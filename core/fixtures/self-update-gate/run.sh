@@ -244,6 +244,59 @@ ss_assert "safe-stop-clean-stdout" \
   "$(bash "$GATE" --safe-stop "$SS/dist" "$SS_BASE" "$SS_R2" "$SS/cons" 2>/dev/null | grep -c 'SELF-UPDATE-')" \
   "0" "stdout carries the ref alone, with no status row that could be pasted into a command"
 
+# --- THE ROW IS DERIVED FROM THE RANGE, AND THE CONSUMER'S MACHINERY IS THE OTHER HALF -------
+# `PC-S331-SAFE-STOP-IGNORES-THE-CONSUMERS-OWN-SKILL-COMMIT`. The row urges a split so the engine
+# lands before it is used. On a consumer whose `skill_commit` is already at or past the named ref,
+# the engine HAS landed and the split advances only the rulebook pair. Every arm above ran without
+# a stamp at all, which is why none of them could see this.
+ss_detail() { # ss_detail <theirs> -> the SAFE-STOP row's DETAIL field
+  bash "$GATE" "$SS/dist" "$SS_BASE" "$1" "$SS/cons" 2>&1 |
+    awk -F'\t' '$1=="SELF-UPDATE-SAFE-STOP" {print $3; exit}'
+}
+ss_stamp() { # ss_stamp <skill_commit|-> ; `-` removes the stamp
+  if [ "$1" = "-" ]; then rm -f "$SS/cons/.claude/.ai-dlc-version"
+  else printf 'version: 1.0.0\ncommit: %s\nskill_version: 1.1.0\nskill_commit: %s\n' "$SS_BASE" "$1" \
+         > "$SS/cons/.claude/.ai-dlc-version"; fi
+}
+
+# BASELINE, and it is the control that makes the next three readable: with no stamp the wording is
+# unchanged from before this guard existed.
+ss_stamp -
+ss_assert "ss-nostamp" "$(ss_detail "$SS_R2" | grep -c 'SPLIT BUYS NOTHING')" "0" \
+  "no stamp: the row keeps its original 'pull FIRST' wording"
+
+# AT the named ref. `--is-ancestor` is true for equality, which is the "at" in "at or past".
+ss_stamp "$SS_R1"
+ss_assert "ss-at" "$(ss_detail "$SS_R2" | grep -c 'SPLIT BUYS NOTHING')" "1" \
+  "skill_commit AT the named ref: the row says the split buys nothing"
+ss_assert "ss-at-ref" \
+  "$(bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R2" "$SS/cons" 2>&1 | awk -F'\t' '$1=="SELF-UPDATE-SAFE-STOP"{print $2; exit}')" \
+  "$SS_R1" "and it still NAMES the ref — annotated, never suppressed, so the DEFER keeps a next step"
+
+# PAST it — the reference consumer's actual shape: `skill_commit` was one commit beyond the
+# release the row named, so an equality test alone would have missed the case that was filed.
+ss_stamp "$SS_R3"
+ss_assert "ss-past" "$(ss_detail "$SS_R2" | grep -c 'SPLIT BUYS NOTHING')" "1" \
+  "skill_commit PAST the named ref: still annotated (equality alone would miss the filed case)"
+
+# CONTROL: BEHIND it. This is the case the row was written for and it must be untouched.
+ss_stamp "$SS_R1"
+ss_assert "ss-behind" "$(ss_detail "$SS_R4" | grep -c 'SPLIT BUYS NOTHING')" "0" \
+  "skill_commit BEHIND the ref the walk names (r3): the original advice stands"
+
+# CONTROL: a ref this distribution cannot resolve tells us nothing, and must not be read as
+# "at or past" — that would silence the advice on every consumer with a foreign stamp.
+ss_stamp "0000000000000000000000000000000000000000"
+ss_assert "ss-unresolvable" "$(ss_detail "$SS_R2" | grep -c 'SPLIT BUYS NOTHING')" "0" \
+  "an unresolvable skill_commit falls back to the original advice"
+
+# CONTROL: `skill_commit` == `commit` means no self-update hop has run, so there is no
+# intermediate machinery ref and the guard must not fire off the rulebook sha.
+ss_stamp "$SS_BASE"
+ss_assert "ss-equals-base" "$(ss_detail "$SS_R2" | grep -c 'SPLIT BUYS NOTHING')" "0" \
+  "skill_commit == commit (no self-update hop) falls back to the original advice"
+ss_stamp -
+
 echo
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."

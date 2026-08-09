@@ -34,6 +34,52 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.342.0] — 2026-08-09
+
+### `SELF-UPDATE-SAFE-STOP` recommended a hop the consumer's machinery already had
+
+Reported by the reference consumer as `PC-S331-SAFE-STOP-IGNORES-THE-CONSUMERS-OWN-SKILL-COMMIT`,
+with the command that found it, and **reproduced here against the code**: `grep -cF skill_commit`
+over `self-update-gate.sh` returned **0**, against a control of two files in the same directory that
+do read the field.
+
+The row exists to tell an operator where to split a deferring pull so the engine lands before it is
+used. It was derived from the RANGE alone. On the consumer's actual pull — from a stamp whose skill
+pair was two releases ahead of its rulebook pair — it named v0.340.0's commit while their
+`skill_commit` already sat one commit past it. **The hop it urged would have advanced only the
+rulebook pair**, which was the reconcile hop the operator had explicitly declined.
+
+Its stated rationale is that step 3 would otherwise classify with the engine the pull is about to
+replace. **That premise is checkable and was false there**: the range's only engine file was already
+bucketed `ALREADY-AT-THEIRS`.
+
+**THE ROW IS ANNOTATED, NEVER SUPPRESSED.** A `DEFER` whose next step is silence is the dead end
+`advise_safe_stop` exists to remove, so the ref stays named and gains the fact that changes what it
+means. `skill_commit` is read from the stamp rather than taken as an argument — the same choice, for
+the same reason, as `unregistered-drift.sh`, which reads the same field to keep an intermediate
+machinery ref from reading as consumer drift.
+
+**TWO GUARDS WERE WRITTEN AND THEN DELETED BECAUSE THEIR MUTANTS CAME BACK GREEN.** Special cases for
+`skill_commit == commit` and for an unresolvable ref changed no answer: the safe-stop ref is a
+release in `BASE..THEIRS`, so it is a descendant of `BASE` and can never be its ancestor, and
+`merge-base --is-ancestor` already exits non-zero on a bad object. Both states are still asserted;
+what holds them is the ancestry test. The donor guards them because it compares byte identity, where
+their removal *does* change the answer.
+
+**A MUTANT ALSO FOUND A LATENT TRAP IN THE FIX ITSELF.** `_sk` was assigned only inside the guard
+while the message that interpolates it lives in the caller, and this file runs under `set -u`. The
+mutant that bypasses the guard was supposed to make the row fire unconditionally; instead the row
+**disappeared entirely** — a crashed check and a check with nothing to say are the same empty output.
+`_sk` is now initialised in the caller.
+
+Six mutants plus an unmutated control, over eight new fixture arms. `G1` (guard never fires) and `G8`
+(guard always fires) are polarity-complementary and between them kill all six state arms; `G2`
+(equality instead of at-or-past) kills the *filed* case alone, which an equality test would have
+missed; `G5` (suppress rather than annotate) kills the arm asserting the ref is still named; `G7`
+(reads `commit` instead of `skill_commit`) kills the positive arms.
+
+The `DEFER` verdict itself is unchanged, which is what the consumer's report asked for.
+
 ## [0.341.0] — 2026-08-09
 
 ### The sprint roll wrote a path the consumer's own pre-push validator blocks
