@@ -52,7 +52,15 @@ printf '0.099.0\n' > "$DIST/VERSION"
 git -C "$DIST" add -A
 git -C "$DIST" commit -q -m 'feat(v0.099.0): land two consumer-filed entries' \
   -m 'Absorbs PC-FIXTURE-NAMED-BUT-RECEIPT-STUCK and PC-FIXTURE-NAMED-MANUAL.' \
-  -m 'Prose-guard control: this line says Entry A still lacked upstream. verbatim.'
+  -m 'Prose-guard control: this line says Entry A still lacked upstream. verbatim.' \
+  -m 'PC-S901 and PC-S902 also land here.'
+
+# THE SHORT-ID COMMITS. Upstream cites `PC-S<n>`, never the full slug -- measured against it at
+# 0.328.0, the slug search found 20 of 128 ledger entries while 20 of 29 prefixes appeared. The
+# message above therefore names PC-S901 and PC-S902 and NOT their slugs, which is the shape the
+# join was blind to. PC-S901 is carried by exactly ONE ledger entry (attributable); PC-S902 is
+# carried by TWO (ambiguous), and naming both would tell the operator to close an entry upstream
+# never touched.
 
 # --- base: neither marker present ---
 printf '# SKILL\nrule one\nrule two\n' > "$SK"
@@ -115,6 +123,25 @@ cat > "$LED" <<'LEDGER'
   `core/skills/…`). It MUST classify identically to Entry B — a closer that cannot resolve
   the path never compares the substring and silently reports nothing about the claim.
   verify: theirs_lacks core/.claude/skills/ai-dlc/SKILL.md "MARKER_B"
+
+- **PC-S901-SHORT-ID-UNIQUE-PREFIX** — upstream cites the short id, this ledger carries one
+  entry under it, so the attribution is unambiguous. The full slug appears NOWHERE in the
+  distribution's history, which is the normal case and is what the slug-only join was blind to.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **PC-S902-SHARED-PREFIX-FIRST** — upstream cites `PC-S902`, and TWO entries here carry it.
+  Attributing the commit to either would tell the operator to close one upstream never touched.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **PC-S902-SHARED-PREFIX-SECOND** — the other half of the ambiguous pair. Exactly ONE
+  `NAMED-UPSTREAM-AMBIGUOUS` row may be emitted across both, keyed on the prefix rather than on
+  either entry: the same fact repeated per entry is a report an operator scrolls past.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **PC-S903-NEVER-CITED-AT-ALL** — the control for both arms. Id-shaped, unique prefix, and
+  upstream names neither its slug nor `PC-S903`. It must stay silent, or the prefix arm is
+  matching on shape rather than on evidence.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
 
 - **Entry H names an ambiguous basename.** Two files at theirs are called
   `validate-thing.sh`, so the fallback has no unique answer and must refuse to guess.

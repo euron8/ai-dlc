@@ -689,6 +689,44 @@ row_lacks "PC-FIXTURE-HEADING-ABSORBED" NAMED-UPSTREAM \
 row_lacks "Entry A" NAMED-UPSTREAM \
   "prose label quoted verbatim in the history -> the id-shape guard refuses to join on words"
 
+# --- THE SHORT ID IS THE FORM UPSTREAM WRITES (PC-S328) ---------------------------------
+# The join asked only for the FULL SLUG, and upstream's commits cite `PC-S<n>`. Measured on the
+# reference consumer at 0.328.0: the slug search found 20 of 128 entries, while 20 of the 29
+# distinct prefixes appeared in upstream's history. Among the misses were three entries that
+# consumer had filed and upstream had just fixed — so on the entries where the third signal was
+# most needed, it was silent.
+row_has "PC-S901-SHORT-ID-UNIQUE-PREFIX" NAMED-UPSTREAM \
+  "upstream cites the SHORT id and one entry carries that prefix -> attributed, though the full slug appears nowhere"
+
+# AND THE NAIVE VERSION OF THAT FIX IS WRONG, WHICH IS WHY BOTH HALVES ARE ASSERTED. Of the 20
+# cited prefixes on the reference consumer, 11 were shared by two or more entries. Matching the
+# prefix regardless would name every entry the sprint filed.
+row_lacks "PC-S902-SHARED-PREFIX-FIRST" NAMED-UPSTREAM \
+  "a prefix carried by two entries is NOT attributed to either — a wrong close is worse than the silence it replaces"
+row_lacks "PC-S902-SHARED-PREFIX-SECOND" NAMED-UPSTREAM \
+  "and not to the other one either — the refusal is symmetric, not first-wins"
+row_has "PC-S902" NAMED-UPSTREAM-AMBIGUOUS \
+  "the shared prefix is reported ONCE, keyed on the prefix itself, because the prefix is the subject"
+
+# ONE ROW, NOT ONE PER ENTRY. Per-entry emission produced 45 rows from 11 prefixes on the
+# reference consumer, all saying the same unresolvable thing — noise added by the fix for a
+# signal that was missing, which is the trade the naive prefix-match makes one level along.
+ambig_n="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="NAMED-UPSTREAM-AMBIGUOUS"{n++} END{print n+0}')"
+ASSERTIONS=$((ASSERTIONS+1))
+if [ "$ambig_n" = "1" ]; then
+  printf '  ok    %-22s exactly one ambiguous row for the two entries sharing PC-S902\n' "ambiguous-collapse"
+else
+  printf '  FAIL  %-22s %s ambiguous row(s) — the prefix fact is being repeated per entry\n' "ambiguous-collapse" "$ambig_n"
+  FAILURES=$((FAILURES+1))
+fi
+
+# THE CONTROL, and without it the two arms above only prove the code runs. An id-shaped label
+# with a unique prefix that upstream names in NEITHER form must stay silent.
+row_lacks "PC-S903-NEVER-CITED-AT-ALL" NAMED-UPSTREAM \
+  "never cited in either form -> silent, so the prefix arm joins on evidence and not on shape"
+row_lacks "PC-S903-NEVER-CITED-AT-ALL" NAMED-UPSTREAM-AMBIGUOUS \
+  "and not reported as ambiguous either — an uncited prefix is not an unresolvable one"
+
 # MUTATION 2 — drop the id-shape guard. Entry A's prose label then matches the pre-base commit
 # that quotes it, and a wall of word-matched rows is exactly the lint an operator switches off.
 #
@@ -721,7 +759,12 @@ fi
 MUTB="$(dirname "$DIST")/mut-bound"
 rm -rf "$MUTB"; mkdir -p "$MUTB"
 cp "$(dirname "$CLOSER")"/*.sh "$MUTB/" 2>/dev/null
-sed 's@--grep="$_id" --format=%H "$THEIRS"@--grep="$_id" --format=%H "${BASE}..${THEIRS}"@' \
+# BOTH SEARCHES, because there are now two. `named_absorbed` falls back to the SHORT id when
+# the full slug finds nothing, and that fallback is its own `git log` call. Bounding only the
+# slug search leaves the prefix arm unbounded — a PARTIAL revert, which proves the layer left
+# in place and comes out looking like a surviving mutant. Both `--grep=` forms are rewritten.
+sed -e 's@--grep="$_id" --format=%H "$THEIRS"@--grep="$_id" --format=%H "${BASE}..${THEIRS}"@' \
+    -e 's@--grep="$_pfx" --format=%H "$THEIRS"@--grep="$_pfx" --format=%H "${BASE}..${THEIRS}"@' \
   "$CLOSER" > "$MUTB/ledger-reverify.sh"
 
 ASSERTIONS=$((ASSERTIONS + 1))
@@ -752,11 +795,11 @@ rm -rf "$CTLD"; mkdir -p "$CTLD"
 cp "$(dirname "$CLOSER")"/*.sh "$CTLD/" 2>/dev/null
 cp "$CLOSER" "$CTLD/ledger-reverify.sh"
 ctl_named="$(bash "$CTLD/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1 | awk -F'\t' '$1 == "NAMED-UPSTREAM" {c++} END{print c+0}')"
-if [ "$ctl_named" -eq 2 ]; then
+if [ "$ctl_named" -eq 3 ]; then
   printf '  ok    %-22s unmutated copy in the same directory emits both named rows (harness is sound)\n' "mutation-control"
 else
   FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s unmutated copy emitted %s named rows, want 2 — a copy that cannot run scores as a kill\n' "mutation-control" "$ctl_named"
+  printf '  FAIL  %-22s unmutated copy emitted %s named rows, want 3 — a copy that cannot run scores as a kill\n' "mutation-control" "$ctl_named"
 fi
 
 # --- ENTRY-SWALLOWED: a bold-bullet annotation that became its own entry -----------------
