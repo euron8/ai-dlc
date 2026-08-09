@@ -1321,6 +1321,29 @@ when you are done — including when "done" means you stopped early. **This inst
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
 
+## What the close-instruction contradiction measured (a state both rules refuse to own)
+
+v0.330.0. Reported by the consumer as the `NAMED-UPSTREAM` close-instruction contradiction, and
+filed by them as `PC-S329`. **The contradiction is real and it is the smaller half.**
+
+`ledger-reverify.sh` skips an entry on `ADOPTED UPSTREAM` ANYWHERE in it; `ledger-rotate.sh`
+archives only on the strict `**ADOPTED UPSTREAM (v`. The asymmetry is deliberate and correct.
+Its STATED cost was *"an entry wrongly kept costs one more pull to notice"* — **and nothing
+noticed**, because rotate reported what it moved and never what it refused.
+
+**Measured on graph at 0.329.0: 8 entries**, in a run whose summary line read
+`0 closed entries — nothing to rotate`. One carries
+`**ADOPTED UPSTREAM (absorbed before base <sha>, verified <date>)**` — a genuine bolded close the
+strict rule refuses only because the parenthetical does not start with a version.
+
+**THE GENERAL FORM: when a safe default's cost is "someone will notice later", check that
+something does.** The rule was right; the sentence excusing it was the defect.
+
+The strict rule is untouched. Rotate now names the refused set BEFORE the nothing-to-rotate exit,
+which is the case the state hides in, and says plainly that withdrawn / retained / absorbed-before-
+base entries belong there legitimately. The `NAMED-UPSTREAM` row names the archivable form; step
+3f now reads **not auto-closable** and states what the annotation actually does.
+
 ## What PC-S328 measured (the backstop for wrong receipts joined on a name upstream never writes)
 
 v0.329.0. **Filed by the consumer, reproduced and enlarged here.** `NAMED-UPSTREAM` is the THIRD

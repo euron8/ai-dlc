@@ -34,6 +34,43 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.330.0] — 2026-08-09
+
+### An entry could be closed for re-verification and unarchivable at once — invisible in every report, never filed
+
+Reported by the reference consumer as the `NAMED-UPSTREAM` close-instruction contradiction.
+Two rules read the same annotation and disagree, deliberately:
+
+- `ledger-reverify.sh` treats an entry as **closed and skips it** on `ADOPTED UPSTREAM` appearing
+  anywhere in it;
+- `ledger-rotate.sh` **archives** only on the strict `**ADOPTED UPSTREAM (v`.
+
+The asymmetry is right — archiving live work is the expensive error — and its stated cost was
+that *"an entry wrongly kept costs one more pull to notice."* **Nothing noticed.** Rotate reported
+what it moved and never what it refused, so an entry in the gap is skipped by every
+re-verification and refused by every rotation: it stays in the live ledger indefinitely, out of
+the report and out of the archive.
+
+**Measured on the reference consumer at 0.329.0: 8 entries**, in the same run that printed
+`0 closed entries — nothing to rotate`. One of them is annotated
+`**ADOPTED UPSTREAM (absorbed before base <sha>, verified <date>)**` — a genuine, deliberate,
+bolded close that the strict rule refuses only because the parenthetical does not begin with a
+version.
+
+**The strict rule is unchanged.** What changes is that its cost is now paid by something: rotate
+names the set, before the nothing-to-rotate exit, since that is exactly the case the state hides
+in. The message states the accepted form and says plainly that some entries belong there
+legitimately — withdrawn, a retained copy, absorbed before base.
+
+**And the contradiction the consumer named is real.** `NAMED-UPSTREAM`'s row told the operator to
+annotate; step 3f called the status *"Not closable"*. Following the row closes the entry for
+re-verification on the next run. The row now names the exact archivable form and says why the
+form matters; step 3f says **not auto-closable**, and states what the annotation actually does.
+
+New fixture coverage in `ledger-rotate`: a seeded closed-but-unarchivable entry that must be
+reported **and named**, with a control that an archivable entry does not appear in that list —
+without it, both arms pass on any script that prints the banner unconditionally.
+
 ## [0.329.0] — 2026-08-09
 
 ### The backstop for wrong receipts joined on a name upstream never writes
