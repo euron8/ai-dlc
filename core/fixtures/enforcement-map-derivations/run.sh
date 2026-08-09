@@ -511,6 +511,33 @@ A27_i33b_fails_closed_when_blind() {
   fi
 }
 
+# --- Assertion 28: I86 — apply.sh must not restate the row token ------------
+# layer-drift.sh declares ADJ_ROW_TOKEN and writes it into an OVERRIDE-SUPERSEDED row when a
+# verdict is already recorded for that digest; apply.sh resolves that declaration and skips
+# prescribing the retire sequence. A restated literal drifts silently — the case arm stops
+# matching and a pull carrying an adjudicated row reads exactly like one carrying none.
+A28_i86_apply_restates_token() {
+  t="$(fresh)"
+  if edit "$t/core/skills/ai-dlc-update/reconcile/apply.sh" \
+       '{ if (!done && index($0, "ADJ_ROW_TOKEN=\"$(sed")) { print "ADJ_ROW_TOKEN=\"adjudicated\""; done=1; next } } { print }'; then
+    assert_fires "I86 apply.sh restating the row token literal is REPORTED" \
+                 "restates the adjudication row token literal"
+  fi
+}
+
+# --- Assertion 29: I86 — the writer must still WRITE the token --------------
+# The other direction, and the one that fails silently. A token with a home and no emitter
+# leaves apply.sh's suppression unable to fire on any pull, forever — which is this repo's
+# recurring class arriving inside the guard against it.
+A29_i86_writer_stops_emitting() {
+  t="$(fresh)"
+  if edit "$t/core/skills/ai-dlc-update/reconcile/layer-drift.sh" \
+       '{ gsub(/\$\{ADJ_ROW_TOKEN\}=/, "adjudicatedX=") } { print }'; then
+    assert_fires "I86 a declared row token that is never written into a row is REPORTED" \
+                 "never writes it into a row"
+  fi
+}
+
 # `--run-one <assertion>` is one assertion, in one process, against one freshly seeded
 # tree. It is the unit the pool schedules and it is also how a human runs a single
 # assertion while working on it.

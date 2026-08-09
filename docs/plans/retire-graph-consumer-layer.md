@@ -1321,6 +1321,53 @@ when you are done — including when "done" means you stopped early. **This inst
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
 
+## What PC-S327 measured (two tools disagreeing, and the destructive one had no reader)
+
+v0.328.0. **Filed by the consumer during the 0.327.0 apply, reproduced here with a control.**
+
+```
+grep -c layer-adjudication-register   reconcile/apply.sh        0
+grep -c layer-adjudication-register   reconcile/layer-drift.sh  2
+```
+
+**THE DEFECT IS A DISAGREEMENT, NOT A MISSING CHECK.** `layer-drift.sh` reads the register and
+correctly emitted NO blocking row for an entry carrying a recorded `still-additive`.
+`apply.sh` builds its override-retire worklist from that same run's `OVERRIDE-SUPERSEDED` rows and
+never asks whether a verdict exists — so the gate said *decided, proceed* and the manifest an
+operator is told to work TOP-DOWN said *delete it*. The prescribed step would have removed a live
+stale-header closure guard and the `FR-S297-4` ceiling delegation, **119 consumer-only lines**,
+against a verdict recorded the previous day.
+
+**THE OPERATOR REFUSED IT CORRECTLY AND NOTHING IN THE TOOLING SUPPORTED THE REFUSAL.** That is the
+part worth keeping: the next operator would have had to re-derive the same refusal from scratch,
+and item 26 is open precisely because LC-O15 is anchor-grained while the decision was arm-grained.
+
+**THE FIX ROUTES THE ANSWER THROUGH THE ROW, not through a second register reader.**
+`layer-drift.sh` already computes the verdict; it now declares `ADJ_ROW_TOKEN` and writes
+`adjudicated=<verdict>` into the row, and `apply.sh` RESOLVES that declaration. A second reader in
+`apply.sh` would be a second thing to keep in step with the schema.
+
+**DIGEST-KEYING IS WHAT MAKES SUPPRESSION SAFE RATHER THAN AN EXEMPTION.** The digest covers the
+entry AND the core file it hooks at theirs, so a SPENT verdict suppresses nothing — the token is
+absent and the worklist returns. Verified both ways.
+
+**TWO DEFECTS IN THE FIX, BOTH CAUGHT BEFORE SHIPPING, and the first is the instructive one.**
+The draft referenced `ADJ_ROW_TOKEN` in `apply.sh` without resolving it. `apply.sh` runs `set -u`,
+so that is an unbound variable and **the run aborts mid-apply** — strictly worse than the defect.
+It now fails closed with a message. Second: `adj_lookup` and the new `adj_verdict` would have
+carried two copies of one `jq` expression; `adj_lookup` is now written in terms of `adj_verdict`.
+
+**I86 binds the token in BOTH directions** — `apply.sh` may not restate the literal, and
+`layer-drift.sh` may not declare a token it never writes into a row. That second arm is the
+repo's recurring class arriving inside the guard against it: **a token with a home and no emitter
+leaves the suppression unable to fire on any pull, forever, while every check stays green.**
+Suite assertions `enforcement-map-derivations` A28–A29.
+
+**STILL OPEN, and this does not close it:** item 26 (LC-O15 is anchor-grained, the supersession
+was arm-grained). v0.328.0 stops `apply.sh` contradicting a recorded verdict; it does not make an
+ARM addressable, which is what item 26 asks. Reproduce item 26 before building it — its first step
+is still to establish whether an arm is addressable at all.
+
 ## What PC-S326 measured (an invariant blind to its own defect one assignment apart)
 
 v0.327.0. **Filed by the consumer against v0.322.0, reproduced here with a control.** Not a plan
