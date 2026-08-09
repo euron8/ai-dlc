@@ -159,6 +159,10 @@ this side proposed closing a live entry). **Neither was visible from this side w
 the measurement against their tree**, which is the standing lesson: a report that contradicts a
 figure here is a measurement, not a mistake to correct.
 
+**GRAPH IS CURRENT AT `0.341.0 / 899411a` ON ALL FOUR FIELDS, read 2026-08-09 after their #906.**
+Two releases have landed here since (v0.342.0, v0.343.0), so a pull is owed again and no runbook
+exists for it yet.
+
 **GRAPH'S STAMP — READ IT, DO NOT CARRY IT.** Every prior revision of this paragraph named a
 version that was wrong within a day; the derivation is the durable part.
 `sed -n '1,4p' /Users/n8/git/graph/.claude/.ai-dlc-version` gives all four fields, and all four
@@ -190,12 +194,26 @@ records 1 of 1 blockers — `HARD-LAYER-ADJUDICATION-MISSING` on
 merges, zero catalog collisions. **This is the operator's, not this repo's** — read it there rather
 than re-deriving it here.
 
-**THE OPERATOR HAS RULED THAT HOP WILL NOT BE FINISHED — the split stamp above IS the next pull's
-start state** (direction 2026-08-09: *"I won't finish the in-flight. Current state will be run book
-start state."*). **The runbook for it exists and is
-[`graph-0338-to-0341-pull.md`](graph-0338-to-0341-pull.md) (#500)**, covering `5e49f08` → `91fde72`.
-It is the operator's to hand to a graph session; nothing in it is this repo's to run. **Do not
-predict its hop count from this side.**
+**~~THE OPERATOR HAS RULED THAT HOP WILL NOT BE FINISHED~~ — THE PULL RAN AND IS COMPLETE.** Their
+#906 (squash `3a9e216c8`) took `0.338.0` → `0.341.0` in **one hop** from the half-landed start state,
+and the split stamp resolved through the tool's own `ALREADY-AT-THEIRS` subtraction — never
+hand-edited, which is what the runbook asked for. Verified from this side rather than accepted:
+all four stamp fields read `0.341.0 / 899411a`, and the four files that were new to them are
+byte-identical to the distribution (control: an unrelated pair reports DIFF).
+The runbook [`graph-0338-to-0341-pull.md`](graph-0338-to-0341-pull.md) (#500) is **SPENT**.
+
+**THEIR REPORT'S OWN NUMBERS, re-run against merged main by them and not just the branch:** fixture
+`PASS`, `sprint-id` 302, `VERDICT: PASS` on artifact paths, `0 error(s), 2 warning(s)` on layers,
+`0 HARD blockers`. Three `HARD-LAYER-ADJUDICATION-MISSING` rows were adjudicated `still-additive` —
+the LC-O15 one this repo predicted would survive the wider range, plus **two LC-E4 rows on
+`route-domain.md` and `route-push.md` that it did not predict**, and which follow from `route.md`
+moving. Predicting one adjudication and getting three is the same class of miss as predicting a hop
+count.
+
+**THE RUN RETURNED THREE UPSTREAM DEFECTS, each citing the command that found it and each declaring
+what it did NOT verify.** All three reproduced here against the code. Two shipped the same day —
+**v0.342.0 (#502)** and **v0.343.0 (#503)**. The third is unresolved and is item 6 of the
+next-action list, where it is written up with the derivation it still needs.
 
 The runbook [`graph-0335-to-0337-pull.md`](graph-0335-to-0337-pull.md) is **SPENT**;
 its own header records what it got wrong. Do not re-point it at a new range; write a fresh one.
@@ -570,14 +588,63 @@ Item 23 is closed; §*Order of execution* lists what remains and none of it bloc
 building — this plan's own record is that a re-derivation changed the work in item 3, item 2b,
 item 16, item 17, item 18 and item 23c.**
 
-**AS OF 2026-08-09 THIS LIST HOLDS NO UNSTRUCK ITEM THIS REPO MUST DO. Item 5 is the only one
-open and it is marked OPTIONAL and unscheduled.** Items 1 and 2 closed in the same session — 1
-without a release, because re-measuring found its subject already delivered, and 2 as v0.341.0.
-**Re-measure before treating that as "the plan is finished"**: what is actually owed is on the
-operator's side and is stated in §*Start here* — the `0.338.0` → `0.341.0` pull, runbooked as
-[`graph-0338-to-0341-pull.md`](graph-0338-to-0341-pull.md), starting from the half-landed state by
-operator direction. **A new item enters this list the way the last five releases did, from the
-consumer's completion report rather than from this file.**
+**ITEMS 1 AND 2 CLOSED 2026-08-09** — 1 without a release, because re-measuring found its subject
+already delivered, and 2 as v0.341.0. **THE PULL THEN RAN AND RETURNED THREE NEW DEFECTS, which is
+the channel this list has been fed by for the last eight releases.** Two shipped the same day
+(v0.342.0 #502, v0.343.0 #503). **The third is item 6 below and it is the only live item in this
+file.** Item 5 remains OPTIONAL and unscheduled.
+
+6. **`ai-dlc-acknowledge.sh`'s updater carve-out never fires on an agent-driven run — AND THE
+   FILED CAUSE IS NOT ESTABLISHED. Establish the mechanism BEFORE writing the fix.**
+
+   **What is reported.** `PC-S331` (the acknowledge hook's updater carve-out being unreachable via
+   the Skill tool). The hook exempts `/ai-dlc-update` sessions from the Rule 29 pause deny, and
+   detects them by grepping the TRANSCRIPT for `<command-name>/ai-dlc-update</command-name>` —
+   `core/hooks/ai-dlc-acknowledge.sh:111`, consumed at `:151` and `:347`. The consumer reports that
+   marker is written when a HUMAN types the slash command and not when the agent invokes the skill
+   through the `Skill` tool, so the first dispatch is always denied. **They observed the denial
+   twice in one session, live, each time cleared by removing the pause flag and restoring it.**
+
+   **WHAT I ESTABLISHED, and it makes the fix cheaper.** The hook is already a `PreToolUse` hook
+   whose matcher includes `Skill` (read from the reference consumer's `settings.json`:
+   `Agent|Task|Skill|TaskCreate|Write|Edit|MultiEdit|NotebookEdit`). And the payload field the
+   consumer could not confirm **is `skill`** — verified against real captured payloads, not
+   inferred: `"name":"Skill","input":{"skill":"ai-dlc-update","args":"apply"}`, with the bare
+   `{"skill":"ai-dlc-update"}` form also present. So `.tool_input.skill` is readable at the deny
+   site with no new lifecycle, which is the option the hook's own comments already prefer.
+
+   **WHAT I COULD NOT REPRODUCE, AND IT IS THE REASON THIS IS NOT ALREADY FIXED.** Across 66 local
+   sessions carrying a `Skill(ai-dlc-update)` tool_use, **every one of them also carries the human
+   `<command-name>` marker. Zero sessions have the tool_use without the marker.** If the marker were
+   simply absent on agent-driven runs there should be counterexamples, and there are none — so the
+   reported cause is not confirmed, and two different mechanisms fit the same observation:
+
+   - the marker is never written for an agent-driven invocation (the filed cause), or
+   - the marker IS written, but not yet at the moment the `PreToolUse` hook runs for the FIRST
+     dispatch — a read-before-write ordering problem, not a missing-signal one.
+
+   **They have different fixes.** The first is fixed by reading `.tool_input.skill`. The second is
+   fixed there too for the dispatch itself, but leaves every SUBSEQUENT `Write`/`Edit` in that
+   session denied, because those are not `Skill` calls and the transcript arm is what covers them.
+   **Do not write the fix until you know which.** This plan's own record is that a consumer-reported
+   cause has been wrong in exactly the detail that decides the fix before.
+
+   **START BY CAPTURING ONE LIVE PAYLOAD AND THE TRANSCRIPT STATE AT DENY TIME**, rather than by
+   reasoning from the hook's source. The transcript records the `Skill` tool_use itself, so a
+   session-level signal exists for agent-driven runs either way — that is the material for the
+   second fix if the second mechanism is the real one.
+
+   **ON THE RECEIPT, which the consumer argued about deliberately and correctly.** A `theirs_has`
+   anchored on the transcript grep survives any fix that keeps that line and ORs in a second arm,
+   which is the likeliest shape. A `theirs_lacks` on `tool_input.skill` returns 0 at theirs and 0
+   across their tracked tree, so it is unfalsifiable and lints `NEEDS-REVIEW` forever. **After a fix
+   that reads the payload, `theirs_has "tool_input.skill"` becomes checkable** — so the receipt is
+   writable, but only against the fixed shape.
+
+   **Forbidden remedy:** a marker file. The hook already argues against it on lifecycle grounds.
+
+**A NEW ITEM ENTERS THIS LIST THE WAY THE LAST EIGHT RELEASES DID, from the consumer's completion
+report rather than from this file.**
 
 **THE NUMBERS BELOW ARE THIS LIST'S OWN AND THE TABLE IN §*Order of execution* CARRIES THE SAME
 ITEMS, IN THE SAME ORDER.** They are two views of one sequence, not two sequences: this list says

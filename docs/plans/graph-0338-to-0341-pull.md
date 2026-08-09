@@ -1,3 +1,23 @@
+# SPENT — the 0.338.0 -> 0.341.0 pull RAN, in ONE hop, and every done-when passed
+
+**Do not execute this file.** Their #906 (squash `3a9e216c8`) took it, from the half-landed start
+state, and the split stamp resolved through the tool's own `ALREADY-AT-THEIRS` subtraction without
+ever being hand-edited. All four stamp fields read `0.341.0 / 899411a`.
+
+**What it got right:** the one-hop prediction was not made (it deliberately refused to predict a hop
+count), the `ALREADY-AT-THEIRS` mechanism was named correctly and is what carried the half-landed
+state, and the LC-O15 blocker survived the wider range exactly as derived.
+
+**What it got wrong, and it is the same class as predicting a hop count:** it named ONE adjudication
+to expect. There were **three** — the two extra are LC-E4 rows on `route-domain.md` and
+`route-push.md`, which follow from `route.md` moving and which the file listed as entries that
+merely *reference* it.
+
+**The run returned three upstream defects.** Two shipped as v0.342.0 and v0.343.0; the third is
+item 6 of the live plan's next-action list. Original text follows.
+
+---
+
 # EXECUTE THIS in a graph session — the pull from `0.338.0` to distribution HEAD (`0.341.0`)
 
 You are in `/Users/n8/git/graph`. Everything below is yours to run and yours to commit.
