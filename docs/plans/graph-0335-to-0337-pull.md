@@ -1,3 +1,31 @@
+# SPENT — the 0.335.0 → 0.338.0 pull, all five steps COMPLETE
+
+**DO NOT EXECUTE THIS FILE.** It ran on 2026-08-09: 2 hops, stamp `0.338.0 / 5e49f08` on all four
+fields, the destructive `ledger-rotate` defect closed (`1 closed entries would move / PC-S330` →
+`0 closed entries`), 32 byproducts re-homed with 0 deletions, and a consolidation pass on
+`carry-over-backlog.md` (75 manifest entries, 47 live / 28 history, zero working files at the area
+root). Graph PRs #901–#904. It is kept as the record, and for the three things it got WRONG:
+
+- **IT TOLD THE OPERATOR TO EXPECT `PC-S331` AS `CLOSE-CANDIDATE`. Their run said `STILL-LIVE`, and
+  they were right.** The verdict depended on the caller's working directory: a `verify: sh` receipt
+  names consumer-relative paths and ran under a bare `bash -c`. From the distribution root the grep
+  exited 2 and the entry read as absorbed — a false close, the direction that loses data. **Fixed
+  upstream as v0.340.0.** This file "corrected" its own parent on that row; the parent was right.
+- **IT PREDICTED `W11` 12 → 0 AND THE CONSUMER GOT 12 → 7.** The clause's slot exemption was a
+  hand-list of two spellings, so `docs/retro/s294/retro.md` — the rewrite W11's own message
+  prescribes — was flagged. All 7 survivors were that shape. **Fixed upstream as v0.339.0**; the
+  predicted 2 warnings is what the fixed validator now reports on their tree.
+- **ITS `W11` TABLE ASSUMED EVERY ROW WAS A LIVE PRESCRIPTION.** In
+  `overrides/steps__retro__domain-sections.md` the old path is the *from* side of a documented
+  rename, so rewriting it literally would have produced `X -> X`. The executor preserved the record
+  and dropped the dead path instead — the right call, and the table should have said so.
+
+**Two consumer-side items are open and neither is core's:** `docs/qa/sprint-<N>/**` was left
+unrepathed (5 live `sprint-<N>` dirs, 0 in `s<N>` form — only `docs/reviews/` migrated), and
+`pipeline-continuation-log.md` sits at 322% of budget with `rotate` as its remedy.
+
+Original text follows.
+
 # EXECUTE THIS in a graph session — the pull from `0.335.0` to distribution HEAD
 
 **HEAD WAS `0.338.0` WHEN THIS LINE WAS LAST TOUCHED, AND THE FILENAME SAYS `0337` BECAUSE IT WAS
