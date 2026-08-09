@@ -4934,9 +4934,23 @@ else
     err "I82 could not resolve the prescribed-path sprint-token ERE from core/scripts/artifact-path-config.sh --token-re-prescribed. That resolver is the single home of the expression; without it this invariant has no predicate, and a predicate that matches nothing reports every prescription core makes as conforming."
     i82_tok_re='(?!)'
   fi
+  # THE SLOT EXEMPTION IS RESOLVED TOO, and this invariant is the third site that hand-listed it.
+  # It skipped the literal `s<N>` and `s*` and nothing else, so a core prescription naming a
+  # CONCRETE slot -- `docs/retro/s294/retro.md` -- would be reported as carrying a token outside
+  # the slot, which is the spelling the remedy asks for. The consumer-facing clause built on the
+  # same hand-list did exactly that on 7 of 7 of a consumer's rows before it was fixed. Same
+  # refusal discipline as the expression above: an unresolvable slot ERE keeps the OLD literal
+  # pair rather than widening to match everything, because an empty ERE in the `grep` below would
+  # exempt every component and report a clean zero over a corpus it never judged.
+  i82_slot_re="$(bash "$REPO_ROOT/core/scripts/artifact-path-config.sh" --slot-re-prescribed 2>/dev/null)"
+  [ -n "$i82_slot_re" ] || err "I82 could not resolve the sprint-slot ERE from core/scripts/artifact-path-config.sh --slot-re-prescribed. Falling back to the literal pair, which under-exempts: a prescription naming a concrete slot will be reported as a violation of the rule it satisfies."
   i82_is_sprint_token() { # <component> -> 0 when it carries one
-    [ "$1" = 's<N>' ] && return 1                       # the reserved directory slot
-    [ "$1" = 's*' ] && return 1                         # ... quantified over every sprint
+    if [ -n "$i82_slot_re" ]; then
+      grep -qE "$i82_slot_re" <<<"$1" && return 1       # the reserved directory slot, any spelling
+    else
+      [ "$1" = 's<N>' ] && return 1
+      [ "$1" = 's*' ] && return 1
+    fi
     grep -qE "$i82_tok_re" <<<"$1"
   }
 

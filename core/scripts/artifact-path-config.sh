@@ -5,6 +5,8 @@
 #   artifact-path-config.sh --areas         [--root <dir>] [--grammar <file>]
 #   artifact-path-config.sh --token-re
 #   artifact-path-config.sh --token-re-prescribed
+#   artifact-path-config.sh --slot-re
+#   artifact-path-config.sh --slot-re-prescribed
 #   artifact-path-config.sh --grammar-file  [--root <dir>] [--grammar <file>]
 #   artifact-path-config.sh --consumer-file [--root <dir>]
 #
@@ -32,6 +34,11 @@
 #                   (`s<N>`, a bare `N`, `*`) and never a digit. Two expressions because they read
 #                   two different string sets -- and one home, because the release that gave them
 #                   two had a checker matching neither of its own subject's spellings.
+#   --slot-re / --slot-re-prescribed
+#                   whether ONE component IS the reserved sprint slot -- the exemption every
+#                   token check needs and every caller used to hand-list. Anchored to a whole
+#                   component, and split into a real-path form (digits) and a prose form
+#                   (placeholder or digits) for the same reason the token pair is.
 #   --grammar-file  the grammar path this resolver settled on, so a caller can report it.
 #   --consumer-file the contract-declared consumer artifact-paths file. Printed whether or not
 #                   it exists, because "go write this file" is the correct remedy when it does
@@ -72,27 +79,45 @@ TOKEN_RE='(^|-)(s|S|sprint-)[0-9]+($|[-.])'
 # reports a clean zero on its own subject -- this repo's named defect class, reached by picking
 # the wrong one of two expressions that both look right.
 #
-# THE RESERVED SLOT IS NOT A VIOLATION AND IS NOT IN THIS ERE. `s<N>` and `s*` are the grammar's
-# own directory slot; a caller tests them by whole-component equality before applying this, the
-# way I82 always has. Encoding the exemption here would make the ERE answer two questions.
+# THE RESERVED SLOT IS NOT A VIOLATION AND IS NOT IN THIS ERE, and the exemption has its own
+# home below rather than being restated by each caller. Encoding it here would make the ERE
+# answer two questions.
 TOKEN_RE_PRESCRIBED='(^|-)(s|S|sprint-)(<N>|N|\*|[0-9]+)($|[-.])'
+
+# THE SLOT ITSELF, and it exists because the sentence above used to end "a caller tests them by
+# whole-component equality" -- and every caller that did wrote out a HAND-LIST of the spellings
+# it happened to think of.
+#
+# MEASURED, on the reference consumer, at the release that fixed it: `validate-layer-entries.sh`
+# skipped the literal strings `s<N>` and `s*` and nothing else, so a prescription naming a
+# CONCRETE slot -- `docs/retro/s294/retro.md` -- was flagged as carrying a sprint token outside
+# the slot. That path IS the slot, correctly spelt, and it is the rewrite W11's own message
+# prescribes. **All SEVEN of the consumer's remaining W11 rows were that shape**: the clause was
+# reporting its own remedy back as the defect, which is the one failure mode that teaches an
+# operator to stop reading a check.
+#
+# TWO EXPRESSIONS, for the same reason as the token pair above: a PROSE path spells the slot with
+# a placeholder or with digits, an expanded FILENAME only ever with digits. A caller that reads
+# real paths must not accept `s<N>` as a directory that exists.
+SLOT_RE_PRESCRIBED='^s(<N>|N|\*|[0-9]+)$'
+SLOT_RE='^s[0-9]+$'
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --scan-roots|--areas|--token-re|--token-re-prescribed|--grammar-file|--consumer-file)
+    --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--grammar-file|--consumer-file)
       [ -z "$MODE" ] || { echo "$PROG: two modes given ('$MODE' and '$1'); it answers one question per call" >&2; exit 2; }
       MODE="$1"; shift ;;
     --root) ROOT="${2:-}"; [ -n "$ROOT" ] || { echo "$PROG: --root needs a directory" >&2; exit 2; }; shift 2 ;;
     --grammar) GRAMMAR_ARG="${2:-}"; [ -n "$GRAMMAR_ARG" ] || { echo "$PROG: --grammar needs a file" >&2; exit 2; }; shift 2 ;;
     -h|--help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "$PROG: unknown option '$1'" >&2
-       echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--grammar-file|--consumer-file [--root <dir>] [--grammar <file>]" >&2
+       echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--grammar-file|--consumer-file [--root <dir>] [--grammar <file>]" >&2
        exit 2 ;;
   esac
 done
 
 [ -n "$MODE" ] || { echo "$PROG: no mode given" >&2
-                    echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--grammar-file|--consumer-file [--root <dir>] [--grammar <file>]" >&2
+                    echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--grammar-file|--consumer-file [--root <dir>] [--grammar <file>]" >&2
                     exit 2; }
 
 # --token-re answers before any tree is consulted. It is a property of the grammar's RULES, not
@@ -100,6 +125,8 @@ done
 # what a sprint token is without first standing somewhere that has one.
 if [ "$MODE" = "--token-re" ]; then printf '%s\n' "$TOKEN_RE"; exit 0; fi
 if [ "$MODE" = "--token-re-prescribed" ]; then printf '%s\n' "$TOKEN_RE_PRESCRIBED"; exit 0; fi
+if [ "$MODE" = "--slot-re" ]; then printf '%s\n' "$SLOT_RE"; exit 0; fi
+if [ "$MODE" = "--slot-re-prescribed" ]; then printf '%s\n' "$SLOT_RE_PRESCRIBED"; exit 0; fi
 
 # RESOLVE --grammar BEFORE the cd, for migrate-artifact-paths.sh's reason exactly: it is the
 # caller's path, relative to where THEY are standing, and this then changes directory.
