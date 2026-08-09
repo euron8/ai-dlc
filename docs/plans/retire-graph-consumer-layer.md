@@ -55,9 +55,9 @@ checked examples: `layer-drift.sh:648` was the env-key guard and is now other co
 `SKILL.md` line describing the invitation sentence v0.282.0 deleted. Both sit in sections marked
 SHIPPED, so they are records of why a thing was done, not instructions.
 
-**EVERY `path:line` ABOVE `## Context` IS RE-CHECKED AT EACH HANDOFF. Re-run 2026-08-09 after
-v0.337.0: 54 distinct citations — 49 resolve in range, 0 past end-of-file, 0 ambiguous, 5 into the
-CONSUMER.** Prior readings were the same 50/45/0/5 after v0.331.0 and after v0.330.0, then 51/46/0/5 (before that handoff's own edits changed it), 41/36/0/5, and 40/34/5/3-ambiguous. **That first figure moving while this paragraph was being written is the drift the sentence below describes.** **Do not carry these
+**EVERY `path:line` ABOVE `## Context` IS RE-CHECKED AT EACH HANDOFF. Re-run 2026-08-09 after the
+0.335.0 → 0.337.0 runbook landed: 62 distinct citations — 57 resolve in range, 0 past end-of-file,
+0 ambiguous, 5 into the CONSUMER.** Prior readings were 54/49/0/5 after v0.337.0, the same 50/45/0/5 after v0.331.0 and after v0.330.0, then 51/46/0/5 (before that handoff's own edits changed it), 41/36/0/5, and 40/34/5/3-ambiguous. **That first figure moving while this paragraph was being written is the drift the sentence below describes.** **Do not carry these
 numbers; re-run the loop.** It is one pass: extract
 `[A-Za-z0-9_./-]+\.(md|sh|json|yaml):[0-9]+` from everything above `## Context`, resolve each
 against `git ls-files`, and compare the line number to `wc -l`. Report the count as its own
@@ -154,8 +154,11 @@ four.** The rulebook base and the tool version have agreed since #887; the one l
 diverge is a run whose machinery slice was empty, where `--carried-machinery-slice` is correctly
 NOT passed and the skill fields stay behind on purpose.
 
-**A PULL IS OWED — ONE HOP, `0.335.0` → `0.337.0`. THERE IS NO RUNBOOK FOR IT YET, AND WRITING ONE
-IS THE FIRST ACTION ON THE LIST BELOW.** The previous runbook,
+**A PULL IS OWED — `0.335.0` → `0.337.0`, AND ~~THERE IS NO RUNBOOK FOR IT YET~~ THE RUNBOOK NOW
+EXISTS: [`graph-0335-to-0337-pull.md`](graph-0335-to-0337-pull.md), written 2026-08-09.** It is the
+operator's to hand to a graph session; nothing in it is this repo's to run. **Do not predict the hop
+count from this side** — the runbook says the same thing and for the same reason. The previous
+runbook,
 [`graph-0330-to-0335-pull-and-homing.md`](graph-0330-to-0335-pull-and-homing.md), is **SPENT** — it
 ran, all five steps completed, and its own header now records the three things it got wrong. Do not
 re-point it at a new range; write a fresh one.
@@ -505,8 +508,59 @@ graph session's completion report; §*What the graph session's report measured* 
 of the last nine releases arrived through that channel rather than through this list, which is the
 shape to expect.
 
-1. **WRITE THE FRESH RUNBOOK — `0.335.0` → `0.337.0`. This is the first order of business and the
-   operator has asked for it by name.** File it as `docs/plans/graph-0335-to-0337-pull.md`.
+1. **FIX `sprint-status.sh`'s FREEZE PATH. It is core's, it is measured, and it came out of item 2's
+   precondition rather than off this list.** `core/scripts/sprint-status.sh:384` freezes a closed
+   sprint to `<area>/sprint-status/sprint-<N>.yaml` — **the pre-migration form**, while core's own
+   `migrate-artifact-paths.sh:375` maps exactly that path onto `<area>/s<N>/sprint-status.yaml` and
+   `validate-artifact-paths.sh` BLOCKS on it. Probed with a control in one run: the old form is the
+   single `BLOCKING` row, the migrated form in the same tree is not reported. The reference
+   consumer's own pre-push runs that validator, so **the next genuine roll on a migrated consumer
+   writes a path that fails their push.**
+
+   Three parts, and the second is the one a fix will miss:
+
+   - **The writer** at `core/scripts/sprint-status.sh:384`, plus the two prose sites that restate
+     the old form (`core/scripts/sprint-status.sh:63` and
+     `core/skills/ai-dlc/steps/route.md:400`) and `core/schemas/sprint-status.json`.
+   - **The READER, `max_frozen` at `core/scripts/sprint-status.sh:276`,** which globs
+     `sprint-status/sprint-*.yaml`. On a migrated consumer that directory holds only
+     `_preamble.yaml`, so it already returns nothing — and its caller's fallback then returns
+     sprint 1, *"which would silently re-stamp a live project as greenfield"*, in the words of the
+     comment directly above it. It must read BOTH spellings: the old one still exists on every
+     consumer that has not migrated.
+   - **`core/fixtures/sprint-status-lifecycle/run.sh` asserts the old destination in three places**,
+     and `core/fixtures/artifact-path-migration` asserts the migration MOVES it — that second one
+     stays correct and is the control that the two spellings are a real pair, not a rename.
+
+   **It is dormant on the reference consumer today** (their canonical carries `sprint:`, so the
+   fallback never runs) and bites at s302's close. **Not urgent, and deliberately NOT folded into
+   the 0.335.0 → 0.337.0 range** — that range is `ai-dlc-update` machinery only, which is what lets
+   its runbook promise a self-update-shaped pull; `core/scripts/` in the slice is the case
+   `core/skills/ai-dlc-update/SKILL.md:296` warns can strand a push.
+
+2. **~~WRITE THE FRESH RUNBOOK — `0.335.0` → `0.337.0`~~ — DONE 2026-08-09.**
+   [`graph-0335-to-0337-pull.md`](graph-0335-to-0337-pull.md), 0 errors / 0 warnings from
+   `validate-plan-shape.sh`. **THREE THINGS THIS LIST TOLD IT TO SAY WERE WRONG, all three found by
+   running the derivation the item demanded:**
+
+   - **"the migration DELETED both archived envelopes"** — it RENAMED them, and the parent claim was
+     a diff read without `-M`. Both `s301/sprint-status.yaml` copies exist, 128 lines, `| 0` content
+     change. That is what settled whether a reversal had a source at all: it does.
+   - **"s302's kickoff roll will SILENTLY no-op"** — it prints `sprint-status: already at sprint 302
+     (no-op)` and exits 0. The `if moved:` guard has an `else`, `core/scripts/sprint-status.sh:402`.
+     Probed on a scratch tree with a control that rolls for real.
+   - **"`PC-S331` will report `STILL-LIVE` against a defect that is fixed"** — the shipped reader
+     returns `CLOSE-CANDIDATE`. Predicting a receipt's verdict from its anchor text is what went
+     wrong; the reader was one run away.
+
+   **AND THE REVERSAL THE ITEM ASKED FOR IS RECOMMENDED AGAINST, on the strength of item 1 above.**
+   Reverting the early roll makes s302's kickoff roll for real, which writes the blocking path, which
+   fails their pre-push, which they fix by moving it back to where it already is. The roll was early
+   against core's own rule and its OUTCOME is nonetheless the state a correct roll would have left.
+   **The call is the operator's and the runbook states it as theirs.**
+
+   Original item text follows, kept because its instinct — establish the precondition before writing
+   the reversal — is what surfaced item 1.
 
    **THE OPERATOR'S INSTRUCTION SAID `0.330.0 → 0.337.0` AND THAT RANGE IS WRONG — they were
    working from a summary of mine that quoted a stamp read BEFORE the graph session ran.** The pull
@@ -519,20 +573,35 @@ shape to expect.
    first, then `roll`"*, and the graph session did exactly that. **That instruction contradicts
    core's own rule**, stated in the script it invokes — `core/scripts/sprint-status.sh:63`:
    *"ROTATION HAPPENS AT PIPELINE START, NOT AT CLOSE… Rotating at start keeps the predecessor's
-   terminal state readable exactly until its successor exists."* `steps/route.md:394` is where the
-   roll belongs. **The same runbook refused to cut the s302 BRANCH three sentences later, for the
+   terminal state readable exactly until its successor exists."* `core/skills/ai-dlc/steps/route.md:400`
+   is where the roll belongs (this line read `steps/route.md:394` until 2026-08-09 — an unresolvable
+   spelling of a real citation, which the plan-shape check cannot see because `steps/` is not a
+   top-level directory here). **The same runbook refused to cut the s302 BRANCH three sentences later, for the
    identical reason** — so the rule was stated and then broken for the adjacent artifact.
 
    **THE COST, measured 2026-08-09.** `sprint-id` returns **302** while
    `planning-artifacts/s302/` does not exist (0 files, against 105 for `s301`) and `stories:` is
-   empty. And **s302's kickoff roll will silently no-op**: `sprint-status.sh:376` short-circuits on
+   empty. ~~And **s302's kickoff roll will silently no-op**: `sprint-status.sh:376` short-circuits on
    `sprint == target`, nothing is appended to `moved`, and the `if moved:` guard means it prints
    NOTHING — indistinguishable from a failure by an operator watching for `rolled forward to
-   sprint 302`.
+   sprint 302`.~~ **REFUTED 2026-08-09: the guard has an `else`** at
+   `core/scripts/sprint-status.sh:402` and the run prints `sprint-status: already at sprint 302
+   (no-op)`. The short-circuit at `core/scripts/sprint-status.sh:375` is real; the silence was not.
+   **The sprint slot is still the evidence of a started sprint** — that half stands.
 
-   **AND A SECOND THING IS UNVERIFIED — DO NOT ACT ON IT, FINISH IT FIRST.** The roll commit
-   `d1f3a1fe4` added `sprint-status/sprint-301.yaml` to BOTH trees (128 lines each). The
-   artifact-path migration `dbe755181`, the SAME DAY, deleted both (128 deletions each). Those
+   **~~AND A SECOND THING IS UNVERIFIED — DO NOT ACT ON IT, FINISH IT FIRST.~~ ESTABLISHED
+   2026-08-09; all three questions answered, and the first sentence of it was wrong.** The roll
+   commit `d1f3a1fe4` added `sprint-status/sprint-301.yaml` to BOTH trees (128 lines each). The
+   artifact-path migration `dbe755181`, the SAME DAY, **RENAMED both — it did not delete them.**
+   `git show -M` reports `{sprint-status/sprint-301.yaml => s301/sprint-status.yaml} | 0` for each
+   view; the earlier "128 deletions each" was a diff read without rename detection, which is the
+   same class as reading a declaration for a measurement. **Where:** both copies are at
+   `_bmad-output/{planning,implementation}-artifacts/s301/sprint-status.yaml` today.
+   **Intended:** yes — `core/scripts/migrate-artifact-paths.sh:375` maps that exact form.
+   **What it costs at kickoff:** nothing on its own, and the real cost is item 1's — `roll` still
+   composes the pre-migration name at `core/scripts/sprint-status.sh:384`, which the consumer's own
+   pre-push validator blocks. Original text follows.
+   Those
    archive directories now hold only `_preamble.yaml`, and `roll` composes that exact name at
    `sprint-status.sh:384`. **What I did not establish, and stopped rather than guess: where the
    migration moved them, whether that was intended, and what it costs at kickoff.** Establish that
@@ -542,7 +611,8 @@ shape to expect.
    **The reversal itself is the OPERATOR's call, not core's**, and this repo may not write their
    tree. Offer it; do not assume it.
 
-   What the runbook must carry, and why each part:
+   **~~What the runbook must carry~~ — DISCHARGED; every bullet below is in the written file, and
+   the fourth one is REFUTED there.** Kept as the record of what was asked for:
 
    - **The scope, DERIVED in the file**, with a control that separates `core/` from `docs/`. The
      figures in the status block above are a pointer, not an answer.
@@ -552,9 +622,12 @@ shape to expect.
    - **The three candidates it closes** — `PC-S329` (reconcile-log) is already a CLOSE-CANDIDATE at
      0.337.0, `PC-S330` and `PC-S331` are NAMED-UPSTREAM at 0.336.0. Their shipped
      `ledger-reverify` says so today; quote the run, do not predict it.
-   - **The receipt re-anchoring the pull will make loud.** `PC-S331`'s verify anchors on the prefix
+   - **The receipt re-anchoring the pull will make loud.** ~~`PC-S331`'s verify anchors on the prefix
      up to `UPSTREAM`, which the fix KEEPS, so it will report STILL-LIVE against a defect that is
-     fixed. `PC-S330`'s anchors on comment text. The run already prints `RECEIPTS-UNDECIDED: 26 of
+     fixed.~~ **REFUTED — the shipped reader returns `CLOSE-CANDIDATE` for `PC-S331`.** This bullet
+     predicted a verdict from the anchor text instead of running the reader that decides it, which
+     is the defect the row three items above warns about. `PC-S330`'s anchors on comment text. The
+     run already prints `RECEIPTS-UNDECIDED: 26 of
      26`, so this is a class and the runbook should say so rather than list two rows.
    - **NO NEW WARNINGS TO EXPECT.** `contract_version` stays 18 and `W11` is already applied there
      — it fires 12/43 on their tree today, unchanged by this range. Do not re-describe it as new.
@@ -563,19 +636,20 @@ shape to expect.
      still resolves"* was unverifiable. Run each command, or state the expected FAIL and what makes
      it unrelated.
 
-2. **The 12 `W11` repaths are the OPERATOR's and are deliberately deferred** — they chose to leave
+3. **The 12 `W11` repaths are the OPERATOR's and are deliberately deferred** — they chose to leave
    them to their own commit so a pull-review diff stays a pull-review diff. The rewrite for each is
    in the SPENT runbook's table and every replacement was verified to exist. **Do not fold them
    into the runbook as work; name them as outstanding.**
 
-3. **A derivation, NOT a fix, on the receipt class — OPTIONAL and unscheduled.** `26 of 26
+4. **A derivation, NOT a fix, on the receipt class — OPTIONAL and unscheduled.** `26 of 26
    theirs_has` receipts restating the previous run is the third appearance of this. Whether the
    remedy is core's (a receipt form that cannot anchor on text a fix keeps) or authoring discipline
    is unknown. **If you take it, run the SHIPPED reader from the first measurement** — see the
    warning below.
 
-**THE OPERATOR'S SIDE, and none of it is yours to do.** Take the pull once the runbook exists
-(`0.335.0` → `0.337.0`; scope in the status block, base to be confirmed from the stamp). **Both
+**THE OPERATOR'S SIDE, and none of it is yours to do.** Take the pull — the runbook exists,
+[`graph-0335-to-0337-pull.md`](graph-0335-to-0337-pull.md), and it carries its own scope derivation
+and its own stamp confirmation, so hand it over rather than re-deriving anything here. **Both
 homing jobs are DONE** — the S299 LOCKED block and the brief's `## Changelog` landed in graph #900,
 brief 1030 → 648 lines. The stray `test-strategy.md` was done earlier. **Nothing on this plan is
 owed to them beyond the pull and the 12 `W11` repaths they deferred by choice.**
