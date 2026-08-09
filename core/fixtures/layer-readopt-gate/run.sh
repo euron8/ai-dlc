@@ -833,6 +833,35 @@ if [ -z "$DRIFT" ]; then
   bad "FIXTURE BROKEN — no layer-drift.sh; the supersession arm would pass by not running"
 else
   mkdir -p "$DIST/core/skills/ai-dlc"
+
+  # A CORE FILE THE SURPLUS ARMS CAN BE MEASURED AGAINST, committed BEFORE the declaration so an
+  # entry can carry it as its own `base_sha`. Every other SUP__ entry below shadows a file that
+  # does not exist in this seed at all — which is the UNMEASURABLE case, asserted in its own right
+  # further down. Without this commit the surplus arms would only ever exercise that branch, and a
+  # measurement that never runs reports the same silence as one that found nothing.
+  #
+  # `### 3. Widget schema.` is FIVE non-blank lines including its heading. The two entries seeded
+  # against it differ by exactly three lines, so the expected numbers below are seeded rather than
+  # recomputed — a fixture that re-derives the answer with the same expression it is testing
+  # agrees with itself.
+  mkdir -p "$DIST/core/skills/ai-dlc/steps"
+  cat > "$DIST/core/skills/ai-dlc/steps/widget.md" <<'WIDGET'
+# Widget
+
+### 3. Widget schema.
+
+Core line one.
+Core line two.
+Core line three.
+
+### 4. Other section.
+
+Untouched.
+WIDGET
+  git -C "$DIST" add -A >/dev/null 2>&1
+  git -C "$DIST" -c user.email=f@x -c user.name=f commit -qm "core carries the widget schema" >/dev/null 2>&1
+  WBASE="$(git -C "$DIST" rev-parse --short HEAD)"
+
   cat > "$DIST/core/skills/ai-dlc/layer-contract.yaml" <<'YML'
 contract_version: 13
 override_supersessions:
@@ -878,6 +907,41 @@ conforms_to: 13
 # body
 EOF
   done
+
+  # THE TWO SURPLUS ENTRIES. Same anchor, same base_sha, same declaration — they differ ONLY in
+  # whether the shadowed span carries lines core does not have. That is what makes the pair a
+  # test of the measurement rather than of the entry's size.
+  cat > "$CONS/.claude/skills/ai-dlc/overrides/SUP__surplus.md" <<EOF
+---
+shadows: steps/widget.md#3. Widget schema.
+base_sha: ${WBASE}
+reason: fixture entry carrying three lines core does not have
+conforms_to: 13
+---
+
+### 3. Widget schema.
+
+Core line one.
+Core line two.
+Core line three.
+Consumer surplus A.
+Consumer surplus B.
+Consumer surplus C.
+EOF
+  cat > "$CONS/.claude/skills/ai-dlc/overrides/SUP__nosurplus.md" <<EOF
+---
+shadows: steps/widget.md#3. Widget schema.
+base_sha: ${WBASE}
+reason: fixture entry whose span is byte-identical to core's
+conforms_to: 13
+---
+
+### 3. Widget schema.
+
+Core line one.
+Core line two.
+Core line three.
+EOF
 
   sup_out="$(bash "$DRIFT" "$DIST" "$BASE" "$THEIRS2" "$CONS" 2>&1)"
   sup_st() { printf '%s\n' "$sup_out" | awk -F'\t' -v e="$1" '$2 ~ e {print $1}'; }
@@ -966,6 +1030,68 @@ EOF
       ok "  and the neighbouring single-key row still carries exactly its own key (the list did not bleed)" ;;
     *)  bad "the single-key row was contaminated by the list above it: ${sup_still:0:80}" ;;
   esac
+
+  # --- THE SURPLUS THE REMEDY DROPS IS STATED AS A NUMBER --------------------------------
+  #
+  # THE REPORT BEHIND THIS. The consumer was told to narrow `shadows:` because core superseded
+  # ONE ARM of an anchor, while their span under it carried 119 lines core does not have. The row
+  # already warned, in prose, that narrowing "releases every unrelated line that anchor's span
+  # froze at base_sha" — and an unquantified warning beside a concrete instruction reads as
+  # boilerplate. The obvious remedy is to declare the ARM, and an arm is NOT ADDRESSABLE:
+  # `override_supersessions` keys on `<file>#<anchor>` with no span vocabulary, the real case's
+  # 231-line span carries exactly one sub-heading with the superseded machinery on BOTH sides of
+  # it, and the other superseded arm is not in the shadowed file at all. So the row states the
+  # size of what the operator is about to drop, which needs no new declaration.
+  sup_surp="$(printf '%s\n' "$sup_out" | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED" && $2 ~ /SUP__surplus\.md$/ {print $4}')"
+  case "$sup_surp" in
+    *"against core's 4 at ${WBASE}, and 3 of yours appear nowhere in core's"*)
+      ok "the row MEASURES the surplus: 3 consumer-only line(s) against core's span at ${WBASE} — the operator is told the size of what narrowing drops" ;;
+    "") bad "the surplus entry produced no OVERRIDE-SUPERSEDED detail at all, so this arm asserts nothing" ;;
+    *"could NOT be measured"*)
+      bad "the surplus went UNMEASURABLE on an entry whose span and core span both exist. Either the anchor is not resolving in one of the two, or base_sha is not being read — and the fallback sentence then hides it behind honest-sounding prose: ${sup_surp:0:200}" ;;
+    *)  bad "the surplus was measured wrongly (want 3 consumer-only against core's 4): $(printf %s "$sup_surp" | grep -oE 'MEASURED:.*' | head -1 || echo "<no MEASURED clause in the detail at all>")" ;;
+  esac
+
+  # THE CONTROL, and it is what stops the arm being "print the entry's size". Same anchor, same
+  # base_sha, same declaration; the only difference is that this span carries nothing core lacks.
+  sup_nosurp="$(printf '%s\n' "$sup_out" | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED" && $2 ~ /SUP__nosurplus\.md$/ {print $4}')"
+  case "$sup_nosurp" in
+    *"and 0 of yours appear nowhere in core's"*)
+      ok "  CONTROL: an identical span reports 0 consumer-only lines — the number is a comparison, not the entry's length" ;;
+    "") bad "the no-surplus control produced no detail at all, so the assertion above is unpaired" ;;
+    *)  bad "CONTROL: a span byte-identical to core's did not report 0 consumer-only lines: ${sup_nosurp:0:220}" ;;
+  esac
+
+  # UNMEASURABLE IS SAID OUT LOUD. SUP__match shadows a section its own body does not contain, so
+  # neither span resolves. The clause must SAY that rather than fall back to the qualitative
+  # sentence alone — a warning that quietly loses its number reads exactly like one that never had
+  # a subject, which is the defect class this whole arm belongs to.
+  case "$sup_still" in
+    *"could NOT be measured"*)
+      ok "  an entry whose span does not resolve says so in the row, instead of dropping silently to prose" ;;
+    *"appear nowhere in core's"*)
+      bad "an entry with no resolvable span reported a MEASUREMENT anyway, so the numbers in the two assertions above cannot be trusted: ${sup_still:0:200}" ;;
+    *)  bad "an entry whose span does not resolve carries neither a measurement nor the unmeasurable notice: ${sup_still:0:200}" ;;
+  esac
+
+  # MUTATION — drop the comparison and count the whole span. The surplus entry still looks right
+  # (8 lines, and 8 would be reported), so ONLY the control can see this; that is why it is paired.
+  MUTS="$ROOT/drift-mutant-surplus"; rm -rf "$MUTS"; mkdir -p "$MUTS"
+  cp "$(dirname "$DRIFT")"/* "$MUTS"/ 2>/dev/null
+  sed 's/| grep -Fxv -f <(printf .%s\\n. "\$cs") | grep -c \./| grep -c ./' "$DRIFT" > "$MUTS/layer-drift.sh"
+  if cmp -s "$DRIFT" "$MUTS/layer-drift.sh"; then
+    bad "  mutation surplus-comparison: the mutation matched nothing, so the control above proves nothing"
+  else
+    ms="$(bash "$MUTS/layer-drift.sh" "$DIST" "$BASE" "$THEIRS2" "$CONS" 2>/dev/null \
+          | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED" && $2 ~ /SUP__nosurplus\.md$/ {print $4}')"
+    if [ -z "$ms" ]; then
+      bad "  mutation surplus-comparison: the mutant emitted no row for the control, so it broke the arm rather than the comparison"
+    elif grep -qF "and 0 of yours appear nowhere" <<<"$ms"; then
+      bad "  mutation surplus-comparison: counting the WHOLE span still reported 0 consumer-only lines — the control is not reading the number it claims to"
+    else
+      ok "  MUTATION: without the comparison the identical span reports a non-zero surplus, so the control is load-bearing"
+    fi
+  fi
 
   # --- A MULTI-ANCHOR OVERRIDE IS THE CASE THIS ARM WAS BLIND TO ------------------------------
   #

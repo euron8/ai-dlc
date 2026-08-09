@@ -34,6 +34,61 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.334.0] — 2026-08-09
+
+### An arm is not addressable, so the row states the surplus instead
+
+Plan item 26, **reproduced here first** — the consumer reported it mid-pull and this repo has been
+wrong about a report's attribution three times.
+
+**THE REPORT, CONFIRMED AT GROUND TRUTH.** `apply.sh` tells the operator to narrow
+`overrides/steps__retro__domain-sections.md` by dropping `steps/retro.md#4a. Close-Out Sweep`,
+because core superseded **one arm** of that section. Measured independently against the entry's own
+`base_sha`: the entry's span under that anchor is 326 lines, core's at `f9b8aa4` is 231, and
+**119 lines appear nowhere in core's** — the exact number the consumer gave. Narrowing drops all
+119 out of the rendered rulebook.
+
+**THE ITEM'S FIRST QUESTION WAS WHETHER AN ARM IS ADDRESSABLE AT ALL. IT IS NOT, and that is
+measured rather than assumed:**
+
+- `override_supersessions` keys on `<file>#<anchor>`. There is no span vocabulary, and adding one
+  requires the span to exist in core's prose.
+- Core's `#4a. Close-Out Sweep` is **231 lines with exactly ONE sub-heading**, at offset 207.
+  `--fail-on` and `warn-only` — the superseded machinery — occur **both inside and outside** it, so
+  no sub-anchor names the arm.
+- `strikethrough`, the other superseded arm, **does not appear in that span at all**. It lives in
+  `validate-artifact-budget.sh`, so no anchor in the shadowed file could ever have named it.
+
+Making an arm addressable therefore means restructuring core's rule prose around a declaration
+format. **So the honest outcome is the smaller one the item itself predicted**: stop leaving the
+surplus unquantified.
+
+**THE ROW ALREADY SAID THE SURPLUS EXISTED. IT NEVER SAID HOW MUCH.** Every one of the four
+supersession emits carried *"releases every unrelated line that anchor's span froze at base_sha"* —
+an unquantified warning beside a concrete instruction, which is a warning the operator reads past.
+It now carries a measurement, computed at the emit site from inputs the loop already held (no new
+declaration, no new input, no new join):
+
+```
+MEASURED: your span under that anchor is 285 non-blank line(s) against core's 199 at f9b8aa4,
+and 119 of yours appear nowhere in core's -- that is what this action drops out of the
+rendered rulebook.
+```
+
+The comparison is against the entry's own `base_sha`, never `theirs`, because that is what an
+override actually froze. Computed once for all four emits so a fifth cannot forget it. **When
+either span is unreadable the clause SAYS the surplus could not be measured** rather than falling
+back to the qualitative sentence alone — a warning that quietly loses its number reads exactly like
+one that never had a subject, which is the defect class this whole change belongs to.
+
+Fixture arms in `layer-readopt-gate`, seeded rather than recomputed (a fixture that re-derives the
+answer with the expression under test agrees with itself): a core section committed before the
+declaration so an entry can carry it as `base_sha`, one entry with **exactly 3** consumer-only
+lines, and a **control whose span is byte-identical to core's and must report 0** — without which
+the arm is satisfied by printing the entry's length. A third arm holds that an entry whose span
+does not resolve says so. The mutant removes the comparison and counts the whole span: the surplus
+entry still looks right, so **only the control can see it**, which is why it is paired.
+
 ## [0.333.0] — 2026-08-09
 
 ### A consumer's own artifact-path prescriptions were the one cell of the 2×2 nothing read
