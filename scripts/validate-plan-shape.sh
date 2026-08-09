@@ -176,6 +176,37 @@ for f in "${FILES[@]}"; do
     done < <(printf '%s\n' "$statuses")
     [ "$unmarked" -gt 1 ] && err "$rel" "carries $n_status status sections and $unmarked of them claim to be current. The reader believes whichever they reach first."
   fi
+
+  # --- P7: an instruction that ships its own opt-out --------------------------------
+  # THE DEFECT, measured on this repo's own runbook before it was handed over. A section
+  # told a graph session to run a consolidation pass. Beside it sat a fenced decision
+  # table -- `ok -> no target, stop` / `OVER -> run it` -- and a paragraph of sizes
+  # "for the record". Every figure in it was true and freshly measured. Together they
+  # were an OPT-OUT KIT: a session told to do a thing, reading in the same section that
+  # its subject looks healthy, can talk itself out of the work and cite the plan while
+  # doing so. The operator's words for it are the name of this arm.
+  #
+  # A plan is a set of instructions. If an action is genuinely conditional, the condition
+  # belongs in the numbered action list where the executor decides it deliberately -- not
+  # in a code comment beside the instruction, where it reads as permission.
+  #
+  # WHY THE GRAMMAR IS THIS NARROW, and it is the whole false-positive argument. The arm
+  # matches ONE shape: a `#` comment carrying an arrow that resolves an outcome to NOT
+  # acting. Measured over `docs/plans/*.md` at the release that shipped it -- 9 plans,
+  # every one of them long and instruction-dense -- the false-positive set is EMPTY, and
+  # the same expression fires on the historical revision that carried the defect
+  # (`git show dd9caf3`, line 452). Prose conditionals are deliberately out of scope:
+  # "a different answer means STOP and ping the operator" is a correct instruction and
+  # this arm must never touch it.
+  #
+  # A WARNING, NOT AN ERROR, and that is not timidity. Conditional steps are legitimate
+  # -- this repo's own runbooks stop on a stamp mismatch. What the arm can prove is the
+  # SHAPE, never that this particular condition is illegitimate, so it names the line and
+  # leaves the judgement with the author. The binding statement is in CLAUDE.md.
+  while IFS= read -r hit; do
+    [ -n "$hit" ] || continue
+    warn "$rel" "line ${hit%%:*} is an opt-out inside an instruction: a comment that maps an outcome to NOT doing the work ('${hit#*:}'). If the action is conditional, put the condition in the numbered action list where the executor decides it; beside the instruction it reads as permission to skip."
+  done < <(grep -nE '^[[:space:]]*#.*(->|→).*([Ss]top|[Ss]kip|do not|don.t|nothing to (do|rotate)|no [A-Za-z-]+ (target|subject))' "$f" | cut -c1-200)
 done
 
 echo "validate-plan-shape: ${#FILES[@]} plan(s) checked, $errs error(s), $warns warning(s)."

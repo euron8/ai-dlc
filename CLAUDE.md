@@ -128,6 +128,28 @@ over hand-listing either; when two files must agree, bind them — the numbered
 invariants in `scripts/validate-enforcement-map.sh` are the pattern, and its
 final `OK:` line enumerates the ones currently live.
 
+## An instruction that ships its own opt-out is not an instruction
+
+**Measured on this repo's own runbook, in the revision about to be handed to a consumer
+session.** A section told that session to run a consolidation pass. Beside it sat a fenced
+decision table — `ok -> no target, stop` — and a paragraph of current sizes "for the
+record, not as a gate". Every figure was true and freshly measured. **Together they were an
+opt-out kit**: a session told to do a thing, reading in the same breath that its subject
+looks healthy, talks itself out of the work and cites the plan while doing so.
+
+**Write the instruction and stop.** No decision table beside it, no "for the record"
+figures, no argument for why this target and not that one — the reader has been handed the
+target by name and everything further is material for re-litigating a settled choice.
+
+**A genuinely conditional action states its condition in the numbered action list**, where
+the executor decides it deliberately and the operator can see the branch. Nowhere else.
+
+**This applies to what you write into `CLAUDE.md` too, which is where it was broken the
+first time it was written down.** A measurement is why a rule exists and belongs here; a
+sentence telling the reader when the rule need not bind is an exception, and it will be
+read as one. `validate-plan-shape.sh`'s P7 flags one form mechanically; its scope, and the
+reason for that scope, are in its own header.
+
 ## Before adding a check, measure its false-positive set
 
 Ship it only if you have run it and the set is empty or enumerated. An unmeasured
