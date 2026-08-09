@@ -163,8 +163,17 @@ figure here is a measurement, not a mistake to correct.
 **GRAPH IS CURRENT AT `0.341.0 / 899411a` ON ALL FOUR FIELDS, re-read 2026-08-09 and unchanged, read 2026-08-09 after their #906.**
 **Read the stamp; do not carry that sha** — the derivation is one line below and this paragraph has
 named a wrong one twice. **THREE releases have landed here since** (v0.342.0, v0.343.0, v0.344.0),
-so a pull is owed again and **no runbook exists for it yet**. Whether to write one is the operator's
-call and is not scheduled anywhere in this file.
+so a pull is owed again. **~~No runbook exists for it yet~~ — WRITTEN on operator direction
+2026-08-09: [`graph-0341-to-0344-pull.md`](graph-0341-to-0344-pull.md)**, 0 errors / 0 warnings from
+`validate-plan-shape.sh`, both of its citations resolving to their subjects. **Hand it over; do not
+re-derive its scope here** — it carries its own derivation, its own stamp confirmation and its own
+done-whens.
+
+**ITS ACTION 0 IS THE ONE WORTH KNOWING FROM THIS SIDE, because it is the fix carrying itself.**
+Graph's pause flag and snapshot are BOTH present today, and their installed acknowledge hook is
+byte-identical to `0.341.0`'s — so an agent-driven `/ai-dlc-update` on that tree is denied at its
+first dispatch **right now**, measured by driving their own installed copy against the new fixture's
+scratch tree, writing nothing to graph. v0.344.0 is the fix and cannot help the run that carries it.
 
 **GRAPH'S STAMP — READ IT, DO NOT CARRY IT.** Every prior revision of this paragraph named a
 version that was wrong within a day; the derivation is the durable part.
