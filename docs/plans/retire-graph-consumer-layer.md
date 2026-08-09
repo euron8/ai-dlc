@@ -21,27 +21,34 @@ paragraph saying SPENT, SUPERSEDED, DONE, or wrapped in `~~strikethrough~~` is a
 everything else above the cut is live. Check the marker before acting on anything here.
 
 **CITATIONS BELOW `## Context` ARE HISTORICAL AND SOME NO LONGER RESOLVE TO THEIR SUBJECT.**
-They were written before the releases that shipped them, and the releases moved the lines.
-Checked at handoff: `layer-drift.sh:648` was the env-key guard and is now other code (v0.275.0
-changed it), and `core/skills/ai-dlc/SKILL.md:506` described the invitation sentence v0.282.0 deleted. Both sit in
-sections marked SHIPPED, so they are records of why a thing was done, not instructions. Every
-`path:line` ABOVE `## Context` was re-checked at handoff. **Re-measured 2026-08-08 after v0.320.0:
-40 distinct citations — 35 resolve into THIS repo and are in range, 0 past end-of-file, 0 ambiguous,
-5 point into the CONSUMER.** The readings before it were 41/36/0/5 and, before the fixes that
-produced those, 40/34/5/**3 ambiguous**. Do not carry these numbers forward; re-run the audit, because
-the last recorded figure said "26 into this repo" and "four into the consumer" and both had drifted.
+They were written before the releases that shipped them, and the releases moved the lines. Two
+checked examples: `layer-drift.sh:648` was the env-key guard and is now other code, and a
+`SKILL.md` line describing the invitation sentence v0.282.0 deleted. Both sit in sections marked
+SHIPPED, so they are records of why a thing was done, not instructions.
+
+**EVERY `path:line` ABOVE `## Context` IS RE-CHECKED AT EACH HANDOFF. Re-run 2026-08-09 after
+v0.330.0: 50 distinct citations — 45 resolve in range, 0 past end-of-file, 0 ambiguous, 5 into the
+CONSUMER.** Prior readings were 51/46/0/5 (before this handoff's own edits changed it), 41/36/0/5, and 40/34/5/3-ambiguous. **That first figure moving while this paragraph was being written is the drift the sentence below describes.** **Do not carry these
+numbers; re-run the loop.** It is one pass: extract
+`[A-Za-z0-9_./-]+\.(md|sh|json|yaml):[0-9]+` from everything above `## Context`, resolve each
+against `git ls-files`, and compare the line number to `wc -l`. Report the count as its own
+control — a loop that extracts nothing prints the same four zeros as a clean file.
+
 **AND THE COUNT IS THE WEAKER HALF OF THE CHECK.** It reports whether a citation RESOLVES, never
 whether it still resolves to its subject — v0.320.0 moved two lines item 27 quotes while leaving
 both in range, so the audit stayed green over a citation that had gone stale. Read the line, not
-just the count.
-The audit is one loop: extract `[A-Za-z0-9_./-]+\.(md|sh|json|yaml):[0-9]+` from everything above
-`## Context`, resolve each against `git ls-files`, and compare the line number to `wc -l`.
-**Re-run after v0.323.0: 50 distinct citations — 45 resolve in range, 0 past end-of-file, 0
-ambiguous, 5 into the CONSUMER.** The run before that fix found **1 ambiguous**, and it was a bare
-`SKILL.md` + line number written into this file the same day the paragraph above warned about
-exactly that. **The warning does not enforce itself; the loop does.** Note that quoting a bad
-citation as an EXAMPLE makes the loop flag the example — write it without the line number, as here.
-Re-run the loop; do not carry 50/45/5.
+just the count. Note also that quoting a bad citation as an EXAMPLE makes the loop flag the
+example — write it without the line number, as above.
+
+**THE FIVE CONSUMER CITATIONS, DERIVED RATHER THAN HAND-LISTED — re-derived 2026-08-09 and
+unchanged:** `s301-epics-repair-p5d.md:115`, `s301-stories-adversarial-p2.md:327`,
+`s301-stories-adversarial-p6.md:252`, `s301-stories-repair-p5.md:581` — **the s301 close-out
+archived all four**, so they now live under
+`_bmad-output/planning-artifacts/archive/s301-<series>/` rather than at the paths quoted; content
+unchanged (`git mv` with per-file sha verification), only the prefix moved. The fifth is
+**`tea-consumer.md:18`**, item 22's. **Re-derive this set with the loop above rather than reading
+it here** — an earlier revision hand-listed four of the five, in the paragraph that exists to keep
+citations honest.
 
 **THE AMBIGUOUS ONE IS THE LESSON: this repo has THREE `SKILL.md` files** (`ai-dlc/`,
 `ai-dlc-setup/`, `ai-dlc-update/`), so a bare `SKILL.md` + line number resolves to whichever the reader
@@ -110,42 +117,38 @@ It said "eighteen" for eighteen releases after that stopped being true, which is
 underived-count defect core Rule 31 exists for, in the file that documents it. The previously-parked F3 branch shipped after two
 renumbers (0.288.0 → 0.289.0 → its final slot) once item 11 unblocked it.
 
-**~~graph is at `0.292.0 / c5e7daa` and is QUIESCENT.~~ ~~NO LONGER TRUE — 8b IS IN FLIGHT.~~
-~~8b IS DONE. graph is at `0.300.0 / 2bc7aa4`~~ ~~SUPERSEDED — graph is at `0.314.0 / f9b8aa4`~~
-~~SUPERSEDED AGAIN 2026-08-08 — graph is at `0.318.0 / 5e0f3b2`~~ **CURRENT AS OF 2026-08-08: graph
-is at `54e71012a`, stamped `0.319.0 / abfab65` on ALL FOUR fields** (#887). The rulebook base and the
-tool version, which had been split since the self-update, agree. **VERIFIED FROM THIS SIDE, not taken
-on the report:** graph's stamp reads `version`/`commit`/`skill_version`/`skill_commit` =
-`0.319.0`/`abfab65` ×2; `.claude/skills/ai-dlc/steps/artifact-consolidation.md` carries the
-`s<N>/consolidation-manifest` prescription; and `tests/fixtures/consolidation-residue/run.sh` is
-installed. The earlier pulls' verifications stand as their own record — graph's OWN installed
-budget validator returned `ok  WHOLE-READ POOL (4 planning artifacts)  117379 tok  (pool 330000,
-35% of it)` after 0.318.0, and `layer-drift.sh` over `2bc7aa4..f9b8aa4` returned **0 `HARD-*`** with
-49 rows across 9 statuses and no `DRIFT-RANGE-DEGENERATE` after 0.314.0.
+**GRAPH'S STAMP — READ IT, DO NOT CARRY IT.** Every prior revision of this paragraph named a
+version that was wrong within a day; the derivation is the durable part.
+`sed -n '1,4p' /Users/n8/git/graph/.claude/.ai-dlc-version` gives all four fields, and all four
+must agree unless a deferred slice is mid-flight. **Read 2026-08-09: `0.329.0 / 9fc216e` on all
+four.** The rulebook base and the tool version have agreed since #887; the one legitimate way they
+diverge is a run whose machinery slice was empty, where `--carried-machinery-slice` is correctly
+NOT passed and the skill fields stay behind on purpose.
 
-**~~ai-dlc `main` HAS MOVED TWO COMMITS PAST WHAT GRAPH HAS, AND NEITHER SHIPS ANYTHING.~~
-SUPERSEDED 2026-08-08 BY v0.320.0 — A PULL IS OWED AGAIN.** That paragraph was true of #455/#456,
-which touch `docs/` only, and it stopped being true the moment a release landed. **The derivation,
-not the answer, is what to carry forward:** `git diff --name-only <graph's stamped sha> HEAD` and
-read the top-level directories. Measured against graph's `abfab65` after v0.320.0 — **7 shipped
-files across `core/` (5) and `scripts/` (2), plus `VERSION` and `CHANGELOG.md`** — so this is a real
-pull, not a version-number gap. (Control: the same command puts exactly one path under `docs/`, so
-it is distinguishing the two kinds rather than reporting everything.) **The pull is small, it gates
-nothing in this plan, and it changes nothing observable on graph** — graph's stamp is already
-correct by hand, and v0.320.0's whole subject is the NEXT deferred-slice apply. Take it whenever
-graph is next open.
+**A PULL IS OWED — ONE HOP, TO `0.330.0`. The derivation, never the answer, is what to carry:**
+`git diff --name-only <graph's stamped sha> HEAD` and read the top-level directories. Measured
+2026-08-09 against `9fc216e`: **5 `core/` files, plus `VERSION` and `CHANGELOG.md`** (control: the
+same command puts 2 paths under `docs/`, so it separates the two kinds rather than reporting
+everything). **No rulebook file and no hooked core file moves**, so expect the self-update to take
+the clean split, **0 `HARD-*` blockers, and no adjudications to record** — graph's eleven recorded
+verdicts are keyed on digests this range does not touch.
 
-**RE-MEASURED 2026-08-08 AFTER v0.321.0–v0.323.0, AND THE SHAPE HAS CHANGED — this is now a pull
-that alters what the pipeline WRITES.** Same derivation, same base: `abfab65..HEAD` is **18 `core/`
-files, 2 `scripts/`, plus `VERSION` and `CHANGELOG.md`** (control: exactly 2 paths under `docs/`, so
-the command still separates the two kinds). **Do not carry those numbers forward — re-run the
-command**; they were 7/2 one release earlier. **Two homing jobs come with it, both small, neither
-blocking:** graph's live brief holds exactly **ONE** in-force LOCKED block (S299, 169 lines) to move
-into `s299/locked-requirements.md`, and its 223-line `## Changelog` section to move into
-`s<N>/changelog-product-brief.md`. Control on that count of one: `product-brief-history.md` carries
-**440** `LOCKED_REQUIREMENTS` mentions, so the live reading is real and not a failed grep. **Nothing
+**WHAT THE OPERATOR SHOULD EXPECT TO SEE FROM IT, and it is the reason to take it:**
+`ledger-rotate.sh` will start naming the entries that are closed for re-verification but not
+archivable. It counted **8** on graph at `0.329.0` while the same run printed
+`0 closed entries — nothing to rotate`. Those 8 are not new damage; they are a state that has been
+accumulating invisibly and now has a row.
+
+**TWO HOMING JOBS ARE STILL OWED, both small, neither blocking. VERIFIED STILL OPEN 2026-08-09,
+not carried from the paragraph that first recorded them:** `s299/locked-requirements.md` does not
+exist and the live brief still carries **6** `LOCKED_REQUIREMENTS` mentions; the brief still
+carries its `## Changelog` section and no `s<N>/changelog-product-brief.md` exists. **Nothing
 breaks before either is done** — the legacy `product-brief.md` is still an accepted source of
 record, and the changelog change governs future passes only.
+
+**~~A THIRD HOMING JOB — the stray `test-strategy.md` at the area root.~~ DONE, verified from this
+side 2026-08-09:** the root copy is gone and `s272/test-strategy.md` exists. That was the one with
+a deadline (Check 23 at s302's first planning gate), so **s302's planning gate is now clear**.
 
 **~~THE SKILL STAMP AGREEING IS A HAND-FIX, NOT A WORKING MECHANISM.~~ FIXED — v0.320.0 (item 27).**
 The operator set `skill_version`/`skill_commit` by hand during the 0.319.0 apply because `apply.sh`
@@ -154,7 +157,14 @@ never wrote them. It writes them now, on the one run that may claim them:
 release changes nothing there and is owed to the NEXT deferred-slice pull** — do not expect a
 visible difference on graph from it. s301 is closed; s302 has not started but MAY now start.
 
-**FOUR THINGS CARRIED FORWARD BY THE 0.318.0 PULL, ALL THE CONSUMER'S, NONE BLOCKING** — reported by
+**~~FOUR THINGS CARRIED FORWARD BY THE 0.318.0 PULL~~ — SPENT 2026-08-09, kept as the record.**
+The `#4a` narrowing is still tracked by `OWED-RETRO-4A-NARROW` and is now item 26's subject; layer
+debt has moved (**10 OPEN / 8 UNDECLARED** at the 0.329.0 pull, the newest UNDECLARED row being a
+verdict the operator wrote that names debt in prose without an `owed` object); the `921.`/`20.`
+retire-or-refile call is still open; and `PC-S318` has since been joined by `PC-S320`, `PC-S326`,
+`PC-S327`, `PC-S328` and `PC-S329`, **five of which this repo has already answered** — see
+§*The consumer-reported defect run*. Original text follows.
+Reported by
 the operator and recorded here so a later session does not read them as this repo's queue:
 the `#4a` anchor **stays** (`OWED-RETRO-4A-NARROW` tracks the narrowing); layer debt at **9 OPEN /
 8 UNDECLARED**; `gate-validation-push.md`'s `921.`/`20.` duplication awaiting a **retire-or-refile**
@@ -395,14 +405,17 @@ under a cross-sprint anchor still reds, asserted in the fixture.
 section, then the numbered list below. **Everything else in this file is either a record of
 completed work or a scoped item you will be sent to by name.**
 
-**SEVENTEEN OTHER PARAGRAPHS IN THIS FILE ANNOUNCE A `NEXT ACTION`, AND ALL SEVENTEEN ARE STRUCK
-THROUGH** — fifteen of them opening `NEXT ACTION FOR THIS REPO`, one `FOR THE OPERATOR`, one bare.
-They are kept because each records what its item measured, and several correct a premise this plan
-got wrong. **Do not act on any of them. This section is the live one**, and a `~~strikethrough~~`
-is this file's only marker that an action is spent — check for it before acting on anything that
-looks like an instruction. Derive the count rather than trusting it: `grep -c 'NEXT ACTION'` against
-`grep -c '~~NEXT ACTION'`, and the difference should be exactly the three occurrences in THIS
-section.
+**EVERY OTHER PARAGRAPH IN THIS FILE THAT ANNOUNCES A `NEXT ACTION` IS STRUCK THROUGH.** They are
+kept because each records what its item measured, and several correct a premise this plan got
+wrong. **Do not act on any of them. This section is the live one**, and a `~~strikethrough~~` is
+this file's only marker that an action is spent — check for it before acting on anything that looks
+like an instruction.
+
+**THE COUNT IS NOT WRITTEN HERE, DELIBERATELY.** It said "seventeen" for two releases after it
+stopped being true — the underived-count defect core Rule 31 exists for, in the file that
+documents it, in the paragraph warning about it. Derive it instead:
+`grep -c 'NEXT ACTION'` minus `grep -c '~~NEXT ACTION'`, and every remaining occurrence must be a
+HEADING or a POINTER to this section, not an instruction. Read them; do not count them.
 
 **NOTHING IS IN FLIGHT AND NOTHING GATES.** Working tree clean, `main` == `origin/main`, every
 branch this plan produced is merged. **Read the version from `VERSION`, never from this file.**
@@ -414,51 +427,47 @@ Item 23 is closed; §*Order of execution* lists what remains and none of it bloc
 building — this plan's own record is that a re-derivation changed the work in item 3, item 2b,
 item 16, item 17, item 18 and item 23c.**
 
-**THE NUMBERS BELOW ARE THIS LIST'S OWN 1–6 AND THE TABLE IN §*Order of execution* CARRIES THE SAME
-SIX AS ROWS 22–27, IN THE SAME ORDER.** They are two views of one sequence, not two sequences: this
-list says what to do next, the table says where each item sits in the whole plan's history. **If
-they ever disagree, the table is the one to fix** — every completed row in it is a receipt with a
-PR number, and this list is derived from what is left.
+**THE NUMBERS BELOW ARE THIS LIST'S OWN AND THE TABLE IN §*Order of execution* CARRIES THE SAME
+ITEMS, IN THE SAME ORDER.** They are two views of one sequence, not two sequences: this list says
+what to do next, the table says where each item sits in the whole plan's history. **If they ever
+disagree, the table is the one to fix** — every completed row in it is a receipt with a PR number,
+and this list is derived from what is left.
 
-1. **~~Item 25 — `test-strategy.md` is prescribed at a durable path with 73 homes.~~ — DONE
-   2026-08-08. v0.324.0.** It is **74** homes now, not 73; do not reuse either number. **The item's
-   central claim — that the durable-artifact declaration does not exist — is REFUTED**: it exists
-   twice over and had already decided four of the five, with reasons. What it had was a HOLE, because
-   it enumerated PRODUCERS and `test-strategy.md` is a TEA deliverable rather than an analyst draft.
-   See §*What item 25 measured*.
-2. **~~Item 24 — the fixture ship-list is four hand-lists.~~ — DONE 2026-08-08. v0.325.0.**
-   The counts were **132/120/12**, not 129/117/12. **A colocated per-fixture declaration already
-   existed** (`.dist-only`) and 5 of 12 already carried a reason, so *"the criterion is stated
-   nowhere"* was half wrong; **7 of 12 were zero bytes**, which was the real half. One of the four
-   derives now — the one that can, and the one that broke. See §*What item 24 measured*.
-3. **Item 28 — a `subject_digest` is unreadable once its row stops blocking.** REPRODUCED here,
+**ITEMS 25 AND 24 SHIPPED (v0.324.0, v0.325.0) and have left this list.** Their findings are in
+§*What item 25 measured* and §*What item 24 measured*, and both refuted their own item's central
+claim — in each case the declaration the item said was missing already existed and had a hole.
+**That is the pattern to expect from what is left below**, not an accident of those two.
+
+1. **Item 28 — a `subject_digest` is unreadable once its row stops blocking.** REPRODUCED here,
    attribution exact. Derive the caller set first so a listing mode does not become a second
    implementation of the candidate join.
-4. **Item 12 — bind the fixture ambient-env guard.** BLOCKED ON A DERIVATION, not on another item:
+2. **Item 12 — bind the fixture ambient-env guard.** BLOCKED ON A DERIVATION, not on another item:
    the guard is unshippable until the *declared consumer-settable tunables* are derived as a set.
    Requiring the clearing loop wherever a fixture names an `AI_DLC_*` token flags 19 fixtures, most
    of them naming keys they set themselves.
-5. **Item 22 — a stale path in a layer entry BODY goes undetected.** **REPRODUCE IT FIRST; it is
+3. **Item 22 — a stale path in a layer entry BODY goes undetected.** **REPRODUCE IT FIRST; it is
    the consumer's report, and its one citation points into the CONSUMER.** Then derive the
    false-positive set before building: entry bodies quote paths for many reasons.
-6. **Item 26 — LC-O15 is anchor-grained, the supersession was arm-grained.** **REPRODUCE IT FIRST**
+4. **Item 26 — LC-O15 is anchor-grained, the supersession was arm-grained.** **REPRODUCE IT FIRST**
    — reported mid-pull, never reproduced here. **Its first step is to establish whether an arm is
    addressable at all**, and if it is not, the honest outcome is a smaller change than a new join.
 
-**RECOMMENDED NEXT: item 28**, then 12, 22, 26. None blocks another.
+**RECOMMENDED NEXT: item 28**, then 12, 22, 26. None blocks another. **Item 26's subject is now
+partly answered but NOT closed** — v0.328.0 stopped `apply.sh` prescribing a retire over a recorded
+verdict, which is the SYMPTOM the consumer hit; item 26 asks whether an ARM is addressable at all,
+and that is untouched.
 
-**THE OPERATOR'S SIDE, and none of it is yours to do:** take the pull (scope and derivation in the
-status block above), and the **three** homing jobs it now carries — the S299 LOCKED block, the
-223-line brief changelog, and, added by v0.324.0, the one stray `test-strategy.md` at the
-`planning-artifacts/` root. **Nothing breaks before the first two are done** — the legacy
-source-of-record basename is still accepted, and the changelog change governs future passes only.
-**The third has a deadline and it is s302's first PLANNING gate**, where Check 23 will block on it;
-it does NOT affect the pull, because `validate-draft-stamps.sh` is not in the consumer pre-push
-(control: `validate-artifact-paths.sh` is, at `core/git-hooks/pre-push:142`). The remedy is one
-file: `git mv _bmad-output/planning-artifacts/test-strategy.md
-_bmad-output/planning-artifacts/s272/test-strategy.md` — the file's own H1 names s272, and that slot
-exists and holds no test strategy. **Move it into the sprint that WROTE it, never into the current
-one.** **Do not schedule work in this repo behind any of them.**
+**THE OPERATOR'S SIDE, and none of it is yours to do.** Take the pull (one hop to `0.330.0`;
+scope and derivation in the status block above), and the **two** homing jobs still open — the S299
+LOCKED block into `s299/locked-requirements.md`, and the brief's `## Changelog` section into
+`s<N>/changelog-product-brief.md`. Both verified still open 2026-08-09. **Nothing breaks before
+either is done.** A third, the stray `test-strategy.md`, is DONE and verified from this side.
+
+**Three consumer-side items are carried in graph's own ledger, not here, and none is this repo's:**
+`PC-S329`'s disposition (unblocked by v0.330.0, which resolved the contradiction that made it
+ambiguous); `PC-S312`'s receipt, which needs re-anchoring at `docs/retro/s249/retro.md` or it
+reports `NEEDS-REVIEW` on every pull; and the `921.`/`20.` retire-or-refile call, open across five
+reports now. **Do not schedule work in this repo behind any of them.**
 
 **s302 HAS NOT STARTED AND IS NOT A DEADLINE** (operator direction 2026-08-07, recorded above).
 It MAY start whenever the operator chooses.
@@ -1320,6 +1329,42 @@ polling. Say something when you need a decision, when you hit a premise that doe
 when you are done — including when "done" means you stopped early. **This instruction is carried
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
+
+## The consumer-reported defect run (v0.326.0–v0.330.0) — five reports, five fixes, none a plan item
+
+**These are not plan items and never entered §*Order of execution*.** They are defects the
+reference consumer filed against this repo during three consecutive pulls, and they are recorded
+here because a fresh session reading only the numbered list would not know they happened — or that
+five of the seven releases since item 24 came from this channel rather than from the plan.
+
+| filed | subject | answered |
+|---|---|---|
+| `PC-S320` | a blocking row's remedy ran the operator's own answer as a command | v0.326.0 (#468) |
+| `PC-S326` | a fixture asserting the pool arm could not run on any consumer | v0.327.0 (#469) |
+| `PC-S327` | `apply.sh` prescribed a destructive retire over a recorded verdict | v0.328.0 (#470) |
+| `PC-S328` | the backstop for wrong receipts joined on a name upstream never writes | v0.329.0 (#471) |
+| `PC-S329` | `NAMED-UPSTREAM` instructs the close its own status forbids | v0.330.0 (#472) |
+
+**THE ATTRIBUTION RECORD MATTERS MORE THAN THE COUNT.** This plan was wrong about a consumer
+report's attribution three times (items 13, 17, 18) and exact five times running (items 20, 21,
+then `PC-S320`, `PC-S326`, `PC-S327`, `PC-S328`, `PC-S329`). **The run of exactness is still not a
+licence to skip the reproduction** — every one of the five above was reproduced here with a
+control before any code was written, and two of the five had a detail the report got wrong
+(`PC-S326`'s release attribution was one release off; `PC-S328`'s scope was far larger than filed).
+
+**THE CLASS THEY SHARE, and it is the one to expect next:** four of the five are a mechanism that
+was *present and could not fire* — a remediation that deleted its own answer, a fixture green in
+the only layout it could not help, a worklist built without reading the register that decides it,
+a join asking for a name nobody writes. **A zero, a silence, or a clean line from an instrument
+that cannot see its subject.** That is this repo's recurring defect and the reason its invariants
+carry self-written probes.
+
+**WHAT THE MECHANISMS CAUGHT IN THE FIXES THEMSELVES** — the strongest evidence in this section,
+because it is the system working on its own author: I54b twice (an EPIPE `grep -q` that reports
+"not found" on matching input), I39 (a new ledger status undocumented at two of its three bound
+sites), I33's own blindness to the two-step form of its subject, a fail-closed guard that aborted
+an unrelated fixture's control, a probe that certified an instrument it never exercised, and a
+partial-revert mutation that proved the layer it left in place.
 
 ## What the close-instruction contradiction measured (a state both rules refuse to own)
 
