@@ -459,14 +459,26 @@ adj_digest() { # $1 entry (consumer-relative), $2 core-relative target
 # the value clears the pipe buffer. Here a match means "adjudicated", so the failure direction
 # would be a blocking row on a consumer who had recorded the verdict. Both sides are read into
 # variables first and the test is a here-string.
-adj_lookup() { # $1 digest -> 0 if a record with a vocabulary verdict exists
+# ONE jq EXPRESSION, TWO CALLERS. adj_lookup answers "is there a verdict"; adj_verdict
+# answers "which one". They must never disagree about what counts as a record, so the
+# second is written in terms of the first rather than beside it.
+adj_verdict() { # $1 digest -> prints the recorded verdict, empty if none
   [ -f "$ADJ_REGISTER" ] || return 1
   command -v jq >/dev/null 2>&1 || return 2
-  local found
-  found="$(jq -r --arg d "$1" 'select(.subject_digest == $d) | .verdict' "$ADJ_REGISTER" 2>/dev/null)"
+  jq -r --arg d "$1" 'select(.subject_digest == $d) | .verdict' "$ADJ_REGISTER" 2>/dev/null
+}
+adj_lookup() { # $1 digest -> 0 if a record with a vocabulary verdict exists
+  local found rc
+  found="$(adj_verdict "$1")"; rc=$?
+  [ "$rc" -eq 2 ] && return 2
   [ -n "$found" ] || return 1
   grep -qxF -f <(printf '%s\n' "$ADJ_VERDICTS") <<<"$found"
 }
+
+# THE TOKEN A CONSUMER OF THIS ROW KEYS ON. Declared here, next to the only writer, and
+# read by apply.sh -- which had no register reader of its own and therefore prescribed
+# destructive work the project had already decided against (PC-S326's sibling, PC-S327).
+ADJ_ROW_TOKEN="adjudicated"
 
 adj_check() { # $1 status, $2 entry, $3 target
   adj_is_adjudicated "$1" || return 0
@@ -950,6 +962,22 @@ while IFS= read -r f; do
       sup_raw="$(awk -F"$TAB" -v k="$(norm "$d_file")#$(norm "$d_anchor")" '$1==k {print $2; exit}' <<< "$ent_keys")"
       [ -n "$sup_raw" ] || continue
 
+      # IF A VERDICT IS ALREADY RECORDED FOR THIS EXACT SUBJECT, SAY SO IN THE ROW.
+      # The row still prints -- the operator wants to see that core superseded something --
+      # but apply.sh reads this token and stops prescribing the retire sequence, which it
+      # was otherwise emitting straight over a recorded `still-additive`. Computed ONCE for
+      # all four emits below rather than pasted into each, so a fifth emit cannot forget it.
+      #
+      # DIGEST-KEYED, WHICH IS THE PROPERTY THAT MAKES THE SUPPRESSION SAFE. adj_digest
+      # covers the entry AND the core file it hooks at theirs, so a verdict is SPENT the
+      # moment either side moves: a stale one cannot suppress anything, and the worklist
+      # comes straight back. This is a record of a reading, never an exemption for a path.
+      sup_adj=""
+      sup_dg="$(adj_digest "$entry" "$tgt" 2>/dev/null || true)"
+      if [ -n "$sup_dg" ] && adj_lookup "$sup_dg" 2>/dev/null; then
+        sup_adj="${ADJ_ROW_TOKEN}=$(adj_verdict "$sup_dg" 2>/dev/null | head -1) :: "
+      fi
+
       # ONE ROW PER SUPERSEDED ANCHOR, which is why the old `break` is gone. Two anchors of one
       # entry can be superseded by two different core releases needing two different keys;
       # collapsing them to one row would hand the operator one of the two actions and drop the
@@ -957,17 +985,17 @@ while IFS= read -r f; do
       if [ "$ent_nparts" -gt 1 ]; then
         if [ -n "$s_env" ]; then
           emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
-            "replaces_with=${s_env} :: retire_anchor=${sup_raw} :: core ${s_since} provides what this entry's \`${sup_raw}\` shadow was written to work around, so that ANCHOR can be dropped rather than re-adopted: set ${s_env} in .claude/settings.json (see override_supersessions in layer-contract.yaml for how to derive its value), then remove \`${sup_raw}\` from this entry's shadows: and leave its other $(( ent_nparts - 1 )) anchor(s) exactly as they are. DO NOT run readopt-override.sh --stamp retire on this entry: that deletes the whole file, and core has superseded only ${sup_raw} of its ${ent_nparts} anchors. Narrowing still releases every unrelated line that anchor's span froze at base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. The clause is ADJUDICATED, so this row needs a RECORDED verdict before the pull applies -- and keeping the shadow IS one of them: a consumer that still wants it for its own reasons records \`still-additive\` with a reason and the block clears. What is refused is proceeding without an answer, never the answer."
+            "${sup_adj}replaces_with=${s_env} :: retire_anchor=${sup_raw} :: core ${s_since} provides what this entry's \`${sup_raw}\` shadow was written to work around, so that ANCHOR can be dropped rather than re-adopted: set ${s_env} in .claude/settings.json (see override_supersessions in layer-contract.yaml for how to derive its value), then remove \`${sup_raw}\` from this entry's shadows: and leave its other $(( ent_nparts - 1 )) anchor(s) exactly as they are. DO NOT run readopt-override.sh --stamp retire on this entry: that deletes the whole file, and core has superseded only ${sup_raw} of its ${ent_nparts} anchors. Narrowing still releases every unrelated line that anchor's span froze at base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. The clause is ADJUDICATED, so this row needs a RECORDED verdict before the pull applies -- and keeping the shadow IS one of them: a consumer that still wants it for its own reasons records \`still-additive\` with a reason and the block clears. What is refused is proceeding without an answer, never the answer."
         else
           emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
-            "retire_anchor=${sup_raw} :: core ${s_since} ADOPTED what this entry says under \`${sup_raw}\`, so that ANCHOR can be dropped rather than re-adopted -- and there is nothing to configure first: remove \`${sup_raw}\` from this entry's shadows: and leave its other $(( ent_nparts - 1 )) anchor(s) exactly as they are. DO NOT run readopt-override.sh --stamp retire on this entry: that deletes the whole file, and core has superseded only ${sup_raw} of its ${ent_nparts} anchors. See override_supersessions in layer-contract.yaml for the reason core recorded and the verify: command that checks the adoption landed. Narrowing still releases every unrelated line that anchor's span froze at base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. The clause is ADJUDICATED, so this row needs a RECORDED verdict before the pull applies -- and keeping the shadow IS one of them: a consumer that still wants it for its own reasons records \`still-additive\` with a reason and the block clears. What is refused is proceeding without an answer, never the answer."
+            "${sup_adj}retire_anchor=${sup_raw} :: core ${s_since} ADOPTED what this entry says under \`${sup_raw}\`, so that ANCHOR can be dropped rather than re-adopted -- and there is nothing to configure first: remove \`${sup_raw}\` from this entry's shadows: and leave its other $(( ent_nparts - 1 )) anchor(s) exactly as they are. DO NOT run readopt-override.sh --stamp retire on this entry: that deletes the whole file, and core has superseded only ${sup_raw} of its ${ent_nparts} anchors. See override_supersessions in layer-contract.yaml for the reason core recorded and the verify: command that checks the adoption landed. Narrowing still releases every unrelated line that anchor's span froze at base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. The clause is ADJUDICATED, so this row needs a RECORDED verdict before the pull applies -- and keeping the shadow IS one of them: a consumer that still wants it for its own reasons records \`still-additive\` with a reason and the block clears. What is refused is proceeding without an answer, never the answer."
         fi
       elif [ -n "$s_env" ]; then
         emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
-          "replaces_with=${s_env} :: core ${s_since} provides what this entry was written to work around, so it can be RETIRED rather than re-adopted: set ${s_env} in .claude/settings.json (see override_supersessions in layer-contract.yaml for how to derive its value) and run readopt-override.sh --stamp retire. Retiring it also releases every unrelated line this entry froze at its base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. The clause is ADJUDICATED, so this row needs a RECORDED verdict before the pull applies -- and keeping the shadow IS one of them: a consumer that still wants it for its own reasons records \`still-additive\` with a reason and the block clears. What is refused is proceeding without an answer, never the answer."
+          "${sup_adj}replaces_with=${s_env} :: core ${s_since} provides what this entry was written to work around, so it can be RETIRED rather than re-adopted: set ${s_env} in .claude/settings.json (see override_supersessions in layer-contract.yaml for how to derive its value) and run readopt-override.sh --stamp retire. Retiring it also releases every unrelated line this entry froze at its base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. The clause is ADJUDICATED, so this row needs a RECORDED verdict before the pull applies -- and keeping the shadow IS one of them: a consumer that still wants it for its own reasons records \`still-additive\` with a reason and the block clears. What is refused is proceeding without an answer, never the answer."
       else
         emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
-          "core ${s_since} ADOPTED what this entry says, so it can be RETIRED rather than re-adopted -- and there is nothing to configure first: run readopt-override.sh --stamp retire on its own. See override_supersessions in layer-contract.yaml for the reason core recorded and the verify: command that checks the adoption landed. Retiring it also releases every unrelated line this entry froze at its base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. The clause is ADJUDICATED, so this row needs a RECORDED verdict before the pull applies -- and keeping the shadow IS one of them: a consumer that still wants it for its own reasons records \`still-additive\` with a reason and the block clears. What is refused is proceeding without an answer, never the answer."
+          "${sup_adj}core ${s_since} ADOPTED what this entry says, so it can be RETIRED rather than re-adopted -- and there is nothing to configure first: run readopt-override.sh --stamp retire on its own. See override_supersessions in layer-contract.yaml for the reason core recorded and the verify: command that checks the adoption landed. Retiring it also releases every unrelated line this entry froze at its base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. The clause is ADJUDICATED, so this row needs a RECORDED verdict before the pull applies -- and keeping the shadow IS one of them: a consumer that still wants it for its own reasons records \`still-additive\` with a reason and the block clears. What is refused is proceeding without an answer, never the answer."
       fi
     done <<< "$(shadow_parts "$s_shadows")"
   done <<< "$(supersessions_of "$THEIRS")"

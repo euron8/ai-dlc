@@ -447,9 +447,58 @@ EOF
 # result is an entry that still freezes its shadowed span. Each loop carries its own
 # heredoc: sharing one silently leaves the other reading stdin, which parses fine.
 TAB_CH="$(printf '\t')"
+
 LD_SUP="$(printf '%s\n' "$LD_OUT" | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED"{print $2 "\t" $4}')"
+# THE ROW TOKEN IS RESOLVED FROM ITS ONE HOME, NEVER RESTATED HERE, AND ONLY WHEN THERE IS
+# A ROW TO APPLY IT TO. layer-drift.sh declares it beside the only code that writes it; this
+# file reads that declaration. A literal copy is a second thing to keep in step, and the
+# failure mode is silent: a token that drifts leaves the case arm below matching nothing,
+# which reads exactly like a pull with no adjudicated rows in it.
+#
+# GATED ON A NON-EMPTY $LD_SUP, and that scoping is not cosmetic. An earlier draft resolved
+# the token unconditionally and FAILED CLOSED when it could not — which is right in
+# principle and wrong here: apply-self-overwrite deliberately drives a LONE COPY of this
+# script in a scratch directory with no sibling beside it, so the guard aborted a run that
+# had no supersession rows to get wrong, and took an unrelated fixture's unmutated control
+# down with it. No rows means no decision to contradict. When there ARE rows, an
+# unresolvable token means this script cannot tell a decided one from an undecided one, and
+# the safe answer there is still to stop rather than guess in either direction.
+if [ -n "$LD_SUP" ]; then
+  ADJ_ROW_TOKEN="$(sed -n 's/^ADJ_ROW_TOKEN="\([A-Za-z_][A-Za-z0-9_-]*\)".*/\1/p' "$SELF/layer-drift.sh" 2>/dev/null | head -1)"
+  if [ -z "$ADJ_ROW_TOKEN" ]; then
+    echo "apply.sh: FATAL — OVERRIDE-SUPERSEDED row(s) present and ADJ_ROW_TOKEN could not be resolved from $SELF/layer-drift.sh." >&2
+    echo "  Without it this script cannot tell an ALREADY-ADJUDICATED supersession row from an" >&2
+    echo "  undecided one, and would emit retire steps over a recorded verdict (PC-S327)." >&2
+    exit 2
+  fi
+fi
+
 while IFS="$TAB_CH" read -r ovr detail; do
   [ -n "$ovr" ] || continue
+
+  # A ROW THE PROJECT HAS ALREADY DECIDED IS NOT A WORKLIST ITEM.
+  #
+  # THIS SCRIPT HAD NO READER FOR THE ADJUDICATION REGISTER AT ALL, and layer-drift.sh --
+  # which does -- correctly emitted NO blocking row for an entry carrying a recorded
+  # `still-additive`. So the two tools disagreed: the gate said "decided, proceed" and this
+  # manifest said "delete it", in a list the operator is told to work top-down. Measured on
+  # the reference consumer: 0 mentions of the register here against 2 in layer-drift.sh,
+  # and the prescribed step 2/2 would have removed a live stale-header closure guard and a
+  # ceiling delegation -- 119 consumer-only lines -- that the recorded verdict exists to
+  # keep. Filed by that consumer as PC-S327.
+  #
+  # THE VERDICT IS NOT RE-DERIVED HERE. layer-drift.sh computes it, digest-keyed, and says
+  # so in the row; a second register reader in this file is a second thing to keep in step
+  # with the schema. Because the digest covers the entry AND the core file it hooks at
+  # theirs, a SPENT verdict cannot suppress anything -- the token is simply absent and the
+  # sequence below is emitted as before. That is what keeps this from becoming a permanent
+  # exemption for a path.
+  case "$detail" in
+    "$ADJ_ROW_TOKEN"=*)
+      adj_v="${detail#"$ADJ_ROW_TOKEN"=}"; adj_v="${adj_v%% ::*}"
+      say NOTE override-adjudicated "$ovr" "core superseded a shadowed anchor here, and this project has ALREADY RECORDED a verdict of '${adj_v}' for this exact subject in the layer adjudication register. No retire steps are emitted: acting on them would undo a decision, not complete one. The row is reported so the supersession stays visible. If you want to revisit it, change the register entry -- and note the verdict is digest-keyed, so it lapses on its own the next time either this entry or the core file it hooks moves."
+      continue ;;
+  esac
   # ORDERED AND ATOMIC, AS ROWS RATHER THAN AS PROSE.
   #
   # Retiring a superseded override is two writes that MUST land together, and the order is

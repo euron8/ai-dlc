@@ -34,6 +34,53 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.328.0] — 2026-08-09
+
+### apply.sh prescribed destructive work the project had already decided against, because it never read the register that holds the decision
+
+`PC-S327`, filed by the reference consumer and **reproduced here with a control**:
+
+```
+grep -c layer-adjudication-register  reconcile/apply.sh       0
+grep -c layer-adjudication-register  reconcile/layer-drift.sh 2
+```
+
+`apply.sh` builds its override-retire worklist from `layer-drift.sh`'s `OVERRIDE-SUPERSEDED`
+rows and never asks whether a verdict exists. So the two tools disagreed: the gate said
+*decided, proceed* — no `HARD-LAYER-ADJUDICATION-MISSING` — while the manifest an operator is
+told to work **top-down** said *delete it*. On the reference consumer the prescribed step 2/2
+would have removed a live stale-header closure guard and the `FR-S297-4` ceiling delegation,
+**119 consumer-only lines**, against a `still-additive` recorded the day before.
+
+**The answer is routed through the row, not through a second register reader.**
+`layer-drift.sh` already computes the verdict, digest-keyed; it now declares `ADJ_ROW_TOKEN`
+and writes `adjudicated=<verdict>` into the row when one is recorded. `apply.sh` **resolves
+that declaration** and emits a `NOTE` instead of the retire sequence. The row still prints —
+the operator wants to see that core superseded something.
+
+**Digest-keying is what makes the suppression safe rather than an exemption.** The digest covers
+the entry *and* the core file it hooks at theirs, so a spent verdict cannot suppress anything:
+the token is simply absent and the worklist returns. Verified both ways.
+
+**Two defects in the fix, both caught before shipping.**
+
+- The first draft referenced `ADJ_ROW_TOKEN` in `apply.sh` without resolving it. Under that
+  file's `set -u` (line 34) it is an unbound variable — **the run aborts mid-apply**, which is
+  worse than the bug being fixed. It now resolves the token from its one home and **fails
+  closed** with an explicit message if it cannot.
+- `adj_lookup` and the new `adj_verdict` would have carried two copies of the same `jq`
+  expression. They are now one: `adj_lookup` is written in terms of `adj_verdict`, so the two
+  can never disagree about what counts as a record.
+
+**New invariant I86** binds the token as one string across writer and reader, in both
+directions: `apply.sh` may not restate the literal, and `layer-drift.sh` may not declare a token
+it never writes into a row — *a token with a home and no emitter leaves the suppression unable to
+fire on any pull, forever.* Suite assertions `enforcement-map-derivations` A28–A29.
+
+**The consumer's judgment call was right and is now mechanised.** Declining the worklist row on
+the strength of a recorded verdict was the correct read; nothing in the tooling supported it, and
+the next operator would have had to re-derive the same refusal from scratch.
+
 ## [0.327.0] — 2026-08-09
 
 ### A fixture asserted the arm that stops a change grading itself, and could not run on any consumer

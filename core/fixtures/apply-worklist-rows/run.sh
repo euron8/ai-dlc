@@ -68,6 +68,7 @@ mk_repo "$W/cons" || { bad "FIXTURE BROKEN — could not build the consumer repo
 OVR='.claude/skills/ai-dlc/overrides/one-key.md'
 OVR_M='.claude/skills/ai-dlc/overrides/multi-key.md'
 OVR_A='.claude/skills/ai-dlc/overrides/multi-adopted.md'
+OVR_J="overrides/steps__w__adjudicated.md"
 ANCHOR='steps/w.md#4a. Close-Out Sweep'
 
 # Build a reconcile directory: every shipped script, with layer-drift replaced by a stub emitting
@@ -83,11 +84,17 @@ ANCHOR='steps/w.md#4a. Close-Out Sweep'
 # and instructs the operator to write that string into settings.json as an environment key.
 build_rec() { # build_rec <dir>
   mkdir -p "$1" && cp "$REC"/*.sh "$1"/ || return 1
+  # THE STUB CARRIES `ADJ_ROW_TOKEN` BECAUSE THE REAL SCRIPT DECLARES IT. apply.sh resolves
+  # that declaration from its sibling rather than restating the literal (I86), and a double
+  # that omits a field the original declares is an incomplete double: without this line
+  # apply.sh fails closed on every row here and all three assertions go vacuous at once.
   cat > "$1/layer-drift.sh" <<STUB
 #!/usr/bin/env bash
+ADJ_ROW_TOKEN="adjudicated"
 printf 'OVERRIDE-SUPERSEDED\t${OVR}\tsteps/w.md\treplaces_with=AI_DLC_ONE_KEY :: core 0.1.0 provides what this entry was written to work around.\n'
 printf 'OVERRIDE-SUPERSEDED\t${OVR_M}\tsteps/w.md\treplaces_with=AI_DLC_ONE_KEY :: retire_anchor=${ANCHOR} :: core 0.1.0 provides what this entry'"'"'s shadow was written to work around.\n'
 printf 'OVERRIDE-SUPERSEDED\t${OVR_A}\tsteps/w.md\tretire_anchor=${ANCHOR} :: core 0.1.0 ADOPTED what this entry says under that anchor.\n'
+printf 'OVERRIDE-SUPERSEDED\t${OVR_J}\tsteps/w.md\tadjudicated=still-additive :: replaces_with=AI_DLC_ONE_KEY :: retire_anchor=${ANCHOR} :: core 0.1.0 provides what this entry was written to work around.\n'
 STUB
   chmod +x "$1/layer-drift.sh"
 }
@@ -274,6 +281,26 @@ else
     *"remove the anchor"*) ok "  and the multi-KEY row still narrows the shadow under it — the arms are not entangled" ;;
     *)                     bad "  MUTANT 4 also broke the multi-key row: assertions 3 and 4 are entangled" ;;
   esac
+fi
+
+# --- ASSERTION 5: a row carrying a RECORDED VERDICT emits no retire steps -------------------
+# PC-S327: apply.sh built this worklist from layer-drift's rows and never asked whether the
+# project had already decided. layer-drift.sh now writes `adjudicated=<verdict>` into the row
+# when a verdict exists for that digest, and apply.sh must emit a NOTE instead of the ATOMIC
+# retire sequence. Acting on those steps would UNDO a decision, not complete one — on the
+# reference consumer, 119 consumer-only lines including a live closure guard.
+#
+# BOTH DIRECTIONS IN ONE ARM, because suppression that cannot be turned off is an exemption:
+# the three rows above carry no token and must still produce their retire rows, which the
+# assertions above already require. This one requires the fourth to produce none.
+ADJ_ROWS="$(rows_for "$W/rec" "$OVR_J")"
+ADJ_N="$(printf '%s\n' "$ADJ_ROWS" | grep -c . || true)"
+ADJ_NOTE="$(bash "$W/rec/apply.sh" "$W/dist" HEAD "$W/cons" HEAD 2>/dev/null \
+  | awk -F'\t' -v o="$OVR_J" '$1=="NOTE" && $2=="override-adjudicated" && $3==o' | grep -c . || true)"
+if [ "$ADJ_N" -eq 0 ] && [ "$ADJ_NOTE" -ge 1 ]; then
+  ok "a supersession row carrying a recorded verdict emits a NOTE and NO retire steps"
+else
+  bad "an adjudicated supersession row emitted $ADJ_N retire row(s) and $ADJ_NOTE note(s) — apply.sh is prescribing work over a recorded verdict (PC-S327)"
 fi
 
 echo ""
