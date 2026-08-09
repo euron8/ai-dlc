@@ -710,7 +710,13 @@ prose is itself generated rather than composed.
      id is the one signal a rewording cannot defeat, because it is the join key the ledger, the
      report and the §8.1 fan-in already use. `STILL-LIVE` + `NAMED-UPSTREAM` on one entry is
      the highest-value pair this tool prints: the entry is absorbed AND its receipt is wrong.
-     **Not closable** — step 8 closes `CLOSE-CANDIDATE` rows only, so this needs no exception.
+     **Not auto-closable** — step 8 closes `CLOSE-CANDIDATE` rows only, so this needs no
+     exception. It is not *unclosable*: the row instructs an annotation, and **any** occurrence
+     of `ADOPTED UPSTREAM` in an entry makes `ledger-reverify.sh` skip it from the next run on.
+     Write the form `ledger-rotate.sh` accepts — bolded, version immediately after the
+     parenthesis — or the entry becomes skipped-but-unarchivable: invisible in every future
+     report and never filed. `ledger-rotate.sh` now reports that set; it counted **8** on the
+     reference consumer while printing "0 closed entries — nothing to rotate" in the same run.
      Read it as "upstream named it", not "upstream took it": a commit can name an id to record
      a rejection or a split. Confirm which, then re-anchor or drop the stale receipt.
    - `NAMED-UPSTREAM-AMBIGUOUS` → upstream's history cites this entry's SPRINT prefix

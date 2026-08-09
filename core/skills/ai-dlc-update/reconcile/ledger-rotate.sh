@@ -76,15 +76,22 @@ trap 'rm -rf "$TMPD"' EXIT
 # (`started` stays 0 until the first boundary, and only `started && closed` moves).
 # Append (`>>`) into pre-created files: awk's `>` truncates on first write per target, which
 # would drop every entry but the last.
-rm -f "$TMPD/keep" "$TMPD/move" "$TMPD/moved-names"
-: > "$TMPD/keep"; : > "$TMPD/move"; : > "$TMPD/moved-names"
-awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" "$(ledger_entry_awk)"'
+rm -f "$TMPD/keep" "$TMPD/move" "$TMPD/moved-names" "$TMPD/stuck-names"
+: > "$TMPD/keep"; : > "$TMPD/move"; : > "$TMPD/moved-names"; : > "$TMPD/stuck-names"
+awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" -v stuck="$TMPD/stuck-names" "$(ledger_entry_awk)"'
   function flush(  i) {
     if (n == 0) return
     out = (started && closed) ? move : keep
     for (i = 1; i <= n; i++) print buf[i] >> out
     if (started && closed) print label >> names
-    n = 0; closed = 0; label = ""
+    # THE ENTRIES NEITHER RULE TAKES. `ledger-reverify.sh` skips on `/ADOPTED UPSTREAM/`
+    # anywhere; this file archives only on the strict `**ADOPTED UPSTREAM (v`. The asymmetry
+    # is deliberate and its stated cost is that "an entry wrongly kept costs one more pull to
+    # notice" -- but NOTHING NOTICED, because nothing reported the gap. An entry in it is
+    # skipped by every re-verification AND refused by every rotation: invisible in the report
+    # and never filed, for as long as the ledger lives.
+    if (started && !closed && loose) print label >> stuck
+    n = 0; closed = 0; loose = 0; label = ""
   }
   # NOT TRUNCATED. This label is what the run prints as `moved-names` — the record of which
   # entries left the live ledger. Clipping it to 70 characters, as this did, produced a name the
@@ -98,6 +105,8 @@ awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" "$(le
   }
   { if (ledger_entry_shape($0) != "") { open_entry($0); buf[++n] = $0; next } }
   /\*\*ADOPTED UPSTREAM \(v/ { closed = 1 }
+  # reverify.sh entry_line_closes(), restated as the LOOSE side of the same question.
+  /ADOPTED UPSTREAM|WITHDRAWN|\(original text, retained for the record\)/ { loose = 1 }
                      { buf[++n] = $0 }
   END { flush() }
 ' "$LEDGER"
@@ -110,6 +119,27 @@ awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" "$(le
 # case — the report contradicts itself and `--apply` creates a header-only archive the run had
 # no reason to write.
 n_move="$(grep -c . "$TMPD/moved-names")"
+n_stuck="$(grep -c . "$TMPD/stuck-names")"
+
+# REPORTED WHETHER OR NOT ANYTHING MOVES, and before the nothing-to-rotate exit below, because
+# the nothing-to-rotate case is exactly where this hides. Measured on the reference consumer at
+# 0.329.0: rotate printed "0 closed entries -- nothing to rotate" while ELEVEN entries sat
+# closed-and-unarchivable, one of them annotated `**ADOPTED UPSTREAM (absorbed before base
+# <sha>, verified <date>)` -- a real, deliberate, bolded close that the strict `(v` refuses
+# because the parenthetical does not start with a version.
+#
+# THIS DOES NOT RELAX THE STRICT RULE. Archiving live work is the expensive error and the rule
+# stays as it is; what changes is that its cost is now PAID BY SOMETHING rather than assumed.
+if [ "$n_stuck" -gt 0 ]; then
+  echo "ledger-rotate: ${n_stuck} entry(ies) are CLOSED for re-verification but NOT archivable."
+  echo "  ledger-reverify.sh skips them, so they never appear in a report again; this script"
+  echo "  refuses them, so they are never filed. They stay in the live ledger indefinitely."
+  echo "  To archive one, write the annotation form this script accepts — bolded, with the"
+  echo "  version immediately after the parenthesis:  **ADOPTED UPSTREAM (v<version>, verified <date>)**"
+  echo "  If the close is genuine but has no version (absorbed before base, withdrawn, a"
+  echo "  retained copy), that is a legitimate state and the row is the record of it."
+  sed 's|^|    |' "$TMPD/stuck-names"
+fi
 l_all="$(wc -l < "$LEDGER" | tr -d ' ')"
 l_keep="$(wc -l < "$TMPD/keep" | tr -d ' ')"
 l_move="$(wc -l < "$TMPD/move" | tr -d ' ')"

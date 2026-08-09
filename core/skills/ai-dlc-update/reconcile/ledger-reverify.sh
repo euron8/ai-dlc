@@ -784,7 +784,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       prefix) na_note=" Matched on the SHORT id \`$(printf '%s' "$label" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')\`, which is the form upstream writes, and that prefix names exactly ONE entry in this ledger -- so the attribution is unambiguous. The full-slug search found nothing, which is normal and is not evidence of anything." ;;
       *)      na_note="" ;;
     esac
-    emit NAMED-UPSTREAM "$label" "upstream's own history NAMES this entry's id at v$na_v ($na_c), which no receipt in this entry can see.${na_note} Confirm whether that commit ABSORBED the entry or recorded a rejection/split; if it absorbed, annotate 'ADOPTED UPSTREAM (v$na_v, verified <date>)' and re-anchor or drop the stale receipt. Do NOT delete the entry."
+    emit NAMED-UPSTREAM "$label" "upstream's own history NAMES this entry's id at v$na_v ($na_c), which no receipt in this entry can see.${na_note} Confirm whether that commit ABSORBED the entry or recorded a rejection/split; if it absorbed, annotate it **bolded, with the version immediately after the parenthesis** -- \`**ADOPTED UPSTREAM (v$na_v, verified <date>)**\` -- and re-anchor or drop the stale receipt. Do NOT delete the entry. THE FORM MATTERS: any occurrence of the phrase makes ledger-reverify SKIP this entry from here on, but only that exact form lets ledger-rotate.sh archive it, and an entry that is skipped without being archivable is invisible in every future report and never filed."
   elif [ -n "$nam" ]; then
     nam_v="$(printf '%s' "$nam" | awk '{print $1}')"
     nam_c="$(printf '%s' "$nam" | awk '{print $2}')"

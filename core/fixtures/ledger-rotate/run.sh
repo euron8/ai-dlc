@@ -37,8 +37,8 @@ before_entries="$(entries "$LEDGER")"
 before_verdicts="$(bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" "$LEDGER" 2>/dev/null)"
 
 # --- Assertion 0: SANITY — the seed really holds both kinds ---------------------------
-if [ "$before_entries" -eq 5 ] && grep -q 'PC-CLOSED-A' "$LEDGER" && grep -q 'PC-OPEN-DECOY' "$LEDGER"; then
-  ok "before: 5 entries, closed + open + a decoy that only MENTIONS the phrase"
+if [ "$before_entries" -eq 6 ] && grep -q 'PC-CLOSED-A' "$LEDGER" && grep -q 'PC-OPEN-DECOY' "$LEDGER"; then
+  ok "before: 6 entries — closed + open + a decoy that only MENTIONS the phrase + one closed-but-unarchivable"
 else
   bad "FIXTURE BROKEN — seed shape wrong ($before_entries entries)"; echo
   echo "ledger-rotate: FIXTURE BROKEN" >&2; exit 2
@@ -154,6 +154,37 @@ elif noop_guard_holds "$MUTD/mutant.sh"; then
   bad "the guard still 'fires' with the fallback restored — assertion 7 is vacuous"
 else
   ok "mutation: restoring '|| echo 0' kills the no-op guard (assertion 7 is load-bearing)"
+fi
+
+# --- THE ENTRIES NEITHER RULE TAKES ---------------------------------------------------
+# READ AS HERE-STRINGS, NEVER `… | grep -q`. Under pipefail the reader leaves at its first
+# match while the writer is still pushing, so the pipeline answers with the writer's EPIPE and
+# reports 'not found' on output that contains the pattern -- a SIZE threshold, not a race, and
+# silent once crossed. I54/I54b caught exactly that in the first draft of these three arms.
+# reverify skips on `/ADOPTED UPSTREAM/` anywhere; this script archives only on the strict
+# `**ADOPTED UPSTREAM (v`. The asymmetry is deliberate, and its stated cost was that a wrongly
+# KEPT entry "costs one more pull to notice" — but nothing noticed, because nothing reported
+# the gap. Measured on the reference consumer at 0.329.0: 8 such entries, while the same run
+# printed "0 closed entries — nothing to rotate".
+stuck_out="$(bash "$ROT" "$LEDGER" 2>&1)"
+if grep -q 'CLOSED for re-verification but NOT archivable' <<<"$stuck_out"; then
+  ok "an entry closed for re-verification but unarchivable is REPORTED, not silently kept"
+else
+  bad "a closed-but-unarchivable entry produced no row — it is invisible in every future report and never filed"
+fi
+if grep -q 'Entry STUCK' <<<"$stuck_out"; then
+  ok "  and it is NAMED, so the operator can grep it back into the ledger"
+else
+  bad "  the count fired but the entry is not named — an unnamed count is not actionable"
+fi
+
+# THE CONTROL, and without it the two arms above pass on any script that prints the banner
+# unconditionally. An archivable entry must NOT appear in the stuck list.
+stuck_list="$(awk '/NOT archivable/{on=1;next} /^ledger-rotate:/{on=0} on' <<<"$stuck_out")"
+if grep -q 'Entry B' <<<"$stuck_list"; then
+  bad "  an ARCHIVABLE entry was reported as stuck — the two predicates are the same one"
+else
+  ok "  and an archivable entry is not in that list, so the row discriminates"
 fi
 
 echo
