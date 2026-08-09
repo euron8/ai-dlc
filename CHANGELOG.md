@@ -34,6 +34,72 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.331.0] — 2026-08-09
+
+### The register was writable exactly when it was empty and unreadable exactly when it was in use
+
+Reported by the reference consumer. To re-read the `subject_digest` they had already recorded a
+verdict under, the operator **withheld their own register to re-fire the block**, read the key from
+the message, restored the file and verified it byte-identical by sha256. Deliberately breaking your
+own gate state is not a workaround; it is the absence of a reader.
+
+`adj_check` prints the digest only inside `HARD-LAYER-ADJUDICATION-MISSING`. Record a verdict and
+`adj_lookup` answers 0, the function returns before printing, and the key is gone. The key is
+needed **after** the first write more often than before it: `owed` is designed to be updated as a
+debt is worked down, and a re-verification has to name the subject it re-read.
+
+New mode, read-only and needing no gate state:
+
+```
+layer-drift.sh --list-adjudications <dist> <base> <theirs> <consumer>
+```
+
+One `ADJUDICABLE` row per keyed subject — entry, target, `subject_digest`, and the recorded verdict
+if there is one — and nothing else. No classification rows, no blockers.
+
+**THE ITEM'S OWN FRAMING WOULD HAVE BUILT A LISTING THAT REPORTED 1 OF 12.** It said `adj_check` is
+reached from every clause at ADJUDICATED level, which is true and is not the subject population.
+Measured on the reference consumer, `9fc216e..HEAD`, with the register withheld as the control:
+**12 keyed occurrences, 10 distinct subjects, and only ONE of them is an `adj_check` row.** The
+other eleven are **LC-E19 `EXTENSION-TITLE-MATCHES-CORE`**, which keys on a digest while sitting at
+`level: WARN` — and that site hides its key harder, because a recorded verdict suppresses the whole
+row rather than just the blocking message. A listing derived from the ADJUDICATED code set would
+have been silent about every one of them and read like a complete answer.
+
+**So the listing is sited on `adj_digest`, not on `ADJ_CODES`.** Every keyed row in the script asks
+that one function for its key, so the mode records what the classifier already computed instead of
+re-deriving who is adjudicable — which is the requirement not to become a second implementation of
+the candidate join — and a digest site added tomorrow is listed without an edit. The unkeyable case
+is recorded too, as `(unkeyable: entry or target unreadable)`; that is the row an operator most
+needs named.
+
+The classify path is untouched and was proven so rather than assumed: same shadow consumer, same
+range, `layer-drift.sh` at `HEAD` against the working tree — **47 rows, byte-identical stdout, 0
+bytes of stderr on both sides.** The temp file the listing accumulates into exists only in list
+mode and carries **no `EXIT` trap**, for the reason the comment above `shadow_keys` records:
+installing one in this script made bash report `printf: write error: Broken pipe` from every
+`printf | grep -q` in the file.
+
+The count line is on **stderr and always printed, including at zero**, because an empty stdout is
+what a broken pass, a wrong consumer root and a genuinely unkeyed layer all look like. A degenerate
+`base..theirs` gets its own stderr warning here as well as in classify: this mode's whole output is
+a listing, so a disarmed range yields a SHORT listing, and short reads as complete.
+
+Fixture coverage in two places, because the two digest sites fail differently:
+
+- `layer-adjudication-tier` Part 9 — the load-bearing assertion is **set equality of the digests
+  across the two register states**, taken in a state where the recorded verdict has already been
+  shown to take the blocking row to zero. Asserting only that a digest prints is satisfied by the
+  build this exists to reject. Plus: the stderr count agrees with the rows it counts, the listing
+  emits nothing but `ADJUDICABLE` rows, and a mutant with `adj_digest`'s recording removed lists
+  **0** subjects while its classify output is unchanged — with an unmutated control from the same
+  copied directory, since a lone copy dies sourcing `lib.sh` and an empty listing from a script that
+  never ran reads exactly like the mutation succeeding.
+- `layer-title-join` Part 7 — the WARN-level half. Its seeded contract is a stub with **no clause at
+  any level**, corroborated against the contract's own text, so the adjudication tier is inactive in
+  that tree and an `ADJ_CODES`-derived listing could name no subject at all. The listing names the
+  row's subject both before and after a verdict suppresses the row.
+
 ## [0.330.0] — 2026-08-09
 
 ### An entry could be closed for re-verification and unarchivable at once — invisible in every report, never filed

@@ -329,6 +329,117 @@ else
   fi
 fi
 
+# --- Part 9: the digest is readable WITHOUT the row still blocking ---------------------------
+#
+# THE DEFECT. `adj_check` prints `subject_digest` only inside the blocking message. Record a
+# verdict and `adj_lookup` answers 0, the function returns before printing, and the key becomes
+# unreachable — so the register was writable exactly when it was empty and unreadable exactly
+# when it was in use. The key is needed AFTER the first write: `owed` is designed to be updated
+# as a debt is worked down, and a re-verification has to name the subject it re-read. The
+# reference consumer's operator got at their own key by WITHHOLDING the register to re-fire the
+# block, reading the value, restoring the file and checking it byte-identical by sha256.
+#
+# THE LOAD-BEARING ASSERTION IS THE SET EQUALITY ACROSS THE TWO REGISTER STATES. Asserting only
+# that the listing prints a digest is satisfied by any build that still needs the blocking row —
+# including the one this part exists to reject. So the same digest set is demanded with the
+# register cleared and with a verdict recorded, in a state where Part 2 has already established
+# that a recorded verdict takes the blocking row to zero.
+echo
+echo "Part 9 — --list-adjudications reads the key without gate state"
+
+list()      { bash "$DRIFT" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null; }
+list_count(){ bash "$DRIFT" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1 >/dev/null \
+              | sed -n 's/.*: \([0-9][0-9]*\) keyed subject(s).*/\1/p' | head -1; }
+list_digs() { list | awk -F'\t' '$1=="ADJUDICABLE"{print $4}' | sort -u; }
+
+rm -f "$REG"
+open_digs="$(list_digs)"
+open_n="$(printf '%s\n' "$open_digs" | grep -c .)"
+if [ "$open_n" -ge 1 ]; then
+  ok "the listing names $open_n keyed subject(s) with no register at all — every assertion below is measured against a non-empty set"
+else
+  bad "the listing named no keyed subject with the register cleared, so Part 9's remaining assertions would pass vacuously against a mode that prints nothing"
+fi
+
+# The count on stderr is this mode's control: its answer is frequently an ABSENCE, and an empty
+# stdout is what a broken pass, a wrong consumer root and a genuinely unkeyed layer all look
+# like. A count that disagrees with the rows is a control that would report the wrong zero.
+if [ "$(list_count)" = "$open_n" ]; then
+  ok "the stderr count agrees with the rows on stdout ($open_n) — the control that makes an empty listing readable is counting the thing it prints"
+else
+  bad "the stderr count says '$(list_count)' while stdout carries $open_n row(s). The one line that tells an operator whether an empty listing means 'nothing keyed' or 'the pass broke' is not derived from the listing"
+fi
+
+if [ "$(list | grep -c '^ADJUDICABLE')" -eq "$(list | grep -c .)" ]; then
+  ok "the listing emits ADJUDICABLE rows and nothing else — no classification rows, no blockers"
+else
+  bad "the listing emitted non-ADJUDICABLE line(s): $(list | grep -v '^ADJUDICABLE' | head -1). A reader that also prints the blocking row would satisfy the set-equality assertion below while still requiring the row to block"
+fi
+
+if [ "$(list | awk -F'\t' '$1=="ADJUDICABLE" && $5=="(none)"' | grep -c .)" -eq "$open_n" ]; then
+  ok "with no register every subject reads verdict '(none)' — the listing reports register state rather than depending on it"
+else
+  bad "with the register cleared the verdict column is not '(none)' on all $open_n subject(s), so the column is not reading the register"
+fi
+
+DIG="$(digest)"
+if [ ${#DIG} -eq 40 ]; then
+  record "$DIG" still-additive > "$REG"
+  if [ "$(blocks)" -eq 0 ]; then
+    ok "PRECONDITION: with that verdict recorded the row no longer blocks, which is the state in which the key used to become unreachable"
+  else
+    bad "PRECONDITION FAILED: the recorded verdict left $(blocks) blocking row(s), so Part 9 is not measuring the post-verdict state at all. Read Part 2 first; this is a consequence"
+  fi
+  closed_digs="$(list_digs)"
+  if [ "$open_digs" = "$closed_digs" ] && [ -n "$closed_digs" ]; then
+    ok "SAME SUBJECT SET with the verdict recorded as without it — the listing needs no gate state, so nobody has to withhold their register to read their own key"
+  else
+    bad "the keyed subject set changed once a verdict was recorded (open: $(printf '%s' "$open_digs" | tr '\n' ' ')/ closed: $(printf '%s' "$closed_digs" | tr '\n' ' ')). The digest is still reachable only from a row that is still blocking, which is the defect"
+  fi
+  if list | awk -F'\t' -v d="$DIG" '$1=="ADJUDICABLE" && $4==d && $5=="still-additive"{f=1} END{exit !f}'; then
+    ok "the adjudicated subject carries its RECORDED verdict in the listing — the operator sees the key and what was decided under it in one line"
+  else
+    bad "the listing does not report 'still-additive' against the digest a record was written under. Reading the key back is only half the job: an operator updating an owed object needs to see which verdict they are amending"
+  fi
+else
+  bad "Part 9 could not obtain a digest from the blocking row, so its post-verdict assertions would measure the wrong thing. Read Part 1 first; this is a consequence"
+fi
+
+# MUTATION — strip the recording from `adj_digest`. The listing must go empty while the
+# CLASSIFIER's own rows are unchanged, or the mutant killed the harness rather than the listing.
+# Built as a copy of the whole reconcile/ directory for the reason Part 7 states: a lone copy
+# dies sourcing lib.sh and emits nothing, and an empty listing from a script that never ran
+# reads exactly like the mutation succeeding.
+MUT9DIR="$ROOT/reconcile-mutant-list"
+rm -rf "$MUT9DIR"; mkdir -p "$MUT9DIR"
+cp "$(dirname "$DRIFT")"/* "$MUT9DIR"/ 2>/dev/null
+MUT9="$MUT9DIR/layer-drift.sh"
+CTL9="$MUT9DIR/layer-drift-unmutated.sh"; cp "$DRIFT" "$CTL9" 2>/dev/null
+MUT9_OLD='[ -n "$ADJ_LIST_FILE" ] && printf '"'"'%s\t%s\t%s\n'"'"' "$1" "$2" "$dg" >> "$ADJ_LIST_FILE"'
+MUT9_OLD="$MUT9_OLD" python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["MUT9_OLD"],"true",1))' \
+  "$DRIFT" "$MUT9" 2>/dev/null
+ctl9_rows="$(bash "$CTL9" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null | grep -c '^ADJUDICABLE')"
+if [ ! -s "$MUT9" ] || cmp -s "$DRIFT" "$MUT9"; then
+  bad "FIXTURE ERROR: the listing-recording mutation matched nothing — Part 9's mutation proves nothing. Update MUT9_OLD to match adj_digest's real recording line"
+elif [ "$ctl9_rows" -ne "$open_n" ]; then
+  bad "FIXTURE ERROR: the UNMUTATED copy in $MUT9DIR lists $ctl9_rows subject(s) against $open_n in place — the copied directory is not a working harness, so the mutant verdict below is not attributable"
+else
+  ok "CONTROL: an unmutated copy in the same directory lists the same $ctl9_rows subject(s) — the mutant verdict below is its edit, not the copy"
+  mut9_rows="$(bash "$MUT9" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null | grep -c '^ADJUDICABLE')"
+  mut9_cls="$(bash "$MUT9" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null | grep -c .)"
+  cls_rows="$(run | grep -c .)"
+  if [ "$mut9_rows" -eq 0 ]; then
+    ok "MUTATION — without adj_digest's recording the listing is empty: the subject set really is collected at the one place every keyed row asks for its key"
+  else
+    bad "MUTATION — the listing still named $mut9_rows subject(s) with adj_digest's recording removed, so it is being derived somewhere else and Part 9's assertions are about a second implementation"
+  fi
+  if [ "$mut9_cls" -eq "$cls_rows" ]; then
+    ok "MUTATION PAIRING — the same mutant's CLASSIFY output is unchanged ($cls_rows rows): it died of the listing edit, not of a broken harness"
+  else
+    bad "MUTATION PAIRING — the mutant's classify output moved ($mut9_cls vs $cls_rows), so its empty listing cannot be attributed to the recording line"
+  fi
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "layer-adjudication-tier: PASS"

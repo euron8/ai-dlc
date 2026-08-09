@@ -1220,6 +1220,18 @@ prose is itself generated rather than composed.
    rows whose prose reads like an obligation while declaring none. A debt nothing enumerates is
    a debt nobody acts on, which is the whole reason the field exists.
 
+   **TO RE-READ A KEY YOU HAVE ALREADY RECORDED A VERDICT UNDER, run
+   `layer-drift.sh --list-adjudications <dist> <base> <theirs> <consumer>`.** It prints every
+   keyed subject this pass can see — entry, target, `subject_digest`, and the recorded verdict
+   if there is one — and nothing else: no classification rows, no blockers, and no dependence on
+   whether the row is still blocking. Pass the SAME base the pull uses, for the reason step 7
+   states per script: base decides which rows the pass produces, so a degenerate range gives a
+   short listing rather than a visibly missing one. **Do not withhold the register to re-fire the
+   block.** That was the only way to read a key before this mode existed, and it means
+   deliberately breaking your own gate state to read a value the tool already computed. You need
+   the key AFTER the first write more often than before it: updating an `owed` object, and
+   re-verifying a subject, both name it.
+
    The digest covers the entry AND the core file it hooks at `theirs`, so a verdict is spent the
    next time either one moves. It is a record of a reading, not an exemption for a path — which
    is why the register is keyed per SUBJECT and never per run. Changing your mind is allowed and

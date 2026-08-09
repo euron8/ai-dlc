@@ -382,6 +382,74 @@ else
   fi
 fi
 
+
+# =======================================================================================
+# Part 7: `--list-adjudications` COVERS THIS ROW, WHICH IS NOT AT LEVEL ADJUDICATED.
+#
+# THE MEASUREMENT THIS ARM EXISTS FOR. On the reference consumer, 12 keyed subjects and only
+# ONE of them is an `adj_check` row; the other eleven are this clause. LC-E19 keys on a digest
+# while sitting at WARN, so a listing derived from the ADJUDICATED code set would have reported
+# 1 of 12 and read like a complete answer. That is why the listing is sited on `adj_digest` —
+# the one function every keyed row asks for its key — and this arm is what fails if anyone
+# re-sites it on ADJ_CODES.
+#
+# AND THIS SITE HIDES ITS KEY HARDER THAN adj_check DOES. A recorded verdict there leaves the
+# candidate row printing and only drops the blocking message; here the whole row is suppressed
+# by the `continue` above, so the digest goes with it. Both register states are asserted.
+# =======================================================================================
+echo ""
+
+# CONTROL FIRST, and this seed gives the sharpest form of it: the seeded contract is a stub
+# carrying no clauses, so NOTHING is at level ADJUDICATED and the whole tier is inactive in this
+# tree. A listing derived from the adjudicated code set could not name a single subject here.
+# The reader's empty answer is corroborated against the contract's own text, because an empty
+# answer from a broken reader would otherwise read the same.
+adj_n="$(bash "$DRIFT" --adjudicated-codes "$DIST" "$THEIRS" 2>/dev/null | grep -c .)"
+lvl_adj="$(git -C "$DIST" show "$THEIRS:core/skills/ai-dlc/layer-contract.yaml" 2>/dev/null | grep -c 'level: ADJUDICATED')"
+if [ "$lvl_adj" -ne 0 ]; then
+  bad "CONTROL: the seeded contract now puts $lvl_adj clause(s) at ADJUDICATED. Part 7 was written against a stub contract with none, and the sharpest version of its assertion depends on that. Re-derive this arm against the new seed"
+elif [ "$adj_n" -ne 0 ]; then
+  bad "CONTROL: the seeded contract declares no ADJUDICATED clause and --adjudicated-codes answered with $adj_n code(s). The two disagree, so neither can be used as the control for what follows"
+else
+  ok "CONTROL: the seeded contract puts nothing at ADJUDICATED and --adjudicated-codes agrees — the adjudication tier is inactive in this tree, so a listing derived from it could name no subject at all"
+fi
+
+: > "$REG"
+FRESH="$(rerun)"
+DIG2="$(printf '%s\n' "$FRESH" | awk -F'\t' '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2 ~ /MATCH\.md$/' \
+        | grep -oE 'subject_digest [0-9a-f]{40}' | awk '{print $2}' | head -1)"
+listing() { bash "$DRIFT" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null \
+            | awk -F'\t' '$1=="ADJUDICABLE"{print $4}'; }
+
+if [ -z "$DIG2" ]; then
+  bad "FIXTURE BROKEN: no keyed title-match row to read a digest from, so Part 7 would assert against an empty key"
+else
+  # Every match below is a here-string against a variable, never a pipe into `grep -q`: under
+  # pipefail the reader leaves at its first match and the pipeline answers with the writer's
+  # EPIPE, so a MATCH reports as not-found once the upstream's remaining output clears the pipe
+  # buffer. I54b holds the whole tree to that shape.
+  LIST_OPEN="$(listing)"
+  if grep -qxF -- "$DIG2" <<<"$LIST_OPEN"; then
+    ok "the listing names this WARN-level row's subject — a listing derived from the ADJUDICATED code set would miss it, and on the reference consumer that is 11 of 12 subjects"
+  else
+    bad "the listing does not name this row's digest, so it is derived from the adjudicated code set rather than from adj_digest. Every clause that keys on a digest without sitting at ADJUDICATED is then invisible to the one reader built to show keys"
+  fi
+
+  printf '{"clause":"LC-E19","entry":"x","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-08-07T00:00:00Z","reason":"read the body; augments"}\n' "$DIG2" > "$REG"
+  TM_AFTER="$(printf '%s\n' "$(rerun)" | awk -F'\t' '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2 ~ /MATCH\.md$/' | grep -c .)"
+  if [ "$TM_AFTER" -ne 0 ]; then
+    bad "PRECONDITION FAILED: the recorded verdict left $TM_AFTER such row(s), so the next assertion is not measuring the state in which this site's key disappears. Read arm 6b first"
+  else
+    ok "PRECONDITION: the recorded verdict suppresses the whole row here, taking the published digest with it"
+  fi
+  LIST_CLOSED="$(listing)"
+  if grep -qxF -- "$DIG2" <<<"$LIST_CLOSED"; then
+    ok "the listing still names that subject with the verdict recorded — the key survives the suppression that used to delete it"
+  else
+    bad "recording a verdict removed this subject from the listing. The key is again reachable only while the row prints, which for this clause means only while it is unadjudicated"
+  fi
+fi
+
 echo ""
 if [ "$fails" -eq 0 ]; then echo "layer-title-join: PASS"; exit 0; fi
 echo "layer-title-join: FAIL ($fails)"; exit 1
