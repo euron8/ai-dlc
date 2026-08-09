@@ -190,8 +190,12 @@ records 1 of 1 blockers — `HARD-LAYER-ADJUDICATION-MISSING` on
 merges, zero catalog collisions. **This is the operator's, not this repo's** — read it there rather
 than re-deriving it here.
 
-**AND v0.341.0 HAS SINCE LANDED HERE, so a range is owed beyond whatever that hop completes on.**
-Confirm the base from the stamp at the moment you write, not from this paragraph.
+**THE OPERATOR HAS RULED THAT HOP WILL NOT BE FINISHED — the split stamp above IS the next pull's
+start state** (direction 2026-08-09: *"I won't finish the in-flight. Current state will be run book
+start state."*). **The runbook for it exists and is
+[`graph-0338-to-0341-pull.md`](graph-0338-to-0341-pull.md) (#500)**, covering `5e49f08` → `91fde72`.
+It is the operator's to hand to a graph session; nothing in it is this repo's to run. **Do not
+predict its hop count from this side.**
 
 The runbook [`graph-0335-to-0337-pull.md`](graph-0335-to-0337-pull.md) is **SPENT**;
 its own header records what it got wrong. Do not re-point it at a new range; write a fresh one.
@@ -570,9 +574,10 @@ item 16, item 17, item 18 and item 23c.**
 open and it is marked OPTIONAL and unscheduled.** Items 1 and 2 closed in the same session — 1
 without a release, because re-measuring found its subject already delivered, and 2 as v0.341.0.
 **Re-measure before treating that as "the plan is finished"**: what is actually owed is on the
-operator's side and is stated in §*Start here* — an in-flight reconcile hop blocked on their
-answer, and a fresh range for v0.341.0 once it lands. **A new item enters this list the way the
-last five releases did, from the consumer's completion report rather than from this file.**
+operator's side and is stated in §*Start here* — the `0.338.0` → `0.341.0` pull, runbooked as
+[`graph-0338-to-0341-pull.md`](graph-0338-to-0341-pull.md), starting from the half-landed state by
+operator direction. **A new item enters this list the way the last five releases did, from the
+consumer's completion report rather than from this file.**
 
 **THE NUMBERS BELOW ARE THIS LIST'S OWN AND THE TABLE IN §*Order of execution* CARRIES THE SAME
 ITEMS, IN THE SAME ORDER.** They are two views of one sequence, not two sequences: this list says
@@ -598,12 +603,18 @@ graph session's completion report; §*What the graph session's report measured* 
 of the last nine releases arrived through that channel rather than through this list, which is the
 shape to expect.
 
-1. **~~WRITE THE RUNBOOK FOR `0.338.0` → HEAD~~ — SPENT BEFORE IT WAS WRITTEN, measured 2026-08-09.
-   The pull ran without one and hop 1 carried the whole payload.** Do not write
-   `graph-0338-to-0340-pull.md`; there is nothing left in that range for a runbook to drive. What
-   IS owed is stated in the status block: finish the in-flight reconcile hop (blocked on an
-   operator answer their own session has already drafted), then a fresh range for v0.341.0 and
-   whatever follows it. **Confirm the base from the stamp at the moment you write it.**
+1. **~~WRITE THE RUNBOOK FOR `0.338.0` → HEAD~~ — THE RANGE AS ITEM 1 FRAMED IT WAS SPENT BEFORE IT
+   WAS WRITTEN, and the runbook that DOES exist covers a different one.** Measured 2026-08-09: the
+   `0.338.0` → `0.340.0` pull ran without a runbook and its hop 1 carried the whole payload, so
+   `graph-0338-to-0340-pull.md` was never written and must not be.
+
+   **WHAT WAS WRITTEN INSTEAD, on operator direction 2026-08-09, is
+   [`graph-0338-to-0341-pull.md`](graph-0338-to-0341-pull.md) (#500)** — 0 errors / 0 warnings from
+   `validate-plan-shape.sh`. **The operator ruled that the in-flight reconcile hop will NOT be
+   finished**, so graph's split stamp is that runbook's START STATE rather than a thing to clean up
+   first. Its range is `5e49f08` → `91fde72`: 13 `core/` files, **9 already byte-identical on their
+   tree** from their own #905, 4 new. **Do not re-derive that here; the runbook carries its own
+   derivation and its own stamp confirmation.**
 
    **THE MEASUREMENT, because "the runbook is unnecessary" is the kind of claim that needs one.**
    The range `5e49f08` → `fb20046` is 14 files, 9 of them under `core/` (control: 5 non-core).
