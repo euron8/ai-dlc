@@ -120,30 +120,24 @@ renumbers (0.288.0 → 0.289.0 → its final slot) once item 11 unblocked it.
 **GRAPH'S STAMP — READ IT, DO NOT CARRY IT.** Every prior revision of this paragraph named a
 version that was wrong within a day; the derivation is the durable part.
 `sed -n '1,4p' /Users/n8/git/graph/.claude/.ai-dlc-version` gives all four fields, and all four
-must agree unless a deferred slice is mid-flight. **Read 2026-08-09: `0.329.0 / 9fc216e` on all
+must agree unless a deferred slice is mid-flight. **Read 2026-08-09: `0.330.0 / 65c572f` on all
 four.** The rulebook base and the tool version have agreed since #887; the one legitimate way they
 diverge is a run whose machinery slice was empty, where `--carried-machinery-slice` is correctly
 NOT passed and the skill fields stay behind on purpose.
 
-**A PULL IS OWED — ONE HOP, TO `0.335.0`. The derivation, never the answer, is what to carry:**
-`git diff --name-only <graph's stamped sha> HEAD` and read the top-level directories. Measured
-2026-08-09 against `9fc216e`, after v0.335.0: **18 `core/` files, plus 2 under `scripts/`,
-`VERSION` and `CHANGELOG.md`** (control: the same command puts 2 paths under `docs/`, so it
-separates the two kinds rather than reporting everything). **Five releases have enlarged this range
-and changed its shape** — it moves
-`core/skills/ai-dlc-update/SKILL.md` and `reconcile/layer-drift.sh`, which the 0.330.0-only range
-did not. **Do not carry the earlier "expect the clean split" prediction across that change**: run
-the dry run and read what the gate says, which is this plan's standing rule after being wrong about
-hop counts twice. Still expect **0 `HARD-*` blockers and no adjudications to record** — graph's
-recorded verdicts are keyed on digests this range does not touch, and `layer-drift.sh`'s classify
-output was proven byte-identical across v0.331.0 on a shadow of graph's own layer.
+**A PULL IS OWED — ONE HOP, TO `0.335.0`. IT IS FULLY RUNBOOKED: everything a graph session needs
+is in [`graph-0330-to-0335-pull-and-homing.md`](graph-0330-to-0335-pull-and-homing.md), including
+both homing jobs. Paste that file at a graph session and nothing here is needed.**
 
-**AND THE PULL CARRIES A NEW READER THE OPERATOR HAS WANTED:**
-`layer-drift.sh --list-adjudications <dist> <base> <theirs> <consumer>` prints every keyed subject
-with its `subject_digest` and recorded verdict, needing no gate state. **This is the answer to the
-report that they had to withhold their own register to re-read a key.** On graph's layer at
-`9fc216e..HEAD` it names **10** subjects, 10 of them already carrying a verdict — every one of
-which was unreadable before.
+**AND THIS PARAGRAPH WAS DERIVING AGAINST THE WRONG BASE UNTIL 2026-08-09, which is why the
+derivation matters more than the answer.** It carried `9fc216e` (0.329.0) after the operator had
+already taken the 0.330.0 pull, so every scope figure under it described a range that was not the
+owed one. The stamp is the source of truth: `sed -n '1,4p' /Users/n8/git/graph/.claude/.ai-dlc-version`.
+Re-derived against the real base `65c572f`: **14 `core/` files, 2 distribution-only paths under
+`scripts/`, plus `VERSION` and `CHANGELOG.md`** (control: 2 paths under `docs/`, so the command
+separates the two kinds rather than reporting everything). **No rulebook file moves** — zero paths
+under `steps/`, `SKILL.md` or `team-roles/` — which is also why **0 new adjudications** is a
+derivation rather than a hope: a verdict's digest covers the entry plus the core file it hooks.
 
 **AND EXPECT A NEW BLOCK OF WARNINGS — 12 OF THEM — WHICH ARE NOT A REGRESSION.** v0.333.0 adds
 `LC-R4`/`W11`: an artifact path a layer entry PRESCRIBES is held to the path grammar. Run against
