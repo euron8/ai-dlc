@@ -146,6 +146,15 @@ It said "eighteen" for eighteen releases after that stopped being true, which is
 underived-count defect core Rule 31 exists for, in the file that documents it. The previously-parked F3 branch shipped after two
 renumbers (0.288.0 → 0.289.0 → its final slot) once item 11 unblocked it.
 
+**THE 2026-08-09 CONSUMER RUN IS THE MOST RECENT MEASUREMENT AND IT PRODUCED TWO CORE RELEASES.**
+Their completion report disagreed with two figures this repo had written into their runbook, and
+**both times the consumer was right and the instrument here was wrong** — v0.339.0 (`W11`'s slot
+exemption was a hand-list of two spellings, so the clause flagged its own prescribed rewrite on 7 of
+7 rows) and v0.340.0 (`ledger-reverify` ran `verify: sh` receipts at the CALLER's cwd, so a run from
+this side proposed closing a live entry). **Neither was visible from this side without re-running
+the measurement against their tree**, which is the standing lesson: a report that contradicts a
+figure here is a measurement, not a mistake to correct.
+
 **GRAPH'S STAMP — READ IT, DO NOT CARRY IT.** Every prior revision of this paragraph named a
 version that was wrong within a day; the derivation is the durable part.
 `sed -n '1,4p' /Users/n8/git/graph/.claude/.ai-dlc-version` gives all four fields, and all four
@@ -154,8 +163,12 @@ four.** The rulebook base and the tool version have agreed since #887; the one l
 diverge is a run whose machinery slice was empty, where `--carried-machinery-slice` is correctly
 NOT passed and the skill fields stay behind on purpose.
 
-**A PULL IS OWED — `0.335.0` → distribution HEAD, AND ~~THERE IS NO RUNBOOK FOR IT YET~~ THE
-RUNBOOK NOW EXISTS: [`graph-0335-to-0337-pull.md`](graph-0335-to-0337-pull.md), written 2026-08-09.**
+**~~A PULL IS OWED~~ — TAKEN 2026-08-09. The consumer is at `0.338.0 / 5e49f08` on all four
+fields**, 2 hops (their #901/#902), with #903 the `W11` repaths and #904 the byproduct re-home plus
+a consolidation pass. **A NEW PULL IS OWED AGAIN — `0.338.0` → HEAD (`0.340.0`)** — see the
+next-action list. The runbook [`graph-0335-to-0337-pull.md`](graph-0335-to-0337-pull.md) is **SPENT**;
+its own header records what it got wrong. Do not re-point it at a new range; write a fresh one.
+Original text follows.
 **Its filename says `0337` and HEAD has since moved to `0.338.0`; the file is not renamed per release
 and says why.** `v0.338.0` ships nothing to a consumer — its whole diff is distribution-only
 (`scripts/validate-plan-shape.sh`, a `.dist-only` fixture) plus `CLAUDE.md`/`CHANGELOG`/`VERSION` —
@@ -550,7 +563,25 @@ graph session's completion report; §*What the graph session's report measured* 
 of the last nine releases arrived through that channel rather than through this list, which is the
 shape to expect.
 
-1. **FIX `sprint-status.sh`'s FREEZE PATH. It is core's, it is measured, and it came out of item 2's
+1. **WRITE THE RUNBOOK FOR `0.338.0` → HEAD.** File it as `docs/plans/graph-0338-to-0340-pull.md`.
+   **Confirm the base from the stamp** (`sed -n '1,4p' /Users/n8/git/graph/.claude/.ai-dlc-version`,
+   read `0.338.0 / 5e49f08` on 2026-08-09) and derive the scope; do not carry a range from here.
+
+   **WHY IT MATTERS: v0.339.0 and v0.340.0 BOTH fix defects that consumer reported and that are
+   live on their tree today.** v0.339.0 takes their `W11` from **7 → 0** (measured with the fixed
+   validator against their tree; total warnings 9 → 2, and the 2 are `W7` and `W6`). v0.340.0 stops
+   `ledger-reverify` proposing a false close when run from anywhere but the consumer root.
+
+   **AND THE `W11` REPATH TABLE IN THE SPENT RUNBOOK IS NOW PARTLY WRONG TO REUSE.** Their 7
+   remaining rows were false positives, not work — after this pull they disappear without an edit.
+   **Do not ask them to repath anything until the pull lands and they re-run the validator.**
+
+   **CARRY THE TWO OPEN CONSUMER-SIDE ITEMS AS OUTSTANDING, NOT AS WORK FOR THE PULL:**
+   `docs/qa/sprint-<N>/**` is unrepathed (5 live `sprint-<N>` dirs, 0 slotted — only `docs/reviews/`
+   migrated), and `pipeline-continuation-log.md` is at **322%** of its budget with `rotate` as the
+   remedy, which the consolidation step excludes by name-class.
+
+2. **FIX `sprint-status.sh`'s FREEZE PATH. It is core's, it is measured, and it came out of item 2's
    precondition rather than off this list.** `core/scripts/sprint-status.sh:384` freezes a closed
    sprint to `<area>/sprint-status/sprint-<N>.yaml` — **the pre-migration form**, while core's own
    `migrate-artifact-paths.sh:375` maps exactly that path onto `<area>/s<N>/sprint-status.yaml` and
@@ -580,7 +611,9 @@ shape to expect.
    its runbook promise a self-update-shaped pull; `core/scripts/` in the slice is the case
    `core/skills/ai-dlc-update/SKILL.md:296` warns can strand a push.
 
-2. **~~WRITE THE FRESH RUNBOOK — `0.335.0` → `0.337.0`~~ — DONE 2026-08-09.**
+3. **~~WRITE THE FRESH RUNBOOK — `0.335.0` → `0.337.0`~~ — DONE 2026-08-09, AND IT RAN.** See the
+   SPENT runbook's own header for the three things it got wrong; two of them became v0.339.0 and
+   v0.340.0.
    [`graph-0335-to-0337-pull.md`](graph-0335-to-0337-pull.md), 0 errors / 0 warnings from
    `validate-plan-shape.sh`. **THREE THINGS THIS LIST TOLD IT TO SAY WERE WRONG, all three found by
    running the derivation the item demanded:**
@@ -678,7 +711,10 @@ shape to expect.
      still resolves"* was unverifiable. Run each command, or state the expected FAIL and what makes
      it unrelated.
 
-3. **The 12 `W11` repaths are the OPERATOR's and are now IN the runbook as §3** — operator
+4. **~~The 12 `W11` repaths~~ — DONE (their #903), and 7 of the survivors were the CLAUSE's bug,
+   not theirs.** See item 1. Original text follows.
+
+   **The 12 `W11` repaths are the OPERATOR's and were IN the runbook as §3** — operator
    direction 2026-08-09, revising the earlier deferral: *"I'll be executing the runbook in a graph
    session, so doesn't it make sense to take them on?"* It does, and **the deferral had been
    misread here as "another session" when the reason on record was "another commit"** — a
@@ -693,7 +729,10 @@ shape to expect.
    derived by intersecting the `W11` list with `--list-adjudications` rather than by inspection.
    §3 therefore runs after the pull merges, and costs one re-adjudication on the following pull.
 
-4. **A derivation, NOT a fix, on the receipt class — OPTIONAL and unscheduled.** `26 of 26
+5. **A derivation, NOT a fix, on the receipt class — OPTIONAL and unscheduled.** **v0.340.0
+   answered part of it**: one class of wrong `STILL-LIVE`/`CLOSE-CANDIDATE` was the reader's cwd,
+   not the anchor text. The re-anchoring question is still open. Original text follows.
+    `26 of 26
    theirs_has` receipts restating the previous run is the third appearance of this. Whether the
    remedy is core's (a receipt form that cannot anchor on text a fix keeps) or authoring discipline
    is unknown. **If you take it, run the SHIPPED reader from the first measurement** — see the
