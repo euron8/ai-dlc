@@ -4920,12 +4920,24 @@ else
   # rule 2 exists to stop; `s*-retro.md` is a basename carrying a sprint token and is still
   # rejected below. The probe block asserts exactly that boundary, because widening an
   # exemption is how a predicate stops seeing the thing it was written for.
+  #
+  # THE ERE IS RESOLVED, NOT WRITTEN HERE, and that is a fix rather than a tidy-up. This block
+  # carried its own widened copy while `artifact-path-config.sh`'s header claimed to be the single
+  # home of the sprint-token expression — a claim true of the digits form and false of the rule.
+  # The two then differed in the one way that matters: the shipped form is `[0-9]+`, so a checker
+  # built on it matches no PRESCRIPTION at all and reports a clean zero on its own subject. There
+  # is one home now, with two modes, and the probes below prove this reader still gets the wider
+  # one. A resolver that cannot answer is a REFUSAL here, never a fallback to a local literal:
+  # falling back is how the fork would grow back silently.
+  i82_tok_re="$(bash "$REPO_ROOT/core/scripts/artifact-path-config.sh" --token-re-prescribed 2>/dev/null)"
+  if [ -z "$i82_tok_re" ]; then
+    err "I82 could not resolve the prescribed-path sprint-token ERE from core/scripts/artifact-path-config.sh --token-re-prescribed. That resolver is the single home of the expression; without it this invariant has no predicate, and a predicate that matches nothing reports every prescription core makes as conforming."
+    i82_tok_re='(?!)'
+  fi
   i82_is_sprint_token() { # <component> -> 0 when it carries one
     [ "$1" = 's<N>' ] && return 1                       # the reserved directory slot
     [ "$1" = 's*' ] && return 1                         # ... quantified over every sprint
-    grep -qE '(^|-)[sS](<N>|N|\*|[0-9]+)($|[-.])' <<<"$1" && return 0
-    grep -qE '(^|-)sprint-(<N>|N|\*|[0-9]+)($|[-.])' <<<"$1" && return 0
-    return 1
+    grep -qE "$i82_tok_re" <<<"$1"
   }
 
   # THE CORPUS IS DERIVED, never listed: every step file, every skill-root rule file except the

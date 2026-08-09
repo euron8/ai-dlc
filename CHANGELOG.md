@@ -34,6 +34,47 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.332.0] — 2026-08-09
+
+### The single home of the sprint-token expression was home to one of its two forms
+
+`artifact-path-config.sh` exists because three shipped programs had grown byte-identical copies of
+the same extraction, and its header names it the single home of the areas, the scan roots **and the
+sprint-token expression**. That last claim was true of the expression it held and false of the rule.
+
+I82 in `validate-enforcement-map.sh` carried its own, WIDER copy — and the widening is the whole
+point of it. The shipped `--token-re` is `(^|-)(s|S|sprint-)[0-9]+($|[-.])`: **digits only**, which
+is correct, because every one of its callers reads expanded filenames and an expanded filename has
+no other kind of sprint in it. A path written in PROSE names the sprint with a placeholder —
+`s<N>`, a bare `N`, `*` — and none of those is a digit.
+
+**WHY THAT DIFFERENCE IS A DEFECT AND NOT A DETAIL.** Item 22's derivation
+(`docs/reviews/layer-entry-artifact-path-derivation.md`, #474) found two artifact-path defects in
+the reference consumer's layer entries, and both are written with the placeholder:
+
+```
+_bmad-output/planning-artifacts/s<N>-carry-over-evaluation.md
+_bmad-output/implementation-artifacts/config-integrity-snapshot-s<N>.json
+```
+
+A checker built on the shipped expression matches **neither**, and reports a clean zero on its own
+subject — this repo's named defect class, reached by picking the wrong one of two expressions that
+both look right. The next release needs that predicate on a consumer, so it is hoisted before it is
+needed rather than copied a fourth time.
+
+New mode, `artifact-path-config.sh --token-re-prescribed`, beside `--token-re`. Two expressions,
+because they read two different string sets; **one home**, because the release that let them have
+two is the one that would have shipped the blind checker. I82 now RESOLVES its predicate and
+**refuses rather than falling back** to a local literal if the resolver cannot answer — a fallback
+is how the fork grows back without anyone seeing it.
+
+**PROVEN, with an in-place mutant rather than a lone copy.** Pointing I82 at `--token-re` instead:
+**7 of its own probes fail**, naming `sprint-<N>-retro.md`, `s<N>-research-notes.md` and the rest of
+the four measured positions; the restored file fails **0**, and was checked byte-identical against
+its backup. A copy of this validator run from a scratch directory dies resolving `REPO_ROOT` and
+emits nothing at all — which scores as 0 probe failures and reads exactly like the mutation being
+harmless. That reading was taken, and discarded, on the way here.
+
 ## [0.331.0] — 2026-08-09
 
 ### The register was writable exactly when it was empty and unreadable exactly when it was in use
