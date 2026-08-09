@@ -444,9 +444,10 @@ what to do next, the table says where each item sits in the whole plan's history
 disagree, the table is the one to fix** — every completed row in it is a receipt with a PR number,
 and this list is derived from what is left.
 
-**ITEMS 25, 24 AND 28 SHIPPED (v0.324.0, v0.325.0, v0.331.0) and have left this list.** Their
-findings are in §*What item 25 measured*, §*What item 24 measured* and §*What item 28 measured*, and
-all three refuted their own item's central claim — twice the declaration the item said was missing
+**ITEMS 25, 24, 28 AND 22 SHIPPED (v0.324.0, v0.325.0, v0.331.0, v0.333.0) and have left this
+list.** Their findings are in §*What item 25 measured*, §*What item 24 measured*, §*What item 28
+measured* and [`docs/reviews/layer-entry-artifact-path-derivation.md`](../reviews/layer-entry-artifact-path-derivation.md),
+and all four refuted their own item's central claim — twice the declaration the item said was missing
 already existed and had a hole, and once the item named a candidate population that was one twelfth
 of the real one. **That is the pattern to expect from what is left below**, not an accident.
 
@@ -454,31 +455,11 @@ of the real one. **That is the pattern to expect from what is left below**, not 
    the guard is unshippable until the *declared consumer-settable tunables* are derived as a set.
    Requiring the clearing loop wherever a fixture names an `AI_DLC_*` token flags 19 fixtures, most
    of them naming keys they set themselves.
-2. **Item 22 — a stale path in a layer entry BODY goes undetected. ITS DERIVATION IS DONE
-   2026-08-09, no release, and the item's premise is REFUTED.** The finding is
-   [`docs/reviews/layer-entry-artifact-path-derivation.md`](../reviews/layer-entry-artifact-path-derivation.md)
-   and it is the spec. **The cited path RESOLVES** — it points at a 50-file residue of the story
-   migration while the live corpus is 233 `s<N>/stories/` directories, so a role following the
-   entry reads the wrong sprint. **A resolver scores 157 false positives out of 309 body tokens
-   AND misses its own subject**; narrowed to the declared artifact area the corpus is 27 tokens
-   across 13 entries, with **3 real findings and 0 false positives**. What to build is
-   `LC-R4`/`W11` in `validate-layer-entries.sh`, at WARN.
-   **THE HOIST IT WAS BLOCKED ON IS DONE — v0.332.0 (#475).**
-   `artifact-path-config.sh --token-re-prescribed` is the placeholder-aware predicate, I82 resolves
-   it rather than defining it, and the join is proven by an in-place mutant (7 probe failures on the
-   digits-only expression, 0 restored). **Read that release's note before building: a lone copy of
-   `validate-enforcement-map.sh` dies resolving `REPO_ROOT` and scores as 0 probe failures, which
-   reads exactly like a harmless mutation.**
-   **WHAT IS LEFT IS THE CLAUSE ITSELF**, and it is unblocked: `LC-R4` / `W11` at WARN in
-   `validate-layer-entries.sh`, beside **W9**, which already scans entry bodies for script paths and
-   is the pattern to copy — including its fence-skipping, whose cost W9's header states rather than
-   hides. **Re-measure the 27-token corpus with fences skipped before writing the arm**; the
-   derivation counted every backticked token, and W9's subject set is narrower than that.
-3. **Item 26 — LC-O15 is anchor-grained, the supersession was arm-grained.** **REPRODUCE IT FIRST**
+2. **Item 26 — LC-O15 is anchor-grained, the supersession was arm-grained.** **REPRODUCE IT FIRST**
    — reported mid-pull, never reproduced here. **Its first step is to establish whether an arm is
    addressable at all**, and if it is not, the honest outcome is a smaller change than a new join.
 
-**RECOMMENDED NEXT: item 22**, then 26, then 12. None blocks another; 12 is last only because its
+**RECOMMENDED NEXT: item 26**, then 12. **Item 22 is CLOSED** — derivation #474, hoist v0.332.0 (#475), clause `LC-R4`/`W11` v0.333.0 (#477). None blocks another; 12 is last only because its
 derivation is the one that is genuinely blocked. **Item 26's subject is now partly answered but NOT
 closed** — v0.328.0 stopped `apply.sh` prescribing a retire over a recorded verdict, which is the
 SYMPTOM the consumer hit; item 26 asks whether an ARM is addressable at all, and that is untouched.
@@ -593,7 +574,7 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~23~~ | ~~**24** — the fixture ship-list is four hand-lists~~ | **DONE — v0.325.0.** `install.sh` derives from `.dist-only`; the criterion is in `CLAUDE.md`; all 7 empty markers filled and I74(d) requires a body. **The other three lists STAY, with the blast radius measured** — uninstall bounds a destructive loop on a tree where `core/fixtures/` does not exist, and the two glob declarations are read by ~20 programs. **I74's old join could not survive and was replaced rather than kept as a tautology.** A second extractor (I8) was found by RUNNING. See §*What item 24 measured* |
 | ~~24~~ | ~~**28** — a `subject_digest` is unreadable once its row stops blocking~~ | **DONE — v0.331.0.** New read-only mode `layer-drift.sh --list-adjudications`, sited on `adj_digest` rather than on `ADJ_CODES`. **The item's own framing would have shipped a listing reporting 1 of 12**: measured on the reference consumer, only ONE keyed subject is an `adj_check` row and eleven are LC-E19 at `level: WARN`, which hides its key harder because a verdict suppresses the whole row. Classify proven byte-identical, 47 rows. Fixture arms in TWO places because the two sites fail differently. See §*What item 28 measured* |
 | **25** | **12** | does not gate anything; take it when convenient. Needs the declared consumer-settable tunables derived first |
-| **26** | **22** — a stale path in a layer entry BODY goes undetected | **DERIVATION DONE 2026-08-09, no release; PREMISE REFUTED.** Finding: [`docs/reviews/layer-entry-artifact-path-derivation.md`](../reviews/layer-entry-artifact-path-derivation.md). **The cited path RESOLVES** — it names a 50-file migration residue against 233 live `s<N>/stories/` dirs. A resolver = **157 FPs of 309 body tokens and misses its own subject**; narrowed to the declared artifact area it is 27 tokens / 13 entries / **3 findings / 0 FPs**. Build `LC-R4`/`W11` at WARN in `validate-layer-entries.sh`, beside W9 which already scans entry bodies. **The hoist it was blocked on SHIPPED as v0.332.0 (#475)** — `artifact-path-config.sh --token-re-prescribed`, with I82 resolving it, proven by an in-place mutant (7 probe failures vs 0). The clause is all that remains |
+| ~~26~~ | ~~**22** — a stale path in a layer entry BODY goes undetected~~ | **CLOSED — derivation (#474), hoist v0.332.0 (#475), clause v0.333.0 (#477).** `LC-R4`/`W11` at WARN, `contract_version` 18. **The premise was refuted: the cited path RESOLVES**, naming a migration residue while the live corpus moved — so nothing in the fix tests existence, which would have scored 157 FPs of 309 tokens and missed its own subject. The empty cell was a CONSUMER's own prescriptions. **76 prescriptions read, 12 findings in 10 entries, 0 FPs — nine found only by reading all four scan roots.** The fixture's second mutant found a defect in the arm before it shipped |
 | **27** | **26** — LC-O15 is anchor-grained, the supersession was arm-grained | **REPORTED by the consumer mid-pull 2026-08-08, NOT reproduced here.** Narrowing on a partial supersession discards the surplus silently — 119 consumer-only lines in the live case. **Establish whether an arm is addressable at all before proposing a join.** Gates nothing; the consumer deferred with a recorded verdict |
 | ~~—~~ | ~~**23d** — its own skill?~~ | **ANSWERED — NO, 2026-08-08. See row 19 and §*What item 23d decided*.** This row is the ORIGINAL scoping and its instruction is spent; a session acting on it would re-open a settled question. What follows is that original text. Operator question 2026-08-08. A DECISION, not a build, and **not answerable before 23a and 23b report**. **A "yes" produces implementation that must be ADDED TO THIS PLAN as its own sequenced item(s) before it starts; a "no" is recorded so it is not re-opened** |
 | ~~—~~ | ~~**20** — a shipped fixture no consumer could run~~ | **DONE** — v0.315.0 (#440). Taken out of order: it was blocking the consumer's pull mid-flight |

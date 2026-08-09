@@ -156,7 +156,7 @@
 # the same declaration-without-a-mechanism defect wearing a new file's clothes. They are named
 # in the CHANGELOG as the backlog and arrive with their enforcers, one release at a time.
 
-contract_version: 17
+contract_version: 18
 
 # WHERE A CONSUMER'S CROSSWALK ROWS LIVE. Declared here, and here rather than in
 # `core-manifest.md`, for a reason that was measured rather than argued.
@@ -1135,6 +1135,34 @@ clauses:
     enforcer: core/scripts/validate-layer-entries.sh
     code: W9
     fixture: layer-reference-resolution
+
+  - id: LC-R4
+    subject: any
+    level: WARN
+    since: 18
+    normative: >-
+      An artifact path a layer entry PRESCRIBES obeys `artifact-path-grammar.md`: no basename
+      carries a sprint token outside the reserved `s<N>/` directory slot, and the story corpus
+      is named at the location `stories_dir` declares in `schemas/sprint-status.json`.
+      LC-R1, LC-R2 and LC-R3 resolve the `Step`, `Check` and script namespaces; this is the
+      fourth, and it is the cell of a 2x2 that nothing was reading — I82 holds CORE's
+      prescriptions and runs only in the distribution, `validate-artifact-paths.sh` holds a
+      consumer's real FILENAMES, and a consumer's own prescriptions were held by nothing.
+      IT IS NOT A RESOLVER, and that was measured before it was written: resolving every
+      path-shaped token in entry bodies scores 157 false positives out of 309 on the reference
+      consumer — core-relative `hooks:` targets, skill-relative names, bare basenames used as
+      labels — and MISSES its own subject, which sits among the 152 that do resolve. The
+      reported case is `_bmad-output/planning-artifacts/stories/`, which exists: it names the
+      residue a migration left behind while the live corpus moved under `s<N>/`, so an agent
+      following the entry reads earlier sprints and nothing fails. Narrowed to the declared
+      scan roots the corpus is 76 prescriptions and the finding set is 12 in 10 entries, 0 of
+      them false; eight are `docs/retro/sprint-<N>.md` citations whose files are gone and whose
+      slotted forms exist. WARN because every remedy is an edit to prose the operator owns, and
+      an ERROR would wedge a pull over a reading.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: W11
+    fixture: layer-artifact-path-prescriptions
 
   # --- the layer conformance adjudication -----------------------------------------------
   #

@@ -179,6 +179,7 @@ core_manifest:
   - fixtures/layer-extends-grain/**
   - fixtures/layer-retired-id-crosswalk/**
   - fixtures/layer-crosswalk-home/**
+  - fixtures/layer-artifact-path-prescriptions/**
   - fixtures/layer-reference-resolution/**
   - fixtures/layer-adjudication-tier/**
   - fixtures/layer-title-join/**
