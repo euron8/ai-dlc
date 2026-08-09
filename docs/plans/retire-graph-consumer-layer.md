@@ -530,10 +530,21 @@ v0.337.0; `PC-S312`'s receipt, which needs re-anchoring at `docs/retro/s249/retr
 and the 48 refused artifact-path migrations plus the 33 byproduct files at the area root, both
 unchanged. **Do not schedule work in this repo behind any of them.**
 
-**s302 HAS STARTED** — `sprint: 302` in graph's `sprint-status.yaml`, read 2026-08-09. The earlier
-line here said it had not, which was true when written and stopped being true without anything
-updating it. **It was never a deadline** (operator direction 2026-08-07) and nothing on this plan
-is on its critical path.
+**s302 HAS NOT STARTED, AND IS NOT A DEADLINE** (operator direction 2026-08-07, confirmed
+2026-08-09).
+
+**DO NOT RE-DERIVE THIS FROM `sprint-status.yaml`. A previous revision of this line did, and got it
+backwards.** That file reads `sprint: 302` / `status: in_progress`, and neither field means work has
+begun: both are the state a ROLL-FORWARD leaves, by the commit that wrote them — *"close the S301
+envelope as abandoned, roll forward to S302"*. `sprint: N` is the DECLARED currency
+`artifact-path-grammar.md` exists to make total; it answers *which sprint do I write to*, never
+*has that sprint begun*.
+
+**The evidence of a started sprint is the SLOT, and it is one listing away:**
+`_bmad-output/planning-artifacts/s302/` does not exist, 0 files against 105 for `s301` and 96 for
+`s300`, and the `stories:` mapping is empty — a `grep -c story-302` returns 1 and that hit is the
+COMMENT naming the key shape, which is the false positive to expect. Nothing on this plan is on its
+critical path either way.
 It MAY start whenever the operator chooses.
 
 **THE PRIOR HANDOFF WORKED AND ITS LESSON IS WHY THIS SECTION EXISTS.** Item 27 and item 23c were
