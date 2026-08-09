@@ -55,9 +55,13 @@ checked examples: `layer-drift.sh:648` was the env-key guard and is now other co
 `SKILL.md` line describing the invitation sentence v0.282.0 deleted. Both sit in sections marked
 SHIPPED, so they are records of why a thing was done, not instructions.
 
-**EVERY `path:line` ABOVE `## Context` IS RE-CHECKED AT EACH HANDOFF. Re-run 2026-08-09 after the
-0.335.0 → 0.337.0 runbook landed: 62 distinct citations — 57 resolve in range, 0 past end-of-file,
-0 ambiguous, 5 into the CONSUMER.** Prior readings were 54/49/0/5 after v0.337.0, the same 50/45/0/5 after v0.331.0 and after v0.330.0, then 51/46/0/5 (before that handoff's own edits changed it), 41/36/0/5, and 40/34/5/3-ambiguous. **That first figure moving while this paragraph was being written is the drift the sentence below describes.** **Do not carry these
+**EVERY `path:line` ABOVE `## Context` IS RE-CHECKED AT EACH HANDOFF. Re-run 2026-08-09 after
+v0.341.0: 63 distinct citations — 58 resolve in range, 0 past end-of-file, 0 ambiguous, 5 into the
+CONSUMER.** Prior readings were 62/57/0/5 after the 0.335.0 → 0.337.0 runbook landed, 54/49/0/5 after v0.337.0, the same 50/45/0/5 after v0.331.0 and after v0.330.0, then 51/46/0/5 (before that handoff's own edits changed it), 41/36/0/5, and 40/34/5/3-ambiguous.
+**AND THE READING THAT MATTERS THIS TIME IS NOT THE COUNT: v0.341.0 moved all four of item 2's
+citations off their subjects while leaving every one of them in range**, so this loop went green
+over four stale citations in the same run that made them stale. The current subjects are written
+into item 2. That is the second recorded instance, after v0.320.0 did it to item 27. **That first figure moving while this paragraph was being written is the drift the sentence below describes.** **Do not carry these
 numbers; re-run the loop.** It is one pass: extract
 `[A-Za-z0-9_./-]+\.(md|sh|json|yaml):[0-9]+` from everything above `## Context`, resolve each
 against `git ls-files`, and compare the line number to `wc -l`. Report the count as its own
@@ -158,15 +162,38 @@ figure here is a measurement, not a mistake to correct.
 **GRAPH'S STAMP — READ IT, DO NOT CARRY IT.** Every prior revision of this paragraph named a
 version that was wrong within a day; the derivation is the durable part.
 `sed -n '1,4p' /Users/n8/git/graph/.claude/.ai-dlc-version` gives all four fields, and all four
-must agree unless a deferred slice is mid-flight. **Read 2026-08-09, AFTER the graph session took the pull: `0.335.0 / b324779` on all
-four.** The rulebook base and the tool version have agreed since #887; the one legitimate way they
-diverge is a run whose machinery slice was empty, where `--carried-machinery-slice` is correctly
-NOT passed and the skill fields stay behind on purpose.
+must agree unless a slice is mid-flight. **Read 2026-08-09, later the same day: the four fields
+DISAGREE — `version: 0.338.0 / commit: 5e49f08` against `skill_version: 0.340.0 /
+skill_commit: fb20046`.** That is a pull IN FLIGHT, not drift: their #905 took the self-update
+(machinery) hop and the reconcile (rulebook) hop has not landed.
 
-**~~A PULL IS OWED~~ — TAKEN 2026-08-09. The consumer is at `0.338.0 / 5e49f08` on all four
-fields**, 2 hops (their #901/#902), with #903 the `W11` repaths and #904 the byproduct re-home plus
-a consolidation pass. **A NEW PULL IS OWED AGAIN — `0.338.0` → HEAD (`0.340.0`)** — see the
-next-action list. The runbook [`graph-0335-to-0337-pull.md`](graph-0335-to-0337-pull.md) is **SPENT**;
+**THE DIVERGENCE POINTS THE OTHER WAY FROM THE ONE THIS PARAGRAPH USED TO DESCRIBE, so do not
+match it against the old sentence and conclude it is the known-benign case.** The documented
+legitimate split is skill fields BEHIND — a run whose machinery slice was empty, where
+`--carried-machinery-slice` is correctly not passed. Here the skill fields are two releases AHEAD.
+Read which side is ahead, not merely that they differ.
+
+**~~A PULL IS OWED~~ ~~TAKEN 2026-08-09, all four fields at `0.338.0 / 5e49f08`~~ — A FURTHER PULL
+IS IN FLIGHT AND IS HALF-LANDED, measured 2026-08-09.** Their #901/#902 took `0.338.0`, #903 the
+`W11` repaths, #904 the byproduct re-home plus a consolidation pass. **Then #905 took the
+self-update hop of `0.338.0` → `0.340.0` WITHOUT a runbook from this side, and it carried the
+entire shipped payload** — all 9 `core/` files in the range, verified byte-identical against the
+distribution with a control that an unrelated pair reports DIFF. **The reconcile hop has not
+landed**, which is the whole of the stamp split above.
+
+**IT IS BLOCKED ON AN OPERATOR ANSWER, AND THE GRAPH SESSION HAS ALREADY WRITTEN THE RESOLUTION.**
+`_bmad-output/ai-dlc-update/blocker-adjudication-20260809T145920Z.md` (untracked on their tree)
+records 1 of 1 blockers — `HARD-LAYER-ADJUDICATION-MISSING` on
+`overrides/steps__retro__domain-sections.md`, LC-O15 — recommends `still-additive` re-declaring
+`OWED-RETRO-4A-NARROW`, and carries the fully-resolved register line. **Its own readiness line reads
+`NOT ready to apply.`** Nothing else gates: zero deletions, zero semantic merges, zero template
+merges, zero catalog collisions. **This is the operator's, not this repo's** — read it there rather
+than re-deriving it here.
+
+**AND v0.341.0 HAS SINCE LANDED HERE, so a range is owed beyond whatever that hop completes on.**
+Confirm the base from the stamp at the moment you write, not from this paragraph.
+
+The runbook [`graph-0335-to-0337-pull.md`](graph-0335-to-0337-pull.md) is **SPENT**;
 its own header records what it got wrong. Do not re-point it at a new range; write a fresh one.
 Original text follows.
 **Its filename says `0337` and HEAD has since moved to `0.338.0`; the file is not renamed per release
@@ -539,6 +566,14 @@ Item 23 is closed; §*Order of execution* lists what remains and none of it bloc
 building — this plan's own record is that a re-derivation changed the work in item 3, item 2b,
 item 16, item 17, item 18 and item 23c.**
 
+**AS OF 2026-08-09 THIS LIST HOLDS NO UNSTRUCK ITEM THIS REPO MUST DO. Item 5 is the only one
+open and it is marked OPTIONAL and unscheduled.** Items 1 and 2 closed in the same session — 1
+without a release, because re-measuring found its subject already delivered, and 2 as v0.341.0.
+**Re-measure before treating that as "the plan is finished"**: what is actually owed is on the
+operator's side and is stated in §*Start here* — an in-flight reconcile hop blocked on their
+answer, and a fresh range for v0.341.0 once it lands. **A new item enters this list the way the
+last five releases did, from the consumer's completion report rather than from this file.**
+
 **THE NUMBERS BELOW ARE THIS LIST'S OWN AND THE TABLE IN §*Order of execution* CARRIES THE SAME
 ITEMS, IN THE SAME ORDER.** They are two views of one sequence, not two sequences: this list says
 what to do next, the table says where each item sits in the whole plan's history. **If they ever
@@ -563,25 +598,59 @@ graph session's completion report; §*What the graph session's report measured* 
 of the last nine releases arrived through that channel rather than through this list, which is the
 shape to expect.
 
-1. **WRITE THE RUNBOOK FOR `0.338.0` → HEAD.** File it as `docs/plans/graph-0338-to-0340-pull.md`.
-   **Confirm the base from the stamp** (`sed -n '1,4p' /Users/n8/git/graph/.claude/.ai-dlc-version`,
-   read `0.338.0 / 5e49f08` on 2026-08-09) and derive the scope; do not carry a range from here.
+1. **~~WRITE THE RUNBOOK FOR `0.338.0` → HEAD~~ — SPENT BEFORE IT WAS WRITTEN, measured 2026-08-09.
+   The pull ran without one and hop 1 carried the whole payload.** Do not write
+   `graph-0338-to-0340-pull.md`; there is nothing left in that range for a runbook to drive. What
+   IS owed is stated in the status block: finish the in-flight reconcile hop (blocked on an
+   operator answer their own session has already drafted), then a fresh range for v0.341.0 and
+   whatever follows it. **Confirm the base from the stamp at the moment you write it.**
 
-   **WHY IT MATTERS: v0.339.0 and v0.340.0 BOTH fix defects that consumer reported and that are
-   live on their tree today.** v0.339.0 takes their `W11` from **7 → 0** (measured with the fixed
-   validator against their tree; total warnings 9 → 2, and the 2 are `W7` and `W6`). v0.340.0 stops
-   `ledger-reverify` proposing a false close when run from anywhere but the consumer root.
+   **THE MEASUREMENT, because "the runbook is unnecessary" is the kind of claim that needs one.**
+   The range `5e49f08` → `fb20046` is 14 files, 9 of them under `core/` (control: 5 non-core).
+   Their #905 changed exactly those 9 on their tree, and all 9 are byte-identical to the
+   distribution today — `cmp -s` on each mapped pair, 9 SAME / 0 DIFF, with a control that an
+   unrelated pair reports DIFF. No fixture in the range is `.dist-only`, so the shipped set is the
+   full 9.
 
-   **AND THE `W11` REPATH TABLE IN THE SPENT RUNBOOK IS NOW PARTLY WRONG TO REUSE.** Their 7
-   remaining rows were false positives, not work — after this pull they disappear without an edit.
-   **Do not ask them to repath anything until the pull lands and they re-run the validator.**
+   **BOTH DEFECTS THIS ITEM EXISTED TO DELIVER ARE ALREADY DEAD ON THEIR TREE, verified by running
+   their own installed programs rather than by reading the diff.** v0.339.0: their validator now
+   prints `77 artifact-path prescription(s) read across 4 scan root(s); 0 non-conforming` and
+   `W11=LC-R4:0/43`, with total warnings **2** — `W6` and `W7`, exactly what this item predicted
+   the post-pull state would be. v0.340.0: their installed `ledger-reverify.sh` is byte-identical
+   to core's.
 
-   **CARRY THE TWO OPEN CONSUMER-SIDE ITEMS AS OUTSTANDING, NOT AS WORK FOR THE PULL:**
-   `docs/qa/sprint-<N>/**` is unrepathed (5 live `sprint-<N>` dirs, 0 slotted — only `docs/reviews/`
-   migrated), and `pipeline-continuation-log.md` is at **322%** of its budget with `rotate` as the
-   remedy, which the consolidation step excludes by name-class.
+   **THE `W11` REPATH TABLE IN THE SPENT RUNBOOK IS STILL WRONG TO REUSE**, and the reason is now
+   history rather than a warning: their 7 remaining rows were the clause's own false positives and
+   they are gone without an edit.
 
-2. **FIX `sprint-status.sh`'s FREEZE PATH. It is core's, it is measured, and it came out of item 2's
+   **THE TWO OPEN CONSUMER-SIDE ITEMS ARE STILL OPEN, re-measured rather than carried, and one
+   figure moved:** `docs/qa/sprint-<N>/**` is unrepathed — **5** `sprint-<N>` directories, **0**
+   slotted (control: a `zzz-*` pattern returns 0). `docs/reviews/` is **not** fully migrated
+   either, which the old line implied: 126 slotted against **9** `sprint-*` directories and 2 files
+   still at the old spelling. And `pipeline-continuation-log.md` is at **326%** of its budget
+   (32697 tok against 10000), up from 322% — the remedy is `rotate`, which the consolidation step
+   excludes by name-class. Neither is this repo's.
+
+2. **~~FIX `sprint-status.sh`'s FREEZE PATH~~ — DONE 2026-08-09. v0.341.0 (#498).** Reproduced end
+   to end before the fix and re-run after: the pre-fix writer froze to
+   `sprint-status/sprint-301.yaml` and the real validator returned `FAIL — 1 blocking`; the fixed
+   writer froze to `s301/sprint-status.yaml` and it returned `PASS`. **All three parts the item
+   named were real, including the second one it warned a fix would miss** — the reader now takes
+   both spellings, and a legacy freeze is honoured where it lies rather than duplicated into the
+   slot. See §*What item 2 measured*.
+
+   **EVERY `path:line` IN THE ORIGINAL ITEM TEXT BELOW NOW RESOLVES AND NONE OF THEM POINTS AT ITS
+   SUBJECT** — the failure mode §*Start here* names and the one the citation-count loop is
+   structurally unable to see. Three had already drifted before this release (the header comment was
+   at `:64` not `:63`, `max_frozen` at `:271` not `:276`; only the writer at `:384` was exact), and
+   v0.341.0 then moved all four. **The subjects today, found by grepping for them rather than by
+   trusting a number, and recorded here so the block below can stay unedited as a record:** the
+   writer is `core/scripts/sprint-status.sh:413`, the reader `max_frozen` is at `:304` with the new
+   path helpers from `:265`, the header prose is at `:64`, and `route.md`'s roll command is at
+   `:394` with the freeze prose just under it. **Do not re-cite from this paragraph either; it is a
+   dated reading like every other figure in this file.** Original item text follows, unedited.
+
+   **FIX `sprint-status.sh`'s FREEZE PATH. It is core's, it is measured, and it came out of item 2's
    precondition rather than off this list.** `core/scripts/sprint-status.sh:384` freezes a closed
    sprint to `<area>/sprint-status/sprint-<N>.yaml` — **the pre-migration form**, while core's own
    `migrate-artifact-paths.sh:375` maps exactly that path onto `<area>/s<N>/sprint-status.yaml` and
@@ -1627,6 +1696,64 @@ polling. Say something when you need a decision, when you hit a premise that doe
 when you are done — including when "done" means you stopped early. **This instruction is carried
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
+
+## What item 2 measured (the item was right, and the trap was in how the probe was built)
+
+**SHIPPED as v0.341.0 (#498).** The item's premise reproduced exactly, at ground truth, with a
+control: seeded into one tree, `sprint-status/sprint-301.yaml` is the single `BLOCKING` row and the
+migrated sibling `s302/sprint-status.yaml` is not reported at all.
+
+**THE END-TO-END PROBE — the real `roll`, then the real validator over its own output:**
+
+```
+pre-fix writer   froze to  sprint-status/sprint-301.yaml   VERDICT: FAIL — 1 blocking
+fixed writer     froze to  s301/sprint-status.yaml         VERDICT: PASS
+```
+
+**AND THE FIRST TWO VERSIONS OF THAT PROBE BOTH RETURNED `PASS` ON BOTH ARMS, which is the part
+worth carrying.** `sprint-status.sh` resolves the project root from ITS OWN location, not from
+`--root`, and it needs `schemas/sprint-status.json` beside it. A copy placed in a scratch directory
+died at `cannot resolve the project root` — and the second attempt died at `cannot find
+schemas/sprint-status.json` — both times BEFORE writing anything, so the validator found no
+offending path and reported a clean tree. **A `PASS` over a roll that never ran is indistinguishable
+from a `PASS` over a roll that ran correctly.** The fix was to make the probe print the roll's own
+output line as its control; the two dead arms are visible there as a `FAIL —` from the script rather
+than as a freeze.
+
+**ALL THREE PARTS THE ITEM NAMED WERE REAL, and the second is the one it correctly predicted a fix
+would miss.** `max_frozen` globbed `sprint-status/sprint-*.yaml`; on a migrated consumer that
+directory holds only `_preamble.yaml`, so it already returned nothing, and its caller's fallback
+returns sprint 1 — *"which would silently re-stamp a live project as greenfield"*, in the words of
+the comment directly above it. Moving the writer alone would have traded a blocked push for a
+destroyed sprint. It reads both spellings now, and a freeze already present under the old one is
+honoured where it lies rather than duplicated into the slot.
+
+**SIX MUTANTS, EACH KILLING EXACTLY ONE ASSERTION, plus an unmutated control that passes the whole
+battery:**
+
+```
+reader loses the s<N>/ slot branch      -> migrated archive resolves to 1
+reader loses the legacy branch          -> unmigrated archive resolves to 1
+slot branch stops requiring the file    -> an empty s<N>/ dir counts as a freeze
+writer reverts to the legacy path       -> freeze destination wrong
+existing-freeze check ignores legacy    -> a second archive minted beside it
+divergence check disabled               -> a divergent freeze does not HARD_BLOCK
+```
+
+**GETTING TO "EXACTLY ONE" TOOK TWO RESTRUCTURINGS AND BOTH ARE THE SAME LESSON: an assertion that
+reads the destination cannot also be the assertion that tests something else about the freeze.**
+The byte-faithfulness and idempotency arms were keyed on the new path, so the path-revert mutant
+killed three arms at once; they now resolve the freeze wherever it landed and the destination has
+its own single arm. Then the divergence control, seeded under one spelling, failed whenever a mutant
+changed which spelling the writer consults — slot-only seeding made the path-revert mutant kill two,
+legacy-only seeding made the ignore-legacy mutant kill two. Seeded under **both**, each mutant kills
+its own and nothing else.
+
+`core/fixtures/artifact-path-migration` is untouched and is the control that the two spellings are a
+real pair rather than a rename: it still asserts the migration MOVES the old form.
+
+**Dormant on the reference consumer today** — their canonical carries `sprint:`, so the fallback
+never runs — and it bites at s302's close.
 
 ## What item 28 measured (the item named one twelfth of its own subject population)
 
