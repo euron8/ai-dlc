@@ -18,11 +18,17 @@ the command that produced it.
    not because it blocks the pull; it does not.
 3. **Take the pull — §2.** Expect the whole range to land in step 2's self-update, `0 HARD-*`,
    0 new adjudications, and **no new warnings at all**.
-4. **Ping the operator** with the facts listed under *When you are done* — including if you stop
+4. **Repath the 12 `W11` prescriptions — §3.** Its own commit, **after step 3's PR has merged**,
+   and that ordering is the one real constraint in this file: one of the ten entries is an
+   adjudicated subject and editing it mid-pull re-fires a block you just cleared.
+5. **Re-home the 32 consolidation byproducts — §4.** Its own commit, independent of everything
+   above: the core work behind it shipped at v0.319.0, which your base already carries.
+6. **Ping the operator** with the facts listed under *When you are done* — including if you stop
    early, and including a plain "nothing needed doing" on step 2.
 
-**NOTHING IN THIS LIST IS BLOCKED.** Step 3 does not depend on step 2. Stopping after step 3 is a
-complete outcome; so is stopping after step 2 with the pull untaken, if the stamp does not match.
+**ONLY ONE THING IN THIS LIST IS ORDERED: step 4 comes after step 3.** Step 3 does not depend on
+step 2. Stopping after step 3 is a complete outcome; so is stopping after step 2 with the pull
+untaken, if the stamp does not match.
 
 **EVERY NUMBER BELOW WAS MEASURED ON 2026-08-09, NOT PREDICTED FROM A DIFF.** Where a figure could
 go stale between writing and running, the derivation is beside it — **run the derivation and
@@ -310,12 +316,199 @@ it is an open question on the distribution side.
 
 ---
 
+## §3 — The 12 `W11` repaths. IN SCOPE for this session, as their OWN COMMIT, AFTER §2 merges
+
+**THE DEFERRAL WAS NEVER "ANOTHER SESSION", IT WAS "ANOTHER COMMIT"** — the reason on record is
+that a pull-review diff should stay a pull-review diff, and a separate commit in this same session
+satisfies that completely. Opening a graph session is the expensive part; these are prose edits to
+layer entries you own. **Operator direction 2026-08-09: take them here.**
+
+**ONE ORDERING RULE, AND IT IS THE ONLY THING THAT MAKES THE ORDER MATTER.** Editing a layer entry
+changes its blob, and `adj_digest` keys a recorded verdict on **the entry file's hash plus the core
+file it hooks at theirs** (`core/skills/ai-dlc-update/reconcile/layer-drift.sh:519`). So an edit
+SPENDS the verdict. **Exactly one of the ten `W11` entries is an adjudicated subject** —
+`overrides/steps__retro__domain-sections.md`, which appears in both the `W11` list and the
+`--list-adjudications` list; the other nine appear in neither. Therefore:
+
+- **Do §3 after §2's PR has merged.** Editing that entry mid-pull re-fires a block you already
+  cleared.
+- **Expect ONE `HARD-LAYER-ADJUDICATION-MISSING` row on the NEXT pull**, for that entry only. That
+  is the digest design working, not damage, and re-recording the verdict is the remedy. If you would
+  rather not carry it, leave that one row and take the other eleven — nothing couples them.
+
+`LC-R4` / `W11` holds a path a layer entry **prescribes** to `artifact-path-grammar.md`. It does not
+test whether the path exists, deliberately: the case that produced the clause is `tea-consumer.md`'s,
+which *resolves* — it names the residue the story migration left at
+`_bmad-output/planning-artifacts/stories/` while the live corpus moved to **233** `s<N>/stories/`
+directories. An agent following it reads old sprints and nothing fails.
+
+The twelve, with the remedy for each. **Every replacement below was RE-VERIFIED to exist in your
+tree on 2026-08-09, with the control that every cited original is gone:**
+
+| entry | prescribes | rewrite as |
+|---|---|---|
+| `extensions/roles/tea-consumer.md` | `_bmad-output/planning-artifacts/stories/` | `_bmad-output/planning-artifacts/s<N>/stories/` |
+| `overrides/steps__retro__domain-sections.md` | `_bmad-output/planning-artifacts/stories/` | same — **this is the adjudicated one** |
+| `extensions/steps-domain/carry-over-evaluation-domain.md` | `…/s<N>-carry-over-evaluation.md` | `…/s<N>/carry-over-evaluation.md` |
+| `extensions/checks/gate-validation-domain.md` | `…/config-integrity-snapshot-s<N>.json` | `…/s<N>/config-integrity-snapshot.json` |
+| `extensions/checks/gate-validation-domain.md` | `docs/retro/sprint-<N>.md` | `docs/retro/s<N>/retro.md` |
+| `extensions/roles/dev-domain.md` | `docs/retro/sprint-294.md` | `docs/retro/s294/retro.md` |
+| `extensions/roles/qa-domain.md` | `docs/retro/sprint-176.md` | `docs/retro/s176/retro.md` |
+| `extensions/roles/qa-domain.md` | `docs/retro/sprint-294.md` | `docs/retro/s294/retro.md` |
+| `extensions/steps-domain/deploy-validate-push.md` | `docs/retro/sprint-249.md` | `docs/retro/s249/retro.md` |
+| `extensions/steps-domain/discovery-prior-decision-corpus.md` | `docs/retro/sprint-*.md` | `docs/retro/s*/retro.md` |
+| `extensions/steps-domain/sprint-review-domain.md` | `docs/reviews/sprint-<N>/**` | `docs/reviews/s<N>/**` |
+| `overrides/steps__retro__ci-gates-enforcement-surface.md` | `docs/retro/sprint-168/171/174.md` | three separate `docs/retro/s168\|s171\|s174/retro.md` |
+
+**EIGHT OF THE TWELVE ARE PROSE YOUR OWN MIGRATION LEFT BEHIND.** The FILENAMES are right —
+`validate-artifact-paths.sh` reports PASS over your tree (5071 conforming of 5169 tracked read) —
+only the prose citing them was never updated. Re-verified today: all six of
+`docs/retro/s{294,176,249,168,171,174}/retro.md` exist, and the control says
+`docs/retro/sprint-{294,176,249,168}.md` are all gone.
+
+**The `docs/reviews/` row has the same shape and is worth one extra line**, because 9 legacy
+`docs/reviews/sprint-<N>/` directories still exist and could make the rewrite look wrong: they hold
+**zero tracked files** (`git ls-files docs/reviews/ | grep -c '^docs/reviews/sprint-'` returns 1, and
+that hit is `sprint-status-generator-side-by-side.md`, a filename with no sprint token). The live
+corpus is **135** `docs/reviews/s<N>/` directories. The old form is dead; the empty directories are
+residue.
+
+**The last row is prose shorthand for three retros** that the extractor reads as one path. A true
+finding with an ugly quotation, not a false positive: all three spellings are dead and the remedy is
+right for all three.
+
+### Done-when for §3
+
+- `validate-layer-entries.sh` prints **`W11=LC-R4:0/43`** in its `LAYER_MEASURED` line and the
+  warning count drops **14 → 2**. Both numbers come from the same line, so read the line rather than
+  the count alone. **The before-reading is `W11=LC-R4:12/43` and 14 warnings, measured 2026-08-09** —
+  take it yourself before you edit anything, or you cannot tell a fix from a tool that was always
+  quiet.
+- The two survivors are `W7` (a dangling "Check 11b" pointer in `deploy-validate-domain.md`) and
+  `W6` (43 entries below `contract_version` 18). **Neither is `W11` work and neither is in scope
+  here** — that is the expected non-zero, stated so a 2 does not read as a failure.
+- `validate-artifact-paths.sh` still reports **PASS**. It reads FILES, not prescriptions, so this
+  section cannot move it; a change there means you edited something you did not mean to.
+
+---
+
+## §4 — Re-home the 32 consolidation byproducts. This is the artifact-consolidation work reaching your tree
+
+**IS THE CORE WORK COMPLETE? YES, AND YOU ALREADY HAVE ALL OF IT.** The last change to
+`steps/artifact-consolidation.md` was **v0.319.0**, and your base is 0.335.0, so nothing in this
+section waits on the pull. What shipped:
+
+- **v0.319.0** closed both defects the consolidation review found: the step prescribed AREA-ROOT
+  paths for per-sprint work products, and it wrote four working files while never saying what became
+  of them. It now writes all four into `_bmad-output/planning-artifacts/s<N>/` and retires the two
+  drafts at a new Step 6.
+- **v0.321.0 – v0.323.0** took the methodology half — the durable artifacts refilled because
+  sprint-scoped content was written into them, so the LOCKED block and the changelog moved into
+  `s<N>/`. **You took that half already, in #900.**
+
+**WHAT HAS NEVER HAPPENED IS A RUN.** No sprint has executed on your tree since v0.319.0, so the
+changed step has never written a file here. Its fixture (`consolidation-residue`) covers it, and its
+red replay was verified drivable in the consumer layout as well as the distribution — but a fixture
+is not a pass. **The observable test of the change is therefore in two parts, and only the first is
+this session's:**
+
+- **NOW (this section): drain the residue the old step left.** 32 byproduct files sit at the
+  planning-artifacts area root.
+- **AT s302's FIRST CONSOLIDATION PASS (not now): assert that ZERO new byproducts land at the area
+  root** and that the two drafts are gone after Step 6. That is the real test of the fix and it
+  belongs where the step naturally runs. **Do not run a consolidation pass now just to test it** —
+  it would write into the live sprint slot and entangle with §1.
+
+### The 32, re-derived 2026-08-09, with the instrument warnings that decide the method
+
+**THE PARENT PLAN SAYS THIS TABLE IS ALREADY WRITTEN DOWN AND IT IS NOT.** Its item-23b section
+carries the aggregate (33 files, 24 direct, 9 inferred, 0 refused) and the list of destination slots,
+but **not the per-file mapping** — so the table below was derived fresh rather than copied.
+**It disagrees with the plan's aggregate and you should expect that**: the count is **32, not 33**
+(the plan measured at an older sha), and the DIRECT/INFERRED split comes out **15/17, not 24/9**,
+because the plan resolved INFERRED rows against a subject-derived sprint timeline by first-parent
+ancestry position and the derivation below simply walks first-parent to the nearest sprint-naming
+subject. **The SLOT is what you act on, and 11 of the plan's 13 slots reappear here unchanged**
+(`s272` and `s298` do not, and those are the two files no longer at the root).
+
+**TWO INSTRUMENTS ARE FALSE HERE, both measured, and using either produces a confident wrong answer:**
+
+- **Content frequency.** A byproduct's content IS other sprints — that is what it consolidates — so
+  the modal sprint token is the sprint being consolidated, not the one doing it.
+  `consolidation-manifest-carry-over-backlog.md` was first committed 2026-06-05 and its modal token
+  is S297, which began 2026-07-22.
+- **`git log --follow`.** A draft is a near-copy of the live artifact, so rename detection walks it
+  into its SOURCE's history: three drafts report creation dates months before consolidation existed.
+  **Bare `--diff-filter=A` is correct for these files** because the migration did not move them.
+
+```
+# the derivation, run from /Users/n8/git/graph
+git log --diff-filter=A --format='%H%x09%s' -- <path> | tail -1     # the adding commit
+# DIRECT   = that subject names a sprint
+# INFERRED = walk `git rev-list --first-parent` from it to the nearest subject that does
+```
+
+| file (at `_bmad-output/planning-artifacts/`) | slot | how |
+|---|---|---|
+| `consolidation-manifest-gate-log.md` | `s243` | DIRECT |
+| `consolidation-manifest-carry-over-backlog.md` | `s244` | inferred, distance 1 |
+| `consolidation-manifest-prd.md` | `s244` | inferred, distance 1 |
+| `consolidation-validation-report.md` | `s244` | inferred, distance 1 |
+| `consolidation-coverage-carry-over-backlog.md` | `s247` | DIRECT |
+| `consolidation-coverage-prd.md` | `s247` | DIRECT |
+| `consolidation-validation-prd.md` | `s248` | DIRECT |
+| `prd-consolidation-validation-report.md` | `s249` | DIRECT |
+| `consolidation-manifest-product-brief.md` | `s268` | inferred, distance 1 |
+| `consolidation-validation-report-2026-06-24.md` | `s268` | inferred, distance 1 |
+| `prd.coverage-report.md` | `s268` | inferred, distance 1 |
+| `product-brief.coverage-report.md` | `s268` | inferred, distance 1 |
+| `consolidation-coverage-product-brief.md` | `s274` | DIRECT |
+| `review-consolidation-prd.md` | `s280` | DIRECT |
+| `consolidation-manifest-architecture.md` | `s287` | inferred, distance 1 |
+| `consolidation-draft-carry-over-backlog-history.md` | `s293` | DIRECT |
+| `consolidation-draft-carry-over-backlog-live.md` | `s293` | DIRECT |
+| `consolidation-draft-prd-history.md` | `s293` | DIRECT |
+| `consolidation-draft-prd-live.md` | `s293` | DIRECT |
+| `consolidation-draft-product-brief-history.md` | `s293` | DIRECT |
+| `consolidation-draft-product-brief-live.md` | `s293` | DIRECT |
+| `consolidation-validation-carry-over-backlog.md` | `s293` | DIRECT |
+| `consolidation-validation-product-brief.md` | `s293` | DIRECT |
+| `consolidation-coverage-architecture.md` | `s301` | inferred, distance 1 |
+| `consolidation-draft-architecture-history-append.md` | `s301` | inferred, distance 1 |
+| `consolidation-draft-architecture-live.md` | `s301` | inferred, distance 1 |
+| `consolidation-draft-architecture-proposed.md` | `s301` | inferred, distance 1 |
+| `consolidation-draft-prd-history-append.md` | `s301` | inferred, distance 1 |
+| `consolidation-draft-prd-live-superseded-20260805T122645Z.md` | `s301` | inferred, distance 1 |
+| `consolidation-manifest-architecture-baseline-20260802.md` | `s301` | inferred, distance 1 |
+| `consolidation-validation-architecture.md` | `s301` | inferred, distance 1 |
+| `consolidation-validation-prd-superseded-20260805T123052Z.md` | `s301` | inferred, distance 1 |
+
+**MOVE, NEVER DELETE.** Older coverage reports cite draft paths as their no-loss evidence, so
+removing a byproduct breaks a record that was already written. `git mv`, with a per-file sha check —
+the same discipline the artifact-path migration used.
+
+**ALL 32 DESTINATIONS ARE FREE**, checked 2026-08-09, and the check has a control:
+`s300/consolidation-manifest-prd.md` DOES exist, so a collision is detectable rather than assumed.
+**Re-run the collision check before moving anything** — 13 byproducts are already in slots and a
+second pass at any of these basenames would change that.
+
+### Done-when for §4
+
+- `git ls-files '_bmad-output/' | awk -F/ 'NF==3' | grep -cE 'consolidation-|coverage-report'`
+  returns **0**. **It returns 32 today** — take that reading first, or a zero afterwards is
+  indistinguishable from a filter that matches nothing. The control is the same expression with
+  `NF>3`, which returns **13** now and **45** after.
+- `validate-artifact-paths.sh` still reports **PASS**. Every path involved conforms both before and
+  after — a syntactic grammar cannot tell a durable artifact from a per-sprint one that omitted its
+  sprint, which is exactly why this is a hand-derived re-home and not a migration run.
+- **No file deleted.** `git diff --stat` for the commit shows renames only, zero deletions.
+
+---
+
 ## Deliberately NOT in this file
 
-- **The 12 `W11` repaths.** The operator chose to leave them to their own commit so a pull-review
-  diff stays a pull-review diff. The rewrite for each is tabulated in the SPENT
-  [`graph-0330-to-0335-pull-and-homing.md`](graph-0330-to-0335-pull-and-homing.md) and every
-  replacement was verified to exist. They are outstanding, not work for this session.
+- **A consolidation PASS.** §4 explains why: it writes into the live sprint slot and its right home
+  is s302's kickoff.
 - **The `sprint-status.sh` freeze-path fix.** Core's, reported, not in this range. §1.
 - **Consumer-side ledger items**, none of which this pull touches: `PC-S329-NAMED-UPSTREAM-…`'s
   disposition, `PC-S312`'s receipt (it reports `NEEDS-REVIEW` on every pull until re-anchored at
@@ -333,7 +526,13 @@ it is an open question on the distribution side.
 2. **`ledger-rotate.sh` before and after** — the `1 closed entries would move / PC-S330` line and
    the `0 closed entries` line. That pair is the whole reason this pull was urgent.
 3. **The two `CLOSE-CANDIDATE` dispositions** — full slugs — and whether you annotated them.
-4. **`validate-layer-entries.sh`'s warning count**, and explicitly whether it is still 14.
-5. **Your §1 decision**: left as-is (the recommendation), or reversed and why.
-6. **Anything this file predicted that did not happen.** Two of its predecessors' predictions have
+4. **`validate-layer-entries.sh`'s warning count at three points**: before anything (expect 14),
+   after the pull (expect 14 — unchanged is the PASS), and after §3 (expect 2, with `W7` and `W6`
+   the named survivors).
+5. **Whether you took `overrides/steps__retro__domain-sections.md`** in §3, since that one costs a
+   re-adjudication on the next pull.
+6. **The byproduct count before and after §4** — 32 → 0 at the area root, 13 → 45 in slots, zero
+   deletions.
+7. **Your §1 decision**: left as-is (the recommendation), or reversed and why.
+8. **Anything this file predicted that did not happen.** Two of its predecessors' predictions have
    already been wrong; the record of a wrong one is worth more than a clean report.

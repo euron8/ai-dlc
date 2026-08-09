@@ -330,10 +330,21 @@ run and read what the gate says.**
 deletes its drafts at Step 6. **That governs FUTURE passes only.** The 33 byproduct files already at
 graph's area root must be MOVED into the sprint slot of the pass that produced them, never removed:
 older coverage reports cite draft paths as their no-loss evidence, so deleting them breaks a record
-that was already written. **The full 33-row derivation — 24 direct, 9 inferred, 0 refused, with the
-destination slot for each — is in §*What item 23b measured*, and the two instruments that get it
-wrong are written into the step itself.** Nothing about this blocks; it is bookkeeping the operator
-can take whenever graph is next open.
+that was already written. **~~The full 33-row derivation … with the
+destination slot for each — is in §*What item 23b measured*~~ — THAT SENTENCE WAS FALSE, and it was
+false in the way a handoff cannot afford.** That section carries the AGGREGATE (33 / 24 direct /
+9 inferred / 0 refused) and the list of destination slots; **it never carried the per-file mapping**,
+so a session sent there to do the re-home would have found a summary of a table and nothing to act
+on. The two instruments that get it wrong ARE written into the step itself — that half was true.
+
+**RE-DERIVED 2026-08-09 and now written into the runbook's §4 as a per-file table**, which is where a
+consumer session can use it. It came out **32, not 33** (the plan measured at an older sha), and the
+DIRECT/INFERRED split **15/17, not 24/9** — the earlier derivation resolved inferred rows against a
+subject-derived sprint timeline by ancestry position, the new one walks first-parent to the nearest
+sprint-naming subject. **11 of the 13 destination slots reappear unchanged**, which is the agreement
+that matters, since the SLOT is what the move acts on. All 32 destinations are free, checked with a
+control that a real collision is detectable. Nothing about this blocks; it is bookkeeping the
+operator can take whenever graph is next open, and it is now step 5 of the pull runbook.
 
 **~~The pull carries four things worth naming for the operator~~ — DISCHARGED, kept as the record of
 what the 0.318.0 pull delivered:**
@@ -636,10 +647,20 @@ shape to expect.
      still resolves"* was unverifiable. Run each command, or state the expected FAIL and what makes
      it unrelated.
 
-3. **The 12 `W11` repaths are the OPERATOR's and are deliberately deferred** — they chose to leave
-   them to their own commit so a pull-review diff stays a pull-review diff. The rewrite for each is
-   in the SPENT runbook's table and every replacement was verified to exist. **Do not fold them
-   into the runbook as work; name them as outstanding.**
+3. **The 12 `W11` repaths are the OPERATOR's and are now IN the runbook as §3** — operator
+   direction 2026-08-09, revising the earlier deferral: *"I'll be executing the runbook in a graph
+   session, so doesn't it make sense to take them on?"* It does, and **the deferral had been
+   misread here as "another session" when the reason on record was "another commit"** — a
+   pull-review diff staying a pull-review diff is satisfied by a separate commit in the same
+   session. **This line previously said "do not fold them into the runbook as work", which is what
+   made the weaker reading look like a decision.**
+
+   One measured constraint came with it, and it is the only ordering in that file: `adj_digest`
+   (`core/skills/ai-dlc-update/reconcile/layer-drift.sh:519`) keys a recorded verdict on the entry
+   file's blob plus its hooked core file, so editing an entry SPENDS its verdict — and **exactly one
+   of the ten `W11` entries is an adjudicated subject**, `overrides/steps__retro__domain-sections.md`,
+   derived by intersecting the `W11` list with `--list-adjudications` rather than by inspection.
+   §3 therefore runs after the pull merges, and costs one re-adjudication on the following pull.
 
 4. **A derivation, NOT a fix, on the receipt class — OPTIONAL and unscheduled.** `26 of 26
    theirs_has` receipts restating the previous run is the third appearance of this. Whether the
