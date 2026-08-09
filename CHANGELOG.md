@@ -34,6 +34,53 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.340.0] — 2026-08-09
+
+### A `verify: sh` receipt was evaluated wherever the caller stood, not at the consumer root
+
+Found by disagreeing with the reference consumer and re-running the measurement. Their pull
+report said `PC-S331` reads `STILL-LIVE`; a runbook written from this side told them to expect
+`CLOSE-CANDIDATE`, quoting a run made here. **Both runs were faithful. The reader was not.**
+
+`verify: sh` receipts name CONSUMER-RELATIVE paths — `.claude/skills/ai-dlc-update/reconcile/
+ledger-rotate.sh` is the one in question. The receipt ran under a bare `bash -c`, which inherits
+the caller's working directory. Same receipt, same ledger, same four arguments:
+
+```
+run from the CONSUMER root       PC-S331  STILL-LIVE       the receipt found its file
+run from the DISTRIBUTION root   PC-S331  CLOSE-CANDIDATE  grep exited 2, no such file
+```
+
+**The wrong-cwd direction is the one that loses data.** It proposes closing a live entry, which
+this file's own header calls the verdict you cannot take back. One row of 56 moved, and it was
+that one.
+
+**THE GUARD DIRECTLY ABOVE IT COULD NOT SEE THIS, WHICH IS THE PART WORTH KEEPING.**
+`receipt_absent_subjects` exists to stop exactly this class — it resolves the receipt's paths
+against `$CONSUMER` and refuses to close when one is missing. It ran, it correctly found every
+path present, and it certified the close **while the predicate itself was reading a different
+tree entirely.** The guard and the predicate disagreed about which root they stood in, and only
+the guard was right. A `cd "$CONSUMER" &&` now precedes the receipt, so an unreachable root is a
+non-zero exit routed through the same guards rather than a silent evaluation somewhere else.
+
+**THE FIXTURE HAD THE ARM AND NOT THE SUBJECT, and that is measured rather than asserted.**
+Every `verify: sh` receipt in the seed named an absolute path or interpolated `$CONSUMER`, and
+both resolve identically from any directory. The pre-existing `consumer-form` arm — which asks
+whether the root ARGUMENT can decide a verdict — therefore agreed with itself no matter which
+tree the receipts were read against. Run the shipped fixture against a mutant with the `cd`
+removed: **76 of 76 assertions PASS.**
+
+The seed gains `Entry SH-RELATIVE-SUBJECT`, a receipt naming a bare consumer-relative file that
+exists, and `run.sh` gains two arms — a byte-comparison of a run from `/` against one from the
+consumer root, and the positive assertion that the entry reads `STILL-LIVE` from a cwd that is
+neither. Against the same mutant the repaired fixture fails **three** arms, the third being
+`consumer-form`: the door was always open, nothing had walked through it.
+
+**AND THE MUTATION RUN ITSELF HAD TO BE REBUILT.** This fixture resolves its subject from three
+fixed candidate paths and takes no argument, so passing it a mutated copy runs the REAL script
+and scores a clean PASS — which is what the first two attempts here did. The mutant is a
+replicated `core/` layout with an unmutated twin, and the twin is what proved the harness works.
+
 ## [0.339.0] — 2026-08-09
 
 ### `W11` was reporting its own remedy back as the defect, on 7 of 7 rows

@@ -21,6 +21,14 @@ DIST="$TMP/dist"
 CONS="$TMP/consumer"
 mkdir -p "$DIST" "$CONS"
 
+# A SUBJECT FOR THE CWD ARM, and it exists because every other `sh` receipt in this seed names
+# an ABSOLUTE path (`/nonexistent/...`) or interpolates `$CONSUMER`. Both resolve the same from
+# any directory, so none of them could ever have detected a receipt being evaluated at the
+# caller's cwd instead of the consumer root -- which is how that defect shipped. The real
+# ledger's receipts are written the other way: a BARE consumer-relative path.
+mkdir -p "$CONS/.claude/skills/ai-dlc-update/reconcile"
+printf 'MARKER_RELATIVE_SUBJECT\n' > "$CONS/.claude/skills/ai-dlc-update/reconcile/ledger-rotate.sh"
+
 git -C "$DIST" init -q
 git -C "$DIST" config user.email seed@fixture
 git -C "$DIST" config user.name seed
@@ -208,6 +216,17 @@ cat > "$LED" <<'LEDGER'
   outcome so the two above cannot both be satisfied by a verb that always reports one
   thing.
   verify: sh true
+
+---
+
+- **Entry SH-RELATIVE-SUBJECT names its subject the way the real ledger does: a BARE
+  consumer-relative path.** Every other `sh` entry here writes an absolute path or interpolates
+  `$CONSUMER`, and both resolve identically from any directory — so before this entry existed,
+  no assertion in this fixture could see a receipt being evaluated at the CALLER's cwd instead
+  of the consumer root. It reproduces (exit 0, STILL-LIVE) only when the receipt runs at the
+  consumer root; from anywhere else `grep` exits 2 on a missing file and the entry reads as
+  absorbed, which is the false close that direction produces.
+  verify: sh grep -q MARKER_RELATIVE_SUBJECT .claude/skills/ai-dlc-update/reconcile/ledger-rotate.sh
 
 ---
 
