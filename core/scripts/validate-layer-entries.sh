@@ -1639,6 +1639,7 @@ if [ -z "$LC_APC" ]; then
 else
   LC_ROOTS="$(bash "$LC_APC" --scan-roots --root "$PROJECT_ROOT" 2>/dev/null)"
   LC_TOKRE="$(bash "$LC_APC" --token-re-prescribed 2>/dev/null)"
+  LC_SLOTRE="$(bash "$LC_APC" --slot-re-prescribed 2>/dev/null)"
   LC_NROOT="$(printf '%s\n' "$LC_ROOTS" | grep -c .)"
 
   # The story corpus location, read from its declared home and SUBSTITUTED. I84's second arm is
@@ -1691,14 +1692,27 @@ else
         [ -n "$p" ] || continue
         LC_AP_SEEN=$((LC_AP_SEEN + 1))
         q="${p%/}"
-        # ARM 1 — rule 2: the directory is the only sprint slot. `s<N>` and `s*` are that slot
-        # and are tested by whole-component equality before the expression is applied, which is
-        # where the resolver's header says the exemption belongs.
+        # ARM 1 — rule 2: the directory is the only sprint slot, and a component that IS that
+        # slot is exempt before the token expression is applied.
+        #
+        # THE EXEMPTION WAS A HAND-LIST OF TWO SPELLINGS AND THE SLOT HAS THREE. This tested
+        # `c = 's<N>'` and `c = 's*'` literally, so a prescription naming a CONCRETE slot —
+        # `docs/retro/s294/retro.md` — was reported as carrying a sprint token outside the slot.
+        # That path IS the slot, correctly spelt, and it is the rewrite this clause's own message
+        # prescribes. Measured on the reference consumer after it took that advice: **7 of 7
+        # remaining W11 rows were this**, so the clause had become a report of its own remedy.
+        # The slot now has one home, `artifact-path-config.sh --slot-re-prescribed`, for the same
+        # reason the token expression does: a hand-list in a caller goes stale silently.
+        #
+        # A MISSING RESOLVER MUST NOT WIDEN THE EXEMPTION. If `LC_SLOTRE` came back empty, an
+        # unguarded `grep -qE "" ` matches every component and every prescription becomes exempt —
+        # a clause reporting a clean zero over a corpus it never judged. The guard below keeps the
+        # arm's old behaviour in that case, which over-reports rather than under-reports.
         bad=""
         while IFS= read -r c; do
           [ -n "$c" ] || continue
-          [ "$c" = 's<N>' ] && continue
-          [ "$c" = 's*' ] && continue
+          [ -n "$LC_SLOTRE" ] && grep -qE "$LC_SLOTRE" <<<"$c" && continue
+          [ -z "$LC_SLOTRE" ] && { [ "$c" = 's<N>' ] && continue; [ "$c" = 's*' ] && continue; }
           grep -qE "$LC_TOKRE" <<<"$c" && bad="$c"
         done < <(printf '%s\n' "$q" | tr '/' '\n')
         if [ -n "$bad" ]; then

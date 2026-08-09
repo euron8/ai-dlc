@@ -115,6 +115,7 @@ GRAMMAR="$(cfg --grammar-file)"
 SCAN_ROOTS="$(cfg --scan-roots)"
 AREAS="$(cfg --areas)"
 TOKEN_RE="$(cfg --token-re)"
+SLOT_RE="$(cfg --slot-re)"
 
 N_AREAS="$(printf '%s\n' "$AREAS" | grep -c .)"
 N_ROOTS="$(printf '%s\n' "$SCAN_ROOTS" | grep -c .)"
@@ -150,7 +151,7 @@ N_SUBJECT="$(grep -c . "$TMP/paths" || true)"
 # ONE CLASSIFIER, USED BY THE PROBE BELOW AND BY THE REAL RUN. A probe that exercises a COPY of
 # the predicate proves the copy.
 classify() { # <paths-file> -> CLASS<TAB>path<TAB>detail, one row per path
-awk -v areas_file="$TMP/areas" -v tokenre="$TOKEN_RE" -v roots="$(printf '%s ' $SCAN_ROOTS)" '
+awk -v areas_file="$TMP/areas" -v tokenre="$TOKEN_RE" -v slotre="$SLOT_RE" -v roots="$(printf '%s ' $SCAN_ROOTS)" '
 # A LEGACY STORY PATH IS NON-CONFORMING BY POSITION, WHATEVER IT IS CALLED. The grammar places
 # `stories/` only under `s<N>/`, so a `stories/` directory with no `s<N>/` component above it
 # cannot hold a conforming file. That is what replaced the whole-corpus deferral: the ambiguity
@@ -238,7 +239,11 @@ BEGIN {
     if (got == "") mismatch = 1
     m = split(got, gv, " ")
     for (j = 1; j <= m; j++) if (!(gv[j] in seen)) { seen[gv[j]] = 1; ndistinct++; nums = nums " " gv[j] }
-    if (i == slotidx && c[i] ~ /^s[0-9]+$/) continue      # the one legal slot, correctly spelt
+    # THE ONE LEGAL SLOT, CORRECTLY SPELT. The expression is RESOLVED, not written here: the
+    # prose-side checker hand-listed its own copy of this exemption and the list went stale,
+    # flagging `docs/retro/s294/retro.md` -- the slot itself -- on 7 of 7 rows at one consumer.
+    # Two spellings, one home: this side reads real filenames so it takes the digits form.
+    if (i == slotidx && c[i] ~ slotre) continue
     nbad++
     if (bad == "") bad = c[i]
   }

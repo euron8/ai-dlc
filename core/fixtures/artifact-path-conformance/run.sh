@@ -224,8 +224,12 @@ mutate 'declared-areas-only' val \
 # first. The two probe mutants are told apart by DIRECTION: this one turns a conforming path
 # into a violation, `token-re-dead` below turns every violation into a conforming path. An
 # assertion on "the probe fired" alone would be satisfied by either and prove neither.
+# THE SED TARGETS THE RESOLVED FORM, and it used to target the literal `/^s[0-9]+$/` that used
+# to sit here. When that literal moved into artifact-path-config.sh --slot-re, this sed matched
+# nothing and the `cmp -s` guard caught it — which is the guard working, and is why the mutation
+# is written against the line rather than against the expression it carries.
 mutate 'slot-not-exempt' val \
-  's@if \(i == slotidx && c\[i\] ~ /\^s\[0-9\]\+\$/\) continue@if (0) continue@' '' \
+  's@if \(i == slotidx && c\[i\] ~ slotre\) continue@if (0) continue@' '' \
   '[ "$rc" -eq 2 ] && grep -q "expected CONFORMING, got NONCONFORMING" <<<"$out"' \
   'without the slot exemption the reserved slot itself reads as a violation, and the probe refuses the run'
 

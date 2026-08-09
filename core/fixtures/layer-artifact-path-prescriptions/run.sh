@@ -89,7 +89,18 @@ else
   bad "the arm reported ${H:-<none>} non-conforming against 3 seeded. Extra findings are false positives on this seed's own conforming paths; fewer means one of the assertions above is passing on the wrong row"
 fi
 
-# --- Part 2: the five silent cases, each for its own reason ----------------------------------
+# --- Part 2: the silent cases, each for its own reason ---------------------------------------
+# THE CONCRETE SLOT, and this arm exists because the clause used to fail it. The exemption was a
+# hand-list of two spellings — `s<N>` and `s*` — so `docs/retro/s294/retro.md` was reported as
+# carrying a sprint token outside the slot. That path IS the slot, and it is precisely the rewrite
+# the W11 message asks for, so the clause was handing back its own remedy as the defect. Measured
+# on the reference consumer at the time: 7 of 7 remaining rows were this shape.
+if says 'docs/retro/s294'; then
+  bad "the CONCRETE slot \`docs/retro/s294/retro.md\` was reported. That is the spelling this clause's own remedy prescribes, so an entry that took the advice is told to change it back — a check that cannot be silenced by following it teaches the operator to stop reading it"
+else
+  ok "SILENT: a CONCRETE slot \`docs/retro/s294/retro.md\` is not reported — the exemption is the slot RULE, not a hand-list of the two placeholder spellings"
+fi
+
 if says 's<N>/stories/'; then
   bad "the CORRECTLY SLOTTED story corpus was reported. The story arm fires on the declared location itself, so a consumer that has done exactly what the schema says is told to change it"
 else
@@ -150,6 +161,29 @@ else
     ok "MUTATION M1 PAIRING — the same mutant still reports the DIGITS form: it lost the placeholder case specifically, not the arm"
   else
     bad "MUTATION M1 PAIRING — the mutant lost the digits form too, so its silence is a broken arm rather than the narrower expression, and M1 attributes nothing"
+  fi
+fi
+
+# --- Part 3b: MUTATION M3 — the exemption is the slot RULE, not a hand-list ------------------
+# Revert the exemption to the two literal spellings it used to carry. The CONCRETE slot must
+# start being reported: that is the regression this arm exists for, and it shipped once.
+MUT3="$MUTDIR/validate-layer-entries-handlist.sh"
+sed 's|\[ -n "\$LC_SLOTRE" \] && grep -qE "\$LC_SLOTRE" <<<"\$c" \&\& continue|[ "$c" = '"'"'s<N>'"'"' ] \&\& continue; [ "$c" = '"'"'s*'"'"' ] \&\& continue|' "$LINTER" > "$MUT3"
+if [ ! -s "$MUT3" ] || cmp -s "$LINTER" "$MUT3"; then
+  bad "FIXTURE ERROR: the slot-exemption mutation matched nothing, so M3 proves nothing about where the exemption comes from"
+else
+  m3="$(bash "$MUT3" "$CONS" 2>/dev/null | grep '^WARN   W11' || true)"
+  if grep -qF 'docs/retro/s294' <<<"$m3"; then
+    ok "MUTATION M3 — with the exemption back to a hand-list, the CONCRETE slot IS reported: resolving --slot-re-prescribed is what stops the clause returning its own remedy as a defect"
+  else
+    bad "MUTATION M3 — the hand-list mutant stayed silent on \`docs/retro/s294/retro.md\`, so the concrete-slot arm above passes for some other reason and the resolver call is not what carries it"
+  fi
+  # PAIRING, same reason as M1's: a mutant that lost the whole arm would satisfy M3 while
+  # proving nothing about the exemption.
+  if grep -qF 'docs/retro/sprint-249.md' <<<"$m3"; then
+    ok "MUTATION M3 PAIRING — the same mutant still reports a genuine violation: it gained the false positive specifically, rather than breaking the arm"
+  else
+    bad "MUTATION M3 PAIRING — the mutant lost the genuine finding too, so M3's extra row is a broken arm rather than the narrower exemption"
   fi
 fi
 

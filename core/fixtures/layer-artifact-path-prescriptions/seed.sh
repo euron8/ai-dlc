@@ -159,6 +159,10 @@ The sprint's stories are in `_bmad-output/planning-artifacts/s<N>/stories/`, the
 `_bmad-output/planning-artifacts/prd.md`, and the live pipeline state is
 `_bmad-output/pipeline-snapshot.md`.
 
+The retro that settled this is `docs/retro/s294/retro.md` — a CONCRETE slot, which is the
+spelling the clause's own remedy message asks for and the one an entry citing a real past sprint
+naturally writes.
+
 An example of the spelling this project has RETIRED, kept as narration inside a fence so it is
 not read as a prescription:
 

@@ -34,6 +34,54 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.339.0] — 2026-08-09
+
+### `W11` was reporting its own remedy back as the defect, on 7 of 7 rows
+
+Reported by the reference consumer after they took the clause's advice. `LC-R4`/`W11` tells an
+author to rewrite `docs/retro/sprint-294.md` as `docs/retro/s294/retro.md`. They did, on every
+row. **The clause then flagged the rewrite.**
+
+**The exemption was a HAND-LIST OF TWO SPELLINGS AND THE SLOT HAS THREE.**
+`validate-layer-entries.sh` skipped the literal strings `s<N>` and `s*`; a concrete `s294` is
+equally the grammar's own slot, and the prescribed token ERE includes `[0-9]+` precisely so prose
+citing a real past sprint is read. Measured on that consumer:
+
+```
+before   W11=LC-R4:7/43    all 7 of the form docs/retro/s<N>/retro.md
+after    W11=LC-R4:0/43    total warnings 9 -> 2, and the 2 are W7 and W6
+```
+
+**A check that cannot be silenced by following its own advice is the one failure mode that
+teaches an operator to stop reading it**, which is why this is a defect and not a tuning
+question.
+
+**THE HAND-LIST WAS AT THREE SITES AND THE FIX IS ONE HOME.** `artifact-path-config.sh` gains
+`--slot-re` and `--slot-re-prescribed` — the same two-expression split the token pair already
+has, because a prose path spells the slot with a placeholder or with digits and an expanded
+filename only ever with digits. `validate-layer-entries.sh`, `validate-artifact-paths.sh` and
+`validate-enforcement-map.sh`'s I82 all read it now; the third had the identical latent bug
+against core's own prescriptions.
+
+**The real-path binding is behaviour-neutral and that was checked, not assumed**:
+`validate-artifact-paths.sh` over the consumer's 5174 tracked files is byte-identical before and
+after, with a control tree that still returns `FAIL — 1 blocking`.
+
+**A MISSING RESOLVER MUST NOT WIDEN THE EXEMPTION.** An empty ERE in `grep -qE` matches every
+component, which would exempt every prescription and report a clean zero over a corpus never
+judged. All three sites keep the old literal pair when the resolver cannot answer — under-exempt
+rather than over-exempt.
+
+**`artifact-path-conformance`'s `slot-not-exempt` mutant caught the move itself**, exactly as a
+`cmp -s` guard is supposed to: its `sed` targeted the literal `/^s[0-9]+$/` that the binding
+replaced, matched nothing, and reported *"the mutant IS the original"* rather than passing as a
+kill. Repointed at the resolved form.
+
+`layer-artifact-path-prescriptions` gains the concrete-slot silence arm and mutation **M3**:
+reverting the exemption to the hand-list makes the concrete slot fire again, and the paired arm
+asserts the mutant still reports a genuine violation, so M3 measures the exemption rather than a
+broken arm.
+
 ## [0.338.0] — 2026-08-09
 
 ### An instruction that ships its own opt-out is not an instruction
