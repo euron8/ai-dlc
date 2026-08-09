@@ -484,6 +484,35 @@ shape to expect.
    landed; graph is at `0.335.0 / b324779`. **Confirm it yourself** rather than trusting this line:
    the same paragraph has now been wrong about the base twice.
 
+   **ITS FIRST TODO IS NOT THE PULL. It is undoing a roll-forward this repo told them to do.**
+
+   **WHY.** `docs/plans/s301-close-out.md` Commit 2 step 1 said *"Run `sprint-status.sh close`
+   first, then `roll`"*, and the graph session did exactly that. **That instruction contradicts
+   core's own rule**, stated in the script it invokes — `core/scripts/sprint-status.sh:63`:
+   *"ROTATION HAPPENS AT PIPELINE START, NOT AT CLOSE… Rotating at start keeps the predecessor's
+   terminal state readable exactly until its successor exists."* `steps/route.md:394` is where the
+   roll belongs. **The same runbook refused to cut the s302 BRANCH three sentences later, for the
+   identical reason** — so the rule was stated and then broken for the adjacent artifact.
+
+   **THE COST, measured 2026-08-09.** `sprint-id` returns **302** while
+   `planning-artifacts/s302/` does not exist (0 files, against 105 for `s301`) and `stories:` is
+   empty. And **s302's kickoff roll will silently no-op**: `sprint-status.sh:376` short-circuits on
+   `sprint == target`, nothing is appended to `moved`, and the `if moved:` guard means it prints
+   NOTHING — indistinguishable from a failure by an operator watching for `rolled forward to
+   sprint 302`.
+
+   **AND A SECOND THING IS UNVERIFIED — DO NOT ACT ON IT, FINISH IT FIRST.** The roll commit
+   `d1f3a1fe4` added `sprint-status/sprint-301.yaml` to BOTH trees (128 lines each). The
+   artifact-path migration `dbe755181`, the SAME DAY, deleted both (128 deletions each). Those
+   archive directories now hold only `_preamble.yaml`, and `roll` composes that exact name at
+   `sprint-status.sh:384`. **What I did not establish, and stopped rather than guess: where the
+   migration moved them, whether that was intended, and what it costs at kickoff.** Establish that
+   before writing the reversal, because it decides whether the reversal has a source to restore
+   from at all.
+
+   **The reversal itself is the OPERATOR's call, not core's**, and this repo may not write their
+   tree. Offer it; do not assume it.
+
    What the runbook must carry, and why each part:
 
    - **The scope, DERIVED in the file**, with a control that separates `core/` from `docs/`. The
