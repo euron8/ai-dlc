@@ -7,8 +7,10 @@
 # corpus (one plan) is far too small for a green run to mean anything on its own. So
 # each arm gets a seeded defect that MUST fire and a conforming control that MUST NOT.
 #
-# The control is not decoration. Four of the six arms are absence checks — a validator
-# that errored on every file would satisfy every positive assertion here and be useless.
+# The control is not decoration. Most arms are absence checks — a validator that errored
+# on every file would satisfy every positive assertion here and be useless. P7 carries a
+# second control of its own, and it is the more important one: the arm's entire defence is
+# that it does not fire on a PROSE stop-condition, which is correct authoring.
 #
 # Usage: run.sh [path-to-validate-plan-shape.sh]
 # Exit:  0 = every assertion holds, 1 = an arm regressed, 2 = the fixture could not run.
@@ -141,10 +143,35 @@ grep -q '0 error(s)' <<<"$(run "$T/p6b.md")" \
   && ok "  and a second record marked superseded is accepted" \
   || bad "P6 fires even on a correctly-marked superseded section — the remedy does not silence it"
 
+# --- P7 an instruction that ships its own opt-out ---------------------------------
+# Seeded from the real defect: a runbook told a consumer session to run a consolidation
+# pass and put a decision table beside it resolving the healthy outcome to "stop".
+{ conforming; printf '\n```\nrun the budget check\n# `ok`   -> no consolidation target. Do the re-home and stop.\n```\n'; } > "$T/p7.md"
+o7="$(run "$T/p7.md")"
+grep -q 'opt-out inside an instruction' <<<"$o7" \
+  && ok "P7 fires on a comment that maps an outcome to NOT doing the work" \
+  || bad "P7 silent on an opt-out beside an instruction — the executor can skip the work and cite the plan"
+grep -q '0 error(s)' <<<"$o7" \
+  && ok "  and P7 is a WARNING — a legitimately conditional step must stay pushable" \
+  || bad "P7 escalated to an error; a plan with a real conditional would then be unpushable"
+
+# THE CONTROL THAT MATTERS, because this arm's whole defence is its narrowness: a PROSE
+# conditional is correct authoring and must not fire. Every runbook in this repo stops on
+# a stamp mismatch, and an arm that flagged that would be off within a week.
+{ conforming; printf '\nA different answer means STOP and ping the operator; do not proceed.\n'; } > "$T/p7b.md"
+grep -q 'opt-out inside an instruction' <<<"$(run "$T/p7b.md")" \
+  && bad "P7 fired on a prose stop-condition — that is correct authoring and the arm is too wide" \
+  || ok "  and it leaves a prose stop-condition alone, which is the false-positive it must not have"
+
 # --- empty corpus is not a pass ---------------------------------------------------
 # `for f in docs/plans/*.md` over an empty directory reads exactly like a clean run.
 mkdir -p "$T/empty/docs/plans" "$T/empty/scripts"
-cp "$V" "$T/empty/scripts/"
+# COPY UNDER THE CANONICAL BASENAME, never `cp "$V" dir/`. The line below invokes
+# `scripts/validate-plan-shape.sh` by name, so driving this fixture with an
+# alternately-named copy of the validator -- which is exactly what a mutation run does --
+# left nothing at that path and the arm exited 127. A 127 scored as "the empty corpus did
+# not exit 2", so a harness failure read as the defect this arm exists to catch.
+cp "$V" "$T/empty/scripts/validate-plan-shape.sh"
 ( cd "$T/empty" && bash scripts/validate-plan-shape.sh >/dev/null 2>&1 ); rc=$?
 [ "$rc" -eq 2 ] \
   && ok "an empty docs/plans/ exits 2, not 0 — no corpus is not the same as no findings" \

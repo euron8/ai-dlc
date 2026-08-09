@@ -34,6 +34,50 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.338.0] — 2026-08-09
+
+### An instruction that ships its own opt-out is not an instruction
+
+Caught by the operator in review, in a runbook revision that was about to be handed to a
+consumer session. A section told that session to run a consolidation pass. Beside it, in
+the same section, sat a fenced decision table — `ok -> no target, stop` / `OVER -> run
+it` — and a paragraph of current sizes "for the record, not as a gate".
+
+**Every figure in it was true and freshly measured. Together they were an OPT-OUT KIT.**
+A session told to do a thing, reading in the same breath that its subject looks healthy,
+can talk itself out of the work and cite the plan while doing so. The threshold that
+material described is what makes the retro size-audit RECOMMEND a pass; it was never a
+precondition for running one, and the step's own rule is that the operator runs it on
+demand naming the target.
+
+The rule is now in `CLAUDE.md`, and the deletion it prescribes is larger than the
+decision table: target-selection evidence goes too, because in a file whose reader has
+already been handed the target by name it only supplies material for re-litigating a
+settled choice.
+
+**MECHANISED NARROWLY, AND THE NARROWNESS IS THE ARGUMENT.** `validate-plan-shape.sh`
+gains P7, matching ONE shape — a `#` comment carrying an arrow that resolves an outcome
+to NOT acting:
+
+```
+false-positive set over docs/plans/*.md   0 of 9 plans      <- measured before shipping
+the historical revision with the defect   fires, line 452   <- the arm has a true positive
+a prose stop-condition                    not matched       <- the control that matters
+```
+
+**Prose conditionals are deliberately out of scope.** *"A different answer means STOP and
+ping the operator"* is correct authoring and every runbook here carries one; the fixture's
+most important arm asserts P7 leaves it alone. It is a WARNING rather than an ERROR
+because the arm can prove the shape and never that this particular condition is
+illegitimate — the judgement stays with the author.
+
+`core/fixtures/plan-shape` gains three arms (fires / is a warning / spares prose), and one
+repair the mutation run exposed: its empty-corpus arm copied the validator with
+`cp "$V" dir/` and then invoked it by canonical name, so driving the fixture with an
+alternately-named copy — exactly what a mutation run does — exited 127, and a 127 scored
+as "the empty corpus did not exit 2". A harness failure was reading as the defect the arm
+exists to catch.
+
 ## [0.337.0] — 2026-08-09
 
 ### The contract was stated everywhere except in the program a reader took to be honouring it
