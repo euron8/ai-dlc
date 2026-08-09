@@ -91,6 +91,52 @@ else
   bad "extension-reread was emitted as a HARD blocker — an unprovable suspicion must not gate apply"
 fi
 
+# --- Assertion 2c: A RECORDED VERDICT CLOSES IT, like the override sequence ---
+# `PC-S331` (apply.sh's extension re-read ignoring a recorded verdict). EXTENSION-HOOK-DRIFT is an
+# ADJUDICATED code, so a verdict clears its HARD- block — but this loop kept only the entry path
+# and DISCARDED the detail field the token rides in, so a fully-adjudicated run still produced a
+# work item. `apply` is not clean while a WORKLIST row is outstanding, and the only way to close
+# this one was a second register row under a digest that already had one.
+#
+# The arms above are the CONTROL for these: they ran against the same tree with no register at all
+# and got the WORKLIST row, so a NOTE here is the verdict doing the work, not the row disappearing.
+# `$DRIFT` here is unregistered-drift.sh; the adjudication keys come from layer-drift.sh, which
+# apply.sh reaches as its own sibling. Derived from $APPLY for exactly that reason rather than
+# re-resolved, so this arm cannot end up reading a different copy than the driver does.
+LAYER_DRIFT="$(dirname "$APPLY")/layer-drift.sh"
+REG_DIR="$CONSUMER/_bmad-output/ai-dlc-update"
+EXT_DIGS="$(bash "$LAYER_DRIFT" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null \
+            | awk -F'\t' '$1=="ADJUDICABLE"{print $4}' | grep -x '[0-9a-f]\{40\}' || true)"
+N_DIGS=$(printf '%s' "$EXT_DIGS" | grep -c . || true)
+if ! command -v jq >/dev/null 2>&1; then
+  ok "SKIP adjudicated-extension arms: jq is not on PATH, so the register cannot be read"
+elif [ "$N_DIGS" -eq 0 ]; then
+  bad "no adjudicable subject digests, so the arms below would record against an empty key and measure nothing"
+else
+  ok "PRECONDITION: $N_DIGS adjudicable subject digest(s) to record against"
+  mkdir -p "$REG_DIR"
+  : > "$REG_DIR/layer-adjudication-register.jsonl"
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    printf '{"clause":"LC-E4","entry":"x","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"fixture"}\n' \
+      "$d" >> "$REG_DIR/layer-adjudication-register.jsonl"
+  done <<EOF
+$EXT_DIGS
+EOF
+  MANIFEST_ADJ="$(bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
+  if grep -q 'NOTE[[:space:]]*extension-adjudicated.*alpha-domain' <<<"$MANIFEST_ADJ"; then
+    ok "a recorded verdict turns extension-reread into NOTE extension-adjudicated"
+  else
+    bad "a recorded verdict produced no adjudicated NOTE: $(printf '%s\n' "$MANIFEST_ADJ" | grep -i 'extension' | head -1)"
+  fi
+  if grep -q 'WORKLIST[[:space:]]*extension-reread' <<<"$MANIFEST_ADJ"; then
+    bad "the WORKLIST row survived a recorded verdict — the unclosable work item that was filed"
+  else
+    ok "and no WORKLIST extension-reread survives — apply can reach clean on a fully-adjudicated tree"
+  fi
+  rm -f "$REG_DIR/layer-adjudication-register.jsonl"
+fi
+
 # --- Assertion 3: THE SECOND DEFENCE — the detector refuses the poisoned reading ---
 # There are now TWO independent defences against this hazard, and this fixture must prove
 # both or it silently proves neither.

@@ -463,12 +463,18 @@ LD_SUP="$(printf '%s\n' "$LD_OUT" | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED"{print 
 # down with it. No rows means no decision to contradict. When there ARE rows, an
 # unresolvable token means this script cannot tell a decided one from an undecided one, and
 # the safe answer there is still to stop rather than guess in either direction.
-if [ -n "$LD_SUP" ]; then
+# TWO ROW CLASSES CARRY THE TOKEN NOW, so the gate asks about both. `EXTENSION-HOOK-DRIFT` joined
+# `OVERRIDE-SUPERSEDED` when a recorded verdict stopped clearing only the retire sequence and
+# started clearing the re-read worklist too; gating on `$LD_SUP` alone would leave the token unset
+# on a run whose only adjudicated rows are extensions — and under `set -u` that is not a silent
+# miss, it is a crash in the loop that reads it.
+LD_HOOK="$(printf '%s\n' "$LD_OUT" | awk -F'\t' -v OFS='\t' '$1=="EXTENSION-HOOK-DRIFT"{print $2, $4}')"
+if [ -n "$LD_SUP" ] || [ -n "$LD_HOOK" ]; then
   ADJ_ROW_TOKEN="$(sed -n 's/^ADJ_ROW_TOKEN="\([A-Za-z_][A-Za-z0-9_-]*\)".*/\1/p' "$SELF/layer-drift.sh" 2>/dev/null | head -1)"
   if [ -z "$ADJ_ROW_TOKEN" ]; then
-    echo "apply.sh: FATAL — OVERRIDE-SUPERSEDED row(s) present and ADJ_ROW_TOKEN could not be resolved from $SELF/layer-drift.sh." >&2
-    echo "  Without it this script cannot tell an ALREADY-ADJUDICATED supersession row from an" >&2
-    echo "  undecided one, and would emit retire steps over a recorded verdict (PC-S327)." >&2
+    echo "apply.sh: FATAL — OVERRIDE-SUPERSEDED or EXTENSION-HOOK-DRIFT row(s) present and ADJ_ROW_TOKEN could not be resolved from $SELF/layer-drift.sh." >&2
+    echo "  Without it this script cannot tell an ALREADY-ADJUDICATED row from an undecided one," >&2
+    echo "  and would emit retire steps or a re-read worklist over a recorded verdict (PC-S327)." >&2
     exit 2
   fi
 fi
@@ -598,10 +604,28 @@ EOF
 # A WORKLIST row is the weakest thing that still has an owner: the caller must dispose of it
 # before the run is done, exactly like a semantic merge, and `apply` is not "clean" while one
 # is outstanding. That is the difference between an instruction and a work item.
-LD_HOOK="$(printf '%s\n' "$LD_OUT" | awk -F'\t' '$1=="EXTENSION-HOOK-DRIFT"{print $2}')"
-while IFS= read -r ext; do
+# AND A RECORDED VERDICT CLOSES IT, exactly as it does for the override retire-sequence above.
+# `EXTENSION-HOOK-DRIFT` is an ADJUDICATED code, so a verdict clears its `HARD-` block — but this
+# loop kept only the entry path and DISCARDED the detail field the token rides in, so there was
+# nothing to test and every fully-adjudicated run still produced a work item. `apply` is not clean
+# while a WORKLIST row is outstanding, and the only way to close this one was a second register row
+# under a digest that already had one, which is `HARD-REGISTER-CONTRADICTION` the moment the
+# verdicts differ. Filed by the reference consumer as
+# `PC-S331` (apply.sh's extension re-read ignoring a recorded verdict), from a run that emitted the
+# adjudicated `NOTE` and the unconditional `WORKLIST` together.
+# `LD_HOOK` is computed with the token gate above, because that gate has to know whether this class
+# is present before this loop runs.
+while IFS="$TAB_CH" read -r ext detail; do
   [ -n "$ext" ] || continue
-  say WORKLIST extension-reread "$ext" "hooked core file changed; re-read this entry against the new core text and record a verdict (still-additive / contradicts-core / retire)"
+  case "$detail" in
+    "$ADJ_ROW_TOKEN"=*)
+      adj_v="${detail#"$ADJ_ROW_TOKEN"=}"; adj_v="${adj_v%% ::*}"
+      say NOTE extension-adjudicated "$ext" "this entry's hooked core file changed, and this project has ALREADY RECORDED a verdict of '${adj_v}' for this exact subject in the layer adjudication register. No re-read is prescribed: the reading has been done. The row is reported so the drift stays visible. The verdict is digest-keyed over this entry AND the core file it hooks, so it lapses on its own the next time either moves."
+      ;;
+    *)
+      say WORKLIST extension-reread "$ext" "hooked core file changed; re-read this entry against the new core text and record a verdict (still-additive / contradicts-core / retire)"
+      ;;
+  esac
 done <<EOF
 $LD_HOOK
 EOF

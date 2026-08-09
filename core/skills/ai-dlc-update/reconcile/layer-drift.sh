@@ -560,6 +560,35 @@ adj_lookup() { # $1 digest -> 0 if a record with a vocabulary verdict exists
 # destructive work the project had already decided against (PC-S326's sibling, PC-S327).
 ADJ_ROW_TOKEN="adjudicated"
 
+# THE "A VERDICT IS ALREADY RECORDED" PREFIX, IN ONE PLACE. Prints `adjudicated=<verdict> :: ` when
+# the register already holds a verdict for this exact subject, and nothing otherwise.
+#
+# WHY IT IS A FUNCTION. The override-supersession block computed this inline and the two EXTENSION
+# emits did not, so a recorded verdict cleared the `HARD-` block for an extension and `apply.sh`
+# STILL emitted `WORKLIST extension-reread` for it — an unclosable work item, since `apply` is not
+# clean while a WORKLIST row is outstanding and the only way to close it is a second register row
+# under a digest that already has one, which is `HARD-REGISTER-CONTRADICTION` if the verdicts ever
+# differ. Filed by the reference consumer as
+# `PC-S331` (apply.sh's extension re-read ignoring a recorded verdict) after one run produced the `NOTE`
+# and the `WORKLIST` shapes together, with all three verdicts recorded before the driver ran.
+#
+# The override block's own comment already argued for this ("Computed ONCE for all four emits below
+# rather than pasted into each, so a fifth emit cannot forget it") — the scope was just one block
+# too small, and the emit that forgot it was in a different one.
+# Written with `${ADJ_ROW_TOKEN}=` spelled out rather than through a `printf` format, because I86
+# greps for exactly that shape to prove the token has an EMITTER and not just a home. A `printf
+# '%s=%s'` form writes the identical bytes and I86 cannot see it — the invariant would have gone
+# green over a token nothing wrote. Keeping the literal shape keeps the check able to fire.
+adj_prefix() { # $1 entry, $2 target
+  local _d _v
+  case "$2" in ''|'?') return 0 ;; esac
+  _d="$(adj_digest "$1" "$2" 2>/dev/null || true)"
+  [ -n "$_d" ] || return 0
+  adj_lookup "$_d" 2>/dev/null || return 0
+  _v="$(adj_verdict "$_d" 2>/dev/null | head -1)"
+  printf '%s' "${ADJ_ROW_TOKEN}=${_v} :: "
+}
+
 adj_check() { # $1 status, $2 entry, $3 target
   adj_is_adjudicated "$1" || return 0
   case "$3" in ''|'?') return 0 ;; esac
@@ -1059,11 +1088,10 @@ while IFS= read -r f; do
       # covers the entry AND the core file it hooks at theirs, so a verdict is SPENT the
       # moment either side moves: a stale one cannot suppress anything, and the worklist
       # comes straight back. This is a record of a reading, never an exemption for a path.
-      sup_adj=""
-      sup_dg="$(adj_digest "$entry" "$tgt" 2>/dev/null || true)"
-      if [ -n "$sup_dg" ] && adj_lookup "$sup_dg" 2>/dev/null; then
-        sup_adj="${ADJ_ROW_TOKEN}=$(adj_verdict "$sup_dg" 2>/dev/null | head -1) :: "
-      fi
+      # Through `adj_prefix`, which is the same computation the two EXTENSION emits now share.
+      # It was inline here until an emit in another block forgot it; the scope of "computed once"
+      # is the file, not this loop.
+      sup_adj="$(adj_prefix "$entry" "$tgt")"
 
       # THE SURPLUS, MEASURED. Every emit below already said, in prose, that narrowing or
       # retiring "releases every unrelated line that anchor's span froze at base_sha". It never
@@ -1598,11 +1626,11 @@ while IFS= read -r f; do
         emit EXTENSION-OK "$entry" "$hooks" "hooked core file changed ${BASE}..${THEIRS} but the declared extends: span '${ext_anc}' did not"
       else
         emit EXTENSION-ANCHOR-DRIFT "$entry" "$hooks" \
-          "the declared extends: span '${ext_anc}' in '$hooks' changed ${BASE}..${THEIRS} — re-read this entry against the new core text for that section. This is the file-grain re-read narrowed to the span the entry actually declared; everything else that moved in this file is not this entry's business."
+          "$(adj_prefix "$entry" "$hooks")the declared extends: span '${ext_anc}' in '$hooks' changed ${BASE}..${THEIRS} — re-read this entry against the new core text for that section. This is the file-grain re-read narrowed to the span the entry actually declared; everything else that moved in this file is not this entry's business."
       fi
     fi
   else
-    emit EXTENSION-HOOK-DRIFT "$entry" "$hooks" "hooked core file changed ${BASE}..${THEIRS} — this entry declares no extends: anchor, so its drift subject is the whole file; re-read it against the new core text"
+    emit EXTENSION-HOOK-DRIFT "$entry" "$hooks" "$(adj_prefix "$entry" "$hooks")hooked core file changed ${BASE}..${THEIRS} — this entry declares no extends: anchor, so its drift subject is the whole file; re-read it against the new core text"
   fi
 done < <(layer_files "$EXT_DIR")
 
