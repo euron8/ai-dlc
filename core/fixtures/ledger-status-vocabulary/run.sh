@@ -106,7 +106,7 @@ mutant_fires() {
 # The silent half. The operator is handed a verdict the step governing the ledger does not
 # explain, and the pull looks complete.
 mutant_fires "emit-undocumented" "$LR" \
-  's/^\(  na=""\)$/  emit NAMED-PHANTOM "x" "y"\n\1/' \
+  's/^\(  na=""; nam=""\)$/  emit NAMED-PHANTOM "x" "y"\n\1/' \
   "emits 'NAMED-PHANTOM' but SKILL.md step 3f never documents it" 1 \
   "a status with no entry in step 3f reaches the operator with no stated handling"
 

@@ -339,8 +339,37 @@ absorbed_at() {
 # commit to name the id. The `head` form makes git the writer into a pipe a reader abandons
 # early — the SIGPIPE-under-pipefail defect this file's all_present() carried, and there is no
 # reason to re-import it for the sake of a flag.
-named_absorbed() { # <label> -> "<version> <short-sha>" if upstream's history names it, else ""
-  local _id="$1" _c _v
+# THE FULL SLUG IS NOT THE FORM UPSTREAM WRITES, AND THIS JOIN ONLY EVER ASKED FOR THE SLUG.
+#
+# MEASURED on the reference consumer's ledger against upstream at 0.328.0: 128 entries, and the
+# full-slug search finds **20**. Upstream's commit subjects and CHANGELOG cite the SHORT form
+# `PC-S<n>` -- 20 of the 29 distinct prefixes appear in its history -- so the slug search misses
+# every absorption that was cited the normal way. Among the misses were the three entries this
+# consumer filed and upstream had just fixed: PC-S320, PC-S326, PC-S327.
+#
+# WHY THIS MATTERS MORE THAN A MISSED ROW. NAMED-UPSTREAM is the THIRD SIGNAL -- the one that is
+# supposed to fire when a receipt is wrong. On the one entry whose receipt WAS wrong, the backstop
+# was silent too, for an unrelated reason. Two independent instruments, both blind, and the
+# agreement between them read as confirmation. Filed by that consumer as PC-S328.
+#
+# THE NAIVE FIX IS WRONG AND THE MEASUREMENT SAYS SO. Matching the bare prefix would attribute one
+# commit to every entry the sprint filed: of the 20 cited prefixes, **11 are shared by two or more
+# ledger entries** and only **9 identify exactly one**. So the prefix is asked ONLY as a fallback,
+# and it attributes ONLY when it resolves to a single entry. When it does not, that is reported as
+# its own status rather than smeared across the batch -- a wrong attribution here tells an operator
+# to close an entry upstream never touched, which is strictly worse than the silence it replaces.
+#
+# Returns "<version> <short-sha> <how>" where <how> is `slug` or `prefix`.
+# HOW MANY LEDGER ENTRIES SHARE A `PC-S<n>` PREFIX. Derived from the SAME extraction the main
+# loop reads, so the count can never describe a different entry set than the rows do -- a second
+# scan of the ledger file would be a second parser of the bullet shape.
+prefix_entry_count() { # <PC-S<n>> -> integer
+  printf '%s\n' "$ENTRIES" | awk -F'\t' 'NF{print $1}' | sort -u \
+    | grep -cE "^$1-" 2>/dev/null || true
+}
+
+named_absorbed() { # <label> -> "<version> <short-sha> <how>" if upstream's history names it, else ""
+  local _id="$1" _c _v _pfx _how
   case "$_id" in
     *[!A-Z0-9-]*|'') return 0 ;;              # not id-shaped: prose label, nothing to ask
   esac
@@ -348,10 +377,42 @@ named_absorbed() { # <label> -> "<version> <short-sha>" if upstream's history na
     *-*) : ;;
     *)   return 0 ;;                          # a single word is not an id
   esac
+  _how=slug
   _c="$(git -C "$DIST" log -F --grep="$_id" --format=%H "$THEIRS" 2>/dev/null | tail -1)"
+  if [ -z "$_c" ]; then
+    # FALLBACK: the short id upstream actually writes. Only when it names ONE entry.
+    _pfx="$(printf '%s' "$_id" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')"
+    [ -n "$_pfx" ] || return 0
+    [ "$(prefix_entry_count "$_pfx")" = "1" ] || return 0
+    _c="$(git -C "$DIST" log -F --grep="$_pfx" --format=%H "$THEIRS" 2>/dev/null | tail -1)"
+    _how=prefix
+  fi
   [ -n "$_c" ] || return 0
   _v="$(git -C "$DIST" show "${_c}:VERSION" 2>/dev/null | tr -d '[:space:]')"
-  printf '%s %s' "${_v:-unknown}" "$(git -C "$DIST" rev-parse --short "$_c" 2>/dev/null)"
+  printf '%s %s %s' "${_v:-unknown}" "$(git -C "$DIST" rev-parse --short "$_c" 2>/dev/null)" "$_how"
+}
+
+# The ambiguous half, reported rather than guessed. Upstream cites the sprint prefix, two or more
+# ledger entries carry it, and nothing in the commit says which -- so the operator reads the commit.
+named_ambiguous() { # <label> -> "<version> <short-sha> <n-entries>" when the prefix is shared
+  local _id="$1" _pfx _n _c _v
+  case "$_id" in *[!A-Z0-9-]*|'') return 0 ;; esac
+  # READ INTO A VARIABLE, THEN TEST. `| grep -q .` leaves at its first match while git log is
+  # still writing, so under `pipefail` the pipeline answers with the WRITER's EPIPE and this
+  # reports "upstream does not name the slug" on a slug it DOES name (I54/I54b). The whole
+  # function then falls through to the prefix arm and mis-reports an unambiguous hit as
+  # ambiguous -- a wrong row rather than a missing one.
+  local _slug_hit
+  _slug_hit="$(git -C "$DIST" log -F --grep="$_id" --format=%H "$THEIRS" 2>/dev/null)"
+  [ -z "$_slug_hit" ] || return 0
+  _pfx="$(printf '%s' "$_id" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')"
+  [ -n "$_pfx" ] || return 0
+  _n="$(prefix_entry_count "$_pfx")"
+  [ "$_n" -gt 1 ] 2>/dev/null || return 0
+  _c="$(git -C "$DIST" log -F --grep="$_pfx" --format=%H "$THEIRS" 2>/dev/null | tail -1)"
+  [ -n "$_c" ] || return 0
+  _v="$(git -C "$DIST" show "${_c}:VERSION" 2>/dev/null | tr -d '[:space:]')"
+  printf '%s %s %s' "${_v:-unknown}" "$(git -C "$DIST" rev-parse --short "$_c" 2>/dev/null)" "$_n"
 }
 
 # $1 = file content, $2 = newline-separated substrings. True iff EVERY one is present.
@@ -713,11 +774,35 @@ while IFS="$(printf '\t')" read -r label ord directive; do
   # loses a distinct fact.
   # ONE ROW PER ENTRY, not per receipt: the name is a property of the entry, and repeating it once
   # per receipt would make a two-receipt entry read as two absorptions.
-  na=""
-  case "$ord" in 1/*|"") na="$(named_absorbed "$label")" ;; esac
+  na=""; nam=""
+  case "$ord" in 1/*|"") na="$(named_absorbed "$label")"; [ -n "$na" ] || nam="$(named_ambiguous "$label")" ;; esac
   if [ -n "$na" ]; then
-    na_v="${na%% *}"; na_c="${na##* }"
-    emit NAMED-UPSTREAM "$label" "upstream's own history NAMES this entry's id at v$na_v ($na_c), which no receipt in this entry can see. Confirm whether that commit ABSORBED the entry or recorded a rejection/split; if it absorbed, annotate 'ADOPTED UPSTREAM (v$na_v, verified <date>)' and re-anchor or drop the stale receipt. Do NOT delete the entry."
+    na_v="$(printf '%s' "$na" | awk '{print $1}')"
+    na_c="$(printf '%s' "$na" | awk '{print $2}')"
+    na_h="$(printf '%s' "$na" | awk '{print $3}')"
+    case "$na_h" in
+      prefix) na_note=" Matched on the SHORT id \`$(printf '%s' "$label" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')\`, which is the form upstream writes, and that prefix names exactly ONE entry in this ledger -- so the attribution is unambiguous. The full-slug search found nothing, which is normal and is not evidence of anything." ;;
+      *)      na_note="" ;;
+    esac
+    emit NAMED-UPSTREAM "$label" "upstream's own history NAMES this entry's id at v$na_v ($na_c), which no receipt in this entry can see.${na_note} Confirm whether that commit ABSORBED the entry or recorded a rejection/split; if it absorbed, annotate 'ADOPTED UPSTREAM (v$na_v, verified <date>)' and re-anchor or drop the stale receipt. Do NOT delete the entry."
+  elif [ -n "$nam" ]; then
+    nam_v="$(printf '%s' "$nam" | awk '{print $1}')"
+    nam_c="$(printf '%s' "$nam" | awk '{print $2}')"
+    nam_n="$(printf '%s' "$nam" | awk '{print $3}')"
+    nam_p="$(printf '%s' "$label" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')"
+    # ONE ROW PER PREFIX, NOT PER ENTRY, and the label IS the prefix because that is the
+    # subject. Measured on the reference consumer: per-entry emission produced 45 rows from 11
+    # prefixes, all saying the same unresolvable thing about the same commits. A report that
+    # repeats one fact 45 times is a report an operator scrolls past, and the row would then be
+    # noise added by the fix for a signal that was missing -- the same trade the naive
+    # prefix-match makes, one level along. The same reasoning as ONE ROW PER ENTRY above.
+    case "${NAM_SEEN:-}" in
+      *"|$nam_p|"*) : ;;
+      *)
+        NAM_SEEN="${NAM_SEEN:-|}$nam_p|"
+        emit NAMED-UPSTREAM-AMBIGUOUS "$nam_p" "upstream's history cites this SPRINT prefix at v$nam_v ($nam_c), and $nam_n entries in this ledger carry it. NOT attributed to any of them, deliberately: naming all $nam_n would tell you to close entries upstream never touched, which is worse than the silence it replaces. Read $nam_c and decide per entry. The full-slug search found nothing for them, which is normal -- upstream cites the short id, not the slug."
+        ;;
+    esac
   fi
 
   case "$verb_norm" in

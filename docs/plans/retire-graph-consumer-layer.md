@@ -1321,6 +1321,49 @@ when you are done — including when "done" means you stopped early. **This inst
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
 
+## What PC-S328 measured (the backstop for wrong receipts joined on a name upstream never writes)
+
+v0.329.0. **Filed by the consumer, reproduced and enlarged here.** `NAMED-UPSTREAM` is the THIRD
+SIGNAL — the one that fires when a receipt is structurally incapable of closing. It searched for
+the entry's FULL SLUG; upstream cites the short `PC-S<n>`.
+
+```
+ledger entries                     128       distinct PC-S<n> prefixes      29
+  found by the FULL-SLUG join       20         cited in upstream history    20
+                                                 naming exactly ONE entry    9   <- attributable
+                                                 shared by 2+ entries       11   <- ambiguous
+```
+
+**THE COMPOUNDING IS THE FINDING.** `RECEIPTS-UNDECIDED` has read 24-of-24 restatements for three
+pulls; NAMED-UPSTREAM exists to catch absorption when receipts are wrong. On the entry whose
+receipt WAS wrong, the backstop was silent too — **two independent instruments, both blind, and
+their agreement reading as confirmation.** Among the misses: `PC-S320`, `PC-S326`, `PC-S327`,
+filed by this consumer and fixed here in this same session.
+
+**THE NAIVE FIX IS WRONG AND THE MEASUREMENT SAYS SO.** 11 of the 20 cited prefixes are shared, so
+matching the prefix regardless attributes one commit to every entry a sprint filed. The prefix is
+therefore a FALLBACK that attributes only when it resolves to ONE entry; otherwise
+`NAMED-UPSTREAM-AMBIGUOUS`, emitted **once per prefix**. Per-entry emission produced **45 rows
+from 11 prefixes** — noise added by the fix for a signal that was missing, which is the same trade
+the naive match makes one level along.
+
+**GROUND TRUTH against graph's real ledger, before and after:** `NAMED-UPSTREAM` **6 → 10**,
+ambiguous **0 → 7 rows**, every other status byte-identical, **nothing lost** (control: the
+old-set minus new-set difference is empty). Newly attributed: `PC-S298-WAIT-FOR-DELIVERABLE…`,
+`PC-S302-ADJUDICATION-RERUN-BASE…`, `PC-S308-SELF-UPDATE-INSTALLS…`, `PC-S318-SELF-UPDATE-SLICE…`.
+
+**THREE MECHANISMS CAUGHT DEFECTS IN THE FIX, which is the strongest evidence in this entry:**
+- **I54b** flagged `git log … | grep -q .` in the new code — EPIPE under `pipefail` reports
+  "not named" on a slug that IS named.
+- **I39** refused the new status until step 3f documented it AND `emit-report.sh` named it.
+- The fixture's bounding mutation rewrote ONE of the now-TWO `git log` calls — a **partial
+  revert**, which proves the layer left in place. Both forms are rewritten now.
+
+**THE CONSUMER'S OWN TWO ERRORS ARE WORTH RECORDING** because both were caught by measuring: a
+receipt anchored on a GUESS at the fix's shape (`apply.sh` gaining the register — upstream routed
+through a row token instead, so it could never close), and a reachability control that was
+**unfalsifiable**, its only occurrence being the receipt's own prose. Both re-anchored.
+
 ## What PC-S327 measured (two tools disagreeing, and the destructive one had no reader)
 
 v0.328.0. **Filed by the consumer during the 0.327.0 apply, reproduced here with a control.**

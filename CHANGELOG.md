@@ -34,6 +34,64 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.329.0] — 2026-08-09
+
+### The backstop for wrong receipts joined on a name upstream never writes
+
+`PC-S328`, filed by the reference consumer. `NAMED-UPSTREAM` is the **third signal** — the one
+that fires when a receipt is structurally incapable of closing. It searched upstream's history
+for the entry's **full slug**. Upstream cites the short `PC-S<n>`.
+
+**Measured against that consumer's ledger at 0.328.0:**
+
+```
+ledger entries                       128
+  found by the FULL-SLUG join         20
+distinct PC-S<n> prefixes             29
+  cited in upstream history           20
+```
+
+So on the one entry whose receipt was wrong, the backstop for wrong receipts was silent too —
+two independent instruments, both blind, and their agreement reading as confirmation. Among the
+misses were `PC-S320`, `PC-S326` and `PC-S327`: three entries that consumer filed and this repo
+had just fixed.
+
+**The naive fix is wrong, and the measurement is what says so.** Of the 20 cited prefixes,
+**11 are shared by two or more entries** and only **9 name exactly one**. Matching the prefix
+regardless would attribute one commit to every entry a sprint filed — telling an operator to
+close entries upstream never touched, which is worse than the silence it replaces.
+
+So the prefix is asked **only as a fallback**, and it attributes **only when it resolves to a
+single entry**. When it does not, that is its own status, `NAMED-UPSTREAM-AMBIGUOUS`, reported
+**once per prefix** — because the prefix is the subject. Per-entry emission produced **45 rows
+from 11 prefixes**, all saying the same unresolvable thing; a report that repeats one fact 45
+times is noise added by the fix for a signal that was missing.
+
+**Ground truth, run against that consumer's real ledger, before and after:**
+
+```
+NAMED-UPSTREAM             6 -> 10      (+4 attributable, none lost)
+NAMED-UPSTREAM-AMBIGUOUS   0 ->  7      (rows, not 45)
+every other status                unchanged
+```
+
+**Three defects the mechanisms caught in the fix itself.**
+
+- **I54b** flagged `git log … | grep -q .` in the new code — the reader leaves at its first
+  match while the writer is still pushing, so under `pipefail` the pipeline answers with the
+  writer's EPIPE and reports *"upstream does not name the slug"* on a slug it does. Read into a
+  variable, then test.
+- **I39** refused the new status until it was documented in `ai-dlc-update/SKILL.md` step 3f
+  **and** named in `emit-report.sh`'s heading, which is exactly what that invariant is for.
+- The `ledger-reverify` fixture's bounding mutation rewrote **one** `git log` call, and there
+  are now two. That is a **partial revert** — it proves the layer left in place. Both `--grep=`
+  forms are now rewritten.
+
+New fixture coverage: a unique-prefix entry attributed via the short id, a shared prefix refused
+**symmetrically** for both entries, a collapse assertion requiring exactly one ambiguous row, and
+a control entry cited in neither form that must stay silent — so the arm joins on evidence, not
+on shape.
+
 ## [0.328.0] — 2026-08-09
 
 ### apply.sh prescribed destructive work the project had already decided against, because it never read the register that holds the decision

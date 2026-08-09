@@ -713,6 +713,14 @@ prose is itself generated rather than composed.
      **Not closable** — step 8 closes `CLOSE-CANDIDATE` rows only, so this needs no exception.
      Read it as "upstream named it", not "upstream took it": a commit can name an id to record
      a rejection or a split. Confirm which, then re-anchor or drop the stale receipt.
+   - `NAMED-UPSTREAM-AMBIGUOUS` → upstream's history cites this entry's SPRINT prefix
+     (`PC-S<n>`), but two or more ledger entries share that prefix and the commit does not say
+     which it absorbed. **Deliberately NOT attributed.** Upstream writes the short id, not the
+     full slug — measured against it at 0.328.0, the slug search found 20 of 128 entries while
+     20 of 29 prefixes appeared, and of those 20 prefixes only 9 named a single entry. Matching
+     the prefix regardless would tell you to close entries upstream never touched, which is
+     worse than the silence it replaces. Read the named commit and decide per entry. Like
+     `NAMED-UPSTREAM`, **not closable** — it is a pointer to a reading, not a verdict.
    - `HAND-REVIEW` → the entry declares `verify: manual`. No mechanical predicate exists for
      it BY DESIGN; adjudicate the body against theirs. This is NOT an entry with no `verify:`
      line — that emits no row at all.
