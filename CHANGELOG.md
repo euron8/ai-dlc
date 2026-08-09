@@ -34,6 +34,53 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.327.0] — 2026-08-09
+
+### A fixture asserted the arm that stops a change grading itself, and could not run on any consumer
+
+`PC-S326`, filed by the reference consumer against v0.322.0 and **reproduced here with a
+control**: `core/fixtures/whole-read-pool/run.sh` exits **2** in the consumer layout and **0** in
+the distribution.
+
+Its 10d mutation arm resolved `sprint-status.json` as the validator's dirname plus a parent hop
+into a `schemas` sibling. That parent-sharing is true only here — `install.sh` **splits** it,
+sending `core/scripts/<x>` to `scripts/ai-dlc/<x>` while `core/schemas/` goes to
+`.claude/schemas/`. So the arm was green upstream and broken on every consumer, and because the
+consumer's pre-push blocks on its fixture suite, **it was a permanent stop**: the reference
+consumer could not push without `--no-verify`.
+
+**What was unreachable is the point.** That arm is the one proving v0.322.0's
+`SPRINT_WHOLE_READ_SET` measures the pool rather than the file merely existing — the check that
+stops the locked-requirements move from grading itself. It was green here and could not run
+anywhere it mattered.
+
+Fixed by rooting the chain at the fixture's own self-location and naming **both** layouts, which
+is what its own validator resolution already did and what `sprint-status.sh:129-137` does for this
+same schema. Verified `0` in both layouts.
+
+**I33 exists for exactly this defect and was blind to it by construction.** Its grammar requires
+the `dirname` call and the `/..` walk in **one expression**; this shipped them one assignment
+apart, and I33's own pattern returns **zero** on the defective file. I33's header records
+*"this pattern occurs ZERO times"* as its false-positive measurement — true of the form it can
+see. **A zero over the wrong grammar reads exactly like a clean tree.** Same shape as I54 → I54b.
+
+**New invariant I33b** for the variable-in-between form. Measured before shipping: the form occurs
+**once** across every `core/fixtures/**/*.sh` — the file above — and **zero** times after the fix.
+
+**A defect in the guard against the defect, caught before it shipped.** The first draft inlined
+the detection twice, so blinding the corpus scan left the probe passing against its own private
+copy — **a probe certifying an instrument it never exercised.** Scan and probe now call one
+function; breaking it surfaces as the probe failing, asserted in the suite.
+
+Proven three ways: restoring the pre-fix fixture makes I33b fire naming the file and the variable;
+blinding the shared predicate makes it **fail closed** rather than report clean; a negative probe
+carrying a non-walking dirname variable and a self-rooted chain keeps the false-positive set empty.
+Suite assertions `enforcement-map-derivations` A26–A27.
+
+**Also fixed: a comment that tripped the checker it was explaining.** The first version of the
+fix's own comment quoted the defective expression verbatim, and I33 — which scans this file —
+flagged the example. Written out in words instead.
+
 ## [0.326.0] — 2026-08-08
 
 ### A blocking row's remedy ran the operator's own answer as a command and deleted it from the sentence

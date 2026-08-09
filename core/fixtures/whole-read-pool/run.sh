@@ -413,18 +413,38 @@ rm -f "$WORK/_bmad-output/planning-artifacts/s288/locked-requirements.md"
 # Both the mutant and its control are therefore staged in a scratch BIN directory
 # holding a copy of sprint-status.sh -- outside the repo tree, so a crashed run
 # cannot leave a stray script where the core-script-boundary checks would read it.
-# AND THE SIBLING HAS A SIBLING OF ITS OWN. sprint-status.sh reads
-# `<its dir>/../schemas/sprint-status.json` and refuses to guess without it, so a BIN
-# holding only the two scripts makes the resolver exit 1 -- the control then pools
-# nothing and the mutation above scores a kill it did not earn. This was the state
-# this arm was first written in; the unmutated control is what caught it.
+# AND THE SIBLING HAS A SIBLING OF ITS OWN. sprint-status.sh loads
+# sprint-status.json and refuses to guess without it, so a BIN holding only the two
+# scripts makes the resolver exit 1 -- the control then pools nothing and the mutation
+# above scores a kill it did not earn. This was the state this arm was first written
+# in; the unmutated control is what caught it.
+#
+# THE SCHEMA IS RESOLVED FROM $ROOT, IN BOTH LAYOUTS, AND NEVER BY WALKING UP FROM
+# $VALIDATOR. This arm shipped at v0.322.0 resolving the schema as the validator's
+# dirname plus a parent hop into a schemas sibling -- written out here in words rather
+# than as the expression, because I33 scans this file and would flag the example.
+# That parent-sharing is true only in the distribution: install.sh SPLITS it, sending
+# core/scripts/<x> to scripts/ai-dlc/<x> and core/schemas/ to .claude/schemas/. So the
+# arm was green here and exited 2 on every consumer -- the item-20 class, and a
+# permanent stop on the consumer's own pre-push, which is how the reference consumer
+# found it (PC-S326). The chain is rooted at the FIXTURE's own self-location and names
+# both layouts explicitly, which is what lines 53-56 above already do for the validator
+# and what sprint-status.sh:129-137 does for this same schema.
 BIN="$WORK/bin"
 mkdir -p "$BIN" "$WORK/schemas" || exit 2
 SCRIPTS_DIR="$(dirname "$VALIDATOR")"
 SPRINT_STATUS="$SCRIPTS_DIR/sprint-status.sh"
-SPRINT_SCHEMA="$SCRIPTS_DIR/../schemas/sprint-status.json"
+if [ -f "$ROOT/core/schemas/sprint-status.json" ]; then
+  SPRINT_SCHEMA="$ROOT/core/schemas/sprint-status.json"
+elif [ -f "$ROOT/.claude/schemas/sprint-status.json" ]; then
+  SPRINT_SCHEMA="$ROOT/.claude/schemas/sprint-status.json"
+else
+  echo "FIXTURE ERROR: sprint-status.json not found in either layout" >&2
+  echo "  looked in: $ROOT/core/schemas/ (distribution), $ROOT/.claude/schemas/ (consumer)" >&2
+  exit 2
+fi
 [ -f "$SPRINT_STATUS" ] || { echo "FIXTURE ERROR: sprint-status.sh not beside $VALIDATOR" >&2; exit 2; }
-[ -f "$SPRINT_SCHEMA" ] || { echo "FIXTURE ERROR: sprint-status.json not at $SPRINT_SCHEMA" >&2; exit 2; }
+
 cp "$SPRINT_STATUS" "$BIN/sprint-status.sh" || exit 2
 cp "$SPRINT_SCHEMA" "$WORK/schemas/sprint-status.json" || exit 2
 MUTANT3="$BIN/validate-artifact-budget.sh"
