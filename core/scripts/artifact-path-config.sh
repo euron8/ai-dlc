@@ -4,6 +4,7 @@
 #   artifact-path-config.sh --scan-roots    [--root <dir>] [--grammar <file>]
 #   artifact-path-config.sh --areas         [--root <dir>] [--grammar <file>]
 #   artifact-path-config.sh --token-re
+#   artifact-path-config.sh --token-re-prescribed
 #   artifact-path-config.sh --grammar-file  [--root <dir>] [--grammar <file>]
 #   artifact-path-config.sh --consumer-file [--root <dir>]
 #
@@ -23,8 +24,14 @@
 #   --areas         core's `areas:` block JOINED with the consumer's, read from the file named
 #                   by `consumer_artifact_paths_file:` in layer-contract.yaml. Where an `s<N>/`
 #                   directory may live. Sorted and de-duplicated.
-#   --token-re      the ERE that decides whether ONE path component carries a sprint token.
+#   --token-re      the ERE that decides whether ONE path component of a REAL FILENAME carries a
+#                   sprint token. Digits, because an expanded filename has no other kind.
 #                   Printed rather than defined by each caller, for the same reason as above.
+#   --token-re-prescribed
+#                   the same rule over a path written in PROSE, where the sprint is a placeholder
+#                   (`s<N>`, a bare `N`, `*`) and never a digit. Two expressions because they read
+#                   two different string sets -- and one home, because the release that gave them
+#                   two had a checker matching neither of its own subject's spellings.
 #   --grammar-file  the grammar path this resolver settled on, so a caller can report it.
 #   --consumer-file the contract-declared consumer artifact-paths file. Printed whether or not
 #                   it exists, because "go write this file" is the correct remedy when it does
@@ -49,28 +56,50 @@ GRAMMAR_ARG=""
 # misses, and it was 173 files.
 TOKEN_RE='(^|-)(s|S|sprint-)[0-9]+($|[-.])'
 
+# THE SAME RULE OVER A PRESCRIPTION, WHICH IS A DIFFERENT STRING SET AND WAS A SECOND HOME.
+# `TOKEN_RE` above reads EXPANDED filenames, which is all its callers read, so digits are the
+# only sprint it can meet. A path written in PROSE names the sprint with a placeholder --
+# `s<N>`, a bare `N`, or `*` -- and none of those is a digit.
+#
+# THE FORK THIS CLOSES, and it is the exact shape this file was created to stop. I82 in
+# `validate-enforcement-map.sh` scans core's prescriptions and had grown its OWN widened copy of
+# this expression, beside a header here claiming to be the single home of the sprint-token
+# expression. The claim was true of the digits form and false of the rule.
+#
+# WHY IT MATTERS RATHER THAN BEING TIDY: measured on the reference consumer, the two artifact-path
+# defects in its layer entries are written `s<N>-carry-over-evaluation.md` and
+# `config-integrity-snapshot-s<N>.json`. A checker built on the digits form matches NEITHER and
+# reports a clean zero on its own subject -- this repo's named defect class, reached by picking
+# the wrong one of two expressions that both look right.
+#
+# THE RESERVED SLOT IS NOT A VIOLATION AND IS NOT IN THIS ERE. `s<N>` and `s*` are the grammar's
+# own directory slot; a caller tests them by whole-component equality before applying this, the
+# way I82 always has. Encoding the exemption here would make the ERE answer two questions.
+TOKEN_RE_PRESCRIBED='(^|-)(s|S|sprint-)(<N>|N|\*|[0-9]+)($|[-.])'
+
 while [ $# -gt 0 ]; do
   case "$1" in
-    --scan-roots|--areas|--token-re|--grammar-file|--consumer-file)
+    --scan-roots|--areas|--token-re|--token-re-prescribed|--grammar-file|--consumer-file)
       [ -z "$MODE" ] || { echo "$PROG: two modes given ('$MODE' and '$1'); it answers one question per call" >&2; exit 2; }
       MODE="$1"; shift ;;
     --root) ROOT="${2:-}"; [ -n "$ROOT" ] || { echo "$PROG: --root needs a directory" >&2; exit 2; }; shift 2 ;;
     --grammar) GRAMMAR_ARG="${2:-}"; [ -n "$GRAMMAR_ARG" ] || { echo "$PROG: --grammar needs a file" >&2; exit 2; }; shift 2 ;;
     -h|--help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "$PROG: unknown option '$1'" >&2
-       echo "usage: $PROG --scan-roots|--areas|--token-re|--grammar-file|--consumer-file [--root <dir>] [--grammar <file>]" >&2
+       echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--grammar-file|--consumer-file [--root <dir>] [--grammar <file>]" >&2
        exit 2 ;;
   esac
 done
 
 [ -n "$MODE" ] || { echo "$PROG: no mode given" >&2
-                    echo "usage: $PROG --scan-roots|--areas|--token-re|--grammar-file|--consumer-file [--root <dir>] [--grammar <file>]" >&2
+                    echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--grammar-file|--consumer-file [--root <dir>] [--grammar <file>]" >&2
                     exit 2; }
 
 # --token-re answers before any tree is consulted. It is a property of the grammar's RULES, not
 # of a particular checkout, and making it need a readable tree would mean a caller cannot ask
 # what a sprint token is without first standing somewhere that has one.
 if [ "$MODE" = "--token-re" ]; then printf '%s\n' "$TOKEN_RE"; exit 0; fi
+if [ "$MODE" = "--token-re-prescribed" ]; then printf '%s\n' "$TOKEN_RE_PRESCRIBED"; exit 0; fi
 
 # RESOLVE --grammar BEFORE the cd, for migrate-artifact-paths.sh's reason exactly: it is the
 # caller's path, relative to where THEY are standing, and this then changes directory.
