@@ -6,6 +6,35 @@
 
 ## Start here
 
+**EVERY FIGURE IN THIS FILE IS A DATED MEASUREMENT, NOT A FACT. RE-DERIVE BEFORE YOU ACT ON ONE.**
+This is not general caution. **Six assertions written into this plan during the 2026-08-08/09
+sessions were wrong, and they were wrong in the same way each time: a number was carried forward,
+or a proxy was read instead of the subject.** Enumerated, because an unenumerated warning is one
+you read past:
+
+| the assertion | what was wrong | what settles it |
+|---|---|---|
+| graph is at `0.329.0 / 9fc216e` | carried after the 0.330.0 pull had landed | `sed -n '1,4p' /Users/n8/git/graph/.claude/.ai-dlc-version` |
+| the owed range is `0.330.0 → 0.337.0` | the pull had already taken it to `0.335.0` | the same command |
+| the pull moves 8 `core/` files | derived against the wrong base | `git diff --name-only <stamped sha> HEAD` |
+| s302 HAS STARTED | read `sprint: N`, a DECLARED currency, as evidence of activity | `ls _bmad-output/planning-artifacts/s<N>/` |
+| `ledger-reverify` skips 15 live entries | modelled the predicate in Python; the shipped one is already anchored | run the shipped reader, before and after |
+| item 22 finds 3 non-conforming paths | scanned one scan root; the declared set is four | the resolver, not a hand-picked corpus |
+
+**THE RULE THAT WOULD HAVE CAUGHT ALL SIX: prefer the DERIVATION to the ANSWER, and when this file
+gives you both, run the derivation.** Where a paragraph names a command, that command is the
+evidence and the number beside it is a dated reading. Where a paragraph gives only a number,
+treat it as a pointer and go find the command.
+
+**AND TWO SPECIFIC TRAPS, both of which produced one of the rows above.** A field that DECLARES
+something (`sprint: N`, `status: in_progress`, a stamp) tells you what a program was told, never
+what happened — find the artifact. And a predicate you have reimplemented in order to measure it
+is not the predicate; **run the shipped program**, and run it before your change as well as after,
+or you cannot tell a fix from a no-op.
+
+**A STATUS LINE THAT HAS BEEN TRUE FOR A WHILE IS NOT EVIDENCE IT HAS ROTTED.** One of the six was
+a CORRECT line overwritten as stale. Measure the subject before rewriting a claim about it.
+
 **FRESH SESSION: your entry point is §*THE NEXT ACTION, AND IT IS THE ONLY LIVE ONE IN THIS FILE*.**
 Read this section for the boundaries and the standing operator decisions, then go straight there. It
 carries the numbered next-action list; nothing else in this file is an instruction to you.
@@ -27,7 +56,7 @@ checked examples: `layer-drift.sh:648` was the env-key guard and is now other co
 SHIPPED, so they are records of why a thing was done, not instructions.
 
 **EVERY `path:line` ABOVE `## Context` IS RE-CHECKED AT EACH HANDOFF. Re-run 2026-08-09 after
-v0.337.0: 50 distinct citations — 45 resolve in range, 0 past end-of-file, 0 ambiguous, 5 into the
+v0.337.0: 54 distinct citations — 49 resolve in range, 0 past end-of-file, 0 ambiguous, 5 into the
 CONSUMER.** Prior readings were the same 50/45/0/5 after v0.331.0 and after v0.330.0, then 51/46/0/5 (before that handoff's own edits changed it), 41/36/0/5, and 40/34/5/3-ambiguous. **That first figure moving while this paragraph was being written is the drift the sentence below describes.** **Do not carry these
 numbers; re-run the loop.** It is one pass: extract
 `[A-Za-z0-9_./-]+\.(md|sh|json|yaml):[0-9]+` from everything above `## Context`, resolve each
