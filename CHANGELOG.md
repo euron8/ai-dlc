@@ -34,6 +34,50 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.335.0] — 2026-08-09
+
+### The subject was never a declaration: 19 false positives became 0 by deriving the other side
+
+Plan item 12, the last item on this plan's next-action list. **The guard is shippable, and the
+thing that made it unshippable was the side the plan chose to derive.**
+
+v0.289.0 fixed three fixtures that read a tunable out of the AMBIENT environment and so asserted
+against whatever the developer's `.claude/settings.json` happened to say. Such a fixture does not
+fail — it passes for the wrong reason on the machine that set the key, and fails on a correct build
+for the machine that set it differently.
+
+**THE PLAN SAID THE SUBJECT IS "THE DECLARED CONSUMER-SETTABLE TUNABLES" AND THAT THIS SIDE HAD TO
+BE DERIVED FIRST. There is no such declaration, and there does not need to be.** A tunable is
+ambient-dangerous exactly when **a shipped program dereferences it** — derived from the code, on
+both sides, and unable to go stale.
+
+Every narrowing measured:
+
+```
+any fixture naming any AI_DLC_* token                      37
+-> keys a shipped program actually dereferences            24     (67 such keys exist)
+-> minus fixtures that ASSIGN the key themselves           11 -> 2
+-> minus comments and single-quoted program text            2 -> 0
+```
+
+The **19** false positives the plan recorded are the first line of that table. Most of those
+fixtures name keys they invent as their own worker-pool plumbing — `AI_DLC_LCC_OUT`,
+`AI_DLC_SFD_SCRIPT`, `AI_DLC_TAC_VALIDATOR`, `AI_DLC_RFO_DETECT`, `AI_DLC_CMI_VALIDATOR` — and
+**21 such tokens have no shipped reader at all**, so no consumer can set them and clearing them
+protects nothing.
+
+**THE LAST TWO NARROWINGS EACH CAME FROM ONE MEASURED FALSE POSITIVE**, and both are named in the
+invariant so the exclusions are auditable rather than tidy: `whole-read-pool` names
+`AI_DLC_SELF_DIR` in a **comment** explaining why a lone copy fails, and
+`enforcement-map-derivations` names `AI_DLC_REATTACH_BUDGET` inside a **single-quoted awk program**,
+where it is building a mutation string and no expansion happens at all.
+
+Ships as **I87** in `validate-enforcement-map.sh`. **Its real answer is zero today**, which is
+precisely why it is asked every run to answer a tree whose answer is known: a probe suite it writes
+itself, with one exposed fixture that must be reported and two that must stay silent for the two
+different reasons the exclusions encode. Verified beyond the probes by injecting a real exposed
+fixture into `core/fixtures/` — reported by name and key — and removing it: back to 0.
+
 ## [0.334.0] — 2026-08-09
 
 ### An arm is not addressable, so the row states the surplus instead

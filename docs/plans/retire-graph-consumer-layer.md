@@ -125,11 +125,12 @@ four.** The rulebook base and the tool version have agreed since #887; the one l
 diverge is a run whose machinery slice was empty, where `--carried-machinery-slice` is correctly
 NOT passed and the skill fields stay behind on purpose.
 
-**A PULL IS OWED — ONE HOP, TO `0.331.0`. The derivation, never the answer, is what to carry:**
+**A PULL IS OWED — ONE HOP, TO `0.335.0`. The derivation, never the answer, is what to carry:**
 `git diff --name-only <graph's stamped sha> HEAD` and read the top-level directories. Measured
-2026-08-09 against `9fc216e`: **8 `core/` files, plus `VERSION` and `CHANGELOG.md`** (control: the
-same command puts 1 path under `docs/`, so it separates the two kinds rather than reporting
-everything). **v0.331.0 enlarged this range and changed its shape** — it moves
+2026-08-09 against `9fc216e`, after v0.335.0: **18 `core/` files, plus 2 under `scripts/`,
+`VERSION` and `CHANGELOG.md`** (control: the same command puts 2 paths under `docs/`, so it
+separates the two kinds rather than reporting everything). **Five releases have enlarged this range
+and changed its shape** — it moves
 `core/skills/ai-dlc-update/SKILL.md` and `reconcile/layer-drift.sh`, which the 0.330.0-only range
 did not. **Do not carry the earlier "expect the clean split" prediction across that change**: run
 the dry run and read what the gate says, which is this plan's standing rule after being wrong about
@@ -143,6 +144,15 @@ with its `subject_digest` and recorded verdict, needing no gate state. **This is
 report that they had to withhold their own register to re-read a key.** On graph's layer at
 `9fc216e..HEAD` it names **10** subjects, 10 of them already carrying a verdict — every one of
 which was unreadable before.
+
+**AND EXPECT A NEW BLOCK OF WARNINGS — 12 OF THEM — WHICH ARE NOT A REGRESSION.** v0.333.0 adds
+`LC-R4`/`W11`: an artifact path a layer entry PRESCRIBES is held to the path grammar. Run against
+graph's layer from this side: **76 prescriptions read across 4 scan roots, 12 non-conforming in 10
+entries, 0 false positives.** Eight are `docs/retro/sprint-<N>.md` citations whose files are gone
+and whose slotted forms exist — the tree migrated and the prose did not. **Nothing blocks**: the
+clause is WARN and every remedy is an edit to prose the operator owns. `contract_version` also goes
+17 → 18, so all 43 entries report `behind` — they already did (`at_current=0`), and the delta is
+one clause on the migration worklist.
 
 **WHAT THE OPERATOR SHOULD EXPECT TO SEE FROM IT, and it is the reason to take it:**
 `ledger-rotate.sh` will start naming the entries that are closed for re-verification but not
@@ -451,17 +461,14 @@ and all four refuted their own item's central claim — twice the declaration th
 already existed and had a hole, and once the item named a candidate population that was one twelfth
 of the real one. **That is the pattern to expect from what is left below**, not an accident.
 
-1. **Item 12 — bind the fixture ambient-env guard.** BLOCKED ON A DERIVATION, not on another item:
-   the guard is unshippable until the *declared consumer-settable tunables* are derived as a set.
-   Requiring the clearing loop wherever a fixture names an `AI_DLC_*` token flags 19 fixtures, most
-   of them naming keys they set themselves.
+**THE NUMBERED LIST IS EMPTY. EVERY ITEM ON THIS PLAN HAS SHIPPED OR BEEN DECIDED.** **Item 22 is CLOSED** (derivation #474, hoist v0.332.0 #475, clause `LC-R4`/`W11` v0.333.0 #477), **item 26 is CLOSED** (v0.334.0 #478 — an arm is NOT addressable, measured, so the row states the surplus instead), and **item 12 is CLOSED** (v0.335.0 #479 — I87; the plan chose the wrong side to derive, and deriving the other one took 19 false positives to 0).
 
-**ONLY ITEM 12 REMAINS IN THIS LIST.** **Item 22 is CLOSED** (derivation #474, hoist v0.332.0 #475, clause `LC-R4`/`W11` v0.333.0 #477) and **item 26 is CLOSED** (v0.334.0 #478 — an arm is NOT addressable, measured, so the row states the surplus instead). None blocks another; 12 is last only because its
-derivation is the one that is genuinely blocked. **Item 26's subject is now partly answered but NOT
-closed** — v0.328.0 stopped `apply.sh` prescribing a retire over a recorded verdict, which is the
-SYMPTOM the consumer hit; item 26 asks whether an ARM is addressable at all, and that is untouched.
+**WHAT REMAINS IS THE OPERATOR'S, and it is listed below.** A session resuming here has no build
+queued. If a new defect arrives from the consumer, file it as its own item rather than reopening
+one of these — every one of them was CLOSED on a measurement, and three of the last four refuted
+the item's own central claim on the way.
 
-**THE OPERATOR'S SIDE, and none of it is yours to do.** Take the pull (one hop to `0.331.0`;
+**THE OPERATOR'S SIDE, and none of it is yours to do.** Take the pull (one hop to `0.335.0`;
 scope and derivation in the status block above), and the **two** homing jobs still open — the S299
 LOCKED block into `s299/locked-requirements.md`, and the brief's `## Changelog` section into
 `s<N>/changelog-product-brief.md`. Both verified still open 2026-08-09. **Nothing breaks before
@@ -570,7 +577,7 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~22~~ | ~~**25** — five more per-sprint artifacts prescribed at durable paths~~ | **DONE — v0.324.0.** `test-strategy.md` moves to `s<N>/`; Check 23 rescoped from producer to path shape; the criterion written down. **The item's premise that no durable declaration exists is REFUTED** — two independent pairs of carriers already agreed, and four of the five were already decided with reasons. **74 homes, not 73.** `bug-analysis` stays out on a stated disagreement rather than a quiet widening. Two pre-existing fixture defects fell out, one of them a vacuous arm caught before it shipped. See §*What item 25 measured* |
 | ~~23~~ | ~~**24** — the fixture ship-list is four hand-lists~~ | **DONE — v0.325.0.** `install.sh` derives from `.dist-only`; the criterion is in `CLAUDE.md`; all 7 empty markers filled and I74(d) requires a body. **The other three lists STAY, with the blast radius measured** — uninstall bounds a destructive loop on a tree where `core/fixtures/` does not exist, and the two glob declarations are read by ~20 programs. **I74's old join could not survive and was replaced rather than kept as a tautology.** A second extractor (I8) was found by RUNNING. See §*What item 24 measured* |
 | ~~24~~ | ~~**28** — a `subject_digest` is unreadable once its row stops blocking~~ | **DONE — v0.331.0.** New read-only mode `layer-drift.sh --list-adjudications`, sited on `adj_digest` rather than on `ADJ_CODES`. **The item's own framing would have shipped a listing reporting 1 of 12**: measured on the reference consumer, only ONE keyed subject is an `adj_check` row and eleven are LC-E19 at `level: WARN`, which hides its key harder because a verdict suppresses the whole row. Classify proven byte-identical, 47 rows. Fixture arms in TWO places because the two sites fail differently. See §*What item 28 measured* |
-| **25** | **12** | does not gate anything; take it when convenient. Needs the declared consumer-settable tunables derived first |
+| ~~25~~ | ~~**12** — bind the fixture ambient-env guard~~ | **CLOSED — v0.335.0 (#479).** Ships as **I87**. **The plan derived the wrong side**: it said the subject is "the declared consumer-settable tunables" and no such declaration exists or is needed — a tunable is ambient-dangerous exactly when a SHIPPED PROGRAM DEREFERENCES it, derived from code on both sides. 37 → 24 → 11 → 2 → **0**, with the last two narrowings each taken from ONE measured false positive (a comment; a single-quoted awk program). 21 of the tokens the old grammar flagged have no shipped reader at all. Real answer is zero today, so it carries a self-written probe suite AND was verified by injecting a real exposure |
 | ~~26~~ | ~~**22** — a stale path in a layer entry BODY goes undetected~~ | **CLOSED — derivation (#474), hoist v0.332.0 (#475), clause v0.333.0 (#477).** `LC-R4`/`W11` at WARN, `contract_version` 18. **The premise was refuted: the cited path RESOLVES**, naming a migration residue while the live corpus moved — so nothing in the fix tests existence, which would have scored 157 FPs of 309 tokens and missed its own subject. The empty cell was a CONSUMER's own prescriptions. **76 prescriptions read, 12 findings in 10 entries, 0 FPs — nine found only by reading all four scan roots.** The fixture's second mutant found a defect in the arm before it shipped |
 | ~~27~~ | ~~**26** — LC-O15 is anchor-grained, the supersession was arm-grained~~ | **CLOSED — v0.334.0 (#478). REPRODUCED first: 119 consumer-only lines, the consumer's exact number, derived independently against the entry's own `base_sha`.** The item's own first question answered NO — **an arm is not addressable**: the declaration keys on `<file>#<anchor>`, core's 231-line span has ONE sub-heading with the superseded machinery on BOTH sides of it, and the second superseded arm is not in the shadowed file at all. So the smaller outcome the item predicted: the row MEASURES the surplus it was already warning about in prose. No new declaration, no new join |
 | ~~—~~ | ~~**23d** — its own skill?~~ | **ANSWERED — NO, 2026-08-08. See row 19 and §*What item 23d decided*.** This row is the ORIGINAL scoping and its instruction is spent; a session acting on it would re-open a settled question. What follows is that original text. Operator question 2026-08-08. A DECISION, not a build, and **not answerable before 23a and 23b report**. **A "yes" produces implementation that must be ADDED TO THIS PLAN as its own sequenced item(s) before it starts; a "no" is recorded so it is not re-opened** |
