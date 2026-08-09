@@ -21,15 +21,17 @@ the command that produced it.
 4. **Repath the 12 `W11` prescriptions — §3.** Its own commit, **after step 3's PR has merged**,
    and that ordering is the one real constraint in this file: one of the ten entries is an
    adjudicated subject and editing it mid-pull re-fires a block you just cleared.
-5. **Re-home the 32 consolidation byproducts — §4**, and run the one-line budget check there that
-   decides whether a consolidation PASS has a subject today. Its own commit, independent of
-   everything above: the core work behind it shipped at v0.319.0, which your base already carries.
+5. **§4 — re-home the 32 consolidation byproducts, THEN run a consolidation pass on
+   `carry-over-backlog.md`.** That order matters: the re-home first, so the pass's own four files
+   are not counted as residue. Independent of everything above — the core work behind it shipped at
+   v0.319.0, which your base already carries.
 6. **Ping the operator** with the facts listed under *When you are done* — including if you stop
    early, and including a plain "nothing needed doing" on step 2.
 
-**ONLY ONE THING IN THIS LIST IS ORDERED: step 4 comes after step 3.** Step 3 does not depend on
-step 2. Stopping after step 3 is a complete outcome; so is stopping after step 2 with the pull
-untaken, if the stamp does not match.
+**TWO THINGS IN THIS LIST ARE ORDERED AND NOTHING ELSE IS: step 4 comes after step 3, and inside
+step 5 the re-home comes before the pass.** Step 3 does not depend on step 2. Stopping after step 3
+is a complete outcome; so is stopping after step 2 with the pull untaken, if the stamp does not
+match.
 
 **EVERY NUMBER BELOW WAS MEASURED ON 2026-08-09, NOT PREDICTED FROM A DIFF.** Where a figure could
 go stale between writing and running, the derivation is beside it — **run the derivation and
@@ -77,12 +79,17 @@ you need a decision, when a premise here does not hold, and when you are done.
 | expected NEW warnings | **0**. `contract_version` stays 18; `W11` already fires 12/43 there and this range does not move it |
 | destructive defect live on graph today | **yes** — their installed `ledger-rotate.sh --apply` would archive `PC-S330`, a live entry |
 | open homing jobs | **0** — both landed in graph #900 |
-| consolidation target | **none** — whole-read pool `ok`, 109623 tok, 33% of 330000. §4 has the check |
+| consolidation pass | **scheduled** — target `carry-over-backlog.md`, 58 sprint-scoped headings against 3/1/0 for the other three |
 | consolidation residue | **32** byproduct files at the planning-artifacts area root. §4 drains them |
 
 **s302 HAS NOT STARTED.** `sprint: 302` in both `sprint-status.yaml` copies is what the roll-forward
 left, not evidence of activity: `_bmad-output/planning-artifacts/s302/` does not exist and `stories:`
 is empty. Nothing in this file is on its critical path.
+
+**AND STEP 5 SPENDS THE FIRST HALF OF THAT EVIDENCE, DELIBERATELY.** The consolidation pass writes
+its working files into `s302/`, so the directory will exist afterwards. **The sprint still will not
+have started**, and the empty `stories:` mapping is what says so from then on. Do not let the new
+directory be read as a kickoff, here or in your report.
 
 ---
 
@@ -429,34 +436,48 @@ returns **302** today, and it would return 302 whether or not the early roll had
 the roll the canonical read `sprint: 301 / status: done`, and rule 3 returns `sprint + 1`. The roll
 does not change the slot a pass would write to.
 
-**WHAT IS MISSING IS A SUBJECT, AND THAT IS THE REASON THIS SECTION DOES NOT SCHEDULE A PASS.** The
-step's trigger is an artifact past its Rule 25(d) threshold. Measured on your tree 2026-08-09 with
-your own installed validator:
+### RUN A PASS. Target: `carry-over-backlog.md`. Operator direction 2026-08-09
+
+**BEING UNDER THRESHOLD IS NOT A REASON TO DEFER, and an earlier revision of this section treated
+it as one.** The step's invocation rule is *"the operator runs it on demand, naming the target
+artifact"*; the Rule 25(d) threshold is what makes the retro size-audit **recommend** a pass, not a
+precondition for running one. Two reasons to run it here: the v0.319.0 change has never executed on
+any consumer, and this is the quiescent point the step asks for.
+
+**THE TARGET IS `_bmad-output/planning-artifacts/carry-over-backlog.md`**, and the choice is
+measured rather than "it is the biggest". It carries the accretion signature item 19 identified —
+per-sprint narrative written into a sprint-independent file — and it carries it alone:
 
 ```
-ok  WHOLE-READ POOL (4 planning artifacts)   109623 tok  (pool 330000, 33% of it)
-      carry-over-backlog.md  42554 | prd.md  32619 | docs/architecture.md  21524 | product-brief.md  12926
+sprint-scoped headings (^#{2,4} .*s<N>)
+  carry-over-backlog.md   58      <- the target
+  product-brief.md         3      the one #900 drained
+  docs/architecture.md     1
+  prd.md                   0
+  sprint-status.yaml       0      control: a file with no sprint narrative by construction
 ```
 
-**The pool is the trigger and it is `ok`** — the validator's own remedy text says so: *"The
-WHOLE-READ POOL breaches as a SUM, so the remedy is chosen across the four, not per file."*
-Your #900 homing is a large part of why (the brief went 1030 → 648 lines). **A consolidation pass
-today would be a fidelity-critical rewrite of four artifacts that are all inside budget**, and a
-done-when for it could not go green, because there is nothing for it to reduce.
+1647 lines, 42554 tok, the largest of the four. **Its no-loss destination already exists** —
+`carry-over-backlog-archive.md` — so Step 2's history draft has somewhere to append.
 
-**SO THE PASS IS CONDITIONAL, NOT DEFERRED. Run the check; if it has a subject, run the step —
-you are already at the right moment and do not need to wait for s302:**
+**IT WILL WRITE TO `s302/`**, because `sprint-id` returns 302 and the step says to use the
+`sprint_id` the snapshot holds when the pass runs. **That creates
+`_bmad-output/planning-artifacts/s302/`, which today does not exist** — and the parent plan uses
+exactly that directory's absence as its evidence that s302 has not started. **After this pass that
+instrument is spent**; the sprint still has not started, and the `stories:` mapping being empty is
+what says so afterwards. Say this in your report so nobody reads the new directory as a kickoff.
 
-```
-bash scripts/ai-dlc/validate-artifact-budget.sh | grep 'WHOLE-READ POOL'
-# `ok`   -> no consolidation target. Do §4's re-home and stop.
-# `OVER` -> you have a subject. Run steps/artifact-consolidation.md against it now,
-#           at this quiescent point, and assert the two observables below.
-```
+**Do not consolidate `pipeline-continuation-log.md`.** It is the one `OVER` row on your tree —
+31457 tok, **314%** of its 10000 budget — and its remedy is `rotate`. The step excludes it by
+name-class: *"Not a consolidation target: `gate-log.md` (and any similar append-only log). Logs are
+bounded by rotation, not consolidation."* It was 309% when the previous runbook called it unrelated,
+so it is growing, and rotating it is separate real work.
 
-**The two observables, whenever that pass happens:** ZERO new byproducts at the planning-artifacts
-area root (everything under `s302/`), and the two drafts gone after the step's Step 6. That is the
-real test of v0.319.0 and it is one `git status` away when the pass runs.
+**THE REST OF THE POOL, for the record and not as a gate:** `ok`, 109623 tok, 33% of 330000
+(`carry-over-backlog` 42554, `prd` 32619, `architecture` 21524, `product-brief` 12926). **Record the
+after-reading; do not make a drop the acceptance criterion.** A pass run for fidelity rather than
+for a breach may reduce very little, and a done-when that requires the pool to fall would fail a
+correct pass.
 
 **ONE ROW IS `OVER` TODAY AND IT IS NOT A CONSOLIDATION TARGET.**
 `_bmad-output/pipeline-continuation-log.md`, **31457 tok, 314% of its 10000 budget, remedy
@@ -539,12 +560,29 @@ the same discipline the artifact-path migration used.
 **Re-run the collision check before moving anything** — 13 byproducts are already in slots and a
 second pass at any of these basenames would change that.
 
-### Done-when for §4
+### Done-when for the consolidation PASS — none of these requires a size reduction
+
+- **Step 3's no-loss gate passed.** Every Step 1 manifest entry appears in exactly one of the two
+  drafts; no Rule 13 locked requirement left the live draft. The step makes an unaccounted entry a
+  HARD_BLOCK, so this is its own assertion — **report the manifest entry count**, because a gate
+  over an empty manifest passes the same way a real one does.
+- **ZERO byproducts at the area root from this pass.** Every working file under
+  `_bmad-output/planning-artifacts/s302/`: the manifest, both drafts, the coverage report.
+  **This is the actual test of v0.319.0** and it is one `git status` away.
+- **Both drafts gone after the step's Step 6**, which is the other half of v0.319.0 —
+  `consolidation-draft-carry-over-backlog-{live,history}.md` must not survive the pass.
+- **Rule 20 validation passed** on the consolidated live draft.
+- **`validate-artifact-paths.sh` still PASS**, and `s302/` is a conforming slot so it should be
+  untouched by this.
+- **The pool reading before and after, reported, not gated.** 109623 tok / 33% before.
+
+### Done-when for the §4 re-home
 
 - `git ls-files '_bmad-output/' | awk -F/ 'NF==3' | grep -cE 'consolidation-|coverage-report'`
   returns **0**. **It returns 32 today** — take that reading first, or a zero afterwards is
   indistinguishable from a filter that matches nothing. The control is the same expression with
-  `NF>3`, which returns **13** now and **45** after.
+  `NF>3`, which returns **13** now and **45** after. **Run the re-home BEFORE the pass, or the
+  pass's own four files land inside the count and you cannot tell the residue from the new work.**
 - `validate-artifact-paths.sh` still reports **PASS**. Every path involved conforms both before and
   after — a syntactic grammar cannot tell a durable artifact from a per-sprint one that omitted its
   sprint, which is exactly why this is a hand-derived re-home and not a migration run.
@@ -554,10 +592,10 @@ second pass at any of these basenames would change that.
 
 ## Deliberately NOT in this file
 
-- **A consolidation PASS, scheduled unconditionally.** §4 explains why: now IS the right moment —
-  the step is a between-sprints operation and your tree is quiescent — but the whole-read pool is
-  `ok` at 33%, so there is no target to consolidate. §4 gives the one-line check that decides it.
-- **Rotating `pipeline-continuation-log.md`** (314% of budget). Real, yours, and not this pull's.
+- **Rotating `pipeline-continuation-log.md`** (314% of budget, remedy `rotate`). Real, yours, and
+  not this pull's — and explicitly NOT a consolidation target.
+- **Consolidating the other three artifacts.** One pass, one named target, per the step's own
+  invocation rule. The other three carry 3, 1 and 0 sprint-scoped headings.
 - **The `sprint-status.sh` freeze-path fix.** Core's, reported, not in this range. §1.
 - **Consumer-side ledger items**, none of which this pull touches: `PC-S329-NAMED-UPSTREAM-…`'s
   disposition, `PC-S312`'s receipt (it reports `NEEDS-REVIEW` on every pull until re-anchored at
@@ -581,8 +619,10 @@ second pass at any of these basenames would change that.
 5. **Whether you took `overrides/steps__retro__domain-sections.md`** in §3, since that one costs a
    re-adjudication on the next pull.
 6. **The byproduct count before and after §4** — 32 → 0 at the area root, 13 → 45 in slots, zero
-   deletions — **and what the whole-read pool check said**, `ok` or `OVER`, since that is what
-   decides whether a consolidation pass was owed while you were there.
-7. **Your §1 decision**: left as-is (the recommendation), or reversed and why.
-8. **Anything this file predicted that did not happen.** Two of its predecessors' predictions have
+   deletions.
+7. **The consolidation pass**: the manifest entry count, that no working file landed at the area
+   root, that both drafts are gone, and the pool before/after. **And say plainly that `s302/` now
+   exists because the pass created it** — the sprint still has not started.
+8. **Your §1 decision**: left as-is (the recommendation), or reversed and why.
+9. **Anything this file predicted that did not happen.** Two of its predecessors' predictions have
    already been wrong; the record of a wrong one is worth more than a clean report.
