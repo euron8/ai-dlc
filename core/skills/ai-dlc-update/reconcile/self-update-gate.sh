@@ -71,7 +71,10 @@
 #   SELF-UPDATE-SAFE-STOP accompanies every DEFER: the furthest release in the range that DOES
 #                         self-update cleanly, so the operator can split the pull and land the
 #                         engine before it is used — or the explicit statement that no such
-#                         release exists, which is a different answer from silence.
+#                         release exists, which is a different answer from silence. When the
+#                         consumer's own `skill_commit` is already at or past the named ref its
+#                         machinery has already landed, and the row says the split buys nothing
+#                         rather than recommending a hop that would advance only the rulebook.
 # Exit:   0 ALWAYS. A classifier, not a gate — the CALLER decides, same posture as layer-drift.sh.
 set -uo pipefail
 
@@ -138,15 +141,68 @@ emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
 # it is a REF, derivable only by running this gate against each release in the range. So
 # every DEFER terminal ends with the answer or with the explicit statement that there is
 # none. Suppressed under --safe-stop, which is what would otherwise re-enter this walk.
+#
+# AND THE RECOMMENDATION IS DERIVED FROM THE RANGE, WHICH IS ONLY HALF THE QUESTION. The row's
+# whole rationale is "step 3 would classify this pull with the engine this pull was going to
+# replace". On a consumer whose MACHINERY is already at or past the ref it names, that premise is
+# false: the engine has already landed, and the split it urges would advance only the rulebook
+# pair. Filed by the reference consumer as
+# `PC-S331-SAFE-STOP-IGNORES-THE-CONSUMERS-OWN-SKILL-COMMIT` after a pull from a stamp whose skill
+# pair was two releases ahead of its rulebook pair — the row named v0.340.0's commit while the
+# consumer's `skill_commit` already sat one commit past it. Measured there: `grep -cF skill_commit`
+# over this file returned **0**.
+#
+# THE ROW IS ANNOTATED, NEVER SUPPRESSED. A DEFER whose next step is silence is the dead end this
+# whole function exists to remove, so the answer stays and gains the fact that changes what it
+# means. `skill_commit` is read from the stamp rather than taken as an argument, and
+# `unregistered-drift.sh` reads the same field the same way for the structurally identical reason
+# (an intermediate machinery ref that is neither `commit` nor `theirs`).
 advise_safe_stop() {
   [ -n "${AI_DLC_GATE_IN_SAFE_STOP:-}" ] && return 0
+  # SET HERE, not only inside the guard that fills it. This file runs under `set -u`, the message
+  # below interpolates `$_sk`, and the only assignment used to live in `machinery_at_or_past` — so
+  # any path that reached the message without running the guard died on an unbound variable and
+  # emitted NO ROW AT ALL. Found by a mutant: bypassing the guard was supposed to make the row fire
+  # unconditionally and instead made it disappear, which is the failure mode where a check that
+  # crashed and a check that had nothing to say are the same empty output.
+  _sk=""
   _ss="$(bash "$SELF_SRC" --safe-stop "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"
   if [ -n "$_ss" ]; then
     _sv="$(git -C "$DIST" show "${_ss}:VERSION" 2>/dev/null | tr -d '[:space:]')"
-    emit SELF-UPDATE-SAFE-STOP "$_ss" "pull to ${_sv:-$_ss} FIRST — its slice self-updates cleanly, so the engine lands and step 2 re-invokes on it. Then pull again for the rest. Without the split, step 3 classifies this pull with the engine this pull was going to replace, and any classifier improvement in the range reports nothing. Run: ai-dlc-update ${_ss} apply, then ai-dlc-update apply."
+    if machinery_at_or_past "$_ss"; then
+      emit SELF-UPDATE-SAFE-STOP "$_ss" "SPLIT BUYS NOTHING HERE — this consumer's own \`skill_commit\` (${_sk}) is already at or past ${_sv:-$_ss}, so its machinery has already landed and step 3 will classify on an engine that is NOT the one this pull replaces. Pulling to ${_ss} first would advance only the rulebook pair. Fold the slice into the gated apply. The DEFER above still stands and is unaffected by this."
+    else
+      emit SELF-UPDATE-SAFE-STOP "$_ss" "pull to ${_sv:-$_ss} FIRST — its slice self-updates cleanly, so the engine lands and step 2 re-invokes on it. Then pull again for the rest. Without the split, step 3 classifies this pull with the engine this pull was going to replace, and any classifier improvement in the range reports nothing. Run: ai-dlc-update ${_ss} apply, then ai-dlc-update apply."
+    fi
   else
     emit SELF-UPDATE-SAFE-STOP "-" "no intermediate release in ${BASE}..${THEIRS} self-updates cleanly, so the split that would land the engine first does not exist here. Fold the slice into the gated apply and expect step 3 to classify on the CURRENT engine."
   fi
+}
+
+# Is the consumer's machinery already at or past $1? Sets `_sk` to the stamp's `skill_commit` for
+# the caller's message.
+#
+# THE ANCESTRY TEST ALREADY ANSWERS NO FOR EVERY DEGENERATE STAMP, so this carries no special case
+# for them and that is a measured decision, not an oversight. `unregistered-drift.sh` reads the same
+# field and DOES guard `skill_commit == commit` and an unresolvable ref, because it compares BYTE
+# IDENTITY, where a missing guard changes the answer. Here the question is ancestry:
+#
+#   skill_commit == commit   `$1` is a release in BASE..THEIRS, so it is a DESCENDANT of BASE and
+#                            can never be its ancestor -> false, with no guard needed.
+#   unresolvable ref         `merge-base --is-ancestor` exits non-zero on a bad object -> false.
+#
+# Both guards were written, and both were then DELETED because their mutants came back GREEN: a
+# guard whose removal changes no answer is a check that cannot fire, which this repo treats as
+# indistinguishable from one that passed. The two states are still asserted in the fixture — what
+# holds them is the ancestry test, which is the honest place for them to be held.
+machinery_at_or_past() {
+  _sk=""
+  _st="$CONSUMER/.claude/.ai-dlc-version"
+  [ -f "$_st" ] || return 1
+  _sk="$(sed -n 's/^skill_commit:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$_st" | head -1)"
+  [ -n "$_sk" ] || return 1
+  # `--is-ancestor` is true for equality too, which is the "at" in "at or past".
+  git -C "$DIST" merge-base --is-ancestor "$1" "$_sk" 2>/dev/null
 }
 
 # ---- THE MACHINERY SLICE CANNOT ALWAYS STAND ALONE -------------------------------------
