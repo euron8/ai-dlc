@@ -34,6 +34,58 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.341.0] — 2026-08-09
+
+### The sprint roll wrote a path the consumer's own pre-push validator blocks
+
+`sprint-status.sh roll` froze a closed sprint to `<area>/sprint-status/sprint-<N>.yaml`. That is
+the **pre-migration** form. `migrate-artifact-paths.sh` maps exactly that path onto
+`<area>/s<N>/sprint-status.yaml`, and `validate-artifact-paths.sh` BLOCKS on it — so on a migrated
+consumer, the next genuine roll wrote a path that failed their own push. Core shipped the
+migration, the validator, and the writer that undoes both.
+
+Reproduced end to end on a scratch consumer, running the real roll and then the real validator over
+its output:
+
+```
+pre-fix writer   froze to  sprint-status/sprint-301.yaml   VERDICT: FAIL — 1 blocking
+fixed writer     froze to  s301/sprint-status.yaml         VERDICT: PASS
+```
+
+**THE READER IS THE HALF A WRITER-ONLY FIX WOULD HAVE MISSED.** `max_frozen` globbed
+`sprint-status/sprint-*.yaml`. On a migrated consumer that directory holds only `_preamble.yaml`,
+so it already returned nothing — and its caller's fallback then returns sprint 1, *"which would
+silently re-stamp a live project as greenfield"*, in the words of the comment above it. It now
+reads BOTH spellings: every consumer that has not migrated still holds its whole archive under the
+old one. Moving the writer without the reader would have traded a blocked push for a destroyed
+sprint.
+
+**A freeze already present under the old spelling is honoured where it lies and never duplicated.**
+Writing the slot copy beside it would mint two records of one sprint — the twin the rotation guard
+exists to prevent, and on an unmigrated tree the legacy copy is the only archive there is.
+
+`core/fixtures/artifact-path-migration` is unchanged and is the control that the two spellings are
+a real pair rather than a rename: it still asserts the migration MOVES the old form.
+
+Six mutants, each a `cmp -s`-guarded copy, plus an unmutated control that passes the whole battery.
+Each kills exactly one assertion:
+
+```
+reader loses the s<N>/ slot branch      -> migrated archive resolves to 1
+reader loses the legacy branch          -> unmigrated archive resolves to 1
+slot branch stops requiring the file    -> an empty s<N>/ dir counts as a freeze
+writer reverts to the legacy path       -> freeze destination wrong
+existing-freeze check ignores legacy    -> a second archive is minted beside it
+divergence check disabled               -> a divergent freeze does not HARD_BLOCK
+```
+
+The divergence control seeds its freeze under **both** spellings deliberately. Seeded under one, it
+also failed whenever a mutant changed which spelling the writer consults, making it a second reading
+of the destination arm instead of an independent check — measured both ways before it was written.
+
+**Dormant on the reference consumer today** (their canonical carries `sprint:`, so the fallback
+never runs) and it bites at s302's close.
+
 ## [0.340.0] — 2026-08-09
 
 ### A `verify: sh` receipt was evaluated wherever the caller stood, not at the consumer root
