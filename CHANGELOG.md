@@ -34,6 +34,66 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.333.0] — 2026-08-09
+
+### A consumer's own artifact-path prescriptions were the one cell of the 2×2 nothing read
+
+Plan item 22. **`LC-R4` / `W11`**, `contract_version` 17 → 18, at **WARN**, in
+`validate-layer-entries.sh` — an artifact path a layer entry *prescribes* is held to
+`artifact-path-grammar.md`.
+
+The consumer's report was one line: *"`tea-consumer.md:18` stale path (no detector claims it)."*
+Both halves matter and the first was misread by this repo's own plan, which glossed it as a path
+that no longer resolves. **It resolves.** It names the 50-file residue the story migration left at
+the area root while the live corpus moved to 233 `s<N>/stories/` directories. An agent following
+that entry reads a residue of earlier sprints **and nothing fails**, which is worse than a dangling
+path.
+
+**SO NOTHING HERE TESTS EXISTENCE, and that was measured before anything was written.** Resolving
+every path-shaped token in entry bodies, over all 43 entries: **309 tokens, 157 that do not
+resolve, and every one of the 157 legitimate** — core-relative `hooks:` targets, skill-relative
+names, bare basenames used as labels. It scores 157 false positives *and* misses its own subject,
+which sits among the 152 that do resolve. Existence is uncorrelated with correctness here in both
+directions. The full derivation is `docs/reviews/layer-entry-artifact-path-derivation.md` (#474).
+
+**THE EMPTY CELL.** I82 holds core's own prescriptions and runs only in the distribution;
+`validate-artifact-paths.sh` holds a consumer's real *filenames*; I84 holds core's *programs*. A
+consumer's own prescriptions were held by nothing — one cell wide, not a new category of check.
+
+Two arms, each reusing a declaration rather than restating one: a component carrying a sprint token
+outside the reserved `s<N>/` slot, and the story corpus named off the location `stories_dir`
+declares. Both the sprint-token expression and the story template are **resolved**, and every
+failure to resolve one is a loud WARN rather than a skip — an unresolved scan-root set, token
+expression or story template are three different ways to print the clean line this arm exists to
+make unprintable without evidence.
+
+**MEASURED ON THE REFERENCE CONSUMER: 76 prescriptions across 4 scan roots, 12 non-conforming in 10
+entries, 0 false positives** — 10 sprint tokens in basenames, 2 story-corpus restatements.
+
+**NINE OF THE TWELVE WERE FOUND ONLY BY READING ALL FOUR ROOTS, and the first cut of this arm read
+one.** Eight findings are `docs/retro/sprint-249.md`-class citations, and each was resolved by
+hand: **every one is missing in that tree and every slotted form exists**, because that consumer
+migrated `docs/retro/` to 294 `s<N>/` directories. `validate-artifact-paths.sh` reports PASS over
+the same tree — the filenames are already right. Only the prose was left behind. The twelfth,
+`docs/retro/sprint-168/171/174.md`, is prose shorthand for three retros that the extractor reads as
+one path; it is named in the code as a true finding with an ugly quotation rather than filed as a
+false positive, because all three spellings are dead and the printed remedy is right for all three.
+
+**THE FIXTURE'S SECOND MUTANT FOUND A DEFECT IN THE ARM, WHICH IS THE POINT OF WRITING IT.**
+`layer-artifact-path-prescriptions` seeds three firing cases (a placeholder sprint token, a digits
+one under a second root, the off-template corpus) and five silent ones, each with its own
+assertion. M2 moves `stories_dir` in the seeded schema. The first cut of the arm read the template
+for its *area* and its *tail* and then tested the parent component against a hard-coded
+`^s(<N>|\*|[0-9]+)$` — every assertion passed, because the reference consumer's slot is spelled
+`s`. M2 went red: the declaration was being read for two of its three parts and restated for the
+third. The slot spelling is now derived from the template too.
+
+M1 is the reason v0.332.0 shipped first: it swaps `--token-re-prescribed` for the digits-only
+`--token-re`, and the placeholder finding disappears while the digits one survives — a checker
+reporting *some* of its subject and reading complete. Both mutants run against an unmutated control
+from the same copied directory, because this linter resolves its resolver *beside itself* and a
+lone copy takes the loud refusal branch and reports zero.
+
 ## [0.332.0] — 2026-08-09
 
 ### The single home of the sprint-token expression was home to one of its two forms

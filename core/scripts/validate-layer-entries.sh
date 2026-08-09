@@ -1556,6 +1556,186 @@ while IFS= read -r f; do
   ' "$f" 2>/dev/null | sort -u)
 done < <({ layer_files "$EXT_DIR"; layer_files "$OVR_DIR"; })
 
+# ---------------------------------------------------------------------------
+# W11 / LC-R4 — an ARTIFACT path a layer entry prescribes, held to core's grammar
+# ---------------------------------------------------------------------------
+# THE FOURTH NAMESPACE, and the cell of a 2x2 that nothing was reading. W3 resolves `Step <n>`,
+# W7 resolves `Check <n>`, W9 resolves a script path. This one asks whether an artifact path an
+# entry PRESCRIBES obeys `artifact-path-grammar.md`. Before it existed:
+#
+#   I82 (validate-enforcement-map.sh)  held CORE's prescriptions      -- distribution only
+#   validate-artifact-paths.sh         holds a consumer's real FILENAMES
+#   I84                                holds core's own PROGRAMS
+#   -> a CONSUMER's own prescriptions  nothing
+#
+# THE REPORT THAT FOUND IT was one line from the reference consumer: "tea-consumer.md:18 stale
+# path (no detector claims it)". The path RESOLVES -- it names the 50-file residue the story
+# migration left at the area root, while the live corpus is 233 `s<N>/stories/` directories. A
+# role reading that entry literally reads the wrong sprint, silently, which is worse than a
+# dangling path because nothing fails.
+#
+# SO THIS IS NOT A RESOLVER, AND THE REFUSAL IS MEASURED. Resolving every path-shaped token in
+# entry bodies was tried against the reference consumer's 43 entries first: 309 tokens, 157 that
+# do not resolve, and every one of the 157 legitimate -- core-relative `hooks:` targets,
+# skill-relative names, bare basenames used as labels. It scores 157 false positives AND misses
+# its own subject, which sits among the 152 that DO resolve. Existence is uncorrelated with
+# correctness here in both directions, so existence is not tested anywhere below.
+#
+# NARROWED TO THE DECLARED SCAN ROOTS the corpus is tractable, and every finding was resolved
+# against the reference consumer's tree by hand: **76 prescriptions read across 4 scan roots,
+# 12 non-conforming in 10 entries, 0 false positives** -- 10 carrying a sprint token in a
+# basename, 2 naming the story corpus off its declared location. The CONFORMING spellings are
+# present in the same tree as the control: another entry writes
+# `_bmad-output/planning-artifacts/s<N>/stories/` correctly, and the 64 that pass are area-root
+# durables, `_bmad-output/` root singletons the grammar explicitly does not govern, correctly
+# slotted `s<N>/` paths and glob forms.
+#
+# NINE OF THE TWELVE WERE FOUND ONLY BY READING ALL FOUR ROOTS, and the first measurement of
+# this arm read one. `docs/` is a scan root and eight findings live there --
+# `docs/retro/sprint-249.md`, `sprint-294.md`, `sprint-176.md` and their placeholder and glob
+# forms. Each was resolved individually: **every one is MISSING in that tree and every slotted
+# form EXISTS** (`docs/retro/s249/retro.md` and so on), because that consumer migrated
+# `docs/retro/` to 294 `s<N>/` directories. `validate-artifact-paths.sh` reports PASS over the
+# same tree -- it reads FILENAMES, and the filenames are already right. Only the prose was left
+# behind, which is this arm's whole subject.
+#
+# THE MIGRATION LEDGER IS CONSULTED BY I82 AND IS NOT CONSULTED HERE, deliberately: it is
+# EMPTY, because core finished migrating its own prescriptions, so consulting it would excuse
+# nothing while implying a carve-out exists. If an entry is ever added to it, this arm needs
+# the same `grep -qxF` skip I82 carries and this paragraph is where to start.
+#
+# THE ONE MANGLED QUOTATION IS A TRUE FINDING, NOT A FALSE POSITIVE, and it is named here
+# because it looks like one: `docs/retro/sprint-168/171/174.md` is prose shorthand for three
+# retros, and the extractor reads it as a single path. Its component `sprint-168` does carry a
+# sprint token, all three spellings are dead in that tree, and the remedy printed -- repoint at
+# the slotted form -- is correct for all three. The quotation is ugly; the verdict is right.
+#
+# FENCED BLOCKS ARE SKIPPED, the same as W9, and the cost was measured rather than assumed: the
+# skip drops exactly ONE distinct token on the reference consumer
+# (`_bmad-output/party-mode-transcripts/s<N>/retro.md`) and that token CONFORMS. No finding is
+# lost to it today; W9's header states the general shape of the cost and it applies here too.
+#
+# THE PREDICATE IS RESOLVED, NEVER WRITTEN HERE. `artifact-path-config.sh --token-re-prescribed`
+# is the placeholder-aware form; the digits-only `--token-re` beside it reads expanded filenames
+# and matches NEITHER of the two sprint-token findings above, both of which are written `s<N>`.
+# Picking the wrong one of those two gives a check that returns a clean zero on its own subject.
+#
+# WARN, NOT ERROR. It fires on three entries of a consumer that has done everything core asked,
+# and every remedy is an edit to prose the operator owns. An ERROR would wedge a pull over a
+# reading -- the cost `validate-artifact-paths.sh`'s own header records paying for.
+echo "== artifact-path prescriptions =="
+
+LC_APC=""
+for _c in "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/artifact-path-config.sh"; do
+  [ -f "$_c" ] && LC_APC="$_c" && break
+done
+
+# EVERY REFUSAL BELOW IS LOUD. An unresolved scan-root set makes the corpus empty, an unresolved
+# token expression makes the predicate match nothing, and an unresolved story template makes the
+# second arm silent -- three different ways to print the same clean line this arm exists to stop
+# being printable without evidence.
+if [ -z "$LC_APC" ]; then
+  warn W11 "no artifact-path-config.sh beside this script, so the artifact-path grammar could not be resolved and NO entry was checked against it. It is the single home of the scan roots and of the sprint-token expression; without it this arm would have to guess both, and a guessed empty root set reports every entry conforming without reading one."
+else
+  LC_ROOTS="$(bash "$LC_APC" --scan-roots --root "$PROJECT_ROOT" 2>/dev/null)"
+  LC_TOKRE="$(bash "$LC_APC" --token-re-prescribed 2>/dev/null)"
+  LC_NROOT="$(printf '%s\n' "$LC_ROOTS" | grep -c .)"
+
+  # The story corpus location, read from its declared home and SUBSTITUTED. I84's second arm is
+  # the reason the substitution is here rather than a literal: a reader that takes the template
+  # and never substitutes composes a path containing `{sprint}`, which exists nowhere, and then
+  # judges every real path against it.
+  LC_SCHEMA=""
+  for _sch in "$PROJECT_ROOT/.claude/schemas/sprint-status.json" \
+              "$PROJECT_ROOT/core/schemas/sprint-status.json"; do
+    [ -f "$_sch" ] && { LC_SCHEMA="$_sch"; break; }
+  done
+  LC_ST_T=""; LC_ST_SLOT=""
+  if [ -n "$LC_SCHEMA" ]; then
+    LC_ST_T="$(sed -n 's/.*"stories_dir"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$LC_SCHEMA" | head -1)"
+    LC_ST_SLOT="$(sed -n 's/.*"stories_dir_sprint_placeholder"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$LC_SCHEMA" | head -1)"
+  fi
+  # THE TEMPLATE IS CUT AT ITS OWN PLACEHOLDER, into all three parts, so none of them can
+  # disagree with the template they came from. `_bmad-output/planning-artifacts/s{sprint}/stories`
+  # yields area `_bmad-output/planning-artifacts`, slot component `s` + <sprint> + ``, tail
+  # `stories`.
+  #
+  # DERIVING THE SLOT COMPONENT'S SPELLING IS THE PART THAT WAS WRONG FIRST, and its own fixture
+  # mutant is what found it. An earlier cut of this arm read the area and the tail from the
+  # template and then tested the parent against a hard-coded `^s(<N>|\*|[0-9]+)$`. Every
+  # assertion passed — including the one that the correctly slotted path stays silent — because
+  # the reference consumer's slot IS spelled `s`. Move `stories_dir` in the schema and the reader
+  # went on judging against the old spelling: the declaration was being read for two of its three
+  # parts and restated for the third, which is I84's second arm failing in the one place nothing
+  # would have printed a different line.
+  LC_ST_AREA=""; LC_ST_TAIL=""; LC_ST_PARENT_RE=""
+  if [ -n "$LC_ST_T" ] && [ -n "$LC_ST_SLOT" ]; then
+    _pre="${LC_ST_T%%"$LC_ST_SLOT"*}"          # …/planning-artifacts/s
+    _post="${LC_ST_T#*"$LC_ST_SLOT"}"          # /stories
+    LC_ST_AREA="${_pre%/*}"
+    _slotpre="${_pre##*/}"                     # s
+    _slotsuf="${_post%%/*}"                    # (empty here; a template may put text after it)
+    LC_ST_TAIL="${_post#"$_slotsuf"}"; LC_ST_TAIL="${LC_ST_TAIL#/}"
+    _esc() { printf '%s' "$1" | sed 's/[^A-Za-z0-9_]/\\&/g'; }
+    LC_ST_PARENT_RE="^$(_esc "$_slotpre")(<N>|\*|[0-9]+)$(_esc "$_slotsuf")\$"
+  fi
+
+  if [ "$LC_NROOT" -eq 0 ] || [ -z "$LC_TOKRE" ]; then
+    warn W11 "artifact-path-config.sh resolved ${LC_NROOT} scan root(s) and a ${LC_TOKRE:+non-}empty sprint-token expression; both must be non-empty. With either missing this arm reads nothing and reports every entry as conforming, which is the same output a clean layer produces."
+  else
+    LC_ALT="$(printf '%s\n' "$LC_ROOTS" | sed 's#/*$##' | paste -sd'|' -)"
+    LC_AP_SEEN=0; LC_AP_HIT=0
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        LC_AP_SEEN=$((LC_AP_SEEN + 1))
+        q="${p%/}"
+        # ARM 1 — rule 2: the directory is the only sprint slot. `s<N>` and `s*` are that slot
+        # and are tested by whole-component equality before the expression is applied, which is
+        # where the resolver's header says the exemption belongs.
+        bad=""
+        while IFS= read -r c; do
+          [ -n "$c" ] || continue
+          [ "$c" = 's<N>' ] && continue
+          [ "$c" = 's*' ] && continue
+          grep -qE "$LC_TOKRE" <<<"$c" && bad="$c"
+        done < <(printf '%s\n' "$q" | tr '/' '\n')
+        if [ -n "$bad" ]; then
+          LC_AP_HIT=$((LC_AP_HIT + 1))
+          warn W11 "$(rel "$f"): prescribes \`$p\`, whose component '$bad' carries a sprint token outside the reserved \`s<N>/\` directory slot. The directory is the only sprint slot; a basename that carries one makes every reader search for the current file, and search means mtime. Rewrite it as <area>/s<N>/<kind>.md. This is an entry telling an agent where an artifact lives, so a wrong grammar here is executed rather than merely written."
+          continue
+        fi
+        # ARM 2 — the story corpus, which arm 1 cannot see: `<area>/stories/` carries no sprint
+        # token at all. Its defect is a MISSING slot, not a misplaced one.
+        [ -n "$LC_ST_AREA" ] && [ -n "$LC_ST_TAIL" ] && [ -n "$LC_ST_PARENT_RE" ] || continue
+        case "$q" in "$LC_ST_AREA"/*) : ;; *) continue ;; esac
+        case "/$q/" in *"/$LC_ST_TAIL/"*) : ;; *) continue ;; esac
+        parent="${q%/"$LC_ST_TAIL"*}"; parent="${parent##*/}"
+        grep -qE "$LC_ST_PARENT_RE" <<<"$parent" && continue
+        LC_AP_HIT=$((LC_AP_HIT + 1))
+        warn W11 "$(rel "$f"): prescribes \`$p\`, which is the story corpus written off its declared location. \`stories_dir\` in schemas/sprint-status.json declares it as \`${LC_ST_T}\`, so the corpus this entry names is not the one a sprint writes to. It may well RESOLVE — a migration leaves the old directory behind — and that is what makes it worse than a dangling path: an agent following this entry reads a residue of earlier sprints and nothing fails. Repoint it at the slotted form."
+      done < <(awk -v alt="$LC_ALT" '
+        /^[[:space:]]*```/ { fence = 1 - fence; next }
+        fence { next }
+        {
+          s = $0
+          while (match(s, "(" alt ")/[A-Za-z0-9_./<>{}*-]*")) {
+            t = substr(s, RSTART, RLENGTH)
+            s = substr(s, RSTART + RLENGTH)
+            sub(/[.,)]+$/, "", t)
+            if (t != "") print t
+          }
+        }
+      ' "$f" 2>/dev/null | sort -u)
+    done < <({ layer_files "$EXT_DIR"; layer_files "$OVR_DIR"; })
+    # THE COUNT IS THE CONTROL. This arm's answer is normally an absence, and an absence is what
+    # a broken extractor, an empty corpus and a conforming layer all print. Stating the subject
+    # count makes the three distinguishable without re-running anything.
+    echo "   ${LC_AP_SEEN} artifact-path prescription(s) read across ${LC_NROOT} scan root(s); ${LC_AP_HIT} non-conforming."
+  fi
+fi
+
 # W7 — the same question in the CHECK namespace, and it is a different subject from W3's.
 #
 # WHY IT IS OWED, measured rather than argued. The band migration renames consumer ids into

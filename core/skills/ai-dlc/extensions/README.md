@@ -83,7 +83,7 @@ push_candidate: false                  # true = generalizable; feeds the ai-dlc-
 fixtures: check-foo-bypass             # OPTIONAL, `kind: check` only — see below
 extends: '#Empirical gate validation'  # OPTIONAL — narrows drift to one section; REQUIRED on kind: qualifier
 position: append                       # `kind: qualifier` ONLY — append | prepend
-conforms_to: 17                         # the contract version you migrated this entry to [LC-C1]
+conforms_to: 18                         # the contract version you migrated this entry to [LC-C1]
 ---
 
 <the additive rule / check / step body>
@@ -451,6 +451,22 @@ times on first contact gets disabled and then catches nothing.
   than discovered. WARN, not ERROR: an entry correctly recording that a script *was* retired
   names a path that no longer resolves, and a clause that blocked you for writing true prose
   would punish accuracy. If that is your case, name the script without a runnable path.
+- **[LC-R4]** WARN — an *artifact* path your entry prescribes obeys `artifact-path-grammar.md`:
+  no basename carries a sprint token outside the reserved `s<N>/` directory slot, and the story
+  corpus is named where `stories_dir` declares it. This is the fourth namespace, and until
+  contract_version 18 it was the one cell of a 2×2 that nothing read — core's own prescriptions
+  are held by an invariant that runs only in the distribution, your real *filenames* are held by
+  `validate-artifact-paths.sh`, and your own prescriptions were held by nothing.
+  **It does not ask whether the path exists, and that is the point.** The case that produced this
+  clause was reported as a stale path, and the path *resolved*: it named the directory a story
+  migration left behind while the live corpus moved under `s<N>/`, so an agent following the entry
+  read a residue of earlier sprints and nothing failed. Testing existence would have missed it and
+  scored 157 false positives on the way — core-relative `hooks:` targets, skill-relative names and
+  bare basenames used as labels all fail to resolve from your project root and are all correct.
+  Fenced blocks are skipped, the same as **[LC-R3]** and with the same stated cost. WARN, not
+  ERROR: every remedy is an edit to prose you own, and on the consumer this was measured against
+  eight of the twelve findings were `docs/retro/sprint-<N>.md` citations left behind by a tree
+  migration that had already succeeded — the files are gone and the slotted forms are there.
 - **[LC-C1]** ERROR — every entry, in `extensions/` and `overrides/` alike, declares
   `conforms_to: N` — the integer contract version you have migrated it to, between 1 and the
   `contract_version` at the top of `layer-contract.yaml`. **It is a receipt, not an exemption.**

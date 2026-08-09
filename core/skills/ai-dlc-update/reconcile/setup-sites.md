@@ -121,6 +121,7 @@ core_manifest:
   - core/fixtures/layer-extends-grain/**
   - core/fixtures/layer-retired-id-crosswalk/**
   - core/fixtures/layer-crosswalk-home/**
+  - core/fixtures/layer-artifact-path-prescriptions/**
   - core/fixtures/layer-reference-resolution/**
   - core/fixtures/layer-adjudication-tier/**
   - core/fixtures/layer-title-join/**
