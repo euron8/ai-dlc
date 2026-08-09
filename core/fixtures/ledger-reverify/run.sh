@@ -36,6 +36,41 @@ OUT="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
 FAILURES=0
 ASSERTIONS=0
 
+# --- CWD INVARIANCE, and it is asserted here because it is not free -------------------------
+# A `verify: sh` receipt names CONSUMER-RELATIVE paths and used to be run with `bash -c` from
+# whatever directory the caller happened to be standing in. The same receipt, the same ledger and
+# the same four arguments then produced DIFFERENT verdicts per cwd. Measured on the reference
+# consumer's ledger, one row apart:
+#
+#   from the CONSUMER root       PC-S331  STILL-LIVE       the receipt found its file
+#   from the DISTRIBUTION root   PC-S331  CLOSE-CANDIDATE  grep exited 2, no such file
+#
+# The wrong-cwd direction is the one that loses data -- it proposes closing a live entry -- and
+# the path-existence guard could not see it, because that guard resolves against $CONSUMER and
+# correctly reported every path present while the predicate read another tree entirely.
+#
+# EVERY OTHER ASSERTION IN THIS FILE IS BLIND TO IT: they all read one $OUT, taken from one cwd,
+# so they agree with each other no matter which tree the receipts were evaluated against. This
+# arm is the only one that can see it, which is why the comparison is byte-for-byte rather than
+# per-row.
+# THE COMPARISON NEEDS A CWD WHERE THE RECEIPT RESOLVES, and the first draft of this arm did
+# not have one: it compared `/` against the fixture's own cwd, and a bare relative subject is
+# missing from BOTH, so the mutant produced the same wrong answer twice and the byte-comparison
+# passed. One side is now the CONSUMER ROOT itself -- the only directory where a
+# consumer-relative path resolves -- which is what makes the two sides able to disagree.
+cwd_probe="$(cd / && bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+cwd_atcons="$(cd "$CONS" && bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ "$cwd_probe" = "$cwd_atcons" ]; then
+  printf '  ok    %-22s byte-identical from `/` and from the CONSUMER root — a receipt is evaluated at the consumer root, not wherever the caller stands
+' "cwd-invariance"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the verdicts CHANGED with the working directory. A `verify: sh` receipt names consumer-relative paths; run from elsewhere its grep exits non-zero on a missing file and the entry reads as absorbed. That direction closes live entries.
+' "cwd-invariance"
+  diff <(printf '%s\n' "$cwd_atcons") <(printf '%s\n' "$cwd_probe") | sed 's/^/          | /' | head -12
+fi
+
 # $1 label-substring  $2 expected STATUS (or "ABSENT")  $3 why
 row_is() {
   local label="$1" want="$2" why="$3" got
@@ -130,6 +165,11 @@ row_is "Entry L" STILL-LIVE      "two substrings, neither at theirs -> genuinely
 # Three outcomes, because two would let a verb that always reports one thing pass.
 row_is "Entry SH-MOVED" NEEDS-REVIEW "exit 127 = subject renamed/deleted, NOT absorbed. A close here records an absorption that never happened, and closing is the direction that loses information permanently"
 row_is "Entry SH-REAL"  CLOSE-CANDIDATE "OVER-FIRE CONTROL: a plain non-zero exit still closes, or the guard pins every sh entry open forever"
+
+# THE POSITIVE OUTCOME, asserted rather than the absence of the old failure. A receipt naming a
+# BARE consumer-relative subject that is PRESENT must read STILL-LIVE from this fixture's cwd,
+# which is not the consumer root. The equality above cannot make that claim on its own.
+row_is "Entry SH-RELATIVE-SUBJECT" STILL-LIVE "a BARE consumer-relative subject that EXISTS reproduces whatever directory the caller stands in; evaluated elsewhere its grep exits 2 and the entry reads as absorbed"
 # A MOVED SUBJECT INSIDE AN && CHAIN IS NOT A FIX, and the exit status cannot say so: the chain
 # short-circuits with 1, exactly like a genuine fix. The 126/127 guard cannot reach it, and the
 # residue used to be a NOTE in the CLOSE-CANDIDATE detail telling the operator to check the paths

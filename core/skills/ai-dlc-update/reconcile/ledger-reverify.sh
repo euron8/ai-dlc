@@ -924,8 +924,34 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # Status-based first, then path-based: a subject inside a longer `&&` chain does not
       # surface as a distinguishable status, so the status arms below claim only what a status
       # can carry.
+      # THE RECEIPT RUNS AT THE CONSUMER ROOT, AND IT USED TO RUN WHEREVER THE CALLER STOOD.
+      #
+      # Every `verify: sh` receipt this ledger holds names CONSUMER-RELATIVE paths --
+      # `.claude/skills/ai-dlc-update/reconcile/ledger-rotate.sh`, `docs/retro/s249/retro.md`.
+      # `bash -c` inherits the cwd, so the same receipt, the same ledger and the same arguments
+      # produced DIFFERENT verdicts depending on where the operator happened to be standing.
+      #
+      # MEASURED, on the reference consumer's 56-entry ledger, one row apart:
+      #
+      #   run from the CONSUMER root       PC-S331  STILL-LIVE      <- the receipt found its file
+      #   run from the DISTRIBUTION root   PC-S331  CLOSE-CANDIDATE <- grep exited 2, no such file
+      #
+      # The wrong-cwd direction is the one that LOSES DATA: it proposes closing a live entry, and
+      # the whole point of the guards above is that a close is the verdict you cannot take back.
+      # A distribution-side session wrote that CLOSE-CANDIDATE into a runbook as the consumer's
+      # expected reading; the consumer's own run disagreed, and the consumer was right.
+      #
+      # THE GUARD DIRECTLY ABOVE COULD NOT SEE IT, WHICH IS THE PART WORTH KEEPING.
+      # `receipt_absent_subjects` resolves the receipt's paths against `$CONSUMER` and correctly
+      # reported that every one of them still exists -- so it certified the close while the
+      # predicate itself had been reading a different tree entirely. The guard and the predicate
+      # disagreed about which root they were standing in, and only the guard was right.
+      #
+      # `cd` FAILING MUST NOT LOOK LIKE A FIX. The `&&` makes an unreachable consumer root a
+      # non-zero exit routed through the same guards, never a silent evaluation at the caller's
+      # cwd; arg parsing already refuses a `$CONSUMER` that is not a directory (INPUT-UNRESOLVED).
       DIST="$DIST" BASE="$BASE" THEIRS="$THEIRS" CONSUMER="$CONSUMER" \
-        bash -c "$rest" >/dev/null 2>&1
+        bash -c "cd \"$CONSUMER\" && { $rest; }" >/dev/null 2>&1
       sh_rc=$?
       case "$sh_rc" in
         0)
