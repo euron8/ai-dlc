@@ -194,6 +194,33 @@ if [ ! -f "$APPLYING" ]; then
 else
   bad "the in-flight marker survived a CLEAN apply — every subsequent push blocks on a consistent tree"
 fi
+# --- THE ONE STEP-7 ARTIFACT apply.sh DOES NOT WRITE, NAMED ON THE RUN THAT OWES IT ---------
+#
+# Filed by the reference consumer as PC-S329-APPLY-SH-NEVER-WRITES-THE-RECONCILE-LOG. Step 7 used
+# to hand the re-stamp and the log to the reader in ONE bullet, one sentence apart from
+# "apply.sh does this; you do not edit the stamp" — so a reader attributed both to the tool.
+# Measured when they filed it: ZERO occurrences of the token in apply.sh against NINE files in
+# the distribution naming the artifact. The run succeeded, the stamp advanced, and the only
+# durable record of what the apply decided was absent.
+#
+# THE TOOL DOES NOT WRITE IT, DELIBERATELY — the log records the gates, the post-apply re-runs,
+# the validators and the ledger decisions, none of which apply.sh can observe, and a skeleton it
+# could fill would ship a file whose empty sections read as written ones. What it does instead is
+# SAY SO, on the successful run, where the omission happens. Prose alone is what failed here the
+# first time, which is why this is asserted rather than left to the step file.
+if grep -q 'NOT WRITTEN BY THIS TOOL' <<<"$out" && grep -q 'reconcile-log' <<<"$out"; then
+  ok "a successful apply NAMES the reconcile log it does not write"
+else
+  bad "a successful apply said nothing about reconcile-log-<ts>.md. The step file hands it to the reader in the same breath as the re-stamp this tool DOES perform, so silence here is what let a whole pull finish with no durable record of what it decided"
+fi
+# CONTROL: it must not claim to have written it, which is the failure mode a louder message
+# invites. The line is a hand-off, not a receipt.
+if grep -qE 'RESOLVED[[:space:]]+reconcile-log|wrote .*reconcile-log' <<<"$out"; then
+  bad "apply.sh reported the reconcile log as something it RESOLVED or wrote. It writes no such file, and a receipt for an unwritten artifact is worse than silence"
+else
+  ok "  and it does not claim to have written it — the line is a hand-off, not a receipt"
+fi
+
 if grep -q 'RESOLVED.*consistent' <<<"$out"; then
   ok "  and the report says so, rather than clearing it silently"
 else

@@ -1467,13 +1467,34 @@ prose is itself generated rather than composed.
      remedy that reverts upstream's own text. That is the same false-drift failure
      the intermediate-ref suppression exists to prevent, reaching the operator
      through the stamp instead of through the scan.
-     Write `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`. **The re-stamp
+     **The re-stamp
      fires whenever the consumer core now equals `theirs` — INCLUDING an empty
      reconcile (zero rulebook blocks applied, e.g. a self-update-only pull). In
      that already-current case this step is a stamp-only bump: the point of the
      `apply` run is to advance the stamp; the log records "already current, stamp
      advanced <base> → <theirs>." Without this, a skill-only pull would leave the
      stamp stuck forever and every later pull would re-diff from a stale base.**
+
+   - **YOU write `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`, and `apply.sh` does NOT.**
+     Write it LAST, after the post-apply re-runs, because it records them. It carries the gates
+     before the first write, the apply manifest, the stamp transition, the post-apply re-runs on
+     their own bases, the validator outcomes, the ledger decisions, and what was deliberately not
+     done.
+
+     *Why this is its own bullet.* It used to sit inside the re-stamp paragraph above, one
+     sentence after "**`apply.sh` does this; you do not edit the stamp**" — so a reader
+     reasonably attributed both to the tool, and the reference consumer filed exactly that
+     (`PC-S329-APPLY-SH-NEVER-WRITES-THE-RECONCILE-LOG`). Measured when they did: **zero
+     occurrences of the token in `apply.sh` against nine files here that name the artifact** —
+     the contract stated everywhere except in the program a reader took to be honouring it.
+     The run succeeded, the stamp advanced, and the only durable record of what the apply
+     decided was absent.
+
+     *Why the tool does not write it instead.* Every section above except the manifest and the
+     stamp is outside what `apply.sh` can observe. A skeleton it could fill would ship a file
+     whose empty sections read as written ones. **It says so on every successful run** — naming
+     this path and stating that it does not write it — because prose alone is what failed here
+     the first time.
 
 ### Mask/reinject transform (setup-substitution sites)
 

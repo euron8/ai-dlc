@@ -1108,6 +1108,26 @@ elif [ -f "$STAMP" ]; then
   # applied tree must keep blocking its own fixture suite until the pull is finished.
   rm -f "$APPLYING"
   say RESOLVED consistent "the tree matches $theirs_sha; fixture suite re-enabled"
+
+  # THE ONE STEP-7 ARTIFACT THIS TOOL DOES NOT WRITE, SAID AT THE MOMENT IT IS OWED.
+  #
+  # Filed by the reference consumer as PC-S329-APPLY-SH-NEVER-WRITES-THE-RECONCILE-LOG: step 7
+  # hands the re-stamp and the log to the reader in one bullet, and this program did the first
+  # and not the second. Measured: ZERO occurrences of the token in this file against NINE files
+  # in the distribution that name the artifact -- the contract stated everywhere except in the
+  # program a reader takes to be doing it.
+  #
+  # THE FIX IS NOT TO WRITE IT HERE, and that is a measurement rather than a preference. A real
+  # reconcile log records the gates before the first write, the post-apply re-runs on their own
+  # bases, the validator outcomes, the ledger decisions and what was deliberately NOT done. This
+  # program sees none of those. A skeleton it could fill would be a file whose empty sections
+  # read as written ones -- the vacuous-double shape this repo has shipped before.
+  #
+  # So the boundary is stated HERE, on the successful run, where the omission actually happens.
+  # Prose alone was what failed the first time.
+  echo "apply: NOT WRITTEN BY THIS TOOL -- _bmad-output/ai-dlc-update/reconcile-log-<ts>.md" >&2
+  echo "  It records the gates, the post-apply re-runs, the validators and the ledger decisions." >&2
+  echo "  This program can see none of those, so it does not write them. Step 7 is where you do." >&2
 fi
 
 exit 0

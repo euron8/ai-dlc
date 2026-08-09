@@ -34,6 +34,40 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.337.0] — 2026-08-09
+
+### The contract was stated everywhere except in the program a reader took to be honouring it
+
+Reported by the reference consumer as `PC-S329-APPLY-SH-NEVER-WRITES-THE-RECONCILE-LOG` — the
+second candidate sharing that short prefix, which is the collision v0.329.0 already documented.
+**Reproduced with a control: ZERO occurrences of the token in `apply.sh` against NINE files here
+that name the artifact.**
+
+Step 7 handed the re-stamp and the log to the reader in **one bullet**, one sentence after
+*"**`apply.sh` does this; you do not edit the stamp**"*. A reader reasonably attributed both to
+the tool. The run then succeeded, the stamp advanced, and **the only durable record of what the
+apply decided was absent** — on the very pull that closed this program.
+
+**THE OBVIOUS FIX IS THE WRONG ONE, and that is measured rather than argued.** A real reconcile
+log — read from the consumer's own, 95 lines — carries: gates before the first write, the apply
+manifest, the stamp, **post-apply re-runs on their own bases**, validator outcomes, ledger
+decisions, and *"Not done, deliberately"*. `apply.sh` can observe two of those eight. A skeleton
+it could fill would ship a file whose empty sections read as written ones, which is the
+vacuous-double shape this repo has shipped before.
+
+So the fix is a boundary, stated in both places it can be read:
+
+- **Step 7 gains its own bullet**: *YOU write it, `apply.sh` does NOT*, written LAST because it
+  records the post-apply re-runs. The bullet carries the measurement and the reason, so the
+  attribution cannot be re-derived wrongly by the next reader.
+- **`apply.sh` says so on every successful run**, naming the path and stating that it cannot see
+  the gates, the re-runs, the validators or the ledger. **Prose alone is exactly what failed
+  here**, so the tool now speaks at the moment the omission happens.
+
+Two fixture arms in `apply-restamp-theirs`: the successful apply must NAME the log, and — the
+control — it must **not** report it as `RESOLVED` or as written. A receipt for an unwritten
+artifact is worse than silence, and that is the failure a louder message invites.
+
 ## [0.336.0] — 2026-08-09
 
 ### `ledger-rotate.sh --apply` archived a live entry, because the entry quoted the rule
