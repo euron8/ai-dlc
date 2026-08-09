@@ -34,6 +34,69 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.344.0] — 2026-08-09
+
+### The updater carve-out could only see the operator's half of the pause
+
+Reported by the reference consumer as `PC-S331`: `ai-dlc-acknowledge.sh` exempts an
+`/ai-dlc-update` session from the Rule 29 pause deny, and could not see one that the AGENT
+started. They observed the denial twice in one live session, each time cleared by removing the
+pause flag and putting it back.
+
+**THE FILED CAUSE WAS RIGHT AND THIS REPO'S OWN COUNTER-EVIDENCE WAS WRONG.** The plan recorded
+*"66 of 66 local sessions carrying a `Skill(ai-dlc-update)` tool_use also carry the human
+`<command-name>` marker, zero without"* and held the fix on the strength of it. Re-derived against
+the same corpus, matching the tool_use as a STRUCTURED block rather than as two strings anywhere in
+one file: **66 sessions carry the tool_use and 10 of them carry no marker at all**, eight of which
+carry only `<command-name>/clear</command-name>`. Two of the ten do contain the hook's own grep
+PATTERN quoted as text, which is how a looser match manufactures agreement.
+
+**THE MECHANISM IS ESTABLISHED, MEASURED LIVE RATHER THAN READ OFF THE SOURCE**, with a PreToolUse
+probe over two headless sessions, one per invocation path:
+
+| at the hook | `<command-name>` marker | the `Skill` tool_use line |
+|---|---|---|
+| operator types `/ai-dlc-update`, at the next tool call | PRESENT | never exists — a typed slash command loads the skill directly and calls no tool |
+| agent calls `Skill(ai-dlc-update)`, at that dispatch | absent, and never written later in the session | not yet flushed (transcript is 12 lines) |
+| the same session, at the NEXT tool call | still absent | PRESENT (17 lines) |
+
+The control is the first row: the probe reads the marker when a human types the command, so the
+absences in rows two and three are real and not a broken probe.
+
+**SO THE TWO CANDIDATE MECHANISMS WERE BOTH INCOMPLETE.** It is not only that the marker is never
+written for an agent-driven run (the filed cause, confirmed); the transcript carries NO
+session-level signal at the moment of the first dispatch, because the tool_use line for the call
+being denied has not been written yet. Neither the read-before-write reading nor the missing-signal
+reading predicts that, and it is what decides the shape of the fix.
+
+**THREE SIGNALS, DISJOINT, NONE OF WHICH COVERS BOTH PATHS.** The hook now reads
+`.tool_input.skill` for the dispatch itself, ORs the serialized `Skill` tool_use into its existing
+single-pass transcript alternation for everything after it — the updater's design is a fan-out
+("dispatch ONE generic agent per file"), and an `Agent` payload carries no skill field — and keeps
+the `<command-name>` arm, which is the only signal a typed invocation produces. The payload is
+applied AFTER the scan: the transcript is one tool call stale by construction, so a `Skill(ai-dlc)`
+resume must override an updater tool_use earlier in the same session.
+
+**THE NEW TRANSCRIPT PATTERN IS STRUCTURAL, NOT A MENTION.** `"name":"Skill","input":{"skill":"…"`
+is the serialization of a real tool_use block; a transcript that merely QUOTES the string carries it
+inside a JSON string with every quote backslash-escaped, where the pattern cannot match. Measured
+over 498 local transcripts: 69 carry a real `Skill(ai-dlc*)` tool_use, the pattern matches exactly
+those 69 and **0** others — control being that the session which wrote this entry mentions the
+string four times and matches zero.
+
+**NO MARKER FILE**, which the hook already argues against on lifecycle grounds and which the report
+named as a forbidden remedy.
+
+New fixture `updater-session-signals` — six positive arms and five negative ones, including that an
+escaped MENTION is not an invocation and that a missing transcript exempts nothing. **The carve-out
+had NO fixture before this**, which is why a arm that could not fire read exactly like one that
+passed. Its `.dist-only` mutation battery kills all five mutants: deleting the payload arm, the
+tool_use case, or the marker alternative each reds exactly the invocation path it covers, and
+widening the payload arm to `ai-dlc*` reds the negative arms. **Written the other way round it
+proved nothing**: the subject fixture's hermetic `AI_DLC_*` scrub unset the battery's own seam, and
+all five mutants came back 0-of-0 green — the survival-scored-as-kill this repo's mutant rules
+exist for, caught by the unmutated control.
+
 ## [0.343.0] — 2026-08-09
 
 ### A recorded verdict cleared the block and still produced an unclosable work item
