@@ -161,6 +161,16 @@ it was handed off:
   runs: every consumer-session stall ended with the operator asking rather than the session
   reporting, including one sitting on a blocking question and one that had already FINISHED.
 
+- **A done-when whose PASS you have CHECKED IS REACHABLE.** This repo's rule for a new check —
+  prove it can fire — applies to acceptance criteria, and the plan that closed this program broke
+  it twice in one file. *"`validate-artifact-budget.sh` green"* was unattainable when written: the
+  only FAIL is an unrelated artifact at 309%, byte-identical before and after the work.
+  *"confirm each still resolves"* was unverifiable: no file in that corpus produces a genuine
+  anchored resolution, so the executor could not satisfy it literally at all. **Both read like
+  ordinary criteria and neither could ever have gone green.** An executor then either invents a
+  substitute — which is what happened, correctly, both times — or reports failure for work that
+  succeeded. Run the command, or state the expected FAIL and what makes it unrelated.
+
 None of that is about writing quality. Each one makes the file produce WRONG WORK when
 followed literally, which is the only thing a handoff is for.
 
