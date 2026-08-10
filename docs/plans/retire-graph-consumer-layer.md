@@ -1,8 +1,81 @@
-# Retire graph's consumer layer by absorbing upstream into core
+# Retire graph's consumer layer by absorbing upstream into core — DISCHARGED 2026-08-10, DO NOT EXECUTE
+
+**THIS PLAN IS SPENT AND NOTHING IN IT IS AN INSTRUCTION TO ANYONE.** R1 through R6 all shipped,
+the final pull ran and merged, and the consumer is current. Read the whole file as a record.
+
+**THE CLOSING MEASUREMENT, taken 2026-08-10 rather than carried.** Graph reads `0.347.0 / 611bbe2`
+on all four stamp fields (`sed -n '1,4p' /Users/n8/git/graph/.claude/.ai-dlc-version`), which is
+this repo's `HEAD`, and the range's one shipped file, `core/git-hooks/pre-push`, is byte-identical
+to the distribution — `cmp -s`, with a control that an unrelated pair reports DIFF. Working tree
+clean, `main` == `origin/main`.
+
+## What it set out to do, and what it actually delivered
+
+**BOTH BLOCKERS — the things the plan said had to come first — ARE FIXED AND LIVE IN CORE.** The
+absorption detector was blind to 27 of 38 extension entries because the whole pass was gated on
+numbered anchors; the title-only harvest R1 specified is `unnumbered_titles_of_file()` in
+`core/skills/ai-dlc-update/reconcile/layer-drift.sh`. Core's inability to say "I absorbed your
+prose" without a `settings_env_key` is gone: `core/skills/ai-dlc/layer-contract.yaml` carries **7**
+`override_supersessions` rows today, against a control of 0 for a fabricated key.
+
+**ALL SIX RELEASES LANDED.** R1 v0.275.0 · R2 v0.276.0 (#362) · R5 v0.277.0 (#363) ·
+R4 v0.281.0 (#369) · R3 v0.282.0 (#370) · R6 across v0.311.0–v0.314.0 (#434–#437). R6's promotion
+is verifiable in the shipped contract rather than from this sentence: `LC-O15` and `LC-E6` both read
+`level: ADJUDICATED`, and the control that the read distinguishes tiers is `LC-E19`, still `WARN`.
+
+**THE PLAN'S OWN HEADLINE METRIC MOVED, ON THE REAL CONSUMER, NOT IN A DRY RUN.** §*Context* below
+recorded 61 register rows and *"in the register's whole history the pull has never once said
+'retire this.'"* Graph's `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl` today holds
+**146 rows: 138 `still-additive`, 7 `contradicts-core`, 1 `retire`** (control: a fabricated key
+returns 0). The `retire` row is `LC-E4` on `extensions/roles/qa-push.md`, recorded
+2026-08-07 — *"Fully absorbed… Nothing in the entry survives core."* The entry is gone from their
+tree. That is R5's absorption producing the sequence's designed end state through the pull itself.
+
+**THE LAYER SHRANK BY EXACTLY WHAT WAS SCOPED, AND THE BASELINE IS DERIVED FROM GRAPH'S OWN STAMP
+HISTORY RATHER THAN FROM THIS FILE'S PROSE.** At the two commits whose stamp reads `0.274.0` — the
+version §*Context* measures — graph carried **12 override files and 39 extension `.md` files**.
+Today: **7 and 38**. The five overrides gone are R2's three, R3's `SKILL__auto_handoff_mode.md` and
+R4's `steps__retro__pipeline-snapshot-ceiling.md`, each verified absent; the one extension gone is
+`qa-push.md`. **This file's own `11 overrides / 38 extensions` is an entry count, not a file count,
+and the two were never reconciled** — which is why the delta above is stated against a re-derived
+baseline.
+
+### Where it fell short of its own text, stated plainly
+
+**R5 PROMISED THREE EXTENSION RETIREMENTS AND PRODUCED ONE.** `extensions/roles/pm-domain.md` and
+`extensions/roles/code-reviewer-push.md` are still on their tree, both adjudicated
+`still-additive`, with register reasons reading *"Debt discharged. The absorbed section was removed
+from the entry and a dated RETIRED/TRIMMED comment left in it."* Core's absorption worked and the
+entries were TRIMMED to their un-absorbed residue, which is the correct outcome for prose that is
+partly domain-local — but it is not what R5's table claims, and the table was never corrected.
+
+**"RETIRE GRAPH'S CONSUMER LAYER" WAS NEVER THE SCOPE, AND THE TITLE OUTRAN THE PLAN FOR ITS WHOLE
+LIFE.** 45 entries remain. Every survivor this file names — `overrides/SKILL__Rule-8.md`,
+`overrides/steps__gate-validation__check-5.md`, `team-roles__tea__consumer-drift.md`,
+`steps__retro__domain-sections.md` — sits in §*Deliberately out of scope, with the reason* with a
+stated reason, and all four are still there, unchanged, by design. Judged against R1–R6 the plan is
+complete; judged against its title it retired 6 of 51 entries.
+
+### What the file became, which is the durable lesson
+
+**73 releases carry a CHANGELOG heading in `0.275.0`–`0.347.0`** (control: 0 above `0.347.0`), and
+the R1–R6 sequence accounts for **nine** of them — one each for R1, R2, R3, R4 and R5, and four for
+R6. By this file's own repeated record, the last nine-odd items entered through the consumer's
+completion report rather than off its numbered list, and the final two came from the operator
+against this repo's own machinery. **It stopped being a retirement plan long before it stopped being
+edited, and ran on as a distribution↔consumer channel inside a five-thousand-line file whose live
+content was one status block.** A channel does not need a plan; the next item that arrives gets a
+fresh, short file of its own.
+
+**NO PLAN IN `docs/plans/` IS LIVE AS OF THIS DISCHARGE.** Every file there, including this one, is
+a record.
 
 ---
 
-# RESUME HERE — state as of 2026-08-08, verified for handoff
+# SPENT — RESUME HERE, the handoff state as of 2026-08-08
+
+**SUPERSEDED BY THE DISCHARGE BANNER ABOVE. Nothing below is live.** Kept because it records the
+boundaries the work ran under and six measurement errors that are worth reading.
 
 ## Start here
 
@@ -35,9 +108,10 @@ or you cannot tell a fix from a no-op.
 **A STATUS LINE THAT HAS BEEN TRUE FOR A WHILE IS NOT EVIDENCE IT HAS ROTTED.** One of the six was
 a CORRECT line overwritten as stale. Measure the subject before rewriting a claim about it.
 
-**FRESH SESSION: your entry point is §*THE NEXT ACTION, AND IT IS THE ONLY LIVE ONE IN THIS FILE*.**
-Read this section for the boundaries and the standing operator decisions, then go straight there. It
-carries the numbered next-action list; nothing else in this file is an instruction to you.
+**~~FRESH SESSION: your entry point is §*THE NEXT ACTION*.~~ THERE IS NO ENTRY POINT ANY MORE —
+THE FILE IS DISCHARGED and that section is now §*SPENT — THE NEXT ACTION LIST*.** Read this section
+for the boundaries and the standing operator decisions the work ran under; nothing in this file is
+an instruction to you.
 
 **This file is the plan of record. Everything below `## Context` is the original design record, kept
 for rationale, and where the two disagree the top wins.**
@@ -100,8 +174,9 @@ content is unchanged (`git mv` with per-file sha verification), only the prefix 
 set going stale, in the paragraph that exists to keep citations honest. Re-verify any citation
 below it against the tree before acting on it.
 
-**WHICH PLANS IN `docs/plans/` ARE LIVE: THIS ONE, AND ONLY THIS ONE.** Every other file there
-is a DISCHARGED runbook and each now says so in its own title. They were all titled
+**~~WHICH PLANS IN `docs/plans/` ARE LIVE: THIS ONE, AND ONLY THIS ONE.~~ NONE ARE, AS OF THE
+2026-08-10 DISCHARGE — this file was the last one and its banner is at the top.** Every other file
+there was already a DISCHARGED runbook and each says so in its own title. They were all titled
 "EXECUTE THIS" and five of them still carried status sections claiming work outstanding —
 a fresh session pointed at the directory would have redone a landed pull. Do not execute
 any of them; read them only as records.
@@ -172,11 +247,13 @@ unrelated pair reports DIFF), and both new fixtures driven against their own ins
 return `PASS`. The runbook [`graph-0341-to-0344-pull.md`](graph-0341-to-0344-pull.md) (#507, #509)
 is **SPENT** and its own header now records the one thing it got wrong.
 
-**AND TWO MORE RELEASES HAVE LANDED SINCE, SO A PULL IS OWED AGAIN — ONE FILE.** v0.346.0 (#510)
-and v0.347.0 (#512), neither of which came from this list. Derived against `959caa8`: **1** shipped
-`core/` path, `core/git-hooks/pre-push`, against a control of 8 non-core changes that ship nothing.
-**No runbook exists and one file may not warrant one** — that is the operator's call and nothing
-here schedules it.
+**~~AND TWO MORE RELEASES HAVE LANDED SINCE, SO A PULL IS OWED AGAIN — ONE FILE.~~ THE OPERATOR
+TOOK IT 2026-08-10 AND IT IS THE LAST PULL THIS PLAN OWED.** v0.346.0 (#510) and v0.347.0 (#512),
+neither of which came from this list. Derived against `959caa8` at the time: **1** shipped `core/`
+path, `core/git-hooks/pre-push`, against a control of 8 non-core changes that ship nothing. It went
+without a runbook, which was the operator's call. **Verified from this side rather than accepted:**
+all four stamp fields read `0.347.0 / 611bbe2` and that one file is byte-identical to the
+distribution, with a control that an unrelated pair reports DIFF.
 
 **IT IS ONE FILE AND IT IS NOT COSMETIC, WHICH IS THE ONLY REASON IT IS WORTH NAMING.** That path
 is the consumer's OWN fixture-suite runner, and v0.347.0 changed how it decides which fixtures a
@@ -605,11 +682,14 @@ the block in the sprint slot, a `s302/` story citing `LR-S299-4` would have been
 `anchor not found`, a true statement about the wrong file. Nothing widened: a fabricated bullet
 under a cross-sprint anchor still reds, asserted in the fixture.
 
-## THE NEXT ACTION, AND IT IS THE ONLY LIVE ONE IN THIS FILE
+## SPENT — THE NEXT ACTION LIST, and every item on it is closed
 
-**START HERE IF YOU ARE A FRESH SESSION.** Read §*Start here* above for the boundaries, then this
-section, then the numbered list below. **Everything else in this file is either a record of
-completed work or a scoped item you will be sent to by name.**
+**~~START HERE IF YOU ARE A FRESH SESSION.~~ DO NOT. THIS SECTION IS A RECORD AS OF THE 2026-08-10
+DISCHARGE.** Items 1, 2, 3, 4 and 6 are struck through and shipped; item 5 was OPTIONAL and was
+never scheduled, and it stays unscheduled — it is a derivation about receipt re-anchoring, not a
+defect, and v0.340.0 answered the half of it that was one. The last thing this section was waiting
+on, the `0.345.0` → `0.347.0` pull, has been taken. **The banner at the top of this file is the
+current record; nothing in this section is.**
 
 **EVERY OTHER PARAGRAPH IN THIS FILE THAT ANNOUNCES A `NEXT ACTION` IS STRUCK THROUGH.** They are
 kept because each records what its item measured, and several correct a premise this plan got
@@ -638,11 +718,14 @@ already delivered, and 2 as v0.341.0. **THE PULL THEN RAN AND RETURNED THREE NEW
 the channel this list has been fed by for the last eight releases.** All three have now shipped
 (v0.342.0 #502, v0.343.0 #503, v0.344.0 #505). Item 5 remains OPTIONAL and unscheduled.
 
-**THERE IS NO LIVE ITEM IN THIS FILE. What is outstanding is a PULL — graph is at `0.341.0` and
-three releases have landed here since — and no runbook exists for it.** Writing one is the
-operator's call; nothing in this file schedules it. **Do not read the empty list as "this plan is
-finished"**: every one of the last nine releases entered through the consumer's completion report,
-so the next item arrives when that pull runs.
+**THERE IS NO LIVE ITEM IN THIS FILE, AND AS OF 2026-08-10 THERE IS NO OUTSTANDING PULL EITHER.**
+The last one — `0.345.0` → `0.347.0`, one file — was taken by the operator and verified from this
+side. **~~Do not read the empty list as "this plan is finished"~~ — the empty list plus a current
+consumer IS what finished looks like**, and the sentence it replaces was written when a pull was
+still owed. What remains true is the reason it was written: every one of the last nine releases
+entered through the consumer's completion report rather than off this list. **That channel outlives
+this plan and is not a reason to keep the file open** — the next item that arrives through it gets
+its own short file.
 
 6. **~~`ai-dlc-acknowledge.sh`'s updater carve-out never fires on an agent-driven run~~ — DONE
    2026-08-09. v0.344.0 (#505). THE FILED CAUSE WAS RIGHT AND THIS ITEM'S OWN COUNTER-EVIDENCE WAS
@@ -1031,8 +1114,9 @@ graph — and it shipped as v0.303.0.
 
 ## SPENT — session handoff of 2026-08-07, kept only for the two errors it records
 
-**THIS IS NOT THE HANDOFF. The live one is §*THE NEXT ACTION, AND IT IS THE ONLY LIVE ONE IN THIS
-FILE*, above.** This section was the handoff at `0.300.0` and every figure in it is superseded;
+**THIS IS NOT THE HANDOFF, AND NEITHER IS ANYTHING ELSE — the file was DISCHARGED 2026-08-10 and
+its banner is at the top.** The handoff this section was superseded by is §*SPENT — THE NEXT ACTION
+LIST*, above, which is now itself a record. This section was the handoff at `0.300.0` and every figure in it is superseded;
 its title read live for eighteen releases, which is the same defect the discharged runbooks in
 `docs/plans/` carried. **The two errors below are why it is kept at all** — both are of the class
 this repo audits for, and both still bind.
