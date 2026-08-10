@@ -38,36 +38,43 @@ Re-derive before acting on one.
 | distribution at program start | `0.350.0` / `c92d509`, and local `main` level with `origin/main` |
 | ledger entries in scope | 2 of the 3 open: the 2026-08-10 acknowledge-hook filing, and `PC-S332` |
 | ledger entries deliberately left open | 1: `PC-S330` |
-| release for the acknowledge hook | **v0.351.0** — code complete, rehearsal outstanding |
-| release for the apply-manifest rows | **v0.352.0** — not started |
-| the runbook | `docs/plans/graph-0347-to-0352-pull.md` — not started; ships with the second release |
+| release for the acknowledge hook | **v0.351.0 — SHIPPED**, merged as `d912623` (#519), rehearsed on a clone first |
+| release for the apply-manifest rows | **v0.352.0 — code and fixtures COMPLETE**, rehearsed on a clone; merge outstanding |
+| the runbook | `docs/plans/graph-0347-to-0352-pull.md` — **WRITTEN**, every figure taken from the full-range rehearsal |
+| the pull itself | **NOT DONE and not ours to do.** The operator runs it in a graph session, from the runbook |
 
 ## The numbered action list
 
-1. **Land v0.351.0.** The fourth carve-out in `core/hooks/ai-dlc-acknowledge.sh`, the two
-   positive arms in `core/fixtures/divergence-hard-block/run.sh`, and the new
-   `core/fixtures/pause-write-allowlist-mutants/` battery. Cut the branch from `origin/main`,
-   one version per branch — a squash of two versions takes the first version in the subject and
-   breaks the release triple.
+Items 1 through 5 are DONE. They are kept here because the criteria that discharged them are
+what a resuming session would otherwise re-derive, and because item 6 is the only thing left.
 
-2. **Rehearse v0.351.0 on a clone before pushing it**, per the rehearsal section. Report the
-   before/after verdict pair for `pipeline-snapshot-history.md` and the unchanged dirty-line
-   count on the original.
+1. ~~**Land v0.351.0.**~~ DONE — merged as `d912623` (#519). The fourth carve-out in
+   `core/hooks/ai-dlc-acknowledge.sh`, the two positive arms in
+   `core/fixtures/divergence-hard-block/run.sh`, and the new
+   `core/fixtures/pause-write-allowlist-mutants/` battery. Cut from `origin/main`, one version
+   per branch — a squash of two versions takes the first version in the subject and breaks the
+   release triple.
 
-3. **Land v0.352.0.** The relabel row and the restamp row in
+2. ~~**Rehearse v0.351.0 on a clone before pushing it.**~~ DONE. The real `apply.sh` carried the
+   hook from `611bbe2`, and the probe pair moved `DENY` to `ALLOW` on the history file while
+   `product-brief.md` and an `Agent` dispatch both stayed `DENY`. The original's dirty-line count
+   read 6 before and after.
+
+3. ~~**Land v0.352.0.**~~ Code, fixtures and CHANGELOG complete; the merge is the only part
+   outstanding. The relabel row and the restamp row in
    `core/skills/ai-dlc-update/reconcile/apply.sh`, the new `apply-relabel-noop-row` fixture, and
-   the extension to `apply-machinery-stamp`. Its CHANGELOG entry names the two arms in the same
-   class this release does NOT fix, so a reader cannot take the sweep for complete.
+   the rulebook half of `apply-machinery-stamp`'s assertion 5. Both rows were proven red against
+   the real pre-fix code, not only against a mutant.
 
-4. **Rehearse the full range on a fresh clone**, `0.347.0` through `0.352.0`, end to end. Every
-   figure the runbook publishes comes from this run and from nowhere else.
+4. ~~**Rehearse the full range on a fresh clone.**~~ DONE, `0.347.0` through `0.352.0`. Every
+   figure the runbook publishes comes from that run.
 
-5. **Write `docs/plans/graph-0347-to-0352-pull.md`** and land it with the second release. Its
-   required shape and content are in the runbook section below.
+5. ~~**Write the runbook.**~~ DONE — `docs/plans/graph-0347-to-0352-pull.md`.
 
 6. **Ping the operator with the outcome**, including anything this file predicted that did not
    happen. That last item is the most valuable thing to send back — the previous runbooks were
-   each wrong about something only the consumer's tree could show.
+   each wrong about something only the consumer's tree could show. **This program does NOT run
+   the pull.** The runbook is the deliverable; the operator executes it in a graph session.
 
 ## What the two entries are, and what verifying them added
 

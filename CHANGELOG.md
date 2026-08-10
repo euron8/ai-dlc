@@ -34,6 +34,72 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.352.0] — 2026-08-10
+
+### Two `RESOLVED` rows asserted work nobody performed, and step 7 tells the reader not to check them
+
+Filed by the reference consumer as `PC-S332`, and the sweep its own "what I did NOT verify" note
+asked for found a second arm of the same class.
+
+**The relabel row.** `apply.sh` invoked `relabel-extension-checks.sh` with its output discarded
+and branched on the exit status. That tool exits `0` three ways — it labelled n headings, it
+found nothing to label, or the consumer has no `extensions/` directory at all — so the guard
+could not tell work from no work:
+
+```
+$ relabel-extension-checks.sh <consumer> --apply --dist <dist> --theirs 611bbe2
+relabel-extension-checks: no unlabelled core-number collisions.
+$ echo $?
+0
+# same run's manifest:
+RESOLVED   relabel   ext-check collisions labelled
+```
+
+Now it reads the count the tool already prints and says **nothing** when there was nothing to do.
+The row also gains a subject — `RESOLVED relabel 1 colliding heading(s)` — because `relabel` and
+`consistent` were the only two bare rows in a file where every other arm names its subject, and a
+bare row is the one a reader cannot check against their own tree.
+
+**The restamp row, which the entry did not reach.** Its guard is `elif [ -f "$STAMP" ]`, which
+proves the stamp exists and never that it was written, and both of its writes are `sed`
+substitutions keyed on a field. **The arm one branch below already knew this** —
+`restamp-machinery` reads its result back, and its comment says a substitution keyed on an absent
+field *"matches nothing and exits 0, which is indistinguishable from having written."* The fix
+stopped one branch short. Measured on a legacy single-line stamp:
+
+```
+before:  RESOLVED  restamp     701c6a6 -> 8a5d1c7
+         RESOLVED  consistent  the tree matches 8a5d1c7; fixture suite re-enabled
+         stamp still reads:  1.0.0 @ 701c6a6        <- neither row was true
+         in-flight marker:   CLEARED                <- and the suite was handed the tree back
+after:   DECISION  restamp-failed  …                 marker SURVIVES
+```
+
+`.ai-dlc-version` is what the NEXT pull reads to compute its base, so this row does not merely
+misreport its own run — it mis-bases the following merge, a pull later and far from the cause.
+`consistent` now sits inside the read-back for the same reason: "the tree matches THEIRS" beside a
+stamp that does not read THEIRS is the strongest false claim this manifest can make.
+
+**Why both shipped: no fixture drove `apply.sh` over a zero-collision consumer.**
+`relabel-theirs-collision` drives the relabel tool directly and always seeds a collision; every
+apply fixture seeded a tree with nothing to label and asserted nothing about the row's absence.
+
+- `core/fixtures/apply-relabel-noop-row/` (new, ships) drives the real `apply.sh` over a clean
+  catalog, over a consumer with no `extensions/` at all, and over a real collision — asserting the
+  row's absence, its presence, its count, **and that the heading was actually rewritten**. It
+  carries a widening mutant, so the two absence assertions are falsifiable, and an unmutated
+  control, because a copy that dies emits no rows and "no row" is what those assertions score
+  green.
+- `core/fixtures/apply-machinery-stamp/run.sh` gains the rulebook half of its own assertion 5.
+
+**Still open, and named here so the sweep is not read as complete.** `RESOLVED consistent` is now
+gated on the stamp but still verifies no file CONTENTS against theirs; and `drift-refile` discards
+the exit status of its `known-skills.json` python merge, so a failure there still reaches a
+`RESOLVED` row. Both need more than a guard swap.
+
+`docs/plans/graph-0347-to-0352-pull.md` is the runbook for pulling this range into the reference
+consumer.
+
 ## [0.351.0] — 2026-08-10
 
 ### The pause-flag allowlist named one file where its own reasoning named two, and nothing could tell an arm from a comment
