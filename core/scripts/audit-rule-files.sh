@@ -106,6 +106,15 @@ corpus = []
 for p in ("CLAUDE.md", "docs/coding-conventions.md"):
     if os.path.isfile(p):
         corpus.append(p)
+# `.claude/rules/*.md` holds authoring prose that used to sit inside CLAUDE.md, and it is
+# rule prose an agent executes by the same standard. It is derived with the SAME tree()
+# walk the loader's own polarity uses -- recursive, `.md` only -- so a file Claude Code
+# reads cannot be a file this audit skips. Hand-listing the rule files here would let the
+# two sets drift the first time one is added. Note this path is layout-independent: the
+# LAYOUTS table exists because the SKILL tree differs between a consumer and the
+# distribution, and `.claude/rules/` does not -- it is this repo's own authoring rulebook
+# and install.sh never writes it onto a consumer.
+corpus.extend(tree(".claude/rules"))
 for p in ("SKILL.md", "escalations.md", "rule-authoring.md", "artifact-path-grammar.md", "core-manifest.md"):
     fp = f"{SKILL}/{p}"
     if os.path.isfile(fp):

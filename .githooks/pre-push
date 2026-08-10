@@ -70,6 +70,18 @@ step "release version triple (subject == VERSION == CHANGELOG heading)" \
 step "plan shape (docs/plans/ is resumable by a session that never saw this one)" \
   bash scripts/validate-plan-shape.sh
 
+# 1e. Narrow authoring rules live in `.claude/rules/*.md` and load only when Claude READS
+#     a matching file -- measured on CC 2.1.226: Read and Edit fire the trigger, Write,
+#     Grep, Glob and Bash do not. Three of the four failure modes that creates are silent:
+#     a glob matching nothing is a rule that never loads, `globs:`-instead-of-`paths:`
+#     frontmatter is a rule that is silently resident in EVERY session, and a rule with
+#     neither a CLAUDE.md pointer nor a reasoned no-stub marker is invisible in both
+#     channels. The fourth bounds the .gitignore narrowing that lets rule files be
+#     committed at all. Push is the seam: it is the last point before the split rulebook
+#     becomes what the next session reads.
+step "claude-rules joins (tracked paths, live globs, paths-only frontmatter, pointers)" \
+  bash scripts/validate-claude-rules.sh
+
 # 2. SKILL.md's first ~5000 tokens are whole-re-read on EVERY compaction. The resident
 #    region sits within a few hundred tokens of the ceiling, so an edit above the fold
 #    can silently push the post-compact recovery protocol below it.

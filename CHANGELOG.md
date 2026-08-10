@@ -34,6 +34,86 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.348.0] — 2026-08-10
+
+### `.claude/rules/` adopted for this repo's authoring rulebook, and the loader measured rather than assumed
+
+Raised by the operator: the ai-dlc skill does not use `.claude/rules/`, should it, and would
+this repo benefit from non-distributed rules.
+
+`.claude/rules/` is a first-class Claude Code loader (CC 2.0.64+; this machine runs 2.1.226).
+One frontmatter key, `paths:`. Without it a rule is resident every session; with it the rule
+loads when Claude works with a matching file. **Everything below was measured on 2.1.226
+against an `InstructionsLoaded` hook, because the trigger set decides which prose can move and
+the docs state it in one sentence.**
+
+```
+Read            FIRES   path_glob_match, model-visible in the same turn
+Edit            FIRES   transitively -- Edit requires a prior Read of its target
+Write (new)     no      live control present in the same run
+Grep            no      live control present  (first attempt INVALID: the model
+                        reported Grep absent and substituted bash grep)
+Glob            no      live control present
+Bash            no      live control present
+subagent Read   parent: NO -- receipt logged, parent context clean
+non-matching    no      the glob discriminates
+```
+
+**THE LOADER MEMOIZES PER SESSION, AND THAT IS THE RESULT THAT CHANGED THE DESIGN.** Three
+separate Reads of three different matching files produced **one** load event, on the first
+read. Re-run forcing the model to quote all three distinct lines, proving all three reads
+happened: still one. A rule loads once per session, not once per read.
+
+**CLAUDE.md 238 -> 163 lines (14,841 -> 9,480 bytes, -36%).** Three sections moved to
+path-scoped rules: `fixture-mutants.md` and `fixture-ship-decl.md` (`core/fixtures/**`),
+`plan-shape.md` + `plan-shape-measured.md` (`docs/plans/**`).
+
+**FOUR SECTIONS DELIBERATELY STAYED, AND THE TEST IS NOT "IS THIS NARROW".** It is "does the
+governed work begin with reading a matching file". The fixture-suite runner rule governs a
+BASH behaviour — its trigger is an agent about to write `for d in core/fixtures/*/` — and Bash
+never fires the loader, so relocating it would have manufactured a rule that fires only when it
+is least needed. The opt-out rule stayed because it governs the authoring of `CLAUDE.md` itself
+as well as `docs/plans/`, and a `docs/plans/**` scope cannot fire for half its own scope.
+
+New `scripts/validate-claude-rules.sh`, four arms, each with a self-probe that runs BEFORE the
+corpus: A1 tracked-path containment, A2 no orphan globs (matched with git's own pathspec, since
+the loader uses gitignore semantics), A3 `paths:`-only frontmatter, A4 the pointer/no-stub join
+in both directions. A3 exists because `paths` is the ONLY key consulted: a file carrying
+Cursor's `globs:`/`description:`/`alwaysApply:` is silently UNCONDITIONAL — resident forever —
+while reading to a human exactly like a scoped rule.
+
+`core/fixtures/claude-rules-joins/` (`.dist-only`): unmutated control plus six mutants, each
+asserting exactly ONE `FAIL:` line so entangled arms are caught. **6/6 killed, control green.**
+
+**THREE THINGS WENT WRONG AND EACH IS RECORDED BECAUSE EACH READ LIKE A RESULT.** The first
+`.gitignore` negation used `.claude/` with negations beneath it; git does not descend into an
+excluded DIRECTORY, so the negations applied to nothing and `git check-ignore` still reported
+the rule file IGNORED while the file read as though it were tracked — fixed to `.claude/*` plus
+negations, verified both directions. The Grep arm above tested nothing on its first run. And
+`I54`/`I54b` fired on the NEW validator's own five `printf | grep -q` sites under `pipefail` —
+the EPIPE class this repo converted away in v0.207.0 — all converted to here-strings.
+
+`audit-rule-files.sh`'s corpus extended with `tree(".claude/rules")`, reusing the existing
+recursive `.md`-only walk so audit corpus and loader corpus derive from one rule. Proven to
+fire: drift seeded into a rule file in a COPY was `FLAGGED` at
+`.claude/rules/fixture-mutants.md:24`, exit 1; the same tree without the seed gave 0.
+
+The invariant is a standalone script, **not** `I88` inside `validate-enforcement-map.sh`: that
+validator is invoked by the suite pole, and v0.345.0 is the record of what a nested loop there
+costs. Measured after this change — new validator **0.19s**, new fixture **1.16s** solo against
+a 433s pole, enforcement map **13.67s** against a 13.67/14.05s baseline.
+
+**Not shipped to consumers, and the blocker is one measurement.** The distribution's prize was
+the post-compact carrier gap (6 of 18 `**Carrier:**` lines read `none`, including Rule 23). The
+design was one rule scoped to `steps/**`, reloading at step cadence. Per-session memoization
+kills that premise unless a compaction clears the memo — and print mode cannot answer it:
+`/compact` exits the process before re-injection, auto-compact never fired under a 1.1 MB fill,
+and no `load_reason:"compact"` line appeared for anything **including the `CLAUDE.md` positive
+control**, which makes it unreadable rather than negative. Held in
+`docs/plans/claude-rules-adoption.md` behind a 4-turn interactive arm. Note for whoever runs it:
+a subagent's read writes the same receipt a parent's read does, so the eventual detector cannot
+be receipt-only.
+
 ## [0.347.0] — 2026-08-10
 
 ### The suite's wall clock: a validator regression I shipped, and a skip the outer gate already knew about
