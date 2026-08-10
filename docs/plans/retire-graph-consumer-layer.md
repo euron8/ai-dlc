@@ -172,6 +172,27 @@ unrelated pair reports DIFF), and both new fixtures driven against their own ins
 return `PASS`. The runbook [`graph-0341-to-0344-pull.md`](graph-0341-to-0344-pull.md) (#507, #509)
 is **SPENT** and its own header now records the one thing it got wrong.
 
+**AND TWO MORE RELEASES HAVE LANDED SINCE, SO A PULL IS OWED AGAIN — ONE FILE.** v0.346.0 (#510)
+and v0.347.0 (#512), neither of which came from this list. Derived against `959caa8`: **1** shipped
+`core/` path, `core/git-hooks/pre-push`, against a control of 8 non-core changes that ship nothing.
+**No runbook exists and one file may not warrant one** — that is the operator's call and nothing
+here schedules it.
+
+**IT IS ONE FILE AND IT IS NOT COSMETIC, WHICH IS THE ONLY REASON IT IS WORTH NAMING.** That path
+is the consumer's OWN fixture-suite runner, and v0.347.0 changed how it decides which fixtures a
+change selects: it now resolves `suite-content-key.sh`'s exclusion set instead of applying none.
+**On a consumer that script does not exist, so the set resolves EMPTY and their behaviour is
+unchanged by construction** — expect the code to move and the run not to. Do not read an unchanged
+run as a failed pull.
+
+**WHAT THOSE TWO RELEASES WERE ABOUT, because both were raised by the operator against this
+repo's own machinery rather than by a consumer report.** v0.346.0: `CLAUDE.md` sat inside the
+fixture suite's content key while no fixture's verdict depended on it — it is in exactly one
+fixture's read-set, and that fixture copies every tracked file. v0.347.0: the suite is POLE-BOUND,
+and an invariant added in v0.345.0 put 39% onto a validator the sharded batteries re-run about
+thirty times each, taking the pole from 442s to 595s. Both are recorded in `CHANGELOG.md`; the
+durable lessons are in `CLAUDE.md`'s fixture-suite section.
+
 **A FOURTH RELEASE ENTERED THE RANGE MID-RUN, FROM THE CONSUMER, AND IT IS THE SHAPE TO EXPECT.**
 v0.345.0 (#508): they reported that `apply-drift-after-write/seed.sh` resolved its schema only in
 the distribution layout and exited 2 on every consumer — reproduced here on a tree built by running
