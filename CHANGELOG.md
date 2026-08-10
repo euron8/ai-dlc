@@ -34,6 +34,61 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.345.0] — 2026-08-09
+
+### A shipped fixture resolved its schema in one layout, and both guards against that are blind to the spelling
+
+Reported by the reference consumer, mid-pull, against `0.341.0 → 0.344.0`. **Reproduced here on a
+tree built by running `install.sh` into an empty directory**, which is the check this repo's own
+rules require for anything touching path resolution and which v0.343.0 did not get.
+
+`core/fixtures/apply-drift-after-write/seed.sh` resolved the adjudication-register schema as
+
+```
+_SCHEMA_SRC="$(cd "$(dirname "$0")/../.." && pwd)/schemas/layer-adjudication-register.json"
+```
+
+That holds in the distribution, where the seed and `core/schemas/` share the `core/` parent. On a
+consumer `install.sh` splits that parent — `core/fixtures/` → `tests/fixtures/` at the project
+root, `core/schemas/` → `.claude/schemas/` — so the walk lands on `<root>/tests/schemas/`, the seed
+takes its own `FIXTURE BROKEN` arm and exits 2. **Step 2 requires the derived fixtures green before
+the push, so that red is a permanent stop on the self-update**, which is what the consumer hit.
+
+**IT IS ONE FILE, NOT A CLASS, AND THAT IS MEASURED RATHER THAN ASSUMED.** All **122** shipped
+fixtures were run in the consumer layout, from the project root: **119 green, 1 red — the reported
+one.** The other two exit 127 because they have no `run.sh` at all (`check-h1-recursion`,
+`check-manifest-bypass`, both seed-only and correctly not driven by either suite); that is the test
+harness's artifact and is reported here as such rather than as a finding.
+
+**THE GUARDS THAT SHOULD HAVE CAUGHT IT ARE BLIND, AND FOR A THIRD DISTINCT REASON.** I33 requires
+the `dirname` and the walk in ONE expression; I33b requires a VARIABLE in between; this form
+normalises through `cd`/`pwd`, so both return zero on it. That is the third appearance of *a zero
+over the wrong grammar reads exactly like a clean tree*, after I33 → I33b and I54 → I54b.
+
+**But the deeper hole is not the spelling.** I33 and I33b both check WHERE a chain is rooted, and
+neither checks that BOTH LAYOUTS ARE NAMED — while the remedy both of them prescribe is *"root the
+chain at the fixture's own self-location and name both layouts"*. Only the first half was ever
+mechanised, so a self-rooted chain naming one layout passes both invariants and fails identically
+on every consumer.
+
+**New invariant I33c** closes exactly that half: a fixture that walks up from its own location into
+a core subtree must also name the consumer layout for it. Both self-rooted spellings are covered,
+the subtree list is derived from `ls core/`, and the scan and its probes call one function — a probe
+against a private copy certifies an instrument the scan never runs. **False-positive set measured
+before shipping: the grammar matched exactly ONE file across every `core/fixtures/**/*.sh`, the
+defect above, and none after the fix.**
+
+**AND ITS FIRST RUN FLAGGED THE FILE IT HAD JUST FIXED**, because the fix's own comment quotes the
+defective expression in order to explain it. Comment lines are therefore excluded — the same
+narrowing I87 carries, derived the same way, from one measured false positive in the run that found
+it.
+
+The fix is the house pattern: root at self, name both candidates, and report BOTH paths on the
+failure arm (the old message interpolated a variable that is empty on exactly that arm, so it read
+*"cannot locate it at "*). Verified in both layouts: `PASS` in the distribution and `PASS` on the
+installed tree. Mutant: reintroducing the walk makes I33c fire, `cmp -s`-guarded so a no-op edit
+cannot pass as a mutation.
+
 ## [0.344.0] — 2026-08-09
 
 ### The updater carve-out could only see the operator's half of the pause

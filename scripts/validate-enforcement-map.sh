@@ -3045,6 +3045,87 @@ if [ -n "${i33b_hits// /}" ]; then
   err "I33b: these fixtures reach a sibling subtree by walking up from a dirname VARIABLE:${i33b_hits}. I33 catches the one-expression form and this is the same defect one assignment apart -- true in core/, broken by the install mapping on every consumer (core/scripts/<x> -> scripts/ai-dlc/<x> while core/schemas/ -> .claude/schemas/). Root the chain at the fixture's own self-location and name BOTH layouts, the way sprint-status.sh:129-137 resolves this same schema."
 fi
 
+# --- I33c: a SELF-ROOTED walk must name BOTH layouts ---------------------------
+# I33 AND I33b BOTH CHECK WHERE A CHAIN IS ROOTED, AND NEITHER CHECKS THAT BOTH LAYOUTS ARE
+# NAMED. Rooting at the fixture's own location is the form both of them PRESCRIBE as the
+# remedy -- "root the chain at the fixture's own self-location and name both layouts" -- and
+# only the first half of that sentence has ever been mechanised. So a self-rooted chain
+# naming ONE layout passes both invariants and is the identical consumer-side failure.
+#
+# THE DEFECT. v0.343.0 shipped `core/fixtures/apply-drift-after-write/seed.sh` with
+#
+#     _SCHEMA_SRC="$(cd "$(dirname "$0")/../.." && pwd)/schemas/layer-adjudication-register.json"
+#
+# which resolves in the distribution, where the seed and `core/schemas/` share the `core/`
+# parent, and resolves nowhere on a consumer, where `install.sh` splits that parent:
+# `core/fixtures/` -> `tests/fixtures/` at the project root while `core/schemas/` ->
+# `.claude/schemas/`. The seed took its own FIXTURE BROKEN arm and exited 2 on every
+# consumer -- and because step 2 requires the derived fixtures green BEFORE the push, that
+# red is a permanent stop on the self-update. Reported by the reference consumer against the
+# 0.341.0 -> 0.344.0 pull, and reproduced on a tree built by running install.sh into an
+# empty directory.
+#
+# AND THE `cd … && pwd` SPELLING IS A THIRD ONE. I33's grammar wants the dirname and the
+# walk in one expression; I33b's wants a variable in between. This form normalises through
+# `cd`/`pwd`, so BOTH of them return zero on it -- the third appearance of "a zero over the
+# wrong grammar reads exactly like a clean tree", after I33 -> I33b and I54 -> I54b.
+#
+# MEASURED BEFORE SHIPPING: across every core/fixtures/**/*.sh this grammar matches ONE
+# file -- the one above -- and its false-positive set is EMPTY. After the fix it matches
+# none, which is why the probe below is not optional: a corpus the grammar cannot match
+# reports the same clean line as a corpus with nothing to find.
+#
+# ONE PREDICATE, TWO CALLERS, as I33b established. The probe and the corpus scan call the
+# SAME function, or the probe certifies an instrument the scan never uses.
+#
+# COMMENTS ARE EXCLUDED, AND THAT NARROWING IS DERIVED FROM ONE MEASURED FALSE POSITIVE --
+# this invariant's first run flagged the very file it had just fixed, because the fix's own
+# comment QUOTES the defective expression to explain it. A scanner satisfied by its own
+# documentation is the I87 narrowing arriving again; the same run that found it is why the
+# filter is here rather than in a later release.
+i33c_scan() { # i33c_scan <file> <subtree> -> the offending line(s), if any
+  grep -nE '(dirname "\$0"\)(/\.\.)+/'"$2"'/|cd "\$\(dirname "\$0"\)(/\.\.)+" && pwd\)/'"$2"'/)' "$1" 2>/dev/null \
+    | grep -vE '^[0-9]+:[[:space:]]*#' \
+    | grep -vE '\.claude/'"$2"'/'
+}
+
+i33c_subs="$(ls -d "$REPO_ROOT"/core/*/ 2>/dev/null | sed 's|.*/core/||; s|/$||' | grep -v '^fixtures$')"
+if [ -z "$i33c_subs" ]; then
+  err "I33c derived NO core subtree to scan for, so its corpus scan could only report clean. The subtree list is derived from ls core/ and an empty one is an instrument failure, not a pass."
+fi
+
+# BOTH DIRECTIONS, through the scan's own function. A grammar blind to the cd/pwd spelling
+# reports the same clean line as a fixed tree; one that flags a chain which DOES name the
+# consumer layout would flag the remedy this invariant prescribes.
+i33c_probe="$(mktemp -d 2>/dev/null)"
+if [ -n "$i33c_probe" ] && [ -d "$i33c_probe" ]; then
+  printf 'S="$(cd "$(dirname "$0")/../.." && pwd)/schemas/x.json"\n' > "$i33c_probe/bad1.sh"
+  printf 'S="$(dirname "$0")/../../schemas/x.json"\n'                 > "$i33c_probe/bad2.sh"
+  printf 'H="$(cd "$(dirname "$0")" && pwd)"\nfor c in "$H/../../schemas/x.json" "$H/../../../.claude/schemas/x.json"; do :; done\n' > "$i33c_probe/ok.sh"
+  i33c_p1="$(i33c_scan "$i33c_probe/bad1.sh" schemas | grep -c . || true)"
+  i33c_p2="$(i33c_scan "$i33c_probe/bad2.sh" schemas | grep -c . || true)"
+  i33c_pn="$(i33c_scan "$i33c_probe/ok.sh"   schemas | grep -c . || true)"
+  rm -rf "$i33c_probe"
+  [ "$i33c_p1" -eq 0 ] && err "I33c's cd/pwd positive probe was NOT reported. That is the exact spelling v0.343.0 shipped, and the one I33 and I33b are both blind to, so a clean corpus result would mean nothing."
+  [ "$i33c_p2" -eq 0 ] && err "I33c's direct-walk positive probe was NOT reported, so the grammar covers only one of the two self-rooted spellings."
+  [ "$i33c_pn" -ne 0 ] && err "I33c's negative probe WAS reported: a self-rooted chain that DOES name the consumer layout was flagged. That is the remedy this invariant prescribes, and flagging it would make the check unsatisfiable."
+else
+  err "I33c could not create its probe directory, so neither direction of its scanner was proven this run."
+fi
+
+i33c_hits=""
+if [ -d "$REPO_ROOT/core/fixtures" ]; then
+  for _sub in $i33c_subs; do
+    for _sf in $(find "$REPO_ROOT/core/fixtures" -name '*.sh' -type f 2>/dev/null | sort); do
+      _r="$(i33c_scan "$_sf" "$_sub")"
+      [ -n "$_r" ] && i33c_hits="$i33c_hits $(printf '%s' "${_sf#$REPO_ROOT/}" )"
+    done
+  done
+fi
+if [ -n "${i33c_hits// /}" ]; then
+  err "I33c: these fixtures walk up from their OWN location into a core subtree while naming only the DISTRIBUTION layout:${i33c_hits}. Self-rooting is what I33 and I33b prescribe and it is only half the remedy -- install.sh splits the parent (core/fixtures/ -> tests/fixtures/ at the project root, core/schemas/ -> .claude/schemas/), so the fixture is green here and exits nonzero on every consumer, which step 2 turns into a permanent stop on the self-update. Add the consumer candidate beside the distribution one, as apply-drift-after-write/seed.sh now does."
+fi
+
 # --- I20: every fixture is DRIVEN, or declares in writing that it cannot be -----
 # core/git-hooks/pre-push runs the fixture suite as
 #

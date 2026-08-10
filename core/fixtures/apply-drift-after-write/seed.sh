@@ -69,12 +69,31 @@ printf '9.9.9\n' > "$DIST/VERSION"
 # Diagnosed exactly that way: the arms went red, and the schema was missing rather than the fix
 # being wrong. Copied from the real distribution rather than hand-written, so the enum this fixture
 # tests against is the one consumers are held to.
-_SCHEMA_SRC="$(cd "$(dirname "$0")/../.." && pwd)/schemas/layer-adjudication-register.json"
-if [ -f "$_SCHEMA_SRC" ]; then
+#
+# NAME BOTH LAYOUTS. This line used to be
+# `$(cd "$(dirname "$0")/../.." && pwd)/schemas/…`, which resolves in the distribution --
+# where this seed and `core/schemas/` share the `core/` parent -- and resolves NOWHERE on a
+# consumer, because `install.sh` splits that parent: `core/fixtures/` -> `tests/fixtures/`
+# at the project root while `core/schemas/` -> `.claude/schemas/`. The seed then took its
+# own `FIXTURE BROKEN` arm and exited 2 on every consumer. Reported from the reference
+# consumer, reproduced here on a tree built by running `install.sh` into an empty directory.
+# Rooting at the fixture's own location was already right; naming only ONE layout was the
+# defect, and it is the half I33/I33b do not check -- see I33c.
+_HERE="$(cd "$(dirname "$0")" && pwd)"
+_SCHEMA_SRC=""
+for _c in "$_HERE/../../schemas/layer-adjudication-register.json" \
+          "$_HERE/../../../.claude/schemas/layer-adjudication-register.json"; do
+  [ -f "$_c" ] && { _SCHEMA_SRC="$_c"; break; }
+done
+if [ -n "$_SCHEMA_SRC" ] && [ -f "$_SCHEMA_SRC" ]; then
   mkdir -p "$DIST/core/schemas"
   cp "$_SCHEMA_SRC" "$DIST/core/schemas/layer-adjudication-register.json"
 else
-  echo "seed.sh: FIXTURE BROKEN — cannot locate layer-adjudication-register.json at $_SCHEMA_SRC." >&2
+  # Name BOTH candidates. `$_SCHEMA_SRC` is empty on this arm by construction, so a message
+  # interpolating it reports "cannot locate it at " and tells the reader nothing.
+  echo "seed.sh: FIXTURE BROKEN — cannot locate layer-adjudication-register.json at either" >&2
+  echo "  $_HERE/../../schemas/          (distribution layout)" >&2
+  echo "  $_HERE/../../../.claude/schemas/  (consumer layout)" >&2
   echo "  Without it the verdict vocabulary is empty and the adjudicated arms assert nothing." >&2
   exit 2
 fi
