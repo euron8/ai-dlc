@@ -146,6 +146,7 @@ core_manifest:
   - fixtures/apply-drift-refile/**
   - fixtures/apply-legacy-script-path/**
   - fixtures/apply-restamp-theirs/**
+  - fixtures/apply-relabel-noop-row/**
   - fixtures/askuserquestion-citation/**
   - fixtures/command-args-citation/**
   - fixtures/operator-request-capture/**

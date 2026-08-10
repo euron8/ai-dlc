@@ -226,6 +226,38 @@ else
   bad "a legacy single-line stamp swallowed the machinery re-stamp in silence — the run reports success and the field never moved"
 fi
 
+# --- Assertion 5b: THE RULEBOOK PAIR FAILS LOUDLY ON THAT SAME STAMP -------------------------
+# The machinery arm above learned that a `sed` keyed on an absent field matches nothing and exits
+# 0, and reads its result back. The rulebook arm ONE BRANCH UP did not: its guard is
+# `elif [ -f "$STAMP" ]`, which proves the stamp exists and never that it was written. On this
+# same legacy stamp both of its substitutions match nothing, both exit 0, and `RESOLVED restamp`
+# printed anyway — beside `RESOLVED consistent`, which asserts "the tree matches THEIRS" over a
+# stamp that plainly does not.
+#
+# This is the costly direction. `.ai-dlc-version` is what the NEXT pull reads to compute its
+# base, so a row claiming a stamp that never landed does not merely misreport this run: it
+# mis-bases the following merge, and the damage surfaces a pull later. Same class as PC-S332's
+# relabel row, one arm along.
+r5_rows="$(awk -F'\t' '$1=="RESOLVED" && ($2=="restamp"||$2=="consistent"){printf "%s ", $2}' <<<"$OUT5")"
+if [ -z "$r5_rows" ]; then
+  ok "a legacy single-line stamp produces NO \`RESOLVED restamp\` and no \`consistent\` row — neither claims a write that could not happen"
+else
+  bad "a legacy single-line stamp still claims [${r5_rows% }] — the substitutions matched nothing, exited 0, and the manifest reported success anyway"
+fi
+if awk -F'\t' '$1=="DECISION" && $2=="restamp-failed"{f=1} END{exit !f}' <<<"$OUT5"; then
+  ok "  and it SAYS so, as a DECISION row the operator has to work (restamp-failed)"
+else
+  bad "  and it says nothing — a silent preserve is exactly the defect assertion 5 exists for, one arm along"
+fi
+# The in-flight marker is the reader half. A tree whose stamp did not land must keep blocking its
+# own fixture suite, so clearing the marker beside an unwritten stamp would hand a half-applied
+# tree back to a green suite.
+if [ -f "$C5/.claude/.ai-dlc-applying" ]; then
+  ok "  and the in-flight marker SURVIVES, so the half-applied tree keeps blocking its own fixture suite"
+else
+  bad "  but the in-flight marker was cleared — a tree that failed to stamp is handed back to a suite that will now run over it"
+fi
+
 # --- Assertion 6: the flag is the ONLY new argument, and an unknown one is a usage error ------
 C6="$WORK/c6"; mkconsumer "$C6" || exit 2
 bash "$APPLY" --carried-machinery-slize "$DIST" "$BASE" "$C6" "$THEIRS" >/dev/null 2>&1

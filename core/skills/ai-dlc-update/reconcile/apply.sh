@@ -651,8 +651,40 @@ $LD_TITLE
 EOF
 
 # ---------------------------------------------------------------- 4. catalog relabel (mechanical)
-if bash "$SELF/relabel-extension-checks.sh" "$CONSUMER" --apply --dist "$DIST" --theirs "$THEIRS" >/dev/null 2>&1; then
-  say RESOLVED relabel "ext-check collisions labelled"
+#
+# THE EXIT STATUS CANNOT TELL WORK FROM NO WORK, AND THIS IS A ROW STEP 7 TELLS THE READER TO
+# TRUST. `relabel-extension-checks.sh` exits 0 three separate ways: it labelled n headings, it
+# found nothing to label, or the consumer has no `extensions/` directory at all. Guarding on the
+# invocation's status, with its output discarded, therefore printed
+# `RESOLVED relabel ext-check collisions labelled` on a tree whose catalog was never colliding.
+# Filed by the reference consumer as PC-S332 and measured on its own 0.345.0 -> 0.347.0 apply,
+# where the tool said `no unlabelled core-number collisions.` and the manifest said the
+# collisions had been labelled.
+#
+# Why the row matters more than the miscount: step 7 says "Do NOT re-do a `RESOLVED` row by
+# hand". A row asserting an action that did not occur reads as "your catalog was colliding and I
+# fixed it" to a reader who is instructed not to check. That is the same vacuous-pass shape this
+# file already refuses for the reconcile log, whose fixture states the rule outright -- a receipt
+# for an unwritten artifact is worse than silence.
+#
+# So read the COUNT the tool already prints, and say nothing when there was nothing to do. Parsed
+# with parameter expansion rather than a pipeline: feeding a variable into a reader is the I54b
+# shape, and this value decides whether a manifest row exists.
+relabel_out="$(bash "$SELF/relabel-extension-checks.sh" "$CONSUMER" --apply --dist "$DIST" --theirs "$THEIRS" 2>/dev/null || true)"
+relabel_n=""
+case "$relabel_out" in
+  *"relabel-extension-checks: labelled "*)
+    relabel_n="${relabel_out##*relabel-extension-checks: labelled }"
+    relabel_n="${relabel_n%% *}"
+    ;;
+esac
+case "$relabel_n" in ''|*[!0-9]*) relabel_n=0 ;; esac
+if [ "$relabel_n" -gt 0 ]; then
+  # The subject is the count, because every other RESOLVED arm in this file names its subject --
+  # `restamp` carries `<base> -> <sha>`, `relocate-move` leads with `${legacy_moved_n}`. `relabel`
+  # and `consistent` were the only two bare rows, and a bare row is the one a reader cannot
+  # sanity-check against their own tree.
+  say RESOLVED relabel "${relabel_n} colliding heading(s)" "labelled with their \`[ext:<id>]\` tag so the consumer's extension checks no longer collide with core's numbering."
 fi
 
 # ---------------------------------------------------------------- 5. re-stamp
@@ -1126,12 +1158,34 @@ elif [ -f "$STAMP" ]; then
     fi
   fi
 
-  say RESOLVED restamp "$BASE -> $theirs_sha"
-  # The tree is consistent again, and ONLY here. Cleared beside the re-stamp rather than
-  # in a trap, so an exit that withholds the stamp also leaves the marker: a partially
-  # applied tree must keep blocking its own fixture suite until the pull is finished.
-  rm -f "$APPLYING"
-  say RESOLVED consistent "the tree matches $theirs_sha; fixture suite re-enabled"
+  # READ THE STAMP BACK, FOR THE REASON THE MACHINERY ARM DIRECTLY ABOVE ALREADY GIVES.
+  # Both writes at the top of this branch are `sed` substitutions keyed on a field, and a
+  # substitution keyed on an ABSENT field matches nothing and exits 0 -- indistinguishable from
+  # having written. Lines above say exactly that, and act on it, for `skill_version`/`skill_commit`.
+  # This arm is one branch up and did not: a stamp lacking `commit:`/`version:` -- a legacy
+  # single-line stamp, or a partial one -- took zero substitutions, both seds exited 0, and the row
+  # printed anyway. `elif [ -f "$STAMP" ]` proves the file exists, never that it was written.
+  #
+  # This is the field the NEXT pull trusts to compute its base, so a row claiming a stamp that did
+  # not land does not merely misreport: it mis-bases the following merge.
+  got_c="$(sed -n 's/^commit:[[:space:]]*//p' "$STAMP" | head -1)"
+  got_v="$(sed -n 's/^version:[[:space:]]*//p' "$STAMP" | head -1)"
+  if [ "$got_c" = "$theirs_sha" ] && { [ -z "$ver" ] || [ "$got_v" = "$ver" ]; }; then
+    say RESOLVED restamp "$BASE -> $theirs_sha"
+    # The tree is consistent again, and ONLY here. Cleared beside the re-stamp rather than
+    # in a trap, so an exit that withholds the stamp also leaves the marker: a partially
+    # applied tree must keep blocking its own fixture suite until the pull is finished.
+    #
+    # It sits INSIDE the read-back for the same reason. "The tree matches THEIRS" asserted beside a
+    # stamp that demonstrably does not read THEIRS is the strongest false claim this manifest can
+    # make, and it was previously unconditional. This does not make the row fully earned -- nothing
+    # here verifies file CONTENTS against theirs -- but it can no longer fire over a stamp that was
+    # never written.
+    rm -f "$APPLYING"
+    say RESOLVED consistent "the tree matches $theirs_sha; fixture suite re-enabled"
+  else
+    say DECISION restamp-failed "$STAMP" "the stamp still reads \`commit: ${got_c:-<absent>}\` / \`version: ${got_v:-<absent>}\` rather than ${ver:-<unreadable>} @ ${theirs_sha}. A \`sed\` keyed on a field the stamp does not carry matches nothing and exits 0, so the write reported success and did nothing — a legacy single-line stamp, or one missing these fields. Rewrite it in schema (version/commit/skill_version/skill_commit/installed_at/upstream) and re-run. The in-flight marker is deliberately left in place, so the fixture suite keeps blocking until it is."
+  fi
 
   # THE ONE STEP-7 ARTIFACT THIS TOOL DOES NOT WRITE, SAID AT THE MOMENT IT IS OWED.
   #

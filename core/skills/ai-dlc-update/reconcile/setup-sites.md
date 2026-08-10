@@ -77,6 +77,7 @@ core_manifest:
   - core/fixtures/apply-drift-refile/**
   - core/fixtures/apply-legacy-script-path/**
   - core/fixtures/apply-restamp-theirs/**
+  - core/fixtures/apply-relabel-noop-row/**
   - core/fixtures/askuserquestion-citation/**
   - core/fixtures/command-args-citation/**
   - core/fixtures/operator-request-capture/**
