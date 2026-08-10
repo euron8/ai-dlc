@@ -34,6 +34,69 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.347.0] — 2026-08-10
+
+### The suite's wall clock: a validator regression I shipped, and a skip the outer gate already knew about
+
+Raised by the operator on two counts — why a full push runs at all, and why it went from a few
+minutes to ten.
+
+**FIRST, THE DURATION, AND THE REGRESSION IS MINE.** The suite is POLE-BOUND: wall clock tracks
+the single longest fixture directory. v0.345.0 added I33c to `validate-enforcement-map.sh` as a
+nested loop over (8 subtrees x 210 fixture files), three processes each. The `enforcement-map-*`
+fixtures are sharded mutation batteries that re-run that validator roughly thirty times per shard.
+
+```
+validate-enforcement-map.sh    v0.344.0  13.02s
+                               v0.345.0  18.07s   +39%
+                               fixed     13.15s
+pole (enforcement-map-sites-b, LOADED)   595s -> 442s
+full pre-push                            7m40s at 1303% CPU, 133 ok / 0 FAIL
+```
+
+I33c now does what I33 already did — one recursive grep per subtree for CANDIDATE files, with the
+per-line refinement paid only on files that matched, which today is none. It still fires on a
+`cmp -s`-guarded mutant that reintroduces the walk.
+
+**MEASURING THIS WENT WRONG THREE TIMES BEFORE IT WENT RIGHT, and each way is recorded because
+each reads like a result.** A validator copy run from `/tmp` resolves its root elsewhere and exits
+in 5ms — a 2600x speed-up that is a broken measurement. A loaded pole cost (595s, under the 16-way
+pool) compared against a solo run of the same shard (112s at 424% CPU) is a 5x win that measures
+nothing but the pool. And `CLAUDE.md`'s own suite figure — 4m57s — had gone stale without anyone
+noticing, in the file that tells everyone else to re-derive; it is corrected there with the
+pole-bound reading that supersedes it.
+
+**SECOND, THE FINER SKIP HONOURS THE OUTER GATE'S EXCLUSION SET.** `suite-content-key.sh` declares
+which paths cannot change a fixture verdict, and earns each line with a two-tree mutation
+measurement. The read-set map — which decides WHICH fixtures run once the key has moved — applied
+no exclusion at all. A changed path in no fixture read-set forces the full suite, and **a new file
+is in no read-set by construction**: the map is a generated snapshot and cannot name a file that
+did not exist when it was derived. `docs/plans/` is edited in nearly every session here, so the arm
+that exists for a genuinely unknown dependency was firing on a directory the key already declares
+irrelevant. Measured tonight: one new plan file forced all 133 fixtures, twice.
+
+The exclusion set is RESOLVED from the declaring script, not restated — that script is
+distribution-only, so on a consumer the set is empty and the behaviour is exactly what it was.
+Both pre-push hooks carry the same code; **I66** compares them on executable lines.
+
+**PROVEN IN BOTH DIRECTIONS, against the hook's own functions rather than a reimplementation:**
+
+| scenario | changed | orphans | |
+|---|---|---|---|
+| a mapped `core/` file is edited | 1 | 0 | control: the probe can see a change |
+| a TRACKED new `core/` file no fixture reads | 1 | 1 | **still forces all** — the fail-closed arm is intact |
+| `CHANGELOG.md` + a `docs/plans/` edit + a NEW plan file | 0 | 0 | the case that cost two full runs tonight |
+
+**And that probe's first version reported the reassuring answer for every scenario**, including the
+control that must force a full run: BSD `sed` reads `{` in `/^fn() {/` as a command, so no function
+defined, and `readset_manifest: command not found` still printed `0 changed / 0 orphans`. It now
+asserts each function defined before it measures anything. A second version's control was an
+UNTRACKED file, which `git ls-files` correctly never sees — invisible is not the same as exempt.
+
+**One-time transition, self-healing:** the first run after this change sees the newly-excluded
+paths as vanished from the verified-state record and reports them changed. That run rewrites the
+record and the next one is clean.
+
 ## [0.346.0] — 2026-08-10
 
 ### `CLAUDE.md` was in the fixture suite's content key, and no fixture's verdict depends on it

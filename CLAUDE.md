@@ -74,6 +74,22 @@ dir breaks their sanity arm. Four of the five said `FIXTURE BROKEN`, which reads
 exactly like a regression in the change under test. The whole suite through the pool is
 **4m57s at 949% CPU**; the serial loop was roughly ten times that and wrong.
 
+**THAT FIGURE WENT STALE AND NOBODY NOTICED, WHICH IS ITS OWN LESSON.** Re-measured on the
+full 133-fixture suite: **7m40s at 1303% CPU**, 133 ok / 0 FAIL. The suite is
+**POLE-BOUND** — wall clock tracks the single longest DIRECTORY, not the sum over the pool — so
+the number to watch is the top of `.git/ai-dlc-fixture-durations`, not the total. Six fixtures
+sit at 395–442s and everything else is under 220s. **A cost recorded there is a LOADED cost,
+measured under the 16-way pool; running the same unit alone gives a completely different number
+(one shard: 442s loaded, 112s solo at 424% CPU) and the two must never be compared.**
+
+**A CHANGE TO A VALIDATOR THE POLE INVOKES IS A CHANGE TO THE SUITE'S WALL CLOCK.** One
+invariant added to `validate-enforcement-map.sh` as a nested loop over (subtree × fixture file)
+moved that validator from 13.0s to 18.1s — 39% — which the sharded mutation batteries multiply by
+roughly thirty. The pole went 442s → 595s and the whole suite went to ten minutes.
+Reshaped to one recursive grep per subtree it is back to 13.2s. **Time the validator before and
+after, from inside the repo** — a copy run from `/tmp` resolves its root elsewhere and exits in
+5ms, which reads as an enormous speed-up and is a broken measurement.
+
 The inverse hazard is live too, and `core/fixtures/check-3b-locked-anchor/run.sh:125`
 carries it: a fixture that is green only from the repo root may be asserting nothing,
 because that is a cwd where its decoy files do not exist. A fixture that must hold from
