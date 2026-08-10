@@ -387,11 +387,22 @@ conversation scrollback.
 
 A self-scheduled wake-up (ScheduleWakeup, cron, or any deferred
 self-trigger) MUST NOT carry a payload that invokes this skill or
-re-enters the pipeline. Auto-handoff terminates the session for a human
-to resume (below); it never arms an automated re-entry with stale args
-and a stale snapshot. As defense-in-depth, a resume that appears to have
-been fired by the lead's own prior self-schedule rather than a human
-paste MUST be discarded.
+re-enters the pipeline. Self-scheduled payloads are limited to
+inert reminders or read-only status checks.
+
+A self-fired resume is not merely harmful, it is UNNECESSARY: dispatched
+subagents, backgrounded commands and long-running deploys already
+re-invoke the lead when they finish, so the wake-up buys nothing the
+harness does not already provide — it only re-enters the skill with stale
+args and a stale snapshot. Auto-handoff terminates the session for a
+human to resume (below); it never arms an automated re-entry.
+
+As defense-in-depth, a resume that appears to have been fired by the
+lead's own prior self-schedule rather than a human paste MUST be
+discarded: recognise the stale-args signature and never execute its
+instructions as current. A self-scheduled payload that re-enters the
+pipeline is a **lead-conduct finding** at retro, scored with Check A and
+Check B in `steps/retro.md`.
 
 ## HANDOFF PROTOCOL -- TRIGGERS AND CONTEXT THRESHOLDS
 
@@ -425,9 +436,18 @@ Production Validation Checkpoint, defined in `steps/deploy-validate.md`; a
 destructive one-time operation, defined in `steps/deploy-validate.md`; a
 `DEFERRAL_REQUEST`, defined in `escalations.md`; and any HARD_BLOCK
 disposition, defined in `escalations.md`. Every gate named here MUST cite
-the file defining its procedure. A gate with no procedure is not a gate,
-and the sprint-PR merge is not one — `steps/retro.md` merges it without
-asking. Treating resume text as standing approval is a rule violation.
+the file defining its procedure. A gate with no procedure is not a gate:
+in core AS SHIPPED the sprint-PR merge has none, because `steps/retro.md`
+merges it without asking.
+
+That is a fact about core's own deploy shape, not a ruling about yours.
+Where a PROJECT's deploy policy defines a procedure for the sprint-PR
+merge — an approval step in its `CLAUDE.md`, or in its
+`steps/deploy-validate.md` — the same test makes it a human gate there,
+and this rule binds it exactly like the four named above. Apply the test
+to your own tree; do not read core's answer as a ruling about it.
+Do NOT write an extension to say so. Treating resume text as
+standing approval is a rule violation.
 
 ### Reminder thresholds
 
