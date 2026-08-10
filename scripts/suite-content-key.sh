@@ -72,12 +72,37 @@ die() { printf 'suite-content-key: %s\n' "$*" >&2; exit 1; }
 # object store, it changes on every commit, and its one input to the suite --
 # which paths are tracked -- is folded back in explicitly as the `tracked`
 # component below.
+#
+# CLAUDE.md ADDED 2026-08-10, BY THE SAME METHOD, AND IT IS THE CASE THIS HEADER
+# ALREADY DESCRIBES WITHOUT NAMING. The paragraph above records that the original
+# four-tree scoping was corrected because `ledger-status-vocabulary` builds its
+# subject tree from `git ls-files` and therefore copies EVERY TRACKED FILE. That is
+# also the ONLY reason CLAUDE.md was inside the key: it is in exactly one fixture's
+# trace-derived read-set, that fixture's read-set is 519 of 534 tracked paths, and
+# nothing in its chain reads the file as INPUT -- `validate-enforcement-map.sh`
+# names CLAUDE.md three times, all in comments and one operator-facing message.
+# (Control: `templates/CLAUDE.md.template`, a DIFFERENT file one basename away, is a
+# genuine input to nine fixtures and stays in the key.)
+#
+# MEASURED, not argued, to the standard the paragraph above sets: two faithful tar
+# copies of the repository including .git, the mutant's CLAUDE.md OVERWRITTEN --
+# 222 lines replaced by 4, `cmp -s`-guarded so a no-op could not pass as a mutation,
+# and `diff -rq` confirming exactly ONE path differs. Both trees ran the full
+# 133-fixture suite at AI_DLC_FIXTURE_NO_SKIP=1. Verdicts identical, 133 ok / 0 FAIL
+# on both sides.
+#
+# AND THE COVERAGE IS NOT LOST, WHICH IS THE ONLY THING THIS EXCLUSION COULD COST.
+# `audit-rule-files.sh` reads CLAUDE.md on EVERY push as its own pre-push step,
+# outside the fixture suite and unaffected by this key. What the exclusion removes is
+# a whole-suite re-run -- minutes, on the reference tree -- triggered by editing a
+# file whose content no fixture verdict depends on.
 # EXCLUDE_BEGIN
 EXCLUDE="
 .git
 CHANGELOG.md
 VERSION
 docs
+CLAUDE.md
 "
 # EXCLUDE_END
 
