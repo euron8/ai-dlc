@@ -113,6 +113,7 @@ to_consumer_glob() {  # <manifest entry> -> consumer-relative glob
     git-hooks/*)      printf '.githooks/%s\n' "${e#git-hooks/}" ;;  # .githooks/, where core.hooksPath points
     session-driver/*) printf '.claude/%s\n' "$e" ;;   # machinery, outside the skill dir
     schemas/*)        printf '.claude/%s\n' "$e" ;;   # machinery, outside the skill dir
+    rules/*)          printf '.claude/%s\n' "$e" ;;   # Claude Code's own loader reads .claude/rules/, a fixed path
     skills/*)         printf '.claude/%s\n' "$e" ;;   # ai-dlc/, ai-dlc-setup/ and ai-dlc-update/ all sit under .claude/skills/
     *)                printf '.claude/skills/ai-dlc/%s\n' "$e" ;;
   esac

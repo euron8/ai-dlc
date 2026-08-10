@@ -2129,6 +2129,7 @@ ci-templates|.github/workflows
 fixtures|tests/fixtures
 git-hooks|.githooks
 schemas|.claude/schemas
+rules|.claude/rules
 hooks|.claude/hooks
 scripts|scripts/ai-dlc
 session-driver|.claude/session-driver
@@ -2827,6 +2828,7 @@ skills/ai-dlc-update|exempt:self-update owns this subtree (step 2), not the drif
 team-roles|scan
 hooks|scan
 schemas|scan
+rules|exempt:a DUPLICATE carrier of SKILL.md prose, not an authority — the rule file itself defers to overrides/, so a consumer changing Rule 23 edits the layer and not this copy, and the text that IS authoritative (SKILL.md) is scan-marked above
 scripts|exempt:machinery — an in-place edit breaks loudly (a failing validator), not as silent prose drift
 session-driver|exempt:machinery (automation shell), not consumer-read rulebook
 ci-templates|exempt:CI templates run from .github/workflows, not consumer-read rulebook

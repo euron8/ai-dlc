@@ -1,0 +1,9 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is scripts/install.sh and scripts/uninstall.sh -- the installer pair, which is
+not shipped to consumers and has no core_manifest entry. A fixture whose subject is absent
+cannot fail on the consumer's tree, and a unit that cannot fail scores as a pass in the
+consumer's own suite verdict.
+
+It also runs four full installs into throwaway trees and shims `claude` on PATH, which is
+distribution-side harness behaviour rather than anything a consumer's suite should do.

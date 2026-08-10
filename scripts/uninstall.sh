@@ -61,6 +61,22 @@ if [ -d "$PROJECT_ROOT/.claude/team-roles" ]; then
   done
 fi
 
+# -- Rule files (the `ai-dlc-` prefix is the boundary, as it is for hooks) --
+# `.claude/rules/` is NOT ai-dlc-owned the way team-roles/ is: Claude Code reads every
+# `.md` there, so a consumer's own authoring rules live alongside ours. Remove by prefix
+# and never the directory. Leaving one behind is worse than never shipping it -- an
+# unconditional rule keeps loading into EVERY session of a repo that no longer has AI/DLC
+# installed, and nothing in that tree would explain where the text came from.
+if [ -d "$PROJECT_ROOT/.claude/rules" ]; then
+  for rule_file in "$PROJECT_ROOT/.claude/rules/"ai-dlc-*.md; do
+    [ -f "$rule_file" ] || continue
+    FILES_TO_REMOVE+=(".claude/rules/$(basename "$rule_file")")
+  done
+fi
+if [ -f "$PROJECT_ROOT/.claude/.ai-dlc-cc-version" ]; then
+  FILES_TO_REMOVE+=(".claude/.ai-dlc-cc-version")
+fi
+
 # -- Templates installed to root --
 for file in CLAUDE.md QUICKSTART.md; do
   if [ -f "$PROJECT_ROOT/$file" ]; then
