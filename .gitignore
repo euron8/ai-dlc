@@ -23,4 +23,23 @@ node_modules/
 # `git add -A` committed one in v0.126.0 -- the same way the budget validator's
 # scan channels used to get committed before they moved to mktemp.
 _bmad-output/
-.claude/
+
+# `.claude/` is excluded as its CONTENTS (`.claude/*`), not as the directory
+# (`.claude/`), and that distinction is the whole of this block. Git does not
+# descend into an excluded DIRECTORY, so with `.claude/` no negation beneath it can
+# ever re-include anything -- the negations parse, apply to nothing, and the file
+# stays ignored while the .gitignore reads as though it were tracked. Measured: the
+# first attempt here used `.claude/` plus two negations and `git check-ignore` still
+# reported `.claude/rules/a.md` IGNORED.
+#
+# The exception is the authoring rulebook. `.claude/rules/**/*.md` is exactly what
+# Claude Code's own loader reads -- recursively, `.md` only -- so the trackable set
+# and the loaded set are one set by construction. Every other path under `.claude/`
+# stays ignored, which is what preserves the property the comment above protects:
+# anything a hook writes here that is not a rule file cannot be committed.
+# Bound mechanically by the tracked-path assertion in `.githooks/pre-push`.
+.claude/*
+!.claude/rules/
+.claude/rules/**
+!.claude/rules/**/
+!.claude/rules/**/*.md

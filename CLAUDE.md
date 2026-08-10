@@ -37,19 +37,6 @@ roughly a dozen files state it locally, in the header of whichever guard learned
 it. Those statements stay where they are — each explains its own guard. This is
 the general form.
 
-## Mutants
-
-- Build the mutant as a **copy**, never an in-place edit, and guard with `cmp -s`
-  so a `sed` that matched nothing cannot pass as a mutation.
-- **Revert every layer of a layered fix.** A partial revert produces a mutant
-  that proves the layer you left in place, and it comes out green.
-- Add an **unmutated control** from the same directory whenever the harness
-  itself could be what fails — a lone script copy that dies sourcing `lib.sh`
-  emits nothing, and "no output" otherwise scores as a kill.
-- Assert a **positive outcome**, not the absence of the old failure message.
-- A mutant must fail **only** its own assertion. Two failures mean the
-  assertions are entangled and one of them is vacuous.
-
 ## Run the fixture suite the way the hook runs it, never a hand-rolled loop
 
 `.githooks/pre-push` is the runner. It dispatches through a worker pool
@@ -96,37 +83,26 @@ because that is a cwd where its decoy files do not exist. A fixture that must ho
 any cwd asserts cwd-invariance itself, in its own arms — it does not get that from how
 the suite is driven.
 
-## Whether a fixture ships is ONE declaration, and it lives in the fixture
+## Some authoring rules live in `.claude/rules/`, and load only on a Read
 
-A fixture ships to consumers unless its own directory carries a `.dist-only` file.
-**`install.sh` derives its copy loop from that marker**; nothing hand-lists the shipped
-set there any more.
+Rules that bind one subsystem are path-scoped files under `.claude/rules/`, each with a
+`paths:` frontmatter list. Claude Code loads one **when a matching file is read** — MEASURED
+on CC 2.1.226: Read fires it, Edit fires it (Edit requires a prior Read), and **Write, Grep,
+Glob and Bash do not**. It fires **once per session**, on the first matching read, not once
+per read. A subagent's read loads it inside the subagent only; it never reaches the parent.
 
-**The criterion: a fixture is `.dist-only` when its SUBJECT is not present on a
-consumer.** Three measured shapes, and they are the whole of today's twelve:
+That trigger shape is why the sections below stayed here rather than moving: a rule about a
+BASH behaviour, or about authoring this file, cannot be carried by a file-read trigger.
 
-- the subject is a distribution-only program (`scripts/validate-enforcement-map.sh`,
-  `validate-plan-shape.sh`, `suite-content-key.sh`, the distribution `.githooks/pre-push`);
-- the subject is a corpus only this repo holds, so the same run on a consumer scans a
-  smaller set and prints the same clean line — a narrower check reading identically to a
-  full one;
-- it is a MUTATION BATTERY behind a shipped fixture, editing copies of core's own sources.
+Today: `fixture-mutants.md`, `fixture-ship-decl.md`, `plan-shape.md`,
+`plan-shape-measured.md`. Both directions are bound by **I88** in
+`scripts/validate-claude-rules.sh` — a rule with no reader and a pointer with no rule both
+fail the push.
 
-**Write the reason in the marker.** It is required to be non-empty, because a marker with
-no reason is a decision nobody can audit — and seven of the twelve were zero bytes until
-this rule existed. Getting it wrong in the shipping direction is how a distribution-only
-battery once became the reference consumer's suite pole; getting it wrong the other way
-means a fixture reaches no consumer while this repo's own suite stays green over it.
-
-**Three hand-written lists remain and they are deliberate.** `uninstall.sh` bounds a
-DESTRUCTIVE loop and runs on a consumer where `core/fixtures/` does not exist, so it cannot
-derive and must not glob the consumer's `tests/fixtures/` — that would delete fixtures the
-consumer wrote. `core-manifest.md` and `setup-sites.md` are glob declarations read by
-roughly twenty programs (the core guard hook, `core-paths.sh`, `validate-layer-entries.sh`,
-the drift scan, a dozen fixtures); changing their grammar to a wildcard-with-exclusion
-touches every one of those readers, and that blast radius is larger than the four edits it
-would save. All three are joined to the derived set by **I74**, in both directions — so
-they can be stale for exactly as long as one push.
+**One trigger cannot fire on its own and is restated here:** creating a NEW fixture
+directory reads nothing, so before you create one — or edit `install.sh` or `uninstall.sh` —
+read `.claude/rules/fixture-ship-decl.md`. Whether a fixture ships is one declaration and it
+lives in the fixture.
 
 ## Two layouts
 
@@ -170,57 +146,6 @@ reason for that scope, are in its own header.
 
 Ship it only if you have run it and the set is empty or enumerated. An unmeasured
 lint is one the operator turns off, which is worse than none.
-
-## A plan that must survive the session lives in `docs/plans/`
-
-Plan mode writes to `~/.claude/plans/`, outside the repo, where nothing can check it and
-nobody else can read it. The moment a plan becomes a handoff — the thing a later session
-is told to READ and FOLLOW — promote it to `docs/plans/<slug>.md` and commit it. Then it
-is reviewable in the PR that does the work, and `scripts/validate-plan-shape.sh` holds it
-to a shape a stranger can act on.
-
-The shape, and the reason for each part, measured on this repo's first plan at the moment
-it was handed off:
-
-- **`## Start here`**, naming the repos and the read/write boundary. Without a declared
-  entry point a resuming session acts on whichever section it reads first.
-- **A numbered next-action list**, blocked items marked as blocked. A plan that records
-  state and never says what to do next is a report.
-- **One current status record.** It had two, and the older one predated a release; a
-  superseded section is fine, but it has to say so where the reader is, not elsewhere.
-- **Completed work marked completed.** Two release sections still read as work to do
-  after they had merged. A session told to FOLLOW the file would have redone them.
-- **Citations that resolve.** `path:line` is this repo's evidence form, and one that
-  cannot be located at resume time is a promissory note against evidence.
-- **An operator-ping instruction.** The plan is executed by a session the operator cannot see,
-  where "still working" and "stopped, waiting on you" look identical from outside — so silence
-  is a stall found only by polling. Every plan tells its executor to ping on any question, on
-  any decision, and on completion (including an early stop). Measured across this repo's own
-  runs: every consumer-session stall ended with the operator asking rather than the session
-  reporting, including one sitting on a blocking question and one that had already FINISHED.
-
-- **A done-when whose PASS you have CHECKED IS REACHABLE.** This repo's rule for a new check —
-  prove it can fire — applies to acceptance criteria, and the plan that closed this program broke
-  it twice in one file. *"`validate-artifact-budget.sh` green"* was unattainable when written: the
-  only FAIL is an unrelated artifact at 309%, byte-identical before and after the work.
-  *"confirm each still resolves"* was unverifiable: no file in that corpus produces a genuine
-  anchored resolution, so the executor could not satisfy it literally at all. **Both read like
-  ordinary criteria and neither could ever have gone green.** An executor then either invents a
-  substitute — which is what happened, correctly, both times — or reports failure for work that
-  succeeded. Run the command, or state the expected FAIL and what makes it unrelated.
-
-  **AND REACHABLE AT THE MOMENT IT IS CHECKED, WHICH IS NOT THE SAME THING.** Measured on the
-  0.341.0 → 0.345.0 runbook, whose done-when 5 asked that `ledger-reverify` report a receipt as
-  `CLOSE-CANDIDATE`. Reachability was checked before the file shipped and the derivation was
-  right — but the run's own later step CLOSES and ROTATES that entry, and a rotated entry emits no
-  row, so the live ledger correctly reads **0** by the time the criterion is read. The executor
-  materialized the pre-close ledger from its own commit and answered there, which is correct and is
-  work the file should not have cost them. **When a run consumes its own subject, state the
-  observation point** — before which step, against which ref. This is the third criterion in this
-  repo's runbooks that an executor had to reinterpret rather than satisfy literally.
-
-None of that is about writing quality. Each one makes the file produce WRONG WORK when
-followed literally, which is the only thing a handoff is for.
 
 ## Releases
 
