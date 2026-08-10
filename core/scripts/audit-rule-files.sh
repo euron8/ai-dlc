@@ -115,6 +115,11 @@ for p in ("CLAUDE.md", "docs/coding-conventions.md"):
 # distribution, and `.claude/rules/` does not -- it is this repo's own authoring rulebook
 # and install.sh never writes it onto a consumer.
 corpus.extend(tree(".claude/rules"))
+# The SHIPPED rule files, which are a different set from the line above. In a consumer
+# they land in `.claude/rules/` and the walk above already has them; in the distribution
+# they are authored at `core/rules/` and would otherwise be scanned by nothing while
+# shipping to every consumer -- which is exactly what I23 exists to catch.
+corpus.extend(tree("core/rules"))
 for p in ("SKILL.md", "escalations.md", "rule-authoring.md", "artifact-path-grammar.md", "core-manifest.md"):
     fp = f"{SKILL}/{p}"
     if os.path.isfile(fp):

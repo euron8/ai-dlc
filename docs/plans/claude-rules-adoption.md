@@ -23,12 +23,16 @@ early stop.** A session executing this file is invisible from outside: "still wo
 
 As of 2026-08-10, on branch `main`, uncommitted in the working tree:
 
-**Phase A — this repo's split — COMPLETE and green.** `CLAUDE.md` went 238 → 163 lines
-(14,841 → 9,480 bytes, −36%). Four rule files live under `.claude/rules/`. A new
-validator, a new fixture and a pre-push step bind them. Nothing is committed yet.
+**Phase A — this repo's split — COMPLETE, merged as v0.348.0 (#515).** `CLAUDE.md` went
+238 → 163 lines (14,841 → 9,480 bytes, −36%). Four rule files under `.claude/rules/`, bound
+by `scripts/validate-claude-rules.sh`, `core/fixtures/claude-rules-joins/` and a pre-push
+step.
 
-**Phase B — shipping a rule to consumers — BLOCKED**, on one measurement that print mode
-cannot make. See "Next actions" item 1.
+**Phase B — shipping ONE unconditional rule to consumers — COMPLETE, in the working tree.**
+The blocking measurement was made in a real interactive session and it **inverted the
+design**: see "The measurement that changed Phase B" below.
+
+**Nothing further is blocked.** The remaining work is the v0.349.0 release commit.
 
 ## What was measured, and on what
 
@@ -47,7 +51,30 @@ files produced **one** load event, on the first read. Re-run forcing the model t
 three distinct lines, proving all three reads happened: same result. **A rule loads once per
 session, not once per read.**
 
-**M2 — post-compaction behaviour: UNREADABLE, which is not a finding.** Print mode is an
+## The measurement that changed Phase B
+
+Run interactively, sid `b2fb0d8e`, all three discriminators satisfied. **The positive
+control fired** (`r:"compact"` for `CLAUDE.md`), so unlike every print-mode attempt this run
+is readable.
+
+- **A path-scoped rule does NOT come back after a compaction.** The per-session memo
+  SURVIVES. Turn 5 read `watched/y.txt` — confirmed as `TOOL_USE #2` in the session
+  transcript, so the absence is real and not an unexercised trigger — and produced no
+  `path_glob_match`. The model independently answered `NONE`.
+- **An unconditional rule DOES come back**, with `load_reason:"compact"`.
+
+**So the planned design was wrong and was inverted.** A scoped rule scoped to `steps/**`
+would not reload at step cadence; it would load once and then be **permanently gone for the
+rest of the session** after the first compaction — worse than useless as a carrier. The
+shipped rule is therefore UNCONDITIONAL, 242 words / ~441 resident tokens, and it
+DUPLICATES `SKILL.md` Rule 23 rather than relocating it.
+
+**This also constrains Phase A retroactively**, and `CLAUDE.md` now says so: a section may
+move to `.claude/rules/` only if it is *also* carried by a mechanism that runs anyway. All
+three moved rules are (`validate-mutation-red.sh`; I74 + install.sh's `.dist-only`
+derivation; `validate-plan-shape.sh`). A prose-only rule must stay resident.
+
+**M2 in print mode — UNREADABLE, which is not a finding.** Print mode is an
 invalid harness: `/compact` exits the process before re-injection runs, `--continue` mints a
 new session id, and auto-compact never fired under any fill (496 KB, then 1.1 MB across 12
 reads, against an 87k-token threshold — `PreCompact` count 0 both times). **No
@@ -109,43 +136,43 @@ Every item below is done and verified; do not redo any of it.
   implementation of "parse a rule file's frontmatter" instead of two, which is the
   divergence I8 exists to prevent.
 
+## Phase B — COMPLETE
+
+1. **DONE** — `core/rules/ai-dlc-resident-discipline.md`, UNCONDITIONAL (no `paths:`),
+   242 words / ~441 resident tokens, under the 250-word bound. Duplicates `SKILL.md`
+   Rule 23. States that it is a carrier and **not** a precedence layer: if a project shadows
+   Rule 23 in `overrides/`, the override wins — rule files sit outside Rule 27's ordering
+   entirely, which would otherwise be a silent contradiction on any consumer that overrides.
+2. **DONE** — the version floor is RESOLVED, not assumed. `install.sh` reads
+   `claude --version`, and below 2.0.64 — or with no resolvable version — it **skips the copy
+   loudly and writes no directory**, because a rules dir on a build without the loader is
+   inert while the tree reports it installed. The observed version is recorded at
+   `.claude/.ai-dlc-cc-version` so "below floor" is distinguishable from "loader present but
+   silent". Measured on three real installs: above-floor installs, 1.9.0 skips, absent
+   `claude` skips.
+3. **DONE** — `uninstall.sh` removes `.claude/rules/ai-dlc-*.md` **by prefix, never the
+   directory**, because Claude Code reads every `.md` there and a consumer's own rules live
+   alongside ours. Verified: ours removed, a consumer-authored `consumer-own.md` kept.
+4. **DONE** — `install.sh` archives `.claude/rules/ai-dlc-*.md` before overwrite.
+5. **DONE** — Rule 23's `**Carrier:**` no longer reads `none`. It names the file, the floor
+   and the detector, and records that a path-scoped rule could not have carried it and that
+   the detector cannot be receipt-only.
+6. **DONE** — the new shipped subtree satisfied five joins that all fired on first run:
+   I28 layer grain (`machinery`), I8's site table row (`rules|.claude/rules`), the
+   `core-manifest.md` ↔ `setup-sites.md` copy agreement, I12's drift policy (`exempt`, with
+   the reason that it is a duplicate carrier whose authority is the scan-marked `SKILL.md`),
+   and I79's carrier-path mappability.
+7. **DONE** — `core/fixtures/shipped-rule-version-floor/` (`.dist-only`), 4 arms, 6.27s.
+   **Mutation-tested 3/3 against a green control**: removing the floor gate, making uninstall
+   delete the directory, and adding `paths:` to the shipped rule are each killed by their own
+   arm. The first mutation run was discarded because its control came up RED — a partial repo
+   copy missing `patterns/` — which is exactly what the control exists to catch.
+
 ## Next actions
 
-1. **BLOCKED on the operator — run the M2 interactive arm.** It is the only harness that can
-   answer the one open question, and it decides Phase B entirely. ~1 minute:
-
-   ```bash
-   cd /private/tmp/claude-501/-Users-n8-git-ai-dlc/5c64e88f-4c66-45f3-8578-b43cee7bf035/scratchpad/m2
-   rm -f loads.jsonl && claude          # interactive, NOT -p
-   ```
-   Then: (a) `Read watched/x.txt, then give the scoped token.` (b) `/compact`
-   (c) `Without reading anything: scoped, standing and CLAUDE.md tokens; NONE for any you
-   cannot see.` (d) `Read watched/y.txt, then give the scoped token or NONE.`
-   (e) `!cat loads.jsonl`
-
-   **Read it as:** a second `path_glob_match` at (d) means compaction clears the per-session
-   memo → the Phase B premise holds. No second one → the memo survives, the rule is evicted
-   for the rest of the session, and **Phase B does not ship**. No `"compact"` line for
-   anything including the `CLAUDE.md` control → unreadable again; re-run, and do not record
-   it as a negative.
-
-2. Commit Phase A as its own release. The commit subject, `VERSION` and the `CHANGELOG`
-   heading are one claim; cut the branch from `origin/main`, not from a local `main`.
-
-3. **Conditional on item 1 reporting that the memo IS cleared:** ship exactly one
-   path-scoped rule to consumers, `paths: [".claude/skills/ai-dlc/steps/**"]`, duplicating —
-   never relocating — the Rule 23 text that `SKILL.md` already carries. Bound: one rule,
-   ≤250 words. Required in the same change: the install-time `claude --version` floor gate
-   (nothing in `core/`, `scripts/` or `templates/` reads a CC version today — verified 0
-   hits against a `CLAUDE_PROJECT_DIR` control returning 3 files), `install.sh:148-156`
-   pre-overwrite archiving of the rules dir, `uninstall.sh` removal joined in both
-   directions, and a `**Carrier:**` line reading `rule-file (floor CC <v>; detector <path>)`
-   rather than a bare `rule-file`. The detector may not be receipt-only, because M1 arm S
-   showed a subagent's read writes the same receipt the parent's read does.
-
-4. **Conditional on item 1 reporting that the memo SURVIVES:** record the negative result in
-   `CHANGELOG.md`, close Phase B, and delete nothing from Phase A — the split stands on its
-   own measurement and does not depend on Phase B.
+1. Commit Phase B as **v0.349.0**. Cut the branch from `origin/main`, not from a local
+   `main`; the commit subject, `VERSION` and the `CHANGELOG` heading are one claim.
+2. Nothing else is outstanding. Both phases are measured, bound and green.
 
 ## Done-when
 

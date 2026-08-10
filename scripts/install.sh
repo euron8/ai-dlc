@@ -153,6 +153,7 @@ archive_tree_glob "$PROJECT_ROOT/.claude/skills/ai-dlc-update/reconcile" "*"
 archive_tree_glob "$PROJECT_ROOT/docs/ai-dlc-patterns" "*.md"
 archive_tree_glob "$PROJECT_ROOT/.claude/team-roles" "*.md"
 archive_tree_glob "$PROJECT_ROOT/.claude/hooks" "ai-dlc-*.sh"
+archive_tree_glob "$PROJECT_ROOT/.claude/rules" "ai-dlc-*.md"
 archive_tree_file "$PROJECT_ROOT/.claude/settings.json"
 
 if [ "$ARCHIVED" = true ]; then
@@ -603,6 +604,39 @@ for schema_file in "$SCRIPT_DIR/../core/schemas/"*.json; do
   cp "$schema_file" "$PROJECT_ROOT/.claude/schemas/"
   echo "  $(basename "$schema_file") installed"
 done
+
+# Install the unconditional rule files that Claude Code's own loader reads.
+#
+# THE VERSION FLOOR IS CHECKED, NOT ASSUMED, AND A MISS IS LOUD. `.claude/rules/` did not
+# exist before Claude Code 2.0.64. On an older build the directory is written and NOTHING
+# READS IT -- the consumer's own audit would score the file CLEAN while it did nothing at
+# all, which is this project's named recurring defect. So the floor is resolved here and
+# the copy is SKIPPED with a visible warning rather than shipped into a tree that ignores
+# it. The rule DUPLICATES SKILL.md Rule 23, so skipping costs nothing a consumer had.
+RULES_FLOOR="2.0.64"
+CC_VERSION="$(claude --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
+version_ge() {  # version_ge A B -> 0 iff A >= B
+  [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -1)" = "$2" ]
+}
+echo "Installing rule files..."
+if [ -z "$CC_VERSION" ]; then
+  echo "  SKIPPED -- could not resolve a Claude Code version from \`claude --version\`."
+  echo "  .claude/rules/ requires >= $RULES_FLOOR. Nothing was written: a rules directory on a"
+  echo "  build without the loader is read by nothing and reports as installed."
+elif ! version_ge "$CC_VERSION" "$RULES_FLOOR"; then
+  echo "  SKIPPED -- Claude Code $CC_VERSION is below the $RULES_FLOOR floor for .claude/rules/."
+  echo "  Nothing was written. Rule 23 is still carried by SKILL.md, exactly as before."
+else
+  mkdir -p "$PROJECT_ROOT/.claude/rules"
+  for rule_file in "$SCRIPT_DIR/../core/rules/"*.md; do
+    [ -f "$rule_file" ] || continue
+    cp "$rule_file" "$PROJECT_ROOT/.claude/rules/"
+    echo "  $(basename "$rule_file") installed (Claude Code $CC_VERSION)"
+  done
+fi
+# Recorded whether or not the copy happened, so the detector can tell "below floor" from
+# "loader present but silent" -- two states that look identical from the tree alone.
+printf '%s\n' "${CC_VERSION:-unknown}" > "$PROJECT_ROOT/.claude/.ai-dlc-cc-version"
 
 # Install test fixture templates (always overwrite with AI/DLC versions)
 echo "Installing test fixture templates..."

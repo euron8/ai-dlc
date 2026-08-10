@@ -108,6 +108,7 @@ except these prefixes, which resolve outside it:
 | `hooks/`           | `.claude/hooks/`                 |
 | `session-driver/`  | `.claude/session-driver/`        |
 | `schemas/`         | `.claude/schemas/`               |
+| `rules/`           | `.claude/rules/`                 |
 | `skills/`          | `.claude/skills/`                |
 | `scripts/`         | `scripts/` (project root)        |
 | `fixtures/`        | `tests/fixtures/` (project root) |
@@ -136,6 +137,7 @@ core_manifest:
   - hooks/ai-dlc-*.sh
   - session-driver/*.sh
   - schemas/*.json
+  - rules/*.md
   - skills/ai-dlc-setup/**
   - skills/ai-dlc-update/**
   - scripts/ai-dlc/*
@@ -271,6 +273,7 @@ machinery:
   - hooks/ai-dlc-*.sh
   - session-driver/*.sh
   - schemas/*.json
+  - rules/*.md
   - skills/ai-dlc-setup/**
   - skills/ai-dlc-update/**
   - scripts/ai-dlc/*

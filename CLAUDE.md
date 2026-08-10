@@ -94,6 +94,19 @@ per read. A subagent's read loads it inside the subagent only; it never reaches 
 That trigger shape is why the sections below stayed here rather than moving: a rule about a
 BASH behaviour, or about authoring this file, cannot be carried by a file-read trigger.
 
+**A PATH-SCOPED RULE IS NOT COMPACTION-DURABLE, AND NOTHING ABOUT THE FILE SAYS SO.** Measured
+in a real interactive session: the per-session memo SURVIVES a compaction, so a scoped rule
+loads once, early, and is then **permanently gone for the rest of the session** — a later read
+of a matching file does NOT bring it back. Only rules with no `paths:` are re-injected
+(`load_reason:"compact"`), and this file is too.
+
+So the test for moving a section here is not just "does the work begin with a matching read".
+It is **also** "is this rule carried by a mechanism that runs anyway". All three moved rules
+are: `validate-mutation-red.sh`, I74 plus install.sh's `.dist-only` derivation, and
+`validate-plan-shape.sh`. **A prose-only rule — one with no enforcer — must stay in this file**,
+which is why "a zero is not a finding" and "prohibitions need mechanisms" did. Moving one into
+`.claude/rules/` would delete it from every session that has compacted once, silently.
+
 Today: `fixture-mutants.md`, `fixture-ship-decl.md`, `plan-shape.md`,
 `plan-shape-measured.md`. Both directions are bound by **I88** in
 `scripts/validate-claude-rules.sh` — a rule with no reader and a pointer with no rule both

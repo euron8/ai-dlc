@@ -68,6 +68,7 @@ core_manifest:
   - core/hooks/ai-dlc-*.sh
   - core/session-driver/*.sh
   - core/schemas/*.json
+  - core/rules/*.md
   - core/skills/ai-dlc-setup/**
   - core/skills/ai-dlc-update/**
   - core/scripts/ai-dlc/*
@@ -203,6 +204,7 @@ machinery:
   - core/hooks/ai-dlc-*.sh
   - core/session-driver/*.sh
   - core/schemas/*.json
+  - core/rules/*.md
   - core/skills/ai-dlc-setup/**
   - core/skills/ai-dlc-update/**
   - core/scripts/ai-dlc/*

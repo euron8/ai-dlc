@@ -34,6 +34,79 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.349.0] — 2026-08-10
+
+### Rule 23 gets a carrier, and the measurement inverted the design that was planned for it
+
+v0.348.0 held the consumer half behind one unmade measurement: **does a compaction clear the
+`.claude/rules/` per-session memo?** Print mode could not answer it. Made interactively
+(sid `b2fb0d8e`), with all three discriminators satisfied and — unlike every print-mode
+attempt — **the positive control firing**, so the run is readable rather than a zero:
+
+```
+r:"compact"  CLAUDE.md          <- positive control, re-injected
+r:"compact"  m2-always.md       <- UNCONDITIONAL rule, re-injected
+r:"compact"  caveman-smart.md   <- user-level rule, re-injected
+(no line)    m2-scoped.md       <- PATH-SCOPED rule, NOT re-injected
+```
+
+**The planned design was wrong and is inverted here.** The plan was one rule scoped to
+`steps/**`, reloading at step cadence because Rule 21 makes every step transition a Read.
+It would not have. The per-session memo SURVIVES compaction: turn 5 read `watched/y.txt` —
+confirmed as `TOOL_USE #2` in the session transcript, so the absence is real and not an
+unexercised trigger — and produced no load. The model independently answered `NONE`. **A
+path-scoped rule loads once, early, then is permanently gone for the rest of the session.**
+As a compaction carrier it is worse than useless: it reads like one and is not one.
+
+So the shipped rule is **UNCONDITIONAL** — `core/rules/ai-dlc-resident-discipline.md`,
+242 words / ~441 resident tokens, under the 250-word bound. It **DUPLICATES** `SKILL.md`
+Rule 23 rather than relocating it, so below the version floor the carrier is simply absent
+and Rule 23 is exactly as carried as before. It also states that it is a carrier and **not a
+precedence layer**: rule files sit outside Rule 27's `overrides/` > `extensions/` > core
+ordering, so a consumer who shadows Rule 23 would otherwise get a shipped file silently
+contradicting their own override.
+
+**THE VERSION FLOOR IS RESOLVED, NOT ASSUMED, AND THE SKIP IS LOUD.** `.claude/rules/` did
+not exist before CC 2.0.64; on an older build a rule file there is inert while the tree — and
+the consumer's own audit — report it installed, which is this project's named recurring
+defect exported to every consumer. `install.sh` now reads `claude --version` and **writes no
+directory at all** below the floor, recording the observed version at
+`.claude/.ai-dlc-cc-version` so "below floor" is distinguishable from "loader present but
+silent". Measured on three real installs: 9.9.9 installs, 1.9.0 skips, absent `claude` skips.
+
+Rule 23's `**Carrier:**` no longer reads `none`. It names the file, the floor and the
+detector — never a bare `rule-file`, which would be a claim nothing can falsify and worse
+than an honest gap. It also records that **the detector cannot be receipt-only**: a
+subagent's read writes the same `InstructionsLoaded` receipt a parent's read does while the
+parent never receives the rule.
+
+`uninstall.sh` removes `.claude/rules/ai-dlc-*.md` **by prefix, never the directory** —
+Claude Code reads every `.md` there, so a consumer's own rules live alongside ours. A
+leftover unconditional rule would keep loading into every session of a repo that no longer
+has AI/DLC installed.
+
+**Five joins fired on the new shipped subtree, on first run, and all five were real:** I28
+layer grain (`machinery`), I8's site-table row, the `core-manifest.md` ↔ `setup-sites.md`
+copy agreement, I12's drift policy (`exempt`, reasoned: a duplicate carrier whose authority
+is the scan-marked `SKILL.md`), and I79's carrier-path mappability.
+
+`core/fixtures/shipped-rule-version-floor/` (`.dist-only`), 4 arms, 6.27s.
+**Mutation-tested 3/3 against a green control** — removing the floor gate, making uninstall
+delete the directory, and adding `paths:` to the shipped rule are each killed by their own
+arm. **The first mutation run was discarded because its control came up RED**: the throwaway
+distribution copy was missing `patterns/`, so install failed early and all three mutants
+would have scored as kills. That is precisely what the control exists to catch, and it is
+recorded because a control-less run would have reported 3/3 just as confidently.
+
+**One retroactive constraint on v0.348.0, now written into `CLAUDE.md`.** A scoped rule dies
+at the first compaction, so a section may move to `.claude/rules/` only if it is ALSO carried
+by a mechanism that runs anyway. All three sections moved in v0.348.0 are
+(`validate-mutation-red.sh`; I74 plus install.sh's `.dist-only` derivation;
+`validate-plan-shape.sh`), and the prose-only rules — "a zero is not a finding",
+"prohibitions need mechanisms" — stayed resident. That was chosen on the read-trigger test
+rather than this one, so the outcome was right for an incomplete reason; the rule is now
+stated so the next move is made deliberately.
+
 ## [0.348.0] — 2026-08-10
 
 ### `.claude/rules/` adopted for this repo's authoring rulebook, and the loader measured rather than assumed
