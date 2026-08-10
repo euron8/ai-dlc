@@ -34,6 +34,48 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.346.0] — 2026-08-10
+
+### `CLAUDE.md` was in the fixture suite's content key, and no fixture's verdict depends on it
+
+Raised by the operator, against a push where editing `CLAUDE.md` busted the whole-suite skip.
+
+**IT WAS IN THE KEY FOR ONE REASON AND IT IS NOT A DEPENDENCY.** `CLAUDE.md` appears in exactly
+one fixture's trace-derived read-set — `ledger-status-vocabulary`, which builds its subject tree
+from `git ls-files` and therefore copies **every tracked file**. Its read-set is **519 of 534**
+tracked paths. Nothing in that chain reads the file as INPUT: `validate-enforcement-map.sh` names
+`CLAUDE.md` three times, all in comments and one operator-facing message, and reads it zero times.
+**Control: `templates/CLAUDE.md.template` — a different file one basename away — is a genuine
+input to nine fixtures and stays in the key.**
+
+**THE HEADER OF `suite-content-key.sh` ALREADY DESCRIBED THIS CASE WITHOUT NAMING IT.** It records
+that the original four-tree scoping was corrected precisely because that fixture copies every
+tracked file, "docs/ and CHANGELOG.md included". `CLAUDE.md` is the same case and was simply not in
+the 2026-07-29 exclusion measurement.
+
+**MEASURED TO THAT BLOCK'S OWN STANDARD, not argued.** Two faithful `tar` copies of the repository
+including `.git`; the mutant's `CLAUDE.md` **overwritten** — 222 lines replaced by 4, not appended
+to, because an appended file still carries every original line and would prove nothing — `cmp -s`
+guarded so a no-op could not pass as a mutation, and `diff -rq` confirming exactly ONE path differs.
+Both trees ran the full suite at `AI_DLC_FIXTURE_NO_SKIP=1`. **Verdicts identical: 133 ok / 0 FAIL
+on both sides.**
+
+**NO COVERAGE IS LOST, which is the only thing this exclusion could cost.** `audit-rule-files.sh`
+reads `CLAUDE.md` on every push as its own pre-push step, outside the fixture suite and unaffected
+by this key — it flagged `CLAUDE.md:126` on every run tonight. What the exclusion removes is a
+whole-suite re-run, minutes on the reference tree, triggered by editing a file no fixture verdict
+depends on.
+
+**I55 DID NOT AND COULD NOT CATCH THIS, and that is worth stating rather than fixing.** Its rule is
+that the key *excludes* only paths no fixture reads — it constrains the exclude side. A path that is
+read only INCIDENTALLY sits on the include side, where nothing looks at it, and the cost is silent:
+a suite that runs when it did not need to reads exactly like one that needed to. The polarity stays
+as it is, because the alternative — an include-list — is the check-that-cannot-fire shape the header
+already rejects, where a tree nobody remembered to add is silently outside the key.
+
+Distribution-only: `scripts/suite-content-key.sh` is not shipped, and the consumer's own pre-push
+names it in a comment only.
+
 ## [0.345.0] — 2026-08-09
 
 ### A shipped fixture resolved its schema in one layout, and both guards against that are blind to the spelling
