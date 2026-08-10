@@ -73,9 +73,6 @@ if [ -d "$PROJECT_ROOT/.claude/rules" ]; then
     FILES_TO_REMOVE+=(".claude/rules/$(basename "$rule_file")")
   done
 fi
-if [ -f "$PROJECT_ROOT/.claude/.ai-dlc-cc-version" ]; then
-  FILES_TO_REMOVE+=(".claude/.ai-dlc-cc-version")
-fi
 
 # -- Templates installed to root --
 for file in CLAUDE.md QUICKSTART.md; do

@@ -1,112 +1,136 @@
 #!/usr/bin/env bash
-# Exercise install.sh's `.claude/rules/` version floor and uninstall.sh's removal of it.
+# Exercise the `.claude/rules/` version floor -- the DETECTOR, not a copy-time gate.
 #
-# `.claude/rules/` did not exist before Claude Code 2.0.64. On an older build the loader
-# reads nothing there, so a rule file copied into it is INERT while the tree, and the
-# consumer's own audit, report it as installed. That is a check that cannot fire reading
-# exactly like one that passed -- exported to every consumer. install.sh therefore resolves
-# `claude --version` and SKIPS the copy loudly below the floor.
+# `.claude/rules/` did not exist before Claude Code 2.0.64. Below that floor an installed
+# rule file is INERT while everything in the tree reports success: the audit scans it and
+# passes, `.ai-dlc-version` says the tree is current, and Rule 23's Carrier names it. A
+# check that cannot fire reading exactly like one that passed.
 #
-#   above-floor   a shimmed `claude --version` of 9.9.9   -> rule INSTALLED
-#   below-floor   a shimmed `claude --version` of 1.9.0   -> SKIPPED, directory ABSENT
-#   absent        no `claude` on PATH at all              -> SKIPPED, directory ABSENT
-#   uninstall     removes ai-dlc-*.md, KEEPS a consumer's own rule file
+# THE FLOOR IS NOT ENFORCED AT COPY TIME, AND THE FIRST VERSION OF THIS FIXTURE TESTED THE
+# WRONG THING. It asserted that `install.sh` SKIPS the copy below the floor. That gate was
+# real and passed its own arms -- and it protected nothing, because `install.sh` is only
+# the path a NEW consumer takes. Measured on a copy of the reference consumer: the real
+# pull (`apply.sh`, 0.347.0 -> 0.349.0, shimmed 1.9.0) reported
+# `RESOLVED pure-apply rules/ai-dlc-resident-discipline.md`, wrote the file and re-stamped
+# the tree as current. A third path -- install current, then DOWNGRADE -- no copy-time gate
+# can see at all.
 #
-# WHY THE VERSION IS SHIMMED AND NOT READ. A fixture that asserted "installs on this
-# machine" would pass for as long as the developer's Claude Code happened to be recent and
-# would never once exercise the skip. The shim is what makes the floor's two branches both
-# reachable on any machine, which is the only way the skip is a tested path rather than a
-# comment.
+# So both copy paths ship the file unconditionally and ONE hook detects the floor every
+# session, whatever path the file arrived by. These arms test that hook, plus the property
+# that makes it the only thing standing between a consumer and a silent inert carrier.
 #
-# WHY THE UNINSTALL ARM CARRIES A CONSUMER-OWNED FILE. `.claude/rules/` is NOT ai-dlc-owned
-# the way team-roles/ is -- Claude Code reads every `.md` there, so a consumer's own rules
-# live alongside ours and a directory-level removal would delete them. The `ai-dlc-` prefix
-# is the boundary, and this arm is what proves the prefix is actually honoured.
+#   A  no rule file present            -> silent (nothing to be inert)
+#   B  file + version below floor      -> LOUD, names the file and the floor
+#   C  file + version at floor (2.0.64)-> silent  (boundary, inclusive)
+#   D  file + one below (2.0.63)       -> LOUD    (boundary, exclusive)
+#   E  version unresolvable            -> reports UNRESOLVED, never silence
+#   F  install.sh ships the file with NO version gate, on any version
+#   G  uninstall.sh removes ai-dlc-*.md by prefix and KEEPS a consumer's own rule
+#
+# WHY E IS NOT PARANOIA. An unresolvable version is the same epistemic state as one below
+# the floor. A detector that treats "I could not tell" as "fine" is the defect it exists
+# to report, one level up.
+#
+# WHY F ASSERTS AN ABSENCE OF A GATE. The gate was removed deliberately; without this arm
+# a future edit could reintroduce it, and the tree would again be protected on one path
+# and not the other -- which reads as protection and is not.
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
 # Resolve the distribution root by walking UP for a marker from this fixture's OWN
-# location, never by counting `..` hops -- a fixed hop count is what I33/I33b forbid, and
-# the first draft of this file used `$DIR/../..`, which lands in core/ and made every arm
-# below exit 2 before running. The marker is install.sh itself, since that is the subject.
+# location, never by counting `..` hops -- a fixed hop count is what I33/I33b forbid.
 ROOT="$DIR"
 while [ "$ROOT" != "/" ] && [ ! -f "$ROOT/scripts/install.sh" ]; do ROOT="$(dirname "$ROOT")"; done
 INSTALL="$ROOT/scripts/install.sh"
 UNINSTALL="$ROOT/scripts/uninstall.sh"
+HOOK="$ROOT/core/hooks/ai-dlc-rules-floor.sh"
+[ -f "$HOOK" ] || HOOK="$ROOT/.claude/hooks/ai-dlc-rules-floor.sh"
 RULE="ai-dlc-resident-discipline.md"
 
-for f in "$INSTALL" "$UNINSTALL"; do
+for f in "$INSTALL" "$UNINSTALL" "$HOOK"; do
   [ -f "$f" ] || { echo "run.sh: missing $f" >&2; exit 2; }
 done
 command -v jq >/dev/null 2>&1 || { echo "run.sh: jq required by install.sh" >&2; exit 2; }
+
+# Scrub ambient AI_DLC_* before invoking any hook. A consumer that tunes one of these in
+# settings.json would otherwise fail this fixture against a hook behaving correctly, and
+# its pre-push gate would then block every push. The fixture must test the CODE, not the
+# environment it happens to run in.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 rc=0
 note() { printf '%s\n' "$*"; }
 
-new_target() { local d; d="$(mktemp -d "$TMP/tgt.XXXXXX")"; mkdir -p "$d/_bmad"; ( cd "$d" && git init -q . ); printf '%s' "$d"; }
-shim() { # shim <version-or-empty> -> prints a dir to prepend to PATH
-  local d v="$1"; d="$(mktemp -d "$TMP/bin.XXXXXX")"
-  if [ -n "$v" ]; then printf '#!/bin/sh\necho "%s (Claude Code)"\n' "$v" > "$d/claude"; chmod +x "$d/claude"; fi
-  printf '%s' "$d"
+# Run the hook against a throwaway project dir at a pinned version.
+hook_out() { # hook_out <project-dir> <AI_AGENT value or empty>
+  local d="$1" agent="${2:-}" empty; empty="$(mktemp -d "$TMP/nobin.XXXXXX")"
+  # PATH is stripped to a dir with no `claude` so the AI_AGENT branch is what is under
+  # test; otherwise the fallback would silently answer with THIS machine's real version
+  # and every arm below would pass for the wrong reason.
+  CLAUDE_PROJECT_DIR="$d" AI_AGENT="$agent" PATH="$empty:/usr/bin:/bin" \
+    bash "$HOOK" </dev/null 2>&1
 }
 
-# --- arm 1: above the floor -> installed --------------------------------------
-t="$(new_target)"; b="$(shim 9.9.9)"
-PATH="$b:$PATH" bash "$INSTALL" "$t" > "$TMP/above.log" 2>&1
-if [ -f "$t/.claude/rules/$RULE" ]; then
-  note "ok    above-floor -- rule installed"
-else
-  note "FAIL  above-floor -- rule NOT installed with a 9.9.9 shim on PATH"; rc=1
-  grep -A3 'Installing rule files' "$TMP/above.log" | sed 's/^/      /'
+proj() { local d; d="$(mktemp -d "$TMP/p.XXXXXX")"; mkdir -p "$d/.claude/rules"; printf '%s' "$d"; }
+
+# --- A: nothing shipped -> silent ------------------------------------------
+d="$(proj)"
+if [ -z "$(hook_out "$d" claude-code_1-9-0_agent)" ]; then
+  note "ok    A no rule file -- silent"
+else note "FAIL  A the hook spoke with no rule file present"; rc=1; fi
+
+# --- B: below floor -> loud -------------------------------------------------
+d="$(proj)"; printf 'x\n' > "$d/.claude/rules/$RULE"
+out="$(hook_out "$d" claude-code_1-9-0_agent)"
+if grep -q 'FLOOR NOT MET' <<<"$out" && grep -q "$RULE" <<<"$out"; then
+  note "ok    B below floor -- loud, and names the file"
+else note "FAIL  B below floor did not report: ${out:0:120}"; rc=1; fi
+# The message is injected as JSON; malformed JSON is dropped by the harness and the
+# warning never reaches anyone, which is indistinguishable from silence.
+if ! python3 -c 'import json,sys; json.load(sys.stdin)' <<<"$out" 2>/dev/null; then
+  note "FAIL  B emitted invalid JSON; the harness would discard it and the warning would vanish"; rc=1
 fi
-# The carrier only works UNCONDITIONALLY. A `paths:` line would make it load once per
-# session and vanish at the first compaction -- the exact failure it exists to prevent.
-if [ -f "$t/.claude/rules/$RULE" ] && head -1 "$t/.claude/rules/$RULE" | grep -q '^---$'; then
-  note "FAIL  above-floor -- the shipped rule carries frontmatter; a \`paths:\` scope would"
-  note "      make it load once per session and NOT survive compaction, which is the whole point"
+
+# --- C/D: the boundary, both sides -----------------------------------------
+d="$(proj)"; printf 'x\n' > "$d/.claude/rules/$RULE"
+[ -z "$(hook_out "$d" claude-code_2-0-64_agent)" ] \
+  && note "ok    C floor exactly (2.0.64) -- silent" \
+  || { note "FAIL  C 2.0.64 IS the floor and must be accepted"; rc=1; }
+grep -q 'FLOOR NOT MET' <<<"$(hook_out "$d" claude-code_2-0-63_agent)" \
+  && note "ok    D one below floor (2.0.63) -- loud" \
+  || { note "FAIL  D 2.0.63 is below the floor and must be reported"; rc=1; }
+
+# --- E: unresolvable version -> reports, never silent -----------------------
+d="$(proj)"; printf 'x\n' > "$d/.claude/rules/$RULE"
+grep -q 'UNRESOLVED' <<<"$(hook_out "$d" "")" \
+  && note "ok    E version unresolvable -- reported, not assumed fine" \
+  || { note "FAIL  E an unresolvable version was treated as meeting the floor"; rc=1; }
+
+# --- F: install.sh ships the file, with no version gate ---------------------
+t="$(mktemp -d "$TMP/tgt.XXXXXX")"; mkdir -p "$t/_bmad"; ( cd "$t" && git init -q . )
+oldbin="$(mktemp -d "$TMP/old.XXXXXX")"
+printf '#!/bin/sh\necho "1.9.0 (Claude Code)"\n' > "$oldbin/claude"; chmod +x "$oldbin/claude"
+PATH="$oldbin:$PATH" bash "$INSTALL" "$t" > "$TMP/install.log" 2>&1
+if [ -f "$t/.claude/rules/$RULE" ]; then
+  note "ok    F install ships the rule with no copy-time version gate"
+else
+  note "FAIL  F install SKIPPED the rule on an old version. A copy-time gate is back, and it"
+  note "      protects install.sh only -- apply.sh has no such gate, so the tree is guarded"
+  note "      on one path and not the other. The floor belongs in the hook."
   rc=1
 fi
 
-# --- arm 2: below the floor -> skipped, nothing written -----------------------
-t="$(new_target)"; b="$(shim 1.9.0)"
-PATH="$b:$PATH" bash "$INSTALL" "$t" > "$TMP/below.log" 2>&1
-if [ -e "$t/.claude/rules" ]; then
-  note "FAIL  below-floor -- .claude/rules/ was created on a 1.9.0 build; the loader there reads nothing, so the file is inert while the tree reports it installed"; rc=1
-elif ! grep -q 'SKIPPED' "$TMP/below.log"; then
-  note "FAIL  below-floor -- nothing was written but install.sh said nothing. A silent skip is indistinguishable from a successful install."; rc=1
-else
-  note "ok    below-floor -- skipped, directory absent, and the skip is announced"
-fi
-
-# --- arm 3: no claude on PATH -> skipped, nothing written ---------------------
-t="$(new_target)"; b="$(shim '')"
-PATH="$b:/usr/bin:/bin" bash "$INSTALL" "$t" > "$TMP/absent.log" 2>&1
-if [ -e "$t/.claude/rules" ]; then
-  note "FAIL  absent-claude -- .claude/rules/ was created with no resolvable version"; rc=1
-elif ! grep -q 'SKIPPED' "$TMP/absent.log"; then
-  note "FAIL  absent-claude -- skipped silently"; rc=1
-else
-  note "ok    absent-claude -- skipped, directory absent, and the skip is announced"
-fi
-
-# --- arm 4: uninstall removes ours, keeps theirs ------------------------------
-t="$(new_target)"; b="$(shim 9.9.9)"
-PATH="$b:$PATH" bash "$INSTALL" "$t" > "$TMP/u-install.log" 2>&1
+# --- G: uninstall by prefix, keeping the consumer's own ---------------------
 printf '# a rule this consumer wrote\n' > "$t/.claude/rules/consumer-own.md"
-if [ ! -f "$t/.claude/rules/$RULE" ]; then
-  note "FIXTURE BROKEN: arm 4's install did not place the rule, so the removal below proves nothing."
-  exit 1
-fi
 printf 'y\n' | bash "$UNINSTALL" "$t" > "$TMP/uninstall.log" 2>&1
 if [ -f "$t/.claude/rules/$RULE" ]; then
-  note "FAIL  uninstall -- the shipped rule survived. An unconditional rule keeps loading into EVERY session of a repo that no longer has AI/DLC installed."; rc=1
+  note "FAIL  G the shipped rule survived uninstall; it would keep loading into every session"
+  note "      of a repo that no longer has AI/DLC installed"; rc=1
 elif [ ! -f "$t/.claude/rules/consumer-own.md" ]; then
-  note "FAIL  uninstall -- it deleted the consumer's OWN rule file. The \`ai-dlc-\` prefix is the boundary; .claude/rules/ is shared, not ai-dlc-owned."; rc=1
-elif [ -f "$t/.claude/.ai-dlc-cc-version" ]; then
-  note "FAIL  uninstall -- the version stamp was left behind"; rc=1
+  note "FAIL  G uninstall deleted the consumer's OWN rule file; the ai-dlc- prefix is the boundary"; rc=1
 else
-  note "ok    uninstall -- removed ai-dlc-*, kept the consumer's own rule, cleared the stamp"
+  note "ok    G uninstall removed ai-dlc-* and kept the consumer's own rule"
 fi
 
-[ "$rc" -eq 0 ] && note "PASS  shipped-rule-version-floor -- floor honoured in both directions, uninstall scoped by prefix"
+[ "$rc" -eq 0 ] && note "PASS  shipped-rule-version-floor -- detector correct on both sides of the boundary, no copy-time gate, uninstall scoped by prefix"
 exit "$rc"

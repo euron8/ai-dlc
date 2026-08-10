@@ -607,36 +607,27 @@ done
 
 # Install the unconditional rule files that Claude Code's own loader reads.
 #
-# THE VERSION FLOOR IS CHECKED, NOT ASSUMED, AND A MISS IS LOUD. `.claude/rules/` did not
-# exist before Claude Code 2.0.64. On an older build the directory is written and NOTHING
-# READS IT -- the consumer's own audit would score the file CLEAN while it did nothing at
-# all, which is this project's named recurring defect. So the floor is resolved here and
-# the copy is SKIPPED with a visible warning rather than shipped into a tree that ignores
-# it. The rule DUPLICATES SKILL.md Rule 23, so skipping costs nothing a consumer had.
-RULES_FLOOR="2.0.64"
-CC_VERSION="$(claude --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
-version_ge() {  # version_ge A B -> 0 iff A >= B
-  [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -1)" = "$2" ]
-}
+# NO VERSION GATE HERE, DELIBERATELY, AND THE FIRST VERSION OF THIS BLOCK HAD ONE.
+# `.claude/rules/` did not exist before Claude Code 2.0.64, and below that floor these
+# files are inert -- but gating the COPY is the wrong place to say so, measured on a copy
+# of the reference consumer. `install.sh` is only the path a NEW consumer takes; an
+# existing one arrives through `ai-dlc-update`, whose `apply.sh` copies core files by a
+# derived mapping and knows nothing about versions. The real pull, run 0.347.0 -> 0.349.0
+# with a shimmed 1.9.0, reported `RESOLVED pure-apply rules/...` and re-stamped the tree
+# as current. A gate here and not there is a gate that reads as protection and is not.
+#
+# A second gate inside `apply.sh` would still miss a consumer who installs on a current
+# build and later DOWNGRADES, and would put a per-path special case inside a deliberately
+# derive-never-list copier. So the file always ships and
+# `.claude/hooks/ai-dlc-rules-floor.sh` is the SINGLE detector, running every session
+# whatever path the file arrived by.
 echo "Installing rule files..."
-if [ -z "$CC_VERSION" ]; then
-  echo "  SKIPPED -- could not resolve a Claude Code version from \`claude --version\`."
-  echo "  .claude/rules/ requires >= $RULES_FLOOR. Nothing was written: a rules directory on a"
-  echo "  build without the loader is read by nothing and reports as installed."
-elif ! version_ge "$CC_VERSION" "$RULES_FLOOR"; then
-  echo "  SKIPPED -- Claude Code $CC_VERSION is below the $RULES_FLOOR floor for .claude/rules/."
-  echo "  Nothing was written. Rule 23 is still carried by SKILL.md, exactly as before."
-else
-  mkdir -p "$PROJECT_ROOT/.claude/rules"
-  for rule_file in "$SCRIPT_DIR/../core/rules/"*.md; do
-    [ -f "$rule_file" ] || continue
-    cp "$rule_file" "$PROJECT_ROOT/.claude/rules/"
-    echo "  $(basename "$rule_file") installed (Claude Code $CC_VERSION)"
-  done
-fi
-# Recorded whether or not the copy happened, so the detector can tell "below floor" from
-# "loader present but silent" -- two states that look identical from the tree alone.
-printf '%s\n' "${CC_VERSION:-unknown}" > "$PROJECT_ROOT/.claude/.ai-dlc-cc-version"
+mkdir -p "$PROJECT_ROOT/.claude/rules"
+for rule_file in "$SCRIPT_DIR/../core/rules/"*.md; do
+  [ -f "$rule_file" ] || continue
+  cp "$rule_file" "$PROJECT_ROOT/.claude/rules/"
+  echo "  $(basename "$rule_file") installed"
+done
 
 # Install test fixture templates (always overwrite with AI/DLC versions)
 echo "Installing test fixture templates..."
