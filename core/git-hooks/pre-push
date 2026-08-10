@@ -246,11 +246,50 @@ VERIFIED_RECORD=".git/ai-dlc-fixture-verified"
 # verdict, with controls proving HEAD really moved and that the comparison could detect a
 # difference. Their git reads are incidental to their verdicts. Excluded here rather than in the
 # map so the map stays a faithful record of what was actually read.
+# THE CONTENT KEY'S EXCLUSION SET, RESOLVED RATHER THAN RESTATED.
+#
+# `scripts/suite-content-key.sh` declares which paths cannot change a fixture verdict, and it
+# earns each line with a two-tree mutation measurement. The OUTER skip honours that set; this
+# INNER one did not, and the asymmetry cost a full suite on almost every push here. A changed
+# path in no fixture read-set forces all N, and a NEW file is in no read-set by construction --
+# the map is a generated snapshot, so it cannot name a file that did not exist when it was
+# derived. `docs/plans/` is edited in nearly every session on this repo, so the arm that exists
+# for a genuinely unknown dependency was firing on a directory the key already declares
+# irrelevant. Measured: one plan file forced all 133 fixtures on a push whose subject was a
+# one-line change.
+#
+# RESOLVED FROM THE DECLARATION, so this is not a second copy of the list. When the declaring
+# script is absent -- it is distribution-only, and a consumer does not have it -- the set is
+# EMPTY and this reduces to the previous behaviour exactly. Both hooks run this same code and
+# I66 compares them on executable lines.
+#
+# `.git` is dropped here because it is already excluded, separately and on different grounds,
+# at both of the sites below.
+readset_excluded_re() {
+  local decl="scripts/suite-content-key.sh" tops t re=""
+  [ -f "$decl" ] || return 0
+  tops="$(sed -n '/^# EXCLUDE_BEGIN$/,/^# EXCLUDE_END$/p' "$decl" \
+          | sed -n 's/^\([A-Za-z0-9._-]\{1,\}\)$/\1/p' | grep -v '^\.git$')"
+  [ -n "$tops" ] || return 0
+  for t in $tops; do
+    re="${re}|^$(printf '%s' "$t" | sed 's/\./\\./g')(/|$)"
+  done
+  printf '%s' "${re#|}"
+}
+
+# Drop every path the exclusion set covers. A no-op when the set is empty -- which is the
+# consumer case, and must stay a no-op there rather than filtering on an empty pattern, since
+# `grep -vE ""` matches everything and would empty the stream.
+readset_drop_excluded() { # reads stdin, writes stdout
+  local re; re="$(readset_excluded_re)"
+  if [ -n "$re" ]; then grep -vE "$re"; else cat; fi
+}
+
 readset_manifest() {
   local out="$1"
   { git ls-files 2>/dev/null
     [ -s "$READSET_MAP" ] && grep -v '^#' "$READSET_MAP" | cut -f2
-  } | grep -v '^\.git/' | grep -v '^\.git$' | sort -u > "$out/.paths"
+  } | grep -v '^\.git/' | grep -v '^\.git$' | readset_drop_excluded | sort -u > "$out/.paths"
   while IFS= read -r p; do [ -f "$p" ] && printf '%s\n' "$p"; done < "$out/.paths" > "$out/.files"
   xargs -n 200 shasum -a 256 < "$out/.files" 2>/dev/null \
     | awk '{ path = $0; sub(/^[0-9a-f]+  /, "", path); print path "\t" $1 }' | sort > "$out/.now"
@@ -318,7 +357,8 @@ apply_readset_skip() {
   # the manifest but not the universe would read as "changed, and no fixture reads it" and
   # force a full run on every commit -- the failure this exclusion exists to prevent, arriving
   # through the other side of the same join.
-  grep -v '^#' "$READSET_MAP" | cut -f2 | grep -v '^\.git/' | grep -v '^\.git$' | sort -u > "$out/.universe"
+  grep -v '^#' "$READSET_MAP" | cut -f2 | grep -v '^\.git/' | grep -v '^\.git$' \
+    | readset_drop_excluded | sort -u > "$out/.universe"
   comm -23 "$out/.changed" "$out/.universe" > "$out/.orphan"
   if [ -s "$out/.orphan" ]; then
     printf '   ..    read-set map: %s changed path(s) are in NO fixture read-set (e.g. %s) -- running all %s\n' \

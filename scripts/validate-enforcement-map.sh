@@ -3083,8 +3083,20 @@ fi
 # comment QUOTES the defective expression to explain it. A scanner satisfied by its own
 # documentation is the I87 narrowing arriving again; the same run that found it is why the
 # filter is here rather than in a later release.
+#
+# ONE PATTERN, TWO USES, AND THE SECOND ONE IS WHY THIS IS NOT A NESTED LOOP. The first
+# draft ran `i33c_scan` for every (subtree, fixture file) pair -- 8 x 210 = 1680 invocations,
+# three processes each. Measured against the validator this invariant lives in: 13.0s before
+# I33c, 18.1s after, a 39% regression on a program the enforcement-map fixtures re-run dozens
+# of times per shard, and those shards are the fixture suite's POLE. It moved the suite's
+# whole wall clock. The corpus scan below therefore does what I33 does -- one recursive grep
+# per subtree to find CANDIDATE files -- and pays for the per-line refinement only on files
+# that already matched, which today is none.
+i33c_pat() { # i33c_pat <subtree> -> the ERE, defined once and used by both callers
+  printf '(dirname "\\$0"\\)(/\\.\\.)+/%s/|cd "\\$\\(dirname "\\$0"\\)(/\\.\\.)+" && pwd\\)/%s/)' "$1" "$1"
+}
 i33c_scan() { # i33c_scan <file> <subtree> -> the offending line(s), if any
-  grep -nE '(dirname "\$0"\)(/\.\.)+/'"$2"'/|cd "\$\(dirname "\$0"\)(/\.\.)+" && pwd\)/'"$2"'/)' "$1" 2>/dev/null \
+  grep -nE "$(i33c_pat "$2")" "$1" 2>/dev/null \
     | grep -vE '^[0-9]+:[[:space:]]*#' \
     | grep -vE '\.claude/'"$2"'/'
 }
@@ -3116,7 +3128,9 @@ fi
 i33c_hits=""
 if [ -d "$REPO_ROOT/core/fixtures" ]; then
   for _sub in $i33c_subs; do
-    for _sf in $(find "$REPO_ROOT/core/fixtures" -name '*.sh' -type f 2>/dev/null | sort); do
+    # CANDIDATES first, one recursive grep per subtree. The refinement below (comment lines,
+    # a consumer candidate on the same line) is per-line and only a matched file can need it.
+    for _sf in $(grep -rlE "$(i33c_pat "$_sub")" "$REPO_ROOT/core/fixtures" --include='*.sh' 2>/dev/null | sort); do
       _r="$(i33c_scan "$_sf" "$_sub")"
       [ -n "$_r" ] && i33c_hits="$i33c_hits $(printf '%s' "${_sf#$REPO_ROOT/}" )"
     done
