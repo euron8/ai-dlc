@@ -34,6 +34,66 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.350.0] — 2026-08-10
+
+### The version floor guarded install.sh and nothing else, and the real pull proved it
+
+Raised by the operator: *"a pull into a consumer project will be successful? Was it
+tested?"* It had not been. v0.349.0 tested `install.sh` on three arms and `uninstall.sh`,
+and never once ran the path an EXISTING consumer takes.
+
+**Measured on a copy of the reference consumer** (cloned to scratch, original never
+touched), running the real `apply.sh` from its installed 0.347.0 to 0.349.0 with a shimmed
+Claude Code 1.9.0:
+
+```
+RESOLVED  pure-apply  rules/ai-dlc-resident-discipline.md   <- 2029 bytes, on a 1.9.0 tree
+apply exit=0 ... "the tree matches 153f8ba"
+.ai-dlc-version  ->  0.349.0                                <- stamped current
+.ai-dlc-cc-version                                          <- ABSENT: no detector either
+```
+
+The pull SUCCEEDS and writes the file where no loader reads it. The floor lived inside
+`install.sh`, which is only the path a NEW consumer takes; `apply.sh` copies core files by
+a derived mapping (`map_consumer`'s `core/*` catch-all files `core/rules/*` under
+`.claude/rules/`, and it `mkdir -p`s the destination) and knows nothing about versions.
+**A gate on one of two copy paths reads as protection and is not.**
+
+**THE FIX IS NOT A SECOND GATE.** Adding one to `apply.sh` would still miss a third case --
+install on a current build, then DOWNGRADE -- and would put a per-path special case inside
+a deliberately derive-never-list copier. So the copy-time gate is REMOVED from `install.sh`
+and the file always ships. `core/hooks/ai-dlc-rules-floor.sh`, a SessionStart hook, is now
+the single detector: it runs every session whatever path the file arrived by, and reports
+loudly when a rule file is present that the running build cannot read.
+
+It resolves the version from `AI_AGENT` (present in the hook environment, measured as
+`claude-code_2-1-226_agent`, free) and falls back to `claude --version` (~40ms). **An
+unresolvable version is REPORTED, not assumed fine** -- that state is epistemically
+identical to being below the floor, and treating it as fine is the same defect one level
+up. Fail-open on every path: a detector that blocks a session is worse than what it reports.
+
+Rule 23's `**Carrier:**` now names the hook as its detector rather than `install.sh`.
+
+
+**Two of this change's own defects were caught by the gates, and both are the recurring
+shapes.** `I54` flagged four `printf "$var" | grep -q` sites in the new fixture -- the EPIPE
+class converted away in v0.207.0 -- now here-strings. And the fixture drove a hook without
+scrubbing ambient `AI_DLC_*`, which would have failed on any consumer that tunes one of
+those in settings.json and then blocked every push there, against a hook behaving correctly.
+
+**A measurement error of mine is recorded because it hid a real failure.** Running the gates
+in a loop as `printf '%s exit=%s' "$(basename $v)" "$?"` reads `basename`'s status, not the
+validator's: the enforcement map printed FAIL lines under a reported `exit=0` for several
+minutes. The command substitution runs first and resets `$?`. Same class as the `tail -40`
+that made a complete suite look truncated in v0.348.0.
+
+The fixture is rewritten and now tests the detector, not a gate: silent with no rule file,
+loud below the floor, **both sides of the boundary (2.0.64 silent, 2.0.63 loud)**, loud on
+an unresolvable version, JSON validity of the injected message (malformed JSON is dropped
+by the harness and the warning vanishes), that `install.sh` ships with NO copy-time gate so
+the removed one cannot creep back, and that `uninstall.sh` still removes by prefix while
+keeping a consumer's own rule.
+
 ## [0.349.0] — 2026-08-10
 
 ### Rule 23 gets a carrier, and the measurement inverted the design that was planned for it
