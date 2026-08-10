@@ -1,4 +1,12 @@
-# Adopt `.claude/rules/` — this repo's authoring rulebook, and the distribution question
+# DISCHARGED — Adopt `.claude/rules/`: this repo's authoring rulebook, and the distribution question
+
+> **THIS PLAN IS SPENT. DO NOT EXECUTE IT.** Both phases shipped: **v0.348.0 (#515)** and
+> **v0.349.0 (#516)**, both on `origin/main`. Every numbered action below is done. It is
+> kept as the RECORD of what was measured and why the design changed mid-flight — read it
+> for the reasoning, never as a set of instructions.
+>
+> Discharged 2026-08-10. A spent runbook still written in the imperative is this repo's
+> recorded handoff hazard: a session told to FOLLOW it redoes merged work.
 
 ## Start here
 
@@ -21,18 +29,17 @@ early stop.** A session executing this file is invisible from outside: "still wo
 
 ## Current status (the only status record in this file)
 
-As of 2026-08-10, on branch `main`, uncommitted in the working tree:
+**DISCHARGED as of 2026-08-10.** Both phases merged to `origin/main`; the working tree is
+clean and nothing here is outstanding.
 
 **Phase A — this repo's split — COMPLETE, merged as v0.348.0 (#515).** `CLAUDE.md` went
 238 → 163 lines (14,841 → 9,480 bytes, −36%). Four rule files under `.claude/rules/`, bound
 by `scripts/validate-claude-rules.sh`, `core/fixtures/claude-rules-joins/` and a pre-push
 step.
 
-**Phase B — shipping ONE unconditional rule to consumers — COMPLETE, in the working tree.**
-The blocking measurement was made in a real interactive session and it **inverted the
-design**: see "The measurement that changed Phase B" below.
-
-**Nothing further is blocked.** The remaining work is the v0.349.0 release commit.
+**Phase B — shipping ONE unconditional rule to consumers — COMPLETE, merged as v0.349.0
+(#516).** The blocking measurement was made in a real interactive session and it **inverted
+the design**: see "The measurement that changed Phase B" below.
 
 ## What was measured, and on what
 
@@ -170,9 +177,13 @@ Every item below is done and verified; do not redo any of it.
 
 ## Next actions
 
-1. Commit Phase B as **v0.349.0**. Cut the branch from `origin/main`, not from a local
-   `main`; the commit subject, `VERSION` and the `CHANGELOG` heading are one claim.
-2. Nothing else is outstanding. Both phases are measured, bound and green.
+**None. This plan is discharged.** Both releases are merged and green.
+
+Recorded for whoever picks up the thread, NOT as work this file authorises: five rules still
+declare `**Carrier:** none` (15, 16, 17, 22, 31). Three of them — 15, 16 and 17 — say in
+their own text that the behaviour leaves no observable artifact, so no telemetry can reach
+them; 22 is already measured at 41%; 31 had a detector that died of its own false positives.
+Collection is not the blocker there, observability is.
 
 ## Done-when
 
