@@ -34,6 +34,56 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.351.0] — 2026-08-10
+
+### The pause-flag allowlist named one file where its own reasoning named two, and nothing could tell an arm from a comment
+
+Filed by the reference consumer, hit live at a handoff seam. Rule 25(a) and Check 14's `trim`
+remedy both say the same thing about an over-budget snapshot: **MOVE** the superseded prose to
+`pipeline-snapshot-history.md`, never delete it. The acknowledge hook allowed the write to
+`pipeline-snapshot.md` while the pause flag was up and denied the write to its archive half, so
+the rulebook mandated a write the hook refused. The lead compressed in place instead — compliant,
+and not what the rule prescribes.
+
+One literal `case` arm, beside the arm for the file it archives. **Literal, not
+`pipeline-snapshot*.md`:** the glob would also admit the timestamped `.archive.<ISO>.md` form,
+which is produced by a MOVE at fresh start where Bash is deliberately never denied — so no
+denial has ever been measured against it, and a carve-out for an unobserved denial is a widening
+nobody reviewed.
+
+**The consumer's entry was right and it was not the whole finding. The allowlist was unasserted
+as a set.** Three arms shipped, one negative sampled them, and nothing bounded membership:
+
+```
+$ sed -i '' '/ai-dlc-update\/\*) ;;/d' core/hooks/ai-dlc-acknowledge.sh   # delete arm 1 whole
+$ <full fixture suite>                                                     # 133 ok / 0 FAIL
+```
+
+The updater's own scratch-space carve-out could be deleted outright and the entire suite stayed
+green. So this release ships a mechanism rather than a one-line patch:
+
+- `core/fixtures/pause-write-allowlist-mutants/` (new, `.dist-only`) deletes each carve-out in
+  turn from a **copy** of the hook and asserts the deletion turns exactly its own path from
+  ALLOW to DENY and moves no other; widens one arm to prove the negative is falsifiable; and
+  **joins to the shipped fixture on names**, so an arm proven load-bearing here but unnamed
+  there is reported rather than silently uncovered.
+- `core/fixtures/divergence-hard-block/run.sh` gains the two positive arms that join needs — the
+  new history file, and the updater scratch space that had no assertion anywhere.
+
+**The kill direction is inverted from the sibling battery, and the control is what covers it.**
+Deleting a carve-out turns ALLOW into DENY, so a hook copy that dies emits nothing, reads as
+ALLOW, and SURVIVES — a broken harness scores zero kills rather than a full sweep. But the
+exclusivity half of every assertion ("and the other three still allow") is exactly what a dead
+copy answers green, so the unmutated control runs first regardless.
+
+Reachability, both arms run before this shipped: against the hook without the fourth arm the
+battery reports `8 assertion(s) FAILED`, including the control refusing to read its baseline and
+the join arm naming the uncovered updater carve-out; with the arm and the two fixture assertions
+it reports `PASS`. **Cost 0.9s solo** against a suite pole near 447s.
+
+`docs/plans/graph-push-candidates-ack-hook-and-apply-rows.md` is the program record for this
+release and the next.
+
 ## [0.350.0] — 2026-08-10
 
 ### The version floor guarded install.sh and nothing else, and the real pull proved it

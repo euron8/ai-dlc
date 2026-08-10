@@ -152,6 +152,23 @@ else bad "the carve-out leaked — every artifact write now bypasses the pause";
 OUT="$(drive_ack "$W" Edit "$W/_bmad-output/pipeline-snapshot.md")"
 if denied "$OUT"; then bad "the pipeline snapshot was DENIED while paused — a handoff that raised the flag cannot finalize its own snapshot, and the resume reads a stale checkpoint"
 else ok "the pipeline snapshot is WRITEABLE while paused (a state record, not a dispatch)"; fi
+
+# ...and so is the snapshot's ARCHIVE half. Rule 25(a) and Check 14's `trim` remedy both say to
+# MOVE superseded snapshot prose here rather than delete it, so denying this file denies half of
+# a write the rulebook mandates — and the lead compresses in place instead, which is not what
+# the rule prescribes. Measured live on the reference consumer at a handoff seam.
+OUT="$(drive_ack "$W" Edit "$W/_bmad-output/pipeline-snapshot-history.md")"
+if denied "$OUT"; then bad "the snapshot HISTORY was DENIED while paused — the Rule 25(a) trim has nowhere to move to, so an over-budget snapshot can only be compressed in place"
+else ok "the snapshot history is WRITEABLE while paused (the archive half of the file above)"; fi
+
+# ...and so is the UPDATER's own scratch space. /ai-dlc-update is a different skill from
+# /ai-dlc: it advances no sprint and runs precisely when the pipeline is not running, so
+# denying its reconcile report blocks a skill that has no pipeline to pause. Observed live: the
+# updater was denied mid-reconcile on its own ledger. This arm shipped with NO fixture naming
+# it — it could be deleted whole and the entire suite stayed green.
+OUT="$(drive_ack "$W" Write "$W/_bmad-output/ai-dlc-update/reconcile-report.md")"
+if denied "$OUT"; then bad "the updater's reconcile report was DENIED while paused — a skill with no pipeline to pause was stopped by a pipeline pause"
+else ok "the updater's own scratch space is WRITEABLE while paused (not pipeline output)"; fi
 rm -rf "$W"
 
 # =============================================================================

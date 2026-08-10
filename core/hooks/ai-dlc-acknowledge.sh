@@ -437,6 +437,27 @@ case "$TOOL_NAME" in
       # file with Edit, not a heredoc -- routing it to Bash is a trap, not a fix.
       */_bmad-output/pipeline-snapshot.md|_bmad-output/pipeline-snapshot.md) ;;
 
+      # THE ARCHIVE HALF OF THE FILE DIRECTLY ABOVE, and it is one arm rather than a wildcard
+      # on purpose. Rule 25(a) and Check 14's `trim` remedy both say the same thing about an
+      # over-budget snapshot: MOVE the superseded prose to this file, never delete it. So the
+      # rulebook mandates a write in the same breath the arm above sanctions its other half,
+      # and a move whose destination is denied is not a move -- the lead compresses in place
+      # instead, which is a compliant fallback and is not what the rule prescribes. Measured
+      # live on the reference consumer at a handoff seam, which is exactly where a trim comes
+      # due: the `Edit` on `pipeline-snapshot.md` succeeded and the identical `Edit` on this
+      # file was denied.
+      #
+      # It is the same deadlock the three carve-outs above each describe, one file short:
+      # denying the state-recording half of an already-sanctioned action. Allowing the live
+      # file and denying its archive does not narrow the carve-out, it only makes the
+      # sanctioned action impossible to perform correctly.
+      #
+      # LITERAL, NOT `pipeline-snapshot*.md`. The glob would also admit the
+      # `.archive.<ISO>.md` form and anything later named to match, none of which has been
+      # reviewed here; the archive form is produced by a MOVE at fresh start, and Bash is
+      # deliberately never denied while paused, so no denial was ever measured against it.
+      */_bmad-output/pipeline-snapshot-history.md|_bmad-output/pipeline-snapshot-history.md) ;;
+
       */_bmad-output/*|_bmad-output/*) ADVANCING=1 ;;
     esac
     ;;

@@ -1,0 +1,14 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is the MUTATION BATTERY behind Check 3's write allowlist in
+`core/hooks/ai-dlc-acknowledge.sh` -- the four carve-out arms that let a write through while
+the Rule 29 pause flag is up. It edits COPIES of that hook, core's own source, deleting one
+arm at a time to prove each turns exactly its own path from ALLOW to DENY.
+`ai-dlc-core-guard.sh` denies a consumer the in-place edit of an installed hook, so the
+surface these mutants perturb cannot change in a consumer tree: whether these assertions can
+fail is a question about a file only this repository edits.
+
+The behaviour a consumer does need is asserted by `divergence-hard-block`, which ships and
+drives the same allowlist through the real hook. This battery adds nothing a consumer can act
+on -- only the evidence that those four assertions are load-bearing rather than redundant,
+which is a claim about this repository's own suite.
