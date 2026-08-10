@@ -1,4 +1,4 @@
-# EXECUTE THIS — pull graph from `0.341.0` to `0.344.0`
+# EXECUTE THIS — pull graph from `0.341.0` to `0.345.0`
 
 **You are a session running in `/Users/n8/git/graph`.** Everything below is yours to do there.
 This file lives in the distribution (`/Users/n8/git/ai-dlc`) and is **read-only to you**; do not
@@ -16,9 +16,13 @@ that is waiting on you look identical, and every stall in this program's history
 operator asking rather than the session reporting, including one that had already finished. If
 you stop, say so and say why.
 
-**EVERY FIGURE HERE IS A DATED MEASUREMENT, taken 2026-08-09 against `899411a` and `44450ea`.**
+**EVERY FIGURE HERE IS A DATED MEASUREMENT, taken 2026-08-09 against `899411a` and `0e812a7`.**
 Where a paragraph names a command, that command is the evidence and the number beside it is a
 reading. Re-derive before acting on one.
+
+**THE FILENAME SAYS `0344` AND THE RANGE NOW ENDS AT `0.345.0`. It is not renamed per
+release** — a renamed handoff breaks every link to it mid-run, and the title and the status table
+are the record. Read the range from the table, never from the filename.
 
 **This runbook is SPENT once the pull merges.** Say so in its own title when it is; a discharged
 runbook still titled EXECUTE THIS is how a later session redoes a landed pull.
@@ -28,10 +32,10 @@ runbook still titled EXECUTE THIS is how a later session redoes a landed pull.
 | | |
 |---|---|
 | graph, all four stamp fields | `0.341.0 / 899411a`, re-read 2026-08-09 |
-| distribution `VERSION` / HEAD | `0.344.0` / `44450ea` |
-| releases in range | v0.342.0 (#502), v0.343.0 (#503), v0.344.0 (#505) |
+| distribution `VERSION` / HEAD | `0.345.0` / `0e812a7` |
+| releases in range | v0.342.0 (#502), v0.343.0 (#503), v0.344.0 (#505), v0.345.0 (#508) |
 | shipped files in range | **11**, derived; 13 under `core/` minus the 2 in a `.dist-only` dir |
-| non-`core/` control | 5 (`VERSION`, `CHANGELOG.md`, two `docs/plans/` files, `scripts/uninstall.sh`) |
+| non-`core/` control | 7 (`VERSION`, `CHANGELOG.md`, `docs/plans/` files, `scripts/uninstall.sh`, `scripts/validate-enforcement-map.sh` — none shipped) |
 | rulebook files in range | **0** |
 | `contract_version` | **18 → 18**; `layer-contract.yaml` is not in the range at all |
 | graph's pause flag | **PRESENT**, and the snapshot exists — see action 0 |
@@ -57,6 +61,34 @@ same classifier returns RULEBOOK for `steps/route.md`, `skills/ai-dlc/SKILL.md` 
 distribution side three times and been wrong three times, in both directions. The composition is
 an input to the gate, not a substitute for it: run `reconcile/self-update-gate.sh` and read what
 it says.
+
+## IF YOU ARE RESUMING MID-RUN — read this before anything else
+
+**You reported that `apply-drift-after-write/seed.sh` resolves its schema only in the
+distribution layout and hard-fails on every consumer. You were right, it was reproduced here on
+a tree built by running `install.sh` into an empty directory, and it is fixed upstream as
+v0.345.0.**
+
+**None of the three options you listed is the one to take**, and the reason is that all three
+assumed upstream was fixed in place. It is not:
+
+- **Do not patch your copy of `seed.sh`.** It is an upstream-owned file; the patch is drift
+  reported on every pull until absorbed, and the absorption already happened.
+- **Do not hold the fixture at `0.341.0`.** That trades one line of drift for two whole files
+  and stops the fixture asserting the `apply.sh` behaviour this very range changed.
+- **Do not stop the pull.** Stopping leaves you on the pre-fix acknowledge hook, which is the
+  defect this whole pull exists to replace.
+
+**Take the range to `0.345.0` instead.** Re-derive against the new HEAD and re-run; the shipped
+set is unchanged at 11 files, because `seed.sh` was already in the range and its fix moves the
+same file. `scripts/validate-enforcement-map.sh` also changed and is NOT shipped to you.
+
+**Two things worth carrying back, because they are the reason your report was worth filing.** The
+fixture was one file and not a class — all 122 shipped fixtures were run in the consumer layout
+and 119 were green, the one red being yours. And the two invariants that exist to catch exactly
+this both returned zero: I33 wants the `dirname` and the walk in one expression, I33b wants a
+variable in between, and this form normalises through `cd`/`pwd`. **I33c now checks the half
+neither did** — that a self-rooted walk names BOTH layouts, not merely that it is self-rooted.
 
 ## The numbered action list
 
@@ -167,7 +199,7 @@ you leave them `manual` say so, because a `manual` receipt is one nothing re-ver
 
 ## Done-when — every criterion below has been RUN, and both of its outcomes checked
 
-1. **All four stamp fields read `0.344.0 / <the merged sha>`.**
+1. **All four stamp fields read `0.345.0 / <the merged sha>`.**
    `sed -n '1,4p' .claude/.ai-dlc-version`. Reachable: the previous pull reached exactly this on
    all four fields through the tool's own subtraction, with no hand edit.
 
@@ -180,16 +212,23 @@ you leave them `manual` say so, because a `manual` receipt is one nothing re-ver
    **Run it BEFORE the apply as well as after** — a criterion you have only seen green cannot tell
    a fix from a no-op.
 
-3. **Your full pre-push suite is green**, driven by the hook rather than by a hand-rolled loop.
+3. **`bash tests/fixtures/apply-drift-after-write/run.sh` → `PASS` from your project root.**
+   This is the one you reported. Checked reachable in both directions: it exits **2** with
+   `FIXTURE BROKEN` on the `0.343.0`–`0.344.0` copy in the consumer layout, and `PASS` after
+   v0.345.0, verified on a tree built by running `install.sh` into an empty directory. **Run it
+   before the apply as well as after** — you have already seen its red, so its green is the half
+   still owed.
+
+4. **Your full pre-push suite is green**, driven by the hook rather than by a hand-rolled loop.
    `git push` is the cheapest way to run it. A `for d in tests/fixtures/*/` loop FABRICATES
    failures — several fixtures resolve the project root from the process working directory.
 
-4. **`ledger-reverify` moves `PC-S331-SAFE-STOP-IGNORES-THE-CONSUMERS-OWN-SKILL-COMMIT` to
+5. **`ledger-reverify` moves `PC-S331-SAFE-STOP-IGNORES-THE-CONSUMERS-OWN-SKILL-COMMIT` to
    `CLOSE-CANDIDATE`.** Run the SHIPPED reader, before the pull as well as after; a predicate you
    have reimplemented in order to measure it is not the predicate. Checked reachable: the token it
    anchors on goes 0 → 8 across this range.
 
-5. **The layer report still reads `0 error(s), 2 warning(s)`** — an expected NO-CHANGE, stated as
+6. **The layer report still reads `0 error(s), 2 warning(s)`** — an expected NO-CHANGE, stated as
    a criterion because a move is the finding. If it moved, report the delta and the row.
 
 ## Deliberately out of scope
