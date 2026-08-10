@@ -1,4 +1,30 @@
-# EXECUTE THIS — pull graph from `0.341.0` to `0.345.0`
+# SPENT — pull graph from `0.341.0` to `0.345.0`. IT RAN, IT MERGED. DO NOT EXECUTE THIS.
+
+**DISCHARGED 2026-08-10.** Graph's #907 (machinery self-update) and #908 (gated reconcile) are on
+their main and the pull is complete. **Verified from this side rather than accepted**: all four
+stamp fields read `0.345.0 / 959caa8`, and 11 of 11 shipped files are byte-identical to the
+distribution (control: an unrelated pair reports DIFF). Both new fixtures were driven against their
+own installed copies and both `PASS`. Gate verdict on the run: `SELF-UPDATE-OK`.
+
+**The executing session refused to retitle this file because it is read-only to them, which is
+exactly right** — a discharged runbook is the upstream's to discharge, and one still titled EXECUTE
+THIS is how a later session redoes a landed pull. Kept below as the record.
+
+**THE ONE THING THIS FILE GOT WRONG, and it is a refinement of the rule it was written under.**
+Done-when 5 asked that `ledger-reverify` move a receipt to `CLOSE-CANDIDATE`. That was checked
+reachable before the file shipped — the token it anchors on goes 0 → 8 across the range — but the
+criterion is only OBSERVABLE in a window the run itself closes: step 8 closes and rotates the
+entry, and a rotated entry emits no row, so the live ledger correctly reads **0** afterwards. The
+executor materialized the pre-close ledger from its own commit and read `CLOSE-CANDIDATE` there,
+which is the right answer to a question this file asked at the wrong moment. **A done-when must be
+reachable AT THE MOMENT IT IS CHECKED, not merely reachable** — state the observation point when
+the run consumes its own subject.
+
+**AND ONE CORRECTION THE RUN PRODUCED, in this file's favour.** The `adj_prefix` receipt token
+landed in `layer-drift.sh` (0 → 5), not in `apply.sh` (0 at both refs), where the ledger entry's own
+prose sited the defect. This file named the right path and the entry's analysis did not.
+
+Original text follows, unedited.
 
 **You are a session running in `/Users/n8/git/graph`.** Everything below is yours to do there.
 This file lives in the distribution (`/Users/n8/git/ai-dlc`) and is **read-only to you**; do not

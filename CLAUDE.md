@@ -193,6 +193,16 @@ it was handed off:
   substitute — which is what happened, correctly, both times — or reports failure for work that
   succeeded. Run the command, or state the expected FAIL and what makes it unrelated.
 
+  **AND REACHABLE AT THE MOMENT IT IS CHECKED, WHICH IS NOT THE SAME THING.** Measured on the
+  0.341.0 → 0.345.0 runbook, whose done-when 5 asked that `ledger-reverify` report a receipt as
+  `CLOSE-CANDIDATE`. Reachability was checked before the file shipped and the derivation was
+  right — but the run's own later step CLOSES and ROTATES that entry, and a rotated entry emits no
+  row, so the live ledger correctly reads **0** by the time the criterion is read. The executor
+  materialized the pre-close ledger from its own commit and answered there, which is correct and is
+  work the file should not have cost them. **When a run consumes its own subject, state the
+  observation point** — before which step, against which ref. This is the third criterion in this
+  repo's runbooks that an executor had to reinterpret rather than satisfy literally.
+
 None of that is about writing quality. Each one makes the file produce WRONG WORK when
 followed literally, which is the only thing a handoff is for.
 
