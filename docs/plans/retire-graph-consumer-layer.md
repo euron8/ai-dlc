@@ -162,18 +162,30 @@ figure here is a measurement, not a mistake to correct.
 
 **GRAPH IS CURRENT AT `0.341.0 / 899411a` ON ALL FOUR FIELDS, re-read 2026-08-09 and unchanged, read 2026-08-09 after their #906.**
 **Read the stamp; do not carry that sha** — the derivation is one line below and this paragraph has
-named a wrong one twice. **THREE releases have landed here since** (v0.342.0, v0.343.0, v0.344.0),
-so a pull is owed again. **~~No runbook exists for it yet~~ — WRITTEN on operator direction
-2026-08-09: [`graph-0341-to-0344-pull.md`](graph-0341-to-0344-pull.md)**, 0 errors / 0 warnings from
-`validate-plan-shape.sh`, both of its citations resolving to their subjects. **Hand it over; do not
-re-derive its scope here** — it carries its own derivation, its own stamp confirmation and its own
-done-whens.
+named a wrong one twice.
 
-**ITS ACTION 0 IS THE ONE WORTH KNOWING FROM THIS SIDE, because it is the fix carrying itself.**
-Graph's pause flag and snapshot are BOTH present today, and their installed acknowledge hook is
-byte-identical to `0.341.0`'s — so an agent-driven `/ai-dlc-update` on that tree is denied at its
-first dispatch **right now**, measured by driving their own installed copy against the new fixture's
-scratch tree, writing nothing to graph. v0.344.0 is the fix and cannot help the run that carries it.
+**~~THREE releases have landed here since~~ ~~A pull is owed~~ — THE PULL RAN AND MERGED
+2026-08-10. GRAPH IS CURRENT AT `0.345.0 / 959caa8` ON ALL FOUR FIELDS.** Their #907 (machinery
+self-update) and #908 (gated reconcile); gate verdict `SELF-UPDATE-OK`. **Verified from this side
+rather than accepted:** 11 of 11 shipped files byte-identical to the distribution (control: an
+unrelated pair reports DIFF), and both new fixtures driven against their own installed copies
+return `PASS`. The runbook [`graph-0341-to-0344-pull.md`](graph-0341-to-0344-pull.md) (#507, #509)
+is **SPENT** and its own header now records the one thing it got wrong.
+
+**A FOURTH RELEASE ENTERED THE RANGE MID-RUN, FROM THE CONSUMER, AND IT IS THE SHAPE TO EXPECT.**
+v0.345.0 (#508): they reported that `apply-drift-after-write/seed.sh` resolved its schema only in
+the distribution layout and exited 2 on every consumer — reproduced here on a tree built by running
+`install.sh` into an empty directory, which is the check this repo's rules require and which
+v0.343.0 did not get. **All 122 shipped fixtures were then run in the consumer layout: 119 green, 1
+red, theirs.** I33 and I33b both returned zero on it, and the reason is not only the `cd`/`pwd`
+spelling — **both invariants check WHERE a chain is rooted and neither checked that BOTH LAYOUTS
+are named**, while that is the remedy both of them prescribe. I33c closes the second half.
+
+**THE ACTION-0 MEASUREMENT IS WORTH KEEPING AS A RECORD.** Before the pull, graph's pause flag and
+snapshot were both present and their installed acknowledge hook was byte-identical to `0.341.0`'s —
+so an agent-driven `/ai-dlc-update` was denied at its first dispatch, measured by driving their own
+installed copy against the new fixture's scratch tree. v0.344.0 was the fix and could not help the
+run that carried it. **That is now discharged and cannot recur on that consumer.**
 
 **GRAPH'S STAMP — READ IT, DO NOT CARRY IT.** Every prior revision of this paragraph named a
 version that was wrong within a day; the derivation is the durable part.
