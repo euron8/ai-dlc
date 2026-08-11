@@ -84,6 +84,7 @@ core_manifest:
   - core/fixtures/operator-request-capture/**
   - core/fixtures/request-coverage/**
   - core/fixtures/scope-confirmation/**
+  - core/fixtures/snapshot-archive-rotate/**
   - core/fixtures/snapshot-conservation/**
   - core/fixtures/suppression-lifetime/**
   - core/fixtures/self-update-join-gate/**

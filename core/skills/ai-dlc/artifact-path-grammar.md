@@ -123,6 +123,10 @@ The grammar governs artifacts a sprint PRODUCES. It does not govern:
   not a sprint's product. Their current `-archive-s<N>.md` spelling is nonetheless in the
   migration ledger below, because it is a sprint token in a basename and the rule has no
   exceptions — it becomes `s<N>/<log>-archive.md`.
+- **`_bmad-output/pipeline-history/`** — the single snapshot archive,
+  `pipeline-snapshot-archive.md`, written only by `scripts/ai-dlc/rotate-snapshot-archive.sh`.
+  It carries no sprint token because it is not per-sprint: see the exception at the end of the
+  destination table below, which explains why this one archive does not take an `s<N>/` slot.
 
 ## What a syntactic check CANNOT catch, measured
 
@@ -346,6 +350,17 @@ with the only archive 10a did place. A second rotation inside one sprint appends
 (`-2`, `-3`) — never a sprint token, and never the span (`gate-log-archive-pre-s<N+1>.md` is
 retired; an archive covering more than its own sprint states the span in its first line, where a
 reader can act on it, instead of in a filename nothing parses).
+
+**ONE ARCHIVE IS EXEMPT FROM THAT DESTINATION RULE, and the exemption is stated here rather than
+left as two rules disagreeing.** `pipeline-snapshot-archive.md` lands at
+`_bmad-output/pipeline-history/`, not in a sprint slot. The rule above earns its sprint slot from
+a READER: the steerability audit reads the live flow log, and an unrotated log "would read all of
+history instead of this sprint". The snapshot history has no reader — measured, its name appears
+in no core file except write instructions, a pause-write allowlist arm and a protect-hook
+exclusion — so a sprint slot buys nothing here and costs one file per sprint. That is the exact
+condition this archive exists to end: the reference consumer reached 158 dated snapshot archives,
+in five different timestamp spellings, before anything bounded them. One file, appended forever,
+written only by `rotate-snapshot-archive.sh`.
 
 Three spellings of one `docs/retro/` path (`sprint-<N>.md`, `sprint-N.md`, `sprint-*.md`) collapse
 to one entry when they move, which is the whole argument in miniature.

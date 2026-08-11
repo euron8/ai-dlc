@@ -34,6 +34,74 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.356.0] — 2026-08-11
+
+### The snapshot history had no rotator, and the one hook that names it explicitly allows reading all 617 KB
+
+`pipeline-snapshot-history.md` is fed by the `trim` remedy at every **gate** — `route.md` Step 1a,
+`_gate-procedures.md`, Check 14 — not by a sprint close. Nothing bounded that cadence. Measured on
+the reference consumer: **87 KB on 2026-07-13, 617 KB on 2026-08-11, 29 commits, every one
+`del=0`.** Append-only held perfectly; no mechanism was watching the size, because
+`is_archive()` matches `*-history.md` and skips the file **before** measuring it — and
+`validate-artifact-budget.sh` names that exemption as the prescribed remedy for a write-only sink.
+
+**The justification is not byte cost, and the release notes say so because the byte argument is
+available and wrong.** Check 35's corpus is every tracked `*.md` in the working tree — 94.6 MB,
+758k distinct lines — and it runs in under 4s; this file is 0.8% of it. What rotation buys is the
+READ: `ai-dlc-protect.sh` lists `*-history.md` in `EXCLUDED_PATTERNS`, so a whole `Read` of 617 KB
+(~154k tokens) is *explicitly allowed*. The file's own H1 says "never whole-read" and nothing
+enforced it.
+
+**The archive is load-bearing evidence, not filing, and that is what shaped the script.** Measured
+against Check 35's 89 candidate lines at a floor of 40:
+
+| corpus | destroyed | verdict |
+|---|---|---|
+| as-is | 17 | PASS |
+| history file removed | **79** | **FAIL** |
+| all 158 dated `pipeline-snapshot.archive.*.md` removed | 17 | unchanged |
+
+62 candidates live **only** in the history. So a rotation whose destination is git-ignored or left
+unstaged does not shrink a file — it destroys 62 lines of gate provenance. `rotate-snapshot-archive.sh`
+therefore **refuses an ignored destination before writing anything**, and stages the archive itself.
+Writing the bytes is not the move; being inside `git ls-files` is the move.
+
+**There is no entry parser, and that is the measured choice.** The live file matches `^## ` **163
+times and those are not 163 entries**: an entry archiving a whole snapshot pastes it in verbatim and
+brings the seven schema section headings with it, and one line is a sentence beginning
+`## Deploy Baseline`. A rotator treating each `^## ` as an entry shreds archived snapshots into
+fragments — and conservation still passes, so nothing would ever report it. Instead one **cut point**
+is chosen, never at one of the seven section names, and the split is a line index: conservation is
+arithmetic rather than judgement. The prose-line case is left unfixed and said so out loud — it costs
+one orphaned line, and telling prose from a heading needs the parser this design exists to avoid.
+
+**158 files became 1, and the producer that made them was respelled.** `route.md`'s fresh-start
+archival minted `pipeline-snapshot.archive.{ISO-timestamp}.md` by hand; the reference consumer holds
+158 of them in **five different timestamp spellings**, three outside `_bmad-output/` root, none
+matched by `is_archive()`. It now calls the rotator with `--absorb`. Running a script rather than
+moving the file by hand is also what keeps the write legal while paused: Rule 29's allowlist covers
+`Write|Edit`, never `Bash`.
+
+The dot grammar is **retired rather than admitted**. Widening `is_archive()` to `*.archive.*` was the
+obvious fix and is the wrong one — the two predicates live in different install layouts, so a shared
+source is the cross-file walk **I33** fails the build on, and `ai-dlc-protect.sh` runs on every tool
+call where a `source` is a per-call cost.
+
+- **New:** `core/scripts/rotate-snapshot-archive.sh` → `scripts/ai-dlc/`. Report-only by default;
+  `--apply`, `--keep-entries N` (default 10), `--absorb`. Three refusals that write nothing: line
+  accounting, a boundary-free history, and a git-ignored destination.
+- **New:** `core/fixtures/snapshot-archive-rotate/` — 13 arms plus a mutation arm. Ships.
+- **Changed:** Rule 25(a) in `SKILL.md` names this one exception and closes with "no other history or
+  archive file rotates", so the `ai-dlc-pause.sh` / `ai-dlc-answer-capture.sh` banners reading
+  "Rotation: none, ever." still hold verbatim.
+- **Changed:** `artifact-path-grammar.md` declares `_bmad-output/pipeline-history/` and states why
+  this one archive is exempt from the per-sprint destination rule — retro's sprint slot is earned by
+  a sprint-scoped *reader*, and this file has no reader at all.
+
+Rehearsed against a `git clone --local` of the reference consumer: history 6086 → 686 lines
+(617,496 → 88,881 B), 159 files → 1, and Check 35's verdict **identical** before and after
+(`89 removed / 17 destroyed / PASS`).
+
 ## [0.355.0] — 2026-08-11
 
 ### Arm H read only the unbolded field heading, and nothing joined it to what is taught

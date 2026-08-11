@@ -60,7 +60,12 @@ When a step file says "run sub-step snapshot update", execute:
      log line.
    - **Exit 1 (past the grace band) → TRIM NOW, before the next
      sub-step.** Move superseded narrative verbatim to
-     `pipeline-snapshot-history.md` (write-only), re-run, then continue.
+     `pipeline-snapshot-history.md` (write-only), then run
+     `bash scripts/ai-dlc/rotate-snapshot-archive.sh _bmad-output/pipeline-snapshot-history.md --apply`,
+     re-run the budget check, then continue. The rotate is here and not at
+     retro because this is the site that FEEDS the history: it fires
+     between gates, all sprint, which is exactly the cadence nothing was
+     bounding.
    - **Exit 1 naming a section outside the seven-section schema → MOVE IT
      NOW**, same destination, same "before the next sub-step." This is the
      verdict that matters here rather than at the gate: invented sections

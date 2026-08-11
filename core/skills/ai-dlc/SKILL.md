@@ -1136,6 +1136,31 @@ item. Rule 13 locked requirements are by definition current and are never
 relocated out of live. History/archive files are write-only — never
 read in the hot path — so their growth is free.
 
+**ONE HISTORY FILE ROTATES, AND IT IS NAMED HERE BECAUSE THE SENTENCE
+ABOVE IS OTHERWISE FALSE FOR IT.** `pipeline-snapshot-history.md` is fed
+by the trim remedy at *every gate* — route.md Step 1a,
+`_gate-procedures.md`, Check 14 — not by a sprint close, so it accretes
+on a cadence no rotation step bounded. Measured on the reference
+consumer: 87 KB to 617 KB across four weeks and 29 commits, every one of
+them `del=0`. Append-only held perfectly; nothing was watching the
+size. "Never whole-read" was prose with no enforcer, and the only
+mechanism that touches it points the other way — `*-history.md` sits in
+`ai-dlc-protect.sh`'s `EXCLUDED_PATTERNS`, so a whole Read of that file
+is EXPLICITLY ALLOWED and costs ~154k tokens. Rotation is what makes an
+accidental read survivable. Entries older than the live window move to
+`_bmad-output/pipeline-history/pipeline-snapshot-archive.md` — ONE file,
+appended forever, itself unbounded and genuinely free — by
+`scripts/ai-dlc/rotate-snapshot-archive.sh`, which is the only writer.
+**The archive is load-bearing, not filing.** Check 35's corpus is every
+tracked `*.md` in the working tree; on the reference consumer 62 of 89
+candidate lines live only in this history, so a rotation whose
+destination is ignored or unstaged takes destroyed lines from 17 to 79
+against a floor of 40. The rotator refuses an ignored destination and
+stages the archive itself for that reason. **No other history or archive
+file rotates** — the banners in `ai-dlc-pause.sh` and
+`ai-dlc-answer-capture.sh` reading "Rotation: none, ever." still hold
+verbatim.
+
 **(b) Slice-read large sectioned artifacts.** Read the section(s)
 relevant to the current scope, not the whole file (Rule 23(b)).
 Exception: cross-cutting evaluations that must weigh every item against
