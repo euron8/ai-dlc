@@ -1,7 +1,8 @@
 # Runbook — pull the graph consumer from 0.353.0 to 0.354.0, mid-sprint s302
 
-**Status: LIVE. Not yet executed.** Authored 2026-08-11 against a real rehearsal (§Rehearsal),
-not against a prediction.
+**Status: DISCHARGED 2026-08-11.** Executed on the consumer; every criterion re-verified from
+the distribution side, read-only, against the consumer's tree rather than against its report.
+See §Discharge. Authored against a real rehearsal (§Rehearsal), not a prediction.
 
 ## Start here
 
@@ -202,3 +203,41 @@ touched. What the rehearsal changed in this file, versus the version written fro
 - **Criterion 2 was originally written as `rc=0` and is unreachable at that observation
   point.** The migration was applied on the copy and re-measured: the F row disappears and
   arm H remains.
+
+---
+
+## Discharge — 2026-08-11, verified from this side
+
+The consumer reported completion. Everything below was re-measured against
+`/Users/n8/git/graph` read-only rather than taken from that report.
+
+| # | criterion | measured |
+|---|---|---|
+| 1 | version stamp | `version: 0.354.0` / `commit: b9428e8`, `skill_version` and `skill_commit` advanced with it |
+| 2–3 | convergence validator on the stories series | `rc=0`, **no FAIL row** — the arm-F migration and the arm-H restructure both landed |
+| 4 | derivation checker | `0 derivation(s) ... across 93 file(s)`; the CONTROL (a scratch file with one fenced block) returns `1 derivation(s)`, so the zero is a real absence |
+| 5 | shipped fixture | `PASS: all assertions correct.` |
+
+And the three steps that produce artifacts rather than exit codes:
+
+- **Step 3 — extension rereads.** `layer-adjudication-register.jsonl` gained **exactly two rows
+  in the `bb1fff8d4~1..HEAD` range**, one per worklist item, both `still-additive`. Range-scoped
+  on purpose: `pm-domain.md` already carried three historical rows, and reading those as this
+  run's work is the trap where a fix's own prior receipts look like its output.
+- **Step 7 — the arm-H filing.** `PC-S302-ARM-H-READS-ONLY-THE-UNBOLDED-FIELD-HEADING-...` is
+  filed with a two-conjunct `verify: sh` predicate (core still carries the `[[:space:]-]*`
+  class AND `remediator.md` still says nothing about bold), and the entry carries its own
+  control — `bold` reads 0 in a file where `derivation` reads 8.
+- **Step 8 — PC-S302 closed.** `verify: manual` was **re-anchored to an `sh` predicate** scoped
+  to the new rung's own sentence, and the entry closed `NAMED-UPSTREAM` at v0.354.0 and rotated
+  to `push-candidate-ledger.archive.md`. That is the closure the runbook asked for: the entry
+  can now close itself, which `manual` never could.
+
+**One correction to this file's own record.** The stamp reads `b9428e8`, not the `017668d` named
+throughout the steps above. That is correct, not drift: `017668d` was `main` when this runbook was
+authored, and two docs-only commits (#525, #526 — this file and a trim to it) landed before the
+pull ran. No consumer-visible file differs between the two refs.
+
+**Nothing here is owed forward.** The one open thread is upstream, not consumer-side: the arm-H
+defect this run filed is real, unfixed in core, and its predicate will report CLOSE-CANDIDATE the
+moment core's bracket class changes.
