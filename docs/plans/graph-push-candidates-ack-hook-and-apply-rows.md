@@ -41,8 +41,10 @@ Re-derive before acting on one.
 | release for the acknowledge hook | **v0.351.0 — SHIPPED**, merged as `d912623` (#519), rehearsed on a clone first |
 | release for the apply-manifest rows | **v0.352.0 — code and fixtures COMPLETE**, rehearsed on a clone; merge outstanding |
 | release for the two mid-pull filings | **v0.353.0 — code and fixture COMPLETE**, merge outstanding. Filed by the consumer DURING the pull, which then stopped by operator direction |
-| the runbook | `docs/plans/graph-0347-to-0352-pull.md` — **WRITTEN, then REVISED** when the consumer's base moved to `0.348.0 / b502b68`. Filename deliberately not changed |
-| the pull itself | **PARTLY DONE, and not ours to finish.** The consumer reached `0.348.0` (#911, #912) and stopped at #913. The operator resumes it in a graph session, from the runbook |
+| the runbook | `docs/plans/graph-0347-to-0352-pull.md` — written, revised mid-run, **DISCHARGED 2026-08-11**. Filename deliberately never changed |
+| the pull itself | **DONE.** The consumer ran it in two legs — #911/#912 to `0.348.0`, #913 stopped and filed, #914 finished to `0.353.0`. Verified from this side, not accepted |
+| all four filings | **CLOSED**, `ADOPTED UPSTREAM` at v0.351.0 / v0.352.0 / v0.353.0, rotated to the consumer's archive |
+| still open | `PC-S330`, plus ONE NEW filing the run produced — the pre-push pool deletes a red unit's evidence with its temp dir |
 
 ## The numbered action list
 

@@ -1,3 +1,41 @@
+# SPENT — pull graph `0.347.0` to `0.353.0`. IT RAN, IN TWO LEGS, AND IT MERGED. DO NOT EXECUTE THIS.
+
+**DISCHARGED 2026-08-11.** The consumer's #914 (`reconcile 0.348.0 → 0.353.0`) is on its main and
+the pull is complete. It ran in two legs — #911/#912 reached `0.348.0`, #913 filed two candidates
+and stopped by operator direction, and #914 finished the range after core took them.
+
+**Verified from this side rather than accepted:**
+
+- All four stamp fields read `0.353.0 / 6e6598a`, which is distribution `main` exactly.
+- 9 of 9 shipped non-fixture files are byte-identical to the distribution. Control: the same
+  comparison against those files at `b502b68` reports DIFF, so it can distinguish.
+- Both retirements landed — the self-scheduling and pending-approvals sections are gone from
+  `extensions/steps-domain/SKILL-push.md`, and the control section (Rule 919) is still there.
+- `absorbed-specifics-survive` shipped and reports `PASS` on the consumer, which is what licensed
+  those two deletions. The `.dist-only` batteries correctly did not arrive, against a control of
+  156 fixtures installed.
+- All four answered ledger entries carry `ADOPTED UPSTREAM (v0.351.0 | v0.352.0 | v0.353.0,
+  verified 2026-08-11)` and have rotated to the archive; the live ledger shrank 3927 → 3766 lines.
+- `PC-S330` is still open and unannotated, as this file directed.
+
+**What the run produced that this file did not predict**, which is the most valuable half:
+one new filing, `PC-S302-FIXTURE-SUITE-POOL-PRODUCES-AN-UNREPRODUCIBLE-FAIL-AND-THE-EVIDENCE-IS-
+DELETED-WITH-THE-TEMP-DIR`. The 16-way pre-push pool reported `FAIL apply-drift-refile`, the same
+fixture then passed alone and the identical re-push went green with no change to the tree — and
+the pool `rm -rf`s each worker's captured output, so the only surviving artifact was the one-line
+`FAIL`. The ask is narrow and is not about the flake: persist a red unit's output to a durable
+path before the temp dir is removed, and name that path in the `BLOCKED` line. Note **I66** binds
+the runner to be one program across both pre-push hooks, so any fix lands in both.
+
+**One prediction this file got wrong, in its own favour.** It told the executor to expect the
+self-update and the reconcile as separate PRs. The run produced a single PR (#914) and advanced
+all four stamp fields, so both halves ran. The "machinery pair did not move" finding-condition was
+correctly not triggered.
+
+Original text follows, unedited.
+
+---
+
 # EXECUTE THIS in a graph session — RESUME the stopped pull, now `0.348.0` to `0.353.0`
 
 You stopped this pull at `0.348.0` by operator direction, after filing two push candidates. Core
