@@ -282,6 +282,30 @@ else
     *) bad "the merge lost an untraced fixture while dropping the omitted one: $G2" ;;
   esac
 
+  # THE CALLER PASSES A NEWLINE-SEPARATED LIST, AND EVERY ARM ABOVE PASSES A SINGLE TOKEN.
+  # That gap shipped a live defect: `LIST` is built by a `for` loop over core/fixtures/*/, so it
+  # arrives newline-separated, and `awk -v traced=" $traced "` cannot carry a newline — awk died
+  # with `newline in string` on line 1, the old-map branch emitted nothing, and every UNTRACED
+  # fixture silently lost its entries. Invisible under --all, which re-traces everything; under
+  # --list it unmaps the rest of the suite. Observed in a real `sudo ... --all` run.
+  #
+  # The arms above could not see it because a one-word list has no newline in it. This one
+  # drives the shape the caller actually produces.
+  G3="$(readset_merge_map "$WORK/old.map" "$WORK/new.map" "$(printf 'alpha\ndelta')" 2>"$WORK/g3.err" | LC_ALL=C sort | tr '\n' ' ')"
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  if [ -s "$WORK/g3.err" ]; then
+    bad "a NEWLINE-separated traced list — the form the caller builds — made the merge write to stderr: $(tr '\n' ' ' < "$WORK/g3.err")"
+  else
+    case "$G3" in
+      *"beta	src/b"*)
+        case "$G3" in
+          *"alpha	src/x"*) bad "newline-separated list: the re-traced fixture kept a stale entry: $G3" ;;
+          *) ok "a NEWLINE-separated traced list behaves as a space-separated one — untraced entries kept, traced ones replaced" ;;
+        esac ;;
+      *) bad "a NEWLINE-separated traced list dropped an untraced fixture's entries — the whole rest of the map: $G3" ;;
+    esac
+  fi
+
   # MUTANTS on the merge, each a cmp -s guarded copy of the extracted block.
   merge_mutant() {
     local name="$1" expr="$2" mm="$WORK/merge.$1.sh"

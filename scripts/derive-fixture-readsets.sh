@@ -104,6 +104,16 @@ say() { echo "[$(date +%H:%M:%S)] $*"; }
 # so the logic under test is the shipped logic rather than a restatement of it.
 readset_merge_map() {
   local old="$1" new="$2" traced="$3"
+  # NEWLINES IN `traced` ABORT THE awk BELOW, AND IT FAILS SILENTLY IN THE WORST DIRECTION.
+  # `awk -v` cannot carry a newline: the caller builds its list with a `for` loop, so it arrives
+  # newline-separated and awk dies with `newline in string` on line 1. The `if` branch then
+  # emits NOTHING, so every untraced fixture's old entries are dropped. Under `--all` that is
+  # invisible because nothing needed preserving; under `--list` it silently unmaps the whole
+  # rest of the suite. Fail-closed, so never wrong -- just useless, and quiet about it.
+  #
+  # Normalised here rather than at the call site because this block is what the fixture
+  # extracts and drives: a fix at the caller would leave the tested function still broken.
+  traced="$(printf '%s' "$traced" | tr '\n' ' ')"
   if [ -s "$old" ]; then
     awk -v traced=" $traced " '
       /^#/ { next }
