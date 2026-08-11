@@ -265,6 +265,7 @@ core_manifest:
   - fixtures/layer-absorption-retire/**
   - fixtures/notify-hook-channel/**
   - fixtures/updater-session-signals/**
+  - fixtures/artifact-derivations/**
 
 machinery:
   - core-manifest.md

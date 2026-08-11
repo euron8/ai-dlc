@@ -45,6 +45,11 @@ record() { # file resolves kind sha_before sha_after delta auth
     printf 'artifact_sha_before: %s\nartifact_sha_after: %s\n' "$sb" "$sa"
     printf 'scope_delta: %s\n' "$delta"
     printf 'operator_authorization: %s\n' "$auth"
+    # Arm F7. This fixture's subject is F6 -- whether the CITATION is genuine -- so every
+    # record here carries a well-formed adjudication shape and holds it constant. A record
+    # missing these fields fails at F7 before F6 is reached, which would make every case
+    # below red for a reason that has nothing to do with what this fixture asserts.
+    printf 'options_presented: 3\nrecommended_option: %s\n' "$kind"
     printf 'ADVERSARIAL_RESOLUTION_END -->\n'
   } > "$file"
 }

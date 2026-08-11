@@ -129,6 +129,13 @@ done
 #     pass, it is a question never asked — the mutant check below names it as such.
 mkdir -p "$WORK/docs/stories" || exit 2
 printf '# artifact\n' > "$WORK/docs/artifact.md"
+# A ```derived block whose command RESOLVES AGAINST THE ROOT. A subject with no such
+# block makes validate-artifact-derivations.sh answer "0 derivation(s)" identically from
+# any root, which scores INERT and takes its agreement assertion with it.
+{ printf '```derived\n'
+  printf '$ ls docs | wc -l\n'
+  printf '%s\n' "$(ls "$WORK/docs" | wc -l)"
+  printf '```\n'; } > "$WORK/docs/derived.md"
 printf '# terminal pass\n' > "$WORK/docs/pass-p1.md"
 printf '# story\n' > "$WORK/docs/stories/story-1.md"
 
@@ -156,6 +163,7 @@ argv_for() {
     validate-audit-anchors.sh)      printf '%s' "--render" ;;
     validate-gate-adjudication.sh)  printf '%s' "--expected implementation" ;;
     validate-provenance-block.sh)   printf '%s' "$WORK/docs/artifact.md" ;;
+    validate-artifact-derivations.sh) printf '%s' "$WORK/docs/derived.md" ;;
     stamp-story-provenance.sh)      printf '%s' "--terminal $WORK/docs/pass-p1.md --check $WORK/docs/stories/story-1.md" ;;
     validate-ac-falsifiability.sh)  printf '%s' "$WORK/docs/stories/story-1.md" ;;
     validate-escalation-status-vocabulary.sh) printf '%s' "$WORK/docs/pending.md" ;;

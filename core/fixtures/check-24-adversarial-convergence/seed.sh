@@ -55,9 +55,13 @@ pass() {
 # The RESOLUTION record -- the resume contract, as a file. v0.59.0.
 # $1 file  $2 resolves-pass-basename  $3 kind  $4 sha_before  $5 sha_after
 # $6 bytes_before  $7 bytes_after  $8 scope_delta  $9 operator_authorization  $10 archive
+# $11 adjudication shape (arm F7): "" = well-formed | "no-options" | "one-option" |
+#     "no-recommendation". The DEFAULT is well-formed, so every pre-F7 call site keeps
+#     passing and the arm's false-positive set inside this fixture stays empty by
+#     construction rather than by hand-editing thirteen call sites.
 record() {
   local file="$1" resolves="$2" kind="$3" sb="$4" sa="$5" bb="$6" ba="$7"
-  local delta="${8:-}" auth="${9:-}" arch="${10:-}"
+  local delta="${8:-}" auth="${9:-}" arch="${10:-}" adj="${11:-}"
   {
     printf '# Divergence resolution — %s\n\n' "$kind"
     printf '<!-- ADVERSARIAL_RESOLUTION v1\n'
@@ -72,6 +76,14 @@ record() {
     [ -n "$delta" ] && printf 'scope_delta: %s\n' "$delta"
     [ -n "$auth" ] && printf 'operator_authorization: %s\n' "$auth"
     [ -n "$arch" ] && printf 'archive: %s\n' "$arch"
+    case "$adj" in
+      no-options)        : ;;                                  # neither field
+      one-option)        printf 'options_presented: 1\n'
+                         printf 'recommended_option: revert\n' ;;
+      no-recommendation) printf 'options_presented: 3\n' ;;
+      *)                 printf 'options_presented: 3\n'
+                         printf 'recommended_option: %s\n' "$kind" ;;
+    esac
     printf 'ADVERSARIAL_RESOLUTION_END -->\n'
   } > "$file"
 }
@@ -260,6 +272,26 @@ record "$TARGET/divergent-resolved/s1-resolution-p2.md" \
   s1-adversarial-p2.md REVERT_REPAIR bbb2 aaa1 4200 4000 "reverted the p1->p2 repair wholesale" \
   '2026-07-12T03:00:00Z | "revert the p1 to p2 repair wholesale"'
 pass "$TARGET/divergent-resolved/s1-adversarial-p3.md" 3 0 0 2 EXIT_CONDITION_MET 0 aaa1 s1-resolution-p2.md
+
+# --- F7: THE ADJUDICATION'S SHAPE ----------------------------------------------
+# THE DIFFERENTIAL, and it has to be one. These three cases are byte-identical to
+# `divergent-resolved` above except for the two fields recording what the operator was
+# actually handed. Every other arm passes on all three -- F4's anchor, F5's revert, F6's
+# citation are the same values -- so if the exit code alone were the assertion, a validator
+# with F7 deleted would score a FALSE PASS on all of them. run.sh asserts the MESSAGE.
+#
+# The operator adjudicating `divergent-resolved` chose in 91 seconds. The operator handed
+# the `no-options` shape spent four round-trips arriving at the same kind.
+for _shape in no-options one-option no-recommendation; do
+  mkdir -p "$TARGET/adjudication-$_shape"
+  pass "$TARGET/adjudication-$_shape/s1-adversarial-p1.md" 1 2 1 1 EXIT_CONDITION_NOT_MET 2 aaa1
+  pass "$TARGET/adjudication-$_shape/s1-adversarial-p2.md" 2 3 1 2 DIVERGENT_HARD_BLOCK   3 bbb2
+  record "$TARGET/adjudication-$_shape/s1-resolution-p2.md" \
+    s1-adversarial-p2.md REVERT_REPAIR bbb2 aaa1 4200 4000 "reverted the p1->p2 repair wholesale" \
+    '2026-07-12T03:00:00Z | "revert the p1 to p2 repair wholesale"' "" "$_shape"
+  pass "$TARGET/adjudication-$_shape/s1-adversarial-p3.md" 3 0 0 2 EXIT_CONDITION_MET 0 aaa1 s1-resolution-p2.md
+done
+unset _shape
 
 # --- divergent-unresolved: F1 --------------------------------------------------
 # p2 hard-blocks and p3 runs anyway, declaring nothing. This is the oscillation the live

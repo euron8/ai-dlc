@@ -277,10 +277,33 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
 
 1. **STOP.** No further pass on the artifact as it stands. Do not dispatch a remediator: a repair
    on unchanged scope is what diverged, and running one now is the failure repeating.
-2. **ADJUDICATE.** Escalate to the operator (Rule 11(a)). Present the finding, the repair that
-   caused it, whether that repair weakened something LOAD-BEARING (an AC, a predicate, a guard, a
-   `LOCKED_REQUIREMENTS` entry — test: *after the edit, can the check still FAIL?*), and your
-   recommended resolution KIND. **The operator picks the kind.**
+2. **ADJUDICATE.** Escalate to the operator (Rule 11(a)). **The operator picks the kind.**
+
+   **Present a DECISION, not the findings.** The operator is being asked for one thing — which
+   resolution KIND — and everything that is not that question is material they must read past to
+   answer it. Emit, in this order and nothing else:
+
+   a. **One sentence naming the decision.** Not the finding, not its severity, not how the pass
+      graded it: the choice in front of them. *"Do I fix two sentences in the spec, or delete
+      them, before the discovery step closes?"*
+   b. **An `AskUserQuestion` with 2–4 options.** Each option carries its resolution KIND, the
+      concrete edit it authorizes, and what it costs. An option the lead has not worked out well
+      enough to state that way is not an option yet — work it out or drop it.
+   c. **Exactly one option marked `(Recommended)`, with the one reason.** A menu with no
+      recommendation hands the judgment back and is a defect of the presentation, not a display
+      of neutrality; the lead has read the artifact and the operator has not.
+
+   Where a repair weakened something LOAD-BEARING — an AC, a predicate, a guard, a
+   `LOCKED_REQUIREMENTS` entry; test: *after the edit, can the check still FAIL?* — say so in (a).
+   That is the one fact that changes which kind is correct, so it belongs in the decision
+   sentence rather than in the evidence the operator has to go looking for.
+
+   The findings, the repair that caused them, and the derivations behind them stay in the pass
+   artifacts, where they already are. Reproducing them in the escalation is what turns a
+   90-second decision into four round-trips.
+
+   Record what you presented: the resolution record's `options_presented` and
+   `recommended_option` are the machine-readable half of this step.
 3. **RESOLVE.** *A repair edits the artifact to close findings on UNCHANGED scope. A resolution
    changes WHAT IS UNDER REVIEW.* The LEAD writes the record — not the adversary (it would only be
    echoing the lead's claim) and not the remediator (it authors repairs, which is the thing being
@@ -300,6 +323,8 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
    scope_delta: <what changed, concretely>
    locked_requirements_touched: <none | entries + the operator's authorization>
    operator_authorization: <ISO-8601 UTC ts of the operator's message> | "<verbatim substring, >=12 chars, copied from it>"
+   options_presented: <int, >=2>   # how many resolution options step 2(b) put to the operator
+   recommended_option: <the one you marked (Recommended), named so the operator's reply identifies it>
    archive: <dir>            # RESTART_CYCLE only
    ADVERSARIAL_RESOLUTION_END -->
    ```
@@ -393,6 +418,24 @@ per finding, the disposition, the edit site, and the command that derives every 
 the repair asserts, with its output. The next adversarial pass verifies against that record.
 
 **Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh <repair_record_path>`.
+
+**Then re-run the derivations, BEFORE dispatching the next pass:**
+
+```
+scripts/ai-dlc/validate-artifact-derivations.sh _bmad-output/planning-artifacts/s<N>/
+```
+
+A non-zero exit is a repair that falsified a derivation — most often not its own, but one
+elsewhere in the artifact set that was counting the thing this repair moved. Send it back to
+the remediator now. It costs an exit code here and a full review-and-repair round trip if it
+reaches the adversary instead: measured across four sprints of this pipeline, **78% of the
+MAJOR findings raised at pass 2 and later were introduced by a prior repair**, and the single
+largest sub-shape is a derivation that was correct when written, was never re-run after a
+later edit, and was rediscovered one pass downstream by an Opus agent running the same
+command the artifact already carried.
+
+Run the same command after the AUTHORING step too, before the cycle's first pass — the same
+staleness reaches pass 1 from the step that wrote the artifact.
 
 **The lead keeps** dispatch, the join, and the **Rule 11/13 scope calls** the remediator
 escalates (cut-versus-fix, `LOCKED_REQUIREMENTS`, anything changing what the sprint delivers).

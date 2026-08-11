@@ -196,6 +196,7 @@ core_manifest:
   - core/fixtures/whole-read-pool/**
   - core/fixtures/notify-hook-channel/**
   - core/fixtures/updater-session-signals/**
+  - core/fixtures/artifact-derivations/**
 
 machinery:
   - core/skills/ai-dlc/core-manifest.md

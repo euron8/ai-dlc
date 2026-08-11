@@ -836,6 +836,50 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
     F_WHY="$rec operator_authorization could not be verified (validator rc=$cite_rc)."
     return 1
   fi
+
+  # F7 -- THE ADJUDICATION WAS A DECISION, NOT A FINDINGS DUMP.
+  #
+  # F6 proves a human spoke in the pause window. It cannot see WHAT they were handed, and
+  # the measured cost of handing them the wrong thing is four round-trips instead of one:
+  # the same operator, on the same class of stall, took 12 minutes when the escalation
+  # opened with the findings and 91 seconds when it opened with a decision and a menu.
+  # `_gate-procedures.md` step 2 now specifies the form; this is its enforcer, because a
+  # presentation rule with no reader is a suggestion and this one is easy to skip under
+  # exactly the pressure that produces the dump.
+  #
+  # What it can and cannot see, stated so it is not over-read: it checks that the lead
+  # RECORDED putting >=2 worked-out options and ONE recommendation. It cannot check that
+  # the options were good, distinct, or actually rendered -- the same honest ceiling
+  # CHANGE_APPROACH runs on above. It closes the case where none were offered at all,
+  # which is the case that fired.
+  #
+  #   Minimum mechanism (Rule 26(c)).
+  #   Catches: a resolution record whose adjudication put no options, or no
+  #     recommendation, to the operator -- the shape that cost four round-trips.
+  #   False-positive cost: measured before shipping against the reference consumer's
+  #     13 `adjudicated_by: operator` records. All 13 predate the fields, and the arm is
+  #     scoped to `--series`, so a closed series is never re-read. The set is the
+  #     IN-FLIGHT records only, enumerated at pull time; migration is two lines each.
+  #   Removed when: the escalation form is generated rather than hand-written, so the
+  #     fields cannot disagree with what was presented.
+  local opts rec_opt
+  opts="$(record_field "$rec" 'options_presented' | tr -cd '0-9')"
+  rec_opt="$(record_field "$rec" 'recommended_option')"
+  if [ -z "$opts" ] || [ "$opts" -lt 2 ]; then
+    F_WHY="$rec declares options_presented=${opts:-<none>}. A resolution is adjudicated by the
+      OPERATOR, and an operator adjudicates by CHOOSING -- which requires at least two worked-out
+      options to choose between. One option is a request for approval; none is a findings dump
+      with a question mark. Present the decision per _gate-procedures.md step 2(b) and record
+      how many options it carried."
+    return 1
+  fi
+  if [ -z "$rec_opt" ]; then
+    F_WHY="$rec presents $opts options and names no 'recommended_option:'. A menu with no
+      recommendation hands the judgment back to the operator, who has not read the artifact.
+      Mark exactly one (Recommended) with the one reason -- _gate-procedures.md step 2(c) --
+      and record which one here."
+    return 1
+  fi
   return 0
 }
 

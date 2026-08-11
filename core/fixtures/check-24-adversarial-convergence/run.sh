@@ -169,6 +169,19 @@ expect divergent-laundered-revert 1 "REVERT_REPAIR landing on a sha no pass ever
 expect_says divergent-laundered-revert s1-adversarial-p "F5-revert-construction" \
   "matches no" "earlier pass in this series"
 
+# F7: the adjudication's SHAPE. These three carry the same passes, the same anchors and the
+# same operator citation as divergent-resolved, which exits 0 -- so the exit code alone
+# cannot tell a validator with F7 from one without it, and the messages are the assertion.
+expect adjudication-no-options 1 "a resolution recording NO options put to the operator -- FAIL (F7)" s1-adversarial-p
+expect_says adjudication-no-options s1-adversarial-p "F7-no-options" \
+  "options_presented=<none>" "an operator adjudicates by CHOOSING"
+expect adjudication-one-option 1 "one option is a request for approval, not an adjudication -- FAIL (F7)" s1-adversarial-p
+expect_says adjudication-one-option s1-adversarial-p "F7-one-option" \
+  "options_presented=1" "at least two worked-out"
+expect adjudication-no-recommendation 1 "a menu with no recommendation hands the judgment back -- FAIL (F7)" s1-adversarial-p
+expect_says adjudication-no-recommendation s1-adversarial-p "F7-no-recommendation" \
+  "names no 'recommended_option:'" "who has not read the artifact"
+
 # D4/G: the dead cycle's tail.
 expect restart-cycle 1 "restart left p4-p6 of the dead cycle on disk -- FAIL (G)" s1-adversarial-p
 # The message must name BOTH causes. Driving this against the reference consumer's live series
