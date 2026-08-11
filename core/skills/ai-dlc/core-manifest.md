@@ -200,9 +200,13 @@ core_manifest:
   - fixtures/extension-check-adoption/**
   - fixtures/escalation-status-vocabulary/**
   - fixtures/gate-adjudication/**
+  - fixtures/gate-remediation-deny/**
+  - fixtures/gate-repair-record/**
+  - fixtures/gate-series-rung/**
   - fixtures/gate-verdict-grep-shape/**
   - fixtures/h2-attest-scripts-dir/**
   - fixtures/handoff-resume-guard/**
+  - fixtures/hook-registration-join/**
   - fixtures/implementation-join-yield/**
   - fixtures/inflight-row-shape/**
   - fixtures/known-skills-extension/**

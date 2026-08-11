@@ -16,8 +16,9 @@ and test strategy with full validation cycle.
 ### 1. Implementation Readiness
 
 Invoke `/bmad-check-implementation-readiness` — validate PRD + architecture
-have everything needed for stories. Fix all gaps directly in the source
-artifacts.
+have everything needed for stories. Dispatch the `pm` (PRD gaps) and the
+`architect` (architecture gaps), role-bound per Rule 19, to fix them directly
+in the source artifacts. The lead owns the routing, not the edit.
 
 ### Story Routing Tags
 
@@ -545,7 +546,10 @@ strategy. Steps 1a–2 below otherwise proceed.
    this gate, not dormant.** It could only carry a real verdict from a trace run
    taken AFTER implementation, when tests exist; the pipeline takes no such run
    today. Do not synthesise `gate-decision.json` to arm it.
-2. `/bmad-review-adversarial-general` — review test strategy. Apply fixes.
+2. `/bmad-review-adversarial-general` — review test strategy.
+   Repair its findings through the **Adversarial repair dispatch** sub-routine
+   (`_gate-procedures.md`) — ONE `remediator` takes the whole finding set and
+   applies the edits; the lead owns the disposition, not the edit.
    **ONE-SHOT — the bmad skill is correct here and stays.** Nothing loops, no
    verdict is stamped, no gate counts this residue, so the skill's "find ≥10,
    HALT on zero" contract costs nothing and buys a cynical sweep. Do NOT convert

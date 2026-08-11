@@ -117,7 +117,18 @@ py_edit 'doc["gate_nonce"] = "implementation-20260101T000000Z"'
 run "$VERDICT"
 [ "$RC" -eq 1 ] && ok "a nonce that mismatches the path stem → exit 1 (freshness anchor)" || bad "a stale nonce did NOT fail with exit 1 (rc=$RC)"
 
-# --- Assertion 8: RESTORE (step c) → exit 0 ----------------------------------
+# --- Assertion 8: ABSENT gate_series_id → exit 1 -----------------------------
+# Without this arm the new required field is asserted by nothing here: it sits in the pristine
+# dict, the restore arm passes, and a reader that never looked at it would score identically.
+# The series id is what --series groups on; a verdict that omits it is invisible to the stall
+# rung, and the rung's own legacy path would count it as a retained prior series rather than a
+# missing pass. The per-pass gate is where that has to be caught.
+restore
+py_edit 'del doc["gate_series_id"]'
+run "$VERDICT"
+[ "$RC" -eq 1 ] && ok "deleting gate_series_id → exit 1 (the pass would be invisible to --series)" || bad "a verdict with no gate_series_id did NOT fail with exit 1 (rc=$RC) — it would drop out of the stall rung's count"
+
+# --- Assertion 9: RESTORE (step c) → exit 0 ----------------------------------
 restore
 run "$VERDICT"
 [ "$RC" -eq 0 ] && ok "restored verdict → exit 0" || bad "the restored pristine verdict did not pass again (rc=$RC)"

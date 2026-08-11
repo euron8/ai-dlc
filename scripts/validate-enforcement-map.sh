@@ -4301,14 +4301,69 @@ i54_re="(printf[[:space:]]+${i54_fmt%\'}(\\\\n)?'|echo)[[:space:]]+\"[^\"]*\"[[:
 # here, before its verdict on the tree is believed.
 i54_probe_bad="if printf ${i54_fmt} \"\$v\" | grep -q TOKEN; then"
 i54_probe_ok='git log --oneline | grep -q TOKEN'
+# A COMMENT IS NOT A SITE, and this arm shipped for eleven releases without that test.
+# Measured: a fixture added in v0.357.0 quoted the banned idiom in a comment warning the
+# next author away from it, and was reported as carrying it. That is the failure direction
+# that gets a check switched off -- and the remedy the author reaches for first is to
+# reword the warning, which deletes the documentation the arm's own message asks for.
+# I54b, forty lines below, has carried this exact test since it was written (`a comment is
+# not a site`), and I87 carries it on a different corpus for the same measured reason. This
+# is that test, not a second approach to it.
+#
+# ANCHORED, AND ONLY ANCHORED. A `#` mid-line opens a comment only when it is not inside a
+# quote, and deciding that needs a quote-aware reader. An unanchored strip would drop any
+# line whose match sits after a `#` in a string -- a false NEGATIVE, which is the direction
+# that switches the check off silently, and the one this repo names as its defect class.
+# So a banned site written after a trailing `#` is still reported; the tree carries zero of
+# those today, measured over its whole .sh corpus against this arm's own grammar.
+#
+# THE GRAMMAR CROSSES INTO awk THROUGH ENVIRON, NEVER THROUGH -v, AND THAT IS MEASURED.
+# awk expands escape sequences in a -v VALUE, and this grammar carries the fragment that
+# admits a trailing-newline format. Same regex, same two files, one reader each:
+#
+#   reader                  printf with a bare format    printf with a newline format
+#   grep -E (the original)  hit                          hit
+#   awk, ENVIRON            hit                          hit
+#   awk, -v                 hit                          MISS
+#
+# The -v row is the whole class this repo is named for: half the grammar goes quiet and the
+# arm prints a clean line over the half of the tree it can no longer see. So the live probe
+# below carries BOTH formats, and asserts on the COUNT. One probe file of the bare form
+# alone cannot tell the two readers apart -- it is the row where they agree.
+#
+# The probes run through the SAME reader as the corpus scan, so a transfer that broke the
+# grammar takes them down with it rather than reporting a clean tree.
+i54_awk='
+  /^[[:space:]]*#/ { next }
+  $0 ~ ENVIRON["I54_RE"] { print FILENAME ":" FNR ":" $0 }
+'
+i54_scan() {   # NUL-separated file list on stdin -> path:line:text per live banned site
+  I54_RE="$i54_re" xargs -0 awk "$i54_awk" 2>/dev/null
+}
+# The probe FILES are written from the assembled fragments, never from a literal, for the
+# reason stated above: this scan covers this file.
+i54_fmt_nl="${i54_fmt%\'}"'\n'"'"
+i54_probe_bad_nl="if printf ${i54_fmt_nl} \"\$v\" | grep -q TOKEN; then"
+i54_pd="$(mktemp -d)"
+printf '%s\n' '#!/usr/bin/env bash' \
+  "$i54_probe_bad" ' :; fi' "$i54_probe_bad_nl" ' :; fi' > "$i54_pd/live.sh"
+printf '%s\n' '#!/usr/bin/env bash' "#   never write this: $i54_probe_bad" > "$i54_pd/commented.sh"
+i54_p_live="$(printf '%s\0' "$i54_pd/live.sh" | i54_scan)"
+i54_p_live_n="$(printf '%s\n' "$i54_p_live" | grep -c .)"
+i54_p_cmt="$(printf '%s\0' "$i54_pd/commented.sh" | i54_scan)"
+rm -rf "$i54_pd"
 if [ "$i54_n" -eq 0 ]; then
   err "I54 enumerated ZERO tracked .sh files under $REPO_ROOT. It reports an ABSENCE -- that no shipped script writes a variable into an early-exiting reader -- and an absence over an empty corpus is not a finding. Fails closed."
 elif ! grep -qE "$i54_re" <<<"$i54_probe_bad"; then
   err "I54's grammar no longer matches the shape it bans, tested against a probe built in this script. Every tree passes it now, including one full of the defect. Fix the grammar or retire the invariant; do not leave it printing a clean line."
 elif grep -qE "$i54_re" <<<"$i54_probe_ok"; then
   err "I54's grammar matches an ordinary command piped into grep -q, which is permitted and common. As written it would report a false positive on nearly every script in the tree. Narrow it back to a builtin writing a shell variable."
+elif [ "$i54_p_live_n" -ne 2 ]; then
+  err "I54's reader reported ${i54_p_live_n} of the 2 LIVE banned sites in a probe file this script wrote itself -- one per printf format the grammar admits, the bare one and the trailing-newline one. The corpus scan below runs that same reader, so its verdict on the tree is a set produced by a reader that cannot see the whole defect, and a half-blind reader prints the same clean line as a clean tree. At ONE hit the likeliest cause is the grammar losing its trailing-newline half on the way into awk: it must cross through ENVIRON, never through -v, which expands escape sequences in the value. At zero, the grammar did not survive the transfer at all."
+elif [ -n "$i54_p_cmt" ]; then
+  err "I54 reported a probe file whose only banned line is a COMMENT [reader answered: $i54_p_cmt]. The comment exclusion was derived from a measured false positive -- a fixture quoting the idiom in order to warn against it -- and without it this arm fires on the documentation it asks people to write, which is how a check gets switched off."
 else
-  i54_hits="$(printf '%s\n' "$i54_files" | tr '\n' '\0' | xargs -0 grep -nE "$i54_re" 2>/dev/null | sed "s@^${REPO_ROOT}/@@")"
+  i54_hits="$(printf '%s\n' "$i54_files" | tr '\n' '\0' | i54_scan | sed "s@^${REPO_ROOT}/@@")"
   if [ -n "$i54_hits" ]; then
     i54_c="$(printf '%s\n' "$i54_hits" | grep -c .)"
     err "I54 found ${i54_c} site(s) writing a shell variable into a grep that stops at its first match, across ${i54_n} tracked shell files:
@@ -4606,6 +4661,30 @@ fi
 # POSTURE does. Measured false-positive set: EMPTY. 12 selected, 10 already bound, 2 real
 # (both stamp-story-provenance.sh --check at Check 17, bound in the same release).
 #
+# THE POSTURE REGEX WAS CASE-SENSITIVE ON ONE ALTERNATIVE AND NOT THE OTHER (v0.357.0). The
+# `FAILS` alternative had always been written `[Cc]heck`; the exit-code alternative was a bare
+# `exits?`, so a check body ending its sentence at the clause boundary -- `. Exit 0 required.`
+# rather than `; exit 0 required.` -- was INVISIBLE to arm 1. That is an author stepping
+# outside a grammar without meaning to, in a file whose sentences are wrapped and re-flowed
+# constantly, and it is not detectable by reading the invariant: both spellings look correct.
+#
+#   MEASURED on gate-validation.md:  lowercase `exit N required`   12   (selected)
+#                                    capitalised `Exit N required`  2   (INVISIBLE)
+#
+# The two were Check 26 -- the fail-closed check through which the lead adopts EVERY
+# adjudication:llm verdict -- and Check 30. LATENT, NOT LIVE, and the difference matters for
+# how this is written up: both rows were bound anyway (26 -> validate-gate-adjudication.sh,
+# 30 -> validate-spec-join.sh, both confirmed by reading the map rows), so no wrong PASS was
+# ever emitted. What the hole cost was the ability to NOTICE if either row were removed.
+#
+# FALSE-POSITIVE MEASUREMENT OF THE WIDENING, which is the part that is not optional, since
+# widening a selector adds rows to the subject set and every added row must genuinely bind:
+# the LIVE i57_awk was extracted from this file and run against gate-validation.md with both
+# regexes. Before 15 pairs, after 17, newly selected EXACTLY `26 validate-gate-adjudication.sh`
+# and `30 validate-spec-join.sh`, nothing lost (the widening is strictly additive), and the
+# full validator run with the widened grammar emits ZERO I57 findings. No row was bound to
+# make the lint quiet and the grammar was not narrowed back.
+#
 # TWO RESOLUTIONS THE NAIVE JOIN GETS WRONG, and each produced phantom findings before it
 # was added. (i) `verdict.sh` is a DISPATCHER -- `verdict.sh <validator> [args]` -- so the
 # citation's basename is the wrapper and the enforcer is its first argument; without this,
@@ -4662,7 +4741,7 @@ END {
     }
     posture = 0
     for (j = a; j <= b; j++)
-      if (line[j] ~ /exits?[ ]+[0-9][ ]+required/ || line[j] ~ /[Cc]heck([ ]+[0-9A-Za-z]+)?[ ]+FAILS/)
+      if (line[j] ~ /[Ee]xits?[ ]+[0-9][ ]+required/ || line[j] ~ /[Cc]heck([ ]+[0-9A-Za-z]+)?[ ]+FAILS/)
         posture = 1
     if (posture) for (k = 1; k <= n; k++) print owner[i] "\t" names[k]
     for (k = 1; k <= n; k++) delete names[k]
@@ -4731,9 +4810,17 @@ i57_nbind="$(printf '%s\n' "$i57_bind" | grep -c . )"
 # different corpus today, and a scan that later widens onto this one must not read the
 # probe as a real citation.
 i57_dir="scripts/ai-dlc"
+#
+# THE PROBE CARRIES BOTH SPELLINGS, and that arm is here because the grammar was blind to one
+# of them for its whole existence: `; exit 0 required.` was selected and `. Exit 0 required.`
+# was not, hiding Checks 26 and 30 from arm 1 (both bound anyway, so latent rather than live).
+# Two spellings of the same sentence must select alike, and asserting it costs one probe line.
 i57_probe="$(printf '%s\n' \
   '<!-- CHECK_LOADED: probe -->' \
   "- **Check.** Run \`${i57_dir}/validate-i57-probe-positive.sh <arg>\`; exit 0 required." \
+  '' \
+  '<!-- CHECK_LOADED: probecap -->' \
+  "- **Check.** Run \`${i57_dir}/validate-i57-probe-capital.sh <arg>\`. Exit 0 required." \
   '' \
   "- The bound script consults \`${i57_dir}/validate-i57-probe-negative.sh --mode x\` first:" \
   '  exit 0 = out of scope, exit 1 = in scope.')"
@@ -4741,6 +4828,10 @@ i57_probe_out="$(printf '%s\n' "$i57_probe" | awk "$i57_awk")"
 case "$i57_probe_out" in
   *validate-i57-probe-positive.sh*) : ;;
   *) err "I57's selection grammar did not fire on a probe written in the exact shape it exists to catch -- a check body naming a validator with 'exit 0 required' beside it. Every tree passes this invariant now, including one full of the defect. Fix the grammar or retire I57; do not leave it printing a clean line." ;;
+esac
+case "$i57_probe_out" in
+  *validate-i57-probe-capital.sh*) : ;;
+  *) err "I57's selection grammar selected the lowercase 'exit 0 required' probe but NOT the identical sentence written 'Exit 0 required' at a sentence start. That is the exact blindness v0.357.0 removed: an author who ends the preceding clause with a full stop instead of a semicolon steps outside the grammar without meaning to, and the check goes quiet on their row while printing the same clean line. Measured when it was live: 12 lowercase sites selected, 2 capitalised ones invisible — Check 26, the fail-closed check through which the lead adopts every adjudication:llm verdict, and Check 30. Restore the case-tolerant class; do not re-narrow it." ;;
 esac
 case "$i57_probe_out" in
   *validate-i57-probe-negative.sh*) err "I57's selection grammar fired on a probe carrying an exit-code LEGEND ('exit 0 = out of scope') rather than an exit-code REQUIREMENT. That is the form Check 16 uses to describe a delegation validate-stub-audit.sh makes internally, and it is correctly carried under reads:. As written the grammar reports a false positive on it. Narrow it back to a posture that binds the gate." ;;
@@ -5550,10 +5641,544 @@ Each one asserts against whatever the developer's .claude/settings.json happens 
   fi
 fi
 
+# --- I89 / I90: the procedure citation join, and the fix-imperative attribution --
+#
+# Two invariants over the same corpus in one python process, because the cost of this
+# script is process spawn (see in_lines above) and both read the same twenty-odd step
+# files. Measured: 62ms for ten runs of the pair, against this script's 13.9s baseline.
+#
+# =============================================================================
+# I89 -- a procedure citation must resolve to a heading that exists.
+# =============================================================================
+# `_gate-procedures.md` holds ten procedures that step files invoke BY NAME -- the file
+# says so itself: "These procedures are invoked **by name** from pipeline step files."
+# The name IS the linkage. There is no anchor, no id, no include; a step file that says
+# READ AND FOLLOW `_gate-procedures.md` "Adversarial repair dispatch" finds it by
+# scanning for that string.
+#
+# WHAT THIS RELEASE ALMOST SHIPPED, AND WHY I11 COULD NOT SEE IT. v0.357.0 widened the
+# heading from `## Adversarial repair dispatch` to `## Adversarial repair dispatch
+# (referenced by step files and by the gate)`, because the gate became its second caller.
+# Five step-file edits landed in the same change citing the procedure by its old name.
+# They still resolve -- the new heading CONTAINS the cited string as a prefix -- and that
+# is luck, not a mechanism. I11 substring-matches the literal "Adversarial repair
+# dispatch" in the STEP FILES to derive its set (b); it never reads the heading at all,
+# so a rename in the other direction (`## Repair dispatch`) would strand every citation
+# in the corpus and I11 would report the same clean line it reports today. A pointer that
+# fails silently is worse than no pointer: the step file still tells the reader to go and
+# follow a procedure, and nothing is there.
+#
+# BOTH SIDES ARE DERIVED. Headings come from `^## ` with the `(referenced by ...)`
+# qualifier stripped -- stripped on the HEADING side rather than tolerated on the citing
+# side, so the qualifier stays free to change without touching thirteen files. Citations
+# come from an emphasised phrase ADJACENT to a `_gate-procedures.md` mention, in the five
+# forms the corpus actually uses (`file, "Name"`, `file — "Name"`, `file \"Name\"`,
+# `file **Name**`, `file § *Name*`, and `**Name** sub-routine (file)`).
+#
+# ADJACENCY IS THE WHOLE FALSE-POSITIVE MEASUREMENT. A plain proximity window (+/-200
+# chars) over the same corpus returns 59 candidates with ELEVEN non-citations: bold field
+# labels (`**Carrier:**`, `**Review passes:**`), quoted prose ("the user is still
+# active"), and sentences that happen to be emphasised near a file mention
+# (`**Join it with the bounded-join beat**`). Requiring adjacency drops those eleven and
+# keeps every real citation: 48 candidates across 13 files, ZERO unresolved, all ten
+# headings cited.
+#
+# The second arm is dormancy. A procedure nobody invokes reads exactly like a live one,
+# and this file's contract is that every procedure in it has a caller.
+#
+# =============================================================================
+# I90 -- a fix-imperative names a seat, or declares that it does not.
+# =============================================================================
+# Rule 28(c): the lead owns PASS/FAIL, the disposition and the escalation; the EDIT that
+# follows is dispatched. v0.25.0 purged the bare "fix it directly" imperatives from the
+# step files once. They grew back -- v0.357.0 requalified six more, measured against a
+# consumer session in which the lead made 104 inline `Edit` calls during one gate
+# remediation and dispatched the `remediator` zero times. This is the mechanism that
+# stops the third growth; the PreToolUse deny is what stops the edits.
+#
+# THE GRAMMAR IS THE ENTIRE DESIGN, AND TWO BROADER ONES WERE MEASURED AND REJECTED
+# rather than argued about:
+#
+#   (1) line starts with a fix verb                    19 hits, mostly `### 14. Update
+#                                                      pipeline snapshot.` headings and
+#                                                      line-wrap fragments
+#   (2) sentence-initial fix imperative                20 hits, 15 with no dispatch
+#                                                      target -- and 11 of those 15 are
+#                                                      correct prose
+#   (3) sentence-initial fix imperative whose OBJECT     8 hits, 4 firing, and all four
+#       is a FINDING                                     just-requalified sites silent
+#
+# (3) ships. The object test is what makes it shippable: the lead's Rule 28(a) mutations
+# name a FILE -- "Update `_bmad-output/pipeline-snapshot.md`", "Update sprint-status.yaml
+# in the same commit" -- and drop out of the population on their own, with nothing
+# hand-listed anywhere. A remediation imperative names a FINDING: gaps, findings,
+# improvements, a mismatch. That is the class Rule 28(c) is about.
+#
+# FIRST-RUN YIELD, recorded because it is the argument for the check existing: the A6
+# purge requalified ONE site per file and left a second one of identical shape in the
+# SAME file twice -- `stories-test-strategy.md` (:548 fixed, :18 left) and
+# `research-requirements.md` (:40 fixed, :105 left). Both were repaired before this
+# shipped. A hand sweep found six; this found the two the hand sweep walked past.
+#
+# THE CARVE-OUT IS DECLARED IN THE STEP FILE, NEVER LISTED HERE. That is the I20/I74
+# posture and it exists for the same reason: a carve-out list living in the checker is
+# invisible to the person reading the rule. Two accepted forms -- a `Rule 28(a)` citation,
+# or `<!-- inline-ok: <reason> -->`. The reason is REQUIRED to be non-empty, because a
+# marker with no reason is a decision nobody can audit; seven `.dist-only` markers were
+# zero bytes until I74(d) said the same thing.
+#
+# SKILL.md IS IN THE CORPUS, AND ARM 2 IS WHY. Extending a step-file grammar onto normative
+# rule text is not obviously safe, so the wrong answers were measured before the right one:
+#
+#   arm 1 alone, applied to SKILL.md                       population 0
+#   "any imperative in a RESIDENT rule with no actor named" 12 hits, 12 of them CORRECT
+#
+# That second grammar is the one to refuse, and the reason generalises. SKILL.md's implicit
+# grammatical subject IS the lead -- every rule is addressed to it -- so "the actor is
+# unattributed" is the NORMAL and correct form of nearly every rule sentence ("Do not skip
+# sections", "Do not summarize", "Write escalations to pending.md"). What separated Rule 7's
+# defect from those twelve was never attribution; it was whether the ACT is delegable. That
+# is a semantic judgment and a lint cannot make it.
+#
+# What CAN be checked is the narrow rhetorical form Rule 7 actually used, which arm 2 is:
+# `Just`/`Simply` + a repair verb + a pronoun. Those two words are an instruction not to
+# route the act, which is exactly the thing Rule 28(c) removes. Measured false-positive set
+# across steps/*.md AND SKILL.md: EMPTY. A bare pronoun-object widening without the prefix
+# takes it to 1 -- `route.md`'s "Resolve it here", where "it" is a sprint_id being DERIVED --
+# and that one line is why the prefix is mandatory rather than decorative.
+#
+# WHY THE FILE IS WORTH THE CORPUS SLOT AT ALL: Rule 7 sits at byte 8,722, RESIDENT above the
+# 20,000-byte re-attach cut. Rule 28, which attributed it, sits at 79,510, and
+# `_gate-procedures.md` is a separate file the lead never loaded. 13 of 31 rules are resident,
+# 18 are below the cut. A compacted lead therefore holds "Just fix it" verbatim and holds
+# nothing that says who fixes it. Proven: reverting Rule 7 to its pre-v0.357.0 text makes this
+# invariant fire at SKILL.md:185, against a same-tree control that reports nothing.
+#
+# NOT ATTEMPTED, DELIBERATELY: reporting which resident rules depend on below-cut material
+# for their attribution. 9 of 13 cite a below-cut rule or an external step file, and that
+# count is not 9 defects -- most are legitimate pointers to a procedure. Separating "points
+# at a procedure" from "depends on it for who acts" is the valuable half and this grammar
+# cannot do it, so it does not pretend to.
+#
+# BOTH INVARIANTS ANSWER A KNOWN TREE FIRST. I89's real answer is "everything resolves"
+# and I90's known-good arms are the requalified sites -- and an extraction that has
+# stopped matching reports exactly that same silence. The probe renames a heading and
+# requires the strand to be reported; it feeds I90 a bare imperative, a dispatched one, a
+# declared one, an empty-reason marker and a file-object imperative, and requires the
+# five verdicts to differ in the five ways the grammar claims. If any probe answers
+# wrong, that is the only error reported and the corpus scan does not run -- a corpus
+# result from a reader that cannot find its subject is worth nothing.
+I89_PY="$(mktemp)"
+cat > "$I89_PY" <<'I89EOF'
+import os, re, sys, tempfile, shutil
+
+ROOT = sys.argv[1]
+STEPS = os.path.join(ROOT, "core/skills/ai-dlc/steps")
+GP = os.path.join(STEPS, "_gate-procedures.md")
+ROLES_DIR = os.path.join(ROOT, "core/team-roles")
+
+def out(msg):
+    sys.stdout.write("ERR\t" + msg.replace("\n", "\\n") + "\n")
+
+def collapse(t):
+    return re.sub(r"\s+", " ", t)
+
+# ---------------------------------------------------------------- I89 predicates
+# Side A. The heading lines as written. The resolve is CONTAINMENT against these (see
+# i89 below); base_name only supplies a readable name for the dormancy message.
+def raw_headings(gp_text):
+    return [m.group(1).strip() for m in re.finditer(r"^## (.+)$", gp_text, re.M)]
+
+def base_name(h):
+    return re.sub(r"\s*\(referenced by [^)]*\)\s*$", "", h).strip()
+
+# Side B. A citation is an EMPHASISED phrase ADJACENT to a `_gate-procedures.md`
+# mention. Adjacency is what keeps the false-positive set empty -- see the header.
+_EMPH = r'(?:\\?"([^"\\]{3,60})\\?"|\*\*([^*]{3,60})\*\*|\*([^*]{3,60})\*)'
+_FILE = r'_gate-procedures\.md`?'
+CITE_PATS = [
+    re.compile(_FILE + r'[\s,\.—\-§]{0,6}' + _EMPH),
+    re.compile(_EMPH + r'\s+sub-routines?\s*\(`?' + _FILE),
+]
+
+def citations(text):
+    coll = collapse(text)
+    found = []
+    for pat in CITE_PATS:
+        for m in pat.finditer(coll):
+            g = [x for x in m.groups() if x]
+            if g:
+                found.append((g[0].strip(), coll[max(0, m.start() - 70):m.end() + 30]))
+    return found
+
+def i89_corpus():
+    files = []
+    for base in (os.path.join(ROOT, "core/skills/ai-dlc"), ROLES_DIR):
+        for d, _, fs in os.walk(base):
+            for f in fs:
+                if f.endswith(".md") and f != "_gate-procedures.md":
+                    files.append(os.path.join(d, f))
+    return sorted(files)
+
+def i89(gp_path, corpus):
+    # BIND ON THE SUBSTRING, NOT THE HEADING LINE. A citation resolves when SOME heading
+    # CONTAINS the cited phrase. Equality against the whole line would go red the moment
+    # anyone touched the `(referenced by ...)` qualifier — churn, not protection — and
+    # containment is also how I11 already reads this file (`"Adversarial repair dispatch"
+    # in collapsed_text`), so the two cannot disagree about what a citation is. Stripping
+    # the parenthetical is kept for NAMING a heading in the dormancy message; the resolve
+    # itself never depends on the qualifier having a particular shape, which matters
+    # because the next qualifier may not be parenthesised at all.
+    raw = raw_headings(open(gp_path, encoding="utf-8").read())
+    unresolved, cited = [], set()
+    n = 0
+    for p in corpus:
+        for name, ctx in citations(open(p, encoding="utf-8").read()):
+            n += 1
+            hit = [h for h in raw if name in h]
+            if hit:
+                cited.update(hit)
+            else:
+                unresolved.append((p, name, ctx))
+    dormant = sorted(base_name(h) for h in raw if h not in cited)
+    return unresolved, dormant, n, len(raw)
+
+# ---------------------------------------------------------------- I90 predicates
+# A fix-imperative is a SENTENCE-INITIAL repair verb whose object is a FINDING, not a
+# named file. That object test is the narrowing; see the header for the three grammars
+# measured and the population each returned.
+# CASE-TOLERANT FIRST LETTER, and it is not cosmetic: the `Just `/`Simply ` prefix leaves the
+# verb LOWERCASE ("Just fix it"), so a capitalised-only class cannot match the one sentence
+# this invariant most exists to catch. The same defect I57 carried until v0.357.0. The match
+# is anchored at a SENTENCE start, so admitting lowercase costs nothing mid-prose.
+I90_VERBS = r"(?:[Aa]pply|[Ff]ix|[Rr]epair|[Cc]orrect|[Rr]emediate|[Rr]esolve|[Aa]ddress)"
+I90_OBJ = (r"(?:gap|finding|improvement|fix|issue|mismatch|misalignment|defect"
+           r"|error|ERROR|problem|violation)(?:e?s)?")
+# ARM 1 -- the object is a FINDING. See the header for the populations measured.
+I90_PAT = re.compile(
+    r"^(?:Just\s+|Simply\s+|Then\s+|Also\s+)?" + I90_VERBS +
+    r"\s+(?:all\s+|any\s+|the\s+|every\s+|each\s+|its\s+|those\s+|these\s+)?"
+    r"(?:\S+\s+){0,2}?" + I90_OBJ + r"\b")
+# ARM 2 -- the DISMISSIVE bare imperative: "Just fix it", "Simply apply them". A pronoun
+# object is far too broad on its own (it selects `route.md`'s "Resolve it here", where "it"
+# is a sprint_id being DERIVED, not a finding being repaired). The `Just`/`Simply` prefix is
+# the whole discriminator, and it is a discriminator about MEANING rather than a lucky
+# narrowing: those words are the rhetorical instruction not to route the act. Measured FP set
+# across steps/*.md and SKILL.md: EMPTY.
+I90_DISMISSIVE = re.compile(
+    r"^(?:Just|Simply)\s+" + I90_VERBS + r"\s+(?:it|them|these|those)\b")
+# A closing quote or bracket may sit between the stop and the space. Without this the
+# sentence `Do not ask "should I fix this?" Just fix it.` is ONE unit beginning "Do", and
+# Rule 7's "Just fix it" is invisible -- measured against the pre-fix text.
+I90_SENT = re.compile(r"""(?<![A-Z0-9])[.!?]["'”’)\]]*(?:\s+|$)""")
+
+def i90_dispatch_re(roles):
+    return re.compile(
+        r"`(?:" + "|".join(sorted(roles)) + r")`|dispatch|teammate"
+        r"|route (?:it |them )?back to|delegat|sub-routine", re.I)
+
+# The carve-out is DECLARED IN THE STEP FILE, never listed here -- the I20/I74 posture.
+I90_MARKER = re.compile(r"<!--\s*inline-ok:\s*(.*?)\s*-->", re.S)
+I90_RULE28A = re.compile(r"Rule 28\(a\)")
+
+def i90_blocks(path):
+    """[(line_no, block_text)]. A block is one list item or one paragraph run.
+    Headings and fenced code are excluded: `### 4. Apply Process Improvements` is a
+    section title, not an instruction."""
+    out_, fence, cur = [], False, None
+    for i, l in enumerate(open(path, encoding="utf-8").read().split("\n"), 1):
+        if l.lstrip().startswith("```"):
+            fence = not fence
+            continue
+        if fence:
+            continue
+        if l.startswith("#") or not l.strip():
+            if cur:
+                out_.append(cur)
+                cur = None
+            continue
+        m = re.match(r"^\s*(?:[-*+]\s+|\d+\.\s+)", l)
+        if m:
+            if cur:
+                out_.append(cur)
+            cur = [i, l[m.end():]]
+        elif cur:
+            cur[1] += " " + l.strip()
+        else:
+            cur = [i, l.strip()]
+    if cur:
+        out_.append(cur)
+    return out_
+
+def i90_corpus(root):
+    """The step files AND SKILL.md. SKILL.md is in the corpus because Rule 7 ended on a
+    bare `Just fix it.` whose actor was established only by Rule 28 -- and Rule 7 sits at
+    byte 8,722, RESIDENT above the 20,000-byte re-attach cut, while Rule 28 sits at 79,510
+    and `_gate-procedures.md` is a separate file the lead never loaded. A compacted lead
+    holds the imperative and holds neither thing that attributes it. The reader who does not
+    follow the pointer is not a careless reader; after a compaction it is the only reader."""
+    files = []
+    steps = os.path.join(root, "core/skills/ai-dlc/steps")
+    if os.path.isdir(steps):
+        files += [os.path.join(steps, f) for f in sorted(os.listdir(steps))
+                  if f.endswith(".md")]
+    sk = os.path.join(root, "core/skills/ai-dlc/SKILL.md")
+    if os.path.isfile(sk):
+        files.append(sk)
+    return files
+
+def i90_scan(paths, roles, root=None):
+    disp = i90_dispatch_re(roles)
+    fires, silent, bad = [], [], []
+    for path in paths:
+        name = os.path.relpath(path, root) if root else os.path.basename(path)
+        for ln, block in i90_blocks(path):
+            block = collapse(block)
+            for m in I90_MARKER.finditer(block):
+                if not m.group(1).strip():
+                    bad.append((name, ln))
+            start = 0
+            for sm in list(I90_SENT.finditer(block)) + [None]:
+                end = sm.start() + 1 if sm else len(block)
+                sent = re.sub(r"^[\*_\s]+", "", block[start:end].strip())
+                start = sm.end() if sm else 0
+                if not (I90_PAT.match(sent) or I90_DISMISSIVE.match(sent)):
+                    continue
+                declared = any(m.group(1).strip() for m in I90_MARKER.finditer(block)) \
+                    or bool(I90_RULE28A.search(block))
+                if disp.search(block) or declared:
+                    silent.append((name, ln, sent))
+                else:
+                    fires.append((name, ln, sent))
+    return fires, silent, bad
+
+# ---------------------------------------------------------------- probes
+def probe():
+    d = tempfile.mkdtemp()
+    try:
+        st = os.path.join(d, "steps")
+        os.makedirs(st)
+        gp = os.path.join(st, "_gate-procedures.md")
+        good = os.path.join(st, "good.md")
+        open(gp, "w").write("# T\n\n## Probe procedure (referenced by step files)\n\nbody\n")
+        open(good, "w").write('See `_gate-procedures.md`, "Probe procedure" for this.\n')
+        unres, uncited, n, _ = i89(gp, [good])
+        if unres or uncited or n != 1:
+            return ("I89 did not read its own agreeing probe as clean: %d unresolved, "
+                    "%d uncited, %d citation(s) seen (expected 0/0/1). The extraction has "
+                    "stopped matching the citation grammar, so a clean repo result is an "
+                    "empty set produced by a reader that finds nothing."
+                    % (len(unres), len(uncited), n))
+        # The qualifier must be free to change, in ANY shape, without stranding a citation.
+        # This is what "bind on the substring, not the heading line" buys, and it is asserted
+        # rather than assumed: an equality-based resolve passes the clean probe above and
+        # fails only here, which is exactly the churn this design exists to avoid.
+        open(gp, "w").write("# T\n\n## Probe procedure — now referenced by the gate too\n\nbody\n")
+        unres, uncited, n, _ = i89(gp, [good])
+        if unres or uncited:
+            return ("I89 stranded a citation when only the heading's QUALIFIER changed "
+                    "(`(referenced by step files)` -> `— now referenced by the gate too`). "
+                    "The resolve has become an equality against the whole heading line, so "
+                    "every edit to a parenthetical now reds the push across thirteen citing "
+                    "files. Bind on the substring the citations carry, as I11 does.")
+        open(gp, "w").write("# T\n\n## Renamed procedure (referenced by step files)\n\nbody\n")
+        unres, uncited, n, _ = i89(gp, [good])
+        if not unres:
+            return ("I89 did not fire on a RENAMED heading: the probe cites "
+                    '"Probe procedure" and the file now heads "Renamed procedure", and the '
+                    "join reported no stranded citation. That is the exact defect the "
+                    "invariant exists for, and a check that cannot fire reads exactly like "
+                    "one that passed.")
+        if not uncited:
+            return ("I89 did not report the renamed heading as UNCITED. The dormancy arm has "
+                    "gone vacuous, so a procedure nobody invokes reads as a live one.")
+        for name, body in (
+            ("p_bare.md",     "Run the validator. Fix all gaps found.\n"),
+            ("p_named.md",    "Run the validator. Fix all gaps found by dispatching a "
+                              "`remediator`.\n"),
+            ("p_declared.md", "Run the validator. Fix all gaps found. <!-- inline-ok: the "
+                              "probe's declared reason -->\n"),
+            ("p_baremark.md", "Run the validator. Fix all gaps found. <!-- inline-ok: -->\n"),
+            ("p_file.md",     "Update `sprint-status.yaml` to match.\n"),
+            # THE WRAP PROBE. The verb and its object on opposite sides of a line break is
+            # the shape a hand `grep -c "Repair its findings"` returns 0 on while the folded
+            # read returns 1 — measured on stories-test-strategy.md:548, a site that WAS
+            # requalified and still went invisible to a line-based sweep. The extractor here
+            # folds by construction (a block is one list item or paragraph run), so this
+            # arm is not fixing anything; it is pinning the property, so a future narrowing
+            # of i90_blocks cannot silently reintroduce a blind spot whose symptom is a
+            # clean run.
+            ("p_wrap.md",     "- Repair all\n  findings.\n"),
+            # THE DISMISSIVE ARM, written in the exact shape Rule 7 carried: a quoted
+            # question ending in `?"` followed by the bare imperative. Both halves are
+            # load-bearing. If the sentence splitter stops treating `?"` as a boundary the
+            # whole thing reads as one sentence beginning "Do" and the arm sees nothing;
+            # if the verb class re-narrows to capitals the lowercase `fix` after `Just`
+            # stops matching. Verified against the real pre-fix text of SKILL.md Rule 7.
+            ("p_dismiss.md",  'Do not ask "should I fix this?" Just fix it.\n'),
+            # ...and its NEGATIVE twin, which is why arm 2 requires the Just/Simply prefix
+            # rather than simply admitting a pronoun object. This is `route.md`'s real
+            # sentence, where "it" is a sprint_id being DERIVED. A bare pronoun-object
+            # widening selects it; the measured false-positive set went 0 -> 1 on exactly
+            # this line before the prefix was made mandatory.
+            ("p_pronoun.md", "Resolve it here, before creating the snapshot.\n"),
+        ):
+            open(os.path.join(st, name), "w").write(body)
+        os.remove(good)
+        os.remove(gp)
+        fires, silent, badm = i90_scan(
+            [os.path.join(st, f) for f in sorted(os.listdir(st))], {"remediator"})
+        ff = set(f for f, _, _ in fires)
+        ss = set(f for f, _, _ in silent)
+        if "p_bare.md" not in ff:
+            return ("I90 did not fire on a bare fix-imperative probe ('Fix all gaps found.' "
+                    "with no dispatch target and no declaration). The grammar has stopped "
+                    "matching its own subject; the corpus scan would then report a clean "
+                    "tree it never read.")
+        if "p_wrap.md" not in ff:
+            return ("I90 did not fire on a WRAPPED bare imperative ('Repair all' / newline / "
+                    "'findings.'). The reader has stopped folding, so its unit is a LINE "
+                    "while its declared unit is a block — and every fix-imperative that "
+                    "happens to wrap between the verb and its object is now invisible while "
+                    "the run prints the same clean line it prints for a requalified site. "
+                    "Measured: a line-based sweep of stories-test-strategy.md:548 returned 0 "
+                    "on a site that was correctly requalified.")
+        if "p_dismiss.md" not in ff:
+            return ("I90 did not fire on the DISMISSIVE bare imperative probe -- the exact "
+                    "text SKILL.md Rule 7 carried until v0.357.0: 'Do not ask \"should I fix "
+                    "this?\" Just fix it.' Two things can break it and both are silent. "
+                    "Either the sentence splitter stopped treating a stop-inside-a-quote "
+                    "(`?\"`) as a boundary, so the unit begins 'Do' and the imperative is "
+                    "buried mid-sentence; or the verb class re-narrowed to capitals, and the "
+                    "verb after `Just ` is lowercase. Rule 7 is RESIDENT above the 20,000-byte "
+                    "re-attach cut while the rule that attributed it is not, so this is the "
+                    "one sentence in the corpus a compacted lead is most likely to hold "
+                    "alone.")
+        if "p_pronoun.md" not in ff and "p_pronoun.md" in ss:
+            return ("I90 treated the pronoun-object probe as a SILENT site rather than one "
+                    "outside its population. It should match neither arm.")
+        if "p_pronoun.md" in ff:
+            return ("I90 fired on 'Resolve it here, before creating the snapshot.' -- the "
+                    "pronoun-object arm has lost its `Just`/`Simply` prefix requirement. "
+                    "That prefix is the discriminator: it is the instruction not to route "
+                    "the act. Without it the arm selects any imperative with a pronoun "
+                    "object, and `route.md`'s sprint_id derivation becomes a finding.")
+        if "p_named.md" not in ss:
+            return ("I90 fired on a probe that NAMES a dispatch target. Every requalified "
+                    "site in the corpus becomes a finding, which is the shape an operator "
+                    "turns the lint off over.")
+        if "p_declared.md" not in ss:
+            return ("I90 fired on a probe carrying a declared `<!-- inline-ok: ... -->` "
+                    "carve-out with a reason. That declaration is the only way a legitimate "
+                    "inline edit can be recorded where the rule's reader sees it.")
+        if "p_baremark.md" not in ff:
+            return ("I90 accepted an `<!-- inline-ok: -->` marker with an EMPTY reason. A "
+                    "carve-out with no reason is a decision nobody can audit -- the same hole "
+                    "a zero-byte `.dist-only` marker left until I74(d).")
+        if not badm:
+            return "I90's empty-reason marker arm did not report the bare marker probe."
+        if "p_file.md" in ff or "p_file.md" in ss:
+            return ("I90's population includes an imperative whose object is a FILE "
+                    "('Update `sprint-status.yaml`'). That is one of the lead's own Rule "
+                    "28(a) mutations, and the finding-object narrowing is what keeps it out; "
+                    "without it the check reports 15 sites, 11 of them correct prose.")
+        return None
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+# ---------------------------------------------------------------- run
+p = probe()
+if p:
+    out(p)
+    sys.exit(0)
+
+if not os.path.isfile(GP):
+    out("I89/I90 could not read %s. An unreadable side reports the same silence as an "
+        "agreeing one." % GP)
+    sys.exit(0)
+
+unres, uncited, ncite, nhead = i89(GP, i89_corpus())
+if ncite < 10 or nhead < 5:
+    out("I89 derived %d citation(s) against %d heading(s); counts this low mean one side "
+        "stopped matching the tree, and an empty citation set resolves vacuously."
+        % (ncite, nhead))
+for p_, name, ctx in unres:
+    out("I89 %s cites `_gate-procedures.md` procedure \"%s\", and no `## ` heading in that "
+        "file carries that name.\nThe citation resolves to nothing: a step file told to READ "
+        "AND FOLLOW a named procedure will not find it, and the pointer fails silently "
+        "because nothing but this join reads both sides.\nEither restore the heading or "
+        "update the citation. The heading may carry a `(referenced by ...)` qualifier -- "
+        "that part is stripped before comparing, so only the base name has to agree.\n"
+        "  at: ...%s..." % (os.path.relpath(p_, ROOT), name, ctx[-150:]))
+for name in uncited:
+    out("I89 `_gate-procedures.md` heads a procedure \"%s\" that NOTHING cites. That file's "
+        "own contract is that its procedures are invoked BY NAME from step files; a "
+        "procedure with no caller is dormant, and a dormant procedure reads exactly like a "
+        "live one." % name)
+
+roles = set(f[:-3] for f in os.listdir(ROLES_DIR) if f.endswith(".md")) \
+    if os.path.isdir(ROLES_DIR) else set()
+if not roles:
+    out("I90 derived no role names from core/team-roles/. The dispatch-target test then "
+        "matches nothing and every requalified site becomes a finding.")
+else:
+    # THE CORPUS IS ASSERTED, NOT ASSUMED. Deleting SKILL.md from i90_corpus() produced no
+    # error at all until this arm existed: the invariant simply scanned a smaller tree and
+    # printed the same clean line, which is this file's own recurring defect committed inside
+    # the check written to close it. Membership is named here because it is a DECISION (rule
+    # text is in scope) rather than a glob result.
+    i90_files = i90_corpus(ROOT)
+    i90_names = set(os.path.relpath(f, ROOT) for f in i90_files)
+    for owed in ("core/skills/ai-dlc/SKILL.md",
+                 "core/skills/ai-dlc/steps/gate-validation.md",
+                 "core/skills/ai-dlc/steps/_gate-procedures.md"):
+        if owed not in i90_names:
+            out("I90's corpus does not contain %s. The scan below covers a SMALLER tree than "
+                "this invariant claims and reports the same clean line it would report for a "
+                "clean one. SKILL.md in particular is in scope by decision, not by glob: Rule "
+                "7's `Just fix it` sat there, RESIDENT above the re-attach cut, with its actor "
+                "established only by a rule below the cut." % owed)
+    if len(i90_files) < 15:
+        out("I90 derived only %d corpus file(s); the step directory has stopped enumerating "
+            "and an empty corpus reports no bare imperatives without reading one."
+            % len(i90_files))
+    fires, silent, badm = i90_scan(i90_files, roles, ROOT)
+    if not silent:
+        out("I90's population contains no site that NAMES a dispatch target. The requalified "
+            "sites (v0.25.0's sprint-review model and v0.357.0's) are the standing control "
+            "that the silent arm can still be reached; with none of them present the grammar "
+            "is matching something other than its subject.")
+    for fn, ln in badm:
+        out("I90 %s:%d carries an `<!-- inline-ok: -->` marker with "
+            "an EMPTY reason. A carve-out with no reason is a decision nobody can audit. "
+            "Write why the lead edits this one inline." % (fn, ln))
+    for fn, ln, sent in fires:
+        out("I90 %s:%d is a bare fix-imperative -- it names no "
+            "dispatch target and declares no inline carve-out:\n    %s\nRule 28: the lead "
+            "owns PASS/FAIL, the disposition and the escalation; the EDIT that follows is "
+            "dispatched. A step file that says only \"fix it\" leaves the subject "
+            "unattributed, and the most context-saturated agent in the pipeline is the one "
+            "that reads it.\nResolve it one of three ways:\n  * name the seat -- a "
+            "`remediator` for planning artifacts (`_gate-procedures.md`, \"Adversarial repair "
+            "dispatch\"), dev teammates for code. steps/sprint-review.md and "
+            "steps/stories-test-strategy.md carry the requalified wording.\n  * cite `Rule "
+            "28(a)` if this really is one of the lead's own sanctioned mutations.\n  * "
+            "declare it: `<!-- inline-ok: <why the lead edits this one inline> -->`. The "
+            "reason is required and is checked for being non-empty." % (fn, ln, sent))
+I89EOF
+I89_OUT="$(python3 "$I89_PY" "$REPO_ROOT" 2>&1)" || err "I89/I90 could not run: $I89_OUT"
+rm -f "$I89_PY"
+while IFS="$(printf '\t')" read -r i89_tag i89_msg; do
+  [ "$i89_tag" = "ERR" ] || continue
+  err "$(printf '%b' "$i89_msg")"
+done <<EOF
+$I89_OUT
+EOF
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), nor from a VARIABLE holding one — the same defect one assignment apart, which I33's single-expression grammar returned zero on, proven each run against a positive probe and a negative one carrying both a non-walking dirname variable and a self-rooted chain (I33b), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), nor feeds one from a PIPELINE — a command upstream, or a variable with a filter in between, both of which sat outside I54's grammar by construction — narrowed to files that enable pipefail and lines whose status is load-bearing, each narrowing derived from the file and proven each run against probes the invariant builds itself (I54b), the fixture suite's content key excludes only paths no fixture reads and every cross-run record the hook keeps sits outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59), and every mode one shipped file names on another shipped script is one that script dispatches, both sides derived rather than hand-listed, proven each run against a probe carrying both dispatch forms (I60), and every clause bullet in a declared prose home states the same severity the contract declares, against a vocabulary derived from the contract itself (I61), and prose that names a contract code cites the clause that claims it, scoped per file by the role the contract pins it at and proven each run against a probe the invariant writes itself (I62), and every file the contract claims to have absorbed is pinned as home, pointer or none and still is that, in both directions (I63), and every clause's code reaches a site in its enforcer that a run can attribute to it, rather than a comment I36's whole-file grep is satisfied by (I64), and every clause names the fixture that proves its code fires — a directory with a driver, that drives the clause's own enforcer, and that names the code where a run can attribute it — or the literal 'none', which is a counted gap no fixture is allowed to satisfy in silence (I65), and the fixture-suite runner is ONE program across both pre-push hooks — pool, empty-suite guard and verdict-completeness assertion alike — compared on executable lines so no comment can satisfy it, with the fixture root mapped rather than exempted (I66), and the consumer's crosswalk file is one string across the contract that declares it and ai-dlc-update's own copy, with neither the validator, the installer nor the pull driver that scaffolds it permitted to restate the literal (I67), and core's own shipped files yield ZERO crosswalk rows so no consumer inherits a resolution its operator never wrote, each zero carrying a same-run control that the reader can still see a row (I68), and every piece of prose naming where that declaration LIVES names a file that carries it, so a remedy read mid-migration can be followed literally (I69), and the PR-class taxonomy the trunk audit reads is declared once with the audit, the installer and the pull driver each deriving its location rather than restating it, and the template they scaffold from named by that same declaration's basename (I70), and no sed or grep expression strips whitespace with a bracket class containing a backslash and the letter t, which in a POSIX bracket expression is those two characters and silently truncates any value ending in one of them — proven each run against both a positive and a negative probe the invariant writes itself, since awk's identical-looking class is correct (I71), and the PR-class taxonomy's grammar is ONE key set across the parser that dispatches it and the template a consumer writes from, both sides derived and neither hand-listed (I72), and the consumer's derivable story-field list is declared once with the derive, the installer and the pull driver each deriving its location, the template named by that declaration's basename, and \`status\` read from the SCHEMA rather than from the list so no consumer can declare its way out of the one field Check 5 depends on (I73), and install.sh DERIVES the shipped fixture set from the tree rather than hand-listing it — asserted to still read core/fixtures/ and to still exclude \`.dist-only\`, with the list-vs-tree joins that remain carried by I8 over uninstall.sh, which runs where the tree does not exist — and every \`.dist-only\` marker carries a non-empty reason, since a marker excluding a fixture from every consumer without saying why is a decision nobody can audit (I74), and every core validator that consults a project root consults it through ONE canonical resolution block — the subject set derived from the scripts that mention a root token and the required text derived as the modal span across those same scripts, so no donor is named, proven each run against a positive and a negative probe the invariant writes itself; scripts taking the root as an argument are out of scope by decision (I75), and the harness-origin prefix set is ONE declaration — the capture hook, Check 33's enforcer and genuineOperatorText all resolving it, with no shipped file permitted to restate a prefix (I76), and the live adversarial series is derived by ONE marked block across the Stop hook and the PreToolUse hook that denies on it — asserted to be the FILTERING form AND to be scoped to the DECLARED sprint's own directory, since two copies of the vulnerable unscoped newest-then-strip form agree with each other, each property proven each run against a probe the invariant writes itself (I81), and every artifact path core prescribes obeys core's own grammar — the directory is the only sprint slot — or is named in artifact-path-grammar.md's migration ledger, which is bound in BOTH directions so an entry cannot outlive the prescription it excuses, with the grammar file excluded from its own corpus and the predicate proven each run against the reserved slot, its all-sprints form and seven measured violations (I82), and the grammar's own \`areas:\` and scan-roots blocks have exactly ONE reader — artifact-path-config.sh — with the corpus derived by find, the resolver itself asserted still to carry the extraction, and the expression proven each run against a positive and a negative probe the invariant writes itself (I83), and the story corpus location is ONE declaration — a template in schemas/sprint-status.json carrying the sprint slot, which no shipped program may restate and which every reader of must substitute, both sides derived and the restatement expression proven each run against a positive probe and a negative one carrying the same path in a comment (I84), and no shipped script command-substitutes inside an operator-facing message — an unescaped backtick in a double-quoted string RUNS the quoted word and silently deletes it from what the operator reads, narrowed by resolving heredoc quoting because the crude form's false-positive set is six correct files, and proven each run against a positive probe and a negative one carrying both the escaped and the quoted-heredoc forms (I85), and the adjudication row token is ONE string across layer-drift.sh, which declares it and writes it into the row when a verdict is recorded for that digest, and apply.sh, which RESOLVES that declaration rather than restating the literal — so apply.sh can no longer prescribe destructive work over a decision the project already recorded (I86), and no fixture inherits a consumer's AI_DLC_* tunable and tests the CONFIG instead of the CODE — the subject narrowed from ANY named token to one a shipped program DEREFERENCES, minus the fixtures that assign it themselves and minus comments and single-quoted program text, each of those last two derived from one measured false positive, and proven each run against a probe suite the invariant writes itself because its real answer is zero (I87)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), nor from a VARIABLE holding one — the same defect one assignment apart, which I33's single-expression grammar returned zero on, proven each run against a positive probe and a negative one carrying both a non-walking dirname variable and a self-rooted chain (I33b), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), nor feeds one from a PIPELINE — a command upstream, or a variable with a filter in between, both of which sat outside I54's grammar by construction — narrowed to files that enable pipefail and lines whose status is load-bearing, each narrowing derived from the file and proven each run against probes the invariant builds itself (I54b), the fixture suite's content key excludes only paths no fixture reads and every cross-run record the hook keeps sits outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59), and every mode one shipped file names on another shipped script is one that script dispatches, both sides derived rather than hand-listed, proven each run against a probe carrying both dispatch forms (I60), and every clause bullet in a declared prose home states the same severity the contract declares, against a vocabulary derived from the contract itself (I61), and prose that names a contract code cites the clause that claims it, scoped per file by the role the contract pins it at and proven each run against a probe the invariant writes itself (I62), and every file the contract claims to have absorbed is pinned as home, pointer or none and still is that, in both directions (I63), and every clause's code reaches a site in its enforcer that a run can attribute to it, rather than a comment I36's whole-file grep is satisfied by (I64), and every clause names the fixture that proves its code fires — a directory with a driver, that drives the clause's own enforcer, and that names the code where a run can attribute it — or the literal 'none', which is a counted gap no fixture is allowed to satisfy in silence (I65), and the fixture-suite runner is ONE program across both pre-push hooks — pool, empty-suite guard and verdict-completeness assertion alike — compared on executable lines so no comment can satisfy it, with the fixture root mapped rather than exempted (I66), and the consumer's crosswalk file is one string across the contract that declares it and ai-dlc-update's own copy, with neither the validator, the installer nor the pull driver that scaffolds it permitted to restate the literal (I67), and core's own shipped files yield ZERO crosswalk rows so no consumer inherits a resolution its operator never wrote, each zero carrying a same-run control that the reader can still see a row (I68), and every piece of prose naming where that declaration LIVES names a file that carries it, so a remedy read mid-migration can be followed literally (I69), and the PR-class taxonomy the trunk audit reads is declared once with the audit, the installer and the pull driver each deriving its location rather than restating it, and the template they scaffold from named by that same declaration's basename (I70), and no sed or grep expression strips whitespace with a bracket class containing a backslash and the letter t, which in a POSIX bracket expression is those two characters and silently truncates any value ending in one of them — proven each run against both a positive and a negative probe the invariant writes itself, since awk's identical-looking class is correct (I71), and the PR-class taxonomy's grammar is ONE key set across the parser that dispatches it and the template a consumer writes from, both sides derived and neither hand-listed (I72), and the consumer's derivable story-field list is declared once with the derive, the installer and the pull driver each deriving its location, the template named by that declaration's basename, and \`status\` read from the SCHEMA rather than from the list so no consumer can declare its way out of the one field Check 5 depends on (I73), and install.sh DERIVES the shipped fixture set from the tree rather than hand-listing it — asserted to still read core/fixtures/ and to still exclude \`.dist-only\`, with the list-vs-tree joins that remain carried by I8 over uninstall.sh, which runs where the tree does not exist — and every \`.dist-only\` marker carries a non-empty reason, since a marker excluding a fixture from every consumer without saying why is a decision nobody can audit (I74), and every core validator that consults a project root consults it through ONE canonical resolution block — the subject set derived from the scripts that mention a root token and the required text derived as the modal span across those same scripts, so no donor is named, proven each run against a positive and a negative probe the invariant writes itself; scripts taking the root as an argument are out of scope by decision (I75), and the harness-origin prefix set is ONE declaration — the capture hook, Check 33's enforcer and genuineOperatorText all resolving it, with no shipped file permitted to restate a prefix (I76), and the live adversarial series is derived by ONE marked block across the Stop hook and the PreToolUse hook that denies on it — asserted to be the FILTERING form AND to be scoped to the DECLARED sprint's own directory, since two copies of the vulnerable unscoped newest-then-strip form agree with each other, each property proven each run against a probe the invariant writes itself (I81), and every artifact path core prescribes obeys core's own grammar — the directory is the only sprint slot — or is named in artifact-path-grammar.md's migration ledger, which is bound in BOTH directions so an entry cannot outlive the prescription it excuses, with the grammar file excluded from its own corpus and the predicate proven each run against the reserved slot, its all-sprints form and seven measured violations (I82), and the grammar's own \`areas:\` and scan-roots blocks have exactly ONE reader — artifact-path-config.sh — with the corpus derived by find, the resolver itself asserted still to carry the extraction, and the expression proven each run against a positive and a negative probe the invariant writes itself (I83), and the story corpus location is ONE declaration — a template in schemas/sprint-status.json carrying the sprint slot, which no shipped program may restate and which every reader of must substitute, both sides derived and the restatement expression proven each run against a positive probe and a negative one carrying the same path in a comment (I84), and no shipped script command-substitutes inside an operator-facing message — an unescaped backtick in a double-quoted string RUNS the quoted word and silently deletes it from what the operator reads, narrowed by resolving heredoc quoting because the crude form's false-positive set is six correct files, and proven each run against a positive probe and a negative one carrying both the escaped and the quoted-heredoc forms (I85), and the adjudication row token is ONE string across layer-drift.sh, which declares it and writes it into the row when a verdict is recorded for that digest, and apply.sh, which RESOLVES that declaration rather than restating the literal — so apply.sh can no longer prescribe destructive work over a decision the project already recorded (I86), and no fixture inherits a consumer's AI_DLC_* tunable and tests the CONFIG instead of the CODE — the subject narrowed from ANY named token to one a shipped program DEREFERENCES, minus the fixtures that assign it themselves and minus comments and single-quoted program text, each of those last two derived from one measured false positive, and proven each run against a probe suite the invariant writes itself because its real answer is zero (I87), and every procedure a step file cites BY NAME out of _gate-procedures.md resolves to a heading that file still carries — both sides derived, the heading's \`(referenced by ...)\` qualifier stripped on the heading side so it stays free to change, citations recognised by ADJACENCY to the file mention rather than proximity, which is what takes the false-positive set from eleven to zero — with the reverse arm reporting a procedure nothing invokes, since a dormant procedure reads exactly like a live one (I89), and every fix-imperative in a step file OR in SKILL.md's rule text names a dispatch seat or declares its inline carve-out IN THE FILE with a non-empty reason — the population narrowed to imperatives whose OBJECT is a FINDING rather than a named file, so the lead's own Rule 28(a) mutations drop out with nothing hand-listed, plus a second arm for the dismissive \`Just fix it\` form whose Just/Simply prefix is the discriminator that keeps its false-positive set empty where a bare pronoun object does not — proven each run against eight probes the invariant writes itself, including the wrapped imperative a line-based reader cannot see and the real pre-fix text of Rule 7 (I90)."
   exit 0
 fi
 exit 1

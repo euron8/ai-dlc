@@ -37,8 +37,11 @@ irrelevant). **Do not pause between research sub-skills:**
    tools or infrastructure work where no market exists)
 3. `/bmad-technical-research` — technology options, constraints, risks
 
-Synthesize research findings into the product brief. Update it directly
-if research surfaces new constraints or opportunities.
+Synthesize research findings into the product brief. When research surfaces
+new constraints or opportunities, dispatch the `pm` (Agent tool, bound to
+`.claude/team-roles/pm.md` per SKILL.md Rule 19 — both bindings: `model` and the
+standing role-contract Read line) to update it directly. The lead owns the
+routing, not the edit.
 
 ### 2. PRD Creation
 
@@ -100,7 +103,8 @@ but does not create new locked WHAT requirements.
 ### 3. PRD Validation
 
 Invoke `/bmad-prd` with the **validate** intent — structured completeness check
-against its own rubric. Fix all gaps found.
+against its own rubric. Dispatch the `pm` (role-bound per Rule 19) to fix the
+gaps it reports. The lead owns the routing, not the edit.
 
 It detects create / update / validate from the conversation, so say which you
 want rather than relying on inference: this call must not re-author the PRD. Under

@@ -169,6 +169,24 @@ argv_for() {
     validate-escalation-status-vocabulary.sh) printf '%s' "$WORK/docs/pending.md" ;;
     validate-suppression-lifetime.sh) printf '%s' "--escalations $WORK/docs/pending.md" ;;
     validate-h2-attestation.sh)     printf '%s' "--digest" ;;
+    # A base ref is a REQUIRED positional for this one, so a bare run stops at its
+    # usage line — byte-identical from any root, which scored it inert and took its
+    # agreement assertion down with it. The ref need not resolve: with one present the
+    # script reaches its project-root code and reports which root it landed on, which
+    # is the only thing the mutant arm below is asking.
+    #
+    # AND THAT IS THE HONEST FLOOR FOR THIS ONE, STATED SO A GREEN ARM IS NOT OVER-READ.
+    # $WORK carries a `.git` DIRECTORY, not a repository — `git rev-parse --git-dir`
+    # returns 128 there. This script derives its entire scope from a diff, so it
+    # declines at that point and never reaches its corpus code. The arm therefore
+    # proves the root is CONSULTED (the two roots produce different errors, each
+    # naming the root it resolved to); it does NOT prove the scope it would then
+    # build is correct. Making $WORK a real repository would close that gap and was
+    # deliberately not done: it changes the world all ~45 scripts here run against,
+    # to strengthen one arm, and nobody has measured what it does to the other 71
+    # assertions. The scope-correctness question is answered elsewhere — the script's
+    # own rc=3 scoping-failure contract — not here.
+    report-propagation-fanout.sh)   printf '%s' "HEAD~1" ;;
     *)                              printf '%s' "" ;;
   esac
 }

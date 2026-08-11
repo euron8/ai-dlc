@@ -67,7 +67,10 @@ is for CONVERGENCE cycles only. Review:
 - Walk through every change across all stories
 - Check for cross-cutting issues (inconsistent patterns, missing
   integration points, duplicated logic across stories)
-- Apply all fixes autonomously. Dev teammates apply code fixes.
+- Apply all fixes autonomously. **Code changes are applied by dev teammates and
+  planning-artifact repairs by a dispatched `remediator` (`_gate-procedures.md`,
+  "Adversarial repair dispatch"), not inline by the lead (Rule 28); the lead owns
+  disposition, not the edit.**
 
 **Run sub-step snapshot update after each adversarial pass.**
 **Then run auto-handoff evaluation** (see `_gate-procedures.md`

@@ -385,7 +385,9 @@ fi
 # Check 6: Dev Agent Record compliance
 #   For each story-<n>-*.md, assert the Dev Agent Record does NOT contain
 #   literal substring "lead (self-executed" UNLESS docs/escalations/pending.md
-#   has a DECIDED_AUTONOMOUSLY or HARD_BLOCK entry naming the story ID.
+#   has a DECIDED_AUTONOMOUSLY or HARD_BLOCK entry naming the story ID --
+#   the entry that names it, not whatever entry happens to sit nearby. See the
+#   waiver predicate below for the measurement that forced that distinction.
 # ============================================================================
 echo "[Check 6] Dev Agent Record compliance (no lead self-execution without waiver)..."
 ESCALATIONS_FILE="docs/escalations/pending.md"
@@ -465,22 +467,64 @@ else
 
     # Check for literal substring "lead (self-executed" only in the Dev Agent Record section
     if grep -q 'lead (self-executed' 2>/dev/null <<<"$DEV_AGENT_SECTION"; then
-      # Check if there's a waiver in escalations file using BOTH filename and display format
+      # THE WAIVER MUST BE THE RECORD THAT NAMES THE STORY, AND THIS IS THE ONE PLACE
+      # `DECIDED_AUTONOMOUSLY` IS GIVEN FORCE ANYWHERE IN CORE -- the force being permissive, it
+      # is a KEY rather than a lock, so every looseness here hands out a key.
+      #
+      # The old predicate was `grep -E -A 5 <story-id>` piped into a second grep for the token: a
+      # PROXIMITY match that crossed record boundaries. Measured on the reference consumer's
+      # `pending-archive.md`, stories 147-1..147-4 were waived by a token 5 lines below their
+      # only mention -- and that token was `**Status:** DECIDED_AUTONOMOUSLY` at `:646`, belonging
+      # to the NEXT entry (`## [Sprint-147 / Scope Selection]` at `:645`), not to the waiver at
+      # `:621` that actually covers them. A neighbouring record satisfied the check.
+      #
+      # The boundary is `^## `, which is the entry grammar core itself publishes in
+      # `skills/ai-dlc/escalations.md` (`## [STORY-ID] [Teammate Name] - [Date/Time]`), so this is
+      # reading the declared shape rather than inventing one. Within a record the existing
+      # 5-line co-location is UNCHANGED, and that is deliberate: replacing it with record scope
+      # was measured and REJECTED. Over 886 composed story ids against the consumer's two
+      # escalation files, "same record, token anywhere in it" newly GRANTED the waiver to 52
+      # stories and "same record, token on the record's `**Status:**` line" to 45 -- because a
+      # long entry mentions many stories in passing (`## [Sprint-172 / Story-172-2 / ...]` at
+      # `pending-archive.md:3221` mentions Story 172-3 in a coordination note, and would have
+      # waived it). Widening the key is the opposite of what this check is for. The predicate
+      # below is the only variant measured to be strictly tighter than the one it replaces:
+      # newly-granted set EMPTY on both files, all 886 ids.
+      #
+      # The trailing-digit guard is the second half of "names THIS story": `story-147-1` used to
+      # be satisfied by a record naming `story-147-10`. Isolated cost of that guard, measured on
+      # the same corpus: one id (`story-170-1`).
       WAIVER_FOUND=0
       if [ -f "$ESCALATIONS_FILE" ]; then
-        # Look for DECIDED_AUTONOMOUSLY or HARD_BLOCK entry naming this story ID.
-        # Search for both "story-N-M" (filename) and "Story N-M" (display) formats.
-        if grep -qE "${story_id}|${display_id}" "$ESCALATIONS_FILE" 2>/dev/null; then
-          # Check if the entry containing story_id also has DECIDED_AUTONOMOUSLY or HARD_BLOCK
-          STORY_CONTEXT=$(grep -E -A 5 "${story_id}|${display_id}" "$ESCALATIONS_FILE" 2>/dev/null)
-          if grep -q 'DECIDED_AUTONOMOUSLY\|HARD_BLOCK' <<<"$STORY_CONTEXT"; then
-            WAIVER_FOUND=1
-          fi
-        fi
+        # Both the filename form ("story-N-M") and the display form ("Story N-M") name the story;
+        # matched as LITERAL substrings, never as a regex, because the fallback id is an arbitrary
+        # file basename.
+        WAIVER_FOUND=$(awk -v sid="$story_id" -v did="$display_id" '
+          function names(line,   n, needle, rest, p, c) {
+            for (n = 1; n <= 2; n++) {
+              needle = (n == 1 ? sid : did)
+              rest = line
+              while ((p = index(rest, needle)) > 0) {
+                c = substr(rest, p + length(needle), 1)
+                if (c !~ /^[0-9]$/) return 1
+                rest = substr(rest, p + 1)
+              }
+            }
+            return 0
+          }
+          /^## / { win = 0 }          # a new record: no window survives into it
+          names($0) { win = 6 }       # this line plus the 5 after it, as grep -A 5 read them
+          win > 0 {
+            if (index($0, "DECIDED_AUTONOMOUSLY") || index($0, "HARD_BLOCK")) { found = 1; exit }
+            win--
+          }
+          END { print found + 0 }
+        ' "$ESCALATIONS_FILE" 2>/dev/null)
+        [ -n "$WAIVER_FOUND" ] || WAIVER_FOUND=0
       fi
 
       if [ $WAIVER_FOUND -eq 0 ]; then
-        fail "Check6_DEV_AGENT_RECORD" "story file '${story_file}' contains 'lead (self-executed' in Dev Agent Record section but no DECIDED_AUTONOMOUSLY or HARD_BLOCK waiver for '${display_id}' (or '${story_id}') found in ${ESCALATIONS_FILE}"
+        fail "Check6_DEV_AGENT_RECORD" "story file '${story_file}' contains 'lead (self-executed' in Dev Agent Record section but no DECIDED_AUTONOMOUSLY or HARD_BLOCK waiver for '${display_id}' (or '${story_id}') found in ${ESCALATIONS_FILE}. The waiver must be the '## ' entry that NAMES this story: the token has to sit on the naming line or within the 5 lines after it, inside that same entry. A token in a neighbouring entry does not waive this story, and neither does an entry naming a longer id this one is a prefix of."
         CHECK6_FAILURES=$((CHECK6_FAILURES + 1))
       fi
     fi

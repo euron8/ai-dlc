@@ -34,6 +34,155 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.357.0] — 2026-08-11
+
+### The gate remediation loop repaired inline, counted nothing, and swept by memory — eleven passes on one gate
+
+The reference consumer ran a `[story]` gate for **eleven adjudication passes** and stopped. Three
+defects produced it, each measured against that consumer's own artifacts rather than inferred.
+All three are core's.
+
+**Rule 28 licensed the inline repair, in one word.** `SKILL.md`'s non-delegable set (c) read
+"owning PASS/FAIL/**remediation**", while the same rule forty lines below called applying a fix
+inline "a lead-conduct retro finding". Measured in that session's transcript, 18:36:56Z →
+21:49:36Z: **104 `Edit` calls on the main thread and 10 `Agent` dispatches, all ten of them
+read-only `gate-adjudicator` passes.** Zero remediation delegated. The `remediator` role, and the
+dispatch procedure whose opening sentence is "The lead does not repair the artifact itself", were
+already shipped and installed on that consumer; the gate-validation failure loop had simply never
+referenced them. The context sensor fired RED twice, at 270k and 317k tokens, *during* the repair
+sequence.
+
+(c) now scopes to the decision — the lead owns PASS/FAIL, the disposition and the escalation, and
+"clears a FAIL only through a dispatched repair, never by editing the artifact inline". `Gate
+Failure` step 1 dispatches one `remediator` per pass to a gate repair record. `_gate-procedures.md`'s
+repair dispatch becomes one procedure with two callers.
+
+**A prose rule could not carry it, and the reasoning was on disk to prove it.** The lead's
+self-authorizations are written as `DECIDED_AUTONOMOUSLY (Rule 12 Tier 2)` records — 375 of them
+in the reference consumer. Hand-classified over a 60-record sample spanning ~55 sprints, **43% fall
+outside Rule 12 Tier 2's own four-bullet definition**: 25% skip, defer or self-adjudicate a gate
+check or validator, 18% accept a known defect. One dated 2026-08-11 authorized an inline edit
+*against a remediator's written refusal* — "this is not a remediator's call… a provenance hash
+re-stamped by the agent whose check it failed certifies nothing."
+
+So the prohibition is a PreToolUse hook that denies the call rather than auditing the reasoning.
+`ai-dlc-gate-remediation-guard.sh` denies a lead `Edit`/`Write`/`MultiEdit` to a planning artifact
+while a gate series carries a recorded FAIL, discriminating the lead from a teammate on the payload's
+`agent_id`. **It is not self-dischargeable**: a `DECIDED_AUTONOMOUSLY` record does not lift it, the
+lead may not author the repair record that does, a record for a different pass or naming only a
+passing check does not lift it, and an operator citation with no verifier present fails closed.
+`gate-remediation-deny` proves all of it, and asserts that a silently disarmed guard is itself a
+failure.
+
+**Nothing counted the passes.** `Gate Failure` step 4 already said "escalate as HARD_BLOCK per
+Rule 12"; check 7 failed **seven consecutive times** and `hard_block_count` stayed `0`. There was
+also no series identity in the data — `gate_nonce` is documented as minted "at gate entry" and the
+consumer minted a fresh one per *pass*, eleven for one gate, so no series-level arm was writable.
+`gate_series_id` is now required and constant across a gate's passes; `validate-gate-adjudication.sh
+--series` errs when one `check_id` holds FAIL across **K=3** consecutive passes.
+
+K was backtested over that consumer's whole corpus — **94 verdict files, 93 nonce-conforming, 20
+multi-pass series**: K=3 fires exactly twice with zero false fires, K=2 adds one. The two real fires
+are `story 20260811` check 7 and `implementation 20260725` check 22 — **the second stall is nine
+sprints older and nobody noticed it.** A verdict whose nonce does not match the schema drops out of
+grouping, so the rung counts and names every file it could not group rather than reading short.
+
+**Step 2 was refuted by the same corpus.** "Re-run the FAILED check specifically (not the entire
+checklist)" misses every regression, and the corpus holds **16 PASS→FAIL regressions** — four in the
+eleven-pass series alone. It now re-runs the failed check plus every check whose inputs the
+remediation touched, which is what `coverage_exact` already enforced.
+
+**The sweeps were hand-scoped, so each pass found exactly one more hop.** Pass 11's own verdict named
+the generator: an 18-line insertion into `docs/architecture.md` shifted every line below it by +18,
+and "every prior sweep (all of which scoped only `docs/escalations/pending.md`) read clean." Pass 9
+had corrected two citations in `traceability-matrix.md` and left the identical two in
+`test-strategy.md` — a file-local fix for a corpus-wide defect.
+
+`report-propagation-fanout.sh` derives that scope from the diff instead: line-shifting hunks, then
+every `` `path:N` `` citation in the mutable current-sprint corpus whose target moved at or above the
+cited line. On the consumer's own remediation commit: **31 shifting files, 455 corpus files, a
+10-item worklist** containing pass 11's finding, in 0.19s. It is advisory — its exit codes say whether
+it could look, never what it found, and a scoping failure exits 3 rather than printing an empty
+worklist that reads like a clean corpus.
+
+**Two invariants, because a requalification that is not bound grows back.** I90 fails a fix-imperative
+in a step file that names no dispatch seat and declares no carve-out, the population narrowed to
+imperatives whose OBJECT is a finding so the lead's own Rule 28(a) file mutations fall out with
+nothing hand-listed. On its first run it caught two sites the hand sweep had missed — **both the
+second instance of an identical shape in a file whose first instance had just been fixed.** I89 binds
+every `_gate-procedures.md` procedure a step file cites by name to a heading that file still carries;
+matching on adjacency rather than proximity takes its false-positive set from eleven to zero.
+
+**I90's yield was four findings and its population is five, and the two numbers reconcile only if you
+know which remedy was used**: requalification REMOVES a site from the population — a sentence rewritten
+to "Dispatch the `pm` … to fix the gaps it reports" no longer opens with a fix verb — while a declared
+carve-out KEEPS it and silences it. Three requalified, one declared.
+
+**I90 would NOT have caught Rule 7's own `Just fix it`, and finding that out cost two defects in the
+checker itself.** Tested against the real pre-fix text rather than reasoned about: the block splitter
+did not treat a sentence stop inside a closing quote (`?"`) as a boundary, so `Do not ask "should I fix
+this?" Just fix it.` was one unit beginning "Do"; and underneath that, the verb list was
+capitalised-only, so the lowercase verb after `Just ` matched nothing. **That second one is I57's
+case-blindness, in the file that fixed I57's case-blindness, the same afternoon.**
+
+The corpus question it opened has a negative answer worth recording. Extending I90's actor-attribution
+arm to `SKILL.md` gives **12 hits, all 12 correct rule text** ("Do not summarize", "Run the entire
+pipeline in this conversation") — because **SKILL.md's implicit grammatical subject IS the lead**, so an
+unattributed actor is the normal and correct form of nearly every rule sentence. What separated Rule 7
+from those twelve was never attribution but whether the ACT is delegable, which is a semantic judgment
+a lint cannot make. What IS checkable is the narrow rhetorical form Rule 7 used — `Just`/`Simply` + a
+repair verb + a pronoun, two words that instruct the reader not to route the act — and that ships with a
+**measured-empty false-positive set** across both corpora. Dropping the prefix takes it to one
+(`route.md`'s "Resolve it here", where "it" is a `sprint_id` being derived), so the prefix is load-bearing
+rather than decorative and a probe asserts it.
+
+I57's own case-blindness was fixed and swept for a second instance: of 27 lowercase prose tokens in the
+file's 136 regex literals, three genuinely read prose and all three came back clean with live controls.
+One instance, looked for a second, none found, and a capitalised probe now sits in I57's own arm set so
+the blindness cannot return silently.
+
+**Also fixed, found while triaging the above.** `validate-cycle-commits.sh` returned `PASS` on a log
+whose newest section was 55 sprints stale, having exempted every section as prior-sprint and measured
+nothing. The lead self-execution waiver matched on a five-line window, so any nearby record satisfied
+it. `validate-hook-registration.sh` closes a hook that ships, sits on disk, looks installed and never
+fires — the registration is performed by a script the pull path names only in prose.
+
+**One correction to this release's own work, worth recording because it is not a slip.** The gate
+repair-record arm derived its directory as `dirname(verdict)`, which is *correct* for the adversarial
+caller — there the pass artifacts and repair records genuinely co-locate. The gate is the one caller
+where that stops being true, so the arm fired on every correctly delegated repair, and its structure
+half was unreachable and read exactly like a pass. The transplant was right up to exactly the caller
+it was for.
+
+**Both sides of that arm were seeded from the wrong side, and each caught the other.** The arm's author
+seeded its fixture with the record beside the verdicts — the shape its own reader accepted — so
+`delegated exit=0` was a false pass and the structure half was unreachable. **A fixture seeded from what
+its reader accepts is a defect this repo has shipped before**, and it was caught here on first contact
+only because a second author seeded the differential from the PRESCRIPTION in `_gate-procedures.md`
+instead. That second author then proposed a fallback glob, `planning-artifacts/*/*-repair-p<M>.md`,
+which admits the ADVERSARIAL caller's record — same sprint directory, usually well-structured, often a
+matching pass number — so the arm would have adopted it as the gate record and passed with no gate
+record written at all: the inline-repair hole reopened inside the check built to close it. Measured on
+the reference consumer's real tree — **74 adversarial records, 50 with a matching pass number, zero gate
+records; the prefixed glob reports 18 missing, the loose one reports 0** — and the corpus measurement is
+what killed it.
+
+The process lesson is the durable one: **writing the differential fixture and the arm it drives in
+separate hands produced both catches.** Neither author could have caught their own, because each was
+reasoning from the artifact they had already accepted. That split was accidental here and is worth
+making deliberate.
+
+The resolve then collapsed from two globs to one, for a reason that is the same defect wearing a
+third face: `gate-*` is a strict superset of `gate-<type>-`, so the second lookup found nothing the
+first did not — **it only made a PARTIAL regression survivable.** Point one of the two at the wrong
+directory and the other still finds the record, the delegated case stays green, and only a
+same-name-wrong-place fixture case notices. One expression cannot half-regress.
+
+**Open, recorded where a reader will meet it rather than here.** The `failure` row does not declare
+`hard_block`; the reason, the census (17 of 57 rows set it, 38 omit it), and what would change the
+decision are in that row's own `why:` field, because nothing in the tree reads the field today and a
+note in a changelog has no reader.
+
 ## [0.356.0] — 2026-08-11
 
 ### The snapshot history had no rotator, and the one hook that names it explicitly allows reading all 617 KB

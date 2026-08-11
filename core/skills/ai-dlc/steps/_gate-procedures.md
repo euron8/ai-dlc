@@ -406,21 +406,27 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
    open a new series: `--series` spans both, the pass numbers collide, and the gate then fails on
    a cycle that did nothing wrong. That pass is the terminal clean pass Check 24 requires.
 
-## Adversarial repair dispatch (referenced by step files)
+## Adversarial repair dispatch (referenced by step files and by the gate)
 
-When a step file says "repair the findings", execute this. **The lead does not repair the
+ONE procedure, TWO callers: a step file that says "repair the findings" after an adversarial
+pass, and `gate-validation.md` "Gate Failure" after a check fails. **The lead does not repair the
 artifact itself** — it is the most context-saturated agent in the pipeline and repairs from a
 compacted summary, not the document. (Rationale + the measurement: notes R35.)
 
-**Dispatch** ONE `remediator` per adversarial pass — never per finding; the artifact is one
-document and parallel editors contradict each other. Agent tool, bound to
+**Dispatch** ONE `remediator` per pass — never per finding, and never a second remediator
+alongside the first; the artifact is one document and parallel editors contradict each other.
+Agent tool, bound to
 `.claude/team-roles/remediator.md` per SKILL.md Rule 19 (both bindings: `model` and the
-standing role-contract Read line). It takes that pass's WHOLE finding set.
+standing role-contract Read line). It takes that pass's WHOLE set: every finding of the
+adversarial pass, or every FAILED check of the gate pass.
 
-It writes the repaired artifact in place plus a **repair record** at
-`_bmad-output/planning-artifacts/s<N>/<artifact>-repair-p<M>.md` (`<M>` = the pass repaired):
-per finding, the disposition, the edit site, and the command that derives every factual claim
-the repair asserts, with its output. The next adversarial pass verifies against that record.
+It writes the repaired artifact in place plus a **repair record** (`<M>` = the pass repaired) at
+`_bmad-output/planning-artifacts/s<N>/<artifact>-repair-p<M>.md` when the caller is an
+adversarial pass, or at
+`_bmad-output/planning-artifacts/s<N>/gate-<type>-repair-p<M>.md` when the caller is a gate
+failure. Per finding — or per failed check — the disposition, the edit site, and the command
+that derives every factual claim the repair asserts, with its output. The next adversarial pass
+verifies against that record; so does the gate's re-run of the failed checks.
 
 **Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh <repair_record_path>`.
 
@@ -428,9 +434,11 @@ the repair asserts, with its output. The next adversarial pass verifies against 
 
 ```
 scripts/ai-dlc/validate-artifact-derivations.sh _bmad-output/planning-artifacts/s<N>/
+scripts/ai-dlc/report-propagation-fanout.sh <base-ref>
 ```
 
-A non-zero exit is a repair that falsified a derivation — most often not its own, but one
+A non-zero exit from `validate-artifact-derivations.sh` is a repair that falsified a
+derivation — most often not its own, but one
 elsewhere in the artifact set that was counting the thing this repair moved. Send it back to
 the remediator now. It costs an exit code here and a full review-and-repair round trip if it
 reaches the adversary instead: measured across four sprints of this pipeline, **78% of the
@@ -441,6 +449,20 @@ command the artifact already carried.
 
 Run the same command after the AUTHORING step too, before the cycle's first pass — the same
 staleness reaches pass 1 from the step that wrote the artifact.
+
+`report-propagation-fanout.sh` finds the dependents no derivation fence covers: it prints an
+**advisory worklist** of every `` `path:N` `` citation in the mutable current-sprint corpus
+whose target this repair line-shifted. `<base-ref>` is the sha this pass's repair started from;
+pass it alone and the diff runs against the WORKING TREE, which is where an uncommitted repair
+is. Hand the worklist to the remediator with the next pass's set. It is not a gate verdict and
+no exit code of it adjudicates a gate.
+
+Its exit codes say whether it could LOOK, never what it found. **0** means the scope resolved
+and the worklist is meaningful even when empty. **3** means it never established one, so it
+resolved to the wrong tree and the empty worklist beneath it states nothing about your
+artifacts; **2** means usage, an unresolvable ref, or not a git repository, and judges nothing
+either. On 3, fix the scope and re-run: do not send it to the remediator, and do not read it as
+a clean corpus.
 
 **The lead keeps** dispatch, the join, and the **Rule 11/13 scope calls** the remediator
 escalates (cut-versus-fix, `LOCKED_REQUIREMENTS`, anything changing what the sprint delivers).

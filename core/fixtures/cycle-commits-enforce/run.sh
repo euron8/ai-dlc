@@ -206,7 +206,7 @@ git checkout -q ai-dlc/retro/sprint-900
 # The exemption keys on `sprint_n != current_sprint_n`. Flip that to never-true and the dead
 # prior-sprint SHAs go back to failing the run, which is the state the consumer measured.
 MUT2="$WORK/mutant-scope.sh"
-sed 's/if str(sprint_n) != str(current_sprint_n):/if False:/' "$VALIDATOR" > "$MUT2" || exit 2
+sed 's/if not is_current(sprint_n):/if False:/' "$VALIDATOR" > "$MUT2" || exit 2
 write_log 3
 {
   printf '\n## Sprint 136 — retro\n\n'
@@ -225,6 +225,127 @@ else
   else
     bad "MUTATION: the run still passed without the prior-sprint test — assertion 6 is vacuous"
     sed 's/^/        /' "$WORK/mut2.txt"
+  fi
+fi
+
+# --- 9. NON-VACUITY: an exempted subject set is not a verified one -------------
+# Measured on the reference consumer at sprint 302, whose log's newest section is 247: every
+# section was exempted, zero cycles were counted, and the script printed
+# `RESULT: PASS -- all artifacts have >=3 cycles`. Each carve-out was right; nothing was
+# counting what survived them. Exit 4, never 0.
+git checkout -q ai-dlc/retro/sprint-900
+S1="$(git rev-parse HEAD)"; S2="$(git rev-parse HEAD~1)"; S3="$(git rev-parse HEAD~2)"
+prior_only_log() {  # a log whose ONLY section is a prior sprint's, with LIVE SHAs
+  mkdir -p "$WORK/_bmad-output"
+  {
+    printf '## Sprint %s — retro\n\n' "$1"
+    printf '| # | Cycle | Notes | SHA |\n'
+    printf '|---|-------|-------|-----|\n'
+    printf '| 1 | party-mode cycle 1 | note | `%s` |\n' "$S1"
+    printf '| 2 | adversarial-review pass 1 | note | `%s` |\n' "$S2"
+    printf '| 3 | party-mode cycle 2 | note | `%s` |\n' "$S3"
+  } > "$WORK/$LOG"
+}
+prior_only_log 800
+bash "$VALIDATOR" ai-dlc/retro/sprint-900 >"$WORK/vac.txt" 2>&1
+rc=$?
+# The control is in the same run: the section must have been PARSED and exempted, not missed.
+# A log this script failed to read would produce the same "nothing measured" for the opposite
+# reason, and the two must not score the same.
+if [ "$rc" = "4" ] && grep -q 'NOTHING MEASURED' "$WORK/vac.txt" \
+   && ! grep -q 'RESULT: PASS' "$WORK/vac.txt" \
+   && grep -q 'MERGED (prior sprint)' "$WORK/vac.txt" \
+   && grep -q 'the log parsed 1 section(s)' "$WORK/vac.txt"; then
+  ok "a log with only PRIOR-sprint sections exits 4 (NOTHING MEASURED), never a bare PASS"
+else
+  bad "an all-exempted run still reported a pass (rc=$rc)"; sed 's/^/        /' "$WORK/vac.txt"
+fi
+
+# --- 9b. The 4 REACHES THE GATE. This is why it is an exit code and not a worklist line ----
+# Check 2 captures this script's output into a variable, prints `CHECK 2: PASS` on exit 0 and
+# never prints the capture. A worklist at exit 0 would be invisible at the only place the
+# verdict is consumed. Assert the wedge is real and visible, because choosing to wedge a
+# dormant-log consumer is the load-bearing half of that decision.
+if [ -f "$VMR" ]; then
+  # 2>&1, unlike the arms above: mandatory-rules prints its per-check verdict on stdout and
+  # accumulates the DETAIL into FAILURE_MSGS, which it dumps to stderr at the end. Reading
+  # only stdout would score a bare `CHECK 2: FAIL` as full disclosure.
+  VOUT="$(bash "$VMR" 900 2>&1 || true)"
+  if grep -q 'CHECK 2: FAIL' <<<"$VOUT" && grep -q 'exited 4' <<<"$VOUT" \
+     && grep -q 'NOTHING MEASURED' <<<"$VOUT"; then
+    ok "mandatory-rules Check 2 renders the 4 as FAIL and carries the code into its message"
+  else
+    bad "Check 2 did not surface the non-vacuity finding"
+    echo "$VOUT" | grep -i -A2 'check 2' | sed 's/^/        /'
+  fi
+fi
+
+# --- 10. The CURRENT sprint's own section, exempted as MERGED, is still nothing measured --
+# `MERGED (prior sprint)` never asked which sprint. On the reference consumer it exempted the
+# section of the sprint the run believed it was validating, one line under a NOTE claiming the
+# current sprint is never exempted. The predicate is left alone deliberately — this asserts
+# only that the exemption is no longer mistaken for a measurement.
+git checkout -q -b ai-dlc/story/sprint-901 2>/dev/null || git checkout -q ai-dlc/story/sprint-901
+prior_only_log 901
+bash "$VALIDATOR" ai-dlc/story/sprint-901 >"$WORK/vac2.txt" 2>&1
+rc=$?
+if [ "$rc" = "4" ] && grep -q 'MERGED (prior sprint)' "$WORK/vac2.txt" \
+   && grep -q 'all removed by a carve-out' "$WORK/vac2.txt" \
+   && grep -q 'Sprint 901 retro \[MERGED\]' "$WORK/vac2.txt"; then
+  ok "the CURRENT sprint's own section exempted as MERGED reports NOTHING MEASURED, naming it"
+else
+  bad "a current-sprint section eaten by MERGED still passed (rc=$rc)"
+  sed 's/^/        /' "$WORK/vac2.txt"
+fi
+
+# --- 11. The sprint under validation is derived from OUTSIDE the log ----------
+# THE ARM ABOVE CANNOT FIRE WITHOUT THIS. The old fallback took the log's own highest section
+# number when the branch named no sprint, under which the log agrees with itself by
+# construction and "no section for the sprint under validation" is unreachable. This is the
+# isolating pair: same tree, same log, same branch — the only difference is whether an
+# external declaration of the current sprint exists.
+git checkout -q ai-dlc/retro/sprint-900
+git checkout -q -b feature/misc-work 2>/dev/null || git checkout -q feature/misc-work
+write_log 3   # a live Sprint 900 retro section; the branch's 3 retro commits count for it
+
+rm -rf "$WORK/_bmad-output/implementation-artifacts"
+bash "$VALIDATOR" feature/misc-work >"$WORK/nostat.txt" 2>&1
+rc_nostat=$?
+
+mkdir -p "$WORK/_bmad-output/implementation-artifacts"
+printf 'sprint: 901\nstatus: in_progress\n' > "$WORK/_bmad-output/implementation-artifacts/sprint-status.yaml"
+bash "$VALIDATOR" feature/misc-work >"$WORK/stat.txt" 2>&1
+rc_stat=$?
+
+if [ "$rc_nostat" = "0" ] && grep -q 'RESULT: PASS' "$WORK/nostat.txt"; then
+  ok "CONTROL: with no external declaration the log's own newest sprint is validated (PASS)"
+else
+  bad "the control arm did not pass (rc=$rc_nostat) — assertion 11's pair is not isolating"
+  sed 's/^/        /' "$WORK/nostat.txt"
+fi
+if [ "$rc_stat" = "4" ] && grep -q 'sprint-status.yaml' "$WORK/stat.txt" \
+   && grep -q 'NO section in the log at all' "$WORK/stat.txt"; then
+  ok "sprint-status.yaml names sprint 901, the log stops at 900 -> NOTHING MEASURED, source named"
+else
+  bad "the sprint under validation was still taken from the log (rc=$rc_stat)"
+  sed 's/^/        /' "$WORK/stat.txt"
+fi
+rm -rf "$WORK/_bmad-output/implementation-artifacts"
+
+# --- 12. MUTATION: neuter the non-vacuity arm -> assertion 9's input goes green --
+MUT3="$WORK/mutant-vacuity.sh"
+sed 's/^if measured_current == 0:/if False:/' "$VALIDATOR" > "$MUT3" || exit 2
+git checkout -q ai-dlc/retro/sprint-900
+prior_only_log 800
+if cmp -s "$VALIDATOR" "$MUT3"; then
+  bad "MUTATION: the non-vacuity predicate was rewritten — assertion 9 is unproven until this sed is updated"
+else
+  bash "$MUT3" ai-dlc/retro/sprint-900 >"$WORK/mut3.txt" 2>&1
+  if [ "$?" = "0" ] && grep -q 'RESULT: PASS' "$WORK/mut3.txt"; then
+    ok "MUTATION: without the arm, the all-exempted log prints the old bare PASS (the 4 was real)"
+  else
+    bad "MUTATION: the all-exempted log did not pass without the arm — assertion 9 is vacuous"
+    sed 's/^/        /' "$WORK/mut3.txt"
   fi
 fi
 

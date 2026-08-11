@@ -29,6 +29,38 @@
 # Exit codes:
 #   0  -- all artifacts pass
 #   1  -- one or more artifacts fail, or validation-cycle-log.md missing
+#   4  -- IT MEASURED NOTHING about the sprint under validation. NEVER A PASS.
+#
+# THE 4 IS THE NON-VACUITY ARM AND IT IS THIS REPO'S NAMED DEFECT CLASS, reached here
+# through an exemption rather than a flag. Every carve-out below -- SQUASHED, MERGED,
+# UNVERIFIABLE -- is correct on its own terms and each one REMOVES a section from the
+# subject set. Nothing was counting what survived. Measured on the reference consumer at
+# sprint 302, whose log's newest section is sprint 247: every one of its 19 sections was
+# exempted, zero cycles were counted, and this script printed
+# `RESULT: PASS -- all artifacts have >=3 cycles with matching log rows.` It had verified
+# no such thing. A run that exempts its whole subject set has established that it ran, not
+# that the cycles happened, and those two must not print the same word.
+#
+# 4 rather than a worklist line at exit 0, and the reason is the CALLER, not taste.
+# --audit-trunk above prints WORKLIST and exits 0 for a project that has not adopted it,
+# because a human reads that output. Check 2 in validate-mandatory-rules.sh does not: it
+# captures this script's stdout+stderr into a variable, prints `CHECK 2: PASS` on exit 0
+# and DISCARDS the capture unread. A worklist line at exit 0 would therefore be invisible
+# at the only place the verdict is consumed -- silence and "nothing owed" looking alike,
+# which is the defect, not a softer form of it.
+#
+# THAT WEDGES A DORMANT-LOG CONSUMER'S GATE, DELIBERATELY, AND THE ESCAPE IS ALREADY
+# DECLARED. Check 2 keys its enablement on the LOG'S PRESENCE and SKIPs, loudly, when it is
+# absent -- the per-artifact-changelog model. So a project reaching this arm has exactly two
+# one-step answers, restore the writer or retire the log, and neither is "backfill 55
+# sprints". A log that is neither written nor declared dead is the one state that has no
+# reading, and it is the state that produced the false PASS.
+#
+# WHICH SPRINT IS UNDER VALIDATION IS DERIVED FROM OUTSIDE THE LOG WHEREVER POSSIBLE, and
+# that is load-bearing for this arm rather than tidiness. The old fallback took the log's
+# own highest section number, under which "the log has no section for the current sprint"
+# is UNREACHABLE BY CONSTRUCTION -- the arm would have been a check that cannot fire. The
+# derivation's source is printed with the verdict for the same reason.
 #
 # ----------------------------------------------------------------------------
 # SECOND MODE: --audit-trunk [<genesis>]  -- the POST-MERGE TRUNK AUDIT.
@@ -542,8 +574,20 @@ subj_result = subprocess.run(
 commits = [line for line in subj_result.stdout.strip().splitlines() if line]
 
 if not commits:
-    print(f"No commits on branch {branch} since {trunk} -- nothing to validate.")
-    sys.exit(0)
+    # Not "nothing to validate": nothing COULD be validated. The commit-based count is one
+    # of the two strategies this script requires to agree, and with an empty range it is
+    # zero for every artifact -- so every verdict below would be reached without evidence.
+    # The control is in the same breath, because an empty range and an unresolvable branch
+    # name print the identical zero.
+    total = subprocess.run(["git", "rev-list", "--count", branch],
+                           capture_output=True, text=True).stdout.strip() or "?"
+    print(f"NOTHING MEASURED: the range {trunk}..{branch} holds no commits, so no cycle "
+          f"commit could be counted for any artifact (control: {branch} itself holds "
+          f"{total} commit(s), so the branch resolves and the enumeration ran).")
+    print(f"        Either this branch has not been worked on yet, or '{trunk}' is not this "
+          f"project's trunk -- set AI_DLC_TRUNK.")
+    print("RESULT: NOTHING MEASURED -- not a pass. See above.")
+    sys.exit(4)
 
 # ---- Parse log file: count rows per artifact section -----------------------
 # Sections: "## Sprint N — <Label> (...)"  or  "## Sprint N -- <Label> (...)"
@@ -595,8 +639,18 @@ with open(log_file, encoding='utf-8') as f:
                 artifacts[current]["shas"].append(sha_m.group(1))
 
 if not artifacts:
-    print("No artifact sections found in validation-cycle-log.md.")
-    sys.exit(0)
+    try:
+        with open(log_file, encoding='utf-8') as f:
+            nlines = sum(1 for _ in f)
+    except OSError:
+        nlines = 0
+    print(f"NOTHING MEASURED: {log_file} exists and carries no '## Sprint N -- <artifact>' "
+          f"section at all, so there is no artifact for this run to count cycles for "
+          f"(control: the file is {nlines} line(s) long, so it was read).")
+    print("        A file with no sections and a file with no findings are different facts. "
+          "Write the sections, or retire the log -- Check 2 SKIPs on its absence.")
+    print("RESULT: NOTHING MEASURED -- not a pass. See above.")
+    sys.exit(4)
 
 # ---- Retro-branch awareness -------------------------------------------------
 # On retro branches (ai-dlc/retro/sprint-N), planning-phase artifacts were
@@ -618,17 +672,53 @@ if is_retro_branch:
 # process-wide exit code as the retro's own verdict, so a single retro could not distinguish
 # them without running this standalone and reading the per-artifact table by hand.
 #
-# DERIVED, in falling order of directness: the retro branch names its sprint; any branch may
-# carry `sprint-<N>`; otherwise the newest section in the log is the one being worked on. The
-# fallback is data, not a guess — the log grows a section per sprint and the highest number is
-# the current one by construction.
+# DERIVED, in falling order of directness, and EVERY SOURCE ABOVE THE LAST IS OUTSIDE THE
+# LOG. That ordering is the whole reason the non-vacuity arm can fire. The original fallback
+# — "the newest section in the log is the sprint being worked on" — was called data rather
+# than a guess, and it is data about a file that has stopped being written: it makes the log
+# agree with itself by construction, so "no section for the sprint under validation" becomes
+# unreachable and the arm reading for it becomes a check that cannot fire.
+#
+# MEASURED on the reference consumer, which is what put sprint-status.yaml in this list: its
+# branch is `ai-dlc/feature/s302-position-usd-create-position`, which `sprint-(\d+)` does not
+# match; the log's newest section is 247; sprint-status.yaml says 302. The old order reported
+# "Sprint 247 is under validation" and exempted 247's own section as a PRIOR sprint.
+#
+# The source is carried, not just the number. A sprint number taken from the log is not
+# independent evidence about the log, and a verdict that does not say where its subject came
+# from cannot be audited by the operator reading it.
+SPRINT_SRC_LOG = "the log's own newest section — no branch name or sprint-status.yaml said"
 current_sprint_n = retro_sprint_n
+sprint_src = "the retro branch name" if current_sprint_n is not None else None
 if current_sprint_n is None:
     bm = re.search(r'sprint-(\d+)', branch)
     if bm:
-        current_sprint_n = bm.group(1)
+        current_sprint_n, sprint_src = bm.group(1), "the branch name"
+if current_sprint_n is None:
+    # `s302` in a feature-branch name. Bounded on both sides so a branch called
+    # `feat/backports-2026` cannot donate a sprint number out of the middle of a word.
+    bm = re.search(r'(?:^|[/_-])s(\d+)(?:[/_.-]|$)', branch)
+    if bm:
+        current_sprint_n, sprint_src = bm.group(1), "the branch name"
+if current_sprint_n is None:
+    # The canonical copy first, then the legacy second copy some consumers still carry —
+    # the same pair, in the same order, that mandatory-rules Check 3 reads.
+    for cand in ("_bmad-output/implementation-artifacts/sprint-status.yaml",
+                 "_bmad-output/planning-artifacts/sprint-status.yaml"):
+        try:
+            with open(cand, encoding='utf-8') as f:
+                for raw_line in f:
+                    sm = re.match(r'^sprint:\s*(\d+)', raw_line)
+                    if sm:
+                        current_sprint_n, sprint_src = sm.group(1), cand
+                        break
+        except OSError:
+            continue
+        if current_sprint_n is not None:
+            break
 if current_sprint_n is None and artifacts:
     current_sprint_n = str(max(int(a["sprint"]) for a in artifacts.values()))
+    sprint_src = SPRINT_SRC_LOG
 
 # ---- Build commit-based counts per artifact --------------------------------
 # Pattern: "Sprint N <artifact_key>: <cycle>"
@@ -713,6 +803,23 @@ for line in commits:
 # ---- Output table and check PASS/FAIL conditions ---------------------------
 fail = False
 unverifiable = []
+
+# ---- The subject set, tracked as the exemptions eat it -----------------------
+# Every carve-out below `continue`s past the verdict, and each one is right on its own
+# terms. What nothing tracked is how much of the sprint under validation was left. These two
+# are that accounting: `measured_current` counts sections of THIS sprint that reached a real
+# verdict, `exempt_current` names the ones a carve-out removed and which carve-out did it.
+measured_current = 0
+exempt_current = []
+
+
+def is_current(sn):
+    try:
+        return int(sn) == int(current_sprint_n)
+    except (TypeError, ValueError):
+        return str(sn) == str(current_sprint_n)
+
+
 print()
 print(f"{'ARTIFACT':<42} | {'COMMITS':>7} | {'LOG ROWS':>8} | {'SHA CHECK':>10} | MATCH")
 print("-" * 90)
@@ -735,6 +842,7 @@ for fk in sorted(artifacts.keys()):
     if is_retro_branch and retro_sprint_n == sprint_n and label != 'retro':
         match = "SQUASHED (pre-retro)"
         disp = f"Sprint {sprint_n} {label}"
+        exempt_current.append(f"{disp} [SQUASHED]")
         print(f"{disp:<42} | {cycles:>7} | {log_rows:>8} | {sha_status:>10} | {match}")
         continue
 
@@ -749,6 +857,14 @@ for fk in sorted(artifacts.keys()):
         if non_tbd_shas and all(sha_exists_in_repo(s) for s in non_tbd_shas):
             match = "MERGED (prior sprint)"
             disp = f"Sprint {sprint_n} {label}"
+            # ITS NAME SAYS "prior sprint" AND ITS PREDICATE NEVER ASKED WHICH SPRINT. On the
+            # reference consumer this arm exempted the section of the very sprint the run
+            # believed it was validating. The predicate is left alone — narrowing it would
+            # turn a mid-sprint feature branch, whose planning cycles legitimately merged
+            # ahead of it, into a FAIL — but an exemption is not a measurement, so a current
+            # -sprint section that lands here is recorded as removed from the subject set.
+            if is_current(sprint_n):
+                exempt_current.append(f"{disp} [MERGED]")
             print(f"{disp:<42} | {cycles:>7} | {log_rows:>8} | {sha_status:>10} | {match}")
             continue
         # THE SAME SHAPE, ONE SHA SHORT. Zero commits on this branch and enough log rows, but
@@ -764,7 +880,7 @@ for fk in sorted(artifacts.keys()):
         # what is lost is only the ability to RE-verify it here. That is a different fact from
         # "this sprint skipped its cycles", so it gets its own name and does not fail the run.
         # The CURRENT sprint is never exempted — see below.
-        if str(sprint_n) != str(current_sprint_n):
+        if not is_current(sprint_n):
             match = "UNVERIFIABLE (history rewritten)"
             disp = f"Sprint {sprint_n} {label}"
             unverifiable.append(disp)
@@ -796,6 +912,10 @@ for fk in sorted(artifacts.keys()):
             match = "PASS"
 
     disp = f"Sprint {sprint_n} {label}"
+    # Reached a verdict — PASS or one of the FAILs. This is the only place a section counts
+    # as measured, so no future carve-out can be added above without leaving it out.
+    if is_current(sprint_n):
+        measured_current += 1
     print(f"{disp:<42} | {cycles:>7} | {log_rows:>8} | {sha_status:>10} | {match}")
 
 print()
@@ -806,7 +926,47 @@ if unverifiable:
     print(f"NOTE: {len(unverifiable)} prior-sprint section(s) UNVERIFIABLE (row SHAs no longer "
           f"in this repo; their cycle integrity is locked in by merged trunk history, and "
           f"re-verification here is what was lost): {', '.join(unverifiable)}")
-    print(f"      Sprint {current_sprint_n} is under validation and is never exempted this way.")
+    print(f"      Sprint {current_sprint_n} is under validation ({sprint_src}) and is never "
+          f"exempted THIS way — see the subject-set line below for what it was exempted by.")
+
+# ---- NON-VACUITY: an exempted subject set is not a verified one ---------------
+# The arm this file's header describes. It is deliberately the LAST thing computed, over the
+# same tallies the table printed, so it cannot disagree with the rows above it.
+if measured_current == 0:
+    sections_current = [f"Sprint {a['sprint']} {a['label']}"
+                        for a in artifacts.values() if is_current(a["sprint"])]
+    sprints_seen = sorted({int(a["sprint"]) for a in artifacts.values()})
+    span = (f"{sprints_seen[0]}-{sprints_seen[-1]}" if len(sprints_seen) > 1
+            else str(sprints_seen[0]))
+    # The control travels with the zero. "No section for this sprint" and "the log did not
+    # parse" produce the same 0 and are opposite problems, so both counts are stated.
+    print(f"NOTHING MEASURED: no section of {log_file} concerning Sprint {current_sprint_n} "
+          f"reached a verdict, so this run counted zero cycles for the sprint under "
+          f"validation and asserted nothing about it.")
+    print(f"      Control: the log parsed {len(artifacts)} section(s) across sprint(s) "
+          f"{span}, and the range {trunk}..{branch} holds {len(commits)} commit(s) — so the "
+          f"parse and the enumeration both ran. Sprint {current_sprint_n} is under "
+          f"validation, derived from {sprint_src}.")
+    if not sections_current:
+        print(f"      That sprint has NO section in the log at all. The newest section is "
+              f"sprint {sprints_seen[-1]}; either the writer that appends here has stopped, "
+              f"or this project has moved to the per-artifact-changelog model.")
+    else:
+        print(f"      Its {len(sections_current)} section(s) were all removed by a carve-out: "
+              f"{', '.join(exempt_current)}. Each carve-out is correct on its own terms and "
+              f"none of them is a measurement.")
+    print("      RESTORE THE WRITER OR RETIRE THE LOG. mandatory-rules Check 2 keys its "
+          "enablement on this file's PRESENCE and SKIPs, saying so, when it is absent — so a "
+          "project on the changelog model has a one-step answer that is not a backfill. A log "
+          "that is neither written nor declared dead has no reading, and it is what made this "
+          "run print PASS.")
+    if not fail:
+        # STDOUT, unlike the FAIL line below, and not a style slip. Check 2 captures this
+        # script with 2>&1 and reports `tail -3` of the capture; stdout to a pipe is block
+        # -buffered and stderr is not, so a verdict written to the other stream can land
+        # ABOVE the lines explaining it and fall outside that tail.
+        print("RESULT: NOTHING MEASURED -- not a pass. See above.")
+        sys.exit(4)
 if fail:
     print(f"RESULT: FAIL -- one or more artifacts have <{min_cycles} cycles or mismatch.",
           file=sys.stderr)

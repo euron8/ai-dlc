@@ -144,6 +144,42 @@ if [ -f scripts/ai-dlc/validate-artifact-paths.sh ]; then
     bash scripts/ai-dlc/validate-artifact-paths.sh
 fi
 
+# 3d. A HOOK ON DISK THAT NOTHING REGISTERS NEVER FIRES, AND NEVER SAYS SO.
+#     A hook reaches a consumer in two halves and they are enforced differently. The FILE is
+#     a pure apply: `reconcile/apply.sh` writes `.claude/hooks/ai-dlc-<x>.sh` from theirs, in
+#     the driver, with a manifest row. The REGISTRATION is `reconcile/settings-merge.sh`
+#     rewriting `.claude/settings.json` -- and nothing CALLS it. Its only two invocation sites
+#     in the whole distribution are PROSE, in `ai-dlc-update/SKILL.md`. A pull that skips the
+#     prose leaves the hook sitting there, executable, looking installed, wired to nothing.
+#
+#     WHY THIS BELONGS HERE AND NOT ONLY IN THE PULL. The pull-time checks answer "did THIS
+#     pull register the hook". They cannot answer "is this consumer broken now", and the two
+#     are different populations: `preclassify.sh` buckets settings.json `TEMPLATE-UNCHANGED-NOOP`
+#     whenever the template itself did not move, so a tree that went stale on an EARLIER pull
+#     produces no row, no worklist item and no gate anywhere. Measured on the reference consumer
+#     the day this shipped: `ai-dlc-rules-floor.sh` -- whose own header reads "Makes an INERT
+#     rule file LOUD" -- present and unregistered since v0.350.0, six releases, across pulls that
+#     every one of them reported success. This arm reads DISK STATE, so it sees that tree.
+#
+#     Decidable from disk, which is why it belongs here and not at a gate. Its remedy is one
+#     command, the validator prints it with no placeholders left in it, and the command ends by
+#     re-running this check.
+if [ -f scripts/ai-dlc/validate-hook-registration.sh ]; then
+  step "hook registration (a hook on disk that nothing registers never fires)" \
+    bash scripts/ai-dlc/validate-hook-registration.sh
+else
+  # NOT A SILENT SKIP, and the reason is this arm's own subject. Every guard above skips in
+  # silence when its validator is absent, and a silent skip prints exactly what a pass prints.
+  # For a check whose entire point is "absent-and-inert is indistinguishable from working",
+  # inheriting that shape would be the joke telling itself. A consumer that predates the
+  # validator gets a named, visible NOT CHECKED instead.
+  printf '\n── %s\n' "hook registration (a hook on disk that nothing registers never fires)"
+  printf '   NOT CHECKED -- scripts/ai-dlc/validate-hook-registration.sh is not in this tree.\n'
+  printf '   This is not a pass. Nothing here verified that this project'"'"'s ai-dlc hooks are\n'
+  printf '   registered in .claude/settings.json; any of them may be present and inert.\n'
+  printf '   The validator arrives with the next /ai-dlc-update pull, and this arm starts working.\n'
+fi
+
 # 4. A shipped script with a syntax error is a gate that cannot run at all.
 #    The glob set below is the consumer image of the distribution hook's set, one
 #    entry per class after the core/ -> consumer mapping. validate-enforcement-map.sh
