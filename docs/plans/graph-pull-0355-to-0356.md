@@ -1,7 +1,8 @@
 # Runbook — pull the graph consumer from 0.355.0 to 0.356.0, mid-sprint s302
 
-**Status: READY TO EXECUTE.** Not yet run against the consumer. Authored against a real rehearsal on
-a `git clone --local` copy (§Rehearsal), not a prediction — every figure below was produced by
+**Status: DISCHARGED 2026-08-11. THIS RUNBOOK IS SPENT — DO NOT EXECUTE IT.** The consumer ran it
+at `036ec6dee`. See §Discharge for the independent verification. Authored against a real rehearsal
+on a `git clone --local` copy (§Rehearsal), not a prediction — every figure below was produced by
 running the step, and three of them contradict what a prediction would have said.
 
 ---
@@ -244,3 +245,57 @@ its budget so the pipeline may trim it at any moment), `gate-metrics.jsonl` (it 
 base sha — changing it re-bases the check and invalidates the before/after pair),
 `sprint-status.yaml`, the s302 planning artifacts, and the live driver state. Do not create
 `_bmad-output/pipeline-paused.flag`.
+
+---
+
+## Discharge — 2026-08-11, verified from this side
+
+The consumer executed it across four commits on `ai-dlc/feature/s302-position-usd-create-position`,
+ending at `036ec6dee`, with the additive/subtractive split the runbook asked for:
+
+    dbf3aab2c  chore(s302): pipeline in-flight state before the 0.355.0 -> 0.356.0 pull
+    3166b2dbf  chore(ai-dlc-update): reconcile distribution 0.355.0 -> 0.356.0
+    86871faa5  chore(s302): fold 158 dated snapshot archives into the one archive (additive)
+    036ec6dee  chore(s302): remove the folded archives and rotate the snapshot history
+
+**Everything below was re-derived read-only against `/Users/n8/git/graph`'s own tree, not read out
+of its report.**
+
+**Verified as written:**
+
+- **Criterion 1** — `.claude/.ai-dlc-version` reads `0.356.0` / `959e778` on all four lines.
+- **Criterion 2** — Check 35: `89 removed / 17 destroyed / PASS`, base sha `72e85e183` unchanged.
+  Identical verdict to the pre-migration reading.
+- **Criterion 3** — `git ls-files -- '*pipeline-snapshot.archive.*'` returns **0**. Control: the
+  looser `*pipeline-snapshot*` glob still matches 5 paths, so the zero is a real absence.
+- **Criterion 4** — history is **686 lines / 88,881 B**, H1 retained. Byte-for-byte the figure the
+  rehearsal predicted.
+- **Criterion 5** — budget still exits 1 on the same two pre-existing findings. The archive is
+  named **0** times in the full output; control, `pipeline-snapshot.md` is named 4 times.
+  (`pipeline-continuation-log.md` drifted 194% -> 198% — live pipeline growth, not this pull.)
+- **Criterion 6** — paths PASS, `ambiguous 72 / no-area 3 / story-no-sprint 23` all unchanged,
+  corpus 5094 files.
+- **Criterion 7** — `tests/fixtures/snapshot-archive-rotate/run.sh` PASS on the consumer's tree.
+- **Criterion 8** — local HEAD == remote HEAD == `036ec6dee`, and `.git/ai-dlc-fixture-verified`
+  and `.git/ai-dlc-fixture-durations` were written at 13:39 against a last commit of 13:19, with
+  144 recorded durations. A `--no-verify` push does not touch those, so the suite ran.
+
+**A stronger check than criterion 2, run because criterion 2 is narrower than it looks.** Check 35
+only examines lines derived from `pipeline-snapshot.md`, so it cannot see whether the *migration*
+lost anything. Reconstructing the pre-migration tree at `dbf3aab2c` — 158 archive files plus the
+617,496-byte history — gives **16,247 distinct substantive lines**, of which **0 are absent** from
+the current corpus. Control against `/dev/null`: 16,247. That figure matches the authoring
+rehearsal exactly.
+
+**Both traps the runbook flagged were handled.** All three sprint-slot files (`s177`, `s249`,
+`s250`) are in the fold, not just the 155 at `_bmad-output/` root — 158 absorbed markers, with a
+root-level file as control. And the dashless `20260718T234306Z` sits at position **144 of 158**,
+between `2026-07-17T011711Z` and `2026-07-19T232737Z`; an unnormalised `sort` would have placed it
+last.
+
+**Nothing in this file was found wrong.** That is worth stating plainly rather than leaving as an
+absence, because the previous two graph runbooks each had criteria withdrawn at discharge, and both
+times the cause was an instrument rather than the change. The difference here is that the three
+figures most likely to be wrong — the file count, which half carries the conservation risk, and
+whether the budget check would go green — were each measured against a control before shipping,
+and each contradicted the prediction. They are recorded in §Rehearsal.
