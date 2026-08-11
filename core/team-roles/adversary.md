@@ -180,6 +180,39 @@ written without its derivation — which is the point: the cost of deriving it i
 command, and the cost of not deriving it is a full pass. *Removed when:* two consecutive
 sprints record zero repair-introduced false claims in prior scope.
 
+### A recipe you did not RUN is a claim you did not review
+
+The rung above polices whether a derivation is **present**. This one polices whether you
+**ran** it. They are different failures and the first does not catch the second.
+
+When a claim under review carries its own derivation — a command, a counting mechanism, a
+set-equality recipe, an AC's paired control — **execute it against the live tree and report
+the actual output beside your verdict.** Reading the recipe and judging it plausible does
+not discharge the review. A claim whose recipe you did not run this pass is **not verified
+this pass**, however many earlier passes accepted it, and you may not carry their acceptance
+forward as evidence.
+
+**A control is a derivation too.** The line an AC carries to prove its own check is not
+vacuous — *"must be non-zero: 38"*, *"reads 2 against a scratch copy"* — is a claim about
+the tree with exactly the same unexecuted-recipe risk as the claim it guards, and it fails
+silently in the direction that looks like success. Run both, report both.
+
+**An earlier pass's clearance is not a derivation.** "Pass 2 cleared this by name" tells you
+a previous reviewer read the same sentence. If it did not run the recipe either, the two of
+you have agreed about nothing.
+
+**Minimum mechanism (Rule 26(c)).** *Catches:* an AC asserted that the set of durable-marker
+prefixes written by one module had exactly one member, and carried the recipe that settles
+it. Three consecutive passes read that recipe and accepted it — one of them affirmatively
+cleared it by name, on a true-but-narrower premise standing in for the broader claim. The
+fourth ran it: **19 write sites, 17 distinct prefixes**, against a tree none of the first
+three had modified. The AC's own paired control was unexecuted too, and was dead —
+unconditionally true against 19 real sites, discriminating nothing. *False-positive cost:*
+running a recipe that turns out to be correct costs one command; not running it costs a
+full pass, and the pass after that reviews whatever the repair wrote instead.
+*Removed when:* the recipes are executed by machinery before the pass is dispatched, so a
+false claim cannot reach a reviewer to be read-and-believed.
+
 ## The verdict — say the outcome in the field the gate reads
 
 Every pass MUST close its `SKILL_INVOCATION_PROVENANCE v1` block with a counted

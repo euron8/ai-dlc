@@ -34,6 +34,82 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.354.0] — 2026-08-11
+
+### The convergence loop was the derivation step, run by two Opus agents one pass late
+
+Measured against the reference consumer, not inferred. Across the 79 MAJOR findings raised at
+adversarial pass 2 and later in its four most recent sprints: **46 (58%) are a count, an
+enumeration, a wrong `file:line` or a quoted snippet — a fact about the tree one command
+settles.** Another 16 are one document contradicting another. **Exactly one in 79 was a wording
+nit.** So the cycle is not slow because the reviewers argue about phrasing; it is slow because it
+re-litigates facts nobody executed.
+
+Two further readings decide where the fix goes. **78% of those 79 findings were introduced by a
+prior repair** — the artifacts say so themselves, one titling its findings section *"all
+repair-injected."* And of the 46 mechanical ones, **22 had the answer already in the package**;
+the dominant sub-shape, 12 of them, is `derive → write → edit → never re-derive`: the command
+existed, would have caught it, and was simply not re-run after the edit that falsified it.
+
+Each of those costs an adversary dispatch to find and a remediator dispatch to fix — two
+Opus-`high` agents to recover a number a `grep -c` produces.
+
+**The duty to derive sat on the wrong side of the loop.** `team-roles/remediator.md` has carried
+*"every factual claim about the code that you write into the artifact carries the command that
+derives it and that command's output"* for releases. The roles that AUTHOR those claims —
+`pm`, `architect`, `sm`, `analyst`, `tea` — carried no such rule. All five now do, with the
+control-is-a-derivation-too clause and the re-run-it-when-you-edit-around-it clause the
+measurement named.
+
+**New: `core/scripts/validate-artifact-derivations.sh`.** A claim written in a ```` ```derived ````
+fence — one read-only command, then its output verbatim — is re-run and compared. It runs after
+every repair dispatch and after the authoring step, before an adversary is spawned. The command
+allowlist is a safety boundary: a refused command FAILS rather than being skipped, because a skip
+would let a claim be moved out of reach by writing it in a language the checker does not run.
+Fixture `artifact-derivations` proves each arm fires, including that a zero-hit `grep` is a
+legitimate derivation of a negative and that the zero carries a control.
+
+Honest bound, in the script's own header: it proves the recorded output is what the recorded
+command produces at HEAD. It does not prove the command MEASURES the claim beside it — five of
+the consumer's findings were a true derivation of the wrong thing, and that judgment stays with
+the adversary.
+
+### A recipe you did not RUN is a claim you did not review
+
+`team-roles/adversary.md` gains the rung the reference consumer filed as
+`PC-S302-ADVERSARY-RECIPE-PRESENT-IS-NOT-RECIPE-RUN`. The existing underived-claim rung polices
+whether a derivation is PRESENT; it says nothing about whether the pass reviewing it RAN it.
+
+Its receipt: an AC asserted that the set of durable-marker prefixes written by one module had
+exactly one member, and carried the recipe that settles it. Three consecutive passes read that
+recipe and accepted it — one affirmatively cleared it by name, on a true-but-narrower premise
+standing in for the broader claim. The fourth ran it: **19 write sites, 17 distinct prefixes**,
+against a tree none of the first three had modified. The AC's paired control was unexecuted too,
+and was dead — unconditionally true against 19 real sites, discriminating nothing.
+
+A control is a derivation, and it fails silently in the direction that looks like success.
+
+### An escalation that opens with the findings costs four round-trips; one that opens with the decision costs 91 seconds
+
+`steps/_gate-procedures.md`'s ADJUDICATE step said to present the finding and a recommended kind.
+It did not say what the operator should NOT be handed. Both numbers above are the same operator on
+the same class of stall, twelve minutes apart in one direction and a minute and a half in the
+other.
+
+The step now specifies the form: one sentence naming the DECISION rather than the finding, an
+`AskUserQuestion` carrying 2–4 worked-out options, and exactly one marked recommended — because a
+menu with no recommendation hands the judgment back to the person who has not read the artifact.
+
+Mechanised, since a presentation rule with no reader is a suggestion: the resolution record gains
+`options_presented` and `recommended_option`, and `validate-adversarial-convergence.sh` grows
+**arm F7** requiring both on any record adjudicated by the operator. The three new fixture cases
+are byte-identical to the passing one except for those fields, so a validator with F7 removed
+cannot pass them on exit code alone.
+
+False-positive set, measured before shipping: the consumer's 13 `adjudicated_by: operator` records
+all predate the fields, and the arm is `--series`-scoped so a closed series is never re-read. The
+set is the in-flight records only; migration is two lines each.
+
 ## [0.353.0] — 2026-08-10
 
 ### Core stated a fact about its own deploy shape as a ruling about everyone's, and a consumer had to contradict it in `extensions/` to be correct

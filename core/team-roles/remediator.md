@@ -48,10 +48,25 @@ In the repair record, per finding:
 - disposition: repaired | escalated | skipped (nit)
 - edit: <artifact file:line(s)>
 - derivation:
-    $ <the exact command>
-    <its output, trimmed to what settles the claim>
+
+```derived
+$ <the exact command>
+<its output, verbatim and unannotated>
+```
+
 - claim now asserted: <the sentence you wrote, which the derivation above supports>
 ```
+
+**The fence is `derived` and it is load-bearing.** `scripts/ai-dlc/validate-artifact-derivations.sh`
+re-runs every command inside one of those blocks and compares against the recorded output, so a
+claim written this way is checked by a script before the next adversarial pass is dispatched
+rather than by an Opus agent one pass later. Record the output **verbatim** — a `-> 7` annotation
+or a trailing `<- the count is clean` makes the block unreadable to the checker; put the
+commentary in the `claim now asserted:` line, which is what it is for.
+
+The command must be one read-only line (`grep`, `rg`, `awk`, `sed`, `wc`, `git grep`, and their
+kin; no `;`, `&&`, redirects or command substitution). A claim you cannot state that way is one
+the checker refuses rather than skips, and it stays the adversary's to run by hand.
 
 A finding whose repair asserts nothing about the code (a wording fix, a deletion) needs no
 derivation — say `derivation: n/a (no factual claim)`.
