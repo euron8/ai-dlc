@@ -17,14 +17,9 @@ Two repos, and the read/write boundary between them is absolute.
 
 Sprint s302 story-validation has **converged**: `stories-adversarial-p7.md` stamps
 `findings_critical: 0`, `findings_major: 0`, `verdict: EXIT_CONDITION_MET`. The pipeline is
-paused before test-strategy §5, and `_bmad-output/pipeline-paused.flag` is raised.
-
-**Do not run another adversarial pass on the stories series.** p7 is a freeze point
-(`core/skills/ai-dlc/steps/_gate-procedures.md`, "EXIT_CONDITION_MET IS A FREEZE POINT"). A
-pass after MET reporting residue is a RE-OPEN, arm J stops it, and it costs a fresh sub-cycle.
-This bites harder on this pull than most: 0.354.0 adds a rung requiring a reviewing pass to
-EXECUTE any derivation recipe it reads, and the last time a pass first did that
-(`stories-adversarial-p4.md`) its counts went UP.
+paused before test-strategy §5, and `_bmad-output/pipeline-paused.flag` is raised. The seam is
+past: `--cycle-state` on that series returns `CONVERGED`, and nothing below writes a story
+file or a pass artifact — steps 4 and 5 touch only resolution and repair records.
 
 **Ping the operator** on any question, on any decision this file does not settle, and on
 completion — including an early stop. A session that stops silently is indistinguishable
