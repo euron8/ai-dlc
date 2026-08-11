@@ -153,6 +153,7 @@ core_manifest:
   - fixtures/operator-request-capture/**
   - fixtures/request-coverage/**
   - fixtures/scope-confirmation/**
+  - fixtures/snapshot-archive-rotate/**
   - fixtures/snapshot-conservation/**
   - fixtures/suppression-lifetime/**
   - fixtures/self-update-join-gate/**

@@ -179,7 +179,10 @@ script names per artifact — they are not interchangeable:
   `pipeline-snapshot-history.md` (write-only, Rule 25(a)), **then** delete it from
   `pipeline-snapshot.md`. Never delete it outright. The live file keeps all seven
   sections: a section is trimmed by moving its superseded entries out, never by
-  dropping the section.
+  dropping the section. Then run:
+
+      bash scripts/ai-dlc/rotate-snapshot-archive.sh \
+           _bmad-output/pipeline-snapshot-history.md --apply
 
 Then re-run the script. It must exit 0 before the sprint proceeds.
 
@@ -545,12 +548,27 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
 - **If the file ALREADY exists** (a stale snapshot from a previous
   pipeline run — Step 0 did not dispatch to a resume, so the user is
   starting fresh with an old snapshot still on disk): do NOT silently
-  overwrite. Archive the old file to
-  `_bmad-output/pipeline-snapshot.archive.{ISO-timestamp}.md`
-  (timestamp format: compact ISO 8601, e.g., `2026-04-15T143000Z`),
+  overwrite. Absorb the old file into the one snapshot archive:
+
+      bash scripts/ai-dlc/rotate-snapshot-archive.sh \
+           _bmad-output/pipeline-snapshot-history.md \
+           --absorb _bmad-output/pipeline-snapshot.md --apply
+
   then create a new snapshot with initial state as above. Announce
   the archival in the output so the user knows the previous state
   was preserved.
+
+  **One destination, one writing program, no dated files.** A per-occasion
+  dated spelling (`pipeline-snapshot.archive.{ISO-timestamp}.md`) is
+  retired: the reference consumer accumulated **158 of them in five
+  different timestamp spellings**, three outside `_bmad-output/` root, and
+  none matched `is_archive()` in the budget sweep — so nothing measured
+  them and nothing rotated them.
+
+  **Run the rotator; do not move the file by hand.** That is what keeps
+  this write legal while the pipeline is paused — Rule 29's allowlist
+  covers `Write|Edit`, never `Bash` — and the rotator refuses a
+  destination Check 35's corpus cannot see.
 
 The full per-section snapshot structure is defined in
 `gate-validation.md` Check 14; see the SKILL.md Handoff Protocol and

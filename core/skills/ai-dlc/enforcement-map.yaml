@@ -1023,7 +1023,18 @@ non_catalog_units:
       - site: gate-validation.md Check 14
         posture: FAILS the gate (pipeline-snapshot.md only)
         why: the snapshot is the only artifact that grows WITHIN a sprint, and it is
-          whole-read at every gate, every resume, and every compaction
+          whole-read at every gate, every resume, and every compaction. The `trim`
+          remedy this verdict issues sends superseded content to
+          pipeline-snapshot-history.md, which is_archive() skips BEFORE measuring —
+          so the destination of this check's own remedy was the one artifact it
+          could never report a number for, measured at 87 KB -> 617 KB in four weeks
+          on the reference consumer, 29 commits, all del=0. rotate-snapshot-archive.sh
+          bounds it, invoked at each trim rather than at retro because the trim is
+          what feeds it and the trim fires per gate. The archive is not filing:
+          Check 35's corpus is every tracked *.md, and 62 of 89 candidate lines
+          lived only in that history, so an ignored or unstaged destination takes
+          destroyed from 17 to 79 against a floor of 40 — which is why the rotator
+          refuses an ignored path and stages the archive itself.
       - site: gate-validation.md Check 15 (--check-evidence)
         posture: FAILS the gate
         why: Check 14 runs the budget check and records its own result, so the
@@ -1038,6 +1049,7 @@ non_catalog_units:
     fixtures:
       - tests/fixtures/snapshot-section-schema
       - tests/fixtures/resume-whole-read
+      - tests/fixtures/snapshot-archive-rotate
       - tests/fixtures/snapshot-evidence-cell
       - tests/fixtures/inflight-row-shape
       - tests/fixtures/verdict-pass-content

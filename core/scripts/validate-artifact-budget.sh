@@ -420,6 +420,25 @@ pipeline-snapshot.md|6000|trim
 # Rule 25(a): history/archive files are write-only and their growth is free.
 # Measuring them would flag a 2.6 MB product-brief-history.md that costs nothing
 # and whose whole job is to BE big so the live file is not.
+#
+# ONE OF THEM IS NOT FREE, AND THIS EXEMPTION IS WHY NOBODY NOTICED.
+# `pipeline-snapshot-history.md` is fed by the `trim` remedy at every GATE, not at a
+# sprint close, and it matches `*-history.md` -- so it is skipped here, before any
+# measurement, and no sweep in this file has ever reported a number for it. Measured on
+# the reference consumer: 87 KB -> 617 KB in four weeks, 29 commits, all `del=0`. It is
+# now bounded by `rotate-snapshot-archive.sh`, which moves the old part to
+# `pipeline-history/pipeline-snapshot-archive.md`. BOTH names match the arms below, which
+# is deliberate: the live file stays exempt from measurement and the rotator is what
+# bounds it. Rule 25(a) in SKILL.md carries the full statement.
+#
+# THE DOT GRAMMAR IS RETIRED RATHER THAN ADMITTED. `*.archive.*` is matched by
+# ai-dlc-protect.sh's EXCLUDED_PATTERNS and NOT by this predicate, which is how 158 dated
+# `pipeline-snapshot.archive.<ISO>.md` files on the reference consumer stayed invisible to
+# this sweep. Widening this list was the obvious fix and is the wrong one: the two lists
+# live in different install layouts (`core/scripts/` -> `scripts/ai-dlc/`, `core/hooks/` ->
+# `.claude/hooks/`), so a shared predicate is the cross-file walk I33 fails the build on,
+# and the hook runs on EVERY tool call where a `source` is a per-call cost. The gap is
+# closed at the producer instead: route.md no longer mints the dot form.
 is_archive() {
   case "$1" in
     *-history.md|*-archive.md|*-archive-*.md|*.precompact.md) return 0 ;;
