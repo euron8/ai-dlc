@@ -91,19 +91,48 @@ record() {
 # A REPAIR RECORD -- the remediator's deliverable, one per repaired pass (§3a). Arm H
 # (v0.103.0) asserts it EXISTS and carries the three structured fields; a converging
 # cycle had repairs, so a delegated one leaves these on disk.
-# $1 file  $2 (optional) "unstructured" -> write prose only, to trip arm H's structure arm
+# $1 file  $2 (optional) mode:
+#   ""             -> the taught form, plain: `- disposition:` (remediator.md's template)
+#   "unstructured" -> prose only, to trip arm H's structure arm
+#   "bold"         -> the HOUSE STYLE: `- **disposition:**`. v0.355.0. Measured on the
+#                     reference consumer, 413 of 977 field lines are written this way and
+#                     every one of them read UNSTRUCTURED to arm H, because the bracket
+#                     class `[[:space:]-]` does not contain `*`. The seed wrote the plain
+#                     form ONLY, which is exactly why the fixture stayed green over it for
+#                     nine releases -- a check seeded with what its reader accepts asserts
+#                     nothing about what its reader rejects.
+#   "off-label"    -> emphasis is fine but the LABEL is not the taught one: `edit sites:`,
+#                     `derivation (qualifier):`. Arm H must STILL FAIL here. This is the
+#                     boundary case: without it, a later widening that admits any line
+#                     containing the word turns arm H off and every arm above still passes.
 repair() {
   local file="$1" mode="${2:-}"
   if [ "$mode" = "unstructured" ]; then
     printf 'The findings were addressed. See the artifact.\n' > "$file"
     return
   fi
+  if [ "$mode" = "off-label" ]; then
+    {
+      printf '# Repair record\n\n'
+      printf '### F1 — CRITICAL\n'
+      printf -- '- **disposition:** repaired\n'
+      printf -- '- **edit sites:** product-brief.md:42\n'
+      printf -- '- derivation (the restored qualifier — the only factual element):\n'
+      printf '    $ grep -c "load-bearing site" product-brief.md\n'
+      printf '    3\n'
+      printf '### Derivation 1 — the count above is the whole population\n'
+    } > "$file"
+    return
+  fi
+  local o="" c=""
+  [ "$mode" = "bold" ] && o='**' && c=':**'
+  [ "$mode" = "bold" ] || c=':'
   {
     printf '# Repair record\n\n'
     printf '### F1 — CRITICAL\n'
-    printf -- '- disposition: repaired\n'
-    printf -- '- edit: product-brief.md:42\n'
-    printf -- '- derivation:\n'
+    printf -- '- %sdisposition%s repaired\n' "$o" "$c"
+    printf -- '- %sedit%s product-brief.md:42\n' "$o" "$c"
+    printf -- '- %sderivation%s\n' "$o" "$c"
     printf '    $ grep -c "load-bearing site" product-brief.md\n'
     printf '    3\n'
     printf -- '- claim now asserted: all three sites are enumerated\n'
@@ -445,6 +474,37 @@ pass "$TARGET/repair-record-empty/s1-adversarial-pass2.md" 2 0 1 2 EXIT_CONDITIO
 pass "$TARGET/repair-record-empty/s1-adversarial-pass3.md" 3 0 0 2 EXIT_CONDITION_MET
 repair "$TARGET/repair-record-empty/s1-brief-repair-p1.md" unstructured
 repair "$TARGET/repair-record-empty/s1-brief-repair-p2.md"
+
+# --- repaired-delegated-bold: THE HOUSE STYLE -- MUST PASS (v0.355.0) ---------
+# The SAME byte-identical pass series a third time. Records are structured and complete;
+# the only difference from repaired-delegated is that the three field headings carry the
+# bold emphasis markdown puts on a field name. A human reads all three fields; arm H before
+# v0.355.0 read none of them and blocked the gate.
+#
+# THIS CASE IS RED AT 0.354.0 AND THAT IS THE POINT. It pairs with repair-record-empty the
+# way repaired-delegated pairs with repaired-inline-no-record: if the reader is ever
+# re-narrowed to the plain form, this goes red; if it is ever widened to "any line
+# mentioning the word", repair-record-off-label below goes red. Neither can move alone.
+mkdir -p "$TARGET/repaired-delegated-bold"
+pass "$TARGET/repaired-delegated-bold/s1-adversarial-pass1.md" 1 2 1 1 EXIT_CONDITION_NOT_MET
+pass "$TARGET/repaired-delegated-bold/s1-adversarial-pass2.md" 2 0 1 2 EXIT_CONDITION_NOT_MET
+pass "$TARGET/repaired-delegated-bold/s1-adversarial-pass3.md" 3 0 0 2 EXIT_CONDITION_MET
+repair "$TARGET/repaired-delegated-bold/s1-brief-repair-p1.md" bold
+repair "$TARGET/repaired-delegated-bold/s1-brief-repair-p2.md" bold
+
+# --- repair-record-off-label: THE BOUNDARY -- MUST FAIL (H) (v0.355.0) --------
+# Same series again. p1's record is emphasised the same way repaired-delegated-bold's is,
+# but its labels are NOT the taught ones: `edit sites:`, `derivation (qualifier):`, and a
+# `### Derivation 1 —` heading in place of the field. remediator.md teaches that the gate
+# reads the label literally; a record that renames the field is off-template and arm H is
+# RIGHT to fail it. Measured on the reference consumer: 12 of 74 records look like this, and
+# admitting them would require a predicate that also matches ordinary prose.
+mkdir -p "$TARGET/repair-record-off-label"
+pass "$TARGET/repair-record-off-label/s1-adversarial-pass1.md" 1 2 1 1 EXIT_CONDITION_NOT_MET
+pass "$TARGET/repair-record-off-label/s1-adversarial-pass2.md" 2 0 1 2 EXIT_CONDITION_NOT_MET
+pass "$TARGET/repair-record-off-label/s1-adversarial-pass3.md" 3 0 0 2 EXIT_CONDITION_MET
+repair "$TARGET/repair-record-off-label/s1-brief-repair-p1.md" off-label
+repair "$TARGET/repair-record-off-label/s1-brief-repair-p2.md" bold
 
 # The harness-owned transcript the RESOLUTION citations verify against (v0.61.0). A resolution
 # clears an operator-gated HARD_BLOCK, so its operator_authorization must quote a GENUINE

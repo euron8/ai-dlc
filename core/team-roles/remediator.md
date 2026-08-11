@@ -57,6 +57,22 @@ $ <the exact command>
 - claim now asserted: <the sentence you wrote, which the derivation above supports>
 ```
 
+**The three labels are read LITERALLY by the gate.** `validate-adversarial-convergence.sh`
+arm H decides whether this record is structured by looking for each label at the start of a
+line with the colon immediately after it. Bold, italic or code emphasis around the label is
+fine and expected — `- **disposition:**` reads exactly like `- disposition:`. What does not
+read is a RENAMED field, and these three are the ones that get written by accident:
+
+| written | read as | write instead |
+|---|---|---|
+| `- **edit sites:** a.md:4, b.md:9` | no `edit` field | `- **edit:** a.md:4, b.md:9` |
+| `- derivation (why this matters):` | no `derivation` field | `- derivation: why this matters` |
+| `### Derivation 1 — the count` | no `derivation` field | `- derivation:` then the heading |
+
+Put the qualifier AFTER the colon. A record that renames the field blocks the story gate
+with a message naming three labels you can see are present, and the fix is one edit you
+should not have to find. Measured on the reference consumer: 12 of 74 records did this.
+
 **The fence is `derived` and it is load-bearing.** `scripts/ai-dlc/validate-artifact-derivations.sh`
 re-runs every command inside one of those blocks and compares against the recorded output, so a
 claim written this way is checked by a script before the next adversarial pass is dispatched

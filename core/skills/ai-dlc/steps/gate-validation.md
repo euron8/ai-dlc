@@ -1601,7 +1601,11 @@ verification pass → MET must PASS: it is the sanctioned exit, and if it goes r
 cycle has no way out of a hard block). Arm H adds a **differential**: `repaired-delegated`
 and `repaired-inline-no-record` carry byte-identical pass series and differ only in whether
 the repair records exist on disk, so a validator that reads the series instead of the record
-cannot pass the fixture. Arm I adds a four-case set on ONE series: `ceiling-unanchored`
+cannot pass the fixture. Two more cases on that same series pin the FIELD READER from both
+sides: `repaired-delegated-bold` (the house style, `- **disposition:**`, must PASS) and
+`repair-record-off-label` (`- **edit sites:**`, `- derivation (qualifier):`, must FAIL).
+Narrow the reader and the first goes red; widen it to any line mentioning the word and the
+second does. Arm I adds a four-case set on ONE series: `ceiling-unanchored`
 (released twice, second release `CHANGE_APPROACH` — CEILING/3), `ceiling-anchored-release`
 (the same passes, second release `CUT_SCOPE` — CONTINUE/0, and **without it the arm has no
 exit and wedges every twice-resolved cycle**), `ceiling-single-resolution` (the sanctioned

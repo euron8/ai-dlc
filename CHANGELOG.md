@@ -34,6 +34,54 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.355.0] — 2026-08-11
+
+### Arm H read only the unbolded field heading, and nothing joined it to what is taught
+
+`validate-adversarial-convergence.sh` arm H decides whether a remediator's repair record is
+*structured* by looking for `disposition:`, `edit:` and `derivation:` at the start of a line.
+The bracket class it used — `[[:space:]-]` — contains space, tab and a hyphen, and **not `*`**.
+So `- **derivation:**`, which is what markdown emphasis on a field name produces, failed all
+three, and the record was reported UNSTRUCTURED.
+
+**Measured on the reference consumer at 0.354.0, not inferred.** Of its **74** repair records,
+**37 read UNSTRUCTURED — and 35 of those 37 carry all three fields in plain sight.** Only four
+heading shapes exist across 977 field lines, and 413 of them are bolded. Arm H fired on **10 of
+46** live series; on 5 it was blocking a gate over a record a human reads as complete.
+
+**The teaching and the checker agreed with each other and disagreed with every record actually
+written.** `core/team-roles/remediator.md` teaches the plain form; arm H read exactly the plain
+form; the fixture seeded exactly the plain form. Three files agreeing is not a join, and a
+fixture seeded from what its reader accepts asserts nothing about what its reader rejects —
+which is why this shipped green for nine releases.
+
+Fixed on all three sides, bound so they cannot drift again:
+
+- **The reader** is one named `repair_field` helper: the taught label, optionally wrapped in
+  the emphasis markdown puts on a field name, anchored to the line start, colon immediately
+  after. **The anchor is what keeps arm H able to fire**, not the tightness of the class — a
+  sentence mentioning the word mid-line cannot match at any width of wrapper. Rejects 37 → 14;
+  arm H still fires on 5 of the consumer's 46 series, which is the control that it fires at all.
+- **The writer.** `remediator.md` now states that the gate reads the three labels literally,
+  with the three renames that get written by accident and what to write instead. A qualifier
+  goes AFTER the colon.
+- **The bind.** `check-24-adversarial-convergence` evals `repair_field` out of the validator and
+  applies it to the field lines it extracts from the template, so the fixture runs the reader's
+  own code rather than a restatement of it. Two new cases pin the reader between walls it cannot
+  pass through at once: `repaired-delegated-bold` (house style, must PASS) and
+  `repair-record-off-label` (`edit sites:`, `derivation (qualifier):`, must FAIL). Narrow the
+  reader and the first goes red; widen it to any line mentioning the word and the second does.
+
+**Deliberately still rejected: 12 of the 74.** They rename the field rather than emphasise it.
+Admitting them needs a predicate that also matches ordinary prose, and an arm H that cannot fire
+reads exactly like one that passed. Arm H firing on them is now correct, and `remediator.md`
+says so where the author is.
+
+Filed by the graph consumer as
+`PC-S302-ARM-H-READS-ONLY-THE-UNBOLDED-FIELD-HEADING-WHILE-THE-TAUGHT-FORM-GOES-UNENFORCED`.
+No sibling defects: the bullet-tolerant `[[:space:]-]` form was unique to arm H, 3 of 3
+occurrences in `core/scripts/`.
+
 ## [0.354.0] — 2026-08-11
 
 ### The convergence loop was the derivation step, run by two Opus agents one pass late

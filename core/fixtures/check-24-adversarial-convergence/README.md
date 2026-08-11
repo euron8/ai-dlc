@@ -78,6 +78,60 @@ instead of statting the record cannot separate them — neutralize arm H and
 pair. This is the S295 defect: a lead that repairs inline leaves a series indistinguishable
 from a delegated one, and arms A–G pass over it.
 
+## v0.355.0 — the field reader, pinned from both sides, and joined to what is taught
+
+The three cases above all seeded the field headings **plain** — `- disposition:` — which is
+the form `remediator.md` teaches and the form arm H read. So the fixture was green over its
+own blind spot for nine releases: markdown puts emphasis on a field name, the reference
+consumer wrote `- **disposition:**` in **413 of 977** field lines, and the bracket class
+`[[:space:]-]` does not contain `*`. **37 of that consumer's 74 repair records read
+UNSTRUCTURED, and 35 of the 37 carry all three fields in plain sight.** Arm H fired on 10 of
+its 46 live series; it was a false positive against the house style on 5 of them.
+
+A fixture seeded from what its reader accepts asserts nothing about what its reader rejects.
+Three cases now hold the reader between two walls it cannot pass through at once:
+
+| Case | Shape | Must |
+|---|---|---|
+| `repaired-delegated-bold` | the SAME series again, records in the house style `- **disposition:**` | **PASS** |
+| `repair-record-off-label` | emphasis is fine, but `- **edit sites:**`, `- derivation (qualifier):`, `### Derivation 1 —` | **FAIL** (H) |
+| `H-BIND` | runs the validator's own `repair_field` on `remediator.md`'s own template lines | **PASS** |
+
+Narrow the reader back and `repaired-delegated-bold` goes red. Widen it to any line
+mentioning the word and `repair-record-off-label` does. **Neither can move alone**, which is
+the whole guarantee: the anchor is what keeps arm H able to fire, not the tightness of the
+class, and an arm H that cannot fire reads exactly like one that passed.
+
+`H-BIND` is the third side. The two cases above prove the reader accepts the bold form; they
+do not prove that form is the one `remediator.md` TEACHES — and for nine releases it was not.
+So `H-BIND` **evals the one-line `repair_field` definition out of the validator** and applies
+it to the three field lines it extracts from the template, plus their bold and italic twins.
+It runs that code rather than a copy: a restated regex could be wrong in the fixture and right
+in the validator, and the join would report clean. Its controls — prose, an absent file, and
+the renamed fields — are what stop a `repair_field` that returns 0 unconditionally from
+passing every other assertion. A fourth arm joins `gate-validation.md`, which states the same
+three labels to the lead.
+
+**A zero here is not a finding.** If the definition were renamed, or the template reworded,
+every assertion would pass over an empty set and report clean — so the extraction counts are
+guarded (`want 1` definition, `want 3` template lines) and a miss says `FIXTURE BROKEN`. That
+guard fired on this arm's first run: the draft used `\|` alternation, which is a GNU sed
+extension and matches nothing under BSD sed, and it extracted 0 lines.
+
+Mutation-tested on four full-tree copies, `cmp -s` guarded, against an unmutated control that
+passes 80 of 80:
+
+| Mutant | Kills |
+|---|---|
+| reader narrowed to the 0.354.0 class | `repaired-delegated-bold`, `H-BIND` grammar (2) |
+| `remediator.md` relabels one template field | `H-BIND` extraction guard only (1) |
+| `repair_field` returns 0 unconditionally | `repair-record-empty`, `repair-record-off-label`, both messages, `H-BIND` controls (5) |
+| `gate-validation.md` drops the `derivation:` label | `H-BIND` teaching arm only (1) |
+
+The control must be a **full-tree** copy. A partial one — the four files this arm reads,
+copied into a skeleton — fails 8 unrelated assertions because the other arms cannot resolve
+their own dependencies, and 8 pre-existing failures score as kills.
+
 ## The `skill:` field in the seeded blocks is INERT — do not read it as coverage
 
 v0.58.0 changed the seeded blocks to `skill: ai-dlc-adversary-review`, because that is
