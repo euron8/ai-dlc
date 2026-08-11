@@ -1,3 +1,27 @@
+# SPENT — four graph push candidates, three releases, one landed pull. DO NOT EXECUTE THIS.
+
+**DISCHARGED 2026-08-11.** Every action item is complete. What it shipped: **v0.351.0** (#519),
+**v0.352.0** (#520) and **v0.353.0** (#521), each rehearsed on a disposable clone before push;
+the runbook `docs/plans/graph-0347-to-0352-pull.md`, written, revised mid-run and discharged with
+its own verification; and the consumer's pull, which ran in two legs and landed at
+`0.353.0 / 6e6598a`. All four filings are `ADOPTED UPSTREAM` and rotated to the consumer's
+archive. The reference consumer was never written to: 6 dirty lines and HEAD `ae1b73de0` at the
+start, unchanged by every rehearsal.
+
+**It grew by one release after it was written, and that is the interesting part.** The program
+began as two entries. The consumer filed two more DURING the pull and stopped; read as a pair
+those two were one root cause — core prose that made a CORRECT consumer non-conformant — which
+neither entry states on its own. A program record that had been closed at its original scope
+would have taken them as unrelated follow-ups.
+
+**Still open, and deliberately not folded in here:** `PC-S330`; the two `apply.sh` arms named in
+v0.352.0's CHANGELOG; the companion-file sweep; and one NEW filing the final run produced, about
+the pre-push pool discarding a red unit's evidence with its temp dir.
+
+Original text follows, unedited.
+
+---
+
 # EXECUTE THIS — two push candidates from the graph consumer, proven on a clone, handed off as a runbook
 
 Two entries from the reference consumer's push-candidate ledger, each re-verified against this
