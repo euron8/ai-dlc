@@ -1,9 +1,9 @@
 # Runbook — pull the graph consumer from 0.354.0 to 0.355.0, mid-sprint s302
 
-**Status: READY TO EXECUTE.** Not yet run against the consumer. Authored against a real
-rehearsal on a `git clone --local` copy (§Rehearsal), not a prediction — every figure below
-was produced by running the step, and five of them contradict what a prediction would have
-said.
+**Status: DISCHARGED 2026-08-11.** Executed on the consumer; every criterion re-verified from
+the distribution side, read-only, against the consumer's tree rather than against its report.
+See §Discharge — **three criteria below were WRONG and are corrected there**, all three from
+broken instruments on the distribution side. Authored against a real rehearsal (§Rehearsal).
 
 ## Start here
 
@@ -232,3 +232,62 @@ Also measured and folded in: the semantic worklist is EMPTY (0 rows), the six ch
 are all `UPSTREAM-ONLY`, and the three `CORE-TEMPLATE-SUBSTITUTED` drift rows
 (`deploy-validate.md`, `dev.md`, `qa.md`) are unchanged by this pull and appear in the control
 too.
+
+---
+
+## Discharge — 2026-08-11, verified from this side
+
+The consumer executed it at `a086bac68` ("chore(ai-dlc-update): reconcile distribution
+0.354.0 → 0.355.0", #917), after `340da8fc7` for the telemetry state. Everything below was
+re-derived read-only against `/Users/n8/git/graph`'s own tree, not read out of its report.
+
+**Verified as written:**
+
+- All FOUR stamp lines read `0.355.0` / `4cded9e`, so the apply carried
+  `--carried-machinery-slice`.
+- `tests/fixtures/check-24-adversarial-convergence/run.sh` — **PASS, 80 of 80**.
+- Arm H fires on **5 of 46**, down from 10, and the five are exactly the five this file names.
+- The ledger entry carries `**ADOPTED UPSTREAM (v0.355.0, verified 2026-08-11)**` in the exact
+  bolded form, is still in the live ledger, and is **not** in the archive — rotation deferred
+  as instructed.
+- Four `still-additive` verdicts in `layer-adjudication-register.jsonl`, each with its own
+  derivation command and result, plus a 72-line blocker-adjudication record.
+- **No planning artifact was touched.** `git log 2fdace418..HEAD -- .../planning-artifacts/`
+  is empty.
+
+### Three criteria in this file were WRONG. All three are distribution-side instrument errors
+
+**Criterion 7 was false and is withdrawn.** `s302/stories-adversarial-p*` does **not** fail
+arm F. It is clean before AND after — its resolution record was already backfilled by the
+0.354.0 pull's own step 4. Two separate broken instruments produced the claim, and the second
+one was built while correcting the first:
+
+- the rehearsal sweep ran under `env -i PATH=/usr/bin:/bin` — **node absent**, which is the
+  very hazard criterion 2 warns about. Arm F's citation check needs it.
+- the re-measurement ran a `/tmp` COPY of the pre-pull validator, and
+  `validate-adversarial-convergence.sh:120` resolves `validate-steering-budget.sh` from
+  `$(dirname "$0")`. In `/tmp` that sibling does not exist, the sub-validator returns rc=1,
+  and arm F reports `operator_authorization could not be verified` — a missing FILE reading
+  as a failed CHECK. This is the copy-run-from-`/tmp` trap `CLAUDE.md` names, quoted in this
+  work's own plan and then walked into anyway.
+
+Correct instrument: the full `scripts/ai-dlc/` directory copied so the sibling resolves, with
+node on `PATH`. The consumer session reproduced the claim because this file told it to expect
+it, and recorded it honestly under "Deliberately not done".
+
+**Criterion 3's totals were node-less.** Correct figures, same instrument both sides:
+**39 → 28** total FAIL lines, not 41 → 30. **The arm-H headline is unaffected: 10 → 5 holds
+under every instrument tried**, because arm H shells out to nothing.
+
+**Criterion 5 was a CLONE ARTIFACT.** On the live consumer that receipt reads
+`STILL-LIVE ... [receipt 2/2]`, not `CLOSE-CANDIDATE`; the row this file told the executor to
+expect never appeared. **`git clone --local` carries COMMITTED state only, so a `verify: sh`
+receipt whose predicate reads an untracked or gitignored path gets a different verdict on the
+rehearsal copy than on the consumer.** A rehearsal is still worth its cost — it caught five
+real things — but a ledger receipt's verdict is not one of the things it can certify.
+(The consumer's own log explains the absence as "#916 rotated it out"; that is also wrong —
+`PC-S312-TRUNK-PUSH-DECLINES-TO-POLICE-THE-TRUNK` is still open in the live ledger. #916
+rotated `PC-S302-ADVERSARY-RECIPE-PRESENT-IS-NOT-RECIPE-RUN`.)
+
+**The pattern across all three: every wrong criterion came from an instrument, not from the
+change.** The pull itself did exactly what it claimed.
