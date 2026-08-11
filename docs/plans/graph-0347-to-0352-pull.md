@@ -1,8 +1,7 @@
-# EXECUTE THIS in a graph session — pull the consumer from `0.347.0` to `0.352.0`
+# EXECUTE THIS in a graph session — RESUME the stopped pull, now `0.348.0` to `0.353.0`
 
-Five releases, two of which close entries this consumer itself filed. The whole range was driven
-end to end on a disposable clone before this file was written, and every figure below is a
-reading from that run.
+You stopped this pull at `0.348.0` by operator direction, after filing two push candidates. Core
+has taken both. This file is the same runbook, updated for where you actually are.
 
 ## Start here
 
@@ -15,197 +14,217 @@ completion — including an early stop.** From outside, a session that is thinki
 that is waiting on a human look identical, and every stall in this program's history ended with
 the operator asking rather than the session reporting, including one that had already finished.
 
-**EVERY FIGURE HERE IS A DATED MEASUREMENT**, taken 2026-08-10 against consumer `ae1b73de0` and
-distribution `4345b1d` — the pre-squash branch commit — on a shallow clone of this repository:
+**THE FILENAME SAYS `0347-to-0352` AND THE RANGE NOW STARTS AT `0.348.0` AND ENDS AT `0.353.0`.
+It is not renamed per release** — a renamed handoff breaks every link to it mid-run, and this file
+is linked from your own stop commit. Read the range from the status table, never from the
+filename.
 
-```sh
-git clone --depth 1 --no-hardlinks \
-  --branch ai-dlc/feature/s302-position-usd-create-position \
-  file:///Users/n8/git/graph "$SCRATCH/graph-full"
-```
+**EVERY FIGURE HERE IS A DATED MEASUREMENT**, re-taken 2026-08-10 after your stop, against
+consumer `a928010e1` and the distribution branch carrying v0.353.0. Where a paragraph names a
+command, that command is the evidence. Re-derive before acting on one.
 
-`file://` forces a real copy, so nothing in the clone can reach back. **Your repository was never
-written to**: `git status --porcelain | wc -l` read 6 before and after every run, and HEAD stayed
-`ae1b73de0`. Where a paragraph names a command, that command is the evidence and the number
-beside it is a reading. Re-derive before acting on one.
+**Take the target sha from `origin/main` at your run, not from this file.** The figures below are
+invariant under the squash that lands v0.353.0; the sha is not.
 
-**THE REHEARSAL DROVE `apply.sh` DIRECTLY, WHICH IS ONLY THE MECHANICAL HALF.** You are running
-`/ai-dlc-update`, which runs the self-update first and then the reconcile. That is why the
-rehearsal's stamp shows `skill_version`/`skill_commit` still at `0.347.0 / 611bbe2` while
-`version`/`commit` advanced — the machinery pair moves in the step the rehearsal did not run, not
-in the one it did. Expect all four fields to advance on your run.
+**`apply.sh` is only the MECHANICAL half.** You are running `/ai-dlc-update`, which runs the
+self-update first and then the reconcile. Expect all four stamp fields to advance. A run where
+`version`/`commit` moved and `skill_version`/`skill_commit` did not means only the mechanical half
+ran — that is a finding, not a normal outcome.
 
-**This runbook is SPENT once the pull merges.** Say so in its own title when it is; a discharged
-runbook still titled EXECUTE THIS is how a later session redoes a landed pull, and every other
-file in the distribution's `docs/plans/` is already discharged.
+**This runbook is SPENT once the pull merges.** Say so in its own title then. A discharged runbook
+still titled EXECUTE THIS is how a later session redoes a landed pull.
 
 ## Current status — one record, and it is the only one in this file
 
 | | |
 |---|---|
-| your stamp, all four fields | `0.347.0 / 611bbe2` |
-| distribution `VERSION` / target | `0.352.0` at `origin/main`. **Take the sha from `origin/main` at your run, not from this file** — the rehearsal drove the pre-merge branch commit `4345b1d`, and the squash that lands it mints a different sha. Every figure below is invariant under that; the sha is not |
-| releases in range | v0.348.0 (#515), v0.349.0 (#516), v0.350.0 (#518), v0.351.0 (#519), v0.352.0 |
-| files changed in range | 36 total |
-| **shipped** files | **13**, derived: 19 under `core/`, minus 6 sitting in `.dist-only` fixture directories |
-| non-`core/` control | 17 — `VERSION`, `CHANGELOG.md`, `CLAUDE.md`, `.githooks/pre-push`, `scripts/`, `docs/plans/`, `.claude/rules/`. None ship. A zero here would have meant the filter was broken, not that the range was small |
+| your stamp, all four fields | `0.348.0 / b502b68` — re-read it, do not trust this row |
+| your HEAD | `a928010e1`, branch `ai-dlc/feature/s302-position-usd-create-position` |
+| your working tree | 5 dirty lines, all under `_bmad-output/` telemetry |
+| distribution target | `0.353.0` at `origin/main` |
+| releases remaining in range | v0.349.0 (#516), v0.350.0 (#518), v0.351.0 (#519), v0.352.0 (#520), v0.353.0 |
+| files changed in range | 28 total |
+| **shipped** files | **14**, derived: 18 under `core/`, minus 4 sitting in `.dist-only` fixture directories |
+| non-`core/` control | 10 — `VERSION`, `CHANGELOG.md`, `scripts/`, `docs/plans/`. None ship. A zero here would mean the filter was broken, not that the range was small |
 | rulebook files in range | **2** — `core/skills/ai-dlc/SKILL.md` and `core/skills/ai-dlc/core-manifest.md` |
-| `contract_version` | **18 to 18**; `layer-contract.yaml` is not in the range at all (0 files) |
-| your pause flag | **PRESENT** and untracked — see action 1 |
-| layer report, before and after | `1 error(s), 2 warning(s)`, unchanged by this range |
+| `contract_version` | **18 to 18**; `layer-contract.yaml` is not in the range at all |
+| your pause flag | **PRESENT** — see action 1 |
+| layer report | `1 error(s), 2 warning(s)`, measured on both sides of the pull and unchanged by it |
 
-Re-read your own stamp rather than trusting row one:
-`sed -n '1,4p' .claude/.ai-dlc-version`.
+## IF YOU ARE RESUMING MID-RUN — read this before anything else
+
+**What already happened, and none of it needs redoing.** Your #911 (self-update) and #912
+(reconcile) landed `0.347.0 → 0.348.0`, and #913 filed two push candidates and stopped the pull by
+operator direction. All four of your stamp fields read `0.348.0 / b502b68`, which is a complete
+hop, not a partial one. **Do not re-run the 0.347.0 hop and do not re-file those two entries.**
+
+**Both entries you filed are now answered upstream, in v0.353.0.** Core no longer states that the
+sprint-PR merge cannot be a gate, and core now carries the three self-scheduling specifics your
+extension held. Both of your `verify:` receipts were checked against both refs before this file
+shipped — each reads one way at your installed `b502b68` and the other way at the target — so
+`ledger-reverify` will close both without a hand edit.
+
+**Because they are answered, the two `EXTENSION-TITLE-MATCHES-CORE` rows are now RETIREMENTS
+rather than dilemmas.** That is the outcome both filings asked for. See action 6.
+
+**One correction to what the earlier revision of this file told you.** It gave the range as
+`0.347.0 → 0.352.0` from base `611bbe2`, and set the pause flag aside as a step it could not
+measure. Your base is now `b502b68` and the range is `0.349.0 → 0.353.0`. The pause flag is still
+live and still yours to clear.
 
 ## The numbered action list
 
-1. **Clear the pause flag, or this run denies its own first dispatch.** Your
-   `_bmad-output/pipeline-paused.flag` is live. It is UNTRACKED, which is why the rehearsal clone
-   did not carry it and could not exercise this for you — the rehearsal ran unpaused, so this
-   step is the one thing below that was reasoned rather than measured on your tree. Read the
-   operator message the flag stands for first. If one is genuinely outstanding, deal with it and
-   stop here; the pull is not urgent enough to talk over a human. If it is residue from the S302
-   handoff, which is the usual case, `rm -f _bmad-output/pipeline-paused.flag` and proceed. Bash
-   is never denied while paused, precisely so this is always possible.
+1. **Clear the pause flag, or this run denies its own first dispatch.**
+   `_bmad-output/pipeline-paused.flag` is present on your tree right now. Read the operator
+   message it stands for first. If one is genuinely outstanding, deal with it and stop here. If it
+   is residue from the S302 handoff or from your own stop, `rm -f
+   _bmad-output/pipeline-paused.flag` and proceed. Bash is never denied while paused, precisely so
+   this is always possible.
 
 2. **Run the dry run.** `/ai-dlc-update` with no arguments. Read the report; do not apply yet.
 
 3. **Run the self-update gate and do what it says.**
    `reconcile/self-update-gate.sh <dist> <base> <theirs> <consumer>`, with `base` the `commit`
-   field of your stamp, `611bbe2`. This range changes two rulebook files, so its DEFER arms can
-   fire — that is a reason to expect an answer, not a reason to skip the question. **Quote its
-   verdict in your report.**
+   field of your stamp, `b502b68`. **This range changes two rulebook files, so its DEFER arms can
+   genuinely fire here** — unlike the last two ranges, where they could not. **Quote its verdict in
+   your report.**
 
 4. **Apply.** `/ai-dlc-update apply`, then merge as usual. One version per branch does not apply
    to you: this is a pull, not a release cut.
 
-5. **Work the five `WORKLIST` rows.** The rehearsal produced exactly these, and no `DECISION`
-   rows at all:
+5. **Work the `WORKLIST` rows.** The rehearsal of the wider range produced 5, all
+   `extension-reread` or `extension-title-match` against
+   `extensions/steps-domain/SKILL-push.md`, `SKILL-domain.md` and `party-mode-inline-relay.md`,
+   and zero `DECISION` rows. Your count may differ now that the base moved; read your own run.
 
-   | rows | subject |
-   |---|---|
-   | 3 × `extension-reread` | `party-mode-inline-relay.md`, `SKILL-domain.md`, `SKILL-push.md` |
-   | 2 × `extension-title-match` | `SKILL-push.md` |
+6. **Retire the two duplicated sections from
+   `extensions/steps-domain/SKILL-push.md`.** Both are now true duplicates of core, and Rule
+   27(c) forbids keeping a restatement:
 
-6. **Re-run every done-when below against merged main, not against the branch.** The adjudication
-   digest covers the entry, so a run that looked clean on the branch can be blocked on main.
+   - *Pending operator approvals do not transfer across handoff* — core now scopes its sprint-PR
+     exclusion to core as shipped and states outright that a project whose deploy policy defines
+     the procedure has the gate **and needs no extension to say so**. Your `CLAUDE.md` Rule (b)
+     and `deploy-validate.md` Step 2a are that procedure. Delete the section.
+   - *No self-scheduling skill re-entry* — core now carries all three specifics your copy held.
+     Delete the section.
 
-7. **Record the two ledger dispositions.** Both are mechanisable, and both receipts were checked
-   in BOTH directions against the two refs before this file shipped — each one reads 0 at your
-   installed commit and non-zero at theirs, or the reverse:
+   **Before deleting either, confirm core actually carries the replacement on YOUR tree**, after
+   the apply, not on the distribution: `bash tests/fixtures/absorbed-specifics-survive/run.sh`.
+   That fixture ships in this range for exactly this reason — it is what protects the deletion.
+
+7. **Re-run every done-when below against merged main, not against the branch.**
+
+8. **Record the ledger dispositions.** Four entries close in this range. The two from your stop
+   commit close on their own receipts, quoted above. The two from before it are:
 
    ```
    verify: theirs_has core/hooks/ai-dlc-acknowledge.sh "pipeline-snapshot-history.md"
    verify: theirs_lacks core/skills/ai-dlc-update/reconcile/apply.sh "--theirs \"$THEIRS\" >/dev/null 2>&1"
    ```
 
-   The first closes your 2026-08-10 acknowledge-hook filing. The second closes `PC-S332`.
+9. **Leave `PC-S330` open, and say in your report that you did.** It is unfixed upstream. Silence
+   about it would read as closure.
 
-8. **Leave `PC-S330` open, and say in your report that you did.** It is unfixed upstream — see
-   the out-of-scope section. Silence about it would read as closure.
-
-9. **Ping the operator with the outcome**: the PR numbers, all four stamp fields, each
-   done-when's actual output, and anything this file predicted that did not happen. **The last is
-   the most valuable thing you can send back** — the previous runbooks were each wrong about
-   something only your tree could show, and both times the correction became a distribution
-   release.
+10. **Ping the operator with the outcome**: PR numbers, all four stamp fields, each done-when's
+    actual output, whether both retirements in action 6 landed, and **anything this file predicted
+    that did not happen**. The last one is the most valuable thing you can send back.
 
 ## What this range carries
 
-- **v0.348.0** moved this repository's own path-scoped authoring rules into `.claude/rules/` and
-  measured the loader: it memoizes per session, so a scoped rule loads once, on the first
-  matching read, and an `Edit` fires it transitively.
-- **v0.349.0** gave Rule 23 a carrier, and the measurement inverted the design that had been
-  planned for it.
+- **v0.349.0** gave Rule 23 a carrier; the measurement inverted the design planned for it.
 - **v0.350.0** removed a version floor that guarded `install.sh` and nothing else. **This one is
   about you**: `install.sh` is only the path a NEW consumer takes, and you arrive through
-  `apply.sh`, which knew nothing about versions. The replacement is a single always-on detector
-  at use time rather than a gate at each copy site.
-- **v0.351.0** adds the fourth carve-out to the pause-flag write allowlist, so a Rule 25(a) trim
-  can move superseded snapshot prose into `pipeline-snapshot-history.md` while paused. Your
-  filing. It also ships a battery proving each carve-out is load-bearing, after finding that one
-  of the three existing arms could be deleted whole with the entire suite staying green.
+  `apply.sh`, which knew nothing about versions. Replaced by one always-on detector at use time.
+- **v0.351.0** adds the fourth pause-flag carve-out so a Rule 25(a) trim can move superseded
+  snapshot prose to `pipeline-snapshot-history.md` while paused. Your filing. It also ships a
+  battery proving each carve-out is load-bearing, after one of the three existing arms turned out
+  to be deletable with the whole suite staying green.
 - **v0.352.0** stops `apply.sh` claiming catalog relabels and re-stamps it did not perform. Your
-  `PC-S332`, plus the sweep its own "what I did NOT verify" note asked for, which found the
-  `restamp` arm in the same class.
+  `PC-S332`, plus the sweep its own "did NOT verify" note asked for, which found the `restamp` arm
+  in the same class.
+- **v0.353.0** is both entries from your stop commit. Core's sprint-PR exclusion is scoped to core
+  as shipped, and the three self-scheduling specifics are absorbed with the retro lead-conduct
+  finding bound to Check A and Check B's existing mechanism.
 
 ## What to expect, and what would be a finding
 
-- **NO `RESOLVED relabel` row in your apply manifest.** Measured on a clone of your tree: your
-  catalog is clean, so v0.352.0 correctly says nothing. Before the fix the same run printed
+- **`bash tests/fixtures/absorbed-specifics-survive/run.sh` reports `PASS` after the apply.**
+  This is the precondition for action 6. **If it does not, do NOT delete either extension section**
+  — that is the one case where retiring your copy loses content, which is the whole reason the
+  fixture ships. Report it instead.
+
+- **NO `RESOLVED relabel` row in your apply manifest.** Your catalog is clean, so v0.352.0
+  correctly says nothing. Before that fix the same run printed
   `RESOLVED relabel ext-check collisions labelled`. **If you still see that row, the fix did not
-  land — quote it.**
+  land.**
 
-- **The manifest should be 15 `RESOLVED`, 5 `WORKLIST`, 1 `NOTE`, and zero `DECISION`.** A
-  `DECISION` row is not a failure, but it is work this file did not predict. **Report any.**
+- **The self-update gate may DEFER, and that is not a failure.** Two rulebook files are in range.
+  Quote the verdict and follow it.
 
-- **All four stamp fields reach `0.352.0` and the merged sha.** The rehearsal reached `0.352.0 /
-  4345b1d` on `version`/`commit` and left the machinery pair behind because it ran only the
-  mechanical half. **Yours runs both, so a machinery pair still reading `0.347.0` after a full
-  `/ai-dlc-update apply` IS a finding.**
+- **The layer report stays at `1 error(s), 2 warning(s)`.** Measured on both sides of the wider
+  pull and identical. The error is pre-existing and not in this range — **do not open it as new**.
+  A move is the finding.
 
-- **The layer report stays at `1 error(s), 2 warning(s)`.** Stated as a criterion because a move
-  is the finding, not because a pass is interesting. **Measured on BOTH sides**: the same
-  `1 error(s), 2 warning(s)` before the pull at `0.347.0` and after it at `0.352.0`. The error is
-  pre-existing and this range does not touch it — do not open it as new.
+- **After action 6, the two `EXTENSION-TITLE-MATCHES-CORE` rows for `SKILL-push.md` should stop
+  appearing** on the next drift run. If one persists after the deletion, the retirement did not
+  take and the report will tell you which title still matches.
 
-- **Three `.dist-only` batteries in this range must NOT arrive**:
-  `pause-write-allowlist-mutants`, `claude-rules-joins`, `shipped-rule-version-floor`. Verified
-  absent on the pulled clone, with 123 shipped fixtures present as the control — an "absent"
-  reading over a tree where nothing installed proves nothing. **If one appears in
-  `tests/fixtures/`, report it: it edits copies of core's own sources and cannot pass on your
-  tree.**
+- **Four `.dist-only` batteries in this range must NOT arrive**:
+  `pause-write-allowlist-mutants`, `claude-rules-joins`, `shipped-rule-version-floor`, and any
+  other directory carrying a `.dist-only` marker. Check with a control — count what DID install —
+  because an "absent" reading over a tree where nothing installed proves nothing.
 
 - **No adjudication count is predicted.** The last pull predicted one and produced three.
-  Predicting an adjudication count is the same class of error as predicting a hop count. Read
-  what your run says.
 
 ## Done-when — every criterion has been RUN, and both of its outcomes checked
 
-1. **All four stamp fields read `0.352.0 / <merged sha>`.**
-   `sed -n '1,4p' .claude/.ai-dlc-version`. **Observation point: AFTER the merge, not after the
-   apply** — see the machinery-pair note in Start here.
+1. **All four stamp fields read `0.353.0 / <merged sha>`.**
+   `sed -n '1,4p' .claude/.ai-dlc-version`. **Observation point: after the merge, not after the
+   apply.**
 
-2. **A paused `Edit` to `_bmad-output/pipeline-snapshot-history.md` is ALLOWED, and a paused
-   `Write` to `_bmad-output/planning-artifacts/product-brief.md` is still DENIED.** Both arms run
-   on a clone of your tree, driving your own installed hook: at `0.347.0` the history file read
-   `DENY` and the snapshot read `ALLOW` — your filed defect, reproduced — and after the pull the
-   history file reads `ALLOW` with `product-brief.md` still `DENY` and an `Agent` dispatch still
-   `DENY`. **Run it before the pull as well as after**; you have only ever seen its red, so its
-   green is the half still owed.
+2. **`bash tests/fixtures/absorbed-specifics-survive/run.sh` reports `PASS`.** Reachable in both
+   directions and both arms were run upstream before this file shipped: against `SKILL.md` at
+   `9365681` all six claims report `LOST` with the control still green; against v0.353.0 it is
+   `PASS`. **Observation point: after the apply and BEFORE action 6** — the fixture is what
+   licenses the deletion, so reading it afterwards answers the wrong question.
 
-3. **`bash tests/fixtures/divergence-hard-block/run.sh` reports `PASS`**, carrying 27 assertions
-   rather than the 25 you have today. Run from the project root. Measured at 27 ok / 0 FAIL on
-   the pulled clone in your layout.
+3. **A paused `Edit` to `_bmad-output/pipeline-snapshot-history.md` is ALLOWED, and a paused
+   `Write` to `_bmad-output/planning-artifacts/product-brief.md` is still DENIED.** Both arms were
+   run on a clone of your tree: at `0.347.0` the history file read `DENY`, and after the pull it
+   reads `ALLOW` with `product-brief.md` and an `Agent` dispatch both still `DENY`. **Run it
+   before the apply as well as after.**
 
-4. **`bash tests/fixtures/apply-relabel-noop-row/run.sh` reports `PASS`** — 8 ok / 0 FAIL,
-   measured in your layout. **This fixture ships WITH its fix, so there is no before-arm to run
-   on your tree**; its red was established upstream instead, by driving it against `apply.sh` at
-   `c92d509`, where the clean-catalog assertion fails. Do not report a missing red as a problem.
+4. **`bash tests/fixtures/divergence-hard-block/run.sh` reports `PASS`**, carrying 27 assertions
+   rather than the 25 you have today.
 
-5. **`bash tests/fixtures/apply-machinery-stamp/run.sh` reports `PASS`** — 22 ok / 0 FAIL, three
-   more assertions than today, covering the rulebook half of the re-stamp.
+5. **`bash tests/fixtures/apply-relabel-noop-row/run.sh` reports `PASS`** — 8 ok / 0 FAIL,
+   measured in your layout. **This fixture ships WITH its fix, so there is no before-arm to run on
+   your tree**; its red was established upstream against `apply.sh` at `c92d509`. Do not report a
+   missing red as a problem.
 
-6. **Your full pre-push suite is green**, driven by the hook rather than a hand-rolled loop.
+6. **`bash tests/fixtures/apply-machinery-stamp/run.sh` reports `PASS`** — 22 ok / 0 FAIL, three
+   more assertions than today.
+
+7. **Your full pre-push suite is green**, driven by the hook rather than a hand-rolled loop.
    `git push` is the cheapest way to run it. A `for d in tests/fixtures/*/` loop FABRICATES
-   failures — several fixtures resolve the project root from the process working directory, and
-   four of them print `FIXTURE BROKEN`, which reads exactly like a regression in the pull.
+   failures — several fixtures resolve the project root from the process working directory.
 
-7. **The layer report reads `1 error(s), 2 warning(s)`**, per the expectation above. This is an
-   asserted NO-CHANGE with both sides measured.
+8. **Both sections named in action 6 are gone from `extensions/steps-domain/SKILL-push.md`**, and
+   the file's remaining sections still lint clean.
 
 ## Deliberately out of scope
 
 **`PC-S330` is still open upstream.** `ledger-rotate.sh` scopes its unarchivable-set phrase test
 to the entry BODY while `ledger-reverify.sh` scopes its skip to the entry TITLE, so the two
 disagree about which entries are closed and the report states the reverify behaviour as its
-premise. Not fixed in this range. It gets its own release; leave the entry as it stands.
+premise. It gets its own release; leave the entry as it stands.
 
 **Two `apply.sh` arms of the same class as `PC-S332` remain.** `RESOLVED consistent` is now gated
-on the re-stamp actually landing, but still verifies no file CONTENTS against theirs; and
-`drift-refile` discards the exit status of its `known-skills.json` merge, so a failure there
-still reaches a `RESOLVED` row. Both are named in v0.352.0's CHANGELOG entry so they are visible
-rather than implied-fixed, and both need more than a guard swap.
+on the re-stamp landing but still verifies no file CONTENTS against theirs; and `drift-refile`
+discards the exit status of its `known-skills.json` merge. Both are named in v0.352.0's CHANGELOG
+so they are visible rather than implied-fixed.
 
-**Your own S302 sprint work.** This pull touches the distribution's machinery, not your sprint.
-If the pull and the sprint contend for the same files, stop and ping rather than merging through.
+**The wider companion-file sweep.** Your acknowledge-hook filing noted it covered only the one
+pairing hit live, and that a full sweep of live/archive pairs against the pause allowlist is a
+separate, larger filing. It has not been done. The allowlist now has four arms, each proven
+load-bearing, but the SET is still whatever the four cover.

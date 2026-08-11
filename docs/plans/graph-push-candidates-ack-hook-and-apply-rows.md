@@ -40,8 +40,9 @@ Re-derive before acting on one.
 | ledger entries deliberately left open | 1: `PC-S330` |
 | release for the acknowledge hook | **v0.351.0 — SHIPPED**, merged as `d912623` (#519), rehearsed on a clone first |
 | release for the apply-manifest rows | **v0.352.0 — code and fixtures COMPLETE**, rehearsed on a clone; merge outstanding |
-| the runbook | `docs/plans/graph-0347-to-0352-pull.md` — **WRITTEN**, every figure taken from the full-range rehearsal |
-| the pull itself | **NOT DONE and not ours to do.** The operator runs it in a graph session, from the runbook |
+| release for the two mid-pull filings | **v0.353.0 — code and fixture COMPLETE**, merge outstanding. Filed by the consumer DURING the pull, which then stopped by operator direction |
+| the runbook | `docs/plans/graph-0347-to-0352-pull.md` — **WRITTEN, then REVISED** when the consumer's base moved to `0.348.0 / b502b68`. Filename deliberately not changed |
+| the pull itself | **PARTLY DONE, and not ours to finish.** The consumer reached `0.348.0` (#911, #912) and stopped at #913. The operator resumes it in a graph session, from the runbook |
 
 ## The numbered action list
 
@@ -71,10 +72,43 @@ what a resuming session would otherwise re-derive, and because item 6 is the onl
 
 5. ~~**Write the runbook.**~~ DONE — `docs/plans/graph-0347-to-0352-pull.md`.
 
-6. **Ping the operator with the outcome**, including anything this file predicted that did not
+6. ~~**Land v0.353.0**~~ — code and fixture complete, merge outstanding. The consumer filed two
+   MORE entries during its pull and stopped at `0.348.0` by operator direction; core took both.
+   See the section below.
+
+7. **Ping the operator with the outcome**, including anything this file predicted that did not
    happen. That last item is the most valuable thing to send back — the previous runbooks were
    each wrong about something only the consumer's tree could show. **This program does NOT run
    the pull.** The runbook is the deliverable; the operator executes it in a graph session.
+
+## The two entries filed DURING the pull, and why they were one defect
+
+Both were raised by `layer-drift.sh`'s `EXTENSION-TITLE-MATCHES-CORE` rows — the same two rows the
+full-range rehearsal had already produced against `extensions/steps-domain/SKILL-push.md` and read
+past as ordinary worklist items. **Read as a pair they are one root cause: core carried prose that
+made a CORRECT consumer non-conformant**, and the consumer had no legal place to put its
+disagreement.
+
+- **The sprint-PR merge.** Core's handoff-approvals paragraph sets a test and then pre-answered it
+  for everyone. True of core as shipped; false for any project whose deploy policy defines an
+  approval step. The consumer had to restate the section in `extensions/` and add the gate, which
+  Rule 27(c) forbids — while `overrides/` would have shadowed core's whole span, taking the four
+  correctly-stated gates down with the one wrong sentence. Now scoped, with an explicit statement
+  that a project meeting the test needs no extension to say so.
+- **Self-scheduling.** An ordinary duplicate, except the consumer's body was a strict superset in
+  three specifics, so retiring it would have dropped them. All three absorbed, with the retro
+  lead-conduct finding bound to Check A and Check B's existing mechanism rather than left as a
+  bare prohibition.
+
+**One thing this program got wrong and the consumer caught.** The scoped `auto-re-invoke` claim
+was filed with a "did NOT verify" note asking whether it holds for every background-task class.
+It is written for the three classes the consumer measured, not as a guarantee about a set nobody
+has enumerated — an unscoped absorption would have shipped a false universal.
+
+**And one receipt nearly missed.** The consumer's own `verify:` anchored on `inert reminders`,
+plural; the absorption was drafted singular, so `ledger-reverify` would have kept reading the
+entry as live over a fix that had landed. Match the consumer's receipt wording, or the mechanism
+they wrote does not fire. Both receipts were then checked at both refs, with controls.
 
 ## What the two entries are, and what verifying them added
 

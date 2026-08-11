@@ -34,6 +34,55 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.353.0] — 2026-08-10
+
+### Core stated a fact about its own deploy shape as a ruling about everyone's, and a consumer had to contradict it in `extensions/` to be correct
+
+Two filings from the reference consumer, both raised mid-pull by `layer-drift.sh`'s
+`EXTENSION-TITLE-MATCHES-CORE` rows, and both with the same root: **core was carrying prose that
+made a correct consumer non-conformant.**
+
+**The sprint-PR merge.** `SKILL.md`'s handoff-approvals paragraph sets a test — *"Every gate named
+here MUST cite the file defining its procedure. A gate with no procedure is not a gate"* — and
+then pre-answered it for everyone: *"and the sprint-PR merge is not one."* That is true of core as
+shipped, where `steps/retro.md` merges without asking. It is false for any project whose deploy
+policy defines an approval step, and the reference consumer is one. So that consumer had to
+restate the section in `extensions/` and add the gate — which **Rule 27(c) forbids** and
+`extensions/README.md`'s "additive only" forbids, with no correct place to put it, because it was
+not hardening a rule but denying a factual claim core made about the consumer's own topology.
+
+The exclusion is now scoped to core AS SHIPPED, and the test is handed back to the project that
+can actually apply it. The paragraph now says outright that a project meeting the test needs **no
+extension** to say so — which is the sentence that lets the consumer retire its copy.
+
+**Self-scheduling.** Same detector row, ordinary retire-the-duplicate case — except the consumer's
+body was a strict superset in three specifics core did not state, so retiring it would have
+dropped them. All three are absorbed: a self-scheduled payload is limited to an inert reminder or
+a read-only status check; background work already re-invokes the lead on completion, so a
+self-fired resume is unnecessary as well as harmful; and a payload that re-enters the pipeline is
+a **lead-conduct finding** at retro, scored beside Check A and Check B in `steps/retro.md` — an
+existing mechanism, so the rule now has a consequence rather than only a prohibition.
+
+**The `auto-re-invoke` claim is scoped, not universal.** The filing's own "what I did NOT verify"
+asked whether it holds for every background-task class. It is written for the three the consumer
+measured — dispatched subagents, backgrounded commands, long-running deploys — rather than as a
+guarantee about a set nobody has enumerated.
+
+**A pin, because absorption makes loss silent.** Once the consumer deletes its copies, nothing on
+its side carries these specifics; a later edit here that drops one is not a regression against a
+second copy that would notice, because that copy was deleted on the strength of this text.
+`core/fixtures/absorbed-specifics-survive/` (new, **ships** — the consumer's own suite is what
+protects the consumer's own retirement) pins the six claims, each on the shortest span that
+carries it, and proves each pin falsifiable by deleting it from a copy and confirming exactly its
+own arm reds. Reachability run both ways: `PASS` here, and against `SKILL.md` at `9365681` all six
+claims report `LOST` with the control still green.
+
+Two anchors were re-wrapped so each sits on one line. That is not cosmetic: **a literal spanning a
+wrap cannot be passed to `awk -v` at all** — a raw newline in the assignment is a syntax error, the
+mutant is never built, and the run reads as entangled assertions rather than as a broken program.
+Measured on two of these six, written that way first. The fixture now refuses any anchor that is
+not on exactly one line and present exactly once.
+
 ## [0.352.0] — 2026-08-10
 
 ### Two `RESOLVED` rows asserted work nobody performed, and step 7 tells the reader not to check them

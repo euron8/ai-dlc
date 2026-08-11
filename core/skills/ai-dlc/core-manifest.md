@@ -147,6 +147,7 @@ core_manifest:
   - fixtures/apply-legacy-script-path/**
   - fixtures/apply-restamp-theirs/**
   - fixtures/apply-relabel-noop-row/**
+  - fixtures/absorbed-specifics-survive/**
   - fixtures/askuserquestion-citation/**
   - fixtures/command-args-citation/**
   - fixtures/operator-request-capture/**

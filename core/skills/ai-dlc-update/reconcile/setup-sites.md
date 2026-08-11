@@ -78,6 +78,7 @@ core_manifest:
   - core/fixtures/apply-legacy-script-path/**
   - core/fixtures/apply-restamp-theirs/**
   - core/fixtures/apply-relabel-noop-row/**
+  - core/fixtures/absorbed-specifics-survive/**
   - core/fixtures/askuserquestion-citation/**
   - core/fixtures/command-args-citation/**
   - core/fixtures/operator-request-capture/**
