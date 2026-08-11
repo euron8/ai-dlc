@@ -212,6 +212,17 @@ expect repair-record-empty       1 "a narrative stub is not a structured repair 
 expect_says repair-record-empty s1-adversarial-pass "H-structure" \
   "H -- REPAIR-RECORD" "not a structured record"
 
+# --- v0.355.0: the emphasis pair. Neither of these two can move alone. --------
+# repaired-delegated-bold is the FALSE POSITIVE that shipped for nine releases: a complete
+# record in the house style, read as UNSTRUCTURED because `[[:space:]-]` has no `*`.
+# repair-record-off-label is the floor under the fix: the reader is allowed to tolerate
+# EMPHASIS around the taught label and nothing else, so a widening that admits a renamed
+# field or a prose line turns this red. Fixing one by breaking the other is not a fix.
+expect repaired-delegated-bold   0 "the house style -- '- **disposition:**' is the same field (H)"
+expect repair-record-off-label   1 "'edit sites:' / 'derivation (x):' rename the field -- FAIL (H)"
+expect_says repair-record-off-label s1-adversarial-pass "H-off-label" \
+  "H -- REPAIR-RECORD" "not a structured record"
+
 echo
 # --- v0.59.0: --cycle-state, the mode the hooks call --------------------------
 # The hooks hold NO logic. They shell out, read the exit code, and deny on 3. These five
@@ -528,6 +539,111 @@ else
       'SERIES="$(ls -t "${ART_DIR}"/s*/*adversarial*p*.md 2>/dev/null | sed -E -n '"'"'s/(pass|p)[0-9]+\.md$//p'"'"' | head -1)"' \
       "STALLED" "3" \
       "CONTROL: with only one sprint on disk the unscoped form is correct too, so s8 is the variable"
+  fi
+fi
+
+echo
+# =============================================================================
+# v0.355.0 -- H-BIND. The reader and the taught form are ONE decision in two files.
+#
+# The cases above prove arm H accepts the bold form and rejects a renamed field. They do
+# NOT prove the form arm H accepts is the form remediator.md TEACHES -- and for nine
+# releases it was not: the template wrote `- disposition:`, the reader read exactly that,
+# the seed seeded exactly that, and every record the reference consumer actually wrote
+# used the bold form that none of the three admitted. Three files agreeing with each other
+# and disagreeing with reality is what a fixture seeded from its own reader cannot see.
+#
+# So this arm runs the validator's OWN repair_field on the template's OWN field lines,
+# both extracted from their files at run time. It evals the definition rather than
+# restating the regex: a copy here could be wrong in the fixture and right in the
+# validator, and the join would report clean.
+# =============================================================================
+bind_fail() { FAILURES=$((FAILURES + 1)); printf '  FAIL  %-28s %s\n' "H-BIND" "$1"; }
+bind_ok()   { printf '  ok    %-28s %s\n' "H-BIND" "$1"; }
+
+# Both layouts, rooted at this fixture's own self-location (I33) -- never walked up from
+# $VALIDATOR, whose parent is `core/scripts` here and `scripts/ai-dlc` on a consumer.
+REMEDIATOR=""
+for cand in \
+  "$DIR/../../team-roles/remediator.md" \
+  "$DIR/../../../.claude/team-roles/remediator.md"; do
+  [ -f "$cand" ] && REMEDIATOR="$cand" && break
+done
+GATEDOC=""
+for cand in \
+  "$DIR/../../skills/ai-dlc/steps/gate-validation.md" \
+  "$DIR/../../../.claude/skills/ai-dlc/steps/gate-validation.md"; do
+  [ -f "$cand" ] && GATEDOC="$cand" && break
+done
+
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ -z "$REMEDIATOR" ] || [ -z "$GATEDOC" ]; then
+  bind_fail "FIXTURE BROKEN: remediator.md=${REMEDIATOR:-<not found>} gate-validation.md=${GATEDOC:-<not found>} from $DIR"
+else
+  # --- extract the reader ----------------------------------------------------
+  # Exactly one one-line definition, or the eval below silently binds the wrong thing.
+  n_fn="$(grep -c '^repair_field() {' "$VALIDATOR")"
+  fn="$(grep -m1 '^repair_field() {' "$VALIDATOR")"
+  # --- extract the taught form ----------------------------------------------
+  # The three field lines of remediator.md's per-finding template, as written there.
+  # sed -E, not BRE: `\|` alternation is a GNU extension and matches nothing under the
+  # BSD sed on macOS. The first draft used it, extracted 0 lines, and was caught by the
+  # count guard below rather than by every assertion quietly passing over an empty set.
+  tmpl="$(sed -E -n 's/^(- (disposition|edit|derivation):).*/\1/p' "$REMEDIATOR" | sort -u)"
+  n_tmpl="$(printf '%s\n' "$tmpl" | grep -c .)"
+
+  if [ "$n_fn" -ne 1 ] || [ "$n_tmpl" -ne 3 ]; then
+    # A ZERO HERE IS NOT A FINDING. If the definition were renamed or the template
+    # reworded, every assertion below would pass over an empty set and report clean.
+    bind_fail "FIXTURE BROKEN: extracted $n_fn repair_field definitions (want 1) from $VALIDATOR and $n_tmpl template field lines (want 3) from $REMEDIATOR"
+  else
+    eval "$fn"
+    BT="$ROOT/bind"; mkdir -p "$BT"
+    bind_miss=""
+    # Every taught line must read, as written AND with the emphasis the house style adds.
+    printf '%s\n' "$tmpl" | while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      lbl="${line#- }"; lbl="${lbl%%:*}"
+      printf '%s repaired\n' "$line"                     > "$BT/plain-$lbl.md"
+      printf -- '- **%s:** repaired\n' "$lbl"            > "$BT/bold-$lbl.md"
+      printf -- '  _%s:_ repaired\n' "$lbl"              > "$BT/ital-$lbl.md"
+      for form in plain bold ital; do
+        repair_field "$lbl" "$BT/$form-$lbl.md" || printf '%s\n' "$form:$lbl" >> "$BT/misses"
+      done
+    done
+    # CONTROL, and it is the one that matters: the eval'd reader must still REJECT. A
+    # function that returned 0 unconditionally would pass every assertion above.
+    printf 'The disposition was recorded and the edit made; see the derivation.\n' > "$BT/prose.md"
+    printf -- '- **edit sites:** a.md:4\n- derivation (why): x\n### Derivation 1 — y\n' > "$BT/offlabel.md"
+    for lbl in disposition edit derivation; do
+      repair_field "$lbl" "$BT/prose.md"    && printf '%s\n' "control-prose:$lbl"    >> "$BT/misses"
+      repair_field "$lbl" "$BT/nonexistent" 2>/dev/null && printf '%s\n' "control-absent:$lbl" >> "$BT/misses"
+    done
+    repair_field edit       "$BT/offlabel.md" && printf 'control-offlabel:edit\n'       >> "$BT/misses"
+    repair_field derivation "$BT/offlabel.md" && printf 'control-offlabel:derivation\n' >> "$BT/misses"
+    bind_miss="$(cat "$BT/misses" 2>/dev/null | tr '\n' ' ')"
+    if [ -n "$bind_miss" ]; then
+      bind_fail "the reader in $VALIDATOR and the template in $REMEDIATOR disagree: $bind_miss"
+    else
+      bind_ok "reader accepts all 3 taught labels plain/bold/italic and rejects prose + renamed fields"
+    fi
+  fi
+
+  # --- the third statement of the same three labels --------------------------
+  # gate-validation.md teaches arm H to the lead. It is prose, so this is a token join,
+  # not a grammar one -- but a label dropped from it is a label nobody is taught.
+  ASSERTIONS=$((ASSERTIONS + 1))
+  gv_miss=""
+  for lbl in disposition edit derivation; do
+    grep -qF "\`$lbl:\`" "$GATEDOC" || gv_miss="$gv_miss $lbl"
+  done
+  gv_ctl="$(grep -c 'REPAIR-RECORD\|arm H' "$GATEDOC")"
+  if [ "$gv_ctl" -eq 0 ]; then
+    bind_fail "FIXTURE BROKEN: $GATEDOC names no arm H at all, so the label check below reads a file that moved"
+  elif [ -n "$gv_miss" ]; then
+    bind_fail "$GATEDOC teaches arm H but no longer names:$gv_miss (control: $gv_ctl arm-H mentions in the same file)"
+  else
+    bind_ok "gate-validation.md names all 3 labels the reader reads"
   fi
 fi
 

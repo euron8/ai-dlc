@@ -1252,6 +1252,37 @@ fi
 #   Removal condition: retire when the `remediator` role is retired under its own
 #     condition (two consecutive sprints of clean inline repair) -- with no delegation
 #     boundary left, arm H protects nothing.
+#
+# THE FIELD READER (v0.355.0). One label, optionally wrapped in the emphasis markdown
+# puts on a field name, anchored to the start of the line, colon immediately after.
+#
+#   accepts:  `- disposition:`  `- **disposition:**`  `  _edit:_`  '`derivation:`'
+#   rejects:  `- **edit sites:**`   `- derivation (a qualifier):`
+#             `### Derivation 1 — ...`   any prose line containing the word
+#
+# THE ANCHOR IS WHAT KEEPS THIS ARM ABLE TO FIRE, not the tightness of the class. A
+# sentence mentioning "derivation" mid-line cannot match at any width of wrapper, and a
+# RENAMED field does not match either -- which is the whole boundary, and it is the one
+# `repair-record-off-label` in check-24 holds. Widening far enough to admit `edit sites:`
+# would require a predicate that also matches ordinary prose, and an arm H that cannot
+# fire reads exactly like one that passed.
+#
+# Measured on the reference consumer at 0.354.0, before this widened: 74 repair records,
+# 37 read UNSTRUCTURED, and 35 of those 37 carry all three fields in plain sight. The
+# taught template in `core/team-roles/remediator.md` writes the labels unbolded and this
+# reader read exactly that form, so the teaching and the checker agreed with each other
+# and disagreed with every record actually written. Arm H fired on 10 of 46 live series;
+# after this, 5 -- and those 5 are the control that it still fires.
+#
+# BOUND TO THE TAUGHT FORM. `core/team-roles/remediator.md` states that the gate reads
+# these labels literally, and `check-24-adversarial-convergence/run.sh` EVALS the one-line
+# definition below out of this file and applies it to the three field lines it extracts
+# from that one. It runs this code, not a copy of it, so the two cannot drift and no
+# re-transcribed regex can be wrong in the fixture and right here. Two consequences:
+# keep the definition on ONE line beginning `repair_field() {`, and keep the body
+# single-quoted so the source text is what grep receives.
+#   $1 field label   $2 candidate file
+repair_field() { grep -qE '^[[:space:]-]*([*_`]{1,2})?'"$1"'([*_`]{1,2})?:' "$2"; }
 for ((h = 0; h + 1 < N; h++)); do
   # A verification pass after a RESOLUTION is arm F's business, not a repair pass.
   [ -n "${P_RESOLVES[$((h + 1))]:-}" ] && continue
@@ -1281,9 +1312,9 @@ for ((h = 0; h + 1 < N; h++)); do
     [ -f "$cand" ] && [ -s "$cand" ] || continue
     # Structured per remediator.md: at least one finding block carrying a disposition,
     # an edit site, and a derivation line. An empty or narrative-only file fails.
-    if grep -q '^[[:space:]-]*disposition:' "$cand" \
-       && grep -q '^[[:space:]-]*edit:' "$cand" \
-       && grep -q '^[[:space:]-]*derivation:' "$cand"; then
+    if repair_field disposition "$cand" \
+       && repair_field edit "$cand" \
+       && repair_field derivation "$cand"; then
       rec="$cand"; break
     fi
     rec_unstructured="$cand"
@@ -1295,8 +1326,24 @@ for ((h = 0; h + 1 < N; h++)); do
     err "H -- REPAIR-RECORD" "$(basename "${P_FILE[$((h + 1))]}") verifies a repair of
       $(basename "${P_FILE[$h]}") (findings fell ${c0}C/${m0}M -> ${c1}C/${m1}M), and a repair
       record exists at $rec_unstructured but is not a structured record: it lacks one of
-      'disposition:', 'edit:', 'derivation:' (remediator.md). A repair record written from a
-      compacted summary reads like prose; a remediator's record derives every claim it asserts."
+      'disposition:', 'edit:', 'derivation:' (remediator.md).
+
+      THE LABEL IS READ LITERALLY, so check the label before you check whether the field is
+      there. Each of the three must open a line, with the colon immediately after it:
+
+        - disposition: repaired          - **disposition:** repaired      <- both read
+        - edit: <file:line>              - **edit:** <file:line>
+        - derivation:                    - **derivation:**
+
+      Emphasis around the label is fine (\`**\`, \`_\`, backticks). RENAMING the field is not,
+      and these are the forms that get written by accident:
+
+        - **edit sites:** ...                  -> the label is 'edit', not 'edit sites'
+        - derivation (why this matters): ...   -> move the qualifier after the colon
+        ### Derivation 1 — ...                 -> a heading is not the field; add the line
+
+      A repair record written from a compacted summary reads like prose; a remediator's
+      record derives every claim it asserts."
   else
     err "H -- REPAIR-RECORD" "$(basename "${P_FILE[$h]}")'s findings were repaired before
       $(basename "${P_FILE[$((h + 1))]}") (fell ${c0}C/${m0}M -> ${c1}C/${m1}M), but no repair
