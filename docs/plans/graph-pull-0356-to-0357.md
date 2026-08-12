@@ -14,8 +14,14 @@ something the skill already owns — which is how they went stale. The skill res
 its own self-update, carries the machinery slice, emits the worklist, and tells you when the
 settings reconcile is needed. Follow what it prints.
 
-What this file is for is the part no skill does: **resetting the s302 `[story]` gate and re-running
-it clean**, which is how this release gets tested end to end this sprint rather than next.
+What this file is for is the part no skill does: **resetting the s302 `[story]` gate.** The reset
+only. Re-running the gate is a pipeline resume, the operator has deliberately kept that out of this
+plan, and `_bmad-output/pipeline-paused.flag` is the seam between the two — it is present on this
+consumer, it blocks pipeline-step execution, and **this run does not clear it.**
+
+**So this run does NOT test the release end to end, and must not report that it did.** The stall
+rung's live behaviour is exercised whenever the operator resumes the pipeline, which is a separate
+decision on their own schedule.
 
 ## Start here
 
@@ -106,7 +112,8 @@ session reporting.
    bash .githooks/pre-push
    ```
 
-4. **Reset the s302 `[story]` gate and re-run it clean.** This is the step this runbook exists for.
+4. **Reset the s302 `[story]` gate — 4a, 4b and 4c, then STOP.** This is the step this runbook
+   exists for, and it ends at the reset. Do not re-run the gate; see 4d.
 
    a. Mint a new `gate_series_id`. **Retain all eleven existing verdict files** —
       `_bmad-output/gate-adjudication/story-20260811T*.verdict.json`, untouched. A reset deletes
@@ -132,8 +139,69 @@ session reporting.
       not apply these edits; the new PreToolUse guard will deny it, and that denial is the release
       working.
 
-   d. Run gate validation `[story]` from pass 1 on the repaired corpus. The stall rung counts the
-      new series only, so it fires only if the *new* loop stalls.
+   d. **Rewrite the pipeline snapshot so it describes the reset gate. Without this the reset is
+      invisible and the whole step is decorative.** `_bmad-output/pipeline-snapshot.md` is the ONLY
+      thing a fresh `ai-dlc` session reads to decide what to do next — `route.md` Step 0 takes
+      `current_step_file` from it and follows its resume instruction — and 4a writes the new
+      `gate_series_id` into an escalation entry, which resume never reads. Nothing joins the two.
+
+      Three statements in the snapshot still describe the old cascade, and **all three instruct a
+      resuming session to continue it.** Each must be restated:
+
+      - the **Pipeline Position** line `Gate validation [story]: IN PROGRESS, 11 completed
+        adjudication passes (all FAIL on Check 7), pass 12 stopped mid-flight for handoff` — restate
+        as RESET, naming the new `gate_series_id`, with **zero passes recorded against it**;
+      - the Recent Activity line stating that `resume must dispatch pass 12 (or 13) with a fresh
+        nonce before anything else`;
+      - the **`RESUME'S FIRST PIPELINE ACTION`** paragraph, which names pass 12 or 13 explicitly and
+        hands the next session pass 12's brief verbatim.
+
+      Replace the resume instruction with: **run gate validation `[story]` from pass 1 of the new
+      `gate_series_id`, against the repaired corpus.** Keep the corpus-wide
+      `docs/architecture.md:<N>` sweep that paragraph already demands — 4b's worklist is what
+      discharges it, and it is the finding that closed pass 11.
+
+      Leave `current_step_file: stories-test-strategy.md` **unchanged.** The schema binds it to the
+      step that INVOKED the gate, §1–§7 are all marked COMPLETE in the snapshot, and resume
+      therefore re-enters at the gate rather than re-running the step. Pointing it at
+      `gate-validation.md` would break that binding.
+
+      **Delete no history.** The eleven passes stay recorded. What changes is the instruction to the
+      next session, not the account of what happened. That paragraph already carries one stale
+      instruction it warns the reader not to act on (`if pass 7 returns clean…`); do not leave a
+      second.
+
+   e. **Land 4a–4d on a branch and open a PR into the sprint branch. Do not leave this work loose
+      in the tree.** 4a, 4c and 4d all WRITE — an escalation entry, the remediator's repairs across
+      the worklist, and the snapshot rewrite. Left uncommitted they are a pile of modified files
+      with no author and no reason attached, and the next lead to resume reads them as stray drift
+      rather than a deliberate gate reset. That is the same failure mode the apply avoids by cutting
+      a reconcile branch; step 4 gets no branch from the skill, because the skill does not run it.
+
+      Mirror the pull's shape: branch off the **sprint branch as it now stands, with the reconcile
+      PR merged**, commit there, push, open a PR into the sprint branch, and **merge only on
+      explicit operator approval.** The PR body is where the reset gets its account: the retired
+      series named by its nonce range, the new `gate_series_id`, the worklist size and its control,
+      and the snapshot statements you rewrote in 4d.
+
+      **Stage explicit paths. Never `git add -A` or `git add .` here.** The hook-written
+      `_bmad-output/` state is dirty and must STAY dirty — sweeping it into this commit publishes
+      s302's in-flight state, which is the exact outcome §Do not touch exists to prevent. Stage the
+      escalation file, the repaired artifacts named in the worklist, and the snapshot; nothing else.
+      Diff the staged set before committing and confirm no state file is in it.
+
+   f. **STOP. Do NOT run gate validation `[story]`.** Running the gate is a pipeline resume; the
+      operator has separated it from this plan and will schedule it independently. An authorization
+      to dispatch the `remediator` in 4c does not cover it, and neither does any instruction in this
+      file.
+
+      Leave `_bmad-output/pipeline-paused.flag` where it is — but **do not report it as what holds
+      the pipeline, because it is not.** `SKILL.md`'s INITIALIZATION clears it as its first action
+      (`rm -f _bmad-output/pipeline-paused.flag`), by design, because the UserPromptSubmit hook
+      re-creates it on every user message including the `/ai-dlc` invocation itself. It blocks
+      advancement *within* a session; it does not survive the start of a new one. **What holds the
+      pipeline is the operator not invoking, and after 4d, a snapshot that says the gate was reset
+      rather than telling the next session to dispatch pass 12.**
 
 5. **Verify** against §Done when, then **hand off**: what is done, what is untouched, the resume
    point. Ping the operator.
@@ -150,9 +218,30 @@ session reporting.
    reconcile: this release's `ai-dlc-gate-remediation-guard.sh`, and `ai-dlc-rules-floor.sh`, which
    has been present-but-unregistered for six releases. One would mean the merge under-reached.
 
-3. **The reset `[story]` gate either CLOSES, or STALLS AND ESCALATES BY PASS 3.** Either is a
-   passing test of this release. **The eleven-pass shape is the failure.** If the stall rung fires,
-   run the Rule 12 escalation — do not dispatch a fourth pass.
+3. **The gate is RESET and NOT re-run.** A new `gate_series_id` exists; all eleven prior verdict
+   files are still on disk; `_bmad-output/pipeline-paused.flag` is still present. Observation
+   point: after 4c, with nothing run against the gate afterwards.
+
+   **What this run therefore does NOT establish, and must not be reported as establishing:** the
+   stall rung's live behaviour. Whether the reset gate closes or stalls and escalates by pass 3 is
+   the end-to-end test of this release, it requires the pipeline resume the operator has kept out
+   of this plan, and it happens on their schedule rather than in this run. Report the rung as
+   UNTESTED-LIVE.
+
+3a. **The snapshot instructs pass 1, not pass 12.** Grep `_bmad-output/pipeline-snapshot.md` for
+   `pass 12` and for `pass 13`: both must be absent from the resume instruction, and the
+   `RESUME'S FIRST PIPELINE ACTION` paragraph must name the new `gate_series_id` and pass 1.
+   **Carry a control in the same reading** — grep the file for the retired nonce range, which MUST
+   still be present, because a snapshot that lost its history is a different failure from one that
+   was correctly updated. A resuming session reads only this file; if it still says pass 12, the
+   reset did not happen no matter what 4a wrote elsewhere.
+
+3b. **Step 4's writes are on a branch with an open or merged PR, and the working tree carries no
+   stray reset edits.** `git status --porcelain` shows the hook-written `_bmad-output/` state files
+   and NOTHING ELSE — no escalation file, no repaired artifact, no snapshot. If any of those is
+   still modified and uncommitted, 4e did not run and the next lead inherits unattributed drift.
+   The state files being dirty is the PASS condition here, not a failure; committing them would be
+   the failure.
 
 4. **The fan-out worklist is non-empty and its items are checked.** Roughly ten against
    `START~1..START`, including a citation from a story file into `docs/architecture.md`.
@@ -182,7 +271,7 @@ whatever the skill pulls carries the fixes. The second rehearsal proved them gon
 the checks proven still able to fire: re-introducing each defect drove its check back to red.
 
 **Structural limits.** A `--local` clone carries committed state only, so nothing here certifies the
-four dirty hook-written files or any ledger receipt. The gate reset (step 4) needs a live gate and
+dirty hook-written `_bmad-output/` state or any ledger receipt. The gate reset (step 4) needs a live gate and
 was never rehearsed. `core.hooksPath` is unset on the live consumer too, which is why step 3 invokes
 the hook by hand.
 
@@ -194,10 +283,16 @@ dirty files, which would have published s302 state mid-sprint.
 ## Abort
 
 **`START` — the commit you recorded in step 1 — is the restore point, and you must name it in the
-command.** No step here commits, but **the skill does**: on apply it cuts a reconcile branch off the
-sprint branch, commits its writes there, pushes it, and opens a PR. So after the apply `HEAD` is
-neither `START` nor the sprint branch — a bare `git checkout -- <path>` restores from the post-apply
-commit, which is a silent no-op that looks like it worked.
+command.** **Two things here commit.** The skill does, on apply: it cuts a reconcile branch off the
+sprint branch, commits its writes there, pushes it, and opens a PR. And **step 4e does**, on its own
+branch off the merged sprint branch. So `HEAD` is neither `START` nor the sprint branch for most of
+this run — a bare `git checkout -- <path>` restores from whichever of those commits you are standing
+on, which is a silent no-op that looks like it worked.
+
+**Which abort you need depends on where you stopped.** Before 4e, step 4's writes are uncommitted
+and `git checkout "$START" -- <path>` reaches them. After 4e they are committed on the step-4
+branch, `START` no longer describes them, and the abort is to close the PR and leave the branch
+unmerged rather than to restore paths — the sprint branch never received them.
 
 - **The apply goes wrong** — restore with `git checkout "$START" -- <path>`, anchored explicitly.
   **Name the paths.** `git checkout "$START" -- .` would revert the `_bmad-output/` state files and

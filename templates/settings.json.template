@@ -36,6 +36,10 @@
       "model": "opus",
       "effort": "high"
     },
+    "ops": {
+      "model": "opus",
+      "effort": "xhigh"
+    },
     "pm": {
       "model": "sonnet",
       "effort": "high"
