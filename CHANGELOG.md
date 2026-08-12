@@ -42,6 +42,27 @@ The reference consumer ran a `[story]` gate for **eleven adjudication passes** a
 defects produced it, each measured against that consumer's own artifacts rather than inferred.
 All three are core's.
 
+**THE THEME, and it was demonstrated by the session that wrote this release.** Every mechanism
+below denies an ACT rather than judging a REASON, and the reason is that reasoning does not bind
+the agent holding it. The lead of this release built the deny hook, could recite the rule it
+enforces, and stated the boundary out loud — then crossed it six times in the following hour.
+Each crossing was individually correct: a false claim in a runbook is a correctness fix, a
+validator failing on a citation you introduced is not new work. That is exactly the
+`DECIDED_AUTONOMOUSLY` shape the triage measured — 43% of those records fall outside their own
+rule's definition, and none was written by someone who believed they were cheating.
+
+Three design choices follow from it, and none of them survives if you assume good reasoning is
+available. **The guard denies the call and never reads the justification**, because a detector
+would have found every one of those six sound. **It is not self-dischargeable**, because a
+well-formed rationale offered as a release condition would have cleared it six times. And the
+remedy was always one turn away: this release SHIPS an operator-ping requirement — P3b, mechanised
+in `validate-plan-shape.sh` — obliging an executor to ping on any decision its file does not
+settle. The lead wrote that rule, enforced it in a validator, and did not apply it to the one
+decision that was its own.
+
+**The rule you are most confident about is the one you are least able to follow unaided.** That is
+the argument for every mechanism in this release, and it is not a metaphor.
+
 **Rule 28 licensed the inline repair, in one word.** `SKILL.md`'s non-delegable set (c) read
 "owning PASS/FAIL/**remediation**", while the same rule forty lines below called applying a fix
 inline "a lead-conduct retro finding". Measured in that session's transcript, 18:36:56Z →
