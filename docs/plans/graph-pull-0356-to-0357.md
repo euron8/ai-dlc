@@ -1,7 +1,9 @@
 # Runbook — pull the graph consumer from 0.356.0 to 0.357.0, mid-sprint s302
 
-**Status: READY TO RUN.** 0.357.0 is merged to the distribution's `main` (PR #534). Not yet run
-against the live consumer.
+**Status: DISCHARGED — SPENT. Do NOT execute this file.** It ran against the live consumer and is
+kept as a record, not as instructions. The consumer is now at **0.360.0**, three releases past the
+one this runbook pulls, so following it literally would re-run a completed pull against a tree it
+no longer describes. See `## Discharge` at the end for what actually happened.
 
 **No ref and no sha are written down in this file, deliberately.** The skill pulls latest by
 default; it resolves the distribution ref itself. Nothing here needs to name one, and a name written
@@ -318,3 +320,67 @@ unmerged rather than to restore paths — the sprint branch never received them.
 - The frozen review records the fan-out worklist deliberately excludes — `*-adversarial-p*.md`,
   `*-repair*.md`, `stories-party-mode/`, `docs/reviews/`. Their citations are accurate accounts of
   what an earlier pass read; repairing them falsifies the record.
+
+## Discharge
+
+**Executed and complete.** The consumer is at 0.360.0; this file pulled it to 0.357.0 and later
+releases carried it the rest of the way.
+
+**What landed, in two PRs on the consumer's sprint branch.** The pull merged as `ab898a6ba`; the
+step-4 gate reset merged separately as `c634c49b3`, on its own branch per 4e. Stamp moved
+`0.356.0 / 959e778` → `0.357.0 / bf22536` on all four lines, `installed_at` and `upstream`
+preserved. Hook registration 14 → 16, `UNREGISTERED: none`, `DANGLING: none`. Consumer pre-push
+suite 148 ok / 0 FAIL, with an independent control on the "adds four, removes none" claim: fixture
+directories 154 → 158, exactly +4. Fan-out worklist 10 items, control `--no-frozen` 48. s302's
+in-flight `_bmad-output/` state was never committed.
+
+**The gate was reset and not re-run**, per the operator's scoping. New series
+`story-s302-reset-20260812T055331Z`, the first live `gate_series_id` on this consumer; the eleven
+prior verdicts retained and confirmed to predate the field; retired series named by its nonce
+range. `pipeline-paused.flag` left in place.
+
+**The remediator returned 0 repaired / 9 no-change / 1 no-repair-by-design.** The corpus was
+already correct, which says the eleven-pass cascade had been chasing citations that mostly
+resolved. That is the most useful number this run produced and it was not one the plan asked for.
+
+### What this file got wrong, found by executing it
+
+Each of these was a defect a compliant run would have hit. They are recorded because the
+differential is the evidence, not because the file is now correct.
+
+1. **Step 4 never wrote to the file a resume reads.** `route.md` Step 0 makes
+   `pipeline-snapshot.md` the only input to a fresh session's next action, and it carried
+   instructions to dispatch **pass 12** of the eleven-pass cascade. 4a writes the new
+   `gate_series_id` into an escalation entry, which resume never reads. Nothing joined them, so a
+   fully compliant run would have left the reset real on disk and invisible where it counts. Added
+   as 4d. The executing session found **five** such statements where this file named three.
+2. **Nothing committed step 4's writes.** The `ai-dlc-update` skill cuts a reconcile branch for the
+   *pull*; step 4 got none, because the skill does not run step 4. Uncommitted, the reset reads as
+   stray drift to the next lead. Added as 4e, with an explicit prohibition on `git add -A`.
+3. **§Abort claimed "No step here commits"**, which 4e falsifies. It now branches on where you
+   stopped.
+4. **Done-when 3 became unreachable** once the operator scoped 4d out — the class
+   `.claude/rules/plan-shape-measured.md` exists for. Replaced with what a compliant run
+   establishes, plus a stated observation point.
+5. **The pause flag was described as holding the pipeline. It does not.** `SKILL.md` INITIALIZATION
+   clears it as its first action, because the UserPromptSubmit hook re-creates it on every user
+   message including `/ai-dlc` itself. It blocks advancement within a session only.
+6. **A count survived the commit whose subject claimed to remove it.** `5f64a71` removed both
+   §Rehearsal shas and the section's opening count, and left a second count ten lines below.
+
+**Why the rehearsals could not have caught most of it.** A `--local` clone carries committed state
+only, so untracked pipeline state — the pause flag included — was invisible to every arm by
+construction. And step 4 was the one step neither rehearsal ever ran. The defects that mattered
+were found by a cold read and by the session executing the file, not by re-running its commands.
+
+### Findings raised by the run and dispositioned elsewhere
+
+- **`retired-layer-contract.sh` read clean over two real positives.** Diagnosed and closed in
+  0.359.0 and 0.360.0: its retired set was empty, so it exited before opening a layer file, and its
+  output was byte-identical to a full scan. The uncovered class got its own detector.
+- **`pipeline-snapshot.md` is over its Rule 25(d) budget** — 161%, measured pre-existing baseline
+  153%. Reported, not fixed, and history deliberately not trimmed to mask it. It escalates when the
+  pipeline resumes; no action is owed here.
+- **A Rule 29 hook bypass was authorized** for one file and one write, after the remediator refused
+  to route around the denial and escalated. The repair record states this on its face, so an
+  authorized exception and an unnoticed gap in a guard do not look alike to the next reader.
