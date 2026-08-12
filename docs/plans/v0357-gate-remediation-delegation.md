@@ -5,9 +5,46 @@
 
 ## Start here
 
-Two repos. **Distribution — `/Users/n8/git/ai-dlc`, the tree this plan WRITES.** **Consumer — `/Users/n8/git/graph`. Read it, never write it** — it is a live consumer stopped deliberately at `0fd25d10d` as this work's baseline, and every bare `architecture.md:` or `pending.md:` citation below is a path in THAT tree, not this one.
+### ⛔ YOUR FIRST ACTION IS TO READ A MESSAGE, NOT TO ACT
 
-**Ping the operator** on any question, on any decision this file does not settle, and on completion including an early stop.
+A local Claude session is executing the consumer pull and is **HOLDING, mid-apply**. Reach it with
+`SendMessage` addressed to **`graph-b3 [18a71e]`** — if that name no longer resolves, find it with
+`ListAgents`; it is the interactive session rooted at `/Users/n8/git/graph`.
+
+**It sent a message that was in flight and UNREAD when this handoff was written**, reporting the
+disposition of the remaining 16 `HARD-LAYER-ADJUDICATION-MISSING` verdicts. **That message decides
+what happens next and this file deliberately does not.**
+
+Ask it for its status before anything else. **Do NOT resume the pull, do NOT adjudicate a verdict,
+and do NOT touch the reconcile branch until you have read it.** Guessing here means acting on a
+live consumer, mid-sprint. **It is still holding and has NOT been told that anything changed** — it
+is waiting on you, and a session that stops silently is indistinguishable from one still working.
+
+### The two repos
+
+**Distribution — `/Users/n8/git/ai-dlc`, the tree this plan WRITES.** `main` is clean, pushed and
+green; v0.357.0 merged as PR #534.
+
+**Consumer — `/Users/n8/git/graph`. NEVER WRITE IT.** A live consumer, mid-sprint, whose baseline
+for this work is `0fd25d10d`. Read it only. Its modified `_bmad-output/` files are expected and are
+not yours to tidy. Every bare `architecture.md:` or `pending.md:` citation below is a path in THAT
+tree, not this one.
+
+**Ping the operator** on any question, on any decision this file does not settle, and on completion
+including an early stop.
+
+### How to work here
+
+Read `CLAUDE.md` — it is the rulebook for this repo and it is not restated here. The discipline it
+carries that this release kept paying for: a zero is not a finding, so carry a control in the same
+invocation; prove a new check can fire; run the fixture suite the way the hook runs it (`git push`),
+never a hand-rolled loop.
+
+**The lead delegates.** That is this release's subject and the prior lead violated it repeatedly
+after building the mechanism against it. Where a contract clause with an enforcer decides a
+question, follow the clause and name it; where nothing decides it, ping the operator rather than
+picking. When a boundary is stated and the next step feels small and obviously correct, that is the
+drift, not an exception.
 
 ## THE THEME — deny the act, never judge the reason
 
@@ -284,9 +321,17 @@ starts from the finding rather than re-discovering it:
    **Per `CLAUDE.md`, measure the false-positive set and enumerate it before either ships.** An
    unmeasured lint is one the operator turns off.
 
-**Do not re-open:** the `hard_block` question (measured — nothing reads the field; disposition
-and its falsifier are in that map row's own `why:`). The `DECIDED_AUTONOMOUSLY` corpus as a
-generator of the 11-pass stall (tested and REFUTED — no pass was closed with it).
+**Do not re-open:**
+- **The `#4a. Close-Out Sweep` override adjudication.** Decided by mechanism, not preference:
+  LC-O9 and LC-O10 both, each with an enforcer, and `layer-drift.sh` emitted both codes
+  independently on this pull. Details in the live-pull section above.
+- **The plan-promotion guard.** CLOSED — the warning is the ceiling. The disposition lives in
+  `CLAUDE.md` under "THE WARNING IS THE CEILING" and that is the authority; the entry above is a
+  pointer to it. Both stronger forms were refuted by measurement, not deferred.
+- **The `hard_block` question** (measured — nothing reads the field; disposition and its falsifier
+  are in that map row's own `why:`).
+- **The `DECIDED_AUTONOMOUSLY` corpus as a generator of the 11-pass stall** (tested and REFUTED —
+  no pass was closed with it).
 ---
 
 
