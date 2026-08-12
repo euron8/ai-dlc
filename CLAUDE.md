@@ -112,10 +112,30 @@ Today: `fixture-mutants.md`, `fixture-ship-decl.md`, `plan-shape.md`,
 `scripts/validate-claude-rules.sh` — a rule with no reader and a pointer with no rule both
 fail the push.
 
-**One trigger cannot fire on its own and is restated here:** creating a NEW fixture
-directory reads nothing, so before you create one — or edit `install.sh` or `uninstall.sh` —
-read `.claude/rules/fixture-ship-decl.md`. Whether a fixture ships is one declaration and it
-lives in the fixture.
+**Two triggers cannot fire on their own and are restated here.**
+
+Creating a NEW fixture directory reads nothing, so before you create one — or edit
+`install.sh` or `uninstall.sh` — read `.claude/rules/fixture-ship-decl.md`. Whether a fixture
+ships is one declaration and it lives in the fixture.
+
+**A plan you are still writing lives at `~/.claude/plans/<slug>.md`, outside this repo.
+Promote it to `docs/plans/<slug>.md` and commit it the moment it becomes a HANDOFF — the thing
+a later session is told to READ AND FOLLOW.** Do it when that becomes true, not at the end.
+
+That rule's own home, `.claude/rules/plan-shape.md`, is scoped `paths: docs/plans/**`, and its
+comment assumes "work on a plan begins by reading `docs/plans/<slug>.md`, so the trigger fires."
+**That is false for a NEW plan**, which is authored in `~/.claude/plans/` and reads nothing
+under `docs/plans/` — so the rule telling you to promote a plan cannot load while you are
+writing one. `scripts/validate-plan-shape.sh` cannot cover the gap either: its corpus IS
+`docs/plans/*.md`, so an unpromoted plan is invisible to it and its clean run reads identically
+whether the promotion happened or not.
+
+Measured on the v0.357.0 program plan: it carried four unresolvable citations and no read/write
+boundary for a whole session, unchecked, because it was never tracked. The validator found all
+five within a second of the file entering its corpus. A `PostToolUse` hook now fires on every
+write under `~/.claude/plans/`, escalating with the write count; it warns rather than denies
+because plan mode's harness requires that path to exist and a deny would break plan mode.
+**A warning is the weaker mechanism and it is chosen under constraint. Promote the file.**
 
 ## Two layouts
 

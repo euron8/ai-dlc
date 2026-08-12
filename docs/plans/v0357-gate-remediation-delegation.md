@@ -81,6 +81,41 @@ section carries all seven contradictions the rehearsal found. Nothing was writte
    781% CPU; this repo's is the larger one. Watch the top of `.git/ai-dlc-fixture-durations`.
 5. Merge (preapproved by the operator).
 
+6. **FINISH THE PLAN-PROMOTION GUARD PROPERLY. What exists now is a stopgap and is not shipped.**
+
+   The defect: `.claude/rules/plan-shape.md` is scoped `paths: docs/plans/**` and assumes "work
+   on a plan begins by reading `docs/plans/<slug>.md`, so the trigger fires." **False for a NEW
+   plan** — plan mode authors into `~/.claude/plans/` and reads nothing under `docs/plans/`, so
+   the rule telling you to promote a plan cannot load while you are writing one.
+   `validate-plan-shape.sh` cannot cover it either: its corpus IS `docs/plans/*.md`, so an
+   unpromoted plan is invisible and its clean run reads identically either way. Measured — this
+   very plan carried four unresolvable citations and no read/write boundary for a whole session,
+   and the validator found all five within a second of the file entering its corpus.
+
+   What was done, and its limits, stated so nobody mistakes it for finished:
+   - A `PostToolUse` hook at `~/.claude/hooks/plan-outside-repo-warn.sh`, registered in the
+     USER's `~/.claude/settings.json`. Three arms tested: fires on `~/.claude/plans/*.md`,
+     silent on a repo path, escalates its banner with the write count to defeat habituation.
+   - A restatement in `CLAUDE.md` beside the fixture-ship trigger, which is the one place that
+     loads unconditionally and survives compaction.
+
+   **Neither is shipped and neither can block.** The hook lives in the operator's home
+   directory: not in `core/hooks/`, not in `templates/settings.json.template`, not covered by
+   any fixture, not delivered to a single consumer, and invisible to
+   `validate-enforcement-map.sh`. It is exactly the present-but-unregistered shape that
+   `validate-hook-registration.sh` was added THIS RELEASE to catch, one level up.
+
+   Decide and act, do not defer:
+   - Does it belong in `core/hooks/` + the settings template + a fixture, so consumers get it?
+     If yes it needs a `.dist-only` decision, `uninstall.sh` and `core-manifest.md` registration
+     (I74), and an arm proving it can fire.
+   - Is a BLOCKING form available? A warning is the weaker mechanism and was chosen only because
+     plan mode's harness requires that path, so a `PreToolUse` deny breaks plan mode. A
+     `SessionEnd` or pre-push check that FAILS on an unpromoted handoff has no such constraint.
+     That is the mechanism this repo would normally demand, and it was not attempted.
+   - If the answer is that this cannot be mechanised beyond a warning, SAY SO in `CLAUDE.md` with
+     the reason, because a prose rule with no enforcer must live there and nowhere else.
+
 **Hazards this session hit, for whoever resumes:**
 - **Do not `--amend` a release commit while agents still write.** Work landing inside the
   `git add` → `--amend` window vanishes with no error and no diff. Nothing was lost here; that
