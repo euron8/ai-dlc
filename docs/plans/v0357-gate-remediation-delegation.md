@@ -1,24 +1,47 @@
 # v0.357.0 — the gate remediation loop repairs inline, counts nothing, and sweeps by memory
 
 ---
-## EXECUTION STATE — read this first on resume. The RELEASE IS SHIPPED. What is live is the CONSUMER PULL, and it is mid-apply
-
 ## Start here
 
-### ⛔ YOUR FIRST ACTION IS TO READ A MESSAGE, NOT TO ACT
+## ✅ DISCHARGED — SPENT. Do NOT execute this file.
 
-A local Claude session is executing the consumer pull and is **HOLDING, mid-apply**. Reach it with
-`SendMessage` addressed to **`graph-b3 [18a71e]`** — if that name no longer resolves, find it with
-`ListAgents`; it is the interactive session rooted at `/Users/n8/git/graph`.
+**Everything below is a record. Nothing in it is an instruction to a later session.** The release
+shipped, the consumer pull completed, and the consumer is now at **0.360.0** — three releases past
+the one this plan delivers. The `⛔ FIRST ACTION` block that stood here told a resuming session to
+message a live consumer session mid-apply and to touch nothing until it replied; that session
+finished its work and is gone, so following it would have produced a message to nobody and a wait
+with no end. It is deleted rather than annotated, because a spent instruction reads exactly like a
+live one.
 
-**It sent a message that was in flight and UNREAD when this handoff was written**, reporting the
-disposition of the remaining 16 `HARD-LAYER-ADJUDICATION-MISSING` verdicts. **That message decides
-what happens next and this file deliberately does not.**
+**What discharged it.**
 
-Ask it for its status before anything else. **Do NOT resume the pull, do NOT adjudicate a verdict,
-and do NOT touch the reconcile branch until you have read it.** Guessing here means acting on a
-live consumer, mid-sprint. **It is still holding and has NOT been told that anything changed** — it
-is waiting on you, and a session that stops silently is indistinguishable from one still working.
+- **0.357.0** merged as PR #534: remediation dispatched rather than applied inline, the K=3 stall
+  rung, the derived fan-out worklist, the self-execution waiver window tightened.
+- **The consumer pull ran to completion.** `ab898a6ba` carried the pull, `c634c49b3` the s302
+  `[story]` gate reset, both merged to the sprint branch. Full account in
+  `docs/plans/graph-pull-0356-to-0357.md` `## Discharge`, which is also spent.
+- **The gate was reset and deliberately NOT re-run.** The operator separated the pipeline resume
+  from this plan. So **Verification item 8 — the end-to-end test of the stall rung — was never
+  performed and is not owed by this plan.** It happens whenever the pipeline resumes. Do not read
+  this plan's completion as evidence the rung fired correctly in production; it has not yet been
+  exercised live.
+
+**Three follow-on releases came out of executing it, each found by the one before:**
+
+- **0.358.0** — the smoke-failure protocol triaged deployment-vs-code and routed both answers to
+  the dev seat. New `ops` seat. *Getting the delegation right is not the same as getting the
+  delegatee right.*
+- **0.359.0** — `retired-layer-contract.sh` exited before opening a file and said nothing, output
+  byte-identical to a full scan. Both quiet paths now qualify their zero. Its fixture arm had been
+  certifying the silence from a branch it never tested.
+- **0.360.0** — the class that zero excluded: a layer file reproducing a core line core has
+  deleted. New `reconcile/retired-layer-passage.sh`, false-positive set measured empty across 20
+  release pairs.
+
+**Still open, and NOT owed by this plan** — the only live item on this page: a
+`validate-plan-shape.sh` arm requiring every `## Rehearsal` finding to name the step its fix landed
+in, or declare itself a record. It is BOOKED item 3 below, and per this repo's rule its
+false-positive set must be measured before it ships.
 
 ### The two repos
 
