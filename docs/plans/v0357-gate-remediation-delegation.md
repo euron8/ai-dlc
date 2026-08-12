@@ -1,7 +1,7 @@
 # v0.357.0 — the gate remediation loop repairs inline, counts nothing, and sweeps by memory
 
 ---
-## EXECUTION STATE — written 2026-08-12, read this first on resume
+## EXECUTION STATE — read this first on resume. The blockers are DISCHARGED; what is left is push and merge
 
 ## Start here
 
@@ -30,24 +30,51 @@ What follows, and what does NOT survive assuming good reasoning is available:
 
 **The rule you are most confident about is the one you are least able to follow unaided.**
 
-## ⛔ DO NOT MERGE — the rehearsal found two regressions THIS RELEASE introduced
+## ✅ DISCHARGED — the rehearsal found two regressions THIS RELEASE introduced, and a second rehearsal proved them gone
 
-Both sit in the distribution's own `core/`, not in the merge, so a consumer cannot fix them and
-the pull breaks their pre-push suite. Proven pull-introduced against an un-pulled control clone:
+Both sat in the distribution's own `core/`, not in the merge, so a consumer could not have fixed
+them and the pull broke their pre-push suite. Fixed on this branch in `a5b041f` — *"fix: the two
+regressions this release introduced, found by rehearsing its own runbook"*. **The findings stay
+recorded below, because the differential IS the evidence the fix is real**: a later reader needs
+to know what was wrong and how it was proven gone, not merely that something was repaired.
 
-1. **`story-fields-derive` PASS → FAIL**, fixture byte-identical across the pull.
-   `core/skills/ai-dlc/steps/gate-validation.md:474` now carries the writing form
-   `scripts/ai-dlc/sprint-status.sh derive-stories` — the exact string that fixture's control arm
-   exists to catch. Introduced by this release's own Check 5 adjudication.
-2. **`audit-rule-files.sh --fail-on=deterministic` 0 → 1 tier-1 finding** — an `ORIGIN_TAG` of
-   `v0.350.0` in prose at `core/skills/ai-dlc-update/SKILL.md:1479`, shipped by this release.
+1. **`story-fields-derive` PASS → FAIL**, fixture byte-identical across the pull. The pull had put
+   the writing form `scripts/ai-dlc/sprint-status.sh derive-stories` into
+   `core/skills/ai-dlc/steps/gate-validation.md` — the exact string that fixture's control arm
+   exists to catch — introduced by this release's own Check 5 adjudication.
+   **The instruction was REMOVED, not reworded.** What stands in that passage now is the
+   read-only form `scripts/ai-dlc/sprint-status.sh derive-stories --check`, at
+   `core/skills/ai-dlc/steps/gate-validation.md:485`, and it is the only
+   `sprint-status.sh derive-stories` occurrence left in the file.
+   **Proven gone:** PASS in BOTH clones, exit 0, with the fixture's own `run.sh` byte-identical
+   across the pull, so the arm was not weakened into agreement. Mutation probe: appending the
+   bare writing form drove it back to FAIL; restoring returned PASS.
+2. **`audit-rule-files.sh --fail-on=deterministic` 0 → 1 tier-1 finding** — an `ORIGIN_TAG` in
+   prose in `core/skills/ai-dlc-update/SKILL.md`, shipped by this release.
+   **The finding was 2 on the distribution, not 1.** The second was `CLAUDE.md` itself, tagged by
+   the tip docs commit, and a consumer-side rehearsal structurally could not see it: a consumer's
+   `CLAUDE.md` is template-derived and sits outside that corpus.
+   **The two needed OPPOSITE treatments.** `CLAUDE.md`'s tag was the measurement's own
+   coordinates, so only the tag form went and the measurement stayed. The update skill's was a
+   duration-of-defect provenance clause whose coordinates were already given a sentence earlier,
+   so the whole clause went — de-v-ing that second one would have cleared the regex and left the
+   violation standing.
+   **Proven gone:** exit 0 and `tier-1 findings: 0` in BOTH clones, with the denominators
+   MATCHING at `107 files scanned` / `78 skill files searched` — equal denominators are what say
+   the two runs looked at the same corpus rather than one of them looking at less.
 
-Fix both, re-rehearse, then merge. **Nothing else in this plan is blocked on anything.**
+**The second rehearsal, against a pristine un-pulled control clone.** Full consumer pre-push
+suite: pulled **148 ok / 0 FAIL, exit 0**; control **144 ok / 0 FAIL, exit 0**. The delta is
+exactly the four fixtures the pull ADDS — `gate-remediation-deny`, `gate-repair-record`,
+`gate-series-rung`, `hook-registration-join` — and none removed. Nothing was written to
+`/Users/n8/git/graph`: `HEAD` `0fd25d10d` and the same four modified `_bmad-output/` files at
+start and at end.
 
-**Committed:** `3077489` (feat) and `43729cc` (docs, the rehearsed runbook) on branch
-`feat/v0.357.0-gate-remediation-delegation`, cut from `origin/main` (`d2378b4`). **NOT pushed,
-NOT merged.** Release triple validates: subject + `VERSION` 0.357.0 + CHANGELOG heading agree,
-one release in range, no unpushed main commits inherited. Working tree clean.
+**Branch state:** `feat/v0.357.0-gate-remediation-delegation`, cut from `origin/main`
+(`d2378b4`). Committed, **NOT pushed, NOT merged.** Refer to the BRANCH, never to a sha list —
+commits are still landing on it and any list written here goes stale immediately. Release triple
+validates: subject + `VERSION` 0.357.0 + CHANGELOG heading agree, one release in range, no
+unpushed main commits inherited.
 
 **Verified green on the COMMITTED tree** (`git archive HEAD` into a temp dir, not the working
 tree): `validate-enforcement-map.sh` exit 0 / 0 FAILs · `validate-gate-manifest.sh` 44/44 ·
@@ -64,57 +91,64 @@ case-blindness fix · `validate-hook-registration.sh` + a consumer pre-push arm 
 `enforcement-map.yaml` made YAML-parseable (baseline fails, branch parses) ·
 `validate-cycle-commits.sh` non-vacuity arm · the self-execution waiver window tightened.
 
-**DONE since this block was first written:** the runbook is written, rehearsed against a
-`git clone --local` copy, corrected, and committed (`43729cc`, plan-shape 0/0). Its `## Rehearsal`
-section carries all seven contradictions the rehearsal found. Nothing was written to
-`/Users/n8/git/graph` — verified same four dirty files and same `HEAD` at start and end.
+**DONE, all committed on this branch:**
+- The runbook `docs/plans/graph-pull-0356-to-0357.md` is written, rehearsed against a
+  `git clone --local` copy, corrected, and committed (plan-shape 0/0). Its `## Rehearsal`
+  section carries all seven contradictions the rehearsal found.
+- **Both blocking regressions fixed and re-rehearsed** — the record is the section above.
+- **Done-when criteria 6 and 7 in the runbook corrected.** Criterion 6 had stated a
+  DISTRIBUTION fact as a CONSUMER expectation, which no consumer executor could have satisfied.
+- **Verification item 7 (E2's window fix, both arms) is covered.**
+  `core/fixtures/story-corpus-sprint-slot/run.sh` carries arm A11 (a waiver naming the story
+  still lifts) and arm A12 (a neighbouring entry's token does not), plus a mutant proving A12
+  can fire: the fixture exits 0 and reports
+  `MUTANT A12 (waiver window free to cross an entry boundary again) fails exactly A12`.
+- Nothing was ever written to `/Users/n8/git/graph` — same four dirty files, same `HEAD`, at
+  start and end of every rehearsal.
 
-**OUTSTANDING — in order:**
-1. **Fix the two regressions above.** Blocking.
-2. **Re-rehearse** after fixing — the rehearsal is what found them, and a fix is unproven until
-   the same clone-and-control run comes back clean.
-3. **Correct done-when criteria 6 and 7 in the runbook.** The rehearsal proved both wrong and
-   §Rehearsal records the right values, but the criteria themselves still read as authored.
-   Criterion 6 states a DISTRIBUTION fact as a CONSUMER expectation.
-4. `git push` — which is how the fixture suite runs. NEVER a hand-rolled loop over
+**OUTSTANDING — in order. Two items, neither blocked:**
+1. `git push` — which is how the fixture suite runs. NEVER a hand-rolled loop over
    `core/fixtures/*/`. The rehearsal measured the CONSUMER's suite at 148 fixtures, 1m24s at
    781% CPU; this repo's is the larger one. Watch the top of `.git/ai-dlc-fixture-durations`.
-5. Merge (preapproved by the operator).
+2. Merge (preapproved by the operator).
 
-6. **FINISH THE PLAN-PROMOTION GUARD PROPERLY. What exists now is a stopgap and is not shipped.**
+**6 — THE PLAN-PROMOTION GUARD. CLOSED. Disposition: THE WARNING IS THE CEILING.**
 
-   The defect: `.claude/rules/plan-shape.md` is scoped `paths: docs/plans/**` and assumes "work
-   on a plan begins by reading `docs/plans/<slug>.md`, so the trigger fires." **False for a NEW
-   plan** — plan mode authors into `~/.claude/plans/` and reads nothing under `docs/plans/`, so
-   the rule telling you to promote a plan cannot load while you are writing one.
-   `validate-plan-shape.sh` cannot cover it either: its corpus IS `docs/plans/*.md`, so an
+   The defect it addresses: `.claude/rules/plan-shape.md` is scoped `paths: docs/plans/**` and
+   assumes "work on a plan begins by reading `docs/plans/<slug>.md`, so the trigger fires."
+   **False for a NEW plan** — plan mode authors into `~/.claude/plans/` and reads nothing under
+   `docs/plans/`, so the rule telling you to promote a plan cannot load while you are writing
+   one. `validate-plan-shape.sh` cannot cover it either: its corpus IS `docs/plans/*.md`, so an
    unpromoted plan is invisible and its clean run reads identically either way. Measured — this
    very plan carried four unresolvable citations and no read/write boundary for a whole session,
    and the validator found all five within a second of the file entering its corpus.
 
-   What was done, and its limits, stated so nobody mistakes it for finished:
-   - A `PostToolUse` hook at `~/.claude/hooks/plan-outside-repo-warn.sh`, registered in the
-     USER's `~/.claude/settings.json`. Three arms tested: fires on `~/.claude/plans/*.md`,
-     silent on a repo path, escalates its banner with the write count to defeat habituation.
-   - A restatement in `CLAUDE.md` beside the fixture-ship trigger, which is the one place that
-     loads unconditionally and survives compaction.
+   What ships: a `PostToolUse` hook at `~/.claude/hooks/plan-outside-repo-warn.sh` in the
+   OPERATOR's home, registered in the USER's `~/.claude/settings.json` — three arms tested
+   (fires on `~/.claude/plans/*.md`, silent on a repo path, escalates its banner with the write
+   count to defeat habituation) — plus the restatement in `CLAUDE.md` beside the fixture-ship
+   trigger, which is the one place that loads unconditionally and survives compaction.
 
-   **Neither is shipped and neither can block.** The hook lives in the operator's home
-   directory: not in `core/hooks/`, not in `templates/settings.json.template`, not covered by
-   any fixture, not delivered to a single consumer, and invisible to
-   `validate-enforcement-map.sh`. It is exactly the present-but-unregistered shape that
-   `validate-hook-registration.sh` was added THIS RELEASE to catch, one level up.
+   **Both stronger forms were refuted by measurement, not deferred:**
+   - *Ship it to consumers* — refuted. A consumer tree never gets `docs/plans/`, never gets a
+     plan-shape validator, and is told nothing about promoting plans.
+     `scripts/validate-plan-shape.sh` exists only in `scripts/`, which is distribution-only by
+     construction, and `core/fixtures/plan-shape/.dist-only` already declares exactly this.
+   - *Version the hook in this repo* — actively fenced out. `.gitignore:41` ignores `.claude/*`,
+     and I88's A1 arm at `scripts/validate-claude-rules.sh:95` fails the push on any tracked path
+     under `.claude/` that is not `.claude/rules/**/*.md`. It would also be covered by nothing:
+     `validate-hook-registration.sh` SKIPs here (no `.claude/settings.json`), its glob is
+     `ai-dlc-*.sh` anyway, this repo's pre-push never calls it, and no other gate reads that path.
+   - *A blocking form* — there is no act to deny. Plan mode's harness requires the home path to
+     exist, so a `PreToolUse` deny breaks plan mode. And no join exists to key a later check on:
+     the home plans directory holds 60 files, `docs/plans/` holds 19, and the intersection of
+     their filenames is ZERO, so which unpromoted plan was owed promotion is not derivable and a
+     check keyed on it fires on all 60. Whether a plan is a handoff is INTENT, and the same write
+     produces a handoff and a throwaway draft.
 
-   Decide and act, do not defer:
-   - Does it belong in `core/hooks/` + the settings template + a fixture, so consumers get it?
-     If yes it needs a `.dist-only` decision, `uninstall.sh` and `core-manifest.md` registration
-     (I74), and an arm proving it can fire.
-   - Is a BLOCKING form available? A warning is the weaker mechanism and was chosen only because
-     plan mode's harness requires that path, so a `PreToolUse` deny breaks plan mode. A
-     `SessionEnd` or pre-push check that FAILS on an unpromoted handoff has no such constraint.
-     That is the mechanism this repo would normally demand, and it was not attempted.
-   - If the answer is that this cannot be mechanised beyond a warning, SAY SO in `CLAUDE.md` with
-     the reason, because a prose rule with no enforcer must live there and nowhere else.
+   The disposition is recorded where a prose rule with no enforcer has to live: `CLAUDE.md`, in
+   the `.claude/rules/` section, under the heading **"THE WARNING IS THE CEILING"**. That is the
+   authority; this entry is the pointer to it. **Do not re-open it here.**
 
 **Hazards this session hit, for whoever resumes:**
 - **Do not `--amend` a release commit while agents still write.** Work landing inside the
@@ -123,6 +157,22 @@ section carries all seven contradictions the rehearsal found. Nothing was writte
 - **Never put backticks in `git commit -m "..."`.** They RUN and silently delete the quoted text
   from the message — I85's exact defect. Use `-F -` with a quoted heredoc (`<<'MSG'`).
 - **Do not `git add -A`** in this tree; it stages agents' scratch. Use explicit paths.
+
+**BOOKED — two defects found while discharging this release, deliberately NOT fixed here.** Both
+are out of scope for this merge and neither blocks it. They are recorded so the next session
+starts from the finding rather than re-discovering it:
+
+1. **`core/skills/ai-dlc/rule-authoring.md:87` cites a prohibition the file never states.** It
+   describes the tier-1 deterministic detector as mechanizing a *"version reference"* prohibition,
+   but the file's own Style list at `:15-18` states only sprint/story references, incident
+   narrative, parenthetical origin notes, and embedded dates — no version clause. The word appears
+   exactly once in the file, at `:87` itself. **The enforcer is stricter than the rule it cites**,
+   and ten live bare-number citations sit compliant-by-rule-text while being only accidentally
+   safe from the regex. Fix the rule or narrow the detector; do not leave them disagreeing.
+2. **`scripts/validate-claude-rules.sh:109` — a stale citation inside a LIVE error message.** A1's
+   error string cites `.gitignore:19-24` as the narrowing it is protecting. Those lines are the
+   `_bmad-output/` comment block. The actual `.claude/*` narrowing is `.gitignore:41-45`. An
+   operator who follows the pointer the failure hands them lands on the wrong block.
 
 **Do not re-open:** the `hard_block` question (measured — nothing reads the field; disposition
 and its falsifier are in that map row's own `why:`). The `DECIDED_AUTONOMOUSLY` corpus as a

@@ -1,33 +1,48 @@
 # Runbook — pull the graph consumer from 0.356.0 to 0.357.0, mid-sprint s302
 
-**Status: NOT YET RUN, AND NOT YET REHEARSED — DO NOT HAND THIS TO A CONSUMER SESSION YET.**
+**Status: REHEARSED TWICE, BOTH BLOCKING REGRESSIONS DISCHARGED, THE MERGE NO LONGER BLOCKED —
+STILL NOT RUN AGAINST THE LIVE CONSUMER, AND DO NOT HAND THIS TO A CONSUMER SESSION UNTIL 0.357.0
+IS ON THE DISTRIBUTION'S `main`.** The two regressions the first rehearsal found are fixed at
+`a5b041f`, and a second rehearsal re-proved them gone against an un-pulled control clone of the
+same consumer commit. What still holds the handoff is not the regressions: until 0.357.0 is on
+`main`, every placeholder in this file resolves to the wrong release — see §Rehearsal item 1.
 This release exists because of what happened on this consumer: the s302 `[story]` gate ran eleven
 adjudication passes and stopped. The pull carries the machinery that would have ended it at pass
 three, and step 9 then **resets that gate and re-runs it clean**, so the release is tested
 end-to-end this sprint rather than next.
 
-**§Rehearsal IS FILLED and it found two BLOCKING regressions this release introduced. DO NOT
-MERGE v0.357.0 UNTIL BOTH ARE FIXED.** Both sit in the distribution's own `core/`, not in the
-merge, so a consumer cannot fix them and the pull would break their pre-push suite:
+**§Rehearsal IS FILLED. The first rehearsal found two BLOCKING regressions this release introduced;
+both are DISCHARGED at `a5b041f` and the second rehearsal proved them gone.** Both sat in the
+distribution's own `core/`, not in the merge, so a consumer could not have fixed them and the pull
+would have broken their pre-push suite. Each is kept here with the differential that closed it,
+because the differential is what makes the fix checkable:
 
-1. **`story-fields-derive` goes PASS -> FAIL**, fixture byte-identical across the pull.
-   `steps/gate-validation.md:474` now carries the writing form
+1. **`story-fields-derive` went PASS -> FAIL**, fixture byte-identical across the pull.
+   `steps/gate-validation.md:474` carried the writing form
    `` `scripts/ai-dlc/sprint-status.sh derive-stories` `` — the exact string that fixture's control
-   arm exists to catch. Introduced by this release's Check 5 adjudication.
-2. **`audit-rule-files.sh --fail-on=deterministic` goes 0 -> 1 tier-1 finding**: an `ORIGIN_TAG`
+   arm exists to catch. Introduced by this release's Check 5 adjudication. **DISCHARGED: PASS on
+   BOTH arms of the second rehearsal, exit 0**, with `run.sh` byte-identical across the pull
+   (`cmp` exit 0; the same `cmp` returns 2 against a different file). The arm still fires —
+   appending the bare writing form drove the fixture to exit 1 / FAIL, and restoring returned PASS.
+2. **`audit-rule-files.sh --fail-on=deterministic` went 0 -> 1 tier-1 finding**: an `ORIGIN_TAG`
    of `v0.350.0` in prose at `.claude/skills/ai-dlc-update/SKILL.md:1479`, delivered by this
-   release itself.
+   release itself. **DISCHARGED: exit 0 and `tier-1 findings: 0` on BOTH arms**, denominators
+   matching at `107 files scanned` and `78 skill files searched` on each, tier-2 identical at 23
+   NARRATIVE_DRIFT + 1 RULE_WEAKNESS and `all findings: 24`. The check still fires — appending an
+   origin-tagged sentence gave exit 1 with 1 tier-1, and restore returned 0.
 
-Both were proven pull-introduced against an un-pulled control clone of the same commit. Criteria 6
-and 7 in this file are ALSO wrong and are corrected in §Rehearsal — criterion 6 states a
-DISTRIBUTION fact as a consumer expectation, and an executor handed the PASS it actually gets would
-conclude it is reading the wrong tree.
+Criteria 6 and 7 in this file were ALSO wrong when it shipped. Both are corrected in place below,
+and §Rehearsal items 3 and 4 carry what each was wrong about.
 
 ## Start here
 
 Two repos, and the read/write boundary between them is absolute.
 
-- **Distribution — `/Users/n8/git/ai-dlc`. Read it, never write it.** `main` carries `0.357.0`.
+- **Distribution — `/Users/n8/git/ai-dlc`. Read it, never write it.** `main` does NOT carry
+  `0.357.0`: `main` and `origin/main` are `d2378b4` with `VERSION` `0.356.0`, and `0.357.0` lives
+  only on the unmerged branch `feat/v0.357.0-gate-remediation-delegation`. Until it merges, every
+  placeholder in this file resolves to the wrong release — §Rehearsal item 1 has the mechanism,
+  the three consequences, and what each placeholder resolves to once it is on `main`.
   Every step below reads from this tree and edits none of it.
 - **Consumer — `/Users/n8/git/graph`, the tree you WRITE.** Mid-sprint s302, stopped and committed
   at `0fd25d10d` *"handoff mid [story]-gate adjudication cascade (pass 11 of 11 FAIL, pass 12
@@ -199,27 +214,55 @@ are not "green" and an executor told to expect green would report failure for wo
    **Exit 3 is not a clean result** — it means the scope never resolved, so fix the scope and
    re-run rather than reading the empty worklist as clean.
 
-6. **`validate-artifact-paths.sh` still exits 1 with 2 blocking paths — this is NOT expected to go
-   green and it never was.** It fails identically on the distribution's `main`. Do not fix it here
-   and do not report it as a regression from this pull.
+6. **`validate-artifact-paths.sh` exits 0 with `VERDICT: PASS`.** Observation point: the consumer,
+   after step 4. Control: an un-pulled clone of the same consumer commit exits 0 with `VERDICT:
+   PASS` identically, so this criterion reports the consumer's standing state at both versions and
+   is not evidence the pull did anything.
 
-7. **The consumer's pre-push suite is green**, run through its own hook.
+   Scoped to `/Users/n8/git/ai-dlc` and to no other tree: the same script exits 1 there with
+   `FAIL — 2 blocking`. That reading is a fact about the distribution. Do not carry it onto the
+   consumer, do not fix it here, and do not report it as a regression from this pull.
 
-## Rehearsal — this runbook was executed against a copy before it shipped
+7. **The consumer's pre-push suite is green — exit 0, `148 ok / 0 FAIL`.** Observation point: after
+   step 8, run through the consumer's own hook as `bash .githooks/pre-push` from the consumer root.
 
-`git clone --local /Users/n8/git/graph`, at `0fd25d10d`, plus a second pristine clone of the same
-commit kept un-pulled as the before-arm control. Nothing was written to `/Users/n8/git/graph`:
-`git status --short` read the same four modified hook-written files at the start and at the end,
-and `HEAD` stayed `0fd25d10d`.
+   **The fixture COUNT MOVES across the pull, and 148 is the post-pull number.** Before the pull
+   the same suite reports `144 ok / 0 FAIL`, exit 0. The pull ADDS four fixtures and removes none:
+   `gate-remediation-deny`, `gate-repair-record`, `gate-series-rung`, `hook-registration-join`.
+   Count 144 before step 4 and 148 after; a rise of exactly four, accounted for by those names, is
+   the pull landing correctly rather than the suite changing shape.
 
-Executed on the copy: step 3's self-update gate; step 4 as `reconcile/apply.sh
---carried-machinery-slice`; step 5's settings merge, verbatim and then corrected; step 6 both arms;
-criteria 1, 2, 3, 5 (both arms), 6; and step 8's whole pre-push suite, 148 fixtures, **1m24s at
-781% CPU** — nowhere near a time-box. Steps 2, 7, 9 and criterion 4 were not run; see the last
-paragraph.
+## Rehearsal — this runbook was executed against a copy TWICE before it shipped
 
-**Eight things the rehearsal contradicted**, each of which a prediction would have written the other
-way:
+Both passes used the same instrument: `git clone --local /Users/n8/git/graph` at `0fd25d10d`, one
+copy pulled and a second pristine clone of the same commit kept un-pulled as the before-arm
+control. Nothing was written to `/Users/n8/git/graph` in either pass: `git status --short` read the
+same four modified hook-written files at the start and at the end, and `HEAD` stayed `0fd25d10d`.
+
+**First rehearsal**, against branch tip `43729cc`. Executed on the copy: step 3's self-update gate;
+step 4 as `reconcile/apply.sh --carried-machinery-slice`; step 5's settings merge, verbatim and
+then corrected; step 6 both arms; criteria 1, 2, 3, 5 (both arms), 6; and step 8's whole pre-push
+suite, 148 fixtures, **1m24s at 781% CPU** — nowhere near a time-box. It produced the eight
+findings below and the two blocking regressions in the header.
+
+**Second rehearsal**, against branch tip `a5b041f`, the commit that fixed both regressions. It
+re-ran the two arms that had gone red and the whole suite on both arms:
+
+- fixture `story-fields-derive` and `audit-rule-files.sh --fail-on=deterministic` — both green on
+  both arms, each with a mutation probe proving the check still fires. Figures in the header.
+- full pre-push suite from the clone root: pulled **148 ok / 0 FAIL, exit 0, 79s**; control
+  **144 ok / 0 FAIL, exit 0, 78s**. Both failure sets empty. The 148-vs-144 gap is the pull adding
+  four fixtures and removing none, named in criterion 7.
+- apply, re-verified end to end: gate `SELF-UPDATE-DEFER` exit 0; `apply.sh
+  --carried-machinery-slice <dist> 959e778 <consumer> a5b041f` exit 0; the stamp reached ALL FOUR
+  lines. Hook registration exit 1 before the reconcile and exit 0 after, 14 registrations to 16
+  present hooks, the added pair exactly `ai-dlc-gate-remediation-guard.sh` and
+  `ai-dlc-rules-floor.sh`.
+- `validate-artifact-paths.sh`: pulled exit 0 `VERDICT: PASS`; control exit 0 `PASS`, identical;
+  `/Users/n8/git/ai-dlc` exit 1 `FAIL — 2 blocking`. This is the reading that rewrote criterion 6.
+
+**Eight things the first rehearsal contradicted**, each of which a prediction would have written the
+other way. Items 3 and 4 carry the second rehearsal's result:
 
 1. **`main` does not carry `0.357.0`, so every placeholder in this file resolves to the WRONG
    RELEASE, and §Start here is where it starts.** `main` and `origin/main` are both `d2378b4`,
@@ -235,11 +278,12 @@ way:
    - Substituting `<theirs>` in step 5 with the only ref this file names has the merge read the
      `0.356.0` template.
 
-   Nor can a sha be written down instead: that branch tip took **four values during this
-   rehearsal** — `1568427` → `3077489` (the `feat` commit amended) → `263ef07` → `43729cc` (a
-   `docs(plan):` commit stacked on top, then itself amended). A tip that moves both by amendment
-   and by accretion is not an identifier a runbook can carry. **The placeholders are not resolvable
-   until `0.357.0` is on `main`.** Once it
+   Nor can a sha be written down instead: that branch tip took **five values across these two
+   rehearsals** — `1568427` → `3077489` (the `feat` commit amended) → `263ef07` → `43729cc` (a
+   `docs(plan):` commit stacked on top, then itself amended) → `a5b041f` (the regression fix). The
+   fifth arrived after this item was written, which is the item's own conclusion holding under
+   test: a tip that moves both by amendment and by accretion is not an identifier a runbook can
+   carry. **The placeholders are not resolvable until `0.357.0` is on `main`.** Once it
    is, all four resolve and none needs a literal: `<base-sha>` is the consumer's own
    `sed -n 's/^commit: //p' .claude/.ai-dlc-version`; `<theirs-sha>` and `<theirs>` are
    `origin/main`; and step 2's report states BOTH on its line 3 — verified by running
@@ -259,24 +303,36 @@ way:
    and then `--template "$t"`. `validate-hook-registration.sh` prints this fix itself, and its
    version clones the upstream over the network rather than reading the distribution already on
    disk.
-3. **Criterion 6 is a fact about the DISTRIBUTION, not about this consumer.** On the pulled consumer
-   `validate-artifact-paths.sh` exits **0** — `VERDICT: PASS`, 5011 conforming of 5109 tracked files
-   — and the pre-push arm that runs it passes. The `exit 1, 2 blocking` reading reproduces on
-   `/Users/n8/git/ai-dlc` and nowhere else. An executor told to expect a FAIL and handed a PASS
-   reads it as the wrong tree.
-4. **Criterion 7 is false, and the pull is what makes it false.** The suite exits 1 on two arms, both
-   proven pull-introduced against the un-pulled control clone:
+3. **Criterion 6 was never true of this consumer, at EITHER version — the pull is not what makes it
+   false.** On the pulled consumer `validate-artifact-paths.sh` exits **0** — `VERDICT: PASS`,
+   5011 conforming of 5109 tracked files — and the pre-push arm that runs it passes. The second
+   rehearsal ran the un-pulled control clone too, and it exits **0** with `VERDICT: PASS`
+   identically, which is the stronger statement: this is the consumer's standing state before and
+   after, not a state the pull produced. The `exit 1, 2 blocking` reading reproduces on
+   `/Users/n8/git/ai-dlc` and nowhere else — a fact about the DISTRIBUTION, written into this file
+   as a consumer expectation. An executor told to expect a FAIL and handed a PASS reads it as the
+   wrong tree. Criterion 6 above now states exit 0 / `VERDICT: PASS` and scopes the FAIL to
+   `/Users/n8/git/ai-dlc` by name.
+4. **Criterion 7 was false, the pull was what made it false, and it is now DISCHARGED.** In the
+   first rehearsal the suite exited 1 on two arms, both proven pull-introduced against the
+   un-pulled control clone:
    - `audit-rule-files.sh --fail-on=deterministic` — **0 tier-1 findings before, 1 after**:
      `ORIGIN_TAG` at `.claude/skills/ai-dlc-update/SKILL.md:1479`, an origin tag `v0.350.0` in prose
      **this release itself delivers**.
    - fixture `story-fields-derive` — **PASS before, FAIL after**, the fixture byte-identical across
      the pull (control: `gate-validation.md` moved +58/−6 in the same diff). Its control arm fires:
-     `steps/gate-validation.md:474` now carries the writing form
+     `steps/gate-validation.md:474` carried the writing form
      `` `scripts/ai-dlc/sprint-status.sh derive-stories` ``, which that arm exists to catch.
      147 ok / 1 FAIL over 148 fixtures.
 
-   Both defects sit in the distribution's own `core/`, not in the merge, so the consumer cannot fix
-   them.
+   Both defects sat in the distribution's own `core/`, not in the merge, so the consumer could not
+   fix them. Fixed at `a5b041f`. The second rehearsal's differential closes both: the suite is
+   **148 ok / 0 FAIL, exit 0, 79s** on the pulled arm against **144 ok / 0 FAIL, exit 0, 78s** on
+   the control, with both failure sets empty; `audit-rule-files.sh --fail-on=deterministic` is exit
+   0 with `tier-1 findings: 0` on both arms over matching denominators; `story-fields-derive` is
+   PASS on both. Each of the two carries a mutation probe — re-introduce the defect and the check
+   goes red, restore it and the check goes green — so the greens are checks passing, not checks
+   that stopped running. Criterion 7 above now states the passing result and the count movement.
 5. **Criterion 1's command returns 2, not 4, exactly as printed.** `<new-sha>` is load-bearing:
    `grep -cE '0\.357\.0|<new-sha>'` matches only the two `version`/`skill_version` lines. Substitute
    the sha and it returns 4. The stamp does reach all four lines after a
@@ -320,7 +376,13 @@ were not run — apply.sh's own worklist is 24 rows (14 `extension-reread`, 5 `e
 2 `override-readopt`, 2 `override-retire`, 1 `semantic-merge`) and contains **no** ledger row, so
 step 7's ledger half is not derivable from it. Criterion 4 needs a live gate and is untested here.
 The distribution commit also moved under the rehearsal — `1568427` → `3077489`, same version, same
-subject — and both defects in item 3 survive at the new HEAD.
+subject.
+
+**What the SECOND rehearsal did not run, stated so no one reads its greens as wider than they are.**
+Steps 1, 2, 7 and 9 were not run, and neither was criterion 4 — it needs a live gate. Criterion 5's
+fan-out worklist was not re-run either: the first rehearsal's worklist of 10, above, stands
+unchallenged by this pass and equally unconfirmed by it. No ledger receipt was certified, for the
+structural reason above — a `--local` clone carries committed state only.
 
 ## Abort
 
