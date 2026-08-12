@@ -34,6 +34,60 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.359.0] — 2026-08-12
+
+### A detector that exited before opening a single file, and a fixture arm that certified the silence
+
+`retired-layer-contract.sh` returned **0 rows, exit 0, no stderr** on the reference consumer's
+0.356.0 → 0.357.0 pull, while two of that consumer's extension entries carried superseded core
+text. Both were found by a human reading the entries. Neither was reachable by re-running the tool
+that owned them.
+
+**The cause, traced rather than guessed.** Running the script under `bash -x` with the pull's own
+refs shows `RETIRED=` empty and `exit 0` taken at the set-difference guard: **0.357.0 retired no
+labelled-directive or `{token}` shape at all — 14 at base, 14 at theirs — so the script never
+opened a layer file.** The scan set was not the cause; the consumer session confirmed independently
+that both positives are `extensions/` entries and that `layer-drift.sh` reached both on the same
+pull, emitting `EXTENSION-HOOK-DRIFT` on each. Only this detector came back empty, and it came back
+empty from a branch that runs before any file is read.
+
+**The output of that branch was byte-identical to a full scan that matched nothing.** That is the
+defect. The script already understood this hazard one branch earlier — it refuses to report clean
+when the rulebook is unreadable, on the stated ground that *"'no shapes' and 'nothing retired' are
+the same output"* — and the empty-retired-set case has the same ambiguity with no such guard.
+
+**Both quiet paths now qualify their zero, on stderr, leaving the row contract untouched:**
+
+- nothing retired → names the derived counts at base and theirs and states that **no layer file was
+  opened**, so the run is silent about layer drift rather than evidence of none;
+- shapes retired but nothing matched → carries its denominator, `N retired shape(s) checked against
+  M layer file(s)`.
+
+Both restate the prose limit at runtime. It was already stated correctly in the file's header —
+*"Do not read a clean result as 'every layer file survived this release'"* — where the operator
+reading the run never sees it.
+
+**The vocabulary was deliberately NOT widened.** The header's own measurement holds: widening past
+labelled directives and `{token}` placeholders into bare words and headings flags every reworded
+sentence and drowns the finding. Both live positives are ordinary English prose — one restates
+core's superseded protocol, one quotes core's superseded line inside an argument about core — and
+neither carries a distinguishing token. Catching that class needs a passage-level comparison and an
+FP measurement that has not been made; it is not folded in here on the strength of two examples.
+
+### Fixed — the fixture arm was passing through the wrong branch
+
+`core/fixtures/retired-layer-contract/run.sh` asserted *"a release that retires nothing reports
+nothing"* by invoking `THEIRS THEIRS`. At the seeded `THEIRS` ref the rulebook carries **no**
+contract shape — that is precisely what the seeded release retires — so that invocation trips the
+unreadable-base guard and exits before the retired set is ever computed. The arm asserted empty
+stdout, got it from a branch it was not testing, and read as a pass. It now uses `BASE BASE`, and a
+control asserts the run did **not** reach the unreadable-base guard.
+
+Three arms added, each proven able to fail against the unfixed script before the fix landed: the
+nothing-retired note, its restatement of the prose limit, and the scanned-but-no-match denominator
+— the last paired with a control asserting that same run still emits no finding row, so the
+denominator is read off a genuine zero. 13 arms, all green.
+
 ## [0.358.0] — 2026-08-12
 
 ### The smoke-failure protocol asked which kind of failure it was and then routed both answers to the same seat
