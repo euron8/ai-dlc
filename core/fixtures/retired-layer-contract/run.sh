@@ -64,11 +64,56 @@ grep -q 'retro-domain.md' <<<"$OUT" \
   && bad "a layer file with no core-contract reference was flagged" \
   || ok "a layer file referencing no core contract is not flagged"
 
-# --- Assertion 5: nothing retired -> NO output --------------------------------
-# base == theirs, so the retired set is empty and the detector must say nothing.
-NOOP="$(bash "$SCRIPT" "$DIST" "$THEIRS" "$THEIRS" "$CONSUMER" 2>/dev/null)"
-[ -z "$NOOP" ] && ok "a release that retires nothing reports nothing" \
+# --- Assertion 5: nothing retired -> no ROWS, but never a silent zero ----------
+# base == theirs, so the retired set is empty and the detector must report no finding.
+#
+# BOTH REFS ARE `BASE`, AND THAT IS LOAD-BEARING. This arm used to pass `THEIRS THEIRS`,
+# which does not exercise the empty-retired-set branch at all: the seeded rulebook at
+# THEIRS carries NO contract shape (that is what the release retired), so that invocation
+# trips the unreadable-base guard instead and exits before the retired set is ever
+# computed. The arm asserted empty stdout, got it from the wrong branch, and read as a
+# pass for nine releases. `BASE BASE` gives a ref whose rulebook HAS shapes and whose
+# retired set is genuinely empty, which is the case this arm names.
+NOOP="$(bash "$SCRIPT" "$DIST" "$BASE" "$BASE" "$CONSUMER" 2>/dev/null)"
+[ -z "$NOOP" ] && ok "a release that retires nothing reports no finding" \
   || bad "the detector reported a finding when base and theirs are identical — it is not deriving the retired set"
+
+# --- Assertion 5b: that zero SAYS it opened no file ---------------------------
+# THIS ARM EXISTS BECAUSE ASSERTION 5 ALONE CERTIFIED THE DEFECT. It asserted silence and
+# got it, and the silence came from a branch that exits before opening a single layer file
+# -- output byte-identical to a full scan that matched nothing. Measured on the reference
+# consumer's 0.356.0 -> 0.357.0 pull: the retired set was empty, this branch was taken, and
+# the clean read was taken as evidence about layer files the run never read.
+NOOPERR="$(bash "$SCRIPT" "$DIST" "$BASE" "$BASE" "$CONSUMER" 2>&1 >/dev/null)"
+# Control: this must be the empty-retired-set branch, NOT the unreadable-base guard that
+# the old `THEIRS THEIRS` form reached. Without this the arm could pass on the wrong exit.
+grep -q 'refusing to report clean' <<<"$NOOPERR" \
+  && bad "  the empty-retired-set arm reached the unreadable-base guard instead — it is testing the wrong branch" \
+  || ok "  and it reached the empty-retired-set branch, not the unreadable-base guard"
+grep -q 'NO layer file was opened' <<<"$NOOPERR" \
+  && ok "a release that retires nothing SAYS it opened no layer file, so the zero cannot read as coverage" \
+  || bad "a release that retires nothing produced a silent zero — indistinguishable from a full scan that found nothing"
+grep -q 'outside this detector' <<<"$NOOPERR" \
+  && ok "  and that note restates the prose-restatement limit, which the operator never reads in the header" \
+  || bad "  the quiet path does not restate the prose limit — the reader has no way to know what the zero excludes"
+
+# --- Assertion 5c: a scanned-but-empty result carries its denominator ---------
+# The other unqualified zero: shapes WERE retired and every layer file was read, but none
+# matched. Without a denominator that reads identically to a scan that opened no files.
+EMPTYC="$WORK/empty-consumer"
+mkdir -p "$EMPTYC/.claude/skills/ai-dlc/overrides" "$EMPTYC/.claude/skills/ai-dlc/extensions"
+printf '# nothing here speaks any core contract shape\n' \
+  > "$EMPTYC/.claude/skills/ai-dlc/overrides/inert.md"
+DENOM="$(bash "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$EMPTYC" 2>&1 >/dev/null)"
+grep -qE 'retired shape\(s\) checked against [1-9][0-9]* layer file\(s\)' <<<"$DENOM" \
+  && ok "a scanned-but-no-match run reports its denominator, so the zero has a control" \
+  || bad "a scanned-but-no-match run reported no denominator — the zero cannot be told from one that opened nothing"
+# Control on the arm above: the same run must still emit NO finding rows, or the
+# denominator is being read off a run that actually matched something.
+DENOMOUT="$(bash "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$EMPTYC" 2>/dev/null)"
+[ -z "$DENOMOUT" ] \
+  && ok "  and that run emits no finding row, so the denominator describes a genuine zero" \
+  || bad "  the empty-consumer run emitted a finding — the denominator arm is not measuring a zero"
 
 # --- Assertion 6: an unreadable base WARNS, never reports clean ---------------
 # 'no shapes found' and 'nothing was retired' are the same empty output. If the rulebook

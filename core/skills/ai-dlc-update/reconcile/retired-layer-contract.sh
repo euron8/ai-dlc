@@ -114,22 +114,51 @@ if [ -z "$BASE_SET" ]; then
   exit 0
 fi
 
+count_of() { printf '%s\n' "$1" | sed '/^$/d' | wc -l | tr -d ' '; }
+
+# The limit that a clean run must restate, because the operator reads the RUN and never
+# this header. Both quiet paths below carry it.
+LIMIT='Prose restatements of retired core text carry no literal shape and are outside this detector'"'"'s vocabulary BY DESIGN — this zero does not cover them.'
+
 RETIRED="$(comm -23 <(printf '%s\n' "$BASE_SET") <(printf '%s\n' "$THEIRS_SET"))"
-[ -n "$RETIRED" ] || exit 0
+
+# A ZERO THAT NEVER OPENED A FILE MUST NOT READ LIKE A ZERO THAT SCANNED EVERYTHING.
+# The guard above refuses to report clean when the rulebook is unreadable, on the ground
+# that "no shapes" and "nothing retired" are the same output. The empty-retired-set case
+# has the SAME ambiguity and had no such guard: the script exited here, silently, having
+# opened no layer file, and its output was byte-identical to a full scan that matched
+# nothing. MEASURED on the 0.356.0 -> 0.357.0 consumer pull: the retired set was empty,
+# this branch was taken, and the run was read as evidence that no layer file carried
+# retired core text while two of them did.
+if [ -z "$RETIRED" ]; then
+  echo "retired-layer-contract: NOTE — this release retired NO contract shape ($(count_of "$BASE_SET") at base, $(count_of "$THEIRS_SET") at theirs), so NO layer file was opened. This run is SILENT about layer drift, which is not the same as finding none. $LIMIT" >&2
+  exit 0
+fi
 
 LAYERS="$CONSUMER/.claude/skills/ai-dlc"
+scanned=0
+rows=""
 for dir in overrides extensions; do
   [ -d "$LAYERS/$dir" ] || continue
-  find "$LAYERS/$dir" -type f \( -name '*.md' -o -name '*.json' \) 2>/dev/null \
-  | sort \
-  | while IFS= read -r f; do
-      body="$(cat "$f" 2>/dev/null || true)"
-      [ -n "$body" ] || continue
-      mine="$( { shapes_of "$body"; tokens_of "$body"; } | sort -u )"
-      comm -12 <(printf '%s\n' "$RETIRED") <(printf '%s\n' "$mine") \
-      | while IFS= read -r shape; do
-          [ -n "$shape" ] || continue
-          printf 'RETIRED-LAYER-CONTRACT\t%s\t%s\n' "${f#"$CONSUMER"/}" "$shape"
-        done
-    done
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    scanned=$((scanned + 1))
+    body="$(cat "$f" 2>/dev/null || true)"
+    [ -n "$body" ] || continue
+    mine="$( { shapes_of "$body"; tokens_of "$body"; } | sort -u )"
+    while IFS= read -r shape; do
+      [ -n "$shape" ] || continue
+      rows="$rows$(printf 'RETIRED-LAYER-CONTRACT\t%s\t%s' "${f#"$CONSUMER"/}" "$shape")
+"
+    done < <(comm -12 <(printf '%s\n' "$RETIRED") <(printf '%s\n' "$mine"))
+  done < <(find "$LAYERS/$dir" -type f \( -name '*.md' -o -name '*.json' \) 2>/dev/null | sort)
 done
+
+if [ -n "$rows" ]; then
+  printf '%s' "$rows"
+else
+  # The other unqualified zero: shapes WERE retired and every layer file was read, but
+  # nothing matched. That is a real result and it still needs its denominator, or it
+  # reads the same as a scan that found no files to open.
+  echo "retired-layer-contract: NOTE — $(count_of "$RETIRED") retired shape(s) checked against $scanned layer file(s); no match. $LIMIT" >&2
+fi
