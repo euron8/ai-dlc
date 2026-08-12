@@ -41,6 +41,16 @@ step "taught schema == read schema (provenance examples derive from schemas/)" \
 step "enforcement-map integrity (I1-I11)" \
   bash scripts/validate-enforcement-map.sh
 
+# 1a-i. docs/invariant-index.md is DERIVED from the arm headers in the validator above, and
+#       byte-compared here. It replaced a hand-typed enumeration in that script's own `OK:`
+#       line which had gone stale by 22 invariants -- it named 71 while 93 arms could fire,
+#       and CLAUDE.md pointed readers at it as the live list. The renderer also asserts, on
+#       every run, that no emitter sits outside a declared arm, that no declared arm is
+#       unable to emit, and that no ID is claimed twice. Runs in ~0.06s and never touches
+#       the validator's body, so it costs the pole nothing.
+step "invariant index derived from the map's arm headers" \
+  bash scripts/render-invariant-index.sh --check
+
 # 1a. The same corpus-wide party-mode floor the consumer hook runs, over the DISTRIBUTION's own
 #     tree. It is here for a reason beyond symmetry: this tree holds the two files the check has
 #     to get right — the one rendered taught example (exempt only because the generated-region

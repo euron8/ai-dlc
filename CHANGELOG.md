@@ -34,6 +34,81 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.361.0] — 2026-08-12
+
+### The enumeration of live invariants was hand-typed, and it had gone stale by 22 of them
+
+`CLAUDE.md` sent every reader to `validate-enforcement-map.sh`'s final `OK:` line as the list of
+invariants currently live. Measured: that line named **71 IDs while 93 arms in the file could
+fire**. Twenty-two invariants were enforcing the tree while absent from the only list claiming to
+enumerate them — including **I1 and I2**, the catalog joins the entire validator is built on.
+
+**The instrument is the argument, and it is why this is a renderer and not a correction.** Taking
+that count by hand gave three different answers in one sitting, each a clean-looking run:
+
+- **9** — derived from `err "I<n> ..."` messages. **23 of the 366 emitter calls carry no ID in
+  their text at all**, so every arm whose finding names no invariant vanished.
+- **19** — after fixing an emitter regex anchored so it could not match an **indented** `err`.
+  That made 45 arms read as silent, including `I66`, which demonstrably emits.
+- **22** — after fixing a header regex anchored to column 0, which could not see an **indented**
+  arm header. That one hid `I31`, `I41`, `I42` and `I58`.
+
+A number nobody can take twice has to be rendered and gated.
+
+**New `scripts/render-invariant-index.sh` → tracked `docs/invariant-index.md`**, byte-compared by
+`--check` as a new pre-push step beside `sync-taught-schema.sh`. It derives from the marker the
+arms already carry — a header OPENING with its IDs and closed by `:` — never from the `OK:` line's
+prose. Rendering that sentence would have frozen the 22-ID gap and stamped it authoritative, which
+is worse than the ambiguity it replaced. **0.06s, and it never touches the validator's body**, so
+the pole pays nothing.
+
+**The derivation is asserted total on every run, not hoped.** Every emitter sits inside exactly one
+declared arm (**0 orphans**) and every declared arm contains at least one emitter (**0 silent**).
+Either non-zero is a failure: an orphaned emitter is an invariant the index cannot see, a silent
+arm is a check that cannot fire. Parsing zero arms fails closed — an empty index compares equal to
+an empty index.
+
+Two arms were unreachable by that derivation and are now declared: **I1/I2**, whose two emitters
+were the only ones in the file outside any arm, and **I17**, which had no header at all.
+
+**`I76` was held by two unrelated invariants**, found by the new collision arm — the skill-root
+ship/claim join and the harness-origin prefix declaration — each cited by a different shipped file
+(`scripts/install.sh` and `core/schemas/harness-origin.json`). The later claimant is renumbered
+**I91**; the older keeps I76. An overview header above its own sub-arms (`I36/I37/I38` with I37's
+arm below) is correctly not a collision, and the fixture asserts both directions.
+
+**`validate-no-dead-doc-refs.sh`'s first arm rescoped, derived from `.dist-only`.** A site inside a
+distribution-only fixture is dead in no consumer tree, because `install.sh` derives its copy loop
+from that same marker and never copies the directory. Deliberately **not** the blanket
+`core/fixtures/` exclusion the schema arm uses: a *shipped* fixture citing a dev-repo doc is still
+caught, and the fixture proves the arm fires on one and goes quiet on the other.
+
+**`CLAUDE.md` repaired where it was measurably wrong.** It cited **`I88`** twice as the mechanism
+binding it to `.claude/rules/` — an ID **no arm has ever carried**, while `CHANGELOG.md` and
+`docs/plans/claude-rules-adoption.md` both already recorded that the invariant is
+`validate-claude-rules.sh` arms A1–A4. It claimed a "133-fixture suite" against a measured **147**,
+and 60 home plans against **58**. Frozen historical measurements now carry the date they were taken
+and the population they were taken over, because an undated number cannot be told from a current one.
+
+New fixture `core/fixtures/invariant-index/` — two controls, six mutants, 0.8s. It runs `--check`
+against the **real** repo as well as a synthetic seed, because a battery that only ever sees a
+four-arm toy source keeps passing after the grammar stops matching the file it guards.
+
+**That controlA arm earned itself on its first real run.** The renderer stamped `VERSION` into a
+footer of the rendered file, so bumping 0.360.0 → 0.361.0 made the index stale on that line alone
+and blocked the push — a re-render forced by every release that changed no invariant at all. It is
+the same tax the no-line-numbers decision was taken to avoid, reintroduced two screens below the
+paragraph arguing against it. **Nothing volatile goes in the rendered file**; git holds the
+provenance. A synthetic-only battery would have stayed green straight through it.
+
+**The gate also refused this change's first attempt at `CLAUDE.md`, and was right.** Dating the
+frozen measurements — so a reader could tell a floor from a reading — put four `EMBEDDED_DATE`
+findings into a file whose tier-1 baseline was zero. A date in resident rule prose is a blocking
+finding in `audit-rule-files.sh`, so **dating is not an available fix there**. The decaying numbers
+are removed instead, with the derivation command written in their place, and the CHANGELOG keeps
+the measurement — a number that is not there cannot go stale. Findings after the correction:
+**tier-1 0, all findings 23**, both equal to the pre-change baseline.
+
 ## [0.360.0] — 2026-08-12
 
 ### The class nothing covered: a layer file reproducing a core line core has deleted

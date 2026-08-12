@@ -235,7 +235,11 @@ map_ids="$(awk '
   inck && /^  - id:/ { v=$0; sub(/^  - id:[ ]*/,"",v); gsub(/"/,"",v); print v }
 ' "$MAP" | sort -u)"
 
-# I1 / I2: set equality between anchors and map ids
+# --- I1 / I2: set equality between the catalog anchor set and the map's check ids ---
+# The arm header is the DECLARATION render-invariant-index.sh derives from, and this arm
+# carried a plain `#` comment instead, so both invariants were live and absent from every
+# enumeration of them. The two emitters below were the only two in the file sitting outside
+# any declared arm.
 missing_in_map="$(comm -23 <(printf '%s\n' "$anchors") <(printf '%s\n' "$map_ids"))"
 stale_in_map="$(comm -13 <(printf '%s\n' "$anchors") <(printf '%s\n' "$map_ids"))"
 [ -n "$missing_in_map" ] && err "catalog check(s) with no enforcement-map entry: $(echo $missing_in_map)"
@@ -2078,6 +2082,7 @@ $I11_OUT
 EOF
 fi
 
+# --- I17: apply.sh's runtime composition writes where install.sh writes ---------
 # The THIRD writer. install.sh is not the only thing that puts core/ files into a
 # consumer — `reconcile/preclassify.sh`'s map_consumer() does too, on every pull, and
 # the two must agree on the destination or the consumer gets two copies at two paths
@@ -4867,7 +4872,7 @@ The map is the one artifact that answers 'what actually enforces this check'. A 
   fi
 fi
 
-# --- I76: harness-origin prefixes are ONE declaration, never a second copy ------
+# --- I91: harness-origin prefixes are ONE declaration, never a second copy ------
 # WHY. The harness raises UserPromptSubmit identically when a backgrounded task completes as
 # when a human types, so three readers in three languages must tell those apart: the capture
 # hook (bash), Check 33's enforcer (Python), and validate-steering-budget.sh's
@@ -4879,54 +4884,54 @@ fi
 # BOTH SIDES DERIVED. The declaration's prefixes are read from the schema, and the JS
 # predicate's are extracted from its own alternation. Neither is written here, so this
 # invariant cannot pass by agreeing with a copy of itself.
-i76_schema="core/schemas/harness-origin.json"
-if [ ! -f "$i76_schema" ]; then
-  err "I76: $i76_schema is missing. It is the single declaration of harness-raised prompt prefixes, and without it the capture hook records background events as operator requests and Check 33 compares the sprint plan against one — measured on the reference consumer as a NOT-APPLICABLE pass where the operator's real ask exits 1."
+i91_schema="core/schemas/harness-origin.json"
+if [ ! -f "$i91_schema" ]; then
+  err "I91: $i91_schema is missing. It is the single declaration of harness-raised prompt prefixes, and without it the capture hook records background events as operator requests and Check 33 compares the sprint plan against one — measured on the reference consumer as a NOT-APPLICABLE pass where the operator's real ask exits 1."
 else
   # BOTH SIDES SORTED BY THE SAME COLLATION. Python's sorted() is byte order and the shell's
   # `sort` is locale-aware; `[` lands on opposite sides of the alphabetics between them, and
   # comm then reports a prefix present in both as missing from each. That is a drift report
   # produced by the comparison rather than by the code, and it cost a debugging pass here.
-  i76_declared="$(python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["prefixes"]))' "$i76_schema" 2>/dev/null | LC_ALL=C sort)"
+  i91_declared="$(python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["prefixes"]))' "$i91_schema" 2>/dev/null | LC_ALL=C sort)"
   # The JS side: the alternation inside genuineOperatorText's prefix test.
   # The JS literal escapes `[` for the regex engine; the declaration carries the plain
   # character. Unescape before comparing, or the two sides differ on a backslash and the
   # invariant reports drift that is only a quoting convention.
-  i76_js="$(sed -n 's/.*if (\/^(\(<task-notification[^)]*\))\/\.test(txt)) return "";.*/\1/p' \
+  i91_js="$(sed -n 's/.*if (\/^(\(<task-notification[^)]*\))\/\.test(txt)) return "";.*/\1/p' \
               core/scripts/validate-steering-budget.sh | head -1 | tr '|' '\n' \
             | sed -e 's/\\//g' | sed '/^$/d' | LC_ALL=C sort)"
-  if [ -z "$i76_declared" ] || [ -z "$i76_js" ]; then
-    err "I76 could not parse one side: declared=$(printf '%s' "$i76_declared" | grep -c .) js=$(printf '%s' "$i76_js" | grep -c .). An empty set compares equal to nothing, so this fails closed rather than reporting an agreement it never computed."
+  if [ -z "$i91_declared" ] || [ -z "$i91_js" ]; then
+    err "I91 could not parse one side: declared=$(printf '%s' "$i91_declared" | grep -c .) js=$(printf '%s' "$i91_js" | grep -c .). An empty set compares equal to nothing, so this fails closed rather than reporting an agreement it never computed."
   else
-    i76_only_js="$(LC_ALL=C comm -13 <(printf '%s\n' "$i76_declared") <(printf '%s\n' "$i76_js") | tr '\n' ' ' | sed 's/ *$//')"
-    i76_only_decl="$(LC_ALL=C comm -23 <(printf '%s\n' "$i76_declared") <(printf '%s\n' "$i76_js") | tr '\n' ' ' | sed 's/ *$//')"
-    [ -n "$i76_only_js" ] && err "I76: genuineOperatorText rejects prefix(es) the declaration does not carry:${i76_only_js:+ $i76_only_js}. The two readings have drifted, which means a prompt one component treats as harness noise the other records as the sprint's ask. Add it to $i76_schema."
-    [ -n "$i76_only_decl" ] && err "I76: $i76_schema declares prefix(es) genuineOperatorText does not reject:${i76_only_decl:+ $i76_only_decl}. The capture would drop a prompt the steering budget still counts as a genuine operator turn."
+    i91_only_js="$(LC_ALL=C comm -13 <(printf '%s\n' "$i91_declared") <(printf '%s\n' "$i91_js") | tr '\n' ' ' | sed 's/ *$//')"
+    i91_only_decl="$(LC_ALL=C comm -23 <(printf '%s\n' "$i91_declared") <(printf '%s\n' "$i91_js") | tr '\n' ' ' | sed 's/ *$//')"
+    [ -n "$i91_only_js" ] && err "I91: genuineOperatorText rejects prefix(es) the declaration does not carry:${i91_only_js:+ $i91_only_js}. The two readings have drifted, which means a prompt one component treats as harness noise the other records as the sprint's ask. Add it to $i91_schema."
+    [ -n "$i91_only_decl" ] && err "I91: $i91_schema declares prefix(es) genuineOperatorText does not reject:${i91_only_decl:+ $i91_only_decl}. The capture would drop a prompt the steering budget still counts as a genuine operator turn."
   fi
   # No shipped file may restate a declared prefix outside the declaration and the one
   # predicate bound to it. A copy is how this becomes two lists again, and a comment naming
   # one is exactly how the last copy got in.
   # The exempt set is DECLARED, not written here -- see copy_scan_exempt's own description
   # for the measured false-positive set that produced it.
-  i76_exempt="$(python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1])).get("copy_scan_exempt") or []))' "$i76_schema" 2>/dev/null)"
-  i76_copies=""
+  i91_exempt="$(python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1])).get("copy_scan_exempt") or []))' "$i91_schema" 2>/dev/null)"
+  i91_copies=""
   while IFS= read -r pfx; do
     [ -n "$pfx" ] || continue
     # HERE-STRING, not a pipe into grep -q. I54 caught the pipe form on this very line:
     # under pipefail the pipeline reports the WRITER's status, so a match answers non-zero
     # once the value clears the pipe buffer, and the exemption would silently stop applying.
-    grep -qxF -- "$pfx" <<<"$i76_exempt" && continue
+    grep -qxF -- "$pfx" <<<"$i91_exempt" && continue
     hits="$(grep -rlF -- "$pfx" core/ scripts/ 2>/dev/null \
             | grep -v '^core/schemas/harness-origin.json$' \
             | grep -v '^core/scripts/validate-steering-budget.sh$' \
             | grep -v '^scripts/validate-enforcement-map.sh$' \
             | grep -v '^core/fixtures/' | tr '\n' ' ')"
-    [ -n "$hits" ] && i76_copies="$i76_copies
+    [ -n "$hits" ] && i91_copies="$i91_copies
   $pfx -> $hits"
   done <<EOF
-$i76_declared
+$i91_declared
 EOF
-  [ -n "$i76_copies" ] && err "I76: shipped file(s) restate a harness-origin prefix outside the declaration:$i76_copies
+  [ -n "$i91_copies" ] && err "I91: shipped file(s) restate a harness-origin prefix outside the declaration:$i91_copies
 Resolve it from core/schemas/harness-origin.json instead. A second copy in a second language is the drift v0.265.0 exists to end, and the file that carried the last one warned about it in prose that nothing enforced."
 fi
 
@@ -6178,7 +6183,17 @@ EOF
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), nor from a VARIABLE holding one — the same defect one assignment apart, which I33's single-expression grammar returned zero on, proven each run against a positive probe and a negative one carrying both a non-walking dirname variable and a self-rooted chain (I33b), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), nor feeds one from a PIPELINE — a command upstream, or a variable with a filter in between, both of which sat outside I54's grammar by construction — narrowed to files that enable pipefail and lines whose status is load-bearing, each narrowing derived from the file and proven each run against probes the invariant builds itself (I54b), the fixture suite's content key excludes only paths no fixture reads and every cross-run record the hook keeps sits outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59), and every mode one shipped file names on another shipped script is one that script dispatches, both sides derived rather than hand-listed, proven each run against a probe carrying both dispatch forms (I60), and every clause bullet in a declared prose home states the same severity the contract declares, against a vocabulary derived from the contract itself (I61), and prose that names a contract code cites the clause that claims it, scoped per file by the role the contract pins it at and proven each run against a probe the invariant writes itself (I62), and every file the contract claims to have absorbed is pinned as home, pointer or none and still is that, in both directions (I63), and every clause's code reaches a site in its enforcer that a run can attribute to it, rather than a comment I36's whole-file grep is satisfied by (I64), and every clause names the fixture that proves its code fires — a directory with a driver, that drives the clause's own enforcer, and that names the code where a run can attribute it — or the literal 'none', which is a counted gap no fixture is allowed to satisfy in silence (I65), and the fixture-suite runner is ONE program across both pre-push hooks — pool, empty-suite guard and verdict-completeness assertion alike — compared on executable lines so no comment can satisfy it, with the fixture root mapped rather than exempted (I66), and the consumer's crosswalk file is one string across the contract that declares it and ai-dlc-update's own copy, with neither the validator, the installer nor the pull driver that scaffolds it permitted to restate the literal (I67), and core's own shipped files yield ZERO crosswalk rows so no consumer inherits a resolution its operator never wrote, each zero carrying a same-run control that the reader can still see a row (I68), and every piece of prose naming where that declaration LIVES names a file that carries it, so a remedy read mid-migration can be followed literally (I69), and the PR-class taxonomy the trunk audit reads is declared once with the audit, the installer and the pull driver each deriving its location rather than restating it, and the template they scaffold from named by that same declaration's basename (I70), and no sed or grep expression strips whitespace with a bracket class containing a backslash and the letter t, which in a POSIX bracket expression is those two characters and silently truncates any value ending in one of them — proven each run against both a positive and a negative probe the invariant writes itself, since awk's identical-looking class is correct (I71), and the PR-class taxonomy's grammar is ONE key set across the parser that dispatches it and the template a consumer writes from, both sides derived and neither hand-listed (I72), and the consumer's derivable story-field list is declared once with the derive, the installer and the pull driver each deriving its location, the template named by that declaration's basename, and \`status\` read from the SCHEMA rather than from the list so no consumer can declare its way out of the one field Check 5 depends on (I73), and install.sh DERIVES the shipped fixture set from the tree rather than hand-listing it — asserted to still read core/fixtures/ and to still exclude \`.dist-only\`, with the list-vs-tree joins that remain carried by I8 over uninstall.sh, which runs where the tree does not exist — and every \`.dist-only\` marker carries a non-empty reason, since a marker excluding a fixture from every consumer without saying why is a decision nobody can audit (I74), and every core validator that consults a project root consults it through ONE canonical resolution block — the subject set derived from the scripts that mention a root token and the required text derived as the modal span across those same scripts, so no donor is named, proven each run against a positive and a negative probe the invariant writes itself; scripts taking the root as an argument are out of scope by decision (I75), and the harness-origin prefix set is ONE declaration — the capture hook, Check 33's enforcer and genuineOperatorText all resolving it, with no shipped file permitted to restate a prefix (I76), and the live adversarial series is derived by ONE marked block across the Stop hook and the PreToolUse hook that denies on it — asserted to be the FILTERING form AND to be scoped to the DECLARED sprint's own directory, since two copies of the vulnerable unscoped newest-then-strip form agree with each other, each property proven each run against a probe the invariant writes itself (I81), and every artifact path core prescribes obeys core's own grammar — the directory is the only sprint slot — or is named in artifact-path-grammar.md's migration ledger, which is bound in BOTH directions so an entry cannot outlive the prescription it excuses, with the grammar file excluded from its own corpus and the predicate proven each run against the reserved slot, its all-sprints form and seven measured violations (I82), and the grammar's own \`areas:\` and scan-roots blocks have exactly ONE reader — artifact-path-config.sh — with the corpus derived by find, the resolver itself asserted still to carry the extraction, and the expression proven each run against a positive and a negative probe the invariant writes itself (I83), and the story corpus location is ONE declaration — a template in schemas/sprint-status.json carrying the sprint slot, which no shipped program may restate and which every reader of must substitute, both sides derived and the restatement expression proven each run against a positive probe and a negative one carrying the same path in a comment (I84), and no shipped script command-substitutes inside an operator-facing message — an unescaped backtick in a double-quoted string RUNS the quoted word and silently deletes it from what the operator reads, narrowed by resolving heredoc quoting because the crude form's false-positive set is six correct files, and proven each run against a positive probe and a negative one carrying both the escaped and the quoted-heredoc forms (I85), and the adjudication row token is ONE string across layer-drift.sh, which declares it and writes it into the row when a verdict is recorded for that digest, and apply.sh, which RESOLVES that declaration rather than restating the literal — so apply.sh can no longer prescribe destructive work over a decision the project already recorded (I86), and no fixture inherits a consumer's AI_DLC_* tunable and tests the CONFIG instead of the CODE — the subject narrowed from ANY named token to one a shipped program DEREFERENCES, minus the fixtures that assign it themselves and minus comments and single-quoted program text, each of those last two derived from one measured false positive, and proven each run against a probe suite the invariant writes itself because its real answer is zero (I87), and every procedure a step file cites BY NAME out of _gate-procedures.md resolves to a heading that file still carries — both sides derived, the heading's \`(referenced by ...)\` qualifier stripped on the heading side so it stays free to change, citations recognised by ADJACENCY to the file mention rather than proximity, which is what takes the false-positive set from eleven to zero — with the reverse arm reporting a procedure nothing invokes, since a dormant procedure reads exactly like a live one (I89), and every fix-imperative in a step file OR in SKILL.md's rule text names a dispatch seat or declares its inline carve-out IN THE FILE with a non-empty reason — the population narrowed to imperatives whose OBJECT is a FINDING rather than a named file, so the lead's own Rule 28(a) mutations drop out with nothing hand-listed, plus a second arm for the dismissive \`Just fix it\` form whose Just/Simply prefix is the discriminator that keeps its false-positive set empty where a bare pronoun object does not — proven each run against eight probes the invariant writes itself, including the wrapped imperative a line-based reader cannot see and the real pre-fix text of Rule 7 (I90)."
+  # THE ENUMERATION IS DERIVED, and this line is why the renderer exists. It used to carry a
+  # hand-typed list of the invariants considered live, 12,243 characters of it. Measured when
+  # that list was replaced: it named 71 IDs while 93 arms in this file could fire, so 22
+  # invariants were enforcing the tree while absent from the only enumeration that claimed to
+  # cover them -- including I1 and I2, the catalog joins everything here is built on. Nothing
+  # read the sentence but a human, and a human cannot audit a 12,000-character sentence.
+  #
+  # The list now lives in docs/invariant-index.md, rendered by scripts/render-invariant-index.sh
+  # from THIS file's own arm headers and byte-compared at pre-push. It is not restated here:
+  # a second copy is a second thing to go stale, which is what this replaced.
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match. The live invariant enumeration is docs/invariant-index.md, rendered from this file and gated at pre-push."
   exit 0
 fi
 exit 1

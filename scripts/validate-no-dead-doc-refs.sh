@@ -24,18 +24,39 @@ cd "$ROOT" || exit 2
 INSTALL="scripts/install.sh"
 fail=0
 
+# A SITE INSIDE A .dist-only FIXTURE IS NOT DEAD ANYWHERE, because install.sh derives its
+# fixture copy loop from that same marker and never copies the directory — there is no
+# consumer tree holding the file, so there is no consumer tree in which its pointer 404s.
+# Derived from the marker, never a hand-list, and deliberately NOT the blanket
+# `core/fixtures/` exclusion the schema arm below uses: a SHIPPED fixture citing a dev-repo
+# doc is dead in the consumer exactly like any other shipped file, and must still be caught.
+site_is_dist_only() {
+  case "$1" in
+    core/fixtures/*)
+      _fx="${1#core/fixtures/}"; _fx="${_fx%%/*}"
+      [ -f "core/fixtures/${_fx}/.dist-only" ] && return 0 ;;
+  esac
+  return 1
+}
+
 for doc in docs/*.md; do
   [ -f "$doc" ] || continue
   base="$(basename "$doc")"
-  # referenced anywhere in core/ ?
-  if grep -rqF "docs/$base" core/ 2>/dev/null; then
-    # shipped by install.sh ?  (install names the doc, or archives/creates it)
-    if ! grep -qF "$base" "$INSTALL" 2>/dev/null; then
-      echo "DEAD-DOC-REF: core/ cites 'docs/$base', a dev-repo doc install.sh does not ship —" >&2
-      echo "  dead in every consumer tree. Drop the reference, relativize it to an installed" >&2
-      echo "  path, or ship the doc under core/. Sites: grep -rn 'docs/$base' core/" >&2
-      fail=1
-    fi
+  # shipped by install.sh ?  (install names the doc, or archives/creates it)
+  grep -qF "$base" "$INSTALL" 2>/dev/null && continue
+  live_sites=""
+  while IFS= read -r site; do
+    [ -n "$site" ] || continue
+    site_is_dist_only "$site" && continue
+    live_sites="${live_sites}${site}
+"
+  done <<<"$(grep -rlF "docs/$base" core/ 2>/dev/null || true)"
+  if [ -n "$live_sites" ]; then
+    echo "DEAD-DOC-REF: core/ cites 'docs/$base', a dev-repo doc install.sh does not ship —" >&2
+    echo "  dead in every consumer tree. Drop the reference, relativize it to an installed" >&2
+    echo "  path, or ship the doc under core/. Sites:" >&2
+    printf '%s' "$live_sites" | sed 's/^/    /' >&2
+    fail=1
   fi
 done
 

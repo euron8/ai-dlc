@@ -61,8 +61,14 @@ dir breaks their sanity arm. Four of the five said `FIXTURE BROKEN`, which reads
 exactly like a regression in the change under test. The whole suite through the pool is
 **4m57s at 949% CPU**; the serial loop was roughly ten times that and wrong.
 
-**THAT FIGURE WENT STALE AND NOBODY NOTICED, WHICH IS ITS OWN LESSON.** Re-measured on the
-full 133-fixture suite: **7m40s at 1303% CPU**, 133 ok / 0 FAIL. The suite is
+**THAT FIGURE WENT STALE AND NOBODY NOTICED, WHICH IS ITS OWN LESSON. IT THEN WENT STALE
+AGAIN, AND THAT IS WHY NO CURRENT COUNT APPEARS HERE.** A raw total written into this file
+decays silently and reads identically to a fresh one; dating it is not available either,
+because a date in resident rule prose is a tier-1 finding in `audit-rule-files.sh`. **Derive
+the count, never quote one** — `find core/fixtures -mindepth 1 -maxdepth 1 -type d | wc -l` —
+and read the CHANGELOG for when a figure was taken. Re-measured on a 133-fixture suite:
+**7m40s at 1303% CPU**, 133 ok / 0 FAIL, which is a FLOOR because the suite has grown since.
+The suite is
 **POLE-BOUND** — wall clock tracks the single longest DIRECTORY, not the sum over the pool — so
 the number to watch is the top of `.git/ai-dlc-fixture-durations`, not the total. Six fixtures
 sit at 395–442s and everything else is under 220s. **A cost recorded there is a LOADED cost,
@@ -108,9 +114,12 @@ which is why "a zero is not a finding" and "prohibitions need mechanisms" did. M
 `.claude/rules/` would delete it from every session that has compacted once, silently.
 
 Today: `fixture-mutants.md`, `fixture-ship-decl.md`, `plan-shape.md`,
-`plan-shape-measured.md`. Both directions are bound by **I88** in
-`scripts/validate-claude-rules.sh` — a rule with no reader and a pointer with no rule both
-fail the push.
+`plan-shape-measured.md`. Both directions are bound by **arms A1–A4 of
+`scripts/validate-claude-rules.sh`** — a rule with no reader and a pointer with no rule both
+fail the push. That validator is a standalone script and deliberately NOT an arm inside
+`validate-enforcement-map.sh`, which the suite pole invokes; this file cited it as `I88` for
+five releases, an ID no arm has ever carried, while `CHANGELOG.md` recorded the deviation.
+Citations here are now joined to the live set — see `docs/invariant-index.md`.
 
 **Two triggers cannot fire on their own and are restated here.**
 
@@ -144,11 +153,12 @@ more effort.
 plans directory. A `PreToolUse` deny on that path breaks plan mode outright, so the write
 cannot be refused.
 
-**The omission cannot be detected, because no join exists.** The home plans directory holds
-60 files; `docs/plans/` holds 19; the intersection of their filenames is **ZERO**. Plan mode
-mints a slug from the prompt plus a random word pair, and a promoted handoff carries a
-hand-chosen slug. Which unpromoted plan was owed promotion is therefore not derivable from
-the two sets, and a check keyed on an unpromoted plan file fires on all 60.
+**The omission cannot be detected, because no join exists.** The home plans directory and
+`docs/plans/` hold filename sets whose intersection is **ZERO**, re-measured every time it has
+been looked at. Plan mode mints a slug from the prompt plus a random word pair, and a promoted
+handoff carries a hand-chosen slug. Which unpromoted plan was owed promotion is therefore not
+derivable from the two sets, and a check keyed on an unpromoted plan file fires on every one
+of them. The two counts move; the empty intersection is the durable part, so only it is stated.
 
 **The predicate is intent, not an act.** Whether a plan is a handoff is a judgment about what
 a later session will be told to do. The same write produces a handoff and an ordinary
@@ -156,7 +166,7 @@ throwaway draft. This repo's mechanisms deny an act and never evaluate a reason,
 here separates the two, so there is nothing to deny.
 
 **The guard cannot be versioned in this repo either.** `.gitignore:41` ignores `.claude/*`,
-and I88's A1 arm at `scripts/validate-claude-rules.sh:95` fails the push on any tracked path
+and arm A1 at `scripts/validate-claude-rules.sh:95` fails the push on any tracked path
 under `.claude/` that is not `.claude/rules/**/*.md`. Force-tracking a hook file or a
 `settings.json` here breaks the push. So the hook stays in the operator's home directory, is
 **NOT** part of the distribution, and reaches no consumer by design — a consumer tree gets no
@@ -178,8 +188,20 @@ change touching path resolution is verified on a tree built by running
 A rule with no enforcer is a suggestion, and the prohibitions being violated are
 exactly the ones with nothing behind them. Prefer deriving both sides of a join
 over hand-listing either; when two files must agree, bind them — the numbered
-invariants in `scripts/validate-enforcement-map.sh` are the pattern, and its
-final `OK:` line enumerates the ones currently live.
+invariants in `scripts/validate-enforcement-map.sh` are the pattern, and
+`docs/invariant-index.md` enumerates the ones currently live.
+
+**That index is DERIVED. Do not hand-edit it — change the arm header and re-run
+`scripts/render-invariant-index.sh`.** It renders from the arm headers themselves,
+byte-compares at pre-push, and asserts that every emitter sits inside a declared arm, that
+every declared arm can emit, and that no ID is claimed twice. **An invariant declares itself
+by OPENING its arm header with its ID**, closed by a colon — a header that merely mentions an
+ID elsewhere in its prose declares nothing.
+
+**A hand-typed enumeration is what this replaced, and it had gone stale by 22 invariants** —
+71 named against 93 live arms, I1 and I2 among the missing. The CHANGELOG carries the
+measurement. Nothing read that sentence but a human, and nobody audits a 12,000-character
+sentence.
 
 ## An instruction that ships its own opt-out is not an instruction
 

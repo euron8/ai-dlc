@@ -82,12 +82,12 @@ Target files: `verification-discipline.md` (VD), `tool-hazards.md` (TH), `consum
 
 | # | Rule | Disposition |
 |---|---|---|
-| D1 | Prove a check passes vacuously → FAILS on the real bug → passes after the fix | HAVE `CLAUDE.md:33`; the **self-probe-before-corpus** form (`validate-claude-rules.sh:29`) is unstated → +VD |
-| D2 | The distribution is not a consumer: install into a clean tree and run as one, in both layouts | HAVE partly `CLAUDE.md:173`; general form → CB |
-| D3 | A hand-maintained list is the bug — derive both sides | HAVE `CLAUDE.md:178` |
-| D4 | A control that agrees with the verdict, or that proves only the run worked, is not a control | HAVE partly `CLAUDE.md:15`; refinement → VD |
+| D1 | Prove a check passes vacuously → FAILS on the real bug → passes after the fix | HAVE `CLAUDE.md §A check that cannot fire`; the **self-probe-before-corpus** form (`validate-claude-rules.sh:29`) is unstated → +VD |
+| D2 | The distribution is not a consumer: install into a clean tree and run as one, in both layouts | HAVE partly `CLAUDE.md §Two layouts`; general form → CB |
+| D3 | A hand-maintained list is the bug — derive both sides | HAVE `CLAUDE.md §Prohibitions need mechanisms` |
+| D4 | A control that agrees with the verdict, or that proves only the run worked, is not a control | HAVE partly `CLAUDE.md §A zero is not a finding`; refinement → VD |
 | D5 | Never `$?` after a pipe; `printf \| grep -q` under `pipefail` reports NOT-FOUND at ≥64 KiB | MECH I54/I54b (`validate-enforcement-map.sh:4265`, `:4375`) |
-| D6 | The Bash tool's shell is zsh — no `PIPESTATUS`, no word-splitting, history modifiers eat unbraced `"$ref:path"`, force `bash -c` | HAVE half `CLAUDE.md:21`; remainder → TH. **Corpus is 0 tracked files**, so no validator is possible |
+| D6 | The Bash tool's shell is zsh — no `PIPESTATUS`, no word-splitting, history modifiers eat unbraced `"$ref:path"`, force `bash -c` | HAVE half `CLAUDE.md §A zero is not a finding`; remainder → TH. **Corpus is 0 tracked files**, so no validator is possible |
 | D7 | BSD grammars — no `\s` in BRE, `[ \t]` is not a tab, no `\1` in awk `sub()`, `awk -v` strips escapes, BSD sed no-ops GNU constructs | MECH for the `[ \t]` half (I71, `:4179`); remainder → VAL |
 | D8 | Assignments and exit codes inside `$( )` or a pipeline's last stage are lost | MECH for the pipeline half (I54b); `$( )` half → VAL |
 | D9 | Git lies by default — `-M` for renames, brace rev-paths, never test landing by ancestry in a squash-merge repo | → TH (ad-hoc tool calls leave no artifact) |
@@ -95,7 +95,7 @@ Target files: `verification-discipline.md` (VD), `tool-hazards.md` (TH), `consum
 | D11 | Run the SHIPPING code against the REAL corpus; a hand-written probe is a second implementation | → VD |
 | D12 | Verify the premise — measured base rate of expired premises ~1 in 2 | → VD |
 | D13 | Ask what SET a number was taken over, and whether it is the set the mechanism runs on | → VD |
-| D14 | Measure the false-positive set before designing the check | HAVE `CLAUDE.md:206`; the **FP-narrowing record** convention is unstated → +VD |
+| D14 | Measure the false-positive set before designing the check | HAVE `CLAUDE.md §Before adding a check`; the **FP-narrowing record** convention is unstated → +VD |
 | D15 | Score mutants one at a time; `cmp -s` proves only that bytes changed | HAVE `.claude/rules/fixture-mutants.md` |
 | D16 | A fixture must not agree with itself — never seed from the reader's accept-set | HAVE partly; the *different-author* clause → extend that rule file |
 | D17 | A fixture whose tree cannot EXPRESS the defect proves nothing | HAVE partly; extend that rule file |
@@ -103,19 +103,19 @@ Target files: `verification-discipline.md` (VD), `tool-hazards.md` (TH), `consum
 | D19 | An ai-dlc session never writes to the consumer; plan across both and close on a consumer measurement | → CB |
 | D20 | A consumer runs its OWN installed engine, so a bootstrap fix cannot be delivered by the step it fixes | → CB |
 | D21 | Packaging is enumerated in several places and every one rots | HAVE `.claude/rules/fixture-ship-decl.md` + I8/I13/I14/I74 |
-| D22 | Verify a release with `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`; `core/git-hooks/pre-push` is the CONSUMER's and prints green having run almost nothing | HAVE half `CLAUDE.md:40`; the two-hooks trap and the env var → +VD |
+| D22 | Verify a release with `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`; `core/git-hooks/pre-push` is the CONSUMER's and prints green having run almost nothing | HAVE half `CLAUDE.md §Run the fixture suite`; the two-hooks trap and the env var → +VD |
 | D23 | No rationale, narrative, version tag or date in resident rule prose | **No home for this repo** → RC |
 | D24 | Verbosity is deliberate scar tissue — delete only vestigial prose whose enforcer you can name | **No home** → RC |
 | D25 | A rule survives compaction only if something other than memory CARRIES it | **No home** → RC |
 | D26 | Anchor a receipt on a token the fix cannot be written without | KEEP (consumer ledger workflow) |
-| D27 | A join that cannot FAIL is the mirror of a check that cannot fire; prefer a partition | HAVE partly `CLAUDE.md:33` → +MD |
+| D27 | A join that cannot FAIL is the mirror of a check that cannot fire; prefer a partition | HAVE partly `CLAUDE.md §A check that cannot fire` → +MD |
 | D28 | A vacuous guard is a loaded gun; fix by subtraction | → MD |
 | D29 | A whole-file `grep -qF` is satisfied by a comment — key a binding on the EMISSION SITE | → VD |
-| D30 | A schema or list written N times is N−1 chances to drift | HAVE `CLAUDE.md:178` + the enforcement map |
+| D30 | A schema or list written N times is N−1 chances to drift | HAVE `CLAUDE.md §Prohibitions need mechanisms` + the enforcement map |
 | D31 | Cite, do not restate; a restatement drifts tighter invisibly | → MD |
 | D32 | Before writing a mechanism, GREP FOR IT — it usually already exists | → MD |
 | D33 | Absorbing a consumer mechanism: ask what core's version IS, which half it owns, whether it fires at the same POINT | KEEP (consumer pull workflow) |
-| D34 | Prohibitions need mechanisms | HAVE `CLAUDE.md:176` |
+| D34 | Prohibitions need mechanisms | HAVE `CLAUDE.md §Prohibitions need mechanisms` |
 | D35 | Enforce at PreToolUse; write down what makes the signal LET GO in the same change | KEEP (shipped-machinery design) |
 | D36 | Render safety-critical output into a generated region with a `--verify` byte-compare | Pattern exists (`sync-taught-schema.sh`), rule unstated → MD |
 | D37 | Site a duty where the DECLARATION decides; detect at USE time across N delivery paths | → MD |
@@ -125,7 +125,7 @@ Target files: `verification-discipline.md` (VD), `tool-hazards.md` (TH), `consum
 | D41 | KISS applies to rules, checks, schemas and hooks, not just code | **No home** → MD |
 | D42 | Optimize the operator's WALL CLOCK, not tokens — spawn agents liberally, background long work | **No home** → OR (must reach subagents) |
 | D43 | A handoff must be executable by a stranger; banner a discharged runbook in its TITLE | HAVE `.claude/rules/plan-shape*.md` + P1–P7; the banner rule → VAL (new P10) |
-| D44 | An instruction that ships its own opt-out is not an instruction | HAVE `CLAUDE.md:184` + P7 |
+| D44 | An instruction that ships its own opt-out is not an instruction | HAVE `CLAUDE.md §An instruction that ships its own opt-out` + P7 |
 | D45 | Tier findings on CONSEQUENCE — BLOCKER / DEFECT / NOTE | **No home** → OR |
 | D46 | Operator standing rulings — a flawed process's output is UNTRUSTED; never narrow a goal on your own authority | **No home** → OR. **This is where the two directives from "Start here" belong.** |
 
@@ -138,7 +138,7 @@ Counts: **9 already mechanized or fully held**, **7 partially held and needing a
 
 ## G1 — `CLAUDE.md` cites an invariant that was deliberately never built
 
-`CLAUDE.md:111` and `CLAUDE.md:159` name **`I88`** as the mechanism binding `CLAUDE.md` to
+`CLAUDE.md §Some authoring rules live in .claude/rules/` and `CLAUDE.md §Some authoring rules live in .claude/rules/` name **`I88`** as the mechanism binding `CLAUDE.md` to
 `.claude/rules/`. `git grep I88` returns five hits, **none in any script**; control `I87`
 returns 16 hits in `validate-enforcement-map.sh`. The correction is already recorded twice in
 the tree — `docs/plans/claude-rules-adoption.md:135` and `CHANGELOG.md:969` both state the
@@ -147,7 +147,7 @@ invariant is `scripts/validate-claude-rules.sh` arms A1–A4, "not `I88`". Nothi
 
 ## G2 — `CLAUDE.md`'s figures have gone stale, in the section that warns about exactly that
 
-`CLAUDE.md:65` states a "full 133-fixture suite"; measured **147**. `CLAUDE.md:148` states the
+`CLAUDE.md §Run the fixture suite` states a "full 133-fixture suite"; measured **147**. `CLAUDE.md §Some authoring rules live in .claude/rules/` states the
 home plans directory holds "60 files"; measured **58**. The same section already says of a
 previous instance: *"THAT FIGURE WENT STALE AND NOBODY NOTICED, WHICH IS ITS OWN LESSON."*
 Sixteen lines carry an integer ≥ 10 and only two carry a date or version anchor, so a reader
@@ -155,7 +155,7 @@ cannot tell a derivable count from a frozen historical measurement.
 
 ## G3 — The enumeration `CLAUDE.md` points readers at is incomplete
 
-`CLAUDE.md:180` sends the reader to `validate-enforcement-map.sh`'s "final `OK:` line" as the
+`CLAUDE.md §Prohibitions need mechanisms` sends the reader to `validate-enforcement-map.sh`'s "final `OK:` line" as the
 list of live invariants. Measured at `:6181`: it names **71** IDs, while **80** appear inside an
 `err` message and can therefore fire. Nine can fire and are named nowhere on that line — I15,
 I16, I17, I18, I33c, I77, I78, I79, I80. The reverse direction is clean. The exact totals shift
@@ -230,7 +230,7 @@ is structural rather than incidental.
 
 Every rule in this repo falls into one of two classes. **If it has an enforcer**, this repo has
 already chosen the home for its explanation, and chosen it deliberately: the header of the guard
-that enforces it. `CLAUDE.md:36` states this — roughly a dozen files carry the rule locally, "in
+that enforces it. `CLAUDE.md §A check that cannot fire` states this — roughly a dozen files carry the rule locally, "in
 the header of whichever guard learned it. Those statements stay where they are — each explains
 its own guard." That choice is load-bearing, because a rule and its mechanism cannot drift apart
 while they are the same file. A reference document holding the same content is copy #2 with no
@@ -287,7 +287,7 @@ the corpus, in the shape at `scripts/validate-claude-rules.sh:29`.
 ## R4 — The two directives go to `operator-rulings.md`; only the checkable half becomes an arm — RULED
 
 **"Merges are preapproved" gets no arm.** A strict grammar over the real corpus errors on **17
-of 19** plans; the loose grammar matches all 19 and catches nothing. `CLAUDE.md:206-209` forbids
+of 19** plans; the loose grammar matches all 19 and catches nothing. `CLAUDE.md §Before adding a check-209` forbids
 shipping that. It is also a *grant by the operator*, not a required act by the executor, so there
 is nothing in a plan file to check. It is stated once in the unconditional channel, where it
 reaches every session and every subagent.
@@ -306,14 +306,14 @@ own zero-is-not-a-finding defect sitting inside its own plan validator. Ship:
   the head rather than testing line 1.
 
 **The authoring-time half cannot be closed and is not faked.** A new plan is written to
-`~/.claude/plans/<slug>.md`, where no validator can see it; `CLAUDE.md:140-164` records why. A
+`~/.claude/plans/<slug>.md`, where no validator can see it; `CLAUDE.md §Some authoring rules live in .claude/rules/-164` records why. A
 `docs/plans/` arm fires only at promotion. The carrier that does reach authoring time is the
 unconditional channel, which is why R4 puts both directives there first and treats P9/P10 as the
 audit rather than the delivery.
 
 ## R5 — Repair G1 and G2 by edit; bind only what has a non-empty corpus
 
-Edit `CLAUDE.md:111` and `:159` to name `scripts/validate-claude-rules.sh` arms A1–A4, matching
+Edit `CLAUDE.md §Some authoring rules live in .claude/rules/` and `:159` to name `scripts/validate-claude-rules.sh` arms A1–A4, matching
 the correction already at `CHANGELOG.md:969`. Edit `:65` to 147 and `:148` to 58.
 
 Add **arm A5**: every `I<n>` token cited in `CLAUDE.md` or any rule file must name an ID that can
@@ -322,7 +322,7 @@ false-positive set empty.
 
 Do **not** add a P4-style `path:line` arm over `CLAUDE.md`. It carries exactly two such citations
 and both resolve, so the arm ships green forever and neither real defect is of that shape — the
-check-that-cannot-fire class the file names at `CLAUDE.md:33`.
+check-that-cannot-fire class the file names at `CLAUDE.md §A check that cannot fire`.
 
 For the figures, no arm can separate the three genres present: derivable counts, frozen
 historical measurements that must never be re-derived, and invariant facts. The form with an
@@ -334,7 +334,7 @@ counts, and a one-time pass dating the ~8 historical measurements.
 `scripts/render-invariant-index.sh` → tracked `docs/invariant-index.md`, and
 `scripts/render-vocabulary-index.sh` → tracked `docs/vocabulary-index.md`, each with a
 byte-comparing `--check` wired into `.githooks/pre-push` beside the existing
-`sync-taught-schema.sh --check`. Then repoint `CLAUDE.md:180` at the invariant index.
+`sync-taught-schema.sh --check`. Then repoint `CLAUDE.md §Prohibitions need mechanisms` at the invariant index.
 
 Two constraints decide whether the invariant index ships at all. It must derive from **a marker
 the arms themselves carry**, never from the `OK:` line's prose — rendering the summary sentence
@@ -396,10 +396,10 @@ throughout.
 5. Add the durable-channel byte-ceiling arm (R1), measuring `CLAUDE.md` plus every unconditional
    rule file, with its fixture. Report the current total and propose a ceiling; the value is an
    OPERATOR DECISION.
-6. Edit `CLAUDE.md:111`, `:159`, `:65`, `:148` per R5, and date the ~8 frozen historical
+6. Edit `CLAUDE.md §Some authoring rules live in .claude/rules/`, `:159`, `:65`, `:148` per R5, and date the ~8 frozen historical
    measurements in place.
 7. Build `scripts/render-invariant-index.sh` per R6, its fixture and its pre-push wiring, then
-   repoint `CLAUDE.md:180`. If action 2's extractor cannot be made total, stop here and ping the
+   repoint `CLAUDE.md §Prohibitions need mechanisms`. If action 2's extractor cannot be made total, stop here and ping the
    operator rather than shipping a partial index.
 8. Build `scripts/render-vocabulary-index.sh` and `docs/vocabulary-index.md` per R2/G7, deriving
    each vocabulary from the file that owns it. Add its fixture and pre-push wiring.
@@ -427,7 +427,7 @@ throughout.
 15. Create the six unconditional rule files per R1, each with an `<!-- unconditional: reason -->`
     marker and a `CLAUDE.md` pointer, and write the 24 homeless rules into them per Part 1C.
 16. Add R8's five conventions to `verification-discipline.md`.
-17. Add the third clause to the placement test at `CLAUDE.md:103-108` — *and no subagent needs
+17. Add the third clause to the placement test at `CLAUDE.md §Some authoring rules live in .claude/rules/-108` — *and no subagent needs
     it* — and rewrite that section to describe three channels rather than two.
 18. Extend `.claude/rules/fixture-mutants.md` with D16's different-author clause and D17's
     tree-must-express-the-defect clause.
@@ -452,7 +452,7 @@ throughout.
   when mutated.
 - Both renderers pass `--check`, and `docs/invariant-index.md` names every ID the extractor
   proves can fire.
-- `CLAUDE.md:65`'s fixture count comes from the generated region and equals
+- `CLAUDE.md §Run the fixture suite`'s fixture count comes from the generated region and equals
   `find core/fixtures -mindepth 1 -maxdepth 1 -type d | wc -l`.
 - Every new rule file loads: confirmed by A2/A3/A4 passing and by the ceiling arm counting it.
 - `git push` is green end to end. Run it from the repo root so the hook drives the suite through
