@@ -1448,8 +1448,16 @@ restore
 # reports the same clean line as one that found nothing to report. I57 answers that with a
 # probe it builds itself. Break the posture term and the probe — not the corpus — is what
 # fails.
+#
+# THE MUTATION NAMES ONLY THE POSTURE TERM, not the whole regex. It used to restate the
+# expression from `exits?` onward, and v0.357.0's case-tolerant widening (`exits?` ->
+# `[Ee]xits?`) left that restatement matching nothing — the arm reported itself broken and
+# blocked the push, which is the guard working, but the arm was dead until someone repaired
+# it. `required/` occurs exactly once in the validator (the closing delimiter pins it to the
+# end of I57's own regex), so the smallest span that carries the semantics is also unique,
+# and an edit to the case class, the quantifiers or the digit class no longer kills the probe.
 cp "$V" "$V.orig"
-sed 's@exits?\[ \]+\[0-9\]\[ \]+required/@exits?[ ]+[0-9][ ]+requiredZZZ/@' "$V.orig" > "$V"
+sed 's@\[ \]+required/@[ ]+requiredZZZ/@' "$V.orig" > "$V"
 if cmp -s "$V.orig" "$V"; then
   bad "FIXTURE BROKEN: the I57 grammar mutation matched nothing, so the liveness arm is unproven"
 else
@@ -1470,8 +1478,10 @@ restore
 # change that would report it, so the negative probe holds that door shut.
 # (The same widening also reports Check 16 itself; that is the false positive the narrow
 # grammar exists to avoid, and this arm asserts the probe's message, not the count.)
+# Same narrowed target as arm 4, for the same reason: widen the posture ALTERNATIVE only,
+# and let the case class and quantifiers ahead of it change without killing this probe.
 cp "$V" "$V.orig"
-sed 's@exits?\[ \]+\[0-9\]\[ \]+required/@exits?[ ]+[0-9][ ]+(required|=)/@' "$V.orig" > "$V"
+sed 's@\[ \]+required/@[ ]+(required|=)/@' "$V.orig" > "$V"
 if cmp -s "$V.orig" "$V"; then
   bad "FIXTURE BROKEN: the I57 grammar widening matched nothing, so the narrowness arm is unproven"
 else
