@@ -34,6 +34,62 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.364.0] — 2026-08-12
+
+### The bash 3.2 / BSD floor, mechanized — and two candidate arms dropped on the measurement
+
+New `scripts/validate-shell-portability.sh`, pre-push step 1f, **325 tracked shell files in
+~0.5s**. GNU-only idioms do not error on this machine, they return the wrong answer quietly:
+`sed -i` takes the script as a backup suffix, `\s` matches a literal `s`, `mapfile` reads
+nothing. Seven arms — S1 `sed -i` without a suffix or explicit `''`, S2 `mapfile`/`readarray`,
+S3 `declare -A`, S4 `setsid`, S5/S6 `\s` in a grep or sed expression, S7 a backreference in an
+`awk` `sub()`/`gsub()` replacement.
+
+**Standalone, deliberately not an arm in the enforcement map**, which the suite pole invokes at
+roughly 30 seconds of gate wall clock per second of script.
+
+**Every arm reports ZERO over the corpus today, and that is the design.** These are regression
+guards, so `core/fixtures/shell-portability/` is the only evidence any of them works: a control,
+**eight mutants each killed by its own arm and only its own**, a fail-closed arm for an emptied
+corpus, and **two negative arms** asserting silence on the measured false positives.
+
+**Two candidate arms were dropped rather than tuned, on measurement.** A bare `sed -i` scan
+returned 4 hits, all 4 of them the correct `sed -i.bak … || sed -i '' …` pair, against 19 files
+carrying that idiom. An `awk -v` backslash scan returned 1 hit which **doubles its backslashes
+precisely because `-v` strips a level** — correct and incorrect use are the same shape to a
+regex, and the difference is intent. The narrowed `sed -i` arm ships; the `awk -v` one does not.
+
+**The bracket-class `\t` trap is not here.** `I71` already owns it with a narrowing this scan
+does not reproduce — a crude version reports 26 hits, nearly all `awk`, where the class IS a
+tab. `mechanism-design.md` forbids the restatement.
+
+**S7's single false positive is python, not awk**, in one of the shell files that embed a
+heredoc'd program. The subtraction keys on the LANGUAGE (`re.` qualifying the call), not on a
+file path, so a new embedded program is covered the day it lands while an awk backreference in
+that same file is still caught.
+
+**Three defects the self-probes caught before any corpus verdict**, none of which a
+corpus-only test would have found: `grep -n` omits the filename when handed a single file, so
+the comment filter silently stopped matching and three arms reported their own probe's comment;
+S1's first pattern excluded the quote that the only real-world violation begins with; and S7's
+`[^)]*` could not cross the `)` inside a regex literal like `/(a)b/`, which is exactly where the
+capture comes from. The fixture then caught a fourth — a fail-closed threshold of "fewer than
+two files" that fires on any legitimately small tree, including its own seed. Zero is the
+failure, not few.
+
+**The validator flagged its own mutation battery, and it took a push to find out.** A battery
+necessarily contains every pattern its validator forbids — that is what it is for. The
+exclusion is DERIVED from the validator's own basename, so a rename moves it, and it is
+deliberately **not** the `.dist-only` rule: that would be one tidy rule and would also stop
+checking sixteen other directories of real shell, whose fixtures run on consumer machines and
+must hold the same floor. **228 of 229 fixture shell files remain in corpus.**
+
+**Why a local run could not have caught it.** The corpus is `git ls-files`, so a NEW file is
+invisible to the scan until it is committed. The run before the commit and the gate's run
+after it are over different corpora, and only the second one is the real one.
+
+`tool-hazards.md` now cites those arms instead of restating their grammars.
+
 ## [0.363.0] — 2026-08-12
 
 ### 24 standing rules moved out of an untracked home directory and into the repo

@@ -1,0 +1,8 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is scripts/validate-shell-portability.sh, which is this repository's own
+pre-push validator. install.sh does not ship it, so on a consumer this fixture would
+resolve no validator at all and could only pass.
+
+It is also a MUTATION BATTERY: it builds eleven throwaway git repos per run, each carrying
+a copy of the validator and a seeded shell file, and asserts one arm fires per repo.

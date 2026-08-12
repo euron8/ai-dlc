@@ -92,6 +92,16 @@ step "plan shape (docs/plans/ is resumable by a session that never saw this one)
 step "claude-rules joins (tracked paths, live globs, paths-only frontmatter, pointers)" \
   bash scripts/validate-claude-rules.sh
 
+# 1f. The bash-3.2 / BSD-userland floor for every shipped shell file. GNU-only idioms do not
+#     error here, they return the WRONG ANSWER quietly -- `sed -i` takes the script as a
+#     backup suffix, `\s` matches a literal `s`, `mapfile` reads nothing. Every arm reports
+#     zero over the corpus today and is a pure regression guard, so its fixture is the only
+#     evidence any of them works. Standalone and ~0.5s: deliberately NOT an arm inside
+#     validate-enforcement-map.sh, which the suite pole invokes at roughly 30s of gate per
+#     second of script.
+step "shell portability (bash 3.2 + BSD userland floor)" \
+  bash scripts/validate-shell-portability.sh
+
 # 2. SKILL.md's first ~5000 tokens are whole-re-read on EVERY compaction. The resident
 #    region sits within a few hundred tokens of the ceiling, so an edit above the fold
 #    can silently push the post-compact recovery protocol below it.

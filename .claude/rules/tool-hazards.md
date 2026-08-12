@@ -33,15 +33,17 @@ subshell. Write them to a file, or restructure.
 
 ## BSD tools are not GNU tools, and they fail silently
 
-- No `\s` in a BRE. `?`, `+` and `|` are literal without `-E`.
-- `[ \t]` in a `sed` or `grep` bracket class is SPACE, BACKSLASH and the letter `t` — not a
-  tab. Use `[[:blank:]]`.
-- No backreference in `awk`'s `sub()`. `awk -v` strips escapes and cannot carry a newline.
-- A multibyte character needs an alternation, not a bracket class.
-- BSD `sed` no-ops several GNU constructs rather than erroring.
+In a tracked file, arms S1–S7 of `scripts/validate-shell-portability.sh` and `I71` mechanize
+this and it is not restated here — read those arms for the grammars. In an ad-hoc tool call
+nothing is watching, and two traps no arm can cover, because correct and incorrect use are
+the same shape to a regex:
 
-Reach for `awk` over `sed` when the expression is doing real work, and verify every new
-expression against a positive control before trusting a zero from it.
+- **`awk -v` strips one level of escaping** and carries no newline at all. A regex passed
+  through it needs doubled backslashes, so a correct site looks wrong.
+- **A multibyte character needs an alternation, not a bracket class.**
+
+Reach for `awk` over `sed` when the expression does real work, and verify every new expression
+against a positive control before trusting a zero from it.
 
 ## Git lies by default
 
@@ -54,8 +56,9 @@ expression against a positive control before trusting a zero from it.
 
 ## Environment floor
 
-`bash` is 3.2: no `mapfile`, no `readarray`, no `declare -A`, and an empty array under
-`set -u` is an error. There is no `setsid`. SIP blocks `dtruss` but not `fs_usage`. The
+`bash` is 3.2, and an empty array under `set -u` is an error. `mapfile`, `readarray`,
+`declare -A` and `setsid` are unavailable, and the validator above fails the push on all four
+in a tracked file. SIP blocks `dtruss` but not `fs_usage`. The
 interactive `grep` is a `ugrep` shim that honours `.gitignore`, so an interactive search and
 a scripted one scan different sets. Measure under `env -i PATH=/usr/bin:/bin bash` when the
 answer has to hold for a shipped script.

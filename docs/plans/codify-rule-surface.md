@@ -34,20 +34,35 @@ completion including an early stop.
 
 ## Status
 
-**Actions 1, 2, 6 and 7 are complete and pushed** — `v0.361.0`, branch `codify-rule-surface`,
-full gate green (11 steps, 146 fixtures, 0 FAIL, content-key and read-set skips both disabled).
-The renderer, the index, its fixture, the pre-push wiring, the `OK:`-line replacement, the
-`I76`/`I91` split and the CLAUDE.md repairs are all in. **Actions 3, 4, 5 and 8 remain in Wave A**;
-Waves B, C, D and E are unstarted.
+**Waves A (except action 8), B and D are complete and merged to `main`**, each through a full
+green gate. Three releases so far.
 
-Three operator rulings are folded into Part 3: topical unscoped rule files (R1), no
+| Action | State |
+|---|---|
+| 1 promote this plan | DONE |
+| 2 extractor + probe | DONE — derivation is the ARM HEADER, not the `err` message |
+| 3 arm A5 · 4 arm A3b · 5 ceiling arm A6 | DONE — 11/11 mutants killed |
+| 6 CLAUDE.md repairs · 7 invariant index | DONE — `I88` gone, index derived and gated |
+| 8 vocabulary index | **NOT STARTED** |
+| 9–11 shell-portability validator | DONE — 7 arms, 325 files, 8/8 mutants + 2 negatives |
+| 12–14 plan-shape arms P9/P10 | **NOT STARTED** |
+| 15–20 the six rulebooks | DONE — 24 rules moved out of the memory corpus |
+| 21 home-directory carriers | **NOT STARTED** |
+
+Four operator rulings are folded into Part 3: topical unscoped rule files (R1), no
 `docs/coding-conventions.md` (R2), prose plus a structural proxy for the two standing
-directives (R4). A fourth ruling — derive the `OK:` line rather than hand-maintain it — is
-discharged by R6.
+directives (R4), and derive the `OK:` line rather than hand-maintain it (R6).
 
-**Two corrections to this plan, both forced by mechanisms rather than by review**, are folded
-into R5 and Wave D below. Dating frozen measurements in `CLAUDE.md` is not available, and the
-`.claude/rules/` files Wave D creates are inside the same audit corpus.
+**Three corrections to this plan, every one forced by a mechanism rather than by review.**
+Dating frozen measurements in `CLAUDE.md` is not available (R5). The `.claude/rules/` files
+are inside the rule-file audit corpus, so they carry no version tags, sprint ids or dates
+(R1). And two of Wave B's candidate arms were DROPPED on measurement rather than tuned — see
+R3 — because their entire hit set was correct code.
+
+**The durable-channel ceiling was raised once, from 32,768 to 40,960**, after arm A6 fired on
+the change that created the channel. Current total is in the A6 line of every
+`validate-claude-rules.sh` run. Raising it again to admit new prose is the failure mode the
+script's header names; mechanizing or scoping a rule out of the channel comes first.
 
 ---
 
