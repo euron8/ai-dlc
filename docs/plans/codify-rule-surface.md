@@ -45,7 +45,7 @@ green gate. Three releases so far.
 | 6 CLAUDE.md repairs · 7 invariant index | DONE — `I88` gone, index derived and gated |
 | 8 vocabulary index | **NOT STARTED** |
 | 9–11 shell-portability validator | DONE — 7 arms, 325 files, 8/8 mutants + 2 negatives |
-| 12–14 plan-shape arms P9/P10 | **NOT STARTED** |
+| 12–14 plan-shape arms | DONE — **P9 shipped, P10 DROPPED on measurement** |
 | 15–20 the six rulebooks | DONE — 24 rules moved out of the memory corpus |
 | 21 home-directory carriers | **NOT STARTED** |
 
@@ -334,11 +334,15 @@ every one is a clean P4 pass, because P4 checks only that citations resolve. Tha
 own zero-is-not-a-finding defect sitting inside its own plan validator. Ship:
 
 - **P9** — a live plan must carry at least one resolving `path:line` citation.
-- **P10** — every plan is either live or banner-marked discharged. This scopes P9 by construction
-  rather than by exemption, and it mechanizes D43's banner rule. All 19 plans satisfy P10 today,
-  so both its FP set and its backlog are empty. The banner may sit below line 1
-  (`docs/plans/v0357-gate-remediation-delegation.md` carries it at line 6), so the arm windows
-  the head rather than testing line 1.
+- ~~**P10** — every plan is either live or banner-marked discharged.~~ **DROPPED on
+  measurement, and the reason is worth keeping.** As written it is a tautology and cannot fire:
+  a plan with no banner is simply classified live. Reshaped into a predicate that CAN fire — a
+  discharge marker exists but is BURIED below the head window — its only hit on the corpus is a
+  live plan whose inventory table describes other plans as spent, which is precisely the shape
+  that recurs. And the genuinely dangerous case, a spent plan carrying no marker anywhere, is
+  undetectable by construction. The arm would buy a false positive in exchange for the easy half
+  of the problem. Live-detection is folded into P9's scoping instead, where it needs no arm of
+  its own.
 
 **The authoring-time half cannot be closed and is not faked.** A new plan is written to
 `~/.claude/plans/<slug>.md`, where no validator can see it; `CLAUDE.md §Some authoring rules live in .claude/rules/-164` records why. A

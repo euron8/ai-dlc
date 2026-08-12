@@ -119,6 +119,7 @@ for f in "${FILES[@]}"; do
   #
   # Scoped to paths under a top-level directory that EXISTS, so a plan naming a file it
   # intends to CREATE is out of scope by construction rather than by exemption.
+  n_resolving=0
   while IFS= read -r cite; do
     [ -n "$cite" ] || continue
     p="${cite%:*}"; ln="${cite##*:}"
@@ -128,10 +129,45 @@ for f in "${FILES[@]}"; do
       err "$rel" "cites '$cite' and '$p' does not exist. A resuming session cannot verify the claim this line was evidence for."
     else
       have="$(wc -l < "$p" | tr -d ' ')"
-      [ "$ln" -le "$have" ] 2>/dev/null || \
+      if [ "$ln" -le "$have" ] 2>/dev/null; then
+        n_resolving=$((n_resolving+1))
+      else
         err "$rel" "cites '$cite' but '$p' has only $have lines. The citation resolves to nothing."
+      fi
     fi
   done < <(grep -oE '\b[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)+:[0-9]+\b' "$f" | sort -u)
+
+  # --- P9: a LIVE plan carries at least one resolving citation ----------------------
+  # P4 CANNOT SEE THE CASE THAT MATTERS. It checks that citations resolve, so a plan citing
+  # NOTHING passes it perfectly -- the repo's own "a zero is not a finding" defect, sitting
+  # inside its own plan validator. Measured over this corpus: 9 of 19 spent plans carry zero
+  # resolving citations and 7 carry no citation token at all, and every one of them is a
+  # clean P4 pass, indistinguishable from a plan whose evidence was checked.
+  #
+  # SCOPED TO LIVE PLANS BY CONSTRUCTION, NOT BY EXEMPTION. A discharged plan is a record,
+  # and editing a spent file to bolt evidence onto it would be fabrication. "Live" is the
+  # absence of a discharge banner from the head window -- the same place a resuming session
+  # looks before it starts executing. Measured: 19 of 20 plans carry that banner in their
+  # first twelve lines, so the arm's live corpus is exactly the plan being worked on, its
+  # backlog is empty, and its false-positive set is empty.
+  #
+  # THE COMPANION ARM WAS DROPPED ON ITS MEASUREMENT. "A discharge marker must not be BURIED
+  # below the head" sounds like the same rule and is not shippable: its only hit on this
+  # corpus is a live plan whose inventory table DESCRIBES other plans as spent, which is the
+  # shape that recurs. And the genuinely dangerous case -- a spent plan with no marker
+  # anywhere -- is undetectable by construction, so the arm would buy a false positive in
+  # exchange for the easy half of the problem.
+  # HERE-STRING, NOT A PIPE (I54b). `head | grep -q` is the EPIPE-under-pipefail trap: the
+  # reader leaves at its first match while `head` is still writing, and the pipeline answers
+  # with the writer's status. Twelve lines never fills the pipe buffer, so this particular
+  # site would have been correct by accident and wrong the day the window widened -- which is
+  # exactly the shape the arm exists to catch before it becomes a size threshold nobody sees.
+  DISCHARGE_BANNER='DISCHARGED|SPENT|DO NOT EXECUTE|SUPERSEDED'
+  if ! grep -qiE "$DISCHARGE_BANNER" <<<"$(head -12 "$f")"; then
+    if [ "$n_resolving" -eq 0 ]; then
+      err "$rel" "is a LIVE plan carrying no resolving 'path:line' citation. P4 passes it because there is nothing to resolve, which is exactly what a plan whose evidence was never checked looks like. Cite the evidence, or mark the plan discharged in its first twelve lines."
+    fi
+  fi
 
   # --- P5: no identifier described two contradictory ways --------------------------
   # THE DEFECT THIS EXISTS FOR, measured on the first plan: R2 and R5 were merged and

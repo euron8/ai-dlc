@@ -34,6 +34,51 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.365.0] — 2026-08-12
+
+### P4 passes a plan that cites nothing, which is what an unchecked plan looks like
+
+New arm **P9** in `scripts/validate-plan-shape.sh`: a LIVE plan must carry at least one
+resolving `path:line` citation. P4 checks that citations RESOLVE, so a plan citing nothing
+passes it perfectly — this repo's own "a zero is not a finding" defect, sitting inside its own
+plan validator. **Measured over the corpus: 9 of 19 spent plans carry zero resolving citations
+and 7 carry no citation token at all**, every one a clean P4 pass, indistinguishable from a plan
+whose evidence was checked.
+
+This is the mechanized half of the operator's standing "everything is sourced and validated with
+ground truth" directive. The phrase itself is unverifiable by the file asserting it — a strict
+grammar for it errors on 18 of 19 plans and a loose one matches all 19 and catches nothing — so
+the arm binds the EVIDENCE instead of the claim.
+
+**Scoped to live plans by construction, not by exemption.** A discharged plan is a record, and
+editing a spent file to bolt on evidence it never had would be fabrication. "Live" is the
+absence of a discharge banner from the first twelve lines — the same place a resuming session
+looks before it starts executing. 19 of 20 plans carry that banner there, so the live corpus is
+exactly the plan being worked on: backlog empty, false-positive set empty.
+
+**The companion arm was dropped on its own measurement.** "Every plan is live or banner-marked"
+cannot fire — a plan with no banner is simply classified live. Reshaped into something that can
+fire, a marker BURIED below the head, its only hit is a live plan whose inventory table
+describes other plans as spent, which is the shape that recurs. The genuinely dangerous case — a
+spent plan with no marker anywhere — is undetectable by construction, so the arm would buy a
+false positive in exchange for the easy half of the problem.
+
+`core/fixtures/plan-shape/` gains both directions: P9 fires on a live plan stripped of its
+citation, and stays silent once that same plan is banner-marked.
+
+**I54b caught the EPIPE idiom in this change too — the third time in one working session, in
+code written by an author who had just codified the rule against it.** `head -12 | grep -q` is
+the same trap as `printf | grep -q`: the reader leaves at its first match while the writer is
+still pushing, and under `pipefail` the pipeline answers with the writer's status. Twelve lines
+never fills the pipe buffer, so this site would have been **correct by accident** and wrong the
+day someone widened the window — a size threshold with no symptom, which is what the arm exists
+to catch before it becomes one. Seven fixtures went red downstream, all of them units that
+invoke the enforcement map rather than seven independent defects.
+
+Three reintroductions of one idiom, by an author with the rule in front of them, is the
+clearest argument this repo has for its own thesis: **a prohibition without a mechanism does
+not stop the person who has read it.**
+
 ## [0.364.0] — 2026-08-12
 
 ### The bash 3.2 / BSD floor, mechanized — and two candidate arms dropped on the measurement

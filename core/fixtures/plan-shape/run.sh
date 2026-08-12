@@ -163,6 +163,23 @@ grep -q 'opt-out inside an instruction' <<<"$(run "$T/p7b.md")" \
   && bad "P7 fired on a prose stop-condition — that is correct authoring and the arm is too wide" \
   || ok "  and it leaves a prose stop-condition alone, which is the false-positive it must not have"
 
+# --- P9 a live plan carries evidence ----------------------------------------------
+# P4 checks that citations RESOLVE, so a plan citing nothing passes it perfectly. This arm is
+# the one that can tell "evidence checked" from "no evidence offered", and the conforming
+# control above is what proves it has a subject rather than being silent for lack of one.
+conforming | grep -v 'scripts/validate-plan-shape\.sh:' > "$T/p9.md"
+grep -q 'LIVE plan carrying no resolving' <<<"$(run "$T/p9.md")" \
+  && ok "P9 fires on a live plan with no resolving citation" \
+  || bad "P9 silent on a live plan citing nothing — a plan whose evidence was never checked passes P4 cleanly"
+
+# THE SCOPING CONTROL. A discharged plan is a record, and editing a spent file to bolt
+# evidence onto it would be fabrication. The scope is by construction — the banner a resuming
+# session reads first — so it has to be proven to actually exempt.
+{ printf -- '# Some plan — DISCHARGED\n'; conforming | tail -n +2 | grep -v 'scripts/validate-plan-shape\.sh:'; } > "$T/p9b.md"
+grep -q 'LIVE plan carrying no resolving' <<<"$(run "$T/p9b.md")" \
+  && bad "P9 fired on a DISCHARGED plan — a spent record would have to be edited to add evidence it never had" \
+  || ok "  and it exempts a banner-marked plan, so a spent record is not a backlog item"
+
 # --- empty corpus is not a pass ---------------------------------------------------
 # `for f in docs/plans/*.md` over an empty directory reads exactly like a clean run.
 mkdir -p "$T/empty/docs/plans" "$T/empty/scripts"
