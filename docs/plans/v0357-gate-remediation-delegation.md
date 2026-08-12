@@ -1,7 +1,7 @@
 # v0.357.0 — the gate remediation loop repairs inline, counts nothing, and sweeps by memory
 
 ---
-## EXECUTION STATE — read this first on resume. The blockers are DISCHARGED; what is left is push and merge
+## EXECUTION STATE — read this first on resume. The RELEASE IS SHIPPED. What is live is the CONSUMER PULL, and it is mid-apply
 
 ## Start here
 
@@ -106,11 +106,96 @@ case-blindness fix · `validate-hook-registration.sh` + a consumer pre-push arm 
 - Nothing was ever written to `/Users/n8/git/graph` — same four dirty files, same `HEAD`, at
   start and end of every rehearsal.
 
-**OUTSTANDING — in order. Two items, neither blocked:**
-1. `git push` — which is how the fixture suite runs. NEVER a hand-rolled loop over
-   `core/fixtures/*/`. The rehearsal measured the CONSUMER's suite at 148 fixtures, 1m24s at
-   781% CPU; this repo's is the larger one. Watch the top of `.git/ai-dlc-fixture-durations`.
-2. Merge (preapproved by the operator).
+**SHIPPED.** Squash-merged to `main` as PR #534, pushed, `pre-push: all gates green` over 144
+fixtures / 0 FAIL. The release triple validates on `main`. Everything in Deliverables A–E is in.
+
+**A THIRD regression was caught at push time, after the two above.** `enforcement-map-sites-b`
+blocked the push: this release widened I57's posture grammar to be case-tolerant
+(`exits?` → `[Ee]xits?` at `scripts/validate-enforcement-map.sh`), and both of that fixture's
+mutation probes still `sed`-matched the old lowercase-only literal, so neither mutation applied
+and both arms reported `FIXTURE BROKEN` rather than passing. **The fixture refused to certify an
+arm it could no longer apply, which is the only reason this surfaced** — the prior session had
+verified the VALIDATOR at exit 0, and a passing validator is exactly what a dead probe looks like.
+Control: the same shard on `origin/main` exited 0 with both arms `ok`, so it was introduced here.
+Repaired by SHRINKING what each probe restates to `[ ]+required/`, which occurs exactly once in
+the validator — minimal and unique, so future edits to the case class, quantifiers or digit class
+cannot kill it again.
+
+**All three regressions are ONE CLASS: this release moved a subject and left its checker anchored
+to the old one.** After finding two, expect the third.
+
+---
+
+## LIVE NOW — the consumer pull, mid-apply. THIS IS THE ACTIVE WORK
+
+**A `graph` consumer session is executing the runbook and has stopped for an adjudication.**
+Its state as last reported:
+
+- Branch `ai-dlc-update/0.357.0-reconcile-20260812T050626Z`, `START` = `0fd25d10d`.
+  **Nothing committed, nothing pushed.**
+- Dry run produced **18 HARD blockers**: 2 `HARD-OVERRIDE-DRIFT-SECTION`, 16
+  `HARD-LAYER-ADJUDICATION-MISSING`. Both Class-A are resolved. **16 verdicts remain.**
+- The second Class-A was adjudicated and CONFIRMED:
+  `.claude/skills/ai-dlc/overrides/steps__retro__domain-sections.md`, anchor
+  `#4a. Close-Out Sweep`. The consumer body had replaced core's ERROR/WARN semantics paragraph
+  with a stub deferring to core — but the entry `shadows:` that span, so precedence deletes the
+  text the stub defers to. Resolution: take core's paragraph plus the new `inline-ok` marker,
+  keeping the three consumer-only paragraphs. **Decided by mechanism, not taste** —
+  `layer-contract.yaml:524-530` LC-O9 (*"an override's body does not delegate to a construct
+  defined inside a section it shadows"*) and its sibling LC-O10 `OVERRIDE-ASSERTS-SHADOW-SURVIVES`
+  (*"it tells the reader the text is still there"*); the stub tripped BOTH, and `layer-drift.sh`
+  emitted both codes independently on this pull. The entry's own `reason:` history had the same
+  class adjudicated wrong twice before.
+
+**OPEN OBLIGATION from that adjudication, not yet confirmed done:** the resolution puts a third
+consumer copy of core text into that entry, and it will not track upstream. The consumer session
+was asked to record it in the entry's `reason:` beside the existing `## Machine Audits` table and
+§3 read-list notes. **An obligation nobody wrote down is one the next re-adoption cannot
+discharge** — verify it landed.
+
+**NEXT ACTION IS NOT YET DETERMINED AND MUST NOT BE GUESSED.** A further message from the consumer
+session was in flight when this was written and has not been read. It will report the disposition
+of the remaining 16 `HARD-LAYER-ADJUDICATION-MISSING` verdicts and whatever it hit doing them.
+**Read that message first; it decides what happens next.** Do not resume the pull, do not
+adjudicate a verdict, and do not touch the reconcile branch before reading it.
+
+The standard given to that session, which still applies: where a contract clause with an enforcer
+decides an adjudication, follow the clause and name it; where nothing decides it, ping the
+operator rather than picking.
+
+**The pull is NOT on the sprint branch and will not be until the operator approves the PR.** The
+skill cuts a reconcile branch, commits there, pushes, opens a PR into the sprint branch, and
+merges only on explicit operator approval — it does not auto-merge. Deliverable D4's gate reset
+runs against the sprint branch, so it is gated behind that approval.
+
+---
+
+## THE CONSUMER RUNBOOK — rewritten, and the four defects that shaped it
+
+`docs/plans/graph-pull-0356-to-0357.md` is the executable handoff. It went 679 → 183 → 224 lines.
+**Do not re-add what was removed.** Each cut is a defect that had already fired:
+
+1. **It described the pull step by step. Two thirds of it restated what the `ai-dlc-update` skill
+   already owns** — resolving the ref, gating its own self-update, carrying the machinery slice,
+   running the hook-registration check inside apply, emitting the worklist, printing the settings
+   reconcile command. Nearly every blocking defect a cold read found lived in that duplicated
+   half. The skill owns the pull; the runbook owns only what no skill does — the s302 gate reset.
+2. **It hardcoded the distribution sha.** The apply stamps whatever the ref resolves to, so a
+   docs commit to the runbook itself falsified its own acceptance criterion. **Name no ref and no
+   sha**; the skill pulls latest and resolves the ref itself.
+3. **It enumerated four dirty consumer files.** There were already six at handoff, and the set
+   GROWS while the pipeline runs — putting a question to the operator writes one. Name the class
+   (`_bmad-output/` is pipeline state), never the members or a count.
+4. **Its §Abort claimed nothing commits, so `HEAD` stays at the handoff commit.** The skill
+   commits. A bare `git checkout -- <path>` would have restored from the post-apply commit — a
+   silent no-op with the shape of a successful recovery. Restores are anchored to `START`, which
+   the executor records in step 1, and the file states that paths the apply CREATED cannot be
+   restored that way at all.
+
+**The rehearsals could not have caught most of this.** They tested whether the commands work; they
+never read the document front to back as an executor would, and both blocking defects sat in steps
+1 and 2 — the two steps neither rehearsal ever ran. A cold read by a session with no context found
+them. **Cold-read a handoff before shipping it, separately from rehearsing its commands.**
 
 **6 — THE PLAN-PROMOTION GUARD. CLOSED. Disposition: THE WARNING IS THE CEILING.**
 
@@ -150,13 +235,25 @@ case-blindness fix · `validate-hook-registration.sh` + a consumer pre-push arm 
    the `.claude/rules/` section, under the heading **"THE WARNING IS THE CEILING"**. That is the
    authority; this entry is the pointer to it. **Do not re-open it here.**
 
-**Hazards this session hit, for whoever resumes:**
+**Hazards these sessions hit, for whoever resumes:**
+- **NEVER write to `/Users/n8/git/graph`.** Live consumer, mid-sprint. Read it only. Its modified
+  `_bmad-output/` files are expected and are not yours to tidy.
 - **Do not `--amend` a release commit while agents still write.** Work landing inside the
   `git add` → `--amend` window vanishes with no error and no diff. Nothing was lost here; that
   was luck, verified after the fact against `HEAD` rather than the working tree.
 - **Never put backticks in `git commit -m "..."`.** They RUN and silently delete the quoted text
   from the message — I85's exact defect. Use `-F -` with a quoted heredoc (`<<'MSG'`).
-- **Do not `git add -A`** in this tree; it stages agents' scratch. Use explicit paths.
+- **Do not `git add -A`** in this tree; it stages agents' scratch. Use explicit paths. A peer
+  agent wrote into this tree mid-release; sample a file's mtime twice before committing anything
+  you did not author.
+- **This shell is zsh: `PIPESTATUS` is empty.** Capture exit codes as `cmd > log 2>&1; echo $?`.
+  Piping a command whose exit code IS the answer — `git push | tail` — reported 0 on a FAILED
+  push here. Read tracking state, not the pipeline's exit.
+- **A control must be a string the target CERTAINLY contains.** Pairing a real pattern that
+  returns 0 with a nonsense pattern that also returns 0 proves nothing; that happened here.
+- **Agents idle or die without delivering** — three long-report agents did, one to a network
+  outage. A silent agent and a passing agent are indistinguishable. Have them write findings to a
+  file, and never read a missing report as a clean result.
 
 **BOOKED — two defects found while discharging this release, deliberately NOT fixed here.** Both
 are out of scope for this merge and neither blocks it. They are recorded so the next session
@@ -173,6 +270,19 @@ starts from the finding rather than re-discovering it:
    error string cites `.gitignore:19-24` as the narrowing it is protecting. Those lines are the
    `_bmad-output/` comment block. The actual `.claude/*` narrowing is `.gitignore:41-45`. An
    operator who follows the pointer the failure hands them lands on the wrong block.
+3. **A candidate mechanism for the class this release kept producing — measure before shipping.**
+   Two arms, both derivable, neither built:
+   - *A rehearsal finding must name where its fix landed.* Measured on this release's own runbook:
+     items that ended "now written into step X itself" were the ones actually repaired; items that
+     did not were, exactly, the ones still live and blocking. That single difference predicted the
+     defect set. A `validate-plan-shape.sh` arm could require every `## Rehearsal` finding to name
+     a step or declare itself a record.
+   - *Verify repo-state claims.* The validator's P4 checks a `path:line` resolves NUMERICALLY, not
+     that content matches, so it cannot see a stale citation and did not see any of the four
+     staleness defects above. Claims of the form "`main` carries X", "ref Y exists", "sha Z is
+     reachable" are all mechanically checkable against the actual repo.
+   **Per `CLAUDE.md`, measure the false-positive set and enumerate it before either ships.** An
+   unmeasured lint is one the operator turns off.
 
 **Do not re-open:** the `hard_block` question (measured — nothing reads the field; disposition
 and its falsifier are in that map row's own `why:`). The `DECIDED_AUTONOMOUSLY` corpus as a
