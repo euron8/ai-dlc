@@ -182,7 +182,7 @@ whatever the skill pulls carries the fixes. The second rehearsal proved them gon
 the checks proven still able to fire: re-introducing each defect drove its check back to red.
 
 **Structural limits.** A `--local` clone carries committed state only, so nothing here certifies the
-four dirty hook-written files or any ledger receipt. The gate reset (step 4) needs a live gate and
+dirty hook-written `_bmad-output/` state or any ledger receipt. The gate reset (step 4) needs a live gate and
 was never rehearsed. `core.hooksPath` is unset on the live consumer too, which is why step 3 invokes
 the hook by hand.
 

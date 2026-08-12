@@ -34,6 +34,96 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.358.0] — 2026-08-12
+
+### The smoke-failure protocol asked which kind of failure it was and then routed both answers to the same seat
+
+The prior release moved the gate remediation edit off the lead and onto a dispatched seat. That
+was the right correction and it exposed the next one: **getting the delegation right is not the
+same as getting the delegatee right.** `steps/deploy-validate.md` step 2 asks the lead to triage a
+smoke-test failure as *deployment issue or code issue*, and steps 3 and 4 then named the **dev
+teammate** for both. The triage question selected nothing, and the distinction it drew had no
+destination.
+
+A development seat handed a deployment fault either guesses at infrastructure it does not own or
+edits application source until the symptom moves. The second outcome is the expensive one: it
+leaves the real fault in place and adds a source change nobody needed.
+
+**Found on the reference consumer, not here.** Its `deploy-validate-domain.md` extension restates
+core's five-step protocol and its step 4 still carries the pre-0.357.0 wording, so the lead renders
+two rules for one step. No layer clause decided which wins — `layer-drift.sh` emitted no
+`EXTENSION-RESTATES-CORE` row for that entry — so it was escalated rather than picked, and the
+ruling was that core owns the step and core is where the fix belongs.
+
+**New seat: `ops`** (`core/team-roles/ops.md`, `aiDlcRoles.ops` at opus/`xhigh`). Operational
+triage and repair — infrastructure, environment and secret configuration, release mechanics, and
+the pipeline that puts a build in front of users.
+
+Its discriminator is **where the defect lives, not who could type the fix**, and it cuts both ways:
+a failure whose fix is a source edit is handed back with the diagnosis even when the edit is one
+line, and a failure whose fix is operational stays with `ops` even when a source change would also
+make the symptom disappear. The role file carries the anti-pattern that second clause exists to
+stop — raising a timeout, adding a retry, pinning to an older build, widening a permission — every
+one of which is a legitimate operational repair AND a way to make a code defect stop being visible.
+The test it states: *after your change, would the underlying fault still be there if the load, the
+data, or the timing shifted?* This is the operational form of the defect this pipeline exists to
+prevent — a symptom that can no longer surface reads exactly like a fault that was fixed.
+
+Two further properties are stated because the corpus shows the seat needs them. **A failure that
+stops reproducing after a change is not proof the change fixed it** — deployments are full of
+caches, retries, warm-ups and propagation delays that resolve on their own clock, so an
+unestablished cause is recorded as unconfirmed rather than asserted. And **`ops` does not certify
+its own repair**: it re-runs the tests and puts the output in the record, but the verdict is the
+gate's and the lead's to adopt, for the same reason a provenance stamp recomputed by the agent
+whose check it failed certifies nothing.
+
+**The mis-scoping is exactly one site, and that was measured rather than assumed.** Every other
+`dev teammate` routing in the step corpus — `implementation.md` ×3, `gate-validation.md`,
+`sprint-review.md` ×2, `stories-test-strategy.md` — is code work and is correctly seated.
+`bug-investigation.md` routes analyst → adversary → remediator throughout and needed nothing. The
+remaining operational duties in `deploy-validate.md` (§2a's go/no-go probe verification at `:64`,
+§2b's deploy-freshness proof at `:99`) are **gate judgments, and 0.357.0's own Rule 28(c) narrowing
+assigns those to the lead** — the lead owns PASS/FAIL, the disposition and the escalation; the edit
+that follows is dispatched. Only the edit moved.
+
+**Controls, since a passing check and a check that cannot fire read identically.**
+
+- **I22 fires on the new role specifically.** Removing the `aiDlcRoles.ops` entry drove
+  `validate-enforcement-map.sh` to exit 1 with `I22 core/team-roles/ops.md ships but
+  templates/settings.json.template has no aiDlcRoles entry for 'ops'`; restoring it returned exit 0
+  with 0 FAILs. The registration join is live on this role, not merely live in general.
+- **The tier-1 rule audit fires on the new file specifically.** A seeded origin tag in `ops.md`
+  produced `ops.md:171 ORIGIN_TAG`, exit 1; removing it returned `tier-1 findings: 0`, exit 0 —
+  with the denominator identical at `70 files scanned` across both runs, which is what says the
+  clean run looked at the same corpus rather than a smaller one.
+- **Both layouts.** Verified on a tree built by running `scripts/install.sh` into an empty
+  BMAD-seeded directory, not only in `core/`: `ops.md` lands at `.claude/team-roles/ops.md`, the
+  generated `settings.json` carries the entry, and the installed step file cites the seat.
+  `core-manifest.md` declares `team-roles/*.md` by glob and `install.sh` copies by glob, so neither
+  needed a new entry — and a per-file grep against a glob-declared list would have proven nothing
+  either way.
+
+**A guard that was measured and deliberately NOT shipped.** The obvious protection against this
+regressing is a dormant-role invariant: a role no shipped file dispatches is dead text, and dead
+text reads exactly like live text. Measured before writing it, and the instrument fails: a
+whole-word name scan scores `ops` at 3 when only 1 is a dispatch — the other two are the word
+"no-ops" — while `cis` and `tea` score only off role-file *bindings* (`.claude/team-roles/cis.md`),
+not dispatch sites at all. A check on that signal would measure the wrong thing and need
+hand-carved exemptions. Per this repo's rule, an unmeasured lint is one the operator turns off, so
+it is recorded here rather than shipped. What does bind today: I22 joins the role file to its
+registration in both directions, and I90 derives its dispatch-target vocabulary from
+`core/team-roles/`, so the new routing line satisfies it by naming a seat that exists. Neither
+prevents the branch being re-pointed at `dev`; that gap is stated rather than papered over.
+
+### Fixed
+
+- `docs/plans/graph-pull-0356-to-0357.md` stated a count of the consumer's dirty files in its
+  §Rehearsal structural-limits paragraph, 145 lines after the same file forbids writing one and
+  explains that the set grows while the pipeline runs. `5f64a71` had claimed both halves of this in
+  its subject — *"remove the stale count and sha"* — and delivered the shas and the first count
+  while a second count ten lines below survived. A fix that moves its subject and leaves one
+  instance behind is the same class as the three regressions 0.357.0 shipped and caught.
+
 ## [0.357.0] — 2026-08-11
 
 ### The gate remediation loop repaired inline, counted nothing, and swept by memory — eleven passes on one gate
