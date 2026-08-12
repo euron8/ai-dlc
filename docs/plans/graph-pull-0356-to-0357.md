@@ -1,7 +1,12 @@
 # Runbook — pull the graph consumer from 0.356.0 to 0.357.0, mid-sprint s302
 
-**Status: READY TO RUN.** 0.357.0 is merged — squash `932ee10` on the distribution's `main`, PR
-#534. Not yet run against the live consumer.
+**Status: READY TO RUN.** 0.357.0 is merged to the distribution's `main` (PR #534). Not yet run
+against the live consumer.
+
+**No sha is written down in this file, deliberately.** `main` moves whenever anything lands on it,
+including a docs commit to this very file, and a hardcoded sha silently falsifies the criterion that
+compares against it. Everywhere a ref is wanted, it is `origin/main`; everywhere a sha is wanted,
+derive it.
 
 **The pull itself is the `ai-dlc-update` skill's job, and this file does not re-describe it.** An
 earlier draft walked the pull step by step and every one of those steps was a restatement of
@@ -21,17 +26,23 @@ invoke it at all. If yours is, stop and ping the operator for a restart.
 
 Two repos, and the boundary is absolute.
 
-- **Distribution — `/Users/n8/git/ai-dlc`. Read it, never write it.** `main` is `932ee10`,
-  `VERSION` `0.357.0`. Wherever a ref is wanted, it is `origin/main`.
+- **Distribution — `/Users/n8/git/ai-dlc`. Read it, never write it.** `main` carries `VERSION`
+  `0.357.0`. Wherever a ref is wanted, it is `origin/main`.
 - **Consumer — `/Users/n8/git/graph`, the tree you WRITE.** Mid-sprint s302, stopped and committed
   at `0fd25d10d` *"handoff mid [story]-gate adjudication cascade (pass 11 of 11 FAIL, pass 12
   stopped)"*. Stamp reads `version: 0.356.0` / `commit: 959e778`.
 
-**The working tree is NOT clean and that is expected.** Four hook-written state files are modified,
-all under `_bmad-output/`: `.context-sensor-state`, `.driver/turns`, `pipeline-continuation-log.md`,
-`subagent-context.jsonl`. No artifact among them. The skill handles a dirty tree and leaves them
-alone. **Do not commit, revert, stash or clean them** — committing them makes the branch ahead of
-its upstream, and the skill's git preflight then auto-pushes s302's in-flight state to
+**The working tree is NOT clean and that is expected.** The modified files are hook-written
+`_bmad-output/` state — no artifact among them.
+
+**Their number is not fixed and this file does not enumerate them.** The set GROWS while the
+pipeline runs: asking the operator a question writes one, and an earlier draft of this file named
+four when there were already six. A count written down here is stale by the time you read it, so
+judge by the path — anything modified under `_bmad-output/` is pipeline state — and if something
+outside `_bmad-output/` is dirty, stop and ping the operator.
+
+**Do not commit, revert, stash or clean any of them.** Committing makes the branch ahead of its
+upstream, and the skill's git preflight then auto-pushes s302's in-flight state to
 `origin/ai-dlc/feature/s302-position-usd-create-position` on a bare dry run.
 
 What this release carries: remediation is dispatched to a `remediator` instead of applied by the
@@ -108,8 +119,15 @@ session reporting.
 ## Done when
 
 1. **The stamp carries this release on all four lines** — `0.357.0` on the two version lines and
-   `932ee10` on the two commit lines. `grep -cE '0\.357\.0|932ee10' .claude/.ai-dlc-version`
-   returns 4. Checking for `0.357.0` alone returns 2 and reads a correct apply as a failure.
+   the sha `origin/main` resolved to on the two commit lines. Derive the sha rather than writing
+   one down:
+
+   ```
+   s=$(git -C /Users/n8/git/ai-dlc rev-parse --short origin/main)
+   grep -cE "0\.357\.0|$s" .claude/.ai-dlc-version
+   ```
+
+   Expect 4. Checking for `0.357.0` alone returns 2 and reads a correct apply as a failure.
 
 2. **`scripts/ai-dlc/validate-hook-registration.sh` exits 0** with `UNREGISTERED: none` and
    `DANGLING: none`. It runs inside `apply.sh` too. Two hooks get registered by the settings
@@ -159,16 +177,24 @@ dirty files, which would have published s302 state mid-sprint.
 
 ## Abort
 
-**There is no restore commit and none is wanted.** Nothing here commits, so `HEAD` stays
-`0fd25d10d` and that commit is the restore point for everything the pull writes. Every path the
-apply touches is tracked and committed there.
+**`0fd25d10d` is the restore point, and you must name it in the command.** No step here commits,
+but **the skill does**: on apply it cuts a reconcile branch off the sprint branch, commits its
+writes there, pushes it, and opens a PR. So after the apply `HEAD` is NOT `0fd25d10d` and it is not
+the sprint branch — a bare `git checkout -- <path>` restores from the post-apply commit, which is a
+silent no-op that looks like it worked.
 
-- **The apply goes wrong** — restore the written paths with `git checkout -- <path>`. **Name the
-  paths.** `git checkout -- .` would revert the four `_bmad-output/` files with them and destroy
-  s302's in-flight state.
+- **The apply goes wrong** — restore with `git checkout 0fd25d10d -- <path>`, anchored to the ref.
+  **Name the paths.** `git checkout 0fd25d10d -- .` would revert the `_bmad-output/` state files
+  and destroy s302's in-flight work.
+- **Paths the apply CREATED are not in `0fd25d10d`** — this release adds fixtures and a hook that
+  do not exist on the consumer yet, and `git checkout` cannot restore a file to not existing. It
+  errors and leaves them. Reverting the modified files without removing the created ones leaves a
+  half-pulled tree. **Do not reach for `git clean`** — it would take the `_bmad-output/` state with
+  it. Stop and ping the operator.
 - **The settings reconcile damages `settings.json`** — it preserves consumer-owned keys
   (`env.AI_DLC_MODEL_ROW`, permissions, mcpServers, statusLine). If any is lost, restore that file
-  alone with `git checkout -- .claude/settings.json` and ping the operator before re-running.
+  alone with `git checkout 0fd25d10d -- .claude/settings.json` and ping the operator before
+  re-running.
 - **The gate reset loses a verdict file** — stop. The eleven retired verdicts are evidence; a reset
   that deletes is a defect in the reset, not a step to work around.
 
