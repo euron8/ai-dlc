@@ -237,6 +237,7 @@ core_manifest:
   - fixtures/resume-whole-read/**
   - fixtures/retired-contract-token/**
   - fixtures/retired-layer-contract/**
+  - fixtures/retired-layer-passage/**
   - fixtures/retired-fixture-orphan/**
   - fixtures/consumer-machinery-inventory/**
   - fixtures/retro-audit-scans/**

@@ -445,6 +445,20 @@ prose is itself generated rather than composed.
    Output is `RETIRED-LAYER-CONTRACT<TAB><layer-path><TAB><shape>`. Each row is a
    layer file to re-read against `theirs`: either re-point it at the replacement
    construct, or record in the report why the stale reference is harmless.
+   **Read its stderr, not only its rows.** When the release retired no shape it opens
+   no layer file at all, and says so; that NOTE is the difference between a scan that
+   found nothing and a scan that never ran.
+3a-iv. **Retired core PASSAGES still carried by a layer file** (cheap, deterministic
+   — no agents): run `reconcile/retired-layer-passage.sh <dist-repo> <base-sha>
+   <theirs-ref> <consumer-root>`. 3a-iii matches retired contract SHAPES — labelled
+   directives and `{token}` placeholders — and cannot see a layer file that reproduces
+   a retired core directive as ordinary prose. This one asks the complementary question:
+   does a layer file still contain a LINE core carried at base and deleted by theirs?
+   Output is `RETIRED-LAYER-PASSAGE<TAB><layer-path>:<line><TAB><deleted core line>`.
+   Each row is a passage the layer reproduces and core no longer has — re-point it at
+   the replacement wording, or record why reproducing the retired text is still correct.
+   Its limit, and read its stderr for the same reason: it matches reproductions, not
+   paraphrases. Reword any clause and the line stops matching.
    **This does NOT block the apply** — a layer file is consumer-owned and the pull
    does not rewrite it. It is a worklist item, and it is owed before the pull counts
    as done.

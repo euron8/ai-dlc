@@ -102,6 +102,34 @@ section_of() { # section_of <heading-text>  < stream
 norm() { printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d '`*' | sed -E 's/[^a-z0-9]+/ /g; s/^ +| +$//g'; }
 
 # ---------------------------------------------------------------------------
+# norm_lines — norm()'s LINE-ORIENTED sibling: a stream filter, not a string call.
+# ---------------------------------------------------------------------------
+# WHY A SECOND FORM RATHER THAN A LOOP OVER norm(). `norm` takes one string as an
+# argument, so normalising a file means one subprocess per line. Measured while
+# building retired-layer-passage.sh: over 120s across a 45-file layer corpus, against
+# 0.78s for a single stream pass. A validator's runtime is the fixture suite's wall
+# clock, so the per-line form is not usable on a whole-corpus scan.
+#
+# IT IS ALSO DELIBERATELY LESS AGGRESSIVE, and that is the real reason it is separate.
+# `norm` squashes EVERY non-alphanumeric run to a space, which is right for comparing
+# anchors and titles. A line-level comparison of rulebook PROSE keeps the internal
+# punctuation that distinguishes two directives and strips only what is presentation:
+# list markers, ordered-list numbering, emphasis, and run-together whitespace. A layer
+# file that renumbers core's step 4 as its own step 7 is still carrying core's sentence.
+#
+# LINE-PRESERVING BY CONTRACT. It emits exactly one output line per input line, so a
+# caller may take grep's line numbers as the source file's own. Do not add a filter here.
+norm_lines() {
+  sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//
+          s/^[-*+][[:space:]]+//
+          s/^[0-9]+[.)][[:space:]]+//
+          s/[`*_]//g
+          s/[[:space:]]+/ /g
+          s/[.[:space:]]+$//' \
+  | tr '[:upper:]' '[:lower:]'
+}
+
+# ---------------------------------------------------------------------------
 # anchor_arm — WHICH DIRECTION of span_of's containment resolved this anchor.
 # ---------------------------------------------------------------------------
 # span_of matches in EITHER direction: the heading contains the anchor (forward),

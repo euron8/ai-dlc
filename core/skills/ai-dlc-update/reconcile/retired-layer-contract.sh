@@ -90,6 +90,13 @@ tokens_of() {
 
 collect() {     # collect <ref> -> every shape+token across the rulebook at that ref
   local ref="$1" glob body all=""
+  # `set -f` IS LOAD-BEARING, same defect its sibling retired-layer-passage.sh carries a
+  # note about. These entries are PATHSPECS; unquoted in `for` they are subject to shell
+  # pathname expansion first, so when the caller's cwd contains matching files bash
+  # substitutes real paths from the WRONG tree. A rulebook file that exists at the ref but
+  # not in the caller's working tree is then silently skipped, and this detector reports a
+  # smaller corpus with the same clean line.
+  set -f
   for glob in $(rulebook_globs); do
     # git ls-tree expands the glob against the tree at <ref>.
     for f in $(git -C "$DIST" ls-tree -r --name-only "$ref" 2>/dev/null \
@@ -101,6 +108,7 @@ $(tokens_of "$body")
 "
     done
   done
+  set +f
   printf '%s\n' "$all" | sed '/^$/d' | sort -u
 }
 
