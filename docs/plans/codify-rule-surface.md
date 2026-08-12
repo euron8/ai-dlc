@@ -34,10 +34,20 @@ completion including an early stop.
 
 ## Status
 
-Action 1 complete — this file is promoted and committed. Nothing else implemented. Inventory and
-gap analysis complete and measured. Three operator rulings are already taken and are folded into
-Part 3: topical unscoped rule files (R1), no `docs/coding-conventions.md` (R2), prose plus a
-structural proxy for the two standing directives (R4). Wave A is next.
+**Actions 1, 2, 6 and 7 are complete and pushed** — `v0.361.0`, branch `codify-rule-surface`,
+full gate green (11 steps, 146 fixtures, 0 FAIL, content-key and read-set skips both disabled).
+The renderer, the index, its fixture, the pre-push wiring, the `OK:`-line replacement, the
+`I76`/`I91` split and the CLAUDE.md repairs are all in. **Actions 3, 4, 5 and 8 remain in Wave A**;
+Waves B, C, D and E are unstarted.
+
+Three operator rulings are folded into Part 3: topical unscoped rule files (R1), no
+`docs/coding-conventions.md` (R2), prose plus a structural proxy for the two standing
+directives (R4). A fourth ruling — derive the `OK:` line rather than hand-maintain it — is
+discharged by R6.
+
+**Two corrections to this plan, both forced by mechanisms rather than by review**, are folded
+into R5 and Wave D below. Dating frozen measurements in `CLAUDE.md` is not available, and the
+`.claude/rules/` files Wave D creates are inside the same audit corpus.
 
 ---
 
@@ -222,6 +232,16 @@ exactly like one deliberately made resident, and the cost lands on every compact
 evaded by the split. The new arm measures the sum of `CLAUDE.md` plus every unconditional rule
 file.
 
+**THE NEW FILES LAND INSIDE AN EXISTING BLOCKING AUDIT, AND THE SOURCE MATERIAL VIOLATES IT.**
+`core/scripts/audit-rule-files.sh` — pre-push step 9 — scans `.claude/rules/` alongside the skill
+tree. An embedded date is **tier-1 and blocks the push**; origin tags, version stamps and
+`used to`-style narrative score as findings too. The 24 rules come from a memory corpus written
+in exactly that register — nearly every cluster carries a release number, a date, or a sentence
+about what something used to do. **Write each rule imperative-first with its evidence stripped,
+and put the evidence in the CHANGELOG entry that lands it.** Measured on this plan's own first
+attempt at `CLAUDE.md`: four dates took a 0-finding file to 4 tier-1 findings and blocked the
+push. Budget the rewriting, not just the moving.
+
 ## R2 — A `docs/` artifact is right when it is DERIVED, and wrong when it is hand-written prose — RULED
 
 The question is whether a project-level reference document is the correct home for any rule
@@ -313,21 +333,31 @@ audit rather than the delivery.
 
 ## R5 — Repair G1 and G2 by edit; bind only what has a non-empty corpus
 
-Edit `CLAUDE.md §Some authoring rules live in .claude/rules/` and `:159` to name `scripts/validate-claude-rules.sh` arms A1–A4, matching
-the correction already at `CHANGELOG.md:969`. Edit `:65` to 147 and `:148` to 58.
+**DONE.** Both `I88` citations now name `scripts/validate-claude-rules.sh` arms A1–A4, matching
+the correction already at `CHANGELOG.md:969`; the stale fixture count and home-plan count are
+gone; `CLAUDE.md §Prohibitions need mechanisms` points at `docs/invariant-index.md`.
 
-Add **arm A5**: every `I<n>` token cited in `CLAUDE.md` or any rule file must name an ID that can
-fire. Measured today it fires on exactly `I88`, with control `I74` resolving — one true positive,
-false-positive set empty.
+**Arm A5 still to build**: every `I<n>` cited in **bold** in `CLAUDE.md` or any rule file must
+name an ID the index lists. The bold form is the file's own pre-existing convention for "this is
+the live mechanism" — backticks mark a literal token under discussion — and it predates this
+work (`git show 5f57940:CLAUDE.md`). Measured over that pre-fix file the arm fires on exactly
+`I88`, with `I33` and `I66` resolving as live controls: **one true positive, false-positive set
+empty**. A5 consumes `docs/invariant-index.md` rather than re-deriving, so there is one
+extractor; the index is byte-compared at an earlier pre-push step, and A5 fails closed if it is
+missing.
 
 Do **not** add a P4-style `path:line` arm over `CLAUDE.md`. It carries exactly two such citations
 and both resolve, so the arm ships green forever and neither real defect is of that shape — the
 check-that-cannot-fire class the file names at `CLAUDE.md §A check that cannot fire`.
 
-For the figures, no arm can separate the three genres present: derivable counts, frozen
-historical measurements that must never be re-derived, and invariant facts. The form with an
-empty FP set is **generation plus explicit dating** — a generated region for the derivable
-counts, and a one-time pass dating the ~8 historical measurements.
+**CORRECTION — dating the frozen measurements is not available, and this plan was wrong to
+propose it.** `core/scripts/audit-rule-files.sh` scans `CLAUDE.md` and treats an embedded date as
+a **tier-1, push-blocking** finding. Adding dates took that file from a 0 tier-1 baseline to 4 and
+blocked the push. The remaining form with an empty FP set is therefore **removal, not dating**:
+delete the decaying number, write the derivation command in its place, and leave the measurement
+in the CHANGELOG, which is outside the audit corpus. A number that is not there cannot go stale.
+A generated region in `CLAUDE.md` is still open as a later option, but it is not needed for any
+figure currently in the file.
 
 ## R6 — Two generated indices, derived from markers or not at all
 
@@ -378,16 +408,16 @@ Each has a live corpus and no general statement anywhere. All go to `verificatio
 Waves A, B and C are independent of each other. Wave D depends on A. Merges are preapproved
 throughout.
 
-1. Promote this file to `docs/plans/codify-rule-surface.md` and commit it, so
-   `scripts/validate-plan-shape.sh` has it in corpus. Run the validator and report its output.
+1. **DONE** (`acd1771`). Promoted to `docs/plans/codify-rule-surface.md` and committed; the
+   validator went from 19 plans to 20, 0 errors, 0 warnings.
 
 **Wave A — bind the rule surface to ground truth**
 
-2. Build the invariant ID → emit-site extractor with its self-probe first. Prove it fires on a
-   seeded `err "I…"`, on `|| err`, on `&& err`, on a multi-line message, and on the heredoc'd
-   Python sub-program inside `scripts/validate-enforcement-map.sh`; prove it does not fire on a
-   comment-only decoy. Ping the operator with the probe output and the firing-ID set before
-   proceeding.
+2. **DONE** (`ca04a72`). The derivation is the ARM HEADER, not the `err` message — 23 of 366
+   emitter calls carry no ID, so a message-based extractor loses every catalog arm. Result:
+   91 arms, 94 IDs, 366 emitters, **0 orphaned, 0 silent, 0 collisions**, after declaring
+   I1/I2 and I17 and splitting `I76`/`I91`. Reported to the operator, who ruled: derive the
+   `OK:` line rather than hand-maintain it.
 3. Add arm A5 to `scripts/validate-claude-rules.sh` consuming that extractor, with a self-probe
    that injects a nonexistent ID into a temp copy. Extend `core/fixtures/claude-rules-joins/` to
    prove A5 can fail, capturing red → green against the live `I88` defect.
@@ -396,11 +426,15 @@ throughout.
 5. Add the durable-channel byte-ceiling arm (R1), measuring `CLAUDE.md` plus every unconditional
    rule file, with its fixture. Report the current total and propose a ceiling; the value is an
    OPERATOR DECISION.
-6. Edit `CLAUDE.md §Some authoring rules live in .claude/rules/`, `:159`, `:65`, `:148` per R5, and date the ~8 frozen historical
-   measurements in place.
-7. Build `scripts/render-invariant-index.sh` per R6, its fixture and its pre-push wiring, then
-   repoint `CLAUDE.md §Prohibitions need mechanisms`. If action 2's extractor cannot be made total, stop here and ping the
-   operator rather than shipping a partial index.
+6. **DONE** (`ca04a72`). Both `I88` citations corrected to arms A1–A4; the stale fixture and
+   home-plan counts removed rather than dated, per R5's correction, with the derivation command
+   written in their place. `audit-rule-files.sh` back to its 0 tier-1 / 23-total baseline.
+7. **DONE** (`ca04a72`). `scripts/render-invariant-index.sh` → `docs/invariant-index.md`,
+   `core/fixtures/invariant-index/` (2 controls, 6 mutants, 0.8s), pre-push step 1a-i,
+   `CLAUDE.md §Prohibitions need mechanisms` repointed. The extractor WAS made total, so the
+   stop-and-ping branch did not fire. **Nothing volatile goes in the rendered file** — the first
+   cut stamped `VERSION` into a footer, which the fixture's real-repo control caught by going
+   red on the release bump alone.
 8. Build `scripts/render-vocabulary-index.sh` and `docs/vocabulary-index.md` per R2/G7, deriving
    each vocabulary from the file that owns it. Add its fixture and pre-push wiring.
 

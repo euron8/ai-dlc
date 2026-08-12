@@ -12,6 +12,11 @@
 #   m4  A4  CLAUDE.md pointing at a rule file that is not there  -> must FAIL
 #   m5  A4  a rule with neither pointer nor no-stub marker       -> must FAIL
 #   m6  A4  a no-stub marker with an EMPTY reason                -> must FAIL
+#   m7  A3b a rule declaring neither paths: nor unconditional:   -> must FAIL
+#   m8  A3b a rule declaring BOTH                                -> must FAIL
+#   m9  A3b an `unconditional:` marker with an EMPTY reason      -> must FAIL
+#   m10 A5  a bold **I<n>** citation the index does not list     -> must FAIL
+#   m11 A6  durable channel over its byte ceiling                -> must FAIL
 #
 # WHY THE CONTROL IS NOT DECORATION. Each mutant is a fresh seed plus one edit, and the
 # validator resolves its own root by walking up for VERSION. A seed that fails to build
@@ -62,14 +67,21 @@ paths:
 # Scoped
 Body.
 EOF
+  # A5 reads the DERIVED index rather than re-deriving the live set, so the seed needs one.
+  # Two rows is enough: a citation the corpus makes, and a second so a one-row grammar
+  # accident cannot pass for a working parse.
+  printf '| ID | What it binds |\n|----|---------------|\n| I1 | a live invariant |\n| I74 | a second live invariant |\n' \
+    > "$d/docs/invariant-index.md"
   cat > "$d/CLAUDE.md" <<'EOF'
 # Authoring rules
 Read `.claude/rules/scoped.md` before touching fixtures.
+The three hand-written lists are joined to the derived set by **I74**, in both directions.
 EOF
   ( cd "$d" && git init -q . && git add -A >/dev/null 2>&1 )
 }
 
 run_v() { ( cd "$1" && bash scripts/validate-claude-rules.sh 2>&1 ); }
+run_v_env() { ( cd "$2" && env "$1" bash scripts/validate-claude-rules.sh 2>&1 ); }
 
 # --- unmutated control ------------------------------------------------------
 seed "$TMP/control"
@@ -148,5 +160,48 @@ printf -- '---\npaths:\n  - "docs/plans/**"\n---\n<!-- no-stub: -->\n# Orphan\n'
 ( cd "$TMP/m6" && git add -A >/dev/null 2>&1 )
 kill_check "m6 A4 empty no-stub reason" "$TMP/m6" "EMPTY"
 
-if [ "$rc" -eq 0 ]; then note "PASS  claude-rules-joins -- control green, 6/6 mutants killed by their own arm"; fi
+# m7 -- A3b a rule declaring NEITHER scope. It carries a CLAUDE.md pointer so A4 stays
+# quiet: a mutant that trips two arms proves neither of them.
+seed "$TMP/m7"
+printf -- '# Unscoped\nNo frontmatter at all.\n' > "$TMP/m7/.claude/rules/noscope.md"
+printf 'Also read `.claude/rules/noscope.md`.\n' >> "$TMP/m7/CLAUDE.md"
+( cd "$TMP/m7" && git add -A >/dev/null 2>&1 )
+kill_check "m7 A3b no scope declared" "$TMP/m7" "declares no scope"
+
+# m8 -- A3b BOTH declarations. Added to the file that already carries a no-stub marker,
+# so A4 is satisfied and only the scope arm can speak.
+seed "$TMP/m8"
+if mutate "$TMP/m8/.claude/rules/scoped.md" 's|^# Scoped|<!-- unconditional: also claimed resident -->\n# Scoped|'; then
+  ( cd "$TMP/m8" && git add -A >/dev/null 2>&1 )
+  kill_check "m8 A3b both declarations" "$TMP/m8" "carries BOTH"
+else note "SKIP  m8 -- sed matched nothing; no mutation occurred"; rc=1; fi
+
+# m9 -- A3b an unconditional marker with no reason. Carries a no-stub so A4 is quiet.
+seed "$TMP/m9"
+printf -- '<!-- no-stub: pointed at from nowhere on purpose -->\n<!-- unconditional: -->\n# Empty reason\n' \
+  > "$TMP/m9/.claude/rules/uncond.md"
+( cd "$TMP/m9" && git add -A >/dev/null 2>&1 )
+kill_check "m9 A3b empty unconditional reason" "$TMP/m9" "EMPTY \`unconditional:\` marker"
+
+# m10 -- A5 a bold citation naming an id the index does not list.
+seed "$TMP/m10"
+if mutate "$TMP/m10/CLAUDE.md" 's|\*\*I74\*\*|**I999**|'; then
+  ( cd "$TMP/m10" && git add -A >/dev/null 2>&1 )
+  kill_check "m10 A5 dead invariant citation" "$TMP/m10" "as a live mechanism, and no arm declares it"
+else note "SKIP  m10 -- sed matched nothing; no mutation occurred"; rc=1; fi
+
+# m11 -- A6 over the ceiling. Driven by the documented override rather than by writing a
+# 32 KB file, so the arm is tested at its real comparison and not at its file arithmetic.
+seed "$TMP/m11"
+out="$(run_v_env AI_DLC_DURABLE_BYTES=10 "$TMP/m11")"
+if [ -z "$out" ] || ! grep -qF "against a ceiling of 10" <<<"$out"; then
+  note "FAIL  m11 A6 over ceiling -- mutant SURVIVED or failed on another arm"
+  printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1
+elif [ "$(printf '%s\n' "$out" | grep -c '^FAIL:')" -ne 1 ]; then
+  note "FAIL  m11 A6 over ceiling -- more than one FAIL line; the arms are entangled"; rc=1
+else
+  note "ok    m11 A6 over ceiling -- killed by its own arm, and only its own"
+fi
+
+if [ "$rc" -eq 0 ]; then note "PASS  claude-rules-joins -- control green, 11/11 mutants killed by their own arm"; fi
 exit "$rc"

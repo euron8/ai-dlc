@@ -176,7 +176,142 @@ else
   say "  A4  ok  -- pointers resolve; every rule has a pointer or a reasoned no-stub (probe fired)"
 fi
 
+# ---------------------------------------------------------------------------
+# A3b -- a rule file declares its scope EXACTLY ONCE: either a `paths:` block, or a
+# `<!-- unconditional: <reason> -->` marker. Never neither, never both.
+#
+# WHY THIS BECAME NECESSARY. While every rule file was scoped, an absent `paths:` key
+# could only be an accident. It is now also a DELIBERATE declaration: a rule file with no
+# `paths:` is re-injected on every compaction (`load_reason:"compact"`, measured), which
+# is the only channel that survives one -- so the authoring rulebook deliberately puts
+# its unscoped rules there. Those two states are byte-indistinguishable in the file, and
+# they differ by a cost paid on every compaction of every session. The marker is what
+# separates them, and it is held to the same non-empty-reason rule as `.dist-only` and
+# `no-stub`: a resident-forever decision nobody wrote a reason for is unauditable.
+# ---------------------------------------------------------------------------
+# HERE-STRING, NOT A PIPE (I54/I54b). `fm_keys | grep -q` feeds a reader that leaves at its
+# first match while the writer is still pushing; under `pipefail` the pipeline then answers
+# with the writer's EPIPE and reports NOT-FOUND on frontmatter that contains the key. It is a
+# size threshold, not a race -- correct until the output after the match fills the pipe
+# buffer, then wrong permanently and silently. Both sites here were written as pipes and the
+# invariant caught them at push.
+has_paths_key() { grep -qx 'paths' <<<"$(fm_keys "$1")"; }
+has_uncond()    { grep -q '<!-- *unconditional:' "$1"; }
+
+printf -- '---\npaths:\n  - "x/**"\n---\nbody\n'            > "$probe/a3b_scoped.md"
+printf -- '<!-- unconditional: because reasons -->\nbody\n'  > "$probe/a3b_uncond.md"
+printf -- 'body only, no declaration\n'                      > "$probe/a3b_neither.md"
+if has_paths_key "$probe/a3b_scoped.md" && ! has_uncond "$probe/a3b_scoped.md" \
+   && has_uncond "$probe/a3b_uncond.md" && ! has_paths_key "$probe/a3b_uncond.md" \
+   && ! has_paths_key "$probe/a3b_neither.md" && ! has_uncond "$probe/a3b_neither.md"; then
+  for f in $(rule_files); do
+    # A3 OWNS THE CURSOR-KEY CASE, and this arm stands down for it. A file carrying
+    # `globs:` has MISdeclared its scope, not failed to declare one, and both arms firing
+    # on one mutation makes neither attributable -- the entanglement the mutation battery
+    # exists to catch. A3's message is the one that names the actual repair.
+    if grep -qE "$BAD_KEYS" <<<"$(fm_keys "$f")"; then continue; fi
+    p=0; u=0
+    has_paths_key "$f" && p=1
+    has_uncond "$f" && u=1
+    if [ "$p" = "0" ] && [ "$u" = "0" ]; then
+      err "A3b: $f declares no scope. It has no \`paths:\` block, so the loader treats it as UNCONDITIONAL and re-injects it on every compaction of every session -- but nothing here says that was intended. Add \`paths:\`, or declare \`<!-- unconditional: <reason> -->\`."
+    elif [ "$p" = "1" ] && [ "$u" = "1" ]; then
+      err "A3b: $f carries BOTH a \`paths:\` block and an \`<!-- unconditional: -->\` marker. The loader obeys \`paths:\` and the marker is then a false claim about when this file loads."
+    elif [ "$u" = "1" ] && ! grep -qE '<!-- *unconditional:[[:space:]]*[^[:space:]>-]' "$f"; then
+      err "A3b: $f carries an EMPTY \`unconditional:\` marker. Resident-in-every-session is the most expensive declaration in this repo and it is the one nobody can audit without a reason."
+    fi
+  done
+  say "  A3b ok  -- every rule declares its scope exactly once (probe fired all three ways)"
+else
+  err "A3b's own probe did not fire: scoped/unconditional/neither were not told apart. The scope verdicts below are vacuous."
+fi
+
+# ---------------------------------------------------------------------------
+# A5 -- every invariant cited as a MECHANISM names one that exists.
+#
+# THE DEFECT, measured: CLAUDE.md cited **I88** twice as the thing binding it to
+# `.claude/rules/`. No arm has ever carried that ID -- the invariant is this script, arms
+# A1-A4 -- and `CHANGELOG.md` and `docs/plans/claude-rules-adoption.md` both already
+# recorded the deviation. The rulebook contradicted its own changelog for five releases
+# because nothing joined its citations to what exists.
+#
+# THE GRAMMAR IS THE FILE'S OWN, AND IT PREDATES THIS ARM. A bold **I<n>** is how this
+# rulebook names a live mechanism; a backticked `I<n>` is how it discusses a literal
+# token. Measured against the pre-fix CLAUDE.md, the bold form yields exactly I33, I66
+# and I88 -- one true positive and two live controls, false-positive set EMPTY. The
+# backtick form is not an exemption bolted on for this arm; it is what the file already
+# did, and it is the only way to write about a retired ID at all.
+#
+# THE LIVE SET IS READ, NOT RE-DERIVED. docs/invariant-index.md is rendered from the arm
+# headers and byte-compared at an earlier pre-push step, so consuming it here means one
+# extractor rather than two that can disagree.
+# ---------------------------------------------------------------------------
+INDEX="docs/invariant-index.md"
+live_ids() { grep -oE '^\| I[0-9]+[a-c]? \|' "$INDEX" 2>/dev/null | tr -d '| ' | LC_ALL=C sort -u; }
+bold_ids() { grep -ohE '\*\*I[0-9]+[a-c]?\*\*' "$@" 2>/dev/null | tr -d '*' | LC_ALL=C sort -u; }
+
+LIVE="$(live_ids)"
+if [ ! -f "$INDEX" ]; then
+  err "A5: $INDEX is missing, so no citation can be checked. This fails rather than passing: an absent index and a clean corpus produce the same silence."
+elif [ -z "$LIVE" ]; then
+  err "A5: parsed ZERO invariant IDs out of $INDEX. The row grammar changed. An empty live set makes every citation look dead OR every citation look fine depending on the comparison direction, so this fails closed."
+else
+  printf 'cites **I99999** and **%s**\n' "$(printf '%s\n' "$LIVE" | head -1)" > "$probe/a5.md"
+  probe_bad="$(bold_ids "$probe/a5.md" | grep -vxF -f <(printf '%s\n' "$LIVE") || true)"
+  if [ "$probe_bad" != "I99999" ]; then
+    err "A5's own probe did not fire: a bold **I99999** beside a live ID should report exactly I99999, got [$probe_bad]. Every citation verdict below is unreadable."
+  else
+    for f in CLAUDE.md $(rule_files); do
+      dead="$(bold_ids "$f" | grep -vxF -f <(printf '%s\n' "$LIVE") || true)"
+      if [ -n "$dead" ]; then
+        err "A5: $f cites $(printf '%s' "$dead" | tr '\n' ' ')as a live mechanism, and no arm declares it. Cite the invariant that exists, or if you are writing ABOUT a retired id use backticks, which is what the surrounding prose already does."
+      fi
+    done
+    say "  A5  ok  -- every bold invariant citation resolves against $INDEX ($(printf '%s\n' "$LIVE" | grep -c .) live) (probe fired)"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# A6 -- the compaction-durable channel has a ceiling.
+#
+# CLAUDE.md and every unconditional rule file are re-injected on EVERY compaction of
+# EVERY session. That is the only channel that survives a compaction, and it was the only
+# channel in this repo with no budget at all: `validate-reattach-budget.sh` is
+# `--skill`-scoped to SKILL.md's recovery region and measures nothing here.
+#
+# MEASURED IN BYTES, NOT ESTIMATED TOKENS, deliberately. The re-attach budget divides by a
+# bytes-per-token figure calibrated on SKILL.md; that divisor under-counts prose-heavy
+# files, and importing it here would import a calibration taken over a different
+# population. Bytes are what this arm can actually observe.
+#
+# The ceiling is a POLICY NUMBER, not a measurement, and it is the operator's to set --
+# `AI_DLC_DURABLE_BYTES` overrides it, the same way AI_DLC_REATTACH_BUDGET overrides that
+# one. The default is sized for the authoring rulebook plus the topical unconditional rule
+# files it is being split into.
+# ---------------------------------------------------------------------------
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-32768}"
+durable_files() {
+  printf '%s\n' CLAUDE.md
+  for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done
+}
+d_total=0; d_list=""
+while IFS= read -r f; do
+  [ -n "$f" ] && [ -f "$f" ] || continue
+  b="$(wc -c < "$f" | tr -d ' ')"
+  d_total=$(( d_total + b ))
+  d_list="${d_list}    ${f} ${b}
+"
+done <<<"$(durable_files)"
+if [ "$d_total" -eq 0 ]; then
+  err "A6: measured ZERO bytes of compaction-durable prose, which cannot be right while CLAUDE.md exists. The file list is broken, so the headroom below is not a reading."
+elif [ "$d_total" -gt "$DURABLE_MAX" ]; then
+  err "A6: the compaction-durable channel is ${d_total} bytes against a ceiling of ${DURABLE_MAX}. Every byte here is re-injected on every compaction of every session. Move a rule to a \`paths:\`-scoped file if its work reliably begins with a matching read, or cut it:"
+  printf '%s' "$d_list" >&2
+else
+  say "  A6  ok  -- compaction-durable channel ${d_total}/${DURABLE_MAX} bytes across $(durable_files | grep -c .) file(s)"
+fi
+
 if [ "$fail" = "0" ]; then
-  say "OK: validate-claude-rules -- A1 tracked-path containment, A2 no orphan globs, A3 paths-only frontmatter, A4 pointer/no-stub join. Corpus: $(rule_files | wc -l | tr -d ' ') rule file(s), $(rule_globs | wc -l | tr -d ' ') glob(s)."
+  say "OK: validate-claude-rules -- A1 tracked-path containment, A2 no orphan globs, A3 paths-only frontmatter, A3b scope declared once, A4 pointer/no-stub join, A5 live invariant citations, A6 durable-channel ceiling. Corpus: $(rule_files | wc -l | tr -d ' ') rule file(s), $(rule_globs | wc -l | tr -d ' ') glob(s), ${d_total}B durable."
 fi
 exit "$fail"

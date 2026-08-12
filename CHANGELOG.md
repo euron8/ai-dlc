@@ -34,6 +34,52 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.362.0] — 2026-08-12
+
+### The rulebook's citations, its scope declarations, and the one channel with no budget
+
+Three arms added to `scripts/validate-claude-rules.sh`, each self-probed before its corpus, each
+with a mutant in `core/fixtures/claude-rules-joins/` — now **11 mutants and a control, 11/11
+killed by their own arm**.
+
+**A5 — a bold `**I<n>**` citation must name an invariant that exists.** This is the arm that would
+have caught `I88`. The grammar is the rulebook's own and predates the arm: **bold** names a live
+mechanism, `` `backticks` `` discuss a literal token. Measured against the pre-fix `CLAUDE.md`, the
+bold form yields exactly `I33`, `I66` and `I88` — **one true positive, two live controls,
+false-positive set empty**. It reads `docs/invariant-index.md` rather than re-deriving the live
+set, so there is one extractor rather than two that can disagree, and it fails closed when the
+index is absent or parses to zero rows. That fail-closed path is not theoretical: the fixture's
+control tripped it on the first run, because the seed had no index.
+
+**A3b — a rule file declares its scope exactly once**, via `paths:` or
+`<!-- unconditional: <reason> -->`, never neither and never both. While every rule file was
+scoped, a missing `paths:` could only be an accident; it is now also a deliberate declaration,
+because an unscoped rule file is the only rule channel re-injected after a compaction. The two
+states are byte-indistinguishable in the file and differ by a cost paid on every compaction of
+every session. The reason is required non-empty, the same rule `.dist-only` and `no-stub` markers
+are held to.
+
+**A3b stands down where A3 has already spoken**, and the mutation battery is what forced it. A
+frontmatter `globs:` key tripped both arms — true findings both, but two FAIL lines from one
+mutation make neither attributable. A Cursor key is a MISdeclared scope, not an undeclared one, so
+A3 owns it.
+
+**I54b caught this change writing the defect I54b exists for.** Two of the new arms fed
+`grep -q` from a pipe — a reader that leaves at its first match while the writer is still
+pushing, which under `pipefail` answers with the writer's EPIPE and reports NOT-FOUND on input
+that contains the pattern. A size threshold, not a race: correct until the output after the
+match fills the pipe buffer, then wrong permanently and with no symptom. Both are here-strings
+now. The invariant found them at push, in code written by someone who had the rule in front of
+them.
+
+**A6 — the compaction-durable channel has a ceiling, and until now it had none.**
+`CLAUDE.md` plus every unconditional rule file is re-injected on every compaction of every
+session; `validate-reattach-budget.sh` is `--skill`-scoped to `SKILL.md` and measures none of it.
+Measured in **bytes, not estimated tokens**, deliberately — that script's bytes-per-token divisor
+is calibrated on `SKILL.md` and under-counts prose-heavy files, and importing it would import a
+calibration taken over a different population. Currently **15,372 of 32,768 bytes across 1 file**.
+The ceiling is a policy number, not a measurement; `AI_DLC_DURABLE_BYTES` overrides it.
+
 ## [0.361.0] — 2026-08-12
 
 ### The enumeration of live invariants was hand-typed, and it had gone stale by 22 of them
