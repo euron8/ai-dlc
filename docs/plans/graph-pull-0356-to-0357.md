@@ -171,15 +171,15 @@ session reporting.
 
 ## Rehearsal
 
-Executed twice against `git clone --local` copies of the consumer at `0fd25d10d`, with a second
-pristine clone kept un-pulled as the control arm. Nothing was written to `/Users/n8/git/graph`:
-same `HEAD` and same four modified files at start and end of both runs.
+Executed twice against `git clone --local` copies of the consumer, with a second pristine clone kept
+un-pulled as the control arm. Nothing was written to `/Users/n8/git/graph`: same `HEAD` and the same
+set of modified `_bmad-output/` files at the start and end of both runs.
 
 **The first rehearsal found two regressions this release had introduced into the distribution's own
 `core/`** — a gate carrying the writing form of `derive-stories`, which a fixture's control arm
-exists to catch, and an origin tag in audited prose. Both were fixed before the merge and are in
-`932ee10`. The second rehearsal proved them gone on both arms, with the checks proven still able to
-fire: re-introducing each defect drove its check back to red.
+exists to catch, and an origin tag in audited prose. Both were fixed before the release merged, so
+whatever the skill pulls carries the fixes. The second rehearsal proved them gone on both arms, with
+the checks proven still able to fire: re-introducing each defect drove its check back to red.
 
 **Structural limits.** A `--local` clone carries committed state only, so nothing here certifies the
 four dirty hook-written files or any ledger receipt. The gate reset (step 4) needs a live gate and
