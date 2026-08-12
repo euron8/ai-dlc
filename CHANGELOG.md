@@ -34,6 +34,70 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.360.0] — 2026-08-12
+
+### The class nothing covered: a layer file reproducing a core line core has deleted
+
+0.359.0 made `retired-layer-contract.sh` say what its zero excludes. It did not close the
+exclusion. Two live findings on the reference consumer — both in `extensions/steps-domain/` —
+reproduce a deleted core directive as ordinary prose, and no detector in `reconcile/` opens that
+class: the shape matcher wants a labelled directive or a `{token}`, and `EXTENSION-RESTATES-CORE`
+(LC-E5) is a **title** join. Both findings were made by a human reading the entries.
+
+**The reframe that made it cheap.** The class was assumed to need fuzzy or semantic comparison.
+It does not. Both live findings reproduce the deleted core line **verbatim**, differing only in
+list numbering and emphasis — one restates core's superseded protocol as its own prose, one quotes
+core's superseded line inside an argument about core. Exact comparison after normalisation catches
+both, and carries none of the threshold-tuning a similarity score would need.
+
+**New `reconcile/retired-layer-passage.sh`**, wired into the update skill's detector sweep as
+step 3a-iv. It asks one question: does a layer file still contain a LINE core carried at base and
+deleted by theirs? Corpus is the same `setup-sites.md` `rulebook:` declaration its sibling reads,
+so a rulebook file added upstream is covered by both without editing either. Output is
+`RETIRED-LAYER-PASSAGE<TAB><layer-path>:<line><TAB><deleted core line>` — the sibling row contract,
+plus the line number.
+
+**FALSE-POSITIVE SET: MEASURED AND EMPTY.** Run across **20 consecutive release pairs** against
+the consumer's 45-file layer corpus:
+
+| base..theirs | removed lines | hits |
+|---|---|---|
+| `959e778..932ee10` | 60 | **2** — both true findings |
+| every other pair | 0–8 | 0 |
+
+Nineteen pairs are quiet because core rarely deletes substantive prose, and the one pair that did
+produced exactly the two real findings — so the instrument is quiet from absence, not blindness,
+and that pair is its own control.
+
+**A minimum word count was measured and rejected.** Floors of 6 and 8 words return the same 2 hits
+as no floor at all across all 20 pairs. It buys nothing measurable, so it does not ship — a knob
+with no measured benefit is mechanism the finding did not ask for, and a floor high enough to
+matter would have dropped one of the two true findings, which is nine words long. What does the
+work is exactness plus three structural exclusions (headings, table rows, fences).
+
+Both quiet paths carry their denominator from the start, rather than learning it the way the
+sibling did.
+
+### Fixed — an unquoted pathspec expanded against the caller's working tree
+
+`for glob in $GLOBS` puts git PATHSPECS through **shell pathname expansion** before git sees them.
+When the caller's cwd happens to contain matching files, bash substitutes real paths from the WRONG
+tree, and a rulebook file that exists at the ref but not in the caller's working tree is silently
+skipped — the detector then reports a smaller corpus with the same clean line.
+
+Found because the new fixture's seeded repo does not share the caller's layout, so the detector
+returned nothing where it should have returned two rows. **`retired-layer-contract.sh` carries the
+identical construct and is fixed in the same commit**; it had been correct only by the accident of
+running from a tree whose layout matched the pathspecs.
+
+### Performance
+
+The first working version normalised each layer line in its own subshell: **over 120s** on a
+45-file corpus. A validator's runtime is the suite's wall clock. Reshaped to one `grep -nxF -f`
+per file against the retired set — **0.78s**, same output.
+
+11 fixture arms, all green, 0.59s.
+
 ## [0.359.0] — 2026-08-12
 
 ### A detector that exited before opening a single file, and a fixture arm that certified the silence

@@ -178,6 +178,7 @@ core_manifest:
   - core/fixtures/resume-whole-read/**
   - core/fixtures/retired-contract-token/**
   - core/fixtures/retired-layer-contract/**
+  - core/fixtures/retired-layer-passage/**
   - core/fixtures/retired-fixture-orphan/**
   - core/fixtures/consumer-machinery-inventory/**
   - core/fixtures/retro-audit-scans/**
