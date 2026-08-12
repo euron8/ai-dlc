@@ -5,7 +5,8 @@
 
 ## ✅ DISCHARGED — SPENT. Do NOT execute this file.
 
-**Everything below is a record. Nothing in it is an instruction to a later session.** The release
+**Everything below is a record, with ONE exception named in `## Open candidate` immediately after
+this section.** Apart from that one item, nothing here is an instruction to a later session. The release
 shipped, the consumer pull completed, and the consumer is now at **0.360.0** — three releases past
 the one this plan delivers. The `⛔ FIRST ACTION` block that stood here told a resuming session to
 message a live consumer session mid-apply and to touch nothing until it replied; that session
@@ -38,10 +39,41 @@ live one.
   deleted. New `reconcile/retired-layer-passage.sh`, false-positive set measured empty across 20
   release pairs.
 
-**Still open, and NOT owed by this plan** — the only live item on this page: a
-`validate-plan-shape.sh` arm requiring every `## Rehearsal` finding to name the step its fix landed
-in, or declare itself a record. It is BOOKED item 3 below, and per this repo's rule its
-false-positive set must be measured before it ships.
+## Open candidate — available for a future session, owed by nobody
+
+**This is the one live item on this page.** It is a CANDIDATE, not committed work: it may be
+picked up, re-scoped, or dropped on measurement. Nothing about this plan's discharge depends on it.
+
+**A `validate-plan-shape.sh` arm requiring every `## Rehearsal` finding to name the step its fix
+landed in, or declare itself a record.**
+
+*The evidence it rests on, measured on this plan's own consumer runbook.* Findings that ended
+"now written into step X itself" were the ones actually repaired. Findings that did not were,
+exactly, the ones still live and blocking when a cold reader found them. **That single difference
+predicted the defect set.** A rehearsal that records a finding without landing it produces a
+document whose §Rehearsal reads as evidence of repair while the steps still carry the defect.
+
+*What a future session must do FIRST, and the reason it is not already built.* Per `CLAUDE.md`,
+measure the false-positive set over `docs/plans/*.md` and ship only if it is empty or enumerated.
+An unmeasured lint is one the operator turns off. **That order is not ceremony — it decided the
+outcome twice in the session that discharged this plan:** a dormant-role guard was measured, found
+to be reading the wrong signal (a name scan scored `ops` at 3 when only 1 was a dispatch), and
+NOT shipped; a passage-level detector was measured across 20 release pairs, came back with an
+empty false-positive set, and shipped as 0.360.0. Same discipline, opposite answers.
+
+*A second arm, same family, weaker evidence.* `validate-plan-shape.sh`'s P4 checks that a
+`path:line` resolves NUMERICALLY, not that the content at that line matches — so it cannot see a
+stale citation, and saw none of the staleness defects this program produced. Claims of the form
+"`main` carries X", "ref Y exists", "sha Z is reachable" are mechanically checkable against the
+actual repo. Treat as a separate candidate with its own measurement; do not fold it in.
+
+*Known false-positive sources to look for before believing an empty set.* A §Rehearsal that is
+deliberately a record of a run rather than a defect list; a finding whose fix landed in a
+different file than a step; a finding correctly dispositioned as "no change needed". Each needs a
+declared form, and per this repo's history a declared exemption is itself a defect worth counting.
+
+Fuller framing, including the arm this supersedes, is in **BOOKED item 3** below — which is
+history, where this section is the live pointer.
 
 ### The two repos
 
@@ -331,6 +363,10 @@ starts from the finding rather than re-discovering it:
    `_bmad-output/` comment block. The actual `.claude/*` narrowing is `.gitignore:41-45`. An
    operator who follows the pointer the failure hands them lands on the wrong block.
 3. **A candidate mechanism for the class this release kept producing — measure before shipping.**
+   **SUPERSEDED AS A POINTER: the live home for this is `## Open candidate` near the top of this
+   file.** What follows is the original framing, kept because it is the evidence, and left here
+   rather than duplicated upward. Do not treat this entry as the actionable one — two live homes
+   for one item is how a candidate gets picked up twice or not at all.
    Two arms, both derivable, neither built:
    - *A rehearsal finding must name where its fix landed.* Measured on this release's own runbook:
      items that ended "now written into step X itself" were the ones actually repaired; items that
