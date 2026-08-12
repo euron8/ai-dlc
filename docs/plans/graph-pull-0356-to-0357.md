@@ -3,10 +3,10 @@
 **Status: READY TO RUN.** 0.357.0 is merged to the distribution's `main` (PR #534). Not yet run
 against the live consumer.
 
-**No sha is written down in this file, deliberately.** `main` moves whenever anything lands on it,
-including a docs commit to this very file, and a hardcoded sha silently falsifies the criterion that
-compares against it. Everywhere a ref is wanted, it is `origin/main`; everywhere a sha is wanted,
-derive it.
+**No ref and no sha are written down in this file, deliberately.** The skill pulls latest by
+default; it resolves the distribution ref itself. Nothing here needs to name one, and a name written
+down goes stale the moment anything lands — including a docs commit to this very file, which is how
+the previous revision falsified its own acceptance criterion.
 
 **The pull itself is the `ai-dlc-update` skill's job, and this file does not re-describe it.** An
 earlier draft walked the pull step by step and every one of those steps was a restatement of
@@ -26,8 +26,8 @@ invoke it at all. If yours is, stop and ping the operator for a restart.
 
 Two repos, and the boundary is absolute.
 
-- **Distribution — `/Users/n8/git/ai-dlc`. Read it, never write it.** `main` carries `VERSION`
-  `0.357.0`. Wherever a ref is wanted, it is `origin/main`.
+- **Distribution — `/Users/n8/git/ai-dlc`. Read it, never write it.** It carries 0.357.0. The skill
+  reads it; you do not need to name a ref into it.
 - **Consumer — `/Users/n8/git/graph`, the tree you WRITE.** Mid-sprint s302, stopped and committed
   at `0fd25d10d` *"handoff mid [story]-gate adjudication cascade (pass 11 of 11 FAIL, pass 12
   stopped)"*. Stamp reads `version: 0.356.0` / `commit: 959e778`.
@@ -68,6 +68,23 @@ session reporting.
    ping the operator — a branch that is ahead gets auto-pushed, and what is on it is not this
    runbook's to publish.
 
+   **Then record the starting commit. Everything later in this file refers to it, and no sha is
+   written down here because the consumer is live and its HEAD moves.**
+
+   ```
+   git rev-parse HEAD
+   ```
+
+   Call that **`START`**. It is the pre-pull state, the fan-out base, and the only restore point
+   §Abort has. Keep it where you can paste it — the apply moves `HEAD` off this commit and off this
+   branch, so you cannot re-derive it afterwards.
+
+   Record the stamp too, for the same reason — it is what criterion 1 compares against:
+
+   ```
+   cat .claude/.ai-dlc-version
+   ```
+
 2. **Run the pull.** Invoke the `ai-dlc-update` skill — bare for the dry run, then with `apply`
    after reading the report. These are skill invocations, not shell commands; `ai-dlc-update` is
    not on `PATH`.
@@ -100,7 +117,7 @@ session reporting.
    b. Derive the repair fan-out rather than sweeping by memory:
 
       ```
-      bash scripts/ai-dlc/report-propagation-fanout.sh 0fd25d10d~1 0fd25d10d --sprint s302
+      bash scripts/ai-dlc/report-propagation-fanout.sh "$START~1" "$START" --sprint s302
       ```
 
       Two refs deliberately: that gives the committed-state answer. Exit 3 means the scope never
@@ -118,16 +135,10 @@ session reporting.
 
 ## Done when
 
-1. **The stamp carries this release on all four lines** — `0.357.0` on the two version lines and
-   the sha `origin/main` resolved to on the two commit lines. Derive the sha rather than writing
-   one down:
-
-   ```
-   s=$(git -C /Users/n8/git/ai-dlc rev-parse --short origin/main)
-   grep -cE "0\.357\.0|$s" .claude/.ai-dlc-version
-   ```
-
-   Expect 4. Checking for `0.357.0` alone returns 2 and reads a correct apply as a failure.
+1. **All four stamp lines advanced.** `cat .claude/.ai-dlc-version` and compare against the reading
+   you recorded in step 1: both version lines now say `0.357.0`, and both commit lines differ from
+   what they said before. Compare against your own recorded reading rather than against a sha named
+   here — a stamped sha is whatever the skill pulled, and this file does not know it.
 
 2. **`scripts/ai-dlc/validate-hook-registration.sh` exits 0** with `UNREGISTERED: none` and
    `DANGLING: none`. It runs inside `apply.sh` too. Two hooks get registered by the settings
@@ -139,7 +150,7 @@ session reporting.
    run the Rule 12 escalation — do not dispatch a fourth pass.
 
 4. **The fan-out worklist is non-empty and its items are checked.** Roughly ten against
-   `0fd25d10d~1..0fd25d10d`, including a citation from a story file into `docs/architecture.md`.
+   `START~1..START`, including a citation from a story file into `docs/architecture.md`.
    Control: `--no-frozen` returns a much larger set, which shows the filter is doing work rather
    than the corpus being empty.
 
@@ -177,23 +188,23 @@ dirty files, which would have published s302 state mid-sprint.
 
 ## Abort
 
-**`0fd25d10d` is the restore point, and you must name it in the command.** No step here commits,
-but **the skill does**: on apply it cuts a reconcile branch off the sprint branch, commits its
-writes there, pushes it, and opens a PR. So after the apply `HEAD` is NOT `0fd25d10d` and it is not
-the sprint branch — a bare `git checkout -- <path>` restores from the post-apply commit, which is a
-silent no-op that looks like it worked.
+**`START` — the commit you recorded in step 1 — is the restore point, and you must name it in the
+command.** No step here commits, but **the skill does**: on apply it cuts a reconcile branch off the
+sprint branch, commits its writes there, pushes it, and opens a PR. So after the apply `HEAD` is
+neither `START` nor the sprint branch — a bare `git checkout -- <path>` restores from the post-apply
+commit, which is a silent no-op that looks like it worked.
 
-- **The apply goes wrong** — restore with `git checkout 0fd25d10d -- <path>`, anchored to the ref.
-  **Name the paths.** `git checkout 0fd25d10d -- .` would revert the `_bmad-output/` state files
-  and destroy s302's in-flight work.
-- **Paths the apply CREATED are not in `0fd25d10d`** — this release adds fixtures and a hook that
-  do not exist on the consumer yet, and `git checkout` cannot restore a file to not existing. It
+- **The apply goes wrong** — restore with `git checkout "$START" -- <path>`, anchored explicitly.
+  **Name the paths.** `git checkout "$START" -- .` would revert the `_bmad-output/` state files and
+  destroy s302's in-flight work.
+- **Paths the apply CREATED are not in `START`** — this release adds fixtures and a hook that do
+  not exist on the consumer yet, and `git checkout` cannot restore a file to not existing. It
   errors and leaves them. Reverting the modified files without removing the created ones leaves a
   half-pulled tree. **Do not reach for `git clean`** — it would take the `_bmad-output/` state with
   it. Stop and ping the operator.
 - **The settings reconcile damages `settings.json`** — it preserves consumer-owned keys
   (`env.AI_DLC_MODEL_ROW`, permissions, mcpServers, statusLine). If any is lost, restore that file
-  alone with `git checkout 0fd25d10d -- .claude/settings.json` and ping the operator before
+  alone with `git checkout "$START" -- .claude/settings.json` and ping the operator before
   re-running.
 - **The gate reset loses a verdict file** — stop. The eleven retired verdicts are evidence; a reset
   that deletes is a defect in the reset, not a step to work around.
