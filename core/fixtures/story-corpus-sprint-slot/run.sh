@@ -58,11 +58,26 @@ story() { # <dir> <basename> <status>
     "$3" > "$1/$2.md"
 }
 
+# The waiver path's two inputs: a story whose Dev Agent Record claims lead self-execution, and the
+# escalations file that is supposed to authorize it.
+selfexec_story() { # <dir> <basename>
+  mkdir -p "$1"
+  printf -- '---\nstatus: done\n---\n\n# story\n\n## Dev Agent Record\n\nModel: lead (self-executed) — see waiver\n' \
+    > "$1/$2.md"
+}
+escalations() { # <root>  (body on stdin)
+  mkdir -p "$1/docs/escalations"; cat > "$1/docs/escalations/pending.md"
+}
+
 # The two tools under test, driven exactly as a consumer drives them: validate-mandatory-rules.sh
 # from the project root (every path in it is cwd-relative), sprint-status.sh with --root.
 check6() { # <root> [tool-dir] -> the Check 6 verdict line
   local r="$1" td="${2:-$1/scripts/ai-dlc}"
   ( cd "$r" && bash "$td/validate-mandatory-rules.sh" 302 2>&1 ) | grep -E '^  CHECK 6:'
+}
+check6_detail() { # <root> [tool-dir] -> the Check6_DEV_AGENT_RECORD failure detail line
+  local r="$1" td="${2:-$1/scripts/ai-dlc}"
+  ( cd "$r" && bash "$td/validate-mandatory-rules.sh" 302 2>&1 ) | grep -E '^\[Check6_DEV_AGENT_RECORD\]'
 }
 stories_check() { # <root> [tool] -> stdout+stderr, sets SC_RC
   local r="$1" tool="${2:-$1/scripts/ai-dlc/sprint-status.sh}"
@@ -170,6 +185,41 @@ battery() { # $1 = the directory holding the two tools under test
   stories_check "$t"
   if [ "$SC_RC" -eq 0 ] && grep -q 'PASS — 4 comparison(s)' <<<"$SC_OUT"; then
     echo "A10 PASS"; else echo "A10 FAIL"; fi
+
+  # --- A11: the self-execution waiver still lifts when the escalation entry that NAMES the story
+  # carries the token. This is the arm that keeps A12 honest: a predicate that denied everything
+  # would satisfy A12 alone and look like the fix.
+  t="$(fresh "$TOOLS")"
+  selfexec_story "$t/$MIG" story-1-alpha
+  escalations "$t" <<'ESC'
+## [Sprint-302 / Story 302-1 self-execution] Lead - 2026-08-11
+**Status:** DECIDED_AUTONOMOUSLY
+**Context:** covered.
+ESC
+  if [[ "$(check6 "$t")" == *"PASS — 1 story file(s) verified"* ]]; then
+    echo "A11 PASS"; else echo "A11 FAIL"; fi
+
+  # --- A12: a NEIGHBOURING entry's token does not waive this story. THE ARM THAT MATTERS HERE.
+  # The story is named in one entry whose status is `RESOLVED`; the `DECIDED_AUTONOMOUSLY` five
+  # lines below belongs to the NEXT entry. That is the exact shape the reference consumer's
+  # `pending-archive.md:641/:646` has, and under the old `grep -A 5` proximity match it passed.
+  # Asserted on the failure detail naming this story, not on the absence of the pass line — two
+  # different reasons to lose that line and only one of them is this arm's.
+  t="$(fresh "$TOOLS")"
+  selfexec_story "$t/$MIG" story-1-alpha
+  escalations "$t" <<'ESC'
+## [Sprint-302 / Model-strategy note] Lead - 2026-08-11
+**Status:** RESOLVED
+**Context:** Stories covered by this note: story-302-1.
+
+---
+
+## [Sprint-302 / A different finding] qa - 2026-08-11
+**Status:** DECIDED_AUTONOMOUSLY
+**Context:** unrelated to the entry above.
+ESC
+  if [[ "$(check6_detail "$t")" == *"no DECIDED_AUTONOMOUSLY or HARD_BLOCK waiver for 'Story 302-1'"* ]]; then
+    echo "A12 PASS"; else echo "A12 FAIL"; fi
 }
 
 echo "story-corpus-sprint-slot:"
@@ -180,7 +230,7 @@ FAILED="$(battery "$TD_REAL" | awk '$2=="FAIL"{printf "%s ", $1}')"
 if [ -n "$FAILED" ]; then
   bad "battery failed on the SHIPPING tools: $FAILED"
 else
-  ok "all 10 assertions pass on the shipping tools"
+  ok "all 12 assertions pass on the shipping tools"
 fi
 
 # =============================================================================
@@ -233,6 +283,11 @@ mutant A9 "index glob widened to a prefix match" ss \
 # is the restatement I84 bans. It then cannot follow the declaration when it moves.
 mutant A10 "corpus literal restated instead of resolved" ss \
   's|^    return STORIES_DIR_T.replace(SPRINT_SLOT, str(sprint))$|    return "_bmad-output/planning-artifacts/s%s/stories" % sprint|'
+# A12: delete the one line that closes the match window at an entry boundary. What is left is the
+# proximity match this release replaced -- same 5 lines, now free to run into the next entry. The
+# mutation is exactly the layer under test, and A11 staying green is what says so.
+mutant A12 "waiver window free to cross an entry boundary again" vmr \
+  '/^          \/\^## \/ { win = 0 }/d'
 
 # --- Unmutated control -------------------------------------------------------
 # A copy in the same directory shape as the mutants, mutated not at all. Without it, a harness
