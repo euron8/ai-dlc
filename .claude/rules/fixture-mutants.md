@@ -19,4 +19,16 @@ paths:
   emits nothing, and "no output" otherwise scores as a kill.
 - Assert a **positive outcome**, not the absence of the old failure message.
 - A mutant must fail **only** its own assertion. Two failures mean the
-  assertions are entangled and one of them is vacuous.
+  assertions are entangled and one of them is vacuous. When both findings are
+  genuinely true, the arms overlap rather than the mutant being wrong: decide
+  which arm OWNS the case and make the other stand down for it.
+- **Keep the fixture's author different from the arm's, deliberately.** An arm
+  and a battery written by the same hand cannot disagree — they encode one
+  understanding twice, and a false pass has an unreachable half nobody sees.
+- **Never seed from what the reader accepts.** Seed from what the real producer
+  emits. A seed derived from the reader's accept-set proves the reader accepts
+  its own grammar and nothing else, and it stays green through a change to both.
+- **A fixture whose tree cannot EXPRESS the defect proves nothing.** Check the
+  seed can actually reach the branch under test, exercise a layout-conditional
+  resolver against every root shape it claims to handle, and give the unit a
+  positive control so a harness that died reports as broken rather than as clean.

@@ -106,14 +106,38 @@ loads once, early, and is then **permanently gone for the rest of the session** 
 of a matching file does NOT bring it back. Only rules with no `paths:` are re-injected
 (`load_reason:"compact"`), and this file is too.
 
-So the test for moving a section here is not just "does the work begin with a matching read".
-It is **also** "is this rule carried by a mechanism that runs anyway". All three moved rules
-are: `validate-mutation-red.sh`, I74 plus install.sh's `.dist-only` derivation, and
-`validate-plan-shape.sh`. **A prose-only rule — one with no enforcer — must stay in this file**,
-which is why "a zero is not a finding" and "prohibitions need mechanisms" did. Moving one into
-`.claude/rules/` would delete it from every session that has compacted once, silently.
+So the test for moving a section to a SCOPED file has three clauses, and all three must hold.
+"Does the work begin with a matching read", **and** "is this rule carried by a mechanism that
+runs anyway", **and** — the clause the first two hid — **"does no subagent need it"**. A
+scoped rule loads inside a subagent only and never reaches the parent, while this file reaches
+both, so any rule binding delegated work cannot be scoped. Delegation is normal here, which
+makes that clause decide real placements rather than edge cases.
 
-Today: `fixture-mutants.md`, `fixture-ship-decl.md`, `plan-shape.md`,
+**A prose-only rule — one with no enforcer — must not be SCOPED**, which is why "a zero is not
+a finding" and "prohibitions need mechanisms" stayed here. Scoping one deletes it from every
+session that has compacted once, silently.
+
+**A rule that fails the scoping test is not thereby confined to this file.** A
+`.claude/rules/` file carrying **no `paths:` key** is re-injected on compaction exactly as
+this one is, so the durable channel is this file plus those. That is where the topical
+rulebooks live — one subject per file, each diffable and reviewable on its own, with this file
+as the index. `paths:` or an `<!-- unconditional: <reason> -->` marker, never neither and
+never both; arm A3b fails the push on either, because the two states are otherwise
+byte-indistinguishable and differ by a cost paid on every compaction of every session. Arm A6
+holds the whole channel to a byte ceiling.
+
+**The unconditional rulebooks**: [`verification-discipline.md`](.claude/rules/verification-discipline.md)
+(how a thing is established true here), [`tool-hazards.md`](.claude/rules/tool-hazards.md)
+(tool behaviours that return a wrong answer rather than an error),
+[`consumer-boundary.md`](.claude/rules/consumer-boundary.md) (what a session may write, and
+why a green push here proves nothing about a consumer),
+[`mechanism-design.md`](.claude/rules/mechanism-design.md) (how to build an enforcer once you
+have decided to), [`resident-context.md`](.claude/rules/resident-context.md) (what may occupy
+this channel and what it costs), and
+[`operator-rulings.md`](.claude/rules/operator-rulings.md) (standing decisions, including that
+merges are preapproved and that every claim is ground-truth sourced).
+
+**The scoped rules today**: `fixture-mutants.md`, `fixture-ship-decl.md`, `plan-shape.md`,
 `plan-shape-measured.md`. Both directions are bound by **arms A1–A4 of
 `scripts/validate-claude-rules.sh`** — a rule with no reader and a pointer with no rule both
 fail the push. That validator is a standalone script and deliberately NOT an arm inside
@@ -174,6 +198,19 @@ under `.claude/` that is not `.claude/rules/**/*.md`. Force-tracking a hook file
 `core/fixtures/plan-shape/.dist-only` already declares.
 
 **Promote the file the moment it becomes a handoff. The reader is the enforcement.**
+
+## The evidence behind these rules is not in this repo
+
+Almost every rule here and in `.claude/rules/` was learned from a specific measured failure,
+and those episodes live in the operator's per-project memory directory at
+`~/.claude/projects/-Users-n8-git-ai-dlc/memory/` — outside the tree, indexed by its own
+`MEMORY.md`. Read it when a rule looks arbitrary; the episode usually explains a clause that
+reads as over-specified.
+
+**No gate reaches that directory**, because it is outside the tree the suite hashes. Nothing
+here can hold it accurate and nothing tries to. What it holds is EVIDENCE. When an episode
+there turns out to carry a standing rule, the rule belongs in this file or in a rulebook
+beside it — the corpus is where a lesson is recorded, never where it is enforced.
 
 ## Two layouts
 

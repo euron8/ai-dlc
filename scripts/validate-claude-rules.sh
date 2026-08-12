@@ -284,12 +284,26 @@ fi
 # files, and importing it here would import a calibration taken over a different
 # population. Bytes are what this arm can actually observe.
 #
-# The ceiling is a POLICY NUMBER, not a measurement, and it is the operator's to set --
-# `AI_DLC_DURABLE_BYTES` overrides it, the same way AI_DLC_REATTACH_BUDGET overrides that
-# one. The default is sized for the authoring rulebook plus the topical unconditional rule
-# files it is being split into.
+# THE CEILING IS A POLICY NUMBER, NOT A MEASUREMENT, and it is the operator's to set;
+# `AI_DLC_DURABLE_BYTES` overrides it the way AI_DLC_REATTACH_BUDGET overrides that one.
+#
+# IT HAS BEEN RAISED ONCE AND THAT IS THE INTERESTING PART. The first value was picked
+# before the rulebooks it was meant to bound had been written -- an estimate of six files at
+# the then-current per-file mean. The files landed larger, and the arm fired on the very
+# change that created them. It was raised to the measured channel plus modest headroom,
+# because the alternative was cutting rule prose to fit a number invented before the prose
+# existed, and `.claude/rules/resident-context.md` establishes that rule text here is not
+# trimmed for byte cost.
+#
+# RAISING IT A SECOND TIME TO ADMIT NEW PROSE IS HOW THIS GUARD BECOMES DECORATIVE. The
+# number exists so that growth in the one channel re-injected on every compaction of every
+# session is a decision somebody makes, rather than a drift nobody measures. When this fires,
+# the first question is what can be MECHANIZED or SCOPED out of the channel -- a rule with an
+# enforcer belongs in the enforcer's header, and a rule whose work reliably begins with a
+# matching read belongs behind `paths:`. Raising the ceiling is the last resort, not the
+# first, and it is the operator's call rather than the author's.
 # ---------------------------------------------------------------------------
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-32768}"
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-40960}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

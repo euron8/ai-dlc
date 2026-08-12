@@ -34,6 +34,59 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.363.0] — 2026-08-12
+
+### 24 standing rules moved out of an untracked home directory and into the repo
+
+The rules governing work here lived in four places and only two were in git. The fourth was
+**213 untracked markdown files in the operator's home directory**, deduplicating to 46 standing
+rules — invisible to every reviewer, surviving no machine change, reachable by no gate. Of those,
+**24 had no tracked home at all**, including every one of the operator's own standing rulings, the
+wall-clock cost model, the finding-severity vocabulary, and this repo's resident-context
+discipline. `core/rules/ai-dlc-resident-discipline.md` declares itself the CONSUMER's carrier;
+the version binding this repo did not exist.
+
+**Six unconditional rulebooks under `.claude/rules/`**, each with a non-empty
+`<!-- unconditional: -->` marker and a `CLAUDE.md` pointer:
+`verification-discipline.md` (how a thing is established true — self-probe before corpus, a
+control that agrees with the verdict is not a control, run the shipping code, verify the premise,
+what SET a number was taken over, key a binding on the emission site, walk up for a marker, an
+empty glob is not a pass, a calibration is a property of its text);
+`tool-hazards.md` (zsh has no `PIPESTATUS`, EPIPE under `pipefail`, BSD grammars, git's default
+lies, the bash 3.2 floor); `consumer-boundary.md` (never write a consumer, rehearse on a clone,
+a consumer runs its OWN installed engine, packaging rots in several places at once);
+`mechanism-design.md` (grep before building, cite rather than restate, a join that cannot fail,
+a vacuous guard, remove the affordance, KISS applies to rules too);
+`resident-context.md` (which of the three channels you are writing into, and what each costs);
+`operator-rulings.md` (**merges are preapproved** and **every claim is ground-truth sourced**,
+now standing rather than restated per prompt).
+
+**Unconditional is now a DECLARATION rather than an absence.** A rule file with no `paths:` key
+is re-injected on every compaction, which is what makes these six work; it is also what an
+accidentally-deleted `paths:` line looks like. Arm A3b tells them apart and the marker's reason is
+required non-empty.
+
+**`CLAUDE.md`'s scoping test gained the clause the first two hid.** A scoped rule loads inside a
+subagent only and never reaches the parent, so a rule binding delegated work cannot be scoped —
+and delegation is normal here. Three clauses now, all of which must hold.
+
+**The durable-channel ceiling fired on the change that created the channel**, which is the useful
+part. 38,751 bytes against a 32,768 ceiling picked before the rulebooks were written. The ceiling
+was raised to the measurement plus headroom rather than the prose being cut to fit it, because
+`resident-context.md` establishes that rule text here is not trimmed for byte cost — and the
+script now says plainly that raising it a second time to admit new prose is how the guard becomes
+decorative, and that mechanizing or scoping a rule out of the channel is the first move instead.
+
+**Zero findings added at any tier**: the rule-file audit scans `.claude/rules/`, and its corpus
+went 70 → 76 files with tier-1 CLEAN and 23 total findings, both equal to the pre-change baseline.
+That constrained the writing — no version tags, no sprint ids, no dates, no origin parentheticals
+in bare prose — and the constraint is correct: a rule that needs a version number to be true is
+not yet a rule.
+
+`fixture-mutants.md` also gained the three clauses its subject was missing: which arm OWNS an
+overlapping case, keep the battery's author different from the arm's, and never seed from what the
+reader accepts.
+
 ## [0.362.0] — 2026-08-12
 
 ### The rulebook's citations, its scope declarations, and the one channel with no budget
