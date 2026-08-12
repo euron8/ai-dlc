@@ -14,8 +14,14 @@ something the skill already owns — which is how they went stale. The skill res
 its own self-update, carries the machinery slice, emits the worklist, and tells you when the
 settings reconcile is needed. Follow what it prints.
 
-What this file is for is the part no skill does: **resetting the s302 `[story]` gate and re-running
-it clean**, which is how this release gets tested end to end this sprint rather than next.
+What this file is for is the part no skill does: **resetting the s302 `[story]` gate.** The reset
+only. Re-running the gate is a pipeline resume, the operator has deliberately kept that out of this
+plan, and `_bmad-output/pipeline-paused.flag` is the seam between the two — it is present on this
+consumer, it blocks pipeline-step execution, and **this run does not clear it.**
+
+**So this run does NOT test the release end to end, and must not report that it did.** The stall
+rung's live behaviour is exercised whenever the operator resumes the pipeline, which is a separate
+decision on their own schedule.
 
 ## Start here
 
@@ -106,7 +112,8 @@ session reporting.
    bash .githooks/pre-push
    ```
 
-4. **Reset the s302 `[story]` gate and re-run it clean.** This is the step this runbook exists for.
+4. **Reset the s302 `[story]` gate — 4a, 4b and 4c, then STOP.** This is the step this runbook
+   exists for, and it ends at the reset. Do not re-run the gate; see 4d.
 
    a. Mint a new `gate_series_id`. **Retain all eleven existing verdict files** —
       `_bmad-output/gate-adjudication/story-20260811T*.verdict.json`, untouched. A reset deletes
@@ -132,8 +139,11 @@ session reporting.
       not apply these edits; the new PreToolUse guard will deny it, and that denial is the release
       working.
 
-   d. Run gate validation `[story]` from pass 1 on the repaired corpus. The stall rung counts the
-      new series only, so it fires only if the *new* loop stalls.
+   d. **STOP. Do NOT run gate validation `[story]`, and leave `_bmad-output/pipeline-paused.flag`
+      exactly where it is.** Running the gate from pass 1 on the repaired corpus is a pipeline
+      resume; the operator has separated it from this plan and will schedule it independently.
+      Clearing the flag is their decision alone — an authorization to dispatch the `remediator` in
+      4c does not cover it, and neither does any instruction in this file.
 
 5. **Verify** against §Done when, then **hand off**: what is done, what is untouched, the resume
    point. Ping the operator.
@@ -150,9 +160,15 @@ session reporting.
    reconcile: this release's `ai-dlc-gate-remediation-guard.sh`, and `ai-dlc-rules-floor.sh`, which
    has been present-but-unregistered for six releases. One would mean the merge under-reached.
 
-3. **The reset `[story]` gate either CLOSES, or STALLS AND ESCALATES BY PASS 3.** Either is a
-   passing test of this release. **The eleven-pass shape is the failure.** If the stall rung fires,
-   run the Rule 12 escalation — do not dispatch a fourth pass.
+3. **The gate is RESET and NOT re-run.** A new `gate_series_id` exists; all eleven prior verdict
+   files are still on disk; `_bmad-output/pipeline-paused.flag` is still present. Observation
+   point: after 4c, with nothing run against the gate afterwards.
+
+   **What this run therefore does NOT establish, and must not be reported as establishing:** the
+   stall rung's live behaviour. Whether the reset gate closes or stalls and escalates by pass 3 is
+   the end-to-end test of this release, it requires the pipeline resume the operator has kept out
+   of this plan, and it happens on their schedule rather than in this run. Report the rung as
+   UNTESTED-LIVE.
 
 4. **The fan-out worklist is non-empty and its items are checked.** Roughly ten against
    `START~1..START`, including a citation from a story file into `docs/architecture.md`.
