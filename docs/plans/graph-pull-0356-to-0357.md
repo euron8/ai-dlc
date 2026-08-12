@@ -90,9 +90,14 @@ session reporting.
    not on `PATH`.
 
    Do what the report and the apply manifest tell you, including the settings reconcile if it asks
-   for one — `apply.sh` prints the exact command, with the operator's `--model-row` answer being
-   the reason that step is not automatic. Ping the operator for the ledger scope if the report does
-   not settle it.
+   for one. The command it prints is a template with placeholders, not something to paste
+   unmodified. Ping the operator for anything the report does not settle.
+
+   **The apply does not land on the sprint branch.** The skill cuts a reconcile branch, commits its
+   writes there, pushes it and opens a PR, and it merges only on explicit operator approval — it
+   does not auto-merge. So `HEAD` moves off the sprint branch, and the pull is not on the sprint
+   branch until that PR is approved. Ping the operator when the PR is open, and say what step 4
+   still needs.
 
 3. **Run the consumer's pre-push suite.** `core.hooksPath` is unset here, so `git push` runs none
    of it:
