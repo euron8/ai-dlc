@@ -180,6 +180,41 @@ render() {
   reloc="$(printf '%s\n' "$pc" | awk -F'\t' '$4 ~ /^RELOCATE-MOVE/ {print $4"  "$2}' | sort -u)"
   none_or "$reloc"
 
+  # HOOK REGISTRATION — the half of a hook delivery that no driver performs.
+  #
+  # `apply.sh` writes `.claude/hooks/ai-dlc-<x>.sh` mechanically; `settings-merge.sh` wires it
+  # up and NOTHING CALLS `settings-merge.sh` — its only two invocation sites are prose, in
+  # SKILL.md. A skipped prose step therefore ships a hook that is on disk, looks installed, and
+  # never fires, and there is no absence anywhere for anyone to notice. Rendering the join here
+  # puts it inside the --verify'd region for the same reason every other detector is here: a
+  # finding the narrator can drop is a finding that gets dropped.
+  #
+  # THIS IS A STATE CHECK, NOT A DELTA CHECK, which is what makes it worth a section. Every
+  # other row above answers "what changed base->theirs"; a settings.json that has been stale
+  # since an earlier pull produces no delta at all — preclassify buckets it
+  # TEMPLATE-UNCHANGED-NOOP whenever the template itself did not move — so the already-broken
+  # consumer is exactly the one the delta view cannot see. Measured on the reference consumer
+  # while this was written: `ai-dlc-rules-floor.sh` present and unregistered since v0.350.0,
+  # six releases, with the template untouched for most of them.
+  #
+  # RUN THEIRS' COPY, not the consumer's: the pull that first DELIVERS this validator must
+  # already be able to report with it, and at step 5 nothing has been written to the consumer
+  # yet. A temp copy is safe here only because the validator resolves everything it reads from
+  # its `--root` argument and nothing from its own location — running a validator from /tmp is
+  # otherwise how a missing sibling gets reported as a failed check.
+  sub "Hook registration (every shipped ai-dlc hook is wired in .claude/settings.json — a present-but-unregistered hook never fires):"
+  local hrv hro
+  hrv="$(mktemp)"
+  if git -C "$DIST" show "$THEIRS:core/scripts/validate-hook-registration.sh" > "$hrv" 2>/dev/null && [ -s "$hrv" ]; then
+    hro="$(bash "$hrv" --root "$CONSUMER" 2>&1)"
+  elif [ -x "$CONSUMER/scripts/ai-dlc/validate-hook-registration.sh" ]; then
+    hro="$(bash "$CONSUMER/scripts/ai-dlc/validate-hook-registration.sh" --root "$CONSUMER" 2>&1)"
+  else
+    hro="  validator absent at ${THEIRS}:core/scripts/validate-hook-registration.sh and on the consumer — NOT CHECKED (this is not a pass)"
+  fi
+  rm -f "$hrv"
+  printf '%s\n' "$hro" | grep -v '^hook-registration: root '
+
   sub "Blocking-layer (HARD-* — blocks apply):"
   bash "$SELF/hard-blockers.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null \
     | sed '/BEGIN GENERATED: hard-blockers/d;/END GENERATED: hard-blockers/d'

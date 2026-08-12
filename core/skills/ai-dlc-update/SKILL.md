@@ -1443,6 +1443,41 @@ prose is itself generated rather than composed.
    manifest. This gate covers the sites that remain — ownership paths and
    deploy/smoke commands.
 
+   **Hook-registration gate — hard, runs after the last write, blocks delivery.**
+
+   ```
+   scripts/ai-dlc/validate-hook-registration.sh
+   ```
+
+   Exit 0 required, same place in the sequence as the two gates above — after the
+   last write, before delivery. It asserts that every `.claude/hooks/ai-dlc-*.sh`
+   on disk is registered in `.claude/settings.json`, and that every registration
+   names a hook that is there. Both sides are derived; nothing is hand-listed.
+
+   A nonzero exit is a FAIL. STOP and run the settings reconcile — the
+   `TEMPLATE-JSON-MERGE` bullet above is the same command — then re-run this gate
+   until it exits 0. Exit 2 means the check could not run at all, which is a FAIL
+   for the same reason: an unknown reads exactly like a clean.
+
+   *Why this exists.* The two halves of a hook delivery are enforced differently.
+   `apply.sh` writes the hook FILE mechanically, with a manifest row. The
+   REGISTRATION is `settings-merge.sh`, and its only invocation sites in the whole
+   distribution are prose — the two in this file. A pull that skips them ships a
+   hook that is on disk, looks installed, and never fires, with no error and no
+   absence anywhere to notice. `apply.sh` now emits a `WORKLIST settings-merge` row
+   naming each such hook at the moment it creates the state; this is the gate that
+   makes the row impossible to walk past.
+
+   *Why it does not key on the `TEMPLATE-JSON-MERGE` bucket.* That bucket is a
+   DELTA — preclassify emits it only when the template itself moved between `base`
+   and `theirs`, and `TEMPLATE-UNCHANGED-NOOP` otherwise. A consumer whose
+   settings.json went stale on an EARLIER pull produces no delta at all, so the
+   bucket is silent on exactly the tree that is already broken. This gate reads
+   disk state, so it fires on that tree too. Measured on the reference consumer
+   while it was written: `ai-dlc-rules-floor.sh` — which `install.sh` calls "the
+   SINGLE detector, running every session" — present and unregistered for six
+   releases, across pulls that reported success.
+
    - Re-stamp the rulebook base: set `version`/`commit` = `<theirs-version>` /
      `<theirs-sha>`, **preserving `skill_version`/`skill_commit`/`installed_at`/
      `upstream`** (rewrite the whole stamp in schema — never collapse it to the

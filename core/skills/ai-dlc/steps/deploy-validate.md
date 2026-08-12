@@ -167,7 +167,8 @@ Run live smoke tests and **capture output**:
 2. Diagnose the failure — is it a deployment issue or a code issue?
 3. If code issue: route back to the dev teammate to fix, re-deploy,
    and re-run smoke tests.
-4. If deployment issue: fix the deployment and re-run smoke tests.
+4. If deployment issue: route back to the dev teammate to fix the
+   deployment, re-deploy, and re-run smoke tests.
 5. Repeat until all smoke tests pass.
 A deployment with failing smoke tests is a broken deployment. Do not
 present it to the human for validation.

@@ -203,11 +203,11 @@ features. Do NOT create stories here — that happens in
 stories-test-strategy after the full planning cycle.
 
 The discovery step will:
-- Update the product brief with carry-over scope
+- Dispatch the `pm` to update the product brief with carry-over scope
 - Extract LOCKED_REQUIREMENTS from carry-over items
 
 The research-requirements step will:
-- Update the PRD with carry-over requirements
+- Dispatch the `pm` to update the PRD with carry-over requirements
 
 The architecture step will:
 - Assess architecture impact of carry-over items

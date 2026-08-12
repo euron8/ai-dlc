@@ -261,7 +261,8 @@ checks:
       - site: gate-validation.md Check 16
         posture: FAILS the gate on exit 1 and on exit 2; exit 4 is the non-vacuity
           sub-clause
-        why: every element of this check was published as a literal regex -- a marker
+        why: >-
+          every element of this check was published as a literal regex -- a marker
           grep, an item-reference regex, a backlog-status regex, a digit-only file:line
           regex, and a length floor beside a density rule given as an exact shell
           pipeline -- and the row carried no enforcer, so an agent performed that
@@ -313,7 +314,8 @@ checks:
         posture: FAILS the gate CLOSED on exit 1, which names one of four causes; exit
           2 is a malformed invocation and is fixed, not adjudicated. Exit 0 prints the
           audit base every per-class audit script is then run --since.
-        why: the check published this half as a mechanical predicate -- "resolve
+        why: >-
+          the check published this half as a mechanical predicate -- "resolve
           <prior_sprint_sha> from the most recent prior sprint entry (current sprint
           number minus one); if absent the gate FAILS CLOSED" -- and carried no
           enforcer, so an agent subtracted one and read a file at every sprint-review
@@ -426,7 +428,8 @@ checks:
           on anything but an explicit exit 3; the gate stays the fail-closed backstop.
       - site: ai-dlc-continue.sh (Stop)
         posture: raises the pause flag, blocks the stop once, writes the flow-log entry
-        why: surfacing, not enforcement — a human must learn about the stop in the turn
+        why: >-
+          surfacing, not enforcement — a human must learn about the stop in the turn
           it happens. It adjudicates nothing: it shells out to the validator, which owns
           ordering (mtime picks the SERIES; the validator picks the PASS)
     resume_contract:
@@ -464,7 +467,8 @@ checks:
         posture: ALLOWS the stop while a backgrounded wait-beat is live
           (`.beat-inflight` epoch > now); every other marker state falls through to
           the Rule 3 block
-        why: the bounded join is a WAIT, and forcing a tool call on every beat made
+        why: >-
+          the bounded join is a WAIT, and forcing a tool call on every beat made
           the lead ride the forced-continuation churn (45-150 blocks per
           implementation day). The beat is now backgrounded and the lead yields; the
           beat's own exit re-invokes it, so the marker is self-proving of
@@ -481,7 +485,8 @@ checks:
       - site: wait-for-deliverable.sh — the delivery predicate
         posture: a target counts as delivered only when it is non-empty AND written
           since the join armed; a file that predates the join is treated as pending
-        why: a presence-only test reported the PREVIOUS sprint's file at a reused
+        why: >-
+          a presence-only test reported the PREVIOUS sprint's file at a reused
           deliverable path as delivered in under a second, which is consumed as this
           sprint's input with nothing downstream to re-examine it. It also returned
           before the sleep, so `.beat-inflight` was never written and the lead could
@@ -563,7 +568,8 @@ checks:
     call_sites:
       - site: gate-validation.md Check 29
         posture: FAILS the planning gate (adopted via Check 26)
-        why: BMAD's Self-Validate is run by the agent that authored the spec, and a
+        why: >-
+          BMAD's Self-Validate is run by the agent that authored the spec, and a
           law graded by its own author is a law with no enforcer. The clause that
           carries the weight is the EARS form on each capability's success field: a
           success signal naming a config value instead of an observable response is
@@ -621,7 +627,8 @@ checks:
     call_sites:
       - site: gate-validation.md Check 32
         posture: FAILS the gate (exit 0 required; deprecations are reported only)
-        why: BMAD ships dead loader shims beside live self-contained skills under
+        why: >-
+          BMAD ships dead loader shims beside live self-contained skills under
           names differing by one word, so a directory-existence check passes on a
           skill that loads nothing and the lead reports running a workflow that never
           ran. Four such call sites were live in this rulebook when the check was
@@ -644,7 +651,8 @@ checks:
     call_sites:
       - site: gate-validation.md Check 33
         posture: FAILS the gate (exit 0 required; exit 2 on absent evidence is also a FAIL)
-        why: every byte-level guarantee in the pipeline terminates at product-brief.md
+        why: >-
+          every byte-level guarantee in the pipeline terminates at product-brief.md
           — Check 3b anchors stories to it, Check 30 joins capabilities through it —
           and the brief is the LEAD's restatement of an ask it received across a hop
           with NO mechanical join. A plan can therefore be perfectly self-consistent
@@ -671,7 +679,8 @@ checks:
       - site: gate-validation.md Check 34
         posture: FAILS the gate (exit 0 required; exit 2 on an absent snapshot is also
           a FAIL, exit 3 is PENDING and reported)
-        why: Rule 3(d) makes the sprint-scope pause point at route.md Step 6 mandatory,
+        why: >-
+          Rule 3(d) makes the sprint-scope pause point at route.md Step 6 mandatory,
           and a mandate with no enforcer is a suggestion. Every other Rule 3 pause point
           is downstream of implementation, so a sprint that never reaches implementation
           had structurally nowhere to ask: one ran seven days, wrote zero lines of
@@ -702,7 +711,8 @@ checks:
       - site: gate-validation.md Check 35
         posture: FAILS the gate (exit 0 required; exit 2 is a FAIL because a check that
           could not evaluate has not passed)
-        why: Rule 25(a) says superseded snapshot content MOVES to a history file and is
+        why: >-
+          Rule 25(a) says superseded snapshot content MOVES to a history file and is
           never deleted, and nothing verified the move. Every mechanism around that rule
           measures the file's SIZE, and a file that got smaller looks identical whether
           the bytes were relocated or dropped — so validate-artifact-budget.sh passes
@@ -771,7 +781,8 @@ checks:
       - site: gate-validation.md core-layer-immutability
         posture: FAILS the gate on exit 1; exit 2 is "the core set could not be resolved"
           and is not a pass either
-        why: v0.199.0 gave this check its executable and left this row reading
+        why: >-
+          v0.199.0 gave this check its executable and left this row reading
           `enforcer: []`, so the one check that calls itself the BACKSTOP for an
           in-place core edit was registered as having nothing behind it. The row is
           how "which catalog checks have a live machine enforcer" is answered, and
@@ -785,8 +796,36 @@ checks:
   - id: failure
     title: Gate Failure
     gate_types: [universal]
-    adjudication: lead   # a remediation protocol the lead executes, not a judgment to escalate
-    enforcer: []
+    adjudication: lead   # the lead DRIVES the protocol and owns the verdict; a dispatched remediator performs the edits
+    enforcer:
+      - core/scripts/validate-gate-adjudication.sh   # --series: the stall rung step 4 escalates on
+    call_sites:
+      - site: gate-validation.md Gate Failure step 4
+        posture: exit 0 required after every recorded pass; a non-zero --series exit
+          is a check_id holding FAIL across three consecutive passes of one
+          gate_series_id, and obliges the HARD_BLOCK escalation
+        why: >-
+          the protocol already ended in "if still failing after remediation,
+          escalate as HARD_BLOCK per Rule 12" with nothing counting the passes, so
+          the escalation fired on the lead's recollection. Measured on the reference
+          consumer, one check held FAIL for seven consecutive passes and
+          hard_block_count stayed at 0. adjudication stays lead because WHICH
+          remediation to dispatch and whether to reset the series are the lead's
+          calls; the pass count is not.
+          hard_block is deliberately ABSENT here, not overlooked. MEASURED across the
+          whole tree: NO program parses this field. The four core/scripts that name it
+          (validate-request-coverage, validate-locked-anchor, validate-gate-adjudication,
+          validate-suppression-lifetime) name it only in COMMENTS, and every other hit
+          is prose or the unrelated retro fields hard_block_count / hard_block_class[] /
+          hard_block_fail. Control: the same search for `gate_types`, a field that IS
+          parsed, returns validate-gate-manifest.sh, validate-layer-entries.sh,
+          validate-stub-audit.sh and more. So the field is a DECLARATION for readers of
+          this file, and on this row it would declare a category error: it says a FAIL
+          of its own row is a hard block, and this row has no verdict of its own — step
+          4 escalates the FAILING CHECK, so the hard block belongs to that check's row.
+          38 of 57 rows omit the field; omission is the normal state, not a gap. What
+          would change this: a program that reads hard_block and acts on it, at which
+          point what this row should declare has to be re-decided against that reader.
     ci_workflow: ~
 
 # Enforcement units that are NOT gate-catalog checks — standalone machinery
@@ -825,7 +864,8 @@ non_catalog_units:
           project from sprint 1 and destroys the prior sprint's drafts.
       - site: route.md Step 6 (roll)
         posture: BLOCKS on exit 3 (prior sprint not closed, or a frozen archive differs)
-        why: the pipeline's ONLY rotation point. Rotation belongs at START, not at
+        why: >-
+          the pipeline's ONLY rotation point. Rotation belongs at START, not at
           close: sprint-id must read the closed sprint's `status: done`, and a
           rotate-at-close prunes exactly that block before the successor exists — so
           the number has nowhere to come from and the roll falls to whoever remembers
@@ -838,7 +878,8 @@ non_catalog_units:
           path with sprint_id, and an unstamped/restamped fallback silently destroys
           the previous sprint's work
       - id: housekeeping-is-not-a-sprint-block
-        asserts: `sprint_<N>_housekeeping:` is never parsed as the sprint envelope,
+        asserts: >-
+          `sprint_<N>_housekeeping:` is never parsed as the sprint envelope,
           and a canonical carrying one still derives N+1
         protects: against the reference consumer's live grammar collision — its
           rotation regex matches ZERO lines of the real canonical (so its sweep
@@ -865,12 +906,14 @@ non_catalog_units:
     call_sites:
       - site: retro.md Close-Out Sweep step 3 (sprint-status.sh close)
         posture: writes status:done + the sprint_<N>_housekeeping block
-        why: the ONLY producer of the closure block Check 3 reads. Hand-editing
+        why: >-
+          the ONLY producer of the closure block Check 3 reads. Hand-editing
           `status: done` leaves the block unwritten, so Check 3 could never pass —
           the block had no producer at all until this `close` mode.
       - site: retro.md Step 5c (validate-mandatory-rules.sh <N>)
         posture: gates the retro commit
-        why: Checks 2 and 4 delegated to sibling scripts core never shipped, and Check 5
+        why: >-
+          Checks 2 and 4 delegated to sibling scripts core never shipped, and Check 5
           keyed on a "## Gate Log: Sprint N" header no core artifact writes — so the
           validator exited 1 on every real retro since S138, a wired CI gate that could
           never pass. The dead delegations now SKIP (consumer-provided), and Check 3 reads
@@ -895,7 +938,8 @@ non_catalog_units:
     call_sites:
       - site: retro.md Step 5c (validate-mandatory-rules.sh <N>)
         posture: still exits 0 on a skip; the VERDICT LINE changes, not the gate
-        why: the un-poisoning above made Checks 2/4/5 SKIP rather than fail, which was
+        why: >-
+          the un-poisoning above made Checks 2/4/5 SKIP rather than fail, which was
           correct and left the summary saying `all 6 checks passed` on a run where
           three of them had not executed. Both roads to exit 0 shared one sentence, and
           retro.md accepts this validator on its exit code alone, so nothing downstream
@@ -990,11 +1034,13 @@ non_catalog_units:
           runs nowhere, every fixture below it is decoration
     posture: FAILS the gate if the mechanical fixture does not hold, or if no valid
       attestation exists for this sprint at the current fixture digest
-    cadence: once per sprint (was: every gate, 4–6× per planning phase). The fixtures
+    cadence: >-
+      once per sprint (was: every gate, 4–6× per planning phase). The fixtures
       are static; a changed byte moves the digest, voids every attestation carrying
       the old one, and forces a full re-drive. Deduplication, not pruning — the check
       keeps every tooth.
-    note: H2 was previously VACUOUS, not merely repetitive. All three seed.sh files
+    note: >-
+      H2 was previously VACUOUS, not merely repetitive. All three seed.sh files
       were echo statements describing fixtures never written to disk, so H2
       adjudicated prose. check-17-bypass's V5 additionally carried `mode: solo`,
       short-circuiting validate-provenance-block.sh's Rule 20 assertion before the
@@ -1022,7 +1068,8 @@ non_catalog_units:
           that introduced the snapshot
       - site: gate-validation.md Check 14
         posture: FAILS the gate (pipeline-snapshot.md only)
-        why: the snapshot is the only artifact that grows WITHIN a sprint, and it is
+        why: >-
+          the snapshot is the only artifact that grows WITHIN a sprint, and it is
           whole-read at every gate, every resume, and every compaction. The `trim`
           remedy this verdict issues sends superseded content to
           pipeline-snapshot-history.md, which is_archive() skips BEFORE measuring —
@@ -1054,7 +1101,8 @@ non_catalog_units:
       - tests/fixtures/inflight-row-shape
       - tests/fixtures/verdict-pass-content
       - tests/fixtures/whole-read-pool
-    supersedes: the retro.md prose threshold table, which was warn-only, fired only
+    supersedes: >-
+      the retro.md prose threshold table, which was warn-only, fired only
       at retro, and drifted from nothing because nothing else executed it; and the
       four per-file planning-artifact constants (prd/product-brief/carry-over-backlog/
       architecture), which had no derivation and whose standing remedy was to relocate
@@ -1076,7 +1124,8 @@ non_catalog_units:
     call_sites:
       - site: gate-validation.md Check 25
         posture: FAILS the gate on a NEW violation since the previous gate
-        why: Rule 29 binds every phase that dispatches, and planning dispatches most
+        why: >-
+          Rule 29 binds every phase that dispatches, and planning dispatches most
           — S290 ran 28 of its 28 spawns there. The delta bound is load-bearing: the
           scan is whole-session, so a raw FAIL would re-report a violation from three
           gates ago forever, could never be remediated, and an unpassable gate gets
@@ -1128,7 +1177,8 @@ non_catalog_units:
       - site: ai-dlc-dispatch-guard.sh (PreToolUse Agent|Task) — THE ONLY TEETH
         posture: runtime DENY of a role-bound dispatch whose model tier disagrees
           with the role file's pin, or which passes no model param at all
-        why: there is NO gate-time backstop and there cannot be one — an
+        why: >-
+          there is NO gate-time backstop and there cannot be one — an
           Agent-spawned teammate leaves no transcript, so nothing downstream can
           learn what model it ran on, and a verdict that self-reports its own
           model is the trust circularity that keeps H1/H2 with the lead. The
@@ -1166,7 +1216,8 @@ non_catalog_units:
     call_sites:
       - site: ai-dlc-context-sensor.sh (Stop | PostToolBatch)
         posture: appends an arm record on a (sprint, model) change; never blocks
-        why: no sprint artifact recorded the arm, so "which arm ran" was
+        why: >-
+          no sprint artifact recorded the arm, so "which arm ran" was
           unfalsifiable from a sprint's own artifacts and the v0.70.0 A/B had to
           be answered by an external script reading ~/.claude/projects. The lead
           must not self-report it: a model naming its own weights is unreliable,

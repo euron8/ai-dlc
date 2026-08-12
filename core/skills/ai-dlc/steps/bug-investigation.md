@@ -109,7 +109,10 @@ carrying a `SKILL_INVOCATION_PROVENANCE v1` block with
 path must not carry an `-adversarial-p<M>` suffix: Check 24 globs that prefix and
 a verdict-less pass swept into a series fails rung A.
 
-Apply all improvements. Append changelog to the story.
+Apply all improvements through the **Adversarial repair dispatch** sub-routine
+(`_gate-procedures.md`): ONE `remediator` takes the whole finding set, applies the
+edits and appends the changelog to the story. The lead owns the disposition, not
+the edit.
 
 **Then stamp the story — MECHANICALLY, never by hand.** Check 17's bug-fix
 story-readiness gate requires a `SKILL_INVOCATION_PROVENANCE` block on the story

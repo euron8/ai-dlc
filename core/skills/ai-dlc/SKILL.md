@@ -183,8 +183,13 @@ artifact exhaustively.
 ### Rule 7 -- Apply all recommended improvements
 
 When party mode, adversarial review, or advanced elicitation surface
-a finding, fix it directly in the artifact. Do not present a menu of
-options. Do not ask "should I fix this?" Just fix it.
+a finding INSIDE the validation cycle, it is fixed directly in the
+artifact by the dispatched repair seat -- a `remediator` for planning
+artifacts (`_gate-procedures.md`, "Adversarial repair dispatch"), dev
+teammates for code -- not inline by the lead. Do not present a menu of
+options. Do not ask "should I fix this?" Just dispatch it. After the series
+stamps `EXIT_CONDITION_MET`, a finding is DEFERRED to the next step's
+artifact or it re-opens the series on this record.
 
 Fixing directly governs disposition, not shape. A finding that adds
 mechanism MUST state why a simpler change is insufficient (Rule
@@ -1403,13 +1408,18 @@ action falls in the **non-delegable set**:
   predicate execution at deploy gates.
 - **(b) Routing** -- pipeline-variant selection and step sequencing.
 - **(c) Gate-validation decisions** -- resolving the manifest, running the
-  `script` / `project` / `lead` checks, owning PASS/FAIL/remediation, and
-  adopting the `gate-adjudicator`'s per-check verdicts via Check 26. Evaluating
-  an individual `adjudication: llm` check is NOT in this set: like a Rule 20
-  validation evaluation it is escalated to a fresh `gate-adjudicator` and never
-  rendered solo in the lead's context. The lead still owns the outcome -- but it
-  adopts an `llm` verdict only through fail-closed Check 26, never by judging the
-  check inline.
+  `script` / `project` / `lead` checks, owning the PASS/FAIL, the remediation
+  disposition and the escalation, and adopting the `gate-adjudicator`'s per-check
+  verdicts via Check 26. Applying the remediation EDIT is NOT in this set: the
+  repair is dispatched to a `remediator`
+  (`_gate-procedures.md`, "Adversarial repair dispatch") and the lead verifies it
+  against the repair record. The lead still owns the disposition -- but it clears
+  a FAIL only through a dispatched repair, never by editing the artifact inline.
+  Evaluating an individual `adjudication: llm` check is NOT in this set: like a
+  Rule 20 validation evaluation it is escalated to a fresh `gate-adjudicator` and
+  never rendered solo in the lead's context. The lead still owns the outcome --
+  but it adopts an `llm` verdict only through fail-closed Check 26, never by
+  judging the check inline.
 
 Triggering a validation sub-skill (Rule 20) is orchestration -- the lead
 triggers it but does not roleplay it, and Rule 20 requires the evaluation

@@ -1208,4 +1208,57 @@ elif [ -f "$STAMP" ]; then
   echo "  This program can see none of those, so it does not write them. Step 7 is where you do." >&2
 fi
 
+# --- HOOK REGISTRATION: the other half of a hook delivery, which this tool does NOT do ------
+#
+# THE SHAPE OF THE DEFECT. A hook arrives on a consumer in two halves. The FILE is a pure
+# apply -- this program writes `.claude/hooks/ai-dlc-<x>.sh` from theirs, with a manifest row,
+# mechanically. The REGISTRATION is `reconcile/settings-merge.sh` rewriting
+# `.claude/settings.json`, and NOTHING CALLS IT: its only two invocation sites in the whole
+# distribution are prose, in `ai-dlc-update/SKILL.md`, and this file names it zero times.
+#
+# So the enforced half puts the file on disk and the prose half wires it up. Skip the prose and
+# the hook ships, sits there, looks installed, and never fires -- with no error, no log line,
+# and no absence anywhere for a later run to notice. `settings-merge.sh` is right to be a
+# script ("prose that an agent retypes as jq drifts", its own header); the residual is that its
+# INVOCATION is still prose, and this row is what stops that from being invisible.
+#
+# WHY A `WORKLIST` ROW AND NOT A CALL TO `settings-merge.sh` HERE. The merge takes an operator
+# answer -- `--model-row`, obtained at the step-5 report -- and this driver has no channel to
+# ask for one. That is also why `.claude/settings.json` is absent from the mechanical set on
+# purpose rather than by oversight: EVERY template-derived consumer file is (`TEMPLATE-` appears
+# zero times in this program, against three `UPSTREAM-ONLY`), because each of the four is a
+# user-owned file whose merge is operator-gated. Calling the merge from here would either
+# discard that gate or invent an answer. Naming the work does neither, and the driver stating
+# it is the difference between an instruction and a hope.
+#
+# WHY IT RUNS AFTER THE RE-STAMP RATHER THAN GATING IT. At this point in step 7 the tree is
+# SUPPOSED to be in this state: the pull writes hook files here and merges settings.json
+# several bullets later. A gate would fire on every correct run. The delivery gate lives at
+# the end of step 7, beside `setup-site-drift.sh`; this row is what tells the reader the work
+# exists, by name, at the moment it is created.
+#
+# UNCONDITIONAL -- outside the re-stamp branch above -- because a withheld stamp does not make
+# an inert hook less inert.
+HR_VALIDATOR=""
+if [ -x "$CONSUMER/scripts/ai-dlc/validate-hook-registration.sh" ]; then
+  # Theirs' copy: the pure-apply phase above already wrote scripts/ai-dlc/ from THEIRS.
+  HR_VALIDATOR="$CONSUMER/scripts/ai-dlc/validate-hook-registration.sh"
+fi
+if [ -n "$HR_VALIDATOR" ]; then
+  hr_out="$(bash "$HR_VALIDATOR" --root "$CONSUMER" 2>&1)"; hr_rc=$?
+  hr_names="$(printf '%s\n' "$hr_out" | sed -n 's@^ *\.claude/hooks/@@p' | tr '\n' ' ')"
+  if [ "$hr_rc" = "1" ] && [ -n "$hr_names" ]; then
+    say WORKLIST settings-merge ".claude/settings.json" \
+      "hook(s) present and UNREGISTERED after this apply: ${hr_names}— each is on disk, wired to nothing, and indistinguishable from one that is working. Run the settings reconcile, which is the one program that owns this contract: \`t=\$(mktemp); git -C <dist> show <theirs>:templates/settings.json.template > \"\$t\"; reconcile/settings-merge.sh --consumer .claude/settings.json --template \"\$t\" [--model-row <operator's answer>]\`. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery."
+  elif [ "$hr_rc" = "2" ]; then
+    say DECISION hook-registration-unreadable ".claude/settings.json" \
+      "the hook-registration check could not run, so whether this pull's hooks are wired is UNKNOWN — and unknown reads exactly like clean. Detail: $(printf '%s' "$hr_out" | tr '\n' ' ')"
+  fi
+else
+  # NOT a silent skip. A pull old enough to predate the validator cannot check this, and saying
+  # so is the difference between "checked and clean" and "never looked".
+  say DECISION hook-registration-unchecked ".claude/settings.json" \
+    "scripts/ai-dlc/validate-hook-registration.sh is not on this consumer, so nothing verified that the hook files this apply wrote are registered in settings.json. Run the settings reconcile (step 7's TEMPLATE-JSON-MERGE bullet) and re-run this apply; from the next pull on, the check is automatic."
+fi
+
 exit 0

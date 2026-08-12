@@ -467,8 +467,20 @@ a story inlines — to satisfy a tooling constraint.
   - `3` — the two canonical copies disagree on `sprint:`. HARD_BLOCK.
   - `4` — **it compared NOTHING** (no canonical, or no `stories:` key). This
     is never a pass. Apply the non-vacuity sub-clause below.
-- **Gate FAILS** if any story has mismatched status between the two files.
-  Fix the mismatch before proceeding.
+- **Gate FAILS** if any story has mismatched status between its story file and
+  its `sprint-status.yaml` entry. Determine which of the two is wrong before
+  changing either — the two remedies write in opposite directions:
+  - **The story file is right and the entry is stale.** The repair is a
+    `derive-stories` run that writes the entry from the story file in every
+    canonical copy. It does not happen here — Check 5 runs the read-only mode,
+    and a gate that edits the artifact it is validating can pass a tree it just
+    changed. Take it through the Gate Failure protocol at the end of this file,
+    dispatched; the write's home is `steps/implementation.md`.
+  - **The story file's own `status:` is wrong.** That is an artifact edit: take
+    it through the Gate Failure protocol at the end of this file, dispatched.
+    Do NOT run `derive-stories` for this case — it takes the story file as the
+    source, so it would copy the wrong status into every canonical copy and this
+    check would then pass.
 - **Declared derivable fields, if this project has any.** Run:
   `scripts/ai-dlc/sprint-status.sh derive-stories --check`. It is the same
   entry-to-story-file join one grain wider — `check-stories` compares `status`,
@@ -2424,10 +2436,52 @@ without moving.
 <!-- CHECK_LOADED: failure -->
 
 If any check fails:
-1. Attempt to remediate (run missing validation, fix inconsistency,
-   restore drifted requirement, populate template, sync status).
-2. Re-run the FAILED check specifically (not the entire checklist).
+1. Dispatch ONE `remediator` for the pass, per `_gate-procedures.md`
+   **Adversarial repair dispatch** — the gate is that procedure's second caller.
+   It takes every FAILED check of this pass and writes its repair record to
+   `_bmad-output/planning-artifacts/s<N>/gate-<type>-repair-p<M>.md`. The lead
+   dispatches, joins, and adjudicates; it does not edit the artifact.
+2. Re-run the failed check AND every check whose inputs the remediation touched.
+   When that set is not derivable from the repair record, re-run the full
+   escalated set. The verdict schema's `coverage_exact` rule binds the pass to
+   that same set.
 3. If the check now passes, continue with remaining checks.
-4. If still failing after remediation, escalate as HARD_BLOCK per Rule 12.
+4. If still failing after remediation, escalate as HARD_BLOCK per Rule 12. Run
+   this after every recorded pass:
+
+       scripts/ai-dlc/validate-gate-adjudication.sh --series ${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/
+
+   exit 0 required. It errors when one `check_id` holds FAIL across three
+   consecutive passes of one `gate_series_id`, and that non-zero exit is what
+   makes the escalation fire.
 5. Do NOT skip a failing check. Do NOT proceed with a known failure.
    "We'll fix it later" is not an acceptable remediation for gate checks.
+
+## Gate Reset
+
+A gate that has already recorded passes is RESET by minting a new
+`gate_series_id`. The pass count restarts at zero, and the stall rung in step 4
+above counts passes of the new series only.
+
+1. Write the reset as an escalation entry naming the retired `gate_series_id`,
+   the new one, and the reason for the reset.
+2. Retain every verdict file of the retired series on disk under its own
+   `gate_series_id`. A reset deletes nothing and overwrites nothing.
+3. Run the gate from pass 1 under the new `gate_series_id`.
+
+## Not self-authorizable
+
+The lead may not authorize itself to:
+
+1. **Skip, defer, or self-adjudicate a gate check or a validator run.** Every
+   check the `GATE_MANIFEST` loads for the gate type runs on every pass, and so
+   does every validator whose exit code that check's body makes decisive.
+2. **Override a dispatched teammate's refusal.** A teammate that declines an
+   action and records why has made that call. The lead escalates it or dispatches
+   a different seat; it does not perform the refused action itself, and it does
+   not re-dispatch the same action to a seat that will not refuse it.
+
+**`DECIDED_AUTONOMOUSLY` does NOT clear either**, and that exclusion is the
+point: it is the lead authorizing its own deviation. Both lift on an operator
+authorization carrying the verbatim citation Check 2a verifies, and on nothing
+else.

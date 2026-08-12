@@ -48,6 +48,10 @@ ids = sys.argv[4:]
 doc = {
     "schema_id": "GATE_ADJUDICATION_VERDICT v1",
     "gate_type": gt,
+    # Single-pass series, so the nonce doubles as the series id. Reusing it keeps a second
+    # literal out of the seed; the two fields are NOT the same axis (series = the gate,
+    # nonce = the pass) and any multi-pass fixture must stamp them separately.
+    "gate_series_id": nonce,
     "gate_nonce": nonce,
     "generated_at": "2026-07-15T14:05:07Z",
     "adjudicator_agent_id": "agent-fixture-0001",
