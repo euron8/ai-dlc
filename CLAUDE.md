@@ -130,7 +130,7 @@ writing one. `scripts/validate-plan-shape.sh` cannot cover the gap either: its c
 `docs/plans/*.md`, so an unpromoted plan is invisible to it and its clean run reads identically
 whether the promotion happened or not.
 
-Measured on the v0.357.0 program plan: it carried four unresolvable citations and no read/write
+Measured on the 0.357.0 program plan: it carried four unresolvable citations and no read/write
 boundary for a whole session, unchecked, because it was never tracked. The validator found all
 five within a second of the file entering its corpus. A `PostToolUse` hook now fires on every
 write under `~/.claude/plans/`, escalating with the write count; it warns rather than denies

@@ -470,10 +470,12 @@ a story inlines — to satisfy a tooling constraint.
 - **Gate FAILS** if any story has mismatched status between its story file and
   its `sprint-status.yaml` entry. Determine which of the two is wrong before
   changing either — the two remedies write in opposite directions:
-  - **The story file is right and the entry is stale.** Run
-    `scripts/ai-dlc/sprint-status.sh derive-stories`. It writes the entry from
-    the story file in every canonical copy, and that write is the lead's own
-    under **Rule 28(a)** — `sprint-status.yaml` is lead-owned state.
+  - **The story file is right and the entry is stale.** The repair is a
+    `derive-stories` run that writes the entry from the story file in every
+    canonical copy. It does not happen here — Check 5 runs the read-only mode,
+    and a gate that edits the artifact it is validating can pass a tree it just
+    changed. Take it through the Gate Failure protocol at the end of this file,
+    dispatched; the write's home is `steps/implementation.md`.
   - **The story file's own `status:` is wrong.** That is an artifact edit: take
     it through the Gate Failure protocol at the end of this file, dispatched.
     Do NOT run `derive-stories` for this case — it takes the story file as the

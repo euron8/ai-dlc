@@ -1475,8 +1475,8 @@ prose is itself generated rather than composed.
    bucket is silent on exactly the tree that is already broken. This gate reads
    disk state, so it fires on that tree too. Measured on the reference consumer
    while it was written: `ai-dlc-rules-floor.sh` — which `install.sh` calls "the
-   SINGLE detector, running every session" — present and unregistered since
-   v0.350.0, six releases, across pulls that reported success.
+   SINGLE detector, running every session" — present and unregistered for six
+   releases, across pulls that reported success.
 
    - Re-stamp the rulebook base: set `version`/`commit` = `<theirs-version>` /
      `<theirs-sha>`, **preserving `skill_version`/`skill_commit`/`installed_at`/
