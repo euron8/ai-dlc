@@ -137,6 +137,34 @@ write under `~/.claude/plans/`, escalating with the write count; it warns rather
 because plan mode's harness requires that path to exist and a deny would break plan mode.
 **A warning is the weaker mechanism and it is chosen under constraint. Promote the file.**
 
+**THE WARNING IS THE CEILING.** Four constraints hold it there, and none of them lifts with
+more effort.
+
+**The act cannot be denied.** Plan mode's harness requires the file to exist under the home
+plans directory. A `PreToolUse` deny on that path breaks plan mode outright, so the write
+cannot be refused.
+
+**The omission cannot be detected, because no join exists.** The home plans directory holds
+60 files; `docs/plans/` holds 19; the intersection of their filenames is **ZERO**. Plan mode
+mints a slug from the prompt plus a random word pair, and a promoted handoff carries a
+hand-chosen slug. Which unpromoted plan was owed promotion is therefore not derivable from
+the two sets, and a check keyed on an unpromoted plan file fires on all 60.
+
+**The predicate is intent, not an act.** Whether a plan is a handoff is a judgment about what
+a later session will be told to do. The same write produces a handoff and an ordinary
+throwaway draft. This repo's mechanisms deny an act and never evaluate a reason, and no act
+here separates the two, so there is nothing to deny.
+
+**The guard cannot be versioned in this repo either.** `.gitignore:41` ignores `.claude/*`,
+and I88's A1 arm at `scripts/validate-claude-rules.sh:95` fails the push on any tracked path
+under `.claude/` that is not `.claude/rules/**/*.md`. Force-tracking a hook file or a
+`settings.json` here breaks the push. So the hook stays in the operator's home directory, is
+**NOT** part of the distribution, and reaches no consumer by design — a consumer tree gets no
+`docs/plans/`, no plan-shape validator, and no promotion rule, which
+`core/fixtures/plan-shape/.dist-only` already declares.
+
+**Promote the file the moment it becomes a handoff. The reader is the enforcement.**
+
 ## Two layouts
 
 `install.sh` splits what shares a parent here: `core/scripts/<x>` →
