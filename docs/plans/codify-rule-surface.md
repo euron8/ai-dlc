@@ -29,40 +29,36 @@ re-derivation is what appears here.
 **Ping the operator** on any question, on any decision marked OPERATOR DECISION, and on
 completion including an early stop.
 
-**This file is the handoff**, and it is promoted: it lives at
-`docs/plans/codify-rule-surface.md` and is inside `scripts/validate-plan-shape.sh`'s corpus.
+**Start at Part 4.** It opens with the three remaining actions; the table under them is the
+record of what is already merged, and "Working this repo" carries the mechanics the finished
+waves cost to learn. Parts 1–3 are the inventory, gap analysis and recommendations that produced
+all of it — read them for WHY a decision went the way it did, not for current state.
+
+**Parts 1 and 2 are a point-in-time measurement, not a live reading.** Their figures were taken
+before any of this shipped, and several have moved since — the fixture count and the invariant
+totals in particular. Re-derive anything you intend to act on; the commands are in the text.
 
 ## Status
 
-**Waves A (except action 8), B and D are complete and merged to `main`**, each through a full
-green gate. Three releases so far.
+**LIVE, and handed off mid-program.** Five releases are built, gate-green and merged to `main`,
+which is at `v0.365.0`. The tree is clean and `main` matches `origin/main`. **Three items
+remain**, listed as the numbered actions in Part 4; everything above them there is a record.
 
-| Action | State |
-|---|---|
-| 1 promote this plan | DONE |
-| 2 extractor + probe | DONE — derivation is the ARM HEADER, not the `err` message |
-| 3 arm A5 · 4 arm A3b · 5 ceiling arm A6 | DONE — 11/11 mutants killed |
-| 6 CLAUDE.md repairs · 7 invariant index | DONE — `I88` gone, index derived and gated |
-| 8 vocabulary index | **NOT STARTED** |
-| 9–11 shell-portability validator | DONE — 7 arms, 325 files, 8/8 mutants + 2 negatives |
-| 12–14 plan-shape arms | DONE — **P9 shipped, P10 DROPPED on measurement** |
-| 15–20 the six rulebooks | DONE — 24 rules moved out of the memory corpus |
-| 21 home-directory carriers | **NOT STARTED** |
+The last full verification was `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`: **147 of 147
+fixtures, all gate steps green, both skips disabled.**
 
-Four operator rulings are folded into Part 3: topical unscoped rule files (R1), no
+Four operator rulings are folded into Part 3 — topical unscoped rule files (R1), no
 `docs/coding-conventions.md` (R2), prose plus a structural proxy for the two standing
-directives (R4), and derive the `OK:` line rather than hand-maintain it (R6).
+directives (R4), and derive the `OK:` line rather than hand-maintain it (R6). Three decisions
+are still open and are listed at the end of Part 4; **one of them blocks remaining action 3.**
 
-**Three corrections to this plan, every one forced by a mechanism rather than by review.**
-Dating frozen measurements in `CLAUDE.md` is not available (R5). The `.claude/rules/` files
-are inside the rule-file audit corpus, so they carry no version tags, sprint ids or dates
-(R1). And two of Wave B's candidate arms were DROPPED on measurement rather than tuned — see
-R3 — because their entire hit set was correct code.
-
-**The durable-channel ceiling was raised once, from 32,768 to 40,960**, after arm A6 fired on
-the change that created the channel. Current total is in the A6 line of every
-`validate-claude-rules.sh` run. Raising it again to admit new prose is the failure mode the
-script's header names; mechanizing or scoping a rule out of the channel comes first.
+**Four corrections to this plan, every one forced by a mechanism rather than by review**, and a
+resuming session should expect more of the same. Dating frozen measurements in `CLAUDE.md` is
+not available, so the fix is removal (R5). The `.claude/rules/` files sit inside the rule-file
+audit corpus, so they carry no version tags, sprint ids or dates (R1). Two of Wave B's candidate
+arms and one of Wave C's were dropped on measurement rather than tuned, because their entire hit
+set was correct code (R3, R4). **Writing a check is not measuring it — three of the nine arms
+this plan proposed did not survive contact with the corpus.**
 
 ---
 
@@ -88,7 +84,7 @@ Entry point is `git push` → `.githooks/pre-push`, 11 steps. No pre-commit, no
 
 | Mechanism | Binds |
 |---|---|
-| `scripts/validate-enforcement-map.sh:6181` | The invariant registry. **80 IDs can fire**; its final `OK:` line names **71**. |
+| `scripts/validate-enforcement-map.sh` | The invariant registry. As measured then: **80 IDs can fire**; its final `OK:` line named **71**. That line no longer enumerates anything — see R6. |
 | `scripts/validate-claude-rules.sh` | Arms A1–A4: `CLAUDE.md` ↔ `.claude/rules/` in both directions; every `paths:` glob non-empty; Cursor `.mdc` keys forbidden; every rule file pointed at or carrying a non-empty `no-stub` reason. |
 | `scripts/validate-plan-shape.sh` | Arms P1–P7 over `docs/plans/*.md`: entry point, numbered actions, read/write boundary, operator ping, resolving citations, no contradictory identifier, one current status, no opt-out kit. |
 | `scripts/validate-release-version.sh` | Commit subject == `VERSION` == CHANGELOG heading, per commit and across a range. |
@@ -190,7 +186,7 @@ every time it is taken.
 
 ## G4 — The compaction-durable channel has no budget
 
-`.githooks/pre-push:88` runs the resident-size budget, and
+`.githooks/pre-push`'s re-attach budget step runs the resident-size budget, and
 `core/scripts/validate-reattach-budget.sh:99` shows it is `--skill`-scoped to `SKILL.md`.
 Sixteen scripts reference `CLAUDE.md`; none measures it. Part 3 adds 24 rules to that channel,
 and nothing would notice if it doubled — a cost paid on every compaction of every session.
@@ -422,105 +418,111 @@ Each has a live corpus and no general statement anywhere. All go to `verificatio
 
 ---
 
-# Part 4 — Actions
+# Part 4 — What remains
 
-Waves A, B and C are independent of each other. Wave D depends on A. Merges are preapproved
-throughout.
+**Three items.** Everything else in this plan is built, gate-green and merged to `main`; the
+completed record is the table below, and Parts 1–3 are the inventory and reasoning that produced
+it. Read "Working this repo" before starting — it carries what the finished waves cost to learn.
 
-1. **DONE** (`acd1771`). Promoted to `docs/plans/codify-rule-surface.md` and committed; the
-   validator went from 19 plans to 20, 0 errors, 0 warnings.
+1. **Build `scripts/render-vocabulary-index.sh` → tracked `docs/vocabulary-index.md`.** This
+   closes G7 and is the second artifact R2 identified. Derive each controlled vocabulary from
+   the file that already owns it — `core/schemas/*.json`, `core/skills/ai-dlc/enforcement-map.yaml`,
+   `core/skills/ai-dlc/layer-contract.yaml` — and restate none of them. Model it on
+   `scripts/render-invariant-index.sh`: self-probe before rendering, byte-comparing `--check`,
+   fail closed on a zero-row parse, and **nothing volatile in the rendered file**. Add a
+   `.dist-only` fixture proving `--check` can fail, and wire the step beside the invariant index
+   in `.githooks/pre-push`. If the derivation cannot be made total across all the owning files,
+   ship nothing and report why — a partial index behind a passing gate is worse than none.
+2. **Record full-suite wall clock, before and after.** The one done-when this program missed.
+   `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`, timed from inside the repo, and put the
+   figure in the CHANGELOG rather than in `CLAUDE.md`. Never compare a loaded fixture cost
+   against a solo one.
+3. **Wave E — the home-directory carriers.** Extend the existing PostToolUse warning on
+   `~/.claude/plans/` to carry both standing directives verbatim, and add a sibling for writes
+   under the memory corpus carrying R1's three-clause placement test. Label both warnings, not
+   gates. **Blocked on operator decision 2 below**: these carriers cannot be versioned in this
+   repo, so whether A1 widens to admit a tracked `.claude/hooks/` subtree decides whether this is
+   worth doing at all.
 
-**Wave A — bind the rule surface to ground truth**
+## Completed and merged
 
-2. **DONE** (`ca04a72`). The derivation is the ARM HEADER, not the `err` message — 23 of 366
-   emitter calls carry no ID, so a message-based extractor loses every catalog arm. Result:
-   91 arms, 94 IDs, 366 emitters, **0 orphaned, 0 silent, 0 collisions**, after declaring
-   I1/I2 and I17 and splitting `I76`/`I91`. Reported to the operator, who ruled: derive the
-   `OK:` line rather than hand-maintain it.
-3. Add arm A5 to `scripts/validate-claude-rules.sh` consuming that extractor, with a self-probe
-   that injects a nonexistent ID into a temp copy. Extend `core/fixtures/claude-rules-joins/` to
-   prove A5 can fail, capturing red → green against the live `I88` defect.
-4. Extend arm A3 to require exactly one of `paths:` or a non-empty
-   `<!-- unconditional: <reason> -->` marker per rule file, with probes in both directions.
-5. Add the durable-channel byte-ceiling arm (R1), measuring `CLAUDE.md` plus every unconditional
-   rule file, with its fixture. Report the current total and propose a ceiling; the value is an
-   OPERATOR DECISION.
-6. **DONE** (`ca04a72`). Both `I88` citations corrected to arms A1–A4; the stale fixture and
-   home-plan counts removed rather than dated, per R5's correction, with the derivation command
-   written in their place. `audit-rule-files.sh` back to its 0 tier-1 / 23-total baseline.
-7. **DONE** (`ca04a72`). `scripts/render-invariant-index.sh` → `docs/invariant-index.md`,
-   `core/fixtures/invariant-index/` (2 controls, 6 mutants, 0.8s), pre-push step 1a-i,
-   `CLAUDE.md §Prohibitions need mechanisms` repointed. The extractor WAS made total, so the
-   stop-and-ping branch did not fire. **Nothing volatile goes in the rendered file** — the first
-   cut stamped `VERSION` into a footer, which the fixture's real-repo control caught by going
-   red on the release bump alone.
-8. Build `scripts/render-vocabulary-index.sh` and `docs/vocabulary-index.md` per R2/G7, deriving
-   each vocabulary from the file that owns it. Add its fixture and pre-push wiring.
+| Release | What landed |
+|---|---|
+| `acd1771` | This plan promoted into `validate-plan-shape.sh`'s corpus. |
+| `v0.361.0` | `render-invariant-index.sh` + `docs/invariant-index.md` + its fixture + pre-push step; the `OK:` line's 12,243-char hand-list replaced; I1/I2 and I17 declared; `I76`/`I91` split; `CLAUDE.md`'s `I88` citations and stale counts repaired; `validate-no-dead-doc-refs.sh` rescoped off `.dist-only`. |
+| `v0.362.0` | Arms A5 (bold invariant citations resolve), A3b (scope declared exactly once), A6 (durable-channel byte ceiling); `claude-rules-joins` extended to 11 mutants. |
+| `v0.363.0` | The six unconditional rulebooks under `.claude/rules/` carrying the 24 homeless rules; `CLAUDE.md`'s placement test gained its third clause; `fixture-mutants.md` gained three clauses; memory-corpus pointer added. |
+| `v0.364.0` | `validate-shell-portability.sh` (7 arms, 325 files, ~0.5s) + its fixture + pre-push step; `tool-hazards.md` reduced to citing it. |
+| `v0.365.0` | Arm P9 — a live plan carries at least one resolving citation; `plan-shape` fixture extended both directions. |
 
-**Wave B — the shell-portability validator**
+**Three proposed arms were DROPPED on measurement, and they are not pending work.** A bare
+`sed -i` scan (4 hits, all 4 correct), an `awk -v` backslash scan (1 hit, correct, and the
+correct and incorrect forms are the same shape to a regex), and **P10** (a tautology as written;
+reshaped, its only hit is a live plan whose table describes others as spent, while the dangerous
+case is undetectable by construction). Do not rebuild them.
 
-9. Write `scripts/validate-shell-portability.sh` covering D7's remainder, D8's `$( )` half and
-   D10's bash-3.2 floor. Each arm self-probes before its corpus. Report the finding set and the
-   false-positive set over the tracked shell corpus before wiring anything.
-10. Add its fixture proving each arm can fail, and wire it as a new `.githooks/pre-push` step.
-11. Time the step from inside the repo, before and after, and report both numbers. Confirm
-    nothing was added to `scripts/validate-enforcement-map.sh`.
+## Working this repo — what the finished waves cost to learn
 
-**Wave C — plan-shape arms**
-
-12. Add P10 (live-or-banner-marked), deriving the banner grammar from all 19 plans and windowing
-    the head rather than testing line 1.
-13. Add P9 (a live plan carries at least one resolving citation), scoped by P10.
-14. Extend `core/fixtures/plan-shape/` to prove P9 and P10 can each fail. Report both
-    false-positive sets over `docs/plans/*.md` before wiring; if either is non-empty, stop and
-    ping the operator.
-
-**Wave D — the prose**
-
-15. Create the six unconditional rule files per R1, each with an `<!-- unconditional: reason -->`
-    marker and a `CLAUDE.md` pointer, and write the 24 homeless rules into them per Part 1C.
-16. Add R8's five conventions to `verification-discipline.md`.
-17. Add the third clause to the placement test at `CLAUDE.md §Some authoring rules live in .claude/rules/-108` — *and no subagent needs
-    it* — and rewrite that section to describe three channels rather than two.
-18. Extend `.claude/rules/fixture-mutants.md` with D16's different-author clause and D17's
-    tree-must-express-the-defect clause.
-19. Add the one-line memory-corpus pointer (R7).
-20. Report the resulting durable-channel total against the ceiling from action 5. Triage of what
-    to compress or drop is an OPERATOR DECISION.
-
-**Wave E — the seams that cannot be versioned**
-
-21. Extend the existing home-directory PostToolUse warning to carry both standing directives
-    verbatim, and add a sibling for writes under the memory directory carrying R1's placement
-    test. Label both as warnings, not gates.
+- **One release per branch, cut from `origin/main`, merged in order.**
+  `validate-release-version.sh` refuses a branch adding two CHANGELOG headings, because a squash
+  takes the first version in the subject and the rest become unattributable.
+- **`git push` is the gate**, and the full suite is roughly nine minutes. Background it. The
+  content key skips an unchanged tree and the read-set map narrows to affected fixtures; both are
+  correct, and neither is evidence your change was exercised. Verify a release with
+  `AI_DLC_FIXTURE_NO_SKIP=1`.
+- **`core/git-hooks/pre-push` is the CONSUMER's hook.** Run here it prints a green banner having
+  executed almost nothing. The distribution's gate is `.githooks/pre-push`.
+- **Rule prose under `.claude/rules/` and `CLAUDE.md` is inside `audit-rule-files.sh`.** Version
+  tags, `S`-prefixed sprint ids and ISO dates are tier-1 and BLOCK the push. Backticked spans,
+  quoted spans, fenced code, HTML comments and frontmatter are exempt. Provenance goes in the
+  CHANGELOG.
+- **`docs/invariant-index.md` is generated.** Change the arm header and re-run the renderer.
+- **A `git ls-files` corpus cannot see an uncommitted file**, so a local run before the commit
+  and the gate's run after it are over different corpora. That is how the shell-portability
+  validator came to flag its own mutation battery only at push.
+- **`I54b` will catch a piped first-match reader**, and it caught three in this program written by
+  an author who had the rule in front of them. Use here-strings.
+- **The durable-channel ceiling was raised once already.** Raising it again to admit new prose is
+  how the guard becomes decorative; mechanize or scope a rule out of the channel first.
 
 ## Verification
 
-- `bash scripts/validate-claude-rules.sh` passes with A3-extended, A5 and the ceiling arm live;
-  `I88` no longer appears in `CLAUDE.md`; `core/fixtures/claude-rules-joins/run.sh` proves each
-  new arm fails when mutated.
-- `bash scripts/validate-plan-shape.sh` passes over all 19 plans plus this one with P9 and P10
-  live; `core/fixtures/plan-shape/run.sh` proves both fail when mutated.
-- `bash scripts/validate-shell-portability.sh` runs clean, and its fixture proves each arm fails
-  when mutated.
-- Both renderers pass `--check`, and `docs/invariant-index.md` names every ID the extractor
-  proves can fire.
-- `CLAUDE.md §Run the fixture suite`'s fixture count comes from the generated region and equals
-  `find core/fixtures -mindepth 1 -maxdepth 1 -type d | wc -l`.
-- Every new rule file loads: confirmed by A2/A3/A4 passing and by the ceiling arm counting it.
-- `git push` is green end to end. Run it from the repo root so the hook drives the suite through
-  its pool; do not hand-roll a fixture loop.
-- Timing reported before and after for `validate-enforcement-map.sh` and for the full suite,
-  measured from inside the repo, loaded figures never compared against solo ones.
+Corrected against what was actually built. The two criteria this program did not meet are the
+remaining actions above, not silent gaps.
+
+- `bash scripts/validate-claude-rules.sh` passes with A3b, A5 and A6 live; `I88` appears nowhere
+  in `CLAUDE.md` as a live mechanism; `core/fixtures/claude-rules-joins/run.sh` proves all eleven
+  mutants die by their own arm. **MET.**
+- `bash scripts/validate-plan-shape.sh` passes over the whole corpus with P9 live, and
+  `core/fixtures/plan-shape/run.sh` proves P9 fires on a live plan with no citation and stays
+  silent on a banner-marked one. **MET.** (P10 is not part of this criterion; it was dropped.)
+- `bash scripts/validate-shell-portability.sh` runs clean and its fixture proves every arm fails
+  when mutated, plus two negatives. **MET.**
+- `scripts/render-invariant-index.sh --check` passes and the index names every ID the extractor
+  proves can fire. **MET.** The vocabulary renderer is remaining action 1.
+- No stale derivable count survives in `CLAUDE.md`. **MET BY REMOVAL, NOT BY GENERATION** — the
+  audit blocks dates in rule prose, so the count was deleted and the derivation command written
+  in its place. A generated region in `CLAUDE.md` remains available and is not currently needed.
+- Every rule file loads: A2/A3/A3b/A4 pass and A6 counts all seven durable files. **MET.**
+- `git push` green end to end, from the repo root, suite through its pool, no hand-rolled loop.
+  **MET** — five releases, and a final `AI_DLC_FIXTURE_NO_SKIP=1` run of 147 of 147 fixtures.
+- Timing before and after for `validate-enforcement-map.sh` (14.27s → 14.68s). **MET.** The
+  full-suite half is remaining action 2.
 
 ## Operator decisions
 
-1. **The nine firing-but-unnamed invariant IDs** — I15, I16, I17, I18, I33c, I77, I78, I79, I80.
-   Whether each is a missing entry, a retired arm, or a mis-scoped ID is a judgment about the
-   invariants themselves, not about rendering. Action 2 reports; the ruling is yours.
-2. **The durable-channel ceiling value**, and what gets compressed or dropped once Wave D lands.
-3. **Whether to widen arm A1** to admit a tracked `.claude/hooks/` subtree, so the Wave E carriers
-   can be versioned. This reopens the containment A1 exists to hold.
-4. **The three KEEP clusters** — D26 receipt anchoring, D33 consumer-mechanism absorption, D35
-   PreToolUse enforcement design. Each is consumer-workflow rather than repo-authoring; they can
-   stay in memory or become a path-scoped rule file over the consumer-pull runbook paths.
+1. **RULED.** The invariants named on the `OK:` line versus those that can fire — the operator
+   ruled that the line is DERIVED rather than hand-maintained, which moots the per-ID judgment.
+   Discharged by R6.
+2. **OPEN — the durable-channel ceiling.** `AI_DLC_DURABLE_BYTES` defaults to 40,960, raised once
+   from 32,768 after arm A6 fired on the change that created the channel. The current total is on
+   the A6 line of any `validate-claude-rules.sh` run. Lowering it means deciding which of the 24
+   rules need not survive a compaction — a judgment about how they are used, not a prose-trimming
+   exercise.
+3. **OPEN — whether to widen arm A1** to admit a tracked `.claude/hooks/` subtree, so remaining
+   action 3's carriers can be versioned. This reopens the containment A1 exists to hold, and it
+   is what makes that action worth doing or not.
+4. **OPEN — the three KEEP clusters**: D26 receipt anchoring, D33 consumer-mechanism absorption,
+   D35 PreToolUse enforcement design. Each is consumer-workflow rather than repo-authoring. They
+   stay in the memory corpus, or become a `paths:`-scoped rule file over the consumer-pull
+   runbook paths.
