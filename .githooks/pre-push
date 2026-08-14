@@ -130,32 +130,46 @@ step "rule-file audit (origin tags, dates, dangling pointers)" \
 # 3. Every fixture is an adversarial self-test for one gate check. A fixture that is
 #    never driven is a green light nobody earned.
 #
-# RUN IN PARALLEL, AND THE REASON IS MEASURED. The suite is latency-bound, not
-# compute-bound: most of its work is waiting on `git init`/commit/mktemp in per-fixture
-# sandboxes. Serially it was 7m06s of wall clock on an idle 18-core machine; 8 workers took
-# it to 2m34s.
+# RUN IN PARALLEL, AND THE PREMISE THAT USED TO SIT HERE HAS EXPIRED. This block said for
+# several releases that the suite is "latency-bound, not compute-bound -- most of its work is
+# waiting on `git init`/commit/mktemp". That was measured over 83 fixtures at 72s and it is no
+# longer true of this suite. Re-measured over 153 units: a full run is ~2480 CPU-seconds
+# against a ~210s wall, i.e. roughly twelve cores busy for the whole run, and its heaviest
+# units are fork-bound at 113% CPU with 62% of that in SYSTEM time.
 #
-# SIXTEEN, AND THE KNEE MOVED BECAUSE THE FLOOR DID. For four releases this said EIGHT, NOT
-# MORE, on a measurement that was true when it was taken: -P16 gave 2m30s against -P8's
-# 2m34s, four seconds, because ONE fixture set a floor no pool size beats. That was the
-# right reading of a floor-bound suite and the wrong constant to keep once the floor moved.
-# `enforcement-map-sites` was 194s in v0.204.0, 107s after v0.205.0, and 25s once it started
-# running its own assertions through a pool. Re-measured on the same idle 18-core machine
-# with that fixture parallel, over the full 83:
+# TWELVE, AND WIDER BUYS NOTHING. Swept on this box with the dispatched set pinned
+# (AI_DLC_FIXTURE_NO_SKIP=1 on every run, the durations record reset from one golden copy
+# before each, cells visited round-robin so drift spreads evenly rather than loading onto
+# whichever ran last). Every run green; wall seconds, and the CPU-seconds the same runs cost:
 #
-#     -P8  95.5s     -P12  80.4s     -P16  72.0s     -P24  64.2s      (83/83 verdicts each)
+#     -P8   [223.45, 276.22]   2346 CPU-s
+#     -P12  [205.40, 218.75]   2433 CPU-s
+#     -P16  [209.31, 213.89]   2483 CPU-s
+#     -P20  [209.98, 213.76]   2495 CPU-s
+#     -P24  [212.38, 220.75]   2500 CPU-s
 #
-# It is still falling at 24 because the remaining pole sleeps rather than computes, so this
-# is not the CPU knee. Sixteen is where the measurement stops buying more than it costs:
-# -P24 nearly doubled some units' individual durations through contention (a 25s fixture
-# took 47.6s), and this suite has a known intermittent-red class that correlates with
-# concurrency and cold caches. Beyond 16 the run gets faster by making every unit slower,
-# which is how a timing-sensitive assertion starts failing for reasons that have nothing to
-# do with what it tests.
+# READ THE RANGES, NOT THE MEDIANS. A difference counts only where two cells' readings do not
+# overlap, and on that rule exactly one comparison separates: -P8 is genuinely worse than the
+# rest. TWELVE, SIXTEEN, TWENTY AND TWENTY-FOUR ARE INDISTINGUISHABLE FROM EACH OTHER, and no
+# number of further repetitions was going to separate them -- the spread WITHIN a cell is
+# already the size of the differences BETWEEN them.
 #
-# The remaining pole is `wait-stale-deliverable` at ~52s: at -P24 it starts at t=10.8s and
-# is still running when everything else has finished. It is sleep-bound rather than
-# fork-bound, so no pool size touches it -- the fix is inside that fixture.
+# -P8 IS THE CONTROL, NOT A CANDIDATE. It has to come out worse or the response variable is
+# not measuring the pool at all, and every other cell is uninterpretable. It did.
+#
+# SO THE CHOICE INSIDE THAT BAND IS NOT A SPEED CLAIM. Wall clock is flat from 12 to 24 while
+# CPU-seconds RISE MONOTONICALLY across the same range -- +67 from 12 to 24, all of it system
+# time. Going wider buys no wall clock and spends contention for it. Twelve is the narrowest
+# width in the indistinguishable band, so it is the one that leaves the most machine to
+# everything else the operator is running. That is an operator's ruling about headroom, and it
+# is recorded as one; the measurement establishes only that 12 is not slower.
+#
+# WHAT IS NOT ESTABLISHED HERE. That 12 beats 16 -- the ranges overlap and this does not claim
+# it. And the NINE INNER POOLS were not swept: nine fixtures open their own `xargs -P`
+# totalling 66 workers on top of this one, and they cannot be varied by an environment
+# variable, because `enforcement-map-sites/run.sh` scrubs every ambient AI_DLC_* name for I10
+# and I87 binds any key a shipped program dereferences. Sweeping them means editing constants
+# on a throwaway branch, and it is owed.
 #
 # THE NUMBER IS MEASURED ON ONE MACHINE. That is why it stays the tunable
 # AI_DLC_FIXTURE_JOBS: on a smaller box, re-measure rather than inherit this.
@@ -170,7 +184,7 @@ step "rule-file audit (origin tags, dates, dangling pointers)" \
 # comparison because a comparison a comment can satisfy is I64's defect: the token
 # is present and the mechanism is absent.
 # FIXTURE_POOL_BEGIN
-FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-16}"
+FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-12}"
 DURATIONS_RECORD=".git/ai-dlc-fixture-durations"
 READSET_MAP=".ai-dlc-fixture-readsets.tsv"
 # THE VERIFIED-STATE RECORD LIVES UNDER .git FOR I55 ARM 4'S REASON EXACTLY: the content key
@@ -514,8 +528,38 @@ run_fixtures() {
   # came out of. A run that recorded nothing leaves the previous record alone rather
   # than replacing it with an empty file, which would silently cost the NEXT run its
   # ordering as well.
+  #
+  # IT MERGES, AND A WHOLE-FILE REPLACE HERE COST THE ORDERING EVERY TIME THE SKIP FIRED.
+  # "$out/.dur/" holds a file only for a unit that was DISPATCHED, and the read-set skip
+  # above narrows the dispatch list in place before the pool is fed. So a replace deleted
+  # the cost of every SKIPPED unit, and those units then re-entered the next run at the
+  # 999999 unknown slot, which sorts FIRST -- putting the real poles LAST, the exact
+  # inversion of what the longest-first block exists to buy. Measured on this repo's own
+  # record: full 150-unit run 506s, the same run after one selective run had clobbered
+  # the record 573s, and a fresh clone with no record at all 671s.
+  #
+  # THE CONCATENATION ORDER IS THE MERGE RULE. Old record first, this run's costs second,
+  # `c[$1] = $2` is last-wins -- so a dispatched unit's fresh cost overwrites its stale one
+  # and a skipped unit keeps the one it had. `NF == 2` is the same predicate the reader
+  # above uses, so writer and reader cannot disagree about the grammar.
+  #
+  # `NR==FNR` WAS THE OBVIOUS SPELLING AND IT IS WRONG: awk given a record file that does
+  # not exist fails outright, and that is the fresh-clone case the old code handled
+  # correctly. The `[ -s ]` guard inside the brace group degrades to "just this run's
+  # costs", which is byte-for-byte the previous behaviour there.
+  #
+  # A GHOST KEY FOR A DELETED FIXTURE IS DELIBERATELY LEFT IN. It costs ~20 bytes under
+  # .git, nothing reads a key with no unit, and `suite-dispatch-order` already feeds a
+  # literal `ghost` line and asserts the suite still runs complete. Pruning against the
+  # on-disk set would need a pre-skip copy of the list, i.e. another executable line in
+  # this I66-joined region, to buy a defect nobody has measured.
   cat "$out"/.dur/* > "$out/.durations" 2>/dev/null
-  [ -s "$out/.durations" ] && cp "$out/.durations" "$DURATIONS_RECORD" 2>/dev/null
+  if [ -s "$out/.durations" ]; then
+    { [ -s "$DURATIONS_RECORD" ] && cat "$DURATIONS_RECORD"; cat "$out/.durations"; } 2>/dev/null \
+      | awk 'NF == 2 { c[$1] = $2 } END { for (k in c) print k, c[k] }' \
+      | sort > "$out/.merged"
+    [ -s "$out/.merged" ] && cp "$out/.merged" "$DURATIONS_RECORD" 2>/dev/null
+  fi
 
   # PUBLISH THE VERIFIED STATE ONLY ON A FULLY GREEN RUN, and that condition is the whole
   # safety of the skip. The record means "every fixture's verdict is known good at these file

@@ -1,0 +1,9 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is scripts/validate-enforcement-map.sh and the FORK_BUDGET that file declares
+about itself, read through scripts/fork-profile.sh. Neither script is installed: install.sh
+copies core/scripts/ to scripts/ai-dlc/, and both of these live in this repository's own
+repo-root scripts/ directory, which reaches no consumer at all.
+
+On a consumer this fixture would resolve no validator and no profiler. It could only report
+that it found nothing to measure, which is the reading a fixture must never be able to give.

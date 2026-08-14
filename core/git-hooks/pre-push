@@ -238,10 +238,19 @@ drivability() { bash scripts/ai-dlc/validate-fixture-drivability.sh; }
 #    not. Comments are stripped before that comparison, because a join a comment can
 #    satisfy is I64's defect.
 #
-#    RE-DERIVE THE POOL SIZE ON YOUR OWN BOX rather than inheriting 16. It is measured
+#    RE-DERIVE THE POOL SIZE ON YOUR OWN BOX rather than inheriting 12. It is measured
 #    on one 18-core machine, which is why it stays the tunable AI_DLC_FIXTURE_JOBS.
+#
+#    WHY 12 AND NOT MORE, on that box: past twelve the wall clock stops falling while the
+#    CPU the run costs keeps rising, all of it in system time. A wider pool there buys no
+#    time and spends contention for it. Your suite is a different size on different cores,
+#    so the useful thing to copy is the METHOD, not the number: pin the dispatched set with
+#    AI_DLC_FIXTURE_NO_SKIP=1 so every run does the same work, reset the durations record
+#    before each run so one run's schedule does not decide the next one's, alternate the
+#    widths rather than running all of one then all of the other, and take a difference as
+#    real only where two widths' readings do not overlap.
 # FIXTURE_POOL_BEGIN
-FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-16}"
+FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-12}"
 DURATIONS_RECORD=".git/ai-dlc-fixture-durations"
 READSET_MAP=".ai-dlc-fixture-readsets.tsv"
 # THE VERIFIED-STATE RECORD LIVES UNDER .git FOR I55 ARM 4'S REASON EXACTLY: the content key
@@ -573,8 +582,25 @@ run_fixtures() {
   # system-bound in the first place. A run that recorded nothing leaves the previous
   # record alone instead of replacing it with an empty one, which would cost the next
   # run its ordering too.
+  #
+  # THE RECORD IS MERGED, NOT REPLACED. Only a fixture that actually RAN leaves a cost
+  # behind, and the read-set skip above means most pushes run a fraction of the suite.
+  # Overwriting the record with just those costs threw away everything the skip had
+  # decided not to run, and an unknown cost sorts FIRST -- so the next full run picked
+  # up its heaviest fixtures LAST and finished later than it needed to.
+  #
+  # Old record first, this run second, last value wins: a fixture that ran gets its new
+  # cost, a fixture that was skipped keeps the one it had. `NF == 2` is the same test the
+  # ordering step above applies, so what is written and what is read cannot drift apart.
+  # A cost left behind for a fixture you have deleted is harmless -- nothing looks up a
+  # name with no directory -- and is not worth the code to remove.
   cat "$out"/.dur/* > "$out/.durations" 2>/dev/null
-  [ -s "$out/.durations" ] && cp "$out/.durations" "$DURATIONS_RECORD" 2>/dev/null
+  if [ -s "$out/.durations" ]; then
+    { [ -s "$DURATIONS_RECORD" ] && cat "$DURATIONS_RECORD"; cat "$out/.durations"; } 2>/dev/null \
+      | awk 'NF == 2 { c[$1] = $2 } END { for (k in c) print k, c[k] }' \
+      | sort > "$out/.merged"
+    [ -s "$out/.merged" ] && cp "$out/.merged" "$DURATIONS_RECORD" 2>/dev/null
+  fi
 
   if [ "$rc" -eq 0 ] && [ -s "$out/.now" ]; then cp "$out/.now" "$VERIFIED_RECORD" 2>/dev/null; fi
 

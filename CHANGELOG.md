@@ -34,6 +34,91 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.370.0] — 2026-08-14
+
+### The pre-push suite was never directory-bound, and half its work was one program run 137 times
+
+`git push` here ran a 150-fixture suite through a 16-way pool. `CLAUDE.md` called the suite
+POLE-BOUND — wall clock tracks the single longest DIRECTORY — and pointed at
+`.git/ai-dlc-fixture-durations`. That reading was right about the symptom and wrong about the
+cause, and the numbers it cited had gone stale twice.
+
+**Measured end to end before touching anything: total suite CPU work is 4983 CPU-seconds over
+148 fixtures**, so on 18 cores the scheduling ceiling was **277s** against a **506s** pole. The
+pool was 55% efficient, and perfect packing was worth 45% and not one second more. The six pole
+fixtures were **80% of everything the suite computed**, five of them mutation batteries for one
+6232-line program — and **`scripts/validate-enforcement-map.sh` alone was ~49% of it**, run
+**137 times per push at 15.7s each**.
+
+That program's own header recorded a budget of **1582 forks per run**, with nothing reading it.
+Measured: **6553**. A 4.1× decay in a number the file states about itself.
+
+**Result: `~570s → 217.27s` of pre-push wall clock, `−62%`**, gate green.
+
+| | before | after |
+|---|---|---|
+| pre-push wall | ~570s | 217.27s |
+| pole | 506s | 166s |
+| validator, per battery invocation | 15.7s | 0.40s |
+| suite CPU | 4983 CPU-s | ~2427 CPU-s |
+
+**`--arms` is where the work went.** `validate-enforcement-map.sh` gained arm selection, so a
+mutation battery runs only the arm its mutant targets. It is licensed by one measurement: cost
+before the first arm header — including executing every helper defined there — is **0.1s of
+13.8s**, so selection pays essentially no fixed tax. The seven battery shards went **3033.7 →
+285.7 CPU-seconds**. Boundaries come from `render-invariant-index.sh`'s existing extractor, never
+a fresh grep: a column-0 pattern finds 83 arm headers where a blanks-tolerant one finds 96, and
+that exact bug is already recorded at `render-invariant-index.sh:22`.
+
+**Four scheduling and packaging changes came with it.** The durations record now MERGES instead
+of replacing — a whole-file replace deleted the cost of every unit the read-set skip withheld,
+and those units returned at the unknown-cost slot, which sorts first, putting the real poles
+last (simulated: 506s healthy, 573s after one selective run, 671s from a fresh clone).
+`enforcement-map-derivations`, `layer-contract-conformance` and the new `validator-arm-selection`
+are each sharded two ways. `self-update-join-gate`'s derived range is bounded. The pool width
+moved 16 → 12.
+
+**`self-update-join-gate` was 99.1% one mechanism, and it grew unattended.** A gate invocation
+against a deferring consumer was 155.07s; with `advise_safe_stop` short-circuited, 1.40s. The
+walk over all 150 fixture directories that looked like the suspect was 0.83s. Cause: the seed
+took `THEIRS=HEAD`, so the range spanned 227 commits of which **111 touch VERSION**, and the gate
+spawns one full nested invocation per candidate. **Every release that added no `CHECK_LOADED`
+anchor made this fixture slower with nobody touching it.** Bounding the range took it
+**199.33s → 10.58s** over three interleaved pairs with disjoint ranges and ten byte-identical
+stdouts. The shipped gate is untouched; the consumer-side cost of that walk is recorded, not
+fixed, and monotonicity was measured for the record — **REJECT ×111, zero transitions**, which
+weakens rather than supports a binary-search remedy.
+
+**Two new gates, because the decay above had nothing watching it.** `scripts/fork-profile.sh`
+plus a `FORK_BUDGET` fixture makes the fork count executable rather than prose — deterministic
+and load-independent, since load does not change how many times a script calls `execve`. It
+carries four guards against passing vacuously and a two-directions self-probe that runs before
+the corpus. `validator-arm-selection` is the differential that keeps `--arms` sound: every
+declared id run alone must produce a subset of the full run's output, and on a seeded tree the
+union of the selected runs must equal the full run exactly.
+
+**A shipped defect surfaced by the work**, confirmed with controls in both directions: in
+`self-update-join-gate/seed.sh`, a single `local ref="$1" dest="$2" src="$WORK/src-${ref:0:8}"`
+expands `${ref:0:8}` against the **enclosing** scope, so both installs had always derived
+`src="$WORK/src-"`. `set -u` cannot catch it, because `local` has already declared the name.
+
+**The pool width is not a speed claim and the hook says so.** Swept with the dispatched set
+pinned and the durations record reset before every run: `-P8 [223.45, 276.22]`,
+`-P12 [205.40, 218.75]`, `-P16 [209.31, 213.89]`, `-P20 [209.98, 213.76]`,
+`-P24 [212.38, 220.75]`. On this repo's rule — a difference is real only where readings do not
+overlap — exactly one comparison separates: **-P8 is worse**, which is the control that makes
+every other cell interpretable. 12 through 24 are indistinguishable. Wall clock is flat across
+that band while CPU-seconds rise monotonically, all of it system time, so **wider buys no wall
+clock and spends contention for it**. Twelve is the narrowest width in the band. The nine inner
+pools — 66 workers on top of the outer one — were **not** swept, and that is recorded as owed:
+they cannot be varied by an environment variable, because `enforcement-map-sites` scrubs every
+ambient `AI_DLC_*` name for I10.
+
+**What the read-set skip is and is not.** Replayed over 40 commits, it cuts the dispatched set
+from 150 to ~21 fixtures and the wall clock by 15% — because 10 of 12 selective commits select
+five of the six poles. It optimises sum, not makespan. It is worth keeping and must not be
+credited as a wall-clock mechanism. All 153 drivable fixtures are now mapped, up from 140.
+
 ## [0.369.0] — 2026-08-14
 
 ### A `contradicts-core` ruling expires like a reading, and the conflict it records does not
