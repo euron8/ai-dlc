@@ -239,12 +239,44 @@ if [ "$SECTION" = probe-only ]; then exit 0; fi
 REPS_MAX=1
 [ "$STABLE" = 1 ] && REPS_MAX=4
 
+# THE READINGS ARE TAKEN TWO AT A TIME, AND THAT CHANGES THE ORDER, NOT THE EVIDENCE. The
+# claim is that a total was REPRODUCED -- two independent profiles of one unchanged target
+# agreeing. Nothing in that claim is about when the second profile starts. The number of
+# readings, the rule for picking the answer (the largest total seen twice), and the refusal to
+# answer at all when nothing repeats are all untouched below.
+#
+# THE OBJECTION IS THAT CONCURRENCY IS WHAT LOSES TRACE LINES, and it was measured rather than
+# argued. 48 profiles of one unchanged tree, 24 each way, interleaved -- 16 each on an idle box
+# and 8 each against a herd of twelve concurrent validator runs holding the box at load 17-25,
+# which is where the pre-push pool puts it. Every one of the 48 read the same total and every
+# SPREAD was a single value: zero losses either way. Wall clock, same runs:
+#
+#     idle     serial 32-35s   two at a time 17-19s
+#     loaded   serial 63-64s   two at a time 34-36s
+#
+# AND A LOSS CANNOT PRODUCE A WRONG ANSWER HERE, which is why the batch is safe even where the
+# measurement above does not reach. A dropped line only ever subtracts, so the readings come
+# from {n, n-1} and four of them always contain a repeat -- exit 3 is unconstructible for a
+# single-line loss under either order. What a loss costs is one more batch, and two batches of
+# two is strictly cheaper than four readings taken one after another.
+BATCH=2
 rep=0; best=""
 : > "$WORK/totals"
 while [ "$rep" -lt "$REPS_MAX" ]; do
-  rep=$(( rep + 1 ))
-  profile "$TARGET" "$WORK/run$rep" || exit 2
-  printf '%s %s\n' "$(meta_field "$WORK/run$rep" 1)" "$rep" >> "$WORK/totals"
+  # THE FAILURE OF A BACKGROUNDED `profile` CANNOT BE READ FROM ITS EXIT STATUS -- a subshell's
+  # status is lost -- so it is recorded as a file and asserted, never assumed.
+  batch0=$rep; nb=0
+  while [ "$nb" -lt "$BATCH" ] && [ "$rep" -lt "$REPS_MAX" ]; do
+    rep=$(( rep + 1 )); nb=$(( nb + 1 ))
+    ( profile "$TARGET" "$WORK/run$rep" || : > "$WORK/fail$rep" ) &
+  done
+  wait
+  i=$batch0
+  while [ "$i" -lt "$rep" ]; do
+    i=$(( i + 1 ))
+    [ -f "$WORK/fail$i" ] && exit 2
+    printf '%s %s\n' "$(meta_field "$WORK/run$i" 1)" "$i" >> "$WORK/totals"
+  done
   best="$(awk '{ c[$1]++; if (c[$1] >= 2 && $1 + 0 > m + 0) m = $1 } END { if (m != "") print m }' "$WORK/totals")"
   [ -n "$best" ] && break
 done

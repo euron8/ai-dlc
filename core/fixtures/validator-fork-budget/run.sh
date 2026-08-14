@@ -36,6 +36,15 @@
 # and its own budget derived from the live reading, so no mutant can fail on another's arm.
 # m7 drives `stable_verdict` with a profiler that accepts `--stable` and ignores it.
 #
+# WHERE THIS FIXTURE'S TIME GOES, because it became the suite's second-longest unit and the
+# obvious guess is wrong. Instrumented solo, 32.2s wall / 36.0 CPU-seconds: the `--stable`
+# corpus reading is 31 of the 32, and everything else -- the self-probe, all six arms, and all
+# eight mutants together -- is the remaining second. m1 costs nothing because the profiler's
+# own self-probe refuses before it ever reaches the validator, and m0/m7 profile a three-line
+# script. So there is no mutant to trim and no arm to shard: the unit IS one reading, and the
+# only lever on it is how the reading is taken. That lever lives in scripts/fork-profile.sh,
+# which now takes its reps two at a time.
+#
 # Exit 0 iff the live verdict is PASS and all eight mutants are killed by their own arm.
 set -u
 

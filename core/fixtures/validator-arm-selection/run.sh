@@ -39,6 +39,73 @@ set -u
 NAME="validator-arm-selection"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# --- THE SHARD SPLIT, AND IT IS A MEASUREMENT RATHER THAN A PREFERENCE --------------------
+# This unit became the pre-push suite's POLE the release it was added -- 220 of a 245-second
+# wall. The suite's makespan tracks its single longest DIRECTORY, because `core/fixtures/*/`
+# is what the outer pool globs, so an inner pool here cannot reach it.
+#
+# WHERE THE TIME ACTUALLY GOES, measured solo with `/usr/bin/time -p` on an otherwise idle
+# box, 88.6s wall / 255 CPU-seconds, by instrumenting every block of this file:
+#
+#     arm 0 the plain baseline run          15s
+#     arm 3 --arms <all 94 ids>             15s
+#     arm 4 the 94-id clean sweep           12s
+#     arm 6 the seeded tree's plain run     16s
+#     arm 6 the 94-id attribution sweep     11s
+#     arm 7 the neutered selector, 3 reps   18s
+#     everything else (seed, mutants, ids)   2s
+#
+# So it is FOUR near-full validator runs and two 94-id sweeps, not "the 94 ids" -- the sweeps
+# are 26% of it. That rules out trimming: every one of those units is a total derivation, and
+# the only way to make one cheaper is to run it over fewer ids, which turns it into a sample.
+#
+# THE PARTITION IS BY PREREQUISITE, NOT ROUND-ROBIN, and that is forced rather than chosen.
+# Round-robin is right for enforcement-map-sites, whose assertions are independent and
+# uniformly shaped. Here the phases fall into two clusters with DISJOINT prerequisites: four
+# of them differential against the plain-tree baseline, six of them against a seeded tree. A
+# round-robin deal would put members of both clusters in both shards and every shard would
+# pay both 15-second prerequisites. Splitting on the cluster boundary means the baseline is
+# computed once and the seeded tree once, so this shard costs NO extra CPU -- unlike the
+# earlier families in this program, where every shard re-ran a shared control.
+#
+# WHAT REPLACES THE PER-SHARD CONTROL. enforcement-map-sites runs its A00 control in every
+# shard because its assertions differential against one tree. Shard 'a' here IS that control
+# -- arm 0's plain run licenses arms 3 and 4 and nothing else. Shard 'b' differentials against
+# the SEEDED tree, and its control is the `N_SEEDED < 3` guard below: a validator that had
+# stopped running produces no findings on that tree and the shard reports FIXTURE BROKEN
+# rather than a clean sweep. Neither shard can report green having run nothing.
+SHARDS="a b"
+PHASES_a="unknown-id grammar all-ids sweep"
+PHASES_b="attrib union partition m1 m2 m3"
+
+# THE SHARD ARRIVES AS AN ARGUMENT, NOT AS AN ENVIRONMENT VARIABLE. The re-entrant worker
+# modes below are dispatched by argument too, and a fixture that took its identity from the
+# environment would silently fall back to shard 'a' wherever that name failed to reach it --
+# the suite would then run shard 'a' twice and report two green fixtures. It is read HERE,
+# ahead of the root resolution, so the SKIP line a consumer would print names the shard it
+# was actually asked for rather than the base fixture.
+GROUP=a
+if [ "${1:-}" = "--group" ]; then
+  GROUP="${2:-}"
+  [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
+fi
+case " $SHARDS " in
+  *" $GROUP "*) ;;
+  *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
+esac
+eval "MINE=\"\${PHASES_$GROUP:-}\""
+# AN EMPTY SHARD PASSES EVERY ASSERTION IT NEVER MADE. A name in SHARDS with no PHASES_ list
+# would run the prologue, print a clean banner and exit 0.
+if [ -z "$MINE" ]; then
+  echo "FIXTURE ERROR: shard '$GROUP' is declared in SHARDS but has no PHASES_$GROUP list; a shard dealt no phases passes everything it never checked" >&2
+  exit 2
+fi
+BASENAME="$NAME"
+[ "$GROUP" = a ] || NAME="$NAME-$GROUP"
+
+want()     { case " $MINE " in *" $1 "*) return 0 ;; esac; return 1; }
+want_any() { for _p in "$@"; do want "$_p" && return 0; done; return 1; }
+
 # BOTH LAYOUTS NAMED, never a single walk-up (I33c). Here the fixture sits at
 # core/fixtures/<name>/; the consumer layout puts it at tests/fixtures/<name>/. This unit is
 # .dist-only and only ever runs here, but a resolver that names one layout is the shape the
@@ -97,6 +164,7 @@ echo "$NAME fixture"
 echo
 
 fails=0
+RAN=""
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 broke() { printf '  FIXTURE BROKEN  %s\n' "$1"; exit 2; }
@@ -107,6 +175,11 @@ trap 'rm -rf "$TMP"' EXIT
 # and a knob here multiplies against a knob there; six is chosen so the two selected-run sweeps
 # (94 ids each, ~0.6 CPU-seconds apiece) do not sit on the critical path while the unit still
 # demands well under a third of the box on its own.
+#
+# AND IT IS NOT THE LEVER, which is why widening it was not the answer to this file becoming
+# the pole. Measured solo, the two sweeps together are 23 of 89 seconds; the other 64 are four
+# near-full validator runs, each of which is a single serial process no inner pool can touch.
+# The directory split above is what those four needed.
 JOBS=6
 
 # The declared id set, taken from the SERVED grammar rather than a fresh grep. The reason is
@@ -122,24 +195,75 @@ if [ "${N_IDS:-0}" -lt 50 ]; then
   broke "derived only ${N_IDS:-0} invariant id(s) from ${RENDERER##*/} --arm-lines; the grammar or the validator moved and every sweep below would be vacuous. stderr: $(head -2 "$TMP/armlines.err")"
 fi
 
+# --- THE COVERAGE JOIN, in shard 'a' only --------------------------------------------------
+# Sharding moves assertions out of this directory, so the failure it introduces is a phase
+# that runs NOWHERE -- a shard directory deleted, a phase name misspelled in one of the lists,
+# or a block whose guard was renamed. Every one of those makes the suite report a shorter
+# green run, which is this repository's named recurring defect wearing a new hat.
+#
+# BOTH SIDES ARE DERIVED AND NEITHER IS THE OTHER. The declared side is the PHASES_* lists;
+# the live side is grepped from the GUARD LINE of each assertion block, which is the line that
+# actually decides whether the block runs. A whole-file grep for the phase name would be
+# satisfied by this comment, and a list joined against itself is a tautology.
+if [ "$GROUP" = a ]; then
+  cov_missing=""
+  for _s in $SHARDS; do
+    [ "$_s" = a ] && continue
+    [ -f "$DIR/../$BASENAME-$_s/run.sh" ] || cov_missing="$cov_missing $_s"
+  done
+  if [ -n "$cov_missing" ]; then
+    broke "shard(s)$cov_missing declared in SHARDS have no driver directory beside this one. Their phases would run NOWHERE and this suite would report a shorter green run."
+  fi
+
+  cov_all=""
+  for _s in $SHARDS; do
+    eval "cov_all=\"\$cov_all \${PHASES_$_s:-}\""
+  done
+  printf '%s\n' $cov_all | grep -c . > "$TMP/cov.n"
+  printf '%s\n' $cov_all | sort -u > "$TMP/cov.declared"
+  grep -oE '^if want [a-z0-9-]+; then$' "$0" | awk '{ sub(/;$/, "", $3); print $3 }' | sort -u > "$TMP/cov.sites"
+  cov_n="$(cat "$TMP/cov.n")"
+  cov_u="$(grep -c . "$TMP/cov.declared" || true)"
+  cov_s="$(grep -c . "$TMP/cov.sites" || true)"
+  # A GRAMMAR THAT STOPPED MATCHING FINDS NOTHING, and an empty live side agrees with an empty
+  # declared side. Floor it rather than let two empties read as a clean join.
+  if [ "${cov_s:-0}" -lt 6 ]; then
+    broke "the phase-guard grammar found only ${cov_s:-0} 'if want <phase>; then' site(s) in $0; it stopped matching and the coverage join below would compare two sets it did not derive"
+  fi
+  if [ "$cov_n" -ne "$cov_u" ]; then
+    broke "the shard phase lists name $cov_n phase(s) but only $cov_u distinct one(s) — a phase declared in two shards runs twice and the suite reports more assertions than this file makes: $(printf '%s\n' $cov_all | sort | uniq -d | tr '\n' ' ')"
+  fi
+  if ! cmp -s "$TMP/cov.declared" "$TMP/cov.sites"; then
+    broke "the shard phase lists and this file's phase guards disagree — some assertion runs in no shard, or a shard names a phase that no longer exists: $(diff "$TMP/cov.sites" "$TMP/cov.declared" | tr '\n' ' ' | cut -c1-160)"
+  fi
+  ok "COVERAGE: all $cov_s phase(s) of this fixture are dealt to exactly one of the $(printf '%s\n' $SHARDS | grep -c .) shard(s), each of which has a driver directory"
+fi
+
 # --- Arm 0: CONTROL — the real tree passes a plain run ------------------------------------
 # Every "selection reproduced the full run" below is a comparison against this run's output.
 # A dirty baseline does not merely weaken them: the verdict block prints its `OK:` line only
 # on a clean run, so a failing baseline makes every selected run's summary a line the full run
 # never printed and the subset arm reports ninety-four unattributable offenders.
+#
+# IT IS A PREREQUISITE, NOT A PHASE, and it is paid only by the shard that holds a phase
+# needing it. Shard 'b' differentials against the seeded tree instead and never runs this.
+if want_any all-ids sweep; then
 bash "$VAL" > "$TMP/full.out" 2> "$TMP/full.err"; FULL_RC=$?
 if [ "$FULL_RC" -eq 0 ]; then
   ok "plain run of validate-enforcement-map.sh exits 0 (the differentials below are attributable)"
 else
   bad "plain run of validate-enforcement-map.sh exits $FULL_RC — the baseline this fixture differentials against is already dirty, so nothing below is evidence about selection: $(grep -m1 '^FAIL:' "$TMP/full.err" | cut -c1-140)"
 fi
+fi
 
 # --- Arm 1: an id no arm declares must EXIT 2, never 0 having run nothing ------------------
 # The whole hazard of a selector is the request that silently matches nothing. `--arms I999`
 # must name what it could not find. The control is the same invocation shape with a real id:
 # without it this arm would pass against a validator that exits 2 on everything.
-sel_out="$(bash "$VAL" --arms I999 2>&1)"; sel_rc=$?
 first_id="$(head -1 "$IDS")"
+if want unknown-id; then
+RAN="$RAN unknown-id"
+sel_out="$(bash "$VAL" --arms I999 2>&1)"; sel_rc=$?
 ctl_out="$(bash "$VAL" --arms "$first_id" 2>&1)"; ctl_rc=$?
 case "$sel_rc:$sel_out" in
   2*"no arm declares I999"*) ok "--arms I999 exits 2 and names the id it could not resolve" ;;
@@ -150,11 +274,14 @@ if [ "$ctl_rc" -eq 0 ] || [ "$ctl_rc" -eq 1 ]; then
 else
   bad "CONTROL FAILED: --arms $first_id exited $ctl_rc. The unknown-id arm above cannot be read — a selector that rejects every id would satisfy it too. Output: $(printf '%s' "$ctl_out" | head -1)"
 fi
+fi
 
 # --- Arm 2: the flag grammar itself fails closed -------------------------------------------
 # `--arms` with no value and an unrecognised flag must both be usage failures. A validator
 # that treated an empty selection as "run everything" would make every converted battery
 # silently pay the full cost and prove nothing about selection.
+if want grammar; then
+RAN="$RAN grammar"
 bash "$VAL" --arms >/dev/null 2>&1; u1_rc=$?
 bash "$VAL" --not-a-flag >/dev/null 2>&1; u2_rc=$?
 bash "$VAL" --arms "$first_id" extra >/dev/null 2>&1; u3_rc=$?
@@ -163,17 +290,21 @@ if [ "$u1_rc" -eq 2 ] && [ "$u2_rc" -eq 2 ] && [ "$u3_rc" -eq 2 ]; then
 else
   bad "the flag grammar does not fail closed: '--arms' exited $u1_rc, '--not-a-flag' exited $u2_rc, a trailing operand exited $u3_rc — each must be 2"
 fi
+fi
 
 # --- Arm 3: EVERY declared id selected must be BYTE-IDENTICAL to a plain run ---------------
 # One line, and it exercises every region boundary at once: preamble, every unit range, and
 # the epilogue. If a boundary is off by a line, some arm's body is attributed to its
 # neighbour and either runs twice or not at all, and this comparison sees it.
+if want all-ids; then
+RAN="$RAN all-ids"
 ALL="$(tr '\n' ',' < "$IDS" | sed 's/,$//')"
 bash "$VAL" --arms "$ALL" > "$TMP/all.out" 2> "$TMP/all.err"; ALL_RC=$?
 if [ "$ALL_RC" -eq "$FULL_RC" ] && cmp -s "$TMP/full.out" "$TMP/all.out" && cmp -s "$TMP/full.err" "$TMP/all.err"; then
   ok "--arms with all $N_IDS declared ids is byte-identical to a plain run (stdout, stderr, exit $FULL_RC)"
 else
   bad "--arms with every declared id DIFFERS from a plain run (exit $ALL_RC vs $FULL_RC). A region boundary is misplaced, which means some arm's body belongs to its neighbour. $(diff "$TMP/full.out" "$TMP/all.out" 2>&1 | head -3 | tr '\n' ' ')$(diff "$TMP/full.err" "$TMP/all.err" 2>&1 | head -3 | tr '\n' ' ')"
+fi
 fi
 
 # --- Arm 4: EVERY id alone must run without a broken slice ---------------------------------
@@ -182,6 +313,8 @@ fi
 # skipped unit assigned emits `unbound variable`; a missing function emits `command not
 # found`; a mis-sliced region emits a syntax error. All three are invisible to the exit code
 # whenever the read happens inside a `$( )`, which is why they are matched by TEXT.
+if want sweep; then
+RAN="$RAN sweep"
 mkdir -p "$TMP/sw"
 tr '\n' '\0' < "$IDS" \
   | xargs -0 -n1 -P "$JOBS" bash "$0" --sweep-one "$VAL" "$TMP/full.out" "$TMP/full.err" "$TMP/sw" \
@@ -197,11 +330,17 @@ elif [ "${SWEEP_N:-0}" -eq 0 ]; then
 else
   bad "$SWEEP_N id(s) do not survive being selected alone — a unit reads a value another unit assigns, or a region boundary is wrong: $(head -3 "$TMP/sweep.txt" | tr '\n' '|')"
 fi
+fi
 
 # --- the seeded tree, and the three mutant copies of it -----------------------------------
 # Every mutant is a whole TREE, not a lone script copy: the validator resolves REPO_ROOT from
 # its own location, so a copy sitting beside nothing exits 2 with `required input not found`
 # and that reads exactly like the mutant being killed.
+#
+# PREREQUISITE, paid by whichever shard holds a phase that differentials against this tree.
+# It is cheap -- measured at under a second -- so it is not what the shard split is about.
+T=""
+if want_any attrib union partition m1 m2 m3; then
 if [ ! -f "$SEED" ]; then
   broke "no seed at $SEED — this fixture builds its mutated tree from enforcement-map-sites' seed and cannot proceed without it"
 fi
@@ -210,16 +349,6 @@ mkdir -p "$T/core/brand-new-subtree" "$T/core/fixtures/zz-arm-selection-probe"
 echo 'x' > "$T/core/brand-new-subtree/thing.sh"
 echo 'x' > "$T/core/fixtures/zz-arm-selection-probe/run.sh"
 TV="$T/scripts/validate-enforcement-map.sh"
-
-# --- Arm 6: the FINDINGS differential, on a tree seeded to make several arms speak ---------
-# The clean-tree sweep cannot see this direction. This tree carries two additions -- a new
-# core subtree and a new fixture directory -- which between them produce several findings
-# across several arms.
-bash "$TV" > /dev/null 2>"$T/seeded.err"
-grep '^FAIL:' "$T/seeded.err" | sort > "$TMP/seeded.fails"
-N_SEEDED="$(grep -c . "$TMP/seeded.fails" || true)"
-if [ "${N_SEEDED:-0}" -lt 3 ]; then
-  broke "the seeded tree produced only ${N_SEEDED:-0} finding(s); this differential needs at least three arms speaking at once and the mutation no longer reaches them"
 fi
 
 # Attribute each finding to an id by asking the SELECTOR, never by reading the message text.
@@ -235,26 +364,6 @@ attrib() { # attrib <tree-validator> <tag> <candidate-id-file> -> $TMP/<tag>.ids
     cp "$d/f.$id" "$TMP/$tag.$id"
   done < "$cands"
 }
-attrib "$TV" sel "$IDS"
-N_ATTRIB="$(grep -c . "$TMP/sel.ids" || true)"
-
-if [ "${N_ATTRIB:-0}" -lt 3 ]; then
-  bad "the seeded tree produced $N_SEEDED finding(s) under a full run but only ${N_ATTRIB:-0} id(s) reproduce any of them when selected alone — findings are being LOST by selection, which is the failure this fixture exists to catch"
-else
-  ok "$N_SEEDED seeded finding(s) attribute to $N_ATTRIB id(s), each reproduced by its own --arms run"
-fi
-
-# The union of the per-id findings must equal the full run's. A selector that dropped an arm
-# satisfies neither this nor the group arm below; a selector that ignores its argument
-# satisfies this one and fails the next, which is why both are here.
-: > "$TMP/union"
-while IFS= read -r id; do [ -n "$id" ] && cat "$TMP/sel.$id" >> "$TMP/union"; done < "$TMP/sel.ids"
-sort -u "$TMP/union" -o "$TMP/union"
-if cmp -s "$TMP/union" "$TMP/seeded.fails"; then
-  ok "the union of the per-arm findings equals the full run's findings exactly"
-else
-  bad "the union of the per-arm findings differs from the full run's: $(diff "$TMP/seeded.fails" "$TMP/union" | head -2 | cut -c1-110 | tr '\n' ' ')"
-fi
 
 # GROUPS, NOT IDS. Two ids sharing a unit are byte-identical by construction, so the partition
 # claim is about groups of identical output. `groups <tag>` prints `<count>` and leaves one
@@ -270,7 +379,55 @@ groups() {
   sort -u -k1,1 "$TMP/$tag.sums" | cut -f2 > "$TMP/$tag.reps"
   grep -c . "$TMP/$tag.reps" || true
 }
+
+# --- Arm 6: the FINDINGS differential, on a tree seeded to make several arms speak ---------
+# The clean-tree sweep cannot see this direction. This tree carries two additions -- a new
+# core subtree and a new fixture directory -- which between them produce several findings
+# across several arms.
+#
+# PREREQUISITE, and it is the expensive half of shard 'b': one plain run of the seeded tree's
+# validator (16s) and one 94-id attribution sweep (11s). The `N_SEEDED < 3` guard inside it is
+# THIS SHARD'S CONTROL -- a validator that had stopped running produces no findings on a tree
+# seeded to make several arms speak, and the shard reports FIXTURE BROKEN rather than a clean
+# differential over an empty set.
+if want_any attrib union partition m2; then
+bash "$TV" > /dev/null 2>"$T/seeded.err"
+grep '^FAIL:' "$T/seeded.err" | sort > "$TMP/seeded.fails"
+N_SEEDED="$(grep -c . "$TMP/seeded.fails" || true)"
+if [ "${N_SEEDED:-0}" -lt 3 ]; then
+  broke "the seeded tree produced only ${N_SEEDED:-0} finding(s); this differential needs at least three arms speaking at once and the mutation no longer reaches them"
+fi
+attrib "$TV" sel "$IDS"
+N_ATTRIB="$(grep -c . "$TMP/sel.ids" || true)"
 N_GROUPS="$(groups sel)"
+fi
+
+if want attrib; then
+RAN="$RAN attrib"
+if [ "${N_ATTRIB:-0}" -lt 3 ]; then
+  bad "the seeded tree produced $N_SEEDED finding(s) under a full run but only ${N_ATTRIB:-0} id(s) reproduce any of them when selected alone — findings are being LOST by selection, which is the failure this fixture exists to catch"
+else
+  ok "$N_SEEDED seeded finding(s) attribute to $N_ATTRIB id(s), each reproduced by its own --arms run"
+fi
+fi
+
+# The union of the per-id findings must equal the full run's. A selector that dropped an arm
+# satisfies neither this nor the group arm below; a selector that ignores its argument
+# satisfies this one and fails the next, which is why both are here.
+if want union; then
+RAN="$RAN union"
+: > "$TMP/union"
+while IFS= read -r id; do [ -n "$id" ] && cat "$TMP/sel.$id" >> "$TMP/union"; done < "$TMP/sel.ids"
+sort -u "$TMP/union" -o "$TMP/union"
+if cmp -s "$TMP/union" "$TMP/seeded.fails"; then
+  ok "the union of the per-arm findings equals the full run's findings exactly"
+else
+  bad "the union of the per-arm findings differs from the full run's: $(diff "$TMP/seeded.fails" "$TMP/union" | head -2 | cut -c1-110 | tr '\n' ' ')"
+fi
+fi
+
+if want partition; then
+RAN="$RAN partition"
 overlap=0
 while IFS= read -r a; do
   while IFS= read -r b; do
@@ -285,6 +442,7 @@ if [ "${N_GROUPS:-0}" -ge 3 ] && [ "$overlap" -eq 0 ]; then
 else
   bad "selection did not partition the findings: $N_GROUPS distinct output group(s) (floor 3) and $overlap overlapping pair(s). A selector that runs more than it was asked for collapses every group into one and makes each battery's per-arm number a measurement of the whole file"
 fi
+fi
 
 # --- Arm 5: THE MUTANT for arm 4. An ABSENCE-shaped arm requires one ----------------------
 # Arm 4 reports the number of offending ids and that number is normally zero, which is what a
@@ -292,6 +450,8 @@ fi
 # to assign it and arm 4's predicate must name the reader. Measured shape: `TEMPLATE` is
 # assigned in I13's unit and read by I14's, and before the hoist `--arms I14` died with
 # `TEMPLATE: unbound variable`.
+if want m1; then
+RAN="$RAN m1"
 TM1="$TMP/m1"
 cp -R "$T" "$TM1"
 awk '
@@ -308,6 +468,7 @@ if grep -q 'TEMPLATE: unbound variable' "$TMP/m1.err"; then
 else
   bad "MUTANT SURVIVED: un-hoisting TEMPLATE did NOT make --arms I14 emit an unbound-variable error. Arm 4 above cannot distinguish a sound slice from a broken one and its clean report means nothing. stderr: $(head -1 "$TMP/m1.err" | cut -c1-120)"
 fi
+fi
 
 # --- Arm 7: THE MUTANT for arm 6 -----------------------------------------------------------
 # Neuter the emission test so `--arms` keeps every line, and the group arm above must go red:
@@ -321,6 +482,8 @@ fi
 # this fixture is meant to save. The representatives are exactly the ids the arm above found
 # to differ from each other, so if the mutant fails to collapse them it fails to collapse
 # anything, and the floor is the same one arm 6 is judged by.
+if want m2; then
+RAN="$RAN m2"
 TM2="$TMP/m2"
 cp -R "$T" "$TM2"
 awk '{ sub(/if \(ln < ustart\[1\] \|\| ln >= verdict \|\| \(ln in keep\)\) print l/, "print l"); print }' \
@@ -336,6 +499,7 @@ if [ "${M2_GROUPS:-0}" -lt "$N_GROUPS" ]; then
 else
   bad "MUTANT SURVIVED: a selector stripped of its keep-range test still produced ${M2_GROUPS:-0} distinct output groups out of $N_GROUPS representatives. Arm 6's partition check cannot fire and its clean report means nothing"
 fi
+fi
 
 # --- Arm 8: an arm that cannot EMIT must be unconstructible, not merely unchecked ----------
 # `--arms` runs no silent-arm check of its own. It does not need one: `--arm-lines` runs the
@@ -343,6 +507,8 @@ fi
 # err/warn/fail call fails there and `--arms` exits 2. That is a partition rather than a
 # check, and a partition still has to be shown to hold -- a renderer that stopped asserting it
 # would leave `--arms` selecting an arm that can never speak, which passes forever.
+if want m3; then
+RAN="$RAN m3"
 TM3="$TMP/m3"
 cp -R "$T" "$TM3"
 { cat "$TV"; printf '\n# --- I998: a declared arm with no emitter ------------------------------------\n:\n'; } \
@@ -353,8 +519,19 @@ if [ "$m3_rc" -eq 2 ] && grep -q 'no err/warn/fail call' "$TMP/m3.err"; then
 else
   bad "MUTANT SURVIVED: adding a declared arm with no err/warn/fail call left --arms exiting $m3_rc. A battery could select an invariant that cannot emit, and that fixture would pass forever. stderr: $(head -1 "$TMP/m3.err" | cut -c1-120)"
 fi
+fi
 
-rm -rf "$T"
+[ -n "$T" ] && rm -rf "$T"
+
+# EVERY PHASE THIS SHARD WAS DEALT MUST HAVE RUN. A `want` that stopped matching -- a renamed
+# phase, a typo in a PHASES_ list, a guard edited out -- silently drops assertions, and a
+# shorter clean run reads exactly like a full one. The coverage join above binds the two SETS;
+# this binds what actually EXECUTED to the set this shard holds.
+ran_n="$(printf '%s\n' $RAN | grep -c . || true)"
+mine_n="$(printf '%s\n' $MINE | grep -c . || true)"
+if [ "${ran_n:-0}" -ne "${mine_n:-0}" ]; then
+  broke "shard '$GROUP' was dealt $mine_n phase(s) [$MINE] but only ${ran_n:-0} executed [$RAN]; the rest asserted nothing and this run's clean lines are a shorter report, not a passing one"
+fi
 
 echo
 if [ "$fails" -eq 0 ]; then
