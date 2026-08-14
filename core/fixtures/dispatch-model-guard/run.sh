@@ -273,6 +273,33 @@ stale_out="$(newprompt "$CONSUMER" "$STALE" | grep -oE 'reasoning effort for thi
   && ok "CONTROL: that dispatch produced a decision at all — the correction is an emission, not a silent pass" \
   || bad "CONTROL: the guard emitted nothing for a dispatch carrying the wrong level"
 
+# --- 13c-MUT. the idempotence arm is an ABSENCE, so prove it can fire ---------
+# `expect_untouched` asserts the hook emitted NOTHING, and a hook that emits nothing for every
+# input satisfies it perfectly. That arm is the only thing coupling the guard's emitted effort
+# line to its own dedupe test — reword one without the other and it is what goes red — so an
+# arm that cannot fire would silently uncouple them. The guard sources no siblings, so a lone
+# copy is a faithful subject here; the unmutated control states that rather than assuming it.
+MCTL="$WORK/guard-control.sh"; cp "$HOOK" "$MCTL"
+[ -z "$(printf '%s' "$IDEM" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$MCTL" 2>/dev/null)" ] \
+  && ok "MUTANT CONTROL: an unmutated copy of the guard is still silent on the idempotent dispatch" \
+  || bad "MUTANT CONTROL is dead — a copy of the guard behaves differently from the original, so the kill below is unearned"
+
+# THE MUTATION MUST MAKE THE DEDUPE MATCH NOTHING, NOT MATCH EVERYTHING, and the first
+# attempt here got that backwards. Widening the pattern to `*)` means NEEDS_EFFORT is never
+# set, so the mutant emits nothing on this input — which is exactly what the ORIGINAL does,
+# and the arm scored a kill it had not earned. Narrowing it to a token no prompt contains
+# sends every dispatch down the `NEEDS_EFFORT=true` branch, so the idempotent one starts
+# emitting. Assert the POSITIVE outcome.
+MGUARD="$WORK/guard-nodedupe.sh"
+sed 's|\*"reasoning effort for this role is \${PIN_EFFORT}"\*) : ;;|*"__NO_PROMPT_CONTAINS_THIS__"*) : ;;|' "$HOOK" > "$MGUARD"
+if cmp -s "$HOOK" "$MGUARD"; then
+  bad "MUTANT matched nothing (cmp -s guard) — the idempotence arm proves nothing"
+else
+  [ -n "$(printf '%s' "$IDEM" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$MGUARD" 2>/dev/null)" ] \
+    && ok "MUTANT: with the dedupe unable to match, the idempotent dispatch starts emitting — so that arm is live" \
+    || bad "MUTANT: the idempotent dispatch stayed silent even with the dedupe disabled — the idempotence arm passes whatever the guard does"
+fi
+
 # --- 13d. a role with no config entry -> UNTOUCHED (fail-open) --------------
 expect_untouched "$CONSUMER" "$(mkjson Agent nocfg)" \
   "role file with no aiDlcRoles entry — fail-open, binds nothing"

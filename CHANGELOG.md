@@ -34,6 +34,60 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.368.0] — 2026-08-14
+
+### Every arm v0.367.0 added was in both directions, and three of them still could not fire
+
+v0.367.0 shipped four fixtures' worth of new assertions, each with a seeded offender and a
+seeded near-miss. That is the both-directions half of this repo's most-repeated rule, and it was
+committed. What was NOT committed was the other half: a mutant proving the ABSENCE-shaped arms
+die when their subject does. Those mutations were run by hand while building the release and
+then thrown away, so nothing re-proved the arms afterwards.
+
+**Measured, not argued.** With `audit-layer-debt.sh` replaced by `#!/usr/bin/env bash\nexit 0`:
+
+```
+ok    a `closes_owed` written as a bare string still discharges its debt
+ok    CONTROL: a register whose closes_owed are all arrays reports no mistyped rows
+```
+
+Both new arms score GREEN against a reader that emits nothing at all — an absence passing for a
+program that never ran, which is the exact defect `layer-debt-ledger`'s own assertion 8 was
+written to prevent one arm earlier in the same file. The fixture as a whole still went red on
+four sibling arms, so nothing shipped broken; the exposure was that narrowing any of those
+siblings would have made assertion 9 vacuous with no signal.
+
+Five committed mutants close it, each asserting a POSITIVE outcome and each killing only its
+own arm:
+
+- **`layer-debt-ledger`** — reverting the coercion to the bare `or []` this release replaced
+  makes the string-form debt REAPPEAR; widening the mistyped counter to flag well-formed lists
+  turns the control red.
+- **`reconcile-blocking-list`** — removing the `DRIFT-RANGE-DEGENERATE` row test makes the
+  qualifier appear on a range whose two refs differ.
+- **`consumer-suite-pool`** — deleting the verdict selector captures a GREEN unit into the
+  failure record.
+- **`dispatch-model-guard`** — a dedupe that cannot match makes the idempotent dispatch start
+  emitting, which is the only thing coupling the guard's effort line to its own dedupe test.
+
+**Two of the five were wrong on the first attempt, in ways worth recording.**
+
+`reconcile-blocking-list`'s mutant was a lone copy of `hard-blockers.sh` in a temp dir. That
+script resolves its two detectors as siblings of its own path, so the copy found neither, `[ -f
+"$UD" ]` was false, and it emitted an empty list — a kill for every mutation and evidence for
+none. It now copies the whole `reconcile/` directory, and an **unmutated control** asserts the
+copy still resolves its detectors before any verdict below it is believed.
+
+`dispatch-model-guard`'s mutant widened the dedupe to `*)` so it matched EVERYTHING, which means
+`NEEDS_EFFORT` is never set and the mutant emits nothing on the idempotent input — which is
+precisely what the original does. It scored a kill it had not earned. Narrowing the pattern to a
+token no prompt can contain is the mutation that actually sends every dispatch down the
+`NEEDS_EFFORT=true` branch.
+
+Under the dead-reader probe above, `layer-debt-ledger` now reports `FIXTURE ERROR: the
+assertion-9 mutation matched nothing` rather than a silent green — the `cmp -s` no-op guard
+turning "my subject is not what I think it is" into a stated finding.
+
 ## [0.367.0] — 2026-08-13
 
 Four defects the graph consumer filed during its sprints 302 and 303, re-verified against this

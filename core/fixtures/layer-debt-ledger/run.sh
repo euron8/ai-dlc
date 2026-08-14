@@ -30,7 +30,7 @@ WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 REG="$WORK/register.jsonl"
 
-EXPECTED_ASSERTIONS=11
+EXPECTED_ASSERTIONS=13
 fails=0; made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
@@ -187,6 +187,59 @@ grep -q 'MISTYPED_CLOSES_OWED=1' <<<"$str_out" \
 grep -q 'MISTYPED_CLOSES_OWED' <<<"$out" \
   && bad "CONTROL: the well-formed register was reported as carrying a mistyped row — the counter fires on correct data" \
   || ok "CONTROL: a register whose closes_owed are all arrays reports no mistyped rows"
+
+# --- 10/11. MUTATIONS: the two absence-shaped arms above -----------------------------------
+# Assertion 9 is an ABSENCE (`OWED-STR-1` must NOT appear) and so is assertion 11's control.
+# Measured: with the reader replaced by `exit 0` BOTH scored green, which is precisely the
+# defect assertion 8 exists for one arm up. These two make them mean something.
+mkmut() { # mkmut <label> <find> <replace> -> prints path, or empty on a no-op mutation
+  local m="$WORK/mutant-$1.sh"
+  cp "$AUDIT" "$m"
+  python3 - "$m" "$2" "$3" <<'PY'
+import io, sys
+p, a, b = sys.argv[1], sys.argv[2], sys.argv[3]
+s = io.open(p, encoding="utf-8").read()
+n = s.replace(a, b)
+if n == s:
+    raise SystemExit(3)
+io.open(p, "w", encoding="utf-8").write(n)
+PY
+  [ $? -eq 0 ] && ! cmp -s "$AUDIT" "$m" && printf '%s' "$m"
+}
+
+# 10 — the coercion reverted to the bare `or []` this release replaced. The string form must
+# stop closing its debt, i.e. the id REAPPEARS. Asserted as a positive outcome, not as the
+# absence of the new message.
+M10="$(mkmut a9 '    co = r.get("closes_owed")
+    if isinstance(co, str):
+        co, mistyped = [co], mistyped + 1
+    elif co is None:
+        co = []
+    elif not isinstance(co, list):
+        co, mistyped = [], mistyped + 1
+    for cid in co:' '    for cid in r.get("closes_owed") or []:')"
+if [ -z "$M10" ]; then
+  bad "FIXTURE ERROR: the assertion-9 mutation matched nothing — assertion 9 proves nothing"
+else
+  m10_out="$(bash "$M10" --register "$STR_REG" 2>&1)"
+  grep -q 'OWED-STR-1' <<<"$m10_out" \
+    && ok "MUTATION: without the coercion the string-form close stops working and the debt reappears (so assertion 9 is live)" \
+    || bad "MUTATION: the debt stayed closed with the coercion removed — assertion 9 passes whatever the reader does"
+fi
+
+# 11 — the mistyped counter widened to flag well-formed lists. Assertion 11's control must go
+# red, which is what makes it a statement about correct data rather than about silence.
+M11="$(mkmut a11 '    elif co is None:' '    elif isinstance(co, list) and co:
+        mistyped += 1
+    elif co is None:')"
+if [ -z "$M11" ]; then
+  bad "FIXTURE ERROR: the assertion-11 mutation matched nothing — assertion 11's control proves nothing"
+else
+  m11_out="$(bash "$M11" --register "$REG" 2>&1)"
+  grep -q 'MISTYPED_CLOSES_OWED' <<<"$m11_out" \
+    && ok "MUTATION: a counter that flags well-formed lists is caught by the control (so assertion 11 discriminates)" \
+    || bad "MUTATION: the well-formed register still reported no mistyped rows — assertion 11's control is vacuous"
+fi
 
 echo ""
 if [ "$made" -ne "$EXPECTED_ASSERTIONS" ]; then

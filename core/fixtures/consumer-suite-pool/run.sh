@@ -402,12 +402,28 @@ if mut m3 's|xargs -P "\$FIXTURE_JOBS"|xargs -P 1|'; then M="$MUT"
   unset CSP_OBSERVE
 fi
 
+# M4 — the failure record's SELECTOR removed, so every unit is written out whether it
+# passed or not. The green-run control in arm 2b is an ABSENCE (`! grep GREENTOKEN`), and an
+# absence passes against a hook that wrote no record at all — the same shape assertion 2's
+# mutant exists for in `layer-debt-ledger`. This is the arm that makes that control mean
+# "only red units are captured" rather than "something did not happen".
+if mut m4 '/= ok \] && continue/d'; then M="$MUT"
+  T="$WORK/m4"; seed "$T" "$M" || broken "seed failed"
+  mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 0 M4TOKEN
+  rc="$(drive "$T" "$WORK/m4.out")"
+  if [ "$rc" = 0 ] && grep -q 'M4TOKEN-stdout' "$T/.git/ai-dlc-fixture-failures" 2>/dev/null; then
+    ok "M4 without the verdict selector a GREEN unit is captured too — so the control is what proves only red units are"
+  else
+    bad "M4 the green unit was still not captured (rc=$rc) — arm 2b's green-run control passes whatever the selector does, and proves nothing"
+  fi
+fi
+
 # ------------------------------------------------------------------- floor ---------
 # EXPECTED_ASSERTIONS, mandatory since v0.217.0 for any fixture whose arms are
 # emitted from inside a conditional: an assertion that never executed prints nothing,
 # and a short green report reads exactly like a complete one. This is the same
 # property the hook itself now asserts about its own workers, one layer out.
-EXPECTED_ASSERTIONS=17
+EXPECTED_ASSERTIONS=18
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"
