@@ -71,9 +71,37 @@ is waiting on a human look identical. Merges are preapproved — do not stop to 
 The pinned copies live in the session scratchpad. **Every step from Phase 0 step 3 onward reads
 the pin, not the live file** — a graph session is filing into the live ledger concurrently.
 
-**Everything below Phase 0 step 1 is NOT yet executed.** The figures in the two tables that
-follow were derived in the planning session against those same refs. **They are hypotheses the
-moment either tree moves — re-derive rather than carrying them forward.**
+**Phase 0 steps 2–4 are COMPLETE, and they replace the planning-session estimates below.** The
+census was built by lifting `ledger-reverify.sh`'s own extraction program (lines 621–738)
+verbatim and changing one thing: `flush()`'s `has_verify &&` conjunct was dropped so an entry
+carrying no receipt is emitted too. **The control is that the receipt-carrying subset must equal
+the tool's own label set** — 79 labels each way, symmetric difference EMPTY, and the comparison
+demonstrably fires on a one-line mutant.
+
+| derived, Phase 0 | value |
+|---|---|
+| **open entry starts** | **131** |
+| section banners that are not entries | 16 |
+| **adjudicable open entries** | **115** |
+| carrying `theirs_has` | 25 |
+| carrying `verify: manual` | 24 |
+| carrying `verify: sh` | 19 |
+| carrying `theirs_lacks` | 11 |
+| **carrying no receipt at all — invisible to the closer** | **36** |
+
+**The tool's ENTRY column is not a unique key, and that is a new finding.** Its own header calls
+the label *"a join key back into the ledger"*, but the label is whatever precedes the first
+` — `, so four `## Open — filed <date>` banners all label as `Open` and the two
+`scripts/validate-provenance-block.sh` bullets at pin lines 297 and 302 collide outright.
+**Measured: no collision today involves a receipt-carrying entry**, so the defect is real but
+currently emits no wrong report row. Tier it accordingly.
+
+**Phase 1 is IN PROGRESS.** The 115 entries are cut into **29 batches of 4** (batch 29 has 3),
+ordered by ledger line, each batch given its pin line span. The batch table and the shared
+adjudication brief live in the session scratchpad.
+
+The two tables that follow are the superseded planning-session estimates, kept because the
+false finding in them is instructive. **Do not act on their numbers.**
 
 **Two tiers, and only the first is trustworthy.** The upper block is what the shipping
 `ledger-reverify.sh` emitted. The lower block comes from parsers written in the planning
