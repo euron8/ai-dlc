@@ -38,6 +38,16 @@
 # Nothing about that is a property of the assertions. Each one already re-copied a pristine
 # tree and shared no state with any other, so they were independent before this driver
 # existed; the serial `t="$(fresh)"` sequence was just the cheapest way to write them down.
+#
+# AND EACH ASSERTION NOW RUNS ONLY THE ARM IT TESTS. The per-call cost above is the cost of a
+# WHOLE-FILE run, which exactly one assertion still makes: A00, whose claim is an absence over
+# every arm and which therefore cannot be selected. Every other assertion tests one invariant,
+# names it in its own function name, and reaches it through
+# `validate-enforcement-map.sh --arms I<n>` -- so it pays the file's prologue plus its own
+# unit instead of ~76 invariants scanning a tree it does not care about. The selector is
+# DERIVED from the assertion's name and never from a table beside it, there is no fallback to
+# a whole-file run, and the control below fails the shard if selection quietly stops
+# happening. See `arm_id_of`, `run_map` and the selection join at the foot of this file.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -89,10 +99,84 @@ edit() {
   mv "$f.mut" "$f"
 }
 
-# assert <label> <expected substring> — run the validator in $t and require the message.
+# arm_id_of <name> — the invariant id a name DECLARES, or empty.
+#
+# EVERY ASSERTION IS NAMED `A<nn>_i<id>_<what>`, AND THAT EMBEDDED SEGMENT IS THE
+# DECLARATION. `A24_i85_fails_closed_when_blind` declares I85; `A26_i33b_two_step_walk`
+# declares I33b; `A00_control` declares nothing, because the whole file is its subject. A
+# table beside these functions mapping assertion to invariant would be a second list to keep
+# in step, and a drifted row runs the wrong arm while still printing `ok`.
+#
+# The grammar is the validator's own `I[0-9]+[a-c]?`, so an id shape `--arms` can select is
+# exactly an id shape this can derive; the two cannot disagree about what an id looks like.
+arm_id_of() {
+  awk -v n="$1" 'BEGIN {
+    k = split(n, p, "_")
+    for (i = 2; i <= k; i++) if (p[i] ~ /^i[0-9]+[a-c]?$/) { print "I" substr(p[i], 2); exit }
+  }'
+}
+
+# run_map <id> — THE ONE PLACE this fixture invokes the validator, and the ledger every
+# invocation is written into. A non-empty <id> runs only that arm's unit (`--arms`); an empty
+# one runs the whole file.
+#
+# THE LEDGER IS A FILE, NOT A COUNTER VARIABLE, and that is forced. Every caller but A00's
+# reads the output through `$( )`, and an assignment made inside a command substitution is
+# lost with the subshell -- a counter incremented there would read zero at the control below,
+# which is precisely the reading that means selection never happened. A file survives the
+# subshell.
+run_map() {
+  local id="$1"
+  if [ -z "$id" ]; then
+    printf 'f\n' >> "$WORK/calls"
+    bash "$t/scripts/validate-enforcement-map.sh" 2>&1
+    return $?
+  fi
+  printf 's %s\n' "$id" >> "$WORK/calls"
+  bash "$t/scripts/validate-enforcement-map.sh" --arms "$id" 2>&1
+}
+
+# sel_guard <rc> <id> <output> — a validator exit of 2 is a SELECTION failure and never an
+# invariant violation: an id no arm declares, a malformed flag, or a generated subprogram
+# that returned without reaching the verdict block. Nothing was checked, so it must not be
+# scored as a mutant surviving OR as one dying; both readings are false, and the second is
+# the dangerous one because it prints `ok`.
+#
+# CALLED FROM THE ASSERTION'S OWN FRAME, NEVER INSIDE `$( )`. An `exit` inside a command
+# substitution leaves the subshell and the run continues; the `bad` line would be captured
+# into the caller's output variable instead of being printed.
+sel_guard() {
+  [ "$1" = "2" ] || return 0
+  bad "FIXTURE BROKEN — 'validate-enforcement-map.sh --arms $2' exited 2. That is a selection or usage failure, never an invariant violation, so NOTHING was checked here and this is not a surviving mutant. The validator said: $3"
+  exit 2
+}
+
+# assert <label> <expected substring> — run ONLY the arm this assertion tests, in $t, and
+# require the message.
+#
+# THE ARM IS DERIVED FROM THE CALLER'S NAME. `${FUNCNAME[@]}` is walked outward and the
+# innermost frame declaring an id wins, so the 25-odd call sites below are unchanged and an
+# assertion added later selects its arm by being named correctly rather than by anyone
+# remembering a second place to edit it.
+#
+# THERE IS NO SILENT FALLBACK TO A FULL RUN, AND THAT IS THE WHOLE DESIGN. A frame with no
+# derivable id is FIXTURE BROKEN, not "run everything". A full run would still contain the
+# message this assertion is looking for and would still print `ok`, so a fallback is a
+# selection mechanism that cannot fire reading exactly like one that fired -- this file's own
+# subject, one level out.
 assert_fires() {
-  local label="$1" want="$2" out
-  out="$(bash "$t/scripts/validate-enforcement-map.sh" 2>&1)"
+  local label="$1" want="$2" out rc id="" f
+  for f in "${FUNCNAME[@]}"; do
+    id="$(arm_id_of "$f")"
+    [ -n "$id" ] && break
+  done
+  if [ -z "$id" ]; then
+    bad "FIXTURE BROKEN — no frame above assert_fires is named A<nn>_i<id>_<what>, so the arm to select cannot be derived and nothing was checked. Name the assertion for the invariant it tests."
+    exit 2
+  fi
+  out="$(run_map "$id")"
+  rc=$?
+  sel_guard "$rc" "$id" "$out"
   case "$out" in
     *"$want"*) ok "$label" ;;
     *)         bad "$label — the validator did NOT report it. The predicate no longer reaches this subject, and a corpus it cannot see reads exactly like a corpus with nothing wrong in it." ;;
@@ -105,9 +189,15 @@ assert_fires() {
 # because "nothing was tested" and "a check regressed" are different answers, and the
 # driver runs this one first and alone so that a failure here stops the run instead of
 # reporting fourteen unattributable kills.
+#
+# THE ONE ASSERTION THAT KEEPS THE FULL RUN, and it is not an oversight. Its claim is that
+# the seed violates NOTHING -- an absence over every arm in the file. A selected run says
+# nothing whatever about the arms it did not run, so an `--arms` control would license the
+# assertions below against a validator that could still be failing anywhere else. It carries
+# no `_i<id>_` segment, which is how the selection control below knows it is exempt.
 A00_control() {
   t="$(fresh)"
-  if bash "$t/scripts/validate-enforcement-map.sh" >/dev/null 2>&1; then
+  if run_map "" >/dev/null 2>&1; then
     ok "unmutated seed passes (the assertions below mean something)"
   else
     bad "FIXTURE BROKEN — the unmutated seed does not pass validate-enforcement-map.sh. Every assertion below would be a false pass."
@@ -202,11 +292,16 @@ A06_i23_rule_prose_corpus_join() {
   fi
 }
 
-# --- Assertion 7: the per-seed root-resolution depth --------------------------
+# --- Assertion 7: I16 — the per-seed root-resolution depth --------------------
 # A seed that resolves its root two dirs up lands at `tests/` in a consumer and every seed
 # there dies -- correct in the distribution, broken on every consumer, which is why this
 # has to be asserted here rather than noticed there.
-A07_seed_root_resolution_depth() {
+#
+# THE ID IS IN THE NAME BECAUSE IT HAS TO BE DERIVABLE, and it was measured rather than
+# assumed: the `err` carrying "must be '$HERE/../../..'" falls inside the column-0 unit that
+# `render-invariant-index.sh --arm-lines` attributes to I16, and on a tree mutated exactly as
+# below, `--arms I16` reports it while `--arms I3` over the same mutated tree does not.
+A07_i16_seed_root_resolution_depth() {
   t="$(fresh)"
   local victim
   victim="$(grep -lE '[DC]_ROOT="\$\(cd "\$HERE/\.\./\.\./\.\.' "$t"/core/fixtures/*/seed.sh 2>/dev/null | head -1)"
@@ -230,13 +325,22 @@ A07_seed_root_resolution_depth() {
 # inserted, and it would keep printing this same clean line. Halving the window must move
 # the reported band size. If this stops firing, every assertion below is scoped to a
 # subject set the invariant chose rather than measured.
+#
+# SELECTED EXPLICITLY, because this one does not go through assert_fires -- it reads a COUNT
+# out of the output and compares two runs. The predicate is presence-shaped on I79 (I79's own
+# band line must appear, and must MOVE), so an I79-only run carries everything it reads and
+# nothing it reads comes from another arm.
 A08_i79_band_is_derived() {
   t="$(fresh)"
-  local base_n moved_n
-  base_n="$(bash "$t/scripts/validate-enforcement-map.sh" 2>&1 | sed -n 's/.*I79: \([0-9]*\) rule(s).*/\1/p')"
+  local base_n moved_n base_out moved_out rc
+  base_out="$(run_map I79)"; rc=$?
+  sel_guard "$rc" I79 "$base_out"
+  base_n="$(sed -n 's/.*I79: \([0-9]*\) rule(s).*/\1/p' <<<"$base_out")"
   if edit "$t/core/scripts/validate-reattach-budget.sh" \
         '/^BUDGET=/ { print "BUDGET=\"${AI_DLC_REATTACH_BUDGET:-2500}\""; next } { print }'; then
-    moved_n="$(bash "$t/scripts/validate-enforcement-map.sh" 2>&1 | sed -n 's/.*I79: \([0-9]*\) rule(s).*/\1/p')"
+    moved_out="$(run_map I79)"; rc=$?
+    sel_guard "$rc" I79 "$moved_out"
+    moved_n="$(sed -n 's/.*I79: \([0-9]*\) rule(s).*/\1/p' <<<"$moved_out")"
     if [ -n "$base_n" ] && [ -n "$moved_n" ] && [ "$moved_n" -gt "$base_n" ]; then
       ok "I79: halving the re-attach window GROWS the band ($base_n -> $moved_n) — it is derived, not hardcoded"
     else
@@ -303,10 +407,14 @@ A13_i79_carrier_maps_to_no_layout() {
 
 # The gap count is REPORTED rather than silently tolerated — a bound the invariant accepts
 # must be visible, or an accepted gap reads as full coverage.
+#
+# SELECTED EXPLICITLY, for A08's reason: the predicate matches a phrase I79 itself emits, so
+# an I79-only run is the whole population it reads.
 A14_i79_gap_count_is_reported() {
   t="$(fresh)"
-  local out
-  out="$(bash "$t/scripts/validate-enforcement-map.sh" 2>&1)"
+  local out rc
+  out="$(run_map I79)"; rc=$?
+  sel_guard "$rc" I79 "$out"
   case "$out" in
     *"declared carrier gap(s)."*) ok "I79: the declared-gap count is reported, not silently accepted" ;;
     *) bad "I79: no gap count in the output — an accepted gap reads exactly like full coverage" ;;
@@ -549,7 +657,34 @@ if [ "${1:-}" = "--run-one" ]; then
   }
   seed_tree
   trap 'rm -rf "$PRISTINE" "$WORK"' EXIT
+  : > "$WORK/calls"
   "$FN"
+
+  # THE POSITIVE CONTROL THAT SELECTION ACTUALLY HAPPENED, and it is here rather than only in
+  # the parent because this is the process that made the calls.
+  #
+  # A conversion that silently stops selecting must turn the fixture RED, not merely make it
+  # slow. Both sides are derived from the same string: what this assertion SHOULD have done
+  # comes from its own name, what it DID comes from run_map's ledger. An assertion declaring
+  # an id must have made at least one selected call and no full one; A00, which declares
+  # none, must have made no selected call at all.
+  #
+  # It stands down when the assertion has already failed. An assertion whose mutation could
+  # not be built returns before it ever reaches the validator, and charging that a second
+  # line here would entangle two findings in one already-red run.
+  sel_n="$(grep -c '^s ' "$WORK/calls" || true)"
+  full_n="$(grep -c '^f$' "$WORK/calls" || true)"
+  want="$(arm_id_of "$FN")"
+  [ -z "${EMD_OUT:-}" ] || printf '%s %s\n' "$sel_n" "$full_n" > "$EMD_OUT/$FN.sel"
+  if [ "$fails" -eq 0 ]; then
+    if [ -n "$want" ]; then
+      if [ "$sel_n" -lt 1 ] || [ "$full_n" -ne 0 ]; then
+        bad "FIXTURE BROKEN — $FN declares $want but made $sel_n selected and $full_n whole-file validator run(s). A whole-file run contains this assertion's message whatever the selector did, so it would print ok either way."
+      fi
+    elif [ "$sel_n" -ne 0 ]; then
+      bad "FIXTURE BROKEN — $FN declares no arm id, so its claim is an ABSENCE over every arm and it must run the WHOLE file; it made $sel_n selected run(s), which say nothing about the arms they did not run."
+    fi
+  fi
   [ "$fails" -eq 0 ] || exit 1
   exit 0
 fi
@@ -651,7 +786,7 @@ SELF="$HERE/$(basename "$0")"
 # The control, first and alone. Its verdict licenses every assertion after it, so a failure
 # here stops the run rather than reporting fourteen unattributable kills.
 CTL="$(printf '%s\n' "$NAMES" | head -1)"
-bash "$SELF" --run-one "$CTL" > "$OUT/$CTL" 2>"$OUT/$CTL.err"
+EMD_OUT="$OUT" bash "$SELF" --run-one "$CTL" > "$OUT/$CTL" 2>"$OUT/$CTL.err"
 ctl_rc=$?
 cat "$OUT/$CTL"
 if [ "$ctl_rc" -ne 0 ]; then
@@ -751,6 +886,47 @@ while IFS= read -r n; do
     fails=$((fails + c))
   fi
 done < "$OUT/list"
+
+# THE SELECTION JOIN, ACROSS THIS SHARD'S WHOLE DISPATCHED SET.
+#
+# Each worker checks its own ledger; this checks that every worker reached that check and
+# that the number which selected is the number that was supposed to. Both sides are derived:
+# the expected count from the A<nn>_i<id>_ naming grammar over the names this shard actually
+# ran, the actual count from the ledgers those runs wrote. Nothing here is a written-down
+# number, so an assertion added or renamed moves both sides together.
+#
+# THE ZERO GUARD IS THE POINT OF THE FIRST ARM. If the naming grammar moved, no name declares
+# an id, the expected count and the actual count are both zero, and a join of 0 against 0
+# passes -- a check that cannot fire, which is the defect this whole file exists to catch.
+# So an empty expected set is itself the failure.
+#
+# These lines print only on failure, so a green run is byte-identical to the whole-file
+# version this replaced.
+{ printf '%s\n' "$CTL"; cat "$OUT/list"; } > "$OUT/ran"
+sel_expect=0
+sel_actual=0
+sel_nofile=""
+while IFS= read -r n; do
+  [ -n "$n" ] || continue
+  [ -z "$(arm_id_of "$n")" ] || sel_expect=$((sel_expect + 1))
+  if [ ! -f "$OUT/$n.sel" ]; then
+    sel_nofile="$sel_nofile $n"
+    continue
+  fi
+  s="$(cut -d' ' -f1 < "$OUT/$n.sel")"
+  [ -n "$s" ] && [ "$s" -ge 1 ] && sel_actual=$((sel_actual + 1))
+done < "$OUT/ran"
+
+if [ "$sel_expect" -eq 0 ]; then
+  printf '  FAIL  the selection join has NO SUBJECT — not one assertion this shard ran declares an arm id, so the A<nn>_i<id>_ naming grammar moved and every count below is zero against zero\n'
+  fails=$((fails + 1))
+elif [ -n "$sel_nofile" ]; then
+  printf '  FAIL  no selection ledger from:%s — the assertion never reached its own selection control, so whether it selected an arm is unknown\n' "$sel_nofile"
+  fails=$((fails + 1))
+elif [ "$sel_actual" -ne "$sel_expect" ]; then
+  printf '  FAIL  %s of %s id-declaring assertion(s) selected their arm — the rest ran something else, and a whole-file run prints ok whatever the selector did\n' "$sel_actual" "$sel_expect"
+  fails=$((fails + 1))
+fi
 
 echo
 if [ "$broken" -ne 0 ]; then

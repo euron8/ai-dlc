@@ -147,10 +147,14 @@
 # jq/yq/rg — the map is authored line-oriented so the portable subset parses it
 # (same posture as validate-ci-gates.sh).
 #
+# Usage:
+#   validate-enforcement-map.sh                 run every arm
+#   validate-enforcement-map.sh --arms I8,I45   run only the units declaring those ids
+#
 # Exit codes:
 #   0 — all invariants hold
 #   1 — one or more invariants violated (drift / dormant binding)
-#   2 — tool-availability or missing-input failure
+#   2 — tool-availability, missing-input, or arm-selection failure
 
 set -u
 
@@ -249,6 +253,215 @@ in_body() {
 # equals "", so the first clause of every loop takes the read branch.
 _i36_body_of=""; _i36_body=""
 _i38_body_of=""; _i38_body=""
+
+# --- ARM SELECTION: `--arms I<n>[,I<n>...]` runs one arm's UNIT, not the whole file --------
+#
+# WHY THIS EXISTS. The three mutation batteries invoke this script once per assertion, and
+# each assertion tests exactly one invariant. Measured: 137 invocations per full suite run at
+# ~15.7s each, about 49% of everything the fixture suite computes, to exercise one arm at a
+# time. The cost attributable to every line ABOVE the first arm header -- which includes
+# executing every helper defined there -- is 0.1s of 13.8s, 0.7%. So selection pays
+# essentially no fixed tax, and a selected run costs the prologue plus its own unit.
+#
+# THE SUBPROGRAM IS GENERATED FROM THE SHIPPED EXTRACTOR, NEVER FROM A FRESH GREP.
+# `render-invariant-index.sh --arm-lines` serves the one arm-header grammar this repo has,
+# and the reason it is served rather than copied is recorded in that file: a column-0 pattern
+# finds 83 of the header-shaped lines here and a blanks-tolerant one finds 96, and the
+# thirteen it drops are silently merged into the preceding arm's bucket. A misplaced boundary
+# here means a selected arm's body is attributed to its neighbour and DOES NOT RUN, which
+# reads exactly like an arm that passed. A second region-finder would be a second set of bugs.
+#
+# WHY THE SELECTABLE UNIT IS THE COLUMN-0 ARM AND NOT EVERY ARM. Ten arm headers are
+# INDENTED, because they sit inside an enclosing block -- nine inside the layer contract's
+# `if [ -f "$lc_file" ]`, one inside I31's. Their line ranges are not balanced shell, so a
+# subprogram sliced at one of them does not parse. A UNIT is therefore a column-0 arm header
+# through the line before the next one, and an indented arm is reached by selecting the unit
+# that contains it. All 81 units were checked to parse standalone; if a future edit breaks
+# that, `eval` below returns instead of reaching the verdict and this exits 2 rather than
+# falling through -- a syntax error must never be reported as exit 1, which a battery would
+# read as the mutant it seeded being killed.
+#
+# WHY IT IS A FLAG AND NOT AN ENVIRONMENT KEY. I10 requires a fixture driving a hook to scrub
+# every ambient `AI_DLC_*` name and `enforcement-map-sites/run.sh` does exactly that, so an
+# `AI_DLC_ARMS` would be unset before it was read and every caller would silently fall back
+# to running everything -- a mechanism that cannot fire, reading exactly like one that fired.
+#
+# NO PER-ID "CAN THIS ARM EMIT" GUARD IS NEEDED, AND THAT IS A PARTITION RATHER THAN AN
+# OMISSION. `--arm-lines` runs the renderer's self-probe and every totality assertion BEFORE
+# it prints a line: zero orphan emitters, zero SILENT arms, zero ID collisions, non-zero arm
+# count. By the time a range reaches this code, an id whose region contains no emitter is
+# unconstructible; the failure surfaces as the renderer's non-zero exit, handled here as 2.
+#
+# `# requires-arms: I<n> ...` IS THE ESCAPE HATCH FOR A VALUE THAT CANNOT BE HOISTED. Most
+# cross-unit reads were fixed by moving the value above the first arm header (see the hoist
+# block below). Three are another arm's DERIVED OUTPUT rather than a constant, and hoisting
+# them would make every selected run pay for a derivation it does not use; those units carry
+# a marker naming what they need and selection takes the transitive closure. The marker is
+# checked for naming declared ids on every `--arms` run whether or not its unit is selected,
+# because a typo in a declaration nothing reads is a declaration that stops working silently.
+ARMS_SEL=""
+case "${1:-}" in
+  "")     : ;;
+  --arms) ARMS_SEL="${2-}"
+          if [ "$#" -ne 2 ] || [ -z "$ARMS_SEL" ]; then
+            echo "usage: ${0##*/} [--arms I<n>[,I<n>...]]" >&2; exit 2
+          fi ;;
+  *)      echo "usage: ${0##*/} [--arms I<n>[,I<n>...]]" >&2; exit 2 ;;
+esac
+
+# The selector, as one awk program over (the served arm map, this file). It emits the
+# subprogram on stdout, or a reason on stderr and a non-zero exit. Everything is validated in
+# END before a single line is printed, so a partial program can never be handed to `eval`.
+ARMS_SELECT_AWK='
+BEGIN { FS = "\t" }
+{ if ($1 ~ /^[0-9]+$/) { hdr[$1 + 0] = $2; nhdr++ } }
+END {
+  if (nhdr == 0) { print "the arm map is empty" > "/dev/stderr"; exit 2 }
+  bad = ""
+  ln = 0; nu = 0; verdict = 0; nverd = 0
+  while ((getline l < src) > 0) {
+    ln++
+    if (ln in hdr) {
+      if (l ~ /^#/) { nu++; ustart[nu] = ln; uids[nu] = hdr[ln] }
+      else if (nu == 0) { bad = bad "  an indented arm header at line " ln " precedes every column-0 one\n" }
+      else { uids[nu] = uids[nu] " / " hdr[ln] }
+    }
+    if (l ~ /^# --- Verdict/) { verdict = ln; nverd++ }
+    if (match(l, /^[[:blank:]]*#[[:blank:]]*requires-arms:[[:blank:]]*/)) {
+      r = substr(l, RSTART + RLENGTH)
+      gsub(/[^A-Za-z0-9]+/, " ", r)
+      if (nu == 0) bad = bad "  a requires-arms: marker at line " ln " sits outside every arm\n"
+      else { req[nu] = req[nu] " " r; reqline[nu] = ln }
+    }
+  }
+  close(src)
+  if (nu == 0) bad = bad "  no column-0 arm header was found in " src "\n"
+  if (nverd != 1) bad = bad "  expected exactly one epilogue anchor line matching /^# --- Verdict/, found " nverd "\n"
+  if (nu > 0 && verdict <= ustart[nu]) bad = bad "  the epilogue anchor at line " verdict " is not below the last arm header\n"
+  if (bad != "") { printf "%s", bad > "/dev/stderr"; exit 2 }
+
+  for (i = 1; i < nu; i++) uend[i] = ustart[i + 1] - 1
+  uend[nu] = verdict - 1
+
+  for (i = 1; i <= nu; i++) {
+    s = uids[i]
+    while (match(s, /I[0-9]+[a-c]?/)) {
+      id = substr(s, RSTART, RLENGTH)
+      # An OVERVIEW header and the sub-arm implementing it both name the id -- `I36/I37/I38`
+      # above `I37`s own indented arm -- and both fall in the same unit, which is the whole
+      # point of merging indented arms upward. Only a repeat across two DIFFERENT units is a
+      # collision, and the renderer already fails the push on the solo form of that.
+      if ((id in unitof) && unitof[id] != i) bad = bad "  id " id " is declared by two units\n"
+      unitof[id] = i
+      s = substr(s, RSTART + RLENGTH)
+    }
+  }
+
+  for (i = 1; i <= nu; i++) {
+    if (!(i in req)) continue
+    m = split(req[i], rr, /[[:blank:]]+/)
+    for (k = 1; k <= m; k++) {
+      id = rr[k]
+      if (id == "") continue
+      if (!(id in unitof)) { bad = bad "  the requires-arms: marker at line " reqline[i] " names " id ", which no arm declares\n"; continue }
+      if (unitof[id] == i) bad = bad "  the requires-arms: marker at line " reqline[i] " names " id ", an id its own unit declares\n"
+    }
+  }
+  if (bad != "") { printf "%s", bad > "/dev/stderr"; exit 2 }
+
+  nsel = 0; nbadid = 0
+  m = split(want, w, /[,[:blank:]]+/)
+  for (k = 1; k <= m; k++) {
+    id = w[k]
+    if (id == "") continue
+    if (!(id in unitof)) { print "no arm declares " id > "/dev/stderr"; nbadid++; continue }
+    if (!sel[unitof[id]]) { sel[unitof[id]] = 1; nsel++ }
+  }
+  if (nbadid > 0) exit 2
+  if (nsel == 0) { print "--arms selected nothing" > "/dev/stderr"; exit 2 }
+
+  changed = 1
+  while (changed) {
+    changed = 0
+    for (i = 1; i <= nu; i++) {
+      if (!sel[i] || !(i in req)) continue
+      m = split(req[i], rr, /[[:blank:]]+/)
+      for (k = 1; k <= m; k++) {
+        id = rr[k]
+        if (id == "") continue
+        j = unitof[id]
+        if (!sel[j]) { sel[j] = 1; changed = 1 }
+      }
+    }
+  }
+
+  for (i = 1; i <= nu; i++) if (sel[i]) for (x = ustart[i]; x <= uend[i]; x++) keep[x] = 1
+  ln = 0
+  while ((getline l < src) > 0) {
+    ln++
+    if (ln < ustart[1] || ln >= verdict || (ln in keep)) print l
+  }
+  close(src)
+}
+'
+
+if [ -n "$ARMS_SEL" ]; then
+  arms_renderer="$REPO_ROOT/scripts/render-invariant-index.sh"
+  if [ ! -f "$arms_renderer" ] || [ ! -r "$0" ]; then
+    echo "validate-enforcement-map: --arms needs $arms_renderer and a readable \$0 ('$0'); one is missing." >&2
+    exit 2
+  fi
+  # THE SOURCE IS PASSED EXPLICITLY, and that is load-bearing rather than tidy. The renderer
+  # locates its own root by walking up for a VERSION marker, and the seeded trees the mutation
+  # batteries build carry core/, scripts/, .githooks/ and templates/ but no VERSION -- so an
+  # argument-less call walks to / and exits 2 inside every sandbox this mode exists to serve.
+  # Measured before this line was written: `--arms I45` inside enforcement-map-sites' own seed
+  # failed exactly that way.
+  arms_map="$(bash "$arms_renderer" --arm-lines "$0" 2>&1)"
+  if [ "$?" -ne 0 ] || [ -z "$arms_map" ]; then
+    echo "validate-enforcement-map: --arms cannot resolve arm boundaries — render-invariant-index.sh --arm-lines failed:" >&2
+    printf '%s\n' "$arms_map" >&2
+    exit 2
+  fi
+  arms_prog="$(awk -v want="$ARMS_SEL" -v src="$0" "$ARMS_SELECT_AWK" <<<"$arms_map")"
+  if [ "$?" -ne 0 ] || [ -z "$arms_prog" ]; then
+    echo "validate-enforcement-map: --arms '$ARMS_SEL' selected no runnable subprogram. Nothing was checked." >&2
+    exit 2
+  fi
+  set --
+  eval "$arms_prog"
+  echo "validate-enforcement-map: the --arms subprogram returned without reaching the verdict block. That is a generated-program failure, not an invariant violation, so this exits 2 rather than 1." >&2
+  exit 2
+fi
+
+# --- Values and helpers HOISTED above the first arm header --------------------------------
+#
+# Each of these was assigned inside one arm's region and read from another's. That coupling
+# is invisible while the file always runs top to bottom, and it is a defect the moment one
+# unit runs alone: under `set -u` a missing name is a loud crash in the MAIN shell, but the
+# same read inside a `$( )` kills only the subshell -- measured, `i54_files` read that way
+# exits 0 with the arm silently evaluating an empty subject. The hoist is what makes the
+# reads unconditional; it changes no behaviour in a full run, which the all-ids byte-identity
+# assertion in core/fixtures/validator-arm-selection/ checks on every push.
+TEMPLATE="$REPO_ROOT/templates/settings.json.template"      # set at I13, read by I14
+SETTINGS_TMPL="$REPO_ROOT/templates/settings.json.template" # set at I22, read by I22b
+PP_DIST="$REPO_ROOT/.githooks/pre-push"                     # set at I30, read by I66
+PP_CONS="$REPO_ROOT/core/git-hooks/pre-push"                # set at I30, read by I66
+LC_YAML="$REPO_ROOT/core/skills/ai-dlc/layer-contract.yaml" # set at I67, read by I70 and I73
+
+# Set at I35, read by I52. Derived from this file's own text, so it does not depend on any
+# arm having run -- which is what makes hoisting it a move rather than a reordering.
+em_marker="$(sed -n "s/^EXEMPT_MARKER='\(.*\)'$/\1/p" "$REPO_ROOT/scripts/validate-enforcement-map.sh" | head -1)"
+
+# Defined here rather than at I5 because I8, I26 and I28 need it too, and I5's own use is
+# further down the file. Pure function; its only input is $1.
+norm_core_manifest() {
+  awk '
+    /^core_manifest:/ {f=1; next}
+    f && /^  - / {v=$0; sub(/^  - /,"",v); print v; next}
+    f {f=0}
+  ' "$1" | sed -E 's#^core/skills/ai-dlc/##; s#^core/##' | sort -u
+}
 
 # --- Catalog anchor set -------------------------------------------------------
 # Real anchors sit at column 0 directly under a check heading. Inline format
@@ -399,16 +612,6 @@ if [ -f "$SEED" ]; then
   done
 fi
 
-# Defined here rather than at I5 because I8 below needs it too, and I5's own use is
-# further down the file. Pure function; its only input is $1.
-norm_core_manifest() {
-  awk '
-    /^core_manifest:/ {f=1; next}
-    f && /^  - / {v=$0; sub(/^  - /,"",v); print v; next}
-    f {f=0}
-  ' "$1" | sed -E 's#^core/skills/ai-dlc/##; s#^core/##' | sort -u
-}
-
 # --- I8: fixture packaging (core/fixtures == install loop == uninstall loop ==
 # --- core_manifest's fixtures/ entries) ---------------------------------------
 # The fixture dirs are shipped by a HARDCODED, enumerated loop in install.sh and
@@ -521,7 +724,6 @@ fi
 # to every consumer, is present on disk, passes its own fixture, and silently never fires:
 # a check that cannot fire, in the most literal form this repo has — the file is RIGHT THERE.
 # The glob is what makes it invisible; the fixture is what makes it feel covered.
-TEMPLATE="$REPO_ROOT/templates/settings.json.template"
 if [ -r "$TEMPLATE" ]; then
   for h in "$REPO_ROOT"/core/hooks/ai-dlc-*.sh; do
     [ -f "$h" ] || continue
@@ -1693,7 +1895,6 @@ fi
 # exemption, and if I20's marker moves, H1 sends them looking for a string no README
 # carries and compliant fixtures start failing. Bind the two, same shape as I15/I18/I34.
 # The rest of the criterion is prose an LLM reads; this pins the one literal in it.
-em_marker="$(sed -n "s/^EXEMPT_MARKER='\(.*\)'$/\1/p" "$REPO_ROOT/scripts/validate-enforcement-map.sh" | head -1)"
 gv_file="$REPO_ROOT/core/skills/ai-dlc/steps/gate-validation.md"
 if [ -z "$em_marker" ]; then
   err "I35 cannot read EXEMPT_MARKER out of validate-enforcement-map.sh. The check binding H1's stated exemption marker to I20's just went vacuous — it must locate the marker or fail loudly, never pass by finding nothing."
@@ -2383,6 +2584,7 @@ if [ "$cm" != "$ss" ]; then
 fi
 
 # --- I43: the consumer machinery home is ONE string across every surface -------
+# requires-arms: I5
 # THE DEFECT. `scripts/ai-dlc-local/` was advertised in FIVE independent hand-written
 # spellings and declared in none: the core-guard's deny text routes an author there,
 # `reconcile/warn-shadowed-local-validators.sh` defaults `LOCAL_DIR` to it, two fixtures
@@ -2439,6 +2641,7 @@ else
 fi
 
 # --- I44: core never reads, never writes and never overwrites the home ---------
+# requires-arms: I43
 # core-manifest.md and the guard's deny text BOTH make this promise in those words.
 # Nothing asserted it. A manifest entry or an install.sh target landing under the home
 # would make the promise false while every reader of the prose still believes it -- and
@@ -3339,7 +3542,6 @@ $key	"}"; row="${row%%
   if [ "$n" = 2 ]; then printf '%s' "${row%%	*}"; else printf '%s' "${row#*	}"; fi
 }
 
-SETTINGS_TMPL="$REPO_ROOT/templates/settings.json.template"
 if [ ! -f "$SETTINGS_TMPL" ]; then
   err "I22 cannot find templates/settings.json.template. The check that keeps every role's model and effort resolvable just went vacuous — it must locate the shipped config or fail loudly, never pass by finding nothing to compare."
 else
@@ -3530,8 +3732,6 @@ syn_globs() { # <hook file> -> one glob per line, from the sentinel-bounded bloc
     | sed -n 's/.*for f in \(.*\); *do.*/\1/p' \
     | tr -s ' \t' '\n' | grep -E '\*' | sort -u
 }
-PP_DIST="$REPO_ROOT/.githooks/pre-push"
-PP_CONS="$REPO_ROOT/core/git-hooks/pre-push"
 if [ ! -f "$PP_DIST" ] || [ ! -f "$PP_CONS" ]; then
   err "I30 could not read one of the pre-push hooks (dist='$PP_DIST' consumer='$PP_CONS'). With one end missing this invariant compares nothing and prints the same line as a pass."
 else
@@ -3633,7 +3833,6 @@ fi
 ccf_decl() { # <file> -> the declared crosswalk file, trailing whitespace stripped
   sed -n 's/^consumer_crosswalk_file:[[:space:]]*//p' "$1" | head -1 | sed 's/[[:space:]]*$//'
 }
-LC_YAML="$REPO_ROOT/core/skills/ai-dlc/layer-contract.yaml"
 CCF="$(ccf_decl "$LC_YAML")"
 CCF_SS="$(ccf_decl "$SETUP_SITES")"
 CCF_READERS="$REPO_ROOT/core/scripts/validate-layer-entries.sh $REPO_ROOT/scripts/install.sh $REPO_ROOT/core/skills/ai-dlc-update/reconcile/apply.sh"
@@ -4436,6 +4635,7 @@ Under pipefail the pipeline reports the WRITER's status, so once the value passe
 fi
 
 # --- I54b: nor does any PIPELINE, where the status is load-bearing -------------
+# requires-arms: I54
 # The arm above bans one WRITER -- a builtin pushing a shell variable -- and it
 # requires the reader to be the IMMEDIATELY next stage. Both halves of that are
 # narrower than the defect, and the tree had 17 sites in the gap:
