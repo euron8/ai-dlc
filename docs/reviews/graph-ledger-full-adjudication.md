@@ -287,3 +287,68 @@ Sorted by ledger order.
 | 4216 | `PC-S303-POSTCOMPACT-RECOVERY-MANDATE-NO-STATED-EXCEPTION` | **ALREADY-FIXED-v0.372.0** | hooks |
 | 4258 | `PC-S331-APPLY-SH-CO-EMITS-READOPT-AND-RETIRE` | **HOLDS** | reconcile |
 | 4313 | `PC-S303-BUDGET-CHECK-EVIDENCE-FIND-PICKS-STALE-GATE-LOG` | **HOLDS-WIDER** | validators |
+
+---
+
+# The refutation pass
+
+Every one of the 48 proposed closes was handed to an **independent verifier briefed to break
+it**, defaulting to `REFUTED` under uncertainty, in twelve parallel batches. No verifier
+adjudicated a close it had written.
+
+| outcome | count |
+|---|---|
+| `CLOSE-CONFIRMED` | 24 |
+| `CLOSE-NARROWED` | 15 |
+| `REFUTED` | 9 |
+
+**Half the proposed closes did not survive as written.** Shipping the Phase 1 close set would
+have told the consumer that 24 entries were resolved when they were not, nine of them simply live.
+
+## Final disposition, all 115 entries
+
+| disposition | count |
+|---|---|
+| LIVE | 67 |
+| CLOSE | 24 |
+| CLOSE + file the sub-claim first | 15 |
+| LIVE (close withdrawn) | 9 |
+
+Every close carries a verifier verdict; there are no unverified closes. That distinction is
+kept explicitly in the tooling — an unattacked close renders as `CLOSE (UNVERIFIED)`, never as
+`CLOSE`, because "nobody checked" and "checked and survived" must not read alike.
+
+## The nine withdrawn closes
+
+| pin | entry | was | why it broke |
+|---|---|---|---|
+| 139 | `validate-mandatory-rules-subset-flags` | `DUPLICATE-OF-pin1011` | gate_log_rotation_ok AND --check-gate-log-rotation are BOTH absent from validate-mandatory-rules.sh (grep rc=1 each; control --check-clean-tree presen… |
+| 687 | `PC-S296-SNAPSHOT-BUDGET-UNENFORCED-AT-GATES` | `FALSIFIED` | THE PREMISE WAS TRUE AT THE FILING BASE AND FOR TWO RELEASES AFTER. core/fixtures/snapshot-evidence-cell/run.sh:9-24 records the path IN CORE'S OWN WO… |
+| 715 | `PC-S296-DEPLOY-VALIDATE-NA-RITUAL` | `FALSIFIED` | THE ABSENCE CLAIM SEARCHED CORE FOR THE FILER'S WORD. Re-probe over core/ + templates/ with a control in the same invocation: "determination"=0 BUT "n… |
+| 1069 | `PC-S297-LOCKED-ANCHOR-VALIDATOR-VACUOUS` | `ALREADY-FIXED-v0.280.0` | Both facts the close cites are TRUE and NEITHER REACHES THE HEADLINE. The pointer loop at :464-486 runs for requires_context-only blocks but resolves … |
+| 1240 | `PC-S297-LOCKED-ANCHOR-EXEMPTED-BY-SILENCE` | `ALREADY-FIXED-v0.280.0` | FIX IS STORY-SCOPED; THE ENTRY'S SUBJECT IS A BLOCK. Ran the shipping script on 4 seeded stories: (A) lone zero-bullet block no citation -> "PASS - NO… |
+| 1597 | `PC-S299-LEDGER-REVERIFY-MISATTRIBUTES-ABSORBING-VERSION` | `ALREADY-FIXED-v0.152.0` | REPRODUCES AT HEAD, with a live probe. :844/:873 pass $sub (the UNSPLIT run, including its internal quote characters) to absorbed_at() while the prese… |
+| 3980 | `PC-S330-A-CONTRADICTS-CORE-VERDICT-EXPIRES` | `ALREADY-FIXED-v0.369.0` | The arm's exemption is (clause,entry) over ANY row carrying ANY owed id - live or discharged, related or not - so a SECOND contradicts-core ruling on … |
+| 4216 | `PC-S303-POSTCOMPACT-RECOVERY-MANDATE-NO-STATED-EXCEPTION` | `ALREADY-FIXED-v0.372.0` | THE GATE DOES NOT ARM ON THE REFERENCE CONSUMER. current_step_file is a BARE BASENAME by contract (route.md:47 resolves it under .claude/skills/ai-dlc… |
+| 4184 | `PC-S303-RETRO-NO-CLOSE-RECORD-FOR-RESET-OR-ABANDONED-SPRINTS` | `ALREADY-FIXED-v0.372.0` | The writer EXISTS but is sited ONLY where a reset/abandoned sprint never goes. The ONLY step-file instruction to run --close-record is retro.md:785; g… |
+
+## The fifteen that close only once a sub-claim is filed
+
+Each is right about its headline and would bury a live finding that **no other entry owns**.
+These become `BL-` entries in `docs/backlog.md` before the close ships.
+
+- **extensions/roles/code-reviewer-push.md** (pin 273)
+- **.claude/team-roles/tea.md** (pin 281)
+- **PC-S295-FLOWLOG-HEADER-LEGEND-IS-GREPPABLE-AS-DATA** (pin 387)
+- **PC-S295-RETRO-RULE18-STABLE-IDENTIFIER-TAGS** (pin 610)
+- **PC-S297-VALIDATE-MANDATORY-RULES-CHECK3-CHECK4-DEAD** (pin 1254)
+- **PC-S299-LEDGER-REVERIFY-SIGPIPE-FALSE-ABSENT** (pin 1449)
+- **PC-S299-READOPT-DOSSIER-RENDERS-REASON-EMPTY** (pin 1543)
+- **PC-S298-WAIT-FOR-DELIVERABLE-NO-PROGRESS-EVIDENCE** (pin 1862)
+- **PC-S314-NO-DETECTOR-LAYER-FILE-CITING-RETIRED-PATH** (pin 3375)
+- **PC-S302-HARD-BLOCKERS-HAS-NO-POST-APPLY-GUARD** (pin 3787)
+- **PC-S303-EFFORT-BINDING-COMMANDS-A-SLASH-COMMAND** (pin 3828)
+- **PC-S316-ABSORPTION-DETECTOR-JOINS-ONLY-ON-NUMBERED-ANCHORS** (pin 3190)
+- **PC-S319-SUBJECT-DIGEST-IS-UNREADABLE-ONCE-ITS-ROW-STOPS-BLOCKING** (pin 3464)
+- **PC-S328-NAMED-UPSTREAM-JOINS-ON-THE-FULL-SLUG** (pin 3507)
+- **PC-S303-BUDGET-SCRIPT-PASS-LINE-UNCONDITIONAL** (pin 4153)
