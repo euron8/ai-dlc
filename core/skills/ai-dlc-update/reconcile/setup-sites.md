@@ -154,6 +154,7 @@ core_manifest:
   - core/fixtures/layer-anchor-declaration/**
   - core/fixtures/layer-catalog-collision/**
   - core/fixtures/layer-contract-conformance/**
+  - core/fixtures/layer-contract-conformance-b/**
   - core/fixtures/layer-debt-ledger/**
   - core/fixtures/layer-readopt-gate/**
   - core/fixtures/ledger-reverify/**

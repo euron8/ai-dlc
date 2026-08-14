@@ -65,6 +65,65 @@ if [ -z "$VAL" ] || [ -z "$CONTRACT" ]; then
 fi
 REPO="$(cd "$(dirname "$VAL")/.." && pwd)"
 
+# ---------------------------------------------------------------------------
+# THE SHARD SPLIT, AND IT IS A MEASUREMENT RATHER THAN A PREFERENCE
+# ---------------------------------------------------------------------------
+# The pre-push suite is POLE-BOUND: its makespan tracks its single longest DIRECTORY,
+# because `core/fixtures/*/run.sh` is what the outer pool globs. This directory sat in that
+# pole set at 434 recorded pool-seconds, behind only self-update-join-gate and the three
+# enforcement-map-sites shards, and an inner pool did not fix it — the inner pool is already
+# there and the unit still costs ~100s with the machine entirely to itself. So the fixture is
+# SHARDED ACROSS DIRECTORIES, the same move and the same reason as enforcement-map-sites,
+# which states the measurement in place.
+#
+# IT IS PLACED AFTER THE SKIP ABOVE, DELIBERATELY. On a consumer neither directory resolves
+# $VAL, so both take that SKIP and exit 0 before any of this runs. Hoisting the shard protocol
+# above the SKIP would make a consumer's exit depend on the coverage join below, and therefore
+# on whether a sibling directory was installed — a packaging decision decided by statement
+# order in a file nobody reading install.sh would think to open.
+#
+# WHAT IS PARTITIONED IS $RUNS, NOT $ARMS, and that is the whole difference from the sites
+# fixture. The registries below are MANY-TO-ONE: three arms read the `control` run and
+# i64-vs-i36 reads i64-unemitted's run, so dealing ARMS out would separate an arm from the
+# run whose output it reads. Dealing RUNS out keeps every reader with its subject.
+SHARDS="a b"
+
+# THE SHARD ARRIVES AS AN ARGUMENT, NOT AS AN ENVIRONMENT VARIABLE. This file unsets
+# AI_DLC_LAYER_CONTRACT near the top for I10 — a fixture must not inherit a tunable that
+# changes what it measures — and an `AI_DLC_LCC_GROUP` would be the same shape of thing to
+# scrub next. An argument cannot be scrubbed: it is not ambient. A fallback-to-'a' design
+# would run shard 'a' twice and report two green fixtures.
+GROUP=a
+if [ "${1:-}" = "--group" ]; then
+  GROUP="${2:-}"
+  [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
+fi
+case " $SHARDS " in
+  *" $GROUP "*) ;;
+  *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
+esac
+
+# THE COVERAGE JOIN. Sharding moves assertions out of this directory, so the failure it
+# introduces is a shard whose directory is deleted, renamed, or never installed: the suite
+# then runs fewer assertions and reports a shorter green run, which is this repository's
+# named recurring defect wearing a new hat. Shard `a` therefore DERIVES the set of shards
+# that exist beside it and refuses to pass if any declared shard has no driver.
+if [ "$GROUP" = a ]; then
+  missing=""
+  for _s in $SHARDS; do
+    [ "$_s" = a ] && continue
+    [ -f "$DIR/../layer-contract-conformance-$_s/run.sh" ] || missing="$missing $_s"
+  done
+  if [ -n "$missing" ]; then
+    echo "FIXTURE ERROR: shard(s)$missing declared in SHARDS have no driver directory beside this one." >&2
+    echo "  Their assertions would run NOWHERE, and this suite would report a shorter green run." >&2
+    exit 2
+  fi
+fi
+
+NAME="layer-contract-conformance"
+[ "$GROUP" = a ] || NAME="layer-contract-conformance-$GROUP"
+
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/layer-contract-XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 
@@ -114,7 +173,7 @@ mutant_fires() {
   reg_arm fires "$label" "$label" "$want" "$why" -
 }
 
-echo "layer-contract-conformance fixture"
+echo "$NAME fixture"
 echo
 
 # THE UNMUTATED CONTROL, FIRST. If the real contract does not come out clean, every "the mutant
@@ -495,6 +554,35 @@ if [ "$ASSERTIONS" -ne "$EXPECTED_ASSERTIONS" ]; then
   exit 1
 fi
 
+# THE ARM-RESOLUTION JOIN, AND IT IS WHAT MAKES THE PARTITION A TOTAL FUNCTION.
+#
+# The shard deal below is round-robin over $RUNS, so every arm whose `run` field names a
+# member of $RUNS lands in exactly ONE shard, and every arm reading `control` lands in ALL of
+# them (`control` is itself a $RUNS member — it is registered by reg_run above — so it needs
+# no clause of its own here). What has no home is an arm naming a run label that was never
+# registered: it is dealt to no shard, evaluates NOWHERE, and is simply not printed. That is
+# indistinguishable from an arm that passed, and unlike the unsharded file it costs nothing to
+# reach — a typo in one reg_arm field is enough.
+#
+# SO THE BAD STATE IS MADE UNCONSTRUCTIBLE HERE RATHER THAN LOOKED FOR AFTERWARDS. With this
+# guard passing, "the union of the shards' arms equals $ARMS" is a THEOREM about the deal, not
+# a property worth asserting — a union arm added below this one could not fail, and a check
+# that cannot fire reads exactly like one that passed. Do not add it back.
+#
+# `-` is the run of the `unmutated` kind, which mutant_fires registers when a mutation matched
+# nothing. It has no run to be dealt, so it is dealt to shard 'a' by the filter below.
+unresolved="$(awk -F'\t' '
+  FNR == NR    { known[$1] = 1; next }
+  $3 == "-"    { next }
+  !($3 in known) { print "    " $2 "  ->  " $3 }
+' "$RUNS" "$ARMS")"
+if [ -n "$unresolved" ]; then
+  echo "FIXTURE ERROR: arm(s) name a run label that is in neither \$RUNS nor the literal '-':" >&2
+  printf '%s\n' "$unresolved" >&2
+  echo "  The shard deal is round-robin over \$RUNS, so an arm resolving nowhere is dealt to NO shard. It would evaluate nowhere and print nothing, which is exactly what a passing arm adds." >&2
+  exit 2
+fi
+
 # ================== PHASE 2: run the validator, once per distinct contract ==================
 #
 # THE JOB LIST IS DERIVED FROM THE REGISTRATIONS ABOVE, with a zero guard. It is never restated:
@@ -513,19 +601,68 @@ run_one() { # run_one <label> <contract-file>
 }
 run_one control "$TMP/control.yaml"
 
-# EIGHT, AND FIXED RATHER THAN TUNABLE — the same number and the same reasoning as
-# enforcement-map-sites, which states it in place: this pool nests inside the pre-push suite's
-# own, so a knob here multiplies against the knob there and the PRODUCT is what lands on the
-# machine. Eight against 18 cores leaves headroom for the sibling fixtures the suite runs beside
-# this one.
+# FOUR, AND FIXED RATHER THAN TUNABLE — the same reasoning as enforcement-map-sites, which
+# states it in place: this pool nests inside the pre-push suite's own, so a knob here
+# multiplies against the knob there and the PRODUCT is what lands on the machine.
 #
-# Measured standalone on the reference box: -P4 60.1s, -P6 45.7s, -P8 41.3s, -P12 35.5s,
-# -P16 32.1s. It is still falling at 16 and eight is deliberately NOT the standalone optimum —
-# inside the suite this fixture now has 54s of slack, so buying it another 9s standalone would
-# be paid for by every unit it contends with. Re-derive both numbers together if the critical
-# path moves off enforcement-map-sites.
-LCC_JOBS=8
-awk -F'\t' '$1!="control"{print $1}' "$RUNS" > "$TMP/pool"
+# THE ARITHMETIC IS THE SHARD SPLIT, AND IT IS THE WHOLE REASON THE NUMBER MOVED. This was
+# EIGHT while the assertions lived in one directory. There are now TWO directories, both
+# dispatched by the same outer pool and both eligible to run at once, so 2 x 4 keeps this
+# fixture family's demand on the machine exactly where it was. Raising it back to 8 would
+# double that demand without adding a core.
+#
+# THE STANDALONE SWEEP THAT USED TO SIT HERE IS GONE RATHER THAN CARRIED FORWARD. It was
+# measured on the unsharded directory (-P4 60.1s ... -P16 32.1s) against a critical path that
+# was enforcement-map-sites, and it named that condition itself: re-derive both numbers
+# together if the critical path moves off it. It has moved — the pole is now a six-fixture set
+# this directory is a member of — so those figures describe a machine state that no longer
+# exists, and a superseded sweep beside a changed constant is a rationale that argues for the
+# wrong number. The joint re-derivation of the outer width and all nine inner widths is its
+# own measured step; it is not restated here.
+LCC_JOBS=4
+
+# DEAL THE NON-CONTROL RUNS OUT TO THE SHARDS IN TURN. ROUND-ROBIN, NOT CONTIGUOUS HALVES:
+# these runs are one full validator invocation each, but the CONTRACTS differ — several
+# mutants delete whole clause blocks and shorten the corpus every arm scans — so a contiguous
+# cut can put the expensive neighbours in one shard and rebuild the pole inside it. Dealing
+# them out in turn spreads that without anyone maintaining a cost table that would go stale the
+# first time a mutant changed.
+awk -F'\t' '$1!="control"{print $1}' "$RUNS" \
+  | awk -v g="$GROUP" -v shards="$SHARDS" '
+      BEGIN { n = split(shards, S, " ") }
+      { if (S[((NR - 1) % n) + 1] == g) print }
+    ' > "$TMP/pool"
+
+# THE EMPTY-SHARD GUARD, AND THE FLOOR ABOVE DOES NOT COVER IT. `N_RUNS -lt 25` is a statement
+# about the REGISTRY, which is identical in every shard, so it passes unchanged on a shard that
+# was dealt nothing — and a shard dealt nothing runs no validator, evaluates only the control
+# arms, and reports a green run.
+N_MINE="$(grep -c . "$TMP/pool" || true)"
+if [ "$N_MINE" -eq 0 ]; then
+  echo "$NAME: FIXTURE ERROR — shard '$GROUP' was dealt no validator runs out of the $((N_RUNS - 1)) non-control runs registered. An empty shard passes every assertion it never made." >&2
+  exit 2
+fi
+
+# THE ARM FILTER. A shard evaluates: every arm whose run was dealt to it, every arm reading the
+# `control` run — EVERY SHARD RUNS THE CONTROL, because a shard without it reports its own
+# mutant kills as earned against a contract nobody checked — and, in shard 'a' only, the arms
+# whose run is `-`, which have no run to be dealt.
+ARMS_MINE="$TMP/arms.mine"
+awk -F'\t' -v g="$GROUP" '
+  FNR == NR       { mine[$1] = 1; next }
+  $3 == "control" { print; next }
+  $3 == "-"       { if (g == "a") print; next }
+  ($3 in mine)    { print }
+' "$TMP/pool" "$ARMS" > "$ARMS_MINE"
+
+# ASSERTIONS IS SHARD-LOCAL FROM HERE, AND THIS LINE IS LOAD-BEARING. reg_arm counted EVERY
+# registered arm during Phase 1 — it has to, because the EXPECTED_ASSERTIONS floor above is a
+# statement about the whole registry — so leaving it alone would make each shard print
+# "all 33 assertions correct" after evaluating about half of them. That is a check wearing a
+# pass: the count is the thing the floor exists to make trustworthy, and a shard reporting a
+# number it did not compute retires the floor for both shards at once.
+ASSERTIONS="$(grep -c . "$ARMS_MINE" || true)"
+
 AI_DLC_LCC_VAL="$VAL" AI_DLC_LCC_OUT="$OUTD" AI_DLC_LCC_RUNS="$RUNS" \
   xargs -P "$LCC_JOBS" -I{} bash -c '
     l="$1"
@@ -582,12 +719,15 @@ while IFS=$'\t' read -r kind label run want a b; do
       FAILURES=$((FAILURES + 1))
       printf '  FAIL  %-18s unknown arm kind %s — an arm registered a shape this loop cannot evaluate\n' "$label" "$kind" ;;
   esac
-done < "$ARMS"
+done < "$ARMS_MINE"
 
 echo
+# BOTH LINES READ THE SHARD-LOCAL COUNT, and both name the shard. A reader comparing this
+# run against the unsharded file's "33" has to be able to see that the smaller number is a
+# partition rather than a regression; without the shard name the two are the same sentence.
 if [ "$FAILURES" -gt 0 ]; then
-  echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."
+  echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong in shard '$GROUP' of '$SHARDS'."
   exit 1
 fi
-echo "PASS: all $ASSERTIONS assertions correct."
+echo "PASS: all $ASSERTIONS assertions correct in shard '$GROUP' of '$SHARDS'."
 exit 0
