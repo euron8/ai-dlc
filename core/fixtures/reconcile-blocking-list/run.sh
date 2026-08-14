@@ -89,6 +89,37 @@ else
   bad "reverting the drift did not clear the blocker list"
 fi
 
+# --- MUTANT: the degenerate detection made unconditional -----------------------
+# Assertion 2b's CONTROL is an ABSENCE — "a real base..theirs range carries no qualifier" —
+# and an absence passes against a script that emits nothing at all. This is what makes that
+# control mean "the detection discriminates" rather than "something did not happen".
+#
+# THE MUTANT IS A COPY OF THE WHOLE `reconcile/` DIRECTORY, not of the one script.
+# `hard-blockers.sh` resolves its two detectors as siblings of its own path, so a lone copy
+# in a temp dir finds neither, `[ -f "$UD" ]` is false, and it emits an empty list — which
+# would score as a kill for every mutant in this file while proving nothing. The unmutated
+# control below is what states that the copied harness still works.
+MUTDIR="$(dirname "$HB")"
+MW="$(mktemp -d "${TMPDIR:-/tmp}/rbl-mut.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+cp -R "$MUTDIR/." "$MW/" 2>/dev/null
+
+ctl_out="$(bash "$MW/hard-blockers.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
+grep -q 'DRIFT-RANGE-DEGENERATE' <<<"$ctl_out" \
+  && ok "MUTANT CONTROL: the unmutated copy still resolves its detectors and qualifies the degenerate run" \
+  || bad "MUTANT CONTROL is dead — a copy of the reconcile dir emits nothing, so any kill below is unearned"
+
+sed 's|\$1=="DRIFT-RANGE-DEGENERATE"{print \$1; exit}|{print "X"; exit}|' \
+  "$MW/hard-blockers.sh" > "$MW/hb-mut.sh"
+if cmp -s "$MW/hard-blockers.sh" "$MW/hb-mut.sh"; then
+  bad "MUTANT matched nothing (cmp -s guard) — assertion 2b's control proves nothing"
+else
+  mut_out="$(bash "$MW/hb-mut.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" 2>/dev/null)"
+  grep -q 'DRIFT-RANGE-DEGENERATE' <<<"$mut_out" \
+    && ok "MUTANT: with the row test removed the qualifier appears on a NON-degenerate range — so the control is what proves it discriminates" \
+    || bad "MUTANT: the qualifier stayed absent even with the row test removed — assertion 2b's control is vacuous"
+fi
+rm -rf "$MW"
+
 echo
 if [ "$fails" -eq 0 ]; then echo "reconcile-blocking-list: PASS"; exit 0; fi
 echo "reconcile-blocking-list: $fails assertion(s) FAILED" >&2
