@@ -63,6 +63,18 @@ step "invariant index derived from the map's arm headers" \
 step "vocabulary index derived from the markers and the schemas" \
   bash scripts/render-vocabulary-index.sh --check
 
+# 1a-iii. The `## Path mapping (core/ -> consumer)` section of core/skills/ai-dlc-update/SKILL.md
+#         is DERIVED from map_consumer() in reconcile/preclassify.sh and byte-compared here. It
+#         was a hand-written restatement of a six-arm `case` and had been wrong in FOUR ways at
+#         once — three subtrees missing and the `core/scripts/` row stale since v0.126.0 — because
+#         I16, the only invariant that reads path prose, puts core/skills/ai-dlc-update/** out of
+#         scope BY NAME. The section sat in the one file every path invariant is told to skip.
+#         It is a standalone renderer rather than an arm inside validate-enforcement-map.sh on
+#         purpose: that validator is what the suite pole invokes, and one nested loop added to it
+#         once moved the pole from 442s to 595s. Runs in ~0.05s and costs the pole nothing.
+step "path mapping derived from map_consumer()" \
+  bash scripts/render-path-mapping.sh --check
+
 # 1a. The same corpus-wide party-mode floor the consumer hook runs, over the DISTRIBUTION's own
 #     tree. It is here for a reason beyond symmetry: this tree holds the two files the check has
 #     to get right — the one rendered taught example (exempt only because the generated-region

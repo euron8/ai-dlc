@@ -71,7 +71,45 @@ rm -f "${STATE_DIR}/.context-sensor-state" 2>/dev/null || true
 STEP_FILE="$(grep -m1 -iE '(current_step_file|current[ _]step|current[ _]phase)' "$SNAPSHOT" 2>/dev/null \
   | sed -E 's/^[^:]*://; s/^[-*[:space:]]+//; s/[[:space:]]*$//')"
 STEP_FILE="$(printf '%s' "$STEP_FILE" | sed -E 's/^`([^`]+)`.*/\1/; s/^([^[:space:]]+)[[:space:]]+—.*/\1/' | sed -E 's/^[`*]+//; s/[`*]+$//')"
-[ -n "$STEP_FILE" ] || STEP_FILE="(named in Pipeline Position -- read the snapshot)"
+# A MANDATE MUST NAME SOMETHING THE LEAD CAN ACTUALLY READ, and this branch did not.
+# When the grep found nothing, STEP_FILE became the prose string below and the second mandate
+# rendered as: Your SECOND tool call MUST be `Read (named in Pipeline Position -- read the
+# snapshot)` in full. That is not an instruction, it is an unexecutable one -- and a lead that
+# cannot comply learns that the MUSTs in this block are negotiable, which is the standing this
+# whole section depends on. Filed alongside
+# PC-S303-POSTCOMPACT-RECOVERY-MANDATE-HAS-NO-STATED-EXCEPTION, though nobody filed this half.
+#
+# The flag is also what `ai-dlc-recover-gate.sh` reads to decide whether it may arm: a gate that
+# enforced a mandate naming no path would deny every call the lead could make.
+STEP_FILE_RESOLVED=1
+if [ -z "$STEP_FILE" ]; then
+  STEP_FILE=""
+  STEP_FILE_RESOLVED=0
+fi
+
+# THE SECOND MANDATE IS BUILT, NOT INTERPOLATED, because its two branches are different
+# instructions rather than one sentence with a hole in it. When the step file resolved, the
+# lead is told which file to Read. When it did not, it is told to resolve it FROM the snapshot
+# it has just been made to Read -- an action it can actually take -- and the ordinal moves to
+# that resolution. The old text put a prose apology where a path belonged and called it a MUST.
+_MANDATE_WHY="Compaction cleared
+the harness's record of every file previously read, so nothing you read before
+this point is still loaded. Rule 21 makes this Read the FIRST call after any
+READ AND FOLLOW and it is not optional here either -- measured across 265 real
+compactions, the snapshot Read above lands 66% of the time and this one only 41%,
+which is the gap this sentence exists to close. Do NOT re-Read completed step
+files or already-produced planning artifacts; Rule 23(a) still applies."
+
+if [ "$STEP_FILE_RESOLVED" -eq 1 ]; then
+  SECOND_MANDATE="**Your SECOND tool call MUST be \`Read ${STEP_FILE}\` in full.** ${_MANDATE_WHY}"
+else
+  SECOND_MANDATE="**This snapshot does not name a current step file in a form this hook could
+resolve, so the second mandate names an action instead of a path.** Take the step
+file's path from the Pipeline Position section of the snapshot you have just been
+told to Read, and your SECOND tool call MUST be \`Read <that path>\` in full. If
+the snapshot names none, say so in your verification turn rather than proceeding
+as though it did. ${_MANDATE_WHY}"
+fi
 
 # A small, bounded excerpt so the lead can orient before its Read returns. This
 # is a convenience, never the source of truth; the Read is.
@@ -96,13 +134,30 @@ attention interrupt (Rule 21) that defeats reconstructing state from the summary
 Never route it through any \`ctx_*\` tool -- \`ai-dlc-protect.sh\` hard-blocks that
 path because consolidation drops directives (Rule 23(c) limit 2).
 
-**Your SECOND tool call MUST be \`Read ${STEP_FILE}\` in full.** Compaction cleared
-the harness's record of every file previously read, so nothing you read before
-this point is still loaded. Rule 21 makes this Read the FIRST call after any
-READ AND FOLLOW and it is not optional here either -- measured across 265 real
-compactions, the snapshot Read above lands 66% of the time and this one only 41%,
-which is the gap this sentence exists to close. Do NOT re-Read completed step
-files or already-produced planning artifacts; Rule 23(a) still applies.
+${SECOND_MANDATE}
+
+## The two MUSTs have NO exception you may grant yourself
+
+\`ai-dlc-recover-gate.sh\` refuses any other first tool call, so a skip is denied
+rather than noticed afterwards. Both files were confirmed to exist before it
+armed: complying is always available to you, which is why there is nothing to
+weigh. "I read it recently" (compaction cleared that record), "the summary covers
+it" (the summary is lossy, which is why this block exists) and "finishing is
+duplicative" (a judgment made from inside the state the Read replaces) are not
+reasons; they are the three shapes the skip has actually taken.
+
+WHERE THE GATE CANNOT REACH, DISCLOSE. It does not arm when the snapshot names no
+resolvable step file, or when a mandated path is missing -- enforcing a Read of
+something absent would deny every call you could make. In that case the MUSTs
+still bind and only your honesty carries them, so if you proceed without one, open
+your next output with:
+
+\`RECOVERY-SKIP: <file> -- <why it was not readable>\`
+
+A mandate that substitutes for your own possibly-wrong belief about your state
+cannot leave the skip decision to that same belief. The disclosure is what makes a
+real exception and a rationalized one different to an operator reading the
+transcript rather than identical.
 
 ## Most of your rulebook is not in your context
 
@@ -237,6 +292,14 @@ mkdir -p "$STATE_DIR" 2>/dev/null || true
   printf 'injected_bytes=%s\n' "${#CONTEXT}"
   printf 'context_limit=%s\n' "$CONTEXT_LIMIT"
   printf 'degraded=%s\n' "$DEGRADED"
+  # WHAT THE GATE ARMS ON. `ai-dlc-recover-gate.sh` refuses the first post-compact tool call
+  # unless it is one of the mandated Reads -- but only where those Reads are actually takeable.
+  # It reads these three, and arms only when both paths are named and resolve. A mandate the
+  # snapshot could not supply a path for is not enforceable, and enforcing it anyway would deny
+  # every call the lead is able to make.
+  printf 'snapshot_path=%s\n' "${SNAPSHOT#"$PROJECT_DIR"/}"
+  printf 'step_file=%s\n' "$STEP_FILE"
+  printf 'step_file_resolved=%s\n' "$STEP_FILE_RESOLVED"
 } >"$MARKER" 2>/dev/null || true
 
 jq -n --arg ctx "$CONTEXT" \

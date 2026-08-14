@@ -34,6 +34,133 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.372.0] — 2026-08-14
+
+Four entries from the graph consumer's push-candidate ledger. All four defects are real; **three
+of the four filings are materially wrong about the mechanism**, and one is wrong in the direction
+that makes the fix bigger. The corrections are recorded beside each remediation because the
+consumer reads this file to close its own ledger, and closing an entry on a wrong premise leaves
+the real defect open.
+
+### A `PASS` line keyed on the exit code, in a run that had just listed breaches
+
+`PC-S303-BUDGET-SCRIPT-PASS-LINE-UNCONDITIONAL`.
+
+The summary was never literally unconditional — it was guarded on `RC`, and `RC` is deliberately
+`0` on the `--warn-only` path when no breaching artifact was hardened with `--fail-on`. So one run
+printed `WARN: N artifact(s) over the Rule 25(d) budget.`, listed every `OVER` row, and closed with
+`PASS  every measured living artifact is within its Rule 25(d) budget.` Reproduced against the
+unfixed script: WARN line, then PASS line, exit 0.
+
+The summary is now a function of what the run PRINTED, through four emission flags, and **the exit
+code is untouched in every branch** — `RC=0` on an unhardened `--warn-only` breach is the contract
+`retro.md` depends on, and changing it would wedge every sprint that has already paid for an
+oversized artifact. A run reporting a breach, an off-schema section or a bad In-Flight status now
+closes with `WARN  this run reported … and is NOT a clean result.` and no `PASS` line. **The clean
+run's `PASS` line is byte-identical to what it always was**, because that is the string anything
+downstream may already match on.
+
+**The filing's stated consequence is FALSE and the consumer should not close on it.** It says the
+false pass "defeats the budget-blocking callers' own read path". No core caller greps the final
+line: the enforcement map lists five call sites and all of them read the exit code or the breach
+rows, and `gate-validation.md` explicitly FORBIDS that grep ("the pipe hands the exit status to
+`grep`, and a validator that prints FAIL and exits 1 then reads as a pass"). What was real is a run
+whose own two lines contradict each other.
+
+**The two reproductions in the filing are different defects, and only one is a contradiction.** The
+sprint-303 case — ungoverned read-path artifacts warning alongside `PASS` — comes from the coverage
+arm, which is warn-only always and never folded into `RC` by design. Its `WARN` and the `PASS`
+claim are both literally true, because an ungoverned artifact is unmeasured rather than over
+budget. That run now says so out loud instead of reading as unqualified.
+
+Two companion drifts, same false-clean class: `retro.md`'s evidence contract told the lead to
+record `or "within budgets"`, a string the script has never emitted; and `verdict.sh`'s rc=0
+evidence grep omitted `OVER` and `WARN:`, so a `--warn-only` breaching run routed through it would
+have surfaced neither the count nor the rows. No core site pairs the two today — closed before one
+does.
+
+### A sprint that ended without a retro-PR merge could not say so, and absence was the only word it had
+
+`PC-S303-RETRO-NO-CLOSE-RECORD-FOR-RESET-OR-ABANDONED-SPRINTS`.
+
+`audit-anchors.json` gains an OPTIONAL `close_reason` with a closed set of `reset` / `abandoned`,
+and `validate-audit-anchors.sh` gains `--close-record <file> <sprint> <reason> <sha>` — the only
+writer of a non-retro anchor, because the record is read by a fail-closed gate and one a model
+retypes drifts from what the reader parses.
+
+**The close record does not weaken Check 18, and that is the whole design.** It carries a `sha`
+that RESOLVES — the commit the sprint actually stopped at — so the next sprint's audit window keeps
+a true lower bound and the gate passes on evidence rather than on an exemption. The mode refuses a
+reason outside the schema's set, an unresolvable sha, a `PENDING` sha and a duplicate sprint; a
+sprint with no entry at all still fails CLOSED. `--prior-sprint-sha` resolves through the record and
+prints a NOTE naming the reason, so an audit window is never silently anchored on a non-merge.
+
+The field is optional because every `audit-anchors.md` already in the field lacks one, and a
+required field errors on real data on first contact. The enum is enforced FROM the schema array
+rather than a restated pattern, so `docs/vocabulary-index.md` picked the members up with no arm
+added.
+
+**The filing's central mechanical claim is wrong: Check 18 is not prose.** It was converted to
+`--prior-sprint-sha` and is registered in the enforcement map with two fixtures. The gap is
+narrower and deeper than filed: abandonment BEFORE close produces no gap at all, because
+`sprint-status.json` makes `done` the only value with mechanical meaning and anything else re-uses
+sprint N. **And the chain is a 1-deep link, not a chain** — the resolver exact-matches `current - 1`
+and stops, so a hole at N−2 or older is undetectable, permanently. That is filed as `BL-007` with a
+behavioural receipt rather than fixed here: it would fire on every consumer whose chain already has
+a hole, and needs a pre-migration posture first.
+
+### A mandate with no exception, no observer, and one branch that could not be obeyed
+
+`PC-S303-POSTCOMPACT-RECOVERY-MANDATE-HAS-NO-STATED-EXCEPTION`.
+
+New `ai-dlc-recover-gate.sh`, a `PreToolUse` hook registered with the documented match-all
+`"matcher": "*"`, refuses the first post-compact tool call unless it is one of the two mandated
+Reads. Until now the mandate was advisory: the injector emits `additionalContext` and has no deny
+path, no hook in the tree parsed a `Read` call, and `ai-dlc-postcompact.sh` recorded only whether
+the text was INJECTED — never whether it was OBEYED.
+
+**Why it cannot wedge is designed rather than asserted.** A gate that denies until an action is
+taken is safe only if that action is always available, so it arms only when `.recover-fired` exists,
+the step file resolved, and BOTH mandated paths are readable — re-checked before every deny. A path
+that vanishes clears the marker and stands the gate down instead of blocking every call the lead can
+make. Under those conditions complying is a Read of a file known to exist.
+
+**A defect nobody filed, found while adjudicating this one.** When the snapshot named no current
+step file, the fallback rendered the mandate as ``Read (named in Pipeline Position -- read the
+snapshot)`` — an unexecutable instruction, and a lead that cannot comply learns the MUSTs are
+negotiable. The second mandate is now built rather than interpolated: it names a path when one
+resolved, and a takeable ACTION when none did.
+
+The injected block now states that there is no self-granted exception, and requires a
+`RECOVERY-SKIP:` disclosure for exactly the cases the gate cannot reach — so a real exception and a
+rationalized one differ to an operator reading the transcript instead of being identical. The
+directive grew from 7305 to 8248 chars against its 9000-char ceiling.
+
+### A path table wrong in four ways, in the one file every path invariant is told to skip
+
+`PC-S330-PATH-MAPPING-TABLE-OMITS-THE-GIT-HOOKS-DESTINATION`.
+
+The `## Path mapping (core/ → consumer)` section of `ai-dlc-update/SKILL.md` was a hand-written
+restatement of a six-arm `case`, presented as total. **The filed omission was one of four.**
+`core/fixtures/` and `core/ci-templates/` were also absent, the identity arm was unstated, and the
+`core/scripts/<x> → scripts/<x>` row had been stale since v0.126.0 moved the validators to
+`scripts/ai-dlc/` — a WRONG row being worse than a missing one, because the reader does not go and
+look.
+
+The section is now RENDERED from `map_consumer()` by `scripts/render-path-mapping.sh` and
+byte-compared at pre-push. The function is scraped and `eval`'d, the idiom `apply.sh` established
+for the reason it states in its own error text; each arm's destination is RESOLVED by CALLING the
+function rather than by reading it; and an extraction yielding fewer arms than the function has ever
+carried is a failure, not an empty table. Measured: adding a seventh arm makes `--check` fail until
+the region is re-rendered, so a fifth omission is unconstructible rather than merely detectable.
+
+**Why nothing caught it.** `I16` is the only invariant that reads path prose and it puts
+`core/skills/ai-dlc-update/**` out of scope BY NAME — correctly, since that subtree reasons about
+the distribution layout by design. The renderer does not reopen that carve-out; it binds one
+generated region, and I16 still never reads the file. It is a standalone renderer rather than an arm
+inside `validate-enforcement-map.sh` deliberately: that validator is what the suite pole invokes,
+and one nested loop added to it once moved the pole from 442s to 595s. This check runs in 0.03s.
+
 ## [0.371.0] — 2026-08-14
 
 ### A carry-over item had no home, so it survived only inside a plan about something else

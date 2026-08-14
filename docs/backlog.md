@@ -138,3 +138,57 @@ run with the attribution sweep. Both were measured; neither was taken.
 Carried over from `docs/plans/pre-push-wall-clock.md`. This is a program, not a single fix.
 
 verify: manual
+
+---
+
+## BL-007 — the audit-anchor chain is a 1-deep link, so an old gap is permanently invisible
+
+`--prior-sprint-sha` computes `prior = current - 1` and exact-matches it
+(`core/scripts/validate-audit-anchors.sh`). There is no contiguity assertion anywhere in the
+anchor path — control: monotonicity language exists elsewhere in the corpus
+(`core/scripts/validate-spec-join.sh` "non-monotonic; ids must ascend and never renumber"), so
+the grep that found none in this path was working.
+
+Consequence: a gap at sprint N−1 is fatal, and a gap at N−2 or older is undetectable. Two
+sprints after a hole nothing revisits it, and `retro.md` Step 5b prunes the live file to the 3
+most recent entries into an archive with, in its own words, "no rendered schema region, no
+validator, no budget".
+
+Scoped OUT of the v0.372.0 close-record work on the operator's decision: that release makes a
+non-retro close RECORDABLE, which is what the consumer filed. Detecting historical holes is a
+different check and would fire on every consumer whose chain already has one, so it needs a
+PENDING/SKIP posture for pre-migration state before it could ship.
+
+The receipt is BEHAVIOURAL and carries its own control. It builds a chain with sprints 10 and
+12 and asks for sprint 13's prior: the resolver answers 12 happily and never sees that 11 is
+missing, so a zero exit there IS the defect. Asking for 12's prior on the same file exits 1,
+which is the control that the resolver does fire on an N−1 absence — the two together are what
+distinguish "no contiguity check" from "no check ran". An anchor on the `current - 1` source
+line would have closed itself on a reformat.
+
+verify: sh t=$(mktemp -d); f="$t/a.md"; bash core/scripts/validate-audit-anchors.sh --render > "$f"; H=$(git rev-parse HEAD); printf '\n- sprint: 10\n  sha: %s\n\n- sprint: 12\n  sha: %s\n' "$H" "$H" >> "$f"; bash core/scripts/validate-audit-anchors.sh --prior-sprint-sha "$f" 13 >/dev/null 2>&1; r=$?; rm -rf "$t"; [ "$r" -eq 0 ] && exit 1 || exit 0
+
+---
+
+## BL-008 — `suite-dispatch-order` asserts an ordering built from wall-clock, and flakes under the pool
+
+Its arm "after the narrowed run the next full run is still longest-first (zzz mmm aaa)" sorts
+three toy fixtures by the durations the previous run RECORDED. Under the 12-way pool those three
+units take single-digit milliseconds and their measured order is noise, so the arm reads
+`zzz aaa mmm` instead and reports a cost "lost to a narrowed run".
+
+Measured on one branch, same tree, same commit, three observations: **`ok` under the pool,
+`FAIL` under the pool on the immediately following run, and green when run alone.** It is
+load-dependent, not a regression — it was already green under the pool on a run that carried
+every change on that branch.
+
+This matters beyond the flake: a fixture that fails intermittently in the gate is the shape that
+gets re-run until green, and a re-run-until-green unit certifies nothing. The fix is to stop
+sorting on real elapsed time in the assertion — seed the durations record with fixed costs and
+assert the dispatch order those produce, so the arm measures the ORDERING RULE rather than the
+machine's scheduler.
+
+`verify: manual` because the defect is a race: a receipt that ran the fixture once would report
+whichever side of it that run landed on, which is the same coin-flip the arm already is.
+
+verify: manual

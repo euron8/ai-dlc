@@ -28,6 +28,16 @@ if   [ -f "$ROOT/core/skills/ai-dlc/SKILL.md" ]; then SKILL="$ROOT/core/skills/a
 elif [ -f "$ROOT/.claude/skills/ai-dlc/SKILL.md" ]; then SKILL="$ROOT/.claude/skills/ai-dlc/SKILL.md"
 else echo "FIXTURE ERROR: SKILL.md not found in either layout" >&2; exit 2; fi
 
+# The ENFORCER of the same instruction, resolved on its own path for the same reason. It is
+# allowed to be ABSENT: this fixture ships, and a core fixture arrives at a consumer one pull
+# ahead of the code it guards. `IS_DIST` is what stops that tolerance from becoming a hole —
+# in the distribution the subject must be here, so run.sh turns the SKIP into a FAIL.
+GATE=""
+if   [ -f "$ROOT/core/hooks/ai-dlc-recover-gate.sh" ]; then GATE="$ROOT/core/hooks/ai-dlc-recover-gate.sh"
+elif [ -f "$ROOT/.claude/hooks/ai-dlc-recover-gate.sh" ]; then GATE="$ROOT/.claude/hooks/ai-dlc-recover-gate.sh"
+fi
+IS_DIST=0; [ -d "$ROOT/core/skills/ai-dlc" ] && IS_DIST=1
+
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/postcompact-rulebook.XXXXXX")" || exit 2
 mkdir -p "$WORK/project/_bmad-output"
 
@@ -49,6 +59,8 @@ cat > "$WORK/env.sh" <<ENV
 HOOK="$HOOK"
 VAL="$VAL"
 SKILL="$SKILL"
+GATE="$GATE"
+IS_DIST="$IS_DIST"
 PROJECT="$WORK/project"
 WORK="$WORK"
 ENV

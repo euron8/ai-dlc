@@ -32,6 +32,7 @@ each whole document, so a schema cannot gain a vocabulary this table does not sh
 
 | Schema | Field | Members |
 |---|---|---|
+| `audit-anchors.json` | `close_reason` | `reset` `abandoned` |
 | `gate-adjudication-verdict.json` | `verdict` | `PASS` `FAIL` |
 | `layer-adjudication-register.json` | `verdict` | `still-additive` `contradicts-core` `retire` |
 | `provenance-block.json` | `mode` | `solo` `subagent` |

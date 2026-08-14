@@ -103,6 +103,7 @@ core_manifest:
   - core/fixtures/audit-anchors-schema/**
   - core/fixtures/blocker-adjudication-record/**
   - core/fixtures/bmad-invocation-resolve/**
+  - core/fixtures/budget-summary-verdict/**
   - core/fixtures/check-15-bypass/**
   - core/fixtures/check-17-bypass/**
   - core/fixtures/check-17-counts/**

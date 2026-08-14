@@ -1006,7 +1006,24 @@ done
 # loop is a bashism and install.sh targets /bin/bash but consumers have run this
 # under sh before.
 RC=0
+
+# WHAT WAS EMITTED, tracked separately from RC, and the two are NOT the same question.
+# RC answers "does this run block the caller". These answer "did this run print a finding".
+# Under --warn-only they diverge by design, and the summary line below has to be a function
+# of THESE -- keying it on RC is what let a single run print `WARN: N artifact(s) over the
+# Rule 25(d) budget.`, list every OVER row, and then close with `PASS  every measured living
+# artifact is within its Rule 25(d) budget.` Filed by the reference consumer as
+# PC-S303-BUDGET-SCRIPT-PASS-LINE-UNCONDITIONAL after reproducing it in two sprints.
+#
+# The verdict files are removed as each block finishes, so the flag is set where the block
+# runs and not read back off the filesystem afterwards.
+SAW_BREACH=0
+SAW_SCHEMA=0
+SAW_STATUS=0
+SAW_UNGOV=0
+
 if [ -s "$BREACH_FILE" ]; then
+  SAW_BREACH=1
   BREACH=$(wc -l < "$BREACH_FILE" | tr -d ' ')
   say ""
   if [ "$WARN_ONLY" -eq 1 ]; then
@@ -1065,6 +1082,7 @@ rm -f "$BREACH_FILE"
 # the lead to the wrong remedy. Trimming bytes out of a section that should not
 # exist is how 9 KB of invention survives a trim.
 if [ -s "$SCHEMA_FILE" ]; then
+  SAW_SCHEMA=1
   say ""
   if [ "$WARN_ONLY" -eq 1 ]; then
     echo "WARN: pipeline-snapshot.md carries section(s) outside its seven-section schema."
@@ -1158,6 +1176,7 @@ rm -f "$INFLIGHT_FILE"
 # say which of the two states it is in. Merged into one verdict, a lead reading
 # the struck-row remediation would delete a row it was supposed to relabel.
 if [ -s "$STATUS_FILE" ]; then
+  SAW_STATUS=1
   say ""
   if [ "$WARN_ONLY" -eq 1 ]; then
     echo "WARN: In-Flight Teammates carries row(s) with an unrecognised status."
@@ -1241,6 +1260,7 @@ if [ -n "$STEPS_DIR" ] && [ -z "$ONLY" ]; then
     done
 
   if [ -s "$UNGOV_FILE" ]; then
+    SAW_UNGOV=1
     say ""
     echo "WARN: read-path artifact(s) over ${UNGOVERNED_FLOOR} tok that NO budget governs."
     cat "$UNGOV_FILE" >&2
@@ -1264,8 +1284,43 @@ EOF
   rm -f "$UNGOV_FILE"
 fi
 
+# THE SUMMARY LINE IS A FUNCTION OF WHAT THIS RUN PRINTED, NEVER OF RC.
+#
+# It used to be `if [ "$RC" -eq 0 ]`, and RC is deliberately 0 on the --warn-only path when
+# no breaching artifact was hardened with --fail-on. So a run could print the WARN count,
+# list every OVER row, and then close by claiming every artifact was within budget. Both
+# statements in the same run, one of them false.
+#
+# THE CLEAN LINE IS BYTE-IDENTICAL TO WHAT IT ALWAYS WAS. Only the runs that had something
+# to report change, because the clean string is the one anything downstream may already
+# match on -- and a fix that moves the passing output is a fix nobody can adopt quietly.
+#
+# The four channels are NOT interchangeable and the summary must not flatten them:
+#   breach/schema/status -- findings about artifacts this table measures. A run that printed
+#                           one of these has NOT established that everything is within
+#                           budget, whatever its exit code says.
+#   coverage             -- artifacts NO budget governs. Its WARN and the clean claim are
+#                           both literally true at once, because an ungoverned artifact is
+#                           unmeasured rather than over budget. That run is not a
+#                           contradiction; it is a pass with a stated blind spot, and saying
+#                           so is the difference between legible and merely quiet.
 if [ "$RC" -eq 0 ]; then
   say ""
-  say "PASS  every measured living artifact is within its Rule 25(d) budget."
+  if [ "$SAW_BREACH" -eq 1 ] || [ "$SAW_SCHEMA" -eq 1 ] || [ "$SAW_STATUS" -eq 1 ]; then
+    _what=""
+    [ "$SAW_BREACH" -eq 1 ] && _what="${_what}, over-budget artifact(s)"
+    [ "$SAW_SCHEMA" -eq 1 ] && _what="${_what}, off-schema section(s)"
+    [ "$SAW_STATUS" -eq 1 ] && _what="${_what}, unrecognised In-Flight status row(s)"
+    _what="${_what#, }"
+    say "WARN  this run reported ${_what} and is NOT a clean result."
+    say "      Exit status is 0 because --warn-only was passed and no reported artifact was"
+    say "      hardened with --fail-on. Read the rows above; do not read this run as a pass."
+  elif [ "$SAW_UNGOV" -eq 1 ]; then
+    say "PASS  every measured living artifact is within its Rule 25(d) budget."
+    say "      Measured is not everything: this run also reported read-path artifact(s) that"
+    say "      NO budget governs. They are unmeasured, not within budget."
+  else
+    say "PASS  every measured living artifact is within its Rule 25(d) budget."
+  fi
 fi
 exit "$RC"

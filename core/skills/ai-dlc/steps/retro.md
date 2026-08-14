@@ -590,7 +590,7 @@ largest single writing cost for its least-read content.
 | `audit-rule-files.sh` | PASS / FINDINGS | exit code + each class's verdict line |
 | `validate-reattach-budget.sh` | PASS / FAIL | exit code + the slack figure, read against the guard's ceiling |
 | `validate-gate-manifest.sh` | PASS / FAIL | exit code + the `manifest source:` and `anchor sources:` lines + the MISSING/ORPHAN/UNLOADABLE lines |
-| `validate-artifact-budget.sh --warn-only --fail-on pipeline-snapshot.md` | CLEAN / BREACH | exit code + each breached artifact, or "within budgets"; a nonzero exit here is the snapshot's hard verdict (budget, schema, or in-place supersession marker) |
+| `validate-artifact-budget.sh --warn-only --fail-on pipeline-snapshot.md` | CLEAN / BREACH | exit code + each breached artifact, and the run's own final summary line verbatim; a nonzero exit here is the snapshot's hard verdict (budget, schema, or in-place supersession marker). **Exit 0 is not by itself CLEAN under `--warn-only`** — the summary line says which, and it is `WARN  this run reported …` when anything was reported |
 | `validate-layer-entries.sh` | CLEAN / N ERR, M WARN | exit code + the summary line, or "n/a (unlayered)" |
 
 **The evidence cell is mandatory and is never `—`.** An empty evidence cell is
@@ -775,6 +775,20 @@ NOT hand-write the header. Step 5c runs `scripts/ai-dlc/validate-audit-anchors.s
 which fails the commit on header drift or a malformed entry. No SHA for the
 prior sprint = audit-gate fails closed at the next sprint's per-class test-debt
 audit (`gate-validation.md` Check 18).
+
+**A sprint that ends WITHOUT a retro-PR merge still owes an anchor.** A sprint
+reset or abandoned after its number was consumed reaches neither this step nor a
+merge SHA, so it used to leave a hole — and a hole and a missing anchor are the
+same observation, which is why Check 18 fails closed on both and why clearing one
+took an operator override. Write the close record instead:
+
+`scripts/ai-dlc/validate-audit-anchors.sh --close-record _bmad-output/audit-anchors.md <N> <reset|abandoned> <sha>`
+
+`<sha>` is the commit the sprint actually STOPPED at, and it must resolve — the
+next sprint's audit window opens there. The mode refuses a reason outside the
+schema's closed set, an unresolvable or PENDING sha, and a second entry for a
+sprint that already has one. It fills the hole; it does not waive the anchor, and
+Check 18 still fails closed when no entry exists at all.
 
 **Then prune (Rule 25(a)/(c)).**
 
