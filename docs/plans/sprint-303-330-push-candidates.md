@@ -1,3 +1,35 @@
+# SPENT — four graph-consumer push candidates. DO NOT EXECUTE THIS.
+
+**DISCHARGED.** Every action item is complete. All four remediations shipped as **v0.372.0**,
+merged as `1537e4c` (#551), cut from `origin/main` and gated with
+`AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push` — 156 ok / 0 FAIL, each changed fixture read
+by NAME against an impossible-name control. The consumer at `/Users/n8/git/graph` was never
+written to; all four `PC-` ids appear verbatim in the v0.372.0 CHANGELOG, which is its close
+signal.
+
+**What the run produced that this file did not predict**, which is the more useful half:
+
+- **The R1 filing's consequence was false and its two reproductions were different defects.**
+  No core caller greps the summary line, and the sprint-303 case (coverage WARN beside PASS)
+  states two things that are both literally true. Only the sprint-302 case was a contradiction.
+- **R2's filing was wrong that Check 18 is prose**, and the real gap is deeper than filed: the
+  chain is a 1-deep link, so a hole at N−2 is permanently invisible. Filed as `BL-007`.
+- **R4 was four defects, not one** — including a `core/scripts/` row stale since v0.126.0.
+- **A defect nobody filed**: the recover hook's `${STEP_FILE}` fallback rendered its own MUST as
+  an unexecutable instruction, so a lead in that branch could not comply.
+- **A subagent's probe found a guard of mine that flips no verdict** — the gate's marker
+  fast-path. It is a cost guard, now documented as one and covered by an arm keyed on cost
+  rather than on a decision. **I authored that one arm and its subject**, which is the thing the
+  different-author rule exists to prevent; it is recorded here rather than hidden.
+- **`suite-dispatch-order` flaked under the pool** — green solo, `ok` on one pooled run and
+  `FAIL` on the next with the same tree. Pre-existing, filed as `BL-008`.
+- **My first cost arm could not fire**: it watched `jq`, which the gate only reaches *below* the
+  guard being tested, so the arm passed against its own mutant. The signal had to be `sed`.
+
+Original text follows, unedited.
+
+---
+
 # EXECUTE THIS — four graph-consumer push candidates, adjudicated and remediated
 
 Four entries from the graph consumer's push-candidate ledger, each re-verified against this
