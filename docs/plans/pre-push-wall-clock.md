@@ -26,28 +26,21 @@ apart is for the operator to ask.
 **Delegate.** The Delegation section below is not advisory: most of these steps are independent
 and should run as parallel named agents.
 
-### Next actions — **STEPS 1-9 ARE DONE AND RELEASED AS v0.370.0. THREE THINGS REMAIN.**
+### Next actions — **v0.370.0 IS MERGED TO `main`. TWO THINGS REMAIN.**
 
-The branch is `perf/pre-push-wall-clock`. `scripts/validate-release-version.sh` passes, the
-gate is green at **217.27s**, and the release triple is cut. Everything below the "Ordered
-execution" table is the record of how it got there; **do not re-execute any of it.**
+v0.370.0 landed on `main` as `d4fd318`, squashed from `perf/pre-push-wall-clock` (#547).
+`scripts/validate-release-version.sh` passes on the merged `main`, and the gate is green at
+**217.27s**. Everything below the "Ordered execution" table is the record of how it got there;
+**do not re-execute any of it.**
 
-1. **Rehearse on a consumer tree, then merge.** `layer-contract-conformance-b` SHIPS — it is in
-   `uninstall.sh` and both manifest copies. Build a tree by running `scripts/install.sh` into an
-   empty directory and check: both `layer-contract-conformance` and `-b` arrive and take the
-   SKIP at exit 0; the `.dist-only` shards (`enforcement-map-derivations-b`,
-   `validator-arm-selection`, `validator-arm-selection-b`, `validator-fork-budget`) are
-   **absent**; `uninstall.sh` removes what it should and leaves `_bmad`. Then
-   `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`, read the changed fixtures **by name**,
-   and merge to `main`. Merges are preapproved; do not stop to ask.
-2. **The nine inner pools are owed, and the hook records them as owed.** 66 workers sit on top
+1. **The nine inner pools are owed, and the hook records them as owed.** 66 workers sit on top
    of the outer pool. They cannot be swept with an environment variable — `enforcement-map-sites`
    scrubs every ambient `AI_DLC_*` name for I10 and I87 binds any key a shipped program
    dereferences — so it means editing the constants on a throwaway branch that is never pushed.
    Use `sweep9.sh`'s design: pin the dispatched set, reset the durations record from one golden
    copy before every run, visit cells round-robin, and take a difference as real only where two
    cells' readings do not overlap.
-3. **`validator-arm-selection` is the pole now, at 166s of a 217s wall.** Its shard b has a
+2. **`validator-arm-selection` is the pole now, at 166s of a 217s wall.** Its shard b has a
    measured floor of ~47.8s solo set by three serial units — seeded run 16s → attribution sweep
    11s → a mutant's three parallel full runs 18s. Going below it needs either a third directory
    duplicating the 27s prerequisite, or overlapping the seeded run with the attribution sweep.
@@ -56,19 +49,32 @@ execution" table is the record of how it got there; **do not re-execute any of i
 **Do not re-open Steps 7 or 8.** Both are marked DROPPED ON MEASUREMENT with the figures that
 killed them, and both sections are kept in full below because their hazard notes are the reason
 to read them if the numbers ever change back.
-8. **Regenerate the read-set map — needs the OPERATOR, and an idle box.**
-   `scripts/derive-fixture-readsets.sh` runs `fs_usage`, which **needs root** (`:5`, `:53`), and
-   `fs_usage` is system-wide, so tracing while anything else runs folds that activity into the
-   map (`:60`). Measured after Steps 1-5: **13 of 153 fixture directories have no map entry** —
-   the three added by this program (`enforcement-map-derivations-b`,
-   `layer-contract-conformance-b`, `validator-fork-budget`) and ten that predate it
-   (`check-h1-recursion`, `check-manifest-bypass`, `gate-remediation-deny`, `gate-repair-record`,
-   `gate-series-rung`, `hook-registration-join`, `invariant-index`, `retired-layer-passage`,
-   `shell-portability`, `vocabulary-index`).
-   **This is fail-closed and not a correctness problem** — `apply_readset_skip:357-359` adds any
-   fixture with no map entry to the selection unconditionally, so an unmapped fixture always
-   runs. It erodes the skip rather than breaking it. Do it on a quiet box, under `sudo`, after
-   the sharding has settled, so the map is derived once against the final directory set.
+### Discharged — do not re-execute
+
+**The consumer rehearsal and the merge. DONE.** A tree built by running `scripts/install.sh`
+into an empty directory received both `layer-contract-conformance` and
+`layer-contract-conformance-b`, and both printed the sibling's SKIP at exit 0. The four
+`.dist-only` shards (`enforcement-map-derivations-b`, `validator-arm-selection`,
+`validator-arm-selection-b`, `validator-fork-budget`) were absent, with the shipped pair as the
+same-invocation positive control. `uninstall.sh --force` exited 0, removed `tests/fixtures/`
+including the `-b` shard, and left `_bmad/`. `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`
+was green — **153 ok, 0 FAIL**, full dispatch — and all ten fixtures this program changed read
+`ok` **by name**, against a control name that returns 0 in the same grammar.
+
+**The read-set map. DONE, by the operator, under `sudo`.** Landed as `0376cb5` and merged in
+`d4fd318`: **140 of 153 → 153 of 153**. Re-derived against the tracked map, the dispatched set
+and the map's key set are equal in **both** directions, with a seeded absent name reported by
+the same join as the control that it can fire. `check-h1-recursion` and `check-manifest-bypass`
+are correctly outside both sets — neither carries a `run.sh`, so the suite's
+`core/fixtures/*/run.sh` glob never dispatches them.
+
+**Two findings from the rehearsal, both PREEXISTING and neither in this program's scope.**
+`uninstall.sh` has no removal path for `.claude/hooks/ai-dlc-*.sh` (17 files), `.claude/schemas/`
+(6), `.claude/session-driver/`, `.claude/settings.json` or `.claude/.ai-dlc-version`, so 25 files
+survive an uninstall; this program's only edit to that file was adding
+`layer-contract-conformance-b` to the fixture loop. And `layer-contract-conformance-b` `exec`s
+its sibling, so its SKIP line prints the SIBLING's name — two directories emit one label. The
+runner keys verdicts on the directory, so nothing is broken, but that log cannot be read by name.
 
 ### Done when
 
