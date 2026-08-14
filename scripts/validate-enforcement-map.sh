@@ -170,12 +170,42 @@ done
 fail=0
 err() { echo "FAIL: $*" >&2; fail=1; }
 
+# --- The fork budget: this script's cost, stated as CODE rather than as prose --------------
+#
+# THIS SCRIPT'S COST IS PROCESS SPAWN, MEASURED RATHER THAN ASSUMED. Nothing here is compute:
+# the files are small and the patterns are literals. The suite runs this script more than a
+# hundred times per full push, so its fork count is a large fraction of everything the fixture
+# suite computes, and an invariant added as a per-file loop is a change to the suite's wall
+# clock whether or not its author looked.
+#
+# THE NUMBER IS EXECUTABLE BECAUSE THE PROSE VERSION DECAYED 4.1x AND NOTHING NOTICED. This
+# paragraph used to state "1582 external commands, 643 of them grep" in a sentence. It was true
+# when written and no program read it; re-measured with scripts/fork-profile.sh the same
+# quantity is 6553, and the sentence still read exactly like a fresh measurement. `FORK_BUDGET`
+# is that sentence with a reader: core/fixtures/validator-fork-budget/ profiles a real run and
+# fails the push when the count crosses it, and fails it the other way when the budget has
+# ratcheted so far above the truth that nothing could ever cross it.
+#
+# WHAT IS COUNTED, EXACTLY: external commands this script's own trace shows it invoking. It is
+# not total process creations -- every `$( )` also forks a subshell that no trace line reports,
+# so the real process count is higher by a constant shape. That bias cancels in a like-for-like
+# comparison, which is all a budget ever asks; see fork-profile.sh's header.
+#
+# RAISING IT IS MEANT TO BE A ONE-LINE REVIEWABLE DIFF, and there is deliberately NO
+# environment override. A budget a stray `AI_DLC_*` key could lift is an instruction that
+# ships its own opt-out, and it would additionally put this file in I87's readable-key set for
+# a tunable no consumer has any business setting.
+#
+# A WALL-CLOCK BUDGET WAS REJECTED, and the reason is not squeamishness about timing. This
+# script is invoked from fixtures that run inside a 16-wide worker pool, nine of which open
+# inner pools of their own; a wall reading taken there measures contention, not this file. And
+# a threshold with enough headroom to survive a loaded box cannot resolve the size of
+# regression that matters -- one invariant added as a nested loop moved this script 39% and
+# the whole suite by minutes. Fork count is deterministic and load-independent: load does not
+# change how many times a script calls execve.
+FORK_BUDGET=7000
+
 # --- Fork-free membership, and the reason it is worth a helper ------------------
-# THIS SCRIPT'S COST IS PROCESS SPAWN, MEASURED RATHER THAN ASSUMED. One run of it forks
-# 1582 external commands — 643 of them `grep` — and at 1.48ms per fork+exec on the reference
-# box that is 2.34s of its 4.70s of SYSTEM time. The suite runs it ~140 times, so the spawns
-# alone are ~221,000 processes and ~328 CPU-seconds. Nothing here is compute: the files are
-# small and the patterns are literals.
 #
 # The single worst shape is an exact-line membership test against a string ALREADY IN MEMORY,
 # written as `grep -qxF -- "$x" <<<"$list"`. That forks a process and builds a here-string to
