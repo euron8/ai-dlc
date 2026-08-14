@@ -30,7 +30,7 @@ WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 REG="$WORK/register.jsonl"
 
-EXPECTED_ASSERTIONS=8
+EXPECTED_ASSERTIONS=11
 fails=0; made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
@@ -145,6 +145,48 @@ else
     bad "MUTATION: the paid debt stayed hidden even with the subtraction removed — assertion 2 is vacuous"
   fi
 fi
+
+# --- 9. a `closes_owed` written as a STRING still closes its debt ---------------------------
+# WHY THIS COULD NOT BE SEEDED WITH `row()`. That helper builds the field with
+# `json.loads(closes)`, so every value it can produce is already a well-formed array — a fixture
+# whose tree cannot EXPRESS the defect proves nothing about it. The row below is written raw.
+#
+# THE DEFECT. `closes_owed` is `{"type": "array"}` in the schema, but a bare string is still
+# valid JSON and still parses, and `for cid in "OWED-X"` iterates CHARACTERS. Nothing errored,
+# nothing warned, and the debt was reported OPEN forever. Filed by the graph consumer as
+# PC-S302-AUDIT-LAYER-DEBT-SILENTLY-IGNORES-A-STRING-CLOSES-OWED after one such row had been
+# reporting a discharged debt open on every pull since the day it was closed.
+STR_REG="$WORK/register-strclose.jsonl"
+: >"$STR_REG"
+python3 - >>"$STR_REG" <<'PY'
+import json
+base = {"clause":"LC-E4","subject_digest":"0"*40,"verdict":"still-additive",
+        "recorded_utc":"2026-08-06T00:00:00Z"}
+print(json.dumps(dict(base, entry="extensions/s.md", reason="carries one that gets paid",
+                      owed={"id":"OWED-STR-1","what":"delete Z"})))
+# THE ROW UNDER TEST: closes_owed as a bare STRING, which the schema forbids and json accepts.
+print(json.dumps(dict(base, entry="extensions/s.md", reason="and here it is paid",
+                      closes_owed="OWED-STR-1")))
+PY
+str_out="$(bash "$AUDIT" --register "$STR_REG" 2>&1)"
+if grep -q 'OWED-STR-1' <<<"$str_out"; then
+  bad "a string-valued \`closes_owed\` did not close its debt — the id is iterated character by character and the debt is reported OPEN forever"
+  sed 's/^/        /' <<<"$str_out"
+else
+  ok "a \`closes_owed\` written as a bare string still discharges its debt"
+fi
+
+# ...and it is COUNTED, not silently repaired. A quiet coercion makes the schema unenforceable by
+# making its violation harmless, so the row never gets corrected.
+grep -q 'MISTYPED_CLOSES_OWED=1' <<<"$str_out" \
+  && ok "the mistyped row is reported, so the register still gets fixed" \
+  || bad "the string form was coerced silently — nothing tells the operator the row violates its own schema"
+
+# CONTROL: the well-formed corpus above must NOT be reported as mistyped. Without this the arm
+# passes against a reader that counts every row, and the count discriminates nothing.
+grep -q 'MISTYPED_CLOSES_OWED' <<<"$out" \
+  && bad "CONTROL: the well-formed register was reported as carrying a mistyped row — the counter fires on correct data" \
+  || ok "CONTROL: a register whose closes_owed are all arrays reports no mistyped rows"
 
 echo ""
 if [ "$made" -ne "$EXPECTED_ASSERTIONS" ]; then

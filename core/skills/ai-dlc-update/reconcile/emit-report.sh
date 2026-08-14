@@ -27,6 +27,9 @@
 #   unregistered-drift.sh <dist> <base> <consumer> <theirs>   STATUS<TAB>file<TAB>detail
 #   layer-drift.sh        <dist> <base> <theirs> <consumer>   STATUS<TAB>entry<TAB>tgt<TAB>detail
 #   hard-blockers.sh      <dist> <base> <consumer> <theirs>   (its own wrapper, stripped here)
+#                         — PRE-APPLY form. That wrapper also takes `--post-apply`, which is the
+#                           right form once apply has written core; this renderer runs before any
+#                           write, so the plain form is correct here and stays.
 #   relabel-…             <consumer> --dist <dist> --theirs <theirs>
 #   ledger-reverify.sh    <dist> <base> <consumer> <theirs>   STATUS<TAB>entry<TAB>detail
 #   retired-tokens.sh     <dist> <base> <theirs> <consumer> [path]  STATUS<TAB>path<TAB>token

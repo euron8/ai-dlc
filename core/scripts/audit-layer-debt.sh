@@ -88,7 +88,7 @@ import json, os, re, sys
 path = sys.argv[1]
 as_json = os.environ.get("AS_JSON") == "yes"
 
-rows, malformed = [], 0
+rows, malformed, mistyped = [], 0, 0
 with open(path, encoding="utf-8") as fh:
     for line in fh:
         line = line.strip()
@@ -108,7 +108,31 @@ for r in rows:
             "id": o["id"], "what": o.get("what", ""), "closes_when": o.get("closes_when", ""),
             "entry": r.get("entry", ""), "opened": r.get("recorded_utc", ""),
         })
-    for cid in r.get("closes_owed") or []:
+    # THE TWO HALVES OF THE CONTRACT ARE READ WITH THE SAME RIGOUR, and until this they were
+    # not: `owed` above is isinstance-guarded, this was a bare `or []`. The schema says
+    # `closes_owed` is an array, but a row carrying it as a bare STRING is still valid JSON and
+    # still parses — and `for cid in "OWED-X"` iterates CHARACTERS. `closed` fills with single
+    # letters, none of which can match an id (the schema's own `^OWED-` pattern guarantees it),
+    # so the close silently no-ops and the debt is reported OPEN on every run thereafter.
+    #
+    # THE FAILURE DIRECTION IS WHY THIS IS WORTH A FIX RATHER THAN A CONVENTION. It can only
+    # produce a false OPEN, never a false close — so nothing is wrongly discharged, and the
+    # operator who honestly RECORDS the discharge is punished exactly as much as the one who
+    # forgot. Measured on the reference consumer's register, where one such row had been
+    # reporting its debt open on every pull since the day it was closed, and filed as
+    # PC-S302-AUDIT-LAYER-DEBT-SILENTLY-IGNORES-A-STRING-CLOSES-OWED.
+    #
+    # COERCED AND COUNTED, NOT SILENTLY REPAIRED. A quiet fix here would make the register's
+    # schema unenforceable by making its violation harmless, which is the same defect one level
+    # up; the count is surfaced beside `malformed` so the row still gets corrected.
+    co = r.get("closes_owed")
+    if isinstance(co, str):
+        co, mistyped = [co], mistyped + 1
+    elif co is None:
+        co = []
+    elif not isinstance(co, list):
+        co, mistyped = [], mistyped + 1
+    for cid in co:
         closed.add(cid)
 
 open_items = [v for k, v in declared.items() if k not in closed]
@@ -132,11 +156,14 @@ for r in rows:
 
 if as_json:
     print(json.dumps({"open": open_items, "undeclared": undeclared,
-                      "rows": len(rows), "malformed": malformed}, indent=1))
+                      "rows": len(rows), "malformed": malformed,
+                      "mistyped_closes_owed": mistyped}, indent=1))
     raise SystemExit(0)
 
-print("LAYER DEBT  register=%s  rows=%d%s"
-      % (path, len(rows), ("  MALFORMED=%d" % malformed) if malformed else ""))
+print("LAYER DEBT  register=%s  rows=%d%s%s"
+      % (path, len(rows), ("  MALFORMED=%d" % malformed) if malformed else "",
+         ("  MISTYPED_CLOSES_OWED=%d (coerced to a list for this run; the schema says array — fix the row)"
+          % mistyped) if mistyped else ""))
 print()
 if open_items:
     print("OPEN (%d) — declared by a row, closed by none:" % len(open_items))

@@ -177,6 +177,23 @@ READSET_MAP=".ai-dlc-fixture-readsets.tsv"
 # hashes the working tree, so a cross-run record inside it would change the key that decides
 # whether this suite runs at all.
 VERIFIED_RECORD=".git/ai-dlc-fixture-verified"
+# A RED UNIT'S OUTPUT HAS TO OUTLIVE THE RUN THAT PRODUCED IT. Until this record existed the
+# worker below sent every fixture's stdout and stderr to /dev/null, so an intermittent red left
+# ONE line of evidence -- `FAIL <name>` in a terminal -- and the honest local remedy was "push
+# again", which is indistinguishable from bypassing a real failure. This repo has spent at least
+# three release cycles proposing and refuting causes for one such intermittent, every
+# investigation re-running the fixture out of band because the gate that SAW the failure kept
+# nothing. Filed by the graph consumer as
+# PC-S302-FIXTURE-SUITE-POOL-PRODUCES-AN-UNREPRODUCIBLE-FAIL-AND-THE-EVIDENCE-IS-DELETED-WITH-THE-TEMP-DIR.
+#
+# UNDER .git FOR THE SAME REASON AS THE TWO ABOVE: the content key hashes the working tree, so a
+# record written into it would change the key that decides whether this suite runs at all.
+#
+# NEVER DELETED ON A GREEN RUN, and that is the whole point. The workflow this exists to serve is
+# "it went red, I pushed again, it went green" -- a green run that cleaned up would destroy the
+# evidence at exactly the moment the operator went looking for it. The record names the run that
+# wrote it, and nothing points a reader at it unless THIS run is red.
+FAILLOG_RECORD=".git/ai-dlc-fixture-failures"
 
 # Reduce "$1" (the dispatch list) to the fixtures a change can actually affect, using the
 # trace-derived read-sets in $READSET_MAP. Announces what it skipped and why; leaves the list
@@ -368,8 +385,9 @@ run_fixtures() {
   # DOT-PREFIXED, and that is what makes the name collision-proof rather than
   # unlikely. Every verdict file in "$out" is named for a fixture, and the glob
   # below cannot match a directory whose name begins with a dot -- so no fixture
-  # can ever be called `.dur` and land on top of this one.
-  mkdir -p "$out/.dur" || { rm -rf "$out"; return 1; }
+  # can ever be called `.dur` and land on top of this one. `.log` is the same shape and
+  # gets its safety from the same dot.
+  mkdir -p "$out/.dur" "$out/.log" || { rm -rf "$out"; return 1; }
 
   for d in core/fixtures/*/; do
     [ -f "$d/run.sh" ] || continue
@@ -449,7 +467,7 @@ run_fixtures() {
   # worth avoiding is a new heavy unit dispatched last.
   AI_DLC_FX_OUT="$out" xargs -P "$FIXTURE_JOBS" -I{} bash -c '
     d="$1"; b="$(basename "$d")"
-    if bash "$d/run.sh" >/dev/null 2>&1; then printf ok   > "$AI_DLC_FX_OUT/$b"
+    if bash "$d/run.sh" > "$AI_DLC_FX_OUT/.log/$b" 2>&1; then printf ok   > "$AI_DLC_FX_OUT/$b"
     else                                      printf FAIL > "$AI_DLC_FX_OUT/$b"; fi
     printf "%s %s\n" "$b" "$SECONDS" > "$AI_DLC_FX_OUT/.dur/$b"
   ' _ {} < "$out/.order"
@@ -505,6 +523,42 @@ run_fixtures() {
   # next push -- changing something else entirely -- would skip the fixture that is still
   # broken and report green.
   if [ "$rc" -eq 0 ] && [ -s "$out/.now" ]; then cp "$out/.now" "$VERIFIED_RECORD" 2>/dev/null; fi
+
+  # PUBLISH THE RED UNITS' CAPTURED OUTPUT BEFORE THE TEMP DIR GOES. Placed here, beside the
+  # durations publish, for the same reason that one is here: it is the last point at which
+  # "$out" still exists. There is no trap in this hook -- the `rm -rf` below is straight-line
+  # -- so anything not copied out on this line is gone.
+  #
+  # THE VERDICT FILE IS THE SELECTOR, NOT `rc`. Walking the list and re-reading each verdict
+  # picks up BOTH failure shapes: a unit that ran and failed, and a unit that produced no
+  # verdict at all because its worker died. The second is the one with no output to show, and
+  # saying so in the record is the difference between "here is why it failed" and a silent
+  # empty section that reads like a clean unit.
+  : > "$out/.failures" 2>/dev/null
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    b="$(basename "$d")"
+    [ -f "$out/$b" ] && [ "$(cat "$out/$b")" = ok ] && continue
+    { printf '===== %s =====\n' "$b"
+      if [ -s "$out/.log/$b" ]; then cat "$out/.log/$b"
+      elif [ -f "$out/.log/$b" ]; then printf '(ran and printed nothing)\n'
+      else printf '(no capture file: the worker died before it could run this unit)\n'; fi
+      printf '\n'; } >> "$out/.failures" 2>/dev/null
+  done < "$out/list"
+
+  # THE DISPATCH ORDER IS PART OF THE EVIDENCE, and it is the half that dies with "$out".
+  # For a failure that only reproduces under load, "what was this scheduled beside" is the
+  # question a later reader cannot answer from anything else -- the durations record holds
+  # costs, not co-scheduling, and it has already been overwritten by this run.
+  if [ -s "$out/.failures" ]; then
+    { printf '===== fixture failures -- %s, pool width %s, %s of %s units red =====\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$FIXTURE_JOBS" \
+        "$(grep -c '^===== ' "$out/.failures")" "$n_expected"
+      cat "$out/.failures"
+      printf '===== dispatch order this run (longest-first) =====\n'
+      cat "$out/.order"; } > "$FAILLOG_RECORD" 2>/dev/null
+    printf '   captured output for the failing unit(s): %s\n' "$FAILLOG_RECORD"
+  fi
 
   rm -rf "$out"
   return $rc

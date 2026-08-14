@@ -248,6 +248,19 @@ READSET_MAP=".ai-dlc-fixture-readsets.tsv"
 # hashes the working tree, so a cross-run record inside it would change the key that decides
 # whether this suite runs at all.
 VERIFIED_RECORD=".git/ai-dlc-fixture-verified"
+# WHEN A FIXTURE GOES RED, THIS IS THE FILE TO READ. The pool runs each unit in its own worker
+# and keeps only a verdict, so without this record a failing fixture left you one line --
+# `FAIL <name>` -- and no way to see what it actually printed. Re-running the fixture by hand
+# is not the same run: the pool schedules sixteen at once, and a unit that only fails under
+# that load passes every time you drive it alone.
+#
+# UNDER .git FOR THE SAME REASON AS THE TWO ABOVE: the content key hashes the working tree, so a
+# record written into it would change the key that decides whether this suite runs at all. It is
+# not a tracked file and will not appear in `git status`.
+#
+# NEVER DELETED ON A GREEN RUN. If a push goes red and the next one goes green, this file still
+# holds the red run's output -- which is the case you most want it for.
+FAILLOG_RECORD=".git/ai-dlc-fixture-failures"
 
 # Reduce "$1" (the dispatch list) to the fixtures a change can actually affect, using the
 # trace-derived read-sets in $READSET_MAP. Announces what it skipped and why; leaves the list
@@ -439,8 +452,9 @@ run_fixtures() {
   # DOT-PREFIXED, and that is what makes the name collision-proof rather than
   # unlikely. Every verdict file in "$out" is named for a fixture, and the glob
   # below cannot match a directory whose name begins with a dot -- so no fixture
-  # can ever be called `.dur` and land on top of this one.
-  mkdir -p "$out/.dur" || { rm -rf "$out"; return 1; }
+  # can ever be called `.dur` and land on top of this one. `.log` is the same shape and
+  # gets its safety from the same dot.
+  mkdir -p "$out/.dur" "$out/.log" || { rm -rf "$out"; return 1; }
 
   for d in tests/fixtures/*/; do
     [ -f "$d/run.sh" ] || continue
@@ -513,7 +527,7 @@ run_fixtures() {
   # last, and that is exactly what a brand-new fixture would otherwise be.
   AI_DLC_FX_OUT="$out" xargs -P "$FIXTURE_JOBS" -I{} bash -c '
     d="$1"; b="$(basename "$d")"
-    if bash "$d/run.sh" >/dev/null 2>&1; then printf ok   > "$AI_DLC_FX_OUT/$b"
+    if bash "$d/run.sh" > "$AI_DLC_FX_OUT/.log/$b" 2>&1; then printf ok   > "$AI_DLC_FX_OUT/$b"
     else                                      printf FAIL > "$AI_DLC_FX_OUT/$b"; fi
     printf "%s %s\n" "$b" "$SECONDS" > "$AI_DLC_FX_OUT/.dur/$b"
   ' _ {} < "$out/.order"
@@ -563,6 +577,39 @@ run_fixtures() {
   [ -s "$out/.durations" ] && cp "$out/.durations" "$DURATIONS_RECORD" 2>/dev/null
 
   if [ "$rc" -eq 0 ] && [ -s "$out/.now" ]; then cp "$out/.now" "$VERIFIED_RECORD" 2>/dev/null; fi
+
+  # COPY THE RED UNITS' OUTPUT OUT BEFORE THE TEMP DIR IS REMOVED. This is the last line at
+  # which "$out" still exists; the `rm -rf` below is straight-line and there is no trap, so
+  # anything not copied here is gone for good.
+  #
+  # A UNIT WITH NO VERDICT IS A FAILURE TOO. Walking the list and re-reading each verdict
+  # catches both shapes -- a fixture that ran and failed, and one whose worker died before it
+  # recorded anything. The second has no output to show, and the record says so rather than
+  # leaving an empty section that looks like a clean unit.
+  : > "$out/.failures" 2>/dev/null
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    b="$(basename "$d")"
+    [ -f "$out/$b" ] && [ "$(cat "$out/$b")" = ok ] && continue
+    { printf '===== %s =====\n' "$b"
+      if [ -s "$out/.log/$b" ]; then cat "$out/.log/$b"
+      elif [ -f "$out/.log/$b" ]; then printf '(ran and printed nothing)\n'
+      else printf '(no capture file: the worker died before it could run this unit)\n'; fi
+      printf '\n'; } >> "$out/.failures" 2>/dev/null
+  done < "$out/list"
+
+  # THE DISPATCH ORDER GOES IN TOO. If a fixture only fails when the machine is busy, what it
+  # was running alongside is the thing you will want to know, and nothing else records it --
+  # the durations file holds costs, not co-scheduling.
+  if [ -s "$out/.failures" ]; then
+    { printf '===== fixture failures -- %s, pool width %s, %s of %s units red =====\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$FIXTURE_JOBS" \
+        "$(grep -c '^===== ' "$out/.failures")" "$n_expected"
+      cat "$out/.failures"
+      printf '===== dispatch order this run (longest-first) =====\n'
+      cat "$out/.order"; } > "$FAILLOG_RECORD" 2>/dev/null
+    printf '   captured output for the failing unit(s): %s\n' "$FAILLOG_RECORD"
+  fi
 
   rm -rf "$out"
   return $rc
