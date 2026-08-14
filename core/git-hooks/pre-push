@@ -238,10 +238,19 @@ drivability() { bash scripts/ai-dlc/validate-fixture-drivability.sh; }
 #    not. Comments are stripped before that comparison, because a join a comment can
 #    satisfy is I64's defect.
 #
-#    RE-DERIVE THE POOL SIZE ON YOUR OWN BOX rather than inheriting 16. It is measured
+#    RE-DERIVE THE POOL SIZE ON YOUR OWN BOX rather than inheriting 12. It is measured
 #    on one 18-core machine, which is why it stays the tunable AI_DLC_FIXTURE_JOBS.
+#
+#    WHY 12 AND NOT MORE, on that box: past twelve the wall clock stops falling while the
+#    CPU the run costs keeps rising, all of it in system time. A wider pool there buys no
+#    time and spends contention for it. Your suite is a different size on different cores,
+#    so the useful thing to copy is the METHOD, not the number: pin the dispatched set with
+#    AI_DLC_FIXTURE_NO_SKIP=1 so every run does the same work, reset the durations record
+#    before each run so one run's schedule does not decide the next one's, alternate the
+#    widths rather than running all of one then all of the other, and take a difference as
+#    real only where two widths' readings do not overlap.
 # FIXTURE_POOL_BEGIN
-FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-16}"
+FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-12}"
 DURATIONS_RECORD=".git/ai-dlc-fixture-durations"
 READSET_MAP=".ai-dlc-fixture-readsets.tsv"
 # THE VERIFIED-STATE RECORD LIVES UNDER .git FOR I55 ARM 4'S REASON EXACTLY: the content key
