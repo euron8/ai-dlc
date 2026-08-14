@@ -62,6 +62,29 @@ echo "self-update-join-gate:"
 
 OUTD="$WORK/out"; mkdir -p "$OUTD"
 
+# clone_tree <src> <dst> — one consumer-tree copy, APFS-cloned when the platform allows it.
+#
+# SEVEN OF THESE RUN PER FIXTURE (one here, six in the pool below) over a ~500-file installed
+# consumer, and `cp -c` (clonefile(2)) makes each of them a metadata operation instead of a
+# byte copy.
+#
+# THE FALLBACK IS MANDATORY AND SO IS THE `rm -rf` IN FRONT OF IT. `core/fixtures/` is
+# installed into consumer trees: GNU `cp` has no `-c` at all, and macOS `cp -c` FAILS rather
+# than degrading when source and destination are on different volumes or on a non-APFS one.
+# Either way `cp -c` can die PARTWAY, leaving a half-tree that the gate would then read as a
+# consumer missing files — so the destination is removed before the slow path re-copies it.
+#
+# ONE IMPLEMENTATION, EXPORTED RATHER THAN RESTATED. The pool below runs in a child `bash -c`,
+# and a second copy of this logic there is a copy that can drift from this one. `export -f`
+# carries the function into the child; if that import ever fails the child's copy step fails,
+# the `.done` marker is never written, and the `dropped` arm reports it as a failure — the
+# broken state is loud rather than a silently slower path nobody compares.
+clone_tree() {
+  rm -rf "$2"
+  cp -Rc "$1" "$2" 2>/dev/null || { rm -rf "$2"; cp -R "$1" "$2"; }
+}
+export -f clone_tree
+
 # ======================= PHASE 1: build the mutants, serially =======================
 # Before the pool, because a mutant that did not build must be REPORTED rather than
 # scheduled: `cmp -s` proves the sed landed and `bash -n` proves the result is still a
@@ -84,7 +107,7 @@ cmp -s "$CTRL" "$MUT_B" && MUT_B_BUILD=vacuous
 # The anchor-stripped consumer for assertion 5, also built here: its absence is a FIXTURE
 # BROKEN verdict rather than an assertion, so it must be settled before anything schedules.
 NOANCHOR="$WORK/cons-noanchors"
-rm -rf "$NOANCHOR"; cp -R "$CONS_OLD" "$NOANCHOR"
+clone_tree "$CONS_OLD" "$NOANCHOR"
 GVC="$NOANCHOR/.claude/skills/ai-dlc/steps/gate-validation.md"
 NOANCHOR_BUILD=ok
 if [ -f "$GVC" ]; then
@@ -126,7 +149,7 @@ AI_DLC_SUJG_OUT="$OUTD" AI_DLC_SUJG_RUNS="$RUNS" \
     c="$(awk -F"\t" -v k="$l" "\$1==k{print \$3}" "$AI_DLC_SUJG_RUNS")"
     [ -n "$g" ] && [ -n "$c" ] || exit 0
     priv="$AI_DLC_SUJG_OUT/$l.consumer"
-    cp -R "$c" "$priv" || exit 0
+    clone_tree "$c" "$priv" || exit 0
     bash "$g" "$AI_DLC_SUJG_DIST" "$AI_DLC_SUJG_BASE" "$AI_DLC_SUJG_THEIRS" "$priv" \
       > "$AI_DLC_SUJG_OUT/$l.txt" 2>&1
     printf done > "$AI_DLC_SUJG_OUT/$l.done"
