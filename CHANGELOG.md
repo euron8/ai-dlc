@@ -34,6 +34,78 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.371.0] — 2026-08-14
+
+### A carry-over item had no home, so it survived only inside a plan about something else
+
+`docs/plans/*.md` was this repo's only tracker, and `scripts/validate-plan-shape.sh` holds it to
+a shape a stranger can act on. What it cannot hold is an item belonging to no program. Measured
+over the corpus: **23 plans, exactly 1 live** — the other 22 carry a discharge banner in their
+first twelve lines, which is where `P9` reads liveness. An item written into a plan about
+another subject stops being visible to anything the moment that plan is discharged.
+
+**Nothing aggregates, either.** `git grep -l "Next action" -- scripts/ core/ .githooks/` returns
+**zero**, against a control showing 7 files do read `docs/plans`. Every arm is per-file.
+
+**And nothing bounds a plan's size.** `validate-plan-shape.sh` has one size-shaped line and it
+is `wc -l` resolving a cited line number; the A6 byte ceiling in `validate-claude-rules.sh`
+covers `CLAUDE.md` and `.claude/rules/` only. `docs/plans/retire-graph-consumer-layer.md` is
+**384817 bytes** against a 16726-byte median, and no push ever failed over it.
+
+**The answer reuses the consumer's push-candidate ledger, which has earned its shape.** That
+machinery is 1632 lines across `ledger-reverify.sh`, `ledger-rotate.sh` and `emit-report.sh`,
+with a nine-member status vocabulary owned by one file, bound by **I39** and rendered into
+`docs/vocabulary-index.md`. Its own growth problem is already measured and already solved:
+`SKILL.md:1678` records the reference consumer's ledger at 2830 lines / 220 KB / 50 entries, of
+which only 39 still classified, and rotation moves them to an archive under an acceptance test
+that is stronger than anything written for this change — reverify's output must be
+byte-identical across the rotation.
+
+**What is shared is the entry GRAMMAR; what is forked is the engine.** `ledger_entry_awk()` in
+`reconcile/lib.sh` is sourced, not copied, for the reason its own header gives: rotate and
+reverify were two hand-copies of that boundary rule and **they drifted within one release**.
+The resolver is new, because `ledger-reverify.sh` carries 65 references to `theirs` and resolves
+against a pull's base/theirs/ours triple. There is no triple here, only a working tree.
+
+**Scope separation is mechanical, not conventional.** The verbs differ (`sh`/`has`/`lacks`
+against `theirs_has`/`theirs_lacks`), so neither engine can read the other's ledger — a
+`theirs_has` receipt in `docs/backlog.md` is refused BY NAME. Ids are `BL-`, never `PC-`. The
+tools live in `scripts/`, which never ships: `install.sh:523` derives its copy loop from
+`core_scripts=("$SCRIPT_DIR"/../core/scripts/*)`.
+
+**The guard that does not transfer is stated, not faked.** The consumer separates a live entry
+from one anchored on invented prose by reading a THIRD REF — a token the fix cannot be written
+without exists in the consumer's own implementation
+(`core/fixtures/ledger-reverify-unfalsifiable/README.md`: 13 such entries at v0.146.0). Here the
+ledger and the searched tree are one tree, so there is no third ref. What replaces it is that
+this tree is EXECUTABLE: `verify: sh` asserts the behaviour itself and cannot be anchored on
+prose. The authoring duty for `has`/`lacks` is named in the ledger and enforced by review.
+
+**Four defects in the new tools, each found by running them rather than reading them.** A prose
+`## Receipts` section parsed as an entry and came back closed, because it quotes the closing
+annotation while explaining it — entries are now identified by id, which also removed a
+multibyte em-dash from a bracket class. An anchor containing a backslash-escaped quote produced
+a **false CLOSE**, the dangerous direction, and is now refused. `bash` 3.2 counts parens across
+heredoc bodies inside `$( )`, so an awk `\(v` swallowed the rest of the file and reported
+`unexpected EOF` a hundred lines later; both tools now build their parser outside a
+substitution. And the rotator **swept an open entry whose prose quoted the annotation form,
+while `--check` reported PASS** — because both tools shared one predicate and the test reads
+their agreement. Rotate is now a strict subset of reverify (numeric version at line start
+versus line start), and arm `subset` pins that relation.
+
+**`core/fixtures/backlog-ledger` is `.dist-only`** and carries 22 assertions. A silent subject
+reports `FIXTURE BROKEN` rather than passing; reverting rotate's predicate to the loose form
+kills four arms, including `--check`, which regains its teeth precisely because the two
+predicates now differ.
+
+**A correction this change forced.** v0.370.0's rehearsal notes recorded that `uninstall.sh`
+exits 0 on a non-interactive abort. It does not: `set -e` at `scripts/uninstall.sh:6` means
+`read` failing on EOF kills the script first — rc=**1**, with `Aborted` appearing **0** times
+against a control line appearing once. Fail-closed and correct. The claim came from reading the
+branch rather than running it, and writing it as an executable receipt is what disproved it. The
+`-b` shard's label finding is likewise narrowed to consumers only; in this repo the shard
+banners and closes under its own name.
+
 ## [0.370.0] — 2026-08-14
 
 ### The pre-push suite was never directory-bound, and half its work was one program run 137 times

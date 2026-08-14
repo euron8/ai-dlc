@@ -1,0 +1,11 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is scripts/backlog-reverify.sh, scripts/backlog-rotate.sh and the docs/backlog.md
+corpus — this repository's own carry-over backlog. None of the three is installed: install.sh's
+copy loop derives from core/scripts/ and never touches the repo-root scripts/, and a consumer
+tree gets no docs/backlog.md. On a consumer this fixture would resolve no tool and no ledger,
+and could only pass.
+
+A consumer's equivalent is the push-candidate ledger under _bmad-output/ai-dlc-update/, whose
+own fixtures (ledger-reverify, ledger-rotate, ledger-status-vocabulary,
+ledger-reverify-unfalsifiable) ship and cover it. This one must not be confused for those.

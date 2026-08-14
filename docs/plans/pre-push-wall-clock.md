@@ -72,9 +72,15 @@ are correctly outside both sets — neither carries a `run.sh`, so the suite's
 `uninstall.sh` has no removal path for `.claude/hooks/ai-dlc-*.sh` (17 files), `.claude/schemas/`
 (6), `.claude/session-driver/`, `.claude/settings.json` or `.claude/.ai-dlc-version`, so 25 files
 survive an uninstall; this program's only edit to that file was adding
-`layer-contract-conformance-b` to the fixture loop. And `layer-contract-conformance-b` `exec`s
-its sibling, so its SKIP line prints the SIBLING's name — two directories emit one label. The
-runner keys verdicts on the directory, so nothing is broken, but that log cannot be read by name.
+`layer-contract-conformance-b` to the fixture loop. And on a CONSUMER — not here —
+`layer-contract-conformance-b` `exec`s its sibling, which takes its SKIP path and prints a
+hardcoded literal naming ITSELF, so both directories emit one label. In this repo the shard
+banners and closes under its own name, so there is no collision. The runner keys verdicts on
+the directory, so nothing is broken; what it costs is that a consumer's log cannot be read by
+fixture name for that pair.
+
+**Both are tracked in `docs/backlog.md` as BL-002 and BL-003**, with executable receipts, so
+they survive this plan's discharge.
 
 ### Done when
 
