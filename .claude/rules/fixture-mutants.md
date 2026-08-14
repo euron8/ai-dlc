@@ -17,7 +17,19 @@ paths:
 - Add an **unmutated control** from the same directory whenever the harness
   itself could be what fails — a lone script copy that dies sourcing `lib.sh`
   emits nothing, and "no output" otherwise scores as a kill.
-- Assert a **positive outcome**, not the absence of the old failure message.
+- Assert a **positive outcome**, not the absence of the old failure message. A
+  mutation that WIDENS a guard to match everything often produces the same
+  output as the unmutated original, so it scores a kill it did not earn —
+  measured on a `case` pattern widened to `*)`. Make the guard match NOTHING.
+- **An ABSENCE-shaped arm is the one that REQUIRES a mutant, and a seeded
+  near-miss is not a substitute.** Both-directions controls establish that the
+  arm discriminates between two inputs; only a mutant establishes that it
+  discriminates at all. Measured: a release shipped four fixtures whose new arms
+  all had an offender and a near-miss, and with the subject replaced by
+  `exit 0` two of them still printed `ok` — an absence passing for a program
+  that never ran, one arm after the mutant written to prevent exactly that. Ask
+  of every new arm whether it would pass against a subject that emits nothing;
+  if yes, it needs a committed mutant, not a hand-run one.
 - A mutant must fail **only** its own assertion. Two failures mean the
   assertions are entangled and one of them is vacuous. When both findings are
   genuinely true, the arms overlap rather than the mutant being wrong: decide
