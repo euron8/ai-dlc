@@ -514,8 +514,38 @@ run_fixtures() {
   # came out of. A run that recorded nothing leaves the previous record alone rather
   # than replacing it with an empty file, which would silently cost the NEXT run its
   # ordering as well.
+  #
+  # IT MERGES, AND A WHOLE-FILE REPLACE HERE COST THE ORDERING EVERY TIME THE SKIP FIRED.
+  # "$out/.dur/" holds a file only for a unit that was DISPATCHED, and the read-set skip
+  # above narrows the dispatch list in place before the pool is fed. So a replace deleted
+  # the cost of every SKIPPED unit, and those units then re-entered the next run at the
+  # 999999 unknown slot, which sorts FIRST -- putting the real poles LAST, the exact
+  # inversion of what the longest-first block exists to buy. Measured on this repo's own
+  # record: full 150-unit run 506s, the same run after one selective run had clobbered
+  # the record 573s, and a fresh clone with no record at all 671s.
+  #
+  # THE CONCATENATION ORDER IS THE MERGE RULE. Old record first, this run's costs second,
+  # `c[$1] = $2` is last-wins -- so a dispatched unit's fresh cost overwrites its stale one
+  # and a skipped unit keeps the one it had. `NF == 2` is the same predicate the reader
+  # above uses, so writer and reader cannot disagree about the grammar.
+  #
+  # `NR==FNR` WAS THE OBVIOUS SPELLING AND IT IS WRONG: awk given a record file that does
+  # not exist fails outright, and that is the fresh-clone case the old code handled
+  # correctly. The `[ -s ]` guard inside the brace group degrades to "just this run's
+  # costs", which is byte-for-byte the previous behaviour there.
+  #
+  # A GHOST KEY FOR A DELETED FIXTURE IS DELIBERATELY LEFT IN. It costs ~20 bytes under
+  # .git, nothing reads a key with no unit, and `suite-dispatch-order` already feeds a
+  # literal `ghost` line and asserts the suite still runs complete. Pruning against the
+  # on-disk set would need a pre-skip copy of the list, i.e. another executable line in
+  # this I66-joined region, to buy a defect nobody has measured.
   cat "$out"/.dur/* > "$out/.durations" 2>/dev/null
-  [ -s "$out/.durations" ] && cp "$out/.durations" "$DURATIONS_RECORD" 2>/dev/null
+  if [ -s "$out/.durations" ]; then
+    { [ -s "$DURATIONS_RECORD" ] && cat "$DURATIONS_RECORD"; cat "$out/.durations"; } 2>/dev/null \
+      | awk 'NF == 2 { c[$1] = $2 } END { for (k in c) print k, c[k] }' \
+      | sort > "$out/.merged"
+    [ -s "$out/.merged" ] && cp "$out/.merged" "$DURATIONS_RECORD" 2>/dev/null
+  fi
 
   # PUBLISH THE VERIFIED STATE ONLY ON A FULLY GREEN RUN, and that condition is the whole
   # safety of the skip. The record means "every fixture's verdict is known good at these file

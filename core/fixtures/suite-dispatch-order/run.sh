@@ -171,6 +171,56 @@ else
   bad "a malformed record cost the suite a fixture (rc=$rc) — the ordering step must never be able to shorten the run"
 fi
 
+# ------------- 4. a run that dispatches a SUBSET keeps the costs of the rest --------
+# THE RECORD IS MERGED, NOT REPLACED, and this is the arm that says so. Only a
+# DISPATCHED unit leaves a file in "$out/.dur/", and the read-set skip narrows the
+# dispatch list before the pool is fed — so a whole-file replace deleted the cost of
+# every unit the skip had decided not to run. Those units then re-entered the next run
+# at the unknown-cost slot, which sorts FIRST, putting the real poles LAST.
+#
+# NARROWED BY TAKING A FIXTURE AWAY rather than by seeding the skip's own state. The
+# code path is identical — a unit that is not dispatched writes no `.dur` file, and
+# nothing downstream can tell why — and this way the arm does not depend on the read-set
+# machinery, which needs a map and a verified-state record that a seeded tree does not
+# have. The unit withheld is the CHEAPEST one deliberately: losing the cost of the
+# cheapest unit is what flips the dispatch order, because an unknown cost sorts first.
+T="$WORK/merge"; seed "$T" "$HOOK" || broken "seed failed"
+export SDO_TRACE="$T/trace"
+mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 1; mkfx_trace "$T" zzz 3
+: > "$SDO_TRACE"
+rc="$(drive "$T" "$WORK/merge1.out")"
+[ "$rc" = 0 ] || broken "the full run that seeds the record did not pass (rc=$rc)"
+n0="$(grep -c . "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
+case "$n0" in ''|*[!0-9]*) n0=0 ;; esac
+[ "$n0" -eq 3 ] || broken "the seeding run recorded $n0 costs, not 3 — arm 4 has nothing to preserve"
+
+mv "$T/tests/fixtures/aaa" "$WORK/aaa.withheld" || broken "could not withhold a fixture"
+: > "$SDO_TRACE"
+rc="$(drive "$T" "$WORK/merge2.out")"
+[ "$rc" = 0 ] || broken "the narrowed run did not pass (rc=$rc)"
+n1="$(grep -c . "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
+case "$n1" in ''|*[!0-9]*) n1=0 ;; esac
+kept="$(awk '$1 == "aaa" { print $2 }' "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
+if [ "$n1" -eq 3 ] && [ -n "$kept" ]; then
+  ok "a run that dispatched 2 of 3 units left the third's cost in the record — the record MERGES, and a replace here loses every skipped unit's cost"
+else
+  bad "a narrowed run cut the record to $n1 line(s) and aaa's cost is '${kept:-gone}' — a replace throws away exactly what the read-set skip decided not to re-run, and an unknown cost sorts FIRST"
+fi
+
+# And the consequence, observed rather than argued: with every cost still known the next
+# full run is still longest-first. Under a replace `aaa` would be unknown, sort first,
+# and the schedule would be `aaa zzz mmm` — slower, and green.
+mv "$WORK/aaa.withheld" "$T/tests/fixtures/aaa" || broken "could not restore the withheld fixture"
+: > "$SDO_TRACE"
+rc="$(drive1 "$T" "$WORK/merge3.out")"
+mg_order="$(tr '\n' ' ' < "$SDO_TRACE")"
+if [ "$rc" = 0 ] && [ "$mg_order" = "zzz mmm aaa " ]; then
+  ok "after the narrowed run the next full run is still longest-first (zzz mmm aaa) — the preserved costs are the ones being sorted on"
+else
+  bad "the run after a narrowed one dispatched '$mg_order' rather than 'zzz mmm aaa ' — a cost lost to a narrowed run comes back as UNKNOWN, which sorts first and puts the poles last"
+fi
+unset SDO_TRACE
+
 # ================================================================== MUTANTS ========
 # Each is a COPY of the hook with one arm removed, guarded by `cmp -s` so a sed that
 # matched nothing cannot pass as a mutation. `mut` SETS `MUT` rather than printing it:
@@ -261,11 +311,41 @@ if mut m3 '/AI_DLC_FX_OUT\/\.dur\//d'; then M="$MUT"
   unset SDO_TRACE
 fi
 
+# M4 — THE MERGE REMOVED, and arm 4 cannot fire without it. The old record is simply not
+# read, so the last-wins pass has nothing to fall back on and the write degenerates to
+# exactly the replace this release removed. One line, because that is the whole mechanism.
+#
+# WITHOUT THIS MUTANT ARM 4 WOULD PASS ON A HOOK THAT NEVER MERGED ANYTHING: on a run
+# that dispatches every unit, a merge and a replace produce byte-identical records. The
+# arm only discriminates on a NARROWED run, so the mutant is what proves the arm is
+# reading the narrowing rather than the tree.
+if mut m4 's|\[ -s "\$DURATIONS_RECORD" \] && cat "\$DURATIONS_RECORD"|false|'; then M="$MUT"
+  T="$WORK/m4"; seed "$T" "$M" || broken "seed failed"
+  export SDO_TRACE="$T/trace"
+  mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 1; mkfx_trace "$T" zzz 3
+  : > "$SDO_TRACE"
+  rc="$(drive "$T" "$WORK/m4a.out")"
+  [ "$rc" = 0 ] || broken "M4's seeding run did not pass (rc=$rc)"
+  mv "$T/tests/fixtures/aaa" "$WORK/m4.withheld" || broken "could not withhold a fixture under M4"
+  : > "$SDO_TRACE"
+  rc="$(drive "$T" "$WORK/m4b.out")"
+  n_m4="$(grep -c . "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
+  case "$n_m4" in ''|*[!0-9]*) n_m4=0 ;; esac
+  m4_kept="$(awk '$1 == "aaa" { print $2 }' "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
+  mv "$WORK/m4.withheld" "$T/tests/fixtures/aaa" || broken "could not restore the fixture withheld under M4"
+  if [ "$rc" = 0 ] && [ "$n_m4" -eq 2 ] && [ -z "$m4_kept" ]; then
+    ok "M4 with the old record not read the same narrowed run cuts it to 2 lines and loses aaa's cost — arm 4 is measuring the merge and not the tree"
+  else
+    bad "M4 the record still held $n_m4 line(s) with aaa='${m4_kept:-gone}' — arm 4 would pass against a hook that replaces, which is the state this release removed"
+  fi
+  unset SDO_TRACE
+fi
+
 # ------------------------------------------------------------------- floor ---------
 # EXPECTED_ASSERTIONS, mandatory since v0.217.0 for any fixture whose arms are emitted
 # from inside a conditional: an assertion that never executed prints nothing, and a short
 # green report reads exactly like a complete one.
-EXPECTED_ASSERTIONS=8
+EXPECTED_ASSERTIONS=11
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"
