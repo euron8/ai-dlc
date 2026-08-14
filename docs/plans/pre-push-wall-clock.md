@@ -26,23 +26,36 @@ apart is for the operator to ask.
 **Delegate.** The Delegation section below is not advisory: most of these steps are independent
 and should run as parallel named agents.
 
-### Next actions
+### Next actions — **STEPS 1-9 ARE DONE AND RELEASED AS v0.370.0. THREE THINGS REMAIN.**
 
-1. **Land the durations merge** (Step 1) in both hooks, with the `suite-dispatch-order` arm and
-   its `m4` mutant. Everything measured after this depends on the record being complete.
-2. **In parallel, as named agents in worktrees:** shard `enforcement-map-derivations` (Step 2),
-   shard `layer-contract-conformance` (Step 3), and take `self-update-join-gate`'s seed apart
-   (Step 4 + the Step 8 items for that fixture).
-3. **Build `scripts/fork-profile.sh` and the `FORK_BUDGET` gate fixture** (Step 5). Independent
-   of 1 and 2; it is the instrument the next two steps are measured with.
-4. **Hoist the ~15 cross-arm names and `norm_core_manifest`** above the first arm header, then
-   ship `--arms` (Step 6). Do the hoist in the parent, once; delegate one agent per dependency
-   family after it.
-5. **Run the fork campaign** P1/P2/P4/P5 as one agent per pattern, then the harness tail in
-   batches (Step 7).
-6. **Hoist `$PRISTINE` and add the `cp -Rc` fast path** (Step 8) once the shards have landed.
-7. **Re-derive the pool widths** (Step 9), backgrounded, and rewrite the expired justification
-   at `.githooks/pre-push:133-158` and its consumer twin whatever the answer.
+The branch is `perf/pre-push-wall-clock`. `scripts/validate-release-version.sh` passes, the
+gate is green at **217.27s**, and the release triple is cut. Everything below the "Ordered
+execution" table is the record of how it got there; **do not re-execute any of it.**
+
+1. **Rehearse on a consumer tree, then merge.** `layer-contract-conformance-b` SHIPS — it is in
+   `uninstall.sh` and both manifest copies. Build a tree by running `scripts/install.sh` into an
+   empty directory and check: both `layer-contract-conformance` and `-b` arrive and take the
+   SKIP at exit 0; the `.dist-only` shards (`enforcement-map-derivations-b`,
+   `validator-arm-selection`, `validator-arm-selection-b`, `validator-fork-budget`) are
+   **absent**; `uninstall.sh` removes what it should and leaves `_bmad`. Then
+   `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`, read the changed fixtures **by name**,
+   and merge to `main`. Merges are preapproved; do not stop to ask.
+2. **The nine inner pools are owed, and the hook records them as owed.** 66 workers sit on top
+   of the outer pool. They cannot be swept with an environment variable — `enforcement-map-sites`
+   scrubs every ambient `AI_DLC_*` name for I10 and I87 binds any key a shipped program
+   dereferences — so it means editing the constants on a throwaway branch that is never pushed.
+   Use `sweep9.sh`'s design: pin the dispatched set, reset the durations record from one golden
+   copy before every run, visit cells round-robin, and take a difference as real only where two
+   cells' readings do not overlap.
+3. **`validator-arm-selection` is the pole now, at 166s of a 217s wall.** Its shard b has a
+   measured floor of ~47.8s solo set by three serial units — seeded run 16s → attribution sweep
+   11s → a mutant's three parallel full runs 18s. Going below it needs either a third directory
+   duplicating the 27s prerequisite, or overlapping the seeded run with the attribution sweep.
+   Both were measured; neither was taken. **This is the next program, not this one.**
+
+**Do not re-open Steps 7 or 8.** Both are marked DROPPED ON MEASUREMENT with the figures that
+killed them, and both sections are kept in full below because their hazard notes are the reason
+to read them if the numbers ever change back.
 8. **Regenerate the read-set map — needs the OPERATOR, and an idle box.**
    `scripts/derive-fixture-readsets.sh` runs `fs_usage`, which **needs root** (`:5`, `:53`), and
    `fs_usage` is system-wide, so tracing while anything else runs folds that activity into the
