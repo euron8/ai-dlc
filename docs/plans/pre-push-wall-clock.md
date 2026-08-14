@@ -82,7 +82,7 @@ This plan re-derives the pole from ground truth and establishes what the reachab
 actually is. The short version, and it is not the answer the framing suggests: the pole is
 six fixtures, five of them mutation batteries for one 6232-line validator, those six are
 **80% of everything the suite computes**, and **that validator alone is ~49% of it** while
-having silently regressed **6.6× against a fork budget written in its own header**.
+having silently regressed **4.1× against a fork budget written in its own header**.
 
 Measured end to end: total suite CPU work is **4983 CPU-seconds**, so on 18 cores the
 scheduling ceiling is **277s** against today's **506s** — the pool is 55% efficient, and
@@ -167,13 +167,26 @@ reader-enforced rule and the decay happened anyway.
 
 ### 4. The validator's cost is fork overhead, and there is no hotspot to fix
 
-`bash -x` of one run emits **261,978 trace lines** containing **~12,850 external-command
-invocations** (grep 4073, awk 1273, sed 926, sort 778, cat 682, tr 592, git 457, mkdir 431,
-cp 336, rm 328, find 162).
+**CORRECTED IN EXECUTION.** This section first said "~12,850 external-command invocations,
+~10,400 real forks, a 6.6× decay". **That was mine and it was an over-count.** I histogrammed
+command-name tokens anywhere in the 262k-line trace, which counts `grep` and `awk` wherever
+they appear inside `err()` message text and inside the embedded awk programs. The direct
+measurement, by a classifier that scores token 1 of each trace line against bash builtins and
+the script's own functions, is:
 
-Measured on this box: **1.81 ms per fork+exec** (`/usr/bin/true` ×5000 = 9.04s) and
-**2.17 ms per grep** (2000 greps = 4.33s). ~10,400 real forks × ~0.94 ms accounts for the
-9.9s of system time exactly.
+```
+6553 traced external invocations   -> a 4.1x decay against the file's recorded 1582
+prologue                              5 forks
+top 10 arms                        80.6% of all 6553
+I87 1463   I60 799   I82 641   I59 603   I33b 484
+I84  431   I75 382   I61 196   I64 174   I83 110
+```
+
+Both numbers can be defended for different quantities — 6553 is what the trace *shows* being
+invoked, and every `$( )` additionally forks an invisible subshell, so total process creations
+are higher by a constant shape. The gate counts the traced quantity and says so. The
+per-fork constants stand: **1.81 ms per fork+exec** (`/usr/bin/true` ×5000 = 9.04s) and
+**2.17 ms per grep** (2000 greps = 4.33s); 6553 × ~1.5 ms is the 9.9s of system time.
 
 A timestamped xtrace spans 18.3s of which only **3.9s sits in gaps larger than 30 ms**; the
 slowest single operation is one 0.885s `grep -rnE`. The other 14.4s is a quarter-million
@@ -650,8 +663,8 @@ Both later steps depend on it, and the file already tells you the number it shou
 > **1582** external commands — 643 of them `grep` — and at 1.48ms per fork+exec on the
 > reference box that is 2.34s of its 4.70s of SYSTEM time. The suite runs it **~140 times**…
 
-Measured today: **~12,850 external-command trace lines, ~10,400 real forks, 9.9s of system
-time.** That is a **6.6× decay in a number the file states about itself**, and it is the whole
+Measured today: **6553 traced external invocations, 9.9s of system
+time.** That is a **4.1× decay in a number the file states about itself**, and it is the whole
 argument for the gate. (It also corroborates the 137-invocation count independently.)
 
 **The harness must be dynamic — static analysis of this file does not work.** It embeds awk
@@ -804,7 +817,7 @@ used at `:1161`). Zero risk, ~900 forks between them.
 **Target: 15.7s → ~7s.** Confidence high (≥85%) that P1+P2+P4+P5 alone reach ≤11s — they are
 mechanical and the helpers exist. Moderate (~65%) for ≤7.5s, which needs the harness-generated
 tail of 40-60 individual sites each with its own probe. The prior round of this campaign
-reached 1582 forks, so the tail is demonstrably reachable; that it rotted back to 10,400 is
+reached 1582 forks, so the tail is demonstrably reachable; that it rotted back to 6553 is
 the evidence that it will not stay there without Step 5's gate.
 
 **Time it from inside the repo, and A/B with `git stash` or a `git worktree` — not a renamed
