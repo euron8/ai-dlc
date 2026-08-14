@@ -1,4 +1,21 @@
-# BRIEF — the S330 layer split, rehearsed on a clone. FOR THE GRAPH SESSION TO APPLY.
+# BRIEF — the S330 layer split, rehearsed on a clone. SUPERSEDED IN PART; READ THIS HEADER.
+
+**OUTCOME (2026-08-14).** The consumer took **end-state 3** and did NOT apply the split on the
+criterion as written. `OWED-S330-921-SPLIT-RELAXATION-TO-OVERRIDE` was superseded by a `-V2`
+that restates the debt as **partial by construction**: 921's gate membership
+(`planning|story|implementation|sprint-review`) strictly exceeds core Check 20's (`planning`),
+so the relaxation must exist at three gate types where core has no section to shadow and no
+`overrides/` entry can follow it. Relocation cannot discharge it. §2's mechanics and §1's
+figures still hold; §3's three end-states are resolved.
+
+**DEFECT IN THIS BRIEF, recorded rather than quietly fixed.** §6 called the §3 findings
+"reasoning about prose semantics, not a measurement". That was written as honesty and it
+functioned as a false structural limit — the measurement was available in the rehearsal clone
+and was not taken. The consumer's committed gate logs carry `menu_skip_provenance` in
+**31 files**, and `s277/gate-log-archive.md:120` records the sprint-review gate PASSING on
+exactly the clause §3 was about. "Could fail after this lands" should have read "has been the
+sole basis for a PASS at that gate across ten sprints." Same conclusion, different force, and
+the corrected rule now lives in `.claude/rules/consumer-boundary.md`.
 
 Discharges `OWED-S330-921-SPLIT-RELAXATION-TO-OVERRIDE` and `OWED-S330-914-RETRO-SCOPE`.
 
@@ -142,9 +159,12 @@ string wider than the heading fires `E7 REVERSE` — that fourth probe is the co
   `validate-gate-manifest.sh`'s resolution output. No gate was actually run.
 - **The clone carries committed state only.** The consumer's uncommitted pipeline state was not
   present, so nothing here is tested against a live paused pipeline.
-- **§3 is reasoning about prose semantics, not a measurement.** Both changes follow from
-  manifest membership, which is measured; that a lead would find the planning-gate pair
-  contradictory is a judgement about how two checks read together.
+- **§3's MECHANISM is measured; its SEVERITY was available and I did not take it.** Both
+  changes follow from manifest membership, which is derived. That a lead would find the
+  planning-gate pair contradictory is a judgement. **But how much the sprint-review change
+  costs was measurable from the rehearsal clone and was not measured** — see the header. This
+  bullet originally stopped at the judgement, which read as "cannot be measured from here" and
+  was wrong.
 - **The 914 coverage claim remains suggestive.** Core's Check 14 sits in the `universal` row
   and carries no `**Scope.**` line at all (`core/skills/ai-dlc/steps/gate-validation.md:760`),
   so it does run at retro — that much is measured. `hard_block_count` is documented cumulative

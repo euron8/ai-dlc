@@ -16,6 +16,20 @@ code.
 close the goal with a measurement taken on the consumer side — a change that cannot be shown
 to have moved anything there has not been shown to work.
 
+**The rehearsal clone carries committed HISTORY, so the stakes are almost always reachable —
+and the failure is not looking.** A brief states the mechanism from the code; what it is worth
+comes from what that consumer has actually been doing, and gate logs, archives and artifact
+history are committed. Measured: a brief said a proposed change "could fail" at one gate, and
+the consumer's own archived gate log — thirty-one files carrying the token, in the clone the
+brief was rehearsed on — recorded that gate PASSING on that exact clause across ten sprints.
+One `grep` in a tree already on disk separated "a risk to weigh" from "a regression, dated".
+
+**Never label a reachable measurement unreachable.** That brief's limitations section called
+the finding "reasoning about prose semantics, not a measurement", written as honesty and
+read as a boundary: an unmeasured claim marked unmeasurable stops the next reader from
+looking. State what you did not measure AND whether it was available — those are different
+admissions, and only the second one is a limit.
+
 ## The distribution is not a consumer, and a green push here proves nothing about one
 
 `install.sh` splits what shares a parent here: `core/scripts/<x>` lands at
