@@ -34,6 +34,62 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.369.0] — 2026-08-14
+
+### A `contradicts-core` ruling expires like a reading, and the conflict it records does not
+
+`PC-S330-A-CONTRADICTS-CORE-VERDICT-EXPIRES-LIKE-A-READING-AND-STOPS-BEING-SURFACED`, filed by
+the graph consumer off a diagnosis this repo produced while answering a different question.
+
+The adjudication key is `(clause, entry, subject_digest)`, and the digest covers the entry AND
+the core file it hooks. That is deliberate — SKILL.md says a verdict is *"a record of a reading,
+not an exemption for a path"*, and for `still-additive` the reading IS the whole claim, so
+expiring it is correct.
+
+**`contradicts-core` is not only a reading.** It is the one verdict `layer-drift.sh` cannot
+reach on its own: an extension that COPIES core is caught by `EXTENSION-RESTATES-CORE`, but one
+that asserts the opposite of core in its own words restates nothing and matches nothing, and
+core explicitly forbids building a textual contradiction detector instead. The register row IS
+the finding. So when the digest expires, the reading goes and **the conflict stays** — and the
+row is not overwritten, it becomes *unaddressable*. No later row disagrees with it, because
+every later row carries a different digest.
+
+Measured on the reference consumer: a ruling recorded 2026-08-05 sat unactioned for **nine
+days** while ten later rows on the same entry recorded `still-additive` against their own
+subjects — none of them wrong, none of them about it, and nothing anywhere reporting the gap.
+
+`audit-layer-debt.sh` gains the third list, beside OPEN and UNDECLARED. `owed` is the only
+digest-independent handle in the register, because the debt join reads `owed.id` and never a
+digest, so an obligation declared there survives every future move of the entry.
+
+**SCOPED PER ENTRY, AND THAT IS A SATISFIABILITY PROPERTY RATHER THAN A NOISE ONE.** The
+register is append-only, so a historical row can never acquire an `owed` — "this ROW declares no
+owed" is unsatisfiable by construction the instant the row is written, and would name the same
+rows forever with no act available to clear them. The entry is the satisfiable unit, because a
+later row can still speak for it, which is how both real debts on the reference consumer were
+actually declared.
+
+**False-positive set, measured on the only register that exists, at two revisions.** At
+`e2604bdf3`, before the operator declared the debt: **1 of 7** contradicts-core entries
+reported, and it is the true one. At the revision after: **0 of 7**. An arm that reported zero
+on the only corpus available would have proven nothing, and the earlier revision is what supplies
+the positive — a better control than any synthetic seed, because neither end was authored to be
+found.
+
+**It REPORTS rather than blocks, and the reason is a false-positive path rather than caution.**
+An operator who records the conflict and then fixes the layer file immediately owes nothing and
+declares nothing; the fix moves the digest, so the next verdict lands under a different key and
+needs no `supersedes`; and append-only means the original row stands forever. Entry-scoped, that
+entry is flagged permanently for having been fixed promptly. Nothing in the register
+distinguishes that from deferred-and-undeclared, so ERROR tier is unavailable under this repo's
+own standard. Blocking becomes possible only if a resolution declaration exists for that case,
+which is a larger change and is not bundled here.
+
+Three arms in `layer-debt-ledger`, and the middle one carries a mutant because it is
+absence-shaped: the corpus holds an entry whose `owed` sits on a LATER row under a different
+digest — the reference consumer's actual shape — and reducing the scope from entry to row
+reports it, which is what proves the control is about scope and not about silence.
+
 ## [0.368.0] — 2026-08-14
 
 ### Every arm v0.367.0 added was in both directions, and three of them still could not fire
