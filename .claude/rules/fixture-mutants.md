@@ -32,3 +32,15 @@ paths:
   seed can actually reach the branch under test, exercise a layout-conditional
   resolver against every root shape it claims to handle, and give the unit a
   positive control so a harness that died reports as broken rather than as clean.
+  Two shapes measured while building one seed: the detector already had a guard
+  covering the case (so the obvious seed was classified before it reached the
+  branch), and `diff` COALESCED the exempt line and the offending line into one
+  hunk, so an exemption keyed on the first swallowed the second.
+- **Mutate the file the fixture RESOLVES, which is not always the one you are
+  changing.** A fixture that names candidates in both install layouts takes the
+  first that exists, and in this repo `core/git-hooks/pre-push` is found before
+  `.githooks/pre-push`. Mutating the other copy leaves every arm green, and a
+  mutant that killed nothing reads exactly like an arm that cannot fire —
+  measured, three in a row, on a change that was in fact correct. `cmp -s` does
+  not catch it: the mutation applied cleanly, to a file the run never loaded.
+  Print the resolved path, or assert the kill count is non-zero.
