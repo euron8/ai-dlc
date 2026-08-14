@@ -97,8 +97,9 @@ change — `PC-S316`, `PC-S302-ADJUDICATION-RERUN`, `PC-S303-EFFORT-BINDING`, `P
 `PC-S299-MISATTRIBUTES`, `PC-S308`, and more. Quoting what you removed is good authoring practice
 here, so **this will keep happening**, and it is a distinct failure from the two shapes
 `ledger-reverify.sh` already detects. One receipt was green for a third reason: it anchored on
-`solo-evaluat` while upstream spells the same concept "solo violation", and reported STILL-LIVE for
-309 releases against a rule that shipped before the entry was filed.
+`solo-evaluat`, a hyphenation the filing invented, while upstream spells the same concept
+"inline-evaluating". It reported STILL-LIVE against a rule that had shipped six days before the
+entry was filed.
 
 **One entry is not an entry.** The body at pin line 2028 is the severed tail of archived
 `PC-S306-OVERRIDE-DELEGATES-INTO-THE-SECTION-IT-SHADOWS`. `ledger-rotate.sh` cut it mid-fenced
@@ -108,10 +109,14 @@ one. The entry documenting heading-span fragility was itself destroyed by a head
 claim it carried is `ALREADY-FIXED` at v0.180.0; the parser damage is live and corroborates
 `PC-S313`, which was independently reproduced by running the shipped rotator.
 
-**Two entries were dead the day they were written, and one was dead 309 releases before.**
+**Three entries were already dead when they were written.**
 `PC-S298-WAIT-FOR-DELIVERABLE` was filed during a pull to 0.168.1 whose range contains its own fix
 at 0.168.0. `PC-S297-RETRO-MD-CLAIMS-NONEXISTENT-GHA-WORKFLOW` was filed four days after
-`93e05d3` fixed it. `PC-S295-RETRO-LEAD-SOLO-EVAL-LLM-CHECK`'s rule shipped at v0.62.0.
+`93e05d3` fixed it. `PC-S295-RETRO-LEAD-SOLO-EVAL-LLM-CHECK`'s rule landed six days before the
+filing, at `b7112d7` — and the refutation pass established it was present **in the very blob the
+entry cites as its own re-verification base**, `f4845a9`, at two sites, with 43 `CHECK_LOADED`
+markers in the same blob as the control. The entry's "STILL LIVE — re-verified" is false against
+its own named ref.
 
 **One entry's own re-verification produced a false zero.** `PC-S297-RETRO-UPSTREAM-PM-AC-PRECISION`
 re-asserted STILL-LIVE in 2026-07-28 having grepped for wording the fix does not use — its control
