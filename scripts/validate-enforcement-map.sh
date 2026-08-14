@@ -1304,6 +1304,11 @@ EOF
 
   # --- I58: the ADJUDICATED level is one token across the contract and the enforcer that acts
   # on it, PROVEN BY RUNNING THE ENFORCER rather than by grepping it. ---
+  # vocabulary: ADJUDICATED clause codes
+  # vocabulary-invariant: I58
+  # vocabulary-owner: core/skills/ai-dlc/layer-contract.yaml
+  # vocabulary-extract: adjudicated-codes
+  # vocabulary-readers: core/skills/ai-dlc-update/reconcile/layer-drift.sh
   #
   # `level:` was declared for six contract versions with NO behavioural reader anywhere in the
   # tree: I37 checked it was present and nothing checked what it did. v0.213.0 gave it one —
@@ -1588,6 +1593,11 @@ else
 fi
 
 # --- I39: the ledger status vocabulary is one set across emitter and rulebook --
+# vocabulary: push-candidate ledger statuses
+# vocabulary-invariant: I39
+# vocabulary-owner: core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
+# vocabulary-extract: ledger-statuses
+# vocabulary-readers: core/skills/ai-dlc-update/SKILL.md, core/skills/ai-dlc-update/reconcile/emit-report.sh
 # THE STATE THIS MAKES UNREPRESENTABLE. `ledger-reverify.sh`'s statuses are a contract with
 # three readers that do not check each other: the operator following SKILL.md step 3f, the
 # report heading in emit-report.sh, and any consumer script grepping the TSV. Nothing joined
@@ -2506,6 +2516,11 @@ defined_rules \"\$1\"" _ "$band_sk" 2>/dev/null)"
 fi
 
 # --- I46: the extension kind vocabulary is one set --------------------------------
+# vocabulary: layer extension kinds
+# vocabulary-invariant: I46
+# vocabulary-owner: core/scripts/validate-layer-entries.sh
+# vocabulary-extract: extension-kinds
+# vocabulary-readers: core/skills/ai-dlc/extensions/README.md
 #
 # `LAYER_KINDS` in validate-layer-entries.sh is what E10 REJECTS against; the entry
 # contract in extensions/README.md is what an author READS. Two copies of a closed
@@ -3459,6 +3474,11 @@ $rp
 fi
 
 # --- I30: the two pre-push syntax globs are one set, mapped ---------------------
+# vocabulary: pre-push shell-syntax globs
+# vocabulary-invariant: I30
+# vocabulary-owner: .githooks/pre-push
+# vocabulary-extract: syntax-globs
+# vocabulary-readers: core/git-hooks/pre-push
 # A shipped script with a syntax error is a gate that cannot run at all, so both hooks
 # run `bash -n` over every class of shipped script. The two lists are the same set
 # expressed in two layouts, and nothing compared them: core validators moved to
@@ -3725,6 +3745,9 @@ EOF
 fi
 
 # --- I70: the PR-class taxonomy is declared once and derived by every reader ----
+# vocabulary: PR classes
+# vocabulary-invariant: I70
+# vocabulary-owner: (consumer-owned) the taxonomy lives in THEIRS's own contract, which ai-dlc-update reads through git show rather than carrying a copy; no member of it exists in this tree to render
 # I67's rule, applied to the third consumer-owned file this contract declares. There is no
 # forward arm because there is no twin: `ai-dlc-update` reads THEIRS's own contract through
 # `git show` rather than carrying a copy, so the declaration has exactly one home and the
@@ -4236,6 +4259,11 @@ Each one silently truncates any value ending in 't' or a backslash -- 'capture: 
 fi
 
 # --- I72: the PR-class grammar is ONE key set across the parser and the template
+# vocabulary: PR-class taxonomy grammar keys
+# vocabulary-invariant: I72
+# vocabulary-owner: core/scripts/validate-cycle-commits.sh
+# vocabulary-extract: pr-class-keys
+# vocabulary-readers: core/skills/ai-dlc/templates/pr-classes.md
 # The parser dispatches on a `case`; the template is what a consumer actually reads before
 # writing a taxonomy. A key in one and not the other is silent in both directions and both
 # directions have a victim:
@@ -4936,6 +4964,11 @@ Resolve it from core/schemas/harness-origin.json instead. A second copy in a sec
 fi
 
 # --- I80: an enumeration of the intensity SET names every member of it -------------
+# vocabulary: validation intensities
+# vocabulary-invariant: I80
+# vocabulary-owner: core/skills/ai-dlc/SKILL.md
+# vocabulary-extract: intensity-table
+# vocabulary-readers: core/skills/ai-dlc/steps/route.md, core/skills/ai-dlc/steps/gate-validation.md
 # I19 binds the intensity table's MINIMUMS column: it forbids a second copy of what an
 # intensity requires. It does not bind the SET. So the same row kept dropping out of the
 # other half — route.md, the file that ASSIGNS validation_intensity, listed three of four

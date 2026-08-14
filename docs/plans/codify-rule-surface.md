@@ -1,4 +1,9 @@
-# Codify the effective rule surface of ai-dlc
+# Codify the effective rule surface of ai-dlc — DISCHARGED
+
+**DISCHARGED at `v0.366.0`. DO NOT EXECUTE.** Every numbered action is built, gate-green and
+merged, and all four operator decisions are ruled. This file is now a RECORD of why each
+decision went the way it did. Part 4 carries the closed action list and the rulings; Parts
+1–3 are the inventory and reasoning that produced them.
 
 ## Context
 
@@ -29,10 +34,10 @@ re-derivation is what appears here.
 **Ping the operator** on any question, on any decision marked OPERATOR DECISION, and on
 completion including an early stop.
 
-**Start at Part 4.** It opens with the three remaining actions; the table under them is the
-record of what is already merged, and "Working this repo" carries the mechanics the finished
-waves cost to learn. Parts 1–3 are the inventory, gap analysis and recommendations that produced
-all of it — read them for WHY a decision went the way it did, not for current state.
+**Start at Part 4.** It opens with the closed action list and the four rulings; the table under
+them is the record of what merged, and "Working this repo" carries the mechanics the waves cost
+to learn. Parts 1–3 are the inventory, gap analysis and recommendations that produced all of it
+— read them for WHY a decision went the way it did, not for current state.
 
 **Parts 1 and 2 are a point-in-time measurement, not a live reading.** Their figures were taken
 before any of this shipped, and several have moved since — the fixture count and the invariant
@@ -40,17 +45,20 @@ totals in particular. Re-derive anything you intend to act on; the commands are 
 
 ## Status
 
-**LIVE, and handed off mid-program.** Five releases are built, gate-green and merged to `main`,
-which is at `v0.365.0`. The tree is clean and `main` matches `origin/main`. **Three items
-remain**, listed as the numbered actions in Part 4; everything above them there is a record.
+**DISCHARGED.** Six releases are built, gate-green and merged to `main`, which is at
+`v0.366.0`. **Nothing remains**: the three actions that were open at handoff are closed in
+Part 4, and the three decisions that were open are ruled there.
 
-The last full verification was `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`: **147 of 147
-fixtures, all gate steps green, both skips disabled.**
+The last full verification before the final release was `AI_DLC_FIXTURE_NO_SKIP=1 bash
+.githooks/pre-push`: **147 of 147 fixtures, all gate steps green, both skips disabled, 581s
+wall from inside the repo.** That timing was the one done-when the program had missed.
 
-Four operator rulings are folded into Part 3 — topical unscoped rule files (R1), no
+Seven operator rulings are folded in — topical unscoped rule files (R1), no
 `docs/coding-conventions.md` (R2), prose plus a structural proxy for the two standing
-directives (R4), and derive the `OK:` line rather than hand-maintain it (R6). Three decisions
-are still open and are listed at the end of Part 4; **one of them blocks remaining action 3.**
+directives (R4), derive the `OK:` line rather than hand-maintain it (R6), hold the
+durable-channel ceiling where it is, do not widen arm A1, and keep the three consumer-workflow
+clusters in the memory corpus. The last three are recorded at the end of Part 4 with the
+ground truth each turned on.
 
 **Four corrections to this plan, every one forced by a mechanism rather than by review**, and a
 resuming session should expect more of the same. Dating frozen measurements in `CLAUDE.md` is
@@ -418,31 +426,41 @@ Each has a live corpus and no general statement anywhere. All go to `verificatio
 
 ---
 
-# Part 4 — What remains
+# Part 4 — The closed action list
 
-**Three items.** Everything else in this plan is built, gate-green and merged to `main`; the
-completed record is the table below, and Parts 1–3 are the inventory and reasoning that produced
-it. Read "Working this repo" before starting — it carries what the finished waves cost to learn.
+**All three CLOSED at `v0.366.0`.** They are kept in their numbered form, marked done, because
+a plan that deletes its actions on completion leaves a reader unable to tell a finished item
+from one that was never written. "Working this repo" below carries what the waves cost to learn.
 
-1. **Build `scripts/render-vocabulary-index.sh` → tracked `docs/vocabulary-index.md`.** This
-   closes G7 and is the second artifact R2 identified. Derive each controlled vocabulary from
-   the file that already owns it — `core/schemas/*.json`, `core/skills/ai-dlc/enforcement-map.yaml`,
-   `core/skills/ai-dlc/layer-contract.yaml` — and restate none of them. Model it on
-   `scripts/render-invariant-index.sh`: self-probe before rendering, byte-comparing `--check`,
-   fail closed on a zero-row parse, and **nothing volatile in the rendered file**. Add a
-   `.dist-only` fixture proving `--check` can fail, and wire the step beside the invariant index
-   in `.githooks/pre-push`. If the derivation cannot be made total across all the owning files,
-   ship nothing and report why — a partial index behind a passing gate is worse than none.
-2. **Record full-suite wall clock, before and after.** The one done-when this program missed.
-   `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`, timed from inside the repo, and put the
-   figure in the CHANGELOG rather than in `CLAUDE.md`. Never compare a loaded fixture cost
-   against a solo one.
-3. **Wave E — the home-directory carriers.** Extend the existing PostToolUse warning on
-   `~/.claude/plans/` to carry both standing directives verbatim, and add a sibling for writes
-   under the memory corpus carrying R1's three-clause placement test. Label both warnings, not
-   gates. **Blocked on operator decision 2 below**: these carriers cannot be versioned in this
-   repo, so whether A1 widens to admit a tracked `.claude/hooks/` subtree decides whether this is
-   worth doing at all.
+1. **DONE — `scripts/render-vocabulary-index.sh` → tracked `docs/vocabulary-index.md`**, with
+   `core/fixtures/vocabulary-index/` (`.dist-only`, 2 controls and 11 mutants) and a pre-push
+   step beside the invariant index. Seven cross-file vocabularies and four schema enums.
+   **THIS ACTION'S OWN SOURCE LIST WAS WRONG, and the measurement is what changed the design.**
+   It said to derive each vocabulary from `core/schemas/*.json`, `enforcement-map.yaml` and
+   `layer-contract.yaml`. Measured against the arms, only I58's owner is one of those three
+   (`core/skills/ai-dlc/layer-contract.yaml:593`): I39's is the `emit` literals at
+   `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:235`, I46's is the `LAYER_KINDS`
+   assignment at `core/scripts/validate-layer-entries.sh:548`, I72's is the `case` at
+   `core/scripts/validate-cycle-commits.sh:217`, I80's is Rule 8's table at
+   `core/skills/ai-dlc/SKILL.md:207`, I30's is the sentinel block at `.githooks/pre-push:640` — and
+   **I70's owner is not in this tree at all**, being the consumer's own taxonomy read through
+   `git show`. So the population is declared by a `# vocabulary:` marker on each arm rather than
+   by a fixed list of source files, and the consumer-owned one carries a reason instead of
+   members. The totality bar the action set was met on the declared population, in three
+   directions, and the arm that keeps that population from going stale is a prose check on arm
+   headers whose false-positive set was measured empty before it shipped.
+2. **DONE — full-suite wall clock recorded.** `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`
+   from inside the repo: **581s, exit 0, 147 fixtures**, both skips disabled. In the CHANGELOG,
+   not in `CLAUDE.md`. The suite is pole-bound, so the ~0.4s step this release adds moves the
+   total by its own cost and nothing else.
+3. **DONE — Wave E, the home-directory carriers**, in the form operator decision 3 settled.
+   `~/.claude/hooks/plan-outside-repo-warn.sh` now restates both standing directives verbatim at
+   plan-authoring time, where `.claude/rules/operator-rulings.md` cannot reach; and a sibling,
+   `~/.claude/hooks/memory-write-placement-warn.sh`, fires on any write under a per-project
+   memory corpus carrying R1's three-clause placement test and the prose-only-rules-are-never-
+   scoped clause. Both are registered in the home `settings.json`, both probed in both
+   directions, both WARNINGS and neither a gate. **Neither is versioned anywhere and neither
+   reaches a consumer** — that is the ruling, not an omission.
 
 ## Completed and merged
 
@@ -454,6 +472,7 @@ it. Read "Working this repo" before starting — it carries what the finished wa
 | `v0.363.0` | The six unconditional rulebooks under `.claude/rules/` carrying the 24 homeless rules; `CLAUDE.md`'s placement test gained its third clause; `fixture-mutants.md` gained three clauses; memory-corpus pointer added. |
 | `v0.364.0` | `validate-shell-portability.sh` (7 arms, 325 files, ~0.5s) + its fixture + pre-push step; `tool-hazards.md` reduced to citing it. |
 | `v0.365.0` | Arm P9 — a live plan carries at least one resolving citation; `plan-shape` fixture extended both directions. |
+| `v0.366.0` | `render-vocabulary-index.sh` + `docs/vocabulary-index.md` + `vocabulary-index` fixture + pre-push step; `# vocabulary:` markers on seven arms; the full-suite wall clock; Wave E's two home-directory carriers. |
 
 **Three proposed arms were DROPPED on measurement, and they are not pending work.** A bare
 `sed -i` scan (4 hits, all 4 correct), an `awk -v` backslash scan (1 hit, correct, and the
@@ -487,8 +506,8 @@ case is undetectable by construction). Do not rebuild them.
 
 ## Verification
 
-Corrected against what was actually built. The two criteria this program did not meet are the
-remaining actions above, not silent gaps.
+Corrected against what was actually built. **Every criterion is now MET**; the two that were
+outstanding at handoff were closed by actions 1 and 2 above.
 
 - `bash scripts/validate-claude-rules.sh` passes with A3b, A5 and A6 live; `I88` appears nowhere
   in `CLAUDE.md` as a live mechanism; `core/fixtures/claude-rules-joins/run.sh` proves all eleven
@@ -499,30 +518,48 @@ remaining actions above, not silent gaps.
 - `bash scripts/validate-shell-portability.sh` runs clean and its fixture proves every arm fails
   when mutated, plus two negatives. **MET.**
 - `scripts/render-invariant-index.sh --check` passes and the index names every ID the extractor
-  proves can fire. **MET.** The vocabulary renderer is remaining action 1.
+  proves can fire. **MET.**
+- `scripts/render-vocabulary-index.sh --check` passes, its population is bound in three
+  directions, and `core/fixtures/vocabulary-index/run.sh` proves eleven mutants each die by
+  their own arm. **MET.**
 - No stale derivable count survives in `CLAUDE.md`. **MET BY REMOVAL, NOT BY GENERATION** — the
   audit blocks dates in rule prose, so the count was deleted and the derivation command written
   in its place. A generated region in `CLAUDE.md` remains available and is not currently needed.
 - Every rule file loads: A2/A3/A3b/A4 pass and A6 counts all seven durable files. **MET.**
 - `git push` green end to end, from the repo root, suite through its pool, no hand-rolled loop.
   **MET** — five releases, and a final `AI_DLC_FIXTURE_NO_SKIP=1` run of 147 of 147 fixtures.
-- Timing before and after for `validate-enforcement-map.sh` (14.27s → 14.68s). **MET.** The
-  full-suite half is remaining action 2.
+- Timing before and after for `validate-enforcement-map.sh` (14.27s → 14.68s). **MET.**
+- Full-suite wall clock recorded: **581s, exit 0, 147 fixtures**, both skips disabled, timed
+  from inside the repo. **MET.**
 
 ## Operator decisions
 
 1. **RULED.** The invariants named on the `OK:` line versus those that can fire — the operator
    ruled that the line is DERIVED rather than hand-maintained, which moots the per-ID judgment.
    Discharged by R6.
-2. **OPEN — the durable-channel ceiling.** `AI_DLC_DURABLE_BYTES` defaults to 40,960, raised once
-   from 32,768 after arm A6 fired on the change that created the channel. The current total is on
-   the A6 line of any `validate-claude-rules.sh` run. Lowering it means deciding which of the 24
-   rules need not survive a compaction — a judgment about how they are used, not a prose-trimming
-   exercise.
-3. **OPEN — whether to widen arm A1** to admit a tracked `.claude/hooks/` subtree, so remaining
-   action 3's carriers can be versioned. This reopens the containment A1 exists to hold, and it
-   is what makes that action worth doing or not.
-4. **OPEN — the three KEEP clusters**: D26 receipt anchoring, D33 consumer-mechanism absorption,
-   D35 PreToolUse enforcement design. Each is consumer-workflow rather than repo-authoring. They
-   stay in the memory corpus, or become a `paths:`-scoped rule file over the consumer-pull
-   runbook paths.
+2. **RULED — hold the durable-channel ceiling at 40,960 and change nothing.** Measured at the
+   time of the ruling: the channel was **38,950 bytes across 7 files**, 2,010 of headroom. The
+   ruling follows the arm's own stated order at `scripts/validate-claude-rules.sh:275` — when A6
+   fires, the first question is what can be MECHANIZED or SCOPED out, and raising is the last
+   resort. It has not fired. A pre-emptive prose cut is separately forbidden by
+   `.claude/rules/resident-context.md`, which says rule text here is not trimmed for byte cost;
+   and lowering the number now would have fired the arm on the next ordinary pointer rather than
+   on a rule anyone examined. **Derive the current figure from the A6 line, never from this
+   sentence.**
+3. **RULED — do NOT widen arm A1, and Wave E's carriers stay in the home directory,
+   unversioned.** The decisive measurement is that **A1's own probe seeds `.claude/settings.json`
+   as its offender** (`scripts/validate-claude-rules.sh:95`), and a repo-local hook needs its
+   registration in exactly that file — so admitting it breaks the probe and reopens the
+   containment the `.gitignore` narrowing exists to hold. Admitting `.claude/hooks/**` alone
+   yields a tracked copy nothing executes, with the executing copy still in the home directory:
+   two files, no join, which is D30. So the affordance was not created. Action 3 shipped in the
+   only form that runs.
+4. **RULED — all three KEEP clusters stay in the memory corpus.** D26 is not homeless: its
+   authoring error is already mechanized by `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:1`
+   and `core/fixtures/ledger-reverify-unfalsifiable/run.sh:1`, whose README names the canonical
+   form, so "cite, do not restate" applies. D33 and D35 are prose-only, and `CLAUDE.md` forbids
+   scoping a prose-only rule because scoping deletes it from every session that has compacted
+   once — even though their globs would be non-empty (`core/skills/ai-dlc-update/**` is 26
+   tracked files, `core/hooks/**` is 7) and pull-runbook delegation measured near zero, at 2 of
+   12 files with one hit each. That left only the durable channel, against 2,010 bytes of
+   headroom, for rules that bind the consumer-pull workflow rather than authoring in this repo.

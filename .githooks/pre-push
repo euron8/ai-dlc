@@ -51,6 +51,18 @@ step "enforcement-map integrity (I1-I11)" \
 step "invariant index derived from the map's arm headers" \
   bash scripts/render-invariant-index.sh --check
 
+# 1a-ii. docs/vocabulary-index.md is DERIVED from the `# vocabulary:` markers those same arm
+#        headers carry, plus every enum in core/schemas/*.json, and byte-compared here. Six
+#        invariants in this tree exist only because a closed vocabulary correctly owned by one
+#        file kept being restated from memory somewhere else; until this ran there was no place
+#        a reader could see the sets at all, so the restating continued and the invariant caught
+#        it afterwards. It also fails the push on an arm header that READS as a vocabulary join
+#        while carrying no marker, which is what keeps the index's population from going stale
+#        as arms are added. Runs in ~0.4s. It must sit AFTER the invariant index, whose output
+#        it consumes to resolve every marker's `vocabulary-invariant:` citation.
+step "vocabulary index derived from the markers and the schemas" \
+  bash scripts/render-vocabulary-index.sh --check
+
 # 1a. The same corpus-wide party-mode floor the consumer hook runs, over the DISTRIBUTION's own
 #     tree. It is here for a reason beyond symmetry: this tree holds the two files the check has
 #     to get right — the one rendered taught example (exempt only because the generated-region

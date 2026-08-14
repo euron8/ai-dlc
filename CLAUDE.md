@@ -235,6 +235,14 @@ every declared arm can emit, and that no ID is claimed twice. **An invariant dec
 by OPENING its arm header with its ID**, closed by a colon — a header that merely mentions an
 ID elsewhere in its prose declares nothing.
 
+**A closed VOCABULARY is the same problem one level down**, and
+`docs/vocabulary-index.md` is the derived answer — every controlled vocabulary, its members,
+the file that OWNS them and the invariant that binds them, rendered by
+`scripts/render-vocabulary-index.sh` and byte-compared at pre-push. Read it before restating a
+set from memory; change the OWNER, never this file. An arm whose header reads as a vocabulary
+join and carries no `# vocabulary:` marker fails the push, so the index cannot go stale as arms
+are added.
+
 **A hand-typed enumeration is what this replaced, and it had gone stale by 22 invariants** —
 71 named against 93 live arms, I1 and I2 among the missing. The CHANGELOG carries the
 measurement. Nothing read that sentence but a human, and nobody audits a 12,000-character

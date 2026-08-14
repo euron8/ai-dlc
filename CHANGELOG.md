@@ -34,6 +34,63 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.366.0] — 2026-08-13
+
+### Six controlled vocabularies had six enforcers and no reader-facing index
+
+At least six invariants in this tree exist for one reason: a closed vocabulary is correctly
+owned by ONE file, and people keep restating it from memory somewhere else. Each binds its own
+pair of files. None of them gave a reader a place to see the sets, so the restating continued
+and the invariant caught it afterwards rather than the reader avoiding it beforehand. That is
+G7 of `docs/plans/codify-rule-surface.md`, and it was the last build item on that plan.
+
+- **`scripts/render-vocabulary-index.sh` → tracked `docs/vocabulary-index.md`**, byte-compared
+  at pre-push beside `render-invariant-index.sh --check`. Seven cross-file vocabularies and
+  four schema enums, every member read from the file that owns it at render time.
+- **The population is DECLARED, in two halves, and each half is total over its own corpus.**
+  Every `enum` in `core/schemas/*.json` — total by construction, the walker descends each whole
+  document. And every arm in `validate-enforcement-map.sh` carrying a `# vocabulary:` marker
+  block, bound in three directions: a marker naming an extractor the renderer does not
+  implement fails, an implemented extractor no marker names fails, and an arm header whose
+  PROSE reads as a vocabulary join while carrying no marker fails.
+- **THE PLAN'S SOURCE LIST WAS WRONG AND THE MEASUREMENT IS WHY THE DESIGN CHANGED.** It said
+  to derive each vocabulary from `core/schemas/*.json`, `enforcement-map.yaml` and
+  `layer-contract.yaml`. Measured against the arms: only I58's owner is one of those three.
+  I39's is `reconcile/ledger-reverify.sh`, I46's is a `LAYER_KINDS='...'` assignment in
+  `validate-layer-entries.sh`, I72's is a `case` in `validate-cycle-commits.sh`, I80's is Rule
+  8's table in `SKILL.md`, I30's is the sentinel block in `.githooks/pre-push` — and **I70's
+  owner is not in this tree at all**, being the consumer's own PR-class taxonomy read through
+  `git show`. Marker-declared owners, one per arm, is what a fixed source list could not be.
+- **The prose arm's false-positive set is empty, and how it got there is part of the arm.** The
+  grammar `vocabular|taxonom|one set|key set` matched six headers. Five were vocabularies. The
+  sixth — the pre-push syntax globs — was MARKED rather than exempted, because it is a closed
+  set owned by one hook and derived by the other, which is the index's subject exactly. No
+  exemption list exists to rot. The near-miss control is a header saying "one string".
+- **`core/fixtures/vocabulary-index/`** (`.dist-only`): 2 controls, 11 mutants, each killed by
+  its own arm. The seed declares all six extractors, so every one is exercised against a
+  synthetic owner rather than only the marker reader being proven.
+- **`CLAUDE.md` points at it**, beside the invariant index. An index nothing points at is the
+  rule-with-no-reader shape arm A4 exists to forbid, and it would have shipped that way.
+  Durable channel 38,950B → 39,477B against the 40,960 ceiling, which the operator ruled holds.
+
+**Three defects in this work were found by mechanisms rather than by review, and two of them
+were written by an author with the rule in front of them.** `I54b` caught a `schema_rows |
+grep -q` — the EPIPE first-match-reader defect, for the fourth time in this repo's history.
+`I85` caught a backtick inside a double-quoted operator-facing string. The third was found by
+the fixture itself: m4 deleted a marker and left its vocabulary-shaped header, so the mutant
+died by the DEMAND arm instead of the one m4 exists to test — a kill reported for a condition
+never tested. A fourth was caught before it shipped by writing the empty-field probe: the row
+reader used TAB, which is IFS-whitespace, so the consumer-owned row's empty extractor field
+collapsed and every field after it shifted. The separator is US (0x1f).
+
+### Full-suite wall clock, the one done-when the rule-surface program had missed
+
+`AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`, timed from inside the repo, both skips
+disabled, 147 fixtures dispatched, all gate steps green: **581s (9m41s)** before this release's
+step was added. The suite is POLE-BOUND, so a new ~0.4s serial step moves the total by its own
+cost and nothing more. Per `CLAUDE.md`, this figure lives here and not in a resident rule file,
+and a loaded fixture cost is never compared against a solo one.
+
 ## [0.365.0] — 2026-08-12
 
 ### P4 passes a plan that cites nothing, which is what an unchecked plan looks like
