@@ -915,7 +915,26 @@ plain run. It is one line, it exercises every region boundary at once, and if it
 cost the same ~15.7s then the selection machinery has overhead of its own and every per-arm
 number taken through it is contaminated.
 
-### Step 7 — the fork-reduction campaign
+### Step 7 — the fork-reduction campaign — **DROPPED ON MEASUREMENT, by operator ruling**
+
+> Not skipped. **Dropped because the measurement that justified it no longer holds.**
+>
+> This step was sized at ~1200 pool-seconds on the premise that the suite runs
+> `validate-enforcement-map.sh` **137 times per push at 15.7s**. After Step 6 it runs fully
+> about **ten** times — the pre-push's own serial step plus each battery's absence-shaped
+> sanity control, which keep the full run deliberately, because a selected run says nothing
+> about the arms it did not run. Everything else is `--arms` at **0.40s**.
+>
+> So the campaign's value fell from ~1200 pool-seconds to roughly **100**, against 60-90
+> minutes of work across 40-60 individual sites each needing its own two-directions probe.
+> The `FORK_BUDGET` gate from Step 5 stays and holds the ground: the number cannot decay again
+> without a reviewable one-line diff.
+>
+> **The patterns remain documented below and remain correct** — P1's `in_lines` helper still
+> exists unused at 380 sites, P2's per-file grep loops are still there. They are simply no
+> longer worth the hours. Re-open this if the validator's full-run cost starts mattering again.
+
+### Step 7 (as written, for the record) — the fork-reduction campaign
 
 Broad by necessity — the flat profile leaves nothing to target. Four patterns, ranked by
 (forks removed / risk); the harness names the rest.
@@ -958,7 +977,23 @@ a copy at `scripts/vem-before.sh` reads the canonical file for I35/I52 and is no
 I91's scan, producing spurious findings. A copy run from `/tmp` resolves its root elsewhere and
 exits in 5 ms, which reads as an enormous speed-up and is a broken measurement.
 
-### Step 8 — copy and clone eliminations
+### Step 8 — copy and clone eliminations — **DROPPED ON MEASUREMENT, by operator ruling**
+
+> The `self-update-join-gate` half **shipped** with Step 4 — the `local`-scope fix, the
+> hardlink clones, the parallel installs and the `cp -Rc` fast path are all in. What is dropped
+> is the `enforcement-map` half: the `$PRISTINE` hoist and the seed clone-eliminations.
+>
+> Sized when `enforcement-map-derivations` was 452s and its ~70 tree copies were 20-40s of it.
+> After Steps 2 and 6 that fixture is **102s loaded / 33.4 CPU-s solo**, and its shard is the
+> same. The copies are now a fraction of a unit that is a fraction of the pole. Roughly 20
+> minutes of work for single-digit seconds off a non-pole.
+>
+> **The hazard notes below stand and are the reason to read this section if it is re-opened**:
+> the worker's `trap 'rm -rf "$PRISTINE"' EXIT` must drop `$PRISTINE` before the hoist, or the
+> first worker to finish deletes the tree the others are reading; and `cp -Rc` needs its
+> `rm -rf`-then-fallback shape, because `core/fixtures/` ships and GNU `cp` has no `-c`.
+
+### Step 8 (as written, for the record) — copy and clone eliminations
 
 **Hoist `$PRISTINE` in `enforcement-map-derivations`.** `seed_tree()` (`:63-66`) is called from
 `--run-one` only, so every one of ~35 workers builds its own 7.5 MB / 493-file pristine tree,
