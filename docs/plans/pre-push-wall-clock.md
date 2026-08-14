@@ -26,6 +26,50 @@ apart is for the operator to ask.
 **Delegate.** The Delegation section below is not advisory: most of these steps are independent
 and should run as parallel named agents.
 
+### Next actions
+
+1. **Land the durations merge** (Step 1) in both hooks, with the `suite-dispatch-order` arm and
+   its `m4` mutant. Everything measured after this depends on the record being complete.
+2. **In parallel, as named agents in worktrees:** shard `enforcement-map-derivations` (Step 2),
+   shard `layer-contract-conformance` (Step 3), and take `self-update-join-gate`'s seed apart
+   (Step 4 + the Step 8 items for that fixture).
+3. **Build `scripts/fork-profile.sh` and the `FORK_BUDGET` gate fixture** (Step 5). Independent
+   of 1 and 2; it is the instrument the next two steps are measured with.
+4. **Hoist the ~15 cross-arm names and `norm_core_manifest`** above the first arm header, then
+   ship `--arms` (Step 6). Do the hoist in the parent, once; delegate one agent per dependency
+   family after it.
+5. **Run the fork campaign** P1/P2/P4/P5 as one agent per pattern, then the harness tail in
+   batches (Step 7).
+6. **Hoist `$PRISTINE` and add the `cp -Rc` fast path** (Step 8) once the shards have landed.
+7. **Re-derive the pool widths** (Step 9), backgrounded, and rewrite the expired justification
+   at `.githooks/pre-push:133-158` and its consumer twin whatever the answer.
+
+### Done when
+
+Each of these is a command with a checked-reachable PASS, not a target.
+
+- `bash scripts/validate-plan-shape.sh` → **0 errors, 0 warnings**. Reachable: it reads that
+  way on this file today, and removing `## Start here` was shown to produce exactly one finding
+  naming it — the control that the arm can fire.
+- `bash core/fixtures/suite-dispatch-order/run.sh` green with its assertion floor raised, **and**
+  its new `m4` mutant shown to turn that arm red. A merge arm that passes without the mutant is
+  indistinguishable from today's replace.
+- `bash scripts/validate-enforcement-map.sh` silent on I5, I8, I20, I33, I66, I74 — **and** the
+  I66 fork error demonstrated by editing one hook and not the other, then cleared.
+- Each sharded family: union of the shards' assertion labels equals the pre-shard set captured
+  on the parent commit, and each of the four shard controls in Step 3 shown to exit 2.
+- `--arms` with every declared id selected produces byte-identical stdout, stderr and exit code
+  to a plain run. This is the equality assertion that makes every per-arm number trustworthy;
+  if it does not also cost the same wall time, the selection machinery has its own overhead.
+- The fork gate goes **red** when a deleted loop is re-added, and says `FIXTURE BROKEN` — not
+  pass — when `bash -x` is neutered by overriding `PS4`.
+- `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push` green, with the changed fixtures read **by
+  name** in the output. A green banner from the content-key skip is not evidence.
+- The makespan and the CPU census re-derived, not assumed: `sort -k2,2nr
+  .git/ai-dlc-fixture-durations | head -8` for the pole, and a fresh solo census for the CPU
+  floor. **Observation point matters** — take both after Step 7 lands, since Steps 5-7 change
+  which arms are worth batching and therefore what Step 9 should sweep.
+
 ## Context
 
 `git push` in this repo is gated by `.githooks/pre-push`, whose dominant step is a
