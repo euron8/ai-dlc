@@ -539,6 +539,47 @@ LCC, register a throwaway arm naming a label absent from `$RUNS`.
 
 ### Step 4 — `self-update-join-gate` (506s): measure the seed before sharding it
 
+> **THE POLE IS ONE MECHANISM, AND IT GROWS ON ITS OWN.** Measured by ablation
+> (`AI_DLC_GATE_IN_SAFE_STOP=1` makes `:161` return early, so this is a non-destructive
+> ablation rather than an edit), 3 interleaved reps, one gate invocation at a time:
+>
+> | invocation | median real |
+> |---|---|
+> | full, DEFER consumer | **155.07s** |
+> | same, safe-stop short-circuited | **1.40s** |
+> | full, non-DEFER consumer | 3.30s |
+> | the `:291` walk over 150 fixture directories, in isolation | 0.83s |
+>
+> **`advise_safe_stop` is 153.7s of 155.07s — 99.1%**, and the 150-directory walk that looked
+> like the obvious suspect is 0.5% of one invocation. The mechanism, re-derived here with a
+> control: `BASE..THEIRS` spans **227 commits of which 111 touch VERSION** (control: the same
+> `rev-list` against a nonexistent path returns 0), and `self-update-gate.sh:120-122` spawns
+> **one full nested gate invocation per candidate**. 110 × ~1.4s reproduces the delta. It is
+> linear rather than quadratic by design — `:118` exports `AI_DLC_GATE_IN_SAFE_STOP=1` before
+> the loop so children do not recurse, and the comment says so.
+>
+> **`seed.sh` derives `BASE` as the parent of the newest `CHECK_LOADED`-adding commit and
+> `THEIRS` as HEAD, so every release that lands without adding an anchor adds one more nested
+> gate invocation.** Nobody has to touch this fixture for it to get slower. That is how it
+> reached #1 pole, and 111 is the current value, not a constant.
+>
+> **OPERATOR RULING:** bound the FIXTURE's range at the minimum that keeps every assertion
+> non-vacuous, and leave `self-update-gate.sh` alone. Separately, measure what a consumer pays
+> on a wide pull and report it as a finding — a consumer crossing N releases pays N nested gate
+> invocations and nothing on that side measures it. The monotonicity question (if the defer
+> predicate flips exactly once across the candidate range, the linear scan is a binary search
+> wearing a loop and 110 invocations becomes ~7) is to be **measured and reported, not acted
+> on** in this program.
+>
+> **A second ruling, on the shared temp namespace:** `seed.sh:24` mktemps into
+> `${TMPDIR:-/tmp}/su-join-gate.*`, and two concurrent consumers of that namespace can delete
+> each other's work trees — which happened during this execution, from a cleanup glob of mine.
+> The fixture's completeness arm reports that case **byte-identically** to "the pool dropped
+> work"; an isolated repro fired three ways (healthy 6/6 markers, `export -f` removed 0/6,
+> source tree deleted mid-flight 0/6) confirms the verdict cannot discriminate. Fix: give each
+> run a private TMPDIR. **Do not** add an arm to tell the two apart — the namespace fix makes
+> that state unconstructible, and a check for an unconstructible state cannot fire.
+>
 > **PREMISE CONTRADICTED IN EXECUTION — read this before acting on the rest of Step 4.**
 >
 > The step below assumes the seed dominates. Instrumented during execution it does not:
