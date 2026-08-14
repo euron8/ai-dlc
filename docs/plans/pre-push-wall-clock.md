@@ -43,6 +43,19 @@ and should run as parallel named agents.
 6. **Hoist `$PRISTINE` and add the `cp -Rc` fast path** (Step 8) once the shards have landed.
 7. **Re-derive the pool widths** (Step 9), backgrounded, and rewrite the expired justification
    at `.githooks/pre-push:133-158` and its consumer twin whatever the answer.
+8. **Regenerate the read-set map — needs the OPERATOR, and an idle box.**
+   `scripts/derive-fixture-readsets.sh` runs `fs_usage`, which **needs root** (`:5`, `:53`), and
+   `fs_usage` is system-wide, so tracing while anything else runs folds that activity into the
+   map (`:60`). Measured after Steps 1-5: **13 of 153 fixture directories have no map entry** —
+   the three added by this program (`enforcement-map-derivations-b`,
+   `layer-contract-conformance-b`, `validator-fork-budget`) and ten that predate it
+   (`check-h1-recursion`, `check-manifest-bypass`, `gate-remediation-deny`, `gate-repair-record`,
+   `gate-series-rung`, `hook-registration-join`, `invariant-index`, `retired-layer-passage`,
+   `shell-portability`, `vocabulary-index`).
+   **This is fail-closed and not a correctness problem** — `apply_readset_skip:357-359` adds any
+   fixture with no map entry to the selection unconditionally, so an unmapped fixture always
+   runs. It erodes the skip rather than breaking it. Do it on a quiet box, under `sudo`, after
+   the sharding has settled, so the map is derived once against the final directory set.
 
 ### Done when
 
