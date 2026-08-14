@@ -84,6 +84,33 @@ verify: lacks core/fixtures/layer-contract-conformance/run.sh "layer-contract-co
 
 ---
 
+## BL-006 — nothing bounds this ledger's size, and rotation alone does not
+
+`backlog-rotate.sh` moves closed entries to `docs/backlog.archive.md`, but rotation is something
+an operator RUNS. Nothing fails a push when this file stops being a queue and becomes a log, so
+the bound depends on someone remembering — which is the state that produced the numbers below.
+
+Measured when this ledger was built: `scripts/validate-plan-shape.sh` has **no** size arm at all
+(its one `wc -l` resolves a cited line number), and the byte ceiling that does exist — A6 in
+`scripts/validate-claude-rules.sh` — covers `CLAUDE.md` and `.claude/rules/` only. With nothing
+watching, `docs/plans/retire-graph-consumer-layer.md` reached **384817 bytes** against a
+16726-byte median across 23 plans, and no push ever failed over it. The pattern this ledger was
+forked from hit the same wall: `core/skills/ai-dlc-update/SKILL.md:1678` records the reference
+consumer's push-candidate ledger at 2830 lines / 220 KB / 50 entries, only 39 still classified.
+
+The arm has to name a ceiling AND name this ledger, which is what the receipt joins. Where it
+lives is open, with one measured constraint: an arm added to `validate-enforcement-map.sh` is
+invoked by the suite pole and costs wall clock there, which is why `validate-plan-shape.sh` and
+`validate-claude-rules.sh` are deliberately standalone.
+
+An entry count is likely the better bound than a byte count — the failure being prevented is a
+queue nobody can read, not a large file — but a bound that fires is worth more than the right
+bound argued about.
+
+verify: sh F=$(git grep -lE "CEILING|MAX_BYTES|MAX_ENTRIES" -- "scripts/*.sh"); test -n "$F" && test -n "$(grep -lF "docs/backlog.md" $F)"
+
+---
+
 ## BL-004 — the nine inner pools are owed, and the hook records them as owed
 
 66 workers sit on top of the outer pool. They cannot be swept with an environment variable —
