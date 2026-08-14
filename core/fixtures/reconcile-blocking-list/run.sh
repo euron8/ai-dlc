@@ -39,8 +39,47 @@ bash "$HB" --check "$REPORT_GOOD" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/nu
 [ "$rc" -eq 0 ] && ok "--check PASSES (exit 0) a report that names the blocker" \
   || bad "--check failed on a report that DOES name the blocker (rc=$rc) — false positive"
 
+# --- Assertion 2b: the degenerate-range qualifier reaches the rendered list -----
+# `layer-drift.sh` emits DRIFT-RANGE-DEGENERATE when base and theirs are the same commit, saying
+# its range-keyed adjudication arms could not fire. This wrapper's only reader was a `^HARD-`
+# filter, and that status carries a deliberately non-HARD prefix — so the one caller that most
+# needed the warning discarded it and printed a clean sheet instead. Filed as
+# PC-S302-HARD-BLOCKERS-HAS-NO-POST-APPLY-GUARD. BASE == THEIRS in this seed, so this run IS
+# degenerate; the control below is the arm that proves the line is not printed unconditionally.
+out="$(bash "$HB" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
+grep -q 'DRIFT-RANGE-DEGENERATE' <<<"$out" \
+  && ok "a degenerate range is qualified in the rendered list, not filtered out of it" \
+  || bad "print mode rendered no DRIFT-RANGE-DEGENERATE row on a run where base == theirs — the clean sheet is unqualified"
+
+# CONTROL: a NON-degenerate range must not carry the qualifier. Without this, the arm above
+# passes against a wrapper that prints the line every time, which discriminates nothing.
+out_adv="$(bash "$HB" "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" 2>/dev/null)"
+grep -q 'DRIFT-RANGE-DEGENERATE' <<<"$out_adv" \
+  && bad "CONTROL: the qualifier was printed on a range whose two refs DIFFER — it fires unconditionally and says nothing" \
+  || ok "CONTROL: a real base..theirs range carries no degenerate qualifier"
+
+# --- Assertion 2c: --post-apply moves ONLY the unregistered-drift base ----------
+# Post-apply, core on disk is at THEIRS. Asking unregistered-drift.sh against the PULL's base
+# then reports upstream's own freshly-written text as a consumer in-place edit, whose printed
+# remedy is to revert or refile it. `--post-apply` asks against theirs instead.
+#
+# THE SAME INVOCATION CARRIES ITS OWN CONTROL: `$DRIFT_REL` is a genuine consumer edit and must
+# stay blocking under the flag. An arm that only asserted the artefact disappears would pass
+# against a flag that suppressed the whole detector.
+pre="$(bash "$HB" "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" 2>/dev/null)"
+post="$(bash "$HB" --post-apply "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" 2>/dev/null)"
+if grep -qF "$MOVED_REL" <<<"$pre" && ! grep -qF "$MOVED_REL" <<<"$post"; then
+  ok "--post-apply drops the wrong-base artefact on a file the pull itself wrote"
+else
+  bad "the wrong-base artefact ($MOVED_REL) did not appear pre-apply or did not clear under --post-apply — the flag changes nothing, or the seed cannot express the defect"
+fi
+grep -qF "$DRIFT_REL" <<<"$post" \
+  && ok "CONTROL: a real consumer in-place edit still blocks under --post-apply" \
+  || bad "CONTROL: --post-apply suppressed a genuine HARD blocker — the flag disarms the detector instead of rebasing it"
+
 # --- Assertion 3: no drift → print says 0, --check passes any report ----------
 git -C "$DIST" show "$BASE:core/$DRIFT_REL" > "$CONSUMER/.claude/$DRIFT_REL"   # revert consumer edit
+git -C "$DIST" show "$BASE:core/$MOVED_REL" > "$CONSUMER/.claude/$MOVED_REL"   # and the range-drifted one
 out="$(bash "$HB" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
 if grep -q "0 HARD blockers" <<<"$out"; then
   bash "$HB" --check "$REPORT_BAD" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1

@@ -62,10 +62,15 @@ expect_untouched() {
 # The prompt the guard hands back, for effort assertions.
 newprompt() { raw "$1" "$2" | jq -r '.hookSpecificOutput.updatedInput.prompt // ""' 2>/dev/null; }
 expect_effort() {  # expect_effort <root> <json> <level> <label>
-  local got; got="$(newprompt "$1" "$2" | grep -oE '/effort [a-z]+' | head -1)"
-  [ "$got" = "/effort $3" ] \
-    && ok "$4 -> prompt carries \`/effort $3\`" \
-    || bad "$4 -> expected \`/effort $3\` appended to the prompt, got '${got:-<none>}'"
+  # THE EXTRACTOR IS THE GUARD'S OWN GRAMMAR AND MOVES WITH IT. It used to read
+  # `/effort [a-z]+`, matching an imperative to run a slash command no file in this
+  # distribution defines; the guard now STATES the level instead, so this matches the
+  # statement. Anchored on the phrase AND the level so a guard that emitted the wrong
+  # level, or the right level for the wrong role, is still caught.
+  local got; got="$(newprompt "$1" "$2" | grep -oE 'reasoning effort for this role is [a-z]+' | head -1)"
+  [ "$got" = "reasoning effort for this role is $3" ] \
+    && ok "$4 -> prompt states the configured effort ($3)" \
+    || bad "$4 -> expected the prompt to state effort '$3', got '${got:-<none>}'"
 }
 expect_model_kept() { # expect_model_kept <root> <json> <label>
   # The guard emitted (to append effort) but did NOT rewrite `model`. Distinguishes
@@ -83,10 +88,10 @@ expect_no_model() { # expect_no_model <root> <json> <label>
     || bad "$3 -> a model was bound where none is configured"
 }
 expect_no_effort() { # expect_no_effort <root> <json> <label>
-  local got; got="$(newprompt "$1" "$2" | grep -oE '/effort [a-z]+' | head -1)"
+  local got; got="$(newprompt "$1" "$2" | grep -oE 'reasoning effort for this role is [a-z]+' | head -1)"
   [ -z "$got" ] \
-    && ok "$3 -> no effort directive appended" \
-    || bad "$3 -> an effort directive was appended ('$got') where none should be"
+    && ok "$3 -> no effort stated" \
+    || bad "$3 -> an effort was stated ('$got') where none should be"
 }
 
 echo "dispatch-model-guard"
@@ -103,8 +108,16 @@ J="$(mkjson Agent gate-adjudicator)"
 [ "$(verdict "$CONSUMER" "$J")" = allow ] \
   && ok "set emits permissionDecision=allow (cannot override another hook's deny)" \
   || bad "set did not emit allow — either it still denies, or it emits a more-restrictive verdict"
-if grep -q 'opus' <<<"$(raw "$CONSUMER" "$J")" && grep -q 'role file' <<<"$(raw "$CONSUMER" "$J")"; then
-  ok "the correction names the tier it bound and cites the role file as the source"
+# THIS ARM WAS SATISFIED BY THE WRONG STRING. It used to require the literal `role file`
+# anywhere in the hook's output, and what supplied it was the EFFORT directive's own wording
+# ("...before reading your role file."), not the reason. The reason has always cited
+# `aiDlcRoles.<role>` in settings.json — which is the actual provenance, since the config is
+# authoritative for both values and the role file states neither. Rewording the effort line
+# turned the arm red and exposed that it was keyed on an unrelated sentence. It now asserts the
+# config entry, which is the thing whose absence would make the correction unauditable.
+raw_out="$(raw "$CONSUMER" "$J")"
+if grep -q 'opus' <<<"$raw_out" && grep -q 'aiDlcRoles' <<<"$raw_out"; then
+  ok "the correction names the tier it bound and cites the aiDlcRoles entry as the source"
 else
   bad "the correction does not explain what it set or from where — unauditable"
 fi
@@ -216,8 +229,8 @@ raw "$CONSUMER" "$(mkjson Agent tea)" | jq -e '.hookSpecificOutput.updatedInput 
   && ok "tea gets no model bound (it configures none) while still getting its effort" \
   || bad "a model was bound for tea, which configures none — the guard is inventing one"
 
-# An unrecognised effort level is DROPPED, never injected. Injecting it would instruct
-# a teammate to run a slash command that does not exist.
+# An unrecognised effort level is DROPPED, never injected. Injecting it would state a
+# configured effort that is not one, in the authoritative voice of the config.
 expect_no_effort "$CONSUMER" "$(mkjson Agent badeffort)" \
   "a role configured with an invalid effort level"
 
@@ -225,12 +238,40 @@ expect_no_effort "$CONSUMER" "$(mkjson Agent badeffort)" \
 # The guard emits `allow` to carry `updatedInput`. If it emitted on every dispatch it
 # would change the approval posture of calls it has nothing to correct, so a call that
 # already carries the right model AND the effort directive must produce NO decision.
+#
+# THE LITERAL IS PINNED HERE ON PURPOSE, and it is what couples the guard's emitted line to its
+# own dedupe test. The dedupe matches a substring of what the guard appends; change the line
+# without changing the match and this arm goes red, which is the only thing standing between a
+# reworded line and a guard that emits on every dispatch forever.
 IDEM="$(jq -nc --arg p "contract is .claude/team-roles/gate-adjudicator.md
 
-Run \`/effort high\` as your FIRST action, before reading your role file." \
+Your configured reasoning effort for this role is high. Operate at that level." \
   '{tool_name:"Agent",tool_input:{model:"opus",prompt:$p,name:"t"}}')"
 expect_untouched "$CONSUMER" "$IDEM" \
   "a dispatch already carrying the configured model AND effort"
+
+# ...and the dedupe must key on the LEVEL, not merely on the phrase. Without this the guard
+# reads "already has an effort" as "already has the RIGHT effort", so a role reconfigured from
+# medium to high keeps being dispatched at medium forever, silently and with a spawn-ledger row
+# claiming otherwise. Measured as a live gap: dropping the level from the match killed no
+# assertion in this file before this arm existed.
+STALE="$(jq -nc --arg p "contract is .claude/team-roles/gate-adjudicator.md
+
+Your configured reasoning effort for this role is medium. Operate at that level." \
+  '{tool_name:"Agent",tool_input:{model:"opus",prompt:$p,name:"t"}}')"
+#
+# READ THE LAST OCCURRENCE, NOT THE FIRST. The guard APPENDS, so a prompt that already carried a
+# stale statement ends up with both; the configured one is the one it added, and it is last.
+# `expect_effort` takes the first match and is right for every other call site, where there is
+# only one. Asserting the emission separately is what stops this arm from passing on a guard
+# that stayed silent and left the stale line as the only match.
+stale_out="$(newprompt "$CONSUMER" "$STALE" | grep -oE 'reasoning effort for this role is [a-z]+' | tail -1)"
+[ "$stale_out" = "reasoning effort for this role is high" ] \
+  && ok "a prompt carrying the WRONG level is re-stated at the configured one" \
+  || bad "a prompt stating the wrong level was left at it (last statement: '${stale_out:-<none>}') — the dedupe matches the phrase without the level, so a reconfigured role is never re-stamped"
+[ -n "$(raw "$CONSUMER" "$STALE")" ] \
+  && ok "CONTROL: that dispatch produced a decision at all — the correction is an emission, not a silent pass" \
+  || bad "CONTROL: the guard emitted nothing for a dispatch carrying the wrong level"
 
 # --- 13d. a role with no config entry -> UNTOUCHED (fail-open) --------------
 expect_untouched "$CONSUMER" "$(mkjson Agent nocfg)" \

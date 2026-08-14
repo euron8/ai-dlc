@@ -465,7 +465,7 @@ prose is itself generated rather than composed.
    Note what it does NOT catch: a shape the consumer invented that core never had,
    and a layer file that paraphrases a retired construct without using its literal
    shape. A clean result is not proof every layer file survived the release.
-3a-iv. **Core fixtures the consumer still carries after core stopped shipping them**
+3a-v. **Core fixtures the consumer still carries after core stopped shipping them**
    (cheap, deterministic — no agents): run
    `reconcile/retired-fixtures.sh <dist-repo> <theirs-ref> <consumer-root>`.
    `install.sh` and `apply.sh` copy a core fixture into the consumer; when core later
@@ -1196,6 +1196,16 @@ prose is itself generated rather than composed.
    **You do not have to remember this.** `layer-drift.sh` emits `DRIFT-RANGE-DEGENERATE` when
    its two refs resolve to the same commit, naming the arms that cannot fire. If you see that
    row, the run said nothing about the layer — re-run it with the pull's base.
+
+   **Re-running the WRAPPER post-apply takes a flag, and without it the wrapper is wrong
+   whichever base you give it.** `reconcile/hard-blockers.sh` drives both detectors, so a single
+   base has to be wrong for one of them: the pull's base makes `unregistered-drift.sh` report
+   `HARD-UNREGISTERED-CORE-DRIFT` against text `apply` itself just wrote, and `theirs` disarms
+   the arm above. Post-apply, call it as
+   `reconcile/hard-blockers.sh --post-apply <dist> <pull-base> <consumer> <theirs>` — it passes
+   `theirs` to `unregistered-drift.sh` and keeps the pull's base for `layer-drift.sh`. It also
+   renders the `DRIFT-RANGE-DEGENERATE` row now, which its `HARD-`-only filter used to discard;
+   a `0 HARD blockers.` line with that row beneath it is not a clean sheet.
 
    **Dispose of every `WORKLIST extension-reread` row — this is *the layer conformance
    adjudication*.** `apply.sh` emits one per `EXTENSION-HOOK-DRIFT`: the core file the extension

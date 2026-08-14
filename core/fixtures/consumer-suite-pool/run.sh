@@ -93,6 +93,17 @@ mkfx() {                       # mkfx <tree> <name> <exitcode>
   printf '#!/usr/bin/env bash\nexit %s\n' "$3" > "$1/tests/fixtures/$2/run.sh"
 }
 
+# A fixture that PRINTS a distinctive token on both streams before exiting with the code it
+# is told to. The token is what arm 2b traces from the worker to the durable record: an
+# assertion that the record merely EXISTS would pass against a file the hook created and
+# never filled, which is the same empty-artifact shape this fixture exists to refuse one
+# layer out.
+mkfx_noisy() {                 # mkfx_noisy <tree> <name> <exitcode> <token>
+  mkdir -p "$1/tests/fixtures/$2"
+  printf '#!/usr/bin/env bash\necho "%s-stdout"\necho "%s-stderr" >&2\nexit %s\n' \
+    "$4" "$4" "$3" > "$1/tests/fixtures/$2/run.sh"
+}
+
 # A fixture that KILLS ITS OWN WORKER before the worker can record a verdict. This
 # is the real shape of a dropped job — the pool loses the process, so no verdict
 # file is written — and it is the only way to reach the completeness arm without
@@ -162,6 +173,50 @@ if [ "$rc" = 1 ] && grep -q 'FAIL  bravo' "$WORK/red.out" \
   ok "a failing fixture is named, and its neighbours still report their own verdicts"
 else
   bad "a failing fixture was not attributed (rc=$rc) — xargs collapses failures into one exit code, so the verdict has to come from the per-fixture files"
+fi
+
+# ------------------------------- 2b. a red unit's OUTPUT survives the run ------------
+# THE DEFECT. The worker used to run `bash "$d/run.sh" >/dev/null 2>&1`, so a red unit left
+# exactly one line of evidence — `FAIL <name>` — and the temp dir holding everything else was
+# `rm -rf`d on the way out. The honest local remedy became "push again", which is
+# indistinguishable from bypassing a real failure, and this repository has spent several
+# releases proposing and refuting causes for one intermittent because every investigation had
+# to re-run the fixture out of band. Filed by the graph consumer as
+# PC-S302-FIXTURE-SUITE-POOL-PRODUCES-AN-UNREPRODUCIBLE-FAIL-AND-THE-EVIDENCE-IS-DELETED-WITH-THE-TEMP-DIR.
+#
+# TRACED BY TOKEN, NOT BY EXISTENCE, and both streams are asserted separately: a capture that
+# took stdout and dropped stderr would satisfy a file-exists check and lose the half a shell
+# fixture writes its diagnostics to.
+T="$WORK/evidence"; seed "$T" "$HOOK" || broken "seed failed"
+mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 1 CSPTOKEN; mkfx "$T" charlie 0
+rc="$(drive "$T" "$WORK/evidence.out")"
+REC="$T/.git/ai-dlc-fixture-failures"
+if [ "$rc" = 1 ] && [ -s "$REC" ] \
+   && grep -q 'CSPTOKEN-stdout' "$REC" && grep -q 'CSPTOKEN-stderr' "$REC"; then
+  ok "a red unit's stdout AND stderr survive the run in a durable record"
+else
+  bad "the red unit's output did not reach $REC (rc=$rc, record $( [ -s "$REC" ] && echo present || echo absent)) — a fixture that fails under the pool leaves nothing to read"
+fi
+
+# The record is useless if nobody is told it exists. The BLOCKED line sits OUTSIDE the
+# FIXTURE_POOL sentinels and is bound by no invariant, so the path is named from inside the
+# pool where I66 holds the two hooks to one program.
+grep -q 'captured output for the failing unit(s): .git/ai-dlc-fixture-failures' "$WORK/evidence.out" \
+  && ok "the run names the record's path, so the operator does not have to know it exists" \
+  || bad "the failing run never named the record path — an artifact nobody is pointed at is one nobody reads"
+
+# CONTROL, and it is the arm that stops the one above from passing on a hook that writes the
+# record unconditionally. A green run must leave no record naming this token: without this,
+# `grep CSPTOKEN` would be satisfied by a capture of every unit whether it failed or not, and
+# the selector could be `true`.
+T="$WORK/evidence-green"; seed "$T" "$HOOK" || broken "seed failed"
+mkfx "$T" alpha 0; mkfx_noisy "$T" bravo 0 GREENTOKEN; mkfx "$T" charlie 0
+rc="$(drive "$T" "$WORK/evidence-green.out")"
+if [ "$rc" = 0 ] && ! grep -q 'GREENTOKEN' "$T/.git/ai-dlc-fixture-failures" 2>/dev/null \
+   && ! grep -q 'captured output for the failing unit' "$WORK/evidence-green.out"; then
+  ok "CONTROL: an all-green run records no failure and names no record — the selector is the verdict, not every unit"
+else
+  bad "a green run wrote a failure record or announced one (rc=$rc) — the capture fires on units that passed"
 fi
 
 # ------------------------------------------------- 3. the empty-suite guard, twice --
@@ -352,7 +407,7 @@ fi
 # emitted from inside a conditional: an assertion that never executed prints nothing,
 # and a short green report reads exactly like a complete one. This is the same
 # property the hook itself now asserts about its own workers, one layer out.
-EXPECTED_ASSERTIONS=14
+EXPECTED_ASSERTIONS=17
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"

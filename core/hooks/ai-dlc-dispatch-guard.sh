@@ -82,10 +82,12 @@
 #   teammate would type at `/model`. A Bedrock consumer changes only the value.
 #
 #   `effort` has NO tool parameter, so it cannot be bound the same way. The guard
-#   appends a `/effort <level>` directive to the dispatch PROMPT — the only channel
-#   that reaches the subagent. Without that, config would be authoritative for the
+#   STATES the configured level in the dispatch PROMPT — the only channel that
+#   reaches the subagent. Without that, config would be authoritative for the
 #   model and merely advisory for effort, and a teammate would have to read
-#   settings.json to learn its own effort.
+#   settings.json to learn its own effort. It is a statement of fact rather than a
+#   directive to run something, because no `/effort` command is defined anywhere in
+#   this distribution and the guard must not depend on one existing in the harness.
 #
 #   FAIL-OPEN on any ambiguity: no prompt, no role binding, unreadable or unpinned
 #   role file, an unreadable/invalid settings.json, a missing `aiDlcModels` block,
@@ -228,8 +230,9 @@ PIN_EFFORT=""
   '.aiDlcRoles[$r].effort // empty' "$SETTINGS" 2>/dev/null || true)"
 
 # Effort is validated against the documented vocabulary rather than passed through.
-# A malformed value would become an instruction to run a slash command that does
-# not exist. An unrecognised level is dropped, not repaired.
+# A malformed value would be stated to the teammate as its configured effort, which
+# is worse than saying nothing: it is authoritative-sounding and wrong. An
+# unrecognised level is dropped, not repaired.
 case "$PIN_EFFORT" in
   low|medium|high|xhigh|max) ;;
   *) PIN_EFFORT="" ;;
@@ -351,9 +354,28 @@ fi
 EFFORT_LINE=""
 NEEDS_EFFORT=false
 if [ -n "$PIN_EFFORT" ]; then
-  EFFORT_LINE="Run \`/effort ${PIN_EFFORT}\` as your FIRST action, before reading your role file."
+  # DECLARATIVE, NOT AN IMPERATIVE TO RUN A COMMAND. This line used to read
+  # "Run `/effort <level>` as your FIRST action, before reading your role file." — an
+  # instruction to invoke a slash command, delivered ahead of the teammate's role-contract
+  # read. NOTHING IN THIS DISTRIBUTION DEFINES AN `effort` SKILL OR COMMAND, and whether the
+  # harness provides one is not knowable from the repository, so the guard's correctness rested
+  # on an assumption no file here states or checks: if the harness has it, the line worked by
+  # luck of the environment; if it does not, every teammate began by trying to execute
+  # something that resolves to nothing, and what a model does then is undefined. Stating the
+  # configured effort as a FACT the teammate operates under needs no command to exist, and is
+  # exactly as authoritative — the channel was always advisory prose either way, because the
+  # Agent tool has no effort parameter to bind. Filed by the graph consumer as
+  # PC-S303-EFFORT-BINDING-COMMANDS-A-SLASH-COMMAND-THAT-RESOLVES-TO-NOTHING.
+  EFFORT_LINE="Your configured reasoning effort for this role is ${PIN_EFFORT}. Operate at that level."
+  # THE DEDUPE MOVES WITH THE LINE, and it is not optional. This case keys on a substring of
+  # what the guard appends; leaving it matching the old `/effort <level>` form while the line
+  # says something else means an already-corrected dispatch never matches, NEEDS_EFFORT stays
+  # true forever, and the guard emits a decision on EVERY dispatch — the posture change the
+  # comment above this block exists to prevent. The level is inside the matched substring on
+  # purpose, so a role reconfigured from high to xhigh is correctly re-stamped rather than
+  # read as already carrying its effort.
   case "$PROMPT" in
-    *"/effort ${PIN_EFFORT}"*) : ;;
+    *"reasoning effort for this role is ${PIN_EFFORT}"*) : ;;
     *) NEEDS_EFFORT=true ;;
   esac
 fi
@@ -403,7 +425,7 @@ emit() {
 
   reason="AI/DLC dispatch guard: bound \`${ROLE}\` from \`aiDlcRoles.${ROLE}\` in .claude/settings.json."
   [ "$NEEDS_MODEL" = true ] && reason="${reason} Set \`model\` to \"${EXPECT}\" (${PIN_MODEL}) — ${note}."
-  [ "$NEEDS_EFFORT" = true ] && reason="${reason} Appended the \`/effort ${PIN_EFFORT}\` directive to the prompt, because the Agent tool has no effort parameter and the config is the only source for it."
+  [ "$NEEDS_EFFORT" = true ] && reason="${reason} Stated the configured reasoning effort (${PIN_EFFORT}) in the prompt, because the Agent tool has no effort parameter and the config is the only source for it."
   reason="${reason} Config is authoritative for both; a call site does not override it. To change either value, edit that config entry."
 
   ctx="dispatch-guard: ${ROLE} bound from aiDlcRoles.${ROLE}"

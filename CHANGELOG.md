@@ -34,6 +34,152 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.367.0] — 2026-08-13
+
+Four defects the graph consumer filed during its sprints 302 and 303, re-verified against this
+tree rather than against this file. Two more of its filings from the same window needed no code
+and are recorded at the end, because "already fixed" is the answer this backlog produces half the
+time and saying so is how the consumer closes an entry.
+
+### A red fixture's output was discarded at the point of production, not merely deleted with the temp dir
+
+`PC-S302-FIXTURE-SUITE-POOL-PRODUCES-AN-UNREPRODUCIBLE-FAIL-AND-THE-EVIDENCE-IS-DELETED-WITH-THE-TEMP-DIR`,
+filed against a 16-way pre-push run that reported `FAIL apply-drift-refile`, passed the same
+fixture alone seconds later, and went green on an identical re-push with nothing touched.
+
+**The filing was charitable.** The worker ran `bash "$d/run.sh" >/dev/null 2>&1`, so stdout and
+stderr went to `/dev/null` inside the worker and the per-fixture file held four bytes. There was
+nothing for the `rm -rf` to destroy. The only surviving artifact was one line in a terminal, and
+the only remedy the `BLOCKED` line offered was `--no-verify` — indistinguishable from bypassing a
+real failure.
+
+**This repository is the evidence for the ask.** The `apply-drift-refile` intermittent has outlived
+three cycles of hypothesis and refutation here: v0.231.0 killed the broken-pipe explanation with 140
+executions at 0 red, v0.207.0 records *"Tested, it does not carry the explanation"* and *"§9 stays
+open"*, and v0.284.0's measurements caught four different fixtures each going red once and green on
+every standalone re-run. Every one of those investigations had to re-run the fixture
+out of band, because the gate that observed the failure kept nothing.
+
+Each worker now captures to `$out/.log/<name>`, mirroring the `.dur/<name>` pattern beside it, and
+the RED units' captures plus the run's dispatch order are copied to `.git/ai-dlc-fixture-failures`
+on the line before the temp dir goes. The path is named from inside `run_fixtures` rather than at
+the `BLOCKED` line, which sits outside the `FIXTURE_POOL` sentinels and is bound by nothing —
+inside, **I66** holds the two hooks to one program. The record is **never deleted on a green run**:
+the workflow it exists for is "it went red, I pushed again," and cleaning up on green would destroy
+the evidence at the moment the operator went looking for it.
+
+**Cost: none measurable.** Full gate, `AI_DLC_FIXTURE_NO_SKIP=1`, same machine, back to back —
+**540.6s at 1221% CPU before, 539.2s at 1218% after**, 148 ok / 0 FAIL both times. Single readings,
+so the honest claim is that capture is below this measurement's resolution, not that it is free.
+
+Three arms in `consumer-suite-pool`, each killed by its own mutation and by no other: a token
+written to both streams traced from the worker into the record, the announcement line, and a
+green-run control that fails if the capture fires on units that passed.
+
+### The wrapper that runs both drift detectors had one base, and both ways of choosing it are wrong
+
+`PC-S302-HARD-BLOCKERS-HAS-NO-POST-APPLY-GUARD`, reproduced by the consumer on two consecutive
+pulls.
+
+v0.303.0 split step 7's post-apply re-run per script — `theirs` for `unregistered-drift.sh`, the
+pull's base for `layer-drift.sh` — because one instruction for both disarmed one of them. It fixed
+the scripts run *directly* and left `hard-blockers.sh`, which runs *both*, taking a single base.
+There is no value that is right for both: the pull's base makes `unregistered-drift.sh` report
+`HARD-UNREGISTERED-CORE-DRIFT` against text `apply` itself just wrote, and `theirs` disarms LC-A1
+so the wrapper prints a clean sheet on a tree where every adjudication is owed.
+
+**The sharper half is that this wrapper was structurally blind to its own safety net.**
+`DRIFT-RANGE-DEGENERATE` was deliberately given a prefix outside `HARD-`/`OVERRIDE-`/`EXTENSION-`
+because it describes the invocation rather than an entry, and `hard-blockers.sh`'s only reader is a
+`^HARD-` filter. The one caller that most needed that warning discarded it. It is now read out
+separately and rendered — inside the generated region, not on stderr, because `emit-report.sh`
+invokes this script with `2>/dev/null` and the report is what the operator approves `apply` from.
+
+`--post-apply` carries the rule instead of the caller remembering it, and changes no existing call
+site. `layer-drift.sh` is still passed the pull's base in both phases, so its own false-positive
+derivation — *"every programmatic caller passes the pull's base"* — stays true.
+
+Four arms in `reconcile-blocking-list`. **The seed had to be rebuilt twice before it could express
+the defect**, and the reason is worth recording: `CORE-AT-THEIRS` already catches a file byte-identical
+to theirs whatever base was passed, so the artefact only arises for a TEMPLATE-substituted file,
+which is classified by `is_unregistered` against BASE. The first seed proved nothing; the second
+put the token line adjacent to the changed line and `diff` coalesced them into one exempt hunk. The
+shipped seed keeps a genuine consumer edit alongside, so the same invocation asserts that
+`--post-apply` rebases the detector rather than disarming it.
+
+Also here: `SKILL.md` numbered **two different steps `3a-iv`** — the v0.360.0 insertion did not
+renumber the follower, while v0.360.0's own entry calls the new detector "step 3a-iv". The new one
+keeps the number and `retired-fixtures` becomes `3a-v`. Found while verifying; nobody filed it.
+
+### A close written as a string closed nothing, and the honest operator paid for it
+
+`PC-S302-AUDIT-LAYER-DEBT-SILENTLY-IGNORES-A-STRING-CLOSES-OWED`.
+
+`audit-layer-debt.sh` read the two halves of the debt contract with different rigour: `owed` was
+`isinstance`-guarded, `closes_owed` was a bare `or []`. The schema says array; a bare string is
+still valid JSON, and `for cid in "OWED-X"` iterates CHARACTERS. The close silently no-ops and the
+debt is reported OPEN on every run thereafter. The consumer's register carried one such row that
+had been reporting a discharged debt open since the day it was closed.
+
+It can only produce a false OPEN, never a false close — the schema's `^OWED-` pattern guarantees no
+single character matches an id — so nothing was ever wrongly discharged. What it does is punish the
+operator who RECORDS the discharge exactly as much as the one who forgets.
+
+Coerced and **counted**, not silently repaired: a quiet fix makes the schema unenforceable by
+making its violation harmless. A new `MISTYPED_CLOSES_OWED` count reports beside `MALFORMED`. No
+schema validator, because there is no JSON-schema helper anywhere in `core/` — every consumer
+hand-parses — so that route is net-new machinery plus a runtime dependency.
+
+**The consumer undersold its own filing.** It named two validators that do not read the register,
+both correctly; `layer-drift.sh` also reads it on the pull path, and does not validate it either.
+
+Three arms in `layer-debt-ledger`, and the first could not use the fixture's own `row()` helper:
+that builder goes through `json.loads`, so every value it can produce is already a well-formed
+array. Reverting to the pre-fix line turns both new arms red.
+
+### The only channel for a configured effort was an order to run a command nothing defines
+
+`PC-S303-EFFORT-BINDING-COMMANDS-A-SLASH-COMMAND-THAT-RESOLVES-TO-NOTHING`.
+
+The Agent tool has no `effort` parameter, so the prompt is the only channel — that much is forced.
+What was not forced is the FORM: the guard appended *"Run `/effort <level>` as your FIRST action,
+before reading your role file."* No `effort` skill or command is defined anywhere in this
+distribution, and whether the harness provides one is not knowable from the repository. The guard's
+correctness rested on an assumption no file states or checks. The tree already reasons this way
+about the invalid case — `dispatch-model-guard` says injecting an unrecognised level "would instruct
+a teammate to run a slash command that does not exist" — it simply assumed the valid levels resolve
+to something.
+
+The line is now declarative. It needs no command to exist and is exactly as authoritative, because
+the channel was advisory prose either way.
+
+**The filing's own prescribed fix was broken, and this is the correction.** It said a declarative
+rewrite leaves the dedupe unchanged. The dedupe matches the literal `/effort <level>` substring; a
+declarative line contains no such substring, so `NEEDS_EFFORT` would stay true forever and the guard
+would emit a decision on every dispatch — the posture change its own comment exists to prevent. The
+line and the match move together, and the idempotence arm is what enforces that.
+
+**Two things this shook out that nothing had noticed.** The arm asserting the correction is
+auditable required the literal `role file` anywhere in the hook's output, and what supplied it was
+the effort directive's own wording, not the reason — it now asserts the `aiDlcRoles` entry, which is
+the actual provenance. And dropping the LEVEL from the dedupe killed no assertion in the whole file:
+a role reconfigured from medium to high would have kept dispatching at medium, silently, with a
+spawn-ledger row claiming otherwise. Both arms are new.
+
+`effort_bound` still records what the guard appended and is still read by nothing; that is a
+separate filing and is not addressed here.
+
+### Two filings from the same window needed no code
+
+- `PC-S302-ADJUDICATION-RERUN-BASE-DISARMS-LC-A1` — **fixed at v0.303.0, the day it was filed**, and
+  refined at v0.314.0. Worth one line back to the consumer: its machine receipt is
+  `theirs_has SKILL.md "not the pull's base"`, and that string survives at HEAD **inside the sentence
+  repudiating it**. The fix quoted what it deleted, so the receipt reports STILL-LIVE forever — the
+  mirror of the false-CLOSE hazard that ledger's own preamble names.
+- `PC-S302-RETIRED-LAYER-CONTRACT-READS-CLEAN-OVER-TWO-REAL-POSITIVES` — **fixed at v0.359.0 and
+  v0.360.0**, which qualified the empty-retired-set zero and added `retired-layer-passage.sh`. The
+  consumer pulled 0.360.0 on the day it filed this; it already has both.
+
 ## [0.366.0] — 2026-08-13
 
 ### Six controlled vocabularies had six enforcers and no reader-facing index
