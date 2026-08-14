@@ -37,7 +37,8 @@
 # THE GRAMMAR IS SERVED, NOT COPIED. `--arm-lines` prints `<line>\t<ids>` for every arm
 # header, in file order, from the SAME EXTRACT_AWK the render and the self-probe use. It
 # exists because scripts/fork-profile.sh has to attribute a traced source line to the arm it
-# falls in, and the only other way to get an arm's line number is a fresh grep. A fresh grep
+# falls in, and validate-enforcement-map.sh's own `--arms` mode has to slice itself at those
+# same boundaries; the only other way to get an arm's line number is a fresh grep. A fresh grep
 # is exactly the bug recorded at the top of this file: a column-0 pattern finds 83 of the
 # header-shaped lines and a blanks-tolerant one finds 96, and the thirteen it drops are
 # silently merged into the preceding arm's bucket. A second region-finder is a second set of
@@ -46,29 +47,44 @@
 #
 # Usage: render-invariant-index.sh              write docs/invariant-index.md
 #        render-invariant-index.sh --check      render to a temp and byte-compare; no write
-#        render-invariant-index.sh --arm-lines  print `<line>\t<ids>` per arm header
+#        render-invariant-index.sh --arm-lines [<validator>]
+#                                              print `<line>\t<ids>` per arm header
 # Exit:  0 = written / in sync, 1 = drift or a totality failure, 2 = usage or environment.
 set -uo pipefail
 
 MODE=write
+ARM_SRC=""
 case "${1:-}" in
   "")           MODE=write     ;;
   --check)      MODE=check     ;;
-  --arm-lines)  MODE=armlines  ;;
-  *) echo "usage: $(basename "$0") [--check|--arm-lines]" >&2; exit 2 ;;
+  --arm-lines)  MODE=armlines; ARM_SRC="${2:-}" ;;
+  *) echo "usage: $(basename "$0") [--check|--arm-lines [<validator>]]" >&2; exit 2 ;;
 esac
 
-# ROOT BY WALKING UP FOR A MARKER, never by counting `..` hops, so this answers identically
-# from the repo root, from a subdirectory, and from a fixture sandbox that copies it.
-ROOT="$(cd "$(dirname "$0")" && pwd)"
-while [ ! -f "$ROOT/VERSION" ] && [ "$ROOT" != "/" ]; do ROOT="$(dirname "$ROOT")"; done
-if [ ! -f "$ROOT/VERSION" ]; then
-  echo "render-invariant-index: no VERSION marker above $(dirname "$0") — cannot locate the repo root." >&2
-  exit 2
-fi
+# AN EXPLICIT SOURCE EXISTS FOR ONE MEASURED REASON, and it is not convenience. The seeded
+# trees the mutation batteries build carry `core/`, `scripts/`, `.githooks/` and `templates/`
+# and NO `VERSION` file, so the marker walk below reaches `/` and exits 2 there. That was
+# harmless while `--arm-lines` had one caller in this repo's own tree; it is not, now that
+# validate-enforcement-map.sh's `--arms` mode calls it from inside those sandboxes. Passing
+# the file removes the need to locate a root at all for this mode -- the mode reads one file
+# and writes nothing -- which is strictly less environment than resolving one and ignoring it.
+if [ "$MODE" = armlines ] && [ -n "$ARM_SRC" ]; then
+  [ -f "$ARM_SRC" ] || { echo "render-invariant-index: --arm-lines was given '$ARM_SRC', which is not a file." >&2; exit 2; }
+  SRC="$ARM_SRC"
+  OUT=""
+else
+  # ROOT BY WALKING UP FOR A MARKER, never by counting `..` hops, so this answers identically
+  # from the repo root, from a subdirectory, and from a fixture sandbox that copies it.
+  ROOT="$(cd "$(dirname "$0")" && pwd)"
+  while [ ! -f "$ROOT/VERSION" ] && [ "$ROOT" != "/" ]; do ROOT="$(dirname "$ROOT")"; done
+  if [ ! -f "$ROOT/VERSION" ]; then
+    echo "render-invariant-index: no VERSION marker above $(dirname "$0") — cannot locate the repo root." >&2
+    exit 2
+  fi
 
-SRC="$ROOT/scripts/validate-enforcement-map.sh"
-OUT="$ROOT/docs/invariant-index.md"
+  SRC="$ROOT/scripts/validate-enforcement-map.sh"
+  OUT="$ROOT/docs/invariant-index.md"
+fi
 [ -f "$SRC" ] || { echo "render-invariant-index: missing $SRC" >&2; exit 2; }
 
 # ---------------------------------------------------------------------------------------

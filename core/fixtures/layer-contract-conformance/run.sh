@@ -24,13 +24,20 @@
 # Each mutant is a COPY guarded by `cmp -s`, asserts a POSITIVE outcome (the specific invariant
 # id appears in the output), and must fail ONLY its own assertion.
 #
-# TWO PHASES, AND THE REASON IS MEASURED. Every arm here is one full run of
+# TWO PHASES, AND THE REASON IS MEASURED. Every arm here WAS one full run of
 # validate-enforcement-map.sh — 6.45s on the reference box, 62% of it SYSTEM time, which is the
 # fork signature rather than work. Thirty of them in a row made this fixture 270.7s of a 276.5s
 # suite with ZERO slack: it WAS the suite, and every other unit finished 137s before it. The runs
 # are independent by construction — each builds its own contract copy in its own $TMP and points
 # the validator at it with AI_DLC_LAYER_CONTRACT — so they were serial only because they were
 # written in a row.
+#
+# EACH RUN NOW EXECUTES ONLY THE ARMS IT IS READ FOR. The validator takes `--arms I<n>,...` and
+# every assertion here tests exactly one invariant, so a mutant run that used to execute all
+# eighty-one units executes the one its arm reads. The selector is DERIVED from the registries
+# below rather than listed; which runs stay on the full validator is derived from arm SHAPE; and
+# the fact that selection happened at all is asserted against what the runner recorded. All three
+# are stated where they are built, further down.
 #
 # So: build every mutant serially (cheap), run the validator for each through a pool, then
 # evaluate serially IN DECLARATION ORDER. The evaluation order is what keeps stdout deterministic
@@ -594,12 +601,158 @@ if [ "$N_RUNS" -lt 25 ]; then
   exit 2
 fi
 
+# ================== THE ARM SELECTOR, DERIVED FROM THE REGISTRIES ==================
+#
+# EVERY RUN HERE TESTS ONE INVARIANT AND PAYS FOR EIGHTY-ONE. validate-enforcement-map.sh
+# now takes `--arms I<n>[,I<n>...]` and executes only the UNITS declaring those ids, plus its
+# prologue and its verdict block. A unit is a column-0 arm header through the line before the
+# next one; the nine INDENTED arms that sit inside the layer contract's `if [ -f "$lc_file" ]`
+# block therefore all resolve to the single unit opened by the `I36 / I37 / I38` header, so
+# selecting any one of this fixture's ids selects all of them. Derived here rather than taken
+# on trust — `render-invariant-index.sh --arm-lines` joined against the validator's own line
+# numbers puts I36/I37/I38, I41, I42, I37, I61, I63, I62, I64, I65 and I58 in one unit.
+# Measured on that unit: ~2.9 CPU-seconds against ~19.5 for a full run, uniform across every
+# arm this fixture asserts on.
+#
+# THE SELECTOR IS DERIVED FROM STRINGS THAT ALREADY EXIST, AND A HAND-WRITTEN LIST WOULD BE
+# THIS FIXTURE'S OWN DEFECT ONE LEVEL OUT: an id dropped from such a list would select the
+# wrong unit, the arm under test would not run, and its `want` would not be found — which is
+# indistinguishable from the mutant surviving, i.e. a false FAIL, or worse, for a `nofire`
+# arm, a false ok.
+#
+# THE SOURCE IS THE RUN LABEL, NOT THE `want` COLUMN, AND THAT IS A TOTALITY ARGUMENT. Every
+# label here already opens `i<id>-` — `i36-forward`, `i63-zero-pins`, `i65-noneforged` — so
+# upcasing the leading segment is total over the registry. The `want` column is NOT: eleven of
+# the thirty assertions are deliberately worded on their arm's OWN sentence rather than on the
+# bare invariant token — `emits 'GM1'`, `has no since:`, `found ZERO clause bullets`,
+# `absorbed_from pins`, `not one of home, pointer or none` — precisely because an assertion on
+# a shared token would pass against a reverted fix. Those carry no id at all.
+#
+# THE `want` COLUMN IS STILL READ, AS AN ADDITION RATHER THAN AS THE SOURCE, AND IT IS WHAT
+# KEEPS A CROSS-INVARIANT ARM HONEST. `i64-vs-i36` reads i64-unemitted's run and asserts I36
+# forward stays SILENT on LC-O12. Selecting that run on its label alone would ask for I64, and
+# an absence asserted over an arm that did not run is the vacuous pass this whole fixture
+# exists to make impossible. So a run's selector is the UNION, over every arm reading it, of
+# the ids in that arm's label and the ids in its `want`; i64-unemitted comes out {I36,I64}.
+# The union is right even today, when the two ids happen to share a unit — the fixture must
+# not be green by accident of a boundary it does not control.
+#
+# WHICH RUNS STAY ON THE FULL VALIDATOR IS DERIVED FROM ARM SHAPE, NOT FROM A NAME. A `clean`
+# arm asserts the validator's ENTIRE output is empty — an absence-shaped claim over every arm
+# in the file — and a selected run says nothing whatever about the arms it did not run. So a
+# run read by any `clean` arm is FULL. Today that is exactly `control`, and every other
+# registered run was checked for the same shape: the other two absence-shaped arms,
+# `i64-control` and `i65-control`, are `nofire` arms that also read `control` and are covered
+# by its full run; `i64-vs-i36` is the only absence-shaped arm on a mutant run, and its claim
+# is over ONE named invariant rather than over the whole output, which is what the union above
+# makes safe. Every other arm is `fires` — presence-shaped, so a wrong selection can only turn
+# it red, never green.
+#
+# A RUN THAT YIELDS NO ID IS A FIXTURE ERROR, NEVER A FULL RUN. A fallback to the whole
+# validator would run everything, print the same green report, and leave nobody able to tell
+# that selection had stopped happening — a mechanism that cannot fire, reading exactly like
+# one that did.
+SEL="$TMP/sel"; : > "$SEL"
+sel_bad="$(awk -F'\t' -v out="$SEL" '
+  function idsfrom(s,   acc) {
+    acc = ""
+    while (match(s, /I[0-9]+[a-c]?/)) { acc = acc " " substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH) }
+    return acc
+  }
+  function addids(r, list,   n, i, w) {
+    n = split(list, w, /[ \t]+/)
+    for (i = 1; i <= n; i++) {
+      if (w[i] == "") continue
+      if (index(" " sel[r] " ", " " w[i] " ") == 0) sel[r] = (sel[r] == "" ? w[i] : sel[r] " " w[i])
+    }
+  }
+  FNR == NR { order[++nr] = $1; next }
+  {
+    arun = $3
+    if (arun == "-") next
+    if ($1 == "clean") full[arun] = 1
+    lid = ""
+    if (match($2, /^i[0-9]+[a-c]?/)) { lid = substr($2, RSTART, RLENGTH); sub(/^i/, "I", lid) }
+    addids(arun, lid)
+    wid = idsfrom($4)
+    addids(arun, wid)
+    if ($1 == "nofire" && wid == "") noid[arun] = noid[arun] " " $2
+  }
+  END {
+    if (nr == 0) { print "    the run registry is empty, so no selector can be derived from it"; exit }
+    for (i = 1; i <= nr; i++) {
+      r = order[i]
+      if (r in full) { print r "\tFULL" > out; continue }
+      if (!(r in sel) || sel[r] == "") {
+        print "    run " r " -> no invariant id is derivable from any arm label or want field that reads it"
+        continue
+      }
+      if (r in noid) {
+        print "    run " r " -> selected, but nofire arm(s)" noid[r] " name no invariant id in their want, so the absence would be asserted over an arm that may not have run"
+        continue
+      }
+      s = sel[r]; gsub(/[ \t]+/, ",", s)
+      print r "\t" s > out
+    }
+    close(out)
+  }
+' "$RUNS" "$ARMS")"
+if [ -n "$sel_bad" ]; then
+  echo "FIXTURE ERROR: the arm selector could not be derived for every registered run:" >&2
+  printf '%s\n' "$sel_bad" >&2
+  echo "  There is deliberately NO fallback to the full validator here: a fallback that quietly runs everything reports the same green run and makes the loss of selection unobservable." >&2
+  exit 2
+fi
+N_SEL="$(grep -c . "$SEL" || true)"
+if [ "$N_SEL" -ne "$N_RUNS" ]; then
+  echo "FIXTURE ERROR: derived $N_SEL selector row(s) for $N_RUNS registered run(s) — a run with no row would be dispatched with no selector." >&2
+  exit 2
+fi
+
+# ONE RUNNER, GENERATED ONCE AND INVOKED BY BOTH THE SERIAL CONTROL AND THE POOL. The two used
+# to carry the same invocation twice, which is one place for the `--arms` flag to be added and
+# another for it to be forgotten. It also captures the validator's EXIT CODE, which the old
+# `bash "$VAL" | grep` shape threw away in the pipe — and exit 2 now means a selection or
+# usage failure, which must be reported as a broken fixture rather than scored as a mutant.
+RUNNER="$TMP/run-one.sh"
+cat > "$RUNNER" <<'LCC_RUNNER'
+#!/usr/bin/env bash
+# run-one.sh <run-label> — generated by core/fixtures/layer-contract-conformance/run.sh.
+# Reads the contract file and the selector for its label out of the two registries, runs the
+# validator, and records four facts: the FAIL lines, the exit code, the MODE it actually used,
+# and a done marker. The mode is written by the thing that ran, which is what lets the caller
+# join what was declared against what happened.
+set -u
+l="$1"
+f="$(awk -F'\t' -v k="$l" '$1==k{print $2}' "$AI_DLC_LCC_RUNS")"
+s="$(awk -F'\t' -v k="$l" '$1==k{print $2}' "$AI_DLC_LCC_SEL")"
+raw="$AI_DLC_LCC_OUT/$l.raw"
+if [ -z "$f" ] || [ -z "$s" ]; then
+  printf 'run %s resolved no contract file and/or no selector row out of the registries\n' "$l" > "$raw"
+  : > "$AI_DLC_LCC_OUT/$l.txt"
+  printf unresolved > "$AI_DLC_LCC_OUT/$l.mode"
+  printf 2 > "$AI_DLC_LCC_OUT/$l.rc"
+  printf done > "$AI_DLC_LCC_OUT/$l.done"
+  exit 0
+fi
+if [ "$s" = FULL ]; then
+  m=full
+  AI_DLC_LAYER_CONTRACT="$f" bash "$AI_DLC_LCC_VAL" > "$raw" 2>&1
+else
+  m=sel
+  AI_DLC_LAYER_CONTRACT="$f" bash "$AI_DLC_LCC_VAL" --arms "$s" > "$raw" 2>&1
+fi
+rc=$?
+grep '^FAIL' "$raw" > "$AI_DLC_LCC_OUT/$l.txt" || :
+printf '%s' "$m" > "$AI_DLC_LCC_OUT/$l.mode"
+printf '%s' "$rc" > "$AI_DLC_LCC_OUT/$l.rc"
+printf done > "$AI_DLC_LCC_OUT/$l.done"
+exit 0
+LCC_RUNNER
+
 # The control is settled FIRST and SERIALLY — see its arm above.
-run_one() { # run_one <label> <contract-file>
-  AI_DLC_LAYER_CONTRACT="$2" bash "$VAL" 2>&1 | grep '^FAIL' > "$OUTD/$1.txt" || true
-  printf done > "$OUTD/$1.done"
-}
-run_one control "$TMP/control.yaml"
+AI_DLC_LCC_VAL="$VAL" AI_DLC_LCC_OUT="$OUTD" AI_DLC_LCC_RUNS="$RUNS" AI_DLC_LCC_SEL="$SEL" \
+  bash "$RUNNER" control
 
 # FOUR, AND FIXED RATHER THAN TUNABLE — the same reasoning as enforcement-map-sites, which
 # states it in place: this pool nests inside the pre-push suite's own, so a knob here
@@ -663,14 +816,70 @@ awk -F'\t' -v g="$GROUP" '
 # number it did not compute retires the floor for both shards at once.
 ASSERTIONS="$(grep -c . "$ARMS_MINE" || true)"
 
-AI_DLC_LCC_VAL="$VAL" AI_DLC_LCC_OUT="$OUTD" AI_DLC_LCC_RUNS="$RUNS" \
-  xargs -P "$LCC_JOBS" -I{} bash -c '
-    l="$1"
-    f="$(awk -F"\t" -v k="$l" "\$1==k{print \$2}" "$AI_DLC_LCC_RUNS")"
-    [ -n "$f" ] || exit 0
-    AI_DLC_LAYER_CONTRACT="$f" bash "$AI_DLC_LCC_VAL" 2>&1 | grep "^FAIL" > "$AI_DLC_LCC_OUT/$l.txt"
-    printf done > "$AI_DLC_LCC_OUT/$l.done"
-  ' _ {} < "$TMP/pool"
+AI_DLC_LCC_VAL="$VAL" AI_DLC_LCC_OUT="$OUTD" AI_DLC_LCC_RUNS="$RUNS" AI_DLC_LCC_SEL="$SEL" \
+  xargs -P "$LCC_JOBS" -I{} bash "$RUNNER" {} < "$TMP/pool"
+
+# THE RUNS THIS SHARD ACTUALLY EXECUTED: the serial control plus whatever it was dealt. Both
+# guards below are scoped to it, because a shard must not report on a run it never started.
+MINE_RUNS="$TMP/mine.runs"
+{ echo control; cat "$TMP/pool"; } > "$MINE_RUNS"
+
+# ---------------------------------------------------------------------------
+# EXIT 2 IS A BROKEN FIXTURE, AND IT IS NEITHER A KILL NOR A SURVIVAL
+# ---------------------------------------------------------------------------
+# The validator exits 2 for an unknown arm id, a malformed flag, or a generated subprogram
+# that did not reach its verdict block. None of those is an invariant violation, and none is
+# evidence about the mutant: the run under a bad selector produces NO FAIL lines at all, which
+# would score a `fires` arm as the mutant surviving and a `nofire` arm as a clean pass. So it
+# is caught HERE, before a single arm is evaluated, and it aborts rather than being counted.
+rc2=""
+while read -r _l; do
+  [ -n "$_l" ] || continue
+  [ "$(cat "$OUTD/$_l.rc" 2>/dev/null || true)" = 2 ] || continue
+  rc2="$rc2
+    run '$_l' — $(head -2 "$OUTD/$_l.raw" 2>/dev/null | tr '\n' ' ')"
+done < "$MINE_RUNS"
+if [ -n "$rc2" ]; then
+  echo "$NAME: FIXTURE ERROR — validate-enforcement-map.sh exited 2, which is a selection or usage failure and never an invariant violation:$rc2" >&2
+  echo "  Nothing below was scored: a run with a broken selector emits no FAIL lines, so it would read as every mutant surviving and every nofire arm passing." >&2
+  exit 2
+fi
+
+# ---------------------------------------------------------------------------
+# THE POSITIVE CONTROL ON SELECTION ITSELF
+# ---------------------------------------------------------------------------
+# Selection is invisible in the report — a selected run and a full run print the same `ok`
+# line, so a conversion that quietly stopped selecting would stay green and only get slower.
+# BOTH SIDES ARE DERIVED. The left is the registry-derived $SEL table; the right is the `.mode`
+# file each run wrote FROM INSIDE THE RUNNER, so it records what was executed rather than what
+# was intended. A third clause joins their sum to the run population this shard dispatched, so
+# a $SEL table that has quietly lost a row cannot balance by shrinking both sides together.
+#
+# NEITHER EXISTING GUARD COVERS THIS. `N_RUNS -lt 25` is a floor on the REGISTRY, identical in
+# every shard and blind to how a run is invoked; the empty-shard guard asks only that this
+# shard was dealt something. Both pass unchanged on a fixture that selects nothing.
+exp_sel=0; exp_full=0; got_sel=0; got_full=0
+while read -r _l; do
+  [ -n "$_l" ] || continue
+  case "$(awk -F'\t' -v k="$_l" '$1==k{print $2}' "$SEL")" in
+    FULL) exp_full=$((exp_full + 1)) ;;
+    ?*)   exp_sel=$((exp_sel + 1)) ;;
+  esac
+  case "$(cat "$OUTD/$_l.mode" 2>/dev/null || true)" in
+    full) got_full=$((got_full + 1)) ;;
+    sel)  got_sel=$((got_sel + 1)) ;;
+  esac
+done < "$MINE_RUNS"
+POP=$((N_MINE + 1))
+if [ "$exp_sel" -eq 0 ] || [ "$got_sel" -ne "$exp_sel" ] || [ "$got_full" -ne "$exp_full" ] \
+   || [ $((exp_sel + exp_full)) -ne "$POP" ] || [ $((got_sel + got_full)) -ne "$POP" ]; then
+  echo "$NAME: FIXTURE ERROR — the selection control does not close in shard '$GROUP'." >&2
+  echo "  declared by the registries : $exp_sel selected + $exp_full full" >&2
+  echo "  observed from the runner    : $got_sel selected + $got_full full" >&2
+  echo "  runs this shard dispatched  : $POP (1 serial control + $N_MINE dealt)" >&2
+  echo "  A run that stopped passing --arms executes every arm in the validator and prints exactly the same report, only slower — which is why this is asserted rather than assumed." >&2
+  exit 2
+fi
 
 # ================== PHASE 3: evaluate, serially, in DECLARATION order ==================
 #
