@@ -539,6 +539,39 @@ LCC, register a throwaway arm naming a label absent from `$RUNS`.
 
 ### Step 4 — `self-update-join-gate` (506s): measure the seed before sharding it
 
+> **PREMISE CONTRADICTED IN EXECUTION — read this before acting on the rest of Step 4.**
+>
+> The step below assumes the seed dominates. Instrumented during execution it does not:
+> **seed ~4s, gate pool ~222s, rc-pair table ~1s** — the seed is about 2% of the fixture.
+> The cost is a single invocation of
+> `core/skills/ai-dlc-update/reconcile/self-update-gate.sh`, which walks all 150 fixture
+> directories (`:291`), executes both the current and incoming version of every changed
+> `core/scripts/` file inside the consumer tree (`:367-368`), and re-invokes the entire gate
+> once per VERSION-bumping commit in `BASE..THEIRS` under `--safe-stop` (`:120-122`).
+>
+> **So sharding this fixture cannot help**, and for a reason stronger than the seed cost: its
+> six gate invocations already run concurrently at width 6 = the run count, so splitting them
+> across two directories changes nothing about when the last one finishes. The seed work below
+> is still worth doing — it is cheap and it uncovered a shipped defect — but the fixture's
+> wall clock moves only when that gate program gets cheaper.
+>
+> The seed/pool/rc split above came from a subagent and **has not been re-derived on a quiet
+> machine**. My own attempt returned seed 33-41s and the pickaxe 2.2-2.5s against the agent's
+> 4.2s and 0.16s — taken at load average 62 with three agents running, i.e. inflated about an
+> order of magnitude. Directionally they agree; neither set is comparable with the other, and
+> that is the loaded-versus-solo hazard this plan warns about, walked into while writing it.
+> **Re-derive on an idle box before any number here is quoted.**
+>
+> **A shipped defect found by attempting the parallelisation**, confirmed independently with
+> controls in both directions on bash 3.2.57: in `seed.sh:57`,
+> `local ref="$1" dest="$2" src="$WORK/src-${ref:0:8}"` expands `${ref:0:8}` against the
+> **enclosing** scope, not the `ref` assigned earlier on the same line. With no outer `ref` it
+> yields `src="$WORK/src-"` for **both** installs, and `set -u` does not catch it because
+> `local` has already declared the name by the time `src` is evaluated. The two installs have
+> always shared one scratch directory; it survives only because `rm -rf "$src"` wipes the
+> previous clone, and parallelising them without splitting the assignment fails outright with
+> `could not create work tree dir '.../src-': File exists`.
+
 Its six gate invocations are already parallel at width 6 = the run count. The only thing a
 shard could parallelise is already parallel, and a shard would re-pay `seed.sh` in full:
 three `git clone --no-hardlinks` against a 20 MB `.git`, two full `scripts/install.sh` runs,
