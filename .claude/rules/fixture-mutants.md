@@ -48,6 +48,17 @@ paths:
   covering the case (so the obvious seed was classified before it reached the
   branch), and `diff` COALESCED the exempt line and the offending line into one
   hunk, so an exemption keyed on the first swallowed the second.
+- **When a guard flips no verdict, arm it on COST — and the signal is the first
+  observable that guard actually gates.** Some guards are fast paths: deleting
+  them changes no decision, so a verdict-flip arm can never fire on one, and
+  `mechanism-design.md` would have you delete a line that is load-bearing for
+  time rather than for behaviour. Give it a subject instead. Measured, on a
+  `PreToolUse` gate whose marker check returns before any parsing: the obvious
+  signal was `jq`, and it was WRONG — `command -v jq` executes nothing and the
+  first real `jq` sat BELOW the guard, so the arm passed against its own mutant.
+  `sed` was the first thing past the line that forks. Pick the signal, then let
+  the mutant tell you whether you picked it right; an arm that survives deleting
+  its own subject is watching the wrong thing.
 - **Mutate the file the fixture RESOLVES, which is not always the one you are
   changing.** A fixture that names candidates in both install layouts takes the
   first that exists, and in this repo `core/git-hooks/pre-push` is found before
