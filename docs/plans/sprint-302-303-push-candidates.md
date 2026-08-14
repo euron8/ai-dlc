@@ -1,3 +1,28 @@
+# SPENT — the graph consumer's sprint 302/303 push candidates. DO NOT EXECUTE THIS.
+
+**DISCHARGED 2026-08-14.** Every action item is complete. All four remediations shipped as
+**v0.367.0**, merged as `bab5a61` (#540), cut from `origin/main` and gated with
+`AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push` — all gates green, 148 ok / 0 FAIL, with
+each changed fixture read by name. The consumer at `/Users/n8/git/graph` was never written to.
+
+**What the run produced that this file did not predict**, which is the most useful half:
+
+- **The R1 seed could not express its own defect, twice.** `unregistered-drift.sh` already
+  carries `CORE-AT-THEIRS` for a file byte-identical to theirs, so the wrong-base artefact only
+  arises for a TEMPLATE-substituted file. The second attempt still failed because `diff`
+  coalesced the token line and the changed line into one exempt hunk.
+- **Three defects nobody had filed**, all shaken out by the fixtures: a `dispatch-model-guard`
+  arm satisfied by the effort directive's own wording rather than by the reason string; a
+  dedupe whose level component killed no assertion in the entire file; and two SKILL.md steps
+  both numbered `3a-iv`.
+- **R4 cost nothing measurable** — 540.6s → 539.2s on single readings, which is below this
+  measurement's resolution rather than free.
+- **The `PC-S303` filing's own prescribed fix was broken** and is corrected in the release.
+
+Original text follows, unedited.
+
+---
+
 # EXECUTE THIS — the graph consumer's sprint 302/303 push candidates, adjudicated and remediated
 
 Six entries from the reference consumer's push-candidate ledger, each re-verified against
