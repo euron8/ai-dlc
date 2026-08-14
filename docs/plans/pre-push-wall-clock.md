@@ -110,6 +110,40 @@ arm selection removes ~2300 CPU-s, then packing ~150s
 
 ---
 
+## Where it landed — measured on the merged tree, gate green
+
+`AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push` from the main checkout, box idle,
+`pre-push: all gates green.`
+
+```
+whole pre-push wall           245.21s   (816.79 user + 1588.07 sys = 2404.9 CPU-s)
+pool sum                      5553 -> 2785 pool-seconds   (-50%)
+pole                          506  ->  220s
+```
+
+The old pole set is gone from the top eight entirely — `self-update-join-gate`,
+`enforcement-map-sites` and both its shards no longer appear. What replaced it:
+
+| unit | s |
+|---|---|
+| **validator-arm-selection** | **220** |
+| validator-fork-budget | 159 |
+| layer-contract-conformance | 134 |
+| layer-contract-conformance-b | 133 |
+| layer-readopt-gate | 119 |
+| check-24-adversarial-convergence | 104 |
+| enforcement-map-derivations | 102 |
+| enforcement-map-derivations-b | 102 |
+
+**THE POLE IS NOW THE FIXTURE THIS PROGRAM ADDED IN STEP 6** — 220s of a 245s wall, and
+`validator-fork-budget` from Step 5 is second at 159s. That is this repo's recurring shape:
+the new check becomes the pole. Both are `.dist-only`, both are cheap to shard or trim
+(`validator-arm-selection` runs all 94 ids alone at ~0.4s each plus a seeded-tree pass), and
+**neither existed when this plan was written**, so neither is in any step below.
+
+CPU floor on 18 cores is now **2405 / 18 ≈ 134s** against a 245s wall, so roughly 45% of
+packing headroom remains — the same ratio as before the program started, at half the work.
+
 ## Findings — all measured this session
 
 ### 1. The pole is six fixtures, and there is a 261-second cliff behind them
@@ -747,6 +781,68 @@ Controls that prove the gate can fire: re-add one deleted loop and it must go re
 `bash -x` by overriding `PS4` and it must say `FIXTURE BROKEN`, not pass.
 
 ### Step 6 — arm-addressable validator (the largest lever)
+
+> **DONE, and it corrected this plan twice. Read both corrections before trusting anything
+> else written here about arm selection.**
+>
+> **Result: the seven battery shards go 3033.7 → 285.7 CPU-seconds**, less 258 for the new
+> differential fixture — about **−2490 CPU-seconds net**. A full validator run is 15.6-17.3s;
+> a selected one is **0.40s**. Solo costs, alternated against a `git archive HEAD~1` tree at
+> load 5.7-9.4, and never comparable with the loaded figures in the durations record.
+>
+> | | solo CPU-s before → after |
+> |---|---|
+> | enforcement-map-sites | 644.8 → 36.4 |
+> | enforcement-map-sites-b | 548.2 → 37.0 |
+> | enforcement-map-sites-c | 523.4 → 35.9 |
+> | enforcement-map-derivations | 338.9 → 33.4 |
+> | enforcement-map-derivations-b | 338.7 → 31.0 |
+> | layer-contract-conformance | 335.4 → 58.2 |
+> | layer-contract-conformance-b | 304.3 → 53.8 |
+>
+> **CORRECTION 1 — this plan's safety argument was wrong.** It held that a coupled arm reading
+> an unset name under `set -u` "exits with `unbound variable` — loud, not green". Measured:
+> true in the main shell, **FALSE inside `$( )`**, which kills only the subshell. Three of the
+> thirteen coupled units — **I5, I26, I54b** — exited **0** with the message on stderr and
+> **no finding**: an arm silently scanning an empty subject, which is precisely the silent
+> false pass this repo exists to prevent. **The hoist is a prerequisite, not a tidy-up.**
+>
+> **CORRECTION 2 — this plan's arm→mutant rule had a 32% false-positive set.** It prescribed
+> matching each assertion's `want` string as a literal substring of an arm's `err()` text, with
+> 0 or ≥2 matches being `FIXTURE BROKEN`. Measured over all **121** `want` strings in the three
+> batteries: 82 resolve to one unit, 8 to several, 15 to none because the message is
+> interpolated at runtime, 16 to none because the want is a grep pattern. **That rule would
+> declare 39 of 121 assertions broken on a correct tree.** `CLAUDE.md` requires an FP set
+> measured before a check ships; this one was measured and the rule was replaced — the id is
+> derived from each assertion's own existing name (`A24_i85_…` → `I85`), with a per-battery
+> control that fails the shard if the assertions that should select stop selecting.
+>
+> **Coupling, re-derived empirically by executing each unit rather than parsing it:** 91 arm
+> regions confirmed, but **10 headers are indented**, so the selectable unit is the column-0
+> arm and there are **81 units**. **68 self-contained, 13 coupled** (not 64/27), through
+> **11 names** (not ~15) and exactly **one** cross-arm function, `norm_core_manifest` —
+> confirmed. A first automated pass reported three functions and 26 names; `check` and `emit`
+> were prose inside `err "…"` strings. **The static pass is a second implementation with its
+> own bugs**, and the shipped numbers are the empirical ones.
+>
+> Three units whose input is another arm's derived output carry a machine-readable
+> `# requires-arms:` marker and selection takes the transitive closure. Proven load-bearing:
+> deleting all three makes `--arms I43/I44/I54b` emit `unbound variable`; unmutated, silent.
+>
+> **The all-ids equality holds:** `--arms` with every declared id selected produces
+> byte-identical stdout, byte-identical stderr and the same exit code as a plain run, at
+> 19.84 vs 19.45 CPU-s (**+2%**). The selection machinery has no material overhead of its own.
+>
+> **A floor `--arms` cannot lower:** all nine of `layer-contract-conformance`'s arms are
+> indented inside one `if [ -f "$lc_file" ]` block, so they share **one** selectable unit.
+> Its 5.8× is the ceiling for that fixture unless that block is split.
+>
+> **NOTE, and it binds Step 9: the pre-push hook's `.git/` paths are literal, so the suite is
+> DEGRADED in every worktree.** `.githooks/pre-push:174,625,633` write
+> `.git/ai-dlc-fixture-durations`, `.git/ai-dlc-suite-key` and its log; in a worktree `.git` is
+> a **file**, so all three fail with `Not a directory`. The content-key skip never fires and no
+> durations are recorded. Pre-existing and untouched by this program — but **Step 9 must be run
+> from the main checkout, never a worktree**, or it sweeps against a record nothing is writing.
 
 Give `scripts/validate-enforcement-map.sh` an `--arms <ID>[,<ID>…]` mode so a mutation battery
 runs only the arm its mutant targets. On today's numbers that takes the suite's 137
