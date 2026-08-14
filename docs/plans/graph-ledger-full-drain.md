@@ -96,9 +96,63 @@ the label *"a join key back into the ledger"*, but the label is whatever precede
 **Measured: no collision today involves a receipt-carrying entry**, so the defect is real but
 currently emits no wrong report row. Tier it accordingly.
 
-**Phase 1 is IN PROGRESS.** The 115 entries are cut into **29 batches of 4** (batch 29 has 3),
-ordered by ledger line, each batch given its pin line span. The batch table and the shared
-adjudication brief live in the session scratchpad.
+**Phase 1 is COMPLETE, and so is the refutation pass that verifies its closes.** The 115 entries
+were adjudicated in 29 parallel batches of 4; all 48 proposed closes were then attacked by 12
+independent verifiers briefed to break them.
+
+**Phase 2 is PAUSED BY THE OPERATOR**, one step in. Twenty-five backlog entries (`BL-009`–`BL-033`)
+were being drafted; none were written. No release branch is cut, `VERSION` is untouched, no
+CHANGELOG entry exists.
+
+### Adjudication result — 115 entries
+
+`ALREADY-FIXED` 41 · `HOLDS-MECHANISM-WRONG` 22 · `NOT-UPSTREAM` 16 · `HOLDS` 15 ·
+`HOLDS-WIDER` 14 · `FALSIFIED` 4 · `DUPLICATE-OF` 3
+
+### Refutation result — all 48 closes attacked
+
+`CLOSE-CONFIRMED` 24 · `CLOSE-NARROWED` 15 · `REFUTED` 9
+
+**Half the closes did not survive.** Final: **76 live** (67 plus 9 whose closes were withdrawn),
+**24 close cleanly**, **15 close only once a named sub-claim is filed first**.
+
+### Where the data lives — READ THESE FIRST ON RESUME
+
+A session scratchpad is session-scoped and unreachable from a fresh session, so the per-entry
+evidence was promoted into the repo:
+
+- `docs/reviews/graph-ledger-full-adjudication.md` — the register: method, controls, cross-cutting
+  findings, and the 115-row verdict table.
+- `docs/reviews/graph-ledger-adjudication-data/phase1-verdicts.tsv` — 115 rows,
+  `line / id / verdict / subsystem`.
+- `.../refutation-verdicts.tsv` — 48 rows, `line / outcome / why`, one per attacked close.
+- `.../final-disposition.tsv` — the merge, 115 rows.
+- `.../merge-verdicts.sh` — recomputes it. **An unattacked close renders `CLOSE (UNVERIFIED)`,
+  never `CLOSE`** — "nobody checked" and "checked and survived" must not read alike.
+- `.../adjudicable-entries.tsv` — the Phase 0 census both passes are keyed on.
+
+### Re-establish the pin before trusting any line number
+
+Every line number in the register is an offset into graph's ledger as pinned at Phase 0:
+
+```
+md5 -q /Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
+```
+
+Must read `2fd444dcf406cdff728fe3c0c4352267`, at graph HEAD `510e4d9f5`. **If it differs, a live
+graph session has moved the corpus** — re-derive the delta before using any pin line, and
+adjudicate whatever was newly filed. One such addition arrived mid-run already.
+
+### Open decisions, blocking Phase 2
+
+1. **`PC-S297-LOCKED-ANCHOR-VALIDATOR-VACUOUS` (pin 1069) is a RETIRE-ON-RULING, not a close.**
+   Its title clause is byte-for-byte true at HEAD; what shipped is a reasoned *exemption*, and the
+   entry's own note reserves that outcome — "if that exemption is correct by design, this entry
+   should be retired rather than pushed." **The operator rules; a measurement cannot.**
+2. **The live set is 76, not the 51 the full sweep was approved against.**
+3. **Three defects in recently-shipped code are not consumer candidates at all** and may deserve to
+   jump the queue: the recovery gate not arming, `wait-for-deliverable`'s false NON-DELIVERY on a
+   chained sibling, and the anti-monotonic short-id fallback (`BL-009`, `BL-011`, `BL-012`).
 
 The two tables that follow are the superseded planning-session estimates, kept because the
 false finding in them is instructive. **Do not act on their numbers.**
@@ -194,7 +248,18 @@ about why. **Do not trust the filing's prescribed fix** — one of them was itse
    headings that are not entries belong in the residual too; classify them explicitly rather
    than letting them inflate the count.
 
-### Phase 1 — adjudicate every open entry (subagent fan-out)
+### Phase 1 — adjudicate every open entry (subagent fan-out) — **COMPLETE**
+
+**Steps 5–9 are DONE.** They are retained because the method is what a later pass reuses, not
+because work remains in them. What the run added, and what a repeat must keep:
+
+- **Every close needs a second, independent hand.** Half failed. Every place a first-pass agent
+  wrote "I hesitated here", a verifier found the defect there — so instruct agents to record their
+  hesitation, and aim the verifier at it.
+- **`CLOSE-NARROWED` is the verdict a lazy confirmation misses.** Fifteen closes were right about
+  their headline and would have buried a live finding no other entry owns. Ask for it by name.
+- **Give the verifier the specific weak point**, not a generic "check this".
+
 
 5. Partition the open entries by the ai-dlc subsystem they target. A planning-session census
    produced this split — **re-derive it, do not trust it**:
@@ -249,7 +314,37 @@ about why. **Do not trust the filing's prescribed fix** — one of them was itse
    them per block against core at HEAD like any other entry. **Do not use `layer-drift.sh` as the
    oracle** — that is the same check-cannot-fire trap this pass exists to find.
 
-### Phase 2 — the close release
+### Phase 2 — the close release — **PAUSED BY THE OPERATOR, one step in**
+
+**RESUME HERE.** The next action is to finish drafting `BL-009`–`BL-033` and land them, because 15
+of the closes are gated on their sub-claim being filed first.
+
+**The 25 entries, by subject:** the recovery gate not arming on a bare-basename step file; the gate
+treating a partial read as a full one; `wait-for-deliverable`'s chained-sibling false NON-DELIVERY;
+the unanchored, archive-blind, anti-monotonic short-id fallback; `<cross-session-message` missing
+from the harness-origin schema; the report dropping the layer row's digest; mandated detectors
+outside the byte-verified region; three catalog entries invisible to the absorption detector with
+no `NOT-CHECKED` status; dispatched modes with no driver; the word-split list that reports itself
+skipped; the pipe-fed `grep -q` that `I54` cannot see; the budget summary reading three of six
+channels; the permanently-exempt contradicts-core entry; the close-record writer sited off the
+terminating path; the divergent flow-log legends; the adjudication schema still naming the blocking
+row; story-scoped `NOTHING VERIFIED`; Check 4's unreachable PASS; the wrapper discarding
+`CORE-AT-THEIRS`; `effort_bound` with no readers; the producer-surface procedure gap; no detector
+deriving retired paths; bare pointers resolving from no root; two template files the install glob
+cannot reach; and the rotator's mid-fence split.
+
+**Each needs a receipt that can fire.** The two failures this program measured, both of which will
+recur: an anchor on text **the fix quotes back** (fixes here document what they removed, so the
+anchor survives inside the comment recording the change), and an anchor on a **phrasing the filing
+invented** rather than one the code uses. Grep the anchor before committing to it, and run the
+receipt — one that exits 0 today is already broken.
+
+**Settle while drafting `BL-033`:** the consumer's rotator split an entry mid-fence and left the
+archive permanently short five paragraphs. This repo's own `docs/backlog.md` is rotated by the
+forked sibling `scripts/backlog-rotate.sh`. If the same boundary blindness is there, the file about
+to grow fourfold carries the identical hazard.
+
+**Then the release itself:**
 
 10. One release. `VERSION` bump, matching commit subject, one `## [X.Y.Z]` CHANGELOG heading, and
     **one `###` section per closed id, each naming the `PC-` id verbatim.** Arm C of
