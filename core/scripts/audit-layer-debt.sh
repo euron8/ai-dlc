@@ -138,6 +138,46 @@ for r in rows:
 open_items = [v for k, v in declared.items() if k not in closed]
 open_items.sort(key=lambda d: (d["opened"], d["id"]))
 
+# A `contradicts-core` verdict is the ONE judgement in this system that no detector can
+# re-derive. SKILL.md says so where the verdict is defined: `layer-drift.sh` emits
+# EXTENSION-RESTATES-CORE when an extension COPIES core, but an extension asserting the
+# OPPOSITE of core in its own words restates nothing and matches nothing, and core forbids
+# building a textual contradiction detector instead. So the register row IS the finding.
+#
+# AND THE ROW EXPIRES. The adjudication key is (clause, entry, subject_digest), and the
+# digest covers the entry and the core file it hooks — deliberately, because a verdict is "a
+# record of a reading, not an exemption for a path". That is right for `still-additive`,
+# where the reading is the whole claim. It is wrong for `contradicts-core`, where the reading
+# expires and the CONFLICT does not: the moment either file moves, the ruling is keyed to a
+# digest nothing will ever look up again. It is not overwritten, it becomes unaddressable,
+# and no later row contradicts it because later rows carry different digests.
+#
+# Measured on the reference consumer: a contradicts-core ruling recorded 2026-08-05 sat
+# unactioned for nine days while ten later rows on the same entry recorded `still-additive`
+# against their own subjects, none of them wrong and none of them about it. Filed as
+# PC-S330-A-CONTRADICTS-CORE-VERDICT-EXPIRES-LIKE-A-READING-AND-STOPS-BEING-SURFACED.
+#
+# `owed` IS THE ONLY DIGEST-INDEPENDENT HANDLE IN THE SYSTEM — the debt join above is
+# (owed.id -> closes_owed) and never touches subject_digest — so an obligation declared here
+# survives every future move of the entry. That is what this arm asks for.
+#
+# SCOPED TO THE ENTRY, NOT THE ROW, AND THAT IS A SATISFIABILITY PROPERTY RATHER THAN A
+# NOISE ONE. This register is append-only: a historical row can never acquire an `owed`, so
+# "this row declares no owed" is unsatisfiable by construction the instant the row is
+# written, and would name the same rows on every run forever with no act available to clear
+# them. The entry is the satisfiable unit, because a LATER row can still speak for it — which
+# is how both real debts on the reference consumer were in fact declared.
+#
+# FALSE-POSITIVE SET, MEASURED ON THE ONLY REGISTER THAT EXISTS, BOTH WAYS: 1 of 7
+# contradicts-core entries at the revision before the operator declared the debt, 0 of 7
+# after. One known FP PATH remains and is why this reports rather than blocks: an operator
+# who records the conflict and FIXES the file immediately owes nothing, declares nothing, and
+# the append-only row stands forever. Blocking would wedge them for having acted fast.
+owed_entries = {(r.get("clause"), r.get("entry")) for r in rows
+                if isinstance(r.get("owed"), dict) and r.get("owed", {}).get("id")}
+unowned = sorted({(r.get("clause") or "", r.get("entry") or "") for r in rows
+                  if r.get("verdict") == "contradicts-core"} - owed_entries)
+
 # THE MIGRATION ARM. Prose that reads like an obligation, on a row declaring none. A
 # suspicion, not a commitment, so it is reported apart and never folded into the count.
 # A cue EMBEDDED IN A LONGER IDENTIFIER is not prose about an obligation: `debt` inside
@@ -157,7 +197,9 @@ for r in rows:
 if as_json:
     print(json.dumps({"open": open_items, "undeclared": undeclared,
                       "rows": len(rows), "malformed": malformed,
-                      "mistyped_closes_owed": mistyped}, indent=1))
+                      "mistyped_closes_owed": mistyped,
+                      "contradicts_core_unowed": [{"clause": c, "entry": e}
+                                                  for c, e in unowned]}, indent=1))
     raise SystemExit(0)
 
 print("LAYER DEBT  register=%s  rows=%d%s%s"
@@ -185,4 +227,20 @@ if undeclared:
     print("  enumerated and closed. A prose obligation is invisible to every reader but a grep.")
 else:
     print("UNDECLARED (0) — no row's prose reads like an undeclared obligation.")
+print()
+if unowned:
+    print("CONTRADICTS-CORE WITHOUT AN `owed` (%d) — a ruling nothing will surface again:" % len(unowned))
+    for c, e in unowned:
+        print("  %-16s %s" % (c, e))
+    print()
+    print("  A `contradicts-core` verdict is the one judgement no detector can re-derive, and it is")
+    print("  keyed on a subject_digest that expires the next time the entry or its hooked core file")
+    print("  moves. After that the ruling is not overwritten — it is unaddressable, and no later row")
+    print("  disagrees with it because later rows carry different digests. `owed` is the only handle")
+    print("  in this register that survives a digest change, because the debt join never reads one.")
+    print("  Declare an `owed` on the entry naming the migration, or — if the conflict was already")
+    print("  resolved rather than deferred — record that resolution, so the ruling stops reading as")
+    print("  live work nobody is doing.")
+else:
+    print("CONTRADICTS-CORE WITHOUT AN `owed` (0) — every contradicts-core entry declares its debt.")
 PY

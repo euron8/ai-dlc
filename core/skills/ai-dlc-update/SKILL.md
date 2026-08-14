@@ -1239,10 +1239,21 @@ prose is itself generated rather than composed.
    {"clause":"LC-E4","entry":"…","subject_digest":"…","verdict":"still-additive","recorded_utc":"…","reason":"…","owed":{"id":"OWED-921-SPLIT","what":"split Check 921 into an overrides/ entry shadowing core Check 20","closes_when":"after this pull's apply"}}
    ```
 
-   **Run `scripts/ai-dlc/audit-layer-debt.sh` and put its OPEN and UNDECLARED lists in the
-   report, every pull.** OPEN is what this consumer owes; UNDECLARED is the migration backlog —
-   rows whose prose reads like an obligation while declaring none. A debt nothing enumerates is
-   a debt nobody acts on, which is the whole reason the field exists.
+   **Run `scripts/ai-dlc/audit-layer-debt.sh` and put its OPEN, UNDECLARED and
+   CONTRADICTS-CORE-WITHOUT-AN-`owed` lists in the report, every pull.** OPEN is what this
+   consumer owes; UNDECLARED is the migration backlog — rows whose prose reads like an
+   obligation while declaring none. A debt nothing enumerates is a debt nobody acts on, which is
+   the whole reason the field exists.
+
+   The third list is the one that cannot be re-derived. A `contradicts-core` verdict is a
+   judgement no detector can reach — that is stated where the verdict is defined below — and it
+   is keyed on a `subject_digest` that expires the next time the entry or its hooked core file
+   moves. After that the ruling is not overwritten; it is unaddressable, and every later row on
+   the entry carries a different digest and so disagrees with nothing. `owed` is the only handle
+   in this register that survives a digest change, because the debt join reads `owed.id` and
+   never a digest. **Scoped per ENTRY, not per row**: the register is append-only, so a
+   historical row can never acquire an `owed`, and the debt is declared by a later row — which
+   is how both real ones on the reference consumer were in fact recorded.
 
    **TO RE-READ A KEY YOU HAVE ALREADY RECORDED A VERDICT UNDER, run
    `layer-drift.sh --list-adjudications <dist> <base> <theirs> <consumer>`.** It prints every

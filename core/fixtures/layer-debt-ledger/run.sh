@@ -30,7 +30,7 @@ WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 REG="$WORK/register.jsonl"
 
-EXPECTED_ASSERTIONS=13
+EXPECTED_ASSERTIONS=16
 fails=0; made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
@@ -239,6 +239,61 @@ else
   grep -q 'MISTYPED_CLOSES_OWED' <<<"$m11_out" \
     && ok "MUTATION: a counter that flags well-formed lists is caught by the control (so assertion 11 discriminates)" \
     || bad "MUTATION: the well-formed register still reported no mistyped rows — assertion 11's control is vacuous"
+fi
+
+# --- 12/13/14. a `contradicts-core` ruling that declares no debt ---------------------------
+# The verdict no detector can re-derive, keyed on a digest that expires the next time either
+# file moves — after which the ruling is unaddressable rather than overwritten. Measured on
+# the reference consumer: nine days unactioned while ten later rows on the same entry recorded
+# their own subjects, none of them wrong and none about it.
+#
+# THE CORPUS CARRIES BOTH SHAPES, and the second is the whole scoping argument: entry `y` has
+# its contradicts-core on one row and its `owed` on a LATER row under a different digest, which
+# is how both real debts on the reference consumer were actually declared. Row scoping would
+# report it, and could never stop reporting it — the register is append-only, so a historical
+# row can never acquire an `owed`.
+CC_REG="$WORK/register-contradicts.jsonl"
+: >"$CC_REG"
+python3 - >>"$CC_REG" <<'PY'
+import json
+base = {"clause":"LC-E4","recorded_utc":"2026-08-06T00:00:00Z"}
+# x — ruled against core, debt never declared anywhere. REPORTED.
+print(json.dumps(dict(base, entry="extensions/x.md", subject_digest="a"*40,
+                      verdict="contradicts-core", reason="relaxes a core check")))
+# y — same ruling, and a LATER row under a different digest declares the debt. NOT reported.
+print(json.dumps(dict(base, entry="extensions/y.md", subject_digest="b"*40,
+                      verdict="contradicts-core", reason="relaxes a core check")))
+print(json.dumps(dict(base, entry="extensions/y.md", subject_digest="c"*40,
+                      verdict="still-additive", reason="declaring the migration",
+                      owed={"id":"OWED-Y-SPLIT","what":"refile as an override"})))
+PY
+cc_out="$(bash "$AUDIT" --register "$CC_REG" 2>&1)"
+
+if grep -qE '^CONTRADICTS-CORE WITHOUT AN `owed` \(1\)' <<<"$cc_out" && grep -q 'x\.md' <<<"$cc_out"; then
+  ok "a contradicts-core entry that declares no \`owed\` anywhere is reported"
+else
+  bad "the undeclared contradicts-core ruling was not reported — it expires with its digest and nothing else names it"
+  sed 's/^/        /' <<<"$cc_out"
+fi
+
+# CONTROL, and it is the arm the mutant below exists for: an entry whose debt is declared on a
+# LATER row must NOT be reported. Absence-shaped, so it passes against an arm that reports
+# nothing at all.
+cc_block="$(awk '/^CONTRADICTS-CORE/,0' <<<"$cc_out")"
+grep -q 'y\.md' <<<"$cc_block" \
+  && bad "CONTROL: an entry whose \`owed\` sits on a later row was reported — the arm is row-scoped, and an append-only register can never satisfy it" \
+  || ok "CONTROL: a contradicts-core entry whose debt is declared by a LATER row is not reported"
+
+# MUTATION: entry scoping reduced to row scoping. The control must go red, and `y` must appear.
+M14="$(mkmut cc 'owed_entries = {(r.get("clause"), r.get("entry")) for r in rows
+                if isinstance(r.get("owed"), dict) and r.get("owed", {}).get("id")}' 'owed_entries = set()')"
+if [ -z "$M14" ]; then
+  bad "FIXTURE ERROR: the entry-scoping mutation matched nothing — the control proves nothing"
+else
+  m14_out="$(bash "$M14" --register "$CC_REG" 2>&1)"
+  grep -q 'y\.md' <<<"$(awk '/^CONTRADICTS-CORE/,0' <<<"$m14_out")" \
+    && ok "MUTATION: scoped to the ROW, the later-declared entry is reported too — so the control is what proves the scope" \
+    || bad "MUTATION: row scoping still did not report the later-declared entry — the control is vacuous"
 fi
 
 echo ""
