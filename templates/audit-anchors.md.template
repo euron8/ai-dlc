@@ -15,9 +15,13 @@ the schema and re-render. Each entry:
 - `closed_at: <time>` — when the retro PR merged (documentary; free-form).
 - `audit_window: <prior-sprint-sha>..<sprint-N-sha>` — git rev range for the next
   sprint's per-class test-debt audit; the lower bound is the prior sprint's `sha`.
+- `close_reason: reset|abandoned` — ONLY on a sprint closed without a retro-PR
+  merge. `sha` is then the commit the sprint stopped at, and it must still resolve.
+  Written by `scripts/ai-dlc/validate-audit-anchors.sh --close-record`, never by hand.
 
 Missing entry for the prior sprint OR `sha: PENDING` there FAILS Check 18 CLOSED —
-a silent skip on a missing audit anchor is forbidden (PI-S169-8).
+a silent skip on a missing audit anchor is forbidden (PI-S169-8). A close record is
+not an exemption from that: it supplies the anchor, it does not waive it.
 <!-- END GENERATED: audit-anchors-schema -->
 
 ## Entries

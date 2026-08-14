@@ -111,7 +111,15 @@ run_one() {
     # or nothing at all, or was run --quiet -- still passed, and rendering that
     # as an error or as empty output would break every caller that reads this as
     # a verdict. The bare line above is the floor; these lines are additive.
-    ok_hits="$(grep -nE '^[[:space:]]*(ok|warn|OK:|PASS)' "$out" 2>/dev/null | head -n "$LINES")"
+    #
+    # `OVER` AND `WARN:` BELONG IN THE rc=0 SET, NOT ONLY THE rc!=0 SET. A run under
+    # --warn-only reports over-budget artifacts and still exits 0 by contract, so keying
+    # the evidence on rc alone renders `PASS <name>` over a run that listed breaches and
+    # surfaces neither the count nor the rows. That is the same false-clean surface the
+    # reference consumer filed against the budget script's own summary line
+    # (PC-S303-BUDGET-SCRIPT-PASS-LINE-UNCONDITIONAL), one layer out. No core call site
+    # pairs verdict.sh with --warn-only today; this closes the path before one does.
+    ok_hits="$(grep -nE '^[[:space:]]*(ok|warn|OK:|PASS|WARN|OVER)' "$out" 2>/dev/null | head -n "$LINES")"
     [ -z "$ok_hits" ] || printf '%s\n' "$ok_hits" | sed 's/^/      /'
   else
     echo "FAIL  ${name}  (rc=${rc})"

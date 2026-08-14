@@ -121,18 +121,28 @@ else
   exit 1
 fi
 
-USAGE="usage: validate-audit-anchors.sh --render | --check <file> | --entries <file> | --trunk-push | --prior-sprint-sha <file> <current-sprint-n> | <file>"
-MODE="validate"; FILE=""; SPRINT=""
+USAGE="usage: validate-audit-anchors.sh --render | --check <file> | --entries <file> | --trunk-push | --prior-sprint-sha <file> <current-sprint-n> | --close-record <file> <sprint-n> <reason> <sha> | <file>"
+MODE="validate"; FILE=""; SPRINT=""; REASON=""; CLOSE_SHA=""
 case "${1:-}" in
   --render)     MODE="render" ;;
   --check)      MODE="check";   FILE="${2:-}" ;;
   --entries)    MODE="entries"; FILE="${2:-}" ;;
   --trunk-push) MODE="trunk-push" ;;
   --prior-sprint-sha) MODE="prior-sprint-sha"; FILE="${2:-}"; SPRINT="${3:-}" ;;
+  --close-record) MODE="close-record"; FILE="${2:-}"; SPRINT="${3:-}"; REASON="${4:-}"; CLOSE_SHA="${5:-}" ;;
   "" )       echo "$USAGE" >&2; exit 2 ;;
   --*)       echo "validate-audit-anchors: unknown option '$1'" >&2; exit 2 ;;
   *)         MODE="validate"; FILE="$1" ;;
 esac
+# Same posture as --prior-sprint-sha below: a fumbled argument is exit 2, never exit 1. Exit 1 from
+# this script means "the anchor chain is wrong", and a caller must not read a typo as that.
+if [ "$MODE" = "close-record" ]; then
+  case "$SPRINT" in
+    ''|*[!0-9]*) echo "validate-audit-anchors: --close-record needs <sprint-n> as a positive integer (got: '${SPRINT}')" >&2; exit 2 ;;
+  esac
+  [ -n "$REASON" ] || { echo "validate-audit-anchors: --close-record needs <reason>. The schema's close_reason enum is the closed set." >&2; exit 2; }
+  [ -n "$CLOSE_SHA" ] || { echo "validate-audit-anchors: --close-record needs <sha> — the commit the sprint actually stopped at. A close record without a resolvable anchor is the hole this mode exists to fill, not a smaller version of it." >&2; exit 2; }
+fi
 # The sprint number is validated HERE, as a usage error, so a caller that fumbled the argument gets
 # exit 2 and never gets exit 1 — which Check 18 reads as "the anchor is missing" and fails the gate
 # on. A wrong argument and an absent anchor are different findings and must not share an exit code.
@@ -142,7 +152,14 @@ if [ "$MODE" = "prior-sprint-sha" ]; then
   esac
   [ "$SPRINT" -ge 1 ] 2>/dev/null || { echo "validate-audit-anchors: --prior-sprint-sha needs <current-sprint-n> >= 1 (got: '${SPRINT}')" >&2; exit 2; }
 fi
-case "$MODE" in render|trunk-push) ;; *)
+case "$MODE" in render|trunk-push) ;; close-record)
+  # The target must exist and be WRITABLE. --close-record appends; it never creates the chain,
+  # because a file this mode invented would carry one entry and read as a complete history.
+  if [ -z "$FILE" ]; then echo "$USAGE" >&2; exit 2; fi
+  if [ ! -r "$FILE" ] || [ ! -w "$FILE" ]; then
+    echo "validate-audit-anchors: FAIL — '$FILE' must exist and be writable to append a close record." >&2; exit 1
+  fi ;;
+  *)
   if [ -z "$FILE" ]; then
     echo "$USAGE" >&2; exit 2
   fi
@@ -161,7 +178,8 @@ command -v python3 >/dev/null 2>&1 || { echo "validate-audit-anchors: FAIL — p
 REFS=""
 [ "$MODE" = "trunk-push" ] && REFS="$(cat)"
 
-MODE="$MODE" FILE="$FILE" SCHEMA="$SCHEMA" TRUNK="${AI_DLC_TRUNK:-main}" REFS="$REFS" SPRINT="$SPRINT" python3 - <<'PY'
+MODE="$MODE" FILE="$FILE" SCHEMA="$SCHEMA" TRUNK="${AI_DLC_TRUNK:-main}" REFS="$REFS" SPRINT="$SPRINT" \
+  REASON="$REASON" CLOSE_SHA="$CLOSE_SHA" python3 - <<'PY'
 import json, os, re, subprocess, sys
 
 mode   = os.environ["MODE"]
@@ -345,6 +363,75 @@ for raw in body.splitlines():
 if cur is not None:
     entries.append(cur)
 
+# --- close-record: APPEND the anchor for a sprint that closed without a retro-PR merge --------
+# THE ONLY WRITER OF A NON-RETRO ANCHOR. retro.md Step 5b writes the retro one; a sprint that was
+# reset or abandoned after consuming its number reached neither, so the chain simply had a hole and
+# the next sprint's Check 18 failed closed on it. That is the correct posture for a MISSING anchor
+# and the wrong one for a DELIBERATE close, and until this mode existed the two were the same
+# observation.
+#
+# IT IS A WRITER BECAUSE THE RECORD IS READ BY A FAIL-CLOSED GATE. The alternative was prose telling
+# a lead the field order and the placeholder spelling, which is a record retyped at the one moment
+# the sprint is already going wrong. Rendered here, validated by the same `fields` loop every other
+# entry goes through, and refused outright if it would not pass that loop.
+#
+# IT DOES NOT WEAKEN THE GATE. `sha` is REQUIRED to resolve to a real commit — the point the sprint
+# actually stopped at — so the next sprint's audit window keeps a true lower bound. This mode fills
+# the hole; it never waives the anchor.
+if mode == "close-record":
+    reason = os.environ.get("REASON", "")
+    sha    = os.environ.get("CLOSE_SHA", "")
+    spec   = fields.get("close_reason", {})
+    allowed = spec.get("enum") or []
+
+    def wfail(msg):
+        sys.stderr.write(f"validate-audit-anchors: FAIL — --close-record ({file_path}, "
+                         f"sprint {os.environ.get('SPRINT','?')}): {msg}\n")
+        sys.exit(1)
+
+    # The closed set is READ FROM THE SCHEMA. Restating the members here would be the second
+    # declaration this file's whole $comment exists to have deleted.
+    if not allowed:
+        wfail("the schema declares no close_reason enum, so there is no closed set to write "
+              "against. Refusing to invent one.")
+    if reason not in allowed:
+        wfail(f"reason '{reason}' is not one of {', '.join(allowed)}.")
+
+    # RESOLVE THE SHA BEFORE WRITING, not at read time. A close record whose anchor does not
+    # resolve is exactly the wedge this mode removes, and writing one would move the failure from
+    # the sprint that can still fix it to the next sprint's gate.
+    try:
+        r = subprocess.run(["git", "rev-parse", "--verify", "-q", f"{sha}^{{commit}}"],
+                           capture_output=True, text=True)
+    except OSError as e:
+        wfail(f"git is not runnable here ({e}), so '{sha}' could not be resolved.")
+    resolved = r.stdout.strip()
+    if r.returncode != 0 or not resolved:
+        wfail(f"sha '{sha}' does not resolve to a commit in the repository this ran in "
+              f"({os.getcwd()}). A close record must carry the commit the sprint stopped at.")
+    if "PENDING" in sha.upper():
+        wfail(f"sha '{sha}' is a PENDING placeholder. A close record is written when the sprint "
+              f"has already stopped, so the commit is knowable now — that is what distinguishes "
+              f"it from a retro anchor awaiting its merge.")
+
+    n = os.environ["SPRINT"]
+    if any(e.get("sprint") == n for e in entries):
+        wfail(f"an entry for sprint {n} already exists. Appending a second one leaves two "
+              f"answers for the sprint Check 18 resolves, and this mode will not create that.")
+
+    lines = [f"- sprint: {n}",
+             f"  sha: {resolved}",
+             f"  close_reason: {reason}"]
+    with open(file_path, "r") as fh:
+        existing = fh.read()
+    sep = "" if existing.endswith("\n") else "\n"
+    with open(file_path, "a") as fh:
+        fh.write(sep + "\n".join(lines) + "\n")
+    sys.stderr.write(f"validate-audit-anchors: --close-record OK — appended sprint {n} "
+                     f"({reason}) anchored at {resolved}. Re-run --entries to validate the file.\n")
+    print(resolved)
+    sys.exit(0)
+
 # --- prior-sprint-sha: resolve the anchor Check 18 opens its audit window on ------------------
 # Reuses the entry parser above rather than adding a grammar. The one it replaces was an awk in
 # validate-mandatory-rules.sh keyed on `$1=="-" && $2=="sprint:"`; that spelling could not see a
@@ -394,6 +481,15 @@ if mode == "prior-sprint-sha":
     if rc != 0 or not resolved:
         fail(f"the sprint {prior} entry's sha '{raw}' does not resolve to a commit in the "
              f"repository this ran in ({os.getcwd()}).")
+    # A NON-RETRO BASE RESOLVES, AND IT SAYS SO. The window's lower bound is then the point an
+    # abandoned or reset sprint stopped at, not a retro-PR merge. That is a legitimate anchor and
+    # the gate passes on it — but an operator reading the audit window has to be able to tell the
+    # two apart, and a resolution that looked identical either way would not let them.
+    cr = matches[-1].get("close_reason", "")
+    if cr:
+        sys.stderr.write(f"validate-audit-anchors: NOTE — sprint {prior} was closed WITHOUT a "
+                         f"retro-PR merge (close_reason: {cr}). The audit window opens at the "
+                         f"commit that sprint stopped at, not at a merge.\n")
     sys.stderr.write(f"validate-audit-anchors: --prior-sprint-sha OK — scanned {scanned} entr"
                      f"{'y' if scanned == 1 else 'ies'}, sprint {prior} -> {resolved}\n")
     print(resolved)
@@ -414,6 +510,13 @@ for i, ent in enumerate(entries):
         pat = spec.get("pattern")
         if pat and not re.match(pat, val):
             errors.append(f"entry sprint={tag}: field '{name}'='{val}' does not match {pat}")
+        # A closed set is enforced FROM the schema's own `enum`, never from a pattern restating
+        # it here. The members are read by scripts/render-vocabulary-index.sh out of the same
+        # array, so the enforcement and the published vocabulary cannot disagree.
+        allowed = spec.get("enum")
+        if allowed and val not in allowed:
+            errors.append(f"entry sprint={tag}: field '{name}'='{val}' is not one of "
+                          f"{', '.join(allowed)}")
 
 if errors:
     sys.stderr.write(f"validate-audit-anchors: FAIL — {file_path}:\n")

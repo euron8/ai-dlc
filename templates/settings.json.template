@@ -120,6 +120,15 @@
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-acknowledge.sh"
           }
         ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-recover-gate.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [

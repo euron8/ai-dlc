@@ -162,6 +162,7 @@ core_manifest:
   - fixtures/audit-anchors-schema/**
   - fixtures/blocker-adjudication-record/**
   - fixtures/bmad-invocation-resolve/**
+  - fixtures/budget-summary-verdict/**
   - fixtures/check-15-bypass/**
   - fixtures/check-17-bypass/**
   - fixtures/check-17-counts/**

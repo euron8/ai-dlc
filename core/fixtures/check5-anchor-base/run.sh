@@ -23,6 +23,12 @@
 # EVERY ARM IS ASSERTED ON ITS OWN WORDING. The four failure causes — no entries, no entry for the
 # prior sprint, a PENDING placeholder, a sha that does not resolve — all exit 1 and would all match
 # a grep for "FAIL". A mutant that collapses two of them into one is exactly what this catches.
+#
+# AND SINCE close_reason: a sprint can now close without a retro-PR merge, anchored at the commit it
+# stopped at. Two questions follow, and the second is the one worth the arms: does the resolver
+# resolve through such a record and SAY it is not a merge base, and did giving a closed sprint an
+# anchor give any sprint a way past one. The C token answers the first; X and PC answer the second
+# by asserting the gate stays shut AND no sha reaches stdout — the thing the caller consumes.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -159,6 +165,34 @@ printf -- '- sprint: 900\n  sha: PENDING\n- sprint: 901\n  sha: <PENDING-S901-RE
 printf -- '- sprint: 500\n  sha: %s\n' "$PRIOR_SHA"                                             > "$WORK/noentry.md"
 printf -- '- sprint: 899\n  sha: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n- sprint: 900\n  sha: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n' > "$WORK/unresolved.md"
 
+# --- CLOSE RECORDS ------------------------------------------------------------------------
+# A sprint reset or abandoned after consuming its number reaches no retro and no merge SHA, so it
+# used to leave a HOLE and the next sprint's Check 18 failed closed on it. `close_reason` gives that
+# sprint a real anchor — the commit it stopped at. The resolver has to resolve through one AND say
+# so, because an operator reading an audit window cannot otherwise tell a merge base from a
+# stopped-at base.
+#
+# BOTH close files carry the SAME reason and the SAME sha at sprint N-1 and N, deliberately: the
+# minus-one is arm 4's R token to own, and a close arm that also moved under the off-by-one mutant
+# would make one of the two vacuous. Two files with DIFFERENT reasons, because a NOTE that named a
+# hardcoded word would satisfy a single one.
+printf -- '- sprint: 949\n  sha: %s\n  close_reason: reset\n- sprint: 950\n  sha: %s\n  close_reason: reset\n' \
+  "$PRIOR_SHA" "$PRIOR_SHA" > "$WORK/close-reset.md"
+printf -- '- sprint: 959\n  sha: %s\n  close_reason: abandoned\n- sprint: 960\n  sha: %s\n  close_reason: abandoned\n' \
+  "$PRIOR_SHA" "$PRIOR_SHA" > "$WORK/close-abandoned.md"
+
+# --- THE ANTI-EXEMPTION FILES -------------------------------------------------------------
+# The whole risk in this change is that a way to anchor a closed sprint becomes a way PAST the
+# anchor. Both files are shaped so that the only difference from a resolvable one is the thing that
+# must NOT be waived, and both are asserted on stdout being EMPTY as well as a non-zero exit: the
+# gate consumes the printed sha, so "it complained and printed one anyway" is the failure that
+# matters. Asserting emptiness rather than the message is also what keeps these two out of the
+# no-entry and placeholder arms' territory — those own the WORDING; these own the fail-closed.
+printf -- '- sprint: 800\n  sha: %s\n  close_reason: reset\n- sprint: 801\n  sha: %s\n  close_reason: abandoned\n' \
+  "$PRIOR_SHA" "$PRIOR_SHA" > "$WORK/close-noentry.md"
+printf -- '- sprint: 979\n  sha: <PENDING-S979-RETRO>\n  close_reason: reset\n- sprint: 980\n  sha: <PENDING-S980-RETRO>\n  close_reason: reset\n' \
+  > "$WORK/close-pending.md"
+
 # battery <script> -> five space-separated tokens, one per arm. A mutant must move EXACTLY one.
 battery() {
   local S="$1" out rc t
@@ -179,15 +213,36 @@ battery() {
   ( cd "$WORK" && bash "$S" --prior-sprint-sha good.md not-a-number ) >/dev/null 2>&1; rc=$?
   if [ "$rc" -eq 2 ]; then t="$t A:usage"; else t="$t A:$rc"; fi
 
+  # C — resolves THROUGH a close record and NAMES the reason on stderr. Both reasons, from two
+  # files, so the NOTE is proven to be read from the entry rather than printed from one spelling.
+  local c1 c2
+  out="$( ( cd "$WORK" && bash "$S" --prior-sprint-sha close-reset.md 950 ) 2>"$WORK/cr.err" )"; rc=$?
+  c1=no; if [ "$rc" -eq 0 ] && [ "$out" = "$PRIOR_SHA" ] && grep -q 'close_reason: reset' "$WORK/cr.err"; then c1=yes; fi
+  out="$( ( cd "$WORK" && bash "$S" --prior-sprint-sha close-abandoned.md 960 ) 2>"$WORK/ca.err" )"; rc=$?
+  c2=no; if [ "$rc" -eq 0 ] && [ "$out" = "$PRIOR_SHA" ] && grep -q 'close_reason: abandoned' "$WORK/ca.err"; then c2=yes; fi
+  if [ "$c1$c2" = "yesyes" ]; then t="$t C:noted"; else t="$t C:$c1$c2"; fi
+
+  # X — THE ANTI-EXEMPTION ARM. Close records are present in the file; the PRIOR sprint still has
+  # none. The gate must stay closed and no sha may reach stdout. A fix that let a nearby close
+  # record stand in for a missing one would pass every other arm here.
+  out="$( ( cd "$WORK" && bash "$S" --prior-sprint-sha close-noentry.md 803 ) 2>/dev/null )"; rc=$?
+  if [ "$rc" -ne 0 ] && [ -z "$out" ]; then t="$t X:closed"; else t="$t X:open"; fi
+
+  # PC — the same question for the OTHER half of the fail-closed rule: an entry that carries a
+  # close_reason and a PENDING sha is still a hole. `close_reason` says why the anchor is not a
+  # merge SHA; it never says the anchor may be absent.
+  out="$( ( cd "$WORK" && bash "$S" --prior-sprint-sha close-pending.md 980 ) 2>/dev/null )"; rc=$?
+  if [ "$rc" -ne 0 ] && [ -z "$out" ]; then t="$t PC:closed"; else t="$t PC:open"; fi
+
   printf '%s' "$t"
 }
 
-EXPECTED="R:sha N:named P:named U:named A:usage"
+EXPECTED="R:sha N:named P:named U:named A:usage C:noted X:closed PC:closed"
 
 # --- 4. the shipping resolver answers all five arms --------------------------
 GOT="$(battery "$WORK/bin/validate-audit-anchors.sh")"
 if [ "$GOT" = "$EXPECTED" ]; then
-  ok "--prior-sprint-sha: resolves sprint N-1, and names each of no-entry / placeholder / unresolvable separately, with a wrong argument staying exit 2"
+  ok "--prior-sprint-sha: resolves sprint N-1 (through a close record too, naming its reason), names each of no-entry / placeholder / unresolvable separately, keeps a wrong argument at exit 2, and stays CLOSED with no sha on stdout when the prior sprint has no entry or only a PENDING one"
 else
   bad "--prior-sprint-sha battery: expected [$EXPECTED], got [$GOT]"
 fi
@@ -238,40 +293,64 @@ mutate() {
 # is the PENDING one the retro has not backfilled yet — so it fails where it should have resolved.
 mutate offbyone \
   's/prior   = current - 1/prior   = current - 0/' \
-  "R:no N:named P:named U:named A:usage" \
+  "R:no N:named P:named U:named A:usage C:noted X:closed PC:closed" \
   "dropping the minus-one stops sprint N-1 resolving, and moves nothing else"
 
 # The placeholder arm. Removing it does not make a PENDING file pass — git still refuses the value
 # — it makes the resolver report the WRONG CAUSE, which is the failure a grep for FAIL cannot see.
 mutate placeholder \
   's/if "PENDING" in raw.upper():/if False and "PENDING" in raw.upper():/' \
-  "R:sha N:named P:no U:named A:usage" \
+  "R:sha N:named P:no U:named A:usage C:noted X:closed PC:closed" \
   "without its own arm a PENDING anchor is reported as an unresolvable sha, not as an unmerged retro"
 
 # The git resolution. Without it an anchor that names no commit in this repository passes.
 mutate resolve \
   's/if rc != 0 or not resolved:/if False and (rc != 0 or not resolved):/' \
-  "R:sha N:named P:named U:no A:usage" \
+  "R:sha N:named P:named U:no A:usage C:noted X:closed PC:closed" \
   "without the rev-parse verdict a sha that resolves to nothing is accepted as the audit base"
 
 # The no-entry arm — the one Check 18's own text calls out: silent skip on a missing anchor is
 # forbidden, so the absence has to be a named finding rather than whatever falls out downstream.
 mutate noentry \
   's/^    if not matches:/    if False:/' \
-  "R:sha N:no P:named U:named A:usage" \
+  "R:sha N:no P:named U:named A:usage C:noted X:closed PC:closed" \
   "without its own arm a missing prior-sprint entry stops being a named finding"
 
 # The usage/absence separation. A fumbled argument must not arrive as exit 1, which Check 18 reads
 # as "the anchor is missing" and fails the gate on.
 mutate usagesplit \
   's/if \[ "\$MODE" = "prior-sprint-sha" \]; then/if [ "$MODE" = "prior-sprint-sha-DISABLED" ]; then/' \
-  "R:sha N:named P:named U:named A:1" \
+  "R:sha N:named P:named U:named A:1 C:noted X:closed PC:closed" \
   "without the argument check a non-numeric sprint exits 1, which a caller reads as a missing anchor"
+
+# THE EXEMPTION THAT WAS AVAILABLE AND NOT TAKEN. This one is not a revert of a layer — it is the
+# wrong fix, written out: let a close record anywhere in the file stand in for the prior sprint's
+# missing entry. It is the shape the filing invites ("the sprint was closed, so the chain is fine")
+# and it passes every other arm here, including the no-entry arm, because a file with no close
+# records at all is unaffected. X is the only thing that sees it.
+mutate exemption \
+  's/^    matches = \[e for e in entries if e.get("sprint", "") == str(prior)\]$/    matches = [e for e in entries if e.get("sprint", "") == str(prior)] or [e for e in entries if e.get("close_reason")]/' \
+  "R:sha N:named P:named U:named A:usage C:noted X:open PC:closed" \
+  "a close record standing in for a MISSING prior-sprint entry opens the gate, and only the anti-exemption arm sees it"
+
+# PC has no mutant of its own, and that is a finding rather than a gap: no single-layer removal
+# opens it. The placeholder arm closes it first, and with that arm disabled the rev-parse verdict
+# closes it anyway — the two layers already carry the `placeholder` and `resolve` mutants above, and
+# PC asserts they compose on an entry that carries a close_reason.
+
+# The close-record NOTE. Removing it does not stop a close record RESOLVING — the sha is real, so
+# the gate still passes on it — it makes the resolution look identical to one anchored on a retro-PR
+# merge. That is the whole difference the field exists to carry, and it is invisible to an exit
+# code: an operator reading the audit window would be told a merge base where none exists.
+mutate closenote \
+  's/^    if cr:$/    if False:/' \
+  "R:sha N:named P:named U:named A:usage C:nono X:closed PC:closed" \
+  "without the NOTE a sprint closed WITHOUT a retro-PR merge resolves silently, reading exactly like a merge anchor"
 
 echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
-if [ "$asserted" -ne 12 ]; then
-  echo "check5-anchor-base: FIXTURE ERROR — ran $asserted assertions, expected 12" >&2
+if [ "$asserted" -ne 14 ]; then
+  echo "check5-anchor-base: FIXTURE ERROR — ran $asserted assertions, expected 14" >&2
   exit 2
 fi
 if [ "$fails" -eq 0 ]; then

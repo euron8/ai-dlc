@@ -35,8 +35,34 @@
     "sprint":       { "required": true,  "pattern": "^[0-9]+$", "desc": "integer sprint number" },
     "sha":          { "required": true,  "pattern": "^\\S+$",   "desc": "retro-PR merge SHA on main (short or full), or a PENDING placeholder until merged" },
     "closed_at":    { "required": false,                        "desc": "retro-PR merge time (documentary; free-form)" },
-    "audit_window": { "required": false,                        "desc": "<prior-sprint-sha>..<sprint-N-sha> git rev range for the next sprint's per-class test-debt audit (documentary)" }
+    "audit_window": { "required": false,                        "desc": "<prior-sprint-sha>..<sprint-N-sha> git rev range for the next sprint's per-class test-debt audit (documentary)" },
+    "close_reason": { "required": false, "enum": ["reset", "abandoned"],
+                                                                "desc": "present ONLY on a sprint closed without a retro-PR merge; `sha` is then the commit the sprint actually stopped at, not a merge SHA" }
   },
+  "$close_reason_comment": [
+    "WHY A SPRINT CAN CLOSE WITHOUT A RETRO-PR MERGE, and why absence could not say so.",
+    "",
+    "The only writer of an entry was retro.md Step 5b, reached only via the normal retro path. A",
+    "sprint that was reset or abandoned after its number was consumed therefore produced NO entry,",
+    "and the NEXT sprint's Check 18 failed closed on the hole -- correctly, because a missing anchor",
+    "and a deliberately-closed sprint were the same observation. The reference consumer cleared one",
+    "with an operator override rather than a mechanized close, filed as",
+    "PC-S303-RETRO-NO-CLOSE-RECORD-FOR-RESET-OR-ABANDONED-SPRINTS.",
+    "",
+    "THE FIELD DOES NOT WEAKEN CHECK 18, and this is the whole design. A close record still carries a",
+    "`sha` that RESOLVES -- the commit the sprint actually stopped at -- so the next sprint's audit",
+    "window has a real lower bound and the gate passes on evidence rather than on an exemption. The",
+    "field says WHY the anchor is not a merge SHA; it never says the anchor may be absent. An entry",
+    "carrying close_reason with a PENDING sha still fails closed, exactly as a retro entry does.",
+    "",
+    "OPTIONAL, AND THAT IS LOAD-BEARING. Every audit-anchors.md already in the field lacks it. A",
+    "required field would error on real data on first contact, which is the wedge $fields_comment",
+    "records the cost of.",
+    "",
+    "Written by `validate-audit-anchors.sh --close-record`, never by hand: the entry is read by a",
+    "fail-closed gate, and a record a model retypes is a record that drifts from what the reader",
+    "parses."
+  ],
   "$backfill_commit_comment": [
     "THE BOUND ON THE DIRECT-TO-TRUNK COMMIT `retro.md` STEP 5b MANDATES. Not the pipeline's only",
     "one — retro.md §7a-post commits the log rotation to the trunk too — but the only one bounded here.",
@@ -89,8 +115,12 @@
     "- `closed_at: <time>` — when the retro PR merged (documentary; free-form).",
     "- `audit_window: <prior-sprint-sha>..<sprint-N-sha>` — git rev range for the next",
     "  sprint's per-class test-debt audit; the lower bound is the prior sprint's `sha`.",
+    "- `close_reason: reset|abandoned` — ONLY on a sprint closed without a retro-PR",
+    "  merge. `sha` is then the commit the sprint stopped at, and it must still resolve.",
+    "  Written by `scripts/ai-dlc/validate-audit-anchors.sh --close-record`, never by hand.",
     "",
     "Missing entry for the prior sprint OR `sha: PENDING` there FAILS Check 18 CLOSED —",
-    "a silent skip on a missing audit anchor is forbidden (PI-S169-8)."
+    "a silent skip on a missing audit anchor is forbidden (PI-S169-8). A close record is",
+    "not an exemption from that: it supplies the anchor, it does not waive it."
   ]
 }

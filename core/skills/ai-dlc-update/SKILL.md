@@ -104,9 +104,21 @@ working tree. See §6.1 of the design record — this is a vendored-dep updater
 
 ## Path mapping (core/ → consumer)
 
-- `core/scripts/<x>`  →  `scripts/<x>`   (project root)
-- `core/<x>`          →  `.claude/<x>`   (everything else: skills, team-roles,
-  hooks, session-driver)
+<!-- BEGIN GENERATED: path-mapping — source: reconcile/preclassify.sh map_consumer() -->
+DERIVED from `map_consumer()`. Do not hand-edit: run `render-path-mapping.sh --write`.
+
+| core path | consumer destination |
+|-----------|----------------------|
+| `core/scripts/<x>` | `scripts/ai-dlc/<x>` |
+| `core/fixtures/<x>` | `tests/fixtures/<x>` |
+| `core/ci-templates/<x>` | `.github/workflows/<x>` |
+| `core/git-hooks/<x>` | `.githooks/<x>` |
+| `core/<x>` | `.claude/<x>` |
+| `<anything else>` | `<unchanged>` |
+
+First match wins, so the rows are in the order `map_consumer()` tests them: the
+specific subtrees are decided before the `core/` catch-all reaches them.
+<!-- END GENERATED: path-mapping -->
 
 ## Divergence taxonomy — the classifier's output buckets
 

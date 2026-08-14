@@ -1149,6 +1149,14 @@ stderr naming which cause fired (no entries, no entry for the prior sprint, a
 silent skip on a missing audit-anchor is forbidden. Exit 2 is a malformed
 invocation, NOT a missing anchor — fix the argument and re-run.
 
+The prior sprint may have ended without a retro-PR merge. Its entry then carries
+`close_reason: reset|abandoned` and a `sha` that is the commit that sprint stopped
+at, written by `--close-record` (retro.md Step 5b). That resolves like any other
+anchor and this check PASSES on it; the resolver prints a NOTE naming the reason,
+so the audit window's lower bound is never silently a non-merge. **This is not an
+exemption path** — a sprint with no entry at all still fails this check CLOSED,
+and a close record whose sha does not resolve is refused at write time.
+
 For each per-class test category audit applicable to the current
 sprint (categories defined by the project), run
 `<audit-script> --since <prior_sprint_sha>` over the project's test
