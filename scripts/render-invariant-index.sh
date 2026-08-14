@@ -34,16 +34,28 @@
 # tax on unrelated work and trains the operator to regenerate without reading. The ID and what
 # it binds are what the index is for; the line is one grep away.
 #
-# Usage: render-invariant-index.sh            write docs/invariant-index.md
-#        render-invariant-index.sh --check    render to a temp and byte-compare; no write
+# THE GRAMMAR IS SERVED, NOT COPIED. `--arm-lines` prints `<line>\t<ids>` for every arm
+# header, in file order, from the SAME EXTRACT_AWK the render and the self-probe use. It
+# exists because scripts/fork-profile.sh has to attribute a traced source line to the arm it
+# falls in, and the only other way to get an arm's line number is a fresh grep. A fresh grep
+# is exactly the bug recorded at the top of this file: a column-0 pattern finds 83 of the
+# header-shaped lines and a blanks-tolerant one finds 96, and the thirteen it drops are
+# silently merged into the preceding arm's bucket. A second region-finder is a second set of
+# bugs, so there is one and it is reachable. The mode runs the self-probe and every totality
+# assertion first, so a caller cannot get line ranges out of a grammar that stopped parsing.
+#
+# Usage: render-invariant-index.sh              write docs/invariant-index.md
+#        render-invariant-index.sh --check      render to a temp and byte-compare; no write
+#        render-invariant-index.sh --arm-lines  print `<line>\t<ids>` per arm header
 # Exit:  0 = written / in sync, 1 = drift or a totality failure, 2 = usage or environment.
 set -uo pipefail
 
 MODE=write
 case "${1:-}" in
-  "")       MODE=write  ;;
-  --check)  MODE=check   ;;
-  *) echo "usage: $(basename "$0") [--check]" >&2; exit 2 ;;
+  "")           MODE=write     ;;
+  --check)      MODE=check     ;;
+  --arm-lines)  MODE=armlines  ;;
+  *) echo "usage: $(basename "$0") [--check|--arm-lines]" >&2; exit 2 ;;
 esac
 
 # ROOT BY WALKING UP FOR A MARKER, never by counting `..` hops, so this answers identically
@@ -89,6 +101,7 @@ BEGIN { narm = 0; ncall = 0; orphan = 0; arm = 0 }
         sub(/[[:blank:]]+$/, "", desc)
         narm++
         armids[narm] = ids
+        armline[narm] = FNR
         armdesc[narm] = desc
         armcalls[narm] = 0
         arm = narm
@@ -141,11 +154,23 @@ END {
     printf "%04d%-1s\t%s\t%s\n", num, suf, id, d
     nid++
   }
+  # OFF BY DEFAULT so the render is byte-identical. `emit_lines` is unset in every caller but
+  # the --arm-lines mode, and an unset awk variable is false, so nothing here reaches the
+  # rendered table. The rows are tab-separated with `#ARMLINE` in field 1, which is how the
+  # render`s own `$2 != "#TOTALS"` filter would have printed them had they ever been emitted.
+  if (emit_lines) for (i = 1; i <= narm; i++) printf "#ARMLINE\t%d\t%s\n", armline[i], armids[i]
+
   printf "ZZZZZZ\t#TOTALS\t%d %d %d %d %d %d\n", narm, nid, ncall, orphan, silent, ncol
 }
 '
 
 extract() { awk "$EXTRACT_AWK" "$1" | LC_ALL=C sort; }
+
+# FILE ORDER, NOT SORT ORDER -- a consumer of this joins a source line to the arm it falls in
+# by walking the headers forward, so the rows must arrive ascending and unsorted.
+extract_arm_lines() {
+  awk -v emit_lines=1 "$EXTRACT_AWK" "$1" | awk -F'\t' '$1 == "#ARMLINE" { print $2 "\t" $3 }'
+}
 
 # ---------------------------------------------------------------------------------------
 # SELF-PROBE, BEFORE THE CORPUS. An extractor that reports "93 invariants" without first
@@ -184,6 +209,14 @@ probe_tot="$(awk -F'\t' '$2 == "#TOTALS" { print $3 }' <<<"$probe_out")"
 # is the case that makes arms and ids legitimately differ and the reason both are asserted.
 [ "$probe_tot" = "3 4 3 0 0 0" ] || \
   probe_fail "totals on the positive probe should be '3 4 3 0 0 0' (arms ids calls orphans silent collisions), got '$probe_tot'"
+
+# THE --arm-lines GRAMMAR IS PROBED IN THE SAME PLACE, and against the same positive probe,
+# because a line number is only useful if it is the header's OWN line. The indented I504 at
+# line 5 is the discriminating row: a column-0 reader reports it nowhere, and a reader that
+# counted headers rather than reading FNR would report 3.
+probe_lines="$(extract_arm_lines "$PROBE_DIR/positive.sh" | tr '\t\n' ' ')"
+[ "$probe_lines" = "1 I501 3 I502 / I503 5 I504 " ] || \
+  probe_fail "--arm-lines on the positive probe should be '1 I501 3 I502 / I503 5 I504', got '$probe_lines'"
 
 # NEGATIVE PROBE 0 -- two SOLO declarations of one id is a collision and must fire; an
 # OVERVIEW header plus that id's own arm is not, and must not.
@@ -267,6 +300,11 @@ if [ "$N_SILENT" -ne 0 ]; then
   echo "  A declared invariant that cannot emit is a check that cannot fire, and it reads exactly" >&2
   echo "  like one that passed. Either give the arm its emitter or retire the declaration." >&2
   exit 1
+fi
+
+if [ "$MODE" = armlines ]; then
+  extract_arm_lines "$SRC"
+  exit 0
 fi
 
 # NOTHING VOLATILE GOES IN THE RENDERED FILE. The first cut stamped VERSION into a footer,
