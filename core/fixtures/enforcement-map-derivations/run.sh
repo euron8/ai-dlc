@@ -2,7 +2,7 @@
 # enforcement-map-derivations — assert the derivations validate-enforcement-map.sh runs
 # in a LOOP still fire.
 #
-# Usage: run.sh [--run-one <assertion>]
+# Usage: run.sh [--run-one <assertion>] [--group <shard>]
 # Exit:  0 = every assertion holds, 1 = a check regressed, 2 = fixture broken.
 #
 # THE DEFECT THIS EXISTS TO CATCH, and why it is a separate fixture from
@@ -567,7 +567,82 @@ if [ "$N_LISTED" -lt 10 ]; then
   exit 2
 fi
 
-echo "enforcement-map-derivations:"
+# ---------------------------------------------------------------------------
+# THE SHARD SPLIT, AND IT IS A MEASUREMENT RATHER THAN A PREFERENCE
+# ---------------------------------------------------------------------------
+# The pre-push suite is POLE-BOUND: its makespan tracks its single longest unit, and the
+# unit is a DIRECTORY, because `core/fixtures/*/run.sh` is what the outer pool schedules.
+# This directory sat on the suite's top shelf -- 452s in `.git/ai-dlc-fixture-durations`
+# against a 173s next-longest outside that shelf -- and the inner pool below could not change
+# it, because an inner pool moves work off the wall clock only while there are free cores and
+# the outer pool has already taken them. Run ALONE from the repo root it costs 136s of wall
+# clock and ~930 CPU-seconds; that solo figure and the 452s are NOT comparable, because the
+# recorded one is measured under the 16-way outer pool.
+#
+# So the fixture is SHARDED ACROSS DIRECTORIES, which is the same move and the same reason
+# as the sibling `enforcement-map-sites`. Each shard is a directory the outer pool can start
+# independently and interleave with everything else.
+#
+# TWO, NOT THREE. Every shard re-pays the control's validator run in full, so each further
+# shard adds a fixed cost to what the machine computes while removing a smaller slice from
+# this directory's critical path -- and the added concurrency inflates every other unit's
+# loaded cost at the same time. Two takes the largest available cut and pays that fixed cost
+# once.
+#
+# ROUND-ROBIN, NOT CONTIGUOUS HALVES. These assertions differ by an order of magnitude in
+# cost -- several seed a tree and run the validator once, a few run it over rebuilt trees --
+# so a contiguous cut puts the expensive neighbours in one shard and rebuilds the pole inside
+# it. Dealing them out in turn spreads that without anyone having to maintain a cost table
+# that would go stale the first time an assertion changed.
+#
+# EVERY SHARD RUNS THE CONTROL. A00 is the arm that says the validator is not simply broken,
+# and a shard without it would report its own assertions as kills earned against a tree
+# nobody checked. It costs one validator run per shard and it is not optional.
+SHARDS="a b"
+
+# THE SHARD ARRIVES AS AN ARGUMENT, NOT AS AN ENVIRONMENT VARIABLE, and the reason here is
+# NOT the sibling's. That file scrubs every ambient AI_DLC_* name near its top for I10, so a
+# tunable would be unset before it could be read; this file carries no scrub at all (it
+# assembles its one hook token rather than spelling it, and its worker wrapper is named EMD_*
+# for the reason at the pool below). The reason the argument form is used HERE is that the two
+# fixtures share ONE shard protocol: the same --group parse, the same membership guard, the
+# same coverage join, the same round-robin partition. A protocol spelled two ways is two
+# grammars to keep in step, and the shard driver beside this directory is written against the
+# argument form. Keeping them identical is what lets either file's shard machinery be read
+# as evidence about the other's.
+GROUP=a
+if [ "${1:-}" = "--group" ]; then
+  GROUP="${2:-}"
+  [ -n "$GROUP" ] || { echo "FIXTURE ERROR: --group needs a shard name" >&2; exit 2; }
+fi
+case " $SHARDS " in
+  *" $GROUP "*) ;;
+  *) echo "FIXTURE ERROR: unknown shard '$GROUP' (known: $SHARDS)" >&2; exit 2 ;;
+esac
+
+# THE COVERAGE JOIN. Sharding moves assertions out of this directory, so the failure mode it
+# introduces is a shard whose directory is deleted, renamed, or never installed: the suite
+# then runs fewer assertions and reports a shorter green run, which is this repository's
+# named recurring defect wearing a new hat. Shard `a` therefore DERIVES the set of shards
+# that actually exist beside it and refuses to pass if any declared shard has no driver.
+# The control is the same grep finding this file's own sibling directories at all.
+if [ "$GROUP" = a ]; then
+  missing=""
+  for _s in $SHARDS; do
+    [ "$_s" = a ] && continue
+    [ -f "$HERE/../enforcement-map-derivations-$_s/run.sh" ] || missing="$missing $_s"
+  done
+  if [ -n "$missing" ]; then
+    echo "FIXTURE ERROR: shard(s)$missing declared in SHARDS have no driver directory beside this one." >&2
+    echo "  Their assertions would run NOWHERE, and this suite would report a shorter green run." >&2
+    exit 2
+  fi
+fi
+
+NAME="enforcement-map-derivations"
+[ "$GROUP" = a ] || NAME="enforcement-map-derivations-$GROUP"
+
+echo "$NAME:"
 
 OUT="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$OUT"' EXIT
@@ -582,13 +657,16 @@ cat "$OUT/$CTL"
 if [ "$ctl_rc" -ne 0 ]; then
   [ -s "$OUT/$CTL.err" ] && cat "$OUT/$CTL.err" >&2
   echo
-  echo "enforcement-map-derivations: 1 assertion(s) FAILED" >&2
+  echo "$NAME: 1 assertion(s) FAILED" >&2
   exit 2
 fi
 
-# EIGHT, and it is a fixed number rather than a tunable for the reason the sibling states:
-# this pool nests inside the pre-push suite's own pool, so a knob here multiplies against a
-# knob there and the product is what lands on the machine.
+# FOUR, and the arithmetic is the whole reason. This pool nests inside the pre-push suite's
+# own pool, so a knob here multiplies against a knob there and the product is what lands on
+# the machine. This fixture used to be ONE directory at 8 wide; it is now TWO directories,
+# and the outer pool starts both. Two directories x 4 = the same 8 cores this fixture
+# demanded before the split, so the split buys wall clock without raising the load the rest
+# of the suite is scheduled against.
 #
 # The worker wrapper's two variables are NOT named AI_DLC_*. I10 requires a fixture that
 # drives a hook to scrub every ambient AI_DLC_* name, and a scrub is a `unset` loop that
@@ -596,8 +674,46 @@ fi
 # carries exactly that ordering hazard in a comment. This fixture assembles its one hook
 # token rather than spelling it, so it is outside I10's set today; naming these two outside
 # the AI_DLC_ namespace means it stays correct if that ever changes.
-JOBS=8
-printf '%s\n' "$NAMES" | tail -n +2 > "$OUT/list"
+JOBS=4
+# Deal the non-control assertions out to the shards in turn. The partition is DERIVED from
+# the same list the control came off, so an assertion added to this file lands in a shard
+# automatically rather than needing a table updated in a second place.
+printf '%s\n' "$NAMES" | tail -n +2 \
+  | awk -v g="$GROUP" -v shards="$SHARDS" '
+      BEGIN { n = split(shards, S, " ") }
+      { if (S[((NR - 1) % n) + 1] == g) print }
+    ' > "$OUT/list"
+N_MINE="$(grep -c . "$OUT/list" || true)"
+if [ "$N_MINE" -eq 0 ]; then
+  echo "$NAME: FIXTURE ERROR — shard '$GROUP' was dealt no assertions out of $N_LISTED; an empty shard passes every assertion it never made" >&2
+  exit 2
+fi
+
+# THE PARTITION IS A PARTITION, AND IT IS ASSERTED RATHER THAN ASSUMED. The coverage join
+# above proves every declared shard has a DRIVER; it says nothing about whether the deal
+# reaches every assertion. An off-by-one in the round-robin index, or a shard name in
+# $SHARDS that the awk never emits, drops assertions on the floor in EVERY shard at once —
+# and every shard then prints a shorter green run, which is exactly the failure this file
+# exists to catch one level out. So shard `a` re-runs the same partition for every value of
+# $SHARDS and requires the counts to sum to the non-control total. Shard `a` alone can
+# compute it because the partition is a pure function of $NAMES and $SHARDS, both of which
+# every shard holds.
+if [ "$GROUP" = a ]; then
+  dealt=0
+  for _s in $SHARDS; do
+    _n="$(printf '%s\n' "$NAMES" | tail -n +2 \
+          | awk -v g="$_s" -v shards="$SHARDS" '
+              BEGIN { n = split(shards, S, " ") }
+              { if (S[((NR - 1) % n) + 1] == g) print }
+            ' | grep -c . || true)"
+    dealt=$((dealt + _n))
+  done
+  if [ "$dealt" -ne "$((N_LISTED - 1))" ]; then
+    echo "$NAME: FIXTURE ERROR — the shards $SHARDS were dealt $dealt assertions between them, but this file defines $((N_LISTED - 1)) non-control assertions." >&2
+    echo "  The difference runs NOWHERE, in every shard, and each shard still reports a green run." >&2
+    exit 2
+  fi
+fi
 EMD_SELF="$SELF" EMD_OUT="$OUT" \
   xargs -P "$JOBS" -I{} bash -c '
     n="$1"
@@ -638,12 +754,12 @@ done < "$OUT/list"
 
 echo
 if [ "$broken" -ne 0 ]; then
-  echo "enforcement-map-derivations: FIXTURE BROKEN — an assertion could not run to a verdict" >&2
+  echo "$NAME: FIXTURE BROKEN — an assertion could not run to a verdict" >&2
   exit 2
 fi
 if [ "$fails" -eq 0 ]; then
-  echo "enforcement-map-derivations: PASS"
+  echo "$NAME: PASS"
   exit 0
 fi
-echo "enforcement-map-derivations: $fails assertion(s) FAILED" >&2
+echo "$NAME: $fails assertion(s) FAILED" >&2
 exit 1
