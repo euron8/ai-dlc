@@ -565,6 +565,29 @@ LCC, register a throwaway arm naming a label absent from `$RUNS`.
 
 ### Step 4 — `self-update-join-gate` (506s): measure the seed before sharding it
 
+> **DONE. 199.33s → 10.58s, and re-derived here at 11.49s wall / 39.65 CPU-seconds on the
+> merged tree at load 4.71.** 3 interleaved pairs with disjoint ranges (before
+> 194.24–202.45, after 10.51–11.09), all six runs 16/16, **all ten captured stdouts
+> byte-identical** including the pre-change baseline, with a decoy control proving `cmp` can
+> fire. The range is bounded to 5 commits / 4 safe-stop candidates / anchors 43 at BASE and 44
+> at THEIRS, and the derivation is kept rather than replaced by a hardcoded ref.
+>
+> **MONOTONICITY, measured for the record and not acted on: REJECT ×111, zero transitions.**
+> Every candidate rejects, so the whole walk establishes only that no safe stop exists — and a
+> negative over an unproven predicate still has to check every candidate. **This weakens the
+> deferred binary-search option rather than supporting it**: a search strategy helps only where
+> a transition exists, and on this range there is none. The agent's first probe of this was
+> DEAD and it said so — `xargs -I{}` collapses a tab, so the gate received a literal
+> `"1 438ee6b…"` as a ref, an unresolvable ref emits no DEFER, and the classifier scored
+> **111 ACCEPT: a clean-looking run that had measured nothing.** Caught by `od -c`, not by the
+> run.
+>
+> **SHARDING COSTS CPU, and the census now shows how much.** Each shard re-runs the control, so
+> `layer-contract-conformance` went 764.5 → 441 + 415 = **856 CPU-s (+12%)** and
+> `enforcement-map-derivations` 830.6 → ~917 (+10%). That is the trade this program is making
+> deliberately — on a pole-bound suite, packing beats total work — but it is a real cost and it
+> caps how far sharding can be pushed before it starts moving the CPU floor the wrong way.
+>
 > **THE POLE IS ONE MECHANISM, AND IT GROWS ON ITS OWN.** Measured by ablation
 > (`AI_DLC_GATE_IN_SAFE_STOP=1` makes `:161` return early, so this is a non-destructive
 > ablation rather than an edit), 3 interleaved reps, one gate invocation at a time:
