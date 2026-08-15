@@ -203,6 +203,44 @@ This is why the program's acceptance criterion was amended: one criterion spanni
 have been unreachable for the second, and an unreachable criterion reads exactly like one that
 passed.
 
+## The fence-aware boundary rule: right in principle, catastrophic in the obvious form
+
+`ledger_entry_shape()` at `core/skills/ai-dlc-update/reconcile/lib.sh:276` matches
+`^#{2,6}[ \t]` or `^- \*\*` **anywhere, fences included**. It is the single shared boundary rule
+behind `ledger-reverify.sh`, `ledger-rotate.sh`, `backlog-reverify.sh` and `backlog-rotate.sh`, and
+none of the four tracks fence state — measured against controls, since a grep returning zero for
+`fence` proves nothing on its own.
+
+**The damage is reproduced, not theorised.** Rotating a scratch backlog whose closed entry contained
+a fence holding one entry-shaped line split that entry mid-fence: the archive received the head and
+stopped at the opening fence — leaving an **unterminated fence**, so the archived markdown is
+corrupt — while the live file kept the orphaned tail plus a phantom entry promoted out of the fence.
+That is `PC-S313-LEDGER-ROTATE-SPLITS-AN-ENTRY-AT-A-BOLD-ANNOTATION` (pin 2957, `HOLDS`), reproduced
+in this repo's own fork rather than only in the consumer's.
+
+**And the obvious fix is worse than the defect.** A plain `infence = !infence` toggle over the
+pinned ledger takes the entry-start count from **142 to 95** — it silently drops **47 real entries**,
+every filing from pin 2101 onward. The reason is in the control: the pin holds **111** fence
+delimiters, an ODD number, so the toggle desynchronises and never recovers.
+
+**One entry causes it.** Per-entry fence parity over the pin: **141 entries balanced, exactly one
+odd** — pin 2028, `### 4b. Operator-steerability audit…`, with five delimiters. That is the same
+entry this program already knew as the `ENTRY-SWALLOWED` instance with no heading and no id, whose
+title was absorbed into a fence opening mid-entry. Its unterminated fence is what leaks over
+everything downstream.
+
+So the remediation is **not** "make the parser fence-aware". It is:
+
+- Scope fence state to the ENTRY, so an unterminated fence cannot leak past the next entry
+  boundary. That bounds the blast radius to the one corrupt entry instead of the rest of the file.
+- **REPORT odd parity rather than absorbing it.** A corrupt entry must produce a row, because the
+  failure this whole class shares is that damage and cleanliness are spelled identically.
+- Only then suppress entry detection inside a balanced fence.
+
+A fixture for this must be authored by a different hand than the fix, per
+`.claude/rules/fixture-mutants.md`, and its battery has to include the odd-parity corpus — a
+mutation suite built only from balanced fences would pass the naive toggle that loses 47 entries.
+
 ## The extension roster rows are entries
 
 Phase 0 left open whether the 12 `extensions/…-push.md` bullets were entries or section
