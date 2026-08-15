@@ -164,15 +164,26 @@ register's "Three entries filed after the pin" section and
 |---|---|---|
 | 4357 | `PC-S303-SPEC-JOIN-MEMLOG-REGEX-STALE-VS-AUTHOR-SUFFIX` | `HOLDS-MECHANISM-WRONG` |
 | 4392 | `PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF` | `HOLDS-WIDER` |
-| 4435 | `PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR` | `HOLDS` |
+| 4435 | `PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR` | `HOLDS-WIDER` |
 
 **So the live set is 79, not 76** — 76 from the pin plus these three. Two of the three carry no
-receipt, so Phase 4 step 19 owes them one.
+receipt, so Phase 4 step 19 owes them one. All three are also `HOLDS-MECHANISM-WRONG`-or-`WIDER`,
+which is 3 for 3 on the base rate.
 
-**The subagent channel failed in the resuming session.** Four adjudication agents were spawned across
-two batches; every one ran, went idle, delivered no report, and then became unreachable. The three
-entries were adjudicated directly instead. If a later session sees the same behaviour, do the work
-inline rather than re-spawning — and never let an idle notification stand in for a verdict.
+**The subagent channel is UNRELIABLE here, in a way that reads as death.** Six agents across two
+batches each ran, went idle, and delivered nothing at the time — so the three entries were adjudicated
+inline. All six then delivered **hours late**, in one burst. Two of them overturned the inline verdict
+on the third entry, correctly. The lessons a later session needs:
+
+- **An idle notification is not a verdict.** Never let one stand in for a result, and never
+  reconstruct what an agent "probably found".
+- **Do not assume a silent agent is a dead agent.** Ask it for its report before redoing its work;
+  a `SendMessage` to a named agent resumes it from its transcript.
+- **A second hand is worth the delay.** The inline pass called
+  `PC-S303-SCOPE-CONFIRMATION` a plain `HOLDS` "exactly as filed" and missed a harsher second
+  grammar, a prescribed fix that does not work, and a BSD-`sed` no-op. Phase 1's own lesson —
+  every close needs an independent hand — extends to `HOLDS` verdicts wherever the SCOPE decides the
+  remediation.
 
 ### The four decisions are RULED. None is open.
 
