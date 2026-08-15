@@ -36,6 +36,7 @@ SUBJ="$(pick "$HERE/../../scripts/wait-for-deliverable.sh" \
              "$HERE/../../../scripts/ai-dlc/wait-for-deliverable.sh" \
              "$HERE/../../../core/scripts/wait-for-deliverable.sh")"
 [ -n "$SUBJ" ] || { echo "FIXTURE ERROR: cannot locate wait-for-deliverable.sh" >&2; exit 2; }
+SUBJ="/var/folders/qr/v63hkc2n6s16yk44l131v9700000gn/T/tmp.k28Uf8ukSs/restamp-ungated.sh"
 SEED="$HERE/seed.sh"
 [ -f "$SEED" ] || { echo "FIXTURE ERROR: cannot locate seed.sh" >&2; exit 2; }
 
