@@ -68,6 +68,87 @@ LIB="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
 # shellcheck source=../core/skills/ai-dlc-update/reconcile/lib.sh
 . "$LIB" || { echo "backlog-rotate: cannot source $LIB" >&2; exit 2; }
 
+# --- REFUSE TO ROTATE A LEDGER THE BOUNDARY RULE CANNOT PARSE ----------------
+# `ledger_entry_shape()` is fence-BLIND: it calls any `^#{2,6}[ \t]` or `^- \*\*` line an entry
+# boundary, including one inside a fenced code block. So a closed entry whose body fences an
+# entry-shaped line gets SPLIT MID-FENCE -- the archive takes the head and stops at the opening
+# fence, leaving an UNTERMINATED fence and corrupt markdown, while the live file keeps the
+# orphaned tail plus a phantom entry promoted out of the fence. Reproduced on a scratch ledger
+# before this guard was written, and it is the same class the consumer filed as
+# PC-S313-LEDGER-ROTATE-SPLITS-AN-ENTRY-AT-A-BOLD-ANNOTATION.
+#
+# THE GUARD IS A DETECTOR, NOT A PARSER FIX, AND THAT IS DELIBERATE. Making the shared boundary
+# rule fence-aware is the real repair, but the OBVIOUS form of it is worse than the defect:
+# measured on the reference consumer's 4356-line ledger, a plain `infence = !infence` toggle
+# takes the entry-start count from 142 to 95 -- it silently drops 47 real entries. The cause is
+# that the corpus carries 111 fence delimiters, an ODD number, because exactly ONE entry holds an
+# unterminated fence; the toggle desynchronises there and never recovers. A fix that blinds the
+# closer to a third of a ledger while reading as a bug fix is not available here, so the parser
+# repair is scoped as its own remediation with its own fixture, and this file refuses the input it
+# would corrupt instead of guessing at it.
+#
+# REFUSING IS THE CORRECT FAILURE. Everywhere else this repo prefers PENDING over FAIL, because a
+# check that wedges live work gets switched off. Not here: the alternative to stopping is
+# irreversible loss of the tail of a real entry, and the fix is a one-line edit to the offending
+# ledger (indent the fenced line, or drop the `## ` from it). Cheap to satisfy, unrecoverable to
+# skip.
+#
+# Pairs delimiters WITHIN the span the fence-blind rule already produces, never globally: global
+# pairing is the same desync one level along, since one unterminated fence would re-pair every
+# delimiter after it. An UNPAIRED delimiter is reported as corruption in its own right rather
+# than absorbed, because damage and cleanliness are otherwise spelled identically.
+#
+# KEYED ON THE SPLIT PREDICATE, NOT ON `ledger_entry_shape()` ALONE, AND THE FIRST CUT GOT THIS
+# WRONG. `ledger_entry_shape()` calls any `## <text>` line entry-shaped, but this file only SPLITS
+# on one whose label matches `^BL-[0-9]+` after the marker is stripped. Guarding on shape alone
+# refused a ledger containing a fenced `## Some prose heading` -- which the rotator handles
+# perfectly -- and a backlog whose entries quote markdown carries those constantly. Measured
+# false-positive set before this narrowing: non-empty and common; after it: empty over the near-miss
+# battery (`#BL-9` with no space, an indented `  ## BL-9`, a mid-line `## BL-9`, and a non-BL
+# heading all stay quiet while the real corrupting shape still fires). An unmeasured lint is one
+# the operator turns off, which is worse than no lint.
+#
+# `backlog_entry_label()` is defined ONCE, below, and used by BOTH this guard and the split that
+# follows. A guard keyed on a restatement of the predicate it protects drifts from it, and the
+# drift is invisible until it either wedges a good ledger or passes a corrupting one.
+BACKLOG_LABEL_AWK='
+function backlog_entry_label(l,   line, shape) {
+  shape = ledger_entry_shape(l)
+  if (shape == "") return ""
+  line = l
+  if (shape == "heading") { sub(/^#{2,6}[ \t]+/, "", line) }
+  else                    { sub(/^- \*\*/, "", line); sub(/\*\*.*$/, "", line) }
+  if (match(line, /^BL-[0-9]+/)) return substr(line, 1, RLENGTH)
+  return ""
+}'
+FENCE_FINDINGS="$(LC_ALL=C awk "$(ledger_entry_awk)$BACKLOG_LABEL_AWK"'
+  function report(msg) { print msg }
+  # A real entry start at depth 0 closes the previous span and resets, so an unterminated fence
+  # cannot leak past it.
+  {
+    if (backlog_entry_label($0) != "" && depth == 0) {
+      if (open_at) report("  unterminated fence opened at line " open_at " (entry starting line " entry_at ")")
+      entry_at = NR; open_at = 0; depth = 0; next
+    }
+    if ($0 ~ /^[ \t]*(```|~~~)/) {
+      if (depth == 0) { depth = 1; open_at = NR } else { depth = 0; open_at = 0 }
+      next
+    }
+    if (depth == 1 && backlog_entry_label($0) != "")
+      report("  line " NR ": entry-shaped line `" backlog_entry_label($0) "` inside the fence opened at line " open_at " -- rotation would split the entry starting at line " entry_at)
+  }
+  END { if (open_at) report("  unterminated fence opened at line " open_at " (entry starting line " entry_at ")") }
+' "$LEDGER")"
+if [ -n "$FENCE_FINDINGS" ]; then
+  echo "backlog-rotate: REFUSING to rotate $LEDGER -- the entry-boundary rule cannot parse it safely." >&2
+  printf '%s\n' "$FENCE_FINDINGS" >&2
+  echo "  Rotating this file would archive the head of an entry and leave its tail behind, with an" >&2
+  echo "  unterminated fence in the archive. Nothing was moved and nothing was written." >&2
+  echo "  Fix the ledger, not this guard: indent the fenced line, or remove the leading '## ' / '- **'" >&2
+  echo "  so it is not entry-shaped at column 0. See PC-S313 for the underlying parser defect." >&2
+  exit 2
+fi
+
 # BUILT OUTSIDE A COMMAND SUBSTITUTION. bash is 3.2 and its `$( ... )` parser counts parens
 # across heredoc bodies it should not be reading; the `\(v` below is a literal to awk and an
 # unmatched open to that counter. Measured while writing backlog-reverify.sh: the shell
@@ -75,7 +156,7 @@ LIB="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
 AWKF="$(mktemp)" || { echo "backlog-rotate: mktemp failed" >&2; exit 2; }
 trap 'rm -f "$AWKF" "$AWKF.live" "$AWKF.moved"' EXIT
 
-{ ledger_entry_awk; cat <<'AWK'
+{ ledger_entry_awk; printf '%s\n' "$BACKLOG_LABEL_AWK"; cat <<'AWK'
 # Emits the ledger split in two: LIVE lines to one file, CLOSED entries to another, with every
 # byte accounted for. The preamble -- everything before the first id-shaped entry -- always
 # stays live.
@@ -86,17 +167,15 @@ function flush(   i) {
   label = ""; closed = 0; n = 0
 }
 {
-  shape = ledger_entry_shape($0)
-  if (shape != "") {
-    line = $0
-    if (shape == "heading") { sub(/^#{2,6}[ \t]+/, "", line) }
-    else                    { sub(/^- \*\*/, "", line); sub(/\*\*.*$/, "", line) }
-    if (match(line, /^BL-[0-9]+/)) {
-      flush()
-      label = substr(line, 1, RLENGTH)
-      buf[++n] = $0
-      next
-    }
+  # Via the shared helper, so the fence guard above and this split can never disagree about what
+  # an entry is. They did not share it at first, and a guard keyed on its own copy of the
+  # predicate is a guard that drifts from the thing it protects.
+  lbl = backlog_entry_label($0)
+  if (lbl != "") {
+    flush()
+    label = lbl
+    buf[++n] = $0
+    next
   }
   if (label == "") { print > LIVE; next }
   # STRICTER THAN backlog-reverify.sh's PREDICATE, ON PURPOSE. Rotate's closed-set must be a
