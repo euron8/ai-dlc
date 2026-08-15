@@ -122,26 +122,61 @@ and no CHANGELOG entry exists yet.
    a green run is evidence about the bytes it ran on and nothing else.
 1. **Re-establish the pin** (see "Re-establish the pin", below). It moved twice already; reconstruct
    rather than expect a match, and verify by md5 with the off-by-one control.
-2. **`BL-009`–`BL-012` are FILED** (`306c4c0`), covering refutation rows 273, 281, 387 and 610.
-   All four receipts verified here: exit 1, parsing under the shipping reader as `STILL-LIVE` with no
-   `unresolved` and no `vacuous`, and two checked for falsifiability. **Outstanding: rows 1254, 1449,
-   1543, 3190** (was `bl-batch-B`) and **3375, 3464, 3787, 3828, 4153** (was `bl-batch-C`) — those two
-   agents were asked for their reports and had not answered when the session closed, so treat the
-   work as undone and redo or re-dispatch. Every input is in `refutation-verdicts.tsv` keyed on pin
-   line. The other three agents' work is committed (`a572e42`, `6abef95`, `306c4c0`).
+2. **ALL 15 GATED SUB-CLAIMS ARE DISCHARGED. This step is DONE.** `BL-009`–`BL-020` are filed
+   (`306c4c0`, `7b8dcc1`), two sub-claims were fixed instead of filed (`b0e523b`, `2951644`), and one
+   was REFUTED. Validation of the whole file, re-run after each batch: the shipping reader reports
+   every entry as `STILL-LIVE` or `HAND-REVIEW` with **zero** `unresolved`, `vacuous` or
+   `INPUT-UNRESOLVED` rows, and `backlog-rotate.sh` still accepts the grown file. Five of the last
+   eight receipts are BEHAVIOURAL — they drive the real detector rather than grepping for a
+   description of its fix.
 
-2a. **A filing's own framing is not evidence, and the first batch measured the rate.** Three of four
-   TSV evidence blocks carried a clause that did not reproduce, and one of the four subjects was
-   correctly REFUSED — `templates/audit-anchors.md.template` is deliberately unshipped, core says so
-   in four places, and its absence from a consumer is the FIX. Expect roughly the same rate in the
-   remaining nine, state the narrowed claim in the entry, and refuse a settled decision rather than
-   filing it as a defect.
-3. **File the remaining backlog entries.** `BL-012` is the highest id in `docs/backlog.md` today, so
-   the next free id is `BL-013`. Grammar and receipt verbs are in that file's own header; **run every
-   receipt before committing it — one that exits 0 today is already broken.**
+   | pin | filed as | pin | filed as |
+   |---|---|---|---|
+   | 273 | `BL-009` | 3375 | `BL-016` |
+   | 281 | `BL-010` | 3464 | `BL-017` |
+   | 387 | `BL-011` | 3787 | `BL-018` |
+   | 610 | `BL-012` | 3828 | `BL-019` |
+   | 1449 | `BL-013` | 4153 | `BL-020` |
+   | 1543 | `BL-014` | 1862 | FIXED `b0e523b` |
+   | 3190 | `BL-015` | 3507 | FIXED `2951644` |
+   | 1254 | **REFUTED — no entry** | | |
+
+   **Pin 1254 is refuted and that changes its disposition.** Its evidence was true and its conclusion
+   false: `CHECK 4: PASS` appears once, at the emitter, but the grep was the wrong instrument —
+   `core/fixtures/mandatory-rules-skip-accounting/run.sh:144` stubs the prereq validator and asserts
+   the summary `Sprint 900: all 6 checks passed`, which requires Check 4's PASS branch, and that
+   fixture passes on every suite run. So `PC-S297-VALIDATE-MANDATORY-RULES-CHECK3-CHECK4-DEAD` is a
+   CLEAN close, not a `CLOSE-NARROWED` — and its own receipt anchor is present at
+   `validate-mandatory-rules.sh:55`, making it already a `CLOSE-CANDIDATE` by its own predicate.
+   **Re-run `merge-verdicts.sh` after correcting that row rather than hand-editing the table.**
+
+2a. **A filing's own framing is not evidence, and the rate is now measured across all 15.** Nearly
+   every row had a clause that did not reproduce. Two subjects were correctly REFUSED rather than
+   filed (`templates/audit-anchors.md.template` is deliberately unshipped; pin 1254's conclusion was
+   false), row 1543's figures had ALL moved, row 4153's held only under a bare `--warn-only` and not
+   under the invocation `retro.md:533` prescribes, and row 3190 UNDERSTATED itself — its three
+   headingless entries each get an affirmative `EXTENSION-OK` row that `emit-report.sh:230` denylists,
+   so a positive verdict sits behind the silence. Carry the re-derived numbers, never the filed ones.
+
+2b. **Two honest gaps are recorded IN the entries and are owed work, not blockers.** `BL-015`'s
+   satisfiability rests on a differential rather than a killed mutant — the mutation attempt tripped
+   the receipt's own `HARNESS BROKEN` guard — so close that before calling it mutation-tested.
+   `BL-014` was verified on the two code paths the dossier composes, not the dossier end to end.
+
+2c. **`## BL-XXX-<slug>` does NOT parse while the number is literal.** The label rule is
+   `match(line, /^BL-[0-9]+/)` (`backlog-reverify.sh:122`, same in `backlog-rotate.sh`). A draft
+   pasted with `XXX` made a scratch ledger parse to **ZERO** entries; in the real file it would have
+   made the whole backlog parse short while the run looked clean. Assign the number before pasting.
+
+3. **The next free backlog id is `BL-021`** (`BL-020` is the highest today). Grammar and receipt verbs
+   are in `docs/backlog.md`'s own header; **run every receipt before committing it — one that exits 0
+   today is already broken** — and re-run `scripts/backlog-reverify.sh` over the whole file after
+   appending, since a malformed receipt shows up there as `unresolved` rather than at the entry.
 4. **Finish the two remaining jump-queue fixes**: the recovery gate not arming on a bare-basename
    step file, and the gate treating a partial read as a full one. The other two are DONE (see below).
-5. **Then the close release** — steps 10–12 unchanged.
+5. **Then the close release** — steps 10–12 unchanged. This is now the critical path: the 15
+   sub-claim filings that gated 15 of the 39 closes are complete, so nothing blocks the release
+   except the two fixes above and the `NAMED-UPSTREAM` readings in step 11.
 
 **An agent going quiet in this session did NOT mean it had died, and acting on that assumption cost a
 full duplicate pass.** Six adjudicators reported hours late, in one burst, after their work had been
