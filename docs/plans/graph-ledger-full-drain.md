@@ -149,13 +149,17 @@ name. An idle notification is not a result, and silence is not death.
 
 **Two things a resuming session must not mistake for done.**
 
-`b0e523b` is verified by `bash -x` trace at the variable level and **not** end-to-end. The outcome
-harness printed the same line for both builds and could not be made deterministic, because
-pre-seeding the counter collides with the grant path's rewrite at `wait-for-deliverable.sh:487` and
-the PENDING loop's re-read at `:586`. A deterministic end-to-end fixture arm is owed, from a
-different hand than the fix.
+**Both fixtures now exist — this paragraph previously said they did not, and that was true for about
+an hour.** `6abef95` gives `b0e523b` the deterministic end-to-end arm it was owed, from a different
+hand, and its decisive mutant reads
+`gating the SAMPLE on MAY_SLEEP declares a demonstrably working teammate non-delivered`. `a572e42`
+gives `d50859d` a battery of five mutants, all killed, plus an eight-shape near-miss set.
 
-`d50859d` has no fixture yet either. Both fixtures were delegated and neither report arrived.
+What remains on those two is **only** the entangled mutant at action 0 above. In particular the
+original worry — that `b0e523b` rested on a `bash -x` trace because the outcome harness printed the
+same line for both builds and could not be made deterministic (pre-seeding the counter collides with
+the grant path's rewrite at `wait-for-deliverable.sh:487` and the PENDING loop's re-read at `:586`) —
+is **discharged**: the delegated fixture achieved determinism where the inline harness did not.
 
 ### Adjudication result — 115 entries
 
