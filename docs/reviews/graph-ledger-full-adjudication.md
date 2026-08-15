@@ -79,11 +79,18 @@ work.
 
 ## The findings that change what gets built
 
-**Of the 51 live entries, 36 are materially wrong about their own mechanism.** That is
-`HOLDS-MECHANISM-WRONG` plus `HOLDS-WIDER` — every one of them reproduces as a defect while its
-filing misstates the cause, the consequence, or the scope. The last cycle measured three of four;
-this pass measures 36 of 51 and the base rate is now established, not anecdotal. **Adjudicate the
-mechanism, never the claim, and never trust the filing's prescribed fix.**
+**36 entries are materially wrong about their own mechanism.** That is `HOLDS-MECHANISM-WRONG` plus
+`HOLDS-WIDER` — every one reproduces as a defect while its filing misstates the cause, the
+consequence, or the scope. Derived from the final disposition, not from the first pass: of the **76**
+live entries, 36 are mechanism-wrong-or-wider, 15 are plain `HOLDS`, 16 are `NOT-UPSTREAM` and 9 are
+withdrawn closes. The three post-pin entries then went **3 for 3** in the same direction. The last
+cycle measured three of four; the base rate is now established, not anecdotal.
+
+**Adjudicate the mechanism, never the claim, and never trust the filing's prescribed fix.** Both
+halves of that are measured. Of the three post-pin filings, **two prescribe a fix that provably does
+not work** — one was transcribed literally and still returns the corrupt value, the other proposes a
+channel that does not exist — and a third of the way through, every one of them turned out to be
+guarded by a fixture that is absent or seeded from what its reader already accepts.
 
 **A `NAMED-UPSTREAM` silence is not evidence of non-absorption.** The commit that fixed two entries
 at v0.117.0 (`b356c92`) cites no `PC-` id at all and is discoverable only by subject text or
@@ -279,7 +286,7 @@ closed count. All three are **LIVE**; none is a close, so none needed a refutati
 |---|---|---|---|
 | 4357 | `PC-S303-SPEC-JOIN-MEMLOG-REGEX-STALE-VS-AUTHOR-SUFFIX` | **HOLDS-MECHANISM-WRONG** | **none — invisible to the closer** |
 | 4392 | `PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF` | **HOLDS-WIDER** | **none — invisible to the closer** |
-| 4435 | `PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR` | **HOLDS** | `manual` |
+| 4435 | `PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR` | **HOLDS-WIDER** | `manual` |
 <!-- END GENERATED: postpin-table -->
 
 The `## RETRACTED` banner at live line 4480 is graph withdrawing its own `--brief` filing as a lead
@@ -294,12 +301,32 @@ is **0 bare against 26 suffixed**, so Check 30 genuinely DISARMED there.
 
 **But the stated consequence is false at HEAD.** The filing says a consumer running the spec layer
 "gets a permanently-DISARMED join at every story gate". graph's *current* s303 memlog measures **11
-bare and 0 suffixed** — the join ARMS there. The suffix is a format the generator emits sometimes,
-not invariably, so the defect is brittleness to a variation rather than a permanent outage. Worth
-noting for tiering: rc 2 DISARMED is the script failing LOUDLY and refusing a vacuous pass, which is
-this repo's own discipline working, not a silent hole. Remediation is the single site — `field_of`
-aside, a search for sibling parsers of that tag grammar finds only this one file, and that search
-found its known subject, so the zero is real.
+bare and 0 suffixed** — the join ARMS there. Worth noting for tiering: rc 2 DISARMED is the script
+failing LOUDLY and refusing a vacuous pass, which is this repo's own discipline working, not a silent
+hole.
+
+**And the stated CAUSE is false, which is the sharper correction.** The filing says "`bmad-spec`'s
+current output tags **every** memlog entry with a `by <author>` attribution suffix", i.e. that the
+format changed. It did not. The producer is the consumer's own `_bmad/scripts/memlog.py`, where
+`--by` is an **optional per-append flag** (`:170` renders it, `:210` declares it) and the script's own
+header documents both forms as legal — *"`(idea)`, `(idea by user)`, `(by coach)`. Omit them for a
+plain note."* Nothing changed; the invoking agent passed `--by` on that run. ai-dlc ships no memlog
+producer at all — 0 tracked paths matching `memlog` against a control of 26 matching `spec` — so the
+grammar is the consumer's to vary and the upstream reader must tolerate both.
+
+**It also understates the blast radius badly.** The `exit 2` at `:167` precedes everything else in
+the script, so it is not merely "the LR→CAP join" that dies: joins (2) CAP→FR, (2a) CAP→AD, (3) story
+`capabilities:` frontmatter, the borrowed `lint_spine.py` and `bmad-testarch-trace` verdicts, and the
+baseline-did-not-reproduce arm all never run. **The whole of Check 30 falls to one grep.** The regex
+also predates the filing's stated 0.360.0→0.372.0 span by far, entering at `a5a21a3` (v0.169.1) with
+6 commits ever touching the file.
+
+**The prescribed fix is under-narrow.** It accepts only a ` by …` suffix, so it misses an
+ordinal-before-`by` shape — and that shape exists in the corpus: `- (resolution 2 by lead, …)`,
+1 hit against a control of 114 plain `(<type> by …)` tags. No `capability N by` line exists *today*,
+so this is a robustness point rather than a live miss, but the widening should follow the producer's
+documented `(<type>[ <qualifier>])` grammar rather than the `by`-only form. The DISARM message at
+`:166` also asserts a format change that did not happen and should be corrected with it.
 
 **`PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF` — `HOLDS-WIDER`.** The mechanism is confirmed
 and MEASURED, not argued. `core/scripts/report-propagation-fanout.sh:255` exports the payload into
@@ -311,21 +338,86 @@ sum **1504336** — over by 455760. Provoked directly: a ~1000KB environment run
 architecture-only diff size (158865 + 607945 = 766810) it SUCCEEDS** — so the control fires in both
 directions and the threshold is real rather than assumed.
 
-**Wider than filed in two ways.** The filing blames `FANOUT_DIFF`; the measurement shows
+**Wider than filed in three ways.** The filing blames `FANOUT_DIFF`; the measurement shows
 `FANOUT_FILES` is the dominant FIXED cost at 607945 bytes — **58% of `ARG_MAX` consumed before any
 diff exists**. A fix that moves only the diff to a temp file leaves that 58% in place and the script
-still fragile on any large repo. And `:255-260` exports **nine** `FANOUT_*` variables, so the subject
-is the env-passing pattern, not one variable.
+still fragile on any large repo. `:255-260` exports **nine** `FANOUT_*` variables, so the subject is
+the env-passing pattern, not one variable. And **it is a large-REPO defect, not a large-diff defect**:
+with the file list resident the diff has only ~437KB of headroom, and past roughly 17,000 tracked
+paths the script fails on a zero-byte diff. graph is at **10146 paths / 607945 bytes** and growing;
+this repo is at **628 / 26885**.
 
-**`PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR` — `HOLDS`.** Exactly as filed.
+**The stated trigger cannot produce the crash, and the stated consequence is false.** The named repair
+— `docs/architecture.md`, ~1200 lines, 158865 bytes — sums with the file list to 766810 and execs
+FINE, which is exactly the control above. Single-ref mode diffs the base against the **working tree**,
+so the real input was accumulated uncommitted dirtiness across many files, i.e. the ordinary mid-sprint
+state rather than an unusually large repair. And the filing's harm — "a caller checking
+`$? -in (0,2,3)` would misclassify this" — has no such caller: `_gate-procedures.md:457-458` states
+that the fanout report "is not a gate verdict and no exit code of it adjudicates a gate", and `:460`
+that "its exit codes say whether it could LOOK, never what it found". Exit 126 with 0 bytes of stdout
+reads as could-not-look, which is correct. The real gap is that 126 is undocumented, which is milder
+than filed.
+
+**Both verifiers reproduced the crash with the shipping script** in a scratch repo under `/tmp` — exit
+126, empty stdout, and stderr matching the filed string byte for byte — which is stronger evidence
+than the `env`-proxy threshold measured here. **Their bisected boundaries (max tolerated diff ≈437KB,
+zero-diff crossing ≈17,462 paths) are agent-derived and NOT re-derived here**; the numbers this
+register asserts on its own authority are `ARG_MAX` 1048576, the three payload sizes, and the
+both-directions `env` threshold. Recorded as the limit of this evidence rather than as a finding.
+
+**`PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR` — `HOLDS-WIDER`.**
 `field_of()` was lifted out of `core/scripts/validate-scope-confirmation.sh:158-162` and executed
 rather than read, because a restated regex is a second implementation whose bugs nobody finds. It
 returns `confirmed` for the plain bullet, `confirmed` for the backtick form — both controls — and
-**`**`** for the consumer's bold form `- **scope_confirmed:** confirmed`. The sibling field corrupts
-identically: `scope_confirmed_cite` yields `**` bold and `a1b2c3d4` plain. Single site: `field_of`
-appears in no other core script. graph has since converted the two consumed lines to the plain form,
-but **14 bold-field lines remain** in that snapshot against 10 plain, so the entry's own warning about
-future readers stands.
+**`**`** for the consumer's bold form. The sibling field corrupts identically. Single site: `field_of`
+appears in no other core script. graph has converted the two consumed lines to the plain form, but
+**14 bold-field lines remain** in that snapshot against 10 plain.
+
+**This was first adjudicated `HOLDS` here and that was too narrow.** Two independent verifiers
+returned `HOLDS-WIDER` and all three of their decisive claims re-derive:
+
+- **A second bold grammar fails in a harsher direction the filing never mentions.**
+  `- **scope_confirmed**: confirmed`, colon OUTSIDE the bold span, returns **empty** rather than
+  `**`, which routes to the FAIL at `:188` — *"a Rule 3(d) pause point that did not happen"*. That
+  accuses the lead of skipped conduct instead of reporting a malformed value.
+- **The filing's prescribed fix does not fix the case the filing reproduces.** Transcribed literally
+  and run, it still returns `**` on the colon-inside form, because the closing `**` sits BETWEEN the
+  colon and the value while the prescribed alternation places the wrapper BEFORE the colon. On the
+  colon-outside form it is strictly worse, capturing the whole line
+  `**scope_confirmed**: confirmed` as the "value".
+- **Half of the prescribed fix is silently inert on this platform.** `\|` is a GNU BRE extension.
+  This machine's `grep` honours it; **BSD `sed` does not** — measured in one invocation, the
+  alternation `sed` left `scope_confirmed**: confirmed` untouched while the same `sed` with a plain
+  `\(\*\*\)` capture stripped it to `confirmed`. `field_of`'s second leg is a `sed`, so the change
+  would half-apply with no error at all.
+
+So the remediation is to NORMALIZE the line — strip `**` and backticks — before matching
+`NAME[[:space:]]*:[[:space:]]*VALUE`, which is position-independent and needs no `\|`. Enumerating
+wrapper alternatives around the name is what fails.
+
+## All three post-pin entries are guarded by a fixture that is absent or blind
+
+The pattern is uniform and it is the class this repo already has a name for.
+
+- **`core/fixtures/scope-confirmation/` SHIPS and cannot express the defect.** It seeds the plain
+  bullet and the backtick prose form — exactly the two grammars its reader accepts. Bold-form seeds:
+  **0** in both `seed.sh` and `run.sh`, against a control of 5 and 9 `scope_confirmed` mentions in
+  the same files. A fix would ship green and unguarded.
+- **`core/fixtures/spec-join-integrity/` SHIPS and is the sharpest instance**, because it asserts its
+  own provenance: `seed.sh:200` reads *"REAL bmad-spec SHAPE, captured from an actual headless run"*
+  and seeds **0** suffixed `(capability by …)` lines against **13** bare ones. It stays green under
+  both the broken and the fixed regex, so it certifies a shape it never had.
+- **`report-propagation-fanout.sh` has no fixture at all** — 0 dirs matching `fanout`/`propagation`
+  against a control of **158** fixture directories; only `validator-path-resolution/run.sh` so much
+  as names it. And a new one **cannot** use this repo's own corpus: ai-dlc's tree is **26885 bytes /
+  628 paths** against graph's **607945 / 10146**, so it can never reach `ARG_MAX` and must synthesize
+  payload sizes instead.
+
+**Two of the three filings also prescribe a fix that does not work** — scope-confirmation's was run
+and still fails, and fanout's "second heredoc/stdin channel" does not exist because stdin already
+carries the program, while "chunk the diff" cannot help a limit charged on the total block. That is
+now measured on three consecutive filings, so the plan's instruction not to trust a filing's
+prescribed fix is a base rate rather than a caution.
 
 **Two of the three carry no `verify:` receipt at all**, so they are invisible to the closer exactly as
 the Phase 0 residual describes, and Phase 4 step 19 owes them one. The third declares
