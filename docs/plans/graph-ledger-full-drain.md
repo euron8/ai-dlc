@@ -107,13 +107,20 @@ and no CHANGELOG entry exists yet.
 **START HERE ON A FRESH SESSION — the numbered next actions.**
 
 0. **THE BRANCH IS RED AND CANNOT PUSH. Fix this first.** `core/fixtures/wait-stale-deliverable`
-   fails one of nineteen assertions:
-   `FAIL MUTANT no-restamp: rc 2 on a flagless join — this mutant reaches code the default path uses`.
-   The fixture is correct and the MUTANT is over-broad: it perturbs a shared path, so it fails a
-   second unrelated join, which `.claude/rules/fixture-mutants.md` forbids. Its sibling assertion for
-   the same mutant passes, so the property IS covered — narrow the mutant to its subject, do not
-   delete the arm and do not relax the assertion. **Give this to a hand other than the one that
-   authored `b0e523b`**, whose fix is the subject under test.
+   fails **1 of 71** assertions:
+   `FAIL MUTANT grant-unconditional: rc 0 on a flagless join — this mutant reaches code the default path uses`.
+   The fixture is correct and the MUTANT is over-broad: forcing `PROGRESSED=1` perturbs a path the
+   default join uses, so it fails a second unrelated assertion, which
+   `.claude/rules/fixture-mutants.md` forbids. **Narrow the mutant to its subject; do not delete the
+   arm and do not relax the assertion** — that mutant covers the OVER-CORRECTION direction (a subject
+   that grants whether or not anything was written) and nothing else does. Give it to a hand other
+   than the one that authored `b0e523b`, whose fix is under test.
+
+   **This assertion has MOVED once already.** It was `MUTANT no-restamp: rc 2 on a flagless join`;
+   that entanglement was resolved correctly, and the same class reappeared in the new mutant. So
+   expect the guard to fire again on the next attempt rather than treating one green run as done —
+   and note that **a green run is evidence about the bytes it ran on and nothing else**: this fixture
+   was reported passing on a run whose bytes were then changed by its own author mid-flight.
 1. **Re-establish the pin** (see "Re-establish the pin", below). It moved twice already; reconstruct
    rather than expect a match, and verify by md5 with the off-by-one control.
 2. **The five delegated agents are GONE with the session. Do NOT wait for them.** Two of them had
