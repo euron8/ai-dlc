@@ -448,13 +448,29 @@ for t in $TARGETS; do
   case "$b" in ''|*[!0-9]*) b=0 ;; esac
 
   # Sample evidence of work, then re-stamp the mark, so the next beat asks about
-  # the window that is about to start. Gated on MAY_SLEEP for the same reason the
-  # counter is: a non-sleeping sibling that re-stamped the mark would shrink the
-  # observation window to nothing and report a working teammate as idle.
+  # the window that is about to start.
+  #
+  # THE READ AND THE RE-STAMP NEED DIFFERENT GATES, AND SHARING ONE WAS A FALSE
+  # NON-DELIVERY. The hazard the MAY_SLEEP gate exists for is real but belongs to the
+  # RE-STAMP alone: a non-sleeping sibling that re-stamped would shrink the observation
+  # window to nothing and report a working teammate as idle. Sampling is a pure READ --
+  # `progressed_since()` only compares mtimes -- so gating it bought nothing and cost
+  # the opposite error. With both gated, a chained sibling (MAY_SLEEP=0, set at :400)
+  # arrives at the exhaustion arm below with PROGRESSED forced to 0. That arm is NOT
+  # gated on MAY_SLEEP, so it denies the work-in-progress grant and reports EXHAUSTED --
+  # non-delivery, which Rule 20 turns into a re-dispatch -- for a teammate whose files
+  # are demonstrably being written. The sole variable was whether a sibling beat had
+  # already run in the same shell.
+  #
+  # So: sample ALWAYS, re-stamp only when this invocation may sleep. A non-sleeping
+  # sibling now reads the window its sleeping predecessor opened and leaves it open for
+  # the next one, which is the behaviour the window was for.
   PROGRESSED=0
-  if [ -n "$PROGRESS_PATHS" ] && [ "$MAY_SLEEP" -eq 1 ]; then
+  if [ -n "$PROGRESS_PATHS" ]; then
     progressed_since "$pg" && PROGRESSED=1
-    : > "$pg" 2>/dev/null || true
+    if [ "$MAY_SLEEP" -eq 1 ]; then
+      : > "$pg" 2>/dev/null || true
+    fi
   fi
 
   if [ "$b" -ge "$MAX_BEATS" ]; then
