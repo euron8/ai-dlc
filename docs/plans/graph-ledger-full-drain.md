@@ -123,14 +123,22 @@ and no CHANGELOG entry exists yet.
    was reported passing on a run whose bytes were then changed by its own author mid-flight.
 1. **Re-establish the pin** (see "Re-establish the pin", below). It moved twice already; reconstruct
    rather than expect a match, and verify by md5 with the off-by-one control.
-2. **The five delegated agents are GONE with the session. Do NOT wait for them.** Two of them had
-   already written to disk and their work is committed (`a572e42`, `6abef95`). The three backlog
-   drafters — `bl-batch-A` (refutation rows 273, 281, 387, 610), `bl-batch-B` (1254, 1449, 1543,
-   3190), `bl-batch-C` (3375, 3464, 3787, 3828, 4153) — delivered nothing, so that work is
-   outstanding. Redo it inline or re-dispatch; every input they were given is in
-   `refutation-verdicts.tsv` keyed on the pin line.
-3. **File the remaining backlog entries.** `BL-008` is the highest id in `docs/backlog.md` today, so
-   the next free id is `BL-009`. Grammar and receipt verbs are in that file's own header; **run every
+2. **`BL-009`–`BL-012` are FILED** (`306c4c0`), covering refutation rows 273, 281, 387 and 610.
+   All four receipts verified here: exit 1, parsing under the shipping reader as `STILL-LIVE` with no
+   `unresolved` and no `vacuous`, and two checked for falsifiability. **Outstanding: rows 1254, 1449,
+   1543, 3190** (was `bl-batch-B`) and **3375, 3464, 3787, 3828, 4153** (was `bl-batch-C`) — those two
+   agents were asked for their reports and had not answered when the session closed, so treat the
+   work as undone and redo or re-dispatch. Every input is in `refutation-verdicts.tsv` keyed on pin
+   line. The other three agents' work is committed (`a572e42`, `6abef95`, `306c4c0`).
+
+2a. **A filing's own framing is not evidence, and the first batch measured the rate.** Three of four
+   TSV evidence blocks carried a clause that did not reproduce, and one of the four subjects was
+   correctly REFUSED — `templates/audit-anchors.md.template` is deliberately unshipped, core says so
+   in four places, and its absence from a consumer is the FIX. Expect roughly the same rate in the
+   remaining nine, state the narrowed claim in the entry, and refuse a settled decision rather than
+   filing it as a defect.
+3. **File the remaining backlog entries.** `BL-012` is the highest id in `docs/backlog.md` today, so
+   the next free id is `BL-013`. Grammar and receipt verbs are in that file's own header; **run every
    receipt before committing it — one that exits 0 today is already broken.**
 4. **Finish the two remaining jump-queue fixes**: the recovery gate not arming on a bare-basename
    step file, and the gate treating a partial read as a full one. The other two are DONE (see below).
