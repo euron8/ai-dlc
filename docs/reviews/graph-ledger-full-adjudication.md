@@ -149,10 +149,77 @@ the ledger". Four `## Open — filed <date>` banners all label as `Open`; two bu
 entry, so it emits no wrong report row yet. Tiered low, recorded so it is not rediscovered.
 
 **Two entries closed themselves in a form neither tool can read.**
-`PC-S300-CYCLE-STATE-RESOLVED-UNREACHABLE` wrote `**CLOSED — FIXED UPSTREAM at v0.247.0**`; the
-reverify skip predicate fires zero times on it and `ledger-rotate.sh` will never archive it. It is
-closed in prose and invisible to both tools — the state `ledger-reverify.sh:787` warns about,
-reached from the other side.
+`PC-S300-CYCLE-STATE-RESOLVED-UNREACHABLE-FOR-A-STALLED-TERMINAL-PASS` wrote
+`**CLOSED — FIXED UPSTREAM at v0.247.0**`; the reverify skip predicate fires zero times on it and
+`ledger-rotate.sh` will never archive it. It is closed in prose and invisible to both tools — the
+state `ledger-reverify.sh:787` warns about, reached from the other side.
+
+## Thirty-nine of these ids were wrong, and the column is the one where a character matters
+
+The first cut of the verdict table was typed by hand, and **39 of its 115 ids were abbreviations of
+the ledger's actual label — 17 of them on rows bound for the CHANGELOG.** Eleven were shortened
+`PC-` ids that read as genuine: the register wrote `PC-S302-FIXTURE-SUITE-POOL-UNREPRODUCIBLE-FAIL`
+where the ledger carries
+`PC-S302-FIXTURE-SUITE-POOL-PRODUCES-AN-UNREPRODUCIBLE-FAIL-AND-THE-EVIDENCE-IS-DELETED-WITH-THE-TEMP-DIR`.
+
+Nothing was wrong with the adjudications. The ids decayed in transcription, and a CHANGELOG drafted
+from them would have named ids that **exist nowhere**, producing no `NAMED-UPSTREAM` row and no
+close — silently, because a citation that fails to join is spelled the same as an entry nobody
+touched.
+
+Derived by joining the register against the Phase 0 census on line number, the census being
+authoritative because it was lifted from the shipping tool's own extraction program. The join
+reports 39 before the repair and 0 after, fires on a seeded mutant, and all 87 id-shaped labels now
+appear **verbatim** in the pinned ledger against an impossible-id control returning zero.
+
+**The table is no longer typed.** `graph-ledger-adjudication-data/render-register-tables.sh` renders
+both tables from the TSVs into `BEGIN/END GENERATED` regions, and `--check` byte-compares. It is
+proven to fail on an in-region edit, on a deleted row, on a changed TSV row, and on a misspelled
+marker; it passes a prose edit outside the regions, which is by design. No pre-push arm binds it:
+this register freezes when the program ends, and an arm whose subject disappears is a vacuous guard.
+Re-run `--check` after any step that changes a verdict.
+
+## A close has two channels, and 14 of the 39 cannot use the first one
+
+The only mechanical close signal is a CHANGELOG naming the `PC-` id verbatim, which graph's
+`ledger-reverify.sh` turns into a `NAMED-UPSTREAM` row. **That row is unreachable for 14 of the 39
+closes**, via two independent gates, both read in the code rather than inferred:
+
+- `flush()` at `ledger-reverify.sh:647` gates on `has_verify &&`, so an entry carrying **no
+  `verify:` receipt emits no row at all** — no citation, however correct, can produce one. 14 closes
+  are receiptless.
+- `named_absorbed()` returns empty on its first line for any label containing a character outside
+  `A-Z0-9-` (`case "$_id" in *[!A-Z0-9-]*|'') return 0`). The 10 bullet-form closes whose label is a
+  path or a sentence have nothing to cite verbatim in the first place.
+
+Those 14 still close. **`ledger-rotate.sh` archives on the strict `**ADOPTED UPSTREAM (v<digit>`
+form alone** — it contains no `has_verify` test anywhere, against 13 `ADOPTED UPSTREAM` occurrences
+as control — so the brief's rendered annotation retires them. What differs is the EVIDENCE: a
+`NAMED-UPSTREAM` row for the 25 citable ones, an archived entry for the other 14. The `close
+channel` column carries the split and names WHY each brief-routed entry is there, because the
+remedies differ — one wants a receipt supplied, the other has no id to cite.
+
+This is why the program's acceptance criterion was amended: one criterion spanning both sets would
+have been unreachable for the second, and an unreachable criterion reads exactly like one that
+passed.
+
+## The extension roster rows are entries
+
+Phase 0 left open whether the 12 `extensions/…-push.md` bullets were entries or section
+scaffolding, with the two planning-session parsers disagreeing. The shipping tool's extraction
+program settles it: they are **entries**, and they appear in the census and the verdict table with
+verdicts of their own (pin 226–276). The ledger's own header was right that the section was "owed,
+not done".
+
+## Operator rulings carried into this register
+
+`PC-S297-LOCKED-ANCHOR-VALIDATOR-VACUOUS` (pin 1069) is **RETIRED ON RULING**, not closed by
+measurement. Its title clause is byte-for-byte true at HEAD, but what shipped is a reasoned
+exemption: `core/scripts/validate-locked-anchor.sh:16-18` states that the byte-match fires only on
+a `full_text_source:` full-text claim, and `:20-26` records that a `requires_context:` load pointer
+**is** resolved for existence — it is only the byte-match that is skipped. Byte-matching a load
+pointer would fail honest cite-by-reference, which is a non-empty false-positive set. The operator
+ruled retirement; the brief carries the reason, and no upstream work follows.
 
 ## Reproducing this
 
@@ -170,123 +237,125 @@ is the worst output this system has.
 Keyed by line number in the pinned ledger (`md5 2fd444dcf406cdff728fe3c0c4352267`, 4356 lines).
 Sorted by ledger order.
 
-| pin | entry | verdict | subsystem |
-|---|---|---|---|
-| 78 | `validate-ci-gates-surface-remainder` | **NOT-UPSTREAM** | validators |
-| 118 | `validate-retro-evidence-delegate-provenance` | **HOLDS-MECHANISM-WRONG** | validators |
-| 139 | `validate-mandatory-rules-subset-flags` | **DUPLICATE-OF-pin1011** | validators |
-| 157 | `SKILL.md-provenance-schema-pointer` | **ALREADY-FIXED-v0.143.6** | ai-dlc-skill |
-| 177 | `rule18-terse-traceability-carve-out` | **HOLDS-MECHANISM-WRONG** | ai-dlc-skill |
-| 226 | `extensions/checks/gate-validation-push.md` | **HOLDS-MECHANISM-WRONG** | layer-extensions |
-| 252 | `extensions/steps-domain/deploy-validate-push.md` | **HOLDS-MECHANISM-WRONG** | layer-extensions |
-| 255 | `extensions/steps-domain/retro-push.md` | **HOLDS-MECHANISM-WRONG** | layer-extensions |
-| 259 | `extensions/steps-domain/implementation-push.md` | **HOLDS-MECHANISM-WRONG** | layer-extensions |
-| 262 | `extensions/steps-domain/SKILL-push.md` | **HOLDS-MECHANISM-WRONG** | layer-extensions |
-| 265 | `extensions/steps-domain/route-push.md` | **HOLDS** | layer-extensions |
-| 267 | `extensions/steps-domain/sprint-review-push.md` | **HOLDS** | layer-extensions |
-| 269 | `extensions/steps-domain/stories-test-strategy-push.md` | **HOLDS** | ai-dlc-skill |
-| 271 | `extensions/steps-domain/artifact-consolidation-push.md` | **ALREADY-FIXED-v0.33.2** | ai-dlc-skill |
-| 273 | `extensions/roles/code-reviewer-push.md` | **ALREADY-FIXED-v0.277.0** | roles |
-| 275 | `extensions/roles/qa-push.md` | **ALREADY-FIXED-v0.277.0** | roles |
-| 276 | `extensions/roles/dev-push.md` | **HOLDS-MECHANISM-WRONG** | roles |
-| 281 | `.claude/team-roles/tea.md` | **ALREADY-FIXED-v0.21.0** | roles |
-| 297 | `validate-provenance-block-placeholder-literal` | **ALREADY-FIXED-v0.128.0** | validators |
-| 302 | `validate-provenance-block-inline-transcript` | **ALREADY-FIXED-v0.60.0** | validators |
-| 305 | `scan-stray-provenance-generated-carveout` | **ALREADY-FIXED-v0.198.0** | validators |
-| 316 | `sprint-review-decision-branch-coverage` | **HOLDS-WIDER** | ai-dlc-skill |
-| 334 | `layer-drift-EXTENSION-RESTATES-CORE-title-join` | **HOLDS-MECHANISM-WRONG** | reconcile |
-| 349 | `S295-retro-batch-closures` | **NOT-UPSTREAM-scaffolding** | consumer-local |
-| 351 | `PC-S295-RETRO-STEERING-AUDIT-SESSION-SCOPED` | **ALREADY-FIXED-v0.117.0** | ai-dlc-skill |
-| 387 | `PC-S295-FLOWLOG-HEADER-LEGEND-IS-GREPPABLE-AS-DATA` | **ALREADY-FIXED-v0.117.0** | hooks |
-| 436 | `PC-S295-RETRO-STEP5C-DEADLOCK-ON-DEFERRED-RED` | **HOLDS-WIDER** | ai-dlc-skill |
-| 510 | `PC-S295-RETRO-CHECK5-SELF-REFERENTIAL` | **HOLDS** | ai-dlc-skill |
-| 553 | `PC-S295-RETRO-LEAD-SOLO-EVAL-LLM-CHECK` | **FALSIFIED** | ai-dlc-skill |
-| 577 | `PC-S295-RETRO-RED-SMOKE-CROSSING-SPRINT-BOUNDARY` | **HOLDS-WIDER** | ai-dlc-skill |
-| 610 | `PC-S295-RETRO-RULE18-STABLE-IDENTIFIER-TAGS` | **DUPLICATE-OF-pin177** | ai-dlc-skill |
-| 638 | `gate-validation-Check25-arm-B-no-remediation` | **ALREADY-FIXED-v0.111.0** | ai-dlc-skill |
-| 654 | `PC-S296-ESCALATION-STATUS-APPENDS-INSTEAD-OF-REPLACING` | **HOLDS-MECHANISM-WRONG** | validators |
-| 673 | `PC-S296-H2-ATTESTED-ANCHOR-DEFEATED-BY-BACKTICKS` | **HOLDS-WIDER** | validators |
-| 687 | `PC-S296-SNAPSHOT-BUDGET-UNENFORCED-AT-GATES` | **FALSIFIED** | validators |
-| 701 | `PC-S296-PIPELINE-POSITION-MUST-BE-EDITED-IN-PLACE` | **HOLDS-MECHANISM-WRONG** | hooks |
-| 715 | `PC-S296-DEPLOY-VALIDATE-NA-RITUAL` | **FALSIFIED** | ai-dlc-skill |
-| 728 | `PC-S296-PAUSE-SKIP-ARM-MISSES-TASK-NOTIFICATIONS` | **ALREADY-FIXED-v0.265.0** | hooks |
-| 776 | `PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD` | **NOT-UPSTREAM** | ai-dlc-skill |
-| 798 | `PC-S295-RETRO-COLLAPSE-PAUSE-FLAG-AND-BOUNDED-JOIN` | **HOLDS-MECHANISM-WRONG** | validators |
-| 821 | `PC-S296-H1-FIXTURE-CITATION-GAP` | **ALREADY-FIXED-v0.146.0** | ai-dlc-skill |
-| 860 | `PC-S296-REJECTION-CARRIES-UNRELATED-GAPS` | **HOLDS** | reconcile |
-| 931 | `PC-S297-POOL-LOOP-SUBSHELL-TRAP-UNDOCUMENTED` | **HOLDS-MECHANISM-WRONG** | validators |
-| 1030 | `validate-retro-prereq-RETIRED-record` | **NOT-UPSTREAM** | consumer-local |
-| 1045 | `PC-S297-FFCLUSTER-SHA-STALE` | **NOT-UPSTREAM** | layer-extensions |
-| 1069 | `PC-S297-LOCKED-ANCHOR-VALIDATOR-VACUOUS` | **ALREADY-FIXED-v0.280.0** | validators |
-| 1093 | `PC-S297-CHECK16-ELEMENT2-REGEX-DEAD` | **HOLDS-MECHANISM-WRONG** | validators |
-| 1125 | `PC-S297-RETRO-MD-CLAIMS-NONEXISTENT-GHA-WORKFLOW` | **ALREADY-FIXED-93e05d3** | ai-dlc-skill |
-| 1136 | `PC-S297-PROVENANCE-FLAGLESS-FAIL-OPEN-BY-DEFAULT` | **HOLDS-WIDER** | validators |
-| 1149 | `PC-S297-GUARDED-MERGE-PROVENANCE-INDIRECT-INVOCATION` | **NOT-UPSTREAM** | consumer-local |
-| 1165 | `PC-S297-CHECK17-PRD-ARM-CONTRADICTS-RULE-20` | **HOLDS-WIDER** | ai-dlc-skill |
-| 1215 | `PC-S297-LOCKED-FENCE-LAUNDERS-AGENT-PROSE` | **HOLDS** | validators |
-| 1226 | `PC-S297-VALIDATOR-PASS-VS-NOTHING-TO-CHECK-CONVENTION` | **HOLDS-WIDER** | validators |
-| 1240 | `PC-S297-LOCKED-ANCHOR-EXEMPTED-BY-SILENCE` | **ALREADY-FIXED-v0.280.0** | validators |
-| 1254 | `PC-S297-VALIDATE-MANDATORY-RULES-CHECK3-CHECK4-DEAD` | **ALREADY-FIXED-v0.88.0** | validators |
-| 1269 | `PC-S297-CHECK16-SCOPE-AMBIGUITY` | **HOLDS** | ai-dlc-skill |
-| 1305 | `PC-S297-RETRO-UPSTREAM-PM-AC-PRECISION` | **ALREADY-FIXED-v0.169.0** | roles |
-| 1346 | `PC-S297-RETRO-OVERRIDES-F1F2F3F6` | **HOLDS-WIDER** | ai-dlc-skill |
-| 1361 | `PC-S297-GATE-PROCEDURES-DISPATCH-NOT-MANDATED-BACKGROUND` | **HOLDS-MECHANISM-WRONG** | ai-dlc-skill |
-| 1381 | `PC-S297-VALIDATE-STEERING-BUDGET-TRANSCRIPT-PROVENANCE` | **HOLDS-WIDER** | validators |
-| 1406 | `PC-S299-UNREGISTERED-DRIFT-SCAN-SKIPS-CORE-FIXTURES` | **DUPLICATE-OF-PC-S303-UNREG** | reconcile |
-| 1449 | `PC-S299-LEDGER-REVERIFY-SIGPIPE-FALSE-ABSENT` | **ALREADY-FIXED-v0.147.1** | reconcile |
-| 1543 | `PC-S299-READOPT-DOSSIER-RENDERS-REASON-EMPTY` | **ALREADY-FIXED-v0.150.1** | reconcile |
-| 1571 | `PC-S299-UPSTREAM-SHIPS-TWO-REVIEW-VERDICT-VOCABULARIES` | **HOLDS-MECHANISM-WRONG** | ai-dlc-skill |
-| 1597 | `PC-S299-LEDGER-REVERIFY-MISATTRIBUTES-ABSORBING-VERSION` | **ALREADY-FIXED-v0.152.0** | reconcile |
-| 1622 | `PC-S299-PREPUSH-NONREPRODUCING-FAIL` | **HOLDS-MECHANISM-WRONG** | fixtures |
-| 1757 | `PC-S303-UNREGISTERED-DRIFT-SCANS-FIVE-OF-TEN-CORE-SUBTREES` | **FALSIFIED** | reconcile |
-| 1862 | `PC-S298-WAIT-FOR-DELIVERABLE-NO-PROGRESS-EVIDENCE` | **ALREADY-FIXED-v0.168.0** | ai-dlc-skill |
-| 1977 | `PC-S304-APPLY-SH-RESTAMPS-BEFORE-THE-WORKLIST-IS-DONE` | **HOLDS-MECHANISM-WRONG** | reconcile |
-| 2028 | `ORPHAN-tail-of-archived-PC-S306` | **ALREADY-FIXED-v0.180.0** | reconcile |
-| 2101 | `PC-S307-MACHINE-AUDITS-IS-A-CHILD-OF-4A` | **HOLDS** | ai-dlc-skill |
-| 2170 | `PC-S308-SELF-UPDATE-INSTALLS-THE-VALIDATOR-THAT-BLOCKS-ITS-OWN-PUSH` | **ALREADY-FIXED-v0.185.0** | update-skill |
-| 2231 | `PC-S311-ENTRY-SWALLOWED-LITERAL-BACKSLASH-U` | **HOLDS** | reconcile |
-| 2306 | `PC-S312-RETRO-REPLAY-HARNESS-NOT-ABSORBED` | **NOT-UPSTREAM** | consumer-local |
-| 2341 | `PC-S312-SPRINT-STATUS-CHECK-STORIES-ONE-FIELD-OF-FIVE` | **HOLDS-MECHANISM-WRONG** | validators |
-| 2372 | `PC-S312-TRUNK-PUSH-DECLINES-TO-POLICE-THE-TRUNK` | **NOT-UPSTREAM** | consumer-local |
-| 2411 | `PC-S312-PROTECTED-CORE-PATHS-STAYS-RETIRED` | **NOT-UPSTREAM** | consumer-local |
-| 2436 | `PC-S312-MUTATION-RED-ANCHOR-STAYS-RETIRED` | **NOT-UPSTREAM** | consumer-local |
-| 2465 | `PC-S312-STRAY-SCAN-ARM-STAYS-RETIRED` | **NOT-UPSTREAM** | consumer-local |
-| 2492 | `PC-S312-STRAYS-DOES-NOT-NORMALIZE-AN-ABSOLUTE-PATH` | **HOLDS** | validators |
-| 2546 | `PC-S312-S239-1-HARDENING-CALLS-PRE-RELOCATION-PATHS` | **NOT-UPSTREAM** | consumer-local |
-| 2576 | `PC-S312-FIXTURE-PROVENANCE-ARM-HAS-NO-LIVE-DRIVER` | **NOT-UPSTREAM** | consumer-local |
-| 2598 | `PC-S312-EXPECTED-VALIDATORS-WORD-SPLIT-EXCLUDES-FLAGS` | **NOT-UPSTREAM** | consumer-local |
-| 2630 | `PC-S312-PR-CLASS-TEST-A6-A7-ARE-UNREACHABLE` | **NOT-UPSTREAM** | consumer-local |
-| 2655 | `PC-S312-FIX-FORWARD-CLASS-GATES-ON-NO-VALIDATOR` | **NOT-UPSTREAM** | consumer-local |
-| 2680 | `PC-S300-CYCLE-STATE-RESOLVED-UNREACHABLE` | **ALREADY-FIXED-v0.247.0** | validators |
-| 2785 | `PC-S300-RESOLUTION-RECORD-CITATION-CANNOT-OUTLIVE-ITS-SESSION` | **HOLDS** | validators |
-| 2957 | `PC-S313-LEDGER-ROTATE-SPLITS-AN-ENTRY-AT-A-BOLD-ANNOTATION` | **HOLDS** | reconcile |
-| 3018 | `PC-S314-PRECLASSIFY-BUCKETS-A-MODE-ONLY-CHANGE-AS-UPSTREAM-ONLY` | **HOLDS** | reconcile |
-| 3088 | `PC-S315-EMIT-REPORT-REGION-OMITS-THREE-MANDATED-DETECTORS` | **HOLDS-WIDER** | reconcile |
-| 3145 | `PC-S316-LEDGER-REVERIFY-DOES-NOT-NORMALIZE-CONSUMER-ABSOLUTE` | **ALREADY-FIXED-v0.301.0** | reconcile |
-| 3190 | `PC-S316-ABSORPTION-DETECTOR-JOINS-ONLY-ON-NUMBERED-ANCHORS` | **ALREADY-FIXED-v0.275.0** | reconcile |
-| 3244 | `PC-S316-LEDGER-REVERIFY-EXITS-0-SILENTLY` | **ALREADY-FIXED-v0.301.0** | reconcile |
-| 3287 | `PC-S302-ADJUDICATION-RERUN-BASE-DISARMS-LC-A1` | **ALREADY-FIXED-v0.303.0** | update-skill |
-| 3336 | `PC-S314-APPLY-SH-OVERWRITES-ITSELF-MID-RUN` | **ALREADY-FIXED-v0.316.0** | reconcile |
-| 3375 | `PC-S314-NO-DETECTOR-LAYER-FILE-CITING-RETIRED-PATH` | **ALREADY-FIXED-v0.333.0** | layer-extensions |
-| 3413 | `PC-S318-SELF-UPDATE-SLICE-CANNOT-CARRY-THE-FIXTURE-FIX` | **HOLDS** | update-skill |
-| 3464 | `PC-S319-SUBJECT-DIGEST-IS-UNREADABLE-ONCE-ITS-ROW-STOPS-BLOCKING` | **ALREADY-FIXED-v0.331.0** | reconcile |
-| 3507 | `PC-S328-NAMED-UPSTREAM-JOINS-ON-THE-FULL-SLUG` | **ALREADY-FIXED-v0.329.0** | reconcile |
-| 3595 | `PC-S329-NAMED-UPSTREAM-DETAIL-INSTRUCTS-THE-CLOSE-ITS-STATUS-FORBIDS` | **HOLDS-MECHANISM-WRONG** | update-skill |
-| 3647 | `PC-S330-LEDGER-ROTATE-STUCK-SET-CONTRADICTS-SKIP-RULE` | **HOLDS-MECHANISM-WRONG** | reconcile |
-| 3719 | `PC-S302-FIXTURE-SUITE-POOL-UNREPRODUCIBLE-FAIL` | **ALREADY-FIXED-v0.367.0** | fixtures |
-| 3749 | `PC-S302-RETIRED-LAYER-CONTRACT-READS-CLEAN` | **ALREADY-FIXED-v0.359.0** | reconcile |
-| 3787 | `PC-S302-HARD-BLOCKERS-HAS-NO-POST-APPLY-GUARD` | **ALREADY-FIXED-v0.367.0** | reconcile |
-| 3828 | `PC-S303-EFFORT-BINDING-COMMANDS-A-SLASH-COMMAND` | **ALREADY-FIXED-v0.367.0** | hooks |
-| 3881 | `PC-S330-PREPUSH-LEAKS-GIT_DIR-INTO-EVERY-FIXTURE-SANDBOX` | **HOLDS-WIDER** | fixtures |
-| 3918 | `PC-S330-STEP-2-NO-DISPOSITION-CONSUMER-MODIFIED-MACHINERY` | **HOLDS-MECHANISM-WRONG** | update-skill |
-| 3980 | `PC-S330-A-CONTRADICTS-CORE-VERDICT-EXPIRES` | **ALREADY-FIXED-v0.369.0** | layer-extensions |
-| 4052 | `PC-S333-SETTINGS-MERGE-CHECK-READS-AN-EMPTY-TEMPLATE-AS-A-VERDICT` | **HOLDS-WIDER** | reconcile |
-| 4096 | `PC-S333-SKILL-RENDERS-THE-THEIRS-REF-UNQUOTED-AND-ZSH-EATS-IT` | **HOLDS-WIDER** | update-skill |
-| 4153 | `PC-S303-BUDGET-SCRIPT-PASS-LINE-UNCONDITIONAL` | **ALREADY-FIXED-v0.372.0** | validators |
-| 4184 | `PC-S303-RETRO-NO-CLOSE-RECORD-FOR-RESET-OR-ABANDONED-SPRINTS` | **ALREADY-FIXED-v0.372.0** | validators |
-| 4216 | `PC-S303-POSTCOMPACT-RECOVERY-MANDATE-NO-STATED-EXCEPTION` | **ALREADY-FIXED-v0.372.0** | hooks |
-| 4258 | `PC-S331-APPLY-SH-CO-EMITS-READOPT-AND-RETIRE` | **HOLDS** | reconcile |
-| 4313 | `PC-S303-BUDGET-CHECK-EVIDENCE-FIND-PICKS-STALE-GATE-LOG` | **HOLDS-WIDER** | validators |
+<!-- BEGIN GENERATED: verdict-table -->
+| pin | entry | verdict | subsystem | close channel |
+|---|---|---|---|---|
+| 78 | `validate-ci-gates.sh → repoint the dormant-gate scan at a REAL enforcement surface, and` | **NOT-UPSTREAM** | validators | brief (no-pc-id) |
+| 118 | `validate-retro-evidence.sh → resolve the retro branch via origin/<branch>, and delegate the` | **HOLDS-MECHANISM-WRONG** | validators | brief (no-pc-id) |
+| 139 | `validate-mandatory-rules.sh → subset-mode flags and a shared gate-log-rotation predicate.` | **DUPLICATE-OF-pin1011** | validators | brief (no-pc-id) |
+| 157 | `SKILL.md:665 cites the provenance-block schema at a path that does not resolve from the` | **ALREADY-FIXED-v0.143.6** | ai-dlc-skill | brief (no-pc-id+no-receipt) |
+| 177 | `Rule 18 has no carve-out for terse traceability citations, though the codebase depends on one` | **HOLDS-MECHANISM-WRONG** | ai-dlc-skill | brief (no-pc-id) |
+| 226 | `extensions/checks/gate-validation-push.md` | **HOLDS-MECHANISM-WRONG** | layer-extensions | brief (no-pc-id+no-receipt) |
+| 252 | `extensions/steps-domain/deploy-validate-push.md` | **HOLDS-MECHANISM-WRONG** | layer-extensions | brief (no-pc-id+no-receipt) |
+| 255 | `extensions/steps-domain/retro-push.md` | **HOLDS-MECHANISM-WRONG** | layer-extensions | brief (no-pc-id+no-receipt) |
+| 259 | `extensions/steps-domain/implementation-push.md` | **HOLDS-MECHANISM-WRONG** | layer-extensions | brief (no-pc-id+no-receipt) |
+| 262 | `extensions/steps-domain/SKILL-push.md` | **HOLDS-MECHANISM-WRONG** | layer-extensions | brief (no-pc-id+no-receipt) |
+| 265 | `extensions/steps-domain/route-push.md` | **HOLDS** | layer-extensions | brief (no-pc-id+no-receipt) |
+| 267 | `extensions/steps-domain/sprint-review-push.md` | **HOLDS** | layer-extensions | brief (no-pc-id+no-receipt) |
+| 269 | `extensions/steps-domain/stories-test-strategy-push.md` | **HOLDS** | ai-dlc-skill | brief (no-pc-id+no-receipt) |
+| 271 | `extensions/steps-domain/artifact-consolidation-push.md` | **ALREADY-FIXED-v0.33.2** | ai-dlc-skill | brief (no-pc-id+no-receipt) |
+| 273 | `extensions/roles/code-reviewer-push.md` | **ALREADY-FIXED-v0.277.0** | roles | brief (no-pc-id+no-receipt) |
+| 275 | `extensions/roles/qa-push.md` | **ALREADY-FIXED-v0.277.0** | roles | brief (no-pc-id+no-receipt) |
+| 276 | `extensions/roles/dev-push.md` | **HOLDS-MECHANISM-WRONG** | roles | brief (no-pc-id+no-receipt) |
+| 281 | `.claude/team-roles/tea.md` | **ALREADY-FIXED-v0.21.0** | roles | brief (no-pc-id+no-receipt) |
+| 297 | `scripts/validate-provenance-block.sh` | **ALREADY-FIXED-v0.128.0** | validators | brief (no-pc-id+no-receipt) |
+| 302 | `scripts/validate-provenance-block.sh` | **ALREADY-FIXED-v0.60.0** | validators | brief (no-pc-id+no-receipt) |
+| 305 | `scripts/scan-stray-provenance.sh` | **ALREADY-FIXED-v0.198.0** | validators | brief (no-pc-id+no-receipt) |
+| 316 | `Decision-branch execution-coverage for sprint-review §3 "Fix and` | **HOLDS-WIDER** | ai-dlc-skill | brief (no-pc-id) |
+| 334 | `layer-drift.sh EXTENSION-RESTATES-CORE matches on section number + title,` | **HOLDS-MECHANISM-WRONG** | reconcile | brief (no-pc-id+no-receipt) |
+| 349 | `S295 retro-batch closures (restructured 2026-07-22, story-296-6).` | **NOT-UPSTREAM-scaffolding** | consumer-local | brief (no-pc-id+no-receipt) |
+| 351 | `PC-S295-RETRO-STEERING-AUDIT-SESSION-SCOPED` | **ALREADY-FIXED-v0.117.0** | ai-dlc-skill | brief (no-receipt) |
+| 387 | `PC-S295-FLOWLOG-HEADER-LEGEND-IS-GREPPABLE-AS-DATA` | **ALREADY-FIXED-v0.117.0** | hooks | brief (no-receipt) |
+| 436 | `PC-S295-RETRO-STEP5C-DEADLOCK-ON-DEFERRED-RED` | **HOLDS-WIDER** | ai-dlc-skill | changelog |
+| 510 | `PC-S295-RETRO-CHECK5-SELF-REFERENTIAL` | **HOLDS** | ai-dlc-skill | changelog |
+| 553 | `PC-S295-RETRO-LEAD-SOLO-EVAL-LLM-CHECK` | **FALSIFIED** | ai-dlc-skill | changelog |
+| 577 | `PC-S295-RETRO-RED-SMOKE-CROSSING-SPRINT-BOUNDARY` | **HOLDS-WIDER** | ai-dlc-skill | changelog |
+| 610 | `PC-S295-RETRO-RULE18-STABLE-IDENTIFIER-TAGS` | **DUPLICATE-OF-pin177** | ai-dlc-skill | changelog |
+| 638 | `steps/gate-validation.md Check 25 has no remediation path for arm B` | **ALREADY-FIXED-v0.111.0** | ai-dlc-skill | brief (no-pc-id+no-receipt) |
+| 654 | `PC-S296-ESCALATION-STATUS-APPENDS-INSTEAD-OF-REPLACING` | **HOLDS-MECHANISM-WRONG** | validators | brief (no-receipt) |
+| 673 | `PC-S296-H2-ATTESTED-ANCHOR-DEFEATED-BY-BACKTICKS` | **HOLDS-WIDER** | validators | brief (no-receipt) |
+| 687 | `PC-S296-SNAPSHOT-BUDGET-UNENFORCED-AT-GATES` | **FALSIFIED** | validators | brief (no-receipt) |
+| 701 | `PC-S296-PIPELINE-POSITION-MUST-BE-EDITED-IN-PLACE` | **HOLDS-MECHANISM-WRONG** | hooks | brief (no-receipt) |
+| 715 | `PC-S296-DEPLOY-VALIDATE-NA-RITUAL` | **FALSIFIED** | ai-dlc-skill | brief (no-receipt) |
+| 728 | `PC-S296-PAUSE-SKIP-ARM-MISSES-TASK-NOTIFICATIONS` | **ALREADY-FIXED-v0.265.0** | hooks | brief (no-receipt) |
+| 776 | `PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD` | **NOT-UPSTREAM** | ai-dlc-skill | brief (no-receipt) |
+| 798 | `PC-S295-RETRO-COLLAPSE-PAUSE-FLAG-AND-BOUNDED-JOIN` | **HOLDS-MECHANISM-WRONG** | validators | brief (no-receipt) |
+| 821 | `PC-S296-H1-FIXTURE-CITATION-GAP` | **ALREADY-FIXED-v0.146.0** | ai-dlc-skill | changelog |
+| 860 | `PC-S296-REJECTION-CARRIES-UNRELATED-GAPS` | **HOLDS** | reconcile | changelog |
+| 931 | `PC-S297-POOL-LOOP-SUBSHELL-TRAP-UNDOCUMENTED` | **HOLDS-MECHANISM-WRONG** | validators | changelog |
+| 1030 | `validate-retro-prereq.sh → RETIRED (no stock equivalent).` | **NOT-UPSTREAM** | consumer-local | brief (no-pc-id+no-receipt) |
+| 1045 | `PC-S297-FFCLUSTER-SHA-STALE` | **NOT-UPSTREAM** | layer-extensions | changelog |
+| 1069 | `PC-S297-LOCKED-ANCHOR-VALIDATOR-VACUOUS` | **ALREADY-FIXED-v0.280.0** | validators | changelog |
+| 1093 | `PC-S297-CHECK16-ELEMENT2-REGEX-DEAD` | **HOLDS-MECHANISM-WRONG** | validators | changelog |
+| 1125 | `PC-S297-RETRO-MD-CLAIMS-NONEXISTENT-GHA-WORKFLOW` | **ALREADY-FIXED-93e05d3** | ai-dlc-skill | changelog |
+| 1136 | `PC-S297-PROVENANCE-FLAGLESS-FAIL-OPEN-BY-DEFAULT` | **HOLDS-WIDER** | validators | changelog |
+| 1149 | `PC-S297-GUARDED-MERGE-PROVENANCE-INDIRECT-INVOCATION` | **NOT-UPSTREAM** | consumer-local | changelog |
+| 1165 | `PC-S297-CHECK17-PRD-ARM-CONTRADICTS-RULE-20-BLOCK-PLACEMENT` | **HOLDS-WIDER** | ai-dlc-skill | changelog |
+| 1215 | `PC-S297-LOCKED-FENCE-LAUNDERS-AGENT-PROSE` | **HOLDS** | validators | changelog |
+| 1226 | `PC-S297-VALIDATOR-PASS-VS-NOTHING-TO-CHECK-CONVENTION` | **HOLDS-WIDER** | validators | changelog |
+| 1240 | `PC-S297-LOCKED-ANCHOR-EXEMPTED-BY-SILENCE` | **ALREADY-FIXED-v0.280.0** | validators | changelog |
+| 1254 | `PC-S297-VALIDATE-MANDATORY-RULES-CHECK3-CHECK4-DEAD` | **ALREADY-FIXED-v0.88.0** | validators | changelog |
+| 1269 | `PC-S297-CHECK16-SCOPE-AMBIGUITY` | **HOLDS** | ai-dlc-skill | changelog |
+| 1305 | `PC-S297-RETRO-UPSTREAM-PM-AC-PRECISION` | **ALREADY-FIXED-v0.169.0** | roles | changelog |
+| 1346 | `PC-S297-RETRO-OVERRIDES-F1F2F3F6` | **HOLDS-WIDER** | ai-dlc-skill | changelog |
+| 1361 | `PC-S297-GATE-PROCEDURES-DISPATCH-NOT-MANDATED-BACKGROUND` | **HOLDS-MECHANISM-WRONG** | ai-dlc-skill | changelog |
+| 1381 | `PC-S297-VALIDATE-STEERING-BUDGET-TRANSCRIPT-PROVENANCE` | **HOLDS-WIDER** | validators | changelog |
+| 1406 | `PC-S299-UNREGISTERED-DRIFT-SCAN-SKIPS-CORE-FIXTURES-AND-CORE-SCRIPTS` | **DUPLICATE-OF-PC-S303-UNREG** | reconcile | changelog |
+| 1449 | `PC-S299-LEDGER-REVERIFY-SIGPIPE-FALSE-ABSENT` | **ALREADY-FIXED-v0.147.1** | reconcile | changelog |
+| 1543 | `PC-S299-READOPT-DOSSIER-RENDERS-REASON-EMPTY` | **ALREADY-FIXED-v0.150.1** | reconcile | changelog |
+| 1571 | `PC-S299-UPSTREAM-SHIPS-TWO-REVIEW-VERDICT-VOCABULARIES` | **HOLDS-MECHANISM-WRONG** | ai-dlc-skill | changelog |
+| 1597 | `PC-S299-LEDGER-REVERIFY-MISATTRIBUTES-ABSORBING-VERSION` | **ALREADY-FIXED-v0.152.0** | reconcile | changelog |
+| 1622 | `PC-S299-PREPUSH-NONREPRODUCING-FAIL` | **HOLDS-MECHANISM-WRONG** | fixtures | changelog |
+| 1757 | `PC-S303-UNREGISTERED-DRIFT-SCANS-FIVE-OF-TEN-CORE-SUBTREES` | **FALSIFIED** | reconcile | changelog |
+| 1862 | `PC-S298-WAIT-FOR-DELIVERABLE-NO-PROGRESS-EVIDENCE` | **ALREADY-FIXED-v0.168.0** | ai-dlc-skill | changelog |
+| 1977 | `PC-S304-APPLY-SH-RESTAMPS-BEFORE-THE-WORKLIST-IS-DONE` | **HOLDS-MECHANISM-WRONG** | reconcile | changelog |
+| 2028 | `4b. Operator-steerability audit, then flow-log rotation (Rule 29 / Rule 25(c))` | **ALREADY-FIXED-v0.180.0** | reconcile | brief (no-pc-id+no-receipt) |
+| 2101 | `PC-S307-MACHINE-AUDITS-IS-A-CHILD-OF-4A-SO-EVERY-4A-SHADOW-SWALLOWS-IT` | **HOLDS** | ai-dlc-skill | changelog |
+| 2170 | `PC-S308-SELF-UPDATE-INSTALLS-THE-VALIDATOR-THAT-BLOCKS-ITS-OWN-PUSH` | **ALREADY-FIXED-v0.185.0** | update-skill | changelog |
+| 2231 | `PC-S311-ENTRY-SWALLOWED-DETAIL-EMITS-A-LITERAL-BACKSLASH-U-ESCAPE-SO-A-VERBATIM-PASTE-FAILS-VERIFY` | **HOLDS** | reconcile | changelog |
+| 2306 | `PC-S312-RETRO-REPLAY-HARNESS-NOT-ABSORBED-BY-DRIVABILITY` | **NOT-UPSTREAM** | consumer-local | changelog |
+| 2341 | `PC-S312-SPRINT-STATUS-CHECK-STORIES-COVERS-ONE-FIELD-OF-FIVE` | **HOLDS-MECHANISM-WRONG** | validators | changelog |
+| 2372 | `PC-S312-TRUNK-PUSH-DECLINES-TO-POLICE-THE-TRUNK` | **NOT-UPSTREAM** | consumer-local | changelog |
+| 2411 | `PC-S312-PROTECTED-CORE-PATHS-STAYS-RETIRED` | **NOT-UPSTREAM** | consumer-local | changelog |
+| 2436 | `PC-S312-MUTATION-RED-ANCHOR-STAYS-RETIRED` | **NOT-UPSTREAM** | consumer-local | changelog |
+| 2465 | `PC-S312-STRAY-SCAN-ARM-STAYS-RETIRED` | **NOT-UPSTREAM** | consumer-local | changelog |
+| 2492 | `PC-S312-STRAYS-DOES-NOT-NORMALIZE-AN-ABSOLUTE-PATH` | **HOLDS** | validators | changelog |
+| 2546 | `PC-S312-S239-1-HARDENING-CALLS-PRE-RELOCATION-PATHS` | **NOT-UPSTREAM** | consumer-local | changelog |
+| 2576 | `PC-S312-FIXTURE-PROVENANCE-ARM-HAS-NO-LIVE-DRIVER` | **NOT-UPSTREAM** | consumer-local | changelog |
+| 2598 | `PC-S312-EXPECTED-VALIDATORS-WORD-SPLIT-EXCLUDES-FLAGS` | **NOT-UPSTREAM** | consumer-local | changelog |
+| 2630 | `PC-S312-PR-CLASS-TEST-A6-A7-ARE-UNREACHABLE` | **NOT-UPSTREAM** | consumer-local | changelog |
+| 2655 | `PC-S312-FIX-FORWARD-CLASS-GATES-ON-NO-VALIDATOR` | **NOT-UPSTREAM** | consumer-local | changelog |
+| 2680 | `PC-S300-CYCLE-STATE-RESOLVED-UNREACHABLE-FOR-A-STALLED-TERMINAL-PASS` | **ALREADY-FIXED-v0.247.0** | validators | changelog |
+| 2785 | `PC-S300-RESOLUTION-RECORD-CITATION-CANNOT-OUTLIVE-ITS-SESSION` | **HOLDS** | validators | changelog |
+| 2957 | `PC-S313-LEDGER-ROTATE-SPLITS-AN-ENTRY-AT-A-BOLD-ANNOTATION` | **HOLDS** | reconcile | changelog |
+| 3018 | `PC-S314-PRECLASSIFY-BUCKETS-A-MODE-ONLY-CHANGE-AS-UPSTREAM-ONLY-SO-THE-SELF-UPDATE-CANNOT-TERMINATE` | **HOLDS** | reconcile | changelog |
+| 3088 | `PC-S315-EMIT-REPORT-REGION-OMITS-THREE-MANDATED-DETECTORS` | **HOLDS-WIDER** | reconcile | changelog |
+| 3145 | `PC-S316-LEDGER-REVERIFY-DOES-NOT-NORMALIZE-CONSUMER-TO-AN-ABSOLUTE-PATH` | **ALREADY-FIXED-v0.301.0** | reconcile | changelog |
+| 3190 | `PC-S316-ABSORPTION-DETECTOR-JOINS-ONLY-ON-NUMBERED-ANCHORS` | **ALREADY-FIXED-v0.275.0** | reconcile | changelog |
+| 3244 | `PC-S316-LEDGER-REVERIFY-EXITS-0-SILENTLY-ON-AN-UNREADABLE-LEDGER-PATH` | **ALREADY-FIXED-v0.301.0** | reconcile | changelog |
+| 3287 | `PC-S302-ADJUDICATION-RERUN-BASE-DISARMS-LC-A1` | **ALREADY-FIXED-v0.303.0** | update-skill | changelog |
+| 3336 | `PC-S314-APPLY-SH-OVERWRITES-ITSELF-MID-RUN-UNDER-DEFER` | **ALREADY-FIXED-v0.316.0** | reconcile | changelog |
+| 3375 | `PC-S314-NO-DETECTOR-CLAIMS-A-LAYER-FILE-CITING-A-PATH-THE-PULL-JUST-RETIRED` | **ALREADY-FIXED-v0.333.0** | layer-extensions | changelog |
+| 3413 | `PC-S318-SELF-UPDATE-SLICE-CANNOT-CARRY-THE-FIXTURE-FIX-THAT-UNBLOCKS-ITS-OWN-PUSH` | **HOLDS** | update-skill | changelog |
+| 3464 | `PC-S319-SUBJECT-DIGEST-IS-UNREADABLE-ONCE-ITS-OWN-ROW-STOPS-BLOCKING` | **ALREADY-FIXED-v0.331.0** | reconcile | changelog |
+| 3507 | `PC-S328-NAMED-UPSTREAM-JOINS-ON-THE-FULL-SLUG-WHILE-UPSTREAM-CITES-THE-SHORT-ID` | **ALREADY-FIXED-v0.329.0** | reconcile | changelog |
+| 3595 | `PC-S329-NAMED-UPSTREAM-DETAIL-INSTRUCTS-THE-CLOSE-ITS-OWN-STATUS-FORBIDS` | **HOLDS-MECHANISM-WRONG** | update-skill | changelog |
+| 3647 | `PC-S330-LEDGER-ROTATE-STUCK-SET-CONTRADICTS-THE-SKIP-RULE-IT-CITES` | **HOLDS-MECHANISM-WRONG** | reconcile | changelog |
+| 3719 | `PC-S302-FIXTURE-SUITE-POOL-PRODUCES-AN-UNREPRODUCIBLE-FAIL-AND-THE-EVIDENCE-IS-DELETED-WITH-THE-TEMP-DIR` | **ALREADY-FIXED-v0.367.0** | fixtures | changelog |
+| 3749 | `PC-S302-RETIRED-LAYER-CONTRACT-READS-CLEAN-OVER-TWO-REAL-POSITIVES` | **ALREADY-FIXED-v0.359.0** | reconcile | changelog |
+| 3787 | `PC-S302-HARD-BLOCKERS-HAS-NO-POST-APPLY-GUARD` | **ALREADY-FIXED-v0.367.0** | reconcile | changelog |
+| 3828 | `PC-S303-EFFORT-BINDING-COMMANDS-A-SLASH-COMMAND-THAT-RESOLVES-TO-NOTHING` | **ALREADY-FIXED-v0.367.0** | hooks | changelog |
+| 3881 | `PC-S330-PREPUSH-LEAKS-GIT_DIR-INTO-EVERY-FIXTURE-SANDBOX` | **HOLDS-WIDER** | fixtures | brief (no-pc-id) |
+| 3918 | `PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH` | **HOLDS-MECHANISM-WRONG** | update-skill | changelog |
+| 3980 | `PC-S330-A-CONTRADICTS-CORE-VERDICT-EXPIRES-LIKE-A-READING-AND-STOPS-BEING-SURFACED` | **ALREADY-FIXED-v0.369.0** | layer-extensions | changelog |
+| 4052 | `PC-S333-SETTINGS-MERGE-CHECK-READS-AN-EMPTY-TEMPLATE-AS-A-VERDICT` | **HOLDS-WIDER** | reconcile | changelog |
+| 4096 | `PC-S333-SKILL-RENDERS-THE-THEIRS-REF-UNQUOTED-AND-ZSH-EATS-IT` | **HOLDS-WIDER** | update-skill | changelog |
+| 4153 | `PC-S303-BUDGET-SCRIPT-PASS-LINE-UNCONDITIONAL` | **ALREADY-FIXED-v0.372.0** | validators | brief (no-receipt) |
+| 4184 | `PC-S303-RETRO-NO-CLOSE-RECORD-FOR-RESET-OR-ABANDONED-SPRINTS` | **ALREADY-FIXED-v0.372.0** | validators | brief (no-receipt) |
+| 4216 | `PC-S303-POSTCOMPACT-RECOVERY-MANDATE-HAS-NO-STATED-EXCEPTION` | **ALREADY-FIXED-v0.372.0** | hooks | brief (no-receipt) |
+| 4258 | `PC-S331-APPLY-SH-CO-EMITS-READOPT-AND-RETIRE-FOR-ONE-SUBJECT-AS-IF-BOTH-WERE-OWED` | **HOLDS** | reconcile | changelog |
+| 4313 | `PC-S303-BUDGET-CHECK-EVIDENCE-FIND-PICKS-A-STALE-GATE-LOG` | **HOLDS-WIDER** | validators | brief (no-receipt) |
+<!-- END GENERATED: verdict-table -->
 
 ---
 
@@ -307,12 +376,14 @@ have told the consumer that 24 entries were resolved when they were not, nine of
 
 ## Final disposition, all 115 entries
 
-| disposition | count |
-|---|---|
-| LIVE | 67 |
-| CLOSE | 24 |
-| CLOSE + file the sub-claim first | 15 |
-| LIVE (close withdrawn) | 9 |
+<!-- BEGIN GENERATED: disposition-table -->
+| disposition | count | via CHANGELOG cite | via brief annotation |
+|---|---|---|---|
+| LIVE | 67 | 44 | 23 |
+| CLOSE | 24 | 14 | 10 |
+| CLOSE + file the sub-claim | 15 | 11 | 4 |
+| LIVE (close withdrawn) | 9 | 4 | 5 |
+<!-- END GENERATED: disposition-table -->
 
 Every close carries a verifier verdict; there are no unverified closes. That distinction is
 kept explicitly in the tooling — an unattacked close renders as `CLOSE (UNVERIFIED)`, never as

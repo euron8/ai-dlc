@@ -100,9 +100,9 @@ currently emits no wrong report row. Tier it accordingly.
 were adjudicated in 29 parallel batches of 4; all 48 proposed closes were then attacked by 12
 independent verifiers briefed to break them.
 
-**Phase 2 is PAUSED BY THE OPERATOR**, one step in. Twenty-five backlog entries (`BL-009`–`BL-033`)
-were being drafted; none were written. No release branch is cut, `VERSION` is untouched, no
-CHANGELOG entry exists.
+**Phase 2 is RESUMED.** The four blocking decisions are ruled (below) and the two register blockers
+found on resume are fixed. Still outstanding: the twenty-five backlog entries (`BL-009`–`BL-033`) are
+not yet written, no release branch is cut, `VERSION` is untouched, and no CHANGELOG entry exists.
 
 ### Adjudication result — 115 entries
 
@@ -133,26 +133,68 @@ evidence was promoted into the repo:
 
 ### Re-establish the pin before trusting any line number
 
-Every line number in the register is an offset into graph's ledger as pinned at Phase 0:
+Every line number in the register is an offset into graph's ledger as pinned at Phase 0. The live
+file has ALREADY moved past the pin twice, so expect to reconstruct rather than to match:
 
 ```
 md5 -q /Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
 ```
 
-Must read `2fd444dcf406cdff728fe3c0c4352267`, at graph HEAD `510e4d9f5`. **If it differs, a live
-graph session has moved the corpus** — re-derive the delta before using any pin line, and
-adjudicate whatever was newly filed. One such addition arrived mid-run already.
+**The pin is reconstructible, and this is how.** Every graph addition so far has been a pure APPEND
+at end of file, and graph `HEAD` has stayed at `510e4d9f5`. So the pin is the live file's first
+**4356** lines, and that reconstruction is verified by md5, not assumed:
 
-### Open decisions, blocking Phase 2
+```
+sed -n '1,4356p' <ledger> | md5      # must be 2fd444dcf406cdff728fe3c0c4352267
+sed -n '1,4355p' <ledger> | md5      # CONTROL: an off-by-one must NOT match
+```
 
-1. **`PC-S297-LOCKED-ANCHOR-VALIDATOR-VACUOUS` (pin 1069) is a RETIRE-ON-RULING, not a close.**
-   Its title clause is byte-for-byte true at HEAD; what shipped is a reasoned *exemption*, and the
-   entry's own note reserves that outcome — "if that exemption is correct by design, this entry
-   should be retired rather than pushed." **The operator rules; a measurement cannot.**
-2. **The live set is 76, not the 51 the full sweep was approved against.**
-3. **Three defects in recently-shipped code are not consumer candidates at all** and may deserve to
-   jump the queue: the recovery gate not arming, `wait-for-deliverable`'s false NON-DELIVERY on a
-   chained sibling, and the anti-monotonic short-id fallback (`BL-009`, `BL-011`, `BL-012`).
+Confirmed on resume — the pin re-derived exactly and the control produced a different digest. Should
+a future graph edit ever land in the MIDDLE of the file, this reconstruction breaks and the md5 will
+say so; re-derive the delta from `git diff` hunk offsets before trusting any pin line.
+
+**Everything after line 4356 is new work.** On resume that was 147 lines: three entries
+(`PC-S303-SPEC-JOIN-MEMLOG-REGEX-STALE-VS-AUTHOR-SUFFIX`,
+`PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF`,
+`PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR`) plus one `## RETRACTED` banner
+in which graph withdrew its own `--brief` filing as a lead invocation error — that one owes no
+upstream work and is not an entry.
+
+### The four decisions are RULED. None is open.
+
+1. **`PC-S297-LOCKED-ANCHOR-VALIDATOR-VACUOUS` (pin 1069) — RETIRED ON RULING.** The exemption is
+   correct by design: `core/scripts/validate-locked-anchor.sh:16-18` scopes the byte-match to a
+   `full_text_source:` full-text claim, and `:20-26` records that a `requires_context:` load pointer
+   **is** resolved for existence. Byte-matching a load pointer would fail honest cite-by-reference.
+   No upstream work; the brief carries the reason so graph can retire it.
+2. **Full sweep, unchanged — drain all 76.** Scope is not renegotiated by a measurement. Keep cutting
+   ≤4-remediation release branches until the `HOLDS` set is empty, reporting after each.
+3. **`BL-009`, `BL-011`, `BL-012` jump the queue and are fixed in the close release.** They are live
+   defects in already-shipped code, not queued innovations, and two return a WRONG answer rather than
+   a missing one. They are gated on no sub-claim, so they add no dependency.
+4. **Done-when 5 is narrowed, and the 14 non-citable closes route through the brief.** See the
+   amended criterion. The closes all still land; only the evidence differs.
+
+### Two blockers were found on resume and are FIXED
+
+Both were in the promoted register data, not in the adjudications.
+
+- **39 of 115 register ids were abbreviations of the ledger's label, 17 on rows bound for the
+  CHANGELOG.** A citation drafted from them would have named ids that exist nowhere and closed
+  nothing, silently. Repaired by joining against the Phase 0 census; the verdict table is now
+  RENDERED by `docs/reviews/graph-ledger-adjudication-data/render-register-tables.sh`, whose
+  `--check` byte-compares and is proven to fail on an in-region edit, a deleted row, a changed TSV
+  row and a misspelled marker.
+- **`merge-verdicts.sh` exited 2 and recomputed nothing** — it named `refute-all.tsv` and
+  `verdicts.tsv`; the committed files are `refutation-verdicts.tsv` and `phase1-verdicts.tsv`.
+  Repaired, it reproduces the disposition table byte-identically. It now also derives the **close
+  channel** from the census, so the two gates below cannot be forgotten.
+
+**A close has two channels and only 25 of the 39 can use the mechanical one.** A `NAMED-UPSTREAM`
+row needs a `verify:` receipt (`ledger-reverify.sh:647` gates on `has_verify &&`) AND an id-shaped
+label (`named_absorbed()` rejects any label with a character outside `A-Z0-9-`). 14 closes fail one
+or both. They close via the brief's strict `**ADOPTED UPSTREAM (v<digit>` annotation, which
+`ledger-rotate.sh` archives with no receipt test anywhere in it.
 
 The two tables that follow are the superseded planning-session estimates, kept because the
 false finding in them is instructive. **Do not act on their numbers.**
@@ -417,10 +459,23 @@ Each of these is a command, and each was checked to be answerable at the point i
    while a known-cited id returns non-zero.
 3. `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push` is green on every release branch, with each
    changed fixture read by name against an impossible-name control.
-4. `git -C /Users/n8/git/graph status --porcelain | wc -l` equals the Phase 0 baseline.
-5. The Phase 5 `ledger-reverify.sh` run emits a `NAMED-UPSTREAM` row for every id this program
-   cited. It joins on the full slug, so each is unambiguous and none degrades to
-   `NAMED-UPSTREAM-AMBIGUOUS`.
+4. **No write by this program reached graph.** The Phase 0 baseline of **35** is NOT the criterion and
+   cannot be: a live graph session is committing and editing there throughout, and it had already
+   moved the count to **113** by the time Phase 2 resumed. An absolute count therefore measures
+   graph's activity, not this program's restraint, and can never come back equal — it is the
+   unreachable-criterion shape this plan is required to avoid. Assert instead that no path this
+   program could write is dirty **by content**: the ledger's md5 is unchanged across the phase, and
+   `git -C /Users/n8/git/graph diff --stat` names no file this program touched. Record the count as
+   an observation, never as a gate.
+5. **Split by channel, because one criterion over both sets is unreachable for half of it.** For the
+   closes whose `final-disposition.tsv` channel is `changelog-cite` — 25 of 39 — the Phase 5
+   `ledger-reverify.sh` run emits a `NAMED-UPSTREAM` row for every id cited, joining on the full
+   slug so none degrades to `NAMED-UPSTREAM-AMBIGUOUS`. For the 14 whose channel is
+   `brief-annotation`, that row **cannot exist** — `flush()` gates on `has_verify &&` and
+   `named_absorbed()` rejects a non-id-shaped label — so the criterion is instead that the brief
+   renders the exact strict `**ADOPTED UPSTREAM (vX.Y.Z, verified <date>)**` string for each, and
+   that `ledger-rotate.sh --check` would archive it. Derive the two sets in the same invocation from
+   the channel column; do not hand-list either.
 6. The `HOLDS` set is empty — every entry is either remediated and cited, or filed as a `BL-`
    entry in `docs/backlog.md`.
 
