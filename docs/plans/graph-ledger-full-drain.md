@@ -100,9 +100,49 @@ currently emits no wrong report row. Tier it accordingly.
 were adjudicated in 29 parallel batches of 4; all 48 proposed closes were then attacked by 12
 independent verifiers briefed to break them.
 
-**Phase 2 is RESUMED.** The four blocking decisions are ruled (below) and the two register blockers
-found on resume are fixed. Still outstanding: the twenty-five backlog entries (`BL-009`–`BL-033`) are
-not yet written, no release branch is cut, `VERSION` is untouched, and no CHANGELOG entry exists.
+**Phase 2 is IN PROGRESS on branch `ai-dlc/graph-ledger-drain`, 11 commits past `0cadda4`, nothing
+pushed and no release cut.** The four blocking decisions are ruled (below). `VERSION` is untouched
+and no CHANGELOG entry exists yet.
+
+**START HERE ON A FRESH SESSION — the numbered next actions.**
+
+1. **Re-establish the pin** (see "Re-establish the pin", below). It moved twice already; reconstruct
+   rather than expect a match, and verify by md5 with the off-by-one control.
+2. **Collect the delegated backlog drafts.** Five agents were dispatched and their reports had not
+   arrived when the session ended: `bl-batch-A` (refutation rows 273, 281, 387, 610), `bl-batch-B`
+   (1254, 1449, 1543, 3190), `bl-batch-C` (3375, 3464, 3787, 3828, 4153), plus two fixture authors,
+   `fixture-fence-guard` (for the rotator guard in `scripts/backlog-rotate.sh`) and
+   `fixture-wfd-sibling` (for the `wait-for-deliverable` fix). **Those agents are gone with the
+   session — do NOT wait for them.** Redo the work inline, or re-dispatch with the same briefs; the
+   briefs' substance is preserved in the numbered list below and in `refutation-verdicts.tsv`.
+3. **File the remaining backlog entries.** `BL-008` is the highest id in `docs/backlog.md` today, so
+   the next free id is `BL-009`. Grammar and receipt verbs are in that file's own header; **run every
+   receipt before committing it — one that exits 0 today is already broken.**
+4. **Finish the two remaining jump-queue fixes**: the recovery gate not arming on a bare-basename
+   step file, and the gate treating a partial read as a full one. The other two are DONE (see below).
+5. **Then the close release** — steps 10–12 unchanged.
+
+**What landed this session, and what each is worth:**
+
+| commit | what | evidence state |
+|---|---|---|
+| `40770c3` | 39 register ids repaired; verdict table now RENDERED with a `--check` | proven both directions |
+| `b222017` | the naive fence fix would drop 47 entries; one entry carries the odd fence | measured |
+| `16d93f4` | the three post-pin entries adjudicated | re-derived |
+| `2c5d691` | six late agent reports reconciled; one overturned a verdict of mine | re-derived |
+| `d50859d` | `backlog-rotate.sh` refuses a ledger it would corrupt | FP set empty over a 6-case battery |
+| `b0e523b` | `wait-for-deliverable` chained-sibling false NON-DELIVERY | **trace only — end-to-end arm still owed** |
+| `2951644` | short-id fallback anchored and archive-aware; 4 misattributions withdrawn | measured, fixture 78/78 |
+
+**Two things a resuming session must not mistake for done.**
+
+`b0e523b` is verified by `bash -x` trace at the variable level and **not** end-to-end. The outcome
+harness printed the same line for both builds and could not be made deterministic, because
+pre-seeding the counter collides with the grant path's rewrite at `wait-for-deliverable.sh:487` and
+the PENDING loop's re-read at `:586`. A deterministic end-to-end fixture arm is owed, from a
+different hand than the fix.
+
+`d50859d` has no fixture yet either. Both fixtures were delegated and neither report arrived.
 
 ### Adjudication result — 115 entries
 
@@ -386,19 +426,32 @@ because work remains in them. What the run added, and what a repeat must keep:
 **RESUME HERE.** The next action is to finish drafting `BL-009`–`BL-033` and land them, because 15
 of the closes are gated on their sub-claim being filed first.
 
-**The 25 entries, by subject:** the recovery gate not arming on a bare-basename step file; the gate
-treating a partial read as a full one; `wait-for-deliverable`'s chained-sibling false NON-DELIVERY;
-the unanchored, archive-blind, anti-monotonic short-id fallback; `<cross-session-message` missing
-from the harness-origin schema; the report dropping the layer row's digest; mandated detectors
-outside the byte-verified region; three catalog entries invisible to the absorption detector with
-no `NOT-CHECKED` status; dispatched modes with no driver; the word-split list that reports itself
-skipped; the pipe-fed `grep -q` that `I54` cannot see; the budget summary reading three of six
-channels; the permanently-exempt contradicts-core entry; the close-record writer sited off the
-terminating path; the divergent flow-log legends; the adjudication schema still naming the blocking
-row; story-scoped `NOTHING VERIFIED`; Check 4's unreachable PASS; the wrapper discarding
-`CORE-AT-THEIRS`; `effort_bound` with no readers; the producer-surface procedure gap; no detector
-deriving retired paths; bare pointers resolving from no root; two template files the install glob
-cannot reach; and the rotator's mid-fence split.
+**The backlog list is 22, not 25, and it must be DERIVED rather than recalled.** Three of the
+original 25 were ruled fixes rather than filings (decision 3), and two of those three are already
+fixed. **Do not work from a prose list** — derive the set from
+`docs/reviews/graph-ledger-adjudication-data/final-disposition.tsv` (rows whose disposition contains
+`sub-claim` are the 15 gated ones) plus `post-pin-verdicts.tsv` for 3 more. Each gated sub-claim
+carries its measured evidence in `refutation-verdicts.tsv`, keyed on the pin line, so the work per
+entry is a RECEIPT THAT FIRES rather than a fresh derivation of the defect.
+
+**The 15 gated sub-claims, by pin line:** 273 the producer-surface evidence procedure; 281 two
+template files the install glob cannot reach; 387 the divergent flow-log legends; 610 a merged
+duplicate whose retirement would delete the only mechanical anchor either entry has; 1254 Check 4's
+unreachable PASS; 1449 a bold bullet that splits an entry while `ENTRY-SWALLOWED` fires only on a
+colon; 1543 a multi-line plain scalar rendered as one line that reads as a complete reason; 1862
+`wait-for-deliverable`'s chained sibling — **FIXED in `b0e523b`**; 3190 three catalog entries outside
+the detector with no `NOT-CHECKED` status; 3375 no detector deriving retired paths; 3464 the shipped
+schema still naming the blocking row; 3507 the archive-blind short-id fallback — **FIXED in
+`2951644`**; 3787 the wrapper discarding `CORE-AT-THEIRS`; 3828 `effort_bound` with no readers; 4153
+the budget summary reading three of six channels.
+
+**Plus the three post-pin entries**, all live, all needing a receipt — two carry none at all:
+`PC-S303-SPEC-JOIN-MEMLOG-REGEX-STALE-VS-AUTHOR-SUFFIX`,
+`PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF`,
+`PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR`.
+
+**Still owed as FIXES, not filings:** the recovery gate not arming on a bare-basename step file, and
+the gate treating a partial read as a full one.
 
 **Each needs a receipt that can fire.** The two failures this program measured, both of which will
 recur: an anchor on text **the fix quotes back** (fixes here document what they removed, so the
