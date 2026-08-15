@@ -438,6 +438,30 @@ to grow fourfold carries the identical hazard.
     hand from the arm's — an arm and a battery from one hand encode one understanding twice and a
     false pass has an unreachable half nobody sees. The last cycle recorded a self-authored arm
     that passed against its own mutant; do not repeat it.
+
+14a. **A `HOLDS` verdict gets an independent hand on its SCOPE before it is remediated.** Phase 1
+    exempted `HOLDS` from second review on the grounds that a false `HOLDS` wastes work rather than
+    losing it. That reasoning holds for whether the defect is real and fails for how WIDE it is: a
+    `HOLDS` whose scope is wrong ships an incomplete fix, which is lost work wearing a green fixture.
+    Measured on the three post-pin entries — all three were `HOLDS`-family, one was filed here as a
+    plain `HOLDS` "exactly as filed", and two independent verifiers found a second failing grammar,
+    a prescribed fix that does not work when run, and a BSD-`sed` no-op in it. **36 of the 76 live
+    entries are already `HOLDS-MECHANISM-WRONG` or `HOLDS-WIDER`**, so scope error is the base case,
+    not the exception. Aim the second hand at the scope question specifically — what else fails the
+    same way, and does the prescribed fix actually work when executed — not at "is this real".
+
+14b. **Run the filing's prescribed fix before adopting it.** Two of three post-pin filings prescribed
+    a fix that provably does not work: one still returned the corrupt value when transcribed
+    literally, the other named a channel that does not exist. Transcribe it, execute it against the
+    case the filing itself reproduces, and record what it returned.
+
+14c. **Read the guarding fixture before writing the remediation, and expect it to be blind.** All
+    three post-pin entries were guarded by a fixture that was absent or seeded from what its reader
+    already accepts — `core/fixtures/scope-confirmation/` seeds only the two grammars its parser
+    accepts, and `core/fixtures/spec-join-integrity/seed.sh:200` claims "REAL bmad-spec SHAPE,
+    captured from an actual headless run" while seeding only the form its regex matches. A fixture
+    that cannot express the defect will stay green across the fix, so the remediation is not done
+    when the code changes — it is done when an arm exists that fails without it.
 15. Gate each branch with `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push` and read every
     changed fixture **by name** in the full output, against an impossible-name control in the same
     invocation. `core/git-hooks/pre-push` is the consumer's hook and prints a green banner having
