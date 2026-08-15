@@ -336,3 +336,307 @@ textual grounds to close it into the other, which would delete the anchor perman
 ONLY as part of an APPLIED merge.**
 
 verify: sh s=$(LC_ALL=C awk '/^\*\*Style:\*\*/{g=1;next} g&&/^\*\*/{exit} g' core/skills/ai-dlc/rule-authoring.md); [ -n "$s" ] && grep -qiE "identifier" <<<"$s"
+
+## BL-013
+
+**A bold bullet whose bold span does NOT end in a colon splits a ledger entry, and nothing reports
+it.** `ledger_entry_shape()` at `core/skills/ai-dlc-update/reconcile/lib.sh:276` opens a new entry on
+any line-leading `- **`. That is correct and load-bearing for every ledger whose entries are bullets.
+The `ENTRY-SWALLOWED` diagnostic that makes the resulting split legible is gated on the bold span
+ending in a colon — `label ~ /:$/` at
+`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:1086`. So an annotation written
+`- **Some lead-in** text` truncates the entry above it, CAPTURES that entry's receipt, and produces
+no row under the swallowed entry's id and no `ENTRY-SWALLOWED` row either.
+
+Measured through the shipping `ledger-reverify.sh` on a three-entry synthetic ledger:
+`PC-PROBE-SPLIT-NO-COLON` is named **0** times in the output, and its receipt is attributed to the
+label `False CLOSE-CANDIDATE`. Controls in the same run, both non-zero: the clean entry emits **1**
+row under its own id, and the byte-identical annotation WITH a colon emits `ENTRY-SWALLOWED` naming
+the truncated entry.
+
+The colon gate was a deliberate choice, not an oversight — the arm's own header records that
+re-keying the entry-shape rule was considered and rejected because narrowing the bullet arm drops
+real entries. **The naive repair is measured worse than the defect**: a plain `infence = !infence`
+toggle over the reference consumer's 4356-line ledger takes the entry-start count from 142 to 95,
+silently dropping 47 real entries, because that corpus carries 111 fence delimiters — an ODD number,
+one entry holding an unterminated fence — and the toggle desynchronises there permanently.
+`scripts/backlog-rotate.sh` took the other road for the same shared boundary rule: it refuses to
+rotate rather than re-keying the parse.
+
+Discharges `PC-S299-LEDGER-REVERIFY-SIGPIPE-FALSE-ABSENT`, whose other two halves — the
+`all_present()` SIGPIPE false-absent and the "first directive wins" receipt parse — are both already
+fixed. A close of that consumer entry is GATED on this filing.
+
+The receipt asserts BEHAVIOUR, not prose: exit 0 when the tool NAMES the truncated entry, which both
+plausible fixes produce — re-attributing the receipt to its own id, or emitting a diagnostic whose
+detail carries the swallowed id. Verified satisfiable: the same probe with a colon added returns 0,
+and that colon is the only difference between exit 1 and exit 0 today. The finding is a property of
+the commit, not of the worktree: it was re-run against `git show HEAD:` copies of both
+`ledger-reverify.sh` and `lib.sh` while a sibling change sat in the tree, same verdict.
+
+verify: sh W=$(mktemp -d); mkdir -p "$W/c"; L="$W/c/led.md"; printf '%s\n' '# probe' '' '- **PC-PROBE-CLEAN-CONTROL** — a clean entry, no annotation in its body' '' '  veri''fy: theirs_has VERSION "0"' '' '- **PC-PROBE-SPLIT-NO-COLON** — the entry a no-colon bold bullet splits' '' '- **False CLOSE-CANDIDATE** this bold span does not end in a colon' '' '  veri''fy: theirs_has VERSION "0"' > "$L"; O=$(bash core/skills/ai-dlc-update/reconcile/ledger-reverify.sh "$PWD" HEAD~1 "$W/c" HEAD "$L" 2>&1); C=$(LC_ALL=C grep -c PC-PROBE-CLEAN-CONTROL <<<"$O" || true); S=$(LC_ALL=C grep -c PC-PROBE-SPLIT-NO-COLON <<<"$O" || true); rm -rf "$W"; echo "control_rows=$C swallowed_id_named=$S"; [ "$C" -ge 1 ] || { echo "HARNESS BROKEN: the control entry emitted no row"; exit 2; }; [ "$S" -ge 1 ]
+
+## BL-014
+
+**The re-adoption dossier renders a multi-line PLAIN scalar `reason:` as its first line only, and
+clips a block scalar with no ellipsis.** `fm_block()` at
+`core/skills/ai-dlc-update/reconcile/readopt-override.sh:67` enters block mode only on
+`/^[|>][0-9]*[-+]?$/`; every other `reason:` value takes `print v; exit` at `:74`. A multi-line PLAIN
+scalar therefore reaches the dossier's "WHY THIS OVERRIDE EXISTS" panel as its first line. Separately
+the render at `:422` pipes through `head -20` with no ellipsis and no count, so a long reason is
+silently truncated.
+
+Measured with the shipping `fm_block()` lifted verbatim, against the reference consumer's override
+entries: `steps__retro__ci-gates-enforcement-surface.md` renders **1 line of 35**, and its one
+surviving line is a complete sentence that reads as the whole reason — the dangerous direction, since
+the operator is looking at a plausible field rather than a blank one.
+`team-roles__tea__consumer-drift.md` renders **1 of 18**, cut mid-sentence after a trailing comma.
+CONTROLS proving the reader works, same invocation: the three block-scalar reasons read **122**, **93**
+and **34** lines. The `head -20` clip then hits all three of those at **20 of 145**, **20 of 169** and
+**20 of 37** folded lines, with nothing in the output saying so.
+
+`SKILL.md` step 7's retire / readopt / reaffirm decision turns on exactly this field, which is why the
+sibling defect — a bare `|` rendering empty — was already fixed. The plain-scalar case was left
+behind by that fix.
+
+**Every figure the filing carried has moved** (it said 1 of 36, 1 of 19, and a clip at 20 of 124 and
+20 of 95, over two files rather than three); the numbers above are re-derived and the class is
+marginally worse than filed. The mechanism claims are exact at the line level.
+
+Discharges `PC-S299-READOPT-DOSSIER-RENDERS-REASON-EMPTY`. A close of that entry is GATED on this
+filing.
+
+Both arms exercise the SHIPPED code — `fm_block()` is lifted verbatim and the render pipeline is
+lifted from the line that renders it, so a fix at either site moves the receipt where a restated
+pipeline could not. The clip arm deliberately asserts reaching the LAST line or carrying a notice
+rather than comparing counts, since a count would be satisfied by raising the limit from 20 to 50
+while the silent clip survived at 60. Verified satisfiable: against a copy patched to collect plain
+scalars and drop the clip, the identical receipt returns 0.
+
+**Not measured, and stated rather than hidden:** the FULL dossier was not run end to end against a
+real override — only the two code paths it composes, which are the entire subject of the claim.
+
+verify: sh S=core/skills/ai-dlc-update/reconcile/readopt-override.sh; eval "$(awk '/^fm_block\(\) \{/,/^\}/' "$S")"; W=$(mktemp -d); printf '%s\n' '---' 'shadows: x' 'reason: first line of a plain scalar,' '  second line,' '  third line.' 'base_sha: dead' '---' > "$W/p.md"; printf '%s\n' '---' 'shadows: x' 'reason: |' '  one' '  two' '  three' 'base_sha: dead' '---' > "$W/b.md"; { printf '%s\n' '---' 'shadows: x' 'reason: |'; i=1; while [ "$i" -le 200 ]; do printf '  L%s\n' "$i"; i=$((i+1)); done; printf '%s\n' 'base_sha: dead' '---'; } > "$W/l.md"; A=$(fm_block "$W/p.md" reason | LC_ALL=C grep -c '' || true); CA=$(fm_block "$W/b.md" reason | LC_ALL=C grep -c '' || true); P=$(LC_ALL=C grep -F 'fm_block "$OVR" reason' "$S" | head -1); P=${P#\$(}; P=${P%)}; OVR="$W/l.md"; R=$(eval "$P"); CB=$(LC_ALL=C grep -c '' <<<"$R" || true); LAST=$(LC_ALL=C grep -c '^  L200$' <<<"$R" || true); NOTE=$(LC_ALL=C grep -vc '^  L[0-9]*$' <<<"$R" || true); rm -rf "$W"; echo "plain=$A block_control=$CA rendered=$CB last=$LAST notice=$NOTE"; [ "$CA" -gt 1 ] && [ "$CB" -gt 0 ] || { echo "HARNESS BROKEN"; exit 2; }; [ "$A" -gt 1 ] && { [ "$LAST" -ge 1 ] || [ "$NOTE" -ge 1 ]; }
+
+## BL-015
+
+**A registered extension entry with zero markdown headings is invisible to the absorption arm, and
+the only row it gets says `EXTENSION-OK`.** `layer-drift.sh`'s unnumbered absorption arm harvests its
+subject with `ext_titles="$(unnumbered_titles_of_file "$f")"` at
+`core/skills/ai-dlc-update/reconcile/layer-drift.sh:1502` and runs only under
+`if [ -n "$ext_titles" ]` at `:1503`. `unnumbered_titles_of_file` at `:747` resolves titles from
+headings, so an entry whose body carries no markdown heading yields an empty set and the arm never
+executes on it. There is no `else`, so nothing is emitted — and the status vocabulary has no member
+that could say so: `NOT-CHECKED` appears **0** times in the file, against **21** emit sites carrying
+**14** distinct statuses.
+
+Measured on the reference consumer's 38 registered extension entries: **3** carry zero markdown
+headings — `roles/pm-domain.md`, `steps-domain/bug-investigation-domain.md`,
+`steps-domain/research-requirements-domain.md`. Control: the other **35** carry at least one, and
+`checks/gate-validation-push.md` carries **10**.
+
+**The silence is worse than absence**, and this is where the filing understated itself. Running the
+shipping `layer-drift.sh` against that consumer, each of the three gets exactly one row and its status
+is `EXTENSION-OK` — the sole member of the denylist at
+`core/skills/ai-dlc-update/reconcile/emit-report.sh:230`, so it never reaches the report. The operator
+sees nothing, and the row behind the nothing reads as checked-and-fine.
+
+**A live instance, found by hand on a file the detector cannot see.** `pm-domain.md`'s own frontmatter
+comment records core v0.288.0 adding both of that entry's former bullets to `team-roles/pm.md`
+near-verbatim. That is exactly the retirement case the absorption arm exists to find.
+
+Discharges `PC-S316-ABSORPTION-DETECTOR-JOINS-ONLY-ON-NUMBERED-ANCHORS`, whose headline claim — the
+arm being gated behind the `ext_anchors` guard — is already fixed: the arm at `:1502` is a separate
+`if` and the weaker status does reach the report. These 3 are the residue. A close of that entry is
+GATED on this filing.
+
+**The satisfiability evidence is a DIFFERENTIAL, not a killed mutant, and that is a real gap.** An
+attempt to patch `unnumbered_titles_of_file`'s empty case collapsed the classifier from 3 rows to 1
+and tripped the receipt's own `HARNESS BROKEN` guard — the guard works, but no green mutant was
+obtained. What stands instead: `WITHHEADING` — identical body text, identical `hooks:` target,
+identical absorbed section, same invocation — earns `EXTENSION-RETIRE-CANDIDATE`, so the target state
+is demonstrably emittable by the shipping code for this exact body and only the harvester's blindness
+separates the two entries. **Close this gap with a killed mutant before treating the receipt as
+mutation-tested.** The receipt's predicate also had to exclude `EXTENSION-HOOK-DRIFT`: a first version
+returned 0 because the synthetic entry picked up that unrelated arm's row, which the three real
+entries do not get — found only by running it.
+
+verify: sh D=core/skills/ai-dlc-update/reconcile/layer-drift.sh; R=$(mktemp -d); DI="$R/d"; CO="$R/c"; mkdir -p "$DI/core/skills/ai-dlc/steps" "$DI/core/schemas" "$CO/.claude/skills/ai-dlc/extensions"; cp core/schemas/layer-adjudication-register.json "$DI/core/schemas/" || { echo "HARNESS BROKEN: schema"; exit 2; }; printf '%s\n' '<!-- CORE_MANIFEST v1 -->' 'machinery:' '  - core-manifest.md' 'rulebook:' '  - steps/*.md' > "$DI/core/skills/ai-dlc/core-manifest.md"; printf 'contract_version: 16\n' > "$DI/core/skills/ai-dlc/layer-contract.yaml"; printf '%s\n' '# Widget' '' '### 3. Pre-existing Widget Check.' '' 'Core has carried this for releases.' > "$DI/core/skills/ai-dlc/steps/widget.md"; git -C "$DI" init -q >/dev/null 2>&1; git -C "$DI" add -A >/dev/null 2>&1; git -C "$DI" -c user.email=f@x -c user.name=f commit -qm base >/dev/null 2>&1; B=$(git -C "$DI" rev-parse --short HEAD); printf '%s\n' '' '### 9. Absorbed Widget Check.' '' 'Core adopted this on this pull.' >> "$DI/core/skills/ai-dlc/steps/widget.md"; git -C "$DI" add -A >/dev/null 2>&1; git -C "$DI" -c user.email=f@x -c user.name=f commit -qm theirs >/dev/null 2>&1; T=$(git -C "$DI" rev-parse --short HEAD); E="$CO/.claude/skills/ai-dlc/extensions"; for n in HEADINGLESS WITHHEADING; do printf '%s\n' '---' 'kind: step-domain' 'hooks: steps/widget.md' "id: $n" 'push_candidate: false' 'conforms_to: 16' '---' '' > "$E/$n.md"; done; printf '%s\n' '- **Absorbed Widget Check (consumer copy).** The body core has since taken, carried as a bare bullet with no heading.' >> "$E/HEADINGLESS.md"; printf '%s\n' '### 9. Absorbed Widget Check.' '' 'The same body, under a heading.' >> "$E/WITHHEADING.md"; O=$(bash "$D" "$DI" "$B" "$T" "$CO" 2>/dev/null); N=$(LC_ALL=C grep -c '' <<<"$O" || true); SU=$(LC_ALL=C awk -F'\t' '$2 ~ /HEADINGLESS/ && $1 != "EXTENSION-OK" && $1 != "EXTENSION-HOOK-DRIFT"' <<<"$O" | LC_ALL=C grep -c '' || true); CT=$(LC_ALL=C awk -F'\t' '$2 ~ /WITHHEADING/ && $1 == "EXTENSION-RETIRE-CANDIDATE"' <<<"$O" | LC_ALL=C grep -c '' || true); NA=$(LC_ALL=C grep -c HEADINGLESS <<<"$O" || true); rm -rf "$R"; echo "rows=$N headingless_named=$NA headingless_absorption_rows=$SU control_withheading_retire_rows=$CT"; [ "$N" -gt 0 ] && [ "$CT" -ge 1 ] || { echo "HARNESS BROKEN: the absorption arm did not fire on the with-heading control"; exit 2; }; [ "$SU" -ge 1 ]
+
+## BL-016
+
+**Nothing derives a retired PATH from the base→theirs diff, so a layer file citing one is claimed by
+no detector.** `retired-layer-contract.sh` does derive its retired set from the base→theirs core
+rulebook, but its vocabulary is two shapes and neither is a path: `shapes_of()` at
+`core/skills/ai-dlc-update/reconcile/retired-layer-contract.sh:81-87` extracts labelled directives and
+`tokens_of()` at `:88-90` extracts `{<token>}` placeholders. A path retired between the two refs
+changes neither set, so `RETIRED` at `:131` is empty and the run takes the early exit at `:141`,
+reporting that the release "retired NO contract shape ... so NO layer file was opened".
+
+The only other candidate is W11 / LC-R4 at `core/scripts/validate-layer-entries.sh:1560`, which closes
+the headline instance and cannot generalise: its arm 2 at `:1731` is hard-coded to the story corpus,
+and every W11 candidate path must begin with one of four scan roots declared in
+`core/skills/ai-dlc/artifact-path-grammar.md` — `_bmad-output`, `docs/retro`, `docs/reviews`,
+`docs/escalations` — alternated into `LC_ALT` at `:1687`. A core path retired outside those four and
+cited in a consumer layer file is a candidate for neither mechanism.
+
+Measured behaviourally, both arms in one invocation, on a synthetic dist repo and a consumer extension:
+retiring only the PATH produced **0** `RETIRED-LAYER-CONTRACT` rows with the note "retired NO contract
+shape (2 at base, 2 at theirs)"; retiring a labelled DIRECTIVE the same layer file also cites produced
+**1** row on that same file. Same harness, same layer file — the detector fires, and the vocabulary is
+what excludes paths.
+
+The header's "WHAT IT DOES NOT CATCH, STATED PLAINLY" at `:47-51` names an invented shape and a prose
+paraphrase, and the run-time limit at `:129` names prose restatements. **Neither tells the operator
+that a retired path is outside the vocabulary, so this zero reads as covered** — an additional defect
+at the same site, folded in here.
+
+Discharges `PC-S314-NO-DETECTOR-CLAIMS-A-LAYER-FILE-CITING-A-PATH-THE-PULL-JUST-RETIRED`. A close of
+that entry is GATED on this filing — W11 arm 2 closes its headline instance and not this sub-claim.
+
+Behavioural rather than a grep: the receipt drives the real detector twice over one seeded tree and the
+directive arm is the control in the same invocation, so a harness that stopped exercising the detector
+returns 0 rows for BOTH arms and reports STILL-LIVE rather than closing. **A fix landing in W11 instead
+of in this detector would also read STILL-LIVE; re-point the receipt if that is the shape chosen.**
+
+verify: sh D=$(mktemp -d); mkdir -p "$D/dist/core/skills/ai-dlc" "$D/cons/.claude/skills/ai-dlc/extensions"; S="$D/dist/core/skills/ai-dlc/SKILL.md"; R="$D/dist"; git -C "$R" init -q; git -C "$R" config user.email a@b; git -C "$R" config user.name a; printf -- "- Model: \140/opus\n- Effort: \140/high\nStories: _bmad-output/planning-artifacts/stories/\n" > "$S"; git -C "$R" add -A; git -C "$R" commit -qm b; C1=$(git -C "$R" rev-parse HEAD); printf -- "- Model: \140/opus\n- Effort: \140/high\nStories: _bmad-output/planning-artifacts/s<N>/stories/\n" > "$S"; git -C "$R" commit -qam p; C2=$(git -C "$R" rev-parse HEAD); git -C "$R" checkout -q -b d "$C1"; printf -- "- Model: \140/opus\nStories: _bmad-output/planning-artifacts/stories/\n" > "$S"; git -C "$R" commit -qam d; C3=$(git -C "$R" rev-parse HEAD); printf -- "- Effort: \140/high\n_bmad-output/planning-artifacts/stories/\n" > "$D/cons/.claude/skills/ai-dlc/extensions/x.md"; V=core/skills/ai-dlc-update/reconcile/retired-layer-contract.sh; P=$(bash "$V" "$R" "$C1" "$C2" "$D/cons" 2>/dev/null | grep -c "^RETIRED-LAYER-CONTRACT"); K=$(bash "$V" "$R" "$C1" "$C3" "$D/cons" 2>/dev/null | grep -c "^RETIRED-LAYER-CONTRACT"); rm -rf "$D"; [ "$K" -ge 1 ] && [ "$P" -ge 1 ]
+
+## BL-017
+
+**The shipped schema still names the blocking row as the only source of `subject_digest`.**
+`core/schemas/layer-adjudication-register.json:29` describes `subject_digest` as "Copied verbatim from
+the blocking row", and `:5` says `reconcile/layer-drift.sh` "prints the digest in the blocking row, so
+the operator copies a value rather than deriving one". Recording a verdict is what stops the row
+blocking, so once any verdict exists for the current subject state the message carrying the key is
+never emitted again — exactly the case of adding an `owed` object to a verdict already recorded
+without one.
+
+`SKILL.md`'s half of that instruction was repaired: `core/skills/ai-dlc-update/SKILL.md:1271` sends the
+operator to `layer-drift.sh --list-adjudications`. The schema's half was not. Measured with a control
+in the same invocation: `grep -c list-adjudications` on the schema = **0**; `grep -c 'blocking row'` on
+the same file = **3**.
+
+The asymmetry is what makes it a defect rather than a duplicate. `scripts/install.sh:601-604` copies
+every `core/schemas/*.json` to `.claude/schemas/`, so the artifact a consumer opens while writing a
+register record is the unrepaired half, and the repaired half is in a file they are not reading at that
+moment.
+
+Discharges `PC-S319-SUBJECT-DIGEST-IS-UNREADABLE-ONCE-ITS-OWN-ROW-STOPS-BLOCKING`. A close of that
+entry is GATED on this filing — the entry names two carriers and only one was repaired.
+
+Anchored on the flag name a fix cannot omit. JSON carries no comments, so the token cannot land in a
+note recording the change while the description stays wrong: any occurrence is inside a description
+string, which IS the text a consumer reads. `subject_digest` is the read control — it survives any
+repair, so a receipt that stops finding it has failed to read the file rather than found the fix. Shown
+able to fire: the same predicate exits 0 against `SKILL.md`.
+
+verify: sh f=core/schemas/layer-adjudication-register.json; [ "$(grep -c subject_digest "$f")" -ge 1 ] || exit 1; grep -qF -e "--list-adjudications" "$f"
+
+## BL-018
+
+**`hard-blockers.sh` discards `CORE-AT-THEIRS` and prints `0 HARD blockers.`** `collect()` at
+`core/skills/ai-dlc-update/reconcile/hard-blockers.sh:96-101` filters both detectors' rows to
+`$1 ~ /^HARD-/`. `CORE-AT-THEIRS`, emitted by `unregistered-drift.sh:347`, does not survive that
+filter, so a run whose only finding is that row prints the literal `0 HARD blockers.` at `:110` and
+nothing else.
+
+That row is the documented tell for a stale base. `SKILL.md:1189` says so in as many words:
+"`CORE-AT-THEIRS` rows are the tell that the base was stale." This wrapper is the caller that most
+needs it and the only one that discards it.
+
+**The same wrapper already solved this exact class for the other non-`HARD-` status.**
+`DRIFT-RANGE-DEGENERATE` is read out separately at `:95`, and the header at `:86-93` states the failure
+mode verbatim — "the `^HARD-` filter below is the only reader this wrapper has, so the one caller that
+most needs that warning was the one caller that discarded it". Same wrapper, same filter, same class,
+one half done.
+
+Measured behaviourally on a copy of the wrapper beside a stub `unregistered-drift.sh` — the wrapper
+resolves its detectors from `$0`'s directory at `:70-72`. A stub emitting one `CORE-AT-THEIRS` row
+produced `0 HARD blockers.` with no mention of the row; a stub emitting one `HARD-PROBE` row through
+the identical harness produced the listed row.
+
+Discharges `PC-S302-HARD-BLOCKERS-HAS-NO-POST-APPLY-GUARD`. A close of that entry is GATED on this
+filing — `--post-apply` exists and closes the headline; the asymmetry argument does not close with it.
+
+Behavioural, and it stubs the detector deliberately: the subject is the wrapper's filter, not which
+base a detector was handed, so the receipt depends on no consumer tree and no ref pair that will move.
+The `HARD-PROBE` arm is the control in the same invocation.
+
+verify: sh D=$(mktemp -d); mkdir -p "$D/bin"; cp core/skills/ai-dlc-update/reconcile/hard-blockers.sh "$D/bin/"; printf "#!/bin/bash\nprintf \"%%s\\\\tcore/x.md\\\\tdetail\\\\n\" \"\$ROW\"\n" > "$D/bin/unregistered-drift.sh"; A=$(ROW=CORE-AT-THEIRS bash "$D/bin/hard-blockers.sh" "$D" HEAD "$D" HEAD 2>&1); B=$(ROW=HARD-PROBE bash "$D/bin/hard-blockers.sh" "$D" HEAD "$D" HEAD 2>&1); rm -rf "$D"; [ "$(grep -cF HARD-PROBE <<<"$B")" -ge 1 ] || exit 1; [ "$(grep -cF CORE-AT-THEIRS <<<"$A")" -ge 1 ]
+
+## BL-019
+
+**`effort_bound` records the config rather than the dispatch, and nothing reads it.**
+`core/hooks/ai-dlc-dispatch-guard.sh:329` writes `effort_bound` into the spawn ledger from
+`--arg effort "${PIN_EFFORT:-}"` at `:318`. `PIN_EFFORT` is the value read out of settings at
+`:228-238`; whether the guard actually appends an effort line is decided at `:355-380`, and the guard
+returns without appending anything at `:384`. The write sits above the decision it purports to record,
+so the field carries the CONFIG on every dispatch the guard leaves untouched — including those exiting
+at `:335` for an unreadable role file, recorded before the guard can know whether it will correct
+anything.
+
+Nothing reads it. Measured with a control in the same invocation over `core/*`: files naming
+`effort_bound` other than the writer = **0**; files naming `model_bound` other than the writer = **6**
+(`validate-spawn-ledger.sh`, `check-22-spawn-ledger/run.sh`, `dispatch-model-guard/run.sh`,
+`subagent-probe/run.sh`, `enforcement-map.yaml`, `gate-validation.md`). Same search, same corpus, one
+field has readers and the other has none.
+
+**`CHANGELOG.md:562-563` concedes the field and discharges nothing.** It reads: "`effort_bound` still
+records what the guard appended and is still read by nothing; that is a separate filing and is not
+addressed here." Two grounds, both measured. **The separate filing does not exist** — `effort_bound`
+occurs at exactly one line across the consumer's ledger and archive, and that line is inside the entry
+being deferred; in ai-dlc it appears only in the CHANGELOG, the writer, two plan files and a verdicts
+TSV, and nowhere in this backlog until now. **And the concession misdescribes what it concedes**: the
+field does not record what the guard appended, it records what was CONFIGURED, which is the sub-claim
+itself. This entry is the filing that pointer named.
+
+Discharges `PC-S303-EFFORT-BINDING-COMMANDS-A-SLASH-COMMAND-THAT-RESOLVES-TO-NOTHING`. A close of that
+entry is GATED on this filing — its headline is fixed at `:369` and fixture-guarded.
+
+The receipt takes either fix: it exits 0 when the field is gone from the hook, or when the write sits
+below the effort decision AND at least one file under `core/` reads it. `model_bound` is the control,
+so a search that has stopped working reports STILL-LIVE rather than closing. **A fix that moves the
+write and leaves it unread still reports STILL-LIVE, deliberately** — a ledger field nobody reads is
+the other half of the claim.
+
+verify: sh H=core/hooks/ai-dlc-dispatch-guard.sh; C=$(git grep -l "model_bound" -- "core/*" | grep -vxF "$H" | wc -l | tr -d " "); [ "$C" -ge 1 ] || exit 1; LW=$(grep -n "effort_bound:" "$H" | head -1 | cut -d: -f1); [ -z "$LW" ] && exit 0; LD=$(grep -n "^NEEDS_EFFORT=false" "$H" | head -1 | cut -d: -f1); W=$(git grep -l "effort_bound" -- "core/*" | grep -vxF "$H" | wc -l | tr -d " "); [ "$LW" -gt "$LD" ] && [ "$W" -ge 1 ]
+
+## BL-020
+
+**Two of the budget script's six finding channels set no flag, and the summary closes them with an
+unqualified PASS.** `core/scripts/validate-artifact-budget.sh` has six finding channels — `:1025` over
+budget, `:1084` off-schema section, `:1118` marked-superseded content, `:1149` struck In-Flight rows,
+`:1178` unrecognised In-Flight status, `:1262` ungoverned artifacts. Four set a `SAW_*` flag; the two in
+the middle, `:1118-1143` and `:1149-1170`, set none. The summary gate reads three at `:1309` and
+`SAW_UNGOV` in the `elif` at `:1318`, so a run whose only finding came from either flagless channel
+falls through to the `else` at `:1322` and prints, at `:1323`,
+`PASS  every measured living artifact is within its Rule 25(d) budget.` — byte-identical to what a
+genuinely clean run prints.
+
+Measured on four seeded snapshots under the invocation `core/skills/ai-dlc/steps/retro.md:533` actually
+prescribes, `--warn-only --fail-on pipeline-snapshot.md`. A struck In-Flight row gives exit 0, one
+`WARN:` row, zero qualified summary lines, one unqualified PASS line. Controls in the same run: an
+unrecognised status token — a covered channel — gives the qualified `WARN  this run reported ...` line
+and no PASS line; a clean snapshot gives the PASS line and nothing else.
+
+`retro.md:593` tells the reader "**Exit 0 is not by itself CLEAN under `--warn-only`** — the summary
+line says which". On the struck-row channel that instruction is false, and it is the instruction the
+operator uses to decide the row's verdict.
+
+**Scope, measured rather than assumed, and narrower than filed.** Only the struck-row channel produces
+the false PASS under retro's flags. The marked-superseded block is gated at `:1120` on
+`! is_fail_on "pipeline-snapshot.md"`, so `--fail-on pipeline-snapshot.md` turns it into a FAIL, `RC=1`,
+and the summary block at `:1307` is skipped — measured both ways: `a-struck` rc=0 bare_PASS=1,
+`b-marker` rc=1 bare_PASS=0. Both blocks are owed the flag; only one is reachable as a false PASS from a
+shipped invocation today.
+
+`core/fixtures/budget-summary-verdict` owns this filing and covers neither channel. Its header at
+`:79-82` records choosing `gate-log.md` over `pipeline-snapshot.md` so a breach-channel arm could not be
+satisfied by another snapshot channel firing — correct for those arms, and why the two flagless channels
+were never seeded.
+
+Behavioural, under the step file's literal flags. The `WARN:` row is the control, so a seed that stops
+working reports STILL-LIVE rather than closing. Proven able to fire: with one line added setting a flag
+inside the struck-row block of a copy, the same predicate exits 0.
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/_bmad-output"; printf "## Pipeline Position\n- x\n## Sprint Context\n- x\n## Recent Activity\n- x\n## Open Items\n- x\n## Locked Decisions\n- x\n## In-Flight Teammates\n| teammate | deliverable | dispatched-at | note | status |\n| --- | --- | --- | --- | --- |\n| ~~a~~ | t | t | n | in-flight |\n## Context Reminders\n- x\n" > "$d/_bmad-output/pipeline-snapshot.md"; printf "tiny\n" > "$d/_bmad-output/gate-log.md"; o=$(bash core/scripts/validate-artifact-budget.sh --root "$d" --warn-only --fail-on pipeline-snapshot.md 2>&1); rm -rf "$d"; [ "$(grep -cF "WARN: In-Flight Teammates carries struck-through row(s)." <<<"$o")" -ge 1 ] || exit 1; [ "$(grep -cF "is NOT a clean result" <<<"$o")" -ge 1 ] || [ "$(grep -cxF "PASS  every measured living artifact is within its Rule 25(d) budget." <<<"$o")" -eq 0 ]
