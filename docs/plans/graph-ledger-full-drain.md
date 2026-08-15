@@ -106,21 +106,34 @@ and no CHANGELOG entry exists yet.
 
 **START HERE ON A FRESH SESSION — the numbered next actions.**
 
+0. **THE BRANCH IS RED AND CANNOT PUSH. Fix this first.** `core/fixtures/wait-stale-deliverable`
+   fails one of nineteen assertions:
+   `FAIL MUTANT no-restamp: rc 2 on a flagless join — this mutant reaches code the default path uses`.
+   The fixture is correct and the MUTANT is over-broad: it perturbs a shared path, so it fails a
+   second unrelated join, which `.claude/rules/fixture-mutants.md` forbids. Its sibling assertion for
+   the same mutant passes, so the property IS covered — narrow the mutant to its subject, do not
+   delete the arm and do not relax the assertion. **Give this to a hand other than the one that
+   authored `b0e523b`**, whose fix is the subject under test.
 1. **Re-establish the pin** (see "Re-establish the pin", below). It moved twice already; reconstruct
    rather than expect a match, and verify by md5 with the off-by-one control.
-2. **Collect the delegated backlog drafts.** Five agents were dispatched and their reports had not
-   arrived when the session ended: `bl-batch-A` (refutation rows 273, 281, 387, 610), `bl-batch-B`
-   (1254, 1449, 1543, 3190), `bl-batch-C` (3375, 3464, 3787, 3828, 4153), plus two fixture authors,
-   `fixture-fence-guard` (for the rotator guard in `scripts/backlog-rotate.sh`) and
-   `fixture-wfd-sibling` (for the `wait-for-deliverable` fix). **Those agents are gone with the
-   session — do NOT wait for them.** Redo the work inline, or re-dispatch with the same briefs; the
-   briefs' substance is preserved in the numbered list below and in `refutation-verdicts.tsv`.
+2. **The five delegated agents are GONE with the session. Do NOT wait for them.** Two of them had
+   already written to disk and their work is committed (`a572e42`, `6abef95`). The three backlog
+   drafters — `bl-batch-A` (refutation rows 273, 281, 387, 610), `bl-batch-B` (1254, 1449, 1543,
+   3190), `bl-batch-C` (3375, 3464, 3787, 3828, 4153) — delivered nothing, so that work is
+   outstanding. Redo it inline or re-dispatch; every input they were given is in
+   `refutation-verdicts.tsv` keyed on the pin line.
 3. **File the remaining backlog entries.** `BL-008` is the highest id in `docs/backlog.md` today, so
    the next free id is `BL-009`. Grammar and receipt verbs are in that file's own header; **run every
    receipt before committing it — one that exits 0 today is already broken.**
 4. **Finish the two remaining jump-queue fixes**: the recovery gate not arming on a bare-basename
    step file, and the gate treating a partial read as a full one. The other two are DONE (see below).
 5. **Then the close release** — steps 10–12 unchanged.
+
+**An agent going quiet in this session did NOT mean it had died, and acting on that assumption cost a
+full duplicate pass.** Six adjudicators reported hours late, in one burst, after their work had been
+redone inline; two fixture authors never reported at all yet had written complete, passing fixtures to
+disk. So: before redoing a delegated task, `git status` for its output and `SendMessage` the agent by
+name. An idle notification is not a result, and silence is not death.
 
 **What landed this session, and what each is worth:**
 
@@ -130,8 +143,8 @@ and no CHANGELOG entry exists yet.
 | `b222017` | the naive fence fix would drop 47 entries; one entry carries the odd fence | measured |
 | `16d93f4` | the three post-pin entries adjudicated | re-derived |
 | `2c5d691` | six late agent reports reconciled; one overturned a verdict of mine | re-derived |
-| `d50859d` | `backlog-rotate.sh` refuses a ledger it would corrupt | FP set empty over a 6-case battery |
-| `b0e523b` | `wait-for-deliverable` chained-sibling false NON-DELIVERY | **trace only — end-to-end arm still owed** |
+| `d50859d` + `a572e42` | `backlog-rotate.sh` refuses a ledger it would corrupt | FP set empty; 5 mutants, all killed |
+| `b0e523b` + `6abef95` | `wait-for-deliverable` chained-sibling false NON-DELIVERY | end-to-end mutant kills; ONE over-broad mutant leaves the branch RED |
 | `2951644` | short-id fallback anchored and archive-aware; 4 misattributions withdrawn | measured, fixture 78/78 |
 
 **Two things a resuming session must not mistake for done.**
