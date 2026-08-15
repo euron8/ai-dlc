@@ -363,9 +363,30 @@ absorbed_at() {
 # HOW MANY LEDGER ENTRIES SHARE A `PC-S<n>` PREFIX. Derived from the SAME extraction the main
 # loop reads, so the count can never describe a different entry set than the rows do -- a second
 # scan of the ledger file would be a second parser of the bullet shape.
+#
+# THE ARCHIVE COUNTS TOO, AND ITS ABSENCE MADE THIS TEST ANTI-MONOTONIC. The uniqueness test exists
+# so the prefix fallback attributes only when the prefix names exactly ONE entry. Counting the live
+# ledger alone means ARCHIVING an unrelated sibling can flip a prefix from ambiguous to unique --
+# so a routine rotation, which is supposed to be a pure move, silently UNLOCKS an attribution that
+# was correctly withheld before it. The count went down as the corpus grew.
+#
+# Measured on the reference consumer at the Phase 0 pin: of 25 prefixes with a live entry, **7 have
+# exactly one live entry AND at least one archived sibling** -- PC-S298 has 1 live against 9
+# archived. Every one of those seven passed the uniqueness test on a false premise, and the header
+# above is explicit that a wrong attribution "tells an operator to close an entry upstream never
+# touched, which is strictly worse than the silence it replaces".
+#
+# Counting both moves this in the CONSERVATIVE direction: strictly fewer attributions, never more.
+# That is the correct direction for this test, per the same asymmetry.
+#
+# The archive is OPTIONAL -- a consumer that has never rotated has no archive file, and that is a
+# normal state, not an error. `ledger-rotate.sh:67` fixes the name as
+# `<ledger-dir>/push-candidate-ledger.archive.md`, so it is derived from $LEDGER rather than
+# configured twice.
 prefix_entry_count() { # <PC-S<n>> -> integer
-  printf '%s\n' "$ENTRIES" | awk -F'\t' 'NF{print $1}' | sort -u \
-    | grep -cE "^$1-" 2>/dev/null || true
+  { printf '%s\n' "$ENTRIES" | awk -F'\t' 'NF{print $1}'
+    printf '%s\n' "${ARCHIVE_LABELS:-}"
+  } | sort -u | grep -cE "^$1-" 2>/dev/null || true
 }
 
 named_absorbed() { # <label> -> "<version> <short-sha> <how>" if upstream's history names it, else ""
@@ -384,7 +405,22 @@ named_absorbed() { # <label> -> "<version> <short-sha> <how>" if upstream's hist
     _pfx="$(printf '%s' "$_id" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')"
     [ -n "$_pfx" ] || return 0
     [ "$(prefix_entry_count "$_pfx")" = "1" ] || return 0
-    _c="$(git -C "$DIST" log -F --grep="$_pfx" --format=%H "$THEIRS" 2>/dev/null | tail -1)"
+    # ANCHORED, because `-F` is an unanchored FIXED-SUBSTRING search and that is not what the
+    # fallback means. The fallback's premise is that upstream cites the SHORT id; `-F --grep=PC-S302`
+    # instead matches any commit mentioning `PC-S302` as a substring, including one that names a
+    # DIFFERENT entry's full slug sharing the prefix, and including `PC-S3021`.
+    #
+    # Measured against this distribution's own history: the unanchored search matched 6 commits for
+    # PC-S302 and 6 for PC-S298, and the commit it attributed for each carries ZERO bare-prefix
+    # tokens -- it matched only through a longer slug. The anchored form matches 1 commit for each.
+    # So the old form did not narrow a wide answer; it produced a WRONG one, on both prefixes tested.
+    # This is the anchoring the consumer's own filing asked for and did not get.
+    #
+    # `-E` and `-F` are mutually exclusive in git, so this switches to ERE. The trailing class is a
+    # word boundary rather than `\b`, which BSD and GNU disagree about: the next character must not
+    # extend the id, so a digit, a letter or a dash all disqualify. The SLUG search above stays `-F`
+    # -- a full slug is already specific, and a fixed string is the right tool for it.
+    _c="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z-]|\$)" --format=%H "$THEIRS" 2>/dev/null | tail -1)"
     _how=prefix
   fi
   [ -n "$_c" ] || return 0
@@ -409,7 +445,12 @@ named_ambiguous() { # <label> -> "<version> <short-sha> <n-entries>" when the pr
   [ -n "$_pfx" ] || return 0
   _n="$(prefix_entry_count "$_pfx")"
   [ "$_n" -gt 1 ] 2>/dev/null || return 0
-  _c="$(git -C "$DIST" log -F --grep="$_pfx" --format=%H "$THEIRS" 2>/dev/null | tail -1)"
+  # ANCHORED, for the same reason as the sibling call in `named_absorbed`: `-F` is an unanchored
+  # fixed-substring search, so it claims a commit that mentions the prefix only inside a DIFFERENT
+  # entry's longer slug. Both arms ask the same question -- "does upstream cite this SHORT id" --
+  # and fixing one would leave the other reporting the same wrong commit, here as the sha an
+  # operator is told to go and read.
+  _c="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z-]|\$)" --format=%H "$THEIRS" 2>/dev/null | tail -1)"
   [ -n "$_c" ] || return 0
   _v="$(git -C "$DIST" show "${_c}:VERSION" 2>/dev/null | tr -d '[:space:]')"
   printf '%s %s %s' "${_v:-unknown}" "$(git -C "$DIST" rev-parse --short "$_c" 2>/dev/null)" "$_n"
@@ -617,6 +658,26 @@ TV="$(theirs_show VERSION | tr -d '[:space:]')"
 # closing `**` there. That is complete and greppable and visibly not an id, which is the honest
 # output for a malformed entry. Narrowing the bullet predicate to "closing ** on this line" would
 # instead DROP such an entry, and the reference consumer has a live one.
+# THE ARCHIVED LABELS, for the prefix-uniqueness test only -- never for verdicts. An archived entry
+# is closed and emits no row; it is counted solely so that archiving a sibling cannot make an
+# ambiguous prefix look unique. Same boundary rule and same em-dash label truncation as the live
+# extraction below, because two parsers of the entry shape would be free to disagree about which
+# entries exist -- which is the exact defect the live extraction's own header warns about.
+ARCHIVE_PATH="$(dirname "$LEDGER")/push-candidate-ledger.archive.md"
+ARCHIVE_LABELS=""
+if [ -r "$ARCHIVE_PATH" ]; then
+  ARCHIVE_LABELS="$(LC_ALL=C awk -v DASH=' — ' "$(ledger_entry_awk)"'
+    {
+      if (ledger_entry_shape($0) == "") next
+      l=$0
+      sub(/^#+[ \t]*/, "", l); sub(/^- \*\*/, "", l); sub(/\*\*.*/, "", l)
+      p=index(l, DASH); if (p > 0) l=substr(l, 1, p-1)
+      sub(/[[:space:]]+$/, "", l); gsub(/`/, "", l)
+      if (l != "") print l
+    }
+  ' "$ARCHIVE_PATH")"
+fi
+
 ENTRIES="$(awk -v DASH=' — ' "$(ledger_entry_awk)"'
   # An ENTRY LINE closes its own entry two ways. A marker anywhere on it is one: the withdrawal
   # lives in the heading (`## PC-FOO — **WITHDRAWN …**`) and the fork-retirement records are

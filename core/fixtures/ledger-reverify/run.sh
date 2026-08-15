@@ -799,18 +799,33 @@ fi
 MUTB="$(dirname "$DIST")/mut-bound"
 rm -rf "$MUTB"; mkdir -p "$MUTB"
 cp "$(dirname "$CLOSER")"/*.sh "$MUTB/" 2>/dev/null
-# BOTH SEARCHES, because there are now two. `named_absorbed` falls back to the SHORT id when
-# the full slug finds nothing, and that fallback is its own `git log` call. Bounding only the
-# slug search leaves the prefix arm unbounded — a PARTIAL revert, which proves the layer left
-# in place and comes out looking like a surviving mutant. Both `--grep=` forms are rewritten.
-sed -e 's@--grep="$_id" --format=%H "$THEIRS"@--grep="$_id" --format=%H "${BASE}..${THEIRS}"@' \
-    -e 's@--grep="$_pfx" --format=%H "$THEIRS"@--grep="$_pfx" --format=%H "${BASE}..${THEIRS}"@' \
+# EVERY SEARCH, and KEYED ON THE THING BEING BOUNDED rather than on the grep expression.
+# `named_absorbed` falls back to the SHORT id when the full slug finds nothing, `named_ambiguous`
+# asks the same two questions again, and each is its own `git log`. Bounding only some of them is a
+# PARTIAL revert, which proves the layer left in place and comes out looking like a surviving
+# mutant — the failure mode this arm's predecessor actually hit.
+#
+# THE EARLIER FORM MATCHED ON `--grep="$_pfx"` AND A FIX TO THE GREP EXPRESSION SILENTLY DODGED IT.
+# When the prefix searches were anchored (`-E --grep="${_pfx}([^0-9A-Za-z-]|\$)"`), the sed pattern
+# stopped matching, the prefix arms stayed unbounded in the mutant, and this arm reported a
+# surviving named row. It failed LOUDLY, which is why the mutant is now keyed on
+# `--format=%H "$THEIRS"` — the ref argument IS what bounding changes, it is identical at every
+# search site, and it does not move when a grep expression is rewritten. `git log -S` at :269 is
+# already range-bounded and carries no bare `"$THEIRS"`, so it is untouched.
+sed -e 's@--format=%H "$THEIRS"@--format=%H "${BASE}..${THEIRS}"@g' \
   "$CLOSER" > "$MUTB/ledger-reverify.sh"
+# The mutation must have hit EVERY search, or a partial revert reads as a surviving mutant again.
+MUTB_HITS="$(LC_ALL=C grep -c -- '--format=%H "${BASE}..${THEIRS}"' "$MUTB/ledger-reverify.sh" || true)"
+MUTB_LEFT="$(LC_ALL=C grep -c -- '--format=%H "$THEIRS"' "$MUTB/ledger-reverify.sh" || true)"
 
 ASSERTIONS=$((ASSERTIONS + 1))
 if cmp -s "$CLOSER" "$MUTB/ledger-reverify.sh"; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the mutation matched nothing, so the unbounded-search assertion is unproven\n' "mutation-bound"
+elif [ "${MUTB_LEFT:-1}" -ne 0 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s %s search(es) left UNBOUNDED by the mutation (%s bounded) — a partial revert proves the layer left in place\n' \
+    "mutation-bound" "$MUTB_LEFT" "${MUTB_HITS:-0}"
 else
   mb_out="$(bash "$MUTB/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
   mb_named="$(printf '%s\n' "$mb_out" | awk -F'\t' '$1 == "NAMED-UPSTREAM" {c++} END{print c+0}')"
