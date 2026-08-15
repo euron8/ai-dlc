@@ -214,6 +214,11 @@ mutant_expr() { # <name> -> sets $MUT_EXPR to the sed program that removes that 
     # phantom kills in cases that mutation has no business touching. `bash -n` in
     # `mutant` is now the standing guard.
     no-restamp)              MUT_EXPR='s%^      : > "\$pg" 2>/dev/null || true$%      : 2>/dev/null || true%' ;;
+    # The over-correction case 16 exists for: a subject that grants whether or not
+    # anything was written. Seeding PROGRESSED=1 leaves `progressed_since` called and
+    # its answer discarded, which is what "the sample no longer decides anything"
+    # looks like from the outside.
+    grant-unconditional)     MUT_EXPR='s/^  PROGRESSED=0$/  PROGRESSED=1/' ;;
     *) echo "FIXTURE ERROR: no mutation registered for '$1'" >&2; exit 2 ;;
   esac
 }
@@ -656,7 +661,7 @@ rm -rf "$W"
 C21_mut_flagless_path() {
 for mname in grant-cap unprune-wait-beats unexclude-beat-inflight state-dir-guard \
              path-exists-check progress-sampling \
-             resample-gate restamp-ungated no-restamp; do
+             resample-gate restamp-ungated no-restamp grant-unconditional; do
   mutant "$mname"
   W="$( bash "$SEED" exhausted )"
   beat_with "$MUT" "$W"
@@ -775,8 +780,20 @@ else bad "chained-window: the mark was re-stamped by a beat that did not sleep; 
 # the counter to the bound so the answer is a verdict the lead would read; if the
 # mark had been re-stamped above, `wip.txt` would no longer be newer than it and
 # this second beat would print NON-DELIVERY instead.
+#
+# THE FOLLOWING BEAT IS A SLEEPING ONE, AND THAT IS WHAT KEEPS THIS ARM THE WINDOW'S
+# AND NOT THE SAMPLE'S. Chained, it would also need the sample to be ungated, so
+# re-gating the sample would red this case as well as case 15 -- two failures for one
+# mutant, which means one of the two arms is not measuring what it says. Case 15 OWNS
+# the sample gate. Here MAY_SLEEP is 1, the sample runs under either build, and the
+# only thing left that can change the verdict is whether the window survived.
 printf '6' > "$W/_bmad-output/.wait-beats/${KEY}"
-chained_beat "$SUBJ" "$W" --progress-path wt
+beat "$W" --progress-path wt
+case "$OUT" in
+  *"a sibling beat already ran in this same Bash call"*)
+    bad "chained-window: the following beat was itself chained — this arm then also depends on the sample gate, which case 15 owns" ;;
+  *) ok "chained-window: CONTROL — the following beat is a sleeping one, so the sample runs either way" ;;
+esac
 if [ "$RC" -eq 0 ] && grep -q '^PROGRESS' "$BEATOUT"; then
   ok "chained-window: the following beat still observes the earlier window and grants"
 else bad "chained-window: rc $RC and no PROGRESS on the following beat — the window did not survive the sibling"; fi
@@ -814,10 +831,10 @@ chained_beat "$SUBJ" "$W" --progress-path wt
 if [ "$RC" -eq 1 ] && grep -q '^NON-DELIVERY' "$BEATOUT"; then
   ok "chained-grant-bounded: a chained sibling with every grant spent still ends the wait"
 else bad "chained-grant-bounded: rc $RC — the chained path is a route around the grant cap"; fi
-case "$OUT" in
-  *"progress grants are spent"*) ok "chained-grant-bounded: the NOTE still explains why" ;;
-  *) bad "chained-grant-bounded: non-delivery on a working teammate with no explanation" ;;
-esac
+# THE `grants are spent` NOTE IS DELIBERATELY NOT ASSERTED HERE. It requires
+# PROGRESSED=1, so re-gating the sample reds it -- and case 15 owns that gate. Case
+# 11 already asserts the NOTE, on the sleeping path where nothing else can move it.
+# What is new on the chained path is the CAP, and that is what this case measures.
 if [ "$(cat "$W/_bmad-output/.wait-beats/${KEY}.grants" 2>/dev/null)" = "6" ]; then
   ok "chained-grant-bounded: grant counter held at the cap"
 else bad "chained-grant-bounded: grant counter moved past the cap"; fi
@@ -873,6 +890,45 @@ if [ "$( fx_mtime "$MARK" )" = "$M0" ]; then
   ok "MUTANT no-restamp: with the re-stamp deleted a sleeping beat never closes the window"
 else bad "MUTANT no-restamp: the mark still moved; the deleted line is not what re-stamps it"; fi
 rm -rf "$W"
+}
+
+# Case 16's mutant. Without it, case 16 establishes that the arm is quiet on a tree
+# with no progress -- but not that anything in the subject is doing the discriminating.
+C30_mut_grant_unconditional() {
+mutant grant-unconditional
+M="$MUT"
+W="$( bash "$SEED" chained-noprogress )"
+chained_beat "$M" "$W" --progress-path wt
+if [ "$RC" -eq 0 ] && grep -q '^PROGRESS' "$BEATOUT"; then
+  ok "MUTANT grant-unconditional: a subject that grants without evidence extends the wait forever"
+else bad "MUTANT grant-unconditional: rc $RC with PROGRESSED forced to 1; the sample is not what gates the grant"; fi
+rm -rf "$W"
+}
+
+# --- 21. this fixture's verdict may not depend on the cwd it was launched from ---
+# The suite runs `bash core/fixtures/<name>/run.sh` FROM THE REPO ROOT, so every
+# case above has only ever been observed at one cwd. That cuts both ways in this
+# repo: a fixture can be green only from the root, and it can also be green only
+# because decoy files happen to exist there. Everything here resolves through HERE
+# (absolute, from `$0`) and through trees that seed.sh makes under mktemp, so the
+# claim is that cwd cannot reach any of it -- asserted rather than assumed, in the
+# fixture's own arms, because it does not inherit that from how the suite is driven.
+#
+# The child is invoked by ABSOLUTE path. A relative `$0` from a foreign cwd cannot
+# resolve, and that is a property of every script rather than something to assert.
+C31_cwd_invariance() {
+SELF_ABS="$HERE/$(basename "$0")"
+out="$( cd / && bash "$SELF_ABS" --run-one C23_chained_noprogress 2>&1 )"
+rc=$?
+if [ "$rc" -eq 0 ]; then
+  ok "cwd-invariance: a case reaches the same verdict launched from /"
+else bad "cwd-invariance: rc $rc from cwd=/ — some arm above is reading a path relative to the repo root, so the suite's cwd is load-bearing: $out"; fi
+# The CONTROL. `-eq 0` alone is also what an empty run scores, and a case that
+# printed nothing is the exact shape of a resolution failure that exited quietly.
+n="$( printf '%s\n' "$out" | grep -c '^  ok' || true )"
+if [ "$n" = "3" ]; then
+  ok "cwd-invariance: CONTROL — all three of that case's assertions ran from /, not zero of them"
+else bad "cwd-invariance: $n assertions from cwd=/ , expected 3 — the case exited without running, which scores as clean"; fi
 }
 
 # ---------------------------------------------------------------------------
