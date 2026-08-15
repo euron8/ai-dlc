@@ -82,6 +82,67 @@ beat_with() { # <subject> <work> [extra args...] -> writes $BEATOUT; sets RC and
 beat() { local w="$1"; shift; beat_with "$SUBJ" "$w" "$@"; }
 
 # ---------------------------------------------------------------------------
+# A CHAINED SIBLING, BUILT WHERE THE MARKER CAN BE BUILT.
+# `wait a; wait b` in one Bash call gives both invocations the same parent shell,
+# so both see `.shell-$PPID` and the second runs with MAY_SLEEP=0. seed.sh cannot
+# seed that marker: it is keyed on the PID of the shell that INVOKES the subject,
+# and seed.sh is a different process. So the marker is written by the very shell
+# that then runs the subject as a CHILD -- `$$` inside that `bash -c` is the
+# subject's `$PPID`. `exec` would be wrong here for the same reason: an exec'd
+# process inherits the GRANDPARENT as its parent, so the marker would name a PID
+# the subject never looks up and every chained case would silently run with
+# MAY_SLEEP=1 -- passing, against the wrong code path.
+#
+# Content, not just the name, comes from what the subject's own producer writes at
+# `printf '%s' "$(date +%s)" > "$SIBLING"` -- an epoch, no newline. Seeding what
+# the READER happens to tolerate would prove only that the reader accepts the
+# fixture's grammar.
+#
+# THE TRAILING `exit $?` IS THE WHOLE MECHANISM, NOT TIDINESS. bash EXECS the last
+# command of a `-c` string when it is a simple command, so `bash "$s"` REPLACES the
+# wrapper shell and the subject's parent becomes the wrapper's own parent -- the
+# marker then names a PID the subject never looks up. Measured on bash 3.2.57:
+# without a trailing builtin the child reports PPID=86777 against a wrapper $$ of
+# 86779; with `exit $?` appended the two are equal. The first form is how this
+# helper was first written, and every chained case ran with MAY_SLEEP=1 -- which
+# presented as a two-minute HANG rather than as a wrong verdict, because the subject
+# went to sleep for its quantum. `sibling_witness` is the standing guard on it.
+#
+# THE QUANTUM IS 60 HERE, NOT 4, AND THAT IS THE DETERMINISM ARGUMENT. The subject
+# calls a marker a sibling's iff `now - LAST < BUDGET`, so at BUDGET=4 this fixture
+# would be asserting that a `date` fork, a file write and a `bash` startup all
+# complete within four seconds -- true today, and a flake on a machine running this
+# pool nested inside the suite's, landing as a false FAIL on an unrelated change. A
+# chained beat never sleeps, so the larger quantum costs the passing path nothing.
+# It is not 600 either: if MAY_SLEEP is ever 1 here the beat DOES sleep, and the
+# quantum is then the wall clock this case adds before `sibling_witness` reports it.
+# 60 buys slack no scheduling delay can cross while keeping that regression a slow
+# FAIL rather than a ten-minute stall.
+chained_beat() { # <subject> <work> [args...] -> as beat_with, with a sibling beat
+                 # already recorded in the shell that invokes the subject
+  local subj="$1" w="$2"; shift 2
+  ( cd "$w" && env AI_DLC_WAIT_BEAT_SECS=60 \
+                   AI_DLC_WAIT_POLL_SECS=1 \
+                   AI_DLC_WAIT_MARGIN_SECS=1 \
+                   AI_DLC_MAX_WAIT_BEATS=6 \
+    bash -c 'printf "%s" "$(date +%s)" > "_bmad-output/.wait-beats/.shell-$$" || exit 3
+             s="$1"; shift
+             bash "$s" "$@"
+             exit $?' _ "$subj" "$@" deliv.md ) > "$BEATOUT" 2>&1
+  RC=$?
+  OUT="$(cat "$BEATOUT")"
+}
+
+# The fixture's OWN mtime reader. Deliberately not borrowed from the subject: a
+# fixture that sourced the subject's `mtime_of` would report the mark unchanged
+# whenever that function broke, which is the mark assertion answering with the
+# code it is measuring.
+fx_mtime() {
+  if stat -f "%m" . >/dev/null 2>&1; then stat -f "%m" "$1" 2>/dev/null || echo 0
+  else stat -c "%Y" "$1" 2>/dev/null || echo 0; fi
+}
+
+# ---------------------------------------------------------------------------
 # MUTANTS ARE BUILT AS COPIES, AND THE SUBJECT IS NEVER EDITED.
 # A mutation proof carried as a prose note is a forgeable evidence cell: it can be
 # written without the run, and nothing in the suite re-checks it when the code it
@@ -131,6 +192,28 @@ mutant_expr() { # <name> -> sets $MUT_EXPR to the sed program that removes that 
     state-dir-guard)         MUT_EXPR='s/^  SD_ABS="\$(abs_of "\$STATE_DIR")"$/  SD_ABS=""/' ;;
     path-exists-check)       MUT_EXPR='s/\[ -e "\$1" \] ||/[ 1 ] ||/' ;;
     progress-sampling)       MUT_EXPR='/progressed_since "\$pg" \&\& PROGRESSED=1/d' ;;
+    # THE THREE BELOW ARE ANCHORED ON INDENTATION, and that is load-bearing rather
+    # than cosmetic. `if [ -n "$PROGRESS_PATHS" ]; then` occurs TWICE in the subject
+    # -- once at column 0 for the state-dir argument guard, once at two spaces inside
+    # the target loop -- and mutating the first would rewrite an argument check while
+    # leaving the sampling gate alone: a mutant that applies cleanly to the wrong
+    # line, which `cmp -s` cannot see. Measured before these were written: the
+    # two-space anchor matches 1 line, the flush-left one matches 1, and an
+    # impossible anchor matches 0.
+    #
+    # `restamp-ungated` rewrites the CONDITION to `[ 1 ]` instead of deleting the
+    # `if`/`fi` pair, because `^    fi$` matches four lines in the subject and a
+    # paired delete would take the wrong one.
+    resample-gate)           MUT_EXPR='s/^  if \[ -n "\$PROGRESS_PATHS" \]; then$/  if [ -n "$PROGRESS_PATHS" ] \&\& [ "$MAY_SLEEP" -eq 1 ]; then/' ;;
+    restamp-ungated)         MUT_EXPR='s/^    if \[ "\$MAY_SLEEP" -eq 1 \]; then$/    if [ 1 ]; then/' ;;
+    # THE REDIRECT ONLY, NOT THE LINE. Deleting the line leaves `if ...; then` with
+    # `fi` and nothing between them, which is a bash SYNTAX ERROR: the mutant then
+    # exits 2 having executed nothing, the mark it was supposed to move is trivially
+    # unchanged, and the assertion scores a kill it did not earn. Measured -- the
+    # first draft of this mutation did exactly that, and it also showed up as three
+    # phantom kills in cases that mutation has no business touching. `bash -n` in
+    # `mutant` is now the standing guard.
+    no-restamp)              MUT_EXPR='s%^      : > "\$pg" 2>/dev/null || true$%      : 2>/dev/null || true%' ;;
     *) echo "FIXTURE ERROR: no mutation registered for '$1'" >&2; exit 2 ;;
   esac
 }
@@ -144,6 +227,20 @@ mutant() { # <name> -> sets $MUT to the mutant's path
   if cmp -s "$SUBJ" "$m"; then
     echo "FIXTURE ERROR: mutant '$name' matched nothing -- the code it targets was" >&2
     echo "  renamed or removed. Re-aim the mutation; do NOT delete the assertion." >&2
+    exit 2
+  fi
+  # A MUTANT THAT WILL NOT PARSE IS NOT A MUTANT, AND IT SCORES KILLS IT DID NOT
+  # EARN. A `sed` that removes the only statement from an `if` body leaves a syntax
+  # error, so the copy exits 2 having executed NOTHING -- and "nothing happened" is
+  # indistinguishable from the wrong behaviour every assertion here is looking for:
+  # no output to grep, no file touched, no counter moved. Measured while writing the
+  # chained-sibling mutants: one such mutant reported four kills, three of them in
+  # cases its mutation cannot reach. `cmp -s` above cannot see this -- the edit
+  # applied perfectly.
+  if ! bash -n "$m" 2>/dev/null; then
+    echo "FIXTURE ERROR: mutant '$name' does not parse -- the mutation removed a" >&2
+    echo "  statement its enclosing block requires. A mutant that cannot RUN passes" >&2
+    echo "  every assertion that looks for absence. Re-aim it to keep valid syntax." >&2
     exit 2
   fi
   MUT="$m"
@@ -558,7 +655,8 @@ rm -rf "$W"
 # it is the one state that still exits nonzero.
 C21_mut_flagless_path() {
 for mname in grant-cap unprune-wait-beats unexclude-beat-inflight state-dir-guard \
-             path-exists-check progress-sampling; do
+             path-exists-check progress-sampling \
+             resample-gate restamp-ungated no-restamp; do
   mutant "$mname"
   W="$( bash "$SEED" exhausted )"
   beat_with "$MUT" "$W"
@@ -567,6 +665,214 @@ for mname in grant-cap unprune-wait-beats unexclude-beat-inflight state-dir-guar
   else bad "MUTANT $mname: rc $RC on a flagless join — this mutant reaches code the default path uses"; fi
   rm -rf "$W"
 done
+}
+
+# --- 15. A CHAINED SIBLING MUST NOT REPORT A WORKING TEAMMATE AS NON-DELIVERY ----
+# Cases 10-13 all run with MAY_SLEEP=1, and that is why the defect below shipped
+# under a green fixture. The subject gated BOTH the progress SAMPLE and the mark
+# RE-STAMP on MAY_SLEEP. Only the re-stamp needs it: sampling is a pure read. With
+# both gated, a chained sibling arrived at the exhaustion arm with PROGRESSED forced
+# to 0 -- and that arm is NOT gated on MAY_SLEEP, so it denied the grant and printed
+# NON-DELIVERY for a teammate whose files were demonstrably being written. Rule 20
+# turns that into a re-dispatch of a live teammate, which is the one failure this
+# whole script exists to prevent.
+#
+# THE SOLE VARIABLE IS WHETHER A SIBLING BEAT RAN FIRST. The tree here is
+# byte-identical to `progress-extends`, so nothing but MAY_SLEEP can explain a
+# different verdict.
+sibling_witness() { # <work> <label> -- a HARNESS control, not a claim about the subject
+  # ONE `.shell-*` marker means the shell that seeded it is the shell the subject
+  # looked up. TWO means the seed named a PID the subject never read (the shape an
+  # `exec` in the wrapper would produce), the case ran with MAY_SLEEP=1, and every
+  # assertion below it would be green about the wrong code path.
+  local n
+  n="$(find "$1/_bmad-output/.wait-beats" -maxdepth 1 -name '.shell-*' | grep -c . || true)"
+  if [ "$n" = "1" ]; then
+    ok "$2: CONTROL — one sibling marker, so the seeding shell IS the subject's parent"
+  else bad "$2: $n sibling markers — the seeded marker is not the one the subject keyed on, so this case did not run with MAY_SLEEP=0"; fi
+}
+
+C22_chained_progress() {
+KEY="$( printf '%s' deliv.md | cksum | tr -d ' \t' | cut -c1-16 )"
+W="$( bash "$SEED" chained-progress )"
+chained_beat "$SUBJ" "$W" --progress-path wt
+
+sibling_witness "$W" "chained-progress"
+
+# The line a lead actually reads. `-eq 0` and the absence of NON-DELIVERY are one
+# claim stated twice on purpose: the exit code is what a Bash tool call surfaces,
+# the line is what the lead acts on, and the pre-fix subject got both wrong.
+if [ "$RC" -eq 0 ] && ! grep -q '^NON-DELIVERY' "$BEATOUT"; then
+  ok "chained-progress: a chained sibling does not declare non-delivery on a working teammate"
+else bad "chained-progress: rc $RC with NON-DELIVERY — a live teammate is re-dispatched because a sibling beat ran first"; fi
+
+if grep -q '^PROGRESS' "$BEATOUT"; then
+  ok "chained-progress: stdout names PROGRESS — the lead is told not to re-dispatch"
+else bad "chained-progress: no PROGRESS line; the grant is invisible to the lead"; fi
+
+# Witnesses that this ran the NON-SLEEPING path all the way to its own exit, rather
+# than reaching the grant by way of MAY_SLEEP=1.
+case "$OUT" in
+  *"a sibling beat already ran in this same Bash call"*)
+    ok "chained-progress: the beat took the non-sleeping return, so MAY_SLEEP was 0" ;;
+  *) bad "chained-progress: no chained-sibling NOTE — this beat slept, so it is not the case under test" ;;
+esac
+
+# The message is not the mechanism. A subject that printed PROGRESS and granted
+# nothing would still re-dispatch on the next beat while reading as fixed.
+if [ "$(cat "$W/_bmad-output/.wait-beats/${KEY}.grants" 2>/dev/null)" = "1" ]; then
+  ok "chained-progress: one grant charged — the extension is counted, not free"
+else bad "chained-progress: .grants not 1 — an uncounted extension is an unbounded wait"; fi
+if [ "$(cat "$W/_bmad-output/.wait-beats/${KEY}" 2>/dev/null)" = "5" ]; then
+  ok "chained-progress: the counter is set to MAX_BEATS-1 — the grant buys exactly ONE more beat"
+else bad "chained-progress: counter not MAX_BEATS-1; the grant bought something other than one beat"; fi
+rm -rf "$W"
+}
+
+# --- 16. ...and the near-miss stays quiet ---------------------------------------
+# Same chained sibling, same spent sequence, one fact removed: nothing under the
+# worktree is newer than the mark. Without this arm, a subject that granted
+# UNCONDITIONALLY -- which is one deleted comparison away -- would satisfy case 15
+# and read as fixed.
+C23_chained_noprogress() {
+W="$( bash "$SEED" chained-noprogress )"
+chained_beat "$SUBJ" "$W" --progress-path wt
+
+sibling_witness "$W" "chained-noprogress"
+
+if [ "$RC" -eq 1 ] && grep -q '^NON-DELIVERY' "$BEATOUT"; then
+  ok "chained-noprogress: with no evidence of work the wait still ends"
+else bad "chained-noprogress: rc $RC — a chained sibling now grants without evidence, which is an unbounded wait (Rule 29, Check C)"; fi
+if grep -q '^PROGRESS' "$BEATOUT"; then
+  bad "chained-noprogress: PROGRESS granted on a tree where nothing was written"
+else ok "chained-noprogress: no PROGRESS line — the grant discriminates"; fi
+rm -rf "$W"
+}
+
+# --- 17. the window the original gate protected is STILL protected ---------------
+# This is the arm that stops "delete the gate" passing as the fix. A non-sleeping
+# sibling must not re-stamp the mark: re-stamping shrinks the observation window to
+# nothing, so the NEXT beat asks "was anything written since a moment ago" and
+# reports a working teammate as idle -- the same false non-delivery from the other
+# direction.
+#
+# The counter is BELOW the bound here, so the grant path never runs. At the bound it
+# rewrites the counter too, and two writes in one observation cannot be attributed.
+C24_chained_window() {
+KEY="$( printf '%s' deliv.md | cksum | tr -d ' \t' | cut -c1-16 )"
+W="$( bash "$SEED" chained-window )"
+MARK="$W/_bmad-output/.wait-beats/${KEY}.progress"
+M0="$( fx_mtime "$MARK" )"
+[ "$M0" != "0" ] || { echo "FIXTURE ERROR: chained-window seeded no .progress mark to measure" >&2; exit 2; }
+
+chained_beat "$SUBJ" "$W" --progress-path wt
+if [ "$( fx_mtime "$MARK" )" = "$M0" ]; then
+  ok "chained-window: a non-sleeping sibling leaves the mark alone — the window stays open"
+else bad "chained-window: the mark was re-stamped by a beat that did not sleep; the window is shrunk to nothing and the next beat reads a working teammate as idle"; fi
+
+# THE BEHAVIOURAL HALF, because an mtime is a proxy and the outcome is the claim. A
+# FOLLOWING beat must still see the window its sleeping predecessor opened. Re-seed
+# the counter to the bound so the answer is a verdict the lead would read; if the
+# mark had been re-stamped above, `wip.txt` would no longer be newer than it and
+# this second beat would print NON-DELIVERY instead.
+printf '6' > "$W/_bmad-output/.wait-beats/${KEY}"
+chained_beat "$SUBJ" "$W" --progress-path wt
+if [ "$RC" -eq 0 ] && grep -q '^PROGRESS' "$BEATOUT"; then
+  ok "chained-window: the following beat still observes the earlier window and grants"
+else bad "chained-window: rc $RC and no PROGRESS on the following beat — the window did not survive the sibling"; fi
+rm -rf "$W"
+}
+
+# --- 18. the other direction: a beat that DOES sleep re-stamps the mark ----------
+# Case 17 alone would be satisfied by a subject that never re-stamped at all, and
+# that subject grants forever: the mark ages without bound, so anything written
+# since the join armed keeps reading as this beat's progress. The re-stamp is what
+# makes the signal a DELTA. This is the only new case that sleeps.
+C25_sleeping_restamp() {
+KEY="$( printf '%s' deliv.md | cksum | tr -d ' \t' | cut -c1-16 )"
+W="$( bash "$SEED" sleeping-restamp )"
+MARK="$W/_bmad-output/.wait-beats/${KEY}.progress"
+M0="$( fx_mtime "$MARK" )"
+[ "$M0" != "0" ] || { echo "FIXTURE ERROR: sleeping-restamp seeded no .progress mark to measure" >&2; exit 2; }
+
+beat "$W" --progress-path wt
+if [ "$( fx_mtime "$MARK" )" -gt "$M0" ]; then
+  ok "sleeping-restamp: a sleeping beat re-stamps the mark — progress stays a delta, not a state"
+else bad "sleeping-restamp: the mark was not re-stamped; the window never closes and every later beat grants on the same old write"; fi
+rm -rf "$W"
+}
+
+# --- 19. the grant is still bounded on the chained path -------------------------
+# Case 11 proves the cap on the sleeping path. The fix widened WHO reaches the grant
+# arm, so the cap has to be asserted for the newly-reaching caller too -- otherwise
+# a chained sibling is a route around Rule 29's Check C and SKILL.md's Rule 26(c)
+# claim becomes false with nothing to say so.
+C26_chained_grant_bounded() {
+KEY="$( printf '%s' deliv.md | cksum | tr -d ' \t' | cut -c1-16 )"
+W="$( bash "$SEED" progress-bounded )"
+chained_beat "$SUBJ" "$W" --progress-path wt
+if [ "$RC" -eq 1 ] && grep -q '^NON-DELIVERY' "$BEATOUT"; then
+  ok "chained-grant-bounded: a chained sibling with every grant spent still ends the wait"
+else bad "chained-grant-bounded: rc $RC — the chained path is a route around the grant cap"; fi
+case "$OUT" in
+  *"progress grants are spent"*) ok "chained-grant-bounded: the NOTE still explains why" ;;
+  *) bad "chained-grant-bounded: non-delivery on a working teammate with no explanation" ;;
+esac
+if [ "$(cat "$W/_bmad-output/.wait-beats/${KEY}.grants" 2>/dev/null)" = "6" ]; then
+  ok "chained-grant-bounded: grant counter held at the cap"
+else bad "chained-grant-bounded: grant counter moved past the cap"; fi
+rm -rf "$W"
+}
+
+# --- 20. the mutation proof for cases 15-19 -------------------------------------
+# Each of the three restores one half of the defect, and they are separate because
+# the fix has two halves: the sample lost its gate and the re-stamp kept one.
+# Reverting them together would produce a mutant that proves whichever half was left
+# in place -- and it comes out green.
+
+# THE DEFECT ITSELF, reinstated. This is the pre-fix subject at the one line that
+# changed, so this mutant is the measurement that case 15 was worth writing.
+C27_mut_resample_gate() {
+mutant resample-gate
+M="$MUT"
+W="$( bash "$SEED" chained-progress )"
+chained_beat "$M" "$W" --progress-path wt
+if [ "$RC" -eq 1 ] && grep -q '^NON-DELIVERY' "$BEATOUT"; then
+  ok "MUTANT resample-gate: gating the SAMPLE on MAY_SLEEP declares a demonstrably working teammate non-delivered"
+else bad "MUTANT resample-gate: rc $RC with the sample re-gated; the ungated sample is not what reaches the grant"; fi
+rm -rf "$W"
+}
+
+# The opposite over-correction: a fix that simply deleted the gate. The grant works,
+# and the window it depends on is destroyed by every non-sleeping sibling.
+C28_mut_restamp_ungated() {
+KEY="$( printf '%s' deliv.md | cksum | tr -d ' \t' | cut -c1-16 )"
+W="$( bash "$SEED" chained-window )"
+MARK="$W/_bmad-output/.wait-beats/${KEY}.progress"
+M0="$( fx_mtime "$MARK" )"
+mutant restamp-ungated
+M="$MUT"
+chained_beat "$M" "$W" --progress-path wt
+if [ "$( fx_mtime "$MARK" )" != "$M0" ]; then
+  ok "MUTANT restamp-ungated: without the re-stamp gate a non-sleeping sibling shrinks the window"
+else bad "MUTANT restamp-ungated: the mark is unchanged with the gate removed; the gate is not what protects the window"; fi
+rm -rf "$W"
+}
+
+# And the subtraction the other two would both tolerate: no re-stamp at all. It
+# passes cases 15, 16, 17 and 19 -- only case 18 sees it.
+C29_mut_no_restamp() {
+KEY="$( printf '%s' deliv.md | cksum | tr -d ' \t' | cut -c1-16 )"
+W="$( bash "$SEED" sleeping-restamp )"
+MARK="$W/_bmad-output/.wait-beats/${KEY}.progress"
+M0="$( fx_mtime "$MARK" )"
+mutant no-restamp
+M="$MUT"
+beat_with "$M" "$W" --progress-path wt
+if [ "$( fx_mtime "$MARK" )" = "$M0" ]; then
+  ok "MUTANT no-restamp: with the re-stamp deleted a sleeping beat never closes the window"
+else bad "MUTANT no-restamp: the mark still moved; the deleted line is not what re-stamps it"; fi
+rm -rf "$W"
 }
 
 # ---------------------------------------------------------------------------
