@@ -51,7 +51,13 @@ given the verdict vocabulary, the consumer-boundary prohibition verbatim, and th
 discipline: any claim whose answer is an absence carries a control in the same invocation that
 comes back non-zero, and both numbers are reported.
 
-## Result
+## Result — FIRST PASS ONLY. Superseded by the refutation pass below.
+
+**These are the Phase 1 verdicts before any close was attacked, and the live count in this section
+is WRONG as a statement about the program's remaining work.** It is kept because the first-pass
+distribution is the input the refutation pass consumed, and because the gap between the two is the
+finding. **For what is actually live, read "Final disposition" — the authoritative number is 76, not
+the 51 below.** Half the closes did not survive.
 
 | verdict | count | disposition |
 |---|---|---|
@@ -63,11 +69,13 @@ comes back non-zero, and both numbers are reported.
 | `FALSIFIED` | 4 | close by CHANGELOG refutation |
 | `DUPLICATE-OF` | 3 | close by citation of the dropped id |
 
-**51 entries are live.** By subsystem: validators 14, the `ai-dlc` skill 12, reconcile machinery
-10, layer extensions 7, the `ai-dlc-update` skill 4, fixtures 2, roles 1, hooks 1.
+**51 entries were live on the first pass** — validators 14, the `ai-dlc` skill 12, reconcile
+machinery 10, layer extensions 7, the `ai-dlc-update` skill 4, fixtures 2, roles 1, hooks 1. Nine
+withdrawn closes then returned to the set, bringing it to **76**.
 
-**48 close now** — 41 already fixed, 4 falsified, 3 duplicates. Sixteen more are consumer-local and
-close by disposition rather than by upstream work.
+**48 closes were PROPOSED here** — 41 already fixed, 4 falsified, 3 duplicates — and 39 survived
+refutation. Sixteen more entries are consumer-local and close by disposition rather than upstream
+work.
 
 ## The findings that change what gets built
 
@@ -258,6 +266,71 @@ a `full_text_source:` full-text claim, and `:20-26` records that a `requires_con
 **is** resolved for existence — it is only the byte-match that is skipped. Byte-matching a load
 pointer would fail honest cite-by-reference, which is a non-empty false-positive set. The operator
 ruled retirement; the brief carries the reason, and no upstream work follows.
+
+## Three entries filed after the pin — adjudicated
+
+graph filed three more entries and one retraction while this program ran. They are kept apart from
+the 115 deliberately: their line numbers are offsets into the LIVE ledger, not the pin, so folding
+them in would hand the reader citations that resolve to the wrong entry and would restate a verified,
+closed count. All three are **LIVE**; none is a close, so none needed a refutation pass.
+
+<!-- BEGIN GENERATED: postpin-table -->
+| live line | entry | verdict | receipt |
+|---|---|---|---|
+| 4357 | `PC-S303-SPEC-JOIN-MEMLOG-REGEX-STALE-VS-AUTHOR-SUFFIX` | **HOLDS-MECHANISM-WRONG** | **none — invisible to the closer** |
+| 4392 | `PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF` | **HOLDS-WIDER** | **none — invisible to the closer** |
+| 4435 | `PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR` | **HOLDS** | `manual` |
+<!-- END GENERATED: postpin-table -->
+
+The `## RETRACTED` banner at live line 4480 is graph withdrawing its own `--brief` filing as a lead
+invocation error, having re-read the check body that already prescribed the invocation it had worked
+out by trial. It owes no upstream work and is not an entry.
+
+**`PC-S303-SPEC-JOIN-MEMLOG-REGEX-STALE-VS-AUTHOR-SUFFIX` — `HOLDS-MECHANISM-WRONG`.** The regex is
+where the filing says: `core/scripts/validate-spec-join.sh:164` requires `)` immediately after
+`capability`, so it cannot match `(capability by bmad-spec)`. Run against both forms: the bare form
+matches 2 (positive control), the suffixed form matches 0. On graph's own s302 spec memlog the split
+is **0 bare against 26 suffixed**, so Check 30 genuinely DISARMED there.
+
+**But the stated consequence is false at HEAD.** The filing says a consumer running the spec layer
+"gets a permanently-DISARMED join at every story gate". graph's *current* s303 memlog measures **11
+bare and 0 suffixed** — the join ARMS there. The suffix is a format the generator emits sometimes,
+not invariably, so the defect is brittleness to a variation rather than a permanent outage. Worth
+noting for tiering: rc 2 DISARMED is the script failing LOUDLY and refusing a vacuous pass, which is
+this repo's own discipline working, not a silent hole. Remediation is the single site — `field_of`
+aside, a search for sibling parsers of that tag grammar finds only this one file, and that search
+found its known subject, so the zero is real.
+
+**`PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF` — `HOLDS-WIDER`.** The mechanism is confirmed
+and MEASURED, not argued. `core/scripts/report-propagation-fanout.sh:255` exports the payload into
+the environment and `:262` runs `python3 - <<'PYEOF'`, so the `execve` limit applies to the inherited
+environment block regardless of the heredoc. On this machine `ARG_MAX` is **1048576**. Measured on
+graph's corpus at the cited base: full diff **896391** bytes, `git ls-files` corpus **607945** bytes,
+sum **1504336** — over by 455760. Provoked directly: a ~1000KB environment runs, ~1100KB gives
+`argument list too long`, the two variables at graph's full-diff sizes fail, and **at the
+architecture-only diff size (158865 + 607945 = 766810) it SUCCEEDS** — so the control fires in both
+directions and the threshold is real rather than assumed.
+
+**Wider than filed in two ways.** The filing blames `FANOUT_DIFF`; the measurement shows
+`FANOUT_FILES` is the dominant FIXED cost at 607945 bytes — **58% of `ARG_MAX` consumed before any
+diff exists**. A fix that moves only the diff to a temp file leaves that 58% in place and the script
+still fragile on any large repo. And `:255-260` exports **nine** `FANOUT_*` variables, so the subject
+is the env-passing pattern, not one variable.
+
+**`PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR` — `HOLDS`.** Exactly as filed.
+`field_of()` was lifted out of `core/scripts/validate-scope-confirmation.sh:158-162` and executed
+rather than read, because a restated regex is a second implementation whose bugs nobody finds. It
+returns `confirmed` for the plain bullet, `confirmed` for the backtick form — both controls — and
+**`**`** for the consumer's bold form `- **scope_confirmed:** confirmed`. The sibling field corrupts
+identically: `scope_confirmed_cite` yields `**` bold and `a1b2c3d4` plain. Single site: `field_of`
+appears in no other core script. graph has since converted the two consumed lines to the plain form,
+but **14 bold-field lines remain** in that snapshot against 10 plain, so the entry's own warning about
+future readers stands.
+
+**Two of the three carry no `verify:` receipt at all**, so they are invisible to the closer exactly as
+the Phase 0 residual describes, and Phase 4 step 19 owes them one. The third declares
+`verify: manual`, correctly — the failure depends on the caller's markdown styling rather than on a
+stable string.
 
 ## Reproducing this
 

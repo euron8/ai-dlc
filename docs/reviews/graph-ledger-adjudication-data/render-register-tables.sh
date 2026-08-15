@@ -16,7 +16,7 @@ S="$(cd "$(dirname "$0")" && pwd)"
 REG="$S/../graph-ledger-full-adjudication.md"
 MODE="${1:-write}"
 
-for f in adjudicable-entries.tsv phase1-verdicts.tsv refutation-verdicts.tsv final-disposition.tsv; do
+for f in adjudicable-entries.tsv phase1-verdicts.tsv refutation-verdicts.tsv final-disposition.tsv post-pin-verdicts.tsv; do
   [ -r "$S/$f" ] || { echo "render-register-tables: missing input $f" >&2; exit 2; }
 done
 [ -r "$REG" ] || { echo "render-register-tables: missing register $REG" >&2; exit 2; }
@@ -55,6 +55,18 @@ render_disposition_table() {
     }' "$S/final-disposition.tsv"
 }
 
+render_postpin_table() {
+  # Keyed by line in the LIVE ledger, not the pin -- these entries were filed after the pin was
+  # taken, so a pin offset does not locate them and pretending otherwise would give the reader a
+  # citation that resolves to the wrong entry. Kept in a table of their own for the same reason:
+  # folding them into the 115 would silently restate a verified, closed count.
+  printf '| live line | entry | verdict | receipt |\n'
+  printf '|---|---|---|---|\n'
+  LC_ALL=C sort -t"$(printf '\t')" -k1,1n "$S/post-pin-verdicts.tsv" | LC_ALL=C awk -F'\t' '
+    { r = ($5 == "NO-RECEIPT") ? "**none — invisible to the closer**" : "`" $5 "`"
+      printf "| %s | `%s` | **%s** | %s |\n", $1, $2, $3, r }'
+}
+
 emit_region() { # <marker> <renderer>
   printf '<!-- BEGIN GENERATED: %s -->\n' "$1"
   "$2"
@@ -72,6 +84,7 @@ build() {
   local tmp="$1"
   emit_region verdict-table     render_verdict_table     > "$RD/verdict-table"
   emit_region disposition-table render_disposition_table > "$RD/disposition-table"
+  emit_region postpin-table     render_postpin_table     > "$RD/postpin-table"
   LC_ALL=C awk -v dir="$RD" '
     function spill(name,   line) {
       while ((getline line < (dir "/" name)) > 0) print line
@@ -81,6 +94,8 @@ build() {
     /^<!-- END GENERATED: verdict-table -->$/       { skip=0; next }
     /^<!-- BEGIN GENERATED: disposition-table -->$/ { spill("disposition-table"); skip=1; next }
     /^<!-- END GENERATED: disposition-table -->$/   { skip=0; next }
+    /^<!-- BEGIN GENERATED: postpin-table -->$/     { spill("postpin-table");     skip=1; next }
+    /^<!-- END GENERATED: postpin-table -->$/       { skip=0; next }
     !skip { print }
   ' "$REG" > "$tmp"
 }
@@ -91,7 +106,7 @@ build "$TMP"
 # BOTH MARKERS MUST HAVE BEEN PRESENT. Without this the script silently rewrites nothing when a
 # marker is missing or misspelled, and --check then passes on a file it never rendered into --
 # a check that cannot fire, reading exactly like one that passed.
-for m in verdict-table disposition-table; do
+for m in verdict-table disposition-table postpin-table; do
   n="$(LC_ALL=C grep -cF "<!-- BEGIN GENERATED: $m -->" "$TMP")"
   [ "$n" = "1" ] || { echo "render-register-tables: region '$m' appears $n times after render, expected 1" >&2; exit 2; }
 done
