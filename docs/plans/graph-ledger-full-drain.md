@@ -100,27 +100,26 @@ currently emits no wrong report row. Tier it accordingly.
 were adjudicated in 29 parallel batches of 4; all 48 proposed closes were then attacked by 12
 independent verifiers briefed to break them.
 
-**Phase 2 is IN PROGRESS on branch `ai-dlc/graph-ledger-drain`, 11 commits past `0cadda4`, nothing
+**Phase 2 is IN PROGRESS on branch `ai-dlc/graph-ledger-drain`, several commits past `0cadda4`, nothing
 pushed and no release cut.** The four blocking decisions are ruled (below). `VERSION` is untouched
 and no CHANGELOG entry exists yet.
 
 **START HERE ON A FRESH SESSION — the numbered next actions.**
 
-0. **THE BRANCH IS RED AND CANNOT PUSH. Fix this first.** `core/fixtures/wait-stale-deliverable`
-   fails **1 of 71** assertions:
-   `FAIL MUTANT grant-unconditional: rc 0 on a flagless join — this mutant reaches code the default path uses`.
-   The fixture is correct and the MUTANT is over-broad: forcing `PROGRESSED=1` perturbs a path the
-   default join uses, so it fails a second unrelated assertion, which
-   `.claude/rules/fixture-mutants.md` forbids. **Narrow the mutant to its subject; do not delete the
-   arm and do not relax the assertion** — that mutant covers the OVER-CORRECTION direction (a subject
-   that grants whether or not anything was written) and nothing else does. Give it to a hand other
-   than the one that authored `b0e523b`, whose fix is under test.
+0. **`core/fixtures/wait-stale-deliverable` is GREEN — 73 of 73** (`c185168`), so the earlier
+   red-branch blocker is CLEARED. Nothing here needs doing; it is recorded because the route to green
+   carries a reusable lesson.
 
-   **This assertion has MOVED once already.** It was `MUTANT no-restamp: rc 2 on a flagless join`;
-   that entanglement was resolved correctly, and the same class reappeared in the new mutant. So
-   expect the guard to fire again on the next attempt rather than treating one green run as done —
-   and note that **a green run is evidence about the bytes it ran on and nothing else**: this fixture
-   was reported passing on a run whose bytes were then changed by its own author mid-flight.
+   The entanglement failure moved twice — `no-restamp`, then `grant-unconditional` — before its author
+   fixed the CLASS rather than the instance: every mutant now carries a paired assertion that the
+   flagless default path is untouched (`exhausted still rc 1`) alongside its own kill. That is the
+   shape `.claude/rules/fixture-mutants.md` actually asks for. Reach for it directly next time a
+   mutant fails a second unrelated arm.
+
+   **And verify a fixture on STABLE BYTES.** Two green readings of this fixture were void because its
+   author was still editing during the run, and the second was reported to the operator as passing
+   before that was noticed. Take the file's md5 before and after the run and require them to match;
+   a green run is evidence about the bytes it ran on and nothing else.
 1. **Re-establish the pin** (see "Re-establish the pin", below). It moved twice already; reconstruct
    rather than expect a match, and verify by md5 with the off-by-one control.
 2. **`BL-009`–`BL-012` are FILED** (`306c4c0`), covering refutation rows 273, 281, 387 and 610.
