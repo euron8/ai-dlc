@@ -153,12 +153,26 @@ Confirmed on resume — the pin re-derived exactly and the control produced a di
 a future graph edit ever land in the MIDDLE of the file, this reconstruction breaks and the md5 will
 say so; re-derive the delta from `git diff` hunk offsets before trusting any pin line.
 
-**Everything after line 4356 is new work.** On resume that was 147 lines: three entries
-(`PC-S303-SPEC-JOIN-MEMLOG-REGEX-STALE-VS-AUTHOR-SUFFIX`,
-`PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF`,
-`PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR`) plus one `## RETRACTED` banner
-in which graph withdrew its own `--brief` filing as a lead invocation error — that one owes no
-upstream work and is not an entry.
+**Everything after line 4356 is new work, and on resume it was ADJUDICATED.** 147 lines: three
+entries plus one `## RETRACTED` banner in which graph withdrew its own `--brief` filing as a lead
+invocation error — that one owes no upstream work and is not an entry. All three verdicts are
+`HOLDS`-family, so all three are LIVE and none needed a refutation pass. Evidence is in the
+register's "Three entries filed after the pin" section and
+`graph-ledger-adjudication-data/post-pin-verdicts.tsv`:
+
+| live line | entry | verdict |
+|---|---|---|
+| 4357 | `PC-S303-SPEC-JOIN-MEMLOG-REGEX-STALE-VS-AUTHOR-SUFFIX` | `HOLDS-MECHANISM-WRONG` |
+| 4392 | `PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF` | `HOLDS-WIDER` |
+| 4435 | `PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR` | `HOLDS` |
+
+**So the live set is 79, not 76** — 76 from the pin plus these three. Two of the three carry no
+receipt, so Phase 4 step 19 owes them one.
+
+**The subagent channel failed in the resuming session.** Four adjudication agents were spawned across
+two batches; every one ran, went idle, delivered no report, and then became unreachable. The three
+entries were adjudicated directly instead. If a later session sees the same behaviour, do the work
+inline rather than re-spawning — and never let an idle notification stand in for a verdict.
 
 ### The four decisions are RULED. None is open.
 
