@@ -583,8 +583,8 @@ have told the consumer that 24 entries were resolved when they were not, nine of
 | disposition | count | via CHANGELOG cite | via brief annotation |
 |---|---|---|---|
 | LIVE | 67 | 44 | 23 |
-| CLOSE | 24 | 14 | 10 |
-| CLOSE + file the sub-claim | 15 | 11 | 4 |
+| CLOSE | 25 | 15 | 10 |
+| CLOSE + file the sub-claim | 14 | 10 | 4 |
 | LIVE (close withdrawn) | 9 | 4 | 5 |
 <!-- END GENERATED: disposition-table -->
 
@@ -594,19 +594,22 @@ kept explicitly in the tooling — an unattacked close renders as `CLOSE (UNVERI
 
 ## The nine withdrawn closes
 
+<!-- BEGIN GENERATED: withdrawn-table -->
 | pin | entry | was | why it broke |
 |---|---|---|---|
-| 139 | `validate-mandatory-rules-subset-flags` | `DUPLICATE-OF-pin1011` | gate_log_rotation_ok AND --check-gate-log-rotation are BOTH absent from validate-mandatory-rules.sh (grep rc=1 each; control --check-clean-tree presen… |
+| 139 | `validate-mandatory-rules.sh → subset-mode flags and a shared gate-log-rotation predicate.` | `DUPLICATE-OF-pin1011` | gate_log_rotation_ok AND --check-gate-log-rotation are BOTH absent from validate-mandatory-rules.sh (grep rc=1 each; control --check-clean-tree presen… |
 | 687 | `PC-S296-SNAPSHOT-BUDGET-UNENFORCED-AT-GATES` | `FALSIFIED` | THE PREMISE WAS TRUE AT THE FILING BASE AND FOR TWO RELEASES AFTER. core/fixtures/snapshot-evidence-cell/run.sh:9-24 records the path IN CORE'S OWN WO… |
 | 715 | `PC-S296-DEPLOY-VALIDATE-NA-RITUAL` | `FALSIFIED` | THE ABSENCE CLAIM SEARCHED CORE FOR THE FILER'S WORD. Re-probe over core/ + templates/ with a control in the same invocation: "determination"=0 BUT "n… |
 | 1069 | `PC-S297-LOCKED-ANCHOR-VALIDATOR-VACUOUS` | `ALREADY-FIXED-v0.280.0` | Both facts the close cites are TRUE and NEITHER REACHES THE HEADLINE. The pointer loop at :464-486 runs for requires_context-only blocks but resolves … |
 | 1240 | `PC-S297-LOCKED-ANCHOR-EXEMPTED-BY-SILENCE` | `ALREADY-FIXED-v0.280.0` | FIX IS STORY-SCOPED; THE ENTRY'S SUBJECT IS A BLOCK. Ran the shipping script on 4 seeded stories: (A) lone zero-bullet block no citation -> "PASS - NO… |
 | 1597 | `PC-S299-LEDGER-REVERIFY-MISATTRIBUTES-ABSORBING-VERSION` | `ALREADY-FIXED-v0.152.0` | REPRODUCES AT HEAD, with a live probe. :844/:873 pass $sub (the UNSPLIT run, including its internal quote characters) to absorbed_at() while the prese… |
-| 3980 | `PC-S330-A-CONTRADICTS-CORE-VERDICT-EXPIRES` | `ALREADY-FIXED-v0.369.0` | The arm's exemption is (clause,entry) over ANY row carrying ANY owed id - live or discharged, related or not - so a SECOND contradicts-core ruling on … |
-| 4216 | `PC-S303-POSTCOMPACT-RECOVERY-MANDATE-NO-STATED-EXCEPTION` | `ALREADY-FIXED-v0.372.0` | THE GATE DOES NOT ARM ON THE REFERENCE CONSUMER. current_step_file is a BARE BASENAME by contract (route.md:47 resolves it under .claude/skills/ai-dlc… |
+| 3980 | `PC-S330-A-CONTRADICTS-CORE-VERDICT-EXPIRES-LIKE-A-READING-AND-STOPS-BEING-SURFACED` | `ALREADY-FIXED-v0.369.0` | The arm's exemption is (clause,entry) over ANY row carrying ANY owed id - live or discharged, related or not - so a SECOND contradicts-core ruling on … |
+| 4216 | `PC-S303-POSTCOMPACT-RECOVERY-MANDATE-HAS-NO-STATED-EXCEPTION` | `ALREADY-FIXED-v0.372.0` | THE GATE DOES NOT ARM ON THE REFERENCE CONSUMER. current_step_file is a BARE BASENAME by contract (route.md:47 resolves it under .claude/skills/ai-dlc… |
 | 4184 | `PC-S303-RETRO-NO-CLOSE-RECORD-FOR-RESET-OR-ABANDONED-SPRINTS` | `ALREADY-FIXED-v0.372.0` | The writer EXISTS but is sited ONLY where a reset/abandoned sprint never goes. The ONLY step-file instruction to run --close-record is retro.md:785; g… |
+<!-- END GENERATED: withdrawn-table -->
 
-## The fifteen that close only once a sub-claim is filed
+<!-- BEGIN GENERATED: gated-list -->
+## The 14 that close only once a sub-claim is filed
 
 Each is right about its headline and would bury a live finding that **no other entry owns**.
 These become `BL-` entries in `docs/backlog.md` before the close ships.
@@ -615,14 +618,14 @@ These become `BL-` entries in `docs/backlog.md` before the close ships.
 - **.claude/team-roles/tea.md** (pin 281)
 - **PC-S295-FLOWLOG-HEADER-LEGEND-IS-GREPPABLE-AS-DATA** (pin 387)
 - **PC-S295-RETRO-RULE18-STABLE-IDENTIFIER-TAGS** (pin 610)
-- **PC-S297-VALIDATE-MANDATORY-RULES-CHECK3-CHECK4-DEAD** (pin 1254)
 - **PC-S299-LEDGER-REVERIFY-SIGPIPE-FALSE-ABSENT** (pin 1449)
 - **PC-S299-READOPT-DOSSIER-RENDERS-REASON-EMPTY** (pin 1543)
 - **PC-S298-WAIT-FOR-DELIVERABLE-NO-PROGRESS-EVIDENCE** (pin 1862)
-- **PC-S314-NO-DETECTOR-LAYER-FILE-CITING-RETIRED-PATH** (pin 3375)
+- **PC-S314-NO-DETECTOR-CLAIMS-A-LAYER-FILE-CITING-A-PATH-THE-PULL-JUST-RETIRED** (pin 3375)
 - **PC-S302-HARD-BLOCKERS-HAS-NO-POST-APPLY-GUARD** (pin 3787)
-- **PC-S303-EFFORT-BINDING-COMMANDS-A-SLASH-COMMAND** (pin 3828)
+- **PC-S303-EFFORT-BINDING-COMMANDS-A-SLASH-COMMAND-THAT-RESOLVES-TO-NOTHING** (pin 3828)
 - **PC-S316-ABSORPTION-DETECTOR-JOINS-ONLY-ON-NUMBERED-ANCHORS** (pin 3190)
-- **PC-S319-SUBJECT-DIGEST-IS-UNREADABLE-ONCE-ITS-ROW-STOPS-BLOCKING** (pin 3464)
-- **PC-S328-NAMED-UPSTREAM-JOINS-ON-THE-FULL-SLUG** (pin 3507)
+- **PC-S319-SUBJECT-DIGEST-IS-UNREADABLE-ONCE-ITS-OWN-ROW-STOPS-BLOCKING** (pin 3464)
+- **PC-S328-NAMED-UPSTREAM-JOINS-ON-THE-FULL-SLUG-WHILE-UPSTREAM-CITES-THE-SHORT-ID** (pin 3507)
 - **PC-S303-BUDGET-SCRIPT-PASS-LINE-UNCONDITIONAL** (pin 4153)
+<!-- END GENERATED: gated-list -->
