@@ -32,10 +32,27 @@ in this corpus is roughly **one in two** — expect about half the ledger to be 
   there. Record `git -C /Users/n8/git/graph status --porcelain | wc -l` before the first action
   and assert it after every phase; a change is a stop-and-ping condition.
 
-**The only two channels that reach graph** are (a) a released version of `core/` whose
-`CHANGELOG.md` names the entry's `PC-` id **verbatim** — that is the consumer's `NAMED-UPSTREAM`
-close signal, and it is a required part of the release, not a courtesy — and (b) a brief the
-operator carries into a graph session. Nothing else.
+**The only two channels that reach graph** are (a) a released version of `core/` that names the
+entry's `PC-` id **verbatim**, and (b) a brief the operator carries into a graph session. Nothing
+else.
+
+**THIS FILE SAID THE CITATION GOES IN `CHANGELOG.md` AND THAT IS FALSE.** `named_absorbed()`
+(`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:402`) resolves the signal with
+`git log -F --grep`, which reads **COMMIT MESSAGES**. A `###` section in `CHANGELOG.md` is in the
+commit's DIFF, never its message, so it produces no `NAMED-UPSTREAM` row at all. Measured over the
+25 citable closes against `origin/main`, both channels in the same invocation: 4 appear in a commit
+message, 8 in the `CHANGELOG` blob, **16 in neither** — and the four that sit in the `CHANGELOG` and
+not in a message are the decisive group, because they are cited exactly as this file prescribed and
+`named_absorbed()` returns nothing for them. Control in the same invocation: an impossible id
+returns 0 from both channels.
+
+So **the id goes in the RELEASE COMMIT MESSAGE, verbatim, for every closed entry**, and in
+`CHANGELOG.md` as well — the message is what the closer joins on, the `CHANGELOG` is what a human
+and the brief read. Citing only one of the two is the failure this paragraph exists to prevent.
+
+`named_absorbed` takes `tail -1`, the OLDEST matching commit, so re-naming an id already named by an
+earlier release does not move the reported version — it still reports the release that first named
+it, which is the correct answer.
 
 **Never run `ledger-reverify.sh` with the process cwd at the ai-dlc root.** Measured and
 recorded at `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:927-948`: a distribution-root
@@ -638,7 +655,11 @@ Each of these is a command, and each was checked to be answerable at the point i
 5. **Split by channel, because one criterion over both sets is unreachable for half of it.** For the
    closes whose `final-disposition.tsv` channel is `changelog-cite` — 25 of 39 — the Phase 5
    `ledger-reverify.sh` run emits a `NAMED-UPSTREAM` row for every id cited, joining on the full
-   slug so none degrades to `NAMED-UPSTREAM-AMBIGUOUS`. For the 14 whose channel is
+   slug so none degrades to `NAMED-UPSTREAM-AMBIGUOUS`. **That row comes from the RELEASE COMMIT
+   MESSAGE, not from `CHANGELOG.md`** — see the correction under "Start here". A run of this
+   criterion against a release that cited only in `CHANGELOG.md` returns zero rows and is the
+   unreachable-criterion shape, measured: 21 of these 25 produce no row today. For the 14 whose
+   channel is
    `brief-annotation`, that row **cannot exist** — `flush()` gates on `has_verify &&` and
    `named_absorbed()` rejects a non-id-shaped label — so the criterion is instead that the brief
    renders the exact strict `**ADOPTED UPSTREAM (vX.Y.Z, verified <date>)**` string for each, and
