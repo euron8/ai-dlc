@@ -1,0 +1,59 @@
+ai-dlc-skill	177	Rule 18 has no carve-out for terse traceability citations, though the codebase depends on one	HOLDS-MECHANISM-WRONG	brief-annotation	no-pc-id
+ai-dlc-skill	269	extensions/steps-domain/stories-test-strategy-push.md	HOLDS	brief-annotation	no-pc-id+no-receipt
+ai-dlc-skill	316	Decision-branch execution-coverage for sprint-review §3 "Fix and	HOLDS-WIDER	brief-annotation	no-pc-id
+ai-dlc-skill	436	PC-S295-RETRO-STEP5C-DEADLOCK-ON-DEFERRED-RED	HOLDS-WIDER	changelog-cite	-
+ai-dlc-skill	510	PC-S295-RETRO-CHECK5-SELF-REFERENTIAL	HOLDS	changelog-cite	-
+ai-dlc-skill	577	PC-S295-RETRO-RED-SMOKE-CROSSING-SPRINT-BOUNDARY	HOLDS-WIDER	changelog-cite	-
+ai-dlc-skill	715	PC-S296-DEPLOY-VALIDATE-NA-RITUAL	FALSIFIED	brief-annotation	no-receipt
+ai-dlc-skill	1165	PC-S297-CHECK17-PRD-ARM-CONTRADICTS-RULE-20-BLOCK-PLACEMENT	HOLDS-WIDER	changelog-cite	-
+ai-dlc-skill	1269	PC-S297-CHECK16-SCOPE-AMBIGUITY	HOLDS	changelog-cite	-
+ai-dlc-skill	1346	PC-S297-RETRO-OVERRIDES-F1F2F3F6	HOLDS-WIDER	changelog-cite	-
+ai-dlc-skill	1361	PC-S297-GATE-PROCEDURES-DISPATCH-NOT-MANDATED-BACKGROUND	HOLDS-MECHANISM-WRONG	changelog-cite	-
+ai-dlc-skill	1571	PC-S299-UPSTREAM-SHIPS-TWO-REVIEW-VERDICT-VOCABULARIES	HOLDS-MECHANISM-WRONG	changelog-cite	-
+ai-dlc-skill	2101	PC-S307-MACHINE-AUDITS-IS-A-CHILD-OF-4A-SO-EVERY-4A-SHADOW-SWALLOWS-IT	HOLDS	changelog-cite	-
+fixtures	1622	PC-S299-PREPUSH-NONREPRODUCING-FAIL	HOLDS-MECHANISM-WRONG	changelog-cite	-
+fixtures	3881	PC-S330-PREPUSH-LEAKS-GIT_DIR-INTO-EVERY-FIXTURE-SANDBOX	HOLDS-WIDER	brief-annotation	no-pc-id
+hooks	701	PC-S296-PIPELINE-POSITION-MUST-BE-EDITED-IN-PLACE	HOLDS-MECHANISM-WRONG	brief-annotation	no-receipt
+layer-extensions	226	extensions/checks/gate-validation-push.md	HOLDS-MECHANISM-WRONG	brief-annotation	no-pc-id+no-receipt
+layer-extensions	252	extensions/steps-domain/deploy-validate-push.md	HOLDS-MECHANISM-WRONG	brief-annotation	no-pc-id+no-receipt
+layer-extensions	255	extensions/steps-domain/retro-push.md	HOLDS-MECHANISM-WRONG	brief-annotation	no-pc-id+no-receipt
+layer-extensions	259	extensions/steps-domain/implementation-push.md	HOLDS-MECHANISM-WRONG	brief-annotation	no-pc-id+no-receipt
+layer-extensions	262	extensions/steps-domain/SKILL-push.md	HOLDS-MECHANISM-WRONG	brief-annotation	no-pc-id+no-receipt
+layer-extensions	265	extensions/steps-domain/route-push.md	HOLDS	brief-annotation	no-pc-id+no-receipt
+layer-extensions	267	extensions/steps-domain/sprint-review-push.md	HOLDS	brief-annotation	no-pc-id+no-receipt
+layer-extensions	3980	PC-S330-A-CONTRADICTS-CORE-VERDICT-EXPIRES-LIKE-A-READING-AND-STOPS-BEING-SURFACED	ALREADY-FIXED-v0.369.0	changelog-cite	-
+reconcile	334	layer-drift.sh EXTENSION-RESTATES-CORE matches on section number + title,	HOLDS-MECHANISM-WRONG	brief-annotation	no-pc-id+no-receipt
+reconcile	860	PC-S296-REJECTION-CARRIES-UNRELATED-GAPS	HOLDS	changelog-cite	-
+reconcile	1597	PC-S299-LEDGER-REVERIFY-MISATTRIBUTES-ABSORBING-VERSION	ALREADY-FIXED-v0.152.0	changelog-cite	-
+reconcile	1977	PC-S304-APPLY-SH-RESTAMPS-BEFORE-THE-WORKLIST-IS-DONE	HOLDS-MECHANISM-WRONG	changelog-cite	-
+reconcile	2231	PC-S311-ENTRY-SWALLOWED-DETAIL-EMITS-A-LITERAL-BACKSLASH-U-ESCAPE-SO-A-VERBATIM-PASTE-FAILS-VERIFY	HOLDS	changelog-cite	-
+reconcile	2957	PC-S313-LEDGER-ROTATE-SPLITS-AN-ENTRY-AT-A-BOLD-ANNOTATION	HOLDS	changelog-cite	-
+reconcile	3018	PC-S314-PRECLASSIFY-BUCKETS-A-MODE-ONLY-CHANGE-AS-UPSTREAM-ONLY-SO-THE-SELF-UPDATE-CANNOT-TERMINATE	HOLDS	changelog-cite	-
+reconcile	3088	PC-S315-EMIT-REPORT-REGION-OMITS-THREE-MANDATED-DETECTORS	HOLDS-WIDER	changelog-cite	-
+reconcile	3647	PC-S330-LEDGER-ROTATE-STUCK-SET-CONTRADICTS-THE-SKIP-RULE-IT-CITES	HOLDS-MECHANISM-WRONG	changelog-cite	-
+reconcile	4052	PC-S333-SETTINGS-MERGE-CHECK-READS-AN-EMPTY-TEMPLATE-AS-A-VERDICT	HOLDS-WIDER	changelog-cite	-
+reconcile	4258	PC-S331-APPLY-SH-CO-EMITS-READOPT-AND-RETIRE-FOR-ONE-SUBJECT-AS-IF-BOTH-WERE-OWED	HOLDS	changelog-cite	-
+roles	276	extensions/roles/dev-push.md	HOLDS-MECHANISM-WRONG	brief-annotation	no-pc-id+no-receipt
+update-skill	3413	PC-S318-SELF-UPDATE-SLICE-CANNOT-CARRY-THE-FIXTURE-FIX-THAT-UNBLOCKS-ITS-OWN-PUSH	HOLDS	changelog-cite	-
+update-skill	3595	PC-S329-NAMED-UPSTREAM-DETAIL-INSTRUCTS-THE-CLOSE-ITS-OWN-STATUS-FORBIDS	HOLDS-MECHANISM-WRONG	changelog-cite	-
+update-skill	3918	PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH	HOLDS-MECHANISM-WRONG	changelog-cite	-
+update-skill	4096	PC-S333-SKILL-RENDERS-THE-THEIRS-REF-UNQUOTED-AND-ZSH-EATS-IT	HOLDS-WIDER	changelog-cite	-
+validators	118	validate-retro-evidence.sh → resolve the retro branch via origin/<branch>, and delegate the	HOLDS-MECHANISM-WRONG	brief-annotation	no-pc-id
+validators	139	validate-mandatory-rules.sh → subset-mode flags and a shared gate-log-rotation predicate.	DUPLICATE-OF-pin1011	brief-annotation	no-pc-id
+validators	654	PC-S296-ESCALATION-STATUS-APPENDS-INSTEAD-OF-REPLACING	HOLDS-MECHANISM-WRONG	brief-annotation	no-receipt
+validators	673	PC-S296-H2-ATTESTED-ANCHOR-DEFEATED-BY-BACKTICKS	HOLDS-WIDER	brief-annotation	no-receipt
+validators	687	PC-S296-SNAPSHOT-BUDGET-UNENFORCED-AT-GATES	FALSIFIED	brief-annotation	no-receipt
+validators	798	PC-S295-RETRO-COLLAPSE-PAUSE-FLAG-AND-BOUNDED-JOIN	HOLDS-MECHANISM-WRONG	brief-annotation	no-receipt
+validators	931	PC-S297-POOL-LOOP-SUBSHELL-TRAP-UNDOCUMENTED	HOLDS-MECHANISM-WRONG	changelog-cite	-
+validators	1069	PC-S297-LOCKED-ANCHOR-VALIDATOR-VACUOUS	ALREADY-FIXED-v0.280.0	changelog-cite	-
+validators	1093	PC-S297-CHECK16-ELEMENT2-REGEX-DEAD	HOLDS-MECHANISM-WRONG	changelog-cite	-
+validators	1136	PC-S297-PROVENANCE-FLAGLESS-FAIL-OPEN-BY-DEFAULT	HOLDS-WIDER	changelog-cite	-
+validators	1215	PC-S297-LOCKED-FENCE-LAUNDERS-AGENT-PROSE	HOLDS	changelog-cite	-
+validators	1226	PC-S297-VALIDATOR-PASS-VS-NOTHING-TO-CHECK-CONVENTION	HOLDS-WIDER	changelog-cite	-
+validators	1240	PC-S297-LOCKED-ANCHOR-EXEMPTED-BY-SILENCE	ALREADY-FIXED-v0.280.0	changelog-cite	-
+validators	1381	PC-S297-VALIDATE-STEERING-BUDGET-TRANSCRIPT-PROVENANCE	HOLDS-WIDER	changelog-cite	-
+validators	2341	PC-S312-SPRINT-STATUS-CHECK-STORIES-COVERS-ONE-FIELD-OF-FIVE	HOLDS-MECHANISM-WRONG	changelog-cite	-
+validators	2492	PC-S312-STRAYS-DOES-NOT-NORMALIZE-AN-ABSOLUTE-PATH	HOLDS	changelog-cite	-
+validators	2785	PC-S300-RESOLUTION-RECORD-CITATION-CANNOT-OUTLIVE-ITS-SESSION	HOLDS	changelog-cite	-
+validators	4184	PC-S303-RETRO-NO-CLOSE-RECORD-FOR-RESET-OR-ABANDONED-SPRINTS	ALREADY-FIXED-v0.372.0	brief-annotation	no-receipt
+validators	4313	PC-S303-BUDGET-CHECK-EVIDENCE-FIND-PICKS-A-STALE-GATE-LOG	HOLDS-WIDER	brief-annotation	no-receipt

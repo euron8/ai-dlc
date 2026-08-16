@@ -117,9 +117,33 @@ currently emits no wrong report row. Tier it accordingly.
 were adjudicated in 29 parallel batches of 4; all 48 proposed closes were then attacked by 12
 independent verifiers briefed to break them.
 
-**Phase 2 is IN PROGRESS on branch `ai-dlc/graph-ledger-drain`, several commits past `0cadda4`, nothing
-pushed and no release cut.** The four blocking decisions are ruled (below). `VERSION` is untouched
-and no CHANGELOG entry exists yet.
+**Phase 2 is IN PROGRESS on branch `ai-dlc/graph-ledger-drain`, nothing pushed and no release cut.**
+The four blocking decisions are ruled (below). `VERSION` is untouched at `0.372.0` and no CHANGELOG
+entry exists yet.
+
+**The pin was re-established and HELD.** graph `HEAD` is still `510e4d9f5`, the live ledger is 4503
+lines — the 4356-line pin plus the 147 already-adjudicated post-pin lines — and `sed -n '1,4356p'`
+reproduces `2fd444dcf406cdff728fe3c0c4352267` exactly, with the 4355-line control producing a
+different digest. **No new graph filings since the last pass**, so the post-pin adjudication still
+covers everything. Consumer dirty count observed at 113; that is an observation and never a gate,
+per done-when 4.
+
+**Pin 1254's disposition is CORRECTED and its sub-claim is refuted**, so the split is now
+**25 CLOSE / 14 CLOSE + file the sub-claim / 9 withdrawn / 67 live** — 39 closes, unchanged. The
+claim was verified behaviourally rather than taken from this file: mutating
+`core/scripts/validate-mandatory-rules.sh:233` to `if false` makes Check 4's PASS branch unreachable
+and `mandatory-rules-skip-accounting` reports `FIXTURE ERROR` with arms A, B and D falling to `[]/1`,
+against an unmutated control of `PASS (10 assertions)` in the same session. **A grep was the wrong
+instrument twice over** — renaming the emitted `CHECK 4: PASS` string kills nothing, because the
+fixture asserts the SUMMARY line rather than the per-check line.
+
+**Correcting it exposed that two register sections were hand-written while `--check` passed**
+(`c9a4500`). The gated list still said "The fifteen" and still listed 1254; the nine-withdrawn-closes
+table held the last hand-typed id column in the file, and it had already decayed — pin 4216 was
+written `…MANDATE-NO-STATED-EXCEPTION` against the ledger's `…MANDATE-HAS-NO-STATED-EXCEPTION`. Both
+now render, and the gated list's heading COUNT is inside its region deliberately. Measured by joining
+every `PC-` token in the register against every one in the pinned ledger: 93 resolve; of the 16 that
+do not, 14 are deliberate prose shorthand and 2 sat in that id column.
 
 **START HERE ON A FRESH SESSION — the numbered next actions.**
 
@@ -189,11 +213,40 @@ and no CHANGELOG entry exists yet.
    are in `docs/backlog.md`'s own header; **run every receipt before committing it — one that exits 0
    today is already broken** — and re-run `scripts/backlog-reverify.sh` over the whole file after
    appending, since a malformed receipt shows up there as `unresolved` rather than at the entry.
-4. **Finish the two remaining jump-queue fixes**: the recovery gate not arming on a bare-basename
-   step file, and the gate treating a partial read as a full one. The other two are DONE (see below).
-5. **Then the close release** — steps 10–12 unchanged. This is now the critical path: the 15
-   sub-claim filings that gated 15 of the 39 closes are complete, so nothing blocks the release
-   except the two fixes above and the `NAMED-UPSTREAM` readings in step 11.
+4. **ALL FIVE JUMP-QUEUE FIXES ARE LANDED. This step is DONE except for two owed guards.**
+   `9cbb77f` remediates the recovery gate; `941021d` lands `BL-009`, `BL-011` and `BL-012`.
+
+   The recovery-gate work is COMPLETE — 47 assertions, PASS, a mutation battery from a different
+   hand in which every mutant reports the exact verdict set it flips, and an anti-wedge arm. Two
+   defects and one false assurance: the gate never armed on the reference layout at all, because
+   `current_step_file` is a bare basename by contract and the marker recorded it raw, so the gate
+   resolved nothing and DELETED ITS OWN MARKER on the first post-compact call; a bounded
+   `Read … limit=1` satisfied an "in full" mandate byte-for-byte; and the injected block asserted
+   "Both files were confirmed to exist before it armed" in exactly the sessions where it had not.
+   The resolution is sited at the PRODUCER, the marker's one writer, not duplicated into the reader.
+
+   **`BL-009`, `BL-011` and `BL-012` are landed but UNGUARDED, and that is the open item.** Each is
+   accepted by the receipt its own backlog entry carried, measured rc=1 at `HEAD` → rc=0 in the tree
+   with non-empty extraction on both sides. That establishes the fixes changed what they claim to
+   change and NOTHING about whether a regression would be caught. Two guarding hands were dispatched
+   and neither reported before the session ended. **`core/fixtures/pause-hook-origin/run.sh:100-106`
+   reads `pause.sh` ALONE** — a per-hook assertion against a cross-hook defect — so it stayed green
+   through the entire life of the `BL-011` divergence and will stay green if the three legends drift
+   apart again. **Do not annotate any of the three LANDED until a guard exists.**
+5. **Then the close release** — steps 10–12. **The 25 CHANGELOG sections are DRAFTED and promoted**
+   to `docs/reviews/graph-ledger-adjudication-data/close-release-changelog-draft.md`, each naming its
+   `PC-` id verbatim, verified 25 of 25 against an impossible-id control. Splice them, bump `VERSION`,
+   and **name every closed id in the RELEASE COMMIT MESSAGE too** — see the correction under
+   "Start here"; a `CHANGELOG` section alone produces no `NAMED-UPSTREAM` row.
+6. **Step 12 is the largest remaining piece and it was NOT started.** 59 live entries must be filed
+   as `BL-` entries. The population is derived and promoted at
+   `docs/reviews/graph-ledger-adjudication-data/filing-population.tsv`, and the fan-out brief that
+   goes to each filing agent is beside it at `filing-brief.md`.
+
+   **51 of those 59 carry NO promoted evidence**, so each is a genuine re-derivation rather than a
+   transcription. Measured with a control in the same invocation: over the 39 closes, 39 carry
+   evidence and 0 do not; over these 59, 9 do and 51 do not. Budget for that — it is Phase 1's work
+   again, per entry, and the reason this step is not a formatting pass.
 
 **An agent going quiet in this session did NOT mean it had died, and acting on that assumption cost a
 full duplicate pass.** Six adjudicators reported hours late, in one burst, after their work had been
