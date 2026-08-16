@@ -41,13 +41,18 @@ skip() { # skip <what> <why> — tolerated only where the subject legitimately h
   else printf '  SKIP  %s -- %s\n' "$1" "$2"; fi
 }
 
-# Drive the hook exactly as the harness does: JSON on stdin, source=compact.
-fire() { # <hook-path> -> prints additionalContext
+# Drive the hook exactly as the harness does: JSON on stdin, source=compact. `fire` is the
+# seeded project; `fire_at` is any project, and `fire` is written in terms of it so the two
+# cannot come to drive the hook differently.
+fire_at() { # fire_at <hook-path> <project> -> prints additionalContext
   printf '{"source":"compact","session_id":"fixture"}' \
-    | CLAUDE_PROJECT_DIR="$PROJECT" bash "$1" 2>/dev/null \
+    | CLAUDE_PROJECT_DIR="$2" bash "$1" 2>/dev/null \
     | python3 -c 'import sys,json
 try: print(json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"])
 except Exception: pass'
+}
+fire() { # <hook-path> -> prints additionalContext
+  fire_at "$1" "$PROJECT"
 }
 
 echo "postcompact-rulebook-recovery:"
@@ -288,9 +293,25 @@ jcall() { # jcall <tool> <file_path|-> — `-` is a tool that carries no file_pa
   else printf '{"tool_name":"%s","tool_input":{"file_path":"%s"}}' "$1" "$2"; fi
 }
 
+# A BOUNDED Read, which is the shape the third filed skip took. `-` omits the field entirely, so
+# `jbounded <p> - -` and `jcall Read <p>` are the same call and the two spellings cannot drift.
+jbounded() { # jbounded <file_path> <limit|-> <offset|->
+  _j="{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"$1\""
+  [ "$2" != "-" ] && _j="$_j,\"limit\":$2"
+  [ "$3" != "-" ] && _j="$_j,\"offset\":$3"
+  printf '%s}}' "$_j"
+}
+
 # A fresh project per scenario. The gate's whole state is two dotfiles under _bmad-output/, so
 # scenarios that shared a root would silently inherit each other's progress.
-newproj() { # newproj <step-file-name|-> <create-that-file:yes|no> -> project dir
+#
+# WHERE THE STEP FILE SITS IS A PARAMETER BECAUSE THE TWO PLACEMENTS ARE DIFFERENT TREES, and
+# `consumer` is the one the protocol actually specifies. `route.md:46-47` resolves
+# `current_step_file` as `{project-root}/.claude/skills/ai-dlc/steps/{current_step_file}`, so the
+# snapshot records a BARE BASENAME and the file is under that directory. `flat` puts the same
+# basename at the project root -- a tree the reference consumer does not produce, kept because
+# a lead may also record a path-carrying spelling and the gate must serve both.
+newproj() { # newproj <step-file-name|-> <where: consumer|flat|none> -> project dir
   _p="$(mktemp -d "$WORK/proj.XXXXXX")" || return 1
   mkdir -p "$_p/_bmad-output"
   {
@@ -298,9 +319,19 @@ newproj() { # newproj <step-file-name|-> <create-that-file:yes|no> -> project di
     [ "$1" != "-" ] && printf 'current_step_file: `%s`\n' "$1"
     printf 'last_gate_passed: planning-gate-2 @ 2026-08-04T10:00:00Z\n'
   } > "$_p/_bmad-output/pipeline-snapshot.md"
-  [ "$2" = yes ] && printf 'step body\n' > "$_p/$1"
+  case "$2" in
+    consumer) mkdir -p "$_p/${STEPS_REL}"; printf 'step body\n' > "$_p/${STEPS_REL}/$1" ;;
+    flat)     printf 'step body\n' > "$_p/$1" ;;
+  esac
   printf 'in-flight edit work\n' > "$_p/decoy.md"
   printf '%s\n' "$_p"
+}
+
+# The step path the PRODUCER recorded, read back from the marker it wrote. Never re-derived here:
+# a fixture that computed the expected path itself would be a second implementation of the
+# resolver under test, and it would agree with a broken one.
+marker_step() { # marker_step <project> -> the recorded step_file, or empty
+  sed -n 's/^step_file=//p' "$1/$mk" 2>/dev/null | head -1
 }
 
 # The marker is written by the REAL producer, never by hand. A hand-written marker would prove
@@ -319,7 +350,7 @@ pg="_bmad-output/.recover-gate-progress"
 # 1. An ordinary tool call in an ordinary session. Overwhelmingly the common case: no
 #    compaction is pending recovery, so the gate must not even look at the call.
 p_inert() {
-  _p="$(newproj architecture.md yes)"
+  _p="$(newproj architecture.md flat)"
   d="$(gate_call "$1" "$_p" "$(jcall Edit "$_p/decoy.md")")"
   allowed "$d" || { printf 'FAIL:denied an ordinary call in an unarmed session (%s)\n' "${d%%|*}"; return; }
   [ -e "$_p/$pg" ] && { printf 'FAIL:wrote gate progress in a session with no marker\n'; return; }
@@ -331,7 +362,7 @@ p_inert() {
 #    filed incident was a lead "continuing straight into in-flight edit work" and a gate that
 #    only understood Read calls would have waved it through.
 p_deny_first() {
-  _p="$(newproj architecture.md yes)"; arm_marker "$HOOK" "$_p"
+  _p="$(newproj architecture.md flat)"; arm_marker "$HOOK" "$_p"
   for _c in "Edit:$_p/decoy.md" "Bash:-" "Read:$_p/decoy.md"; do
     d="$(gate_call "$1" "$_p" "$(jcall "${_c%%:*}" "${_c#*:}")")"
     allowed "$d" && { printf 'FAIL:%s was allowed as the first post-compact call\n' "${_c%%:*}"; return; }
@@ -346,11 +377,34 @@ p_deny_first() {
 #    the project root, and a lead may issue either spelling; a gate matching one of them denies
 #    a compliant call, which is a wedge wearing a different hat. `abs` and `rel` are separate
 #    predicates so a mutation that breaks one spelling is not hidden by the other passing.
-p_ladder() { # p_ladder <gate> <abs|rel>
-  _p="$(newproj architecture.md yes)"; arm_marker "$HOOK" "$_p"
+#    `consumer` is the THIRD spelling and it is the reference layout rather than a variation on
+#    it: the snapshot carries a bare basename, the producer resolves it under the steps
+#    directory, and the lead's compliant Read names the resolved path. It is the ANTI-WEDGE arm
+#    for that layout -- full compliance must be allowed end to end and must disarm the gate.
+#    Its step path is taken from the MARKER, never recomputed here.
+p_ladder() { # p_ladder <gate> <abs|rel|consumer>
+  case "$2" in
+    consumer) _p="$(newproj architecture.md consumer)" ;;
+    *)        _p="$(newproj architecture.md flat)" ;;
+  esac
+  arm_marker "$HOOK" "$_p"
   case "$2" in
     abs) s="$_p/_bmad-output/pipeline-snapshot.md"; f="$_p/architecture.md" ;;
-    *)   s="_bmad-output/pipeline-snapshot.md";     f="architecture.md" ;;
+    rel) s="_bmad-output/pipeline-snapshot.md";     f="architecture.md" ;;
+    consumer)
+      # ABSOLUTE on purpose. The subject here is the LAYOUT, not the spelling, and the two
+      # ladders above already own the spelling. Measured with relative spellings instead, the
+      # one-spelling mutant flipped this arm as well as `ladder_rel` -- two arms reporting one
+      # finding, which is the entanglement the flip sets exist to expose.
+      s="$_p/_bmad-output/pipeline-snapshot.md"; f="$(marker_step "$_p")"
+      case "$f" in
+        */*) : ;;
+        *) printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the producer recorded "%s", a bare basename, so this ladder is the flat one again\n' "$f"; return ;;
+      esac
+      [ -r "$_p/$f" ] \
+        || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the recorded step path "%s" is not readable, so no compliant Read exists to allow\n' "$f"; return; }
+      f="$_p/$f"
+      ;;
   esac
   d="$(gate_call "$1" "$_p" "$(jcall Read "$s")")"
   allowed "$d" || { printf 'FAIL:%s: denied the mandated snapshot Read\n' "$2"; return; }
@@ -368,7 +422,7 @@ p_ladder() { # p_ladder <gate> <abs|rel>
 #    the gate could demand, so it must not arm — and it must LEAVE the marker, which is
 #    ai-dlc-postcompact.sh's record that the injection happened.
 p_standdown_r0() {
-  _p="$(newproj - no)"; arm_marker "$HOOK" "$_p"
+  _p="$(newproj - none)"; arm_marker "$HOOK" "$_p"
   grep -q '^step_file_resolved=0$' "$_p/$mk" 2>/dev/null \
     || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — this snapshot still resolved a step file\n'; return; }
   d="$(gate_call "$1" "$_p" "$(jcall Edit "$_p/decoy.md")")"
@@ -377,13 +431,26 @@ p_standdown_r0() {
   printf 'PASS\n'
 }
 
-# 6. The step file resolved but is not on disk. Denying a Read of something absent is the
+# 6. The step file resolved and then VANISHED. Denying a Read of something absent is the
 #    unrecoverable wedge, so the gate stands down AND CLEARS the marker so it cannot re-arm on
 #    the next call. The second call is the arm: clearing is what makes the stand-down permanent.
+#
+#    THE SEED IS A VANISH, NOT AN ABSENCE, AND IT HAD TO BECOME ONE. This predicate used to seed
+#    a snapshot naming a step file that was never created, and read `step_file_resolved=1` off
+#    the marker to prove the case was expressible. That stopped being constructible when the
+#    producer began deriving the flag from READABILITY: an absent path now records
+#    `step_file_resolved=0`, which is predicate 5's case, and this one reported SEED CANNOT
+#    EXPRESS. The gate's re-check is not thereby vacuous -- its stated subject is "a path that
+#    vanished mid-session", which is a state no producer can write and only the passage of time
+#    can create. So the seed arms on a file that IS there and then removes it, which is the only
+#    tree that reaches this branch and is also the one the guard's own comment describes.
 p_standdown_missing() {
-  _p="$(newproj architecture.md no)"; arm_marker "$HOOK" "$_p"
+  _p="$(newproj architecture.md flat)"; arm_marker "$HOOK" "$_p"
   grep -q '^step_file_resolved=1$' "$_p/$mk" 2>/dev/null \
-    || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the step file did not resolve, so this is the r0 case\n'; return; }
+    || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the step file did not resolve at arming time, so this is the r0 case\n'; return; }
+  rm -f "$_p/architecture.md"
+  [ -e "$_p/architecture.md" ] \
+    && { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the mandated path did not vanish\n'; return; }
   d="$(gate_call "$1" "$_p" "$(jcall Edit "$_p/decoy.md")")"
   allowed "$d" || { printf 'FAIL:denied a call while demanding a Read of a file that is not there\n'; return; }
   [ -e "$_p/$mk" ] && { printf 'FAIL:stood down but left the marker, so the next call re-arms on the same absent file\n'; return; }
@@ -396,7 +463,7 @@ p_standdown_missing() {
 #    mandate it never recorded, and a consumer mid-upgrade has exactly one of these on disk.
 p_legacy() {
   [ -n "${LEGACY_PRODUCER:-}" ] || { printf 'FAIL:FIXTURE STALE — no legacy producer was built\n'; return; }
-  _p="$(newproj architecture.md yes)"; arm_marker "$LEGACY_PRODUCER" "$_p"
+  _p="$(newproj architecture.md flat)"; arm_marker "$LEGACY_PRODUCER" "$_p"
   grep -qE '^(snapshot_path|step_file|step_file_resolved)=' "$_p/$mk" 2>/dev/null \
     && { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the legacy marker still carries the new keys\n'; return; }
   grep -q '^fired_at=' "$_p/$mk" 2>/dev/null \
@@ -423,7 +490,7 @@ p_legacy() {
 #    mutant. `mval` is the first thing past the line that forks, so `sed` is the first
 #    observable the line actually gates.
 p_fastpath() {
-  _p="$(newproj architecture.md yes)"
+  _p="$(newproj architecture.md flat)"
   _b="$WORK/shim.$$"; rm -rf "$_b"; mkdir -p "$_b"
   _sent="$_p/sed-was-called"
   _real="$(command -v sed)"
@@ -445,13 +512,65 @@ p_fastpath() {
   printf 'PASS\n'
 }
 
-PREDS="inert deny_first ladder_abs ladder_rel standdown_r0 standdown_missing legacy fastpath"
+# 9/10. "IN FULL" IS PART OF THE MANDATE AND THE GATE USED TO JOIN ON TOOL NAME AND PATH ALONE.
+#    `Read <mandated file> limit=1` cleared the marker exactly as a full Read did: measured on
+#    the pre-fix gate, the bounded snapshot Read was ALLOWED and advanced the stage, and the
+#    bounded step Read was ALLOWED and disarmed the gate -- 1 line of 1210 loaded, gate inert.
+#    That is the THIRD skip shape the filing records, and it was the one taken in the open.
+#
+#    TWO PREDICATES, ONE PER STAGE, BECAUSE THEY ARE TWO CALL SITES. A single predicate would be
+#    satisfied by a gate that tests only the stage it happened to reach first, and the pre-fix
+#    gate had exactly two places to fix.
+#
+#    EACH CARRIES ITS OWN CONTROL, IN THE SAME PREDICATE. A deny is easy to produce by breaking
+#    the gate, so the arm is not "the bounded Read is refused" but "the bounded Read is refused
+#    AND the unbounded one is allowed". The `offset:1` call is the near-miss: a Read starting at
+#    line 1 is a full read and must be allowed, so a test widened to "any offset field is a
+#    partial" fails here rather than passing as a stricter gate.
+p_full_snapshot() {
+  _p="$(newproj architecture.md flat)"; arm_marker "$HOOK" "$_p"
+  for _b in "1:-" "-:800"; do
+    d="$(gate_call "$1" "$_p" "$(jbounded "$_p/_bmad-output/pipeline-snapshot.md" "${_b%%:*}" "${_b#*:}")")"
+    allowed "$d" && { printf 'FAIL:a snapshot Read bounded by {limit=%s offset=%s} was allowed as the mandated FIRST call\n' "${_b%%:*}" "${_b#*:}"; return; }
+    grep -q 'IN FULL' <<<"${d#*|}" || { printf 'FAIL:the bounded snapshot Read {limit=%s offset=%s} was denied for some other reason than being partial\n' "${_b%%:*}" "${_b#*:}"; return; }
+    [ -e "$_p/$pg" ] && { printf 'FAIL:a bounded snapshot Read advanced the gate — the partial cleared the stage\n'; return; }
+  done
+  # CONTROL: the same Read with neither field, and the near-miss that must NOT be treated as
+  # partial. Without these the arm would pass against a gate that denies every Read there is.
+  d="$(gate_call "$1" "$_p" "$(jbounded "$_p/_bmad-output/pipeline-snapshot.md" - 1)")"
+  allowed "$d" || { printf 'FAIL:a snapshot Read at offset 1 is a FULL read and was denied — the test widened past its subject\n'; return; }
+  [ "$(cat "$_p/$pg" 2>/dev/null)" = step ] || { printf 'FAIL:the offset-1 snapshot Read did not advance the gate\n'; return; }
+  printf 'PASS\n'
+}
+
+p_full_step() {
+  _p="$(newproj architecture.md flat)"; arm_marker "$HOOK" "$_p"
+  gate_call "$1" "$_p" "$(jcall Read "$_p/_bmad-output/pipeline-snapshot.md")" >/dev/null
+  [ "$(cat "$_p/$pg" 2>/dev/null)" = step ] \
+    || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the full snapshot Read did not reach stage two\n'; return; }
+  for _b in "1:-" "-:800"; do
+    d="$(gate_call "$1" "$_p" "$(jbounded "$_p/architecture.md" "${_b%%:*}" "${_b#*:}")")"
+    allowed "$d" && { printf 'FAIL:a step-file Read bounded by {limit=%s offset=%s} satisfied the SECOND mandate\n' "${_b%%:*}" "${_b#*:}"; return; }
+    grep -q 'IN FULL' <<<"${d#*|}" || { printf 'FAIL:the bounded step Read {limit=%s offset=%s} was denied for some other reason than being partial\n' "${_b%%:*}" "${_b#*:}"; return; }
+    [ -e "$_p/$mk" ] || { printf 'FAIL:a bounded step Read disarmed the gate\n'; return; }
+    [ "$(cat "$_p/$pg" 2>/dev/null)" = step ] || { printf 'FAIL:a bounded step Read moved the gate off stage two\n'; return; }
+  done
+  # CONTROL: the unbounded Read of the same file must be allowed AND must disarm. This is the
+  # anti-wedge half -- the always-available action the deny above sends the lead to.
+  d="$(gate_call "$1" "$_p" "$(jcall Read "$_p/architecture.md")")"
+  allowed "$d" || { printf 'FAIL:the unbounded step Read was denied, so the deny above is not satisfiable and the gate is a wedge\n'; return; }
+  [ -e "$_p/$mk" ] && { printf 'FAIL:the unbounded step Read was allowed but the gate stayed armed\n'; return; }
+  printf 'PASS\n'
+}
+
+PREDS="inert deny_first ladder_abs ladder_rel ladder_consumer standdown_r0 standdown_missing legacy fastpath full_snapshot full_step"
 verdicts() { # verdicts <gate> -> "name=PASS" lines, in PREDS order
   for _n in $PREDS; do
     case "$_n" in
-      ladder_abs) r="$(p_ladder "$1" abs)" ;;
-      ladder_rel) r="$(p_ladder "$1" rel)" ;;
-      *)          r="$("p_$_n" "$1")" ;;
+      ladder_abs)      r="$(p_ladder "$1" abs)" ;;
+      ladder_rel)      r="$(p_ladder "$1" rel)" ;;
+      ladder_consumer) r="$(p_ladder "$1" consumer)" ;;
+      *)               r="$("p_$_n" "$1")" ;;
     esac
     printf '%s=%s\n' "$_n" "${r%%:*}"
   done
@@ -476,6 +595,9 @@ for _n in $PREDS; do
   case "$_n" in
     ladder_abs) r="$(p_ladder "$GATE" abs)"; label="the compliance ladder holds for ABSOLUTE spellings of both mandated paths" ;;
     ladder_rel) r="$(p_ladder "$GATE" rel)"; label="the compliance ladder holds for RELATIVE spellings of both mandated paths" ;;
+    ladder_consumer) r="$(p_ladder "$GATE" consumer)"; label="ANTI-WEDGE on the REFERENCE layout: a bare basename in the snapshot, and full compliance is allowed end to end and disarms the gate" ;;
+    full_snapshot)   r="$(p_full_snapshot "$GATE")";   label="a BOUNDED Read of the snapshot is refused and does not advance the gate, while the unbounded one and an offset-1 Read are allowed" ;;
+    full_step)       r="$(p_full_step "$GATE")";       label="a BOUNDED Read of the step file is refused and does not disarm the gate, while the unbounded one is allowed and does" ;;
     inert)              r="$(p_inert "$GATE")";              label="inert with no marker: an ordinary call in an ordinary session is untouched" ;;
     deny_first)         r="$(p_deny_first "$GATE")";         label="armed: an edit, a tool with no file_path, and a Read of the wrong file are all denied, each told what to Read" ;;
     standdown_r0)       r="$(p_standdown_r0 "$GATE")";       label="stands down when the snapshot resolved no step file, and keeps the injection record" ;;
@@ -519,10 +641,15 @@ mutant_arm() { # mutant_arm <label> <mutant> <expected flip set, in PREDS order>
 
 # --- Assertion 18: MUTANT — the gate allows unconditionally ------------------
 # The deny path emptied at its source, so every guard above it still runs and still decides;
-# only the refusal is gone. Nothing but the deny arm may notice.
+# only the refusal is gone. Only the arms that assert a REFUSAL may notice, and there are three
+# of them because the gate refuses three distinct things: a call that is not a mandated Read at
+# all, a bounded Read at stage one, and a bounded Read at stage two. Each is a separate finding
+# about a separate call site -- the single-site mutants below prove the two stage arms are
+# reachable one at a time -- and no stand-down arm may appear here, because a gate that never
+# refuses stands down by accident everywhere.
 MG_ALLOW="$WORK/gate-allow-all.sh"
 awk '/^deny\(\) \{$/{print; print "  exit 0"; next} 1' "$GATE" > "$MG_ALLOW"
-mutant_arm "a gate that never refuses" "$MG_ALLOW" "deny_first"
+mutant_arm "a gate that never refuses" "$MG_ALLOW" "deny_first full_snapshot full_step"
 
 # --- Assertion 19: MUTANT — the gate arms on an unresolvable mandate ---------
 # BOTH layers of the precondition, because they are one guard: with only the flag check gone
@@ -544,12 +671,17 @@ mutant_arm "a gate that arms when the snapshot named no step file" "$MG_R0" "sta
 # Removing all four is what those states are defended against, and its consequences run past
 # the three inert arms: with no marker the unset paths resolve to the project directory, which
 # is readable, so the gate arms in a session that never compacted AND re-arms after it has
-# already disarmed, so both ladders' last call — an ordinary call after full compliance — is
-# refused, and the missing-path stand-down no longer holds on the second call. Six genuine
+# already disarmed, so every ladder's last call — an ordinary call after full compliance — is
+# refused, and the missing-path stand-down no longer holds on the second call. Seven genuine
 # findings from one property: the gate arms only from a COMPLETE marker.
+#
+# `ladder_consumer` is in the set for the same reason as the other two and for no reason of its
+# own: it is a third ladder and its last call is refused too. The two `full_*` arms are NOT here,
+# and that is the discriminating part — a re-armed gate still refuses a bounded Read, so the
+# in-full test is untouched by this mutation.
 MG_WEDGE="$WORK/gate-no-standdown.sh"
 awk '!(index($0,"[ -f \"$MARKER\" ] || exit 0") || index($0,"[ \"$STEP_RESOLVED\" = \"1\" ] || exit 0") || index($0,"[ -n \"$SNAP_REL\" ] || exit 0") || index($0,"[ -n \"$STEP_REL\" ] || exit 0"))' "$GATE" > "$MG_WEDGE"
-mutant_arm "a gate with every arming precondition removed" "$MG_WEDGE" "inert ladder_abs ladder_rel standdown_r0 standdown_missing legacy fastpath"
+mutant_arm "a gate with every arming precondition removed" "$MG_WEDGE" "inert ladder_abs ladder_rel ladder_consumer standdown_r0 standdown_missing legacy fastpath"
 
 # --- Assertion 21: MUTANT — one spelling only --------------------------------
 # The call's path left unnormalised while the marker's stays resolved. The absolute ladder is
@@ -591,14 +723,269 @@ awk '!index($0,"[ -f \"$MARKER\" ] || exit 0")' "$GATE" > "$MG_FAST"
 mutant_arm "the marker fast-path deleted — the gate still works but parses on every call" "$MG_FAST" "fastpath"
 
 # --- Assertion 22: MUTANT — the gate replaced by a dead hook -----------------
-# THE CONTROL THE ALLOW-SHAPED ARMS REQUIRE. Four of the seven predicates pass when nothing
-# fires, and `exit 0` is nothing firing. It must flip every arm that asserts an OBSERVABLE
-# CONSEQUENCE — the deny, the two ladders' advance-and-disarm, the marker clearing — and it
-# must NOT flip the three that assert a stand-down, because a stood-down gate and a dead gate
+# THE CONTROL THE ALLOW-SHAPED ARMS REQUIRE. Four of the predicates pass when nothing fires, and
+# `exit 0` is nothing firing. It must flip every arm that asserts an OBSERVABLE CONSEQUENCE — the
+# deny, the three ladders' advance-and-disarm, the marker clearing, and both in-full arms — and
+# it must NOT flip the three that assert a stand-down, because a stood-down gate and a dead gate
 # are the same thing. That asymmetry is why those three carry assertion 20's mutant instead.
+#
+# The two `full_*` arms are killed here on their CONTROL halves as much as on their denies: a
+# dead gate neither refuses the bounded Read nor advances on the unbounded one, and an arm that
+# only watched for a refusal would score this silence as a pass.
 MG_DEAD="$WORK/gate-dead.sh"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$MG_DEAD"
-mutant_arm "the gate replaced by exit 0" "$MG_DEAD" "deny_first ladder_abs ladder_rel standdown_missing fastpath"
+mutant_arm "the gate replaced by exit 0" "$MG_DEAD" "deny_first ladder_abs ladder_rel ladder_consumer standdown_missing fastpath full_snapshot full_step"
+
+# --- MUTANT — "in full" unenforced, ALL THREE LAYERS reverted ----------------
+# THE PRE-FIX GATE, reconstructed rather than asserted: the two `jq` field extractions gone, the
+# `is_full_read` definition gone, and both call sites unconditional again. Reverting only the
+# call sites would leave a test nothing calls and the mutant would still prove the extraction;
+# reverting only the extraction would leave `is_full_read` reading unset variables under `set -u`
+# and the mutant would die on a shell error, whose silence is an ALLOW that scores as a kill.
+#
+# It must flip BOTH stage arms and nothing else. A third flip would mean a bounded Read is doing
+# work somewhere the two arms above do not name.
+MG_NOFULL="$WORK/gate-partial-ok.sh"
+awk '
+  index($0,".tool_input.limit // empty")  {next}
+  index($0,".tool_input.offset // empty") {next}
+  $0=="is_full_read() {" {inf=1; next}
+  inf && $0=="}" {inf=0; next}
+  inf {next}
+  $0=="      if is_full_read; then" {print "      if true; then"; next}
+  1' "$GATE" > "$MG_NOFULL"
+# Anchored on the EMITTING lines, never on the header prose: the gate's own comment names
+# `is_full_read()` and quotes `limit`/`offset`, so a loose grep counts a correctly reverted
+# mutant as unreverted and the arm would report FIXTURE STALE forever.
+lay=0
+[ "$(grep -c 'tool_input\.limit // empty' "$MG_NOFULL")"  -eq 0 ] && lay=$((lay+1))
+[ "$(grep -c 'tool_input\.offset // empty' "$MG_NOFULL")" -eq 0 ] && lay=$((lay+1))
+[ "$(grep -c '^is_full_read() {$' "$MG_NOFULL")"          -eq 0 ] && lay=$((lay+1))
+[ "$(grep -c '^      if is_full_read; then$' "$MG_NOFULL")" -eq 0 ] && lay=$((lay+1))
+[ "$(grep -c '^      if true; then$' "$MG_NOFULL")"       -eq 2 ] && lay=$((lay+1))
+if [ "$lay" -ne 5 ]; then
+  bad "FIXTURE STALE: only ${lay} of the in-full fix's 5 layers were reverted; a partial revert comes out green and proves the layer left in place"
+else
+  mutant_arm "a gate that accepts a BOUNDED Read as compliance, at both sites" "$MG_NOFULL" "full_snapshot full_step"
+fi
+
+# --- MUTANT — "in full" unenforced at ONE site, once per site ----------------
+# THE ENTANGLEMENT TEST FOR THE TWO STAGE ARMS. The mutant above proves the fix is load-bearing;
+# these two prove the arms are separable, which is the failure mode where one stage is guarded
+# and the fixture reports both as guarded. Each replaces exactly ONE of the two identical call
+# sites, so each must flip exactly one predicate.
+_i=1
+for _site in snapshot step; do
+  MG_ONE="$WORK/gate-partial-ok-${_site}.sh"
+  awk -v want="$_i" '
+    $0=="      if is_full_read; then" { n++; if (n==want) { print "      if true; then"; next } }
+    1' "$GATE" > "$MG_ONE"
+  if [ "$(grep -c '^      if true; then$' "$MG_ONE")" -ne 1 ] \
+  || [ "$(grep -c '^      if is_full_read; then$' "$MG_ONE")" -ne 1 ]; then
+    bad "FIXTURE STALE: the single-site in-full mutant for the ${_site} stage did not land on exactly one of the two call sites"
+  else
+    mutant_arm "a gate that accepts a BOUNDED Read at the ${_site} stage only" "$MG_ONE" "full_${_site}"
+  fi
+  _i=$((_i+1))
+done
+
+# =============================================================================
+# THE PRODUCER — ai-dlc-recover.sh, on the layout the protocol actually specifies
+#
+# Everything above holds the GATE fixed and mutates it. Two of the three defects this section
+# was added for are in the INJECTOR, and one of them is invisible from the gate's side because
+# the gate behaved correctly on the input it was given: the marker said the mandated file was
+# `discovery.md`, no such file existed at the project root, and standing down was the right
+# answer to a wrong question.
+#
+# So this is a SECOND battery, with its own predicates, its own unmutated control and its own
+# mutants. It holds the gate at the real one and mutates the producer, which is the only way a
+# marker-content defect can be scored. The two batteries never share a mutant, so a flip in
+# either is attributable to the file that was mutated.
+# =============================================================================
+
+# R1. THE GATE NEVER ARMED ON THE REFERENCE-CONSUMER LAYOUT. `route.md:46-47` resolves
+#     `current_step_file` as `{project-root}/.claude/skills/ai-dlc/steps/{current_step_file}`,
+#     so the snapshot carries a BARE BASENAME. Recorded raw, the mandate named a file that does
+#     not exist at the project root, and the gate resolved `${PROJECT_DIR}/discovery.md`, found
+#     nothing, took its "a mandated path vanished, stand down" branch, DELETED ITS OWN MARKER and
+#     allowed the call. The first post-compact tool call -- any call -- disarmed it permanently.
+#
+#     The predicate asserts the whole chain, because each link alone is satisfiable by a
+#     regression in the next: a resolved marker whose path the mandate does not name leaves the
+#     lead reading a different file, and both of those are consistent with a gate that never
+#     arms.
+pr_consumer() { # pr_consumer <recover-hook>
+  _p="$(newproj discovery.md consumer)"
+  arm_marker "$1" "$_p"
+  sf="$(marker_step "$_p")"
+  [ -n "$sf" ] || { printf 'FAIL:the producer recorded no step_file at all\n'; return; }
+  [ -r "$_p/$sf" ] \
+    || { printf 'FAIL:the producer recorded step_file=%s, which is not readable from the project root — the mandate names a file the lead cannot Read and the gate has nothing armable\n' "$sf"; return; }
+  t="$(fire_at "$1" "$_p")"
+  grep -qF "Read ${sf}\` in full" <<<"$t" \
+    || { printf 'FAIL:the marker resolved to %s but the SECOND mandate does not name that path, so the lead is sent somewhere else\n' "$sf"; return; }
+  d="$(gate_call "$GATE" "$_p" "$(jcall Edit "$_p/decoy.md")")"
+  allowed "$d" \
+    && { printf 'FAIL:an ordinary Edit was ALLOWED as the first post-compact call on the reference layout — the gate never armed\n'; return; }
+  [ -e "$_p/$mk" ] \
+    || { printf 'FAIL:the gate deleted its own marker on the first post-compact call, so it is disarmed for the rest of the session\n'; return; }
+  printf 'PASS\n'
+}
+
+# R2. THE ASSURANCE IS A CLAIM ABOUT THE GATE AND WAS EMITTED WHERE THE GATE CANNOT ARM.
+#     "Both files were confirmed to exist before it armed" went into every block, including
+#     every session where nothing was watching. That is worse than silence: the RECOVERY-SKIP
+#     disclosure is the only thing binding those sessions, and a lead that believes it is
+#     mechanically gated has no reason to reach it.
+#
+#     BOTH DIRECTIONS, IN ONE PREDICATE. The offender is a snapshot naming a file that exists
+#     nowhere; the control is the reference layout, where the assurance is TRUE and must still
+#     be stated. Without the control, deleting the paragraph outright would pass -- and silence
+#     is not the fix either, because the armed session is the one the claim is for.
+pr_assurance() { # pr_assurance <recover-hook>
+  _g="$(newproj ghost.md none)"
+  arm_marker "$1" "$_g"
+  grep -q '^step_file_resolved=0$' "$_g/$mk" 2>/dev/null \
+    || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the producer reported a step file it can nowhere read as resolved\n'; return; }
+  t="$(fire_at "$1" "$_g")"
+  [ -n "$t" ] || { printf 'FAIL:the hook emitted nothing for a snapshot naming an unreachable step file\n'; return; }
+  grep -q 'refuses any other first tool call' <<<"$t" \
+    && { printf 'FAIL:the block promises the gate refuses any other first tool call, in a session where the gate cannot arm\n'; return; }
+  grep -q 'confirmed readable' <<<"$t" \
+    && { printf 'FAIL:the block claims both files were confirmed readable before the gate armed, and it never armed\n'; return; }
+  grep -q 'CANNOT ARM' <<<"$t" \
+    || { printf 'FAIL:the block neither promises nor disclaims enforcement, so the lead cannot tell which session it is in\n'; return; }
+  grep -q 'RECOVERY-SKIP:' <<<"$t" \
+    || { printf 'FAIL:the gate cannot arm and the disclosure form is absent, so nothing at all binds this session\n'; return; }
+  # CONTROL: a layout where the flag is 1, so the assurance is true and must be made.
+  #
+  # FLAT, NOT THE REFERENCE LAYOUT, AND THAT WAS MEASURED RATHER THAN CHOSEN. With the reference
+  # layout as the control this predicate went red under the resolution-only mutant -- correctly,
+  # since nothing resolves there and the block then discloses -- but that is the OTHER arm's
+  # finding reported twice. A flat project reaches `step_file_resolved=1` without the candidate
+  # -root loop, so what remains here is the only thing this arm should own: whether the
+  # paragraph tracks the flag.
+  _c="$(newproj architecture.md flat)"
+  arm_marker "$1" "$_c"
+  t2="$(fire_at "$1" "$_c")"
+  grep -q 'CANNOT ARM' <<<"$t2" \
+    && { printf 'FAIL:the block disclaims enforcement in a session where the gate does arm\n'; return; }
+  grep -q 'refuses any other first tool call' <<<"$t2" \
+    || { printf 'FAIL:the block never states the assurance even where the gate armed — the paragraph was deleted rather than made conditional\n'; return; }
+  printf 'PASS\n'
+}
+
+RPREDS="consumer assurance"
+rverdicts() { # rverdicts <recover-hook>
+  for _n in $RPREDS; do r="$("pr_$_n" "$1")"; printf '%s=%s\n' "$_n" "${r%%:*}"; done
+}
+rflips() { printf '%s ' $(rverdicts "$1" | sed -n 's/=FAIL$//p'); }
+
+for _n in $RPREDS; do
+  case "$_n" in
+    consumer)  r="$(pr_consumer "$HOOK")";  label="producer: a BARE BASENAME in the snapshot resolves under the steps directory, the mandate names the resolved path, and the gate ARMS instead of deleting its own marker" ;;
+    assurance) r="$(pr_assurance "$HOOK")"; label="producer: the gate-assurance paragraph is made only where the gate can arm, and IS made where it can" ;;
+  esac
+  if [ "$r" = PASS ]; then ok "$label"; else bad "$label — ${r#FAIL:}"; fi
+done
+
+# --- UNMUTATED CONTROL for the producer battery ------------------------------
+RCTRL="$WORK/recover-control-producer.sh"
+cp "$HOOK" "$RCTRL"
+rcf="$(rflips "$RCTRL")"
+if [ -z "${rcf// /}" ]; then
+  ok "control: an unmutated copy of the producer reproduces both verdicts — the flips below are the mutations"
+else
+  bad "CONTROL FAILED — an unmutated copy of the producer already flips {${rcf}}, so every producer-mutant verdict below is uninterpretable"
+fi
+
+rmutant_arm() { # rmutant_arm <label> <mutant> <expected flip set, in RPREDS order>
+  if cmp -s "$HOOK" "$2"; then
+    bad "FIXTURE STALE: $1 — the mutant is byte-identical to the producer, so the mutation matched nothing"; return
+  fi
+  if ! bash -n "$2" 2>/dev/null; then
+    bad "FIXTURE STALE: $1 — the mutant is not valid shell; it would emit no directive and write no marker, and both predicates would read that as a kill they did not earn"; return
+  fi
+  got="$(rflips "$2")"
+  if [ "$got" = "$3 " ]; then
+    ok "mutant: $1 — flips exactly {$3}"
+  elif [ -z "${got// /}" ]; then
+    bad "MUTANT KILLED NOTHING: $1 — both producer arms stay green with the mutation applied, so {$3} cannot fire"
+  else
+    bad "MUTANT FLIP SET WRONG: $1 — expected {$3}, measured {$got}; the arms are entangled or one of them is vacuous"
+  fi
+}
+
+# --- MUTANT — the whole basename fix reverted, BOTH layers -------------------
+# The resolution loop and the readability-derived flag are two layers of one edit, and reverting
+# either alone leaves the other doing the work. This is the pre-fix producer: the grep's raw
+# capture recorded verbatim, and `step_file_resolved=1` meaning "a grep matched something".
+MR_RAW="$WORK/recover-raw-basename.sh"
+awk '
+  $0=="  case \"$STEP_FILE\" in" {inb=1; next}
+  inb && $0=="  esac" {inb=0; if (!e) {print "  :"; e=1} next}
+  inb {next}
+  index($0,"[ -r \"$_step_abs\" ] || STEP_FILE_RESOLVED=0") {next}
+  1' "$HOOK" > "$MR_RAW"
+lay=0
+[ "$(grep -c '_cand' "$MR_RAW")"     -eq 0 ] && lay=$((lay+1))
+[ "$(grep -c '_step_abs' "$MR_RAW")" -eq 0 ] && lay=$((lay+1))
+[ "$(grep -c '^  :$' "$MR_RAW")"     -eq 1 ] && lay=$((lay+1))
+if [ "$lay" -ne 3 ]; then
+  bad "FIXTURE STALE: only ${lay} of the basename fix's 3 layers were reverted; a partial revert comes out green and proves the layer left in place"
+else
+  rmutant_arm "a producer that records the snapshot's bare basename raw and calls it resolved" "$MR_RAW" "consumer assurance"
+fi
+
+# --- MUTANT — the resolution reverted, the readability flag KEPT -------------
+# THE ENTANGLEMENT TEST, one layer each. With the loop gone the basename never becomes a path,
+# so the flag correctly reads 0 and the block correctly discloses -- the gate does not arm and
+# does not lie about it. Only the reference-layout arm may notice.
+MR_RESOLVE="$WORK/recover-no-resolve.sh"
+awk '
+  !d && $0=="  case \"$STEP_FILE\" in" {inb=1; d=1; next}
+  inb && $0=="  esac" {inb=0; next}
+  inb {next}
+  1' "$HOOK" > "$MR_RESOLVE"
+if [ "$(grep -c '_cand' "$MR_RESOLVE")" -ne 0 ] || [ "$(grep -c '_step_abs' "$MR_RESOLVE")" -eq 0 ]; then
+  bad "FIXTURE STALE: the resolution-only mutant did not cut exactly the candidate-root loop"
+else
+  rmutant_arm "a producer that never resolves a bare basename under the steps directory" "$MR_RESOLVE" "consumer"
+fi
+
+# --- MUTANT — the readability flag reverted, the resolution KEPT -------------
+# The other half. Resolution still works, so the reference layout is unaffected; what returns is
+# `step_file_resolved=1` for a name that resolves nowhere, which is the input the false assurance
+# was rendered from.
+MR_FLAG="$WORK/recover-flag-blind.sh"
+awk '
+  $0=="  case \"$STEP_FILE\" in" {n++; if (n==2) {inb=1; next}}
+  inb && $0=="  esac" {inb=0; next}
+  inb {next}
+  index($0,"[ -r \"$_step_abs\" ] || STEP_FILE_RESOLVED=0") {next}
+  1' "$HOOK" > "$MR_FLAG"
+if [ "$(grep -c '_step_abs' "$MR_FLAG")" -ne 0 ] || [ "$(grep -c '_cand' "$MR_FLAG")" -eq 0 ]; then
+  bad "FIXTURE STALE: the flag-only mutant did not cut exactly the readability test"
+else
+  rmutant_arm "a producer whose resolved flag means only that a grep matched something" "$MR_FLAG" "assurance"
+fi
+
+# --- MUTANT — the assurance emitted unconditionally --------------------------
+# THE ARM'S OWN KILLER, and the one that owns the false-assurance case: the flag is computed
+# correctly and the paragraph ignores it, which is exactly the shipped defect. Anchored on the
+# SECOND occurrence of the branch condition -- the first is the second-mandate branch, and a
+# mutant that collapsed both would be scoring two changes as one.
+MR_ASSURE="$WORK/recover-assurance-always.sh"
+awk '
+  $0=="if [ \"$STEP_FILE_RESOLVED\" -eq 1 ]; then" { n++; if (n==2) { print "if true; then"; next } }
+  1' "$HOOK" > "$MR_ASSURE"
+if [ "$(grep -c '^if true; then$' "$MR_ASSURE")" -ne 1 ] \
+|| [ "$(grep -c '^if \[ "\$STEP_FILE_RESOLVED" -eq 1 \]; then$' "$MR_ASSURE")" -ne 1 ]; then
+  bad "FIXTURE STALE: the unconditional-assurance mutant did not land on exactly the second of the two branch conditions"
+else
+  rmutant_arm "a producer that promises the gate armed whether or not it could" "$MR_ASSURE" "assurance"
+fi
 
 fi  # GATE present
 
@@ -610,13 +997,6 @@ fi  # GATE present
 UNRES="$(mktemp -d "$WORK/unres.XXXXXX")"; mkdir -p "$UNRES/_bmad-output"
 printf '# Pipeline Snapshot\n\n## Pipeline Position\nlast_gate_passed: planning-gate-2\n' \
   > "$UNRES/_bmad-output/pipeline-snapshot.md"
-fire_at() { # fire_at <hook> <project>
-  printf '{"source":"compact","session_id":"fixture"}' \
-    | CLAUDE_PROJECT_DIR="$2" bash "$1" 2>/dev/null \
-    | python3 -c 'import sys,json
-try: print(json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"])
-except Exception: pass'
-}
 second_mandate_ok() { # second_mandate_ok <hook> -> PASS | FAIL:<what>
   t="$(fire_at "$1" "$UNRES")"
   [ -n "$t" ] || { printf 'FAIL:the hook emitted nothing for a snapshot naming no step file\n'; return; }
@@ -633,12 +1013,45 @@ else
   bad "recover: the SECOND mandate is unexecutable — ${r#FAIL:}"
 fi
 
+# --- Assertion 23b: the cliff, measured on the LARGER of the two branches -----
+# ASSERTION 4 MEASURES THE SEEDED PROJECT AND THAT IS NO LONGER THE BIGGEST BLOCK. The hook now
+# has two shapes and the unresolvable one is the longer: it replaces a one-line mandate with a
+# paragraph telling the lead how to resolve the path itself, and replaces the gate assurance with
+# the cannot-arm disclaimer. Measured, same hook, same run: 8696 characters where the step file
+# resolves and 8927 where it does not — a 231-character spread against 304 characters of
+# headroom, all of it on the branch assertion 4 does not see.
+#
+# THAT SPREAD WAS TAKEN WITH THE SNAPSHOT HELD CONSTANT and it is not the difference between the
+# two figures this fixture prints. The unresolvable project below carries no Pipeline Position
+# body, so its excerpt is shorter and its total lands lower than the 8927 above while still being
+# the larger of the two BRANCHES. Reading the two printed numbers as the branch cost would
+# under-state it.
+#
+# The predicate is assertion 4's, and assertion 8c is what proves that predicate can fire; this
+# arm adds a second population, not a second check.
+# Measured the way assertion 4 measures, through a variable: piping `fire_at` straight into
+# `wc -c` counts python's trailing newline and the two figures would differ by one byte.
+UCTX="$(fire_at "$HOOK" "$UNRES")"
+ULEN="$(printf '%s' "$UCTX" | wc -c | tr -d ' ')"
+if [ "$ULEN" -lt 9000 ]; then
+  ok "the LARGER branch — no resolvable step file — is ${ULEN} chars, also under the 9000 ceiling"
+else
+  bad "the block is ${ULEN} chars when the snapshot names no resolvable step file, at or past the 9000 ceiling — the harness replaces the ENTIRE block with a file-path stub for exactly the recoveries that have the least going for them"
+fi
+
 # --- Assertion 24: MUTANT — the old ${STEP_FILE} fallback restored -----------
 # Both layers: the prose string back in the empty case AND the two-branch mandate collapsed to
 # the single interpolated form. Reverting one alone leaves the other doing the work.
+#
+# ANCHORED ON THE FIRST OCCURRENCE OF THE BRANCH CONDITION, NOT ON EVERY ONE. A second consumer
+# of `STEP_FILE_RESOLVED` was added -- the gate-assurance paragraph -- and a blanket `sed`
+# collapsed both, which is two mutations scored as one and reported here as three layers where
+# the mutant has two.
 MUT_FB="$WORK/recover-old-fallback.sh"
-sed -e 's|^  STEP_FILE=""$|  STEP_FILE="(named in Pipeline Position -- read the snapshot)"|' \
-    -e 's|^if \[ "\$STEP_FILE_RESOLVED" -eq 1 \]; then$|if true; then|' "$HOOK" > "$MUT_FB"
+awk '
+  $0=="  STEP_FILE=\"\"" {print "  STEP_FILE=\"(named in Pipeline Position -- read the snapshot)\""; next}
+  !d && $0=="if [ \"$STEP_FILE_RESOLVED\" -eq 1 ]; then" {print "if true; then"; d=1; next}
+  1' "$HOOK" > "$MUT_FB"
 # Anchored on the ASSIGNMENT, not the phrase: the hook's own comment quotes the old rendering
 # verbatim, so a bare grep for it counts 2 in a correctly mutated file and reads as a stale seed.
 lay="$(grep -c '^  STEP_FILE="(named in Pipeline Position' "$MUT_FB")"

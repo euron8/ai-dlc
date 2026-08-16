@@ -81,10 +81,41 @@ STEP_FILE="$(printf '%s' "$STEP_FILE" | sed -E 's/^`([^`]+)`.*/\1/; s/^([^[:spac
 #
 # The flag is also what `ai-dlc-recover-gate.sh` reads to decide whether it may arm: a gate that
 # enforced a mandate naming no path would deny every call the lead could make.
+#
+# AND WHAT THE SNAPSHOT CARRIES IS A BARE BASENAME BY CONTRACT, which is the half that made the
+# gate inert on the layout it was written for. `route.md:46-47` resolves `current_step_file` as
+# `{project-root}/.claude/skills/ai-dlc/steps/{current_step_file}`, so a reference consumer
+# records `discovery.md`, not a path. Recorded raw it made the mandate name a file that does not
+# exist at the project root, and made the gate resolve `${PROJECT_DIR}/discovery.md`, find
+# nothing, and take its stand-down branch -- deleting its own marker on the FIRST post-compact
+# tool call, whatever that call was. Measured end to end: a non-mandated first `Edit` was ALLOWED
+# and the marker was gone, against a control differing only in the spelling of this one value,
+# which DENIED. Resolve it here, against the two candidate roots the validators already probe.
 STEP_FILE_RESOLVED=1
 if [ -z "$STEP_FILE" ]; then
   STEP_FILE=""
   STEP_FILE_RESOLVED=0
+else
+  case "$STEP_FILE" in
+    */*) : ;;  # already carries a directory; trust the spelling and let the test below rule
+    *)
+      for _cand in ".claude/skills/ai-dlc/steps" "core/skills/ai-dlc/steps"; do
+        if [ -r "${PROJECT_DIR}/${_cand}/${STEP_FILE}" ]; then
+          STEP_FILE="${_cand}/${STEP_FILE}"
+          break
+        fi
+      done
+      ;;
+  esac
+  # THE FLAG NOW MEANS "THE LEAD CAN READ THIS", not "a grep matched something". An unreadable
+  # path is the case the gate disarms on anyway, so deciding it here changes no enforcement --
+  # what it changes is that the block below stops claiming an arming that never happened, and
+  # routes the lead to the disclosure line instead.
+  case "$STEP_FILE" in
+    /*) _step_abs="$STEP_FILE" ;;
+    *)  _step_abs="${PROJECT_DIR}/${STEP_FILE}" ;;
+  esac
+  [ -r "$_step_abs" ] || STEP_FILE_RESOLVED=0
 fi
 
 # THE SECOND MANDATE IS BUILT, NOT INTERPOLATED, because its two branches are different
@@ -109,6 +140,24 @@ file's path from the Pipeline Position section of the snapshot you have just bee
 told to Read, and your SECOND tool call MUST be \`Read <that path>\` in full. If
 the snapshot names none, say so in your verification turn rather than proceeding
 as though it did. ${_MANDATE_WHY}"
+fi
+
+# THE ASSURANCE IS A CLAIM ABOUT THE GATE, so it may only be made where the gate can arm. Emitted
+# unconditionally it told the lead "a skip is denied rather than noticed afterwards" in precisely
+# the sessions where nothing was watching. That is worse than saying nothing: the honest-
+# disclosure paragraph further down is the only thing binding those sessions, and a lead that
+# believes it is being gated mechanically has no reason to reach it.
+if [ "$STEP_FILE_RESOLVED" -eq 1 ]; then
+  GATE_ASSURANCE="\`ai-dlc-recover-gate.sh\` refuses any other first tool call, so a skip is denied
+rather than noticed afterwards. Both files were confirmed readable before it
+armed, and a bounded Read -- \`limit\` or a late \`offset\` -- is refused the same
+way a wrong file is: complying is always available to you, which is why there is
+nothing to weigh."
+else
+  GATE_ASSURANCE="\`ai-dlc-recover-gate.sh\` CANNOT ARM for this recovery, for the reason in the
+disclosure paragraph below. Nothing mechanical is watching these two calls, so
+they are carried by your honesty alone -- which makes them stricter here, not
+weaker."
 fi
 
 # A small, bounded excerpt so the lead can orient before its Read returns. This
@@ -138,10 +187,7 @@ ${SECOND_MANDATE}
 
 ## The two MUSTs have NO exception you may grant yourself
 
-\`ai-dlc-recover-gate.sh\` refuses any other first tool call, so a skip is denied
-rather than noticed afterwards. Both files were confirmed to exist before it
-armed: complying is always available to you, which is why there is nothing to
-weigh. "I read it recently" (compaction cleared that record), "the summary covers
+${GATE_ASSURANCE} "I read it recently" (compaction cleared that record), "the summary covers
 it" (the summary is lossy, which is why this block exists) and "finishing is
 duplicative" (a judgment made from inside the state the Read replaces) are not
 reasons; they are the three shapes the skip has actually taken.

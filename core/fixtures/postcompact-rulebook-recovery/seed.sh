@@ -55,6 +55,16 @@ current_branch: main
 sprint_id: 300
 MD
 
+# THE SNAPSHOT CARRIES A BARE BASENAME AND THE STEP FILE LIVES UNDER THE STEPS DIRECTORY -- the
+# reference-consumer layout, `route.md:46-47`: `current_step_file` is resolved as
+# `{project-root}/.claude/skills/ai-dlc/steps/{current_step_file}`. This seed named the basename
+# and put the file NOWHERE, which is a tree that cannot occur: the mandate then names a file the
+# lead cannot read, and every arm below measured the hook's unresolvable branch while claiming to
+# measure its ordinary one. Measured on that seed, the directive carried ONE bolded mandate and
+# the grade arm went red.
+mkdir -p "$WORK/project/.claude/skills/ai-dlc/steps"
+printf '# Architecture\n\nstep body\n' > "$WORK/project/.claude/skills/ai-dlc/steps/architecture.md"
+
 cat > "$WORK/env.sh" <<ENV
 HOOK="$HOOK"
 VAL="$VAL"
@@ -62,6 +72,7 @@ SKILL="$SKILL"
 GATE="$GATE"
 IS_DIST="$IS_DIST"
 PROJECT="$WORK/project"
+STEPS_REL=".claude/skills/ai-dlc/steps"
 WORK="$WORK"
 ENV
 
