@@ -497,6 +497,11 @@ hook scripts. Rotated per sprint at retro close (Rule 25(c)).
 Event types:
 
 - `USER_PAUSE`: user sent a message; pipeline paused via flag file
+- `PAUSE_SKIPPED`: a UserPromptSubmit carried no operator prose, so no pause
+  flag was created. The harness raises the event identically for a completed
+  background task and for a human typing; this records the ones that were not
+  a human, so a pause that never happened is distinguishable from one the lead
+  already cleared
 - `BLOCKED`: Stop event blocked; Rule 3 enforcement forced continue
 - `ALLOWED_BY_PAUSE`: Stop event allowed because pause flag exists
 - `ACK_DENIED`: a pipeline-advancing tool call was DENIED because an operator
@@ -504,6 +509,19 @@ Event types:
   the lead tried to execute straight through a waiting human and the hook --
   not the lead's judgment -- is what stopped it. Investigate each one.
 - `BACKOFF`: rapid-fire stop attempts detected; stall confirmed
+
+Retro reviews this log to assess pipeline flow:
+
+- High USER_PAUSE counts mean the user intervened often (normal for
+  interactive sprints, concerning if unexpected)
+- High PAUSE_SKIPPED counts are normal in a sprint with heavy background
+  dispatch; a SUDDEN change in the USER_PAUSE:PAUSE_SKIPPED ratio is the
+  signal worth reading
+- High BLOCKED counts mean Rule 3 enforcement is doing work; without
+  the hook the pipeline would have stalled
+- BACKOFF entries indicate the pipeline actually got stuck and the
+  hook exhausted its retry budget. Investigate the transcript around
+  each BACKOFF to find the upstream cause.
 
 Counting entries: one event is one `## <timestamp> -- <EVENT>` line. Count with
 `grep -c '^## .*-- <EVENT>'`. A bare `grep -c <EVENT>` also matches this header,
