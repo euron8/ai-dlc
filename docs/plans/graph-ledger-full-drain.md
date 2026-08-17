@@ -481,33 +481,58 @@ the arm is seeded rather than timed the race is gone, so a mechanical receipt be
 writing one is a legitimate part of this remediation** — but it is an option the remediation earns,
 not a precondition on it.
 
-**BATCH 3 IS THE LEDGER-PARSING FAMILY: `BL-013`, `BL-032`, `BL-065`, `BL-036`.** Verify the scope
-still holds against the reverify run before building, and substitute freely if it does not — but
-keep the batch to ONE subsystem. Three things about it are already measured:
+**BATCH 3 IS THE LEDGER-PARSING FAMILY: `BL-013`, `BL-032`, `BL-065`, `BL-036`.** Re-derive before
+building and substitute freely if the scope has moved — but keep the batch to ONE subsystem.
 
-- **`BL-013` and `BL-032` key on the SAME boundary rule**,
-  `core/skills/ai-dlc-update/reconcile/lib.sh:276`.
+**All four were confirmed OPEN and `STILL-LIVE` at batch 2's wind-down**, one row each, against an
+impossible-id control of 0 and a control confirming `BL-008` is absent from the open file and
+present in the archive. All four carry `verify: sh`, so all four are exposed to the receipt defect
+below. `core/skills/ai-dlc-update/reconcile/lib.sh:276` was re-checked in the same pass and still
+resolves to `ledger_entry_shape`, the boundary rule. **These are still hypotheses about a tree that
+moves — re-run the instrument, do not read this paragraph as the answer.**
+
+- **`BL-013` and `BL-032` key on the SAME boundary rule**, `lib.sh:276`.
 - **`BL-013`'s naive repair is measured WORSE than the defect** — a plain fence toggle drops 47 real
   entries on the reference consumer's ledger. Its entry names the two routes a fix may take.
 - **`BL-065`'s entry records that the filing's own prescribed fix does not work**, and that half of
   it is silently inert under BSD `sed`. That is step 14b: run a prescribed fix before adopting it.
 
-**BOTH CARRY-OVER ITEMS ARE DISCHARGED IN `v0.375.0`. Nothing is owed here.** `e9c5970` now has
-its own CHANGELOG section, verified uncited before it was written rather than taken from this
-file: the six `gen-architecture-index` hits already in `CHANGELOG.md` are all v0.33-era delivery
-notes, and `incomplete-sanitization`, `CodeQL` and `escape backslash` returned zero against a
-control of 34 for `escape`. `BL-070` is remediated, not merely filed. What they were:
+**BATCH 2 ADDED A FOURTH THING, AND IT BINDS ALL FOUR OF THESE ENTRIES: A RECEIPT CAN BE WRONG
+ABOUT ITS OWN SUBJECT, IN THE DIRECTION THAT LOOKS LIKE WORK REMAINING.** `BL-070`'s receipt scored
+a guard that was present, passing, and killing its own mutant as ABSENT — it anchored on
+`(bash|node)[^|]*<script-name>` over fixture text, but **I33** requires a fixture to name BOTH
+install layouts and resolve one into a VARIABLE, so the shipping guard invokes `node "$GEN"` and no
+line in it ever places an interpreter and the script's name together. The anchor was a hypothesis
+about what a fix would LOOK like, written before one existed.
 
-`e939a92`'s successor `e9c5970` — a CodeQL `js/incomplete-sanitization` fix to the markdown cell
-escaping in `core/scripts/gen-architecture-index.js` — is on `main` with **no CHANGELOG entry and
-no version**, so it cannot reach a consumer until a release names it. Name it.
+**So a `STILL-LIVE` row is not evidence that the defect is live.** It is evidence that the receipt
+did not exit 0, and those differ whenever the receipt anchors on TEXT rather than on BEHAVIOUR.
+Before building a remediation for any of these four, read its receipt and ask what it would say
+against a CORRECT fix — not just what it says today. A receipt that a correct fix cannot satisfy
+will have you rebuild something that already works.
 
-**`BL-070` is filed and unremediated**: that same script ships to every consumer and NOTHING in the
-tree exercises it. Its receipt anchors on a fixture that INVOKES the script and PASSES, so a stub
-naming it cannot close it. When you build that guard it needs a MUTANT arm — an assertion over an
-intact table row passes against a subject that never ran. Note also that only a backslash
-IMMEDIATELY BEFORE a pipe corrupts a row, so the obvious seed carrying both characters
-non-adjacently passes under the broken and the fixed script alike.
+**Re-anchor on behaviour and prove it in BOTH directions**, which is what `BL-070`'s replacement
+does: run the guard against the shipping subject and require PASS, then rebuild the subject's
+neighbourhood in a `mktemp` root around the PRE-FIX blob and require the SAME guard to FAIL, with
+`cmp -s` refusing if the two are not different. The decisive case is the third one — **a stub that
+names the subject and exits 0 must NOT close the entry** — and it is the case a text anchor cannot
+express.
+
+**And a separation that makes a wrong answer UNLIKELY is not one that makes it UNCONSTRUCTIBLE.**
+`BL-008`'s arm was ordered by a margin that looked ample and was not, because `sort -k1,1nr`'s `-r`
+is KEY-SCOPED: tied keys fall through to a FORWARD whole-line compare, so the two units only had to
+reach EQUALITY, never an inversion. Measured: 0 inversions in 30 loaded repetitions, and the arm
+failed anyway. Any parsing fix in this family that picks a boundary "far enough" from a collision
+is making the weaker claim.
+
+**BOTH CARRY-OVER ITEMS ARE DISCHARGED IN `v0.375.0` AND NOTHING IS OWED. Do not re-do them.**
+`e9c5970`'s CodeQL `js/incomplete-sanitization` fix now has its own CHANGELOG section, so it can
+reach a consumer — verified uncited before it was written rather than taken from this file: the six
+`gen-architecture-index` hits already in `CHANGELOG.md` are all v0.33-era delivery notes, and
+`incomplete-sanitization`, `CodeQL` and `escape backslash` returned zero against a control of 34 for
+`escape`. `BL-070` is REMEDIATED, not merely filed: `core/fixtures/architecture-index-cell-escaping/`
+is a shipping fixture with a mutant arm, registered in `uninstall.sh` and both `core_manifest`
+copies. Both entries are annotated and rotated into `docs/backlog.archive.md`.
 
 **THE PIN IS DEAD AND SO IS EVERY LINE NUMBER KEYED ON IT. JOIN BY `PC-` ID.** See "Re-establish the
 pin" below, which is now a post-mortem rather than a procedure. This costs you nothing for Phase 3,
