@@ -240,6 +240,19 @@ do not, 14 are deliberate prose shorthand and 2 sat in that id column.
    observation point is BEFORE graph applies any annotation from the brief** — an annotated entry is
    skipped and emits no row, so the criterion is unreachable afterwards.
 
+6. **OWED, AND IT IS THE OPERATOR'S CALL: one general rule has no durable carrier.** This session
+   found that **a coverage proof over a derived population cannot see outside it** — step 12's
+   census came from the corpus pin, so the check confirming all 59 rows were accounted for was
+   CORRECT and structurally blind to the three entries filed after the pin. That is a sharpening of
+   `verification-discipline.md`'s existing "Ask what SET a number was taken over", and it belongs
+   beside it.
+
+   **It is not there, because the durable channel has 40 bytes of headroom** — arm A6 reports
+   40920/40960 across 7 files. Adding it requires TRADING OUT existing prose, and
+   `resident-context.md` forbids trimming for cost and requires grepping for inbound references
+   before any cut. That is a deliberate decision, not a mechanical one. Today the rule is carried
+   by action 3 of this file, which is adequate for this program and for nothing else.
+
 5. **Phase 3 is not started, and it is a program rather than a step.** The `HOLDS` set is now 42
    backlog entries (`BL-021`..`BL-062`) plus whatever action 3 adds. Done-when 6 is ALREADY SATISFIED
    — "every entry is either remediated and cited, or filed as a `BL-` entry" — so this is the
