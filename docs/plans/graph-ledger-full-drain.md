@@ -355,6 +355,41 @@ do not, 14 are deliberate prose shorthand and 2 sat in that id column.
    each cites its own post-pin line (4357 / 4392 / 4435) so the join to the consumer resolves. They
    correctly exit NON-ZERO — the ai-dlc polarity, opposite to the fourteen consumer receipts.
 
+3b. **A DEFECT in the shipped engine that costs 10 of the 42 receipts their mechanical close, and a
+   RE-DISPOSITION owed on pin 4216. Both were found by the authoring agents, after their batches
+   landed, and neither is in the safe-to-ignore category.**
+
+   **`receipt_absent_subjects` withholds a genuine close from any receipt that spells a
+   DISTRIBUTION path.** At `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:502-515` the
+   extraction is `grep -oE '(\$CONSUMER/)?(docs|_bmad-output|scripts|\.claude)/[A-Za-z0-9_./-]+'` —
+   **unanchored** — so a receipt naming `core/scripts/x.sh` yields the match `scripts/x.sh`, which is
+   absent under the consumer root, and the caller then withholds the CLOSE-CANDIDATE as
+   NEEDS-REVIEW. Measured by lifting that function verbatim and running it over every `sh` receipt
+   in `replacement-receipts.tsv`: **10 of 37 affected** — pins 654, 673, 798, 1069, 1093, 1136, 1240,
+   1381, 4184, 4313. Controls both directions in the same invocation: a genuinely present consumer
+   path (`scripts/ai-dlc/artifact-path-config.sh`) is NOT withheld, and `core/scripts/`
+   `validate-locked-anchor.sh` IS.
+
+   **The direction is SAFE and that is why this is a DEFECT rather than a BLOCKER.** The function's
+   own header says its caller uses it "to WITHHOLD a CLOSE-CANDIDATE, never to produce one", so the
+   cost is that those ten entries need a hand review they should not have needed. No false close.
+
+   **The remedy is one character of indirection, in the receipt and not in the engine**: write
+   `S="$DIST/core/scripts"; V="$S/validate-x.sh"` so no literal `core/scripts/…` substring exists for
+   the guard to extract. Verified to extract zero paths. Fixing the engine's regex would be the
+   better repair but it cannot reach graph until graph pulls, and the brief must be actionable under
+   the engine graph has installed TODAY.
+
+   **Pin 4216 wants re-dispositioning to the ADOPTED UPSTREAM channel, cited at 0.373.0.**
+   `final-disposition.tsv` still reads `LIVE (close withdrawn) / brief-annotation / no-receipt`,
+   written before `9cbb77f` landed. All three surviving sub-claims are now closed and the fixture
+   PASSes with by-name arms for each. **The version cannot be 0.372.0**: that is the release whose
+   close the refuter overturned, and it is the id's only CHANGELOG cite (`CHANGELOG.md:485`).
+   `9cbb77f` wrote NO CHANGELOG entry at all — four files, none of them `CHANGELOG.md` — so the
+   0.373.0 section does not name this id and a hand-chosen annotation is the only correct channel.
+   Its receipt is already `verify: manual` carrying that reasoning, which is a safe holding state,
+   so this is an accuracy improvement to the brief and not a live hazard.
+
 3a. **Two NOTES from the post-pin filing, neither blocking, both worth seeing before writing another
    receipt.**
 
@@ -463,6 +498,24 @@ do not, 14 are deliberate prose shorthand and 2 sat in that id column.
    — "every entry is either remediated and cited, or filed as a `BL-` entry" — so this is the
    operator's call on sequencing, not a blocker on closing this plan. Batches of ≤4 remediations per
    release branch, one version per branch, cut from `origin/main`.
+
+**AN UNTRACKED FILE IS NOT A MISSING FILE, AND I DECLARED THREE BATCHES MISSING THAT WERE ON DISK.**
+The authoring agents wrote their batch files and left them untracked, as instructed. Two separate
+mistakes compounded: a backgrounded `sleep` returns immediately here, so three "waits" spanned about
+a minute of real time rather than the long silence they were reported as; and a check that cannot see
+an uncommitted file reads exactly like one reporting a real absence. `batch-12.md` was recorded in a
+commit message as "never written" — **that claim exceeded its evidence.** A direct `ls` returned
+ENOENT when it ran, and the agent reports the file on disk at 08:50; the two cannot be reconciled
+from here, so the record should say the file was absent WHEN CHECKED, not that it never existed.
+Before declaring a delegated deliverable missing: `ls` the path, `git status --porcelain` for a `??`
+row, and ask the agent by name.
+
+**`run-receipts.sh` really did iterate `for i in 1 2 3 4`** — verified at `2db4035:24`, exactly as an
+agent reported — so over a partial batch set it would have reported a clean run across four files
+while ignoring the rest. The rewrite to a TSV-driven runner removed it, and the current runner
+reports `42 receipt(s) from 12 batch file(s)`. Recorded because the finding was RIGHT about a version
+that existed, and a reader comparing it against the current file would otherwise conclude the agent
+was wrong.
 
 **Three things this session learned that will cost a fresh session real time if forgotten.**
 
