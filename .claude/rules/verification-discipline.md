@@ -24,6 +24,13 @@ fired; those are two separate claims and both need establishing. When a search r
 nothing, the control must be a token you already know is present in the same corpus, in the
 same invocation.
 
+## A differential must prove its two sides differ
+
+Both runs reading the same tree establishes nothing. Measured: a `sed` making a probe's root
+overridable expanded to the identical line, so both runs used the fixed copy and the outputs
+matched perfectly — which reads as "no regression". Assert the sides differ, in the same
+invocation, before reading the comparison.
+
 ## Run the shipping code against the real corpus
 
 A hand-written probe is a second implementation whose bugs nobody finds. When a probe and

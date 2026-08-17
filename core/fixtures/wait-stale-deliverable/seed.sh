@@ -89,9 +89,26 @@ case "$CASE" in
   # The deliverable is ABSENT rather than stale-and-present: a missing file cannot
   # deliver its way out either, and it keeps the pre-existing-content NOTE out of
   # the output these cases assert on.
-  progress-extends|progress-bounded|progress-ignores-own-state)
+  # ---- the chained-sibling cases ----------------------------------------------
+  # Same family, and deliberately seeded through the same block: what they vary is
+  # NOT the tree but whether a sibling beat already ran in the calling shell. The
+  # tree therefore has to be identical to `progress-extends`, or a difference in
+  # outcome could be attributed to the seed instead of to MAY_SLEEP.
+  #
+  # THE SIBLING MARKER IS NOT SEEDED HERE, AND THAT IS NOT AN OMISSION. It is keyed
+  # `.shell-$PPID` on the PID of the shell that INVOKES the subject, which this
+  # process is not. run.sh writes it from inside that shell -- see `chained_beat`.
+  #
+  # `chained-window` and `sleeping-restamp` seed the counter BELOW the bound. They
+  # are about the mark's re-stamp, not about the grant, and at the bound the grant
+  # path rewrites the counter as well -- two writes in one observation.
+  progress-extends|progress-bounded|progress-ignores-own-state|\
+  chained-progress|chained-noprogress|chained-window|sleeping-restamp)
     mkdir -p "$WORK/_bmad-output/.wait-beats"
-    printf '6' > "$WORK/_bmad-output/.wait-beats/$(key_of deliv.md)"
+    case "$CASE" in
+      chained-window|sleeping-restamp) printf '1' > "$WORK/_bmad-output/.wait-beats/$(key_of deliv.md)" ;;
+      *)                               printf '6' > "$WORK/_bmad-output/.wait-beats/$(key_of deliv.md)" ;;
+    esac
     printf '6' > "$WORK/_bmad-output/.wait-beats/.bound"
     : > "$WORK/_bmad-output/.wait-beats/$(key_of deliv.md).progress"
     age_file "$WORK/_bmad-output/.wait-beats/$(key_of deliv.md).progress" 300
@@ -105,8 +122,16 @@ case "$CASE" in
 
     case "$CASE" in
       # A file written since the last beat: the teammate is demonstrably working.
-      progress-extends)
+      progress-extends|chained-progress|chained-window|sleeping-restamp)
         printf 'a partial result written during the last beat\n' > "$WORK/wt/wip.txt"
+        ;;
+      # THE NEAR-MISS, and it is the arm that stops "grants unconditionally" from
+      # passing. Everything about `chained-progress` holds except the one fact the
+      # grant is supposed to turn on: nothing under the worktree is newer than the
+      # mark. `settled.txt` above is 600s old against a 300s mark, so the tree is
+      # non-empty and the absence of a hit is a real answer rather than an empty
+      # traversal.
+      chained-noprogress)
         ;;
       # Same evidence, but every grant is already spent. The wait must still end --
       # a teammate that writes forever without delivering is the hang Rule 29's

@@ -35,6 +35,11 @@
 # satisfied on the next call. That is the whole safety argument, and it is why this hook is a
 # deny rather than the weaker instrumentation option.
 #
+# IN FULL IS ENFORCED, NOT ASSUMED. The mandate says "in full" and the first shipped version of
+# this gate joined on tool name and path only, so `Read <step file> limit=1` cleared the marker
+# exactly as a full Read did. `is_full_read()` below is the test. It does not narrow the safety
+# argument: the always-available action is the same Read with neither field.
+#
 # WHAT IT DOES NOT DO. It does not police the THIRD mandated Read (`SKILL.md`), which the
 # injected text asks for but which is a re-Read whose necessity this hook cannot establish
 # from outside. It does not read the lead's prose, so the RECOVERY-SKIP disclosure the block
@@ -102,6 +107,24 @@ fi
 
 TOOL="$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)"
 FPATH="$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)"
+LIMIT="$(printf '%s' "$INPUT" | jq -r '.tool_input.limit // empty' 2>/dev/null)"
+OFFSET="$(printf '%s' "$INPUT" | jq -r '.tool_input.offset // empty' 2>/dev/null)"
+
+# "IN FULL" IS PART OF THE MANDATE AND IT WAS THE THIRD SKIP THE FILING RECORDED -- a lead that
+# started the second mandated Read and stopped 773 of 1210 lines in, reasoning live that the
+# remainder was duplicative. Until this test the gate joined on tool name and path alone, so
+# `Read <step file> limit=1` satisfied it exactly as a full Read did: marker cleared, gate inert,
+# 1 line of 1210 loaded. `limit` bounds the read; an `offset` past the first line starts it late.
+# Either is a partial. No limit and no offset past line 1 is the full read.
+#
+# IT CANNOT WEDGE, which is the same argument the arming precondition makes. The always-available
+# action is the identical Read with neither field -- the harness TRUNCATES an over-long Read
+# rather than refusing it, so that call is issuable for any file, and the block above has already
+# established this one is readable. A deny here is satisfiable on the very next call.
+is_full_read() {
+  [ -z "$LIMIT" ] || return 1
+  case "$OFFSET" in ""|0|1) return 0 ;; *) return 1 ;; esac
+}
 
 # Normalise the call's path the same way, so `Read _bmad-output/x.md` and an absolute form of
 # the same file are one answer. A gate that matched only one spelling would deny a compliant
@@ -127,8 +150,15 @@ deny() {
 case "$STAGE" in
   snapshot)
     if [ "$TOOL" = "Read" ] && [ -n "$FABS" ] && [ "$FABS" = "$SNAP_ABS" ]; then
-      printf 'step\n' >"$PROGRESS" 2>/dev/null || true
-      exit 0
+      if is_full_read; then
+        printf 'step\n' >"$PROGRESS" 2>/dev/null || true
+        exit 0
+      fi
+      deny "AI/DLC post-compact recovery: \`Read ${SNAP_REL}\` must be IN FULL, and this call bounds it with \`limit\`/\`offset\`. Re-issue the same Read with neither field." \
+"A bounded Read of the snapshot is the skip wearing the shape of compliance --
+the gate would clear and the pipeline state you did not load would be the state
+you act on. Call \`Read ${SNAP_REL}\` again with no \`limit\` and no \`offset\`;
+that call is available to you now."
     fi
     deny "AI/DLC post-compact recovery: your FIRST tool call must be \`Read ${SNAP_REL}\` in full. This conversation was compacted and the summary is not the authoritative pipeline state." \
 "The snapshot is a verbatim-load file and the Read is the attention interrupt that
@@ -139,10 +169,17 @@ you on the next call; there is nothing here to weigh."
     ;;
   step)
     if [ "$TOOL" = "Read" ] && [ -n "$FABS" ] && [ "$FABS" = "$STEP_ABS" ]; then
-      # SATISFIED. Clear both, so the gate is inert for the rest of the session until the
-      # next compaction writes a fresh marker.
-      rm -f "$MARKER" "$PROGRESS" 2>/dev/null || true
-      exit 0
+      if is_full_read; then
+        # SATISFIED. Clear both, so the gate is inert for the rest of the session until the
+        # next compaction writes a fresh marker.
+        rm -f "$MARKER" "$PROGRESS" 2>/dev/null || true
+        exit 0
+      fi
+      deny "AI/DLC post-compact recovery: \`Read ${STEP_REL}\` must be IN FULL, and this call bounds it with \`limit\`/\`offset\`. Re-issue the same Read with neither field." \
+"This is the exact skip this gate was filed for: the second mandated Read was
+started and abandoned partway on the judgment that the remainder was duplicative
+-- a judgment made from inside the state the Read exists to replace. Call
+\`Read ${STEP_REL}\` again with no \`limit\` and no \`offset\`."
     fi
     # Re-reading the snapshot is not progress, but it is not a violation either -- it is the
     # call this gate just demanded. Allow it without advancing, so a lead that reads it twice

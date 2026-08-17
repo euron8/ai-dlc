@@ -1,0 +1,20 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Two of the rule's three shapes apply, either alone being sufficient.
+
+Its SUBJECT is scripts/backlog-rotate.sh, which is not installed: install.sh's copy loop
+derives from core/scripts/ and never touches the repo-root scripts/. It also reads the
+repository's own docs/backlog.md as a false-positive corpus, and a consumer tree gets no
+docs/backlog.md. On a consumer this fixture would resolve no tool and no corpus, and could
+only pass.
+
+It is also a MUTATION BATTERY: it builds sandbox roots under mktemp holding sed-mutated
+copies of scripts/backlog-rotate.sh and a copy of
+core/skills/ai-dlc-update/reconcile/lib.sh, and asserts each mutant kills the arm it
+targets.
+
+The consumer's equivalent ledger is the push-candidate ledger under
+_bmad-output/ai-dlc-update/, whose own fixtures (ledger-reverify, ledger-rotate,
+ledger-status-vocabulary, ledger-reverify-unfalsifiable) ship and cover it. This one must
+not be confused for those, and its sibling core/fixtures/backlog-ledger/ carries the same
+declaration for the same reason.

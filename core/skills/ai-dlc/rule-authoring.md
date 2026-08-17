@@ -12,6 +12,11 @@ CLAUDE.md, `docs/coding-conventions.md`, step files, or team role files.
   when granting permission or autonomy, not when stating a mandate.
 - State the enforcement consequence inline when one applies:
   "Violation fails gate N" or "Missing = Critical severity".
+- Give a rule a stable identifier a later rule can cite, and carry it in
+  the rule's own heading: `Rule <n>` for a rule, `Rule <n>(<letter>)` for
+  a clause of one, `Step <n>` for a step-file section. Cite a mechanism
+  by its invariant identifier in backticks: `I23`. An identifier is a
+  name and MUST NOT encode a sprint, story, version, or date.
 - No sprint or story references.
 - No incident descriptions or "because we got burned" narrative.
 - No parenthetical origin notes after a directive.

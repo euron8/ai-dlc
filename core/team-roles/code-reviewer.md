@@ -120,12 +120,18 @@ verification step:
 
 1. Grep the code for all response field access patterns (`.field_name`,
    `["field_name"]`, destructuring assignments from API response data).
-2. For each field, verify it exists in the target API response. Check via:
+2. Read the diff for query shape — the fields the change SENDS, not only
+   the ones it reads: selection sets, projection and `select` lists,
+   request-body and query-parameter keys, filter and sort keys. List every
+   field the diff ADDS to a query.
+3. For each field, verify it exists in the target API response. Check via:
    - The architecture addendum response schema (if documented), OR
    - The actual API endpoint (curl or reference the API code)
-3. Cross-check test fixtures: do the mocked response shapes match the real
+   A field added to a query is verified against the DEPLOYED schema, not
+   against a schema copy held in the repo.
+4. Cross-check test fixtures: do the mocked response shapes match the real
    API response shapes?
-4. Any unverifiable field name is **Important** severity, not Suggestion.
+5. Any unverifiable field name is **Important** severity, not Suggestion.
    Synchronized fixture/schema bugs bypass all automated testing.
 
 ## Bug-Site Anchoring
@@ -226,6 +232,8 @@ Any change that adds a new field to an API query without logged
 verification against the deployed schema MUST be classified as
 **Important**. If deployment has already shipped and the query is
 failing in production, escalate to **Critical** in retro.
+**Evidence required:** Include the query diff, the added field names, and
+the deployed-schema source consulted, in the review doc.
 
 ### Silent Validity-Guard on a Consumer-Facing Data Surface = Critical
 
