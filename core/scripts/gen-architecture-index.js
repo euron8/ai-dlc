@@ -123,8 +123,12 @@ function render({ rows, totalLines, docPath }) {
   out.push('|---|---|---|---|');
   for (const r of rows) {
     const indent = r.level === 3 ? '&nbsp;&nbsp;↳ ' : '';
-    const title = r.title.replace(/\|/g, '\\|');
-    const summary = (r.summary || '').replace(/\|/g, '\\|');
+    // Escape backslashes BEFORE pipes. The reverse order would also escape the
+    // backslash the pipe-replacement itself introduces, turning `\|` into `\\|`
+    // and breaking the very cell the escape was protecting.
+    const cell = (s) => s.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+    const title = cell(r.title);
+    const summary = cell(r.summary || '');
     out.push(`| ${r.line} | ${indent}${title} | \`#${r.anchor}\` | ${summary} |`);
   }
   out.push('');
