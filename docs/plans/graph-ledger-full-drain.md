@@ -236,6 +236,21 @@ do not, 14 are deliberate prose shorthand and 2 sat in that id column.
    each cites its own post-pin line (4357 / 4392 / 4435) so the join to the consumer resolves. They
    correctly exit NON-ZERO — the ai-dlc polarity, opposite to the fourteen consumer receipts.
 
+3a. **Two NOTES from the post-pin filing, neither blocking, both worth seeing before writing another
+   receipt.**
+
+   **A receipt's own sanity failure is INVISIBLE.** `scripts/backlog-reverify.sh` maps any non-zero
+   exit to `STILL-LIVE`, so a receipt that dies at its own `exit 9` guard — subject missing,
+   extraction empty, harness broken — reports identically to one that measured a live defect. The
+   direction is safe and the silence is not: a receipt can rot into permanent uselessness and every
+   run will keep saying "still reproduces here". The consumer's engine distinguishes this (126/127 ->
+   NEEDS-REVIEW); ours does not. Filing a distinct status is a candidate for a later pass.
+
+   **`BL-064`'s receipt has a stated dependency**: its diff leg needs `git diff HEAD~1` to be
+   non-empty. True today and while `HEAD~1` differs from the tree, but if that ever went empty the
+   diff signature would read 0 for a reason unrelated to any fix. Its corpus leg is unaffected, so
+   the receipt degrades to half-strength rather than false-closing. Recorded in the entry.
+
 4. **Then Phase 5.** Step 22 is ALREADY DONE and was re-verified at wind-down: the pin reproduces,
    graph `HEAD` is unchanged, and the 147 post-pin lines are the three entries above plus one
    `RETRACTED` banner — **no new consumer filings during this run**. Step 21 needs the merge from
