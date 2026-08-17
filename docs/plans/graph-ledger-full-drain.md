@@ -250,8 +250,10 @@ What the pull produced, all of it adjudicated live:
   OLDEST commit whose MESSAGE contains the id (`:402`, with a third instance of the idiom in its own
   prefix-fallback arm at `:423`), and `$na_v` from it is interpolated into a paste-ready PERMANENT
   annotation at `:848`. Measured over the 29 ids in `e939a92`'s message against
-  `final-disposition.tsv`: **2 agree, 22 disagree, and 5 carry no version-bearing verdict to compare
-  against — so it is 22 of the 24 COMPARABLE rows**, with 20 resolving to `e939a92` itself. **THREE**
+  `final-disposition.tsv`: **2 agree and 23 disagree over 25 comparable rows**, with 20 resolving to
+  `e939a92` itself. Only 4 rows — 2 `FALSIFIED`, 2 `DUPLICATE-OF` — name no absorbing release; the
+  25th is `ALREADY-FIXED-93e05d3`, an absorption claim spelled as a SHA, which forward-walks to
+  0.103.0 against the join's 0.373.0. **THREE**
   of the nine older resolutions are this program's own `docs(plan)`/`docs(reviews)` commits that
   merely MENTION the id — the same reads-vs-mentions class as `receipt_absent_subjects` — and a
   fourth, `5b5b95c`, is worse: a ledger-drain release touching 23 `core/` files, attributed to an
@@ -259,13 +261,25 @@ What the pull produced, all of it adjudicated live:
   something that was never a defect. **And this plan CAUSED the 20-row case**: the correction
   requiring every closed id in the release commit MESSAGE is what makes the join resolve there.
 
-  **THIS FILE FIRST SAID "28 OF 29 DISAGREE" AND THAT WAS WRONG, IN A WAY WORTH KEEPING.** The
-  figure was counted BY EYE off a printed table whose adjudicated column also matched `FALSIFIED`
-  and `DUPLICATE-OF` rows, so five entries with nothing to compare were scored as disagreements and
-  a second agreement was missed. It was published to the consumer, into this file and into a commit
-  message before a delegate re-derived it by computing the join instead of transcribing it. **A
-  count read off a rendering is not a derived count** — the same class as reading a report's own
-  summary sentence as a data row, which this program also did, one turn earlier.
+  **THIS ONE NUMBER WAS WRONG THREE TIMES AND EACH CORRECTION CAME FROM SOMEONE RE-DERIVING IT
+  RATHER THAN ACCEPTING IT. That pattern is the finding; the number is just its subject.**
+
+  It read **28 of 29** first — counted BY EYE off a printed table whose adjudicated column also
+  matched `FALSIFIED` and `DUPLICATE-OF` rows, so entries with nothing to compare were scored as
+  disagreements and a second agreement was missed. It reached the consumer, this file and a commit
+  message before a delegate computed the join instead of transcribing it. **A count read off a
+  rendering is not a derived count** — the same class as reading a report's own summary sentence as
+  a data row, which this program also did one turn earlier.
+
+  It then read **22 of 24 comparable**, which was arithmetically right and mis-partitioned: the
+  non-comparable bucket was described as `FALSIFIED`/`DUPLICATE-OF`/`HOLDS`-family when it contains
+  no `HOLDS` row at all and does contain an `ALREADY-FIXED-93e05d3`. **The consumer caught that**,
+  having derived its own figure before the correction arrived rather than taking one.
+
+  It is **23 of 25** because that sha row is a real absorption claim that a `v`-anchored regex
+  cannot parse. **The bucket labelled "nothing to compare" was an artifact of the parser's grammar,
+  not a property of the data**, and it hid the single largest disagreement in the set. Every stage
+  of this was a clean-looking run.
 - **`closes_when` is free prose that nothing parses**, found by graph, filed as `BL-067`. Read at
   `audit-layer-debt.sh:108` and printed at `:215-216`; `migrate-artifact-paths.sh` has zero hits for
   it against a `strip_token` control of 3. It has a schema, a producer and a printer and **no

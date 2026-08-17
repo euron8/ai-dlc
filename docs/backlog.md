@@ -2889,9 +2889,20 @@ version parsed out of col3's `ALREADY-FIXED-v<X>`:
 
 - **20 of 29 resolve to `e939a92` itself** and would be annotated with that release's version.
 - **9 resolve to older commits.**
-- **24 of the 29 carry an `ALREADY-FIXED-v<X>` verdict** to compare against. Of those, **2 agree**
-  — `8dc52be`/`0.247.0` and `1537e4c`/`0.372.0` — and **22 disagree**. The remaining 5 carry a
-  non-version verdict, so no comparison exists for them and they are not counted either way.
+- **24 of the 29 carry a literal `ALREADY-FIXED-v<X>` verdict.** Of those, **2 agree** —
+  `8dc52be`/`0.247.0` and `1537e4c`/`0.372.0` — and **22 disagree**.
+- **A 25th is comparable and a `v`-anchored regex cannot see it.** The remaining five are 2
+  `FALSIFIED`, 2 `DUPLICATE-OF` and one `ALREADY-FIXED-93e05d3` — an `ALREADY-FIXED` naming a SHA
+  rather than a version. It is a real absorption claim, so it belongs in the comparable set: the sha
+  forward-walks to the first later `VERSION` change at **`0.103.0`**, while the join reports
+  **`0.373.0`**, resolving to `e939a92`. **So the split is 25 comparable, 2 agreeing, 23
+  disagreeing**, and only the four refutation/duplicate rows name no absorbing release at all.
+  Control in the same invocation: an impossible id resolves to 0 commits.
+- **THE SHA FORM IS THE SHAPE A JOIN SILENTLY MISBUCKETS, AND THIS ENTRY DEMONSTRATED IT TWICE.**
+  A first derivation put the row in a bucket labelled "no comparable verdict" — not because it lacks
+  one, but because the parser's grammar was `ALREADY-FIXED-v[0-9]` and the row spells its version as
+  a commit. A zero over the wrong grammar reads exactly like an absence, and here it read as a row
+  with nothing to say while it was in fact the largest single disagreement in the set.
 - **3 of the 9 older resolutions are upstream's own documentation commits**, whose diffs are
   docs-only and which merely mention the id: `2bc7aa4` (`docs(plan)`, 1 file),
   `c9a4500` (`docs(reviews)`, 4 files), `40770c3` (`docs(reviews)`, 6 files).
