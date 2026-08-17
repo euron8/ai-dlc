@@ -9,17 +9,18 @@ command. All three labels below are the census labels at
 resolves for its pin (`798`, `3595`, `3647`) and the control pin `999999` resolves in neither
 column.
 
-Derivations against `/Users/n8/git/ai-dlc` at committed HEAD **`e95dcce`**. The tree moved under
-this session — HEAD was `2db4035` when the first measurement was taken — and every receipt was
-re-measured at `e95dcce` afterwards. The receipts themselves never name a sha: they read
-`"$THEIRS:<path>"`, which the engine re-derives on every run.
+Derivations against `/Users/n8/git/ai-dlc` at committed HEAD **`43626f9`**. The tree moved three
+times under this session — `2db4035`, `e95dcce`, `ca317dc`, `43626f9`, another agent committing on
+the same branch — so no sha here is a handle; every receipt was re-measured at the final one. The
+receipts themselves name no sha: they read `"${THEIRS}:<path>"`, which the engine re-derives on
+every run.
 
 `/Users/n8/git/graph` was read only. Nothing was written outside this batch file, and no commit
 was made in either repo.
 
 ## Polarity, and where the OLD receipts sit on it
 
-From the `sh` dispatch itself, `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:1015-1030`:
+From the `sh` dispatch itself, `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:1017-1027`:
 `0)` emits `STILL-LIVE`, `126|127)` emits `NEEDS-REVIEW`, and the default arm emits
 `CLOSE-CANDIDATE`. So every receipt here **exits 0 while its defect is live** and non-zero once
 upstream fixes it. The `theirs_has` verb has the matching sense — present at theirs emits
@@ -35,9 +36,16 @@ the remedy space its own filing names.
 the shared brief says `$DIST`, and this program's own `run-receipts.sh` does
 `cd "$DIST" && eval`, so the two harnesses disagree about cwd. Every receipt below is therefore
 written cwd-**invariant**: no relative path, every read through `git -C "$DIST"`, every scratch
-file under `mktemp -d`. Measured from three cwds (`$DIST`, `$CONSUMER`, `/tmp`): rc=0 in all
-three, for all three receipts. The installed `ledger-rotate.sh:145` carries the same `loose` rule
-as HEAD, so pin 3647's subject is present in the engine graph has today.
+file under `mktemp -d`. The installed `ledger-rotate.sh:145` carries the same `loose` rule as HEAD,
+so pin 3647's subject is present in the engine graph has today.
+
+**Every rev-path is braced, and that was a measured defect, not a precaution.** The first drafts
+wrote `"$THEIRS:core/…"`. Under bash — the shell all three real harnesses use — they measured
+rc=0. Run under this machine's interactive `zsh`, pins 798 and 3595 measured **127**: `:c` is a
+zsh history modifier and it eats the reference, so `git show` fails and the receipt reports an
+unresolvable subject. Pin 3647 was unaffected only by luck, because `$P` follows its colon. Braced
+to `"${THEIRS}:…"`, all three are shell-agnostic. Final measurement grid, 18 runs: **rc=0 for all
+three receipts under both `bash` and `zsh`, from `$DIST`, from `$CONSUMER`, and from `/tmp`.**
 
 Each receipt gives every arm its **own** exit code (1, 2, 3, 4 — never 126/127). That is not
 decoration: it is what makes a mutant that dies by the wrong arm visible instead of being
@@ -50,19 +58,19 @@ suppresses the sentence too). The arms were reordered until each mutant died by 
 ## Pin 798 — `PC-S295-RETRO-COLLAPSE-PAUSE-FLAG-AND-BOUNDED-JOIN`
 
 **Re-derivation.** The entry carries no `verify:` line anywhere in its body (pin 798 to the `---`
-at 823), so `flush()` emits no row for it and there is nothing to replace — only to author. It is
+at 819), so `flush()` emits no row for it and there is nothing to replace — only to author. It is
 a **removal** candidate: it argues Rule 3's pause flag and Rule 29's bounded join are two
 mechanisms for one failure and should be collapsed, so the defect is LIVE exactly while the two
 remain separate. The filing's mechanism claim is that both are "enforced by different arms of
 `scripts/validate-steering-budget.sh`". Re-derived at theirs rather than taken from the filing:
 that script's banner calls itself the *Rule 29* validator (`core/scripts/validate-steering-budget.sh:3`)
-and its own `WHAT IT CHECKS` block (`:29-57`) declares four arms, of which **B** is the pause-flag
+and its own `WHAT IT CHECKS` block (`:28-57`) declares four arms, of which **B** is the pause-flag
 arm ("before the lead clears the pause flag … the sanctioned exit is an explicit
 `rm ... pipeline-paused.flag`", `:31-37`) and **A/C/D** are the bounded-join arms. The four
 emitters are at `:613`, `:643`, `:661`, `:675` — one file, distinct arms, so the filing's claim is
 directionally right and imprecise: the pause flag's *live* enforcement is the hook pair
 (`core/hooks/ai-dlc-pause.sh` sets the flag, `ai-dlc-acknowledge.sh` denies through it), and check
-B is a post-hoc transcript audit that explicitly excludes hook-denied attempts (`:79-88`). On the
+B is a post-hoc transcript audit that explicitly excludes hook-denied attempts (`:73-83`). On the
 rule side, `core/skills/ai-dlc/SKILL.md:118` and `:1481` are still two separate rules; Rule 3's
 span still carries `touch _bmad-output/pipeline-paused.flag` as its own imperative, Rule 29's span
 still carries the `bounded file-wait beat`, and Rule 29 has to spend a bullet reconciling them
@@ -80,7 +88,7 @@ verify: (absent — this entry carries no directive, so flush() emits no row for
 **NEW**
 
 ```
-verify: sh s=$(git -C "$DIST" show "$THEIRS:core/skills/ai-dlc/SKILL.md") || exit 127; v=$(git -C "$DIST" show "$THEIRS:core/scripts/validate-steering-budget.sh") || exit 127; r3=$(printf '%s\n' "$s" | LC_ALL=C awk '/^### Rule 3 --/{f=1} f&&/^### Rule 4 --/{exit} f'); r29=$(printf '%s\n' "$s" | LC_ALL=C awk '/^### Rule 29 --/{f=1} f&&/^### Rule 30 --/{exit} f'); { [ -n "$r3" ] && [ -n "$r29" ]; } || exit 127; case "$r3" in *"touch _bmad-output/pipeline-paused.flag"*) ;; *) exit 1 ;; esac; case "$r29" in *"bounded file-wait beat"*) ;; *) exit 2 ;; esac; case "$v" in *"FAIL (B -- STEAMROLL)"*) ;; *) exit 3 ;; esac; case "$v" in *"FAIL (C -- UNBOUNDED WAIT)"*) ;; *) exit 4 ;; esac; exit 0
+verify: sh s=$(git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc/SKILL.md") || exit 127; v=$(git -C "$DIST" show "${THEIRS}:core/scripts/validate-steering-budget.sh") || exit 127; r3=$(printf '%s\n' "$s" | LC_ALL=C awk '/^### Rule 3 --/{f=1} f&&/^### Rule 4 --/{exit} f'); r29=$(printf '%s\n' "$s" | LC_ALL=C awk '/^### Rule 29 --/{f=1} f&&/^### Rule 30 --/{exit} f'); { [ -n "$r3" ] && [ -n "$r29" ]; } || exit 127; case "$r3" in *"touch _bmad-output/pipeline-paused.flag"*) ;; *) exit 1 ;; esac; case "$r29" in *"bounded file-wait beat"*) ;; *) exit 2 ;; esac; case "$v" in *"FAIL (B -- STEAMROLL)"*) ;; *) exit 3 ;; esac; case "$v" in *"FAIL (C -- UNBOUNDED WAIT)"*) ;; *) exit 4 ;; esac; exit 0
 ```
 
 **Measured today: rc=0 (STILL-LIVE).**
@@ -147,7 +155,7 @@ verify: theirs_has core/skills/ai-dlc-update/reconcile/ledger-reverify.sh "recor
 **NEW**
 
 ```
-verify: sh a=$(git -C "$DIST" show "$THEIRS:core/skills/ai-dlc-update/reconcile/ledger-reverify.sh") || exit 127; s=$(git -C "$DIST" show "$THEIRS:core/skills/ai-dlc-update/SKILL.md") || exit 127; row=$(printf '%s\n' "$a" | LC_ALL=C awk '/emit NAMED-UPSTREAM "/{print;exit}'); c8=$(printf '%s\n' "$s" | LC_ALL=C awk '/^ *- \*\*Close any/{f=1} f&&/^ *- \*\*Rotate the closed/{exit} f'); { [ -n "$row" ] && [ -n "$c8" ]; } || exit 127; case "$c8" in *"Close ONLY"*) ;; *) exit 127 ;; esac; case "$row" in *annotate*) ;; *) exit 1 ;; esac; case "$row" in *"ADOPTED UPSTREAM"*) ;; *) exit 2 ;; esac; case "$c8" in *NAMED-UPSTREAM*) exit 3 ;; esac; exit 0
+verify: sh a=$(git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc-update/reconcile/ledger-reverify.sh") || exit 127; s=$(git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc-update/SKILL.md") || exit 127; row=$(printf '%s\n' "$a" | LC_ALL=C awk '/emit NAMED-UPSTREAM "/{print;exit}'); c8=$(printf '%s\n' "$s" | LC_ALL=C awk '/^ *- \*\*Close any/{f=1} f&&/^ *- \*\*Rotate the closed/{exit} f'); { [ -n "$row" ] && [ -n "$c8" ]; } || exit 127; case "$c8" in *"Close ONLY"*) ;; *) exit 127 ;; esac; case "$row" in *annotate*) ;; *) exit 1 ;; esac; case "$row" in *"ADOPTED UPSTREAM"*) ;; *) exit 2 ;; esac; case "$c8" in *NAMED-UPSTREAM*) exit 3 ;; esac; exit 0
 ```
 
 **Measured today: rc=0 (STILL-LIVE).**
@@ -192,7 +200,7 @@ while `ledger-rotate.sh` scopes `loose` to the whole **BODY**. The title half is
 reverify has *two* closing rules, `entry_line_closes()` applied to entry lines (`:690`, used at
 `:721` and `:730`) **and** a body-line rule at `:769` that fires on any line whose *leading
 structure* is an annotation — `/^[ \t]*(<br[ \t]*\/?[ \t]*>)?[ \t]*(\*\*[^`]*)?(ADOPTED UPSTREAM|WITHDRAWN)/`
-— with its own header (`:759-768`) recording the discrimination it exists for: "A mention sits
+— with its own header (`:759-767`) recording the discrimination it exists for: "A mention sits
 inside a sentence." That rule is the unique line in the file matching both `closed=1` and
 `ADOPTED UPSTREAM` (count 1, derived, not assumed). `ledger-rotate.sh:145` is the same question
 asked **unanchored**: `/ADOPTED UPSTREAM|WITHDRAWN|\(original text, retained for the record\)/`,
@@ -220,7 +228,7 @@ verify: theirs_has core/skills/ai-dlc-update/reconcile/ledger-rotate.sh "anywher
 **NEW**
 
 ```
-verify: sh P=core/skills/ai-dlc-update/reconcile; d=$(mktemp -d) || exit 127; git -C "$DIST" show "$THEIRS:$P/ledger-rotate.sh" > "$d/ledger-rotate.sh" || exit 127; git -C "$DIST" show "$THEIRS:$P/lib.sh" > "$d/lib.sh" || exit 127; rv=$(git -C "$DIST" show "$THEIRS:$P/ledger-reverify.sh" | LC_ALL=C awk '/closed=1/ && /ADOPTED UPSTREAM/{sub(/^[ \t]+/,"");print;exit}'); [ -n "$rv" ] || exit 127; printf '%s\n' '# seed' '' '## SEED-LOOSE-MENTION -- its body mentions the phrase mid-sentence' '' 'Remedy: annotate ADOPTED UPSTREAM once the grep is non-zero.' '' '## SEED-CLEAN-CONTROL -- no closure phrase anywhere in it' '' 'Nothing here.' > "$d/l.md"; out=$(bash "$d/ledger-rotate.sh" "$d/l.md" 2>&1) || { rm -rf "$d"; exit 127; }; rm -rf "$d"; case "$rv" in '/^'*) ;; *) exit 1 ;; esac; case "$out" in *SEED-LOOSE-MENTION*) ;; *) exit 2 ;; esac; case "$out" in *SEED-CLEAN-CONTROL*) exit 3 ;; esac; case "$out" in *"ledger-reverify.sh skips them"*) ;; *) exit 4 ;; esac; exit 0
+verify: sh P=core/skills/ai-dlc-update/reconcile; d=$(mktemp -d) || exit 127; git -C "$DIST" show "${THEIRS}:${P}/ledger-rotate.sh" > "$d/ledger-rotate.sh" || exit 127; git -C "$DIST" show "${THEIRS}:${P}/lib.sh" > "$d/lib.sh" || exit 127; rv=$(git -C "$DIST" show "${THEIRS}:${P}/ledger-reverify.sh" | LC_ALL=C awk '/closed=1/ && /ADOPTED UPSTREAM/{sub(/^[ \t]+/,"");print;exit}'); [ -n "$rv" ] || exit 127; printf '%s\n' '# seed' '' '## SEED-LOOSE-MENTION -- its body mentions the phrase mid-sentence' '' 'Remedy: annotate ADOPTED UPSTREAM once the grep is non-zero.' '' '## SEED-CLEAN-CONTROL -- no closure phrase anywhere in it' '' 'Nothing here.' > "$d/l.md"; out=$(bash "$d/ledger-rotate.sh" "$d/l.md" 2>&1) || { rm -rf "$d"; exit 127; }; rm -rf "$d"; case "$rv" in '/^'*) ;; *) exit 1 ;; esac; case "$out" in *SEED-LOOSE-MENTION*) ;; *) exit 2 ;; esac; case "$out" in *SEED-CLEAN-CONTROL*) exit 3 ;; esac; case "$out" in *"ledger-reverify.sh skips them"*) ;; *) exit 4 ;; esac; exit 0
 ```
 
 **Measured today: rc=0 (STILL-LIVE).**

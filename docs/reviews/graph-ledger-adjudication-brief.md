@@ -43,7 +43,7 @@ an arm that accepts both is not discriminating between them.
 | B | WITHDRAW — filed by graph, premise dead on re-derivation | 18 |
 | C | LIVE, now tracked upstream as a `BL-` entry | 41 |
 | D | LIVE, consumer-local — no upstream grain fits | 17 |
-| E | replacement `verify:` receipts for undecidable and absent directives | 33 |
+| E | replacement `verify:` receipts for undecidable and absent directives | 40 |
 | F | filed after the corpus pin — LIVE, tracked upstream | 3 |
 
 Sections A–D partition the 115 exactly: 39 + 18 + 41 + 17.
@@ -247,7 +247,7 @@ Byte-matching a load pointer would fail honest cite-by-reference.
 | 2655 | `PC-S312-FIX-FORWARD-CLASS-GATES-ON-NO-VALIDATOR` | NOT-UPSTREAM |
 | 4216 | `PC-S303-POSTCOMPACT-RECOVERY-MANDATE-HAS-NO-STATED-EXCEPTION` | ALREADY-FIXED-v0.372.0 |
 
-## E — replacement `verify:` receipts (33)
+## E — replacement `verify:` receipts (40)
 
 **Two classes of entry are in here, and neither can ever be closed by the directive it carries
 today.** Most carry a `verify: theirs_has <substring>` whose substring is present at BASE as well
@@ -418,6 +418,54 @@ verify: sh f=$(git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc/steps/stories-t
 
 Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-6.md:212`.
 
+### pin 276 — `extensions/roles/dev-push.md`
+
+OLD — **none**. No directive, so the closer emits no row for this entry at all:
+
+```
+verify: (absent — this entry carries no directive, so flush() emits no row for it)
+```
+
+NEW (measured `rc=0` today, which is STILL-LIVE):
+
+```
+verify: sh d=$(git -C "$DIST" show "${THEIRS}:core/team-roles/dev.md" 2>/dev/null) || exit 127; s=$(LC_ALL=C awk '/Pre-submission self-check/{f=1} f&&/^- When a story requires/{exit} f' <<<"$d"); [ -n "$s" ] || exit 127; case "$s" in *"Mutation self-check"*) ;; *) exit 127 ;; esac; case "$s" in *"Orphan-fixture check"*) ;; *) exit 127 ;; esac; cl=$(git -C "$DIST" grep -I -h -E '^[[:space:]]*- \[ \] ' "$THEIRS" -- core/team-roles core/skills/ai-dlc/steps 2>/dev/null); LC_ALL=C grep -qF 'Mutation self-check' <<<"$cl" || exit 127; c=$(printf '%s\n%s\n' "$s" "$cl"); el=$(LC_ALL=C grep -cE 'Edit-landed|edit-landed|already exists in the working tree|re-issuing the edit' <<<"$c"); tm=$(LC_ALL=C grep -cE 'mocked-timing|[Tt]iming-dependent|real-process runs|near-live harness|wall-clock ordering' <<<"$c"); [ "$el" -eq 0 ] || [ "$tm" -eq 0 ]
+```
+
+Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-7.md:49`.
+
+### pin 334 — `layer-drift.sh EXTENSION-RESTATES-CORE matches on section number + title,`
+
+OLD — **none**. No directive, so the closer emits no row for this entry at all:
+
+```
+verify: (absent — this entry carries no directive, so flush() emits no row for it)
+```
+
+NEW (measured `rc=0` today, which is STILL-LIVE):
+
+```
+verify: sh d=$(mktemp -d) || exit 127; trap 'rm -rf "$d"' EXIT; git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc-update/reconcile/layer-drift.sh" > "$d/layer-drift.sh" 2>/dev/null || exit 127; git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc-update/reconcile/lib.sh" > "$d/lib.sh" 2>/dev/null || exit 127; [ -s "$d/layer-drift.sh" ] && [ -s "$d/lib.sh" ] || exit 127; cv=$(git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc/layer-contract.yaml" 2>/dev/null | LC_ALL=C sed -n 's/^contract_version: *\([0-9][0-9]*\).*/\1/p' | head -1); [ -n "$cv" ] || exit 127; gt=$(git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc/steps/gate-validation.md" 2>/dev/null) || exit 127; gb=$(git -C "$DIST" show "${BASE}:core/skills/ai-dlc/steps/gate-validation.md" 2>/dev/null) || exit 127; h=$(LC_ALL=C awk '/^### [0-9]+\. /{print; exit}' <<<"$gt"); [ -n "$h" ] || exit 127; LC_ALL=C grep -qxF "$h" <<<"$gb" || exit 127; bd=$(LC_ALL=C awk -v h="$h" '$0==h{f=1;next} f&&/^#/{exit} f' <<<"$gt" | LC_ALL=C grep -v '^[[:space:]]*$' | head -8); [ -n "$bd" ] || exit 127; e="$d/c/.claude/skills/ai-dlc/extensions"; mkdir -p "$e" || exit 127; for n in ADDITIVE DUPLICATE; do printf '%s\n' --- 'kind: step-domain' 'hooks: steps/gate-validation.md' "id: $n" 'push_candidate: false' "conforms_to: $cv" --- '' "$h" '' > "$e/$n.md" || exit 127; done; printf '%s\n' 'A pending consumer escalation blocks this gate until it is marked RESOLVED, and nothing upstream says so.' >> "$e/ADDITIVE.md"; printf '%s\n' "$bd" >> "$e/DUPLICATE.md"; o=$(bash "$d/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$d/c" 2>/dev/null) || exit 127; r=$(LC_ALL=C awk -F'\t' '$1=="EXTENSION-RESTATES-CORE"{print $2}' <<<"$o"); LC_ALL=C grep -q 'DUPLICATE\.md$' <<<"$r" || exit 127; LC_ALL=C grep -q 'ADDITIVE\.md$' <<<"$r"
+```
+
+Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-7.md:75`.
+
+### pin 349 — `S295 retro-batch closures (restructured 2026-07-22, story-296-6).`
+
+OLD — **none**. No directive, so the closer emits no row for this entry at all:
+
+```
+verify: (absent — this entry carries no directive, so flush() emits no row for it)
+```
+
+NEW (no mechanical predicate exists — reported as HAND-REVIEW):
+
+```
+verify: manual container heading for already-CLOSED sub-entries; names no upstream artifact, and its members are identified only by position — 2 of the stated 5 remain under it — so there is no subject at theirs to predicate on and any absence-shaped arm is satisfied by construction forever
+```
+
+No mechanical predicate; reported as HAND-REVIEW, never as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-7.md:101`.
+
 ### pin 436 — `PC-S295-RETRO-STEP5C-DEADLOCK-ON-DEFERRED-RED`
 
 OLD (undecidable — the substring matches at BASE too):
@@ -557,10 +605,10 @@ verify: (absent — this entry carries no directive, so flush() emits no row for
 NEW (measured `rc=0` today, which is STILL-LIVE):
 
 ```
-verify: sh s=$(git -C "$DIST" show "$THEIRS:core/skills/ai-dlc/SKILL.md") || exit 127; v=$(git -C "$DIST" show "$THEIRS:core/scripts/validate-steering-budget.sh") || exit 127; r3=$(printf '%s\n' "$s" | LC_ALL=C awk '/^### Rule 3 --/{f=1} f&&/^### Rule 4 --/{exit} f'); r29=$(printf '%s\n' "$s" | LC_ALL=C awk '/^### Rule 29 --/{f=1} f&&/^### Rule 30 --/{exit} f'); { [ -n "$r3" ] && [ -n "$r29" ]; } || exit 127; case "$r3" in *"touch _bmad-output/pipeline-paused.flag"*) ;; *) exit 1 ;; esac; case "$r29" in *"bounded file-wait beat"*) ;; *) exit 2 ;; esac; case "$v" in *"FAIL (B -- STEAMROLL)"*) ;; *) exit 3 ;; esac; case "$v" in *"FAIL (C -- UNBOUNDED WAIT)"*) ;; *) exit 4 ;; esac; exit 0
+verify: sh s=$(git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc/SKILL.md") || exit 127; v=$(git -C "$DIST" show "${THEIRS}:core/scripts/validate-steering-budget.sh") || exit 127; r3=$(printf '%s\n' "$s" | LC_ALL=C awk '/^### Rule 3 --/{f=1} f&&/^### Rule 4 --/{exit} f'); r29=$(printf '%s\n' "$s" | LC_ALL=C awk '/^### Rule 29 --/{f=1} f&&/^### Rule 30 --/{exit} f'); { [ -n "$r3" ] && [ -n "$r29" ]; } || exit 127; case "$r3" in *"touch _bmad-output/pipeline-paused.flag"*) ;; *) exit 1 ;; esac; case "$r29" in *"bounded file-wait beat"*) ;; *) exit 2 ;; esac; case "$v" in *"FAIL (B -- STEAMROLL)"*) ;; *) exit 3 ;; esac; case "$v" in *"FAIL (C -- UNBOUNDED WAIT)"*) ;; *) exit 4 ;; esac; exit 0
 ```
 
-Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-10.md:83`.
+Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-10.md:91`.
 
 ### pin 860 — `PC-S296-REJECTION-CARRIES-UNRELATED-GAPS`
 
@@ -577,6 +625,22 @@ verify: sh f=$(git -C "$DIST" show "$THEIRS:core/skills/ai-dlc-update/reconcile/
 ```
 
 Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-1.md:74`.
+
+### pin 1030 — `validate-retro-prereq.sh → RETIRED (no stock equivalent).`
+
+OLD — **none**. No directive, so the closer emits no row for this entry at all:
+
+```
+verify: (absent — this entry carries no directive, so flush() emits no row for it)
+```
+
+NEW (no mechanical predicate exists — reported as HAND-REVIEW):
+
+```
+verify: manual retirement record, not a candidate; upstream has never shipped this script (0 adds across all refs, control 2) and validate-mandatory-rules.sh:221 SKIPs Check 4 on its absence by design, so the only available predicate is guaranteed true forever and the residual claim is a judgement about guidance sufficiency with no artifact to read
+```
+
+No mechanical predicate; reported as HAND-REVIEW, never as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-7.md:127`.
 
 ### pin 1069 — `PC-S297-LOCKED-ANCHOR-VALIDATOR-VACUOUS`
 
@@ -765,10 +829,10 @@ verify: theirs_has core/skills/ai-dlc-update/reconcile/ledger-reverify.sh "recor
 NEW (measured `rc=0` today, which is STILL-LIVE):
 
 ```
-verify: sh a=$(git -C "$DIST" show "$THEIRS:core/skills/ai-dlc-update/reconcile/ledger-reverify.sh") || exit 127; s=$(git -C "$DIST" show "$THEIRS:core/skills/ai-dlc-update/SKILL.md") || exit 127; row=$(printf '%s\n' "$a" | LC_ALL=C awk '/emit NAMED-UPSTREAM "/{print;exit}'); c8=$(printf '%s\n' "$s" | LC_ALL=C awk '/^ *- \*\*Close any/{f=1} f&&/^ *- \*\*Rotate the closed/{exit} f'); { [ -n "$row" ] && [ -n "$c8" ]; } || exit 127; case "$c8" in *"Close ONLY"*) ;; *) exit 127 ;; esac; case "$row" in *annotate*) ;; *) exit 1 ;; esac; case "$row" in *"ADOPTED UPSTREAM"*) ;; *) exit 2 ;; esac; case "$c8" in *NAMED-UPSTREAM*) exit 3 ;; esac; exit 0
+verify: sh a=$(git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc-update/reconcile/ledger-reverify.sh") || exit 127; s=$(git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc-update/SKILL.md") || exit 127; row=$(printf '%s\n' "$a" | LC_ALL=C awk '/emit NAMED-UPSTREAM "/{print;exit}'); c8=$(printf '%s\n' "$s" | LC_ALL=C awk '/^ *- \*\*Close any/{f=1} f&&/^ *- \*\*Rotate the closed/{exit} f'); { [ -n "$row" ] && [ -n "$c8" ]; } || exit 127; case "$c8" in *"Close ONLY"*) ;; *) exit 127 ;; esac; case "$row" in *annotate*) ;; *) exit 1 ;; esac; case "$row" in *"ADOPTED UPSTREAM"*) ;; *) exit 2 ;; esac; case "$c8" in *NAMED-UPSTREAM*) exit 3 ;; esac; exit 0
 ```
 
-Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-10.md:150`.
+Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-10.md:158`.
 
 ### pin 3647 — `PC-S330-LEDGER-ROTATE-STUCK-SET-CONTRADICTS-THE-SKIP-RULE-IT-CITES`
 
@@ -781,10 +845,10 @@ verify: theirs_has core/skills/ai-dlc-update/reconcile/ledger-rotate.sh "anywher
 NEW (measured `rc=0` today, which is STILL-LIVE):
 
 ```
-verify: sh P=core/skills/ai-dlc-update/reconcile; d=$(mktemp -d) || exit 127; git -C "$DIST" show "$THEIRS:$P/ledger-rotate.sh" > "$d/ledger-rotate.sh" || exit 127; git -C "$DIST" show "$THEIRS:$P/lib.sh" > "$d/lib.sh" || exit 127; rv=$(git -C "$DIST" show "$THEIRS:$P/ledger-reverify.sh" | LC_ALL=C awk '/closed=1/ && /ADOPTED UPSTREAM/{sub(/^[ \t]+/,"");print;exit}'); [ -n "$rv" ] || exit 127; printf '%s\n' '# seed' '' '## SEED-LOOSE-MENTION -- its body mentions the phrase mid-sentence' '' 'Remedy: annotate ADOPTED UPSTREAM once the grep is non-zero.' '' '## SEED-CLEAN-CONTROL -- no closure phrase anywhere in it' '' 'Nothing here.' > "$d/l.md"; out=$(bash "$d/ledger-rotate.sh" "$d/l.md" 2>&1) || { rm -rf "$d"; exit 127; }; rm -rf "$d"; case "$rv" in '/^'*) ;; *) exit 1 ;; esac; case "$out" in *SEED-LOOSE-MENTION*) ;; *) exit 2 ;; esac; case "$out" in *SEED-CLEAN-CONTROL*) exit 3 ;; esac; case "$out" in *"ledger-reverify.sh skips them"*) ;; *) exit 4 ;; esac; exit 0
+verify: sh P=core/skills/ai-dlc-update/reconcile; d=$(mktemp -d) || exit 127; git -C "$DIST" show "${THEIRS}:${P}/ledger-rotate.sh" > "$d/ledger-rotate.sh" || exit 127; git -C "$DIST" show "${THEIRS}:${P}/lib.sh" > "$d/lib.sh" || exit 127; rv=$(git -C "$DIST" show "${THEIRS}:${P}/ledger-reverify.sh" | LC_ALL=C awk '/closed=1/ && /ADOPTED UPSTREAM/{sub(/^[ \t]+/,"");print;exit}'); [ -n "$rv" ] || exit 127; printf '%s\n' '# seed' '' '## SEED-LOOSE-MENTION -- its body mentions the phrase mid-sentence' '' 'Remedy: annotate ADOPTED UPSTREAM once the grep is non-zero.' '' '## SEED-CLEAN-CONTROL -- no closure phrase anywhere in it' '' 'Nothing here.' > "$d/l.md"; out=$(bash "$d/ledger-rotate.sh" "$d/l.md" 2>&1) || { rm -rf "$d"; exit 127; }; rm -rf "$d"; case "$rv" in '/^'*) ;; *) exit 1 ;; esac; case "$out" in *SEED-LOOSE-MENTION*) ;; *) exit 2 ;; esac; case "$out" in *SEED-CLEAN-CONTROL*) exit 3 ;; esac; case "$out" in *"ledger-reverify.sh skips them"*) ;; *) exit 4 ;; esac; exit 0
 ```
 
-Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-10.md:223`.
+Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-10.md:231`.
 
 ### pin 3918 — `PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH`
 
@@ -817,6 +881,54 @@ verify: sh s=$(git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc-update/SKILL.md
 ```
 
 Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-4.md:224`.
+
+### pin 4184 — `PC-S303-RETRO-NO-CLOSE-RECORD-FOR-RESET-OR-ABANDONED-SPRINTS`
+
+OLD — **none**. No directive, so the closer emits no row for this entry at all:
+
+```
+verify: (absent — this entry carries no directive, so flush() emits no row for it)
+```
+
+NEW (measured `rc=0` today, which is STILL-LIVE):
+
+```
+verify: sh v=$(git -C "$DIST" show "${THEIRS}:core/scripts/validate-audit-anchors.sh") || exit 127; LC_ALL=C grep -q -- '--close-record) MODE=' <<<"$v" || exit 127; f=$(git -C "$DIST" grep -lE 'validate-audit-anchors\.sh --close-record' "$THEIRS" -- 'core/skills/ai-dlc/steps/*.md'); [ -n "$f" ] || exit 127; n=$(LC_ALL=C grep -c . <<<"$f"); [ "$n" -eq 1 ] && [ "${f##*/}" = 'retro.md' ]
+```
+
+Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-11.md:53`.
+
+### pin 4216 — `PC-S303-POSTCOMPACT-RECOVERY-MANDATE-HAS-NO-STATED-EXCEPTION`
+
+OLD — **none**. No directive, so the closer emits no row for this entry at all:
+
+```
+verify: (absent — this entry carries no directive, so flush() emits no row for it)
+```
+
+NEW (no mechanical predicate exists — reported as HAND-REVIEW):
+
+```
+verify: manual remediated at theirs after the refutation, by 9cbb77f, which is unreleased (VERSION reads 0.373.0 with no release commit): all three refuted sub-claims — arming on a bare-basename step file, the bounded-read skip, and the unconditional gate assurance — are closed, so every candidate anchor exits non-zero today and any sh receipt would be a false close. An operator must re-disposition this entry into the ADOPTED UPSTREAM channel and pick the version, which cannot be v0.372.0: that is the release whose close was refuted, and it is the only release the id is cited under in CHANGELOG.md.
+```
+
+No mechanical predicate; reported as HAND-REVIEW, never as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-11.md:123`.
+
+### pin 4313 — `PC-S303-BUDGET-CHECK-EVIDENCE-FIND-PICKS-A-STALE-GATE-LOG`
+
+OLD — **none**. No directive, so the closer emits no row for this entry at all:
+
+```
+verify: (absent — this entry carries no directive, so flush() emits no row for it)
+```
+
+NEW (measured `rc=0` today, which is STILL-LIVE):
+
+```
+verify: sh t=$(mktemp -d) || exit 127; git -C "$DIST" show "${THEIRS}:core/scripts/validate-artifact-budget.sh" > "$t/v.sh" || { rm -rf "$t"; exit 127; }; [ -s "$t/v.sh" ] || { rm -rf "$t"; exit 127; }; d="$t/_bmad-output/planning-artifacts/s300/archive/cycle-1"; mkdir -p "$d"; printf '| [core] 14 - Update pipeline snapshot | PASS (lead) | 4385 tok |\n' > "$d/gate-log.md"; o=$(AI_DLC_PROJECT_ROOT="$t" bash "$t/v.sh" --root "$t" --check-evidence 2>&1); rm -rf "$t"; [ -n "$o" ] || exit 127; LC_ALL=C grep -qE '^gate log +: _bmad-output/planning-artifacts/s300/archive/cycle-1/gate-log\.md$' <<<"$o"
+```
+
+Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-11.md:180`.
 
 
 ## F — filed after the corpus pin (3)

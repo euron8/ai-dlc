@@ -121,6 +121,12 @@ EOF
     && mv "$P/d/b.t" "$P/d/batch-1.md"
   chk 'A7 tab inside a receipt' 7 "$(run)"
 
+  # A4b the same pin claimed by two batch files
+  seed 1 'verify: theirs_has core/x.md "s"' 'verify: sh true'
+  cp "$P/d/batch-1.md" "$P/d/batch-2.md"
+  chk 'A4b same pin in two batch files' 8 "$(run)"
+  rm -f "$P/d/batch-2.md"
+
   # A8 `manual` is accepted and carries rc=n/a
   seed 1 'verify: (absent — this entry carries no directive, so flush() emits no row for it)' \
          'verify: manual no mechanical predicate exists: the subject never shipped upstream'
@@ -191,6 +197,16 @@ fi
 # --- ARM 4: the NEW line must be a verb the engine dispatches --------------------------------
 if bad=$(LC_ALL=C awk -F'\t' '$6 !~ /^verify: (sh|manual) ./ {printf "  %s pin %s NEW is not sh/manual: %s\n", $2, $1, substr($6,1,60)}' "$TMP/parsed"); [ -n "$bad" ]; then
   echo "REFUSING: bad NEW directive(s):" >&2; printf '%s\n' "$bad" >&2; exit 4
+fi
+
+# --- ARM 4b: no pin may be claimed by two sections ---------------------------------------------
+# Two batch files covering the same pin -- a replacement authored after an agent went silent, then
+# the original landing anyway -- emits TWO rows for one entry. The brief would then render the same
+# pin twice with different receipts and no statement of which is current, and `run-receipts.sh`'s
+# coverage count would still balance because it counts headings.
+if bad=$(LC_ALL=C awk -F'\t' '{n[$1]++; where[$1]=where[$1] " " $2} END {for (p in n) if (n[p]>1) printf "  pin %s claimed %s times:%s\n", p, n[p], where[p]}' "$TMP/parsed"); [ -n "$bad" ]; then
+  echo "REFUSING: duplicate pin(s). Delete or rename the superseded section, do not leave both." >&2
+  printf '%s\n' "$bad" >&2; exit 8
 fi
 
 # --- ARM 5: every pin resolves to an authoritative label -------------------------------------
