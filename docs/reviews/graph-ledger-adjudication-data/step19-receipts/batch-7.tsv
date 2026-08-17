@@ -1,0 +1,4 @@
+276	NO-RECEIPT	HOLDS-MECHANISM-WRONG	extensions/roles/dev-push.md
+334	NO-RECEIPT	HOLDS-MECHANISM-WRONG	layer-drift.sh EXTENSION-RESTATES-CORE matches on section number + title,
+349	NO-RECEIPT	NOT-UPSTREAM-scaffolding	S295 retro-batch closures (restructured 2026-07-22, story-296-6).
+1030	NO-RECEIPT	NOT-UPSTREAM	validate-retro-prereq.sh → RETIRED (no stock equivalent).

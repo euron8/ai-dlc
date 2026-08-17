@@ -15,9 +15,17 @@ VER=$(cat VERSION)
 DATE=2026-08-17
 DD=docs/reviews/graph-ledger-adjudication-data
 FD="$DD/final-disposition.tsv"
-OUT=docs/reviews/graph-ledger-adjudication-brief.md
-SP=/private/tmp/claude-501/-Users-n8-git-ai-dlc/bf4b7a9b-7e21-4470-bb51-dcacf2a4f138/scratchpad
+OUT="${AI_DLC_BRIEF_OUT:-docs/reviews/graph-ledger-adjudication-brief.md}"
 RECEIPTS="$DD/replacement-receipts.tsv"
+# THE STEP-12 FILING POPULATION, FROM THE REPO AND NOT FROM A SESSION SCRATCHPAD.
+# This read used to be `"$SP"/step12/batch-*.tsv` against the authoring session's scratchpad --
+# session-scoped by construction and unreachable from any later session. Nothing would have
+# errored: this script sets `-u` but not `-e`, so a glob matching nothing feeds `awk` no files,
+# the population derives to ZERO pins, and sections B, C and D all mis-partition while the
+# arithmetic line at the end still prints a sum. The promoted file carries the same 59 pins --
+# verified symmetric-difference EMPTY against the scratchpad copy while it still existed, with
+# fields 1 and 3 differing by 67 and 118 as the control that the comparison discriminates.
+POP="${AI_DLC_BRIEF_POP:-$DD/filing-population.tsv}"
 TMP=$(mktemp -d) || exit 1
 trap 'rm -rf "$TMP"' EXIT
 
@@ -36,8 +44,12 @@ printf '%s\n' "**ADOPTED UPSTREAM (verified ${DATE})**" \
 # --- ARM 2: refuse to emit a brief that promises a section it lacks -----------
 [ -e "$RECEIPTS" ] || { echo "REFUSING: $RECEIPTS absent. Section E would be promised and missing." >&2; exit 5; }
 
+# --- ARM 3: refuse rather than partition 115 rows against an empty population --
+[ -s "$POP" ] || { echo "REFUSING: $POP absent or empty. Sections B, C and D would all mis-partition and the arithmetic line would still print a sum." >&2; exit 6; }
+
 # --- data prep ----------------------------------------------------------------
-LC_ALL=C awk -F'\t' '{print $2}' "$SP"/step12/batch-*.tsv | sort -u > "$TMP/pop"
+LC_ALL=C awk -F'\t' '{print $2}' "$POP" | sort -u > "$TMP/pop"
+[ -s "$TMP/pop" ] || { echo "REFUSING: the step-12 population derived to zero pins from $POP" >&2; exit 6; }
 
 # every pin each new backlog entry cites -> pin<TAB>BL
 LC_ALL=C awk '
@@ -63,6 +75,51 @@ n_entries=$(LC_ALL=C awk -F'\t' '{print $2}' "$TMP/pin2bl" | sort -u | wc -l | t
 n_withdrawn=$(( $(wc -l < "$TMP/pop" | tr -d ' ') - n_filed ))
 n_notup=$(LC_ALL=C awk -F'\t' 'NR==FNR{p[$1];next} $5 ~ /LIVE/ && !($1 in p)' "$TMP/pop" "$FD" | wc -l | tr -d ' ')
 n_rcpt=$(LC_ALL=C awk -F'\t' 'NR>1' "$RECEIPTS" | wc -l | tr -d ' ')
+
+# --- section F: the entries graph filed AFTER the corpus pin -----------------------------------
+# They are deliberately NOT in final-disposition.tsv. Step 12's population was derived from the
+# pin -- the ledger's first 4356 lines -- so every derivation downstream inherited that boundary,
+# and the coverage proof confirming all 59 population rows were accounted for was CORRECT and
+# structurally blind to these three. WHEN A POPULATION IS DERIVED FROM A PINNED SNAPSHOT, ASK
+# SEPARATELY WHAT THE PIN EXCLUDED; a complete-looking coverage proof over the population cannot
+# see outside it. Rendering them here keeps them out of the 115-row partition and still in the
+# brief.
+POSTPIN="$DD/post-pin-verdicts.tsv"
+[ -s "$POSTPIN" ] || { echo "REFUSING: $POSTPIN absent or empty; the post-pin entries would be silently dropped from the brief." >&2; exit 7; }
+LC_ALL=C awk -F'\t' '{print $1}' "$POSTPIN" | sort -un > "$TMP/pp_pins"
+n_pp=$(wc -l < "$TMP/pp_pins" | tr -d ' ')
+# Join each post-pin line to the BL- entry citing it. THE BODY IS FLATTENED FIRST: `line 4357,
+# past the 4356-line pin` wraps across lines in this hard-wrapped file, and a single-line match
+# reports every one of them missing -- measured, on this exact corpus, as an 18-of-42 finding that
+# was entirely an artefact of the instrument's shape.
+LC_ALL=C awk '
+  NR==FNR { want[$1]=1; next }
+  /^## BL-[0-9]+/ { if (id!="") emit(); id=$2; body=""; next }
+  id!="" { body = body " " $0 }
+  END { if (id!="") emit() }
+  function emit(   b,p) {
+    b=body; gsub(/[ \t]+/, " ", b)
+    for (p in want) if (b ~ ("(^|[^0-9])" p "([^0-9]|$)")) printf "%s\t%s\n", p, id
+  }
+' "$TMP/pp_pins" docs/backlog.md | sort -un > "$TMP/pp2bl"
+n_pp_joined=$(LC_ALL=C awk -F'\t' '{print $1}' "$TMP/pp2bl" | sort -u | wc -l | tr -d ' ')
+if [ "$n_pp_joined" != "$n_pp" ] || [ "$(wc -l < "$TMP/pp2bl" | tr -d ' ')" != "$n_pp" ]; then
+  echo "REFUSING: $n_pp post-pin entry(ies) but $n_pp_joined resolved to exactly one BL- entry each:" >&2
+  cat "$TMP/pp2bl" >&2; exit 7
+fi
+# CONTROL, same invocation: an impossible pin must join to nothing. Captured into a variable
+# rather than piped into `grep -q` -- that reader exits at its first match while the writer is
+# still pushing, and the writer's EPIPE then reports NOT-FOUND on input that did match.
+ctl=$(LC_ALL=C awk '
+  /^## BL-[0-9]+/ { if (id!="") emit(); id=$2; body=""; next }
+  id!="" { body = body " " $0 }
+  END { if (id!="") emit() }
+  function emit(   b) { b=body; gsub(/[ \t]+/," ",b); if (b ~ /(^|[^0-9])9999109([^0-9]|$)/) print id }
+' docs/backlog.md)
+if [ -n "$ctl" ]; then
+  echo "REFUSING: the post-pin join control matched an impossible line number, so the join does not discriminate" >&2
+  exit 7
+fi
 
 {
 cat <<HDR
@@ -111,10 +168,18 @@ an arm that accepts both is not discriminating between them.
 | B | WITHDRAW — filed by graph, premise dead on re-derivation | ${n_withdrawn} |
 | C | LIVE, now tracked upstream as a \`BL-\` entry | ${n_filed} |
 | D | LIVE, consumer-local — no upstream grain fits | ${n_notup} |
-| E | replacement \`verify:\` receipts for undecidable directives | ${n_rcpt} |
+| E | replacement \`verify:\` receipts for undecidable and absent directives | ${n_rcpt} |
+| F | filed after the corpus pin — LIVE, tracked upstream | ${n_pp} |
 
 Sections A–D partition the 115 exactly: ${n_close} + ${n_withdrawn} + ${n_filed} + ${n_notup}.
 Section E cuts across C and D — those entries stay open AND get a working receipt.
+
+**Section F sits OUTSIDE that partition, and the reason matters more than the three rows.** The
+115 came from a corpus pinned at this ledger's first 4356 lines, so every derivation downstream
+inherited that boundary — including the coverage proof that confirmed all 59 filing rows were
+accounted for. That proof was correct and could not see these three, because they were filed above
+the pin. A complete-looking coverage proof over a derived population cannot see outside it; the
+question that found them was a different one — *do any upstream entries cite a pin above 4356?*
 
 **Section C is ${n_filed} consumer rows but ${n_entries} upstream entries**, because one row
 drew two. Do not read the counts as interchangeable; that conflation produced a wrong
@@ -230,9 +295,9 @@ LC_ALL=C awk -F'\t' -v P="$TMP/pop" '
 # ---------- E ----------
 printf '\n## E — replacement `verify:` receipts (%s)\n\n' "$n_rcpt"
 cat <<'EH'
-**These receipts can never go green, and your own tool says so.** Each entry below carries a
-`verify: theirs_has <substring>` whose substring is present at BASE as well as at theirs, so the
-reverifier reports:
+**Two classes of entry are in here, and neither can ever be closed by the directive it carries
+today.** Most carry a `verify: theirs_has <substring>` whose substring is present at BASE as well
+as at theirs, so the reverifier reports:
 
 > `RECEIPTS-UNDECIDED … reported STILL-LIVE on a substring present at BASE as well as at theirs`
 
@@ -240,9 +305,27 @@ A predicate that matches in both states distinguishes nothing. It will report "s
 forever, whether or not the defect is ever fixed — and `ledger-reverify-unfalsifiable/README.md`
 measures 13 such entries on this consumer already.
 
+The rest carry **no directive at all**, which is worse and much quieter: `flush()` gates on
+`has_verify &&`, so those entries produce no row in any reverify report. They are not reported as
+open, or as closed, or as needing review. They are simply invisible to the closer, and a zero
+CLOSE-CANDIDATE count over a corpus containing them means nothing.
+
 Each replacement below is anchored on a token the fix MUST add or remove — a flag, a path, a
-function name — never on prose describing the fix. **Every one was RUN and exits non-zero today**,
-which is the requirement: the defect is live, so a receipt exiting 0 now is already broken.
+function name, an emitted string, an observable behaviour — never on prose describing the fix.
+
+**Every one was RUN, and every `sh` receipt exits 0 today. Zero is the requirement, not the
+failure.** Your engine's `sh` dispatch reads `rc=0` as **STILL-LIVE** and a non-zero as
+**CLOSE-CANDIDATE** — read it at the emitter in `ledger-reverify.sh`, because its own file header
+reads the other way and this program briefed four authors from the header before catching it.
+So a receipt here that exits non-zero is proposing to retire a live defect. If you carry a habit
+from a `docs/backlog.md`-shaped tool, note that those read the OPPOSITE sense.
+
+**Every `sh` receipt below guards its own subject to exit 127** when a path, span or extraction
+cannot be resolved, which your engine reports as NEEDS-REVIEW rather than as a close. That guard
+is not decoration: measured on this consumer, ONE relocation commit moved five receipt subjects
+and all five flipped to CLOSE-CANDIDATE in a single run, every one still reproducing at its new
+path. Where a row's note says the guard is absent, treat any future non-zero from it as
+unverified until you have confirmed the subject still resolves.
 
 Three anchor failures this program measured, all of which recur, and which each replacement was
 checked against: an anchor on text the FIX QUOTES BACK (fixes here document what they removed, so
@@ -256,11 +339,46 @@ and the engine runs them through `eval`, so quoting is part of the predicate.
 EH
 LC_ALL=C awk -F'\t' 'NR>1 {
   printf "### pin %s — `%s`\n\n", $1, $2
-  printf "OLD (undecidable):\n\n```\n%s\n```\n\n", $3
-  printf "NEW (exits %s today):\n\n```\n%s\n```\n\n", $5, $4
+  if ($3 ~ /^verify: \(absent/)
+    printf "OLD — **none**. No directive, so the closer emits no row for this entry at all:\n\n```\n%s\n```\n\n", $3
+  else
+    printf "OLD (undecidable — the substring matches at BASE too):\n\n```\n%s\n```\n\n", $3
+  if ($5 == "n/a")
+    printf "NEW (no mechanical predicate exists — reported as HAND-REVIEW):\n\n```\n%s\n```\n\n", $4
+  else
+    printf "NEW (measured `rc=%s` today, which is STILL-LIVE):\n\n```\n%s\n```\n\n", $5, $4
   if ($6 != "") printf "%s\n\n", $6
 }' "$RECEIPTS"
 
+# ---------- F ----------
+printf '\n## F — filed after the corpus pin (%s)\n\n' "$n_pp"
+cat <<'FH'
+These three were filed into this ledger AFTER upstream pinned the corpus, so they are not part of
+the 115 and appear in no table above. All three were adjudicated against the working tree on the
+same terms as the rest, all three are `HOLDS`-family — **3 for 3 on the base rate that a filing
+understates or misstates its own mechanism** — and all three are now tracked upstream.
+
+**Leave these open in your ledger.** They close when upstream ships the fix and cites the id.
+
+Two of the three carried no `verify:` directive at all, so your closer emits no row for them; their
+replacement receipts are in section E. One thing to note about the upstream receipts backing them:
+they exit NON-zero while the defect is live, which is the opposite of the receipts in section E.
+That is not an inconsistency — `docs/backlog.md` is read by a different engine
+(`scripts/backlog-reverify.sh`) whose `sh` polarity is inverted relative to yours. Do not carry a
+receipt across the boundary without re-reading its engine's dispatch.
+
+| live line | entry | verdict | upstream |
+|---|---|---|---|
+FH
+LC_ALL=C awk -F'\t' -v P="$TMP/pp2bl" '
+  BEGIN { while ((getline l < P) > 0) { split(l, a, "\t"); bl[a[1]] = a[2] } }
+  {
+    lbl=$2; if (length(lbl)>56) lbl=substr(lbl,1,53) "..."
+    printf "| %s | `%s` | %s | `%s` |\n", $1, lbl, $3, bl[$1]
+  }
+' "$POSTPIN" | sort -t'|' -k2 -n
+
+printf '\n'
 cat <<'TAIL'
 ## Evidence, and where to check any of it
 
