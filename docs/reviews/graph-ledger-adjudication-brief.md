@@ -941,10 +941,10 @@ verify: (absent — this entry carries no directive, so flush() emits no row for
 NEW (measured `rc=0` today, which is STILL-LIVE):
 
 ```
-verify: sh D=$(mktemp -d) || exit 127; mkdir -p "$D/b" "$D/s" || { rm -rf "$D"; exit 127; }; printf "# PRD\n\n- FR-S1-1 the functional requirement, CAP-1\n- LR-S1-1 the locked requirement\n" > "$D/prd.md"; printf "# SPEC\n\nCAP-1 the capability\n" > "$D/b/SPEC.md"; cp "$D/b/SPEC.md" "$D/s/SPEC.md"; printf -- "- (capability) LR-S1-1 -> CAP-1\n" > "$D/b/.memlog.md"; printf -- "- (capability by bmad-spec) LR-S1-1 -> CAP-1\n" > "$D/s/.memlog.md"; cmp -s "$D/b/.memlog.md" "$D/s/.memlog.md" && { rm -rf "$D"; exit 127; }; V="$DIST/core/scripts/validate-spec-join.sh"; [ -f "$V" ] || { rm -rf "$D"; exit 127; }; bash "$V" --spec "$D/b" --prd "$D/prd.md" >/dev/null 2>&1; b=$?; bash "$V" --spec "$D/s" --prd "$D/prd.md" >/dev/null 2>&1; s=$?; rm -rf "$D"; [ "$b" -eq 0 ] || exit 127; [ "$s" -eq 2 ]
+verify: sh cd "$DIST" || exit 127; S="$DIST/core/scripts"; V="$S/validate-spec-join.sh"; [ -f "$V" ] || exit 127; d=$(mktemp -d) || exit 127; mkdir -p "$d/bare" "$d/qual" || exit 127; printf "# PRD\n\n- FR-S303-1 the functional requirement, CAP-7\n- LR-S303-1 the locked requirement\n" > "$d/prd.md"; printf "# SPEC\n\nCAP-7 the capability\n" > "$d/bare/SPEC.md"; cp "$d/bare/SPEC.md" "$d/qual/SPEC.md" || exit 127; printf -- "- (capability) LR-S303-1 -> CAP-7\n" > "$d/bare/.memlog.md"; printf -- "- (capability by bmad-spec) LR-S303-1 -> CAP-7\n" > "$d/qual/.memlog.md"; cmp -s "$d/bare/.memlog.md" "$d/qual/.memlog.md" && { rm -rf "$d"; exit 127; }; bash "$V" --spec "$d/bare" --prd "$d/prd.md" >"$d/b.out" 2>&1; b=$?; bash "$V" --spec "$d/qual" --prd "$d/prd.md" >"$d/q.out" 2>&1; q=$?; [ "$b" -eq 0 ] || { rm -rf "$d"; exit 127; }; [ "$q" -eq 0 ] && { rm -rf "$d"; exit 1; }; [ "$q" -eq 2 ] || { rm -rf "$d"; exit 127; }; grep -q "no .(capability). entries" "$d/q.out" || { rm -rf "$d"; exit 127; }; rm -rf "$d"; exit 0
 ```
 
-Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-13.md:41`.
+Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-14.md:65`.
 
 ### pin 4392 — `PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF`
 
@@ -957,10 +957,10 @@ verify: (absent — this entry carries no directive, so flush() emits no row for
 NEW (measured `rc=0` today, which is STILL-LIVE):
 
 ```
-verify: sh d=$(mktemp -d) || exit 127; n="$d/env"; printf "#!/bin/sh\ncat >/dev/null\nenv > %s\n" "$n" > "$d/python3" || { rm -rf "$d"; exit 127; }; chmod +x "$d/python3" || { rm -rf "$d"; exit 127; }; S="$DIST/core/scripts/report-propagation-fanout.sh"; [ -f "$S" ] || { rm -rf "$d"; exit 127; }; ( cd "$DIST" && PATH="$d:$PATH" AI_DLC_PROJECT_ROOT="$DIST" bash "$S" HEAD~1 >/dev/null 2>&1 ); [ -s "$n" ] || { rm -rf "$d"; exit 127; }; p=$(LC_ALL=C grep -c "PATH=" "$n"); f=$(LC_ALL=C grep -c "core/scripts/report-propagation-fanout.sh" "$n"); g=$(LC_ALL=C grep -c "^@@ " "$n"); rm -rf "$d"; [ "$p" -ge 1 ] || exit 127; { [ "$f" -ge 1 ] || [ "$g" -ge 1 ]; }
+verify: sh cd "$DIST" || exit 127; S="$DIST/core/scripts"; F="$S/report-propagation-fanout.sh"; [ -f "$F" ] || exit 127; git -C "$DIST" ls-files --error-unmatch VERSION >/dev/null 2>&1 || exit 127; h=$(git -C "$DIST" -c core.quotepath=false diff -U0 "${BASE}~1" "$BASE" | grep -c "^@@ ") || exit 127; [ "$h" -ge 1 ] || exit 127; d=$(mktemp -d) || exit 127; printf "#!/bin/sh\ncat >/dev/null\nenv > %s/env\n" "$d" > "$d/python3" || exit 127; chmod +x "$d/python3" || exit 127; AI_DLC_PROJECT_ROOT="$DIST" PATH="$d:$PATH" bash "$F" "${BASE}~1" "$BASE" >/dev/null 2>&1; [ -s "$d/env" ] || { rm -rf "$d"; exit 127; }; grep -q "^PATH=" "$d/env" || { rm -rf "$d"; exit 127; }; f=$(grep -c '^VERSION$' "$d/env"); g=$(grep -c "^@@ " "$d/env"); rm -rf "$d"; { [ "$f" -ge 1 ] || [ "$g" -ge 1 ]; } || exit 1; exit 0
 ```
 
-Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-13.md:93`.
+Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-14.md:144`.
 
 
 ## F — filed after the corpus pin (3)
