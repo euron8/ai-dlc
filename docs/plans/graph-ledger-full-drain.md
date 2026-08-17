@@ -409,9 +409,39 @@ A6 ceiling question is also ruled and executed — see action 6; nothing is owed
 **Then cut the next batch** — ≤4 remediations, one version per branch, from `origin/main`. Steps
 13–16 carry the method; 14a–14c are the clauses learned the hard way and are not optional.
 
-**BATCH 2 IS SCOPED AS THE LEDGER-PARSING FAMILY: `BL-013`, `BL-032`, `BL-065`, `BL-036`.** Verify
-the scope still holds against the reverify run before building, and substitute freely if it does
-not — but keep the batch to ONE subsystem. Three things about it are already measured:
+**BATCH 2 IS `BL-008`, ALONE, AND IT IS SEQUENCED FIRST BY OPERATOR RULING BECAUSE IT CORRUPTS THE
+INSTRUMENT EVERY OTHER BATCH IS JUDGED BY.** `suite-dispatch-order` sorts three toy fixtures by the
+durations the PREVIOUS run recorded; under the pool those units take single-digit milliseconds and
+their measured order is the machine's scheduler, not the ordering rule. So the gate reports a red
+unit on a tree nothing is wrong with.
+
+**Measured across five pooled gate runs in one session, on four different trees, none of which
+carried a change that can reach fixture dispatch ordering: four `ok`, one `FAIL`.** The failing run
+was a DOCS-ONLY commit touching a single file under `docs/plans/`. The same unit is green when run
+alone, 11 assertions. That is roughly one poisoned gate in five, and every batch of this program
+ends in a gate.
+
+**The cost is not the re-run, it is what the re-run does to the evidence.** `BL-008`'s own entry
+says it: *"a fixture that fails intermittently in the gate is the shape that gets re-run until
+green, and a re-run-until-green unit certifies nothing."* A session that hits this while carrying a
+real change has to prove a negative — that its own work could not have reached dispatch ordering —
+before it can read its own gate. Batch 1 hit exactly that and had to spend the argument.
+
+**The prescribed fix is in the entry**: stop sorting on real elapsed time in the assertion. Seed the
+durations record with FIXED costs and assert the dispatch order those produce, so the arm measures
+the ORDERING RULE rather than the machine's scheduler. Everything around it stays — the mutant
+battery M1–M4 is sound and its control arm is what proves the hook is green on an unmutated tree.
+
+**`BL-008` is `verify: manual` and its close is a HAND judgement, deliberately.** The entry states
+why: a receipt that ran the fixture once would report whichever side of the race that run landed
+on, which is the same coin-flip as the arm. Do not go looking for a receipt to turn green. **Once
+the arm is seeded rather than timed the race is gone, so a mechanical receipt becomes possible and
+writing one is a legitimate part of this remediation** — but it is an option the remediation earns,
+not a precondition on it.
+
+**BATCH 3 IS THE LEDGER-PARSING FAMILY: `BL-013`, `BL-032`, `BL-065`, `BL-036`.** Verify the scope
+still holds against the reverify run before building, and substitute freely if it does not — but
+keep the batch to ONE subsystem. Three things about it are already measured:
 
 - **`BL-013` and `BL-032` key on the SAME boundary rule**,
   `core/skills/ai-dlc-update/reconcile/lib.sh:276`.
