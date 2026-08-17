@@ -245,19 +245,44 @@ What the pull produced, all of it adjudicated live:
   invocations (`:905`, `:934`), not three, and the cited lines 271/427/455 are not call sites at all
   but the three instances of the `git show "${_c}:VERSION"` IDIOM, in `absorbed_at`,
   `named_absorbed` and `named_ambiguous`. The filing named the true scope while mislabelling it.
-- **The widest instance is `named_absorbed()`, filed separately**, because the fault is the JOIN and
-  not the version read, so the forward-walk remedy does not reach it. `_c` is the OLDEST commit
-  whose MESSAGE contains the id, and `$na_v` from it is interpolated into a paste-ready PERMANENT
+- **The widest instance is `named_absorbed()`, filed separately as `BL-066`**, because the fault is
+  the JOIN and not the version read, so the forward-walk remedy does not reach it. `_c` is the
+  OLDEST commit whose MESSAGE contains the id (`:402`, with a third instance of the idiom in its own
+  prefix-fallback arm at `:423`), and `$na_v` from it is interpolated into a paste-ready PERMANENT
   annotation at `:848`. Measured over the 29 ids in `e939a92`'s message against
-  `final-disposition.tsv`: **28 of 29 disagree with the adjudicated version**, 20 resolving to
-  `e939a92` itself. Four of the nine older resolutions are THIS PROGRAM's own `docs(plan)` and
-  `docs(reviews)` commits, which merely MENTION the id — the same reads-vs-mentions class as
-  `receipt_absent_subjects`. **And this plan CAUSED the 20-row case**: the correction requiring every
-  closed id in the release commit MESSAGE is what makes the join resolve there.
-- **`closes_when` is free prose that nothing parses**, found by graph. Read at
+  `final-disposition.tsv`: **2 agree, 22 disagree, and 5 carry no version-bearing verdict to compare
+  against — so it is 22 of the 24 COMPARABLE rows**, with 20 resolving to `e939a92` itself. **THREE**
+  of the nine older resolutions are this program's own `docs(plan)`/`docs(reviews)` commits that
+  merely MENTION the id — the same reads-vs-mentions class as `receipt_absent_subjects` — and a
+  fourth, `5b5b95c`, is worse: a ledger-drain release touching 23 `core/` files, attributed to an
+  entry adjudicated **FALSIFIED**, so the function would propose an absorption annotation for
+  something that was never a defect. **And this plan CAUSED the 20-row case**: the correction
+  requiring every closed id in the release commit MESSAGE is what makes the join resolve there.
+
+  **THIS FILE FIRST SAID "28 OF 29 DISAGREE" AND THAT WAS WRONG, IN A WAY WORTH KEEPING.** The
+  figure was counted BY EYE off a printed table whose adjudicated column also matched `FALSIFIED`
+  and `DUPLICATE-OF` rows, so five entries with nothing to compare were scored as disagreements and
+  a second agreement was missed. It was published to the consumer, into this file and into a commit
+  message before a delegate re-derived it by computing the join instead of transcribing it. **A
+  count read off a rendering is not a derived count** — the same class as reading a report's own
+  summary sentence as a data row, which this program also did, one turn earlier.
+- **`closes_when` is free prose that nothing parses**, found by graph, filed as `BL-067`. Read at
   `audit-layer-debt.sh:108` and printed at `:215-216`; `migrate-artifact-paths.sh` has zero hits for
-  it against a `strip_token` control of 3. Six layer debts came due the instant graph ran that
-  migration and nothing announced it.
+  it against a `strip_token` control of 3. It has a schema, a producer and a printer and **no
+  consumer**. Measured on the consumer's own register: 24 `owed` objects, **0** ever recorded in any
+  `closes_owed`, and 6 carrying the identical `closes_when` naming
+  `migrate-artifact-paths.sh --apply` — which graph then ran, so all six came due and nothing
+  announced it. Control in the same invocation: 0 open debts match an impossible token.
+
+**Both `BL-` receipts were proven in BOTH directions before filing, which is the half that is
+usually skipped.** Against the shipping tree each exits **1** — STILL-LIVE under
+`backlog-reverify.sh`'s polarity, which is the OPPOSITE of the consumer engine's — and against a
+copy carrying the fix each exits **0**, with the two sides asserted to differ before the comparison
+was read. A receipt that cannot go green is a check that cannot fire wearing a live-defect badge.
+`backlog-reverify.sh` reports both as `STILL-LIVE` by name, against an impossible-id control of 0.
+Neither anchors on a substring: `BL-066` evals the shipping `named_absorbed()` against a synthetic
+three-commit history where a `docs` commit MENTIONS the id and a later `fix:` commit absorbs it,
+because any fix will quote the `tail -1` reasoning back inside the comment recording it.
 
 **A BLOCKER WAS FOUND IN THIS PROGRAM'S OWN BRIEF, ONE STEP BEFORE IT WAS APPLIED, AND IS FIXED.**
 `render-brief.sh` rendered ONE annotation string from the pulled version and instructed it into all

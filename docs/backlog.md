@@ -2860,3 +2860,143 @@ Discharges the consumer entry `PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-M
 LIVE ledger line 4435, past the 4356-line pin.
 
 verify: sh V=core/scripts/validate-scope-confirmation.sh; F=$(sed -n "/^field_of() {/,/^}/p" "$V"); [ -n "$F" ] || exit 9; eval "$F"; D=$(mktemp -d); printf -- "- scope_confirmed: confirmed\n" > "$D/p.md"; printf -- "- **scope_confirmed:** confirmed\n" > "$D/i.md"; printf -- "- **scope_confirmed**: confirmed\n" > "$D/o.md"; p=$(field_of scope_confirmed "$D/p.md"); i=$(field_of scope_confirmed "$D/i.md"); o=$(field_of scope_confirmed "$D/o.md"); rm -rf "$D"; [ "$p" = confirmed ] || exit 9; [ "$i" = confirmed ] && [ "$o" = confirmed ]
+
+## BL-066
+
+**`named_absorbed()` joins on the OLDEST commit whose MESSAGE mentions the id, which is not the
+commit that absorbed the entry, and the version it reads there is interpolated into a permanent
+paste-ready annotation.** `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:402` is
+`git log -F --grep="$_id" --format=%H "$THEIRS" | tail -1` — newest-first output, so the last line
+is the FIRST commit whose message contains the id. `:427` then reads `VERSION` at that commit, and
+`:848` interpolates the result into the row's instruction to the operator:
+`**ADOPTED UPSTREAM (v$na_v, verified <date>)**`. That annotation is the form `ledger-rotate.sh`
+keys on to archive the entry, so a wrong version here is written into the consumer's ledger by hand
+and never re-derived.
+
+**The join key is the defect, not the `tail`.** The comment at `:338-341` defends `tail -1` over
+`--reverse | head -1` on SIGPIPE grounds and states the premise in as many words — *"the last line
+is the FIRST commit to name the id"*. Naming is not absorbing. The two are not the same question,
+and nothing between the grep and the `VERSION` read distinguishes them. This is the
+`receipt_absent_subjects` "reads vs mentions" class one level along: there, a receipt path a file
+MENTIONS was counted as one it READS; here, a commit message that MENTIONS an id is counted as the
+commit that landed it. The SIGPIPE argument is orthogonal and does not block a fix — reading the log
+into a variable and taking its first line abandons no pipe.
+
+**Measured against this repo's own history, over the 29 `PC-` ids cited in `e939a92`'s message.**
+For each id, `git log -F --grep=<id> --format=%H HEAD | tail -1`, `VERSION` read at that commit,
+joined to `docs/reviews/graph-ledger-adjudication-data/final-disposition.tsv` on col2 with the
+version parsed out of col3's `ALREADY-FIXED-v<X>`:
+
+- **20 of 29 resolve to `e939a92` itself** and would be annotated with that release's version.
+- **9 resolve to older commits.**
+- **24 of the 29 carry an `ALREADY-FIXED-v<X>` verdict** to compare against. Of those, **2 agree**
+  — `8dc52be`/`0.247.0` and `1537e4c`/`0.372.0` — and **22 disagree**. The remaining 5 carry a
+  non-version verdict, so no comparison exists for them and they are not counted either way.
+- **3 of the 9 older resolutions are upstream's own documentation commits**, whose diffs are
+  docs-only and which merely mention the id: `2bc7aa4` (`docs(plan)`, 1 file),
+  `c9a4500` (`docs(reviews)`, 4 files), `40770c3` (`docs(reviews)`, 6 files).
+- A fourth, `5b5b95c`, is worse than a docs mention: it is a ledger-drain release touching 23
+  `core/` files, and the entry it is attributed to —
+  `PC-S303-UNREGISTERED-DRIFT-SCANS-FIVE-OF-TEN-CORE-SUBTREES` — is adjudicated **FALSIFIED**. The
+  function would propose an `ADOPTED UPSTREAM` annotation for an entry that was never a defect.
+
+Control in the same invocation: the impossible id `PC-S999-IMPOSSIBLE-NEVER` resolves to **0**
+commits while `PC-S300-CYCLE-STATE-RESOLVED-UNREACHABLE-FOR-A-STALLED-TERMINAL-PASS` resolves to
+**2**, so the search runs and discriminates.
+
+**This repo's own instruction produced the 20-row case.** `docs/plans/graph-ledger-full-drain.md:49`
+directs that *"the id goes in the RELEASE COMMIT MESSAGE, verbatim, for every closed entry"*. That
+correction is right for coverage and it is exactly what makes an unqualified message-grep resolve to
+the release commit — the id is now guaranteed to appear in a commit whose relationship to the fix is
+"cited it while closing the ledger", which the join cannot tell apart from "landed it".
+
+**A SIBLING INSTANCE, SAME IDIOM, SAME FILE.** `named_ambiguous()` (`:433`) runs the same
+`| tail -1` at `:453` and reads `VERSION` at `:455`, and its output is the sha an operator is told to
+go and read. A fix keyed only on `named_absorbed` leaves that half emitting the same wrong commit.
+The prefix-fallback arm inside `named_absorbed` at `:423` is a third site of the same idiom.
+
+**NOT the same defect as `absorbed_at()`.** `absorbed_at()` (`:267`, `VERSION` at `:271`) uses a
+content pickaxe (`log -S"$2"`) bounded to `BASE..THEIRS` with `--reverse | head -1`, so it already
+joins on a diff rather than on a message; its filed problem is which version blob it reads at the
+commit it found. Filed by the consumer as
+`PC-S334-ABSORBED-AT-READS-THE-VERSION-BLOB-AT-THE-FIX-COMMIT`. Cross-referenced, not merged — the
+two need different fixes and a joint one would satisfy neither join.
+
+**Why this receipt and why it is behavioural.** A substring anchor is unusable: the fix will quote
+the `tail -1` wording back inside the comment recording what it replaced, exactly as `:338-341`
+already quotes the reasoning it is defending. The receipt instead `sed`-extracts the shipping
+`named_absorbed()` body, evals it against a three-commit synthetic upstream in which a `docs(plan)`
+commit at `0.2.0` MENTIONS the id and touches no subject, and the `fix:` commit at `0.3.0` absorbs it
+— and asserts the returned version is the absorbing one. Its four sanity arms exit 9 (which reverify
+reports as STILL-LIVE, the safe direction): the extraction produced a function, the two commits'
+`VERSION` blobs genuinely differ, the mentioning commit really mentions the id, and the mentioning
+commit does NOT touch the subject while the absorbing commit does. An earlier draft guarded on the
+extracted text containing `tail -1`, which would have exited 9 on precisely the fix — a receipt that
+cannot go green. Satisfiability demonstrated against a mutant whose two sides were asserted to
+differ: shipping returns `0.2.0 <sha> slug` and exits **1**; the same receipt against a copy with
+`| tail -1` changed to `| head -1` in that arm returns `0.3.0` and exits **0**.
+
+Cross-references the consumer entry `PC-S334-NAMED-ABSORBED-JOINS-ON-THE-OLDEST-MESSAGE-MENTION`,
+filed by the graph consumer session. That id appears in **0** commits of this repo's history
+(control in the same invocation: `PC-S303` appears in **8**), so nothing upstream can be read as
+having answered it.
+
+verify: sh L=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; f=$(sed -n "/^named_absorbed() {/,/^}/p" "$L"); case "$f" in *"named_absorbed()"*) : ;; *) exit 9 ;; esac; d=$(mktemp -d); u="$d/u"; mkdir -p "$u/docs"; git init -q "$u"; git -C "$u" config user.email a@b; git -C "$u" config user.name a; printf "0.1.0\n" > "$u/VERSION"; printf "x\n" > "$u/subj"; printf "p\n" > "$u/docs/plan.md"; git -C "$u" add -A; git -C "$u" commit -q -m "chore: seed"; printf "0.2.0\n" > "$u/VERSION"; printf "pp\n" > "$u/docs/plan.md"; git -C "$u" add -A; git -C "$u" commit -q -m "docs(plan): a handoff that MENTIONS PC-S999-PROBE-SLUG and touches no subject"; printf "0.3.0\n" > "$u/VERSION"; printf "fixed\n" > "$u/subj"; git -C "$u" add -A; git -C "$u" commit -q -m "fix: absorb PC-S999-PROBE-SLUG"; o=$(git -C "$u" show HEAD~1:VERSION); n=$(git -C "$u" show HEAD:VERSION); [ "$o" != "$n" ] || { rm -rf "$d"; exit 9; }; case "$(git -C "$u" log -1 --format=%B HEAD~1)" in *PC-S999-PROBE-SLUG*) : ;; *) rm -rf "$d"; exit 9 ;; esac; case "$(git -C "$u" show HEAD~1 --format= --name-only)" in *subj*) rm -rf "$d"; exit 9 ;; esac; case "$(git -C "$u" show HEAD --format= --name-only)" in *subj*) : ;; *) rm -rf "$d"; exit 9 ;; esac; r=$(DIST="$u" THEIRS=HEAD bash -c "$f; prefix_entry_count(){ echo 0; }; named_absorbed PC-S999-PROBE-SLUG"); rm -rf "$d"; [ -n "$r" ] || exit 9; [ "$(printf "%s" "$r" | awk "{print \$1}")" = "0.3.0" ]
+
+
+## BL-067
+
+**`closes_when` names the command that discharges a layer debt, and nothing in the tree joins the
+two — so running the named command clears the debt in fact and announces nothing.**
+`core/scripts/audit-layer-debt.sh:108` carries the field into the report dict and `:215-216` prints
+it verbatim (`print("      closes when: %s" % d["closes_when"])`). Those, plus the dict key itself,
+are all **3** occurrences in that file. The value is free prose written by an adjudicator, and no
+reader parses it.
+
+**Declared and produced, but consumed by nothing.** `core/schemas/layer-adjudication-register.json:72`
+declares `closes_when` as an optional property of `owed` (`required` is `["id","what"]`);
+`core/skills/ai-dlc-update/SKILL.md:1242` instructs the adjudicator to write it and `:1251` shows an
+example. The only other occurrences in the tracked tree are a seed row at
+`core/fixtures/layer-debt-ledger/run.sh:55` and one CHANGELOG line — and that fixture has **0** hits
+for the printed form `closes when` against **18** for `assert`/`expect`, so the field's rendering is
+seeded but never asserted. The field has a producer, a schema, a printer, and no consumer.
+
+**The command the values actually name has zero awareness of them.**
+`core/scripts/migrate-artifact-paths.sh` has **0** hits for
+`closes_when|layer-debt|audit-layer-debt`; positive control in the same invocation, `strip_token`
+returns **3** in that same file, so the grep reaches the file and discriminates.
+
+**Measured on the reference consumer's register**, `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl`,
+read out of the consumer tree without writing to it: 207 rows, **24** `owed` objects, **0** ids
+appearing in any row's `closes_owed` — so all 24 are OPEN and none has ever been recorded as paid.
+**6 of the 24 carry the identical `closes_when` value** *"immediately after
+`scripts/ai-dlc/migrate-artifact-paths.sh --apply` completes"*. That consumer ran exactly that
+command to clear an unrelated pre-push blocker; all six came due and nothing announced it. They were
+found only because a session ran the debt audit and read the strings by hand. Control in the same
+invocation: **0** open debts match the impossible token `zzz-no-such-cmd`.
+
+**Tier: DEFECT, not BLOCKER.** No answer is wrong — the debts stay visible as OPEN, and
+`audit-layer-debt.sh` is report-only by design (`exit 0` on findings). What is lost is the reminder:
+the one moment at which a debt becomes payable passes silently, and the register's own `closes_owed`
+half stays empty because nobody is told to fill it.
+
+**Why the receipt is a differential and what its limit is.** There is no substring a fix must
+contain, and anchoring on `closes_when` itself would be satisfied by the comment a fix writes about
+the field. The receipt instead drives the shipping script twice over the SAME register path, with
+one row whose `closes_when` names a command and one whose `closes_when` names no command at all,
+strips the echoed `closes when:` lines from both outputs, and asserts what remains still differs —
+i.e. that something other than the echo depends on the field's content. Sanity arms exit 9: both
+runs must exit 0, both must name the probe id, the two register bodies must differ, and the two RAW
+outputs must differ. **The first draft of this receipt FALSE-CLOSED** — it wrote the two registers to
+two different temp paths, and the report's header line prints `register=%s`, so the outputs differed
+on the path alone and the receipt reported the fix present against the shipping code. Re-run over
+one path rewritten between the two runs, shipping exits **1**. Satisfiability demonstrated against a
+mutant asserted to differ from shipping, which adds one line matching a `.sh` token out of
+`closes_when` and printing `DUE-AFTER:` or `(no command named)`: that copy exits **0**. The limit,
+stated rather than hidden: a fix that puts the join behind a new flag and leaves the default report
+byte-identical would leave this STILL-LIVE — the safe direction, but not a close.
+
+Found by the graph consumer session. Cross-references the consumer entry
+`PC-S334-CLOSES-WHEN-NAMES-A-COMMAND-AND-NOTHING-JOINS-THE-TWO`.
+
+verify: sh S=core/scripts/audit-layer-debt.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d); g="$d/reg.jsonl"; h="{\"clause\":\"LC-E1\",\"entry\":\"extensions/probe.md\",\"subject_digest\":\"da39a3e\",\"verdict\":\"still-additive\",\"recorded_utc\":\"1970-01-01T00:00:00Z\",\"reason\":\"probe row\",\"owed\":{\"id\":\"OWED-PROBE-1\",\"what\":\"split X out\",\"closes_when\":"; x="$h"'"immediately after scripts/ai-dlc/migrate-artifact-paths.sh --apply completes"}}'; y="$h"'"when the operator says so"}}'; [ "$x" != "$y" ] || { rm -rf "$d"; exit 9; }; printf '%s\n' "$x" > "$g"; a=$(bash "$S" --register "$g" 2>/dev/null); ra=$?; printf '%s\n' "$y" > "$g"; b=$(bash "$S" --register "$g" 2>/dev/null); rb=$?; rm -rf "$d"; [ "$ra" = 0 ] && [ "$rb" = 0 ] || exit 9; case "$a" in *OWED-PROBE-1*) : ;; *) exit 9 ;; esac; case "$b" in *OWED-PROBE-1*) : ;; *) exit 9 ;; esac; [ "$a" != "$b" ] || exit 9; ca=$(printf '%s\n' "$a" | grep -v 'closes when:'); cb=$(printf '%s\n' "$b" | grep -v 'closes when:'); [ "$ca" != "$cb" ]
