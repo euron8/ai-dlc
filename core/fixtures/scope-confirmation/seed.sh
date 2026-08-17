@@ -11,17 +11,42 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
-if [ -n "$ROOT" ] && [ -f "$ROOT/core/hooks/ai-dlc-answer-capture.sh" ]; then
-  HOOK="$ROOT/core/hooks/ai-dlc-answer-capture.sh"
-  VALIDATOR="$ROOT/core/scripts/validate-scope-confirmation.sh"
-elif [ -n "$ROOT" ] && [ -f "$ROOT/.claude/hooks/ai-dlc-answer-capture.sh" ]; then
-  HOOK="$ROOT/.claude/hooks/ai-dlc-answer-capture.sh"
-  VALIDATOR="$ROOT/scripts/ai-dlc/validate-scope-confirmation.sh"
-else
-  echo "FIXTURE ERROR: ai-dlc-answer-capture.sh not found in either layout" >&2; exit 2
-fi
-[ -f "$VALIDATOR" ] || { echo "FIXTURE ERROR: validate-scope-confirmation.sh not found beside the hook" >&2; exit 2; }
+
+# ROOT IS RESOLVED BY WALKING UP FOR A MARKER, NOT BY COUNTING `..` HOPS. The hop count
+# that was here (`$HERE/../../..`) is 3 in both layouts today by coincidence, and a
+# coincidence is not a resolver: it answers differently the moment either tree moves a
+# level, and the wrong answer is a FIXTURE ERROR that reads like a missing hook.
+#
+# THE MARKER IS THE HOOK ITSELF, in whichever layout holds it, rather than a proxy file.
+# `VERSION` is the marker this repo's validators walk for and it is the WRONG one here:
+# measured, `scripts/install.sh` has ZERO sites copying a VERSION file into a consumer
+# (against a control of 91 sites writing under PROJECT_ROOT), so a VERSION walk resolves
+# nothing on the tree this fixture SHIPS to. Marker-walking on the artifact cannot pick a
+# root that does not hold the artifact.
+HOOK=""; VALIDATOR=""; ROOT=""
+CAND_DIST=""; CAND_CONS=""
+_d="$HERE"
+while [ -n "$_d" ] && [ "$_d" != "/" ]; do
+  if [ -f "$_d/core/hooks/ai-dlc-answer-capture.sh" ]; then
+    ROOT="$_d"
+    CAND_DIST="$_d/core/scripts/validate-scope-confirmation.sh"
+    CAND_CONS="$_d/scripts/ai-dlc/validate-scope-confirmation.sh"
+    HOOK="$_d/core/hooks/ai-dlc-answer-capture.sh"
+    VALIDATOR="$CAND_DIST"
+    break
+  fi
+  if [ -f "$_d/.claude/hooks/ai-dlc-answer-capture.sh" ]; then
+    ROOT="$_d"
+    CAND_DIST="$_d/core/scripts/validate-scope-confirmation.sh"
+    CAND_CONS="$_d/scripts/ai-dlc/validate-scope-confirmation.sh"
+    HOOK="$_d/.claude/hooks/ai-dlc-answer-capture.sh"
+    VALIDATOR="$CAND_CONS"
+    break
+  fi
+  _d="$(dirname "$_d")"
+done
+[ -n "$HOOK" ] || { echo "FIXTURE ERROR: ai-dlc-answer-capture.sh not found in either layout walking up from $HERE" >&2; exit 2; }
+[ -f "$VALIDATOR" ] || { echo "FIXTURE ERROR: validate-scope-confirmation.sh not found beside the hook (named candidates: $CAND_DIST | $CAND_CONS)" >&2; exit 2; }
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/scope-confirm.XXXXXX")" || exit 2
 mkdir -p "$WORK/proj/_bmad-output"
@@ -100,7 +125,91 @@ cat > "$WORK/snap-inline.md" <<INLINE
   \`scope_confirmed_cite: $SHA\`. \`scope_confirmed: corrected\`.
 INLINE
 
+# --- THE GRAMMAR THE PRODUCER ACTUALLY EMITS ----------------------------------
+# SEEDED FROM THE PRODUCER, NOT FROM THE READER. The two snapshots above are the two
+# grammars `field_of` was written to accept, so an arm built on them proves the reader
+# accepts its own accept-set and nothing else. Re-derived on the reference consumer's live
+# `_bmad-output/pipeline-snapshot.md`: 14 bold `- **name:** value` field lines against 10
+# plain `- name: value` ones, and EVERY sibling of `scope_confirmed` inside the routing
+# record block itself is bold — `user_request_cite`, `bug_signal_present`,
+# `carryover_or_sprint_signal_present`, `clarification_asked`, `user_request_verbatim`.
+# Only the two lines this check consumes had been hand-converted to plain, so the corpus
+# this validator will meet is the bold one and the fixture had no seed for it.
+#
+# Three shapes are copied from that file rather than invented:
+#   * the colon INSIDE the bold span      - **bug_signal_present:** yes
+#   * a value carrying trailing prose     - **clarification_asked:** n-a — defect and ...
+#   * a bold name with a BACKTICKED value - **user_request_cite:** `63b1ab53...`
+# The colon-OUTSIDE, `__underscore__` and whole-pair forms are the same author's sibling
+# markdown habits; they are seeded because the fix normalizes rather than enumerates, and
+# an arm on each is what stops a later author narrowing the normalizer back to a list.
+prod() {
+  f="$WORK/snap-prod-$1.md"; shift
+  {
+    echo '# Pipeline Snapshot'
+    echo
+    echo '### Routing record (Check 27 re-adjudicates this at every planning gate; written'
+    echo 'once by route.md Step 6, never rewritten)'
+    echo '- **user_request_cite:** `0000000000000000000000000000000000000000000000000000000000000000`'
+    echo '  (`_bmad-output/operator-requests-history.md`, 1376 bytes)'
+    echo '- **bug_signal_present:** yes — AC16 discharged negative; the live Create L2 at 75%'
+    echo '  minted against the full balance and swapped unchunked.'
+    echo '- **carryover_or_sprint_signal_present:** yes — six `CO-S302-*` identifiers named.'
+    echo '- **clarification_asked:** n-a — defect and carry-over signals co-occur, but the'
+    echo '  operator pre-directed priority, discharging the Step 4 MUST-ASK.'
+    for _l in "$@"; do printf '%s\n' "$_l"; done
+    echo '- **user_request_verbatim:**'
+    echo
+    echo '```text'
+    echo 'Fix the create-position capital-sizing seam.'
+    echo '```'
+  } > "$f"
+  return 0
+}
+
+# colon INSIDE the bold span, prose after the value, cite bold + backticked. This is the
+# producer's dominant form, line for line.
+prod bold     "- **scope_confirmed:** confirmed — the operator accepted the scope as put." \
+              "- **scope_confirmed_cite:** \`$SHA\`" \
+              "  (\`_bmad-output/operator-answers-history.md\`, 23 bytes)"
+
+# colon OUTSIDE the bold span, and the value is `corrected` rather than `confirmed` so an
+# arm on it cannot pass against a parser that answers `confirmed` unconditionally. The cite
+# is written BEFORE the value, as in snap-inline: `scope_confirmed` is a string PREFIX of
+# `scope_confirmed_cite`, and normalization moves the wrapper without moving that hazard.
+prod boldout  "- **scope_confirmed_cite**: $SHA" \
+              "- **scope_confirmed**: corrected"
+
+# plain name, BACKTICKED VALUE. The pre-fix value class excluded a backtick, so this
+# returned empty and routed to the skipped-pause-point accusation.
+prod btval    "- scope_confirmed: \`confirmed\`" \
+              "- scope_confirmed_cite: \`$SHA\`"
+
+# `__underscore bold__`. Named as residue-adjacent in the validator: the single-underscore
+# form CANNOT be normalized because the field name contains one, but the doubled form can.
+prod uscore   "- __scope_confirmed__: confirmed" \
+              "- __scope_confirmed_cite__: $SHA"
+
+# a bold span wrapping the whole NAME-AND-VALUE pair; the pre-fix read the value as
+# `confirmed**` and reported it malformed.
+prod boldpair "- **scope_confirmed: confirmed**" \
+              "- **scope_confirmed_cite: $SHA**"
+
+# THE NEGATIVE ARM. Every sibling field bold, and no `scope_confirmed` at all. The correct
+# answer is EMPTY and the accusation is the RIGHT behaviour. Without this, an arm asserting
+# only that the bold forms yield `confirmed` passes against `field_of() { echo confirmed; }`
+# -- a fix that closes the check by breaking it, which BL-065's own receipt accepts.
+prod nofield
+
+# a bold field carrying a value outside the closed set. Both the pre-fix and the fixed
+# parser exit 1 here, so the EXIT CODE cannot tell them apart -- the pre-fix reports the
+# value as `**` and the fixed one as `n-a`. The arm reads the message.
+prod badvalue "- **scope_confirmed:** n-a" \
+              "- **scope_confirmed_cite:** \`$SHA\`"
+
 cat > "$WORK/env.sh" <<ENV
+CAND_DIST="$CAND_DIST"
+CAND_CONS="$CAND_CONS"
 HOOK="$HOOK"
 VALIDATOR="$VALIDATOR"
 WORK="$WORK"
