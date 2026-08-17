@@ -16,6 +16,33 @@ looking identical to a scan that discriminates.
 
 This is the most-repeated rule in the repo and the one most often skipped in new work.
 
+## Run the control on the input that DISCRIMINATES, and assert it discriminates first
+
+A control passing on an input ADJACENT to the one that matters reads exactly like one that works.
+Measured: an inclusive and an exclusive range return the same commit when walked from one step ahead
+of the discriminating input, so the control passed under both the broken and the fixed
+implementation. Where two candidate semantics exist, compute both and REFUSE unless they differ.
+
+## Text about a program is not the program
+
+Six instances in one program, by two parties both watching for it: a path a receipt READS vs
+MENTIONS; a grep hit counted as a call site; a report's own sentence counted as a data row; a guard
+testing that extracted text CONTAINED a function name, which mangled unparseable text still does.
+Reading harder does not fix it — reading is the faculty that fails. Recompute and compare two
+independently derived values; a count read off a rendering is not a derived count.
+
+## A coverage proof over a DERIVED population cannot see outside it
+
+Measured: a census from a pinned snapshot was fully accounted for and blind to entries filed after
+the pin; a bucket labelled "nothing to compare" held the set's largest disagreement, because the
+parser's grammar could not spell it. Ask separately what the population EXCLUDED.
+
+## A prediction sent without its preconditions is a false finding
+
+Measured: an expected-outcome row went to another session without stating that its population was an
+unapplied document and its guard unreachable in the current state. That session measured zero,
+correctly, and nearly filed a defect against a working engine.
+
 ## A control that agrees with the verdict is not a control
 
 Run the control against the thing the verdict claims is ABSENT, and read its output. A

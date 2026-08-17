@@ -302,8 +302,41 @@ fi
 # enforcer belongs in the enforcer's header, and a rule whose work reliably begins with a
 # matching read belongs behind `paths:`. Raising the ceiling is the last resort, not the
 # first, and it is the operator's call rather than the author's.
+#
+# IT HAS NOW BEEN RAISED A SECOND TIME, 40960 -> 43520, ON AN OPERATOR RULING, AND THE
+# PARAGRAPH ABOVE IS THE STANDARD IT WAS HELD TO RATHER THAN A RULE IT BROKE.
+#
+# THE FIGURE WAS RULED TWICE, AND THE SECOND TIME IS THE INSTRUCTIVE ONE. 43008 was approved
+# against an author's ESTIMATE that the incoming rules needed 1300-1600 bytes. Written at the
+# terseness where each still carries the measurement that justifies it, they needed 2628, and
+# the channel landed 156 over the ceiling that had just been approved for it. The author's
+# estimate was the error, not the rules -- so the ceiling moved again rather than the prose
+# being ground down to fit a number invented before it existed, which is the same reasoning
+# that produced the FIRST raise and is recorded above. An estimate of prose you have not yet
+# written is a hypothesis; cost it after drafting, not before.
+#
+# Seven prose-only rules had accumulated with no durable carrier. Both prior remedies were
+# asked first and both were EXHAUSTED, which is the precondition the paragraph above states:
+#   - MECHANIZED: none can be. Each fires inside a tool call -- a backgrounded `sleep`, a
+#     parallel tool block, a count read off a rendering -- or is a judgement about a
+#     population. Nothing in a tracked file expresses any of them, so no arm can scan for one.
+#   - SCOPED: barred. `resident-context.md` forbids scoping a PROSE-ONLY rule, because a
+#     `paths:` file is not re-injected after a compaction and is therefore silently deleted
+#     from every session that has compacted once. Scoping these would hide them, not carry them.
+#
+# AND THE SUBTRACTION POOL WAS MEASURED BEFORE THE RAISE, NOT ASSUMED. Every section of
+# `CLAUDE.md` and of the six rulebooks was tested against `resident-context.md`'s three
+# vestigial clauses -- mechanism nameable, instruction authoritative elsewhere, inbound
+# references grepped with a control. 82% of `CLAUDE.md` and 100% of the rulebooks FAILED at
+# least one clause. The defensible set was 384 measured bytes against a need of ~1300-1600,
+# and the one block large enough to close the gap alone declares its own enforcer to be THE
+# READER, which cannot be vestigial by construction.
+#
+# THE 384 BYTES WERE STILL CUT, and that is the half that keeps this guard honest. Raising the
+# ceiling while leaving defensible vestigial prose resident is precisely the decorative
+# outcome this header warns about, so the raise and the trade were taken together.
 # ---------------------------------------------------------------------------
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-40960}"
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-43520}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

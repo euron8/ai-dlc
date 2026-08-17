@@ -141,11 +141,35 @@ pushed from that session — not `main`, not the branch. **Read the exit code wi
 `git push … | tail` reports `tail`'s status and prints `exit=0` over a failed push, because this
 shell has no `PIPESTATUS`.
 
-**EVERYTHING IS PUSHED. `origin/main` carries v0.373.0 and the finished brief, and the consumer is
-pulling it.** Phase 5 step 21 is RUN and its evidence is promoted — see action 4. **Phase 3 is not
-started and is now HELD by operator ruling until the pull is adjudicated**, not merely unscheduled;
-a fresh session stands by and adjudicates rather than cutting a release branch. See action zero,
-which overrides the numbered sequence.
+**THE PULL IS DONE, APPLIED AND CLOSED. PHASES 0–2, 4 AND 5 ARE COMPLETE. PHASE 3 IS THE ONLY
+REMAINING WORK, AND ITS HOLD IS RELEASED — CUT BRANCHES.** The A6 ceiling question is ruled and
+executed too, so **no decision is waiting on a human.** See ACTION ZERO, which overrides the
+numbered sequence.
+
+graph pulled v0.373.0, merged it at **PR #935**, and applied sections A, B and E of the brief.
+Measured on the consumer at wind-down, all four stamp fields at `858f4f5`:
+
+| consumer quantity | before | after |
+|---|---|---|
+| `RECEIPTS-UNDECIDED` | 28 of 28 | **5 of 5** |
+| live ledger | 4719 lines | **2953** (archive 6491) |
+| `NEEDS-REVIEW` / `INPUT-UNRESOLVED` / `ENTRY-SWALLOWED` | — | **0 / 0 / 0** |
+| layer debt OPEN | 16 | **10** |
+
+56 annotations applied (pin 610 was already archived), 42 receipts — 18 replaced and **24 inserted**.
+**The 24 inserts are the class that carried NO DIRECTIVE AT ALL**, invisible to every report rather
+than merely unclosable; the reverify row count RISING after section E is that set becoming visible,
+which is the finding this whole program started from.
+
+**FOUR NEW UPSTREAM DEFECTS CAME OUT OF THE PULL AND ARE FILED** as `BL-066`–`BL-069`, all found by
+the consumer, all re-derived here against the shipping code, all with receipts proven in BOTH
+directions. See the closing section for what each one is.
+
+**TWO DEFECTS WERE FOUND IN THIS PROGRAM'S OWN BRIEF, BOTH AFTER IT "VERIFIED SOUND", AND BOTH
+CAUGHT BEFORE APPLICATION** — the one-version-for-all annotation and an exclusive version walk wrong
+by a whole release. Both are fixed and both now carry an arm that can fail. The brief was
+subsequently audited row by row from both ends: **57 annotation rows, 0 mismatches**, 39 + 1 + 17 =
+57 with the arithmetic itself as the control against an audit that quietly examined a subset.
 
 **Two claims elsewhere in this file are WRONG and both would cost a fresh session real work.**
 
@@ -329,47 +353,50 @@ passes, and 7 version-less rows correctly do not trip it.
 
 **START HERE ON A FRESH SESSION — the numbered next actions.**
 
-**ACTION ZERO: THE PULL IS ADJUDICATED. PHASE 3 REMAINS HELD UNTIL THE OPERATOR LIFTS IT — DO NOT
-CUT A RELEASE BRANCH ON YOUR OWN AUTHORITY.** The hold's original reason (do not move `origin/main`
-under a consumer mid-pull) has EXPIRED: graph merged at PR #935 and step 21 is banked. The hold is
-now a sequencing decision only the operator can take, per `operator-rulings.md` — scope is theirs to
-change, never yours. Ask; do not infer that an expired reason lifts a standing ruling.
+**ACTION ZERO: THE PULL IS DONE, APPLIED AND CLOSED. PHASES 0–2, 4 AND 5 ARE COMPLETE. THE PHASE 3
+HOLD IS RELEASED BY OPERATOR RULING. BOTH OPEN DECISIONS ARE RULED — NOTHING IS WAITING ON A HUMAN.
+START CUTTING RELEASE BRANCHES.**
 
-Do these three things, in this order, and then hold:
+graph pulled v0.373.0, merged it at PR #935, and applied sections A, B and E of the brief. **The
+A6 ceiling question is also ruled and executed — see action 6; nothing is owed there.**
 
-1. **Read `docs/reviews/graph-ledger-adjudication-brief.md` and the EXPECTED-OUTCOMES list below
-   before looking at any output from the pull.** Most of what the pull reports is already known and
-   already measured. A session that reads the output first will file expected results as regressions.
-2. **Re-establish the pin** (see "Re-establish the pin"). One command, and every line number in the
-   register and the brief depends on it.
-3. **Confirm the read/write boundary still holds.** `/Users/n8/git/graph` is READ ONLY even while
-   adjudicating its pull. Record the ledger md5 before your first action and assert it after every
-   phase; assert by CONTENT, never by the dirty count, which measures graph's activity and not your
-   restraint.
+**Do these three things, in this order.**
 
-**Then adjudicate on request. Report on any question, any decision, and any early stop.**
+1. **Derive the Phase 3 worklist from `docs/backlog.md`, never from a prose list in this file.**
+   `bash scripts/backlog-reverify.sh` is the instrument. Measured at wind-down: **68 `BL-` entries —
+   61 `STILL-LIVE`, 4 `HAND-REVIEW`, 3 `CLOSE-CANDIDATE`**, against an impossible-id control of 0.
+   That is **16 release branches at ≤4 remediations each**, so this is a program of many sessions:
+   report after each branch and do not try to batch around the limit.
+   **Its `sh` polarity is INVERTED relative to the consumer's engine**: here `rc=0` means the fix is
+   PRESENT (`CLOSE-CANDIDATE`) and non-zero means STILL-LIVE. Read
+   `scripts/backlog-reverify.sh:184-186` before writing a receipt, not this sentence.
+2. **ADJUDICATE THE 3 `CLOSE-CANDIDATE` ROWS BEFORE REMEDIATING ANYTHING. This is the operator's
+   explicit first instruction and it is the data-losing direction if skipped.** A `CLOSE-CANDIDATE`
+   means a receipt now reports its fix present — either a real absorption, or a receipt that rotted.
+   **This program measured both, and they are indistinguishable from the status alone.** Confirm each
+   against the tree before draining it.
+3. **Confirm the read/write boundary.** `/Users/n8/git/graph` is READ ONLY. Record the ledger md5
+   before your first action and assert it by CONTENT after every phase, never by the dirty count,
+   which measures graph's activity and not your restraint.
 
-**THE EXPECTED-OUTCOMES LIST. Every row here is a MEASURED prediction, not a reassurance — if the
-pull produces one of these, it is the design working and not a defect to file.** The whole point is
-that this program's own instruments produce several results that read like regressions.
+**Then cut batch 1** — ≤4 remediations, one version per branch, from `origin/main`. Steps 13–16 carry
+the method; 14a–14c are the clauses learned the hard way and are not optional.
 
-| what the pull or a reverify reports | why it is EXPECTED |
+**THE PIN IS DEAD AND SO IS EVERY LINE NUMBER KEYED ON IT. JOIN BY `PC-` ID.** See "Re-establish the
+pin" below, which is now a post-mortem rather than a procedure. This costs you nothing for Phase 3,
+because Phase 3 is keyed on `BL-` ids in `docs/backlog.md`, a file this repo owns.
+
+**THE EXPECTED-OUTCOMES LIST IS SPENT. Kept only as the record of what was predicted and what the
+prediction was worth**, because two of its six rows are the reason this section exists:
+
+| predicted | what actually happened |
 |---|---|
-| 10 entries report `NEEDS-REVIEW` where a `CLOSE-CANDIDATE` was earned | `receipt_absent_subjects` harvests a distribution path from the receipt text. Pins 654, 673, 798, 1069, 1093, 1136, 1240, 1381, 4184, 4313. See action 3b. |
-| `RECEIPTS-UNDECIDED  28 of 28` still present | The replacement receipts are in the BRIEF. That line closes only once graph pastes section E. |
-| 7 `NAMED-UPSTREAM-AMBIGUOUS` rows | Sprint-prefix labels, pre-existing, resolved per entry at step 11. |
-| pin 4216 has no version to annotate | Its close was refuted, `9cbb77f` fixed it inside v0.373.0, and `named_absorbed()`'s oldest-wins reports the refuted 0.372.0 forever. Operator picks 0.373.0 by hand. See action 3b. |
-| an annotated entry vanishes from the report entirely | Correct: *any* occurrence of `ADOPTED UPSTREAM` makes `ledger-reverify.sh` skip the entry. That is also why the strict form matters — see the next row. |
-| an annotated entry is skipped **and** never archives | **This one IS a defect and the annotation is the cause.** `ledger-rotate.sh` archives only on `/\*\*ADOPTED UPSTREAM \(v[0-9]/`. A versionless paste makes the entry invisible AND unarchivable. Check the paste before hunting the rotator. |
-
-**AND ONE THING THAT IS NOT ON THAT LIST, SO A FAILURE THERE IS A REAL FINDING.** The consumer's
-engine runs an `sh` receipt with the cwd at `$CONSUMER` — `ledger-reverify.sh:954` is
-`bash -c "cd \"$CONSUMER\" && { $rest; }"` — while `extract-receipts.sh` measured every receipt with
-the cwd at `$DIST`. Those are two different harnesses and the receipts were only ever proven under
-one. **Re-measured under BOTH before this file was written: all 37 `sh` receipts report `rc=0` at the
-consumer cwd, 0 diverging, with the two cwds asserted to differ before the comparison was read.** So
-the receipts are cwd-invariant, and a receipt misbehaving on the consumer is a genuine signal rather
-than a harness artefact. That is the discriminator; do not spend the session on the harness.
+| `RECEIPTS-UNDECIDED 28 of 28` persists until section E is pasted | **EXACT.** It now reads `5 of 5`. |
+| ~10 entries report `NEEDS-REVIEW` where a `CLOSE-CANDIDATE` was earned | **WRONG AS STATED, AND THE ERROR WAS MINE.** Measured 0, and 0 is correct. Two preconditions went unstated: the population is section E of the BRIEF, not the ledger, and `receipt_absent_subjects` is unreachable at `rc=0` (`ledger-reverify.sh:1017-1027` — the `0)` arm emits STILL-LIVE and returns). The consumer nearly filed a defect against a correctly-behaving engine on my say-so. **A PREDICTION HANDED TO ANOTHER PARTY WITHOUT ITS PRECONDITIONS IS A FALSE FINDING WAITING TO BE FILED.** |
+| 7 `NAMED-UPSTREAM-AMBIGUOUS` rows | Exact at the time; now 5 after the drain. |
+| pin 4216 needs a hand-chosen version | Correct. Annotated v0.373.0 by hand. |
+| an annotated entry vanishes from the report | Correct, by design. |
+| an annotated entry is skipped AND never archives | Did not occur — the strict form held across all 56 annotations. |
 
 0. **THE MERGE AND THE PUSH ARE DONE, AND SO IS STEP 21. Nothing in this action is owed** — it is
    kept because the credential mechanism below is not recorded anywhere else, and a session that has
@@ -623,8 +650,58 @@ than a harness artefact. That is the discriminator; do not spend the session on 
    observe what the CONSUMER's engine will see, and the consumer fetches `origin`. A run against a
    local ref no consumer can reach reproduces the shape this plan spent a phase removing.
 
-6. **OWED, AND IT IS THE OPERATOR'S CALL: THREE general rules have no durable carrier, and all three
-   are blocked on the same 40 bytes.**
+6. **RULED AND DONE. NOTHING IS OWED HERE — read it only to know what changed under you.**
+
+   **The operator ruled: raise A6 AND land the trade, both.** Executed. The ceiling went
+   **40960 → 43520**, the 384 defensible vestigial bytes were cut, and **all seven prose-only rules
+   now have a durable carrier**: three delegation hazards in `.claude/rules/tool-hazards.md`, four
+   verification rules in `.claude/rules/verification-discipline.md`. A6 reads **43164/43520**.
+
+   **Raising while leaving defensible vestigial prose resident is the decorative outcome the
+   ceiling's own header warns about, so the raise and the trade were taken TOGETHER.** The two cuts
+   were the `I88` misattribution narrative and the hand-typed-enumeration provenance — each with its
+   mechanism named, its instruction authoritatively elsewhere, and its inbound references grepped
+   with a control in the same invocation.
+
+   **THE CEILING WAS RULED TWICE AND THE SECOND TIME IS THE LESSON.** 43008 was approved against my
+   ESTIMATE that the rules needed 1300–1600 bytes. Written at the terseness where each still carries
+   the measurement that justifies it, they needed **2628**, landing 156 over the ceiling just
+   approved for them. **The estimate was the error, not the rules** — so the ceiling moved again
+   rather than the prose being ground down to fit a number invented before it existed, which is the
+   same reasoning behind the FIRST raise. **An estimate of prose you have not yet written is a
+   hypothesis; cost it after drafting.** Recorded in the arm's own header.
+
+   The superseded analysis, kept because its measurement is what made the decision:
+
+   **SEVEN prose-only rules now have no durable carrier, not three.** The four below, plus three this
+   program added after they were written:
+
+   - **A PREDICTION HANDED TO ANOTHER PARTY WITHOUT ITS PRECONDITIONS IS A FALSE FINDING WAITING TO
+     BE FILED.** The `NEEDS-REVIEW` row above, handed to the consumer without stating that its
+     population was an unapplied document and that the guard is unreachable at `rc=0`.
+   - **A COUNT READ OFF A RENDERING IS NOT A DERIVED COUNT.** Two instances: a report's own summary
+     sentence counted as a data row, and a disagreement tally counted by eye off a printed table.
+   - **A CONTROL MUST BE RUN AGAINST THE INPUT THAT DISCRIMINATES, AND ASSERTED TO DISCRIMINATE ON
+     IT, BEFORE ITS RESULT IS READ.** Measured six times in one pull; see the closing section.
+
+   **THE TRADE, DERIVED AND NOT ESTIMATED.** A6 reads **40920/40960 across 7 files — 40 bytes**. The
+   defensible vestigial set, applying `resident-context.md`'s three clauses literally, is **487
+   bytes** (C1, the `I88` misattribution narrative at 205B; C3, the hand-typed-enumeration provenance
+   at 282B), or **818B** including a qualified candidate that is only worth taking bundled with
+   repointing two plan citations. The seven rules need roughly **1300–1600B**. **82% of `CLAUDE.md`
+   and 100% of the six rulebooks fail at least one clause**, and the single block large enough to
+   close the gap alone (1778B) is the one whose declared enforcer is *the reader*.
+
+   **`scripts/validate-claude-rules.sh:288-305` sets the order of operations and puts the last resort
+   with the operator**: mechanize first, scope second, raise the ceiling last. Both prior remedies are
+   now exhausted for all seven — none is mechanizable (each fires inside a tool call or is a judgement
+   about a population), and `resident-context.md` bars scoping a prose-only rule because scoping
+   deletes it from every session that has compacted once. Suggested sizing if the ceiling moves:
+   **40960 → 43008**, which leaves ~1000B of real headroom after all seven land with C1+C3 applied.
+
+   **A rule whose only carrier is a plan file dies with the plan.** These are carried by this action
+   and by the memory corpus, which is EVIDENCE and not a carrier — a compacted session has not read
+   it. The original three, as recorded when they were found:
 
    **The third is that AN UNTRACKED FILE IS NOT A MISSING FILE.** A check built on a committed
    corpus — `git ls-files`, `git show HEAD:`, anything greping a tree — cannot see an uncommitted
@@ -679,25 +756,35 @@ than a harness artefact. That is the discriminator; do not spend the session on 
    third is a judgement about a population — and `resident-context.md` forbids scoping a prose-only
    rule, so the unconditional channel is the only place any of them can live.
 
-5. **PHASE 3 IS HELD, BY OPERATOR RULING, UNTIL THE GRAPH PULL IS ADJUDICATED. DO NOT CUT A RELEASE
-   BRANCH.** This action previously read "Phase 3 batch 1 is the operator's chosen next session"; that
-   was superseded at the close of the same session, once the pull became imminent. Action zero is what
-   a fresh session does instead.
+5. **PHASE 3 IS THE ONLY REMAINING WORK AND THE HOLD IS RELEASED. Cut branches.**
 
-   **The hold has a reason beyond sequencing.** A Phase 3 release moves `origin/main`, and the
-   consumer is mid-pull against it. Cutting one while graph is applying the brief means the tree it
-   pulled and the tree the brief was measured on are different, and every figure in the brief becomes
-   a hypothesis again. Step 21 is already banked so nothing is LOST by cutting one — but the
-   adjudication of the pull is the work that cannot be redone later, because the pull happens once.
+   **Ruled by the operator after the pull closed**, with one condition attached: adjudicate the 3
+   `CLOSE-CANDIDATE` rows before remediating anything. The hold's original reason — a Phase 3 release
+   moves `origin/main` while the consumer is mid-pull — expired at graph's merge.
 
-   **Release it when the operator says the pull is adjudicated**, then: cut the first ≤4-remediation
-   branch from `origin/main`, one version per branch.
+   **The expiry did NOT lift it; the operator did, and that distinction is the reusable part.** A
+   standing ruling outlives the argument that produced it. `operator-rulings.md` puts scope with the
+   operator, so a session that finds a hold's stated reason spent must ASK rather than reason its way
+   out of the hold.
 
-   **Phase 3 is a program rather than a step.** The `HOLDS` set is 42
-   backlog entries (`BL-021`..`BL-062`) plus `BL-063`–`BL-065`. Done-when 6 is ALREADY SATISFIED
-   — "every entry is either remediated and cited, or filed as a `BL-` entry" — so this is the
-   operator's call on sequencing, not a blocker on closing this plan. Batches of ≤4 remediations per
-   release branch, one version per branch, cut from `origin/main`.
+   **DERIVE the worklist; do not read one.** `bash scripts/backlog-reverify.sh` over
+   `docs/backlog.md`. Measured at wind-down: **68 entries — 61 `STILL-LIVE`, 4 `HAND-REVIEW`, 3
+   `CLOSE-CANDIDATE`**, impossible-id control 0. The `BL-021`..`BL-069` span covers the original
+   `HOLDS` set, the three post-pin entries, and the four defects the pull itself produced. **Any
+   count in this file is a hypothesis; the command is the answer.**
+
+   **Adjudicate the 3 `CLOSE-CANDIDATE` rows FIRST.** Each means a receipt now reports its fix
+   present — either a real absorption, or a receipt that rotted. This program measured both, and the
+   data-losing direction is treating the second as the first.
+
+   **Then, per batch:** ≤4 remediations per release branch, one version per branch, cut from
+   `origin/main` and never from a local `main` that may be ahead of it. Steps 13–16 carry the method,
+   and 14a–14c are the ones that were learned the hard way: a `HOLDS` gets an independent hand on its
+   SCOPE, the filing's prescribed fix is RUN before adoption, and the guarding fixture is read first
+   and expected to be blind.
+
+   **Done-when 6 is ALREADY SATISFIED** — "every entry is either remediated and cited, or filed as a
+   `BL-` entry". So Phase 3 is sequencing, not a blocker on closing this plan.
 
 **AN UNTRACKED FILE IS NOT A MISSING FILE, AND I DECLARED THREE BATCHES MISSING THAT WERE ON DISK.**
 The authoring agents wrote their batch files and left them untracked, as instructed. Two separate
@@ -816,38 +903,40 @@ evidence was promoted into the repo:
   never `CLOSE`** — "nobody checked" and "checked and survived" must not read alike.
 - `.../adjudicable-entries.tsv` — the Phase 0 census both passes are keyed on.
 
-### Re-establish the pin before trusting any line number
+### THE PIN IS DEAD. DO NOT RE-ESTABLISH IT — JOIN BY `PC-` ID.
 
-Every line number in the register is an offset into graph's ledger as pinned at Phase 0. The live
-file has ALREADY moved past the pin twice, so expect to reconstruct rather than to match:
+**This section is a POST-MORTEM, not a procedure. Every line number in the register and the brief is
+now unresolvable, and running the recipe below will not tell you that — it will hand you a blank
+line or the wrong entry.**
 
-```
-md5 -q /Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-```
+Measured at wind-down: the live ledger is **2953 lines** and still moving, down from 4719, because
+graph applied the brief — 56 annotations, 42 receipts, and a rotation that archived every closed
+entry. **`sed -n '1,4356p'` now returns the WHOLE FILE**, so the old pin md5 check does not fail
+loudly; it silently compares the entire file against a digest of a prefix that no longer exists.
+Pin 4285, which was a valid mapped offset one revision earlier, is past EOF. 47 `## PC-` entries
+remain live against an archive of 6491 lines; control, an impossible id returns 0.
 
-**THE MIDDLE EDIT THIS SECTION WARNED ABOUT HAS HAPPENED. THE FIRST-4356-LINES RECONSTRUCTION IS
-DEAD AND EVERY REGISTER PIN ABOVE 637 IS NOW OFF BY 28.** Do not run the old recipe; it is kept
-below only so its failure is legible.
+**Join by `PC-` id.** Every live entry carries one, the ids are stable across rotation, and the
+archive keeps the closed ones under the same id.
 
-graph applied the brief's close for pin 610 and `ledger-rotate.sh` archived the entry, which is a
-**deletion from the middle**, not an append. Derived against the last known-good ref, with the
-hunk offsets read rather than guessed:
+**THIS COSTS PHASE 3 NOTHING**, which is the reason no replacement mapping is offered. Phase 3 is
+keyed on `BL-` ids in `docs/backlog.md` — a file this repo owns and rotates itself. The pin only
+ever served ADJUDICATION, and adjudication is complete.
 
-```
-git -C <graph> diff --numstat 2c7935e5d..HEAD -- <ledger>     # 178 insertions, 28 DELETIONS
-git -C <graph> diff -U0      2c7935e5d..HEAD -- <ledger> | grep '^@@'
-  @@ -610,28 +609,0 @@      <- pin 610's entry, 28 lines, ARCHIVED
-  @@ -4503,0 +4476,178 @@    <- graph's two new PC-S334 entries, appended
-```
+**The lesson, which outlives the pin.** The reconstruction survived two `HEAD` moves and then died,
+and the sequence is the point:
 
-**The mapping, and it is exact:**
+1. **Append-only held, and was checked.** `sed -n '1,4356p' | md5` reproduced against a 4355-line
+   control that differed. Correct every time it was run.
+2. **Then a rotation deleted from the MIDDLE** — `@@ -610,28 +609,0 @@` — and the recipe became a
+   `-28` shift above line 637, derived from `git diff --numstat` and hunk offsets rather than
+   guessed, verified both ways.
+3. **Then the full drain invalidated even that**, because the file is now shorter than the pin.
 
-| pinned line | where it is now |
-|---|---|
-| 1 – 609 | unchanged |
-| **610 – 637** | **GONE — archived to `push-candidate-ledger.archive.md`** |
-| 638 – 4503 | **subtract 28** |
-| — | new live lines 4476+ are graph's `PC-S334` filings, outside the pin |
+**An append-only assumption is not a property of a file. It is a property of what the consumer
+happens to be doing, and it stops being true the moment the consumer acts on your own output.** The
+durable instruction was never a line total: it is `--numstat`'s deletion count and the hunk offsets,
+and better still an id that does not move at all.
 
 Verified in both directions in one invocation: pin 4313 resolves at 4285 to
 `PC-S303-BUDGET-CHECK-EVIDENCE-FIND-PICKS-A-STALE-GATE-LOG` while line 4313 now holds unrelated
@@ -1224,6 +1313,17 @@ to grow fourfold carries the identical hazard.
 
 ## Done when
 
+**STATUS: 1, 2, 4 and 5 are SATISFIED and BANKED. 6 is SATISFIED. 3 is the only one still open, and
+it is open only because Phase 3 has not been released — it is a per-release-branch criterion with no
+release branch yet cut.** Each is still stated in full below because a fresh session must be able to
+re-check them, not take this line's word for it.
+
+Two of these were satisfied in ways worth knowing before you re-read them. **Criterion 5 was
+NARROWED on measurement** — it split by channel because one criterion over both sets was
+structurally unreachable for half of them. **Criterion 4 was measured by CONTENT throughout and
+never by the dirty count**, which moved from 35 to 113 to 3 to 4 across the program purely from
+graph's own activity.
+
 Each of these is a command, and each was checked to be answerable at the point it is read.
 
 1. `docs/reviews/graph-ledger-full-adjudication.md` carries one verdict row per open entry, and
@@ -1275,3 +1375,56 @@ Each of these is a command, and each was checked to be answerable at the point i
 - **The consumer runs its own installed engine.** Fixing `ledger-reverify.sh` here does not help
   graph until graph pulls. Run the fixed copy locally against graph's ledger for this program's
   own use, but the brief must be actionable under the engine graph has installed today.
+
+## What the pull produced — the four filings, and the one lesson behind all of them
+
+`BL-066`–`BL-069` are in `docs/backlog.md` with full derivations. Summarised only so a fresh session
+knows what exists before re-deriving it:
+
+| id | defect | consumer id |
+|---|---|---|
+| `BL-066` | `named_absorbed()` joins on the OLDEST commit whose MESSAGE mentions an id, and feeds its `VERSION` into a paste-ready PERMANENT annotation. Naming is not absorbing. **This plan CAUSED the worst of it** — the rule requiring every closed id in the release commit message is what makes the join resolve there. | `PC-S334-NAMED-ABSORBED-JOINS-ON-THE-OLDEST-MESSAGE-MENTION` |
+| `BL-067` | `closes_when` has a schema, a producer, a printer and **no consumer**. Six layer debts came due the instant graph ran the command they named, and nothing announced it. | `PC-S334-CLOSES-WHEN-NAMES-A-COMMAND-AND-NOTHING-JOINS-THE-TWO` |
+| `BL-068` | `ledger-rotate.sh:38-41` states a byte-identical invariant that its own prescribed workflow breaks, and the fixture asserting it **cannot construct** the row that would break it. | `PC-S334-ROTATE-ACCEPTANCE-TEST-FALSE-FAILS-ON-THE-WORKFLOW-IT-DOCUMENTS` |
+| `BL-069` | `audit-layer-debt.sh` files its own discharge rows as undeclared debt, so the metric moves the wrong way in response to the action it exists to encourage. | `PC-S334-AUDIT-LAYER-DEBT-FLAGS-ITS-OWN-DISCHARGE-ROWS-AS-UNDECLARED-DEBT` |
+
+### THE FINDING THAT OUTRANKS ALL FOUR, AND THE REASON THIS SECTION EXISTS
+
+**Six independent instances of ONE class in a single pull, split evenly between two parties who were
+both actively watching for it.** A path a receipt READS versus one it MENTIONS. A grep hit counted
+as a call site. A regex truncating placeholder paths. A report's own summary sentence *"24
+HAND-REVIEW"* counted as a data row. A `v`-anchored bucket labelled "nothing to compare" that
+contained the largest disagreement in the set. And a receipt guard testing that extracted text
+*contained* the string `prefix_entry_count` — which mangled, unparseable text still does — so `eval`
+failed, the function was never defined, both counts came back empty, and `[ "" = "" ]` returned 0.
+
+**That last one was in the receipt for the entry documenting the pattern, written in the same hour.**
+
+**Six is not a discipline problem, and treating it as one produces exactly the wrong remedy.** The
+instinct after six is to read more carefully — and reading is the faculty that failed all six times.
+Every instance was a TEXT-SHAPED QUESTION ASKED ABOUT A PROGRAM: does this file mention X, does this
+line contain Y, does this extraction look like a function. Text-shaped questions cannot separate a
+subject from a reference to it.
+
+**Nothing about review caught any of them.** Not the brief, which I reviewed before shipping. Not
+the figures, which I published three times. Not the version walk, which I reviewed *while writing
+its own control*. Reviewing a rendering establishes only that it is internally consistent with
+itself, which every one of these was. **All six fell to recomputing from source and comparing two
+independently derived values.**
+
+### THE RULE THIS EARNED, and it is the one to carry forward
+
+**A control must be run against the input that DISCRIMINATES, and asserted to discriminate on it,
+before its result is read.**
+
+Every bad control in this pull passed on an input ADJACENT to the one that mattered — a summary line
+beside the data rows, a release commit one step ahead of the start point, two temp paths differing
+only in a header, a fixture corpus that could not construct the row type under test.
+
+`ARM 5` of `render-brief.sh` is the shape that follows from it, and it is portable: draw the probe
+FROM THE CORPUS rather than hand-picking one, so it survives the corpus moving; compute both
+candidate semantics; and **REFUSE UNLESS THEY DIFFER** before reading either. It does not ask anyone
+to read more carefully. It makes the instrument refuse when its two inputs cannot disagree.
+
+**A number was wrong three times and an artifact twice, and every single correction came from a
+party re-deriving rather than accepting.** That is the operating lesson of this entire program.

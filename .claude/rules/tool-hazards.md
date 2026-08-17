@@ -20,6 +20,21 @@ here. What follows has no corpus to scan because it happens in tool calls.
 **Force `bash -c` for any loop, any heredoc, and any hook test.** The rule is not "be careful
 in zsh"; it is "do not author shell logic in the interactive shell at all".
 
+## Delegation hazards: three ways a tool call lies about another agent
+
+**A backgrounded `sleep` returns immediately**, so chained "waits" are rapid polling granting no
+wall clock. Measured: apparent ten-minute waits spanned one minute, four agents were called silent
+having barely started, one agent's finished work was redone. Block on the condition instead.
+
+**A CLAIM about a call's output must not share a parallel block with the call** — both dispatch
+together, so the claim predates the result. Measured: "a `find` returns nothing" was sent in the
+same block as that find, which returned the file.
+
+**An untracked file is not a missing file.** `git ls-files`, `git show HEAD:` and any tree grep
+cannot see one, and the clean run reads as a real absence. Measured: three delegated deliverables
+declared missing while on disk as `??`. `ls` it, check `git status --porcelain`, ask the agent by
+name. An idle notification is not a result; silence is not death.
+
 ## Never read `$?` after a pipe, and never feed `grep -q` from one
 
 `grep -q` leaves at its first match while the writer is still pushing. Under `pipefail` the

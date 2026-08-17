@@ -141,9 +141,8 @@ merges are preapproved and that every claim is ground-truth sourced).
 `plan-shape-measured.md`. Both directions are bound by **arms A1–A4 of
 `scripts/validate-claude-rules.sh`** — a rule with no reader and a pointer with no rule both
 fail the push. That validator is a standalone script and deliberately NOT an arm inside
-`validate-enforcement-map.sh`, which the suite pole invokes; this file cited it as `I88` for
-five releases, an ID no arm has ever carried, while `CHANGELOG.md` recorded the deviation.
-Citations here are now joined to the live set — see `docs/invariant-index.md`.
+`validate-enforcement-map.sh`, which the suite pole invokes. Bold invariant citations here are
+joined to the live set by arm A5 — see `docs/invariant-index.md`.
 
 **Two triggers cannot fire on their own and are restated here.**
 
@@ -242,11 +241,6 @@ the file that OWNS them and the invariant that binds them, rendered by
 set from memory; change the OWNER, never this file. An arm whose header reads as a vocabulary
 join and carries no `# vocabulary:` marker fails the push, so the index cannot go stale as arms
 are added.
-
-**A hand-typed enumeration is what this replaced, and it had gone stale by 22 invariants** —
-71 named against 93 live arms, I1 and I2 among the missing. The CHANGELOG carries the
-measurement. Nothing read that sentence but a human, and nobody audits a 12,000-character
-sentence.
 
 ## An instruction that ships its own opt-out is not an instruction
 
