@@ -3017,3 +3017,116 @@ Found by the graph consumer session. Cross-references the consumer entry
 `PC-S334-CLOSES-WHEN-NAMES-A-COMMAND-AND-NOTHING-JOINS-THE-TWO`.
 
 verify: sh S=core/scripts/audit-layer-debt.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d); g="$d/reg.jsonl"; h="{\"clause\":\"LC-E1\",\"entry\":\"extensions/probe.md\",\"subject_digest\":\"da39a3e\",\"verdict\":\"still-additive\",\"recorded_utc\":\"1970-01-01T00:00:00Z\",\"reason\":\"probe row\",\"owed\":{\"id\":\"OWED-PROBE-1\",\"what\":\"split X out\",\"closes_when\":"; x="$h"'"immediately after scripts/ai-dlc/migrate-artifact-paths.sh --apply completes"}}'; y="$h"'"when the operator says so"}}'; [ "$x" != "$y" ] || { rm -rf "$d"; exit 9; }; printf '%s\n' "$x" > "$g"; a=$(bash "$S" --register "$g" 2>/dev/null); ra=$?; printf '%s\n' "$y" > "$g"; b=$(bash "$S" --register "$g" 2>/dev/null); rb=$?; rm -rf "$d"; [ "$ra" = 0 ] && [ "$rb" = 0 ] || exit 9; case "$a" in *OWED-PROBE-1*) : ;; *) exit 9 ;; esac; case "$b" in *OWED-PROBE-1*) : ;; *) exit 9 ;; esac; [ "$a" != "$b" ] || exit 9; ca=$(printf '%s\n' "$a" | grep -v 'closes when:'); cb=$(printf '%s\n' "$b" | grep -v 'closes when:'); [ "$ca" != "$cb" ]
+
+## BL-068
+
+**`ledger-rotate.sh` states a byte-identical invariant that its own prescribed workflow breaks, and
+the fixture asserting it cannot reach the shape that breaks it.** `ledger-rotate.sh:38-41` reads
+*"Closed entries are exactly the ones ledger-reverify already skips, so rotating them must not
+change its output by a single byte. Run ledger-reverify.sh before and after and diff the two — that
+is the acceptance test, and the fixture asserts it."* The premise is false for any entry annotated
+in the same pass, which is exactly what the annotate-then-rotate step prescribes.
+
+**The mechanism is an asymmetric union.** `prefix_entry_count()`
+(`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:386-390`) counts over
+`$ENTRIES` unioned with `$ARCHIVE_LABELS`. The live side is the OPEN set — the extractor skips any
+entry containing `ADOPTED UPSTREAM` (`:639`). So a freshly annotated entry is on NEITHER side while
+it sits in the live file, and on the ARCHIVE side once rotated. **The count RISES across a move that
+can only ever reduce the live set.** Measured by extracting the shipping function and driving it
+either side of the move: `1` before, `2` after.
+
+That count is emitted only inside a `NAMED-UPSTREAM-AMBIGUOUS` row, so the diff appears as changed
+prefix counts on otherwise identical rows. Measured on the reference consumer across a real
+annotate-then-rotate of 56 entries: the row SET was identical at 84 rows, 10 LINES differed, and
+10 of 10 carried a prefix count — `PC-S296` went from *"6 entries in this ledger carry it"* to
+*"10 entries"*. Nothing was swept.
+
+**The consequence is an operator unwinding correct work.** The spec's stated conclusion for a
+non-empty diff is that a live entry was swept. Here the diff is real and the conclusion is false,
+and the instruction is followed at exactly the moment a large batch of closes has just landed.
+
+**The fixture cannot fire on this.** `core/fixtures/ledger-rotate/` seeds already-annotated entries
+and asserts the byte-identical property, but has **0** occurrences of `AMBIGUOUS` in either
+`seed.sh` or `run.sh` — control in the same invocation, `STILL-LIVE` returns 2 in `run.sh` — so it
+never produces the only row type carrying a prefix count. The assertion holds there because the
+discriminating shape is absent, not because the invariant is true.
+
+**The substantive guarantee DOES hold and is what the test should compare**: the row set, by status
+and subject, is unchanged. Only the count annotation on ambiguous rows moves.
+
+Both a counter fix and a rewording of the invariant are legitimate, so the receipt keys on the
+BEHAVIOUR rather than on any substring: it extracts the shipping `prefix_entry_count()`, drives it
+with a label on the live side and a second label moving into the archive, and asserts the two counts
+AGREE. Sanity arms exit 9 — the extraction must contain the function, must `eval` cleanly, must
+leave it callable, and both counts must be integers of at least 1.
+
+**THE `eval`-CLEANLY AND STILL-CALLABLE ARMS WERE ADDED AFTER A FALSE GREEN IN THIS ENTRY'S OWN
+SATISFIABILITY TEST.** A first mutant mangled the function into invalid shell; the original guard
+tested only that the extracted TEXT CONTAINED the string `prefix_entry_count`, which mangled text
+still does. `eval` failed, the function was never defined, both counts came back EMPTY, and
+`[ "" = "" ]` returned 0 — a receipt reporting the fix present against a copy where its subject did
+not exist. A guard that a name is MENTIONED is not a guard that it is DEFINED.
+
+Verified in three directions: against the shipping tree the receipt exits **1** (STILL-LIVE);
+against a copy whose live side is widened to include annotated-but-unrotated entries it exits **0**,
+with the copy asserted to differ from shipping AND to pass `bash -n` before the result was read;
+and against a deliberately mangled extraction it exits **9** rather than falsely closing.
+
+Found by the graph consumer session while applying the adjudication brief. Cross-references the
+consumer entry `PC-S334-ROTATE-ACCEPTANCE-TEST-FALSE-FAILS-ON-THE-WORKFLOW-IT-DOCUMENTS`.
+
+verify: sh L=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; f=$(sed -n "/^prefix_entry_count() {/,/^}/p" "$L"); case "$f" in *prefix_entry_count*) : ;; *) exit 9 ;; esac; eval "$f" 2>/dev/null || exit 9; command -v prefix_entry_count >/dev/null || exit 9; ENTRIES="$(printf "PC-S900-ALPHA\tsh true\n")"; ARCHIVE_LABELS=""; b=$(prefix_entry_count PC-S900); ARCHIVE_LABELS="PC-S900-BETA"; a=$(prefix_entry_count PC-S900); [ "$b" -ge 1 ] 2>/dev/null || exit 9; [ "$a" -ge 1 ] 2>/dev/null || exit 9; [ "$b" = "$a" ]
+
+## BL-069
+
+**`audit-layer-debt.sh`'s migration arm files its own discharge rows as undeclared debt, so the
+metric moves the wrong way in response to the action it exists to encourage.** The arm at
+`core/scripts/audit-layer-debt.sh:189-190` skips a row only when `owed` is a dict:
+
+```
+    if isinstance(r.get("owed"), dict):
+        continue
+```
+
+It never consults `closes_owed`. A discharge row carries `closes_owed` and — by the convention
+every existing discharge row in the reference consumer's register follows — opens its `reason` with
+`Debt discharged.`, which matches the `debt` cue in `PROSE`. **The correct way to close a debt is
+also the phrasing that files it as an undeclared one.**
+
+Reproduced behaviourally against the shipping script, with the discriminating control in the same
+invocation: a one-row register whose only row is a discharge row with the conventional reason
+reports `UNDECLARED (1)`; the byte-differing register carrying the identical row with a neutral
+reason reports `UNDECLARED (0)`. The two registers are asserted to differ before either result is
+read.
+
+Measured on the reference consumer's register after a six-debt discharge, 213 rows: 21 rows flagged
+UNDECLARED, **8 of them carrying `closes_owed`** — false positives — leaving a genuine remainder of
+13. 10 discharge rows are present and 8 of the 10 trip it. **38% noise, and it grows by one every
+time a debt is correctly closed.** The consumer discharged six debts and watched UNDECLARED rise by
+exactly six, which is how it was found.
+
+**This is the second false-positive class in that arm and the first STRUCTURAL one.** The author had
+already measured and excluded a LEXICAL class — `debt` inside the identifier
+`test-check18-debt-audit`, which is why the `(?<![\w-])…(?![\w-])` guard exists. A narrowing that
+fixes cue matching cannot reach this one, because the prose here genuinely is about a debt; the row
+simply is not declaring one.
+
+The remedy is to `continue` on `r.get("closes_owed")` as well. Where a discharge row must still be
+scannable for a NEW obligation, the schema already permits `owed` and `closes_owed` on one row, so
+requiring an explicit `owed` keeps that case reachable rather than exempting it.
+
+The receipt keys on the BEHAVIOUR rather than a substring, because a fix may land in the skip
+condition, in the cue set, or in the discharge-row convention, and no anchor survives all three. Its
+sanity arms exit 9: the script must exist, the two registers must differ, both runs must exit 0,
+both counts must parse, and **the neutral-reason control must itself report 0** — without that last
+arm a script that flagged everything, or nothing, would read identically to one that discriminates.
+
+Verified in both directions: against the shipping tree the receipt exits **1** (STILL-LIVE); against
+a copy whose skip condition also honours `closes_owed` it exits **0**, with the copy asserted to
+differ from shipping before the result was read.
+
+Found by the graph consumer session while discharging six artifact-path layer debts. Cross-references
+the consumer entry
+`PC-S334-AUDIT-LAYER-DEBT-FLAGS-ITS-OWN-DISCHARGE-ROWS-AS-UNDECLARED-DEBT`.
+
+verify: sh S=core/scripts/audit-layer-debt.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; h="{\"clause\":\"LC-E1\",\"entry\":\"extensions/p.md\",\"subject_digest\":\"da39a3e\",\"verdict\":\"still-additive\",\"recorded_utc\":\"1970-01-01T00:00:00Z\",\"closes_owed\":[\"OWED-X\"],\"reason\":"; printf "%s\"Debt discharged. The repath landed.\"}\n" "$h" > "$d/a.jsonl"; printf "%s\"The repath landed.\"}\n" "$h" > "$d/b.jsonl"; cmp -s "$d/a.jsonl" "$d/b.jsonl" && { rm -rf "$d"; exit 9; }; a=$(bash "$S" --register "$d/a.jsonl" 2>/dev/null); ra=$?; b=$(bash "$S" --register "$d/b.jsonl" 2>/dev/null); rb=$?; rm -rf "$d"; [ "$ra" = 0 ] && [ "$rb" = 0 ] || exit 9; na=$(printf "%s" "$a" | sed -n "s/.*UNDECLARED (\([0-9]*\)).*/\1/p" | head -1); nb=$(printf "%s" "$b" | sed -n "s/.*UNDECLARED (\([0-9]*\)).*/\1/p" | head -1); [ -n "$na" ] && [ -n "$nb" ] || exit 9; [ "$nb" = 0 ] || exit 9; [ "$na" = 0 ]
