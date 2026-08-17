@@ -43,7 +43,7 @@ an arm that accepts both is not discriminating between them.
 | B | WITHDRAW — filed by graph, premise dead on re-derivation | 18 |
 | C | LIVE, now tracked upstream as a `BL-` entry | 41 |
 | D | LIVE, consumer-local — no upstream grain fits | 17 |
-| E | replacement `verify:` receipts for undecidable and absent directives | 30 |
+| E | replacement `verify:` receipts for undecidable and absent directives | 33 |
 | F | filed after the corpus pin — LIVE, tracked upstream | 3 |
 
 Sections A–D partition the 115 exactly: 39 + 18 + 41 + 17.
@@ -247,7 +247,7 @@ Byte-matching a load pointer would fail honest cite-by-reference.
 | 2655 | `PC-S312-FIX-FORWARD-CLASS-GATES-ON-NO-VALIDATOR` | NOT-UPSTREAM |
 | 4216 | `PC-S303-POSTCOMPACT-RECOVERY-MANDATE-HAS-NO-STATED-EXCEPTION` | ALREADY-FIXED-v0.372.0 |
 
-## E — replacement `verify:` receipts (30)
+## E — replacement `verify:` receipts (33)
 
 **Two classes of entry are in here, and neither can ever be closed by the directive it carries
 today.** Most carry a `verify: theirs_has <substring>` whose substring is present at BASE as well
@@ -432,7 +432,7 @@ NEW (measured `rc=0` today, which is STILL-LIVE):
 verify: sh set -u; r=$(git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc/steps/retro.md") || exit 127; d=$(git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc/steps/deploy-validate.md") || exit 127; ra=$(LC_ALL=C awk '/^### 5c\./{f=1} f&&/^### 6\./{exit} f' <<<"$r"); da=$(LC_ALL=C awk '/^### 3\. Smoke Tests/{f=1} f&&/^### 3b\./{exit} f' <<<"$d"); [ -n "$ra" ] && [ -n "$da" ] || exit 127; grep -qF "MUST exit 0" <<<"$ra" && grep -qi smoke <<<"$da" || exit 127; A=1; B=1; if grep -qF "MUST exit 0. If it fails, fix the issues before proceeding to Step 6." <<<"$ra" && ! grep -qiE "defer|disposition|BLOCKED-BY" <<<"$ra"; then A=0; fi; if grep -qF "Repeat until all smoke tests pass." <<<"$da" && ! grep -qiE "defer|disposition|BLOCKED-BY" <<<"$da"; then B=0; fi; [ "$A" = 0 ] || [ "$B" = 0 ]
 ```
 
-Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-8.md:42`.
+Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-8.md:50`.
 
 ### pin 577 — `PC-S295-RETRO-RED-SMOKE-CROSSING-SPRINT-BOUNDARY`
 
@@ -448,7 +448,7 @@ NEW (measured `rc=0` today, which is STILL-LIVE):
 verify: sh set -u; r=$(git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc/steps/retro.md") || exit 127; ss=$(LC_ALL=C awk '/^### Sprint-Ship Verification/{f=1} f&&/^### 5\. Human Commentary/{exit} f' <<<"$r"); [ -n "$ss" ] || exit 127; grep -qF "dual-counter: consecutive-deploy-clean:" <<<"$ss" || exit 127; A=1; B=1; grep -qF "pre-existing FAILs may persist without" <<<"$ss" && A=0; grep -qF "ship-quality when EITHER counter reaches 5/5." <<<"$ss" && B=0; [ "$A" = 0 ] || [ "$B" = 0 ]
 ```
 
-Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-8.md:96`.
+Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-8.md:104`.
 
 ### pin 654 — `PC-S296-ESCALATION-STATUS-APPENDS-INSTEAD-OF-REPLACING`
 
@@ -464,7 +464,7 @@ NEW (measured `rc=0` today, which is STILL-LIVE):
 verify: sh set -u; W=$(mktemp -d) || exit 127; trap "rm -rf \"$W\"" EXIT; git -C "$DIST" show "${THEIRS}:core/scripts/validate-escalation-status-vocabulary.sh" > "$W/v.sh" || exit 127; git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc/escalations.md" > "$W/spec.md" || exit 127; [ -s "$W/v.sh" ] && [ -s "$W/spec.md" ] || exit 127; printf "## E-1\n**Status:** HARD_BLOCK\nbody\n\n**Resolution**\n**Status:** BOGUS_APPENDED_TOKEN\n" > "$W/two.md"; printf "## E-1\n**Status:** BOGUS_APPENDED_TOKEN\n" > "$W/one.md"; cmp -s "$W/two.md" "$W/one.md" && exit 127; AI_DLC_PROJECT_ROOT="$DIST" bash "$W/v.sh" "$W/one.md" "$W/spec.md" >/dev/null 2>&1 && exit 127; AI_DLC_PROJECT_ROOT="$DIST" bash "$W/v.sh" "$W/two.md" "$W/spec.md" >/dev/null 2>&1
 ```
 
-Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-8.md:150`.
+Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-8.md:158`.
 
 ### pin 673 — `PC-S296-H2-ATTESTED-ANCHOR-DEFEATED-BY-BACKTICKS`
 
@@ -480,7 +480,7 @@ NEW (measured `rc=0` today, which is STILL-LIVE):
 verify: sh set -u; W=$(mktemp -d) || exit 127; trap "rm -rf \"$W\"" EXIT; git -C "$DIST" show "${THEIRS}:core/scripts/validate-h2-attestation.sh" > "$W/h2.sh" || exit 127; [ -s "$W/h2.sh" ] || exit 127; D=$(AI_DLC_PROJECT_ROOT="$DIST" bash "$W/h2.sh" --digest 2>/dev/null | tail -1); [ -n "$D" ] || exit 127; L="H2_ATTESTED v1 sprint=999 digest=$D at=2026-01-01T00:00:00Z items=1,2,3 mechanical=check-17-bypass:PASS"; printf "## Gate 1\n%s\n" "$L" > "$W/bare.md"; printf "## Gate 1\n\140%s\140\n" "$L" > "$W/tick.md"; printf "## Gate 1\n   %s\n" "$L" > "$W/indent.md"; cmp -s "$W/bare.md" "$W/tick.md" && exit 127; cmp -s "$W/bare.md" "$W/indent.md" && exit 127; AI_DLC_PROJECT_ROOT="$DIST" bash "$W/h2.sh" --verify --sprint 999 --gate-log "$W/bare.md" >/dev/null 2>&1 || exit 127; AI_DLC_PROJECT_ROOT="$DIST" bash "$W/h2.sh" --verify --sprint 999 --gate-log "$W/tick.md" >/dev/null 2>&1; t=$?; AI_DLC_PROJECT_ROOT="$DIST" bash "$W/h2.sh" --verify --sprint 999 --gate-log "$W/indent.md" >/dev/null 2>&1; i=$?; [ "$t" != 0 ] || [ "$i" != 0 ]
 ```
 
-Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-8.md:205`.
+Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-8.md:213`.
 
 ### pin 687 — `PC-S296-SNAPSHOT-BUDGET-UNENFORCED-AT-GATES`
 
@@ -545,6 +545,22 @@ verify: manual no upstream subject exists, so no anchor can ever flip. The scrip
 ```
 
 No mechanical predicate; reported as HAND-REVIEW, never as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-9.md:205`.
+
+### pin 798 — `PC-S295-RETRO-COLLAPSE-PAUSE-FLAG-AND-BOUNDED-JOIN`
+
+OLD — **none**. No directive, so the closer emits no row for this entry at all:
+
+```
+verify: (absent — this entry carries no directive, so flush() emits no row for it)
+```
+
+NEW (measured `rc=0` today, which is STILL-LIVE):
+
+```
+verify: sh s=$(git -C "$DIST" show "$THEIRS:core/skills/ai-dlc/SKILL.md") || exit 127; v=$(git -C "$DIST" show "$THEIRS:core/scripts/validate-steering-budget.sh") || exit 127; r3=$(printf '%s\n' "$s" | LC_ALL=C awk '/^### Rule 3 --/{f=1} f&&/^### Rule 4 --/{exit} f'); r29=$(printf '%s\n' "$s" | LC_ALL=C awk '/^### Rule 29 --/{f=1} f&&/^### Rule 30 --/{exit} f'); { [ -n "$r3" ] && [ -n "$r29" ]; } || exit 127; case "$r3" in *"touch _bmad-output/pipeline-paused.flag"*) ;; *) exit 1 ;; esac; case "$r29" in *"bounded file-wait beat"*) ;; *) exit 2 ;; esac; case "$v" in *"FAIL (B -- STEAMROLL)"*) ;; *) exit 3 ;; esac; case "$v" in *"FAIL (C -- UNBOUNDED WAIT)"*) ;; *) exit 4 ;; esac; exit 0
+```
+
+Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-10.md:83`.
 
 ### pin 860 — `PC-S296-REJECTION-CARRIES-UNRELATED-GAPS`
 
@@ -737,6 +753,38 @@ verify: sh s=core/scripts; git -C "$DIST" grep -qF 'if mode == "trunk-push":' "$
 ```
 
 Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-3.md:247`.
+
+### pin 3595 — `PC-S329-NAMED-UPSTREAM-DETAIL-INSTRUCTS-THE-CLOSE-ITS-OWN-STATUS-FORBIDS`
+
+OLD (undecidable — the substring matches at BASE too):
+
+```
+verify: theirs_has core/skills/ai-dlc-update/reconcile/ledger-reverify.sh "recorded a rejection/split; if it absorbed, annotate"
+```
+
+NEW (measured `rc=0` today, which is STILL-LIVE):
+
+```
+verify: sh a=$(git -C "$DIST" show "$THEIRS:core/skills/ai-dlc-update/reconcile/ledger-reverify.sh") || exit 127; s=$(git -C "$DIST" show "$THEIRS:core/skills/ai-dlc-update/SKILL.md") || exit 127; row=$(printf '%s\n' "$a" | LC_ALL=C awk '/emit NAMED-UPSTREAM "/{print;exit}'); c8=$(printf '%s\n' "$s" | LC_ALL=C awk '/^ *- \*\*Close any/{f=1} f&&/^ *- \*\*Rotate the closed/{exit} f'); { [ -n "$row" ] && [ -n "$c8" ]; } || exit 127; case "$c8" in *"Close ONLY"*) ;; *) exit 127 ;; esac; case "$row" in *annotate*) ;; *) exit 1 ;; esac; case "$row" in *"ADOPTED UPSTREAM"*) ;; *) exit 2 ;; esac; case "$c8" in *NAMED-UPSTREAM*) exit 3 ;; esac; exit 0
+```
+
+Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-10.md:150`.
+
+### pin 3647 — `PC-S330-LEDGER-ROTATE-STUCK-SET-CONTRADICTS-THE-SKIP-RULE-IT-CITES`
+
+OLD (undecidable — the substring matches at BASE too):
+
+```
+verify: theirs_has core/skills/ai-dlc-update/reconcile/ledger-rotate.sh "anywhere; this file archives only on the strict"
+```
+
+NEW (measured `rc=0` today, which is STILL-LIVE):
+
+```
+verify: sh P=core/skills/ai-dlc-update/reconcile; d=$(mktemp -d) || exit 127; git -C "$DIST" show "$THEIRS:$P/ledger-rotate.sh" > "$d/ledger-rotate.sh" || exit 127; git -C "$DIST" show "$THEIRS:$P/lib.sh" > "$d/lib.sh" || exit 127; rv=$(git -C "$DIST" show "$THEIRS:$P/ledger-reverify.sh" | LC_ALL=C awk '/closed=1/ && /ADOPTED UPSTREAM/{sub(/^[ \t]+/,"");print;exit}'); [ -n "$rv" ] || exit 127; printf '%s\n' '# seed' '' '## SEED-LOOSE-MENTION -- its body mentions the phrase mid-sentence' '' 'Remedy: annotate ADOPTED UPSTREAM once the grep is non-zero.' '' '## SEED-CLEAN-CONTROL -- no closure phrase anywhere in it' '' 'Nothing here.' > "$d/l.md"; out=$(bash "$d/ledger-rotate.sh" "$d/l.md" 2>&1) || { rm -rf "$d"; exit 127; }; rm -rf "$d"; case "$rv" in '/^'*) ;; *) exit 1 ;; esac; case "$out" in *SEED-LOOSE-MENTION*) ;; *) exit 2 ;; esac; case "$out" in *SEED-CLEAN-CONTROL*) exit 3 ;; esac; case "$out" in *"ledger-reverify.sh skips them"*) ;; *) exit 4 ;; esac; exit 0
+```
+
+Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-10.md:223`.
 
 ### pin 3918 — `PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH`
 
