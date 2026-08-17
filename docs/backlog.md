@@ -3023,3 +3023,63 @@ the consumer entry
 `PC-S334-AUDIT-LAYER-DEBT-FLAGS-ITS-OWN-DISCHARGE-ROWS-AS-UNDECLARED-DEBT`.
 
 verify: sh S=core/scripts/audit-layer-debt.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; h="{\"clause\":\"LC-E1\",\"entry\":\"extensions/p.md\",\"subject_digest\":\"da39a3e\",\"verdict\":\"still-additive\",\"recorded_utc\":\"1970-01-01T00:00:00Z\",\"closes_owed\":[\"OWED-X\"],\"reason\":"; printf "%s\"Debt discharged. The repath landed.\"}\n" "$h" > "$d/a.jsonl"; printf "%s\"The repath landed.\"}\n" "$h" > "$d/b.jsonl"; cmp -s "$d/a.jsonl" "$d/b.jsonl" && { rm -rf "$d"; exit 9; }; a=$(bash "$S" --register "$d/a.jsonl" 2>/dev/null); ra=$?; b=$(bash "$S" --register "$d/b.jsonl" 2>/dev/null); rb=$?; rm -rf "$d"; [ "$ra" = 0 ] && [ "$rb" = 0 ] || exit 9; na=$(printf "%s" "$a" | sed -n "s/.*UNDECLARED (\([0-9]*\)).*/\1/p" | head -1); nb=$(printf "%s" "$b" | sed -n "s/.*UNDECLARED (\([0-9]*\)).*/\1/p" | head -1); [ -n "$na" ] && [ -n "$nb" ] || exit 9; [ "$nb" = 0 ] || exit 9; [ "$na" = 0 ]
+
+## BL-070
+
+**`gen-architecture-index.js` ships to every consumer and NOTHING in the tree exercises it, so the
+CodeQL escaping defect just fixed at `e9c5970` can return with every check green.** The script builds
+a markdown table and escapes free text into its cells at `core/scripts/gen-architecture-index.js:129`.
+That escaping had a sanitization-order fault — `js/incomplete-sanitization`, flagged high by CodeQL on
+a consumer that had pulled the file into `scripts/ai-dlc/` — and it is fixed. The fix has no guard.
+
+Measured over the corpus that could hold one: `grep -rlE '(bash|node)[^|]*gen-architecture-index'`
+over `core/fixtures/` returns **nothing**, against a positive control of the identically-shaped
+pattern for `validate-mandatory-rules` returning **3** files in the same invocation. Widening to a
+plain name search over `.githooks/`, `core/git-hooks/`, `core/fixtures/`, `scripts/` and
+`core/scripts/` returns exactly **1** tracked hit and it is the script itself, against a control of
+**13** for a token known present in that corpus.
+
+**The `.ai-dlc-fixture-readsets.tsv` rows naming this path are NOT coverage and are the trap here.**
+Five fixtures record it in their read-sets — `consumer-machinery-home`, `crosswalk-home-declaration`,
+`enforcement-map-derivations`, `enforcement-map-derivations-b`, `enforcement-map-sites` — because
+each scans `core/scripts/` as a CORPUS. Reading a file while enumerating a directory is not
+exercising the program in it. A coverage question answered off that TSV returns "five fixtures touch
+it" and is wrong, which is the same reads-vs-mentions class this repo has now measured in six other
+places.
+
+**It reaches consumers by GLOB, which is why a by-name search of the installer says otherwise.**
+`scripts/install.sh:523` derives its copy loop as `core/scripts/*` and never enumerates, so
+`grep -n 'gen-architecture-index' scripts/install.sh` returns 0 for this file and would for every
+other one — the false-zero shape `CLAUDE.md` already lists. The two invokers spell the INSTALLED
+path: `core/skills/ai-dlc/steps/architecture.md:302` and
+`core/skills/ai-dlc/steps/artifact-consolidation.md:119`.
+
+**The defect this guards against is narrow and the obvious test input does not reach it.** Only a
+backslash IMMEDIATELY BEFORE a pipe corrupts a row: `both\|here` escaped pipes-only yields `both\\|here`,
+an escaped backslash followed by a BARE pipe, which ends the cell early. A title carrying a backslash
+and a pipe that are not adjacent produces an intact row under both the broken and the fixed script,
+so a fixture seeded with the obvious input would pass either way. Measured through the shipping
+script at `HEAD` and `HEAD~1`, asserted to differ by `cmp -s` before the outputs were compared: the
+pre-fix row carries **7** unescaped pipes where a four-column row has **5**, and the fixed row
+carries 5, matching a clean control in the same run. Counting unescaped pipes requires tracking
+escape state — a `grep -o '[^\]|'` scores both rows at 4 and discriminates nothing, because the
+character before the bare pipe IS a backslash, the one that is itself escaped.
+
+Scope of the fix was checked and is complete for the table-cell class: `r.line` is numeric, `indent`
+is a constant, and `r.anchor` passes the slugger's `[^\w\- ]+` strip at `:58`, which removes both
+characters — the anchor was byte-identical under the broken and fixed scripts in the same run.
+
+**Anchored on the fixture PASSING, not on a reference existing**, so a stub that names the script
+cannot close this. The receipt locates a fixture that INVOKES the script by interpreter and then RUNS
+it, requiring exit 0. Proven in three states: today rc=1; a synthetic tree carrying a working guard
+rc=0; that same tree with the escaping reverted rc=1, because the guard fires and the receipt refuses
+to close over a regressed script. The positive control is asserted before the search result is read,
+so an empty `core/fixtures/` cannot report as an absent guard.
+
+**Known limit, stated rather than papered over**: the receipt establishes that a guard exists and
+passes, not that it carries a mutant proving it can fire. `.claude/rules/fixture-mutants.md` binds
+that half and it is enforced at review. A guard for this belongs with a mutant arm reverting the
+escaping, because an assertion over an intact row is exactly the arm that passes against a subject
+that never ran.
+
+verify: sh S=core/scripts/gen-architecture-index.js; [ -f "$S" ] || exit 9; ctl=$(grep -rlE '(bash|node)[^|]*validate-mandatory-rules' core/fixtures/ 2>/dev/null | head -1); [ -n "$ctl" ] || exit 9; d=$(grep -rlE '(bash|node)[^|]*gen-architecture-index' core/fixtures/ 2>/dev/null | head -1); [ -n "$d" ] || exit 1; fx=$(dirname "$d"); [ -f "$fx/run.sh" ] || exit 1; bash "$fx/run.sh" >/dev/null 2>&1
