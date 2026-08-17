@@ -141,9 +141,11 @@ pushed from that session — not `main`, not the branch. **Read the exit code wi
 `git push … | tail` reports `tail`'s status and prints `exit=0` over a failed push, because this
 shell has no `PIPESTATUS`.
 
-**Phase 3 is not started and is a multi-release program of its own. Phase 5 step 21 is BLOCKED on
-the push**, because it re-runs `ledger-reverify.sh` against the new ai-dlc `origin/main` and
-`origin/main` is still `b1ee196`.
+**EVERYTHING IS PUSHED. `origin/main` carries v0.373.0 and the finished brief, and the consumer is
+pulling it.** Phase 5 step 21 is RUN and its evidence is promoted — see action 4. **Phase 3 is not
+started and is now HELD by operator ruling until the pull is adjudicated**, not merely unscheduled;
+a fresh session stands by and adjudicates rather than cutting a release branch. See action zero,
+which overrides the numbered sequence.
 
 **Two claims elsewhere in this file are WRONG and both would cost a fresh session real work.**
 
@@ -219,7 +221,51 @@ do not, 14 are deliberate prose shorthand and 2 sat in that id column.
 
 **START HERE ON A FRESH SESSION — the numbered next actions.**
 
-0. **THE MERGE AND THE PUSH ARE DONE. Phase 5 step 21 is the first thing owed, and it EXPIRES.**
+**ACTION ZERO, AND IT OVERRIDES THE SEQUENCE BELOW: STAND BY FOR THE GRAPH PULL AND ADJUDICATE WHAT
+IT SURFACES. DO NOT CUT A PHASE 3 RELEASE BRANCH.** Operator ruling at the close of the session that
+finished Phase 4. The consumer is pulling v0.373.0 and applying
+`docs/reviews/graph-ledger-adjudication-brief.md`; your job is to adjudicate whatever that produces,
+not to move `origin/main` underneath it.
+
+Do these three things, in this order, and then hold:
+
+1. **Read `docs/reviews/graph-ledger-adjudication-brief.md` and the EXPECTED-OUTCOMES list below
+   before looking at any output from the pull.** Most of what the pull reports is already known and
+   already measured. A session that reads the output first will file expected results as regressions.
+2. **Re-establish the pin** (see "Re-establish the pin"). One command, and every line number in the
+   register and the brief depends on it.
+3. **Confirm the read/write boundary still holds.** `/Users/n8/git/graph` is READ ONLY even while
+   adjudicating its pull. Record the ledger md5 before your first action and assert it after every
+   phase; assert by CONTENT, never by the dirty count, which measures graph's activity and not your
+   restraint.
+
+**Then adjudicate on request. Report on any question, any decision, and any early stop.**
+
+**THE EXPECTED-OUTCOMES LIST. Every row here is a MEASURED prediction, not a reassurance — if the
+pull produces one of these, it is the design working and not a defect to file.** The whole point is
+that this program's own instruments produce several results that read like regressions.
+
+| what the pull or a reverify reports | why it is EXPECTED |
+|---|---|
+| 10 entries report `NEEDS-REVIEW` where a `CLOSE-CANDIDATE` was earned | `receipt_absent_subjects` harvests a distribution path from the receipt text. Pins 654, 673, 798, 1069, 1093, 1136, 1240, 1381, 4184, 4313. See action 3b. |
+| `RECEIPTS-UNDECIDED  28 of 28` still present | The replacement receipts are in the BRIEF. That line closes only once graph pastes section E. |
+| 7 `NAMED-UPSTREAM-AMBIGUOUS` rows | Sprint-prefix labels, pre-existing, resolved per entry at step 11. |
+| pin 4216 has no version to annotate | Its close was refuted, `9cbb77f` fixed it inside v0.373.0, and `named_absorbed()`'s oldest-wins reports the refuted 0.372.0 forever. Operator picks 0.373.0 by hand. See action 3b. |
+| an annotated entry vanishes from the report entirely | Correct: *any* occurrence of `ADOPTED UPSTREAM` makes `ledger-reverify.sh` skip the entry. That is also why the strict form matters — see the next row. |
+| an annotated entry is skipped **and** never archives | **This one IS a defect and the annotation is the cause.** `ledger-rotate.sh` archives only on `/\*\*ADOPTED UPSTREAM \(v[0-9]/`. A versionless paste makes the entry invisible AND unarchivable. Check the paste before hunting the rotator. |
+
+**AND ONE THING THAT IS NOT ON THAT LIST, SO A FAILURE THERE IS A REAL FINDING.** The consumer's
+engine runs an `sh` receipt with the cwd at `$CONSUMER` — `ledger-reverify.sh:954` is
+`bash -c "cd \"$CONSUMER\" && { $rest; }"` — while `extract-receipts.sh` measured every receipt with
+the cwd at `$DIST`. Those are two different harnesses and the receipts were only ever proven under
+one. **Re-measured under BOTH before this file was written: all 37 `sh` receipts report `rc=0` at the
+consumer cwd, 0 diverging, with the two cwds asserted to differ before the comparison was read.** So
+the receipts are cwd-invariant, and a receipt misbehaving on the consumer is a genuine signal rather
+than a harness artefact. That is the discriminator; do not spend the session on the harness.
+
+0. **THE MERGE AND THE PUSH ARE DONE, AND SO IS STEP 21. Nothing in this action is owed** — it is
+   kept because the credential mechanism below is not recorded anywhere else, and a session that has
+   to push will need it.
    `main` carries the v0.373.0 release and all of Phase 4. The gate was run the way the hook runs it
    twice, green both times — **157 fixtures, 157 ok, 0 FAIL** — with all six fixtures changed on the
    branch read BY NAME against an impossible-name control returning 0 and a present-name control
@@ -525,10 +571,19 @@ do not, 14 are deliberate prose shorthand and 2 sat in that id column.
    third is a judgement about a population — and `resident-context.md` forbids scoping a prose-only
    rule, so the unconditional channel is the only place any of them can live.
 
-5. **PHASE 3 BATCH 1 IS THE OPERATOR'S CHOSEN NEXT SESSION.** Ruled at the wind-down of the session
-   that finished Phase 4: cut the first ≤4-remediation release branch from `origin/main`. Everything
-   it needs is landed and pushed, so it depends on nothing above except step 21 being run first —
-   step 21 observes `origin/main` as it is now, and a Phase 3 release moves it.
+5. **PHASE 3 IS HELD, BY OPERATOR RULING, UNTIL THE GRAPH PULL IS ADJUDICATED. DO NOT CUT A RELEASE
+   BRANCH.** This action previously read "Phase 3 batch 1 is the operator's chosen next session"; that
+   was superseded at the close of the same session, once the pull became imminent. Action zero is what
+   a fresh session does instead.
+
+   **The hold has a reason beyond sequencing.** A Phase 3 release moves `origin/main`, and the
+   consumer is mid-pull against it. Cutting one while graph is applying the brief means the tree it
+   pulled and the tree the brief was measured on are different, and every figure in the brief becomes
+   a hypothesis again. Step 21 is already banked so nothing is LOST by cutting one — but the
+   adjudication of the pull is the work that cannot be redone later, because the pull happens once.
+
+   **Release it when the operator says the pull is adjudicated**, then: cut the first ≤4-remediation
+   branch from `origin/main`, one version per branch.
 
    **Phase 3 is a program rather than a step.** The `HOLDS` set is 42
    backlog entries (`BL-021`..`BL-062`) plus `BL-063`–`BL-065`. Done-when 6 is ALREADY SATISFIED
