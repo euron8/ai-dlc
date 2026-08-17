@@ -370,7 +370,35 @@ do not, 14 are deliberate prose shorthand and 2 sat in that id column.
    diff signature would read 0 for a reason unrelated to any fix. Its corpus leg is unaffected, so
    the receipt degrades to half-strength rather than false-closing. Recorded in the entry.
 
-4. **PHASE 5 STEP 21 IS THE FIRST THING OWED, AND IT IS THE ONE STEP THAT CAN EXPIRE.** Step 22 is
+4. **PHASE 5 STEP 21 IS RUN AND DONE-WHEN 5's MECHANICAL HALF IS SATISFIED: 25 of 25.** Run from the
+   graph root against the pushed `origin/main` — `bash .claude/skills/ai-dlc-update/reconcile/`
+   `ledger-reverify.sh /Users/n8/git/ai-dlc adec9ae /Users/n8/git/graph 5c96500`, exit 0, cwd asserted
+   to be the CONSUMER root and never the distribution root. The full output is promoted at
+   `docs/reviews/graph-ledger-adjudication-data/step21-reverify-at-0.373.0.log`, byte-identical to the
+   run, **because this measurement is PERISHABLE** — an annotated entry emits no row, so once graph
+   applies the brief it can never be taken again.
+
+   Every one of the 25 closes whose `final-disposition.tsv` channel is `changelog-cite` — the set
+   DERIVED from the channel column, not hand-listed — emits a `NAMED-UPSTREAM` row: **25
+   NAMED-UPSTREAM, 0 degraded to NAMED-UPSTREAM-AMBIGUOUS, 0 with no row**, against an impossible-id
+   control at 0 and a known id at 2 in the same invocation. **Before the release commit named the ids
+   in its MESSAGE, 21 of these 25 produced no row at all.** The run's histogram: 58 STILL-LIVE, 33
+   NAMED-UPSTREAM, 25 HAND-REVIEW, 7 NAMED-UPSTREAM-AMBIGUOUS, 1 RECEIPTS-UNDECIDED, 1
+   CLOSE-CANDIDATE. The consumer was untouched — ledger md5 identical either side of the run, graph
+   `HEAD` still `510e4d9f5`.
+
+   **The other half of done-when 5 — the 14 `brief-annotation` closes — is carried by the renderer's
+   own arms, not by this run, and correctly so:** a `NAMED-UPSTREAM` row cannot exist for them
+   (`flush()` gates on `has_verify &&` and `named_absorbed()` rejects a non-id-shaped label), so the
+   criterion is that the brief renders the exact strict string and the rotator would archive it.
+   `render-brief.sh` arm 1 tests the string it generates against BOTH enforcers and refuses if the
+   versionless near-miss also passes the strict form.
+
+   **`RECEIPTS-UNDECIDED` still reads 28 of 28**, and that is expected rather than a regression: the
+   replacement receipts live in the BRIEF and graph has not applied them. That line is what closes
+   when graph pastes section E.
+
+   **Step 22 is DONE.** Step 22 is
    DONE and was re-verified again at wind-down: the pin reproduces, graph `HEAD` is unchanged, and
    the 147 post-pin lines are the three entries above plus one `RETRACTED` banner — **no new consumer
    filings during this run**. Step 21 re-runs `ledger-reverify.sh` from the graph root against the
