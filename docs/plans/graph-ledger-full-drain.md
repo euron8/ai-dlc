@@ -117,9 +117,40 @@ currently emits no wrong report row. Tier it accordingly.
 were adjudicated in 29 parallel batches of 4; all 48 proposed closes were then attacked by 12
 independent verifiers briefed to break them.
 
-**Phase 2 is IN PROGRESS on branch `ai-dlc/graph-ledger-drain`, nothing pushed and no release cut.**
-The four blocking decisions are ruled (below). `VERSION` is untouched at `0.372.0` and no CHANGELOG
-entry exists yet.
+**PHASE 2 IS COMPLETE. `v0.373.0` IS CUT AT `e939a92` ON `ai-dlc/graph-ledger-drain`, NOTHING
+PUSHED AND NOTHING MERGED.** `VERSION` is `0.373.0`, the top CHANGELOG heading matches, and
+`scripts/validate-release-version.sh` PASSes over 41 commits. The full gate was run the way the
+hook runs it — `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push` — and is GREEN: **157 fixtures,
+157 ok, 0 FAIL**, with both changed fixtures read by name against an impossible-name control that
+came back empty.
+
+**Phase 4 is IN PROGRESS. Phase 3 is not started and is a multi-release program of its own.**
+
+**THE PLAN WAS WRONG ABOUT THE `verify: sh` POLARITY AND SO WAS I, IN THE OPPOSITE DIRECTION —
+THIS IS THE MOST IMPORTANT THING ON THIS PAGE.** The two reverify engines read a receipt's exit
+code in OPPOSITE senses, and a receipt written for the wrong one proposes closing a live defect:
+
+| engine | subject | `rc=0` | `rc≠0` |
+|---|---|---|---|
+| `scripts/backlog-reverify.sh` | ai-dlc's OWN `docs/backlog.md` | CLOSE-CANDIDATE, "the fix is present" | STILL-LIVE |
+| `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh` | the CONSUMER's ledger | **STILL-LIVE** | **CLOSE-CANDIDATE** |
+
+Read at the emitter, not the header: `ledger-reverify.sh:942`'s dispatch comment states *"`sh`
+reads a non-zero exit as 'no longer reproduces' -> CLOSE-CANDIDATE."* `backlog-reverify.sh:184-186`
+states the opposite for its own file.
+
+**I briefed four agents with the ai-dlc polarity for receipts destined for the CONSUMER's ledger.**
+One caught it unprompted and inverted; the rest were corrected mid-flight. All 14 drafted receipts
+now measure `rc=0` (STILL-LIVE) — verified by RUNNING them, not reading them, under the engine's own
+exported environment, with controls both ways. **A receipt for a consumer entry must exit 0 while the
+defect is live.** The failure mode is a FALSE CLOSE, which this file's own Hazards section calls the
+worst output in the system.
+
+**And `126`/`127` are NOT a close.** A renamed subject also exits non-zero, so a relocation reads as
+an absorption that never happened — measured on this consumer, one relocation commit moved five
+receipt subjects and all five flipped to CLOSE-CANDIDATE in a single run, every one still
+reproducing at its new path. Guard every `sh` receipt so an unresolvable subject exits 127
+(`[ -n "$s" ] || exit 127`), which `ledger-reverify.sh` reports as NEEDS-REVIEW.
 
 **The pin was re-established and HELD.** graph `HEAD` is still `510e4d9f5`, the live ledger is 4503
 lines — the 4356-line pin plus the 147 already-adjudicated post-pin lines — and `sed -n '1,4356p'`
@@ -147,106 +178,80 @@ do not, 14 are deliberate prose shorthand and 2 sat in that id column.
 
 **START HERE ON A FRESH SESSION — the numbered next actions.**
 
-0. **`core/fixtures/wait-stale-deliverable` is GREEN — 73 of 73** (`c185168`), so the earlier
-   red-branch blocker is CLEARED. Nothing here needs doing; it is recorded because the route to green
-   carries a reusable lesson.
+0. **Nothing is pushed and nothing is merged.** The branch `ai-dlc/graph-ledger-drain` carries
+   `v0.373.0` at `e939a92`, plus `d6d34c6` and the promotion commit after it. Merges are preapproved
+   — the gate was green at `d6d34c6`, so **re-run the gate and merge** unless you have changed
+   something since. Do not cut anything new from a local `main` that may be ahead of `origin/main`.
 
-   The entanglement failure moved twice — `no-restamp`, then `grant-unconditional` — before its author
-   fixed the CLASS rather than the instance: every mutant now carries a paired assertion that the
-   flagless default path is untouched (`exhausted still rc 1`) alongside its own kill. That is the
-   shape `.claude/rules/fixture-mutants.md` actually asks for. Reach for it directly next time a
-   mutant fails a second unrelated arm.
+1. **Re-establish the pin** (see "Re-establish the pin", below). It held across this entire session:
+   graph `HEAD` is still `510e4d9f5`, the live ledger is 4503 lines, and `sed -n '1,4356p'` reproduces
+   `2fd444dcf406cdff728fe3c0c4352267` with the 4355-line control differing. Verify anyway; it is one
+   command and every line number in the register depends on it.
 
-   **And verify a fixture on STABLE BYTES.** Two green readings of this fixture were void because its
-   author was still editing during the run, and the second was reported to the operator as passing
-   before that was noticed. Take the file's md5 before and after the run and require them to match;
-   a green run is evidence about the bytes it ran on and nothing else.
-1. **Re-establish the pin** (see "Re-establish the pin", below). It moved twice already; reconstruct
-   rather than expect a match, and verify by md5 with the off-by-one control.
-2. **ALL 15 GATED SUB-CLAIMS ARE DISCHARGED. This step is DONE.** `BL-009`–`BL-020` are filed
-   (`306c4c0`, `7b8dcc1`), two sub-claims were fixed instead of filed (`b0e523b`, `2951644`), and one
-   was REFUTED. Validation of the whole file, re-run after each batch: the shipping reader reports
-   every entry as `STILL-LIVE` or `HAND-REVIEW` with **zero** `unresolved`, `vacuous` or
-   `INPUT-UNRESOLVED` rows, and `backlog-rotate.sh` still accepts the grown file. Five of the last
-   eight receipts are BEHAVIOURAL — they drive the real detector rather than grepping for a
-   description of its fix.
+2. **FINISH PHASE 4 — the critical path, and the only channel that reaches graph.** Three pieces:
 
-   | pin | filed as | pin | filed as |
-   |---|---|---|---|
-   | 273 | `BL-009` | 3375 | `BL-016` |
-   | 281 | `BL-010` | 3464 | `BL-017` |
-   | 387 | `BL-011` | 3787 | `BL-018` |
-   | 610 | `BL-012` | 3828 | `BL-019` |
-   | 1449 | `BL-013` | 4153 | `BL-020` |
-   | 1543 | `BL-014` | 1862 | FIXED `b0e523b` |
-   | 3190 | `BL-015` | 3507 | FIXED `2951644` |
-   | 1254 | **REFUTED — no entry** | | |
+   **2a. Build `docs/reviews/graph-ledger-adjudication-data/replacement-receipts.tsv`.** The 14
+   replacement receipts are DRAFTED, RUN and PROMOTED, but they are still prose in four per-batch
+   files under `graph-ledger-adjudication-data/step19-receipts/batch-{1,2,3,4}.md`. The renderer needs
+   them as a TSV with columns `pin / label / old / new / rc / note`. Extract them; do not retype them.
+   **Re-run `step19-receipts/run-receipts.sh` after extracting** — it executes every receipt under the
+   engine's own exported environment (`DIST`/`BASE`/`THEIRS`/`CONSUMER`) and every one must report
+   `rc=0`, which is STILL-LIVE for the consumer engine. Its controls are built in.
 
-   **Pin 1254 is refuted and that changes its disposition.** Its evidence was true and its conclusion
-   false: `CHECK 4: PASS` appears once, at the emitter, but the grep was the wrong instrument —
-   `core/fixtures/mandatory-rules-skip-accounting/run.sh:144` stubs the prereq validator and asserts
-   the summary `Sprint 900: all 6 checks passed`, which requires Check 4's PASS branch, and that
-   fixture passes on every suite run. So `PC-S297-VALIDATE-MANDATORY-RULES-CHECK3-CHECK4-DEAD` is a
-   CLEAN close, not a `CLOSE-NARROWED` — and its own receipt anchor is present at
-   `validate-mandatory-rules.sh:55`, making it already a `CLOSE-CANDIDATE` by its own predicate.
-   **Re-run `merge-verdicts.sh` after correcting that row rather than hand-editing the table.**
+   **2b. Render the brief.** `graph-ledger-adjudication-data/render-brief.sh` writes
+   `docs/reviews/graph-ledger-adjudication-brief.md` and has a `--check` mode. It carries three arms,
+   all proven able to fire: it tests the annotation string it generates against BOTH enforcers, it
+   refuses if the versionless near-miss ALSO passes the strict form, and it refuses outright while
+   `replacement-receipts.tsv` is absent rather than emitting a brief that promises a section it lacks.
+   Sections A–D partition the 115 exactly — **39 CLOSE + 18 WITHDRAW + 41 LIVE-tracked + 17
+   consumer-local**; section E cuts across C and D.
 
-2a. **A filing's own framing is not evidence, and the rate is now measured across all 15.** Nearly
-   every row had a clause that did not reproduce. Two subjects were correctly REFUSED rather than
-   filed (`templates/audit-anchors.md.template` is deliberately unshipped; pin 1254's conclusion was
-   false), row 1543's figures had ALL moved, row 4153's held only under a bare `--warn-only` and not
-   under the invocation `retro.md:533` prescribes, and row 3190 UNDERSTATED itself — its three
-   headingless entries each get an affirmative `EXTENSION-OK` row that `emit-report.sh:230` denylists,
-   so a positive verdict sits behind the silence. Carry the re-derived numbers, never the filed ones.
+   **2c. Add the three post-pin entries to the brief.** They are NOT in `final-disposition.tsv`, so
+   the renderer cannot see them; their verdicts are in `post-pin-verdicts.tsv`. See action 3.
 
-2b. **Two honest gaps are recorded IN the entries and are owed work, not blockers.** `BL-015`'s
-   satisfiability rests on a differential rather than a killed mutant — the mutation attempt tripped
-   the receipt's own `HARNESS BROKEN` guard — so close that before calling it mutation-tested.
-   `BL-014` was verified on the two code paths the dossier composes, not the dossier end to end.
+3. **Confirm `BL-063`–`BL-065` landed, or file them.** The three post-pin entries were NEVER FILED —
+   step 12's population came from the pinned 4356 lines and structurally excluded them. An agent was
+   dispatched at the end of the session and had not reported. **Check first:**
+   `grep -c '^## BL-06[3-5]' docs/backlog.md` — it was **0** at wind-down. If they are absent, file
+   them from `post-pin-verdicts.tsv`. Two of the three carry NO receipt at all, and two are
+   `HOLDS-WIDER`/`-MECHANISM-WRONG`, so their SCOPE is wrong as filed. Their receipts go in
+   `docs/backlog.md`, so they take the AI-DLC polarity — non-zero while live — which is the OPPOSITE
+   of the consumer receipts in action 2a. Read the polarity table in the status record before writing
+   either.
 
-2c. **`## BL-XXX-<slug>` does NOT parse while the number is literal.** The label rule is
-   `match(line, /^BL-[0-9]+/)` (`backlog-reverify.sh:122`, same in `backlog-rotate.sh`). A draft
-   pasted with `XXX` made a scratch ledger parse to **ZERO** entries; in the real file it would have
-   made the whole backlog parse short while the run looked clean. Assign the number before pasting.
+4. **Then Phase 5.** Step 22 is ALREADY DONE and was re-verified at wind-down: the pin reproduces,
+   graph `HEAD` is unchanged, and the 147 post-pin lines are the three entries above plus one
+   `RETRACTED` banner — **no new consumer filings during this run**. Step 21 needs the merge from
+   action 0 first, because it re-runs `ledger-reverify.sh` against the new ai-dlc `origin/main`. **Its
+   observation point is BEFORE graph applies any annotation from the brief** — an annotated entry is
+   skipped and emits no row, so the criterion is unreachable afterwards.
 
-3. **The next free backlog id is `BL-021`** (`BL-020` is the highest today). Grammar and receipt verbs
-   are in `docs/backlog.md`'s own header; **run every receipt before committing it — one that exits 0
-   today is already broken** — and re-run `scripts/backlog-reverify.sh` over the whole file after
-   appending, since a malformed receipt shows up there as `unresolved` rather than at the entry.
-4. **ALL FIVE JUMP-QUEUE FIXES ARE LANDED. This step is DONE except for two owed guards.**
-   `9cbb77f` remediates the recovery gate; `941021d` lands `BL-009`, `BL-011` and `BL-012`.
+5. **Phase 3 is not started, and it is a program rather than a step.** The `HOLDS` set is now 42
+   backlog entries (`BL-021`..`BL-062`) plus whatever action 3 adds. Done-when 6 is ALREADY SATISFIED
+   — "every entry is either remediated and cited, or filed as a `BL-` entry" — so this is the
+   operator's call on sequencing, not a blocker on closing this plan. Batches of ≤4 remediations per
+   release branch, one version per branch, cut from `origin/main`.
 
-   The recovery-gate work is COMPLETE — 47 assertions, PASS, a mutation battery from a different
-   hand in which every mutant reports the exact verdict set it flips, and an anti-wedge arm. Two
-   defects and one false assurance: the gate never armed on the reference layout at all, because
-   `current_step_file` is a bare basename by contract and the marker recorded it raw, so the gate
-   resolved nothing and DELETED ITS OWN MARKER on the first post-compact call; a bounded
-   `Read … limit=1` satisfied an "in full" mandate byte-for-byte; and the injected block asserted
-   "Both files were confirmed to exist before it armed" in exactly the sessions where it had not.
-   The resolution is sited at the PRODUCER, the marker's one writer, not duplicated into the reader.
+**Three things this session learned that will cost a fresh session real time if forgotten.**
 
-   **`BL-009`, `BL-011` and `BL-012` are landed but UNGUARDED, and that is the open item.** Each is
-   accepted by the receipt its own backlog entry carried, measured rc=1 at `HEAD` → rc=0 in the tree
-   with non-empty extraction on both sides. That establishes the fixes changed what they claim to
-   change and NOTHING about whether a regression would be caught. Two guarding hands were dispatched
-   and neither reported before the session ended. **`core/fixtures/pause-hook-origin/run.sh:100-106`
-   reads `pause.sh` ALONE** — a per-hook assertion against a cross-hook defect — so it stayed green
-   through the entire life of the `BL-011` divergence and will stay green if the three legends drift
-   apart again. **Do not annotate any of the three LANDED until a guard exists.**
-5. **Then the close release** — steps 10–12. **The 25 CHANGELOG sections are DRAFTED and promoted**
-   to `docs/reviews/graph-ledger-adjudication-data/close-release-changelog-draft.md`, each naming its
-   `PC-` id verbatim, verified 25 of 25 against an impossible-id control. Splice them, bump `VERSION`,
-   and **name every closed id in the RELEASE COMMIT MESSAGE too** — see the correction under
-   "Start here"; a `CHANGELOG` section alone produces no `NAMED-UPSTREAM` row.
-6. **Step 12 is the largest remaining piece and it was NOT started.** 59 live entries must be filed
-   as `BL-` entries. The population is derived and promoted at
-   `docs/reviews/graph-ledger-adjudication-data/filing-population.tsv`, and the fan-out brief that
-   goes to each filing agent is beside it at `filing-brief.md`.
+**A count with no join to anything else is a count nobody can falsify.** The step-12 commit reported
+"17 withdrawn", derived as 59 rows minus 42 entries — a subtraction assuming one entry per row. Pin
+262 drew two entries, and one entry cites a section banner before its own subject. It went unnoticed
+until the brief, whose sections must partition 115 exactly, summed to 114. The real figure is 18, and
+41 + 18 = 59 closes where the wrong one never did. Corrected in `d6d34c6`.
 
-   **51 of those 59 carry NO promoted evidence**, so each is a genuine re-derivation rather than a
-   transcription. Measured with a control in the same invocation: over the 39 closes, 39 carry
-   evidence and 0 do not; over these 59, 9 do and 51 do not. Budget for that — it is Phase 1's work
-   again, per entry, and the reason this step is not a formatting pass.
+**Its mirror image, in the same hour: a probe reported that 18 of 42 entries stated no pin line, and
+that was FALSE.** `pinned ledger line <N>` WRAPS across lines in a hard-wrapped file, and a
+single-line `grep -oE` cannot see it. All 42 state their pin. Flatten the body before matching. Both
+failures are one class from opposite sides — an instrument's shape deciding a number that then reads
+as a finding about the corpus.
+
+**An idle notification is still not a result, and this session re-confirmed both halves.** Yesterday's
+`fix-bl009`/`fix-bl011`/`fix-bl012` fired idle notifications hours late; all three were UNREACHABLE
+(`No agent named … is reachable`) because their session was gone, and the tree had been clean at
+`95e421a`, so they had left nothing behind. But this session's own agents all delivered when ASKED,
+and two of them delivered their most important finding only in the report, never in the file — the
+`verify: sh` polarity inversion among them. Ask before concluding, and ask before redoing.
 
 **An agent going quiet in this session did NOT mean it had died, and acting on that assumption cost a
 full duplicate pass.** Six adjudicators reported hours late, in one burst, after their work had been
@@ -254,7 +259,26 @@ redone inline; two fixture authors never reported at all yet had written complet
 disk. So: before redoing a delegated task, `git status` for its output and `SendMessage` the agent by
 name. An idle notification is not a result, and silence is not death.
 
-**What landed this session, and what each is worth:**
+**What landed in the session that CUT THE RELEASE, and what each is worth:**
+
+| commit | what | evidence state |
+|---|---|---|
+| `cb94a43` | BL-011's cross-hook legend arm + 5-mutant battery; the `I77` mode bit | fires on the REAL pre-fix hooks, one FAIL, differential sides asserted to differ |
+| `74430c0` | BL-012's receipt could not tell the fix from the defect; DO-NOT-BUILD reasoned | FP set empty over 5 rewordings vs 2 offenders |
+| `158d752` | step 12 — 42 backlog entries `BL-021`..`BL-062`, 18 withdrawals promoted | all 41 `sh` receipts RUN, evaluator controlled both ways |
+| `953e39e` | BL-009's guard reduced to the half with a bounded FP set | FP set ENUMERATED at one member; unguarded half stated in the fixture |
+| `e939a92` | **release v0.373.0**, 29 ids cited in the CHANGELOG *and* the commit message | commit-message join went 9/29 → 29/29, impossible-id control 0 |
+| `d6d34c6` | corrected step 12's withdrawal count, 17 → 18 | partition now closes: 39+18+41+17 = 115 |
+
+**A guard was NOT built for BL-009's procedure half, and that is a decision with a measurement
+behind it rather than an omission.** Its arm keys on the token `quer` plus a closed list of send
+verbs, and 3 of 5 legitimate rewordings fire — "request shape", "transmits", "introduces" all
+preserve the instruction and all trip it. That false-positive set is an open class of legitimate
+English, which `CLAUDE.md` forbids shipping. A future sweep could delete the query-shape step and
+nothing would catch it; the fixture says so in its own header so its green line cannot be read as
+covering it.
+
+**The earlier session's table, kept because its findings still stand:**
 
 | commit | what | evidence state |
 |---|---|---|
