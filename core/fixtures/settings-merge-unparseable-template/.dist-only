@@ -1,0 +1,36 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its SUBJECT does reach a consumer: install.sh:331 copies
+core/skills/ai-dlc-update/reconcile/* to .claude/skills/ai-dlc-update/reconcile/, so
+settings-merge.sh is on every installed tree. By the criterion in
+.claude/rules/fixture-ship-decl.md that alone would make this fixture SHIP. It does not
+ship, and the reason is the CORPUS rather than the subject.
+
+The decisive assertion here is the POSITIVE control: the correct template must still reach
+`model_row_needed=yes`. Without it the fixture passes against a script that answers `no` to
+everything -- a "fix" that closes the check by breaking it. That control needs a template a
+real producer emitted, and the only one is templates/settings.json.template.
+
+MEASURED: `settings.json.template` occurs exactly ONCE in scripts/install.sh, at :408, and
+that occurrence is an ASSIGNMENT reading it out of the distribution
+(`$SCRIPT_DIR/../templates/`). No `cp` puts it under `$PROJECT_ROOT`. The control in the same
+invocation is coding-conventions.md.template, which does appear on a `cp ... "$PROJECT_ROOT/..."`
+line. The two documented invocation sites agree: SKILL.md:879 and apply.sh:1252 both reach the
+template as `git -C <dist> show <theirs>:templates/settings.json.template`, a git object in the
+distribution clone, never a path in the consumer tree.
+
+So on a consumer this fixture's positive control has nothing to point --template at. It would
+either abort or degrade to asserting only that unparseable templates are refused -- which is
+the half that passes against a script saying `no` to everything.
+
+THAT FAILURE IS NOT HYPOTHETICAL. core/fixtures/settings-merge-documented-form/.dist-only
+records the same template dependency shipping without a marker in 0.151.0 and blocking the
+reference consumer's self-update for three consecutive releases while the distribution suite
+stayed green. Shipping the template alongside the fixture is the wrong repair for the same
+reason given there: a consumer has no use for the distribution's settings template, and adding
+a file to satisfy a test is how the test stops describing anything.
+
+The second, independent reason is the third measured shape in .claude/rules/fixture-ship-decl.md:
+this is a MUTATION BATTERY. It writes four mutated copies of core's own settings-merge.sh into
+a mktemp directory and scores each against the same arms. A consumer has no use for a battery
+over a file it does not author and that every pull overwrites wholesale.

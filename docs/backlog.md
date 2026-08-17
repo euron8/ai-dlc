@@ -1100,7 +1100,21 @@ Its adjacent note gives a `theirs_has` rationale — "anchored on the status nam
 guard cannot be written without" — so the verb, not the anchor, is the error.
 
 
-verify: sh D=$(mktemp -d); R=core/skills/ai-dlc-update/reconcile/ledger-rotate.sh; mkl() { printf '# L\n\npre\n\n## PC-PROBE-SPLIT — t\n\nHEADMARK\n\n**ADOPTED UPSTREAM (v0.1.0, verified deadbee).**\n\n%s\n\nTAILMARK\n\nverify: theirs_has core/probe.md "TOK"\n\n---\n\n## PC-PROBE-OPEN — t\n\nbody\n' "$2" > "$1"; }; mkl "$D/a.md" '- **Note:** an annotation lead-in, not an entry title.'; mkl "$D/b.md" '  **Note:** an annotation lead-in, not an entry title.'; bash "$R" "$D/a.md" --archive "$D/a.arc.md" --apply >/dev/null 2>&1; bash "$R" "$D/b.md" --archive "$D/b.arc.md" --apply >/dev/null 2>&1; CTRL=$(grep -c TAILMARK "$D/b.arc.md" 2>/dev/null); H=$(grep -c HEADMARK "$D/a.md"); T=$(grep -c TAILMARK "$D/a.md"); rm -rf "$D"; [ "${CTRL:-0}" -eq 1 ] || exit 1; [ "$H" -eq "$T" ]
+**THE RECEIPT BELOW CARRIES A THIRD LEDGER, AND WITHOUT IT THIS RECEIPT CLOSES ON THE ONE FIX
+THAT MUST NEVER SHIP.** The `H -eq T` arm asks only that the entry is not split, and deleting
+the bullet arm outright — `if (0) return "bullet"` in `ledger_entry_shape()` — satisfies it
+perfectly, because a rule that sees no bullets splits nothing. That is the remedy
+`docs/analysis/ledger-entry-boundary-measurement.md` rules out as *worse* than the defect: it
+blinds the rotator to every bullet-keyed entry, 21 live and 38 archived on the reference
+consumer, which is silent non-archival rather than a visible refusal. Measured over three
+trees in one invocation, sides asserted byte-different first: pre-fix **1**, the shipped
+refusal guard **0**, and the `if (0)` mutant **0** — a FALSE CLOSE available to the forbidden
+fix. This is the inverse of the receipt defect this program usually finds; not a correct fix
+scored as work remaining, but a destructive one scored as done. The `c.md` arm requires a
+CLOSED BULLET entry to still reach the archive, which no bullet-blind rule can satisfy: the
+same three trees now measure **1 / 0 / 1**.
+
+verify: sh D=$(mktemp -d); R=core/skills/ai-dlc-update/reconcile/ledger-rotate.sh; mkl() { printf '# L\n\npre\n\n## PC-PROBE-SPLIT — t\n\nHEADMARK\n\n**ADOPTED UPSTREAM (v0.1.0, verified deadbee).**\n\n%s\n\nTAILMARK\n\nverify: theirs_has core/probe.md "TOK"\n\n---\n\n## PC-PROBE-OPEN — t\n\nbody\n' "$2" > "$1"; }; mkl "$D/a.md" '- **Note:** an annotation lead-in, not an entry title.'; mkl "$D/b.md" '  **Note:** an annotation lead-in, not an entry title.'; printf '# L\n\npre\n\n- **PC-PROBE-BULLET-ENTRY** — a CLOSED entry keyed as a top-level bullet\n\nBULLETMARK\n\n**ADOPTED UPSTREAM (v0.2.0, verified deadbee).**\n\n- **PC-PROBE-BULLET-OPEN** — an open bullet entry\n\nbody\n' > "$D/c.md"; bash "$R" "$D/a.md" --archive "$D/a.arc.md" --apply >/dev/null 2>&1; bash "$R" "$D/b.md" --archive "$D/b.arc.md" --apply >/dev/null 2>&1; bash "$R" "$D/c.md" --archive "$D/c.arc.md" --apply >/dev/null 2>&1; CTRL=$(grep -c TAILMARK "$D/b.arc.md" 2>/dev/null); ARC=$(grep -c BULLETMARK "$D/c.arc.md" 2>/dev/null); H=$(grep -c HEADMARK "$D/a.md"); T=$(grep -c TAILMARK "$D/a.md"); rm -rf "$D"; [ "${CTRL:-0}" -eq 1 ] || exit 1; [ "${ARC:-0}" -eq 1 ] || exit 1; [ "$H" -eq "$T" ]
 ## BL-033
 
 **A mode-only upstream change buckets `UPSTREAM-ONLY` even when the consumer copy is already

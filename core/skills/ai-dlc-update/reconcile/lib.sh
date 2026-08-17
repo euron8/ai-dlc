@@ -280,3 +280,38 @@ function ledger_entry_shape(l) {
 }
 AWK
 }
+
+# WHICH BOUNDARY LINES CARRY AN ENTRY ID -- the second half of the boundary question, and it
+# is here for the same reason the shape rule is: two tools disagreeing about what counts as an
+# id is itself a bug. `docs/analysis/ledger-entry-boundary-measurement.md` closes on "Fix
+# `lib.sh` once ... both readers must move together", and this is that once.
+#
+# THE SHAPE RULE ALONE CANNOT SAY WHETHER A `- **` BULLET IS AN ENTRY OR AN ANNOTATION, AND
+# NOTHING CAN. An annotation written as a lead-in is byte-indistinguishable from an entry
+# written as a title. So neither reader guesses. `ledger-rotate.sh` uses this to REFUSE an
+# input it would corrupt, and `ledger-reverify.sh` uses it to REPORT a capture it would
+# otherwise perform silently. Both are the non-destructive direction; the shape rule keeps
+# deciding boundaries, so no legacy id-less entry stops being seen.
+#
+# ANCHORED AT THE START OF THE LABEL, DELIBERATELY. An unanchored match is satisfied by an
+# annotation that MENTIONS another entry -- `- **Note: see PC-S300 for detail**` -- which would
+# make the rotator's guard fall silent on exactly the line it exists to catch. A real entry
+# opens with its own id; a reference to one does not.
+#
+# THE CHARACTER CLASS IS WIDER THAN `ledger-reverify.sh`'s LOCAL `idshape()` WAS, AND THAT WAS
+# A LIVE FALSE NEGATIVE. `idshape()` required `^[A-Z0-9-]+$`, which excludes `_` and `.`;
+# measured over the reference consumer, `PC-S330-PREPUSH-LEAKS-GIT_DIR-INTO-EVERY-FIXTURE-`
+# `SANDBOX` and `PC-S300-SEVEN-VALIDATORS-SHIPPED-NON-EXECUTABLE-AT-0.242.0` each failed it --
+# one real entry in the live ledger and one in the archive, scored as annotations. Neither
+# produced a wrong row under the old colon gate, because that gate fired on nothing at all.
+# A leading backtick is tolerated because the ledger's own label rule strips backticks only
+# after the caller has extracted the span.
+ledger_entry_id_awk() {
+  cat <<'AWK'
+function ledger_entry_id(label) {
+  if (match(label, /^`?(PC|BL)-[A-Za-z0-9_.-]+/))
+    return substr(label, RSTART, RLENGTH)
+  return ""
+}
+AWK
+}
