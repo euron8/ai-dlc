@@ -222,45 +222,6 @@ decision as a bug.
 
 verify: sh bad=0; for f in $(git ls-files templates/pipeline/); do grep -qE "^[^#]*cp .*(${f}|templates/pipeline/)" scripts/install.sh || bad=1; done; [ "$bad" -eq 0 ]
 
-## BL-013
-
-**A bold bullet whose bold span does NOT end in a colon splits a ledger entry, and nothing reports
-it.** `ledger_entry_shape()` at `core/skills/ai-dlc-update/reconcile/lib.sh:276` opens a new entry on
-any line-leading `- **`. That is correct and load-bearing for every ledger whose entries are bullets.
-The `ENTRY-SWALLOWED` diagnostic that makes the resulting split legible is gated on the bold span
-ending in a colon — `label ~ /:$/` at
-`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:1086`. So an annotation written
-`- **Some lead-in** text` truncates the entry above it, CAPTURES that entry's receipt, and produces
-no row under the swallowed entry's id and no `ENTRY-SWALLOWED` row either.
-
-Measured through the shipping `ledger-reverify.sh` on a three-entry synthetic ledger:
-`PC-PROBE-SPLIT-NO-COLON` is named **0** times in the output, and its receipt is attributed to the
-label `False CLOSE-CANDIDATE`. Controls in the same run, both non-zero: the clean entry emits **1**
-row under its own id, and the byte-identical annotation WITH a colon emits `ENTRY-SWALLOWED` naming
-the truncated entry.
-
-The colon gate was a deliberate choice, not an oversight — the arm's own header records that
-re-keying the entry-shape rule was considered and rejected because narrowing the bullet arm drops
-real entries. **The naive repair is measured worse than the defect**: a plain `infence = !infence`
-toggle over the reference consumer's 4356-line ledger takes the entry-start count from 142 to 95,
-silently dropping 47 real entries, because that corpus carries 111 fence delimiters — an ODD number,
-one entry holding an unterminated fence — and the toggle desynchronises there permanently.
-`scripts/backlog-rotate.sh` took the other road for the same shared boundary rule: it refuses to
-rotate rather than re-keying the parse.
-
-Discharges `PC-S299-LEDGER-REVERIFY-SIGPIPE-FALSE-ABSENT`, whose other two halves — the
-`all_present()` SIGPIPE false-absent and the "first directive wins" receipt parse — are both already
-fixed. A close of that consumer entry is GATED on this filing.
-
-The receipt asserts BEHAVIOUR, not prose: exit 0 when the tool NAMES the truncated entry, which both
-plausible fixes produce — re-attributing the receipt to its own id, or emitting a diagnostic whose
-detail carries the swallowed id. Verified satisfiable: the same probe with a colon added returns 0,
-and that colon is the only difference between exit 1 and exit 0 today. The finding is a property of
-the commit, not of the worktree: it was re-run against `git show HEAD:` copies of both
-`ledger-reverify.sh` and `lib.sh` while a sibling change sat in the tree, same verdict.
-
-verify: sh W=$(mktemp -d); mkdir -p "$W/c"; L="$W/c/led.md"; printf '%s\n' '# probe' '' '- **PC-PROBE-CLEAN-CONTROL** — a clean entry, no annotation in its body' '' '  veri''fy: theirs_has VERSION "0"' '' '- **PC-PROBE-SPLIT-NO-COLON** — the entry a no-colon bold bullet splits' '' '- **False CLOSE-CANDIDATE** this bold span does not end in a colon' '' '  veri''fy: theirs_has VERSION "0"' > "$L"; O=$(bash core/skills/ai-dlc-update/reconcile/ledger-reverify.sh "$PWD" HEAD~1 "$W/c" HEAD "$L" 2>&1); C=$(LC_ALL=C grep -c PC-PROBE-CLEAN-CONTROL <<<"$O" || true); S=$(LC_ALL=C grep -c PC-PROBE-SPLIT-NO-COLON <<<"$O" || true); rm -rf "$W"; echo "control_rows=$C swallowed_id_named=$S"; [ "$C" -ge 1 ] || { echo "HARNESS BROKEN: the control entry emitted no row"; exit 2; }; [ "$S" -ge 1 ]
-
 ## BL-014
 
 **The re-adoption dossier renders a multi-line PLAIN scalar `reason:` as its first line only, and
@@ -1031,90 +992,6 @@ at pinned ledger line 2231.
 
 
 verify: sh F=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; B='\'; RE="^[[:space:]]*emit .*${B}${B}u[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]"; grep -qE "$RE" <<<"  emit X \"a ${B}u2026 b\"" || exit 1; grep -qE "$RE" <<<"# comment quoting ${B}u2026" && exit 1; [ "$(grep -cE "$RE" "$F")" -eq 0 ]
-## BL-032
-
-**`reconcile/ledger-rotate.sh` physically splits a closed ledger entry at a line-leading bold
-annotation: the head goes to the archive and the tail, including the entry's `verify:` receipt,
-stays in the live ledger under no heading.** Driven behaviourally against the shipping script with a
-near-miss control in the same invocation. Two synthetic ledgers, byte-identical except for the
-indentation of one bullet, each rotated with `--apply` into its own archive:
-
-```
-bullet at column 0 (a boundary)   archive: HEAD 1  TAIL 0  receipt 0
-                                  live:    HEAD 0  TAIL 1  receipt 1   heading for that entry: 0
-bullet indented   (not a boundary) archive: HEAD 1  TAIL 1  receipt 1
-                                  live:    HEAD 0  TAIL 0  receipt 0
-```
-
-Both runs exited 0. The control proves the harness drives a working rotator and that the entry
-rotates whole when no boundary-shaped line sits inside it; the arm shows the split. The two
-post-rotation live files were asserted byte-different before the comparison was read.
-
-`ledger_entry_shape()` at `core/skills/ai-dlc-update/reconcile/lib.sh:276-280` is the boundary rule
-— `if (l ~ /^- \*\*/) return "bullet"` — and `ledger-rotate.sh:111` partitions on it.
-
-**The filing prescribed two fixes and one of them has LANDED and is provably insufficient, which is
-the correction.** Fix shape 2 was "share one boundary parser between the two tools". That is done:
-`lib.sh` now owns the single copy and `ledger-rotate.sh:54-56` records the merge in as many words —
-"This block used to carry its own [copy] ... There is one boundary now." The probe above runs on
-that shared parser and still splits, because unifying the rule changed nothing about what the rule
-SAYS. Fix shape 1, a refuse-to-rotate guard, did not land. The correction moves the entry NARROWER
-in cause (the defect is the rule's content, never the duplication) and leaves its consequence
-exactly as filed.
-
-**The shipped rotator's one integrity check cannot see this class, and that is structural.**
-`ledger-rotate.sh:186` refuses when `kept + moved != total` — a line-accounting conservation
-predicate. A split conserves every line; the two halves simply land on opposite sides. The
-distribution's own rotator has the check this one lacks: `scripts/backlog-rotate.sh:71-143` refuses
-to rotate a ledger the boundary rule cannot parse safely, and its header at `:78` cites this very
-consumer entry by id. That guard is keyed on the FENCE case (`:101-104`, "KEYED ON THE SPLIT
-PREDICATE, NOT ON `ledger_entry_shape()` ALONE"), so it would not fire on the bold-annotation case
-either — but it establishes that the distribution already accepted refusal as the answer for this
-class in its own tool and did not carry it into the shipped one.
-
-`docs/analysis/ledger-entry-boundary-measurement.md` is the upstream measurement and it is NOT a
-decision to leave this alone: "The report is correct and the consequence is destructive... **the
-guard belongs in the tool**." It rules out the two cheap discriminators with numbers (49 of 123
-boundary-matching lines name no `PC-` id; some are real legacy entries) and lists four things a real
-fix must establish first. It is an analysis file with no receipt and no reader, which is why this
-belongs in a ledger that re-executes.
-
-**Distinct from `BL-013`, deliberately.** `BL-013` is the `ledger-reverify.sh` DIAGNOSTIC being
-gated on the bold span ending in a colon — the no-colon case, where nothing is reported. This probe
-uses `- **Note:** …`, which DOES end in a colon, so the diagnostic fires and the rotator destroys
-the entry anyway. Different tool, different half of the corpus, opposite failure.
-
-The receipt asserts the entry is not SPLIT — that HEAD and TAIL end on the same side — rather than
-that it rotates. That takes BOTH candidate fixes: a boundary rule that stops treating the annotation
-as a title (both halves archived, 0 == 0) and a refuse-to-rotate guard (both halves retained,
-1 == 1). Verified satisfiable in the same invocation: a copy of `lib.sh` patched so a bold span
-ending in a colon is not a boundary — asserted byte-different from the shipping file first — takes
-the receipt to exit 0, with the control still green. A receipt asserting "the tail reached the
-archive" would have reported STILL-LIVE forever against a refusal-shaped fix.
-
-Discharges the consumer entry `PC-S313-LEDGER-ROTATE-SPLITS-AN-ENTRY-AT-A-BOLD-ANNOTATION` at pinned
-ledger line 2957. **That entry's own receipt is inverted and must not be trusted when draining it**:
-it reads `theirs_lacks ... ledger-rotate.sh "ENTRY-SWALLOWED"`, the token is absent from that file
-today and has been throughout, so the receipt reports CLOSE-CANDIDATE while the defect reproduces.
-Its adjacent note gives a `theirs_has` rationale — "anchored on the status name a refuse-to-rotate
-guard cannot be written without" — so the verb, not the anchor, is the error.
-
-
-**THE RECEIPT BELOW CARRIES A THIRD LEDGER, AND WITHOUT IT THIS RECEIPT CLOSES ON THE ONE FIX
-THAT MUST NEVER SHIP.** The `H -eq T` arm asks only that the entry is not split, and deleting
-the bullet arm outright — `if (0) return "bullet"` in `ledger_entry_shape()` — satisfies it
-perfectly, because a rule that sees no bullets splits nothing. That is the remedy
-`docs/analysis/ledger-entry-boundary-measurement.md` rules out as *worse* than the defect: it
-blinds the rotator to every bullet-keyed entry, 21 live and 38 archived on the reference
-consumer, which is silent non-archival rather than a visible refusal. Measured over three
-trees in one invocation, sides asserted byte-different first: pre-fix **1**, the shipped
-refusal guard **0**, and the `if (0)` mutant **0** — a FALSE CLOSE available to the forbidden
-fix. This is the inverse of the receipt defect this program usually finds; not a correct fix
-scored as work remaining, but a destructive one scored as done. The `c.md` arm requires a
-CLOSED BULLET entry to still reach the archive, which no bullet-blind rule can satisfy: the
-same three trees now measure **1 / 0 / 1**.
-
-verify: sh D=$(mktemp -d); R=core/skills/ai-dlc-update/reconcile/ledger-rotate.sh; mkl() { printf '# L\n\npre\n\n## PC-PROBE-SPLIT — t\n\nHEADMARK\n\n**ADOPTED UPSTREAM (v0.1.0, verified deadbee).**\n\n%s\n\nTAILMARK\n\nverify: theirs_has core/probe.md "TOK"\n\n---\n\n## PC-PROBE-OPEN — t\n\nbody\n' "$2" > "$1"; }; mkl "$D/a.md" '- **Note:** an annotation lead-in, not an entry title.'; mkl "$D/b.md" '  **Note:** an annotation lead-in, not an entry title.'; printf '# L\n\npre\n\n- **PC-PROBE-BULLET-ENTRY** — a CLOSED entry keyed as a top-level bullet\n\nBULLETMARK\n\n**ADOPTED UPSTREAM (v0.2.0, verified deadbee).**\n\n- **PC-PROBE-BULLET-OPEN** — an open bullet entry\n\nbody\n' > "$D/c.md"; bash "$R" "$D/a.md" --archive "$D/a.arc.md" --apply >/dev/null 2>&1; bash "$R" "$D/b.md" --archive "$D/b.arc.md" --apply >/dev/null 2>&1; bash "$R" "$D/c.md" --archive "$D/c.arc.md" --apply >/dev/null 2>&1; CTRL=$(grep -c TAILMARK "$D/b.arc.md" 2>/dev/null); ARC=$(grep -c BULLETMARK "$D/c.arc.md" 2>/dev/null); H=$(grep -c HEADMARK "$D/a.md"); T=$(grep -c TAILMARK "$D/a.md"); rm -rf "$D"; [ "${CTRL:-0}" -eq 1 ] || exit 1; [ "${ARC:-0}" -eq 1 ] || exit 1; [ "$H" -eq "$T" ]
 ## BL-033
 
 **A mode-only upstream change buckets `UPSTREAM-ONLY` even when the consumer copy is already
@@ -1281,54 +1158,6 @@ at pinned ledger line 3647.
 
 
 verify: sh R=core/skills/ai-dlc-update/reconcile; P='(ADOPTED UPSTREAM|WITHDRAWN)/ { closed=1 }'; [ "$(grep -cF "$P" "$R/ledger-reverify.sh")" -eq 1 ] || exit 1; A=$(grep -F "$P" "$R/ledger-reverify.sh"); D=$(mktemp -d); printf '## PC-PROBE-MENTION — probe\n\nProse: annotate ADOPTED UPSTREAM (v9.9.9, verified <date>) once the grep is non-zero.\n' > "$D/m.md"; printf '## PC-PROBE-ANNOT — control\n\n**WITHDRAWN 2026-01-01, the premise was false.**\n' > "$D/a.md"; cat "$D/m.md" "$D/a.md" > "$D/push-candidate-ledger.md"; S=$(bash "$R/ledger-rotate.sh" "$D/push-candidate-ledger.md" 2>&1); LC_ALL=C awk "$A"'END{exit !closed}' "$D/m.md"; vm=$?; LC_ALL=C awk "$A"'END{exit !closed}' "$D/a.md"; va=$?; rm -rf "$D"; [ "$vm" = 1 ] && [ "$va" = 0 ] || exit 1; grep -qF 'PC-PROBE-ANNOT' <<<"$S" || exit 1; ! grep -qF 'PC-PROBE-MENTION' <<<"$S"
-## BL-036
-
-**`settings-merge.sh --check` answers `model_row_needed=no` and exits 0 on a template it could not
-parse, and there are TWO such templates, not one.** `SENSOR_WIRED` at
-`core/skills/ai-dlc-update/reconcile/settings-merge.sh:100-103` is `jq` over `$TEMPLATE` with a
-`|| echo false` fallback; the guard at `:108` is `[ "$SENSOR_WIRED" = "true" ] && [ -z "$EXISTING_ROW" ]`,
-so anything that is not the literal `true` collapses to `no` at `:115`. Measured against one
-consumer `settings.json` carrying no `.env.AI_DLC_MODEL_ROW`, three templates, same script, same
-invocation:
-
-```
-CORRECT template (wires ai-dlc-context-sensor.sh)  sensor_wired=true   model_row_needed=yes  exit 0
-0-BYTE template                                    sensor_wired=       model_row_needed=no   exit 0
-READABLE NON-JSON template                         sensor_wired=false  model_row_needed=no   exit 0
-```
-
-The first row is the control: same consumer, same script, the answer flips to `yes` the moment the
-template is readable. Step 5 raises the provisioning question only on `yes`, so on a consumer that
-genuinely needs the row the operator is never asked and `.env.AI_DLC_MODEL_ROW` is never written,
-with the run still green.
-
-**The filing is wrong in both directions.** Narrower: its headline says "0-byte **or unreadable**",
-and the unreadable half is already guarded — `:81` is `[ -r "$TEMPLATE" ] || { echo "FAIL: cannot
-read template: $TEMPLATE" >&2; exit 1; }`, measured exit **1**. Wider: the suppression has two
-distinct paths and the filing describes only the empty one. The non-JSON path is the one that
-actually takes the `|| echo false` fallback the filing's own prose blames, and the empty path does
-not (an empty `jq` input exits 0 and prints nothing, so `SENSOR_WIRED` is the empty string). **The
-filing's prescribed fix does not close the defect it describes**: transcribed and run against the
-cases the filing itself reproduces, `[ -r "$TEMPLATE" ] && [ -s "$TEMPLATE" ]` rejects the 0-byte
-template (`FAIL: cannot read template`) and leaves the non-JSON template returning
-`sensor_wired=false model_row_needed=no` at exit 0 — unchanged.
-
-Scope is `--check` only, and that is measured rather than assumed: the merge path with the same
-non-JSON template refuses with `FAIL: merge produced no output; consumer left untouched`. So the
-writer is guarded and the sensor is not, which is why the failure is silent.
-
-The anchor drives the real script over all three templates in one invocation and asserts the
-`model_row_needed=` line it prints, not a phrase describing a guard nobody has written. The correct
-template is the positive control: a fix that closes the check by breaking it fails the receipt too.
-A looser anchor — `has settings-merge.sh "-s \"$TEMPLATE\""` — would close on the filing's own
-broken fix. Measured against a copy carrying a real fix (`jq -e . < "$TEMPLATE"` beside the `-r`
-guard): exit **0**. Against the tree today: exit **1**.
-
-Discharges the consumer entry `PC-S333-SETTINGS-MERGE-CHECK-READS-AN-EMPTY-TEMPLATE-AS-A-VERDICT`
-at pinned ledger line 4052.
-
-
-verify: sh M=core/skills/ai-dlc-update/reconcile/settings-merge.sh; D=$(mktemp -d); printf '{"env":{"ENABLE_PROMPT_CACHING_1H":"1"},"hooks":{}}\n' > "$D/c.json"; printf '{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-context-sensor.sh"}]}]}}\n' > "$D/good.json"; : > "$D/empty.json"; printf 'not json at all\n' > "$D/junk.json"; g=$(bash "$M" --consumer "$D/c.json" --template "$D/good.json" --check 2>/dev/null); e=$(bash "$M" --consumer "$D/c.json" --template "$D/empty.json" --check 2>/dev/null); j=$(bash "$M" --consumer "$D/c.json" --template "$D/junk.json" --check 2>/dev/null); rm -rf "$D"; grep -qF 'model_row_needed=yes' <<<"$g" || exit 1; ! grep -qF 'model_row_needed=no' <<<"$e" || exit 1; ! grep -qF 'model_row_needed=no' <<<"$j"
 ## BL-037
 
 **`apply.sh` emits an `override-readopt` row and a two-step ATOMIC `override-retire` sequence for
@@ -2677,61 +2506,6 @@ Discharges the consumer entry `PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF
 the consumer's closer.
 
 verify: sh d=$(mktemp -d); n="$d/env"; printf "#!/bin/sh\ncat >/dev/null\nenv > %s\n" "$n" > "$d/python3"; chmod +x "$d/python3"; PATH="$d:$PATH" bash core/scripts/report-propagation-fanout.sh HEAD~1 >/dev/null 2>&1; [ -s "$n" ] || { rm -rf "$d"; exit 9; }; p=$(grep -c "PATH=" "$n"); f=$(grep -c "core/scripts/report-propagation-fanout.sh" "$n"); g=$(grep -c "^@@ " "$n"); rm -rf "$d"; [ "$p" -ge 1 ] || exit 9; [ "$f" -eq 0 ] && [ "$g" -eq 0 ]
-
-## BL-065
-
-**`field_of()` corrupts a bold-markdown field into the literal string `**`, and the sibling grammar
-it never considered returns EMPTY and accuses the lead of skipped conduct.** The function at
-`core/scripts/validate-scope-confirmation.sh:158-162` was lifted out and EXECUTED rather than
-restated, because a restated regex is a second implementation whose bugs nobody finds. Over four
-grammars in one invocation it returns `confirmed` for `- scope_confirmed: confirmed` and `confirmed`
-for the backtick prose form — the two controls, and the only two its own comment block documents —
-then **`**`** for `- **scope_confirmed:** confirmed` and **empty** for
-`- **scope_confirmed**: confirmed`. The first routes to the FAIL at `:199`, "scope_confirmed is
-'**', which is not one of confirmed|corrected". The second routes to the FAIL at `:186-190`, "a
-Rule 3(d) pause point that did not happen" — a well-formed snapshot with a correct value read as
-evidence the lead skipped a mandatory operator pause. Single site: `field_of` appears in exactly
-**1** core script, against a control of **8** naming `grep -o`.
-
-**The filing is right about the mechanism and misses the harsher half.** It reproduces only the
-colon-inside form and its `**` corruption; the colon-outside form is a second established bold
-grammar that fails into an accusation rather than a malformed-value report, and the filing never
-mentions it. `scope_confirmed_cite` corrupts identically at `:206`.
-
-**The prescribed fix does not fix the case the filing itself reproduces, and half of it is silently
-inert here.** Transcribed literally and run: it still returns **`**`** on the colon-inside form,
-because the closing `**` sits BETWEEN the colon and the value while the prescribed alternation places
-the wrapper BEFORE the colon; on the colon-outside form it is strictly worse, capturing the whole
-line `**scope_confirmed**: confirmed` as the "value". And `\|` is a GNU BRE extension that this
-machine's `grep` honours but BSD `sed` does not — measured in one invocation, the alternation `sed`
-left `scope_confirmed**: confirmed` untouched while the same `sed` with a plain `\(\*\*\)` capture
-stripped it to `scope_confirmed: confirmed`. `field_of`'s second leg is a `sed`, so the prescribed
-change would half-apply with no error at all. The remediation is to NORMALIZE the line — strip `**`
-and backticks — before matching `NAME[[:space:]]*:[[:space:]]*VALUE`, which is position-independent
-and needs no `\|`. Enumerating wrapper alternatives around the name is what fails.
-
-**The guarding fixture is seeded from what its own reader already accepts.**
-`core/fixtures/scope-confirmation/` SHIPS and seeds **0** bold-form lines in `seed.sh` and **0** in
-`run.sh`, against a control of **5** and **9** `scope_confirmed` mentions in those same two files —
-exactly the two grammars the parser handles and no third. A fix would ship green and unguarded. The
-consumer has converted only the two lines the check consumes: **14** bold-field lines remain in its
-`_bmad-output/pipeline-snapshot.md` against **10** plain, so every one of them is exposed to the
-identical misparse by any future `field_of`-style reader.
-
-**Why the receipt is the receipt, and why it is not `manual`.** The filing declared `verify: manual`
-on the grounds that the failure depends on the caller's markdown styling rather than a stable string.
-That is right about the consumer's engine and wrong here: the tree is executable, so the receipt
-lifts `field_of` from the shipping script by its own definition boundaries and drives it, asserting a
-BEHAVIOUR rather than any text a fix could quote back. The plain-bullet arm returning `confirmed` is
-the control in the same invocation and exits 9 if it ever stops holding, which would mean the lift
-broke rather than the defect closed. It reaches 0 when both bold forms yield `confirmed`,
-demonstrated against a normalizing implementation that returns `confirmed` for all three inputs where
-the shipping one returns `confirmed`, `**` and empty.
-
-Discharges the consumer entry `PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR` at
-LIVE ledger line 4435, past the 4356-line pin.
-
-verify: sh V=core/scripts/validate-scope-confirmation.sh; F=$(sed -n "/^field_of() {/,/^}/p" "$V"); [ -n "$F" ] || exit 9; eval "$F"; D=$(mktemp -d); printf -- "- scope_confirmed: confirmed\n" > "$D/p.md"; printf -- "- **scope_confirmed:** confirmed\n" > "$D/i.md"; printf -- "- **scope_confirmed**: confirmed\n" > "$D/o.md"; p=$(field_of scope_confirmed "$D/p.md"); i=$(field_of scope_confirmed "$D/i.md"); o=$(field_of scope_confirmed "$D/o.md"); rm -rf "$D"; [ "$p" = confirmed ] || exit 9; [ "$i" = confirmed ] && [ "$o" = confirmed ]
 
 ## BL-066
 
