@@ -127,7 +127,45 @@ hook runs it — `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push` — and is G
 157 ok, 0 FAIL**, with both changed fixtures read by name against an impossible-name control that
 came back empty.
 
-**Phase 4 is IN PROGRESS. Phase 3 is not started and is a multi-release program of its own.**
+**PHASE 4 IS COMPLETE. THE BRANCH IS MERGED INTO LOCAL `main` AT `3217cde` AND CANNOT BE PUSHED.**
+The full gate was run the way the hook runs it and is GREEN — **157 fixtures, 157 ok, 0 FAIL,
+`pre-push: all gates green`** — with all six fixtures changed on the branch read BY NAME in the
+full output against an impossible-name control returning 0 and a present-name control returning
+non-zero, in the same invocation. `validate-release-version.sh` PASSes over the 58-commit range.
+The merge precondition held: local `main` was at `origin/main` with zero commits ahead.
+
+**`git push` returns 403 and the reason is an identity, not a protection rule.** The credential
+helper authenticates as `ats0012_amway`, which has no write access to `euron8/ai-dlc`:
+`remote: Permission to euron8/ai-dlc.git denied to ats0012_amway`, exit **128**. Nothing can be
+pushed from that session — not `main`, not the branch. **Read the exit code without a pipe**: a
+`git push … | tail` reports `tail`'s status and prints `exit=0` over a failed push, because this
+shell has no `PIPESTATUS`.
+
+**Phase 3 is not started and is a multi-release program of its own. Phase 5 step 21 is BLOCKED on
+the push**, because it re-runs `ledger-reverify.sh` against the new ai-dlc `origin/main` and
+`origin/main` is still `b1ee196`.
+
+**Two claims elsewhere in this file are WRONG and both would cost a fresh session real work.**
+
+**`named_absorbed()`'s `tail -1` is not always the correct answer, and the paragraph under "Start
+here" says it is.** That paragraph reasons that re-naming an id already named by an earlier release
+"still reports the release that first named it, which is the correct answer". For pin 4216,
+`PC-S303-POSTCOMPACT-RECOVERY-MANDATE-HAS-NO-STATED-EXCEPTION`, it is the WRONG answer. v0.372.0
+named it first, at `1537e4c`, and that close was REFUTED — the gate did not arm on the reference
+consumer at all. The actual fix is `9cbb77f`, which `git merge-base --is-ancestor` puts INSIDE
+v0.373.0 (0 one way, 1 the other, against a self-comparison control of 0). Both commits now match
+the grep, oldest wins, so the mechanical channel will report absorption at the release that did not
+fix it and no amount of re-citing can move it. That entry therefore carries `verify: manual` and
+needs an operator-chosen version. **A first naming that was a false close makes "the release that
+first named it" the one answer you must not report.**
+
+**"Still owed as FIXES, not filings" under Phase 2 is STALE — both landed in v0.373.0.** The
+recovery gate not arming on a bare-basename step file, and the gate treating a partial read as a
+full one, are both fixed and guarded: `core/hooks/ai-dlc-recover-gate.sh:118` distinguishes a
+partial read from a full one, and `core/fixtures/postcompact-rulebook-recovery/run.sh` carries
+eight bare-basename references, two mutant arms over exactly that case, and a near-miss arm at
+`:527-528` establishing that an `offset:1` Read IS a full read and must be allowed. The fixture
+PASSes. A session following that line literally would rebuild two fixes that already exist.
 
 **THE PLAN WAS WRONG ABOUT THE `verify: sh` POLARITY AND SO WAS I, IN THE OPPOSITE DIRECTION —
 THIS IS THE MOST IMPORTANT THING ON THIS PAGE.** The two reverify engines read a receipt's exit
@@ -181,17 +219,84 @@ do not, 14 are deliberate prose shorthand and 2 sat in that id column.
 
 **START HERE ON A FRESH SESSION — the numbered next actions.**
 
-0. **Nothing is pushed and nothing is merged.** The branch `ai-dlc/graph-ledger-drain` carries
-   `v0.373.0` at `e939a92`, plus `d6d34c6` and the promotion commit after it. Merges are preapproved
-   — the gate was green at `d6d34c6`, so **re-run the gate and merge** unless you have changed
-   something since. Do not cut anything new from a local `main` that may be ahead of `origin/main`.
+0. **THE MERGE IS DONE AND THE PUSH IS THE ONLY THING BLOCKING THIS PLAN. It needs the operator,
+   not a retry.** Local `main` is at `3217cde`, 59 commits ahead of `origin/main`, gate green at
+   157/157. `git push` fails 403 as `ats0012_amway`, which has no write access to `euron8/ai-dlc`.
+   Fix the credential — `gh auth status` and `gh auth login`, or the `credential.helper` this repo
+   resolves — then `git push origin main`. **Do not re-run the gate first** unless the tree changed:
+   it was green on `0f67164`, and the only commit after it is the merge and this status update, both
+   docs-only. Do not cut anything new from a local `main` that is now ahead of `origin/main`.
 
 1. **Re-establish the pin** (see "Re-establish the pin", below). It held across this entire session:
    graph `HEAD` is still `510e4d9f5`, the live ledger is 4503 lines, and `sed -n '1,4356p'` reproduces
    `2fd444dcf406cdff728fe3c0c4352267` with the 4355-line control differing. Verify anyway; it is one
    command and every line number in the register depends on it.
 
-2. **FINISH PHASE 4 — the critical path, and the only channel that reaches graph.** Three pieces:
+2. **PHASE 4 IS DONE. Nothing is owed here. Read this only to know what changed under you.**
+
+   **Step 19's real population was 42 receipts, not the 14 this action used to describe.** The step
+   covers "each of the 28 undecided `theirs_has` receipts" AND "every open entry the Phase 0
+   residual showed carries no directive at all", and only 14 had been drafted. Joining
+   `adjudicable-entries.tsv` against `final-disposition.tsv` over the LIVE rows: **18** carry
+   `theirs_has`, **22 carry NO DIRECTIVE AT ALL**, and 2 of the 3 post-pin entries carry none
+   either. The no-directive class is the quieter half and the worse one — `flush()` gates on
+   `has_verify &&`, so those entries emit no row in any reverify report: not open, not closed, not
+   needing review, invisible to the closer. A zero CLOSE-CANDIDATE count over a corpus holding 22
+   of them means nothing, which is the same shape as the finding that started this program.
+
+   All 42 exist, and coverage is JOINED rather than asserted: the 42 receipt pins against the 42
+   owed pins have symmetric difference **EMPTY**, with a control confirming the comparison fires on
+   a one-line mutant. 37 measure `rc=0`; 5 are `verify: manual`, each naming the structural fact
+   that blocks a predicate rather than the difficulty of writing one; every `sh` receipt carries the
+   `exit 127` guard.
+
+   **`extract-receipts.sh` is new and is the ONLY parser of the batch markdown.** Eight arms, each
+   probed both directions. Two of its rules were learned from the corpus and matter to anyone
+   adding a batch: the `rc` column is MEASURED by running the receipt, never parsed out of the
+   prose — `step19-receipts/batch-3.md:123` states "measured rc=1 today" about an ABSENCE arm inside
+   a section whose receipt measures 0 — and the `label` column comes from the census, never from the
+   batch heading, because `batch-3.md:186` abbreviates its own label by five words. Its probe found
+   its own arm-ordering bug: a tab inside a receipt was caught by the verb arm rather than the tab
+   arm, so the tab arm now runs first and the file says why.
+
+   **`run-receipts.sh` no longer parses the markdown.** It reads the TSV, re-runs every receipt
+   independently, and asserts both that each measures zero and that it AGREES with the recorded rc.
+   Its coverage arm is a COUNT of pin headings rather than a parse, so a batch file that gained a
+   section the TSV does not carry cannot pass.
+
+   **Three defects were in the promoted Phase 4 machinery, all found by running it:**
+
+   `render-brief.sh` derived the step-12 population from the AUTHORING SESSION'S SCRATCHPAD under
+   `/private/tmp/…/<uuid>/scratchpad`. It still existed, so it still worked. When it stops existing
+   nothing errors: the script sets `-u` but not `-e`, so a glob matching nothing feeds `awk` no
+   files, the population derives to ZERO pins, and sections B, C and D all mis-partition while the
+   arithmetic line still prints a sum. It now reads the promoted `filing-population.tsv`, verified
+   symmetric-difference EMPTY on field 2 against the scratchpad copy while that still existed, with
+   fields 1 and 3 differing by 67 and 118 as the control that the comparison discriminates.
+
+   **Section E's polarity prose was INVERTED for its own subject.** It read "Every one was RUN and
+   exits non-zero today … a receipt exiting 0 now is already broken" — `backlog-reverify.sh`'s
+   sense, in a section whose receipts are read by `ledger-reverify.sh`. The brief would have told
+   graph that all fourteen working receipts were broken and that a false close was the correct
+   state. Section C's identical wording is CORRECT and stays, because C is about upstream's own
+   `docs/backlog.md`. **The two engines' senses sit four hundred lines apart in one generated file;
+   check which engine a paragraph is about before trusting its polarity.**
+
+   **A new arm, ARM 4b, refuses when two batch sections claim the same pin.** Added when three
+   authoring agents looked silent and replacements were about to be written to different filenames.
+   Two files covering one pin emits two rows for one entry, the brief renders the pin twice with
+   different receipts and no statement of which is current, and the coverage count still balances
+   because it counts headings.
+
+   **Section F is new** — the three post-pin entries, outside the 115-row partition by construction,
+   joined to `BL-063`–`BL-065`. The join FLATTENS the entry body first, because `line 4357, past the
+   4356-line pin` wraps in this hard-wrapped file; control in the same invocation, an impossible
+   line number joins to nothing.
+
+   The brief renders at **A=39 B=18 C=41 rows/42 entries D=17 E=42 F=3** and the A–D partition
+   closes at 115. `render-brief.sh --check` and `extract-receipts.sh --check` both pass.
+
+   The superseded sub-actions, kept only because their evidence is cited above:
 
    **2a. Build `docs/reviews/graph-ledger-adjudication-data/replacement-receipts.tsv`.** The 14
    replacement receipts are DRAFTED, RUN and PROMOTED, but they are still prose in four per-batch
@@ -251,12 +356,17 @@ do not, 14 are deliberate prose shorthand and 2 sat in that id column.
    diff signature would read 0 for a reason unrelated to any fix. Its corpus leg is unaffected, so
    the receipt degrades to half-strength rather than false-closing. Recorded in the entry.
 
-4. **Then Phase 5.** Step 22 is ALREADY DONE and was re-verified at wind-down: the pin reproduces,
-   graph `HEAD` is unchanged, and the 147 post-pin lines are the three entries above plus one
-   `RETRACTED` banner — **no new consumer filings during this run**. Step 21 needs the merge from
-   action 0 first, because it re-runs `ledger-reverify.sh` against the new ai-dlc `origin/main`. **Its
-   observation point is BEFORE graph applies any annotation from the brief** — an annotated entry is
-   skipped and emits no row, so the criterion is unreachable afterwards.
+4. **Then Phase 5. Step 22 is DONE; step 21 is BLOCKED ON THE PUSH, not on work.** Step 22 was
+   re-verified again this session: the pin reproduces, graph `HEAD` is unchanged, and the 147
+   post-pin lines are the three entries above plus one `RETRACTED` banner — **no new consumer filings
+   during this run**. Step 21 re-runs `ledger-reverify.sh` against the new ai-dlc `origin/main`, and
+   `origin/main` is still `b1ee196` because action 0's push fails 403. Run it the moment the push
+   lands. **Its observation point is BEFORE graph applies any annotation from the brief** — an
+   annotated entry is skipped and emits no row, so the criterion is unreachable afterwards.
+
+   **Do not substitute the local `main` for `origin/main` in that run.** The criterion exists to
+   observe what the CONSUMER's engine will see, and the consumer fetches `origin`. A run against a
+   local ref that no consumer can reach reproduces the shape this plan spent a phase removing.
 
 6. **OWED, AND IT IS THE OPERATOR'S CALL: one general rule has no durable carrier.** This session
    found that **a coverage proof over a derived population cannot see outside it** — step 12's
