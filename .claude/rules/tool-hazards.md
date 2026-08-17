@@ -16,6 +16,9 @@ here. What follows has no corpus to scan because it happens in tool calls.
 - **History modifiers eat unbraced references.** `"$r:core/..."` becomes garbage because
   `:c` and `:t` are modifiers that consume the next character. Always `"${r}:core/..."`.
 - **`case` patterns are not glob-substituted** the way a bash author expects.
+- **The working directory PERSISTS across calls.** A `cd` inside one compound command
+  relocates every later call, so a correct relative path then reports **No such file** —
+  which reads as a deleted file rather than a moved shell. Subshell it: `( cd x && ... )`.
 
 **Force `bash -c` for any loop, any heredoc, and any hook test.** The rule is not "be careful
 in zsh"; it is "do not author shell logic in the interactive shell at all".
