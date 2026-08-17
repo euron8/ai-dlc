@@ -98,30 +98,42 @@ drive1() {                     # drive1 <tree> <outfile>  -> rc
   ( cd "$1" && AI_DLC_FIXTURE_JOBS=1 bash .githooks/pre-push </dev/null >"$2" 2>&1; echo $? )
 }
 
-# --------------------------- 1. dispatch is LONGEST-FIRST, off a real record --------
-# THE TWO RUNS ARE THE WHOLE POINT, and seeding the record by hand would have made this
-# arm worthless. The first run WRITES the record; the second READS it. The format is
-# therefore bound end to end by the runner itself, and a hook whose writer and reader
-# disagreed could not pass here. Hand-written seed data would restate the format instead
-# of testing it, and the mechanism would be free to degrade silently to glob order — a
-# check that cannot fire, with a stopwatch attached.
+# --------------------------- 1. dispatch is LONGEST-FIRST, off a SEEDED record ------
+# THE COSTS ARE SEEDED, AND THAT IS THIS ARM'S SUBJECT RATHER THAN A CONCESSION MADE TO
+# GET IT GREEN. It used to give the three units real sleeps, run the pool once to record
+# what they cost, and assert the second run's order against a hardcoded triple. That made
+# the machine's scheduler the judge: a worker records `$SECONDS` off its OWN shell
+# (`core/git-hooks/pre-push:541` — the hook this fixture RESOLVES first, whose numbering
+# is not `.githooks/pre-push`'s), so under a loaded 16-way pool a `sleep 0` unit can
+# record 1 or 2 and outrank the `sleep 1` unit, and the arm reads `zzz aaa mmm` on a tree
+# with nothing wrong with it. Measured across pooled gate runs on trees that could not
+# reach dispatch ordering at all: mostly `ok`, intermittently `FAIL`. A unit that fails
+# intermittently is the shape that gets re-run until green, and a re-run-until-green unit
+# certifies nothing.
+# (`docs/backlog.md`, `BL-008`.)
 #
-# The costs are 0, 1 and 3 seconds against a whole-second record, so the two orders are
-# exact reverses and a full second of scheduling noise on the middle unit still cannot
-# reorder them.
+# A seeded record measures the ORDERING RULE, which is the only thing this arm ever
+# claimed to measure. What the two-run shape bound INCIDENTALLY — that the writer's record
+# format is the one the reader parses — is not lost with it: arm 1b asserts that directly,
+# off a real run, so the determinism was not bought by trading the property away.
+#
+# The costs are 1, 5 and 9 against a whole-number record, so the sort key is unambiguous,
+# the expected order is the exact reverse of glob order, and no unknown-cost fallback
+# (999999, `core/git-hooks/pre-push:519`) is involved.
+SEEDREC="$WORK/seed.durations"
+printf 'aaa 1\nmmm 5\nzzz 9\n' > "$SEEDREC" || broken "could not write the seeded durations record"
+
 T="$WORK/lpt"; seed "$T" "$HOOK" || broken "seed failed"
 export SDO_TRACE="$T/trace"
-mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 1; mkfx_trace "$T" zzz 3
-: > "$SDO_TRACE"
-rc="$(drive "$T" "$WORK/lpt1.out")"
-[ "$rc" = 0 ] || broken "the run that writes the durations record did not pass (rc=$rc); every arm here reads what it wrote"
+mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 0; mkfx_trace "$T" zzz 0
+cp "$SEEDREC" "$T/.git/ai-dlc-fixture-durations" || broken "could not install the seeded durations record"
 : > "$SDO_TRACE"
 rc="$(drive1 "$T" "$WORK/lpt2.out")"
 lpt_order="$(tr '\n' ' ' < "$SDO_TRACE")"
 if [ "$rc" = 0 ] && [ "$lpt_order" = "zzz mmm aaa " ]; then
-  ok "the second run dispatches longest-first (zzz mmm aaa) off the costs the FIRST run recorded"
+  ok "a record costing aaa=1 mmm=5 zzz=9 dispatches longest-first (zzz mmm aaa) — the ORDERING RULE, with no stopwatch in the assertion"
 else
-  bad "the second run did not dispatch longest-first (rc=$rc, got '$lpt_order', glob order is 'aaa mmm zzz') — a pool's makespan is decided by when its longest unit starts"
+  bad "the seeded record did not dispatch longest-first (rc=$rc, got '$lpt_order', glob order is 'aaa mmm zzz') — a pool's makespan is decided by when its longest unit starts"
 fi
 
 # CONTROL. Same tree, same fixtures, same width — only the record removed. Without it
@@ -135,6 +147,30 @@ if [ "$rc" = 0 ] && [ "$ctl_order" = "aaa mmm zzz " ]; then
   ok "with the record deleted the SAME tree dispatches in glob order — the record is what reorders it, and a first run is correct without one"
 else
   bad "removing the record did not restore glob order (rc=$rc, got '$ctl_order') — arm 1 is not measuring the record"
+fi
+
+# ------------------ 1b. the WRITER's format is the one the READER parses -------------
+# The property arm 1's old two-run shape held incidentally, asserted directly and with no
+# timing claim attached. The control run just above dispatched every unit and WROTE this
+# record; the predicate below is the hook's own reader (`core/git-hooks/pre-push:517` —
+# `NR==FNR { if (NF == 2) prev[$1] = $2 }`) joined to the basename it derives from the
+# dispatch list at `:518`.
+#
+# THIS IS A JOIN AND NOT A RESTATEMENT, which is why it earns its own arm. A writer that
+# changed its field count, its separator, or the name it keys on would leave the reader
+# indexing on nothing at all: every lookup would miss, every unit would take the
+# unknown-cost slot, the reorder would degrade silently to glob order — and every ORDER
+# assertion in this file would still pass, because arm 1 seeds its own record and the
+# control expects glob order anyway. Nothing else here can see that break.
+REC="$T/.git/ai-dlc-fixture-durations"
+bound="$(awk 'NF == 2 && $2 ~ /^[0-9]+$/ { print $1 }' "$REC" 2>/dev/null | sort | tr '\n' ' ')"
+# BOTH DIRECTIONS IN THE SAME INVOCATION. Without the near-miss leg, "every line parsed"
+# is a statement about a predicate that accepts everything, not about what the writer emits.
+nearmiss="$(awk 'NF == 2 && $2 ~ /^[0-9]+$/ { print $1 }' <<<'aaa' | tr '\n' ' ')"
+if [ "$bound" = "aaa mmm zzz " ] && [ -z "$nearmiss" ]; then
+  ok "every line the pool WROTE is accepted by the reader's own NF==2 parse and keys on the basename the reader derives, while a one-field near-miss is rejected"
+else
+  bad "the written record does not join to the reader's parse (accepted '$bound', expected 'aaa mmm zzz '; near-miss yielded '$nearmiss') — a writer/reader format split makes every cost lookup miss and degrades the reorder to glob order in silence"
 fi
 
 # ------------------------ 2. the record is written OUTSIDE the working tree ---------
@@ -184,15 +220,17 @@ fi
 # machinery, which needs a map and a verified-state record that a seeded tree does not
 # have. The unit withheld is the CHEAPEST one deliberately: losing the cost of the
 # cheapest unit is what flips the dispatch order, because an unknown cost sorts first.
+#
+# AAA'S PRESERVED COST IS SEEDED AT 1 AND IS NEVER MEASURED HERE, because aaa is withheld
+# from the only run that dispatches anything. mmm and zzz sleep 2, and `$SECONDS` is
+# integer elapsed, so neither can record less than 2 and pool contention only raises it.
+# `aaa < mmm, zzz` therefore holds BY CONSTRUCTION rather than by luck. The old form
+# asserted the whole triple `zzz mmm aaa` against three MEASURED costs and let the
+# scheduler decide the verdict — `BL-008`, and the same defect as arm 1's.
 T="$WORK/merge"; seed "$T" "$HOOK" || broken "seed failed"
 export SDO_TRACE="$T/trace"
-mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 1; mkfx_trace "$T" zzz 3
-: > "$SDO_TRACE"
-rc="$(drive "$T" "$WORK/merge1.out")"
-[ "$rc" = 0 ] || broken "the full run that seeds the record did not pass (rc=$rc)"
-n0="$(grep -c . "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
-case "$n0" in ''|*[!0-9]*) n0=0 ;; esac
-[ "$n0" -eq 3 ] || broken "the seeding run recorded $n0 costs, not 3 — arm 4 has nothing to preserve"
+mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 2; mkfx_trace "$T" zzz 2
+cp "$SEEDREC" "$T/.git/ai-dlc-fixture-durations" || broken "could not install the seeded durations record"
 
 mv "$T/tests/fixtures/aaa" "$WORK/aaa.withheld" || broken "could not withhold a fixture"
 : > "$SDO_TRACE"
@@ -201,23 +239,29 @@ rc="$(drive "$T" "$WORK/merge2.out")"
 n1="$(grep -c . "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
 case "$n1" in ''|*[!0-9]*) n1=0 ;; esac
 kept="$(awk '$1 == "aaa" { print $2 }' "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
-if [ "$n1" -eq 3 ] && [ -n "$kept" ]; then
-  ok "a run that dispatched 2 of 3 units left the third's cost in the record — the record MERGES, and a replace here loses every skipped unit's cost"
+if [ "$n1" -eq 3 ] && [ "$kept" = 1 ]; then
+  ok "a run that dispatched 2 of 3 units left the third's cost in the record UNCHANGED at its seeded 1 — the record MERGES, and a replace here loses every skipped unit's cost"
 else
-  bad "a narrowed run cut the record to $n1 line(s) and aaa's cost is '${kept:-gone}' — a replace throws away exactly what the read-set skip decided not to re-run, and an unknown cost sorts FIRST"
+  bad "a narrowed run cut the record to $n1 line(s) and aaa's cost is '${kept:-gone}' rather than the seeded 1 — a replace throws away exactly what the read-set skip decided not to re-run, and an unknown cost sorts FIRST"
 fi
 
-# And the consequence, observed rather than argued: with every cost still known the next
-# full run is still longest-first. Under a replace `aaa` would be unknown, sort first,
-# and the schedule would be `aaa zzz mmm` — slower, and green.
+# And the consequence, observed rather than argued. With aaa's cost still KNOWN it sorts
+# on its VALUE, which is the smallest here, so aaa goes LAST. Under a replace aaa would be
+# unknown, unknown maps to 999999 (`core/git-hooks/pre-push:519`), and aaa would go FIRST
+# — so POSITION is what discriminates, and the two states cannot collide on it.
+#
+# THE ARM READS AAA'S POSITION AND NOTHING ELSE. mmm and zzz both sleep 2, so which of the
+# two lands first is a scheduler question, and asking it is exactly what made this arm
+# flake. An assertion must not depend on an answer the assertion does not need.
 mv "$WORK/aaa.withheld" "$T/tests/fixtures/aaa" || broken "could not restore the withheld fixture"
 : > "$SDO_TRACE"
 rc="$(drive1 "$T" "$WORK/merge3.out")"
 mg_order="$(tr '\n' ' ' < "$SDO_TRACE")"
-if [ "$rc" = 0 ] && [ "$mg_order" = "zzz mmm aaa " ]; then
-  ok "after the narrowed run the next full run is still longest-first (zzz mmm aaa) — the preserved costs are the ones being sorted on"
+mg_last="$(tail -1 "$SDO_TRACE")"
+if [ "$rc" = 0 ] && [ "$mg_last" = aaa ]; then
+  ok "after the narrowed run the unit whose cost was PRESERVED sorts last on its value (order '$mg_order') — the preserved cost is the one being sorted on"
 else
-  bad "the run after a narrowed one dispatched '$mg_order' rather than 'zzz mmm aaa ' — a cost lost to a narrowed run comes back as UNKNOWN, which sorts first and puts the poles last"
+  bad "the run after a narrowed one dispatched '$mg_order', ending on '$mg_last' rather than aaa — a cost lost to a narrowed run comes back as UNKNOWN, which sorts first and puts the poles last"
 fi
 unset SDO_TRACE
 
@@ -248,15 +292,20 @@ rc="$(drive "$T" "$WORK/mctl.out")"
               || bad "mutant-battery control is RED (rc=$rc) — no mutant verdict below is believable"
 
 # M1 — dispatch reads the UNORDERED list. The reordering still computes; nothing uses it.
-# THE RECORD THESE THREE COPY IS A REAL ONE, taken from arm 1's own first run. Writing
-# one here would restate the format under test, and a mutant that restates the thing it
-# tests proves the restatement.
+#
+# THE RECORD M1 AND M2 COPY IS ARM 1's SEEDED ONE, AND ARM 1 IS WHAT MAKES THAT SOUND.
+# A mutant fed an input that could not produce a reordering under an UNMUTATED hook scores
+# a kill it did not earn — the differential's two sides have to be proven to differ before
+# either verdict is read. Arm 1 has already established, in this same run and against this
+# exact record, that the unmutated hook reorders to `zzz mmm aaa`. That is a stronger
+# guarantee than the real record this used to copy, whose separation was itself a
+# measurement and could collapse to a tie under load.
 if mut m1 's|< "\$out/\.order"|< "$out/list"|'; then M="$MUT"
   T="$WORK/m1"; seed "$T" "$M" || broken "seed failed"
   export SDO_TRACE="$T/trace"
-  mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 1; mkfx_trace "$T" zzz 3
-  cp "$WORK/lpt/.git/ai-dlc-fixture-durations" "$T/.git/ai-dlc-fixture-durations" \
-    || broken "could not carry arm 1's real durations record into the M1 tree"
+  mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 0; mkfx_trace "$T" zzz 0
+  cp "$SEEDREC" "$T/.git/ai-dlc-fixture-durations" \
+    || broken "could not carry arm 1's seeded durations record into the M1 tree"
   : > "$SDO_TRACE"
   rc="$(drive1 "$T" "$WORK/m1.out")"
   m1_order="$(tr '\n' ' ' < "$SDO_TRACE")"
@@ -273,9 +322,9 @@ fi
 if mut m2 's@| sort -k1,1nr@| sort-is-not-installed@'; then M="$MUT"
   T="$WORK/m2"; seed "$T" "$M" || broken "seed failed"
   export SDO_TRACE="$T/trace"
-  mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 1; mkfx_trace "$T" zzz 3
-  cp "$WORK/lpt/.git/ai-dlc-fixture-durations" "$T/.git/ai-dlc-fixture-durations" \
-    || broken "could not carry arm 1's real durations record into the M2 tree"
+  mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 0; mkfx_trace "$T" zzz 0
+  cp "$SEEDREC" "$T/.git/ai-dlc-fixture-durations" \
+    || broken "could not carry arm 1's seeded durations record into the M2 tree"
   : > "$SDO_TRACE"
   rc="$(drive1 "$T" "$WORK/m2.out")"
   m2_order="$(tr '\n' ' ' < "$SDO_TRACE")"
@@ -322,10 +371,9 @@ fi
 if mut m4 's|\[ -s "\$DURATIONS_RECORD" \] && cat "\$DURATIONS_RECORD"|false|'; then M="$MUT"
   T="$WORK/m4"; seed "$T" "$M" || broken "seed failed"
   export SDO_TRACE="$T/trace"
-  mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 1; mkfx_trace "$T" zzz 3
-  : > "$SDO_TRACE"
-  rc="$(drive "$T" "$WORK/m4a.out")"
-  [ "$rc" = 0 ] || broken "M4's seeding run did not pass (rc=$rc)"
+  mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 2; mkfx_trace "$T" zzz 2
+  cp "$SEEDREC" "$T/.git/ai-dlc-fixture-durations" \
+    || broken "could not install the seeded durations record under M4"
   mv "$T/tests/fixtures/aaa" "$WORK/m4.withheld" || broken "could not withhold a fixture under M4"
   : > "$SDO_TRACE"
   rc="$(drive "$T" "$WORK/m4b.out")"
@@ -334,7 +382,7 @@ if mut m4 's|\[ -s "\$DURATIONS_RECORD" \] && cat "\$DURATIONS_RECORD"|false|'; 
   m4_kept="$(awk '$1 == "aaa" { print $2 }' "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
   mv "$WORK/m4.withheld" "$T/tests/fixtures/aaa" || broken "could not restore the fixture withheld under M4"
   if [ "$rc" = 0 ] && [ "$n_m4" -eq 2 ] && [ -z "$m4_kept" ]; then
-    ok "M4 with the old record not read the same narrowed run cuts it to 2 lines and loses aaa's cost — arm 4 is measuring the merge and not the tree"
+    ok "M4 with the old record not read the same narrowed run cuts it to 2 lines and loses aaa's seeded cost — arm 4 is measuring the merge and not the tree"
   else
     bad "M4 the record still held $n_m4 line(s) with aaa='${m4_kept:-gone}' — arm 4 would pass against a hook that replaces, which is the state this release removed"
   fi
@@ -345,7 +393,7 @@ fi
 # EXPECTED_ASSERTIONS, mandatory since v0.217.0 for any fixture whose arms are emitted
 # from inside a conditional: an assertion that never executed prints nothing, and a short
 # green report reads exactly like a complete one.
-EXPECTED_ASSERTIONS=11
+EXPECTED_ASSERTIONS=12
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"
