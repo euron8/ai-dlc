@@ -34,6 +34,106 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.375.0] — 2026-08-17
+
+### `BL-008` — `suite-dispatch-order` judged the machine's scheduler, not the ordering rule
+
+`core/fixtures/suite-dispatch-order/run.sh` asserted a dispatch order against costs the pool
+had MEASURED. A worker records `$SECONDS` off its own shell
+(`core/git-hooks/pre-push:541`), so under a loaded 16-way pool a `sleep 0` unit can record 1 or
+2 and outrank the `sleep 1` unit — and the gate reports a red unit on a tree with nothing wrong
+with it. **The cost is not the re-run, it is what the re-run does to the evidence:** a fixture
+that fails intermittently is the shape that gets re-run until green, and a session carrying a
+real change has to prove a negative before it can read its own gate.
+
+The costs are now SEEDED. `$SECONDS` is in no assertion's path.
+
+**The filing named one arm and the defect had two.** `BL-008` cites only arm 4's consequence;
+arm 1 had the identical exposure, its record also written by a full-width run and read back at
+width 1. Fixing only the named arm would have left one poisoned assertion of five.
+
+**Applying the prescribed fix literally would have deleted a real property.** The fixture's own
+header argued that hand-seeding arm 1 makes it worthless, because the two-run shape is what
+binds the writer's record format to the reader's parser end to end. That argument is correct,
+so the binding is now asserted DIRECTLY as a new arm 1b — the hook's `NF == 2` predicate joined
+to the basename it derives — off a real run, with a one-field near-miss rejected in the same
+invocation. **11 assertions → 12.**
+
+Arm 4's consequence reads one unit's POSITION instead of the whole triple. Its cost is seeded
+at 1 and never measured, because that unit is withheld from the only run that dispatches
+anything, while the other two sleep 2 and integer-elapsed `$SECONDS` cannot report less — so
+the inequality holds by CONSTRUCTION. Under a replace the withheld unit's cost is unknown,
+unknown maps to 999999, and it sorts FIRST rather than last, so the two states cannot collide
+on position. Which of the other two lands first is a scheduler question the assertion no longer
+asks.
+
+M1 and M2 now copy the seeded record rather than a measured one. That is stronger: a mutant fed
+an input that could not reorder under an unmutated hook scores a kill it did not earn, and arm 1
+establishes in the same run that this exact record reorders.
+
+Every reshaped arm is proven reachable **by a different probe**, against an unmutated control
+that ran first and was green — sort-ascending reddens arm 1a and arm 4's consequence, a changed
+writer separator reddens arm 1b alone, the merge removed reddens both of arm 4's. The probes
+mutate `core/git-hooks/pre-push`, the hook this fixture RESOLVES first; mutating the other copy
+leaves every arm green and reads exactly like an arm that cannot fire.
+
+**Not established, and said rather than implied:** a 6-vs-6 differential of the old and new
+fixtures under 36 spinners on 18 cpus produced zero failures on either side, so it did not
+discriminate and is not evidence for this change. The two sides were asserted to differ before
+it ran. Synthetic CPU load is not the condition — the inner pool has to contend with the outer
+fixture pool.
+
+### `BL-070` — `gen-architecture-index.js` ships to every consumer and nothing exercised it
+
+New fixture `core/fixtures/architecture-index-cell-escaping/`, 8 assertions. It **SHIPS** — the
+subject is present on a consumer — so it carries no `.dist-only` marker and is registered in
+`uninstall.sh`'s destructive loop and both `core_manifest` copies, which **I74** joins in both
+directions.
+
+**The obvious seed proves nothing, and arm 8 asserts that rather than saying it.** Only a
+backslash IMMEDIATELY BEFORE a pipe corrupts a row; a backslash and a pipe that merely coexist
+emit an intact row under the broken and the fixed script alike. Arm 8 seeds exactly that input
+and requires it NOT to discriminate, so a later author cannot quietly weaken arm 4's seed
+without arm 8 going red.
+
+**The counter is a state machine, probed before the corpus.** `grep -o '[^\]|'` scores the
+corrupt and the intact row identically, because the character before the bare pipe IS a
+backslash — the one that is itself escaped. Arms 1 and 2 probe the counter both directions on
+literal rows before it is pointed at anything the script produced.
+
+**The mutant is not a source-level revert and is not described as one.** `e9c5970` also
+EXTRACTED the cell helper, so the pre-fix source has no `cell` at all and inlines the same
+replace at two sites; what arm 6 reverts is the escaping LAYER. The equivalence was measured,
+not reasoned — the mutant's index is byte-identical to the one the real `e9c5970^` script
+produces on this seed, against a control confirming pre-fix and current DIFFER on it.
+
+**`BL-070`'s own receipt scored the correct guard as ABSENT.** It anchored on
+`(bash|node)[^|]*gen-architecture-index` over the fixture text, but a fixture must name BOTH
+install layouts and resolve one into a variable (**I33**), so it invokes `node "$GEN"` and no
+line places an interpreter and the script's name together. The anchor was a hypothesis about
+what a guard would LOOK like, written before one existed. Re-anchored on BEHAVIOUR in both
+directions: run the guard against the shipping script and require PASS, then rebuild its
+two-layout neighbourhood in a `mktemp` root around `e9c5970^`'s pre-fix script and require the
+SAME guard to FAIL there. Proven in three states in one invocation — no guard `rc=1`, **a stub
+that names the script and exits 0 `rc=1`**, the real guard `rc=0`.
+
+### `gen-architecture-index.js` cell escaping — `e9c5970`'s CodeQL fix, now named by a release
+
+`e9c5970` fixed `js/incomplete-sanitization` in the markdown table-cell escaping at
+`core/scripts/gen-architecture-index.js:129` — flagged high by CodeQL on a consumer that had
+pulled the file into `scripts/ai-dlc/`. The cell replaced `|` with `\|` and left backslashes
+alone, so text carrying both produced an escaped backslash followed by a BARE pipe, ending the
+cell early and corrupting the row. Backslashes are escaped first, then pipes; the reverse order
+re-escapes the backslash the pipe replacement itself introduces.
+
+It landed on `main` with **no CHANGELOG entry and no version**, so it could not reach a
+consumer. This names it. Verified before writing this section rather than taken from the plan
+that reported it: the six `gen-architecture-index` hits already in this file are all v0.33-era
+delivery notes, and `incomplete-sanitization`, `CodeQL` and `escape backslash` returned zero
+against a control of 34 for `escape`.
+
+The guard it never had is `BL-070` above.
+
 ## [0.374.0] — 2026-08-17
 
 ### `BL-012` — the identifier grant had no mechanism, and the guard `941021d` said it owed is here
