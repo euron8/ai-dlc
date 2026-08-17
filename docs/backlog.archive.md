@@ -184,11 +184,36 @@ would sort FIRST — so the two states cannot collide on position.
 Each reshaped arm is proven reachable by a DIFFERENT probe against the hook the fixture
 resolves, with an unmutated control run first and green: sort-ascending reddens arm 1a and
 arm 4's consequence; a changed writer separator reddens arm 1b alone; the merge removed
-reddens both of arm 4's. **What is NOT established, stated rather than implied:** a 6-vs-6
-differential of the old and new fixtures under 36 spinners on 18 cpus produced zero failures on
-either side, so it did not discriminate and is not evidence here. The two sides were asserted to
-differ first. Synthetic CPU load is not the condition — the inner pool must contend with the
-outer 16-way fixture pool. The measured claim is the structural one plus the probe matrix.
+reddens both of arm 4's.
+
+**REPRODUCED at 1/20 loaded against 0/30 unloaded, and the FIRST ATTEMPT FAILED in a way that
+is the more useful half of this record.** A 6-vs-6 differential under 36 spinners on 18 cpus
+produced zero failures on BOTH sides, which discriminates nothing; it was reported as no
+evidence rather than as a pass. **Spinners are the wrong load.** What moves a worker's
+`$SECONDS` is `bash -c` STARTUP LATENCY, contended on PROCESS CREATION, not CPU — 64 pure
+spinners reproduce the same 0-of-8. A fork storm of 96 concurrent `while :; do /usr/bin/true;
+done` reproduces it, and driving only the record-writing run rather than the full width-1 replay
+is ~20× cheaper per repetition, which is what makes a 1-in-20 event observable at all.
+
+**THE TRIGGER IS EQUALITY, NOT INVERSION, WHICH IS TIGHTER THAN THIS ENTRY'S OWN PROSE.** The
+entry says a `sleep 0` unit outranks the `sleep 1` unit; that never occurred in 30 repetitions
+and it does not need to. `sort -k1,1nr`'s `-r` is KEY-SCOPED, so tied keys fall through to a
+FORWARD whole-line last-resort compare. Re-derived against `sort` 2.3-Apple (199), both
+directions in one invocation: `aaa 1 / mmm 1 / zzz 3` gives `zzz aaa mmm`, which is exactly the
+order this entry reports, while the untied control `aaa 0 / mmm 1 / zzz 3` gives `zzz mmm aaa`.
+The window is "the cheapest unit gains about a second of startup while the middle one stays
+under two", not "milliseconds of noise".
+
+**Both reshaped arms are immune to that trigger BY CONSTRUCTION, not by margin.** Arm 1's seeded
+costs are 1 / 5 / 9 and cannot tie. Arm 4 pits a seeded 1 against measured costs that
+integer-elapsed `$SECONDS` cannot report below 2, so those cannot tie either — and a tie is the
+entire failure mode.
+
+**One reason given for leaving M1–M4 untouched was incomplete, and the code is already better
+than the reasoning.** "They assert glob order, which holds for any record" is true of the
+VERDICT and false of the KILL: a mutant fed a record the unmutated hook would also serve in glob
+order scores a kill it did not earn. Before this change M1 and M2 copied a MEASURED record and
+carried the same tie exposure one level down. They now copy the seeded record, which closes it.
 
 Its arm "after the narrowed run the next full run is still longest-first (zzz mmm aaa)" sorts
 three toy fixtures by the durations the previous run RECORDED. Under the 12-way pool those three

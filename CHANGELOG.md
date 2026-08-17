@@ -77,11 +77,29 @@ writer separator reddens arm 1b alone, the merge removed reddens both of arm 4's
 mutate `core/git-hooks/pre-push`, the hook this fixture RESOLVES first; mutating the other copy
 leaves every arm green and reads exactly like an arm that cannot fire.
 
-**Not established, and said rather than implied:** a 6-vs-6 differential of the old and new
-fixtures under 36 spinners on 18 cpus produced zero failures on either side, so it did not
-discriminate and is not evidence for this change. The two sides were asserted to differ before
-it ran. Synthetic CPU load is not the condition — the inner pool has to contend with the outer
-fixture pool.
+**REPRODUCED at 1/20 loaded against 0/30 unloaded, and the first attempt to reproduce it FAILED
+in a way worth recording.** A 6-vs-6 differential under 36 spinners on 18 cpus produced zero
+failures on BOTH sides — it did not discriminate, and was reported as no evidence rather than
+dressed up as a pass. **Spinners are the wrong load.** What moves a worker's `$SECONDS` is
+`bash -c` STARTUP LATENCY, contended on PROCESS CREATION, not on CPU; 64 pure spinners
+reproduce the same 0-of-8. A fork storm — 96 concurrent `while :; do /usr/bin/true; done` —
+reproduces it. Driving only the record-writing run and feeding the record to the hook's own
+reader is ~20× cheaper per repetition, which is what buys enough repetitions to see a 1-in-20
+event at all.
+
+**The trigger is EQUALITY, not inversion, which is tighter than `BL-008` states.** A `sleep 0`
+unit outranking a `sleep 1` unit never occurred in 30 repetitions. It does not need to:
+`sort -k1,1nr`'s `-r` is KEY-SCOPED, so tied keys fall through to a FORWARD whole-line
+last-resort compare. Re-derived here against `sort` 2.3-Apple (199), both directions in one
+invocation: `aaa 1 / mmm 1 / zzz 3` yields `zzz aaa mmm` — exactly the order `BL-008` reports —
+while the untied control `aaa 0 / mmm 1 / zzz 3` yields `zzz mmm aaa`. The real window is "the
+cheapest unit gains about a second of startup while the middle one stays under two", not
+"milliseconds of noise".
+
+**Both reshaped arms are immune to that trigger BY CONSTRUCTION rather than by margin.** Arm 1's
+seeded costs are 1 / 5 / 9, distinct, so no tie exists. Arm 4 pits a SEEDED 1 against measured
+costs that integer-elapsed `$SECONDS` cannot report below 2, so no tie exists there either — and
+a tie is the whole failure mode.
 
 ### `BL-070` — `gen-architecture-index.js` ships to every consumer and nothing exercised it
 

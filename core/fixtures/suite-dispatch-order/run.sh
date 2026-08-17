@@ -104,13 +104,23 @@ drive1() {                     # drive1 <tree> <outfile>  -> rc
 # what they cost, and assert the second run's order against a hardcoded triple. That made
 # the machine's scheduler the judge: a worker records `$SECONDS` off its OWN shell
 # (`core/git-hooks/pre-push:541` — the hook this fixture RESOLVES first, whose numbering
-# is not `.githooks/pre-push`'s), so under a loaded 16-way pool a `sleep 0` unit can
-# record 1 or 2 and outrank the `sleep 1` unit, and the arm reads `zzz aaa mmm` on a tree
-# with nothing wrong with it. Measured across pooled gate runs on trees that could not
-# reach dispatch ordering at all: mostly `ok`, intermittently `FAIL`. A unit that fails
-# intermittently is the shape that gets re-run until green, and a re-run-until-green unit
-# certifies nothing.
-# (`docs/backlog.md`, `BL-008`.)
+# is not `.githooks/pre-push`'s), so under load the `sleep 0` unit's cost can RISE to meet
+# the `sleep 1` unit's and the arm reads `zzz aaa mmm` on a tree with nothing wrong with
+# it. Measured across pooled gate runs on trees that could not reach dispatch ordering at
+# all: mostly `ok`, intermittently `FAIL`. A unit that fails intermittently is the shape
+# that gets re-run until green, and a re-run-until-green unit certifies nothing.
+# (`docs/backlog.archive.md`, `BL-008`.)
+#
+# IT ONLY HAS TO REACH A TIE, AND THAT IS WHY THE OLD MARGIN LOOKED SAFE AND WAS NOT.
+# `sort -k1,1nr`'s `-r` is KEY-SCOPED, so tied keys fall through to a FORWARD whole-line
+# last-resort compare -- `aaa 1 / mmm 1 / zzz 3` sorts to `zzz aaa mmm`, against an untied
+# control `aaa 0 / mmm 1 / zzz 3` sorting to `zzz mmm aaa`. The cheaper unit never has to
+# OUTRANK the dearer one; measured over 30 loaded repetitions it never did, and the arm
+# failed anyway. The contended resource is `bash -c` startup, not CPU: pure spinners do not
+# reproduce this and a fork storm does.
+#
+# So the seeded costs below are separated to make a TIE unconstructible, which is a
+# different requirement from making an inversion unlikely.
 #
 # A seeded record measures the ORDERING RULE, which is the only thing this arm ever
 # claimed to measure. What the two-run shape bound INCIDENTALLY — that the writer's record
@@ -250,9 +260,12 @@ fi
 # unknown, unknown maps to 999999 (`core/git-hooks/pre-push:519`), and aaa would go FIRST
 # — so POSITION is what discriminates, and the two states cannot collide on it.
 #
-# THE ARM READS AAA'S POSITION AND NOTHING ELSE. mmm and zzz both sleep 2, so which of the
-# two lands first is a scheduler question, and asking it is exactly what made this arm
-# flake. An assertion must not depend on an answer the assertion does not need.
+# THE ARM READS AAA'S POSITION AND NOTHING ELSE. mmm and zzz both sleep 2, so they can TIE
+# with each other, and a tie is resolved by `sort`'s last-resort compare rather than by the
+# ordering rule -- which is the very thing that made the old form flake. Asking which of
+# them lands first would reintroduce the defect inside its own fix. aaa cannot tie with
+# either: its 1 is seeded and never measured, and `sleep 2` under integer-elapsed
+# `$SECONDS` cannot record below 2.
 mv "$WORK/aaa.withheld" "$T/tests/fixtures/aaa" || broken "could not restore the withheld fixture"
 : > "$SDO_TRACE"
 rc="$(drive1 "$T" "$WORK/merge3.out")"
