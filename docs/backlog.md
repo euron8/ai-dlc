@@ -2781,22 +2781,30 @@ fixture names the script at all. A new one cannot use this tree as its corpus �
 across 633 paths against the consumer's 607945 across 10146 — so it has to synthesize the payload
 size rather than reach `ARG_MAX` honestly.
 
-**Why the receipt is the receipt.** It measures the SIZE OF THE CHILD'S ENVIRONMENT rather than
-naming any variable, so a fix that renames `FANOUT_DIFF` without moving it off the env channel cannot
-close it, and no comment recording the change can satisfy it. Both legs are observed in the same
-invocation — the direct exec establishes the baseline and proves the shim is reachable, the scripted
-exec establishes the payload — and the verdict is only their difference. It reaches 0 when the
-payload travels by file or stdin instead: demonstrated against a mutant that stops exporting the two
-large variables, with the two sides asserted to differ first, where the delta goes **32115 -> 0**.
-That measurement also killed a draft arm asserting `run > base` as a sanity check, which would have
-exited 9 on the fixed script and made this receipt unsatisfiable — the same defect in the other
-direction.
+**Why the receipt is the receipt.** It dumps the child's ENVIRONMENT and looks for each payload's
+SIGNATURE in it — a tracked path for the file list, a hunk header for the diff — rather than naming a
+variable or thresholding a total size. So a fix that renames `FANOUT_DIFF` while leaving it on the
+env channel cannot close it, no comment recording the change can satisfy it, and neither can a
+PARTIAL fix. Its control is that the shim was REACHED at all, asserted in the same invocation before
+the verdict is read: the env dump must be non-empty and must carry `PATH=`.
+
+**Both of those clauses are there because the first draft of this receipt failed them, measured.** It
+thresholded total env growth at 4096 bytes, and a mutant that moves only `FANOUT_FILES` off the env
+leaves the diff behind at **4113** bytes of child environment against a **2236**-byte baseline — under
+the threshold, so that draft reported the fix PRESENT while the diff channel was still live. Worse,
+its satisfiability proof was itself invalid: the mutant was a copy under `/tmp`, which resolves
+`AI_DLC_ROOT` elsewhere and **exited 2 before ever exec'ing `python3`**, so the receipt read a stale
+baseline as a clean environment and a dead mutant reported as a passing fix. Re-run with
+`AI_DLC_PROJECT_ROOT` pinned and with reach asserted per arm, three pairwise-different variants
+separate correctly: shipping gives corpus-signature **1** and diff-signature **1**, the partial fix
+gives **0** and **1** and stays open, and a full fix that moves both payloads off the env gives **0**
+and **0** and closes. That is the change which makes this receipt reach 0.
 
 Discharges the consumer entry `PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF` at LIVE ledger line
 4392, past the 4356-line pin. That entry carries no `verify:` receipt of its own and is invisible to
 the consumer's closer.
 
-verify: sh d=$(mktemp -d); n="$d/n"; printf "#!/bin/sh\ncat >/dev/null\nenv | wc -c > %s\n" "$n" > "$d/python3"; chmod +x "$d/python3"; PATH="$d:$PATH" python3 </dev/null >/dev/null 2>&1; base=$(cat "$n" 2>/dev/null); PATH="$d:$PATH" bash core/scripts/report-propagation-fanout.sh HEAD~1 >/dev/null 2>&1; run=$(cat "$n" 2>/dev/null); rm -rf "$d"; [ -n "$base" ] && [ -n "$run" ] || exit 9; [ $((run - base)) -lt 4096 ]
+verify: sh d=$(mktemp -d); n="$d/env"; printf "#!/bin/sh\ncat >/dev/null\nenv > %s\n" "$n" > "$d/python3"; chmod +x "$d/python3"; PATH="$d:$PATH" bash core/scripts/report-propagation-fanout.sh HEAD~1 >/dev/null 2>&1; [ -s "$n" ] || { rm -rf "$d"; exit 9; }; p=$(grep -c "PATH=" "$n"); f=$(grep -c "core/scripts/report-propagation-fanout.sh" "$n"); g=$(grep -c "^@@ " "$n"); rm -rf "$d"; [ "$p" -ge 1 ] || exit 9; [ "$f" -eq 0 ] && [ "$g" -eq 0 ]
 
 ## BL-065
 
