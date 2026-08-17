@@ -29,6 +29,20 @@ verify: manual                      no mechanical predicate by design -> HAND-RE
 assume of the ref it greps. A behavioural predicate asserts the defect itself and cannot be
 anchored on prose the author invented to describe a wanted fix.
 
+**THIS FILE'S `sh` POLARITY IS THE OPPOSITE OF THE CONSUMER LEDGER'S, AND THE TWO ARE WRITTEN
+IN THE SAME SESSIONS.** Here, `scripts/backlog-reverify.sh:184-186` reads **exit 0 as "the fix
+is present"** and non-zero as "still reproduces". In a consumer's push-candidate ledger,
+`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:942` reads it the other way — **exit 0
+means the entry STILL REPRODUCES**, and non-zero proposes CLOSE-CANDIDATE. Carrying this file's
+rule into a consumer receipt writes a predicate that proposes closing a LIVE defect, which is
+the one direction that loses data permanently. Check which file your receipt lands in before
+you fix its polarity, and read the emitter rather than either header.
+
+**In a consumer receipt, guard the unresolvable subject too.** A RENAMED subject also exits
+non-zero there, so a relocation reads as an absorption that never happened; `[ -n "$s" ] ||
+exit 127` makes it NEEDS-REVIEW instead. This file's engine needs no such guard, because its
+non-zero direction is the one that keeps the entry open.
+
 **When you must use `has`/`lacks`, anchor on a token the fix CANNOT BE WRITTEN WITHOUT** — a
 flag, a path, a function name — never a phrase describing the fix. The consumer's engine
 detects that error by reading a third ref; this one has no third ref to read, so the rule is
