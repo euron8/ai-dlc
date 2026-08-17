@@ -127,24 +127,47 @@ hook runs it — `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push` — and is G
 157 ok, 0 FAIL**, with both changed fixtures read by name against an impossible-name control that
 came back empty.
 
-**PHASE 4 IS COMPLETE. THE BRANCH IS MERGED INTO LOCAL `main` AT `3217cde` AND CANNOT BE PUSHED.**
+**PHASE 4 IS COMPLETE. THE BRANCH WAS MERGED INTO LOCAL `main` AT `3217cde`. It could not be pushed
+AT THE TIME; that is no longer true and the paragraph two below says why.**
 The full gate was run the way the hook runs it and is GREEN — **157 fixtures, 157 ok, 0 FAIL,
 `pre-push: all gates green`** — with all six fixtures changed on the branch read BY NAME in the
 full output against an impossible-name control returning 0 and a present-name control returning
 non-zero, in the same invocation. `validate-release-version.sh` PASSes over the 58-commit range.
 The merge precondition held: local `main` was at `origin/main` with zero commits ahead.
 
-**`git push` returns 403 and the reason is an identity, not a protection rule.** The credential
-helper authenticates as `ats0012_amway`, which has no write access to `euron8/ai-dlc`:
-`remote: Permission to euron8/ai-dlc.git denied to ats0012_amway`, exit **128**. Nothing can be
-pushed from that session — not `main`, not the branch. **Read the exit code without a pipe**: a
-`git push … | tail` reports `tail`'s status and prints `exit=0` over a failed push, because this
-shell has no `PIPESTATUS`.
+**PUSHING WORKS NOW AND THE 403 PARAGRAPH BELOW IS HISTORY, NOT A CONSTRAINT.** It once returned
+403 because the credential helper authenticated as `ats0012_amway`, which has no write access to
+`euron8/ai-dlc`. Both v0.374.0 and the two commits after it were pushed successfully. **The remote
+is now the SSH alias `git@github-euron8:euron8/ai-dlc.git`**, not the https URL the credential-helper
+paragraph in action 0 describes — that paragraph is STALE about the mechanism and is kept only
+because the helper is not recorded anywhere else. **Read a push's exit code without a pipe** either
+way: `git push … | tail` reports `tail`'s status and prints `exit=0` over a failed push, because
+this shell has no `PIPESTATUS`.
 
-**THE PULL IS DONE, APPLIED AND CLOSED. PHASES 0–2, 4 AND 5 ARE COMPLETE. PHASE 3 IS THE ONLY
-REMAINING WORK, AND ITS HOLD IS RELEASED — CUT BRANCHES.** The A6 ceiling question is ruled and
-executed too, so **no decision is waiting on a human.** See ACTION ZERO, which overrides the
-numbered sequence.
+**PHASE 3 BATCH 1 IS COMPLETE, MERGED AND PUSHED AS `v0.374.0`.** It adjudicated the three
+`CLOSE-CANDIDATE` rows and built the one guard that adjudication turned up. Merge `6828d91`,
+release `b8fda98`. The gate was run the way the hook runs it on the branch AND again on the merged
+tree — **157 fixtures, 157 ok, 0 FAIL, `pre-push: all gates green`** both times — with the changed
+fixture read BY NAME against an impossible-name control returning 0 and two present-name controls
+returning non-zero, in the same invocation. `validate-release-version.sh`: one release in the range.
+
+**ALL THREE `CLOSE-CANDIDATE` ROWS WERE REAL ABSORPTIONS AND THE CLOSE STILL SPLIT 2/1. That split
+is the finding, and it is a form of the data-losing direction this plan does not otherwise name.**
+`BL-009`, `BL-011` and `BL-012` were all fixed by one commit, `941021d`, released in v0.373.0 —
+and that commit's own body reads *"GUARDS ARE STILL OWED AND THIS COMMIT DOES NOT PRETEND
+OTHERWISE"*, closing *"None of the three entries may be annotated LANDED until that work is done"*.
+Two guards landed inside v0.373.0 (`953e39e`, `cb94a43`); `BL-012`'s never did. Closing all three on
+the receipts alone would have been correct about every receipt and would still have deleted the only
+written record that a guard was owed. **A receipt that rotted is not the only way a close loses
+data; a REAL absorption whose close drops the work still attached to it is the other.**
+
+**The absorbing release is NOT `VERSION` at the fix commit.** `941021d` carries `0.372.0` and
+released in `0.373.0`. Derive it by an INCLUSIVE forward walk to the first `VERSION` differing from
+the fix's parent. That is `BL-066`'s subject and it is still live.
+
+**PHASES 0–2, 4 AND 5 ARE COMPLETE. PHASE 3 IS THE ONLY REMAINING WORK AND ITS HOLD IS RELEASED —
+KEEP CUTTING BRANCHES.** The A6 ceiling question is ruled and executed too, so **no decision is
+waiting on a human.** See ACTION ZERO, which overrides the numbered sequence.
 
 graph pulled v0.373.0, merged it at **PR #935**, and applied sections A, B and E of the brief.
 Measured on the consumer at wind-down, all four stamp fields at `858f4f5`:
@@ -353,9 +376,9 @@ passes, and 7 version-less rows correctly do not trip it.
 
 **START HERE ON A FRESH SESSION — the numbered next actions.**
 
-**ACTION ZERO: THE PULL IS DONE, APPLIED AND CLOSED. PHASES 0–2, 4 AND 5 ARE COMPLETE. THE PHASE 3
-HOLD IS RELEASED BY OPERATOR RULING. BOTH OPEN DECISIONS ARE RULED — NOTHING IS WAITING ON A HUMAN.
-START CUTTING RELEASE BRANCHES.**
+**ACTION ZERO: THE PULL IS DONE, APPLIED AND CLOSED. PHASES 0–2, 4 AND 5 ARE COMPLETE. PHASE 3
+BATCH 1 IS MERGED AND PUSHED AS `v0.374.0`. THE HOLD IS RELEASED, NOTHING IS WAITING ON A HUMAN,
+AND PUSHING WORKS. CUT THE NEXT BATCH.**
 
 graph pulled v0.373.0, merged it at PR #935, and applied sections A, B and E of the brief. **The
 A6 ceiling question is also ruled and executed — see action 6; nothing is owed there.**
@@ -363,24 +386,52 @@ A6 ceiling question is also ruled and executed — see action 6; nothing is owed
 **Do these three things, in this order.**
 
 1. **Derive the Phase 3 worklist from `docs/backlog.md`, never from a prose list in this file.**
-   `bash scripts/backlog-reverify.sh` is the instrument. Measured at wind-down: **68 `BL-` entries —
-   61 `STILL-LIVE`, 4 `HAND-REVIEW`, 3 `CLOSE-CANDIDATE`**, against an impossible-id control of 0.
-   That is **16 release branches at ≤4 remediations each**, so this is a program of many sessions:
+   `bash scripts/backlog-reverify.sh` is the instrument, and every count in this file is a
+   HYPOTHESIS about a tree that has moved. Measured at batch 1's wind-down: **66 `BL-` entries —
+   62 `STILL-LIVE`, 4 `HAND-REVIEW`, 0 `CLOSE-CANDIDATE`**, one row per entry, against an
+   impossible-id control of 0. At ≤4 remediations a branch this is a program of many sessions:
    report after each branch and do not try to batch around the limit.
    **Its `sh` polarity is INVERTED relative to the consumer's engine**: here `rc=0` means the fix is
    PRESENT (`CLOSE-CANDIDATE`) and non-zero means STILL-LIVE. Read
-   `scripts/backlog-reverify.sh:184-186` before writing a receipt, not this sentence.
-2. **ADJUDICATE THE 3 `CLOSE-CANDIDATE` ROWS BEFORE REMEDIATING ANYTHING. This is the operator's
-   explicit first instruction and it is the data-losing direction if skipped.** A `CLOSE-CANDIDATE`
-   means a receipt now reports its fix present — either a real absorption, or a receipt that rotted.
-   **This program measured both, and they are indistinguishable from the status alone.** Confirm each
-   against the tree before draining it.
+   `scripts/backlog-reverify.sh:183-186` before writing a receipt, not this sentence.
+2. **ADJUDICATE EVERY `CLOSE-CANDIDATE` ROW BEFORE REMEDIATING ANYTHING, and there are two ways
+   that close loses data, not one.** A `CLOSE-CANDIDATE` means a receipt now reports its fix
+   present — either a real absorption, or a receipt that ROTTED, and those are indistinguishable
+   from the status alone. **Batch 1 found a third state: all three rows were real absorptions and
+   one still could not close, because its fix had shipped with its GUARD OWED and the fixing commit
+   said so in its own body.** So confirm two things against the tree, not one: that the fix is
+   really there, and that whatever the fixing commit promised alongside it actually arrived. Read
+   the fixing commit's message in full before closing on it.
 3. **Confirm the read/write boundary.** `/Users/n8/git/graph` is READ ONLY. Record the ledger md5
    before your first action and assert it by CONTENT after every phase, never by the dirty count,
    which measures graph's activity and not your restraint.
 
-**Then cut batch 1** — ≤4 remediations, one version per branch, from `origin/main`. Steps 13–16 carry
-the method; 14a–14c are the clauses learned the hard way and are not optional.
+**Then cut the next batch** — ≤4 remediations, one version per branch, from `origin/main`. Steps
+13–16 carry the method; 14a–14c are the clauses learned the hard way and are not optional.
+
+**BATCH 2 IS SCOPED AS THE LEDGER-PARSING FAMILY: `BL-013`, `BL-032`, `BL-065`, `BL-036`.** Verify
+the scope still holds against the reverify run before building, and substitute freely if it does
+not — but keep the batch to ONE subsystem. Three things about it are already measured:
+
+- **`BL-013` and `BL-032` key on the SAME boundary rule**,
+  `core/skills/ai-dlc-update/reconcile/lib.sh:276`.
+- **`BL-013`'s naive repair is measured WORSE than the defect** — a plain fence toggle drops 47 real
+  entries on the reference consumer's ledger. Its entry names the two routes a fix may take.
+- **`BL-065`'s entry records that the filing's own prescribed fix does not work**, and that half of
+  it is silently inert under BSD `sed`. That is step 14b: run a prescribed fix before adopting it.
+
+**TWO CARRY-OVER ITEMS BELONG IN THE NEXT RELEASE COMMIT AND ARE NOT BATCH-2 REMEDIATIONS.**
+
+`e939a92`'s successor `e9c5970` — a CodeQL `js/incomplete-sanitization` fix to the markdown cell
+escaping in `core/scripts/gen-architecture-index.js` — is on `main` with **no CHANGELOG entry and
+no version**, so it cannot reach a consumer until a release names it. Name it.
+
+**`BL-070` is filed and unremediated**: that same script ships to every consumer and NOTHING in the
+tree exercises it. Its receipt anchors on a fixture that INVOKES the script and PASSES, so a stub
+naming it cannot close it. When you build that guard it needs a MUTANT arm — an assertion over an
+intact table row passes against a subject that never ran. Note also that only a backslash
+IMMEDIATELY BEFORE a pipe corrupts a row, so the obvious seed carrying both characters
+non-adjacently passes under the broken and the fixed script alike.
 
 **THE PIN IS DEAD AND SO IS EVERY LINE NUMBER KEYED ON IT. JOIN BY `PC-` ID.** See "Re-establish the
 pin" below, which is now a post-mortem rather than a procedure. This costs you nothing for Phase 3,
