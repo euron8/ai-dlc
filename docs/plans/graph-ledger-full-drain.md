@@ -196,7 +196,15 @@ do not, 14 are deliberate prose shorthand and 2 sat in that id column.
    them as a TSV with columns `pin / label / old / new / rc / note`. Extract them; do not retype them.
    **Re-run `step19-receipts/run-receipts.sh` after extracting** — it executes every receipt under the
    engine's own exported environment (`DIST`/`BASE`/`THEIRS`/`CONSUMER`) and every one must report
-   `rc=0`, which is STILL-LIVE for the consumer engine. Its controls are built in.
+   `rc=0`, which is STILL-LIVE for the consumer engine. Its controls are built in, and it REFUSES
+   with exit 2 if any batch file is absent rather than reporting a clean run over nothing.
+
+   **All 14 are verified as of `a47233d`**: `rc=0` each, with `exit 127` guards throughout (6/5/5/5),
+   controls firing both ways in the same invocation. **Two of the four batches were promoted in a
+   pre-correction state and re-promoted at `92e8bed`** — I snapshotted them while their authors were
+   still revising after the polarity correction reached their inboxes. If you touch these files,
+   `cmp -s` the promoted copy against whatever you think is current before trusting either; batches 2
+   and 4 were byte-identical then, which is what made the comparison believable.
 
    **2b. Render the brief.** `graph-ledger-adjudication-data/render-brief.sh` writes
    `docs/reviews/graph-ledger-adjudication-brief.md` and has a `--check` mode. It carries three arms,
