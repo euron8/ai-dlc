@@ -43,7 +43,7 @@ an arm that accepts both is not discriminating between them.
 | B | WITHDRAW — filed by graph, premise dead on re-derivation | 18 |
 | C | LIVE, now tracked upstream as a `BL-` entry | 41 |
 | D | LIVE, consumer-local — no upstream grain fits | 17 |
-| E | replacement `verify:` receipts for undecidable and absent directives | 40 |
+| E | replacement `verify:` receipts for undecidable and absent directives | 42 |
 | F | filed after the corpus pin — LIVE, tracked upstream | 3 |
 
 Sections A–D partition the 115 exactly: 39 + 18 + 41 + 17.
@@ -247,7 +247,7 @@ Byte-matching a load pointer would fail honest cite-by-reference.
 | 2655 | `PC-S312-FIX-FORWARD-CLASS-GATES-ON-NO-VALIDATOR` | NOT-UPSTREAM |
 | 4216 | `PC-S303-POSTCOMPACT-RECOVERY-MANDATE-HAS-NO-STATED-EXCEPTION` | ALREADY-FIXED-v0.372.0 |
 
-## E — replacement `verify:` receipts (40)
+## E — replacement `verify:` receipts (42)
 
 **Two classes of entry are in here, and neither can ever be closed by the directive it carries
 today.** Most carry a `verify: theirs_has <substring>` whose substring is present at BASE as well
@@ -929,6 +929,38 @@ verify: sh t=$(mktemp -d) || exit 127; git -C "$DIST" show "${THEIRS}:core/scrip
 ```
 
 Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-11.md:180`.
+
+### pin 4357 — `PC-S303-SPEC-JOIN-MEMLOG-REGEX-STALE-VS-AUTHOR-SUFFIX`
+
+OLD — **none**. No directive, so the closer emits no row for this entry at all:
+
+```
+verify: (absent — this entry carries no directive, so flush() emits no row for it)
+```
+
+NEW (measured `rc=0` today, which is STILL-LIVE):
+
+```
+verify: sh D=$(mktemp -d) || exit 127; mkdir -p "$D/b" "$D/s" || { rm -rf "$D"; exit 127; }; printf "# PRD\n\n- FR-S1-1 the functional requirement, CAP-1\n- LR-S1-1 the locked requirement\n" > "$D/prd.md"; printf "# SPEC\n\nCAP-1 the capability\n" > "$D/b/SPEC.md"; cp "$D/b/SPEC.md" "$D/s/SPEC.md"; printf -- "- (capability) LR-S1-1 -> CAP-1\n" > "$D/b/.memlog.md"; printf -- "- (capability by bmad-spec) LR-S1-1 -> CAP-1\n" > "$D/s/.memlog.md"; cmp -s "$D/b/.memlog.md" "$D/s/.memlog.md" && { rm -rf "$D"; exit 127; }; V="$DIST/core/scripts/validate-spec-join.sh"; [ -f "$V" ] || { rm -rf "$D"; exit 127; }; bash "$V" --spec "$D/b" --prd "$D/prd.md" >/dev/null 2>&1; b=$?; bash "$V" --spec "$D/s" --prd "$D/prd.md" >/dev/null 2>&1; s=$?; rm -rf "$D"; [ "$b" -eq 0 ] || exit 127; [ "$s" -eq 2 ]
+```
+
+Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-13.md:41`.
+
+### pin 4392 — `PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF`
+
+OLD — **none**. No directive, so the closer emits no row for this entry at all:
+
+```
+verify: (absent — this entry carries no directive, so flush() emits no row for it)
+```
+
+NEW (measured `rc=0` today, which is STILL-LIVE):
+
+```
+verify: sh d=$(mktemp -d) || exit 127; n="$d/env"; printf "#!/bin/sh\ncat >/dev/null\nenv > %s\n" "$n" > "$d/python3" || { rm -rf "$d"; exit 127; }; chmod +x "$d/python3" || { rm -rf "$d"; exit 127; }; S="$DIST/core/scripts/report-propagation-fanout.sh"; [ -f "$S" ] || { rm -rf "$d"; exit 127; }; ( cd "$DIST" && PATH="$d:$PATH" AI_DLC_PROJECT_ROOT="$DIST" bash "$S" HEAD~1 >/dev/null 2>&1 ); [ -s "$n" ] || { rm -rf "$d"; exit 127; }; p=$(LC_ALL=C grep -c "PATH=" "$n"); f=$(LC_ALL=C grep -c "core/scripts/report-propagation-fanout.sh" "$n"); g=$(LC_ALL=C grep -c "^@@ " "$n"); rm -rf "$d"; [ "$p" -ge 1 ] || exit 127; { [ "$f" -ge 1 ] || [ "$g" -ge 1 ]; }
+```
+
+Guarded: an unresolvable subject exits 127, which the engine reports as NEEDS-REVIEW rather than as a close. Evidence, two-sided probe and the author's stated hesitation: `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-13.md:93`.
 
 
 ## F — filed after the corpus pin (3)
