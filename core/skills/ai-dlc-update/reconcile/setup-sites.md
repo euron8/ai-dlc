@@ -205,6 +205,7 @@ core_manifest:
   - core/fixtures/notify-hook-channel/**
   - core/fixtures/updater-session-signals/**
   - core/fixtures/artifact-derivations/**
+  - core/fixtures/architecture-index-cell-escaping/**
 
 machinery:
   - core/skills/ai-dlc/core-manifest.md

@@ -274,6 +274,7 @@ core_manifest:
   - fixtures/notify-hook-channel/**
   - fixtures/updater-session-signals/**
   - fixtures/artifact-derivations/**
+  - fixtures/architecture-index-cell-escaping/**
 
 machinery:
   - core-manifest.md

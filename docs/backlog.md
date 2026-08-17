@@ -3070,11 +3070,24 @@ is a constant, and `r.anchor` passes the slugger's `[^\w\- ]+` strip at `:58`, w
 characters — the anchor was byte-identical under the broken and fixed scripts in the same run.
 
 **Anchored on the fixture PASSING, not on a reference existing**, so a stub that names the script
-cannot close this. The receipt locates a fixture that INVOKES the script by interpreter and then RUNS
-it, requiring exit 0. Proven in three states: today rc=1; a synthetic tree carrying a working guard
-rc=0; that same tree with the escaping reverted rc=1, because the guard fires and the receipt refuses
-to close over a regressed script. The positive control is asserted before the search result is read,
-so an empty `core/fixtures/` cannot report as an absent guard.
+cannot close this. The receipt locates a fixture that names the script and then RUNS it, requiring
+exit 0.
+
+**THE ORIGINAL ANCHOR WAS `(bash|node)[^|]*gen-architecture-index` OVER THE FIXTURE TEXT, AND A
+CORRECTLY-BUILT GUARD CANNOT CARRY IT.** Measured against the guard written for this entry: rc=1,
+with the guard present, passing, and killing its own mutant. A fixture must name BOTH install
+layouts and resolve one into a variable — **I33**, and the same `core/scripts/` vs `scripts/ai-dlc/`
+split that put this script out of reach of a by-name installer search — so it invokes
+`node "$GEN"`, and no line anywhere in it places an interpreter and the script's name together.
+The anchor was a hypothesis about what a guard would LOOK like, written before one existed, and it
+scored the correct guard as absent. Text about a program is not the program.
+
+**Re-anchored on BEHAVIOUR, in both directions, which is what the entry always meant.** The receipt
+runs the guard against the shipping script and requires PASS, then rebuilds the guard's own two-layout
+neighbourhood in a `mktemp` root around `e9c5970^`'s pre-fix script and requires the same guard to
+FAIL there. `cmp -s` refuses if the two scripts are not different, so a reverted tree reports STILL-LIVE
+rather than closing. Proven in three states in one invocation: no guard rc=1; **a stub that names the
+script and exits 0 rc=1**, because it passes both runs and the second must fail; the real guard rc=0.
 
 **Known limit, stated rather than papered over**: the receipt establishes that a guard exists and
 passes, not that it carries a mutant proving it can fire. `.claude/rules/fixture-mutants.md` binds
