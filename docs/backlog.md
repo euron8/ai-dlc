@@ -327,6 +327,19 @@ Anchored on the `**Style:**` block, not the whole file. A looser anchor false-cl
 `grep -nwE 'id'` already matches `:26` ("shadows it by id"), and a mention outside the Style block is
 not a permitted form an author can follow.
 
+**Anchored on the grant's TEMPLATE, not on the word "identifier", and that narrowing is the
+receipt.** The grant is one multi-line bullet whose closing clause is itself a prohibition — "An
+identifier is a name and MUST NOT encode a sprint, story, version, or date" — so a Style block
+holding that clause ALONE is prohibitions-only, is exactly the defect this entry states, and
+contains the word "identifier". Measured on a `cmp -s`-guarded copy: with the grant clause deleted
+and that trailing prohibition retained, an `identifier` anchor returns **rc=0 CLOSE-CANDIDATE** on
+the defect itself; only total deletion of the bullet returns rc=1. A permitted form cannot be
+written without EXHIBITING the form, so the anchor is the backticked placeholder template
+(`` `Rule <n>` ``, `` `Step <n>` ``), which no prohibition in the block carries. False-positive set
+measured EMPTY over five legitimate rewordings of the same block — bullets reordered, grant prose
+rewritten, grant widened with a further kind, placeholder letter changed, bullet unwrapped to one
+line — all rc=0, against the two offenders above at rc=1 in the same invocation.
+
 Discharges the mechanical anchor of `PC-S295-RETRO-RULE18-STABLE-IDENTIFIER-TAGS` (pinned line 610).
 **This gate is load-bearing in a way the others are not.** That entry's `merge:` field routes it into
 the pinned line 177 entry, which is `verify: manual` and whose body says "No mechanical anchor was
@@ -335,7 +348,7 @@ RECIPROCAL duplicate declaration naming 610 as the survivor. An adjudicator read
 textual grounds to close it into the other, which would delete the anchor permanently. **Close 610
 ONLY as part of an APPLIED merge.**
 
-verify: sh s=$(LC_ALL=C awk '/^\*\*Style:\*\*/{g=1;next} g&&/^\*\*/{exit} g' core/skills/ai-dlc/rule-authoring.md); [ -n "$s" ] && grep -qiE "identifier" <<<"$s"
+verify: sh s=$(LC_ALL=C awk '/^\*\*Style:\*\*/{g=1;next} g&&/^\*\*/{exit} g' core/skills/ai-dlc/rule-authoring.md); [ -n "$s" ] && grep -qE '`[A-Z][a-z]+ <[a-z]+>`' <<<"$s"
 
 ## BL-013
 
