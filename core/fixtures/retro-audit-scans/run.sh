@@ -228,6 +228,99 @@ fi
   && ok "  and the unmutated run on that corpus exits 1 (control is live)" \
   || bad "  but the unmutated run also passed — the differential is vacuous"
 
+# ------------- tier 1: the GRANT, which is the other half of the above -------
+# Every assertion above tests a PROHIBITION. rule-authoring.md's Style block also
+# has to PERMIT a form for the stable identifier its own skill cites throughout,
+# and for the whole life of the file it permitted none — leaving retro.md Step 4
+# a prohibition it could enforce against any tag a rule carries and no form to
+# point the author at. Nothing in the tree asserted the grant, so a fix that
+# deleted it again would restore the defect with every check green.
+RA=".claude/skills/ai-dlc/rule-authoring.md"
+
+# --- Assertion 12m: the grant deleted, its own trailing PROHIBITION retained -
+# THE DECISIVE INPUT, and the reason this arm is not anchored on the word
+# "identifier". The grant's closing clause is itself a prohibition, so a Style
+# block holding that clause ALONE is prohibitions-only, IS the defect, and still
+# contains the word. Measured on a copy: an `identifier` anchor scores this CLEAN.
+fresh
+cp "$WORK/t/$RA" "$WORK/ra.pristine"
+cat > "$WORK/t/$RA" <<'EOF'
+# Rule authoring
+Rules are imperative.
+
+**Style:**
+
+- An identifier is a name and MUST NOT encode a sprint, story, version,
+  or date.
+- No sprint or story references.
+- No parenthetical origin notes after a directive.
+EOF
+if cmp -s "$WORK/ra.pristine" "$WORK/t/$RA"; then
+  bad "FIXTURE BROKEN — the Class 1c mutant is byte-identical to the seed, so nothing was mutated and the arms below prove nothing"
+else
+  out="$(audit)"; has 'IDENTIFIER_GRANT: FLAGGED' "$out" \
+    && ok "grant deleted with its trailing prohibition retained -> IDENTIFIER_GRANT FLAGGED" \
+    || bad "a Style block that prohibits every way to carry an identifier and permits none went undetected"
+  [ "$(rc_of "$AUDIT" --fail-on=deterministic)" = "1" ] \
+    && ok "  and it gates the push (--fail-on=deterministic -> exit 1)" \
+    || bad "  but --fail-on=deterministic did not exit 1"
+  # MUTANT differential, on THIS corpus rather than 12f's: 12f seeds only CLAUDE.md,
+  # where this class has no subject, so it scores the same either way there and
+  # establishes nothing about Class 1c.
+  has 'IDENTIFIER_GRANT: CLEAN' "$(audit_mut)" \
+    && ok "  MUTANT: tier-1 stripped -> the same corpus scores CLEAN (no older class is catching it)" \
+    || bad "  MUTANT run still flagged it — an older class is matching this seed and Class 1c is unproven"
+fi
+
+# --- Assertion 12n: a legitimately REWORDED grant is not a violation ---------
+# The near-miss half. Different placeholder letter, different bullet order,
+# different prose: the permitted form is still exhibited and the block is clean.
+# Without this the arm could be keyed on the shipped wording and would fail every
+# honest rewrite — the unmeasured lint an operator turns off.
+fresh
+cat > "$WORK/t/$RA" <<'EOF'
+# Rule authoring
+Rules are imperative.
+
+**Style:**
+
+- No sprint or story references.
+- Carry a citable name in the rule's own heading: `Step <k>` for a step
+  section, `Rule <k>` for a rule. An identifier MUST NOT encode a sprint,
+  story, version, or date.
+EOF
+has 'IDENTIFIER_GRANT: CLEAN' "$(audit)" \
+  && ok "a reworded grant exhibiting the same form -> still CLEAN" \
+  || bad "the arm is keyed on the shipped wording rather than on the permitted form"
+
+# --- Assertion 12o: no **Style:** block at all -> FLAGGED, for THAT reason ----
+# Asserted on the reason, not the code. Deleting the block is the cheapest way to
+# silence a check that reads inside it, and a finding that did not name the cause
+# would send the reader looking for a missing bullet in a block that is gone.
+fresh
+cat > "$WORK/t/$RA" <<'EOF'
+# Rule authoring
+Rules are imperative.
+EOF
+out="$(audit)"
+has 'no `\*\*Style:\*\*` block' "$out" \
+  && ok "no Style block -> FLAGGED naming the absent block, not an absent bullet" \
+  || bad "a rule-authoring.md with no Style block did not report the missing block as the cause"
+
+# --- Assertion 12p: no subject -> N/A, never CLEAN ---------------------------
+# A scan of nothing reporting CLEAN is the shape this whole fixture exists to
+# refuse. Corpus membership is deliberately NOT this class's job — I23 in
+# validate-enforcement-map.sh fails the push when a file install.sh ships is
+# absent from `--list` — so the honest report here is N/A naming that arm.
+fresh
+rm -f "$WORK/t/$RA"
+out="$(audit)"
+if has 'IDENTIFIER_GRANT: N/A' "$out" && ! has 'IDENTIFIER_GRANT: CLEAN' "$out"; then
+  ok "subject absent -> IDENTIFIER_GRANT N/A (not a silent CLEAN)"
+else
+  bad "with no rule-authoring.md the class reported CLEAN — a scan of nothing reading as a scan that passed"
+fi
+
 # --- Assertion 12g: the two thresholds differ, and NEITHER goes silent ------
 # A tier-2-only corpus: the push is not gated, the retro still sees the finding.
 fresh
