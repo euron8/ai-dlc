@@ -217,15 +217,21 @@ do not, 14 are deliberate prose shorthand and 2 sat in that id column.
    **2c. Add the three post-pin entries to the brief.** They are NOT in `final-disposition.tsv`, so
    the renderer cannot see them; their verdicts are in `post-pin-verdicts.tsv`. See action 3.
 
-3. **Confirm `BL-063`–`BL-065` landed, or file them.** The three post-pin entries were NEVER FILED —
-   step 12's population came from the pinned 4356 lines and structurally excluded them. An agent was
-   dispatched at the end of the session and had not reported. **Check first:**
-   `grep -c '^## BL-06[3-5]' docs/backlog.md` — it was **0** at wind-down. If they are absent, file
-   them from `post-pin-verdicts.tsv`. Two of the three carry NO receipt at all, and two are
-   `HOLDS-WIDER`/`-MECHANISM-WRONG`, so their SCOPE is wrong as filed. Their receipts go in
-   `docs/backlog.md`, so they take the AI-DLC polarity — non-zero while live — which is the OPPOSITE
-   of the consumer receipts in action 2a. Read the polarity table in the status record before writing
-   either.
+3. **`BL-063`–`BL-065` ARE FILED (`b4e7f17`). This step is DONE.** The three post-pin entries were
+   the last unfiled live entries in the program. They were missed for a STRUCTURAL reason: step 12's
+   population came from the corpus pin — the ledger's first 4356 lines — and graph filed these after
+   the pin was taken, so every derivation downstream inherited that boundary. The coverage check that
+   confirmed all 59 population rows were accounted for was CORRECT and said nothing about these.
+
+   Found by asking a different question: do any backlog entries cite a pin above 4356? Zero did,
+   against a control confirming 42 cite pins below it. **When a population is derived from a pinned
+   snapshot, ask separately what the pin excluded** — a complete-looking coverage proof over the
+   population cannot see outside it.
+
+   All three verified from the tree rather than from the authoring agent's account: 64 reverify rows
+   for 64 entries, zero `unresolved`/`vacuous`/`INPUT-UNRESOLVED`/`ENTRY-SWALLOWED`, rotator ok, and
+   each cites its own post-pin line (4357 / 4392 / 4435) so the join to the consumer resolves. They
+   correctly exit NON-ZERO — the ai-dlc polarity, opposite to the fourteen consumer receipts.
 
 4. **Then Phase 5.** Step 22 is ALREADY DONE and was re-verified at wind-down: the pin reproduces,
    graph `HEAD` is unchanged, and the 147 post-pin lines are the three entries above plus one
