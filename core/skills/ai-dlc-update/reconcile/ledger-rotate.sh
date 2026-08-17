@@ -95,8 +95,8 @@ trap 'rm -rf "$TMPD"' EXIT
 # byte-indistinguishable, so no boundary rule can separate them. The two cheap discriminators
 # were measured and both fail: requiring a `PC-` id makes the rotator stop seeing every legacy
 # id-less entry, which is silent non-archival rather than a visible refusal, and requiring a
-# `verify:` receipt fails for the same corpus. `docs/analysis/ledger-entry-boundary-`
-# `measurement.md` asks whether an explicit terminator could carry the boundary instead:
+# `verify:` receipt fails for the same corpus. `ledger-entry-boundary-measurement.md`, the
+# distribution`s own analysis note, asks whether an explicit terminator could carry it instead:
 # measured on the reference consumer, the live ledger holds 96 boundary-shaped lines against 50
 # `---` separators and the archive 142 against 70, so `---` does not separate all entries and
 # that route is closed on this corpus.
@@ -130,8 +130,8 @@ trap 'rm -rf "$TMPD"' EXIT
 #
 # FALSE-POSITIVE SET, MEASURED BEFORE SHIPPING AND ENUMERATED RATHER THAN ASSERTED. Over this
 # guard`s ACTUAL POPULATION -- the files a rotation reads, which are LIVE ledgers -- it reports
-# ZERO: nothing on the reference consumer`s live ledger, nothing on `docs/backlog.md`, nothing
-# on `docs/backlog.archive.md`. It fires on the reproduction above and stays silent on the
+# ZERO: nothing on the reference consumer`s live ledger, and nothing on the distribution`s own
+# backlog or its archive. It fires on the reproduction above and stays silent on the
 # indented near-miss, with the two inputs asserted byte-different first.
 #
 # THE CONSUMER`S OWN ARCHIVE REPORTS 22, AND THAT IS STATED RATHER THAN ROUNDED AWAY. An

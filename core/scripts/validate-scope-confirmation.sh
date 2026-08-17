@@ -191,7 +191,7 @@ say "answers_entries_scanned: ${ENTRIES}"
 # neither appears in the producer's output. This is the residue, and it is named because a
 # separation that makes a wrong answer unlikely is not one that makes it unconstructible.
 #
-# KEEP THIS FUNCTION SELF-CONTAINED. `docs/backlog.md`'s receipt for this defect lifts it by
+# KEEP THIS FUNCTION SELF-CONTAINED. The distribution's backlog receipt for this defect lifts it by
 # its own definition boundaries -- `sed -n '/^field_of() {/,/^}/p'` -- and evals it alone, so a
 # correct fix that delegated to a helper would leave the helper undefined and report the defect
 # STILL-LIVE against working code. Measured: the helper-delegating form exits 9 there.

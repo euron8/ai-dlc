@@ -283,7 +283,7 @@ AWK
 
 # WHICH BOUNDARY LINES CARRY AN ENTRY ID -- the second half of the boundary question, and it
 # is here for the same reason the shape rule is: two tools disagreeing about what counts as an
-# id is itself a bug. `docs/analysis/ledger-entry-boundary-measurement.md` closes on "Fix
+# id is itself a bug. `ledger-entry-boundary-measurement.md` closes on "Fix
 # `lib.sh` once ... both readers must move together", and this is that once.
 #
 # THE SHAPE RULE ALONE CANNOT SAY WHETHER A `- **` BULLET IS AN ENTRY OR AN ANNOTATION, AND

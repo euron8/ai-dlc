@@ -294,7 +294,7 @@ fi
 # THE FALSE-POSITIVE ARMS BELOW MATTER MORE THAN THE POSITIVE ONE, and that is not a slogan
 # here. A refusal is the whole of this guard's behaviour, so a guard that refuses too much
 # wedges every rotation of a ledger it misreads, and the operator turns it off. The class it
-# has to stay silent on is named in `docs/analysis/ledger-entry-boundary-measurement.md`: 49
+# has to stay silent on is named in `ledger-entry-boundary-measurement.md`: 49
 # of the reference consumer's 123 boundary-matching lines name no `PC-` id and SOME OF THEM
 # ARE REAL ENTRIES in an older id-less format. A rule that cannot tell those from annotations
 # does not get to refuse on their account.
@@ -392,7 +392,7 @@ fp_check fp-versionless "SUBJECT DEFECT" "a real prose-titled entry with a VERSI
 # the one shape NOTHING can classify. If it is a real entry, nothing is stranded and the
 # refusal cost an operator two lines. If it is an annotation, the closed entry`s tail — its
 # receipt included — is destroyed, and destroyed is not a state you recover by re-running.
-# `docs/analysis/ledger-entry-boundary-measurement.md` IS the finding that no rule separates
+# `ledger-entry-boundary-measurement.md` IS the finding that no rule separates
 # the two: an annotation lead-in and an entry title are byte-indistinguishable.
 #
 # THE TWO OUTCOMES ARE NOT SYMMETRIC, which is the whole of the argument. A wrong refusal is a
@@ -401,8 +401,8 @@ fp_check fp-versionless "SUBJECT DEFECT" "a real prose-titled entry with a VERSI
 # on "the guard belongs in the tool".
 #
 # AND IT WEDGES NOTHING THAT EXISTS. Measured with the shipping script against copies of all
-# four real corpora — the consumer live ledger, the consumer archive, `docs/backlog.md` and
-# `docs/backlog.archive.md` — the guard reports ZERO findings. This case arises only in
+# four real corpora — the consumer live ledger, the consumer archive, and the distribution's own
+# backlog and its archive — the guard reports ZERO findings. This case arises only in
 # constructed input like the ledger below. The arm two further down proves the refusal is
 # ESCAPABLE, which is what makes requiring it legitimate rather than a dead end.
 rg_write fp-open '- **A real prose-titled entry that is still OPEN** and carries its own receipt
@@ -548,7 +548,7 @@ else
 fi
 
 # --- MUTATION: DELETE THE BULLET ARM OF ledger_entry_shape() -------------------------------
-# `if (0) return "bullet"` is the remedy `docs/analysis/ledger-entry-boundary-measurement.md`
+# `if (0) return "bullet"` is the remedy `ledger-entry-boundary-measurement.md`
 # rules out as WORSE THAN THE DEFECT — it makes the rotator stop seeing every bulleted entry,
 # which is silent non-archival rather than a visible refusal. It was measured to satisfy an
 # earlier form of BL-032's receipt, i.e. a FALSE CLOSE for a destructive change.

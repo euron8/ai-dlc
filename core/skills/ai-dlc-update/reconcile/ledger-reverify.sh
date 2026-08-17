@@ -1169,7 +1169,7 @@ fi
 # `ledger_entry_id()` REPLACES A LOCAL `idshape()` THAT HAD ITS OWN FALSE NEGATIVES. That
 # helper required `^[A-Z0-9-]+$`, which excludes `_` and `.`; two real entries on the reference
 # consumer failed it. It is now single-homed in `lib.sh` beside the shape rule, which is what
-# `docs/analysis/ledger-entry-boundary-measurement.md` asks for, and `ledger-rotate.sh`s
+# `ledger-entry-boundary-measurement.md` asks for, and `ledger-rotate.sh`s
 # refusal guard reads the same one.
 awk -v DASH=' — ' "$(ledger_entry_awk)$(ledger_entry_id_awk)"'
   function idshape(s) {
