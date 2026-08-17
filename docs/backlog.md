@@ -2690,3 +2690,165 @@ pinned ledger line 4313.
 
 
 verify: sh R=$(mktemp -d); mkdir -p "$R/_bmad-output/implementation-artifacts" "$R/_bmad-output/planning-artifacts/s300/archive/cycle-1"; printf "| [core] 14 - Update pipeline snapshot | PASS (lead) | 5881 tok |\n" > "$R/_bmad-output/implementation-artifacts/gate-log.md"; printf "| [core] 14 - Update pipeline snapshot | PASS (lead) | 4385 tok |\n" > "$R/_bmad-output/planning-artifacts/s300/archive/cycle-1/gate-log.md"; out=$(bash core/scripts/validate-artifact-budget.sh --root "$R" --check-evidence 2>&1); rm -rf "$R"; case "$out" in *"cites 5881 tok"*) true;; *) false;; esac
+
+## BL-063
+
+**One `grep` at `core/scripts/validate-spec-join.sh:164` takes down the whole of Check 30 when a
+memlog tags a capability entry with the producer's optional `by <author>` qualifier.** The predicate
+requires `)` immediately after `capability`/`capabilities`, and the `exit 2` it guards at `:167`
+precedes every other join in the script. Driven rather than read: a synthetic spec seeded
+`- (capability) LR-S1-1 -> CAP-1` returns **rc 0**, `PASS (1 locked requirement(s), 1
+capability(ies)...)` — the positive control — while the otherwise byte-identical spec seeded
+`- (capability by bmad-spec) LR-S1-1 -> CAP-1` returns **rc 2, DISARMED**. Both runs in one
+invocation, same PRD, with the two memlogs asserted to differ before the comparison is read.
+
+So it is not "the LR->CAP join" that dies, as filed. Joins (2) CAP->FR, (2a) CAP->AD, (3) story
+`capabilities:` frontmatter, the borrowed `lint_spine.py` and `bmad-testarch-trace` verdicts and the
+baseline-did-not-reproduce arm all sit below `:167` and never run. **The blast radius is understated
+and the stated cause is false.** The filing says `bmad-spec`'s output changed to tag every entry. It
+did not: the producer is the consumer's own `_bmad/scripts/memlog.py`, where `--by` is an OPTIONAL
+per-append flag — declared at `:210`, rendered at `:170` — whose header at `:58` documents both forms
+as legal, "`(idea)`, `(idea by user)`, `(by coach)`. Omit them for a plain note." ai-dlc ships no
+memlog producer at all: **0** tracked paths matching `memlog` against a control of **26** matching
+`spec`, so the grammar is the consumer's to vary per append and the upstream reader must tolerate
+both. The stated consequence — "a permanently-DISARMED join at every story gate" — is false in the
+same direction: across all four spec memlogs on the reference consumer the split is s299 **10 bare /
+0 suffixed**, s301 **13 / 0**, s302 **0 / 26**, s303 **11 / 0**. One sprint in four, decided per
+append. The predicate is also far older than the filing's stated 0.360.0->0.372.0 span, entering at
+`a5a21a3` (v0.169.1) — `git log -S CAP_ENTRIES` over that file returns that one commit, against a
+control needle known present returning 1 and an impossible needle returning 0.
+
+**The filing's prescribed fix is under-narrow.** It accepts only ` by <author>`. Following the
+producer's documented `(<type>[ <qualifier>])` grammar instead — `([[:space:]][^)]*)?` before the
+closing paren — matches bare, ` by bmad-spec` and the ordinal-before-`by` shape ` 2 by lead`, and
+still returns **0** on `- (event by bmad-spec)`, which is the negative control that stops the
+widening from making the join vacuous. The ordinal shape is in the consumer corpus at **1** hit
+against a control of **871** plain `(<type> by ...)` tags — robustness rather than a live miss, but
+the `by`-only form misses it. The DISARM text at `:166` should move with the predicate: it frames
+the remedy as tracking a change in "bmad-spec's memlog entry types", when what is required is
+tolerating a qualifier that was always legal.
+
+**The guarding fixture certifies a shape it never had.** `core/fixtures/spec-join-integrity/seed.sh:200`
+reads "REAL bmad-spec SHAPE, captured from an actual headless run" and seeds **0** `(capability by ...)`
+entries against **13** bare ones. It is green under both the broken and the widened predicate, so
+this is not remediated when `:164` changes — it is remediated when that fixture seeds the suffixed
+form and fails without the widening.
+
+**Why the receipt is the receipt.** It drives the shipping script twice and reads its EXIT CODE, so
+there is no substring for a fix to quote back inside a comment recording what it removed. The control
+is not "the run happened": it asserts the bare-form arm returns **exactly 0**. An earlier draft
+returned non-zero for the wrong reason — its control spec carried no `FR-` identifier and DISARMED at
+a different arm, which reads exactly like the finding. It reaches 0 when `:164` accepts the
+qualifier, demonstrated against a mutant carrying the widened predicate whose two sides were asserted
+to differ: the suffixed run goes rc 2 -> rc 0 while the bare arm stays 0. A sanity failure exits 9,
+which reverify reports as STILL-LIVE — the safe direction, but not a distinct status.
+
+Discharges the consumer entry `PC-S303-SPEC-JOIN-MEMLOG-REGEX-STALE-VS-AUTHOR-SUFFIX` at LIVE ledger
+line 4357, past the 4356-line pin. That entry carries no `verify:` receipt of its own and is
+invisible to the consumer's closer.
+
+verify: sh D=$(mktemp -d); mkdir -p "$D/b" "$D/s"; printf "# PRD\n\n- FR-S1-1 the functional requirement, CAP-1\n- LR-S1-1 the locked requirement\n" > "$D/prd.md"; printf "# SPEC\n\nCAP-1 the capability\n" > "$D/b/SPEC.md"; cp "$D/b/SPEC.md" "$D/s/SPEC.md"; printf -- "- (capability) LR-S1-1 -> CAP-1\n" > "$D/b/.memlog.md"; printf -- "- (capability by bmad-spec) LR-S1-1 -> CAP-1\n" > "$D/s/.memlog.md"; cmp -s "$D/b/.memlog.md" "$D/s/.memlog.md" && { rm -rf "$D"; exit 9; }; bash core/scripts/validate-spec-join.sh --spec "$D/b" --prd "$D/prd.md" >/dev/null 2>&1; b=$?; bash core/scripts/validate-spec-join.sh --spec "$D/s" --prd "$D/prd.md" >/dev/null 2>&1; s=$?; rm -rf "$D"; [ "$b" -eq 0 ] || exit 9; [ "$s" -ne 2 ]
+
+## BL-064
+
+**`report-propagation-fanout.sh` hands its whole corpus to `python3` through the ENVIRONMENT, and
+`execve` charges its size limit on that block whatever the heredoc does.**
+`core/scripts/report-propagation-fanout.sh:255-261` is a single `export` statement carrying **10**
+`FANOUT_*` variables — the full unified diff and the entire `git ls-files` corpus among them — and
+`:262` then runs `python3 - <<'PYEOF'`. Measured behaviourally against the shipping script with a
+`python3` shim first on `PATH`, so the thing under test is the program and not a restatement of it:
+the child's own environment is **2236** bytes when exec'd directly and **31962** bytes when exec'd by
+this script from this repo — a payload of **29726** bytes, stable across three consecutive runs, on a
+tree whose `git ls-files` is **27885** bytes and whose diff was **1741**. `ARG_MAX` here is
+**1048576**, and the ceiling is real in both directions in one invocation: a 1000KB environment execs
+`/usr/bin/true` fine and an 1100KB one returns `Argument list too long`.
+
+**It is a large-REPO defect, not the large-diff defect that was filed, and the named trigger cannot
+produce the crash.** The fixed cost is the file list, not the diff: on the reference consumer
+`git ls-files` is **607945** bytes across **10146** paths, which is **58%** of `ARG_MAX` consumed
+before a single byte of diff exists. A fix that moves only `FANOUT_DIFF` to a temp file leaves that
+58% in place. The filing also blames one variable when `:255-261` exports ten, so the subject is the
+env-passing pattern rather than any one name. And the stated consequence does not hold: the filing's
+harm is that "a caller checking `$? -in (0,2,3)` would misclassify this", but no such caller exists —
+`core/skills/ai-dlc/steps/_gate-procedures.md:457-458` states the report "is not a gate verdict and
+no exit code of it adjudicates a gate", and `:460` that "its exit codes say whether it could LOOK,
+never what it found". Exit 126 with empty stdout reads as could-not-look, which is correct. The real
+gap is that 126 is undocumented, which is milder than filed.
+
+**There is no fixture, and this repo's own corpus cannot build one.** Fixture directories matching
+`fanout` or `propagation`: **0**, against a control of **159** fixture directories; exactly **1**
+fixture names the script at all. A new one cannot use this tree as its corpus — ai-dlc is 27885 bytes
+across 633 paths against the consumer's 607945 across 10146 — so it has to synthesize the payload
+size rather than reach `ARG_MAX` honestly.
+
+**Why the receipt is the receipt.** It measures the SIZE OF THE CHILD'S ENVIRONMENT rather than
+naming any variable, so a fix that renames `FANOUT_DIFF` without moving it off the env channel cannot
+close it, and no comment recording the change can satisfy it. Both legs are observed in the same
+invocation — the direct exec establishes the baseline and proves the shim is reachable, the scripted
+exec establishes the payload — and the verdict is only their difference. It reaches 0 when the
+payload travels by file or stdin instead: demonstrated against a mutant that stops exporting the two
+large variables, with the two sides asserted to differ first, where the delta goes **32115 -> 0**.
+That measurement also killed a draft arm asserting `run > base` as a sanity check, which would have
+exited 9 on the fixed script and made this receipt unsatisfiable — the same defect in the other
+direction.
+
+Discharges the consumer entry `PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF` at LIVE ledger line
+4392, past the 4356-line pin. That entry carries no `verify:` receipt of its own and is invisible to
+the consumer's closer.
+
+verify: sh d=$(mktemp -d); n="$d/n"; printf "#!/bin/sh\ncat >/dev/null\nenv | wc -c > %s\n" "$n" > "$d/python3"; chmod +x "$d/python3"; PATH="$d:$PATH" python3 </dev/null >/dev/null 2>&1; base=$(cat "$n" 2>/dev/null); PATH="$d:$PATH" bash core/scripts/report-propagation-fanout.sh HEAD~1 >/dev/null 2>&1; run=$(cat "$n" 2>/dev/null); rm -rf "$d"; [ -n "$base" ] && [ -n "$run" ] || exit 9; [ $((run - base)) -lt 4096 ]
+
+## BL-065
+
+**`field_of()` corrupts a bold-markdown field into the literal string `**`, and the sibling grammar
+it never considered returns EMPTY and accuses the lead of skipped conduct.** The function at
+`core/scripts/validate-scope-confirmation.sh:158-162` was lifted out and EXECUTED rather than
+restated, because a restated regex is a second implementation whose bugs nobody finds. Over four
+grammars in one invocation it returns `confirmed` for `- scope_confirmed: confirmed` and `confirmed`
+for the backtick prose form — the two controls, and the only two its own comment block documents —
+then **`**`** for `- **scope_confirmed:** confirmed` and **empty** for
+`- **scope_confirmed**: confirmed`. The first routes to the FAIL at `:199`, "scope_confirmed is
+'**', which is not one of confirmed|corrected". The second routes to the FAIL at `:186-190`, "a
+Rule 3(d) pause point that did not happen" — a well-formed snapshot with a correct value read as
+evidence the lead skipped a mandatory operator pause. Single site: `field_of` appears in exactly
+**1** core script, against a control of **8** naming `grep -o`.
+
+**The filing is right about the mechanism and misses the harsher half.** It reproduces only the
+colon-inside form and its `**` corruption; the colon-outside form is a second established bold
+grammar that fails into an accusation rather than a malformed-value report, and the filing never
+mentions it. `scope_confirmed_cite` corrupts identically at `:206`.
+
+**The prescribed fix does not fix the case the filing itself reproduces, and half of it is silently
+inert here.** Transcribed literally and run: it still returns **`**`** on the colon-inside form,
+because the closing `**` sits BETWEEN the colon and the value while the prescribed alternation places
+the wrapper BEFORE the colon; on the colon-outside form it is strictly worse, capturing the whole
+line `**scope_confirmed**: confirmed` as the "value". And `\|` is a GNU BRE extension that this
+machine's `grep` honours but BSD `sed` does not — measured in one invocation, the alternation `sed`
+left `scope_confirmed**: confirmed` untouched while the same `sed` with a plain `\(\*\*\)` capture
+stripped it to `scope_confirmed: confirmed`. `field_of`'s second leg is a `sed`, so the prescribed
+change would half-apply with no error at all. The remediation is to NORMALIZE the line — strip `**`
+and backticks — before matching `NAME[[:space:]]*:[[:space:]]*VALUE`, which is position-independent
+and needs no `\|`. Enumerating wrapper alternatives around the name is what fails.
+
+**The guarding fixture is seeded from what its own reader already accepts.**
+`core/fixtures/scope-confirmation/` SHIPS and seeds **0** bold-form lines in `seed.sh` and **0** in
+`run.sh`, against a control of **5** and **9** `scope_confirmed` mentions in those same two files —
+exactly the two grammars the parser handles and no third. A fix would ship green and unguarded. The
+consumer has converted only the two lines the check consumes: **14** bold-field lines remain in its
+`_bmad-output/pipeline-snapshot.md` against **10** plain, so every one of them is exposed to the
+identical misparse by any future `field_of`-style reader.
+
+**Why the receipt is the receipt, and why it is not `manual`.** The filing declared `verify: manual`
+on the grounds that the failure depends on the caller's markdown styling rather than a stable string.
+That is right about the consumer's engine and wrong here: the tree is executable, so the receipt
+lifts `field_of` from the shipping script by its own definition boundaries and drives it, asserting a
+BEHAVIOUR rather than any text a fix could quote back. The plain-bullet arm returning `confirmed` is
+the control in the same invocation and exits 9 if it ever stops holding, which would mean the lift
+broke rather than the defect closed. It reaches 0 when both bold forms yield `confirmed`,
+demonstrated against a normalizing implementation that returns `confirmed` for all three inputs where
+the shipping one returns `confirmed`, `**` and empty.
+
+Discharges the consumer entry `PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR` at
+LIVE ledger line 4435, past the 4356-line pin.
+
+verify: sh V=core/scripts/validate-scope-confirmation.sh; F=$(sed -n "/^field_of() {/,/^}/p" "$V"); [ -n "$F" ] || exit 9; eval "$F"; D=$(mktemp -d); printf -- "- scope_confirmed: confirmed\n" > "$D/p.md"; printf -- "- **scope_confirmed:** confirmed\n" > "$D/i.md"; printf -- "- **scope_confirmed**: confirmed\n" > "$D/o.md"; p=$(field_of scope_confirmed "$D/p.md"); i=$(field_of scope_confirmed "$D/i.md"); o=$(field_of scope_confirmed "$D/o.md"); rm -rf "$D"; [ "$p" = confirmed ] || exit 9; [ "$i" = confirmed ] && [ "$o" = confirmed ]
