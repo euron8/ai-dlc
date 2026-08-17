@@ -341,7 +341,7 @@ directions and the threshold is real rather than assumed.
 **Wider than filed in three ways.** The filing blames `FANOUT_DIFF`; the measurement shows
 `FANOUT_FILES` is the dominant FIXED cost at 607945 bytes — **58% of `ARG_MAX` consumed before any
 diff exists**. A fix that moves only the diff to a temp file leaves that 58% in place and the script
-still fragile on any large repo. `:255-260` exports **nine** `FANOUT_*` variables, so the subject is
+still fragile on any large repo. `:255-260` exports **ten** `FANOUT_*` variables, so the subject is
 the env-passing pattern, not one variable. And **it is a large-REPO defect, not a large-diff defect**:
 with the file list resident the diff has only ~437KB of headroom, and past roughly 17,000 tracked
 paths the script fails on a zero-byte diff. graph is at **10146 paths / 607945 bytes** and growing;
@@ -352,7 +352,7 @@ this repo is at **628 / 26885**.
 FINE, which is exactly the control above. Single-ref mode diffs the base against the **working tree**,
 so the real input was accumulated uncommitted dirtiness across many files, i.e. the ordinary mid-sprint
 state rather than an unusually large repair. And the filing's harm — "a caller checking
-`$? -in (0,2,3)` would misclassify this" — has no such caller: `_gate-procedures.md:457-458` states
+`$? -in (0,2,3)` would misclassify this" — has no such caller: `core/skills/ai-dlc/steps/_gate-procedures.md:457-458` states
 that the fanout report "is not a gate verdict and no exit code of it adjudicates a gate", and `:460`
 that "its exit codes say whether it could LOOK, never what it found". Exit 126 with 0 bytes of stdout
 reads as could-not-look, which is correct. The real gap is that 126 is undocumented, which is milder
