@@ -16,13 +16,18 @@ absence-shaped claim. This brief is the result.
 Nothing below asks you to take upstream's word for it; every row names its evidence and where
 it lives. Where upstream was wrong, that is stated in the row rather than quietly corrected.
 
-## The annotation, rendered once
+## The annotation, rendered PER ENTRY
 
-Paste this string, **byte for byte**, into each entry in sections A and B:
+**There is no single string to paste, and an earlier revision of this brief said there was.**
+That revision rendered one annotation from the version being pulled and instructed it into all
+39 + 18 entries of sections A and B. But most of those entries were absorbed
+YEARS of releases earlier, and the version in this annotation is permanent provenance: it is what
+retro and the §8.1 fan-in read back. Stamping the pulled version onto an entry fixed in v0.21.0
+records an absorption that never happened at a release that never made it.
 
-```
-**ADOPTED UPSTREAM (v0.373.0, verified 2026-08-17)**
-```
+**So each row in sections A and B carries its OWN paste-ready string, in its own column.** Paste
+that row's string, byte for byte. Do not compose one from the version column, and do not reuse a
+neighbouring row's.
 
 **The form is load-bearing in two directions and a sloppy paste breaks both.**
 `ledger-reverify.sh` treats *any* occurrence of `ADOPTED UPSTREAM` in an entry as closed and
@@ -80,53 +85,61 @@ resolves them and your next reconcile emits a `NAMED-UPSTREAM` row independently
 `brief-annotation` rows CANNOT — `flush()` gates on `has_verify &&` and they carry no receipt —
 so for those **this annotation is the only closing channel**.
 
-| pin | entry | verdict | channel |
-|---|---|---|---|
-| 157 | `SKILL.md:665 cites the provenance-block schema at a path th...` | ALREADY-FIXED-v0.143.6 | brief-annotation |
-| 271 | `extensions/steps-domain/artifact-consolidation-push.md` | ALREADY-FIXED-v0.33.2 | brief-annotation |
-| 273 | `extensions/roles/code-reviewer-push.md` | ALREADY-FIXED-v0.277.0 | brief-annotation |
-| 275 | `extensions/roles/qa-push.md` | ALREADY-FIXED-v0.277.0 | brief-annotation |
-| 281 | `.claude/team-roles/tea.md` | ALREADY-FIXED-v0.21.0 | brief-annotation |
-| 297 | `scripts/validate-provenance-block.sh` | ALREADY-FIXED-v0.128.0 | brief-annotation |
-| 302 | `scripts/validate-provenance-block.sh` | ALREADY-FIXED-v0.60.0 | brief-annotation |
-| 305 | `scripts/scan-stray-provenance.sh` | ALREADY-FIXED-v0.198.0 | brief-annotation |
-| 351 | `PC-S295-RETRO-STEERING-AUDIT-SESSION-SCOPED` | ALREADY-FIXED-v0.117.0 | brief-annotation |
-| 387 | `PC-S295-FLOWLOG-HEADER-LEGEND-IS-GREPPABLE-AS-DATA` | ALREADY-FIXED-v0.117.0 | brief-annotation |
-| 553 | `PC-S295-RETRO-LEAD-SOLO-EVAL-LLM-CHECK` | FALSIFIED | changelog-cite |
-| 610 | `PC-S295-RETRO-RULE18-STABLE-IDENTIFIER-TAGS` | DUPLICATE-OF-pin177 | changelog-cite |
-| 638 | `steps/gate-validation.md Check 25 has no remediation path f...` | ALREADY-FIXED-v0.111.0 | brief-annotation |
-| 728 | `PC-S296-PAUSE-SKIP-ARM-MISSES-TASK-NOTIFICATIONS` | ALREADY-FIXED-v0.265.0 | brief-annotation |
-| 821 | `PC-S296-H1-FIXTURE-CITATION-GAP` | ALREADY-FIXED-v0.146.0 | changelog-cite |
-| 1125 | `PC-S297-RETRO-MD-CLAIMS-NONEXISTENT-GHA-WORKFLOW` | ALREADY-FIXED-93e05d3 | changelog-cite |
-| 1254 | `PC-S297-VALIDATE-MANDATORY-RULES-CHECK3-CHECK4-DEAD` | ALREADY-FIXED-v0.88.0 | changelog-cite |
-| 1305 | `PC-S297-RETRO-UPSTREAM-PM-AC-PRECISION` | ALREADY-FIXED-v0.169.0 | changelog-cite |
-| 1406 | `PC-S299-UNREGISTERED-DRIFT-SCAN-SKIPS-CORE-FIXTURES-AND-COR...` | DUPLICATE-OF-PC-S303-UNREG | changelog-cite |
-| 1449 | `PC-S299-LEDGER-REVERIFY-SIGPIPE-FALSE-ABSENT` | ALREADY-FIXED-v0.147.1 | changelog-cite |
-| 1543 | `PC-S299-READOPT-DOSSIER-RENDERS-REASON-EMPTY` | ALREADY-FIXED-v0.150.1 | changelog-cite |
-| 1757 | `PC-S303-UNREGISTERED-DRIFT-SCANS-FIVE-OF-TEN-CORE-SUBTREES` | FALSIFIED | changelog-cite |
-| 1862 | `PC-S298-WAIT-FOR-DELIVERABLE-NO-PROGRESS-EVIDENCE` | ALREADY-FIXED-v0.168.0 | changelog-cite |
-| 2028 | `4b. Operator-steerability audit, then flow-log rotation (Ru...` | ALREADY-FIXED-v0.180.0 | brief-annotation |
-| 2170 | `PC-S308-SELF-UPDATE-INSTALLS-THE-VALIDATOR-THAT-BLOCKS-ITS-...` | ALREADY-FIXED-v0.185.0 | changelog-cite |
-| 2680 | `PC-S300-CYCLE-STATE-RESOLVED-UNREACHABLE-FOR-A-STALLED-TERM...` | ALREADY-FIXED-v0.247.0 | changelog-cite |
-| 3145 | `PC-S316-LEDGER-REVERIFY-DOES-NOT-NORMALIZE-CONSUMER-TO-AN-A...` | ALREADY-FIXED-v0.301.0 | changelog-cite |
-| 3190 | `PC-S316-ABSORPTION-DETECTOR-JOINS-ONLY-ON-NUMBERED-ANCHORS` | ALREADY-FIXED-v0.275.0 | changelog-cite |
-| 3244 | `PC-S316-LEDGER-REVERIFY-EXITS-0-SILENTLY-ON-AN-UNREADABLE-L...` | ALREADY-FIXED-v0.301.0 | changelog-cite |
-| 3287 | `PC-S302-ADJUDICATION-RERUN-BASE-DISARMS-LC-A1` | ALREADY-FIXED-v0.303.0 | changelog-cite |
-| 3336 | `PC-S314-APPLY-SH-OVERWRITES-ITSELF-MID-RUN-UNDER-DEFER` | ALREADY-FIXED-v0.316.0 | changelog-cite |
-| 3375 | `PC-S314-NO-DETECTOR-CLAIMS-A-LAYER-FILE-CITING-A-PATH-THE-P...` | ALREADY-FIXED-v0.333.0 | changelog-cite |
-| 3464 | `PC-S319-SUBJECT-DIGEST-IS-UNREADABLE-ONCE-ITS-OWN-ROW-STOPS...` | ALREADY-FIXED-v0.331.0 | changelog-cite |
-| 3507 | `PC-S328-NAMED-UPSTREAM-JOINS-ON-THE-FULL-SLUG-WHILE-UPSTREA...` | ALREADY-FIXED-v0.329.0 | changelog-cite |
-| 3719 | `PC-S302-FIXTURE-SUITE-POOL-PRODUCES-AN-UNREPRODUCIBLE-FAIL-...` | ALREADY-FIXED-v0.367.0 | changelog-cite |
-| 3749 | `PC-S302-RETIRED-LAYER-CONTRACT-READS-CLEAN-OVER-TWO-REAL-PO...` | ALREADY-FIXED-v0.359.0 | changelog-cite |
-| 3787 | `PC-S302-HARD-BLOCKERS-HAS-NO-POST-APPLY-GUARD` | ALREADY-FIXED-v0.367.0 | changelog-cite |
-| 3828 | `PC-S303-EFFORT-BINDING-COMMANDS-A-SLASH-COMMAND-THAT-RESOLV...` | ALREADY-FIXED-v0.367.0 | changelog-cite |
-| 4153 | `PC-S303-BUDGET-SCRIPT-PASS-LINE-UNCONDITIONAL` | ALREADY-FIXED-v0.372.0 | brief-annotation |
+| pin | entry | verdict | channel | paste this, byte for byte |
+|---|---|---|---|---|
+| 157 | `SKILL.md:665 cites the provenance-block schema at a path th...` | ALREADY-FIXED-v0.143.6 | brief-annotation | `**ADOPTED UPSTREAM (v0.143.6, verified 2026-08-17)**` |
+| 271 | `extensions/steps-domain/artifact-consolidation-push.md` | ALREADY-FIXED-v0.33.2 | brief-annotation | `**ADOPTED UPSTREAM (v0.33.2, verified 2026-08-17)**` |
+| 273 | `extensions/roles/code-reviewer-push.md` | ALREADY-FIXED-v0.277.0 | brief-annotation | `**ADOPTED UPSTREAM (v0.277.0, verified 2026-08-17)**` |
+| 275 | `extensions/roles/qa-push.md` | ALREADY-FIXED-v0.277.0 | brief-annotation | `**ADOPTED UPSTREAM (v0.277.0, verified 2026-08-17)**` |
+| 281 | `.claude/team-roles/tea.md` | ALREADY-FIXED-v0.21.0 | brief-annotation | `**ADOPTED UPSTREAM (v0.21.0, verified 2026-08-17)**` |
+| 297 | `scripts/validate-provenance-block.sh` | ALREADY-FIXED-v0.128.0 | brief-annotation | `**ADOPTED UPSTREAM (v0.128.0, verified 2026-08-17)**` |
+| 302 | `scripts/validate-provenance-block.sh` | ALREADY-FIXED-v0.60.0 | brief-annotation | `**ADOPTED UPSTREAM (v0.60.0, verified 2026-08-17)**` |
+| 305 | `scripts/scan-stray-provenance.sh` | ALREADY-FIXED-v0.198.0 | brief-annotation | `**ADOPTED UPSTREAM (v0.198.0, verified 2026-08-17)**` |
+| 351 | `PC-S295-RETRO-STEERING-AUDIT-SESSION-SCOPED` | ALREADY-FIXED-v0.117.0 | brief-annotation | `**ADOPTED UPSTREAM (v0.117.0, verified 2026-08-17)**` |
+| 387 | `PC-S295-FLOWLOG-HEADER-LEGEND-IS-GREPPABLE-AS-DATA` | ALREADY-FIXED-v0.117.0 | brief-annotation | `**ADOPTED UPSTREAM (v0.117.0, verified 2026-08-17)**` |
+| 553 | `PC-S295-RETRO-LEAD-SOLO-EVAL-LLM-CHECK` | FALSIFIED | changelog-cite | `**ADOPTED UPSTREAM (v0.373.0, verified 2026-08-17)**` |
+| 610 | `PC-S295-RETRO-RULE18-STABLE-IDENTIFIER-TAGS` | DUPLICATE-OF-pin177 | changelog-cite | `**ADOPTED UPSTREAM (v0.373.0, verified 2026-08-17)**` |
+| 638 | `steps/gate-validation.md Check 25 has no remediation path f...` | ALREADY-FIXED-v0.111.0 | brief-annotation | `**ADOPTED UPSTREAM (v0.111.0, verified 2026-08-17)**` |
+| 728 | `PC-S296-PAUSE-SKIP-ARM-MISSES-TASK-NOTIFICATIONS` | ALREADY-FIXED-v0.265.0 | brief-annotation | `**ADOPTED UPSTREAM (v0.265.0, verified 2026-08-17)**` |
+| 821 | `PC-S296-H1-FIXTURE-CITATION-GAP` | ALREADY-FIXED-v0.146.0 | changelog-cite | `**ADOPTED UPSTREAM (v0.146.0, verified 2026-08-17)**` |
+| 1125 | `PC-S297-RETRO-MD-CLAIMS-NONEXISTENT-GHA-WORKFLOW` | ALREADY-FIXED-93e05d3 | changelog-cite | `**ADOPTED UPSTREAM (v0.103.0, verified 2026-08-17)**` |
+| 1254 | `PC-S297-VALIDATE-MANDATORY-RULES-CHECK3-CHECK4-DEAD` | ALREADY-FIXED-v0.88.0 | changelog-cite | `**ADOPTED UPSTREAM (v0.88.0, verified 2026-08-17)**` |
+| 1305 | `PC-S297-RETRO-UPSTREAM-PM-AC-PRECISION` | ALREADY-FIXED-v0.169.0 | changelog-cite | `**ADOPTED UPSTREAM (v0.169.0, verified 2026-08-17)**` |
+| 1406 | `PC-S299-UNREGISTERED-DRIFT-SCAN-SKIPS-CORE-FIXTURES-AND-COR...` | DUPLICATE-OF-PC-S303-UNREG | changelog-cite | `**ADOPTED UPSTREAM (v0.373.0, verified 2026-08-17)**` |
+| 1449 | `PC-S299-LEDGER-REVERIFY-SIGPIPE-FALSE-ABSENT` | ALREADY-FIXED-v0.147.1 | changelog-cite | `**ADOPTED UPSTREAM (v0.147.1, verified 2026-08-17)**` |
+| 1543 | `PC-S299-READOPT-DOSSIER-RENDERS-REASON-EMPTY` | ALREADY-FIXED-v0.150.1 | changelog-cite | `**ADOPTED UPSTREAM (v0.150.1, verified 2026-08-17)**` |
+| 1757 | `PC-S303-UNREGISTERED-DRIFT-SCANS-FIVE-OF-TEN-CORE-SUBTREES` | FALSIFIED | changelog-cite | `**ADOPTED UPSTREAM (v0.373.0, verified 2026-08-17)**` |
+| 1862 | `PC-S298-WAIT-FOR-DELIVERABLE-NO-PROGRESS-EVIDENCE` | ALREADY-FIXED-v0.168.0 | changelog-cite | `**ADOPTED UPSTREAM (v0.168.0, verified 2026-08-17)**` |
+| 2028 | `4b. Operator-steerability audit, then flow-log rotation (Ru...` | ALREADY-FIXED-v0.180.0 | brief-annotation | `**ADOPTED UPSTREAM (v0.180.0, verified 2026-08-17)**` |
+| 2170 | `PC-S308-SELF-UPDATE-INSTALLS-THE-VALIDATOR-THAT-BLOCKS-ITS-...` | ALREADY-FIXED-v0.185.0 | changelog-cite | `**ADOPTED UPSTREAM (v0.185.0, verified 2026-08-17)**` |
+| 2680 | `PC-S300-CYCLE-STATE-RESOLVED-UNREACHABLE-FOR-A-STALLED-TERM...` | ALREADY-FIXED-v0.247.0 | changelog-cite | `**ADOPTED UPSTREAM (v0.247.0, verified 2026-08-17)**` |
+| 3145 | `PC-S316-LEDGER-REVERIFY-DOES-NOT-NORMALIZE-CONSUMER-TO-AN-A...` | ALREADY-FIXED-v0.301.0 | changelog-cite | `**ADOPTED UPSTREAM (v0.301.0, verified 2026-08-17)**` |
+| 3190 | `PC-S316-ABSORPTION-DETECTOR-JOINS-ONLY-ON-NUMBERED-ANCHORS` | ALREADY-FIXED-v0.275.0 | changelog-cite | `**ADOPTED UPSTREAM (v0.275.0, verified 2026-08-17)**` |
+| 3244 | `PC-S316-LEDGER-REVERIFY-EXITS-0-SILENTLY-ON-AN-UNREADABLE-L...` | ALREADY-FIXED-v0.301.0 | changelog-cite | `**ADOPTED UPSTREAM (v0.301.0, verified 2026-08-17)**` |
+| 3287 | `PC-S302-ADJUDICATION-RERUN-BASE-DISARMS-LC-A1` | ALREADY-FIXED-v0.303.0 | changelog-cite | `**ADOPTED UPSTREAM (v0.303.0, verified 2026-08-17)**` |
+| 3336 | `PC-S314-APPLY-SH-OVERWRITES-ITSELF-MID-RUN-UNDER-DEFER` | ALREADY-FIXED-v0.316.0 | changelog-cite | `**ADOPTED UPSTREAM (v0.316.0, verified 2026-08-17)**` |
+| 3375 | `PC-S314-NO-DETECTOR-CLAIMS-A-LAYER-FILE-CITING-A-PATH-THE-P...` | ALREADY-FIXED-v0.333.0 | changelog-cite | `**ADOPTED UPSTREAM (v0.333.0, verified 2026-08-17)**` |
+| 3464 | `PC-S319-SUBJECT-DIGEST-IS-UNREADABLE-ONCE-ITS-OWN-ROW-STOPS...` | ALREADY-FIXED-v0.331.0 | changelog-cite | `**ADOPTED UPSTREAM (v0.331.0, verified 2026-08-17)**` |
+| 3507 | `PC-S328-NAMED-UPSTREAM-JOINS-ON-THE-FULL-SLUG-WHILE-UPSTREA...` | ALREADY-FIXED-v0.329.0 | changelog-cite | `**ADOPTED UPSTREAM (v0.329.0, verified 2026-08-17)**` |
+| 3719 | `PC-S302-FIXTURE-SUITE-POOL-PRODUCES-AN-UNREPRODUCIBLE-FAIL-...` | ALREADY-FIXED-v0.367.0 | changelog-cite | `**ADOPTED UPSTREAM (v0.367.0, verified 2026-08-17)**` |
+| 3749 | `PC-S302-RETIRED-LAYER-CONTRACT-READS-CLEAN-OVER-TWO-REAL-PO...` | ALREADY-FIXED-v0.359.0 | changelog-cite | `**ADOPTED UPSTREAM (v0.359.0, verified 2026-08-17)**` |
+| 3787 | `PC-S302-HARD-BLOCKERS-HAS-NO-POST-APPLY-GUARD` | ALREADY-FIXED-v0.367.0 | changelog-cite | `**ADOPTED UPSTREAM (v0.367.0, verified 2026-08-17)**` |
+| 3828 | `PC-S303-EFFORT-BINDING-COMMANDS-A-SLASH-COMMAND-THAT-RESOLV...` | ALREADY-FIXED-v0.367.0 | changelog-cite | `**ADOPTED UPSTREAM (v0.367.0, verified 2026-08-17)**` |
+| 4153 | `PC-S303-BUDGET-SCRIPT-PASS-LINE-UNCONDITIONAL` | ALREADY-FIXED-v0.372.0 | brief-annotation | `**ADOPTED UPSTREAM (v0.372.0, verified 2026-08-17)**` |
 
 ## B — WITHDRAW (18)
 
 These were filed by graph and re-derived upstream against the working tree. Each is either
 already fixed, or its premise is false, or its subject is a settled decision rather than a
-defect. **Annotate them exactly as section A.**
+defect. **Annotate them by the same rule as section A — each row's OWN string, from its own
+column.** Not section A's strings, and not one string across the section; that conflation is the
+defect the previous revision of this brief shipped.
+
+**Most rows here are annotated at the pulled version and that is correct, not a relapse.** A
+`HOLDS`-family, `FALSIFIED` or `DUPLICATE-OF` verdict names no absorbing release because nothing
+was absorbed — the premise died on re-derivation — so the version records the release that
+ADJUDICATED the withdrawal. The rows verdicted `ALREADY-FIXED-v<X>` carry `<X>` instead, and the
+renderer refuses if any of them disagrees.
 
 The measured base rate of expired premises in this corpus is roughly one in two; this pass came
 in lower. A filing that cannot be substantiated is worse than none, so these are a normal
@@ -137,26 +150,26 @@ adjudicator's own words, with the controls each ran. Read it before retiring any
 with — one entry here was independently confirmed dead by a hand that did not know the operator
 had already ruled it retired.
 
-| pin | entry | verdict |
-|---|---|---|
-| 118 | `validate-retro-evidence.sh → resolve the retro branch via...` | HOLDS-MECHANISM-WRONG |
-| 139 | `validate-mandatory-rules.sh → subset-mode flags and a sha...` | DUPLICATE-OF-pin1011 |
-| 177 | `Rule 18 has no carve-out for terse traceability citations, ...` | HOLDS-MECHANISM-WRONG |
-| 269 | `extensions/steps-domain/stories-test-strategy-push.md` | HOLDS |
-| 334 | `layer-drift.sh EXTENSION-RESTATES-CORE matches on section n...` | HOLDS-MECHANISM-WRONG |
-| 687 | `PC-S296-SNAPSHOT-BUDGET-UNENFORCED-AT-GATES` | FALSIFIED |
-| 715 | `PC-S296-DEPLOY-VALIDATE-NA-RITUAL` | FALSIFIED |
-| 798 | `PC-S295-RETRO-COLLAPSE-PAUSE-FLAG-AND-BOUNDED-JOIN` | HOLDS-MECHANISM-WRONG |
-| 931 | `PC-S297-POOL-LOOP-SUBSHELL-TRAP-UNDOCUMENTED` | HOLDS-MECHANISM-WRONG |
-| 1069 | `PC-S297-LOCKED-ANCHOR-VALIDATOR-VACUOUS` | ALREADY-FIXED-v0.280.0 |
-| 1240 | `PC-S297-LOCKED-ANCHOR-EXEMPTED-BY-SILENCE` | ALREADY-FIXED-v0.280.0 |
-| 1269 | `PC-S297-CHECK16-SCOPE-AMBIGUITY` | HOLDS |
-| 1346 | `PC-S297-RETRO-OVERRIDES-F1F2F3F6` | HOLDS-WIDER |
-| 1597 | `PC-S299-LEDGER-REVERIFY-MISATTRIBUTES-ABSORBING-VERSION` | ALREADY-FIXED-v0.152.0 |
-| 1622 | `PC-S299-PREPUSH-NONREPRODUCING-FAIL` | HOLDS-MECHANISM-WRONG |
-| 2341 | `PC-S312-SPRINT-STATUS-CHECK-STORIES-COVERS-ONE-FIELD-OF-FIVE` | HOLDS-MECHANISM-WRONG |
-| 3980 | `PC-S330-A-CONTRADICTS-CORE-VERDICT-EXPIRES-LIKE-A-READING-A...` | ALREADY-FIXED-v0.369.0 |
-| 4184 | `PC-S303-RETRO-NO-CLOSE-RECORD-FOR-RESET-OR-ABANDONED-SPRINTS` | ALREADY-FIXED-v0.372.0 |
+| pin | entry | verdict | paste this, byte for byte |
+|---|---|---|---|
+| 118 | `validate-retro-evidence.sh → resolve the retro branch via...` | HOLDS-MECHANISM-WRONG | `**ADOPTED UPSTREAM (v0.373.0, verified 2026-08-17)**` |
+| 139 | `validate-mandatory-rules.sh → subset-mode flags and a sha...` | DUPLICATE-OF-pin1011 | `**ADOPTED UPSTREAM (v0.373.0, verified 2026-08-17)**` |
+| 177 | `Rule 18 has no carve-out for terse traceability citations, ...` | HOLDS-MECHANISM-WRONG | `**ADOPTED UPSTREAM (v0.373.0, verified 2026-08-17)**` |
+| 269 | `extensions/steps-domain/stories-test-strategy-push.md` | HOLDS | `**ADOPTED UPSTREAM (v0.373.0, verified 2026-08-17)**` |
+| 334 | `layer-drift.sh EXTENSION-RESTATES-CORE matches on section n...` | HOLDS-MECHANISM-WRONG | `**ADOPTED UPSTREAM (v0.373.0, verified 2026-08-17)**` |
+| 687 | `PC-S296-SNAPSHOT-BUDGET-UNENFORCED-AT-GATES` | FALSIFIED | `**ADOPTED UPSTREAM (v0.373.0, verified 2026-08-17)**` |
+| 715 | `PC-S296-DEPLOY-VALIDATE-NA-RITUAL` | FALSIFIED | `**ADOPTED UPSTREAM (v0.373.0, verified 2026-08-17)**` |
+| 798 | `PC-S295-RETRO-COLLAPSE-PAUSE-FLAG-AND-BOUNDED-JOIN` | HOLDS-MECHANISM-WRONG | `**ADOPTED UPSTREAM (v0.373.0, verified 2026-08-17)**` |
+| 931 | `PC-S297-POOL-LOOP-SUBSHELL-TRAP-UNDOCUMENTED` | HOLDS-MECHANISM-WRONG | `**ADOPTED UPSTREAM (v0.373.0, verified 2026-08-17)**` |
+| 1069 | `PC-S297-LOCKED-ANCHOR-VALIDATOR-VACUOUS` | ALREADY-FIXED-v0.280.0 | `**ADOPTED UPSTREAM (v0.280.0, verified 2026-08-17)**` |
+| 1240 | `PC-S297-LOCKED-ANCHOR-EXEMPTED-BY-SILENCE` | ALREADY-FIXED-v0.280.0 | `**ADOPTED UPSTREAM (v0.280.0, verified 2026-08-17)**` |
+| 1269 | `PC-S297-CHECK16-SCOPE-AMBIGUITY` | HOLDS | `**ADOPTED UPSTREAM (v0.373.0, verified 2026-08-17)**` |
+| 1346 | `PC-S297-RETRO-OVERRIDES-F1F2F3F6` | HOLDS-WIDER | `**ADOPTED UPSTREAM (v0.373.0, verified 2026-08-17)**` |
+| 1597 | `PC-S299-LEDGER-REVERIFY-MISATTRIBUTES-ABSORBING-VERSION` | ALREADY-FIXED-v0.152.0 | `**ADOPTED UPSTREAM (v0.152.0, verified 2026-08-17)**` |
+| 1622 | `PC-S299-PREPUSH-NONREPRODUCING-FAIL` | HOLDS-MECHANISM-WRONG | `**ADOPTED UPSTREAM (v0.373.0, verified 2026-08-17)**` |
+| 2341 | `PC-S312-SPRINT-STATUS-CHECK-STORIES-COVERS-ONE-FIELD-OF-FIVE` | HOLDS-MECHANISM-WRONG | `**ADOPTED UPSTREAM (v0.373.0, verified 2026-08-17)**` |
+| 3980 | `PC-S330-A-CONTRADICTS-CORE-VERDICT-EXPIRES-LIKE-A-READING-A...` | ALREADY-FIXED-v0.369.0 | `**ADOPTED UPSTREAM (v0.369.0, verified 2026-08-17)**` |
+| 4184 | `PC-S303-RETRO-NO-CLOSE-RECORD-FOR-RESET-OR-ABANDONED-SPRINTS` | ALREADY-FIXED-v0.372.0 | `**ADOPTED UPSTREAM (v0.372.0, verified 2026-08-17)**` |
 
 ## C — LIVE, tracked upstream (41 rows, 42 entries)
 

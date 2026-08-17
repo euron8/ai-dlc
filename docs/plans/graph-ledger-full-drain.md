@@ -195,12 +195,26 @@ receipt subjects and all five flipped to CLOSE-CANDIDATE in a single run, every 
 reproducing at its new path. Guard every `sh` receipt so an unresolvable subject exits 127
 (`[ -n "$s" ] || exit 127`), which `ledger-reverify.sh` reports as NEEDS-REVIEW.
 
-**The pin was re-established and HELD.** graph `HEAD` is still `510e4d9f5`, the live ledger is 4503
-lines — the 4356-line pin plus the 147 already-adjudicated post-pin lines — and `sed -n '1,4356p'`
-reproduces `2fd444dcf406cdff728fe3c0c4352267` exactly, with the 4355-line control producing a
-different digest. **No new graph filings since the last pass**, so the post-pin adjudication still
-covers everything. Consumer dirty count observed at 113; that is an observation and never a gate,
-per done-when 4.
+**The pin HOLDS, and graph `HEAD` HAS MOVED PAST `510e4d9f5`. Those are not in tension, and a
+session that treats the second as breaking the first will re-derive this from scratch.** The
+`HEAD` row in the pin table above is the sha the pin was TAKEN at, not a quantity that stays
+true; graph commits on its own schedule and has done so repeatedly since. What is pinned is the
+ledger's first 4356 lines, and that reconstruction is verified rather than assumed: `sed -n
+'1,4356p'` reproduces `2fd444dcf406cdff728fe3c0c4352267`, with the 4355-line control producing a
+different digest.
+
+**The delta is a pure APPEND and that is why the pin survived a moved `HEAD`.** The ledger blob at
+`510e4d9f5` is **4312** lines because the pin was taken against graph's WORKING TREE while those
+lines were still uncommitted; `8ad601f87` then committed them as a 191-line append at line 4311
+with **zero deletions**, and `4312 + 191 = 4503`. Its four entries are all already adjudicated —
+pin 4313 as `BL-062`, and 4357 / 4392 / 4435 as `BL-063`–`BL-065`. **No new graph filings**, so the
+post-pin adjudication still covers everything.
+
+**Re-derive the delta, do not re-derive the pin.** `git diff --numstat <pinned-HEAD>..HEAD --` the
+ledger path answers in one command whether a `HEAD` move touched the pinned region; a non-zero
+deletion count or a hunk starting below 4356 is the only state that breaks the reconstruction, and
+the md5 says so independently. Consumer dirty count observed at 3 here and at 113 earlier in the
+program; that is an observation and never a gate, per done-when 4.
 
 **Pin 1254's disposition is CORRECTED and its sub-claim is refuted**, so the split is now
 **25 CLOSE / 14 CLOSE + file the sub-claim / 9 withdrawn / 67 live** — 39 closes, unchanged. The
@@ -219,13 +233,52 @@ now render, and the gated list's heading COUNT is inside its region deliberately
 every `PC-` token in the register against every one in the pinned ledger: 93 resolve; of the 16 that
 do not, 14 are deliberate prose shorthand and 2 sat in that id column.
 
+**THE PULL IS DONE AND ADJUDICATED. graph MERGED v0.373.0 AT PR #935, `0 HARD blockers`.** Sections
+A and B of the brief are NOT yet applied and are the only step outstanding on the consumer side.
+What the pull produced, all of it adjudicated live:
+
+- **Two upstream defects, both real, both now filed.** graph filed `PC-S334-ABSORBED-AT-READS-THE-`
+  `VERSION-BLOB-AT-THE-FIX-COMMIT` — verdict **HOLDS-WIDER**. `absorbed_at()` reads `VERSION` at the
+  commit that introduced the substring, but a fix lands while `VERSION` still holds the previous
+  number, so it reports one release early: 40 of the 68 commits in `b1ee196..858f4f5` carry the
+  pre-bump value. **The filing's scope was wrong in both directions** — `absorbed_at` has TWO
+  invocations (`:905`, `:934`), not three, and the cited lines 271/427/455 are not call sites at all
+  but the three instances of the `git show "${_c}:VERSION"` IDIOM, in `absorbed_at`,
+  `named_absorbed` and `named_ambiguous`. The filing named the true scope while mislabelling it.
+- **The widest instance is `named_absorbed()`, filed separately**, because the fault is the JOIN and
+  not the version read, so the forward-walk remedy does not reach it. `_c` is the OLDEST commit
+  whose MESSAGE contains the id, and `$na_v` from it is interpolated into a paste-ready PERMANENT
+  annotation at `:848`. Measured over the 29 ids in `e939a92`'s message against
+  `final-disposition.tsv`: **28 of 29 disagree with the adjudicated version**, 20 resolving to
+  `e939a92` itself. Four of the nine older resolutions are THIS PROGRAM's own `docs(plan)` and
+  `docs(reviews)` commits, which merely MENTION the id — the same reads-vs-mentions class as
+  `receipt_absent_subjects`. **And this plan CAUSED the 20-row case**: the correction requiring every
+  closed id in the release commit MESSAGE is what makes the join resolve there.
+- **`closes_when` is free prose that nothing parses**, found by graph. Read at
+  `audit-layer-debt.sh:108` and printed at `:215-216`; `migrate-artifact-paths.sh` has zero hits for
+  it against a `strip_token` control of 3. Six layer debts came due the instant graph ran that
+  migration and nothing announced it.
+
+**A BLOCKER WAS FOUND IN THIS PROGRAM'S OWN BRIEF, ONE STEP BEFORE IT WAS APPLIED, AND IS FIXED.**
+`render-brief.sh` rendered ONE annotation string from the pulled version and instructed it into all
+57 entries of sections A and B — while 34 section-A rows are adjudicated `ALREADY-FIXED-v<X>` across
+29 distinct versions from v0.21.0 to v0.372.0, and **not one** is adjudicated at 0.373.0. A literal
+application stamped v0.373.0 as permanent provenance onto an entry the same brief adjudicates as
+fixed in v0.21.0 — precisely the failure `absorbed_at()`'s header was written about, re-introduced
+at the human layer. **Arm 1 could not see it**: both enforcers check only the FORM, bold and a digit
+after the `v`, so it proved the string well-formed and nothing proved it TRUE. Each row now carries
+its own paste-ready string, and **ARM 4** reads the RENDERED artifact — not the map, which would be
+a tautology — and refuses when an annotation contradicts its own row's verdict. Proven both
+directions: the one-version-for-all mutant refuses at exit 8 naming the pins, the clean render
+passes, and 7 version-less rows correctly do not trip it.
+
 **START HERE ON A FRESH SESSION — the numbered next actions.**
 
-**ACTION ZERO, AND IT OVERRIDES THE SEQUENCE BELOW: STAND BY FOR THE GRAPH PULL AND ADJUDICATE WHAT
-IT SURFACES. DO NOT CUT A PHASE 3 RELEASE BRANCH.** Operator ruling at the close of the session that
-finished Phase 4. The consumer is pulling v0.373.0 and applying
-`docs/reviews/graph-ledger-adjudication-brief.md`; your job is to adjudicate whatever that produces,
-not to move `origin/main` underneath it.
+**ACTION ZERO: THE PULL IS ADJUDICATED. PHASE 3 REMAINS HELD UNTIL THE OPERATOR LIFTS IT — DO NOT
+CUT A RELEASE BRANCH ON YOUR OWN AUTHORITY.** The hold's original reason (do not move `origin/main`
+under a consumer mid-pull) has EXPIRED: graph merged at PR #935 and step 21 is banked. The hold is
+now a sequencing decision only the operator can take, per `operator-rulings.md` — scope is theirs to
+change, never yours. Ask; do not infer that an expired reason lifts a standing ruling.
 
 Do these three things, in this order, and then hold:
 
@@ -717,18 +770,45 @@ file has ALREADY moved past the pin twice, so expect to reconstruct rather than 
 md5 -q /Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
 ```
 
-**The pin is reconstructible, and this is how.** Every graph addition so far has been a pure APPEND
-at end of file, and graph `HEAD` has stayed at `510e4d9f5`. So the pin is the live file's first
-**4356** lines, and that reconstruction is verified by md5, not assumed:
+**THE MIDDLE EDIT THIS SECTION WARNED ABOUT HAS HAPPENED. THE FIRST-4356-LINES RECONSTRUCTION IS
+DEAD AND EVERY REGISTER PIN ABOVE 637 IS NOW OFF BY 28.** Do not run the old recipe; it is kept
+below only so its failure is legible.
+
+graph applied the brief's close for pin 610 and `ledger-rotate.sh` archived the entry, which is a
+**deletion from the middle**, not an append. Derived against the last known-good ref, with the
+hunk offsets read rather than guessed:
 
 ```
-sed -n '1,4356p' <ledger> | md5      # must be 2fd444dcf406cdff728fe3c0c4352267
-sed -n '1,4355p' <ledger> | md5      # CONTROL: an off-by-one must NOT match
+git -C <graph> diff --numstat 2c7935e5d..HEAD -- <ledger>     # 178 insertions, 28 DELETIONS
+git -C <graph> diff -U0      2c7935e5d..HEAD -- <ledger> | grep '^@@'
+  @@ -610,28 +609,0 @@      <- pin 610's entry, 28 lines, ARCHIVED
+  @@ -4503,0 +4476,178 @@    <- graph's two new PC-S334 entries, appended
 ```
 
-Confirmed on resume — the pin re-derived exactly and the control produced a different digest. Should
-a future graph edit ever land in the MIDDLE of the file, this reconstruction breaks and the md5 will
-say so; re-derive the delta from `git diff` hunk offsets before trusting any pin line.
+**The mapping, and it is exact:**
+
+| pinned line | where it is now |
+|---|---|
+| 1 – 609 | unchanged |
+| **610 – 637** | **GONE — archived to `push-candidate-ledger.archive.md`** |
+| 638 – 4503 | **subtract 28** |
+| — | new live lines 4476+ are graph's `PC-S334` filings, outside the pin |
+
+Verified in both directions in one invocation: pin 4313 resolves at 4285 to
+`PC-S303-BUDGET-CHECK-EVIDENCE-FIND-PICKS-A-STALE-GATE-LOG` while line 4313 now holds unrelated
+prose; pin 4184 resolves at 4156; and pin 297, below the deletion, is unchanged. The archived entry
+appears exactly once in the archive against an impossible-id control of 0, carrying the strict
+`**ADOPTED UPSTREAM (v0.373.0, verified …)**` form. Its id still returns 2 hits in the LIVE file —
+both are MENTIONS, at pin 177's cross-reference and inside graph's new entry, not the entry itself.
+**Grep the id and you will conclude the rotation failed.**
+
+**The superseded recipe, and the reason it worked until it did not:** every graph change had been a
+pure append, so the pin was the live file's first 4356 lines, checked by
+`sed -n '1,4356p' | md5` = `2fd444dcf406cdff728fe3c0c4352267` against a 4355-line control that must
+differ. That held for the whole program and reproduced at `2c7935e5d`. **An append-only assumption
+is not a property of the file; it is a property of what the consumer happened to be doing.** The
+moment the consumer acted on this program's own output, it stopped being true — so the durable
+instruction is the `--numstat` deletion count and the hunk offsets, never a line total.
 
 **Everything after line 4356 is new work, and on resume it was ADJUDICATED.** 147 lines: three
 entries plus one `## RETRACTED` banner in which graph withdrew its own `--brief` filing as a lead

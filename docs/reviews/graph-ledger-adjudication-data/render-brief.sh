@@ -47,6 +47,65 @@ printf '%s\n' "**ADOPTED UPSTREAM (verified ${DATE})**" \
 # --- ARM 3: refuse rather than partition 115 rows against an empty population --
 [ -s "$POP" ] || { echo "REFUSING: $POP absent or empty. Sections B, C and D would all mis-partition and the arithmetic line would still print a sum." >&2; exit 6; }
 
+# --- the annotation version is PER ROW, and this used to be ONE STRING FOR ALL --
+#
+# THE DEFECT THIS REPLACES. `ANN` above was rendered once, from $VER, and the brief instructed it
+# be pasted into every entry in sections A and B -- 57 of them. But 34 section-A rows are
+# adjudicated `ALREADY-FIXED-v<X>` across 29 distinct versions from v0.21.0 to v0.372.0, and NOT
+# ONE is adjudicated at $VER (control: `grep -c 'ALREADY-FIXED-v0.373.0'` over the brief returned
+# 0 while `ALREADY-FIXED-v` returned 34 in the same invocation). A literal application therefore
+# stamped v0.373.0 as permanent provenance onto an entry this same brief adjudicates as fixed in
+# v0.21.0.
+#
+# `absorbed_at()`'s own header states the cost and was written about exactly this failure: "that
+# annotation is permanent: the ledger entry is the provenance of an upstreamed change, and retro
+# and the §8.1 fan-in read it." This renderer re-introduced at the HUMAN layer the bug that
+# function fixed at the machine layer.
+#
+# AND ARM 1 COULD NOT SEE IT. Arm 1 tests the generated string against both enforcers and against
+# the versionless near-miss. Both enforcers check only the FORM -- bold, a digit immediately after
+# the `v`. Neither can check whether the version is TRUE for the entry it lands on. Arm 1 proved
+# the string well-formed; nothing proved it correct. ARM 4 below is the missing half, and it reads
+# the RENDERED OUTPUT rather than this map, because a check over the map would be a tautology --
+# the map is derived from the verdict, so it cannot disagree with it.
+#
+# THE MAPPING, and every case is present in the corpus today:
+#   ALREADY-FIXED-v<X>  -> <X>            the release that shipped the fix. 34 rows in A, 6 in B.
+#   ALREADY-FIXED-<sha> -> resolve FORWARD to the earliest commit at or after <sha> that CHANGES
+#                          VERSION, and read VERSION there. One row: pin 1125 at `93e05d3`, whose
+#                          own VERSION blob reads 0.102.0 because a fix lands while VERSION still
+#                          holds the previous number -- the bump arrives later, in the release
+#                          commit. Forward-walking resolves it to v0.103.0. Control, in the same
+#                          invocation: the same walk from `e939a92~1` lands on `e939a92` itself,
+#                          so a commit that IS its own release resolves to itself.
+#   anything else       -> $VER. FALSIFIED and DUPLICATE-OF close no absorption, so no absorbing
+#                          release exists; $VER is the release that RECORDED the refutation or
+#                          cited the dropped id. Section B's HOLDS-family rows are withdrawals on
+#                          the same footing.
+LC_ALL=C awk -F'\t' -v V="$VER" '
+  { v = V
+    if      ($3 ~ /^ALREADY-FIXED-v[0-9]/) v = substr($3, 16)
+    else if ($3 ~ /^ALREADY-FIXED-.+/)     v = "@" substr($3, 15)
+    printf "%s\t%s\n", $1, v }
+' "$FD" > "$TMP/annot_raw"
+
+: > "$TMP/annot"
+while IFS="$(printf '\t')" read -r _pin _v; do
+  case "$_v" in
+    @*) _sha="${_v#@}"
+        _rc="$(git log --reverse --format=%H "${_sha}..HEAD" -- VERSION 2>/dev/null | head -1)"
+        _v="$(git show "${_rc}:VERSION" 2>/dev/null | tr -d '[:space:]')"
+        ;;
+  esac
+  case "$_v" in
+    ''|@*) echo "REFUSING: pin $_pin has no resolvable annotation version. A row with no version renders an annotation the rotator cannot archive." >&2; exit 7 ;;
+  esac
+  printf '%s\t%s\n' "$_pin" "$_v" >> "$TMP/annot"
+done < "$TMP/annot_raw"
+
+[ "$(wc -l < "$TMP/annot" | tr -d ' ')" = "$(wc -l < "$FD" | tr -d ' ')" ] \
+  || { echo "REFUSING: the annotation map does not cover every disposition row." >&2; exit 7; }
+
 # --- data prep ----------------------------------------------------------------
 LC_ALL=C awk -F'\t' '{print $2}' "$POP" | sort -u > "$TMP/pop"
 [ -s "$TMP/pop" ] || { echo "REFUSING: the step-12 population derived to zero pins from $POP" >&2; exit 6; }
@@ -141,13 +200,18 @@ absence-shaped claim. This brief is the result.
 Nothing below asks you to take upstream's word for it; every row names its evidence and where
 it lives. Where upstream was wrong, that is stated in the row rather than quietly corrected.
 
-## The annotation, rendered once
+## The annotation, rendered PER ENTRY
 
-Paste this string, **byte for byte**, into each entry in sections A and B:
+**There is no single string to paste, and an earlier revision of this brief said there was.**
+That revision rendered one annotation from the version being pulled and instructed it into all
+${n_close} + ${n_withdrawn} entries of sections A and B. But most of those entries were absorbed
+YEARS of releases earlier, and the version in this annotation is permanent provenance: it is what
+retro and the §8.1 fan-in read back. Stamping the pulled version onto an entry fixed in v0.21.0
+records an absorption that never happened at a release that never made it.
 
-\`\`\`
-${ANN}
-\`\`\`
+**So each row in sections A and B carries its OWN paste-ready string, in its own column.** Paste
+that row's string, byte for byte. Do not compose one from the version column, and do not reuse a
+neighbouring row's.
 
 **The form is load-bearing in two directions and a sloppy paste breaks both.**
 \`ledger-reverify.sh\` treats *any* occurrence of \`ADOPTED UPSTREAM\` in an entry as closed and
@@ -208,20 +272,31 @@ resolves them and your next reconcile emits a `NAMED-UPSTREAM` row independently
 `brief-annotation` rows CANNOT — `flush()` gates on `has_verify &&` and they carry no receipt —
 so for those **this annotation is the only closing channel**.
 
-| pin | entry | verdict | channel |
-|---|---|---|---|
+| pin | entry | verdict | channel | paste this, byte for byte |
+|---|---|---|---|---|
 AH
-LC_ALL=C awk -F'\t' '$5 ~ /^CLOSE/ {
-  lbl=$2; if (length(lbl)>62) lbl=substr(lbl,1,59) "..."
-  printf "| %s | `%s` | %s | %s |\n", $1, lbl, $3, $7
-}' "$FD" | sort -t'|' -k2 -n
+LC_ALL=C awk -F'\t' -v A="$TMP/annot" -v D="$DATE" '
+  BEGIN { while ((getline l < A) > 0) { split(l, t, "\t"); av[t[1]] = t[2] } }
+  $5 ~ /^CLOSE/ {
+    lbl=$2; if (length(lbl)>62) lbl=substr(lbl,1,59) "..."
+    printf "| %s | `%s` | %s | %s | `**ADOPTED UPSTREAM (v%s, verified %s)**` |\n", \
+      $1, lbl, $3, $7, av[$1], D
+  }' "$FD" | sort -t'|' -k2 -n
 
 # ---------- B ----------
 printf '\n## B — WITHDRAW (%s)\n\n' "$n_withdrawn"
 cat <<'BH'
 These were filed by graph and re-derived upstream against the working tree. Each is either
 already fixed, or its premise is false, or its subject is a settled decision rather than a
-defect. **Annotate them exactly as section A.**
+defect. **Annotate them by the same rule as section A — each row's OWN string, from its own
+column.** Not section A's strings, and not one string across the section; that conflation is the
+defect the previous revision of this brief shipped.
+
+**Most rows here are annotated at the pulled version and that is correct, not a relapse.** A
+`HOLDS`-family, `FALSIFIED` or `DUPLICATE-OF` verdict names no absorbing release because nothing
+was absorbed — the premise died on re-derivation — so the version records the release that
+ADJUDICATED the withdrawal. The rows verdicted `ALREADY-FIXED-v<X>` carry `<X>` instead, and the
+renderer refuses if any of them disagrees.
 
 The measured base rate of expired premises in this corpus is roughly one in two; this pass came
 in lower. A filing that cannot be substantiated is worse than none, so these are a normal
@@ -232,14 +307,16 @@ adjudicator's own words, with the controls each ran. Read it before retiring any
 with — one entry here was independently confirmed dead by a hand that did not know the operator
 had already ruled it retired.
 
-| pin | entry | verdict |
-|---|---|---|
+| pin | entry | verdict | paste this, byte for byte |
+|---|---|---|---|
 BH
-LC_ALL=C awk -F'\t' -v F="$TMP/filed_pins" -v P="$TMP/pop" '
-  BEGIN { while ((getline l < F) > 0) f[l]=1; while ((getline l < P) > 0) pop[l]=1 }
+LC_ALL=C awk -F'\t' -v F="$TMP/filed_pins" -v P="$TMP/pop" -v A="$TMP/annot" -v D="$DATE" '
+  BEGIN { while ((getline l < F) > 0) f[l]=1; while ((getline l < P) > 0) pop[l]=1
+          while ((getline l < A) > 0) { split(l, t, "\t"); av[t[1]] = t[2] } }
   $5 ~ /LIVE/ && ($1 in pop) && !($1 in f) {
     lbl=$2; if (length(lbl)>62) lbl=substr(lbl,1,59) "..."
-    printf "| %s | `%s` | %s |\n", $1, lbl, $3
+    printf "| %s | `%s` | %s | `**ADOPTED UPSTREAM (v%s, verified %s)**` |\n", \
+      $1, lbl, $3, av[$1], D
   }
 ' "$FD" | sort -t'|' -k2 -n
 
@@ -405,6 +482,38 @@ before and after: 9 of 29 resolved before, 29 of 29 after, with an impossible-id
 throughout.
 TAIL
 } > "$OUT.tmp"
+
+# --- ARM 4: no rendered annotation may contradict its own row's verdict --------
+#
+# READS THE EMITTED ARTIFACT, NOT THE MAP. A check over $TMP/annot would be a tautology: the map
+# is derived from the verdict column, so it cannot disagree with it. This reads the rendered table
+# rows, where the two values arrive by different paths -- the verdict is printed straight from
+# field 3 and the annotation is printed from a joined lookup -- so a mis-joined key, a shifted
+# column or a revert to one shared string all show up here as a disagreement.
+#
+# SCOPE. It fires only on rows whose verdict NAMES a version (`ALREADY-FIXED-v<X>`). A FALSIFIED,
+# DUPLICATE-OF or HOLDS row names none, so there is nothing to contradict and the arm is silent on
+# them by construction rather than by exemption.
+#
+# PROVEN TO FIRE, BOTH DIRECTIONS, before it shipped: seeding one row's annotation with the pulled
+# version instead of its adjudicated one -- which is exactly what the previous revision emitted for
+# all 57 -- makes this refuse and name the pin; the unmutated render passes. A control that only
+# ever passes is the shape this whole arm exists to replace.
+_bad="$(LC_ALL=C awk '
+  /^\| [0-9]+ \|/ && /ALREADY-FIXED-v/ {
+    v = ""; a = ""
+    if (match($0, /ALREADY-FIXED-v[0-9][0-9.]*/))     v = substr($0, RSTART+15, RLENGTH-15)
+    if (match($0, /ADOPTED UPSTREAM \(v[0-9][0-9.]*/)) a = substr($0, RSTART+19, RLENGTH-19)
+    if (v != "" && a != "" && v != a) { split($0, c, "|"); printf "  pin %s: verdict says v%s, annotation says v%s\n", c[2], v, a }
+  }' "$OUT.tmp")"
+if [ -n "$_bad" ]; then
+  printf 'REFUSING: a rendered annotation contradicts its own row.\n%s\n' "$_bad" >&2
+  rm -f "$OUT.tmp"; exit 8
+fi
+# CONTROL: the arm must have had rows to inspect. A zero over an empty scan is not a pass.
+_seen="$(LC_ALL=C grep -cE '^\| [0-9]+ \|.*ALREADY-FIXED-v' "$OUT.tmp" || true)"
+[ "${_seen:-0}" -gt 0 ] \
+  || { echo "REFUSING: ARM 4 inspected NO version-bearing rows, so its silence establishes nothing." >&2; rm -f "$OUT.tmp"; exit 8; }
 
 if [ "${1:-}" = "--check" ]; then
   if cmp -s "$OUT.tmp" "$OUT"; then echo "ok: brief matches the data"; rm -f "$OUT.tmp"; exit 0
