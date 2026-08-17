@@ -109,7 +109,10 @@ demonstrably fires on a one-line mutant.
 **The tool's ENTRY column is not a unique key, and that is a new finding.** Its own header calls
 the label *"a join key back into the ledger"*, but the label is whatever precedes the first
 ` — `, so four `## Open — filed <date>` banners all label as `Open` and the two
-`scripts/validate-provenance-block.sh` bullets at pin lines 297 and 302 collide outright.
+`scripts/validate-provenance-block.sh` bullets at pin lines 297 and 302 collide outright. **That
+path is the CONSUMER's spelling, quoted from the ledger's own bullet label — do not look for it
+here.** In this tree the file is `core/scripts/validate-provenance-block.sh`; `install.sh` lands it
+at `scripts/ai-dlc/`.
 **Measured: no collision today involves a receipt-carrying entry**, so the defect is real but
 currently emits no wrong report row. Tier it accordingly.
 
