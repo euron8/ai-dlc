@@ -448,8 +448,19 @@ do not, 14 are deliberate prose shorthand and 2 sat in that id column.
    observe what the CONSUMER's engine will see, and the consumer fetches `origin`. A run against a
    local ref no consumer can reach reproduces the shape this plan spent a phase removing.
 
-6. **OWED, AND IT IS THE OPERATOR'S CALL: now TWO general rules have no durable carrier, and both
+6. **OWED, AND IT IS THE OPERATOR'S CALL: THREE general rules have no durable carrier, and all three
    are blocked on the same 40 bytes.**
+
+   **The third is that AN UNTRACKED FILE IS NOT A MISSING FILE.** A check built on a committed
+   corpus — `git ls-files`, `git show HEAD:`, anything greping a tree — cannot see an uncommitted
+   file, and its clean run reads exactly like a real absence. Measured here: three delegated batch
+   files were declared missing while sitting on disk as `??`, one of them recorded in a commit
+   message as "never written". Before declaring a delegated deliverable missing: `ls` the path,
+   `git status --porcelain` for a `??` row, and ask the agent by name. **`grep -rniE`
+   `"uncommitted|untracked|ls-files"` over the durable channel returns 0** — established with
+   POSITIVE controls in the same invocation, `PIPESTATUS` at 1 and `compaction` at 12, because a
+   zero checked only against another zero establishes nothing. It is the same class as `CLAUDE.md`'s
+   measured false-zero list and belongs beside it.
 
    **The second one is a tool hazard and it has cost real work twice.** `sleep` under the Bash
    tool's `run_in_background` **returns immediately**, so a chain of backgrounded "waits" is rapid
@@ -475,18 +486,23 @@ do not, 14 are deliberate prose shorthand and 2 sat in that id column.
    `verification-discipline.md`'s existing "Ask what SET a number was taken over", and it belongs
    beside it.
 
-   **Neither is there, because the durable channel has 40 bytes of headroom** — arm A6 reports
-   40920/40960 across 7 files, re-derived at wind-down. Between them the two rules need roughly
-   **900 bytes**. Adding either requires TRADING OUT existing prose, and `resident-context.md`
+   **None of the three is there, because the durable channel has 40 bytes of headroom** — arm A6
+   reports 40920/40960 across 7 files, re-derived at wind-down. Between them the three rules need
+   roughly **1300 bytes**. Adding either requires TRADING OUT existing prose, and `resident-context.md`
    forbids trimming for cost and requires grepping for inbound references before any cut. That is a
    deliberate decision, not a mechanical one.
 
-   Today rule one is carried by action 3 of this file and rule two by action 0's hazard note —
-   adequate for this program and for nothing else. **A rule whose only carrier is a plan file dies
-   with the plan.** The three options, none of which a session may take on its own authority: trade
-   out ~900 bytes of prose that meets the VESTIGIAL test (mechanism nameable, instruction
-   authoritative elsewhere, inbound references grepped); raise A6's 40960 ceiling, which is a budget
-   decision; or accept that both rules stay uncarried and will be relearned.
+   Today rule one is carried by action 3 of this file, rule two by action 0's hazard note, and rule
+   three by the paragraph above — adequate for this program and for nothing else. **A rule whose only
+   carrier is a plan file dies with the plan.** The three options, none of which a session may take on
+   its own authority: trade out ~1300 bytes of prose that meets the VESTIGIAL test (mechanism
+   nameable, instruction authoritative elsewhere, inbound references grepped); raise A6's 40960
+   ceiling, which is a budget decision; or accept that all three stay uncarried and will be relearned.
+
+   **All three were learned the same way in one session, which is itself the argument for spending
+   the bytes**: each cost real work, none is mechanizable — two happen inside a tool call and the
+   third is a judgement about a population — and `resident-context.md` forbids scoping a prose-only
+   rule, so the unconditional channel is the only place any of them can live.
 
 5. **PHASE 3 BATCH 1 IS THE OPERATOR'S CHOSEN NEXT SESSION.** Ruled at the wind-down of the session
    that finished Phase 4: cut the first ≤4-remediation release branch from `origin/main`. Everything
