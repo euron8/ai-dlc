@@ -34,6 +34,58 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.374.0] — 2026-08-17
+
+### `BL-012` — the identifier grant had no mechanism, and the guard `941021d` said it owed is here
+
+`core/scripts/audit-rule-files.sh` gains **Class 1c, `IDENTIFIER_GRANT`, tier 1**. It is the other
+half of Class 1a: 1a mechanizes what `rule-authoring.md` PROHIBITS, and nothing mechanized what it
+must PERMIT — so deleting the permitted-form bullet would restore the defect with every check in
+the tree green.
+
+Anchored on the grant's backticked TEMPLATE, not on the word "identifier". The grant's own closing
+clause is itself a prohibition — "An identifier is a name and MUST NOT encode a sprint, story,
+version, or date" — so a Style block holding that clause ALONE is prohibitions-only, IS the defect,
+and still contains the word. That input scores CLEAN under the obvious anchor and FLAGGED under this
+one. The class reads raw lines rather than `used()`, which strips the backticked span the predicate
+is looking for.
+
+Probed under `mktemp` before the real corpus was read, five inputs, each verdict read: unmutated
+CLEAN; grant deleted with its prohibition retained FLAGGED; grant reworded as `Step <k>` with
+bullets reordered CLEAN; whole `**Style:**` block removed FLAGGED with a distinct reason;
+`AI_DLC_AUDIT_MUTANT=1` CLEAN. A sixth, subject absent from the corpus, reports **N/A and never
+CLEAN** — corpus membership is `I23`'s arm, not this one, and the report says so.
+
+False-positive set measured EMPTY on the real corpus: `IDENTIFIER_GRANT: CLEAN` over 76 files,
+tier-1 findings 0.
+
+Hosted in `audit-rule-files.sh` because it already opens this file in both install layouts, already
+runs at `.githooks/pre-push:140`, and already owns this policy — one class, zero packaging.
+`validate-enforcement-map.sh` was rejected as a host and is untouched at its measured 17.7s, so the
+suite pole does not move. Guarded by assertions 12m–12p of `core/fixtures/retro-audit-scans/`, each
+mutating a pristine copy under a `cmp -s` guard, with 12m carrying its own MUTANT differential
+rather than leaning on 12f — which seeds only `CLAUDE.md`, where this class has no subject.
+
+### `BL-009` and `BL-011` — adjudicated as real absorptions and closed at v0.373.0
+
+Both reported CLOSE-CANDIDATE by `backlog-reverify.sh`. A CLOSE-CANDIDATE is either a real
+absorption or a receipt that rotted, indistinguishable from the status alone, so both were taken to
+the tree: BL-009's two required halves are present, and BL-011's three seeded legends are
+byte-identical at 2102 bytes with one legend opener per hook. Fixed at `941021d`, guarded at
+`953e39e` and `cb94a43`, all inside v0.373.0.
+
+The absorbing release is derived by an INCLUSIVE forward walk to the first `VERSION` differing from
+the fix's parent — `941021d` itself carries `0.372.0`, one release early, which is the fault
+`BL-066` is filed against.
+
+BL-012's fix sat in the same commit and does NOT close there, because `941021d`'s own body records
+"GUARDS ARE STILL OWED" and forbids annotating any of the three LANDED until that work is done.
+Two guards arrived in v0.373.0; BL-012's is above. Closing all three on the receipts alone would
+have discarded the only written record that a guard was owed.
+
+`docs/backlog.archive.md` is new — `backlog-rotate.sh --apply` moved the three there and `--check`
+passes afterwards. 65 entries remain open: 61 STILL-LIVE, 4 HAND-REVIEW, 0 CLOSE-CANDIDATE.
+
 ## [0.373.0] — 2026-08-17
 
 ### `PC-S295-RETRO-LEAD-SOLO-EVAL-LLM-CHECK` — FALSIFIED, and false at the entry's own re-verification base

@@ -61,6 +61,15 @@ EOF
 cat > "$P/.claude/skills/ai-dlc/rule-authoring.md" <<'EOF'
 # Rule authoring
 Rules are imperative.
+
+**Style:**
+
+- Give a rule a stable identifier a later rule can cite, and carry it in
+  the rule's own heading: `Rule <n>` for a rule, `Step <n>` for a step-file
+  section. An identifier is a name and MUST NOT encode a sprint, story,
+  version, or date.
+- No sprint or story references.
+- No parenthetical origin notes after a directive.
 EOF
 
 cat > "$P/.claude/skills/ai-dlc/steps/example.md" <<'EOF'

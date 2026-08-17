@@ -31,6 +31,7 @@ set -euo pipefail
 # Scans reported:
 #   Class 1   narrative drift        (Rule 18)                    tier 2
 #   Class 1a  origin tag / origin parenthetical / embedded date    tier 1
+#   Class 1c  the identifier grant rule-authoring.md must carry    tier 1
 #   Class 1b  incomplete Rule 26(c) triple                         tier 2
 #   Class 2   rule weakness          (Rule 18)                     tier 2
 #   Class 3   complexity accretion   — NOT MECHANIZED, DID-NOT-RUN
@@ -265,6 +266,67 @@ if not MUTANT:
 emit("ORIGIN_TAG", tag_hits, 1)
 emit("ORIGIN_PARENTHETICAL", paren_hits, 1)
 emit("EMBEDDED_DATE", date_hits, 1)
+
+# --------------------------------------------------------------- Class 1c
+# The OTHER HALF of Class 1a. Class 1a mechanizes what rule-authoring.md
+# PROHIBITS; nothing mechanized what it must PERMIT, and for the whole life of
+# the file it permitted nothing. Its `**Style:**` block forbade sprint and story
+# references, parenthetical origin notes and embedded dates — every way a rule
+# could carry a citable identifier — and granted no form in their place, while
+# the skill's own rules are cited by identifier throughout ("Rule 18",
+# "Rule 25(c)", `I79`). retro.md Step 4 therefore had a prohibition it could
+# enforce against any tag a rule carries and no form to point the author at.
+#
+# ANCHORED ON THE GRANT'S TEMPLATE, NOT ON THE WORD "identifier", AND THAT
+# NARROWING IS THE CHECK. The grant's own closing clause is itself a prohibition
+# — "An identifier is a name and MUST NOT encode a sprint, story, version, or
+# date" — so a Style block holding that clause ALONE is prohibitions-only, IS
+# the defect, and contains the word. Measured on a copy with the grant deleted
+# and that clause retained: an `identifier` anchor scores it CLEAN. A permitted
+# form cannot be written without EXHIBITING the form, so the anchor is the
+# backticked placeholder template, which no prohibition in the block carries.
+#
+# FALSE-POSITIVE SET MEASURED EMPTY over five legitimate rewordings of the same
+# block — bullets reordered, grant prose rewritten, grant widened with a further
+# kind, placeholder letter changed, bullet unwrapped to one line.
+#
+# RAW LINES, NEVER used(). Every other class strips backticked spans because a
+# line that QUOTES a forbidden pattern is documenting it rather than committing
+# it. Here the backticked span IS the subject, and used() deletes it — the same
+# predicate run through used() cannot fire at all.
+print("--- Class 1c: Identifier Grant (tier 1) ---")
+GRANT_TEMPLATE = re.compile(r"`[A-Z][a-z]+ <[a-z]+>`")
+ra = [p for p in corpus if os.path.basename(p) == "rule-authoring.md"]
+if not ra:
+    # NOT reported CLEAN. A scan of nothing is the shape this whole audit exists
+    # to refuse. Corpus membership is not this class's job either: I23 in
+    # validate-enforcement-map.sh already fails the push when a file install.sh
+    # ships is absent from `--list`, so an empty subject here is that arm's finding.
+    print("  IDENTIFIER_GRANT: N/A  n=[]  "
+          "(no rule-authoring.md in the corpus; membership is I23's arm, not this one)")
+    print()
+else:
+    grant_hits = []
+    if not MUTANT:
+        for p in ra:
+            start, style = 0, []
+            for i, raw in enumerate(lines(p), 1):
+                if raw.startswith("**Style:**"):
+                    start, style = i, []
+                    continue
+                if start and raw.startswith("**"):
+                    break
+                if start:
+                    style.append(raw)
+            if not start:
+                grant_hits.append((p, 1, "no `**Style:**` block: the prohibitions this "
+                                         "audit's Class 1a enforces have no counterpart grant"))
+            elif not GRANT_TEMPLATE.search("\n".join(style)):
+                grant_hits.append((p, start, "the `**Style:**` block prohibits every way a rule "
+                                             "could carry a citable identifier and permits none — "
+                                             "no backticked placeholder template (`Rule <n>`, "
+                                             "`Step <n>`) appears in it"))
+    emit("IDENTIFIER_GRANT", grant_hits, 1)
 
 # ---------------------------------------------------------------- Class 1
 # Narrative drift: rule text carrying the story of its own origin. Tier 2 — a
