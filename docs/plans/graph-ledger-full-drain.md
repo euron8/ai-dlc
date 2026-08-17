@@ -219,13 +219,27 @@ do not, 14 are deliberate prose shorthand and 2 sat in that id column.
 
 **START HERE ON A FRESH SESSION — the numbered next actions.**
 
-0. **THE MERGE IS DONE AND THE PUSH IS THE ONLY THING BLOCKING THIS PLAN. It needs the operator,
-   not a retry.** Local `main` is at `3217cde`, 59 commits ahead of `origin/main`, gate green at
-   157/157. `git push` fails 403 as `ats0012_amway`, which has no write access to `euron8/ai-dlc`.
-   Fix the credential — `gh auth status` and `gh auth login`, or the `credential.helper` this repo
-   resolves — then `git push origin main`. **Do not re-run the gate first** unless the tree changed:
-   it was green on `0f67164`, and the only commit after it is the merge and this status update, both
-   docs-only. Do not cut anything new from a local `main` that is now ahead of `origin/main`.
+0. **THE MERGE AND THE PUSH ARE DONE. Phase 5 step 21 is the first thing owed, and it EXPIRES.**
+   `main` carries the v0.373.0 release and all of Phase 4. The gate was run the way the hook runs it
+   twice, green both times — **157 fixtures, 157 ok, 0 FAIL** — with all six fixtures changed on the
+   branch read BY NAME against an impossible-name control returning 0 and a present-name control
+   returning non-zero, in the same invocation. `validate-release-version.sh` PASSes over the range.
+
+   **The push identity is project-scoped now, and the mechanism is worth knowing before you touch
+   it.** `git push` used to fail **403 as `ats0012_amway`**, which has no write access to this
+   remote; `gh api repos/euron8/ai-dlc` reports `push: false` for that account against `push: true`
+   for `euron8`, control in the same invocation. `.git/config` now sets
+   `credential.helper` to `~/.gh-credential-euron8` — a helper that shells out to
+   `gh auth token --user euron8` at each use, so it stores no secret and picks up a rotation
+   automatically — plus `credential.https://github.com.username euron8`, and an empty
+   `credential.helper` entry ahead of it to reset the inherited global `osxkeychain` helper. That
+   config is LOCAL, so other repos keep their own default.
+
+   **Two ways this bites, both measured here.** A `core.askpass` script that calls `gh` hangs git
+   indefinitely, and `GIT_TERMINAL_PROMPT=0` does NOT make it fail fast — if git wedges with no
+   output, that is the shape; use the credential helper, not askpass. And
+   `git push --dry-run | tail` printed `exit=0` over a push that really exited **128**, because this
+   shell has no `PIPESTATUS`. **Read a push's status without a pipe.**
 
 1. **Re-establish the pin** (see "Re-establish the pin", below). It held across this entire session:
    graph `HEAD` is still `510e4d9f5`, the live ledger is 4503 lines, and `sed -n '1,4356p'` reproduces
@@ -356,17 +370,20 @@ do not, 14 are deliberate prose shorthand and 2 sat in that id column.
    diff signature would read 0 for a reason unrelated to any fix. Its corpus leg is unaffected, so
    the receipt degrades to half-strength rather than false-closing. Recorded in the entry.
 
-4. **Then Phase 5. Step 22 is DONE; step 21 is BLOCKED ON THE PUSH, not on work.** Step 22 was
-   re-verified again this session: the pin reproduces, graph `HEAD` is unchanged, and the 147
-   post-pin lines are the three entries above plus one `RETRACTED` banner — **no new consumer filings
-   during this run**. Step 21 re-runs `ledger-reverify.sh` against the new ai-dlc `origin/main`, and
-   `origin/main` is still `b1ee196` because action 0's push fails 403. Run it the moment the push
-   lands. **Its observation point is BEFORE graph applies any annotation from the brief** — an
-   annotated entry is skipped and emits no row, so the criterion is unreachable afterwards.
+4. **PHASE 5 STEP 21 IS THE FIRST THING OWED, AND IT IS THE ONE STEP THAT CAN EXPIRE.** Step 22 is
+   DONE and was re-verified again at wind-down: the pin reproduces, graph `HEAD` is unchanged, and
+   the 147 post-pin lines are the three entries above plus one `RETRACTED` banner — **no new consumer
+   filings during this run**. Step 21 re-runs `ledger-reverify.sh` from the graph root against the
+   new ai-dlc `origin/main`, which now carries the release. Run it BEFORE anything else.
+
+   **Its observation point is BEFORE graph applies any annotation from the brief** — an annotated
+   entry is skipped and emits no row, so once graph pastes the section A and B annotations the
+   criterion is permanently unreachable and no rerun recovers it. The brief is written and sitting in
+   `docs/reviews/graph-ledger-adjudication-brief.md`; the moment it is delivered, this window closes.
 
    **Do not substitute the local `main` for `origin/main` in that run.** The criterion exists to
    observe what the CONSUMER's engine will see, and the consumer fetches `origin`. A run against a
-   local ref that no consumer can reach reproduces the shape this plan spent a phase removing.
+   local ref no consumer can reach reproduces the shape this plan spent a phase removing.
 
 6. **OWED, AND IT IS THE OPERATOR'S CALL: one general rule has no durable carrier.** This session
    found that **a coverage proof over a derived population cannot see outside it** — step 12's
@@ -381,8 +398,13 @@ do not, 14 are deliberate prose shorthand and 2 sat in that id column.
    before any cut. That is a deliberate decision, not a mechanical one. Today the rule is carried
    by action 3 of this file, which is adequate for this program and for nothing else.
 
-5. **Phase 3 is not started, and it is a program rather than a step.** The `HOLDS` set is now 42
-   backlog entries (`BL-021`..`BL-062`) plus whatever action 3 adds. Done-when 6 is ALREADY SATISFIED
+5. **PHASE 3 BATCH 1 IS THE OPERATOR'S CHOSEN NEXT SESSION.** Ruled at the wind-down of the session
+   that finished Phase 4: cut the first ≤4-remediation release branch from `origin/main`. Everything
+   it needs is landed and pushed, so it depends on nothing above except step 21 being run first —
+   step 21 observes `origin/main` as it is now, and a Phase 3 release moves it.
+
+   **Phase 3 is a program rather than a step.** The `HOLDS` set is 42
+   backlog entries (`BL-021`..`BL-062`) plus `BL-063`–`BL-065`. Done-when 6 is ALREADY SATISFIED
    — "every entry is either remediated and cited, or filed as a `BL-` entry" — so this is the
    operator's call on sequencing, not a blocker on closing this plan. Batches of ≤4 remediations per
    release branch, one version per branch, cut from `origin/main`.
