@@ -3045,11 +3045,23 @@ annotate-then-rotate of 56 entries: the row SET was identical at 84 rows, 10 LIN
 non-empty diff is that a live entry was swept. Here the diff is real and the conclusion is false,
 and the instruction is followed at exactly the moment a large batch of closes has just landed.
 
-**The fixture cannot fire on this.** `core/fixtures/ledger-rotate/` seeds already-annotated entries
-and asserts the byte-identical property, but has **0** occurrences of `AMBIGUOUS` in either
-`seed.sh` or `run.sh` — control in the same invocation, `STILL-LIVE` returns 2 in `run.sh` — so it
-never produces the only row type carrying a prefix count. The assertion holds there because the
-discriminating shape is absent, not because the invariant is true.
+**The fixture cannot fire on this, and the row it would need is UNCONSTRUCTIBLE rather than merely
+unseeded.** `core/fixtures/ledger-rotate/` seeds already-annotated entries and asserts the
+byte-identical property at `run.sh:5` and `run.sh:90`, but has **0** occurrences of `AMBIGUOUS` in
+either `seed.sh` or `run.sh` — control in the same invocation, `STILL-LIVE` returns 2 in `run.sh`.
+
+The structural reason is one level down: **`seed.sh` carries 0 ids of the form `PC-S<n>`**. Its
+labels are `PC-OPEN-A`, `PC-CLOSED-A` and `PC-OPEN-DECOY`. Control in the same invocation — 6 entry
+headings and 2 `PC-` ids of any form are present, so the search reaches the file and discriminates.
+`named_ambiguous()` extracts a `PC-S<n>` sprint prefix and gates on two or more entries sharing it,
+so with no such id in the corpus **the fixture could not produce a `NAMED-UPSTREAM-AMBIGUOUS` row no
+matter what the code under test did.**
+
+**That distinction decides the remedy.** "Unseeded" invites adding a seed. "Unconstructible" says
+the fixture's corpus shape cannot express the property its own assertion names — so that assertion
+has been decorative since the day it was written, and would have stayed green through any future
+rewrite of the invariant it exists to guard. A guard that never had a subject is not a gap in
+coverage; it is a check that cannot fire, reading exactly like one that passed.
 
 **The substantive guarantee DOES hold and is what the test should compare**: the row set, by status
 and subject, is unchanged. Only the count annotation on ambiguous rows moves.
