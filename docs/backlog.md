@@ -2893,11 +2893,17 @@ version parsed out of col3's `ALREADY-FIXED-v<X>`:
   `8dc52be`/`0.247.0` and `1537e4c`/`0.372.0` — and **22 disagree**.
 - **A 25th is comparable and a `v`-anchored regex cannot see it.** The remaining five are 2
   `FALSIFIED`, 2 `DUPLICATE-OF` and one `ALREADY-FIXED-93e05d3` — an `ALREADY-FIXED` naming a SHA
-  rather than a version. It is a real absorption claim, so it belongs in the comparable set: the sha
-  forward-walks to the first later `VERSION` change at **`0.103.0`**, while the join reports
-  **`0.373.0`**, resolving to `e939a92`. **So the split is 25 comparable, 2 agreeing, 23
-  disagreeing**, and only the four refutation/duplicate rows name no absorbing release at all.
-  Control in the same invocation: an impossible id resolves to 0 commits.
+  rather than a version. It is a real absorption claim, so it belongs in the comparable set:
+  `93e05d3` CHANGES `VERSION` itself, `0.101.0` -> `0.102.0`, so it IS its own release and shipped
+  at **`0.102.0`**, while the join reports **`0.373.0`**, resolving to `e939a92`. **So the split is
+  25 comparable, 2 agreeing, 23 disagreeing**, and only the four refutation/duplicate rows name no
+  absorbing release at all. Control in the same invocation: an impossible id resolves to 0 commits.
+- **BOTH SHAPES EXIST IN THIS HISTORY AND ASSUMING EITHER IS AN ERROR.** A fix commit may land
+  while `VERSION` still holds the previous number, with the bump arriving later in a separate
+  release commit — that is `941021d`, the case the consumer's own `PC-S334` filing is about. Or the
+  fix commit may BE the release, bumping `VERSION` in the same commit — that is `93e05d3`. Resolving
+  a sha to its shipping release therefore takes the earliest `VERSION`-changing commit **at or
+  after** it, inclusive of the commit itself.
 - **THE SHA FORM IS THE SHAPE A JOIN SILENTLY MISBUCKETS, AND THIS ENTRY DEMONSTRATED IT TWICE.**
   A first derivation put the row in a bucket labelled "no comparable verdict" — not because it lacks
   one, but because the parser's grammar was `ALREADY-FIXED-v[0-9]` and the row spells its version as

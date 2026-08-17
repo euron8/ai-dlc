@@ -71,13 +71,28 @@ printf '%s\n' "**ADOPTED UPSTREAM (verified ${DATE})**" \
 #
 # THE MAPPING, and every case is present in the corpus today:
 #   ALREADY-FIXED-v<X>  -> <X>            the release that shipped the fix. 34 rows in A, 6 in B.
-#   ALREADY-FIXED-<sha> -> resolve FORWARD to the earliest commit at or after <sha> that CHANGES
-#                          VERSION, and read VERSION there. One row: pin 1125 at `93e05d3`, whose
-#                          own VERSION blob reads 0.102.0 because a fix lands while VERSION still
-#                          holds the previous number -- the bump arrives later, in the release
-#                          commit. Forward-walking resolves it to v0.103.0. Control, in the same
-#                          invocation: the same walk from `e939a92~1` lands on `e939a92` itself,
-#                          so a commit that IS its own release resolves to itself.
+#   ALREADY-FIXED-<sha> -> the release that SHIPPED <sha>: the earliest commit AT OR AFTER it that
+#                          CHANGES VERSION. The range must be `<sha>^..` and INCLUDE <sha> itself.
+#
+#                          THIS SHIPPED ONCE AS AN EXCLUSIVE `<sha>..` WALK AND WAS WRONG BY A
+#                          WHOLE RELEASE. The reasoning behind the exclusive form was that "a fix
+#                          lands while VERSION still holds the previous number, and the bump arrives
+#                          later in the release commit". That is true of SOME commits here and false
+#                          of others, and the only row this code path touches is one of the others:
+#                          pin 1125's `93e05d3` CHANGES VERSION itself, 0.101.0 -> 0.102.0, so it IS
+#                          its own release and shipped at v0.102.0. The exclusive walk skipped past
+#                          it to `ebbfae9` and rendered v0.103.0 -- a different release entirely.
+#                          Both shapes exist in this history; assume neither.
+#
+#                          AND THE CONTROL COULD NOT HAVE CAUGHT IT, WHICH IS THE REAL DEFECT. It
+#                          walked from `e939a92~1` and asserted the walk landed on `e939a92`. But
+#                          `e939a92` is itself a release commit one step ahead of the start point,
+#                          so INCLUSIVE and EXCLUSIVE return it alike -- measured, both semantics
+#                          give the same sha, so the control passed under the broken implementation
+#                          and under the fixed one. The discriminating input is a release commit
+#                          walked FROM ITSELF, which is exactly the shape pin 1125 has. The arm
+#                          below uses that input and ASSERTS THE TWO SEMANTICS DIFFER on it before
+#                          reading either, so a future rewrite to the exclusive form fails here.
 #   anything else       -> $VER. FALSIFIED and DUPLICATE-OF close no absorption, so no absorbing
 #                          release exists; $VER is the release that RECORDED the refutation or
 #                          cited the dropped id. Section B's HOLDS-family rows are withdrawals on
@@ -89,12 +104,37 @@ LC_ALL=C awk -F'\t' -v V="$VER" '
     printf "%s\t%s\n", $1, v }
 ' "$FD" > "$TMP/annot_raw"
 
+# shipping_release <sha> -> VERSION at the earliest commit AT OR AFTER <sha> that changes VERSION.
+shipping_release() {
+  local _s="$1" _base _c
+  _base="$(git rev-parse -q --verify "${_s}^" 2>/dev/null)" || _base=""
+  if [ -n "$_base" ]; then _c="$(git log --reverse --format=%H "${_base}..HEAD" -- VERSION 2>/dev/null | head -1)"
+  else                     _c="$(git log --reverse --format=%H HEAD          -- VERSION 2>/dev/null | head -1)"; fi
+  [ -n "$_c" ] || return 1
+  git show "${_c}:VERSION" 2>/dev/null | tr -d '[:space:]'
+}
+
+# --- ARM 5: the walk must be INCLUSIVE, proven on the input that discriminates ---
+# A release commit walked FROM ITSELF. Inclusive answers "this release"; exclusive answers "the
+# next one". Assert they DIFFER before reading either, so this cannot pass vacuously the way its
+# predecessor did.
+_probe="$(LC_ALL=C awk -F'\t' '$3 ~ /^ALREADY-FIXED-[0-9a-f]{7,}$/ { print substr($3, 15); exit }' "$FD")"
+if [ -n "$_probe" ]; then
+  _inc="$(shipping_release "$_probe")"
+  _exc_c="$(git log --reverse --format=%H "${_probe}..HEAD" -- VERSION 2>/dev/null | head -1)"
+  _exc="$(git show "${_exc_c}:VERSION" 2>/dev/null | tr -d '[:space:]')"
+  [ -n "$_inc" ] || { echo "REFUSING: ARM 5 could not resolve $_probe at all." >&2; exit 9; }
+  [ "$_inc" != "$_exc" ] \
+    || { echo "REFUSING: ARM 5 is VACUOUS -- inclusive and exclusive both answer '$_inc' for $_probe, so this arm cannot tell the two implementations apart. Re-point it at a commit that CHANGES VERSION itself." >&2; exit 9; }
+  [ "$(git show "${_probe}:VERSION" 2>/dev/null | tr -d '[:space:]')" = "$_inc" ] \
+    || { echo "REFUSING: $_probe changes VERSION itself, so its shipping release is its own VERSION ($_inc expected)." >&2; exit 9; }
+fi
+
 : > "$TMP/annot"
 while IFS="$(printf '\t')" read -r _pin _v; do
   case "$_v" in
     @*) _sha="${_v#@}"
-        _rc="$(git log --reverse --format=%H "${_sha}..HEAD" -- VERSION 2>/dev/null | head -1)"
-        _v="$(git show "${_rc}:VERSION" 2>/dev/null | tr -d '[:space:]')"
+        _v="$(shipping_release "$_sha")" || _v=""
         ;;
   esac
   case "$_v" in

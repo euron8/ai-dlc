@@ -252,8 +252,8 @@ What the pull produced, all of it adjudicated live:
   annotation at `:848`. Measured over the 29 ids in `e939a92`'s message against
   `final-disposition.tsv`: **2 agree and 23 disagree over 25 comparable rows**, with 20 resolving to
   `e939a92` itself. Only 4 rows — 2 `FALSIFIED`, 2 `DUPLICATE-OF` — name no absorbing release; the
-  25th is `ALREADY-FIXED-93e05d3`, an absorption claim spelled as a SHA, which forward-walks to
-  0.103.0 against the join's 0.373.0. **THREE**
+  25th is `ALREADY-FIXED-93e05d3`, an absorption claim spelled as a SHA, which resolves to 0.102.0
+  against the join's 0.373.0. **THREE**
   of the nine older resolutions are this program's own `docs(plan)`/`docs(reviews)` commits that
   merely MENTION the id — the same reads-vs-mentions class as `receipt_absent_subjects` — and a
   fourth, `5b5b95c`, is worse: a ledger-drain release touching 23 `core/` files, attributed to an
@@ -280,6 +280,22 @@ What the pull produced, all of it adjudicated live:
   cannot parse. **The bucket labelled "nothing to compare" was an artifact of the parser's grammar,
   not a property of the data**, and it hid the single largest disagreement in the set. Every stage
   of this was a clean-looking run.
+
+  **AND THE FIX FOR IT WAS ITSELF WRONG BY A WHOLE RELEASE, WITH A CONTROL THAT COULD NOT HAVE
+  CAUGHT IT. This is the sharpest instance in the program of "a check that cannot fire reads exactly
+  like one that passed", because it sits INSIDE a guard built to stop a version being wrong.** The
+  renderer resolved the sha with an EXCLUSIVE `<sha>..HEAD` walk, on the reasoning that a fix lands
+  before its release commit bumps `VERSION`. **Both shapes exist here and the only row this path
+  touches is the other one**: `93e05d3` changes `VERSION` itself, `0.101.0` -> `0.102.0`, so it IS
+  its own release; the exclusive walk stepped past it to `ebbfae9` and rendered **v0.103.0**. The
+  control asserted that a walk from `e939a92~1` lands on `e939a92` — but `e939a92` is a release
+  commit one step AHEAD of the start point, so inclusive and exclusive return it alike. **Measured:
+  both semantics give the same sha, so the control passed under the broken implementation and under
+  the fixed one.** The discriminating input is a release commit walked FROM ITSELF, which is exactly
+  the shape the corpus row has and exactly the shape the control avoided. **ARM 5 now uses that
+  input and asserts the two semantics DIFFER before reading either**, so it refuses when it cannot
+  discriminate rather than passing — proven by reverting the walk, which makes it report both
+  answers as `0.103.0` and exit 9. Caught by the consumer, re-deriving.
 - **`closes_when` is free prose that nothing parses**, found by graph, filed as `BL-067`. Read at
   `audit-layer-debt.sh:108` and printed at `:215-216`; `migrate-artifact-paths.sh` has zero hits for
   it against a `strip_token` control of 3. It has a schema, a producer and a printer and **no

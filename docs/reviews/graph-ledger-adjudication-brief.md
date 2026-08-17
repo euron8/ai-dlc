@@ -102,7 +102,7 @@ so for those **this annotation is the only closing channel**.
 | 638 | `steps/gate-validation.md Check 25 has no remediation path f...` | ALREADY-FIXED-v0.111.0 | brief-annotation | `**ADOPTED UPSTREAM (v0.111.0, verified 2026-08-17)**` |
 | 728 | `PC-S296-PAUSE-SKIP-ARM-MISSES-TASK-NOTIFICATIONS` | ALREADY-FIXED-v0.265.0 | brief-annotation | `**ADOPTED UPSTREAM (v0.265.0, verified 2026-08-17)**` |
 | 821 | `PC-S296-H1-FIXTURE-CITATION-GAP` | ALREADY-FIXED-v0.146.0 | changelog-cite | `**ADOPTED UPSTREAM (v0.146.0, verified 2026-08-17)**` |
-| 1125 | `PC-S297-RETRO-MD-CLAIMS-NONEXISTENT-GHA-WORKFLOW` | ALREADY-FIXED-93e05d3 | changelog-cite | `**ADOPTED UPSTREAM (v0.103.0, verified 2026-08-17)**` |
+| 1125 | `PC-S297-RETRO-MD-CLAIMS-NONEXISTENT-GHA-WORKFLOW` | ALREADY-FIXED-93e05d3 | changelog-cite | `**ADOPTED UPSTREAM (v0.102.0, verified 2026-08-17)**` |
 | 1254 | `PC-S297-VALIDATE-MANDATORY-RULES-CHECK3-CHECK4-DEAD` | ALREADY-FIXED-v0.88.0 | changelog-cite | `**ADOPTED UPSTREAM (v0.88.0, verified 2026-08-17)**` |
 | 1305 | `PC-S297-RETRO-UPSTREAM-PM-AC-PRECISION` | ALREADY-FIXED-v0.169.0 | changelog-cite | `**ADOPTED UPSTREAM (v0.169.0, verified 2026-08-17)**` |
 | 1406 | `PC-S299-UNREGISTERED-DRIFT-SCAN-SKIPS-CORE-FIXTURES-AND-COR...` | DUPLICATE-OF-PC-S303-UNREG | changelog-cite | `**ADOPTED UPSTREAM (v0.373.0, verified 2026-08-17)**` |
