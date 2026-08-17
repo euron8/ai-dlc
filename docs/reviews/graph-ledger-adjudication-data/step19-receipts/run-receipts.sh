@@ -7,7 +7,10 @@
 #   rc != 0     -> CLOSE-CANDIDATE (upstream fixed it)            <- FALSE CLOSE today
 #   rc 126/127  -> NEEDS-REVIEW    (subject unresolvable)
 set -u
-SP=/private/tmp/claude-501/-Users-n8-git-ai-dlc/bf4b7a9b-7e21-4470-bb51-dcacf2a4f138/scratchpad/step19
+# Resolve beside this script, NOT a session scratchpad -- the scratchpad this was
+# authored in is unreachable from any later session, and a harness that silently
+# finds no receipts prints nothing and reads exactly like a clean run.
+SP="$(cd "$(dirname "$0")" && pwd)"
 
 export DIST=/Users/n8/git/ai-dlc
 export CONSUMER=/Users/n8/git/graph
@@ -19,8 +22,8 @@ echo
 
 live=0; falseclose=0; needsreview=0
 for i in 1 2 3 4; do
-  f="$SP/out-$i.md"
-  [ -e "$f" ] || { echo "out-$i: PENDING"; continue; }
+  f="$SP/batch-$i.md"
+  [ -e "$f" ] || { echo "batch-$i: MISSING -- refusing to report a clean run over nothing" >&2; exit 2; }
   LC_ALL=C grep -n '^verify: sh ' "$f" | while IFS= read -r line; do
     ln=${line%%:*}
     body=${line#*:verify: sh }
@@ -30,7 +33,7 @@ for i in 1 2 3 4; do
       126|127)  verdict="NEEDS-REVIEW    subject unresolvable" ;;
       *)        verdict="CLOSE-CANDIDATE **FALSE CLOSE**" ;;
     esac
-    printf '  out-%s:%-4s rc=%-3s %s\n' "$i" "$ln" "$rc" "$verdict"
+    printf '  batch-%s:%-4s rc=%-3s %s\n' "$i" "$ln" "$rc" "$verdict"
   done
 done
 

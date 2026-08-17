@@ -15,17 +15,28 @@ batch is a **consumer push-candidate ledger**, run by
 `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh`, whose `sh` verb is the **opposite**:
 
 ```
-core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:28-29
+core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:29-30
 #   verify: sh <one-liner>
 #       Escape hatch. Runs with $DIST/$BASE/$THEIRS/$CONSUMER exported. Exit 0 = the entry
 #       STILL reproduces at theirs (stays open); nonzero = it no longer does → CLOSE-CANDIDATE.
 ```
 
-and the dispatch at `:1016-1019` confirms it — `0)` emits `STILL-LIVE`, the default arm emits
+and the dispatch at `:1017-1019` confirms it — `0)` emits `STILL-LIVE`, the default arm emits
 `CLOSE-CANDIDATE`. **A receipt written to exit non-zero today would be reported CLOSE-CANDIDATE
 on its first run** — the exact data-losing verdict this step exists to prevent. All four
 receipts below therefore **exit 0 today** and non-zero once fixed. This applies to the other
 three batches too.
+
+**Verified in the engine that will actually run them.** A consumer executes its OWN installed
+copy, not ai-dlc HEAD, so the polarity was checked in both:
+
+| engine | lines | md5 | `sh` rc=0 arm | 126/127 arm |
+|---|---|---|---|---|
+| `core/skills/…/ledger-reverify.sh` (ai-dlc HEAD) | 1177 | `2dd0fb12…` | `:1019` STILL-LIVE | `:1020` |
+| `/Users/n8/git/graph/.claude/skills/…/ledger-reverify.sh` (installed) | 1116 | `b3e83588…` | `:958` STILL-LIVE | `:959` NEEDS-REVIEW |
+
+The installed copy is 61 lines behind but **identical on this point** — same header sentence at
+`:30`, same dispatch, same `cd "$CONSUMER"` + exported `DIST/BASE/THEIRS/CONSUMER` at `:953-954`.
 
 Two further consequences of the engine that shaped every receipt here:
 
