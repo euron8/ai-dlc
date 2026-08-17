@@ -76,6 +76,121 @@ done
 TMPD="$(mktemp -d)" || { echo "ledger-rotate: mktemp failed" >&2; exit 1; }
 trap 'rm -rf "$TMPD"' EXIT
 
+# --- REFUSE TO ROTATE A LEDGER THE BOUNDARY RULE WOULD SPLIT ------------------------------
+# THE DEFECT. `ledger_entry_shape()` opens an entry on ANY line-leading `- **`, so an
+# ANNOTATION written in that shape inside a CLOSED entry ends it. The head is archived and the
+# tail -- including the entry`s verify: receipt -- is stranded in the live ledger under no
+# heading. Observed on `PC-S296-WHOLE-READ-POOL`: the archived copy ended mid-sentence and the
+# receipt sat 170 lines below an unrelated entry. Driven behaviourally against this script,
+# two ledgers byte-identical but for one bullet`s indentation: the column-0 bullet puts HEAD in
+# the archive and TAIL in the live file, the indented one rotates the entry whole.
+#
+# THE EXISTING INTEGRITY CHECK CANNOT SEE THIS AND THAT IS STRUCTURAL, NOT AN OVERSIGHT. The
+# `kept + moved != total` arm below is LINE accounting, and a split conserves every line -- the
+# two halves simply land on opposite sides. Every conservation predicate over the SAME parse is
+# blind the same way, because the parse is the thing that is wrong.
+#
+# WHY A DETECTOR AND NOT A PARSER FIX, WHICH IS THE SAME ANSWER `scripts/backlog-rotate.sh`
+# REACHED FOR THE FENCE CASE. An annotation lead-in and an entry title are
+# byte-indistinguishable, so no boundary rule can separate them. The two cheap discriminators
+# were measured and both fail: requiring a `PC-` id makes the rotator stop seeing every legacy
+# id-less entry, which is silent non-archival rather than a visible refusal, and requiring a
+# `verify:` receipt fails for the same corpus. `ledger-entry-boundary-measurement.md`, the
+# distribution`s own analysis note, asks whether an explicit terminator could carry it instead:
+# measured on the reference consumer, the live ledger holds 96 boundary-shaped lines against 50
+# `---` separators and the archive 142 against 70, so `---` does not separate all entries and
+# that route is closed on this corpus.
+#
+# REFUSING IS THE CORRECT FAILURE HERE, AND THIS REPO NORMALLY PREFERS PENDING TO FAIL. Not on
+# this one: the alternative to stopping is irreversible loss of the tail of a real entry, and
+# the remedy is a one-line edit to the offending ledger -- indent the annotation so it does not
+# start a line, or drop its bold. Cheap to satisfy, unrecoverable to skip.
+#
+# KEYED ON THE HARM, NOT ON THE SHAPE, AND THE FIRST CUT GOT THIS WRONG IN THE WAY THE
+# ANALYSIS FILE PREDICTS. Keying on shape alone -- any non-id boundary inside a closed id-keyed
+# entry -- reads a REAL prose-titled entry that merely FOLLOWS a closed one as an annotation,
+# and wedges a rotation that would have been correct. `core/fixtures/ledger-rotate/seed.sh`
+# carries exactly that adjacency: `- **Entry STUCK is closed for re-verification and`
+# `unarchivable.**` sits right after the closed `PC-CLOSED-BULLET`, and the shape-keyed form
+# refused it. That fixture found the false positive the reference-consumer corpus did not
+# contain.
+#
+# So the predicate is the DAMAGE. A split only loses something when the closed entry`s receipt
+# ends up on the far side of the offending line, so all three of these must hold: the boundary
+# is non-id and sits inside a CLOSED id-keyed entry; it carries NO close annotation of its own,
+# which a real entry closed in its own right does; and a `verify:` receipt follows it before
+# the next id-keyed boundary. When those hold, the receipt is either the closed entry`s --
+# about to be stranded -- or the new entry`s, and NOTHING can tell which. That is exactly the
+# state in which refusing is the right answer rather than a guess.
+#
+# `ledger_entry_id()` is the shared, single-homed id rule from lib.sh -- the same one
+# `ledger-reverify.sh`s ENTRY-SWALLOWED arm reads, so the two tools cannot drift about what an
+# id is. The close test is this file`s own strict form, `**ADOPTED UPSTREAM (v<digit>`, not
+# reverify`s looser one, because the loose form matches an entry that merely QUOTES it.
+#
+# FALSE-POSITIVE SET, MEASURED BEFORE SHIPPING AND ENUMERATED RATHER THAN ASSERTED. Over this
+# guard`s ACTUAL POPULATION -- the files a rotation reads, which are LIVE ledgers -- it reports
+# ZERO: nothing on the reference consumer`s live ledger, and nothing on the distribution`s own
+# backlog or its archive. It fires on the reproduction above and stays silent on the
+# indented near-miss, with the two inputs asserted byte-different first.
+#
+# THE CONSUMER`S OWN ARCHIVE REPORTS 22, AND THAT IS STATED RATHER THAN ROUNDED AWAY. An
+# archive is a rotation OUTPUT and never an input, so those 22 gate nothing and no run reaches
+# them. They are NOT adjudicated here: each is a boundary-shaped line inside a closed entry, and
+# whether a given one is an annotation or a real legacy id-less entry is the same question this
+# whole guard exists BECAUSE nothing can answer. Reporting the number without the adjudication
+# is the honest form; calling it zero because it does not gate anything would not be.
+SPLIT_FINDINGS="$(LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)"'
+  function label_of(l,   line, shape) {
+    shape = ledger_entry_shape(l)
+    if (shape == "") return "\001"
+    line = l
+    if (shape == "heading") { sub(/^#{2,6}[ \t]+/, "", line) }
+    else                    { sub(/^- \*\*/, "", line); sub(/\*\*.*$/, "", line) }
+    return line
+  }
+  function report() {
+    if (susp_at && !susp_closed && !entry_hasv && (susp_colon || susp_hasv))
+      printf "  line %d: `%s` sits inside the CLOSED entry `%s` opened at line %d, carries no close annotation of its own, and a verify: receipt follows it at line %d -- rotation would archive that entry head and strand the receipt in the live ledger under no heading\n", susp_at, substr(susp_lab, 1, 55), substr(entry_lab, 1, 55), entry_at, susp_v_at
+    susp_at = 0; susp_closed = 0; susp_hasv = 0
+  }
+  {
+    lab = label_of($0)
+    if (lab != "\001") {
+      if (ledger_entry_id(lab) != "") { report(); entry_at = NR; entry_lab = lab; closed = 0; entry_hasv = 0; next }
+      report()
+      if (entry_at && closed) {
+        susp_at = NR; susp_lab = lab; susp_colon = (lab ~ /:$/)
+        # THE CLOSE MAY SIT IN THE BOUNDARY LINE`S OWN BOLD SPAN. The legacy id-less form
+        # writes it there -- `- **`validate-ci-gates.sh` -> ADOPTED UPSTREAM (v0.135.0).**` --
+        # so a close test that only reads the lines BELOW never sees it and the guard refuses a
+        # real entry. Read the line itself as well.
+        if ($0 ~ /ADOPTED UPSTREAM/) susp_closed = 1
+      }
+      next
+    }
+    if ($0 ~ /\*\*ADOPTED UPSTREAM \(v[0-9]/ && !susp_at) closed = 1
+    if ($0 ~ /ADOPTED UPSTREAM/ && susp_at) susp_closed = 1
+    if ($0 ~ /^[ \t]*(<br[ \t]*\/?[ \t]*>)?[ \t]*[-*]?[ \t]*`?verify:/) {
+      # A receipt ABOVE the suspect line is already on the archive side, so nothing of this
+      # entry`s receipt can be stranded by the split and there is nothing to refuse.
+      if (susp_at) { if (!susp_hasv) { susp_hasv = 1; susp_v_at = NR } }
+      else if (entry_at)             { entry_hasv = 1 }
+    }
+  }
+  END { report() }
+' "$LEDGER")"
+if [ -n "$SPLIT_FINDINGS" ]; then
+  echo "ledger-rotate: REFUSING to rotate $LEDGER — the entry-boundary rule would split a closed entry." >&2
+  printf '%s\n' "$SPLIT_FINDINGS" >&2
+  echo "  If the reported line is an ANNOTATION, re-indent it so it does not start a line, or drop" >&2
+  echo "  its bold. If it is a real ENTRY, that advice would destroy it — give it its own close" >&2
+  echo "  annotation, or an entry id, so the two stop being indistinguishable. This refuses" >&2
+  echo "  precisely because nothing here can tell which one it is." >&2
+  echo "  Nothing written." >&2
+  exit 1
+fi
+
 # Split the ledger into KEEP and MOVE by the same boundary + closed rules ledger-reverify
 # uses. Everything before the first entry boundary is the file's preamble and always stays
 # (`started` stays 0 until the first boundary, and only `started && closed` moves).

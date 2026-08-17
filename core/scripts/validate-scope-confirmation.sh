@@ -155,10 +155,51 @@ say "answers_entries_scanned: ${ENTRIES}"
 # a hex digest or `none`), so the value runs to the first space, backtick or sentence
 # punctuation. Nothing here needs to survive a value containing spaces, and a parser
 # that tried would swallow the rest of a prose line.
+# NORMALIZE THE LINE, THEN MATCH. ENUMERATING WRAPPERS AROUND THE NAME IS WHAT FAILED.
+#
+# This used to spell the backtick as an optional character on each side of the NAME, which
+# handles exactly the two grammars its own comment block documents and misparses every other
+# one. Two of the failures are silent and one of them is an ACCUSATION:
+#
+#   - **scope_confirmed:** confirmed    ->  `**`    -> FAIL "not one of confirmed|corrected"
+#   - **scope_confirmed**: confirmed    ->  empty   -> FAIL "a Rule 3(d) pause point that did
+#                                                      not happen"
+#
+# The second is the harsher one: a well-formed snapshot carrying a correct value is read as
+# evidence the lead skipped a MANDATORY operator pause. `scope_confirmed_cite` reached the
+# same fate through the same function.
+#
+# THE FILED REPORT NAMED TWO GRAMMARS AND SIX WERE MEASURED. Driving the pre-fix function over
+# a grammar table, the ones it got wrong were: bold with the colon inside the span, bold with
+# the colon outside it, a BACKTICKED VALUE (the value class excluded a backtick, so
+# `` `confirmed` `` matched nothing and returned empty), a bold span wrapping the whole pair
+# (`confirmed**`), `__underscore bold__`, and a bold name with a backticked value. Only the
+# first two were reported.
+#
+# WHY THE REPORT'S PRESCRIBED FIX WAS NOT ADOPTED -- it was transcribed and RUN, and it does
+# not fix the case the report itself reproduces. It places the wrapper BEFORE the colon while
+# the colon-inside form puts the closing `**` BETWEEN the colon and the value, so that form
+# still returns `**`; on the colon-outside form it is strictly worse, capturing the whole line
+# as the value. It also spells its alternation `\|`, a GNU BRE extension this machine's `grep`
+# honours and BSD `sed` does not -- and the second leg here IS a `sed`, so half of it would
+# have applied with no error at all.
+#
+# WHAT STILL DOES NOT PARSE, STATED RATHER THAN IMPLIED: single-character emphasis around the
+# name -- `*scope_confirmed*` or `_scope_confirmed_`. A single `_` CANNOT be stripped, because
+# the field name contains one; stripping it destroys the name this function is looking for.
+# Both forms return empty here and returned empty before, so neither is a regression, and
+# neither appears in the producer's output. This is the residue, and it is named because a
+# separation that makes a wrong answer unlikely is not one that makes it unconstructible.
+#
+# KEEP THIS FUNCTION SELF-CONTAINED. The distribution's backlog receipt for this defect lifts it by
+# its own definition boundaries -- `sed -n '/^field_of() {/,/^}/p'` -- and evals it alone, so a
+# correct fix that delegated to a helper would leave the helper undefined and report the defect
+# STILL-LIVE against working code. Measured: the helper-delegating form exits 9 there.
 field_of() {
-  grep -o "\`\{0,1\}$1\`\{0,1\}[[:space:]]*:[[:space:]]*[^[:space:]\`]\{1,\}" "$2" 2>/dev/null \
+  sed -e 's/\*\*//g' -e 's/__//g' -e 's/`//g' "$2" 2>/dev/null \
+    | grep -o "$1[[:space:]]*:[[:space:]]*[^[:space:]]\{1,\}" \
     | head -1 \
-    | sed -e "s/^.*$1\`\{0,1\}[[:space:]]*:[[:space:]]*//" -e 's/[`.,;:]\{1,\}$//'
+    | sed -e "s/^.*$1[[:space:]]*:[[:space:]]*//" -e 's/[.,;:]\{1,\}$//'
 }
 
 # --- routing record present at all? -----------------------------------------

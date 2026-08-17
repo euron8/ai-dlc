@@ -34,6 +34,148 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.376.0] — 2026-08-17
+
+Four parsers that answered confidently on input they could not read. Three of the four filings
+were wrong about their own scope, and in two of them the prescribed fix was transcribed, RUN,
+and measured NOT to close the case the filing itself reproduces.
+
+### `BL-036` / `PC-S333-SETTINGS-MERGE-CHECK-READS-AN-EMPTY-TEMPLATE-AS-A-VERDICT`
+
+`reconcile/settings-merge.sh --check` answered `model_row_needed=no` and exited 0 on a template
+it could not parse. Step 5 raises the provisioning question only on `yes`, so a consumer that
+genuinely needed `.env.AI_DLC_MODEL_ROW` was never asked and the run stayed green.
+
+**The cause was a `|| echo false` fallback that made a `jq` ERROR and a genuine `false` the same
+string**, and every guard written downstream of that conflation is blind by construction. The
+fallback is gone, `jq`'s own exit status is read, and a verdict can only be produced from a
+literal `true` or `false`.
+
+**FOUR input classes reached that silent `no`, not the one the report named.** A 0-byte template
+(where `jq` exits 0 and prints nothing, so the fallback never fires at all), a readable non-JSON
+template, a bare JSON scalar, and a valid JSON object whose `.hooks` is not an object. **The last
+two are VALID JSON, which is why validating the template as JSON does not close this.**
+
+**The narrower fix was built first and measured failing**, which is the reason the fallback had
+to go rather than be guarded: a `case` refusing anything that is not a literal `true|false`, added
+with the fallback still in place, closes ONLY the 0-byte case — the other three arrive spelled
+`false` and are indistinguishable from a template that genuinely does not wire the sensor.
+
+The report's own prescribed fix, transcribed and run: `[ -r ] && [ -s ]` rejects the 0-byte
+template and leaves the non-JSON one returning `model_row_needed=no` at exit 0, unchanged. Its
+headline also claimed the unreadable case, which the `-r` guard has always refused at exit 1.
+
+### `BL-065` / `PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR`
+
+`validate-scope-confirmation.sh`'s `field_of()` spelled the backtick as an optional character on
+each side of the field NAME, which handles the two grammars its own comment block documents and
+misparses the rest. `- **scope_confirmed:** confirmed` returned the literal `**`; `- **scope_`
+`confirmed**: confirmed` returned EMPTY, and **empty routes to an accusation** — a well-formed
+snapshot carrying a correct value read as evidence the sprint lead skipped a mandatory operator
+pause point. `scope_confirmed_cite` corrupted identically.
+
+It now NORMALIZES the line — stripping `**`, `__` and backticks — then matches
+`NAME[[:space:]]*:[[:space:]]*VALUE` position-independently.
+
+**The filing named two failing grammars and six were measured**, by driving the pre-fix function
+over a grammar table rather than reading its regex: the two above, plus a BACKTICKED VALUE (the
+value class excluded a backtick, so `` `confirmed` `` matched nothing), a bold span wrapping the
+whole pair, `__underscore bold__`, and a bold name with a backticked value.
+
+**The prescribed fix does not fix the case the filing reproduces** — it places the wrapper before
+the colon while the colon-inside form puts the closing `**` between the colon and the value — and
+**half of it is silently inert here**, because it spells its alternation `\|`, a GNU BRE extension
+this machine's `grep` honours and BSD `sed` does not, and the second leg is a `sed`.
+
+**The residue is stated rather than implied**: single-character emphasis (`*name*`, `_name_`) still
+returns empty, because a single `_` cannot be stripped — the field name contains one. Neither form
+is a regression and neither appears in the producer's output.
+
+**`field_of` is deliberately kept SELF-CONTAINED.** The backlog receipt lifts it by its own
+definition boundaries and evals it alone, so a correct fix delegating to a helper would leave that
+helper undefined and report the defect STILL-LIVE against working code — measured at exit 9.
+
+### `BL-013` / `PC-S299-LEDGER-REVERIFY-SIGPIPE-FALSE-ABSENT`
+
+`ledger-reverify.sh`'s `ENTRY-SWALLOWED` diagnostic was gated on the annotation's bold span ending
+in a COLON. An annotation without one truncates the entry above it, CAPTURES that entry's receipt,
+and produces no row under the swallowed id and no diagnostic either.
+
+**The colon gate fires ZERO times on every corpus available** — the reference consumer's live
+ledger and archive and both distribution backlog files — while those same corpora contain
+annotations that really are swallowing entries. A gate that has never fired reads exactly like a
+corpus with nothing to report.
+
+A second gate is added, and it is **the conjunction of the two predicates the arm's own header
+records as measured and REJECTED**, neither of which is shippable alone: a non-id bullet CAPTURED a
+receipt, AND the id-keyed entry above it emitted no row of its own, AND that entry is not closed.
+That is the harm signature — an entry losing its only row to the line below it.
+
+**False positives, enumerated rather than asserted: ZERO.** It fires 1× on the consumer's live
+ledger, 0× on its archive and 3× in `docs/backlog.md`, and all four are genuine annotation
+sub-bullets. The capture predicate ALONE fires 11× on that same ledger.
+
+**The naive repair is measured worse than the defect and was not taken**: a plain fence toggle
+takes the entry-start count from 142 to 95 on the reference consumer, silently dropping 47 real
+entries, because that corpus carries an ODD number of fence delimiters.
+
+### `BL-032` / `PC-S313-LEDGER-ROTATE-SPLITS-AN-ENTRY-AT-A-BOLD-ANNOTATION`
+
+`ledger-rotate.sh` physically SPLIT a closed entry at a line-leading bold annotation: the head to
+the archive, the tail — receipt included — stranded in the live ledger under no heading. **The
+existing integrity check cannot see this and that is structural:** `kept + moved != total` is LINE
+accounting, and a split conserves every line. Every conservation predicate over the same parse is
+blind the same way, because the parse is what is wrong.
+
+The rotator now REFUSES rather than guessing, which is the answer `scripts/backlog-rotate.sh`
+already reached for the fence case and the one `docs/analysis/ledger-entry-boundary-measurement.md`
+prescribes.
+
+**Three candidate discriminators were measured and rejected before this one.** Requiring a `PC-` id
+makes the rotator stop seeing every legacy id-less entry — silent non-archival, worse than a
+visible refusal. A tail-shape signal has an enumerated false-positive set of 12 on the live ledger.
+And the analysis file's own suggestion, that an explicit `---` terminator could carry the boundary
+instead, is **closed on this corpus**: the live ledger holds 96 boundary-shaped lines against 50
+separators, the archive 142 against 70.
+
+**KEYED ON THE HARM, NOT THE SHAPE, AND THE FIRST CUT GOT THAT WRONG.** A shape-keyed guard reads a
+REAL prose-titled entry that merely FOLLOWS a closed one as an annotation and wedges a correct
+rotation. `core/fixtures/ledger-rotate/seed.sh` carries exactly that adjacency and REFUSED under
+the first cut — **the fixture found the false positive the reference-consumer corpus does not
+contain**, and that entry's close is VERSIONLESS, so a strict close test misses it too. The guard
+now fires only when the closed entry's receipt would actually be stranded. False positives over its
+real population: ZERO on all four corpora.
+
+**THE ENTRY'S RECEIPT WAS ITSELF CLOSABLE BY THE ONE FIX THAT MUST NEVER SHIP, AND IT IS TIGHTENED
+IN THIS RELEASE.** Its `H -eq T` arm asks only that the entry is not split, and `if (0) return`
+`"bullet"` — deleting the bullet arm — satisfies that perfectly, because a rule which sees no
+bullets splits nothing. Measured across three trees in one invocation with the sides asserted
+byte-different first: pre-fix **1**, the shipped guard **0**, the forbidden mutant **0**. **This is
+the INVERSE of the receipt defect this program keeps finding** — not a correct fix scored as work
+remaining, as `BL-070`'s was, but a destructive one scored as done. The receipt now also requires a
+CLOSED BULLET entry to reach the archive, which no bullet-blind rule can satisfy; the same three
+trees measure **1 / 0 / 1**.
+
+**A THIRD HAND-COPY OF THE BOUNDARY RULE SURVIVES IN THE SAME DIRECTORY, AND IS NOT TOUCHED HERE.**
+`ledger-rotate.sh`'s header says "There is one boundary now"; that is true of the two ledger tools
+and false of the directory, because `reconcile/warn-shadowed-local-validators.sh:84-85`
+re-implements `/^- \*\*/` and `/^#{2,6}[ \t]/` inline. It is recorded rather than fixed: it is a
+different program with a different subject, and folding it in would put an unmeasured third reader
+inside a release whose whole subject is that this rule cannot be changed safely without measuring
+every reader. **The boundary rule itself is deliberately NOT modified in this release** — both
+fixes are additive, and `ledger_entry_shape()` is byte-identical to its previous form.
+
+### `lib.sh` — the entry-id rule is single-homed, and it had its own false negatives
+
+`ledger_entry_id()` joins `ledger_entry_shape()` in `reconcile/lib.sh`, read by both tools above, so
+they cannot drift about what an id is — which is what the analysis file's closing item asks for.
+
+It replaces a local `idshape()` in `ledger-reverify.sh` whose `^[A-Z0-9-]+$` excluded `_` and `.`:
+`PC-S330-PREPUSH-LEAKS-GIT_DIR-INTO-EVERY-FIXTURE-SANDBOX` and
+`PC-S300-SEVEN-VALIDATORS-SHIPPED-NON-EXECUTABLE-AT-0.242.0` are real entries that failed it, one in
+the consumer's live ledger and one in its archive. Neither produced a wrong row under the old gate,
+because that gate fired on nothing at all.
+
 ## [0.375.0] — 2026-08-17
 
 ### `BL-008` — `suite-dispatch-order` judged the machine's scheduler, not the ordering rule

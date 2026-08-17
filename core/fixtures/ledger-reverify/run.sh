@@ -883,10 +883,18 @@ row_lacks "a-real-entry.sh" ENTRY-SWALLOWED \
 
 # MUTATION — drop the colon discriminator. The prose-titled control must then be reported,
 # which is the exact false-positive set that killed the earlier predicate. Nothing else changes.
+#
+# RE-ANCHORED, AND THE OLD ANCHOR'S DEATH IS THE POINT. The arm used to key on
+# `label ~ /:$/ && !idshape(label)`, one conjunction inside a single `if`. The colon test is
+# now a BRANCH SELECTOR — `if (label ~ /:$/)` picks the colon row and `else if (…)` picks the
+# capture row — so the old anchor matched nothing and this arm went red rather than quiet.
+# That is the `cmp -s` guard working exactly as designed and it is deliberately kept: the
+# alternative reading of a vanished anchor is a mutation that silently stops mutating, which
+# reads identically to a discriminator that is load-bearing.
 MUTC="$(dirname "$DIST")/mut-colon"
 rm -rf "$MUTC"; mkdir -p "$MUTC"
 cp "$(dirname "$CLOSER")"/*.sh "$MUTC/" 2>/dev/null
-sed 's@label ~ /:\$/ && !idshape(label)@!idshape(label)@' "$CLOSER" > "$MUTC/ledger-reverify.sh"
+sed 's@if (label ~ /:\$/)@if (1)@' "$CLOSER" > "$MUTC/ledger-reverify.sh"
 
 ASSERTIONS=$((ASSERTIONS + 1))
 if cmp -s "$CLOSER" "$MUTC/ledger-reverify.sh"; then
@@ -894,12 +902,160 @@ if cmp -s "$CLOSER" "$MUTC/ledger-reverify.sh"; then
   printf '  FAIL  %-22s the mutation matched nothing, so the colon discriminator is unproven\n' "mutation-colon"
 else
   mc_out="$(bash "$MUTC/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
-  if printf '%s\n' "$mc_out" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /a-real-entry/{f=1} END{exit !f}'; then
+  # BOTH HALVES. Without the second the arm scores a kill for a mutant that broke the whole
+  # ENTRY-SWALLOWED block — an emitter that died prints no prose row either, and "no row for
+  # a-real-entry" would then read as the colon test doing its job.
+  mc_fp="$(printf '%s\n' "$mc_out" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /a-real-entry/{f=1} END{print f+0}')"
+  mc_tp="$(printf '%s\n' "$mc_out" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /The derivation/{f=1} END{print f+0}')"
+  if [ "$mc_fp" = 1 ] && [ "$mc_tp" = 1 ]; then
     printf '  ok    %-22s without the colon test a prose-titled entry is falsely reported — it is load-bearing\n' "mutation-colon"
+  elif [ "$mc_tp" != 1 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant lost the genuine colon row too, so it is not a clean mutation of the colon test alone\n' "mutation-colon"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s dropping the colon test did NOT re-fire the prose entry, so the control above is vacuous\n' "mutation-colon"
   fi
+fi
+
+# --- BL-013: THE NO-COLON SWALLOW, WHICH THE COLON SIGNAL CANNOT SEE ----------------------
+# The colon gate fires ZERO times on every corpus available — the reference consumer's live
+# ledger and archive, and both distribution backlog files — while those same corpora carry
+# annotation bullets that really are swallowing entries. An annotation whose bold span does
+# NOT end in a colon truncates the entry above it exactly as a colon one does, captures its
+# receipt, and produced no row anywhere until the second signal existed.
+row_has "False CLOSE-CANDIDATE" ENTRY-SWALLOWED \
+  "a NO-COLON annotation that captured a receipt is REPORTED — the colon signal is blind to this one"
+
+ASSERTIONS=$((ASSERTIONS + 1))
+if printf '%s\n' "$OUT" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /False CLOSE-CANDIDATE/ && $3 ~ /PC-FIXTURE-NO-COLON-SWALLOWED/{f=1} END{exit !f}'; then
+  printf '  ok    %-22s names the entry that went dark, so the operator has a subject and not just a complaint\n' "no-colon-names-entry"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s reported the no-colon swallow without naming PC-FIXTURE-NO-COLON-SWALLOWED\n' "no-colon-names-entry"
+  printf '%s\n' "$OUT" | awk -F'\t' '$1=="ENTRY-SWALLOWED"' | sed 's/^/          | /'
+fi
+
+# AND IT MUST DISCRIMINATE, or the arm above is satisfied by a detector that reports every
+# non-id bullet carrying a receipt. Predicate (2) ALONE — a receipt under a non-id label —
+# reports 11 rows on the reference consumer's live ledger; the conjunction reports 1. These
+# three are the classes the conjunction subtracts, and each is a REAL entry.
+row_lacks "Second no-colon prose bullet" ENTRY-SWALLOWED \
+  "the entry above emitted its OWN row (its receipt sits ABOVE the annotation) — nothing was lost, so nothing is reported"
+row_lacks "legacy-entry.sh" ENTRY-SWALLOWED \
+  "a real id-less entry below a CLOSED one stays silent: a closed entry emits no row BY DESIGN, so 'no row above' is true of every entry that follows a close"
+row_lacks "PC-FIXTURE-ID_WITH.PUNCT-AT-0.242.0" ENTRY-SWALLOWED \
+  "an id carrying '_' and '.' is an ID, not an annotation — the two shapes the reference consumer really files"
+
+# ...and that last one is a REAL entry, so it must still report its own verdict. A silence
+# bought by the entry disappearing from the classifier is not the silence being asserted.
+row_is "PC-FIXTURE-ID_WITH.PUNCT-AT-0.242.0" STILL-LIVE \
+  "and it is classified normally — the id rule keeps it visible rather than merely unreported"
+
+# MUTATION — the ID RULE'S ANCHOR. `idshape()` required `^[A-Z0-9-]+$`: a FULL-STRING match
+# that admits neither `_` nor `.`. Restoring it makes a real entry read as an annotation and
+# the capture arm fires on it.
+#
+# THE MUTATION IS ON THE ANCHOR, NOT ON THE CHARACTER CLASS, AND THAT IS A MEASUREMENT AND NOT
+# A PREFERENCE. `ledger_entry_id()` is a PREFIX match, so narrowing its class back to
+# `[A-Z0-9-]` still matches `PC-S330-PREPUSH-LEAKS-GIT` and still returns non-empty — the id
+# verdict does not move. Measured over 349 boundary lines in the reference consumer's live
+# ledger and archive, its degradation ledger and both distribution backlog files: reverting
+# the class alone changes ZERO verdicts, while reverting to the anchored old rule changes 3.
+# A class-only mutant would have survived, and a surviving mutant reads exactly like an arm
+# that cannot fire.
+MUTI="$(dirname "$DIST")/mut-idrule"
+rm -rf "$MUTI"; mkdir -p "$MUTI"
+cp "$(dirname "$CLOSER")"/*.sh "$MUTI/" 2>/dev/null
+sed 's@if (match(label, /\^`?(PC|BL)-\[A-Za-z0-9_\.-\]+/))@if (match(label, /^[A-Z0-9-]+$/))@' \
+  "$(dirname "$CLOSER")/lib.sh" > "$MUTI/lib.sh"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$(dirname "$CLOSER")/lib.sh" "$MUTI/lib.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation matched nothing in lib.sh, so the id rule is unproven\n' "mutation-idrule"
+else
+  mi_out="$(bash "$MUTI/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+  mi_hit="$(printf '%s\n' "$mi_out" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /PC-FIXTURE-ID_WITH.PUNCT/{f=1} END{print f+0}')"
+  mi_ctl="$(printf '%s\n' "$mi_out" | awk -F'\t' '$2 ~ /Entry B/ && $1=="CLOSE-CANDIDATE"{f=1} END{print f+0}')"
+  if [ "$mi_ctl" != 1 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutated lib.sh broke the classifier outright (Entry B lost its verdict), so its silence is not attributable\n' "mutation-idrule"
+  elif [ "$mi_hit" = 1 ]; then
+    printf '  ok    %-22s the anchored id rule reads a real _-bearing entry as an annotation — the fix is load-bearing\n' "mutation-idrule"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s restoring the anchored id rule did NOT misread the _-bearing entry, so the id assertion is vacuous\n' "mutation-idrule"
+  fi
+fi
+
+# MUTATION — drop `!prev_id_closed` from the conjunction, and ONLY that clause. A closed entry
+# is skipped by the classifier, so it emits no row by design; without this clause every real
+# entry that follows a close is reported as an annotation that ate its neighbour's receipt.
+# This is a REVERT OF ONE LAYER of a layered change, which is why it is its own mutant rather
+# than a second assertion on the one above.
+MUTP="$(dirname "$DIST")/mut-prevclosed"
+rm -rf "$MUTP"; mkdir -p "$MUTP"
+cp "$(dirname "$CLOSER")"/*.sh "$MUTP/" 2>/dev/null
+sed 's@ && !prev_id_closed)@)@' "$CLOSER" > "$MUTP/ledger-reverify.sh"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$CLOSER" "$MUTP/ledger-reverify.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation matched nothing, so the !prev_id_closed clause is unproven\n' "mutation-prevclosed"
+else
+  mp_out="$(bash "$MUTP/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+  mp_hit="$(printf '%s\n' "$mp_out" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /legacy-entry/{f=1} END{print f+0}')"
+  mp_tp="$(printf '%s\n' "$mp_out" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /False CLOSE-CANDIDATE/{f=1} END{print f+0}')"
+  if [ "$mp_tp" != 1 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant lost the genuine no-colon row too, so it is not a clean revert of the clause alone\n' "mutation-prevclosed"
+  elif [ "$mp_hit" = 1 ]; then
+    printf '  ok    %-22s without !prev_id_closed a real entry below a close is falsely reported — the clause is load-bearing\n' "mutation-prevclosed"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s dropping !prev_id_closed did NOT re-fire the entry below the close, so that control is vacuous\n' "mutation-prevclosed"
+  fi
+fi
+
+# MUTATION — drop `!prev_id_hadv`, the clause that keeps the BENIGN direction quiet. Without it
+# an entry whose own receipt sits ABOVE an annotation — which loses nothing — is reported.
+MUTH="$(dirname "$DIST")/mut-prevhadv"
+rm -rf "$MUTH"; mkdir -p "$MUTH"
+cp "$(dirname "$CLOSER")"/*.sh "$MUTH/" 2>/dev/null
+sed 's@ && !prev_id_hadv@@' "$CLOSER" > "$MUTH/ledger-reverify.sh"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$CLOSER" "$MUTH/ledger-reverify.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation matched nothing, so the !prev_id_hadv clause is unproven\n' "mutation-prevhadv"
+else
+  mh_out="$(bash "$MUTH/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+  mh_hit="$(printf '%s\n' "$mh_out" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /Second no-colon prose bullet/{f=1} END{print f+0}')"
+  mh_tp="$(printf '%s\n' "$mh_out" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /False CLOSE-CANDIDATE/{f=1} END{print f+0}')"
+  if [ "$mh_tp" != 1 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant lost the genuine no-colon row too, so it is not a clean revert of the clause alone\n' "mutation-prevhadv"
+  elif [ "$mh_hit" = 1 ]; then
+    printf '  ok    %-22s without !prev_id_hadv the benign direction is falsely reported — the clause is load-bearing\n' "mutation-prevhadv"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s dropping !prev_id_hadv did NOT re-fire the benign case, so that control is vacuous\n' "mutation-prevhadv"
+  fi
+fi
+
+# THE UNMUTATED CONTROL FOR THIS BATTERY. Four mutant directories above are COPIES; a copy that
+# cannot source lib.sh emits nothing at all, and "no ENTRY-SWALLOWED row" would score as a kill
+# for every false-positive assertion here. This copy is byte-identical, so it must agree with
+# $OUT exactly.
+ASSERTIONS=$((ASSERTIONS + 1))
+CTLS="$(dirname "$DIST")/ctl-swallow"
+rm -rf "$CTLS"; mkdir -p "$CTLS"
+cp "$(dirname "$CLOSER")"/*.sh "$CTLS/" 2>/dev/null
+ctl_sw="$(bash "$CTLS/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1 | awk -F'\t' '$1=="ENTRY-SWALLOWED"{c++} END{print c+0}')"
+own_sw="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="ENTRY-SWALLOWED"{c++} END{print c+0}')"
+if [ "$ctl_sw" = "$own_sw" ] && [ "$own_sw" -ge 2 ]; then
+  printf '  ok    %-22s unmutated copy emits the same %s ENTRY-SWALLOWED rows (the four mutants above ran a working harness)\n' "swallow-control" "$own_sw"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s unmutated copy emitted %s rows against %s in place (want equal, and >= 2) — a copy that cannot run scores as a kill\n' "swallow-control" "$ctl_sw" "$own_sw"
 fi
 
 

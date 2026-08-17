@@ -97,10 +97,41 @@ fi
 jq -e . >/dev/null 2>&1 <<<"$BASE_JSON" || { echo "FAIL: consumer settings.json is not valid JSON; left untouched" >&2; exit 1; }
 
 # Does the template wire the context sensor? Only then is the row meaningful.
-SENSOR_WIRED="$(jq -r '
+#
+# THE `|| echo false` FALLBACK THIS USED TO CARRY MADE AN ERROR AND A VERDICT THE SAME STRING,
+# and every guard written downstream of that conflation is blind by construction. `--check`
+# answered `model_row_needed=no` and exited 0 on a template it could not parse; step 5 raises
+# the provisioning question only on `yes`, so a consumer that genuinely needed
+# `.env.AI_DLC_MODEL_ROW` was never asked and the run stayed green.
+#
+# FOUR INPUT CLASSES REACHED THAT SILENT `no`, NOT THE ONE THE REPORT NAMED. Measured against
+# one consumer settings.json carrying no `.env.AI_DLC_MODEL_ROW`, same script, same invocation:
+# a 0-byte template (jq exits 0 and prints NOTHING, so the fallback never fires and
+# SENSOR_WIRED is the empty string), a readable non-JSON template, a bare JSON scalar, and a
+# valid JSON object whose `.hooks` is not an object. The last two are valid JSON and are why
+# validating the template as JSON is not enough — `.hooks // {} | to_entries[]` still errors.
+#
+# NARROWING THE INPUT SET IS THE WEAKER CLAIM AND IT WAS MEASURED FAILING. A guard that
+# refuses unless SENSOR_WIRED is a literal true|false, placed with the fallback still in
+# place, closes ONLY the 0-byte case: the other three take the fallback and arrive spelled
+# `false`, which is indistinguishable from a template that genuinely does not wire the sensor.
+# So the fallback goes, jq's own exit status is read, and the verdict can only be produced
+# from a literal true|false. An unparseable template cannot reach a verdict at all.
+#
+# The unreadable case is already refused at the `-r` guard above, exit 1; the report's headline
+# said "0-byte or unreadable" and that half was never open.
+if ! SENSOR_WIRED="$(jq -r '
   [ .hooks // {} | to_entries[] | .value[]? | .hooks[]? | .command // "" ]
   | any(test("ai-dlc-context-sensor\\.sh"))
-' "$TEMPLATE" 2>/dev/null || echo false)"
+' "$TEMPLATE" 2>/dev/null)"; then
+  echo "FAIL: the sensor predicate could not be evaluated against the template: $TEMPLATE" >&2
+  exit 1
+fi
+case "$SENSOR_WIRED" in
+  true|false) ;;
+  *) echo "FAIL: the sensor predicate produced no verdict against the template: $TEMPLATE" >&2
+     exit 1 ;;
+esac
 
 EXISTING_ROW="$(printf '%s' "$BASE_JSON" | jq -r '.env.AI_DLC_MODEL_ROW // empty' 2>/dev/null || true)"
 

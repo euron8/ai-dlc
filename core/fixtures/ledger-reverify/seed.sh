@@ -427,6 +427,71 @@ verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
   colon. It must stay SILENT.
 
 verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-NO-COLON-SWALLOWED — the entry a NO-COLON annotation truncates
+
+BL-013's SUBJECT, and the colon signal is structurally blind to it. This entry carries no
+receipt of its own above the annotation and no close, so it emits NO row at all; the bullet
+below opens a new entry and CAPTURES the receipt that was written for this one. The bold span
+below ends in no colon, which is the only thing separating this from the case above it.
+
+- **False CLOSE-CANDIDATE** this bold span ends in no colon at all, which is how an operator
+  writes a lead-in when the next word is a noun rather than an explanation.
+
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-RECEIPT-ABOVE-ANNOTATION — the BENIGN direction, which must stay SILENT
+
+THE FALSE-NEGATIVE CONTROL, and it is deliberate. This entry's own receipt sits ABOVE the
+annotation, so it still emits its row and NOTHING is lost. The harm the conjunction reports is
+the LOSS of a row, never the presence of an annotation — an arm that fires here is watching
+shape rather than damage.
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **Second no-colon prose bullet** which captures a second copy of the same receipt
+
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-CLOSED-BEFORE-PROSE — a CLOSED entry, and a REAL entry follows it
+
+THE `!prev_id_closed` SUBJECT. A closed entry emits no row BY DESIGN — the classifier skips
+it — so "the entry above emitted no row of its own" is satisfied by every single entry that
+follows a close. Without that clause every real prose-titled entry in this position is
+falsely reported, and this adjacency is ordinary in a pre-rotation ledger.
+
+<br>**ADOPTED UPSTREAM (v0.099.0, verified 2026-01-01).** Upstream took it.
+
+- **`legacy-entry.sh` → repoint the dormant-gate scan at the installed tree**
+
+  A REAL entry in the older id-less format the reference consumer still carries, sitting
+  directly below a closed one and carrying its own receipt legitimately.
+
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-NO-ROW-ABOVE — emits no row of its own, so the conjunction's first half holds
+
+THE CHARACTER-CLASS SUBJECT SITS BELOW THIS ONE. No receipt, no close: this entry emits
+nothing, which is exactly the state the capture arm looks for. The bullet below is a REAL
+entry whose id carries `_` and `.`, so the ONLY thing keeping it out of the report is the id
+rule recognising those two characters.
+
+- **PC-FIXTURE-ID_WITH.PUNCT-AT-0.242.0** — a real entry whose id carries an underscore and a dot
+
+  `idshape()` used to require `^[A-Z0-9-]+$`, which admits neither. Measured on the reference
+  consumer, `PC-S330-PREPUSH-LEAKS-GIT_DIR-INTO-EVERY-FIXTURE-SANDBOX` and
+  `PC-S300-SEVEN-VALIDATORS-SHIPPED-NON-EXECUTABLE-AT-0.242.0` each failed it — one real entry
+  in the live ledger and one in the archive, scored as annotations.
+
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
 LEDGER
 
 printf '%s %s %s %s\n' "$DIST" "$BASE" "$CONS" "$THEIRS"

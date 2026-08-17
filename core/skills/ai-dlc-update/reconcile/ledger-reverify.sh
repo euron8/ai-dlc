@@ -1136,42 +1136,85 @@ fi
 # so a diagnostic added here cannot perturb the receipt parse above -- which is the parse this
 # entire tool exists to get right.
 # (No apostrophes anywhere below: the awk program is a single-quoted shell string.)
-awk -v DASH=' — ' "$(ledger_entry_awk)"'
-  # An id is upper-case, digits and hyphens, with at least one hyphen. A single word is not an id.
+# THE COLON IS NOT THE ONLY SIGNAL, AND ON ITS OWN IT FIRES ON NOTHING. The paragraphs above
+# are the record of why the colon was chosen and they stay; what follows is what the colon
+# missed. An annotation whose bold span does NOT end in a colon -- `- **False CLOSE-CANDIDATE**
+# this span has no colon` -- truncates the entry above it exactly as a colon one does, captures
+# that entry's receipt, and produces NO row under the swallowed id AND no row here either.
+#
+# MEASURED, AND THE COLON GATE IS INERT ON EVERY CORPUS AVAILABLE: it fires ZERO times across
+# the reference consumer live ledger, that consumer archive, and both of the distribution
+# backlog files, while those same corpora contain annotation bullets that really are swallowing
+# entries. A gate that has never fired reads exactly like a corpus with nothing to report.
+#
+# THE SECOND SIGNAL IS THE CONJUNCTION OF THE TWO PREDICATES REJECTED ABOVE, AND NEITHER HALF
+# IS SHIPPABLE ALONE -- that is why this is not a re-run of a settled argument. Predicate (1),
+# an entry that emits no row, reports 58 entries there. Predicate (2), a receipt attributed to
+# a non-id label, reports 11 in the live ledger and 6 of the 7 originally measured were real
+# prose-titled entries. Their CONJUNCTION is the actual harm signature: a non-id bullet
+# CAPTURED a receipt AND the id-keyed entry above it emitted none of its own, so that entry
+# lost its only row to the line below it.
+#
+# FALSE POSITIVES: ZERO, ENUMERATED RATHER THAN ASSERTED. The conjunction fires 1 time in the
+# live ledger, 0 in the consumer archive and 3 in the distribution backlog, and all four are
+# genuine annotation sub-bullets -- `Fix-is-release.` inside
+# PC-S334-ABSORBED-AT-READS-THE-VERSION-BLOB-AT-THE-FIX-COMMIT, and `(c) CONTROL`,
+# `N>=10 live timing-ordering harness` and a `3 of the 9 older resolutions` lead-in inside
+# three BL- entries. Predicate (2) alone fires 11 times on the same live ledger.
+#
+# THE FALSE NEGATIVE IS DELIBERATE AND IT IS THE BENIGN DIRECTION. An entry whose own receipt
+# sits ABOVE the annotation still emits its row, so nothing is silently lost and this stays
+# quiet. The harm this reports is the LOSS of a row, not the presence of an annotation.
+#
+# `ledger_entry_id()` REPLACES A LOCAL `idshape()` THAT HAD ITS OWN FALSE NEGATIVES. That
+# helper required `^[A-Z0-9-]+$`, which excludes `_` and `.`; two real entries on the reference
+# consumer failed it. It is now single-homed in `lib.sh` beside the shape rule, which is what
+# `ledger-entry-boundary-measurement.md` asks for, and `ledger-rotate.sh`s
+# refusal guard reads the same one.
+awk -v DASH=' — ' "$(ledger_entry_awk)$(ledger_entry_id_awk)"'
   function idshape(s) {
     sub(/[[:space:]]*\(.*\)[[:space:]]*$/, "", s)
-    return (s ~ /^[A-Z0-9-]+$/ && s ~ /-/)
+    return (ledger_entry_id(s) != "")
   }
   function flush() {
-    if (label != "" && is_bullet && label ~ /:$/ && !idshape(label))
-      printf "%s\t%s\t%s\n", label, (hasv ? "CAPTURED" : "none"), (prev_id == "" ? "(no id-shaped entry above)" : prev_id)
+    if (label == "" || !is_bullet || idshape(label)) return
+    if (label ~ /:$/)
+      printf "%s\t%s\t%s\t%s\n", label, (hasv ? "CAPTURED" : "none"), (prev_id == "" ? "(no id-shaped entry above)" : prev_id), "colon"
+    else if (hasv && prev_id != "" && !prev_id_hadv && !prev_id_closed)
+      printf "%s\t%s\t%s\t%s\n", label, "CAPTURED", prev_id, "capture"
   }
   {
     shape = ledger_entry_shape($0)
     if (shape != "") {
       flush()
-      if (label != "" && idshape(label)) prev_id = label
+      if (label != "" && idshape(label)) { prev_id = label; prev_id_hadv = hasv; prev_id_closed = hasclose }
       l = $0
       if (shape == "bullet") { sub(/^- \*\*/, "", l); sub(/\*\*.*/, "", l) }
       else                   { sub(/^#+[ \t]*/, "", l) }
       p = index(l, DASH); if (p > 0) l = substr(l, 1, p-1)
       sub(/[[:space:]]+$/, "", l)
       gsub(/`/, "", l)
-      label = l; hasv = 0; is_bullet = (shape == "bullet")
+      label = l; hasv = 0; hasclose = 0; is_bullet = (shape == "bullet")
       next
     }
     if ($0 ~ /^[ \t]*(<br[ \t]*\/?[ \t]*>)?[ \t]*[-*]?[ \t]*`?verify:/) hasv = 1
+    if ($0 ~ /ADOPTED UPSTREAM/) hasclose = 1
   }
   END { flush() }
 ' "$LEDGER" 2>/dev/null \
-| while IFS="$(printf '\t')" read -r sw_label sw_cap sw_prev; do
+| while IFS="$(printf '\t')" read -r sw_label sw_cap sw_prev sw_sig; do
     [ -n "${sw_label:-}" ] || continue
     if [ "$sw_cap" = CAPTURED ]; then
       sw_harm="and it CAPTURED that entry's verify: receipt, so the entry now emits NO row under its own id — which reads exactly like an entry with nothing to report"
     else
       sw_harm="so everything below it is attributed to this annotation rather than to that entry"
     fi
-    emit ENTRY-SWALLOWED "$sw_label" "this bullet is an annotation lead-in, not an entry title — its bold span ends in a colon and it is not an id. A line-leading '- **\u2026**' opens a NEW entry, so this line truncates the entry above it (nearest id-shaped entry above: ${sw_prev}) ${sw_harm}. Re-indent the annotation so it does not start a line, or drop the bold, then re-run and confirm the entry reports under its own id."
+    if [ "${sw_sig:-colon}" = colon ]; then
+      sw_why="its bold span ends in a colon and it is not an id"
+    else
+      sw_why="its bold span is not an id, it CAPTURED a receipt, and the id-keyed entry above it emitted NO row of its own — the signature of an entry losing its only row to the line below. The bold span does NOT end in a colon, which is why the colon signal alone cannot see this one"
+    fi
+    emit ENTRY-SWALLOWED "$sw_label" "this bullet is an annotation lead-in, not an entry title — ${sw_why}. A line-leading '- **\u2026**' opens a NEW entry, so this line truncates the entry above it (nearest id-shaped entry above: ${sw_prev}) ${sw_harm}. Re-indent the annotation so it does not start a line, or drop the bold, then re-run and confirm the entry reports under its own id."
   done
 
 exit 0   # classifier — the while-pipe's status is irrelevant; a close never blocks
