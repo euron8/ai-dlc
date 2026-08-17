@@ -63,6 +63,36 @@ HEADING="$(sed -n '/^## Review Document Template/,/^```$/p' "$ROLE" \
 
 matches() { grep -qiE "$1" <<<"$2"; }
 
+# A SECOND SUBJECT IN THE SAME ROLE FILE, HOSTED HERE BECAUSE THIS FIXTURE ALREADY RESOLVES IT.
+#
+# `### Missing Pre-Deploy Field Verification` classifies a PRODUCER-side condition — a change
+# that adds a field to an API query — and for the whole life of the rule it was the only one in
+# its contiguous severity run carrying no `**Evidence required:**` clause. A reviewer who made
+# the observation was told nothing about what to record, so the classification was
+# unfalsifiable. Absent in 21 of 21 revisions in which the rule existed, through a prose sweep
+# that deleted from this file's Mandatory Severity section without noticing the gap beside it.
+#
+# WHAT IS DELIBERATELY NOT ASSERTED. The same fix added a query-shape step to the procedure at
+# `## Field Verification`, and NO arm here covers it. An arm was built and measured: keyed on
+# the word "query" plus a closed list of send verbs, 3 of 5 legitimate rewordings that fully
+# preserved the instruction came back red — the wording "request shape", "transmits" and
+# "introduces" all defeat it. Widening the alternation is guessing the synonym space, which
+# leaves a false-positive set that is an open class of legitimate English: neither empty nor
+# enumerable, so it fails CLAUDE.md's precondition. That half is UNGUARDED and this fixture's
+# green line must not be read as covering it.
+#
+# `**Evidence required:**` is different in kind — a literal structural convention the file uses
+# verbatim at 5 sites, not a phrase chosen to match prose. It survived all 5 rewordings.
+RULE_SEC() { LC_ALL=C awk '/^### Missing Pre-Deploy Field Verification/{g=1;next} g&&/^### /{exit} g' "$1"; }
+
+[ -n "$(RULE_SEC "$ROLE")" ] || {
+  echo "FIXTURE STALE: no \`### Missing Pre-Deploy Field Verification\` rule in code-reviewer.md." >&2
+  echo "  Either the heading moved — re-point RULE_SEC — or the rule was RETIRED, in which case" >&2
+  echo "  this assertion retires with it. A fixture that lost its subject is not a tree defect," >&2
+  echo "  and the two must not print the same verdict." >&2
+  exit 2
+}
+
 # --- Assertion 1: THE JOIN --------------------------------------------------
 # The whole point. The pattern the gate mandates must match the heading the template emits.
 if matches "$PAT" "$HEADING"; then
@@ -126,6 +156,41 @@ if grep -qiE 'zero matches? +fails? this check' "$GATE"; then
   ok "a zero-match is declared a FAIL, not a fallback"
 else
   bad "gate-validation.md no longer declares zero matches a FAIL — a review file the pattern misses silently returns to the lead's recollection, which is the defect the check exists to prevent"
+fi
+
+# --- Assertion 6: the producer-side severity rule states its evidence --------
+if grep -qF '**Evidence required:**' <<<"$(RULE_SEC "$ROLE")"; then
+  ok "the Missing Pre-Deploy Field Verification rule carries an \`**Evidence required:**\` clause"
+  a6=present
+else
+  bad "\`### Missing Pre-Deploy Field Verification\` carries no \`**Evidence required:**\` clause — every other rule in its contiguous severity run does. Without one a reviewer who observes the trigger is told nothing about what to record, and the classification cannot be checked by anyone downstream"
+  a6=absent
+fi
+
+# --- Assertion 7: MUTANT — assertion 6 must fail on the historical defect ----
+# ASSERTION 6 OWNS THE ABSENT CASE and this arm stands down for it. A mutation that deletes a
+# clause already missing changes no bytes, and reporting that as a broken mutant on top of the
+# real finding prints two failures for one defect — which is how a battery starts looking
+# entangled. Measured against the true pre-fix file at 941021d^, where both fired.
+if [ "$a6" = absent ]; then
+  ok "MUTANT stands down — assertion 6 already reports the clause absent, and it owns that case"
+else
+  # A COPY, never an in-place edit, guarded by `cmp -s` so a sed that matched nothing cannot
+  # pass as a mutation. The clause is deleted as a range because it spans two lines; keying the
+  # range end on `in the review doc.` is safe only because the search runs FORWARD from the
+  # start line — an identical tail sits earlier in the file, at Evidence/Assertion Separation.
+  MUT="$(mktemp)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+  trap 'rm -f "$MUT"' EXIT
+  cp "$ROLE" "$MUT"
+  LC_ALL=C sed -i.bak '/^\*\*Evidence required:\*\* Include the query diff, the added field names, and$/,/^the deployed-schema source consulted, in the review doc\.$/d' "$MUT"
+  rm -f "$MUT.bak"
+  if cmp -s "$ROLE" "$MUT"; then
+    bad "MUTANT changed no bytes — its sed matched nothing, so an unmutated copy would score as a kill and assertion 6 would be proving nothing"
+  elif grep -qF '**Evidence required:**' <<<"$(RULE_SEC "$MUT")"; then
+    bad "MUTANT NOT DETECTED: with the clause deleted, assertion 6 still reads it as present — the extraction is picking up an \`**Evidence required:**\` from a neighbouring rule, so a green assertion 6 means nothing"
+  else
+    ok "with the clause deleted from a copy, assertion 6 goes red (it can fire)"
+  fi
 fi
 
 echo
