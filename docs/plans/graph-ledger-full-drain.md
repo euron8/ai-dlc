@@ -359,8 +359,29 @@ do not, 14 are deliberate prose shorthand and 2 sat in that id column.
    RE-DISPOSITION owed on pin 4216. Both were found by the authoring agents, after their batches
    landed, and neither is in the safe-to-ignore category.**
 
-   **`receipt_absent_subjects` withholds a genuine close from any receipt that spells a
-   DISTRIBUTION path.** At `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:502-515` the
+   **`receipt_absent_subjects` CANNOT DISTINGUISH A PATH THE RECEIPT READS FROM ONE IT MERELY
+   MENTIONS. That is the general form, and it is wider than the unanchored-regex framing below.**
+   The harvest is a `grep -oE` over the receipt's RAW TEXT, so it collects a `mktemp` scratch root, a
+   git exclude pathspec, or any incidental literal exactly as it collects a real subject. Measured
+   over all 37 `sh` receipts, the class splits three ways and only two are defects:
+
+   - **10 WITHHELD today** — the distribution-path case detailed below.
+   - **2 FALSE-COUPLED**, passing only because the harvested path happens to exist. Pin 334 embeds a
+     `mktemp` scratch root spelled `.claude/skills/ai-dlc/extensions`; **pin 267 carries
+     `':(exclude).claude/worktrees'`, a git PATHSPEC it is asserting should be IGNORED.** Excluding a
+     nonexistent directory is a no-op by construction, so that receipt stays perfectly decisive while
+     its close is withheld anyway.
+   - **4 that LOOK contingent and are the guard working correctly** — pins 226, 252, 255, 259 spell
+     `$CONSUMER/.claude/skills/…` where the path IS the entry's subject, and each receipt's own
+     `exit 127` agrees with the engine. The function's header records that a `$CONSUMER/`-prefixed
+     spelling is normalised precisely so the two forms cannot disagree about one file.
+
+   **Split the class before calling it a defect** — doing so took this from 6 affected to 2, and the
+   sharpest instance came from an authoring agent RETRACTING its own earlier all-clear. A delegate's
+   correction is where the finding is.
+
+   **The narrow case, which is the 10:** at
+   `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:502-515` the
    extraction is `grep -oE '(\$CONSUMER/)?(docs|_bmad-output|scripts|\.claude)/[A-Za-z0-9_./-]+'` —
    **unanchored** — so a receipt naming `core/scripts/x.sh` yields the match `scripts/x.sh`, which is
    absent under the consumer root, and the caller then withholds the CLOSE-CANDIDATE as
