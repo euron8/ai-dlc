@@ -1,7 +1,15 @@
-# Step 12 — the 17 entries adjudicated and NOT filed
+# Step 12 — the 18 consumer rows adjudicated and NOT filed
 
-Phase 2 step 12 took the 59 live push-candidate entries to the working tree. **42 were filed as
-`BL-021`..`BL-062` in `docs/backlog.md`; these 17 were not.** A filing that cannot be substantiated
+Phase 2 step 12 took the 59 live push-candidate entries to the working tree. **41 of those rows
+received an upstream entry — 42 entries in total, because pin 262 drew two — and these 18 rows
+received none.**
+
+**THE COUNT IN THE COMMIT THAT LANDED THIS FILE SAID 17, AND IT WAS WRONG.** It was derived as
+59 rows minus 42 entries, a subtraction that silently assumes one entry per row. Two things
+break that assumption: pin 262 received both `BL-025` and `BL-026`, and one entry cites the
+section banner at pin 208 before its own subject. Re-derived by joining EVERY pin each entry
+mentions against the population, the answer is 41 rows covered and 18 not — and 41 + 18 = 59,
+which the wrong figure never did. A filing that cannot be substantiated
 is worse than none, so a dead premise is a legitimate and expected outcome — the measured base rate
 of expired premises in this corpus is roughly one in two, and this pass came in at 29%.
 
