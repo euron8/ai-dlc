@@ -377,8 +377,13 @@ passes, and 7 version-less rows correctly do not trip it.
 **START HERE ON A FRESH SESSION — the numbered next actions.**
 
 **ACTION ZERO: THE PULL IS DONE, APPLIED AND CLOSED. PHASES 0–2, 4 AND 5 ARE COMPLETE. PHASE 3
-BATCH 1 IS MERGED AND PUSHED AS `v0.374.0`. THE HOLD IS RELEASED, NOTHING IS WAITING ON A HUMAN,
-AND PUSHING WORKS. CUT THE NEXT BATCH.**
+BATCHES 1 AND 2 ARE MERGED AND PUSHED, AS `v0.374.0` AND `v0.375.0`. THE HOLD IS RELEASED,
+NOTHING IS WAITING ON A HUMAN, AND PUSHING WORKS. CUT BATCH 3 — IT IS THE LEDGER-PARSING FAMILY,
+SCOPED BELOW.**
+
+**THE GATE INSTRUMENT IS REPAIRED, WHICH IS WHY BATCH 2 WENT FIRST.** `suite-dispatch-order` no
+longer sorts on measured wall-clock, so a red unit in your gate is now a finding about your own
+change rather than a coin flip you have to argue with. If it goes red, do not re-run it.
 
 graph pulled v0.373.0, merged it at PR #935, and applied sections A, B and E of the brief. **The
 A6 ceiling question is also ruled and executed — see action 6; nothing is owed there.**
@@ -387,9 +392,12 @@ A6 ceiling question is also ruled and executed — see action 6; nothing is owed
 
 1. **Derive the Phase 3 worklist from `docs/backlog.md`, never from a prose list in this file.**
    `bash scripts/backlog-reverify.sh` is the instrument, and every count in this file is a
-   HYPOTHESIS about a tree that has moved. Measured at batch 1's wind-down: **66 `BL-` entries —
-   62 `STILL-LIVE`, 4 `HAND-REVIEW`, 0 `CLOSE-CANDIDATE`**, one row per entry, against an
-   impossible-id control of 0. At ≤4 remediations a branch this is a program of many sessions:
+   HYPOTHESIS about a tree that has moved. Measured at batch 2's wind-down: **64 `BL-` entries —
+   61 `STILL-LIVE`, 3 `HAND-REVIEW`, 0 `CLOSE-CANDIDATE`**, one row per entry, against an
+   impossible-id control of 0. (Batch 1's wind-down read 66 / 62 / 4 / 0; `BL-008` and `BL-070`
+   are the difference.) **`BL-070` was the one entry this program has seen go
+   `STILL-LIVE → CLOSE-CANDIDATE` because its RECEIPT was wrong rather than because its defect
+   moved** — re-derive, do not carry a status forward. At ≤4 remediations a branch this is a program of many sessions:
    report after each branch and do not try to batch around the limit.
    **Its `sh` polarity is INVERTED relative to the consumer's engine**: here `rc=0` means the fix is
    PRESENT (`CLOSE-CANDIDATE`) and non-zero means STILL-LIVE. Read
@@ -409,7 +417,41 @@ A6 ceiling question is also ruled and executed — see action 6; nothing is owed
 **Then cut the next batch** — ≤4 remediations, one version per branch, from `origin/main`. Steps
 13–16 carry the method; 14a–14c are the clauses learned the hard way and are not optional.
 
-**BATCH 2 IS `BL-008`, ALONE, AND IT IS SEQUENCED FIRST BY OPERATOR RULING BECAUSE IT CORRUPTS THE
+**BATCH 2 IS COMPLETE, MERGED AND PUSHED AS `v0.375.0`.** It closed `BL-008` and `BL-070` and
+carried both carry-over items. The gate was run the way the hook runs it on the branch and again
+on the merged tree — **158 fixtures, 158 ok, 0 FAIL** both times — with both changed fixtures read
+BY NAME against an impossible-name control returning 0 and a present-name control returning 1, in
+the same invocation. `validate-release-version.sh`: one release in the range. Open `BL-` entries
+**66 → 64**; archive 3 → 5.
+
+**THE FLAKE'S MECHANISM IS TIGHTER THAN `BL-008` STATES, AND THE CORRECTION MATTERS TO ANYONE
+WRITING A COST-ORDERED ASSERTION.** The entry says a `sleep 0` unit OUTRANKS the `sleep 1` unit.
+It never did — 0 inversions in 30 loaded repetitions. **It only has to reach a TIE**, because
+`sort -k1,1nr`'s `-r` is KEY-SCOPED and tied keys fall through to a FORWARD whole-line
+last-resort compare: `aaa 1 / mmm 1 / zzz 3` sorts to `zzz aaa mmm`, which is precisely the order
+the entry reports, against an untied control sorting to `zzz mmm aaa`. A margin that makes an
+inversion unlikely does not make a tie unconstructible, and only the second is safe.
+
+**THE FIRST ATTEMPT TO REPRODUCE IT FAILED, AND THAT IS THE MORE USEFUL HALF.** A 6-vs-6
+differential under 36 spinners on 18 cpus returned zero failures on BOTH sides — reported as no
+evidence rather than as a pass, with the two sides asserted to differ first. **Spinners are the
+wrong load**: what moves a worker's `$SECONDS` is `bash -c` STARTUP LATENCY, contended on PROCESS
+CREATION, not CPU. A 96-way fork storm reproduces it at **1/20 against 0/30 unloaded**. Driving
+only the record-writing run instead of the full width-1 replay is ~20× cheaper per repetition,
+which is what makes a 1-in-20 event observable at all.
+
+**Two `HOLDS` scope corrections, both found before building, both of the base-case kind this plan
+predicts.** `BL-008` names one arm and two were exposed. **`BL-070`'s own receipt scored the
+correct guard as ABSENT** — it anchored on `(bash|node)[^|]*gen-architecture-index` over the
+fixture text, but **I33** forces a fixture to name both install layouts and resolve one into a
+variable, so it invokes `node "$GEN"` and no line places an interpreter and the script's name
+together. Re-anchored on behaviour, proven three ways in one invocation: no guard `rc=1`, **a stub
+that names the script and exits 0 `rc=1`**, the real guard `rc=0`.
+
+The original batch-2 statement of the problem, kept because the next batch is judged by the same
+instrument:
+
+**`BL-008` WAS SEQUENCED FIRST BY OPERATOR RULING BECAUSE IT CORRUPTS THE
 INSTRUMENT EVERY OTHER BATCH IS JUDGED BY.** `suite-dispatch-order` sorts three toy fixtures by the
 durations the PREVIOUS run recorded; under the pool those units take single-digit milliseconds and
 their measured order is the machine's scheduler, not the ordering rule. So the gate reports a red
@@ -450,7 +492,11 @@ keep the batch to ONE subsystem. Three things about it are already measured:
 - **`BL-065`'s entry records that the filing's own prescribed fix does not work**, and that half of
   it is silently inert under BSD `sed`. That is step 14b: run a prescribed fix before adopting it.
 
-**TWO CARRY-OVER ITEMS BELONG IN THE NEXT RELEASE COMMIT AND ARE NOT BATCH-2 REMEDIATIONS.**
+**BOTH CARRY-OVER ITEMS ARE DISCHARGED IN `v0.375.0`. Nothing is owed here.** `e9c5970` now has
+its own CHANGELOG section, verified uncited before it was written rather than taken from this
+file: the six `gen-architecture-index` hits already in `CHANGELOG.md` are all v0.33-era delivery
+notes, and `incomplete-sanitization`, `CodeQL` and `escape backslash` returned zero against a
+control of 34 for `escape`. `BL-070` is remediated, not merely filed. What they were:
 
 `e939a92`'s successor `e9c5970` — a CodeQL `js/incomplete-sanitization` fix to the markdown cell
 escaping in `core/scripts/gen-architecture-index.js` — is on `main` with **no CHANGELOG entry and
