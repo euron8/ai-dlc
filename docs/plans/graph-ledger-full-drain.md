@@ -385,18 +385,45 @@ do not, 14 are deliberate prose shorthand and 2 sat in that id column.
    observe what the CONSUMER's engine will see, and the consumer fetches `origin`. A run against a
    local ref no consumer can reach reproduces the shape this plan spent a phase removing.
 
-6. **OWED, AND IT IS THE OPERATOR'S CALL: one general rule has no durable carrier.** This session
+6. **OWED, AND IT IS THE OPERATOR'S CALL: now TWO general rules have no durable carrier, and both
+   are blocked on the same 40 bytes.**
+
+   **The second one is a tool hazard and it has cost real work twice.** `sleep` under the Bash
+   tool's `run_in_background` **returns immediately**, so a chain of backgrounded "waits" is rapid
+   polling that grants a delegated agent no wall clock at all. Measured here: several apparent
+   ten-minute waits spanned about one minute of real time, four authoring agents were described as
+   silent when they had barely started, and one agent's work was redone inline as a result. Wait with
+   a blocking `until` loop on the condition instead. **`grep -c "sleep"` over the durable channel
+   returns 0**, against a control of 1 for `PIPESTATUS` — present — and 0 for an impossible token, so
+   the gap is measured rather than assumed. Its evidence is in the memory corpus under
+   `ai_dlc_v0372_four_push_candidates` and `ai_dlc_v0373_phase4_42_receipts`, which is EVIDENCE and
+   not a carrier: a compacted session has not read it.
+
+   **Its natural home is `.claude/rules/tool-hazards.md`**, whose subject is exactly "behaviours
+   that return a WRONG answer rather than an error" and which already carries the `PIPESTATUS` and
+   `grep -q`-from-a-pipe cases. It cannot be mechanized — nothing in a tracked file expresses it,
+   because it happens in a tool call — so by `resident-context.md` it must NOT be scoped, and the
+   unconditional channel is the only option.
+
+   **The first one**, unchanged from when it was recorded: this session
    found that **a coverage proof over a derived population cannot see outside it** — step 12's
    census came from the corpus pin, so the check confirming all 59 rows were accounted for was
    CORRECT and structurally blind to the three entries filed after the pin. That is a sharpening of
    `verification-discipline.md`'s existing "Ask what SET a number was taken over", and it belongs
    beside it.
 
-   **It is not there, because the durable channel has 40 bytes of headroom** — arm A6 reports
-   40920/40960 across 7 files. Adding it requires TRADING OUT existing prose, and
-   `resident-context.md` forbids trimming for cost and requires grepping for inbound references
-   before any cut. That is a deliberate decision, not a mechanical one. Today the rule is carried
-   by action 3 of this file, which is adequate for this program and for nothing else.
+   **Neither is there, because the durable channel has 40 bytes of headroom** — arm A6 reports
+   40920/40960 across 7 files, re-derived at wind-down. Between them the two rules need roughly
+   **900 bytes**. Adding either requires TRADING OUT existing prose, and `resident-context.md`
+   forbids trimming for cost and requires grepping for inbound references before any cut. That is a
+   deliberate decision, not a mechanical one.
+
+   Today rule one is carried by action 3 of this file and rule two by action 0's hazard note —
+   adequate for this program and for nothing else. **A rule whose only carrier is a plan file dies
+   with the plan.** The three options, none of which a session may take on its own authority: trade
+   out ~900 bytes of prose that meets the VESTIGIAL test (mechanism nameable, instruction
+   authoritative elsewhere, inbound references grepped); raise A6's 40960 ceiling, which is a budget
+   decision; or accept that both rules stay uncarried and will be relearned.
 
 5. **PHASE 3 BATCH 1 IS THE OPERATOR'S CHOSEN NEXT SESSION.** Ruled at the wind-down of the session
    that finished Phase 4: cut the first ≤4-remediation release branch from `origin/main`. Everything
