@@ -26,7 +26,12 @@
 #
 # Usage:  warn-shadowed-local-validators.sh [--root R] [--ledger L] [--local-dir D] [--core-dir C]
 # Output: TSV — STATUS<TAB>FORK-PATH<TAB>DETAIL, one RETIRE-CANDIDATE per shadowed fork.
-# Exit:   0 ALWAYS. A classifier, not a gate — the signal never blocks.
+# Exit:   0 on every CLASSIFICATION, including "nothing to report" — this is a classifier, not a
+#         gate, and the signal never blocks on what it finds. 2 when it could not classify at all:
+#         a bad argument, an unresolvable root, an unsourceable lib.sh, or a close grammar
+#         `ledger_close_awk` refused to lift. That distinction is the contract — a caller must be
+#         able to tell "no forks are shadowed" from "this never ran", and those are the same empty
+#         output. This line read `0 ALWAYS` while three `exit 2` paths already existed.
 set -uo pipefail
 
 ROOT=""; LEDGER=""; LOCAL_DIR=""; CORE_DIR=""
@@ -74,16 +79,40 @@ fi
 
 emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
 
-# Every `.sh` basename named inside a CLOSED (ADOPTED UPSTREAM) ledger entry. An entry is a
-# `- **bullet**` or a `##`-`######` heading; either ends the one before it. `ADOPTED
-# UPSTREAM` anywhere in the entry marks it closed. Same entry-walk as ledger-reverify.sh —
-# a heading OPENS an entry after flushing the previous, so a directive is never orphaned.
+# Every `.sh` basename named inside a CLOSED ledger entry. An entry is a `- **bullet**` or a
+# `##`-`######` heading; either ends the one before it.
+#
+# THE ENTRY-WALK AND THE CLOSE TEST ARE BOTH LIFTED, AND BOTH USED TO BE HAND-COPIES HERE. The
+# comment this replaces said "same entry-walk as ledger-reverify.sh" while re-implementing
+# `/^- \*\*/` and `/^#{2,6}[ \t]/` inline — a prose claim of provenance is not a reader, and this
+# was the THIRD copy of a boundary rule `lib.sh` already single-homes. The close test was worse
+# than a copy: it was `/ADOPTED UPSTREAM/` UNANCHORED, so an OPEN entry whose body merely says
+# "annotate it ADOPTED UPSTREAM once X is upstreamed" scored as closed and this script advised
+# RETIRING a fork that is still needed. Reproduced end to end against the real script.
+#
+# IT EMITS NO ROW ON THE REFERENCE CONSUMER TODAY, and that is not why it was left alone. The
+# zero comes from the fork-exists and core-exists filters downstream, not from the predicate:
+# 48 `.sh`-naming lines sit inside entries the old rule called closed. Latent and reachable.
+# shellcheck source=lib.sh
+SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$SELF/lib.sh" || { echo "warn-shadowed-local-validators: cannot source $SELF/lib.sh" >&2; exit 2; }
+
+# COMPUTED ONCE AND GUARDED, BECAUSE A REFUSAL MUST NOT BE SURVIVABLE. `ledger_close_awk` refuses
+# when the close grammar is missing from ledger-reverify.sh, or no longer single-homed there.
+# Interpolated straight into an awk program that refusal became an EMPTY string, awk then died on
+# an undefined function, and this script exited 0 having emitted no rows -- a silent clean run,
+# byte-indistinguishable from a corpus with nothing in it. MEASURED before this guard existed:
+# rc=0 with 0 rows on the refusal path, against rc=0 with 1 row when the lift resolves.
+CLOSE_AWK="$(ledger_close_awk)" || exit 2
 # Piped to a while-read loop (bash 3.2, no mapfile).
-closed_basenames="$(awk '
+closed_basenames="$(awk "$(ledger_entry_awk)${CLOSE_AWK}"'
   function flush(){ if (closed && names != "") printf "%s", names; closed=0; names="" }
-  /^- \*\*/       { flush() }
-  /^#{2,6}[ \t]/  { flush() }
-  /ADOPTED UPSTREAM/ { closed=1 }
+  ledger_entry_shape($0) != "" { flush() }
+  # TWO SCOPES, THE WAY reverify HAS THEM. A body line closes only on the ANCHORED rule; an ENTRY
+  # LINE closes on the marker anywhere in it, because the legacy id-less form writes the close
+  # inside the title, and on the retained-copy parenthetical, which carries no marker of its own.
+  ledger_body_closes($0) { closed=1 }
+  ledger_entry_shape($0) != "" && ($0 ~ /ADOPTED UPSTREAM|WITHDRAWN/ || $0 ~ /\(original text, retained for the record\)/) { closed=1 }
   {
     s=$0
     while (match(s, /[A-Za-z0-9._-]+\.sh/)) {

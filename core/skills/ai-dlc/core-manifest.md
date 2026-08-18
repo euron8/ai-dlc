@@ -275,6 +275,7 @@ core_manifest:
   - fixtures/updater-session-signals/**
   - fixtures/artifact-derivations/**
   - fixtures/architecture-index-cell-escaping/**
+  - fixtures/prepush-worktree-env-scrub/**
 
 machinery:
   - core-manifest.md

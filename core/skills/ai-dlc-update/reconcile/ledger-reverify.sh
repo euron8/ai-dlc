@@ -140,6 +140,14 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib.sh
 . "$SELF/lib.sh" || { echo "ledger-reverify: cannot source $SELF/lib.sh" >&2; exit 1; }
 
+# COMPUTED ONCE AND GUARDED, BECAUSE A REFUSAL MUST NOT BE SURVIVABLE. `ledger_close_awk` refuses
+# when the close grammar is missing from ledger-reverify.sh, or no longer single-homed there.
+# Interpolated straight into an awk program that refusal became an EMPTY string, awk then died on
+# an undefined function, and this script exited 0 having emitted no rows -- a silent clean run,
+# byte-indistinguishable from a corpus with nothing in it. MEASURED before this guard existed:
+# rc=0 with 0 rows on the refusal path, against rc=0 with 1 row when the lift resolves.
+CLOSE_AWK="$(ledger_close_awk)" || exit 2
+
 DIST="${1:?usage: ledger-reverify.sh <dist-repo> <base-sha> <consumer-root> <theirs-ref> [ledger-path]}"
 BASE="${2:?}"
 CONSUMER="${3:?}"
@@ -1171,7 +1179,7 @@ fi
 # consumer failed it. It is now single-homed in `lib.sh` beside the shape rule, which is what
 # `ledger-entry-boundary-measurement.md` asks for, and `ledger-rotate.sh`s
 # refusal guard reads the same one.
-awk -v DASH=' — ' "$(ledger_entry_awk)$(ledger_entry_id_awk)"'
+awk -v DASH=' — ' "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE_AWK}"'
   function idshape(s) {
     sub(/[[:space:]]*\(.*\)[[:space:]]*$/, "", s)
     return (ledger_entry_id(s) != "")
@@ -1198,7 +1206,10 @@ awk -v DASH=' — ' "$(ledger_entry_awk)$(ledger_entry_id_awk)"'
       next
     }
     if ($0 ~ /^[ \t]*(<br[ \t]*\/?[ \t]*>)?[ \t]*[-*]?[ \t]*`?verify:/) hasv = 1
-    if ($0 ~ /ADOPTED UPSTREAM/) hasclose = 1
+    # THE SAME LIFT THE OTHER THREE DRIFTED PREDICATES NOW USE, AND THIS FILE IS THE ONE THE
+    # GRAMMAR LIVES IN -- so an unanchored copy HERE was the least defensible of the four. It
+    # suppressed a SWALLOWED-RECEIPT finding whenever a body line merely MENTIONED the phrase.
+    if (ledger_body_closes($0)) hasclose = 1
   }
   END { flush() }
 ' "$LEDGER" 2>/dev/null \
@@ -1214,7 +1225,7 @@ awk -v DASH=' — ' "$(ledger_entry_awk)$(ledger_entry_id_awk)"'
     else
       sw_why="its bold span is not an id, it CAPTURED a receipt, and the id-keyed entry above it emitted NO row of its own — the signature of an entry losing its only row to the line below. The bold span does NOT end in a colon, which is why the colon signal alone cannot see this one"
     fi
-    emit ENTRY-SWALLOWED "$sw_label" "this bullet is an annotation lead-in, not an entry title — ${sw_why}. A line-leading '- **\u2026**' opens a NEW entry, so this line truncates the entry above it (nearest id-shaped entry above: ${sw_prev}) ${sw_harm}. Re-indent the annotation so it does not start a line, or drop the bold, then re-run and confirm the entry reports under its own id."
+    emit ENTRY-SWALLOWED "$sw_label" "this bullet is an annotation lead-in, not an entry title — ${sw_why}. A line-leading '- **…**' opens a NEW entry, so this line truncates the entry above it (nearest id-shaped entry above: ${sw_prev}) ${sw_harm}. Re-indent the annotation so it does not start a line, or drop the bold, then re-run and confirm the entry reports under its own id."
   done
 
 exit 0   # classifier — the while-pipe's status is irrelevant; a close never blocks

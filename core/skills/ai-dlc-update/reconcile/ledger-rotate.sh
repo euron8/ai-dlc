@@ -35,10 +35,40 @@
 # Entry BOUNDARIES are lifted from ledger-reverify's parser unchanged: an entry is a
 # top-level `- **…**` bullet or a `##`-`######` heading, and either one ENDS the entry above.
 #
-# THE INVARIANT THAT MAKES THIS SAFE. Closed entries are exactly the ones ledger-reverify
-# already skips, so rotating them must not change its output by a single byte. Run
-# ledger-reverify.sh before and after and diff the two — that is the acceptance test, and the
-# fixture asserts it. The default (no --apply) writes nothing, so the comparison is free.
+# THE INVARIANT THAT MAKES THIS SAFE, AND THE PROJECTION IT HOLDS OVER. Closed entries are
+# exactly the ones ledger-reverify already skips, so rotating them must not change WHICH ROWS it
+# emits: the row SET, by status and subject, is identical before and after. Run ledger-reverify.sh
+# before and after and compare that projection — that is the acceptance test, and the fixture
+# asserts it. The default (no --apply) writes nothing, so the comparison is free.
+#
+# A BYTE COMPARISON IS THE WRONG TEST, AND IT FALSE-FAILS ON THE VERY WORKFLOW THIS SCRIPT IS THE
+# SECOND HALF OF. `prefix_entry_count()` in ledger-reverify.sh counts a sprint prefix over the OPEN
+# entries UNIONED with the ARCHIVED labels, and the open extractor skips any entry carrying
+# `ADOPTED UPSTREAM`. An entry annotated in the same pass — which is exactly what the
+# annotate-then-rotate step prescribes — is therefore on NEITHER side while it sits in the live
+# file, and on the archive side once moved, so the count RISES across a move that can only ever
+# shrink the live set. That number is printed inside NAMED-UPSTREAM-AMBIGUOUS details, so the
+# difference surfaces as changed counts on otherwise identical rows.
+#
+# MEASURED, by annotating every open entry on a COPY of the reference consumer's live ledger (79
+# of them) and rotating: the row SET was identical at 12 rows, 2 LINES differed, and 2 of 2 carried
+# a prefix count -- which ROSE, 3 entries to 5, on the same PC-S330 row. NOTHING WAS SWEPT. Since
+# the stated conclusion for a non-empty diff is that a live entry WAS swept, the byte form hands the
+# operator a false alarm at precisely the moment a large batch of closes has landed, and the remedy
+# it invites is unwinding correct work.
+#
+# THOSE FIGURES ARE A PROPERTY OF THAT LEDGER AT THAT SIZE, NOT A CONSTANT. An earlier run of the
+# same experiment on a larger ledger reported 84 rows and 10 differing lines. Both are true of their
+# own corpus and neither is the invariant -- what holds is the SHAPE: the row set does not move, the
+# differing lines all carry a prefix count, and the count rises. Re-derive rather than quoting
+# either number.
+#
+# THE COUNTER IS NOT THE DEFECT, AND CHANGING IT WOULD BE A REGRESSION. Its archive arm is a
+# deliberate earlier fix: without it the count was ANTI-MONOTONIC, every rotation lowering it and
+# converting a correct AMBIGUOUS into a confidently wrong single attribution. Widening the open
+# side to include annotated-but-unrotated entries was measured on the reference consumer too — it
+# moves 18 displayed counts and flips ZERO classifier verdicts, which is not enough to touch a
+# reader four programs share. The CLAIM was wrong; the code it claims about was right.
 #
 # Usage:
 #   ledger-rotate.sh <ledger-path> [--archive <path>] [--apply]
@@ -57,6 +87,14 @@ set -uo pipefail
 SELF="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib.sh
 . "$SELF/lib.sh" || { echo "ledger-rotate: cannot source $SELF/lib.sh" >&2; exit 1; }
+
+# COMPUTED ONCE AND GUARDED, BECAUSE A REFUSAL MUST NOT BE SURVIVABLE. `ledger_close_awk` refuses
+# when the close grammar is missing from ledger-reverify.sh, or no longer single-homed there.
+# Interpolated straight into an awk program that refusal became an EMPTY string, awk then died on
+# an undefined function, and this script exited 0 having emitted no rows -- a silent clean run,
+# byte-indistinguishable from a corpus with nothing in it. MEASURED before this guard existed:
+# rc=0 with 0 rows on the refusal path, against rc=0 with 1 row when the lift resolves.
+CLOSE_AWK="$(ledger_close_awk)" || exit 2
 
 LEDGER="${1:-}"
 [ -n "$LEDGER" ] || { echo "usage: ledger-rotate.sh <ledger-path> [--archive <path>] [--apply]" >&2; exit 2; }
@@ -140,7 +178,7 @@ trap 'rm -rf "$TMPD"' EXIT
 # whether a given one is an annotation or a real legacy id-less entry is the same question this
 # whole guard exists BECAUSE nothing can answer. Reporting the number without the adjudication
 # is the honest form; calling it zero because it does not gate anything would not be.
-SPLIT_FINDINGS="$(LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)"'
+SPLIT_FINDINGS="$(LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE_AWK}"'
   function label_of(l,   line, shape) {
     shape = ledger_entry_shape(l)
     if (shape == "") return "\001"
@@ -170,6 +208,24 @@ SPLIT_FINDINGS="$(LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)"'
       next
     }
     if ($0 ~ /\*\*ADOPTED UPSTREAM \(v[0-9]/ && !susp_at) closed = 1
+    # DELIBERATELY NOT THE LIFTED PREDICATE, AND THE MEASUREMENT IS WHY. This one and the stuck
+    # rule below ask a similar question and FAIL IN OPPOSITE DIRECTIONS, so one rule cannot serve
+    # both. The stuck rule makes a CLAIM -- these are the entries reverify skips -- so a loose
+    # form states something false about an open entry. This one SUPPRESSES a refusal, so a loose
+    # form only lets a split through, while a TIGHT form refuses a real entry and writes nothing.
+    #
+    # ROUTING THIS THROUGH ledger_body_closes() WAS BUILT AND MEASURED, AND IT WEDGES ROTATION.
+    # Driven on the false-positive case the fixture already carries: a real entry whose body says
+    # "Annotate it `ADOPTED UPSTREAM (vX.Y.Z...)` once the grep is non-zero", sitting under a
+    # genuinely closed entry. Unanchored, rc=0 and no refusal; anchored, rc=1 and REFUSING TO
+    # ROTATE -- a false positive on a real entry, and refusal writes nothing at all. The stuck
+    # report is fixed either way: 5 rows on the reference consumer under both.
+    #
+    # THE MISSED-REFUSAL DIRECTION IS STILL REAL AND IS FILED RATHER THAN GUESSED AT. A mention
+    # can still silence this guard. Closing that without re-opening the false positive needs a
+    # predicate that is neither of these two, and it needs its own false-positive measurement
+    # against the consumer archive, where 22 boundary-shaped lines inside closed entries all
+    # escape refusal on a single clause today.
     if ($0 ~ /ADOPTED UPSTREAM/ && susp_at) susp_closed = 1
     if ($0 ~ /^[ \t]*(<br[ \t]*\/?[ \t]*>)?[ \t]*[-*]?[ \t]*`?verify:/) {
       # A receipt ABOVE the suspect line is already on the archive side, so nothing of this
@@ -198,7 +254,7 @@ fi
 # would drop every entry but the last.
 rm -f "$TMPD/keep" "$TMPD/move" "$TMPD/moved-names" "$TMPD/stuck-names"
 : > "$TMPD/keep"; : > "$TMPD/move"; : > "$TMPD/moved-names"; : > "$TMPD/stuck-names"
-awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" -v stuck="$TMPD/stuck-names" "$(ledger_entry_awk)"'
+awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" -v stuck="$TMPD/stuck-names" "$(ledger_entry_awk)${CLOSE_AWK}"'
   function flush(  i) {
     if (n == 0) return
     out = (started && closed) ? move : keep
@@ -235,8 +291,9 @@ awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" -v st
   # verdict -- and a push candidate ABOUT this script naturally writes the form it describes.
   # Reproduced on the reference consumer: --apply archived PC-S330, a live entry, on a line
   # reading  `**ADOPTED UPSTREAM (v` annotation is a real close.  The entry was matched against
-  # its own quotation of the rule, and the operator caught it only because the byte-identical
-  # acceptance test this script prescribes made the disappearance visible.
+  # its own quotation of the rule, and the operator caught it only because the acceptance test
+  # this script prescribes made the disappearance visible. A swept entry drops a ROW, so the
+  # row-set form above catches it for the same reason the byte form did, without the false alarm.
   #
   # SKIPPING FENCES IS THE OBVIOUS FIX AND IT IS THE WRONG ONE -- measured, because the report
   # said the quotation was fenced and it is not. Four quotation forms were tried against a
@@ -256,8 +313,23 @@ awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" -v st
   # difference is the versionless close above -- which the rule was never entitled to archive.
   # Live ledger: 1 false positive before, 0 after.
   /\*\*ADOPTED UPSTREAM \(v[0-9]/ { closed = 1 }
-  # reverify.sh entry_line_closes(), restated as the LOOSE side of the same question.
-  /ADOPTED UPSTREAM|WITHDRAWN|\(original text, retained for the record\)/ { loose = 1 }
+  # THE SKIP SIDE OF THE SAME QUESTION, LIFTED FROM reverify RATHER THAN RESTATED.
+  #
+  # NO APOSTROPHES IN THIS COMMENT EITHER, for the reason stated above it.
+  #
+  # This used to read an UNANCHORED phrase test matching anywhere on any body line, and the
+  # comment above it attributed that to entry_line_closes(). Two things were wrong.
+  # entry_line_closes() is applied to the ENTRY LINE and not to the body, so the citation named a
+  # mechanism that decides a different question; and the body rule it should have named is
+  # ANCHORED, because the ledger is prose that DISCUSSES closes as well as carrying them.
+  # MEASURED on the reference consumer: this report named 12 entries and 7 of them were OPEN,
+  # one of them being the entry that filed this defect. ledger_body_closes() is the reverify line
+  # itself, read out of that file at load time, so the two cannot drift apart again.
+  ledger_body_closes($0) { loose = 1 }
+  # The retained-copy parenthetical stays LOCAL and stays unanchored. It is not part of the
+  # reverify BODY rule at all -- reverify closes that shape on the ENTRY LINE, through
+  # entry_line_closes() -- and it is a parenthetical that legitimately sits mid-line in a heading.
+  /\(original text, retained for the record\)/ { loose = 1 }
                      { buf[++n] = $0 }
   END { flush() }
 ' "$LEDGER"
@@ -311,7 +383,9 @@ if [ "$APPLY" -eq 0 ]; then
   echo "ledger-rotate: ${n_move} closed entries would move (${l_move} of ${l_all} lines, leaving ${l_keep})."
   sed 's/^/  /' "$TMPD/moved-names"
   echo "  archive: ${ARCHIVE}"
-  echo "  re-run with --apply to write. Verify after: ledger-reverify.sh output must be BYTE-IDENTICAL."
+  echo "  re-run with --apply to write. Verify after: ledger-reverify.sh must emit the SAME ROW SET,"
+  echo "  by status and subject. Prefix counts inside NAMED-UPSTREAM-AMBIGUOUS details DO move when an"
+  echo "  entry annotated in the same pass reaches the archive; that is not a sweep. A changed row SET is."
   exit 0
 fi
 

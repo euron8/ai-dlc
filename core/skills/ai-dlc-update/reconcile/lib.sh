@@ -315,3 +315,52 @@ function ledger_entry_id(label) {
 }
 AWK
 }
+
+# WHICH BODY LINES CLOSE AN ENTRY -- lifted from `ledger-reverify.sh`, never restated.
+#
+# THE DEFECT THIS REPLACES, MEASURED. `ledger-rotate.sh` reported its "closed for re-verification
+# but not archivable" set on an UNANCHORED phrase test while `ledger-reverify.sh` decided the same
+# question with a LINE-LEADING anchor, and rotate's own comment called the loose form
+# "reverify.sh entry_line_closes(), restated as the LOOSE side of the same question" -- a
+# restatement of a mechanism rather than a citation of it, and wrong about which mechanism:
+# `entry_line_closes()` is applied to the ENTRY LINE, while the BODY rule is the anchored one this
+# function lifts. On the reference consumer the report named 12 entries and 7 of them were OPEN,
+# including the very entry that filed the defect. Four predicates across three programs had
+# drifted the same way, so this is single-homed rather than corrected in place.
+#
+# WHY THIS READS THE SIBLING RATHER THAN OWNING THE REGEX. Moving the predicate INTO this file was
+# built and measured too. It gives the same correct answer and it breaks two INDEPENDENT anchors
+# that key on the emitting line's text: `core/fixtures/ledger-reverify/run.sh`'s mutation arm,
+# which then reports "the mutation matched nothing, so the anchor assertions above are unproven",
+# and the backlog receipt that certifies this very fix. Reading the line leaves
+# `ledger-reverify.sh` byte-unchanged, so both keep working and the grammar still exists once.
+#
+# THE LIFT SHAPE IS THIS DIRECTORY'S OWN. `map_consumer()` is defined once in `preclassify.sh` and
+# eval'd out of it by six other programs; this is that pattern for an awk rule rather than a shell
+# function.
+#
+# IT REFUSES RATHER THAN GUESSING, IN BOTH DIRECTIONS. No matching line means the emitter moved or
+# was reworded, and a silently empty predicate would make every caller decide that NOTHING is
+# closed -- a rotation guard that permits everything, reading exactly like one that found nothing
+# to stop. More than one match means the grammar is no longer single-homed, and lifting "the" line
+# is then not a question with an answer.
+ledger_close_awk() {
+  _lca_src="${SELF:-.}/ledger-reverify.sh"
+  _lca_re_find='^[[:space:]]*/.*\(ADOPTED UPSTREAM\|WITHDRAWN\).*closed=1 \}$'
+  if [ ! -r "$_lca_src" ]; then
+    echo "lib.sh: ledger_close_awk cannot read $_lca_src -- the close grammar is single-homed there and must not be restated here" >&2
+    return 1
+  fi
+  _lca_n="$(grep -cE "$_lca_re_find" "$_lca_src")"
+  if [ "$_lca_n" != 1 ]; then
+    echo "lib.sh: ledger_close_awk found $_lca_n candidate close rules in $_lca_src, expected exactly 1 -- the grammar is not single-homed, so there is no line to lift" >&2
+    return 1
+  fi
+  _lca_rule="$(grep -E "$_lca_re_find" "$_lca_src")"
+  _lca_pat="$(printf '%s\n' "$_lca_rule" | sed -E 's|^[[:space:]]*/(.*)/[[:space:]]*\{[[:space:]]*closed=1[[:space:]]*\}[[:space:]]*$|\1|')"
+  if [ -z "$_lca_pat" ] || [ "$_lca_pat" = "$_lca_rule" ]; then
+    echo "lib.sh: ledger_close_awk could not extract a pattern out of: $_lca_rule" >&2
+    return 1
+  fi
+  printf 'function ledger_body_closes(l) { return (l ~ /%s/) }\n' "$_lca_pat"
+}

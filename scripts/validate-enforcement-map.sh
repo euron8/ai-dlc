@@ -1872,11 +1872,51 @@ else
     # status the heading names must be one the emitter still produces.
     er_file="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/emit-report.sh"
     if [ -f "$er_file" ]; then
-      for st in $(grep -oE 'Push-candidate ledger — [A-Z][A-Z0-9 /-]+' "$er_file" \
-                  | grep -oE '\b[A-Z][A-Z0-9-]*-[A-Z][A-Z0-9-]*\b' | sort -u); do
+      er_sts="$(grep -oE 'Push-candidate ledger — [A-Z][A-Z0-9 /-]+' "$er_file" \
+                | grep -oE '\b[A-Z][A-Z0-9-]*-[A-Z][A-Z0-9-]*\b' | sort -u)"
+      for st in $er_sts; do
         grep -qxF -- "$st" <<<"$lr_emitted" || \
           err "I39: emit-report.sh's push-candidate heading names '$st', which ledger-reverify.sh does not emit. The report promises the operator a section that can never have rows in it."
       done
+      # THE FOURTH READER IS THE ONE THAT ACTS, and it was the one nothing checked. The heading
+      # above announces the rows to the operator; step 8 is where the operator does something
+      # about them. A status the report puts in front of a reader and step 8 gives no
+      # disposition to is a DUTY WITH NO ACTOR -- and it fails silently in the closing
+      # direction, because a reader executing step 8 literally leaves such a row unannotated
+      # and the entry then re-reports forever on a receipt step 3f has already called
+      # structurally incapable of deciding it.
+      #
+      # THE THREE ARMS ABOVE CANNOT SEE IT AND WIDENING THEM IS NOT THE FIX. Their SKILL-side
+      # population is step 3f's span alone, bounded for the reason in this arm's header: the
+      # same bullet grammar over the whole file matches other detectors' statuses. 3f is the
+      # DESCRIPTION and was correct throughout; the disagreement lived in the ACTION.
+      #
+      # BACKTICK-DELIMITED, AND THAT IS THE WHOLE OF THE FALSE-POSITIVE NARROWING. An unbounded
+      # `grep -F NAMED-UPSTREAM` is satisfied by `NAMED-UPSTREAM-AMBIGUOUS` -- a different
+      # status carrying a different duty, deliberately NOT attributed -- so the bare-substring
+      # form passes on a disposition written for the wrong row. SKILL.md writes every status in
+      # backticks, so the delimiters are a boundary this corpus already supplies rather than one
+      # imposed on it. Measured over the acting region with the delimiters: the eight statuses
+      # that owe an action all resolve, and `STILL-LIVE` -- filtered from the report and owed no
+      # action -- resolves 0, so the predicate discriminates rather than flagging everything.
+      s8="$(awk '/^8\. \*\*Deliver/{on=1} on && /^9\. \*\*Safety/{exit} on' "$lr_skill")"
+      if [ -z "$er_sts" ]; then
+        err "I39: emit-report.sh's push-candidate heading yielded NO statuses. The two arms above just went vacuous over an empty set, which reads exactly like agreement."
+      elif [ -z "$s8" ]; then
+        err "I39 could not locate SKILL.md's step 8 acting region. Either the step was renumbered or its heading grammar changed; a zero here retires the acting-reader check while the arms above still pass."
+      else
+        # SCOPED TO THE HEADING STATUSES THE EMITTER ACTUALLY PRODUCES, and that intersection is
+        # the difference between one finding per defect and two. A heading naming a PHANTOM status
+        # is already reported by the subset arm above; adding a second message for it says nothing
+        # new, because a row that can never exist owes the operator no disposition. Entangled arms
+        # are the shape where one of the two is vacuous and nobody can tell which -- measured here
+        # as a mutation battery whose phantom-heading mutant produced two failures for one defect.
+        for st in $er_sts; do
+          grep -qxF -- "$st" <<<"$lr_emitted" || continue
+          grep -qF -- "\`$st\`" <<<"$s8" || \
+            err "I39: emit-report.sh's push-candidate heading puts '$st' in front of the operator, but SKILL.md step 8 -- the step that ACTS on those rows -- never names it. The operator is handed a row with no stated disposition, which is read as nothing to do."
+        done
+      fi
     fi
   fi
 fi
