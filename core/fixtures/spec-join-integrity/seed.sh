@@ -326,4 +326,117 @@ sed -e 's/^#### FR-1:/#### FR-1 (CAP-1):/' \
     -e 's/^#### FR-3:/#### FR-3 (CAP-2):/' \
     "$ROOT/prd-bmad-raw.md" > "$ROOT/prd-bmad-enriched.md"
 
+
+# --- QUALIFIED memlog tags: the PRODUCER's optional qualifier -------------------
+# memlog.py's `cmd_append` builds one tag out of two optional parts:
+#   label = args.type;  if args.by: label = f"{label} by {args.by}";  tag = f"({label}) "
+# so `(capability)` and `(capability by bmad-spec)` are the SAME entry type, and which
+# one appears is decided PER APPEND by whether the caller passed --by. Nothing in the
+# producer makes the qualifier stable across a memlog, let alone across sprints.
+#
+# Captured from the reference consumer's 58 real memlogs, not from the reader's
+# accept-set: 57 `(capability)`, 19 `(capability by bmad-spec)`, 7
+# `(capability by pm-escalated)`. Three sprints are bare throughout and one (s302) is
+# qualified throughout. Every payload above this line is BARE, which is why this
+# fixture was green under a predicate that required `)` immediately after the type --
+# a predicate that reads ZERO capability entries out of s302 and DISARMS at exit 2,
+# which sits ABOVE every join in the check.
+#
+# HAND-WRITTEN, NOT DERIVED BY sed FROM $ROOT/real. The two mutators above are anchored
+# on the literal `(capability)`; a qualified corpus built by sed-mutating the bare one
+# matches nothing, produces a copy identical to its source, and asserts nothing.
+
+# (a) MUST PASS. Both observed qualified forms, mixed with a bare entry the way the
+# corpus mixes them across sprints. Kernel, PRD and story are the `real` set's.
+mkdir -p "$ROOT/real-qualified"
+cp "$ROOT/real/SPEC.md" "$ROOT/real-qualified/SPEC.md"
+cat > "$ROOT/real-qualified/.memlog.md" <<'QUALLOG'
+---
+topic: S300 pilot
+---
+
+- (note by bmad-spec) input is an in-chat operator scope carrying a verbatim LOCKED_REQUIREMENTS block
+- (decision by bmad-spec) headless mode: express distill, no elicitation
+- (capability by bmad-spec) CAP-1 realises LR-S300-1: the gated-path leg routes through the router
+- (constraint by bmad-spec) neither routing knob is read on the gated path
+- (capability by pm-escalated) CAP-2 realises LR-S300-2: a position below MIN_PASSIVE_LIFETIME is left unswept
+- (event by bmad-spec) pass 2 preservation PASS: LR-S300-1 -> CAP-1, LR-S300-2 -> CAP-2
+- (event by bmad-spec) spec finalized
+QUALLOG
+
+# (b) MUST FAIL AT THE JOIN, NOT DISARM. Qualified entries are present -- so the
+# emptiness test is satisfied -- but LR-S300-2 is named only by a `(note ...)`. This is
+# the arm that separates "the widened predicate FEEDS join (1)" from "the widened
+# predicate merely stops the DISARM firing": a widening that collected the entries and
+# then failed to hand them to the loop would pass (a) and exit 0 here.
+mkdir -p "$ROOT/real-qualified-orphan"
+cp "$ROOT/real/SPEC.md" "$ROOT/real-qualified-orphan/SPEC.md"
+cat > "$ROOT/real-qualified-orphan/.memlog.md" <<'QUALORPHAN'
+---
+topic: S300 pilot
+---
+
+- (capability by bmad-spec) CAP-1 realises LR-S300-1: the gated-path leg routes through the router
+- (capability by pm-escalated) CAP-2 was carried without a locked requirement behind it
+- (note by bmad-spec) LR-S300-2 was discussed and then not carried
+- (event by bmad-spec) pass 2 preservation PASS: LR-S300-1 -> CAP-1, LR-S300-2 -> CAP-2
+QUALORPHAN
+
+# (c) MUST STILL DISARM. Every tag is qualified and NONE is a capability. A widening
+# that dropped the type anchor -- `\([^)]*\)` -- reads the `(event ...)` verdict line as
+# a capability entry, closes join (1) on the spec's own self-report, and exits 0. This
+# corpus is what makes that vacuity visible; the mutation control below fires it.
+mkdir -p "$ROOT/real-qualified-noncap"
+cp "$ROOT/real/SPEC.md" "$ROOT/real-qualified-noncap/SPEC.md"
+cat > "$ROOT/real-qualified-noncap/.memlog.md" <<'QUALNONCAP'
+---
+topic: S300 pilot
+---
+
+- (note by bmad-spec) input is an in-chat operator scope carrying a verbatim LOCKED_REQUIREMENTS block
+- (decision by bmad-spec) headless mode: express distill, no elicitation
+- (constraint by bmad-spec) neither routing knob is read on the gated path
+- (event by bmad-spec) pass 2 preservation PASS: LR-S300-1 -> CAP-1, LR-S300-2 -> CAP-2
+- (event by bmad-spec) spec finalized
+QUALNONCAP
+
+# (d) MUST STILL DISARM. `(capability-review ...)` is a DIFFERENT type that shares a
+# prefix with this one. The widening's optional group opens with `[[:space:]]`, and that
+# character is the whole of what keeps a hyphenated neighbour out; without it the group
+# is `([^)]*)?` and this corpus is read as capability entries. `--type capability-review`
+# is expressible by the producer (memlog.py enforces no vocabulary -- "the host skill
+# names the vocabulary; the script does not"), and no such type appears in the reference
+# corpus today, so this arm pins a boundary rather than reproducing a captured shape.
+mkdir -p "$ROOT/real-hyphen-type"
+cp "$ROOT/real/SPEC.md" "$ROOT/real-hyphen-type/SPEC.md"
+cat > "$ROOT/real-hyphen-type/.memlog.md" <<'HYPHENLOG'
+---
+topic: S300 pilot
+---
+
+- (capability-review by lead) CAP-1 realises LR-S300-1: the gated-path leg routes through the router
+- (capability-review by lead) CAP-2 realises LR-S300-2: a position below MIN_PASSIVE_LIFETIME is left unswept
+- (event by bmad-spec) spec finalized
+HYPHENLOG
+
+# (e) MUST PASS. `--by` is free text and the reference corpus proves it: one real entry
+# reads `(correction by lead, CAP-10 pointer clause at 01:57:27Z)` -- commas, digits and
+# a colon inside the qualifier, through the same code path that builds a capability tag.
+# `[^)]*` must carry all of it.
+#
+# The ORDINAL form `(capability 2 by lead)` gets NO arm. It has zero occurrences in the
+# 58 real memlogs, and the predicate has no `by`-specific structure, so it lands in the
+# same equivalence class as (e) and would discriminate nothing.
+mkdir -p "$ROOT/real-qualifier-rich"
+cp "$ROOT/real/SPEC.md" "$ROOT/real-qualifier-rich/SPEC.md"
+cat > "$ROOT/real-qualifier-rich/.memlog.md" <<'RICHLOG'
+---
+topic: S300 pilot
+---
+
+- (capability by lead, CAP-1 pointer clause at 01:57:27Z) CAP-1 realises LR-S300-1: the gated-path leg routes through the router
+- (capability by remediator, adversarial pass 1 + pass 2) CAP-2 realises LR-S300-2: a position below MIN_PASSIVE_LIFETIME is left unswept
+- (event by bmad-spec) spec finalized
+RICHLOG
+
 printf '%s\n' "$ROOT"

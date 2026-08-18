@@ -15,6 +15,11 @@
 #   - trace verdict CONCERNS            PASSES (0) and PRINTS a note (recorded, not dropped)
 #   - three MUTATION controls hold      -- one per mechanical join; one mutant
 #                                          licenses only one FAIL
+#   - a QUALIFIED capability memlog     PASSES (0)  -- `(capability by <who>)` is the
+#                                          same entry type as `(capability)`
+#   - qualified + an uncited LR         FAILS (1)   -- the widened entries FEED join (1)
+#   - qualified NON-capability tags     DISARMS (2) -- the widening is not vacuous
+#   - `(capability-review by <who>)`    DISARMS (2) -- and is not over-wide either
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -42,6 +47,11 @@ want() { # <expected-rc> <label> <args...>
 }
 
 echo "spec-join-integrity:"
+# The candidate list above spans BOTH install layouts and takes the first that exists, so
+# the file this unit actually loads is not necessarily the one an author just edited.
+# Print it: a mutant applied to the other copy leaves every arm green and reads exactly
+# like an arm that cannot fire.
+echo "spec-join-integrity: resolved subject = $(cd "$(dirname "$V")" && pwd)/$(basename "$V")"
 
 want 0 "OVER-FIRE CONTROL: a healthy spec set passes every join" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
@@ -285,6 +295,99 @@ cp "$V" "$R/control-unmutated.sh"
 bash "$R/control-unmutated.sh" --spec "$R/orphan-lr" --prd "$R/prd-ok.md" --baseline "$R/baseline-stale.txt" >/dev/null 2>&1
 [ $? -eq 1 ] && ok "CONTROL: an unmutated copy in \$R still FAILS the stale baseline" \
              || bad "CONTROL: an unmutated copy misbehaves in \$R — every mutation above is vacuous"
+
+# --- the memlog tag QUALIFIER, and the DISARM that sits above every join --------
+# THIS BLOCK MUST STAY ABOVE `exit $rc`. An earlier attempt at these arms appended them
+# BELOW it, reported rc=0 and PASS, and executed none of them -- "a check that cannot
+# fire reads exactly like one that passed", landing on the guard for this very entry.
+# $QUAL_ARMS is the answer to that: every arm here goes through a counting wrapper and
+# the last arm asserts the count, so a truncated or unreachable block reports itself.
+#
+# THE SUBJECT. memlog.py renders `(<type>)` or `(<type> by <who>)` and the qualifier is
+# decided PER APPEND. `CAP_ENTRIES` required `)` immediately after the type, so a memlog
+# whose capability entries are qualified -- the reference consumer's s302, every entry --
+# yielded an EMPTY set and hit `exit 2`. That exit is ABOVE joins (1), (2), (2a) and (3),
+# so the whole of Check 30 dies, not just the LR->CAP leg.
+QUAL_ARMS=0
+q_want() { QUAL_ARMS=$((QUAL_ARMS+1)); want "$@"; }
+q_says() { QUAL_ARMS=$((QUAL_ARMS+1)); says "$@"; }
+q_mut()  { QUAL_ARMS=$((QUAL_ARMS+1)); mut  "$@"; }
+
+# (a) the observed qualified forms PASS. rc=0 alone is what a subject replaced by
+# `exit 0` also produces, so the PASS LINE and its counts are asserted beside it: those
+# counts are readable only if the memlog was actually parsed.
+q_want 0 "QUALIFIER: '(capability by bmad-spec)' / '(capability by pm-escalated)' entries PASS every join" \
+  --spec "$R/real-qualified" --prd "$R/prd-real.md" --story "$R/story-real.md"
+q_says "QUALIFIER: the qualified memlog is COUNTED, not merely tolerated" \
+  "PASS (2 locked requirement(s), 2 capability(ies)" \
+  --spec "$R/real-qualified" --prd "$R/prd-real.md" --story "$R/story-real.md"
+
+# (b) THE ARM THAT PROVES THE WIDENED ENTRIES FEED THE JOIN. Qualified entries exist, so
+# the emptiness test is satisfied; LR-S300-2 is cited only by a `(note ...)`. A widening
+# that collected the entries and never handed them to the loop passes (a) and exits 0
+# here. Exit 2 here would mean the DISARM merely moved.
+q_want 1 "QUALIFIER: an uncited LR in a QUALIFIED memlog FAILS at join (1) — it does not DISARM" \
+  --spec "$R/real-qualified-orphan" --prd "$R/prd-real.md" --story "$R/story-real.md"
+q_says "QUALIFIER: the failing LR is NAMED, so the widening is feeding join (1)" \
+  "LR-S300-2 appears in the memlog but no capability entry cites it" \
+  --spec "$R/real-qualified-orphan" --prd "$R/prd-real.md" --story "$R/story-real.md"
+
+# (c) NEGATIVE CONTROL. Every tag qualified, none a capability. Dropping the type anchor
+# would read the `(event ...)` self-report as a capability entry and close join (1) on
+# the spec's own verdict -- the exact defect the `real-severed` pin exists for, reachable
+# a second way through the qualifier. Holds under both the narrow and the widened
+# predicate; the mutant below is what proves it can fire at all.
+q_want 2 "NEGATIVE CONTROL: qualified NON-capability tags only still DISARMS at exit 2" \
+  --spec "$R/real-qualified-noncap" --prd "$R/prd-real.md" --story "$R/story-real.md"
+q_says "NEGATIVE CONTROL: the DISARM says why, rather than exiting 2 mutely" \
+  "contains no '(capability)' entries" \
+  --spec "$R/real-qualified-noncap" --prd "$R/prd-real.md" --story "$R/story-real.md"
+
+# (d) the TIGHTNESS boundary. `(capability-review by lead)` shares a prefix and is a
+# different type. The `[[:space:]]` opening the optional group is the whole of what
+# excludes it.
+q_want 2 "TIGHTNESS: '(capability-review by lead)' is a DIFFERENT type and still DISARMS" \
+  --spec "$R/real-hyphen-type" --prd "$R/prd-real.md" --story "$R/story-real.md"
+q_says "TIGHTNESS: the hyphenated neighbour is reported as no capability entries at all" \
+  "contains no '(capability)' entries" \
+  --spec "$R/real-hyphen-type" --prd "$R/prd-real.md" --story "$R/story-real.md"
+
+# (e) `--by` is free text and the real corpus proves it: `(correction by lead, CAP-10
+# pointer clause at 01:57:27Z)` carries commas, digits and a colon through the same code
+# path that builds a capability tag.
+q_want 0 "QUALIFIER: a rich '--by' qualifier (commas, digits, a colon) PASSES" \
+  --spec "$R/real-qualifier-rich" --prd "$R/prd-real.md" --story "$R/story-real.md"
+q_says "QUALIFIER: the rich-qualifier memlog is COUNTED, not merely tolerated" \
+  "PASS (2 locked requirement(s), 2 capability(ies)" \
+  --spec "$R/real-qualifier-rich" --prd "$R/prd-real.md" --story "$R/story-real.md"
+
+# MUTATION: the pre-fix predicate, restored exactly by deleting the optional group. This
+# is the ONE mutant that reproduces the shipped defect, and every arm above under (a),
+# (b) and (e) goes red against it -- the block's reason for existing.
+q_mut qual-narrow "([[:space:]][^)]*)?" "" \
+  2 "MUTATION: reverting the qualifier group DISARMS the qualified memlog at exit 2" \
+  --spec "$R/real-qualified" --prd "$R/prd-real.md" --story "$R/story-real.md"
+
+# MUTATION: the widening gone VACUOUS. Drop the type anchor and (c) exits 0 on a memlog
+# with no capability entry in it. This is what makes (c) an arm rather than a formality.
+q_mut qual-typeless '\((capability|capabilities)([[:space:]][^)]*)?\)' '\([^)]*\)' \
+  0 "MUTATION: dropping the TYPE anchor closes join (1) on a memlog with no capability entry" \
+  --spec "$R/real-qualified-noncap" --prd "$R/prd-real.md" --story "$R/story-real.md"
+
+# MUTATION: the `[[:space:]]` deleted, the rest of the group kept. (d) exits 0, which is
+# the measurement behind calling that one character load-bearing.
+q_mut qual-hyphen "([[:space:]][^)]*)?" "([^)]*)?" \
+  0 "MUTATION: dropping the [[:space:]] swallows '(capability-review)' as a capability entry" \
+  --spec "$R/real-hyphen-type" --prd "$R/prd-real.md" --story "$R/story-real.md"
+
+# ARMS-RAN. Non-zero and exact. A block that never executed, or one truncated by an early
+# `exit`, cannot produce this row -- and the count is what distinguishes it from a block
+# that ran halfway.
+if [ "$QUAL_ARMS" -eq 13 ]; then
+  ok "ARMS-RAN: all 13 qualifier arms EXECUTED (counted $QUAL_ARMS)"
+else
+  bad "ARMS-RAN: expected 13 qualifier arms, counted $QUAL_ARMS — the block is unreachable, truncated, or short-circuited"
+fi
 
 echo
 if [ "$rc" -eq 0 ]; then echo "spec-join-integrity: PASS"; else echo "spec-join-integrity: FAILED" >&2; fi

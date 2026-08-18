@@ -1988,8 +1988,10 @@ verify: sh d=$(mktemp -d); for k in f h; do mkdir -p "$d/$k"; printf '# B\n\n## 
 ## BL-058
 
 **Three core validators emit an "examined nothing" verdict, in three spellings carrying three
-different exit codes, and no vocabulary joins them — while the schema a gate writes its verdict
-into can express only `PASS` and `FAIL`.** The three, each with its own documented rationale for
+different exit codes, and no vocabulary joins them.** (The filing's second clause — that the
+schema a gate writes its verdict into can express only `PASS` and `FAIL`, so a vacuous run is
+recorded as a pass — is STRUCK below as unsourced, and is removed from this sentence rather than
+left standing where a reader meets it first.) The three, each with its own documented rationale for
 its own choice: `core/scripts/validate-stub-audit.sh:263` prints `AUDITED NOTHING` at **exit 4**;
 `core/scripts/validate-locked-anchor.sh:607` prints `PASS — NOTHING VERIFIED` at **exit 0**;
 `core/scripts/validate-ci-gates.sh:197`, declared at `:11`, prints `VACUOUS:` at **exit 78**.
@@ -1998,9 +2000,21 @@ Measured over `core/scripts/*.sh`: 3 files emit one of those tokens, out of 34
 impossible token returns 0 files. `docs/vocabulary-index.md` — the derived, pre-push
 byte-compared register of every controlled vocabulary — carries 7 cross-file vocabularies and 5
 schema enums, and **none** of the twelve is this one; the same case-insensitive grep that returns
-3 files under `core/scripts/` returns 0 rows there. Its own row for
-`gate-adjudication-verdict.json` records the `verdict` enum as exactly `PASS` `FAIL`, so a run
-that examined nothing has no verdict to be recorded as, and is recorded as a pass.
+3 files under `core/scripts/` returns 0 rows there.
+
+**THE SCHEMA HALF OF THIS ENTRY IS STRUCK: it was UNSOURCED, and it would have sent the fix into
+a decision another entry has already settled.** The entry claimed that because
+`gate-adjudication-verdict.json` records the `verdict` enum as exactly `PASS` `FAIL`, a run that
+examined nothing "is recorded as a pass". Measured: all three emitters mention `gate-adjudication`
+**zero** times, against a positive control of **12** in `validate-gate-adjudication.sh` in the same
+invocation. **There is no path from a vacuous verdict to that schema at all**, so nothing was ever
+recorded as anything. Worse, acting on it would have meant proposing a third enum member — which
+`BL-039` already adjudicated and rejected, citing the field's own documentation: *"There is no
+third value and no empty value. A check you cannot evaluate is FAIL-with-reason, never omitted and
+never PASS-by-default."* A third member also breaks a generated region that
+`sync-taught-schema.sh --check` byte-matches, and leaves two prose restatements OUTSIDE that region
+stale and silent. **A premise that reads as a measurement and names a real file is not a
+measurement** — the file existing was never the claim.
 
 **The filing named the wrong home for its one cited instance, and undercounted the population.**
 It cites "the file-local `VACUOUS`/rc=78 vocabulary in `ci-local.sh`". No `ci-local.sh` exists
@@ -2013,18 +2027,73 @@ on its own terms. The disagreement is the finding, not any one choice.
 The anchor is `docs/vocabulary-index.md` because that file is **rendered** by
 `scripts/render-vocabulary-index.sh` from the owner files at render time and byte-compared at
 pre-push, so it cannot be satisfied by prose: a token reaches it only by a real vocabulary
-declaration in a real owner. It closes on either shape the fix might take — a third member on the
-`verdict` enum, or a registered cross-file vacuous-verdict vocabulary — since both surface in the
-same derived table. The emitter count is a guard, not a condition: if that grep ever returns
-fewer than two files the receipt exits non-zero and the entry stays open, so a broken search
-reports STILL-LIVE rather than closing. Proven satisfiable against a patched copy of the index
-(exit 0 with the emitters still at 3).
+declaration in a real owner.
+
+**THE ORIGINAL RECEIPT REQUIRED THE DEFECT TO SURVIVE IN ORDER TO CLOSE, and this is the third
+time that polarity has appeared in this program.** It counted files still carrying the three
+divergent spellings and demanded `n >= 2`, describing that clause as a guard against a broken
+search. It is not a guard. **A correct unification NECESSARILY DELETES the spellings it counts** —
+measured live as the fix landed, the count went 3 → 0 while the new token appeared in 3 files
+against an impossible-token control of 0 — so the clause exits 1 forever against a completed fix.
+It also failed the second question: the index renders EVERY enum in `core/schemas/*.json`, so
+adding a member spelled `vacuous` to any unrelated schema closed it while touching no validator,
+and a bare prose sentence in the generated file closed it too.
+
+**The replacement keys on the EMITTER PATHS, which a rename cannot move.** An independent hand's
+first attempt keyed on the vocabulary's NAME and was rejected by the build, which named the set
+"empty-subject verdict token" — containing none of the words that receipt looked for. That is the
+same polarity again, caught by driving rather than by reading. The shipped form asks a structural
+question instead: does the cross-file section carry a row naming at least two of the emitters, and
+does `render-vocabulary-index.sh --check` still agree with the tree. `--check` is what forecloses
+prose — the row cannot be hand-written, because the renderer derives it from a real owner
+declaration and the pre-push byte-compare fails otherwise. The marker-count clause is the control:
+if the `# vocabulary:` convention is ever rewritten the receipt reports STILL-LIVE rather than
+closing on a dead read.
+
+Proven across seven scenarios, sides asserted byte-different first. It is correct in all seven
+where the original is wrong in three, in both directions: registration alone **0**, registration
+plus unification **0** (the original said 1 — a false reject of the shipped fix), unification with
+no registration **1**, an unrelated schema enum member **1** (the original said 0), a bare prose
+sentence **1** (the original said 0), one emitter's vacuous branch deleted **1**, and the unfixed
+baseline **1**. Rejecting unification-without-registration is deliberate: unifying the spelling
+removes today's disagreement and leaves nothing binding it, so a later author simply re-diverges.
+
+**ONE FURTHER CLAUSE, because "registration alone closes" leaves a false close reachable.** A
+vocabulary can be registered whose MEMBERS are the three divergent spellings — the set documented
+rather than unified — and a receipt that asks only whether a row exists reads that as a fix. The
+receipt therefore lifts the members cell out of the row it already found and requires each of the
+three emitters to print that exact string on a line that is not a comment. The comment grain is
+load-bearing: every one of these scripts states its verdict token in its own exit-code table, so a
+whole-file match is satisfied by documentation. Measured with the two forms side by side over a
+seeded validator whose header RECORDS the retirement — the shape a good header takes — the
+comment-aware form finds 0 and the whole-file form finds 3, with the live token found on the
+seed's one emitting line as the control in the same run.
+
+**WIDER than filed on the population, and the widening is deliberately NOT all remediated.** The
+same shape exists at other spellings and other exit codes: `NOT-APPLICABLE` emitted by
+`validate-artifact-paths.sh`, `validate-request-coverage.sh`, `validate-snapshot-conservation.sh`
+and `validate-suppression-lifetime.sh`; `DISARMED` by `validate-spec-join.sh`,
+`validate-ac-falsifiability.sh`, `validate-bmad-invocations.sh` and `audit-layer-debt.sh`;
+`COMPARED NOTHING` at exit 4 by `sprint-status.sh` in both `check-stories` and `derive-stories`.
+Those are EXCLUDED here and enumerated rather than overlooked. `DISARMED` is a DIFFERENT state —
+the check could not run at all, which is not the same as running over an empty subject — and the
+`NOT-APPLICABLE` / `COMPARED NOTHING` sites are the same state at a scope this entry does not
+name. Unifying them is a second change against a wider consumer surface.
+
+**The exit codes are deliberately untouched, and unifying them is not this entry's to decide.**
+4, 0 and 78 are per-validator caller contracts, each argued in its own header, and
+`validate-ci-gates.sh` argues 78 at length at `:11`. This is a report-grammar unification only.
+
+Remediated at `core/skills/ai-dlc/enforcement-map.yaml` `empty_subject_verdict:` — chosen as owner
+because it is the only file in the tree that already declares all three emitters, so the owner is
+not one peer promoted over the other two — rendered into `docs/vocabulary-index.md` and bound by
+**I93** in `scripts/validate-enforcement-map.sh`. The unified token is `EXAMINED NOTHING`.
 
 Discharges the consumer entry `PC-S297-VALIDATOR-PASS-VS-NOTHING-TO-CHECK-CONVENTION` at pinned
 ledger line 1226.
 
 
-verify: sh n=$(grep -rlE 'AUDITED NOTHING|NOTHING VERIFIED|VACUOUS' core/scripts/*.sh | wc -l | tr -d ' '); [ "$n" -ge 2 ] || exit 1; grep -qiE 'vacuous|nothing verified|audited nothing|examined nothing' docs/vocabulary-index.md
+verify: sh G=/usr/bin/grep; V=docs/vocabulary-index.md; M=scripts/validate-enforcement-map.sh; [ -f "$V" ] && [ -f "$M" ] || exit 1; [ "$($G -c '^[[:space:]]*#[[:space:]]*vocabulary:' "$M")" -ge 6 ] || exit 1; SEC=$(sed -n '/^## Cross-file vocabularies$/,/^## Schema enums$/p' "$V"); [ -n "$SEC" ] || exit 1; ROW=$($G -E '^\|' <<<"$SEC" | awk '{c=0; if(/validate-stub-audit\.sh/)c++; if(/validate-locked-anchor\.sh/)c++; if(/validate-ci-gates\.sh/)c++; if(/validate-spec-join\.sh/)c++; if(/audit-layer-debt\.sh/)c++; if(c>=2) print}' | head -1); [ -n "$ROW" ] || exit 1; TOK=$(printf '%s\n' "$ROW" | awk -F'|' '{ x=$3; gsub("\140","",x); sub(/^ +/,"",x); sub(/ +$/,"",x); print x }'); [ -n "$TOK" ] || exit 1; for f in core/scripts/validate-stub-audit.sh core/scripts/validate-locked-anchor.sh core/scripts/validate-ci-gates.sh; do awk -v t="$TOK" '{ if (index($0,t)==0) next; s=$0; sub(/^[[:space:]]+/,"",s); if (substr(s,1,1)=="#") next; n=1 } END { exit(n?0:1) }' "$f" || exit 1; done; bash scripts/render-vocabulary-index.sh --check >/dev/null 2>&1
 ## BL-059
 
 **`validate-steering-budget.sh` reports how MANY transcripts it read and never WHICH, so a
@@ -2056,11 +2125,67 @@ STILL-LIVE rather than closing on a run that produced nothing. Satisfiability pr
 mutant: a copy of the script with one extra `log(\`transcripts read   : ${files.join(", ")}\`)`
 line above `:603` takes the same receipt to exit 0.
 
+**Corrected on remediation. The population is FOUR output modes and the original receipt could
+not see three of them.** `--transcript` and `--dir` share the evidence block; `--cite` — which is
+THE genuine-operator predicate that `validate-adversarial-convergence.sh`,
+`validate-escalation-resolution.sh` and `ai-dlc-gate-remediation-guard.sh` all delegate to — has
+its own output path and carried the same count-without-identity on THREE separate diagnostics;
+`--count` is a bare integer by contract and cannot carry provenance without breaking
+`steps/gate-validation.md` and `core/fixtures/check-25-steering-conduct`. `$TRANSCRIPT` and `$DIR`
+were each printed at exactly one site, both on the unreadable-input FAIL path, so on any
+SUCCESSFUL run the identity appeared nowhere. **The third `--cite` site was found by the
+replacement receipt, not by reading**: two of the three were patched, the differential still
+reported the two corpora indistinguishable, and the zero-parseable-records branch was the reason.
+
+**The original receipt failed all three questions and in three different polarities.** It CLOSED
+on a hardcoded constant string that reads nothing; on an echoed ARGUMENT rather than the resolved
+corpus; and on a fix that renders the path and then exits 1, because `O=$(...)` discards `$?` and
+the receipt never read the validator's status. It REJECTED the entry's own two-part remedy
+implemented as a refusal, and it closed on a `--transcript`-only fix with `--dir` — which this
+entry puts in scope — still broken. Measured across a 13-variant battery on patched copies.
+
+**The replacement anchors on DISCRIMINATION rather than on a string**, which is this entry's own
+measurement turned into an assertion: two `mktemp -d` corpora holding identical content and
+identically-named members, whose outputs must DIFFER, in all three of `--transcript`, `--dir` and
+`--cite`. Random directory names make a hardcoded literal unconstructible; the four exit-status
+guards kill the render-then-fail regression; the member-name arms kill the argument echo and force
+both modes. Proven both ways in one invocation with the two sides asserted to differ: **0** against
+the fixed tree, **1** against the pre-fix copy.
+
+**The `--cite` half of the fix reached NO reader inside the distribution until its three
+delegators were changed too, and that was found by the fixture hand rather than by the fix.** All
+three callers — the convergence validator, the escalation gate and the remediation guard — invoke
+`--cite … --quiet >/dev/null 2>&1` and read only `$?`. `--quiet` does not suppress the cite
+diagnostic (it is `console.error`, ungated); what discards it is each caller's own redirection. So
+naming the corpus inside `--cite` improves a human's hand-run and nothing else. The place identity
+actually reaches a reader is each delegator's own FAIL text, which named the QUOTE and the window
+and never the corpus — meaning "the operator did not say this" was asserted over a corpus the
+reader could not see, and a wrong-corpus run made that accusation indistinguishable from a true
+one. Both failure texts now name `$STEER_ARG`.
+
+**The first fix was incomplete and its own fixture refused it, in the case that matters most.**
+Rendering only the members READ leaves a run that found NOTHING naming no source — and a
+`--since` window that excludes every file is the invocation shape `steps/retro.md` itself
+prescribes, so the empty corpus is a live path rather than an edge. A wrong-corpus run that comes
+back empty is exactly the reading a reader cannot distinguish from a right one, which is this
+entry's whole subject. The corpus is therefore named on its own line, unconditionally, and the
+member list is separate. **The arm that caught it was written by a different hand from the fix**,
+which is the mechanism `fixture-mutants.md` requires and the second time in this batch it refuted
+its own author.
+
+**Half of the filing's two-part remedy is NOT delivered here, deliberately and with the reason.**
+Part 1 — derive the lead's own session transcript rather than trusting a caller-supplied path — is
+implementable: `CLAUDE_CODE_SESSION_ID` is in the environment of any harness child, the derived
+corpus path resolves to a real file, and an all-zeros-UUID control correctly does not. It is filed
+separately rather than landed here because it changes the DEFAULT corpus for twelve call sites and
+retires a model-retyped `ls -t | head -1` derivation in `steps/gate-validation.md`, which is a
+consumer-visible behaviour change and not the half this entry's anchor is about.
+
 Discharges the consumer entry `PC-S297-VALIDATE-STEERING-BUDGET-TRANSCRIPT-PROVENANCE` at pinned
 ledger line 1381.
 
 
-verify: sh D=$(mktemp -d); T="$D/AIDLC-PROVENANCE-PROBE.jsonl"; printf "%s\n" "{\"type\":\"user\",\"message\":{\"content\":\"x\"},\"timestamp\":\"2026-08-01T00:00:00Z\"}" > "$T"; O=$(bash core/scripts/validate-steering-budget.sh --transcript "$T" 2>&1); rm -rf "$D"; grep -qF "transcripts scanned" <<<"$O" || exit 1; grep -qF "AIDLC-PROVENANCE-PROBE.jsonl" <<<"$O"
+verify: sh DA=$(mktemp -d); DB=$(mktemp -d); [ "$DA" != "$DB" ] || exit 9; J=type:user; for d in "$DA" "$DB"; do printf "%s\n" "$J" > "$d/alpha-session.jsonl"; printf "%s\n" "$J" > "$d/bravo-session.jsonl"; done; V=core/scripts/validate-steering-budget.sh; OA=$(bash "$V" --transcript "$DA/alpha-session.jsonl" 2>/dev/null); RA=$?; OB=$(bash "$V" --transcript "$DB/alpha-session.jsonl" 2>/dev/null); RB=$?; OC=$(bash "$V" --dir "$DA" 2>/dev/null); RC=$?; OD=$(bash "$V" --dir "$DB" 2>/dev/null); RD=$?; OE=$(bash "$V" --dir "$DA" --cite zzznosuchphrasezzz 2>&1); OF=$(bash "$V" --dir "$DB" --cite zzznosuchphrasezzz 2>&1); rm -rf "$DA" "$DB"; [ "$RA" = 0 ] && [ "$RB" = 0 ] && [ "$RC" = 0 ] && [ "$RD" = 0 ] || exit 9; grep -qF "transcripts scanned" <<<"$OA" || exit 9; [ "$OA" != "$OB" ] || exit 1; [ "$OC" != "$OD" ] || exit 1; [ "$OE" != "$OF" ] || exit 1; grep -qF "$DA" <<<"$OA" && grep -qF "$DB" <<<"$OB" && grep -qF "$DA" <<<"$OC" && grep -qF "$DB" <<<"$OD" || exit 1; grep -qF "alpha-session.jsonl" <<<"$OC" && grep -qF "bravo-session.jsonl" <<<"$OC"
 ## BL-060
 
 **`validate-provenance-block.sh --strays` judges the declared homes on the path SPELLING, so the
@@ -2153,19 +2278,56 @@ already claims to handle — "No ground truth to check against" — reached with
 
 **Why the anchor is the anchor.** No fixture arm anywhere exercises an empty corpus: all 10
 `--transcript-dir` occurrences under `core/fixtures/` pass a populated `"$ROOT"`, and 0 pass a
-`mktemp` directory, against a control of 178 fixtures that use `mktemp`. A looser receipt keyed on
-the two-tier posture generally would false-close the moment anyone reads the fixture, because that
-posture is correct and asserted. A substring receipt would be worse still: the three fix shapes
-(count the corpus before selecting it, require a readable transcript inside it, or fall through to
-the `-z "$STEER_FLAG"` branch) share no token. It reaches 0 when an empty corpus stops outranking
-no corpus — arm `b` then returns 0 like arm `a`, which is already demonstrated reachable by arm 3
-above.
+`mktemp` directory. A looser receipt keyed on the two-tier posture generally would false-close the
+moment anyone reads the fixture, because that posture is correct and asserted. A substring receipt
+would be worse still: the three fix shapes (count the corpus before selecting it, require a
+readable transcript inside it, or fall through to the `-z "$STEER_FLAG"` branch) share no token.
+The 10 and the 0 are confirmed on re-derivation; the control figure of "178 fixtures that use
+`mktemp`" is a FILE count mislabelled as a fixture count — the suite holds 162 fixture directories,
+so 178 could never have been one, and the correct control is 182 files across 156 directories.
+
+**Corrected on remediation, in three directions, and each correction moved the fix.**
+
+**The trigger is not emptiness, it is holding no `*.jsonl`.** `validate-steering-budget.sh:427`
+selects the corpus with `readdirSync(dir).filter(f => f.endsWith(".jsonl"))`, so a directory
+holding a sidecar `.txt` is exactly as blind as an empty one and reached the same DIVERGENT/3.
+That is the MORE reachable half: the hook passes `dirname "$transcript_path"`, a harness directory
+that can hold sidecar files. Five arms in one invocation, with two positive controls — a real
+`silent.jsonl` corpus still DENIED at 3 and a real `real.jsonl` corpus RESOLVED at 0 — so the
+empty and no-`.jsonl` arms are isolated and the scan is not dead.
+
+**The predicate has THREE copies, not one.** `core/scripts/validate-escalation-resolution.sh` and
+`core/hooks/ai-dlc-gate-remediation-guard.sh` carry it byte-identically. The escalation copy is not
+a wedge — that tier is fail-closed by design — but with nothing to search it reports the OPERATOR
+as having said nothing, which is an accusation where the true state is that the gate had no corpus.
+The hook copy takes `dirname "$TRANSCRIPT"`, so its `--dir` branch won on an empty corpus and the
+readable-file fallback below it was unreachable. A fix at one site leaves the other two.
+
+**The fix goes in the PREDICATE, and the entry's own third shape is a regression.** Clearing
+`STEER_FLAG` after the `if`/`elif` chain has run skips the `-r "$TRANSCRIPT"` fallback, so a caller
+passing an empty directory ALONGSIDE a readable transcript falls to fail-open instead of using the
+file it was handed: driven on a real forgery, rc 3 → rc 0, the deny lost.
+`core/skills/ai-dlc/steps/gate-validation.md` instructs the operator to pass both flags, so that
+state is documented rather than hypothetical.
+
+**The receipt was REPLACED, and the original failed all three questions.** It asserted only that
+two arms both return 0 — no arm anything must still DENY — so deleting the `--transcript-dir`
+feature, neutering the citation check, and making the dir branch unreachable ALL scored as FIXED,
+while the entry's own third fix shape scored as fixed despite losing the deny. Arm `a` was not a
+control either: it asserts 0, the same direction as the verdict. And a PENDING/SKIP remedy at a
+distinct non-zero code — which `mechanism-design.md` explicitly permits — would have been REJECTED
+forever, so the replacement reads `b -ne 3` rather than `b -eq 0`. The replacement adds the three
+arms the original lacked: a genuine corpus must still RESOLVE at 0, a forgery corpus must still
+DENY at 3, and an empty directory passed alongside a readable forgery must still DENY at 3. Driven
+across three independently written correct fixes and five wrong ones, the replacement passes only
+the three correct ones; proven both ways in one invocation, **0** against the fixed tree and **1**
+against the pre-fix copy with the two sides asserted to differ.
 
 Discharges the consumer entry `PC-S300-RESOLUTION-RECORD-CITATION-CANNOT-OUTLIVE-ITS-SESSION` at
 pinned ledger line 2785.
 
 
-verify: sh R=$(bash core/fixtures/adversarial-citation/seed.sh | tail -1); E=$(mktemp -d); V=core/scripts/validate-adversarial-convergence.sh; S="$R/terminal/s-adversarial-p"; bash "$V" --series "$S" --cycle-state >/dev/null 2>&1; a=$?; bash "$V" --series "$S" --cycle-state --transcript-dir "$E" >/dev/null 2>&1; b=$?; rm -rf "$R" "$E"; [ "$a" -eq 0 ] && [ "$b" -eq 0 ]
+verify: sh R=$(bash core/fixtures/adversarial-citation/seed.sh | tail -1); E=$(mktemp -d); G=$(mktemp -d); D=$(mktemp -d); cp "$R/real.jsonl" "$G/"; cp "$R/silent.jsonl" "$D/"; V=core/scripts/validate-adversarial-convergence.sh; S="$R/terminal/s-adversarial-p"; bash "$V" --series "$S" --cycle-state >/dev/null 2>&1; a=$?; bash "$V" --series "$S" --cycle-state --transcript-dir "$E" >/dev/null 2>&1; b=$?; bash "$V" --series "$S" --cycle-state --transcript-dir "$G" >/dev/null 2>&1; c=$?; bash "$V" --series "$S" --cycle-state --transcript-dir "$D" >/dev/null 2>&1; d=$?; bash "$V" --series "$S" --cycle-state --transcript "$R/silent.jsonl" --transcript-dir "$E" >/dev/null 2>&1; e=$?; rm -rf "$R" "$E" "$G" "$D"; [ "$a" -eq 0 ] && [ "$b" -ne 3 ] && [ "$c" -eq 0 ] && [ "$d" -eq 3 ] && [ "$e" -eq 3 ]
 ## BL-062
 
 **`--check-evidence` discovers its gate log by basename alone and reads an ARCHIVED sprint's copy,
@@ -2244,32 +2406,66 @@ control needle known present returning 1 and an impossible needle returning 0.
 producer's documented `(<type>[ <qualifier>])` grammar instead — `([[:space:]][^)]*)?` before the
 closing paren — matches bare, ` by bmad-spec` and the ordinal-before-`by` shape ` 2 by lead`, and
 still returns **0** on `- (event by bmad-spec)`, which is the negative control that stops the
-widening from making the join vacuous. The ordinal shape is in the consumer corpus at **1** hit
-against a control of **871** plain `(<type> by ...)` tags — robustness rather than a live miss, but
-the `by`-only form misses it. The DISARM text at `:166` should move with the predicate: it frames
+widening from making the join vacuous.
+
+**The "ordinal" reading of that shape is WRONG about the producer, and the correction matters
+more than the claim did.** The memlog writer has no ordinal path: it emits `(<type>)`, or
+`(<type> by <author>)` when the append carried an author, and nothing else. What looked like an
+ordinal — `(resolution 2 by lead, adversarial pass 4 STALL, …)` — is a free-text TYPE, because the
+type is whatever the caller passed. So ` by <author>` is the whole qualifier grammar, and the
+reason to accept `[^)]*` anyway is not the ordinal: it is that the TYPE side is unconstrained on
+the producer's side, and a predicate narrower than this would have to track its wording. The
+widening is correct for a different reason than the one first given, and a receipt built on the
+first reason would have been guarding a shape the producer cannot emit.
+
+The DISARM text at `:166` should move with the predicate: it frames
 the remedy as tracking a change in "bmad-spec's memlog entry types", when what is required is
 tolerating a qualifier that was always legal.
 
 **The guarding fixture certifies a shape it never had.** `core/fixtures/spec-join-integrity/seed.sh:200`
-reads "REAL bmad-spec SHAPE, captured from an actual headless run" and seeds **0** `(capability by ...)`
-entries against **13** bare ones. It is green under both the broken and the widened predicate, so
-this is not remediated when `:164` changes — it is remediated when that fixture seeds the suffixed
-form and fails without the widening.
+reads "REAL bmad-spec SHAPE, captured from an actual headless run" and seeded **0**
+`(capability by ...)` entries against a non-zero number of bare ones. It was green under both the
+broken and the widened predicate, so this was not remediated when `:164` changed — it was
+remediated when that fixture seeded the suffixed form and failed without the widening.
 
-**Why the receipt is the receipt.** It drives the shipping script twice and reads its EXIT CODE, so
-there is no substring for a fix to quote back inside a comment recording what it removed. The control
-is not "the run happened": it asserts the bare-form arm returns **exactly 0**. An earlier draft
-returned non-zero for the wrong reason — its control spec carried no `FR-` identifier and DISARMED at
-a different arm, which reads exactly like the finding. It reaches 0 when `:164` accepts the
-qualifier, demonstrated against a mutant carrying the widened predicate whose two sides were asserted
-to differ: the suffixed run goes rc 2 -> rc 0 while the bare arm stays 0. A sanity failure exits 9,
-which reverify reports as STILL-LIVE — the safe direction, but not a distinct status.
+**The "13 bare" this entry originally cited is a MENTION count, not an entry count, and the
+correction is the point rather than the arithmetic.** The seed writes its corpus inside `printf`
+strings, so three defensible ways of counting give three answers — 5 line-anchored bullets, 8
+emitted entries, 13 occurrences of the token including comments and the two `sed` mutator
+expressions. Only one of those is the population the predicate reads. The durable fact is the
+ratio's numerator: **zero** qualified entries, which is why the fixture could not express the
+defect, and that number does not decay.
+
+**The mutators are themselves paren-anchored**, at `seed.sh:260` and `:268`, so a qualified arm
+built by `sed`-mutating the bare corpus silently no-ops and asserts nothing. The suffixed corpora
+are hand-written from the producer's output for that reason, which is `fixture-mutants.md`'s
+"never seed from what the reader accepts" arriving by a second route.
+
+**Why the receipt is the receipt, and why the two-run one it REPLACES had to go.** The original
+drove the shipping script twice — bare and suffixed — and closed on `[ "$s" -ne 2 ]`. That accepts
+every exit code except 2, and **both destructive remedies reach one**: deleting the `exit 2` at
+`:167`, and deleting the `CAP_ENTRIES` predicate outright, each leave the suffixed run falling
+through to join (1) and failing there at **rc 1**, which the receipt scored as FIXED. A fix that
+removes the guard is not a fix, and that is the same false close that shipped once already. Driven
+across seven variants, each asserted to differ from baseline before any verdict was read.
+
+The replacement drives five corpora and pins **exact** codes rather than an inequality. `noncap`
+(`(event by ...)` only) must still DISARM at **2** — that is the arm that kills both destructive
+remedies and also kills a widening gone vacuous, since `\([^)]*\)` without the leading
+`[[:space:]]` swallows `(event ...)` and drives `noncap` to 0. `sever` (a qualified capability
+entry present, the locked requirement uncited) must reach **1**, which proves the widened entries
+actually FEED the join instead of merely satisfying the emptiness test at `:165`. `ord`
+(`(capability 2 by lead)`) must reach **0**, and it is what discriminates this entry's fix from the
+filing's under-narrow ` by <author>` — the narrow form leaves `ord` at 2 and the receipt correctly
+stays STILL-LIVE. `bare` remains the sanity arm at exit 9, the safe direction but not a distinct
+status. Proven both ways in one invocation with the two sides asserted to differ: **0** against the
+widened predicate, **1** against the pre-fix copy.
 
 Discharges the consumer entry `PC-S303-SPEC-JOIN-MEMLOG-REGEX-STALE-VS-AUTHOR-SUFFIX` at LIVE ledger
 line 4357, past the 4356-line pin. That entry carries no `verify:` receipt of its own and is
 invisible to the consumer's closer.
 
-verify: sh D=$(mktemp -d); mkdir -p "$D/b" "$D/s"; printf "# PRD\n\n- FR-S1-1 the functional requirement, CAP-1\n- LR-S1-1 the locked requirement\n" > "$D/prd.md"; printf "# SPEC\n\nCAP-1 the capability\n" > "$D/b/SPEC.md"; cp "$D/b/SPEC.md" "$D/s/SPEC.md"; printf -- "- (capability) LR-S1-1 -> CAP-1\n" > "$D/b/.memlog.md"; printf -- "- (capability by bmad-spec) LR-S1-1 -> CAP-1\n" > "$D/s/.memlog.md"; cmp -s "$D/b/.memlog.md" "$D/s/.memlog.md" && { rm -rf "$D"; exit 9; }; bash core/scripts/validate-spec-join.sh --spec "$D/b" --prd "$D/prd.md" >/dev/null 2>&1; b=$?; bash core/scripts/validate-spec-join.sh --spec "$D/s" --prd "$D/prd.md" >/dev/null 2>&1; s=$?; rm -rf "$D"; [ "$b" -eq 0 ] || exit 9; [ "$s" -ne 2 ]
+verify: sh D=$(mktemp -d); mkdir -p "$D/bare" "$D/suf" "$D/ord" "$D/noncap" "$D/sever"; printf "# PRD\n\n- FR-S1-1 the functional requirement, CAP-1\n- LR-S1-1 the locked requirement\n" > "$D/prd.md"; for k in bare suf ord noncap sever; do printf "# SPEC\n\nCAP-1 the capability\n" > "$D/$k/SPEC.md"; done; printf -- "- (capability) LR-S1-1 -> CAP-1\n" > "$D/bare/.memlog.md"; printf -- "- (capability by bmad-spec) LR-S1-1 -> CAP-1\n" > "$D/suf/.memlog.md"; printf -- "- (capability 2 by lead) LR-S1-1 -> CAP-1\n" > "$D/ord/.memlog.md"; printf -- "- (event by bmad-spec) LR-S1-1 -> CAP-1 verified\n" > "$D/noncap/.memlog.md"; printf -- "- (capability by pm-escalated) CAP-1 stands alone\n- (event by bmad-spec) LR-S1-1 -> CAP-1 verified\n" > "$D/sever/.memlog.md"; for k in suf ord noncap sever; do cmp -s "$D/bare/.memlog.md" "$D/$k/.memlog.md" && { rm -rf "$D"; exit 9; }; done; r(){ bash core/scripts/validate-spec-join.sh --spec "$1" --prd "$D/prd.md" >/dev/null 2>&1; echo $?; }; b=$(r "$D/bare"); s=$(r "$D/suf"); o=$(r "$D/ord"); n=$(r "$D/noncap"); v=$(r "$D/sever"); rm -rf "$D"; [ "$b" -eq 0 ] || exit 9; [ "$n" -eq 2 ] && [ "$v" -eq 1 ] && [ "$s" -eq 0 ] && [ "$o" -eq 0 ]
 
 ## BL-064
 
@@ -2676,3 +2872,498 @@ lift landed, while establishing that its new mutant could distinguish a lifted p
 inline one.
 
 verify: sh W=core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh; [ -f "$W" ] || exit 9; grep -q 'ledger_close_awk' "$W" || exit 9; n="$(grep -c 'original text, retained for the record' "$W")"; [ "$n" -eq 0 ]
+
+## BL-075
+
+**Check 16's marker gate is applied to the RAW source line while all four elements it gates
+assume a comment block, so any occurrence of a marker in code opens the elements against a line
+that can never satisfy them.** `core/scripts/validate-stub-audit.sh:108` is
+`STUB_MARKER='(stub|TODO|FIXME|wired later|Phase [0-9]|NotImplementedError)'`, matched at `:184`
+as `[[ $line =~ $STUB_MARKER ]]` — unanchored, no boundary guard, and against `$line`, not the
+decommented text. `decomment_line()` at `:131` already exists and is called only at `:196` to
+build `dec[]`, which feeds element 4 alone; its own header states the subject is "a comment
+block", and element 1's finding message says so too. The gate is the one part of the check that
+does not.
+
+Driven through the shipping script on probe trees under `mktemp`: `self.stubborn = 1` and
+`client_stub.call()` return rc=1 with two `element1-item-ref` findings, and
+`stub = AsyncMock(return_value=None)` returns rc=1 with two. Positive control in the same
+invocation, `# stub, wire later`, rc=1; discriminating control, a file whose only body is
+`return 42`, rc=0 at `0 stub marker(s) examined` — so the zero is a real absence and not a broken
+invocation. Population over the 354 tracked hot-path files (control: the same `git ls-files` for
+`*.zzzznope` returns 0): **115 markers examined, 115 findings**, of which 9 are substring
+inflections (`stubbed`, `stubs`) and 17 raw hits come from `Phase [0-9]` matching ordinary prose
+such as `core/fixtures/check-15-bypass/seed.sh:188`. The site is unique: a sweep of
+`core/scripts/` (46 files) and `core/hooks/` (17) for a bare-word alternation regex var returns
+`:108` and nothing else, with a seeded `MY_MARKER='(foo|bar|baz)'` probe proving the sweep fires
+and an impossible-token control returning 0.
+
+**The filing's prescribed remedy is a total disarm on this platform, and its own receipt accepts
+it.** `\b` is not in Darwin's ERE under bash 3.2 — measured, `[[ "stub = 1" =~ \b(stub)\b ]]`
+does not match while `(stub)` matches — so `STUB_MARKER='\b(...)\b'` examines **0 markers over
+all 354 corpus files** and passes `# stub, wire later`, `raise NotImplementedError()` and
+`# TODO: fix` alike. The cited precedent, `core/scripts/audit-layer-debt.sh:186`, is a **Python**
+`re.compile` with lookbehind run through `python3` at `:85`, which `[[ =~ ]]` cannot take.
+
+**The two obvious remedies each fail one direction, and the receipt is shaped to reject both.**
+A word boundary drops 9 of 115 findings and adds 0, but still fires on `stub = AsyncMock(...)`,
+the bare-word case the filing itself reports. Gating the marker on comment text clears that and
+drops 36 — none of which, enumerated, is a genuine deferred implementation — but it drops
+`raise NotImplementedError()` in live code by construction, which is the most reliable stub
+signal in the list. That false negative is invisible on this corpus: all 22 real stubs here sit
+at `core/fixtures/check-15-bypass/seed.sh` written `raise NotImplementedError  # stub`, whose
+trailing comment the gate happens to keep. A remedy that survives measurement for that reason has
+not been measured. Splitting the set — `NotImplementedError` matched anywhere, the prose markers
+matched only in comment text, both word-bounded — satisfies all four arms, takes the corpus from
+115 markers to 73 with 0 findings added, and keeps every one of the 22. **It is not free, and the
+cost is a predicate this file does not have.** `decomment_line()` cannot supply it: it strips
+leading whitespace at `:133` BEFORE it inspects the prefix, so its output differs from its input
+for every INDENTED line, comment or not. A patch deriving "this line carries no comment" from
+`[ "$(decomment_line "$line")" = "$line" ]` therefore passes the comment arm and the substring arm
+and FAILS the bare-word arm on any indented code — which is all Python code. That patch was built
+and driven here and it returns rc=1 where the split returns rc=0. The prefix has to be tested
+directly.
+
+The receipt is four-armed and behavioural because every narrower anchor false-closes here. A
+textual anchor on `:108` closes on the `\b` disarm; an anchor on `element1-item-ref` closes on
+nothing, since element 1 is merely whichever element fails first when no backlog exists. Arms C
+and E are guards in opposite directions — C rejects a disarm, E rejects a comment-only gate — and
+without either the receipt certifies a check that has been weakened rather than corrected. Proven
+against patched copies under `mktemp`, each asserted byte-different from the shipping file first:
+shipping, `\b`, word-boundary and comment-gated all exit non-zero; the split set exits 0.
+
+Discharges the consumer entry `PC-S303-STUB-AUDIT-MARKER-REGEX-MATCHES-LOCAL-VAR-NAMED-STUB` at
+LIVE ledger line 2955.
+
+
+verify: sh V=core/scripts/validate-stub-audit.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d) || exit 9; mkdir -p "$d/src"; printf 'def f():\n    stub = AsyncMock(return_value=None)\n    return stub\n' > "$d/src/a.py"; printf 'def f():\n    client_stub.call()\n    return 0\n' > "$d/src/b.py"; printf 'def f():\n    # stub, wire later\n    return 0\n' > "$d/src/c.py"; printf 'def f():\n    raise NotImplementedError()\n' > "$d/src/e.py"; bash "$V" --root "$d" src/a.py >/dev/null 2>&1; ra=$?; bash "$V" --root "$d" src/b.py >/dev/null 2>&1; rb=$?; bash "$V" --root "$d" src/c.py >/dev/null 2>&1; rc=$?; bash "$V" --root "$d" src/e.py >/dev/null 2>&1; re=$?; rm -rf "$d"; [ "$rc" -eq 1 ] || exit 1; [ "$re" -eq 1 ] || exit 1; [ "$ra" -eq 0 ] || exit 1; [ "$rb" -eq 0 ] || exit 1; exit 0
+
+## BL-076
+
+**Five sibling validators report how MANY files they read and never WHICH, so a run over the
+wrong corpus is byte-identical to a run over the right one — the same defect `BL-059` fixed in
+`validate-steering-budget.sh`, in `validate-ci-gates.sh`, `validate-ac-falsifiability.sh`,
+`validate-scope-confirmation.sh`, `validate-spec-join.sh` and
+`validate-suppression-lifetime.sh`.** Each takes its corpus from the caller — an argv flag, a
+positional, or an `AI_DLC_*` env override — and each prints the corpus identity at exactly one
+site, on a path a successful run never reaches.
+
+**The population is derived, and it is FIVE, not the three the sweep was opened on.** 86 tracked
+files across `core/scripts`, `core/hooks`, `core/git-hooks`, `scripts` and `.githooks`; 68 lines
+in 23 of them emit a count over a named noun, and the control that the grammar can see its own
+subjects is that all three originally-suspected validators appear in that set. Narrowing clause 1
+— the corpus comes from the CALLER — leaves 12 files with an argv case-arm assigning from `$2`, a
+positional collector, or an `AI_DLC_*` override; a count over a DERIVED or FIXED corpus is a
+different thing and is not this defect. Narrowing clause 2 — the resolved corpus is emitted
+NOWHERE on a success path — leaves five. The seven that fall out fall out for the right reason
+and are the enumerated false-positive set: `validate-spawn-ledger.sh` prints
+`COUNTS: examined N ... in ${LEDGER}`, `rotate-snapshot-archive.sh` and `backlog-rotate.sh` name
+their archive and ledger, and `validate-artifact-paths.sh` and `migrate-artifact-paths.sh` print a
+resolved root, grammar and scan-root list above their counts. Those are the convention, not the
+defect.
+
+**Measured, each driven twice over two `mktemp -d` corpora holding identical content, with a
+control token in the same invocation.** `validate-scope-confirmation.sh`: rc 0 both runs, output
+byte-identical, `answers_entries_scanned` present **1** time and either corpus path present **0**
+times. `validate-ci-gates.sh`: rc 0 both runs, byte-identical across two different retro trees AND
+two different enforcement surfaces, `Scanned` present 1 time, neither tree named — and
+`ALIAS_TABLE_FILE` is emitted **0** times anywhere in the file against a control of **1** for
+`RETRO_DIR`. `validate-ac-falsifiability.sh`: rc 0 both runs, byte-identical, `term(s) loaded`
+present 1 time, neither the lexicon nor the story file named. `validate-spec-join.sh`: rc 0 both
+runs, byte-identical, `PASS` present 1 time, no corpus named.
+`validate-suppression-lifetime.sh`: rc 0 both runs, byte-identical.
+
+**Rank them on what a wrong corpus BUYS, because all five are enforcement-map rows and tiering
+them by "feeds a gate" collapses the set into one register.** The discriminator is whether the
+wrong corpus fails loud or passes clean, and it was measured in both directions.
+
+**`validate-ci-gates.sh` is worse than `BL-059`, and it is the only one of the five for which
+that is true.** A retro tree that EXISTS and holds no gate declarations turns a real finding into
+a clean pass: same enforcement surface, right root → **rc 1**, `1 gates declared, 1 dormant`;
+wrong root → **rc 0**, `0 gates declared, 0 dormant`. Both roots are consumer-tunable by design
+and the file's own comment says so, the verdict ships to a consumer's CI through
+`core/ci-templates/validate-ci-gates.yml`, and the line reporting the pass names neither tree. The
+one place `RETRO_DIR` IS printed is the branch where the directory does not exist — the case a
+reader could already diagnose.
+
+`validate-ac-falsifiability.sh` is second and fails open the same way through its lexicon. A story
+whose AC states its predicate with `exhaustive` — the first term in the live `AC_UNBOUNDED_TERMS`
+block — is **rc 1 FAIL** against the real lexicon and **rc 0 PASS** against a readable two-term
+file passed to `--lexicon-from`, and the PASS line reports `2 term(s) loaded` without saying from
+where. Its DISARMED guard names the lexicon and catches only the ZERO-term case; a wrong lexicon
+with any terms in it walks straight past.
+
+`validate-scope-confirmation.sh` is third, and the framing this arrived under — "arguably worse
+than BL-059, it feeds a routing verdict" — does not survive checking. It does not FEED routing; it
+adjudicates a routing record already written, and both its FAILING directions already name their
+corpus. What is unnamed is the PASS — the run that certifies a human pause point happened. A
+`--answers` pointed at another sprint's capture history that happens to carry the cited digest
+passes silently, and the file's own header states the principle its emission half-implements: a
+run that scanned nothing and a run that scanned forty healthy entries must not look alike.
+
+`validate-spec-join.sh` is fourth and the best defended: every empty-set direction is a DISARMED
+that names its corpus, so only a populated-but-wrong spec folder reaches the identity-free PASS.
+
+`validate-suppression-lifetime.sh` is last, and its shape is the inversion worth recording: it
+names the escalations file when the file is ABSENT and there is nothing to say, and omits it when
+it is delivering a verdict.
+
+**`validate-layer-entries.sh` is NOT part of this and the reason is clause 1.** It has **0** argv
+case-arms and **0** `AI_DLC_*` overrides, against a control of four on `validate-ci-gates.sh`; its
+roots come from `artifact-path-config.sh --scan-roots`, derived rather than supplied, and it
+already reports the resolution. There is no caller-chosen corpus for it to conceal.
+
+**The fix is one appended line per emitter, and the convention already exists — but not in the two
+files it is usually attributed to.** `validate-artifact-budget.sh` and
+`validate-snapshot-conservation.sh` carry **0** label-column emitters under a grammar that finds
+**4** in `validate-steering-budget.sh`; they render per-finding rows and `WARN:` sentences, not an
+evidence block. The live shell exemplar is `validate-artifact-paths.sh` — a resolved-root header
+over a label column carrying grammar, scan roots and counts together — and the JS one is
+`validate-steering-budget.sh` as `BL-059` left it. Every fix APPENDS and none rewrites, because
+`BL-059` nearly broke `steps/retro.md`, which reads `transcripts scanned : N` by label.
+
+**Four downstream readers parse these lines and all four survive that fix, measured against the
+patched copies rather than reasoned about** — the `scope-confirmation`, `ci-gates-resolution`,
+`spec-join-integrity` and `suppression-lifetime` fixtures each read one of these lines by label or
+prefix, and all four HOLD against a negative control token that correctly does not. No caller
+parses any of them: the two hits outside the fixtures are prose and a comment.
+
+**Nothing guards this today and the proof is not a grep.** All five owning fixtures run rc 0 with
+144 passing assertions between them on this tree, and this entry's receipt reports the defect LIVE
+in all five on that same tree. A fixture that is green while its subject is broken cannot express
+the break. A keyword scan of the fixture bodies for discrimination language was tried first and
+DISCARDED: it scored **0** on `core/fixtures/adversarial-citation/run.sh`, which post-`BL-059`
+does assert corpus identity, so the instrument failed its own control and its numbers are not
+reported.
+
+**The receipt anchors on DISCRIMINATION, not on a string, and it splits each validator's inputs
+across TWO temp roots so that naming one corpus cannot satisfy the other.** All five must produce
+DIFFERENT output on the two sides while both sides exit their success status. Random directory
+names make a hardcoded literal unconstructible; the five exit-status guards kill a fix that renders
+the path and then breaks the verdict; requiring BOTH temp roots in the output of the four
+two-input validators kills a fix that echoes one argument and calls it provenance; requiring the
+literal root — not merely that the outputs differ — kills a fix that discriminates with a nonce or
+a timestamp; and putting all five in one chain means a fix to one leaves the receipt STILL-LIVE.
+The control is the evidence line itself: if any of the five stops emitting its count line the
+receipt exits 9 rather than closing on a run that produced nothing.
+
+**Proven in both directions with byte-identical receipt text, and against five mutants.** Against
+this tree: **1**, past the exit-9 guards, so all five reached their success path and emitted their
+evidence. Against a `mktemp -d` root holding patched copies of all five — the two sides asserted to
+differ first by `diff -rq`, which named exactly those five files: **0**. The three questions,
+answered by mutation of that fixed tree: a hardcoded constant corpus string → **1**; naming one of
+two caller-supplied corpora → **1**; rendering the path then failing → **9**; fixing one validator
+and leaving four → **1**; a per-run nonce that discriminates without naming → **1**. The unmutated
+fix scores **0** in the same invocation, so the receipt is satisfiable and not merely strict.
+
+
+verify: sh T=$(printf '\140'); S(){ P="$1"; Q="$2"; mkdir -p "$P/spec"; H=$(printf hi | shasum -a 256 | cut -d' ' -f1); printf '%s\n' "- user_request_verbatim: x" "- scope_confirmed: confirmed" "- scope_confirmed_cite: $H" > "$P/snap.md"; printf '%s\n' "- SHA256: $H" > "$Q/ans.md"; printf '%s\n' "add CI gate ${T}g1${T} here." > "$P/retro.md"; printf '%s\n' "run: g1" > "$Q/w.yml"; printf '%s\n' "<!-- AC_UNBOUNDED_TERMS v1 -->" "aaa, bbb" "<!-- AC_UNBOUNDED_TERMS_END -->" > "$P/lex.md"; printf '%s\n' "- **AC1 (unit).** counter increments by exactly 1." > "$Q/story.md"; printf '%s\n' "- CAP-1 x" > "$P/spec/SPEC.md"; printf '%s\n' "- (capability) LR-S1-1 -> CAP-1" > "$P/spec/.memlog.md"; printf '%s\n' "- FR-1 (CAP-1) x" > "$Q/prd.md"; printf '%s\n' "# esc" > "$P/esc.md"; }; R(){ P="$1"; Q="$2"; O1=$(bash core/scripts/validate-scope-confirmation.sh --snapshot "$P/snap.md" --answers "$Q/ans.md" 2>&1); C1=$?; O2=$(AI_DLC_RETRO_DIR="$P" AI_DLC_CI_SURFACE="$Q" bash core/scripts/validate-ci-gates.sh 2>&1); C2=$?; O3=$(bash core/scripts/validate-ac-falsifiability.sh --lexicon-from "$P/lex.md" "$Q/story.md" 2>&1); C3=$?; O4=$(bash core/scripts/validate-spec-join.sh --spec "$P/spec" --prd "$Q/prd.md" 2>&1); C4=$?; O5=$(bash core/scripts/validate-suppression-lifetime.sh --escalations "$P/esc.md" 2>&1); C5=$?; }; A1=$(mktemp -d); A2=$(mktemp -d); B1=$(mktemp -d); B2=$(mktemp -d); [ "$A1" != "$B1" ] && [ "$A2" != "$B2" ] || exit 9; S "$A1" "$A2"; S "$B1" "$B2"; R "$A1" "$A2"; a1=$O1; a2=$O2; a3=$O3; a4=$O4; a5=$O5; c1=$C1; c2=$C2; c3=$C3; c4=$C4; c5=$C5; R "$B1" "$B2"; b1=$O1; b2=$O2; b3=$O3; b4=$O4; b5=$O5; rm -rf "$A1" "$A2" "$B1" "$B2"; [ "$c1" = 0 ] && [ "$c2" = 0 ] && [ "$c3" = 0 ] && [ "$c4" = 0 ] && [ "$c5" = 0 ] || exit 9; grep -qF "answers_entries_scanned" <<<"$a1" && grep -qF " retros," <<<"$a2" && grep -qF "term(s) loaded" <<<"$a3" && grep -qF "locked requirement(s)" <<<"$a4" && grep -qF "entries_scanned=" <<<"$a5" || exit 9; [ "$a1" != "$b1" ] && [ "$a2" != "$b2" ] && [ "$a3" != "$b3" ] && [ "$a4" != "$b4" ] && [ "$a5" != "$b5" ] || exit 1; grep -qF "$A1" <<<"$a1" && grep -qF "$A2" <<<"$a1" && grep -qF "$A1" <<<"$a2" && grep -qF "$A2" <<<"$a2" && grep -qF "$A1" <<<"$a3" && grep -qF "$A2" <<<"$a3" && grep -qF "$A1" <<<"$a4" && grep -qF "$A2" <<<"$a4" && grep -qF "$A1" <<<"$a5" || exit 1; grep -qF "$B1" <<<"$b1" && grep -qF "$B1" <<<"$b2" && grep -qF "$B1" <<<"$b3" && grep -qF "$B1" <<<"$b4" && grep -qF "$B1" <<<"$b5"
+
+## BL-077
+
+**`validate-steering-budget.sh` refuses to run without a caller-supplied corpus, so the
+derivation of "this session's transcript" is retyped by the MODEL in prose at
+`core/skills/ai-dlc/steps/gate-validation.md:1665` and by hand in `steps/retro.md:614`, where
+nothing can check either one.** With no corpus flag the script exits 1 at
+`core/scripts/validate-steering-budget.sh:189` with `FAIL: pass --transcript PATH or --dir PATH`,
+so every caller must construct the path itself. The gate's construction is
+`T=$(ls -t ~/.claude/projects/"$(pwd | sed 's|/|-|g')"/*.jsonl 2>/dev/null | head -1)` — a model
+transcription sitting in a step file, which is `.claude/rules/mechanism-design.md`'s own named
+failure mode ("a skill that ends in a manual transcription step ends in a place where the
+transcription silently stops happening"). That rule's remedy shape is to move the derivation
+INTO the tool so the prose carries no transcription at all. Split from `BL-059`, whose two-part
+remedy this is the first half of; the second half — naming the corpus that was read — shipped on
+this branch and is what makes a wrong derivation VISIBLE rather than impossible.
+
+**The retyped derivation is wrong in two ways and currently right by luck, and both halves must
+be stated in the same breath.** Measured on the live tree: the operator's projects directory holds
+**9** project slug directories and the one for this repo holds **163** top-level `*.jsonl` session files — down from **173** counted forty
+minutes earlier in the same session, same glob, so the corpus `ls -t` reads is not merely
+contended but actively PRUNED underneath it, of which **1** was modified in the last 60 minutes, **4** in the last 24 hours and **26** in
+the last 7 days; `ls -t … | head -1` therefore picks **this session's file, correctly, right now**
+— the race is LATENT, not a live miswitness, and needs a second concurrent session on the same
+project to fire. The slug rule is the same shape: `sed 's|/|-|g'` and the harness's own `/` **and**
+`.` collapse agree byte-for-byte on a path with no dot in it and DIVERGE on any checkout that
+carries one — control, computed both ways in one invocation: `/Users/n8/git/my.app` gives
+`-Users-n8-git-my.app` from the `sed` form against `-Users-n8-git-my-app` from the collapse. So
+this repo cannot observe the bug, and a consumer whose checkout path holds a dot gets a directory
+that does not exist, a `head -1` of nothing, and an empty `$T` that the gate's own SKIP branch then
+reads as "no transcript (CI, a non-Claude-Code runner)". **A misderived corpus fails as a
+legitimate SKIP**, which is the shape this repo calls a check that cannot fire.
+
+**The consequence is not symmetric, and `--cite` is the half that matters.** `--cite` is THE
+genuine-operator predicate — the convergence validator, the escalation gate and
+`core/hooks/ai-dlc-gate-remediation-guard.sh` all delegate "a real human said this" to it, and the
+guard is a `PreToolUse` hook that DENIES tool calls on the answer. A wrong corpus there makes a
+genuine operator authorization unverifiable (NOMATCH, the record stops counting, `--cycle-state`
+regresses to STALLED, every dispatch denied — the deadlock those files' own headers record), and
+the inverse direction is worse in kind: a corpus WIDER than the session makes a citation verifiable
+that the operator never made in the relevant sprint. **Frequency is UNMEASURED and it is
+measurable** — every gate run writes `steering_violations:` into the gate log and the `--cite`
+calls are hook-logged, so a consumer's committed gate-log archive would answer how often the
+derived corpus was empty. That measurement was not taken here, and not taking it is not a limit on
+the fix.
+
+**Twelve call sites, and a default change breaks none of them, because every one passes an explicit
+corpus flag today.** Derived over `core/` and `scripts/`, with an impossible flag returning rc 1 in
+the same invocation so the scan is known to discriminate: seven fixture invocations across
+`askuserquestion-citation`, `command-args-citation` and `check-25-steering-conduct`; the three
+delegating callers; and the two prose sites. **`--transcript` and `--dir` MUST stay explicit
+overrides** — a fix that makes either refuse a caller-supplied path breaks all ten mechanical sites
+at once and is a regression, not a fix. The receipt asserts the override arms FIRST and exits 9 if
+they have stopped discriminating, so a run that measured nothing reports STILL-LIVE rather than
+closing.
+
+**The three delegating callers are why this is not a one-line default, and why it did not ride
+along with `BL-059`.** Each has an explicit "no corpus" branch that fails OPEN in hook mode
+(`ADVERSARIAL_CITATION_UNVERIFIABLE`, return 0, never wedge the pipeline) and CLOSED in gate mode.
+A derived default silently DELETES that branch: the hook stops failing open and starts adjudicating
+against a corpus nobody chose, inside a `PreToolUse` deny path. That is the consumer-visible
+behaviour change. **And the default differs by MODE**: those callers prefer the directory precisely
+because an authorization OUTLIVES the session that recorded it, so a `--cite` default must be the
+slug DIRECTORY while a `--count`/checks-A–D default is the single session FILE. One default for
+both modes is wrong in whichever mode it was not written for.
+
+**The environment the derivation reads is not the one first proposed, and three clauses of that
+proposal re-derived FALSE.** `CLAUDE_CODE_SESSION_ID` IS present in a Bash-tool child (control: an
+all-zeros UUID under the same slug directory is correctly absent). `CLAUDE_PROJECT_DIR` is **UNSET**
+in that same child while **70** tracked files reference it — it is a HOOK-environment variable — so
+a formula slugging `$CLAUDE_PROJECT_DIR` resolves to a path with an empty component and finds
+nothing. The available root is the working directory, and it must be the REPO ROOT resolved by
+walking up for `VERSION`, never `$PWD`: run from `core/scripts/`, a `$PWD`-slugged derivation on a
+patched copy refused outright, while the same copy from the repo root resolved. Two further facts
+belong in the specification rather than in a later session's surprise: **a subagent's Bash child
+sees the TEAM session id, not its own**, and subagent transcripts live one level down under a
+per-session directory — **13** of them for the session that measured this — invisible both to a
+`<slug>/*.jsonl` glob and to the non-recursive directory read at `:427`. The derived corpus is the
+LEAD's conduct, which is what Rule 29 asks for; that exclusion should be DECLARED, not discovered.
+
+**The case against, and why it does not block.** The derivation depends on a harness variable with
+no published contract, absent for a consumer running the validator from CI, a plain terminal or a
+git hook outside the tool, and absent under a sandbox with a different `HOME`. Measured on a
+patched copy with `HOME` pointed at an empty `mktemp -d`: it falls back to the existing refusal,
+rc 1, byte-identical to today's message. **That is the required shape and it is the specification:
+derive-or-fall-back-to-the-current-refusal, never derive-or-fail-differently.** A fix that makes an
+underivable environment fail in a NEW way fails closed on every consumer not running Claude Code,
+which is the shipping hazard here.
+
+**The receipt anchors on the CONTRACT, not on the mechanism.** Anchoring on the literal
+`CLAUDE_CODE_SESSION_ID` would prescribe one implementation and REJECT every other correct
+derivation; anchoring on the absence of the `ls -t` line from `gate-validation.md` would CLOSE when
+someone deletes the instruction without replacing it, and the receipt never reads that file for
+exactly that reason. Instead: a corpus-flagless `--cite` run must name a corpus that EXISTS, is not
+a path the receipt supplied, and is not inside the repo; and the same flagless run under a swapped
+`HOME` must name something DIFFERENT, which makes a hardcoded constant unconstructible. Both rc 0
+and rc 2 are accepted from that arm because **the receipt's own probe token enters the live
+transcript the moment anyone runs it** — measured, a token typed literally into a command read
+**4** occurrences in the session file while a token assembled at runtime read **0**, so a negative
+control against a LIVE transcript is contaminated by the act of running it.
+
+Proven in both directions with the sides asserted to differ first: **1** against the current tree,
+and **0** against a patched copy carrying a derivation that never mentions the environment variable
+at all, which is the property the receipt is meant to have. Killed: a hardcoded constant corpus, by
+the `HOME`-swap arm; a derivation that also makes `--transcript` refuse a caller path, at exit 9 by
+the override control; and a doc-only change, which moves nothing.
+
+**Two constraints on the fix that the receipt imposes, stated rather than left to be discovered.**
+It does not fire where no corpus is resolvable at all, which is the safe direction. And it requires
+a derivation NOT rooted at the SCRIPT's own location: the receipt exercises the validator as a
+COPY, so a `dirname "$0"` walk-up for a repo marker finds nothing above a `core/scripts` copy,
+never derives, and scores a fix that is correct in the tree as STILL-LIVE. Measured on one patch
+with a single expression changed — script-rooted **1**, working-directory-rooted **0**. That costs
+nothing, because the rooting the receipt demands is the correct one on the merits: globbing
+`$HOME/.claude/projects/*/<session-id>.jsonl` computes NO slug, sorts nothing, and is invariant to
+both the working directory and the install layout that puts this file at `core/scripts/` here and
+at `scripts/ai-dlc/` in a consumer — so it retires the `.`-versus-`/` slug bug and the `ls -t` race
+in the same stroke.
+
+**The extraction covers all THREE `--cite` diagnostics, and keyed on one of them it rejected a
+correct fix.** Proven rather than reasoned: a seeded `HOME` whose slug directory holds a single
+UNPARSEABLE transcript drives the zero-records branch, where a `sed` keyed on the `cite: scanned`
+wording lifts an empty string and exits at the non-empty guard — a permanent false STILL-LIVE for
+any consumer whose corpus happens to be unparseable. The shipped form lifts the ` from ` suffix
+common to all three.
+
+
+verify: sh V=core/scripts/validate-steering-budget.sh; [ -r "$V" ] || exit 9; DA=$(mktemp -d); DB=$(mktemp -d); [ "$DA" != "$DB" ] || exit 9; J='{"type":"user","message":{"role":"user","content":"probe"}}'; printf '%s\n' "$J" > "$DA/alpha.jsonl"; printf '%s\n' "$J" > "$DB/alpha.jsonl"; OA=$(bash "$V" --transcript "$DA/alpha.jsonl" 2>&1); RA=$?; OB=$(bash "$V" --transcript "$DB/alpha.jsonl" 2>&1); RB=$?; OC=$(bash "$V" --dir "$DA" 2>&1); RC=$?; ON=$(bash "$V" --cite zzzabsentphrasezzz 2>&1); RN=$?; EH=$(mktemp -d); OH=$(HOME="$EH" bash "$V" --cite zzzabsentphrasezzz 2>&1); rm -rf "$DA" "$DB" "$EH"; [ "$RA" = 0 ] && [ "$RB" = 0 ] && [ "$RC" = 0 ] || exit 9; grep -qF "transcripts read" <<<"$OA" || exit 9; [ "$OA" != "$OB" ] || exit 9; grep -qF "$DA/alpha.jsonl" <<<"$OA" && grep -qF "$DB/alpha.jsonl" <<<"$OB" || exit 9; case "$RN" in 0|2) ;; *) exit 1 ;; esac; name(){ L=$(sed -n '/ from /{p;q;}' <<<"$1"); L="${L##* from }"; L="${L%, no genuine operator message carried it}"; printf '%s' "${L%)}"; }; P=$(name "$ON"); [ -n "$P" ] || exit 1; { [ -r "$P" ] || [ -d "$P" ]; } || exit 1; case "$P" in "$PWD"/*|"$PWD") exit 1 ;; esac; Q=$(name "$OH"); [ "$Q" != "$P" ] || exit 1
+
+## BL-078
+
+**`EXAMINED NOTHING` was just unified across three validators and is emitted at three different
+exit codes, and the wider population it was lifted out of is 17 sites across 13 files and 4 exit
+codes with no vocabulary, no invariant and no shared word recording which code means what.**
+`core/scripts/validate-locked-anchor.sh:607` prints `PASS — EXAMINED NOTHING` at **exit 0**,
+`core/scripts/validate-stub-audit.sh:263` prints `EXAMINED NOTHING (exit 4)` at **exit 4**, and
+`core/scripts/validate-ci-gates.sh:197` prints `EXAMINED NOTHING:` at **exit 78**; control in the
+same invocation, the impossible token `EXAMINED ZQZQNOTHING` returns 0 files against 3. The
+unification is correct and the codes were held on purpose — `validate-locked-anchor.sh:599` records
+that *"'Every claim verified' and 'there was nothing to check' still share exit code 0 … They are
+separable now without moving the exit code"* — but the result is that one registered-looking token
+now spans a passing gate, a bespoke code with no reader, and a consumer-visible code, and nothing
+in the tree says so.
+
+**The population that token was lifted out of is far wider than the three.** Derived over
+`core/scripts/*.sh`, `scripts/*.sh` and `core/skills/**/*.sh` with comment lines excluded: 6
+spellings occupy **46 emission sites in 21 files**; control in the same invocation, the same grep
+shape for an impossible token returns 0 files against 21. **30 of the 46 are ordinary
+malformed-input refusals and are not this defect** — an unreadable `--baseline`, a missing `--prd`,
+a usage error. The remaining **17 are empty-subject verdicts**, at 4 codes: **exit 0** —
+`validate-artifact-paths.sh:329`, `validate-escalation-resolution.sh:143`,
+`validate-escalation-status-vocabulary.sh:144`, `validate-gate-adjudication.sh:523`,
+`validate-locked-anchor.sh:607`, `validate-request-coverage.sh:356`; **exit 2** —
+`validate-spec-join.sh:141,173,180,207,275`, `audit-layer-debt.sh:81`,
+`validate-ac-falsifiability.sh:132`, `validate-bmad-invocations.sh:160`,
+`scripts/validate-plan-shape.sh:54`; **exit 4** — `validate-stub-audit.sh:263`; **exit 78** —
+`validate-ci-gates.sh:197`.
+
+**One phrase already carries opposite verdicts.** `nothing to check` is emitted by
+`validate-escalation-status-vocabulary.sh:144` for an absent declared subject at **exit 0**, and by
+`scripts/validate-plan-shape.sh:54` for an absent declared corpus at **exit 2** — each citing a
+principle, the first that an absent escalations file is a legitimate clean state, the second that a
+zero is not a finding applied to the corpus itself. Both are defensible; nothing records which case
+is which, so the next validator picks by whichever neighbour its author happened to read.
+
+**`validate-escalation-resolution.sh` is the exemplar, not an offender, and it is the evidence that
+the distinction is real and load-bearing.** That file draws the line deliberately and BY MODE:
+`:134` states that a caller asking "was this authorized?" must not read "nothing to check" as yes,
+and `:135` emits `NONE:` at **exit 1** for the absent file under `--any-authorized` while `:143`
+emits `OK: … nothing to check.` at **exit 0** for the same absent file under the gate mode. One
+file discovered the split, encoded it privately, and nothing carries that reasoning to the other
+twelve. `validate-request-coverage.sh:238` did the same independently.
+
+**The `DISARMED` polarity claim this entry was scoped around does NOT hold, and the correction
+matters more than the claim would have.** `DISARMED` is a genuine de-facto shared vocabulary — 24
+emission sites across `validate-spec-join.sh`, `validate-ac-falsifiability.sh`,
+`validate-bmad-invocations.sh` and `audit-layer-debt.sh` — and every one of the 24 exits **2**,
+uniformly, derived by taking the first `exit <n>` within 15 lines of each site and collapsing to
+distinct values, which yields the single value 2. The three `DISARMED:` prints in
+`scripts/validate-enforcement-map.sh:5264,5268,5271` are **not** a fourth polarity: their
+`sys.exit(0)` belongs to an inner heredoc python whose stdout is captured, and the shell `case` at
+`:5293` matches `DISARMED:*` and calls `err`, so the script exits **1**. Same token, same meaning,
+non-passing on both sides. What survives is narrower and still real: a 24-site cross-file
+vocabulary that `docs/vocabulary-index.md` does not register — 0 hits there for each of `DISARMED`,
+`EXAMINED NOTHING`, `NOT-APPLICABLE`, `VACUOUS` and `nothing to check`, against a control of 6 hits
+for `vocabulary` in the same file.
+
+**The exit codes are a separate decision and it is the operator's, not this entry's.** Derived
+readers, with `\b` avoided in every pattern because git grep's ERE does not support it and silently
+returned 0 for all five codes — including `-eq 0`, which certainly exists — before that was caught:
+
+- **exit 2** is the most heavily contracted code in the tree — roughly 40 fixture arms assert it as
+  fail-closed, several naming this exact class: `core/fixtures/bmad-invocation-resolve/run.sh:163`
+  ("zero enumerated call sites exits 2, not 0"), `core/fixtures/layer-debt-ledger/run.sh:117` (rc 2
+  **and** the `DISARMED` token together), `core/fixtures/setup-site-drift/run.sh:249`.
+- **exit 4 has no reader at all.** All four files invoking `validate-stub-audit` compare an rc to 4
+  **zero** times; control in the same loop over the same four files finds an `-eq 1` compare in
+  `check-15-bypass/run.sh`. The distinction that code buys is unobserved.
+- **exit 78** is the best-defended and the only consumer-visible one.
+  `core/fixtures/ci-gates-resolution/run.sh:70` asserts it and `:73` mutates `exit 78` → `exit 2` to
+  prove the arm can kill, and `core/skills/ai-dlc/steps/retro.md:360` names the code to the lead in
+  shipped prose.
+- **exit 0** is what a gate reads as a pass, which is why `validate-gate-adjudication.sh:523` spells
+  a zero-subject result `PASS — 0 series … Nothing to count; nothing counted` — the one site where
+  the vacuous verdict is literally the word PASS.
+
+**Three coherent options.** (1) **Bind the token only, leave every code as it is** — cheapest,
+breaks no caller, and leaves a reader unable to tell exit 0 "legitimately empty" from exit 0
+"passed" without parsing prose; this is the state the tree is in right now, arrived at by default
+rather than by decision. (2) **Unify onto one empty-subject code** — makes the class
+machine-readable everywhere, and breaks the ~40 rc-2 fixture arms, the 78 assertions, and
+`retro.md`'s shipped text. (3) **Tier into a documented two-member set**, one code for "no subject
+exists and that is legitimate" and one for "the subject is missing so nothing ran" — the
+distinction two files already found alone; costs a migration of the exit-0 sites that are really
+refusals, and leaves 78 and 4 as outliers to absorb or keep.
+
+Tiered **DEFECT**, not BLOCKER. Every site is individually justified in its own header and none was
+measured emitting a wrong verdict; the harm is that the judgment is remade from scratch at each new
+validator with nothing to consult, which is how the three in `BL-058` diverged in the first place —
+and how their unified replacement now spans three exit codes.
+
+**The receipt keys on the REGISTRATION, never on a count of the divergent spellings, and it is
+built to reject `BL-058`'s narrower fix.** A receipt counting the old spellings requires the defect
+to survive in order to close; that shape was live in `BL-058`'s own receipt and is why this one
+differs — and it is now concrete, because `BL-058`'s unification drove those spellings to zero.
+`docs/vocabulary-index.md` is a GENERATED file, byte-compared at pre-push, whose rows render from
+the owner that declares each vocabulary, so a row cannot be hand-written to satisfy this: its
+existence implies a real owner and a real binding invariant. The receipt requires a row naming the
+empty-subject class **and** reaching at least three emitters outside `BL-058`'s three, or a
+`core/scripts/*` glob covering them — that reach is what separates this entry's close from
+`BL-058`'s. All three options above end in that row, so a correct fix of any shape satisfies it.
+The table-header guard means a broken scan exits 9 and reports STILL-LIVE rather than closing.
+Proven in four directions against copies under `mktemp`, each asserted byte-different from the
+shipping file first: shipping tree exits 1; a `BL-058`-only registration exits 1; a wide
+registration exits 0; a truncated index exits 9.
+
+Split from `BL-058`, which unified the token for its three named emitters only. The wider
+population and the exit-code question were left out of that remediation deliberately.
+
+
+verify: sh V=docs/vocabulary-index.md; [ -f "$V" ] || exit 9; grep -q "^| Vocabulary | Members | Owner | Bound by | Readers |$" "$V" || exit 9; row="$(grep -iE "^\|[^|]*(vacuous|empty.subject|examined nothing|nothing to check|not.applicable|nothing verified)[^|]*\|" "$V")"; [ -n "$row" ] || exit 1; n=0; for f in validate-spec-join validate-plan-shape audit-layer-debt validate-bmad-invocations validate-ac-falsifiability validate-escalation-status-vocabulary validate-artifact-paths validate-request-coverage validate-gate-adjudication validate-snapshot-conservation; do case "$row" in *"$f"*) n=$((n+1));; esac; done; case "$row" in *"core/scripts/*"*) n=99;; esac; [ "$n" -ge 3 ] || exit 1; exit 0
+
+## BL-079
+
+**`validate-spec-join.sh`'s join (1) reads its locked-requirement population with a whole-file
+scan of the memlog, while the capability predicate three lines below it is deliberately
+restricted to typed entries — with a comment refusing to read the spec's own self-report as
+evidence. The LR side reads that same self-report as its population.** The scan is
+`LRS="$(grep -ohE '\bLR-[A-Za-z0-9]+-[0-9]+[a-z]?\b' "$MEMLOG" | sort -u)"` (re-derive the line;
+it drifts). Measured on the reference consumer across all four spec memlogs: **18 join-(1)
+findings, exactly 1 false** — `LR-S999-9` in s302, an absent-id CONTROL TOKEN quoted inside an
+`(event by bmad-spec)` entry recording *"an id-presence sweep run with an absent-id control
+(LR-S999-9) that returned zero, proving the search could return nothing"*. That is this repo's own
+zero-is-not-a-finding discipline, written into a consumer's memlog and read back by a validator as
+data. It appears in no `locked-requirements.md` anywhere in the tree; positive control in the same
+sweep, `LR-S302-1` is present in 35 files. Genuineness of the other 17 is not a judgment call: 13
+are declared in their sprint's own `planning-artifacts/<sprint>/locked-requirements.md`, and 4 are
+undeterminable only because s301 ships no such file.
+
+**This became reachable rather than newly broken, and the entry that exposed it is `BL-063`.**
+Before the capability predicate was widened to accept the producer's optional qualifier, s302
+returned rc 2 DISARMED — the LR scan ran and nothing downstream of it did. The widening takes s302
+from **0 of 7 LR ids checked to 7 checked, 6 correct, 1 false**, which is a strict gain in
+coverage, and it is why the false finding is tolerable in the interim rather than blocking.
+
+**It is NOT fixable by symmetrizing the predicate, and that refutes the obvious patch.**
+Restricting the LR side to typed entries — the symmetric change the asymmetry invites — drops
+**0**: every LR occurrence in the corpus is already on a typed entry line, so the change is a
+measured no-op. Four further discriminators were driven over all four sprints and every one loses
+genuine declared locked requirements: excluding ids seen only in `(event)`/`(note)` entries loses
+**5**; excluding `(event)`-only loses **3**; requiring a `CAP-<n>` on the same line loses **5**,
+two of them already baselined, which additionally converts two suppressed findings into
+did-not-reproduce failures; requiring the sprint prefix to match the spec directory loses **1**, a
+declared cross-sprint carry-over this consumer demonstrably has.
+
+**The leading candidate is a DISARM and both the seeded corpus and the fixture say so
+independently.** Requiring a `CAP-<n>` on the LR's own line returns **rc 0 on a corpus carrying a
+genuinely uncited locked requirement** — because an LR that reaches no capability is, in the
+ordinary case, exactly an LR with no `CAP-` on any of its lines, so the candidate excludes the
+primary failure mode from its own population. `mechanism-design.md`: a fix that satisfies a join by
+deleting the join's subject reads as green forever. Swapped into a copy of `core/` asserted
+byte-different, it turns three arms of `core/fixtures/spec-join-integrity` red — including *"join
+(1): a locked requirement citing no capability FAILS"* — against a sanity control on the identical
+temp-tree harness with unpatched code at 56 ok / 0 FAIL.
+
+**No predicate can separate these two inputs, which is why this needs a design change rather than
+a regex.** The absent-id control is BY CONSTRUCTION an id shaped exactly like a real one — that is
+its whole purpose. Typed entry, sprint-shaped id, ordinary prose. The only thing distinguishing it
+is the surrounding English, and keying a validator on prose phrasing is the failure
+`verification-discipline.md` names as text-about-a-program. **The sound remedy is a DECLARED
+population** — take the sprint's `locked-requirements.md` as the LR set through a new flag — and it
+is blocked on two things that must be settled in the same change: s301 carries no such file, so the
+flag needs SKIP semantics that do not silently pass; and the deployed baseline is a single
+project-wide file measured against s299, which fires its did-not-reproduce arm **15** times when
+run at s302. **So "just baseline the false positive" is not available either** — the shared
+baseline cannot absorb a sprint-local entry without breaking at the other three sprints, and that
+is why the interim disposition is to leave the finding reported.
+
+**Why the receipt is the receipt.** It must reject a disarm, because every candidate remedy
+measured here is one. It therefore drives the shipping script twice and requires BOTH directions in
+the same invocation: a seeded memlog carrying a genuinely uncited locked requirement must still
+exit 1, AND the absent-id control token must stop being reported. A remedy satisfying only the
+second is the disarm above, and it is the shape a narrowing naturally takes. The seeded arm is
+built at run time rather than lifted from the consumer, so the receipt carries no dependency on a
+tree outside this repo. Tier: **DEFECT** — one false finding today on a gate the consumer already
+records as failing, against a coverage gain that is strictly larger.
+
+
+verify: sh D=$(mktemp -d); mkdir -p "$D/spec" "$D/ctl"; printf '# PRD\n\n- FR-S1-1 the functional requirement, CAP-1\n- LR-S1-1 the locked requirement\n' > "$D/prd.md"; printf '# SPEC\n\nCAP-1 the capability\n' > "$D/spec/SPEC.md"; cp "$D/spec/SPEC.md" "$D/ctl/SPEC.md"; printf -- '- (capability by bmad-spec) LR-S1-1 -> CAP-1\n- (event by bmad-spec) swept with an absent-id control (LR-S999-9) that returned zero\n' > "$D/spec/.memlog.md"; printf -- '- (capability by bmad-spec) LR-S1-1 -> CAP-1\n- (constraint by bmad-spec) LR-S1-2 is locked and cites nothing\n' > "$D/ctl/.memlog.md"; cmp -s "$D/spec/.memlog.md" "$D/ctl/.memlog.md" && { rm -rf "$D"; exit 9; }; V=core/scripts/validate-spec-join.sh; [ -r "$V" ] || { rm -rf "$D"; exit 9; }; bash "$V" --spec "$D/ctl" --prd "$D/prd.md" >/dev/null 2>&1; c=$?; out=$(bash "$V" --spec "$D/spec" --prd "$D/prd.md" 2>&1); s=$?; rm -rf "$D"; [ "$c" -eq 1 ] || exit 9; [ "$s" -eq 0 ] && ! grep -qF "LR-S999-9" <<<"$out"

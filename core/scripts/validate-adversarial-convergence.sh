@@ -620,6 +620,26 @@ C_DIVERGED="${C_DIVERGED:-0}"
 # STRICT -- every divergence, not just the last. There is no history to grandfather:
 # the only live consumer is resetting its series, so an arm scoped to "the last
 # divergence only" would buy laxity for nothing.
+# A DIRECTORY IS NOT A CORPUS. `-d` answers whether the path EXISTS, never whether it holds
+# any ground truth, so an empty --transcript-dir outranked the fail-open branch below and
+# DENIED every dispatch: passing the flag with no transcripts wedged the pipeline while
+# passing no flag at all did not. The corpus reader selects `*.jsonl`
+# (`validate-steering-budget.sh:427`), so a directory holding only sidecar files is exactly
+# as blind as an empty one and this counts what that reader would count. Failing here falls
+# through to the single-file branch, which is why the narrowing goes in the PREDICATE and
+# not into a later clearing of STEER_FLAG -- clearing it after the chain has run skips the
+# `-r "$TRANSCRIPT"` fallback and loses the deny for a caller that passed both flags, which
+# `steps/gate-validation.md` instructs the operator to do. This predicate is byte-identical in
+# `validate-escalation-resolution.sh` and `core/hooks/ai-dlc-gate-remediation-guard.sh`;
+# invariant I92 holds the three copies to one text and refuses a fourth.
+steer_dir_has_transcript() { # $1 dir -> 0 if it holds a readable *.jsonl
+  [ -n "${1:-}" ] && [ -d "$1" ] || return 1
+  for _sdht in "$1"/*.jsonl; do
+    [ -r "$_sdht" ] && return 0
+  done
+  return 1
+}
+
 validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -> 0 ok, 1 bad
   local rec="$1" div="$2" idx="$3"
   local resolves kind sha_b sha_a b_b b_a delta auth arch i
@@ -792,7 +812,7 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
   # error on bash 3.2, which is what macOS ships and what this repo has already shipped a
   # silent fail-open on once.
   STEER_FLAG=""; STEER_ARG=""
-  if [ -n "$TRANSCRIPT_DIR" ] && [ -d "$TRANSCRIPT_DIR" ]; then
+  if steer_dir_has_transcript "$TRANSCRIPT_DIR"; then
     STEER_FLAG="--dir"; STEER_ARG="$TRANSCRIPT_DIR"
   elif [ -n "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ]; then
     STEER_FLAG="--transcript"; STEER_ARG="$TRANSCRIPT"
@@ -822,10 +842,15 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
     --since "${P_AT[$idx]:-}" --quiet >/dev/null 2>&1
   cite_rc=$?
   if [ "$cite_rc" -eq 2 ]; then
+    # NAME THE CORPUS THAT WAS SEARCHED. The sibling prints its own corpus identity, and this
+    # caller discards it -- `--quiet >/dev/null 2>&1` reads only the status. So "the operator
+    # did not say this" is asserted here over a corpus the reader cannot see, and a
+    # wrong-corpus run makes that accusation indistinguishable from a true one.
     F_WHY="$rec operator_authorization quotes \"${auth_quote}\", which appears in NO genuine
       operator message at or after $(basename "$div") opened the block (window start:
-      ${P_AT[$idx]:-<no invoked_at>}). The resolution clears an operator-gated HARD_BLOCK,
-      and the operator did not say this. A lead-authored resolution is not an operator adjudication."
+      ${P_AT[$idx]:-<no invoked_at>}), searched in ${STEER_ARG}. The resolution clears an
+      operator-gated HARD_BLOCK, and the operator did not say this. A lead-authored resolution
+      is not an operator adjudication."
     return 1
   elif [ "$cite_rc" -ne 0 ]; then
     # Tooling error (e.g. node absent), not a NOMATCH. Same two-tier posture.

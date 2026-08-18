@@ -20,4 +20,4 @@ consumer, 196 of 998 stories took the second road and 0 took the first; the
 whole corpus reported PASS and nothing had ever been verified.
 
 The assertion is therefore on the STRING, not the exit code: this file must
-report `PASS — NOTHING VERIFIED` and `good-story.md` must not.
+report `PASS — EXAMINED NOTHING` and `good-story.md` must not.

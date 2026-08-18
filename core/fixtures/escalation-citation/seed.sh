@@ -79,4 +79,20 @@ CITE_CROSS_FAKE='2026-07-12T03:00:00Z | "zzz no operator ever typed this phrase 
 #     widen into fail-open: scanning more sessions must never turn a fabrication into a pass.
 : > "$ROOT/pending-crossfake.md";    entry "$ROOT/pending-crossfake.md"    S50-ITEM-7 RESOLVED "$CITE_CROSS_FAKE"
 
+# --- corpora that EXIST and hold no ground truth ---------------------------------------------
+# `--transcript-dir` was tested for EXISTENCE only, never for CONTENT. With nothing to search,
+# the citation query returned NOMATCH and this validator reported the OPERATOR as having said
+# nothing -- an accusation ("This is the S290 failure"), where the true state is that the gate
+# had no corpus. The two exits are both 1, so only the MESSAGE separates them.
+#
+# The corpus reader selects `*.jsonl` and only those (`validate-steering-budget.sh:427`), so a
+# directory of sidecar files is exactly as blind as an empty one. Both shapes are seeded
+# because a narrowing keyed on "the directory has no entries" passes one and fails the other.
+mkdir -p "$ROOT/dir-empty"
+
+mkdir -p "$ROOT/dir-sidecar"
+printf 'not a transcript\n'           > "$ROOT/dir-sidecar/README.md"
+printf '{"note":"summary sidecar"}\n' > "$ROOT/dir-sidecar/summary.json"
+printf 'session-abc123\n'             > "$ROOT/dir-sidecar/.session-id"
+
 printf '%s\n' "$ROOT"

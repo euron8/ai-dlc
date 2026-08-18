@@ -155,12 +155,13 @@ expect tests/fixtures/check-15-bypass-local/seed.sh \
 # the ownership resolve and no exemption mutation can reach them.
 #
 # 1. A set that audits nothing must not report a pass. "Audited and found nothing" and
-# "audited nothing" are the two states every vacuously-green implementation of a gate
-# check has collapsed into one.
+# "examined nothing" are the two states every vacuously-green implementation of a gate
+# check has collapsed into one. The verdict token is the one declared at
+# enforcement-map.yaml `empty_subject_verdict:` and bound by validate-enforcement-map.sh I93.
 audit _bmad-output/planning-artifacts/carry-over-backlog.md; out="$OUT"
 case "$RC:$out" in
-  4:*AUDITED\ NOTHING*) note "ok" "vacuity floor" "a set with nothing in scope exits 4, not 0" ;;
-  *) note "BAD" "vacuity floor" "a set with nothing in scope reported exit $RC without an AUDITED NOTHING verdict"
+  4:*EXAMINED\ NOTHING*) note "ok" "vacuity floor" "a set with nothing in scope exits 4, not 0" ;;
+  *) note "BAD" "vacuity floor" "a set with nothing in scope reported exit $RC without an EXAMINED NOTHING verdict"
      fails=$((fails + 1)) ;;
 esac
 

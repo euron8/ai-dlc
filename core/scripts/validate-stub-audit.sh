@@ -53,7 +53,7 @@
 #   1 = >=1 finding. Each names `file:line` and the element that rejected it
 #   2 = cannot decide: bad arguments, no resolver, or a stub match needed the backlog
 #       and no backlog file exists. Fail-closed -- never a pass
-#   4 = AUDITED NOTHING. No path given was an in-scope hot-path file. Not a pass:
+#   4 = EXAMINED NOTHING. No path given was an in-scope hot-path file. Not a pass:
 #       the caller decides whether an empty subject set is legitimate at this gate
 
 set -uo pipefail
@@ -260,7 +260,7 @@ printf 'validate-stub-audit: %d path(s) given, %d hot-path, %d dropped upstream-
   "$n_given" "$n_hot" "$n_exempt" "$n_undet" "$n_audited" "$n_markers" "$n_findings"
 
 if [ "$n_audited" -eq 0 ]; then
-  echo "validate-stub-audit: AUDITED NOTHING (exit 4) — of $n_given path(s) given, $n_hot were hot-path and $n_exempt of those were dropped as upstream-owned, so no file reached the elements. This is not a pass; the caller decides whether an empty subject set is legitimate at this gate." >&2
+  echo "validate-stub-audit: EXAMINED NOTHING (exit 4) — of $n_given path(s) given, $n_hot were hot-path and $n_exempt of those were dropped as upstream-owned, so no file reached the elements. This is not a pass; the caller decides whether an empty subject set is legitimate at this gate." >&2
   exit 4
 fi
 [ "$n_findings" -eq 0 ] || exit 1

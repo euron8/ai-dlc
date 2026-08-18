@@ -161,9 +161,16 @@ note=0
 # for a requirement left the join PASSING, because the spec's own claim that the
 # join holds was being read as evidence that it holds. That is the self-declared
 # verdict Rule 30 forbids adopting, committed by the check meant to enforce it.
-CAP_ENTRIES="$(grep -E '^[[:space:]]*[-*][[:space:]]*\((capability|capabilities)\)' "$MEMLOG")"
+# The tag grammar is the PRODUCER's and the qualifier is optional per append: the memlog
+# writer emits `(<type>)`, or `(<type> by <author>)` when the append carried an author. So
+# `(capability)` and `(capability by bmad-spec)` are the SAME entry type and both are read
+# here. This accepts anything after the type word rather than ` by ` specifically, because
+# the type itself is free text on the producer's side and a narrower predicate would have to
+# track its wording. The `[[:space:]]` inside the optional group is load-bearing: without it
+# the group also swallows `(capability-review)`, and the join widens to a different type.
+CAP_ENTRIES="$(grep -E '^[[:space:]]*[-*][[:space:]]*\((capability|capabilities)([[:space:]][^)]*)?\)' "$MEMLOG")"
 if [ -z "$CAP_ENTRIES" ]; then
-  echo "$PROG: DISARMED — $MEMLOG contains no '(capability)' entries. The LR->CAP join reads those entries and only those; with none present it would close against an empty set. If bmad-spec's memlog entry types have changed, this predicate must change with them rather than fall back to scanning every line." >&2
+  echo "$PROG: DISARMED — $MEMLOG contains no '(capability)' entries. The LR->CAP join reads those entries and only those; with none present it would close against an empty set. An optional qualifier after the type — '(capability by <author>)' — is legal and is read here; a memlog with neither form has no capability entries at all. If bmad-spec's memlog entry TYPES change, this predicate must change with them rather than fall back to scanning every line." >&2
   exit 2
 fi
 

@@ -166,6 +166,24 @@
 
 set -u
 
+# A DIRECTORY IS NOT A CORPUS. `-d` answers whether the path EXISTS, never whether it holds
+# any ground truth. Here the dirname of an unreadable `transcript_path` still exists, so the
+# `--dir` branch won on a corpus with nothing in it and the readable-file fallback below was
+# never reached — a verified authorization then failed to lift the guard for want of a corpus
+# rather than for want of a citation. The corpus reader selects `*.jsonl`
+# (`validate-steering-budget.sh:427`), so a directory holding only sidecar files is exactly
+# as blind as an empty one and this counts what that reader would count. This predicate is
+# byte-identical in `core/scripts/validate-adversarial-convergence.sh` and
+# `core/scripts/validate-escalation-resolution.sh`; invariant I92 holds the three copies to
+# one text and refuses a fourth.
+steer_dir_has_transcript() { # $1 dir -> 0 if it holds a readable *.jsonl
+  [ -n "${1:-}" ] && [ -d "$1" ] || return 1
+  for _sdht in "$1"/*.jsonl; do
+    [ -r "$_sdht" ] && return 0
+  done
+  return 1
+}
+
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 # `AI_DLC_STATE_DIR` may be absolute or relative; the role files and
 # `_gate-procedures.md:143` both write it as `${AI_DLC_STATE_DIR:-_bmad-output}`.
@@ -353,7 +371,7 @@ if [ -f "$AUTH_FILE" ] && [ -f "$STEER_SCRIPT" ]; then
   [ -z "$AUTH_QUOTE" ] && AUTH_QUOTE="$(printf '%s' "${AUTH#*|}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
   if [ "${#AUTH_QUOTE}" -ge 12 ]; then
     STEER_FLAG=""; STEER_ARG=""
-    if [ -n "$TRANSCRIPT" ] && [ -d "$(dirname "$TRANSCRIPT")" ]; then
+    if [ -n "$TRANSCRIPT" ] && steer_dir_has_transcript "$(dirname "$TRANSCRIPT")"; then
       # THE DIRECTORY, not the file. An authorization outlives the session that
       # recorded it; `transcript_path` is always THIS session, never the one the
       # operator spoke in. Same reasoning as `ai-dlc-acknowledge.sh:268-272`.

@@ -357,11 +357,12 @@ and a project needs at least one of them:
   script). This path consults only the files the rows name, so it adjudicates
   in full with no CI directory present at all.
 
-With neither, the run is VACUOUS (exit 78) and **prints every declared gate
-name it could not check** — that inventory is the deliverable in that case, and
-§4's unexercised-gate audit reads it. Measured on the reference consumer before
-this was so: six unique gate names declared across 14 retro files, none of them
-ever enforcement-checked, because the validator returned 78 before reading a
+With neither, the run reports EXAMINED NOTHING (exit 78) and **prints
+every declared gate name it could not check** — that inventory is the
+deliverable in that case, and §4's unexercised-gate audit reads it.
+Measured on the reference consumer before this was so: six unique gate
+names declared across 14 retro files, none of them ever
+enforcement-checked, because the validator returned 78 before reading a
 single retro and named nothing.
 
 Declaration convention: when a retro adds a new CI gate, name it using the

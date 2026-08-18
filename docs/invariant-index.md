@@ -107,3 +107,5 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I89 | the procedure citation join, and the fix-imperative attribution |
 | I90 | the procedure citation join, and the fix-imperative attribution |
 | I91 | harness-origin prefixes are ONE declaration, never a second copy |
+| I92 | the transcript-corpus predicate is one rule in three copies, byte-identical |
+| I93 | an "examined nothing" verdict is ONE token across every emitter of it |

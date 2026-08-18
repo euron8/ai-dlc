@@ -363,16 +363,17 @@ fi
 # --- THE TWO ROADS TO EXIT 0 PRINT DIFFERENT LINES ---------------------------------
 # "Every claim verified" and "there was nothing to check" still share exit code 0, and
 # they should: a block that claims nothing has nothing to substantiate. What was wrong
-# is that they also shared one REPORT LINE. The assertion is on the STRING.
+# is that they also shared one REPORT LINE. The assertion is on the STRING, and the string
+# is the token declared at enforcement-map.yaml `empty_subject_verdict:`, bound by I93.
 NV_OUT="$("$VALIDATOR" "$DIR/nothing-verified-story.md" 2>&1)"
 GD_OUT="$("$VALIDATOR" "$DIR/good-story.md" 2>&1)"
 case "$NV_OUT" in
-  *"NOTHING VERIFIED"*) echo "ok: a zero-verification story reports PASS — NOTHING VERIFIED" ;;
+  *"EXAMINED NOTHING"*) echo "ok: a zero-verification story reports PASS — EXAMINED NOTHING" ;;
   *) echo "FAIL: a zero-verification story reports the same line as a verified one: $NV_OUT" >&2; rc=1 ;;
 esac
 case "$GD_OUT" in
-  *"NOTHING VERIFIED"*) echo "FAIL: a VERIFIED story reported NOTHING VERIFIED — the two roads are swapped: $GD_OUT" >&2; rc=1 ;;
-  *) echo "ok: OVER-FIRE CONTROL: a verified story does NOT report NOTHING VERIFIED" ;;
+  *"EXAMINED NOTHING"*) echo "FAIL: a VERIFIED story reported EXAMINED NOTHING — the two roads are swapped: $GD_OUT" >&2; rc=1 ;;
+  *) echo "ok: OVER-FIRE CONTROL: a verified story does NOT report EXAMINED NOTHING" ;;
 esac
 
 MUT5="$WORK/mut-one-pass-line.sh"; cp "$VALIDATOR" "$MUT5"
@@ -381,7 +382,7 @@ if cmp -s "$VALIDATOR" "$MUT5"; then
   echo "FAIL: MUTATION setup — the two-road branch was not mutated, so the arm below proves nothing" >&2
   rc=1
 else
-  if bash "$MUT5" "$DIR/nothing-verified-story.md" 2>&1 | grep -q "NOTHING VERIFIED"; then
+  if bash "$MUT5" "$DIR/nothing-verified-story.md" 2>&1 | grep -q "EXAMINED NOTHING"; then
     echo "FAIL: MUTATION — the collapsed branch still distinguishes the two roads; the branch is not what does it" >&2
     rc=1
   else

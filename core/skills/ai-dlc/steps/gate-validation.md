@@ -426,13 +426,13 @@ non-source-of-record / index artifact, a dangling anchor, or a bullet
 not byte-present at the cited anchor; or a `requires_context` names an
 artifact or anchor that is not there.
 
-**Read the PASS line, not just the exit code.** `PASS — NOTHING
-VERIFIED` means the story carried no resolvable citation of either form:
-a legal state for a block that claims nothing, and the absence of
-evidence rather than evidence of correctness. It is reported separately
-because the two roads to exit 0 used to be spelled identically —
-measured on a reference consumer, 196 of 998 stories took that road, 0
-had ever taken the other, and every gate had read green.
+**Read the PASS line, not just the exit code.** The line
+`PASS — EXAMINED NOTHING` means the story carried no resolvable
+citation of either form: a legal state for a block that claims nothing,
+and the absence of evidence rather than evidence of correctness. It is
+reported separately because the two roads to exit 0 used to be spelled
+identically — measured on a reference consumer, 196 of 998 stories took
+that road, 0 had ever taken the other, and every gate had read green.
 
 **Category-error rider.** Context/tool thresholds (e.g. the ctx
 `INTENT_SEARCH_THRESHOLD`) gate what re-enters the conversation on an

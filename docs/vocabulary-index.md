@@ -24,6 +24,7 @@ invariant because the set kept getting restated from memory somewhere else.
 | PR classes | — consumer-owned | (consumer-owned) the taxonomy lives in THEIRS's own contract, which ai-dlc-update reads through git show rather than carrying a copy; no member of it exists in this tree to render | I70 | — |
 | PR-class taxonomy grammar keys | `added` `capture` `class` `paths` `validator` | `core/scripts/validate-cycle-commits.sh` | I72 | `core/skills/ai-dlc/templates/pr-classes.md` |
 | validation intensities | `carry-over-single` `full` `lightweight` `standard` | `core/skills/ai-dlc/SKILL.md` | I80 | `core/skills/ai-dlc/steps/route.md`, `core/skills/ai-dlc/steps/gate-validation.md` |
+| empty-subject verdict token | `EXAMINED NOTHING` | `core/skills/ai-dlc/enforcement-map.yaml` | I93 | `core/scripts/validate-stub-audit.sh`, `core/scripts/validate-locked-anchor.sh`, `core/scripts/validate-ci-gates.sh`, `core/skills/ai-dlc/steps/gate-validation.md`, `core/skills/ai-dlc/steps/retro.md` |
 
 ## Schema enums
 

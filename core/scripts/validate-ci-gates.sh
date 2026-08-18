@@ -8,7 +8,7 @@
 #   0  — clean scan (no dormant gates)
 #   1  — one or more dormant gates detected (declared in a retro, no enforcer match)
 #   2  — tool-availability failure
-#   78 — VACUOUS: no enforcement surface exists to scan against. A check that CANNOT
+#   78 — EXAMINED NOTHING: no enforcement surface exists to scan against. A check that CANNOT
 #        run must not share an exit code with one that ran and passed (0) or one that
 #        ran and found a specific dormant gate (1). A consumer that disabled GitHub
 #        Actions and points AI_DLC_CI_SURFACE at a missing/empty directory reaches this.
@@ -178,7 +178,7 @@ ALIAS_TABLE_FILE="${AI_DLC_CI_ALIAS_TABLE:-}"
 # returned 78 before reading a single retro, so "locally" produced no inventory, no
 # gate names and nothing to act on. Measured on the reference consumer: SIX unique CI
 # gate names declared across 14 of 299 retro files, and the only thing this script had
-# ever emitted there was `VACUOUS: no enforcement surface to scan`.
+# ever emitted there was `EXAMINED NOTHING: no enforcement surface to scan`.
 #
 # TWO CORRECTIONS, and the second is the one that makes the documented path real.
 #   (1) A vacuum still REPORTS. The declaration scan needs no enforcement surface, so
@@ -194,7 +194,7 @@ SURFACE_PRESENT=0; [ -d "${WORKFLOW_DIR}" ] && SURFACE_PRESENT=1
 ALIAS_PRESENT=0;   [ -n "$ALIAS_TABLE_FILE" ] && [ -f "$ALIAS_TABLE_FILE" ] && ALIAS_PRESENT=1
 if [ "$SURFACE_PRESENT" -eq 0 ] && [ "$ALIAS_PRESENT" -eq 0 ]; then
   vac_count=$(printf '%s\n' "$unique_gates" | awk 'NF' | wc -l | tr -d ' ')
-  echo "VACUOUS: ${retro_count} retros scanned, ${vac_count} CI gate(s) declared, 0 adjudicable." >&2
+  echo "EXAMINED NOTHING: ${retro_count} retros scanned, ${vac_count} CI gate(s) declared, 0 adjudicable." >&2
   printf '%s\n' "$unique_gates" | awk 'NF' | sed 's/^/  declared, unchecked: /' >&2
   echo "  No enforcement surface (${WORKFLOW_DIR} does not exist) and no alias table." >&2
   echo "  A consumer whose gates live elsewhere sets AI_DLC_CI_SURFACE to that directory." >&2
