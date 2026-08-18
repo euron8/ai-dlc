@@ -34,6 +34,143 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.377.0] — 2026-08-18
+
+The ledger close channel: the report that named open entries as closed, the step that told the
+operator to act and left four statuses with no disposition, the acceptance test that false-failed
+on the workflow it documents, and a scrub whose siting nothing could see. **Four of the five
+entries were WIDER than filed, and in two of them the entry's own receipt would have certified the
+wrong fix.**
+
+### `BL-035` / `PC-S330-LEDGER-ROTATE-STUCK-SET-CONTRADICTS-THE-SKIP-RULE-IT-CITES`
+
+`ledger-rotate.sh` reported entries as "closed for re-verification but not archivable" on an
+UNANCHORED phrase test, while `ledger-reverify.sh` decides the same question with a LINE-LEADING
+anchor. Its own comment attributed the loose form to `entry_line_closes()` — a mechanism that
+decides a DIFFERENT question, being applied to the entry line rather than the body.
+
+`reconcile/lib.sh` gains `ledger_close_awk()`, which LIFTS the anchored grammar out of
+`ledger-reverify.sh` instead of owning or restating it — the `map_consumer()` shape already used at
+six sites in that directory. Three drifted predicates route through it: the stuck-set `loose` rule,
+`ledger-reverify.sh`'s `hasclose`, and `warn-shadowed-local-validators.sh`, which also loses the
+THIRD hand-copy of the entry-boundary rule.
+
+**Measured on the reference consumer's live ledger, sides asserted byte-different first: 12 stuck
+rows to 5, seven dropped, zero added — and three of the seven false rows are the entries filing
+these very defects.** `warn-shadowed-local-validators.sh` pre-fix advises RETIRING a fork whose
+ledger entry only says "annotate it ADOPTED UPSTREAM once X is upstreamed"; post-fix that row is
+gone and the genuinely closed one remains.
+
+**Two of three candidate shapes were built and measured before this one was chosen.** Restating the
+anchor at the call site satisfies the receipt and leaves two copies. MOVING the predicate into
+`lib.sh` is correct and breaks two INDEPENDENT anchors keyed on the emitting line's text — a
+fixture mutation arm, which then reports "the mutation matched nothing, so the anchor assertions
+above are unproven", and the backlog receipt itself. Reading the line leaves `ledger-reverify.sh`
+byte-unchanged, so both survive and the grammar still exists exactly once.
+
+**A FOURTH PREDICATE WAS DELIBERATELY NOT ROUTED, ON A MEASUREMENT, AND IS FILED AS `BL-071`.**
+`susp_closed` SUPPRESSES a refusal, so it fails in the OPPOSITE direction: the anchored form turns
+a REAL entry into `REFUSING to rotate` on the false-positive case the fixture already carries, and
+a refusal writes nothing. The fixture caught that against the author of the change.
+
+### `BL-050` / `PC-S329-NAMED-UPSTREAM-DETAIL-INSTRUCTS-THE-CLOSE-ITS-OWN-STATUS-FORBIDS`
+
+`SKILL.md` step 8 — the step that ACTS on the ledger — named `CLOSE-CANDIDATE` and `NEEDS-REVIEW`
+and nothing else, so a reader executing it literally left every `NAMED-UPSTREAM` row unannotated
+and the entry re-reported forever on a receipt §3f had already called structurally incapable of
+deciding it.
+
+**The entry named one status and FOUR were undisposed**, and step 8 was the odd one out among
+THREE readers: `emit-report.sh`'s heading already groups `NAMED-UPSTREAM` with `CLOSE-CANDIDATE`
+under "the operator confirms and annotates", siding with §3f.
+
+Step 8 now carries a disposition for every status that heading announces, and a fourth **I39** arm
+binds the acting region to the heading's status set intersected with what the emitter produces —
+both sides derived, neither hand-listed. **I39 could not see this and widening it is not the fix**:
+its SKILL-side population is step 3f's span alone, bounded because the same bullet grammar over the
+whole file matches other detectors' statuses. §3f was correct throughout; the disagreement lived in
+the ACTION.
+
+**The delimiters are the whole false-positive narrowing.** `grep -F NAMED-UPSTREAM` matches inside
+`NAMED-UPSTREAM-AMBIGUOUS`, so a step 8 disposing only the AMBIGUOUS row satisfies the entry's
+receipt — measured, a false close — while the backtick-delimited arm still reports `NAMED-UPSTREAM`
+missing. `STILL-LIVE`, filtered from the report and owed no action, resolves 0.
+
+### `BL-068` / `PC-S334-ROTATE-ACCEPTANCE-TEST-FALSE-FAILS-ON-THE-WORKFLOW-IT-DOCUMENTS`
+
+`ledger-rotate.sh` prescribed a BYTE-IDENTICAL `ledger-reverify.sh` comparison across a rotation
+and said any difference means a live entry was swept. That is false for the annotate-then-rotate
+step the skill itself prescribes: an entry annotated in the same pass is skipped by the open-entry
+extractor and not yet in the archive, so the sprint-prefix count inside `NAMED-UPSTREAM-AMBIGUOUS`
+details RISES as it reaches the archive.
+
+**The remedy is PROSE, and the entry's own receipt rewarded a documented regression.** Four
+candidate remedies were built and run; the only one it accepts is dropping the counter's archive
+arm — recorded in this file as a deliberate earlier fix whose removal made the count ANTI-MONOTONIC
+and turned a correct `AMBIGUOUS` into a confidently wrong single attribution. A bare
+`prefix_entry_count() { echo 1; }` stub also exits 0. Both remedies the entry's prose calls
+legitimate exit 1 forever, because the receipt's corpus is `ledger-reverify.sh` and the string
+`ledger-rotate` never appears in it.
+
+The claim is corrected at every site — the header, **the message the tool PRINTS to the operator at
+report time**, step 8, and the fixture's `README.md` and `run.sh`. `prefix_entry_count()` is
+byte-unchanged: the code route moves 18 displayed counts on the reference consumer and flips ZERO
+classifier verdicts, which is not enough to touch a reader seven call sites share.
+
+**The fixture's acceptance arm had been decorative since it was written**, and unconstructibly so —
+its corpus carried no `PC-S<n>` id, so the row it asserts on could never be produced whatever the
+code did. It now seeds a prefix trio and an archive, compares the ROW SET by status and subject,
+and fires both ways: identical set with LINES differing, so the byte assertion would have FAILED
+there, and a committed SWEEP mutant where the set genuinely changes.
+
+### `BL-046` / `PC-S330-PREPUSH-LEAKS-GIT_DIR-INTO-EVERY-FIXTURE-SANDBOX`
+
+Both pre-push hooks scrub git's worktree environment before dispatching fixtures. The scrub landed
+after the previous release and had never been named in a commit message, so it had not reached the
+consumer's close channel at all.
+
+**Its receipt is PRESENCE-ONLY and the claim is SITING, so the status was not the evidence.**
+Established behaviourally instead, by a real `git push` from a real LINKED WORKTREE through the
+shipping hook with only the scrub line removed: the dispatched worker sees `GIT_DIR=<UNSET>` and
+the repository is untouched, against `GIT_DIR=<repo>/.git/worktrees/<name>`, the commit count
+rising, and `poison.txt` tracked in the real repository. The consumer half was measured on a tree
+built by `scripts/install.sh`, not in `core/`.
+
+**`core/fixtures/prepush-worktree-env-scrub/` is the arm that would fail without it**, and it kills
+a third mutant nobody asked for: the scrub MOVED BELOW THE DISPATCH, which satisfies the presence
+regex exactly once and still corrupts the repository. That is the entire gap between "the line
+exists" and "the line runs first".
+
+### `BL-031` / `PC-S311-ENTRY-SWALLOWED-DETAIL-EMITS-A-LITERAL-BACKSLASH-U-ESCAPE-SO-A-VERBATIM-PASTE-FAILS-VERIFY`
+
+`ledger-reverify.sh` emitted its `ENTRY-SWALLOWED` detail through a `%s` conversion carrying a
+literal backslash-u escape, so six characters reached stdout verbatim and were rendered into the
+region `emit-report.sh --verify` byte-compares. Population re-derived independently as exactly one
+site; the other `\uXXXX` occurrences under `core/` are JSON and Python escapes a reader does
+interpret.
+
+**Its receipt binds the escape's SYNTACTIC POSITION, not whether it reaches stdout**, and three
+things satisfy it: deleting the emit call, a bare line-continuation, and — surviving a correct fix
+— hoisting the message into a variable, which leaves the escape emitting. The durable guard is an
+arm bound to the emitted bytes.
+
+### A refusal that was survivable, found while guarding the above
+
+`ledger_close_awk()` refuses when the close grammar is missing or no longer single-homed.
+Interpolated straight into an awk program that refusal became an EMPTY string, awk died on an
+undefined function, and the caller exited **0 with no rows** — a silent clean run,
+byte-indistinguishable from a corpus with nothing in it. All three callers now compute the lift
+once behind `|| exit 2`. Measured: the refusal path is rc=2 with 0 rows against rc=0 with 1 row
+when it resolves, and `warn-shadowed-local-validators.sh`'s header no longer claims `0 ALWAYS` on a
+file that already had three `exit 2` paths.
+
+### Filed, not fixed
+
+`BL-071` the refusal-suppressor above, `verify: manual` because the two inputs a fix must separate
+are the same shape on today's signals. `BL-072` `validate-no-dead-doc-refs.sh` reads 31 of 105
+markdown files under `docs/`. `BL-073` three telemetry reads carrying the `BL-036` conflation.
+`BL-074` the entry-line half of the close predicate, still a hand-copy.
+
 ## [0.376.0] — 2026-08-17
 
 Four parsers that answered confidently on input they could not read. Three of the four filings
