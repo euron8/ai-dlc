@@ -16,7 +16,15 @@ paths:
   that proves the layer you left in place, and it comes out green.
 - Add an **unmutated control** from the same directory whenever the harness
   itself could be what fails — a lone script copy that dies sourcing `lib.sh`
-  emits nothing, and "no output" otherwise scores as a kill.
+  emits nothing, and "no output" otherwise scores as a kill. **The control is
+  NECESSARY AND NOT SUFFICIENT, and believing otherwise is how a battery certifies
+  silence.** Measured independently by two hands on two batteries: a control
+  asserting rc=0-and-no-findings PASSES against a subject replaced by `exit 0`,
+  because rc=0 with nothing reported is exactly what a clean copy looks like. What
+  stops silence scoring as a kill is that every arm is PRESENCE-shaped — each one
+  requiring a specific row or message to APPEAR — so a subject that emits nothing
+  fails them by construction. Give the control a positive conjunct too: it must
+  assert a baseline row is THERE, not merely that nothing went wrong.
 - Assert a **positive outcome**, not the absence of the old failure message. A
   mutation that WIDENS a guard to match everything often produces the same
   output as the unmutated original, so it scores a kill it did not earn —
