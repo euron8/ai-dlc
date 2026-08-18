@@ -3,9 +3,11 @@
 #
 # WHY THIS FIXTURE EXISTS. I39 joins `ledger-reverify.sh`'s emitted status set to the set
 # SKILL.md step 3f documents, in both directions, plus the subset emit-report.sh's push-candidate
-# heading names. It passes on this repo and will pass on every well-formed tree — the state this
-# repo names as its recurring defect. Its whole value is the half-done rename it rejects, and a
-# green with no mutant behind it is indistinguishable from an extraction that stopped matching.
+# heading names, plus — the reader that ACTS — the disposition SKILL.md step 8 gives each status
+# that heading announces. It passes on this repo and will pass on every well-formed tree — the
+# state this repo names as its recurring defect. Its whole value is the half-done rename it
+# rejects, and a green with no mutant behind it is indistinguishable from an extraction that
+# stopped matching.
 #
 # THE MUTANT IS THE INPUT, NOT THE VALIDATOR. I39 resolves both its inputs against $REPO_ROOT,
 # which is derived from the validator's own location, so there is no tunable to point it at a
@@ -16,8 +18,15 @@
 # a failure to I39 rather than to the copy being incomplete.
 #
 # Each mutant is a COPY guarded by `cmp -s`, asserts a POSITIVE outcome (the specific I39 message
-# appears), and — for the five single-arm mutants — asserts the run produced EXACTLY ONE failure
-# line, which is how this file proves the assertions are not entangled.
+# appears), and asserts the run produced EXACTLY ONE failure line — except half-rename, whose
+# subject is a rename that genuinely breaks both directions at once and which therefore asserts
+# both tokens by name. That count is how this file proves the assertions are not entangled, and
+# a mutant that starts reporting two is a signal about the VALIDATOR, not about this number.
+#
+# Every assertion is
+# PRESENCE-shaped, so none of them can be satisfied by a validator that emits nothing: measured
+# with `validate-enforcement-map.sh` replaced by `exit 0`, ten of the eleven fail and only the
+# unmutated control passes.
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -66,11 +75,17 @@ echo "ledger-status-vocabulary fixture"
 echo
 
 # EVERY RUN IS INDEPENDENT, SO THEY GO THROUGH A POOL. Each assertion below copies the tracked
-# tree, mutates one file in the copy and runs `validate-enforcement-map.sh` over it — seven
-# runs of a ~8.5s validator that share nothing. Run end to end they cost 61s standalone and
-# ~198s inside the 16-way pre-push suite, and that suite is POLE-BOUND: its makespan tracks
-# its single longest unit (measured 268s against a 268s wall clock), so an internally-serial
-# fixture sets the wall clock for the whole push whatever AI_DLC_FIXTURE_JOBS says.
+# tree, mutates one file in the copy and runs `validate-enforcement-map.sh` over it — one run
+# per assertion, sharing nothing. The pre-push suite is POLE-BOUND: its makespan tracks its
+# single longest unit, so an internally-serial fixture sets the wall clock for the whole push
+# whatever AI_DLC_FIXTURE_JOBS says.
+#
+# THE COST STEPS AT EACH MULTIPLE OF LSV_JOBS, NOT PER RUN. Eight runs and eleven runs are one
+# wave and two, so the eleventh assertion is free and the ninth was not. Measured standalone
+# from the repo root: 31s at seven runs (one wave), 49-53s at eleven (two). Read the LOADED cost
+# from `.git/ai-dlc-fixture-durations`, never this comment, and compare it against the top of
+# that file before adding a twelfth — a cost recorded there is measured under the 16-way pool
+# and is a different number from anything measured here.
 #
 # Three phases. The call sites in the middle are UNCHANGED from the serial version —
 # `mutant_fires` now REGISTERS a run instead of performing it, and a third phase evaluates the
@@ -133,10 +148,71 @@ mutant_fires "skill-zero" "$SK" \
 # --- The report heading is the third reader -------------------------------------------
 # It names a SUBSET by design, so only one direction is checkable: a heading promising a section
 # whose status nothing emits promises the operator rows that can never arrive.
+#
+# THIS MUTANT ONCE FIRED TWO ARMS, AND THE FIX WAS THE VALIDATOR, NOT THE COUNT. When the step-8
+# arm landed it iterated the heading set unfiltered, so a phantom heading status was reported
+# twice: once as a section that can never have rows, once as a duty with no actor. Reshaping the
+# MUTANT could not fix it — derived over this tree, every backtick-delimited status in step 8's
+# acting region is also emitted, so no phantom token exists that trips the emitter arm and
+# leaves the step-8 arm quiet. The step-8 loop was therefore narrowed to iterate
+# `er_sts ∩ lr_emitted`: a status the emitter cannot produce owes the operator no disposition,
+# and the arm above already reports it.
+#
+# SO THE `want_n 1` BELOW IS LOAD-BEARING AND IS NOT A TOLERANCE. Re-widening that loop makes
+# this mutant report 2 and fails here. Do not "fix" that by raising the number — the second
+# finding is the vacuous one, which is the whole of `fixture-mutants.md`'s two-failures rule.
 mutant_fires "heading-phantom" "$ER" \
   's/Push-candidate ledger — CLOSE-CANDIDATE/Push-candidate ledger — GONE-CANDIDATE/' \
   "heading names 'GONE-CANDIDATE', which ledger-reverify.sh does not emit" 1 \
   "the report promises a section that can never have rows in it"
+
+# --- The fourth reader is the one that ACTS: step 8 --------------------------------------
+# A status the report puts in front of the operator and step 8 gives no disposition to is a duty
+# with no actor, and it fails in the CLOSING direction: the reader executing step 8 literally
+# leaves the row unannotated and it re-reports forever. Removing one status from step 8's
+# disposition list is the whole defect, in one line.
+mutant_fires "step8-undisposed" "$SK" \
+  's/, `INPUT-UNRESOLVED`//' \
+  "heading puts 'INPUT-UNRESOLVED' in front of the operator, but SKILL.md step 8" 1 \
+  "a status the report announces and step 8 never names is a duty with no actor"
+
+# --- THE DECISIVE ARM: the substring near-miss --------------------------------------------
+# The step-8 arm matches BACKTICK-DELIMITED, and the delimiters are the whole of its
+# false-positive narrowing. They are also invisible: drop them and every other arm in this file
+# stays green, because `NAMED-UPSTREAM` is a proper substring of `NAMED-UPSTREAM-AMBIGUOUS` — a
+# DIFFERENT status, deliberately not attributed, carrying a different duty.
+#
+# So this mutant deletes step 8's `NAMED-UPSTREAM` bullet and LEAVES the AMBIGUOUS one standing.
+# The mutated tree therefore still contains the bare substring while owing an unfilled duty, and
+# a bare-substring predicate is satisfied by it. The delimited predicate is not. The kind gets
+# its own evaluator below because half the arm is the PRECONDITION: if a later edit also removes
+# the AMBIGUOUS bullet this stops being a near-miss and silently degenerates into a second copy
+# of step8-undisposed, so the precondition is asserted rather than assumed.
+#
+# The address is anchored on FIVE leading spaces. Step 3f's own bullet for the same status sits
+# at three, and an unanchored range would swallow it and take out the 3f arms with it — measured
+# while building this: the loose form deleted 16 lines of step 3f as well.
+NEAR_MISS_SED='/^     - `NAMED-UPSTREAM` /,/^     - `NAMED-UPSTREAM-AMBIGUOUS` /{/^     - `NAMED-UPSTREAM-AMBIGUOUS` /!d;}'
+ASSERTIONS=$((ASSERTIONS + 1))
+printf '%s' "$NEAR_MISS_SED" > "$MUTD/near-miss.sed"
+printf 'near-miss\t%s\t%s\t\t\n' "near-miss" "$SK" >> "$RUNS"
+
+# --- The step-8 arm's two zero guards, each driven -----------------------------------------
+# Both are "a zero silently retires the check" guards, and a guard nobody has fired is a guard
+# that may not fire. The heading side goes empty by breaking the literal the extraction anchors
+# on; the SKILL side goes empty by renumbering the step, exactly as skill-zero does for 3f.
+# Neither may be allowed to read as agreement: an empty heading set makes the two arms above
+# vacuous, and an empty step-8 region retires the acting-reader check while everything else
+# still passes.
+mutant_fires "heading-zero" "$ER" \
+  's/Push-candidate ledger/Push-candidate LEDGER/' \
+  "push-candidate heading yielded NO statuses" 1 \
+  "an empty heading set makes both heading arms vacuous, which reads exactly like agreement"
+
+mutant_fires "step8-zero" "$SK" \
+  's/^8\. \*\*Deliver/8z. **Deliver/' \
+  "I39 could not locate SKILL.md's step 8 acting region" 1 \
+  "renumbering step 8 must fail loudly rather than silently retiring the acting-reader check"
 
 # --- THE DEFECT THIS INVARIANT SHIPPED FOR: a half-done rename ------------------------
 # v0.186.0 renamed the NAMED-* status across five files. Reverting the SKILL.md half alone
@@ -232,6 +308,35 @@ while IFS=$'\t' read -r kind label file want want_n why; do
         printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/          | /' | head -4
       else
         printf '  ok    %-20s fires  (%s)\n' "$label" "$why"
+      fi ;;
+
+    near-miss)
+      # THE PRECONDITION IS HALF THE ARM, and it is checked FIRST. Recomputed from the same sed
+      # program over the same input the worker mutated, so it describes the tree the validator
+      # actually read. The mutated acting region must still CONTAIN the bare substring and must
+      # NOT contain it backtick-delimited; that pair is the only thing separating this mutant
+      # from step8-undisposed, and neither the validator's output nor `cmp -s` can see it.
+      m8="$(sed -f "$MUTD/near-miss.sed" "$BASE/$SK" \
+            | awk '/^8\. \*\*Deliver/{on=1} on && /^9\. \*\*Safety/{exit} on')"
+      bare=0; delim=0
+      grep -qF 'NAMED-UPSTREAM'   <<<"$m8" && bare=1
+      grep -qF '`NAMED-UPSTREAM`' <<<"$m8" && delim=1
+      # The quotes in the wanted message are load-bearing the same way the backticks are:
+      # "puts 'NAMED-UPSTREAM' in front" cannot be satisfied by a message about
+      # 'NAMED-UPSTREAM-AMBIGUOUS', because the closing quote follows the token immediately.
+      if [ "$bare" -ne 1 ] || [ "$delim" -ne 0 ]; then
+        FAILURES=$((FAILURES + 1))
+        printf '  FAIL  %-20s this is no longer a NEAR-MISS (bare substring present=%s, backticked present=%s) — it now proves only what step8-undisposed proves, and the delimiters are unguarded\n' "$label" "$bare" "$delim"
+      elif ! grep -qF "heading puts 'NAMED-UPSTREAM' in front of the operator, but SKILL.md step 8" <<<"$out"; then
+        FAILURES=$((FAILURES + 1))
+        printf '  FAIL  %-20s I39 did NOT report NAMED-UPSTREAM undispositioned while step 8 disposes only NAMED-UPSTREAM-AMBIGUOUS. If the other arms above fired, the step-8 predicate has lost its backtick delimiters and is now closing on a disposition written for a different row; if they went quiet too, read the control first\n' "$label"
+        printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/          | /' | head -3
+      elif [ "$n" -ne 1 ]; then
+        FAILURES=$((FAILURES + 1))
+        printf '  FAIL  %-20s fired, but the run produced %s failures (want 1) — the assertions are entangled and one of them is vacuous\n' "$label" "$n"
+        printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/          | /' | head -4
+      else
+        printf '  ok    %-20s fires  (a step 8 disposing only NAMED-UPSTREAM-AMBIGUOUS still owes NAMED-UPSTREAM, which a bare-substring predicate cannot say)\n' "$label"
       fi ;;
 
     half-rename)

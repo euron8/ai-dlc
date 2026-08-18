@@ -492,6 +492,18 @@ rule recognising those two characters.
   in the live ledger and one in the archive, scored as annotations.
 
   verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-UESCAPE-NEAR-MISS — a receipt substring that only LOOKS like a unicode escape
+
+THE NEAR-MISS CONTROL for the detail-field escape arm in run.sh. The real producer echoes this
+substring verbatim into the emitted detail, and it carries the three shapes ADJACENT to a unicode
+escape without being one: the bare word u2026 with no backslash, a lone backslash before a
+non-u character, and a backslash-u with only THREE hex digits. An arm keyed on a backslash alone,
+on the token u2026, or on backslash-u without counting the digits, reports this entry and is wrong.
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "NEARMISS-u2026-and-\x-and-\u202-END"
 LEDGER
 
 printf '%s %s %s %s\n' "$DIST" "$BASE" "$CONS" "$THEIRS"

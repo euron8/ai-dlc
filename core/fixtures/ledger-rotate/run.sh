@@ -2,9 +2,27 @@
 # ledger-rotate/run.sh — prove rotation removes CLOSED entries, keeps OPEN ones, loses
 # nothing, and does not change what the classifier says about the work still open.
 #
-# The acceptance test is the byte-identical ledger-reverify output. Rotation moves exactly
-# the entries ledger-reverify already skips, so if its output shifts by one byte the split
-# took a live entry — the only failure mode that actually costs anything.
+# THE ACCEPTANCE TEST IS THE ROW SET, NOT THE BYTES, and `ledger-rotate.sh`'s own header states
+# the same projection rather than a second one: ledger-reverify.sh must emit the SAME ROW SET, by
+# STATUS and SUBJECT, before and after. Rotation moves exactly the entries reverify already
+# skips, so a row that appears or disappears means the split took a live entry — the only
+# failure mode that actually costs anything.
+#
+# A BYTE COMPARISON WAS THE OLD CLAIM AND IT FALSE-FAILS THE WORKFLOW THIS SCRIPT IS THE SECOND
+# HALF OF. `prefix_entry_count()` in ledger-reverify.sh counts a sprint prefix over the OPEN
+# entries UNIONED with the ARCHIVED labels, and the open extractor skips anything carrying
+# `ADOPTED UPSTREAM`. An entry annotated in the same pass — which is exactly what annotate-then-
+# rotate prescribes — is therefore on NEITHER side while it sits in the live file and on the
+# archive side once moved, so the count RISES across a move that can only shrink the live set.
+# That number is printed inside NAMED-UPSTREAM-AMBIGUOUS details, so correct work surfaces as
+# changed LINES on an identical ROW SET. Assertion 4 asserts both halves at once, and assertion
+# 4b proves the reshaped comparison still FAILS on a genuine sweep.
+#
+# THE OLD ARM COULD NOT FAIL ON THIS, AND ITS SUBJECT WAS UNCONSTRUCTIBLE RATHER THAN UNSEEDED.
+# `named_ambiguous()` gates on a `PC-S[0-9]+` prefix shared by two or more entries; seed.sh
+# carried no id of that shape at all, so no NAMED-UPSTREAM-AMBIGUOUS row could be produced no
+# matter what the code under test did, and the assertion would have stayed green through any
+# rewrite of the invariant it existed to guard. The PC-S900 trio in seed.sh is what gives it one.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -35,10 +53,16 @@ echo "ledger-rotate:"
 before_lines="$(wc -l < "$LEDGER" | tr -d ' ')"
 before_entries="$(entries "$LEDGER")"
 before_verdicts="$(bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" "$LEDGER" 2>/dev/null)"
+# The PRE-ROTATION bytes, kept because assertion 4b needs a second, untouched copy of this
+# ledger to rotate a different way. Taken before assertion 1 so a dry run that wrongly wrote
+# cannot contaminate it.
+ORIG="$WORK/ledger.orig.md"
+cp "$LEDGER" "$ORIG"
 
 # --- Assertion 0: SANITY — the seed really holds both kinds ---------------------------
-if [ "$before_entries" -eq 6 ] && grep -q 'PC-CLOSED-A' "$LEDGER" && grep -q 'PC-OPEN-DECOY' "$LEDGER"; then
-  ok "before: 6 entries — closed + open + a decoy that only MENTIONS the phrase + one closed-but-unarchivable"
+if [ "$before_entries" -eq 9 ] && grep -q 'PC-CLOSED-A' "$LEDGER" && grep -q 'PC-OPEN-DECOY' "$LEDGER" \
+   && grep -q 'PC-S900-ALPHA' "$LEDGER" && grep -q 'PC-S900-BETA' "$LEDGER" && grep -q 'PC-S900-GAMMA' "$LEDGER"; then
+  ok "before: 9 entries — closed + open + a decoy that only MENTIONS the phrase + one closed-but-unarchivable + a PC-S900 prefix trio"
 else
   bad "FIXTURE BROKEN — seed shape wrong ($before_entries entries)"; echo
   echo "ledger-rotate: FIXTURE BROKEN" >&2; exit 2
@@ -91,15 +115,148 @@ after_total=$(( $(wc -l < "$LEDGER" | tr -d ' ') + $(grep -c '' "$ARCH" 2>/dev/n
   && ok "no content lost (live + archive >= original ${before_lines} lines)" \
   || bad "content lost: live+archive is $after_total vs $before_lines before"
 
-# --- Assertion 4: THE ACCEPTANCE TEST — classifier output unchanged --------------------
+# --- Assertion 4: THE ACCEPTANCE TEST — the ROW SET is unchanged ------------------------
+#
+# `emit()` in ledger-reverify.sh writes `<status>\t<subject>\t<detail>`. The projection this
+# asserts over is the first two fields — what the classifier SAYS about which work — sorted,
+# with multiplicity kept, so a swept entry cannot hide behind a duplicate. The DETAIL column is
+# dropped deliberately: it is where `prefix_entry_count()` prints a number that MOVES on a
+# correct rotation. Dropping it is the whole correction; it is not a loosening, because every
+# row this fixture cares about losing is identified by its status and subject.
 after_verdicts="$(bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" "$LEDGER" 2>/dev/null)"
-if [ "$before_verdicts" = "$after_verdicts" ]; then
-  ok "ledger-reverify output BYTE-IDENTICAL across the rotation"
+rowset() { cut -f1,2 | sort; }   # status + subject, multiplicity kept
+before_rows="$(printf '%s\n' "$before_verdicts" | rowset)"
+after_rows="$(printf '%s\n' "$after_verdicts" | rowset)"
+n_rows="$(printf '%s\n' "$before_verdicts" | grep -c .)"
+printf '%s\n' "$before_verdicts" > "$WORK/rv-before.txt"
+printf '%s\n' "$after_verdicts"  > "$WORK/rv-after.txt"
+n_linediff="$(diff "$WORK/rv-before.txt" "$WORK/rv-after.txt" | grep -c '^[<>]' || true)"
+
+# THE POSITIVE CONTROL, AND WITHOUT IT THE ARM BELOW PASSES ON SILENCE. Two empty outputs are
+# equal, so a ledger-reverify that emitted nothing at all — a broken copy, a wrong argument
+# order, a parser that opened no entry — would score this as the strongest assertion here. The
+# control names the AMBIGUOUS row specifically because that row is the one whose absence made
+# the old byte assertion decorative, and a count of rows alone would not notice it missing.
+if [ "$n_rows" -ge 7 ] && grep -q 'NAMED-UPSTREAM-AMBIGUOUS' <<<"$before_verdicts" \
+   && grep -q 'PC-S900' <<<"$before_verdicts"; then
+  ok "PRECONDITION: reverify emits ${n_rows} rows before the rotation, including the NAMED-UPSTREAM-AMBIGUOUS row for PC-S900 — so the comparisons below discriminate rather than compare two silences"
 else
-  bad "ledger-reverify output CHANGED — rotation moved an entry the classifier was using"
-  printf '%s\n' "$before_verdicts" > /tmp/lr-before.$$; printf '%s\n' "$after_verdicts" > /tmp/lr-after.$$
-  diff /tmp/lr-before.$$ /tmp/lr-after.$$ | sed 's/^/      /' | head -8
-  rm -f /tmp/lr-before.$$ /tmp/lr-after.$$
+  bad "PRECONDITION FAILED: reverify emitted ${n_rows} rows and/or no NAMED-UPSTREAM-AMBIGUOUS row before the rotation, so every comparison below is between two silences and proves nothing"
+fi
+
+if [ "$before_rows" = "$after_rows" ]; then
+  ok "ledger-reverify emits the SAME ROW SET across the rotation (by status and subject)"
+else
+  bad "ledger-reverify's ROW SET CHANGED — rotation moved an entry the classifier was using"
+  diff <(printf '%s\n' "$before_rows") <(printf '%s\n' "$after_rows") | sed 's/^/      /' | head -8
+fi
+
+# ...AND THE BYTES DIFFER, WHICH IS THE OLD ASSERTION FAILING ON CORRECT WORK. This is not a
+# nice-to-have: if the two outputs were byte-identical here the reshaped arm above would be
+# indistinguishable from the one it replaces, and the seed would not be exercising the case the
+# correction exists for.
+if [ "$n_linediff" -gt 0 ]; then
+  ok "  and the BYTES differ on ${n_linediff} of ${n_rows} rows — the byte-identical assertion this arm replaces would FAIL here, and the arm above says whether that difference was a sweep"
+else
+  bad "  the two outputs are byte-identical, so this seed does not exercise the false-failure the row-set correction exists for and the arm above is untested against it"
+fi
+
+# THE NUMBER THAT MOVES, NAMED. Asserting the specific 2 -> 3 rather than "something changed"
+# is what ties the difference to `prefix_entry_count()`'s archive arm instead of to any other
+# byte in the report — and it is the observation the counter-regression mutant at the foot of
+# this file kills.
+pfx_n() { sed -n 's/.*and \([0-9][0-9]*\) entries in this ledger carry it.*/\1/p' <<<"$1"; }
+b_n="$(pfx_n "$before_verdicts")"; a_n="$(pfx_n "$after_verdicts")"
+if [ "$b_n" = "2" ] && [ "$a_n" = "3" ]; then
+  ok "  and the PC-S900 prefix count rises 2 -> 3 across the move: the archived sibling is still counted, which is why the row survives"
+else
+  bad "  the PC-S900 prefix count went '${b_n:-<none>}' -> '${a_n:-<none>}', expected 2 -> 3. Either the trio is not reaching named_ambiguous() or prefix_entry_count() stopped counting one of its two sides"
+fi
+
+# --- Assertion 4b: MUTATION — A GENUINE SWEEP MUST STILL FAIL THE ROW-SET TEST ----------
+#
+# WITHOUT THIS, ASSERTION 4 IS A LAXER ASSERTION THAN THE ONE IT REPLACES AND NOTHING SAYS SO.
+# Dropping the detail column removes real information, so the question the reshape has to answer
+# is whether the projection that remains still catches an entry being swept. It does, and the
+# reason is structural: a swept entry stops being extracted as open, so it stops emitting a row
+# at all — status and subject are exactly what disappears.
+#
+# THE MUTATION IS THE ONE THAT PRODUCED THE REAL DEFECT (PC-S331): drop the version DIGIT from
+# the close predicate and the rotator matches an entry against its own INLINE quotation of the
+# annotation form. `PC-SW-OPEN` below is that entry, and it carries a receipt so ledger-reverify
+# emits a row for it — the quoting entry in the PC-S331 ledger further down does not, which is
+# why this needs its own seed rather than reusing that one.
+#
+# THE QUOTATION IS MID-LINE, DELIBERATELY. reverify's body-close rule is ANCHORED, so a phrase
+# in the middle of a sentence does not close the entry there; the rotator's is UNANCHORED, so
+# the same line matches once the digit is gone. That asymmetry is what lets one seed be both
+# live to the classifier and archivable by a broken rotator.
+SW="$WORK/sweep"; rm -rf "$SW"; mkdir -p "$SW/ctl" "$SW/mut" "$SW/bin"
+cat > "$SW/led.md" <<'SWLED'
+# Push-candidate ledger
+
+## PC-SW-OPEN — LIVE, and its body quotes the strict annotation form INLINE
+
+Filed because rotate archives only on `**ADOPTED UPSTREAM (v` while reverify skips on the loose form.
+
+verify: theirs_has core/scripts/thing.sh "MARKER_A"
+
+## PC-SW-CLOSED — genuinely closed, so the rotation has real work to do either way
+
+<br>**ADOPTED UPSTREAM (v0.96.0, verified 2026-01-01).** Upstream took it.
+
+verify: theirs_has core/scripts/thing.sh "MARKER_B"
+SWLED
+
+# `ledger_close_awk()` in lib.sh LIFTS the close grammar out of ledger-reverify.sh at run time,
+# so a rotator copy needs its SIBLING beside it, not just lib.sh. Copy the .sh files and no more:
+# a sandbox that mirrors the whole directory would keep working when the program grows a read of
+# something else, and this fixture's job is to notice that.
+cp "$(dirname "$ROT")"/*.sh "$SW/bin"/ 2>/dev/null
+sed 's@/\\\*\\\*ADOPTED UPSTREAM \\(v\[0-9\]/@/\\*\\*ADOPTED UPSTREAM \\(v/@' "$ROT" > "$SW/bin/sweeper.sh"
+
+sw_rows() { # <rotator> <dir> -> writes "<before-rows>|<after-rows>|<before-has-open>|<after-has-open>"
+  local rot="$1" d="$2" b a
+  cp "$SW/led.md" "$d/push-candidate-ledger.md"
+  rm -f "$d/push-candidate-ledger.archive.md"
+  b="$(bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" "$d/push-candidate-ledger.md" 2>/dev/null | rowset)"
+  bash "$rot" "$d/push-candidate-ledger.md" --apply >/dev/null 2>&1
+  a="$(bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" "$d/push-candidate-ledger.md" 2>/dev/null | rowset)"
+  printf '%s\n--\n%s\n' "$b" "$a" > "$d/rows.txt"
+}
+
+if cmp -s "$ROT" "$SW/bin/sweeper.sh"; then
+  bad "FIXTURE BROKEN — the digit-anchor mutation matched nothing, so the sweep assertions below are unproven"
+else
+  sw_rows "$SW/bin/ledger-rotate.sh" "$SW/ctl"
+  sw_rows "$SW/bin/sweeper.sh"        "$SW/mut"
+  ctl_b="$(sed -n '1,/^--$/p' "$SW/ctl/rows.txt" | grep -v '^--$')"
+  ctl_a="$(sed -n '/^--$/,$p'  "$SW/ctl/rows.txt" | grep -v '^--$')"
+  mut_b="$(sed -n '1,/^--$/p' "$SW/mut/rows.txt" | grep -v '^--$')"
+  mut_a="$(sed -n '/^--$/,$p'  "$SW/mut/rows.txt" | grep -v '^--$')"
+
+  # THE UNMUTATED CONTROL, from the same sandbox, AND IT ASSERTS A POSITIVE OUTCOME. A copy that
+  # dies sourcing lib.sh rotates nothing, so "the row set did not change" is exactly what a
+  # program that never ran produces — the same trap `rg_refused()` further down avoids by
+  # requiring the banner as well as the exit code. So the control requires the closed entry to
+  # have REACHED the archive, which only a working rotator can do.
+  if ! grep -q 'PC-SW-CLOSED' "$SW/ctl/push-candidate-ledger.archive.md" 2>/dev/null; then
+    bad "FIXTURE BROKEN — the UNMUTATED rotator in the sandbox archived nothing, so it is not a working rotator and every comparison below is between two runs that did not happen"
+  elif ! grep -q 'PC-SW-OPEN' <<<"$ctl_b"; then
+    bad "FIXTURE BROKEN — the sweep seed's OPEN entry emits no row even before rotation, so its disappearance below could not be observed"
+  elif [ "$ctl_b" != "$ctl_a" ]; then
+    bad "FIXTURE BROKEN — the UNMUTATED rotator in the sandbox already changes the row set on this seed, so the mutant's verdict below is not attributable to the mutation"
+  else
+    ok "  CONTROL: the unmutated rotator in the sandbox archives the closed entry and leaves the row set alone"
+  fi
+
+  if [ "$mut_b" = "$mut_a" ]; then
+    bad "  MUTATION: a rotator that archived a LIVE entry produced the SAME row set — the reshaped acceptance test cannot see a sweep, which is the one thing it exists to see"
+  elif grep -q 'PC-SW-OPEN' <<<"$mut_a"; then
+    bad "  MUTATION: the row set changed but the swept entry is still present, so the difference is not the sweep and this arm is measuring something else"
+  else
+    ok "  MUTATION: without the version digit the rotator archives the quoting LIVE entry, its row disappears, and the ROW-SET comparison FAILS — the reshaped test is not laxer about a sweep"
+  fi
 fi
 
 # --- Assertion 5: IDEMPOTENT -----------------------------------------------------------
@@ -151,8 +308,19 @@ fi
 # --- Assertion 8: MUTATION — restore the `|| echo 0` fallback; the guard must die --------
 # `grep -c` PRINTS 0 on no match and ALSO exits 1, so the fallback fires on exactly the case
 # it looks like it covers and makes n_move the two-line string `0\n0`.
+#
+# THE SANDBOX CARRIES WHAT THE PROGRAM READS, AND THAT SET GREW. `lib.sh`'s `ledger_close_awk()`
+# LIFTS the close grammar out of `${SELF}/ledger-reverify.sh` at run time rather than restating
+# it, so a rotator copy now reads a SIBLING and a dir holding only `lib.sh` dies before it
+# rotates anything. The unmutated control below is what caught that — it started reporting
+# FIXTURE BROKEN the moment the dependency landed, which is the arm working, not noise.
+#
+# NAMED FILES, NOT THE WHOLE DIRECTORY. Mirroring `$(dirname "$ROT")` wholesale would keep this
+# sandbox green through the NEXT new read too, and the loud failure is the only thing that
+# reports one.
 MUTD="$WORK/mut-noop"; mkdir -p "$MUTD"
 cp "$(dirname "$ROT")/lib.sh" "$MUTD/lib.sh" 2>/dev/null
+cp "$(dirname "$ROT")/ledger-reverify.sh" "$MUTD/ledger-reverify.sh" 2>/dev/null
 cp "$ROT" "$MUTD/control.sh"
 sed 's@n_move="$(grep -c . "$TMPD/moved-names")"@n_move="$(grep -c . "$TMPD/moved-names" 2>/dev/null || echo 0)"@' \
   "$ROT" > "$MUTD/mutant.sh"
@@ -190,12 +358,32 @@ else
 fi
 
 # THE CONTROL, and without it the two arms above pass on any script that prints the banner
-# unconditionally. An archivable entry must NOT appear in the stuck list.
+# unconditionally. An archivable entry must NOT appear in the stuck list, and neither must an
+# OPEN one.
+#
+# THIS CONTROL WAS DECORATIVE FOR ITS WHOLE LIFE. It grepped the stuck list for `Entry B`, and
+# `Entry B` appears nowhere in this fixture except in the assertion itself — measured, one hit
+# across the directory, against `Entry STUCK` which is present in both seed.sh and run.sh. So it
+# took its `else` branch on every run since it was written and would have reported a passing
+# control against a rotator that named every entry in the ledger as stuck. It is replaced with
+# the two ids the seed actually distinguishes.
 stuck_list="$(awk '/NOT archivable/{on=1;next} /^ledger-rotate:/{on=0} on' <<<"$stuck_out")"
-if grep -q 'Entry B' <<<"$stuck_list"; then
+# The positive control comes FIRST: an empty stuck list satisfies both absences below, and an
+# empty list is exactly what a rotator that stopped classifying produces.
+if grep -q 'Entry STUCK' <<<"$stuck_list"; then
+  ok "  the stuck list is non-empty and names the genuinely-stuck entry, so the two absences below are discriminations rather than an empty grep"
+else
+  bad "  the stuck list does not name the entry the seed built for it, so the absences below hold over an empty list and prove nothing"
+fi
+if grep -q 'PC-CLOSED-A' <<<"$stuck_list"; then
   bad "  an ARCHIVABLE entry was reported as stuck — the two predicates are the same one"
 else
-  ok "  and an archivable entry is not in that list, so the row discriminates"
+  ok "  and PC-CLOSED-A, which this same run reports as moving, is NOT in that list: archivable and stuck are different questions"
+fi
+if grep -q 'PC-OPEN-DECOY' <<<"$stuck_list"; then
+  bad "  an OPEN entry that merely NARRATES the phrase was reported as closed-but-unarchivable — that is the unanchored body rule back, and it files live work as stuck"
+else
+  ok "  and the OPEN decoy is not in it either, so the stuck predicate is keyed on an annotation and not on the phrase appearing"
 fi
 
 # --- THE ENTRY THAT QUOTES THE RULE MUST NOT BE ARCHIVED BY IT (PC-S331) -------------------
@@ -610,6 +798,85 @@ elif ! bm_archived "$BM" PC-BM-CLOSED-HEADING; then
   bad "  MUTATION: the closed HEADING entry ALSO stopped being archived, so the mutant broke the parser outright and the kill is not attributable to the bullet arm"
 else
   ok "  MUTATION: deleting the bullet arm strands the closed BULLET entry in the live file while the HEADING entry still archives — one assertion, one shape"
+fi
+
+# --- MUTATION: DELETE THE ARCHIVE ARM OF prefix_entry_count() -----------------------------
+#
+# WHY THIS GUARD LIVES IN THE ROTATE FIXTURE AND NOT IN `ledger-reverify`. The arm being guarded
+# is one line inside `prefix_entry_count()`: the sprint prefix is counted over the OPEN entries
+# UNIONED with the ARCHIVED labels. Its whole purpose is to survive a ROTATION — an archived
+# sibling must keep counting, so that moving it cannot make a shared prefix look unique. That
+# harm therefore needs an archive file holding a sibling, which is a state only a rotation
+# produces, and this is the only fixture that rotates. `core/fixtures/ledger-reverify` passes
+# 88/88 with the line present and 88/88 with it deleted, because its own ambiguity pair is two
+# LIVE entries and its seed writes no archive at all; giving it one would mean teaching that
+# fixture to rotate, which is this fixture.
+#
+# THE HARM IS NOT A CHANGED NUMBER, IT IS A CHANGED VERDICT, and the seed is built to show that
+# rather than a count. Two entries share PC-S901; one is closed and rotates. With the archive arm
+# the prefix still names 2 entries, so the survivor stays NAMED-UPSTREAM-AMBIGUOUS — "upstream
+# cites this prefix, more than one entry carries it, read the commit and decide". Without it the
+# prefix names 1, `named_absorbed()`'s fallback fires, and the operator is told upstream absorbed
+# THIS entry, by name, on a commit that says no such thing. A confidently wrong single attribution
+# is worse than the silence it replaces, which is why the arm exists.
+#
+# NOTE THE ROW-SET ARM ABOVE CANNOT COVER THIS. The count it moves lives in the DETAIL column,
+# which that arm drops by design; only when the count crosses 1 does a STATUS change. Two
+# assertions, two subjects.
+PC="$WORK/prefix-counter"; rm -rf "$PC"; mkdir -p "$PC/led" "$PC/ctl" "$PC/mut"
+cat > "$PC/led/push-candidate-ledger.md" <<'PCLED'
+# Push-candidate ledger
+
+## PC-S901-ALPHA — open, and the only LIVE member of its prefix once the sibling is archived
+
+verify: theirs_has core/scripts/thing.sh "MARKER_A"
+
+## PC-S901-BETA — closed and archivable: the sibling the rotation moves
+
+<br>**ADOPTED UPSTREAM (v0.95.0, verified 2026-01-01).** Upstream took it.
+
+verify: theirs_has core/scripts/thing.sh "MARKER_B"
+PCLED
+bash "$ROT" "$PC/led/push-candidate-ledger.md" --apply >/dev/null 2>&1
+
+cp "$(dirname "$RV")"/*.sh "$PC/ctl"/ 2>/dev/null
+cp "$(dirname "$RV")"/*.sh "$PC/mut"/ 2>/dev/null
+# ONE LINE, REPLACED BY A NO-OP RATHER THAN DELETED, so the brace group it sits in still parses
+# and the mutant is a working classifier whose ONLY difference is the archive side of the union.
+sed 's@^\( *\)printf .*ARCHIVE_LABELS.*@\1:@' "$RV" > "$PC/mut/ledger-reverify.sh"
+pc_rows() { bash "$1" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" "$PC/led/push-candidate-ledger.md" 2>/dev/null; }
+
+pc_ndiff="$(diff "$RV" "$PC/mut/ledger-reverify.sh" | grep -c '^[<>]' || true)"
+if [ ! -s "$PC/led/push-candidate-ledger.archive.md" ] || grep -q 'PC-S901-BETA' "$PC/led/push-candidate-ledger.md"; then
+  bad "FIXTURE BROKEN — the PC-S901 sibling did not reach the archive, so the counter guard below has no archived label to count and would pass for the wrong reason"
+elif cmp -s "$RV" "$PC/mut/ledger-reverify.sh"; then
+  bad "FIXTURE BROKEN — the prefix_entry_count mutation matched nothing, so the counter assertions below are unproven"
+elif [ "$pc_ndiff" -ne 2 ]; then
+  bad "FIXTURE BROKEN — the prefix_entry_count mutation changed $((pc_ndiff / 2)) lines, expected exactly 1; a wider mutation makes any kill unattributable"
+else
+  pc_ctl="$(pc_rows "$PC/ctl/ledger-reverify.sh")"
+  pc_mut="$(pc_rows "$PC/mut/ledger-reverify.sh")"
+  # THE CONTROL, TWICE OVER. An unmutated copy in the sandbox must reproduce the real answer, and
+  # the mutant must still be a working classifier — both arms below are ABSENCE-shaped on the
+  # mutant side, and a copy that died sourcing lib.sh emits nothing, which satisfies an absence.
+  if ! grep -q 'NAMED-UPSTREAM-AMBIGUOUS' <<<"$pc_ctl" || ! grep -q 'PC-S901' <<<"$pc_ctl"; then
+    bad "FIXTURE BROKEN — an UNMUTATED reverify copy does not report PC-S901 as ambiguous after the rotation, so the mutant's silence below is not attributable to the deleted arm"
+  elif ! grep -q 'STILL-LIVE' <<<"$pc_mut" || ! grep -q 'PC-S901-ALPHA' <<<"$pc_mut"; then
+    bad "  MUTATION: the mutated copy emits no verdict for the surviving entry at all, so it is a broken classifier and its silence is not a kill"
+  elif grep -q 'NAMED-UPSTREAM-AMBIGUOUS' <<<"$pc_mut"; then
+    bad "  MUTATION: PC-S901 is still reported AMBIGUOUS with the archive arm of prefix_entry_count() deleted — nothing in this repo notices that deletion, and the archived sibling is not what keeps the prefix shared"
+  elif grep -q 'NAMED-UPSTREAM	PC-S901-ALPHA' <<<"$pc_mut"; then
+    ok "  MUTATION: deleting the archive arm of prefix_entry_count() turns the correct AMBIGUOUS row into a confident NAMED-UPSTREAM attribution of PC-S901-ALPHA — the arm is load-bearing across a rotation"
+  else
+    bad "  MUTATION: the AMBIGUOUS row vanished but no single attribution replaced it, so the mutant changed the count in some other way and this arm is not measuring the union's archive side"
+  fi
+  # AND THE CORRECT ANSWER IS ASSERTED POSITIVELY, not merely as the mutant's opposite: the
+  # survivor must NOT be attributed to a commit that names only the prefix.
+  if grep -q 'NAMED-UPSTREAM	PC-S901-ALPHA' <<<"$pc_ctl"; then
+    bad "  the shipping reverify attributes PC-S901-ALPHA to upstream by NAME after its sibling was archived — that is the anti-monotonic count the archive arm exists to prevent"
+  else
+    ok "  and the shipping reverify makes no single attribution for the surviving entry, which is the verdict the archive arm buys"
+  fi
 fi
 
 echo
