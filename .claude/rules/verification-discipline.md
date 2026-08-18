@@ -111,7 +111,8 @@ changes.
 
 ## Verify a release the way the gate runs it
 
-`AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`, and read the fixture by NAME in the full
-output. `core/git-hooks/pre-push` is the CONSUMER's hook: run here it prints a green banner
-having executed almost nothing. The content-key skip prints a green banner too, and it is
-correct to — but neither is evidence that your change was exercised.
+`AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`, and read the fixture by NAME. The
+CONSUMER's hook `core/git-hooks/pre-push` prints a green banner here having run almost
+nothing; the content-key skip prints one too, correctly — neither is evidence your change ran.
+The TALLY is not the verdict either: 159 ok / 0 FAIL while the gate exited 1 on a phase outside
+the suite. Read the gate's exit, never a backgrounded wrapper's.
