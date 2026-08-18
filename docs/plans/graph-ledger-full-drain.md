@@ -381,7 +381,9 @@ BATCHES 1–4 ARE MERGED AND PUSHED, AS `v0.374.0`, `v0.375.0`, `v0.376.0` AND `
 IS RELEASED, NOTHING IS WAITING ON A HUMAN, AND PUSHING WORKS. CUT BATCH 5 — RE-DERIVE THE
 WORKLIST FIRST; EVERY BATCH SECTION BELOW IS NOW A RECORD, NOT AN INSTRUCTION.**
 
-**BATCH 4 IS COMPLETE, MERGED AND PUSHED AS `v0.377.0`.** Merge `5ecd136`, release `03be95f`.
+**BATCH 4 IS COMPLETE, MERGED AND PUSHED AS `v0.377.0`.** Merge `5ecd136`, release `03be95f`, followed on `main` by `ce97b23` (a
+`fixture-mutants.md` correction) and `26ea6ce` (a fixture-comment provenance correction). `main` is
+at `26ea6ce` and `origin/main` matches it.
 `BL-031`, `BL-035`, `BL-046`, `BL-050` and `BL-068` are annotated `**LANDED (v0.377.0, verified
 867597a).**` and rotated. Open `BL-` entries **60 → 59** (five closed, four filed); archive
 **9 → 14**. The gate was run the way the hook runs it on the branch AND again on the merged tree —
@@ -458,29 +460,51 @@ false-positive MEASUREMENT, not the glob change), `BL-073` (three telemetry read
 hand-copy — deferred deliberately rather than landing a second runtime read into a release whose
 fixtures three hands had just stabilised).
 
-### BATCH 5 — the evidence-and-transcript validator family
+### BATCH 5 — the validators that report on evidence they did not read
 
-**Measured at batch 4's wind-down: 59 open `BL-` entries — 55 `STILL-LIVE`, 4 `HAND-REVIEW`, 0
-`CLOSE-CANDIDATE`**, one row per entry, against an impossible-id control of 0. Re-derive with
-`bash scripts/backlog-reverify.sh`; this paragraph is a hypothesis about a tree that moves.
+**Re-derived at batch 4's close, on `26ea6ce`: 59 open `BL-` entries — 55 `STILL-LIVE`,
+4 `HAND-REVIEW`, 0 `CLOSE-CANDIDATE`**, one row per entry, against an impossible-id control of 0.
+Archive 14. **Re-run `bash scripts/backlog-reverify.sh` before you believe any of it** — batch 4
+opened on a paragraph exactly like this one and `BL-046` had moved.
 
-**There is no `CLOSE-CANDIDATE` to adjudicate, so batch 5 starts at the remediation step** — but
-re-run the instrument first, because batch 4 began the same way and `BL-046` appeared.
+**There is no `CLOSE-CANDIDATE` to adjudicate, so batch 5 starts at the remediation step.** Run the
+instrument anyway: an entry going `STILL-LIVE → CLOSE-CANDIDATE` between sessions has happened
+twice in this program, and both times the RECEIPT had rotted rather than the defect being fixed.
 
-**Proposed batch: `BL-058`, `BL-059`, `BL-061`, `BL-063`.** One subsystem as step 13 requires — the
-validators that report on evidence they did not read:
+**The batch: `BL-058`, `BL-059`, `BL-061`, `BL-063`.** All four confirmed `STILL-LIVE` on `26ea6ce`.
+One subsystem, as step 13 requires — a validator whose verdict is about evidence it never opened,
+or which refuses over an absence it cannot distinguish from a finding.
 
-- **`BL-058`** — three core validators emit an "examined nothing" verdict in three spellings
-  carrying three meanings. This is the family's own vocabulary problem and the natural anchor.
-- **`BL-059`** — `validate-steering-budget.sh` reports how MANY transcripts it read and never
-  WHICH.
-- **`BL-061`** — a transcript corpus containing ZERO transcripts is classified as operator forgery.
-- **`BL-063`** — one `grep` takes down the whole of Check 30.
+- **`BL-058` is the anchor, and it is a VOCABULARY defect.** Three validators spell "examined
+  nothing" three ways at three exit codes — `AUDITED NOTHING` at 4, `PASS — NOTHING VERIFIED` at 0,
+  `VACUOUS:` at 78 — and none of `docs/vocabulary-index.md`'s twelve vocabularies is this one.
+  **The machinery for this landed in batch 4**: `docs/vocabulary-index.md` is DERIVED and
+  byte-compared at pre-push, an arm declares its vocabulary with a `# vocabulary:` marker, and
+  `I39` now has a fourth reader binding an ACTING region to a derived status set. Read that arm
+  before designing this one. Note the hard part is not the register — it is that
+  `gate-adjudication-verdict.json`'s `verdict` enum is exactly `PASS` `FAIL`, so a run that
+  examined nothing has no verdict it can legally write.
+- **`BL-059`** — `validate-steering-budget.sh` prints `transcripts scanned : N` and never WHICH,
+  so a wrong-session run is byte-identical to a correct one. The entry records that its own filing
+  was narrow in two directions and that `--dir` was added after it. This is a RENDER-the-evidence
+  fix, and `mechanism-design.md`'s "render safety-critical output; do not let a model retype it"
+  is the rule that governs it.
+- **`BL-061`** — an EMPTY `--transcript-dir` is classified as forgery, so passing the flag with no
+  transcripts WEDGES the pipeline while passing no flag at all fails open. The entry carries a
+  three-arm end-to-end reproduction against the real validator. **This one can wedge live work, so
+  `mechanism-design.md`'s "never ship a check that wedges live work or errors on correct data"
+  binds the FIX as well as the defect** — PENDING/SKIP over FAIL for an absent corpus.
+- **`BL-063`** — one `grep` at `validate-spec-join.sh:164` sits above every other join, so an
+  optional `by <author>` qualifier takes down the whole of Check 30 at `exit 2`. **The entry states
+  that its own filing's cause is FALSE and its blast radius understated** — read the entry, not the
+  filing it quotes.
 
 `BL-056` and `BL-060` are the `validate-provenance-block.sh` pair and are the obvious batch 6.
+
 **Substitute freely if the re-derivation disagrees — but keep the batch to ONE subsystem, read each
-receipt before building, and put an independent hand on the SCOPE question, which was right about
-the width on four of five entries this batch.**
+receipt before building, and put an independent hand on the SCOPE question.** That hand was right
+about the width on FOUR OF FIVE entries in batch 4; the one it was wrong about, it was wrong in the
+direction of recommending a change a fixture then refuted.
 
 ### BATCH 4 — COMPLETE, SHIPPED AS `v0.377.0`. A RECORD OF HOW IT WAS SCOPED, NOT AN INSTRUCTION. DO NOT RE-DO IT.
 
