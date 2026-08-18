@@ -377,9 +377,10 @@ passes, and 7 version-less rows correctly do not trip it.
 **START HERE ON A FRESH SESSION — the numbered next actions.**
 
 **ACTION ZERO: THE PULL IS DONE, APPLIED AND CLOSED. PHASES 0–2, 4 AND 5 ARE COMPLETE. PHASE 3
-BATCHES 1–4 ARE MERGED AND PUSHED, AS `v0.374.0`, `v0.375.0`, `v0.376.0` AND `v0.377.0`. THE HOLD
-IS RELEASED, NOTHING IS WAITING ON A HUMAN, AND PUSHING WORKS. CUT BATCH 5 — RE-DERIVE THE
-WORKLIST FIRST; EVERY BATCH SECTION BELOW IS NOW A RECORD, NOT AN INSTRUCTION.**
+BATCHES 1–5 ARE MERGED AND PUSHED, AS `v0.374.0` THROUGH `v0.378.0`. THE HOLD IS RELEASED AND
+PUSHING WORKS. **ONE DECISION IS WAITING ON THE OPERATOR — the exit-code question in `BL-078`** —
+and it blocks nothing: batch 6 can be cut without it. CUT BATCH 6 — RE-DERIVE THE WORKLIST FIRST;
+EVERY BATCH SECTION BELOW IS NOW A RECORD, NOT AN INSTRUCTION.**
 
 **BATCH 4 IS COMPLETE, MERGED AND PUSHED AS `v0.377.0`.** Merge `5ecd136`, release `03be95f`, followed on `main` by `ce97b23` (a
 `fixture-mutants.md` correction) and `26ea6ce` (a fixture-comment provenance correction). `main` is
@@ -460,7 +461,82 @@ false-positive MEASUREMENT, not the glob change), `BL-073` (three telemetry read
 hand-copy — deferred deliberately rather than landing a second runtime read into a release whose
 fixtures three hands had just stabilised).
 
-### BATCH 5 — the validators that report on evidence they did not read
+**BATCH 5 IS COMPLETE, MERGED AND PUSHED AS `v0.378.0`.** Merge `890b921`, release `6011d94`.
+`main` is at `890b921` and `origin/main` matches it. `BL-058`, `BL-059`, `BL-061` and `BL-063`
+all report `CLOSE-CANDIDATE` on the merged tree under receipts that were REPLACED — see below.
+Re-derived after the push: **64 `BL-` entries — 56 `STILL-LIVE`, 4 `HAND-REVIEW`, 4
+`CLOSE-CANDIDATE`**, against an impossible-id control of 0. The gate was run the way the hook
+runs it on the branch AND again on the merged tree — **160 fixtures, 160 ok, 0 FAIL, all 15
+phases PASS, `pre-push: all gates green`** both times, gate exit read directly — with the nine
+changed fixtures read BY NAME against an impossible-name control of 0 and a present-name control
+of 1, in the same invocation. All four `PC-` ids resolve in the pushed release commit MESSAGE
+against an impossible-id control of 0.
+
+**ALL FOUR RECEIPTS WERE DEFECTIVE. That is four out of four, and the count across the program is
+now nine in five batches.** The polarities repeat rather than diversifying:
+
+- **`BL-063`'s** closed on `[ "$s" -ne 2 ]`, which accepts rc 1 — and BOTH destructive remedies
+  reach rc 1, because with the predicate deleted the run falls through to the next join and fails
+  there. Deleting the guard scored as FIXED.
+- **`BL-061`'s** asserted only that two arms both return 0, with NO arm anything must still DENY,
+  so deleting the feature, neutering the citation check and making the branch unreachable all
+  scored as FIXED — while REJECTING the PENDING/SKIP remedy `mechanism-design.md` permits.
+- **`BL-059`'s** closed on a hardcoded constant, on an echoed argument, and on a fix that renders
+  the path and then exits 1, because `O=$(...)` discards `$?`.
+- **`BL-058`'s** REQUIRED THE DEFECT TO SURVIVE: it counted files still carrying the divergent
+  spellings and demanded `n >= 2`, so a correct unification — measured live as the fix landed,
+  3 → 0 — makes it exit 1 forever. **Third occurrence of the `BL-068` polarity.**
+
+**THE REPLACEMENT RECEIPT IS NOT SAFE MERELY FOR BEING NEW.** An independently-authored
+replacement for `BL-058` keyed on the vocabulary's NAME; the build named the set "empty-subject
+verdict token", containing none of the words it looked for, and it rejected the correct fix — the
+same polarity it was written to remove. Caught by driving it. **Key a receipt on facts a fix
+cannot rename: emitter PATHS, exit codes, structural relationships.**
+
+**TWO FIXTURES REFUTED THEIR OWN ARM'S AUTHOR, IN ONE BATCH.** `spec-join-integrity` found that
+un-disarming Check 30 makes a pre-existing false positive REACHABLE — the LR population is a
+whole-file scan, so an absent-id CONTROL TOKEN quoted in a consumer's prose becomes a finding.
+`check-25-steering-conduct` found the steering fix INCOMPLETE: rendering only the members read
+leaves an empty corpus naming no source, and a `--since` window excluding everything is the
+invocation `retro.md` itself prescribes. Both were arms that would have shipped green. **Keep the
+fixture author a different hand from the arm's; it is now 3-for-3 across batches 4 and 5.**
+
+**FOUR OF THE FIGURES I PASSED TO DELEGATES WERE STALE OR WRONG, AND EVERY ONE WAS CAUGHT BY THE
+DELEGATE.** The `DISARMED` "opposite polarity" claim (all 24 sites exit 2; the apparent `exit 0`
+is an inner heredoc's, escalated to 1), the rendering-convention exemplars (both named files carry
+0 label-column emitters), the "13 bare capability entries" (a MENTION count — three defensible
+counting methods give 5, 8 and 13), and the ordinal qualifier shape (the producer has no ordinal
+path; what looked like one is a free-text TYPE). **A figure you are merely relaying is still a
+hypothesis.**
+
+**FILED THIS BATCH, each receipt verified by me in both directions before filing:** `BL-075` (the
+graph entry that arrived unadjudicated — HOLDS-WIDER; the consumer's own prescribed `\b` fix is a
+TOTAL DISARM on bash 3.2, examining 0 markers over 354 files, and its own receipt accepted it),
+`BL-076` (five sibling count-without-identity validators; `validate-ci-gates.sh` fails OPEN on a
+wrong retro root, worse than the entry just closed), `BL-077` (derive the session's own corpus
+rather than retyping an `ls -t | head -1` derivation in prose), `BL-078` (the wider empty-subject
+population, 17 sites at 4 exit codes, with the exit-code decision laid out as three options for
+the operator), `BL-079` (the LR-population scan; every narrowing that clears the false positive
+loses genuine locked requirements, and the best candidate disarms the check).
+
+**AWAITING THE OPERATOR: the exit-code question in `BL-078`.** `EXAMINED NOTHING` is now one token
+at three exit codes (0, 4, 78) because unifying the codes is consumer-visible and was deliberately
+not taken on this branch. Three options are costed in the entry.
+
+**A COST TO WATCH BEFORE THE NEXT ARM LANDS.** `validator-fork-budget` profiles at **6850–6930
+against a 7000 ceiling**, and the profile is not stable run to run. Two invariants landed this
+batch (`I92`, `I93`). That fixture fails the push in BOTH directions, so the next arm should be
+written for forks or the ceiling revisited.
+
+### BATCH 6 — the `validate-provenance-block.sh` pair
+
+`BL-056` and `BL-060` were named as the obvious batch 6 at batch 5's scoping and neither has been
+re-derived since. **Re-run `bash scripts/backlog-reverify.sh` before believing any count above.**
+The batch-5 filings also give a coherent alternative subsystem — `BL-076` and `BL-078` are the
+same family as what just shipped, and `BL-079` is a live false positive on the reference consumer
+that this batch made reachable.
+
+### BATCH 5 — COMPLETE, SHIPPED AS `v0.378.0`. A RECORD OF HOW IT WAS SCOPED, NOT AN INSTRUCTION. DO NOT RE-DO IT.
 
 **GRAPH FILED TWO NEW ENTRIES DURING BATCH 4, AND ONE OF THEM IS NOT MIRRORED HERE.** The reference
 consumer's live ledger moved under this program — md5 `c3b8ed13…` → `1f13c17f…`, 2953 → 3024 lines,
