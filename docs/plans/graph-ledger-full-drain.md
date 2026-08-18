@@ -377,65 +377,112 @@ passes, and 7 version-less rows correctly do not trip it.
 **START HERE ON A FRESH SESSION — the numbered next actions.**
 
 **ACTION ZERO: THE PULL IS DONE, APPLIED AND CLOSED. PHASES 0–2, 4 AND 5 ARE COMPLETE. PHASE 3
-BATCHES 1, 2 AND 3 ARE MERGED AND PUSHED, AS `v0.374.0`, `v0.375.0` AND `v0.376.0`. THE HOLD IS
-RELEASED, NOTHING IS WAITING ON A HUMAN, AND PUSHING WORKS. CUT BATCH 4 — RE-DERIVE THE WORKLIST
-FIRST; THE BATCH-3 SECTION BELOW IS NOW A RECORD, NOT AN INSTRUCTION.**
+BATCHES 1–4 ARE MERGED AND PUSHED, AS `v0.374.0`, `v0.375.0`, `v0.376.0` AND `v0.377.0`. THE HOLD
+IS RELEASED, NOTHING IS WAITING ON A HUMAN, AND PUSHING WORKS. CUT BATCH 5 — RE-DERIVE THE
+WORKLIST FIRST; EVERY BATCH SECTION BELOW IS NOW A RECORD, NOT AN INSTRUCTION.**
 
-**BATCH 3 IS COMPLETE, MERGED AND PUSHED AS `v0.376.0`.** Merge `9bcec5f`, release `363b5f2`.
-`BL-013`, `BL-032`, `BL-036` and `BL-065` are annotated `**LANDED (v0.376.0, verified 9b18af4).**`
-and rotated. Open `BL-` entries **64 → 60**; archive **5 → 9**. The gate was run the way the hook
-runs it and is GREEN — **159 fixtures, 159 ok, 0 FAIL, all 15 phases PASS,
-`pre-push: all gates green`** — with the four changed fixtures read BY NAME against an
-impossible-name control returning 0 and a present-name control returning 1, in the same
-invocation. `validate-release-version.sh`: one release in the range.
+**BATCH 4 IS COMPLETE, MERGED AND PUSHED AS `v0.377.0`.** Merge `5ecd136`, release `03be95f`.
+`BL-031`, `BL-035`, `BL-046`, `BL-050` and `BL-068` are annotated `**LANDED (v0.377.0, verified
+867597a).**` and rotated. Open `BL-` entries **60 → 59** (five closed, four filed); archive
+**9 → 14**. The gate was run the way the hook runs it on the branch AND again on the merged tree —
+**160 fixtures, 160 ok, 0 FAIL, all 15 phases PASS, `pre-push: all gates green`** both times — with
+the six changed fixtures read BY NAME against an impossible-name control returning nothing and a
+present-name control returning 1, in the same invocation. `validate-release-version.sh`: one
+release in the range. All five `PC-` ids resolve in the pushed release commit MESSAGE against an
+impossible-id control of 0.
 
-**THE FIRST GATE RUN BLOCKED AND THE FIXTURE TALLY DID NOT SAY SO. READ THE GATE'S OWN EXIT
-CODE, NOT THE SUITE'S COUNT AND NOT A TASK WRAPPER'S STATUS.** It reported **159 ok / 0 FAIL**
-while the gate exited **1**, because a phase OUTSIDE the suite failed: comments written in this
-release cited `docs/backlog.md`, `docs/backlog.archive.md` and the analysis note from inside
-`core/`, none of which `install.sh` ships, so every pointer is dead in a consumer tree. A
-backgrounded `bash .githooks/pre-push` also reports the WRAPPER's exit, which was 0 over a gate
-that exited 1 — the same shape as the `| tail` hazard, one layer up.
+**FOUR OF THE FIVE ENTRIES WERE WIDER THAN FILED, AND THAT IS NOW THE BASE CASE RATHER THAN THE
+EXCEPTION.** `BL-035` named one drifted close predicate and **four** had drifted across three
+programs. `BL-050` named one undisposed status and **four** were undisposed. `BL-068`'s site list
+missed **the message the tool PRINTS to the operator**, which is the most consequential of its
+sites. Only `BL-031` was exactly as filed, and that was established by re-deriving its population,
+not by reading the entry. **Send an independent hand at the SCOPE question every time; it paid on
+four of five.**
 
-**`validate-no-dead-doc-refs.sh` SCANS `docs/*.md` — TOP LEVEL ONLY.** Three sites were flagged;
-four `docs/analysis/…` citations were the identical dead reference sitting outside its glob and
-were fixed anyway. The glob is a real scope gap and was deliberately NOT widened: its
-false-positive set over `docs/**` is unmeasured, and this repo does not ship an unmeasured check.
+**THE FIRST GATE EXITED 1 AND THE FIXTURE TALLY WAS 156 ok / 4 FAIL — FOUR RED UNITS, ONE CAUSE,
+AND NOT ONE OF THEM WAS ABOUT ITS OWN SUBJECT.** `I77` fired on three shipped shell files tracked
+`100644`, so `validate-enforcement-map.sh` exited 1, so every fixture that differentials against a
+clean baseline correctly reported its own control dirty rather than reporting on it —
+`layer-contract-conformance` and its `-b` sibling ("the UNMUTATED contract already fails — every
+mutant below is unattributable"), `validator-arm-selection` ("the baseline this fixture
+differentials against is already dirty"), and `validator-fork-budget`. **The mode loss came from
+editing files with `> tmp && mv`, which drops the bit at the umask — the exact hazard I77's own
+message names.** Fix with `git update-index --chmod=+x`, and check the bit after ANY edit that
+rewrites a shipped script through a temp file.
 
-**A RECEIPT CAN BE WRONG IN THE OTHER DIRECTION TOO, AND BATCH 3 FOUND THE FIRST INSTANCE.**
-Batch 2's lesson was a correct fix scored as work remaining. `BL-032`'s receipt was the INVERSE:
-it was satisfied by `if (0) return "bullet"` — deleting the bullet arm from `ledger_entry_shape()`,
-the one remedy `ledger-entry-boundary-measurement.md` rules out as WORSE than the defect, blinding
-the rotator to 21 live and 38 archived bullet entries. Measured across three trees with the sides
-asserted byte-different first: pre-fix **1**, the shipped guard **0**, the forbidden mutant **0** —
-a FALSE CLOSE available to a destructive fix. The receipt now carries a third ledger requiring a
-CLOSED BULLET entry to reach the archive, and the same trees measure **1 / 0 / 1**. **Ask of every
-receipt not only whether a correct fix satisfies it, but what ELSE does.**
+**THE RECEIPT-DEFECT COUNT IS NOW FIVE ACROSS FOUR BATCHES, IN BOTH DIRECTIONS, AND TWO OF THIS
+BATCH'S WOULD HAVE CERTIFIED THE WRONG FIX.** `BL-068`'s accepts ONLY the counter change this
+repo's own CHANGELOG records as a removed regression — its corpus is `ledger-reverify.sh` and the
+string `ledger-rotate` never appears in it, so both remedies the entry's prose calls legitimate
+exit 1 forever. It was REPLACED with one driving the shipping rotator, proven four ways: fixed 0,
+pre-fix 1, a silent stub 9, guidance deleted 1. `BL-050`'s closes on a sentence about a DIFFERENT
+status, because `grep -F NAMED-UPSTREAM` matches inside `NAMED-UPSTREAM-AMBIGUOUS`, and on a
+sentence RESTATING the defect. `BL-031`'s binds the escape's SYNTACTIC POSITION, so hoisting the
+message into a variable satisfies it while the escape still emits. **Ask of every receipt: does a
+correct fix satisfy it, what ELSE does, and can the CORRECT fix be one it rejects.**
 
-**THE OBVIOUS LEDGER FIX WAS REFUTED THREE TIMES AND THE FOURTH SURVIVED ONLY BECAUSE A FIXTURE
-DISAGREED WITH A CORPUS SCAN.** The `---`-as-boundary route the analysis file proposes is closed
-on today's corpus: 96 boundary-shaped lines against 50 separators live, 142 against 70 archived. A
-tail-shape discriminator has an enumerated false-positive set of 12. A shape-keyed refusal measured
-ZERO over all four real corpora **and still wedged `core/fixtures/ledger-rotate/seed.sh`**, whose
-real prose-titled entry with a VERSIONLESS close sits immediately after a closed one. A second hand
-then found three more false positives in the harm-keyed replacement. **Four of the five defects in
-that guard were found by a party other than its author, every one after it measured clean.**
+**A FIXTURE REFUTED A CHANGE ITS OWN AUTHOR HAD JUST MADE, ON A RECOMMENDATION FROM AN INDEPENDENT
+SCOPE HAND, AND THE FIXTURE WAS RIGHT.** Routing `ledger-rotate.sh`'s `susp_closed` through the
+lifted anchored predicate turns a REAL entry into `REFUSING to rotate` — rc 0 → 1 — and a refusal
+writes nothing. **The stuck rule and the refusal-suppressor FAIL IN OPPOSITE DIRECTIONS**: the
+first makes a CLAIM, so looseness states something false and tightening is strictly correct; the
+second SUPPRESSES a refusal, so tightness refuses real work. One rule cannot serve both. Reverted,
+filed as `BL-071`. **Keep the fixture author a different hand from the arm's — it is the only
+mechanism in this program that has ever told a session it was wrong about its own change.**
 
-**THE BOUNDARY RULE ITSELF IS STILL UNCHANGED AND SHOULD STAY THAT WAY WITHOUT A MEASUREMENT.**
-`ledger_entry_shape()` is byte-identical; both fixes are additive. Six call sites across four
-programs read it, and a THIRD hand-copy survives at
-`core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh:84-85`, so
-`ledger-rotate.sh`'s "there is one boundary now" is true of the two ledger tools and false of the
-directory. Recorded, not fixed — folding an unmeasured third reader into a release whose subject is
-that this rule cannot be changed safely would be the mistake the release is about.
+**A REFUSAL THAT IS NOT FATAL IS A SILENT CLEAN RUN, AND THIS BATCH SHIPPED ONE BEFORE REMOVING
+IT.** `ledger_close_awk()` refuses when the close grammar is missing or not single-homed;
+interpolated into an awk program that refusal became an EMPTY string, awk died on an undefined
+function, and the caller exited **0 with no rows**. Measured rc=0/0 rows against rc=0/1 row when it
+resolves. All three callers now compute the lift once behind `|| exit 2`. **When you make a helper
+that can refuse, drive its refusal path and read the CALLER's exit, not the helper's.**
 
-**Two findings are recorded and NOT filed as backlog entries**, and a later batch should decide
-whether they earn one: the `docs/*.md` glob gap above, and
-`core/hooks/ai-dlc-subagent-probe.sh:100-102`, which reads `peak`/`turns`/`compactions` through the
-same `|| echo 0` conflation `BL-036` was about — unparseable telemetry reads as zero. It gates no
-operator question, which is why it is a NOTE rather than a defect.
+**TWO NUMBERS I RELAYED FROM A SCOPE REPORT WERE WRONG AND THE FIXTURE HANDS CAUGHT BOTH** — "five
+copy sites" was one, and a claimed live defect had already been closed by my own fix. **A figure
+from another session is a hypothesis until re-derived, including one you are merely passing on.**
+The same rule bit on shipped prose: the `84 rows / 10 lines` consumer figure in `BL-068` did not
+reproduce (12 rows, 2 lines, on a 2953-line ledger against the original's 4356), so the comments
+now state the SHAPE and tell the reader to re-derive.
 
-### BATCH 4 — do these two things, in this order
+**Two independent hands, on two different batteries, measured the same thing: AN UNMUTATED CONTROL
+PASSES AGAINST A SUBJECT REPLACED BY `exit 0`**, because rc=0 with no findings is exactly what a
+clean copy looks like. The control is necessary and is NOT what stops silence scoring as a kill —
+PRESENCE-shaped assertions are.
+
+**FILED THIS BATCH, each receipt proven three ways before filing**: `BL-071` (the
+refusal-suppressor, `verify: manual` because the two inputs a fix must separate are the same shape
+on today's signals — an `sh` receipt would be a standard nobody can meet), `BL-072`
+(`validate-no-dead-doc-refs.sh` reads 31 of 105 markdown files under `docs/`; the work is the
+false-positive MEASUREMENT, not the glob change), `BL-073` (three telemetry reads carrying the
+`BL-036` conflation, tiered NOTE), `BL-074` (the entry-line half of the close predicate, still a
+hand-copy — deferred deliberately rather than landing a second runtime read into a release whose
+fixtures three hands had just stabilised).
+
+### BATCH 5 — the evidence-and-transcript validator family
+
+**Measured at batch 4's wind-down: 59 open `BL-` entries — 55 `STILL-LIVE`, 4 `HAND-REVIEW`, 0
+`CLOSE-CANDIDATE`**, one row per entry, against an impossible-id control of 0. Re-derive with
+`bash scripts/backlog-reverify.sh`; this paragraph is a hypothesis about a tree that moves.
+
+**There is no `CLOSE-CANDIDATE` to adjudicate, so batch 5 starts at the remediation step** — but
+re-run the instrument first, because batch 4 began the same way and `BL-046` appeared.
+
+**Proposed batch: `BL-058`, `BL-059`, `BL-061`, `BL-063`.** One subsystem as step 13 requires — the
+validators that report on evidence they did not read:
+
+- **`BL-058`** — three core validators emit an "examined nothing" verdict in three spellings
+  carrying three meanings. This is the family's own vocabulary problem and the natural anchor.
+- **`BL-059`** — `validate-steering-budget.sh` reports how MANY transcripts it read and never
+  WHICH.
+- **`BL-061`** — a transcript corpus containing ZERO transcripts is classified as operator forgery.
+- **`BL-063`** — one `grep` takes down the whole of Check 30.
+
+`BL-056` and `BL-060` are the `validate-provenance-block.sh` pair and are the obvious batch 6.
+**Substitute freely if the re-derivation disagrees — but keep the batch to ONE subsystem, read each
+receipt before building, and put an independent hand on the SCOPE question, which was right about
+the width on four of five entries this batch.**
+
+### BATCH 4 — COMPLETE, SHIPPED AS `v0.377.0`. A RECORD OF HOW IT WAS SCOPED, NOT AN INSTRUCTION. DO NOT RE-DO IT.
 
 **FIRST, ADJUDICATE `BL-046`. IT IS THE ONLY `CLOSE-CANDIDATE` AND IT MUST BE SETTLED BEFORE ANY
 REMEDIATION.** Measured at batch 3's wind-down: **60 open `BL-` entries — 56 `STILL-LIVE`,
