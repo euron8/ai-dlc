@@ -43,13 +43,51 @@ The asymmetry is deliberate and is stated in the script header.
 6. **Closed entries are in the archive** — moved, never deleted.
 7. **The preamble stays** — text belonging to no entry is not swept.
 8. **No line lost** — live + archive ≥ the original.
-9. **The acceptance test** — `ledger-reverify.sh` output is byte-identical across the
-   rotation. Rotation moves exactly the entries it already skips, so a single byte of
-   difference means the split took a live entry. This is the assertion that matters; the
-   others localise the failure.
+9. **The acceptance test** — `ledger-reverify.sh` emits the **same row set, by status and
+   subject**, across the rotation. Rotation moves exactly the entries it already skips, so a
+   row that appears or disappears means the split took a live entry. This is the assertion
+   that matters; the others localise the failure.
 10. **Idempotent** — a second `--apply` is a no-op.
 11. **The accounting guard is load-bearing** — a mutant with the balance check disabled is
     built, so the guard cannot pass vacuously.
+12. **A genuine sweep still fails the row-set test** — a mutated rotator with the version
+    digit removed from its close predicate archives a live entry that quotes the annotation
+    form, its row disappears, and the comparison in 9 fails. Without this the reshape in 9
+    would be a looser assertion with nothing saying so.
+13. **The prefix counter survives a rotation** — a mutant with the archive arm of
+    `prefix_entry_count()` removed turns a correct `NAMED-UPSTREAM-AMBIGUOUS` row into a
+    confident single attribution of the surviving sibling.
+
+## Why the acceptance test is the row set and not the bytes
+
+A byte comparison is wrong for the workflow the skill prescribes — annotate, then rotate, in
+one pass. `prefix_entry_count()` in `ledger-reverify.sh` counts a sprint prefix over the OPEN
+entries **unioned with the archived labels**, and the open extractor skips any entry carrying
+`ADOPTED UPSTREAM`. An entry annotated in the same pass is therefore on neither side while it
+sits in the live file, and on the archive side once moved — so the count **rises** across a
+move that can only shrink the live set. That number is printed inside
+`NAMED-UPSTREAM-AMBIGUOUS` details, so correct work surfaces as changed lines on an identical
+row set.
+
+**What holds is the shape, not a pair of totals: the row set does not move, the differing lines
+all carry a prefix count, and the count rises.** Re-derive it rather than quoting a number —
+run `ledger-reverify.sh` either side of the rotation on the ledger in front of you. Illustrated
+by one run, named with its population: annotating every open entry on a copy of the reference
+consumer's live ledger, 79 entries, gave 12 rows with an identical set, 2 differing lines, both
+of them prefix counts, one of which rose from 3 entries to 5. An earlier run of the same
+experiment on a larger ledger reported 84 rows and 10 differing lines. Both are true of their
+own corpus and neither is the invariant.
+
+Nothing was swept in either. The byte form hands the operator a false alarm exactly when a
+large batch of closes has landed, and the remedy it invites is unwinding correct work. The
+counter is not the defect: without its archive arm the count is anti-monotonic and converts a
+correct ambiguity into a confidently wrong attribution. The claim was wrong; the code was right.
+
+The seed carries a `PC-S900` trio — two open entries and one closed in the same pass — because
+`named_ambiguous()` gates on a `PC-S<n>` prefix shared by two or more entries. Before that
+trio existed the ledger held no id of that shape at all, so the row this assertion is about
+could not be produced no matter what the code under test did, and the assertion was decorative
+rather than merely unseeded.
 
 ## Notes for future edits
 

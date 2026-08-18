@@ -1082,6 +1082,141 @@ else
   fi
 fi
 
+
+# --- NO UNICODE ESCAPE SURVIVES INTO A DETAIL FIELD --------------------------------------
+# THE DEFECT. emit() writes its three fields with a printf whose format is three %s
+# conversions, and a %s conversion does NOT interpret escapes. A six-character
+# backslash-u-2026 typed into a detail string therefore reaches stdout VERBATIM and is
+# rendered into the region `emit-report.sh --verify` byte-compares, so the operator reads the
+# escape where the author meant an ellipsis. One emit site carried exactly that, beside a real
+# em-dash in the same sentence.
+#
+# THE SUBJECT IS THE OUTPUT, NOT THE SOURCE. A grep of ledger-reverify.sh for the escape is a
+# presence anchor on text ABOUT the program: it is satisfied by a comment, and it is blind to
+# an escape that arrives from the ledger or through a variable. This arm reads field 3 of what
+# the shipping program actually printed.
+#
+# POPULATION: field 3 of EVERY emitted row, not the ENTRY-SWALLOWED rows alone. Every detail in
+# this file goes through that one printf, so the defect is available to all two dozen emit sites
+# equally; scoping the arm to the site that happened to carry it would leave the rest unwatched
+# and read green through the next one.
+#
+# THE PATTERN DISCRIMINATES ON LENGTH, not on the backslash. It is backslash-u followed by
+# EXACTLY four hex digits. A lone backslash, the bare token u2026, and backslash-u with three
+# hex digits are all legitimate detail content — a ledger substring is echoed into field 3
+# verbatim, so a receipt may legally name any of them. PC-FIXTURE-UESCAPE-NEAR-MISS in seed.sh
+# carries all three in ONE substring that the real producer copies into a detail, and this arm
+# requires that row to be PRESENT in the corpus it scanned: a near-miss control that is absent
+# proves nothing.
+#
+# THE POSITIVE CONTROL is the row and ENTRY-SWALLOWED counts. This is an absence-shaped arm, so
+# a subject that emits nothing sweeps it clean — the exact failure fixture-mutants.md measures.
+# Zero offenders is a finding only over a corpus that has rows in it AND still carries a row
+# from the emit site the defect was on.
+#
+# TYPING THE ESCAPE IS ITSELF A HAZARD, measured while this arm was written: three attempts to
+# put the six characters into a probe — through a heredoc, through an editor and inline —
+# arrived as a single U+2026 character, and the probe then reported "no match" all three times.
+# Nothing below spells the backslash: awk builds it from its character code, so no layer between
+# this file and the regex engine can fold it.
+#
+# stdin: emitted rows. stdout: "<offenders> <rows> <swallowed> <nearmiss>"
+uescape_scan() {
+  awk -F'\t' '
+    BEGIN { BS = sprintf("%c", 92) }
+    {
+      rows++
+      if ($1 == "ENTRY-SWALLOWED") sw++
+      s = $3; isoff = 0
+      while ((p = index(s, BS "u")) > 0) {
+        t = substr(s, p + 2, 4)
+        if (length(t) == 4 && t ~ /^[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]$/) { isoff = 1; break }
+        s = substr(s, p + 2)
+      }
+      # THE NEAR-MISS COUNT EXCLUDES OFFENDERS, and it did not until a probe forced it to. A row
+      # carrying a REAL escape also carries a backslash and the token u2026, so counting both
+      # shapes independently let an offending row satisfy the near-miss precondition — measured
+      # on a hoisted-message mutant, where nm went 1 -> 3 as the escape came back. The mutant
+      # arm below requires the near-miss row to SURVIVE the mutation; that requirement is only
+      # a requirement if the offending rows cannot supply it.
+      if (isoff) off++
+      else if (index($3, "u2026") > 0 && index($3, BS) > 0) nm++
+    }
+    END { printf "%d %d %d %d\n", off + 0, rows + 0, sw + 0, nm + 0 }
+  '
+}
+# The offender dump, kept beside the scanner so both read field 3 by the same rule.
+uescape_offenders() {
+  awk -F'\t' '
+    BEGIN { BS = sprintf("%c", 92) }
+    {
+      s = $3
+      while ((p = index(s, BS "u")) > 0) {
+        t = substr(s, p + 2, 4)
+        if (length(t) == 4 && t ~ /^[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]$/) { print $1 "  " $2; break }
+        s = substr(s, p + 2)
+      }
+    }
+  '
+}
+
+ASSERTIONS=$((ASSERTIONS + 1))
+read -r ue_off ue_rows ue_sw ue_nm < <(printf '%s\n' "$OUT" | uescape_scan)
+if [ "$ue_rows" -eq 0 ] || [ "$ue_sw" -eq 0 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s scanned %s row(s), %s of them ENTRY-SWALLOWED — a zero over an empty corpus is not a finding, and this arm would have passed against a subject that printed nothing\n' "detail-no-uescape" "$ue_rows" "$ue_sw"
+elif [ "$ue_nm" -eq 0 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the PC-FIXTURE-UESCAPE-NEAR-MISS detail is not among the %s scanned rows, so a zero here does not establish that the pattern separates a real escape from an adjacent one\n' "detail-no-uescape" "$ue_rows"
+elif [ "$ue_off" -eq 0 ]; then
+  printf '  ok    %-22s no detail in %s rows (%s ENTRY-SWALLOWED) carries backslash-u-HHHH, and the near-miss row carrying a lone backslash, the token u2026 and a 3-hex backslash-u did NOT trip it\n' "detail-no-uescape" "$ue_rows" "$ue_sw"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s %s detail field(s) carry a literal backslash-u-HHHH escape. emit() prints a detail through a %%s conversion, which does not interpret escapes, so those six characters reach the operator and the byte-compared report verbatim. Write the character itself\n' "detail-no-uescape" "$ue_off"
+  printf '%s\n' "$OUT" | uescape_offenders | sed 's/^/          | /'
+fi
+
+# MUTATION — put the escape back on the emitting line of a COPY. The mutant rewrites the bold
+# span inside the ENTRY-SWALLOWED detail from the literal ellipsis to the six characters, by
+# index and substr rather than by sub(): a backslash in a sub() REPLACEMENT is reprocessed, and
+# backslash-u there is undefined across awk implementations, which would make the mutation the
+# one thing in this file whose bytes are not knowable.
+#
+# BOTH HALVES ARE ASSERTED. The kill is "the arm reports an offender"; on its own that is also
+# what a mutant which broke the emitter into garbage would produce, so the second half requires
+# the mutant to still emit its ENTRY-SWALLOWED rows and to still carry the near-miss row.
+MUTE="$(dirname "$DIST")/mut-uescape"
+rm -rf "$MUTE"; mkdir -p "$MUTE"
+cp "$(dirname "$CLOSER")"/*.sh "$MUTE/" 2>/dev/null
+awk '
+  BEGIN { BS = sprintf("%c", 92) }
+  /emit ENTRY-SWALLOWED/ {
+    p = index($0, "**")
+    if (p > 0) {
+      q = index(substr($0, p + 2), "**")
+      if (q > 0) $0 = substr($0, 1, p + 1) BS "u2026" substr($0, p + 2 + q - 1)
+    }
+  }
+  { print }
+' "$CLOSER" > "$MUTE/ledger-reverify.sh"
+
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$CLOSER" "$MUTE/ledger-reverify.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation matched nothing, so the escape arm is unproven — it has never been shown to fire\n' "mutation-uescape"
+else
+  mu_out="$(bash "$MUTE/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+  read -r mu_off mu_rows mu_sw mu_nm < <(printf '%s\n' "$mu_out" | uescape_scan)
+  if [ "$mu_off" -gt 0 ] && [ "$mu_sw" -gt 0 ] && [ "$mu_nm" -gt 0 ]; then
+    printf '  ok    %-22s the escape restored on the emitting line is REPORTED (%s offending detail(s)), while the mutant still emits %s ENTRY-SWALLOWED row(s) and the near-miss row — the arm fires, and it fired on the mutation rather than on wreckage\n' "mutation-uescape" "$mu_off" "$mu_sw"
+  elif [ "$mu_sw" -eq 0 ] || [ "$mu_nm" -eq 0 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant emitted %s ENTRY-SWALLOWED row(s) and %s near-miss row(s) over %s rows — it broke the emitter rather than restoring the escape, so any verdict from it is about wreckage\n' "mutation-uescape" "$mu_sw" "$mu_nm" "$mu_rows"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the escape is back on the emitting line and the arm reported ZERO offenders over %s rows — the arm above cannot fire and its clean run means nothing\n' "mutation-uescape" "$mu_rows"
+  fi
+fi
 echo
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."

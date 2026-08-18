@@ -1687,6 +1687,24 @@ declared sites, not everywhere unconditionally.
      (the updater's own directory, carved out of the Rule 29 acknowledge hook), never a
      Bash write, and never automatic. Close ONLY `CLOSE-CANDIDATE` rows; a `NEEDS-REVIEW`
      row is never a close, whatever its detail says.
+   - **Every other status in the push-candidate heading has a disposition here, and none of
+     them is a close.** `reconcile/emit-report.sh` renders the set the operator acts on and
+     this is the step that acts, so a status named there and not here is a duty with no actor.
+     Step 3f says what each status MEANS; these say what to DO with it.
+     - `NAMED-UPSTREAM` — upstream's history names the id. Read the named commit and decide
+       whether it ABSORBED the entry or recorded a rejection or a split. On absorption,
+       annotate by hand in the form `ledger-rotate.sh` accepts — bolded, version immediately
+       after the parenthesis — the same edit the bullet above describes; otherwise re-anchor or
+       drop the stale receipt. Naming is not absorption and the row is never an auto-close.
+     - `NAMED-UPSTREAM-AMBIGUOUS` — the commit cites the sprint prefix and two or more entries
+       share it. Deliberately NOT attributed: read the named commit and decide per entry.
+       Annotate nothing on the strength of the row alone.
+     - `HAND-REVIEW` — the entry declares `verify: manual` and no mechanical predicate exists
+       for it by design. Adjudicate the body against `theirs`; annotate only what that
+       adjudication establishes.
+     - `NEEDS-REVIEW`, `INPUT-UNRESOLVED`, `RECEIPTS-UNDECIDED`, `ENTRY-SWALLOWED` — the
+       RECEIPT or the entry's own shape is the defect, not the entry. Repair it here, the way
+       the re-run bullet above requires, and close nothing on one.
    - **Rotate the closed entries out.** `reconcile/ledger-rotate.sh <ledger>` reports what
      would move; `--apply` moves it to `push-candidate-ledger.archive.md`. The ledger is
      append-only otherwise, so it grows every sprint and never shrinks — measured at 2830
@@ -1695,9 +1713,18 @@ declared sites, not everywhere unconditionally.
      receipt edit pays for their bytes. Rotation moves, never deletes, and requires the
      annotation form (`**ADOPTED UPSTREAM (v`) rather than the phrase anywhere — an entry
      wrongly kept costs one pull to notice, one wrongly archived costs the work.
-     **Acceptance test:** `ledger-reverify.sh` output must be byte-identical before and
-     after. Rotation moves exactly the entries it already skips, so any difference means a
-     live entry was swept.
+     **Acceptance test:** `ledger-reverify.sh` must emit the same ROW SET before and after —
+     by status and subject. Rotation moves exactly the entries it already skips, so a changed
+     row set means a live entry was swept. **It is NOT a byte comparison, and running one here
+     false-fails on this very step.** An entry you annotated in this same pass is skipped by
+     the open-entry extractor and not yet in the archive, so the sprint-prefix count inside
+     `NAMED-UPSTREAM-AMBIGUOUS` details rises as it reaches the archive. Measured by annotating
+     every open entry on a copy of the reference consumer's ledger and rotating: identical row
+     set, every differing line carrying a prefix count, and that count rising — nothing swept.
+     Treating it as a sweep unwinds correct work at exactly the moment a large batch of closes
+     has landed. **Derive the row set; do not carry a row COUNT across corpora** — the totals are
+     a property of the ledger's size on the day, and two runs of this experiment on ledgers of
+     different sizes gave different ones.
 9. **Safety.** Three independent recover layers: the step-6 reconcile **branch**
    (the working branch is never touched), the consumer's
    `docs/pre-ai-dlc/<ts>/_divergence/` archive (written by install), and the

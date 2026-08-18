@@ -206,6 +206,7 @@ core_manifest:
   - core/fixtures/updater-session-signals/**
   - core/fixtures/artifact-derivations/**
   - core/fixtures/architecture-index-cell-escaping/**
+  - core/fixtures/prepush-worktree-env-scrub/**
 
 machinery:
   - core/skills/ai-dlc/core-manifest.md

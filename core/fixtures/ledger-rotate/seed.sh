@@ -44,6 +44,41 @@ verify: theirs_has core/scripts/thing.sh "MARKER_D"
 
 ---
 
+## PC-S900-ALPHA — open, and shares a SPRINT PREFIX with the two entries below it
+
+A `PC-S<n>` prefix carried by two or more entries is what makes ledger-reverify emit a
+NAMED-UPSTREAM-AMBIGUOUS row, and that row's detail carries `prefix_entry_count()`. Without a
+prefix in this ledger the acceptance assertion in run.sh has no subject at all.
+
+verify: theirs_has core/scripts/thing.sh "MARKER_A"
+
+---
+
+## PC-S900-BETA — open, and carries the same sprint prefix
+
+The second live member. Two live members keep the prefix ambiguous on BOTH sides of the
+rotation, so the row survives the move and only its COUNT changes — which is the whole
+distinction between the row set and the bytes.
+
+verify: theirs_has core/scripts/thing.sh "MARKER_B"
+
+---
+
+## PC-S900-GAMMA — closed in the same pass that rotates it, and the third member of the prefix
+
+THIS ENTRY IS THE POINT OF THE TRIO. `prefix_entry_count()` counts the prefix over the OPEN
+entries UNIONED with the ARCHIVED labels, and the open extractor skips anything carrying
+`ADOPTED UPSTREAM`. So while this sits annotated in the LIVE file it is on neither side, and
+once rotated it is on the archive side — the count rises 2 -> 3 across a move that can only
+shrink the live set. Annotate-then-rotate in one pass is what SKILL.md step 8 prescribes, so
+this is the ordinary case and not a constructed one.
+
+<br>**ADOPTED UPSTREAM (v0.97.0, verified 2026-01-01).** Upstream took it.
+
+verify: theirs_has core/scripts/thing.sh "MARKER_A"
+
+---
+
 - **PC-OPEN-BULLET** — the bullet entry shape is also supported
 
   verify: theirs_has core/scripts/thing.sh "MARKER_B"
@@ -71,6 +106,13 @@ printf 'MARKER_A\nMARKER_B\nMARKER_D\n' > core/scripts/thing.sh
 git -C "$WORK/dist" -c user.email=f@f -c user.name=f -c commit.gpgsign=false add -A
 git -C "$WORK/dist" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -qm base
 BASE="$(git -C "$WORK/dist" rev-parse HEAD)"
+# UPSTREAM CITES THE SHORT SPRINT ID, NEVER THE FULL SLUG, and both halves of that are load-
+# bearing. `named_ambiguous()` returns nothing at all when the SLUG search hits, so a message
+# naming `PC-S900-ALPHA` would suppress the ambiguous row this seed exists to produce. The
+# prefix search is anchored (`PC-S900([^0-9A-Za-z-]|$)`), so the trailing space is what makes
+# it match.
+git -C "$WORK/dist" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -q --allow-empty \
+  -m 'upstream sprint work landed: PC-S900 and PC-S901 absorbed'
 git -C "$WORK/dist" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -q --allow-empty -m theirs
 THEIRS="$(git -C "$WORK/dist" rev-parse HEAD)"
 
