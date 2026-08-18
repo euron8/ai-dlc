@@ -435,6 +435,61 @@ whether they earn one: the `docs/*.md` glob gap above, and
 same `|| echo 0` conflation `BL-036` was about — unparseable telemetry reads as zero. It gates no
 operator question, which is why it is a NOTE rather than a defect.
 
+### BATCH 4 — do these two things, in this order
+
+**FIRST, ADJUDICATE `BL-046`. IT IS THE ONLY `CLOSE-CANDIDATE` AND IT MUST BE SETTLED BEFORE ANY
+REMEDIATION.** Measured at batch 3's wind-down: **60 open `BL-` entries — 56 `STILL-LIVE`,
+3 `HAND-REVIEW`, 1 `CLOSE-CANDIDATE`** — one row per entry, against an impossible-id control of 0.
+Re-derive with `bash scripts/backlog-reverify.sh`; this paragraph is a hypothesis about a tree that
+moves.
+
+`BL-046` is *"neither pre-push hook scrubs git's worktree environment, so a push issued from a
+linked worktree redirects 33 fixture sandboxes onto the real repository"*. **It went
+`STILL-LIVE` → `CLOSE-CANDIDATE`, and this program has seen that exactly once before — `BL-070`,
+where the RECEIPT was wrong rather than the defect being fixed.** Do not close it on the status.
+What is established, and what is not:
+
+- **Its receipt is a PRESENCE-ONLY TEXT ANCHOR**: `grep -qE '^[[:space:]]*unset[[:space:]].*`
+  `GIT_OBJECT_DIRECTORY'` against both hooks. It asserts a line EXISTS, never that it runs before
+  anything it protects.
+- **The line really is there in both**, `unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR`
+  `GIT_OBJECT_DIRECTORY`, so this is not the `BL-070` shape of a fix the anchor cannot see.
+- **What is NOT established is SITING, which is the whole claim.** The scrub is at `.githooks/`
+  `pre-push:758` of 788 lines and `core/git-hooks/pre-push:683` of 697, while the fixture-suite
+  text appears at 180/187 and 242/253 respectively. **That proves nothing on its own** — a shell
+  script defines functions early and invokes them late, so textual order is not execution order,
+  and reading it as such is this repo's "text about a program is not the program". **Determine the
+  RUNTIME order**, by instrumenting or by tracing the call, not by line numbers.
+- **The commit that produced the current text, `7fa26f5`, is a COMMENT fix, and its own body says
+  the previous comment asserted a safety property that DOES NOT HOLD** — a reviewer disproved it
+  with a live counterexample, and it records "no line-count, siting, or behavior change". So the
+  siting question has already been got wrong once in this exact file, in the direction of claiming
+  more safety than exists.
+- **Batch 1's third state applies**: a real absorption can still fail to close if the fixing commit
+  promised work alongside it. Read `7fa26f5` in full, and whatever introduced the `unset` line, before closing.
+
+**THEN CUT BATCH 4: the ledger CLOSE-CHANNEL family — `BL-031`, `BL-035`, `BL-050`, `BL-068`.**
+All four confirmed OPEN and `STILL-LIVE` at batch 3's wind-down, one row each, against an
+impossible-id control of 0. One subsystem, as step 13 requires: the annotate-then-rotate channel in
+`ledger-rotate.sh` / `ledger-reverify.sh` and the step-8 status vocabulary that drives it.
+
+- **`BL-031`** — `ledger-reverify.sh` emits its `ENTRY-SWALLOWED` detail with a literal
+  backslash-`u2026` escape. **Batch 3 rewrote that exact arm and left the escape in place
+  deliberately**, because changing it was not that batch's subject; the string is at the `emit`
+  call at the end of the arm. This one is small and its subject is freshly understood.
+- **`BL-035`** — `ledger-rotate.sh` reports an entry as "closed for re-verification" on an
+  UNANCHORED phrase. Same file batch 3 added the refusal guard to.
+- **`BL-050`** — step 8 forbids the annotation §3f instructs, and `NAMED-UPSTREAM` is a status it
+  never reaches. This is the vocabulary half of the same channel.
+- **`BL-068`** — `ledger-rotate.sh` states a byte-identical invariant that its own prescribed
+  workflow breaks.
+
+**Substitute freely if the re-derivation disagrees — but keep the batch to ONE subsystem, and read
+each receipt before building.** Three receipt defects in three batches, in both directions: a
+correct fix scored as work remaining (`BL-070`), a destructive fix scored as done (`BL-032`), and a
+presence anchor that cannot see siting (`BL-046`, above). **Ask of every receipt both questions:
+does a correct fix satisfy it, and what ELSE satisfies it.**
+
 **THE GATE INSTRUMENT IS REPAIRED, WHICH IS WHY BATCH 2 WENT FIRST.** `suite-dispatch-order` no
 longer sorts on measured wall-clock, so a red unit in your gate is now a finding about your own
 change rather than a coin flip you have to argue with. If it goes red, do not re-run it.
@@ -535,8 +590,11 @@ the arm is seeded rather than timed the race is gone, so a mechanical receipt be
 writing one is a legitimate part of this remediation** — but it is an option the remediation earns,
 not a precondition on it.
 
-**BATCH 3 IS THE LEDGER-PARSING FAMILY: `BL-013`, `BL-032`, `BL-065`, `BL-036`.** Re-derive before
-building and substitute freely if the scope has moved — but keep the batch to ONE subsystem.
+**BATCH 3 IS COMPLETE — SHIPPED AS `v0.376.0`. EVERYTHING FROM HERE TO THE END OF THIS SECTION IS
+A RECORD OF WHY IT WAS SCOPED THAT WAY, NOT AN INSTRUCTION. DO NOT RE-DO IT.** It was the
+ledger-parsing family, `BL-013`, `BL-032`, `BL-065` and `BL-036`; all four are annotated and sit in
+`docs/backlog.archive.md`. The paragraphs below are kept because the NEXT batch is judged by the
+same instruments and two of the warnings in them fired.
 
 **All four were confirmed OPEN and `STILL-LIVE` at batch 2's wind-down**, one row each, against an
 impossible-id control of 0 and a control confirming `BL-008` is absent from the open file and
