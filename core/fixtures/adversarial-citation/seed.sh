@@ -112,4 +112,35 @@ cat > "$ROOT/toolresult.jsonl" <<'JSONL'
 {"type":"user","timestamp":"2026-07-12T03:00:00Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_x","content":"reframe the AC as a class invariant"}]}}
 JSONL
 
+# --- transcript DIRECTORIES: a corpus, and the two shapes of a corpus that is EMPTY ---------
+# `--transcript-dir` was tested for EXISTENCE only, so a directory with nothing in it
+# outranked the fail-open branch and DENIED every dispatch: passing the flag wedged the
+# pipeline while passing NO flag at all did not. Nothing above this line can express that,
+# because every case above passes `--transcript` and never a directory.
+#
+# The corpus reader selects `*.jsonl` and only those (`validate-steering-budget.sh:427`,
+# `fs.readdirSync(dir).filter(f => f.endsWith(".jsonl"))`), which is why the sidecar-only
+# directory below is a case rather than a curiosity: to that reader it is empty.
+
+# EMPTY. Exists, holds nothing.
+mkdir -p "$ROOT/dir-empty"
+
+# SIDECAR-ONLY. Exists, holds files, holds no transcript the reader would ever open. Named
+# after what the harness really leaves beside a transcript directory.
+mkdir -p "$ROOT/dir-sidecar"
+printf 'not a transcript\n'                 > "$ROOT/dir-sidecar/README.md"
+printf '{"note":"summary sidecar"}\n'       > "$ROOT/dir-sidecar/summary.json"
+printf 'session-abc123\n'                   > "$ROOT/dir-sidecar/.session-id"
+
+# A REAL CORPUS carrying the S290 fabrication shape. The dir branch must keep its teeth:
+# an empty corpus falling through to fail-open must NOT become "a corpus never denies".
+mkdir -p "$ROOT/dir-silent"
+cp "$ROOT/silent.jsonl" "$ROOT/dir-silent/session-a.jsonl"
+
+# A REAL CORPUS carrying the genuine operator turn, in a file whose name is NOT the one any
+# caller would pass as --transcript. This is the positive outcome of the dir branch; without
+# it, a mutant that disables the branch entirely leaves every other dir arm green.
+mkdir -p "$ROOT/dir-real"
+cp "$ROOT/real.jsonl" "$ROOT/dir-real/session-monday.jsonl"
+
 printf '%s\n' "$ROOT"

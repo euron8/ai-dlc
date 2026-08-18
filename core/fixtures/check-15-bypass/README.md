@@ -85,7 +85,7 @@ calls it, so the code under test and the code that ships are the same bytes.
 
 Three assertions are deliberately NOT about the elements, so no element
 mutation can flip one: an all-out-of-scope set must exit **4**, not 0
-(`AUDITED NOTHING` — the state every vacuously-green gate check has collapsed
+(`EXAMINED NOTHING` — the state every vacuously-green gate check has collapsed
 into a pass); a finding must reach the caller as exit **1**; and the run must
 report what it LOOKED AT. Both the vacuity and the counts assertions drive the
 audited-nothing case through a non-hot-path file rather than an exempt one, so

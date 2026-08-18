@@ -34,6 +34,98 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.378.0] — 2026-08-18
+
+The validators that reported on evidence they never opened: a corpus counted but never named, an
+empty corpus classified as forgery, a legal qualifier that killed a whole check, and three
+spellings of "examined nothing" that no vocabulary joined. Four backlog entries closed, five
+filed, and every one of the four original receipts replaced — three of them would have certified
+a fix that was destructive, incomplete, or the wrong one entirely.
+
+### `PC-S303-SPEC-JOIN-MEMLOG-REGEX-STALE-VS-AUTHOR-SUFFIX` — a legal qualifier disarmed the whole of Check 30
+
+`core/scripts/validate-spec-join.sh` required `)` immediately after `capability`, so a memlog
+entry tagged with the producer's optional `by <author>` qualifier left `CAP_ENTRIES` empty and hit
+`exit 2` DISARMED — above every other join in the check. The predicate now accepts the producer's
+grammar, and the DISARM message no longer tells the reader to track a change in entry TYPES when
+what is required is tolerating a qualifier that was always legal. Measured on the reference
+consumer: sprint s302 goes from **0 of 7 locked-requirement ids checked** to **7 checked**.
+
+The guarding fixture seeded 13 bare capability entries and **zero** qualified ones while claiming
+"REAL bmad-spec SHAPE, captured from an actual headless run", so it was green under both the broken
+and the fixed predicate. It now carries 13 qualifier arms plus an arms-ran counter, hand-written
+from the producer's output because the fixture's own mutators are paren-anchored and a sed-derived
+qualified corpus silently no-ops.
+
+### `PC-S300-RESOLUTION-RECORD-CITATION-CANNOT-OUTLIVE-ITS-SESSION` — an empty corpus was classified as forgery
+
+`[ -d "$TRANSCRIPT_DIR" ]` tests that a directory EXISTS, never that it holds ground truth, so an
+empty `--transcript-dir` outranked the fail-open branch and DENIED every dispatch — passing the
+flag wedged the pipeline while passing nothing at all did not. The trigger was also wider than
+filed: the corpus reader selects `*.jsonl`, so a directory of sidecar files was exactly as blind.
+
+**The predicate had three copies, not one.** `validate-escalation-resolution.sh` reported the
+OPERATOR as having said nothing when the true state was that the gate had no corpus, and
+`core/hooks/ai-dlc-gate-remediation-guard.sh` took `dirname "$TRANSCRIPT"`, so its `--dir` branch
+won on an empty corpus and the readable-file fallback below it was unreachable. All three now share
+one byte-identical helper, bound by new invariant **I92**, which catches drift between the copies
+AND a fourth copy appearing.
+
+The narrowing is in the PREDICATE deliberately: clearing the flag after the chain has run skips the
+single-file fallback and loses the deny for a caller passing both flags, which `gate-validation.md`
+instructs the operator to do — measured at rc 3 → rc 0 on a real fabrication.
+
+### `PC-S297-VALIDATE-STEERING-BUDGET-TRANSCRIPT-PROVENANCE` — a count is not provenance
+
+`validate-steering-budget.sh` printed how MANY transcripts it read and never WHICH, so two runs
+over two different corpora holding identical content produced byte-identical output. It now names
+the corpus and the members it read, across all four output modes — including `--cite`, THE
+genuine-operator predicate, whose three separate diagnostics each carried the same count without an
+identity. The third of those was found by the replacement receipt after two were patched.
+
+`--count` stays a bare integer and `transcripts scanned : N` is byte-identical, because
+`steps/retro.md` reads that line by label. The three `--cite` delegators discard stderr, so their
+own failure texts now name the corpus too — otherwise "the operator did not say this" is asserted
+over a corpus the reader cannot see.
+
+### `PC-S297-VALIDATOR-PASS-VS-NOTHING-TO-CHECK-CONVENTION` — three spellings of "examined nothing", joined by nothing
+
+`AUDITED NOTHING` at exit 4, `PASS — NOTHING VERIFIED` at exit 0 and `VACUOUS:` at exit 78 are now
+one token, `EXAMINED NOTHING`, declared in `core/skills/ai-dlc/enforcement-map.yaml`, rendered into
+`docs/vocabulary-index.md` and bound by new invariant **I93**. The exit codes are deliberately
+UNCHANGED — they are per-validator contracts, one of them consumer-visible, and unifying them is a
+decision for the operator rather than a side effect of this one.
+
+**The entry's schema premise was struck as unsourced.** It claimed a vacuous run "is recorded as a
+pass" in `gate-adjudication-verdict.json`; all three emitters mention `gate-adjudication` zero
+times, against a control of 12. Acting on it would have meant proposing a third `verdict` enum
+member, which `BL-039` already adjudicated and rejected.
+
+### Every one of the four receipts was replaced, and three would have certified the wrong outcome
+
+- **`BL-063`'s** closed on `[ "$s" -ne 2 ]`, which accepts **rc 1** — reached by BOTH destructive
+  remedies, deleting the `exit 2` and deleting the predicate outright.
+- **`BL-061`'s** contained no arm anything must still DENY, so deleting the feature, neutering the
+  citation check and making the branch unreachable all scored as FIXED — while REJECTING the
+  PENDING/SKIP remedy the repo's own rules permit.
+- **`BL-059`'s** closed on a hardcoded constant, an echoed argument, and a fix that renders the path
+  then exits 1, because `O=$(...)` discards `$?`.
+- **`BL-058`'s** required the defect to SURVIVE: it counted files still carrying the divergent
+  spellings and demanded `n >= 2`, so a correct unification — measured live, 3 → 0 — makes it exit
+  1 forever. Third occurrence of that polarity in this program.
+
+### Filed, not fixed
+
+`BL-075` (the stub-audit marker gate matches an identifier containing `stub`; the consumer's own
+prescribed `\b` fix is a total disarm on bash 3.2, examining 0 markers over 354 files),
+`BL-076` (five sibling validators with the same count-without-identity shape; `validate-ci-gates.sh`
+fails OPEN on a wrong retro root, which is worse than the entry just closed), `BL-077` (derive the
+session's own corpus instead of retyping an `ls -t | head -1` derivation in prose), `BL-078` (the
+wider empty-subject population, 17 sites at 4 exit codes, and the exit-code decision laid out as
+options), and `BL-079` (the LR-population scan reads the spec's own self-report, so an absent-id
+CONTROL TOKEN quoted in prose becomes a finding — every narrowing that clears it loses genuine
+locked requirements, and the best candidate disarms the check).
+
 ## [0.377.0] — 2026-08-18
 
 The ledger close channel: the report that named open entries as closed, the step that told the

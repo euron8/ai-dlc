@@ -422,6 +422,13 @@ const isDenied = (b) => {
 // a transcript last written before the sprint opened cannot hold an event inside it. Files
 // excluded are REPORTED, never silently dropped -- a narrow scan must be visible, which is
 // the whole defect being fixed here.
+// SAME DEFECT, THE OTHER OUTPUT PATH. `--cite` is THE genuine-operator predicate --
+// the convergence validator, the escalation gate and the remediation guard all delegate
+// their \"a real human said this\" question to it -- and it reported only a COUNT, so a
+// citation verified against the wrong corpus was byte-identical to one verified against
+// the right one. The corpus SOURCE rather than every member: --cite runs on every gate
+// call and the discriminator is which corpus was consulted, not which files it held.
+const CORPUS_ID = path.resolve(one || dir);
 let skippedBySince = 0;
 const files = one ? [one]
   : fs.readdirSync(dir).filter(f => f.endsWith(".jsonl")).map(f => path.join(dir, f))
@@ -459,7 +466,7 @@ if (CITE) {
     } catch { /* an unreadable member is not a verdict; the count below shows the scan */ }
   }
   if (!recs.length) {
-    console.error(`NOMATCH (0 records across ${files.length} transcript(s))`);
+    console.error(`NOMATCH (0 records across ${files.length} transcript(s) from ${CORPUS_ID})`);
     console.log("NOMATCH"); process.exit(2);
   }
   // Which tool_use ids are AskUserQuestion calls. Resolved by PAIRING, never by sniffing the
@@ -477,11 +484,11 @@ if (CITE) {
     const ts = Date.parse(r.timestamp);
     if (!(ts >= sinceMs)) continue;
     if (norm(txt).includes(needle)) {
-      console.error(`cite: scanned ${files.length} transcript(s)`);
+      console.error(`cite: scanned ${files.length} transcript(s) from ${CORPUS_ID}`);
       console.log(`MATCH ${r.timestamp}`); process.exit(0);
     }
   }
-  console.error(`cite: scanned ${files.length} transcript(s), no genuine operator message carried it`);
+  console.error(`cite: scanned ${files.length} transcript(s) from ${CORPUS_ID}, no genuine operator message carried it`);
   console.log("NOMATCH"); process.exit(2);
 }
 
@@ -601,6 +608,23 @@ if (COUNT) {
 const log = (...a) => { if (!QUIET) console.log(...a); };
 log(`steering budget     : ${BUDGET}s (foreground calls may not block longer)`);
 log(`transcripts scanned : ${files.length}${SINCE && !one ? ` (${skippedBySince} excluded: mtime before ${SINCE})` : ""}`);
+// A COUNT IS NOT PROVENANCE, AND THE EMPTY CASE IS THE ONE THAT MATTERS. The corpus is
+// named on its OWN line rather than only through the members read, because a run that found
+// nothing — or a `--since` window that excluded everything, which is the invocation shape
+// `steps/retro.md` itself prescribes — would otherwise name no source at all, and a
+// wrong-corpus run that comes back empty is precisely the case a reader cannot tell from a
+// right one. Caught by this validator's own fixture, red against a first fix that printed
+// only the members it read.
+// `--transcript` and `--dir` are both free caller-supplied paths
+// bound to nothing, so two runs over two DIFFERENT corpora holding identical content produced
+// byte-identical output and a wrong-session run was indistinguishable from a correct one. The
+// count answers "how many", which is not the question a reader of this gate has. Resolved, so
+// a relative path and the absolute path it names cannot read as two different corpora; one
+// per line under a hanging indent, because `--dir` over an unbounded project directory is
+// hundreds of files and a joined line would be unreadable. The line ABOVE is read by label
+// (`steps/retro.md`), so this goes after it and changes none of its bytes.
+log(`corpus              : ${CORPUS_ID}`);
+log(`transcripts read    : ${files.length ? files.map(f => path.resolve(f)).join("\n                      ") : "(none)"}`);
 log(`exempt from check A : AskUserQuestion (human think-time, not starvation)`);
 log("");
 

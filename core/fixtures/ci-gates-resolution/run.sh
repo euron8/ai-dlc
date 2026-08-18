@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ci-gates-resolution — assert validate-ci-gates.sh's generalized enforcement match:
-# the VACUOUS-78 code, the comment-aware forward match (no longer fail-open), and the
+# the EXAMINED-NOTHING-78 code, the comment-aware forward match (no longer fail-open), and the
 # optional two-legged alias table. Every general mechanism carries a MUTATION control:
 # a FAIL/PASS is evidence for a mechanism only if removing that mechanism flips it.
 #
@@ -10,7 +10,10 @@
 #    COMMENTS INCLUDED, read as enforcement. A gate name left in a `#` banner after its
 #    enforcing step was deleted stayed "enforced" forever — a check that cannot fail.
 #  - "No enforcement surface" exited 2 (tool-failure), sharing an exit with a real error
-#    and never distinguishable from a clean or a dormant scan. It is VACUOUS: exit 78.
+#    and never distinguishable from a clean or a dormant scan. It reports the declared
+#    empty-subject verdict token EXAMINED NOTHING at exit 78. The token is owned by
+#    enforcement-map.yaml `empty_subject_verdict:` and bound by validate-enforcement-map.sh I93;
+#    the exit CODE is this script's own contract and is deliberately not unified with it.
 #  - A gate enforced under a DIFFERENT name than it is declared needs an alias, but an
 #    alias that only checks the gate name is a suppression list. A row resolves ONLY when
 #    the enforcer is wired (leg i) AND the detection anchor is present exactly once in
@@ -65,13 +68,15 @@ ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1" >&2; fails=$((fails+1)); }
 echo "ci-gates-resolution:"
 
-# ============================ A. VACUOUS = exit 78 ============================
+# ==================== A. EXAMINED NOTHING = exit 78 ==========================
 rc="$(run_ci "$VALIDATOR" "$WORK/does-not-exist")"
-[ "$rc" = "78" ] && ok "A no surface -> exit 78 (VACUOUS, not 0/1/2)" \
+[ "$rc" = "78" ] && ok "A no surface -> exit 78 (EXAMINED NOTHING, not 0/1/2)" \
   || bad "A no surface -> exit $rc, expected 78"
-# MUTATION: revert the VACUOUS code to the old exit 2 and require the code to flip.
+# MUTATION: revert the exit-78 code to the old exit 2 and require the code to flip. This
+# mutation is keyed on `exit 78`, NOT on the verdict token, so renaming the token leaves it
+# working and RENUMBERING the code silently returns UNCHANGED -- which the guard below reports.
 m="$(mutate 'exit 78' 'exit 2')"
-if [ "$m" != "CHANGED" ]; then bad "A MUTATION matched nothing (exit 78 renamed)"; else
+if [ "$m" != "CHANGED" ]; then bad "A MUTATION matched nothing (exit 78 renumbered)"; else
   rc="$(run_ci "$WORK/mutant.sh" "$WORK/does-not-exist")"
   [ "$rc" = "2" ] && ok "A MUTATION — without the 78 code the surface-missing path is exit 2 again" \
     || bad "A MUTATION — expected exit 2 from the reverted code, got $rc"

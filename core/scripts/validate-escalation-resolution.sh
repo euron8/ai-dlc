@@ -88,6 +88,23 @@
 #   2  bad arguments / unreadable escalations file
 set -u
 
+# A DIRECTORY IS NOT A CORPUS. `-d` answers whether the path EXISTS, never whether it holds
+# any ground truth. With nothing to search, the message below reports the operator as having
+# said nothing — an accusation, where the true state is that the gate had no corpus. The
+# corpus reader selects `*.jsonl` (`validate-steering-budget.sh:427`), so a directory holding
+# only sidecar files is exactly as blind as an empty one and this counts what that reader
+# would count. Failing here falls through to the single-file branch. This predicate is
+# byte-identical in `validate-adversarial-convergence.sh` and `core/hooks/`
+# `ai-dlc-gate-remediation-guard.sh`; invariant I92 holds the three copies to one text and
+# refuses a fourth.
+steer_dir_has_transcript() { # $1 dir -> 0 if it holds a readable *.jsonl
+  [ -n "${1:-}" ] && [ -d "$1" ] || return 1
+  for _sdht in "$1"/*.jsonl; do
+    [ -r "$_sdht" ] && return 0
+  done
+  return 1
+}
+
 ESCALATIONS=""
 SPRINT=""
 TRANSCRIPT=""
@@ -242,7 +259,7 @@ while IFS="$(printf '\t')" read -r header status authline; do
   # error on bash 3.2, which is what macOS ships and what this repo has already shipped a
   # silent fail-open on once.
   STEER_FLAG=""; STEER_ARG=""
-  if [ -n "$TRANSCRIPT_DIR" ] && [ -d "$TRANSCRIPT_DIR" ]; then
+  if steer_dir_has_transcript "$TRANSCRIPT_DIR"; then
     STEER_FLAG="--dir"; STEER_ARG="$TRANSCRIPT_DIR"
   elif [ -n "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ]; then
     STEER_FLAG="--transcript"; STEER_ARG="$TRANSCRIPT"
@@ -263,9 +280,12 @@ while IFS="$(printf '\t')" read -r header status authline; do
   bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$quote" --quiet >/dev/null 2>&1
   rc=$?
   if [ "$rc" -eq 2 ]; then
+    # NAME THE CORPUS THAT WAS SEARCHED. The sibling prints its own corpus identity and this
+    # caller discards it, so this accusation is otherwise made over a corpus the reader cannot
+    # see -- and a wrong-corpus run reads exactly like a real S290 fabrication.
     echo "FAIL: [$short] operator authorization quotes \"${quote}\", which appears in NO genuine" >&2
-    echo "      operator message in the transcript. A lead-authored 'operator disposition' is not" >&2
-    echo "      an operator adjudication. This is the S290 failure." >&2
+    echo "      operator message in the transcript searched (${STEER_ARG}). A lead-authored" >&2
+    echo "      'operator disposition' is not an operator adjudication. This is the S290 failure." >&2
     FAIL=1; FAILN=$((FAILN + 1)); continue
   elif [ "$rc" -ne 0 ]; then
     echo "FAIL: [$short] operator authorization could not be verified (validator rc=$rc)." >&2

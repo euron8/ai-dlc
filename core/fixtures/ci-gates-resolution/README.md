@@ -7,7 +7,7 @@ validator through the tunables a consumer would set (`AI_DLC_PROJECT_ROOT`,
 
 Assertions, each general mechanism paired with a MUTATION control:
 
-- **A — VACUOUS = exit 78.** No enforcement surface -> exit 78, never 0/1/2. Mutation:
+- **A — EXAMINED NOTHING = exit 78.** No enforcement surface -> exit 78, never 0/1/2. Mutation:
   revert to `exit 2` and require the code to flip.
 - **B — comment-aware forward match.** A gate named only in a `#` comment is DORMANT (the
   old `grep -rqF` was fail-open — a name in a banner read as enforced). Mutation: neuter

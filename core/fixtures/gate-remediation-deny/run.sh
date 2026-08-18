@@ -43,18 +43,24 @@ HOOK="$(pick "$HERE/../../hooks/ai-dlc-gate-remediation-guard.sh" \
 [ -n "$HOOK" ] || { echo "FIXTURE ERROR: cannot locate ai-dlc-gate-remediation-guard.sh" >&2; exit 2; }
 command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq absent; every arm would fail open" >&2; exit 2; }
 
+# The candidate list above spans both install layouts and takes the first that EXISTS, so the
+# file this unit drives is not necessarily the one an author just edited. Print it: a mutant
+# applied to the other copy leaves every arm green and reads exactly like an arm that cannot
+# fire, and `cmp -s` cannot tell those apart.
+echo "gate-remediation-deny: resolved subject = $(cd "$(dirname "$HOOK")" && pwd)/$(basename "$HOOK")"
+
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
 # Drive the PreToolUse hook. `agent` empty => the LEAD (the harness omits agent_id
 # on the main thread; `ai-dlc-context-sensor.sh:160` reads exactly that field).
-drive() { # <work> <tool> <file_path> [agent_id] [transcript]
-  local w="$1" tool="$2" fp="$3" agent="${4:-}" tr="${5:-}"
+drive() { # <work> <tool> <file_path> [agent_id] [transcript] [hook-override]
+  local w="$1" tool="$2" fp="$3" agent="${4:-}" tr="${5:-}" h="${6:-$HOOK}"
   jq -nc --arg t "$tool" --arg f "$fp" --arg a "$agent" --arg tr "$tr" \
     '{session_id:"t", tool_name:$t, transcript_path:$tr, tool_input:{file_path:$f}}
      + (if $a == "" then {} else {agent_id:$a} end)' \
-    | CLAUDE_PROJECT_DIR="$w" bash "$HOOK" 2>/dev/null
+    | CLAUDE_PROJECT_DIR="$w" bash "$h" 2>/dev/null
 }
 denied() { case "$1" in *'"permissionDecision": "deny"'*|*'"permissionDecision":"deny"'*) return 0 ;; esac; return 1; }
 
@@ -254,6 +260,104 @@ EOF
 OUT="$(drive "$W" Edit "$W/$ART" "" "$TR")"
 if denied "$OUT"; then ok "LIFT: an operator citation with no verifier present does NOT lift (fail CLOSED)"
 else bad "LIFT: an unverifiable operator quote lifted the deny — S290 rebuilt in a new place"; fi
+rm -rf "$W"
+
+# =============================================================================
+# THE LIFT, WITH THE VERIFIER PRESENT — the branch arm 6 above can never reach.
+# =============================================================================
+# Arm 6 is the `[ -f "$STEER_SCRIPT" ]` guard failing: the seed leaves
+# `scripts/ai-dlc/` EMPTY, so the whole authorization block short-circuits and
+# the corpus-vs-file resolution below it never executes at all. Every arm above
+# this line is therefore blind to it, which is how a defect sat in that
+# resolution unmeasured. These arms put the real validator in the workspace.
+seed open-fail
+STEER="$(pick "$HERE/../../scripts/validate-steering-budget.sh" \
+              "$HERE/../../../scripts/ai-dlc/validate-steering-budget.sh" \
+              "$HERE/../../core/scripts/validate-steering-budget.sh")"
+[ -n "$STEER" ] || { echo "FIXTURE ERROR: cannot locate validate-steering-budget.sh; every arm below would score arm 6's fail-CLOSED as this branch holding" >&2; exit 2; }
+cp "$STEER" "$W/scripts/ai-dlc/validate-steering-budget.sh"
+[ -f "$W/scripts/ai-dlc/validate-steering-budget.sh" ] \
+  || { echo "FIXTURE ERROR: the verifier did not land in the workspace" >&2; exit 2; }
+command -v node >/dev/null 2>&1 || { echo "FIXTURE ERROR: node absent; the verifier exits non-zero for every arm and each would read as fail-CLOSED" >&2; exit 2; }
+
+AUTHF="$W/_bmad-output/gate-adjudication/story-20260811T193044Z.authorization.md"
+cat > "$AUTHF" <<'EOF'
+operator_authorization: 2026-08-11T19:55:54Z | "go ahead and re-stamp it yourself"
+EOF
+
+# The operator spoke on Monday, in a session this gate call cannot name. The corpus is where
+# the words are; `transcript_path` names Friday's file.
+mkdir -p "$W/sessions-jsonl" "$W/sessions-plain"
+cat > "$W/sessions-jsonl/monday.jsonl" <<'EOF'
+{"type":"user","timestamp":"2026-08-11T19:55:54Z","message":{"content":"Go ahead and re-stamp it yourself, I have looked at it."}}
+EOF
+: > "$W/sessions-jsonl/friday.jsonl"
+# The SAME operator turn, in a readable file the corpus reader would never open: it selects
+# `*.jsonl` and only those (`validate-steering-budget.sh:427`). Its directory holds no
+# transcript at all, so it is the shape where a corpus EXISTS and is EMPTY.
+cp "$W/sessions-jsonl/monday.jsonl" "$W/sessions-plain/current.log"
+
+# 7. THE CORPUS BRANCH WORKS. A genuine, verified citation lifts. This is the positive
+#    control for arms 8 and 9: without it, a verifier that failed for any reason at all
+#    would make both of them pass by denying.
+OUT="$(drive "$W" Edit "$W/$ART" "" "$W/sessions-jsonl/friday.jsonl")"
+if denied "$OUT"; then bad "LIFT/CORPUS: a VERIFIED operator citation in a sibling session did NOT lift — the gate is wedged on a real authorization"
+else ok "LIFT/CORPUS: a verified operator citation in a sibling session lifts the deny"; fi
+
+# 8. THE TEETH. Same corpus, a quote no operator typed. Fail-open on an empty corpus must
+#    never widen into fail-open on a corpus.
+cat > "$AUTHF" <<'EOF'
+operator_authorization: 2026-08-11T19:55:54Z | "zzz no operator ever typed this phrase zzz"
+EOF
+OUT="$(drive "$W" Edit "$W/$ART" "" "$W/sessions-jsonl/friday.jsonl")"
+if denied "$OUT"; then ok "LIFT/CORPUS: a fabricated quote over the same corpus does NOT lift"
+else bad "LIFT/CORPUS: the lead can lift its own deny by inventing an operator quote — S290 rebuilt"; fi
+cat > "$AUTHF" <<'EOF'
+operator_authorization: 2026-08-11T19:55:54Z | "go ahead and re-stamp it yourself"
+EOF
+
+# 9. THE DEFECT AT THIS SITE. `transcript_path` is readable and carries the operator's words,
+#    but its DIRECTORY holds no `*.jsonl`, so the corpus the `--dir` branch would scan is
+#    empty. `-d` on the dirname was true anyway, that branch won, and the readable-file
+#    fallback under it was unreachable — a verified authorization failed to lift for want of
+#    a corpus rather than for want of a citation. Measured: this is the ONLY input at this
+#    site whose verdict the narrowing changes. Every `*.jsonl` transcript_path puts at least
+#    itself in the dirname, so the two predicates agree; a transcript_path that is not
+#    readable at all denies under both.
+OUT="$(drive "$W" Edit "$W/$ART" "" "$W/sessions-plain/current.log")"
+if denied "$OUT"; then bad "LIFT/EMPTY-CORPUS: a readable transcript in a directory with no *.jsonl did NOT lift — the empty corpus outranked the file that holds the words"
+else ok "LIFT/EMPTY-CORPUS: an empty corpus falls through to the readable transcript, which verifies"; fi
+
+# --- the mutant --------------------------------------------------------------------------
+# Arms 7 and 9 are ABSENCE-shaped: "not denied". A hook replaced by `exit 0` emits nothing,
+# is not denied, and passes both. Only a mutant establishes that they discriminate at all.
+# Built as a COPY and guarded by `cmp -s`, and the control copy is driven first — a lone copy
+# that died on startup would also emit nothing.
+MWORK="$(mktemp -d)"
+cp "$HOOK" "$MWORK/control.sh"
+cp "$HOOK" "$MWORK/m-existence-only.sh"
+sed -i.bak 's@\[ -n "$TRANSCRIPT" \] && steer_dir_has_transcript "$(dirname "$TRANSCRIPT")"@[ -n "$TRANSCRIPT" ] \&\& [ -d "$(dirname "$TRANSCRIPT")" ]@' "$MWORK/m-existence-only.sh"
+rm -f "$MWORK/m-existence-only.sh.bak"
+if cmp -s "$HOOK" "$MWORK/m-existence-only.sh"; then
+  bad "MUTANT: the existence-only sed changed no bytes — it matched nothing and would score as a kill"
+elif ! bash -n "$MWORK/m-existence-only.sh"; then
+  bad "MUTANT: the existence-only copy does not parse; its silence would score as a kill"
+else
+  OUT="$(drive "$W" Edit "$W/$ART" "" "$W/sessions-plain/current.log" "$MWORK/control.sh")"
+  if denied "$OUT"; then bad "CONTROL: an unmutated copy of the hook DENIES arm 9 — every verdict below is about the copy, not the mutation"
+  else ok "CONTROL: an unmutated copy of the hook reproduces arm 9's lift"; fi
+
+  OUT="$(drive "$W" Edit "$W/$ART" "" "$W/sessions-plain/current.log" "$MWORK/m-existence-only.sh")"
+  if denied "$OUT"; then ok "MUTANT: the pre-fix existence-only predicate DENIES arm 9 — the arm can fire"
+  else bad "MUTANT: the pre-fix predicate still lifted arm 9 — the arm asserts nothing"; fi
+
+  # ...and nothing else moves. A mutant failing more than its own assertion means the arms
+  # are entangled and one of them is vacuous.
+  OUT="$(drive "$W" Edit "$W/$ART" "" "$W/sessions-jsonl/friday.jsonl" "$MWORK/m-existence-only.sh")"
+  if denied "$OUT"; then bad "MUTANT: arm 7 also went red — the corpus arm and the fallthrough arm are entangled"
+  else ok "MUTANT: arm 7 (the corpus branch) is UNCHANGED — the mutant kills only its own arm"; fi
+fi
+rm -rf "$MWORK"
 rm -rf "$W"
 
 # =============================================================================

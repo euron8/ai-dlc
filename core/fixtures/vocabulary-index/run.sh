@@ -26,12 +26,22 @@
 # silently stopped parsing markers would print that same green line. Every arm here exists
 # to prove one specific way it can still fail.
 #
-# WHY THE SYNTHETIC SEED DECLARES ALL SIX EXTRACTORS. The renderer joins its implemented
+# WHY THE SYNTHETIC SEED DECLARES EVERY EXTRACTOR. The renderer joins its implemented
 # slugs against the declared ones in BOTH directions, so a seed naming one slug would fail
-# on the other five -- correctly. Declaring all six costs six tiny owner files and buys the
-# thing a toy seed usually loses: every extractor is exercised against a synthetic owner
+# on all the others -- correctly. Declaring every one costs a tiny owner file each and buys
+# the thing a toy seed usually loses: every extractor is exercised against a synthetic owner
 # whose shape is stated here, so a change to any extractor's grammar shows up as a fixture
-# failure rather than as a silently emptier index.
+# failure rather than as a silently emptier index. The count is deliberately NOT written in
+# this comment: it moved from six to seven the first time an extractor was added, and a
+# number here decays into a lie while the join below stays true. The seed's own assertion
+# is the count, and it is one line.
+#
+# THE `empty-subject-verdict` OWNER IS ALSO A NEAR-MISS CONTROL. Its extractor reads a
+# scoped YAML block, and `token:` is a two-character word any later block could reuse, so
+# the seeded owner carries a `token:` on BOTH sides of its block. A file-wide extractor
+# renders three members where the vocabulary has one, and the member assertion below catches
+# it -- the same near-miss the renderer asserts in its own probe, asserted here against the
+# shipping renderer rather than against a copy of its reasoning.
 #
 # WHY `cmp -s` GUARDS EVERY sed. A sed whose pattern stopped matching produces a
 # byte-identical copy; the renderer then correctly passes and the arm reports SURVIVED for a
@@ -81,9 +91,15 @@ seed() {
                 '| `heavy` | x | y |' '| `light` | x | y |' '' > "$d/owners/skill.md"
   printf '%s\n' '# SYNTAX_GLOB_BEGIN' '  for f in one/*.sh \' '           two/*.sh; do' \
                 '# SYNTAX_GLOB_END' > "$d/owners/hook"
+  # The block reader gets a `token:` on BOTH sides of its block, so this owner is also
+  # the seed's standing proof that the extractor is SCOPED rather than matching `token:`
+  # file-wide -- the near-miss the renderer's own probe asserts, asserted here too.
+  printf '%s\n' 'preamble:' '  token: BEFORE-BLOCK' 'empty_subject_verdict:' \
+                '  token: SEEDED NOTHING' '  emitters:' '    - a.sh' 'after:' \
+                '  token: AFTER-BLOCK' > "$d/owners/emap.yaml"
 
   # --- the readers each vocabulary is joined to ---
-  for r in ledger kinds contract cycle skill hook; do
+  for r in ledger kinds contract cycle skill hook emap; do
     printf 'reader\n' > "$d/readers/$r.md"
   done
 
@@ -138,6 +154,13 @@ err "I806 fired"
 # vocabulary-invariant: I807
 # vocabulary-owner: (consumer-owned) the set lives in THEIRS and is read through git show
 err "I807 fired"
+# --- I810: the empty-subject verdict token is one string ---------------------
+# vocabulary: empty-subject tokens
+# vocabulary-invariant: I810
+# vocabulary-owner: owners/emap.yaml
+# vocabulary-extract: empty-subject-verdict
+# vocabulary-readers: readers/emap.md
+err "I810 fired"
 # --- I808: an ordinary arm, and a NEAR MISS -- it binds ONE string, not a set -
 # The wording is deliberate. `one string` is one character-class away from `one set`, which
 # is what the demand arm keys on, so this line is the seed's standing proof that the arm
@@ -150,7 +173,7 @@ EOF
   # --- the invariant index the markers' citations resolve against ---
   {
     printf '# Invariant index\n\n| ID | What it binds |\n|----|---------------|\n'
-    for i in 801 802 803 804 805 806 807 808; do printf '| I%s | seeded |\n' "$i"; done
+    for i in 801 802 803 804 805 806 807 808 810; do printf '| I%s | seeded |\n' "$i"; done
   } > "$d/docs/invariant-index.md"
 
   # --- one schema, so the second table is non-empty ---
@@ -175,8 +198,8 @@ fi
 # --- controlB: the synthetic seed renders and round-trips --------------------
 seed "$TMP/controlB"
 outB="$(render_in "$TMP/controlB")"
-if ! grep -q "7 cross-file vocabular(ies), 1 schema enum(s)" <<<"$outB"; then
-  note "FIXTURE BROKEN: the synthetic seed did not render 7 vocabularies and 1 schema enum."
+if ! grep -q "8 cross-file vocabular(ies), 1 schema enum(s)" <<<"$outB"; then
+  note "FIXTURE BROKEN: the synthetic seed did not render 8 vocabularies and 1 schema enum."
   printf '%s\n' "$outB" | sed 's/^/      /' | head -6
   exit 1
 fi
@@ -184,7 +207,7 @@ fi
 # marker reader ran; six extractors could each be returning nothing and the row count would
 # be identical.
 missing=""
-for want in 'ALPHA' 'kind-one' 'CODE-A' 'keyone' 'heavy' 'one/\*.sh' 'YES'; do
+for want in 'ALPHA' 'kind-one' 'CODE-A' 'keyone' 'heavy' 'one/\*.sh' 'YES' 'SEEDED NOTHING'; do
   grep -qE "$want" "$TMP/controlB/docs/vocabulary-index.md" || missing="$missing $want"
 done
 if [ -n "$missing" ]; then

@@ -6483,6 +6483,361 @@ done <<EOF
 $I89_OUT
 EOF
 
+# --- I92: the transcript-corpus predicate is one rule in three copies, byte-identical ---
+# WHAT IT BINDS. `steer_dir_has_transcript()` answers a single question -- does this directory
+# hold a readable `*.jsonl` -- and at all three sites that one answer decides the same thing:
+# whether the steer is issued as `--dir <corpus>` or falls back. Two of the three are gate
+# validators handed the directory as `--transcript-dir`; the third is the remediation guard,
+# which derives it from the session transcript and gates a dispatch on it. All three previously
+# tested only that the path EXISTED, which classified an EMPTY corpus as operator forgery and
+# denied every dispatch. The repair is one predicate written into three files, and three copies
+# are three chances for the guard to deny what the validators accept -- a disagreement that
+# surfaces as a refused dispatch with two green validators beside it, which reads as a correct
+# denial.
+#
+# COPIES RATHER THAN A SHARED SOURCE, for I25's reason and I33's. install.sh splits what shares
+# a parent here: `core/scripts/<x>` lands at `scripts/ai-dlc/<x>` and `core/hooks/` lands
+# elsewhere, and I33 fails the build on locating one core file by walking up from another, so in
+# an installed tree there is no path all three could source. A hook that sources a helper also
+# fails OPEN when a partial install omits it, which is the failure I25 records at length. The
+# duplication is only safe because this assertion exists.
+#
+# NOT A VOCABULARY, so no `# vocabulary:` marker. The subject is an executable predicate's BODY,
+# not an enumerated membership a second reader could restate: there is no owner-and-readers
+# split to render and nothing for docs/vocabulary-index.md to list. What is bound here is that
+# three byte strings are one byte string.
+#
+# THE FOURTH-COPY HALF, AND ITS MEASURED FALSE-POSITIVE SET. Byte-equality across three
+# hand-written paths cannot see a fourth copy appearing in a fourth file, so the site list is
+# DERIVED as well as declared: every file under core/ and scripts/ that names the helper must be
+# one of the three. A declared site that stops defining it fails the first half; an undeclared
+# file that starts naming it fails this one.
+#
+# Measured over the real tree, every hit outside the three declared sites is a MUTATION
+# BATTERY under core/fixtures/ that seeds a REVERT of this very repair, and therefore has to
+# quote the line it reverts. That is the entire false-positive set. It is excluded by DIRECTORY
+# and not by name, and the reason is measured rather than tidy: the battery count went from one
+# to three inside the single session that wrote this arm, as the fixtures for the same repair
+# landed. A per-file exemption list would have been stale twice before it was committed.
+#
+# The exclusion is also the right shape on its own terms. Nothing under core/fixtures/ is ever
+# executed as the guard or as a validator, so it cannot be the fourth copy that drifts, and a
+# fixture written to prove THIS arm would have to name its subject for the same reason. This
+# file is excluded one level up for that reason exactly -- an arm names the helper it binds,
+# and it is read back below as this half's positive control.
+i92_needle='steer_dir_has_transcript'
+i92_declared='core/scripts/validate-adversarial-convergence.sh
+core/scripts/validate-escalation-resolution.sh
+core/hooks/ai-dlc-gate-remediation-guard.sh'
+
+# The same extractor I25 and I40 use, for the same reason: a function body is a line range
+# between its opening line at column 0 and the matching closing brace at column 0.
+i92_body() { awk "/^$2\(\) \{/,/^\}/" "$1" 2>/dev/null; }
+# The site scan, as a function taking its roots, so the probe below drives THE SHIPPING CODE
+# PATH rather than a second implementation of it.
+i92_sites() { i92_n="$1"; shift; grep -rlF -- "$i92_n" "$@" 2>/dev/null; }
+
+# THE PROBE, RUN BEFORE THE CORPUS. Both halves of this arm are absence-shaped: a body that no
+# longer extracts compares empty-to-empty and reports agreement, and a scan that no longer
+# matches reports no fourth copy. Both silences read exactly like a conforming tree. So the two
+# functions above are first driven over a tree with one right answer, and the corpus is not
+# scanned at all unless they produce it. The tree fires in BOTH directions -- a seeded offender
+# must be reported and a seeded near-miss must not.
+i92_probe_dir="$(mktemp -d "${TMPDIR:-/tmp}/i92-XXXXXX")"
+mkdir -p "$i92_probe_dir/t"
+#  a  the reference body.
+printf 'lead=1\n%s() { # note\n  f "$1"\n}\ntail=2\n' "$i92_needle" > "$i92_probe_dir/t/a.sh"
+#  b  NEAR-MISS for the equality half: identical body, different surrounding text. Must compare
+#     EQUAL, or this arm reports drift on every file that is merely not a copy of its neighbour.
+printf 'other=9\n%s() { # note\n  f "$1"\n}\nmore=0\n' "$i92_needle" > "$i92_probe_dir/t/b.sh"
+#  c  DRIFT: one character inside the body differs. Must compare UNEQUAL.
+printf '%s() { # note\n  f "$2"\n}\n' "$i92_needle" > "$i92_probe_dir/t/c.sh"
+#  d  no definition at all. Extraction must be EMPTY -- an extractor that invents a body here
+#     is one that would compare two inventions and call them equal.
+printf 'unrelated_helper() {\n  :\n}\n' > "$i92_probe_dir/t/d.sh"
+#  e  a FOURTH SITE that MENTIONS the helper without defining it. The scan must SEE it: a copy
+#     arrives as a mention before it arrives as a definition.
+printf '# dispatches through %s\n' "$i92_needle" > "$i92_probe_dir/t/e.sh"
+#  f  NEAR-MISS for the scan half: a differently-named helper in the same family. Must stay
+#     quiet, or the scan flags files for resembling the subject rather than carrying it.
+printf 'steer_dir_has_nothing() { :; }\n' > "$i92_probe_dir/t/f.sh"
+i92_pa="$(i92_body "$i92_probe_dir/t/a.sh" "$i92_needle")"
+i92_pb="$(i92_body "$i92_probe_dir/t/b.sh" "$i92_needle")"
+i92_pc="$(i92_body "$i92_probe_dir/t/c.sh" "$i92_needle")"
+i92_pd="$(i92_body "$i92_probe_dir/t/d.sh" "$i92_needle")"
+i92_pm="$(i92_sites "$i92_needle" "$i92_probe_dir/t" | LC_ALL=C sort)"
+i92_pm_want="$i92_probe_dir/t/a.sh
+$i92_probe_dir/t/b.sh
+$i92_probe_dir/t/c.sh
+$i92_probe_dir/t/e.sh"
+i92_score=0
+[ -n "$i92_pa" ]              || i92_score=$((i92_score + 1))
+[ "$i92_pa" = "$i92_pb" ]     || i92_score=$((i92_score + 10))
+[ "$i92_pa" != "$i92_pc" ]    || i92_score=$((i92_score + 100))
+[ -z "$i92_pd" ]              || i92_score=$((i92_score + 1000))
+[ "$i92_pm" = "$i92_pm_want" ] || i92_score=$((i92_score + 10000))
+rm -rf "$i92_probe_dir"
+if [ "$i92_score" -ne 0 ]; then
+  err "I92's probe scored $i92_score where 0 is the only correct total, so the corpus below was not scanned. +1 the extractor found no body where one is defined; +10 it called two IDENTICAL bodies in differently-surrounded files different, which would report drift on a conforming tree; +100 it called a body differing by one character the SAME, which is the state this arm exists to report; +1000 it returned a body from a file defining no such function, so the equality half would be comparing two inventions; +10000 the site scan did not name exactly the four probe files that carry the string -- it either missed the mention-only fourth site or flagged the similarly-named near-miss. Any non-zero total means both halves of I92 would report a clean tree for the reason a broken reader does."
+else
+  # HALF ONE: the three declared copies are one byte string. Read against the FIRST readable
+  # copy rather than pairwise, so N files cost N extractions.
+  i92_ref=''; i92_ref_of=''; i92_vacuous=''; i92_drift=''
+  while IFS= read -r i92_rel; do
+    [ -n "$i92_rel" ] || continue
+    i92_abs="$REPO_ROOT/$i92_rel"
+    i92_got="$(i92_body "$i92_abs" "$i92_needle")"
+    if [ -z "$i92_got" ]; then
+      i92_vacuous="$i92_vacuous $i92_rel"
+    elif [ -z "$i92_ref" ]; then
+      i92_ref="$i92_got"; i92_ref_of="$i92_rel"
+    elif [ "$i92_got" != "$i92_ref" ]; then
+      i92_drift="$i92_drift $i92_rel"
+    fi
+  done <<EOF
+$i92_declared
+EOF
+  [ -z "$i92_vacuous" ] || err "I92 cannot find a ${i92_needle}() definition in:$i92_vacuous. The check binding the three readings of what makes a transcript directory a usable corpus just went vacuous -- it must locate all three or fail loudly, never pass by finding nothing. If the helper was renamed or lifted, rename it here in the same change."
+  [ -z "$i92_drift" ] || err "I92: the transcript-corpus predicate has forked. $i92_ref_of and$i92_drift define ${i92_needle}() differently. Two of the three sites are gate validators deciding whether a --dir corpus is real; the third is the remediation guard deciding whether a dispatch may proceed. A copy that differs means the guard denies a dispatch over a directory the validators just accepted, and the operator sees a refusal with two green validators beside it. Make ${i92_needle}() byte-identical across all three."
+
+  # HALF TWO: no fourth site. The hit list is DERIVED; the three declared paths and the two
+  # excluded directories are the only things written down.
+  #
+  # THE POSITIVE CONTROL IS THIS FILE, AND IT REPLACED A GUARD THAT COULD NOT FIRE. The first
+  # cut asserted the hit list was non-EMPTY, on the reasoning that an empty one satisfies the
+  # fourth-copy half by having nothing left to check. Measured against a tree with the helper
+  # renamed out of all four files that carry it: that guard stayed silent, because this arm is
+  # itself inside the scanned roots and names the needle at i92_needle= and throughout the prose
+  # above. An empty hit list is unconstructible while the arm exists, so the guard was a
+  # condition that changes no outcome -- and one that reads exactly like a check that passed.
+  #
+  # What IS constructible is a scan that stops reading one of its roots: narrow it to core/, or
+  # let REPO_ROOT resolve somewhere else -- this file run from a copy under /tmp answers with a
+  # different root and finishes in milliseconds -- and the fourth-copy half goes quiet over a
+  # corpus it never opened. So the control is a token already known to be present, read in the
+  # same invocation: this file must appear in its own scan.
+  i92_hits="$(i92_sites "$i92_needle" "$REPO_ROOT/core" "$REPO_ROOT/scripts" | LC_ALL=C sort)"
+  i92_self="scripts/validate-enforcement-map.sh"
+  if ! in_lines "$REPO_ROOT/$i92_self" "$i92_hits"; then
+    err "I92's site scan did not find $i92_self, which carries ${i92_needle} in this arm's own i92_needle= assignment and in the paragraphs above it. That is the control failing, not a finding about the tree: the scan is not reading the roots it was handed, so its report of no fourth copy would be a zero taken over a corpus it never opened. Fix the roots passed to i92_sites, or the resolution of REPO_ROOT, before reading anything below."
+  else
+    i92_extra=''
+    while IFS= read -r i92_hit; do
+      [ -n "$i92_hit" ] || continue
+      i92_r="${i92_hit#"$REPO_ROOT"/}"
+      case "$i92_r" in
+        core/fixtures/*) continue ;;
+        scripts/validate-enforcement-map.sh) continue ;;
+      esac
+      in_lines "$i92_r" "$i92_declared" || i92_extra="$i92_extra $i92_r"
+    done <<EOF
+$i92_hits
+EOF
+    [ -z "$i92_extra" ] || err "I92: file(s) outside the three bound sites name ${i92_needle}:$i92_extra. A fourth copy is an unbound copy -- the equality half above compares only the three it is given, so a fourth drifts in silence and decides the same corpus question its own way. Either resolve it from one of the three bound sites, or add it to i92_declared here in the same change so it is held byte-identical with them. A file that merely CITES the name in prose still counts: that is how the last unbound copy in this repository arrived."
+  fi
+fi
+
+# --- I93: an "examined nothing" verdict is ONE token across every emitter of it ----
+# vocabulary: empty-subject verdict token
+# vocabulary-invariant: I93
+# vocabulary-owner: core/skills/ai-dlc/enforcement-map.yaml
+# vocabulary-extract: empty-subject-verdict
+# vocabulary-readers: core/scripts/validate-stub-audit.sh, core/scripts/validate-locked-anchor.sh, core/scripts/validate-ci-gates.sh, core/skills/ai-dlc/steps/gate-validation.md, core/skills/ai-dlc/steps/retro.md
+#
+# WHY. Three core validators printed "this run examined nothing" in three spellings at three
+# exit codes -- `AUDITED NOTHING` at 4, `PASS -- NOTHING VERIFIED` at 0, `VACUOUS:` at 78 --
+# and no vocabulary joined them. Each was argued at length in its own header and none was
+# wrong on its own terms; the DISAGREEMENT was the defect, because an operator reading a gate
+# log had to know three grammars to recognise one state and a fourth emitter would have
+# invented a fourth spelling with nothing to stop it.
+#
+# THE EXIT CODES ARE NOT BOUND HERE AND MUST NOT BE. 4, 0 and 78 are per-validator caller
+# contracts, each argued in its own header (4 = not a pass, the caller decides; 0 = a legal
+# state that must still say what it did not do; 78 = a check that COULD NOT run must not share
+# a code with one that ran and passed). Unifying them is consumer-visible and is not this
+# arm's business. One token says "nothing was examined"; the code says what that is worth.
+#
+# THE OWNER IS THE MAP, NOT ONE OF THE THREE. They are co-equal peers, so promoting one picks
+# a winner on no criterion; the map is the only file in the tree that declares all three under
+# `enforcer:` (derived, not asserted: the set of files naming all three emitters is this file,
+# the map, the CHANGELOG, docs/ and the generated readset table).
+#
+# THE FALSE-POSITIVE NARROWING IS THE EMISSION SITE, NOT A DELIMITER, and that is a departure
+# from the sibling readers of I39 on purpose. Those narrow with backticks because SKILL.md
+# writes every status in backticks and a bare `grep -F` on one member matches a longer member
+# containing it. Neither holds here: this corpus is shell and Python, where a backtick RUNS
+# the quoted word (I85 fails the push on one), and the set has a single member with no longer
+# sibling to be confused with. What a whole-file `grep -qF` gets wrong in THIS corpus is a
+# COMMENT -- the same defect one grain over -- so esv_sites drops comment-only lines.
+#
+# HOW THE FALSE-POSITIVE SET REACHED ZERO, WHICH IS PART OF THE ARM. Over the REAL tree the
+# narrowed and unnarrowed forms both report zero, because this change rewrote each emitter's
+# exit-code TABLE along with its emission; the real corpus does not discriminate the two and
+# therefore cannot be the evidence for the narrowing. What discriminates them is the shape
+# arm C has to TOLERATE: a validator whose header RECORDS the retirement -- "78 = EXAMINED
+# NOTHING; was VACUOUS: until the vocabulary landed, so a consumer grepping old gate logs
+# finds those runs under the new token". That is the right thing for a header to say. Seeded
+# and measured side by side in one invocation: narrowed 0 findings, unnarrowed 3, with the
+# declared token found on the seed's one emitting line as the control. The narrowing buys
+# exactly that, and the probe below asserts both directions of it before the corpus is read.
+
+# `esv_sites <token> <file>...` -> "file:line" for each NON-COMMENT line carrying the token.
+# ONE awk over the whole file list rather than a loop: the fixture-suite pole invokes this
+# script and a per-file fork is a change to the suite's wall clock. The token is carried by
+# `-v`, which strips one level of escaping and transports no newline -- safe here only
+# because the declared token holds neither.
+esv_sites() {
+  esv_t="$1"; shift
+  awk -v t="$esv_t" '
+    { if (index($0, t) == 0) next
+      s = $0; sub(/^[[:space:]]+/, "", s)
+      if (substr(s, 1, 1) == "#") next
+      print FILENAME ":" FNR }
+  ' "$@"
+}
+
+# `esv_rows <yaml>` -> "<key><TAB><value>" rows for the empty_subject_verdict: block ALONE.
+# Scoped to the block and exited at the next top-level key, so a `token:` under any other
+# key cannot leak in -- the probe below seeds one on each side to prove it.
+esv_rows() {
+  awk '
+    /^empty_subject_verdict:/                     { on = 1; next }
+    on && /^[^[:space:]#]/                        { exit }
+    !on                                           { next }
+    /^  [a-z_]+:[[:space:]]*$/                    { k = $1; sub(/:$/, "", k); next }
+    /^  [a-z_]+:[[:space:]]*[^[:space:]]/         { k = $1; sub(/:$/, "", k)
+                                                    v = $0
+                                                    sub(/^  [a-z_]+:[[:space:]]*/, "", v)
+                                                    print k "\t" v; k = ""; next }
+    /^    - /                                     { if (k != "") { v = $0
+                                                      sub(/^    - /, "", v)
+                                                      gsub(/^"|"$/, "", v)
+                                                      print k "\t" v } }
+  ' "$1"
+}
+esv_val() { awk -F'\t' -v k="$1" '$1 == k { print $2 }' <<EOF
+$2
+EOF
+}
+
+# --- the probe, over a seeded tree, BEFORE the corpus ------------------------------------
+ESV_TMP="$(mktemp -d "${TMPDIR:-/tmp}/i93-XXXXXX")"
+printf '%s\n' \
+  'decoy_before:' \
+  '  token: DECOY93A' \
+  'empty_subject_verdict:' \
+  '  token: PROBE93 TOKEN' \
+  '  emitters:' \
+  '    - a.sh' \
+  '    - b.sh' \
+  '  retired:' \
+  '    - "OLD93:"' \
+  'checks:' \
+  '  token: DECOY93B' > "$ESV_TMP/map.yaml"
+printf '%s\n' 'echo "PROBE93 TOKEN reached the operator"' > "$ESV_TMP/emit.sh"
+printf '%s\n' '#   4 = PROBE93 TOKEN, in an exit-code table' \
+              '    # PROBE93 TOKEN, indented comment' > "$ESV_TMP/comment.sh"
+printf '%s\n' 'echo "nothing to see"' > "$ESV_TMP/silent.sh"
+
+esv_p_rows="$(esv_rows "$ESV_TMP/map.yaml")"
+esv_score=0
+[ "$(esv_val token "$esv_p_rows")" = "PROBE93 TOKEN" ] || esv_score=$((esv_score + 1))
+[ "$(esv_val emitters "$esv_p_rows" | grep -c .)" = "2" ] || esv_score=$((esv_score + 10))
+[ "$(esv_val retired "$esv_p_rows")" = "OLD93:" ] || esv_score=$((esv_score + 100))
+[ -n "$(esv_sites 'PROBE93 TOKEN' "$ESV_TMP/emit.sh")" ] || esv_score=$((esv_score + 1000))
+[ -z "$(esv_sites 'PROBE93 TOKEN' "$ESV_TMP/comment.sh")" ] || esv_score=$((esv_score + 10000))
+[ -z "$(esv_sites 'PROBE93 TOKEN' "$ESV_TMP/silent.sh")" ] || esv_score=$((esv_score + 100000))
+rm -rf "$ESV_TMP"
+
+if [ "$esv_score" -ne 0 ]; then
+  err "I93's probe scored $esv_score where 0 is the only correct total, so nothing below was read by a working reader. +1 the block reader lost the token or picked up a decoy \`token:\` outside the block; +10 it read the wrong number of emitters, so the list grammar moved; +100 it did not strip the quotes off a retired spelling, so arm C would search for a literal with quotes in it and find nothing forever; +1000 esv_sites found no emission in a file whose only line EMITS the token, which makes arm A pass by finding nothing; +10000 it counted a COMMENT as an emission, which is the whole of this arm's false-positive narrowing and makes arm C fire on every exit-code table; +100000 it reported a site in a file carrying no token at all."
+else
+  esv_rows_all="$(esv_rows "$MAP")"
+  esv_tok="$(esv_val token "$esv_rows_all")"
+  esv_emitters="$(esv_val emitters "$esv_rows_all")"
+  esv_readers="$(esv_val readers "$esv_rows_all")"
+  esv_retired="$(esv_val retired "$esv_rows_all")"
+  if [ -z "$esv_tok" ] || [ -z "$esv_emitters" ] || [ -z "$esv_readers" ] || [ -z "$esv_retired" ]; then
+    err "I93: the \`empty_subject_verdict:\` block in $MAP did not yield all four of token/emitters/readers/retired (token='$esv_tok'; $(printf '%s' "$esv_emitters" | grep -c .) emitter(s), $(printf '%s' "$esv_readers" | grep -c .) reader(s), $(printf '%s' "$esv_retired" | grep -c .) retired spelling(s)). Either the block was removed or its shape changed. This fails closed: with an empty declaration every loop below iterates zero times and the arm reports a unified tree it never looked at."
+  else
+    # ARM A -- every declared emitter EMITS the token, and emits no retired spelling.
+    while IFS= read -r esv_f; do
+      [ -n "$esv_f" ] || continue
+      if [ ! -f "$REPO_ROOT/$esv_f" ]; then
+        err "I93: $MAP declares '$esv_f' as an emitter of the empty-subject verdict and no such file exists. A scan over a missing file reads exactly like an emitter that conforms."
+        continue
+      fi
+      [ -n "$(esv_sites "$esv_tok" "$REPO_ROOT/$esv_f")" ] || \
+        err "I93: $esv_f is declared an emitter of the empty-subject verdict and no line of it OUTSIDE A COMMENT prints '$esv_tok'. Either it stopped emitting the verdict, or it emits a spelling of its own -- which is the three-grammar state this vocabulary replaced. The token is declared at $MAP \`empty_subject_verdict: token:\`; change it there and here in one commit, never in one emitter."
+      while IFS= read -r esv_r; do
+        [ -n "$esv_r" ] || continue
+        esv_hit="$(esv_sites "$esv_r" "$REPO_ROOT/$esv_f")"
+        [ -z "$esv_hit" ] || \
+          err "I93: $esv_f emits the RETIRED spelling '$esv_r' at $esv_hit. It was replaced by '$esv_tok' precisely so that one state has one grammar; an emitter carrying both prints two names for one thing and an operator grepping the gate log for either finds half the runs."
+      done <<EOF
+$esv_retired
+EOF
+    done <<EOF
+$esv_emitters
+EOF
+
+    # ARM B -- every declared reader NAMES the token and no retired spelling. These are
+    # step files an agent reads at a gate: a step that restates a spelling the script no
+    # longer prints tells the agent to look for a line that will never appear. Read with
+    # `$(<file)` and matched with in_body, so the whole arm costs no fork -- and matched
+    # WHOLE-FILE deliberately, because prose has no emission site to key on and `#` is a
+    # markdown heading rather than a comment.
+    while IFS= read -r esv_f; do
+      [ -n "$esv_f" ] || continue
+      if [ ! -f "$REPO_ROOT/$esv_f" ]; then
+        err "I93: $MAP declares '$esv_f' as a reader of the empty-subject verdict and no such file exists."
+        continue
+      fi
+      esv_body="$(<"$REPO_ROOT/$esv_f")"
+      in_body "$esv_tok" "$esv_body" || \
+        err "I93: $esv_f is declared a reader of the empty-subject verdict and never names '$esv_tok'. It is a step file an agent reads AT the gate; if it does not carry the token the agent is told to read a report line by a name nothing prints."
+      while IFS= read -r esv_r; do
+        [ -n "$esv_r" ] || continue
+        ! in_body "$esv_r" "$esv_body" || \
+          err "I93: $esv_f still restates the RETIRED spelling '$esv_r'. The emitters print '$esv_tok' now, so this instructs an agent to look for a line that no longer exists."
+      done <<EOF
+$esv_retired
+EOF
+    done <<EOF
+$esv_readers
+EOF
+
+    # ARM C -- no OTHER shipped validator revives a retired spelling. Arm A holds the three
+    # declared emitters; this holds the rest of core/scripts/, which is where a fourth
+    # emitter would appear. Scoped to emissions for the reason in the header: every one of
+    # the three retired spellings still appears, correctly, in the exit-code COMMENT tables
+    # and headers that record what each code used to be called.
+    esv_files=()
+    for esv_f in "$REPO_ROOT"/core/scripts/*.sh; do
+      [ -f "$esv_f" ] && esv_files[${#esv_files[@]}]="$esv_f"
+    done
+    if [ "${#esv_files[@]}" -eq 0 ]; then
+      err "I93: the glob core/scripts/*.sh matched no file, so arm C's sweep for revived spellings would report a clean tree having opened nothing. An unmatched glob and a conforming corpus print the same zero."
+    elif [ -z "$(esv_sites "$esv_tok" "${esv_files[@]}")" ]; then
+      # THE POSITIVE CONTROL, IN THE SAME INVOCATION AS THE ZEROS BELOW. Arm A already
+      # requires each declared emitter to print the token and all three live under
+      # core/scripts/, so the identical scan over this file list MUST find them. If it does
+      # not, the sweep is not reading the corpus it was handed and every "no revived
+      # spelling" below is a zero taken over nothing.
+      err "I93: arm C's control failed -- scanning $(printf '%s' "${#esv_files[@]}") core/scripts/*.sh file(s) for the DECLARED token '$esv_tok' found no emission, while arm A above requires three of those files to emit it. The file list or esv_sites is not reading the tree, so the retired-spelling sweep below cannot be believed."
+    else
+    while IFS= read -r esv_r; do
+      [ -n "$esv_r" ] || continue
+      esv_hits="$(esv_sites "$esv_r" "${esv_files[@]}" | sed "s|^$REPO_ROOT/||" | tr '\n' ' ')"
+      [ -z "$esv_hits" ] || \
+        err "I93: the retired empty-subject spelling '$esv_r' is emitted again under core/scripts/: $esv_hits. This vocabulary exists because three validators each invented their own name for one state. The declared token is '$esv_tok' ($MAP \`empty_subject_verdict:\`); if a new validator needs this verdict it emits that, and if the token itself must change it changes at the owner."
+    done <<EOF
+$esv_retired
+EOF
+    fi
+  fi
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"

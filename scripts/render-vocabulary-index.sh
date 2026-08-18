@@ -226,7 +226,19 @@ vocab_extract_syntax_globs() {
 
 # The slug -> function map, and the ONLY list of implemented slugs. The two-way join below
 # compares this against what the markers declare, so neither side can grow alone.
-IMPLEMENTED='ledger-statuses extension-kinds adjudicated-codes pr-class-keys intensity-table syntax-globs'
+vocab_extract_empty_subject_verdict() {
+  # SCOPED TO THE BLOCK AND EXITED AT THE NEXT TOP-LEVEL KEY. `token:` is a two-character
+  # word that any later block could reuse; a file-wide `sed -n 's/^  token:...'` would then
+  # render two members for a one-member vocabulary and the row would read like a set that
+  # legitimately has two. The near-miss probe seeds a `token:` on each side of the block.
+  awk '
+    /^empty_subject_verdict:/     { on = 1; next }
+    on && /^[^[:space:]#]/        { exit }
+    on && /^  token:[[:space:]]/  { v = $0; sub(/^  token:[[:space:]]*/, "", v); print v }
+  ' "$1"
+}
+
+IMPLEMENTED='ledger-statuses extension-kinds adjudicated-codes pr-class-keys intensity-table syntax-globs empty-subject-verdict'
 
 extract_with() { # extract_with <slug> <owner-path>
   case "$1" in
@@ -236,6 +248,7 @@ extract_with() { # extract_with <slug> <owner-path>
     pr-class-keys)      vocab_extract_pr_class_keys      "$2" ;;
     intensity-table)    vocab_extract_intensity_table    "$2" ;;
     syntax-globs)       vocab_extract_syntax_globs       "$2" ;;
+    empty-subject-verdict) vocab_extract_empty_subject_verdict "$2" ;;
     *) return 3 ;;
   esac
 }
@@ -401,9 +414,26 @@ printf '%s\n' \
   '  for f in outside/*.sh; do' > "$PROBE_DIR/hook"
 probe_extract syntax-globs "$PROBE_DIR/hook" "a/*.sh b/*.sh"
 
+printf '%s\n' \
+  'decoy_before:' \
+  '  token: NOT THIS ONE' \
+  'empty_subject_verdict:' \
+  '  token: PROBE VERDICT' \
+  '  emitters:' \
+  '    - a.sh' \
+  'checks:' \
+  '  token: NOR THIS ONE' > "$PROBE_DIR/emap.yaml"
+probe_extract empty-subject-verdict "$PROBE_DIR/emap.yaml" "PROBE VERDICT"
+
 # NEAR-MISS CONTROL for the extractors as a class: an owner whose shape has changed must
 # yield NOTHING rather than something plausible, because the zero guard below is what turns
 # that into a failure instead of an empty row.
+# NEAR-MISS for the block reader specifically: a file with no such block at all must yield
+# NOTHING, not the first `token:` it happens to find.
+printf '%s\n' 'other_block:' '  token: SOMETHING ELSE' > "$PROBE_DIR/emap-none.yaml"
+[ -z "$(vocab_extract_empty_subject_verdict "$PROBE_DIR/emap-none.yaml")" ] || \
+  probe_fail "the empty-subject-verdict extractor returned a member from a file carrying no empty_subject_verdict: block; it is matching \`token:\` file-wide."
+
 printf '%s\n' 'LAYER_KINDS="alpha beta"' > "$PROBE_DIR/kinds-double.sh"
 [ -z "$(vocab_extract_extension_kinds "$PROBE_DIR/kinds-double.sh")" ] || \
   probe_fail "the extension-kinds extractor matched a DOUBLE-quoted assignment; it must key on the shape the owner actually uses so a changed shape reads as zero, not as a guess."

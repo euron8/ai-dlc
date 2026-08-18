@@ -46,6 +46,37 @@
 
 catalog: core
 
+# The EMPTY-SUBJECT VERDICT vocabulary. One spelling for "this run examined nothing",
+# owned here because this is the only file that declares all three emitters of it.
+#
+# WHY IT IS OWNED BY THE MAP AND NOT BY ONE OF THE EMITTERS. The three are co-equal
+# peers: each argued its own spelling at length in its own header and none of them is
+# wrong on its own terms, so promoting one to owner picks a winner on no criterion. The
+# map already names all three under `enforcer:` and is the artifact that answers "what
+# enforces this check", which makes it the one place a reader is already going to look.
+#
+# THE EXIT CODES ARE DELIBERATELY NOT UNIFIED AND MUST NOT BE. `token` is a report
+# grammar; the exit code is each validator's own caller contract, argued in each of
+# their headers (4 = not a pass, the caller decides; 0 = a legal state that reports what
+# it did not do; 78 = a check that COULD NOT run must not share a code with one that ran
+# and passed). One token says "nothing was examined"; the code says what that is worth.
+#
+# `retired` is the set of spellings this replaced. No shipped validator may emit one
+# again — a fourth spelling is how this became three.
+empty_subject_verdict:
+  token: EXAMINED NOTHING
+  emitters:
+    - core/scripts/validate-stub-audit.sh
+    - core/scripts/validate-locked-anchor.sh
+    - core/scripts/validate-ci-gates.sh
+  readers:
+    - core/skills/ai-dlc/steps/gate-validation.md
+    - core/skills/ai-dlc/steps/retro.md
+  retired:
+    - AUDITED NOTHING
+    - NOTHING VERIFIED
+    - "VACUOUS:"
+
 checks:
   - id: "1"
     title: Validation cycle complete?
