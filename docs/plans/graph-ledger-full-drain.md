@@ -462,6 +462,22 @@ fixtures three hands had just stabilised).
 
 ### BATCH 5 — the validators that report on evidence they did not read
 
+**GRAPH FILED TWO NEW ENTRIES DURING BATCH 4, AND ONE OF THEM IS NOT MIRRORED HERE.** The reference
+consumer's live ledger moved under this program — md5 `c3b8ed13…` → `1f13c17f…`, 2953 → 3024 lines,
+96 entry headings — by graph's own `chore(s303)` sprint-review commits, with a clean working tree
+there. **This session never wrote to graph; the change is the consumer's own work**, which is the
+state Phase 5 step 22 says to hand over rather than report completion over.
+
+- `PC-S303-FANOUT-SCRIPT-ARG-MAX-VIA-EXPORTED-DIFF-ENV-VAR` — already mirrored here as **`BL-064`**,
+  open, `STILL-LIVE`.
+- `PC-S303-STUB-AUDIT-MARKER-REGEX-MATCHES-LOCAL-VAR-NAMED-STUB` — **NOT filed here.** It is a
+  THIRD defect in `core/scripts/validate-stub-audit.sh`, distinct from `BL-055` (`:217`) and from
+  `BL-058` (`:263`) — and `BL-058` is batch 5's anchor, so that file is open on the bench anyway.
+  **It is NOT filed because it has not been adjudicated against this working tree**, and filing a
+  consumer claim unverified is the thing this program exists to stop. Adjudicate it as part of
+  batch 5 and file it, or hand it back with the reason.
+
+
 **Re-derived at batch 4's close, on `26ea6ce`: 59 open `BL-` entries — 55 `STILL-LIVE`,
 4 `HAND-REVIEW`, 0 `CLOSE-CANDIDATE`**, one row per entry, against an impossible-id control of 0.
 Archive 14. **Re-run `bash scripts/backlog-reverify.sh` before you believe any of it** — batch 4
