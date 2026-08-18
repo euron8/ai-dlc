@@ -949,49 +949,6 @@ ledger line 1977.
 
 
 verify: sh bash -c 'a=core/skills/ai-dlc-update/reconcile/apply.sh; w=$(LC_ALL=C grep -c "say WORKLIST" "$a"); m=$(LC_ALL=C grep -cE "^[^#]*mech_fail=" "$a"); [ "$w" -gt 0 ] && [ "$m" -gt 0 ] || exit 3; n=$(LC_ALL=C grep -n "say DECISION restamp-withheld" "$a" | head -1 | cut -d: -f1); [ -n "$n" ] || exit 3; g=$(sed -n "$((n-1))p" "$a"); LC_ALL=C grep -qE "[&][&]|[|][|]" <<< "$g" && exit 0; LC_ALL=C grep -qiE "^[^#]*worklist[a-z_]*=" "$a" && exit 0; exit 1'
-## BL-031
-
-**`ledger-reverify.sh` emits its `ENTRY-SWALLOWED` detail with a literal backslash-u-2026 escape,
-and that detail is rendered into the region `emit-report.sh --verify` byte-compares.** The escape is
-at `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:1174`, inside the third argument of an
-`emit` call. `emit()` at `:193` is `printf '%s\t%s\t%s\n' "$1" "$2" "$3$RSFX"` — a `%s` conversion,
-which does not interpret escapes in its argument — so the six characters reach stdout verbatim. The
-same string literal carries a REAL em-dash (`cat -v` on `:1174` shows `M-bM-^@M-^T`), so this is an
-inconsistency inside one message rather than an ASCII-safety convention. The detail is not dropped
-downstream: `emit-report.sh:251` prints field `$3` for every row whose status is neither
-`STILL-LIVE` nor `HAND-REVIEW`, and `ENTRY-SWALLOWED` is neither.
-
-Measured over `core/`, with a control in the same invocation: emit-site lines carrying a
-`\uXXXX`-shaped escape = **1**, in that one file; total `emit ` call sites in that same file =
-**21**. So the offender is 1 of 21 in its own file and 1 across the whole of `core/` — an outlier,
-not a convention.
-
-The filing is right about the mechanism and wrong about one coordinate: it cites line **767**, and
-the emit site is at **1174** today. That is a REPOINT, not a close — the string, the escape and the
-`printf '%s'` emitter are all unchanged. Nothing else in the filing moved.
-
-**The consequence was reproduced first-hand while filing this, which is the strongest evidence
-available for it.** Three separate attempts to type the six-character escape into a probe — through
-a heredoc, through the `Write` tool, and inline — arrived as a single `…` character every time, and
-the arm reported "no match" on all three. The probe only worked once the escape was assembled from
-parts at runtime (`B='\'` then `"${B}u2026"`). That is precisely the filing's claim — "any faithful
-reader, a model, a markdown renderer, a copy through anything that normalises JSON escapes, will
-turn it into `…`" — reproduced on the reader most likely to be pasting the region.
-
-The receipt keys on the EMIT SITE (`^[[:space:]]*emit `), not on the file. A whole-file grep is the
-anchor failure this program keeps measuring: a fix that emits the character directly and records
-what it removed in a comment leaves the substring in the file, and a file-scoped anchor would then
-report STILL-LIVE forever. The receipt's own near-miss arm asserts a comment line carrying the same
-escape does NOT satisfy it. Verified satisfiable in the same invocation: a `sed`-substituted copy of
-the file — asserted byte-different from the original before comparing — takes the count from 1 to 0
-and the receipt to exit 0, with all 112 real em-dashes intact.
-
-Discharges the consumer entry
-`PC-S311-ENTRY-SWALLOWED-DETAIL-EMITS-A-LITERAL-BACKSLASH-U-ESCAPE-SO-A-VERBATIM-PASTE-FAILS-VERIFY`
-at pinned ledger line 2231.
-
-
-verify: sh F=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; B='\'; RE="^[[:space:]]*emit .*${B}${B}u[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]"; grep -qE "$RE" <<<"  emit X \"a ${B}u2026 b\"" || exit 1; grep -qE "$RE" <<<"# comment quoting ${B}u2026" && exit 1; [ "$(grep -cE "$RE" "$F")" -eq 0 ]
 ## BL-033
 
 **A mode-only upstream change buckets `UPSTREAM-ONLY` even when the consumer copy is already
@@ -1104,60 +1061,6 @@ ledger line 3088. The name undercounts by one; the entry is the wider finding.
 
 
 verify: sh E=core/skills/ai-dlc-update/reconcile/emit-report.sh; c() { LC_ALL=C awk -v p="$1" '/^[[:space:]]*#/{next} index($0,p){n++} END{exit !(n>0)}' "$E"; }; c "SELF/retired-tokens.sh" || exit 1; N=0; for d in retired-layer-contract.sh retired-layer-passage.sh retired-fixtures.sh; do c "SELF/$d" || N=$((N+1)); done; c "--templates" || N=$((N+1)); [ "$N" -eq 0 ]
-## BL-035
-
-**`ledger-rotate.sh` reports an entry as "closed for re-verification" using an UNANCHORED phrase
-test, while `ledger-reverify.sh` decides the same question with a LINE-LEADING anchor — so 4 of
-the 9 entries the report names are ones reverify does not skip.** `ledger-rotate.sh:145` is
-`/ADOPTED UPSTREAM|WITHDRAWN|\(original text, retained for the record\)/ { loose = 1 }`, matching
-anywhere on any body line. `ledger-reverify.sh:769` is
-`/^[ \t]*(<br[ \t]*\/?[ \t]*>)?[ \t]*(\*\*[^`]*)?(ADOPTED UPSTREAM|WITHDRAWN)/ { closed=1 }` —
-same words, but only where the line LEADS with the marker. Measured on the pinned reference-consumer
-ledger (4356 lines, md5 `2fd444dcf406cdff728fe3c0c4352267`; control: the 4355-line prefix hashes
-`d4e39a96a33c5c92adfe4c8457020064`, so the pin is exact), running the shipping
-`ledger-rotate.sh` in report mode: **9 stuck rows**. Re-deriving both predicates over the same
-corpus through the same `ledger_entry_awk` boundary rule splits those 9 into **5 that reverify
-really does skip and 4 that it does not** — `PC-S299`, `PC-S313`, `PC-S329`, `PC-S330`. Controls in
-the same invocation, both non-zero: **6** entries reverify closes that rotate's `loose` never sees
-at all (they are closed by their TITLE, and `ledger-rotate.sh:106` `next`s on the entry line so
-neither of its rules reads a title), and **0** entries rotate would archive that reverify would not
-skip. The re-derived stuck total, 5 + 4, equals the shipping program's 9.
-
-The claim the report prints is therefore false for 4 of 9. `ledger-rotate.sh:199-200` tells the
-operator "`ledger-reverify.sh` skips them, so they never appear in a report again"; `:17-18` states
-the same premise in the header as "treats an entry as closed on `/ADOPTED UPSTREAM/` anywhere in
-it"; and `:144` labels the loose rule "reverify.sh entry_line_closes(), restated as the LOOSE side
-of the same question" — but `entry_line_closes()` at `ledger-reverify.sh:691` is applied to the
-ENTRY LINE only, and reverify's body rule is the different, anchored one at `:769`. Three
-statements of a premise that no longer holds, and the middle one is a restatement of a mechanism
-rather than a citation of it.
-
-**What the filing got wrong, and the direction: a different cause, and its prescribed fix is now
-actively harmful.** The entry says reverify "scopes its skip to the entry TITLE" and prescribes
-"scope `loose` to the title, the way `ledger-reverify.sh` scopes `s`." That was true at the sha the
-filing measured; it is not true here. Reverify closes on body lines too — it is the ANCHORING that
-differs, not the SPAN. Executing the filing's own remedy against the case it reproduces: a copy of
-`ledger-rotate.sh` with `loose` computed from the entry line only reports **8** rows instead of 9,
-and the two sets overlap in **2** entries. It drops 7 of today's 9 and adds 6 that are new, and **3
-of the 5 genuinely-stuck entries disappear from the report** — the exact invisibility the stuck-set
-report exists to end. The correction is a REPLACEMENT of the cause, not a widening: the fix is to
-give `loose` reverify's line-leading anchor, not the title scope.
-
-The anchor is behavioural and binds to reverify's own regex by `grep -F`-ing the emitting line out
-of `ledger-reverify.sh` and running it as awk, rather than restating it — a restated regex is the
-drift this entry is about. A looser anchor would false-close: a substring check for the word
-"anchored" in `ledger-rotate.sh` is satisfied by the header prose already there, and an anchor on
-the premise sentence at `:199` is satisfied by any rewording that leaves the predicate untouched.
-The probe's two arms are each other's control: the mid-sentence mention must be reported stuck by
-rotate and NOT closed by reverify's predicate, and the line-leading `**WITHDRAWN` annotation must be
-reported by rotate AND closed by reverify. Measured against a copy carrying the fix
-(`loose` given reverify's anchor): exit **0**. Against the tree today: exit **1**.
-
-Discharges the consumer entry `PC-S330-LEDGER-ROTATE-STUCK-SET-CONTRADICTS-THE-SKIP-RULE-IT-CITES`
-at pinned ledger line 3647.
-
-
-verify: sh R=core/skills/ai-dlc-update/reconcile; P='(ADOPTED UPSTREAM|WITHDRAWN)/ { closed=1 }'; [ "$(grep -cF "$P" "$R/ledger-reverify.sh")" -eq 1 ] || exit 1; A=$(grep -F "$P" "$R/ledger-reverify.sh"); D=$(mktemp -d); printf '## PC-PROBE-MENTION — probe\n\nProse: annotate ADOPTED UPSTREAM (v9.9.9, verified <date>) once the grep is non-zero.\n' > "$D/m.md"; printf '## PC-PROBE-ANNOT — control\n\n**WITHDRAWN 2026-01-01, the premise was false.**\n' > "$D/a.md"; cat "$D/m.md" "$D/a.md" > "$D/push-candidate-ledger.md"; S=$(bash "$R/ledger-rotate.sh" "$D/push-candidate-ledger.md" 2>&1); LC_ALL=C awk "$A"'END{exit !closed}' "$D/m.md"; vm=$?; LC_ALL=C awk "$A"'END{exit !closed}' "$D/a.md"; va=$?; rm -rf "$D"; [ "$vm" = 1 ] && [ "$va" = 0 ] || exit 1; grep -qF 'PC-PROBE-ANNOT' <<<"$S" || exit 1; ! grep -qF 'PC-PROBE-MENTION' <<<"$S"
 ## BL-037
 
 **`apply.sh` emits an `override-readopt` row and a two-step ATOMIC `override-retire` sequence for
@@ -1607,48 +1510,6 @@ at pinned ledger line 2101.
 
 
 verify: sh . core/skills/ai-dlc-update/reconcile/lib.sh; F=core/skills/ai-dlc/steps/retro.md; A=$(span_of "4a. Close-Out Sweep" < "$F"); B=$(span_of "## Machine Audits" < "$F"); [ -n "$A" ] && [ -n "$B" ] || exit 1; [ "${B%% *}" -gt "${A##* }" ]
-## BL-046
-
-**Neither pre-push hook scrubs git's worktree environment, so a push issued from a linked
-worktree redirects 33 fixture sandboxes onto the real repository.** Measured on this machine
-with a control in the same invocation: a `pre-push` hook driven by a push from the PRIMARY
-checkout sees `GIT_DIR` **UNSET**; the same hook driven by a push from a LINKED WORKTREE sees
-`GIT_DIR=<repo>/.git/worktrees/<name>`. The damage arm, same construction: with `GIT_DIR`
-exported, a fixture-shaped `mktemp -d; git init; git add; git commit` sequence committed into
-the REAL repository — commit count 1 → 2, `poison.txt` tracked in the real repo = **1**; with
-`GIT_DIR` unset the identical sequence left the real repo untouched — count unchanged, tracked
-file = **0**. Both hooks lack the scrub: `grep -c GIT_OBJECT_DIRECTORY` over
-`.githooks/pre-push` and `core/git-hooks/pre-push` = **0 / 0**, against a control token
-(`fixture`) in the same invocation over the same two files = **66 / 68**. `unset GIT_` occurs
-**nowhere** in the tree. Blast radius: **33 of 160** fixture directories `git init` inside a
-`mktemp` sandbox and so depend on git's upward repository discovery, which git only consults
-when `GIT_DIR` is unset (control: an impossible token over the same corpus = 0).
-
-**The filing is narrower than the defect in two directions, and its stated reason that
-upstream is immune is false.** It anchors on `core/git-hooks/pre-push` alone; `.githooks/pre-push`
-— this repo's own runner, which invariant **I66** binds to be one program with it — has the
-same hole, and its `xargs -P "$FIXTURE_JOBS"` dispatch at `.githooks/pre-push:494` inherits the
-parent environment exactly as the consumer's does at `core/git-hooks/pre-push:537`. More
-importantly the entry argues "the distribution develops in its own primary checkout, where git
-exports nothing, so the asymmetry does not arise there." **Measured now: `git worktree list` on
-this distribution repo reports 8 entries, 6 of them linked worktrees under
-`.claude/worktrees/agent-*`** — created by the agent-isolation harness, not by hand. The
-distribution is in the affected population today, and the entry's own reason for treating it as
-out of scope is the part that expired.
-
-The anchor is `GIT_OBJECT_DIRECTORY` because the scrub cannot be written without naming the
-variables it unsets, and the pattern is anchored to `^[[:space:]]*unset[[:space:]]` — the
-EMISSION site, not the file. Measured against the dominant failure mode: a line reading
-`# we deliberately do not unset GIT_OBJECT_DIRECTORY here` does **not** satisfy it, so a fix
-that documents what it removed cannot false-close the receipt. Seeded both other directions in
-the same invocation: with both hooks scrubbed the predicate returns **0**, and with only ONE of
-the two scrubbed it stays **1** — a half-fix cannot close it.
-
-Discharges the consumer entry `PC-S330-PREPUSH-LEAKS-GIT_DIR-INTO-EVERY-FIXTURE-SANDBOX` at
-pinned ledger line 3881.
-
-
-verify: sh for h in .githooks/pre-push core/git-hooks/pre-push; do grep -qE '^[[:space:]]*unset[[:space:]].*GIT_OBJECT_DIRECTORY' "$h" || exit 1; done
 ## BL-047
 
 **A Pipeline Position carrying two `Current step file` values makes `ai-dlc-recover.sh` mandate
@@ -1791,46 +1652,6 @@ at pinned ledger line 3413.
 
 
 verify: sh S=core/skills/ai-dlc-update/SKILL.md; F=core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh; grep -qF core/fixtures "$S" && grep -qF core/fixtures "$F" || { echo "CONTROL FAILED"; exit 9; }; grep -qF 'grepped from the fixtures rather than from the diff' "$S" && grep -qF 'passed IN rather than re-derived here' "$F" && exit 1; exit 0
-## BL-050
-
-**Step 8 forbids the annotation §3f instructs, and `NAMED-UPSTREAM` is the status it never
-names.** `core/skills/ai-dlc-update/SKILL.md:1688` is the acting instruction — "Close ONLY
-`CLOSE-CANDIDATE` rows; a `NEEDS-REVIEW` row is never a close, whatever its detail says." §3f at
-`:738-745` says the opposite for `NAMED-UPSTREAM`: "**Not auto-closable** … It is not *unclosable*:
-the row instructs an annotation, and **any** occurrence of `ADOPTED UPSTREAM` in an entry makes
-`ledger-reverify.sh` skip it from the next run on." The emitter at
-`reconcile/ledger-reverify.sh:848` instructs that annotation in its detail. Measured over step 8's
-region (`^8\. \*\*Deliver` to `^9\. \*\*Safety`): occurrences of `NAMED-UPSTREAM` = **0**; control,
-`CLOSE-CANDIDATE` in the same region = non-zero, so the search ran over live text.
-
-**The filing is wrong about the mechanism in two places, and the defect moved rather than
-survived.** It claimed line 787's detail hands the reader "the identical closure instruction" as
-the three `CLOSE-CANDIDATE` emitters. That is now false: `:848` reads "Confirm whether that commit
-ABSORBED the entry or recorded a rejection/split; if it absorbed, annotate…", which is exactly the
-disambiguation the filing's own remedy asked for, while `:906`/`:935`/`:1027` still assert
-absorption. It also quoted §3f as saying "**Not closable**"; §3f now reads "**Not auto-closable**"
-and resolves the contradiction the filing's SECOND coherent answer proposed — make it closable and
-say so. What did not happen is the other half of that answer: "§3f and step 8 must say so, and the
-two places must agree." Step 8 was never updated.
-
-The direction also flipped. The filing feared over-closing on the strength of a naming. Today's
-residue is under-closing: a reader executing step 8 literally leaves every `NAMED-UPSTREAM` row
-unannotated, which is the "confident wrong answer" §3f warns about at `:733-737` — the entry keeps
-reporting `STILL-LIVE` on a receipt §3f has already told you is structurally incapable of deciding.
-
-The anchor is a status TOKEN inside the region that acts, not prose describing a fix: step 8 cannot
-be given a disposition for `NAMED-UPSTREAM` without naming it. A whole-file grep would false-close
-immediately — the token occurs five times in §3f at `:732`, `:737`, `:748`, `:755` and `:791`,
-which is the near-miss, and the receipt reports 1 against it today.
-
-Discharges the consumer entry `PC-S329-NAMED-UPSTREAM-DETAIL-INSTRUCTS-THE-CLOSE-ITS-OWN-STATUS-FORBIDS`
-at pinned ledger line 3595. **Its own receipt is inverted and must not be trusted to close it** —
-`theirs_has …/ledger-reverify.sh "recorded a rejection/split; if it absorbed, annotate"` anchors on
-the defect's CURRENT wording, which is present at `:848` (count 1; control, `ADOPTED UPSTREAM` = 16),
-so it reads CLOSE-CANDIDATE while the entry is live.
-
-
-verify: sh S=core/skills/ai-dlc-update/SKILL.md; r="$(sed -n '/^8\. \*\*Deliver/,/^9\. \*\*Safety/p' "$S")"; grep -qF CLOSE-CANDIDATE <<<"$r" || { echo "CONTROL FAILED"; exit 9; }; grep -qF NAMED-UPSTREAM <<<"$r" && exit 0; exit 1
 ## BL-051
 
 **Step 2 computes which machinery paths the consumer has edited and then discards the answer.**
@@ -2664,77 +2485,6 @@ Found by the graph consumer session. Cross-references the consumer entry
 
 verify: sh S=core/scripts/audit-layer-debt.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d); g="$d/reg.jsonl"; h="{\"clause\":\"LC-E1\",\"entry\":\"extensions/probe.md\",\"subject_digest\":\"da39a3e\",\"verdict\":\"still-additive\",\"recorded_utc\":\"1970-01-01T00:00:00Z\",\"reason\":\"probe row\",\"owed\":{\"id\":\"OWED-PROBE-1\",\"what\":\"split X out\",\"closes_when\":"; x="$h"'"immediately after scripts/ai-dlc/migrate-artifact-paths.sh --apply completes"}}'; y="$h"'"when the operator says so"}}'; [ "$x" != "$y" ] || { rm -rf "$d"; exit 9; }; printf '%s\n' "$x" > "$g"; a=$(bash "$S" --register "$g" 2>/dev/null); ra=$?; printf '%s\n' "$y" > "$g"; b=$(bash "$S" --register "$g" 2>/dev/null); rb=$?; rm -rf "$d"; [ "$ra" = 0 ] && [ "$rb" = 0 ] || exit 9; case "$a" in *OWED-PROBE-1*) : ;; *) exit 9 ;; esac; case "$b" in *OWED-PROBE-1*) : ;; *) exit 9 ;; esac; [ "$a" != "$b" ] || exit 9; ca=$(printf '%s\n' "$a" | grep -v 'closes when:'); cb=$(printf '%s\n' "$b" | grep -v 'closes when:'); [ "$ca" != "$cb" ]
 
-## BL-068
-
-**`ledger-rotate.sh` states a byte-identical invariant that its own prescribed workflow breaks, and
-the fixture asserting it cannot reach the shape that breaks it.** `ledger-rotate.sh:38-41` reads
-*"Closed entries are exactly the ones ledger-reverify already skips, so rotating them must not
-change its output by a single byte. Run ledger-reverify.sh before and after and diff the two — that
-is the acceptance test, and the fixture asserts it."* The premise is false for any entry annotated
-in the same pass, which is exactly what the annotate-then-rotate step prescribes.
-
-**The mechanism is an asymmetric union.** `prefix_entry_count()`
-(`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:386-390`) counts over
-`$ENTRIES` unioned with `$ARCHIVE_LABELS`. The live side is the OPEN set — the extractor skips any
-entry containing `ADOPTED UPSTREAM` (`:639`). So a freshly annotated entry is on NEITHER side while
-it sits in the live file, and on the ARCHIVE side once rotated. **The count RISES across a move that
-can only ever reduce the live set.** Measured by extracting the shipping function and driving it
-either side of the move: `1` before, `2` after.
-
-That count is emitted only inside a `NAMED-UPSTREAM-AMBIGUOUS` row, so the diff appears as changed
-prefix counts on otherwise identical rows. Measured on the reference consumer across a real
-annotate-then-rotate of 56 entries: the row SET was identical at 84 rows, 10 LINES differed, and
-10 of 10 carried a prefix count — `PC-S296` went from *"6 entries in this ledger carry it"* to
-*"10 entries"*. Nothing was swept.
-
-**The consequence is an operator unwinding correct work.** The spec's stated conclusion for a
-non-empty diff is that a live entry was swept. Here the diff is real and the conclusion is false,
-and the instruction is followed at exactly the moment a large batch of closes has just landed.
-
-**The fixture cannot fire on this, and the row it would need is UNCONSTRUCTIBLE rather than merely
-unseeded.** `core/fixtures/ledger-rotate/` seeds already-annotated entries and asserts the
-byte-identical property at `run.sh:5` and `run.sh:90`, but has **0** occurrences of `AMBIGUOUS` in
-either `seed.sh` or `run.sh` — control in the same invocation, `STILL-LIVE` returns 2 in `run.sh`.
-
-The structural reason is one level down: **`seed.sh` carries 0 ids of the form `PC-S<n>`**. Its
-labels are `PC-OPEN-A`, `PC-CLOSED-A` and `PC-OPEN-DECOY`. Control in the same invocation — 6 entry
-headings and 2 `PC-` ids of any form are present, so the search reaches the file and discriminates.
-`named_ambiguous()` extracts a `PC-S<n>` sprint prefix and gates on two or more entries sharing it,
-so with no such id in the corpus **the fixture could not produce a `NAMED-UPSTREAM-AMBIGUOUS` row no
-matter what the code under test did.**
-
-**That distinction decides the remedy.** "Unseeded" invites adding a seed. "Unconstructible" says
-the fixture's corpus shape cannot express the property its own assertion names — so that assertion
-has been decorative since the day it was written, and would have stayed green through any future
-rewrite of the invariant it exists to guard. A guard that never had a subject is not a gap in
-coverage; it is a check that cannot fire, reading exactly like one that passed.
-
-**The substantive guarantee DOES hold and is what the test should compare**: the row set, by status
-and subject, is unchanged. Only the count annotation on ambiguous rows moves.
-
-Both a counter fix and a rewording of the invariant are legitimate, so the receipt keys on the
-BEHAVIOUR rather than on any substring: it extracts the shipping `prefix_entry_count()`, drives it
-with a label on the live side and a second label moving into the archive, and asserts the two counts
-AGREE. Sanity arms exit 9 — the extraction must contain the function, must `eval` cleanly, must
-leave it callable, and both counts must be integers of at least 1.
-
-**THE `eval`-CLEANLY AND STILL-CALLABLE ARMS WERE ADDED AFTER A FALSE GREEN IN THIS ENTRY'S OWN
-SATISFIABILITY TEST.** A first mutant mangled the function into invalid shell; the original guard
-tested only that the extracted TEXT CONTAINED the string `prefix_entry_count`, which mangled text
-still does. `eval` failed, the function was never defined, both counts came back EMPTY, and
-`[ "" = "" ]` returned 0 — a receipt reporting the fix present against a copy where its subject did
-not exist. A guard that a name is MENTIONED is not a guard that it is DEFINED.
-
-Verified in three directions: against the shipping tree the receipt exits **1** (STILL-LIVE);
-against a copy whose live side is widened to include annotated-but-unrotated entries it exits **0**,
-with the copy asserted to differ from shipping AND to pass `bash -n` before the result was read;
-and against a deliberately mangled extraction it exits **9** rather than falsely closing.
-
-Found by the graph consumer session while applying the adjudication brief. Cross-references the
-consumer entry `PC-S334-ROTATE-ACCEPTANCE-TEST-FALSE-FAILS-ON-THE-WORKFLOW-IT-DOCUMENTS`.
-
-verify: sh L=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; f=$(sed -n "/^prefix_entry_count() {/,/^}/p" "$L"); case "$f" in *prefix_entry_count*) : ;; *) exit 9 ;; esac; eval "$f" 2>/dev/null || exit 9; command -v prefix_entry_count >/dev/null || exit 9; ENTRIES="$(printf "PC-S900-ALPHA\tsh true\n")"; ARCHIVE_LABELS=""; b=$(prefix_entry_count PC-S900); ARCHIVE_LABELS="PC-S900-BETA"; a=$(prefix_entry_count PC-S900); [ "$b" -ge 1 ] 2>/dev/null || exit 9; [ "$a" -ge 1 ] 2>/dev/null || exit 9; [ "$b" = "$a" ]
-
 ## BL-069
 
 **`audit-layer-debt.sh`'s migration arm files its own discharge rows as undeclared debt, so the
@@ -2789,3 +2539,140 @@ the consumer entry
 
 verify: sh S=core/scripts/audit-layer-debt.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; h="{\"clause\":\"LC-E1\",\"entry\":\"extensions/p.md\",\"subject_digest\":\"da39a3e\",\"verdict\":\"still-additive\",\"recorded_utc\":\"1970-01-01T00:00:00Z\",\"closes_owed\":[\"OWED-X\"],\"reason\":"; printf "%s\"Debt discharged. The repath landed.\"}\n" "$h" > "$d/a.jsonl"; printf "%s\"The repath landed.\"}\n" "$h" > "$d/b.jsonl"; cmp -s "$d/a.jsonl" "$d/b.jsonl" && { rm -rf "$d"; exit 9; }; a=$(bash "$S" --register "$d/a.jsonl" 2>/dev/null); ra=$?; b=$(bash "$S" --register "$d/b.jsonl" 2>/dev/null); rb=$?; rm -rf "$d"; [ "$ra" = 0 ] && [ "$rb" = 0 ] || exit 9; na=$(printf "%s" "$a" | sed -n "s/.*UNDECLARED (\([0-9]*\)).*/\1/p" | head -1); nb=$(printf "%s" "$b" | sed -n "s/.*UNDECLARED (\([0-9]*\)).*/\1/p" | head -1); [ -n "$na" ] && [ -n "$nb" ] || exit 9; [ "$nb" = 0 ] || exit 9; [ "$na" = 0 ]
 
+
+## BL-071
+
+**`ledger-rotate.sh`'s split-refusal can still be silenced by a body line that merely MENTIONS the
+annotation form, and the two inputs that decide it are not distinguishable by any signal the
+current parse computes.** `ledger-rotate.sh:196` reads `if ($0 ~ /ADOPTED UPSTREAM/ && susp_at)
+susp_closed = 1` — unanchored, so a suspect whose body says "Annotate it `ADOPTED UPSTREAM
+(vX.Y.Z, verified <date>)` once the grep is non-zero" scores as carrying its own close and
+suppresses the refusal. The refusal exists because rotating a split entry strands its receipt in
+the live ledger under no heading, which `ledger-rotate.sh:104-106` calls unrecoverable to skip.
+
+**The obvious fix was BUILT AND MEASURED IN THE RELEASE THAT FILED THIS, AND IT WEDGES ROTATION.**
+Routing this predicate through `ledger_close_awk()` — the anchored grammar lifted from
+`ledger-reverify.sh`, which the same release routes three other drifted predicates through —
+turns `core/fixtures/ledger-rotate/run.sh`'s own `fp-quotes` false-positive case into a refusal.
+Driven on the exact ledger that arm builds, shipping rotator, sides asserted byte-different first:
+unanchored **rc=0, 0 refusals**; anchored **rc=1, `REFUSING to rotate`**. A refusal writes nothing,
+so that is a real entry blocked from rotating forever.
+
+**The reason one predicate cannot serve both, which is the part worth carrying.** The stuck-set
+rule and this one ask a similar question and FAIL IN OPPOSITE DIRECTIONS. The stuck rule makes a
+CLAIM — these are the entries `ledger-reverify.sh` skips — so a loose form states something FALSE
+about an open entry, and tightening it is strictly correct. This one SUPPRESSES a refusal, so a
+loose form merely lets a split through while a TIGHT form refuses a real entry and writes nothing.
+
+**Why there is no `sh` receipt, stated rather than worked around.** The two cases a fix must
+separate are, on today's signals, the same shape: both are a bold bullet inside a closed entry,
+both carry a receipt below them (`susp_hasv`), and the real-entry case does not even carry the
+trailing colon (`susp_colon`) that would mark an annotation lead-in. The ONLY thing separating
+them in the current parse is the quotation itself — the real entry quotes the annotation form
+because it is discussing it, and a genuine lead-in does not quote, it IS one. That is an
+accidental signal, not a designed one, and a fix needs a signal the parse does not currently
+compute. A receipt asserting both arms would therefore be UNSATISFIABLE against every predicate
+available today, and shipping one would be a standard nobody can meet.
+
+The two cases a fix must satisfy simultaneously, so the next session does not have to rederive
+them: `core/fixtures/ledger-rotate/run.sh`'s `splitter` seed must be REFUSED, and its `fp-quotes`
+seed must NOT be. Both already exist in that fixture and both are already asserted.
+
+Found while remediating `BL-035`, by that fixture, against its own author.
+
+verify: manual
+
+## BL-072
+
+**`validate-no-dead-doc-refs.sh` scans `docs/*.md` and nothing below it, so 74 of 105 tracked
+markdown files under `docs/` are outside the corpus it reports clean over.** The loop is
+`for doc in docs/*.md` at `scripts/validate-no-dead-doc-refs.sh:42`. Measured in one invocation:
+top-level `docs/*.md` = **31**; `find docs -name '*.md'` = **105**; the difference, **74**, is the
+population no run has ever read. Control: the same `find` restricted to the glob returns the same
+31, so the counts are taken over one tree and one tool.
+
+**This is a scope gap and was deliberately NOT widened when it was found.** The release that found
+it fixed four dead citations by hand — three inside the glob that the validator flagged, and four
+under `docs/analysis/…` that were the IDENTICAL dead reference sitting outside it and were fixed
+without any check having named them. Widening the glob was rejected in that release on one
+ground and it is still the live one: the false-positive set over `docs/**` is UNMEASURED, and this
+repo does not ship an unmeasured check.
+
+**So the work this entry names is the MEASUREMENT, not the one-character glob change.** Run the
+existing predicate over `docs/**/*.md`, enumerate what it flags, and separate genuine dead
+references from paths that are legitimately unresolvable in that subtree — plan and review
+documents quote paths that no longer exist ON PURPOSE, as the record of a tree that has moved,
+and a check that fails the push on a historical citation is one the operator turns off.
+
+The receipt keys on the LOOP, and carries a control so deleting the loop cannot close it: a fix
+that widens the corpus changes that line, and a fix that removes the scan entirely fails the
+control arm rather than passing it.
+
+verify: sh S=scripts/validate-no-dead-doc-refs.sh; [ -f "$S" ] || exit 9; g="$(grep -oE '^for doc in [^;]+' "$S" | head -1)"; [ -n "$g" ] || exit 9; case "$g" in *'docs/*.md'*) exit 1 ;; *) exit 0 ;; esac
+
+## BL-073
+
+**`ai-dlc-subagent-probe.sh` reads three telemetry values through the same `|| echo 0` conflation
+`BL-036` was closed for, so an unparseable transcript reports as a measured zero.**
+`core/hooks/ai-dlc-subagent-probe.sh:100-102` reads `peak`, `turns` and `compactions` as
+`jq -r '.<field>' 2>/dev/null || echo 0`. `jq` exits non-zero on malformed input, so the fallback
+fires on exactly the case it cannot distinguish: a genuine `0` and a read that FAILED produce the
+identical string, and every consumer of those three values sees a number rather than an absence.
+`model` and `end_ts` at `:103-104` take the same shape with `""`.
+
+**It is a NOTE rather than a defect, and the reason is the consequence, not the mechanism.** The
+mechanism is exactly `BL-036`'s — measured there across four unparseable-template classes, two of
+which are VALID JSON — but these three values gate no operator question and block nothing. They
+are telemetry. A wrong zero here produces a wrong number in a probe record, not a wrong verdict on
+a push.
+
+**The fix `BL-036` shipped is the one to copy and it is subtractive**: the fallback goes, rather
+than a guard being placed downstream of it. A separation that makes a wrong answer unlikely is not
+one that makes it unconstructible, and a downstream check for a literal integer closes only the
+0-byte case — measured in that release, which is why the narrower fix was built first and
+abandoned.
+
+The receipt keys on the three reads and carries a control: a fix that removes the fallback closes
+it, and a fix that deletes the reads fails the control arm.
+
+verify: sh H=core/hooks/ai-dlc-subagent-probe.sh; [ -f "$H" ] || exit 9; n="$(grep -cE '^[[:space:]]*(PEAK|TURNS|COMPACTIONS)=.*jq ' "$H")"; [ "$n" -eq 3 ] 2>/dev/null || exit 9; b="$(grep -E '^[[:space:]]*(PEAK|TURNS|COMPACTIONS)=.*jq ' "$H" | grep -c 'echo 0')"; [ "$b" -eq 0 ]
+
+## BL-074
+
+**The ENTRY-LINE half of the ledger close predicate is still a hand-copy, in the one program that
+now lifts the BODY half from its owner.** `core/skills/ai-dlc-update/reconcile/`
+`warn-shadowed-local-validators.sh` composes its awk from `ledger_entry_awk()` and
+`ledger_close_awk()`, so its boundary rule and its BODY close test are both single-homed — and
+then writes the entry-line test inline:
+
+```
+ledger_entry_shape($0) != "" && ($0 ~ /ADOPTED UPSTREAM|WITHDRAWN/ || $0 ~ /\(original text, retained for the record\)/) { closed=1 }
+```
+
+which is the predicate `ledger-reverify.sh`'s `entry_line_closes()` already owns. `lib.sh`
+single-homes only the body rule, and its own header's sentence about two close-predicates
+differing deliberately is about reverify-vs-rotate — it says nothing about a third copy in a
+third program.
+
+**This is the same class the release that filed it just fixed, and it is filed rather than fixed
+for a stated reason.** That release replaced four drifted copies of the BODY rule with one lift,
+after measuring that the drifted ones produced a false report on the reference consumer and false
+retire advice here. A second lift is the correct remedy and it is a second runtime read; landing
+one into a release whose fixtures three independent hands had just stabilised is how a green gate
+becomes a red one at the last step.
+
+**The two copies AGREE today, so no fixture arm can distinguish them and one would be vacuous.**
+That is what makes this a latent defect rather than a live one, and it is also why the remedy is
+a lift rather than a guard — `mechanism-design.md` asks for the PARTITION that makes the bad state
+unconstructible over the check that looks for it. The receipt below therefore keys on the
+restatement itself, with a control so deleting the arm cannot close it.
+
+**A fix must lift, not delete.** The entry-line scope is load-bearing: the legacy id-less form
+writes its close inside the title, and the retained-copy parenthetical carries no marker of its
+own, so a program without an entry-line test misses both.
+
+Found by the fixture author who repaired `core/fixtures/shadowed-local-validators/` after the body
+lift landed, while establishing that its new mutant could distinguish a lifted predicate from an
+inline one.
+
+verify: sh W=core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh; [ -f "$W" ] || exit 9; grep -q 'ledger_close_awk' "$W" || exit 9; n="$(grep -c 'original text, retained for the record' "$W")"; [ "$n" -eq 0 ]
