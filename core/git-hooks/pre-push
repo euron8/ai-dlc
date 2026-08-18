@@ -666,9 +666,12 @@ MSG
 }
 # A push issued from a LINKED WORKTREE has git export GIT_DIR (pointed at that
 # worktree's private `.git/worktrees/<name>` dir) into this hook's process
-# environment; a push from the primary checkout does not. Nothing above this
-# line reads GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE/GIT_COMMON_DIR/
-# GIT_OBJECT_DIRECTORY itself, but every fixture below builds its own isolated
+# environment; a push from the primary checkout does not. A `git` invocation
+# above this line still honors an exported GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE
+# -- that's git's own behavior, not something this hook's shell code opts into
+# -- and every one of those invocations wants exactly that: to operate on the
+# worktree actually being pushed. What breaks is different: every fixture below
+# builds its own isolated
 # sandbox (`mktemp -d`, `cd`, `git -C`, a fresh `git init`) on the assumption
 # that git's own upward repository-discovery will find that sandbox -- discovery
 # git only consults when GIT_DIR is unset. Leaked and inherited unscrubbed, a
