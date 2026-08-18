@@ -1114,11 +1114,22 @@ fi
 # Zero offenders is a finding only over a corpus that has rows in it AND still carries a row
 # from the emit site the defect was on.
 #
-# TYPING THE ESCAPE IS ITSELF A HAZARD, measured while this arm was written: three attempts to
-# put the six characters into a probe — through a heredoc, through an editor and inline —
-# arrived as a single U+2026 character, and the probe then reported "no match" all three times.
+# TYPING THE ESCAPE IS ITSELF A HAZARD. The backlog entry this arm discharges reports three
+# attempts to put the six characters into a probe — through a heredoc, through an editor and
+# inline — each arriving as a single U+2026 character with the probe then reporting "no match".
+# THAT IS THE ENTRY'S MEASUREMENT AND NOT THIS ARM'S: the design here avoided the hazard from the
+# first line rather than reproducing it, so nothing in this file confirms or refutes it. Recorded
+# as inherited, because a comment that says "measured while this was written" about someone
+# else's measurement is the provenance defect this repo keeps finding in its own prose.
 # Nothing below spells the backslash: awk builds it from its character code, so no layer between
 # this file and the regex engine can fold it.
+#
+# WHAT THIS ARM DOES NOT COVER, stated because a coverage proof cannot see outside its own
+# population. It scans the rows in `$OUT` — the main corpus this fixture drives — and nothing
+# else. The caller-error probes further up capture their output in separate variables, so an
+# escape typed into an emit site only THEY reach (`INPUT-UNRESOLVED` is the live example) would
+# not be seen here. Widening it means hand-listing that join, which is why it was not done
+# quietly; the population is named instead.
 #
 # stdin: emitted rows. stdout: "<offenders> <rows> <swallowed> <nearmiss>"
 uescape_scan() {
