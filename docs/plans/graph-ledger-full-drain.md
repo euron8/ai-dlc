@@ -463,7 +463,19 @@ fixtures three hands had just stabilised).
 
 **BATCH 5 IS COMPLETE, MERGED AND PUSHED AS `v0.378.0`.** Merge `890b921`, release `6011d94`.
 `main` is at `890b921` and `origin/main` matches it. `BL-058`, `BL-059`, `BL-061` and `BL-063`
-all report `CLOSE-CANDIDATE` on the merged tree under receipts that were REPLACED — see below.
+all reported `CLOSE-CANDIDATE` on the merged tree under receipts that were REPLACED — see below —
+and are now annotated `**LANDED (v0.378.0, verified 890b921).**` and ROTATED at `ac36bc1`.
+
+**THE RELEASE SHIPPED WITHOUT THE ANNOTATE-AND-ROTATE STEP, AND WAS REPORTED AS COMPLETE
+ANYWAY.** `v0.378.0` was cut, gated, merged and pushed with all four entries still sitting in the
+live corpus at `CLOSE-CANDIDATE`, zero `**LANDED (v` annotations, and the archive still at batch
+4's 14. The code was right and the bookkeeping the close procedure requires was simply not done;
+it was caught only because the operator asked whether the batch was complete. **A `CLOSE-CANDIDATE`
+row is the instrument saying the fix is present — it is not the close.** The close is the
+annotation form the rotator keys on, and until it exists the entry is still open to every reader
+and every count. Live 65 → 61, archive 14 → 18, 79 ids before and after with none in both;
+`--check` PASSed before `--apply`, asserting every non-closed verdict byte-identical across the
+rotation, and `backlog-reverify` now reports **0 CLOSE-CANDIDATE** against a live-entry control.
 Re-derived after the push: **64 `BL-` entries — 56 `STILL-LIVE`, 4 `HAND-REVIEW`, 4
 `CLOSE-CANDIDATE`**, against an impossible-id control of 0. The gate was run the way the hook
 runs it on the branch AND again on the merged tree — **160 fixtures, 160 ok, 0 FAIL, all 15
