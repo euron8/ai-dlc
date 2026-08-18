@@ -3367,3 +3367,55 @@ records as failing, against a coverage gain that is strictly larger.
 
 
 verify: sh D=$(mktemp -d); mkdir -p "$D/spec" "$D/ctl"; printf '# PRD\n\n- FR-S1-1 the functional requirement, CAP-1\n- LR-S1-1 the locked requirement\n' > "$D/prd.md"; printf '# SPEC\n\nCAP-1 the capability\n' > "$D/spec/SPEC.md"; cp "$D/spec/SPEC.md" "$D/ctl/SPEC.md"; printf -- '- (capability by bmad-spec) LR-S1-1 -> CAP-1\n- (event by bmad-spec) swept with an absent-id control (LR-S999-9) that returned zero\n' > "$D/spec/.memlog.md"; printf -- '- (capability by bmad-spec) LR-S1-1 -> CAP-1\n- (constraint by bmad-spec) LR-S1-2 is locked and cites nothing\n' > "$D/ctl/.memlog.md"; cmp -s "$D/spec/.memlog.md" "$D/ctl/.memlog.md" && { rm -rf "$D"; exit 9; }; V=core/scripts/validate-spec-join.sh; [ -r "$V" ] || { rm -rf "$D"; exit 9; }; bash "$V" --spec "$D/ctl" --prd "$D/prd.md" >/dev/null 2>&1; c=$?; out=$(bash "$V" --spec "$D/spec" --prd "$D/prd.md" 2>&1); s=$?; rm -rf "$D"; [ "$c" -eq 1 ] || exit 9; [ "$s" -eq 0 ] && ! grep -qF "LR-S999-9" <<<"$out"
+
+## BL-080
+
+**`enforcement-map.yaml` states Check 3b's posture as `FAILS the gate (exit 0 required)`, and
+exit 0 is exactly what a story that verified NOTHING returns — so the map records a vacuous run as
+gate-satisfying.** The row's enforcer is `core/scripts/validate-locked-anchor.sh`, whose vacuous
+branch prints `PASS — EXAMINED NOTHING` and exits **0** by deliberate design: a block claiming
+nothing has nothing to substantiate, and failing it would red every legacy block in a consumer's
+history. Driven through the shipping script on the fixture's own stories, three arms in one
+invocation: `nothing-verified-story.md` **rc 0**, `good-story.md` **rc 0**, and the control that
+proves the check can still fire, `bad-story.md` **rc 1**. The two roads to 0 are distinguishable in
+the REPORT LINE and indistinguishable in the EXIT CODE, and the map's posture is written in terms
+of the exit code.
+
+**The scale is already measured and it is recorded in this repo, in the fixture's own prose:** on a
+reference consumer **196 of 998 stories took the vacuous road and 0 took the verified one** — the
+whole corpus reported PASS and nothing had ever been verified. A posture that reads "exit 0
+required" is satisfied by every one of those 196.
+
+**This is `BL-039`'s PASS-by-default hazard written into the map rather than into a schema, and it
+is what `BL-058` did NOT fix.** `BL-058` unified the emitted TOKEN across three validators and
+registered it as a controlled vocabulary; it deliberately left every exit code untouched, because
+the codes are per-validator contracts and one of them is consumer-visible. So the token now
+distinguishes the two roads and the posture line still does not. The distinction exists, is
+rendered in `docs/vocabulary-index.md`, and the one place a reader goes to ask "what does this
+check enforce" cannot see it.
+
+**Narrower than it looks in one direction, and that belongs in the record.** The other two emitters
+do not have this shape: `validate-stub-audit.sh` exits **4** on its vacuous branch and its map row
+says so explicitly (`exit 4 is the non-vacuity sub-clause`), and `validate-ci-gates.sh` exits
+**78** with a row whose posture is `reports; the retro adjudicates`. Only the locked-anchor row
+states a bare exit-0 requirement against an emitter whose vacuous road is exit 0. The defect is one
+row, not a class — but it is the row on a `hard_block: true` check.
+
+**Why the receipt is the receipt.** It cannot key on the posture's WORDING, because any fix is free
+to phrase it differently and this program has already shipped one receipt that rejected a correct
+fix for renaming its subject. It keys instead on the JOIN the fix has to create: the Check 3b row
+must reach the empty-subject vocabulary — by naming the token, or the vocabulary, or by the gate
+step reading the token rather than the code. Its control is behavioural and runs first: the
+fixture's failing story must still exit **1** and its vacuous story must still exit **0**, so a fix
+that "resolves" this by making the vacuous road fail — reddening 196 of 998 stories on a real
+consumer — exits 9 and reports STILL-LIVE rather than closing. That control is the whole reason
+this entry is not simply "make it exit non-zero". Proven in both directions with the sides asserted
+to differ: **1** against the tree as shipped, **0** against a copy whose Check 3b row names the
+token, with the behavioural control passing in both.
+
+Split from `BL-058`, which registered the vocabulary these emitters share; found while auditing
+that entry's own owner file. Tier: **DEFECT** — it misstates what a `hard_block` check enforces, on
+a corpus where the vacuous road was measured at roughly one story in five.
+
+
+verify: sh M=core/skills/ai-dlc/enforcement-map.yaml; V=core/scripts/validate-locked-anchor.sh; F=core/fixtures/check-3b-locked-anchor; [ -f "$M" ] && [ -r "$V" ] && [ -d "$F" ] || exit 9; ( cd "$F" && bash "../../../$V" bad-story.md >/dev/null 2>&1 ); b=$?; ( cd "$F" && bash "../../../$V" nothing-verified-story.md >/dev/null 2>&1 ); n=$?; [ "$b" -eq 1 ] || exit 9; [ "$n" -eq 0 ] || exit 9; ROW=$(awk '/- site: gate-validation.md Check 3b$/{on=1} on{print; c++} on && c>=6{exit}' "$M"); [ -n "$ROW" ] || exit 9; printf '%s' "$ROW" | grep -qiE 'EXAMINED NOTHING|empty.subject|empty_subject'
