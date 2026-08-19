@@ -418,9 +418,28 @@ divergence). The surviving proposal, and it is the operator's own: **`MAJOR` is 
 falsify it" — so *unproven* blocks the exit exactly as hard as *wrong*, and is discharged by ADDING a
 derivation, which is an edit, which is what produces the next pass's findings. Supporting figures:
 MAJOR 2.10/pass against CRITICAL 0.98; **79% of pass-2+ findings are repair-introduced**; pass-2+
-CRITICALs are **3 of 3, 2 of 4, 4 of 4 prior-scope**. A backtest of re-tiering the
-underived-but-unfalsified class was dispatched and **did not return before this session ended — it must
-be re-run.** Apply v0.253.0's standard: if it has no unique catch over the real series, kill it.
+CRITICALs are **3 of 3, 2 of 4, 4 of 4 prior-scope**.
+
+**A DIFFERENT PROPOSAL — A PLATEAU EXIT — WAS BACKTESTED AND IS DEAD. DO NOT RE-RUN IT.** Over 47
+fully adjudicable series / 127 passes (s288–s304; 29 series excluded for pre-v0.48.0 schema or missing
+pass tokens, named rather than counted as zero): a 2-pass non-increasing-MAJOR exit and every
+`MAJOR <= k` variant are **DISQUALIFIED** — each skips a *prior-scope* CRITICAL that was already in the
+text when the predicate declared convergence (`s302/stories-p4`, an AC asserting one durable-marker
+prefix where the code writes seventeen from nineteen sites; `s299/coe-p3`, an artifact contradicting a
+Rule-13 operator-locked decision). The 3-pass strict variant is clean but has **no unique catch**: it
+fires once in seventeen sprints, saves two passes — about **three minutes per sprint** — and Arm E
+already stops that series one pass later. Decisive: **Arm E fired live exactly twice in 47 series, and
+in 2 of 2 the very next pass reached 0C/0M.** In this corpus a plateau is not evidence the cycle has
+stopped moving; it is evidence it is one pass from done. Killed on v0.253.0's own standard.
+
+**THE OPERATOR'S MAJOR PROPOSAL IS STILL UNTESTED, and the backtest surfaced its main obstacle.**
+There is no `findings_major_prior_scope` in the provenance schema — censused across all 185 pass files,
+the only key containing "major" is `findings_major`, while `findings_critical_prior_scope` appears in
+127. So the split cannot be computed from what producers emit today: re-tiering the
+underived-but-unfalsified class needs the ADVERSARY to emit the distinction (a `team-roles/adversary.md`
+change plus a schema field), not just a new validator arm. A check keyed on the absent field would read
+empty forever and its silence would be indistinguishable from a clean corpus. Test the proposal, apply
+v0.253.0's standard, and kill it if it has no unique catch.
 
 **TWO DECISIONS ARE WAITING ON THE OPERATOR AND NEITHER BLOCKS BATCH 7.** The exit-code question
 in `BL-078` (`EXAMINED NOTHING` is one token at three exit codes; unifying them is
