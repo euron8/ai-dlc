@@ -114,9 +114,9 @@ AGENT_ID="$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null || tru
 #
 # The teammate's own transcript does exist, one level down, named by `agent_id`:
 #   <project-slug>/<session-uuid>/subagents/agent-<agent_id>.jsonl
-# `docs/backlog.md` already records that layout. Sampled 400 of them: 400 carry
-# `"isSidechain":true` and NONE carries `false`, the exact complement of the
-# session files at the top level, which are 233 false and 0 true.
+# Sampled 400 of them: 400 carry `"isSidechain":true` and NONE carries `false`,
+# the exact complement of the session files at the top level, which are 233 false
+# and 0 true.
 #
 # ABSENT MEANS NO ROW, NEVER THE LEAD'S NUMBERS. At SubagentStop the teammate has
 # just finished, so its transcript is present; a retrospective scan resolves fewer
