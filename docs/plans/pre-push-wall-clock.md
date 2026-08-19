@@ -2,6 +2,22 @@
 
 ## Start here
 
+**You were started with one sentence: `READ and FOLLOW docs/plans/pre-push-wall-clock.md`.**
+This section is your entry point and the only current status record; anything below that reads
+as a status is out of date and THIS BLOCK REPLACES IT.
+
+**THE STATE MOVED UNDER THIS PLAN, AND THE NUMBERS IN IT ARE STALE BY CONSTRUCTION.** A later
+release cut the suite's largest avoidable cost, which this file predates: the read-set map and
+the content key each deferred to the other, so the suite ran in FULL on every push — including a
+commit touching only `docs/`, a top the content key itself excludes, which ran all 161 fixtures.
+The read-set now owns that decision; a docs-only push runs **0** fixtures, and a core change
+selects roughly 39 of 161. See the `0.381.0` section of `CHANGELOG.md`.
+
+**Re-derive every figure below before acting on it.** The census METHOD in this file is still
+sound and is the reason to keep it; its NUMBERS were taken against a suite that no longer runs
+the same way. Treat each one as a hypothesis, exactly as this repo's standing rule requires.
+
+
 **Read the Context, then §8b, then the Ordered execution table.** Context frames the two levers
 and their sizes; §8b is the whole-suite CPU census that decides which lever is worth what;
 Ordered execution is what to do and in what order. Findings §1-§10 are the derivations behind

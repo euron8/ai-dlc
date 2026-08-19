@@ -34,6 +34,65 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.383.0] — 2026-08-19
+
+A plan is resumed with one sentence and nothing else. Now every live plan has to carry it.
+
+### Added
+
+- **`validate-plan-shape.sh` arm P10 — a LIVE plan carries its own resume one-liner.** The
+  operator resumes work with exactly `READ and FOLLOW docs/plans/<slug>.md`. Every other arm in
+  that validator checks a plan is well formed *once you are reading the right part of it*; P10
+  checks what happens before that, when a fresh session opens the file at the top and acts on
+  whatever it meets first.
+
+  **It keys on the file's OWN basename, and that clause is the whole point.** A bare presence
+  check passes the case that actually happens: a plan copied from another plan inherits the
+  ancestor's resume line and sends the session to the wrong file. What the arm can prove is that
+  the sentence exists and names *this* file — it cannot prove the plan is genuinely resumable,
+  which is a judgement about content, and this repo's rule is that a declaration of intent is
+  never evidence about content. That limit is stated in the arm rather than implied.
+
+  **Scoped to live plans by construction, as P9 is** — liveness is the absence of a discharge
+  banner from the head window, the same place a resuming session looks. **False-positive set
+  measured before shipping**, as `CLAUDE.md` requires: over 25 plans, 23 spent and 2 live, the
+  set is **exactly the two live plans**, both named and both fixed in the same commit. Control
+  in the same invocation: `READ and FOLLOW` appeared in **0 of 25** files, so the zero was a real
+  absence rather than a search that missed.
+
+- **`core/fixtures/plan-shape/` gains three arms** — P10 fires on a plan with no resume line,
+  fires on one whose line names a DIFFERENT plan, and stays silent on a banner-marked spent
+  plan. `conforming` now takes the basename it will be written as, because a fixed resume line
+  would name one file while the seed is written as another and every case but one would fail for
+  a reason unrelated to what it tests.
+
+### Fixed
+
+- **The resume block's natural vocabulary collides with the discharge banner's, and the collision
+  silences P9 and P10 together.** A resume block wants to say the status records below it are
+  *superseded* — and `SUPERSEDED` is a discharge token, so writing that sentence inside the head
+  window makes a LIVE plan read as a spent one. Measured while the arm was being written: both
+  live plans acquired the word in their first twelve lines, both silently left the live corpus,
+  and **the arm then passed a mutant whose resume line pointed at a different plan**. The control
+  is what caught it; the arm on its own looked like it was working. Both plans reworded, and the
+  collision is recorded in the arm where the next author will meet it.
+
+- **A `/tmp` sandbox made the same arm look broken in the other direction.** The first control ran
+  the validator against a bare temp directory holding only `docs/plans/`, where root resolution
+  fails — it reported `not a readable file` and scored the mutant as a pass. This repo already
+  records that shape: a validator copied out of its tree answers about a different tree. Re-run
+  against a full working-tree extract, the arm fires on both mutants and exempts the spent plan.
+
+### Changed
+
+- **`docs/plans/graph-ledger-full-drain.md` gains a `## RESUME HERE` block** carrying the
+  read/write boundary, the commands to re-derive current state rather than trusting the numbers
+  in it, what is done, the numbered next actions, and the operator-ping instruction — with
+  everything below it marked as history and evidence rather than instruction.
+- **`docs/plans/pre-push-wall-clock.md` gains the same entry point**, and says plainly that its
+  figures predate the release that changed how the suite runs: its census METHOD is sound, its
+  NUMBERS were taken against a suite that no longer behaves the same way.
+
 ## [0.382.0] — 2026-08-19
 
 `MAJOR` was overloaded: an underived factual claim and a claim shown WRONG blocked the

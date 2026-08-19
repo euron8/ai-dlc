@@ -213,6 +213,58 @@ for f in "${FILES[@]}"; do
     [ "$unmarked" -gt 1 ] && err "$rel" "carries $n_status status sections and $unmarked of them claim to be current. The reader believes whichever they reach first."
   fi
 
+  # --- P10: a LIVE plan carries the RESUME ONE-LINER, naming its OWN path -----------
+  # THE OPERATOR RESUMES A PLAN WITH EXACTLY ONE SENTENCE -- `READ and FOLLOW
+  # docs/plans/<slug>.md` -- and nothing else. Every other arm here checks that a plan is
+  # well formed once you are reading the right part of it. This one checks the thing that
+  # happens BEFORE that: a fresh session gets one line, opens the file at the top, and acts
+  # on whatever it meets first.
+  #
+  # WHAT THIS PROVES AND WHAT IT DOES NOT, stated plainly because the gap is the whole
+  # false-positive argument. It proves the resume sentence EXISTS and that it names THIS
+  # file. It cannot prove the plan is genuinely resumable -- that is a judgement about
+  # content, and this repo's own rule is that a declaration of intent is never evidence
+  # about content. What it buys is that an author who has to write the sentence has to
+  # choose a path, and a path that is not this file's own is the failure that actually
+  # happens: a plan copied from another plan carries the ancestor's resume line and sends
+  # the session to the wrong file. That case is DETECTABLE and it is what the self-naming
+  # clause is for.
+  #
+  # SCOPED TO LIVE PLANS, THE SAME WAY P9 IS, AND FOR THE SAME REASON. A discharged plan is
+  # a record; nobody resumes it, and editing a spent file to bolt a resume line onto it
+  # would be fabrication. Liveness is the absence of a discharge banner from the head
+  # window -- the same place a resuming session looks before it starts executing.
+  #
+  # THE RESUME BLOCK'S NATURAL VOCABULARY COLLIDES WITH THE DISCHARGE BANNER'S, AND THE
+  # COLLISION SILENCES THIS ARM AND P9 TOGETHER. A resume block exists to say "the status
+  # records below this one are SUPERSEDED" -- and `SUPERSEDED` is a discharge token, so
+  # writing that sentence inside the head window makes a LIVE plan read as a spent one.
+  # Measured while this arm was being written: both live plans acquired the word in their
+  # first twelve lines, both silently left the live corpus, and the arm passed a mutant whose
+  # resume line pointed at a DIFFERENT plan. The control is what caught it -- the arm on its
+  # own looked like it was working. Say "this block replaces it" in the head window and keep
+  # the discharge vocabulary out of it.
+  #
+  # FALSE-POSITIVE SET, MEASURED BEFORE SHIPPING, as CLAUDE.md requires: over
+  # `docs/plans/*.md` at the release that added this -- 25 plans, 23 spent and 2 live --
+  # the set is EXACTLY THE TWO LIVE PLANS, both named, both fixed in the same commit.
+  # Control in the same invocation: `READ and FOLLOW` appeared in 0 of 25 files, so the
+  # zero was a real absence rather than a search that missed.
+  #
+  # THE MATCH IS ON THE BASENAME, NOT THE FULL PATH, and that is deliberate. A plan may
+  # legitimately cite itself as `docs/plans/x.md` or as `x.md` depending on the sentence,
+  # and requiring one spelling would fail a correct plan for punctuation. The basename is
+  # the part that decides WHICH FILE the session opens, which is the thing being checked.
+  if ! grep -qiE "$DISCHARGE_BANNER" <<<"$(head -12 "$f")"; then
+    plan_base="$(basename "$f")"
+    # HERE-STRING, NOT A PIPE (I54b), for the reason P6 and P9 both record: `grep -q` leaves
+    # at its first match while the writer is still pushing, and under pipefail the pipeline
+    # answers with the writer's EPIPE -- reporting NOT-FOUND on a file that contains it.
+    if ! grep -qiE "READ and FOLLOW.*${plan_base}" <<<"$(cat "$f")"; then
+      err "$rel" "is a LIVE plan that does not carry its own resume one-liner. The operator resumes with exactly 'READ and FOLLOW $rel' and nothing else, so that sentence has to appear IN the plan, naming THIS file -- an inherited one from an ancestor plan sends the session somewhere else. Put it at the top, above the history, with the current state and the numbered next actions beside it."
+    fi
+  fi
+
   # --- P7: an instruction that ships its own opt-out --------------------------------
   # THE DEFECT, measured on this repo's own runbook before it was handed over. A section
   # told a graph session to run a consolidation pass. Beside it sat a fenced decision
