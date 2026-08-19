@@ -66,7 +66,12 @@ chk "records peak_tokens" "$(last .peak_tokens)" "60000"
 chk "  records the teammate's model" "$(last .model)" "claude-opus-4-8"
 chk "  records the sprint from the snapshot" "$(last .sprint)" "291"
 chk "  records agent_id" "$(last .agent_id)" "adversary-s291-p1"
-chk "  schema-stamped" "$(last .v)" "1"
+# v2, not v1: every row a consumer already holds was derived from the LEAD's
+# transcript, and nothing but its timestamp separates those rows from corrected
+# ones. The bump is what lets a reader tell them apart. Nothing machine-reads this
+# field -- the writer, this assertion and two comments are its only mentions -- so
+# it costs nothing and it is the only durable mark the correction leaves.
+chk "  schema-stamped" "$(last .v)" "2"
 chk "  no compaction seen" "$(last .compactions)" "0"
 
 # --- 3. THE MEASUREMENT THAT MATTERS: a teammate that crowded the ceiling -----

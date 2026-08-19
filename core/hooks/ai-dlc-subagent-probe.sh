@@ -23,10 +23,20 @@
 # INTO A MEASUREMENT: how close do teammates actually get to the threshold, and
 # do any of them compact?
 #
-# It also settles a question no artifact could answer: teammates leave no
-# transcript in ~/.claude/projects, so their context was unobservable from disk.
-# SubagentStop hands us `transcript_path` at the one moment the teammate's own
-# transcript is complete. That is the only window there is.
+# It also settles a question no artifact could answer. The premise this comment
+# used to carry -- "teammates leave no transcript in ~/.claude/projects, so their
+# context was unobservable from disk, and SubagentStop hands us `transcript_path`
+# at the one moment the teammate's own transcript is complete" -- was FALSE IN BOTH
+# HALVES, and it contradicted itself across those two sentences: a teammate that
+# leaves no transcript cannot also be the subject of the path handed to us.
+#
+# Teammates DO leave a transcript, one level below the session file:
+#   <project-slug>/<session-uuid>/subagents/agent-<agent_id>.jsonl
+# And `transcript_path` at SubagentStop points at the LEAD's session file, not at
+# that one. Believing otherwise is what made every field below the lead's for the
+# entire life of this hook. Sampled 400 subagent files: 400 carry
+# `"isSidechain":true` and none carries `false`; the 233 session files at the top
+# level are the exact complement, 233 false and 0 true.
 #
 # EMITS  ${AI_DLC_STATE_DIR:-_bmad-output}/subagent-context.jsonl
 #   {v, ts, sprint, agent_id, model, role, turns, peak_tokens, compactions, duration_s}
@@ -275,7 +285,7 @@ jq -nc --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
        --argjson turns "${TURNS:-0}" \
        --argjson peak "${PEAK:-0}" \
        --argjson comp "${COMPACTIONS:-0}" \
-  '{v:1, ts:$ts, sprint:(if $s=="" then null else ($s|tonumber) end),
+  '{v:2, ts:$ts, sprint:(if $s=="" then null else ($s|tonumber) end),
     agent_id:$a, model:(if $m=="" then null else $m end),
     role:(if $r=="" then null else $r end),
     turns:$turns, peak_tokens:$peak, compactions:$comp,
