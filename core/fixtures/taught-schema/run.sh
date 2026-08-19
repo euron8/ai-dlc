@@ -159,6 +159,7 @@ subs = {
     "findings_critical": "0",
     "findings_critical_prior_scope": "0",
     "findings_major": "0",
+    "findings_major_underived": "0",
     "findings_minor": "1",
     "verdict": "EXIT_CONDITION_MET",
 }
