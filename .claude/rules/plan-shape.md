@@ -19,6 +19,17 @@ to a shape a stranger can act on.
 The shape, and the reason for each part, measured on this repo's first plan at the moment
 it was handed off:
 
+- **The RESUME ONE-LINER, in the plan, naming the plan.** The operator resumes with exactly
+  `READ and FOLLOW docs/plans/<slug>.md` and nothing else, so that sentence has to appear in
+  the file, at the top, above the history, with the current state and the numbered next
+  actions beside it. It names THIS file: a plan copied from another inherits the ancestor's
+  line and sends the session somewhere else, which is the failure that actually happens.
+  Carried by **P10** of `scripts/validate-plan-shape.sh`, scoped to live plans.
+
+  **Keep the discharge vocabulary out of the head window while you write it.** A resume block
+  wants to say the records below it are *superseded* — and `SUPERSEDED` is a discharge token,
+  so that sentence makes a live plan read as a spent one and silences P9 and P10 together.
+  Say "this block replaces it" instead.
 - **`## Start here`**, naming the repos and the read/write boundary. Without a declared
   entry point a resuming session acts on whichever section it reads first.
 - **A numbered next-action list**, blocked items marked as blocked. A plan that records

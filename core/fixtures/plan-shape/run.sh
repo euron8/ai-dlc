@@ -34,9 +34,19 @@ echo "plan-shape:"
 
 # A CONFORMING PLAN. Every seeded defect below is this file with ONE thing changed, so a
 # firing arm is attributable to that change and to nothing else.
+# THE BASENAME IS AN ARGUMENT, because P10 asks whether the plan names ITSELF. A fixed
+# resume line would name one file while the seed is written as another, so every case but one
+# would fail the arm for a reason that has nothing to do with what it tests.
+#
+# The heredoc stays QUOTED. Its body carries backticks (`/some/repo`, the citation), and an
+# unquoted heredoc would COMMAND-SUBSTITUTE them -- so the resume line is printf'd ahead of it
+# rather than interpolated into it. Line 1 is still the title, so `tail -n +2` at the P9b site
+# keeps working.
 conforming() {
+  local base="${1:-plan.md}"
+  printf '# Some plan\n\n'
+  printf 'Resume with: `READ and FOLLOW docs/plans/%s`\n' "$base"
   cat <<'MD'
-# Some plan
 
 ## Start here
 
@@ -57,7 +67,7 @@ MD
 
 run() { bash "$V" "$1" 2>&1; }
 
-conforming > "$T/good.md"
+conforming good.md > "$T/good.md"
 out="$(run "$T/good.md")"
 if grep -q '0 error(s)' <<<"$out"; then ok "a conforming plan raises no error"
 else bad "the conforming control errored — every positive assertion below is then meaningless: $(grep -m1 ERROR <<<"$out")"; fi
@@ -75,7 +85,7 @@ fi
 # waiting on you" are indistinguishable from outside and silence is a stall found only by
 # polling. REQUIRED, not advisory: the instruction has to survive into plans nobody in this
 # repo writes, and a convention with no enforcer is a suggestion.
-conforming | grep -v '^Ping the operator' > "$T/p3b.md"
+conforming p3b.md | grep -v '^Ping the operator' > "$T/p3b.md"
 if ! cmp -s "$T/good.md" "$T/p3b.md"; then
   grep -q 'no operator-ping instruction' <<<"$(run "$T/p3b.md")" \
     && ok "P3b fires when the plan never tells its executor to speak" \
@@ -89,19 +99,19 @@ grep -qE '^ERROR .*operator-ping' <<<"$(run "$T/p3b.md")" \
   || bad "  the ping finding is not an ERROR, so the instruction is optional in practice"
 
 # --- P1 entry point ---------------------------------------------------------------
-conforming | grep -v '^## Start here$' > "$T/p1.md"
+conforming p1.md | grep -v '^## Start here$' > "$T/p1.md"
 grep -q "no '## Start here' section" <<<"$(run "$T/p1.md")" \
   && ok "P1 fires when the entry point is missing" \
   || bad "P1 silent on a plan with no '## Start here' — a resuming session acts on whatever it reads first"
 
 # --- P2 ordered next action -------------------------------------------------------
-conforming | grep -vE '^[12]\. ' > "$T/p2.md"
+conforming p2.md | grep -vE '^[12]\. ' > "$T/p2.md"
 grep -q 'no numbered action list' <<<"$(run "$T/p2.md")" \
   && ok "P2 fires when there is nothing to follow" \
   || bad "P2 silent on a plan with no numbered action — 'FOLLOW this plan' has no referent"
 
 # --- P3 read/write boundary (WARN, never an error) --------------------------------
-conforming | sed 's/ — read it, never write it\.//' > "$T/p3.md"
+conforming p3.md | sed 's/ — read it, never write it\.//' > "$T/p3.md"
 o3="$(run "$T/p3.md")"
 grep -q 'states no read/write boundary' <<<"$o3" \
   && ok "P3 warns when the boundary is unstated" \
@@ -111,12 +121,12 @@ grep -q '0 error(s)' <<<"$o3" \
   || bad "P3 escalated to an error — a plan touching one tree only would then be unpushable"
 
 # --- P4 citations resolve ---------------------------------------------------------
-conforming | sed 's|scripts/validate-plan-shape\.sh:1|scripts/no-such-file.sh:1|' > "$T/p4a.md"
+conforming p4a.md | sed 's|scripts/validate-plan-shape\.sh:1|scripts/no-such-file.sh:1|' > "$T/p4a.md"
 grep -q 'does not exist' <<<"$(run "$T/p4a.md")" \
   && ok "P4 fires on a citation whose file is gone" \
   || bad "P4 silent on a citation to a nonexistent file"
 
-conforming | sed 's|scripts/validate-plan-shape\.sh:1|scripts/validate-plan-shape.sh:999999|' > "$T/p4b.md"
+conforming p4b.md | sed 's|scripts/validate-plan-shape\.sh:1|scripts/validate-plan-shape.sh:999999|' > "$T/p4b.md"
 grep -q 'resolves to nothing' <<<"$(run "$T/p4b.md")" \
   && ok "  and on one whose line number is past EOF" \
   || bad "P4 checks existence but not bounds — a citation can point past the end and pass"
@@ -124,13 +134,13 @@ grep -q 'resolves to nothing' <<<"$(run "$T/p4b.md")" \
 # --- P5 contradictory status ------------------------------------------------------
 # THE DEFECT THIS VALIDATOR WAS WRITTEN FOR: a shipped release still described as work
 # to do. A session told to FOLLOW the plan redoes it.
-{ conforming; printf '\n| R1 | not started | something |\n'; } > "$T/p5.md"
+{ conforming p5.md; printf '\n| R1 | not started | something |\n'; } > "$T/p5.md"
 grep -q 'BOTH shipped and not-started' <<<"$(run "$T/p5.md")" \
   && ok "P5 fires when one identifier is both shipped and not-started" \
   || bad "P5 silent on a contradiction — this is the exact defect the validator exists for"
 
 # --- P6 one current status record -------------------------------------------------
-{ conforming; printf '\n## Status\n\nA second record with no marker.\n'; } > "$T/p6.md"
+{ conforming p6.md; printf '\n## Status\n\nA second record with no marker.\n'; } > "$T/p6.md"
 grep -q 'status sections' <<<"$(run "$T/p6.md")" \
   && ok "P6 fires on two unmarked status records" \
   || bad "P6 silent on duplicate status sections — the reader believes whichever comes first"
@@ -138,7 +148,7 @@ grep -q 'status sections' <<<"$(run "$T/p6.md")" \
 # CONTROL for P6, and the one that keeps it honest: marking the second as superseded is
 # the remedy the message prescribes, so it MUST silence the row. An arm that cannot be
 # quieted by following its own advice teaches the operator to stop reading it.
-{ conforming; printf '\n## Status\n\nSuperseded — see the Start here section above.\n'; } > "$T/p6b.md"
+{ conforming p6b.md; printf '\n## Status\n\nSuperseded — see the Start here section above.\n'; } > "$T/p6b.md"
 grep -q '0 error(s)' <<<"$(run "$T/p6b.md")" \
   && ok "  and a second record marked superseded is accepted" \
   || bad "P6 fires even on a correctly-marked superseded section — the remedy does not silence it"
@@ -146,7 +156,7 @@ grep -q '0 error(s)' <<<"$(run "$T/p6b.md")" \
 # --- P7 an instruction that ships its own opt-out ---------------------------------
 # Seeded from the real defect: a runbook told a consumer session to run a consolidation
 # pass and put a decision table beside it resolving the healthy outcome to "stop".
-{ conforming; printf '\n```\nrun the budget check\n# `ok`   -> no consolidation target. Do the re-home and stop.\n```\n'; } > "$T/p7.md"
+{ conforming p7.md; printf '\n```\nrun the budget check\n# `ok`   -> no consolidation target. Do the re-home and stop.\n```\n'; } > "$T/p7.md"
 o7="$(run "$T/p7.md")"
 grep -q 'opt-out inside an instruction' <<<"$o7" \
   && ok "P7 fires on a comment that maps an outcome to NOT doing the work" \
@@ -158,7 +168,7 @@ grep -q '0 error(s)' <<<"$o7" \
 # THE CONTROL THAT MATTERS, because this arm's whole defence is its narrowness: a PROSE
 # conditional is correct authoring and must not fire. Every runbook in this repo stops on
 # a stamp mismatch, and an arm that flagged that would be off within a week.
-{ conforming; printf '\nA different answer means STOP and ping the operator; do not proceed.\n'; } > "$T/p7b.md"
+{ conforming p7b.md; printf '\nA different answer means STOP and ping the operator; do not proceed.\n'; } > "$T/p7b.md"
 grep -q 'opt-out inside an instruction' <<<"$(run "$T/p7b.md")" \
   && bad "P7 fired on a prose stop-condition — that is correct authoring and the arm is too wide" \
   || ok "  and it leaves a prose stop-condition alone, which is the false-positive it must not have"
@@ -167,7 +177,7 @@ grep -q 'opt-out inside an instruction' <<<"$(run "$T/p7b.md")" \
 # P4 checks that citations RESOLVE, so a plan citing nothing passes it perfectly. This arm is
 # the one that can tell "evidence checked" from "no evidence offered", and the conforming
 # control above is what proves it has a subject rather than being silent for lack of one.
-conforming | grep -v 'scripts/validate-plan-shape\.sh:' > "$T/p9.md"
+conforming p9.md | grep -v 'scripts/validate-plan-shape\.sh:' > "$T/p9.md"
 grep -q 'LIVE plan carrying no resolving' <<<"$(run "$T/p9.md")" \
   && ok "P9 fires on a live plan with no resolving citation" \
   || bad "P9 silent on a live plan citing nothing — a plan whose evidence was never checked passes P4 cleanly"
@@ -175,10 +185,34 @@ grep -q 'LIVE plan carrying no resolving' <<<"$(run "$T/p9.md")" \
 # THE SCOPING CONTROL. A discharged plan is a record, and editing a spent file to bolt
 # evidence onto it would be fabrication. The scope is by construction — the banner a resuming
 # session reads first — so it has to be proven to actually exempt.
-{ printf -- '# Some plan — DISCHARGED\n'; conforming | tail -n +2 | grep -v 'scripts/validate-plan-shape\.sh:'; } > "$T/p9b.md"
+{ printf -- '# Some plan — DISCHARGED\n'; conforming p9b.md | tail -n +2 | grep -v 'scripts/validate-plan-shape\.sh:'; } > "$T/p9b.md"
 grep -q 'LIVE plan carrying no resolving' <<<"$(run "$T/p9b.md")" \
   && bad "P9 fired on a DISCHARGED plan — a spent record would have to be edited to add evidence it never had" \
   || ok "  and it exempts a banner-marked plan, so a spent record is not a backlog item"
+
+# --- P10 a live plan carries its own resume one-liner -----------------------------
+# THE OPERATOR RESUMES WITH ONE SENTENCE AND NOTHING ELSE. Every other arm checks a plan is
+# well formed once you are reading the right part of it; this one checks what happens before
+# that, when a fresh session opens the file at the top and acts on what it meets first.
+conforming p10.md | grep -v 'READ and FOLLOW' > "$T/p10.md"
+grep -q 'does not carry its own resume one-liner' <<<"$(run "$T/p10.md")" \
+  && ok "P10 fires on a live plan with no resume one-liner" \
+  || bad "P10 silent on a plan that never says how to resume it — the operator's one-line prompt has no landing point"
+
+# THE CASE THAT ACTUALLY HAPPENS, and the reason the arm keys on the file's OWN basename: a
+# plan copied from another plan inherits the ancestor's resume line and sends the session to
+# the wrong file. A bare presence check would pass that.
+conforming p10b.md | sed 's|docs/plans/p10b\.md|docs/plans/SOME-ANCESTOR.md|' > "$T/p10b.md"
+grep -q 'does not carry its own resume one-liner' <<<"$(run "$T/p10b.md")" \
+  && ok "  and on one whose resume line names a DIFFERENT plan — an inherited line is the real defect" \
+  || bad "P10 accepts a resume line pointing at another file; a copied plan sends the session elsewhere"
+
+# THE SCOPING CONTROL, the same shape as P9b. A discharged plan is a record and nobody
+# resumes it; bolting a resume line onto a spent file would be fabrication.
+{ printf -- '# Some plan — DISCHARGED\n'; conforming p10c.md | tail -n +2 | grep -v 'READ and FOLLOW'; } > "$T/p10c.md"
+grep -q 'does not carry its own resume one-liner' <<<"$(run "$T/p10c.md")" \
+  && bad "P10 fired on a DISCHARGED plan — a spent record is not resumable and must not be a backlog item" \
+  || ok "  and it exempts a banner-marked plan, so only live plans owe the sentence"
 
 # --- empty corpus is not a pass ---------------------------------------------------
 # `for f in docs/plans/*.md` over an empty directory reads exactly like a clean run.

@@ -1,5 +1,109 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
+## RESUME HERE
+
+**You were started with one sentence: `READ and FOLLOW docs/plans/graph-ledger-full-drain.md`.
+This section is the whole of your entry point, and it is the ONLY CURRENT STATUS RECORD in this
+file.** Everything from `## Context` down is HISTORY — measured episodes, refuted hypotheses,
+and status records that were current when they were written and that THIS BLOCK REPLACES. Read
+it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
+instruction from it.**
+
+**Two repos, and the boundary is absolute.** `/Users/n8/git/ai-dlc` is WRITE.
+`/Users/n8/git/graph` is the reference consumer and is **READ ONLY** — an ai-dlc session never
+writes to a consumer. Assert it by ledger CONTENT, not by dirty count and not by `HEAD`:
+`md5 -q /Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md`. Record the
+value before your first action and re-check it after every phase; a change is a stop-and-ping
+condition. Full boundary in `## Start here` below, and in `.claude/rules/consumer-boundary.md`.
+
+**Never run `git checkout --`, `git restore`, `git clean`, `git stash`, or `git reset --hard`
+in either repo, and tell every delegate the same.** Delegates work in `mktemp` copies made with
+`git archive HEAD | tar -x`.
+
+### Derive the state; do not trust the numbers below
+
+Every figure here is a HYPOTHESIS about a tree that has moved. The measured base rate of expired
+premises in this program is roughly one in two. Each command below carries its own control.
+
+```
+git -C /Users/n8/git/ai-dlc log --oneline -1 origin/main
+grep -cE '^## BL-[0-9]+' docs/backlog.md          # live entries
+grep -cE '^## BL-[0-9]+' docs/backlog.archive.md  # archived
+bash scripts/backlog-reverify.sh | grep -oE 'CLOSE-CANDIDATE|STILL-LIVE|HAND-REVIEW|NEEDS-REVIEW' | sort | uniq -c
+```
+
+At the last session's close those read **61 live / 22 archived / 57 STILL-LIVE + 4 HAND-REVIEW**,
+with 0 CLOSE-CANDIDATE, against an impossible-id control of 0.
+
+### What is DONE — do not redo any of it
+
+**Phases 0–2, 4 and 5 are COMPLETE.** Phase 3 is the batch loop and it is the only remaining
+work. Batches 1–7 have all MERGED AND PUSHED; the releases are `v0.374.0`, `v0.375.0`,
+`v0.376.0`, `v0.377.0`, `v0.378.0`, `v0.379.0` and `v0.380.0`, each recorded in `CHANGELOG.md`.
+`v0.381.0` and `v0.382.0` followed as machinery releases and are also shipped.
+
+**The consumer wall-clock investigation is CLOSED and its record is
+`docs/v0.380.0-pipeline-cost-investigation.md`.** It refutes ELEVEN hypotheses, each with its
+killing measurement, and a twelfth (a plateau exit) is refuted in the history below. **Re-running
+any of them is the most expensive mistake available to you.** The operator's standing direction
+at the close of that work was: **stop measuring the pipeline, build the fix.**
+
+**The one live proposal out of it has SHIPPED as `v0.382.0`** — `MAJOR` was overloaded, so
+`findings_major_underived` now partitions `findings_major` and the convergence exit reads
+`findings_critical == 0 && (findings_major - findings_major_underived) == 0`. Absent means ZERO,
+so no block written before it changes verdict.
+
+### NEXT ACTIONS — numbered, in order
+
+1. **Batch 8. `BL-079` is its subject, by operator ruling.** It is a live false positive on the
+   reference consumer's s302 gate, and its remedy is a design change — a declared-population flag
+   with SKIP semantics for a sprint shipping no `locked-requirements.md`, plus a shared baseline
+   that fires did-not-reproduce 15 times at s302 — which the entry says must be settled in one
+   change. Read the entry in `docs/backlog.md` before scoping it; **re-derive its population
+   rather than believing it.** Measured across four batches, **4 of 5 entries were WIDER than
+   filed**, and that is now the base case rather than the exception.
+2. **Keep the batch to ONE subsystem.** `BL-076` (five sibling count-without-identity validators)
+   and `BL-078` are same-family and may join it. `BL-081`, `BL-082` and `BL-083` are a coherent
+   alternative subsystem — take one group or the other, not both.
+3. **Put independent hands on SCOPE, FIXTURE and RECEIPT, every time.** In the last session they
+   refuted work already committed on the branch twice out of three, and across four batches this
+   is the only mechanism that has ever told a session it was wrong about its own change. Ask of
+   every receipt: does a correct fix satisfy it, what ELSE satisfies it, and can the CORRECT fix
+   be one it REJECTS. Key mutants on LOCATION and observable BEHAVIOUR, never on a spelling.
+4. **Gate it the way the hook runs it, and read the GATE's own exit.**
+   `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`, or simply push and let the hook's own run
+   be the single gate — running it manually and then pushing pays for it twice. **The fixture
+   tally is NOT the verdict**: a run has exited 1 with the suite reporting PASS. Tabulate every
+   `── phase` header against PASS/FAIL, and read each changed fixture BY NAME against an
+   impossible-name control in the same invocation. This shell has no `PIPESTATUS`, so
+   `cmd | tail` reports `tail`'s status — never read a push's exit through a pipe.
+5. **Close the batch properly. A `CLOSE-CANDIDATE` row is the instrument saying the fix is
+   present; it is NOT the close.** Annotate each entry with `**LANDED (v<version>, verified
+   <sha>).**` at the START of a line — that FORM is what the rotator keys on — then
+   `scripts/backlog-rotate.sh --check`, then `--apply`. **Confirm the archive count MOVED.** A
+   release has shipped with this step silently skipped and was reported complete; it was caught
+   only because the operator asked.
+6. **Cite every closed id verbatim in the RELEASE COMMIT MESSAGE**, not only in `CHANGELOG.md`.
+   `named_absorbed()` resolves the signal with `git log -F --grep`, which reads commit MESSAGES;
+   a `###` section in the CHANGELOG is in the diff and produces no row at all.
+
+### Ping the operator
+
+**On any question, on any decision, on completion, and on any early stop.** This program runs for
+many releases, and from outside a session that is thinking and a session that is waiting on a
+human look identical. Merges are preapproved — do not stop to ask for one. Scope is the
+operator's: never narrow a goal or drop an item on your own authority; deliver the whole scope
+and say clearly what was blocked and why.
+
+### Done when
+
+The six criteria are in `## Done when` at the foot of this file, with 1, 2, 4, 5 and 6 already
+satisfied and banked. Criterion 3 is per-release-branch and is re-checked on each batch.
+
+---
+
+*Everything below is HISTORY. It is evidence, not instruction.*
+
 ## Context
 
 `/Users/n8/git/graph` is the reference consumer. Its
