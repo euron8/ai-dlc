@@ -378,10 +378,28 @@ passes, and 7 version-less rows correctly do not trip it.
 
 **ACTION ZERO: THE PULL IS DONE, APPLIED AND CLOSED. PHASES 0–2, 4 AND 5 ARE COMPLETE. PHASE 3
 BATCHES 1–6 ARE MERGED AND PUSHED, AS `v0.374.0` THROUGH `v0.379.0`, EACH ONE ANNOTATED AND
-ROTATED. THE HOLD IS RELEASED AND
-PUSHING WORKS. **ONE DECISION IS WAITING ON THE OPERATOR — the exit-code question in `BL-078`** —
-and it blocks nothing: batch 6 can be cut without it. CUT BATCH 6 — RE-DERIVE THE WORKLIST FIRST;
-EVERY BATCH SECTION BELOW IS NOW A RECORD, NOT AN INSTRUCTION.**
+ROTATED. THE HOLD IS RELEASED AND PUSHING WORKS. **CUT BATCH 7 — RE-DERIVE THE WORKLIST FIRST
+WITH `bash scripts/backlog-reverify.sh`; EVERY BATCH SECTION BELOW IS NOW A RECORD, NOT AN
+INSTRUCTION, AND EVERY COUNT IN THIS FILE IS A HYPOTHESIS.**
+
+**TWO DECISIONS ARE WAITING ON THE OPERATOR AND NEITHER BLOCKS BATCH 7.** The exit-code question
+in `BL-078` (`EXAMINED NOTHING` is one token at three exit codes; unifying them is
+consumer-visible, and three options are costed in the entry). And the compaction-durable rule
+channel, measured at **43517 of a 43520-byte ceiling** — three bytes — so a new standing rule has
+nowhere to go without cutting resident prose, which `resident-context.md` restricts to VESTIGIAL
+text whose enforcing mechanism you can name. Two rules earned in batch 6 are parked on that:
+a `$?` read after a SIBLING command substitution is the substitution's status, not the command's;
+and a mutant keyed on a SPELLING is disarmed by any fix that normalises spellings, so key it on a
+LOCATION.
+
+**BATCH 7 SCOPING, RE-DERIVED AT `0f278685` AND STILL A HYPOTHESIS.** The operator ruled during
+batch 6 that `BL-079` becomes batch 7 — it is a live false positive on the reference consumer's
+s302 gate, and its remedy is a design change (a declared-population flag with SKIP semantics for
+a sprint shipping no `locked-requirements.md`, plus a shared baseline that fires
+did-not-reproduce 15 times at s302) which the entry says must be settled in one change. Adjacent
+and same-family: `BL-076` (five sibling count-without-identity validators) and `BL-078`. The
+three filed by batch 6 — `BL-081`, `BL-082`, `BL-083` — are a coherent alternative subsystem of
+their own. Keep the batch to ONE subsystem.
 
 **BATCH 4 IS COMPLETE, MERGED AND PUSHED AS `v0.377.0`.** Merge `5ecd136`, release `03be95f`, followed on `main` by `ce97b23` (a
 `fixture-mutants.md` correction) and `26ea6ce` (a fixture-comment provenance correction). `main` is
