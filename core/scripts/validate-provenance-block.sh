@@ -176,10 +176,42 @@ if [ "$MODE" = "strays" ]; then
     # homes are judged against; an absolute scan root would make every path miss every home.
     [ ${#STRAY_PATHS[@]} -gt 0 ] || STRAY_PATHS=(".")
 
+    # AN ARGUMENT THAT NAMES NOTHING PRODUCES NO CANDIDATE, AND NO CANDIDATE IS A CLEAN RUN.
+    # `grep -rlI` is silent on a path that does not exist, so a typo, a path spelled from the
+    # caller's cwd rather than the root (this block has already `cd`-ed to the root), and a
+    # symlink named on the command line (grep does not follow one) all yield ZERO candidates and
+    # exit 0 having examined nothing. The canonicalisation in the python below cannot reach this
+    # class, because these paths never become candidates at all. Same duty and same exit code as
+    # the artifact-mode check above: a missing subject is a fixed invocation, not a verdict.
+    # AND `[ -e ]` ALONE DOES NOT CLOSE THE SYMLINK MEMBER, WHICH IS WHY THIS RESOLVES RATHER
+    # THAN ONLY TESTS. `[ -e ]` FOLLOWS a link, so a link to a real file passes the guard --
+    # while `grep -rlI` does NOT descend a symlink it was HANDED, so the scan still gets zero
+    # candidates and answers PASS over a stray it was pointed directly at. Measured: a link and
+    # its target are the same file in the same project and only the spelling differed, rc=0 vs
+    # rc=1. Resolving each argument to its physical path before grep sees it is what closes it;
+    # `grep -R` is the wrong reach, because it follows every link encountered during recursion
+    # and invites loops. STRAY_PATHS itself is left alone -- STRAY_DEFAULT below is derived from
+    # it, and rewriting `.` to an absolute path would silently switch the default branch off.
+    STRAY_SCAN_PATHS=()
+    for _sp in ${STRAY_PATHS[@]+"${STRAY_PATHS[@]}"}; do
+        if [ ! -e "$_sp" ]; then
+            echo "FAIL: --strays was given a path that does not exist under the project root: $_sp" >&2
+            echo "      Root is $PB_ROOT and this scan resolves its arguments there, not from the" >&2
+            echo "      caller's working directory. A path that names nothing yields no candidate," >&2
+            echo "      and a scan with no corpus reports PASS on everything; refusing to." >&2
+            exit 2
+        fi
+        if [ "$_sp" = "." ]; then
+            STRAY_SCAN_PATHS+=("$_sp")
+        else
+            STRAY_SCAN_PATHS+=("$(python3 -c 'import os,sys; sys.stdout.write(os.path.realpath(sys.argv[1]))' "$_sp")")
+        fi
+    done
+
     STRAY_CANDIDATES=()
     while IFS= read -r _f; do
         [ -n "$_f" ] && STRAY_CANDIDATES+=("$_f")
-    done < <(grep -rlI "${GREP_ARGS[@]}" -- "$STRAY_MARKER" "${STRAY_PATHS[@]}" 2>/dev/null)
+    done < <(grep -rlI "${GREP_ARGS[@]}" -- "$STRAY_MARKER" "${STRAY_SCAN_PATHS[@]}" 2>/dev/null)
 
     # An EXPLICIT path list means the caller chose the subjects, so a home exclusion still
     # applies but the fixture-home exclusion does not — that is how a test points the scanner at
@@ -189,6 +221,7 @@ if [ "$MODE" = "strays" ]; then
 
     python3 - "$SCHEMA" "$KNOWN_SKILLS_EXT" "$STRAY_DEFAULT" ${STRAY_CANDIDATES[@]+"${STRAY_CANDIDATES[@]}"} <<'PYSTRAY'
 import json
+import os
 import re
 import sys
 
@@ -258,6 +291,45 @@ def match_home(rel, pattern):
     return rel == pattern
 
 
+def norm_home(pattern):
+    """THE PATTERN SIDE OF THE SAME COMPARISON, AND IT WAS NEVER NORMALISED.
+
+    `canon()` below canonicalises the CANDIDATE; the pattern reached `match_home` raw, straight
+    from the schema or from a consumer's `party_mode_homes`. So four legitimate spellings of a
+    real home silently matched NOTHING and the consumer's own files were then reported as strays
+    -- `./scripts/tests/**`, `scripts/tests//**`, `/scripts/tests/**` and
+    `scripts/tests/../tests/**` each measured as a STRAY against an rc=0 control on the
+    correctly-spelled form. That is precisely the failure `match_home`'s own docstring forbids:
+    a home that quietly matches nothing turns this scan into one that cannot fire. The upstream
+    type check requires a non-empty string and nothing more, so all four passed it in silence.
+    `party_mode_homes` is consumer-authored, which is what makes this reachable rather than
+    theoretical.
+
+    Lexical, not filesystem: a pattern names no real file, so `realpath` has nothing to resolve
+    and would be the wrong tool. A pattern normalising to an absolute, root-escaping or
+    whole-tree form is REFUSED rather than left to match nothing, because matching nothing is
+    the silent failure. A pattern malformed in the way `match_home` already refuses LOUDLY is
+    passed through untouched, so that refusal keeps firing instead of being normalised into
+    acceptance."""
+    if pattern.endswith("/**"):
+        body, suffix = pattern[:-3], "/**"
+    elif "*" in pattern:
+        return pattern
+    else:
+        body, suffix = pattern, ""
+    n = os.path.normpath(body)
+    if n.startswith("/") or n == ".." or n.startswith("../") or n == ".":
+        print(
+            f"FAIL: home pattern {pattern!r} normalises to {n!r}, which is not a path inside "
+            f"the project root. Homes are matched against repo-relative paths; an absolute, "
+            f"root-escaping or whole-tree home would match nothing -- or everything -- in "
+            f"silence.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    return n + suffix
+
+
 def in_any(rel, patterns):
     for p in patterns:
         try:
@@ -273,9 +345,38 @@ def in_any(rel, patterns):
     return False
 
 
+# ONE SITE, AFTER ALL INGESTION. `HOMES` has two writers -- the schema, then the consumer
+# extension -- and `FIXTURE_HOMES` mirrors both, so normalising here rather than at each writer
+# keeps one canonical form and cannot be half-applied by a future third source.
+HOMES = [norm_home(h) for h in HOMES]
+FIXTURE_HOMES = [norm_home(h) for h in FIXTURE_HOMES]
+
 strays = []
+# THE ONE WRITER OF `rel`, AND EVERY DECISION AND EVERY PRINTED PATH FLOWS FROM IT.
+# What stood here was `path[2:] if path.startswith("./")` -- a strip of exactly ONE spelling.
+# It is load-bearing for the DEFAULT branch (measured: remove it and the whole-tree scan reports
+# every home as a stray, because `grep -r .` emits `./`-prefixed candidates), and it is the whole
+# normaliser, so the EXPLICIT-path branch got no normalisation at all. `match_home` is
+# `rel.startswith(prefix)`, so the raw spelling decided membership and it was wrong in BOTH
+# directions: an absolute or doubled-slash spelling of a declared home missed every home and was
+# reported as a stray, and -- the worse one -- a GENUINE stray reached through a home prefix
+# (`docs/retro/../../server/stray.md`) matched the prefix as a STRING and was excused. Measured:
+# the file was opened and read (`1 file(s) carried the envelope`) and then passed over, against a
+# control in the same run showing traversal through a NON-home prefix still reported correctly.
+# realpath on BOTH sides, not a lexical normpath: it additionally makes the explicit branch agree
+# with the default branch about a home that is itself a symlink, where the two branches gave
+# opposite answers about the same file and only the default branch's is the one any gate sees.
+ROOT_REAL = os.path.realpath(os.getcwd())
+
+
+def canon(path):
+    """Root-relative canonical form. A path outside the root keeps a `../` prefix and so
+    matches no home, which is the correct answer rather than an error."""
+    return os.path.relpath(os.path.realpath(path), ROOT_REAL)
+
+
 for path in candidates:
-    rel = path[2:] if path.startswith("./") else path
+    rel = canon(path)
     if in_any(rel, HOMES if default_scan else [h for h in HOMES if h not in FIXTURE_HOMES]):
         continue
     try:
@@ -350,6 +451,7 @@ fi
 
 python3 - "$ARTIFACT_PATH" "$REQUIRE_SKILL" "$SCHEMA" "$KNOWN_SKILLS_EXT" <<'PYEOF'
 import json
+import os
 import re
 import sys
 
@@ -421,7 +523,22 @@ if RETRO_PATH_RE.search("docs/retro/s301/retro-draft.md"):
         "docs/retro/s301/retro-draft.md, which is not the retro document. A classifier "
         "that cannot tell them apart imposes the retro contract on drafts.\n")
     sys.exit(2)
-is_retro = bool(RETRO_PATH_RE.search(artifact_path))
+# NORMALISE BEFORE CLASSIFYING. The regex is anchored at its END only, and `search` reads the
+# RAW argument, so a spelling that denotes a retro without being spelled canonically -- measured
+# on `docs/retro/s301/./retro.md` -- classifies as NOT a retro, and a real retro doc carrying no
+# provenance block exits 0 "no provenance block required or present". Same fail-open as the
+# caller-side path defect this file's retro rungs already had, reached by a different route. The
+# probes above test two canonical spellings and structurally cannot see it, so one more probe
+# below drives the non-canonical form.
+_retro_probe = os.path.normpath("docs/retro/s301/./retro.md")
+if not RETRO_PATH_RE.search(_retro_probe):
+    sys.stderr.write(
+        "validate-provenance-block: FAIL — the retro-path classifier does not recognise "
+        "docs/retro/s301/./retro.md once normalised. A non-canonical spelling of a retro "
+        "path would exempt every retro-only requirement and this run would exit 0 having "
+        "checked none of them.\n")
+    sys.exit(2)
+is_retro = bool(RETRO_PATH_RE.search(os.path.normpath(artifact_path)))
 
 # MALFORMED != ABSENT, and they must never share an exit code.
 #

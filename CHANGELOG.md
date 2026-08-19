@@ -34,6 +34,109 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.379.0] — 2026-08-18
+
+Two path-classifier defects in `validate-provenance-block.sh`, both of which made a check report
+clean on the artifact it exists to examine. Batch 6 of the graph push-candidate drain.
+
+### Fixed
+
+- **`BL-056` / `PC-S297-PROVENANCE-FLAGLESS-FAIL-OPEN-BY-DEFAULT` — the retro CI step named a path
+  the retro classifier does not match, so three requirements were silently exempt.**
+  `core/ci-templates/validate-retro-compliance.yml` still built the pre-migration
+  `docs/retro/sprint-<n>.md` at four sites after every reader had moved to `docs/retro/s<n>/retro.md`.
+  `RETRO_PATH_RE` does not match the legacy form, so `is_retro` was false and the party-mode-block
+  requirement, the `transcript_path` requirement and the at-least-one-block floor were all skipped:
+  a blockless retro doc exited **0** with `OK: no provenance block required or present`, against a
+  control at the migrated path exiting **1** on identical bytes.
+
+  **The fifth coupled site is the one no filing named, and a path-only migration is worse than no
+  fix.** The sprint number was extracted with `basename "$f" .md | sed 's/^sprint-//'`, which reads
+  it out of the FILENAME; under the migrated shape it lives in a DIRECTORY component. Measured:
+  `sprint=303` on the legacy path and **empty** on the migrated one, and every later step is
+  `if: steps.sprint.outputs.sprint != ''`. So migrating the trigger, the filter and the invocation
+  while leaving the extraction produces a workflow that carries **zero** legacy path sites, fires,
+  filters, and then skips every check while reporting green. The extraction now reads the directory
+  component through an anchored expression, and an empty extraction over a non-empty changed-set is
+  a hard failure rather than a silent skip.
+
+  The invocation also gained `--require-skill bmad-party-mode`. It is redundant against `is_retro`
+  today — measured, every rung the flag reaches is also reached once the path is migrated — and it
+  is kept as the caller declaring its own requirement, so the step does not depend entirely on a
+  regex in another file. That is the coupling that produced this defect.
+
+  Two further caller sites are corrected: `core/skills/ai-dlc/steps/retro.md` prescribed the
+  validator with no argument at all and told the reader it "MUST exit 0" (measured **rc=2**, a usage
+  error, unsatisfiable as written), and `core/skills/ai-dlc/templates/pr-classes.md` passed
+  `docs/retro/`, a directory (**rc=1**, artifact not found), inside a class stanza whose own `paths:`
+  is already on the migrated regex.
+
+- **`BL-060` / `PC-S312-STRAYS-DOES-NOT-NORMALIZE-AN-ABSOLUTE-PATH` — `--strays` judged declared
+  homes by path SPELLING, and it was wrong in both directions.** `match_home` is
+  `rel.startswith(prefix)`, and the only normalisation in the branch was a strip of one spelling, a
+  leading `./`. That strip is load-bearing for the default whole-tree scan — remove it and every home
+  reports as a stray — and the explicit-path branch therefore had none.
+
+  **The direction the filing did not name is the worse one.** A GENUINE stray reached through a home
+  prefix, `docs/retro/../../server/stray.md`, matched the prefix as a STRING and was excused: the
+  file was opened, read and passed over, `rc=0`. Control in the same run: traversal through a
+  NON-home prefix is still reported, so what excused the file was the home match and nothing else.
+  A scan declaring a real stray clean is the failure the scan exists to prevent.
+
+  The one writer of `rel` now canonicalises to a root-relative realpath form, closing the filed
+  false-stray direction (absolute, doubled-slash, symlinked-parent, `/private` spellings) and the
+  false-pass direction together. realpath on both sides rather than a lexical normalisation is
+  deliberate: it additionally makes the explicit branch AGREE with the default branch about a home
+  that is itself a symlink, where the two branches previously gave opposite answers about the same
+  file and only the default branch's answer is the one any gate sees. The default whole-tree scan's
+  output is byte-identical across the change.
+
+  **A second site was needed and normalisation could not reach it.** An explicit argument that
+  resolves to nothing — a typo, a path spelled from the caller's cwd rather than the root, a symlink
+  named on the command line — produced zero candidates before the python ran at all, and the scan
+  reported PASS over 0 files. Such arguments now exit **2**, the same code and the same duty as the
+  artifact-mode missing-file arm and the root-refusal arm already in the file.
+
+  **This was a regression that shipped from here, and the consumer's workaround is committed
+  evidence of it.** `--strays` replaced a retired consumer-side scan which DID normalise, and
+  `scripts/ai-dlc-local/scan-stray-provenance.sh` in the reference consumer records the loss in its
+  own header: *"core judges a file against the homes by its REPO-RELATIVE path and does NOT
+  normalize an absolute one, so an explicit path MUST be passed repo-relative or every home misses
+  and a legitimate block reads as a stray... the retired consumer arm normalized `${f#$ROOT/}` and
+  forgave it."* Two further consumer files carry the same caveat inline, one of them introducing a
+  variable for no other purpose. No shipped caller in either layout is exposed — both pre-push hooks
+  invoke `--strays` with no paths, taking the normalising default branch — so this cost a consumer
+  three documented workarounds rather than a red gate.
+
+- **The HOME side of the same comparison was never normalised either, and it is reachable through a
+  field the reference consumer already populates.** `canon()` canonicalises the candidate; the
+  pattern reached `match_home` raw, from the schema or from a consumer's `party_mode_homes`. So four
+  legitimate spellings of a real home silently matched NOTHING and the consumer's own ceremony files
+  were then reported as strays. Measured against the pre-fix tree, one home file and one genuine
+  stray, with the correctly-spelled pattern as the control: `scripts/tests/**` reports **1** stray,
+  while `./scripts/tests/**`, `scripts/tests//**`, `/scripts/tests/**` and
+  `scripts/tests/../tests/**` each report **2** — the home file wrongly among them. After the fix all
+  four report 1, and an absolute pattern is REFUSED at exit 2 rather than left to match nothing.
+  A pattern malformed in the way `match_home` already refuses loudly is passed through untouched, so
+  that refusal keeps firing instead of being normalised into acceptance. This is the failure
+  `match_home`'s own docstring forbids — *"a home that quietly matches nothing turns this scan into
+  one that cannot fire"* — and the upstream type check requires a non-empty string and nothing more,
+  so all four passed it in silence.
+
+- **`is_retro` classified a non-canonical spelling of a real retro path as not-a-retro.** Found while
+  fixing the above, in the same file and the same class: the classifier `search`es the RAW argument,
+  so `docs/retro/s301/./retro.md` — a genuine retro document carrying no provenance block — exited
+  **0**, `no provenance block required or present`. The argument is now normalised before
+  classification, and the file's same-run probes gained a row driving the non-canonical form; the two
+  existing probes test canonical spellings and structurally could not see the class.
+
+### Changed
+
+- The retro-compliance workflow's `paths:` trigger and changed-set filter move to
+  `docs/retro/s*/retro.md`. A consumer still on the pre-migration retro layout will stop triggering
+  this workflow; `core/scripts/migrate-artifact-paths.sh` declares that migration and every other
+  reader in the tree already honours it.
+
 ## [0.378.0] — 2026-08-18
 
 The validators that reported on evidence they never opened: a corpus counted but never named, an

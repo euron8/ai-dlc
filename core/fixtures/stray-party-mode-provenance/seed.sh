@@ -91,6 +91,34 @@ SLUG="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["region_
   printf '<!-- END GENERATED: %s -->\n' "$SLUG"
 } > "$P/docs/taught.md"
 
+# --- a SECOND project, checked out UNDER a path that spells a home ------------
+# The false-PASS direction, and it is the one nobody filed. `homes` are matched against the
+# candidate path, so any fix that recognises a home by looking for the pattern ANYWHERE in the
+# path accepts every file of a project that merely LIVES at docs/retro/<something>. This tree
+# exists so that mistake has a subject: its own repo-relative layout contains no home at all,
+# but its absolute path contains `docs/retro/` before the root even begins.
+N="$WORK/docs/retro/nested-checkout"
+mkdir -p "$N/.claude/schemas" "$N/server" "$N/lib" "$N/vendor/docs/retro" "$N/.git"
+cp "$SCHEMA_SRC" "$N/.claude/schemas/provenance-block.json"
+block "$N/server/x.py" "$PARTY" "# nested handler"
+block "$N/lib/y.py"    "$PARTY" "# nested lib"
+
+# And a directory INSIDE that project spelled like a home but not sitting at one. Its
+# repo-relative path CONTAINS `docs/retro/` and does not BEGIN with it, so it is the one subject
+# that separates a prefix match from a substring match no matter how the caller spelled the path
+# or how thoroughly it was normalised first. The nested checkout's absolute path does that job
+# only until the paths are resolved; this file does it afterwards too, which is the difference
+# between a mutant that guards the fix and one that only guards the bug.
+block "$N/vendor/docs/retro/inner.md" "$PARTY" "# vendored, and not a home"
+
+# Two symlinks NAMED ON THE COMMAND LINE, both pointing at a genuine stray inside the same
+# project. They live in the nested checkout and not in $P so that no whole-tree assertion has
+# its finding count moved by them. `grep -rlI` does not descend a symlink it was handed, and a
+# test for existence follows one, so these are the shape where a per-path guard and the scanner
+# disagree about whether there was anything to scan.
+ln -s "$N/server/x.py" "$N/link-to-stray.py"
+ln -s "$N/server"      "$N/link-to-serverdir"
+
 # --- consumer extension variants ----------------------------------------------
 printf '{ "party_mode_homes": ["server/**"] }\n'   > "$WORK/ext-adds-server.json"
 printf '{ "party_mode_homes": "server/**" }\n'     > "$WORK/ext-malformed-type.json"
@@ -159,6 +187,16 @@ PY
 [ $? -eq 0 ] || exit 2
 cmp -s "$S" "$WORK/schema-no-skills.json" && { echo "FIXTURE ERROR: skills mutation changed nothing" >&2; exit 2; }
 
+# MUT-E: the home match widens from a PREFIX to a SUBSTRING. This is the shape of the tempting
+# wrong fix for the absolute-path defect — "the absolute path contains the home, so accept it" —
+# and it turns every file of a project checked out at docs/retro/<name>/ into a declared home.
+# A widened guard usually produces the SAME output as the original, which is how it scores an
+# unearned kill; the arm that reads this mutant asks about the nested checkout, where the two
+# spellings disagree, and pairs it with a stray the widening cannot reach.
+mutate_py "$V" "$WORK/mut-substr.sh" \
+  'return rel.startswith(prefix)' \
+  'return prefix in rel' "substr"
+
 cat > "$WORK/env.sh" <<ENV
 WORK="$WORK"
 PROJ="$P"
@@ -173,6 +211,8 @@ SCHEMA_NO_SKILLS="$WORK/schema-no-skills.json"
 EXT_ADDS_SERVER="$WORK/ext-adds-server.json"
 EXT_MALFORMED_TYPE="$WORK/ext-malformed-type.json"
 EXT_BAD_GLOB="$WORK/ext-bad-glob.json"
+NESTED="$N"
+MUT_SUBSTR="$WORK/mut-substr.sh"
 ENV
 
 printf '%s\n' "$WORK"

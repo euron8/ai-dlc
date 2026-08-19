@@ -1939,7 +1939,7 @@ Discharges the consumer entry `PC-S297-PROVENANCE-FLAGLESS-FAIL-OPEN-BY-DEFAULT`
 line 1136.
 
 
-verify: sh y=core/ci-templates/validate-retro-compliance.yml; l=$(grep -F 'validate-provenance-block.sh' "$y" | grep -F 'docs/retro/'); [ -n "$l" ] || exit 1; grep -q -- '--require-skill' <<<"$l" && exit 0; grep -q -- 'docs/retro/sprint-' <<<"$l" || exit 0; d=$(mktemp -d); mkdir -p "$d/docs/retro"; printf '# Retro\n' > "$d/docs/retro/sprint-303.md"; bash core/scripts/validate-provenance-block.sh "$d/docs/retro/sprint-303.md" >/dev/null 2>&1; rc=$?; rm -rf "$d"; [ "$rc" -eq 1 ]
+verify: sh python3 scripts/verify-backlog-bl056.py "$PWD"
 ## BL-057
 
 **A LOCKED_REQUIREMENTS block whose bullets are pure agent fabrication scores byte-identically to
@@ -2030,7 +2030,7 @@ Discharges the consumer entry `PC-S312-STRAYS-DOES-NOT-NORMALIZE-AN-ABSOLUTE-PAT
 line 2492.
 
 
-verify: sh D=$(mktemp -d); P="$D/proj"; mkdir -p "$P/.claude/schemas" "$P/docs/retro" "$P/server"; cp core/schemas/provenance-block.json "$P/.claude/schemas/"; python3 -c "import json,sys;S=json.load(open(sys.argv[1]));e=S['envelope'];b=(e['open']+chr(10)+'skill: '+S['stray_scan']['party_mode_skills'][0]+chr(10)+'invoked_at: 2026-07-28T09:00:00Z'+chr(10)+'mode: subagent'+chr(10)+e['close']+chr(10));open(sys.argv[2],'w').write(b);open(sys.argv[3],'w').write(b)" "$P/.claude/schemas/provenance-block.json" "$P/docs/retro/probe.md" "$P/server/stray.md"; V="$PWD/core/scripts/validate-provenance-block.sh"; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays docs/retro/probe.md >/dev/null 2>&1; R1=$?; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays server/stray.md >/dev/null 2>&1; R2=$?; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays "$P/docs/retro/probe.md" >/dev/null 2>&1; R3=$?; rm -rf "$D"; [ "$R1" = 0 ] && [ "$R2" = 1 ] && [ "$R3" = 0 ]
+verify: sh D=$(mktemp -d); P="$D/proj"; mkdir -p "$P/.claude/schemas" "$P/docs/retro" "$P/server"; cp core/schemas/provenance-block.json "$P/.claude/schemas/"; python3 -c "import json,sys;S=json.load(open(sys.argv[1]));e=S['envelope'];b=(e['open']+chr(10)+'skill: '+S['stray_scan']['party_mode_skills'][0]+chr(10)+'invoked_at: 2026-07-28T09:00:00Z'+chr(10)+'mode: subagent'+chr(10)+e['close']+chr(10));open(sys.argv[2],'w').write(b);open(sys.argv[3],'w').write(b)" "$P/.claude/schemas/provenance-block.json" "$P/docs/retro/probe.md" "$P/server/stray.md"; V=$(grep -ls -- '--strays' core/scripts/*.sh 2>/dev/null | xargs -I{} grep -ls 'party_mode_skills' {} 2>/dev/null | head -1); [ -n "$V" ] || { rm -rf "$D"; exit 1; }; V="$PWD/$V"; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays docs/retro/probe.md >/dev/null 2>&1; R1=$?; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays server/stray.md >/dev/null 2>&1; R2=$?; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays "$P/docs/retro/probe.md" >/dev/null 2>&1; R3=$?; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays "$P/server/stray.md" >/dev/null 2>&1; R4=$?; rm -rf "$D"; [ "$R1" = 0 ] && [ "$R2" = 1 ] && [ "$R3" = 0 ] && [ "$R4" = 1 ]
 ## BL-062
 
 **`--check-evidence` discovers its gate log by basename alone and reads an ARCHIVED sprint's copy,
@@ -3030,3 +3030,163 @@ a corpus where the vacuous road was measured at roughly one story in five.
 
 
 verify: sh M=core/skills/ai-dlc/enforcement-map.yaml; V=core/scripts/validate-locked-anchor.sh; F=core/fixtures/check-3b-locked-anchor; [ -f "$M" ] && [ -r "$V" ] && [ -d "$F" ] || exit 9; ( cd "$F" && bash "../../../$V" bad-story.md >/dev/null 2>&1 ); b=$?; ( cd "$F" && bash "../../../$V" nothing-verified-story.md >/dev/null 2>&1 ); n=$?; [ "$b" -eq 1 ] || exit 9; [ "$n" -eq 0 ] || exit 9; ROW=$(awk '/- site: gate-validation.md Check 3b$/{on=1} on{print; c++} on && c>=6{exit}' "$M"); [ -n "$ROW" ] || exit 9; printf '%s' "$ROW" | grep -qiE 'EXAMINED NOTHING|empty.subject|empty_subject'
+## BL-081
+
+**`receipt_absent_subjects()` fabricates a consumer-relative path out of a substring of a
+distribution-relative rev-path, and downgrades the close that receipt had just earned.**
+`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:521` scans the receipt text with
+`grep -oE '(\$CONSUMER/)?(docs|_bmad-output|scripts|\.claude)/[A-Za-z0-9_./-]+'`. That expression
+is **unanchored**, so the token `core/scripts/validate-steering-budget.sh` — which the receipt uses
+only as `git -C "$DIST" show "$THEIRS:core/scripts/…"`, a rev-path resolved inside the distribution
+clone — yields the substring `scripts/validate-steering-budget.sh`. `:520` then tests that against
+`$CONSUMER`, finds nothing, and `:1031` routes the receipt's non-zero exit to NEEDS-REVIEW instead
+of CLOSE-CANDIDATE. The fabricated token names a file that exists in **neither** tree: `install.sh`
+splits `core/scripts/<x>` to `scripts/ai-dlc/<x>`, which is the two-layout rule invariant **I33**
+exists to enforce, so `scripts/<x>` is the one spelling that is wrong on both sides of the
+boundary. The guard is the code that checks whether a receipt's subject moved, and it is reading a
+path the receipt never asked any consumer about.
+
+**Measured on the shipping function, driven against a synthetic consumer carrying both layouts.**
+With `scripts/ai-dlc/validate-steering-budget.sh` present and bare
+`scripts/validate-steering-budget.sh` absent, the function returns
+` scripts/validate-steering-budget.sh` for a receipt whose only path token is a `$THEIRS:`
+rev-path, and ` docs/no-such-file.md` for a receipt naming a genuinely absent consumer path. The
+first is the defect; the second is the behaviour that must survive any fix.
+
+**It cost a correct close on the release that is in the consumer's tree now.**
+`PC-S297-VALIDATE-STEERING-BUDGET-TRANSCRIPT-PROVENANCE`'s receipt asserts the validator prints the
+transcript it read. Extracted and run at `6011d94^` it exits **0**; at `6011d94` — the v0.378.0
+release commit that landed exactly that change — it exits **1**, the two blobs differing
+(`fe66c6d0…` → `d7f2febc…`). Non-zero is CLOSE-CANDIDATE. The consumer's 0.373.0 → 0.378.0
+reconcile instead recorded `NEEDS-REVIEW … the receipt exited 1, but consumer-relative path(s) it
+names DO NOT EXIST: scripts/validate-steering-budget.sh`, and the entry is still live. The same
+report carries that entry's `NAMED-UPSTREAM` row at v0.378.0 and calls the pair *"the highest-value
+pair the tool prints"* — the signal was complete and the guard talked the session out of it.
+
+**Scope: three of the twelve findings the guard emits on the reference consumer are of this class,
+and the other nine are a different problem that must not be swept in with it.** Over all **69**
+`verify: sh` receipts in that consumer's live and archive ledgers, driven through the shipping
+function with `CONSUMER` set to the real consumer root: **14** receipts contain a `$THEIRS:`/`$BASE:`
+rev-path, **12** emit an absent-subject finding, and **3** of those findings vanish when rev-paths
+are stripped from the input. Those three are wholly fabricated. The remaining nine name a bare
+`scripts/<x>.sh` token, and **9 of the 10 distinct tokens exist at `scripts/ai-dlc/<x>.sh`**
+(control in the same invocation: an impossible `scripts/NO-SUCH-CONTROL.sh` absent in both layouts;
+one token genuinely absent in both). Those receipts really are mis-anchored, and the guard is right
+to say so — the report's own "Re-anchor at `scripts/ai-dlc/…`" is the correct remedy for them.
+**The two classes need different fixes**: this entry is the one where no consumer path was ever
+named, and a fix that merely taught the guard the `scripts/` → `scripts/ai-dlc/` mapping would
+close the wrong nine and leave this one reporting.
+
+**Why the receipt is the receipt.** A substring anchor on the regex is unusable — the fix will
+quote the old expression in the comment recording what it replaced, which is this file's habit at
+`:1011-1017`. The receipt therefore `sed`-extracts the shipping `receipt_absent_subjects()` and
+drives it against a `mktemp` consumer holding both layouts, so the two-layout split is exercised
+rather than described. Its decisive arm is a **negative control**: a receipt asserting only that the
+fabricated token disappears is satisfied by deleting the guard, and deleting the guard is the
+destructive remedy this class invites, so the receipt additionally requires that a genuinely absent
+`$CONSUMER/docs/…` path is **still** reported. Measured against both destructive mutants — the
+`[ -e … ]` accumulation line deleted, and the whole function stubbed to `return 0` — the receipt
+exits **1** in each, while the correct fix exits **0** and the unfixed tree exits **1**. A sanity
+arm exits **9** (which reverify reports as STILL-LIVE, the safe direction) if the extraction
+captured no function body, proven live by renaming the definition.
+
+Found while adjudicating whether the v0.378.0 close channel reached the reference consumer. It did:
+all four `PC-` ids produced `NAMED-UPSTREAM` rows. This is the one entry among them whose close was
+mechanically earned and mechanically refused.
+
+
+verify: sh L=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; f=$(sed -n "/^receipt_absent_subjects() {/,/^}/p" "$L"); case "$f" in *"receipt_absent_subjects()"*) : ;; *) exit 9 ;; esac; d=$(mktemp -d); c="$d/c"; mkdir -p "$c/scripts/ai-dlc" "$c/docs"; printf "x\n" > "$c/scripts/ai-dlc/validate-steering-budget.sh"; [ -e "$c/scripts/ai-dlc/validate-steering-budget.sh" ] || { rm -rf "$d"; exit 9; }; if [ -e "$c/scripts/validate-steering-budget.sh" ] || [ -e "$c/docs/no-such-file.md" ]; then rm -rf "$d"; exit 9; fi; a=$(CONSUMER="$c" bash -c "$f"'; receipt_absent_subjects "$1"' _ 'git -C "$DIST" show "$THEIRS:core/scripts/validate-steering-budget.sh" > "$d/v.sh"'); b=$(CONSUMER="$c" bash -c "$f"'; receipt_absent_subjects "$1"' _ 'grep -q probe "$CONSUMER/docs/no-such-file.md"'); rm -rf "$d"; [ -z "$a" ] && [ -n "$b" ]
+## BL-082
+
+**On a case-folding filesystem `--strays` reports a declared home as a stray when the caller
+spells a path component in a different case, and every remedy that closes it opens a FALSE PASS
+on a case-sensitive consumer.** `core/scripts/validate-provenance-block.sh` canonicalises each
+candidate through `os.path.realpath`, which resolves symlinks and `..` and does **not** fold
+case, so the canonical form keeps the caller's spelling and misses the home. Measured on this
+host with the filesystem's behaviour PROBED rather than inferred from the platform name
+(`[ -e "$PROJ/DOCS" ]` is true, so the two spellings are one file): `docs/retro/sprint-1.md`
+exits **0**, `DOCS/retro/sprint-1.md` — the same file — exits **1** and is reported
+`STRAY PARTY-MODE PROVENANCE: DOCS/retro/sprint-1.md`. Control in the same run: a genuine stray
+spelled correctly, `server/handler.py`, exits **1**, so the scan fires and the passing arm is not
+a dead scan.
+
+**The direction is the safe one and that is why this is filed rather than fixed.** A case variant
+cannot turn a non-home into a home — on a folding filesystem the two spellings name the same
+directory either way — so there is no false-PASS counterpart to the defect itself. It is noise: a
+false STRAY, loud, and the operator fixes it by respelling the argument.
+
+**The obvious remedy is forbidden, and that is the entry's substance.** Case-folding the home
+comparison would make `docs/retro/**` match a genuinely DISTINCT `DOCS/retro/` directory on a
+case-sensitive filesystem, which is what a consumer's Linux CI runs. That converts a
+noise-tier false stray on one platform into a false PASS on the platform that matters — the exact
+direction `BL-060` was opened to close, reintroduced by its own cleanup. A per-component
+case-canonicalising walk is correct only on the folding filesystem and is wrong to ship as a
+general rule. So there is no remedy that is right on both platforms, and the entry exists to stop
+the next author reaching for the one that looks obvious.
+
+**It is unreachable in the place it would matter.** On a case-sensitive filesystem `DOCS/retro/`
+names nothing, and the explicit-argument existence assert added alongside `BL-060` already
+refuses it at exit 2 — which is the correct answer there. So this fires on a developer's macOS
+checkout and never in a consumer's CI.
+
+Found by the independent fixture hand for `BL-060` while enumerating sixteen path spellings; the
+arm was written, measured, and then deliberately removed rather than left red or closed by
+folding, with a comment at its site pointing here. Two spelling classes were enumerated alongside
+it and are NOT covered by this entry: hard links, which are not a distinct spelling because a
+second link is the same inode with no way for a caller to name it differently, and Unicode
+NFC/NFD filename variants, which are constructible on APFS and were deliberately not asserted
+because they were not measured.
+
+The receipt drives the shipping validator on both spellings of one file and requires them to
+agree, with the genuine-stray control in the same invocation so a disarmed scan cannot satisfy
+it. It SKIPs — exit 9, which reverify reports as STILL-LIVE, the safe direction — on a filesystem
+that does not fold case, because there the subject does not exist and an arm with no subject must
+not report a verdict.
+
+
+verify: sh V=core/scripts/validate-provenance-block.sh; [ -f "$V" ] || exit 9; R="$PWD"; D=$(mktemp -d); P="$D/proj"; mkdir -p "$P/.claude/schemas" "$P/docs/retro" "$P/server"; cp core/schemas/provenance-block.json "$P/.claude/schemas/" || { rm -rf "$D"; exit 9; }; printf '0.0.0\n' > "$P/VERSION"; python3 -c 'import json,sys;S=json.load(open(sys.argv[1]));e=S["envelope"];b=e["open"]+chr(10)+"skill: "+S["stray_scan"]["party_mode_skills"][0]+chr(10)+"invoked_at: 2026-07-28T09:00:00Z"+chr(10)+"mode: subagent"+chr(10)+e["close"]+chr(10);[open(p,"w").write(b) for p in sys.argv[2:]]' "$P/.claude/schemas/provenance-block.json" "$P/docs/retro/probe.md" "$P/server/stray.md" || { rm -rf "$D"; exit 9; }; [ -e "$P/DOCS" ] || { rm -rf "$D"; exit 9; }; ( cd "$P" && AI_DLC_PROJECT_ROOT="$P" bash "$R/$V" --strays server/stray.md >/dev/null 2>&1 ); c=$?; ( cd "$P" && AI_DLC_PROJECT_ROOT="$P" bash "$R/$V" --strays docs/retro/probe.md >/dev/null 2>&1 ); a=$?; ( cd "$P" && AI_DLC_PROJECT_ROOT="$P" bash "$R/$V" --strays DOCS/retro/probe.md >/dev/null 2>&1 ); b=$?; rm -rf "$D"; [ "$c" = 1 ] || exit 9; [ "$a" = 0 ] || exit 9; [ "$b" = 0 ]
+## BL-083
+
+**`verification-discipline.md` prescribes a root marker that does not exist in one of the two
+layouts, so a fixture that follows the rule exactly cannot resolve its root on a consumer — and
+the fixtures that work do so by the idiom the same rule forbids.** The rule reads *"Resolve the
+repo root by walking up for a marker. Never count `..` hops... Walk up for `VERSION`."* Measured:
+`scripts/install.sh` into an empty directory produces a tree with **0** `VERSION` files at any
+depth, while the distribution root carries one — control in the same invocation, the installed
+`tests/fixtures/<name>` directory IS present, so the install ran and the absence is real.
+
+**The correct two-layout resolver already exists in this repo and the rule restates a different
+one.** `core/scripts/validate-provenance-block.sh:98` is `ai_dlc_resolve_root()`, which walks up
+for `.git` OR `.claude` OR `core/skills/ai-dlc` — a marker set satisfied in BOTH layouts, and
+inlined into every validator that needs it with a comment recording why duplication is correct
+there. So this is not a missing mechanism; it is a rule that restates one and has drifted from
+it, which is the failure `mechanism-design.md` names as *"a rule that RESTATES a mechanism drifts
+tighter than the mechanism, invisibly."*
+
+**It was found the way it bites: by a fixture author following the rule.** A new fixture's first
+draft walked up for `VERSION`, passed every distribution test, and then failed **all six arms** on
+a tree built by `install.sh` with *"no VERSION marker … cannot resolve its own tree"*. It now
+walks up for its own home — `<root>/core/fixtures/<name>` or `<root>/tests/fixtures/<name>` — which
+is self-anchoring and additionally names the layout it resolved.
+
+**The population is not one file.** **16** of the shipped fixture `run.sh` files test a `/VERSION`
+marker (control in the same invocation: **155** carry the token `FIXTURE`, so the grep reaches the
+corpus). Most other shipped fixtures resolve by counting three `..` hops — which happens to be
+correct in both layouts and is the exact idiom the rule prohibits. So the rule is currently
+obeyed by the files that break on a consumer and disobeyed by the files that work, which is the
+strongest available evidence that the rule rather than the fixtures is what is wrong.
+
+**Scope note, deliberately narrow.** The 16 is a FLOOR and an approximation: it counts files
+testing the literal marker path, and a fixture that resolves correctly by another route may still
+appear. The entry's claim is the divergence and the consumer-side zero, both of which are exact;
+the 16 is offered as a population size to re-derive, not as a defect count.
+
+**Why the receipt is two-armed.** Two different fixes are legitimate and a one-sided anchor would
+go unsatisfiable when the other is taken: `install.sh` could land a root marker in the consumer
+layout, or the rule and its followers could move to the marker set the shipped validators already
+use. It closes on either, and it drives a real `install.sh` rather than reading the rule's prose,
+because text about a program is not the program. It exits 9 — STILL-LIVE, the safe direction — if
+the install did not produce a tree, so a broken probe cannot read as a fix.
+
+
+verify: sh R="$PWD"; D=$(mktemp -d) || exit 9; mkdir -p "$D/_bmad"; bash scripts/install.sh "$D" >/dev/null 2>&1; [ -d "$D/tests/fixtures" ] || { rm -rf "$D"; exit 9; }; n=$(find "$D" -name VERSION -type f 2>/dev/null | wc -l | tr -d ' '); rm -rf "$D"; [ "$n" -gt 0 ] && exit 0; c=$(grep -l '/VERSION"' "$R"/core/fixtures/*/run.sh 2>/dev/null | wc -l | tr -d ' '); k=$(grep -l 'FIXTURE' "$R"/core/fixtures/*/run.sh 2>/dev/null | wc -l | tr -d ' '); [ "$k" -gt 0 ] || exit 9; [ "$c" -eq 0 ]
