@@ -85,10 +85,17 @@ select_in() {
     sed 's|core/fixtures/||g; s|/$||' "$scratch/l" | tr '\n' ' '
     printf '\n---MSG---\n'
     cat "$scratch/msg"
+    # THE DECISION, NOT THE PROSE. The whole-suite skip leaves the fixture list UNTOUCHED --
+    # it is carried by a flag, because an empty list is a hard FAIL in run_fixtures by design.
+    # So "skipped everything" and "ran everything" produce the SAME selected set, and an arm
+    # scoring only on that set cannot tell them apart. Report the flag.
+    printf '\n---FLAG---\n'
+    printf '%s\n' "${READSET_NO_CHANGE:-0}"
   )
 }
 sel_of()  { printf '%s' "$1" | sed -n '1p' | tr -s ' ' | sed 's/ $//'; }
-msg_of()  { printf '%s' "$1" | sed -n '/---MSG---/,$p' | tail -n +2; }
+msg_of()  { printf '%s' "$1" | sed -n '/---MSG---/,/---FLAG---/p' | tail -n +2 | sed '$d'; }
+flag_of() { printf '%s' "$1" | sed -n '/---FLAG---/,$p' | tail -n +2 | tr -d '[:space:]'; }
 
 # ------------------------------------------------------------------------- arm 1-6 ----
 T="$WORK/t1"; seed "$T" || broken "seed failed"
@@ -176,10 +183,56 @@ esac
 [ -f "$T/$T9_REF" ] || broken "resolved ref file '$T9_REF' does not exist in the seed"
 printf 'gamma\t%s\n' "$T9_REF" >> "$T/.ai-dlc-fixture-readsets.tsv"
 R="$(select_in "$T" 'git -c user.email=f@f -c user.name=f commit -q --allow-empty -m moveHEAD')"
-if [ "$(sel_of "$R")" = "alpha beta gamma" ] && printf '%s' "$(msg_of "$R")" | grep -q 'nothing changed'; then
+if [ "$(flag_of "$R")" = "1" ] && [ "$(sel_of "$R")" = "alpha beta gamma" ]; then
   ok "a commit moves the branch ref and the map sees NOTHING — git internals move on every push, and honouring them would select their readers every time"
 else
-  bad "a branch-ref move was visible to the selection ('$(sel_of "$R")'): $(msg_of "$R" | tr -d '\n')"
+  bad "a branch-ref move was visible to the selection ('$(sel_of "$R")', flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
+fi
+
+# ------------------------------------------------------------------------ arms 10-11 ----
+# THE WHOLE-SUITE SKIP, AND THE ONE THING THAT MAKES IT SOUND.
+#
+# Arm 10 is the behaviour itself: when NOTHING in the universe moved, the suite does not run.
+# This branch used to defer to the content key, and the two instruments deadlocked -- the key
+# announced "changed, running the suite" while this announced "nothing changed", and neither
+# ever skipped. Measured on the real repo, a commit touching only files under `docs/` -- a top
+# the content key itself EXCLUDES -- ran all 161 fixtures.
+#
+# Arm 11 is the reason that skip is not reckless. `git ls-files` answers about the COMMITTED
+# tree; a fixture reads the WORKING one. An untracked, unignored file is in no read-set by
+# construction, so without it in the manifest universe `.changed` would be empty and arm 10
+# would skip the suite over a tree nobody hashed. With it, the file is a CHANGED path no
+# fixture reads -- the orphan case -- and the whole suite runs. The two arms pull in opposite
+# directions on purpose: 10 says "skip when nothing moved", 11 says "and an untracked file IS
+# something moving".
+T="$WORK/t10"; seed "$T" || broken "seed failed"
+R="$(select_in "$T" ':')"
+if [ "$(flag_of "$R")" = "1" ] && printf '%s' "$(msg_of "$R")" | grep -q 'skipping all'; then
+  ok "NOTHING changed since the last green run — the suite is SKIPPED WHOLE, not run whole"
+else
+  bad "an unchanged tree did not skip the suite (flag $(flag_of "$R")): $(msg_of "$R" | tr -d '\n')"
+fi
+
+T="$WORK/t11"; seed "$T" || broken "seed failed"
+R="$(select_in "$T" 'printf v1 > src/untracked-newcomer.sh')"
+if [ "$(flag_of "$R")" = "0" ] && [ "$(sel_of "$R")" = "alpha beta gamma" ]; then
+  ok "  an UNTRACKED, unignored new file is NOT nothing — it blocks the skip and runs the whole suite"
+else
+  bad "  an untracked file was invisible to the manifest (flag $(flag_of "$R"), sel '$(sel_of "$R")') — the skip would run over a tree nobody hashed"
+fi
+
+# A GIT-IGNORED file must NOT block the skip, or the skip could never fire on a real tree:
+# hooks and fixtures write into ignored paths WHILE the suite runs, so a universe covering
+# them would differ from itself across the very run it is keyed on. This is the near-miss for
+# arm 11 -- same shape, opposite required answer.
+T="$WORK/t12"; seed "$T" || broken "seed failed"
+printf 'ignored-scratch/\n' > "$T/.gitignore"
+( cd "$T" && git add -A && git -c user.email=f@f -c user.name=f commit -qm ignore ) >/dev/null 2>&1   || broken "could not seed a .gitignore"
+R="$(select_in "$T" 'mkdir -p ignored-scratch && printf v1 > ignored-scratch/noise.txt')"
+if [ "$(flag_of "$R")" = "1" ]; then
+  ok "  and a GIT-IGNORED file does NOT block it — fixtures write into ignored paths as they run"
+else
+  bad "  an ignored file blocked the skip (flag $(flag_of "$R")): the skip could never fire on a real tree"
 fi
 
 # -------------------------------------------------------------------------- mutants ----
@@ -225,6 +278,33 @@ mutant orphan 's|if \[ -s "$out/.orphan" \]; then|if false; then|' \
 # Remove the NO_SKIP escape hatch.
 mutant noskip 's|if \[ "${AI_DLC_FIXTURE_NO_SKIP:-}" = "1" \]; then|if false; then|' \
   "alpha beta gamma" 'printf v2 > src/a.sh'
+
+# THESE TWO ARE SCORED ON THE FLAG, NOT THE SELECTED SET, because both failure modes leave the
+# set at the full list -- which is exactly why `mutant()` above cannot express them.
+flag_mutant() {
+  local name="$1" expr="$2" want="$3" mut="$4" t m out
+  m="$WORK/pool.$name.sh"
+  sed "$expr" "$POOL" > "$m"
+  if cmp -s "$POOL" "$m"; then
+    bad "FLAG MUTANT $name: the edit matched nothing, so this mutant tests the unmutated program"
+    return
+  fi
+  t="$WORK/fm.$name"; seed "$t" || { bad "FLAG MUTANT $name: seed failed"; return; }
+  local saved="$POOL"; POOL="$m"
+  out="$(select_in "$t" "$mut")"
+  POOL="$saved"
+  if [ "$(flag_of "$out")" = "$want" ]; then
+    bad "FLAG MUTANT $name: flag is still '$want' — the arm it should break does not depend on the mutated line"
+  else
+    ok "FLAG MUTANT $name moves its arm: flag '$want' became '$(flag_of "$out")'"
+  fi
+}
+# Keyed on the EMITTING line, not on a spelling of the announce: the flag is the decision.
+flag_mutant nochange_off 's|READSET_NO_CHANGE=1|READSET_NO_CHANGE=0|' "1" ':'
+# Drop untracked files from the universe: arm 11's newcomer goes invisible and the suite skips
+# over a tree nobody hashed. This is the soundness half of the change.
+flag_mutant untracked_blind 's|git ls-files --others --exclude-standard 2>/dev/null||' \
+  "0" 'printf v1 > src/untracked-newcomer.sh'
 
 # UNMUTATED CONTROL, from the same directory and driven the same way. Without it a mutant that
 # dies for a harness reason -- a copy that cannot source, a seed that failed -- emits nothing,
