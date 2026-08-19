@@ -1460,3 +1460,150 @@ line 2492.
 
 
 verify: sh D=$(mktemp -d); P="$D/proj"; mkdir -p "$P/.claude/schemas" "$P/docs/retro" "$P/server"; cp core/schemas/provenance-block.json "$P/.claude/schemas/"; python3 -c "import json,sys;S=json.load(open(sys.argv[1]));e=S['envelope'];b=(e['open']+chr(10)+'skill: '+S['stray_scan']['party_mode_skills'][0]+chr(10)+'invoked_at: 2026-07-28T09:00:00Z'+chr(10)+'mode: subagent'+chr(10)+e['close']+chr(10));open(sys.argv[2],'w').write(b);open(sys.argv[3],'w').write(b)" "$P/.claude/schemas/provenance-block.json" "$P/docs/retro/probe.md" "$P/server/stray.md"; V=$(grep -ls -- '--strays' core/scripts/*.sh 2>/dev/null | xargs -I{} grep -ls 'party_mode_skills' {} 2>/dev/null | head -1); [ -n "$V" ] || { rm -rf "$D"; exit 1; }; V="$PWD/$V"; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays docs/retro/probe.md >/dev/null 2>&1; R1=$?; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays server/stray.md >/dev/null 2>&1; R2=$?; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays "$P/docs/retro/probe.md" >/dev/null 2>&1; R3=$?; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays "$P/server/stray.md" >/dev/null 2>&1; R4=$?; rm -rf "$D"; [ "$R1" = 0 ] && [ "$R2" = 1 ] && [ "$R3" = 0 ] && [ "$R4" = 1 ]
+## BL-073
+
+**LANDED (v0.380.0, verified 5b1fea28).** The `|| echo 0` / `|| echo ""` fallbacks are gone from
+all five reads in `core/hooks/ai-dlc-subagent-probe.sh`; the fix is the subtractive one `BL-036`
+shipped. The receipt reports `CLOSE-CANDIDATE` against an impossible-id control of 0.
+
+**THIS ENTRY'S OWN RECEIPT WOULD HAVE REJECTED A CORRECT FIX, AND IT CLOSES ONLY BECAUSE THE
+SHIPPED REMEDY HAPPENS TO KEEP ITS SHAPE.** It requires exactly three lines matching
+`^\s*(PEAK|TURNS|COMPACTIONS)=.*jq`, so the literal token `jq ` must sit on a line beginning with
+the variable name. An independent hand drove four ordinary refactors that are behaviourally
+correct — the fixture passes each at rc=0 and `BL-084`'s behavioural receipt accepts each at 0 —
+and **every one exits 9**: hoisting the reads into a `probe_field()` helper; a pure reformat onto
+continuation lines; `JQ="$(command -v jq)"` plus `"$JQ" -r`, which is **this repo's own `I33`
+two-layout pattern**; and one `jq` call emitting all five via `@sh`. `backlog-reverify.sh:183`
+reads any non-zero as `STILL-LIVE`, so exit 9 is byte-indistinguishable from "still reproduces" —
+the entry would have read open forever against a correct tree.
+
+**It is also evadable in the closing direction by one character**, and it is the only guard its
+class has: `|| echo "0"`, `|| PEAK=0` on the same line, and `: "${PEAK:=0}"` on the next line all
+reintroduce the exact defect and all report `CLOSE-CANDIDATE`. The first also passes the fixture.
+The lesson is the one this program keeps relearning — **key on the LOCATION (an assignment
+reaching a defaulting construct), never on the spelling `echo 0`.** Recorded here rather than
+repaired, because the entry archives with this release and the receipt stops guarding anything
+the moment it does.
+
+**`ai-dlc-subagent-probe.sh` reads three telemetry values through the same `|| echo 0` conflation
+`BL-036` was closed for, so an unparseable transcript reports as a measured zero.**
+`core/hooks/ai-dlc-subagent-probe.sh:100-102` reads `peak`, `turns` and `compactions` as
+`jq -r '.<field>' 2>/dev/null || echo 0`. `jq` exits non-zero on malformed input, so the fallback
+fires on exactly the case it cannot distinguish: a genuine `0` and a read that FAILED produce the
+identical string, and every consumer of those three values sees a number rather than an absence.
+`model` and `end_ts` at `:103-104` take the same shape with `""`.
+
+**It is a NOTE rather than a defect, and the reason is the consequence, not the mechanism.** The
+mechanism is exactly `BL-036`'s — measured there across four unparseable-template classes, two of
+which are VALID JSON — but these three values gate no operator question and block nothing. They
+are telemetry. A wrong zero here produces a wrong number in a probe record, not a wrong verdict on
+a push.
+
+**The fix `BL-036` shipped is the one to copy and it is subtractive**: the fallback goes, rather
+than a guard being placed downstream of it. A separation that makes a wrong answer unlikely is not
+one that makes it unconstructible, and a downstream check for a literal integer closes only the
+0-byte case — measured in that release, which is why the narrower fix was built first and
+abandoned.
+
+The receipt keys on the three reads and carries a control: a fix that removes the fallback closes
+it, and a fix that deletes the reads fails the control arm.
+
+verify: sh H=core/hooks/ai-dlc-subagent-probe.sh; [ -f "$H" ] || exit 9; n="$(grep -cE '^[[:space:]]*(PEAK|TURNS|COMPACTIONS)=.*jq ' "$H")"; [ "$n" -eq 3 ] 2>/dev/null || exit 9; b="$(grep -E '^[[:space:]]*(PEAK|TURNS|COMPACTIONS)=.*jq ' "$H" | grep -c 'echo 0')"; [ "$b" -eq 0 ]
+
+## BL-084
+
+**LANDED (v0.380.0, verified 5b1fea28).** Both read sites in
+`core/hooks/ai-dlc-subagent-probe.sh` now resolve the teammate's own transcript at
+`<slug>/<session-uuid>/subagents/agent-<agent_id>.jsonl`, absent means no row, and the row stamp
+is `v:2`. The receipt reports `CLOSE-CANDIDATE` against an impossible-id control of 0. The gate
+was run the way the hook runs it — exit 0 read directly, 15 of 15 phases PASS, 161 fixtures ok /
+0 FAIL, `subagent-probe` read BY NAME against an impossible-name control of 0 in the same
+invocation — and the merged tree is byte-identical to the gated one.
+
+**THREE INDEPENDENT HANDS WERE PUT ON SCOPE, FIXTURE AND RECEIPT, AND TWO FOUND DEFECTS IN WORK
+ALREADY COMMITTED.** The fixture's one arm covering "teammate transcript missing" was reading the
+PREVIOUS fire's file, because `fire()` skipped the copy when a seed was absent but never removed
+what an earlier fire left under the same `agent_id` — so a hook mutated to fall silently BACK to
+the lead transcript produced output **byte-identical** to the fixed hook's across the whole
+fixture. And two claims this branch had already committed were false: the header's assertion that
+true teammate peaks sit well below the threshold and true `compactions` is zero (32 of 1086 exceed
+it, 16 compacted, max 372633), and `99.1%` for lead-arm agreement (95.9%, 1248 of 1301). Both are
+retracted in place rather than quietly corrected.
+
+**The fix also narrows the population, and that is declared in the hook rather than left to be
+discovered.** From `v:2` the file records NAMED teammates; bare unnamed spawns resolve 40 of 646
+against 557 of 557 named, with reaping controlled for.
+
+**`ai-dlc-subagent-probe.sh` derived every teammate field from the LEAD's transcript, so the one
+instrument in the pipeline built to see inside a teammate never measured one.**
+`.transcript_path` at `SubagentStop` is the lead's session file, and BOTH read sites took from it —
+the bounded tail read and the bounded head read — so `peak_tokens`, `turns`, `compactions`,
+`model`, `end_ts`, `duration_s` and the `role` fallback were all the lead's, from the day each
+field shipped. The teammate's own transcript exists one level down, at
+`<project-slug>/<session-uuid>/subagents/agent-<agent_id>.jsonl`.
+
+**Three independent proofs, each with its control in the same invocation.** The implied starts
+(`ts − duration_s`) for one sprint collapse onto THREE values, and those three are that sprint's
+three harness sessions, 48 rows sharing one minute — against a control of 118 distinct `ts`
+minutes over the same 145 rows, so the collapse is in the derived value and not in the sampling.
+Nine stop-seconds carry more than one record and EIGHT of the nine are byte-identical on
+`peak_tokens|turns|compactions|model` across distinct agents, against a control of `agent_id`
+distinct in 9 of 9. And the probe's `model` matches the LEAD's own recorded arm on **95.9%** of
+rows (1248 of 1301), against a control with the lead's arm flipped at 4.1%.
+
+**Measured against teammates' own transcripts, eight rows, every field was wrong**: peak
+over-reported 25–160% (381571 recorded against a true 147024), `model` wrong on 7 of 8 — every one
+an opus teammate recorded as sonnet — `compactions` reporting 1 where the truth is 0, duration
+inflated 16–40×. Corpus-wide the probe's `model` agrees with the teammate's true arm on **41.2%**
+of rows against **89.1%** for the dispatch guard's `model_bound` (630 of 707 rows that resolve to
+a teammate transcript): below chance on a two-class problem where opus is the majority.
+
+**This voided the instrument's own purpose, and the shape of the wrongness is what hid it.** The
+hook exists to answer *"how close do teammates get to the threshold, and do any of them
+compact"* — the open question under `autoCompactWindow`, where the alternative is paying a
+measured ~19% bill increase for an unquantified benefit. Its recorded peak MAXIMUM exceeds the
+threshold it is read against, which is the lead crossing its own ceiling. A number that is too large in the
+direction the reader is worried about reads as the instrument working.
+
+**The true teammate distribution is now derivable, and it is not what an earlier draft of this
+entry and of the hook header both asserted.** Both said teammate peaks sit well below the
+threshold and true `compactions` is zero, generalised from the eight rows above. Scanned over the
+whole teammate corpus with the hook's own predicates, 1086 files: **32 exceed the 287000 threshold
+and 16 actually compacted**, 17 boundary records, max teammate peak **372633** — above it. Control
+in the same scan: one teammate reads peak 0, so the scan can return a zero; an independent raw grep
+finds the boundary token in 18 files. The `autoCompactWindow` question is therefore still open and
+answerable, which it was not while the field beneath it emitted the lead's numbers.
+
+**It never worked, so there is no era of the record that is sound.** The earliest day in the
+reference consumer's corpus already reads 100% of runs over 900s. The header's own calibration
+(`10% of runs, ~47% of agent-hours`) was not stale but UNREPRODUCIBLE from any point in the
+record — a sound measurement taken by a different method and orphaned onto a column that did not
+exist when it was taken, which read as confirmation for a month.
+
+**The fixture certified exactly the assumption the hook violated, and could never have fired.**
+`core/fixtures/subagent-probe/run.sh` handed the hook a teammate-shaped transcript DIRECTLY, a
+layout that does not occur in production, so its `duration_s` assertion was green for the whole
+life of the defect. This is the `check that cannot fire` class, sited inside the only guard the
+subject had.
+
+**Filed with the release that fixes it, deliberately.** The defect was found by an investigation
+rather than by a filing, so no entry existed to carry it; the archive is where this repo's
+record of a found-and-fixed defect lives, and an id in the archive is what a later reader and the
+`CHANGELOG` can both cite. The value of the entry is the receipt below — but read what it
+actually asserts: `peak_tokens` provenance and the no-row contract, not every field. **The full
+regression guard is `core/fixtures/subagent-probe/run.sh`, not this receipt**, and an independent
+hand established the difference by driving a one-line mutant that restores the headline defect on
+the HEAD read: the receipt accepts it, the fixture fails it and names the value it got. Cite the
+fixture where you need coverage and this receipt only for the close.
+
+**The receipt drives the shipping hook rather than reading it, and it is two-armed on purpose.**
+Arm 1 gives the hook a real two-file layout where the lead file carries a peak no teammate reaches
+and asserts the emitted row carries the TEAMMATE's number; arm 2 fires the same hook for a
+teammate whose transcript is ABSENT and asserts NO row is written. The pre-fix hook fails both —
+it reports the lead's peak, and it writes a row for a teammate that left no transcript. Proven
+five ways before filing: the fixed hook **0**, the real pre-fix hook from `origin/main` **1**, an
+`exit 0` stub **1** (arm 1 is presence-shaped, so silence cannot close it), a mutant that resolves
+the teammate path correctly but falls BACK to the lead when it is absent **1**, and an absent
+subject **9**.
+
+verify: sh H=core/hooks/ai-dlc-subagent-probe.sh; [ -f "$H" ] || exit 9; command -v jq >/dev/null 2>&1 || exit 9; D=$(mktemp -d) || exit 9; mkdir -p "$D/_bmad-output" "$D/lead/subagents" || { rm -rf "$D"; exit 9; }; : > "$D/_bmad-output/pipeline-snapshot.md"; printf '%s\n' '{"type":"assistant","timestamp":"2026-01-01T00:00:00Z","message":{"model":"lead","usage":{"input_tokens":999999}}}' > "$D/lead.jsonl"; printf '%s\n' '{"type":"assistant","timestamp":"2026-01-01T00:00:10Z","message":{"model":"mate","usage":{"input_tokens":123}}}' > "$D/lead/subagents/agent-mate1.jsonl"; O="$D/_bmad-output/subagent-context.jsonl"; printf '{"transcript_path":"%s","agent_id":"mate1"}' "$D/lead.jsonl" | CLAUDE_PROJECT_DIR="$D" AI_DLC_STATE_DIR=_bmad-output bash "$H" >/dev/null 2>&1; p=$(jq -r '.peak_tokens' "$O" 2>/dev/null | tail -1); n1=$(wc -l < "$O" 2>/dev/null | tr -d ' '); printf '{"transcript_path":"%s","agent_id":"no-such-teammate"}' "$D/lead.jsonl" | CLAUDE_PROJECT_DIR="$D" AI_DLC_STATE_DIR=_bmad-output bash "$H" >/dev/null 2>&1; n2=$(wc -l < "$O" 2>/dev/null | tr -d ' '); rm -rf "$D"; [ "${n1:-0}" = 1 ] && [ "${p:-}" = 123 ] && [ "${n2:-0}" = 1 ]
