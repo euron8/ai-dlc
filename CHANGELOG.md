@@ -108,6 +108,21 @@ clean on the artifact it exists to examine. Batch 6 of the graph push-candidate 
   invoke `--strays` with no paths, taking the normalising default branch — so this cost a consumer
   three documented workarounds rather than a red gate.
 
+- **The HOME side of the same comparison was never normalised either, and it is reachable through a
+  field the reference consumer already populates.** `canon()` canonicalises the candidate; the
+  pattern reached `match_home` raw, from the schema or from a consumer's `party_mode_homes`. So four
+  legitimate spellings of a real home silently matched NOTHING and the consumer's own ceremony files
+  were then reported as strays. Measured against the pre-fix tree, one home file and one genuine
+  stray, with the correctly-spelled pattern as the control: `scripts/tests/**` reports **1** stray,
+  while `./scripts/tests/**`, `scripts/tests//**`, `/scripts/tests/**` and
+  `scripts/tests/../tests/**` each report **2** — the home file wrongly among them. After the fix all
+  four report 1, and an absolute pattern is REFUSED at exit 2 rather than left to match nothing.
+  A pattern malformed in the way `match_home` already refuses loudly is passed through untouched, so
+  that refusal keeps firing instead of being normalised into acceptance. This is the failure
+  `match_home`'s own docstring forbids — *"a home that quietly matches nothing turns this scan into
+  one that cannot fire"* — and the upstream type check requires a non-empty string and nothing more,
+  so all four passed it in silence.
+
 - **`is_retro` classified a non-canonical spelling of a real retro path as not-a-retro.** Found while
   fixing the above, in the same file and the same class: the classifier `search`es the RAW argument,
   so `docs/retro/s301/./retro.md` — a genuine retro document carrying no provenance block — exited

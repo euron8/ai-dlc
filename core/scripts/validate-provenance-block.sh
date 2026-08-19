@@ -291,6 +291,45 @@ def match_home(rel, pattern):
     return rel == pattern
 
 
+def norm_home(pattern):
+    """THE PATTERN SIDE OF THE SAME COMPARISON, AND IT WAS NEVER NORMALISED.
+
+    `canon()` below canonicalises the CANDIDATE; the pattern reached `match_home` raw, straight
+    from the schema or from a consumer's `party_mode_homes`. So four legitimate spellings of a
+    real home silently matched NOTHING and the consumer's own files were then reported as strays
+    -- `./scripts/tests/**`, `scripts/tests//**`, `/scripts/tests/**` and
+    `scripts/tests/../tests/**` each measured as a STRAY against an rc=0 control on the
+    correctly-spelled form. That is precisely the failure `match_home`'s own docstring forbids:
+    a home that quietly matches nothing turns this scan into one that cannot fire. The upstream
+    type check requires a non-empty string and nothing more, so all four passed it in silence.
+    `party_mode_homes` is consumer-authored, which is what makes this reachable rather than
+    theoretical.
+
+    Lexical, not filesystem: a pattern names no real file, so `realpath` has nothing to resolve
+    and would be the wrong tool. A pattern normalising to an absolute, root-escaping or
+    whole-tree form is REFUSED rather than left to match nothing, because matching nothing is
+    the silent failure. A pattern malformed in the way `match_home` already refuses LOUDLY is
+    passed through untouched, so that refusal keeps firing instead of being normalised into
+    acceptance."""
+    if pattern.endswith("/**"):
+        body, suffix = pattern[:-3], "/**"
+    elif "*" in pattern:
+        return pattern
+    else:
+        body, suffix = pattern, ""
+    n = os.path.normpath(body)
+    if n.startswith("/") or n == ".." or n.startswith("../") or n == ".":
+        print(
+            f"FAIL: home pattern {pattern!r} normalises to {n!r}, which is not a path inside "
+            f"the project root. Homes are matched against repo-relative paths; an absolute, "
+            f"root-escaping or whole-tree home would match nothing -- or everything -- in "
+            f"silence.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    return n + suffix
+
+
 def in_any(rel, patterns):
     for p in patterns:
         try:
@@ -305,6 +344,12 @@ def in_any(rel, patterns):
             sys.exit(2)
     return False
 
+
+# ONE SITE, AFTER ALL INGESTION. `HOMES` has two writers -- the schema, then the consumer
+# extension -- and `FIXTURE_HOMES` mirrors both, so normalising here rather than at each writer
+# keeps one canonical form and cannot be half-applied by a future third source.
+HOMES = [norm_home(h) for h in HOMES]
+FIXTURE_HOMES = [norm_home(h) for h in FIXTURE_HOMES]
 
 strays = []
 # THE ONE WRITER OF `rel`, AND EVERY DECISION AND EVERY PRINTED PATH FLOWS FROM IT.

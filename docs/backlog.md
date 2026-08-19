@@ -1939,7 +1939,7 @@ Discharges the consumer entry `PC-S297-PROVENANCE-FLAGLESS-FAIL-OPEN-BY-DEFAULT`
 line 1136.
 
 
-verify: sh Y=core/ci-templates/validate-retro-compliance.yml; V=$(grep -ls -- '--require-skill' core/scripts/*.sh 2>/dev/null | xargs -I{} grep -ls 'RETRO_PATH_RE' {} 2>/dev/null | head -1); [ -f "$Y" ] && [ -n "$V" ] || exit 1; B=$(basename "$V"); V="$PWD/$V"; D=$(mktemp -d); W="$D/w"; mkdir -p "$W/scripts/ai-dlc" "$W/docs/retro/s303" "$W/docs/notes"; printf '#!/bin/sh\nprintf "%%s\\t" "$@" >> "$ARGV_LOG"; printf "\\n" >> "$ARGV_LOG"; exit 0\n' > "$W/scripts/ai-dlc/$B"; chmod +x "$W/scripts/ai-dlc/$B"; printf '%s\n' 'import re,sys' 'src=open(sys.argv[1]).read(); tok=sys.argv[3]; out=[]' 'for chunk in re.split(r"\n(?=      - name: )", src):' '    if tok not in chunk: continue' '    m=re.search(r"\n +run: \|\n(.*)", chunk, re.S)' '    if not m: continue' '    ind=None; lines=[]' '    for ln in m.group(1).split("\n"):' '        if not ln.strip(): lines.append(""); continue' '        cur=len(ln)-len(ln.lstrip())' '        if ind is None: ind=cur' '        if cur<ind: break' '        lines.append(ln[ind:])' '    out.append(re.sub(r"\$\{\{[^}]*\}\}","303","\n".join(lines)))' 'sys.exit(3) if not out else open(sys.argv[2],"w").write("\n".join(out))' > "$D/x.py"; python3 "$D/x.py" "$Y" "$W/steps.sh" "$B" 2>/dev/null; [ -s "$W/steps.sh" ] || { rm -rf "$D"; exit 1; }; ARGV_LOG="$D/argv"; : > "$ARGV_LOG"; export ARGV_LOG; ( cd "$W" && sh ./steps.sh ) >/dev/null 2>&1; grep -q 'docs/retro/' "$ARGV_LOG" || { rm -rf "$D"; exit 1; }; printf '# n\n' > "$W/docs/notes/x.md"; bash "$V" "$W/docs/notes/x.md" >/dev/null 2>&1 || { rm -rf "$D"; exit 1; }; printf '# r\n' > "$W/docs/retro/s303/retro.md"; bash "$V" "$W/docs/retro/s303/retro.md" >/dev/null 2>&1; [ $? -eq 1 ] || { rm -rf "$D"; exit 1; }; BAD="$D/bad"; while IFS= read -r line; do case "$line" in *docs/retro/*) ;; *) continue ;; esac; OIFS="$IFS"; IFS=$'\t'; set -f; set -- $line; set +f; IFS="$OIFS"; for p in "$@"; do case "$p" in docs/retro/*) mkdir -p "$W/$(dirname "$p")"; printf '# b\n' > "$W/$p" ;; esac; done; ( cd "$W" && bash "$V" "$@" ) >/dev/null 2>&1; [ $? -eq 0 ] && : > "$BAD"; for p in "$@"; do case "$p" in docs/retro/*) rm -f "$W/$p" ;; esac; done; ( cd "$W" && bash "$V" "$@" ) >/dev/null 2>&1; [ $? -eq 2 ] && : > "$BAD"; done < "$ARGV_LOG"; R=1; [ -e "$BAD" ] || R=0; rm -rf "$D"; exit "$R"
+verify: sh python3 core/fixtures/retro-compliance-workflow/verify-bl056.py "$PWD"
 ## BL-057
 
 **A LOCKED_REQUIREMENTS block whose bullets are pure agent fabrication scores byte-identically to
@@ -3096,3 +3096,52 @@ mechanically earned and mechanically refused.
 
 
 verify: sh L=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; f=$(sed -n "/^receipt_absent_subjects() {/,/^}/p" "$L"); case "$f" in *"receipt_absent_subjects()"*) : ;; *) exit 9 ;; esac; d=$(mktemp -d); c="$d/c"; mkdir -p "$c/scripts/ai-dlc" "$c/docs"; printf "x\n" > "$c/scripts/ai-dlc/validate-steering-budget.sh"; [ -e "$c/scripts/ai-dlc/validate-steering-budget.sh" ] || { rm -rf "$d"; exit 9; }; if [ -e "$c/scripts/validate-steering-budget.sh" ] || [ -e "$c/docs/no-such-file.md" ]; then rm -rf "$d"; exit 9; fi; a=$(CONSUMER="$c" bash -c "$f"'; receipt_absent_subjects "$1"' _ 'git -C "$DIST" show "$THEIRS:core/scripts/validate-steering-budget.sh" > "$d/v.sh"'); b=$(CONSUMER="$c" bash -c "$f"'; receipt_absent_subjects "$1"' _ 'grep -q probe "$CONSUMER/docs/no-such-file.md"'); rm -rf "$d"; [ -z "$a" ] && [ -n "$b" ]
+## BL-082
+
+**On a case-folding filesystem `--strays` reports a declared home as a stray when the caller
+spells a path component in a different case, and every remedy that closes it opens a FALSE PASS
+on a case-sensitive consumer.** `core/scripts/validate-provenance-block.sh` canonicalises each
+candidate through `os.path.realpath`, which resolves symlinks and `..` and does **not** fold
+case, so the canonical form keeps the caller's spelling and misses the home. Measured on this
+host with the filesystem's behaviour PROBED rather than inferred from the platform name
+(`[ -e "$PROJ/DOCS" ]` is true, so the two spellings are one file): `docs/retro/sprint-1.md`
+exits **0**, `DOCS/retro/sprint-1.md` — the same file — exits **1** and is reported
+`STRAY PARTY-MODE PROVENANCE: DOCS/retro/sprint-1.md`. Control in the same run: a genuine stray
+spelled correctly, `server/handler.py`, exits **1**, so the scan fires and the passing arm is not
+a dead scan.
+
+**The direction is the safe one and that is why this is filed rather than fixed.** A case variant
+cannot turn a non-home into a home — on a folding filesystem the two spellings name the same
+directory either way — so there is no false-PASS counterpart to the defect itself. It is noise: a
+false STRAY, loud, and the operator fixes it by respelling the argument.
+
+**The obvious remedy is forbidden, and that is the entry's substance.** Case-folding the home
+comparison would make `docs/retro/**` match a genuinely DISTINCT `DOCS/retro/` directory on a
+case-sensitive filesystem, which is what a consumer's Linux CI runs. That converts a
+noise-tier false stray on one platform into a false PASS on the platform that matters — the exact
+direction `BL-060` was opened to close, reintroduced by its own cleanup. A per-component
+case-canonicalising walk is correct only on the folding filesystem and is wrong to ship as a
+general rule. So there is no remedy that is right on both platforms, and the entry exists to stop
+the next author reaching for the one that looks obvious.
+
+**It is unreachable in the place it would matter.** On a case-sensitive filesystem `DOCS/retro/`
+names nothing, and the explicit-argument existence assert added alongside `BL-060` already
+refuses it at exit 2 — which is the correct answer there. So this fires on a developer's macOS
+checkout and never in a consumer's CI.
+
+Found by the independent fixture hand for `BL-060` while enumerating sixteen path spellings; the
+arm was written, measured, and then deliberately removed rather than left red or closed by
+folding, with a comment at its site pointing here. Two spelling classes were enumerated alongside
+it and are NOT covered by this entry: hard links, which are not a distinct spelling because a
+second link is the same inode with no way for a caller to name it differently, and Unicode
+NFC/NFD filename variants, which are constructible on APFS and were deliberately not asserted
+because they were not measured.
+
+The receipt drives the shipping validator on both spellings of one file and requires them to
+agree, with the genuine-stray control in the same invocation so a disarmed scan cannot satisfy
+it. It SKIPs — exit 9, which reverify reports as STILL-LIVE, the safe direction — on a filesystem
+that does not fold case, because there the subject does not exist and an arm with no subject must
+not report a verdict.
+
+
+verify: sh V=core/scripts/validate-provenance-block.sh; [ -f "$V" ] || exit 9; R="$PWD"; D=$(mktemp -d); P="$D/proj"; mkdir -p "$P/.claude/schemas" "$P/docs/retro" "$P/server"; cp core/schemas/provenance-block.json "$P/.claude/schemas/" || { rm -rf "$D"; exit 9; }; printf '0.0.0\n' > "$P/VERSION"; python3 -c 'import json,sys;S=json.load(open(sys.argv[1]));e=S["envelope"];b=e["open"]+chr(10)+"skill: "+S["stray_scan"]["party_mode_skills"][0]+chr(10)+"invoked_at: 2026-07-28T09:00:00Z"+chr(10)+"mode: subagent"+chr(10)+e["close"]+chr(10);[open(p,"w").write(b) for p in sys.argv[2:]]' "$P/.claude/schemas/provenance-block.json" "$P/docs/retro/probe.md" "$P/server/stray.md" || { rm -rf "$D"; exit 9; }; [ -e "$P/DOCS" ] || { rm -rf "$D"; exit 9; }; ( cd "$P" && AI_DLC_PROJECT_ROOT="$P" bash "$R/$V" --strays server/stray.md >/dev/null 2>&1 ); c=$?; ( cd "$P" && AI_DLC_PROJECT_ROOT="$P" bash "$R/$V" --strays docs/retro/probe.md >/dev/null 2>&1 ); a=$?; ( cd "$P" && AI_DLC_PROJECT_ROOT="$P" bash "$R/$V" --strays DOCS/retro/probe.md >/dev/null 2>&1 ); b=$?; rm -rf "$D"; [ "$c" = 1 ] || exit 9; [ "$a" = 0 ] || exit 9; [ "$b" = 0 ]

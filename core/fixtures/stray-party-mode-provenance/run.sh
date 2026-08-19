@@ -21,6 +21,9 @@
 # are that half; their section header states the two shapes and which branch of the validator each
 # one reaches. MUT-E defends the arm that is green today: the home match must stay a PREFIX, because
 # a substring match turns every file of a project checked out at docs/retro/<name>/ into a home.
+# MUT-E's subject was chosen the hard way -- an earlier version of it went vacuous against a
+# candidate fix and reported MUTANT SURVIVED. The paragraph beside it says why, and says not to
+# re-aim it; read that before simplifying it.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -315,6 +318,21 @@ scan_at "$NESTED" "$NESTED" "$VALIDATOR" "$CONTROL_SCHEMA" "" "$NESTED/vendor/do
   && ok "S7b a stray under vendor/docs/retro/ is reported; a home is a place the path STARTS, not one it contains" \
   || bad "S7b FALSE PASS: vendor/docs/retro/inner.md was accepted as a home (rc=$RC) — the home pattern was found mid-path"
 
+# --- (no S10) case-variant spellings are a FILED DEFECT, not an arm ----------
+# `DOCS/retro/sprint-1.md` and `docs/retro/sprint-1.md` are ONE FILE where the filesystem folds
+# case, and this repo's development host is one. `realpath` resolves symlinks and `..` and does
+# NOT fold case, so the case-variant spelling of a declared home keeps the caller's spelling,
+# misses the home, and is reported as a stray. Measured, with the correct-case spelling as the
+# control in the same run. Filed as BL-082; deliberately not asserted here.
+#
+# THE OBVIOUS REMEDY IS FORBIDDEN. Folding case in the home match closes it on a case-folding
+# filesystem and OPENS A FALSE PASS on a case-sensitive one, where `DOCS/retro/` can be a
+# genuinely distinct directory that would then be accepted as the declared home — a false STRAY
+# traded for a false PASS, on the platform a consumer's CI actually runs. A per-component
+# case-canonicalising walk is only correct on the folding filesystem, so no remedy is right on
+# both. That is what makes it a filed defect rather than a fix, and it is why there is a gap
+# here instead of an arm.
+
 # --- S9: a SYMLINK named on the command line -----------------------------------
 # The last member of the zero-candidate class, and the one an existence test cannot see. A test
 # for existence FOLLOWS a symlink, so a link to a real file passes it; `grep -rlI` does not
@@ -345,10 +363,27 @@ scan_at "$NESTED" "$NESTED" "$VALIDATOR" "$CONTROL_SCHEMA" "" "link-to-serverdir
 # mutant, that a stray no home substring can reach is still reported — which a copy that died
 # on its own preamble cannot satisfy.
 #
-# IT IS AIMED AT S7b AND NOT AT S7 ON PURPOSE, and the difference was measured rather than
-# reasoned: aimed at S7 this mutant SURVIVES against a validator that normalises its paths,
-# because normalisation is what removes the home substring from the nested checkout's spelling.
-# The arm would then have gone green on the fix while claiming to defend it.
+# DO NOT RE-AIM THIS MUTANT AT S7. It was written against S7 first and that version SURVIVED,
+# measured against a candidate fix before the shipped one landed, and the three parts of that
+# are worth more than the arm itself:
+#
+#   WHAT IT WAS.  The mutation was the same one it is now -- `rel.startswith(prefix)` widened to
+#     `prefix in rel` -- but the subject was the nested checkout's `server/x.py`, named by its
+#     ABSOLUTE path. That path contains `docs/retro/` because of where the checkout SITS, so
+#     under the widening it was accepted and the kill scored.
+#   WHY THE FIX MADE IT VACUOUS.  The fix resolves every candidate to a root-relative path before
+#     the home match sees it, and that is exactly the step that removes `docs/retro/` from the
+#     nested checkout's spelling. Post-fix the mutation flips no verdict on that subject, so the
+#     arm reports MUTANT SURVIVED -- and had the arm been written the other way round it would
+#     have reported a clean kill it did not earn. A guard turned into a tautology by the very
+#     change it exists to guard, going green while claiming to defend it.
+#   WHAT THE RETARGET IS KEYED ON.  `vendor/docs/retro/inner.md` is a path whose root-relative
+#     form CONTAINS a home pattern and does not BEGIN with one. Canonicalisation cannot remove
+#     that -- it is where the file actually is -- so prefix and substring disagree about it
+#     before and after any normalisation anyone adds later.
+#
+# The rule that generalises: a mutant keyed on a SPELLING is only as durable as the spelling, and
+# a fix that normalises spellings will disarm it silently. Key it on a LOCATION instead.
 scan_at "$NESTED" "$NESTED" "$MUT_SUBSTR" "$CONTROL_SCHEMA" "" "$NESTED/vendor/docs/retro/inner.md"
 mut_e_accepted=1; { [ "$RC" -eq 0 ] && ! reported_any "vendor/docs/retro/inner.md"; } || mut_e_accepted=0
 scan_at "$PROJ" "$PROJ" "$MUT_SUBSTR" "$CONTROL_SCHEMA" "" "server/handler.py"

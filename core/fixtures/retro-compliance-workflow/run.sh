@@ -194,6 +194,11 @@ build_repo() {
         git config user.email fixture@example.invalid
         git config user.name  fixture
         git config commit.gpgsign false
+        # A seeded commit must never run the OPERATOR's hooks. core.hooksPath is set
+        # per-repo in this tree, but a consumer may set it globally, and the sandbox would
+        # then inherit it — a fixture whose two `git commit` calls fire a real pre-commit
+        # gate is a hang or a failure attributed to the subject under test.
+        mkdir -p .nohooks && git config core.hooksPath "$dir/.nohooks"
         printf 'seed\n' > README.md
         git add -A && git commit -qm base
         git rev-parse HEAD > .base
@@ -218,8 +223,14 @@ drive_sprint() {
     python3 "$PY" "$wf" run "Determine sprint number" > "$body" 2>"$WORK/x.err" || { echo "__NOSTEP__"; return; }
     shas="$(cat "$repo/.base") $(cat "$repo/.head")"
     base="${shas%% *}"; head="${shas##* }"
-    subst "$body" '${{ github.event.pull_request.base.sha }}' "$base" >/dev/null
-    subst "$body" '${{ github.event.pull_request.head.sha }}' "$head" >/dev/null
+    # A substitution that matched NOTHING leaves `${{ ... }}` in the body; bash then dies on
+    # the syntax, the step writes no output, and the sprint reads EMPTY — which this fixture
+    # would otherwise report as the migration defect. Two different causes, one symptom, so
+    # the miss gets its own token.
+    if [ "$(subst "$body" '${{ github.event.pull_request.base.sha }}' "$base")" != OK ] ||
+       [ "$(subst "$body" '${{ github.event.pull_request.head.sha }}' "$head")" != OK ]; then
+        echo "__NOSHA__"; return
+    fi
     : > "$WORK/gh_out"
     ( cd "$repo" && GITHUB_OUTPUT="$WORK/gh_out" bash "$body" ) >/dev/null 2>&1
     sed -n 's/^sprint=//p' "$WORK/gh_out" | tail -n 1
@@ -243,7 +254,7 @@ drive_provenance() {
 # Prints one token per arm: "<id>:pass" or "<id>:fail:<detail>".
 # ---------------------------------------------------------------------------
 arms() {
-    local wf="$1" tag="$2" VPUSE="${3:-$VP}" r
+    local wf="$1" tag="$2" VPUSE="${3:-$VP}" r v
 
     # --- A1 trigger paths -----------------------------------------------------
     local plist hit p
@@ -269,6 +280,7 @@ arms() {
         s="$(drive_sprint "$wf" "$re")"
         if [ "$s" = "302" ]; then echo "A2:pass"
         elif [ "$s" = "__NOSTEP__" ]; then echo "A2:fail:no 'Determine sprint number' step with a run: body"
+        elif [ "$s" = "__NOSHA__" ]; then echo "A2:fail:the step no longer reads github.event.pull_request.{base,head}.sha — this fixture could not hand it a diff range, so the EMPTY result below would have been the harness, not the subject"
         elif [ -z "$s" ]; then echo "A2:fail:sprint resolved EMPTY — every later step is skipped by its own if:, and the workflow reports green having validated nothing"
         else echo "A2:fail:sprint resolved to '$s', expected 302"; fi
     fi
