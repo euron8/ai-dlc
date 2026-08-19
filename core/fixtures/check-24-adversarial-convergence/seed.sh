@@ -29,7 +29,7 @@ mkdir -p "$TARGET"
 # four releases and nothing read it, so nothing complained.
 pass() {
   local file="$1" n="$2" crit="$3" major="$4" minor="$5" verdict="$6"
-  local prior="${7:-}" sha="${8:-}" resolves="${9:-}" at="${10:-}"
+  local prior="${7:-}" sha="${8:-}" resolves="${9:-}" at="${10:-}" underived="${11:-}"
   [ -n "$at" ] || at="$(printf '2026-07-12T%02d:00:00Z' "$n")"
   {
     printf '# Adversarial review — pass %s\n\n' "$n"
@@ -46,6 +46,7 @@ pass() {
     printf 'findings_critical: %s\n' "$crit"
     [ -n "$prior" ] && printf 'findings_critical_prior_scope: %s\n' "$prior"
     printf 'findings_major: %s\n' "$major"
+    [ -n "$underived" ] && printf 'findings_major_underived: %s\n' "$underived"
     printf 'findings_minor: %s\n' "$minor"
     [ -n "$verdict" ] && printf 'verdict: %s\n' "$verdict"
     printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'
@@ -694,3 +695,51 @@ record "$TARGET/ceiling-converged/s1-resolution-p4.md" \
 pass "$TARGET/ceiling-converged/s1-adversarial-p5.md" 5 1 1 2 EXIT_CONDITION_NOT_MET 1 c005 s1-resolution-p4.md
 pass "$TARGET/ceiling-converged/s1-adversarial-p6.md" 6 0 0 1 EXIT_CONDITION_MET      0 c006
 repair "$TARGET/ceiling-converged/s1-brief-repair-p5.md"
+
+# =============================================================================
+# THE MAJOR SPLIT -- findings_major_underived.
+#
+# `adversary.md` grades an underived factual claim a MAJOR "whether or not you can yet
+# falsify it", and the exit condition reads findings_major. So UNPROVEN blocked the exit
+# exactly as hard as WRONG, and the discharge for unproven is to ADD a derivation -- an
+# edit, which is what the next pass reviews. The split lets an underived-but-unfalsified
+# MAJOR be RECORDED without blocking; a MAJOR shown WRONG still blocks.
+#
+# THE FIVE CASES ARE A PARTITION OF THE WAYS THIS CAN GO WRONG, and the last one is the
+# migration proof.
+# =============================================================================
+
+# All three MAJORs are underived: 0 blocking, so MET is the honest verdict.
+mkdir -p "$TARGET/underived-exits"
+pass "$TARGET/underived-exits/s1-adversarial-p1.md" 1 2 3 1 EXIT_CONDITION_NOT_MET 2
+pass "$TARGET/underived-exits/s1-adversarial-p2.md" 2 0 3 1 EXIT_CONDITION_MET     0 "" "" "" 3
+repair "$TARGET/underived-exits/s1-brief-repair-p1.md"
+
+# TWO of three underived: ONE blocking MAJOR remains, so MET is a false convergence.
+# This is the arm that stops the split becoming a free exit.
+mkdir -p "$TARGET/underived-partial-blocks"
+pass "$TARGET/underived-partial-blocks/s1-adversarial-p1.md" 1 2 3 1 EXIT_CONDITION_NOT_MET 2
+pass "$TARGET/underived-partial-blocks/s1-adversarial-p2.md" 2 0 3 1 EXIT_CONDITION_MET     0 "" "" "" 2
+repair "$TARGET/underived-partial-blocks/s1-brief-repair-p1.md"
+
+# The partition EXCEEDS the whole: 4 underived of 3 MAJOR. Refused rather than clamped --
+# inflating this field is the single edit that would buy EXIT_CONDITION_MET outright.
+mkdir -p "$TARGET/underived-exceeds"
+pass "$TARGET/underived-exceeds/s1-adversarial-p1.md" 1 2 3 1 EXIT_CONDITION_NOT_MET 2
+pass "$TARGET/underived-exceeds/s1-adversarial-p2.md" 2 0 3 1 EXIT_CONDITION_MET     0 "" "" "" 4
+repair "$TARGET/underived-exceeds/s1-brief-repair-p1.md"
+
+# 0 blocking and it still stamps NOT_MET -- the S289 pass-4 shape, one level down. The
+# residue IS the exit condition and the field the gate reads must say so.
+mkdir -p "$TARGET/underived-refuses"
+pass "$TARGET/underived-refuses/s1-adversarial-p1.md" 1 2 3 1 EXIT_CONDITION_NOT_MET 2
+pass "$TARGET/underived-refuses/s1-adversarial-p2.md" 2 0 3 1 EXIT_CONDITION_NOT_MET 0 "" "" "" 3
+repair "$TARGET/underived-refuses/s1-brief-repair-p1.md"
+
+# THE MIGRATION PROOF: the SAME residue with NO field at all still blocks. Absent means
+# ZERO here -- the opposite of prior_scope's default, and the reason no block written
+# before this field existed can change verdict.
+mkdir -p "$TARGET/underived-absent-still-blocks"
+pass "$TARGET/underived-absent-still-blocks/s1-adversarial-p1.md" 1 2 3 1 EXIT_CONDITION_NOT_MET 2
+pass "$TARGET/underived-absent-still-blocks/s1-adversarial-p2.md" 2 0 3 1 EXIT_CONDITION_MET     0
+repair "$TARGET/underived-absent-still-blocks/s1-brief-repair-p1.md"

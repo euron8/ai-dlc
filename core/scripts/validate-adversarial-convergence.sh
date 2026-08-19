@@ -404,6 +404,26 @@ for f in "${SORTED[@]}"; do
   verdict="$(normalize_verdict "$raw_verdict")"
   crit="$(severity_count "$f" CRITICAL)"
   major="$(severity_count "$f" MAJOR)"
+
+  # findings_major_underived partitions the MAJOR count the way prior_scope partitions the
+  # CRITICAL one: of your MAJORs, how many are underived-but-not-falsified -- a count, a
+  # universal, a call-site list or a negative asserted with no derivation, which you have NOT
+  # shown to be false. `adversary.md` grades those a MAJOR "whether or not you can yet falsify
+  # it", so UNPROVEN used to block the exit exactly as hard as WRONG, and the discharge for
+  # unproven is to ADD a derivation -- an edit, which is what the next pass reviews.
+  #
+  # ABSENT MEANS ZERO, AND THAT IS THE OPPOSITE DEFAULT TO prior_scope's ON PURPOSE. There,
+  # absent means ALL, because assuming a cycle has not progressed is the safe assumption. Here
+  # the safe assumption is that a MAJOR blocks: absent => underived := 0 => `blocking` is
+  # exactly `major` => this degrades to EXACTLY the pre-split predicate. Every block written
+  # before this field existed keeps its verdict, and a producer that never emits it can only be
+  # stricter, never laxer. A default of "all" here would let an omission RELEASE the exit.
+  underived="$(block_field "$f" 'findings_major_underived' | tr -cd '0-9')"
+  [ -z "$underived" ] && underived=0
+  blocking="$major"
+  if [ -n "$major" ] && [ "$underived" -le "$major" ] 2>/dev/null; then
+    blocking=$(( major - underived ))
+  fi
   invoked_at="$(block_field "$f" 'invoked_at')"
 
   P_FILE+=("$f")
@@ -495,14 +515,26 @@ for f in "${SORTED[@]}"; do
 
   # --- B. CONSISTENCY -------------------------------------------------------
   if [ -n "$crit" ] && [ -n "$major" ]; then
-    if [ "$verdict" = "EXIT_CONDITION_MET" ] && { [ "$crit" -gt 0 ] || [ "$major" -gt 0 ]; }; then
-      err "B -- CONSISTENCY" "$f stamps EXIT_CONDITION_MET while reporting
-      $crit CRITICAL and $major MAJOR. The exit condition is 'only nitpicks remain'
-      (team-roles/adversary.md severity ladder: MINOR/NIT is the nitpick bucket).
-      A CRITICAL or a MAJOR is not a nitpick. This verdict claims a convergence the
-      residue contradicts."
+    # THE PARTITION CANNOT EXCEED THE WHOLE, and this arm is the only thing standing between the
+    # split and a free exit. Every other guard here reads a residue an author is motivated to
+    # report honestly; this one reads the field an author is motivated to inflate, because
+    # underived == major buys EXIT_CONDITION_MET outright. Catches a typo and a dishonest field
+    # in the same assertion, exactly as arm C does for prior_scope.
+    if [ "$underived" -gt "$major" ]; then
+      err "B -- CONSISTENCY" "$f declares findings_major_underived=$underived but only
+      $major MAJOR. The partition cannot exceed the whole. If the intent was 'all of them',
+      write the number: an inflated partition is the one edit that turns this split into a
+      free EXIT_CONDITION_MET, which is why it is refused rather than clamped."
     fi
-    if [ "$verdict" = "EXIT_CONDITION_NOT_MET" ] && [ "$crit" -eq 0 ] && [ "$major" -eq 0 ]; then
+    if [ "$verdict" = "EXIT_CONDITION_MET" ] && { [ "$crit" -gt 0 ] || [ "$blocking" -gt 0 ]; }; then
+      err "B -- CONSISTENCY" "$f stamps EXIT_CONDITION_MET while reporting
+      $crit CRITICAL and $blocking blocking MAJOR ($major MAJOR less $underived underived).
+      The exit condition is 'only nitpicks remain' (team-roles/adversary.md severity ladder:
+      MINOR/NIT is the nitpick bucket), plus MAJORs whose only defect is a missing derivation.
+      A CRITICAL, or a MAJOR you have shown to be WRONG, is neither. This verdict claims a
+      convergence the residue contradicts."
+    fi
+    if [ "$verdict" = "EXIT_CONDITION_NOT_MET" ] && [ "$crit" -eq 0 ] && [ "$blocking" -eq 0 ]; then
       err "B -- CONSISTENCY" "$f reports 0 CRITICAL and 0 MAJOR and still stamps
       EXIT_CONDITION_NOT_MET. Under the severity ladder that residue IS 'only
       nitpicks remain' -- the exit condition is MET. This is the S289 pass-4 shape:
@@ -570,7 +602,12 @@ for f in "${SORTED[@]}"; do
   # A pass that holds a nonzero MAJOR at zero CRITICAL, and did not REDUCE it, is a pass
   # that bought nothing. Count the run; a decrease (or any CRITICAL, which is C's business)
   # resets it. Reset on unparseable counts too -- though arm A now makes that unreachable.
-  if [ -n "$crit" ] && [ -n "$major" ] && [ "$crit" -eq 0 ] && [ "$major" -gt 0 ] \
+  # KEYED ON THE BLOCKING COUNT, NOT THE RAW ONE. A pass holding only UNDERIVED majors does not
+  # block the exit any more, so it is not a pass that "bought nothing" -- it is a pass that
+  # should have stamped EXIT_CONDITION_MET, and arm B above says so. Leaving E on the raw count
+  # would report a stall for a series that had already converged, which is the same wrong answer
+  # in the opposite direction.
+  if [ -n "$crit" ] && [ -n "$major" ] && [ "$crit" -eq 0 ] && [ "$blocking" -gt 0 ] \
      && [ -n "$PREV_MAJOR" ] && [ "$major" -ge "$PREV_MAJOR" ]; then
     STALL_RUN=$((STALL_RUN + 1))
     [ -n "$STALL_FROM" ] || STALL_FROM="$f"
