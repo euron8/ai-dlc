@@ -376,11 +376,51 @@ passes, and 7 version-less rows correctly do not trip it.
 
 **START HERE ON A FRESH SESSION — the numbered next actions.**
 
-**ACTION ZERO: THE PULL IS DONE, APPLIED AND CLOSED. PHASES 0–2, 4 AND 5 ARE COMPLETE. PHASE 3
-BATCHES 1–6 ARE MERGED AND PUSHED, AS `v0.374.0` THROUGH `v0.379.0`, EACH ONE ANNOTATED AND
-ROTATED. THE HOLD IS RELEASED AND PUSHING WORKS. **CUT BATCH 7 — RE-DERIVE THE WORKLIST FIRST
-WITH `bash scripts/backlog-reverify.sh`; EVERY BATCH SECTION BELOW IS NOW A RECORD, NOT AN
-INSTRUCTION, AND EVERY COUNT IN THIS FILE IS A HYPOTHESIS.**
+**ACTION ZERO: BATCH 7 IS CUT AND HALF-BUILT ON AN UNMERGED BRANCH. FINISH IT — DO NOT RESTART IT.**
+
+Branch **`v0.380.0-probe-duration`**, cut from `origin/main` at `f8abde7e`. Four commits, tree clean,
+nothing pushed. `git log --oneline origin/main..HEAD` is the manifest.
+
+**WHAT BATCH 7 BECAME, AND WHY IT IS NOT `BL-079`.** The operator directed that the consumer's
+wall-clock problem be diagnosed before the next batch. That investigation is COMPLETE and its record
+is tracked at **`docs/v0.380.0-pipeline-cost-investigation.md`** — read it before touching anything
+here; it lists ELEVEN refuted hypotheses so they are not re-run, and each one cost hours. Batch 7
+became the one live defect that investigation fell over. `BL-079` moves to batch 8.
+
+**WHAT IS DONE (committed, verified):** `core/hooks/ai-dlc-subagent-probe.sh` read the LEAD's
+transcript, so all six derived fields were the lead's. Both reads now point at the teammate's own file
+at `<slug>/<session-uuid>/subagents/agent-<agent_id>.jsonl`. `BL-073`'s `|| echo 0` conflation is
+gone. Schema stamp `v1 -> v2`. The false premise is corrected in the hook header AND in
+`enforcement-map.yaml`'s `subagent-context-probe` block, which stated it verbatim. The fixture could
+never fire on this defect — it seeded a teammate-shaped transcript, a layout that does not occur — and
+now builds the real two-file shape. Proven both directions on a `git archive` extract: fixed hook
+**26/26**, the real pre-fix hook from `origin/main` **fails 15 field assertions**, with the two
+asserted to differ before any comparison is read. `validate-enforcement-map.sh` exits 0.
+
+**WHAT REMAINS, in order:**
+1. **File `BL-084`** for the probe defect and annotate **`BL-073`** as landed. Note in `BL-073`'s
+   annotation that its receipt would REJECT a correct fix — it requires exactly three lines matching
+   `^\s*(PEAK|TURNS|COMPACTIONS)=.*jq`, so hoisting those reads into a helper exits 9 forever. The
+   shipped fix keeps the three lines, so it closes.
+2. **CHANGELOG heading + `VERSION` 0.380.0 + a release commit subject naming it** — one claim, joined
+   at pre-push. One version on this branch.
+3. **Run the gate the way the hook runs it**: `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`.
+   Read the GATE's exit, never a wrapper's; tabulate every `── phase` header against PASS/FAIL; read
+   `subagent-probe` BY NAME against an impossible-name control in the same invocation.
+4. Merge, push, **ANNOTATE** with `**LANDED (v0.380.0, verified <sha>).**` at the start of a line,
+   then `scripts/backlog-rotate.sh --check` then `--apply`. **Confirm the archive count moved off 20.**
+
+**THE WALL-CLOCK QUESTION IS DIAGNOSED BUT NOT FIXED, AND THE LIVE LEAD IS THE OPERATOR'S.** Planning
+cost is uncorrelated with scope (r=0.060) and tracks artifact count (r=0.953); depth tripled at a dated
+boundary; the pipeline is lead-bound. Concurrency is refuted (1.17–1.62× charged, negative under one
+divergence). The surviving proposal, and it is the operator's own: **`MAJOR` is overloaded.**
+`core/team-roles/adversary.md:157-161` makes an underived claim a MAJOR "whether or not you can yet
+falsify it" — so *unproven* blocks the exit exactly as hard as *wrong*, and is discharged by ADDING a
+derivation, which is an edit, which is what produces the next pass's findings. Supporting figures:
+MAJOR 2.10/pass against CRITICAL 0.98; **79% of pass-2+ findings are repair-introduced**; pass-2+
+CRITICALs are **3 of 3, 2 of 4, 4 of 4 prior-scope**. A backtest of re-tiering the
+underived-but-unfalsified class was dispatched and **did not return before this session ended — it must
+be re-run.** Apply v0.253.0's standard: if it has no unique catch over the real series, kill it.
 
 **TWO DECISIONS ARE WAITING ON THE OPERATOR AND NEITHER BLOCKS BATCH 7.** The exit-code question
 in `BL-078` (`EXAMINED NOTHING` is one token at three exit codes; unifying them is
