@@ -88,6 +88,86 @@ jq -nc '{type:"user", message:{content:"hi"}}' > "$WORK/nousage.jsonl"
                     usage:{input_tokens:1000, cache_creation_input_tokens:0, cache_read_input_tokens:40000}}}'
 } > "$WORK/polluted.jsonl"
 
+# THE SUM, NOT ONE TERM. `mkrec` hard-wires cache_creation_input_tokens to 0 and every
+# hand-written record above does the same, so the peak expression could drop that term
+# entirely and every assertion would still read correctly. Here all three components are
+# non-zero AND no two subsets share a total -- 1000+150000+100000 = 251000, against
+# 101000 without cache_creation, 151000 without cache_read, 250000 without input_tokens
+# -- so the failure message names which term went missing rather than just "wrong".
+jq -nc '{type:"assistant", message:{model:"claude-opus-4-8",
+         usage:{input_tokens:1000, cache_creation_input_tokens:150000,
+                cache_read_input_tokens:100000}}}' > "$WORK/cachecreate.jsonl"
+
+# A teammate whose LAST MEGABYTE holds no complete record. The hook escalates its tail
+# window 1MB -> 4MB -> 16MB for exactly this shape, and no other seed here is within
+# three orders of magnitude of the first window (the largest is ~540 bytes), so the
+# escalation has never once run under this fixture. One 1.2MB trailing line puts the
+# whole default window inside a single unparseable fragment. Without the escalation the
+# teammate produces NO ROW AT ALL -- not a wrong number, an absence indistinguishable
+# from a teammate that was never dispatched.
+#
+# The padding is built by doubling a shell string rather than with `head -c /dev/zero |
+# tr '\0' X`: BSD and GNU `tr` disagree on the NUL escape, and a padding generator that
+# silently emits nothing would shrink the seed below the window and quietly disarm this.
+#
+# THE PADDING DOES NOT GO THROUGH argv, AND THAT IS NOT A STYLE CHOICE. `jq -nc --arg p
+# "$_pad"` dies with `Argument list too long` at this size -- argv is capped by ARG_MAX
+# -- and because this script sets `pipefail` but not `-e`, the failure printed to a
+# stderr nobody reads and the seed carried on. The result was a 153-BYTE hugetail.jsonl:
+# the arm asserting the escalation was asserting the ordinary path, and it passed. Only
+# the mutant that deletes the escalation exposed it. `printf` is a bash builtin, so it
+# never execs and ARG_MAX does not apply; the payload is a fixed alphabet, so nothing
+# here needs quoting.
+_pad=XXXXXXXXXXXXXXXX
+while [ ${#_pad} -lt 1200000 ]; do _pad="$_pad$_pad"; done
+_pad="${_pad:0:1200000}"
+{ mkrec 1000 76000
+  printf '{"type":"user","message":{"role":"user","content":"%s"}}\n' "$_pad"
+} > "$WORK/hugetail.jsonl"
+# A SEED THAT DOES NOT EXCEED THE WINDOW DISARMS ITS ARM SILENTLY. Fail loudly here
+# rather than let the fixture report `ok` for a file the first read already swallowed.
+_ht="$(wc -c < "$WORK/hugetail.jsonl" | tr -d ' ')"
+if [ "${_ht:-0}" -le 1048576 ]; then
+  echo "FIXTURE ERROR: hugetail.jsonl is ${_ht} bytes, which the default 1048576 tail window swallows whole -- the escalation arm cannot fire" >&2
+  exit 2
+fi
+
+# ROLE PROSE AHEAD OF THE DISPATCH PROMPT, in a record the lead did not author.
+# `polluted.jsonl` puts the poison INSIDE the first user record, which is the half the
+# scoping cannot filter and which 8a asserts still wins; this puts it in an earlier
+# NON-user record, which is the half the scoping exists for. Read unscoped, the first
+# match wins and the answer is `adversary`. Read scoped to the dispatch prompt, the
+# `qa` binding wins. No other seed separates those two readings.
+{ jq -nc '{type:"system", timestamp:"2026-07-26T09:00:00.000Z",
+           content:"injected context: the METHOD is .claude/team-roles/adversary.md"}'
+  jq -nc '{type:"user", timestamp:"2026-07-26T09:00:01.000Z",
+           message:{role:"user", content:"READ AND FOLLOW .claude/team-roles/qa.md"}}'
+  jq -nc '{type:"assistant", timestamp:"2026-07-26T09:20:00.000Z",
+           message:{model:"claude-opus-4-8",
+                    usage:{input_tokens:1000, cache_creation_input_tokens:0,
+                           cache_read_input_tokens:52000}}}'
+} > "$WORK/prefixrole.jsonl"
+
+# TWO ASSISTANT ARMS, TWO DIFFERENT MODELS. Every other seed is single-model or uniform,
+# so `last` and `first` return the same string and the field's direction is unasserted.
+# A teammate that escalated mid-run ends on the model it finished as, and that is the
+# one the row must carry.
+{ mkrec 1000 10000 claude-sonnet-5
+  mkrec 1000 33000 claude-opus-4-8
+} > "$WORK/multimodel.jsonl"
+
+# RECORDS OUT OF CHRONOLOGICAL ORDER, so end_ts precedes start_ts. A negative duration
+# must never reach the row: it is not a reading, and it would sum into every total taken
+# over this file. Two guards in the hook stand between this seed and a row, and they are
+# redundant with each other -- this seed gives the PAIR a subject, which neither had.
+{ jq -nc '{type:"user", timestamp:"2026-07-27T10:00:00.000Z",
+           message:{role:"user", content:"go"}}'
+  jq -nc '{type:"assistant", timestamp:"2026-07-27T08:00:00.000Z",
+           message:{model:"claude-opus-4-8",
+                    usage:{input_tokens:1000, cache_creation_input_tokens:0,
+                           cache_read_input_tokens:63000}}}'
+} > "$WORK/backwards.jsonl"
+
 cat > "$WORK/env.sh" <<ENV
 HOOK="$HOOK"
 PROJ="$PROJ"

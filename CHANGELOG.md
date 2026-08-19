@@ -34,6 +34,150 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.380.0] — 2026-08-19
+
+Two defects in `core/hooks/ai-dlc-subagent-probe.sh`, the `SubagentStop` telemetry hook. Both are
+correctness defects in an INSTRUMENT, and the release is scoped to that hook, its fixture and the
+two places its false premise was written down.
+
+**THIS MAKES A COST MEASURABLE. IT DOES NOT MAKE A SPRINT FASTER, AND NOTHING HERE IS A
+PERFORMANCE CHANGE.** The investigation that fell over these defects is recorded at
+`docs/v0.380.0-pipeline-cost-investigation.md`: it measured the reference consumer's planning wall
+clock across `s288–s304`, refuted eleven hypotheses about it, and its surviving explanation is a
+platform tier change that no edit in this repo causes or cancels. No remedy for that wall clock
+ships here, and reading this release as one would repeat the failure the same investigation found
+in this file — `Measured` appears **240** times in `CHANGELOG.md` at `v0.379.0` (control in the
+same invocation: an impossible token returns 0) against **one** instance of post-release efficacy
+phrasing.
+
+### Fixed
+
+- **`BL-084` — the probe derived every teammate field from the LEAD's transcript, so the one
+  instrument in the pipeline built to see inside a teammate never measured one.**
+  `.transcript_path` at `SubagentStop` is the lead's session file, and BOTH read sites took from
+  it — the bounded tail read and the bounded head read — so `peak_tokens`, `turns`, `compactions`,
+  `model`, `end_ts`, `duration_s` and the `role` fallback were all the lead's, from the day each
+  field shipped. Both reads now resolve the teammate's own transcript, one level down at
+  `<project-slug>/<session-uuid>/subagents/agent-<agent_id>.jsonl`. **Absent means no row, never
+  the lead's numbers.**
+
+  **Three independent proofs, each with its control in the same invocation.** The implied starts
+  (`ts − duration_s`) for one sprint collapse onto THREE values, and those three are that sprint's
+  three harness sessions, 48 rows sharing one minute — against a control of 118 distinct `ts`
+  minutes over the same 145 rows, so the collapse is in the derived value, not in the sampling.
+  Nine stop-seconds carry more than one record and EIGHT of the nine are byte-identical on
+  `peak_tokens|turns|compactions|model` across distinct agents, against a control of `agent_id`
+  distinct in 9 of 9. The probe's `model` matches the LEAD's own recorded arm on **95.9%** of rows (1248
+  of 1301), against a control with the lead's arm flipped at 4.1%.
+
+  Measured against teammates' own transcripts, eight rows, **every field was wrong**: peak
+  over-reported 25–160% (381571 recorded against a true 147024), `model` wrong on 7 of 8 — every
+  one an opus teammate recorded as sonnet — `compactions` reporting 1 where the truth is 0,
+  duration inflated 16–40×. Corpus-wide the probe's `model` agrees with the teammate's true arm on
+  **41.2%** of rows against **89.1%** for the dispatch guard's `model_bound` (630 of the 707 rows
+  that resolve to a teammate transcript): below chance on a two-class problem where opus is the
+  majority.
+
+  **The wrongness pointed the way the reader was already worried, which is why it survived.** The
+  hook exists to answer *"how close do teammates get to the threshold, and do any of them
+  compact"* — the open question under `autoCompactWindow`, whose alternative is paying a measured
+  ~19% bill increase for an unquantified benefit. Its recorded peak MAXIMUM exceeds the threshold
+  it is read against, because that is the lead crossing its own ceiling. **The `autoCompactWindow`
+  question was argued from lead data.** A wrong `model` reading has separately been cited as the
+  whole evidence of an operator escalation, in a corpus where the ledger row for the REMEDIATION
+  of a disputed dispatch reads identically to the violation.
+
+  **The corrected hook makes that question answerable, and the first reading refutes what an
+  earlier draft of this release asserted.** That draft — in the hook header, in `BL-084` and here —
+  said true teammate peaks sit well below the threshold and true `compactions` is zero, generalised
+  from the eight rows above without the qualifier. Scanned over the reference consumer's whole
+  teammate corpus with the hook's own predicates, 1086 files: **32 exceed the 287000 threshold and
+  16 actually compacted**, 17 boundary records, max teammate peak **372633 — above it**. Control in
+  the same scan: one teammate reads peak 0, so the scan can return a zero; an independent raw grep
+  finds the boundary token in 18 files. Writing that distribution into a shipped comment is the
+  error this release exists to correct, so the hook now carries the retraction and the instruction
+  to re-derive rather than a number.
+
+  **There is no sound era of this field to fall back on** — the earliest day in the reference
+  consumer's corpus already reads 100% of runs over 900s. Any figure taken from a `v:1` row is
+  the lead's, including every figure this repo has quoted from it.
+
+- **`BL-073` — five telemetry values were read through the `|| echo 0` / `|| echo ""` conflation
+  `BL-036` was closed for, so an unparseable transcript reported as a measured zero.** `jq` exits
+  non-zero on malformed input, so the fallback fired on exactly the case it cannot distinguish.
+  The fix is the subtractive one `BL-036` shipped: the fallback goes. An empty read is already
+  handled — the `TURNS` guard treats it as "window too small, escalate", and the `PEAK` guard
+  before the emit writes no row at all.
+
+  **`BL-073`'s own receipt would have REJECTED a correct fix, and that is recorded rather than
+  quietly worked around.** It requires exactly three lines matching
+  `^\s*(PEAK|TURNS|COMPACTIONS)=.*jq`, so hoisting those three reads into a helper — a legitimate
+  remedy — exits 9, `STILL-LIVE`, permanently. The shipped fix keeps the three lines in place, so
+  it closes; the receipt is right about this tree and wrong as a standard.
+
+- **The fixture certified exactly the assumption the hook violated, and structurally could not
+  fire on it.** `core/fixtures/subagent-probe/run.sh` handed the hook a teammate-shaped transcript
+  DIRECTLY — a layout that does not occur in production — so its `duration_s` assertion was green
+  for the whole life of the defect. It now builds the real two-file shape, with the lead stub
+  carrying values no teammate reaches so a regression fails loudly and names what it read.
+  Measured on a `git archive` extract with the two hooks asserted to DIFFER before any comparison
+  was read: the fixed hook passes **36 of 36**, the real pre-fix hook from `origin/main` fails
+  **24** assertions, and an `exit 0` stub fails **31** — the arms are presence-shaped, so silence
+  cannot pass as a clean run.
+
+  **The one arm covering "teammate transcript missing" was reading the PREVIOUS fire's file, and an
+  independent hand found it by mutation rather than by reading.** `fire()` skipped the copy when a
+  seed was absent but never removed the file an earlier fire had left under the same `agent_id`, so
+  the absent case was never absent. The cost was exact: a hook mutated to fall silently BACK to the
+  lead transcript when the teammate's is unreadable — the same wrong-file defect this release
+  fixes, wearing a different hat — produced output **byte-identical** to the fixed hook's under the
+  whole fixture. `fire()` now clears the teammate file, and the absent case has a presence-shaped
+  arm pairing "no row, and none of the lead's poison values" with a positive control in the same
+  assertion. That mutant now fails two arms by name.
+
+  **A signature arm was added because every other assertion depends on something a fix could
+  change** — a seeded value, a path shape, a field name. This one depends on nothing: two
+  teammates dispatched under ONE lead must produce two DIFFERENT rows. It catches the failure the
+  poison pill cannot — a hook that resolves the path correctly but collapses both teammates onto
+  one reading — and that identity is the defect's own fingerprint, two party seats in one wave
+  sharing `peak_tokens` 386006 TO THE BYTE on the reference consumer.
+
+### Changed
+
+- **The row stamp goes `v:1` → `v:2`.** The correction changes what every field MEANS, and a
+  consumer already holds thousands of rows carrying the old, lead-derived values with nothing but
+  a timestamp separating them from corrected ones. **Do not price anything off a `v:1` row.**
+  Verified free before bumping: the writer, one fixture assertion and two comments are the field's
+  only mentions — no script, gate or step machine-reads it.
+
+- **A false premise, stated verbatim in two places, is corrected in both.** The hook header and
+  `core/skills/ai-dlc/enforcement-map.yaml`'s `subagent-context-probe` block both said *"teammates
+  leave no transcript in `~/.claude/projects` … `SubagentStop` hands us `transcript_path` at the
+  one moment the teammate's own transcript is complete"*. Both halves are false and they
+  contradict each other across two sentences: a teammate that leaves no transcript cannot also be
+  the subject of the path handed to the hook. Sampled 400 subagent files: **400** carry
+  `"isSidechain":true` and none carries `false`, the exact complement of the 233 session files at
+  the top level. The map's `emits:` comment was stale in the same block — it omitted `role` and
+  `duration_s`, both of which had shipped since it was written.
+
+- **Two stale calibrations are removed from the hook header rather than updated.** The
+  `10% of runs, ~47% of agent-hours` figure and the header's duration study were not out of date
+  but UNREPRODUCIBLE from any point in the recorded corpus — sound measurements taken by a
+  different method and orphaned onto a column that did not exist when they were taken. A
+  distribution quoted in a comment is a claim about data that moves; derive it when you need it.
+
+### Added
+
+- **`docs/v0.380.0-pipeline-cost-investigation.md`** — the measurement record behind this release,
+  tracked so its **eleven refutations are not re-derived**. Each cost hours: consumer instruction
+  surface, artifact size, version churn under a series, `validation_intensity`, a stricter
+  adversary, the five new spec-layer gate checks, the cross-artifact byte-identity join,
+  superlinearity in corpus size, concurrency across planning artifacts, catching mechanical
+  findings before the adversary, and requiring the remediator to fence counts. It also records
+  seven instrument defects that each produced or nearly produced an INVERTED conclusion, and
+  states plainly what it could not answer: the pipeline holds no model-independent quality signal,
+  so whether the extra convergence passes bought anything is not answerable from that corpus.
+
 ## [0.379.0] — 2026-08-18
 
 Two path-classifier defects in `validate-provenance-block.sh`, both of which made a check report

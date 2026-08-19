@@ -1271,7 +1271,7 @@ non_catalog_units:
     hard_block: false
     enforcer:
       - core/hooks/ai-dlc-subagent-probe.sh
-    emits: subagent-context.jsonl   # {v,ts,sprint,agent_id,model,turns,peak_tokens,compactions}
+    emits: subagent-context.jsonl   # {v,ts,sprint,agent_id,model,role,turns,peak_tokens,compactions,duration_s}
     call_sites:
       - site: ai-dlc-subagent-probe.sh (SubagentStop)
         posture: records only; NEVER blocks (a blocking SubagentStop hook hangs a teammate)
@@ -1279,11 +1279,14 @@ non_catalog_units:
           recovery protocol, context sensor). A teammate has NONE of it and runs in
           its own window — the sensor deliberately exits on agent_id. If a teammate
           compacts it silently loses the middle of its task and returns a confident,
-          degraded verdict. That risk was argued but never measured, because
-          teammates leave no transcript in ~/.claude/projects; SubagentStop hands us
-          transcript_path at the one moment the teammate's own transcript is complete.
-          It is the only window there is, and it is what makes the autoCompactWindow
-          question answerable with data instead of a guess.
+          degraded verdict. That risk was argued but never measured. The reason
+          recorded here was that teammates leave no transcript in ~/.claude/projects
+          and SubagentStop hands us the teammate's own; BOTH halves were false, and
+          they contradict each other. Teammates DO leave a transcript, at
+          <slug>/<session-uuid>/subagents/agent-<agent_id>.jsonl, and transcript_path
+          points at the LEAD's session file. Every field this probe emitted was
+          therefore the lead's until the reads were repointed, so the
+          autoCompactWindow question was argued from lead data and is still open.
     checks:
       - id: peak-not-last
         asserts: peak_tokens is the maximum across the run, including before any
