@@ -236,6 +236,7 @@ artifact_sha: <sha256 of that file, as you read it> # `shasum -a 256 <artifact> 
 findings_critical: <int>                    # the residue the verdict is adjudicated against. Required of EVERY known evaluation, not only verdict-bearing ones — see rules.counts_always.
 findings_critical_prior_scope: <int>        # of the CRITICALs above, those in text the PRIOR pass also reviewed. OPTIONAL BY DESIGN: absent means the validator assumes ALL of them (fail-closed). Requiring it would invert that default and reject the safe omission. This is what separates 'not converging' from 'the document is moving'.
 findings_major: <int>                       # omit it and the stall rung goes silent for the ENTIRE series.
+findings_major_underived: <int>             # of the MAJORs above, those whose ONLY defect is a MISSING DERIVATION -- a count, a universal, a call-site list or a negative asserted without one, which you have NOT shown to be false. These are RECORDED and do NOT block the exit condition; a MAJOR you have shown WRONG still does. OPTIONAL, and ABSENT MEANS ZERO -- the inverse of findings_critical_prior_scope's default, deliberately. There, absent means ALL, because assuming a cycle has not progressed is the safe assumption. Here, absent means NONE, because assuming a claim is merely unproven is not: an omission leaves every MAJOR blocking, exactly as before this field existed, so no pre-existing block changes verdict and a producer that never emits it can only be stricter, never laxer. It may never exceed findings_major -- that is arm B's business, not the reader's.
 findings_minor: <int>                       # the nitpick bucket. Does not block the exit condition.
 resolves_divergence: <path to the resolution record> # ONLY on the verification pass, and only if the pass before you STOPPED.
 verdict: <EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET|DIVERGENT_HARD_BLOCK> # required on every adversarial-review pass. There is no free-text verdict.
@@ -258,11 +259,13 @@ CRITICAL and MAJOR counts.
 
 **The residue decides the verdict. You do not.**
 
-- `findings_critical == 0` and `findings_major == 0` → **`EXIT_CONDITION_MET`**.
-  The step's exit condition is *"continue until only nitpicks remain,"* and by the
-  ladder above MINOR/NIT **is** the nitpick bucket. A clean-of-CRITICAL-and-MAJOR
-  residue with open MINORs is a MET exit condition, not a nearly-met one. Say MET.
-- any CRITICAL or MAJOR open → `EXIT_CONDITION_NOT_MET`.
+- `findings_critical == 0` and `findings_major - findings_major_underived == 0`
+  → **`EXIT_CONDITION_MET`**. The step's exit condition is *"continue until only
+  nitpicks remain,"* and by the ladder above MINOR/NIT **is** the nitpick bucket. A
+  residue clean of CRITICALs and of *derived* MAJORs is a MET exit condition, not a
+  nearly-met one. Say MET.
+- any CRITICAL, or any MAJOR that is **not** counted in `findings_major_underived`
+  → `EXIT_CONDITION_NOT_MET`.
 - **`findings_critical_prior_scope` above the previous pass's `findings_critical`**
   → `DIVERGENT_HARD_BLOCK`, and say why in your first line. These are defects the
   repair injected into text that had **already been cleared**. This is not "not met,
@@ -274,6 +277,39 @@ CRITICAL and MAJOR counts.
   not comparable because **the document is not the same document** — and the remedy
   is not yours to name: the lead reads the gap between the two fields and shrinks
   the sprint.
+
+**The bar for counting a MAJOR in `findings_major_underived`, and it is narrow.** The
+rung above grades an underived factual claim a MAJOR *"whether or not you can yet
+falsify it"* — which is right, and which made **UNPROVEN block the exit exactly as hard
+as WRONG**. Those are not the same defect and they do not carry the same remedy: an
+unproven claim is discharged by ADDING a derivation, and that addition is an edit, which
+is what the next pass reviews. So the loop fed itself.
+
+A MAJOR belongs in `findings_major_underived` when **all three** hold:
+
+1. its ONLY defect is the missing derivation — a count, a universal, a call-site list or
+   a negative, asserted without one;
+2. you have **not** shown the claim to be false. **The moment you falsify it, it is a
+   plain MAJOR and it blocks.** "I doubt it" is not falsification, and neither is "this
+   looks unlikely";
+3. the artifact is still correct if the claim is simply CUT. If the artifact depends on
+   the claim being true, it is not underived — it is unverified load-bearing text, and
+   that blocks.
+
+**You are still filing the finding.** This field does not soften it, forgive it, or make
+it optional to repair; it records that the residue does not require another full pass
+before the gate can read a verdict. The repairer's licence to delete an unverified
+factual claim is unchanged.
+
+**And it may never exceed `findings_major`** — it is a subset of your own count, not a
+second opinion about it. Inflating it is the single edit that would buy
+`EXIT_CONDITION_MET` outright, so the validator REFUSES a block where it does rather
+than clamping it.
+
+**Omitting it is safe and costs you a pass.** Absent means **ZERO** — every MAJOR blocks,
+exactly as before this field existed. That is the opposite default to
+`findings_critical_prior_scope`'s below, and deliberately so: there, the safe assumption
+is that nothing has progressed; here, the safe assumption is that a MAJOR blocks.
 
 **The bar for excluding a CRITICAL from `findings_critical_prior_scope`.** Name the
 artifact `file:line` and assert that text did not exist at the previous pass. If you

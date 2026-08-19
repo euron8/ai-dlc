@@ -647,6 +647,24 @@ else
   fi
 fi
 
+# --- the MAJOR split: findings_major_underived --------------------------------
+# UNPROVEN used to block the exit exactly as hard as WRONG, because the exit condition reads
+# findings_major and adversary.md grades an underived claim a MAJOR "whether or not you can
+# yet falsify it". These five are a partition of the ways the split can be got wrong, and the
+# last one is the migration proof.
+expect underived-exits               0 "0C, 3M ALL underived: 0 blocking -- MET is honest" s1-adversarial-p
+expect underived-partial-blocks      1 "0C, 3M with 2 underived: ONE blocking MAJOR -- MET is a false convergence (B)" s1-adversarial-p
+expect underived-exceeds             1 "4 underived of 3 MAJOR: the partition cannot exceed the whole (B)" s1-adversarial-p
+expect underived-refuses             1 "0 blocking and still NOT_MET -- the residue IS the exit condition (B)" s1-adversarial-p
+expect underived-absent-still-blocks 1 "MIGRATION: same residue, NO field -- absent means ZERO, so it still blocks" s1-adversarial-p
+
+# The exit codes above are necessary and not sufficient: three of those four failures are arm
+# B, so a message naming the wrong quantity would score identically.
+expect_says underived-partial-blocks s1-adversarial-p "B-blocking-count" \
+  "1 blocking MAJOR" "3 MAJOR less 2 underived"
+expect_says underived-exceeds s1-adversarial-p "B-partition" \
+  "findings_major_underived=4" "3 MAJOR"
+
 echo
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."

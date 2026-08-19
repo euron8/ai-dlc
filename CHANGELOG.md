@@ -34,6 +34,73 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.382.0] — 2026-08-19
+
+`MAJOR` was overloaded: an underived factual claim and a claim shown WRONG blocked the
+convergence exit equally hard, and only one of them is a defect in the artifact.
+
+### Added
+
+- **`findings_major_underived`, a provenance count that partitions `findings_major`.** The
+  convergence exit becomes `findings_critical == 0 && (findings_major - findings_major_underived)
+  == 0`. `core/team-roles/adversary.md` grades an underived factual claim — a count, a universal,
+  a call-site list, a negative — a MAJOR *"whether or not you can yet falsify it"*, which is
+  right; but the exit condition read `findings_major`, so **UNPROVEN blocked the exit exactly as
+  hard as WRONG**. The two do not carry the same remedy: an unproven claim is discharged by
+  ADDING a derivation, and that addition is an edit, which is what the next pass reviews.
+
+  **A FIELD, NOT A VERDICT TOKEN, AND THE CHOICE IS FORCED BY THE CONSUMER BOUNDARY.** Measured
+  against the current reader in both directions: a block carrying an unknown field PASSES
+  (`validate-provenance-block.sh` returns early on unknown fields), while
+  `EXIT_CONDITION_MET_UNPROVEN` is REJECTED with rc=1 by the verdict enum in both
+  `validate-provenance-block.sh` and `validate-adversarial-convergence.sh`. A new token would
+  break every consumer that has not pulled; a new field is forward-compatible.
+
+  **ABSENT MEANS ZERO, WHICH IS THE OPPOSITE DEFAULT TO `findings_critical_prior_scope`'s, AND
+  THE INVERSION IS THE POINT.** There, absent means ALL, because assuming a cycle has not
+  progressed is the safe assumption. Here the safe assumption is that a MAJOR blocks: absent →
+  `underived := 0` → the blocking count is exactly `findings_major` → the predicate degrades to
+  precisely the pre-split one. **No block written before this field existed changes verdict**, and
+  a producer that never emits it can only be stricter, never laxer. A default of "all" here would
+  let an omission RELEASE the exit — the same shape as the omitted-count bypass arm A exists to
+  close.
+
+  **The abuse path is the one that got the guard.** `underived == major` buys
+  `EXIT_CONDITION_MET` outright, so arm B refuses a block whose partition exceeds its whole
+  rather than clamping it — the same discipline arm C already applies to `prior_scope`. Arm E's
+  stall accumulator moves to the blocking count too: a plateau of underived MAJORs is a series
+  that should have stamped MET, not one that bought nothing, and leaving E on the raw count would
+  report a stall for a series that had already converged.
+
+  **The rung states a three-part bar and it is narrow.** A MAJOR counts as underived only when
+  its ONLY defect is the missing derivation, you have **not** shown the claim false — *"the
+  moment you falsify it, it is a plain MAJOR and it blocks"* — and the artifact is still correct
+  if the claim is simply CUT. Unverified load-bearing text is not underived. The finding is still
+  filed; the field records that the residue does not require another full pass before the gate
+  can read a verdict.
+
+  Schema, role file and rendered example are one source: the field rides exactly the profiles
+  carrying `findings_critical_prior_scope` (`adversary-pass.fields`,
+  `story-provenance.batch_invariant`, `story-provenance.fields`) — asserted as a set equality,
+  not hand-listed — and `sync-taught-schema.sh` rendered it into `core/team-roles/adversary.md`
+  rather than any of it being hand-written.
+
+### Changed
+
+- `core/fixtures/check-24-adversarial-convergence/` gains five cases and two message arms, **80 →
+  87 assertions**. The five are a partition of the ways the split can be got wrong: all-underived
+  exits **0**; two-of-three underived leaves one blocking MAJOR and a `EXIT_CONDITION_MET` there
+  fails; a partition exceeding its whole fails; zero blocking while still stamping
+  `EXIT_CONDITION_NOT_MET` fails; and the same residue with **no field at all** still blocks,
+  which is the migration proof.
+
+  **Two of those four failures are the same arm, so the exit code is necessary and not
+  sufficient** — a message naming the wrong quantity would score identically. Two `expect_says`
+  arms assert the emitted text names the blocking arithmetic and the partition. Proven by
+  mutation: reverting arm B to the raw `findings_major` kills `underived-exits` **and nothing
+  else**, and deleting the partition check kills **only** `B-partition` — via the message, since
+  the exit code stays 1 either way.
+
 ## [0.381.0] — 2026-08-19
 
 The fixture suite ran in full on every push, including pushes that changed nothing any fixture

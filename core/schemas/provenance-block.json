@@ -247,6 +247,14 @@
       "doc": "omit it and the stall rung goes silent for the ENTIRE series."
     },
     {
+      "name": "findings_major_underived",
+      "required": false,
+      "required_for_verdict": false,
+      "pattern_ref": "integer",
+      "placeholder": "<int>",
+      "doc": "of the MAJORs above, those whose ONLY defect is a MISSING DERIVATION -- a count, a universal, a call-site list or a negative asserted without one, which you have NOT shown to be false. These are RECORDED and do NOT block the exit condition; a MAJOR you have shown WRONG still does. OPTIONAL, and ABSENT MEANS ZERO -- the inverse of findings_critical_prior_scope's default, deliberately. There, absent means ALL, because assuming a cycle has not progressed is the safe assumption. Here, absent means NONE, because assuming a claim is merely unproven is not: an omission leaves every MAJOR blocking, exactly as before this field existed, so no pre-existing block changes verdict and a producer that never emits it can only be stricter, never laxer. It may never exceed findings_major -- that is arm B's business, not the reader's."
+    },
+    {
       "name": "findings_minor",
       "required": false,
       "required_for_verdict": true,
@@ -302,6 +310,7 @@
         "findings_critical",
         "findings_critical_prior_scope",
         "findings_major",
+        "findings_major_underived",
         "findings_minor",
         "resolves_divergence",
         "verdict"
@@ -364,6 +373,7 @@
         "findings_critical",
         "findings_critical_prior_scope",
         "findings_major",
+        "findings_major_underived",
         "findings_minor",
         "verdict"
       ],
@@ -382,6 +392,7 @@
         "findings_critical",
         "findings_critical_prior_scope",
         "findings_major",
+        "findings_major_underived",
         "findings_minor",
         "verdict"
       ]
