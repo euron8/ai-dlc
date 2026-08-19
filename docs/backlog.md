@@ -1894,52 +1894,6 @@ Discharges the consumer entry `PC-S297-CHECK16-ELEMENT2-REGEX-DEAD` at pinned le
 
 
 verify: sh d=$(mktemp -d) && t=$(bash core/fixtures/check-15-bypass/seed.sh "$d" | tail -1) && b="$t/_bmad-output/planning-artifacts/carry-over-backlog.md" && sed 's/retired ack shim/retire the OPENAPI ack shim/' "$b" > "$b.n" && mv "$b.n" "$b" && grep -qF 'OPENAPI ack shim (CLOSED)' "$b" && { bash core/scripts/validate-stub-audit.sh --root "$t" src/v7_item_closed.py >/dev/null 2>&1; rc=$?; rm -rf "$d"; [ "$rc" -eq 1 ]; }
-## BL-056
-
-**The one shipped flagless call to `validate-provenance-block.sh` hands it a path its retro
-classifier does not match, so the retro-provenance CI step reports OK on a retro doc carrying no
-provenance block at all.** `core/ci-templates/validate-retro-compliance.yml:83` runs
-`./scripts/ai-dlc/validate-provenance-block.sh "docs/retro/sprint-${sprint}.md"` with no
-`--require-skill`. `core/scripts/validate-provenance-block.sh:411` is
-`RETRO_PATH_RE = re.compile(r"docs/retro/s\d+/retro\.md$")`, so `is_retro` at `:424` is false for
-the path the template builds, no flag was passed, and the `if not blocks` arm at `:430` prints
-`OK: no provenance block required or present` and exits 0. Measured on a blockless file at that
-path: **rc=0**; control in the same invocation, the identical file with
-`--require-skill bmad-party-mode`, **rc=1**. Three sibling path shapes were tried alongside
-(`docs/retros/sprint-303.md`, `_bmad-output/retro/sprint-303.md`, `docs/retro/retro-303.md`), all
-rc=0, so the pass is the classifier missing rather than one malformed probe path.
-
-**The filing describes a different mechanism.** It frames this as a default-direction defect —
-"a safety-relevant validator that fails open by default rather than requiring an explicit
-`--allow-missing`-style opt-out" — demonstrated on `/etc/hosts`. That default is deliberate and
-documented: the header states the artifact is "handed ONE artifact by a gate that already decided
-the artifact is in scope", the requirement is the caller's to declare, and `--strays` exists as
-the corpus-wide floor under exactly that carve-out. The correction runs in both directions at
-once — **narrower in cause** (not the default, but one caller that declares nothing and one path
-regex that misses it) and **wider in consequence** (not a hypothetical on `/etc/hosts`, but the
-shipped retro compliance workflow, which `scripts/install.sh:564-566` copies into a consumer's
-`.github/workflows/`).
-
-**Both of the validator's own same-run probes pass and neither can see this.** `:412` asserts the
-regex matches `docs/retro/s301/retro.md` and `:418` asserts it refuses `docs/retro/s301/retro-draft.md`
-— written, correctly, against the migrated path form. `core/scripts/migrate-artifact-paths.sh:192`
-records that form as the migration target of `docs/retro/sprint-299.md`, so the template is on the
-pre-migration shape and the probes are on the post-migration one, with nothing joining them. The
-same staleness disarms the workflow twice: its `paths:` trigger at `:19` and its changed-set filter
-at `:46` are both `docs/retro/sprint-*.md`, so on a migrated consumer the job does not fire at all.
-
-The receipt is a three-armed join rather than a grep, because either side is a legitimate fix and
-a one-sided anchor would go unsatisfiable when the other is chosen: it exits 0 if the template's
-invocation gains `--require-skill`, or if the template stops constructing the legacy
-`docs/retro/sprint-` form, and otherwise requires the validator to refuse a blockless doc at the
-path the template actually builds. An empty grep of the template — the invocation removed entirely
-— holds the entry open rather than closing it, since a deleted check is not a repaired one.
-
-Discharges the consumer entry `PC-S297-PROVENANCE-FLAGLESS-FAIL-OPEN-BY-DEFAULT` at pinned ledger
-line 1136.
-
-
-verify: sh python3 scripts/verify-backlog-bl056.py "$PWD"
 ## BL-057
 
 **A LOCKED_REQUIREMENTS block whose bullets are pure agent fabrication scores byte-identically to
@@ -1985,52 +1939,6 @@ Discharges the consumer entry `PC-S297-LOCKED-FENCE-LAUNDERS-AGENT-PROSE` at pin
 
 
 verify: sh d=$(mktemp -d); for k in f h; do mkdir -p "$d/$k"; printf '# B\n\n## Requirements\n\nRetain audit records for seven years.\n' > "$d/$k/brief.md"; { printf '# S\n\n<!-- LOCKED_REQUIREMENTS -->\nrequires_context: brief.md#Requirements\n'; if [ "$k" = f ]; then printf -- '- Delete all audit records at agent discretion.\n'; else printf -- '- Retain audit records for seven years.\n'; fi; printf '<!-- END LOCKED_REQUIREMENTS -->\n'; } > "$d/$k/story.md"; done; cmp -s "$d/f/story.md" "$d/h/story.md" && { rm -rf "$d"; exit 1; }; of=$(bash core/scripts/validate-locked-anchor.sh "$d/f/story.md" 2>&1); rf=$?; oh=$(bash core/scripts/validate-locked-anchor.sh "$d/h/story.md" 2>&1); rh=$?; sf=$(printf '%s' "$of" | head -1 | sed "s|$d/f|X|"); sg=$(printf '%s' "$oh" | head -1 | sed "s|$d/h|X|"); rm -rf "$d"; [ "$rf" != "$rh" ] || [ "$sf" != "$sg" ]
-## BL-060
-
-**`validate-provenance-block.sh --strays` judges the declared homes on the path SPELLING, so the
-same file passed as an absolute path is reported as an out-of-place stray.** The explicit-path
-branch at `core/scripts/validate-provenance-block.sh:184-188` sets `STRAY_DEFAULT=0` and hands the
-caller's paths to `grep -rlI` verbatim; only the DEFAULT whole-tree branch normalizes, by forcing
-`STRAY_PATHS=(".")` at `:177` under a comment at `:176` that states the mechanism — *"an absolute
-scan root would make every path miss every home"* — in the one branch where it cannot bite.
-Reproduced on a sandbox root, one file, same validator, three invocations: `--strays
-docs/retro/probe.md` (a declared home) exits **0**, `--strays: PASS`; `--strays
-"$P/docs/retro/probe.md"` exits **1**, `STRAY PARTY-MODE PROVENANCE: /var/…/docs/retro/probe.md
-[reason:out-of-place-party-mode]`. Control in the same invocation: `--strays server/stray.md`, a
-genuine non-home spelled relatively, exits **1** — so the scan fires on a real finding and the
-passing arm is not a dead scan.
-
-**The filing measured this on the CONSUMER's installed copy; the subject is core's.** It reproduces
-in the distribution copy, upstream of every install, so the repro needs no consumer tree and no
-`$CONSUMER` variable. That matters because the filing's own receipt has already been re-anchored
-once, on 2026-08-14, when its subject `docs/retro/sprint-249.md` moved to `docs/retro/s249/retro.md`
-and the `&&` chain began short-circuiting on a missing file. Direction: same cause, moved one tree
-up and off a moving subject. The filing's two self-corrections both hold as written — the comment
-placement at `:176` and the silence of the explicit-path branch are exactly as it describes.
-
-**Scope is narrower than the entry reads, and that belongs in the record.** The shipped gate is not
-affected: `core/git-hooks/pre-push:109` invokes `--strays` with no paths, which takes the
-normalizing default branch. The exposure is every caller that passes an explicit path, and nothing
-guards it — `core/fixtures/stray-party-mode-provenance/run.sh` carries **6** occurrences of
-`--strays` and **0** of `PWD` or `absolute`, so the fixture that owns this validator's tree
-behaviour has no arm for the case at all.
-
-**Why a behavioural probe and why it is built from the schema.** The sandbox root's block is
-assembled from `envelope.open`, `envelope.close` and `stray_scan.party_mode_skills[0]` read out of
-`core/schemas/provenance-block.json`, so the receipt restates no grammar and — the reason this is
-not optional — `docs/backlog.md` carries no literal envelope marker. Writing one here would make
-the backlog itself a subject of the whole-tree scan this entry is about, which is the v0.194.0
-lesson `core/fixtures/stray-party-mode-provenance/seed.sh:40-43` already records. The relative-home
-arm doubles as the proof that the target state is reachable: the same file, same validator, exits 0
-when the path is spelled relatively, so normalizing an absolute argument in the explicit-path branch
-closes this receipt. A substring anchor would false-close on the fix's own comment, which will quote
-the absolute-path wording back.
-
-Discharges the consumer entry `PC-S312-STRAYS-DOES-NOT-NORMALIZE-AN-ABSOLUTE-PATH` at pinned ledger
-line 2492.
-
-
-verify: sh D=$(mktemp -d); P="$D/proj"; mkdir -p "$P/.claude/schemas" "$P/docs/retro" "$P/server"; cp core/schemas/provenance-block.json "$P/.claude/schemas/"; python3 -c "import json,sys;S=json.load(open(sys.argv[1]));e=S['envelope'];b=(e['open']+chr(10)+'skill: '+S['stray_scan']['party_mode_skills'][0]+chr(10)+'invoked_at: 2026-07-28T09:00:00Z'+chr(10)+'mode: subagent'+chr(10)+e['close']+chr(10));open(sys.argv[2],'w').write(b);open(sys.argv[3],'w').write(b)" "$P/.claude/schemas/provenance-block.json" "$P/docs/retro/probe.md" "$P/server/stray.md"; V=$(grep -ls -- '--strays' core/scripts/*.sh 2>/dev/null | xargs -I{} grep -ls 'party_mode_skills' {} 2>/dev/null | head -1); [ -n "$V" ] || { rm -rf "$D"; exit 1; }; V="$PWD/$V"; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays docs/retro/probe.md >/dev/null 2>&1; R1=$?; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays server/stray.md >/dev/null 2>&1; R2=$?; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays "$P/docs/retro/probe.md" >/dev/null 2>&1; R3=$?; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays "$P/server/stray.md" >/dev/null 2>&1; R4=$?; rm -rf "$D"; [ "$R1" = 0 ] && [ "$R2" = 1 ] && [ "$R3" = 0 ] && [ "$R4" = 1 ]
 ## BL-062
 
 **`--check-evidence` discovers its gate log by basename alone and reads an ARCHIVED sprint's copy,
