@@ -33,11 +33,21 @@
 # One line per teammate completion. Append-only. Read it with:
 #   jq -s 'max_by(.peak_tokens)'            <- the closest any teammate came
 #   jq -s 'map(select(.compactions>0))'     <- teammates that actually compacted
-#   jq -s 'map(select(.duration_s>900))'    <- the tail: 10% of runs, ~47% of agent-hours
+#   jq -s 'map(select(.duration_s>900))'    <- the long tail
 #   jq -s 'map(select(.duration_s>900 and (.turns/(.duration_s/60))<1))'
 #                                           <- long AND barely turning: stalled, not working
-# `role` and `duration_s` are null when the transcript's opening records do not
-# carry them; a null is "not observed", never "zero".
+# `role` is null when the transcript's opening records do not carry it, and
+# `duration_s` is null when no dispatch row matched; a null is "not observed",
+# never "zero".
+#
+# NO SHARE-OF-RUNS FIGURE IS QUOTED HERE, AND THAT IS DELIBERATE. This comment
+# used to say the >900s bucket was "10% of runs, ~47% of agent-hours". The
+# reference consumer's file said 94.3% of runs and 99.9% of agent-seconds, and
+# had said so for every day it holds -- the earliest day in the corpus already
+# read 100%. The figure was not stale, it was unreproducible from any point in
+# the record, and it read as confirmation for a month while the field beneath it
+# emitted session age. A distribution quoted in a comment is a claim about data
+# that moves; derive it when you need it and do not carry one here.
 #
 # READ peak_tokens AGAINST THE THRESHOLD, NOT THE WINDOW: compaction fires at
 # `effectiveWindow - 13000` (287000 at the default 300000 setting). A teammate at
@@ -97,11 +107,21 @@ for N in ${AI_DLC_PROBE_TAIL_BYTES:-1048576} 4194304 16777216; do
         }
     ' 2>/dev/null)"
   [ -n "$READ" ] || continue
-  PEAK="$(printf '%s' "$READ" | jq -r '.peak' 2>/dev/null || echo 0)"
-  TURNS="$(printf '%s' "$READ" | jq -r '.turns' 2>/dev/null || echo 0)"
-  COMPACTIONS="$(printf '%s' "$READ" | jq -r '.compactions' 2>/dev/null || echo 0)"
-  MODEL="$(printf '%s' "$READ" | jq -r '.model' 2>/dev/null || echo "")"
-  END_TS="$(printf '%s' "$READ" | jq -r '.end_ts' 2>/dev/null || echo "")"
+  # NO `|| echo 0` FALLBACK ON ANY OF THESE FIVE, AND THE OMISSION IS THE POINT.
+  # `jq` exits non-zero on malformed input, so a fallback fires on exactly the case
+  # it cannot distinguish: a genuine `0` and a read that FAILED become the identical
+  # string, and every reader downstream sees a number where there was an absence.
+  # This is the same conflation `BL-036` was closed for, and the fix it shipped is
+  # the one copied here -- subtractive. An empty value is already handled: the
+  # `TURNS` guard three lines down treats it as "window too small, keep looking",
+  # and the `PEAK` guard before the emit exits without writing a row at all. A
+  # missing record is a gap someone can see; a fabricated zero is a wrong number
+  # that sums into every total taken over this file.
+  PEAK="$(printf '%s' "$READ" | jq -r '.peak' 2>/dev/null)"
+  TURNS="$(printf '%s' "$READ" | jq -r '.turns' 2>/dev/null)"
+  COMPACTIONS="$(printf '%s' "$READ" | jq -r '.compactions' 2>/dev/null)"
+  MODEL="$(printf '%s' "$READ" | jq -r '.model' 2>/dev/null)"
+  END_TS="$(printf '%s' "$READ" | jq -r '.end_ts' 2>/dev/null)"
   # A tail that captured no assistant turn means the window was too small for
   # even one record — escalate. Otherwise this reading stands.
   case "${TURNS:-0}" in ''|0) continue ;; esac
@@ -117,10 +137,9 @@ done
 #
 # WHY DURATION. peak_tokens answers "did a teammate approach the ceiling". It
 # cannot answer "did a teammate STOP MAKING PROGRESS", and those are different
-# failures with different remedies. Measured on the reference consumer's 1,979
-# teammate runs: p50 4.1m, p90 15.0m, p99 61.6m, max 699m — and the 699m run
-# had 127 turns while a healthy 151m run had 781. Duration alone does not
-# separate them; duration WITH turns does (turns-per-minute), which is why both
+# failures with different remedies. A long run with few turns is stalled; a long
+# run with many turns is working. Duration alone does not separate them; duration
+# WITH turns does (turns-per-minute), which is why both
 # fields are emitted and neither is emitted as a verdict. This records the
 # fact. Nothing here bounds, kills, or warns — see the header: PURE
 # INSTRUMENTATION. A bound argued from one incident is a guess; this is the
@@ -128,9 +147,10 @@ done
 START_TS=""; ROLE=""
 HEAD_READ="$(head -c "${AI_DLC_PROBE_HEAD_BYTES:-262144}" "$TRANSCRIPT" 2>/dev/null)"
 if [ -n "$HEAD_READ" ]; then
-  START_TS="$(printf '%s' "$HEAD_READ" | jq -Rsc '
-      [ (split("\n") | map(fromjson?))[] | .timestamp // empty ] | first // ""
-    ' 2>/dev/null | tr -d '"')"
+  # NO `START_TS` IS TAKEN FROM THIS WINDOW, AND THAT IS THE FIX -- see the
+  # dispatch-instant block below for the measurement. The head read stays because
+  # `ROLE`'s fallback still needs it; the START it used to yield was the SESSION's
+  # first record, which is not this teammate's start and never was.
   # Role binding: `.claude/team-roles/<role>.md` as dispatched (Rule 19).
   #
   # SCOPED TO THE DISPATCH PROMPT — the first `type:"user"` record — and NOT to
@@ -186,6 +206,41 @@ if [ -n "${AGENT_ID:-}" ] && [ "${AGENT_ID}" != "unknown" ] && [ -r "$SPAWN_LEDG
       | sort_by(.name | length) | last | .role // empty
     ' "$SPAWN_LEDGER" 2>/dev/null || true)"
   [ -n "${LEDGER_ROLE:-}" ] && ROLE="$LEDGER_ROLE"
+
+  # AND THE DISPATCH INSTANT, FROM THE SAME ROW, FOR THE SAME REASON.
+  #
+  # `START_TS` above is the first timestamp in the head of `$TRANSCRIPT`. At
+  # SubagentStop `.transcript_path` is the LEAD's transcript, so that timestamp is
+  # the SESSION's first record -- one constant shared by every teammate the session
+  # ever dispatches. `duration_s` was therefore SESSION AGE, not teammate runtime.
+  #
+  # Measured on the reference consumer, one sprint, 145 rows carrying the field:
+  # the implied starts (`ts - duration_s`) collapse onto THREE values, and those
+  # three are the sprint's three harness sessions -- 59 rows on the first, 4 on the
+  # second, 82 on the third, with 48 sharing a single minute. The control is that
+  # the `ts` values themselves scatter across 118 distinct minutes over the same
+  # 145 rows, so the collapse is in the derived start and not in the sampling.
+  # Corpus-wide the field summed to 16,808 agent-hours across a 743-hour window --
+  # 22.6 teammates running without pause for the whole month, against a measured
+  # peak concurrency of five to eleven for minutes at a time.
+  #
+  # The ledger row is the fix because it is the one record written BEFORE the
+  # teammate runs, from the actual tool input, by the guard -- the same reason the
+  # block above prefers it for `role`. Its `ts` IS the dispatch instant.
+  #
+  # A teammate with no ledger row gets NO duration rather than the old value: a
+  # session-age number is a wrong answer that reads as a real one, and this field
+  # exists to be summed. `null` is already the field's declared absent form.
+  LEDGER_TS="$(jq -rs --arg id "$AGENT_ID" '
+      [ .[]
+        | select(type == "object")
+        | select((.name // "") != "")
+        | select((.ts // "") != "")
+        | select(.name as $n | $id | contains($n))
+      ]
+      | sort_by(.name | length) | last | .ts // empty
+    ' "$SPAWN_LEDGER" 2>/dev/null || true)"
+  START_TS="${LEDGER_TS:-}"
 fi
 
 # Seconds, not milliseconds: the spread being measured runs minutes to hours,
