@@ -21,10 +21,33 @@ chk() { [ "$2" = "$3" ] && ok "$1" || bad "$1 -- expected '$3', got '$2'"; }
 OUT="$PROJ/_bmad-output/subagent-context.jsonl"
 
 # fire <project> <transcript> [agent_id]
+#
+# THE SEEDS ARE TEAMMATE-SHAPED; PRODUCTION IS NOT, AND THAT GAP IS WHY EVERY
+# ASSERTION BELOW PASSED THROUGHOUT THE LIFE OF THE DEFECT THIS FIXTURE EXISTS TO
+# CATCH. `.transcript_path` at SubagentStop is the LEAD's transcript. The teammate's
+# own file lives one level down at `<lead-minus-.jsonl>/subagents/agent-<id>.jsonl`.
+# Handing the hook a teammate-shaped file directly tests a layout that never occurs,
+# so `duration_s == 7200` here certified exactly the assumption the hook violated.
+#
+# So: build the real two-file shape. The seed becomes the TEAMMATE's transcript, and
+# the path handed to the hook is a LEAD stub carrying deliberately impossible values
+# -- a timestamp years earlier, a usage figure no teammate reaches, and a model name
+# that appears nowhere else. If the hook ever reads the lead again, it does not fail
+# subtly: every field assertion below moves at once and names the value it got.
 fire() {
-  jq -nc --arg t "$WORKDIR/$2" --arg a "${3:-adversary-s291-p1}" \
+  _f_proj="$1"; _f_seed="$2"; _f_aid="${3:-adversary-s291-p1}"
+  _f_lead="$WORKDIR/lead-${_f_aid}.jsonl"
+  {
+    printf '%s\n' '{"timestamp":"2020-01-01T00:00:00Z","isSidechain":false,"type":"user","message":{"role":"user","content":"lead session opener"}}'
+    printf '%s\n' '{"timestamp":"2020-01-01T09:59:59Z","isSidechain":false,"type":"assistant","message":{"model":"LEAD-MODEL-MUST-NOT-BE-RECORDED","usage":{"input_tokens":999000,"cache_read_input_tokens":0,"output_tokens":0}}}'
+  } > "$_f_lead"
+  if [ -f "$WORKDIR/$_f_seed" ]; then
+    mkdir -p "$WORKDIR/lead-${_f_aid}/subagents"
+    cp "$WORKDIR/$_f_seed" "$WORKDIR/lead-${_f_aid}/subagents/agent-${_f_aid}.jsonl"
+  fi
+  jq -nc --arg t "$_f_lead" --arg a "$_f_aid" \
     '{transcript_path:$t, agent_id:$a, hook_event_name:"SubagentStop"}' \
-    | CLAUDE_PROJECT_DIR="$1" bash "$HOOK" 2>/dev/null
+    | CLAUDE_PROJECT_DIR="$_f_proj" bash "$HOOK" 2>/dev/null
 }
 last() { tail -1 "$OUT" 2>/dev/null | jq -r "$1 // empty" 2>/dev/null; }
 reset() { rm -f "$OUT"; }

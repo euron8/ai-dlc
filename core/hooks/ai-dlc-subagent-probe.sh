@@ -81,6 +81,42 @@ TRANSCRIPT="$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/nu
 AGENT_ID="$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null || true)"
 [ -n "$AGENT_ID" ] || AGENT_ID="unknown"
 
+# `.transcript_path` AT SubagentStop IS THE LEAD'S TRANSCRIPT, NOT THE TEAMMATE'S,
+# AND EVERY FIELD BELOW IS DERIVED FROM IT. This hook read the wrong file from the
+# day the fields shipped, so `peak_tokens`, `turns`, `compactions`, `model`,
+# `end_ts`, `duration_s` and the `role` fallback were all the LEAD's.
+#
+# Measured against teammates' own transcripts on the reference consumer, eight
+# rows, every field wrong: peak over-reported 25-160% (381571 recorded against a
+# true 147024), `compactions` reporting 1 where the truth is 0, `model` wrong on
+# seven of eight -- every one an opus teammate recorded as sonnet -- and duration
+# inflated 16-40x. Two party seats dispatched in the same wave share a peak of
+# 386006 TO THE BYTE, which is the lead's. Corpus-wide the probe's `model` agrees
+# with the teammate's true arm on 41.2% of rows, against 89.7% for the dispatch
+# guard's `model_bound` -- below chance on a two-class problem where opus is the
+# majority.
+#
+# The damage is not academic. The hook exists to answer "how close do teammates
+# get to the threshold, and do any of them compact" -- and it never measured that
+# once: its recorded peak maximum EXCEEDS the very threshold it is read against,
+# because that is the lead crossing its own ceiling, while true teammate peaks sit
+# well below it and true `compactions` is zero.
+#
+# The teammate's own transcript does exist, one level down, named by `agent_id`:
+#   <project-slug>/<session-uuid>/subagents/agent-<agent_id>.jsonl
+# `docs/backlog.md` already records that layout. Sampled 400 of them: 400 carry
+# `"isSidechain":true` and NONE carries `false`, the exact complement of the
+# session files at the top level, which are 233 false and 0 true.
+#
+# ABSENT MEANS NO ROW, NEVER THE LEAD'S NUMBERS. At SubagentStop the teammate has
+# just finished, so its transcript is present; a retrospective scan resolves fewer
+# because these files are reaped. Writing the lead's reading into this file is the
+# defect being fixed, and a row of nothing is already recorded elsewhere -- the
+# spawn ledger is the dispatch record, this file is the telemetry record.
+LEAD_TRANSCRIPT="$TRANSCRIPT"
+TRANSCRIPT="${LEAD_TRANSCRIPT%.jsonl}/subagents/agent-${AGENT_ID}.jsonl"
+[ -r "$TRANSCRIPT" ] || exit 0
+
 # Bounded reverse tail-read, same discipline as ai-dlc-context-sensor.sh: a
 # teammate transcript can be megabytes and a single tool_result line can be huge,
 # so escalate the window rather than reading the whole file. Unlike the sensor we
@@ -147,10 +183,13 @@ done
 START_TS=""; ROLE=""
 HEAD_READ="$(head -c "${AI_DLC_PROBE_HEAD_BYTES:-262144}" "$TRANSCRIPT" 2>/dev/null)"
 if [ -n "$HEAD_READ" ]; then
-  # NO `START_TS` IS TAKEN FROM THIS WINDOW, AND THAT IS THE FIX -- see the
-  # dispatch-instant block below for the measurement. The head read stays because
-  # `ROLE`'s fallback still needs it; the START it used to yield was the SESSION's
-  # first record, which is not this teammate's start and never was.
+  # This IS the teammate's first record now, because `$TRANSCRIPT` was repointed at
+  # the teammate's own file above. On the lead's transcript it was the SESSION's
+  # first record -- one constant shared by every teammate the session dispatched,
+  # which is what made `duration_s` session age.
+  START_TS="$(printf '%s' "$HEAD_READ" | jq -Rsc '
+      [ (split("\n") | map(fromjson?))[] | .timestamp // empty ] | first // ""
+    ' 2>/dev/null | tr -d '"')"
   # Role binding: `.claude/team-roles/<role>.md` as dispatched (Rule 19).
   #
   # SCOPED TO THE DISPATCH PROMPT — the first `type:"user"` record — and NOT to
@@ -207,40 +246,6 @@ if [ -n "${AGENT_ID:-}" ] && [ "${AGENT_ID}" != "unknown" ] && [ -r "$SPAWN_LEDG
     ' "$SPAWN_LEDGER" 2>/dev/null || true)"
   [ -n "${LEDGER_ROLE:-}" ] && ROLE="$LEDGER_ROLE"
 
-  # AND THE DISPATCH INSTANT, FROM THE SAME ROW, FOR THE SAME REASON.
-  #
-  # `START_TS` above is the first timestamp in the head of `$TRANSCRIPT`. At
-  # SubagentStop `.transcript_path` is the LEAD's transcript, so that timestamp is
-  # the SESSION's first record -- one constant shared by every teammate the session
-  # ever dispatches. `duration_s` was therefore SESSION AGE, not teammate runtime.
-  #
-  # Measured on the reference consumer, one sprint, 145 rows carrying the field:
-  # the implied starts (`ts - duration_s`) collapse onto THREE values, and those
-  # three are the sprint's three harness sessions -- 59 rows on the first, 4 on the
-  # second, 82 on the third, with 48 sharing a single minute. The control is that
-  # the `ts` values themselves scatter across 118 distinct minutes over the same
-  # 145 rows, so the collapse is in the derived start and not in the sampling.
-  # Corpus-wide the field summed to 16,808 agent-hours across a 743-hour window --
-  # 22.6 teammates running without pause for the whole month, against a measured
-  # peak concurrency of five to eleven for minutes at a time.
-  #
-  # The ledger row is the fix because it is the one record written BEFORE the
-  # teammate runs, from the actual tool input, by the guard -- the same reason the
-  # block above prefers it for `role`. Its `ts` IS the dispatch instant.
-  #
-  # A teammate with no ledger row gets NO duration rather than the old value: a
-  # session-age number is a wrong answer that reads as a real one, and this field
-  # exists to be summed. `null` is already the field's declared absent form.
-  LEDGER_TS="$(jq -rs --arg id "$AGENT_ID" '
-      [ .[]
-        | select(type == "object")
-        | select((.name // "") != "")
-        | select((.ts // "") != "")
-        | select(.name as $n | $id | contains($n))
-      ]
-      | sort_by(.name | length) | last | .ts // empty
-    ' "$SPAWN_LEDGER" 2>/dev/null || true)"
-  START_TS="${LEDGER_TS:-}"
 fi
 
 # Seconds, not milliseconds: the spread being measured runs minutes to hours,
