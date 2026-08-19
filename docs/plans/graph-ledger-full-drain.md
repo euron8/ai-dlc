@@ -377,7 +377,8 @@ passes, and 7 version-less rows correctly do not trip it.
 **START HERE ON A FRESH SESSION — the numbered next actions.**
 
 **ACTION ZERO: THE PULL IS DONE, APPLIED AND CLOSED. PHASES 0–2, 4 AND 5 ARE COMPLETE. PHASE 3
-BATCHES 1–5 ARE MERGED AND PUSHED, AS `v0.374.0` THROUGH `v0.378.0`. THE HOLD IS RELEASED AND
+BATCHES 1–6 ARE MERGED AND PUSHED, AS `v0.374.0` THROUGH `v0.379.0`, EACH ONE ANNOTATED AND
+ROTATED. THE HOLD IS RELEASED AND
 PUSHING WORKS. **ONE DECISION IS WAITING ON THE OPERATOR — the exit-code question in `BL-078`** —
 and it blocks nothing: batch 6 can be cut without it. CUT BATCH 6 — RE-DERIVE THE WORKLIST FIRST;
 EVERY BATCH SECTION BELOW IS NOW A RECORD, NOT AN INSTRUCTION.**
@@ -540,7 +541,53 @@ against a 7000 ceiling**, and the profile is not stable run to run. Two invarian
 batch (`I92`, `I93`). That fixture fails the push in BOTH directions, so the next arm should be
 written for forks or the ceiling revisited.
 
-### BATCH 6 — the `validate-provenance-block.sh` pair
+### BATCH 6 — COMPLETE, SHIPPED AS `v0.379.0`. A RECORD, NOT AN INSTRUCTION. DO NOT RE-DO IT.
+
+Merge `944085a1`, close `c31f52f4`. `BL-056` and `BL-060` annotated
+`**LANDED (v0.379.0, verified 944085a1).**` and ROTATED — live 64 → 62, archive 18 → 20, 82 ids
+either side with none in both, `--check` PASSing before `--apply`, and `backlog-reverify` back to
+**0 CLOSE-CANDIDATE** against a live-entry control. Gate run the way the hook runs it on the
+settled tree AND again through the push: **15 phases, 15 PASS, 0 FAIL, 161 fixtures ok, 0 FAIL,
+0 SKIP**, exit read inside the hook's own shell both times, four changed fixtures read BY NAME
+against an impossible-name control returning nothing. Both `PC-` ids resolve in the pushed commit
+MESSAGE against an impossible-id control of 0.
+
+**BOTH ENTRIES WERE ROUGHLY THREE TIMES WIDER THAN FILED, AND THE UNFILED HALF WAS THE WORSE
+DIRECTION BOTH TIMES.** `BL-060` filed a false STRAY; underneath it was a **FALSE PASS** — a genuine
+stray reached through a home prefix, opened, read, and then excused, because the home match was a
+raw-string prefix test. `BL-056` filed one flagless call site; the fifth coupled site was a sprint
+extraction reading the BASENAME, so a path-only migration yields a template carrying **ZERO** legacy
+path sites that fires, filters, and then skips every step green.
+
+**A MUTANT CAN BE SILENTLY DISARMED BY THE FIX IT GUARDS, AND IT GOES GREEN AT THE MOMENT IT STOPS
+WORKING.** A substring mutant was keyed on a home substring that existed only because of where a
+checkout SAT; root-relative normalisation is exactly the step that removes it. Post-fix the mutation
+flipped no verdict and the arm would have reported a kill it did not earn. Key a mutant on a
+LOCATION, never on a spelling. Found only by RUNNING the fix.
+
+**ELEVEN RECEIPT DEFECTS IN SIX BATCHES.** `BL-056`'s arm 1 was an unconditional `exit 0` on a
+substring — satisfied by a COMMENT, by a second call site with the defective one untouched, and by
+`--require-skill` placed BEFORE the path (which makes the invocation exit 2 on every PR) — while
+REJECTING a correct fix with the path hoisted into a variable. `BL-060`'s negative control was
+spelled RELATIVELY while the defect is about ABSOLUTE spelling, so both remedies making `--strays`
+blind to absolute paths scored as FIXED.
+
+**A GATE RUN WHILE ANOTHER PROCESS WRITES THE TREE IS NOT A MEASUREMENT.** The first gate exited 1
+with `crosswalk-home-declaration` FAIL under the pool; it passes standalone and passed on the
+settled re-run. That fixture mirrors `core-manifest.md`, which this batch modified. The harness
+notification for that run said **"exit code 0"** — the backgrounded wrapper's status — while
+`GATE_EXIT=1`. Freeze every hand before the gate.
+
+**FILED THIS BATCH**: `BL-081` (`receipt_absent_subjects` fabricating a consumer-relative path from
+a `$DIST` rev-path, which refused a correct close on v0.378.0's own release), `BL-082` (case-variant
+spellings, where every remedy opens a FALSE PASS on a case-sensitive consumer), `BL-083` (the
+root-marker rule is distribution-shaped — an installed tree carries **0** `VERSION` files at any
+depth, and the correct two-layout resolver already exists in the validators).
+
+**AWAITING THE OPERATOR**: the exit-code question in `BL-078`, and the durable rule channel at
+**43517/43520**, which has no room for the two rules this batch produced.
+
+### BATCH 6 — THE ORIGINAL SCOPING NOTE, SUPERSEDED BY THE RECORD ABOVE
 
 `BL-056` and `BL-060` were named as the obvious batch 6 at batch 5's scoping and neither has been
 re-derived since. **Re-run `bash scripts/backlog-reverify.sh` before believing any count above.**
