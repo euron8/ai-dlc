@@ -132,6 +132,36 @@ fire "$PROJ" crowded.jsonl gate-adjudicator-s291-story >/dev/null
 chk "appends one row per teammate (never truncates)" "$(wc -l < "$OUT" | tr -d ' ')" "2"
 chk "  and keeps them distinct" "$(last .agent_id)" "gate-adjudicator-s291-story"
 
+# --- 7a. THE SIGNATURE: two teammates under ONE lead must not collapse -------
+# Every other assertion in this file depends on something a fix could change --
+# the seeded poison values, the path shape, a field name. This one depends on
+# nothing: two teammates are two teammates, so two rows must differ. When the hook
+# read the LEAD's transcript both rows came back byte-identical, and that identity
+# is the defect's fingerprint -- two party seats dispatched in one wave shared
+# peak_tokens 386006 TO THE BYTE on the reference consumer.
+#
+# It catches a failure the poison pill above cannot: a hook that resolves the path
+# correctly but collapses both teammates onto one reading passes every field
+# assertion here and fails only this one. Note the two fires share ONE lead file,
+# which is what section 7 does not do -- it uses a separate transcript per teammate,
+# so identical readings there would be a seeding artifact rather than a defect.
+reset
+SIGLEAD="$WORKDIR/siglead.jsonl"
+printf '%s\n' '{"timestamp":"2020-01-01T00:00:00Z","isSidechain":false,"type":"user","message":{"role":"user","content":"one lead, two teammates"}}' > "$SIGLEAD"
+mkdir -p "$WORKDIR/siglead/subagents"
+cp "$WORKDIR/calm.jsonl"    "$WORKDIR/siglead/subagents/agent-sig-calm.jsonl"
+cp "$WORKDIR/crowded.jsonl" "$WORKDIR/siglead/subagents/agent-sig-crowded.jsonl"
+for _sig_a in sig-calm sig-crowded; do
+  jq -nc --arg t "$SIGLEAD" --arg a "$_sig_a" \
+    '{transcript_path:$t, agent_id:$a, hook_event_name:"SubagentStop"}' \
+    > "$WORKDIR/sig-payload.json"
+  CLAUDE_PROJECT_DIR="$PROJ" bash "$HOOK" < "$WORKDIR/sig-payload.json" 2>/dev/null
+done
+chk "7a two teammates under ONE lead: both rows written" \
+  "$(wc -l < "$OUT" | tr -d ' ')" "2"
+chk "  and their readings DIFFER -- the defect's fingerprint" \
+  "$(jq -r '[.peak_tokens,.turns]|@csv' "$OUT" 2>/dev/null | sort -u | wc -l | tr -d ' ')" "2"
+
 # --- 8. role provenance: the dispatch-time ledger outranks the transcript ----
 # Check 22 compares a spawn's bound model against its role file, so a WRONG role
 # is not a cosmetic defect — it points the comparison at the wrong pin. The prose
