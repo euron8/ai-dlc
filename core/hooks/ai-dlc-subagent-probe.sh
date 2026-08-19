@@ -109,8 +109,19 @@ AGENT_ID="$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null || tru
 # The damage is not academic. The hook exists to answer "how close do teammates
 # get to the threshold, and do any of them compact" -- and it never measured that
 # once: its recorded peak maximum EXCEEDS the very threshold it is read against,
-# because that is the lead crossing its own ceiling, while true teammate peaks sit
-# well below it and true `compactions` is zero.
+# because that is the lead crossing its own ceiling.
+#
+# DO NOT PUT THE TEAMMATE DISTRIBUTION IN THIS COMMENT. An earlier revision of this
+# paragraph asserted that "true teammate peaks sit well below it and true
+# `compactions` is zero", generalised from the eight-row sample above. Scanned over
+# the reference consumer's whole teammate corpus with the predicates below, 1086
+# files: 32 exceed the 287000 threshold and 16 actually compacted, max peak 372633 --
+# ABOVE it. Control in the same scan: one teammate reads peak 0, so the scan can
+# return a zero, and an independent raw grep finds the boundary token in 18 files.
+# Both halves of that sentence were false, in a comment telling the reader the
+# `autoCompactWindow` question was settled at zero. It is not settled by a comment.
+# Derive it by running that scan, which is why these numbers sit in a warning about
+# a retracted claim and not in a claim of their own.
 #
 # The teammate's own transcript does exist, one level down, named by `agent_id`:
 #   <project-slug>/<session-uuid>/subagents/agent-<agent_id>.jsonl
@@ -123,6 +134,19 @@ AGENT_ID="$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null || tru
 # because these files are reaped. Writing the lead's reading into this file is the
 # defect being fixed, and a row of nothing is already recorded elsewhere -- the
 # spawn ledger is the dispatch record, this file is the telemetry record.
+#
+# THIS NARROWS THE POPULATION, AND IT IS DECLARED HERE BECAUSE NO READER WOULD
+# OTHERWISE SEE IT. Two `agent_id` shapes reach this hook: a NAMED dispatch
+# (`adev-s303-4-<hex>`), which the dispatch guard also records in the spawn ledger,
+# and a BARE one (`a` + 16 hex) from an unnamed Explore / Plan / general-purpose /
+# fork spawn. Measured on the reference consumer, restricted to rows inside a session
+# window whose `subagents/` directory still exists so that reaping is controlled for:
+# named resolve 557 of 557, bare 40 of 646, and bare rows join the spawn ledger 0 of
+# 717 against 557 of 562 for named. So from `v:2` this file records NAMED TEAMMATES,
+# and the bare class -- 56% of recent `v:1` rows -- stops appearing. Nothing of value
+# is lost, because every `v:1` value that class carried was the lead's. But a reader
+# comparing row counts across the stamp will see a large drop, and THIS is it, not a
+# regression.
 LEAD_TRANSCRIPT="$TRANSCRIPT"
 TRANSCRIPT="${LEAD_TRANSCRIPT%.jsonl}/subagents/agent-${AGENT_ID}.jsonl"
 [ -r "$TRANSCRIPT" ] || exit 0

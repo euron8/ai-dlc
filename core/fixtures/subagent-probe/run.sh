@@ -41,15 +41,32 @@ fire() {
     printf '%s\n' '{"timestamp":"2020-01-01T00:00:00Z","isSidechain":false,"type":"user","message":{"role":"user","content":"lead session opener"}}'
     printf '%s\n' '{"timestamp":"2020-01-01T09:59:59Z","isSidechain":false,"type":"assistant","message":{"model":"LEAD-MODEL-MUST-NOT-BE-RECORDED","usage":{"input_tokens":999000,"cache_read_input_tokens":0,"output_tokens":0}}}'
   } > "$_f_lead"
+  # AN ABSENT SEED MUST PRODUCE AN ABSENT TEAMMATE FILE, AND FOR A WHILE IT DID NOT.
+  # `fire` reuses one lead path per agent_id, so a fire with a missing seed inherited
+  # the subagents directory left by the PREVIOUS fire under the same id. The
+  # "unreadable transcript" arm below then ran against a transcript that was very much
+  # readable -- the prior seed's -- and passed because that seed happened to carry no
+  # usage. It was the "no usage" arm asserted twice, and a hook that silently fell back
+  # to the LEAD when the teammate file was missing went green through both.
   if [ -f "$WORKDIR/$_f_seed" ]; then
     mkdir -p "$WORKDIR/lead-${_f_aid}/subagents"
     cp "$WORKDIR/$_f_seed" "$WORKDIR/lead-${_f_aid}/subagents/agent-${_f_aid}.jsonl"
+  else
+    rm -rf "$WORKDIR/lead-${_f_aid}"
   fi
   jq -nc --arg t "$_f_lead" --arg a "$_f_aid" \
     '{transcript_path:$t, agent_id:$a, hook_event_name:"SubagentStop"}' \
     | CLAUDE_PROJECT_DIR="$_f_proj" bash "$HOOK" 2>/dev/null
 }
 last() { tail -1 "$OUT" 2>/dev/null | jq -r "$1 // empty" 2>/dev/null; }
+# `last` CANNOT SEE THE DIFFERENCE BETWEEN null AND "", which is the distinction two
+# arms below are named after. In jq the empty string is TRUTHY, so `"" // empty` yields
+# `""` while `null // empty` yields nothing, and both reach the shell as a blank string.
+# A hook emitting `"role":""` where it should emit `"role":null` passed this file. Drop
+# the `// empty` and jq renders the null as the literal `null`, which is a value the
+# comparison can hold. The hook's contract is that a null means "not observed, never
+# zero", and a downstream `select(.role != null)` behaves differently on `""`.
+raw() { tail -1 "$OUT" 2>/dev/null | jq -r "$1" 2>/dev/null; }
 reset() { rm -f "$OUT"; }
 
 echo "subagent-probe"
@@ -107,8 +124,49 @@ chk "  turns-per-hour is the discriminator, not duration alone" "$(last .turns)"
 # These two prove the null is a reading, not the only thing the code can emit.
 reset
 fire "$PROJ" calm.jsonl >/dev/null
-chk "duration_s is null when the transcript carries no timestamps (not 0)" "$(last .duration_s)" ""
-chk "  role is null when no binding was dispatched (not empty-string)" "$(last .role)" ""
+chk "duration_s is null when the transcript carries no timestamps (not 0, not \"\")" "$(raw .duration_s)" "null"
+chk "  role is null when no binding was dispatched (not empty-string)" "$(raw .role)" "null"
+
+# --- 4c. THE FIELDS THE SEEDS ABOVE CANNOT REACH -----------------------------
+# Each of these four was a mutation that changed a recorded number and left this file
+# green, because every seed above happens to agree under both the right behaviour and
+# the wrong one. A seed set that cannot separate two semantics asserts neither.
+
+# peak is a SUM of three usage components and only two of them were ever non-zero.
+reset
+fire "$PROJ" cachecreate.jsonl >/dev/null
+chk "peak SUMS all three usage components (cache_creation is non-zero only here)" \
+  "$(last .peak_tokens)" "251000"
+
+# The tail window escalates 1MB -> 4MB -> 16MB, and no seed had ever entered the loop.
+# Losing the escalation loses the whole ROW, so assert the row and its peak together.
+reset
+fire "$PROJ" hugetail.jsonl >/dev/null
+chk "  the escalation seed actually exceeds the default window (else the arm below is vacuous)" \
+  "$([ "$(wc -c < "$WORKDIR/hugetail.jsonl" | tr -d ' ')" -gt 1048576 ] && echo over || echo under)" "over"
+chk "escalates the tail window when the last 1MB holds no complete record" \
+  "$(last .peak_tokens)" "77000"
+
+# The dispatched role must beat role prose carried by an EARLIER non-user record. 8a
+# covers the poison INSIDE the dispatch record; this covers the poison ahead of it.
+reset
+fire "$PROJ" prefixrole.jsonl >/dev/null
+chk "role comes from the DISPATCH PROMPT, not from an earlier non-user record" \
+  "$(last .role)" "qa"
+
+# model is the arm the teammate FINISHED on, not the one it started on.
+reset
+fire "$PROJ" multimodel.jsonl >/dev/null
+chk "model is the LAST assistant arm, not the first" "$(last .model)" "claude-opus-4-8"
+
+# A negative duration is not a reading. Two redundant guards stand between this seed
+# and a row; this arm is the only subject either of them has.
+reset
+fire "$PROJ" backwards.jsonl >/dev/null
+chk "a negative duration is never recorded (end_ts before start_ts)" \
+  "$(raw .duration_s)" "null"
+chk "  and the row is still written -- the teammate is not dropped for it" \
+  "$(last .peak_tokens)" "64000"
 
 # --- 5. silence cases --------------------------------------------------------
 reset
@@ -118,6 +176,34 @@ chk "transcript with no usage writes nothing" "$([ -f "$OUT" ] && echo present |
 reset
 fire "$PROJ" does-not-exist.jsonl >/dev/null
 chk "unreadable transcript writes nothing (fail-open)" "$([ -f "$OUT" ] && echo present || echo absent)" "absent"
+
+# --- 5b. ABSENT MEANS NO ROW, NEVER THE LEAD'S NUMBERS -----------------------
+# The arm above is ABSENCE-shaped: "no file" is what a hook that never ran also
+# produces, so on its own it cannot tell a working fail-open from a dead program. This
+# one is PRESENCE-shaped and PAIRED -- one assertion carrying both halves, so it cannot
+# be satisfied by silence. Absent teammate file: no row, and in particular not the
+# lead's. Same lead, same agent_id, teammate file now PRESENT: a row, with the
+# teammate's own model.
+#
+# It owns the failure the arm above cannot express. A hook that falls back to the lead
+# when the teammate file is missing --
+#     [ -r "$TRANSCRIPT" ] || TRANSCRIPT="$LEAD_TRANSCRIPT"
+# -- writes the lead's model and the lead's 999000 peak into the telemetry for every
+# teammate whose transcript was reaped, which is the same wrong-file defect this whole
+# fixture exists to catch. The failure message NAMES the poison it found, so the arm
+# reports which file was read rather than only that a count moved.
+reset
+fire "$PROJ" does-not-exist.jsonl absent-probe-s291 >/dev/null
+if [ -f "$OUT" ]; then _absent="$(jq -r '.model' "$OUT" 2>/dev/null | tr '\n' ',')"; else _absent="no-row"; fi
+fire "$PROJ" calm.jsonl absent-probe-s291 >/dev/null
+# The positive half reads peak_tokens rather than model DELIBERATELY. A paired arm needs
+# a positive conjunct or silence satisfies it, but whichever field it reads it entangles
+# with -- and read on `model` this arm also failed under a mutant that only blanked the
+# model, which is a case the model arm above already owns. peak_tokens on the calm seed
+# is touched by fewer mutants, so the overlap is smallest here.
+chk "5b absent teammate file records NOTHING, and the same fire WITH the file present records a row" \
+  "absent=${_absent} present=$(last .peak_tokens)" \
+  "absent=no-row present=60000"
 
 # --- 6. activation gate: no pipeline -> total no-op --------------------------
 rm -f "$NOPIPE/_bmad-output/subagent-context.jsonl"
