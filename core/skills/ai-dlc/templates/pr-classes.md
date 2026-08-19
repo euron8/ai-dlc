@@ -98,8 +98,9 @@ read it.
 
     class: retro
     paths: ^docs/retro/s[0-9]+/retro\.md$
+    capture: sprint ^docs/retro/s([0-9]+)/retro\.md$
     validator: scripts/ai-dlc/validate-retro-evidence.sh
-    validator: scripts/ai-dlc/validate-provenance-block.sh docs/retro/
+    validator: scripts/ai-dlc/validate-provenance-block.sh docs/retro/s{sprint}/retro.md --require-skill bmad-party-mode
 
     class: provenance-bearing
     added: SKILL_INVOCATION_PROVENANCE v1

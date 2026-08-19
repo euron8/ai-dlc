@@ -825,7 +825,8 @@ core-layer-immutability).
    If the audit was clean, skip.
 
 2. **Provenance block verification.** Run
-   `scripts/ai-dlc/validate-provenance-block.sh` — it owns the block's shape and
+   `scripts/ai-dlc/validate-provenance-block.sh docs/retro/s<N>/retro.md --require-skill bmad-party-mode`
+   — it owns the block's shape and
    is also its own CI step. MUST exit 0. **Never invent a `tool_use_id`:**
    if it is not accessible in the conversation (common after compact),
    write `tool_use_id: NOT_ACCESSIBLE`. A fabricated id is a forged block.

@@ -8,15 +8,15 @@ name: Validate Retro Compliance
 # /bmad-party-mode Skill invocation, or that omit the transcript + SHA
 # citation, fail PR checks.
 #
-# Triggers on any PR that modifies docs/retro/sprint-*.md OR adds/modifies
+# Triggers on any PR that modifies docs/retro/s<N>/retro.md OR adds/modifies
 # any file under _bmad-output/party-mode-transcripts/. Extracts the sprint
-# number from the touched retro path and runs validate-mandatory-rules.sh
-# against it.
+# number from the DIRECTORY component of the touched retro path and runs
+# validate-mandatory-rules.sh against it.
 
 on:
   pull_request:
     paths:
-      - "docs/retro/sprint-*.md"
+      - "docs/retro/s*/retro.md"
       - "_bmad-output/party-mode-transcripts/**"
       - "scripts/ai-dlc/validate-retro-evidence.sh"
       - "scripts/validate-cycle-commits.sh"
@@ -43,7 +43,7 @@ jobs:
           base_sha="${{ github.event.pull_request.base.sha }}"
           head_sha="${{ github.event.pull_request.head.sha }}"
           git fetch --no-tags --depth=50 origin "$base_sha" "$head_sha" || true
-          changed=$(git diff --name-only "$base_sha" "$head_sha" -- 'docs/retro/sprint-*.md' || true)
+          changed=$(git diff --name-only "$base_sha" "$head_sha" -- 'docs/retro/s*/retro.md' || true)
           if [[ -z "$changed" ]]; then
               echo "No retro files touched. Skipping."
               echo "sprint=" >> "$GITHUB_OUTPUT"
@@ -51,7 +51,10 @@ jobs:
           fi
           sprint=""
           for f in $changed; do
-              n=$(basename "$f" .md | sed 's/^sprint-//')
+              # The sprint number lives in the DIRECTORY component, not the basename.
+              # Anchored ^...$ on purpose: an unanchored capture leaves the unmatched
+              # remainder in the value, silently.
+              n=$(printf '%s\n' "$f" | sed -n 's#^docs/retro/s\([0-9][0-9]*\)/retro\.md$#\1#p')
               if [[ "$n" =~ ^[0-9]+$ ]]; then
                   if [[ -z "$sprint" ]]; then
                       sprint="$n"
@@ -61,6 +64,13 @@ jobs:
                   fi
               fi
           done
+          if [[ -z "$sprint" ]]; then
+              echo "ERROR: retro files changed but no sprint number could be extracted." >&2
+              echo "       Changed: $changed" >&2
+              echo "       Expected docs/retro/s<N>/retro.md. Every step below is guarded on" >&2
+              echo "       this value, so an empty extraction would skip the whole gate green." >&2
+              exit 1
+          fi
           echo "sprint=$sprint" >> "$GITHUB_OUTPUT"
           echo "Sprint number resolved: $sprint"
 
@@ -80,4 +90,4 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x scripts/ai-dlc/validate-provenance-block.sh
-          ./scripts/ai-dlc/validate-provenance-block.sh "docs/retro/sprint-${{ steps.sprint.outputs.sprint }}.md"
+          ./scripts/ai-dlc/validate-provenance-block.sh "docs/retro/s${{ steps.sprint.outputs.sprint }}/retro.md" --require-skill bmad-party-mode

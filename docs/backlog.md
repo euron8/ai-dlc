@@ -1939,7 +1939,7 @@ Discharges the consumer entry `PC-S297-PROVENANCE-FLAGLESS-FAIL-OPEN-BY-DEFAULT`
 line 1136.
 
 
-verify: sh y=core/ci-templates/validate-retro-compliance.yml; l=$(grep -F 'validate-provenance-block.sh' "$y" | grep -F 'docs/retro/'); [ -n "$l" ] || exit 1; grep -q -- '--require-skill' <<<"$l" && exit 0; grep -q -- 'docs/retro/sprint-' <<<"$l" || exit 0; d=$(mktemp -d); mkdir -p "$d/docs/retro"; printf '# Retro\n' > "$d/docs/retro/sprint-303.md"; bash core/scripts/validate-provenance-block.sh "$d/docs/retro/sprint-303.md" >/dev/null 2>&1; rc=$?; rm -rf "$d"; [ "$rc" -eq 1 ]
+verify: sh Y=core/ci-templates/validate-retro-compliance.yml; V=$(grep -ls -- '--require-skill' core/scripts/*.sh 2>/dev/null | xargs -I{} grep -ls 'RETRO_PATH_RE' {} 2>/dev/null | head -1); [ -f "$Y" ] && [ -n "$V" ] || exit 1; B=$(basename "$V"); V="$PWD/$V"; D=$(mktemp -d); W="$D/w"; mkdir -p "$W/scripts/ai-dlc" "$W/docs/retro/s303" "$W/docs/notes"; printf '#!/bin/sh\nprintf "%%s\\t" "$@" >> "$ARGV_LOG"; printf "\\n" >> "$ARGV_LOG"; exit 0\n' > "$W/scripts/ai-dlc/$B"; chmod +x "$W/scripts/ai-dlc/$B"; printf '%s\n' 'import re,sys' 'src=open(sys.argv[1]).read(); tok=sys.argv[3]; out=[]' 'for chunk in re.split(r"\n(?=      - name: )", src):' '    if tok not in chunk: continue' '    m=re.search(r"\n +run: \|\n(.*)", chunk, re.S)' '    if not m: continue' '    ind=None; lines=[]' '    for ln in m.group(1).split("\n"):' '        if not ln.strip(): lines.append(""); continue' '        cur=len(ln)-len(ln.lstrip())' '        if ind is None: ind=cur' '        if cur<ind: break' '        lines.append(ln[ind:])' '    out.append(re.sub(r"\$\{\{[^}]*\}\}","303","\n".join(lines)))' 'sys.exit(3) if not out else open(sys.argv[2],"w").write("\n".join(out))' > "$D/x.py"; python3 "$D/x.py" "$Y" "$W/steps.sh" "$B" 2>/dev/null; [ -s "$W/steps.sh" ] || { rm -rf "$D"; exit 1; }; ARGV_LOG="$D/argv"; : > "$ARGV_LOG"; export ARGV_LOG; ( cd "$W" && sh ./steps.sh ) >/dev/null 2>&1; grep -q 'docs/retro/' "$ARGV_LOG" || { rm -rf "$D"; exit 1; }; printf '# n\n' > "$W/docs/notes/x.md"; bash "$V" "$W/docs/notes/x.md" >/dev/null 2>&1 || { rm -rf "$D"; exit 1; }; printf '# r\n' > "$W/docs/retro/s303/retro.md"; bash "$V" "$W/docs/retro/s303/retro.md" >/dev/null 2>&1; [ $? -eq 1 ] || { rm -rf "$D"; exit 1; }; BAD="$D/bad"; while IFS= read -r line; do case "$line" in *docs/retro/*) ;; *) continue ;; esac; OIFS="$IFS"; IFS=$'\t'; set -f; set -- $line; set +f; IFS="$OIFS"; for p in "$@"; do case "$p" in docs/retro/*) mkdir -p "$W/$(dirname "$p")"; printf '# b\n' > "$W/$p" ;; esac; done; ( cd "$W" && bash "$V" "$@" ) >/dev/null 2>&1; [ $? -eq 0 ] && : > "$BAD"; for p in "$@"; do case "$p" in docs/retro/*) rm -f "$W/$p" ;; esac; done; ( cd "$W" && bash "$V" "$@" ) >/dev/null 2>&1; [ $? -eq 2 ] && : > "$BAD"; done < "$ARGV_LOG"; R=1; [ -e "$BAD" ] || R=0; rm -rf "$D"; exit "$R"
 ## BL-057
 
 **A LOCKED_REQUIREMENTS block whose bullets are pure agent fabrication scores byte-identically to
@@ -2030,7 +2030,7 @@ Discharges the consumer entry `PC-S312-STRAYS-DOES-NOT-NORMALIZE-AN-ABSOLUTE-PAT
 line 2492.
 
 
-verify: sh D=$(mktemp -d); P="$D/proj"; mkdir -p "$P/.claude/schemas" "$P/docs/retro" "$P/server"; cp core/schemas/provenance-block.json "$P/.claude/schemas/"; python3 -c "import json,sys;S=json.load(open(sys.argv[1]));e=S['envelope'];b=(e['open']+chr(10)+'skill: '+S['stray_scan']['party_mode_skills'][0]+chr(10)+'invoked_at: 2026-07-28T09:00:00Z'+chr(10)+'mode: subagent'+chr(10)+e['close']+chr(10));open(sys.argv[2],'w').write(b);open(sys.argv[3],'w').write(b)" "$P/.claude/schemas/provenance-block.json" "$P/docs/retro/probe.md" "$P/server/stray.md"; V="$PWD/core/scripts/validate-provenance-block.sh"; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays docs/retro/probe.md >/dev/null 2>&1; R1=$?; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays server/stray.md >/dev/null 2>&1; R2=$?; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays "$P/docs/retro/probe.md" >/dev/null 2>&1; R3=$?; rm -rf "$D"; [ "$R1" = 0 ] && [ "$R2" = 1 ] && [ "$R3" = 0 ]
+verify: sh D=$(mktemp -d); P="$D/proj"; mkdir -p "$P/.claude/schemas" "$P/docs/retro" "$P/server"; cp core/schemas/provenance-block.json "$P/.claude/schemas/"; python3 -c "import json,sys;S=json.load(open(sys.argv[1]));e=S['envelope'];b=(e['open']+chr(10)+'skill: '+S['stray_scan']['party_mode_skills'][0]+chr(10)+'invoked_at: 2026-07-28T09:00:00Z'+chr(10)+'mode: subagent'+chr(10)+e['close']+chr(10));open(sys.argv[2],'w').write(b);open(sys.argv[3],'w').write(b)" "$P/.claude/schemas/provenance-block.json" "$P/docs/retro/probe.md" "$P/server/stray.md"; V=$(grep -ls -- '--strays' core/scripts/*.sh 2>/dev/null | xargs -I{} grep -ls 'party_mode_skills' {} 2>/dev/null | head -1); [ -n "$V" ] || { rm -rf "$D"; exit 1; }; V="$PWD/$V"; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays docs/retro/probe.md >/dev/null 2>&1; R1=$?; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays server/stray.md >/dev/null 2>&1; R2=$?; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays "$P/docs/retro/probe.md" >/dev/null 2>&1; R3=$?; AI_DLC_PROJECT_ROOT="$P" bash "$V" --strays "$P/server/stray.md" >/dev/null 2>&1; R4=$?; rm -rf "$D"; [ "$R1" = 0 ] && [ "$R2" = 1 ] && [ "$R3" = 0 ] && [ "$R4" = 1 ]
 ## BL-062
 
 **`--check-evidence` discovers its gate log by basename alone and reads an ARCHIVED sprint's copy,
@@ -3030,3 +3030,69 @@ a corpus where the vacuous road was measured at roughly one story in five.
 
 
 verify: sh M=core/skills/ai-dlc/enforcement-map.yaml; V=core/scripts/validate-locked-anchor.sh; F=core/fixtures/check-3b-locked-anchor; [ -f "$M" ] && [ -r "$V" ] && [ -d "$F" ] || exit 9; ( cd "$F" && bash "../../../$V" bad-story.md >/dev/null 2>&1 ); b=$?; ( cd "$F" && bash "../../../$V" nothing-verified-story.md >/dev/null 2>&1 ); n=$?; [ "$b" -eq 1 ] || exit 9; [ "$n" -eq 0 ] || exit 9; ROW=$(awk '/- site: gate-validation.md Check 3b$/{on=1} on{print; c++} on && c>=6{exit}' "$M"); [ -n "$ROW" ] || exit 9; printf '%s' "$ROW" | grep -qiE 'EXAMINED NOTHING|empty.subject|empty_subject'
+## BL-081
+
+**`receipt_absent_subjects()` fabricates a consumer-relative path out of a substring of a
+distribution-relative rev-path, and downgrades the close that receipt had just earned.**
+`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:521` scans the receipt text with
+`grep -oE '(\$CONSUMER/)?(docs|_bmad-output|scripts|\.claude)/[A-Za-z0-9_./-]+'`. That expression
+is **unanchored**, so the token `core/scripts/validate-steering-budget.sh` — which the receipt uses
+only as `git -C "$DIST" show "$THEIRS:core/scripts/…"`, a rev-path resolved inside the distribution
+clone — yields the substring `scripts/validate-steering-budget.sh`. `:520` then tests that against
+`$CONSUMER`, finds nothing, and `:1031` routes the receipt's non-zero exit to NEEDS-REVIEW instead
+of CLOSE-CANDIDATE. The fabricated token names a file that exists in **neither** tree: `install.sh`
+splits `core/scripts/<x>` to `scripts/ai-dlc/<x>`, which is the two-layout rule invariant **I33**
+exists to enforce, so `scripts/<x>` is the one spelling that is wrong on both sides of the
+boundary. The guard is the code that checks whether a receipt's subject moved, and it is reading a
+path the receipt never asked any consumer about.
+
+**Measured on the shipping function, driven against a synthetic consumer carrying both layouts.**
+With `scripts/ai-dlc/validate-steering-budget.sh` present and bare
+`scripts/validate-steering-budget.sh` absent, the function returns
+` scripts/validate-steering-budget.sh` for a receipt whose only path token is a `$THEIRS:`
+rev-path, and ` docs/no-such-file.md` for a receipt naming a genuinely absent consumer path. The
+first is the defect; the second is the behaviour that must survive any fix.
+
+**It cost a correct close on the release that is in the consumer's tree now.**
+`PC-S297-VALIDATE-STEERING-BUDGET-TRANSCRIPT-PROVENANCE`'s receipt asserts the validator prints the
+transcript it read. Extracted and run at `6011d94^` it exits **0**; at `6011d94` — the v0.378.0
+release commit that landed exactly that change — it exits **1**, the two blobs differing
+(`fe66c6d0…` → `d7f2febc…`). Non-zero is CLOSE-CANDIDATE. The consumer's 0.373.0 → 0.378.0
+reconcile instead recorded `NEEDS-REVIEW … the receipt exited 1, but consumer-relative path(s) it
+names DO NOT EXIST: scripts/validate-steering-budget.sh`, and the entry is still live. The same
+report carries that entry's `NAMED-UPSTREAM` row at v0.378.0 and calls the pair *"the highest-value
+pair the tool prints"* — the signal was complete and the guard talked the session out of it.
+
+**Scope: three of the twelve findings the guard emits on the reference consumer are of this class,
+and the other nine are a different problem that must not be swept in with it.** Over all **69**
+`verify: sh` receipts in that consumer's live and archive ledgers, driven through the shipping
+function with `CONSUMER` set to the real consumer root: **14** receipts contain a `$THEIRS:`/`$BASE:`
+rev-path, **12** emit an absent-subject finding, and **3** of those findings vanish when rev-paths
+are stripped from the input. Those three are wholly fabricated. The remaining nine name a bare
+`scripts/<x>.sh` token, and **9 of the 10 distinct tokens exist at `scripts/ai-dlc/<x>.sh`**
+(control in the same invocation: an impossible `scripts/NO-SUCH-CONTROL.sh` absent in both layouts;
+one token genuinely absent in both). Those receipts really are mis-anchored, and the guard is right
+to say so — the report's own "Re-anchor at `scripts/ai-dlc/…`" is the correct remedy for them.
+**The two classes need different fixes**: this entry is the one where no consumer path was ever
+named, and a fix that merely taught the guard the `scripts/` → `scripts/ai-dlc/` mapping would
+close the wrong nine and leave this one reporting.
+
+**Why the receipt is the receipt.** A substring anchor on the regex is unusable — the fix will
+quote the old expression in the comment recording what it replaced, which is this file's habit at
+`:1011-1017`. The receipt therefore `sed`-extracts the shipping `receipt_absent_subjects()` and
+drives it against a `mktemp` consumer holding both layouts, so the two-layout split is exercised
+rather than described. Its decisive arm is a **negative control**: a receipt asserting only that the
+fabricated token disappears is satisfied by deleting the guard, and deleting the guard is the
+destructive remedy this class invites, so the receipt additionally requires that a genuinely absent
+`$CONSUMER/docs/…` path is **still** reported. Measured against both destructive mutants — the
+`[ -e … ]` accumulation line deleted, and the whole function stubbed to `return 0` — the receipt
+exits **1** in each, while the correct fix exits **0** and the unfixed tree exits **1**. A sanity
+arm exits **9** (which reverify reports as STILL-LIVE, the safe direction) if the extraction
+captured no function body, proven live by renaming the definition.
+
+Found while adjudicating whether the v0.378.0 close channel reached the reference consumer. It did:
+all four `PC-` ids produced `NAMED-UPSTREAM` rows. This is the one entry among them whose close was
+mechanically earned and mechanically refused.
+
+
+verify: sh L=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; f=$(sed -n "/^receipt_absent_subjects() {/,/^}/p" "$L"); case "$f" in *"receipt_absent_subjects()"*) : ;; *) exit 9 ;; esac; d=$(mktemp -d); c="$d/c"; mkdir -p "$c/scripts/ai-dlc" "$c/docs"; printf "x\n" > "$c/scripts/ai-dlc/validate-steering-budget.sh"; [ -e "$c/scripts/ai-dlc/validate-steering-budget.sh" ] || { rm -rf "$d"; exit 9; }; if [ -e "$c/scripts/validate-steering-budget.sh" ] || [ -e "$c/docs/no-such-file.md" ]; then rm -rf "$d"; exit 9; fi; a=$(CONSUMER="$c" bash -c "$f"'; receipt_absent_subjects "$1"' _ 'git -C "$DIST" show "$THEIRS:core/scripts/validate-steering-budget.sh" > "$d/v.sh"'); b=$(CONSUMER="$c" bash -c "$f"'; receipt_absent_subjects "$1"' _ 'grep -q probe "$CONSUMER/docs/no-such-file.md"'); rm -rf "$d"; [ -z "$a" ] && [ -n "$b" ]

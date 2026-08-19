@@ -276,6 +276,7 @@ core_manifest:
   - fixtures/artifact-derivations/**
   - fixtures/architecture-index-cell-escaping/**
   - fixtures/prepush-worktree-env-scrub/**
+  - fixtures/retro-compliance-workflow/**
 
 machinery:
   - core-manifest.md
