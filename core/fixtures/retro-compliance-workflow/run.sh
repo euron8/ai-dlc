@@ -140,7 +140,8 @@ if [ -z "$WF" ] || [ -z "$VP" ] || [ -z "$SCHEMA" ]; then
     [ -z "$SCHEMA" ] && miss="$miss provenance-block.json"
     for a in "A1 trigger paths" "A2 changed-set filter + sprint extraction" \
              "A3 blockless retro rejected" "A4 transcript_path required" \
-             "A5 caller declares its own requirement" "A6 compliant retro accepted"; do
+             "A5 caller declares its own requirement" "A6 compliant retro accepted" \
+             "A7 empty extraction hard-fails"; do
         skip "$a — subject absent in both layouts:$miss"
     done
     exit 0
@@ -152,7 +153,7 @@ trap 'rm -rf "$WORK"' EXIT
 SEED="$WORK/seed"
 mkdir -p "$SEED"
 if ! bash "$HERE/seed.sh" "$SEED" >/dev/null 2>"$WORK/seed.err"; then
-    for a in "A1" "A2" "A3" "A4" "A5" "A6"; do
+    for a in "A1" "A2" "A3" "A4" "A5" "A6" "A7"; do
         skip "$a — seed unavailable: $(tr -d '\n' < "$WORK/seed.err")"
     done
     exit 0
@@ -203,11 +204,21 @@ build_repo() {
         git add -A && git commit -qm base
         git rev-parse HEAD > .base
     ) >/dev/null 2>&1 || return 1
-    if [ "$layout" = both ]; then
+    case "$layout" in
+      both)
         cp "$doc" "$dir/docs/retro/sprint-302.md"
-    fi
-    mkdir -p "$dir/docs/retro/s302"
-    cp "$doc" "$dir/docs/retro/s302/retro.md"
+        mkdir -p "$dir/docs/retro/s302"; cp "$doc" "$dir/docs/retro/s302/retro.md" ;;
+      migrated-only)
+        mkdir -p "$dir/docs/retro/s302"; cp "$doc" "$dir/docs/retro/s302/retro.md" ;;
+      nested-only)
+        # Matches the git PATHSPEC at the changed-set filter and NOT the anchored extraction,
+        # because git's fnmatch has no FNM_PATHNAME so `*` crosses `/`. This is the only tree
+        # shape that reaches the hard-fail branch.
+        mkdir -p "$dir/docs/retro/s302/sub"; cp "$doc" "$dir/docs/retro/s302/sub/retro.md" ;;
+      no-retro)
+        cp "$doc" "$dir/docs/architecture.md" ;;
+      *) return 1 ;;
+    esac
     (
         cd "$dir" || exit 1
         git add -A && git commit -qm head
@@ -234,6 +245,25 @@ drive_sprint() {
     : > "$WORK/gh_out"
     ( cd "$repo" && GITHUB_OUTPUT="$WORK/gh_out" bash "$body" ) >/dev/null 2>&1
     sed -n 's/^sprint=//p' "$WORK/gh_out" | tail -n 1
+}
+
+# drive_sprint_rc <workflow> <repo> — as drive_sprint, but prints "<rc>|<sprint>". A2 reads
+# the VALUE; A7 reads the CODE, because the hard-fail branch's whole contribution is turning
+# an exit 0 that wrote an empty sprint into an exit 1 that wrote nothing. Those two states
+# carry the same sprint value and only the code tells them apart.
+drive_sprint_rc() {
+    local wf="$1" repo="$2" body="$WORK/body.rc.$$" shas base head rc
+    python3 "$PY" "$wf" run "Determine sprint number" > "$body" 2>"$WORK/x.err" || { echo "99|"; return; }
+    shas="$(cat "$repo/.base") $(cat "$repo/.head")"
+    base="${shas%% *}"; head="${shas##* }"
+    if [ "$(subst "$body" '${{ github.event.pull_request.base.sha }}' "$base")" != OK ] ||
+       [ "$(subst "$body" '${{ github.event.pull_request.head.sha }}' "$head")" != OK ]; then
+        echo "98|"; return
+    fi
+    : > "$WORK/gh_out.rc"
+    ( cd "$repo" && GITHUB_OUTPUT="$WORK/gh_out.rc" bash "$body" ) >/dev/null 2>&1
+    rc=$?
+    echo "${rc}|$(sed -n 's/^sprint=//p' "$WORK/gh_out.rc" | tail -n 1)"
 }
 
 # drive_provenance <workflow> <repo> <sprint> — runs the provenance step body with the
@@ -317,6 +347,38 @@ arms() {
         esac
     done
 
+    # --- A7 the empty extraction is a HARD FAIL, and only when retros changed --
+    # A2 asserts that a canonical retro RESOLVES. It cannot see what happens when one does
+    # not, and that is the whole silent-skip class: a step that writes `sprint=` and exits 0
+    # leaves every later step disabled by its own `if:` and the job reports green. A7 owns
+    # the branch that turns that into an exit 1.
+    #
+    # BOTH DIRECTIONS IN ONE ARM, because a guard widened to "sprint is empty" regardless of
+    # whether anything changed would fire on every PR in the repository. The no-retro tree is
+    # the near-miss and it must stay quiet.
+    local rr rq rc7 sp7
+    rr="$WORK/${tag}.nested"; rm -rf "$rr"
+    if ! build_repo "$rr" "$SEED/docs/blockless.md" nested-only "$VPUSE" >/dev/null; then
+        echo "A7:fail:could not build the nested repo (fixture broken, not a finding)"
+    else
+        r="$(drive_sprint_rc "$wf" "$rr")"
+        rc7="${r%%|*}"; sp7="${r#*|}"
+        if [ "$rc7" = 99 ] || [ "$rc7" = 98 ]; then
+            echo "A7:fail:the sprint step could not be driven (rc=$rc7) — harness, not subject"
+        elif [ "$rc7" = 0 ]; then
+            echo "A7:fail:a changed retro that yields NO sprint exited 0 (wrote sprint='$sp7') — every later step is disabled by its own if: and the job reports green having validated nothing"
+        else
+            rq="$WORK/${tag}.noretro"; rm -rf "$rq"
+            if ! build_repo "$rq" "$SEED/docs/blockless.md" no-retro "$VPUSE" >/dev/null; then
+                echo "A7:fail:could not build the no-retro repo (fixture broken, not a finding)"
+            else
+                r="$(drive_sprint_rc "$wf" "$rq")"
+                if [ "${r%%|*}" = 0 ]; then echo "A7:pass"
+                else echo "A7:fail:NEAR-MISS — a PR touching no retro at all exited ${r%%|*}; the hard-fail is keyed on the empty sprint rather than on retro files having changed, so it fires on every unrelated PR"; fi
+            fi
+        fi
+    fi
+
     # --- A5 the caller declares its own requirement ----------------------------
     # MUTANT: is_retro forced false in a COPY of the validator. Everything the flag would
     # reach via RETRO_PATH_RE is now gone, so only an explicit --require-skill can reject.
@@ -371,11 +433,11 @@ n_fix_fail="$(grep -c ':fail:' <<<"$probe_fixed")"
 # Offender direction: the synthetic legacy workflow must trip A1 A2 A3 A4 A5 — each named,
 # because "five findings" would also be satisfied by five copies of one finding.
 p_missing=""
-for id in A1 A2 A3 A4 A5; do
+for id in A1 A2 A3 A4 A5 A7; do
     grep -q "^${id}:fail:" <<<"$probe_legacy" || p_missing="$p_missing $id"
 done
 if [ -z "$p_missing" ]; then
-    ok "P1 self-probe: the synthetic LEGACY workflow trips A1 A2 A3 A4 A5 by name"
+    ok "P1 self-probe: the synthetic LEGACY workflow trips A1 A2 A3 A4 A5 A7 by name"
 else
     bad "P1 self-probe: the synthetic LEGACY workflow did NOT trip$p_missing — those arms cannot fire, and a clean corpus run would mean nothing"
     sed 's/^/        /' <<<"$probe_legacy" >&2
@@ -384,11 +446,11 @@ fi
 # what a run that emitted nothing looks like, so the arm also requires all six verdict
 # tokens to be PRESENT. Measured twice elsewhere in this repo, a control asserting only
 # rc=0-and-no-findings passes against a subject replaced by `exit 0`.
-n_fix_tok="$(grep -c '^A[1-6]:' <<<"$probe_fixed")"
-if [ "$n_fix_fail" = 0 ] && [ "$n_fix_tok" = 6 ]; then
-    ok "P2 self-probe: the synthetic FIXED workflow trips nothing, and all 6 arms reported"
+n_fix_tok="$(grep -c '^A[1-7]:' <<<"$probe_fixed")"
+if [ "$n_fix_fail" = 0 ] && [ "$n_fix_tok" = 7 ]; then
+    ok "P2 self-probe: the synthetic FIXED workflow trips nothing, and all 7 arms reported"
 elif [ "$n_fix_tok" != 6 ]; then
-    bad "P2 self-probe: only $n_fix_tok of 6 arms produced a verdict — arms went silent, which is not the same as passing"
+    bad "P2 self-probe: only $n_fix_tok of 7 arms produced a verdict — arms went silent, which is not the same as passing"
 else
     bad "P2 self-probe: the synthetic FIXED workflow tripped $n_fix_fail arm(s); the arms are over-broad"
     grep ':fail:' <<<"$probe_fixed" | sed 's/^/        /' >&2
@@ -410,11 +472,11 @@ fi
 : > "$WORK/empty.yml"
 m1="$(arms "$WORK/empty.yml" m1)"
 m1_missing=""
-for id in A1 A2 A3 A4 A5 A6; do
+for id in A1 A2 A3 A4 A5 A6 A7; do
     grep -q "^${id}:fail:" <<<"$m1" || m1_missing="$m1_missing $id"
 done
 if [ -z "$m1_missing" ]; then
-    ok "M1 mutant: an EMPTY workflow file trips all six arms — no arm treats a subject that says nothing as a subject that is clean"
+    ok "M1 mutant: an EMPTY workflow file trips all seven arms — no arm treats a subject that says nothing as a subject that is clean"
 else
     bad "M1 mutant: an EMPTY workflow file left$m1_missing quiet — those arms would report ok for a workflow that does not exist"
 fi
@@ -476,9 +538,10 @@ name_of() {
         A4) echo "A4 a party-mode block with no transcript_path is REJECTED" ;;
         A5) echo "A5 the step declares its own requirement (is_retro disarmed)" ;;
         A6) echo "A6 a compliant retro is ACCEPTED" ;;
+        A7) echo "A7 a changed retro that yields no sprint HARD-FAILS, and an unrelated PR does not" ;;
     esac
 }
-for id in A1 A2 A3 A4 A5 A6; do
+for id in A1 A2 A3 A4 A5 A6 A7; do
     line="$(grep "^${id}:" <<<"$real" | head -n 1)"
     if [ -z "$line" ]; then
         bad "$(name_of "$id") — the arm produced no verdict at all"

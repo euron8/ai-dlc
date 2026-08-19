@@ -1939,7 +1939,7 @@ Discharges the consumer entry `PC-S297-PROVENANCE-FLAGLESS-FAIL-OPEN-BY-DEFAULT`
 line 1136.
 
 
-verify: sh python3 core/fixtures/retro-compliance-workflow/verify-bl056.py "$PWD"
+verify: sh python3 scripts/verify-backlog-bl056.py "$PWD"
 ## BL-057
 
 **A LOCKED_REQUIREMENTS block whose bullets are pure agent fabrication scores byte-identically to
@@ -3145,3 +3145,48 @@ not report a verdict.
 
 
 verify: sh V=core/scripts/validate-provenance-block.sh; [ -f "$V" ] || exit 9; R="$PWD"; D=$(mktemp -d); P="$D/proj"; mkdir -p "$P/.claude/schemas" "$P/docs/retro" "$P/server"; cp core/schemas/provenance-block.json "$P/.claude/schemas/" || { rm -rf "$D"; exit 9; }; printf '0.0.0\n' > "$P/VERSION"; python3 -c 'import json,sys;S=json.load(open(sys.argv[1]));e=S["envelope"];b=e["open"]+chr(10)+"skill: "+S["stray_scan"]["party_mode_skills"][0]+chr(10)+"invoked_at: 2026-07-28T09:00:00Z"+chr(10)+"mode: subagent"+chr(10)+e["close"]+chr(10);[open(p,"w").write(b) for p in sys.argv[2:]]' "$P/.claude/schemas/provenance-block.json" "$P/docs/retro/probe.md" "$P/server/stray.md" || { rm -rf "$D"; exit 9; }; [ -e "$P/DOCS" ] || { rm -rf "$D"; exit 9; }; ( cd "$P" && AI_DLC_PROJECT_ROOT="$P" bash "$R/$V" --strays server/stray.md >/dev/null 2>&1 ); c=$?; ( cd "$P" && AI_DLC_PROJECT_ROOT="$P" bash "$R/$V" --strays docs/retro/probe.md >/dev/null 2>&1 ); a=$?; ( cd "$P" && AI_DLC_PROJECT_ROOT="$P" bash "$R/$V" --strays DOCS/retro/probe.md >/dev/null 2>&1 ); b=$?; rm -rf "$D"; [ "$c" = 1 ] || exit 9; [ "$a" = 0 ] || exit 9; [ "$b" = 0 ]
+## BL-083
+
+**`verification-discipline.md` prescribes a root marker that does not exist in one of the two
+layouts, so a fixture that follows the rule exactly cannot resolve its root on a consumer — and
+the fixtures that work do so by the idiom the same rule forbids.** The rule reads *"Resolve the
+repo root by walking up for a marker. Never count `..` hops... Walk up for `VERSION`."* Measured:
+`scripts/install.sh` into an empty directory produces a tree with **0** `VERSION` files at any
+depth, while the distribution root carries one — control in the same invocation, the installed
+`tests/fixtures/<name>` directory IS present, so the install ran and the absence is real.
+
+**The correct two-layout resolver already exists in this repo and the rule restates a different
+one.** `core/scripts/validate-provenance-block.sh:98` is `ai_dlc_resolve_root()`, which walks up
+for `.git` OR `.claude` OR `core/skills/ai-dlc` — a marker set satisfied in BOTH layouts, and
+inlined into every validator that needs it with a comment recording why duplication is correct
+there. So this is not a missing mechanism; it is a rule that restates one and has drifted from
+it, which is the failure `mechanism-design.md` names as *"a rule that RESTATES a mechanism drifts
+tighter than the mechanism, invisibly."*
+
+**It was found the way it bites: by a fixture author following the rule.** A new fixture's first
+draft walked up for `VERSION`, passed every distribution test, and then failed **all six arms** on
+a tree built by `install.sh` with *"no VERSION marker … cannot resolve its own tree"*. It now
+walks up for its own home — `<root>/core/fixtures/<name>` or `<root>/tests/fixtures/<name>` — which
+is self-anchoring and additionally names the layout it resolved.
+
+**The population is not one file.** **16** of the shipped fixture `run.sh` files test a `/VERSION`
+marker (control in the same invocation: **155** carry the token `FIXTURE`, so the grep reaches the
+corpus). Most other shipped fixtures resolve by counting three `..` hops — which happens to be
+correct in both layouts and is the exact idiom the rule prohibits. So the rule is currently
+obeyed by the files that break on a consumer and disobeyed by the files that work, which is the
+strongest available evidence that the rule rather than the fixtures is what is wrong.
+
+**Scope note, deliberately narrow.** The 16 is a FLOOR and an approximation: it counts files
+testing the literal marker path, and a fixture that resolves correctly by another route may still
+appear. The entry's claim is the divergence and the consumer-side zero, both of which are exact;
+the 16 is offered as a population size to re-derive, not as a defect count.
+
+**Why the receipt is two-armed.** Two different fixes are legitimate and a one-sided anchor would
+go unsatisfiable when the other is taken: `install.sh` could land a root marker in the consumer
+layout, or the rule and its followers could move to the marker set the shipped validators already
+use. It closes on either, and it drives a real `install.sh` rather than reading the rule's prose,
+because text about a program is not the program. It exits 9 — STILL-LIVE, the safe direction — if
+the install did not produce a tree, so a broken probe cannot read as a fix.
+
+
+verify: sh R="$PWD"; D=$(mktemp -d) || exit 9; mkdir -p "$D/_bmad"; bash scripts/install.sh "$D" >/dev/null 2>&1; [ -d "$D/tests/fixtures" ] || { rm -rf "$D"; exit 9; }; n=$(find "$D" -name VERSION -type f 2>/dev/null | wc -l | tr -d ' '); rm -rf "$D"; [ "$n" -gt 0 ] && exit 0; c=$(grep -l '/VERSION"' "$R"/core/fixtures/*/run.sh 2>/dev/null | wc -l | tr -d ' '); k=$(grep -l 'FIXTURE' "$R"/core/fixtures/*/run.sh 2>/dev/null | wc -l | tr -d ' '); [ "$k" -gt 0 ] || exit 9; [ "$c" -eq 0 ]

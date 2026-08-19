@@ -66,7 +66,9 @@ Y = os.path.join(TD, yc[0])
 src = open(Y, errors="replace").read()
 SCH = os.path.join(root, "core/schemas/provenance-block.json")
 if not os.path.exists(SCH):
-    sys.exit(3)
+    # 4, not 3: 3 already means "root unresolved". A duplicated code is a failure that cannot
+    # name itself, which is the whole reason these are distinct.
+    sys.exit(4)
 
 # --- the discriminating artifact, built from the schema, never restated ---
 S = json.load(open(SCH))

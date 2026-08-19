@@ -149,6 +149,13 @@ jobs:
                   sprint="$n"
               fi
           done
+          # A7's subject. Present in the FIXED probe only: the legacy probe writes an empty
+          # sprint here and exits 0, which is the silent-skip the arm exists to reject.
+          if [[ -z "$sprint" ]]; then
+              echo "ERROR: retro files changed but no sprint number could be extracted." >&2
+              echo "       Changed: $changed" >&2
+              exit 1
+          fi
           echo "sprint=$sprint" >> "$GITHUB_OUTPUT"
 
       - name: Run validate-provenance-block.sh on retro doc
