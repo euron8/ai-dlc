@@ -376,10 +376,63 @@ passes, and 7 version-less rows correctly do not trip it.
 
 **START HERE ON A FRESH SESSION — the numbered next actions.**
 
-**ACTION ZERO: BATCH 7 IS CUT AND HALF-BUILT ON AN UNMERGED BRANCH. FINISH IT — DO NOT RESTART IT.**
+**ACTION ZERO: BATCH 7 IS COMPLETE, MERGED AND PUSHED AS `v0.380.0`. `v0.381.0` FOLLOWED IT. THE
+NEXT BATCH IS BATCH 8 AND `BL-079` IS ITS SUBJECT.**
 
-Branch **`v0.380.0-probe-duration`**, cut from `origin/main` at `f8abde7e`. Four commits, tree clean,
-nothing pushed. `git log --oneline origin/main..HEAD` is the manifest.
+**`v0.380.0`** — merge `5b1fea28`, release `56fbd212`, close+rotate `b2df8e00`. `BL-084` filed and
+`BL-073` closed, both annotated `**LANDED (v0.380.0, verified 5b1fea28).**` and rotated: live
+**63 → 61**, archive **20 → 22**, 83 ids either side with none in both, `--check` PASSing before
+`--apply`, and `backlog-reverify` reporting **0 CLOSE-CANDIDATE** afterwards against an
+impossible-id control of 0. Gate run the way the hook runs it: exit **0** read directly, **15 of
+15** phases PASS, **161 ok / 0 FAIL**, `subagent-probe` read BY NAME against an impossible-name
+control of 0 and a second present-name control of 1, in the same invocation.
+
+**THREE INDEPENDENT HANDS ON SCOPE, FIXTURE AND RECEIPT FOUND DEFECTS IN WORK ALREADY COMMITTED ON
+THE BRANCH, AND TWO OF THE THREE WOULD HAVE SHIPPED.** That is now 4 of 4 batches where the
+independent-hand mechanism paid.
+
+- **The fixture's one arm for "teammate transcript missing" was reading the PREVIOUS fire's file.**
+  `fire()` skipped the copy when a seed was absent but never removed what an earlier fire left
+  under the same `agent_id`, so the absent case was never absent. Measured: a hook mutated to fall
+  silently BACK to the lead transcript produced output **byte-identical** to the fixed hook's
+  across the whole fixture. Repaired, and that mutant now fails two arms by name.
+- **Two claims the branch had already committed were FALSE.** The hook header asserted true
+  teammate peaks sit well below the threshold and true `compactions` is zero — scanned over all
+  1086 teammate transcripts with the hook's own predicates, **32 exceed the 287000 threshold and 16
+  actually compacted**, max peak **372633**, above it. And lead-arm agreement was published as
+  `99.1%` against a re-derived **95.9%** (1248/1301). Both retracted in place.
+- **`131 of 395 adversary spawns ran sonnet despite an opus pin` is refuted outright** — 140
+  adversary spawns resolve to a teammate transcript, all opus-pinned, all ran opus, and 395 is not
+  constructible from that ledger. The investigation doc is corrected; the correction makes its
+  surviving hypothesis stronger, not weaker.
+
+**A GREEN FIXTURE TALLY IS STILL NOT THE GATE VERDICT, AND IT BIT AGAIN HERE.** The first gate run
+exited **1** with the fixture suite PASSing: the failing phase was `no dead doc refs`, because the
+branch's corrected hook header cited `docs/backlog.md`, which `install.sh` does not ship — a dead
+pointer in every consumer tree, aimed at an entry the same release closes. `origin/main`'s copy
+carries 0, so the branch introduced it. **Tabulate every `── phase` header against PASS/FAIL and
+read the gate's own exit; the tally answers a different question.**
+
+**`validate-release-version.sh` FIRED ON A REAL DEFECT TOO.** An earlier commit's subject carried
+`v0.380.0` while `VERSION` at that commit was `0.379.0`. Predicate A caught it. When rewriting
+history to fix a subject, assert the rebuilt tree is byte-identical to the original **and** that
+the comparison is not vacuous — `git diff --quiet OLD HEAD` alongside a diff against `OLD~1` that
+must be non-empty.
+
+**`v0.381.0` — THE FIXTURE SUITE RAN IN FULL ON EVERY PUSH AND TWO SKIP INSTRUMENTS WERE THE
+CAUSE.** Merge `ef2ece74`, release `785920f8`. `apply_readset_skip`'s no-change branch printed
+*"nothing changed … (the content key owns that case)"* while `fixture_suite_step` printed
+*"content key changed — running the suite"*; each deferred to the other and neither ever skipped.
+Measured on the close-and-rotate commit above, which touched only two files under `docs/` — a top
+the content key's own `EXCLUDE` block already lists — **all 161 fixtures ran**, with both sentences
+four lines apart in the log. The read-set manifest now owns the decision, and its universe gains
+untracked-but-unignored files, without which the new skip would run over a tree nobody hashed.
+`readset-skip` goes 21 → 26 assertions with two mutants keyed on the emitting line. Proof it works:
+the very next push selected **29 of 161 fixtures and skipped 132**.
+
+**THE OPERATOR'S STANDING DIRECTION AT THE END OF THIS SESSION: STOP MEASURING THE PIPELINE, BUILD
+THE FIX.** The wall-clock investigation is closed at `docs/v0.380.0-pipeline-cost-investigation.md`
+with its eleven refutations plus the plateau exit. Do not re-run any of them.
 
 **WHAT BATCH 7 BECAME, AND WHY IT IS NOT `BL-079`.** The operator directed that the consumer's
 wall-clock problem be diagnosed before the next batch. That investigation is COMPLETE and its record
