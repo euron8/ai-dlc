@@ -34,6 +34,67 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.381.0] — 2026-08-19
+
+The fixture suite ran in full on every push, including pushes that changed nothing any fixture
+reads. Two skip instruments deadlocked; the finer one now decides.
+
+### Fixed
+
+- **The read-set map and the content key each deferred to the other, so neither ever skipped.**
+  `apply_readset_skip`'s no-change branch printed *"nothing changed since the last verified state
+  — running all N (the content key owns that case)"* while `fixture_suite_step` printed
+  *"content key changed — running the suite"*. Measured on this repo, on a commit touching only
+  `docs/backlog.md` and `docs/backlog.archive.md` — a top the content key's own `EXCLUDE` block
+  already lists — **all 161 fixtures ran**, and the log carries both sentences four lines apart.
+
+  **The read-set manifest is the finer instrument and it now owns the decision.** It hashes file
+  CONTENT over every tracked file, every path any read-set names and (see below) every
+  untracked-but-unignored file, minus the exclusion set both instruments derive from **one**
+  declaration — `readset_excluded_re` lifts it from `suite-content-key.sh`'s `EXCLUDE_BEGIN`
+  block rather than restating it. The content key is a declared SUPERSET that also hashes
+  directory entries, so it moves for reasons that cannot reach a fixture verdict. An empty
+  `.changed` now skips the whole suite instead of deferring.
+
+  **A whole-suite skip cannot be signalled by an empty fixture list**, because an empty list is a
+  hard FAIL in `run_fixtures` by design — *"an empty suite passes every assertion it never made"*.
+  It is carried by its own flag and returns before the count is taken, leaving both the verified
+  state and the content key untouched: nothing ran, so nothing new is blessed.
+
+  **It fails closed in the direction that matters.** Every guard ahead of that branch —
+  `AI_DLC_FIXTURE_NO_SKIP=1`, no map, no verified-state record, an unhashable tree — already
+  returns "run everything" before reaching it, so a broken or uninstalled instrument cannot
+  produce this skip.
+
+- **`readset_manifest` hashed the COMMITTED tree while fixtures read the WORKING one.** `git
+  ls-files` alone answers "what am I pushing"; a fixture reads what is on disk. An untracked,
+  unignored file is in no read-set by construction, so `.changed` could be empty while such a
+  file sat beside a fixture's subject — and with the skip above, the suite would have been
+  skipped over a tree nobody hashed. The universe now includes `git ls-files --others
+  --exclude-standard`. Git-ignored paths stay out for the reason the content key already states
+  about the same set: hooks and fixtures write into them *while the suite runs*, so a universe
+  covering them would differ from itself across the very run it is keyed on.
+
+- **Both changes land in both pre-push hooks byte-identically**, as **I66** requires:
+  `readset_manifest` and `apply_readset_skip` are `cmp`-identical across `.githooks/pre-push` and
+  `core/git-hooks/pre-push` before and after. `run_fixtures` differs between them by layout
+  (`core/fixtures/` against `tests/fixtures/`) and did so at `origin/main` too — 137 differing
+  lines there, unchanged by this release.
+
+### Changed
+
+- `core/fixtures/readset-skip/run.sh` gains three arms and two mutants, 21 assertions → **26**.
+  The existing `.git`-scope arm scored on the announce text and on the selected set; a whole-suite
+  skip leaves the selected set at the FULL list, so that arm could not have distinguished
+  "skipped everything" from "ran everything". `select_in` now reports the DECISION as a flag and
+  the arms score on it.
+
+  The two new mutants are keyed on the emitting line, never on a spelling: `nochange_off`
+  (`READSET_NO_CHANGE=1` → `=0`) moves the skip flag 1 → 0, and `untracked_blind` (dropping the
+  `--others` read) moves it 0 → 1, which is the soundness half — it makes the suite skip over the
+  untracked newcomer. A near-miss arm asserts a **git-ignored** file does NOT block the skip;
+  without it the skip could never fire on a real tree.
+
 ## [0.380.0] — 2026-08-19
 
 Two defects in `core/hooks/ai-dlc-subagent-probe.sh`, the `SubagentStop` telemetry hook. Both are

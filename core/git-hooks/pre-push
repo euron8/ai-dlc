@@ -345,7 +345,17 @@ readset_drop_excluded() { # reads stdin, writes stdout
 
 readset_manifest() {
   local out="$1"
+  # UNTRACKED-BUT-UNIGNORED FILES ARE IN THE UNIVERSE, AND THE WHOLE-SUITE SKIP BELOW IS WHY.
+  # `git ls-files` alone answers about the COMMITTED tree, which is the right population for
+  # "what am I pushing" and the wrong one for "what will a fixture read": a fixture reads the
+  # WORKING tree, and an untracked file there is one a trace never saw and no read-set names.
+  # Without this line `.changed` could be empty while an unignored file sat beside a fixture's
+  # subject, and the no-change branch would skip the suite over a tree nobody hashed.
+  # Git-ignored paths stay out, for the reason the content key states about the same set:
+  # hooks and fixtures WRITE INTO them while the suite runs, so a universe covering them would
+  # differ from itself across the very run it is keyed on.
   { git ls-files 2>/dev/null
+    git ls-files --others --exclude-standard 2>/dev/null
     [ -s "$READSET_MAP" ] && grep -v '^#' "$READSET_MAP" | cut -f2
   } | grep -v '^\.git/' | grep -v '^\.git$' | readset_drop_excluded | sort -u > "$out/.paths"
   while IFS= read -r p; do [ -f "$p" ] && printf '%s\n' "$p"; done < "$out/.paths" > "$out/.files"
@@ -402,8 +412,31 @@ apply_readset_skip() {
   { cat "$out/.changed"; sed -n 's|/[^/]*$||p' "$out/.appeared" | grep -v '^$'; } \
     | sort -u > "$out/.match"
 
+  # NOTHING CHANGED -> SKIP THE WHOLE SUITE. THIS BRANCH USED TO DEFER TO THE CONTENT KEY AND
+  # THE TWO INSTRUMENTS THEN DEADLOCKED: the key said "changed, run everything", this said "the
+  # key owns that case", and neither ever skipped. Measured on this repo, on a commit touching
+  # only two files under `docs/` -- a top the key itself EXCLUDES -- the suite ran all 161
+  # fixtures while this line printed that nothing had changed.
+  #
+  # THE READ-SET MANIFEST IS THE FINER INSTRUMENT AND IT IS THE ONE TO BELIEVE. It hashes file
+  # CONTENT over every tracked file, every untracked-but-unignored file and every path any
+  # read-set names, minus the exclusion set both instruments derive from ONE declaration
+  # (`readset_excluded_re`, lifted from the content key's own EXCLUDE block). The content key
+  # additionally hashes directory entries and is a declared SUPERSET, so it moves for reasons
+  # that cannot reach a fixture verdict -- which is precisely the announce above.
+  #
+  # WHAT MAKES SKIPPING EVERYTHING SOUND HERE, stated so the next reader can attack it: an
+  # empty `.changed` means no path in that universe changed content, appeared or vanished
+  # since the last GREEN run recorded the state. Every fixture would therefore read bytes
+  # identical to the ones it already passed on. A new fixture cannot hide in it either -- a new
+  # `run.sh` is a file that appeared, so `.changed` is non-empty by construction.
+  #
+  # AND IT FAILS CLOSED IN THE ONE DIRECTION THAT MATTERS: every guard ABOVE this point --
+  # NO_SKIP set, no map, no verified record, an unhashable tree -- returns "run everything"
+  # before reaching here, so a broken or uninstalled instrument can never produce this skip.
   if [ ! -s "$out/.changed" ]; then
-    printf '   ..    read-set map: nothing changed since the last verified state -- running all %s (the content key owns that case)\n' "$n_all"
+    READSET_NO_CHANGE=1
+    printf '   ..    read-set map: NOTHING in any fixture read-set changed since the last green run -- skipping all %s\n' "$n_all"
     return 0
   fi
 
@@ -476,7 +509,19 @@ run_fixtures() {
   # how the empty-suite guard below shipped UNABLE TO FIRE: the line was present,
   # the mechanism was not, and a fixture driving the real hook is what found it.
   # Normalise to a bare integer instead of rescuing a failed exit status.
+  READSET_NO_CHANGE=0
   apply_readset_skip "$out/list" "$out"
+
+  # A WHOLE-SUITE SKIP CANNOT BE SIGNALLED BY AN EMPTY LIST, and the guard four lines down is
+  # why: an empty list is a hard FAIL here, deliberately, because "an empty suite passes every
+  # assertion it never made". So the no-change case is carried by its own flag and returns
+  # before the count is taken, leaving the prior verified state and the prior key untouched --
+  # nothing ran, so nothing new is blessed.
+  if [ "${READSET_NO_CHANGE:-0}" = "1" ]; then
+    SUITE_SKIPPED=1
+    rm -rf "$out"
+    return 0
+  fi
 
   n_expected="$(grep -c . "$out/list" 2>/dev/null)"
   case "$n_expected" in ''|*[!0-9]*) n_expected=0 ;; esac
