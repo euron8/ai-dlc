@@ -57,48 +57,6 @@ not a closed entry.
 
 ---
 
-## BL-084 — two unshared encodings of the container set, currently agreeing
-
-`core/scripts/validate-spec-join.sh` has ONE container definition on the kernel side —
-`CONTAINER` in `CAP_DECL_AWK`, consumed by the fold terminator and the leading test. The
-SPINE fold carries its own container handling and does not use it. That is a second,
-unshared encoding of the same markdown fact.
-
-**It is correct today, and that is the whole problem.** Measured across seven containers by
-the adversarial pass that found it: a `- **Binds:** CAP-1` bullet followed by a line naming
-two capabilities in a numbered item, a `+` bullet, a blockquote, a table row and a thematic
-break all TERMINATE the fold and leave both capabilities correctly unbound; only a plain
-prose line absorbs, which is the accepted W2 limit. The spine fold is in fact more complete
-than the kernel's was.
-
-The reason to unify anyway is the base rate. In v0.388.0 this exact class — one markdown
-fact written N times, no two copies agreeing — produced four defects, and every one was
-created by REPAIRING ONE COPY AND NOT THE OTHER: BLOCKER 35, 39 and 41 were each introduced
-by the fix for the one before it, and three of the four were silent drops of a real
-capability that the fixture could not see.
-
-**TRIGGER, and it is the point of this entry: WHEN EITHER FOLD IS NEXT EDITED, UNIFY THEM
-FIRST.** An undated intention decays; a precondition on the next edit fires exactly when the
-risk becomes real, on the author who is already in the file. The seven measured rows above
-mean whoever trips it inherits a passing baseline rather than having to establish one.
-
-**The reader is deliberately NOT in the set and must stay out**, and the reasoning belongs
-with it as a rule rather than as an exemption: `CONTAINER` encodes a MARKDOWN FACT — what
-starts a block-level item — true regardless of who wrote the file. The reader's `[-*]`
-encodes a PRODUCER CONTRACT — what `bmad-spec` emits — true only while it emits it. Two
-kinds of knowledge that go stale on different schedules must not share a definition. Folding
-the reader in would flip eleven loud DISARMs into eleven quiet reads, which is the opposite
-of what that arm exists for.
-
-Anchored on the number of CALL SITES of the shared predicate, not on the shared definition
-itself — the definition already exists, so a receipt keyed on it reads as fixed the moment
-this entry is filed. Today `container_start(` occurs twice: one definition and one call,
-from the kernel fold. A fix that routes the spine fold through it makes that three.
-
-verify: sh test "$(grep -c 'container_start(' core/scripts/validate-spec-join.sh)" -ge 3
-
----
-
 ## BL-002 — `uninstall.sh` has no removal path for the machinery under `.claude/`
 
 After `scripts/uninstall.sh --force` on a tree built by `scripts/install.sh`, **25 files

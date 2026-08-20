@@ -1607,3 +1607,55 @@ the teammate path correctly but falls BACK to the lead when it is absent **1**, 
 subject **9**.
 
 verify: sh H=core/hooks/ai-dlc-subagent-probe.sh; [ -f "$H" ] || exit 9; command -v jq >/dev/null 2>&1 || exit 9; D=$(mktemp -d) || exit 9; mkdir -p "$D/_bmad-output" "$D/lead/subagents" || { rm -rf "$D"; exit 9; }; : > "$D/_bmad-output/pipeline-snapshot.md"; printf '%s\n' '{"type":"assistant","timestamp":"2026-01-01T00:00:00Z","message":{"model":"lead","usage":{"input_tokens":999999}}}' > "$D/lead.jsonl"; printf '%s\n' '{"type":"assistant","timestamp":"2026-01-01T00:00:10Z","message":{"model":"mate","usage":{"input_tokens":123}}}' > "$D/lead/subagents/agent-mate1.jsonl"; O="$D/_bmad-output/subagent-context.jsonl"; printf '{"transcript_path":"%s","agent_id":"mate1"}' "$D/lead.jsonl" | CLAUDE_PROJECT_DIR="$D" AI_DLC_STATE_DIR=_bmad-output bash "$H" >/dev/null 2>&1; p=$(jq -r '.peak_tokens' "$O" 2>/dev/null | tail -1); n1=$(wc -l < "$O" 2>/dev/null | tr -d ' '); printf '{"transcript_path":"%s","agent_id":"no-such-teammate"}' "$D/lead.jsonl" | CLAUDE_PROJECT_DIR="$D" AI_DLC_STATE_DIR=_bmad-output bash "$H" >/dev/null 2>&1; n2=$(wc -l < "$O" 2>/dev/null | tr -d ' '); rm -rf "$D"; [ "${n1:-0}" = 1 ] && [ "${p:-}" = 123 ] && [ "${n2:-0}" = 1 ]
+## BL-084 — two unshared encodings of the container set, currently agreeing
+
+**LANDED (v0.389.0, verified 9b939ff7).** The trigger fired as filed: the indentation fix
+touched both folds, so the spine fold was routed through `CONTAINER` first. The receipt
+anchored on the call-site count of the shared predicate, which is now 4. Two things the entry
+did not anticipate. The unconditional terminators must be tested BEFORE the container test,
+because `CONTAINER` carries `>` and `|` and the more-indented rule would otherwise turn a
+blockquote or a table row into a CONTINUATION — the false-BIND direction, at rc=0. And the
+seven containers the entry measured were measured by hand: none of them existed as seeds, so
+the fixture was blind to the reroute by construction and four had to be added, three that must
+terminate and one that must continue.
+
+`core/scripts/validate-spec-join.sh` has ONE container definition on the kernel side —
+`CONTAINER` in `CAP_DECL_AWK`, consumed by the fold terminator and the leading test. The
+SPINE fold carries its own container handling and does not use it. That is a second,
+unshared encoding of the same markdown fact.
+
+**It is correct today, and that is the whole problem.** Measured across seven containers by
+the adversarial pass that found it: a `- **Binds:** CAP-1` bullet followed by a line naming
+two capabilities in a numbered item, a `+` bullet, a blockquote, a table row and a thematic
+break all TERMINATE the fold and leave both capabilities correctly unbound; only a plain
+prose line absorbs, which is the accepted W2 limit. The spine fold is in fact more complete
+than the kernel's was.
+
+The reason to unify anyway is the base rate. In v0.388.0 this exact class — one markdown
+fact written N times, no two copies agreeing — produced four defects, and every one was
+created by REPAIRING ONE COPY AND NOT THE OTHER: BLOCKER 35, 39 and 41 were each introduced
+by the fix for the one before it, and three of the four were silent drops of a real
+capability that the fixture could not see.
+
+**TRIGGER, and it is the point of this entry: WHEN EITHER FOLD IS NEXT EDITED, UNIFY THEM
+FIRST.** An undated intention decays; a precondition on the next edit fires exactly when the
+risk becomes real, on the author who is already in the file. The seven measured rows above
+mean whoever trips it inherits a passing baseline rather than having to establish one.
+
+**The reader is deliberately NOT in the set and must stay out**, and the reasoning belongs
+with it as a rule rather than as an exemption: `CONTAINER` encodes a MARKDOWN FACT — what
+starts a block-level item — true regardless of who wrote the file. The reader's `[-*]`
+encodes a PRODUCER CONTRACT — what `bmad-spec` emits — true only while it emits it. Two
+kinds of knowledge that go stale on different schedules must not share a definition. Folding
+the reader in would flip eleven loud DISARMs into eleven quiet reads, which is the opposite
+of what that arm exists for.
+
+Anchored on the number of CALL SITES of the shared predicate, not on the shared definition
+itself — the definition already exists, so a receipt keyed on it reads as fixed the moment
+this entry is filed. Today `container_start(` occurs twice: one definition and one call,
+from the kernel fold. A fix that routes the spine fold through it makes that three.
+
+verify: sh test "$(grep -c 'container_start(' core/scripts/validate-spec-join.sh)" -ge 3
+
+---
+
