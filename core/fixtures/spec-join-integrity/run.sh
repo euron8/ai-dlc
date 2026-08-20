@@ -93,6 +93,11 @@ want 1 "borrowed verdict: high-severity lint_spine findings FAIL the gate" \
 
 want 0 "low-severity-only lint findings are RECORDED, not gating" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine-lint "$R/spine-low.json"
+# POSITIVE CONJUNCT. rc=0 is also what a subject replaced by `exit 0` produces, and this
+# arm passed against one until it was measured. The NOTE is the thing being claimed.
+says "low-severity findings are RECORDED — the note is what makes this arm non-vacuous" \
+  "low-severity finding(s)" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine-lint "$R/spine-low.json"
 
 want 2 "DISARM: a file that is not a lint_spine envelope exits 2, never 0" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine-lint "$R/story-ok.md"
@@ -151,6 +156,9 @@ want 0 "the same PRD with (CAP-n) added to its H4 FR headings PASSES" \
 # --- (2a) the CAP -> AD join, against bmad-architecture's real spine shape ------
 want 0 "OVER-FIRE CONTROL: a spine whose AD binds 'all' covers every capability" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-all.md"
+says "OVER-FIRE CONTROL: and the spine-wide close is ANNOUNCED, not silent" \
+  "declares '**Binds:** all'" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-all.md"
 
 want 1 "join (2a): a capability no AD binds FAILS" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-cap1only.md"
@@ -183,8 +191,10 @@ says "trichotomy: key EMPTY says the field IS present" \
 ASSERT_OUT="$(bash "$V" --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-empty.md" 2>&1)"
 if grep -qF "carries no 'capabilities:' frontmatter field at all" <<<"$ASSERT_OUT"; then
   bad "trichotomy: the EMPTY case is still told the field is absent — the false diagnosis survives"
+elif ! grep -qF "The field IS present" <<<"$ASSERT_OUT"; then
+  bad "trichotomy: neither sentence is present — this absence arm would pass against a subject that emits nothing"
 else
-  ok "trichotomy: the EMPTY case is NOT told the field is absent"
+  ok "trichotomy: the EMPTY case is NOT told the field is absent, and IS told the field is present"
 fi
 
 want 0 "trichotomy: EMPTY + capabilities_rationale is a declared disposition, not a failure" \
@@ -236,7 +246,7 @@ mut() { # <name> <literal-from> <literal-to> <expect-rc> <label> <args...>
   [ "$g" -eq "$exp" ] && ok "$lab" || bad "$lab (mutant exited $g, expected $exp — the guard under test is not what produced the FAIL)"
 }
 
-mut lr-off "grep -qE '\\bCAP-[0-9]+\\b'" "true" \
+mut lr-off 'grep -qE "$CAP_GRAMMAR"' "true" \
   0 "MUTATION: neutering join (1) turns the orphan-LR case green" \
   --spec "$R/orphan-lr" --prd "$R/prd-ok.md"
 
@@ -387,6 +397,1167 @@ if [ "$QUAL_ARMS" -eq 13 ]; then
   ok "ARMS-RAN: all 13 qualifier arms EXECUTED (counted $QUAL_ARMS)"
 else
   bad "ARMS-RAN: expected 13 qualifier arms, counted $QUAL_ARMS — the block is unreachable, truncated, or short-circuited"
+fi
+
+
+# --- v0.388.0: five behaviours, and the counter that proves this block ran ------
+# THIS BLOCK MUST STAY ABOVE `exit $rc`, for the reason the QUALIFIER block above
+# records: arms appended below it execute never and report PASS. $NEW_ARMS is the answer,
+# asserted exactly at the end.
+#
+# WHAT IS UNDER TEST, none of it seeded from the reader's accept-set:
+#   (G) CAP_GRAMMAR accepts one lowercase suffix, and a token it cannot spell IN FULL
+#       DISARMs instead of leaving the capability set in silence
+#   (S) the story-citation arm routes through fail_join, so --baseline can reach it, on a
+#       key the coarse `story:` key cannot stand in for
+#   (B) the `- **Binds:**` reader folds wrapped continuation lines into their bullet
+#   (N) `- **No-AD:** CAP-n — REASON: <why>` is join (2a)'s third disposition
+#   (D) `- (disposition) LR-n NO-CAPABILITY <reason>` is join (1)'s third disposition
+# A LAYERED FIX NEEDS A LAYERED MUTANT. Reverting one layer of a two-layer guard leaves
+# the other still failing the run, and `mut` then reports "expected 0, got 1" -- which
+# reads as a broken mutant rather than as an incomplete revert. Each layer gets its own
+# `cmp` guard, so a layer whose literal has moved is named.
+# THREE LAYERS NOW COVER THE CAPABILITY SET: the id grammar, the declaration-shape
+# assertion, and the looks-declarative join. Reverting any two leaves the third catching
+# the seed, which reads as a broken mutant rather than as an incomplete revert.
+mut3() { # <name> <f1> <t1> <f2> <t2> <f3> <t3> <expect-rc> <label> <args...>
+  local n="$1" f1="$2" t1="$3" f2="$4" t2="$5" f3="$6" t3="$7" exp="$8" lab="$9"; shift 9
+  _mut3_build "$n" "$f1" "$t1" "$f2" "$t2" "$f3" "$t3" || return
+  bash "$R/mutant-$n.sh" "$@" >/dev/null 2>&1
+  local g=$?
+  [ "$g" -eq "$exp" ] && ok "$lab" || bad "$lab (mutant exited $g, expected $exp — a layer is still doing the job)"
+}
+mut3_says() { # <name> <f1> <t1> <f2> <t2> <f3> <t3> <must-contain> <label> <args...>
+  local n="$1" f1="$2" t1="$3" f2="$4" t2="$5" f3="$6" t3="$7" want_s="$8" lab="$9"; shift 9
+  _mut3_build "$n" "$f1" "$t1" "$f2" "$t2" "$f3" "$t3" || return
+  local out; out="$(bash "$R/mutant-$n.sh" "$@" 2>&1)"
+  if grep -qF -- "$want_s" <<<"$out"; then ok "$lab"
+  else bad "$lab (mutant did not produce: \"$want_s\")"; fi
+}
+_mut3_build() { # <name> <f1> <t1> <f2> <t2> <f3> <t3>  -- each layer guarded on its own
+  local n="$1" m="$R/mutant-$1.sh" i prev
+  cp "$V" "$m"
+  for i in 1 2 3; do
+    prev="$m.prev"; cp "$m" "$prev"
+    case "$i" in 1) FROM="$2" TO="$3" ;; 2) FROM="$4" TO="$5" ;; 3) FROM="$6" TO="$7" ;; esac
+    export FROM TO; perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$m"
+    if cmp -s "$prev" "$m"; then
+      bad "FIXTURE ERROR: mutation '$n' LAYER $i matched nothing — its assertion would prove nothing"; return 1
+    fi
+  done
+  if ! bash -n "$m" 2>/dev/null; then
+    bad "FIXTURE ERROR: mutant '$n' is not a valid shell script — its silence is not a kill"; return 1
+  fi
+  return 0
+}
+
+# NOTHING IN THIS BATTERY ASSERTED THAT THE FOLD ENDS, and the fold is an accumulator.
+# Measured on this subject: its first version added a RELATIVE offset to an absolute
+# cursor and walked backwards forever, and the only reason it surfaced is that an
+# unrelated probe happened to be running under a timeout. A hang is not a failure -- it is
+# a fixture that never reports -- so termination needs its own instrument.
+#
+# THE POLL MUST GRANT REAL WALL CLOCK. A `while kill -0` loop with no `sleep` spins
+# thousands of iterations in microseconds and calls a healthy run a hang; that is a
+# measured mistake from this same session, not a hypothetical.
+# A PIN WHOSE PROPERTY IS STRUCTURAL CANNOT HAVE A MUTANT, and pretending otherwise is
+# worse than saying so. `decl_run` only ever considers text inside an emphasis or code run,
+# so an ordinary prose bullet is not reachable by any switchable guard -- the bad state is
+# UNCONSTRUCTIBLE rather than checked for, which `mechanism-design.md` prefers. What still
+# has to be established is that the pin DISCRIMINATES, and the instrument for that is a
+# seeded offender in the SAME container measured in the SAME run: quiet here, DISARM there.
+# A subject that emits nothing gives 0 and 0 and fails this by construction.
+# KILL THE WHOLE TREE, LEAVES FIRST. `kill -9` on the backgrounded wrapper leaves its
+# grandchildren running: they are reparented to init and keep burning a core for the rest
+# of the session. Measured while building this arm — 21 leaked `awk` processes at ~90% CPU
+# after a handful of runs, and under the 16-way fixture pool that is sixteen per run. One
+# level of `pkill -P` was not enough either, because the chain is wrapper -> subshell ->
+# awk; two survived. Recursion is what makes it complete, and children must die before
+# their parent, since once the parent is gone `pgrep -P` can no longer find them.
+_kill_tree() { # <pid>
+  local kid
+  for kid in $(pgrep -P "$1" 2>/dev/null); do _kill_tree "$kid"; done
+  kill -9 "$1" 2>/dev/null
+}
+
+discriminates() { # <label> <quiet-spec-dir> <offender-spec-dir> <prd>
+  local lab="$1" q="$2" o="$3" pr="$4" a b
+  bash "$V" --spec "$q" --prd "$pr" >/dev/null 2>&1; a=$?
+  bash "$V" --spec "$o" --prd "$pr" >/dev/null 2>&1; b=$?
+  if [ "$a" -eq 0 ] && [ "$b" -eq 2 ]; then ok "$lab"
+  else bad "$lab (pin exited $a and offender exited $b — expected 0 and 2 in the same run)"; fi
+}
+
+run_bounded() { # <seconds> <script> <args...>  -- rc 0 completed, 1 killed at the bound
+  local secs="$1" prog="$2"; shift 2
+  bash "$prog" "$@" >/dev/null 2>&1 &
+  local pid=$! deadline
+  deadline=$(( $(date +%s) + secs ))
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$(date +%s)" -ge "$deadline" ]; then
+      _kill_tree "$pid"; wait "$pid" 2>/dev/null
+      return 1
+    fi
+    sleep 1
+  done
+  wait "$pid" 2>/dev/null
+  return 0
+}
+
+mut2_says() { # <name> <from1> <to1> <from2> <to2> <must-contain> <label> <args...>
+  local n="$1" f1="$2" t1="$3" f2="$4" t2="$5" want_s="$6" lab="$7"; shift 7
+  local m="$R/mutant-$n.sh"
+  cp "$V" "$m"
+  FROM="$f1" TO="$t1" perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$m"
+  if cmp -s "$V" "$m"; then bad "FIXTURE ERROR: mutation '$n' LAYER 1 matched nothing"; return; fi
+  cp "$m" "$m.layer1"
+  FROM="$f2" TO="$t2" perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$m"
+  if cmp -s "$m.layer1" "$m"; then bad "FIXTURE ERROR: mutation '$n' LAYER 2 matched nothing"; return; fi
+  if ! bash -n "$m" 2>/dev/null; then bad "FIXTURE ERROR: mutant '$n' is not a valid shell script"; return; fi
+  local out; out="$(bash "$m" "$@" 2>&1)"
+  if grep -qF -- "$want_s" <<<"$out"; then ok "$lab"
+  else bad "$lab (mutant did not produce: \"$want_s\")"; fi
+}
+
+mut2() { # <name> <from1> <to1> <from2> <to2> <expect-rc> <label> <args...>
+  local n="$1" f1="$2" t1="$3" f2="$4" t2="$5" exp="$6" lab="$7"; shift 7
+  local m="$R/mutant-$n.sh"
+  cp "$V" "$m"
+  FROM="$f1" TO="$t1" perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$m"
+  if cmp -s "$V" "$m"; then
+    bad "FIXTURE ERROR: mutation '$n' LAYER 1 matched nothing — its assertion would prove nothing"; return
+  fi
+  cp "$m" "$m.layer1"
+  FROM="$f2" TO="$t2" perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$m"
+  if cmp -s "$m.layer1" "$m"; then
+    bad "FIXTURE ERROR: mutation '$n' LAYER 2 matched nothing — only one layer was reverted"; return
+  fi
+  if ! bash -n "$m" 2>/dev/null; then
+    bad "FIXTURE ERROR: mutant '$n' is not a valid shell script — its silence is not a kill"; return
+  fi
+  bash "$m" "$@" >/dev/null 2>&1
+  local g=$?
+  [ "$g" -eq "$exp" ] && ok "$lab" || bad "$lab (mutant exited $g, expected $exp — a layer is still doing the job)"
+}
+
+NEW_ARMS=0
+n_want()     { NEW_ARMS=$((NEW_ARMS+1)); want     "$@"; }
+n_says()     { NEW_ARMS=$((NEW_ARMS+1)); says     "$@"; }
+n_mut()      { NEW_ARMS=$((NEW_ARMS+1)); mut      "$@"; }
+n_mut2()     { NEW_ARMS=$((NEW_ARMS+1)); mut2     "$@"; }
+n_mut2_says(){ NEW_ARMS=$((NEW_ARMS+1)); mut2_says "$@"; }
+n_mut3()     { NEW_ARMS=$((NEW_ARMS+1)); mut3     "$@"; }
+n_mut3_says(){ NEW_ARMS=$((NEW_ARMS+1)); mut3_says "$@"; }
+n_discrim()  { NEW_ARMS=$((NEW_ARMS+1)); discriminates "$@"; }
+n_mut_says() { NEW_ARMS=$((NEW_ARMS+1)); mut_says "$@"; }
+
+# --- (G) the alphabetic capability suffix --------------------------------------
+# rc=0 is also what a subject replaced by `exit 0` produces, so the PASS LINE and its
+# CAPABILITY COUNT are asserted beside it: `3 capability(ies)` is readable only if CAP-1a
+# entered the set, and it is exactly 2 under the pre-fix grammar.
+n_want 0 "SUFFIX: a kernel defining CAP-1a alongside CAP-1 and CAP-2 passes every join" \
+  --spec "$R/real-suffixed" --prd "$R/prd-suffixed.md" --story "$R/story-suffixed.md" --spine "$R/spine-suffixed.md"
+n_says "SUFFIX: CAP-1a is COUNTED into the capability set, not merely tolerated" \
+  "PASS (2 locked requirement(s), 3 capability(ies), 1 story(ies), 0 recorded note(s), 0 baselined)" \
+  --spec "$R/real-suffixed" --prd "$R/prd-suffixed.md" --story "$R/story-suffixed.md" --spine "$R/spine-suffixed.md"
+
+# THE ARMS THAT PROVE THE SUFFIXED ID FEEDS THE JOINS. A widening that parsed CAP-1a and
+# never handed it to the per-capability loops passes both arms above and exits 0 here.
+n_want 1 "SUFFIX: join (2) FAILS when no FR cites CAP-1a — the suffixed id is not exempt" \
+  --spec "$R/real-suffixed" --prd "$R/prd-suffixed-nocap1a.md" --story "$R/story-suffixed-no1a.md"
+n_says "SUFFIX: join (2) NAMES CAP-1a, so the finding is actionable" \
+  "CAP-1a is defined in SPEC.md but no functional requirement in" \
+  --spec "$R/real-suffixed" --prd "$R/prd-suffixed-nocap1a.md" --story "$R/story-suffixed-no1a.md"
+n_want 1 "SUFFIX: join (2a) FAILS when no AD binds CAP-1a" \
+  --spec "$R/real-suffixed" --prd "$R/prd-suffixed.md" --story "$R/story-suffixed.md" --spine "$R/spine-suffixed-no1a.md"
+n_says "SUFFIX: join (2a) NAMES CAP-1a" \
+  "CAP-1a is defined in SPEC.md but no architecture decision in" \
+  --spec "$R/real-suffixed" --prd "$R/prd-suffixed.md" --story "$R/story-suffixed.md" --spine "$R/spine-suffixed-no1a.md"
+
+# DISTINCTNESS. A PRD citing CAP-1a and NOT CAP-1 must fail for CAP-1. Without the
+# boundary class `CAP-1` matches inside `CAP-1a` and the two collapse into one id, which
+# is the failure mode a suffix grammar invites and the reason `sort -u -V` alone is not
+# enough.
+n_says "SUFFIX: CAP-1 and CAP-1a are DISTINCT ids — citing the suffixed one does not cover the bare one" \
+  "CAP-1 is defined in SPEC.md but no functional requirement in" \
+  --spec "$R/real-suffixed" --prd "$R/prd-suffixed-only1a.md" --story "$R/story-suffixed.md"
+
+# THE RESIDUE PARTITION. Two shapes one character outside the accepted form, each beside
+# two ids the grammar DOES parse -- so the zero-capability DISARM cannot be what catches
+# them, and a silent drop is the only other outcome available.
+n_want 2 "RESIDUE: a kernel carrying CAP-1ab DISARMS at exit 2 rather than dropping it" \
+  --spec "$R/cap-residue" --prd "$R/prd-ok.md"
+n_says "RESIDUE: the DISARM ECHOES the offending definition line, so the remedy is one edit" \
+  "CAP-1ab" \
+  --spec "$R/cap-residue" --prd "$R/prd-ok.md"
+n_says "RESIDUE: an UPPERCASE suffix is caught too — the partition is the class, not one shape" \
+  "CAP-1A" \
+  --spec "$R/cap-residue-upper" --prd "$R/prd-ok.md"
+
+# THE RESIDUE OVER-FIRE PIN. `CAP-<n>` and `CAP-N` are how this repo and BMAD both write
+# a capability in prose. A residue class that caught them would DISARM every real kernel
+# whose text explains its own id scheme -- a hard block on correct input.
+n_want 0 "RESIDUE PIN: template tokens CAP-<n> and CAP-N are NOT residue" \
+  --spec "$R/cap-template" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+n_says "RESIDUE PIN: and they are not counted as capabilities either" \
+  "PASS (2 locked requirement(s), 2 capability(ies), 1 story(ies), 0 recorded note(s), 0 baselined)" \
+  --spec "$R/cap-template" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+
+# MUTATION: the pre-fix grammar, restored exactly. THE DROP DOES NOT SURFACE AS A MISSING
+# CAPABILITY -- it surfaces as an ACCUSATION AGAINST THE STORY AUTHOR, about an id sitting
+# defined in the kernel. Note that reverting CAP_GRAMMAR alone is the whole revert: the
+# residue expression is a SEPARATE literal that still accepts `CAP-1a`, so layer two does
+# not catch what layer one stopped parsing.
+# THE CAPABILITY SET IS NO LONGER A FREE GREP -- it is the well-formed subset of the
+# DEFINITION bullets, so the grammar that decides membership is this `grep -xE`, not
+# `$CAP_GRAMMAR`. Narrowing it alone is the whole revert: the residue filter beside it
+# still accepts `CAP-1a`, so nothing downstream catches what this stopped parsing.
+n_mut2_says grammar-narrow "grep -xE 'CAP-[0-9]+[a-z]?'" "grep -xE 'CAP-[0-9]+'" \
+  'if [ -n "$CAP_DECL_MALFORMED" ]; then' 'if false; then' \
+  "cites 'CAP-1a' and" \
+  "MUTATION: the old grammar accuses the STORY of citing an id the kernel defines" \
+  --spec "$R/real-suffixed" --prd "$R/prd-suffixed.md" --story "$R/story-suffixed.md" --spine "$R/spine-suffixed.md"
+
+# MUTATION, the same revert against a corpus with no story citing CAP-1a: the capability
+# is exempt from joins (2) and (2a) and the run exits 0 in SILENCE. This is the arm that
+# makes "a parser that cannot spell an id does not report a gap" a measurement.
+n_mut2 grammar-narrow-silent "grep -xE 'CAP-[0-9]+[a-z]?'" "grep -xE 'CAP-[0-9]+'" \
+  'if [ -n "$CAP_DECL_MALFORMED" ]; then' 'if false; then' \
+  0 "MUTATION: under the old grammar the UNCITED CAP-1a exits 0 — the gap is not reported" \
+  --spec "$R/real-suffixed" --prd "$R/prd-suffixed-nocap1a.md" --story "$R/story-suffixed-no1a.md"
+
+# THE MALFORMED ARM IS WHAT CATCHES EVERY REAL DEFINITION BULLET. Its subject here is an
+# emphasis form the `**CAP-<n>**` anchor cannot see at all, so nothing downstream is left
+# to catch it: with this arm off the id leaves the capability set in silence.
+n_mut decl-malformed-off-emph 'if [ -n "$CAP_DECL_MALFORMED" ]; then' 'if false; then' \
+  0 "MUTATION: dropping the declaration assertion lets '- _CAP-1a_' vanish and the run exit 0" \
+  --spec "$R/cap-emph-underscore" --prd "$R/prd-ok.md"
+
+n_mut cap-boundary-loose \
+  'if ! grep -qE "(^|[^A-Za-z0-9-])$cap([^A-Za-z0-9-]|\$)" <<<"$FR_LINES"; then' \
+  'if ! grep -qE "$cap" <<<"$FR_LINES"; then' \
+  0 "MUTATION: dropping the id boundary lets CAP-1a's citation stand in for CAP-1" \
+  --spec "$R/real-suffixed" --prd "$R/prd-suffixed-only1a.md" --story "$R/story-suffixed.md"
+
+# --- (S) the story citation, reachable by --baseline ---------------------------
+n_want 0 "STORY-CAP: a baseline naming story-cap:<file>:<CAP> suppresses the dangling citation" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-dangling.md" --baseline "$R/baseline-story-cap.txt"
+n_says "STORY-CAP: the suppression is REPORTED with the key, not silent" \
+  "BASELINED  story-cap:story-dangling.md:CAP-9" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-dangling.md" --baseline "$R/baseline-story-cap.txt"
+
+# THE KEY THAT MUST NOT WORK. `story:<basename>` is join (3)'s FIELD key. If it also
+# reached the citation arm, one baseline line would excuse a missing field and every
+# dangling citation in the same file at once.
+n_want 1 "STORY-CAP: the COARSE story:<file> key does NOT suppress a dangling citation" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-dangling.md" --baseline "$R/baseline-story-coarse.txt"
+n_says "STORY-CAP: and the coarse entry is reported as NOT REPRODUCING, so it cannot sit there unused" \
+  "baseline entry 'story:story-dangling.md' in" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-dangling.md" --baseline "$R/baseline-story-coarse.txt"
+
+n_mut story-cap-coarse-key \
+  'fail_join "story-cap:$(basename "$s"):$r"' 'fail_join "story:$(basename "$s")"' \
+  0 "MUTATION: keying the citation arm on the coarse story:<file> lets one line excuse both defects" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-dangling.md" --baseline "$R/baseline-story-coarse.txt"
+
+# MUTATION: the pre-fix routing, restored -- a bare echo setting rc directly. The arm then
+# registers no key at all and the baseline cannot reach it, which is the state the
+# reference consumer's own baseline file documents in a comment as unreachable.
+n_mut story-cap-unrouted \
+  'fail_join "story-cap:$(basename "$s"):$r" "' 'rc=1; echo "FAIL: ' \
+  1 "MUTATION: reverting the arm to a bare echo puts it out of --baseline's reach again" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-dangling.md" --baseline "$R/baseline-story-cap.txt"
+
+# --- (B) the wrapped Binds bullet ----------------------------------------------
+n_want 0 "FOLD: a spine whose Binds bullet WRAPS its capability onto a continuation line binds it" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-wrapped.md"
+n_says "FOLD: and the run reports a real PASS, not an empty one" \
+  "PASS (2 locked requirement(s), 2 capability(ies), 0 story(ies), 0 recorded note(s), 0 baselined)" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-wrapped.md"
+
+# THE OVER-FIRE PIN FOR THE FOLD. `CAP-2` sits in a `- **Prevents:**` bullet, which is
+# where the real spine mentions eight capabilities it does not bind. Folding stops at the
+# list item; widening the grep would close the join on text that binds nothing.
+n_want 1 "FOLD PIN: a CAP named only in a neighbouring Prevents bullet is NOT bound" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-neighbour.md"
+n_says "FOLD PIN: and the unbound capability is NAMED" \
+  "CAP-2 is defined in SPEC.md but no architecture decision in" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-neighbour.md"
+
+n_mut_says binds-fold-off 'acc = acc " " $0' 'acc = acc' \
+  "CAP-2 is defined in SPEC.md but no architecture decision in" \
+  "MUTATION: dropping the accumulation accuses the wrapped spine of not binding CAP-2" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-wrapped.md"
+
+n_mut binds-widen 'BINDS="$(printf ' 'BINDS="$(grep -E CAP- "$SPINE_MD" || true)"; IGNORED1="$(printf ' \
+  0 "MUTATION: widening the reader to any CAP-bearing line closes join (2a) on a Prevents bullet" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-neighbour.md"
+
+# --- (N) `- **No-AD:**`, join (2a)'s third disposition -------------------------
+n_want 0 "NO-AD: a capability dispositioned '- **No-AD:** CAP-2 — REASON: ...' passes join (2a)" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad.md"
+n_says "NO-AD: the disposition is RECORDED as a note naming the capability" \
+  "CAP-2 is dispositioned No-AD in" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad.md"
+n_says "NO-AD: and it COUNTS in the note total — passed visibly, not in silence" \
+  "PASS (2 locked requirement(s), 2 capability(ies), 0 story(ies), 1 recorded note(s), 0 baselined)" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad.md"
+
+# ONE FOLD, TWO READERS. The No-AD bullet wraps for the same reason Binds does, and its
+# REASON: lands on the continuation line. This is the arm that makes the shared
+# accumulator a requirement rather than a convenience.
+n_want 0 "NO-AD: a WRAPPED No-AD bullet whose REASON is on the continuation line is read" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-wrapped.md"
+n_says "NO-AD: the wrapped disposition is recorded for the right capability" \
+  "CAP-2 is dispositioned No-AD in" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-wrapped.md"
+
+n_want 1 "NO-AD NEAR MISS: a No-AD bullet with no REASON: is an unexplained blank and still FAILS" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-noreason.md"
+n_want 1 "NO-AD NEAR MISS: the same decision written as PROSE is not a disposition" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-prose.md"
+# THE DISARM SITS ABOVE THE DISPOSITION. A spine of nothing but No-AD bullets declares no
+# AD at all; if the disposition reader could satisfy the emptiness test, a file that is
+# not a spine would close join (2a) by declining it wholesale.
+n_want 2 "NO-AD NEAR MISS: a spine with No-AD bullets and NO Binds still DISARMS at exit 2" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-only.md"
+
+n_mut noad-off 'if [ -n "$NO_AD" ]; then' 'if false; then' \
+  1 "MUTATION: dropping the No-AD reader fails the dispositioned capability" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad.md"
+# THE REASON REQUIREMENT IS READ TWICE -- once by the hatch that excuses, once by the
+# malformed-bullet arm -- and both read the SAME regex, so one substitution reverts both
+# layers. Reverting only the hatch leaves the malformed arm still failing the run, which
+# would score as a kill the mutation did not earn.
+n_mut noad-reason-loose '  r="$(printf '"'"'%s'"'"' "$1" | sed '"'"'s/^[[:space:]]*//; s/[[:space:]]*$//'"'"')"' '  return 0' \
+  0 "MUTATION: dropping the reason-carries-text requirement (BOTH readers) excuses an empty REASON:" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-emptyreason.md"
+# THE MALFORMED BULLET IS REPORTED AS ITSELF. Here the capability it names IS bound, so
+# the ad: arm cannot fire and this is the only arm left that can say anything at all --
+# without it an author who wrote a No-AD bullet is told about an id, never about their
+# bullet.
+n_want 1 "NO-AD FORM: a No-AD bullet with no REASON: is reported even when the capability IS bound" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-malformed-bound.md"
+n_says "NO-AD FORM: the malformed bullet is named, with the correct form" \
+  "bullet with no 'REASON:' at all" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-malformed-bound.md"
+n_says "NO-AD FORM: the no-REASON payload gets the same bullet-level diagnosis, not only the id-level one" \
+  "bullet with no 'REASON:' at all" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-noreason.md"
+n_want 1 "NO-AD FORM: 'REASON:' present but EMPTY is still an unexplained blank" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-emptyreason.md"
+n_says "NO-AD FORM: and the empty reason is diagnosed at the bullet — a present-but-empty REASON is its own state" \
+  "whose 'REASON:' has no text" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-emptyreason.md"
+n_mut noad-malformed-off \
+  '        *REASON:*)' \
+  '        *)' \
+  0 "MUTATION: dropping the malformed-bullet arm leaves a reasonless bullet reported by nothing" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-malformed-bound.md"
+
+# THE ID SEGMENT. A capability MENTIONED inside the reason is not disposed by it.
+n_want 1 "NO-AD SEGMENT: a CAP named only inside the REASON text is NOT dispositioned" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-reasonmention.md"
+n_says "NO-AD SEGMENT: the merely-mentioned capability still FAILS join (2a)" \
+  "CAP-2 is defined in SPEC.md but no architecture decision in" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-reasonmention.md"
+n_says "NO-AD SEGMENT: while the capability in the ID segment IS dispositioned — the arm discriminates" \
+  "CAP-1 is dispositioned No-AD in" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-reasonmention.md"
+n_mut noad-idsegment-loose \
+  'printf '"'"'%s\n'"'"' "${1%%REASON:*}" | grep -ohE "$CAP_GRAMMAR" || true' \
+  'printf '"'"'%s\n'"'"' "$1" | grep -ohE "$CAP_GRAMMAR" || true' \
+  0 "MUTATION: reading ids from the whole bullet lets the REASON text dispose CAP-2" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-reasonmention.md"
+
+n_mut_says noad-marker-loose 'NO_AD="$(printf ' 'NO_AD="$(grep -E No-AD "$SPINE_MD" || true)"; IGNORED2="$(printf ' \
+  "Offending bullet: No-AD:" \
+  "MUTATION: dropping the bullet marker picks the PROSE sentence up as a No-AD bullet" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-prose.md"
+n_mut noad-fold-off 'acc = acc " " $0' 'acc = acc' \
+  1 "MUTATION: dropping the accumulation loses the WRAPPED No-AD bullet's REASON" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-wrapped.md"
+
+# --- (D) `- (disposition) LR-n NO-CAPABILITY <reason>`, join (1)'s third state --
+n_want 0 "DISPOSITION: an LR dispositioned NO-CAPABILITY with a reason passes join (1)" \
+  --spec "$R/disp-ok" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+n_says "DISPOSITION: the LR is NAMED in the note, so the decision is visible" \
+  "LR-S304-6 is dispositioned NO-CAPABILITY in" \
+  --spec "$R/disp-ok" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+n_says "DISPOSITION: and it COUNTS in the note total" \
+  "PASS (3 locked requirement(s), 2 capability(ies), 1 story(ies), 1 recorded note(s), 0 baselined)" \
+  --spec "$R/disp-ok" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+# The producer's qualifier is decided per append, exactly as for `(capability by ...)`.
+n_want 0 "DISPOSITION: '(disposition by lead)' is the SAME entry type and is read" \
+  --spec "$R/disp-qualified" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+n_says "DISPOSITION: the qualified entry produces the SAME note — rc=0 alone is what a subject that emits nothing also gives" \
+  "LR-S304-6 is dispositioned NO-CAPABILITY in" \
+  --spec "$R/disp-qualified" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+
+n_want 1 "DISPOSITION NEAR MISS: NO-CAPABILITY with no reason after it still FAILS" \
+  --spec "$R/disp-noreason" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+n_says "DISPOSITION NEAR MISS: and the FAIL names the LR and the remedy" \
+  "LR-S304-6 appears in the memlog but no capability entry cites it" \
+  --spec "$R/disp-noreason" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+# THE SHAPE THE REFERENCE CONSUMER HAS ON DISK is `(decision)`, and the accepted type set
+# now carries it. This arm is what stops that widening being silently reverted.
+n_want 0 "DISPOSITION: '(decision)' — the type the reference consumer actually wrote — is READ" \
+  --spec "$R/disp-wrongtype" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+n_says "DISPOSITION: and it produces the note, so the consumer's existing entry parses" \
+  "LR-S304-6 is dispositioned NO-CAPABILITY in" \
+  --spec "$R/disp-wrongtype" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+n_want 1 "DISPOSITION NEAR MISS: an UNTYPED bullet naming the LR and the token still FAILS" \
+  --spec "$R/disp-untyped" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+n_says "DISPOSITION NEAR MISS: untyped prose gets the ordinary join (1) FAIL" \
+  "LR-S304-6 appears in the memlog but no capability entry cites it" \
+  --spec "$R/disp-untyped" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+
+n_mut disp-off 'if [ -n "$DISP_ENTRIES" ] && printf' 'if false && printf' \
+  1 "MUTATION: dropping the hatch fails the dispositioned LR — the arm has a subject" \
+  --spec "$R/disp-ok" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+# --- (N2) the No-AD that outlived its cause -----------------------------------
+# The hatch is consulted only where it EXCUSES, so until this arm the ids a No-AD bullet
+# names were validated nowhere. Both states below pass in silence without it.
+n_want 1 "NO-AD LIFETIME: a capability that is dispositioned No-AD AND bound by an AD FAILS" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-stale.md"
+n_says "NO-AD LIFETIME: the contradiction names the id and the one-line remedy" \
+  "disposition for 'CAP-2' AND an architecture decision that binds it" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-stale.md"
+n_want 1 "NO-AD LIFETIME: a disposition for an id SPEC.md does not define FAILS" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-unknown.md"
+n_says "NO-AD LIFETIME: the undefined id is NAMED" \
+  "disposition for 'CAP-9', which" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-unknown.md"
+# THE CASE THE PER-CAPABILITY LOOP CANNOT REACH. `Binds: all` short-circuits that loop
+# entirely, so a No-AD sitting beside a spine-wide AD is contradicted by a binding no
+# per-capability search would ever compare it against.
+n_want 1 "NO-AD LIFETIME: a No-AD beside a spine-wide 'Binds: all' FAILS, though the cap loop never runs" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-bindsall.md"
+n_says "NO-AD LIFETIME: and it is reported as the same contradiction" \
+  "disposition for 'CAP-2' AND an architecture decision that binds it" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-bindsall.md"
+
+n_mut noad-unknown-off 'if ! grep -qx -- "$nid" <<<"$CAPS"; then' 'if false; then' \
+  0 "MUTATION: dropping the defined-id check lets a No-AD for an undefined id pass" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-unknown.md"
+n_mut noad-contradiction-off \
+  'elif [ "$binds_all" -eq 1 ] || grep -qE "(^|[^A-Za-z0-9-])$nid([^A-Za-z0-9-]|\$)" <<<"$BINDS"; then' \
+  'elif false; then' \
+  0 "MUTATION: dropping the contradiction check lets a stale No-AD sit beside its own AD" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-stale.md"
+n_mut noad-bindsall-blind '[ "$binds_all" -eq 1 ] || grep -qE' '[ 0 -eq 1 ] || grep -qE' \
+  0 "MUTATION: dropping the binds_all disjunct makes the spine-wide AD invisible to this arm" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-bindsall.md"
+
+# --- (R) the residue scan's POPULATION: definition bullets, in the kernel only --
+# THE SAME TOKEN, EVERYWHERE BUT THE KERNEL. Without this pair the scoping claim is
+# untested in the direction that costs a consumer its gate: a `CAP-1ab` in a transcript,
+# a PRD note, a story body and a Prevents bullet, all at once.
+n_want 0 "RESIDUE SCOPE: a residue-shaped token in the memlog, PRD, story and spine does NOT disarm" \
+  --spec "$R/residue-elsewhere" --prd "$R/prd-residue-token.md" --story "$R/story-residue-token.md" --spine "$R/spine-residue-token.md"
+n_says "RESIDUE SCOPE: and the run is a real PASS, not an empty one" \
+  "PASS (2 locked requirement(s), 2 capability(ies), 1 story(ies), 1 recorded note(s), 0 baselined)" \
+  --spec "$R/residue-elsewhere" --prd "$R/prd-residue-token.md" --story "$R/story-residue-token.md" --spine "$R/spine-residue-token.md"
+
+# `_` AND `-` ARE WORD CHARACTERS, so `\bCAP-[0-9]+[a-z]?\b` matches neither id in full.
+# A residue class narrower than the complement of `\b` extracts the well-formed `CAP-1`
+# out of each and silently defines a DIFFERENT capability than the one written.
+n_want 2 "RESIDUE CLASS: 'CAP-1_a' as a DEFINITION disarms — the class is the complement of \\b" \
+  --spec "$R/cap-residue-underscore" --prd "$R/prd-ok.md"
+n_says "RESIDUE CLASS: the underscore id is NAMED, not silently reduced to CAP-1" \
+  "CAP-1_a" \
+  --spec "$R/cap-residue-underscore" --prd "$R/prd-ok.md"
+n_want 2 "RESIDUE CLASS: 'CAP-1-x' as a DEFINITION disarms" \
+  --spec "$R/cap-residue-hyphen" --prd "$R/prd-ok.md"
+n_says "RESIDUE CLASS: the hyphenated id is NAMED" \
+  "CAP-1-x" \
+  --spec "$R/cap-residue-hyphen" --prd "$R/prd-ok.md"
+
+# A KERNEL DOCUMENTING ITS OWN ID GRAMMAR. Disarming here blocks the gate on correct
+# content, with "delete the documentation" as the only remedy.
+n_want 0 "FENCE: a definition-shaped line inside a fenced example block is an illustration, not a declaration" \
+  --spec "$R/cap-fenced" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+n_says "FENCE: and the fenced CAP ids are not counted as capabilities either" \
+  "PASS (2 locked requirement(s), 2 capability(ies), 1 story(ies), 0 recorded note(s), 0 baselined)" \
+  --spec "$R/cap-fenced" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+
+# MENTIONS BUT DEFINES NONE is not the same state as ZERO CAPABILITIES, and the two must
+# not print the same sentence -- one is a malformed kernel, the other a real spec.
+n_want 2 "DEFINITION GRAMMAR: a kernel that MENTIONS ids but declares none in the bullet shape disarms" \
+  --spec "$R/cap-mentions-none" --prd "$R/prd-ok.md"
+n_says "DEFINITION GRAMMAR: and it is told which of the two states it is in" \
+  "mentions CAP-<n> identifiers but DEFINES none" \
+  --spec "$R/cap-mentions-none" --prd "$R/prd-ok.md"
+
+n_want 0 "DEFINITION GRAMMAR: a prose MENTION of CAP-3 does not define it" \
+  --spec "$R/cap-prose-mention" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+n_says "DEFINITION GRAMMAR: the mentioned id is not required of any FR or AD" \
+  "PASS (2 locked requirement(s), 2 capability(ies), 1 story(ies), 0 recorded note(s), 0 baselined)" \
+  --spec "$R/cap-prose-mention" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+
+# TWO PARTITIONS COVER THIS ID DELIBERATELY, and that overlap is the fix for the prefix
+# shadow: the malformed-definition set catches it as a bad DEFINITION, and the
+# looks-declarative join catches it as a declaration that never parsed. Reverting either
+# alone leaves the other still catching it, so only reverting BOTH shows what the pair is
+# worth -- a silent drop, and a story citing the id accused of citing one that does not exist.
+n_mut decl-malformed-off-underscore 'if [ -n "$CAP_DECL_MALFORMED" ]; then' 'if false; then' \
+  0 "MUTATION: dropping the declaration assertion lets CAP-1_a vanish and the run exit 0" \
+  --spec "$R/cap-residue-underscore" --prd "$R/prd-ok.md"
+n_mut fenced-strip-off 'KERNEL_PROSE="$(awk ' 'KERNEL_PROSE="$(cat "$KERNEL" || true)"; IGNORED4="$(awk ' \
+  2 "MUTATION: not stripping fences disarms the gate on a kernel that documents its own grammar" \
+  --spec "$R/cap-fenced" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+# Both states exit 2, so rc cannot tell them apart -- the SENTENCE is the assertion.
+n_mut_says mentions-none-collapse 'if [ -z "$CAPS" ] && grep -qE' 'if false && grep -qE' \
+  "defines ZERO capabilities" \
+  "MUTATION: collapsing the two empty-set states tells a malformed kernel it has no capabilities" \
+  --spec "$R/cap-mentions-none" --prd "$R/prd-ok.md"
+
+# --- (A) `all` must be the WHOLE value, on the MARKER line ---------------------
+# The single most dangerous string in the file: it switches join (2a) off for every
+# capability at once and prints identically to a spine that closes the join for real.
+# This continuation says the AD binds NOTHING.
+n_want 1 "BINDS-ALL: a continuation line beginning 'all ...' does NOT switch join (2a) off" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-binds-all-prose.md"
+n_says "BINDS-ALL: the capabilities are still checked individually and still FAIL" \
+  "CAP-1 is defined in SPEC.md but no architecture decision in" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-binds-all-prose.md"
+n_says "BINDS-ALL: a real spine-wide AD says so out loud, with the count it is closing" \
+  "declares '**Binds:** all', so join (2a) closes spine-wide for all 2 capability(ies)" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-all.md"
+n_mut binds-all-folded \
+  "if grep -qiE '^[[:space:]]*[-*][[:space:]]*\\*\\*Binds:\\*\\*[[:space:]]*all[[:space:]]*\\.?[[:space:]]*\$' \"\$SPINE_MD\"; then" \
+  "if grep -qiE '\\*\\*Binds:\\*\\*[[:space:]]*all' <<<\"\$BINDS\"; then" \
+  0 "MUTATION: reading 'all' off the FOLDED bullet lets prose switch join (2a) off entirely" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-binds-all-prose.md"
+
+# --- (N3) the placeholder, the neighbouring bullet, and bound-wins -------------
+# Both hatches print `<why>` / `<reason>` into their own FAIL messages. Accepting that
+# literal back is a predicate satisfied by the instruction that produced it.
+n_want 1 "PLACEHOLDER: 'REASON: <why>' -- the string this check's own message prints -- is not a reason" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-placeholder.md"
+n_says "PLACEHOLDER: and the bullet is diagnosed as carrying no reason text" \
+  "whose 'REASON:' has no text" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-placeholder.md"
+n_mut noad-placeholder-loose '  r="$(printf '"'"'%s'"'"' "$1" | sed '"'"'s/^[[:space:]]*//; s/[[:space:]]*$//'"'"')"' '  return 0' \
+  0 "MUTATION: accepting any reason text lets the placeholder excuse the capability" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-placeholder.md"
+
+# THE REAL DEFERRED BULLET, under its own bold key. This is the form the consumer's spine
+# has today and the narrowness arm most likely to rot: the disposition is only readable
+# from the bullet the reader is anchored on.
+n_want 1 "NARROWNESS: the same decision under a DIFFERENT bold key is not a No-AD bullet" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-otherbullet.md"
+n_says "NARROWNESS: the capability it names still FAILS join (2a)" \
+  "CAP-2 is defined in SPEC.md but no architecture decision in" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-otherbullet.md"
+
+# BOUND WINS, AND NO NOTE IS EMITTED. Ordering, not a predicate: the `continue` for a
+# bound capability sits above the hatch. A note here would say the spine dispositioned a
+# capability it in fact binds -- the contradiction reported one arm down, restated as an
+# excuse. Absence-shaped, so the mutant below is what proves it discriminates.
+NEW_ARMS=$((NEW_ARMS+1))
+BW_OUT="$(bash "$V" --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-stale.md" 2>&1)"
+if grep -qF "CAP-2 is dispositioned No-AD in" <<<"$BW_OUT"; then
+  bad "BOUND WINS: a BOUND capability was also reported as dispositioned No-AD — the hatch runs above the bound check"
+elif ! grep -qF "disposition for 'CAP-2' AND an architecture decision that binds it" <<<"$BW_OUT"; then
+  bad "BOUND WINS: the contradiction FAIL is missing — this arm's absence half would pass against a subject that emits nothing"
+else
+  ok "BOUND WINS: a bound capability gets no No-AD note, and DOES get the contradiction FAIL"
+fi
+n_mut_says bound-wins-off 'if grep -qE "(^|[^A-Za-z0-9-])$cap([^A-Za-z0-9-]|\$)" <<<"$BINDS"; then' 'if false; then' \
+  "CAP-2 is dispositioned No-AD in" \
+  "MUTATION: dropping the bound check makes the hatch note a capability an AD binds" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-stale.md"
+
+# --- (D2) the memlog hatch: the SUBJECT anchor and the placeholder -------------
+n_want 1 "PLACEHOLDER: 'NO-CAPABILITY <reason>' is the message's own placeholder, not a reason" \
+  --spec "$R/disp-placeholder" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+n_says "PLACEHOLDER: the LR still gets the ordinary join (1) FAIL" \
+  "LR-S304-6 appears in the memlog but no capability entry cites it" \
+  --spec "$R/disp-placeholder" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+n_mut disp-placeholder-loose '  r="$(printf '"'"'%s'"'"' "$1" | sed '"'"'s/^[[:space:]]*//; s/[[:space:]]*$//'"'"')"' '  return 0' \
+  0 "MUTATION: accepting any reason text lets the placeholder excuse the requirement" \
+  --spec "$R/disp-placeholder" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+
+# THE LR MUST BE THE SUBJECT. One entry, two ids, neither dispositioned NO-CAPABILITY:
+# LR-S304-6 is SUPERSEDED and LR-S304-9 is merely named as its superseder. An unanchored
+# pair of greps -- "a line naming this LR", then "a line containing the token" -- excuses
+# BOTH, and neither of them is what the entry says.
+n_want 1 "SUBJECT ANCHOR: an entry naming the token but dispositioning the LR as something else excuses neither id" \
+  --spec "$R/disp-notsubject" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+n_says "SUBJECT ANCHOR: the dispositioned-as-something-else id still FAILS" \
+  "LR-S304-6 appears in the memlog but no capability entry cites it" \
+  --spec "$R/disp-notsubject" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+n_says "SUBJECT ANCHOR: and so does the id merely named as its superseder" \
+  "LR-S304-9 appears in the memlog but no capability entry cites it" \
+  --spec "$R/disp-notsubject" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+n_mut disp-anchor-loose '$lr[[:space:]]+NO-CAPABILITY' 'NO-CAPABILITY' \
+  0 "MUTATION: unanchoring the token from the id excuses BOTH ids in that entry" \
+  --spec "$R/disp-notsubject" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+
+# TWO LAYERS DECIDE THE BARE TOKEN -- the guard's own "and something after it", and
+# `is_reason`. Reverting either alone leaves the other still failing the run, which would
+# score as a kill the mutation did not earn.
+n_mut2 disp-noreason-loose \
+  'NO-CAPABILITY[[:space:]]+[^[:space:]]"' 'NO-CAPABILITY"' \
+  '  r="$(printf '"'"'%s'"'"' "$1" | sed '"'"'s/^[[:space:]]*//; s/[[:space:]]*$//'"'"')"' '  return 0' \
+  0 "MUTATION: dropping BOTH reason layers accepts a bare NO-CAPABILITY" \
+  --spec "$R/disp-noreason" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+
+# --- (R2) definitions the bold anchor cannot see, and the delimiter that bounds it
+n_want 2 "EMPHASIS: '- _CAP-1a_' is a definition ATTEMPT the bold anchor cannot see, and it DISARMS" \
+  --spec "$R/cap-emph-underscore" --prd "$R/prd-ok.md"
+n_says "EMPHASIS: the offending declaration LINE is echoed, so the author sees which bullet" \
+  "- _CAP-1a_ intent" \
+  --spec "$R/cap-emph-underscore" --prd "$R/prd-ok.md"
+n_want 2 "EMPHASIS: a code-marker definition '- \`CAP-1a\`' DISARMS too" \
+  --spec "$R/cap-emph-code" --prd "$R/prd-ok.md"
+
+# THE FALSE-POSITIVE PIN. Measured against the five real kernels with the subject's own
+# expression: 0 findings each, against 10/10/14/11/18 canonical definitions. Without the
+# emphasis-delimiter requirement this bullet shape is a finding, and the real kernels
+# carry 18 of them.
+n_want 0 "EMPHASIS PIN: a prose bullet that merely OPENS with a capability id is not a definition attempt" \
+  --spec "$R/cap-prose-bullet" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+n_says "EMPHASIS PIN: and the mentioned id does not enter the capability set" \
+  "PASS (2 locked requirement(s), 2 capability(ies), 1 story(ies), 0 recorded note(s), 0 baselined)" \
+  --spec "$R/cap-prose-bullet" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+# `decl-opener-loose` RETIRED HERE, deliberately and with its reason. It widened the
+# opener test so an ordinary prose bullet would be read as a declaration. Measured at this
+# pin: that bullet carries NO emphasis marker at all, so `decl_run`'s while-match loop
+# never executes and the widened test is unreachable -- three separate layer combinations
+# left it at rc=0. That is not a mutant that survived; it is an arm whose subject stopped
+# being constructible, and the honest instrument is the discrimination arm below.
+n_discrim "EMPHASIS PIN DISCRIMINATES: the prose bullet is quiet while a two-id run in the SAME container DISARMS" \
+  "$R/cap-prose-bullet" "$R/decl-bullet" "$R/prd-ok.md"
+
+# --- (D3) the accepted TYPE SET, and its boundary -----------------------------
+n_want 1 "TYPE SET: a '(note)' entry carrying the anchored token is NOT a disposition" \
+  --spec "$R/disp-notype" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+n_says "TYPE SET: the untyped-for-this-purpose entry produces the ordinary join (1) FAIL" \
+  "LR-S304-6 appears in the memlog but no capability entry cites it" \
+  --spec "$R/disp-notype" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+
+# --- (N4) the id segment, and a marker a Binds bullet ate ---------------------
+n_want 1 "ID SEGMENT: a parenthetical naming another capability makes the segment a mixed one, and it is REFUSED" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-mixedseg.md"
+n_says "ID SEGMENT: the diagnosis says where commentary belongs" \
+  "id segment is not an id list" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-mixedseg.md"
+# The only new hard edge in the hatch, and the code says it is baselineable. An arm that
+# never exercises the key cannot tell a routed finding from an unroutable one.
+n_want 0 "ID SEGMENT: the no-ad-form: key is reachable by --baseline, as its own comment claims" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-mixedseg.md" --baseline "$R/baseline-noad-form.txt"
+n_says "ID SEGMENT: and the suppression names the key" \
+  "BASELINED  no-ad-form:spine-noad-mixedseg.md" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-mixedseg.md" --baseline "$R/baseline-noad-form.txt"
+# THE WRONG DIRECTION IS THE ONE THAT COSTS A CONSUMER ITS GATE. With both segment readers
+# off, `CAP-1` -- named only inside the parenthetical -- is treated as DISPOSED and then
+# reported as contradicting the AD that binds it: a hard, unbaselineable FAIL on a spine
+# that is correct. That is the failure the partition exists to make unconstructible, so it
+# is what this mutant asserts rather than a bare rc.
+n_mut2_says noad-segment-off \
+  'elif ! no_ad_id_segment_ok "$nad_line"; then' 'elif false; then' \
+  '  no_ad_id_segment_ok "$1" || return' '  :' \
+  "disposition for 'CAP-1' AND an architecture decision that binds it" \
+  "MUTATION: dropping BOTH segment readers makes a merely-mentioned CAP-1 contradict its own AD" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-mixedseg.md"
+
+# A MARKER THAT IS NOT AT BULLET START is folded into the Binds bullet, and every
+# capability it names then reads as BOUND -- silence from a sentence that says the
+# opposite. rc alone cannot see it: with the arm off the run is a clean PASS.
+n_want 1 "EATEN MARKER: a '**No-AD:**' inside a Binds bullet is reported, not silently read as a binding" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-eaten.md"
+n_says "EATEN MARKER: the diagnosis says the disposition must start its own bullet" \
+  "names a capability AFTER a second '**<Key>:**' marker inside a '- **Binds:**' bullet" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-eaten.md"
+# TWO LAYERS: the arm that REPORTS the eaten marker, and the truncation that stops the
+# capabilities after it being counted as bound. Reverting the report alone leaves the
+# truncation still failing them, which would score as a kill the mutation did not earn.
+n_mut2 noad-eaten-off \
+  'if [ -n "$BINDS_EATEN" ]; then' 'if false; then' \
+  '      if (match(rest, /\*\*[A-Za-z][A-Za-z-]*:\*\*/)) { print substr($0, 1, h + 9 + RSTART - 1); next }' '      if (0) { next }' \
+  0 "MUTATION: dropping BOTH the report and the truncation makes CAP-2 read as BOUND, silently" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-eaten.md"
+# THE NARROWING PIN. A second marker with no id after it loses nothing to the truncation,
+# and the wrapped form of that sentence is what the fold exists to support.
+n_want 0 "EATEN MARKER PIN: a second '**<Key>:**' marker with NO capability after it does not fire" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-marker-noid.md"
+n_says "EATEN MARKER PIN: and both capabilities still read as bound" \
+  "PASS (2 locked requirement(s), 2 capability(ies), 0 story(ies), 0 recorded note(s), 0 baselined)" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-marker-noid.md"
+n_says "EATEN MARKER: the capabilities after the eaten marker are NOT counted as bound" \
+  "CAP-2 is defined in SPEC.md but no architecture decision in" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-eaten.md"
+
+# --- (R3) declarations the definition reader cannot see -----------------------
+# Each shape below is a real markdown declaration the `- **CAP-<n>**` reader does not
+# parse. Narrowing the population is how the silence came back once already, so the two
+# sets are derived separately and their DISAGREEMENT is the finding.
+n_want 2 "LOOKS-DECLARATIVE: a heading declaration '### CAP-3' disarms rather than vanishing" \
+  --spec "$R/cap-heading" --prd "$R/prd-ok.md"
+n_says "LOOKS-DECLARATIVE: the heading-declared id is echoed" \
+  "### CAP-3" \
+  --spec "$R/cap-heading" --prd "$R/prd-ok.md"
+
+# THE SHAPE THE JOIN STRUCTURALLY CANNOT SEE IF ITS TWO SIDES SHARE A GRAMMAR. The
+# well-formed PREFIX of `CAP-1ab` is `CAP-1a`, and here that prefix is itself defined --
+# so a looks-declarative probe extracting with the well-formed grammar cancels against
+# CAPS and the malformed definition is dropped in silence. Measured as a live regression
+# once; this arm is what stops it returning.
+n_want 2 "PREFIX SHADOW: a malformed definition whose well-formed PREFIX is also defined still disarms" \
+  --spec "$R/cap-prefix-defined" --prd "$R/prd-prefix-defined.md"
+n_says "PREFIX SHADOW: and it is the malformed id that is named, not its prefix" \
+  "CAP-1ab" \
+  --spec "$R/cap-prefix-defined" --prd "$R/prd-prefix-defined.md"
+
+# --- (T) a definition bullet that declares TWO capabilities --------------------
+# THE SHAPE THE CROSS-CHECK CANNOT EXPRESS. It joins two ID sets; this bullet's defect is
+# that one definition STRING holds two ids, and `CAP-2` — sitting mid-run with no emphasis
+# marker before it — never reaches the looks-declarative side at all. Nothing disagrees,
+# so nothing fires. The definition-shape assertion is the only guard whose subject is the
+# string rather than the ids.
+n_want 2 "TWO-ID DEFINITION: a bullet declaring two capabilities DISARMS rather than crediting one" \
+  --spec "$R/cap-twoid" --prd "$R/prd-ok.md"
+n_says "TWO-ID DEFINITION: the malformed declaration STRING is echoed, not just an id" \
+  "**CAP-1 and CAP-2 together**" \
+  --spec "$R/cap-twoid" --prd "$R/prd-ok.md"
+# WHICH GUARD OWNS IT. Same bullet, leading id changed to one nothing else defines: now the
+# CROSS-CHECK sees it, because `CAP-9` is not cancelled on the parsed side. The pair is
+# what shows the two guards cover different populations rather than one being redundant.
+n_want 2 "TWO-ID DEFINITION: an undefined leading id in the same bullet shape also DISARMS" \
+  --spec "$R/cap-twoid-undefined" --prd "$R/prd-ok.md"
+# WHICH GUARD OWNS WHICH. The definition-shape assertion runs first and claims both, so the
+# boundary is only visible with it disarmed: then the CROSS-CHECK still catches the
+# undefined leading id, and (the mutant above) does NOT catch the defined one. That pair is
+# the measurement behind keeping both guards.
+n_mut_says twoid-def-off-undefined 'if [ -n "$CAP_DECL_MALFORMED" ]; then' 'if false; then' \
+  "PASS (2 locked requirement(s), 1 capability(ies)" \
+  "MUTATION: with the assertion off the undefined-leading-id variant ALSO drops its second id in silence" \
+  --spec "$R/cap-twoid-undefined" --prd "$R/prd-ok.md"
+# rc alone cannot see this one: with the assertion off the run is a clean PASS. The
+# CAPABILITY COUNT is the whole finding -- two declared, one seen.
+n_mut_says twoid-def-off 'if [ -n "$CAP_DECL_MALFORMED" ]; then' 'if false; then' \
+  "PASS (2 locked requirement(s), 1 capability(ies)" \
+  "MUTATION: dropping the definition-shape assertion silently credits two capabilities to one" \
+  --spec "$R/cap-twoid" --prd "$R/prd-ok.md"
+
+# --- (S) the No-AD staleness key is baselineable -------------------------------
+# The comment above that arm says so, and a comment is not a mechanism. This is the only
+# thing that can tell a routed finding from an unroutable one.
+n_want 0 "NO-AD STALE: the no-ad-stale:<CAP-id> key is reachable by --baseline" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-stale.md" --baseline "$R/baseline-noad-stale.txt"
+n_says "NO-AD STALE: and the suppression names the per-capability key, not a file-level one" \
+  "BASELINED  no-ad-stale:CAP-2" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-stale.md" --baseline "$R/baseline-noad-stale.txt"
+
+# --- (I) is_reason, the whole accept/reject matrix ------------------------------
+# THE REJECTS ARE THE STRINGS THIS CHECK'S OWN MESSAGES TELL AUTHORS TO WRITE, plus the
+# words an author writes when they mean to come back. The ACCEPTS are the reason that
+# fooled the first version of the wrapper test: a real justification written entirely
+# inside brackets or emphasis. Both halves are needed — a predicate that rejects
+# everything passes the reject rows and fails no gate until it blocks a correct spine.
+n_want 1 "REASON REJECT: the bare placeholder '<why>'" --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-reject-1.md"
+n_want 1 "REASON REJECT: the placeholder in a code span" --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-reject-2.md"
+n_want 1 "REASON REJECT: the placeholder in parentheses — the test runs on the CONTENT" --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-reject-3.md"
+n_want 1 "REASON REJECT: '[reason]' reduces to a placeholder WORD once brackets are stripped" --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-reject-4.md"
+n_want 1 "REASON REJECT: '{why}' likewise" --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-reject-5.md"
+n_want 1 "REASON REJECT: '(why)' likewise" --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-reject-6.md"
+n_want 1 "REASON REJECT: the bare word 'reason'" --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-reject-7.md"
+n_want 1 "REASON REJECT: TODO" --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-reject-8.md"
+n_want 1 "REASON REJECT: TBD" --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-reject-9.md"
+n_want 1 "REASON REJECT: n/a" --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-reject-10.md"
+n_want 0 "REASON ACCEPT: a real justification written entirely in parentheses" --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-accept-1.md"
+n_says "REASON ACCEPT: and it is recorded as a note rather than passed in silence" \
+  "CAP-2 is dispositioned No-AD in" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-accept-1.md"
+n_want 0 "REASON ACCEPT: a bracketed citation followed by prose" --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-accept-2.md"
+n_says "REASON ACCEPT: the bracketed-citation reason is RECORDED, not passed in silence" \
+  "CAP-2 is dispositioned No-AD in" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-accept-2.md"
+
+n_want 0 "REASON ACCEPT: emphasis around a real reference" --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-accept-3.md"
+n_says "REASON ACCEPT: the emphasised reason is RECORDED" \
+  "CAP-2 is dispositioned No-AD in" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-accept-3.md"
+
+n_want 0 "REASON ACCEPT: a sentence that merely CONTAINS the word 'reason'" --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-accept-4.md"
+n_says "REASON ACCEPT: the word list matches the WHOLE trimmed string, so a sentence containing it is RECORDED" \
+  "CAP-2 is dispositioned No-AD in" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-accept-4.md"
+
+
+# THE STRIP IS LOAD-BEARING IN THE ACCEPT DIRECTION, which is the one a reject-everything
+# predicate passes. Remove it and a real justification written in parentheses is a hard
+# failure on a correct spine.
+n_mut reason-strip-off \
+  "      '('*')'|'['*']'|'{'*'}')" "      'zzz')" \
+  0 "MUTATION: not stripping brackets lets '(<why>)' through — the placeholder test runs on the CONTENT" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-reject-3.md"
+n_mut reason-wordlist-off \
+  "    reason|why|rationale|explanation|justification|reasons) return 1 ;;" "    zzzz) return 1 ;;" \
+  0 "MUTATION: dropping the placeholder-word list accepts a bare '[reason]'" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/reason-reject-4.md"
+
+# --- (E) the eaten-marker matrix ----------------------------------------------
+# FIRES ON AN ACTUAL ID LOSS, NOT ON THE PRESENCE OF A MARKER. The two no-loss rows below
+# were hard failures until this was narrowed, and the first of them is ordinary writing.
+n_want 1 "EATEN MARKER: a parenthetical marker BEFORE a later id truncates that id away" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/binds-loss-parenthetical.md"
+n_says "EATEN MARKER: the loss is reported against the bullet" \
+  "names a capability AFTER a second '**<Key>:**' marker" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/binds-loss-parenthetical.md"
+n_want 1 "EATEN MARKER: a foreign key marker BETWEEN two ids truncates the second" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/binds-loss-midlist.md"
+n_want 0 "EATEN MARKER PIN: a trailing marker with every id BEFORE it loses nothing and must not fire" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/binds-noloss-trailing.md"
+n_says "EATEN MARKER PIN: and both capabilities still read as bound" \
+  "PASS (2 locked requirement(s), 2 capability(ies), 0 story(ies), 0 recorded note(s), 0 baselined)" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/binds-noloss-trailing.md"
+n_want 0 "EATEN MARKER PIN: '**AD-7:**' carries a digit and is not a key marker at all" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/binds-noloss-digitkey.md"
+n_says "EATEN MARKER PIN: and both capabilities still read as bound past the digit-bearing key" \
+  "PASS (2 locked requirement(s), 2 capability(ies), 0 story(ies), 0 recorded note(s), 0 baselined)" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/binds-noloss-digitkey.md"
+
+
+# --- (C) one malformed run, six containers ------------------------------------
+# THE CONTROL RUNS FIRST. A clean second declaration in the identical file shape must
+# still be two capabilities and a PASS -- otherwise every DISARM below is the file shape
+# rather than the malformed run.
+n_want 0 "CONTAINER CONTROL: a clean second declaration in the same file shape passes" \
+  --spec "$R/decl-clean" --prd "$R/prd-ok.md"
+n_says "CONTAINER CONTROL: and BOTH capabilities are in the set" \
+  "PASS (2 locked requirement(s), 2 capability(ies), 0 story(ies), 0 recorded note(s), 0 baselined)" \
+  --spec "$R/decl-clean" --prd "$R/prd-ok.md"
+
+# SIX RECONSTRUCTIONS, ONE CAUSE. Each is the SAME two-id run; only the container differs.
+# The predicate is keyed on the emphasis run, so all six take the same exit.
+n_want 2 "CONTAINER: a two-id run in a dash bullet DISARMS" \
+  --spec "$R/decl-bullet" --prd "$R/prd-ok.md"
+n_want 2 "CONTAINER: in a NUMBERED item" \
+  --spec "$R/decl-numbered" --prd "$R/prd-ok.md"
+n_want 2 "CONTAINER: in a TABLE row" \
+  --spec "$R/decl-table" --prd "$R/prd-ok.md"
+n_want 2 "CONTAINER: in a BLOCKQUOTE bullet" \
+  --spec "$R/decl-quote" --prd "$R/prd-ok.md"
+n_want 2 "CONTAINER: in a HEADING" \
+  --spec "$R/decl-heading" --prd "$R/prd-ok.md"
+n_want 2 "CONTAINER: as a plain PARAGRAPH" \
+  --spec "$R/decl-para" --prd "$R/prd-ok.md"
+n_want 2 "CONTAINER: with an inner emphasis marker inside the bold run" \
+  --spec "$R/decl-innerstar" --prd "$R/prd-ok.md"
+n_says "CONTAINER: the offending RUN is echoed, so the author sees which text is wrong" \
+  "**CAP-1 and CAP-2 together**" \
+  --spec "$R/decl-table" --prd "$R/prd-ok.md"
+
+# THE MUTANT USES A NON-BULLET CONTAINER ON PURPOSE. With the declaration assertion off,
+# the cross-check cannot reach this: `CAP-1` is cancelled by the clean declaration and
+# `CAP-2` sits mid-run with no marker before it, so it is absent from BOTH sides of the
+# join. rc stays 0 and the only trace is the capability count.
+n_mut_says decl-malformed-off 'if [ -n "$CAP_DECL_MALFORMED" ]; then' 'if false; then' \
+  "PASS (2 locked requirement(s), 1 capability(ies)" \
+  "MUTATION: with the declaration assertion off, a table-row two-id run drops CAP-2 in silence" \
+  --spec "$R/decl-table" --prd "$R/prd-ok.md"
+
+# THE NEGATIVE CONTROL, AND WHAT IT IS ACTUALLY A CONTROL FOR. A bolded clause that
+# MENTIONS two ids opens with a backtick, not an id, so the declaration arm is right to
+# stay quiet. The FILE is quiet only because those ids are declared elsewhere -- the
+# cross-check reads a backticked id as declarative. Both halves are armed because a
+# single-sided control here would credit the declaration arm with a quietness the
+# surrounding kernel is providing.
+n_want 0 "CLAUSE PIN: a bolded clause MENTIONING ids it does not declare is not a declaration" \
+  --spec "$R/decl-clause-defined" --prd "$R/prd-decl-clause.md"
+n_says "CLAUSE PIN: and all three declared capabilities are in the set" \
+  "PASS (1 locked requirement(s), 3 capability(ies), 0 story(ies), 0 recorded note(s), 0 baselined)" \
+  --spec "$R/decl-clause-defined" --prd "$R/prd-decl-clause.md"
+# THE rc=2 HALF IS RETIRED, and the reason is a rule change rather than a regression.
+# It fired because ANY run opening with a CAP id counted as a declaration. DEFECT 33
+# overturned that -- a capability whose intent cites a neighbouring spec was hard-DISARMING
+# -- so only an item FIRST run can declare and everything after it is prose. This clause
+# opens `**` then a backtick, so the item declares nothing and the ids inside it are prose
+# mentions, which is exactly what DEFECT 33 says must not fire.
+#
+# THE COST IS NAMED RATHER THAN HIDDEN: a genuinely undeclared id that appears ONLY inside
+# prose now goes unreported. That is the right trade -- the alternative was measured at 18
+# false positives across five real kernels, four of which it would have DISARMED -- but it
+# is a real hole and this arm is where a future reader will find it stated.
+n_want 0 "CLAUSE PIN: with those ids UNDECLARED the clause is STILL quiet — prose beats declaration after the first run" \
+  --spec "$R/decl-clause-undefined" --prd "$R/prd-decl-clause.md"
+n_says "CLAUSE PIN: and the kernel keeps exactly the ONE capability it really declares" \
+  "PASS (1 locked requirement(s), 1 capability(ies), 0 story(ies), 0 recorded note(s), 0 baselined)" \
+  --spec "$R/decl-clause-undefined" --prd "$R/prd-decl-clause.md"
+
+# --- (U) an UNCLOSED emphasis run, and a correct kernel that documents itself -------
+# THE EIGHTH RECONSTRUCTION. An unclosed `**` is an ordinary hand-edit typo, and the
+# definition reader needs a CLOSING marker — so the run is captured by nothing and every id
+# on the line leaves the set in silence. Three openers, because the opener is the key.
+n_want 2 "UNCLOSED: a bold run that never closes DISARMS rather than dropping its ids" \
+  --spec "$R/unclosed-bold" --prd "$R/prd-unclosed.md"
+n_says "UNCLOSED: the offending line is echoed" \
+  "- **CAP-2 and CAP-9 together intent" \
+  --spec "$R/unclosed-bold" --prd "$R/prd-unclosed.md"
+n_want 2 "UNCLOSED: an unclosed single-asterisk run too" \
+  --spec "$R/unclosed-em" --prd "$R/prd-unclosed.md"
+n_want 2 "UNCLOSED: an unclosed code run too" \
+  --spec "$R/unclosed-code" --prd "$R/prd-unclosed.md"
+
+# THE DISCRIMINATING CONTROL, and the one that decides whether the arm keys on the RUN or
+# on the LOSS. Same unclosed line, every id it names declared properly above it: nothing is
+# dropped, so nothing may fire.
+n_want 0 "UNCLOSED PIN: the same unclosed line with every id DECLARED elsewhere stays quiet" \
+  --spec "$R/unclosed-declared" --prd "$R/prd-unclosed.md"
+n_says "UNCLOSED PIN: and all three capabilities are in the set" \
+  "PASS (2 locked requirement(s), 3 capability(ies), 0 story(ies), 0 recorded note(s), 0 baselined)" \
+  --spec "$R/unclosed-declared" --prd "$R/prd-unclosed.md"
+
+# THE POSITIVE CONTROL KERNEL. Canonical declarations AND prose about them: a heading per
+# capability, a heading naming two, and a bolded sentence citing both. Nothing is dropped,
+# so a kernel that documents itself must pass. Without this arm an assertion that flags any
+# non-id emphasis run reads as green while hard-blocking every kernel written this way.
+n_want 0 "PROSE-RICH KERNEL: capability headings and a bolded sentence about them still PASS" \
+  --spec "$R/kernel-prose-rich" --prd "$R/prd-ok.md"
+n_says "PROSE-RICH KERNEL: and the prose neither adds to nor removes from the capability set" \
+  "PASS (2 locked requirement(s), 2 capability(ies), 0 story(ies), 0 recorded note(s), 0 baselined)" \
+  --spec "$R/kernel-prose-rich" --prd "$R/prd-ok.md"
+
+n_mut unclosed-off 'if [ -n "$CAP_DECL_MALFORMED" ]; then' 'if false; then' \
+  0 "MUTATION: with the assertion off the unclosed run drops CAP-2 and CAP-9 and the run exits 0" \
+  --spec "$R/unclosed-bold" --prd "$R/prd-unclosed.md"
+
+# --- (W) a declaration that WRAPS ---------------------------------------------
+# THE DEFECT SPANS TWO INNOCENT LINES. The first opens a run and drops nothing; the second
+# carries the dropped id and opens no run. A line-scoped reader sees neither.
+n_want 2 "WRAPPED: a two-id declaration split across two lines DISARMS" \
+  --spec "$R/b31-wrapped" --prd "$R/prd-ok.md"
+# WHICH ARM CLAIMED IT, not merely that something did: this seed is reachable by the
+# declaration assertion only, and the dropped-id list is what names it.
+n_says "WRAPPED: the declaration arm claims it, and names the id that was dropped" \
+  "drop these capability ids: CAP-2" \
+  --spec "$R/b31-wrapped" --prd "$R/prd-ok.md"
+# THE LOAD-BEARING HALF. Byte-identical content on ONE line. Revert the fold and this arm
+# stays green while the wrapped one goes silent — so the pair localises the regression to
+# the fold rather than to the declaration predicate.
+n_want 2 "WRAPPED CONTROL: the byte-identical ONE-LINE form DISARMS too" \
+  --spec "$R/b31-oneline" --prd "$R/prd-ok.md"
+n_says "WRAPPED CONTROL: and it is the same arm and the same dropped id" \
+  "drop these capability ids: CAP-2" \
+  --spec "$R/b31-oneline" --prd "$R/prd-ok.md"
+n_want 2 "WRAPPED: the wrapped form with an UNDECLARED leading id DISARMS as well" \
+  --spec "$R/b31-wrapped-undef" --prd "$R/prd-ok.md"
+# THE MUTANT KILLS ONE HALF OF THE PAIR AND NOT THE OTHER, which is the pair's whole point:
+# reading the unfolded prose leaves the wrapped declaration invisible while the one-line
+# form still DISARMs.
+n_mut fold-off 'printf '"'"'%s\n'"'"' "$KERNEL_ITEMS"; }' 'printf '"'"'%s\n'"'"' "$KERNEL_PROSE"; }' \
+  0 "MUTATION: reading unfolded prose lets the WRAPPED declaration drop CAP-2 in silence" \
+  --spec "$R/b31-wrapped" --prd "$R/prd-ok.md"
+
+# --- (F) the fold's BOUND -----------------------------------------------------
+# THE FOLD IS BOUNDED BY AN OPEN RUN THAT OPENED WITH A CAP ID, not by the list item and
+# not by any odd asterisk count. Each arm below is a CORRECT kernel that a wider bound
+# hard-DISARMS, which is the failure mode this file has met three times.
+n_want 0 "FOLD BOUND: an unclosed '**' in a DESCRIPTION does not drag the next line into the declaration" \
+  --spec "$R/d32-unclosed-desc" --prd "$R/prd-ok.md"
+n_says "FOLD BOUND: and the cross-spec id on that line is not read as dropped" \
+  "PASS (2 locked requirement(s), 2 capability(ies), 0 story(ies), 0 recorded note(s), 0 baselined)" \
+  --spec "$R/d32-unclosed-desc" --prd "$R/prd-ok.md"
+n_want 0 "FOLD BOUND: the same line with the bold CLOSED also passes — the bound cannot be widened back" \
+  --spec "$R/d32-closed-desc" --prd "$R/prd-ok.md"
+n_want 0 "FOLD BOUND: a CLOSED declaration whose description cites another spec's id passes" \
+  --spec "$R/bound-closed-desc" --prd "$R/prd-ok.md"
+n_says "FOLD BOUND: and that description contributes nothing to the capability set" \
+  "PASS (2 locked requirement(s), 2 capability(ies), 0 story(ies), 0 recorded note(s), 0 baselined)" \
+  --spec "$R/bound-closed-desc" --prd "$R/prd-ok.md"
+# `fold-bound-wide` RETIRED for the same measured reason: with the fold bound widened AND
+# the first-run rule widened, both bound pins stay at rc=0, because a cross-spec id inside
+# a description opens no run and `decl_run` reports only a run-opening id. The bound is
+# held by the shape of the reader, not by a guard that can be switched off.
+n_discrim "FOLD BOUND DISCRIMINATES: a description citing another spec is quiet while a WRAPPED declaration DISARMS" \
+  "$R/bound-closed-desc" "$R/b31-wrapped" "$R/prd-ok.md"
+n_discrim "FOLD BOUND DISCRIMINATES: and so is an unclosed bold inside a description" \
+  "$R/d32-unclosed-desc" "$R/b31-wrapped" "$R/prd-ok.md"
+
+# --- (T) the fold TERMINATES --------------------------------------------------
+# A HANG IS NOT A FAILURE. Every other arm here reads an exit code or a message, and an
+# accumulator that never returns produces neither.
+NEW_ARMS=$((NEW_ARMS+1))
+if ! run_bounded 5 "$V" --spec "$R/fold-heavy" --prd "$R/prd-ok.md"; then
+  bad "TERMINATION: the fold did NOT complete within 5s on a fold-heavy kernel — an accumulator that never returns"
+elif ! bash "$V" --spec "$R/fold-heavy" --prd "$R/prd-ok.md" 2>&1 | grep -qF "PASS (2 locked requirement(s), 2 capability(ies)"; then
+  bad "TERMINATION: it completed but produced no verdict — completing is what a subject that emits nothing also does"
+else
+  ok "TERMINATION: the fold completes on a 600-line fold-heavy kernel within 5s AND reports its verdict"
+fi
+# THE ARM NEEDS A SUBJECT. A non-terminating fold must be killed by the bound, or this
+# assertion is one that cannot fire — the exact shape it exists to catch.
+NEW_ARMS=$((NEW_ARMS+1))
+HANG_M="$R/mutant-fold-hang.sh"
+cp "$V" "$HANG_M"
+FROM='  DECL_RUN = ""; DECL_FOUND = 0; DECL_OPEN = 0' TO='  DECL_RUN = ""; DECL_FOUND = 0; DECL_OPEN = 0; while (1) { }' \
+  perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$HANG_M"
+if cmp -s "$V" "$HANG_M"; then
+  bad "FIXTURE ERROR: the fold-hang mutation matched nothing — the termination arm proves nothing"
+elif ! bash -n "$HANG_M" 2>/dev/null; then
+  bad "FIXTURE ERROR: the fold-hang mutant is not a valid shell script"
+elif run_bounded 5 "$HANG_M" --spec "$R/fold-heavy" --prd "$R/prd-ok.md"; then
+  bad "MUTATION: a non-terminating fold COMPLETED — the termination arm cannot fire"
+else
+  ok "MUTATION: a non-terminating fold is caught by the bound, so the arm above has a subject"
+fi
+
+# --- (33) after the first run, an item is PROSE -------------------------------
+n_want 0 "DEFECT 33: an intent citing a neighbouring spec id is prose, not a second declaration" \
+  --spec "$R/bullet-foreign-id" --prd "$R/prd-ok.md"
+n_says "DEFECT 33: and the cited id does not enter the capability set" \
+  "PASS (2 locked requirement(s), 2 capability(ies), 0 story(ies), 0 recorded note(s), 0 baselined)" \
+  --spec "$R/bullet-foreign-id" --prd "$R/prd-ok.md"
+# An item whose FIRST run is not an id declares nothing at all -- the comment beside that
+# rule names this exact shape, so it gets an arm rather than a citation.
+n_want 0 "DEFECT 33: a Note bullet declares nothing, so an undeclared id inside it is quiet" \
+  --spec "$R/note-bullet" --prd "$R/prd-ok.md"
+n_says "DEFECT 33: and the two real declarations are still both counted" \
+  "PASS (2 locked requirement(s), 2 capability(ies), 0 story(ies), 0 recorded note(s), 0 baselined)" \
+  --spec "$R/note-bullet" --prd "$R/prd-ok.md"
+
+# THE ACCEPTED COST, ARMED ON BOTH SIDES. A heading has no closing delimiter, so its whole
+# text is the run and a heading CITING a foreign id DISARMS -- while the identical citation
+# in an intent bullet is prose and is quiet. The asymmetry is deliberate; arming only the
+# side that fires would let the other drift into silence unnoticed, and arming neither
+# would leave a hard block on correct input undocumented.
+n_want 2 "ACCEPTED COST: a HEADING citing a foreign id DISARMS — a heading has no delimiter to end its run" \
+  --spec "$R/head-foreign-id" --prd "$R/prd-ok.md"
+n_discrim "ACCEPTED COST: the identical citation is quiet in a BULLET and firing in a HEADING, in one run" \
+  "$R/bullet-foreign-id" "$R/head-foreign-id" "$R/prd-ok.md"
+
+# --- (M) container x declaration-shape, in the LONE-ID shape -------------------
+# THE FAMILY THAT WAS MISSING, AND WHY ITS ABSENCE WAS INVISIBLE. Every container arm
+# above seeds a TWO-ID run, which is non-bare and is taken by the stronger-run path
+# WITHOUT EVER CONSULTING the leading test. A regression that put a lone `| **CAP-9** |`
+# and `> - **CAP-9**` back into silence lived in that leading test, and this battery
+# stayed green straight through it. WHEN A GUARD HAS TWO ACCEPTANCE PATHS, EVERY SEED
+# FAMILY NEEDS A CASE ON EACH — otherwise the family covers one branch and reads as
+# though it covered the guard.
+#
+# THE EXPECTATION SPLITS THREE WAYS, and that is the load-bearing part: an arm asserting
+# "every container DISARMS" would be WRONG about the two the reader correctly takes.
+
+# READ. The reader takes these, so CAP-9 joins the set — asserted on the COUNT, because
+# rc=0 alone is what a subject that emits nothing also gives.
+n_want 0 "MATRIX/READ: a canonical dash bullet is taken as a declaration" \
+  --spec "$R/mx-read-dash" --prd "$R/prd-matrix.md"
+n_says "MATRIX/READ: and CAP-9 is IN the capability set" \
+  "PASS (1 locked requirement(s), 2 capability(ies)" \
+  --spec "$R/mx-read-dash" --prd "$R/prd-matrix.md"
+n_want 0 "MATRIX/READ: an INDENTED bullet is still a bullet" \
+  --spec "$R/mx-read-indent" --prd "$R/prd-matrix.md"
+n_says "MATRIX/READ: and its id is IN the set too" \
+  "PASS (1 locked requirement(s), 2 capability(ies)" \
+  --spec "$R/mx-read-indent" --prd "$R/prd-matrix.md"
+
+n_want 2 "MATRIX/FLAG: a lone declaration in a NUMBERED item DISARMS" \
+  --spec "$R/mx-flag-numbered" --prd "$R/prd-matrix.md"
+n_want 2 "MATRIX/FLAG: a lone declaration in a PLUS-marker bullet DISARMS" \
+  --spec "$R/mx-flag-plus" --prd "$R/prd-matrix.md"
+n_want 2 "MATRIX/FLAG: a lone declaration in a BLOCKQUOTE DISARMS" \
+  --spec "$R/mx-flag-quote" --prd "$R/prd-matrix.md"
+n_want 2 "MATRIX/FLAG: a lone declaration in a BLOCKQUOTE BULLET DISARMS" \
+  --spec "$R/mx-flag-quotebul" --prd "$R/prd-matrix.md"
+n_want 2 "MATRIX/FLAG: a lone declaration in a TABLE cell DISARMS" \
+  --spec "$R/mx-flag-table" --prd "$R/prd-matrix.md"
+n_want 2 "MATRIX/FLAG: a lone declaration in a HEADING DISARMS" \
+  --spec "$R/mx-flag-heading" --prd "$R/prd-matrix.md"
+n_want 2 "MATRIX/FLAG: a lone declaration in a bare PARAGRAPH DISARMS" \
+  --spec "$R/mx-flag-para" --prd "$R/prd-matrix.md"
+n_want 2 "MATRIX/FLAG: a lone declaration in underscore EMPHASIS DISARMS" \
+  --spec "$R/mx-flag-em" --prd "$R/prd-matrix.md"
+n_want 2 "MATRIX/FLAG: a lone declaration in a CODE run DISARMS" \
+  --spec "$R/mx-flag-code" --prd "$R/prd-matrix.md"
+n_want 2 "MATRIX/FLAG: a lone declaration in DOUBLE-UNDERSCORE emphasis DISARMS" \
+  --spec "$R/mx-flag-dunder" --prd "$R/prd-matrix.md"
+n_says "MATRIX/FLAG: and the unreadable id is NAMED, so the author is told which one" \
+  "CAP-9" \
+  --spec "$R/mx-flag-table" --prd "$R/prd-matrix.md"
+
+# QUIET. Prose. The id must NOT join the set and nothing may fire — the third expectation,
+# and the one an "everything DISARMS" arm would get backwards.
+n_want 0 "MATRIX/QUIET: a prose bullet citing an id upstream is not a declaration" \
+  --spec "$R/mx-quiet-see" --prd "$R/prd-matrix.md"
+n_says "MATRIX/QUIET: and the cited id stays OUT of the capability set" \
+  "PASS (1 locked requirement(s), 1 capability(ies)" \
+  --spec "$R/mx-quiet-see" --prd "$R/prd-matrix.md"
+n_want 0 "MATRIX/QUIET: a Note bullet citing an id upstream is not a declaration either" \
+  --spec "$R/mx-quiet-note" --prd "$R/prd-matrix.md"
+n_says "MATRIX/QUIET: and its id stays out too" \
+  "PASS (1 locked requirement(s), 1 capability(ies)" \
+  --spec "$R/mx-quiet-note" --prd "$R/prd-matrix.md"
+
+# --- (40) the membership gate has THREE states, not two -----------------------
+# A bolded phrase LATE in an item is a foreign citation when NONE of its ids is declared,
+# and a dropped declaration when SOME are. Only the middle state fires. Holding the two
+# ends without the middle lets a widening pass in silence; holding the middle without the
+# ends lets the gate be deleted.
+n_want 0 "MEMBERSHIP: a late bolded phrase whose ids are ALL declared is quiet" \
+  --spec "$R/mem-all-known" --prd "$R/prd-mixed.md"
+n_says "MEMBERSHIP: and the kernel keeps its three real declarations" \
+  "PASS (1 locked requirement(s), 3 capability(ies)" \
+  --spec "$R/mem-all-known" --prd "$R/prd-mixed.md"
+n_want 0 "MEMBERSHIP: a late bolded phrase whose ids are NONE declared is a foreign citation" \
+  --spec "$R/mem-none-known" --prd "$R/prd-mixed.md"
+n_says "MEMBERSHIP: and it does not beat the real declaration" \
+  "PASS (1 locked requirement(s), 3 capability(ies)" \
+  --spec "$R/mem-none-known" --prd "$R/prd-mixed.md"
+n_want 2 "MEMBERSHIP: MIXED — one id declared and one not — is a real drop and FIRES" \
+  --spec "$R/mem-mixed" --prd "$R/prd-mixed.md"
+n_says "MEMBERSHIP: and the mixed phrase is reported" \
+  "CAP-9" \
+  --spec "$R/mem-mixed" --prd "$R/prd-mixed.md"
+# POSITION STILL WINS OVER MEMBERSHIP when the phrase is the item FIRST run: that is a
+# declaration attempt whatever its ids are, so both membership states fire.
+n_want 2 "MEMBERSHIP: as the FIRST run, a mixed phrase fires on position regardless" \
+  --spec "$R/mem-first-mixed" --prd "$R/prd-mixed.md"
+n_want 2 "MEMBERSHIP: and so does a wholly-foreign phrase in first position" \
+  --spec "$R/mem-first-none" --prd "$R/prd-mixed.md"
+n_mut membership-gate-off '        if (!strict || leading || known(run)) {' '        if (1) {' \
+  2 "MUTATION: dropping the membership gate makes a foreign citation beat the real declaration" \
+  --spec "$R/mem-none-known" --prd "$R/prd-mixed.md"
+
+# --- the DOCUMENTED irreducible limit ------------------------------------------
+# A short prefix before a declaration naming exactly ONE id is structurally identical to a
+# citation, and the id drops in SILENCE. This is armed as the behaviour it IS, with the
+# COUNT as the discriminator — 3 against the control 4. An arm expecting a fix would be
+# asserting a decision nobody took; an arm asserting rc alone would see nothing at all,
+# because both sides exit 0.
+n_says "DOCUMENTED LIMIT: a prefixed lone-id declaration is DROPPED — three capabilities, not four" \
+  "PASS (1 locked requirement(s), 3 capability(ies)" \
+  --spec "$R/limit-prefixed" --prd "$R/prd-limit.md"
+n_says "DOCUMENTED LIMIT CONTROL: the same declaration WITHOUT the prefix is taken — four" \
+  "PASS (1 locked requirement(s), 4 capability(ies)" \
+  --spec "$R/limit-control" --prd "$R/prd-limit.md"
+
+# UNMUTATED CONTROL for this block's subjects.
+# THIS CONTROL IS WHAT SEPARATES A BROKEN SUBJECT FROM WRONG ARMS, and it earned that
+# during this release: one run came back with EVERY arm exiting 2 and this line firing.
+# That is the signal that the subject is mid-edit or broken, not that 190 arms need
+# rebasing — without it the next author spends an hour rebasing against a state that no
+# longer exists. A battery this large needs one arm whose only job is to say "not you". The control above runs the orphan-LR
+# corpus; these mutants run five corpora it never touches, and a copy that misbehaved on
+# any of them would make their assertions vacuous. Positive conjunct: the PASS LINE must
+# be THERE, because rc=0 with nothing printed is what a subject replaced by `exit 0` also
+# produces.
+NEW_ARMS=$((NEW_ARMS+1))
+CTRL_OUT="$(bash "$R/control-unmutated.sh" --spec "$R/real-suffixed" --prd "$R/prd-suffixed.md" \
+              --story "$R/story-suffixed.md" --spine "$R/spine-suffixed.md" 2>&1)"
+if grep -qF "PASS (2 locked requirement(s), 3 capability(ies)" <<<"$CTRL_OUT"; then
+  ok "CONTROL: an unmutated copy in \$R still reports the suffixed PASS line"
+else
+  bad "CONTROL: an unmutated copy misbehaves in \$R — every mutation in this block is vacuous"
+fi
+
+# ARMS-RAN. Non-zero and exact, for the reason the block above states.
+if [ "$NEW_ARMS" -eq 238 ]; then
+  ok "ARMS-RAN: all 238 v0.388.0 arms EXECUTED (counted $NEW_ARMS)"
+else
+  bad "ARMS-RAN: expected 238 v0.388.0 arms, counted $NEW_ARMS — the block is unreachable, truncated, or short-circuited"
 fi
 
 echo

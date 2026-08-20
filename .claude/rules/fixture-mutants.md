@@ -67,6 +67,18 @@ paths:
   `sed` was the first thing past the line that forks. Pick the signal, then let
   the mutant tell you whether you picked it right; an arm that survives deleting
   its own subject is watching the wrong thing.
+- **A PRESENCE-shaped arm catches quoting bugs an absence-shaped one hides.** Backticks
+  inside a double-quoted assertion string ran the id as a COMMAND, so the arm was
+  searching for the text either side of a hole. It failed loudly only because it DEMANDED
+  a string; the same bug in an arm asserting an absence would have passed forever.
+- **Killing a backgrounded subject means reaping its TREE.** A bare `kill -9` on the
+  wrapper leaves the grandchild reparented to init and spinning — measured at 21 leaked
+  `awk` processes at ~99% CPU, and one level of `pkill -P` was not enough because the
+  chain is wrapper → subshell → awk. Under the 16-way pool that is sixteen burned cores
+  per run, and the fixture still reports PASS. It also corrupts the next timing you take:
+  a 17s unit read 32–43s while the leaks stole CPU, which is a self-inflicted false
+  measurement that only `ps` reveals.
+
 - **Mutate the file the fixture RESOLVES, which is not always the one you are
   changing.** A fixture that names candidates in both install layouts takes the
   first that exists, and in this repo `core/git-hooks/pre-push` is found before
