@@ -34,6 +34,56 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.392.0] — 2026-08-20
+
+### Fixed
+
+**`W12`'s own header carried a measured figure that was stale one release after it shipped.**
+It read "of that consumer's 12, exactly ONE has been read closely and it was a true positive.
+n=1 supports no base rate." By the time v0.391.0 lifted the crosswalk exemption the count was
+18 and the readings were **five for five**. A figure taken from one consumer at one moment
+decays in place and reads exactly like a fresh one — which is the failure this repo already
+records about counts in resident prose, reaching an enforcer header this time.
+
+**The direction is the load-bearing part and it has held across every reading.** The rate is
+very likely a selection effect — that consumer keeps reading the rows that look wrong, and
+thirteen are unread — so it is not offered as a base rate. What it establishes is which way a
+reader goes wrong: seeing `AMBIGUOUS 18` and inferring "eighteen genuinely undecidable" is
+wrong on that tree, measurably, and no run says so. The header now says that, says the figure
+was stale, and tells the next author to re-derive numerator and denominator together or drop
+both and keep the sentence.
+
+**The count line's caveat is now armed.** Its whole job is to stop `N` being read as `N
+undecidable`, so the sentence is the payload rather than decoration. A mutant strips the
+caveat and leaves the number — the only arm that would catch a future author trimming that
+line for length.
+
+### Changed
+
+**An inherited guard carries the premise of the clause it came from, not of the one it lands
+in.** Stated as the general form at the site of the v0.391.0 defect, because "does the
+borrowed stand-down look right" is the wrong question: the right one is which premise made it
+right where it came from, and whether that premise still holds.
+
+**Both instruments that failed in this series failed the same way, and it is worth the
+header sentence rather than a note.** The consumer's mislabel at `deploy-validate-domain.md:15`
+and this clause's non-corroborating branch were both cases where **the instrument reported
+clean because nothing in its corpus could make it dirty**. Framing owed to that consumer.
+
+### Verification
+
+**Their run of the shipping code at `d46ded31` matched the prediction exactly on FINDING —
+both rows, by identity — and diverged by 2 on AMBIGUOUS.** The gap was their citation regex a
+third time: `Check [0-9]+` scores 0 against `Check-24`, and the hyphenated form turns out to
+be a real authoring variant on that tree across four rows in three files. This arm's extractor
+takes `Check[ -]` and caught all four. The restraint half also held on the row it was designed
+for: `gate-validation-domain.md:116` entered AMBIGUOUS rather than being promoted, which is
+the exemption lifting and the ordinary signals still declining to decide.
+
+### Fixture
+
+`layer-reference-resolution` 30 → **31 assertions**, one mutant.
+
 ## [0.391.0] — 2026-08-20
 
 ### Fixed

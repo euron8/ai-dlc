@@ -1875,10 +1875,19 @@ done <<< "$all_files"
 # AMBIGUOUS is not even a warning — 12 permanent worklist lines on one consumer is the shape
 # an operator switches off. It is counted in the footer and listed only on demand.
 #
-# WHAT THE AMBIGUOUS COUNT DOES NOT MEAN. It is unadjudicated, not undecidable. Of that
-# consumer's 12, exactly ONE has been read closely and it was a true positive. n=1 supports
-# no base rate in either direction, and this comment exists so the next author does not read
-# "AMBIGUOUS 12" as "12 cases with no answer".
+# WHAT THE AMBIGUOUS COUNT DOES NOT MEAN, AND THE FIGURE HERE IS THE ONE THAT MOVED.
+# It is unadjudicated, not undecidable. On the reference consumer, of the 18 this arm counts,
+# FIVE have been read closely and FIVE were findings. Thirteen are unread. That rate is very
+# likely a selection effect -- that consumer keeps reading the ones that look wrong -- so it
+# supports no base rate and is not offered as one. What it does establish is the direction of
+# the error: a reader who sees "AMBIGUOUS 18" and infers "eighteen genuinely undecidable" is
+# wrong on this tree, measurably, and no run reports that.
+#
+# THIS COMMENT CARRIED "n=1" FOR ONE RELEASE AND WAS ALREADY STALE WHEN IT SHIPPED. A figure
+# taken from one consumer at one moment decays in place and reads exactly like a fresh one.
+# It is kept rather than deleted because the DIRECTION is the load-bearing part and that has
+# held across every reading; whoever next touches this should re-derive the numerator and the
+# denominator together, or drop both and keep the sentence.
 #
 # UNTESTED PRECEDENCE, STATED AS SUCH. A tag-join outranks a core qualifier here, on the
 # reasoning that a tag join is evidence about what the line is ABOUT while a qualifier is a
@@ -1990,6 +1999,11 @@ while IFS= read -r f; do
       # A CROSSWALK ROW RESOLVES IT — BUT ONLY WHEN THE ROW IS ABOUT SOMETHING ELSE, AND
       # CARRYING LC-R2's UNCONDITIONAL STAND-DOWN ACROSS TO THIS CLAUSE WAS A DESIGN ERROR.
       #
+      # AN INHERITED GUARD CARRIES THE PREMISE OF THE CLAUSE IT CAME FROM, NOT OF THE ONE IT
+      # LANDS IN, AND THAT IS THE GENERAL FORM OF WHAT WENT WRONG HERE. The question to ask of
+      # a borrowed stand-down is not whether it looks right; it is which premise made it right
+      # where it came from, and whether that premise still holds.
+      #
       # For LC-R2 the stand-down is unarguable: the row is the sanctioned remedy for a RETIRED
       # id, so a citation the row resolves is one the project has already fixed by the
       # prescribed mechanism, and reporting it is the arm firing on its own contract. That
@@ -2066,7 +2080,7 @@ while IFS= read -r f; do
 done <<< "$CONSUMER_LAYER_FILES"
 
 if [ "$AMBIGUOUS_REFS" -gt 0 ] && [ "$CHECK_REFS" != "1" ]; then
-  printf '  note  %d sub-band Check citation(s) this project also defines a band counterpart for, undecidable from the line. Re-run with --check-refs to list them. UNADJUDICATED is not UNDECIDABLE: on the reference consumer one of these was read closely and it was a real mislabel.\n' "$AMBIGUOUS_REFS"
+  printf '  note  %d sub-band Check citation(s) this project also defines a band counterpart for, undecidable from the line. Re-run with --check-refs to list them. UNADJUDICATED is not UNDECIDABLE: on the reference consumer, every one of these that anyone has read closely has turned out to be a real mislabel.\n' "$AMBIGUOUS_REFS"
 fi
 
 echo
