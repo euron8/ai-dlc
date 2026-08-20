@@ -176,6 +176,11 @@ row_is "Entry SH-RELATIVE-SUBJECT" STILL-LIVE "a BARE consumer-relative subject 
 # themselves. SH-REAL above is the paired control: a non-zero exit whose receipt names no
 # consumer-relative path at all must still CLOSE, or this guard pins every sh entry open.
 row_is "Entry SH-SUBJECT-GONE" NEEDS-REVIEW "an && chain short-circuiting on a MOVED subject must not read as a fix"
+# A DISTRIBUTION PATH IS NOT A CONSUMER SUBJECT. The pair with SH-SUBJECT-GONE is the whole
+# assertion: that entry names a consumer path that is genuinely absent and must stay flagged,
+# this one names a distribution path inside a rev-spec and must not be. An extractor that sees
+# neither passes the first arm alone; one that sees both passes the second alone.
+row_is "Entry SH-DIST-PATH" CLOSE-CANDIDATE "a `core/scripts/<x>` rev-spec names no consumer subject; reading one out of it withholds the close on a receipt that works"
 row_is "Entry SH-LIVE"  STILL-LIVE "exit 0 still means it reproduces"
 
 row_is "Entry M" CLOSE-CANDIDATE "two substrings, BOTH at theirs -> absorbed, must not stay open"
@@ -490,6 +495,44 @@ else
     printf '  FAIL  %-22s the mutant also moved the ABSOLUTE run, so it is not a clean mutation of the normalization alone\n' "mutation-normalize"
   else
     printf '  ok    %-22s without normalization "." produces a FALSE CLOSE on SH-CWD, and nothing else moves\n' "mutation-normalize"
+  fi
+fi
+
+# MUTATION — widen receipt_absent_subjects' prefix test to a substring test, which is the shape
+# the defect had. SH-DIST-PATH must flip to NEEDS-REVIEW and SH-SUBJECT-GONE must stay
+# NEEDS-REVIEW: a mutant that reddens both is telling you the extractor went blind rather than
+# that it stopped anchoring.
+#
+# THE TOKENIZER IS NOT THE SIGNAL, AND THE MUTANT IS HOW THAT WAS SETTLED. The obvious mutation
+# was the `tr` keep-set — put `:` back in it so a rev-spec stays one token — and it SURVIVES,
+# measured: the token is then `$THEIRS:core/scripts/<x>`, which fails the prefix test anyway.
+# What carries the fix is that a candidate is a WHOLE TOKEN judged by its first characters, so
+# that is what this mutation removes.
+MUTP="$(dirname "$DIST")/mut-prefix"
+rm -rf "$MUTP"; mkdir -p "$MUTP"
+cp "$(dirname "$CLOSER")"/*.sh "$MUTP/" 2>/dev/null
+sed 's@      docs/\*|_bmad-output/\*|scripts/\*|\.claude/\*) ;;@      *docs/*|*_bmad-output/*|*scripts/*|*.claude/*) ;;@' \
+  "$CLOSER" > "$MUTP/ledger-reverify.sh"
+
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$CLOSER" "$MUTP/ledger-reverify.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation matched nothing, so the anchoring assertion is unproven\n' "mutation-prefix"
+else
+  mp_out="$(bash "$MUTP/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null)"
+  mp_dist="$(printf '%s\n' "$mp_out" | awk -F'\t' '$2 ~ /Entry SH-DIST-PATH/ {print $1; exit}')"
+  mp_gone="$(printf '%s\n' "$mp_out" | awk -F'\t' '$2 ~ /Entry SH-SUBJECT-GONE/ {print $1; exit}')"
+  if [ -z "$mp_out" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant produced NO rows — a dead copy scores every absence as a kill\n' "mutation-prefix"
+  elif [ "$mp_dist" != "NEEDS-REVIEW" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s SH-DIST-PATH read %s under the substring test, so the arm above is not watching the anchoring\n' "mutation-prefix" "${mp_dist:-<none>}"
+  elif [ "$mp_gone" != "NEEDS-REVIEW" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant also moved SH-SUBJECT-GONE to %s — it blinded the extractor instead of widening it\n' "mutation-prefix" "${mp_gone:-<none>}"
+  else
+    printf '  ok    %-22s a substring prefix test reads a consumer subject out of a distribution rev-spec, and only SH-DIST-PATH moves\n' "mutation-prefix"
   fi
 fi
 

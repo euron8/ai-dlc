@@ -507,6 +507,25 @@ base_holds() { all_present "$(base_show "$1")" "$2"; }
 # "$CONSUMER"` receipt addresses; a `$CONSUMER/`-prefixed spelling is normalised to the same thing
 # so the two forms cannot disagree about one file. Anything else -- a path built from a variable,
 # a glob, a distribution path -- is simply not seen, and the verdict is what it was before.
+#
+# THE SPLIT IS ON SHELL WORDS, AND IT IS THE WHOLE OF THE CONTRACT ABOVE. This was an unanchored
+# `grep -oE` alternation with no left boundary, which made the last clause of that paragraph
+# FALSE: a regex looking for `scripts/...` anywhere in the line finds it INSIDE a distribution
+# path, so `git -C "$DIST" show "$THEIRS:core/scripts/validate-steering-budget.sh"` yielded
+# `scripts/validate-steering-budget.sh`, which is not on a consumer at all -- the installed
+# spelling is `scripts/ai-dlc/<x>`. The caller then withheld the close and told the operator to
+# re-anchor a receipt that was working. Reported by the graph consumer at s304.
+#
+# Splitting on every character a path cannot contain leaves each candidate standing as its own
+# word, so the four `case` prefixes below decide a token that BEGINS with them rather than one
+# that merely contains them. `$` stays in the keep-set so `$CONSUMER/...` survives as one token
+# and is normalised on the next line; `:` does not, so a rev-spec splits at the colon and its
+# distribution half fails the prefix test.
+#
+# MEASURED over the reference consumer's ledger, 45 `sh` receipts: 7 entries stop being flagged,
+# every one of them a `core/scripts/<x>` seen mid-token, and 0 paths are newly flagged. Control
+# in the same run: 17 of the 45 still name at least one consumer path under the new split, so
+# the extractor did not simply go quiet.
 receipt_absent_subjects() {
   local rest="$1" p out=""
   while IFS= read -r p; do
@@ -518,7 +537,7 @@ receipt_absent_subjects() {
     esac
     case "$p" in *'*'*|*'?'*|*'$'*) continue ;; esac
     [ -e "$CONSUMER/$p" ] || case " $out " in *" $p "*) ;; *) out="$out $p" ;; esac
-  done < <(printf '%s\n' "$rest" | grep -oE '(\$CONSUMER/)?(docs|_bmad-output|scripts|\.claude)/[A-Za-z0-9_./-]+' || true)
+  done < <(printf '%s\n' "$rest" | tr -c 'A-Za-z0-9_./$-' '\n' || true)
   printf '%s' "$out"
 }
 
@@ -1030,7 +1049,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
         *)
           _gone="$(receipt_absent_subjects "$rest")"
           if [ -n "$_gone" ]; then
-            emit NEEDS-REVIEW "$label" "unresolved: the receipt exited $sh_rc, but consumer-relative path(s) it names DO NOT EXIST:${_gone}. Inside an \`&&\` chain a missing subject short-circuits the whole receipt, so this exit cannot mean 'fixed' — it means the receipt is anchored at a path that moved. Re-anchor it and re-run. Measured on this ledger: an artifact-path migration moved one subject and the entry proposed closing a defect that still reproduced at the new path."
+            emit NEEDS-REVIEW "$label" "unresolved: the receipt exited $sh_rc, but consumer-relative path(s) it names DO NOT EXIST:${_gone}. A receipt whose subject is missing exits non-zero for the ABSENCE, and that is indistinguishable from exiting non-zero because the defect is gone — so this status cannot be read as 'fixed'. Re-anchor it at the subject's current path and re-run. Measured on this ledger: an artifact-path migration moved one subject and the entry proposed closing a defect that still reproduced at the new path. (This detail states no mechanism the receipt was checked for: an earlier version asserted an \`&&\` chain short-circuiting, and the receipts it was shown against used \`;\` and explicit exit guards.)"
           else
             emit CLOSE-CANDIDATE "$label" "verify sh: no longer reproduces at theirs ($TV) — likely absorbed. Confirm, then annotate 'ADOPTED UPSTREAM (v$TV, verified <date>)'. Do NOT delete the entry. Every consumer-relative path this receipt names still exists, so the exit is not a moved subject; a subject named in a form this cannot see is still possible, so confirm before draining."
           fi ;;
