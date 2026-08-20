@@ -272,11 +272,58 @@ base_show() { git -C "$DIST" show "${BASE}:$1" 2>/dev/null; }
 # "the pull you are looking at absorbed it". Falls back to $TV when the search finds nothing —
 # a relocated path, a rewritten line — because a close row with no version is worse than one
 # with the tip's.
+# release_containing <commit> -> the VERSION of the release that CONTAINS <commit>, or "" when
+# no release does. Never reads the VERSION blob AT <commit>, and that distinction is the whole
+# function.
+#
+# READING THE BLOB AT THE COMMIT IS WRONG FOR ONE OF THE TWO SHAPES THIS HISTORY CONTAINS, AND
+# BOTH SHAPES EXIST -- do not generalise from either.
+#
+#   FIX-THEN-RELEASE. The fix lands while VERSION still holds the PREVIOUS number and the bump
+#   arrives later in a separate release commit. Measured: `941021d` reads 0.372.0 at itself and
+#   the bump to 0.373.0 lands in `e939a92`, after it. The blob read reports ONE RELEASE EARLY.
+#
+#   FIX-IS-RELEASE. The commit bumps VERSION itself. Measured: `93e05d3`, parent 0.101.0, at
+#   0.102.0. The blob read is CORRECT here, and a forward walk that EXCLUDES the starting commit
+#   overshoots to the next release -- the mirror-image defect, which upstream shipped once while
+#   fixing the first one.
+#
+# So the walk is INCLUSIVE of the starting commit, expressed as "did this commit change VERSION
+# against its first parent". That test is also merge-safe: a merge that brings a release in
+# differs from its first parent and is correctly reported as belonging to that release, where a
+# `--name-only` test would see a combined diff and report nothing.
+#
+# Reported by the graph consumer as PC-S334-ABSORBED-AT-READS-THE-VERSION-BLOB-AT-THE-FIX-COMMIT.
+# Verified against all four shapes at 91ab1829: 941021d -> 0.373.0 (was 0.372.0), 93e05d3 ->
+# 0.102.0 (not 0.103.0), the release commits e2d6989d/7ccd98e2 -> their own versions, and the
+# merges ca4a0caf/b9309730 -> the release they merge.
+#
+# NO `| head -1`. Under `pipefail` a reader that leaves early makes the pipeline answer with the
+# writer's EPIPE (I54/I54b); the first line comes off a variable instead.
+release_containing() {
+  local _c="$1" _rc
+  [ -n "$_c" ] || return 0
+  # `git diff --quiet <c>^ <c> -- VERSION` rather than comparing two blob reads: it asks the
+  # question directly, it names the FIRST PARENT explicitly so a merge is judged against the
+  # branch it advanced, and it leaves no `<commit>:VERSION` read in this file at all -- which is
+  # the token the filing anchors on, because reading VERSION AT a commit is the defect itself.
+  if ! git -C "$DIST" rev-parse -q --verify "${_c}^" >/dev/null 2>&1 \
+     || ! git -C "$DIST" diff --quiet "${_c}^" "$_c" -- VERSION 2>/dev/null; then
+    _rc="$_c"
+  else
+    _rc="$(git -C "$DIST" log --reverse --format=%H "${_c}..${THEIRS}" -- VERSION 2>/dev/null)"
+    _rc="${_rc%%
+*}"
+  fi
+  [ -n "$_rc" ] || return 0
+  git -C "$DIST" show "${_rc}:VERSION" 2>/dev/null | tr -d '[:space:]'
+}
+
 absorbed_at() {
   local _c _v
   _c="$(git -C "$DIST" log -S"$2" --reverse --format=%H "${BASE}..${THEIRS}" -- "$1" 2>/dev/null | head -1)"
   [ -n "$_c" ] || { printf '%s' "$TV"; return; }
-  _v="$(git -C "$DIST" show "${_c}:VERSION" 2>/dev/null | tr -d '[:space:]')"
+  _v="$(release_containing "$_c")"
   [ -n "$_v" ] && printf '%s' "$_v" || printf '%s' "$TV"
 }
 
@@ -397,8 +444,8 @@ prefix_entry_count() { # <PC-S<n>> -> integer
   } | sort -u | grep -cE "^$1-" 2>/dev/null || true
 }
 
-named_absorbed() { # <label> -> "<version> <short-sha> <how>" if upstream's history names it, else ""
-  local _id="$1" _c _v _pfx _how
+named_absorbed() { # <label> -> "<newest-sha> <oldest-sha> <n> <how>" if upstream's history names it, else ""
+  local _id="$1" _hits _new _old _n _pfx _how
   case "$_id" in
     *[!A-Z0-9-]*|'') return 0 ;;              # not id-shaped: prose label, nothing to ask
   esac
@@ -407,8 +454,27 @@ named_absorbed() { # <label> -> "<version> <short-sha> <how>" if upstream's hist
     *)   return 0 ;;                          # a single word is not an id
   esac
   _how=slug
-  _c="$(git -C "$DIST" log -F --grep="$_id" --format=%H "$THEIRS" 2>/dev/null | tail -1)"
-  if [ -z "$_c" ]; then
+  # THE WHOLE MATCH SET, NOT ONE COMMIT OF IT. This was `| tail -1` -- the OLDEST commit whose
+  # MESSAGE names the id -- and the row then reported that commit's version as the absorbing
+  # release. Naming is not absorbing: a commit naming an id to record a rejection, a split, a
+  # plan or a LEDGER DRAIN matches identically to one that landed the fix. Reported as
+  # PC-S334-NAMED-ABSORBED-JOINS-ON-THE-OLDEST-MESSAGE-MENTION.
+  #
+  # RE-DERIVED HERE, not transcribed from the filing, because the filing's own copy of this
+  # figure was wrong twice before it was right: `e939a92` names 29 ids in its message; joining
+  # each against the row of `docs/reviews/graph-ledger-adjudication-data/final-disposition.tsv`
+  # whose id column contains it, and comparing the adjudicated version to the one this join
+  # would have reported, gives comparable 25, AGREE 2, DISAGREE 23, no comparable verdict 4, no
+  # disposition row 0. Control in the same run: an impossible id appears 0 times in that
+  # message. The `ALREADY-FIXED-<sha>` verdict form has to be forward-walked to a release or it
+  # misbuckets as incomparable -- which is how the filing's second count came out at 22 of 24.
+  #
+  # So this reports WHAT IT KNOWS -- how many commits name the id, and the two ends of the range
+  # -- and stops electing one of them. The `tail -1` defence a few lines up argued SIGPIPE, which
+  # is real and is orthogonal: the list comes off a variable here, so no pipe is abandoned either
+  # way.
+  _hits="$(git -C "$DIST" log -F --grep="$_id" --format=%H "$THEIRS" 2>/dev/null)"
+  if [ -z "$_hits" ]; then
     # FALLBACK: the short id upstream actually writes. Only when it names ONE entry.
     _pfx="$(printf '%s' "$_id" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')"
     [ -n "$_pfx" ] || return 0
@@ -428,18 +494,25 @@ named_absorbed() { # <label> -> "<version> <short-sha> <how>" if upstream's hist
     # word boundary rather than `\b`, which BSD and GNU disagree about: the next character must not
     # extend the id, so a digit, a letter or a dash all disqualify. The SLUG search above stays `-F`
     # -- a full slug is already specific, and a fixed string is the right tool for it.
-    _c="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z-]|\$)" --format=%H "$THEIRS" 2>/dev/null | tail -1)"
+    _hits="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z-]|\$)" --format=%H "$THEIRS" 2>/dev/null)"
     _how=prefix
   fi
-  [ -n "$_c" ] || return 0
-  _v="$(git -C "$DIST" show "${_c}:VERSION" 2>/dev/null | tr -d '[:space:]')"
-  printf '%s %s %s' "${_v:-unknown}" "$(git -C "$DIST" rev-parse --short "$_c" 2>/dev/null)" "$_how"
+  [ -n "$_hits" ] || return 0
+  _new="${_hits%%
+*}"                                    # git log is newest-first
+  _old="${_hits##*
+}"
+  _n="$(printf '%s\n' "$_hits" | grep -c . 2>/dev/null || true)"
+  printf '%s %s %s %s' \
+    "$(git -C "$DIST" rev-parse --short "$_new" 2>/dev/null)" \
+    "$(git -C "$DIST" rev-parse --short "$_old" 2>/dev/null)" \
+    "${_n:-1}" "$_how"
 }
 
 # The ambiguous half, reported rather than guessed. Upstream cites the sprint prefix, two or more
 # ledger entries carry it, and nothing in the commit says which -- so the operator reads the commit.
-named_ambiguous() { # <label> -> "<version> <short-sha> <n-entries>" when the prefix is shared
-  local _id="$1" _pfx _n _c _v
+named_ambiguous() { # <label> -> "<newest-sha> <n-entries>" when the prefix is shared
+  local _id="$1" _pfx _n _c _hits
   case "$_id" in *[!A-Z0-9-]*|'') return 0 ;; esac
   # READ INTO A VARIABLE, THEN TEST. `| grep -q .` leaves at its first match while git log is
   # still writing, so under `pipefail` the pipeline answers with the WRITER's EPIPE and this
@@ -458,10 +531,14 @@ named_ambiguous() { # <label> -> "<version> <short-sha> <n-entries>" when the pr
   # entry's longer slug. Both arms ask the same question -- "does upstream cite this SHORT id" --
   # and fixing one would leave the other reporting the same wrong commit, here as the sha an
   # operator is told to go and read.
-  _c="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z-]|\$)" --format=%H "$THEIRS" 2>/dev/null | tail -1)"
-  [ -n "$_c" ] || return 0
-  _v="$(git -C "$DIST" show "${_c}:VERSION" 2>/dev/null | tr -d '[:space:]')"
-  printf '%s %s %s' "${_v:-unknown}" "$(git -C "$DIST" rev-parse --short "$_c" 2>/dev/null)" "$_n"
+  # NO VERSION HERE EITHER, for the same reason as the sibling: the commit this names MENTIONS a
+  # sprint prefix, and a version read off a mention is a claim about the wrong event. The row
+  # already tells the operator to go and read the commit; that is what it can honestly say.
+  _hits="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z-]|\$)" --format=%H "$THEIRS" 2>/dev/null)"
+  [ -n "$_hits" ] || return 0
+  _c="${_hits%%
+*}"
+  printf '%s %s' "$(git -C "$DIST" rev-parse --short "$_c" 2>/dev/null)" "$_n"
 }
 
 # $1 = file content, $2 = newline-separated substrings. True iff EVERY one is present.
@@ -865,18 +942,23 @@ while IFS="$(printf '\t')" read -r label ord directive; do
   na=""; nam=""
   case "$ord" in 1/*|"") na="$(named_absorbed "$label")"; [ -n "$na" ] || nam="$(named_ambiguous "$label")" ;; esac
   if [ -n "$na" ]; then
-    na_v="$(printf '%s' "$na" | awk '{print $1}')"
-    na_c="$(printf '%s' "$na" | awk '{print $2}')"
-    na_h="$(printf '%s' "$na" | awk '{print $3}')"
+    na_c="$(printf '%s' "$na" | awk '{print $1}')"
+    na_o="$(printf '%s' "$na" | awk '{print $2}')"
+    na_n="$(printf '%s' "$na" | awk '{print $3}')"
+    na_h="$(printf '%s' "$na" | awk '{print $4}')"
+    if [ "${na_n:-1}" -gt 1 ] 2>/dev/null; then
+      na_where="in $na_n commits, newest $na_c and oldest $na_o"
+    else
+      na_where="in one commit, $na_c"
+    fi
     case "$na_h" in
       prefix) na_note=" Matched on the SHORT id \`$(printf '%s' "$label" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')\`, which is the form upstream writes, and that prefix names exactly ONE entry in this ledger -- so the attribution is unambiguous. The full-slug search found nothing, which is normal and is not evidence of anything." ;;
       *)      na_note="" ;;
     esac
-    emit NAMED-UPSTREAM "$label" "upstream's own history NAMES this entry's id at v$na_v ($na_c), which no receipt in this entry can see.${na_note} Confirm whether that commit ABSORBED the entry or recorded a rejection/split; if it absorbed, annotate it **bolded, with the version immediately after the parenthesis** -- \`**ADOPTED UPSTREAM (v$na_v, verified <date>)**\` -- and re-anchor or drop the stale receipt. Do NOT delete the entry. THE FORM MATTERS: any occurrence of the phrase makes ledger-reverify SKIP this entry from here on, but only that exact form lets ledger-rotate.sh archive it, and an entry that is skipped without being archivable is invisible in every future report and never filed."
+    emit NAMED-UPSTREAM "$label" "upstream's own history NAMES this entry's id ${na_where}, which no receipt in this entry can see.${na_note} THIS ROW CARRIES NO VERSION, DELIBERATELY: naming is not absorbing. A commit naming an id to record a rejection, a split, a plan or a ledger drain is indistinguishable here from one that landed the fix, and a version read off the wrong commit goes into a permanent annotation. Read the commit(s) and decide whether the entry was ABSORBED; if it was, establish WHICH RELEASE contains the absorbing commit and annotate with THAT version -- **bolded, version immediately after the parenthesis** -- \`**ADOPTED UPSTREAM (v<version>, verified <date>)**\`, then re-anchor or drop the stale receipt. Do NOT delete the entry. THE FORM MATTERS: any occurrence of the phrase makes ledger-reverify SKIP this entry from here on, but only that exact form lets ledger-rotate.sh archive it, and an entry that is skipped without being archivable is invisible in every future report and never filed."
   elif [ -n "$nam" ]; then
-    nam_v="$(printf '%s' "$nam" | awk '{print $1}')"
-    nam_c="$(printf '%s' "$nam" | awk '{print $2}')"
-    nam_n="$(printf '%s' "$nam" | awk '{print $3}')"
+    nam_c="$(printf '%s' "$nam" | awk '{print $1}')"
+    nam_n="$(printf '%s' "$nam" | awk '{print $2}')"
     nam_p="$(printf '%s' "$label" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')"
     # ONE ROW PER PREFIX, NOT PER ENTRY, and the label IS the prefix because that is the
     # subject. Measured on the reference consumer: per-entry emission produced 45 rows from 11
@@ -888,7 +970,7 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       *"|$nam_p|"*) : ;;
       *)
         NAM_SEEN="${NAM_SEEN:-|}$nam_p|"
-        emit NAMED-UPSTREAM-AMBIGUOUS "$nam_p" "upstream's history cites this SPRINT prefix at v$nam_v ($nam_c), and $nam_n entries in this ledger carry it. NOT attributed to any of them, deliberately: naming all $nam_n would tell you to close entries upstream never touched, which is worse than the silence it replaces. Read $nam_c and decide per entry. The full-slug search found nothing for them, which is normal -- upstream cites the short id, not the slug."
+        emit NAMED-UPSTREAM-AMBIGUOUS "$nam_p" "upstream's history cites this SPRINT prefix ($nam_c), and $nam_n entries in this ledger carry it. No version, for the sibling row's reason: the commit MENTIONS the prefix, and a version read off a mention is a claim about the wrong event. NOT attributed to any of them, deliberately: naming all $nam_n would tell you to close entries upstream never touched, which is worse than the silence it replaces. Read $nam_c and decide per entry. The full-slug search found nothing for them, which is normal -- upstream cites the short id, not the slug."
         ;;
     esac
   fi

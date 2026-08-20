@@ -211,18 +211,97 @@ row_is "PC-FIXTURE-WITHDRAWN"        ABSENT          "premise was false -> finis
 # correction filed against it (derived by sampling the refs already loaded, rather than walking
 # the history) was wrong in the same direction.
 #
-# The seed absorbs MARKER_B at 0.101.0 and moves theirs on to 0.102.0, so naming the tip and
+# The seed absorbs MARKER_B at 0.101.0 and moves theirs on to 0.103.0, so naming the tip and
 # naming the truth are different strings here. With base->theirs adjacent they would not be.
 ASSERTIONS=$((ASSERTIONS + 1))
 brow="$(printf '%s\n' "$OUT" | awk -F'\t' '$2 ~ /Entry B/ {print $3; exit}')"
 if grep -q 'absorbed this at 0\.101\.0' <<<"$brow"; then
-  printf '  ok    %-22s names 0.101.0  (the version that absorbed it, not theirs 0.102.0)\n' "absorbing-version"
-elif grep -q 'absorbed this at 0\.102\.0' <<<"$brow"; then
+  printf '  ok    %-22s names 0.101.0  (the version that absorbed it, not theirs 0.103.0)\n' "absorbing-version"
+elif grep -q 'absorbed this at 0\.103\.0' <<<"$brow"; then
   FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s names theirs 0.102.0 — the tip, not the absorbing release; this string is copied into a permanent ledger annotation\n' "absorbing-version"
+  printf '  FAIL  %-22s names theirs 0.103.0 — the tip, not the absorbing release; this string is copied into a permanent ledger annotation\n' "absorbing-version"
 else
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s no recognisable version in the close row: %s\n' "absorbing-version" "$brow"
+fi
+
+# THE OTHER COMMIT SHAPE, and it is the one the version used to be wrong for. `MARKER_B` above
+# arrived in a commit that ALSO bumped VERSION, so reading the blob at it is correct and the arm
+# above passes either way. `MARKER_C` arrived one commit BEFORE its release: blob-at-the-commit
+# says 0.101.0, the tip says 0.103.0, and the release that actually carries it is 0.102.0. Three
+# distinct strings, so this arm cannot be satisfied by any of the three behaviours by accident.
+# Reported by the graph consumer as PC-S334-ABSORBED-AT-READS-THE-VERSION-BLOB-AT-THE-FIX-COMMIT.
+ASSERTIONS=$((ASSERTIONS + 1))
+vrow="$(printf '%s\n' "$OUT" | awk -F'\t' '$2 ~ /Entry V/ {print $3; exit}')"
+case "$vrow" in
+  *'absorbed this at 0.102.0'*)
+    printf '  ok    %-22s names 0.102.0  (the release CONTAINING the fix, not the blob at it)\n' "release-containing" ;;
+  *'absorbed this at 0.101.0'*)
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s names 0.101.0 — the VERSION blob AT the absorbing commit, one release early\n' "release-containing" ;;
+  *'absorbed this at 0.103.0'*)
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s names 0.103.0 — theirs, so the walk found nothing and fell back\n' "release-containing" ;;
+  *)
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s no recognisable version in Entry V row: %s\n' "release-containing" "$vrow" ;;
+esac
+
+# A NAMED-UPSTREAM ROW CARRIES NO VERSION, DELIBERATELY. The join is on the commit MESSAGE, and a
+# commit that names an id to record a rejection, a split, a plan or a ledger drain matches
+# exactly like one that landed the fix — so a version read off it is a claim about the wrong
+# event, and it went into a permanent annotation. Re-derived against `e939a92` and
+# `docs/reviews/graph-ledger-adjudication-data/final-disposition.tsv`: 29 ids named, 25
+# comparable, 23 disagreeing with the adjudicated disposition.
+# PC-S334-NAMED-ABSORBED-JOINS-ON-THE-OLDEST-MESSAGE-MENTION.
+#
+# BOTH HALVES ASSERTED. "No version" alone is satisfied by a row that lost its content; the row
+# must still say WHERE upstream names the id, or the fix deleted the signal instead of the
+# false precision.
+ASSERTIONS=$((ASSERTIONS + 1))
+nrow="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="NAMED-UPSTREAM" {print $3; exit}')"
+if [ -z "$nrow" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s no NAMED-UPSTREAM row at all — the arms below cannot discriminate\n' "named-no-version"
+elif grep -qE 'at v[0-9]+\.[0-9]+\.[0-9]+|\(v[0-9]+\.[0-9]+\.[0-9]+,' <<<"$nrow"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the row still renders a version: %s\n' "named-no-version" "$(printf '%s' "$nrow" | cut -c1-140)"
+elif grep -q 'NAMES this entry.s id in ' <<<"$nrow"; then
+  printf '  ok    %-22s no version, and it still says where upstream names the id\n' "named-no-version"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s no version, but the row no longer says WHERE: %s\n' "named-no-version" "$(printf '%s' "$nrow" | cut -c1-140)"
+fi
+
+# MUTATION — put the VERSION blob read back into absorbed_at. Entry V must regress to 0.101.0 and
+# Entry B must NOT move: the two shapes are what make this a fix rather than a swap, and a mutant
+# that moved both would mean the seed only carries one of them.
+MUTV="$(dirname "$DIST")/mut-version"
+rm -rf "$MUTV"; mkdir -p "$MUTV"
+cp "$(dirname "$CLOSER")"/*.sh "$MUTV/" 2>/dev/null
+sed 's@_v="$(release_containing "$_c")"@_v="$(git -C "$DIST" show "${_c}:VERSION" 2>/dev/null | tr -d "[:space:]")"@' \
+  "$CLOSER" > "$MUTV/ledger-reverify.sh"
+
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$CLOSER" "$MUTV/ledger-reverify.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation matched nothing, so the forward walk is unproven\n' "mutation-version"
+else
+  mv_out="$(bash "$MUTV/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null)"
+  mv_v="$(printf '%s\n' "$mv_out" | awk -F'\t' '$2 ~ /Entry V/ {print $3; exit}')"
+  mv_b="$(printf '%s\n' "$mv_out" | awk -F'\t' '$2 ~ /Entry B/ {print $3; exit}')"
+  if [ -z "$mv_out" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant produced NO rows — a dead copy scores every absence as a kill\n' "mutation-version"
+  elif ! grep -q 'absorbed this at 0\.101\.0' <<<"$mv_v"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s with the blob read restored Entry V still reads %s — the arm above is not watching the walk\n' "mutation-version" "$(printf '%s' "$mv_v" | sed -n 's/.*absorbed this at \([0-9.]*\).*/\1/p')"
+  elif ! grep -q 'absorbed this at 0\.101\.0' <<<"$mv_b"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant also moved Entry B — the fix-is-release shape is not being held fixed\n' "mutation-version"
+  else
+    printf '  ok    %-22s the blob read regresses Entry V to 0.101.0 and leaves Entry B at 0.101.0\n' "mutation-version"
+  fi
 fi
 
 # An unresolvable substring must fall back to theirs' VERSION, not print an empty version.
