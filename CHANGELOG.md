@@ -34,6 +34,47 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.386.0] — 2026-08-20
+
+### Fixed
+
+**A receipt naming a DISTRIBUTION path was reported as a receipt whose subject had moved, and
+the remedy it printed named a mechanism the receipt did not contain** (found by the graph
+consumer while reconciling 0.384.0 → 0.385.0). `ledger-reverify.sh`'s
+`receipt_absent_subjects()` extracted candidate paths with an unanchored `grep -oE`
+alternation, so a path was recognised anywhere in the line rather than as its own word. Given
+`git -C "$DIST" show "$THEIRS:core/scripts/validate-steering-budget.sh"` it returned
+`scripts/validate-steering-budget.sh` — a spelling that exists on no consumer, because
+`install.sh` lands that file at `scripts/ai-dlc/<x>`. The caller then withheld the
+CLOSE-CANDIDATE and told the operator to re-anchor a receipt that was working.
+
+The function's own header already promised the opposite — "a path built from a variable, a
+glob, a distribution path — is simply not seen". The header was right about the contract and
+the code did not implement it. Candidates are now split on every character a path cannot
+contain, so the four prefixes decide a token that BEGINS with them instead of one that merely
+contains them.
+
+**Measured over the reference consumer's ledger, 45 `sh` receipts: 7 entries stop being
+flagged — every one a `core/scripts/<x>` seen mid-token — and 0 paths are newly flagged.**
+Control in the same run: 17 of the 45 still name at least one consumer path under the new
+split, so the extractor did not go quiet.
+
+**The NEEDS-REVIEW detail no longer asserts a mechanism it never checked.** It said "Inside an
+`&&` chain a missing subject short-circuits the whole receipt"; the receipts it was shown
+against used `;` and explicit `exit 127` guards, so the operator was handed a diagnosis of
+their receipt's structure that was simply untrue. It now states what was observed — the named
+path is absent, and an exit caused by an absence cannot be told from an exit caused by the
+defect being gone.
+
+`core/fixtures/ledger-reverify` grows `Entry SH-DIST-PATH` and a committed mutation.
+SH-DIST-PATH is paired with the existing SH-SUBJECT-GONE — a distribution rev-spec must not be
+flagged, a genuinely absent consumer path must be — so an extractor that sees neither passes
+the first arm alone and one that sees both passes the second alone. The mutation widens the
+prefix test to a substring test and requires SH-DIST-PATH alone to redden. **The obvious
+mutation was the tokenizer's keep-set, and it SURVIVES**: putting `:` back leaves the token as
+`$THEIRS:core/scripts/<x>`, which fails the prefix test anyway. Prefix anchoring over whole
+tokens is what carries the fix, so that is what the committed mutant removes.
+
 ## [0.385.0] — 2026-08-20
 
 ### Added

@@ -212,6 +212,18 @@ cat > "$LED" <<'LEDGER'
 
 ---
 
+- **Entry SH-DIST-PATH runs an `sh` receipt naming a DISTRIBUTION path in a rev-spec.** The
+  receipt reads a file out of the distribution at theirs; it names nothing on the consumer's own
+  disk. `receipt_absent_subjects` must not see a consumer path inside it. It used to: an
+  unanchored regex found `scripts/validate-x.sh` INSIDE `core/scripts/validate-x.sh`, that
+  spelling exists on no consumer (the installed one is `scripts/ai-dlc/<x>`), and a working
+  receipt was reported unresolved with an instruction to re-anchor it. SH-SUBJECT-GONE above is
+  the paired control: a genuinely absent CONSUMER path in the same position must still be flagged,
+  or this arm is satisfied by an extractor that sees nothing at all.
+  verify: sh git -C "$DIST" show "$THEIRS:core/scripts/validate-artifact-derivations.sh" >/dev/null 2>&1; exit 1
+
+---
+
 - **Entry SH-LIVE runs an `sh` receipt that still reproduces.** Exit 0. Pins the third
   outcome so the two above cannot both be satisfied by a verb that always reports one
   thing.
