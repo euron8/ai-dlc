@@ -1921,6 +1921,31 @@ CONSUMER_ANCHORS="$(while IFS= read -r f; do [ -n "$f" ] && defined_anchors "$f"
                       <<< "$CONSUMER_LAYER_FILES" | sort -u)"
 AMBIGUOUS_REFS=0
 
+# Does the crosswalk row for <ref> carry a title that is this project's own `9<n>` title?
+# See the call site for why a corroborating row must not exempt and must not promote either.
+crosswalk_corroborates() { # crosswalk_corroborates <ref> <band-title-nrm> <core-title-nrm>
+  local _r="$1" _x="$2" _c="$3" _f _cell
+  [ -n "$_x" ] || return 1
+  for _f in "$CROSSWALK_MD" "$CROSSWALK_LEGACY"; do
+    [ -n "$_f" ] && [ -f "$_f" ] || continue
+    while IFS= read -r _cell; do
+      [ -n "$_cell" ] || continue
+      [ "${_x#"$_cell"}" = "$_x" ] && continue
+      [ -n "$_c" ] && [ "${_c#"$_cell"}" != "$_c" ] && continue
+      return 0
+    done < <(awk -F'|' -v r="$_r" "$NRM_FN"'
+      /^[[:space:]]*```/ { fence = !fence; next }
+      fence { next }
+      /^[[:space:]]*\|/ {
+        v=$2; gsub(/^[ \t`*]+|[ \t`*]+$/,"",v)
+        sub(/^[Cc]heck[ \t]+/,"",v)
+        if (v != r) next
+        for (i = 3; i <= NF; i++) { c = nrm($i); if (c != "") print c }
+      }' "$_f" 2>/dev/null)
+  done
+  return 1
+}
+
 title_in() { # title_in <file-list> <anchor> -> first non-empty normalised title
   local _f _t
   while IFS= read -r _f; do
@@ -1962,12 +1987,44 @@ while IFS= read -r f; do
       ctitle="$(title_in "$CORE_CATALOG_FILES" "$ref")"
       [ -n "$ctitle" ] || continue
 
-      # A CROSSWALK ROW RESOLVES IT, exactly as it resolves W7, and for the same stated
-      # reason: the row is the sanctioned remedy for a retired id. Reporting a citation the
-      # project has already fixed by the mechanism this contract prescribes is the arm firing
-      # on its own remedy. Its sibling fixture calls that the load-bearing silent case.
-      grep -Fxq -- "$ref" <<<"$CROSSWALK_IDS" && continue
-      grep -Fxq -- "Check $ref" <<<"$CROSSWALK_IDS" && continue
+      # A CROSSWALK ROW RESOLVES IT — BUT ONLY WHEN THE ROW IS ABOUT SOMETHING ELSE, AND
+      # CARRYING LC-R2's UNCONDITIONAL STAND-DOWN ACROSS TO THIS CLAUSE WAS A DESIGN ERROR.
+      #
+      # For LC-R2 the stand-down is unarguable: the row is the sanctioned remedy for a RETIRED
+      # id, so a citation the row resolves is one the project has already fixed by the
+      # prescribed mechanism, and reporting it is the arm firing on its own contract. That
+      # reasoning does not survive the trip to this clause, because it conflates two rows that
+      # say opposite things.
+      #
+      # A row that resolves <n> to something UNRELATED does license the citation. A row whose
+      # own title is this project's `9<n>` title says the reverse: it is the project stating on
+      # the record that a bare <n> in its prose means ITS check. That is corroborating evidence
+      # FOR a finding, and it was being read as a blanket exemption.
+      #
+      # MEASURED, not reasoned, and found by the reference consumer running the shipped arm
+      # against its own tree rather than by any review here. Their row reads
+      # `| 24 | [ext:gate-validation-domain] | Financial-display ground-truth live-verify |
+      # (label adoption) | collides with core 24 (adversarial convergence), which core added
+      # later |` — and a genuine mislabel on a line carrying the exact provenance tag this
+      # clause keys on came back QUIET, because the stand-down runs BEFORE any signal. One row
+      # was suppressing the title-join, the tag-join and the AMBIGUOUS count together.
+      #
+      # CORROBORATION DOES NOT PROMOTE, IT ONLY DECLINES TO EXEMPT, and that restraint is
+      # load-bearing. Making a corroborating row a FINDING in its own right would fire on
+      # EVERY citation of that id regardless of context — on that consumer it would have
+      # flagged `# Check 24 orders the pass series on this`, which is core's adversarial-cycle
+      # check and almost certainly correct. The row removes the exemption; the ordinary
+      # signals still decide, so that line lands in AMBIGUOUS where it belongs.
+      #
+      # COLUMN-AGNOSTIC BY CONSTRUCTION. The title is not read from a fixed column index —
+      # every cell of the row is offered to the same prefix join the citing title uses, and a
+      # cell wins only by prefixing the band title while NOT prefixing core's. A crosswalk
+      # table is hand-written prose in three known shapes and an index would silently read the
+      # wrong cell in two of them.
+      if grep -Fxq -- "$ref" <<<"$CROSSWALK_IDS" || grep -Fxq -- "Check $ref" <<<"$CROSSWALK_IDS"; then
+        crosswalk_corroborates "$ref" "$(title_in "$CONSUMER_LAYER_FILES" "$band")" "$ctitle" \
+          || continue
+      fi
 
       xtitle="$(title_in "$CONSUMER_LAYER_FILES" "$band")"
       cite="$(printf '%s' "$text" | sed -n "s/.*Check ${ref} *(\([^)]*\)).*/\1/p" | head -1)"

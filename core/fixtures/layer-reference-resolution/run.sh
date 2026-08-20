@@ -72,8 +72,8 @@ bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 # what closes it, and the count is a literal here or it disappears with the assertions.
 # 3 premises + 3 W9 premises + 1 pristine vector + 2 applicability + 1 code-attribution
 # + 1 crosswalk-is-load-bearing + 1 exit condition + 9 mutants + 1 unmutated control.
-# + 1 W12 premise + 6 W12 mutants
-EXPECTED_ASSERTIONS=29
+# + 1 W12 premise + 7 W12 mutants
+EXPECTED_ASSERTIONS=30
 
 echo "layer-reference-resolution:"
 
@@ -168,11 +168,15 @@ vector() {
   refs_out="$(bash "$1" "$2" --check-refs 2>&1)"
   v="$v w12amb=$(grep -c '^  ambiguous ' <<<"$refs_out")"
   v="$v w12stem=$(grep -q 'ambiguous.*"Check 30"' <<<"$refs_out" && echo A || echo -)"
+  # THE RESTRAINT HALF of the crosswalk rule: a corroborating row removes the EXEMPTION and
+  # must not PROMOTE. Asserted on the listing, positively, because "no warning for Check 26"
+  # is also what a stood-down subject looks like.
+  v="$v w12x26amb=$(grep -q 'ambiguous.*"Check 26"' <<<"$refs_out" && echo A || echo -)"
   printf '%s' "$v"
 }
 
 W9WANT='w9miss=W w9dot=W w9ovr=W w9ok=- w9fence=- w9dist=- w9rdme=-'
-W12WANT='w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=2 w12stem=A'
+W12WANT='w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=3 w12stem=A w12x26amb=A'
 WANT="d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT $W12WANT"
 
 # --- Part 1: the pristine vector ---------------------------------------------------------
@@ -322,13 +326,13 @@ grep -q 'gate-1 only' "$DOMAIN" && grep -q 'gate-1 is active (Check 20)' "$CONS/
 # which is what makes these two signals rather than one written twice.
 mk_mutant w12-title-off \
   "s/verdict=\"title\"/verdict=\"ambiguous\"/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=- w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=3 w12stem=A"
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=- w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=4 w12stem=A w12x26amb=A"
 
 # M11 — the tag-join off. The mirror of M10, and the count moves because a demoted FINDING
 # lands in AMBIGUOUS rather than vanishing: this arm never drops a subject, it re-tiers it.
 mk_mutant w12-tag-off \
   "s/verdict=\"tag\"/verdict=\"ambiguous\"/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=- w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=3 w12stem=A"
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=- w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=4 w12stem=A w12x26amb=A"
 
 # M12 — drop the UPPERCASE half of the provenance-token filter. `gate-1` becomes a token, the
 # 920 heading and the Check 20 citation line share it, and the arm reports a mislabel on a
@@ -336,30 +340,47 @@ mk_mutant w12-tag-off \
 # the filter cannot be simplified back out.
 mk_mutant w12-token-loose \
   "s/\\| grep -E '\\[A-Z\\]' \\| grep -E '\\[0-9\\]'/| grep -E '[0-9]'/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=W w12amb=1 w12stem=A"
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=W w12amb=2 w12stem=A w12x26amb=A"
 
 # M13 — accept a bare `gate-validation` stem as a core qualifier, which is the signal the
 # reference consumer originally proposed. The bare-stem row leaves AMBIGUOUS and goes silent —
 # and that consumer adjudicated that exact row as a real mislabel. A false QUIET, on demand.
 mk_mutant w12-stem-quiet \
   "s/gate-validation\\\\\\.md\\)\\[/gate-validation)[/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=1 w12stem=-"
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=2 w12stem=- w12x26amb=A"
 
 # M14 — drop the stand-down for a citation core does not define. W7 already reports those as
 # dangling; without this gate both arms fire on one subject and one of them is vacuous.
 mk_mutant w12-core-gate-off \
   "s/\\[ -n \"\\\$ctitle\" \\] \\|\\| continue/: ; #/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=6 w12stem=A"
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=7 w12stem=A w12x26amb=A"
 
 # M15 — drop the crosswalk stand-down. `Check 34` is resolved by the row that exists for
 # exactly that purpose, so reporting it is the arm firing on its own contract remedy. This is
 # the load-bearing silent case W7 already has, in the second namespace.
-# ANCHORED ON THIS ARM'S OWN INDENT. W7 carries the byte-identical crosswalk line four
-# spaces in; a mutation keyed on the text alone edits both and flips a W7 cell, which is a
-# kill scored by the wrong arm. Measured here on the first run of this mutant.
+# M15 — delete the crosswalk gate entirely. `Check 22` carries a row whose title is nothing
+# like this project's 922, so the row genuinely does license the citation and the clause must
+# stay silent; without the gate it lands in AMBIGUOUS. That subject exists only because the
+# corroboration split created a second branch — before it, "a non-corroborating row exempts"
+# had nothing in the seed that could exercise it, which is a clause nobody could have caught
+# breaking.
+#
+# ANCHORED ON THIS ARM'S OWN INDENT. W7 carries a byte-identical crosswalk line four spaces
+# in; a mutation keyed on the text alone edits both and flips a W7 cell, which is a kill
+# scored by the wrong arm. Measured here, on the first run of this mutant.
 mk_mutant w12-crosswalk-off \
-  "s/^      grep -Fxq -- \"Check \\\$ref\" <<<\"\\\$CROSSWALK_IDS\" && continue/      : ; #/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=2 w12stem=A"
+  "s/^      if grep -Fxq -- \"\\\$ref\" <<<\"\\\$CROSSWALK_IDS\"/      if false/" \
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=4 w12stem=A w12x26amb=A"
+
+# M16 — restore the UNCONDITIONAL crosswalk stand-down that shipped in v0.390.0, by making
+# the corroboration test never fire. The seed's `26` row is a `(label adoption)` row whose own
+# title IS this project's 926 title, so under the old rule one row silences a title-join
+# FINDING and an AMBIGUOUS row together, before any signal is evaluated. That is the defect
+# the reference consumer found by running the shipped arm against its own tree — not by
+# review here, and not by this fixture, which did not have a corroborating row until now.
+mk_mutant w12-crosswalk-unconditional \
+  "s/\\[ -n \"\\\$_x\" \\] \\|\\| return 1/return 1/" \
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=- w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=2 w12stem=A w12x26amb=-"
 
 # THE UNMUTATED CONTROL, from the same directory and run last. A lone copy that dies for a
 # reason unrelated to any mutation emits nothing, and "no output" otherwise scores as a kill.

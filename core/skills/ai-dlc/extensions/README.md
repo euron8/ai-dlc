@@ -452,7 +452,10 @@ times on first contact gets disabled and then catches nothing.
   provenance token from your heading appearing on the citation line, both report; a
   core-namespace qualifier before the citation, or a citing title that prefixes CORE's title,
   are quiet. Everything else is UNADJUDICATED rather than undecidable, and is counted in the
-  footer rather than warned — `--check-refs` lists it. **A bare file stem is not a qualifier**:
+  footer rather than warned — `--check-refs` lists it. **A crosswalk row exempts a citation only when the row is about something else** — a row whose
+  own title is your `9<n>` title says the opposite of an exemption, and it removes the
+  exemption without promoting the citation to a finding by itself.
+  **A bare file stem is not a qualifier**:
   `gate-validation` names core's step file and your own `gate-validation-*` layer file equally
   well, and on the reference consumer that single distinction moved one row out of quiet,
   where it then adjudicated as a real mislabel.
