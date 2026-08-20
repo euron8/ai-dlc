@@ -98,6 +98,17 @@ Claimed by TWO override entries at once, and by nothing else in this fixture. Ev
 rule here is shadowed by an entry some later assertion writes, so a duplicate seeded on one
 of those counts a claimant the seed never declared -- which is exactly how the first draft
 of the double-shadow assertion read 3 rows where it wanted 2.
+
+## Rule 18 -- Close-Out
+
+Claimed by ONE entry whose body carries a SECOND same-level section that no anchor names.
+Unchanged base..theirs, so the entry stays OVERRIDE-OK and the unclaimed row cannot be
+mistaken for a drift row.
+
+## Rule 19 -- Sweep
+
+The near-miss for the same arm: its override nests a sub-heading INSIDE the claimed section.
+A heading-set difference would report that child; a span-based claim does not.
 EOF
 
 # NOTE the trailing unchanged section. The template tokens must NOT be the last
@@ -227,6 +238,17 @@ Claimed by TWO override entries at once, and by nothing else in this fixture. Ev
 rule here is shadowed by an entry some later assertion writes, so a duplicate seeded on one
 of those counts a claimant the seed never declared -- which is exactly how the first draft
 of the double-shadow assertion read 3 rows where it wanted 2.
+
+## Rule 18 -- Close-Out
+
+Claimed by ONE entry whose body carries a SECOND same-level section that no anchor names.
+Unchanged base..theirs, so the entry stays OVERRIDE-OK and the unclaimed row cannot be
+mistaken for a drift row.
+
+## Rule 19 -- Sweep
+
+The near-miss for the same arm: its override nests a sub-heading INSIDE the claimed section.
+A heading-set difference would report that child; a span-based claim does not.
 EOF
 
 # THEIRS absorbs the consumer's hardening (the v0.55.0 handoff-guard case).
@@ -312,6 +334,46 @@ Consumer reporting rules. Record every verdict in core's \`## Audit Ledger\` tab
 
 That table is defined INSIDE Rule 10, which this entry replaces at load time, so
 the delegation cannot resolve. This entry MUST be reported.
+EOF
+
+# --- LC-O16 / OVERRIDE-BODY-UNCLAIMED -------------------------------------------------
+# THE OFFENDER. Two same-level sections in the body, ONE anchor. The appendix is what an
+# LC-O15 narrowing leaves behind when it removes an anchor and keeps the text: applied by
+# nothing, and still reading as live consumer machinery.
+cat > "$CONS/.claude/skills/ai-dlc/overrides/SKILL__Rule-18-unclaimed.md" <<EOF
+---
+shadows: SKILL.md#Rule 18
+base_sha: ${BASE}
+reason: consumer close-out machinery; the appendix below is claimed by no anchor.
+---
+
+## Rule 18 -- Close-Out (CONSUMER OVERRIDE)
+
+Consumer close-out rules, replacing core's Rule 18 for this project.
+
+## Rule 18 Appendix -- consumer-only sweep
+
+Same heading level as the claimed section above, named by no anchor in \`shadows:\`, so the
+body is sliced past it and nothing ever applies it.
+EOF
+
+# THE NEAR-MISS. A sub-heading NESTED inside the claimed section. It is inside that anchor's
+# span and at a level no claimed heading uses, so both narrowings must hold it silent.
+# Without this the offender assertion passes for an arm that reports every child heading.
+cat > "$CONS/.claude/skills/ai-dlc/overrides/SKILL__Rule-19-nested.md" <<EOF
+---
+shadows: SKILL.md#Rule 19
+base_sha: ${BASE}
+reason: consumer sweep rules; nests a detail heading inside its own claimed section.
+---
+
+## Rule 19 -- Sweep (CONSUMER OVERRIDE)
+
+Consumer sweep rules, replacing core's Rule 19.
+
+### a nested detail this claimed section owns
+
+Inside the span the anchor claims, so it is claimed with it.
 EOF
 
 # THE CONTROL. Same shape, same shadow, but it delegates to a construct defined

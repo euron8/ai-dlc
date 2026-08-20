@@ -156,7 +156,7 @@
 # the same declaration-without-a-mechanism defect wearing a new file's clothes. They are named
 # in the CHANGELOG as the backlog and arrive with their enforcers, one release at a time.
 
-contract_version: 18
+contract_version: 19
 
 # WHERE A CONSUMER'S CROSSWALK ROWS LIVE. Declared here, and here rather than in
 # `core-manifest.md`, for a reason that was measured rather than argued.
@@ -547,6 +547,31 @@ clauses:
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: OVERRIDE-ASSERTS-SHADOW-SURVIVES
+    fixture: layer-readopt-gate
+
+  - id: LC-O16
+    subject: override
+    level: WARN
+    since: 19
+    normative: >-
+      Every section of an override's body is claimed by one of its `shadows:` anchors. The body is
+      sliced PER ANCHOR, so a section no anchor names is applied by nothing: it renders nowhere and
+      reaches no lead while it still reads, in the file, as live consumer machinery. THE STATE IS
+      REACHED BY REMOVING AN ANCHOR AND LEAVING THE BODY, which is precisely what LC-O15's
+      narrowing remedy instructs for a multi-anchor entry -- so the two clauses must be read
+      together, and LC-O15's remedy is incomplete without this one. Unlike LC-O9 and LC-O14, which
+      ask whether the body describes its own effect truthfully, this asks whether the body is
+      REACHED at all; an entry can satisfy both of those on every anchor and still carry a section
+      nothing applies. A body that restates NO shadowed heading is the single-anchor shape and is
+      silent here, because the whole body is that one anchor's span. Only a heading at a level some
+      CLAIMED heading also uses is reported: an override's framing prose is not a failed claim, and
+      the defect's signature is a section at the same grain as the sections that are claimed. Those
+      two narrowings took the measured false-positive set to ZERO over the reference consumer's
+      eight overrides, against a seeded control on that same corpus in which removing one anchor
+      from a four-anchor entry reports that entry's orphaned section by name.
+    prose_home: core/skills/ai-dlc/overrides/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: OVERRIDE-BODY-UNCLAIMED
     fixture: layer-readopt-gate
 
   - id: LC-O10

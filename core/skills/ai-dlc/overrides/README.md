@@ -130,6 +130,16 @@ status that stops `apply`); **WARN** reports and never blocks.
   is gone; this one tells the reader the text is still there, which is why nobody goes looking for
   it. The remedy is the same pair: narrow `shadows:` to the sub-heading actually rewritten, or
   restate the surviving text in the override body.
+- **[LC-O16]** WARN — every section of an override's body is claimed by one of its `shadows:`
+  anchors. LC-O9 and LC-O14 ask whether the body describes its own effect truthfully; this asks
+  whether the body is REACHED. The body is sliced PER ANCHOR, so a section no anchor names is
+  applied by nothing: it renders nowhere and reaches no lead while it still reads, in the file, as
+  live consumer machinery. **It is reached by REMOVING an anchor and leaving the body — exactly
+  what LC-O15's narrowing remedy instructs for a multi-anchor entry — so read the two together and
+  do not execute an LC-O15 narrowing without checking this.** A body that restates no shadowed
+  heading is the single-anchor shape and is silent here; only a heading at a level some claimed
+  heading also uses is reported, because framing prose is not a failed claim. Remedy: restore the
+  anchor to `shadows:`, move the text under a section an anchor does claim, or delete it.
 
 ## Authoring routing (§7.1 — enforced)
 

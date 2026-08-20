@@ -329,6 +329,53 @@ else
   ok "declaring an area in the consumer's file removes it from the inferred set, and only it"
 fi
 
+# ARM B2 — THE UNREADABLE DECLARATION. The template shipped `area: <path>` one per line for
+# seven releases while the resolver only ever read an `areas:` block, so a consumer following
+# its own scaffolded documentation declared nothing and was told to declare it on every run.
+# Correcting the template fixes nothing for a consumer that HAS one: install.sh preserves that
+# file by design, so the correction cannot arrive by pull and the diagnosis has to.
+cat > "$wi/.claude/skills/ai-dlc/artifact-paths.md" <<'EOF'
+# consumer artifact paths
+
+area: _bmad-output/brainstorming
+area: _bmad-output/test-artifacts
+EOF
+b2_out="$(bash "$MIG" --root "$wi" 2>&1)"
+if grep -q "UNREADABLE DECLARATION" <<<"$b2_out"; then
+  ok "an 'area:'-per-line declaration is reported as UNREADABLE, not silently ignored"
+else
+  bad "the documented-but-unreadable 'area:' form extracted nothing and said nothing — the consumer is told to declare an area they have already declared, on every run, forever"
+fi
+# and it must still be INFERRED, because nothing was read: a diagnosis that replaced the
+# inferred row would hide the consequence it is diagnosing.
+grep -q "_bmad-output/brainstorming" <<<"$(sed -n '/AREAS INFERRED/,/^$/p' <<<"$b2_out")" \
+  && ok "  and the area is STILL inferred — the diagnosis reports the state, it does not mask it" \
+  || bad "  the diagnosis replaced the inferred row, so the report no longer shows what was lost"
+
+# THE NEAR-MISS. A READABLE block that also mentions `area:` in its prose must stay silent, or
+# the check fires on every correctly-declared file that happens to describe its own grammar.
+cat > "$wi/.claude/skills/ai-dlc/artifact-paths.md" <<'EOF'
+# consumer artifact paths
+
+An `area:` is a durable root; declare each one under the block below.
+
+areas:
+  _bmad-output/brainstorming
+EOF
+if grep -q "UNREADABLE DECLARATION" <<<"$(bash "$MIG" --root "$wi" 2>&1)"; then
+  bad "a READABLE areas: block was reported as unreadable because the prose mentions 'area:' — the predicate is not the conjunction and every compliant file is a false positive"
+else
+  ok "  and a readable block that mentions 'area:' in prose stays silent"
+fi
+
+# Restore ARM B's state so the mutation below measures what it was written to measure.
+cat > "$wi/.claude/skills/ai-dlc/artifact-paths.md" <<'EOF'
+# consumer artifact paths
+
+areas:
+  _bmad-output/brainstorming
+EOF
+
 # MUTATION — stop reading the consumer's file. ARM B must regress and ARM A must not move.
 # THE SUBJECT IS THE RESOLVER, not the migration: the consumer-area join moved into
 # artifact-path-config.sh so the conformance validator could not grow a second copy of it. The

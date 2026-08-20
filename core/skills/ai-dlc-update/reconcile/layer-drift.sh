@@ -68,6 +68,18 @@
 #                                    case points the lead at text that is gone; this one
 #                                    tells the lead the text is still there. Both read as
 #                                    careful authorship, which is why neither is visible.
+#   OVERRIDE-BODY-UNCLAIMED        a section in the override's BODY that NO `shadows:` anchor
+#                                    claims. The body is sliced PER ANCHOR (readopt-override.sh
+#                                    slices it with span_of), so a section no anchor names is
+#                                    applied by nothing -- it sits in the file, reads as live
+#                                    consumer machinery, and reaches no lead. The state is
+#                                    reached by REMOVING an anchor from `shadows:` and leaving
+#                                    the body, which is exactly what LC-O15's narrowing remedy
+#                                    instructs for a multi-anchor entry. Every other body-side
+#                                    question here asks whether the body describes its own
+#                                    effect truthfully; this asks whether the body is REACHED
+#                                    at all. Report-only: the section may be deliberate dead
+#                                    prose, and only the author knows.
 #                                    Report-only, and independent of any pull: true or false
 #                                    today, like its sibling.
 #   OVERRIDE-LOOSE-ANCHOR            a `shadows:` anchor resolves only by the REVERSE arm of
@@ -372,6 +384,59 @@ layer_files() { [ -d "$1" ] || return 0; find "$1" -type f -name '*.md' ! -name 
 # findings, and had in fact read nothing.
 body_of() {
   awk 'NR==1 && $0=="---" { fm=1; next } fm && $0=="---" { fm=0; next } !fm' "$1"
+}
+
+# Sections of an override BODY that no `shadows:` anchor claims — the join for
+# OVERRIDE-BODY-UNCLAIMED.
+#
+# WHY PER-ANCHOR SPANS AND NOT A HEADING-SET DIFFERENCE. `readopt-override.sh` locates each
+# anchor's text in the body with `span_of`, so what an anchor claims is a RANGE, not a heading.
+# A sub-heading nested under a claimed heading is inside that range and is claimed with it;
+# differencing heading sets would report every `####` child of every shadowed section.
+#
+# TWO NARROWINGS, BOTH MEASURED RATHER THAN ARGUED, and together they took the false-positive
+# set to zero over the reference consumer's eight real overrides:
+#
+#   * A body that restates NO shadowed heading is the single-anchor shape readopt-override.sh
+#     names at its own refusal site: the WHOLE body is that one anchor's span, so nothing in it
+#     can be unclaimed. That entry is silent here, not clean-by-luck.
+#   * Only a heading at a level some CLAIMED heading also uses is reported. An override body
+#     opens with framing prose under headings of its own, and those are not failed claims. The
+#     defect's signature is a section at the same grain as the sections that ARE claimed.
+#
+# SPANS CROSS INTO awk AS ONE LINE OF `lo:hi` TOKENS. `awk -v` carries no newline at all on the
+# BSD awk this ships against; a multi-line value dies with `newline in string` and the arm then
+# reports every body clean, which is the shape of a check that cannot fire.
+unclaimed_body_sections() { # unclaimed_body_sections <entry-file> <shadow_parts-output>
+  local _b _spans="" _id _sp _tab
+  _tab="$(printf '\t')"
+  _b="$(mktemp)" || return 0
+  body_of "$1" > "$_b"
+  while IFS= read -r _pair; do
+    [ -n "$_pair" ] || continue
+    _id="${_pair#*"$_tab"}"
+    [ -n "$_id" ] || continue
+    _sp="$(span_of "$_id" < "$_b")"
+    [ -n "$_sp" ] && _spans="${_spans}${_sp%% *}:${_sp##* } "
+  done <<< "$2"
+  if [ -n "$_spans" ]; then
+    awk -v spans="$_spans" '
+      BEGIN { n = split(spans, S, " ")
+              for (i = 1; i <= n; i++) {
+                if (S[i] == "") continue
+                split(S[i], P, ":"); lo[i] = P[1] + 0; hi[i] = P[2] + 0 } }
+      /^#{2,6}[ \t]/ {
+        match($0, /^#+/); lvl = RLENGTH; covered = 0; isstart = 0
+        for (i = 1; i <= n; i++) {
+          if (lo[i] == "") continue
+          if (NR >= lo[i] && NR <= hi[i]) { covered = 1; if (NR == lo[i]) isstart = 1 } }
+        if (isstart) { claimed[lvl + 0] = 1; next }
+        if (covered) next
+        h = $0; sub(/^#+[ \t]+/, "", h); o++; olvl[o] = lvl + 0; otxt[o] = h }
+      END { for (i = 1; i <= o; i++) if (olvl[i] in claimed) print otxt[i] }
+    ' "$_b"
+  fi
+  rm -f "$_b"
 }
 
 # Backticked constructs in a stream, lowercased and deduped — the join key for
@@ -1296,6 +1361,15 @@ while IFS= read -r f; do
   if asserts_shadow_survives "$(body_of "$f")"; then
     emit OVERRIDE-ASSERTS-SHADOW-SURVIVES "$entry" "$tgt" \
       "the body asserts that the section(s) it shadows are unchanged and still govern. Precedence is overrides > extensions > core, so at load time this entry replaces the WHOLE shadowed span -- if the body rewrites one paragraph of it and states the rest still governs, that sentence is false about this entry's own effect, and the dropped text is exactly what nobody will look for. Narrow shadows: to the sub-heading actually rewritten, or restate the surviving text in this body. Report-only -- an override shadowing a sub-heading may be describing the surrounding PARENT section correctly."
+  fi
+
+  # The sixth: not whether the body is truthful, but whether it is REACHED. An anchor removed
+  # from `shadows:` leaves its section in the body, claimed by nothing and applied by nothing --
+  # and LC-O15's own narrowing remedy for a multi-anchor entry is the act that creates it.
+  unclaimed="$(unclaimed_body_sections "$f" "$pairs")"
+  if [ -n "$unclaimed" ]; then
+    emit OVERRIDE-BODY-UNCLAIMED "$entry" "$tgt" \
+      "body section(s) that no shadows: anchor claims: $(printf '%s' "$unclaimed" | tr '\n' ';' | sed 's/;$//'). The body is sliced PER ANCHOR, so a section no anchor names is applied by nothing: it renders nowhere, reaches no lead, and every mechanical check stays green while the consumer machinery in it silently stops governing. Restore the anchor to shadows:, move the text to a section an anchor does claim, or delete it. Report-only -- deliberate dead prose is indistinguishable from a dropped claim, and only the author knows which this is."
   fi
 
   # The fifth separately-asked question: not whether upstream moved, but whether this entry's

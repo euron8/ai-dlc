@@ -53,7 +53,8 @@ executed. Fixing a consumer without fixing the prescription re-creates it next s
       story-<M>-<slug>.md          the sprint comes from the DIRECTORY; <M> is the story index
 ```
 
-Five rules, each mechanically checkable:
+Six rules. The first five are mechanically checkable against a path that already exists; the
+sixth governs the INPUT that produces one, and is checkable only as its result:
 
 1. **`s<N>` is the only spelling of a sprint** — lowercase `s`, no zero padding, never `S<N>`,
    never `sprint-<N>`, never a bare number. **`s*` is the same slot quantified over every
@@ -72,6 +73,16 @@ Five rules, each mechanically checkable:
    Core cannot know what artifacts this project produces.
 5. **`p<M>` is the only pass marker** — no `pass<M>`, no `-pass-<M>`. Ordering stays `order_key()`'s
    job, never mtime's.
+6. **A name you hand a sub-skill is a path component.** Where an invoked skill composes its own
+   output directory from a session or run name — the `/bmad-*` skills do — that name lands in the
+   path, and rules 1 through 3 govern it exactly as they govern a basename you write yourself.
+   **So the name carries no sprint token.** Core directs those invocations and owns neither the
+   sub-skill's internals nor the directory it builds; the name passed IN is the one part core
+   does own, and the only point at which this is decidable before the file exists. Prescribing an
+   output path does not reach it — core already prescribes one for several of these skills and the
+   sub-skill still built its own directory beside the prescribed file. The pre-push validator
+   judges the produced path either way, so a name chosen for comfort blocks a push at a step
+   nobody connects to the naming.
 
 ## Areas
 

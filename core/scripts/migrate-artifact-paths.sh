@@ -436,6 +436,12 @@ if [ -s "$INFERRED" ]; then
     echo "  core's artifact-path-grammar.md is overwritten by one, so an area added there is"
     echo "  gone at the next update. This run READ your file and joined its areas to core's, so"
     echo "  declaring them is what stops them being inferred here again."
+    # AND IF THE DECLARATION IS ALREADY THERE AND UNREADABLE, SAY SO HERE. Without this line the
+    # remedy above is what a consumer who has ALREADY followed it reads, on every run, forever --
+    # which is the state the shipped template put them in for seven releases. The syntax check is
+    # resolved from the config rather than restated, so there is one spelling of what readable means.
+    _syn="$(cfg --consumer-syntax 2>/dev/null || true)"
+    [ -n "$_syn" ] && { echo ""; echo "  $_syn" | fold -s -w 96 | sed '2,$s/^/  /'; }
   fi
   echo ""
 fi
