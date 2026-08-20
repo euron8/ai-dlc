@@ -34,6 +34,101 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.389.0] — 2026-08-20
+
+### Fixed
+
+**A folded continuation line carried its source indentation into the operator-facing text,
+at both folds.** Reported by the graph consumer against the v0.388.0 No-AD note, reproduced
+here on this fixture's own seed rather than taken on report: a wrapped `- **No-AD:**` reason
+rendered as `already establishes and   introduces no new mechanism class` — three spaces
+where the source line wrapped. Both folds in `validate-spec-join.sh` built a logical item by
+appending physical lines with a single space and never dropped the appended line's leading
+whitespace. It flips no verdict, and that is measurable rather than argued: every terminator
+test runs on the raw line BEFORE the append, and the id readers strip ids and test the
+residue for alphanumerics, so indentation is invisible to all of them. It reached the
+operator, which is where it counted — the same defect shows in the kernel side's DISARM
+echo, which prints the offending declaration back to its author.
+
+**The differential is what establishes "cosmetic", not the reasoning above.** 2123 cases
+across every seeded corpus, the v0.388.0 validator against this one: **0 exit-code
+differences, 0 text differences once space runs are collapsed, and 125 cases where the raw
+bytes DO differ** — that last number is the control, because two runs reading the same tree
+also produce zero mismatches and read as a clean differential.
+
+### Changed
+
+**The spine fold now derives its container test from the kernel's `CONTAINER` predicate,
+retiring the second encoding `BL-084` filed against v0.388.0.** That entry's trigger was
+"when either fold is next edited, unify them first", and the indentation fix is that edit.
+The class it guards against is the one that produced four defects in v0.388.0 — one markdown
+fact written twice, each drift introduced by repairing one copy and not the other.
+
+**The unconditional terminators are tested BEFORE the container test, and the ordering is
+the whole correctness argument.** `CONTAINER` carries `>` and `|` alongside the list markers,
+so a reroute that tested containers first would hand an indented blockquote or table row to
+the more-indented rule and CONTINUE the `- **Binds:**` item — absorbing a capability that
+line only MENTIONS into the binding. That is the false-BIND direction: join (2a) closes at
+rc=0 against text that binds nothing, with no note and no failure. Old and new agree on all
+four container seeds; the committed mutant that removes the ordering flips three of them
+from FAIL to PASS.
+
+**The corpus held none of that population, so the differential above was blind to the
+reroute by construction.** Four seeds were added for it — an indented blockquote, an indented
+table row and a thematic break, all of which must END the item, plus a nested list which must
+CONTINUE it. Three terminators and one continuation, because a fold that terminates on
+everything satisfies the first three and silently unbinds every nested-list binding.
+
+**`--baseline` DISARM: one exit code, two opposite remedies, and the message named neither.**
+Surfaced by the graph consumer, whose baseline file is swallowed by a `*.txt` ignore rule and
+is therefore present for its author and absent on every fresh clone. The DISARM was correct —
+an unreadable baseline is not an empty one — but a reader hitting it has to work out which of
+two situations they are in. It now names both: if the ledger reached zero entries, DELETE the
+file and stop passing the flag; if the file should exist, check it is COMMITTED.
+
+### Documentation
+
+**The terminal state of a baseline is DELETION, and `gate-validation.md` never said so.** The
+line-level rule was already there — a baselined entry that stops reproducing is itself a FAIL,
+so the line goes when its cause does — but the file-level consequence was left to inference. An
+empty ledger suppresses nothing, and a flag still pointed at it is a standing affordance to
+baseline rather than fix. The step file now states that, states that the file is a gate INPUT
+and must be COMMITTED while it exists, and states that a convention written into its comment
+block belongs in a tracked document instead, because the file it sits in is meant to end.
+It also states the ABOVE-zero half explicitly, at that consumer's prompting: a session reading
+the contract as it stood had independently reached "add a `!<path>` carve-out and commit it",
+which was the right answer for a non-empty ledger and the wrong one for theirs. Both readings
+were reachable from the old text, so both are now written down — and the reason to commit is
+that an untracked gate input makes the author's gate and everyone else's DIFFERENT GATES, with
+nothing reporting the difference.
+
+**Join (3): a `story-cap:` line is legal and almost never right.** A citation resolving to no
+capability is a typo or a dropped capability, and both are cheaper to fix than to carry. That
+reading of the contract existed only in one consumer's baseline comment block; it belongs
+where the flag is described.
+
+### Fixture
+
+`spec-join-integrity` gains **19 arms and 5 seeds** (238 + 13 + 19 = 270 assertions), each
+presence-shaped and each carrying a committed mutant. 18 of the 19 fail against a subject
+replaced by `exit 0`; the one that does not is a `want 0` paired with an arm asserting the
+PASS line. Unit cost 26.0s → 44.0s, against a suite pole of 395–442s.
+
+**Two of the new arms were wrong on their first run, and both were wrong in the way this
+repo keeps relearning.** A mutant disabling `container_start` was armed on a nested-list seed
+and came back GREEN — falling through the container branch continues the item anyway, so that
+seed cannot kill it; what the predicate decides is TERMINATION on a same-indent sibling.
+Retargeted at a sibling seed it then died by the EATEN-MARKER guard instead, because the
+sibling bullet carried a `**<Key>:**` marker — a kill reported by an arm that says nothing
+about the subject under test. The seed that finally discriminates carries no second marker
+and places the `- **Rule:**` bullet above the `- **Binds:**` one.
+
+**Authorship note.** `.claude/rules/fixture-mutants.md` requires the battery author to differ
+from the arm author, so the two cannot encode one understanding twice. These arms were written
+by the hand that wrote the change. The mitigation is that the behaviour claim rests on the
+differential against the previous release rather than on these arms — but the independent
+check was not taken, and a reviewer should read them knowing it.
+
 ## [0.388.0] — 2026-08-20
 
 ### Fixed

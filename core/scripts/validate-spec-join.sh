@@ -141,7 +141,7 @@ done
 BASELINE_KEYS=""
 BASELINE_HIT=""
 if [ -n "$BASELINE" ]; then
-  [ -f "$BASELINE" ] || { echo "$PROG: DISARMED — --baseline names an unreadable file: $BASELINE. An unreadable baseline is not an empty one; exiting rather than reporting every baselined failure as new." >&2; exit 2; }
+  [ -f "$BASELINE" ] || { echo "$PROG: DISARMED — --baseline names an unreadable file: $BASELINE. An unreadable baseline is not an empty one; exiting rather than reporting every baselined failure as new. TWO WAYS TO GET HERE, WITH OPPOSITE REMEDIES. If the ledger reached zero entries, the terminal state is to DELETE the file and stop passing --baseline — an empty ledger is not a ledger, and a flag pointed at a path nothing writes is a standing invitation to re-baseline. If the file should exist, check it is COMMITTED: a baseline is a gate INPUT, and an ignore rule as ordinary as *.txt swallows it, leaving it present for its author and absent on every fresh clone." >&2; exit 2; }
   BASELINE_KEYS="$(sed 's/#.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' "$BASELINE" | grep -v '^$' || true)"
 fi
 
@@ -430,7 +430,7 @@ CAP_GRAMMAR='\bCAP-[0-9]+[a-z]?\b'
 # still open; the scan asks what is inside it. Neither can learn a marker the other does
 # not. The value is single-quoted at assignment, so the backtick in the class is literal,
 # and expansion does not re-parse it.
-CAP_DECL_AWK='
+CONTAINER_AWK='
 # ONE CONTAINER CLASS, DEFINED AS DATA AND BUILT INTO EVERY EXPRESSION THAT NEEDS IT.
 #
 # This set was written FOUR times before it was extracted -- the fold terminator, the
@@ -451,6 +451,20 @@ CAP_DECL_AWK='
 BEGIN { CONTAINER = "([-*+>|]|[0-9]+[.)])" }
 function container_start(l) { return (l ~ "^[[:space:]]*" CONTAINER "[[:space:]]") }
 function only_container_markers(pre) { return (pre ~ "^([[:space:]]|" CONTAINER "|#+)*$") }
+# A CONTINUATION LINE JOINS AS TEXT, NOT AS LAYOUT. Both folds in this file build a logical
+# item by appending physical lines with a single space, and the leading indentation of the
+# appended line used to survive into the joined string. Nothing downstream reads it -- the
+# id readers strip ids and test the residue for alphanumerics, and the terminator tests all
+# run on the raw line BEFORE the append -- so it changed no verdict. It changed what the
+# operator sees: a wrapped No-AD reason rendered in the note with three spaces at the wrap,
+# which reads as a rendering fault in the gate output and was reported as one by a consumer.
+# The indentation is layout belonging to the source line and is dropped at the join.
+function unindent(l) { sub(/^[[:space:]]+/, "", l); return l }
+'
+# THE DECLARATION READER, layered on the container class above. Kept in a SECOND variable
+# so the spine fold can take the container predicates without also taking `decl_run`, whose
+# `ok` array only the kernel side populates.
+CAP_DECL_AWK="$CONTAINER_AWK"'
 function known(run,   t, id) {
   t = run
   while (match(t, /CAP-[0-9][A-Za-z0-9_-]*/)) {
@@ -592,7 +606,7 @@ KERNEL_ITEMS="$(printf '%s\n' "$KERNEL_PROSE" | awk "$CAP_DECL_AWK"'
   {
     if (acc != "") {
       if ($0 ~ /^[[:space:]]*$/ || $0 ~ /^#/ || container_start($0)) { print acc; acc = "" }
-      else if (decl_run(acc, 0) && DECL_OPEN) { acc = acc " " $0; next }
+      else if (decl_run(acc, 0) && DECL_OPEN) { acc = acc " " unindent($0); next }
       else { print acc; acc = "" }
     }
     if (acc == "") { acc = $0 }
@@ -963,7 +977,12 @@ if [ -n "$SPINE_MD" ]; then
   # continuation line, which is the defect this fold exists to fix; it was never a
   # capability, it was a coincidence of the bug. Put dispositions in a `- **No-AD:**`
   # bullet, which is what that bullet is for.
-  SPINE_BULLETS="$(awk '
+  # ONE CONTAINER CLASS ACROSS BOTH FOLDS (BL-084). The kernel fold derives its terminator
+  # from CONTAINER; this one carried its own list-marker regex, agreeing by inspection. The
+  # class that produced four defects in v0.388.0 is exactly "one markdown fact written twice",
+  # and every one of those was introduced by repairing one copy and not the other, so the
+  # second encoding is retired here rather than checked.
+  SPINE_BULLETS="$(awk "$CONTAINER_AWK"'
     BEGIN { fence = 0 }
     /^[[:space:]]*(```|~~~)/ { if (acc != "") { print acc; acc = "" } fence = !fence; next }
     fence { next }
@@ -974,14 +993,20 @@ if [ -n "$SPINE_MD" ]; then
     {
       if (acc != "") {
         if ($0 ~ /^[[:space:]]*$/) { print acc; acc = ""; next }
-        if ($0 ~ /^[[:space:]]*([-*+]|[0-9]+[.)])[[:space:]]/) {
-          if (match($0, /[^ \t]/) > ind) { acc = acc " " $0; next }
-          print acc; acc = ""; next
-        }
+        # THE NON-LIST TERMINATORS ARE TESTED FIRST, and that order is what makes routing
+        # the list test through container_start() behaviour-preserving. CONTAINER carries
+        # `>` and `|` alongside the list markers, so a blockquote or a table row would
+        # otherwise reach the more-indented rule and CONTINUE the item -- absorbing its CAP
+        # tokens into the binding, which is the false-BIND direction. Terminating them above
+        # the container test keeps them unconditional, exactly as the two regexes did.
         if ($0 ~ /^#/ || $0 ~ /^[[:space:]]*>/ || $0 ~ /^[[:space:]]*\|/ || $0 ~ /^[[:space:]]*(---|===|___|\*\*\*)/) {
           print acc; acc = ""; next
         }
-        acc = acc " " $0
+        if (container_start($0)) {
+          if (match($0, /[^ \t]/) > ind) { acc = acc " " unindent($0); next }
+          print acc; acc = ""; next
+        }
+        acc = acc " " unindent($0)
       }
     }
     END { if (acc != "") print acc }
