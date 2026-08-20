@@ -34,6 +34,93 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.384.0] — 2026-08-19
+
+### Fixed
+
+**Core enforced a naming convention it never stated at the point of production**
+(`PC-S336`, filed by the graph consumer). `artifact-path-grammar.md` rule 2 forbids a sprint
+token in a basename and `validate-artifact-paths.sh` enforces it against real filenames on
+every push. Core directs sixteen distinct `/bmad-*` skills, names an output path for **three**
+of them, and constrained the session NAME those skills compose their own output directory from
+in **none** — measured: `steps/discovery.md` never mentions `_bmad-output/brainstorming`
+(control: it names `_bmad-output/planning-artifacts` 8 times), and one unrelated hit for
+session-name guidance across every step file.
+
+**Prescribing the output path does not fix it, and that is why this is rule 6 rather than
+sixteen new path prescriptions.** Core already prescribes `_bmad-output/planning-artifacts/prd.md`
+for `/bmad-prd`; the consumer's blocking set still contained `prds/prd-s304-validate-.../`,
+produced by the same invocation, sitting beside the conforming prescribed file. The prescription
+governs where the LEAD files an artifact and never reaches the directory the SUB-SKILL composes.
+Rule 6 governs the name passed IN, which is the only part core owns and the only point at which
+this is decidable before the file exists. Fourteen such paths hard-stopped a `/ai-dlc-update` at
+step-1 preflight before any classification ran, and it recurs every sprint until the constraint
+is stated.
+
+**The artifact-paths template documented a declaration syntax its only reader cannot parse**
+(`PC-2`, filed by the graph consumer). `templates/artifact-paths.md` shipped `area: <path>` one
+per line, in prose twice and in its worked example; `areas_of()` in `artifact-path-config.sh`
+parses an `areas:` header at column 0 with two-space-indented entries. The documented form
+extracts NOTHING, and the failure is silent in the worst direction — the migration goes on
+printing "declare them in your own file" with no sign the declaration was unreadable. **The
+reader diverged from the template, not the reverse**: the template shipped at 0.298.0 and was
+never revised, `areas_of()` arrived seven releases later at 0.305.0, and at 0.298.0 the `area:`
+form was correct *by vacuity* because nothing read the file. `artifact-path-migration`'s fixture
+seeds the reader's own form, so it cannot fail on a documentation mismatch. The template now
+documents the `areas:` block, states that the reader scans the WHOLE file for a column-0
+`areas:` (two such blocks are read and unioned, which is why the worked example stays indented
+and inert), and records that **`kind:` is read by nothing** — rule 4 has no enforcer, so it is
+unenforced whatever the file says, and the template no longer implies otherwise.
+
+**Correcting the template fixes nothing for a consumer that already has one, so the diagnosis
+ships too.** `install.sh:313` scaffolds that file only when it is ABSENT and preserves it
+otherwise — by design, it is consumer-owned — so the corrected syntax cannot arrive by pull and
+every existing consumer keeps the unreadable form silently forever. `artifact-path-config.sh`
+gains a `--consumer-syntax` mode and the migration's `AREAS INFERRED` remedy now prints
+`UNREADABLE DECLARATION` when the file carries column-0 `area:` lines AND no readable `areas:`
+block. **The predicate is that conjunction and each half alone is a false positive**: a readable
+block whose prose also mentions `area:` must stay silent, and a file with neither is an
+undeclared set, which is a legal answer. The diagnosis does NOT replace the inferred row —
+masking the consequence it is reporting is the failure one level up — and the fixture asserts
+all three, plus that the arm is anchored so the template's own indented worked example cannot
+trip it.
+
+### Added
+
+**`LC-O16` / `OVERRIDE-BODY-UNCLAIMED` — an orphaned override body section.** An override's body
+is sliced PER ANCHOR (`readopt-override.sh` locates each with `span_of`), so removing an anchor
+from `shadows:` and leaving the body produces a section applied by nothing: it renders nowhere,
+reaches no lead, and still reads in the file as live consumer machinery. **Every correspondence
+check ran the other way** — `E7` (anchor with no core heading), `readopt-override.sh`'s refusal
+(anchors with no body), `LC-O9` (body delegates into a shadowed section), `LC-O14` (body asserts
+core's text survives) — and nothing keyed on a body section with no anchor.
+
+**It is `LC-O15`'s own narrowing remedy that creates the state**, so the two are now cross-cited
+in both directions: a multi-anchor entry told to remove one anchor and leave the rest
+byte-untouched leaves that anchor's body behind. Found while adjudicating a consumer's standing
+narrowing debt, where executing it would have orphaned 289 non-blank lines including 101 of
+consumer-owned close-out machinery — one of them a status whose only enforcement was the swept
+section itself.
+
+Two narrowings, both measured: a body restating no shadowed heading is the single-anchor shape
+and is silent (the whole body is that one anchor's span); only a heading at a level some CLAIMED
+heading also uses is reported, because an override's framing prose is not a failed claim.
+**False-positive set: ZERO**, measured by running the shipped `layer-drift.sh` against the
+reference consumer's eight real overrides — control: the same run emitted 11 override rows
+across 4 other codes, so the zero is one the instrument could have broken. The committed
+mutants are the proof the arms are not vacuous: `unclaimed-silence` resolves no span and kills
+the PRESENCE arm only, `unclaimed-widen` drops both narrowings together and makes the nested
+near-miss fire. Dropping either narrowing alone changes nothing on the seed, which is why the
+widening mutant takes both — a partial revert proves the layer left in place.
+
+`contract_version` 18 → 19. Every layer entry declaring a lower `conforms_to` moves behind it at
+once; `W6` reports that as one line per run and silences nothing, and the new clause ships at
+WARN per the contract's own promotion discipline.
+
+**Known limitation, stated rather than papered over:** the fixture arms and the code they prove
+were written by the same hand, which `fixture-mutants.md` warns against — an arm and a battery
+from one author encode one understanding twice.
+
 ## [0.383.0] — 2026-08-19
 
 A plan is resumed with one sentence and nothing else. Now every live plan has to carry it.

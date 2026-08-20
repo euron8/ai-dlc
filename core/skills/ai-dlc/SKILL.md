@@ -1119,7 +1119,9 @@ path grammar — the directory is the only sprint slot, `<area>/s<N>/`, and
 no basename may carry a sprint token — lives in
 `artifact-path-grammar.md` alongside this file. READ AND FOLLOW it before
 writing a pipeline artifact to a path this rulebook does not already
-name. A basename carrying the sprint forces every reader to SEARCH for
+name — **and before handing a session or run name to a `/bmad-*`
+sub-skill, because those compose their own output directory from it and
+rule 6 governs that name as a path component.** A basename carrying the sprint forces every reader to SEARCH for
 the current one, and search means mtime: that is how both pipeline hooks
 came to pick the live adversarial series by modification time across 56
 sprints in one directory, and how Check 6 verified two closed sprints

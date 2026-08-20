@@ -631,6 +631,41 @@ else
     bad "  the wrapped claim was missed — a line-based scan reports a false zero on the real shape"
   fi
 
+  # --- OVERRIDE-BODY-UNCLAIMED (LC-O16) ------------------------------------------------
+  # The third body-side question, and the one that asks something the other two cannot:
+  # LC-O9 and LC-O14 ask whether the body is TRUTHFUL, this asks whether it is REACHED.
+  # The state is what an LC-O15 narrowing LEAVES BEHIND when it removes an anchor and keeps
+  # the text, so the two clauses have to be read together.
+  if grep -qx OVERRIDE-BODY-UNCLAIMED <<<"$(st_of 'SKILL__Rule-18-unclaimed\.md$')"; then
+    ok "a body section no shadows: anchor claims is REPORTED"
+  else
+    bad "the unclaimed body section went undetected — it is applied by nothing while every mechanical check reports green"
+  fi
+
+  # THE NEAR-MISS, and it is the assertion that stops this arm being a heading counter. A
+  # sub-heading nested INSIDE a claimed section is inside that anchor's span; a heading-set
+  # difference would report every '###' child of every shadowed section on every consumer.
+  if grep -qx OVERRIDE-BODY-UNCLAIMED <<<"$(st_of 'SKILL__Rule-19-nested\.md$')"; then
+    bad "a sub-heading NESTED inside the claimed section was reported — the claim is being read as a heading set, not a span, and every override with a child heading is a false positive"
+  else
+    ok "  and a sub-heading nested inside a claimed section stays silent"
+  fi
+
+  # The single-anchor shape: a body restating NO shadowed heading is the WHOLE span of its
+  # one anchor, so nothing in it can be unclaimed. readopt-override.sh names this shape at
+  # its own refusal site; an arm that fired here would report every such entry forever.
+  if grep -qx OVERRIDE-BODY-UNCLAIMED <<<"$(st_of 'SKILL__Rule-13-survives\.md$')"; then
+    bad "the single-anchor shape (a body restating no shadowed heading) was reported — the whole body is that anchor's span and nothing in it can be unclaimed"
+  else
+    ok "  and the single-anchor shape stays silent"
+  fi
+
+  if grep -q '^HARD-' <<<"$(st_of 'SKILL__Rule-18-unclaimed\.md$')"; then
+    bad "OVERRIDE-BODY-UNCLAIMED carries a HARD- prefix — it would block apply"
+  else
+    ok "  and it is report-only (no HARD- prefix), so it cannot block an apply"
+  fi
+
   # It answers a DIFFERENT question than the drift arm, same as its sibling. Both real
   # instances were OVERRIDE-OK while making the claim.
   if grep -qx OVERRIDE-OK <<<"$(st_of 'SKILL__Rule-13-survives\.md$')"; then
@@ -817,6 +852,45 @@ else
       ok "  mutation dup-threshold: raising the duplicate threshold silences the pair, and only that"
     else
       bad "  mutation dup-threshold: double=$m4d (want 0) loose=$m4l (want 1) — the assertion is vacuous or the two statuses are entangled"
+    fi
+  fi
+
+  # MUTANT 5 — silence the unclaimed arm by resolving NO span. Two of the three LC-O16
+  # assertions are ABSENCE-shaped and would pass against a subject that emits nothing, which
+  # is the exact shape a near-miss cannot distinguish. The PRESENCE arm must die here and
+  # only it; the positive conjunct is a baseline row that must survive, so a mutant that
+  # broke the whole script cannot score this as a kill.
+  sed 's|_sp="$(span_of "$_id" < "$_b")"|_sp=""|' "$DRIFT" > "$MUTD/layer-drift.sh"
+  if cmp -s "$DRIFT" "$MUTD/layer-drift.sh"; then
+    bad "  mutation unclaimed-silence: the mutation matched nothing, so the unclaimed presence assertion is unproven"
+  else
+    m5="$(bash "$MUTD/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"
+    m5u="$(printf '%s\n' "$m5" | awk -F'\t' '$1=="OVERRIDE-BODY-UNCLAIMED"{c++} END{print c+0}')"
+    m5d="$(printf '%s\n' "$m5" | awk -F'\t' '$1=="OVERRIDE-DOUBLE-SHADOW"{c++} END{print c+0}')"
+    if [ "$m5u" -eq 0 ] && [ "$m5d" -eq 2 ]; then
+      ok "  mutation unclaimed-silence: with no span resolved the unclaimed row vanishes, and only that"
+    else
+      bad "  mutation unclaimed-silence: unclaimed=$m5u (want 0) double=$m5d (want 2) — the presence assertion is vacuous, or the script died and silence scored as a kill"
+    fi
+  fi
+
+  # MUTANT 6 — WIDEN instead of silence, because the two narrowings are what make this arm
+  # something other than a heading counter, and only a widening mutant can prove them. BOTH
+  # layers come out together: dropping either one alone changes nothing on this seed, which
+  # is a partial revert proving the layer left in place. The NESTED entry must now be
+  # reported, and the single-anchor entry must still not be -- it resolves no span either way.
+  sed -e '/if (covered) next/d' \
+      -e 's/if (olvl\[i\] in claimed) print otxt\[i\]/print otxt[i]/' "$DRIFT" > "$MUTD/layer-drift.sh"
+  if cmp -s "$DRIFT" "$MUTD/layer-drift.sh"; then
+    bad "  mutation unclaimed-widen: the mutation matched nothing, so the two narrowings are unproven"
+  else
+    m6="$(bash "$MUTD/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"
+    m6n="$(printf '%s\n' "$m6" | awk -F'\t' '$1=="OVERRIDE-BODY-UNCLAIMED" && $2 ~ /Rule-19-nested/{c++} END{print c+0}')"
+    m6s="$(printf '%s\n' "$m6" | awk -F'\t' '$1=="OVERRIDE-BODY-UNCLAIMED" && $2 ~ /Rule-13-survives/{c++} END{print c+0}')"
+    if [ "$m6n" -eq 1 ] && [ "$m6s" -eq 0 ]; then
+      ok "  mutation unclaimed-widen: without the span and level narrowings the NESTED child is reported — both are load-bearing"
+    else
+      bad "  mutation unclaimed-widen: nested=$m6n (want 1) single-anchor=$m6s (want 0) — the near-miss assertion is vacuous, or the widening reached an entry it should not"
     fi
   fi
 fi

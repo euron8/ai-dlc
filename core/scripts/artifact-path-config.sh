@@ -9,6 +9,7 @@
 #   artifact-path-config.sh --slot-re-prescribed
 #   artifact-path-config.sh --grammar-file  [--root <dir>] [--grammar <file>]
 #   artifact-path-config.sh --consumer-file [--root <dir>]
+#   artifact-path-config.sh --consumer-syntax [--root <dir>]
 #
 # WHY THIS EXISTS, and it is a measurement rather than tidiness. Three shipped programs had
 # already grown their OWN copy of the same four-line extraction -- `migrate-artifact-paths.sh`,
@@ -104,20 +105,20 @@ SLOT_RE='^s[0-9]+$'
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--grammar-file|--consumer-file)
+    --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax)
       [ -z "$MODE" ] || { echo "$PROG: two modes given ('$MODE' and '$1'); it answers one question per call" >&2; exit 2; }
       MODE="$1"; shift ;;
     --root) ROOT="${2:-}"; [ -n "$ROOT" ] || { echo "$PROG: --root needs a directory" >&2; exit 2; }; shift 2 ;;
     --grammar) GRAMMAR_ARG="${2:-}"; [ -n "$GRAMMAR_ARG" ] || { echo "$PROG: --grammar needs a file" >&2; exit 2; }; shift 2 ;;
     -h|--help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "$PROG: unknown option '$1'" >&2
-       echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--grammar-file|--consumer-file [--root <dir>] [--grammar <file>]" >&2
+       echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax [--root <dir>] [--grammar <file>]" >&2
        exit 2 ;;
   esac
 done
 
 [ -n "$MODE" ] || { echo "$PROG: no mode given" >&2
-                    echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--grammar-file|--consumer-file [--root <dir>] [--grammar <file>]" >&2
+                    echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax [--root <dir>] [--grammar <file>]" >&2
                     exit 2; }
 
 # --token-re answers before any tree is consulted. It is a property of the grammar's RULES, not
@@ -181,6 +182,32 @@ fi
 # `areas:` block in the same shape, and two copies of this awk is how they start disagreeing
 # about what an area is.
 areas_of() { awk '/^areas:$/{f=1;next} f&&/^[^ ]/{f=0} f&&/^  [^ ]/{gsub(/^  /,"");print}' "$1"; }
+
+# --consumer-syntax -- ONE line naming an UNREADABLE declaration, or nothing.
+#
+# WHY THIS EXISTS AS A SEPARATE MODE. The template shipped `area: <path>` one per line for seven
+# releases while `areas_of()` above has only ever read an `areas:` block, so a consumer following
+# its own scaffolded documentation declared nothing and was told, on every run, to declare it.
+# The template is now correct and that fixes NOTHING for a consumer that already has one:
+# `install.sh` scaffolds this file only when it is ABSENT and preserves it otherwise, by design,
+# because it is consumer-owned. So the correction cannot arrive by pull and the diagnosis has to.
+#
+# THE PREDICATE IS THE CONJUNCTION, AND EACH HALF ALONE IS A FALSE POSITIVE. A file with a
+# readable `areas:` block that ALSO mentions `area:` in its prose is fine and must stay silent;
+# a file with neither is an undeclared set, which is a legal answer here and not an error. Only
+# `area:`-shaped lines present WITH nothing readable is the unreadable-declaration state.
+#
+# ANCHORED AT COLUMN 0 AND REQUIRING THE VALUE, so the template's own indented worked example --
+# which is deliberately inert and which a consumer is told to de-indent -- cannot trip it.
+if [ "$MODE" = "--consumer-syntax" ]; then
+  [ -n "$CONSUMER_AREAS_REL" ] || exit 0
+  [ -f "$CONSUMER_AREAS_REL" ] || exit 0
+  if [ -z "$(areas_of "$CONSUMER_AREAS_REL")" ] \
+     && grep -qE '^area:[[:space:]]*[^[:space:]]' "$CONSUMER_AREAS_REL"; then
+    printf '%s\n' "UNREADABLE DECLARATION: ${CONSUMER_AREAS_REL} carries $(grep -cE '^area:[[:space:]]*[^[:space:]]' "$CONSUMER_AREAS_REL") 'area:' line(s) and no readable 'areas:' block, so NONE of them is being read. The one reader takes an 'areas:' header at column 0 with each area indented exactly two spaces beneath it. Rewrite the block in that shape; the areas below are inferred only because the declaration could not be parsed."
+  fi
+  exit 0
+fi
 
 CORE_AREAS="$(areas_of "$GRAMMAR")"
 [ -n "$CORE_AREAS" ] || { echo "$PROG: extracted ZERO areas from $GRAMMAR. Without them every area is inferred and every caller reports nothing." >&2; exit 2; }

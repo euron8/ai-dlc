@@ -574,6 +574,14 @@ prose is itself generated rather than composed.
      precedence replaces the WHOLE span, so that sentence is false about the entry's
      own effect. **Report-only.** Remedy: narrow `shadows:`, or restate the surviving
      text in the body.
+   - `OVERRIDE-BODY-UNCLAIMED` → a section of the body that NO `shadows:` anchor
+     claims. Both rows above ask whether the body describes its own effect truthfully;
+     this asks whether the body is REACHED. The body is sliced per anchor, so a section
+     no anchor names is applied by nothing — it renders nowhere while still reading as
+     live consumer machinery. **Report-only.** It is reached by REMOVING an anchor and
+     leaving the body, so it is the companion row to an `OVERRIDE-SUPERSEDED` narrowing:
+     read them together before executing one. Remedy: restore the anchor, move the text
+     under a section an anchor does claim, or delete it.
    - `OVERRIDE-LOOSE-ANCHOR` → a `shadows:` anchor resolves only by the REVERSE arm
      of the containment match, so it names something finer than a heading and quietly
      widens the shadow to the whole section. **Report-only.** The row names the exact
