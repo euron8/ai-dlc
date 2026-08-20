@@ -274,6 +274,7 @@ core_manifest:
   - fixtures/notify-hook-channel/**
   - fixtures/updater-session-signals/**
   - fixtures/artifact-derivations/**
+  - fixtures/derivation-capture/**
   - fixtures/architecture-index-cell-escaping/**
   - fixtures/prepush-worktree-env-scrub/**
   - fixtures/retro-compliance-workflow/**

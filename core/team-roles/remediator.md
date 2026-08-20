@@ -76,7 +76,9 @@ should not have to find. Measured on the reference consumer: 12 of 74 records di
 **The fence is `derived` and it is load-bearing.** `scripts/ai-dlc/validate-artifact-derivations.sh`
 re-runs every command inside one of those blocks and compares against the recorded output, so a
 claim written this way is checked by a script before the next adversarial pass is dispatched
-rather than by an Opus agent one pass later. Record the output **verbatim** — a `-> 7` annotation
+rather than by an Opus agent one pass later. The `ai-dlc-derivation-capture.sh` hook runs that
+same checker on the block as you WRITE it, so an output you recorded without running the command
+is refused inside the tool call that wrote it. Record the output **verbatim** — a `-> 7` annotation
 or a trailing `<- the count is clean` makes the block unreadable to the checker; put the
 commentary in the `claim now asserted:` line, which is what it is for.
 

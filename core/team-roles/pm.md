@@ -77,7 +77,10 @@ $ grep -c 'save_state_fn' rebalancer/execution.py
 One read-only command, then its output **verbatim** — no `-> 19` annotation, no trailing
 comment. `scripts/ai-dlc/validate-artifact-derivations.sh` re-runs every command in one of
 those blocks and compares, so a claim written this way is settled by an exit code before the
-first adversarial pass is dispatched. Put the commentary in the sentence beside the block.
+first adversarial pass is dispatched. The `ai-dlc-derivation-capture.sh` hook runs that same
+checker on the block as you WRITE it and refuses the write when the recorded output is not what
+the command produces, so run the command before you record what it printed. Put the commentary
+in the sentence beside the block.
 
 **This is not the adversary's job to do for you.** An underived claim is a MAJOR the moment a
 pass reads it, and filing it costs the cycle a full review-and-repair round trip to recover a

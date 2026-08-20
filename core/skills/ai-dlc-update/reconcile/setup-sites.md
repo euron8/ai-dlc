@@ -205,6 +205,7 @@ core_manifest:
   - core/fixtures/notify-hook-channel/**
   - core/fixtures/updater-session-signals/**
   - core/fixtures/artifact-derivations/**
+  - core/fixtures/derivation-capture/**
   - core/fixtures/architecture-index-cell-escaping/**
   - core/fixtures/prepush-worktree-env-scrub/**
   - core/fixtures/retro-compliance-workflow/**

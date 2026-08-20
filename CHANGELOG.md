@@ -34,6 +34,69 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.385.0] — 2026-08-20
+
+### Added
+
+**A ```derived block is now witnessed by an execution at the moment it is written**
+(`PC-S304-DERIVED-BLOCK-VERIFIES-REPRODUCIBILITY-NOT-PROVENANCE`, filed by the graph consumer).
+`validate-artifact-derivations.sh` re-runs a block's command and diffs it against the recorded
+output, and it runs at the GATE — `steps/_gate-procedures.md` invokes it after a repair and
+before the next adversarial pass. A re-run establishes REPRODUCIBILITY. It cannot establish
+PROVENANCE: an output the author OBSERVED and an output the author GUESSED correctly are the
+same bytes on disk, so no later reader can separate them, and an output that is WRONG is caught
+one gate after the passes that already reasoned from it.
+
+The incident: authoring `stories-adversarial-repair-p3.md` at s304, an author wrote two
+```derived blocks — a `find ... | wc -l` and a `find ... -name ...` — without invoking the tool
+first. Both happened to match the tree, so every mechanism reported green and the defect is
+known only because the author reported it.
+
+`core/hooks/ai-dlc-derivation-capture.sh` is a `PostToolUse` hook on `Write|Edit|MultiEdit`.
+It masks the artifact down to the command/output pairs the payload actually wrote, hands that
+to the same validator, and exits 2 with the validator's own FAIL text when a pair does not
+reproduce. **It cannot tell a guess from an observation either — it makes the question moot by
+performing the observation itself**, inside the tool call, before any other pass reads the file.
+
+**The overwrite variant the filing proposed as the stronger option was rejected.** Having the
+hook replace the recorded output with what it captured removes the author's assertion from the
+trust chain and puts a WRONG COMMAND's real output in its place: the sentence beside the block
+still asserts what the author expected, and the contradiction now reads as machine-verified.
+That converts a visible mismatch into a permanent green.
+
+**Pair grain, not file grain, and that is a measurement rather than a preference.** Over the
+reference consumer's active sprint, 12 of the 40 artifact files carrying at least one fence
+already fail whole-file validation; submitting the whole file would refuse an unrelated edit in
+30% of live files, and an author who cannot save a file turns the hook off. Cost, measured on
+that consumer with the shipping validator: 1.08s for the 47-fence pole file, 0.09s for a
+two-fence file, and nothing at all for an edit that wrote no derivation.
+
+`core/fixtures/derivation-capture` (ships) drives the real hook with synthesized PostToolUse
+payloads across 18 arms, including the two that decide the design — the reproducing and the
+stale pair of ONE block, required to reach opposite verdicts. `core/fixtures/derivation-capture-mutants`
+(`.dist-only`) is the battery behind it: nine of those arms are absence-shaped and pass against
+a hook replaced by `exit 0`, so nine mutations each delete or widen one behaviour and declare
+the exact set of arms that must redden.
+
+**The read-only allowlist was hardened in the same release, because this hook is what makes it
+load-bearing without a human.** `validate-artifact-derivations.sh` admits read-only PROGRAMS by
+first word and refuses shell metacharacters, and several allowed tools carry one option that
+writes a file or runs a command without needing any of those characters. Measured against the
+copy this replaces, on a fence reading `$ find src -name victim.txt -delete`: the old validator
+**deleted the file and exited 0**, reporting the derivation as reproducing, because a recorded
+empty output matches an actual empty output. `find -delete/-exec/-execdir/-ok/-okdir/-fls/-fprint*`,
+`sed -i`, `sort -o`, `awk 'system(...)'` and `git -O/--output` are now refused by name.
+False-positive set, as a differential over the reference consumer's planning artifacts —
+1529 derivations in 2320 files: both validators produce the **same 87 allowlist refusals and the
+same 497 stale findings**, 0 new. The conditioning is on the command NAME, which is what keeps
+`grep -i` and `grep -o` — two of the most common flags in that corpus — out of it. Not covered,
+and stated in the code: `uniq in out` writes its second positional operand, and every detector
+for that also refuses `uniq -f 1 file`.
+
+Registered in `templates/settings.json.template`, so `/ai-dlc-update`'s settings merge wires it
+into an existing consumer. `core/team-roles/{analyst,architect,pm,sm,tea,remediator}.md` now say
+the checker runs as you write.
+
 ## [0.384.0] — 2026-08-19
 
 ### Fixed
