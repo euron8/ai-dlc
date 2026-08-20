@@ -1518,4 +1518,90 @@ PRDLIM
 mk_mixed limit-prefixed  '- *(deprecated)* **CAP-9** intent: a prefix and exactly one id.'
 mk_mixed limit-control   '- **CAP-9** intent: the same declaration with no prefix.'
 
+# --- (U) THE SPINE FOLD CONTAINER SET, and the direction a reroute can fail in --
+# v0.389.0 routes this fold through the kernel CONTAINER predicate instead of its own
+# list-marker regex, retiring the second encoding BL-084 filed. CONTAINER carries `>` and
+# `|` alongside the list markers, so a reroute that tested containers BEFORE the
+# unconditional terminators would hand an indented blockquote or table row to the
+# more-indented rule and CONTINUE the Binds item -- ABSORBING the capability that line
+# merely mentions into the binding. That is a false BIND: join (2a) closes against text
+# that binds nothing, at rc=0, with no note and no failure.
+#
+# THE CORPUS HELD NONE OF THESE. Every existing spine seed continues a Binds bullet with
+# prose or ends it with a blank line, so a differential over the whole seed set is blind
+# to the reroute by construction. These four are that population, and the fourth is the
+# one that must still CONTINUE -- three terminators and one continuation, because a fold
+# that terminates on everything passes all three quiet arms and is useless.
+cat > "$ROOT/spine-cont-quote.md" <<'SPINECQ'
+# Architecture spine
+
+## Invariants & Rules
+
+### AD-1 — router resolver owns venue choice (== ADR-S300-1)
+
+- **Binds:** FR-S300-1; `CAP-1`.
+  > `CAP-2` is named in an indented blockquote under the bullet, and is NOT bound by AD-1.
+- **Prevents:** two paths resolving a venue from different inputs
+- **Rule:** one core resolver maps routing config to a venue decision
+SPINECQ
+cat > "$ROOT/spine-cont-table.md" <<'SPINECT'
+# Architecture spine
+
+## Invariants & Rules
+
+### AD-1 — router resolver owns venue choice (== ADR-S300-1)
+
+- **Binds:** FR-S300-1; `CAP-1`.
+  | `CAP-2` | named in an indented table row, and NOT bound by AD-1 |
+- **Prevents:** two paths resolving a venue from different inputs
+- **Rule:** one core resolver maps routing config to a venue decision
+SPINECT
+cat > "$ROOT/spine-cont-thematic.md" <<'SPINECB'
+# Architecture spine
+
+## Invariants & Rules
+
+### AD-1 — router resolver owns venue choice (== ADR-S300-1)
+
+- **Binds:** FR-S300-1; `CAP-1`.
+  ---
+  `CAP-2` sits after a thematic break, which ends the list item, and is NOT bound by AD-1.
+- **Prevents:** two paths resolving a venue from different inputs
+- **Rule:** one core resolver maps routing config to a venue decision
+SPINECB
+# THE CONTINUATION SIDE. A more-indented LIST item is part of the bullet, and a nested
+# list under the marker is the most idiomatic way to write a multi-capability binding.
+# Without this seed every arm above is satisfied by a fold that terminates unconditionally.
+# THE CASE container_start ITSELF DECIDES. Falling through the container branch continues
+# the item anyway, so a nested-list seed cannot kill a mutant that disables the predicate.
+# What it decides is TERMINATION on a same-or-less-indented sibling. This seed carries a
+# sibling bullet with NO `**<Key>:**` marker in it, deliberately: with a marker the
+# eaten-marker guard owns the case and the mutant dies by the wrong arm, reporting a kill
+# that says nothing about the predicate under test. The `- **Rule:**` bullet is placed
+# ABOVE the Binds bullet for the same reason.
+cat > "$ROOT/spine-cont-sibling.md" <<'SPINECS'
+# Architecture spine
+
+## Invariants & Rules
+
+### AD-1 — router resolver owns venue choice (== ADR-S300-1)
+
+- **Rule:** one core resolver maps routing config to a venue decision
+- **Binds:** FR-S300-1; `CAP-1`.
+- `CAP-2` sits in a sibling bullet at the same indent, and is NOT bound by AD-1.
+SPINECS
+cat > "$ROOT/spine-cont-nested.md" <<'SPINECN'
+# Architecture spine
+
+## Invariants & Rules
+
+### AD-1 — router resolver owns venue choice (== ADR-S300-1)
+
+- **Binds:** FR-S300-1;
+  - `CAP-1`
+  - `CAP-2`
+- **Prevents:** two paths resolving a venue from different inputs
+- **Rule:** one core resolver maps routing config to a venue decision
+SPINECN
+
 printf '%s\n' "$ROOT"

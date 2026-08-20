@@ -2247,7 +2247,9 @@ The baseline names them, one namespaced key per line (`lr:` / `fr:` / `ad:` / `s
 `story-cap:`, namespaced because joins (2) and (2a) both key on `CAP-<n>` and a bare id
 would suppress both on one line). **Join (3) carries two keys, deliberately.**
 `story:<basename>` is the story's `capabilities:` FIELD — absent, or empty and unexplained.
-`story-cap:<basename>:<CAP-id>` is one citation that resolves to no capability. A single
+`story-cap:<basename>:<CAP-id>` is one citation that resolves to no capability. A `story-cap:`
+line is legal and almost never right: a citation resolving to nothing is a typo or a
+capability that was dropped, and both are cheaper to fix than to carry. A single
 file-level key would let one line excuse a missing field AND every dangling citation in
 that file; every arm routes through the same suppression path, so no arm is
 unbaselineable. **A baselined entry that does NOT reproduce is itself a FAIL** — the
@@ -2260,6 +2262,18 @@ adopting a self-declared pass by omission.
 **Exit 2 is a FAIL, not a skip** — a zero-capability kernel, an absent
 `FR Coverage Map`, or an unreadable input closes every join vacuously. So is an unreadable
 `--baseline`: a baseline this script cannot read is not an empty one.
+
+**The terminal state of a baseline is DELETION, and until then the file is a gate INPUT.**
+The line-level rule reaches the file when the last line goes: an empty ledger suppresses
+nothing, and a flag still pointed at it is a standing affordance to re-baseline rather than
+fix. Delete the file AND remove `--baseline` from the invocation — a flag left pointed at a
+deleted path fails closed at exit 2, which is correct and unhelpful. While the file exists,
+COMMIT it. An ignore rule as ordinary as `*.txt` swallows it, and the consequence is worse
+than fragility: the gate its author runs and the gate anyone else runs are then DIFFERENT
+GATES, with nothing reporting the difference, and on a fresh clone this check DISARMs at
+exit 2 for a cause nobody diagnoses quickly. If a broad ignore rule covers the path, add a
+`!<path>` carve-out for it rather than moving the file. Any convention the file carries in its comment block belongs in a tracked
+document instead, because the file it sits in is meant to end.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: a requirement that reaches no
 capability (a silent drop that leaves every downstream artifact internally

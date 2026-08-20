@@ -684,7 +684,7 @@ n_says "FOLD PIN: and the unbound capability is NAMED" \
   "CAP-2 is defined in SPEC.md but no architecture decision in" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-neighbour.md"
 
-n_mut_says binds-fold-off 'acc = acc " " $0' 'acc = acc' \
+n_mut_says binds-fold-off 'acc = acc " " unindent($0)' 'acc = acc' \
   "CAP-2 is defined in SPEC.md but no architecture decision in" \
   "MUTATION: dropping the accumulation accuses the wrapped spine of not binding CAP-2" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-wrapped.md"
@@ -774,7 +774,7 @@ n_mut_says noad-marker-loose 'NO_AD="$(printf ' 'NO_AD="$(grep -E No-AD "$SPINE_
   "Offending bullet: No-AD:" \
   "MUTATION: dropping the bullet marker picks the PROSE sentence up as a No-AD bullet" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-prose.md"
-n_mut noad-fold-off 'acc = acc " " $0' 'acc = acc' \
+n_mut noad-fold-off 'acc = acc " " unindent($0)' 'acc = acc' \
   1 "MUTATION: dropping the accumulation loses the WRAPPED No-AD bullet's REASON" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-wrapped.md"
 
@@ -1558,6 +1558,140 @@ if [ "$NEW_ARMS" -eq 238 ]; then
   ok "ARMS-RAN: all 238 v0.388.0 arms EXECUTED (counted $NEW_ARMS)"
 else
   bad "ARMS-RAN: expected 238 v0.388.0 arms, counted $NEW_ARMS — the block is unreachable, truncated, or short-circuited"
+fi
+
+# =============================================================================
+# v0.389.0 — a continuation line joins as TEXT, and ONE container set
+# =============================================================================
+# Counted separately from the 238 above so that block stays exact.
+#
+# AUTHORSHIP NOTE, STATED BECAUSE IT IS A DEPARTURE. The rule in
+# `.claude/rules/fixture-mutants.md` is to keep the battery author different from the arm
+# author, precisely so the two cannot encode one understanding twice. These arms were
+# written by the hand that wrote the change. The mitigation is that every arm below is
+# PRESENCE-shaped and every one carries a committed mutant, and that the behaviour claim
+# is carried by a differential against the previous release rather than by these arms --
+# but a reviewer should read them knowing the independent check was not taken.
+U_ARMS=0
+u_want()     { U_ARMS=$((U_ARMS+1)); want     "$@"; }
+u_says()     { U_ARMS=$((U_ARMS+1)); says     "$@"; }
+u_mut()      { U_ARMS=$((U_ARMS+1)); mut      "$@"; }
+u_mut_says() { U_ARMS=$((U_ARMS+1)); mut_says "$@"; }
+
+# --- (U1) the join drops the source indentation, at BOTH folds -----------------
+# The defect was reported by a consumer reading gate output: a wrapped No-AD reason
+# rendered with the continuation line's own indentation embedded mid-sentence. It flips no
+# verdict -- every terminator test runs on the raw line BEFORE the append, and the id
+# readers strip ids and test the residue for alphanumerics -- so no rc arm can see it and
+# only a text arm can.
+u_says "UNINDENT (spine): a wrapped No-AD reason joins with ONE space at the wrap" \
+  "already establishes and introduces no new mechanism class" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-wrapped.md"
+
+u_says "UNINDENT (kernel): a wrapped declaration is echoed with ONE space at the wrap" \
+  "- **CAP-1 and CAP-2 together**" \
+  --spec "$R/b31-wrapped" --prd "$R/prd-ok.md"
+
+# BOTH DIRECTIONS ON THE REAL SUBJECT. A presence arm alone is satisfied by output that
+# carries the fixed form somewhere and the broken form as well; the claim is that the
+# indented form is GONE, and an absence needs the presence stated in the same run or it
+# passes against a subject that emits nothing.
+U_ARMS=$((U_ARMS+1))
+U_OUT="$(bash "$V" --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-wrapped.md" 2>&1)"
+if grep -qF "establishes and   introduces" <<<"$U_OUT"; then
+  bad "UNINDENT: the source indentation is STILL embedded in the note"
+elif ! grep -qF "establishes and introduces" <<<"$U_OUT"; then
+  bad "UNINDENT: neither form is present — this absence arm would pass against a subject that emits nothing"
+else
+  ok "UNINDENT: the indented form is absent AND the joined form is present, in one run"
+fi
+
+# ONE PREDICATE, TWO EMISSION SITES. The same literal appears at the kernel fold and at
+# both spine appends, so one mutation reverts all three -- which is what makes these two
+# arms one predicate rather than two entangled guards. Each asserts its own site.
+u_mut_says unindent-spine 'acc = acc " " unindent($0)' 'acc = acc " " $0' \
+  "establishes and   introduces" \
+  "MUTATION: dropping the unindent puts the source indentation back into the NOTE" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-wrapped.md"
+
+u_mut_says unindent-kernel 'acc = acc " " unindent($0)' 'acc = acc " " $0' \
+  "**CAP-1 and   CAP-2 together**" \
+  "MUTATION: dropping the unindent puts it back into the DISARM echo too" \
+  --spec "$R/b31-wrapped" --prd "$R/prd-ok.md"
+
+# --- (U2) ONE container set across both folds (BL-084) -------------------------
+# The spine fold now derives its container test from CONTAINER instead of carrying its own
+# list-marker regex. CONTAINER holds `>` and `|` as well, so the unconditional terminators
+# are tested FIRST; a reroute that did not would send an indented blockquote or table row
+# to the more-indented rule and CONTINUE the Binds item, absorbing a capability that line
+# only MENTIONS. That closes join (2a) at rc=0 against text that binds nothing.
+u_want 1 "CONTAINER (spine): an indented BLOCKQUOTE ends the Binds item, so the CAP it names is unbound" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-cont-quote.md"
+u_says "CONTAINER (spine): and the unbound capability is named, so the finding is actionable" \
+  "CAP-2 is defined in" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-cont-quote.md"
+
+u_want 1 "CONTAINER (spine): an indented TABLE ROW ends the Binds item" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-cont-table.md"
+
+u_want 1 "CONTAINER (spine): a THEMATIC BREAK ends the Binds item" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-cont-thematic.md"
+
+# THE CONTINUATION SIDE, without which the three arms above are satisfied by a fold that
+# terminates on everything -- which would silently unbind every nested-list binding.
+u_want 0 "CONTAINER (spine): a more-indented NESTED LIST continues the item, so both CAPs bind" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-cont-nested.md"
+u_says "CONTAINER (spine): the nested binding reaches the PASS line, not an empty rc=0" \
+  "PASS (2 locked requirement(s), 2 capability(ies)" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-cont-nested.md"
+
+# THE MUTANT IS THE REORDER ITSELF: test the containers first and the three terminators
+# become continuations. All three flip 1 -> 0, which is the false-BIND direction.
+u_mut cont-reorder-quote 'if ($0 ~ /^#/ || $0 ~ /^[[:space:]]*>/ || $0 ~ /^[[:space:]]*\|/ || $0 ~ /^[[:space:]]*(---|===|___|\*\*\*)/) {' 'if ($0 ~ /^#/) {' \
+  0 "MUTATION: dropping the unconditional terminators makes a BLOCKQUOTE bind CAP-2" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-cont-quote.md"
+
+u_mut cont-reorder-table 'if ($0 ~ /^#/ || $0 ~ /^[[:space:]]*>/ || $0 ~ /^[[:space:]]*\|/ || $0 ~ /^[[:space:]]*(---|===|___|\*\*\*)/) {' 'if ($0 ~ /^#/) {' \
+  0 "MUTATION: and makes a TABLE ROW bind CAP-2" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-cont-table.md"
+
+u_mut cont-reorder-thematic 'if ($0 ~ /^#/ || $0 ~ /^[[:space:]]*>/ || $0 ~ /^[[:space:]]*\|/ || $0 ~ /^[[:space:]]*(---|===|___|\*\*\*)/) {' 'if ($0 ~ /^#/) {' \
+  0 "MUTATION: and makes text after a THEMATIC BREAK bind CAP-2" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-cont-thematic.md"
+
+# THE SHARED PREDICATE ITSELF. Deleting container_start from the spine fold must not be
+# survivable: with it always false, a nested list item stops continuing the Binds bullet
+# and the idiomatic multi-capability binding silently unbinds.
+# THE SHARED PREDICATE ITSELF, mutated on the case it actually decides. Falling through
+# the container branch CONTINUES the item anyway, so a nested-list seed cannot kill this
+# mutant -- the first attempt at this arm did exactly that and came back green. What
+# container_start decides is TERMINATION on a same-or-less-indented sibling bullet: with
+# it off, the `- **Prevents:**` bullet folds into `- **Binds:**` and every capability that
+# bullet merely mentions reads as BOUND. The seed carries no second `**<Key>:**` marker,
+# so the eaten-marker guard cannot own the case and kill the mutant by the wrong arm.
+u_want 1 "CONTAINER (spine): a same-indent SIBLING bullet ends the item, so the CAP it names is unbound" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-cont-sibling.md"
+u_mut cont-predicate-off 'if (container_start($0)) {' 'if (0) {' \
+  0 "MUTATION: with the shared container predicate off, a sibling bullet folds in and binds CAP-2" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-cont-sibling.md"
+
+# --- (U3) the widened --baseline diagnostic ------------------------------------
+# The exit code was already armed. What is new is that ONE exit 2 has two opposite
+# remedies, and the message has to carry both or it sends half its readers the wrong way.
+u_want 2 "BASELINE DISARM: an unreadable baseline still exits 2" \
+  --spec "$R/orphan-lr" --prd "$R/prd-ok.md" --baseline "$R/nonexistent-baseline.txt"
+u_says "BASELINE DISARM: names the DELETE remedy for a ledger that reached zero" \
+  "the terminal state is to DELETE the file and stop passing" \
+  --spec "$R/orphan-lr" --prd "$R/prd-ok.md" --baseline "$R/nonexistent-baseline.txt"
+u_says "BASELINE DISARM: names the TRACKING remedy for a file that should exist" \
+  "check it is COMMITTED" \
+  --spec "$R/orphan-lr" --prd "$R/prd-ok.md" --baseline "$R/nonexistent-baseline.txt"
+
+# ARMS-RAN for this block, exact and non-zero, for the reason the 238 block states.
+if [ "$U_ARMS" -eq 19 ]; then
+  ok "ARMS-RAN: all 19 v0.389.0 arms EXECUTED (counted $U_ARMS)"
+else
+  bad "ARMS-RAN: expected 19 v0.389.0 arms, counted $U_ARMS — the block is unreachable, truncated, or short-circuited"
 fi
 
 echo
