@@ -133,10 +133,51 @@ cmd_is_safe() { # $1 command -> 0 safe, 1 refused (reason in REFUSED)
       sub="$(printf '%s' "$seg" | sed 's/^[[:space:]]*//' | awk '{print $2}')"
       grep -qF " $sub " <<< " $ALLOWED_GIT_SUB " || { printf 'BADGIT:%s\n' "$sub"; break; }
     fi
+    # THE WRITE AND EXEC PREDICATES OF THE ALLOWED TOOLS. The first-word allowlist admits
+    # read-only PROGRAMS, and several of them carry one option that writes a file or runs a
+    # command: `find -delete`, `sed -i`, `sort -o`, `awk 'system(...)'`, `git grep -O`. None
+    # of those needs a shell metacharacter, so the chain/redirect refusal above never sees
+    # them. Until v0.385.0 they ran only when an operator invoked the gate;
+    # `ai-dlc-derivation-capture.sh` now re-runs a block inside the tool call that wrote it,
+    # so this boundary has to hold with no human in the loop.
+    #
+    # FALSE-POSITIVE SET, measured before shipping and as a DIFFERENTIAL against the copy
+    # this replaces: both validators over the reference consumer's planning artifacts,
+    # 1529 derivations in 2320 files, produce the SAME 87 allowlist refusals and the same
+    # 497 stale findings -- 0 refusals are new. (The token scan behind it covers the wider
+    # population of 4470 `$ `-prefixed lines in those files, fenced or not.) The
+    # conditioning on the command NAME is what makes that hold: `grep -i` and `grep -o` are
+    # two of the most common flags in that corpus and neither is a write.
+    #
+    # NOT COVERED, stated rather than left to be found: `uniq in out` writes its second
+    # positional operand. Every detector for that also refuses `uniq -f 1 file`, whose `1`
+    # is an option ARGUMENT and not an operand, and a false refusal here wedges a gate. The
+    # claim this list makes is "the read-only tools cannot be turned into writers by one
+    # obvious flag", not "no author can ever write a file".
+    for w in $seg; do
+      case "${first}:${w}" in
+        find:-delete|find:-exec|find:-execdir|find:-ok|find:-okdir|\
+        find:-fls|find:-fprint|find:-fprint0|find:-fprintf|\
+        sed:-i|sed:-i.*|sed:--in-place|sed:--in-place=*|\
+        sort:-o|sort:--output|sort:--output=*|\
+        git:-O|git:-O?*|git:--open-files-in-pager|git:--open-files-in-pager=*|\
+        git:--output|git:--output=*)
+          printf 'BADOPT:%s %s\n' "$first" "$w"; break ;;
+      esac
+    done
+    case "$first:$seg" in
+      awk:*system\(*) printf 'BADOPT:awk system()\n'; break ;;
+    esac
   done > "$TMP_SAFE"
   if grep -q '^BAD:' "$TMP_SAFE" 2>/dev/null; then
     REFUSED="'$(sed -n 's/^BAD://p' "$TMP_SAFE" | head -1)' is not on the read-only allowlist
       ($ALLOWED_CMDS)"
+    return 1
+  fi
+  if grep -q '^BADOPT:' "$TMP_SAFE" 2>/dev/null; then
+    REFUSED="'$(sed -n 's/^BADOPT://p' "$TMP_SAFE" | head -1)' writes a file or runs a command
+      -- the allowlist admits read-only PROGRAMS, not every option they carry, and this
+      block is re-run automatically at write time"
     return 1
   fi
   if grep -q '^BADGIT:' "$TMP_SAFE" 2>/dev/null; then

@@ -86,9 +86,21 @@ sed -i.bak '$d' "$WORK/src/two-needles.txt" && rm -f "$WORK/src/two-needles.txt.
 # A refused command must FAIL. If it were skipped, an author could move any claim out of
 # the checker's reach by writing it in a language the checker does not run -- and the
 # suite would report the same clean line over a corpus it no longer checks.
+#
+# THE WRITE PREDICATES OF THE ALLOWED TOOLS ARE PART OF THAT BOUNDARY. `find`, `sed`,
+# `sort`, `awk` and `git` are read-only PROGRAMS with one option each that writes a file
+# or runs a command, and none of those options needs a shell metacharacter -- so the
+# chain/redirect refusal above never sees them. They ran only at gate time until
+# `ai-dlc-derivation-capture.sh` began re-running a block inside the tool call that wrote
+# it; from there on the boundary holds with no human in the loop, or it does not hold.
 for pair in "python3 -c 'print(2)'|not on the read-only allowlist" \
             "grep -c needle src/two-needles.txt > /tmp/x|chain, redirect or substitute" \
-            "grep -c needle src/two-needles.txt; ls|chain, redirect or substitute"; do
+            "grep -c needle src/two-needles.txt; ls|chain, redirect or substitute" \
+            "find src -name two-needles.txt -delete|writes a file or runs a command" \
+            "find src -name x -exec ls {} +|writes a file or runs a command" \
+            "sed -i.bak s/needle/x/ src/two-needles.txt|writes a file or runs a command" \
+            "sort -o src/two-needles.txt src/two-needles.txt|writes a file or runs a command" \
+            "git diff --output=src/x HEAD|writes a file or runs a command"; do
   c="${pair%%|*}"; want="${pair##*|}"
   mkdir -p "$WORK/c-refuse"
   { printf '```derived\n$ %s\n2\n```\n' "$c"; } > "$WORK/c-refuse/story.md"
@@ -99,6 +111,15 @@ for pair in "python3 -c 'print(2)'|not on the read-only allowlist" \
     bad "c-refuse expected exit 1 naming '$want' for '$c', got $rc: $out"
   fi
 done
+
+# THE REFUSAL HAS TO BE WHY THE FILE SURVIVED, not the seed's luck. Two of the rows above
+# would delete or rewrite `src/two-needles.txt` if they ran; a refusal that merely exits 1
+# after doing the damage is not a boundary.
+if [ -s "$WORK/src/two-needles.txt" ] && ! [ -e "$WORK/src/two-needles.txt.bak" ]; then
+  ok "c-refuse               the refused writers never touched the tree"
+else
+  bad "c-refuse a refused command still wrote to the tree — the refusal happens after execution"
+fi
 
 # --- D. A NEGATIVE IS A LEGITIMATE DERIVATION -----------------------------------
 # `grep` exits 1 on NO HITS. A checker that treats a non-zero rc as failure cannot

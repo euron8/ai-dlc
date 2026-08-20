@@ -1,0 +1,15 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is the MUTATION BATTERY behind core/hooks/ai-dlc-derivation-capture.sh. It builds a
+throwaway distribution tree, edits COPIES of that hook -- core's own source -- one behaviour
+at a time, and re-runs the shipped `derivation-capture` fixture against each mutant to prove
+every one of its arms is load-bearing and exclusively so.
+
+`ai-dlc-core-guard.sh` denies a consumer the in-place edit of an installed hook, so the surface
+these mutants perturb cannot change in a consumer tree: the assertions are about whether THIS
+repository's hook still discriminates, and a consumer that ran them would be re-deriving an
+answer about a file it is forbidden to touch.
+
+Its sibling `derivation-capture` SHIPS, and that is the split: the shipped fixture proves the
+hook enforces provenance on the consumer's own tree; this one proves the shipped fixture would
+notice if it stopped.
