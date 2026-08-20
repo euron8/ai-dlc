@@ -1704,6 +1704,11 @@ declared sites, not everywhere unconditionally.
        annotate by hand in the form `ledger-rotate.sh` accepts — bolded, version immediately
        after the parenthesis — the same edit the bullet above describes; otherwise re-anchor or
        drop the stale receipt. Naming is not absorption and the row is never an auto-close.
+       **The row supplies no version and you must establish one**: find the release that
+       CONTAINS the absorbing commit, which is not the same as the `VERSION` file at that commit
+       — a fix that lands before its bump reads one release early there. The row deliberately
+       stopped guessing it, because a version read off a commit that merely NAMES the id is a
+       claim about the wrong event and the annotation it lands in is permanent.
      - `NAMED-UPSTREAM-AMBIGUOUS` — the commit cites the sprint prefix and two or more entries
        share it. Deliberately NOT attributed: read the named commit and decide per entry.
        Annotate nothing on the strength of the row alone.

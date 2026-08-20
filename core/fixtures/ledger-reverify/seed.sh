@@ -87,9 +87,28 @@ printf '0.101.0\n' > "$DIST/VERSION"
 git -C "$DIST" add -A
 git -C "$DIST" commit -qm mid
 
-# --- theirs: an unrelated change, VERSION moves on to 0.102.0 ---
-printf '#!/bin/sh\necho thing\necho more\n' > "$DIST/core/skills/ai-dlc/validate-thing.sh"
+# --- mid2: MARKER_C added HERE, and VERSION IS NOT BUMPED (the FIX-THEN-RELEASE shape) ---
+# The two shapes are both real and a fix for one is the mirror defect for the other, so the seed
+# carries BOTH. `mid` above is FIX-IS-RELEASE: the commit that introduced MARKER_B bumped VERSION
+# in the same commit, so the release IS that commit. This one is the other shape: the change
+# lands while VERSION still reads 0.101.0 and the bump arrives separately, below. Reading the
+# VERSION blob AT this commit reports 0.101.0 -- one release early, and permanently, because the
+# operator copies it into `ADOPTED UPSTREAM (v…)`.
+printf '# SKILL\nrule one\nrule two\nMARKER_B a rule upstream just absorbed\nMARKER_C absorbed one commit before its release\n' > "$SK"
+git -C "$DIST" add -A
+git -C "$DIST" commit -qm 'fix: absorb MARKER_C, no version bump in this commit'
+
+# --- rel: the release that CARRIES MARKER_C. VERSION -> 0.102.0, nothing else changes ---
+# Deliberately NOT the tip. If it were, "the release containing the fix" and "VERSION at theirs"
+# would be the same string and the arm could not tell a correct forward walk from the old
+# fall-back-to-theirs behaviour.
 printf '0.102.0\n' > "$DIST/VERSION"
+git -C "$DIST" add -A
+git -C "$DIST" commit -qm 'release: v0.102.0'
+
+# --- theirs: an unrelated change, VERSION moves on to 0.103.0 ---
+printf '#!/bin/sh\necho thing\necho more\n' > "$DIST/core/skills/ai-dlc/validate-thing.sh"
+printf '0.103.0\n' > "$DIST/VERSION"
 git -C "$DIST" add -A
 git -C "$DIST" commit -qm theirs
 THEIRS="$(git -C "$DIST" rev-parse HEAD)"
@@ -109,6 +128,12 @@ cat > "$LED" <<'LEDGER'
 - **Entry B was live, now absorbed.** Another improvement, since taken upstream.
   <br>Receipt prose here.
   verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_B"
+
+- **Entry V was absorbed one commit BEFORE its release.** The forward-walk case: `MARKER_C`
+  arrived while VERSION still read 0.101.0 and shipped in 0.102.0, and theirs is 0.103.0 — so
+  the correct answer, the blob-at-the-commit answer and the tip answer are three different
+  strings.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_C"
 
 - **Entry C already closed.** This one was adopted last pull.
   <br>ADOPTED UPSTREAM (v0.99.0, verified 2026-07-19). Closed.

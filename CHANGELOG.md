@@ -34,6 +34,60 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.387.0] — 2026-08-20
+
+### Fixed
+
+**Two joins in `ledger-reverify.sh` were writing a wrong release number into a permanent
+annotation** (`PC-S334-ABSORBED-AT-READS-THE-VERSION-BLOB-AT-THE-FIX-COMMIT` and
+`PC-S334-NAMED-ABSORBED-JOINS-ON-THE-OLDEST-MESSAGE-MENTION`, both filed by the graph consumer).
+A close row's version is copied by the operator into `ADOPTED UPSTREAM (v…)`, which retro and
+the §8.1 fan-in then read; being one release off there is not a display bug.
+
+**`absorbed_at()` read the `VERSION` blob AT the absorbing commit, which is right for one of the
+two commit shapes this history contains and wrong for the other.** A fix that lands while
+`VERSION` still holds the previous number reads one release EARLY; a commit that bumps `VERSION`
+itself reads correctly, and a forward walk that EXCLUDES the starting commit overshoots to the
+next release — the mirror-image defect, which this repo shipped once while fixing the first one.
+`release_containing()` walks forward INCLUSIVE of the starting commit, expressed as "did this
+commit change `VERSION` against its first parent", which is also merge-safe. Verified against
+every shape at 91ab1829: `941021d` → 0.373.0 (was 0.372.0), `93e05d3` → 0.102.0 (not 0.103.0),
+the release commits → their own versions, the merges → the release they merge, an empty and a
+bogus sha → nothing. No `<commit>:VERSION` read remains in the file.
+
+**`named_absorbed()` elected the OLDEST commit whose MESSAGE named the id and reported that
+commit's version as the absorbing release.** Naming is not absorbing: a commit naming an id to
+record a rejection, a split, a plan or a ledger drain matches identically to one that landed the
+fix. The figure is the filing's and is **re-derived here rather than transcribed**, because the
+filing's own copy of it was wrong twice before it was right: joining the 29 ids named in
+`e939a92` against `docs/reviews/graph-ledger-adjudication-data/final-disposition.tsv` gives 25
+comparable, 2 agreeing and **23 disagreeing with the adjudicated disposition** (control: an
+impossible id appears 0 times in that message; the `ALREADY-FIXED-<sha>` verdict form must be
+forward-walked to a release or it misbuckets as incomparable, which is what produced the filing's
+intermediate 22-of-24). Both name joins now report what they know —
+how many commits name the id, and the two ends of the range — and elect none of them. The
+`NAMED-UPSTREAM` and `NAMED-UPSTREAM-AMBIGUOUS` rows carry NO version, and no longer render a
+paste-ready `ADOPTED UPSTREAM (v…)`; step 8 of `ai-dlc-update` now says the version is the
+reader's to establish and why.
+
+`core/fixtures/ledger-reverify` grows the second commit shape — `MARKER_C` absorbed one commit
+BEFORE its release, so the blob answer (0.101.0), the tip answer (0.103.0) and the true answer
+(0.102.0) are three different strings — plus an arm requiring the `NAMED-UPSTREAM` row to carry
+no version AND still say where upstream names the id, and a committed mutation that restores the
+blob read and requires Entry V to regress while Entry B holds. 95 assertions.
+
+### Corrected
+
+**v0.386.0's headline number, restated with the distinction it was missing.** That entry says
+"7 entries stop being flagged", which is true of the absent-set and NOT true of emitted verdicts.
+The absent-set is only ever consumed to WITHHOLD a `CLOSE-CANDIDATE`, so clearing it moves a row
+only where the receipt already exited in the close direction — measured on the reference
+consumer, that is **one** row (`PC-S297-VALIDATE-STEERING-BUDGET-TRANSCRIPT-PROVENANCE`,
+NEEDS-REVIEW → CLOSE-CANDIDATE), against 93 rows before and after. `PC-S330` correctly stayed
+flagged, which is the discriminating result: its exit 127 is a real receipt defect and an
+extractor fix that had also silenced it would have been the wrong kind of green. Caught by the
+graph consumer running the fix against its own ledger rather than accepting the summary.
+
 ## [0.386.0] — 2026-08-20
 
 ### Fixed
