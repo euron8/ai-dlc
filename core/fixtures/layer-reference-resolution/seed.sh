@@ -100,6 +100,8 @@ leaves a citation pointing at whatever core happens to define under that integer
 
 ### 20. Validation-intensity compliance.
 
+### 22. Teammate-spawn role binding.
+
 ### 30. Spec join integrity.
 EOF
 
@@ -136,6 +138,8 @@ arm reports a mislabel on a citation nothing is wrong with.
 ### 926. [ext:domain] Deployed-ranges consistency gate ran (deploy-validate, non-skippable). [S239-2 AC1]
 
 ### 920. [ext:domain] HPE ADR probe-evidence (gate-1 only).
+
+### 922. [ext:domain] Smoke test evidence (deploy-validate gate only).
 
 ### 930. [ext:domain] Orphaned-function / core-path wiring meta-check (story completion gates).
 
@@ -189,7 +193,13 @@ hooks: steps/gate-validation.md
 W12's SIX CASES, and every silent one is silent for a DIFFERENT reason.
 
 - **Check 26 (deployed-ranges consistency gate ran)** — the citing title prefixes THIS
-  project's 926 and not core's 26. Reports.
+  project's 926 and not core's 26. Reports — AND THERE IS A CROSSWALK ROW FOR 26. Under an
+  unconditional crosswalk stand-down this line goes silent, which is the defect the reference
+  consumer found by running the shipped arm against its own tree. The row's own title IS this
+  project's 926 title, so it corroborates the finding rather than licensing the citation.
+- The pass series is ordered by Check 26 on the invoked_at field. AMBIGUOUS, and it is the
+  restraint half of the same rule: a corroborating row must not PROMOTE. Make corroboration a
+  finding in its own right and this line reports too, on a citation that is very likely core's.
 - **Financial-display fix (`PI-S253-3`).** A PR touching one must satisfy Check 24). The
   provenance token is in 924's heading and in none of core's. Reports.
   Reports.
@@ -202,6 +212,9 @@ W12's SIX CASES, and every silent one is silent for a DIFFERENT reason.
   `checks/domain.md` hook equally well, so it decides nothing.
 - Check 8 is core's, and this project allocates no 908, so the number decides the referent
   by itself and it is not a subject at all.
+- Check 22 is resolved by its crosswalk row, whose title is NOTHING like this project's 922.
+  Silent — and this is the branch that keeps the stand-down real rather than deleted. Without
+  a subject here, "a non-corroborating row still exempts" is a clause nothing can exercise.
 - The probe runs only while gate-1 is active (Check 20). AMBIGUOUS and NOT a finding: 920's
   heading also says `gate-1`, and that token is the false-positive pin. It joins on the text
   and must NOT join as provenance, because it carries no uppercase letter. Drop that half of
@@ -234,6 +247,8 @@ cat > "$SKILL/extensions/README.md" <<'EOF'
 |---|---|---|
 | 34 | 934 | Retired at 0.214.0, absorbed by core |
 | Check 12 | 912 | Retired, and this row names the id in namespaced form |
+| 26 | `[ext:domain]` | Deployed-ranges consistency gate ran | (label adoption) | collides with core 26, which core added later |
+| 22 | 922 | Absorbed by an unrelated upstream mechanism entirely |
 
 W9's EXCLUDED-FILE case. `layer_files()` drops README.md by name, so the path below must
 stay silent: this file is core's worked example, not a consumer entry.

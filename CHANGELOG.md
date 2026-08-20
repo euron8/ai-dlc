@@ -34,6 +34,66 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.391.0] — 2026-08-20
+
+### Fixed
+
+**`W12`'s crosswalk stand-down exempted the citations it should have convicted, and a real
+mislabel came back QUIET.** Found by the graph consumer running the SHIPPED enforcer against
+its own tree — not by review here, and not by the fixture, which had no case that could
+express it.
+
+**Carrying `LC-R2`'s stand-down across to this clause conflated two rows that say opposite
+things.** For `LC-R2` it is unarguable: the row is the sanctioned remedy for a RETIRED id, so
+reporting a citation the row resolves is the arm firing on its own contract. But a row whose
+own title IS the project's `9<n>` title says the reverse. Theirs reads:
+
+    | 24 | `[ext:gate-validation-domain]` | Financial-display ground-truth live-verify
+       | (label adoption) | collides with core 24 (adversarial convergence), which core
+         added later |
+
+That is the project stating on the record that a bare `24` in its prose means ITS check.
+Evidence FOR a finding, read as a blanket exemption — and **silent in the way that matters**,
+because the stand-down runs before any signal, so one row suppressed the title-join, the
+tag-join and the AMBIGUOUS count together.
+
+**CORROBORATION REMOVES THE EXEMPTION AND DOES NOT PROMOTE**, and the restraint is
+load-bearing rather than cautious. Making a corroborating row a finding in its own right fires
+on every citation of that id regardless of context: on that consumer it would have flagged
+`# Check 24 orders the pass series on this`, which is core's adversarial-cycle check and
+almost certainly correct. The row removes the exemption; the ordinary signals still decide, so
+that line lands in AMBIGUOUS where it belongs. Both directions are seeded and armed.
+
+**Column-agnostic by construction.** The row's title is not read from a fixed index — every
+cell is offered to the same prefix join the citing title uses, and a cell wins only by
+prefixing the band title while NOT prefixing core's. A crosswalk table is hand-written prose
+in three known shapes and an index would silently read the wrong cell in two of them.
+
+**THE NON-CORROBORATING BRANCH HAD NO SUBJECT AND NOTHING SAID SO.** Splitting the stand-down
+created two branches where there had been one, and the seed could exercise neither: its only
+crosswalk ids name checks core does not define, so they were never subjects. "A row about
+something else still exempts" was a clause nothing could have caught breaking. It now has a
+seeded subject and a mutant that deletes the gate.
+
+### Changed
+
+**A hand sweep and a shipped reader disagreed three times, and the reader was right every
+time.** The consumer's own enumeration — the corpus this clause's false-positive set was
+measured against — carried three independent scoping defects: a citation regex matching only
+`Check 26` and never `Check-26`; `overrides/` never read; and a catalog grepped from one
+directory that found 20 of 31 band ids. Each grep was written deliberately and each looked
+complete. **The scoping decisions are invisible until something else enumerates the same
+corpus and disagrees**, which is the argument for one reader rather than two, arriving from
+the direction nobody chose. The v0.390.0 prediction of `FINDING 2 / QUIET 17 / AMBIGUOUS 5` is
+superseded by their run of the shipping code: `FINDING 1 / AMBIGUOUS 15`, before this fix.
+
+### Fixture
+
+`layer-reference-resolution` 29 → **30 assertions**. The seed gains a corroborating
+`(label adoption)` row for `26`, a non-corroborating row for `22` with a real subject behind
+it, and a bare `Check 26` citation with no signal — the restraint case. 22 of the 30 fail
+against a subject replaced by `exit 0`.
+
 ## [0.390.0] — 2026-08-20
 
 ### Added

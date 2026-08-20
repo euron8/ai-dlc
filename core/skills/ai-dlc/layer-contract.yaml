@@ -1168,6 +1168,14 @@ clauses:
       prefix of core's title for `<n>`. What remains is UNADJUDICATED rather than undecidable
       and is counted, not warned — listed only under `--check-refs`, because a permanent
       worklist printed every run is the shape an operator switches off.
+      A crosswalk row exempts a citation only when the row is about something else. LC-R2's
+      stand-down is unconditional and correct there: the row is the sanctioned remedy for a
+      RETIRED id. Carried across unchanged it conflates two rows that say opposite things — a
+      row whose own title IS this project's `9<n>` title is the project stating on the record
+      that a bare `<n>` in its prose means ITS check, which is evidence FOR a finding rather
+      than a licence for the citation. Corroboration removes the exemption and does NOT
+      promote: making it a finding on its own would fire on every citation of that id
+      regardless of context.
       A bare file stem is not a qualifier. `gate-validation` names core's step file and a
       consumer's own `gate-validation-*` layer file equally well; on the reference consumer
       that one distinction moved a row out of QUIET and it adjudicated as a genuine mislabel.
