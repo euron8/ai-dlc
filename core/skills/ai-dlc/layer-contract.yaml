@@ -156,7 +156,7 @@
 # the same declaration-without-a-mechanism defect wearing a new file's clothes. They are named
 # in the CHANGELOG as the backlog and arrive with their enforcers, one release at a time.
 
-contract_version: 19
+contract_version: 20
 
 # WHERE A CONSUMER'S CROSSWALK ROWS LIVE. Declared here, and here rather than in
 # `core-manifest.md`, for a reason that was measured rather than argued.
@@ -1141,6 +1141,39 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: W7
+    fixture: layer-reference-resolution
+
+  - id: LC-R5
+    subject: any
+    level: WARN
+    since: 20
+    normative: >-
+      A `Check <n>` citation below the reserved band, in a layer file of a project that also
+      defines the band counterpart `9<n>`, names the check the surrounding text is about.
+      LC-R2 cannot state this and widening it cannot reach it: LC-R2 asks whether a citation
+      RESOLVES, and every citation in this class resolves — to core, because the old id is a
+      valid core id. Measured on the reference consumer by that consumer: LC-R2 fired 0 times
+      across 44 subjects on a tree carrying 16 real mislabels.
+      The ambiguity is this contract's own. LC-N5 renumbers an allocation and says so
+      explicitly — your heading is an allocation from core's namespace while your reference to
+      core's rule is prose in your body — which is correct, load-bearing, and exactly what
+      makes a stale citation indistinguishable from a deliberate core reference. Every project
+      that adopts the band inherits it.
+      The population is narrower than "a sub-band citation": a number this project has no
+      `9<n>` for is decided by the number alone and is not a subject. Four determinate signals
+      partition the rest, with no similarity score anywhere. Two report: the adjacent
+      parenthetical title is a prefix of the `9<n>` heading title and not of core's, or a
+      provenance token from the `9<n>` heading appears on the citation line. Two are quiet: a
+      core-namespace qualifier immediately precedes the citation, or the adjacent title is a
+      prefix of core's title for `<n>`. What remains is UNADJUDICATED rather than undecidable
+      and is counted, not warned — listed only under `--check-refs`, because a permanent
+      worklist printed every run is the shape an operator switches off.
+      A bare file stem is not a qualifier. `gate-validation` names core's step file and a
+      consumer's own `gate-validation-*` layer file equally well; on the reference consumer
+      that one distinction moved a row out of QUIET and it adjudicated as a genuine mislabel.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: W12
     fixture: layer-reference-resolution
 
   - id: LC-R3

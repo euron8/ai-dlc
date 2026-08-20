@@ -86,6 +86,21 @@ Worked example, and the placeholders here are why the grammar is numeric-leading
 if Check A fails, record Check N in the ledger.
 
 ### 8. Core's own second check, and the override shadows this one.
+
+W12's CORE SIDE. Every id below is one this consumer ALSO has a band counterpart for, so
+the number alone decides nothing and the title is what separates them. Core's titles here
+are deliberately unrelated to the consumer's, which is the real relationship: a renumber
+leaves a citation pointing at whatever core happens to define under that integer.
+
+### 17. Skill-invocation provenance (retro gate).
+
+### 24. The adversarial cycle CONVERGED.
+
+### 26. Gate-check adjudication verdict.
+
+### 20. Validation-intensity compliance.
+
+### 30. Spec join integrity.
 EOF
 
 # W9's RESOLVING subject. A real file at a real path, so the arm has something to stay silent
@@ -106,10 +121,23 @@ hooks: steps/gate-validation.md
 
 ## Check 19b
 
-### 919b. Renamed into the band while its citations stayed put.
+### 919b. External-field prod-existence probe (gate-1 only). [PI-S253-1]
 
 The scope note under this check still says gate-1 fails at Check 19b, which is the
 citation the renumber orphaned.
+
+W12's FALSE-POSITIVE PIN, and it is why the provenance token needs an uppercase letter as
+well as a digit. This heading carries `gate-1`, and `roles/dev.md` cites `Check 19b` on a
+line that also says `gate-1`. Drop the uppercase requirement and those two join, and the
+arm reports a mislabel on a citation nothing is wrong with.
+
+### 924. [ext:domain] Financial-display ground-truth live-verify (deploy-validate gate only). [PI-S253-3]
+
+### 926. [ext:domain] Deployed-ranges consistency gate ran (deploy-validate, non-skippable). [S239-2 AC1]
+
+### 920. [ext:domain] HPE ADR probe-evidence (gate-1 only).
+
+### 930. [ext:domain] Orphaned-function / core-path wiring meta-check (story completion gates).
 
 ### 7. Not renamed yet, and its heading ends in a dot.
 
@@ -157,6 +185,27 @@ hooks: steps/gate-validation.md
 - scripts/present.sh exists and resolves, so the arm stays silent about it.
 - The distribution's own copy lives at core/scripts/dist-only-missing.sh, which is not a path
   relative to this project's root and is therefore not W9's subject.
+
+W12's SIX CASES, and every silent one is silent for a DIFFERENT reason.
+
+- **Check 26 (deployed-ranges consistency gate ran)** — the citing title prefixes THIS
+  project's 926 and not core's 26. Reports.
+- **Financial-display fix (`PI-S253-3`).** A PR touching one must satisfy Check 24). The
+  provenance token is in 924's heading and in none of core's. Reports.
+  Reports.
+- These arms apply in addition to core's Check 17, which governs the same surface. Quiet:
+  the qualifier names core, unambiguously.
+- **Check 17 (skill-invocation provenance)** — quiet the other way: the citing title
+  prefixes CORE's title for 17, so the citation resolves where it says it does.
+- This is the counterpart of gate-validation Check 30; keep the three surfaces aligned.
+  AMBIGUOUS, not quiet: the bare stem names core's step file and this project's own
+  `checks/domain.md` hook equally well, so it decides nothing.
+- Check 8 is core's, and this project allocates no 908, so the number decides the referent
+  by itself and it is not a subject at all.
+- The probe runs only while gate-1 is active (Check 20). AMBIGUOUS and NOT a finding: 920's
+  heading also says `gate-1`, and that token is the false-positive pin. It joins on the text
+  and must NOT join as provenance, because it carries no uppercase letter. Drop that half of
+  the filter and this line reports a mislabel with nothing wrong with it.
 EOF
 receipt "$SKILL/extensions/roles/dev.md"
 
