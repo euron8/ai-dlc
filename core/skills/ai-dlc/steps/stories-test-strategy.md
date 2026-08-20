@@ -311,7 +311,9 @@ entries, which ai-dlc authors and can therefore mandate.
 ### 2a. Propagate Locked Requirements to Stories (Rule 13)
 
 **Every story MUST carry a `capabilities:` frontmatter field** listing the
-`CAP-<n>` identifiers it delivers, e.g. `capabilities: [CAP-3, CAP-7]`.
+`CAP-<n>` identifiers it delivers, e.g. `capabilities: [CAP-3, CAP-7]`. A capability
+inserted without renumbering carries a single lowercase suffix — `CAP-1a` — and is cited
+in that exact form.
 That field is the only mechanical link from a story to the spec; without it
 the story's place in the chain
 `LOCKED_REQUIREMENTS → CAP-<n> → FR-<n> → AC → test` is prose.

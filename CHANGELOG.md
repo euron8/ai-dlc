@@ -34,6 +34,145 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.388.0] — 2026-08-20
+
+### Fixed
+
+**`validate-spec-join.sh` could not represent an alphabetic-suffixed capability id, and the
+failure surfaced as an accusation against the story that cited one.** Filed by the graph
+consumer as `PC-S304-SPEC-JOIN-ALPHABETIC-CAP-ID-UNPARSEABLE-AND-THREE-ADJACENT-JOIN-GAPS`;
+all four defects reproduced against that consumer's real corpus on a scratch copy before
+any change. `bmad-spec` never renumbers, so a capability inserted between two existing ones
+is spelled `CAP-1a` — the suffix IS the mechanism that keeps the id-stability promise every
+join here rests on. `\bCAP-[0-9]+\b` cannot match it, so the id left the capability set in
+silence: exempt from the LR, FR and AD joins, while join (3) reported the STORY as citing an
+id "that does not exist ... a typo or a stale reference". Measured on the filed kernel:
+present twice, extracted zero times, defined in full with intent and an EARS criterion.
+
+**Three adjacent gaps in the same file, all filed with it.** The story-citation arm emitted a
+bare `echo`/`rc=1` where every sibling arm calls `fail_join`, so it registered no key and was
+the one arm `--baseline` could not reach — a consumer able to PROVE a false positive there
+had nowhere to record it. The `- **Binds:**` reader took physical lines rather than logical
+list items, so a wrapped bullet bound nothing: on the spine revision the filing measured,
+16 of 17 capabilities read as unbound and only the one id sitting on its marker line passed.
+And join (1) admitted two dispositions where a real corpus has three.
+
+**Two more the consumer argued for, and the argument was verified before it was taken.** Join
+(2a) had join (1)'s gap one join over — no state for a capability an architect DELIBERATELY
+declined to write an AD for, which the consumer's spine already recorded as prose no join
+could read. Without a literal form the only exits were fabricating ADs for a decision nobody
+made, or filing permanent entries in a ledger whose contract is that every line keeps
+reproducing and names a removal condition. `- **No-AD:** <CAP ids> — REASON: <why>` is that
+form, with a lifetime arm so a disposition cannot outlive its cause.
+
+### Changed — CONSUMER-VISIBLE
+
+**Join (3) is baselineable for the first time, and a consumer had written the opposite down as
+a load-bearing property.** The reference consumer's `spec-join-baseline.txt` carries a section
+headed "WHAT THIS DELIBERATELY DOES NOT COVER" stating that the story arm CANNOT be baselined,
+because it did not route through `fail_join`. That was true when it was written and this
+release makes it false. Any consumer carrying the same note now documents a guarantee that no
+longer holds. The new key is per-citation — `story-cap:<basename>:<CAP-id>` — so muting one
+dangling citation cannot also mute a missing `capabilities:` field or a second dangling
+citation in the same file.
+
+**A dangling citation is baselineable mechanically and has no state baselining describes
+correctly.** Either the id is a typo, which costs seconds, or the story cites a capability
+that does not exist, which is scope drift and must never be muted. The constraint is stated
+where the person about to violate it is already reading — the failure message — rather than
+given machinery it does not need.
+
+**Capabilities are now DECLARED, not mentioned.** A capability is `- **CAP-<n>** — <intent>`,
+outside any fenced block. Declaring one any other way DISARMs rather than being dropped.
+
+### Fixed — defects found in the fix itself
+
+Two independent review hands and the consumer found fourteen defects in this change across
+seventeen adversarial passes. More than half were introduced by fixes for earlier defects in
+it, and the most severe were in code written minutes before. Recorded because the pattern is
+the finding.
+
+**Every wrong answer in this review that we found came from an INSTRUMENT, not from a misread
+of correct output.** Eleven measurement failures across three hands — a `\b` passed to `sed`,
+which is BRE and matched nothing silently; `$?` read after a sibling command substitution,
+reporting `basename`'s status; a control that kept its verdict and lost its discrimination when
+a guard moved upstream of it; an `awk` cursor built from a RELATIVE `index()` offset, which hung;
+an apostrophe inside a single-quoted `awk` program, breaking the file two hundred lines away; a
+probe whose seed could not express the defect it reported; a `kill -0` poll with no sleep
+declaring a 0.05s run a hang; and a false-positive probe whose own seeded control printed
+nothing, making its zeros worthless. The statement claims no rate — it counts only the failures
+that were CAUGHT, and an instrument that returns a clean answer nobody questions is by
+construction uncountable. What it argues is that the failure mode is not people misreading
+correct output; it is instruments quietly answering a different question, which only a second
+instrument required to disagree can catch.
+
+The defects themselves:
+
+- The widening made the ENGLISH PLURAL parse. A kernel sentence "the `CAP-1s` described
+  above" minted phantom capabilities that hard-blocked two joins, and the residue partition
+  is structurally blind to it because `CAP-1s` is a well-formed id. Scoping to definitions
+  fixed it and introduced the next one.
+- Scoping to definition BULLETS then dropped every capability declared in a heading, a table
+  row, a numbered item, `__CAP-2__` or `**_CAP-2_**` — silently, with the capability count as
+  the only trace. The guard required the same container as the reader, so it could only catch
+  a wrong emphasis inside a right container.
+- The declarative cross-check that replaced it extracted the longest well-formed PREFIX, so a
+  kernel defining `CAP-1a` CANCELLED the finding for a `CAP-1ab` typo — precisely the ids the
+  suffix scheme makes coexist.
+- The definition-shape partition was then deleted as subsumed by that cross-check. It was not:
+  one keys on the malformed DEFINITION STRING, the other on IDS, and an id is cancellable by
+  an identically-spelled id from a clean bullet elsewhere. `- **CAP-1 and CAP-2 together**`
+  beside `- **CAP-1**` dropped CAP-2 at rc=0. A join over two id sets cannot see a definition
+  whose defect is that it holds two ids.
+- The `No-AD` hatch read ids out of `REASON:` prose, which failed in both directions at once —
+  a bound id quoted in a reason hard-failed the gate, an unbound one was SILENTLY EXCUSED by a
+  bullet that never disposed it. The second is the exact silent exemption this whole filing is
+  about, reintroduced by its own escape hatch.
+- The Binds fold MANUFACTURED a spine-wide `**Binds:** all` out of a continuation line reading
+  "all routing decisions are deferred to AD-2 and this AD binds nothing yet" — a sentence
+  saying the AD binds NOTHING switched join (2a) off for every capability while printing the
+  summary of a spine that closes it. `all` is now read off the physical marker line and must
+  be the entire value.
+- `is_reason` accepted the literal `<reason>` placeholder that this check's own FAIL message
+  tells the author to write, then over-rejected any reason wrapped entirely in one bracket
+  pair.
+- `sed` is BRE and `\b` is not BRE: the id-segment predicate matched NOTHING, silently,
+  failing every well-formed bullet. Caught only by running the clean control in the same
+  invocation.
+
+`core/scripts/validate-request-coverage.sh` carried a SECOND capability grammar that nobody
+widened, plus the same hole in its `LR` pattern. An operator asking about `CAP-1a` was recorded
+as asking about `CAP-1`, and the series prefix then let any `CAP-*` citation satisfy the ask.
+
+### For consumers: what the reader accepts
+
+**A capability is declared by its BOLD MARKER, not by a separator.** `bmad-spec`'s own
+`spec-template.md` emits `- **CAP-1**` with `intent:` and `success:` as SUB-BULLETS, and
+that parses — verified against the template verbatim. Corpora that write
+`- **CAP-1** — <intent>` on one line parse too. Either is fine; the marker is the contract.
+This was checked because the graph consumer read the PRODUCER'S TEMPLATE rather than its own
+corpus and asked whether the separator was required. Their corpus was clean and would have
+stayed clean until the next generated kernel.
+
+**One prose shape trips the new DISARM, and the workaround is one convention.** A bullet
+whose bold run OPENS with a bare CAP id and names two or more ids the kernel does not
+declare — `- **CAP-6 and CAP-8 are named by NO entry**` — is indistinguishable from a
+malformed two-id declaration and stops the gate. Put the ids in code spans —
+``- **`CAP-6` and `CAP-8` are named by NO entry**`` — and it is quiet in any container.
+Measured across paragraph, dash bullet and code-span variants: the code spans are what makes
+it quiet, not the container.
+
+### Known limits, stated rather than closed
+
+Prose lazily continuing a `- **Binds:**` bullet reads as a binding. No lexical rule separates
+it from a wrapped id list — real spines wrap mid-phrase with no punctuation to key on — and the
+previous reader was correct on that case only because it discarded EVERY continuation line,
+which is the defect this release fixes. An id that is neither emphasised, coded, nor
+heading-initial is outside both sides of the declaration cross-check; the obvious widening is
+the one measured at 18 false positives over five real kernels. Fenced content is excluded from
+both sides, so a partially fenced kernel undercounts — measured at zero live instances across
+those same five kernels.
+
 ## [0.387.0] — 2026-08-20
 
 ### Fixed

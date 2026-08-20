@@ -2152,9 +2152,47 @@ AFTER implementation; the pipeline takes no such run today. The flag remains
 supported by the validator so that a post-implementation run can arm it without a
 script change.
 
+**`CAP-<n>` may carry a single lowercase suffix, and that is the producer's grammar.**
+`bmad-spec` never renumbers, so a capability inserted between two existing ones is
+spelled `CAP-1a`. The validator parses that form. **A capability is DECLARED by its
+definition bullet** — `- **CAP-<n>** — <intent>`, outside any fenced block — never by
+being mentioned: reading ids out of prose lets the English plural in a kernel sentence
+("the `CAP-1s` described above") mint a phantom capability that then hard-blocks the FR
+and AD joins. **Declaring one any other way DISARMs rather than dropping it.** A heading,
+a table row, a numbered item, `__CAP-2__` or `**_CAP-2_**` are all real markdown
+declarations that this reader cannot parse, and a reader that narrows its population
+silently is the same defect as one that cannot spell an id — the capability leaves the
+set, is exempt from every join, and a story citing it is accused of citing an id that does
+not exist. So the declarative-looking ids and the parsed ones are derived separately and
+must agree; disagreement is the finding. A kernel that mentions capabilities and defines
+none also DISARMs, because that is a producer-grammar change and not a spec with zero
+capabilities. A `CAP-<digit>...` token it cannot
+parse in full DISARMS at exit 2 rather than being skipped: an unparsed id is dropped
+from the capability set, exempt from every join, and any story citing it is reported as
+citing an id that does not exist — the accusation lands on the author, not on the gap.
+
 The joins: every locked requirement reaches a `CAP-<n>`; every `CAP-<n>` is bound by
-an architecture decision (`- **Binds:**` in the spine, where `all` binds every
-capability) — a capability no AD governs was never designed; every `CAP-<n>` is cited by
+an architecture decision (`- **Binds:**` in the spine, where a marker line whose ENTIRE
+value is `all` binds every capability — it must be the whole value, on that physical
+line, because a continuation line beginning "all routing decisions are deferred…" would
+otherwise fold into the marker and switch the join off spine-wide while printing the same
+summary as a spine that closes it; the short-circuit now announces itself as a note) — a capability no AD governs was never designed. That leg admits a third
+disposition too: `- **No-AD:** <CAP ids> — REASON: <why>` in the spine records a
+capability an architect DELIBERATELY declined to write an AD for, which is the real state
+of a capability that extends an existing pattern and introduces no new mechanism class.
+It is type-anchored to the spine's own bullet grammar and requires the literal `REASON:`
+with text after it; it is reported as a note. **Every id a No-AD names must be a
+capability that no AD binds**, or the gate FAILs: a disposition for an id `SPEC.md` does
+not define excuses nothing, and one for a capability an AD has since bound leaves the
+spine asserting both while this join reads only the half that does not fire. That arm is
+the No-AD equivalent of the baseline's did-not-reproduce arm, and like it, it is
+deliberately NOT baselineable — suppressing "your excuse is stale" would be an excuse for
+an excuse, leaving the stale disposition still silently exempting a capability. Both have
+the same one-line remedy: delete the id. The two routes it replaces are both
+dishonest — authoring an AD to satisfy the join fabricates architecture for a decision
+nobody made, and baselining files a permanent entry in a ledger whose contract is that
+every line keeps reproducing and names a removal condition, when this one has no cause to
+fix and can never be removed; every `CAP-<n>` is cited by
 a functional-requirement entry in `prd.md` (**not** in BMAD's `FR Coverage Map`,
 which is not a traceability surface at all: the strings `CAP` and `LR-` appear
 nowhere in that skill, and its instructed output is literally
@@ -2163,7 +2201,15 @@ is the author's discretion, not the tool's contract, so a check reading that map
 non-deterministic by construction. FR-to-epic coverage is
 `bmad-check-implementation-readiness` step 03's job); every story `capabilities:`
 entry resolves to a
-capability `SPEC.md` defines. The `LR → CAP` leg reads the memlog, which is
+capability `SPEC.md` defines. The `LR → CAP` leg admits THREE dispositions, not two: map
+the requirement to a capability, record it SUPERSEDED/AMENDED, or — for a requirement that
+asserts no behaviour of its own and correctly maps to none, such as a WHAT/HOW meta-clause
+governing how the other locked entries are READ — record
+`- (disposition) LR-<id> NO-CAPABILITY <reason>` in the memlog. That entry is type-anchored
+and requires the reason; it is reported as a note, never passed in silence. Baselining such
+a requirement is the wrong instrument: a baseline entry asserts the failure still
+reproduces and its cause is unfixed, which is false of a requirement that is correctly
+dispositioned. The `LR → CAP` leg reads the memlog, which is
 append-only and never reordered; `SPEC.md` is only read for the capability set,
 never as an anchor, because it is re-rendered on every derive. Byte anchoring of
 requirement TEXT stays Check 3b's job against the product brief — the spec adds
@@ -2197,9 +2243,14 @@ in-scope stories were told a field they carry is absent.
 **`--baseline <file>` for adoption against an existing corpus, and it is a ledger, not a
 mute button.** Adopting this check inherits whatever orphans the chain already has — 15 in
 the reference consumer (5 `LR`→`CAP`, 10 `CAP`→`FR`), none of them caused by adopting it.
-The baseline names them, one namespaced key per line (`lr:` / `fr:` / `ad:` / `story:`,
-namespaced because joins (2) and (2a) both key on `CAP-<n>` and a bare id would suppress
-both on one line). **A baselined entry that does NOT reproduce is itself a FAIL** — the
+The baseline names them, one namespaced key per line (`lr:` / `fr:` / `ad:` / `story:` /
+`story-cap:`, namespaced because joins (2) and (2a) both key on `CAP-<n>` and a bare id
+would suppress both on one line). **Join (3) carries two keys, deliberately.**
+`story:<basename>` is the story's `capabilities:` FIELD — absent, or empty and unexplained.
+`story-cap:<basename>:<CAP-id>` is one citation that resolves to no capability. A single
+file-level key would let one line excuse a missing field AND every dangling citation in
+that file; every arm routes through the same suppression path, so no arm is
+unbaselineable. **A baselined entry that does NOT reproduce is itself a FAIL** — the
 failure it excused is fixed, so the line now excuses nothing while standing ready to
 suppress the next real instance of that id, silently. That arm is what forces the line to
 be deleted when its cause is. The two borrowed verdicts are not baselineable: they publish
