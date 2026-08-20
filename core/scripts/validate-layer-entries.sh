@@ -191,7 +191,18 @@
 
 set -uo pipefail
 
-PROJECT_ROOT="${1:-$(pwd)}"
+# `--check-refs` lists W12's AMBIGUOUS rows instead of only counting them. It is a flag
+# rather than the default because a permanent worklist printed on every run is the shape an
+# operator switches off, and the count in the footer is what keeps the population visible.
+CHECK_REFS=0
+_LC_ROOT=""
+for _a in "$@"; do
+  case "$_a" in
+    --check-refs) CHECK_REFS=1 ;;
+    *) [ -z "$_LC_ROOT" ] && _LC_ROOT="$_a" ;;
+  esac
+done
+PROJECT_ROOT="${_LC_ROOT:-$(pwd)}"
 SKILL_DIR="$PROJECT_ROOT/.claude/skills/ai-dlc"
 EXT_DIR="$SKILL_DIR/extensions"
 OVR_DIR="$SKILL_DIR/overrides"
@@ -1797,6 +1808,209 @@ while IFS= read -r f; do
     warn W7 "$(rel "$f"): references \"Check $ref\" but no core file, extension, or override defines check $ref anywhere in the rendered rulebook, and the crosswalk file (${CROSSWALK_REL:-undeclared}) carries no crosswalk row resolving it — dangling check pointer. Either repoint the citation at the id the check carries today, or add a crosswalk row naming '$ref', the id it became, and the title. A renumber into the reserved band does not reach back into prose that cites the old id, which is how these are made."
   done < <(grep -Eoh 'Check[ -][0-9]+[a-z-]*' "$f" 2>/dev/null | sed -E 's/^Check[ -]//' | sort -u)
 done <<< "$all_files"
+
+# ---------------------------------------------------------------------------
+# W12 — LC-R5: a sub-band `Check <n>` citation in a layer file, where this
+#              project defines the band counterpart `9<n>` under a DIFFERENT title
+# ---------------------------------------------------------------------------
+# WHY W7 CANNOT BE WIDENED INTO THIS, and it is the first thing the next author will try.
+# W7 asks whether a citation RESOLVES. These citations all resolve — to core, because the
+# old id is a valid core id. Its own message text names the mechanism that makes them:
+# "A renumber into the reserved band does not reach back into prose that cites the old id,
+# which is how these are made." The clause describes the failure and cannot see the half of
+# it where the orphaned pointer lands on a live core check instead of on nothing.
+#
+# MEASURED ON THE REFERENCE CONSUMER BY THAT CONSUMER, not argued from here: `W7=LC-R2:0/44`
+# — forty-four subjects, zero firings, on the tree where sixteen real mislabels were sitting.
+# A dangling-pointer clause is blind to a WRONG-TARGET pointer by construction, and that is a
+# property of the predicate rather than of anyone's prose.
+#
+# THE AMBIGUITY IS UPSTREAM'S OWN AND EVERY BAND CONSUMER INHERITS IT. `extensions/README.md`
+# says, correctly, that a number core already defines is not excluded from the LC-N5 renumber,
+# because "your heading is an allocation from core's namespace, while your reference to core's
+# rule is prose in your body". That sentence is load-bearing and it is also exactly what makes
+# a stale citation indistinguishable from a deliberate core reference. So the clause belongs
+# here, beside the reader that already walks these citation sites, and not in a consumer tool
+# that would re-derive four scoping decisions this file already made.
+#
+# THE POPULATION IS NARROWER THAN "A SUB-BAND CITATION", and getting that wrong is what makes
+# this look like a lint nobody wants. On the reference consumer: 56 sub-band citations, of
+# which 25 name a number this project has no `9<n>` for at all. Those are decidable on the
+# number alone and are NEVER subjects — not excluded, absent. 31 remain.
+#
+# FOUR SIGNALS, EVERY ONE DETERMINATE. No token-overlap score, no threshold:
+#   FINDING  the adjacent parenthetical title is a prefix of the `9<n>` heading title and
+#            NOT of core's title for <n>.
+#   FINDING  a provenance token in the `9<n>` heading also appears on the citation line.
+#   QUIET    a core qualifier sits immediately before the citation.
+#   QUIET    the adjacent title is a prefix of CORE's title for <n>.
+#   else     AMBIGUOUS — reported only under --check-refs, never as a warning.
+#
+# MEASURED, over the reference consumer's 31: FINDING 2, QUIET 17, AMBIGUOUS 12. Both
+# findings are real mislabels that consumer had not found by hand. Against the sixteen it
+# HAD already fixed, replayed in their pre-fix form, the title-join scores 4 of 4 on the four
+# that carried a title; the other twelve carried none and are AMBIGUOUS, which is honest —
+# they were found by widening a hand sweep and no text decides them.
+#
+# THE PROVENANCE TOKEN IS DERIVED FROM THE HEADING, NEVER FROM A GRAMMAR, and the first
+# version did the opposite. A tag pattern keyed on the reference consumer's own scheme
+# (`PI-S253-3`, `S277`) is a consumer-specific rule wearing an upstream clause's clothes.
+# Deriving the join key from whatever that project wrote in its own heading works for any
+# scheme. The filter — bracketed or parenthesised segments only, at least three characters,
+# at least one uppercase letter AND one digit — was NOT chosen for tidiness: dropping the
+# uppercase requirement makes `gate-1` a token, `919b`'s heading carries "gate-1 only", and
+# a citation line reading "gate-1 fails (Check 19b)" then scores a FALSE FINDING. Measured,
+# on that consumer, before this shipped.
+#
+# THE CORE QUALIFIER MUST NAME CORE UNAMBIGUOUSLY, AND A BARE FILE STEM DOES NOT. The
+# reference consumer proposed `core` / `Core` / `Upstream's` / `gate-validation` as one
+# signal. The bare stem names core's step file AND that project's own
+# `checks/gate-validation-domain.md` equally well, and splitting it moved exactly one row out
+# of QUIET: `roles/qa-domain.md:81`, "gate-validation Check 30; keep the three surfaces
+# aligned". That consumer then adjudicated it and it IS their 930 — so the unsplit signal
+# silently excused a genuine mislabel. The split is why the qualifier list holds only
+# core-namespace words and the exact core filename.
+#
+# WARN, NOT ERROR, for W7's reason: the remedy is a judgement about what the author meant.
+# AMBIGUOUS is not even a warning — 12 permanent worklist lines on one consumer is the shape
+# an operator switches off. It is counted in the footer and listed only on demand.
+#
+# WHAT THE AMBIGUOUS COUNT DOES NOT MEAN. It is unadjudicated, not undecidable. Of that
+# consumer's 12, exactly ONE has been read closely and it was a true positive. n=1 supports
+# no base rate in either direction, and this comment exists so the next author does not read
+# "AMBIGUOUS 12" as "12 cases with no answer".
+#
+# UNTESTED PRECEDENCE, STATED AS SUCH. A tag-join outranks a core qualifier here, on the
+# reasoning that a tag join is evidence about what the line is ABOUT while a qualifier is a
+# phrase an author can write while still mislabelling. Rows carrying BOTH measured ZERO on
+# the only real corpus available, so the ordering is a decision and not a measurement. The
+# first consumer to construct the case decides it.
+#
+# TEAM-ROLE FILES ARE OUT OF SCOPE, deliberately: they are seeded from core templates, so a
+# citation there may be core's own prose that the consumer never wrote. The layer dirs are
+# the set this project authored. `layer_files` also skips a layer README, which on the
+# reference consumer hides 5 of the 56 — stated because a scope is not a coverage claim.
+pad9() { # pad9 <check-id> -> band counterpart, or empty for a non-numeric-leading id
+  case "$1" in
+    [0-9]*) printf '9%02d%s' "$(( 10#$(printf '%s' "$1" | sed -E 's/^([0-9]+).*/\1/') ))" \
+                             "$(printf '%s' "$1" | sed -E 's/^[0-9]+//')" ;;
+    *) : ;;
+  esac
+}
+heading_raw() { # heading_raw <file> <anchor> -> the heading line, unnormalised
+  awk -v a="$2" '
+    $0 ~ ("^#{2,4}[ \t]+(Check[ \t]+)?" a "[ \t]*(\\.|—)") { print; exit }' "$1" 2>/dev/null
+}
+# Provenance tokens carried INSIDE a bracketed or parenthesised segment. See the header for
+# why the uppercase-and-digit filter is load-bearing rather than cosmetic.
+prov_tokens() {
+  printf '%s\n' "$1" | grep -oE '\[[^]]*\]|\([^)]*\)' 2>/dev/null \
+    | grep -oE '[A-Za-z0-9]+(-[A-Za-z0-9]+)*' 2>/dev/null \
+    | grep -E '[A-Z]' | grep -E '[0-9]' | awk 'length($0) >= 3' | sort -u
+}
+# The same token grammar over a whole line, with no segment restriction: the citing side.
+line_tokens() {
+  printf '%s\n' "$1" | grep -oE '[A-Za-z0-9]+(-[A-Za-z0-9]+)*' 2>/dev/null \
+    | grep -E '[A-Z]' | grep -E '[0-9]' | awk 'length($0) >= 3' | sort -u
+}
+
+CONSUMER_LAYER_FILES="$( { layer_files "$EXT_DIR"; layer_files "$OVR_DIR"; } 2>/dev/null | sort -u )"
+CORE_CATALOG_FILES="$( { find "$SKILL_DIR" -maxdepth 1 -name 'SKILL.md';
+                         find "$SKILL_DIR/steps" -name '*.md' 2>/dev/null; } 2>/dev/null | sort -u )"
+CONSUMER_ANCHORS="$(while IFS= read -r f; do [ -n "$f" ] && defined_anchors "$f"; done \
+                      <<< "$CONSUMER_LAYER_FILES" | sort -u)"
+AMBIGUOUS_REFS=0
+
+title_in() { # title_in <file-list> <anchor> -> first non-empty normalised title
+  local _f _t
+  while IFS= read -r _f; do
+    [ -n "$_f" ] || continue
+    _t="$(heading_title "$_f" "$2")"
+    [ -n "$_t" ] && { printf '%s' "$_t"; return 0; }
+  done <<< "$1"
+  return 0
+}
+raw_in() { # raw_in <file-list> <anchor> -> first matching raw heading line
+  local _f _t
+  while IFS= read -r _f; do
+    [ -n "$_f" ] || continue
+    _t="$(heading_raw "$_f" "$2")"
+    [ -n "$_t" ] && { printf '%s' "$_t"; return 0; }
+  done <<< "$1"
+  return 0
+}
+
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  while IFS= read -r hit; do
+    [ -n "$hit" ] || continue
+    ln="${hit%%:*}"; text="${hit#*:}"
+    while IFS= read -r ref; do
+      [ -n "$ref" ] || continue
+      band="$(pad9 "$ref")"
+      [ -n "$band" ] || continue
+      # NOT A SUBJECT rather than excluded: this project allocates no counterpart, so the
+      # number decides the referent by itself and there is nothing to disambiguate.
+      grep -Fxq -- "$band" <<<"$CONSUMER_ANCHORS" || continue
+
+      # W7 OWNS A CITATION THAT DOES NOT RESOLVE, AND THIS ARM MUST STAND DOWN FOR IT.
+      # Found by this clause's own fixture, not by review: four `Check 19b` citations came
+      # back AMBIGUOUS here while W7 was already reporting them as dangling. Two arms firing
+      # on one subject means one of them is vacuous, and the vacuous one is this: there is no
+      # core referent to be confused WITH. The subject is a citation that resolves to core and
+      # may mean the band counterpart — so core must define <n>, or the case is W7's.
+      ctitle="$(title_in "$CORE_CATALOG_FILES" "$ref")"
+      [ -n "$ctitle" ] || continue
+
+      # A CROSSWALK ROW RESOLVES IT, exactly as it resolves W7, and for the same stated
+      # reason: the row is the sanctioned remedy for a retired id. Reporting a citation the
+      # project has already fixed by the mechanism this contract prescribes is the arm firing
+      # on its own remedy. Its sibling fixture calls that the load-bearing silent case.
+      grep -Fxq -- "$ref" <<<"$CROSSWALK_IDS" && continue
+      grep -Fxq -- "Check $ref" <<<"$CROSSWALK_IDS" && continue
+
+      xtitle="$(title_in "$CONSUMER_LAYER_FILES" "$band")"
+      cite="$(printf '%s' "$text" | sed -n "s/.*Check ${ref} *(\([^)]*\)).*/\1/p" | head -1)"
+      cite_n="$(printf '%s\n' "$cite" | awk "$NRM_FN"'{ print nrm($0) }' | head -1)"
+
+      verdict=""
+      if [ -n "$cite_n" ] && [ -n "$xtitle" ] && [ "${xtitle#"$cite_n"}" != "$xtitle" ] \
+         && { [ -z "$ctitle" ] || [ "${ctitle#"$cite_n"}" = "$ctitle" ]; }; then
+        verdict="title"
+      else
+        shared="$(comm -12 <(prov_tokens "$(raw_in "$CONSUMER_LAYER_FILES" "$band")") \
+                           <(line_tokens "$text") | head -3 | tr '\n' ' ')"
+        if [ -n "${shared// /}" ]; then
+          verdict="tag"
+        # I54: `grep -q` leaves at its first match and the writer takes the EPIPE, so a
+        # pipeline into it reports NOT-FOUND on input that contains the pattern once the
+        # output after the match fills the buffer. Command-substitute, then here-string.
+        elif pre_cite="$(printf '%s' "$text" | sed -n "s/Check ${ref}.*//p" | head -1)"; \
+             grep -qiE "(core'?s?|upstream'?s?|gate-validation\.md)[\`'\"[:space:]]*$" <<<"$pre_cite"; then
+          verdict="quiet"
+        elif [ -n "$cite_n" ] && [ -n "$ctitle" ] && [ "${ctitle#"$cite_n"}" != "$ctitle" ]; then
+          verdict="quiet"
+        else
+          verdict="ambiguous"
+        fi
+      fi
+
+      case "$verdict" in
+        title)
+          warn W12 "$(rel "$f"):$ln: cites \"Check $ref\" beside the title of \"$band\", which is THIS project's check — core's $ref is a different check under a different title. The LC-N5 renumber moved the allocation and left this citation pointing at core. Repoint it at $band. (Citing title: \"$cite\")" ;;
+        tag)
+          warn W12 "$(rel "$f"):$ln: cites \"Check $ref\" on a line carrying $(printf '%s' "$shared" | sed 's/ *$//'), which is provenance this project's \"$band\" heading also carries — core's $ref carries none of it. Repoint the citation at $band, or move the provenance off this line if core's $ref really is meant." ;;
+        ambiguous)
+          AMBIGUOUS_REFS=$((AMBIGUOUS_REFS + 1))
+          [ "$CHECK_REFS" = "1" ] && printf '  ambiguous  %s:%s: "Check %s" — this project also defines %s, and nothing in the line decides which is meant\n' "$(rel "$f")" "$ln" "$ref" "$band" ;;
+      esac
+    done < <(printf '%s\n' "$text" | grep -oE 'Check[ -][0-9]+[a-z-]*' | sed -E 's/^Check[ -]//' | sort -u)
+  done < <(grep -nE 'Check[ -][0-9]+[a-z-]*' "$f" 2>/dev/null)
+done <<< "$CONSUMER_LAYER_FILES"
+
+if [ "$AMBIGUOUS_REFS" -gt 0 ] && [ "$CHECK_REFS" != "1" ]; then
+  printf '  note  %d sub-band Check citation(s) this project also defines a band counterpart for, undecidable from the line. Re-run with --check-refs to list them. UNADJUDICATED is not UNDECIDABLE: on the reference consumer one of these was read closely and it was a real mislabel.\n' "$AMBIGUOUS_REFS"
+fi
 
 echo
 printf 'validate-layer-entries: %d error(s), %d warning(s)\n' "$ERRORS" "$WARNS"

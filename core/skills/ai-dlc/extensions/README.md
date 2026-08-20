@@ -83,7 +83,7 @@ push_candidate: false                  # true = generalizable; feeds the ai-dlc-
 fixtures: check-foo-bypass             # OPTIONAL, `kind: check` only — see below
 extends: '#Empirical gate validation'  # OPTIONAL — narrows drift to one section; REQUIRED on kind: qualifier
 position: append                       # `kind: qualifier` ONLY — append | prepend
-conforms_to: 19                         # the contract version you migrated this entry to [LC-C1]
+conforms_to: 20                         # the contract version you migrated this entry to [LC-C1]
 ---
 
 <the additive rule / check / step body>
@@ -438,6 +438,24 @@ times on first contact gets disabled and then catches nothing.
   Numeric-leading ids only — `Check A` and `Check N` are placeholders in worked examples, not
   citations. If the id was retired rather than mis-cited, the crosswalk row is the fix and it
   clears this warning as well as **[LC-N6]**.
+- **[LC-R5]** WARN — a `Check <n>` citation below the band, in a project that also defines
+  `9<n>`, names the check its surrounding text is about. **[LC-R2]** cannot reach this and
+  widening it cannot either: that clause asks whether a citation RESOLVES, and every one of
+  these resolves — to core, because the old id is a valid core id. Measured on the reference
+  consumer by that consumer, LC-R2 fired **0 times across 44 subjects** on a tree that was
+  carrying sixteen real mislabels. **The ambiguity is this document's own**: LC-N5 renumbers
+  an allocation and leaves your prose citation where it was, which is correct and is exactly
+  what makes a stale citation look like a deliberate core reference. Every project on the band
+  inherits it. A number you define no `9<n>` for is not a subject — the number decides the
+  referent by itself. What remains is partitioned by four determinate signals and no
+  similarity score: a citing title that prefixes YOUR heading title and not core's, or a
+  provenance token from your heading appearing on the citation line, both report; a
+  core-namespace qualifier before the citation, or a citing title that prefixes CORE's title,
+  are quiet. Everything else is UNADJUDICATED rather than undecidable, and is counted in the
+  footer rather than warned — `--check-refs` lists it. **A bare file stem is not a qualifier**:
+  `gate-validation` names core's step file and your own `gate-validation-*` layer file equally
+  well, and on the reference consumer that single distinction moved one row out of quiet,
+  where it then adjudicated as a real mislabel.
 - **[LC-R3]** WARN — a script path your entry names resolves to a file that exists in your
   project. This is the same question as **[LC-R1]** and **[LC-R2]** in the namespace neither
   covers: the executables an entry tells a dispatched agent to *run*. On the reference consumer

@@ -72,7 +72,8 @@ bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 # what closes it, and the count is a literal here or it disappears with the assertions.
 # 3 premises + 3 W9 premises + 1 pristine vector + 2 applicability + 1 code-attribution
 # + 1 crosswalk-is-load-bearing + 1 exit condition + 9 mutants + 1 unmutated control.
-EXPECTED_ASSERTIONS=22
+# + 1 W12 premise + 6 W12 mutants
+EXPECTED_ASSERTIONS=29
 
 echo "layer-reference-resolution:"
 
@@ -145,11 +146,34 @@ vector() {
   v="$v w9fence=$(grep -q 'names `scripts/fenced-missing.sh`' <<<"$out" && echo W || echo -)"
   v="$v w9dist=$(grep -q 'dist-only-missing.sh' <<<"$out" && echo W || echo -)"
   v="$v w9rdme=$(grep -q 'names `scripts/readme-missing.sh`' <<<"$out" && echo W || echo -)"
+  # W12 — the citation that RESOLVES and still names the wrong check. Every silent cell here
+  # is silent for a different reason, which is what the six mutants below take apart. The
+  # grammar is `cites`, never `references`: W7's message uses the other verb on the same ids,
+  # and a cell keyed on the id alone would score W7's finding as this arm's.
+  v="$v w12t26=$(grep -q 'cites \"Check 26\"' <<<"$out" && echo W || echo -)"
+  v="$v w12g24=$(grep -q 'cites \"Check 24\"' <<<"$out" && echo W || echo -)"
+  v="$v w12q17=$(grep -q 'cites \"Check 17\"' <<<"$out" && echo W || echo -)"
+  v="$v w12w19b=$(grep -q 'cites \"Check 19b\"' <<<"$out" && echo W || echo -)"
+  v="$v w12x34=$(grep -q 'cites \"Check 34\"' <<<"$out" && echo W || echo -)"
+  v="$v w12n8=$(grep -q 'cites \"Check 8\"' <<<"$out" && echo W || echo -)"
+  v="$v w12p20=$(grep -q 'cites \"Check 20\"' <<<"$out" && echo W || echo -)"
+  # The AMBIGUOUS bucket is not a warning, so it cannot be read off the default output. It is
+  # a POSITIVE assertion on the listing: a count alone would be satisfied by two rows that are
+  # not the two seeded, and the bare-stem case is the one this fixture exists to pin.
+  # I54, and it bit here before it was spotted: `grep -q` leaves at its first match, the
+  # writer takes the EPIPE, and under `set -o pipefail` the pipeline reports NOT-FOUND on
+  # input that contains the pattern. The count cell survived it only because `grep -c` reads
+  # to EOF. Run once, capture, and feed both readers a here-string.
+  local refs_out
+  refs_out="$(bash "$1" "$2" --check-refs 2>&1)"
+  v="$v w12amb=$(grep -c '^  ambiguous ' <<<"$refs_out")"
+  v="$v w12stem=$(grep -q 'ambiguous.*"Check 30"' <<<"$refs_out" && echo A || echo -)"
   printf '%s' "$v"
 }
 
 W9WANT='w9miss=W w9dot=W w9ovr=W w9ok=- w9fence=- w9dist=- w9rdme=-'
-WANT="d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT"
+W12WANT='w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=2 w12stem=A'
+WANT="d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT $W12WANT"
 
 # --- Part 1: the pristine vector ---------------------------------------------------------
 got="$(vector "$LINTER" "$CONS")"
@@ -188,7 +212,7 @@ if cmp -s "$ROOT/crosswalk.orig" "$CROSSWALK"; then
   bad "fixture BROKEN: removing the 34 crosswalk row changed nothing"
 else
   got="$(vector "$LINTER" "$CONS")"
-  [ "$got" = "d19b=W r19b=W r11b=W c34=W c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT" ] \
+  [ "$got" = "d19b=W r19b=W r11b=W c34=W c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT $W12WANT" ] \
     && ok "removing the 34 crosswalk row makes Check 34 dangle, and moves no other cell" \
     || bad "crosswalk row removal: got [$got]"
 fi
@@ -202,7 +226,7 @@ cp "$ROOT/crosswalk.orig" "$CROSSWALK"
 sed -i.bak 's/Check 19b/Check 919b/g' "$DOMAIN" "$CONS/.claude/skills/ai-dlc/extensions/roles/dev.md"
 printf '| 11b | 911b | Retired, repointed |\n' >> "$CROSSWALK"
 got="$(vector "$LINTER" "$CONS")"
-[ "$got" = "d19b=- r19b=- r11b=- c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT" ] \
+[ "$got" = "d19b=- r19b=- r11b=- c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT $W12WANT" ] \
   && ok "exit condition: the prescribed repairs clear every W7 subject" \
   || bad "exit condition: repairs applied and W7 still reports [$got]"
 git -C "$CONS" checkout -q -- . 2>/dev/null
@@ -230,7 +254,7 @@ mk_mutant() { # mk_mutant <label> <sed-expr> <expected-vector>
 # M1 — put the hardcoded dot back. Only the em-dash subject's applicability moves.
 mk_mutant hardcoded-dot \
   "s/a_form=\"\\\$\(anchor_form \"\\\$f\" \"\\\$a\"\)\"/a_form=\"\\\${a}.\"/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=BAD dotform=OK $W9WANT"
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=BAD dotform=OK $W9WANT $W12WANT"
 
 # M2 — drop the BARE half of the crosswalk join. Only the bare-row citation moves.
 # The first cut of this fixture had one mutant for the whole join and seeded only a bare row,
@@ -238,22 +262,22 @@ mk_mutant hardcoded-dot \
 # and proved nothing. Two rows, two mutants, one cell each.
 mk_mutant no-crosswalk-bare \
   "/grep -Fxq -- \"\\\$ref\" <<<\"\\\$CROSSWALK_IDS\" && continue/d" \
-  "d19b=W r19b=W r11b=W c34=W c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT"
+  "d19b=W r19b=W r11b=W c34=W c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT $W12WANT"
 
 # M2b — drop the NAMESPACED half. Only the namespaced-row citation moves.
 mk_mutant no-crosswalk-namespaced \
   "/grep -Fxq -- \"Check \\\$ref\" <<<\"\\\$CROSSWALK_IDS\" && continue/d" \
-  "d19b=W r19b=W r11b=W c34=- c12=W c7=- alpha=- apform=OK dotform=OK $W9WANT"
+  "d19b=W r19b=W r11b=W c34=- c12=W c7=- alpha=- apform=OK dotform=OK $W9WANT $W12WANT"
 
 # M3 — widen the grammar to alphabetic ids. Only the placeholders move.
 mk_mutant alphabetic-grammar \
   "s/grep -Eoh 'Check\[ -\]\[0-9\]\+\[a-z-\]\*'/grep -Eoh 'Check[ -][0-9A-Z]+[a-z-]*'/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=W apform=OK dotform=OK $W9WANT"
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=W apform=OK dotform=OK $W9WANT $W12WANT"
 
 # M4 — drop the rulebook resolve. Only core's own check moves.
 mk_mutant no-anchor-resolve \
   "/grep -Fxq -- \"\\\$ref\" <<<\"\\\$GLOBAL_CHECK_ANCHORS\" && continue/d" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=W alpha=- apform=OK dotform=OK $W9WANT"
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=W alpha=- apform=OK dotform=OK $W9WANT $W12WANT"
 
 # --- W9's mutants. One per narrowing, and each narrowing exists for a measured reason. ----
 # The arm is four decisions, not one: skip fences, normalise `./`, require the path to be
@@ -264,28 +288,78 @@ mk_mutant no-anchor-resolve \
 # a reader that does not skip fences turns a worked example into a finding.
 mk_mutant w9-no-fence-skip \
   "/^[[:space:]]+fence \{ next \}$/d" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK w9miss=W w9dot=W w9ovr=W w9ok=- w9fence=W w9dist=- w9rdme=-"
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK w9miss=W w9dot=W w9ovr=W w9ok=- w9fence=W w9dist=- w9rdme=- $W12WANT"
 
 # M6 — stop normalising the leading `./`. Only the dot-slash path moves, and it goes SILENT:
 # the reference consumer's live subject is written in exactly this form, in a step's own
 # command list, so without this line the arm misses the case that motivated it.
 mk_mutant w9-no-dotslash \
   "/, \"\", t\)/d" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK w9miss=W w9dot=- w9ovr=W w9ok=- w9fence=- w9dist=- w9rdme=-"
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK w9miss=W w9dot=- w9ovr=W w9ok=- w9fence=- w9dist=- w9rdme=- $W12WANT"
 
 # M7 — stop requiring the token to be root-relative. Only the distribution-form path moves.
 # Unanchored, the arm resolves a path written against the distribution's layout against the
 # CONSUMER's root, where it correctly does not exist — a finding manufactured by the grammar.
 mk_mutant w9-no-root-anchor \
   "s/if \(t ~ [^)]*\) print t/print t/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK w9miss=W w9dot=W w9ovr=W w9ok=- w9fence=- w9dist=W w9rdme=-"
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK w9miss=W w9dot=W w9ovr=W w9ok=- w9fence=- w9dist=W w9rdme=- $W12WANT"
 
 # M8 — narrow the subject set to extensions/. Only the override's citation moves, and it goes
 # silent: an arm that walked one of the two layer directories would print the same clean line
 # on a tree whose overrides tell an agent to run a file that is not there.
 mk_mutant w9-extensions-only \
   "s/\{ layer_files \"\\\$EXT_DIR\"; layer_files \"\\\$OVR_DIR\"; \}/layer_files \"\\\$EXT_DIR\"/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK w9miss=W w9dot=W w9ovr=- w9ok=- w9fence=- w9dist=- w9rdme=-"
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK w9miss=W w9dot=W w9ovr=- w9ok=- w9fence=- w9dist=- w9rdme=- $W12WANT"
+
+# --- W12 (LC-R5) ------------------------------------------------------------------------
+# THE PREMISE, read out of the seed rather than through the arm. The false-positive pin only
+# pins something if the same lowercase-with-digit token really is on both sides.
+grep -q 'gate-1 only' "$DOMAIN" && grep -q 'gate-1 is active (Check 20)' "$CONS/.claude/skills/ai-dlc/extensions/roles/dev.md" \
+  && ok "premise: 'gate-1' appears in the 920 heading AND on the Check 20 citation line" \
+  || bad "premise BROKEN: the gate-1 false-positive pin has no subject on one side or the other"
+
+# M10 — the title-join off. Only the titled citation moves; the tag-join one is untouched,
+# which is what makes these two signals rather than one written twice.
+mk_mutant w12-title-off \
+  "s/verdict=\"title\"/verdict=\"ambiguous\"/" \
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=- w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=3 w12stem=A"
+
+# M11 — the tag-join off. The mirror of M10, and the count moves because a demoted FINDING
+# lands in AMBIGUOUS rather than vanishing: this arm never drops a subject, it re-tiers it.
+mk_mutant w12-tag-off \
+  "s/verdict=\"tag\"/verdict=\"ambiguous\"/" \
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=- w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=3 w12stem=A"
+
+# M12 — drop the UPPERCASE half of the provenance-token filter. `gate-1` becomes a token, the
+# 920 heading and the Check 20 citation line share it, and the arm reports a mislabel on a
+# citation nothing is wrong with. This is the measured false positive, armed as a mutant so
+# the filter cannot be simplified back out.
+mk_mutant w12-token-loose \
+  "s/\\| grep -E '\\[A-Z\\]' \\| grep -E '\\[0-9\\]'/| grep -E '[0-9]'/" \
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=W w12amb=1 w12stem=A"
+
+# M13 — accept a bare `gate-validation` stem as a core qualifier, which is the signal the
+# reference consumer originally proposed. The bare-stem row leaves AMBIGUOUS and goes silent —
+# and that consumer adjudicated that exact row as a real mislabel. A false QUIET, on demand.
+mk_mutant w12-stem-quiet \
+  "s/gate-validation\\\\\\.md\\)\\[/gate-validation)[/" \
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=1 w12stem=-"
+
+# M14 — drop the stand-down for a citation core does not define. W7 already reports those as
+# dangling; without this gate both arms fire on one subject and one of them is vacuous.
+mk_mutant w12-core-gate-off \
+  "s/\\[ -n \"\\\$ctitle\" \\] \\|\\| continue/: ; #/" \
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=6 w12stem=A"
+
+# M15 — drop the crosswalk stand-down. `Check 34` is resolved by the row that exists for
+# exactly that purpose, so reporting it is the arm firing on its own contract remedy. This is
+# the load-bearing silent case W7 already has, in the second namespace.
+# ANCHORED ON THIS ARM'S OWN INDENT. W7 carries the byte-identical crosswalk line four
+# spaces in; a mutation keyed on the text alone edits both and flips a W7 cell, which is a
+# kill scored by the wrong arm. Measured here on the first run of this mutant.
+mk_mutant w12-crosswalk-off \
+  "s/^      grep -Fxq -- \"Check \\\$ref\" <<<\"\\\$CROSSWALK_IDS\" && continue/      : ; #/" \
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=2 w12stem=A"
 
 # THE UNMUTATED CONTROL, from the same directory and run last. A lone copy that dies for a
 # reason unrelated to any mutation emits nothing, and "no output" otherwise scores as a kill.

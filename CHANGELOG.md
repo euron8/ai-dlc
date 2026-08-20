@@ -34,6 +34,100 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.390.0] — 2026-08-20
+
+### Added
+
+**`LC-R5` / code `W12` — a `Check <n>` citation that RESOLVES and still names the wrong
+check.** `LC-R2` asks whether a citation resolves; every citation in this class resolves, to
+core, because the old id is a valid core id. Its own message text names the mechanism that
+produces the class it cannot see: *"A renumber into the reserved band does not reach back into
+prose that cites the old id, which is how these are made."*
+
+**The evidence is a measurement the reference consumer took, not an argument made here.**
+`W7=LC-R2:0/44` — forty-four subjects, zero firings, on the tree where sixteen real mislabels
+were sitting. Four of those pointed a reader at a core check under a different title while
+describing the consumer's own; one cited "Financial-display ground-truth … Check 24" where
+core's 24 is "The adversarial cycle CONVERGED" and the consumer's 924 is titled exactly what
+the sentence says. That consumer found them by hand-sweeping twice, and **both sweeps
+under-counted** — first four instances, then twelve, then sixteen. Two hand sweeps missing the
+same population in the same direction is the argument for the clause.
+
+**The ambiguity is this distribution's own, and every consumer on the 900+ band inherits it.**
+`extensions/README.md` states, correctly, that a number core already defines is not excluded
+from the `LC-N5` renumber, because "your heading is an allocation from core's namespace, while
+your reference to core's rule is prose in your body". That sentence is load-bearing and it is
+also precisely what makes a stale citation read as perfect compliance. The clause therefore
+belongs beside the reader that already walks these citation sites, not in a consumer tool that
+would re-derive four scoping decisions this file already made.
+
+**The population is far narrower than "a sub-band citation", and getting that wrong is what
+made this look like a lint nobody wants.** Measured over the reference consumer's 56 sub-band
+citations: **25** name a number that project has no `9<n>` for and are decided by the number
+alone; **4** name an id core does not define at all and belong to `LC-R2`; **3** sit in a layer
+README, which `layer_files` is not a reader of. **24 are subjects.** Of those: **2 FINDING, 17
+QUIET, 5 AMBIGUOUS** — two warnings and a count, on a real consumer, with both warnings real
+mislabels that consumer had not found by hand.
+
+**Four signals, every one determinate. No token-overlap score anywhere.** A citing title that
+prefixes the `9<n>` heading title and not core's, or a provenance token from the `9<n>` heading
+appearing on the citation line, both report. A core-namespace qualifier before the citation, or
+a citing title that prefixes CORE's title, are quiet. What remains is counted, not warned:
+twelve permanent worklist lines on one consumer is the shape an operator switches off, so
+`--check-refs` lists them and the footer carries the count.
+
+**A bare file stem is not a qualifier, and that single distinction found a real defect.** The
+reference consumer proposed `core` / `Core` / `Upstream's` / `gate-validation` as one signal.
+The bare stem names core's step file AND that project's own `checks/gate-validation-domain.md`
+equally well. Splitting it moved exactly one row out of QUIET — `roles/qa-domain.md:81`,
+*"gate-validation Check 30; keep the three surfaces aligned"* — and that consumer then
+adjudicated it: it is their 930. **The unsplit signal silently excused a genuine mislabel.**
+
+**The provenance token is derived from the heading, never from a grammar.** The first
+implementation keyed on the reference consumer's own tag scheme, which is a consumer-specific
+rule wearing an upstream clause's clothes. The filter — bracketed or parenthesised segments,
+three characters, at least one uppercase letter AND one digit — is not tidiness: without the
+uppercase half, `gate-1` becomes a token, `919b`'s heading carries "gate-1 only", and a line
+reading "gate-1 fails (Check 19b)" scores a FALSE FINDING. Measured on that consumer before
+this shipped, and armed as a committed mutant so it cannot be simplified back out.
+
+**Two things ship stated rather than measured.** A tag-join outranks a core qualifier on
+reasoning — a tag join is evidence about what the line is ABOUT while a qualifier is a phrase
+an author can write while still mislabelling — but rows carrying both measured ZERO, so the
+precedence is a decision. And the AMBIGUOUS count is **unadjudicated, not undecidable**: of the
+reference consumer's twelve, exactly one was read closely and it was a true positive. n=1
+supports no base rate, and the clause's header says so rather than letting "AMBIGUOUS 12" read
+as "twelve cases with no answer".
+
+### Fixed
+
+**Three defects in the new arm, all three found by its own fixture rather than by review.**
+`Check 19b` citations came back AMBIGUOUS here while `W7` was already reporting them as
+dangling — two arms firing on one subject means one is vacuous, and the vacuous one was this,
+because a citation that does not resolve has no core referent to be confused with. `Check 34`
+came back AMBIGUOUS although a crosswalk row already resolves it, which is the arm firing on
+its own contract remedy. And the first crosswalk mutant edited `W7`'s byte-identical line four
+spaces to the left, flipping a `W7` cell — a kill scored by the wrong arm.
+
+**`grep -q` fed from a pipe, twice in one change, in two different files.** This repo's own
+documented hazard: `grep -q` leaves at its first match, the writer takes the EPIPE, and under
+`pipefail` the pipeline reports NOT-FOUND on input that contains the pattern. Once in the
+enforcer and once in the fixture's own vector, where it survived only because the sibling cell
+used `grep -c`, which reads to EOF.
+
+### Changed
+
+`contract_version` 19 → 20 for the new clause.
+
+### Fixture
+
+`layer-reference-resolution` goes 22 → **29 assertions** with six new mutants, one per reason a
+`W12` cell is silent: the title-join, the tag-join, the uppercase half of the token filter, the
+bare-stem qualifier, the `LC-R2` stand-down, and the crosswalk stand-down. 21 of the 29 fail
+against a subject replaced by `exit 0`. The AMBIGUOUS bucket is asserted positively — on the
+listing, not on the count — because a count alone is satisfied by two rows that are not the two
+seeded, and the bare-stem row is the one this fixture exists to pin.
+
 ## [0.389.0] — 2026-08-20
 
 ### Fixed
