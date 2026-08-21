@@ -53,7 +53,12 @@ else
 fi
 
 # --- Assertion 4: the stamp was re-stamped -----------------------------------
-grep -q "version: 9.9.9" "$STAMP" && ok "stamp re-stamped to theirs (version 9.9.9)" \
+# THE PATTERN IS LINE-ANCHORED AND ITS DOTS ARE ESCAPED, AND SO IS ASSERTION 8'S. Read the
+# two together: this arm is the POSITIVE CONTROL for the pattern assertion 8 uses in the
+# absence direction. It runs against a genuinely advanced stamp, before line 116 resets it,
+# so an over-anchored pattern is caught HERE as a red rather than silently making assertion
+# 8's third conjunct permanently true. Keep the two spellings byte-identical.
+grep -qE '^version: 9\.9\.9$' "$STAMP" && ok "stamp re-stamped to theirs (version 9.9.9)" \
   || bad "stamp not updated"
 
 # --- Assertion 5: a core/ subtree apply.sh never hand-listed still APPLIES ----
@@ -97,7 +102,7 @@ if ! grep -q 'local m; m=""' "$MUTDIR/apply.sh" || [ ! -f "$MUTDIR/preclassify.s
   bad "FIXTURE STALE: could not build the mapper mutant — consumer_path() no longer resolves via 'local m; m=...', or reconcile/ has no preclassify.sh sibling"
 else
   MUT_OUT="$(bash "$MUTDIR/apply.sh" "$M_DIST" "$M_BASE" "$M_CONSUMER" "$M_THEIRS" 2>/dev/null)"
-  if grep -q "version: 9.9.9" "$M_STAMP"; then
+  if grep -qE '^version: 9\.9\.9$' "$M_STAMP"; then
     bad "with the mapper broken, the stamp STILL advanced to 9.9.9 — the tree now claims a version it does not have"
   elif ! grep -q "restamp-withheld" <<<"$MUT_OUT"; then
     bad "mutant: stamp correctly withheld but apply.sh said nothing — a silent withhold is its own trap"
@@ -113,10 +118,23 @@ rm -rf "$W2"
 # The delegation is only safe if a failure to load map_consumer() is loud. A silent fallback
 # to a private table is the defect this whole change removes: it would place some subtrees,
 # skip others, and stamp as though everything landed.
+#
+# THE STAMP CONJUNCT IS LINE-ANCHORED AND ITS DOTS ARE ESCAPED, AND THAT IS THE WHOLE POINT
+# OF THIS COMMENT. It was `grep -q "9.9.9" "$STAMP"`, and the line below writes the 40-char
+# BASE SHA into that same file — so `.` as a BRE wildcard matched `9?9?9` anywhere in the
+# sha and the arm reported the guard broken while the stamp sat untouched at 0.0.1.
+# Measured over 2,000,000 sampled 40-char hex shas: 0.83% carry the pattern, so the arm
+# false-failed on roughly one push in a hundred, passed on re-run, and passed standalone —
+# which reads exactly like a parallel-dispatch flake and is not one. Reproduced serially and
+# deterministically by pinning the seed's commit dates so BASE landed on
+# 909c5a406e18b144d25d50e92f522989b9ebcb7a (`989b9`), with a control one second later that
+# passed. apply.sh writes a SHORT sha here, and seven hex characters carry the pattern too,
+# so shortening the field is not a fix. Anchor the version LINE; never match a bare version
+# literal against a file that also holds a revision.
 printf 'version: 0.0.1\ncommit: %s\n' "$BASE" > "$STAMP"
 LONE="$WORK/lone/apply.sh"; mkdir -p "$WORK/lone"; cp "$APPLY" "$LONE"
 LONE_OUT="$(bash "$LONE" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1)"; lone_rc=$?
-if [ "$lone_rc" -ne 0 ] && grep -q "could not load map_consumer" <<<"$LONE_OUT" && ! grep -q "9.9.9" "$STAMP"; then
+if [ "$lone_rc" -ne 0 ] && grep -q "could not load map_consumer" <<<"$LONE_OUT" && ! grep -qE '^version: 9\.9\.9$' "$STAMP"; then
   ok "apply.sh with no map_consumer to load refuses loudly and leaves the stamp alone (it never guesses a path)"
 else
   bad "apply.sh with no map_consumer did NOT fail closed (rc=$lone_rc) — it either guessed consumer paths or stamped anyway"
