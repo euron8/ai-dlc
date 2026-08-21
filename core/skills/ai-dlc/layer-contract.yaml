@@ -1168,6 +1168,12 @@ clauses:
       prefix of core's title for `<n>`. What remains is UNADJUDICATED rather than undecidable
       and is counted, not warned — listed only under `--check-refs`, because a permanent
       worklist printed every run is the shape an operator switches off.
+      Two further signals decide a citation carrying neither a title nor a provenance token.
+      An override whose `shadows:` anchor opens with `<n>` has already declared which check it
+      means, so a bare `Check <n>` in its body is that declaration restated and is quiet; and a
+      citation inside the section that DEFINES `9<n>` is a self-reference and reports, the
+      position being the whole evidence. Both came out of the reference consumer adjudicating
+      its entire ambiguous worklist rather than the part of it that looked wrong.
       A crosswalk row exempts a citation only when the row is about something else. LC-R2's
       stand-down is unconditional and correct there: the row is the sanctioned remedy for a
       RETIRED id. Carried across unchanged it conflates two rows that say opposite things — a

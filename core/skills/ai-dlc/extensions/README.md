@@ -464,7 +464,14 @@ times on first contact gets disabled and then catches nothing.
   provenance token from your heading appearing on the citation line, both report; a
   core-namespace qualifier before the citation, or a citing title that prefixes CORE's title,
   are quiet. Everything else is UNADJUDICATED rather than undecidable, and is counted in the
-  footer rather than warned — `--check-refs` lists it. **A crosswalk row exempts a citation only when the row is about something else** — a row whose
+  footer rather than warned — `--check-refs` lists it. Two further signals decide a citation with no title and no provenance token at all. **An
+  override whose `shadows:` anchor opens with `<n>` has already declared which check it means**,
+  in a field this validator parses for three other clauses — a bare `Check <n>` in its body is
+  that declaration restated, and is quiet. **A citation INSIDE the section that defines `9<n>`
+  is a self-reference**, and reports: the position is the whole evidence. Both were found by
+  the reference consumer adjudicating its ENTIRE ambiguous worklist rather than the part that
+  looked wrong, and between them they decide six of its eighteen rows.
+  **A crosswalk row exempts a citation only when the row is about something else** — a row whose
   own title is your `9<n>` title says the opposite of an exemption, and it removes the
   exemption without promoting the citation to a finding by itself.
   **A bare file stem is not a qualifier**:
