@@ -106,12 +106,8 @@ loads once, early, and is then **permanently gone for the rest of the session** 
 of a matching file does NOT bring it back. Only rules with no `paths:` are re-injected
 (`load_reason:"compact"`), and this file is too.
 
-So the test for moving a section to a SCOPED file has three clauses, and all three must hold.
-"Does the work begin with a matching read", **and** "is this rule carried by a mechanism that
-runs anyway", **and** — the clause the first two hid — **"does no subagent need it"**. A
-scoped rule loads inside a subagent only and never reaches the parent, while this file reaches
-both, so any rule binding delegated work cannot be scoped. Delegation is normal here, which
-makes that clause decide real placements rather than edge cases.
+**The three-clause scoping test is stated ONCE**, in
+[`resident-context.md`](.claude/rules/resident-context.md). Do not restate it here.
 
 **A prose-only rule — one with no enforcer — must not be SCOPED**, which is why "a zero is not
 a finding" and "prohibitions need mechanisms" stayed here. Scoping one deletes it from every
