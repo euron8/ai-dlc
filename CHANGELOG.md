@@ -34,6 +34,53 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.403.0] — 2026-08-21
+
+### Documentation
+
+**Two authorised guards were measured and NOT built, because both would have shipped unable to fire.
+Recorded so the question is not reopened and the evidence is not re-derived.**
+
+**The `vacuous predicate` guard for the `sh` arm has ZERO live subjects.** The `theirs_*` verbs
+detect a close condition already satisfied at base and report `vacuous predicate:`; the `sh` arm does
+not, and that is the verdict direction which DELETES an entry, so it looked like the costlier hole.
+Its three measured subjects — `PC-S309`, `PC-S310`, `PC-S316-SNAPSHOT` — are **archived, not live**
+(live 0, archive 1/1/3, against controls that fired both ways). `PC-S309`'s threshold is re-derivable
+today: 12 unique tokens against a ceiling of 7, identical at base and theirs, so it has been
+proposing a close since before the consumer's base.
+
+**And no entry was lost to it, which removes the remedial argument.** All three were closed by
+**human-verified `ADOPTED UPSTREAM`** annotations naming a version and a date, one stating "Fixed by
+v0.289.0" outright. The mechanical false close the guard would prevent has never actually drained an
+entry here. It remains a real structural asymmetry and a legitimate future build; it is not one with
+a subject today.
+
+**The subject-missing guard is FULLY SUBSUMED by v0.402.0's partition.** Six live receipts guard with
+`test -e X || exit 0`, which declares STILL-LIVE when the subject is GONE and reads as the inverse of
+a guard the arm already has. Cross-referenced against the shipped bucket table, **five are bucket 2** —
+consumer-owned subjects under `scripts/ai-dlc-local/` or the whole tree, where declining to judge is
+correct, and one of those is a `STAYS-RETIRED` watchdog — and the sixth,
+`PC-S314-PRECLASSIFY-BUCKETS-A-MODE-ONLY-CHANGE`, is **already** reported NEEDS-REVIEW. Building it
+would have put false accusations on five correct verdicts.
+
+**A MEASUREMENT INSTRUMENT UNDERCOUNTED THIS CORPUS BY MORE THAN TWO THIRDS, AND THE WRONG NUMBER
+READ AS PRECISE.** `grep -c '^verify: sh'` finds **13** live receipts where the shipping parser sees
+**41**: 28 of 41 are INDENTED, and the line-anchored form cannot see them. The first pass at the
+subject-missing population was taken over that 13 — under a third of its corpus — and would have
+shipped as a measured figure. `verification-discipline.md` already carries the general rule ("ask
+what SET a number was taken over"), so this needs no new resident prose; what it needs is the
+concrete instance, which is here. **The receipt grammar tolerates leading whitespace; anchor on
+`^[[:space:]]*verify:` or count what the parser counts.**
+
+### Verification
+
+Every count above carries a control in the same invocation: an id known live (`PC-S337`, live 2)
+against an impossible id (0); the archive's 197 closure annotations against an impossible closure
+token (0); the widening-grammar ladder itself, where 13 / 41 / 41 / 44 across four grammars is what
+exposed the undercount. No code was written and no guard shipped, which is the outcome the
+measurement argued for rather than a scope reduction — the authorising operator released both items
+on this evidence.
+
 ## [0.402.0] — 2026-08-21
 
 ### Fixed
