@@ -10,6 +10,10 @@ Thumbs.db
 .vscode/
 *.sublime-workspace
 
+# Serena MCP server local state: an on-disk cache, a symbol index and a
+# per-machine `project.local.yml`. Regenerated on demand and machine-specific.
+.serena/
+
 # Node (if testing install script)
 node_modules/
 

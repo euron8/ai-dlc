@@ -902,8 +902,16 @@ clauses:
       entries, including every role entry and every SKILL entry. A heading that names the same
       section as a core heading is therefore reported on TEXT as well. It is deliberately
       weaker than LC-E5/LC-E6 and prescribes no deletion: a numbered anchor asserts identity,
-      a prose heading does not, so the match may be a duplicate to retire OR an entry naming
-      the section it augments. Excluded, both by derivation and not by list: headings shared
+      a prose heading does not, so the match may be a duplicate to retire, an entry naming the
+      section it augments, or a REPRODUCTION of that section made in order to append to it —
+      for which the grain is `kind: qualifier` with `extends:` and `position:`, and neither of
+      the first two dispositions is the answer. A reproduction recorded as augmenting clears
+      the row and leaves the copy frozen, and a frozen copy cannot receive an upstream
+      improvement.
+      THE WEAKNESS IS WHAT MADE IT FIRE, measured on the reference consumer: its reproduction
+      is not a byte copy, so LC-E5/LC-E6 could not see it, and the text join caught a fork that
+      had already opened — 165 lines against core's 133, with core's step 1 carrying guidance
+      the copy never received. Excluded, both by derivation and not by list: headings shared
       by two or more core rulebook files, which are a document skeleton rather than a section,
       and headings that open with an anchor the numbered join already owns.
     prose_home: core/skills/ai-dlc/extensions/README.md

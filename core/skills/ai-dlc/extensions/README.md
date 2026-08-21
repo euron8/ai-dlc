@@ -248,9 +248,18 @@ state of your tree, so a pull that changes nothing here still reports it.
   [LC-E19], a **warning, never a block**, and it deliberately does not tell you to delete
   anything: a numbered anchor asserts *this is check N*, a prose heading asserts nothing, so a
   text match may mean you are duplicating core's section **or** that you are naming the
-  section you augment. Read the body and pick: retire it if core now carries the content, or
-  declare `extends: '#<the core heading>'` if it augments — which also narrows this entry's
-  drift subject from the whole file to that one span. Two exclusions are applied for you, both
+  section you augment. Read the body and pick between THREE. Retire it if core now carries the
+  content; declare `extends: '#<the core heading>'` if it augments — which also narrows this
+  entry's drift subject from the whole file to that one span; and if it REPRODUCES that section
+  in order to append to it, **neither of those is the answer**. That grain is `kind: qualifier`
+  with `extends:` and `position:`, which renders your addition inside core's section and carries
+  no obligation on prose you did not write. **Recording an augmenting verdict on a reproduction
+  clears the row and leaves the copy frozen**, and a frozen copy cannot receive an upstream
+  improvement. Measured on the reference consumer at this clause: 165 lines reproducing a
+  133-line core section to carry 49 additive ones, with core's step 1 already carrying
+  slice-read guidance the copy never received — Rule 27(c)'s silent fork, live. **The weakness
+  is what made it fire**: that reproduction is not a byte copy, so the numbered joins could not
+  see it at all. Two exclusions are applied for you, both
   derived rather than listed: a heading appearing in two or more core rulebook files is a
   document skeleton (`## Identity`, `## Context Loading`) and is never reported, and a heading
   that opens with an anchor you already declared belongs to the numbered signals above.

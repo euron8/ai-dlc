@@ -34,6 +34,50 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.397.0] — 2026-08-20
+
+### Fixed
+
+**`LC-E19` offered two dispositions where there are three, and the missing one is the only
+answer for the case the reference consumer actually hit.** That clause reports an extension
+heading naming the same core section, deliberately weaker than the numbered joins, and its
+remedy said: retire it if core absorbed the body, or record an augmenting verdict if it
+augments. A body that REPRODUCES core's section in order to append to it is neither, and
+recording it as augmenting **clears the row and leaves the copy frozen** — which is the state
+the clause exists to surface.
+
+**Measured on that consumer during the pull, not predicted.** `roles/dev-push.md` reproduces
+core's `#Workflow Per Task` at **165 lines against core's 133** to carry 49 genuinely additive
+ones, and the copy had already forked: core's step 1 gained slice-read guidance
+(`architecture_refs` names the sections to slice-read) that the reproduction never received. A
+dev reading their rendered pipeline misses an upstream improvement. Rule 27(c)'s silent fork as
+a live instance rather than a hypothetical.
+
+**The grain that fits it already exists and the clause never named it.** `kind: qualifier` with
+`extends:` and `position:` renders an addition INSIDE core's section and carries no obligation
+on prose the entry did not write — which is exactly what a reproduction is paying for. The
+emitter, the contract and `extensions/README.md` now all carry the third disposition.
+
+**THE WEAKNESS IS WHAT MADE IT FIRE, and that is now recorded at the clause.** `LC-E19` is
+weaker than `LC-E5`/`LC-E6` on purpose: a prose heading is not an identity claim. That
+reproduction is not a byte copy, so the numbered joins could not see it at all, and the text
+join caught a fork that had already opened. A clause that reports without prescribing earned
+its keep on the row where the strong ones were blind.
+
+### Verification
+
+**The pull landed on the reference consumer: `bfbad590` → `d5adfdde`, eight releases.** Their
+own installed engine reports **0 findings / 8 ambiguous**, identical row for row to their
+read-only runs of the distribution engine at `1bd1f5c5` and `7d9caf60`. Two engines, two points
+in time, one tree, no disagreement. Both captures are committed on their side.
+
+**A correction to a figure this repo caused.** That consumer measured "one `conforms_to: 19` to
+bump" before the pull and reported the cost as one integer. It was **zero**: the single
+occurrence was upstream's own copyable example inside `extensions/README.md` — a file the pull
+overwrites, and already bumped to 20 when `I78` blocked the v0.390.0 gate. Their 44 entries
+declare 13 or 18 and were unaffected. A consumer measuring a distribution file inside its own
+tree measures the distribution, and the number reads as local either way.
+
 ## [0.396.0] — 2026-08-20
 
 ### Documentation
