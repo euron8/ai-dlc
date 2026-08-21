@@ -1,12 +1,100 @@
 # graph consumer pull, 0.396.0 → 0.403.0 — adjudication handoff
 
-**RESUME WITH: `READ and FOLLOW docs/plans/graph-0396-to-0403-pull.md`.** This block is the
-current state and replaces anything below it that reads differently.
+# DISCHARGED — NOTHING HERE IS WORK TO DO
 
-**State: the distribution half is DONE and merged. What remains is adjudicating ONE incoming
-report** from the graph consumer session that is applying this pull. Six releases shipped,
-`v0.398.0` through `v0.403.0`, HEAD `895db006`, `VERSION` 0.403.0. Nothing is owed in this repo.
-The next actions are in [`## Next actions`](#next-actions); do those and nothing else.
+**This plan is SPENT. Do not execute it.** The consumer applied the pull and merged as PR #954 into
+`ai-dlc/feature/rebalance-pct-selector`; its stamp reads 0.403.0 @ `895db006` on both pairs. All six
+numbered actions below were carried out and their outcomes are in [`## Outcome`](#outcome). It is
+retained as the evidence record for that pull, nothing more.
+
+**THE COMPOSITE GATE EXITED rc=1. DO NOT RECORD THIS PULL AS A CLEAN RUN.** An earlier revision of
+this block said the gate went green; that was wrong, and it is the failure this repo already knows —
+a fixture tally read as a gate verdict. 155 checks ok, one FAIL: `VERDICT: FAIL — 6 blocking, 3
+ambiguous`, six sprint-304 review docs carrying the sprint token in the basename rather than the
+reserved `s304/` slot. **Pre-existing and unrelated to this pull**, present before the consumer
+touched anything, and still open on their side. Both of their pushes used `--no-verify`, on the
+record. Every gate belonging to this pull exited 0 individually — `emit-report.sh --verify`,
+`setup-site-drift.sh`, `validate-hook-registration.sh` (18/18), `hard-blockers.sh` at
+`0 HARD blockers.` before and after — and all three changed fixtures pass, including the
+intermittently-red `apply-drift-refile`. The composite is red on something older than the pull.
+
+**This file is NOT reachable from `895db006`.** It was committed at `7b41c16d`, a docs-only
+descendant. `git show 895db006:docs/plans/graph-0396-to-0403-pull.md` fails. Read it at `7b41c16d`
+or later. The `path:line` citations in `## Citations` were derived at `895db006` and still hold —
+that commit changed no cited file.
+
+Two things it got WRONG are corrected in `## Outcome` — read those before trusting any confirmation
+step in the body below.
+
+The distribution half shipped as `v0.398.0` through `v0.403.0`, HEAD `895db006`, `VERSION` 0.403.0.
+Nothing is owed in this repo.
+
+## Outcome
+
+- **The four entries: confirmed exactly as predicted.** `PC-S303-FANOUT-ARG-MAX`, `PC-S314-PRECLASSIFY`
+  and `PC-S334-AUDIT-LAYER-DEBT` re-anchored on upstream, all three still `STILL-LIVE`, so only the
+  receipts moved. `PC-S337` closed ADOPTED UPSTREAM (v0.398.0, verified 2026-08-21) and rotated;
+  rotation acceptance test passed on an identical 82-row set.
+- **Bucket-2 nine and the three `STAYS-RETIRED` watchdogs: left untouched, as intended.**
+- **The `## Two layouts` question: nothing to adjudicate.** 0 occurrences in the consumer's
+  `CLAUDE.md` (control `## Key References` = 1) and 0 across 46 layer files.
+- **CORRECTION — the post-apply confirmation in this plan was WRONG.** It said the unanchored
+  `grep -q "9.9.9" "$STAMP"` form should be GONE. It is not: exactly one occurrence survives at
+  `core/fixtures/apply-drift-refile/run.sh:123`, inside the comment documenting the fix. The
+  anchored count of 3 is right; a "gone" check reads **1, not 0** and would misread as a failed
+  apply.
+- **CORRECTION — a `theirs_has` re-anchor on that bare substring would be unfalsifiable**, because
+  that same comment satisfies it. Five lines in the file contain `9.9.9` in some form. The consumer
+  used the inverted verb instead — `theirs_lacks` on `^version: 9\.9\.9$`, absent at base and
+  present at theirs — which is correct.
+- **`release-version-triple` reports `ok`, not `SKIP`.** Resolved: the fixture prints
+  `PASS (skipped -- distribution-only validator)` and exits 0, so `ok` subsumes the skip. This
+  plan's wording was imprecise; the substance held.
+- **A relayed preapproval did not move the consumer, and should not have.** It took the merge
+  authorization to its own operator rather than acting on this session's relay. Correct behaviour —
+  a peer session cannot carry an operator's approval. Do not brief a consumer as though a relayed
+  approval were actionable; state it as context and let them seek their own.
+- **PROVENANCE, stated by the consumer and worth preserving.** It independently verified the four
+  entries, the `## Two layouts` question, the PC-S337 cause and the rotation counts against its own
+  tree. It did NOT independently derive three figures and took them from the brief: the bucket-2
+  membership list of nine, "13 of 41 live `sh` receipts never consult upstream", and the
+  0.83%-of-shas rate. Those three trace back to this session's measurements, not to a second
+  instrument — treat them accordingly.
+- **The re-anchors, for the record, because each names a token a real fix must touch.** S303 →
+  `theirs_has core/scripts/report-propagation-fanout.sh "export FANOUT_DIFF="` (line 255 exports the
+  diff into the child's environment). S314 → kept as an `sh` receipt but re-pointed at
+  `git -C "$DIST" show "$THEIRS":…/preclassify.sh`, preserving the bucket-ORDERING test, which a
+  substring receipt cannot express. S334 → extracts `$THEIRS:core/scripts/audit-layer-debt.sh` to a
+  temp file and runs THAT against a synthetic register rather than the installed copy.
+- **PC-S337 was closed on INDEPENDENT evidence, not on the NEEDS-REVIEW row** — commit `048428e6`
+  plus the three anchored arms verified on disk post-apply at lines 61, 105, 137. The tool never
+  auto-closes.
+- **Rotation counts.** Ledger 2616 → 2540 lines; archive 39 → 40 entries (7513 → 7589 lines). One
+  entry moved, PC-S337, verified 1× in archive and 0× in ledger. Disposition confirmed BEFORE
+  rotating, per the observation-point caveat. Acceptance test passed on an identical 82-row set.
+  Final state: 0 NEEDS-REVIEW, 0 CLOSE-CANDIDATE.
+
+## Filed, not fixed — a defect this pull exposed in the distribution
+
+`self-update-gate.sh` returned `SELF-UPDATE-OK` with a non-empty machinery slice, which sends step 2
+to branch, commit, push and auto-merge autonomously. But `git push` on that consumer fails for a
+STANDING, unrelated reason, which makes `SELF-UPDATE-OK` a direct route into `PC-S308` — orphaned
+branch, push permanently blocked, `skill_version` already advanced.
+
+The gate's own header anticipates the adjacent case: a pull installing a validator that then fails
+the very push the cycle is making. This is not that. The gate is **differential on
+incoming-vs-installed script**, so a pre-existing red is not in the delta it examines, and it
+correctly returns OK. Nothing asks the cheaper question first — *can this consumer push at all right
+now*. Any consumer carrying a standing pre-push failure hits this on every machinery-bearing pull,
+with no operator in the loop, because step 2 is explicitly ungated.
+
+Proposed remedy, from the consumer that found it: a dry-run push probe, or reuse of step 1's
+preflight result. The consumer avoided it by skipping step 2 and carrying the slice through
+`--carried-machinery-slice`, which is the path built for DEFER and worked cleanly.
+
+**Not built. It needs the operator's scope decision, and it composes with `PC-S336`** (step 1's
+auto-push is fatal and unguarded where step 2's is hardened) — both are the same root: neither step
+asks whether the consumer's push can succeed.
 
 ## Start here
 
