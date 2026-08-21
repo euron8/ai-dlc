@@ -34,6 +34,59 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.398.0] — 2026-08-21
+
+### Fixed
+
+**A fixture arm matched a bare version literal against a file that also holds a revision, so the
+control data it had just written convicted the subject.** `apply-drift-refile` assertion 8 proves
+that an `apply.sh` severed from `map_consumer()` refuses rather than guessing, and its third
+conjunct was `! grep -q "9.9.9" "$STAMP"` — checking the stamp was left alone. The line above it
+writes `commit: $BASE` into that same stamp. `.` is a BRE wildcard, so the pattern matched `9?9?9`
+anywhere inside the 40-character hex sha, and the arm reported the guard broken while the stamp sat
+untouched at `0.0.1`.
+
+**Measured, not inferred.** 0.83% of shas carry the pattern, over 2,000,000 sampled 40-character
+hex strings. Reproduced **serially, in one process, deterministically** by pinning the seed's commit
+dates so `BASE` landed on `909c5a406e18b144d25d50e92f522989b9ebcb7a` (`989b9`), with a control one
+second later that passes — output byte-identical to the reference consumer's captured failure, same
+assertion, same `rc=1`, 11 ok / 1 FAIL. `apply.sh` writes a **short** sha into that field and seven
+hex characters carry the pattern too, so narrowing the field is not a fix.
+
+**The reported mechanism was wrong, and it was labelled as an inference by the party who filed it.**
+The filing attributed the intermittency to the 12-way parallel fixture pool — a mapper becoming
+resolvable to the lone copy through a shared temp root. It cannot: `apply.sh` loads its mapper from
+`$SELF/preclassify.sh`, an absolute path under a per-invocation `mktemp -d`, with no search path and
+no fallback. 48 runs at 16-way concurrency produced zero failures, which at 0.83% is the expected
+0.4 and is therefore consistent with the real cause rather than evidence against it. A defect whose
+rate is set by the content of a random sha presents as a flake, passes on re-run and passes
+standalone, and none of that implicates concurrency.
+
+**The three patterns in the fixture are now one spelling, and the coupling is the guard.** All three
+are `^version: 9\.9\.9$` — line-anchored, dots escaped. Assertion 4 runs that pattern against a
+genuinely advanced stamp before the reset, which makes it the **positive control** for the pattern
+assertion 8 uses in the absence direction: an anchor that stops matching the real stamp format is
+caught there as a red instead of silently making assertion 8's third conjunct permanently true.
+
+### Verification
+
+**Both mutants kill, and each fails only its own assertion.** With the stamp genuinely advanced to
+`9.9.9`, assertion 8 fails — the anchored pattern still detects a re-stamp, so the fix is not a
+disarm. With the anchor mutated to no longer match the real stamp format, **assertion 4 fails while
+assertion 8 reports `ok` vacuously**, which is exactly the dead-check state the coupling exists to
+make loud. Mutants built as copies and guarded with `cmp -s`, so a `sed` that matched nothing cannot
+pass as a mutation.
+
+**The subject is byte-identical on the reference consumer.** `run.sh`, `seed.sh` and the installed
+`apply.sh` all diff clean against core, so the reproduction here is a reproduction there.
+
+**Class swept, and the fix is one site.** Of seven grep sites in `core/`, `scripts/` and
+`core/fixtures/` whose pattern carries an unescaped dot between digits, one is this defect, one is a
+performance comment, two are the same fixture's prefix-guarded siblings (now anchored anyway), and
+three are prose patterns against validator output. No validator arm is added: a check for "unescaped
+dot in a grep pattern" flags every prose pattern in the tree, and an unmeasurable false-positive set
+is the kind of lint an operator switches off.
+
 ## [0.397.0] — 2026-08-20
 
 ### Fixed
