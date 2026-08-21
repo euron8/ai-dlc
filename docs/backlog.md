@@ -57,6 +57,42 @@ not a closed entry.
 
 ---
 
+## BL-085 — `extends:` cannot express a multi-span dependency, so an additive entry falls back to file grain and nothing says so
+
+`LC-E11` permits exactly one anchor, and the reasoning is sound: two anchors mean two spans and a
+drift row could no longer say which one moved. The consequence is that an entry whose dependency
+is genuinely multi-span has no way to declare it, falls back to whole-file drift, and is
+indistinguishable from an entry whose author never thought about the grain.
+
+**Measured on the reference consumer, twice, on consecutive pulls.** Four `kind: check` entries —
+`attribution-provenance`, `gate-validation-domain`, `gate-validation-push`, `validator-honesty` —
+report `HARD-LAYER-ADJUDICATION-MISSING` on every pull that touches `steps/gate-validation.md`,
+because none declares `extends:` and each one's drift subject is therefore the whole file. Fresh
+digests each pull spend the prior verdicts, so that consumer records four near-identical
+adjudications per pull whose reasoning is always "core's change was confined to Check N and this
+entry adds checks that do not restate it".
+
+**The obvious anchor is worse than none, and that is the finding rather than the recurrence.**
+`#Validation Checklist` is 2352 of core's 2560 lines, so declaring it narrows the subject by 6%
+and silences `## Gate-type manifest` (94 lines, decides WHEN the entry's check loads) and
+`## Consumer-catalog crosswalk` (49 lines, governs how it is numbered) — the two spans an additive
+check entry most needs re-reading against. A consumer reaching for the anchor that looks right
+would trade 6% fewer re-reads for the drift that would actually break them, and `LC-E11` accepts
+it silently: its arms are structural, so a wrong anchor resolves and reports clean forever.
+
+The prose half is landed with this entry — `extensions/README.md` now states that file grain is
+correct for a multi-span entry rather than a mis-declaration, with the arithmetic. What is NOT
+landed is the ability to say it: the declaration still cannot express the dependency, so the
+worklist cost stands and the distinction between "correctly file-grained" and "never declared" is
+still invisible to every reader.
+
+Anchored on the count predicate every real fix must change, with a second conjunct so that
+DELETING the arm does not satisfy it — the failure mode a removal-shaped receipt otherwise has.
+
+verify: sh test "$(grep -c 'ext_n" -ne 1' core/scripts/validate-layer-entries.sh)" -eq 0 && test "$(grep -c 'err E11' core/scripts/validate-layer-entries.sh)" -ge 3
+
+---
+
 ## BL-002 — `uninstall.sh` has no removal path for the machinery under `.claude/`
 
 After `scripts/uninstall.sh --force` on a tree built by `scripts/install.sh`, **25 files

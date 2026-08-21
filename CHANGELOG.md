@@ -34,6 +34,38 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.393.0] — 2026-08-20
+
+### Documentation
+
+**An entry that depends on several spans keeps file grain, and that is CORRECT rather than a
+mis-declaration.** `extensions/README.md` said `extends:` is optional and that omitting it costs
+you a 91%-noise worklist. It did not say that for some entries there is no honest anchor to
+declare, so a consumer reading it concludes their entries are mis-declared and goes looking for
+the anchor they are missing.
+
+**The obvious anchor is worse than none, and the arithmetic is now in the prose.** One anchor is
+the whole truth about an entry that AUGMENTS a core span — which is why `kind: qualifier` requires
+it. An entry that ADDS a whole check augments nothing: it depends on the gate-type manifest that
+decides when its check loads, on the consumer-catalog crosswalk that governs its numbering, and on
+whichever core section it sits beside. Three disjoint spans; `extends:` names one. Measured on
+core's own `steps/gate-validation.md`: `#Validation Checklist` is **2352 of 2560 lines**, so
+declaring it narrows the drift subject by **6%** and buys that by silencing the manifest (94 lines)
+and the crosswalk (49 lines) — the two spans such an entry most needs re-reading against.
+
+Surfaced by the graph consumer, who asked the right question and had the right instinct: they
+would rather be told "that is the grain" than invent an anchor that narrows a subject it should
+not narrow, because a wrong `extends:` silences real drift. `LC-E11`'s arms are structural, so a
+wrong anchor resolves and reports clean forever — there is no mechanism that would have caught it.
+
+### Added
+
+**`BL-085`** — `extends:` cannot express a multi-span dependency, so an additive entry falls back
+to file grain and nothing distinguishes "correctly file-grained" from "never declared". The prose
+half lands here; the declaration still cannot say it, and four entries on the reference consumer
+pay four near-identical adjudications per pull for that. Anchored on the count predicate every real
+fix must change, with a second conjunct so that deleting the arm does not satisfy the receipt.
+
 ## [0.392.0] — 2026-08-20
 
 ### Fixed
