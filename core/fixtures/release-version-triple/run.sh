@@ -231,7 +231,7 @@ two_sha="$(git rev-parse HEAD)"
 status="$(run --range "$base_sha..$two_sha")"
 if [ "$status" = "1" ] \
    && grep -q 'adds 2 release headings' "$WORK/out.txt" \
-   && grep -q '0.2.0' "$WORK/out.txt" && grep -q '0.3.0' "$WORK/out.txt"; then
+   && grep -qF '0.2.0' "$WORK/out.txt" && grep -qF '0.3.0' "$WORK/out.txt"; then
   ok "a range adding TWO release headings fails, and names both versions"
 else
   bad "a two-release range was not caught -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
