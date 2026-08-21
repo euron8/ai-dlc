@@ -1983,7 +1983,8 @@ while IFS= read -r f; do
   shadow_anc="$(shadow_parts "$(unquote "$(fm "$f" shadows)")" 2>/dev/null | head -1 | cut -f2)"
   while IFS= read -r hit; do
     [ -n "$hit" ] || continue
-    ln="${hit%%	*}"; rest="${hit#*	}"; sec="${rest%%	*}"; text="${rest#*	}"
+    ln="${hit%%	*}"; rest="${hit#*	}"; sec="${rest%%	*}"
+    rest="${rest#*	}"; prevline="${rest%%	*}"; text="${rest#*	}"
     while IFS= read -r ref; do
       [ -n "$ref" ] || continue
       band="$(pad9 "$ref")"
@@ -2061,7 +2062,21 @@ while IFS= read -r f; do
         # I54: `grep -q` leaves at its first match and the writer takes the EPIPE, so a
         # pipeline into it reports NOT-FOUND on input that contains the pattern once the
         # output after the match fills the buffer. Command-substitute, then here-string.
-        elif pre_cite="$(printf '%s' "$text" | sed -n "s/Check ${ref}.*//p" | head -1)"; \
+        # THE QUALIFIER READS A TWO-LINE WINDOW, because a citation that opens a line has its
+        # qualifier at the END OF THE ONE ABOVE. Measured on the reference consumer, on a row
+        # this clause reported and should not have: line 50 ends "Record `N/A (core" and line
+        # 51 opens "Check 3a does not run at retro)`". Line-scoped, the qualifier cannot fire,
+        # every other quiet signal is silent too, and the position signal below then CONVICTS a
+        # citation whose own sentence says it means core's. Its remedy would have INVERTED the
+        # clause: that entry does run at retro, and records N/A there precisely because core's
+        # 3a does not.
+        #
+        # THE FINDING SIGNALS STAY LINE-SCOPED, and the asymmetry is deliberate rather than
+        # unfinished. Widening a QUIET signal can only cost a missed finding; widening a
+        # FINDING signal produces a false one, and the false-positive set for a wrapped
+        # title-join or tag-join has been measured on no real corpus. A wrapped tag now lands
+        # in AMBIGUOUS, which is the safe direction to be wrong in.
+        elif pre_cite="$(printf '%s %s' "$prevline" "$text" | sed -n "s/Check ${ref}.*//p" | head -1)"; \
              grep -qiE "(core'?s?|upstream'?s?|gate-validation\.md)[\`'\"[:space:]]*$" <<<"$pre_cite"; then
           verdict="quiet"
         elif [ -n "$cite_n" ] && [ -n "$ctitle" ] && [ "${ctitle#"$cite_n"}" != "$ctitle" ]; then
@@ -2086,6 +2101,19 @@ while IFS= read -r f; do
         # writing "core's Check 28" inside the 928 section means core's, and position must not
         # overrule a stated referent. Ordering it here costs nothing measurable and removes the
         # one way this signal could contradict an explicit declaration.
+        # POSITION IS SECTION-LEVEL EVIDENCE, SO ITS REBUTTAL IS TOO. A section whose body says
+        # "core's Check <n>" anywhere has stated the referent for that id, and a bare citation
+        # of the same id inside it continues that statement rather than pointing astray. The
+        # reference consumer's row said it FOUR times within twelve lines and the arm still
+        # convicted, because every other signal reads one line. Defence in depth behind the
+        # two-line window: the window fixes the measured row, this stops the shape of it.
+        elif [ -n "$sec" ] && [ "$sec" = "$band" ] \
+             && sec_body="$(awk -v a="$band" '
+                  $0 ~ ("^#{2,4}[ \t]+(Check[ \t]+)?" a "[ \t]*(\\.|—)") { inb = 1; next }
+                  inb && /^#{2,4}[ \t]/ { exit }
+                  inb { printf "%s ", $0 }' "$f" 2>/dev/null)" \
+             && grep -qiE "(core'?s?|upstream'?s?)[\`'\"[:space:]]+Check[ -]${ref}([^0-9a-z]|$)" <<<"$sec_body"; then
+          verdict="quiet"
         elif [ -n "$sec" ] && [ "$sec" = "$band" ]; then
           verdict="self"
         else
@@ -2112,7 +2140,8 @@ while IFS= read -r f; do
         sec = substr(h, 1, RLENGTH); sub(/[ \t]*(\.|—)$/, "", sec)
       } else { sec = "" }
     }
-    /Check[ -][0-9]/ { print NR "\t" sec "\t" $0 }
+    /Check[ -][0-9]/ { print NR "\t" sec "\t" prev "\t" $0 }
+    { prev = $0 }
   ' "$f" 2>/dev/null)
 done <<< "$CONSUMER_LAYER_FILES"
 

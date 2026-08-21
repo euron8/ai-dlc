@@ -106,6 +106,12 @@ leaves a citation pointing at whatever core happens to define under that integer
 
 ### 28. Spec-layer adoption is declared (all planning gates).
 
+### 3a. Story validation origin check (story gates only).
+
+### 23. Per-sprint planning-artifact sprint stamps.
+
+### 21. Test-strategy deliverable presence.
+
 ### 30. Spec join integrity.
 EOF
 
@@ -155,6 +161,34 @@ neither join can reach it — the POSITION is the whole evidence. Core's 28 is s
 adoption at planning gates, which this section is not about.
 
 The execution-health floor is what Check-28 asserts on every deploy-validate run.
+
+### 903a. [ext:domain] Story origin — LR to AC discrimination sub-clauses.
+
+W12's WRAPPED-QUALIFIER case, and it is a real row this arm reported and should not have. The
+qualifier is the LAST TOKEN OF THE LINE ABOVE the citation, so a line-scoped reader cannot see
+it, every other quiet signal stays silent, and the position signal then convicts a citation
+whose own sentence says it means core's. Nothing else in this section names core's 3a, so the
+section rebuttal cannot mask the window: this case tests the window alone.
+
+An entry evaluated against nothing would be a vacuous PASS. Record `N/A (core
+Check 3a does not run at retro)`.
+
+### 921. [ext:domain] Validation-intensity carry-over, consumer extension.
+
+### 923. [ext:domain] Per-sprint planning-artifact sprint stamps, consumer extension.
+
+W12's SECTION-REBUTTAL case. The bare citation below carries no adjacent qualifier on either
+line, so the two-line window cannot reach it; what decides it is that this section states the
+referent elsewhere in its own body. Position is section-level evidence and its rebuttal has to
+be section-level too.
+
+These sub-clauses apply in addition to core's Check 23, which governs the same surface.
+
+The two-line window must NOT be able to reach that qualifier from the citation below, or this
+seed tests the window a second time instead of the rebuttal. Three lines of separation is what
+keeps the two guards independently killable.
+
+The stamp ladder is the thing Check 23 orders, and this entry extends it by one value.
 
 ### 930. [ext:domain] Orphaned-function / core-path wiring meta-check (story completion gates).
 
@@ -230,6 +264,11 @@ W12's SIX CASES, and every silent one is silent for a DIFFERENT reason.
 - Check 22 is resolved by its crosswalk row, whose title is NOTHING like this project's 922.
   Silent — and this is the branch that keeps the stand-down real rather than deleted. Without
   a subject here, "a non-corroborating row still exempts" is a clause nothing can exercise.
+- W12's WRAPPED-QUALIFIER case, and it must sit outside any `9<n>` section: inside one, the
+  section rebuttal joins the whole body and would reach this qualifier too, so the window
+  could never be killed on its own. Quiet at baseline, AMBIGUOUS with the window narrowed.
+  The intensity ladder is the one core
+  Check 21 already establishes, so this entry adds a value rather than a rule.
 - The probe runs only while gate-1 is active (Check 20). AMBIGUOUS and NOT a finding: 920's
   heading also says `gate-1`, and that token is the false-positive pin. It joins on the text
   and must NOT join as provenance, because it carries no uppercase letter. Drop that half of
