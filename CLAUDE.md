@@ -207,14 +207,6 @@ here can hold it accurate and nothing tries to. What it holds is EVIDENCE. When 
 there turns out to carry a standing rule, the rule belongs in this file or in a rulebook
 beside it — the corpus is where a lesson is recorded, never where it is enforced.
 
-## Two layouts
-
-`install.sh` splits what shares a parent here: `core/scripts/<x>` →
-`scripts/ai-dlc/<x>`, `core/schemas/` → `.claude/schemas/`. Never locate one core
-file by walking up from another — invariant **I33** fails the build on it. Any
-change touching path resolution is verified on a tree built by running
-`scripts/install.sh` into an empty directory, not only in `core/`.
-
 ## Prohibitions need mechanisms
 
 A rule with no enforcer is a suggestion, and the prohibitions being violated are

@@ -34,6 +34,55 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.401.0] — 2026-08-21
+
+### Documentation
+
+**`CLAUDE.md` stated the two-layout rule a second time, and `consumer-boundary.md` already stated it
+better.** The `## Two layouts` section is removed. Its authoritative home carries the same split plus
+two things the copy omitted — the reason (`a path that resolves in this tree can resolve nowhere in
+an installed one`) and the duty (`run the suite there as a consumer runs it — in both layouts`). Two
+unbound statements of one rule is the N−1 drift surface `mechanism-design.md` prohibits.
+
+**Unlike the v0.399.0 cut, this one satisfies BOTH clauses of the vestigial test.** The enforcing
+mechanism is nameable — **I33** fails the build on locating one core file by walking up from another
+— and the instruction lives authoritatively elsewhere in the same channel. `consumer-boundary.md` did
+not cite I33 (measured: 0 occurrences), so the citation MOVED rather than dying; dropping the section
+outright would have deleted the durable channel's only pointer to that enforcer.
+
+**Corroboration nobody wrote for this change.** `docs/plans/codify-rule-surface.md:115` already
+records the migration as intended: *"HAVE partly `CLAUDE.md §Two layouts`; general form → CB."*
+
+**The inbound-reference check changed the confidence rather than confirming it.** Three
+`docs/plans/` files and one FIXTURE reference the removed heading. The fixture's reference is a
+comment in `seed.sh`, established with a control that fired — the same filter found three
+non-comment lines in that directory while the real query came back empty — so no mechanism binds
+the heading. `validate-plan-shape` reports 25 plans, 0 errors, 0 warnings after the cut.
+
+**What the freed bytes bought.** A rule with no possible enforcer, folded into
+`mechanism-design.md`'s existing "a join that cannot fail is the mirror of a check that cannot fire":
+run a new detector's rule against the case that MOTIVATED it before building it. It is folded rather
+than given its own heading deliberately — a reader in that section is already asking the question,
+and a separate heading cost 38 bytes more and would have left 5 bytes of slack, where any later
+release adding one word to any durable file breaches the gate.
+
+**A SECOND rule from the same work is deliberately NOT here.** "Anchor a receipt on bytes that exist,
+never on bytes a hypothesised fix would introduce" came out of the reference consumer's own
+adjudication and is the more concrete of the two, but it is about to acquire an enforcer in
+`ledger-reverify.sh`'s `sh` arm. A mechanizable rule belongs in a validator, not in resident prose,
+so it is waiting for the arm instead of taking bytes.
+
+### Verification
+
+**A6: 43499 → 43477 of 43520**, net −22, slack 43. All seven arms ok with probes fired. The applied
+bytes were `cmp`-compared against the rehearsed versions before the gate ran.
+
+**The channel is saturated and that is worth recording separately from this change.** It has sat
+within 43 bytes of its ceiling for three consecutive releases, so the marginal cost of any new
+resident rule is now a deletion elsewhere. Two rules running have been funded by finding
+duplications; a sentence-grain scan across all seven files finds only five cross-file duplicates
+remaining, every one too small to fund anything. That supply is effectively exhausted.
+
 ## [0.400.0] — 2026-08-21
 
 ### Fixed
