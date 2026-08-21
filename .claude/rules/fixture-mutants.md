@@ -42,6 +42,23 @@ paths:
   assertions are entangled and one of them is vacuous. When both findings are
   genuinely true, the arms overlap rather than the mutant being wrong: decide
   which arm OWNS the case and make the other stand down for it.
+- **Two guards that COVER each other read exactly like two guards that do not
+  work, and the symptom is ZERO failures rather than two.** The rule above
+  catches entangled assertions by their extra failure; this is the mirror and it
+  is silent. Measured: a two-line lookback and a section-wide rebuttal were added
+  in one change against ONE seeded subject, and each reached it — so disabling
+  either changed no cell and BOTH mutants came back green, which is
+  indistinguishable from two guards that never fired. Give every guard a subject
+  the OTHER guards cannot see: here the lookback's had to sit outside the section
+  the rebuttal joins, and the rebuttal's needed three lines of separation so the
+  lookback could not reach its qualifier. Ask of each new guard which existing one
+  would still cover its subject; if the answer is any, the seed cannot kill it.
+- **When two arms open with byte-identical text, anchor the mutation on what
+  SEPARATES them, not on the shared line.** A `sed` keyed on the common condition
+  edits both, moves two cells, and scores a kill the arm did not earn. Three times
+  in one series: a crosswalk line shared with a sibling clause (fixed by anchoring
+  on the indent), and a branch condition shared with the guard beside it (fixed by
+  anchoring on the trailing `; then` one of them carries and the other does not).
 - **Keep the fixture's author different from the arm's, deliberately.** An arm
   and a battery written by the same hand cannot disagree — they encode one
   understanding twice, and a false pass has an unreachable half nobody sees.

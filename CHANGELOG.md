@@ -34,6 +34,41 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.396.0] — 2026-08-20
+
+### Documentation
+
+**`.claude/rules/fixture-mutants.md` gains the covering-guards shape, which had no carrier.**
+That file already says a mutant must fail only its own assertion, and catches entangled arms by
+their EXTRA failure. The mirror is silent and cost a release to find: two guards added in one
+change against ONE seeded subject, each reaching it, so disabling either moved no cell and
+**both mutants came back green** — indistinguishable from two guards that never fired. The rule
+is to give every guard a subject the other guards cannot see, and the test is to ask of each new
+guard which existing one would still cover it.
+
+**And: when two arms open with byte-identical text, anchor the mutation on what SEPARATES them.**
+Three times in this series a `sed` keyed on a shared condition edited a neighbouring arm, moved
+two cells, and scored a kill it had not earned — once on a crosswalk line shared with a sibling
+clause, once on a branch condition shared with the guard beside it.
+
+### Verification
+
+**`LC-R5` confirmed on the reference consumer's real tree, by that consumer, with the shipped
+engine.** Three engines against one tree: 0.393.0 gives 0 findings / 13 ambiguous, 0.394.0 gives
+1 / 8 with the false positive, 0.395.0 gives **0 / 8**. The row that produced the false finding
+is fully silent rather than downgraded.
+
+**Five of the rows the new signals decided are five that consumer had independently adjudicated
+as not-findings**, with no row where the tool and the reading disagreed — and on the sixth, where
+0.394.0 said finding and the reading said core, the corpus settled it against the tool. Five
+agreements and one disagreement resolved in favour of the reading is a better result for these
+signals than unanimity would have been, because unanimity would not have distinguished a signal
+that discriminates from one that agrees with everything.
+
+**The `shadows:` signal did not over-reach:** an override citing `Check 5` while shadowing retro
+sections rather than `#5. Story status consistency?` is still AMBIGUOUS. It fires only where the
+entry actually declares the referent.
+
 ## [0.395.0] — 2026-08-20
 
 ### Fixed
