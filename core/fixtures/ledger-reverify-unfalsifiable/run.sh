@@ -191,6 +191,85 @@ else
   fi
 fi
 
+# --- The same guard on the `verify: sh` arm -------------------------------------------
+# The theirs_* verbs have carried this guard since they were written; `sh` did not, and it is
+# the verb that runs arbitrary consumer-side commands. A receipt anchored on what a
+# HYPOTHESISED fix would introduce reports STILL-LIVE forever, and nothing reported it.
+#
+# SANITY FIRST, because every arm below is a claim about these bytes and is unattributable
+# without them. The subject must map through map_consumer() and exist in the consumer, or the
+# guard is undecidable and the arms pass while testing nothing.
+if [ -f "$CONSUMER/scripts/ai-dlc/validate-thing.sh" ] \
+   && ! grep -qF 'theirs moved' "$CONSUMER/scripts/ai-dlc/validate-thing.sh" \
+   && grep -qF 'theirs moved' <<<"$(git -C "$DIST" show "${THEIRS}:core/scripts/validate-thing.sh")" \
+   && ! grep -qF 'theirs moved' <<<"$(git -C "$DIST" show "${BASE}:core/scripts/validate-thing.sh")"; then
+  ok "before: sh subject exists, token absent in consumer and at base, PRESENT at theirs"
+else
+  bad "FIXTURE BROKEN — sh subject/token preconditions do not hold"; echo
+  echo "ledger-reverify-unfalsifiable: FIXTURE BROKEN" >&2; exit 2
+fi
+
+# Bucket 1: consults THEIRS, so a pull can settle it and the guard must stand down.
+[ "$(verdict PC-SH-UPSTREAM)" = "STILL-LIVE" ] \
+  && ok "PC-SH-UPSTREAM (reads THEIRS) → STILL-LIVE (bucket 1, guard stands down)" \
+  || bad "PC-SH-UPSTREAM → $(verdict PC-SH-UPSTREAM), expected STILL-LIVE — the guard fires on receipts that DO consult upstream"
+
+# Bucket 3: the defect the reference consumer hit.
+[ "$(verdict PC-SH-INSTALLED)" = "NEEDS-REVIEW" ] \
+  && ok "PC-SH-INSTALLED (installed copy, upstream ships the subject) → NEEDS-REVIEW (bucket 3)" \
+  || bad "PC-SH-INSTALLED → $(verdict PC-SH-INSTALLED), expected NEEDS-REVIEW — a receipt that can never observe the fix was not caught"
+
+# Bucket 2, AND THE ONLY ARM THAT SEPARATES IT FROM BUCKET 3. Both receipts are
+# consumer-side-only with the same verb, negation and token; only the subject's upstream
+# existence differs. A guard that skips the mapping entirely, or resolves it wrongly, collapses
+# the two and convicts this one — which is the difference between reporting a defect and
+# libelling a standing consumer-side invariant. Nothing else here can catch that.
+[ "$(verdict PC-SH-CONSUMER-OWNED)" = "STILL-LIVE" ] \
+  && ok "PC-SH-CONSUMER-OWNED (no upstream counterpart) → STILL-LIVE (bucket 2, not accused)" \
+  || bad "PC-SH-CONSUMER-OWNED → $(verdict PC-SH-CONSUMER-OWNED), expected STILL-LIVE — a consumer-owned subject was reported as a defective receipt; no pull can settle it and that is not the receipt's fault"
+
+# Bucket 2 must be DISTINGUISHABLE from bucket 1, not merely un-accused. Both are STILL-LIVE,
+# so the verdict alone cannot tell an operator that no pull will ever settle this entry. Without
+# this the whole consumer-owned branch could be a no-op and every arm above would still pass.
+_co="$(bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null \
+       | awk -F"\t" '$2 ~ /PC-SH-CONSUMER-OWNED/ {print $3}')"
+_up="$(bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null \
+       | awk -F"\t" '$2 ~ /PC-SH-UPSTREAM/ {print $3}')"
+if [ -n "$_co" ] && [ "$_co" != "$_up" ]; then
+  ok "bucket 2 detail differs from bucket 1's — an operator can tell 'no pull can settle this' from an ordinary still-live"
+else
+  bad "bucket 2 and bucket 1 emit the SAME detail, so the consumer-owned branch says nothing an operator can act on"
+fi
+
+# The exemption, and the assertion is NOT-NEEDS-REVIEW rather than a named verdict.
+#
+# MEASURED WHILE WRITING THIS ARM, and it corrected the expectation: a watchdog scanning
+# tree-wide finds its own retired token IN THE LEDGER ENTRY THAT NAMES IT, so `! git grep`
+# fails and the shape reports CLOSE-CANDIDATE today, not the permanent STILL-LIVE it was
+# described as having. `consumer_reachable` already excludes the ledger for exactly this
+# self-reference; a bare `git grep` in a receipt does not.
+#
+# So the exemption's real contract is that the unfalsifiability guard must not CLAIM this
+# shape — whatever the arm concludes about it otherwise is a separate question, and pinning a
+# specific verdict here would make this arm fail on an unrelated change.
+_wd="$(verdict PC-SH-WATCHDOG)"
+[ "$_wd" != "NEEDS-REVIEW" ] \
+  && ok "PC-SH-WATCHDOG (tree-wide, no named subject) → $_wd, not claimed by the guard (exempt)" \
+  || bad "PC-SH-WATCHDOG → NEEDS-REVIEW — a STAYS-RETIRED watchdog was libelled as unfalsifiable; its exit 0 is the healthy steady state"
+
+# The detail must join the EXISTING vocabulary, not invent a synonym. A verdict alone does not
+# tell the reader which of the three NEEDS-REVIEW causes this is.
+# `grep -q` is fed a HERE-STRING, never a pipe: it exits at the first match while the writer
+# is still pushing, and under pipefail the pipeline then answers with the writer's EPIPE and
+# reports NOT-FOUND on input that contains the pattern. It is a size threshold, not a race.
+_sh_detail="$(bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null \
+              | awk -F'\t' '$2 ~ /PC-SH-INSTALLED/ {print $3}')"
+if grep -qF 'unfalsifiable predicate:' <<<"$_sh_detail"; then
+  ok "PC-SH-INSTALLED detail carries 'unfalsifiable predicate:' (same vocabulary as the theirs_* arms)"
+else
+  bad "PC-SH-INSTALLED detail does not say 'unfalsifiable predicate:' — the sh arm invented its own wording"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "ledger-reverify-unfalsifiable: PASS"

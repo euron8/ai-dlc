@@ -34,6 +34,89 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.402.0] — 2026-08-21
+
+### Fixed
+
+**`ledger-reverify.sh`'s `sh` arm reported STILL-LIVE for receipts no pull could ever settle, and
+the population was larger than every token-level defect combined.** A `verify: sh` receipt runs
+`cd "$CONSUMER" && …`; reverify runs BEFORE an apply, so a receipt that never references `$THEIRS`
+or `$DIST` reads only the installed copy, frozen at base. **13 of 41 live receipts on the reference
+consumer never consult upstream at all.** The `0)` branch now partitions instead of emitting one
+verdict: a receipt that consults upstream is untouched; a consumer-side-only receipt whose subject
+has NO upstream counterpart stays STILL-LIVE and says no pull can settle it; a consumer-side-only
+receipt whose subject upstream DOES ship is NEEDS-REVIEW with detail beginning
+`unfalsifiable predicate:`, joining the vocabulary the `theirs_*` arms already use.
+
+**Four accusations on the reference consumer, all four adjudicated TRUE POSITIVES**, each with a
+control in the same invocation (`core/NO-SUCH-FILE-CONTROL.sh` ABSENT while all four real core
+paths are PRESENT). Every one names a file upstream ships AND has an installed copy byte-identical
+to the base blob, so the receipt is demonstrably reading a frozen tree: `PC-S337`,
+`PC-S303-FANOUT-SCRIPT-ARG-MAX`, `PC-S314-PRECLASSIFY-BUCKETS-A-MODE-ONLY-CHANGE`,
+`PC-S334-AUDIT-LAYER-DEBT`. `PC-S337`'s subject is already moving upstream — 21 insertions in
+`base..theirs` — to a file its receipt cannot see.
+
+**THE TOKEN-LEVEL DESIGN THIS REPLACES WAS BUILT TWICE AND DIED TWICE, AND THE SECOND DEATH IS THE
+INSTRUCTIVE ONE.** A tree-wide reachability rule scored 0 of 12 and did not fire on the case that
+motivated it. A scope-faithful rewrite fired on it but scored **1-in-6 precision**, and two of its
+false positives were irreparable: in `PC-S299` and `PC-S296-REJECTION` the absent token IS the
+semantic content of the defect, which a two-ref absence test cannot distinguish from a token
+invented for a fix nobody had designed. **The partition disposes of both for free** — they consult
+`$THEIRS`, so they never enter the population. Both are verified byte-unchanged by this release.
+`token choice was never the defect`: a perfectly-anchored version of `PC-S337`'s receipt is equally
+permanently green.
+
+**The three `STAYS-RETIRED` watchdogs are NOT accused**, which was a measured false-positive class
+the earlier design would have shipped. Permanent exit 0 is their correct steady state; one lands in
+the consumer-owned bucket and two are undecidable for want of a named subject.
+
+### Verification
+
+**The battery was authored blind to the arm, deliberately, and it discriminated.** It was red on
+exactly three assertions against the unguarded arm and is green against the implementation — the
+two were written by different hands with neither seeing the other, which is the only arrangement in
+which they can disagree. Its load-bearing pair is bucket 2 against bucket 3: identical receipts,
+same verb, same negation, same token, differing ONLY in whether `map_consumer()` gives the subject
+an upstream preimage, on deliberately different files so neither guard can cover the other's case.
+A fourth arm requires bucket 2's DETAIL to differ from bucket 1's, because both are STILL-LIVE and
+without it the whole consumer-owned branch could be a no-op with every arm still green.
+
+**Both undecidable arms are probed, and by two DISTINCT causes.** `map_consumer()` unliftable, and
+a ref carrying no `core/` at all. The first implementation reported the lift as the cause on a run
+where the ref was the cause; the two are now told apart and 13 rows say which, with 0 accusations
+either way.
+
+**The exempting discriminator is proven both ways on one subject.** Four seeds naming the same file
+and differing only in mentioning `$THEIRS` / `$DIST` / `${DIST}` / nothing — the first three exempt,
+the fourth flagged. Every alternative in the pattern therefore has a live subject, including
+`${DIST}`, which has none in the real ledger.
+
+**Cost: 0.25s, once per invocation.** The core-to-consumer table is built by enumerating core paths
+at theirs and applying the REAL `map_consumer()`, never a hand-written inverse.
+
+**A limitation the no-new-status constraint buys, stated because it is invisible otherwise.**
+`emit-report.sh` filters rows to `STILL-LIVE`, so the bucket-2 and undecidable DETAIL never reaches
+the operator's rendered report — only a direct TSV reader sees it. Introducing a status token would
+have required `docs/vocabulary-index.md` and an invariant, so the constraint was kept deliberately
+and the cost is recorded rather than hidden. Two further conservative gaps, both measured: a
+receipt naming its subject through a variable or a glob, and one whose only subject is absolute or
+bare, are undecidable and keep today's verdict — 2 of 41.
+
+**The consumer-boundary gate caught a dead reference this change introduced, and the cause was the
+spec rather than the implementation.** A comment explaining the no-new-status decision named
+`docs/vocabulary-index.md` — a dev-repo doc `install.sh` does not ship, so the path would be dead in
+every consumer tree. `validate-no-dead-doc-refs` failed the push on it. The wording came from the
+authoring instruction, which cited that path to explain why a fourth verdict word was out of scope;
+it is now described rather than cited. A gate that fails on prose inside a shipped file is the whole
+point of the check, and the first gate run of this release exited 1 on it.
+
+**Not split into a machinery-only release, and the reason is a distinction rather than a
+measurement.** `consumer-boundary.md` requires a DETECTOR fix to ship machinery-only so the pull is
+classified by the fixed detector; that concern is about the programs which classify the PULL, and
+`ledger-reverify.sh` classifies ledger ENTRIES. Slice membership was not established mechanically —
+the grep that would have shown it returned zero with a control that did not fire, so no claim is
+made from it.
+
 ## [0.401.0] — 2026-08-21
 
 ### Documentation
