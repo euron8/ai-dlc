@@ -72,8 +72,8 @@ bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 # what closes it, and the count is a literal here or it disappears with the assertions.
 # 3 premises + 3 W9 premises + 1 pristine vector + 2 applicability + 1 code-attribution
 # + 1 crosswalk-is-load-bearing + 1 exit condition + 9 mutants + 1 unmutated control.
-# + 1 W12 premise + 8 W12 mutants
-EXPECTED_ASSERTIONS=31
+# + 1 W12 premise + 10 W12 mutants
+EXPECTED_ASSERTIONS=33
 
 echo "layer-reference-resolution:"
 
@@ -176,11 +176,19 @@ vector() {
   # undecidable" from N, so the caveat is the payload and not decoration — a note that keeps
   # the number and loses the sentence is the failure this cell exists to catch.
   v="$v w12note=$(grep -q 'UNADJUDICATED is not UNDECIDABLE' <<<"$out" && echo N || echo -)"
+  # THE SELF-REFERENCE SIGNAL: a bare sub-band citation inside the section defining its own
+  # band counterpart. No title, no tag — the position is the whole evidence.
+  v="$v w12self=$(grep -q 'from INSIDE the section that defines' <<<"$out" && echo W || echo -)"
+  # THE `shadows:` SIGNAL, three-state on purpose. `-` is also what a subject that was never
+  # reached looks like, so the cell has to distinguish quiet-by-declaration from absent: the
+  # mutant that disables the branch must move it to A, not merely leave it at `-`.
+  v="$v w12shadow5=$(grep -q 'cites \"Check 5\"' <<<"$out" && echo W \
+      || { grep -q 'ambiguous.*\"Check 5\"' <<<"$refs_out" && echo A || echo -; })"
   printf '%s' "$v"
 }
 
 W9WANT='w9miss=W w9dot=W w9ovr=W w9ok=- w9fence=- w9dist=- w9rdme=-'
-W12WANT='w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=3 w12stem=A w12x26amb=A w12note=N'
+W12WANT='w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=3 w12stem=A w12x26amb=A w12note=N w12self=W w12shadow5=-'
 WANT="d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT $W12WANT"
 
 # --- Part 1: the pristine vector ---------------------------------------------------------
@@ -330,13 +338,13 @@ grep -q 'gate-1 only' "$DOMAIN" && grep -q 'gate-1 is active (Check 20)' "$CONS/
 # which is what makes these two signals rather than one written twice.
 mk_mutant w12-title-off \
   "s/verdict=\"title\"/verdict=\"ambiguous\"/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=- w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=4 w12stem=A w12x26amb=A w12note=N"
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=- w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=4 w12stem=A w12x26amb=A w12note=N w12self=W w12shadow5=-"
 
 # M11 — the tag-join off. The mirror of M10, and the count moves because a demoted FINDING
 # lands in AMBIGUOUS rather than vanishing: this arm never drops a subject, it re-tiers it.
 mk_mutant w12-tag-off \
   "s/verdict=\"tag\"/verdict=\"ambiguous\"/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=- w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=4 w12stem=A w12x26amb=A w12note=N"
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=- w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=4 w12stem=A w12x26amb=A w12note=N w12self=W w12shadow5=-"
 
 # M12 — drop the UPPERCASE half of the provenance-token filter. `gate-1` becomes a token, the
 # 920 heading and the Check 20 citation line share it, and the arm reports a mislabel on a
@@ -344,20 +352,26 @@ mk_mutant w12-tag-off \
 # the filter cannot be simplified back out.
 mk_mutant w12-token-loose \
   "s/\\| grep -E '\\[A-Z\\]' \\| grep -E '\\[0-9\\]'/| grep -E '[0-9]'/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=W w12amb=2 w12stem=A w12x26amb=A w12note=N"
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=W w12amb=2 w12stem=A w12x26amb=A w12note=N w12self=W w12shadow5=-"
 
 # M13 — accept a bare `gate-validation` stem as a core qualifier, which is the signal the
 # reference consumer originally proposed. The bare-stem row leaves AMBIGUOUS and goes silent —
 # and that consumer adjudicated that exact row as a real mislabel. A false QUIET, on demand.
 mk_mutant w12-stem-quiet \
   "s/gate-validation\\\\\\.md\\)\\[/gate-validation)[/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=2 w12stem=- w12x26amb=A w12note=N"
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=2 w12stem=- w12x26amb=A w12note=N w12self=W w12shadow5=-"
 
-# M14 — drop the stand-down for a citation core does not define. W7 already reports those as
+# M14 — drop the stand-down for a citation core does not define. The vector is derived, not
+# observed: the three baseline AMBIGUOUS rows stay, `Check 19b` on the dev.md gate-1 line joins
+# them (its `gate-1` token carries no uppercase, so nothing reaches it), and the `## Check 19b`
+# group heading joins them too because at that point the enclosing section is still 917. The
+# fourth 19b citation sits INSIDE `### 919b.` and reports as a self-reference, which is why
+# `w12w19b` moves to W rather than staying quiet. `Check 34` stays stood down by its
+# non-corroborating crosswalk row. Three plus two ambiguous, one finding. W7 already reports those as
 # dangling; without this gate both arms fire on one subject and one of them is vacuous.
 mk_mutant w12-core-gate-off \
   "s/\\[ -n \"\\\$ctitle\" \\] \\|\\| continue/: ; #/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=7 w12stem=A w12x26amb=A w12note=N"
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=W w12x34=- w12n8=- w12p20=- w12amb=5 w12stem=A w12x26amb=A w12note=N w12self=W w12shadow5=-"
 
 # M15 — drop the crosswalk stand-down. `Check 34` is resolved by the row that exists for
 # exactly that purpose, so reporting it is the arm firing on its own contract remedy. This is
@@ -374,7 +388,7 @@ mk_mutant w12-core-gate-off \
 # scored by the wrong arm. Measured here, on the first run of this mutant.
 mk_mutant w12-crosswalk-off \
   "s/^      if grep -Fxq -- \"\\\$ref\" <<<\"\\\$CROSSWALK_IDS\"/      if false/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=4 w12stem=A w12x26amb=A w12note=N"
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=4 w12stem=A w12x26amb=A w12note=N w12self=W w12shadow5=-"
 
 # M16 — restore the UNCONDITIONAL crosswalk stand-down that shipped in v0.390.0, by making
 # the corroboration test never fire. The seed's `26` row is a `(label adoption)` row whose own
@@ -384,7 +398,7 @@ mk_mutant w12-crosswalk-off \
 # review here, and not by this fixture, which did not have a corroborating row until now.
 mk_mutant w12-crosswalk-unconditional \
   "s/\\[ -n \"\\\$_x\" \\] \\|\\| return 1/return 1/" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=- w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=2 w12stem=A w12x26amb=- w12note=N"
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=- w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=2 w12stem=A w12x26amb=- w12note=N w12self=W w12shadow5=-"
 
 # M17 — drop the caveat from the count line, keeping the count. The number survives and the
 # sentence that stops it being misread does not. This is the only arm that would catch a
@@ -392,7 +406,22 @@ mk_mutant w12-crosswalk-unconditional \
 # consumer has read five of its ambiguous rows closely and all five were findings.
 mk_mutant w12-note-uncaveated \
   "s/UNADJUDICATED is not UNDECIDABLE[^\\\\]*//" \
-  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=3 w12stem=A w12x26amb=A w12note=-"
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=3 w12stem=A w12x26amb=A w12note=- w12self=W w12shadow5=-"
+
+# M18 — disable the `shadows:` branch. The override declares `#5. Story status consistency?`
+# and cites `Check 5` in its body; without the branch that citation is a subject with no
+# evidence and falls to AMBIGUOUS. The cell moves `-` -> A rather than vanishing, which is why
+# it is three-state: a two-state cell cannot tell quiet-by-declaration from never-reached.
+mk_mutant w12-shadow-off \
+  "s/\\[ -n \"\\\$shadow_anc\" \\] && \\[ \"\\\$\\{shadow_anc#\\\"\\\$ref\\\"\\}\" != \"\\\$shadow_anc\" \\]/false/" \
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=4 w12stem=A w12x26amb=A w12note=N w12self=W w12shadow5=A"
+
+# M19 — disable the self-reference branch. The `Check-28` citation inside the `### 928.`
+# section carries no title and no provenance token, so nothing else can reach it and it falls
+# to AMBIGUOUS. Two of the reference consumer's seven real mislabels are exactly this shape.
+mk_mutant w12-self-off \
+  "s/\\[ -n \"\\\$sec\" \\] && \\[ \"\\\$sec\" = \"\\\$band\" \\]/false/" \
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=4 w12stem=A w12x26amb=A w12note=N w12self=- w12shadow5=-"
 
 # THE UNMUTATED CONTROL, from the same directory and run last. A lone copy that dies for a
 # reason unrelated to any mutation emits nothing, and "no output" otherwise scores as a kill.

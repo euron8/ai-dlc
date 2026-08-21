@@ -102,6 +102,10 @@ leaves a citation pointing at whatever core happens to define under that integer
 
 ### 22. Teammate-spawn role binding.
 
+### 5. Story status consistency?
+
+### 28. Spec-layer adoption is declared (all planning gates).
+
 ### 30. Spec join integrity.
 EOF
 
@@ -140,6 +144,17 @@ arm reports a mislabel on a citation nothing is wrong with.
 ### 920. [ext:domain] HPE ADR probe-evidence (gate-1 only).
 
 ### 922. [ext:domain] Smoke test evidence (deploy-validate gate only).
+
+### 905. [ext:domain] Story status consistency, consumer extension.
+
+### 928. [ext:domain] Execution-health gate ran (deploy-validate gate only).
+
+W12's SELF-REFERENCE case. The line below cites a bare sub-band number from INSIDE the
+section that defines its band counterpart. It carries no title and no provenance token, so
+neither join can reach it — the POSITION is the whole evidence. Core's 28 is spec-layer
+adoption at planning gates, which this section is not about.
+
+The execution-health floor is what Check-28 asserts on every deploy-validate run.
 
 ### 930. [ext:domain] Orphaned-function / core-path wiring meta-check (story completion gates).
 
@@ -234,6 +249,20 @@ receipt "$SKILL/extensions/roles/dev.md"
   printf -- '---\n\n### 8. Core'"'"'s own second check, and the override shadows this one.\n\n'
   printf 'Shadowed body. Invoke scripts/override-missing.sh, which does not exist.\n'
 } > "$SKILL/overrides/gate-validation__8.md"
+
+# W12's `shadows:` case. An override that declares which core anchor it shadows has already
+# said which check it means, in a field this validator parses for three other clauses. A bare
+# `Check 5` in its body is that declaration restated in prose, not a stale pointer — and the
+# consumer defines 905, so without this signal the citation is a subject with no evidence and
+# lands in AMBIGUOUS.
+{ printf -- '---\n'
+  printf 'shadows: steps/gate-validation.md#5. Story status consistency?\n'
+  printf 'base_sha: 89abcdef0123456789abcdef0123456789abcdef\n'
+  printf 'reason: fixture override, carries the W12 shadows-anchor signal\n'
+  printf 'conforms_to: %s\n' "$CV"
+  printf -- '---\n\n### 5. Story status consistency?\n\n'
+  printf 'Shadowed body. The status ladder Check 5 asserts is extended here by one value.\n'
+} > "$SKILL/overrides/gate-validation__5.md"
 
 # THE CROSSWALK. One row for 34 and none for 11b or 19b, which is what splits the two silent
 # cases from the two reported ones. Column 1 is read by `crosswalk_rows`, which takes column 1

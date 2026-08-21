@@ -1875,19 +1875,23 @@ done <<< "$all_files"
 # AMBIGUOUS is not even a warning — 12 permanent worklist lines on one consumer is the shape
 # an operator switches off. It is counted in the footer and listed only on demand.
 #
-# WHAT THE AMBIGUOUS COUNT DOES NOT MEAN, AND THE FIGURE HERE IS THE ONE THAT MOVED.
-# It is unadjudicated, not undecidable. On the reference consumer, of the 18 this arm counts,
-# FIVE have been read closely and FIVE were findings. Thirteen are unread. That rate is very
-# likely a selection effect -- that consumer keeps reading the ones that look wrong -- so it
-# supports no base rate and is not offered as one. What it does establish is the direction of
-# the error: a reader who sees "AMBIGUOUS 18" and infers "eighteen genuinely undecidable" is
-# wrong on this tree, measurably, and no run reports that.
+# WHAT THE AMBIGUOUS COUNT MEANS, NOW MEASURED OVER A WHOLE POPULATION RATHER THAN GUESSED.
+# It is unadjudicated, not undecidable, and the reference consumer has now adjudicated all of
+# it: of 18 ambiguous rows, SEVEN were real mislabels and THIRTEEN were correct references to
+# core. So the bucket is MOSTLY CORRECT, and a reader who treats a nonzero count as a worklist
+# of defects will spend most of that time confirming citations that were already right.
 #
-# THIS COMMENT CARRIED "n=1" FOR ONE RELEASE AND WAS ALREADY STALE WHEN IT SHIPPED. A figure
-# taken from one consumer at one moment decays in place and reads exactly like a fresh one.
-# It is kept rather than deleted because the DIRECTION is the load-bearing part and that has
-# held across every reading; whoever next touches this should re-derive the numerator and the
-# denominator together, or drop both and keep the sentence.
+# THE DIRECTION SURVIVES AND THE MAGNITUDE DID NOT. "A reader who sees AMBIGUOUS 18 and infers
+# eighteen genuinely undecidable is wrong" still holds -- every one of the 18 was decidable by
+# a human in one reading. What broke is the RATE. This comment twice carried a figure that an
+# adjudication then refuted: first n=1, then five-for-five, both from a consumer reading the
+# rows that looked wrong first. Selection effect, named as a risk in the previous release and
+# then measured: over the full population the finding rate is 7 in 18, not 5 in 5.
+#
+# TWO SIGNALS CAME OUT OF THAT ADJUDICATION AND ARE IMPLEMENTED ABOVE -- the `shadows:` anchor
+# and the self-reference position. Between them they decide six of the eighteen with no new
+# heuristic, and both were visible only because someone worked the whole worklist instead of
+# the suspicious part of it. **The uninteresting rows are where the next signal lives.**
 #
 # UNTESTED PRECEDENCE, STATED AS SUCH. A tag-join outranks a core qualifier here, on the
 # reasoning that a tag join is evidence about what the line is ABOUT while a qualifier is a
@@ -1976,9 +1980,10 @@ raw_in() { # raw_in <file-list> <anchor> -> first matching raw heading line
 
 while IFS= read -r f; do
   [ -n "$f" ] || continue
+  shadow_anc="$(shadow_parts "$(unquote "$(fm "$f" shadows)")" 2>/dev/null | head -1 | cut -f2)"
   while IFS= read -r hit; do
     [ -n "$hit" ] || continue
-    ln="${hit%%:*}"; text="${hit#*:}"
+    ln="${hit%%	*}"; rest="${hit#*	}"; sec="${rest%%	*}"; text="${rest#*	}"
     while IFS= read -r ref; do
       [ -n "$ref" ] || continue
       band="$(pad9 "$ref")"
@@ -2061,6 +2066,28 @@ while IFS= read -r f; do
           verdict="quiet"
         elif [ -n "$cite_n" ] && [ -n "$ctitle" ] && [ "${ctitle#"$cite_n"}" != "$ctitle" ]; then
           verdict="quiet"
+        # THE ENTRY ALREADY DECLARED WHICH CHECK IT MEANS, in a field this file parses for
+        # three other clauses. An override whose `shadows:` anchor opens with <n> is shadowing
+        # CORE's <n>; a bare `Check <n>` in its body is that declaration restated in prose, not
+        # a stale pointer. Four of the reference consumer's thirteen non-findings are one
+        # override with `shadows: steps/gate-validation.md#5. Story status consistency?`, and
+        # every `Check 5` in it resolves by that field alone with no heuristic anywhere.
+        # I54: no pipe into `grep -q`. Written as one the first time and caught by the
+        # invariant rather than by review -- the fourth instance of this idiom in one session.
+        elif [ -n "$shadow_anc" ] && [ "${shadow_anc#"$ref"}" != "$shadow_anc" ] \
+             && grep -qE '^([^0-9a-z]|$)' <<<"${shadow_anc#"$ref"}"; then
+          verdict="quiet"
+        # A CITATION INSIDE THE SECTION THAT DEFINES `9<n>` IS A SELF-REFERENCE, and it needs
+        # neither a title nor a tag to decide — the position IS the evidence. Two of the
+        # reference consumer's seven real mislabels are `Check-28` sitting inside its own
+        # `### 928.` section while core's 28 is spec-layer adoption at planning gates.
+        #
+        # LAST AMONG THE FINDING SIGNALS, AND DELIBERATELY BELOW EVERY QUIET ONE. An author
+        # writing "core's Check 28" inside the 928 section means core's, and position must not
+        # overrule a stated referent. Ordering it here costs nothing measurable and removes the
+        # one way this signal could contradict an explicit declaration.
+        elif [ -n "$sec" ] && [ "$sec" = "$band" ]; then
+          verdict="self"
         else
           verdict="ambiguous"
         fi
@@ -2069,6 +2096,8 @@ while IFS= read -r f; do
       case "$verdict" in
         title)
           warn W12 "$(rel "$f"):$ln: cites \"Check $ref\" beside the title of \"$band\", which is THIS project's check — core's $ref is a different check under a different title. The LC-N5 renumber moved the allocation and left this citation pointing at core. Repoint it at $band. (Citing title: \"$cite\")" ;;
+        self)
+          warn W12 "$(rel "$f"):$ln: cites \"Check $ref\" from INSIDE the section that defines \"$band\" — this project's own check. A section citing a bare sub-band number in its own body is the LC-N5 renumber reaching the heading and not the prose under it. Repoint it at $band." ;;
         tag)
           warn W12 "$(rel "$f"):$ln: cites \"Check $ref\" on a line carrying $(printf '%s' "$shared" | sed 's/ *$//'), which is provenance this project's \"$band\" heading also carries — core's $ref carries none of it. Repoint the citation at $band, or move the provenance off this line if core's $ref really is meant." ;;
         ambiguous)
@@ -2076,11 +2105,19 @@ while IFS= read -r f; do
           [ "$CHECK_REFS" = "1" ] && printf '  ambiguous  %s:%s: "Check %s" — this project also defines %s, and nothing in the line decides which is meant\n' "$(rel "$f")" "$ln" "$ref" "$band" ;;
       esac
     done < <(printf '%s\n' "$text" | grep -oE 'Check[ -][0-9]+[a-z-]*' | sed -E 's/^Check[ -]//' | sort -u)
-  done < <(grep -nE 'Check[ -][0-9]+[a-z-]*' "$f" 2>/dev/null)
+  done < <(awk '
+    /^#{2,4}[ \t]+/ {
+      h = $0; sub(/^#+[ \t]+/, "", h); sub(/^[Cc]heck[ \t]+/, "", h)
+      if (match(h, /^([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[ \t]*(\.|—)/)) {
+        sec = substr(h, 1, RLENGTH); sub(/[ \t]*(\.|—)$/, "", sec)
+      } else { sec = "" }
+    }
+    /Check[ -][0-9]/ { print NR "\t" sec "\t" $0 }
+  ' "$f" 2>/dev/null)
 done <<< "$CONSUMER_LAYER_FILES"
 
 if [ "$AMBIGUOUS_REFS" -gt 0 ] && [ "$CHECK_REFS" != "1" ]; then
-  printf '  note  %d sub-band Check citation(s) this project also defines a band counterpart for, undecidable from the line. Re-run with --check-refs to list them. UNADJUDICATED is not UNDECIDABLE: on the reference consumer, every one of these that anyone has read closely has turned out to be a real mislabel.\n' "$AMBIGUOUS_REFS"
+  printf '  note  %d sub-band Check citation(s) this project also defines a band counterpart for, undecidable from the line. Re-run with --check-refs to list them. UNADJUDICATED is not UNDECIDABLE: on the reference consumer all 18 were adjudicated and 7 were real mislabels, so this is a worklist to read once rather than a defect count.\n' "$AMBIGUOUS_REFS"
 fi
 
 echo

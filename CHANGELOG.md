@@ -34,6 +34,49 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.394.0] — 2026-08-20
+
+### Added
+
+**Two `W12` signals that decide a citation carrying neither a title nor a provenance token.**
+Both came out of the graph consumer adjudicating its ENTIRE ambiguous worklist rather than the
+part of it that looked wrong, and neither was visible from the rows anyone had chosen to read.
+
+**The `shadows:` anchor.** An override declaring `shadows: steps/gate-validation.md#5. Story
+status consistency?` has already said which check it means, in a field this validator parses
+for three other clauses. A bare `Check 5` in its body is that declaration restated in prose,
+not a stale pointer. Four of that consumer's thirteen non-findings are one override, decided
+by a field already on disk with no new heuristic.
+
+**The self-reference position.** A citation inside the section that DEFINES `9<n>` is a
+self-reference and reports — the position is the whole evidence, and it needs no title and no
+tag. Two of that consumer's seven real mislabels are `Check-28` sitting inside its own
+`### 928.` section while core's 28 is spec-layer adoption at planning gates. It is ordered
+BELOW every quiet signal deliberately: an author writing "core's Check 28" inside the 928
+section means core's, and position must not overrule a stated referent.
+
+### Fixed
+
+**The AMBIGUOUS caveat was measured and the magnitude was wrong.** This header has now carried
+a refuted figure twice: first `n=1`, then five-for-five. The graph consumer adjudicated all 18
+of its ambiguous rows — **7 real mislabels, 13 correct references to core** — so the bucket is
+MOSTLY CORRECT, and a reader treating a nonzero count as a defect list spends most of it
+confirming citations that were already right.
+
+**The direction survives; the rate did not.** "A reader who sees `AMBIGUOUS 18` and infers
+eighteen genuinely undecidable is wrong" still holds — every one of the 18 was decidable by a
+human in one reading. What broke is the selection effect, named as a risk in v0.392.0 and now
+measured: that consumer had been reading the rows that looked wrong first. **The uninteresting
+rows are where the next signal lives**, and both signals above are the evidence for that.
+
+### Fixture
+
+`layer-reference-resolution` 31 → **33 assertions**, two mutants and two seeds. The `shadows:`
+cell is three-state on purpose: `-` is also what a subject that was never reached looks like,
+so a two-state cell could not tell quiet-by-declaration from absent, and the mutant has to
+move it to AMBIGUOUS rather than merely leave it silent. 25 of the 33 fail against a subject
+replaced by `exit 0`.
+
 ## [0.393.0] — 2026-08-20
 
 ### Documentation
