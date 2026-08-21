@@ -109,6 +109,13 @@ divisor across populations produces the same number with the opposite error, and
 review because the arithmetic is right. Re-measure the calibration whenever the corpus
 changes.
 
+## Ask what rate a hypothesis PREDICTS before a zero refutes it
+
+A zero consistent with the hypothesis is not evidence against it. Measured: 48 runs hunting a
+0.83%-rate defect returned nothing, the expected count was 0.4, and that clean sweep read as a
+refutation. Compute the predicted count FIRST; below one the run cannot discriminate, and a
+forced input beats a larger N.
+
 ## Verify a release the way the gate runs it
 
 `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`, and read the fixture by NAME. The

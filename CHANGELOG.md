@@ -34,6 +34,39 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.399.0] — 2026-08-21
+
+### Documentation
+
+**A zero consistent with the hypothesis is not evidence against it, and reading one as a refutation
+nearly discarded the only correct explanation.** While diagnosing v0.398.0's fixture flake, 48 runs
+at 16-way concurrency returned no failures, and that clean sweep read as a refutation of the
+sha-content explanation. It was not: the defect's rate is 0.83%, so the expected count over 48 runs
+was **0.4**. A run whose predicted yield is below one cannot discriminate between a live hypothesis
+and a dead one, and its silence looks identical either way. `verification-discipline.md` now carries
+the clause — compute the predicted count first, and prefer a forced input over a larger N.
+
+**The bytes came from a duplication, not from trimming scar tissue.** The durable channel stood at
+43517 of 43520 bytes, so the clause had no room. `CLAUDE.md` carried a second, differently-worded
+statement of the three-clause scoping test whose authoritative home is `resident-context.md` — the
+same channel, so the same compaction survival and the same subagent reach, which makes the copy pure
+drift surface of the kind `mechanism-design.md` prohibits. It is replaced by a citation. The
+measurements around it stay: the CC 2.1.226 trigger shape, and the paragraph establishing that a
+path-scoped rule is not compaction-durable.
+
+**Recorded because the cut was a judgement, not a rule application.** `resident-context.md` permits
+deleting prose whose enforcing mechanism can be NAMED **and** whose instruction lives authoritatively
+elsewhere. Only the second clause held — A3b binds that a rule declares its scope once and A4 binds
+pointers, but **nothing enforces which scope is correct**, so the scoping test has no enforcer to
+name. The cut was made on "cite, do not restate" instead, with the operator ruling on it.
+
+### Verification
+
+**A6 moved 43517 → 43499 of 43520**, net −18 bytes, 21 remaining. The applied bytes were
+`cmp`-compared against the rehearsed versions before the gate ran, so what shipped is what was
+reviewed. No live inbound references to the removed text — only CHANGELOG provenance and stale
+worktree copies, and the control grep fired on those, so the search discriminates.
+
 ## [0.398.0] — 2026-08-21
 
 ### Fixed
