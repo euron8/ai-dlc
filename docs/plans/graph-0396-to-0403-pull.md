@@ -74,7 +74,12 @@ Nothing is owed in this repo.
   rotating, per the observation-point caveat. Acceptance test passed on an identical 82-row set.
   Final state: 0 NEEDS-REVIEW, 0 CLOSE-CANDIDATE.
 
-## Filed, not fixed — a defect this pull exposed in the distribution
+## A defect this pull exposed — FILED AS `BL-086` in `docs/backlog.md`
+
+**The filing lives in the backlog, not here.** An earlier revision of this plan recorded it in this
+file only, which was wrong for the reason `docs/backlog.md`'s own header gives: state written into a
+plan about something else vanishes when that plan is discharged, and this plan is discharged. The
+summary below is context; `BL-086` is the entry that gets re-derived.
 
 `self-update-gate.sh` returned `SELF-UPDATE-OK` with a non-empty machinery slice, which sends step 2
 to branch, commit, push and auto-merge autonomously. But `git push` on that consumer fails for a

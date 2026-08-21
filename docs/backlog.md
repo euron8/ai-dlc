@@ -57,6 +57,45 @@ not a closed entry.
 
 ---
 
+## BL-086 — `self-update-gate.sh` asks whether the PULL can break the push, never whether the consumer can push AT ALL
+
+The gate is differential on incoming-vs-installed script, and its own header shows that is
+deliberate: it exists because a cycle can install a validator that then fails the very push the
+cycle is making. That case it catches. A **standing, pre-existing** push failure is not in the delta
+it examines, so the gate correctly returns `SELF-UPDATE-OK`, and step 2 — explicitly ungated —
+branches, commits, pushes and auto-merges into a push that cannot succeed for reasons the pull never
+caused. The result is `PC-S308` exactly: orphaned branch, push permanently blocked, `skill_version`
+already advanced on a commit that will never land. No operator is in the loop.
+
+**Measured on the reference consumer, during the 0.396.0 → 0.403.0 pull, by that consumer.**
+`self-update-gate.sh` printed `SELF-UPDATE-OK` with a non-empty machinery slice while `git push` on
+the same tree returned rc=1 with `VERDICT: FAIL — 6 blocking, 3 ambiguous` — an artifact-path
+conformance failure predating the pull. That session skipped step 2 and carried the slice through
+`--carried-machinery-slice`, the path built for `DEFER`, which worked cleanly. Had it followed the
+step as written, it would have hit `PC-S308` autonomously.
+
+**It composes with `PC-S336`, and the pair is one root cause.** That entry reports step 1's
+auto-push arm as fatal and unguarded where step 2's is hardened. Together: neither step asks
+whether this consumer's push can succeed before acting on the answer. Any consumer carrying a
+standing pre-push red meets one or the other on every machinery-bearing pull.
+
+**Proposed:** probe push viability before step 2 acts on `SELF-UPDATE-OK` — a dry-run push, or reuse
+of step 1's preflight result, which has already exercised the real hook by that point. Emit the
+existing `SELF-UPDATE-DEFER` when the probe fails, since the DEFER path already handles the slice
+correctly.
+
+  verify: manual
+
+**Why `manual` and not `sh`, given this file prefers `sh`.** Every mechanical anchor available here
+is a token a HYPOTHESISED fix would introduce — a flag name, a probe function, a new verdict word —
+and an entry anchored that way reports STILL-LIVE forever, including after the fix lands. That is
+the defect class `v0.402.0` shipped a guard for on the consumer side, and filing this entry in the
+shape that release exists to catch would be its own finding. A falsifiable `sh` receipt is available
+once the remedy has a shape: run the gate against a tree whose push fails and assert the verdict is
+not `SELF-UPDATE-OK`. Re-anchor on that at the change that builds it.
+
+---
+
 ## BL-085 — `extends:` cannot express a multi-span dependency, so an additive entry falls back to file grain and nothing says so
 
 `LC-E11` permits exactly one anchor, and the reasoning is sound: two anchors mean two spans and a
