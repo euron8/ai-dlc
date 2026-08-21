@@ -34,6 +34,55 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.395.0] — 2026-08-20
+
+### Fixed
+
+**The self-reference signal shipped in v0.394.0 reported a FALSE FINDING whose remedy would
+have inverted the clause it edited.** Found by the graph consumer running the shipped engine
+read-only against its own tree, one release after the signal landed.
+
+**The qualifier was there and the reader could not see it, because it was the last token of
+the line above.** Their row wraps at ~76 columns like the rest of that corpus:
+
+    line 50: ...would be a vacuous PASS, not a real check. Record `N/A (core
+    line 51: Check 3a does not run at retro)`.
+
+Unwrapped it reads `Record "N/A (core Check 3a does not run at retro)"`. Every quiet signal was
+line-scoped, so none could fire; the position signal — deliberately ordered below all of them
+for exactly this reason — then convicted. **The ordering was right and the qualifier never got
+a turn.** Following the remedy would have rewritten a sentence whose whole point is that the
+consumer's own check records `N/A` at retro BECAUSE core's does not run there, into a claim
+that its own check does not run there, which is false.
+
+**Two guards, and the asymmetry between them is deliberate.** The qualifier now reads a
+two-line window. The position signal now stands down when its own section states the referent
+anywhere in its body — position is section-level evidence, so its rebuttal is section-level
+too. **The FINDING signals stay line-scoped**: widening a quiet signal can only cost a missed
+finding, while widening a title-join or tag-join produces a false one, and that false-positive
+set has been measured on no real corpus. A wrapped tag now lands in AMBIGUOUS, which is the
+safe direction to be wrong in.
+
+### Fixture
+
+`layer-reference-resolution` 33 → **35 assertions**, two mutants. 27 of the 35 fail against a
+subject replaced by `exit 0`.
+
+**Both new mutants survived their first run, and the reason is worth more than the fix.** The
+two guards had ONE shared subject, and each covered it — so disabling either changed nothing
+and both arms read exactly like guards that do not work. Inside a band section the rebuttal
+joins the whole body and reaches the wrapped qualifier too; at one line of separation the
+window reaches the qualified mention the rebuttal was meant to find. They now have independent
+subjects: the window's sits OUTSIDE any band section, and the rebuttal's carries three lines of
+separation. **Two guards that cover each other are indistinguishable from two guards that are
+broken, and only a mutant per subject tells them apart.**
+
+**And the self-branch mutation killed two branches.** The rebuttal opens with the
+byte-identical condition, so a sed keyed on that text alone disabled both and moved two cells
+— one mutant proving two things, which means one of the two arms was proving nothing. Anchored
+on the `; then` that separates them. Third time in this series that a mutation edited a
+neighbouring arm.
+
 ## [0.394.0] — 2026-08-20
 
 ### Added
