@@ -34,6 +34,59 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.400.0] — 2026-08-21
+
+### Fixed
+
+**`release-version-triple`'s two-release arm matched a bare version literal against validator output
+that can carry a short sha.** Assertion 9 read `grep -q '0.2.0'` and `grep -q '0.3.0'`; the dots are
+BRE wildcards, so `0?2?0` inside a 7-character short sha satisfies them. Both are now `grep -qF`,
+which makes the dots literal and puts the pattern permanently out of a hex sha's reach. Measured: the
+constructed sha `a0b2c0deadbeef0123456789abcdef0123456789` matches the old pattern and not the new
+one, while the real output line still matches and a version the range does not name still does not.
+Fixture PASS at 20 assertions.
+
+**This one is the opposite polarity to v0.398.0's and that is why it is a weaker finding.** It sits
+inside a presence-shaped conjunction, so a false match would have read GREEN — weakening the "names
+both versions" sub-claim without ever flipping the verdict. It is also unreachable today:
+`validate-release-version.sh` emits `FAIL  $short  …` only on a per-commit disagreement, and the
+arm's own `release()` helper keeps subject, `VERSION` and heading in agreement by construction, so no
+sha reaches that corpus on this path. Fixed on affordance-removal grounds, not because it was firing.
+
+### Documentation
+
+**A guard for permanently-false `STILL-LIVE` receipts was designed, measured, and NOT shipped,
+because the measurement proved it could not fire.** `ledger-reverify.sh` is asymmetric: the
+`theirs_has` / `theirs_lacks` arms detect a predicate that can never go green and report
+`unfalsifiable predicate`, while the `sh` arm — which runs arbitrary consumer-side commands — is
+guarded only in the opposite direction, against a false CLOSE from a missing subject. The reference
+consumer hit the unguarded half: a receipt anchored on the pinning constructs a *hypothesised* fix
+would introduce, which the actual fix does not contain, so it reports `STILL-LIVE` forever.
+
+**The proposed rule was: a negated grep whose every alternative is unreachable. Measured over the
+reference consumer's 75 `verify: sh` receipts, it fires on ZERO of the 12 that contain one.** The
+refutation is not the zero itself but where the zero lands — **the rule does not fire on the very
+receipt that motivated it.** That receipt keys on `mktemp -d -p\|TMPDIR=`, and `TMPDIR=` is present
+tree-wide in this distribution, so a tree-wide reachability test calls it reachable while the file
+the receipt actually greps contains neither token. **The scope was wrong, not the threshold.**
+
+**Three further reasons the shape is not the population**, all measured rather than argued: 4 of the
+12 grep a HERE-STRING and not a tree at all, so tree absence cannot establish anything about them
+and flagging them would be a false positive by construction; 22 alternatives sit on case-insensitive
+`-qiE` sites where a fixed-string probe is the wrong instrument; and `\|` is an alternation under
+BRE, a literal under `-F`, and spelled `|` under `-E`, so one splitter across all three grammars
+manufactures phantom alternatives — two patterns already carry `|` inside a regex group, which a
+naive split read as 4 alternatives that do not exist.
+
+**The absence-shaped population is real and differently shaped**, which is why this is recorded
+rather than dropped: 5 `sh` receipts reach exit 0 through `grep … || exit 0` and 3 more through a
+grep count compared to zero. All 8 sit outside the `! grep` bucket, so the guard as designed would
+have missed every one of them while being unable to fire on the bucket it targeted.
+
+**Recorded so the next author does not rebuild it.** A guard that cannot fire is indistinguishable
+here from one that passed, and this repo has shipped that mistake before. The gap in the `sh` arm is
+genuine and still open; what is refuted is this way of closing it.
+
 ## [0.399.0] — 2026-08-21
 
 ### Documentation
