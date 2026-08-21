@@ -26,7 +26,10 @@ the reader LOADS and the docs RENDER.
 
 Ask what state returns success without observing anything. Ask what satisfies NEITHER arm of
 a two-way resolve. Ask what a detector's join key structurally excludes from its own
-population. Where the shape allows it, build a PARTITION that makes the bad state
+population. Run a new detector's rule against the case that MOTIVATED it before building it: if
+that case does not fire, the population is not the shape you think. Measured — a guard scored 0 of
+12 and missed its own subject, its probe being tree-wide where the receipt greps one file.
+Where the shape allows it, build a PARTITION that makes the bad state
 unconstructible instead of a check that looks for it.
 
 ## A vacuous guard is a loaded gun

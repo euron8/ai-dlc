@@ -34,7 +34,8 @@ admissions, and only the second one is a limit.
 
 `install.sh` splits what shares a parent here: `core/scripts/<x>` lands at
 `scripts/ai-dlc/<x>`, `core/schemas/` lands at `.claude/schemas/`. A path that resolves in
-this tree can resolve nowhere in an installed one. Verify anything touching path resolution
+this tree can resolve nowhere in an installed one, and invariant **I33** fails the build on
+locating one core file by walking up from another. Verify anything touching path resolution
 on a tree built by running `scripts/install.sh` into an empty directory, and run the suite
 there as a consumer runs it — in both layouts.
 
