@@ -102,6 +102,18 @@ present, must be the one `hooks:` names. Exactly one anchor: two would mean two 
 row could no longer say which one moved. The anchor must name a heading FORWARD (the heading
 contains your anchor), not the reverse — see LC-E11.
 
+**An entry that depends on SEVERAL spans keeps file grain, and that is correct rather than a
+mis-declaration.** One anchor is the whole truth about an entry that AUGMENTS a core span, which
+is why `kind: qualifier` requires it. An entry that ADDS a whole check augments nothing: it
+depends on the gate-type manifest that decides when its check loads, on the consumer-catalog
+crosswalk that governs how its check is numbered, and on whichever core section it sits beside —
+three disjoint spans, and `extends:` can name one. Declaring the largest of them is the trap.
+Measured on core's own `steps/gate-validation.md`: `#Validation Checklist` is 2352 of 2560 lines,
+so anchoring there narrows the drift subject by **6%** and buys that by silencing the manifest and
+the crosswalk, which are the two spans an additive check entry most needs to be re-read against.
+**Take the file-grain re-reads.** They are the price of a declaration that cannot say what your
+entry means, not a defect in your entry.
+
 **`kind: qualifier` — render INSIDE a core section.** The other kinds are additive at file scope:
 they render as their own section. A qualifier renders *within* the core section `extends:` names,
 at `position: append` or `prepend`, and it carries **no `base_sha` obligation on prose it does not
