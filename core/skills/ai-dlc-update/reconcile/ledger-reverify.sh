@@ -603,6 +603,13 @@ base_holds() { all_present "$(base_show "$1")" "$2"; }
 # every one of them a `core/scripts/<x>` seen mid-token, and 0 paths are newly flagged. Control
 # in the same run: 17 of the 45 still name at least one consumer path under the new split, so
 # the extractor did not simply go quiet.
+#
+# THE SPLIT ITSELF IS ONE FUNCTION WITH TWO READERS. The character class IS the contract quoted
+# above -- "splitting on every character a path cannot contain" -- and the falsifiability partition
+# below needs the same tokens for a different question. A second copy of that class is a second
+# chance for the two to drift, and a drift here is silent in both directions at once.
+receipt_path_tokens() { printf '%s\n' "$1" | tr -c 'A-Za-z0-9_./$-' '\n' || true; }
+
 receipt_absent_subjects() {
   local rest="$1" p out=""
   while IFS= read -r p; do
@@ -614,8 +621,156 @@ receipt_absent_subjects() {
     esac
     case "$p" in *'*'*|*'?'*|*'$'*) continue ;; esac
     [ -e "$CONSUMER/$p" ] || case " $out " in *" $p "*) ;; *) out="$out $p" ;; esac
-  done < <(printf '%s\n' "$rest" | tr -c 'A-Za-z0-9_./$-' '\n' || true)
+  done < <(receipt_path_tokens "$rest")
   printf '%s' "$out"
+}
+
+# --- IS AN `sh` RECEIPT FALSIFIABLE BY A PULL AT ALL? -------------------------------------------
+#
+# A `verify: sh` receipt runs `cd "$CONSUMER" && { … }`, so a receipt that names neither `$THEIRS`
+# nor `$DIST` reads the consumer's INSTALLED copy and nothing else. Reverify runs BEFORE the apply,
+# so that copy is still the BASE blob: nothing in `base..theirs` can move the predicate, exit 0
+# means STILL-LIVE, and it will mean STILL-LIVE on the pull that lands the fix and on every pull
+# after it. The receipt is not wrong about what it measures; it is measuring a tree the pull has
+# not touched yet.
+#
+# MEASURED on the reference consumer, 41 live `sh` receipts: 28 name `$THEIRS` or `$DIST`, 13 name
+# neither. No receipt names `$BASE` without also naming `$DIST` (checked with `grep -F` -- a BRE
+# `$DIST` never matches on BSD grep, where a mid-pattern `$` is still an anchor, and that false
+# zero is how this set was first miscounted).
+#
+# THIS IS NOT A TOKEN PROBLEM AND MUST NOT BE ATTACKED AS ONE. The motivating entry,
+# `PC-S337-APPLY-DRIFT-REFILE-NO-MAPPER-ARM-IS-NOT-PARALLEL-SAFE`, greps
+# `tests/fixtures/apply-drift-refile/run.sh`, which is byte-identical to its blob at base -- so a
+# receipt quoting exactly the RIGHT token there is just as permanently green as one quoting the
+# wrong one. What decides the verdict is WHICH TREE is read, and that is carried by the receipt's
+# text: the refs it does or does not mention. An earlier design tried to decide it by parsing the
+# grep patterns out of the one-liner -- alternation splitting, BRE/ERE/-F grammar -- and scored
+# roughly one useful finding in six. The pattern grammar is not the signal, and no amount of
+# parsing makes it one. There is no grep-pattern parsing below and there must not be.
+#
+# THREE OUTCOMES ON THE rc=0 SIDE, AND ONLY ONE OF THEM IS A DEFECT:
+#
+#   1. The receipt references `$THEIRS`/`$DIST`. It consults upstream, so a pull can flip it. The
+#      STILL-LIVE row stays BYTE-UNCHANGED -- 28 of the 41, including the two entries an earlier
+#      design libelled (`PC-S299-UPSTREAM-SHIPS-TWO-REVIEW-VERDICT-VOCABULARIES` and
+#      `PC-S296-REJECTION-CARRIES-UNRELATED-GAPS`).
+#   2. Consumer-side only, and NO path it names is a file upstream ships. The entry is a standing
+#      CONSUMER-SIDE invariant -- the three `PC-S312-*-STAYS-RETIRED` falsifiability watchdogs, a
+#      `.pre-commit-config.yaml` wiring, the consumer's own `scripts/ai-dlc-local/` tests. There is
+#      nothing upstream for a pull to observe, so the entry is unfalsifiable BY CONSTRUCTION and
+#      that is NOT a receipt defect. STILL-LIVE, with a DETAIL saying no pull can settle it.
+#      Reporting these as faults would file nine healthy entries as broken, which is how a status
+#      becomes one an operator skims.
+#   3. Consumer-side only, and at least one named path IS a file upstream ships. This is the
+#      defect: the receipt reads the installed copy of a file the apply is about to replace, so it
+#      cannot observe the fix even in principle. NEEDS-REVIEW under the existing
+#      `unfalsifiable predicate:` prefix -- the same vocabulary the two-ref guards above emit.
+#
+# NO NEW STATUS TOKEN, DELIBERATELY. Bucket 2 is a STILL-LIVE with a longer DETAIL and bucket 3 is
+# a NEEDS-REVIEW; both words are already in this tool's vocabulary and in the contract SKILL.md
+# states. A fourth verdict word would need a row in the distribution's derived vocabulary index and
+# an invariant binding it, for a distinction the DETAIL already carries. That index is a dev-repo
+# doc install.sh does not ship, so it is described rather than cited: a path named here would be
+# dead in every consumer tree, which is what the dead-doc-ref gate caught on this very line.
+#
+# THE consumer->core DIRECTION IS DERIVED, NEVER INVERTED BY HAND. `map_consumer()` in
+# preclassify.sh is the single home of core->consumer, and a private inverse table here would be a
+# second mapping: right for one layout, silently wrong in the other, and stale the first time a
+# subtree moves. That is the exact fallback `apply.sh` refuses to make ("refusing to guess consumer
+# paths"). So the inverse is BUILT -- every `core/` path at theirs pushed through the REAL
+# `map_consumer()`, recorded as `consumer<TAB>core`. 496 paths at the measured ref; one table per
+# invocation, built on FIRST USE, so a ledger with no consumer-side `sh` receipt pays nothing.
+#
+# UNDECIDABLE NEVER MANUFACTURES A VERDICT. If `map_consumer()` cannot be lifted, or the receipt
+# names no path-shaped subject at all, the entry keeps today's STILL-LIVE and the DETAIL says the
+# check did not run -- the shape the consumer-reachability arm above already uses, for the same
+# reason. A missed receipt leaves the verdict where it was; a wrong NEEDS-REVIEW accuses a healthy
+# entry, and only one of those two errors is recoverable by reading.
+#
+# bash 3.2: no associative arrays, so the table is a temp file and the lookup is an exact field
+# compare. Removed on EXIT.
+#
+# TWO WAYS TO BE UNDECIDABLE, AND THE DETAIL MUST NOT NAME THE WRONG ONE. `CORE_MAP_WHY` carries
+# the cause into the row: a message asserting the lift failed, printed on a run where the lift
+# worked and the REF was wrong, sends the reader to the wrong file. This file's own header already
+# records the cost of a status whose name asserts more than it observed.
+CORE_MAP=""          # <consumer-path><TAB><core-path> for every core file at THEIRS
+CORE_MAP_STATE=""    # "" not attempted yet | ok | unavailable
+CORE_MAP_WHY=""      # why it is unavailable, rendered verbatim into the undecidable row
+core_map_cleanup() { [ -n "${CORE_MAP:-}" ] && rm -f "$CORE_MAP"; return 0; }
+trap core_map_cleanup EXIT
+core_map() { # 0 = $CORE_MAP holds the table; 1 = UNDECIDABLE, nothing was built
+  case "$CORE_MAP_STATE" in
+    ok)          return 0 ;;
+    unavailable) return 1 ;;
+  esac
+  # Set BEFORE the work, so every later caller short-circuits on a failure instead of retrying a
+  # 496-path build once per receipt.
+  CORE_MAP_STATE=unavailable
+  CORE_MAP_WHY="map_consumer() could not be lifted from $SELF/preclassify.sh"
+  # THE LIFT IS apply.sh's, VERBATIM -- one function out of preclassify.sh by its own header and
+  # closing brace. `command -v` is the guard and it is not optional: an awk range that matches
+  # nothing yields an EMPTY string, `eval ""` succeeds, and the caller then runs with no mapping at
+  # all. That is the refusal apply.sh:170 exists for, one file along.
+  eval "$(awk '/^map_consumer\(\) \{/,/^\}/' "$SELF/preclassify.sh" 2>/dev/null)" 2>/dev/null || return 1
+  command -v map_consumer >/dev/null 2>&1 || return 1
+  CORE_MAP_WHY="a temp file for the derived consumer→core table could not be created"
+  CORE_MAP="$(mktemp)" || { CORE_MAP=""; return 1; }
+  # `${THEIRS}` BRACED: unbraced, zsh's `:c`/`:t` history modifiers eat the next character and the
+  # ref resolves to garbage -- which git reports as an empty tree, i.e. as a clean absence.
+  while IFS= read -r _cp; do
+    [ -n "$_cp" ] || continue
+    printf '%s\t%s\n' "$(map_consumer "$_cp")" "$_cp"
+  done < <(git -C "$DIST" ls-tree -r --name-only "${THEIRS}" -- core/ 2>/dev/null) > "$CORE_MAP"
+  # An EMPTY table is not a mapping with nothing in it: `core/` is never empty at a real ref, so
+  # this is a bad ref or a bad repo, and answering "upstream ships none of these" from it would
+  # turn every bucket-3 receipt into a bucket-2 all-clear -- an undecidable input manufacturing the
+  # ONE verdict here that says "nothing to fix".
+  CORE_MAP_WHY="the derived consumer→core table came back EMPTY (no core/ path at the theirs ref in '$DIST'), which is a bad ref or a bad repo rather than a mapping with nothing in it"
+  [ -s "$CORE_MAP" ] || return 1
+  CORE_MAP_WHY=""
+  CORE_MAP_STATE=ok
+  return 0
+}
+
+# <consumer-relative path> -> the core path at theirs that installs to it, or "" when upstream
+# ships no such file.
+#
+# `$1 == q` is an exact FIELD compare, so a path carrying `.` or `-` needs no regex escaping to get
+# wrong. `awk -v` strips one level of escaping, which cannot bite here: receipt_path_tokens keeps no
+# backslash in a token. A FILE argument, never a pipe -- `grep -q` fed from a pipe answers with the
+# writer's EPIPE once the output outgrows the buffer, and reports NOT-FOUND on a match.
+core_for_consumer_path() { awk -F'\t' -v q="$1" '$1 == q { print $2; exit }' "$CORE_MAP"; }
+
+# receipt_named_subjects <sh-receipt> -> "<consumer-path><TAB><core-path-or-empty>" per distinct
+# path-shaped subject the receipt names. Requires core_map() to have succeeded.
+#
+# WHY THIS DOES NOT REUSE receipt_absent_subjects' PREFIX WHITELIST, which is the obvious move.
+# That function must decide EXISTENCE against `$CONSUMER`, where an unrecognised token yields a
+# bogus "does not exist", so it whitelists the consumer's own top-level homes. Here the DERIVED
+# TABLE is the filter: a token that is not a consumer path simply fails to match. The whitelist
+# would also have to GROW a `tests/` row to see the motivating entry at all -- one more hand-listed
+# home, which is the thing the table exists to replace.
+#
+# A `/` IS REQUIRED AND A LEADING `/` DISQUALIFIES. A receipt that has `cd`-ed to the consumer root
+# addresses its subjects relatively (or as `$CONSUMER/…`, stripped here); an absolute token is
+# `/dev/null` or a `mktemp` scratch path, and `map_consumer()` emits nothing absolute, so it could
+# never match anyway. The `/` test only separates bucket 2 from "nothing parsed" -- BOTH of which
+# emit STILL-LIVE -- so a junk token cannot manufacture a NEEDS-REVIEW. Only an exact hit in the
+# derived table can, and that is the whole reason the accusing direction is keyed on the table.
+receipt_named_subjects() {
+  local p seen=""
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    p="${p#\$CONSUMER/}"; p="${p#./}"
+    case "$p" in *'*'*|*'?'*|*'$'*) continue ;; esac
+    case "$p" in /*) continue ;; esac
+    case "$p" in */*) : ;; *) continue ;; esac
+    case " $seen " in *" $p "*) continue ;; esac
+    seen="$seen $p"
+    printf '%s\t%s\n' "$p" "$(core_for_consumer_path "$p")"
+  done < <(receipt_path_tokens "$1")
 }
 
 # Every path at THEIRS whose basename equals $1. Compared as a fixed string after splitting
@@ -1125,7 +1280,38 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       sh_rc=$?
       case "$sh_rc" in
         0)
-          emit STILL-LIVE "$label" "verify sh: still reproduces at theirs ($TV)" ;;
+          # THREE-WAY, AND THE FIRST TEST IS ON THE RECEIPT'S TEXT: see IS AN `sh` RECEIPT
+          # FALSIFIABLE BY A PULL AT ALL? above for why the refs it mentions -- not the patterns it
+          # greps for -- are what decides this.
+          #
+          # BOTH SPELLINGS OF EACH REF. `$THEIRS` is not a substring of `${THEIRS}`, so one pattern
+          # cannot cover the other; the braced form is the one this repo's own rev-path rule
+          # REQUIRES, and it is 17 of the 33 occurrences on the reference consumer.
+          case "$rest" in
+            *'$THEIRS'*|*'${THEIRS}'*|*'$DIST'*|*'${DIST}'*)
+              # Bucket 1 -- consults upstream, so a pull can flip it. BYTE-UNCHANGED.
+              emit STILL-LIVE "$label" "verify sh: still reproduces at theirs ($TV)" ;;
+            *)
+              if ! core_map; then
+                emit STILL-LIVE "$label" "verify sh: still reproduces at theirs ($TV) — falsifiability NOT checked ($CORE_MAP_WHY, so there is no derived consumer→core table to ask), so a receipt that can only ever read the consumer's installed copy would not have been caught here"
+              else
+                _ns=0; _up=""
+                while IFS="$(printf '\t')" read -r _sp _sc; do
+                  [ -n "$_sp" ] || continue
+                  _ns=$((_ns + 1))
+                  [ -n "$_sc" ] && _up="$_up $_sp (upstream ships it as $_sc)"
+                done <<EOF
+$(receipt_named_subjects "$rest")
+EOF
+                if [ "$_ns" -eq 0 ]; then
+                  emit STILL-LIVE "$label" "verify sh: still reproduces at theirs ($TV) — falsifiability NOT checked (this receipt names no path-shaped subject this can see, so there was nothing to look up in the derived consumer→core table), so a receipt that can only ever read the consumer's installed copy would not have been caught here"
+                elif [ -n "$_up" ]; then
+                  emit NEEDS-REVIEW "$label" "unfalsifiable predicate: this receipt reads ONLY the consumer's installed copy — it names neither \$THEIRS nor \$DIST — and at least one file it reads is one upstream SHIPS:${_up}. Re-verification runs BEFORE the apply, so that installed copy is still frozen at base; nothing in base..theirs can move this predicate, and the exit 0 above means STILL-LIVE on this pull and on every pull after the fix lands. Re-anchor on the UPSTREAM file at \$THEIRS — 'verify: theirs_has' / 'theirs_lacks' exist for exactly this and are checked against BOTH refs — or declare 'verify: manual' if the claim is really about the consumer's own state. This is a finding about the RECEIPT, not a verdict on the entry: the entry may well be live, and nothing here says it is not."
+                else
+                  emit STILL-LIVE "$label" "verify sh: still reproduces at theirs ($TV) — and no pull can settle that: the receipt names neither \$THEIRS nor \$DIST, so it reads only the consumer's own tree, and none of the $_ns path-shaped subject(s) it names is a file upstream ships at theirs (checked against the consumer→core table derived from map_consumer()). The subject is CONSUMER-OWNED with no upstream counterpart, so this is a standing consumer-side invariant, not a defective receipt — there is nothing upstream for a pull to observe. Adjudicate the entry by hand; a re-verification cannot."
+                fi
+              fi ;;
+          esac ;;
         126|127)
           emit NEEDS-REVIEW "$label" "unresolved: the receipt exited $sh_rc (command not found / not executable), which is what a RENAMED or DELETED subject looks like — not a fix. A close here would record an absorption that never happened. Re-anchor the receipt at the subject's current path, then re-run. If the subject really is gone, say so in the entry rather than letting the exit status say it." ;;
         *)
