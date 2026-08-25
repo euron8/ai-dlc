@@ -194,7 +194,9 @@ and says why in the comment itself.
    later session to discover the rule is unbacked and assume it was an oversight.
 
    **The durable fix is the POLE, not the budget**, and it is explicitly NOT in this plan's
-   scope: 119s in one fixture is what makes a 120s default unsurvivable at all. File it.
+   scope: 119s in one fixture is what makes a 120s default unsurvivable at all. FILED as
+   **BL-088** — that did not happen when 6b shipped, and was caught only when a later phase
+   went looking. It is distinct from BL-005, which is a different pole in a different tree.
 7. **Deliver the consumer brief.** Rehearse on a `file://` clone, then hand the paused
    graph session an exact command list: migrate the 24 paths, untrack the 134 wait-beats,
    re-run `validate-artifact-paths.sh` and the pre-push, resume gate-3 only after both are

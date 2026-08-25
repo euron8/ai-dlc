@@ -57,6 +57,87 @@ not a closed entry.
 
 ---
 
+## BL-088 — one fixture is 119s of a 130.9s suite, which is what makes the default 2-minute tool timeout unsurvivable
+
+**The pole, not the budget, is the durable fix.** v0.405.0 prescribed an explicit long timeout
+where core tells the lead to `git push`, and that is a mitigation: it stops the SIGKILL, it does
+not make the gate fast. A consumer whose pre-push cannot finish inside the default caller timeout
+is one forgotten `timeout:` away from the same failure, and the instruction carrying the budget
+is prose with no enforcer by construction — a `PreToolUse` hook can deny a call, it cannot raise
+the timeout of one.
+
+**Measured on a `file://` clone of the reference consumer at `386a56d34`, per-line timestamps.**
+The pre-push is **148.9s** total: **18.0s** for every phase before the fixture suite and
+**130.9s** for the suite itself. The default tool timeout is **120s**. The suite is
+**POLE-BOUND** — wall clock tracks the single longest DIRECTORY, not the sum over the worker
+pool — and across 155 fixtures totalling 1006 fixture-seconds the longest is
+`layer-reference-resolution` at **119s**. One fixture is 91% of the suite's wall clock and
+99% of the default timeout on its own.
+
+**The consequence is recorded twice in one sprint's transcript**, `2026-08-24T13:19Z` and
+`2026-08-25T01:41:47Z`, both `Exit code 143 | Command timed out after 2m 0s`. A SIGKILLed push
+reads as a failed push and is not one: the gate was still running, so nothing is known about
+whether it would have passed. That ambiguity is the actual cost.
+
+**Phase 1's read-set map removes the ROUTINE cost and cannot help here.** It skips fixtures whose
+read-set the change did not touch — but a change that selects the pole still pays the pole, so the
+worst case is unchanged and it is the worst case that breaks the push.
+
+**Where it came from.** Action 6b of `docs/plans/graph-s305-triage.md` states "The durable fix is
+the POLE, not the budget, and it is explicitly NOT in this plan's scope... File it." That filing
+did not happen when 6b shipped as v0.405.0; this entry is it, filed from the plan's own recorded
+measurements. Note the distinction from **BL-005**, which is a different pole — this repo's
+`validator-arm-selection` at 166s of a 217s wall. Reducing one does not touch the other.
+
+**Proposed:** shard `layer-reference-resolution` the way the mutation batteries are already
+sharded, so the pole falls to the next-longest directory. Re-measure the pole AFTER, because a
+loaded cost is only valid under the pool that produced it and the number to watch is the top of
+`.git/ai-dlc-fixture-durations`, never the total.
+
+  verify: manual
+
+## BL-087 — nobody knows whether `PreToolUse` fires on a tool call that fails INPUT VALIDATION, and it decides whether a whole class of guard is buildable
+
+**The unresolved question.** When the model emits a tool call whose input fails the tool's own
+schema, Claude Code returns `<tool_use_error>InputValidationError: [{"origin":"array",
+"code":"too_small","minimum":2,...,"path":["questions",1,"options"]}]`. It is not known whether
+the `PreToolUse` hook for that tool runs first, or whether the call is rejected before any hook
+sees it.
+
+**Why it is worth settling once.** Every `PreToolUse` guard this repo might build against a
+MALFORMED call — not a disallowed one, a malformed one — is unbuildable if validation wins, and
+would look exactly like a guard that works: registered, green, never firing. That is this repo's
+recurring defect class, and here it is decided by a harness behaviour no local mechanism can
+observe.
+
+**What is already established, both directions, so the next session does not re-derive it.**
+The docs reference says `PreToolUse` "Runs after Claude creates tool parameters and **before
+processing the tool call**", which leans toward the hook firing first. Against that,
+`PostToolUseFailure` is documented as running "when a tool that **started executing** fails",
+which a schema-invalid call never did — so if `PreToolUse` also does not see it, such a call is
+invisible to the hook system entirely. **The documentation does not state the ordering**, checked
+against both the hooks reference and the hooks guide.
+
+**The rejections are real and reachable**, which is what makes the experiment cheap to validate:
+parsing session transcripts finds `<2`-option `AskUserQuestion` calls that received an
+`InputValidationError` tool_result with `is_error: true`. The reference consumer's sprint 305
+carried three, one per session, each losing an operator decision to a compaction within minutes.
+
+**Where it came from.** RC-3 of `docs/plans/graph-s305-triage.md` filed a `PreToolUse` deny on a
+`<2`-option `AskUserQuestion`. It was DROPPED at v0.407.0 on the operator's decision, on the
+grounds that it could not be shown able to fire AND would duplicate a rejection the lead already
+sees in-band. The second ground is independent of this question; only the first depends on it.
+
+**Proposed:** run the experiment rather than reason about it. A scratch project, a `PreToolUse`
+hook on `AskUserQuestion` whose whole body appends its payload to a file, one deliberately
+1-option call, then read the file. Record the answer where a future guard author will meet it.
+This repo's own session could not run it — no `PreToolUse` hook is registered here, so there was
+nothing to observe.
+
+  verify: manual
+
+---
+
 ## BL-086 — `self-update-gate.sh` asks whether the PULL can break the push, never whether the consumer can push AT ALL
 
 The gate is differential on incoming-vs-installed script, and its own header shows that is
