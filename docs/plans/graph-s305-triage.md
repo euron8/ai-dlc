@@ -67,17 +67,40 @@ At this plan's writing those read `FAIL — 24 blocking, 3 ambiguous`; `134`;
 
 ### What is DONE — do not redo any of it
 
-**Nothing has been executed. All seven phases are open.** What is complete is the
-INVESTIGATION: six root causes derived with controls, the regression question answered NO,
-and this file filed as `7633dd29`. `VERSION` was `0.403.0` and `CHANGELOG.md` opened with
-`## [Unreleased]`.
+**Phase 1 (RC-1) is DONE, shipped as v0.404.0 (`fe64a47a`), merged to `main` and pushed.
+Phases 2 through 7 are open.** The gate ran green on it — `AI_DLC_FIXTURE_NO_SKIP=1 bash
+.githooks/pre-push`, gate exit 0, 0 FAIL lines, 163 fixtures ok, `readset-skip`,
+`artifact-path-conformance` and `validator-fork-budget` read by name against an
+impossible-name control of 0.
+
+**TWO PREMISES BELOW WERE MEASURED FALSE while executing phase 1, and both are corrected
+here rather than in the evidence they contradict.**
+
+- **RC-1's ORDERING CONSTRAINT is wrong.** I82 does NOT fail on
+  `_bmad-output/party-mode/s<N>/` when the area is undeclared. Differential, both runs on
+  the live tree: byte-identical output, rc=0 either way. Its predicate reads path
+  COMPONENTS and is area-independent. Positive control in the same session: a seeded
+  `_bmad-output/party-mode/s305-findings.md` in that same file makes I82 fire, rc=1.
+- **The area was already declared, by the CONSUMER.** graph's
+  `.claude/skills/ai-dlc/artifact-paths.md` lists `_bmad-output/party-mode`. On the
+  rehearsal clone, `validate-artifact-paths.sh` reports PASS with core's declaration,
+  without it, and with NEITHER — so adding it to core's `areas:` block moved no verdict
+  and would have been a decoration. It is load-bearing now only because I82b's second
+  direction was built to give it a subject.
+
+**A third premise held but was INCOMPLETE.** "Have `core/git-hooks/pre-push` generate the
+map rather than fall back to all-155" cannot be done: the deriver needs root, because
+`fs_usage` is the only tracer that sees a stat()-only dependency and an atime-only map
+under-records exactly those — the direction that skips a fixture silently. A pre-push
+cannot prompt for a password. Both hooks now print the resolved `sudo bash <path> --all`
+instead of only the fallback line, and the producer ships so the command resolves.
 
 **Do not re-run the investigation.** Every measurement behind the six findings is recorded
 below with the command that produced it and the control that ran beside it. Re-deriving the
 byte accounting means re-parsing 10.4 MB of transcript for a number this file already
 carries, and the transcripts are outside every gate — nothing will tell you it was wasted.
 
-**As each phase lands, the `### Remedy` heading of its RC section below is amended to
+**As each phase lands, the `### Remedy — COMPLETE, SHIPPED AS v0.404.0` heading of its RC section below is amended to
 `### Remedy — COMPLETE, SHIPPED AS vX.Y.Z` and this paragraph is replaced.** Those headings
 are the only place a phase's completion is written by hand, and they are corroboration only:
 **the probe block above is the authority.** Where the two disagree the probe is right, because
@@ -116,6 +139,25 @@ sprint cannot safely resume until the consumer can push, which is why RC-1 is ph
    re-run `validate-artifact-paths.sh` and the pre-push, resume gate-3 only after both are
    green.
 
+   **The path half of that is already REHEARSED, on a `file://` clone at `386a56d34`.**
+   22 tracked files `git mv` from `_bmad-output/planning-artifacts/party-mode/s305/` to
+   `_bmad-output/party-mode/s305/`, preserving the `architecture-rounds/` subdirectory,
+   then `migrate-artifact-paths.sh --apply` for the 2 residual
+   `_bmad-output/brainstorming/brainstorm-s305-*` paths, which are a different and
+   pre-existing class. The verdict went `FAIL — 24 blocking, 3 ambiguous` to `PASS — 0
+   blocking, 3 ambiguous` over 5793 tracked files. The 3 ambiguous are non-blocking and
+   pre-date s305. Do NOT run `migrate-artifact-paths.sh` on the 22: it derives
+   `_bmad-output/planning-artifacts/s305/party-mode/`, which is legal but is neither the
+   prescribed home nor where sprints 297/298/303 put theirs.
+
+   **The brief must also carry the TIMEOUT.** Measured on that clone with per-line
+   timestamps: the pre-push is 148.9s, of which every phase before the fixture suite is
+   18.0s and the suite is 130.9s. The suite is pole-bound — 155 fixtures, 1006
+   fixture-seconds, longest single fixture `layer-reference-resolution` at 119s — so even a
+   perfect read-set map cannot put a change that selects the pole under a 120s caller
+   timeout. Tell that session to push with an explicit long timeout, and separately to
+   build the map once with `sudo bash scripts/ai-dlc/derive-fixture-readsets.sh --all`.
+
 ### Done when
 
 All nine probes read `DONE`, the consumer's `validate-artifact-paths.sh` reports 0 blocking,
@@ -137,8 +179,51 @@ before your first action and re-check after every phase; a change is a stop-and-
 `git reset --hard` in either repo, and tell every delegate the same.** Delegates work in
 `mktemp` copies made with `git archive HEAD | tar -x`.
 
-**Delegate.** The phases are largely independent below phase 1; spawn named agents in
-parallel and background anything long.
+### Delegate, and name the model
+
+**The phases are independent below phase 1. Spawn named agents in parallel and background
+anything long** — the operator's cost is wall clock, not tokens, and this box has 18 cores.
+Give every agent a `name` so it stays addressable by `SendMessage` while it runs.
+
+**Send work to a subagent when any of these is true**, and do the work inline otherwise:
+
+- it is a SEARCH or a census whose answer is a short conclusion drawn from many files — the
+  agent keeps the file dumps and hands back the number;
+- it is a REHEARSAL on a `file://` clone or a `mktemp` copy, which is slow, self-contained,
+  and produces one verdict;
+- it belongs to a different phase than the one in front of you and shares no file with it;
+- it is a two-direction self-probe or a mutation battery whose only output is a kill count.
+
+**Do NOT delegate the thing the phase is FOR.** Writing the arm, choosing the predicate,
+deciding what a measurement means, and reconciling a finding against this plan's evidence
+stay with the session that owns the phase. A subagent's read of a `paths:`-scoped rule file
+loads inside that subagent only and never reaches you, so an agent authoring core files is
+authoring them without the rules you are holding.
+
+**Choose the model by the reasoning the task needs, not by how long it will take.** The
+parameter is `model` on the `Agent` call and its values are `opus` and `sonnet`; it
+overrides the agent definition's own frontmatter, and it is IGNORED for
+`subagent_type: "fork"`, which always runs on the parent's model.
+
+- **`model: "sonnet"`** — the task has a stated procedure and a checkable answer. Running a
+  named script and reporting its verdict and exit code. Enumerating call sites, counting a
+  corpus, extracting a list. Building a scratch install and reporting whether a file landed.
+  Driving a fixture and reporting its tally. Re-deriving a figure this plan already carries,
+  with its control.
+- **`model: "opus"`** — the task requires deciding what the answer MEANS. Designing a
+  predicate and measuring its false-positive set. Adjudicating whether a zero is a finding or
+  a broken instrument. Reading a hook's state machine to work out why an arm cannot fire.
+  Writing rule prose that will sit in the resident channel. Anything whose output this plan
+  will be amended from.
+
+**When you cannot tell which, it is `opus`.** The failure mode this ordering exists to
+prevent is a cheap agent returning a confident zero from a scan that could not have fired,
+which reads exactly like a clean result and costs a whole phase to catch.
+
+**Every delegated result is a HYPOTHESIS until re-derived.** Give the agent its control in
+the prompt — name the token that must be present in the same invocation — and require it to
+report both halves. An agent that reports an absence without a control has established that
+its search ran, not that the thing is missing.
 
 ---
 
