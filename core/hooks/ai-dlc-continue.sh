@@ -501,10 +501,37 @@ if [ -f "$BEAT_MARKER" ]; then
       echo "- Backgrounded wait-beat live until epoch ${BEAT_DEADLINE} (now ${NOW}); yield allowed"
       echo ""
     } >> "$LOG_FILE"
-    # A live beat is forward progress, not a stall: reset the rapid-fire counter
-    # so a burst of legitimate yields cannot trip the backoff and let a later
-    # genuine stall through.
-    rm -f "$STATE_FILE"
+    # THE BLOCK STATE IS DELIBERATELY NOT TOUCHED HERE, AND IT USED TO BE WIPED.
+    # A removal of the state file sat on this line from v0.81.0 -- deliberately
+    # NOT spelled out, because the s305 triage probe for this fix greps this
+    # window for that exact command and a quotation of it reads as the defect.
+    # It was reasoned as "a live beat is forward progress, so reset the
+    # rapid-fire counter" -- but it took the TIMESTAMP with the counter, so the
+    # next block read
+    # `LAST_TS=0`, computed `DELTA = NOW - 0` (~1.79e9), took the `gap > window`
+    # branch every time, and pinned the counter at 1. The backoff could then never
+    # be reached by any sequence that put a beat between two blocks -- which is the
+    # sequence a join-wait stall IS. Measured on the reference consumer's sprint
+    # 305: `BLOCKED` 15, all 15 reading `rapid-fire 1/3`, `ALLOWED_BY_LIVE_BEAT`
+    # 240, `BACKOFF` 0, against 170 wait-beat arms and 16.7 h inside join-wait
+    # loops that nothing reported.
+    #
+    # PRESERVING `LAST_TS` WHILE STILL ZEROING THE COUNTER FIXES NOTHING, and that
+    # is why the fix is a deletion rather than a rewrite. A zeroed counter makes
+    # the next block `0 + 1 = 1` -- the identical value the epoch delta forced.
+    # Driven both ways over four event sequences, the decision sequence came back
+    # byte-identical; only the printed delta moved.
+    #
+    # THE CLOCK IS THE PROGRESS SIGNAL, so the counter needs no separate reset. A
+    # beat that genuinely consumed time pushes `DELTA` past `RAPID_WINDOW_SECONDS`
+    # and the `else` branch below resets the counter on its own. A beat that
+    # returned instantly -- every target already on disk, one of the four ways the
+    # block reason below says you can believe you have a beat and not have one --
+    # consumes no time, so the counter keeps climbing and the stall is reported.
+    #
+    # A YIELD BURST STILL CANNOT TRIP THE BACKOFF. Nothing on this path increments
+    # the counter; only a BLOCK does, twenty lines below. The v0.81.0 comment's
+    # stated fear was of a state this code cannot reach.
     exit 0
   fi
 fi
@@ -595,7 +622,16 @@ echo "$COUNTER" >> "$STATE_FILE"
   if [ -n "$LAST_GATE" ]; then
     echo "- Last gate: ${LAST_GATE}"
   fi
-  echo "- Seconds since previous block: ${DELTA}"
+  # NEVER PRINT AN EPOCH AS A DELTA. With no previous block recorded `LAST_TS` is
+  # 0 and `DELTA` is the current epoch -- a number that reads as an interval, is
+  # off by fifty years, and was the visible symptom of the wiped-state defect
+  # above. All 15 of sprint 305's blocks printed one (min `1787395192`) and it was
+  # read as a long quiet gap rather than as a broken clock.
+  if [ "$LAST_TS" -eq 0 ]; then
+    echo "- Seconds since previous block: first block (no previous block recorded)"
+  else
+    echo "- Seconds since previous block: ${DELTA}"
+  fi
   echo "- Reason returned to Claude: forced continuation (Rule 3)"
   echo ""
 } >> "$LOG_FILE"

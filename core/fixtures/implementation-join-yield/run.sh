@@ -104,14 +104,110 @@ else ok "no snapshot: allowed by Check 2 (no pipeline); Check 2b never consulted
 rm -rf "$W"
 
 # =============================================================================
-# 6. PROGRESS — a live-beat allow resets the rapid-fire counter, so a burst of
-#    legitimate yields cannot trip the backoff and free a later genuine stall.
+# 6. PROGRESS IS MEASURED BY THE CLOCK, not asserted by the beat's existence.
 # =============================================================================
-W="$(bash "$HERE/seed.sh" counter-reset)"; OUT="$(drive_stop "$W")"
-if blocked "$OUT"; then bad "counter-reset: BLOCKED with a live beat"
-elif [ -f "$W/_bmad-output/pipeline-block-state.txt" ]; then bad "counter-reset: the rapid-fire counter SURVIVED a live-beat allow — a yield burst can still trip the backoff"
-elif fired_live "$W"; then ok "counter-reset: the live-beat allow clears the rapid-fire state (a yield is progress)"
-else bad "counter-reset: the allow did not come from Check 2b"; fi
+# THE DEFECT THESE ARMS EXIST TO CATCH, and the reason section 6 used to assert
+# its OPPOSITE. The live-beat path wiped the whole block-state file, so the next
+# block read `LAST_TS=0`, computed a delta of one and a half billion seconds,
+# took the "gap > window, progress happened" branch, and pinned the rapid-fire
+# counter at 1 forever. `BACKOFF` was then unreachable by any sequence with a
+# beat between two blocks -- which is the sequence a join-wait stall IS. The old
+# arm here REQUIRED the wipe (`the counter SURVIVED a live-beat allow` was its
+# FAIL text), so the fixture certified the defect.
+#
+# WHY A SEQUENCE AND NOT A PRE-SEEDED COUNTER. The old arm seeded a hot counter
+# and drove ONE invocation, which can only observe what the hook writes, never
+# what the next turn READS. The property is a state machine across turns, so the
+# arms drive it as one.
+#
+# THE OFFENDER AND THE NEAR-MISS DIFFER IN ONE VARIABLE — whether the beat
+# CONSUMED TIME — and in nothing else. Same event shape, same marker handling,
+# same number of blocks. Without that pairing an arm that flags every sequence
+# reads exactly like one that discriminates.
+beat_on()  { printf '%s' "$(( $(date +%s) + 100 ))" > "$1/_bmad-output/.beat-inflight"; }
+beat_off() { rm -f "$1/_bmad-output/.beat-inflight"; }
+# Push the recorded block timestamp back, so the NEXT block reads a real elapsed
+# gap. This is how a beat that genuinely slept is expressed without sleeping:
+# the fixture cannot spend 30s per arm, and `date` is not injectable into the
+# hook. It rewrites the hook's own OUTPUT, never its input grammar.
+age_state() {
+  _sf="$1/_bmad-output/pipeline-block-state.txt"; [ -f "$_sf" ] || return 0
+  _t="$(sed -n '1p' "$_sf")"; _c="$(sed -n '2p' "$_sf")"
+  printf '%s\n%s\n' "$(( _t - 100 ))" "$_c" > "$_sf"
+}
+# Drive one event sequence: B = block turn (no beat), L = live-beat turn,
+# G = the previous beat consumed real time. Echoes the decision sequence.
+drive_seq() {
+  _w="$1"; shift
+  for _e in "$@"; do
+    case "$_e" in
+      G) age_state "$_w"; continue ;;
+      L) beat_on "$_w" ;;
+      B) beat_off "$_w" ;;
+    esac
+    drive_stop "$_w" >/dev/null
+  done
+  # ENTRIES ONLY, via the grammar the log's own header prescribes: one event is
+  # one `## <timestamp> -- <EVENT>` line. A bare token grep also matches the
+  # header, which names every event type in its legend — measured while writing
+  # these arms, where it put three phantom `BACKOFF`s in front of every sequence
+  # and made 6a pass without the detector firing at all.
+  sed -n 's/^## [^ ]* -- //p' "$_w/$LOG" 2>/dev/null \
+    | grep -E '^(BLOCKED \(rapid-fire [0-9]+/[0-9]+\)|BACKOFF|ALLOWED_BY_LIVE_BEAT)$' | tr '\n' ' '
+}
+backed_off() { case "$1" in *BACKOFF*) return 0 ;; esac; return 1; }
+
+# 6a. THE OFFENDER — the reference consumer's measured sprint-305 shape: a block,
+#     an instantly-returning beat, a block, a beat, ... Every beat consumes no
+#     time, so nothing is progressing and the stall MUST be reported.
+W="$(bash "$HERE/seed.sh" sequence)"; SEQ="$(drive_seq "$W" B L B L B L B L B)"
+if backed_off "$SEQ"; then ok "beat-churn stall: BACKOFF is reached through interleaved live beats (the detector can fire)"
+else bad "beat-churn stall: no BACKOFF in [$SEQ] — a beat between every pair of blocks still pins the counter, so no stall can ever be confirmed"; fi
+case "$SEQ" in *'ALLOWED_BY_LIVE_BEAT'*) ok "...and the yields themselves were still ALLOWED (the backoff did not come from losing Check 2b)" ;;
+  *) bad "beat-churn stall: no ALLOWED_BY_LIVE_BEAT in [$SEQ] — Check 2b stopped firing, so this arm proves nothing about the counter" ;; esac
+rm -rf "$W"
+
+# 6b. THE NEAR-MISS — the identical event shape, except each beat CONSUMED real
+#     time. That is a healthy long join and it must stay silent.
+W="$(bash "$HERE/seed.sh" sequence)"; SEQ="$(drive_seq "$W" B L G B L G B L G B L G B)"
+if backed_off "$SEQ"; then bad "slow-beat near-miss: BACKOFF fired in [$SEQ] — a healthy long join is being reported as a stall"
+elif case "$SEQ" in *'rapid-fire 1/3'*) false ;; *) true ;; esac; then
+  bad "slow-beat near-miss: no 'rapid-fire 1/3' in [$SEQ] — the hook emitted nothing recognizable and the quiet reads vacuously"
+else ok "slow-beat near-miss: stays quiet — a beat that consumed time resets the counter through the window test"; fi
+rm -rf "$W"
+
+# 6c. A YIELD BURST alone must never trip the backoff. Nothing on the live-beat
+#     path touches the counter; only a BLOCK does. This is the property the
+#     deleted wipe was reasoned to protect, held here without it.
+W="$(bash "$HERE/seed.sh" sequence)"; SEQ="$(drive_seq "$W" B B B L L L L L L)"
+if backed_off "$SEQ"; then bad "yield burst: BACKOFF fired in [$SEQ] — a run of legitimate yields tripped the stall detector"
+elif case "$SEQ" in *'ALLOWED_BY_LIVE_BEAT'*) false ;; *) true ;; esac; then
+  bad "yield burst: no ALLOWED_BY_LIVE_BEAT in [$SEQ] — the yields never happened, so the quiet proves nothing"
+else ok "yield burst: six live-beat allows leave the rapid-fire counter untouched"; fi
+rm -rf "$W"
+
+# =============================================================================
+# 7. THE FLOW LOG NEVER PRINTS AN EPOCH AS A DELTA.
+# =============================================================================
+# `Seconds since previous block` is read by a human deciding whether a gap was a
+# pause or a stall. With no previous block recorded the raw subtraction yields
+# the current epoch — a number that reads as an interval and is off by fifty
+# years. All 15 of the reference consumer's sprint-305 blocks printed one.
+W="$(bash "$HERE/seed.sh" sequence)"; drive_seq "$W" B B >/dev/null
+DELTAS="$(sed -n 's/^- Seconds since previous block: //p' "$W/$LOG" 2>/dev/null)"
+# HERE-STRINGS, NOT `printf | grep -q` — I54/I54b. This file sets `pipefail`, and
+# a reader that leaves at its first match while the writer is still pushing makes
+# the pipeline answer with the WRITER's EPIPE, so the test reports NOT-FOUND on
+# input that contains the pattern. It is a size threshold, not a race. Both arms
+# below decide a verdict on that status, which is exactly the shape the invariant
+# is looking for; the first draft of this section shipped the pipeline form and
+# the gate failed twelve fixtures on it.
+if [ -z "$DELTAS" ]; then bad "delta print: no 'Seconds since previous block' line was emitted at all — this arm cannot see its subject"
+elif grep -qE '^[0-9]{9,}$' <<< "$DELTAS"; then
+  bad "delta print: an epoch-scale value reached the flow log ($(tr '\n' ' ' <<< "$DELTAS")) — a broken clock reading as a long quiet gap"
+elif grep -q 'first block' <<< "$DELTAS"; then
+  ok "delta print: the first block reports 'first block', never a raw epoch"
+else bad "delta print: the first block printed '$(head -1 <<< "$DELTAS")' — expected the 'first block' wording"; fi
 rm -rf "$W"
 
 echo

@@ -34,6 +34,47 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.406.0] — 2026-08-25
+
+### Fixed: the stall detector could not fire, and the fixture guarding it asserted the defect
+
+s305 root cause 4. `ai-dlc-continue.sh`'s `ALLOWED_BY_LIVE_BEAT` path ran `rm -f "$STATE_FILE"`,
+deleting the block TIMESTAMP along with the rapid-fire counter. The next block therefore read
+`LAST_TS=0`, computed `DELTA = NOW - 0` (~1.79e9), took the `gap > window, progress happened`
+branch, and pinned the counter at 1. `BACKOFF` was unreachable by any sequence that put a beat
+between two blocks — which is the sequence a join-wait stall is. Present since v0.81.0.
+
+Measured on the reference consumer's sprint 305, controls in the same invocation: `BLOCKED` **15**,
+all fifteen reading `rapid-fire 1/3`; `ALLOWED_BY_LIVE_BEAT` **240**; `BACKOFF` **0**; impossible-event
+control **0** — against 170 wait-beat arms and 16.7 h inside join-wait loops that nothing reported.
+All 15 blocks printed an epoch as their delta (min `1787395192`).
+
+**The fix is a deletion, because preserving `LAST_TS` while still zeroing the counter fixes
+nothing.** A zeroed counter makes the next block `0 + 1 = 1`, the identical value the epoch delta
+forced. Driven both ways over four event sequences against the committed hook, the decision
+sequence came back byte-identical and only the printed delta moved. **The clock is the progress
+signal**: a beat that genuinely consumed time pushes `DELTA` past the window and the existing
+`else` branch resets the counter on its own; a beat that returned instantly consumes no time, so
+the counter climbs and the stall is reported. A yield burst still cannot trip the backoff —
+nothing on the live-beat path increments the counter, only a block does.
+
+Second change, same root cause: the flow log **no longer prints an epoch as a delta**. With no
+previous block recorded it reports `first block`.
+
+`core/fixtures/implementation-join-yield` **9 → 14 assertions**. Its section 6 previously
+REQUIRED the wipe — `the rapid-fire counter SURVIVED a live-beat allow` was its FAIL text — so
+the fixture certified the defect. It now drives event SEQUENCES rather than one invocation,
+because the property is a state machine across turns that no single-invocation seed can express.
+Five mutants, each built as a copy behind a `cmp -s` guard, run against the file the fixture
+actually RESOLVES: the committed hook kills 2 (one arm per remedy); reverting only the delta
+guard kills 1; restoring only the wipe kills 1; a subject replaced by `exit 0` kills 12 of 14,
+so both absence-shaped arms carry a positive conjunct and cannot pass on silence. The unmutated
+control passes.
+
+**A sixth mutant is the reason the remedy on file was not the remedy shipped.** The triage plan
+prescribed keeping `LAST_TS` and zeroing the counter; built and run, that variant is killed by
+the same two arms as the unfixed hook.
+
 ## [0.405.0] — 2026-08-25
 
 ### Fixed: core prescribed `git push` with no time budget, so every consumer push could be SIGKILLed

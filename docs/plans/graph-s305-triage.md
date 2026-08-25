@@ -74,18 +74,22 @@ At this plan's writing those read `FAIL — 24 blocking, 3 ambiguous`; `134`;
 ### What is DONE — do not redo any of it
 
 **Phase 1 (RC-1) is DONE, shipped as v0.404.0 (`fe64a47a`). Action 6b (RC-1b) is DONE,
-shipped as v0.405.0 (`fea38ec7`), taken out of order at the operator's direction. Both merged
-to `main` and pushed. Actions 2, 3, 4, 5, 6 and 7 are open. Start at NEXT ACTION 2.** The gate ran green on it —
-`AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`, gate exit 0, 0 FAIL lines, 163 fixtures
-ok, `readset-skip`, `artifact-path-conformance` and `validator-fork-budget` read by name
-against an impossible-name control of 0.
+shipped as v0.405.0 (`fea38ec7`), taken out of order at the operator's direction. Phase 2
+(RC-4) is DONE, shipped as v0.406.0. All merged to `main` and pushed. Actions 3, 4, 5, 6 and 7
+are open. Start at NEXT ACTION 3.**
 
-**Tree state at handoff (`902197f2`):** on `main`, clean, level with `origin/main`, `VERSION`
-`0.404.0`. Consumer ledger re-checked at the phase boundary and unchanged at
+**Tree state at handoff:** on `main`, clean, level with `origin/main`, `VERSION` `0.406.0`.
+Consumer ledger re-checked at the phase boundary and unchanged at
 `a8f61789e1c947a8251eef9b4cb7c098`; nothing in `/Users/n8/git/graph` was written — its three
 dirty paths (`.context-sensor-state`, `.driver/turns`, `pipeline-continuation-log.md`) belong
-to its own paused session and were dirty before this work began. Phase 2's reconnaissance is
-filed under RC-4's remedy, so that phase starts at the sites rather than the search.
+to its own paused session and were dirty before this work began.
+
+**THREE PREMISES IN RC-4'S EVIDENCE WERE MEASURED FALSE while executing phase 2, and the
+remedy that shipped is not the remedy that was filed. The operator chose it on the
+measurement.** All three are corrected in RC-4's own section rather than here, because that is
+where a later reader meets them. The short form: the filed remedy — keep `LAST_TS`, zero the
+counter — is BEHAVIOURALLY INERT, and a mutant built from it is killed by the same two fixture
+arms that kill the unfixed hook.
 
 **TWO PREMISES BELOW WERE MEASURED FALSE while executing phase 1, and both are corrected
 here rather than in the evidence they contradict.**
@@ -126,10 +130,18 @@ a heading is a claim about the tree and the probe is a reading of it.
 The sprint cannot safely resume until the consumer can push, which is why RC-1 is action 1.
 
 **The probes are NOT in action order and one of them is out of family, so the map is written
-out rather than inferred.** `P1a`/`P1b`/`P1c` → action 1 (DONE). `P1d` → action 6b (DONE). `P2` → action 2. `P3` → action 3.
+out rather than inferred.** `P1a`/`P1b`/`P1c` → action 1 (DONE). `P1d` → action 6b (DONE).
+`P2` → action 2 (DONE). `P3` → action 3.
 `P4` → action 4. `P5` → action 5. `P6` → action 6. `P7` → action 7. Read the ACTION number, not the
 probe's; a session going top-down through the probe list reaches `P1d` first and would start
 in the wrong place.
+
+**`P2` grew a second way to read DONE and the fix had to work around it.** It greps the
+live-beat window for the literal `rm -f "$STATE_FILE"`, so PROSE in that window naming the
+command it is looking for holds the probe at TODO after the command is gone. Measured: the
+first draft of the fix explained itself by quoting the deleted line, and `P2` read TODO
+against a correctly fixed hook. The comment now describes the removal without spelling it,
+and says why in the comment itself.
 
 1. **RC-1 — unblock the consumer's push.** **Declare `_bmad-output/party-mode` in core's
    own `areas:` block FIRST** (`core/skills/ai-dlc/artifact-path-grammar.md`) — see the
@@ -138,9 +150,10 @@ in the wrong place.
    prescription blindness with a derived join; ship `derive-fixture-readsets.sh` into
    `core/scripts/`, `install.sh`, `uninstall.sh` and both manifest copies, and make
    `core/git-hooks/pre-push` generate the map rather than fall back to all-155.
-2. **RC-4 — make the stall detector able to fire.** Stop `rm -f "$STATE_FILE"` on the
-   live-beat path; reset the COUNTER and keep `LAST_TS`. Refuse to print an epoch as a
-   delta. Add the fixture arm that proves `BACKOFF` is reachable.
+2. **RC-4 — COMPLETE, SHIPPED AS v0.406.0.** The stall detector can now fire. What shipped is
+   a DELETION of the live-beat state wipe, not the counter-reset that was filed here — see
+   RC-4's remedy for the differential that changed it, and note that the plan's own fixture
+   prescription would have produced a vacuous arm.
 3. **RC-3 — the two escalation guards.** A `PreToolUse` deny on an `AskUserQuestion`
    carrying a question with fewer than two options, and a `PostToolUse` on `SendMessage`
    that logs `ESCALATION_UNDELIVERED` on `success:false`.
@@ -453,7 +466,53 @@ Consequence, and it is the operator's reported symptom: **170 wait-beat arms and
 inside join-wait loops**, while the one mechanism built to say *"this is a stall, investigate
 the transcript"* fired zero times. Introduced v0.81.0.
 
-### Remedy
+### Remedy — COMPLETE, SHIPPED AS v0.406.0
+
+**RC-4 SHIPPED. This phase is closed and there is nothing here to execute.** Two things
+changed in `core/hooks/ai-dlc-continue.sh` and they are stated in the next paragraph.
+
+**The three-numbered remedy that this section used to open with is NOT what shipped.** It was
+built as a mutant, driven, and measured inert. It now sits at the END of this section under
+its own heading, marked superseded, kept only so a reader can see which of its premises were
+wrong. Nothing between here and that heading is superseded.
+
+**What shipped.** The live-beat state wipe is DELETED — that path now
+touches the block state not at all. **The clock is the progress signal**, so the counter needs
+no separate reset: a beat that genuinely consumed time pushes `DELTA` past
+`RAPID_WINDOW_SECONDS` and the pre-existing `else` branch resets the counter itself, while a
+beat that returned instantly consumes no time and lets the counter climb. Item 2 shipped as
+filed. The fixture is `core/fixtures/implementation-join-yield`, **9 → 14 assertions**.
+
+**Premise 1, FALSE: "so `COUNTER=1` — every time."** True only where a state wipe precedes
+every block. Four consecutive blocks with no intervening beat DO reach `BACKOFF` on the
+unfixed hook, measured. The unreachable case is specifically the ALTERNATING one, which is
+graph's.
+
+**Premise 2, FALSE: the filed remedy item 1 is BEHAVIOURALLY INERT.** Zeroing the counter
+makes the next block `0 + 1 = 1`, the identical value the epoch delta forced. Built as a
+mutant and driven against the committed hook over four event sequences: the decision sequence
+came back BYTE-IDENTICAL, only the printed delta moved. The shipped fixture kills that mutant
+with the same two arms that kill the unfixed hook.
+
+**Premise 3, FALSE: remedy item 3's arm as prescribed is VACUOUS.** "Interleaving live beats
+with rapid blocks and asserting `BACKOFF` is reached" PASSES ON THE UNFIXED HOOK — one beat
+followed by four blocks reaches `BACKOFF` today. The arm that discriminates holds the event
+shape fixed and varies ONE thing, whether the beat CONSUMED TIME: alternating instant beats
+must reach `BACKOFF`, the same sequence with beats that consumed time must stay silent.
+
+**A fourth trap, met while writing the fixture and worth the line.** A bare token grep over
+the flow log also matches the log's own legend, which names every event type — it put three
+phantom `BACKOFF`s in front of every sequence and made the offender arm pass without the
+detector firing. `core/hooks/ai-dlc-continue.sh` documents the correct grammar in the header
+it writes: one event is one `## <timestamp> -- <EVENT>` line.
+
+---
+
+#### The filed remedy — SUPERSEDED, do not execute
+
+Everything above this heading describes what actually shipped. The three items below are the
+original prescription, kept verbatim as the record of what was measured wrong: item 1 is
+inert, item 3's arm is vacuous, and only item 2 shipped as written.
 
 1. **Stop deleting the timestamp.** Reset the COUNTER on a live beat; keep `LAST_TS`. A live
    beat is forward progress for the counter, not amnesia for the clock.

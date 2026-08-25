@@ -68,9 +68,12 @@ case "$CASE" in
   # not manufacture an allow of its own.
   no-snapshot)    printf '%s' "$(( NOW + 100 ))" > "$MARK" ;;
 
-  # Progress: a live-beat allow must reset the rapid-fire counter so a burst of
-  # legitimate yields cannot trip the backoff. Pre-seed a hot counter.
-  counter-reset)  write_snapshot; printf '%s' "$(( NOW + 100 ))" > "$MARK"; printf '%s\n%s\n' "$NOW" "5" > "$OUT/pipeline-block-state.txt" ;;
+  # A bare active pipeline with no marker and no block state, for the SEQUENCE
+  # arms. Those drive the hook repeatedly and toggle the marker themselves,
+  # because the property under test is a state machine over several turns and no
+  # single-invocation seed can express it. Identical on disk to no-marker; the
+  # name is what tells a reader which arm owns it.
+  sequence)       write_snapshot ;;
 
   *) echo "FIXTURE ERROR: unknown case '$CASE'" >&2; exit 2 ;;
 esac
