@@ -43,13 +43,20 @@ echo "P5  full re-read mandate     $([ "$(grep -cF 'IN FULL' core/skills/ai-dlc/
 p6a=$([ -e core/scripts/sync-transient-ignore.sh ] && echo 1 || echo 0)
 p6b=$(grep -cF 'bash "$SYNC_IGNORE"' scripts/install.sh)
 echo "P6  transient ignore rule    $(v "$((p6a * p6b))")"
-echo "P7  consumer brief filed     $(v "$(ls docs/reviews/ 2>/dev/null | grep -c s305)")"
+echo "P7  consumer runbook filed   $(v "$([ -f docs/plans/graph-s305-runbook.md ] && echo 1 || echo 0)")"
 echo "CTL must be DONE             $([ -d core ] && echo DONE || echo TODO)"
 echo "CTL must be TODO             $([ -e core/NO-SUCH-CONTROL.sh ] && echo DONE || echo TODO)"
 ```
 
-**P1a through P6 read DONE; P7 reads TODO; `P1d CONTROL` reads DONE and the
-two block controls read DONE then TODO.**
+**EVERY probe now reads DONE, `P1d CONTROL` reads DONE, and the two block controls read
+DONE then TODO.** That is the whole of this plan's build work. What remains is not a phase —
+see `## YOUR ROLE NOW` immediately below.
+
+**P7's ORIGINAL PROBE LOOKED IN `docs/reviews/`.** The deliverable it was written for was a
+"consumer brief"; what the operator asked for, and what shipped, is an executable RUNBOOK the
+graph session is told to READ AND FOLLOW, which is a handoff and therefore lives in
+`docs/plans/` where `validate-plan-shape.sh` can hold it to a shape a stranger can act on. The
+probe now keys on that file.
 
 **P6's ORIGINAL PROBE WAS REPLACED BECAUSE IT WENT GREEN ON A COMMENT.** It grepped
 `templates/` and `scripts/install.sh` for `wait-beats`, and the shipped fix put that token in
@@ -90,11 +97,14 @@ item 1 DROPPED on the operator's decision — see RC-3's remedy. Action 4 (RC-2)
 shipped as v0.408.0 (`faea82e7`, merged `dbdb18cb`). Action 5 (RC-5) is DONE, shipped as
 v0.409.0 (`16cc6799`, merged `f7318db0`). Action 6 (RC-6) is DONE, shipped as v0.410.0.
 All merged to `main` and pushed.
-Action 7 is the only one open. Start at NEXT ACTION 7.**
+Action 7 (the consumer runbook) is DONE — `docs/plans/graph-s305-runbook.md`.
+**ALL SEVEN ACTIONS ARE COMPLETE. There is no next action.** Read `## YOUR ROLE NOW` below
+before you do anything: you are standby support for the graph session, not its executor.**
 
 **Tree state at handoff:** on `main`, clean, level with `origin/main`, `VERSION` `0.410.0`.
-**NOTHING IS IN FLIGHT** — no branch open, no partial edit, no unrun gate. Action 7 has not
-been started.
+**NOTHING IS IN FLIGHT** — no branch open, no partial edit, no unrun gate, and no action
+left to take in this repo. The remaining work is the graph session's, and it is driven by
+`docs/plans/graph-s305-runbook.md`, which the operator starts separately.
 
 **RC-6 MEASURED WIDER THAN IT WAS FILED, and the operator chose the wider scope.** The entry
 below records 134 tracked files under one path; the measurement was 138 across THREE —
@@ -107,7 +117,8 @@ names the machinery constructs, rendered by a shipped script and bound by **I95*
 
 **THE CONSUMER STILL HAS ALL 138 FILES TRACKED, AND NOTHING IN THIS RELEASE UNTRACKS THEM.**
 An ignore rule does nothing to a file git already tracks. The renderer NAMES them and prints
-the `git rm -r --cached` command; running it is action 7's business, on the consumer side.
+the `git rm -r --cached` command. Running it is the RUNBOOK's action 4, executed by the graph
+session in its own tree — never by a write from here.
 
 **THE COMPACTION-DURABLE RULE CHANNEL IS EFFECTIVELY FULL: 44522 of 44544 bytes, 22 free.**
 Arm A6 of `scripts/validate-claude-rules.sh` fails the push over the ceiling, so any rule you
@@ -215,7 +226,49 @@ are the only place a phase's completion is written by hand, and they are corrobo
 **the probe block above is the authority.** Where the two disagree the probe is right, because
 a heading is a claim about the tree and the probe is a reading of it.
 
-### NEXT ACTIONS — numbered, in order
+### YOUR ROLE NOW: STANDBY SUPPORT. You are not the executor any more.
+
+**All seven actions are DONE. Do not start a phase, do not open a release branch, and do not
+re-run the investigation.** This plan built the machinery; the remaining work happens in the
+CONSUMER, and a different session does it.
+
+**The operator starts that session separately** with `READ and FOLLOW
+docs/plans/graph-s305-runbook.md`. It executes in `/Users/n8/git/graph`, which it is entitled
+to write. **You are not.** Your boundary is unchanged: `/Users/n8/git/ai-dlc` is WRITE,
+`/Users/n8/git/graph` is READ, never write. If the graph session asks you to change something
+in its tree, the answer is that you tell IT what to run.
+
+**What you are for.** The graph session hits something the runbook does not predict and
+escalates through the operator. You have what it does not: the distribution's source, the
+measurements behind every figure in the runbook, and this plan's whole evidence trail. Answer
+from those.
+
+**The four places it is most likely to need you**, in descending order of likelihood:
+
+1. **The `/ai-dlc-update` pull, 0.403.0 → 0.410.0. It is the ONE step nobody rehearsed**, and
+   the runbook says so in its own text. What WAS established mechanically is the path mapping
+   (`core/skills/ai-dlc-update/reconcile/preclassify.sh:66`) and that a newly shipped executable
+   carries its mode across (`core/skills/ai-dlc-update/reconcile/apply.sh:196`). A DECISION row
+   the graph session cannot adjudicate is the expected escalation.
+2. **A fixture failing in graph's own pre-push after the pull.** The pull delivers new fixtures
+   into `tests/fixtures/`. `transient-ignore-block` was run IN THE CONSUMER LAYOUT on the
+   rehearsal clone — exit 0, 11 ok, 0 FAIL, 3 mutants killed, resolving
+   `scripts/ai-dlc/sync-transient-ignore.sh` — so that one is known good there. The others were
+   not individually exercised in a consumer.
+3. **The read-set map.** `sudo bash scripts/ai-dlc/derive-fixture-readsets.sh --all` needs root
+   and prompts for a password. A pre-push cannot prompt, which is why it is a manual step and
+   not automation somebody forgot to write. Without it the hook runs all 155 fixtures at 161s.
+4. **A count in the runbook's probe block not matching.** That means somebody worked in the
+   graph tree after 2026-08-25, and the step ORDER depends on those counts. It is a stop.
+
+**Do not pre-emptively fix things in `core/` because the graph session hit a problem.** Find out
+what it actually hit first; the measured base rate of expired premises in this program is
+roughly one in two, and that cuts both ways.
+
+**Ping the operator** on any question, on any decision, and on completion — including an early
+stop.
+
+### THE ACTIONS — all seven complete, kept for their evidence
 
 **Run the probe block first and execute the LOWEST-NUMBERED ACTION whose probe reads `TODO`.**
 The sprint cannot safely resume until the consumer can push, which is why RC-1 is action 1.
@@ -223,7 +276,7 @@ The sprint cannot safely resume until the consumer can push, which is why RC-1 i
 **The probes are NOT in action order and one of them is out of family, so the map is written
 out rather than inferred.** `P1a`/`P1b`/`P1c` → action 1 (DONE). `P1d` → action 6b (DONE).
 `P2` → action 2 (DONE). `P3` → action 3 (DONE). `P4` → action 4 (DONE).
-`P5` → action 5 (DONE). `P6` → action 6 (DONE). `P7` → action 7. Read the ACTION number, not the
+`P5` → action 5 (DONE). `P6` → action 6 (DONE). `P7` → action 7 (DONE). Read the ACTION number, not the
 probe's; a session going top-down through the probe list reaches `P1d` first and would start
 in the wrong place.
 
@@ -299,10 +352,21 @@ and says why in the comment itself.
    scope: 119s in one fixture is what makes a 120s default unsurvivable at all. FILED as
    **BL-088** — that did not happen when 6b shipped, and was caught only when a later phase
    went looking. It is distinct from BL-005, which is a different pole in a different tree.
-7. **Deliver the consumer brief.** Rehearse on a `file://` clone, then hand the paused
-   graph session an exact command list: migrate the 24 paths, untrack the 134 wait-beats,
-   re-run `validate-artifact-paths.sh` and the pre-push, resume gate-3 only after both are
-   green.
+7. **COMPLETE — the runbook is `docs/plans/graph-s305-runbook.md`.** Rehearsed on a
+   `--no-hardlinks` `file://` clone at `386a56d34`, ten numbered actions, and it carries what
+   was NOT rehearsed as explicitly as what was. Measured end to end on that clone:
+   `FAIL — 24 blocking` → **`PASS`**; 138 index entries removed across the three transient
+   paths; all three then `IGNORED` with a durable control reading `not-ignored`;
+   `_bmad-output/.audit-accepted-exceptions` still tracked and still unignored, which is the
+   check that validates enumerating over globbing; pre-push exit 0 at **161s**, 0 FAIL, with
+   `no read-set map -- running all 155`.
+
+   **Three ORDERING constraints came out of the rehearsal and none was in this plan's text.**
+   `migrate-artifact-paths.sh` refuses a dirty tree
+   (`core/scripts/migrate-artifact-paths.sh:127`), so the 22 `git mv`s must be COMMITTED before
+   it runs. `git commit` without `-a` does not stage `.gitignore`, which the renderer edits on
+   disk. And the renderer and the read-set deriver do not exist in graph until the pull, so the
+   pull is action 1 and not a footnote.
 
    **The path half of that is already REHEARSED, on a `file://` clone at `386a56d34`.**
    22 tracked files `git mv` from `_bmad-output/planning-artifacts/party-mode/s305/` to
@@ -761,7 +825,7 @@ Verified across Position sections of 2, 10, 40 and 400 rows: the excerpt survive
 re-measured Read-byte share **over a real post-compact sequence, not a projection**. That
 sequence requires a CONSUMER running the new code through an actual compaction, which no run
 here can produce. The −78% is a derived per-event figure taken from the two files on disk.
-**Whoever delivers action 7 should carry this**: the brief is the first point at which the
+**Action 7 carried this into the runbook**: the runbook is the first point at which the
 consumer-side measurement becomes takeable, and RC-5 closes there or not at all.
 
 ---
@@ -807,7 +871,8 @@ untracks consumer-owned dot-entries no declaration here can enumerate.
 
 **Untracking is NOT done and cannot be done from here.** An ignore rule has no effect on a
 tracked file. The renderer names the still-tracked paths and prints the `git rm -r --cached`
-command; running it belongs to the brief in action 7, never to a write into the consumer.
+command; running it is the runbook's action 4, executed by the graph session, never a write
+into the consumer from here.
 
 ---
 
