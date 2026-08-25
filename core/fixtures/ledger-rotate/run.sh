@@ -879,6 +879,121 @@ else
   fi
 fi
 
+echo "== BL. a close on the entry's OWN boundary line is seen by the archive predicate =="
+
+# The boundary-line rule ends in `next`, which used to skip every flag-setting rule below it:
+# the archive test, the lifted loose test and the retained-copy test alike. An entry whose
+# close annotation sat on its own opening line was therefore ARCHIVED BY NOTHING AND REPORTED
+# BY NOTHING -- it fell through `started && !closed && loose` into `keep`, silently. That is
+# the state the stuck list exists to eliminate, surviving in the one shape the stuck list
+# could not see.
+#
+# THE TWO LEDGERS DIFFER IN ONE VARIABLE AND NOTHING ELSE: where the identical, correctly
+# spelled annotation sits. Anything else moving between them would make this a comparison of
+# two ledgers rather than of two line positions.
+#
+# THE BODY CASE IS THE NON-VACUITY CONTROL, and it is the half that says the fix widened the
+# SUBJECT rather than loosening the RULE. A change that made everything archivable would move
+# both rows and read exactly like this arm passing.
+BLW="$WORK/bl"; rm -rf "$BLW"; mkdir -p "$BLW"
+bl_ledger() { # $1 path, $2 the entry's opening line, $3 its body line
+  cat > "$1" <<EOF
+# Push Candidate Ledger
+
+Preamble that always stays.
+
+- **PC-BL-OPEN** — an open entry with no close anywhere.
+  Body text carrying no annotation.
+
+$2
+$3
+EOF
+}
+bl_ledger "$BLW/onboundary.md" \
+  '- **ADOPTED UPSTREAM (v0.135.0, verified 2026-08-25).** validate-ci-gates.sh' \
+  '  Body line carrying no annotation of its own.'
+bl_ledger "$BLW/inbody.md" \
+  '- **validate-ci-gates.sh** legacy id-less entry' \
+  '  **ADOPTED UPSTREAM (v0.135.0, verified 2026-08-25).**'
+
+bl_moves() { bash "$ROT" "$1" --archive "$BLW/arch.md" 2>&1 | grep -c 'would move'; }
+bl_on="$(bl_moves "$BLW/onboundary.md")"
+bl_in="$(bl_moves "$BLW/inbody.md")"
+
+if [ "$bl_on" -eq 1 ]; then
+  ok "a strict close on the entry's own boundary line is archivable"
+else
+  bad "a correctly spelled close on the boundary line was NOT seen — the entry is archived by nothing and reported by nothing, which is invisible in both directions"
+fi
+if [ "$bl_in" -eq 1 ]; then
+  ok "CONTROL: the same close one line down in the body still archives (the body path did not regress)"
+else
+  bad "CONTROL: the BODY case stopped archiving — this change broke the path that already worked"
+fi
+
+# THE LOOSE HALF. Setting only the archive flag from the boundary line would fix the loud case
+# and leave a versionless boundary close exactly as invisible as before -- no archive, and no
+# stuck row either. That entry must become a REPORTED stuck row, which is a presence assertion.
+bl_ledger "$BLW/looseboundary.md" \
+  '- **ADOPTED UPSTREAM (absorbed before base acdae7a, verified 2026-07-24).** thing' \
+  '  Body line carrying no annotation of its own.'
+bl_stuck="$(bash "$ROT" "$BLW/looseboundary.md" --archive "$BLW/arch.md" 2>&1 | grep -c 'NOT archivable')"
+if [ "$bl_stuck" -eq 1 ]; then
+  ok "a VERSIONLESS close on the boundary line is reported as stuck rather than vanishing"
+else
+  bad "a versionless boundary-line close was neither archived nor reported — the loose half of the fix is missing, so the quiet case is still invisible"
+fi
+
+# --- MUTANT: restore the defect by reverting ONLY the boundary-line flag setting -----------
+# Both added lines are reverted together. Reverting one leaves the other proving its own half,
+# and the arm comes back green on a subject that is still half broken -- the layered-fix trap.
+BLM="$WORK/blmut"; rm -rf "$BLM"; mkdir -p "$BLM"
+cp "$(dirname "$ROT")"/*.sh "$BLM/" 2>/dev/null || true
+
+cp "$ROT" "$BLM/ledger-rotate.sh"
+bl_ctl="$(bash "$BLM/ledger-rotate.sh" "$BLW/onboundary.md" --archive "$BLM/arch.md" 2>&1 | grep -c 'would move')"
+if [ "$bl_ctl" -eq 1 ]; then
+  ok "  mutation control: an unmutated copy still archives the boundary-line close"
+else
+  bad "  mutation control: the unmutated copy archived nothing — a copy that cannot run scores as a kill below"
+fi
+
+# BOTH ADDED LINES ARE COUNTED AND BOTH MUST GO. This mutation is a two-layer revert and the
+# `cmp -s` guard cannot see a PARTIAL one -- deleting either line alone changes the file, so
+# `cmp` reports a mutation and the arm scores a kill for the layer that is still reverted while
+# the other half sits unproven. Caught exactly that way here: the loose line was rewritten from
+# `ledger_body_closes` to `ledger_entry_line_closes` and the mutation's second pattern silently
+# stopped matching. So the deletions are COUNTED, and a count other than 2 is a broken mutation.
+bl_deleted="$(awk '/if \(\$0 ~ \/\\\*\\\*ADOPTED UPSTREAM \\\(v\[0-9\]\/\) closed = 1/ { n++; next }
+     /if \(ledger_entry_line_closes\(\$0\)\) loose = 1/ { n++; next }
+     { print > "/dev/stderr" }
+     END { print n+0 }' "$ROT" 2>"$BLM/ledger-rotate.sh")"
+if [ "$bl_deleted" -ne 2 ]; then
+  bad "  mutation boundary-flags: reverted $bl_deleted of 2 added lines — a partial revert proves only the layer it left in place"
+elif cmp -s "$ROT" "$BLM/ledger-rotate.sh"; then
+  bad "  mutation boundary-flags: the mutation matched nothing, so the boundary-line assertions are unproven"
+else
+  m_on="$(bash "$BLM/ledger-rotate.sh" "$BLW/onboundary.md" --archive "$BLM/arch.md" 2>&1 | grep -c 'would move')"
+  m_in="$(bash "$BLM/ledger-rotate.sh" "$BLW/inbody.md"     --archive "$BLM/arch.md" 2>&1 | grep -c 'would move')"
+  m_ls="$(bash "$BLM/ledger-rotate.sh" "$BLW/looseboundary.md" --archive "$BLM/arch.md" 2>&1 | grep -c 'NOT archivable')"
+  if [ "$m_on" -eq 0 ]; then
+    ok "  mutation boundary-flags: without them the boundary-line close goes unseen again (the arm can fire)"
+  else
+    bad "  mutation boundary-flags: the mutant still archived the boundary-line close, so the arm above proves nothing"
+  fi
+  if [ "$m_ls" -eq 0 ]; then
+    ok "  mutation boundary-flags: and the VERSIONLESS boundary close stops being reported — the loose half is load-bearing too"
+  else
+    bad "  mutation boundary-flags: the versionless case was still reported under the mutant, so the loose half proves nothing"
+  fi
+  if [ "$m_in" -eq 1 ]; then
+    ok "  mutation boundary-flags: and the BODY case survives the mutant — the two paths are not entangled"
+  else
+    bad "  mutation boundary-flags: the mutant also killed the body case, so it is testing whether the script RUNS, not the boundary rule"
+  fi
+fi
+rm -rf "$BLM" "$BLW"
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "ledger-rotate: PASS"

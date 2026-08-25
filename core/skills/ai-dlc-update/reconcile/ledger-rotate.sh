@@ -95,6 +95,8 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 # byte-indistinguishable from a corpus with nothing in it. MEASURED before this guard existed:
 # rc=0 with 0 rows on the refusal path, against rc=0 with 1 row when the lift resolves.
 CLOSE_AWK="$(ledger_close_awk)" || exit 2
+CLOSE_AWK="${CLOSE_AWK}
+$(ledger_entry_line_close_awk)" || exit 2
 
 LEDGER="${1:-}"
 [ -n "$LEDGER" ] || { echo "usage: ledger-rotate.sh <ledger-path> [--archive <path>] [--apply]" >&2; exit 2; }
@@ -279,7 +281,41 @@ awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" -v st
     sub(/^[-#][ \t]*/, "", l); gsub(/\*\*/, "", l); gsub(/`/, "", l)
     sub(/[[:space:]]+$/, "", l); label = l
   }
-  { if (ledger_entry_shape($0) != "") { open_entry($0); buf[++n] = $0; next } }
+  # THE OPENING LINE MUST BE TESTED TOO, AND THIS `next` IS WHY IT WAS NOT.
+  #
+  # A close annotation sitting on the entry`s OWN boundary line was invisible to every rule
+  # below: `next` skips the archive test, the lifted loose test, and the retained-copy test
+  # alike. `flush()` then evaluated `started && !closed && loose` as false, and the entry went
+  # to `keep` -- ARCHIVED BY NOTHING AND REPORTED BY NOTHING. That is the state the stuck list
+  # was added to eliminate, surviving in the one shape the stuck list could not see.
+  #
+  # THE SPLIT GUARD ABOVE ALREADY READS THE BOUNDARY LINE, and its comment names the legacy
+  # id-less form that writes a close there. So the shape was understood and the fix landed on
+  # one of the two predicates; this is the other one.
+  #
+  # MEASURED, one variable changed, strict form, bullet shape preserved on both sides:
+  #   close ON the boundary line     before: 0 would move   after: 1 would move
+  #   same close one line INTO body  before: 1 would move   after: 1 would move
+  # The body path is unchanged, which is what says this widened the subject rather than the rule.
+  #
+  # BOTH FLAGS, NOT JUST `closed`. Setting only the archive flag would leave a boundary-line
+  # close carrying NO version invisible in both directions instead of becoming a correctly
+  # reported stuck row -- fixing the loud half and leaving the quiet half exactly as it was.
+  #
+  # ORDER MATTERS: `open_entry()` calls `flush()` first, which zeroes both flags for the
+  # entry that just ended. Setting them AFTER that call is what attaches them to the entry
+  # this line OPENS rather than to the one it closes.
+  #
+  # THE COUNT OF AFFECTED ENTRIES CANNOT BE READ OFF STUCK COUNTS. An entry in this shape
+  # appears in the stuck list only when some UNRELATED body line happens to match the loose
+  # rule, so every such count is a lower bound biased downward by a coincidence that has
+  # nothing to do with the property being counted. Measured on the reference consumer: its one
+  # instance was visible only because a neighbouring sub-bullet`s own annotation sat five lines
+  # inside its span.
+  { if (ledger_entry_shape($0) != "") { open_entry($0); buf[++n] = $0
+      if ($0 ~ /\*\*ADOPTED UPSTREAM \(v[0-9]/) closed = 1
+      if (ledger_entry_line_closes($0)) loose = 1
+      next } }
   # A DIGIT AFTER `(v`, AND THAT ONE CHARACTER CLASS IS THE WHOLE OF TWO FIXES.
   #
   # NO APOSTROPHES IN THIS COMMENT, AND THAT IS NOT STYLE. This awk program sits inside a shell
@@ -355,8 +391,15 @@ n_stuck="$(grep -c . "$TMPD/stuck-names")"
 # stays as it is; what changes is that its cost is now PAID BY SOMETHING rather than assumed.
 if [ "$n_stuck" -gt 0 ]; then
   echo "ledger-rotate: ${n_stuck} entry(ies) are CLOSED for re-verification but NOT archivable."
-  echo "  ledger-reverify.sh skips them, so they never appear in a report again; this script"
-  echo "  refuses them, so they are never filed. They stay in the live ledger indefinitely."
+  # THIS BANNER USED TO DESCRIBE THE STATE IT FIXES, IN THE PRESENT TENSE, INSIDE ITS OWN
+  # OUTPUT. It read "they never appear in a report again ... they are never filed" -- printed
+  # by the report that files them, two lines above the sentence saying the row IS the record.
+  # A reader who stopped at the first sentence concluded the state was unhandled and the
+  # prescribed remedy was the only exit. Measured: that is exactly what a consumer session did,
+  # and it produced an upstream request to add annotation spellings for a case already named
+  # two lines below. The rows below are the filing; say so where the reader is.
+  echo "  ledger-reverify.sh skips them and this script refuses them, so THIS ROW is the only"
+  echo "  place they appear. They stay in the live ledger and are re-reported every run."
   echo "  To archive one, write the annotation form this script accepts — bolded, with the"
   echo "  version immediately after the parenthesis:  **ADOPTED UPSTREAM (v<version>, verified <date>)**"
   echo "  If the close is genuine but has no version (absorbed before base, withdrawn, a"

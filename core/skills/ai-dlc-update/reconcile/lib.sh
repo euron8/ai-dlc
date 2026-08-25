@@ -364,3 +364,40 @@ ledger_close_awk() {
   fi
   printf 'function ledger_body_closes(l) { return (l ~ /%s/) }\n' "$_lca_pat"
 }
+
+# ledger_entry_line_close_awk() — the ENTRY-LINE close rule, lifted from the same single home.
+#
+# WHY A SECOND LIFT RATHER THAN REUSING THE FIRST. `ledger_body_closes()` is ANCHORED at `^[ \t]*`
+# because the ledger is prose that discusses closes as well as carrying them. A boundary line
+# begins `- **` or `## `, so that anchor can NEVER match one -- and a caller that tests a boundary
+# line with the body rule gets a predicate that is not merely wrong but INERT, silently answering
+# "not closed" for every entry line ever passed to it. Measured while building exactly that: the
+# arm asserting a versionless boundary-line close becomes a reported stuck row failed, because the
+# body rule could not fire on a bullet.
+#
+# reverify answers the boundary question with `entry_line_closes()`, which is deliberately
+# unanchored, and that is the rule a caller asking "would reverify skip this entry" must use.
+# Lifted rather than restated for the reason the function above states: a second copy of a
+# grammar is a second thing to keep in step, and this directory already lost that bet twice.
+#
+# THE EXTRACTION KEYS ON THE `return` LINE, not on the function header, because the header
+# carries no grammar and a header-keyed grep would happily lift a renamed function`s body.
+ledger_entry_line_close_awk() {
+  _elc_src="${SELF:-.}/ledger-reverify.sh"
+  # LITERAL PARENS AND A LITERAL PIPE, as in the sibling above: under `grep -E` a backslashed
+  # `\(` `\|` `\)` matches those characters, which is what the target line actually contains.
+  # Written unescaped they are a group and an alternation, and the group never closes -- the
+  # shim reports `error at position 66` rather than matching nothing, which at least fails loudly.
+  _elc_re_find='^[[:space:]]*return \(s ~ /ADOPTED UPSTREAM\|WITHDRAWN/\)'
+  if [ ! -r "$_elc_src" ]; then
+    echo "lib.sh: ledger_entry_line_close_awk cannot read $_elc_src -- the entry-line close grammar is single-homed there and must not be restated here" >&2
+    return 1
+  fi
+  _elc_n="$(grep -cE "$_elc_re_find" "$_elc_src")"
+  if [ "$_elc_n" != 1 ]; then
+    echo "lib.sh: ledger_entry_line_close_awk found $_elc_n candidate entry-line close rules in $_elc_src, expected exactly 1 -- the grammar is not single-homed, so there is no line to lift" >&2
+    return 1
+  fi
+  _elc_body="$(grep -E "$_elc_re_find" "$_elc_src" | sed -E 's|^[[:space:]]*||')"
+  printf 'function ledger_entry_line_closes(s) { %s }\n' "$_elc_body"
+}
