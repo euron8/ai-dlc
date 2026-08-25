@@ -5353,6 +5353,227 @@ Resolve it from $i94_schema instead. A second copy of the branch text hands the 
   fi
 fi
 
+# --- I95: every pipeline state path is CLASSIFIED transient or durable, in one place ---
+# WHY. The distribution shipped no .gitignore rule at all -- install.sh carried zero
+# references to one -- so every consumer discovered the transient half of _bmad-output/ by
+# finding churn in its own git history and hand-adding entries. The reference consumer had
+# added four that way over roughly four hundred releases, and meanwhile three others had
+# quietly become TRACKED: .wait-beats/ at 134 files, .driver/ at 3, .context-sensor-state at
+# 1. Nothing joined that hand-written list to the hooks creating the paths, so it could only
+# ever lag, and nothing reported the lag.
+#
+# THE SUBJECT IS THE PARTITION, NOT THE IGNORE LIST, and that is the whole reason this arm
+# earns its cost. Binding only the transient half would leave a new state path invisible until
+# someone noticed it in a diff -- the same failure one level up. Every top-level name the
+# machinery constructs must be classified one way or the other, so an unclassified path fails
+# the push the moment it is written. What renders into .gitignore is then a projection of a
+# complete declaration rather than a list somebody maintains.
+#
+# THE GRAMMAR IS SHARED WITH THE DECLARATION AND IS DELIBERATELY COMMENT-BLIND. core carries
+# worked path EXAMPLES in prose -- _bmad-output/x.md, s177/foo.md, party-mode/s<N>/ -- and an
+# arm that counted those would demand a declaration for names no program ever creates. The
+# false-positive set was measured over the live tree at ZERO with comments excluded and at
+# five with them included, and the five were all documentation examples. That exclusion is
+# also why arm (a) checks a declared producer with the SAME grammar rather than a whole-file
+# grep: a producer that only NAMES its path in a header comment constructs nothing, and a
+# substring search cannot tell those apart.
+#
+# ONE `python3` FOR THE CORPUS AND BOTH PROBE DIRECTIONS. An arm's fork count is a change to
+# the suite's wall clock -- validator-fork-budget exists to say so, and I94's first draft
+# breached it by resolving fields one interpreter start at a time. The reader below takes
+# (tag, root, schema) triples and tags every finding, so the live corpus and the two seeded
+# trees are one process rather than three.
+i95_schema="core/schemas/pipeline-state-paths.json"
+if [ ! -f "$i95_schema" ]; then
+  err "I95: $i95_schema is missing. It is the single classification of every path the shipped machinery writes under the pipeline root, and install.sh renders the consumer's .gitignore from it — without the file the installer writes NO ignore rules and reports that it skipped them, which is how 134 transient files became tracked in the reference consumer in the first place."
+else
+  # PROBE TREES FIRST, so the arm's ability to fire is established before its verdict on the
+  # corpus is read. The offender constructs an undeclared path on a live line; the near-miss
+  # names the same shape of path in a COMMENT and additionally constructs one that IS
+  # declared. An arm that flagged the near-miss would flag every documented example in core.
+  i95_probe="$(mktemp -d 2>/dev/null)"
+  i95_pos_root=""; i95_neg_root=""
+  if [ -n "$i95_probe" ]; then
+    mkdir -p "$i95_probe/pos/core/hooks" "$i95_probe/neg/core/hooks"
+    printf 'X="${STATE_DIR}/.i95-probe-undeclared"\n' > "$i95_probe/pos/core/hooks/probe.sh"
+    {
+      printf '# X="${STATE_DIR}/.i95-probe-nearmiss"\n'
+      printf 'Y="${STATE_DIR}/.wait-beats"\n'
+    } > "$i95_probe/neg/core/hooks/probe.sh"
+    i95_pos_root="$i95_probe/pos"; i95_neg_root="$i95_probe/neg"
+  fi
+
+  i95_out="$(python3 - \
+      live "$REPO_ROOT" "$REPO_ROOT/$i95_schema" \
+      pos "${i95_pos_root:-}" "$REPO_ROOT/$i95_schema" \
+      neg "${i95_neg_root:-}" "$REPO_ROOT/$i95_schema" <<'PY' 2>&1
+import io, json, os, re, sys
+
+NAME = r'[A-Za-z0-9_.-]+'
+PAT = re.compile(r'(?:\$\{(?:STATE_DIR|LOG_DIR)\}|_bmad-output)/(' + NAME + r')')
+DIRS = ['core/hooks', 'core/scripts', 'core/session-driver', 'core/git-hooks']
+
+
+def population(root):
+    """name -> first constructing file:line, over non-comment lines only."""
+    found = {}
+    for d in DIRS:
+        ad = os.path.join(root, d)
+        if not os.path.isdir(ad):
+            continue
+        for dirpath, _dirs, filenames in os.walk(ad):
+            for fn in sorted(filenames):
+                fp = os.path.join(dirpath, fn)
+                try:
+                    raw = io.open(fp, encoding='utf-8', errors='replace').read()
+                except Exception:
+                    continue
+                for i, line in enumerate(raw.splitlines(), 1):
+                    if line.lstrip().startswith('#'):
+                        continue
+                    for m in PAT.finditer(line):
+                        nm = m.group(1).rstrip('.')
+                        if nm and nm != '_bmad-output':
+                            found.setdefault(nm, '%s:%d' % (os.path.relpath(fp, root), i))
+    return found
+
+
+def constructs(path, name):
+    try:
+        raw = io.open(path, encoding='utf-8', errors='replace').read()
+    except Exception:
+        return False
+    for line in raw.splitlines():
+        if line.lstrip().startswith('#'):
+            continue
+        for m in PAT.finditer(line):
+            if m.group(1).rstrip('.') == name:
+                return True
+    return False
+
+
+args = sys.argv[1:]
+for i in range(0, len(args), 3):
+    tag, root, schema_p = args[i], args[i + 1], args[i + 2]
+    if not root or not os.path.isdir(root):
+        print('%s\tPROBEBROKEN\t-\troot %r is not a directory' % (tag, root))
+        continue
+    derived = population(root)
+    if not derived:
+        print('%s\tDISARMED\t-\tthe grammar matched nothing under %s' % (tag, ', '.join(DIRS)))
+        continue
+    try:
+        decl = json.load(io.open(schema_p, encoding='utf-8'))
+    except Exception as exc:
+        print('%s\tUNPARSED\t%s\t%s' % (tag, schema_p, exc))
+        continue
+
+    declared = {}
+    for e in (decl.get('paths') or []):
+        nm = (e.get('name') or '').strip()
+        if not nm:
+            print('%s\tFIELD\t<unnamed>\tan entry declares no name' % tag)
+            continue
+        if nm in declared:
+            print('%s\tFIELD\t%s\tdeclared twice' % (tag, nm))
+        declared[nm] = e
+        for req in ('producer', 'reason'):
+            if not (e.get(req) or '').strip():
+                print('%s\tFIELD\t%s\tempty %s' % (tag, nm, req))
+        if not isinstance(e.get('transient'), bool):
+            print('%s\tFIELD\t%s\ttransient is not a boolean' % (tag, nm))
+            continue
+        ig = (e.get('ignore') or '').strip()
+        if e['transient']:
+            if not ig:
+                print('%s\tFIELD\t%s\ttransient but declares no ignore pattern' % (tag, nm))
+            elif not ig.startswith((decl.get('root') or '') + '/'):
+                print('%s\tFIELD\t%s\tignore pattern %s is not under the declared root'
+                      % (tag, nm, ig))
+        elif ig:
+            print('%s\tFIELD\t%s\tdurable but declares an ignore pattern (%s)' % (tag, nm, ig))
+        prod = (e.get('producer') or '').strip()
+        # Only the live corpus can be asked about producers; a probe tree holds no machinery,
+        # and checking there would emit a finding per entry and drown the seeded signal.
+        if prod and tag == 'live':
+            pp = os.path.join(root, prod)
+            if not os.path.isfile(pp):
+                print('%s\tPRODUCER\t%s\t%s does not exist' % (tag, nm, prod))
+            elif not constructs(pp, nm):
+                print('%s\tPRODUCER\t%s\t%s does not construct it on a non-comment line'
+                      % (tag, nm, prod))
+
+    for nm in sorted(set(derived) - set(declared)):
+        print('%s\tUNDECLARED\t%s\t%s' % (tag, nm, derived[nm]))
+    if tag == 'live':
+        for nm in sorted(set(declared) - set(derived)):
+            print('%s\tORPHAN\t%s\t-' % (tag, nm))
+    print('%s\tPOP\t%d\t%d' % (tag, len(derived), len(declared)))
+PY
+)"
+  [ -n "$i95_probe" ] && rm -rf "$i95_probe"
+
+  if [ -z "$i95_out" ]; then
+    err "I95's reader produced NO output at all, not even its population count. It did not run, so neither the corpus verdict nor the probe that proves the corpus verdict means anything. This fails closed."
+  else
+    i95_pos_fired=0
+    i95_neg_fired=0
+    i95_live_pop=0
+    while IFS="$(printf '\t')" read -r _tag _kind _what _where; do
+      [ -n "$_tag" ] || continue
+      case "$_tag:$_kind" in
+        pos:UNDECLARED) [ "$_what" = ".i95-probe-undeclared" ] && i95_pos_fired=1 ;;
+        neg:UNDECLARED) i95_neg_fired=1 ;;
+        live:POP) i95_live_pop="$_what" ;;
+        live:UNDECLARED)
+          err "I95: $_what is constructed at $_where and is classified NOWHERE in $i95_schema. Add it with transient true or false: transient means per-run coordination state, which renders into the consumer's .gitignore, and durable means a pipeline artifact the consumer commits. An unclassified path is exactly how .wait-beats/ reached 134 tracked files." ;;
+        live:ORPHAN)
+          err "I95: $i95_schema declares '$_what', but no shipped file under core/hooks, core/scripts, core/session-driver or core/git-hooks constructs it on a non-comment line. Either the machinery that wrote it was removed — in which case delete the entry, and if it was transient the consumer's .gitignore keeps a rule for a path nothing creates — or it moved somewhere this arm does not look, which means the population it scans is no longer the population that matters." ;;
+        live:FIELD)
+          err "I95: entry '$_what' in $i95_schema is malformed — $_where. Every field is load-bearing: a transient entry with no ignore pattern is classified correctly and still reaches no .gitignore, and a durable entry that carries one gets a consumer's committed artifact ignored." ;;
+        live:PRODUCER)
+          err "I95: entry '$_what' names a producer that does not hold up — $_where. The producer is checked with the same grammar that derived the population, so naming the path in a header comment does not satisfy it. A declaration pointing at the wrong file cannot tell anyone where a path comes from when they need to change it." ;;
+        live:UNPARSED)
+          err "I95: $_what did not parse as JSON ($_where), so nothing below it ran and the corpus arm reported nothing rather than reporting clean." ;;
+        live:DISARMED)
+          err "I95's population grammar matched NOTHING in the live tree — $_where. Every hook that writes pipeline state would have to have stopped doing so; far likelier is that the directories moved, in which case this arm is scanning an empty set and passing." ;;
+        *:PROBEBROKEN)
+          err "I95 could not build its $_tag probe tree ($_where), so that direction of its self-probe did not run this run." ;;
+      esac
+    done <<EOF
+$i95_out
+EOF
+
+    [ "$i95_pos_fired" -eq 0 ] && err "I95's POSITIVE probe was NOT reported: a seeded file constructing an undeclared path went unseen by the same reader the corpus arm runs, so a clean corpus result above establishes only that the reader executed. This fails closed."
+    [ "$i95_neg_fired" -ne 0 ] && err "I95's NEGATIVE probe WAS reported: a path named only inside a COMMENT was treated as constructed. The grammar is not comment-blind, and every worked path example in core's prose is now in this arm's finding set."
+    [ "${i95_live_pop:-0}" -lt 2 ] && err "I95 derived ${i95_live_pop:-0} path(s) from the live tree. The probe trees derive one each by construction, so a live population that small means the corpus scan resolved to a probe-sized tree rather than to core/, and its set-compare is meaningless."
+
+    # (c) THE READERS, keyed on the line that FEEDS the schema path to jq. A script that names
+    # the file in a comment satisfies a whole-file grep and reads nothing, and the failure is
+    # silent in the worst direction: a consumer with no rendered block looks exactly like one
+    # whose block is up to date.
+    for _r in core/scripts/sync-transient-ignore.sh scripts/uninstall.sh; do
+      if [ ! -f "$_r" ]; then
+        err "I95(c): $_r is missing, so this invariant cannot establish that $i95_schema has the readers it claims."
+      elif ! grep -q 'jq [^|]*"\$[A-Z_]*SCHEMA"' "$_r"; then
+        err "I95(c): $_r does not READ $i95_schema — no line feeds a resolved schema path to jq. The renderer projects the declaration's transient half into the consumer's .gitignore and uninstall.sh cuts that block by the markers declared in it; a copy of either the markers or the path list inside those scripts is a second source that drifts from this one silently."
+      fi
+    done
+
+    # (d) THE RENDERER SHIPS, AND install.sh CALLS IT. This is the arm that would have caught
+    # the shape this release started with. The renderer lived inside install.sh, which no
+    # consumer has: apply.sh would have delivered the declaration on every pull and the code
+    # that renders it on none, so the consumers with committed transient state -- the whole
+    # subject -- were the ones it could never reach. Keyed on the INVOCATION, because
+    # install.sh naming the script in a comment is how that regression would read.
+    if [ ! -f core/scripts/sync-transient-ignore.sh ]; then
+      err "I95(d): core/scripts/sync-transient-ignore.sh is missing. It is the only thing that writes the consumer's .gitignore block, and install.sh's copy loop over core/scripts/ is what delivers it to a consumer as scripts/ai-dlc/sync-transient-ignore.sh — without it the declaration ships to every consumer and nothing renders it anywhere."
+    elif ! grep -q 'bash "\$SYNC_IGNORE"' scripts/install.sh 2>/dev/null; then
+      err "I95(d): scripts/install.sh does not INVOKE sync-transient-ignore.sh. A fresh install would copy the renderer into scripts/ai-dlc/ and never run it, so a new consumer starts with no ignore block and no indication that one was expected."
+    fi
+  fi
+fi
+
 # --- I80: an enumeration of the intensity SET names every member of it -------------
 # vocabulary: validation intensities
 # vocabulary-invariant: I80

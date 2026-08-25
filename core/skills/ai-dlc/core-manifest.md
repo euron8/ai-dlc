@@ -230,6 +230,7 @@ core_manifest:
   - fixtures/mutation-red-replay/**
   - fixtures/trunk-audit-classes/**
   - fixtures/story-fields-derive/**
+  - fixtures/transient-ignore-block/**
   - fixtures/trunk-push-bound/**
   - fixtures/pause-hook-origin/**
   - fixtures/postcompact-rulebook-recovery/**

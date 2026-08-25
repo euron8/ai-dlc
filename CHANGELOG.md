@@ -15,6 +15,91 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.410.0] - 2026-08-25
+
+### Transient pipeline state is classified once and rendered into the consumer's .gitignore
+
+RC-6 of `docs/plans/graph-s305-triage.md`, and it measured wider than it was filed. The plan
+recorded 134 tracked scratch files under `_bmad-output/.wait-beats/`. The measured state of the
+reference consumer was **138 files across three paths** -- `.wait-beats/` (134), `.driver/` (3)
+and `.context-sensor-state` (1) -- with ten further transient paths latent. The reason for all
+of it is that **the distribution shipped no ignore rule at all**: `scripts/install.sh` carried
+zero references to `.gitignore`. Every transient path that consumer did ignore had been
+hand-added there, four of them, over roughly four hundred releases.
+
+`core/schemas/pipeline-state-paths.json` now classifies **every** top-level name the shipped
+machinery constructs under the pipeline root -- 13 transient, 20 durable, 33 total. The
+partition is the mechanism, not the ignore list: binding only the transient half would leave a
+newly added state path invisible until somebody noticed it in a diff, which is the same failure
+one level up. The classification was validated against the reference consumer independently of
+the grammar that derived it -- every durable entry is tracked there and every transient entry
+is untracked, the only exceptions being the three that are this release's subject.
+
+`core/scripts/sync-transient-ignore.sh` renders the transient half into `.gitignore` as a
+marker-bounded block, with a `--check` mode that fails on a block that is present and stale. It
+is a shipped script rather than a block inside the installer for a delivery reason: an existing
+consumer arrives through `ai-dlc-update`, whose `apply.sh` copies core files by a derived
+mapping, so an inline renderer would have put the declaration on every consumer and the code
+that renders it on none -- leaving the consumers that already have committed transient state as
+the only ones it could never reach.
+
+It does not untrack anything. `git rm --cached` rewrites index state, so already-tracked paths
+are NAMED with the command to run instead; an ignore rule does nothing whatever to a file git
+is already tracking, and a tool reporting "installed" over 138 still-committed files would be
+reporting success for work that did not happen.
+
+**A blanket `_bmad-output/.*` glob was measured and rejected.** It is one line and covers every
+future dot-prefixed path for free. It is also wrong: the reference consumer tracks
+`_bmad-output/.audit-accepted-exceptions`, a deliberate committed file with **zero** references
+in `core/` (control: 31 for `audit-anchors`). A glob shipped from the distribution would
+silently untrack consumer-owned dot-entries that no declaration here can enumerate.
+
+### Added
+
+- **`core/schemas/pipeline-state-paths.json`** -- the transient/durable partition, each entry
+  carrying its producer and the reason for its classification.
+- **`core/scripts/sync-transient-ignore.sh`** -- the renderer, with `--check` and `--root`.
+  Ships to consumers as `scripts/ai-dlc/sync-transient-ignore.sh` through install.sh's derived
+  `core/scripts/` copy loop, so no packaging list had to be edited for it.
+- **`I95`** in `scripts/validate-enforcement-map.sh` -- four arms. It re-derives the population
+  from `core/hooks/`, `core/scripts/`, `core/session-driver/` and `core/git-hooks/` and
+  set-compares it against the declaration in both directions, checks each declared producer
+  with that same grammar rather than a whole-file grep, binds the readers on the line that
+  feeds the schema to `jq`, and asserts install.sh INVOKES the renderer. The grammar is
+  comment-blind: the false-positive set was 5 with comment lines included -- all of them
+  documentation path examples -- and **0** with them excluded. Both probe directions run before
+  the corpus and in the same `python3` process as the corpus scan, so the arm costs one fork
+  rather than three.
+- **`core/fixtures/transient-ignore-block/`** -- shipping fixture, 7 arms and 3 mutants, each
+  mutant killed by its own arm alone. Every expected pattern is derived from the declaration
+  rather than restated. Arms cover the rendered set, the exclusion of durable paths, the
+  marker-bounded cut, idempotence over four renders, `--check` discriminating a stale block
+  from a current one, fail-closed on an empty marker with a byte-compare, and the naming of
+  already-tracked paths.
+
+### Notes
+
+- **The obvious mutant for the durable-exclusion arm is behaviourally inert, and the fixture
+  caught it.** Deleting `select(.transient)` leaves `.ignore // empty`, and a durable entry has
+  no `ignore` field -- so the surviving filter drops exactly the entries the mutation meant to
+  admit. `cmp` reports a changed file and the output is byte-identical. The mutation has to
+  synthesise a pattern for the durable half, and under the declared root rather than a literal
+  one, or it stops matching the arm the day the declaration moves.
+- **`../schemas/` does not resolve in a consumer, and the renderer's first comment claimed it
+  did.** `install.sh` splits what shares a parent upstream: `core/scripts/` lands at
+  `scripts/ai-dlc/` and `core/schemas/` at `.claude/schemas/`, so `scripts/schemas/` does not
+  exist there and the `.claude/schemas/` candidate is what answers. Measured on a scratch
+  install, not assumed -- the same parent-sharing assumption `I33` fails the build on.
+- The fixture's first draft resolved its root by walking up for `VERSION`, which is a
+  content-key EXCLUDED path: a fixture that reads one can change behaviour without the pre-push
+  suite ever re-running. It walks up for its own subject in either layout instead.
+- Verified on a scratch install into an empty git repo, in both layouts: block rendered with the
+  consumer's own rules intact above it, idempotent over four runs, a rule added after the block
+  surviving a re-render, `--check` returning 0 fresh and 1 stale, and an already-tracked
+  `.wait-beats/` path reported by name.
+- `validator-fork-budget`: **7041** forks of `FORK_BUDGET=7050` across 168 fixture dirs. The
+  budget was NOT raised.
+
 ## [0.409.0] - 2026-08-25
 
 ### The post-compact rulebook re-read is a 21 KB digest instead of a 102 KB file

@@ -40,14 +40,24 @@ echo "P2  live-beat keeps LAST_TS  $([ "$lb" -eq 0 ] && echo DONE || echo TODO)"
 echo "P3  escalation guards        $(v "$(grep -ciF 'escalation_undelivered' CHANGELOG.md)")"
 echo "P4  answer-capture routes    $(v "$(grep -cF 'additionalContext' core/hooks/ai-dlc-answer-capture.sh)")"
 echo "P5  full re-read mandate     $([ "$(grep -cF 'IN FULL' core/skills/ai-dlc/SKILL.md)" -eq 0 ] && echo DONE || echo TODO)"
-echo "P6  wait-beats ignore        $(v "$(grep -rlF 'wait-beats' templates/ scripts/install.sh 2>/dev/null | wc -l)")"
+p6a=$([ -e core/scripts/sync-transient-ignore.sh ] && echo 1 || echo 0)
+p6b=$(grep -cF 'bash "$SYNC_IGNORE"' scripts/install.sh)
+echo "P6  transient ignore rule    $(v "$((p6a * p6b))")"
 echo "P7  consumer brief filed     $(v "$(ls docs/reviews/ 2>/dev/null | grep -c s305)")"
 echo "CTL must be DONE             $([ -d core ] && echo DONE || echo TODO)"
 echo "CTL must be TODO             $([ -e core/NO-SUCH-CONTROL.sh ] && echo DONE || echo TODO)"
 ```
 
-**P1a through P5 read DONE; P6 and P7 read TODO; `P1d CONTROL` reads DONE and the
+**P1a through P6 read DONE; P7 reads TODO; `P1d CONTROL` reads DONE and the
 two block controls read DONE then TODO.**
+
+**P6's ORIGINAL PROBE WAS REPLACED BECAUSE IT WENT GREEN ON A COMMENT.** It grepped
+`templates/` and `scripts/install.sh` for `wait-beats`, and the shipped fix put that token in
+`core/schemas/pipeline-state-paths.json` — nowhere the probe looked. What made it read DONE was
+a MEASUREMENT SENTENCE in install.sh's new header naming the path. A whole-file grep is
+satisfied by a comment, which is this repo's own standing rule, and the probe had drifted onto
+the wrong side of it. It now keys on two emission sites: the renderer existing at a path fixed
+by convention, and install.sh's invocation LINE.
 Every probe read TODO when this plan was written, and the three that flipped did so when
 phase 1 landed — which is the polarity proof, not a formality. Each probe is polarity-correct
 in the sense `BL-086` names: it keys on a byte that EXISTS today and the fix REMOVES, or on a
@@ -78,12 +88,26 @@ shipped as v0.405.0 (`fea38ec7`), taken out of order at the operator's direction
 (RC-4) is DONE, shipped as v0.406.0. Phase 3 (RC-3) is DONE, shipped as v0.407.0, with its
 item 1 DROPPED on the operator's decision — see RC-3's remedy. Action 4 (RC-2) is DONE,
 shipped as v0.408.0 (`faea82e7`, merged `dbdb18cb`). Action 5 (RC-5) is DONE, shipped as
-v0.409.0 (`16cc6799`, merged `f7318db0`). All merged to `main` and pushed.
-Actions 6 and 7 are open. Start at NEXT ACTION 6.**
+v0.409.0 (`16cc6799`, merged `f7318db0`). Action 6 (RC-6) is DONE, shipped as v0.410.0.
+All merged to `main` and pushed.
+Action 7 is the only one open. Start at NEXT ACTION 7.**
 
-**Tree state at handoff:** on `main`, clean, level with `origin/main`, `VERSION` `0.409.0`.
-**NOTHING IS IN FLIGHT** — no branch open, no partial edit, no unrun gate. Action 6 has not
+**Tree state at handoff:** on `main`, clean, level with `origin/main`, `VERSION` `0.410.0`.
+**NOTHING IS IN FLIGHT** — no branch open, no partial edit, no unrun gate. Action 7 has not
 been started.
+
+**RC-6 MEASURED WIDER THAN IT WAS FILED, and the operator chose the wider scope.** The entry
+below records 134 tracked files under one path; the measurement was 138 across THREE —
+`.wait-beats/` (134), `.driver/` (3), `.context-sensor-state` (1) — with ten more transient
+paths latent and NO ignore-rule delivery path in the distribution at all (`install.sh` carried
+zero references to `.gitignore`). What shipped is a full transient/durable PARTITION of the 33
+names the machinery constructs, rendered by a shipped script and bound by **I95**. A blanket
+`_bmad-output/.*` glob was measured and rejected: the reference consumer tracks
+`_bmad-output/.audit-accepted-exceptions`, which `core/` has zero knowledge of.
+
+**THE CONSUMER STILL HAS ALL 138 FILES TRACKED, AND NOTHING IN THIS RELEASE UNTRACKS THEM.**
+An ignore rule does nothing to a file git already tracks. The renderer NAMES them and prints
+the `git rm -r --cached` command; running it is action 7's business, on the consumer side.
 
 **THE COMPACTION-DURABLE RULE CHANNEL IS EFFECTIVELY FULL: 44522 of 44544 bytes, 22 free.**
 Arm A6 of `scripts/validate-claude-rules.sh` fails the push over the ceiling, so any rule you
@@ -199,7 +223,7 @@ The sprint cannot safely resume until the consumer can push, which is why RC-1 i
 **The probes are NOT in action order and one of them is out of family, so the map is written
 out rather than inferred.** `P1a`/`P1b`/`P1c` → action 1 (DONE). `P1d` → action 6b (DONE).
 `P2` → action 2 (DONE). `P3` → action 3 (DONE). `P4` → action 4 (DONE).
-`P5` → action 5 (DONE). `P6` → action 6. `P7` → action 7. Read the ACTION number, not the
+`P5` → action 5 (DONE). `P6` → action 6 (DONE). `P7` → action 7. Read the ACTION number, not the
 probe's; a session going top-down through the probe list reaches `P1d` first and would start
 in the wrong place.
 
@@ -239,7 +263,13 @@ and says why in the comment itself.
    The mandated post-compact Read goes **102,881 → 21,850 bytes, −78%**. It is a SELECTION of
    SKILL.md's own bytes, not a summary. See RC-5's remedy for the faithfulness arm and for
    the one part of the done-when this release CANNOT close.
-6. **RC-6 — ship the ignore rule** for `_bmad-output/.wait-beats/`.
+6. **RC-6 — COMPLETE, SHIPPED AS v0.410.0.** `core/schemas/pipeline-state-paths.json`
+   classifies all 33 paths the machinery writes under the pipeline root (13 transient, 20
+   durable); `core/scripts/sync-transient-ignore.sh` renders the transient half into the
+   consumer's `.gitignore` as a marker-bounded block with a `--check` mode; **I95** binds the
+   declaration to the machinery in both directions; new shipping fixture
+   `transient-ignore-block` carries 7 arms and 3 mutants. See RC-6's remedy for why the
+   renderer is a shipped script rather than installer code, and for the glob that was rejected.
 6b. **RC-1b — COMPLETE, SHIPPED AS v0.405.0.** Core prescribed `git push` with no time budget.
    Measured on a `file://` clone of the reference consumer at `386a56d34`, per-line
    timestamps: the pre-push is **148.9s**, of which every phase before the fixture suite is
@@ -743,10 +773,41 @@ path returns nothing. These are per-shell coordination files (`.shell-<pid>`, `<
 `<n>.progress`) created and destroyed constantly — 5 of the 25 files in the handoff commit
 `386a56d34` were wait-beat churn.
 
-### Remedy
+### Remedy — COMPLETE, SHIPPED AS v0.410.0
 
-Ship the ignore rule in the distribution; untrack in graph via the brief (RC-1 item 4),
-never by writing to the consumer from here.
+**The finding above is the filed one and it is NARROWER than what was measured.** 138 files
+across three paths were tracked, not 134 across one, and ten further transient paths were
+latent. The root cause is one level up from any of them: the distribution had NO ignore-rule
+delivery path — `install.sh` carried zero references to `.gitignore` — so every transient path
+the reference consumer ignored had been hand-added by that consumer, four of them across
+roughly four hundred releases.
+
+What shipped:
+
+- `core/schemas/pipeline-state-paths.json` — a PARTITION, not a list. All 33 top-level names
+  the shipped machinery constructs under the pipeline root, each classified transient or
+  durable with its producer and a reason. Binding only the transient half would leave a new
+  state path invisible until somebody spotted it in a diff, which is the same failure the
+  hand-written list had.
+- `core/scripts/sync-transient-ignore.sh` — renders the transient half into `.gitignore` as a
+  marker-bounded block, idempotent by cut-then-append, with a `--check` mode that fails on a
+  block that is present and stale. **It is a shipped script and not installer code for a
+  DELIVERY reason**: an existing consumer arrives through `ai-dlc-update`, whose `apply.sh`
+  copies core files by a derived mapping, so an inline renderer would have delivered the
+  declaration to every consumer and the code that renders it to none — leaving the consumers
+  that already have committed transient state as the only ones it could never reach.
+- **I95** in `scripts/validate-enforcement-map.sh`, four arms, both join directions.
+- `core/fixtures/transient-ignore-block/` — shipping, 7 arms and 3 mutants.
+
+**A blanket `_bmad-output/.*` glob was measured and REJECTED.** One line, covers every future
+dot-prefixed path for free, and wrong: the reference consumer tracks
+`_bmad-output/.audit-accepted-exceptions`, a deliberate committed file with zero references in
+`core/` (control: 31 for `audit-anchors`). A glob shipped from the distribution silently
+untracks consumer-owned dot-entries no declaration here can enumerate.
+
+**Untracking is NOT done and cannot be done from here.** An ignore rule has no effect on a
+tracked file. The renderer names the still-tracked paths and prints the `git rm -r --cached`
+command; running it belongs to the brief in action 7, never to a write into the consumer.
 
 ---
 
