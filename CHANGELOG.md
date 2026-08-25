@@ -15,6 +15,60 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.412.0] - 2026-08-25
+
+### A close on an entry's own boundary line was archived by nothing and reported by nothing
+
+Reported by the reference consumer while rotating its ledger after the 0.403.0 -> 0.410.0 pull.
+
+`reconcile/ledger-rotate.sh`'s entry-boundary rule ends in `next`, which skipped every
+flag-setting rule below it -- the strict archive test, the lifted loose test and the
+retained-copy test alike. A close annotation written on the entry's OWN opening line therefore
+set neither `closed` nor `loose`, and `flush()` sent the entry to `keep` silently.
+
+**That is not the documented limbo.** A stuck entry is skipped by re-verification and refused by
+rotation, and the refusal row is its filing. This shape had no row: archived by nothing,
+reported by nothing -- the exact state the stuck list was added to eliminate, surviving in the
+one shape the stuck list could not see. The split guard in the same file already reads the
+boundary line, and its comment names the legacy id-less form that writes a close there, so the
+case was understood and the fix had landed on one of the two predicates.
+
+Measured, one variable changed, strict form and bullet shape preserved on both sides: a close ON
+the boundary line moved 0 entries before and 1 after; the same close one line INTO the body moved
+1 before and 1 after. The body path is unchanged, which is what says the subject widened rather
+than the rule loosening.
+
+**The count of affected entries cannot be read off stuck counts.** An entry in this shape reaches
+the stuck list only when some unrelated body line happens to match the loose rule. The reference
+consumer's one instance was visible only because a neighbouring sub-bullet's own annotation sat
+five lines inside its span; delete that line and the entry vanishes from both sides. Every such
+count is therefore a lower bound biased downward by a coincidence unrelated to the property being
+counted.
+
+**Both flags, not just `closed`.** Setting only the archive flag would have fixed the loud case
+and left a versionless boundary-line close exactly as invisible as before. The loose half needs
+the ENTRY-LINE grammar, not the body one: `ledger_body_closes()` is anchored at `^[ \t]*` and a
+`- **` bullet can never match it, so testing a boundary line with it is not merely wrong but
+INERT. `lib.sh` gains `ledger_entry_line_close_awk()`, lifting `entry_line_closes()` out of
+`ledger-reverify.sh` the way the body rule was already lifted, rather than restating a second
+copy of a grammar this directory has already lost that bet on twice.
+
+### The stuck banner described the state it fixes, in the present tense, inside its own output
+
+It read "they never appear in a report again ... they are never filed" -- printed by the report
+that files them, two lines above the sentence saying the row IS the record. Measured: a consumer
+session stopped at the first sentence, concluded the state was unhandled, and raised an upstream
+request to add annotation spellings for a case already named two lines below. The rows are the
+filing; the banner now says so where the reader is.
+
+Shipping fixture `ledger-rotate` gains arm **BL**: the boundary case, the body case as the
+non-vacuity control, and the versionless case as a presence assertion. Its mutant is a TWO-LAYER
+revert whose deletions are COUNTED, because `cmp -s` cannot see a partial revert -- deleting
+either line alone still changes the file, so the arm would score a kill for the layer still
+reverted while the other sat unproven. That is not hypothetical: it happened while this was being
+built, when the loose line was rewritten and the mutation's second pattern silently stopped
+matching.
+
 ## [0.411.0] - 2026-08-25
 
 ### The re-adoption dossier could not say "nothing drifted"
