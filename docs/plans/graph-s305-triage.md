@@ -46,7 +46,7 @@ echo "CTL must be DONE             $([ -d core ] && echo DONE || echo TODO)"
 echo "CTL must be TODO             $([ -e core/NO-SUCH-CONTROL.sh ] && echo DONE || echo TODO)"
 ```
 
-**P1a through P4 read DONE; P5, P6 and P7 read TODO; `P1d CONTROL` reads DONE and the
+**P1a through P5 read DONE; P6 and P7 read TODO; `P1d CONTROL` reads DONE and the
 two block controls read DONE then TODO.**
 Every probe read TODO when this plan was written, and the three that flipped did so when
 phase 1 landed — which is the polarity proof, not a formality. Each probe is polarity-correct
@@ -77,11 +77,12 @@ At this plan's writing those read `FAIL — 24 blocking, 3 ambiguous`; `134`;
 shipped as v0.405.0 (`fea38ec7`), taken out of order at the operator's direction. Phase 2
 (RC-4) is DONE, shipped as v0.406.0. Phase 3 (RC-3) is DONE, shipped as v0.407.0, with its
 item 1 DROPPED on the operator's decision — see RC-3's remedy. Action 4 (RC-2) is DONE,
-shipped as v0.408.0 (`faea82e7`, merged `dbdb18cb`). All merged to `main` and pushed.
-Actions 5, 6 and 7 are open. Start at NEXT ACTION 5.**
+shipped as v0.408.0 (`faea82e7`, merged `dbdb18cb`). Action 5 (RC-5) is DONE, shipped as
+v0.409.0 (`16cc6799`, merged `f7318db0`). All merged to `main` and pushed.
+Actions 6 and 7 are open. Start at NEXT ACTION 6.**
 
-**Tree state at handoff:** on `main`, clean, level with `origin/main`, `VERSION` `0.408.0`.
-**NOTHING IS IN FLIGHT** — no branch open, no partial edit, no unrun gate. Action 5 has not
+**Tree state at handoff:** on `main`, clean, level with `origin/main`, `VERSION` `0.409.0`.
+**NOTHING IS IN FLIGHT** — no branch open, no partial edit, no unrun gate. Action 6 has not
 been started.
 
 **The whole consumer block was re-derived at this handoff and every value is UNCHANGED**
@@ -94,17 +95,26 @@ written — its three dirty paths (`.context-sensor-state`, `.driver/turns`,
 `pipeline-continuation-log.md`) belong to its own paused session and were dirty before this
 work began.
 
-**One change shipped this session that is NOT one of the seven actions.** The
-compaction-durable rule channel's ceiling went `43520 -> 44544` on an operator ruling, to
-admit one 722-byte rule into `.claude/rules/tool-hazards.md`: **the Bash tool's output is
-rewritten before you read it.** A compressor edits text inside Bash results, code included —
-measured here, a `cat -n` of a shipped hook returned `[ -n "${A_ESC:-}" || continue` for a
-line that reads `[ -n "${A_ESC:-}" ] || continue`, and heredoc bodies came back short. Read
-source with `Read` or `ctx_execute_file`; keep Bash for output whose SHAPE is the answer and
-for mutations. **This one matters to you immediately** — it is how a file gets misread with
-no error raised, and it cost a wrong reading of a hook in this session before it was caught.
+**THE BASH-OUTPUT HAZARD IS LIVE AND IT FIRED AGAIN IN THE v0.409.0 SESSION.** A compressor
+edits text inside Bash results, code included, and raises no error. It struck twice while
+RC-5 was being built: an `install.sh` read came back with its copy loop mangled, and a
+`core-manifest.md` block read came back deduplicated so four list entries were invisible.
+Both were caught only by re-deriving with `grep -c` instead of reading. Read source with
+`Read` or `ctx_execute_file`; keep Bash for output whose SHAPE is the answer — counts, exit
+codes — and for mutations. **Where a Bash result has to be exact, DERIVE it**: the pattern
+that worked all session was `printf 'a=%s b=%s\n' "$(grep -c X f)" "$(grep -c Y f)"`, one
+line, with a control in the same invocation.
 `scripts/validate-claude-rules.sh`'s A6 header carries the ruling and why neither
 mechanising nor scoping was available.
+
+**A BUDGET WAS RAISED IN v0.409.0 AND THE MEASUREMENT THAT JUSTIFIED IT WAS INITIALLY WRONG.**
+`FORK_BUDGET` went `7000 -> 7050` in `scripts/validate-enforcement-map.sh`. A first timing
+comparison read **+1.9s (11%)** on the pole validator and would have justified an optimisation
+pass; it was invalid, because it ran `origin/main` from a `mktemp` extraction against the
+branch in the LIVE REPO — two different trees. Re-measured with both sides extracted alike and
+the runs INTERLEAVED to cancel drift, five reps each: main **17.29s**, branch **17.10s**. No
+regression. **Never compare a `mktemp` extraction against the working repo**, and interleave
+timing reps rather than running one side then the other.
 
 **RC-2's THREE REMEDY ITEMS ALL SHIPPED, and the single-source clause cost more than the
 routing did.** Routing the answer channel made a second emitter of the pause branch text and
@@ -169,7 +179,7 @@ The sprint cannot safely resume until the consumer can push, which is why RC-1 i
 **The probes are NOT in action order and one of them is out of family, so the map is written
 out rather than inferred.** `P1a`/`P1b`/`P1c` → action 1 (DONE). `P1d` → action 6b (DONE).
 `P2` → action 2 (DONE). `P3` → action 3 (DONE). `P4` → action 4 (DONE).
-`P5` → action 5. `P6` → action 6. `P7` → action 7. Read the ACTION number, not the
+`P5` → action 5 (DONE). `P6` → action 6. `P7` → action 7. Read the ACTION number, not the
 probe's; a session going top-down through the probe list reaches `P1d` first and would start
 in the wrong place.
 
@@ -204,10 +214,11 @@ and says why in the comment itself.
    handoff and the auto-handoff copy. New shipping fixture `answer-handoff-routing`;
    `handoff-resume-guard` gained six arms and a mutant; `pause-hook-origin` now compares five
    legend seeders.
-5. **RC-5 — cut the post-compact re-read loop.** Extend `ai-dlc-recover.sh` to RENDER the
-   rules and step-position digest that live past Claude Code's re-attach cut, and rewrite
-   the `POST-COMPACT RECOVERY PROTOCOL` to cite the injected block instead of mandating a
-   full `SKILL.md` Read.
+5. **RC-5 — COMPLETE, SHIPPED AS v0.409.0.** `core/skills/ai-dlc/postcompact-digest.md`
+   ships, rendered by `scripts/render-postcompact-digest.sh` and byte-compared at pre-push.
+   The mandated post-compact Read goes **102,881 → 21,850 bytes, −78%**. It is a SELECTION of
+   SKILL.md's own bytes, not a summary. See RC-5's remedy for the faithfulness arm and for
+   the one part of the done-when this release CANNOT close.
 6. **RC-6 — ship the ignore rule** for `_bmad-output/.wait-beats/`.
 6b. **RC-1b — COMPLETE, SHIPPED AS v0.405.0.** Core prescribed `git push` with no time budget.
    Measured on a `file://` clone of the reference consumer at `386a56d34`, per-line
@@ -655,20 +666,53 @@ the measured shape of "started well, degraded".
 Corroborating waste: the party-mode invocation shape was re-derived from scratch four
 separate times (`08-22T10:26`, `08-22T11:49`, `08-24T09:55`, `08-24T14:06`).
 
-### Remedy — operator-selected: extend `ai-dlc-recover.sh`
+### Remedy — COMPLETE, SHIPPED AS v0.409.0
 
-`core/hooks/ai-dlc-recover.sh` already injects 8,944 bytes on every compaction. **Extend it
-to RENDER the rules and step-position digest that live past the re-attach cut**, so the
-mandated full `SKILL.md` Read stops being necessary, and rewrite the protocol to cite the
-injected block.
+**RC-5 shipped. This phase is closed and there is nothing here to execute**, except that its
+done-when is only PARTLY discharged — see the last paragraph, which is the one thing a later
+session still owes.
 
-This is the repo's own "render safety-critical output; do not let a model retype it"
-pattern: the digest is generated into a marked region and `--check` byte-compared at the
-gate, so it cannot drift from `SKILL.md`. Sharding `SKILL.md` and `gate-validation.md` is
-explicitly NOT in this scope.
+**What shipped.** `core/skills/ai-dlc/postcompact-digest.md`, rendered by
+`scripts/render-postcompact-digest.sh` and byte-compared at pre-push. The
+`POST-COMPACT RECOVERY PROTOCOL` and `ai-dlc-recover.sh` both mandate the digest instead of
+`SKILL.md` IN FULL; `validate-reattach-budget.sh`'s mandate arm re-anchors onto the digest
+path AND the SKILL.md path, requiring both.
 
-Measure before and after on the same corpus. The figure is a **re-read count and byte
-total**, never a token estimate.
+**THE DIGEST COULD NOT BE INJECTED, AND THAT DECIDED THE DESIGN.** The hook's block is bounded
+by Claude Code's 10,000-character cliff and was already at 8,670 bytes, so a 20 KB digest was
+never going into `additionalContext`. It is a FILE the block names. Anyone revisiting this
+should start from that constraint rather than rediscovering it.
+
+**It is a SELECTION of SKILL.md's own bytes, never a summary**, so it cannot say anything
+SKILL.md does not and `--check` fails the push the moment SKILL.md moves. The selector takes
+every heading past the measured 20,121-byte cut with its first paragraph and, where that
+paragraph ends on a COLON, the block it announces.
+
+**That colon clause is the whole faithfulness argument and it is not decorative.** Measured:
+first-paragraph-only left THREE entries dangling, one of them Rule 23, rendered as *"Three
+controls keep the resident set lean:"* with the three controls dropped — the one rule whose
+absence causes the compaction that removed it. `--check` asserts zero dangling and reports 3
+against the naive selector in the same invocation, so the arm discriminates.
+
+**The digest is disclosed as an INDEX, and a fixture arm asserts the disclosure.** It
+establishes that a rule EXISTS and what it governs, and is not enough to APPLY one; both the
+hook and the protocol tell the lead to Read SKILL.md for the full text of any rule it acts on.
+A lead that reads an entry and proceeds as though it read the rule has no signal it is missing
+anything, which is a worse failure than the one this replaced — so it is not left to prose.
+
+**A SECOND DEFECT WAS FOUND AND FIXED WHILE MEASURING THE FIRST.** The Pipeline Position
+excerpt was included whole or dropped whole against a 9,000-byte ceiling, and measured, a
+snapshot whose Position ran to its 1,200-byte cap lost it entirely — so `build yes` was
+reachable only for a Position under ~230 bytes. It now fits the excerpt to the space left,
+drawing on the range between the ceiling and the cliff and leaving a 500-byte reserve.
+Verified across Position sections of 2, 10, 40 and 400 rows: the excerpt survives every one.
+
+**THE DONE-WHEN IS NOT FULLY DISCHARGED AND CANNOT BE FROM THIS REPO.** It asks for a
+re-measured Read-byte share **over a real post-compact sequence, not a projection**. That
+sequence requires a CONSUMER running the new code through an actual compaction, which no run
+here can produce. The −78% is a derived per-event figure taken from the two files on disk.
+**Whoever delivers action 7 should carry this**: the brief is the first point at which the
+consumer-side measurement becomes takeable, and RC-5 closes there or not at all.
 
 ---
 
