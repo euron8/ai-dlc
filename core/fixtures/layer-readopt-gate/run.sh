@@ -236,6 +236,124 @@ else
 fi
 rm -f "$BL"
 
+echo "== B5. the dossier's upstream-change panel must SAY when nothing drifted =="
+
+# The panel titled "WHAT UPSTREAM CHANGED IN THE SHADOWED SECTION" echoed its heading for
+# EVERY anchor before computing that anchor's diff, so an entry whose sections are
+# byte-identical rendered as a list of bare headings underneath a title asserting they
+# CHANGED. Measured on the reference consumer, `overrides/steps__retro__domain-sections.md`,
+# four anchors: four headings, ZERO diff hunks. The reader's inference is "four sections
+# drifted", which points at --merge / --stamp readopt -- surgery on an entry needing none.
+# It reached an operator's report before it was caught.
+#
+# SELF-MASKING, which is why it needs an arm rather than a doc note: the same rendering is
+# CORRECT whenever at least one anchor did change, so nothing downstream disagrees and the
+# panel is internally consistent in both cases.
+#
+# THE ARM IS PRESENCE-SHAPED IN BOTH DIRECTIONS, and that is deliberate. Asserting only
+# "no bare heading appears" would pass against a subject that emits nothing at all --
+# `fixture-mutants.md`'s rule that an absence-shaped arm scores silence as a kill. So the
+# quiet direction DEMANDS the explicit sentence, and the loud direction DEMANDS a real
+# diff hunk. Rule 7 is byte-identical BASE..THEIRS in this seed and Rule 8 is not, so the
+# two directions are driven by two different anchors of the same seeded core file — a
+# single anchor could not produce both.
+PANEL="$CONS/.claude/skills/ai-dlc/overrides/SKILL__PanelQuiet.md"
+panel_of() { # $1 override path -> just the upstream-change panel
+  bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$1" 2>&1 \
+    | awk '/WHAT UPSTREAM CHANGED/{p=1} /SUPERSEDED CORE TEXT/{p=0} p'
+}
+
+# -- QUIET DIRECTION: an anchor that did NOT drift.
+cat > "$PANEL" <<EOF
+---
+shadows: SKILL.md#Rule 7
+base_sha: ${BASE}
+reason: shadows a section upstream did not touch in this range.
+---
+Body that restates nothing.
+EOF
+qp="$(panel_of "$PANEL")"
+if grep -qE '\(none -- all [0-9]+ compared anchor' <<<"$qp"; then
+  ok "an unchanged anchor renders an explicit 'nothing drifted' sentence"
+else
+  bad "the panel did NOT state that nothing drifted — a reader cannot tell 'unchanged' from 'not compared'"
+  printf '%s\n' "$qp" | sed 's/^/        /'
+fi
+if grep -qE '^[[:space:]]*## ' <<<"$qp"; then
+  bad "an unchanged anchor still rendered a bare '## <id>' heading under a title asserting it CHANGED"
+  printf '%s\n' "$qp" | sed 's/^/        /'
+else
+  ok "no bare anchor heading is printed for a section that did not drift"
+fi
+
+# -- LOUD DIRECTION, the non-vacuity control. Same panel, an anchor that DID drift.
+cat > "$PANEL" <<EOF
+---
+shadows: SKILL.md#Rule 8
+base_sha: ${BASE}
+reason: shadows a section upstream DID rewrite in this range.
+---
+Body that restates nothing.
+EOF
+lp="$(panel_of "$PANEL")"
+if grep -qE '^[[:space:]]*@@' <<<"$lp"; then
+  ok "CONTROL: a genuinely drifted anchor still renders its diff hunk"
+else
+  bad "CONTROL: the drifted anchor rendered NO diff — the quiet arm above is passing because the panel went silent for everything"
+  printf '%s\n' "$lp" | sed 's/^/        /'
+fi
+if grep -qE '^[[:space:]]*## Rule 8' <<<"$lp"; then
+  ok "CONTROL: the drifted anchor's heading IS printed, above its diff"
+else
+  bad "CONTROL: a drifted anchor lost its heading — the fix suppressed headings unconditionally"
+fi
+rm -f "$PANEL"
+
+# --- MUTANT: restore the defect (heading emitted before the diff is known) --------------
+# The second quiet assertion above is ABSENCE-shaped -- "no bare `## ` heading appears" --
+# and `fixture-mutants.md` is explicit that such an arm scores SILENCE as a kill. A copy of
+# this script that cannot source lib.sh prints nothing and would satisfy it. So the arm gets
+# a mutant that makes the panel LOUD in exactly the old way, plus an unmutated control in the
+# same directory so a broken copy is reported as broken rather than as a pass.
+#
+# The mutation deletes the emptiness guard, which is the whole of the fix on the quiet path:
+# every anchor's heading is then emitted whether or not its section moved.
+MUTP="$ROOT/mutpanel"; rm -rf "$MUTP"; mkdir -p "$MUTP"
+cp "$(dirname "$READOPT")"/*.sh "$MUTP/" 2>/dev/null || true
+cat > "$PANEL" <<EOF
+---
+shadows: SKILL.md#Rule 7
+base_sha: ${BASE}
+reason: shadows a section upstream did not touch in this range.
+---
+Body that restates nothing.
+EOF
+
+cp "$READOPT" "$MUTP/readopt-override.sh"
+cpanel="$(bash "$MUTP/readopt-override.sh" "$DIST" "$THEIRS" "$CONS" "$PANEL" 2>&1 \
+          | awk '/WHAT UPSTREAM CHANGED/{p=1} /SUPERSEDED CORE TEXT/{p=0} p')"
+if grep -qE '\(none -- all [0-9]+ compared anchor' <<<"$cpanel"; then
+  ok "  mutation control: an unmutated copy still prints the 'nothing drifted' sentence"
+else
+  bad "  mutation control: unmutated copy printed no sentence — a copy that cannot run scores as a kill"
+fi
+
+sed 's@^  \[ -n "\$_d" \] || continue$@@' "$READOPT" > "$MUTP/readopt-override.sh"
+if cmp -s "$READOPT" "$MUTP/readopt-override.sh"; then
+  bad "  mutation panel-guard: the mutation matched nothing, so the bare-heading assertion is unproven"
+else
+  mpanel="$(bash "$MUTP/readopt-override.sh" "$DIST" "$THEIRS" "$CONS" "$PANEL" 2>&1 \
+            | awk '/WHAT UPSTREAM CHANGED/{p=1} /SUPERSEDED CORE TEXT/{p=0} p')"
+  if grep -qE '^[[:space:]]*## Rule 7' <<<"$mpanel"; then
+    ok "  mutation panel-guard: without it an UNCHANGED anchor prints a bare heading again (the arm can fire)"
+  else
+    bad "  mutation panel-guard: the mutant did NOT reproduce the bare heading, so the arm above proves nothing"
+    printf '%s\n' "$mpanel" | sed 's/^/        /'
+  fi
+fi
+rm -rf "$MUTP"
+rm -f "$PANEL"
+
 echo "== C0. --merge re-adopts MECHANICALLY (no hand edit) =="
 
 # The operator must never be told to "merge the new core text in, preserving your
