@@ -15,6 +15,46 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.411.0] - 2026-08-25
+
+### The re-adoption dossier could not say "nothing drifted"
+
+`PC-S305-READOPT-DOSSIER-PRINTS-UNCHANGED-ANCHORS-UNDER-A-CHANGED-HEADING`, reported by the
+reference consumer while adjudicating the 0.403.0 -> 0.410.0 pull.
+
+`reconcile/readopt-override.sh`'s dossier panel, titled `WHAT UPSTREAM CHANGED IN THE SHADOWED
+SECTION`, echoed `## <anchor>` for every entry in `shadows:` **before** computing that anchor's
+diff. An entry whose shadowed sections are byte-identical therefore rendered as a list of bare
+headings underneath a title asserting they had changed. Measured on the reference consumer's
+`overrides/steps__retro__domain-sections.md` -- four anchors, `b1ee196..e3f7c20d`: **four
+headings, zero diff hunks**. The reader's inference is "four sections drifted", which points at
+`--merge` / `--stamp readopt` -- surgery on an entry that needs none. It reached that consumer's
+operator report before it was caught.
+
+**This panel had already failed in the opposite direction**, and the two are one defect. A
+missing trailing newline once made the `while read` loop never run, printing an EMPTY panel that
+read as "nothing changed" on a section that had changed. Both are the same hole: the panel had no
+way to SAY that nothing drifted.
+
+So the states are now disjoint and every one of them is spoken -- an anchor list that could not be
+read, anchors that resolve to no heading at either ref, anchors compared and identical, and
+anchors that genuinely moved. Silence is unconstructible: every path through the block prints
+something. The `byte-identical` sentence counts only anchors actually COMPARED, which this
+change's own control caught it getting wrong -- an entry whose single anchor resolved nowhere
+printed "all 1 shadowed anchor(s) are byte-identical" directly above the `UNRESOLVED` line
+contradicting it.
+
+The loop is fed by a here-string rather than a pipeline so its counters survive; on the last
+stage of a pipeline they die with the subshell and the panel would report zero anchors on every
+entry.
+
+Shipping fixture `layer-readopt-gate` gains arm **B5**, presence-shaped in both directions -- the
+quiet direction demands the explicit sentence, the loud direction demands a real diff hunk, driven
+by two different anchors of the seeded core file because one anchor cannot produce both. Its
+absence-shaped half ("no bare heading") carries a committed mutant that deletes the emptiness
+guard and asserts the bare heading comes back, plus an unmutated control in the same directory so
+a copy that cannot run is reported as broken rather than as a pass.
+
 ## [0.410.0] - 2026-08-25
 
 ### Transient pipeline state is classified once and rendered into the consumer's .gitignore

@@ -424,20 +424,90 @@ $(fm_block "$OVR" reason | fold -s -w 78 | sed 's/^/  /' | head -20)
 --- WHAT UPSTREAM CHANGED IN THE SHADOWED SECTION (${BASE_SHA}..${THEIRS_SHA}) ---
 EOF
 
-# `printf '%s\n'`, not `printf '%s'`. Without the trailing newline `while read`
-# fails its condition on the final line and the loop body NEVER RUNS -- the dossier
-# then prints an EMPTY "what upstream changed" panel and reads as "nothing changed"
-# on a section that changed. Silent, and exactly the class of defect this release
-# is about. (`stale_lines` escaped it only because a here-string appends one.)
-printf '%s\n' "$SHADOWS" | tr ',' '\n' | sed -n 's/.*#//p' | sed 's/^ *//; s/ *$//' \
-| while IFS= read -r id; do
-    [ -n "$id" ] || continue
-    echo "  ## ${id}"
-    diff -u \
-      <(git -C "$DIST" show "${BASE_SHA}:${CORE}" 2>/dev/null | section_of "$id") \
-      <(git -C "$DIST" show "${THEIRS}:${CORE}"   2>/dev/null | section_of "$id") \
-      | tail -n +3 | sed 's/^/    /'
-  done
+# THIS PANEL HAS NOW FAILED IN BOTH DIRECTIONS, AND THE REMEDY IS ONE PARTITION RATHER
+# THAN TWO GUARDS.
+#
+# Direction 1, fixed earlier and kept here because it is why the loop is fed by a
+# here-string: `printf '%s'` without the trailing newline made `while read` fail its
+# condition on the final line, so the loop body NEVER RAN and the panel came out EMPTY --
+# which reads as "nothing changed" on a section that changed. (`stale_lines` escaped it
+# only because a here-string appends one.)
+#
+# Direction 2: the heading was echoed BEFORE the diff was computed, so an anchor whose
+# section is byte-identical rendered as a bare `## <id>` underneath a title that asserts
+# it CHANGED. Measured on the reference consumer, entry
+# `overrides/steps__retro__domain-sections.md`, four anchors, `b1ee196..e3f7c20d`: four
+# headings and ZERO diff hunks. The reader's inference from four headings is "four
+# shadowed sections drifted", which points at the three-way re-adoption merge and the
+# re-stamp -- surgery on an entry needing neither. THE FLAG NAMES ARE DELIBERATELY NOT
+# SPELLED HERE: I59's fixture proves its undocumented-mode arm by reverting every site that
+# names a dispatched mode, and a third naming site in this comment leaves that mutation
+# green against a mode nothing documents. Describe the mode; do not spell it.
+# It reached an operator's report before it was caught, and it is
+# SELF-MASKING because the same rendering is correct whenever at least one anchor DID
+# change, so nothing downstream disagrees.
+#
+# Both directions are one defect: the panel had no way to SAY "nothing drifted". So the
+# states are now disjoint and every one of them is spoken. Silence is unconstructible
+# here -- each path through this block prints something -- which is what stops a
+# regression in either direction from reading as a verdict.
+#
+# NOT A PIPELINE, deliberately. A `while` on the last stage of a pipeline runs in a
+# SUBSHELL and the counters below would die with it, leaving the panel reporting zero
+# anchors on every entry. The anchor list is resolved into a variable first and fed in by
+# here-string, which also appends the newline direction 1 was about.
+_ids="$(printf '%s\n' "$SHADOWS" | tr ',' '\n' | sed -n 's/.*#//p' \
+        | sed 's/^ *//; s/ *$//' | grep -v '^$')"
+_panel="$(mktemp)"
+_n_anchors=0; _n_drifted=0; _n_unres=0; _unresolved=""
+while IFS= read -r id; do
+  [ -n "$id" ] || continue
+  _n_anchors=$((_n_anchors + 1))
+  _bf="$(mktemp)"; _tf="$(mktemp)"
+  git -C "$DIST" show "${BASE_SHA}:${CORE}" 2>/dev/null | section_of "$id" > "$_bf"
+  git -C "$DIST" show "${THEIRS}:${CORE}"   2>/dev/null | section_of "$id" > "$_tf"
+  # AN UNRESOLVABLE ANCHOR IS NOT AN UNCHANGED ONE. Both sides empty makes `diff` silent,
+  # and folding that into "did not drift" is a false reassurance about the one anchor the
+  # operator most needs told about -- it is the same vacuity `--stamp readopt` refuses on.
+  if [ ! -s "$_bf" ] && [ ! -s "$_tf" ]; then
+    _unresolved="${_unresolved:+$_unresolved, }#${id}"
+    _n_unres=$((_n_unres + 1))
+    rm -f "$_bf" "$_tf"
+    continue
+  fi
+  _d="$(diff -u "$_bf" "$_tf" | tail -n +3 | sed 's/^/    /')"
+  rm -f "$_bf" "$_tf"
+  [ -n "$_d" ] || continue
+  _n_drifted=$((_n_drifted + 1))
+  { echo "  ## ${id}"; printf '%s\n' "$_d"; } >> "$_panel"
+done <<EOF
+$_ids
+EOF
+
+# THE "byte-identical" SENTENCE MAY ONLY COUNT ANCHORS THAT WERE ACTUALLY COMPARED.
+# Caught by this change's own control: an entry whose single anchor resolves nowhere
+# printed "all 1 shadowed anchor(s) are byte-identical" immediately above the UNRESOLVED
+# line contradicting it. An anchor that was never read is not an anchor that matched, and
+# stating otherwise re-introduces the exact false reassurance this block exists to remove.
+_n_compared=$((_n_anchors - _n_unres))
+if [ "$_n_anchors" -eq 0 ]; then
+  echo "  (NO ANCHOR could be read from this entry's \`shadows:\` value, so nothing was"
+  echo "   compared. This panel is silent because the comparison never ran, NOT because"
+  echo "   nothing changed.)"
+elif [ "$_n_compared" -le 0 ]; then
+  echo "  (NOT COMPARED -- every one of this entry's ${_n_anchors} shadowed anchor(s) resolves"
+  echo "   to no heading at either ref. This panel says nothing about whether core moved;"
+  echo "   see the UNRESOLVED line below.)"
+elif [ "$_n_drifted" -eq 0 ]; then
+  echo "  (none -- all ${_n_compared} compared anchor(s) are byte-identical at ${BASE_SHA}"
+  echo "   and ${THEIRS_SHA}. Nothing upstream displaced this entry, so there is no core"
+  echo "   text to re-adopt and no section to merge.)"
+else
+  cat "$_panel"
+fi
+[ -n "$_unresolved" ] && printf '%s\n' \
+  "  UNRESOLVED: ${_unresolved} -- resolves to no heading at either ref, so it was NOT compared and its absence above is not a reading."
+rm -f "$_panel"
 
 cat <<EOF
 
