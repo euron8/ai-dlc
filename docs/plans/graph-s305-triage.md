@@ -46,7 +46,7 @@ echo "CTL must be DONE             $([ -d core ] && echo DONE || echo TODO)"
 echo "CTL must be TODO             $([ -e core/NO-SUCH-CONTROL.sh ] && echo DONE || echo TODO)"
 ```
 
-**P1a, P1b, P1c and P1d read DONE; P2 through P7 read TODO; `P1d CONTROL` reads DONE and the
+**P1a through P4 read DONE; P5, P6 and P7 read TODO; `P1d CONTROL` reads DONE and the
 two block controls read DONE then TODO.**
 Every probe read TODO when this plan was written, and the three that flipped did so when
 phase 1 landed — which is the polarity proof, not a formality. Each probe is polarity-correct
@@ -76,14 +76,30 @@ At this plan's writing those read `FAIL — 24 blocking, 3 ambiguous`; `134`;
 **Phase 1 (RC-1) is DONE, shipped as v0.404.0 (`fe64a47a`). Action 6b (RC-1b) is DONE,
 shipped as v0.405.0 (`fea38ec7`), taken out of order at the operator's direction. Phase 2
 (RC-4) is DONE, shipped as v0.406.0. Phase 3 (RC-3) is DONE, shipped as v0.407.0, with its
-item 1 DROPPED on the operator's decision — see RC-3's remedy. All merged to `main` and
-pushed. Actions 4, 5, 6 and 7 are open. Start at NEXT ACTION 4.**
+item 1 DROPPED on the operator's decision — see RC-3's remedy. Action 4 (RC-2) is DONE,
+shipped as v0.408.0 (`faea82e7`, merged `dbdb18cb`). All merged to `main` and pushed.
+Actions 5, 6 and 7 are open. Start at NEXT ACTION 5.**
 
-**Tree state at handoff:** on `main`, clean, level with `origin/main`, `VERSION` `0.406.0`.
+**Tree state at handoff:** on `main`, clean, level with `origin/main`, `VERSION` `0.408.0`.
 Consumer ledger re-checked at the phase boundary and unchanged at
 `a8f61789e1c947a8251eef9b4cb7c098`; nothing in `/Users/n8/git/graph` was written — its three
 dirty paths (`.context-sensor-state`, `.driver/turns`, `pipeline-continuation-log.md`) belong
 to its own paused session and were dirty before this work began.
+
+**RC-2's THREE REMEDY ITEMS ALL SHIPPED, and the single-source clause cost more than the
+routing did.** Routing the answer channel made a second emitter of the pause branch text and
+a second reader of the handoff-intent patterns, so both moved into a new declaration,
+`core/schemas/pause-routing.json`, with three readers and invariant **I94** holding it to one
+copy. Two things a later phase should not rediscover:
+
+- **`I92` was the ID first chosen and it was already claimed**, by the transcript-corpus
+  predicate arm. The rendered index caught it; its `i92_*` variables would also have
+  collided inside the same file. Read `docs/invariant-index.md` before claiming a number.
+- **An arm's FORK COUNT is a change to the suite's wall clock, and `validator-fork-budget`
+  is what says so.** I94's first draft resolved each declared field with its own `python3`
+  start, twice over, and measured 7020 against a 7000 ceiling. Dumping the whole declaration
+  once and replacing a per-field `grep | grep -v | tr` with one `grep` plus shell filtering
+  brought it to 6998. The budget was NOT raised.
 
 **THREE PREMISES IN RC-4'S EVIDENCE WERE MEASURED FALSE while executing phase 2, and the
 remedy that shipped is not the remedy that was filed. The operator chose it on the
@@ -132,8 +148,8 @@ The sprint cannot safely resume until the consumer can push, which is why RC-1 i
 
 **The probes are NOT in action order and one of them is out of family, so the map is written
 out rather than inferred.** `P1a`/`P1b`/`P1c` → action 1 (DONE). `P1d` → action 6b (DONE).
-`P2` → action 2 (DONE). `P3` → action 3 (DONE).
-`P4` → action 4. `P5` → action 5. `P6` → action 6. `P7` → action 7. Read the ACTION number, not the
+`P2` → action 2 (DONE). `P3` → action 3 (DONE). `P4` → action 4 (DONE).
+`P5` → action 5. `P6` → action 6. `P7` → action 7. Read the ACTION number, not the
 probe's; a session going top-down through the probe list reaches `P1d` first and would start
 in the wrong place.
 
@@ -158,11 +174,16 @@ and says why in the comment itself.
 3. **RC-3 — COMPLETE, SHIPPED AS v0.407.0.** The `PostToolUse` on `SendMessage` ships and the
    constraint is stated once. The `PreToolUse` deny was DROPPED because it could not be shown
    able to fire — see RC-3's remedy for the evidence and the operator's decision.
-4. **RC-2 — route a handoff arriving as an answer.** Extend `ai-dlc-answer-capture.sh` to
-   emit the routing block, create the pause flag and log `USER_PAUSE` on a handoff-intent
-   answer, single-sourcing the vocabulary and the branch text from `ai-dlc-pause.sh`.
-   Extend `core/fixtures/handoff-resume-guard` to require Step 1's stopped-teammate record.
-   Fix step 4's driver signal.
+4. **RC-2 — COMPLETE, SHIPPED AS v0.408.0.** `ai-dlc-answer-capture.sh` routes a
+   handoff-intent answer: pause flag, `USER_PAUSE` with a `Channel:` line, and the branch as
+   `PostToolUse` `additionalContext`. The branch text and both intent patterns are declared
+   once in `core/schemas/pause-routing.json` and read by three components; **I94** forbids a
+   second copy. Check 0 gained a teammate-sweep arm — no `In-Flight Teammates` row may still
+   read `in-flight` at a handoff, and `steps/handoff.md` step 1 requires the row be rewritten
+   to `stopped` rather than deleted. Step 4's driver `touch` is unconditional in both the
+   handoff and the auto-handoff copy. New shipping fixture `answer-handoff-routing`;
+   `handoff-resume-guard` gained six arms and a mutant; `pause-hook-origin` now compares five
+   legend seeders.
 5. **RC-5 — cut the post-compact re-read loop.** Extend `ai-dlc-recover.sh` to RENDER the
    rules and step-position digest that live past Claude Code's re-attach cut, and rewrite
    the `POST-COMPACT RECOVERY PROTOCOL` to cite the injected block instead of mandating a
