@@ -161,6 +161,14 @@ PAUSE_HOOK="$(pick "$HERE/../../hooks/ai-dlc-pause.sh" \
 ESC_HOOK="$(pick "$HERE/../../hooks/ai-dlc-escalation-delivery.sh" \
                  "$HERE/../../../.claude/hooks/ai-dlc-escalation-delivery.sh" \
                  "$HERE/../../../core/hooks/ai-dlc-escalation-delivery.sh")"
+# The FIFTH seeder. `ai-dlc-answer-capture.sh` began writing USER_PAUSE when a handoff
+# request arriving as an AskUserQuestion answer was routed, and any hook that can open this
+# log seeds its own legend. It is in the comparison for the same reason the fourth is: a
+# hook that is guarded but left out of the verdict drifts silently, and the arm goes on
+# reporting agreement among the others.
+ANS_HOOK="$(pick "$HERE/../../hooks/ai-dlc-answer-capture.sh" \
+                 "$HERE/../../../.claude/hooks/ai-dlc-answer-capture.sh" \
+                 "$HERE/../../../core/hooks/ai-dlc-answer-capture.sh")"
 
 # The heredoc body between `cat > "$LOG_FILE" <<'EOF'` and its terminator. Keyed on the
 # EMITTING line, not on a mention of the log elsewhere in the file. LC_ALL=C because the
@@ -206,19 +214,20 @@ legend_verdict() { # <scratch-dir> <hook>... -> verdict
 }
 
 V8="UNRESOLVED"
-if [ -z "$CONT_HOOK" ] || [ -z "$ACK_HOOK" ] || [ -z "$PAUSE_HOOK" ] || [ -z "$ESC_HOOK" ]; then
-  bad "FIXTURE BROKEN — cannot locate all four log-seeding hooks in either layout"
+if [ -z "$CONT_HOOK" ] || [ -z "$ACK_HOOK" ] || [ -z "$PAUSE_HOOK" ] || [ -z "$ESC_HOOK" ] || [ -z "$ANS_HOOK" ]; then
+  bad "FIXTURE BROKEN — cannot locate all five log-seeding hooks in either layout"
 else
   LEG="$WORK/legend"; mkdir -p "$LEG"
-  printf '        legend sources: %s | %s | %s | %s\n' "$CONT_HOOK" "$ACK_HOOK" "$PAUSE_HOOK" "$ESC_HOOK"
-  V8="$(legend_verdict "$LEG" "$CONT_HOOK" "$ACK_HOOK" "$PAUSE_HOOK" "$ESC_HOOK")"
-  printf '        legend bytes:   continue=%s acknowledge=%s pause=%s escalation-delivery=%s\n' \
+  printf '        legend sources: %s | %s | %s | %s | %s\n' "$CONT_HOOK" "$ACK_HOOK" "$PAUSE_HOOK" "$ESC_HOOK" "$ANS_HOOK"
+  V8="$(legend_verdict "$LEG" "$CONT_HOOK" "$ACK_HOOK" "$PAUSE_HOOK" "$ESC_HOOK" "$ANS_HOOK")"
+  printf '        legend bytes:   continue=%s acknowledge=%s pause=%s escalation-delivery=%s answer-capture=%s\n' \
     "$(wc -c < "$LEG/legend.1" 2>/dev/null | tr -d ' ')" \
     "$(wc -c < "$LEG/legend.2" 2>/dev/null | tr -d ' ')" \
     "$(wc -c < "$LEG/legend.3" 2>/dev/null | tr -d ' ')" \
-    "$(wc -c < "$LEG/legend.4" 2>/dev/null | tr -d ' ')"
+    "$(wc -c < "$LEG/legend.4" 2>/dev/null | tr -d ' ')" \
+    "$(wc -c < "$LEG/legend.5" 2>/dev/null | tr -d ' ')"
   if [ "$V8" = "SAME" ]; then
-    ok "all four hooks seed a byte-identical log legend"
+    ok "all five hooks seed a byte-identical log legend"
   elif [ "$V8" = "DIFFER" ]; then
     bad "THE SEEDED LEGENDS DISAGREE ($V8). Which legend a sprint gets is decided by hook firing order, and retro.md §4b reads it as the definition of every count it reports."
   else
@@ -243,16 +252,17 @@ fi
 # reachable only on a path that has already failed the fixture, and it says so out loud.
 if [ "$V8" != "SAME" ]; then
   printf '        legend battery: STOOD DOWN — assertion 8 owns this case and already failed (%s)\n' "$V8"
-elif [ -n "${CONT_HOOK:-}" ] && [ -n "${ACK_HOOK:-}" ] && [ -n "${PAUSE_HOOK:-}" ] && [ -n "${ESC_HOOK:-}" ]; then
+elif [ -n "${CONT_HOOK:-}" ] && [ -n "${ACK_HOOK:-}" ] && [ -n "${PAUSE_HOOK:-}" ] && [ -n "${ESC_HOOK:-}" ] && [ -n "${ANS_HOOK:-}" ]; then
   MUT="$WORK/legend-mutants"; mkdir -p "$MUT"
   cp "$CONT_HOOK" "$MUT/continue.sh"
   cp "$ACK_HOOK"  "$MUT/acknowledge.sh"
   cp "$PAUSE_HOOK" "$MUT/pause.sh"
   cp "$ESC_HOOK"  "$MUT/escalation.sh"
+  cp "$ANS_HOOK"  "$MUT/answer.sh"
   kills=0
 
   # 9a. CONTROL — unmutated copies in the mutant directory still read SAME.
-  VC="$(legend_verdict "$MUT" "$MUT/continue.sh" "$MUT/acknowledge.sh" "$MUT/pause.sh" "$MUT/escalation.sh")"
+  VC="$(legend_verdict "$MUT" "$MUT/continue.sh" "$MUT/acknowledge.sh" "$MUT/pause.sh" "$MUT/escalation.sh" "$MUT/answer.sh")"
   if [ "$VC" = "SAME" ]; then
     ok "mutant control: unmutated copies under $MUT read SAME — the battery's harness is alive"
   else
@@ -265,22 +275,23 @@ elif [ -n "${CONT_HOOK:-}" ] && [ -n "${ACK_HOOK:-}" ] && [ -n "${PAUSE_HOOK:-}"
   # is caught by an expression a pause.sh-only mutant never reaches. One pass per position is
   # what makes every comparison load-bearing — including the FOURTH, which is the one the
   # hard-coded `legend.1..3` comparison used to skip while still guarding it.
-  for pos in 1 2 3 4; do
-    case "$pos" in 1) src=continue ;; 2) src=acknowledge ;; 3) src=pause ;; 4) src=escalation ;; esac
+  for pos in 1 2 3 4 5; do
+    case "$pos" in 1) src=continue ;; 2) src=acknowledge ;; 3) src=pause ;; 4) src=escalation ;; 5) src=answer ;; esac
     sed 's/^- `BACKOFF`: rapid-fire/- `BACKOFF`; rapid-fire/' "$MUT/$src.sh" > "$MUT/$src.1byte.sh"
     if cmp -s "$MUT/$src.sh" "$MUT/$src.1byte.sh"; then
       bad "FIXTURE STALE: the one-byte legend mutation matched nothing in $src.sh — the BACKOFF entry was reworded"
       continue
     fi
-    c="$MUT/continue.sh"; a="$MUT/acknowledge.sh"; p="$MUT/pause.sh"; e="$MUT/escalation.sh"
+    c="$MUT/continue.sh"; a="$MUT/acknowledge.sh"; p="$MUT/pause.sh"; e="$MUT/escalation.sh"; n="$MUT/answer.sh"
     case "$pos" in
       1) c="$MUT/continue.1byte.sh" ;;
       2) a="$MUT/acknowledge.1byte.sh" ;;
       3) p="$MUT/pause.1byte.sh" ;;
       4) e="$MUT/escalation.1byte.sh" ;;
+      5) n="$MUT/answer.1byte.sh" ;;
     esac
     printf '        mutant 9b/%s edits: %s\n' "$src" "$MUT/$src.1byte.sh"
-    V9B="$(legend_verdict "$MUT" "$c" "$a" "$p" "$e")"
+    V9B="$(legend_verdict "$MUT" "$c" "$a" "$p" "$e" "$n")"
     if [ "$V9B" = "DIFFER" ]; then
       kills=$((kills+1)); ok "mutant 9b/$src: one byte changed in $src's legend -> DIFFER (assertion 8 can fire on this hook)"
     else
@@ -345,7 +356,7 @@ elif [ -n "${CONT_HOOK:-}" ] && [ -n "${ACK_HOOK:-}" ] && [ -n "${PAUSE_HOOK:-}"
   # empty-body). Deriving it means the next hook to seed a legend extends the battery instead
   # of tripping it, and a SHRUNKEN battery still fails: expected moves down with `LEGEND_HOOKS`
   # only because the loop above walks the same set.
-  LEGEND_HOOKS=4
+  LEGEND_HOOKS=5
   EXPECT_KILLS=$(( LEGEND_HOOKS + 2 ))
   if [ "$kills" -eq "$EXPECT_KILLS" ]; then
     ok "legend battery: $kills of $EXPECT_KILLS mutants killed ($LEGEND_HOOKS one-byte, 1 anchor-loss, 1 empty-body)"

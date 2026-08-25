@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "pause-routing.json",
+  "title": "Pipeline pause routing — branch text and handoff-intent vocabulary",
+  "description": "THE single declaration of (1) the three-way branch the lead is given when the pipeline pauses and (2) the phrasings that mean the operator asked for a handoff. Two hooks and one guard read it; none restates its literals, and a numbered invariant in scripts/validate-enforcement-map.sh fails the build if a shipped file carries one of these strings outside this declaration. Written because an operator's handoff request arrived as an AskUserQuestion ANSWER, which never raises UserPromptSubmit -- so ai-dlc-pause.sh, the only thing that routed a handoff, structurally could not see it, and the lead improvised the procedure instead of loading steps/handoff.md. Routing the answer channel meant a second reader of both the branch text and the vocabulary, and ai-dlc-pause.sh's own header had already ruled on what to do about that: single-source it, do not copy it.",
+  "type": "object",
+  "required": [
+    "pause_branch_text",
+    "prompt_pause_preamble",
+    "answer_pause_preamble",
+    "handoff_intent_pattern",
+    "handoff_mention_exclusion_pattern"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "pause_branch_text": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The three-way branch, shared verbatim by every hook that announces a pause. It is separate from the preambles because the two callers differ only in HOW the pause was raised -- a typed message versus a selected answer -- and the instruction that follows is the same instruction. Splitting it here is what lets both emit one branch rather than two that drift."
+    },
+    "prompt_pause_preamble": {
+      "type": "string",
+      "minLength": 1,
+      "description": "ai-dlc-pause.sh's opening sentence: a UserPromptSubmit carrying operator prose. Concatenated with pause_branch_text to form the additionalContext, byte-identically to what that hook emitted before this declaration existed."
+    },
+    "answer_pause_preamble": {
+      "type": "string",
+      "minLength": 1,
+      "description": "ai-dlc-answer-capture.sh's opening sentence: an AskUserQuestion answer carrying handoff intent. It names the channel because the lead otherwise has no way to tell which event paused it, and the two have different evidence trails -- a typed request is in operator-requests-history.md, a selected answer is in operator-answers-history.md."
+    },
+    "handoff_intent_pattern": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Extended regular expression, matched case-insensitively, for REQUEST-shaped handoff phrasings. Its false-positive set was measured on the reference consumer as ai-dlc-continue.sh's Check 0 predicate before it moved here: it matches 'handoff'/'hand off' as a VERB, a terse standalone 'handoff', and 'continue in a new session', and deliberately does NOT match incidental NOUN mentions ('the handoff prompt', 'handoff guard'), because a bare-substring regex fires on every one of those and spams the operator with a spurious resume prompt. PAUSE-only phrasings are deliberately absent: an operator who types 'pause' has already paused the pipeline through ai-dlc-pause.sh, and adding the word here would put the handoff guard -- which demands a resume block -- in front of someone who asked for no such thing."
+    },
+    "handoff_mention_exclusion_pattern": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Extended regular expression, matched case-insensitively. A message that matches this is DISCUSSING the handoff mechanism, or IS a resume prompt, and is not a request. Applied as a veto over handoff_intent_pattern by every reader. It exists because the injected pipeline-control context itself contains the word 'handoff', so without the veto the guard fires on its own output."
+    }
+  },
+  "pause_branch_text": "Before continuing pipeline work, interpret the user's intent: (a) Resume intent -- including /ai-dlc invocations, handoff resume prompts, or natural resume language -- delete the flag via Bash (rm _bmad-output/pipeline-paused.flag) then RE-READ the current step file (Rule 22: Read tool call for the step file named in pipeline-snapshot.md Pipeline Position, enumerate remaining numbered sections in output, THEN execute them). Do not act from memory of what remains. (b) Question, correction, clarification, or conversational message -- respond normally; leave the flag in place. (c) Handoff request -- follow Rule 2 handoff protocol; leave the flag in place. Do not execute pipeline steps while the flag exists.",
+  "prompt_pause_preamble": "[AI/DLC Pipeline Control] A user message was received while the pipeline is active. The pipeline has been paused via flag file at _bmad-output/pipeline-paused.flag. ",
+  "answer_pause_preamble": "[AI/DLC Pipeline Control] The operator's AskUserQuestion answer carries HANDOFF INTENT, and an AskUserQuestion answer raises no UserPromptSubmit, so this is the only notice of it you will get. The pipeline has been paused via flag file at _bmad-output/pipeline-paused.flag, and the answer is recorded verbatim in _bmad-output/operator-answers-history.md. Branch (c) is the one that applies: LOAD steps/handoff.md and execute its five steps in order. Do not improvise the procedure from memory of what a handoff involves. ",
+  "handoff_intent_pattern": "hand[ -]off (this|it|to|the (sprint|pipeline|work|session))|hand(ing)? (this|it) off|\\b(do|create|prepare|need|want|start|begin|let's|please) (a |an |the )?hand[ -]?off\\b|^[[:space:]]*hand[ -]?off[[:space:]]*$|continue in a (new|fresh) session|pick (this|it) up in a (new|fresh) session",
+  "handoff_mention_exclusion_pattern": "/ai-dlc|acknowledge handoff|handoff (resume|guard|prompt|protocol)|resume prompt|pipeline control"
+}

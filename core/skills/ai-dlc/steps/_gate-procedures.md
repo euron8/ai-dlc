@@ -608,7 +608,11 @@ carry the no-human-present additions:
    every `in_progress` task. Halt any Agent-spawned teammate not
    bound to a task. Wait until every teammate has returned before
    proceeding. Record stopped teammates and in-flight artifacts in
-   the snapshot's Open Items in Step 3.
+   the snapshot's Open Items in Step 3, and set each stopped
+   teammate's **In-Flight Teammates** row `status` to `stopped` —
+   rewrite the row, never delete it. `steps/handoff.md` step 1 owns
+   why, and `ai-dlc-continue.sh` Check 0 blocks the stop while any
+   row still reads `in-flight`.
 2. `git add` and `git commit` any in-flight work, including work
    teammates left in the working tree.
 3. Finalize the pipeline snapshot — one last update capturing
@@ -649,9 +653,9 @@ carry the no-human-present additions:
    > user-shared /context."*
 
    The resume line is the bare `/ai-dlc resume` (the successor reads the
-   snapshot for all state). If auto-session-chaining is in use, also
-   `touch _bmad-output/.driver/handoff` — the driver's zero-content
-   handoff signal.
+   snapshot for all state). Then `touch _bmad-output/.driver/handoff` —
+   the driver's zero-content handoff signal. **The `touch` is
+   unconditional**; `steps/handoff.md` step 4 owns why.
 
 5. Create the pause flag so the continuation hook allows this
    auto-handoff to end the session (an autonomous handoff has no user

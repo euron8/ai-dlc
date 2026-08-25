@@ -148,6 +148,7 @@ core_manifest:
   - fixtures/apply-restamp-theirs/**
   - fixtures/apply-relabel-noop-row/**
   - fixtures/absorbed-specifics-survive/**
+  - fixtures/answer-handoff-routing/**
   - fixtures/askuserquestion-citation/**
   - fixtures/command-args-citation/**
   - fixtures/operator-request-capture/**

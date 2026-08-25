@@ -52,4 +52,92 @@ mk undelimited "hand off the sprint" \
 mk noun "what does the handoff guard actually check?" \
   "It checks that the resume prompt is delimited." > "$ROOT/.p_noun"
 
+# (6) A COMPLIANT handoff turn: request + the mandated resume block. Reused by every
+#     teammate-sweep case below, so those cases differ from each other in the SNAPSHOT
+#     alone and nothing else. If they each carried their own transcript, a difference in
+#     the resume block would be indistinguishable from a difference in the sweep.
+mk sweep "hand off the sprint" \
+  "Snapshot finalized.
+
+\`\`\`
+----
+/ai-dlc resume
+----
+\`\`\`
+" > "$ROOT/.p_sweep"
+
+# ---------------------------------------------------------------------------
+# Snapshots for the teammate-sweep arm
+# ---------------------------------------------------------------------------
+# Three snapshots that differ ONLY in the In-Flight Teammates section, so the arm's verdict
+# cannot be produced by anything else in the file. Every one carries the other six
+# load-bearing sections, because a snapshot the guard cannot parse would fail-open and read
+# exactly like a clean sweep.
+#
+# THE SEED IS WRITTEN FROM route.md's ROW SHAPE, not from the guard's reader. A seed derived
+# from what the reader accepts proves the reader accepts its own grammar and stays green
+# through a change to both.
+snap() { # snap <name> <inflight-section-body>
+  cat > "$ROOT/snap-$1.md" <<EOF
+# Pipeline Snapshot
+
+## Pipeline Position
+current_step_file: implementation.md
+
+## Sprint Context
+sprint_id: 305
+
+## Recent Activity
+- gate 3 in progress
+
+## Open Items
+- none
+
+## Locked Decisions
+- none
+
+## In-Flight Teammates
+$2
+
+## Context Reminders
+context_reminders_sent: none
+EOF
+  printf '%s' "$ROOT/snap-$1.md"
+}
+
+# (a) a teammate is still recorded as running -> the sweep was not done, or was not recorded
+snap running '| agent | role | deliverable | dispatched-at | status |
+|---|---|---|---|---|
+| tester-a | qa | docs/reviews/s305-qa.md | 2026-08-25T01:10:00Z | in-flight |' > "$ROOT/.s_running"
+
+# (b) the same teammate, swept and RECORDED -> the state steps/handoff.md step 1 mandates
+snap stopped '| agent | role | deliverable | dispatched-at | status |
+|---|---|---|---|---|
+| tester-a | qa | docs/reviews/s305-qa.md | 2026-08-25T01:10:00Z | stopped |' > "$ROOT/.s_stopped"
+
+# (c) no In-Flight section at all. route.md says that section AUTO-HEALS, so a snapshot
+#     written by an older version legitimately lacks it and must not be blocked.
+cat > "$ROOT/snap-nosection.md" <<'EOF'
+# Pipeline Snapshot
+
+## Pipeline Position
+current_step_file: implementation.md
+
+## Sprint Context
+sprint_id: 305
+
+## Recent Activity
+- gate 3 in progress
+
+## Open Items
+- none
+
+## Locked Decisions
+- none
+
+## Context Reminders
+context_reminders_sent: none
+EOF
+printf '%s' "$ROOT/snap-nosection.md" > "$ROOT/.s_nosection"
+
 printf '%s\n' "$ROOT"
