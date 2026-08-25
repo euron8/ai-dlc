@@ -137,7 +137,7 @@ fi
 # fixtures it does not name. It had already drifted: install shipped nine, this listed
 # five. `scripts/validate-enforcement-map.sh` (I8) now asserts the two lists and
 # core/fixtures/ agree, so the next fixture cannot be added to one loop only.
-for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-17-counts check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence adversarial-citation escalation-citation extension-check-adoption check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-anchor-declaration layer-catalog-collision layer-contract-conformance layer-contract-conformance-b layer-readopt-gate layer-debt-ledger handoff-resume-guard divergence-hard-block taught-schema gate-adjudication self-update-gate setup-config-drift relabel-theirs-collision known-skills-extension reconcile-blocking-list reconcile-emit-report apply-drift-refile apply-drift-after-write apply-restamp-theirs apply-relabel-noop-row absorbed-specifics-survive escalation-status-vocabulary askuserquestion-citation answer-handoff-routing command-args-citation operator-request-capture request-coverage pause-hook-origin core-write-guard audit-anchors-schema dispatch-model-guard subagent-probe sprint-status-lifecycle route-defect-classification story-provenance implementation-join-yield wait-stale-deliverable validate-mandatory-rules-revive mandatory-rules-clean-tree mandatory-rules-skip-accounting check5-anchor-base check-22-spawn-ledger cycle-commits-enforce ledger-reverify ledger-status-vocabulary ledger-reverify-unfalsifiable ledger-rotate snapshot-archive-rotate snapshot-section-schema resume-whole-read retired-contract-token retired-layer-contract retired-layer-passage retired-fixture-orphan consumer-machinery-inventory retro-audit-scans context-mode-protect verdict-pass-content provenance-not-accessible snapshot-evidence-cell inflight-row-shape whole-read-pool release-version-triple core-script-boundary apply-legacy-script-path validator-path-resolution relocation-preclassify ci-gates-resolution shadowed-local-validators h2-attest-scripts-dir gate-remediation-deny gate-repair-record gate-series-rung gate-verdict-grep-shape blocker-adjudication-record bmad-invocation-resolve check-31-ac-falsifiability spec-adoption-floor spec-join-integrity consumer-machinery-home layer-qualifier-grain layer-extends-grain layer-retired-id-crosswalk layer-crosswalk-home layer-reference-resolution layer-artifact-path-prescriptions layer-conforms-to layer-adjudication-tier layer-title-join stray-party-mode-provenance core-paths-audit-diff mutation-red-replay trunk-push-bound trunk-audit-classes story-fields-derive fixture-drivability consumer-suite-pool postcompact-rulebook-recovery scope-confirmation snapshot-conservation suppression-lifetime self-update-join-gate self-update-fixture-log snapshot-supersession-marker readset-skip notify-hook-channel artifact-path-migration artifact-path-conformance setup-site-drift story-corpus-sprint-slot apply-worklist-rows apply-self-overwrite layer-absorption-retire consolidation-residue apply-machinery-stamp changelog-sprint-slot updater-session-signals artifact-derivations derivation-capture hook-registration-join budget-summary-verdict architecture-index-cell-escaping prepush-worktree-env-scrub retro-compliance-workflow escalation-delivery; do
+for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-17-counts check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence adversarial-citation escalation-citation extension-check-adoption check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-anchor-declaration layer-catalog-collision layer-contract-conformance layer-contract-conformance-b layer-readopt-gate layer-debt-ledger handoff-resume-guard divergence-hard-block taught-schema gate-adjudication self-update-gate setup-config-drift relabel-theirs-collision known-skills-extension reconcile-blocking-list reconcile-emit-report apply-drift-refile apply-drift-after-write apply-restamp-theirs apply-relabel-noop-row absorbed-specifics-survive escalation-status-vocabulary askuserquestion-citation answer-handoff-routing command-args-citation operator-request-capture request-coverage pause-hook-origin core-write-guard audit-anchors-schema dispatch-model-guard subagent-probe sprint-status-lifecycle route-defect-classification story-provenance implementation-join-yield wait-stale-deliverable validate-mandatory-rules-revive mandatory-rules-clean-tree mandatory-rules-skip-accounting check5-anchor-base check-22-spawn-ledger cycle-commits-enforce ledger-reverify ledger-status-vocabulary ledger-reverify-unfalsifiable ledger-rotate snapshot-archive-rotate snapshot-section-schema resume-whole-read retired-contract-token retired-layer-contract retired-layer-passage retired-fixture-orphan consumer-machinery-inventory retro-audit-scans context-mode-protect verdict-pass-content provenance-not-accessible snapshot-evidence-cell inflight-row-shape whole-read-pool release-version-triple core-script-boundary apply-legacy-script-path validator-path-resolution relocation-preclassify ci-gates-resolution shadowed-local-validators h2-attest-scripts-dir gate-remediation-deny gate-repair-record gate-series-rung gate-verdict-grep-shape blocker-adjudication-record bmad-invocation-resolve check-31-ac-falsifiability spec-adoption-floor spec-join-integrity consumer-machinery-home layer-qualifier-grain layer-extends-grain layer-retired-id-crosswalk layer-crosswalk-home layer-reference-resolution layer-artifact-path-prescriptions layer-conforms-to layer-adjudication-tier layer-title-join stray-party-mode-provenance core-paths-audit-diff mutation-red-replay trunk-push-bound trunk-audit-classes story-fields-derive fixture-drivability consumer-suite-pool postcompact-rulebook-recovery scope-confirmation snapshot-conservation suppression-lifetime self-update-join-gate self-update-fixture-log snapshot-supersession-marker readset-skip notify-hook-channel artifact-path-migration artifact-path-conformance setup-site-drift story-corpus-sprint-slot apply-worklist-rows apply-self-overwrite layer-absorption-retire consolidation-residue apply-machinery-stamp changelog-sprint-slot updater-session-signals artifact-derivations derivation-capture hook-registration-join budget-summary-verdict architecture-index-cell-escaping prepush-worktree-env-scrub retro-compliance-workflow escalation-delivery transient-ignore-block; do
   if [ -d "$PROJECT_ROOT/tests/fixtures/$fixture_dir" ]; then
     DIRS_TO_REMOVE+=("tests/fixtures/$fixture_dir/")
   fi
@@ -223,6 +223,39 @@ if [ -d "$ARCHIVE_BASE" ]; then
   done
   rm -rf "$ARCHIVE_BASE"
   echo "  Removed docs/pre-ai-dlc/ archive directory"
+fi
+
+# Remove the managed transient-state block from the consumer's .gitignore.
+#
+# CUT BY MARKER PAIR, never by matching the rules themselves. A consumer may legitimately have
+# written its own rule for one of these paths before installing -- the reference consumer had
+# four of them, hand-added -- and a removal keyed on the patterns would delete those too. The
+# markers bound exactly what install.sh wrote.
+#
+# THE MARKERS ARE READ FROM THE INSTALLED SCHEMA, NOT RESTATED HERE. A second copy of the two
+# strings is a second thing to drift, and the failure is silent: a stale marker in this file
+# leaves the block behind while the uninstall reports success. If the schema is already gone,
+# say so rather than guessing.
+UNINSTALL_STATE_SCHEMA="$PROJECT_ROOT/.claude/schemas/pipeline-state-paths.json"
+CONSUMER_GITIGNORE="$PROJECT_ROOT/.gitignore"
+if [ -f "$CONSUMER_GITIGNORE" ]; then
+  if [ -f "$UNINSTALL_STATE_SCHEMA" ] && command -v jq >/dev/null 2>&1; then
+    UIG_BEGIN="$(jq -r '.block_begin' "$UNINSTALL_STATE_SCHEMA")"
+    UIG_END="$(jq -r '.block_end' "$UNINSTALL_STATE_SCHEMA")"
+    if grep -qxF -- "$UIG_BEGIN" "$CONSUMER_GITIGNORE"; then
+      awk -v b="$UIG_BEGIN" -v e="$UIG_END" '
+        $0 == b { skip = 1; next }
+        skip == 1 && $0 == e { skip = 0; next }
+        skip == 0 { print }
+      ' "$CONSUMER_GITIGNORE" > "$CONSUMER_GITIGNORE.ai-dlc-new"
+      mv "$CONSUMER_GITIGNORE.ai-dlc-new" "$CONSUMER_GITIGNORE"
+      echo "  Removed AI/DLC transient-state block from .gitignore"
+    fi
+  else
+    echo "  NOTE: .claude/schemas/pipeline-state-paths.json is absent, so the managed"
+    echo "    .gitignore block (if present) was left in place. Delete the lines between"
+    echo "    the AI/DLC transient pipeline state markers by hand."
+  fi
 fi
 
 # Clean up empty directories (don't remove if they still have content)

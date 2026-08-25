@@ -605,6 +605,33 @@ for schema_file in "$SCRIPT_DIR/../core/schemas/"*.json; do
   echo "  $(basename "$schema_file") installed"
 done
 
+# Render the transient pipeline state into the consumer's .gitignore.
+#
+# THE DISTRIBUTION SHIPPED NO IGNORE RULE AT ALL until this step existed, and the cost was
+# measured on the reference consumer: 138 files of per-run coordination state committed across
+# three paths -- .wait-beats/ (134), .driver/ (3), .context-sensor-state (1) -- while four
+# OTHER transient paths had been hand-added to that consumer's own .gitignore over roughly four
+# hundred releases. A hand-written list on either side of that gap rots in silence, because
+# nothing joins it to the hooks that create the paths.
+#
+# THE RENDERER IS A SHIPPED SCRIPT AND IS CALLED HERE RATHER THAN INLINED, and that is not
+# tidiness. This installer is the path only a NEW consumer takes; an existing one arrives
+# through ai-dlc-update, whose apply.sh copies core files by a derived mapping. An inline block
+# would deliver the DECLARATION to every consumer on every pull and the thing that RENDERS it
+# to none of them -- so the consumers that already have committed transient state, which is the
+# entire reason this exists, would be exactly the ones it never reached.
+echo "Installing transient-state ignore rules..."
+SYNC_IGNORE="$PROJECT_ROOT/scripts/ai-dlc/sync-transient-ignore.sh"
+if [ -x "$SYNC_IGNORE" ]; then
+  # Run the copy that just landed in the consumer, not the one in this distribution: it is the
+  # one the consumer will run from now on, and a difference between them is worth finding here
+  # rather than on the consumer's next pull.
+  bash "$SYNC_IGNORE" --root "$PROJECT_ROOT" || echo "  WARNING: transient-state ignore rules were not written (see above)"
+else
+  echo "  SKIPPED: $SYNC_IGNORE is absent or not executable, so no ignore rules were written."
+  echo "    Transient pipeline state under _bmad-output/ will be reported as untracked changes."
+fi
+
 # Install the unconditional rule files that Claude Code's own loader reads.
 #
 # NO VERSION GATE HERE, DELIBERATELY, AND THE FIRST VERSION OF THIS BLOCK HAD ONE.

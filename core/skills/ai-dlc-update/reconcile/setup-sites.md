@@ -171,6 +171,7 @@ core_manifest:
   - core/fixtures/mutation-red-replay/**
   - core/fixtures/trunk-audit-classes/**
   - core/fixtures/story-fields-derive/**
+  - core/fixtures/transient-ignore-block/**
   - core/fixtures/trunk-push-bound/**
   - core/fixtures/pause-hook-origin/**
   - core/fixtures/postcompact-rulebook-recovery/**
