@@ -85,6 +85,26 @@ Actions 6 and 7 are open. Start at NEXT ACTION 6.**
 **NOTHING IS IN FLIGHT** — no branch open, no partial edit, no unrun gate. Action 6 has not
 been started.
 
+**THE COMPACTION-DURABLE RULE CHANNEL IS EFFECTIVELY FULL: 44522 of 44544 bytes, 22 free.**
+Arm A6 of `scripts/validate-claude-rules.sh` fails the push over the ceiling, so any rule you
+add to `CLAUDE.md` or to a `.claude/rules/` file with no `paths:` breaks your gate unless you
+delete as much as you add. Raising the ceiling has been an OPERATOR RULING both times it has
+happened. Derive the live number before you plan a rule — `bash
+scripts/validate-claude-rules.sh` prints it — because this figure moves with every release.
+
+**EIGHT LOCAL BRANCHES ARE AHEAD OF `origin/main` AND NONE OF THEM IS THIS PLAN'S.** All six
+plan release branches are fully contained in `origin/main`, verified by content rather than
+ancestry. The eight predate this plan: `backup-batch7b`, `hook-selftest`, and six
+`worktree-agent-*`. Two are substantial — 13 and 20 commits — and they carry FIXTURE-SHARDING
+AND FORK-BUDGET PERF WORK, which is the subject of **BL-088**, the suite pole. Do not assume
+they are dead, and do not delete one to tidy up; ask the operator before acting on them.
+`git rev-list --count origin/main..<branch>` is the reading.
+
+**`git branch` OUTPUT WAS SILENTLY TRUNCATED WHEN THIS WAS DERIVED** — a listing showed 8 of
+20 branches, caught only because a `release/*` count of 8 contradicted the names beside it.
+That is the Bash-output compressor described below, on a command whose answer is a LIST.
+Count the thing two ways before you believe a branch inventory.
+
 **The whole consumer block was re-derived at this handoff and every value is UNCHANGED**
 from the record above: `FAIL — 24 blocking, 3 ambiguous`; `134` tracked wait-beats;
 `BLOCKED 15 / BACKOFF 0 / ALLOWED_BY_LIVE_BEAT 240`; ledger
