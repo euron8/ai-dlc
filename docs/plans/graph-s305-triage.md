@@ -1,12 +1,20 @@
 # s305 triage — six root causes, each measured, each with a remedy
 
-## RESUME HERE
+> **DISCHARGED 2026-08-25 — DO NOT EXECUTE. This banner is the current status record; every
+> block below it is EVIDENCE.** All seven actions shipped as v0.404.0–v0.410.0, and the
+> consumer work they existed to unblock is complete: the reference consumer runs `0.412.0`,
+> `validate-artifact-paths.sh` reports `PASS`, and all three transient paths are untracked
+> with the durable control still tracked. The done-when's two-minute bound is met for a
+> ROUTINE push only — the suite pole is 124s against a 120s default, which this plan puts out
+> of scope and files as **BL-088** (`docs/backlog.md:60`). Read on for the derivation behind a
+> figure; take no instruction from any of it.
 
-**You were started with one sentence: `READ and FOLLOW docs/plans/graph-s305-triage.md`.
-This section is the whole of your entry point and it is the ONLY CURRENT STATUS RECORD in
-this file.** Everything from `## Context` down is EVIDENCE — measurements taken 2026-08-24/25
-against trees that have since moved. Read it when a figure looks arbitrary or when you need
-the derivation behind one. **Do not take an instruction from it.**
+## The state this plan was resumed from, retained
+
+**Superseded by the banner above.** Kept because the probe block below is the cheapest way to
+re-derive what shipped, and because the corrections recorded here are the evidence for six root
+causes. Everything from `## Context` down is measurement taken 2026-08-24/25 against trees that
+have since moved. **Do not take an instruction from it.**
 
 **Two repos, and the boundary is absolute.** `/Users/n8/git/ai-dlc` is WRITE.
 `/Users/n8/git/graph` is the reference consumer: **read it, never write it.** Full boundary,

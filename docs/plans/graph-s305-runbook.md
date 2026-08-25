@@ -1,10 +1,24 @@
 # s305 unblock runbook — migrate the artifact paths, untrack the transient state, resume gate 3
 
-## RESUME HERE
+> **DISCHARGED 2026-08-25 — ACTIONS 1–9 ARE SPENT. DO NOT EXECUTE THEM AGAIN.** They were
+> executed against `/Users/n8/git/graph` and every one is verified landed, derived from that
+> tree: the consumer runs `0.412.0` with all four stamp fields advanced; `.wait-beats/`,
+> `.driver/` and `.context-sensor-state` are tracked 0/0/0 while the durable control
+> `.audit-accepted-exceptions` is still tracked at 1; `sync-transient-ignore.sh --check`
+> reports `OK: transient-state block current (13 path(s))`; `validate-artifact-paths.sh`
+> reports `PASS`; the read-set map covers 168 of 168 fixtures.
+>
+> **RE-RUNNING THEM IS DESTRUCTIVE, NOT MERELY WASTEFUL.** Action 5 moves 22 tracked files that
+> are already at their destination, and action 6 runs a migrator that refuses a dirty tree.
+>
+> **Action 10 — resume gate 3 on story 2.1 — is the only item still open, and it is ORDINARY
+> PIPELINE WORK, not a step of this runbook.** The operator drives it from a fresh session
+> through the normal skill; nothing here needs re-reading to do it.
 
-**You were started with one sentence: `READ and FOLLOW docs/plans/graph-s305-runbook.md`.
-This section is your whole entry point.** Everything below `## Start here` is the procedure and
-the evidence behind it.
+## The procedure, retained as the record of what was run
+
+**Superseded by the banner above.** Kept because the rehearsal figures and the three ordering
+constraints below are the evidence for what was done and why in that order.
 
 **You are the GRAPH session. You WRITE `/Users/n8/git/graph`.** That is the inversion a reader
 coming from this repo's other plans must notice: `docs/plans/graph-s305-triage.md` forbids
