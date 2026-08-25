@@ -46,8 +46,8 @@ echo "CTL must be DONE             $([ -d core ] && echo DONE || echo TODO)"
 echo "CTL must be TODO             $([ -e core/NO-SUCH-CONTROL.sh ] && echo DONE || echo TODO)"
 ```
 
-**P1a, P1b and P1c read DONE; P1d and P2 through P7 read TODO; `P1d CONTROL` reads DONE and
-the two block controls read DONE then TODO.**
+**P1a, P1b, P1c and P1d read DONE; P2 through P7 read TODO; `P1d CONTROL` reads DONE and the
+two block controls read DONE then TODO.**
 Every probe read TODO when this plan was written, and the three that flipped did so when
 phase 1 landed — which is the polarity proof, not a formality. Each probe is polarity-correct
 in the sense `BL-086` names: it keys on a byte that EXISTS today and the fix REMOVES, or on a
@@ -73,8 +73,9 @@ At this plan's writing those read `FAIL — 24 blocking, 3 ambiguous`; `134`;
 
 ### What is DONE — do not redo any of it
 
-**Phase 1 (RC-1) is DONE, shipped as v0.404.0 (`fe64a47a`), merged to `main` and pushed.
-Phases 2 through 7 are open. Start at NEXT ACTION 2.** The gate ran green on it —
+**Phase 1 (RC-1) is DONE, shipped as v0.404.0 (`fe64a47a`). Action 6b (RC-1b) is DONE,
+shipped as v0.405.0 (`fea38ec7`), taken out of order at the operator's direction. Both merged
+to `main` and pushed. Actions 2, 3, 4, 5, 6 and 7 are open. Start at NEXT ACTION 2.** The gate ran green on it —
 `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`, gate exit 0, 0 FAIL lines, 163 fixtures
 ok, `readset-skip`, `artifact-path-conformance` and `validator-fork-budget` read by name
 against an impossible-name control of 0.
@@ -125,10 +126,8 @@ a heading is a claim about the tree and the probe is a reading of it.
 The sprint cannot safely resume until the consumer can push, which is why RC-1 is action 1.
 
 **The probes are NOT in action order and one of them is out of family, so the map is written
-out rather than inferred.** `P1a`/`P1b`/`P1c` → action 1. `P2` → action 2. `P3` → action 3.
-`P4` → action 4. `P5` → action 5. `P6` → action 6. `P1d` → action **6b**, which carries a `1`
-in its probe name because it is the second half of RC-1 and a `6b` in its action number
-because nothing depends on it landing early. `P7` → action 7. Read the ACTION number, not the
+out rather than inferred.** `P1a`/`P1b`/`P1c` → action 1 (DONE). `P1d` → action 6b (DONE). `P2` → action 2. `P3` → action 3.
+`P4` → action 4. `P5` → action 5. `P6` → action 6. `P7` → action 7. Read the ACTION number, not the
 probe's; a session going top-down through the probe list reaches `P1d` first and would start
 in the wrong place.
 
@@ -155,7 +154,7 @@ in the wrong place.
    the `POST-COMPACT RECOVERY PROTOCOL` to cite the injected block instead of mandating a
    full `SKILL.md` Read.
 6. **RC-6 — ship the ignore rule** for `_bmad-output/.wait-beats/`.
-6b. **RC-1b — core prescribes `git push` with no time budget, and every consumer pays it.**
+6b. **RC-1b — COMPLETE, SHIPPED AS v0.405.0.** Core prescribed `git push` with no time budget.
    Measured on a `file://` clone of the reference consumer at `386a56d34`, per-line
    timestamps: the pre-push is **148.9s**, of which every phase before the fixture suite is
    **18.0s** and the suite is **130.9s**. The default caller timeout is **120s**. The suite
