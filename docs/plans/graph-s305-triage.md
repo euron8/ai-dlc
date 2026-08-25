@@ -121,8 +121,16 @@ a heading is a claim about the tree and the probe is a reading of it.
 
 ### NEXT ACTIONS — numbered, in order
 
-**Run the probe block first and execute the LOWEST-NUMBERED phase reading `TODO`.** The
-sprint cannot safely resume until the consumer can push, which is why RC-1 is phase 1.
+**Run the probe block first and execute the LOWEST-NUMBERED ACTION whose probe reads `TODO`.**
+The sprint cannot safely resume until the consumer can push, which is why RC-1 is action 1.
+
+**The probes are NOT in action order and one of them is out of family, so the map is written
+out rather than inferred.** `P1a`/`P1b`/`P1c` → action 1. `P2` → action 2. `P3` → action 3.
+`P4` → action 4. `P5` → action 5. `P6` → action 6. `P1d` → action **6b**, which carries a `1`
+in its probe name because it is the second half of RC-1 and a `6b` in its action number
+because nothing depends on it landing early. `P7` → action 7. Read the ACTION number, not the
+probe's; a session going top-down through the probe list reaches `P1d` first and would start
+in the wrong place.
 
 1. **RC-1 — unblock the consumer's push.** **Declare `_bmad-output/party-mode` in core's
    own `areas:` block FIRST** (`core/skills/ai-dlc/artifact-path-grammar.md`) — see the
