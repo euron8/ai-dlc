@@ -1,52 +1,96 @@
 # s305 triage — six root causes, each measured, each with a remedy
 
-## Start here
+## RESUME HERE
 
 **You were started with one sentence: `READ and FOLLOW docs/plans/graph-s305-triage.md`.
-This section is your whole entry point and the ONLY CURRENT STATUS RECORD in this file.**
-Everything below `## Context` is EVIDENCE — measurements taken on 2026-08-24/25 against the
-trees as they stood then. Read it when a figure looks arbitrary. **Do not take an
-instruction from it.**
+This section is the whole of your entry point and it is the ONLY CURRENT STATUS RECORD in
+this file.** Everything from `## Context` down is EVIDENCE — measurements taken 2026-08-24/25
+against trees that have since moved. Read it when a figure looks arbitrary or when you need
+the derivation behind one. **Do not take an instruction from it.**
 
 **Two repos, and the boundary is absolute.** `/Users/n8/git/ai-dlc` is WRITE.
-`/Users/n8/git/graph` is the reference consumer: **read it, never write it.** Assert the
-boundary by ledger CONTENT, not by dirty count and not by `HEAD` —
-`md5 -q /Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md` read
-`a8f61789e1c947a8251eef9b4cb7c098` when this plan was written. Re-check it after every
-phase; a change is a stop-and-ping condition.
-
-**Never run `git checkout --`, `git restore`, `git clean`, `git stash`, or
-`git reset --hard` in either repo, and tell every delegate the same.** Delegates work in
-`mktemp` copies made with `git archive HEAD | tar -x`.
+`/Users/n8/git/graph` is the reference consumer: **read it, never write it.** Full boundary,
+and the reason for it, in `## Start here` below.
 
 **Ping the operator** on any question, on any decision, and on completion — including an
 early stop. Silence and progress are indistinguishable from outside.
 
-**Merges are preapproved.** Cut the branch, run the gate, merge it. Each numbered phase is
-one release on its own branch; the release-version validator rejects a branch carrying two.
+**Merges are preapproved.** Cut the branch, run the gate, merge it. Each phase is ONE
+release on its own branch; `validate-release-version.sh` rejects a branch carrying two.
 
-### Derive the state; do not trust the numbers below
+### Derive the state; do not trust the record below
 
-Every figure here is a HYPOTHESIS about trees that have moved. The measured base rate of
-expired premises in this program is roughly one in two. Each command carries its own control.
+Every figure in this file is a HYPOTHESIS about trees that have moved. The measured base
+rate of expired premises in this program is roughly one in two. **Run this block first — it
+is the phase state.** Each probe is keyed on an emission site, and the two controls at the
+end must read `DONE` then `TODO` or the block is not discriminating and its zeros mean
+nothing.
 
+```sh
+cd /Users/n8/git/ai-dlc
+v() { [ "$1" -gt 0 ] && echo DONE || echo TODO; }
+lb=$(awk '/ALLOWED_BY_LIVE_BEAT/{f=1} f&&/exit 0/{exit} f' core/hooks/ai-dlc-continue.sh \
+     | grep -cF 'rm -f "$STATE_FILE"')
+echo "P1a readset producer ships   $([ -e core/scripts/derive-fixture-readsets.sh ] && echo DONE || echo TODO)"
+echo "P1b party-mode home in core  $(v "$(grep -rF -- '_bmad-output/party-mode/s<N>/' core/skills/ai-dlc/ | wc -l)")"
+echo "P1c SKILL.md parenthetical   $([ "$(grep -cF 'planning-artifacts/party-mode' core/skills/ai-dlc/SKILL.md)" -eq 0 ] && echo DONE || echo TODO)"
+echo "P2  live-beat keeps LAST_TS  $([ "$lb" -eq 0 ] && echo DONE || echo TODO)"
+echo "P3  escalation guards        $(v "$(grep -ciF 'escalation_undelivered' CHANGELOG.md)")"
+echo "P4  answer-capture routes    $(v "$(grep -cF 'additionalContext' core/hooks/ai-dlc-answer-capture.sh)")"
+echo "P5  full re-read mandate     $([ "$(grep -cF 'IN FULL' core/skills/ai-dlc/SKILL.md)" -eq 0 ] && echo DONE || echo TODO)"
+echo "P6  wait-beats ignore        $(v "$(grep -rlF 'wait-beats' templates/ scripts/install.sh 2>/dev/null | wc -l)")"
+echo "P7  consumer brief filed     $(v "$(ls docs/reviews/ 2>/dev/null | grep -c s305)")"
+echo "CTL must be DONE             $([ -d core ] && echo DONE || echo TODO)"
+echo "CTL must be TODO             $([ -e core/NO-SUCH-CONTROL.sh ] && echo DONE || echo TODO)"
 ```
-cd /Users/n8/git/graph && bash scripts/ai-dlc/validate-artifact-paths.sh --report | tail -3
-cd /Users/n8/git/graph && git ls-files _bmad-output/.wait-beats/ | wc -l
-cd /Users/n8/git/graph && for e in BLOCKED BACKOFF ALLOWED_BY_LIVE_BEAT NO_SUCH_EVENT; do \
-  printf '%-22s %s\n' "$e" "$(grep -c "^## .*-- ${e}" _bmad-output/pipeline-continuation-log.md)"; done
-ls core/scripts/derive-fixture-readsets.sh; ls core/scripts/validate-artifact-paths.sh
+
+**Every probe reads TODO as this plan is written, against controls that read DONE then TODO.**
+Each is polarity-correct in the sense `BL-086` names: it keys on a byte that EXISTS today and
+the fix REMOVES, or on a path fixed by convention (`core/scripts/`) rather than on a flag name
+a hypothesised fix would introduce. **A probe anchored on a token the fix invents reports TODO
+forever, including after the fix lands.**
+
+Re-derive the consumer side too, each with its own control:
+
+```sh
+cd /Users/n8/git/graph && bash scripts/ai-dlc/validate-artifact-paths.sh | tail -1
+git -C /Users/n8/git/graph ls-files _bmad-output/.wait-beats/ | wc -l
+for e in BLOCKED BACKOFF ALLOWED_BY_LIVE_BEAT NO_SUCH_EVENT_CONTROL; do \
+  printf '%-24s %s\n' "$e" "$(grep -c "^## .*-- ${e}" \
+  /Users/n8/git/graph/_bmad-output/pipeline-continuation-log.md)"; done
+md5 -q /Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
 ```
 
-At this plan's writing those read: `FAIL — 24 blocking, 3 ambiguous`; `134`;
-`BLOCKED 15 / BACKOFF 0 / ALLOWED_BY_LIVE_BEAT 240 / NO_SUCH_EVENT 0`; and the first `ls`
-absent against the second present.
+At this plan's writing those read `FAIL — 24 blocking, 3 ambiguous`; `134`;
+`BLOCKED 15 / BACKOFF 0 / ALLOWED_BY_LIVE_BEAT 240 / NO_SUCH_EVENT_CONTROL 0`; and
+`a8f61789e1c947a8251eef9b4cb7c098`.
+
+### What is DONE — do not redo any of it
+
+**Nothing has been executed. All seven phases are open.** What is complete is the
+INVESTIGATION: six root causes derived with controls, the regression question answered NO,
+and this file filed as `7633dd29`. `VERSION` was `0.403.0` and `CHANGELOG.md` opened with
+`## [Unreleased]`.
+
+**Do not re-run the investigation.** Every measurement behind the six findings is recorded
+below with the command that produced it and the control that ran beside it. Re-deriving the
+byte accounting means re-parsing 10.4 MB of transcript for a number this file already
+carries, and the transcripts are outside every gate — nothing will tell you it was wasted.
+
+**As each phase lands, the `### Remedy` heading of its RC section below is amended to
+`### Remedy — COMPLETE, SHIPPED AS vX.Y.Z` and this paragraph is replaced.** Those headings
+are the only place a phase's completion is written by hand, and they are corroboration only:
+**the probe block above is the authority.** Where the two disagree the probe is right, because
+a heading is a claim about the tree and the probe is a reading of it.
 
 ### NEXT ACTIONS — numbered, in order
 
-The sprint cannot safely resume until the push works, so RC-1 is first.
+**Run the probe block first and execute the LOWEST-NUMBERED phase reading `TODO`.** The
+sprint cannot safely resume until the consumer can push, which is why RC-1 is phase 1.
 
-1. **RC-1 — unblock the consumer's push.** Prescribe a party-mode findings home in core at
+1. **RC-1 — unblock the consumer's push.** **Declare `_bmad-output/party-mode` in core's
+   own `areas:` block FIRST** (`core/skills/ai-dlc/artifact-path-grammar.md`) — see the
+   ordering constraint in RC-1's remedy; then prescribe the findings home at
    `_bmad-output/party-mode/s<N>/`; fix `core/skills/ai-dlc/SKILL.md:721`; close the I82
    prescription blindness with a derived join; ship `derive-fixture-readsets.sh` into
    `core/scripts/`, `install.sh`, `uninstall.sh` and both manifest copies, and make
@@ -71,6 +115,30 @@ The sprint cannot safely resume until the push works, so RC-1 is first.
    graph session an exact command list: migrate the 24 paths, untrack the 134 wait-beats,
    re-run `validate-artifact-paths.sh` and the pre-push, resume gate-3 only after both are
    green.
+
+### Done when
+
+All nine probes read `DONE`, the consumer's `validate-artifact-paths.sh` reports 0 blocking,
+its pre-push completes inside the two-minute bound, and the graph session has been handed the
+brief. Report completion to the operator; an early stop is reported the same way.
+
+---
+
+## Start here
+
+**The read/write boundary, in full.** `/Users/n8/git/ai-dlc` is WRITE. `/Users/n8/git/graph`
+is the reference consumer: **read it, never write it.** An ai-dlc session never writes to a
+consumer — it writes `core/`, and it writes the brief. Assert the boundary by ledger CONTENT,
+not by dirty count and not by `HEAD`:
+`md5 -q /Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md`. Record it
+before your first action and re-check after every phase; a change is a stop-and-ping condition.
+
+**Never run `git checkout --`, `git restore`, `git clean`, `git stash`, or
+`git reset --hard` in either repo, and tell every delegate the same.** Delegates work in
+`mktemp` copies made with `git archive HEAD | tar -x`.
+
+**Delegate.** The phases are largely independent below phase 1; spawn named agents in
+parallel and background anything long.
 
 ---
 
@@ -146,10 +214,20 @@ never the producer, so **every consumer runs all 155 fixtures on every push, per
 ### Remedy
 
 1. **Give party-mode findings a prescribed home in core** (operator-selected),
-   `_bmad-output/party-mode/s<N>/` — the path three prior sprints already used and the
-   declared area already permits. Fix `SKILL.md:721` to name it. Single declaration, cited
-   not restated. Graph's 24 s305 files migrate to it. **Closed sprints stay put**:
-   s297/s298/s303 already conform and are not touched.
+   `_bmad-output/party-mode/s<N>/` — the path three prior sprints already used. Fix
+   `SKILL.md:721` to name it. Single declaration, cited not restated. Graph's 24 s305 files
+   migrate to it. **Closed sprints stay put**: s297/s298/s303 already conform.
+
+   **ORDERING CONSTRAINT, and without it this phase fails its own gate.** The area is
+   declared by the CONSUMER, not by core. `core/scripts/artifact-path-config.sh --areas`
+   run in THIS repo returns 8 areas and `_bmad-output/party-mode` is not among them — the
+   control `party-mode-transcripts` is, so the absence is real and not a broken read. The
+   dev repo has no `.claude/skills/ai-dlc/artifact-paths.md` to join, so **I82 — "core's own
+   artifact-path prescriptions obey core's own grammar" (`docs/invariant-index.md:101`) —
+   would fail the push on the very prescription this item adds.** Add
+   `_bmad-output/party-mode` to the `areas:` block of
+   `core/skills/ai-dlc/artifact-path-grammar.md` in the same change, BEFORE the
+   prescription, and re-run `--areas` with its control to confirm the set moved to 9.
 2. **Close the I82 blindness with a derived join**, not a hand-list: a core prescription
    naming a directory under a scan root, which will receive a sprint slot at expansion, must
    be written with the slot (`.../s<N>/`) so the prose form carries a token I82 can read.
