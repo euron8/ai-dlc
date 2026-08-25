@@ -65,9 +65,18 @@ the same response. The agent MUST NOT pause for user confirmation.
 only the first ~5,000 tokens of a skill after a compact -- under a
 QUARTER of this one. Gone: most numbered rules, the handoff triggers,
 the snapshot schema. Nothing marks the cut, and the rules governing
-re-reads are past it. `Read .claude/skills/ai-dlc/SKILL.md` IN FULL
-in the verification turn. Never guess a rule and never ask to
-re-invoke `/ai-dlc` instead: it is on disk, one Read is the fix.
+re-reads are past it. `Read
+.claude/skills/ai-dlc/postcompact-digest.md` in the verification turn.
+It carries every heading past the cut with its operative text,
+selected from this file and byte-compared at the gate, so it cannot
+drift from what it stands in for.
+
+That digest is the rulebook's INDEX, not the rulebook: it tells you a
+rule binds you and what it governs, not enough to apply it. Before
+acting on any rule you meet there, `Read
+.claude/skills/ai-dlc/SKILL.md` for that rule's full text. Never guess
+a rule and never ask to re-invoke `/ai-dlc` instead: both files are on
+disk.
 
 ## AUTONOMY RULES
 

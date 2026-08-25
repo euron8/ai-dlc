@@ -63,6 +63,7 @@ core_manifest:
   - core/skills/ai-dlc/escalations.md
   - core/skills/ai-dlc/rule-authoring.md
   - core/skills/ai-dlc/artifact-path-grammar.md
+  - core/skills/ai-dlc/postcompact-digest.md
   - core/skills/ai-dlc/templates/*.md
   - core/team-roles/*.md
   - core/hooks/ai-dlc-*.sh
@@ -218,6 +219,7 @@ machinery:
   - core/skills/ai-dlc/layer-contract.yaml
   - core/git-hooks/pre-push
   - core/skills/ai-dlc/templates/*.md
+  - core/skills/ai-dlc/postcompact-digest.md
   - core/hooks/ai-dlc-*.sh
   - core/session-driver/*.sh
   - core/schemas/*.json

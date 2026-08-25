@@ -207,11 +207,11 @@ transcript rather than identical.
 
 ## Most of your rulebook is not in your context
 
-Then \`Read .claude/skills/ai-dlc/SKILL.md\` IN FULL. This one IS a re-Read and is
-required anyway, because the harness re-attaches only the first ~5,000 tokens of
-an invoked skill -- measured at 20,121 bytes, under a QUARTER of that file. The
-back three quarters is gone: most of the numbered rules, the handoff triggers,
-and the snapshot schema.
+Then \`Read .claude/skills/ai-dlc/postcompact-digest.md\`. The harness re-attaches
+only the first ~5,000 tokens of an invoked skill -- measured at 20,121 bytes, under
+a QUARTER of SKILL.md. The back three quarters is gone: most of the numbered rules,
+the handoff triggers, and the snapshot schema. The digest is that missing part,
+SELECTED from SKILL.md's own bytes.
 
 You cannot find the cut by introspection. Nothing marks it, the surviving text
 ends mid-file without a seam, and the rules that govern re-reading are themselves
@@ -220,8 +220,11 @@ hold. It comes from here. A lead that skips this runs the rest of the sprint on
 the quarter of the rulebook that happened to survive, and reports no problem,
 because a rule it never saw is indistinguishable from a rule that does not exist.
 
-Read it. Do not reconstruct it, and do not ask the operator to re-invoke
-\`/ai-dlc\` to restore it -- the file is on disk and one Read is the whole fix.
+It is an INDEX: it establishes that a rule EXISTS and what it governs, not enough
+to APPLY one. Before acting on a rule you meet there, \`Read
+.claude/skills/ai-dlc/SKILL.md\` for its full text. Reading an entry and proceeding
+as though you had read the rule is the one way this costs more than it saves. Do
+not reconstruct a rule, and do not ask the operator to re-invoke \`/ai-dlc\`.
 
 Before acting, emit a verification turn naming: the current step file, the last
 gate passed with its timestamp, any in-flight sub-step, the In-Flight Teammates
@@ -315,15 +318,44 @@ $( [ "$1" = yes ] && [ -n "$POSITION" ] && printf '%s\n\n%s\n' "---
 EOF
 }
 
-CONTEXT="$(build yes)"
 CEILING=$(( CONTEXT_LIMIT - SAFETY_MARGIN ))
 
 # Trim before emitting, never after. An over-limit block is not truncated by the
 # harness -- it is replaced wholesale by a file path, so a directive that does
 # not fit is a directive that never runs. The Pipeline Position excerpt is the
 # only droppable part; the directive itself is the payload.
-if [ "${#CONTEXT}" -ge "$CEILING" ]; then
-  CONTEXT="$(build no)"
+#
+# THE EXCERPT IS FITTED TO THE REMAINING BUDGET, NOT INCLUDED WHOLE OR DROPPED WHOLE.
+# All-or-nothing was the earlier shape and it made the `build yes` path very nearly dead:
+# measured, a snapshot whose Pipeline Position ran to the 1,200-byte cap lost the excerpt
+# entirely, so the branch fired only for a Position under ~230 bytes. Sizing the excerpt to
+# what is actually left keeps it in the cases it was written for and, where nothing is left,
+# emits the bare directive by the same rule rather than by a branch nobody can reach.
+BARE="$(build no)"
+# The excerpt carries its own separator and heading, which are part of what it costs.
+EXCERPT_OVERHEAD=120
+# THE MARGIN GUARDS THE DIRECTIVE; THE EXCERPT MAY SPEND PART OF IT, DOWN TO A RESERVE.
+# `SAFETY_MARGIN` exists so the DIRECTIVE -- the payload, which cannot be dropped -- never
+# approaches the cliff, and that use is unchanged: `CEILING` still decides `degraded`. The
+# excerpt is different in kind. It is droppable, and it is now bounded by this arithmetic
+# rather than added blind at up to 1,200 bytes, which is the risk the whole margin was
+# absorbing before. So it draws on the space between the ceiling and the cliff, leaving
+# `EXCERPT_RESERVE` unspent. Worst case with an excerpt is CONTEXT_LIMIT - EXCERPT_RESERVE,
+# asserted below rather than assumed.
+EXCERPT_RESERVE="${AI_DLC_HOOK_EXCERPT_RESERVE:-500}"
+ROOM=$(( CONTEXT_LIMIT - EXCERPT_RESERVE - ${#BARE} - EXCERPT_OVERHEAD ))
+if [ -n "$POSITION" ] && [ "$ROOM" -gt 200 ]; then
+  [ "$ROOM" -lt "${#POSITION}" ] && POSITION="$(printf '%s' "$POSITION" | head -c "$ROOM")"
+  CONTEXT="$(build yes)"
+else
+  CONTEXT="$BARE"
+fi
+# Belt and braces. If the assembled block still reaches the excerpt's own ceiling -- a path
+# length or a sidecar note this arithmetic did not anticipate -- fall back to the directive
+# alone. The directive is the payload and the excerpt is the convenience; that order never
+# inverts, and this is the assertion rather than the assumption.
+if [ "${#CONTEXT}" -ge $(( CONTEXT_LIMIT - EXCERPT_RESERVE )) ]; then
+  CONTEXT="$BARE"
 fi
 
 # `degraded` reports what the HARNESS will do, so it tests against the real

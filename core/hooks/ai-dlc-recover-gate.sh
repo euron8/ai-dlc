@@ -40,9 +40,13 @@
 # exactly as a full Read did. `is_full_read()` below is the test. It does not narrow the safety
 # argument: the always-available action is the same Read with neither field.
 #
-# WHAT IT DOES NOT DO. It does not police the THIRD mandated Read (`SKILL.md`), which the
-# injected text asks for but which is a re-Read whose necessity this hook cannot establish
-# from outside. It does not read the lead's prose, so the RECOVERY-SKIP disclosure the block
+# WHAT IT DOES NOT DO. It does not police the THIRD mandated Read -- the post-compact digest,
+# `.claude/skills/ai-dlc/postcompact-digest.md`, which the injected text asks for and which
+# this hook cannot establish the necessity of from outside. Nor does it police the Read of
+# SKILL.md the block asks for on top of that, which is CONDITIONAL by design: it is per-rule,
+# taken when the lead is about to act on something the digest only indexes, and a gate cannot
+# know from a tool call which rule the lead is about to lean on.
+# It does not read the lead's prose, so the RECOVERY-SKIP disclosure the block
 # requires is not verifiable here -- that disclosure covers exactly the cases where this gate
 # could not arm, and the block says so.
 #
