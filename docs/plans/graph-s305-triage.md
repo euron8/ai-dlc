@@ -44,11 +44,14 @@ echo "CTL must be DONE             $([ -d core ] && echo DONE || echo TODO)"
 echo "CTL must be TODO             $([ -e core/NO-SUCH-CONTROL.sh ] && echo DONE || echo TODO)"
 ```
 
-**Every probe reads TODO as this plan is written, against controls that read DONE then TODO.**
-Each is polarity-correct in the sense `BL-086` names: it keys on a byte that EXISTS today and
-the fix REMOVES, or on a path fixed by convention (`core/scripts/`) rather than on a flag name
-a hypothesised fix would introduce. **A probe anchored on a token the fix invents reports TODO
-forever, including after the fix lands.**
+**P1a, P1b and P1c read DONE; P2 through P7 read TODO; the controls read DONE then TODO.**
+Every probe read TODO when this plan was written, and the three that flipped did so when
+phase 1 landed — which is the polarity proof, not a formality. Each probe is polarity-correct
+in the sense `BL-086` names: it keys on a byte that EXISTS today and the fix REMOVES, or on a
+path fixed by convention (`core/scripts/`) rather than on a flag name a hypothesised fix would
+introduce. **A probe anchored on a token the fix invents reports TODO forever, including after
+the fix lands** — three of them have now been observed flipping, so that failure is ruled out
+for those three and not for the rest.
 
 Re-derive the consumer side too, each with its own control:
 
@@ -68,10 +71,17 @@ At this plan's writing those read `FAIL — 24 blocking, 3 ambiguous`; `134`;
 ### What is DONE — do not redo any of it
 
 **Phase 1 (RC-1) is DONE, shipped as v0.404.0 (`fe64a47a`), merged to `main` and pushed.
-Phases 2 through 7 are open.** The gate ran green on it — `AI_DLC_FIXTURE_NO_SKIP=1 bash
-.githooks/pre-push`, gate exit 0, 0 FAIL lines, 163 fixtures ok, `readset-skip`,
-`artifact-path-conformance` and `validator-fork-budget` read by name against an
-impossible-name control of 0.
+Phases 2 through 7 are open. Start at NEXT ACTION 2.** The gate ran green on it —
+`AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`, gate exit 0, 0 FAIL lines, 163 fixtures
+ok, `readset-skip`, `artifact-path-conformance` and `validator-fork-budget` read by name
+against an impossible-name control of 0.
+
+**Tree state at handoff (`902197f2`):** on `main`, clean, level with `origin/main`, `VERSION`
+`0.404.0`. Consumer ledger re-checked at the phase boundary and unchanged at
+`a8f61789e1c947a8251eef9b4cb7c098`; nothing in `/Users/n8/git/graph` was written — its three
+dirty paths (`.context-sensor-state`, `.driver/turns`, `pipeline-continuation-log.md`) belong
+to its own paused session and were dirty before this work began. Phase 2's reconnaissance is
+filed under RC-4's remedy, so that phase starts at the sites rather than the search.
 
 **TWO PREMISES BELOW WERE MEASURED FALSE while executing phase 1, and both are corrected
 here rather than in the evidence they contradict.**
@@ -417,6 +427,33 @@ the transcript"* fired zero times. Introduced v0.81.0.
 3. **Prove it can fire.** A fixture arm interleaving live beats with rapid blocks and
    asserting `BACKOFF` is reached, plus a seeded near-miss that stays quiet. One direction
    alone leaves a scan that flags everything looking identical to one that discriminates.
+
+**Reconnaissance already done against `core/hooks/ai-dlc-continue.sh` at `902197f2`, so the
+next session starts from the sites rather than the search.** Re-derive before editing; the
+file moves.
+
+`MAX_RAPID_BLOCKS=3` at line 89, `RAPID_WINDOW_SECONDS=30` at line 88. There are FOUR
+`rm -f "$STATE_FILE"` sites and only ONE of them is the defect:
+
+- **line 507 — the subject.** Inside the `ALLOWED_BY_LIVE_BEAT` branch, under a comment that
+  says it is resetting the rapid-fire COUNTER. It deletes the file, so it resets `LAST_TS`
+  too, and the read block twenty lines below then starts from `LAST_TS=0`.
+- line 458 — the pause-resume path, deliberate (`pause-resume cycle counts as progress`).
+- line 467 — no snapshot, so no pipeline and no state to track.
+- line 547 — inside the `BACKOFF` emitter itself, after the stall has been declared.
+
+The read block is lines 515-526 (`LAST_TS=0`, `COUNTER=0`, then `sed -n '1p'`/`'2p'` off the
+state file, then `DELTA=$((NOW - LAST_TS))`); the window test and counter are 528-534; the
+`BACKOFF` branch is 539-548; the state write is 586-587; the epoch-as-a-delta print is line
+598. The two fixtures already driving this hook's neighbourhood are
+`core/fixtures/implementation-join-yield` and `core/fixtures/handoff-resume-guard` — check
+whether the new arm belongs in one of those before creating a directory, because a NEW
+fixture directory reads nothing and so cannot fire `.claude/rules/fixture-ship-decl.md`.
+
+**The write at 586-587 is the shape the fix has to match**: line 1 is the timestamp, line 2
+is the counter. Preserving `LAST_TS` while zeroing the counter means writing both, not
+deleting the file — and at line 507 `LAST_TS` has not been read yet, so the fix either moves
+the read above the live-beat branch or rewrites line 2 in place.
 
 ---
 
