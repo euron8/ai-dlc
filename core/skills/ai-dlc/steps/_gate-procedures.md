@@ -615,7 +615,21 @@ carry the no-human-present additions:
    record from Step 1. Commit the finalized snapshot if the project
    tracks `_bmad-output/`, then push the current branch to origin
    (`git push`) so the Step 2 commit and the finalized state reach the
-   remote and are not stranded on this machine. If the push fails (no
+   remote and are not stranded on this machine.
+
+   **EVERY `git push` IN THIS PIPELINE RUNS WITH AN EXPLICIT 10-MINUTE
+   TIMEOUT — `timeout: 600000` on the Bash call — AND IN THE FOREGROUND.**
+   The pre-push gate runs the whole fixture suite, and the default tool
+   timeout is 2 minutes. Measured on the reference consumer: 148.9s, of
+   which 130.9s is the suite. A push that exceeds the default is SIGKILLed
+   at `Exit code 143`, which looks like a failed push and is not one — the
+   gate was still running, so nothing is known about whether it would have
+   passed. **Do not background the push to dodge this.** The exit code is
+   what says whether the gate passed, and a backgrounded push invites
+   moving on before it arrives; a push is a mutation, so the next step
+   would be acting on a remote state that does not exist yet.
+
+   If the push fails (no
    remote configured, offline, or a protected branch), note the reason
    in the auto-handoff line and continue; the local commits still stand
    and the handoff is not blocked.

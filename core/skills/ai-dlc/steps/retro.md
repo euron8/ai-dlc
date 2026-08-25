@@ -886,7 +886,9 @@ If there are no uncommitted changes, skip this step.
 
 **6b. Push the branch.**
 
-Push the current branch to origin:
+Push the current branch to origin, **in the foreground with
+`timeout: 600000`** — `_gate-procedures.md` ("Auto-handoff evaluation",
+step 3) owns why, and the reason is not restated here:
 ```bash
 git push -u origin HEAD
 ```

@@ -34,6 +34,33 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.405.0] — 2026-08-25
+
+### Fixed: core prescribed `git push` with no time budget, so every consumer push could be SIGKILLed
+
+s305 root cause 1, second half. `git push` appeared as bare text in three step files —
+`steps/_gate-procedures.md`, `steps/handoff.md`, `steps/retro.md` — with no timeout anywhere.
+The default tool timeout is 2 minutes and the pre-push gate runs the whole fixture suite.
+
+Measured on a `file://` clone of the reference consumer, per-line timestamps: **148.9s total,
+18.0s for every phase before the fixture suite, 130.9s for the suite.** The sprint's transcript
+records the kill twice, `2026-08-24T13:19Z` and `2026-08-25T01:41:47Z`
+(`Exit code 143 | Command timed out after 2m 0s`). A SIGKILLed push reads as a failed push and
+is not one: the gate was still running, so nothing is known about whether it would have passed.
+
+The instruction is now stated once, in `_gate-procedures.md` where auto-handoff prescribes the
+push, and cited from the other two: **foreground, `timeout: 600000`.**
+
+**Foreground rather than backgrounded, deliberately.** A background call does return its exit
+code in this harness; what it adds is a session that proceeds past a push it has not made, and
+a push is a mutation. `.claude/rules/verification-discipline.md` already carries the rule —
+*read the gate's exit, never a backgrounded wrapper's* — learned from a gate that exited 1
+under a 159 ok / 0 FAIL tally.
+
+**This is prose with no enforcer and it ships that way.** A `PreToolUse` hook can deny a call;
+it cannot raise the timeout of one. Nothing on disk can make the lead pass a budget it was not
+told to pass.
+
 ## [0.404.0] — 2026-08-24
 
 ### Fixed: the consumer could not push, for two reasons that share no mechanism

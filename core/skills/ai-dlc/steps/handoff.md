@@ -29,7 +29,10 @@ Execute this 5-step procedure in order:
    record from Step 1. Commit the finalized snapshot if the project
    tracks `_bmad-output/`, then push the current branch to origin
    (`git push`) so the Step 2 commit and the finalized state reach the
-   remote and are not stranded on this machine. If the push fails (no
+   remote and are not stranded on this machine. **Push in the foreground
+   with `timeout: 600000`** — `_gate-procedures.md` ("Auto-handoff
+   evaluation", step 3) owns why, and the reason is not restated here.
+   If the push fails (no
    remote configured, offline, or a protected branch), report it to the
    operator in one line and continue; the local commits still stand and
    the handoff is not blocked.
