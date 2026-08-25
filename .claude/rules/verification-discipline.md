@@ -58,6 +58,12 @@ overridable expanded to the identical line, so both runs used the fixed copy and
 matched perfectly — which reads as "no regression". Assert the sides differ, in the same
 invocation, before reading the comparison.
 
+## Time both sides the same way, and interleave the reps
+
+A `mktemp` extraction timed against the live repo compares two TREES, not two revisions.
+Measured: that shape read +1.9s and nearly bought an optimisation pass against a regression
+that does not exist. Extracted alike and interleaved, five reps: 17.29s vs 17.10s.
+
 ## Run the shipping code against the real corpus
 
 A hand-written probe is a second implementation whose bugs nobody finds. When a probe and
