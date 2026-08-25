@@ -34,6 +34,8 @@ lb=$(awk '/ALLOWED_BY_LIVE_BEAT/{f=1} f&&/exit 0/{exit} f' core/hooks/ai-dlc-con
 echo "P1a readset producer ships   $([ -e core/scripts/derive-fixture-readsets.sh ] && echo DONE || echo TODO)"
 echo "P1b party-mode home in core  $(v "$(grep -rF -- '_bmad-output/party-mode/s<N>/' core/skills/ai-dlc/ | wc -l)")"
 echo "P1c SKILL.md parenthetical   $([ "$(grep -cF 'planning-artifacts/party-mode' core/skills/ai-dlc/SKILL.md)" -eq 0 ] && echo DONE || echo TODO)"
+echo "P1d push time budget        $(v "$(grep -ciF 'timeout' core/skills/ai-dlc/steps/_gate-procedures.md)")"
+echo "P1d CONTROL (same file)      $(v "$(grep -cF 'git push' core/skills/ai-dlc/steps/_gate-procedures.md)")"
 echo "P2  live-beat keeps LAST_TS  $([ "$lb" -eq 0 ] && echo DONE || echo TODO)"
 echo "P3  escalation guards        $(v "$(grep -ciF 'escalation_undelivered' CHANGELOG.md)")"
 echo "P4  answer-capture routes    $(v "$(grep -cF 'additionalContext' core/hooks/ai-dlc-answer-capture.sh)")"
@@ -44,7 +46,8 @@ echo "CTL must be DONE             $([ -d core ] && echo DONE || echo TODO)"
 echo "CTL must be TODO             $([ -e core/NO-SUCH-CONTROL.sh ] && echo DONE || echo TODO)"
 ```
 
-**P1a, P1b and P1c read DONE; P2 through P7 read TODO; the controls read DONE then TODO.**
+**P1a, P1b and P1c read DONE; P1d and P2 through P7 read TODO; `P1d CONTROL` reads DONE and
+the two block controls read DONE then TODO.**
 Every probe read TODO when this plan was written, and the three that flipped did so when
 phase 1 landed — which is the polarity proof, not a formality. Each probe is polarity-correct
 in the sense `BL-086` names: it keys on a byte that EXISTS today and the fix REMOVES, or on a
@@ -144,6 +147,33 @@ sprint cannot safely resume until the consumer can push, which is why RC-1 is ph
    the `POST-COMPACT RECOVERY PROTOCOL` to cite the injected block instead of mandating a
    full `SKILL.md` Read.
 6. **RC-6 — ship the ignore rule** for `_bmad-output/.wait-beats/`.
+6b. **RC-1b — core prescribes `git push` with no time budget, and every consumer pays it.**
+   Measured on a `file://` clone of the reference consumer at `386a56d34`, per-line
+   timestamps: the pre-push is **148.9s**, of which every phase before the fixture suite is
+   **18.0s** and the suite is **130.9s**. The default caller timeout is **120s**. The suite
+   is POLE-BOUND — 155 fixtures, 1006 fixture-seconds, longest single fixture
+   `layer-reference-resolution` at **119s** — so phase 1's read-set map removes the routine
+   cost and CANNOT put a change that selects the pole under the default. The transcript
+   records the SIGKILL twice, `2026-08-24T13:19Z` and `2026-08-25T01:41:47Z`
+   (`Exit code 143 | Command timed out after 2m 0s`).
+
+   Core prescribes `git push` as bare text in three places — `steps/_gate-procedures.md:617`,
+   `steps/handoff.md:31`, `steps/retro.md:891` — with no timeout and no backgrounding.
+   Prescribe an **explicit long timeout on a FOREGROUND call**, once, cited from the other
+   two. Do not prescribe `run_in_background`: it is the same fix with an extra way to go
+   wrong, and the way it goes wrong is this repo's own standing rule — *"Read the gate's
+   exit, never a backgrounded wrapper's"* (`.claude/rules/verification-discipline.md`),
+   learned from a gate that exited 1 under a 159 ok / 0 FAIL tally. The exit code IS
+   delivered by a background call in this harness; what backgrounding adds is a session that
+   proceeds past a push it has not yet made, and `git push` is a mutation.
+
+   **This is PROSE WITH NO ENFORCER and it ships that way deliberately.** A `PreToolUse` hook
+   can deny a call; it cannot raise the timeout of one. Nothing on disk can make the lead
+   pass a budget it was not told to pass. Say so beside the instruction rather than leaving a
+   later session to discover the rule is unbacked and assume it was an oversight.
+
+   **The durable fix is the POLE, not the budget**, and it is explicitly NOT in this plan's
+   scope: 119s in one fixture is what makes a 120s default unsurvivable at all. File it.
 7. **Deliver the consumer brief.** Rehearse on a `file://` clone, then hand the paused
    graph session an exact command list: migrate the 24 paths, untrack the 134 wait-beats,
    re-run `validate-artifact-paths.sh` and the pre-push, resume gate-3 only after both are
@@ -160,17 +190,14 @@ sprint cannot safely resume until the consumer can push, which is why RC-1 is ph
    `_bmad-output/planning-artifacts/s305/party-mode/`, which is legal but is neither the
    prescribed home nor where sprints 297/298/303 put theirs.
 
-   **The brief must also carry the TIMEOUT.** Measured on that clone with per-line
-   timestamps: the pre-push is 148.9s, of which every phase before the fixture suite is
-   18.0s and the suite is 130.9s. The suite is pole-bound — 155 fixtures, 1006
-   fixture-seconds, longest single fixture `layer-reference-resolution` at 119s — so even a
-   perfect read-set map cannot put a change that selects the pole under a 120s caller
-   timeout. Tell that session to push with an explicit long timeout, and separately to
+   **The brief must also carry the TIME BUDGET**, whose measurement and whose reason for
+   being a foreground timeout rather than a background call are in action 6b and are not
+   restated here. Two commands for that session: push with an explicit long timeout, and
    build the map once with `sudo bash scripts/ai-dlc/derive-fixture-readsets.sh --all`.
 
 ### Done when
 
-All nine probes read `DONE`, the consumer's `validate-artifact-paths.sh` reports 0 blocking,
+All ten phase probes read `DONE` with `P1d CONTROL` still `DONE`, the consumer's `validate-artifact-paths.sh` reports 0 blocking,
 its pre-push completes inside the two-minute bound, and the graph session has been handed the
 brief. Report completion to the operator; an early stop is reported the same way.
 
