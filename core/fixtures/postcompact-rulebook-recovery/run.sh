@@ -77,13 +77,42 @@ else
   bad "the directive never names the installed SKILL.md path; the lead has nothing to Read"
 fi
 
+# --- Assertion 1b: the directive names the DIGEST by its INSTALLED path -------
+# The recovery Read. SKILL.md is ~102 KB and re-reading it after every compaction is what
+# brings the next compaction closer, so the mandated Read is now
+# `.claude/skills/ai-dlc/postcompact-digest.md` -- a rendered selection of SKILL.md's own
+# bytes past the cut. Named by the consumer path for the same reason assertion 1 is: a lead
+# handed a `core/` path on a consumer tree reads the failure as "the file is gone".
+if grep -q '\.claude/skills/ai-dlc/postcompact-digest\.md' <<<"$CTX"; then
+  ok "directive names .claude/skills/ai-dlc/postcompact-digest.md — the recovery Read"
+else
+  bad "the directive never names the installed digest path; the lead is told its rulebook is missing and given nothing to Read"
+fi
+
 # --- Assertion 2: it demands the WHOLE file, not a look ----------------------
 # "Check whether rules are missing" is the instruction that already failed — it asks the lead
-# to detect an absence it structurally cannot see.
+# to detect an absence it structurally cannot see. The subject is now the two GATED Reads --
+# the snapshot and the step file -- which `ai-dlc-recover-gate.sh` refuses when bounded by
+# `limit` or a late `offset`. The digest is not in this arm's scope: it is small enough that
+# a partial read is not the failure mode, and assertion 2d carries what it needs instead.
 if grep -qi 'IN FULL' <<<"$CTX"; then
   ok "directive demands the file IN FULL, not a spot check for what looks missing"
 else
   bad "the directive does not demand a full read; a partial read leaves the same silent gap"
+fi
+
+# --- Assertion 2d: the digest is disclosed as an INDEX, not as the rulebook ---
+# THE FAILURE MODE THE DIGEST INTRODUCES, and the reason this arm exists at all. The digest
+# carries every heading past the cut with its operative opening, which is enough for a lead to
+# learn a rule EXISTS and what it governs -- and not enough to APPLY one. A lead that reads an
+# entry and acts as though it had read the rule is worse off than one that read nothing, because
+# it has no signal that it is missing anything. So the block must say so and must name SKILL.md
+# as where the full text lives. Both halves, because the caveat without the path is a warning
+# with no remedy.
+if grep -q 'INDEX' <<<"$CTX" && grep -q '\.claude/skills/ai-dlc/SKILL\.md' <<<"$CTX"; then
+  ok "directive discloses the digest as an INDEX and names SKILL.md for a rule's full text"
+else
+  bad "the directive presents the digest without saying it is not enough to apply a rule; a lead will act on a heading and never learn it was missing the rule"
 fi
 
 # --- Assertion 2b: the two mandatory Reads carry the SAME grade --------------
@@ -123,11 +152,18 @@ fi
 # Claude Code replaced the whole thing with a file-path stub, so the snapshot directive was
 # NEVER injected on any of three observed compactions. Adding prose to this hook is exactly
 # how that recurs, and it recurs SILENTLY — the hook exits 0 either way.
+# THE BOUND IS 9500, NOT 9000, AND THE DIFFERENCE IS DELIBERATE. 9000 is the ceiling the
+# DIRECTIVE is held to -- it is the payload and cannot be dropped. The Pipeline Position
+# excerpt is droppable, and the hook now FITS it to the space left rather than adding up to
+# 1,200 bytes blind or nothing at all, so a block carrying one may run up to
+# CONTEXT_LIMIT - EXCERPT_RESERVE. Asserting 9000 here would fail every run that includes an
+# excerpt, which is the common case; asserting 10000 would assert only the cliff and stop
+# watching the reserve. 9500 is the bound the hook's own arithmetic promises.
 LEN="$(printf '%s' "$CTX" | wc -c | tr -d ' ')"
-if [ "$LEN" -lt 9000 ]; then
-  ok "directive is ${LEN} chars, under the 9000 ceiling (10000 cliff - 1000 margin)"
+if [ "$LEN" -lt 9500 ]; then
+  ok "directive is ${LEN} chars, under the 9500 bound (10000 cliff - 500 excerpt reserve)"
 else
-  bad "directive is ${LEN} chars, at or past the 9000 ceiling — the harness will replace the ENTIRE block with a file-path stub and nothing gets injected"
+  bad "directive is ${LEN} chars, at or past the 9500 bound — it has eaten the reserve that keeps it clear of the 10000 cliff, where the harness replaces the ENTIRE block with a file-path stub and nothing gets injected"
 fi
 
 # --- Assertion 5: the hook records degraded=no -------------------------------
@@ -150,14 +186,18 @@ fi
 
 # --- Assertion 7: MUTANT — strip the mandate from SKILL.md, arm 6 must fail ---
 # Built as a COPY, guarded by cmp -s so a sed that matched nothing cannot pass as a mutation.
+# THE MUTATION MOVED WITH THE MANDATE. It used to strip `Read ... SKILL.md` IN FULL; the
+# recovery Read is now the digest, and the validator arm requires BOTH paths -- the digest to
+# recover FROM and SKILL.md for a rule's full text. Killing either half must fail the arm, so
+# the mutant strips the digest path, which is the half that did not exist before.
 MUT_SKILL="$WORK/skill-no-mandate.md"
-sed 's|`Read \.claude/skills/ai-dlc/SKILL\.md` IN FULL|the lead may wish to review the rules|' \
+sed 's|\.claude/skills/ai-dlc/postcompact-digest\.md|the rulebook digest|' \
   "$SKILL" > "$MUT_SKILL"
 if cmp -s "$SKILL" "$MUT_SKILL"; then
   bad "FIXTURE STALE: the mandate sentence was reworded, so the mutant is a byte-identical copy and assertion 6 proves nothing"
 else
   out="$(bash "$VAL" --skill "$MUT_SKILL" --quiet 2>&1)"; rc=$?
-  if [ "$rc" -ne 0 ] && grep -q 'does not tell the lead to re-read' <<<"$out"; then
+  if [ "$rc" -ne 0 ] && grep -q 'does not tell the lead how to recover' <<<"$out"; then
     ok "mutant: a protocol without the mandate FAILS, on the mandate arm specifically"
   elif [ "$rc" -ne 0 ]; then
     bad "MUTANT FAILED ON THE WRONG ARM — it tripped the byte-budget instead of the mandate check, so the two assertions are entangled and one is vacuous. Output: $(head -1 <<<"$out")"
@@ -185,6 +225,31 @@ else
     bad "MUTANT EMITTED NOTHING — its silence is indistinguishable from a kill, so assertions 1-3 are unproven"
   else
     bad "MUTANT DID NOT FAIL — the directive still names the skill with the mandate stripped"
+  fi
+fi
+
+# --- Assertion 8c: MUTANT — strip the DIGEST path from the hook, only 1b red --
+# Assertion 8 above strips `skills/ai-dlc/SKILL.md`, which the digest path does not match, so
+# it leaves assertion 1b standing. Without this mutant 1b is an arm nobody has shown can fail:
+# it would read `ok` against a hook that names the digest nowhere, and the lead would be told
+# its rulebook is gone and handed no path. Anchored on the digest filename alone so it cannot
+# reach the SKILL.md sentence assertions 1 and 2d key on -- one mutant, one red arm.
+MUT_HOOK_D="$WORK/recover-no-digest.sh"
+awk '!/postcompact-digest\.md/' "$HOOK" > "$MUT_HOOK_D"
+if cmp -s "$HOOK" "$MUT_HOOK_D"; then
+  bad "FIXTURE STALE: could not build the no-digest hook mutant — the digest path moved, so assertion 1b proves nothing"
+elif ! bash -n "$MUT_HOOK_D" 2>/dev/null; then
+  bad "FIXTURE STALE: the no-digest hook mutant is not valid shell, so its silence would score as a kill"
+else
+  DCTX="$(fire "$MUT_HOOK_D")"
+  if [ -z "$DCTX" ]; then
+    bad "MUTANT EMITTED NOTHING — its silence is indistinguishable from a kill, so assertion 1b is unproven"
+  elif grep -q 'postcompact-digest\.md' <<<"$DCTX"; then
+    bad "MUTANT DID NOT FAIL — the directive still names the digest with its path stripped"
+  elif ! grep -q '\.claude/skills/ai-dlc/SKILL\.md' <<<"$DCTX" || ! grep -q 'INDEX' <<<"$DCTX"; then
+    bad "MUTANT FAILED ON THE WRONG ARMS — stripping the digest path also took out assertion 1 or 2d, so the three arms are entangled and one of them is vacuous"
+  else
+    ok "mutant: the hook emits a directive naming no digest — assertion 1b can fail, and only it"
   fi
 fi
 
@@ -225,7 +290,7 @@ elif ! bash -n "$MUT_C" 2>/dev/null; then
 else
   OCTX="$(fire "$MUT_C")"
   OLEN="$(printf '%s' "$OCTX" | wc -c | tr -d ' ')"
-  if [ -n "$OCTX" ] && [ "$OLEN" -ge 9000 ]; then
+  if [ -n "$OCTX" ] && [ "$OLEN" -ge 9500 ]; then
     ok "mutant: an oversize directive is ${OLEN} chars and trips the cliff arm — assertion 4 can fail"
   else
     bad "MUTANT DID NOT FAIL — the padded directive measured ${OLEN} chars, under the ceiling, so assertion 4 never proves the cliff is watched"
@@ -1033,10 +1098,10 @@ fi
 # `wc -c` counts python's trailing newline and the two figures would differ by one byte.
 UCTX="$(fire_at "$HOOK" "$UNRES")"
 ULEN="$(printf '%s' "$UCTX" | wc -c | tr -d ' ')"
-if [ "$ULEN" -lt 9000 ]; then
-  ok "the LARGER branch — no resolvable step file — is ${ULEN} chars, also under the 9000 ceiling"
+if [ "$ULEN" -lt 9500 ]; then
+  ok "the LARGER branch — no resolvable step file — is ${ULEN} chars, also under the 9500 bound"
 else
-  bad "the block is ${ULEN} chars when the snapshot names no resolvable step file, at or past the 9000 ceiling — the harness replaces the ENTIRE block with a file-path stub for exactly the recoveries that have the least going for them"
+  bad "the block is ${ULEN} chars when the snapshot names no resolvable step file, at or past the 9500 bound — the harness replaces the ENTIRE block with a file-path stub for exactly the recoveries that have the least going for them"
 fi
 
 # --- Assertion 24: MUTANT — the old ${STEP_FILE} fallback restored -----------

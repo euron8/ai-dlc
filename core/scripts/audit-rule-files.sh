@@ -121,7 +121,13 @@ corpus.extend(tree(".claude/rules"))
 # they are authored at `core/rules/` and would otherwise be scanned by nothing while
 # shipping to every consumer -- which is exactly what I23 exists to catch.
 corpus.extend(tree("core/rules"))
-for p in ("SKILL.md", "escalations.md", "rule-authoring.md", "artifact-path-grammar.md", "core-manifest.md"):
+# `postcompact-digest.md` is in this list because it SHIPS and a consumer's lead READS it
+# after every compaction -- I23's exact subject. Most of it is a rendered selection of
+# SKILL.md's own bytes, so a finding there is a finding against SKILL.md and will be reported
+# twice; that is the correct direction. What this actually scans that nothing else does is the
+# file's hand-written preamble, which is the only part a renderer does not own.
+for p in ("SKILL.md", "escalations.md", "rule-authoring.md", "artifact-path-grammar.md", "core-manifest.md",
+          "postcompact-digest.md"):
     fp = f"{SKILL}/{p}"
     if os.path.isfile(fp):
         corpus.append(fp)

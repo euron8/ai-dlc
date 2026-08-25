@@ -189,7 +189,7 @@ cp "$SCRIPT_DIR/../core/skills/ai-dlc/steps/"*.md "$PROJECT_ROOT/.claude/skills/
 # probe install AND is claimed by core_manifest:, or carries a `<name>.not-shipped`
 # marker and is claimed by neither. The ship side is measured by RUNNING this loop, so
 # the list cannot drift from what it delivers.
-for doc in escalations.md rule-authoring.md artifact-path-grammar.md core-manifest.md enforcement-map.yaml layer-contract.yaml; do
+for doc in escalations.md rule-authoring.md artifact-path-grammar.md core-manifest.md enforcement-map.yaml layer-contract.yaml postcompact-digest.md; do
   [ -f "$SCRIPT_DIR/../core/skills/ai-dlc/$doc" ] && \
     cp "$SCRIPT_DIR/../core/skills/ai-dlc/$doc" "$PROJECT_ROOT/.claude/skills/ai-dlc/"
 done

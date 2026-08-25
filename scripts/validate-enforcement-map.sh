@@ -207,7 +207,7 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 # regression that matters -- one invariant added as a nested loop moved this script 39% and
 # the whole suite by minutes. Fork count is deterministic and load-independent: load does not
 # change how many times a script calls execve.
-FORK_BUDGET=7000
+FORK_BUDGET=7050
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

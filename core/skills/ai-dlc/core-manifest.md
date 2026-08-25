@@ -132,6 +132,7 @@ core_manifest:
   - escalations.md
   - rule-authoring.md
   - artifact-path-grammar.md
+  - postcompact-digest.md
   - templates/*.md
   - team-roles/*.md
   - hooks/ai-dlc-*.sh
@@ -287,6 +288,7 @@ machinery:
   - layer-contract.yaml
   - git-hooks/pre-push
   - templates/*.md
+  - postcompact-digest.md
   - hooks/ai-dlc-*.sh
   - session-driver/*.sh
   - schemas/*.json

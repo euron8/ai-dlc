@@ -75,6 +75,18 @@ step "vocabulary index derived from the markers and the schemas" \
 step "path mapping derived from map_consumer()" \
   bash scripts/render-path-mapping.sh --check
 
+# 1a-iv. core/skills/ai-dlc/postcompact-digest.md is DERIVED from the part of SKILL.md that a
+#        compaction throws away, and byte-compared here. It is the file the lead is now told to
+#        Read after a compaction instead of re-reading all ~102 KB of SKILL.md, so a digest that
+#        has drifted from the rulebook is a lead running the sprint on stale rules while every
+#        other check stays green. The renderer also fails the push when a digest entry ends on a
+#        colon -- announcing content it does not carry, which a lead reads as the rule -- and
+#        when the selector finds fewer headings than the floor, which is how an extractor that
+#        lost SKILL.md's grammar would otherwise byte-compare clean against an empty region.
+#        Runs in ~0.05s and costs the pole nothing.
+step "post-compact digest derived from SKILL.md past the re-attach cut" \
+  bash scripts/render-postcompact-digest.sh --check
+
 # 1a. The same corpus-wide party-mode floor the consumer hook runs, over the DISTRIBUTION's own
 #     tree. It is here for a reason beyond symmetry: this tree holds the two files the check has
 #     to get right — the one rendered taught example (exempt only because the generated-region

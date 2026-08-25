@@ -15,6 +15,103 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.409.0] - 2026-08-25
+
+### The post-compact rulebook re-read is a 21 KB digest instead of a 102 KB file
+
+RC-5 of `docs/plans/graph-s305-triage.md`. Byte accounting over the reference consumer's
+sprint 305 — 5 transcripts, 10.4 MB, 27 compactions — put `Read` tool results at **51.5%**
+of all conversation content, with `SKILL.md` alone at **15.3%** and `steps/*` at 12.1%.
+About a third of the sprint's context was ai-dlc re-reading its own instruction surface,
+and the cadence shows the consequence: 27 compactions, one every ~30 minutes in the final
+stretch.
+
+The loop is that the `POST-COMPACT RECOVERY PROTOCOL` mandated `Read SKILL.md` **IN FULL**
+after every compaction, and SKILL.md is 102,881 bytes. The instruction that recovered the
+rulebook was also the instruction that brought the next compaction closer — so it was
+skipped, which is the failure the mandate existed to prevent.
+
+**`core/skills/ai-dlc/postcompact-digest.md` now ships**, rendered by
+`scripts/render-postcompact-digest.sh` and byte-compared at pre-push. The mandated
+post-compact Read goes **102,881 → 21,850 bytes, −78%**.
+
+**It is a SELECTION of SKILL.md's own bytes, not a summary.** No model wrote it and it
+cannot say anything SKILL.md does not. The selector takes every heading past the measured
+20,121-byte re-attach cut with its first paragraph, and — where that paragraph ends on a
+colon — the block it announces. That last clause is the whole faithfulness argument: measured
+on this tree, first-paragraph-only left **3** entries dangling, one of them Rule 23, rendered
+as *"Three controls keep the resident set lean:"* with the three controls dropped. Rule 23 is
+resident-context discipline, the one rule whose absence causes the compaction that removed
+it. `--check` asserts the dangle count is zero and reports 3 against the naive selector, so
+the arm has a demonstrated non-zero direction.
+
+**The digest is disclosed as an INDEX, in the hook and in the protocol.** It establishes that
+a rule exists and what it governs, and is not enough to apply one; both now tell the lead to
+`Read SKILL.md` for the full text of any rule it is about to act on. A lead that reads an
+entry and proceeds as though it had read the rule is worse off than one that read nothing,
+because it has no signal it is missing anything — so that caveat is asserted by a fixture arm
+rather than left to prose.
+
+### The Pipeline Position excerpt was very nearly dead code, and now fits its budget
+
+`ai-dlc-recover.sh` included the excerpt whole or dropped it whole against a 9,000-byte
+ceiling. Measured: a snapshot whose Pipeline Position ran to its 1,200-byte cap lost the
+excerpt entirely, so `build yes` fired only for a Position under ~230 bytes. It now sizes the
+excerpt to the space actually left, drawing on the range between the ceiling and the
+10,000-character cliff while leaving a 500-byte reserve unspent. The directive's own margin is
+unchanged — it is the payload and cannot be dropped; the excerpt is the convenience, and that
+order is now asserted rather than assumed. Measured across Position sections of 2, 10, 40 and
+400 rows: the excerpt survives every one, capped at 9,475 characters.
+
+### Changed
+
+- `core/skills/ai-dlc/SKILL.md` — the protocol cites the digest; `IN FULL` against SKILL.md
+  is gone. The protocol ends at ~966 tokens, 3,784 under its ceiling.
+- `core/scripts/validate-reattach-budget.sh` — the mandate arm re-anchors from
+  (`SKILL.md` + `IN FULL`) to (digest path + `SKILL.md` path). **Both** are required: an arm
+  naming only the digest would let a protocol hand the lead rule titles to act on.
+- `core/hooks/ai-dlc-recover-gate.sh` — header corrected. The third mandated Read is the
+  digest; the SKILL.md Read on top of it is per-rule and conditional by design, which is why
+  no gate polices it.
+- `core/scripts/audit-rule-files.sh` — digest added to the scan corpus (I23). Its one finding
+  is a tier-2 `NARRATIVE_DRIFT` already reported against `SKILL.md:1001`: the expected double
+  report of selected text, not a new defect.
+- Packaging: `install.sh` doc loop, `core-manifest.md` and `reconcile/setup-sites.md`
+  (`core_manifest:` + `machinery:` grain — a generated, byte-compared file has no
+  override/extension semantics). Verified on a scratch install: the digest lands
+  byte-identical and the consumer-layout validator passes against the installed skill.
+- `core/fixtures/postcompact-rulebook-recovery` — 50 assertions. Two new arms (the digest is
+  named; the digest is disclosed as an INDEX), a new mutant proving the first can fail without
+  entangling the other two, the stale mandate mutant retargeted, and the size bound moved
+  9,000 → 9,500 with the reason recorded beside it.
+
+### `FORK_BUDGET` 7000 → 7050, and the wall clock did NOT move
+
+Adding two files to the tree took `validate-enforcement-map.sh` from **6978** forks to **7012**
+and breached the 7000 budget. The +34 is diffuse — the largest attributable site is +4 — and it
+is not the digest's content: with the generated region emptied to 1,519 bytes the validator
+timed **18.96s / 19.53s** against **18.98s / 18.95s** with all 21,850 bytes present.
+
+**A first timing comparison showed +1.9s and was WRONG.** It ran `origin/main` from a `mktemp`
+extraction and the branch from the live repo — two different trees, which is not a like-for-like
+comparison. Re-measured with both sides extracted the same way and the runs INTERLEAVED to
+cancel machine drift, five reps each: `origin/main` mean **17.29s**, this branch mean
+**17.10s**. The branch is not slower. Recorded because the discarded figure is the one that
+would have justified an optimisation pass against a regression that does not exist.
+
+Raised rather than reduced because there is nothing here to reduce: no hot loop was added, and a
+budget that a release adding one script and one doc cannot clear is measuring tree growth rather
+than a defect. `origin/main` had 22 forks of headroom. A4 of `core/fixtures/validator-fork-budget`
+holds the other direction — the budget may not ratchet past measured/0.7 — so 7050 is inside
+both bounds at 7012 measured.
+
+### Not closed by this release
+
+RC-5's done-when asks for a re-measured Read-byte share **over a real post-compact sequence,
+not a projection**. That sequence cannot exist in this repo: it requires a consumer running
+the new code through an actual compaction. The −78% above is a derived per-event figure taken
+from the two files on disk, not a corpus measurement, and it is stated that way deliberately.
+
 ## [Unreleased]
 
 ### Corrected: two assertion counts in the notes below were wrong, and both were wrong in a way that matters

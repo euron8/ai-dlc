@@ -181,16 +181,31 @@ fi
 # re-invoke `/ai-dlc`, gated on the lead first NOTICING rules were missing. A lead
 # cannot notice a rule it has never seen, and nothing marks where the cut fell.
 #
-# Anchored on the installed path plus the full-read demand, because either alone
-# is satisfiable by prose that does not instruct anything -- the path appears in
-# any sentence about the file, and "IN FULL" appears in the snapshot Read
-# directive one paragraph up.
+# THE RECOVERY READ IS NOW THE DIGEST, AND THIS ARM MOVED WITH IT. `IN FULL` against
+# SKILL.md was the mandate until the cost of obeying it was measured: SKILL.md is ~102 KB,
+# `Read` results were 51.5% of all conversation content across the reference consumer's
+# sprint 305, and SKILL.md alone was 15.3% over 27 compactions. A 102 KB re-read is what
+# brings the NEXT compaction closer, so the instruction that recovered the rulebook was
+# also the instruction that destroyed it again -- and it was skipped accordingly.
+# `core/skills/ai-dlc/postcompact-digest.md` is a mechanical SELECTION of SKILL.md's own
+# bytes past the cut, rendered by scripts/render-postcompact-digest.sh and byte-compared at
+# pre-push, so it cannot say anything SKILL.md does not.
+#
+# BOTH PATHS ARE STILL REQUIRED, and that is the point of the pair rather than a leftover.
+# The digest is an INDEX: it establishes that a rule exists and what it governs, which is
+# the failure the full-read mandate existed to prevent. It is NOT enough to apply a rule, so
+# the protocol must also name SKILL.md as where the full text lives. A protocol that named
+# only the digest would hand the lead a list of rule titles and let it act on them, which is
+# a worse failure than the one this arm started with -- the lead reads the title and believes
+# it holds the rule. Either path alone is also satisfiable by prose that instructs nothing.
 PROTO_TEXT="$(sed -n "${START_LINE},${PROTO_END}p" "$SKILL_MD")"
 if ! grep -q '\.claude/skills/ai-dlc/SKILL\.md' <<<"$PROTO_TEXT" \
-   || ! grep -q 'IN FULL' <<<"$PROTO_TEXT"; then
-  echo "FAIL: the POST-COMPACT RECOVERY PROTOCOL does not tell the lead to re-read" >&2
-  echo "      this skill. Expected both '.claude/skills/ai-dlc/SKILL.md' and 'IN FULL'" >&2
-  echo "      inside lines ${START_LINE}..${PROTO_END}; found path=$(grep -c '\.claude/skills/ai-dlc/SKILL\.md' <<<"$PROTO_TEXT") in-full=$(grep -c 'IN FULL' <<<"$PROTO_TEXT")." >&2
+   || ! grep -q '\.claude/skills/ai-dlc/postcompact-digest\.md' <<<"$PROTO_TEXT"; then
+  echo "FAIL: the POST-COMPACT RECOVERY PROTOCOL does not tell the lead how to recover" >&2
+  echo "      its rulebook. Expected both '.claude/skills/ai-dlc/postcompact-digest.md'" >&2
+  echo "      (the mandated recovery Read) and '.claude/skills/ai-dlc/SKILL.md' (where a" >&2
+  echo "      rule's full text lives) inside lines ${START_LINE}..${PROTO_END}; found" >&2
+  echo "      digest=$(grep -c '\.claude/skills/ai-dlc/postcompact-digest\.md' <<<"$PROTO_TEXT") skill=$(grep -c '\.claude/skills/ai-dlc/SKILL\.md' <<<"$PROTO_TEXT")." >&2
   echo "      A compaction keeps under a quarter of this file and marks nothing, so a" >&2
   echo "      lead that is not told to Read the rest runs the sprint on whatever" >&2
   echo "      survived and reports no problem -- a rule it never saw is" >&2
@@ -199,5 +214,5 @@ if ! grep -q '\.claude/skills/ai-dlc/SKILL\.md' <<<"$PROTO_TEXT" \
 fi
 
 say "PASS  protocol ends at ~${EST_TOKENS} tokens; ${SLACK} tokens of slack under the ${CEILING}-token ceiling (${BUDGET} window - ${MARGIN} margin)."
-say "      protocol carries the full-rulebook re-read mandate."
+say "      protocol names the digest to recover from and SKILL.md for full rule text."
 exit 0
