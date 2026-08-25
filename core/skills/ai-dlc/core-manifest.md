@@ -209,6 +209,7 @@ core_manifest:
   - fixtures/handoff-resume-guard/**
   - fixtures/hook-registration-join/**
   - fixtures/implementation-join-yield/**
+  - fixtures/escalation-delivery/**
   - fixtures/inflight-row-shape/**
   - fixtures/known-skills-extension/**
   - fixtures/layer-anchor-declaration/**

@@ -299,7 +299,8 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
    a. **One sentence naming the decision.** Not the finding, not its severity, not how the pass
       graded it: the choice in front of them. *"Do I fix two sentences in the spec, or delete
       them, before the discovery step closes?"*
-   b. **An `AskUserQuestion` with 2–4 options.** Each option carries its resolution KIND, the
+   b. **An `AskUserQuestion` with 2–4 options** (the constraint and why the
+      harness enforces it are in `SKILL.md`'s Rule 3 pause-point section)**.** Each option carries its resolution KIND, the
       concrete edit it authorizes, and what it costs. An option the lead has not worked out well
       enough to state that way is not an option yet — work it out or drop it.
    c. **Exactly one option marked `(Recommended)`, with the one reason.** A menu with no

@@ -34,6 +34,65 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.407.0] — 2026-08-25
+
+### Added: an undelivered escalation now leaves an artifact; the two-option constraint is stated once
+
+s305 root cause 3. The operator's standing instruction was to send every decision needing
+attention to one named session. `SendMessage` to that session returned
+`No agent named 'graph-6b' is reachable.` in each of the last three sessions, and nothing
+recorded it. The `AskUserQuestion` fallback was then rejected three times for carrying one
+option, and two of those rejections were followed by a compaction inside three minutes — so
+the decision went into a summary and the operator never saw it.
+
+**`core/hooks/ai-dlc-escalation-delivery.sh`** is new: `PostToolUse` on `SendMessage`, logging
+`ESCALATION_UNDELIVERED` to the flow log with the intended recipient and the harness's own
+message.
+
+**The sensor is `.tool_response.success`, and it has to be.** Measured over 1141 real
+SendMessage results: 1123 `success:true`, 18 `success:false`, and **`is_error` absent on all
+eighteen**. The harness treats an undelivered message as a SUCCESSFUL call returning a failure
+payload, so `PostToolUseFailure` never fires for it and an error-flag sensor reads clean over a
+corpus made entirely of failures. That is why nothing noticed for three sessions.
+
+**The false-positive set is enumerated rather than empty, and the legend says so where the
+count is read.** Of the 18: 9 `No agent named 'parent'` (a subagent answering upward, routine),
+1 `notify_when_idle is only supported for...` (a capability refusal, not a delivery failure),
+and 8 genuine undelivered messages, 3 of them the s305 escalations. The event fires on every
+`success:false` — no grammar over harness prose — and the entry carries the target so a reader
+separates the classes. A count is a FLOOR on undelivered messages and an OVERCOUNT of
+undelivered escalations.
+
+**The hook shipped once unable to fire, and the fixture is what caught it.** `jq`'s alternative
+operator treats `false` exactly as it treats null and absent, so `.tool_response.success //
+empty` yields NOTHING on the one input the hook exists for. The comparison is now `== false`
+inside `jq`, which is also type-strict: a string `"false"` is not a failed send.
+
+`core/fixtures/escalation-delivery` is new — **13 assertions**, every payload lifted verbatim
+from session transcripts rather than composed from the hook's own accept-set, with a committed
+two-mutant battery because three arms assert a zero. A subject replaced by `exit 0` kills 5;
+removing type-strictness kills exactly 1; removing the `SendMessage` matcher kills exactly 1.
+
+**The flow log now has FOUR seeding hooks, and `pause-hook-origin` assertion 8 was comparing
+only three.** Its guard loop always walked every hook passed while the comparison hard-coded
+`legend.1..3`, so a fourth would have been guarded and then silently excluded from the only
+assertion that matters. The comparison is variadic, the battery runs one mutant per position
+(**5 → 6 kills**), and the expected count is derived from the hook count rather than written as
+a literal — the literal `5` is what turned adding a hook into a failure with a number instead
+of a reason.
+
+**Item 2 of the remedy: the 2-4 option constraint is now stated once**, in `SKILL.md`'s Rule 3
+pause-point section where `AskUserQuestion` is named as the mechanism, and cited from
+`steps/route.md` and `steps/_gate-procedures.md` rather than restated. It records that the
+REJECTION is the harness's (`InputValidationError`, `"minimum":2`), not this rule's.
+
+**The PreToolUse deny in the filed remedy was DROPPED, on the operator's decision.** A
+schema-invalid call is rejected at input validation; the docs do not state whether hooks run
+before or after that, and `PostToolUseFailure` is documented as firing when a tool "started
+executing and fails", which such a call never did. It could not be shown able to fire, and it
+would duplicate a rejection the lead already sees in-band. What was actually lost in s305 was
+the decision, to a compaction — not the schema error.
+
 ## [0.406.0] — 2026-08-25
 
 ### Fixed: the stall detector could not fire, and the fixture guarding it asserted the defect

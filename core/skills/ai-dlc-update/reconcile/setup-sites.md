@@ -150,6 +150,7 @@ core_manifest:
   - core/fixtures/handoff-resume-guard/**
   - core/fixtures/hook-registration-join/**
   - core/fixtures/implementation-join-yield/**
+  - core/fixtures/escalation-delivery/**
   - core/fixtures/inflight-row-shape/**
   - core/fixtures/known-skills-extension/**
   - core/fixtures/layer-anchor-declaration/**

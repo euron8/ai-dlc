@@ -138,6 +138,16 @@ call, pushing you past the very checkpoint you stopped at.
 `AskUserQuestion`, so the turn never ends and the Stop hook never runs.
 A flag set there is a pause nobody clears.
 
+**EVERY `AskUserQuestion` CARRIES 2-4 OPTIONS PER QUESTION. A question with one
+option is REJECTED BY THE HARNESS**, not by this rule -- `InputValidationError`,
+`"code":"too_small"`, `"minimum":2` -- and the decision it carried is lost unless
+you re-ask. Measured on one sprint: three rejections in three sessions, two of
+them followed by a compaction inside three minutes, so the escalation went into a
+summary and the operator never saw it. If you have only one course of action you
+do not have a question; state it and act, or find the real alternative. This is
+the single statement of that constraint; `steps/route.md` and
+`steps/_gate-procedures.md` cite it rather than restating it.
+
 If you are not at one of these four pause points, you are not done.
 Keep working. Do not ask if you should continue.
 

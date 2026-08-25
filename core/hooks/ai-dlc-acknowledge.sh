@@ -509,6 +509,12 @@ Event types:
   the lead tried to execute straight through a waiting human and the hook --
   not the lead's judgment -- is what stopped it. Investigate each one.
 - `BACKOFF`: rapid-fire stop attempts detected; stall confirmed
+- `ESCALATION_UNDELIVERED`: a SendMessage returned `success:false`, so an
+  operator-bound message was never delivered. The harness does NOT mark these
+  as tool errors, which is why they fell through silently; a nonzero count
+  means an escalation the lead believed it had sent did not arrive. Read the
+  recorded target -- a failure to reach `parent` is subagent routing, not an
+  operator escalation
 
 Retro reviews this log to assess pipeline flow:
 

@@ -75,8 +75,9 @@ At this plan's writing those read `FAIL — 24 blocking, 3 ambiguous`; `134`;
 
 **Phase 1 (RC-1) is DONE, shipped as v0.404.0 (`fe64a47a`). Action 6b (RC-1b) is DONE,
 shipped as v0.405.0 (`fea38ec7`), taken out of order at the operator's direction. Phase 2
-(RC-4) is DONE, shipped as v0.406.0. All merged to `main` and pushed. Actions 3, 4, 5, 6 and 7
-are open. Start at NEXT ACTION 3.**
+(RC-4) is DONE, shipped as v0.406.0. Phase 3 (RC-3) is DONE, shipped as v0.407.0, with its
+item 1 DROPPED on the operator's decision — see RC-3's remedy. All merged to `main` and
+pushed. Actions 4, 5, 6 and 7 are open. Start at NEXT ACTION 4.**
 
 **Tree state at handoff:** on `main`, clean, level with `origin/main`, `VERSION` `0.406.0`.
 Consumer ledger re-checked at the phase boundary and unchanged at
@@ -131,7 +132,7 @@ The sprint cannot safely resume until the consumer can push, which is why RC-1 i
 
 **The probes are NOT in action order and one of them is out of family, so the map is written
 out rather than inferred.** `P1a`/`P1b`/`P1c` → action 1 (DONE). `P1d` → action 6b (DONE).
-`P2` → action 2 (DONE). `P3` → action 3.
+`P2` → action 2 (DONE). `P3` → action 3 (DONE).
 `P4` → action 4. `P5` → action 5. `P6` → action 6. `P7` → action 7. Read the ACTION number, not the
 probe's; a session going top-down through the probe list reaches `P1d` first and would start
 in the wrong place.
@@ -154,9 +155,9 @@ and says why in the comment itself.
    a DELETION of the live-beat state wipe, not the counter-reset that was filed here — see
    RC-4's remedy for the differential that changed it, and note that the plan's own fixture
    prescription would have produced a vacuous arm.
-3. **RC-3 — the two escalation guards.** A `PreToolUse` deny on an `AskUserQuestion`
-   carrying a question with fewer than two options, and a `PostToolUse` on `SendMessage`
-   that logs `ESCALATION_UNDELIVERED` on `success:false`.
+3. **RC-3 — COMPLETE, SHIPPED AS v0.407.0.** The `PostToolUse` on `SendMessage` ships and the
+   constraint is stated once. The `PreToolUse` deny was DROPPED because it could not be shown
+   able to fire — see RC-3's remedy for the evidence and the operator's decision.
 4. **RC-2 — route a handoff arriving as an answer.** Extend `ai-dlc-answer-capture.sh` to
    emit the routing block, create the pause flag and log `USER_PAUSE` on a handoff-intent
    answer, single-sourcing the vocabulary and the branch text from `ai-dlc-pause.sh`.
@@ -437,7 +438,41 @@ operator attention/decisions to that session."*
   summary and the operator never saw it.
 - Asks that did land had operator latencies of **1.9 h, 7.5 h and 11 h**.
 
-### Remedy
+### Remedy — COMPLETE, SHIPPED AS v0.407.0
+
+**RC-3 shipped. This phase is closed and there is nothing here to execute.** Items 2 and 3
+shipped; item 1 was dropped. The three filed items are kept at the end of this section under
+their own heading. Nothing between here and that heading is superseded.
+
+**What shipped.** `core/hooks/ai-dlc-escalation-delivery.sh`, `PostToolUse` on `SendMessage`,
+logging `ESCALATION_UNDELIVERED` on a boolean `success:false`, with the recipient and the
+harness message on the entry. The 2-4 option constraint is stated once in `SKILL.md`'s Rule 3
+pause-point section and cited from the two step files.
+
+**ITEM 1 WAS DROPPED, ON THE OPERATOR'S DECISION, AND THE REASON IS REUSABLE.** A `<2`-option
+`AskUserQuestion` is rejected at INPUT VALIDATION — `InputValidationError`, `"code":"too_small"`,
+`"minimum":2` — and the hooks documentation does not state whether hook dispatch runs before or
+after that. `PostToolUseFailure` is documented as firing when a tool "started executing and
+fails", which a schema-invalid call never did. **The hook could not be shown able to fire, and
+this repo does not ship checks in that state.** It would also have duplicated a rejection the
+lead already sees in-band; what s305 actually lost was the DECISION, to a compaction three
+minutes later.
+
+**Two premises in the evidence above were measured wrong.** "Core states the two-option minimum
+NOWHERE" is false — `steps/_gate-procedures.md:302` stated it, gate-scoped, which is why it did
+not reach the fallback ask. And the `success:false` population is not all escalations: of 18
+real failures, 9 are a subagent failing to reach `parent` and 1 is a capability refusal.
+
+**A trap worth carrying forward.** The sensor cannot be a tool-error flag. `is_error` is absent
+on ALL EIGHTEEN measured failures — the harness treats an undelivered message as a successful
+call returning a failure body. An arm keyed on the error flag reads clean over a corpus made
+entirely of failures.
+
+---
+
+#### The filed remedy — items 2 and 3 shipped, item 1 dropped
+
+Everything above this heading describes what actually shipped.
 
 1. **Remove the affordance.** A `PreToolUse` deny on `AskUserQuestion` with any question
    carrying fewer than two options, returning the reason in-band so the lead repairs it

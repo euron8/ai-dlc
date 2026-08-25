@@ -421,6 +421,8 @@ canonical it would freeze. Surface it and wait — never freeze live state.
 Before initializing the snapshot, and before any planning step loads, ask the
 operator ONE `AskUserQuestion` that puts the scope you resolved in front of
 them to confirm or correct.
+The 2-4 option constraint on every `AskUserQuestion` is stated in `SKILL.md`'s
+Rule 3 pause-point section and is not restated here.
 
 WHY THIS PAUSE POINT EXISTS, AND WHY HERE. Every other Rule 3 pause point is
 downstream of implementation, so a sprint that never reaches implementation
