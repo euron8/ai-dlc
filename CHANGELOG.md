@@ -34,6 +34,88 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.408.0] — 2026-08-25
+
+### Added: a handoff asked for as an AskUserQuestion ANSWER is now routed, and a handoff must record its teammate sweep
+
+s305 root cause 2. At `01:25:47Z` the lead asked an `AskUserQuestion` about a gate-3 Check 16
+disposition. At `01:35:25Z` the operator answered **`handoff`**. The lead read the intent
+correctly and then improvised — one `TaskStop`, a snapshot edit, `touch pipeline-paused.flag` —
+without ever loading `steps/handoff.md` in that session, and confirmed at `01:42:08Z`: *"no full
+teammate sweep, no commit, no push attempt, no bare resume line."*
+
+The cause is structural. `core/hooks/ai-dlc-pause.sh` was the ONLY thing that routes a handoff
+request, and it fires on `UserPromptSubmit`. An `AskUserQuestion` answer never raises that event —
+`core/hooks/ai-dlc-answer-capture.sh`'s own header already said so — and that hook recorded the
+answer without routing it. The continuation log carries no `USER_PAUSE` between `01:24:59Z` and
+`01:38:21Z`; the `01:36:15Z` `ALLOWED_BY_PAUSE` reads a flag the lead created itself.
+
+**`core/schemas/pause-routing.json`** is new and is the single declaration of both the three-way
+pause branch text and the handoff-intent vocabulary. Routing the answer channel made a second
+emitter of each, and `ai-dlc-pause.sh`'s header had already ruled on that case — *"if a broader
+predicate is ever needed, single-source it, do not copy it"*. Three readers, no copies:
+`ai-dlc-pause.sh` (preamble + branch), `ai-dlc-answer-capture.sh` (its own preamble + the same
+branch, plus both patterns), `ai-dlc-continue.sh` Check 0 (both patterns). The branch text and the
+patterns are byte-identical to the literals they replaced — verified by driving the pre-change and
+post-change `ai-dlc-pause.sh` on the same input and comparing `additionalContext`: identical at 878
+bytes, with the two hook files asserted to differ first so the comparison had two sides.
+
+**`core/hooks/ai-dlc-answer-capture.sh` now routes.** On an answer matching the declared intent
+vocabulary it creates the pause flag, logs `USER_PAUSE` with a `Channel:` line, and emits the
+branch as `PostToolUse` `additionalContext`. It still never blocks and every path still exits 0 —
+a `PostToolUse` hook emits after the tool call has returned. The capture is untouched and runs
+ahead of the gate, so the first `/ai-dlc` of a project is still recorded.
+
+**Intent is read from the ANSWER, never the question.** The question is text the lead authored;
+matching on it would let the lead pause the pipeline by phrasing a question, with no operator
+involved. Same split, same reason, as the SHA that covers the answer body alone.
+
+**`USER_PAUSE` has two producers now, so the flow-log legend says so and every entry names its
+`Channel:`.** The legend is seeded by whichever hook opens the log first, and `retro.md` §4b reads
+it as the definition of every count it reports; all five seeding hooks now carry it byte-identically
+(2860 bytes each, one distinct body).
+
+**`ai-dlc-continue.sh` Check 0 gained a second arm: the teammate sweep must be RECORDED.** At a
+handoff, no row in the snapshot's `## In-Flight Teammates` section may still read `in-flight`.
+`steps/handoff.md` step 1 now requires each stopped teammate's row be rewritten to `stopped` rather
+than deleted — a deleted row is indistinguishable from a teammate that never existed, and the
+successor session has no other way to learn what was running. It routes through the row that
+already exists rather than adding a field, and fails open on three unambiguous absences: no
+snapshot, no In-Flight section (it auto-heals per `route.md`), and no rows.
+
+**`steps/handoff.md` step 4's driver `touch` is now unconditional**, as is the auto-handoff copy in
+`steps/_gate-procedures.md`. It read *"if auto-session-chaining is in use"*, which is a condition a
+session cannot evaluate from inside itself; on the reference consumer `_bmad-output/.driver/handoff`
+was left at `2026-08-21T18:13` by a handoff on the 25th. The marker is inert with no driver
+attached and the driver deletes it when it acts.
+
+**`core/fixtures/answer-handoff-routing`** is new and SHIPS (14 arms, mutant killed, control alive).
+Assertion 5 is the load-bearing one — an ordinary answer must route nothing, which is what stops the
+predicate from pausing the pipeline on every question the lead asks. Two harness defects were found
+by the fixture failing before the subject did: `CASE_DIR` assigned inside a command substitution was
+discarded at the closing paren, so five arms inspected the PREVIOUS case's directory; and a `sed`
+whose `|` delimiter collided with the `||` in its own pattern.
+
+**`core/fixtures/handoff-resume-guard`** gained six arms and a mutant: the declaration resolves, the
+guard genuinely stands down when it does not, the three teammate-sweep cases, and a mutant that pins
+the sweep verdict open. Adding a snapshot to a case makes the pipeline ACTIVE, so Rule 3 blocks
+every Stop regardless of Check 0 — three assertions failed that way before the pause flag was added
+beside the snapshot, which is also what really happens.
+
+**`core/fixtures/pause-hook-origin`** now compares five legend seeders, not four; `LEGEND_HOOKS` is
+5 and the battery kills 7 of 7.
+
+**Invariant `I94`** holds the declaration to one copy. Three arms: every field non-empty (an empty
+one shortens both channels at once and the copies still agree), no shipped file restates a declared
+value, and every reader is bound on the line that FEEDS the schema path to `jq` rather than on a
+file that mentions the filename. False-positive set measured at zero over `core/` and `scripts/`
+with all five values; a two-direction self-probe on a `mktemp` tree runs before the corpus scan.
+Each arm was mutated and observed to fire. The validator moved 19.4s → 19.7s, inside noise.
+
+`I92` was the first ID chosen and it was already claimed by the transcript-corpus predicate arm —
+caught by the rendered index, which is what it is for, and its `i92_*` variables would have
+collided in the same file.
+
 ## [0.407.0] — 2026-08-25
 
 ### Added: an undelivered escalation now leaves an artifact; the two-option constraint is stated once

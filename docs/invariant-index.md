@@ -110,3 +110,4 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I91 | harness-origin prefixes are ONE declaration, never a second copy |
 | I92 | the transcript-corpus predicate is one rule in three copies, byte-identical |
 | I93 | an "examined nothing" verdict is ONE token across every emitter of it |
+| I94 | the pause branch text and the handoff-intent PATTERNS are ONE declaration |

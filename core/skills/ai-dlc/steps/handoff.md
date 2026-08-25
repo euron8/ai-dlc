@@ -21,7 +21,13 @@ Execute this 5-step procedure in order:
    every `in_progress` task. Halt any Agent-spawned teammate not
    bound to a task. Wait until every teammate has returned before
    proceeding. Record stopped teammates and in-flight artifacts
-   in the snapshot's Open Items in Step 3.
+   in the snapshot's Open Items in Step 3, and set each stopped
+   teammate's **In-Flight Teammates** row `status` to `stopped`.
+   **Rewrite the row; do not delete it** — at a handoff the successor
+   needs to know what was running, and a deleted row is
+   indistinguishable from a teammate that never existed.
+   `ai-dlc-continue.sh` Check 0 blocks the stop while any row still
+   reads `in-flight`.
 2. Commit any in-flight work (`git add` + `git commit`), including
    work teammates left in the working tree.
 3. Finalize the pipeline snapshot — one last update capturing
@@ -38,9 +44,13 @@ Execute this 5-step procedure in order:
    the handoff is not blocked.
 4. Emit the successor's entry line — exactly `/ai-dlc resume`, wrapped in
    `----` delimiter lines (one before, one after) for copy-paste. Nothing
-   else: no narrated body. If auto-session-chaining is in use, also
-   `touch _bmad-output/.driver/handoff` (the driver's zero-content handoff
-   signal).
+   else: no narrated body. Then `touch _bmad-output/.driver/handoff` —
+   the driver's zero-content handoff signal.
+
+   **The `touch` is unconditional.** A session cannot tell from inside
+   itself whether a driver is attached, so a conditional here is a
+   condition nobody can evaluate. With no driver the marker is inert —
+   nothing reads it; with one, the driver consumes and deletes it.
 5. Create the pause flag so the continuation hook allows this session to
    end cleanly: `touch _bmad-output/pipeline-paused.flag`. Then end the
    session — do not continue the pipeline in this conversation.

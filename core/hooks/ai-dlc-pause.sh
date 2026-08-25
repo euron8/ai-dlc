@@ -121,6 +121,31 @@ for _hos in "${PROJECT_DIR}/.claude/schemas/harness-origin.json" \
   [ -f "$_hos" ] && { HARNESS_ORIGIN_SCHEMA="$_hos"; break; }
 done
 
+# -----------------------------------------------------------------------------
+# The pause branch text is NOT written here either
+# -----------------------------------------------------------------------------
+# The three-way branch this hook injects as additionalContext used to be a string literal
+# at the bottom of this file, and it was the only routing a handoff request had. Then one
+# arrived as an AskUserQuestion ANSWER, which raises no UserPromptSubmit, so this hook could
+# not see it and the lead improvised the procedure. Routing the answer channel made
+# ai-dlc-answer-capture.sh a second emitter of the same branch, and a second copy of it is
+# the drift this file's own header rules against. It is declared once in
+# schemas/pause-routing.json and both hooks resolve it.
+#
+# SELF-RELATIVE FIRST, and that ONE relative path covers BOTH layouts: a hook sits at
+# core/hooks/ upstream and .claude/hooks/ in a consumer, and `../schemas/` from either is
+# the schema directory that shipped in the same package. The PROJECT_DIR candidates below
+# it are the fallback for a hook invoked through a copy. The env override is for fixtures,
+# which drive a mutated copy from a temp directory where neither path resolves.
+_prs_self="$(cd "$(dirname "$0")" && pwd)"
+PAUSE_ROUTING_SCHEMA=""
+for _prs in "${AI_DLC_PAUSE_ROUTING_SCHEMA:-}" \
+            "${_prs_self}/../schemas/pause-routing.json" \
+            "${PROJECT_DIR}/.claude/schemas/pause-routing.json" \
+            "${PROJECT_DIR}/core/schemas/pause-routing.json"; do
+  [ -n "$_prs" ] && [ -f "$_prs" ] && { PAUSE_ROUTING_SCHEMA="$_prs"; break; }
+done
+
 # is_harness_origin <text> -> 0 when the text starts with a declared harness prefix.
 #
 # THE UNRESOLVED CASE ANSWERS "NO", AND THAT DIRECTION IS DELIBERATE. If the declaration
@@ -257,7 +282,12 @@ hook scripts. Rotated per sprint at retro close (Rule 25(c)).
 
 Event types:
 
-- `USER_PAUSE`: user sent a message; pipeline paused via flag file
+- `USER_PAUSE`: the operator steered and the pipeline paused via flag file. TWO
+  channels raise it and the entry's `Channel:` line names which: a typed message
+  (UserPromptSubmit), or an AskUserQuestion answer carrying handoff intent. The
+  second raises no UserPromptSubmit at all, so before it was routed a handoff
+  asked for that way produced no USER_PAUSE, no flag, and no record that the
+  operator had spoken
 - `PAUSE_SKIPPED`: a UserPromptSubmit carried no operator prose, so no pause
   flag was created. The harness raises the event identically for a completed
   background task and for a human typing; this records the ones that were not
@@ -340,6 +370,10 @@ seed_log_header
 {
   echo "## ${TIMESTAMP} -- USER_PAUSE"
   echo "- Session: ${SESSION_ID}"
+  # NAMED, not implied by which hook wrote it. USER_PAUSE now has two producers and the
+  # log is read by retro.md long after both are out of context; "which channel" is the
+  # first question a nonzero count raises and the entry is the only thing that can answer.
+  echo "- Channel: UserPromptSubmit (typed message)"
   echo "- Prompt (first 120 chars): ${PROMPT_PREVIEW}"
   # Emitted on THIS path too, not only on the skip path. A missing declaration produces
   # pauses, not skips -- so a note that appeared only where nothing was skipped would be
@@ -347,6 +381,12 @@ seed_log_header
   if [ -z "$HARNESS_ORIGIN_SCHEMA" ]; then
     echo "- HARNESS_ORIGIN_UNRESOLVED: schemas/harness-origin.json was not found, so this pause may have been"
     echo "  raised by the harness rather than the operator and nothing could tell. Reinstall ai-dlc."
+  fi
+  # Same shape, same reason: a note INSIDE an existing event rather than a new event type,
+  # because a new type would have to be added to the legend every log-seeding hook carries.
+  if [ -z "$PAUSE_ROUTING_SCHEMA" ]; then
+    echo "- PAUSE_ROUTING_UNRESOLVED: schemas/pause-routing.json was not found, so this pause was recorded"
+    echo "  but the lead was given NO branch instruction with it. Reinstall ai-dlc."
   fi
   echo ""
 } >> "$LOG_FILE"
@@ -357,8 +397,15 @@ seed_log_header
 # This fires on every user message during an active pipeline. Keep it
 # concise -- the lead sees this as additionalContext before processing
 # the user's message.
-
-CONTEXT="[AI/DLC Pipeline Control] A user message was received while the pipeline is active. The pipeline has been paused via flag file at _bmad-output/pipeline-paused.flag. Before continuing pipeline work, interpret the user's intent: (a) Resume intent -- including /ai-dlc invocations, handoff resume prompts, or natural resume language -- delete the flag via Bash (rm _bmad-output/pipeline-paused.flag) then RE-READ the current step file (Rule 22: Read tool call for the step file named in pipeline-snapshot.md Pipeline Position, enumerate remaining numbered sections in output, THEN execute them). Do not act from memory of what remains. (b) Question, correction, clarification, or conversational message -- respond normally; leave the flag in place. (c) Handoff request -- follow Rule 2 handoff protocol; leave the flag in place. Do not execute pipeline steps while the flag exists."
+#
+# Assembled from the declaration, never written here: this hook's own preamble plus the
+# branch text it shares with ai-dlc-answer-capture.sh. An unresolved declaration emits
+# nothing rather than a partial instruction -- the pause itself already happened, the
+# PAUSE_ROUTING_UNRESOLVED note is already in the log, and half a branch list is worse
+# than none.
+[ -n "$PAUSE_ROUTING_SCHEMA" ] || exit 0
+CONTEXT="$(jq -rj '(.prompt_pause_preamble // "") + (.pause_branch_text // "")' "$PAUSE_ROUTING_SCHEMA" 2>/dev/null)"
+[ -n "$CONTEXT" ] || exit 0
 
 jq -n \
   --arg context "$CONTEXT" \

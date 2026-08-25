@@ -79,6 +79,7 @@ core_manifest:
   - core/fixtures/apply-restamp-theirs/**
   - core/fixtures/apply-relabel-noop-row/**
   - core/fixtures/absorbed-specifics-survive/**
+  - core/fixtures/answer-handoff-routing/**
   - core/fixtures/askuserquestion-citation/**
   - core/fixtures/command-args-citation/**
   - core/fixtures/operator-request-capture/**

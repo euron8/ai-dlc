@@ -110,7 +110,12 @@ hook scripts. Rotated per sprint at retro close (Rule 25(c)).
 
 Event types:
 
-- `USER_PAUSE`: user sent a message; pipeline paused via flag file
+- `USER_PAUSE`: the operator steered and the pipeline paused via flag file. TWO
+  channels raise it and the entry's `Channel:` line names which: a typed message
+  (UserPromptSubmit), or an AskUserQuestion answer carrying handoff intent. The
+  second raises no UserPromptSubmit at all, so before it was routed a handoff
+  asked for that way produced no USER_PAUSE, no flag, and no record that the
+  operator had spoken
 - `PAUSE_SKIPPED`: a UserPromptSubmit carried no operator prose, so no pause
   flag was created. The harness raises the event identically for a completed
   background task and for a human typing; this records the ones that were not
@@ -183,10 +188,63 @@ fi
 # The invariant that matters is "the command line is delimited for copy-paste",
 # never the hyphen count. Accept four or more; quote the rulebook's own template.
 #
+# A HANDOFF ALSO HAS TO BE AUDITABLE, WHICH IS A SECOND ARM ON THE SAME EVENT.
+# `steps/handoff.md` step 1 says stop every in-flight teammate and record them in the
+# snapshot; step 3 says the finalized snapshot carries that record. Measured on the
+# reference consumer: a lead read a handoff request correctly, called one TaskStop, edited
+# the snapshot and touched the pause flag -- and confirmed afterwards that there had been
+# "no full teammate sweep, no commit, no push attempt". The resume block was the only thing
+# anything checked, so the handoff looked complete. The successor session then inherits a
+# snapshot whose In-Flight Teammates rows still read `in-flight` for teammates that are
+# gone, which is the one state no later step can reconstruct.
+#
+# THE PREDICATE IS THE ROW THAT ALREADY EXISTS, not a new field: no row in the snapshot's
+# `## In-Flight Teammates` section may still read `in-flight` at a handoff. Stopping a
+# teammate and NOT recording it is what this catches, because step 1 requires the row be
+# rewritten to `stopped` rather than deleted -- a deleted row is a lost record, and the
+# successor cannot tell it from a teammate that never existed.
+#
+# FAIL-OPEN IN THREE PLACES, each because the absence is unambiguous: no snapshot at all
+# (no pipeline), no In-Flight section (it AUTO-HEALS per route.md, so snapshots predating
+# it are legal), and no rows (nothing was dispatched). The arm fires only on a row that
+# positively says a teammate is still running.
+#
 # Fail-open: any transcript parse failure skips this check entirely.
 TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
 HANDOFF_STATE="${LOG_DIR}/handoff-guard-state.txt"
-if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+
+# The handoff-intent vocabulary is NOT written here. It is declared once in
+# schemas/pause-routing.json, because ai-dlc-answer-capture.sh needs the same set to route
+# a handoff that arrives as an AskUserQuestion answer -- and a hand-maintained list of
+# handoff phrasings in two files is two lists that drift, which ai-dlc-pause.sh's header
+# already ruled on for its own list. `../schemas/` resolves in BOTH layouts from a hook
+# (core/hooks/ upstream, .claude/hooks/ in a consumer); the env override is for fixtures
+# driving a mutated copy from a temp directory.
+#
+# UNRESOLVED SKIPS THE WHOLE CHECK, and that silence is covered by a shipped fixture
+# rather than by a log line: core/fixtures/handoff-resume-guard asserts the declaration
+# resolves before it asserts anything about the guard, so an install that lost the schema
+# fails at the consumer's own pre-push instead of quietly disarming the guard.
+_hg_self="$(cd "$(dirname "$0")" && pwd)"
+PAUSE_ROUTING_SCHEMA=""
+for _prs in "${AI_DLC_PAUSE_ROUTING_SCHEMA:-}" \
+            "${_hg_self}/../schemas/pause-routing.json" \
+            "${PROJECT_DIR}/.claude/schemas/pause-routing.json" \
+            "${PROJECT_DIR}/core/schemas/pause-routing.json"; do
+  [ -n "$_prs" ] && [ -f "$_prs" ] && { PAUSE_ROUTING_SCHEMA="$_prs"; break; }
+done
+HANDOFF_INTENT_RE=""
+HANDOFF_MENTION_RE=""
+if [ -n "$PAUSE_ROUTING_SCHEMA" ]; then
+  HANDOFF_INTENT_RE="$(jq -rj '.handoff_intent_pattern // ""' "$PAUSE_ROUTING_SCHEMA" 2>/dev/null)"
+  HANDOFF_MENTION_RE="$(jq -rj '.handoff_mention_exclusion_pattern // ""' "$PAUSE_ROUTING_SCHEMA" 2>/dev/null)"
+fi
+# A DEDICATED SKIP FLAG, not a blanked $TRANSCRIPT. Check 0b reads $TRANSCRIPT too (it
+# passes it to the cycle reader further down), so disarming Check 0 by clearing that
+# variable would silently disarm an unrelated guard on the same event.
+HANDOFF_VOCAB_OK=0
+[ -n "$HANDOFF_INTENT_RE" ] && [ -n "$HANDOFF_MENTION_RE" ] && HANDOFF_VOCAB_OK=1
+if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
   LAST_USER=$(jq -rs '[.[]|select(.message.role=="user")|.message.content|(if type=="string" then . else (map(select(.type=="text")|.text)|join(" ")) end)]|map(select(length>0))|last // ""' "$TRANSCRIPT" 2>/dev/null || echo "")
   # LAST_ASST is reconstructed with join("") (NOT " "): the format check below is
   # line-anchored, and a streaming split of one text block into chunks can land a
@@ -201,30 +259,68 @@ if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
   # context): those are discussion, not a request, and a bare-substring regex fires on
   # every one of them and spams the operator with a spurious resume prompt. The second
   # grep excludes any message that IS a resume prompt or talks ABOUT the mechanism.
-  if grep -qiE 'hand[ -]off (this|it|to|the (sprint|pipeline|work|session))|hand(ing)? (this|it) off|\b(do|create|prepare|need|want|start|begin|let'\''s|please) (a |an |the )?hand[ -]?off\b|^[[:space:]]*hand[ -]?off[[:space:]]*$|continue in a (new|fresh) session|pick (this|it) up in a (new|fresh) session' <<<"$LAST_USER" \
-     && ! grep -qiE '/ai-dlc|acknowledge handoff|handoff (resume|guard|prompt|protocol)|resume prompt|pipeline control' <<<"$LAST_USER"; then
+  if grep -qiE "$HANDOFF_INTENT_RE" <<<"$LAST_USER" \
+     && ! grep -qiE "$HANDOFF_MENTION_RE" <<<"$LAST_USER"; then
 
     RESUME_OK=$(printf '%s' "$LAST_ASST" | awk '
       /^[[:space:]]*-{4,}[[:space:]]*$/ { marks++; if (marks==1){opened=1;sawcmd=0} else if (marks>=2 && sawcmd){ok=1}; next }
       opened && /^[[:space:]]*\/ai-dlc[[:space:]]+resume[[:space:]]*$/ { sawcmd=1 }
       END { print (ok?"1":"0") }')
 
-    if [ "$RESUME_OK" != "1" ]; then
+    # The teammate-sweep arm. Reads the LAST cell of every table row inside the
+    # `## In-Flight Teammates` section, which is the `status` column route.md defines. The
+    # last NON-EMPTY cell, because a markdown row's trailing pipe makes split() produce an
+    # empty final field and a positional index would read that instead of the status.
+    TEAMMATES_OK=1
+    if [ -f "$SNAPSHOT_FILE" ]; then
+      TEAMMATES_OK=$(awk '
+        /^##[[:space:]]+In-Flight Teammates/ { inb=1; next }
+        inb && /^##[[:space:]]/              { inb=0 }
+        inb && /^[[:space:]]*\|/ {
+          n = split($0, c, "|")
+          last = ""
+          for (i = n; i >= 1; i--) {
+            gsub(/^[ \t]+/, "", c[i]); gsub(/[ \t]+$/, "", c[i])
+            if (c[i] != "") { last = c[i]; break }
+          }
+          if (tolower(last) == "in-flight") found = 1
+        }
+        END { print (found ? "0" : "1") }' "$SNAPSHOT_FILE" 2>/dev/null || echo 1)
+      [ -n "$TEAMMATES_OK" ] || TEAMMATES_OK=1
+    fi
+
+    if [ "$RESUME_OK" != "1" ] || [ "$TEAMMATES_OK" != "1" ]; then
       H_LAST=0; H_CNT=0
       if [ -f "$HANDOFF_STATE" ]; then
         H_LAST=$(sed -n '1p' "$HANDOFF_STATE" 2>/dev/null); H_CNT=$(sed -n '2p' "$HANDOFF_STATE" 2>/dev/null)
         [[ "$H_LAST" =~ ^[0-9]+$ ]] || H_LAST=0; [[ "$H_CNT" =~ ^[0-9]+$ ]] || H_CNT=0
       fi
       if [ $((NOW - H_LAST)) -lt "$RAPID_WINDOW_SECONDS" ]; then H_CNT=$((H_CNT + 1)); else H_CNT=1; fi
+      # WHICH ARM FIRED IS PART OF THE RECORD. Two different failures reach this block and
+      # they have different remedies; a log line naming only the resume block would send a
+      # retro reading HANDOFF_GUARD_BLOCK counts to the wrong cause.
+      H_WHY=""
+      [ "$RESUME_OK" != "1" ]    && H_WHY="no delimited /ai-dlc resume block"
+      [ "$TEAMMATES_OK" != "1" ] && H_WHY="${H_WHY:+$H_WHY; }In-Flight Teammates still carries an \`in-flight\` row"
+      # The remediation text is assembled the same way, so a lead that satisfied one arm is
+      # not told to redo it.
+      H_FIX_RESUME="Per steps/handoff.md step 4, emit exactly this, and nothing else -- no narrated body:"
+      H_FIX_TEAM="Per steps/handoff.md step 1, stop every in-flight teammate, wait for each to return, and rewrite its In-Flight Teammates row's status to \`stopped\` -- do NOT delete the row. A deleted row is a lost record: the successor session cannot tell it from a teammate that never existed."
       if [ "$H_CNT" -le "$MAX_RAPID_BLOCKS" ]; then
         echo "$NOW" > "$HANDOFF_STATE"; echo "$H_CNT" >> "$HANDOFF_STATE"
         {
           echo "## ${TIMESTAMP} -- HANDOFF_GUARD_BLOCK (${H_CNT}/${MAX_RAPID_BLOCKS})"
           echo "- Session: ${SESSION_ID}"
-          echo "- Handoff requested but the turn ends with no delimited /ai-dlc resume block"
+          echo "- Handoff requested but the turn ends with ${H_WHY}"
           echo ""
         } >> "$LOG_FILE"
-        jq -n --arg r "HANDOFF GUARD: the operator requested a handoff, but this turn ends WITHOUT a copy-pasteable resume prompt. Per steps/handoff.md step 4, emit exactly this, and nothing else -- no narrated body:
+        if [ "$RESUME_OK" = "1" ]; then
+          jq -n --arg r "HANDOFF GUARD: the operator requested a handoff and the resume prompt is well-formed, but the pipeline snapshot's \`## In-Flight Teammates\` section still carries a row whose status reads \`in-flight\`. ${H_FIX_TEAM}
+
+Then finalize the snapshot (step 3) and end the turn again. A handoff whose teammate sweep is not recorded looks identical to one that had no teammates." '{decision:"block",reason:$r,suppressOutput:true}'
+          exit 0
+        fi
+        jq -n --arg r "HANDOFF GUARD: the operator requested a handoff, but this turn ends WITHOUT a copy-pasteable resume prompt. ${H_FIX_RESUME}
 
 \`\`\`
 ----
@@ -237,7 +333,7 @@ The \`/ai-dlc resume\` line MUST sit BETWEEN two delimiter lines (four or more h
       fi
       rm -f "$HANDOFF_STATE"   # backoff exhausted: allow stop (possible false positive)
     else
-      rm -f "$HANDOFF_STATE"   # well-formed resume block present: handoff satisfied
+      rm -f "$HANDOFF_STATE"   # resume block well-formed AND the sweep recorded: satisfied
     fi
   fi
 fi

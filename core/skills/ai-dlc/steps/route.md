@@ -536,7 +536,10 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
     `agent | role | deliverable | dispatched-at | status`; rows are added
     at dispatch as `in-flight`, become `delivered-reachable` at join if the
     teammate may still be messaged, and are deleted — never struck — once
-    it will not be. What a message to a reachable teammate may carry is
+    it will not be. The one exception is a HANDOFF: `steps/handoff.md`
+    step 1 rewrites each stopped teammate's row to `stopped` and keeps it,
+    because the successor session has no other way to learn what was
+    running. What a message to a reachable teammate may carry is
     bounded by Rule 28)
   - Context Reminders (initialized here; the `ai-dlc-context-sensor.sh`
     hook owns runtime firing and dedupe in its own sidecar, and Check 14

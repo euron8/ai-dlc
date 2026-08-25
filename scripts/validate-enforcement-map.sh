@@ -5233,6 +5233,126 @@ EOF
 Resolve it from core/schemas/harness-origin.json instead. A second copy in a second language is the drift v0.265.0 exists to end, and the file that carried the last one warned about it in prose that nothing enforced."
 fi
 
+# --- I94: the pause branch text and the handoff-intent PATTERNS are ONE declaration ---
+# WHY. Two hooks now hand the lead the same three-way branch when the pipeline pauses --
+# ai-dlc-pause.sh on a typed message, ai-dlc-answer-capture.sh on an AskUserQuestion answer
+# carrying handoff intent -- and those two plus ai-dlc-continue.sh's Check 0 share the two
+# regular expressions that decide what "handoff intent" means. Every one of those was a
+# string literal in a hook before the answer channel was routed. A second copy of the branch
+# is a lead given different instructions depending on which channel the operator used, and a
+# second copy of a pattern is a request one component routes and another ignores.
+# ai-dlc-pause.sh's own header had already ruled on this for its harness-prefix list, and
+# I91 is the same invariant one subject over.
+#
+# NOT A VOCABULARY, AND THE HEADER SAYS PATTERNS FOR THAT REASON. What is bound here is two
+# EREs and three prose strings; there is no enumerable member set, so there is nothing for
+# render-vocabulary-index.sh to render and no `# vocabulary:` marker to write. Its guard
+# reads arm headers for the word and demanded one when this header carried it -- correctly,
+# since a header claiming a set with no marker is how the index goes blind.
+#
+# THREE ARMS, AND THE THIRD IS THE ONE THAT COULD NOT BE SKIPPED. (a) the declaration is
+# present and every field carries a value -- an empty field would let both readers emit
+# nothing and agree perfectly. (b) no shipped file restates a declared value. (c) every
+# reader actually READS it: a copy scan alone passes against a hook that resolves nothing
+# and emits nothing, which is exactly the shape a broken install has, so the bind is keyed
+# on the line that FEEDS the schema path to jq, not on a file that mentions the filename.
+#
+# ONE `python3`, NOT ELEVEN. The first draft resolved each field with its own interpreter
+# start, twice over -- once per arm -- and validator-fork-budget caught it at 7020 against a
+# 7000 ceiling. That budget is not cosmetic: the suite runs this validator well over a
+# hundred times per push, so an arm's fork count is a change to the suite's wall clock. The
+# whole declaration is dumped once, as `name<TAB>value` lines, and both arms read the dump.
+i94_schema="core/schemas/pause-routing.json"
+if [ ! -f "$i94_schema" ]; then
+  err "I94: $i94_schema is missing. It is the single declaration of the pause branch text and the handoff-intent patterns; without it ai-dlc-pause.sh emits no branch at all, ai-dlc-continue.sh's Check 0 skips entirely, and a handoff arriving as an AskUserQuestion answer goes unrouted — which is the defect the declaration was created to close."
+else
+  # Tab-delimited is safe here and asserted to be: every declared value is a single-line JSON
+  # string with no tab in it, and the dump refuses to emit a field that has one rather than
+  # producing a row that would silently truncate at the split below.
+  i94_dump="$(python3 - "$i94_schema" <<'PY' 2>/dev/null
+import json, sys
+want = ["pause_branch_text", "prompt_pause_preamble", "answer_pause_preamble",
+        "handoff_intent_pattern", "handoff_mention_exclusion_pattern"]
+d = json.load(open(sys.argv[1]))
+for k in want:
+    v = d.get(k) or ""
+    if "\t" in v or "\n" in v:
+        v = ""          # unsplittable -> reported as EMPTY, never as a truncated value
+    print("%s\t%s" % (k, v))
+PY
+)"
+  i94_empty=""
+  i94_copies=""
+  i94_needle=""
+  if [ -z "$i94_dump" ]; then
+    err "I94 could not read $i94_schema at all — it is present but did not parse, so neither the empty-field arm nor the copy scan below ran. A silent parse failure would leave both reporting clean."
+  else
+    # (b) THE COPY SCAN, folded into the same pass as (a). Fixtures are IN scope, unlike
+    # I91's: nothing here is an ordinary transcript token that unrelated code legitimately
+    # handles, and a fixture that hard-coded the branch text would keep passing across a
+    # change to the declaration. FALSE-POSITIVE SET MEASURED AT ZERO over core/ and scripts/
+    # with all five values, which is the whole corpus these ship into; the narrowing that got
+    # it there was writing every reader to resolve the value through jq rather than to
+    # compare against a literal.
+    while IFS="$(printf '\t')" read -r _f _v; do
+      [ -n "$_f" ] || continue
+      if [ -z "$_v" ]; then i94_empty="$i94_empty $_f"; continue; fi
+      [ "$_f" = pause_branch_text ] && i94_needle="$_v"
+      # ONE FORK PER FIELD. The obvious `grep -rlF | grep -v | tr` is three processes, and
+      # this loop runs once per declared field -- 15 forks for a filter and a join the shell
+      # does for free. The declaration's own path is excluded here rather than by a second
+      # grep, and the list is joined by accumulation rather than by `tr`.
+      _out="$(grep -rlF -- "$_v" core/ scripts/ 2>/dev/null)"
+      _hits=""
+      while IFS= read -r _p; do
+        [ -n "$_p" ] || continue
+        [ "$_p" = "$i94_schema" ] && continue
+        _hits="$_hits $_p"
+      done <<EOF
+$_out
+EOF
+      [ -n "${_hits// /}" ] && i94_copies="$i94_copies
+  $_f ->$_hits"
+    done <<EOF
+$i94_dump
+EOF
+  fi
+  [ -n "${i94_empty// /}" ] && err "I94: $i94_schema declares empty, missing, or unsplittable field(s):${i94_empty}. Both readers concatenate these, so an empty one produces a shorter instruction in every channel at once and the copies still agree — the join passes while the lead is told nothing."
+  [ -n "${i94_copies// /}" ] && err "I94: shipped file(s) restate a pause-routing value outside the declaration:$i94_copies
+Resolve it from $i94_schema instead. A second copy of the branch text hands the lead one instruction on one channel and a stale one on the other, and nothing compares them."
+
+  # (c) THE READER BIND, keyed on the line that passes the resolved path to jq. A hook that
+  # merely names the file in a comment satisfies a whole-file grep and reads nothing.
+  for _r in core/hooks/ai-dlc-pause.sh core/hooks/ai-dlc-answer-capture.sh core/hooks/ai-dlc-continue.sh; do
+    if [ ! -f "$_r" ]; then
+      err "I94(c): $_r is missing, so this invariant cannot establish that the declaration has the readers it claims."
+    elif ! grep -q 'jq -rj .*"\$PAUSE_ROUTING_SCHEMA"' "$_r"; then
+      err "I94(c): $_r does not READ $i94_schema — no line feeds \$PAUSE_ROUTING_SCHEMA to jq. Either it went back to a literal, in which case arm (b) above is scanning for a value this file no longer carries verbatim, or it stopped emitting the branch at all. Both are silent."
+    fi
+  done
+
+  # SELF-PROBE, both directions, on a mktemp tree rather than the corpus. An arm reporting
+  # zero copies without first producing one has established that it ran, not that the tree is
+  # clean; and an arm that flags a near-miss would flag every paraphrase in the CHANGELOG.
+  i94_probe="$(mktemp -d 2>/dev/null)"
+  if [ -z "$i94_probe" ] || [ -z "$i94_needle" ]; then
+    err "I94 could not build its probe (dir='${i94_probe:-}' needle=${#i94_needle}B), so neither direction of its copy scan was proven this run. An empty needle is contained by nothing and matched by everything, depending on the tool — either way the scan above is unproven."
+  else
+    printf '%s\n' "$i94_needle" > "$i94_probe/offender.sh"
+    # The near-miss drops the first word. Same subject, same length class, not the value.
+    printf '%s\n' "${i94_needle#* }" > "$i94_probe/nearmiss.sh"
+    # Read the EXIT STATUS, not a piped `grep -c` of the output: `grep -lF` already answers
+    # "did this file contain it", and counting its lines costs a second process for an
+    # answer the first one gave.
+    i94_pp=0; i94_pn=0
+    grep -qlF -- "$i94_needle" "$i94_probe/offender.sh" 2>/dev/null && i94_pp=1
+    grep -qlF -- "$i94_needle" "$i94_probe/nearmiss.sh" 2>/dev/null && i94_pn=1
+    rm -rf "$i94_probe"
+    [ "$i94_pp" -eq 0 ] && err "I94's positive probe was NOT reported: a seeded verbatim copy of the branch text went unseen by the same scan the corpus arm runs, so a clean result above means nothing. This fails closed."
+    [ "$i94_pn" -ne 0 ] && err "I94's negative probe WAS reported: a near-miss that is not the declared value was flagged as a copy. The scan is not fixed-string, and every paraphrase in the tree is now in its finding set."
+  fi
+fi
+
 # --- I80: an enumeration of the intensity SET names every member of it -------------
 # vocabulary: validation intensities
 # vocabulary-invariant: I80

@@ -115,7 +115,12 @@ hook scripts. Rotated per sprint at retro close (Rule 25(c)).
 
 Event types:
 
-- `USER_PAUSE`: user sent a message; pipeline paused via flag file
+- `USER_PAUSE`: the operator steered and the pipeline paused via flag file. TWO
+  channels raise it and the entry's `Channel:` line names which: a typed message
+  (UserPromptSubmit), or an AskUserQuestion answer carrying handoff intent. The
+  second raises no UserPromptSubmit at all, so before it was routed a handoff
+  asked for that way produced no USER_PAUSE, no flag, and no record that the
+  operator had spoken
 - `PAUSE_SKIPPED`: a UserPromptSubmit carried no operator prose, so no pause
   flag was created. The harness raises the event identically for a completed
   background task and for a human typing; this records the ones that were not
