@@ -99,6 +99,7 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I80 | an enumeration of the intensity SET names every member of it |
 | I81 | the live adversarial series is derived ONE way, in both hooks |
 | I82 | core's own artifact-path prescriptions obey core's own grammar |
+| I82b | a DIRECTORY core prescribes under an area spells the sprint slot |
 | I83 | the grammar's blocks have exactly ONE reader |
 | I84 | the story corpus location is ONE declaration |
 | I85 | no shipped script command-substitutes inside its own operator message |

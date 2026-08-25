@@ -34,6 +34,88 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.404.0] — 2026-08-24
+
+### Fixed: the consumer could not push, for two reasons that share no mechanism
+
+Both are s305 root cause 1. Both predate the 0.396.0 → 0.403.0 pull — that range touches no
+`SKILL.md`, no `steps/`, no `hooks/`, no `git-hooks/` and no `scripts/`, against a control of 18
+files changed repo-wide — so neither is a regression from it.
+
+**Core prescribed no home for party-mode findings, and I82 could not see that it hadn't.**
+`SKILL.md`'s only party-mode directory string was `planning-artifacts/party-mode/`, a bare
+directory with no sprint slot. The reference consumer expanded it to
+`_bmad-output/planning-artifacts/party-mode/s305/**` and stood at 24 blocking paths on its own
+pre-push, having been at 6 during the pull three days earlier. Three earlier sprints (297, 298,
+303) had guessed a different position, `_bmad-output/party-mode/s<N>/`, which is legal.
+
+The home is now prescribed once, in `steps/_gate-procedures.md` under "Validation cycle", where
+every planning step's party-mode invocation already lives; `SKILL.md` cites it and states no path
+of its own. `_bmad-output/party-mode` joins the `areas:` block in `artifact-path-grammar.md`.
+
+**`derive-fixture-readsets.sh` moved to `core/scripts/` and now ships.** v0.294.0 shipped
+`core/git-hooks/pre-push`, which READS `.ai-dlc-fixture-readsets.tsv`, and left the only program
+that writes one in the distribution's own `scripts/`. Every consumer push since has taken the
+`no read-set map -- running all N` fallback, which is correct, safe, and therefore invisible.
+
+Measured on a `file://` clone of the reference consumer, per-line timestamps: **148.9s total, of
+which every phase before the fixture suite accounts for 18.0s and the suite accounts for 130.9s —
+88%.** The caller's default timeout is 120s, and the sprint's transcript records the SIGKILL
+twice. The suite is pole-bound: 155 fixtures, 1006 fixture-seconds, longest single fixture
+`layer-reference-resolution` at 119s, so a read-set map removes the routine cost but cannot by
+itself put a change that selects the pole under two minutes.
+
+The script assumed the distribution in two places and both are now resolved, because `install.sh`
+splits what shares a parent here (I33): the repo root by `git rev-parse` rather than by counting
+`..` hops, and the fixture root by reading it off `.githooks/pre-push`'s own glob — `core/fixtures`
+here, the consumer's `tests/fixtures` there. Verified by running it in both layouts: each resolves
+its own root and prints its own invocation path.
+
+Its two shipped controls named a fixture and a validator that exist only in this distribution, so
+in an installed tree the only surviving assertion was "at least one fixture mapped". Two derived
+controls now hold everywhere: every mapped fixture's read-set names its own `run.sh`, and at least
+one read-set is a proper subset of the path universe, which is what separates a map that
+discriminates from one that selects everything.
+
+**The hook still cannot build the map, and now says so with the command.** `fs_usage` needs root
+and is the only tracer that sees a stat()-only dependency; an atime-only map under-records exactly
+those, which is the direction that skips a fixture silently. A pre-push cannot ask for a password,
+so both hooks now print the resolved `sudo bash <path> --all` instead of only the fallback line.
+
+### Added: I82b — a directory core prescribes under an area spells the sprint slot
+
+I82 reads a prescription component by component and asks whether any carries a sprint token
+outside the reserved slot. That question is unanswerable about a prescription that names no sprint
+at all, and the blindness is structural rather than a gap in its regex: the violation exists only
+at expansion, where no prose scanner looks. Confirmed by differential — I82 returns byte-identical
+output with and without the offending prescription present.
+
+Two directions, both derived from the grammar's own `areas:` block:
+
+- a path ending at a directory, strictly below a declared area, spelling the slot nowhere;
+- every `s<N>/` core does prescribe sits directly under a declared area.
+
+**False-positive set, measured before shipping: 0.** The raw extraction over I82's own corpus is 83
+path-shaped strings, 10 written with a trailing slash. Three narrowings take it to zero and each is
+derived rather than listed — a scan root is below no area, an area root is not strictly below
+itself, and a path already spelling the slot is out of scope. `_bmad-output/pipeline-history/`
+falls out through the first of those rather than through a carve-out, which matters because the
+grammar exempts it for a reason of its own. The second direction reads 43 slot-bearing
+prescriptions with 0 offenders.
+
+Both fire on seeded offenders and stay silent on seeded near-misses, on the live tree: restoring
+`planning-artifacts/party-mode/` produces the first, removing one line from `areas:` produces the
+second, and the arm's three self-probes run before the corpus on every invocation.
+
+Written the obvious way — `printf | tr` to split a path into components, `$( )` to return a
+prefix, `grep -qxF` for list membership — the arm took the validator to 7084 forks against
+`validator-fork-budget`'s 7000 ceiling. That fixture reports a fork count as a change to the
+SUITE's wall clock, not as a style note, because the suite runs this validator well over a hundred
+times per full push. Re-spelled with parameter expansion, a global, and a `case` glob, the live
+total is 6954 and the validator's own wall clock is unmoved (19.28s against a 19.57s baseline,
+both timed from inside the repo — a copy run from `/tmp` resolves its root elsewhere, exits in
+milliseconds and reports one fork, which is what the first attempt at this measurement returned).
+
 ## [0.403.0] — 2026-08-21
 
 ### Documentation

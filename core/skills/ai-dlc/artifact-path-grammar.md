@@ -94,6 +94,7 @@ areas:
   _bmad-output/implementation-artifacts
   _bmad-output/retro-artifacts
   _bmad-output/specs
+  _bmad-output/party-mode
   _bmad-output/party-mode-transcripts
   docs/retro
   docs/reviews

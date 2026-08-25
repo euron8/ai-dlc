@@ -5540,6 +5540,149 @@ The directory is the only sprint slot. A basename that carries one makes the rea
         i82_is_sprint_token "$i82_p" \
           || err "I82's own probe: '$i82_p' was NOT flagged. That is one of the four positions measured in the tree, so the predicate cannot see the defect it exists to catch and every PASS above means nothing."
       done
+
+    # --- I82b: a DIRECTORY core prescribes under an area spells the sprint slot ------
+    # I82 above reads a prescription COMPONENT BY COMPONENT and asks whether any of them carries
+    # a sprint token outside the slot. That question is unanswerable about a prescription which
+    # names no sprint at all, and the blindness is structural rather than a gap in its regex:
+    # `planning-artifacts/party-mode/` has no token in any component, so I82 passed it, and the
+    # sprint dimension every artifact underneath it carries got placed by whoever wrote the first
+    # file. Measured on the reference consumer: 24 blocking paths at
+    # `_bmad-output/planning-artifacts/party-mode/s305/**`, produced by a prescription I82 read
+    # and certified, while three earlier sprints had guessed a different and legal position for
+    # the same artifact. A prose scanner cannot see a violation that only exists at expansion.
+    #
+    # WHAT IT ASSERTS, in both directions:
+    #   * A path core prescribes which (a) ends at a DIRECTORY, (b) sits STRICTLY BELOW a declared
+    #     area, and (c) spells the reserved slot nowhere, is under-specified: the grammar gives an
+    #     area root exactly two shapes below it, `<name>.md` and `s<N>/`, so a directory in neither
+    #     position is a slot the prescription declined to place. Write the slot.
+    #   * Every `s<N>/` core DOES prescribe sits directly under a declared area. The grammar's
+    #     `areas:` block is the declaration of where a slot may live and I82 already asserts every
+    #     area sits under a scan root; without this converse, core could prescribe a slot in a
+    #     position its own grammar never declared and nothing would read the contradiction.
+    #     MEASURED: 43 slot-bearing prescriptions in the corpus, 0 whose slot parent is not a
+    #     declared area — and removing one line from the `areas:` block produces exactly one
+    #     offender, which is this direction's positive control on the live tree.
+    #
+    # HOW THE FALSE-POSITIVE SET REACHED ZERO, which is the part the next author will widen back.
+    # The raw extraction over the same corpus I82 reads is 83 path-shaped strings; keeping only
+    # the ones written with a trailing `/` leaves 10. Three narrowings take it to 0, and each is
+    # DERIVED from a declaration rather than listed here:
+    #   * a scan root itself (`_bmad-output/`) is below no area -> excluded by (b);
+    #   * an AREA ROOT (`_bmad-output/specs/`, `docs/reviews/`) is not strictly below itself ->
+    #     excluded by (b). Area roots are durable by definition and must never carry a slot, so
+    #     a rule that flagged them would contradict the grammar it enforces;
+    #   * anything already spelling the slot (`_bmad-output/specs/s<N>/<slug>/`) -> excluded by (c).
+    # `_bmad-output/pipeline-history/` falls out through the first of those and not through a
+    # carve-out, which matters because the grammar exempts it for a reason of its own and two
+    # independent statements of one exemption is how they drift apart.
+    i82b_a1="$(printf '%s\n' "$i82_areas" | grep -E '.' | head -1)"
+    i82b_is_slot() {
+      if [ -n "$i82_slot_re" ]; then
+        [[ "$1" =~ $i82_slot_re ]]
+      else
+        [ "$1" = 's<N>' ] || [ "$1" = 's*' ]
+      fi
+    }
+    # 0 == under-specified. Every early return names which of (a)/(b)/(c) acquitted the path.
+    #
+    # SPLIT WITH PARAMETER EXPANSION, NOT `printf | tr`. Both helpers here walk components of
+    # every extracted path, and the obvious spelling forks twice per path. Measured: the arm as
+    # first written put `validator-fork-budget` 84 forks over its 7000 ceiling, which that
+    # fixture reports as a change to the suite's WALL CLOCK rather than as a style note — this
+    # validator runs well over a hundred times per full push. `set -- $p` under a `/` IFS is not
+    # the fix either: `s*` is a real component spelling here and would glob.
+    i82b_underspecified() {
+      local p="$1" a="" x rest c
+      while IFS= read -r x; do
+        [ -n "$x" ] || continue
+        case "$p/" in "$x"/*) [ "${#x}" -gt "${#a}" ] && a="$x" ;; esac
+      done <<<"$i82_areas"
+      [ -n "$a" ] || return 1                     # (b) below no area at all
+      rest="${p#"$a"/}"
+      [ "$rest" != "$p" ] || return 1             # (b) IS an area root, not below one
+      rest="$p"
+      while [ -n "$rest" ]; do
+        c="${rest%%/*}"
+        if [ "$c" = "$rest" ]; then rest=""; else rest="${rest#*/}"; fi
+        [ -n "$c" ] || continue
+        i82b_is_slot "$c" && return 1             # (c) the slot is already placed
+      done
+      return 0
+    }
+
+    # THE SAME EXTRACTION AS I82's, MINUS THE ONE `sed` THAT ERASES THE SUBJECT. `i82_seen` ends
+    # with `s#/$##`, so by the time I82 sees a path it can no longer tell a directory from a file
+    # — which is why this arm re-extracts rather than filtering that set.
+    i82b_dirs="$(grep -rhoE "(${i82_alt})/[A-Za-z0-9_./<>{}*-]*" "${i82_corpus[@]}" 2>/dev/null \
+      | sed -e 's/[.,)]*$//' | grep '/$' | sed 's#/*$##' | grep -E '.' | sort -u)"
+
+    if [ -z "$i82b_dirs" ]; then
+      err "I82b extracted ZERO directory-shaped artifact paths from ${#i82_corpus[@]} rule file(s). Core prescribes several; zero means the trailing-slash extraction no longer matches how a directory is written, and an extractor that matches nothing reports every prescription as fully specified."
+    else
+      i82b_viol=""
+      while IFS= read -r i82b_p; do
+        [ -n "$i82b_p" ] || continue
+        i82b_underspecified "$i82b_p" && i82b_viol="${i82b_viol}
+  ${i82b_p}/"
+      done <<<"$i82b_dirs"
+
+      [ -n "$i82b_viol" ] && err "I82b core prescribes directory(ies) under a declared area that place no sprint slot:${i82b_viol}
+
+An area root has exactly two legal shapes below it — a durable \`<name>.md\`, or \`s<N>/\`. A directory in neither position does not forbid a sprint token; it leaves the sprint UNPLACED, and the first session to write a file underneath picks a position that this invariant's sibling I82 cannot see, because at prose time there is no token to read. Spell it: <area>/s<N>/<dir>/, or move the directory up to be an area in artifact-path-grammar.md's \`areas:\` block."
+
+      # PROVE IT CAN FIRE, BOTH DIRECTIONS, ON PATHS DERIVED FROM THE LIVE DECLARATION rather
+      # than invented — an invented area would exercise the predicate against a tree the grammar
+      # does not describe, and would go on passing after a real area was renamed out from under it.
+      i82b_underspecified "${i82b_a1}/probe-findings" \
+        || err "I82b's own probe: '${i82b_a1}/probe-findings' was NOT flagged. That is the exact shape measured on the reference consumer (a bare directory below an area, no slot), so the predicate cannot see the defect it exists to catch and every PASS above means nothing."
+      i82b_underspecified "${i82b_a1}" \
+        && err "I82b's own probe: the area root '${i82b_a1}' was flagged. An area is durable and carries no sprint token by definition, so this predicate rejects the one shape the grammar's \`areas:\` block requires."
+      i82b_underspecified "${i82b_a1}/s<N>/probe-findings" \
+        && err "I82b's own probe: '${i82b_a1}/s<N>/probe-findings' was flagged. It places the reserved slot correctly, so flagging it makes the remedy this invariant prescribes into a violation of it."
+
+      # THE CONVERSE DIRECTION. Finds the prefix ABOVE the first slot component of every
+      # prescription that has one, and requires it to be a declared area. `i82_seen` is reused
+      # deliberately: a path is a file or a directory here without distinction, because the
+      # question is where the SLOT sits and not what hangs below it.
+      #
+      # THE RESULT COMES BACK IN A GLOBAL, NOT ON STDOUT, for the same reason the split above is
+      # parameter expansion: `$(f "$p")` forks once per call and this runs over the whole
+      # extracted corpus. Membership goes through a `case` glob over a flattened copy of the
+      # area list rather than a `grep` per path -- and a flattened list is also why the areas are
+      # padded with spaces on both sides, so a prefix cannot match a longer sibling.
+      i82b_par=""
+      i82b_slot_parent() {                        # sets i82b_par: prefix above the first slot, or empty
+        local acc="" c rest="$1"
+        i82b_par=""
+        while [ -n "$rest" ]; do
+          c="${rest%%/*}"
+          if [ "$c" = "$rest" ]; then rest=""; else rest="${rest#*/}"; fi
+          [ -n "$c" ] || continue
+          i82b_is_slot "$c" && { i82b_par="$acc"; return 0; }
+          acc="${acc:+$acc/}$c"
+        done
+        return 0
+      }
+      i82b_areas_flat=" $(printf '%s' "$i82_areas" | tr '\n' ' ') "
+      i82b_orphan=""
+      i82b_nslot=0
+      while IFS= read -r i82b_p; do
+        [ -n "$i82b_p" ] || continue
+        i82b_slot_parent "$i82b_p"
+        [ -n "$i82b_par" ] || continue
+        i82b_nslot=$(( i82b_nslot + 1 ))
+        case "$i82b_areas_flat" in *" $i82b_par "*) continue ;; esac
+        i82b_orphan="${i82b_orphan}
+  $i82b_p    (slot parent '$i82b_par' is not a declared area)"
+      done <<<"$i82_seen"
+
+      [ "$i82b_nslot" -eq 0 ] && err "I82b found ZERO prescriptions carrying a sprint slot across ${#i82_corpus[@]} rule file(s). Core prescribes dozens; zero means the slot predicate no longer matches how the slot is written, and a predicate that matches nothing reports every slot as correctly sited."
+      [ -n "$i82b_orphan" ] && err "I82b core prescribes a sprint slot in a position artifact-path-grammar.md's \`areas:\` block does not declare:${i82b_orphan}
+
+The \`areas:\` block IS the declaration of where an \`s<N>/\` directory may live, and I82 above already requires every area to sit under a scan root. A slot prescribed outside that set is a home core invented in one rule file and told no reader about — the consumer's migrate and validate both resolve an artifact's area from this block, so the position holds only for as long as nobody asks. Add the parent to \`areas:\`, or move the prescription under an area already declared."
+    fi
     fi
   fi
 fi

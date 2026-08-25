@@ -195,6 +195,14 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    apply every improvement; run the step's source-fidelity check if it names one.
    **Both flags are load-bearing and neither is optional — SKILL.md Rule 20 (i)
    owns why.**
+   **Every per-seat deliverable this invocation produces is written under
+   `_bmad-output/party-mode/s<N>/`**, one file per seat, named
+   `<step>-<seat>.md`. That directory is the declared area for it
+   (`artifact-path-grammar.md`, "Areas"); anything written elsewhere blocks the
+   consumer's push at `validate-artifact-paths.sh`, because a sprint token in
+   any other position is outside the reserved slot. The retro TRANSCRIPT is a
+   different artifact in a different area and `steps/retro.md` owns its path —
+   do not fold the two together.
    **Run sub-step snapshot update** ("Sub-step snapshot update" above), then
    proceed.
 2. `/bmad-advanced-elicitation` — probe until zero ambiguity and update the

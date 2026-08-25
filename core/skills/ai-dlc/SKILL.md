@@ -717,8 +717,9 @@ must be passed together or the fix creates the deadlock.**
 
 If a future harness drops Skill arguments, this shape is void and party-mode
 personas must be dispatched by the lead as ordinary Agent spawns on per-seat
-deliverables (the shape `carry-over-evaluation.md` already produces under
-`planning-artifacts/party-mode/`). Verify with `/bmad-party-mode --list-groups`:
+deliverables (the shape `carry-over-evaluation.md` already produces; their path
+is prescribed once, in `steps/_gate-procedures.md` under "Validation cycle", and
+is not restated here). Verify with `/bmad-party-mode --list-groups`:
 it returns the group menu and starts no party. If a party starts instead, the
 arguments did not arrive.
 

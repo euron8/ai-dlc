@@ -2,7 +2,26 @@
 # Derive each fixture's READ-SET by tracing it, and write the map the pre-push suite uses to
 # skip fixtures a change cannot affect.
 #
-# RUN AS: sudo bash scripts/derive-fixture-readsets.sh [--all | --list "<fixtures>"]
+# RUN AS, in this distribution:  sudo bash core/scripts/derive-fixture-readsets.sh [--all | --list "<fixtures>"]
+#         in an installed tree:  sudo bash scripts/ai-dlc/derive-fixture-readsets.sh [--all | --list "<fixtures>"]
+#
+# ---------------------------------------------------------------------------------------
+# WHY IT LIVES IN core/scripts/ AND SHIPS. It did not, for the whole life of the read-set
+# skip: v0.294.0 shipped `core/git-hooks/pre-push`, which READS the map, and left the program
+# that WRITES it in the distribution's own `scripts/`. A consumer therefore reached the
+# `no read-set map -- running all N` line on every push it has ever made, and there was no
+# command anywhere in its tree that could produce one. Measured on the reference consumer at
+# 0.403.0: 155 fixtures on every push, 2m30s wall clock, against a 2m00s tool timeout that
+# SIGKILLed the push twice in one sprint. The reader shipping without the producer is invisible
+# by construction, because the fallback it takes is the correct and safe one.
+#
+# THE TWO LAYOUTS ARE NOT THE SAME TREE, AND NOTHING HERE MAY ASSUME EITHER. install.sh splits
+# what shares a parent in the distribution, and the fixture suite each hook drives has a
+# different root on each side -- `core/fixtures/` here, the consumer's own `tests/fixtures/`
+# there. Both are RESOLVED below and neither is written into a default, because a producer
+# that guessed the wrong root would write a map keyed on fixture names the runner never looks
+# up, and the runner's fail-closed "unmapped means run it" would turn that into a suite that
+# simply stopped skipping -- correct, silent, and indistinguishable from the map being absent.
 #
 # ---------------------------------------------------------------------------------------
 # WHY A MAP AT ALL. `scripts/suite-content-key.sh` already skips the WHOLE suite when nothing
@@ -21,7 +40,9 @@
 # scripts/validate-plan-shape.sh and touched zero fixtures; `plan-shape` went red, correctly,
 # because its SUBJECT moved. A filter keyed on "did this fixture's own files change" would
 # have skipped exactly the fixture that caught the regression. This script's own control
-# asserts that case still selects `plan-shape`.
+# asserts that case still selects `plan-shape` -- in THIS distribution only, since neither the
+# fixture nor the validator exists in an installed tree. The pair of controls that holds
+# everywhere is derived instead, and both live in the controls block below.
 #
 # ---------------------------------------------------------------------------------------
 # THE HAZARD, AND EVERY DESIGN CHOICE BELOW ANSWERS IT. Under-record one path and the result
@@ -64,7 +85,13 @@
 # fixture's set.
 set -uo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# THE ROOT IS RESOLVED, NEVER COUNTED IN `..` HOPS. This file sits at `core/scripts/` here and
+# at `scripts/ai-dlc/` in an installed tree; a fixed number of hops is correct in exactly one of
+# them and silently names a subdirectory in the other. `git rev-parse` is the marker both
+# layouts share, and it is what both pre-push hooks already use.
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+[ -n "$REPO_ROOT" ] && [ -d "$REPO_ROOT/.git" ] || {
+  echo "ERROR: not inside a git work tree. The map is a tracked artifact of one repository and the trace copies its .git; there is nothing to derive from here." >&2; exit 1; }
 MAP="$REPO_ROOT/.ai-dlc-fixture-readsets.tsv"
 TRACE_ROOT="${AI_DLC_READSET_TRACE_ROOT:-/private/tmp/ai-dlc-readset}"
 TREE="$TRACE_ROOT/t"
@@ -79,6 +106,27 @@ DAEMONS='fseventsd|mds|mds_stores|mdworker|mdworker_shared|mdsync|Spotlight|dist
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 say() { echo "[$(date +%H:%M:%S)] $*"; }
+
+# THE FIXTURE ROOT IS READ OFF THE RUNNER THAT WILL CONSUME THE MAP, not restated here. The
+# map's key is a fixture BASENAME and the runner looks it up against the directories its own
+# glob produced; a producer that enumerated a different root would emit keys nothing ever
+# matches, every fixture would be "unmapped", and the runner would fail closed by running all
+# of them. That is the correct behaviour and it is why the drift is undetectable from the
+# outside -- the suite goes on passing and merely stops skipping.
+#
+# `.githooks/pre-push` is the runner in BOTH layouts: this repo's own gate, and, in an
+# installed tree, the copy install.sh puts there from core/git-hooks/pre-push (a consumer's
+# .git/hooks/pre-push is a shim that execs it). Invariant I66 binds those to be one program.
+#
+# EXACTLY ONE MATCH IS REQUIRED. Zero means the runner no longer iterates a fixture glob and
+# this script's whole premise has moved; more than one means the suite has two roots and a map
+# keyed on basenames alone cannot say which directory an entry belongs to.
+RUNNER="$REPO_ROOT/.githooks/pre-push"
+[ -r "$RUNNER" ] || die "cannot read $RUNNER. It is the program that consumes this map, and the fixture root is read off its own glob rather than assumed."
+FIXTURE_ROOT="$(sed -n 's|^[[:space:]]*for d in \([A-Za-z0-9_./-]*\)/\*/;.*|\1|p' "$RUNNER" | sort -u)"
+N_ROOT="$(printf '%s\n' "$FIXTURE_ROOT" | grep -c .)"
+[ "$N_ROOT" -eq 1 ] || die "read $N_ROOT fixture root(s) from $RUNNER, need exactly 1 (got: $(printf '%s' "$FIXTURE_ROOT" | tr '\n' ' ')). Zero means its fixture glob has changed shape and this producer is now guessing; more than one means a basename key cannot name a directory."
+[ -d "$REPO_ROOT/$FIXTURE_ROOT" ] || die "$RUNNER drives '$FIXTURE_ROOT/' and no such directory exists under $REPO_ROOT."
 
 # READSET_MERGE_BEGIN
 # Merge a run's newly-derived entries into the existing map and print the result.
@@ -130,7 +178,7 @@ readset_merge_map() {
 # READSET_MERGE_END
 
 MODE="${1:---all}"
-[ "$(id -u)" = "0" ] || die "must run as root -- fs_usage needs it. Use: sudo bash scripts/derive-fixture-readsets.sh $MODE"
+[ "$(id -u)" = "0" ] || die "must run as root -- fs_usage needs it. Use: sudo bash $0 $MODE"
 command -v fs_usage >/dev/null || die "fs_usage not found; this derivation is macOS-only"
 command -v python3  >/dev/null || die "python3 not found (path normalisation)"
 
@@ -174,9 +222,9 @@ case "$DIRTY_BASE" in ''|*[!0-9]*) DIRTY_BASE=0 ;; esac
 [ "$DIRTY_BASE" -eq 0 ] || say "note: deriving from a tree with $DIRTY_BASE uncommitted path(s); the guard measures growth beyond that"
 
 case "$MODE" in
-  --all)  LIST="$(cd "$TREE" && for d in core/fixtures/*/; do [ -f "$d/run.sh" ] && basename "$d"; done)" ;;
+  --all)  LIST="$(cd "$TREE" && for d in "$FIXTURE_ROOT"/*/; do [ -f "$d/run.sh" ] && basename "$d"; done)" ;;
   --list) LIST="${2:-}"; [ -n "$LIST" ] || die "--list needs a fixture list" ;;
-  *)      die "usage: sudo bash scripts/derive-fixture-readsets.sh [--all | --list \"<fixtures>\"]" ;;
+  *)      die "usage: sudo bash $0 [--all | --list \"<fixtures>\"]" ;;
 esac
 N_SUBJECT="$(echo "$LIST" | wc -w | tr -d ' ')"
 [ "$N_SUBJECT" -gt 0 ] || die "no drivable fixtures found -- an empty map would skip the entire suite"
@@ -213,7 +261,7 @@ for fx in $LIST; do
   # failures. `-n` and </dev/null are not decoration: backgrounded, sudo reaches for the
   # controlling terminal, the process group takes SIGTTIN and the whole derivation stops dead
   # in state T with no error and no exit code.
-  ( cd "$TREE" && sudo -n -u "$RUN_AS" bash "core/fixtures/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
+  ( cd "$TREE" && sudo -n -u "$RUN_AS" bash "$FIXTURE_ROOT/$fx/run.sh" ) >"$WORK/$fx.log" 2>&1 </dev/null
   rc=$?
 
   sleep 1
@@ -286,6 +334,42 @@ if [ "${FIXTURE_HAS_PLAN_SHAPE:-yes}" = yes ]; then
   fi
 fi
 [ "$MAPPED" -gt 0 ] || { echo "  FAIL  zero fixtures mapped -- an empty map would skip the whole suite"; FAIL=1; }
+
+# THE TWO CONTROLS ABOVE NAME A FIXTURE AND A VALIDATOR THAT EXIST ONLY IN THIS DISTRIBUTION,
+# so in an installed tree the whole `if` is skipped and only "mapped > 0" is left -- which is
+# satisfied by a map that records one path for one fixture. A shipped program whose controls
+# cannot fire on the tree it ships to is this repo's named defect class, so the pair below is
+# DERIVED and holds in any tree.
+#
+# POSITIVE: a fixture reads its own driver. `bash <root>/<fx>/run.sh` is how the runner starts
+# it, so that path is in every honest read-set. A trace that lost it lost the fixture's first
+# open, which means the capture boundary moved and every other path in that set is suspect.
+#
+# NEGATIVE: the map DISCRIMINATES. A read-set equal to the whole universe selects its fixture
+# on every change and is a full run wearing a map's clothes -- and it is the shape an
+# over-broad filter produces, so a map built entirely of them would report success while
+# skipping nothing. One fixture whose set is a proper subset of the union is enough to
+# establish that the instrument separates; zero of them is not.
+while IFS= read -r cfx; do
+  [ -n "$cfx" ] || continue
+  if ! grep -qxF "$cfx	$FIXTURE_ROOT/$cfx/run.sh" "$WORK/map"; then
+    echo "  FAIL  $cfx's read-set does not name its own driver $FIXTURE_ROOT/$cfx/run.sh"; FAIL=1
+  fi
+done < <(cut -f1 "$WORK/map" | sort -u)
+cut -f2 "$WORK/map" | sort -u > "$WORK/.universe"
+N_UNIVERSE="$(grep -c . "$WORK/.universe" 2>/dev/null)"; case "$N_UNIVERSE" in ''|*[!0-9]*) N_UNIVERSE=0 ;; esac
+N_PROPER=0
+while IFS= read -r cfx; do
+  [ -n "$cfx" ] || continue
+  n_own="$(awk -F'\t' -v f="$cfx" '$1 == f' "$WORK/map" | wc -l | tr -d ' ')"
+  [ "$n_own" -lt "$N_UNIVERSE" ] && N_PROPER=$(( N_PROPER + 1 ))
+done < <(cut -f1 "$WORK/map" | sort -u)
+if [ "$N_PROPER" -gt 0 ]; then
+  echo "  PASS  CONTROL: $N_PROPER of $MAPPED read-set(s) are a PROPER subset of the $N_UNIVERSE-path universe -- the map discriminates"
+else
+  echo "  FAIL  CONTROL: every read-set covers the whole $N_UNIVERSE-path universe -- this map selects everything on every change and skips nothing"; FAIL=1
+fi
+
 [ "$FAIL" -eq 0 ] || die "controls failed; the map was NOT written"
 
 MERGED="$WORK/merged"
@@ -323,7 +407,7 @@ M_PATH="$(cut -f2 "$MERGED" | sort -u | wc -l | tr -d ' ')"
 [ "$M_ENT" -gt 0 ] || die "the merged map is empty -- refusing to write it"
 
 {
-  echo "# GENERATED by scripts/derive-fixture-readsets.sh -- DO NOT EDIT BY HAND."
+  echo "# GENERATED by derive-fixture-readsets.sh -- DO NOT EDIT BY HAND."
   echo "#"
   echo "# <fixture>\t<path it reads>. The pre-push suite runs a fixture when any changed path"
   echo "# is in its set, and ALWAYS runs a fixture that has no entry here -- absence means"

@@ -330,7 +330,28 @@ apply_readset_skip() {
     return 0
   fi
   if [ ! -s "$READSET_MAP" ]; then
-    printf '   ..    no read-set map at %s -- running all %s\n' "$READSET_MAP" "$n_all"; return 0
+    printf '   ..    no read-set map at %s -- running all %s\n' "$READSET_MAP" "$n_all"
+    # THE FALLBACK IS CORRECT AND IT IS ALSO PERMANENT UNTIL SOMEONE ACTS, which is why this
+    # branch now prints a command. The reader shipped without its producer from v0.294.0 to
+    # 0.403.0: every consumer push ran the whole suite, this line was the only symptom, and it
+    # reads as a considered fallback rather than as an instrument nobody ever built. Measured on
+    # the reference consumer at 0.403.0 -- 18s for every other phase combined, 145s for the
+    # suite, 2m43s total against a 2m00s caller timeout that SIGKILLed two pushes in one sprint.
+    #
+    # THIS HOOK CANNOT BUILD THE MAP ITSELF, and the reason is not effort. The deriver needs
+    # ROOT: fs_usage is the only tracer that sees a stat()-only dependency, an atime-only map
+    # under-records exactly those, and under-recording is the direction that skips a fixture
+    # silently forever. A pre-push that prompted for a password would be worse than the wait.
+    readset_deriver=""
+    for c in scripts/ai-dlc/derive-fixture-readsets.sh core/scripts/derive-fixture-readsets.sh; do
+      [ -f "$c" ] && readset_deriver="$c" && break
+    done
+    if [ -n "$readset_deriver" ]; then
+      printf '   ..    build one once, from a normal account: sudo bash %s --all\n' "$readset_deriver"
+    else
+      printf '   ..    and no derive-fixture-readsets.sh in either layout -- until ai-dlc ships one here, every push runs all %s\n' "$n_all"
+    fi
+    return 0
   fi
   if [ ! -s "$VERIFIED_RECORD" ]; then
     printf '   ..    no verified-state record yet -- running all %s (this run writes one)\n' "$n_all"; return 0

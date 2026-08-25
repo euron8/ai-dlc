@@ -324,12 +324,22 @@ fi
 # therefore invisible: the suite stays correct and merely stops skipping, which reads as the
 # feature underperforming rather than as a bug. These arms are why it cannot come back.
 #
-# THE DERIVER IS DIST-ONLY and a consumer never has it, so its absence is reported as a SKIP
-# rather than passing silently. A vanished arm and a passing arm look identical in a summary.
+# THE DERIVER NOW SHIPS, and it lands under a different parent on each side: install.sh copies
+# `core/scripts/<x>` to `scripts/ai-dlc/<x>`, so neither path can be assumed and neither may be
+# located by walking up from the other (I33). The CONSUMER layout is probed first and the
+# distribution second, which is the order every other two-layout resolver here uses.
+#
+# ITS ABSENCE IS STILL A SKIP RATHER THAN A FAILURE, and that is not leniency. A core fixture
+# ships ahead of its subject: this fixture reaches a consumer in one pull and the deriver in
+# the next, so an installed tree between those two pulls has the fixture and not the file. A
+# SKIP says so; passing silently would make a vanished arm and a satisfied arm identical.
 MERGE_ARMS=0
-DERIVER="$ROOT/scripts/derive-fixture-readsets.sh"
-if [ ! -f "$DERIVER" ]; then
-  printf '  SKIP  map-merge arms: scripts/derive-fixture-readsets.sh is not in this tree (dist-only)\n'
+DERIVER=""
+for _d in "$ROOT/scripts/ai-dlc/derive-fixture-readsets.sh" "$ROOT/core/scripts/derive-fixture-readsets.sh"; do
+  [ -f "$_d" ] && DERIVER="$_d" && break
+done
+if [ -z "$DERIVER" ]; then
+  printf '  SKIP  map-merge arms: derive-fixture-readsets.sh is in neither layout yet (core fixtures ship ahead of their subject)\n'
 else
   M="$WORK/merge.sh"
   sed -n '/# READSET_MERGE_BEGIN/,/# READSET_MERGE_END/p' "$DERIVER" > "$M"
