@@ -81,10 +81,30 @@ shipped as v0.408.0 (`faea82e7`, merged `dbdb18cb`). All merged to `main` and pu
 Actions 5, 6 and 7 are open. Start at NEXT ACTION 5.**
 
 **Tree state at handoff:** on `main`, clean, level with `origin/main`, `VERSION` `0.408.0`.
-Consumer ledger re-checked at the phase boundary and unchanged at
-`a8f61789e1c947a8251eef9b4cb7c098`; nothing in `/Users/n8/git/graph` was written — its three
-dirty paths (`.context-sensor-state`, `.driver/turns`, `pipeline-continuation-log.md`) belong
-to its own paused session and were dirty before this work began.
+**NOTHING IS IN FLIGHT** — no branch open, no partial edit, no unrun gate. Action 5 has not
+been started.
+
+**The whole consumer block was re-derived at this handoff and every value is UNCHANGED**
+from the record above: `FAIL — 24 blocking, 3 ambiguous`; `134` tracked wait-beats;
+`BLOCKED 15 / BACKOFF 0 / ALLOWED_BY_LIVE_BEAT 240`; ledger
+`a8f61789e1c947a8251eef9b4cb7c098`. The control `NO_SUCH_EVENT_CONTROL` read `0` while three
+real event names read non-zero in the same invocation, so the grep discriminates and those
+zeros are readings rather than a broken pattern. Nothing in `/Users/n8/git/graph` was
+written — its three dirty paths (`.context-sensor-state`, `.driver/turns`,
+`pipeline-continuation-log.md`) belong to its own paused session and were dirty before this
+work began.
+
+**One change shipped this session that is NOT one of the seven actions.** The
+compaction-durable rule channel's ceiling went `43520 -> 44544` on an operator ruling, to
+admit one 722-byte rule into `.claude/rules/tool-hazards.md`: **the Bash tool's output is
+rewritten before you read it.** A compressor edits text inside Bash results, code included —
+measured here, a `cat -n` of a shipped hook returned `[ -n "${A_ESC:-}" || continue` for a
+line that reads `[ -n "${A_ESC:-}" ] || continue`, and heredoc bodies came back short. Read
+source with `Read` or `ctx_execute_file`; keep Bash for output whose SHAPE is the answer and
+for mutations. **This one matters to you immediately** — it is how a file gets misread with
+no error raised, and it cost a wrong reading of a hook in this session before it was caught.
+`scripts/validate-claude-rules.sh`'s A6 header carries the ruling and why neither
+mechanising nor scoping was available.
 
 **RC-2's THREE REMEDY ITEMS ALL SHIPPED, and the single-source clause cost more than the
 routing did.** Routing the answer channel made a second emitter of the pause branch text and

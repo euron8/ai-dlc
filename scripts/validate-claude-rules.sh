@@ -335,8 +335,21 @@ fi
 # THE 384 BYTES WERE STILL CUT, and that is the half that keeps this guard honest. Raising the
 # ceiling while leaving defensible vestigial prose resident is precisely the decorative
 # outcome this header warns about, so the raise and the trade were taken together.
+#
+# RAISED A THIRD TIME, 43520 -> 44544, ON AN OPERATOR RULING, FOR ONE RULE COSTING 722 BYTES.
+# `tool-hazards.md` gained "The Bash tool's OUTPUT is rewritten before you read it": a
+# compressor edits text inside Bash results, code included, and it returned
+# `[ -n "${A_ESC:-}" || continue` for a line that reads `[ -n "${A_ESC:-}" ] || continue`.
+# Both prior remedies were asked first and both were exhausted, as this header requires. It
+# cannot be MECHANIZED: the corruption happens in the tool call, and no tracked file carries
+# a trace of it for an arm to scan. It cannot be SCOPED: it is prose-only, and
+# `resident-context.md` bars scoping those because a `paths:` file is silently absent from
+# every session that has compacted once. It is admitted at full length rather than trimmed
+# because it corrupts the one input every other reading is derived from, and the corrupted
+# form is syntactically valid -- the failure it prevents is a confident wrong answer, which
+# is the class this whole channel exists for. The bump is 1024 bytes and leaves 345 free.
 # ---------------------------------------------------------------------------
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-43520}"
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-44544}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

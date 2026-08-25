@@ -23,6 +23,19 @@ here. What follows has no corpus to scan because it happens in tool calls.
 **Force `bash -c` for any loop, any heredoc, and any hook test.** The rule is not "be careful
 in zsh"; it is "do not author shell logic in the interactive shell at all".
 
+## The Bash tool's OUTPUT is rewritten before you read it
+
+A compressor sits on Bash results and edits the text inside them, CODE INCLUDED. Measured on
+a `cat -n` of a shipped hook: `[ -n "${A_ESC:-}" ] || continue` came back as
+`[ -n "${A_ESC:-}" || continue`, and heredoc bodies came back short. The damage is
+syntactically plausible, so a wrong reading of a file is indistinguishable from a right one
+and no error is raised.
+
+Read source with **Read**, or with `ctx_execute_file` printing indexed lines. Keep Bash for
+output whose SHAPE is the answer — exit codes, counts, `git status` — and for mutations.
+Where a Bash result has to be exact, DERIVE it instead of reading it: `md5`, `wc -c`,
+`cmp -s`, `grep -c`.
+
 ## Delegation hazards: three ways a tool call lies about another agent
 
 **A backgrounded `sleep` returns immediately**, so chained "waits" are rapid polling granting no
