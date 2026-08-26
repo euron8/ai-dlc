@@ -15,6 +15,94 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.417.0] - 2026-08-26
+
+### A triage sweep over all 64 live backlog entries, none re-tested for forty releases
+
+`BL-081` closed as EXPIRED. `BL-066` narrowed and held open. `BL-091` and `BL-092` filed.
+`BL-006`, `BL-089` and `BL-066` amended with what the sweep measured.
+
+Fifty-two of the sixty-four live entries were filed on or before 2026-08-17, thirty-eight of
+them on a single adjudication day, and none had been re-tested since. Fourteen independent
+hands re-derived every entry against the tree, one question each — does this still reproduce —
+followed by four verifiers briefed to BREAK the proposed closes rather than confirm them.
+Result: **62 REPRODUCES, 2 proposed closes, of which 1 survived attack.** Coverage was joined
+both ways against the live ledger: no entry unexamined, none examined twice.
+
+**The verifier pass earned its cost on the first close it looked at.** `BL-066` was proposed
+EXPIRED on good evidence — `34c77736` (`v0.387.0`) genuinely removed the three `tail -1` sites
+and both `VERSION` reads from `named_absorbed()`, and `na_v` occurs zero times in tracked code
+against live controls. Two verifiers agreed on every measurement and split on scope. The entry
+text decided it: its sibling paragraph names a harm distinct from the version-in-an-annotation
+one — *"its output is the sha an operator is told to go and read"* — and `named_ambiguous()`
+still elects a single commit from its match set, now the newest rather than the oldest, with no
+count and no range. Driven against a synthetic upstream where three commits cite the prefix, the
+row emits one sha, and that sha is a ledger-drain docs commit: the exact "cited it while closing
+the ledger" confusion the entry was filed about. **`v0.387.0`'s own CHANGELOG says "Both name
+joins now report what they know … and elect none of them", and that sentence is false.** A
+release note asserting a fix that half-landed is why the entry stays open.
+
+**`BL-081` closed on the opposite finding: the fix had shipped thirty releases earlier and
+nobody joined the row to it.** `5d02dcf4` (`v0.386.0`) replaced the unanchored `grep -oE` with a
+shell-word split; `v0.386.0`'s CHANGELOG names the id zero times, which is why it sat live.
+Both verifiers confirmed independently, neither relying on the receipt, both running both
+implementations over all 70 `verify: sh` receipts in the reference consumer's ledgers —
+pre-fix 14 absent-subject findings, HEAD 1, and that one a genuine consumer path. The entry's
+own claim 7 was wrong in the direction that strengthens the close: all twelve `scripts/<x>.sh`
+findings sit inside distribution paths, so the "nine legitimate findings" the fix was forbidden
+to silence were not a class at all.
+
+### Three receipts that could not measure, and one that reported the wrong answer out loud
+
+**`BL-006` is the ledger's only CLOSE-CANDIDATE and it is FALSE.** Its receipt exits 0 on two
+comment lines, one of which states that the mechanism *"was offered and declined for now"*. The
+flip was established rather than inferred: `git blame` attributes that line to `e2f3e42a`, and
+the same receipt against an `e2f3e42a^` sandbox exits 1. **A documentation sentence turned a
+receipt green.** It is wrong in both directions — its pathspec is `scripts/*.sh`, so a correct
+fix landed in `core/scripts/` is invisible to it. The entry now carries a DO-NOT-CLOSE
+annotation; re-anchoring the receipt is the next batch's work.
+
+**`BL-089` is wider than filed, and the widening is the dangerous half.** It was filed against
+the exit-9 convention; the sweep found the larger population is receipts exiting **1** having
+measured nothing, which carries no hint at all. `BL-081`'s receipt had done so since `v0.402.0`,
+after `d983feb9` factored a helper one line ABOVE its `sed` extraction range — it had correctly
+earned a close for sixteen releases, then went silently wrong, and its sanity arm could not see
+it because that arm only tests whether the extracted text CONTAINS the function name, which
+mangled text still does. `BL-066`'s exits 9 for the same structural reason. **Single-sourcing a
+helper to prevent drift breaks every receipt that reconstructs its caller by `sed` range** — the
+two failures are one edit seen from opposite ends.
+
+### `BL-091` — 52 of 64 ledger headings carry no title, and an empty extract exits 0
+
+An extractor keyed on `## BL-0NN ` with a trailing space returns **zero bytes** for four-fifths
+of this file. A zero-byte extract is a valid empty shell program: it parses, runs, and exits 0,
+which this ledger reads as "the fix is present". Two hands hit it independently during the
+sweep, one catching it only on a byte-count control. The shipping readers are unaffected —
+`backlog-reverify.sh` matches `^BL-[0-9]+` after stripping the marker — so nothing fails today
+and nothing will start failing on its own; the cost falls on the next ad-hoc extractor, which is
+the reader no mechanism watches. The remedy is to make the grammar uniform rather than document
+the trap.
+
+### `BL-092` — the rev-path defence is keyed on a `core/` prefix
+
+`receipt_path_tokens()` rejects the `core/…` half of a rev-spec, so a distribution path that
+does not begin `core/` is still read as a missing consumer subject: `$THEIRS:docs/backlog.md`
+yields ` docs/backlog.md` at HEAD. **The shipped comment at `:599-600` asserts the opposite.**
+Zero instances reproduce today — all 48 rev-specs across the consumer's 70-receipt corpus are
+`core/`-prefixed — which is the entry's point rather than a reason to defer it: the guard is
+correct on every receipt anyone has written and fails silently on the first one that is not.
+Filed separately from `BL-081` because that entry's title, mechanism, evidence and receipt are
+all specific to the `core/scripts/<x>` substring, and that half is dead.
+
+Both new receipts were proven to fire in both directions before shipping, per this repo's rule
+that a check which cannot fail reads exactly like one that passed. `BL-091` goes 1 → 0 when
+every heading is titled and back to 1 when a single bare heading is restored. `BL-092` goes
+1 → 0 under a correct fix and stays 1 under a near-miss handling only the dead `scripts/`
+spelling. Building the `BL-092` probe also caught a defect in the receipt itself:
+`receipt_path_tokens()` is a one-liner with no line beginning `}`, so an awk range over it runs
+straight into its neighbour — the receipt now asserts that both function names landed in the
+extract instead of relying on that overlap, which is the guard `BL-081`'s receipt lacked.
+
 ## [0.416.0] - 2026-08-26
 
 ### Five validators reported how many files they read and never which

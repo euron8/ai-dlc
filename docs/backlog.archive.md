@@ -2092,3 +2092,106 @@ rather than hidden.
 
 verify: sh V=docs/vocabulary-index.md; M=core/skills/ai-dlc/enforcement-map.yaml; [ -f "$V" ] && [ -f "$M" ] || exit 9; grep -q "^| Vocabulary | Members | Owner | Bound by | Readers |$" "$V" || exit 9; row="$(grep -iE "^\|[^|]*(vacuous|empty.subject|examined nothing|nothing to check|not.applicable|nothing verified)[^|]*\|" "$V")"; [ -n "$row" ] || exit 1; tok="$(awk '/^empty_subject_verdict:/{on=1;next} on&&/^[^[:space:]#]/{exit} on&&/^  token:[[:space:]]/{v=$0;sub(/^  token:[[:space:]]*/,"",v);print v}' "$M")"; [ -n "$tok" ] || exit 9; ems="$(awk '/^empty_subject_verdict:/{on=1;next} on&&/^[^[:space:]#]/{exit} on&&/^  emitters:[[:space:]]*$/{e=1;next} on&&e&&/^  [a-z_]+:/{e=0} on&&e&&/^    - /{v=$0;sub(/^    - /,"",v);print v}' "$M")"; [ -n "$ems" ] || exit 9; n=0; for f in validate-spec-join validate-plan-shape audit-layer-debt validate-bmad-invocations validate-ac-falsifiability validate-escalation-status-vocabulary validate-artifact-paths validate-request-coverage validate-gate-adjudication validate-snapshot-conservation; do case "$ems" in *"$f.sh"*) n=$((n+1)) ;; esac; done; [ "$n" -ge 3 ] || exit 1; bad=0; while IFS= read -r f; do [ -n "$f" ] || continue; [ -f "$f" ] || { bad=1; continue; }; hit="$(awk -v t="$tok" '{ if (index($0,t)==0) next; s=$0; sub(/^[[:space:]]+/,"",s); if (substr(s,1,1)=="#") next; c++ } END { print c+0 }' "$f")"; [ "$hit" -gt 0 ] || bad=1; done <<<"$ems"; [ "$bad" -eq 0 ] || exit 1; ctl="$(awk -v t="$tok" '{ if (index($0,t)==0) next; s=$0; sub(/^[[:space:]]+/,"",s); if (substr(s,1,1)=="#") next; c++ } END { print c+0 }' VERSION)"; [ "$ctl" -eq 0 ] || exit 9; exit 0
 
+## BL-081
+
+**LANDED (v0.386.0, verified 5d02dcf4).** EXPIRED, not remediated here — the subject was fixed
+thirty releases before this triage found it, and the ledger row was never joined to the fix
+because v0.386.0's CHANGELOG names this id zero times (control: `ledger-reverify` twice in the
+same range). `5d02dcf4` replaced the unanchored `grep -oE` with a shell-word split,
+`receipt_path_tokens() { printf '%s\n' "$1" | tr -c 'A-Za-z0-9_./$-' '\n' || true; }`; `:` is
+outside the keep-set, so a rev-spec splits at the colon and its `core/…` half fails the four
+`case` prefixes. Two independent verifiers confirmed against the tree, neither relying on the
+receipt. Both ran both implementations over all 70 `verify: sh` receipts in the consumer's
+live + archive ledgers with `CONSUMER=/Users/n8/git/graph`: pre-fix **14** receipts emit an
+absent-subject finding including ` scripts/validate-steering-budget.sh`, HEAD emits **1**, and
+that one is a genuine consumer path with no rev-spec in it. The regex is gone rather than
+relocated — `grep -rn --include=*.sh -F "(docs|_bmad-output|scripts|\.claude)/"` over the whole
+tree exits 1, control `-F receipt_path_tokens` returns 4 hits and exits 0.
+<br>**Claim 4 is PRESERVED and claim 5 is SATISFIED**, which is what separates this from a
+guard deletion: a genuinely absent `$CONSUMER/docs/no-such-file.md` is still reported at HEAD,
+present paths stay silent, and the fix is a tokenizer change rather than the
+`scripts/` → `scripts/ai-dlc/` re-mapping the entry forbids (the file refuses a private inverse
+table at `:677-679`). Guarded, not merely present: `core/fixtures/ledger-reverify/run.sh:183`
+asserts `Entry SH-DIST-PATH` → CLOSE-CANDIDATE, deliberately paired at `:178` with
+`Entry SH-SUBJECT-GONE` → NEEDS-REVIEW, which is the two-directional receipt this entry
+specified. Claim 6 discharged: `PC-S297-VALIDATE-STEERING-BUDGET-TRANSCRIPT-PROVENANCE` now
+appears only in the consumer's archive ledger.
+<br>**Claim 7's 3-vs-9 split was wrong, in the direction that strengthens the close.** All
+twelve `scripts/<x>.sh` findings sit inside a distribution path — `${THEIRS}:`, `$THEIRS:`,
+`$t/`, `$DIST/` or bare `core/scripts/…` — so none was a genuine consumer-side mis-anchor. The
+entry's split was an artifact of a strip matching only the `$THEIRS:` spelling. The fix
+therefore swept in no class it should have left alone; there was no such class.
+<br>**The receipt is retired with the entry rather than ported.** It has exited 1 having
+measured NOTHING since v0.402.0: `d983feb9` factored the split into `receipt_path_tokens()` one
+line ABOVE its `sed -n "/^receipt_absent_subjects() {/,/^}/p"` range, so both arms die with
+`receipt_path_tokens: command not found` and `b` comes back empty. Its sanity arm cannot see
+that — it tests only that the body was captured. Widening the `sed` to include the helper gives
+`a=[]`, `b=[ docs/no-such-file.md]`, exit 0: this entry's own pass condition, met. That failure
+mode is NOT filed separately — it WIDENS `BL-089`, whose population is receipts that measure
+nothing while reading STILL-LIVE, and splitting it would give the class two entries and neither
+a full view. The latent prefix-defence gap is filed as `BL-092`.
+
+**`receipt_absent_subjects()` fabricates a consumer-relative path out of a substring of a
+distribution-relative rev-path, and downgrades the close that receipt had just earned.**
+`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:521` scans the receipt text with
+`grep -oE '(\$CONSUMER/)?(docs|_bmad-output|scripts|\.claude)/[A-Za-z0-9_./-]+'`. That expression
+is **unanchored**, so the token `core/scripts/validate-steering-budget.sh` — which the receipt uses
+only as `git -C "$DIST" show "$THEIRS:core/scripts/…"`, a rev-path resolved inside the distribution
+clone — yields the substring `scripts/validate-steering-budget.sh`. `:520` then tests that against
+`$CONSUMER`, finds nothing, and `:1031` routes the receipt's non-zero exit to NEEDS-REVIEW instead
+of CLOSE-CANDIDATE. The fabricated token names a file that exists in **neither** tree: `install.sh`
+splits `core/scripts/<x>` to `scripts/ai-dlc/<x>`, which is the two-layout rule invariant **I33**
+exists to enforce, so `scripts/<x>` is the one spelling that is wrong on both sides of the
+boundary. The guard is the code that checks whether a receipt's subject moved, and it is reading a
+path the receipt never asked any consumer about.
+
+**Measured on the shipping function, driven against a synthetic consumer carrying both layouts.**
+With `scripts/ai-dlc/validate-steering-budget.sh` present and bare
+`scripts/validate-steering-budget.sh` absent, the function returns
+` scripts/validate-steering-budget.sh` for a receipt whose only path token is a `$THEIRS:`
+rev-path, and ` docs/no-such-file.md` for a receipt naming a genuinely absent consumer path. The
+first is the defect; the second is the behaviour that must survive any fix.
+
+**It cost a correct close on the release that is in the consumer's tree now.**
+`PC-S297-VALIDATE-STEERING-BUDGET-TRANSCRIPT-PROVENANCE`'s receipt asserts the validator prints the
+transcript it read. Extracted and run at `6011d94^` it exits **0**; at `6011d94` — the v0.378.0
+release commit that landed exactly that change — it exits **1**, the two blobs differing
+(`fe66c6d0…` → `d7f2febc…`). Non-zero is CLOSE-CANDIDATE. The consumer's 0.373.0 → 0.378.0
+reconcile instead recorded `NEEDS-REVIEW … the receipt exited 1, but consumer-relative path(s) it
+names DO NOT EXIST: scripts/validate-steering-budget.sh`, and the entry is still live. The same
+report carries that entry's `NAMED-UPSTREAM` row at v0.378.0 and calls the pair *"the highest-value
+pair the tool prints"* — the signal was complete and the guard talked the session out of it.
+
+**Scope: three of the twelve findings the guard emits on the reference consumer are of this class,
+and the other nine are a different problem that must not be swept in with it.** Over all **69**
+`verify: sh` receipts in that consumer's live and archive ledgers, driven through the shipping
+function with `CONSUMER` set to the real consumer root: **14** receipts contain a `$THEIRS:`/`$BASE:`
+rev-path, **12** emit an absent-subject finding, and **3** of those findings vanish when rev-paths
+are stripped from the input. Those three are wholly fabricated. The remaining nine name a bare
+`scripts/<x>.sh` token, and **9 of the 10 distinct tokens exist at `scripts/ai-dlc/<x>.sh`**
+(control in the same invocation: an impossible `scripts/NO-SUCH-CONTROL.sh` absent in both layouts;
+one token genuinely absent in both). Those receipts really are mis-anchored, and the guard is right
+to say so — the report's own "Re-anchor at `scripts/ai-dlc/…`" is the correct remedy for them.
+**The two classes need different fixes**: this entry is the one where no consumer path was ever
+named, and a fix that merely taught the guard the `scripts/` → `scripts/ai-dlc/` mapping would
+close the wrong nine and leave this one reporting.
+
+**Why the receipt is the receipt.** A substring anchor on the regex is unusable — the fix will
+quote the old expression in the comment recording what it replaced, which is this file's habit at
+`:1011-1017`. The receipt therefore `sed`-extracts the shipping `receipt_absent_subjects()` and
+drives it against a `mktemp` consumer holding both layouts, so the two-layout split is exercised
+rather than described. Its decisive arm is a **negative control**: a receipt asserting only that the
+fabricated token disappears is satisfied by deleting the guard, and deleting the guard is the
+destructive remedy this class invites, so the receipt additionally requires that a genuinely absent
+`$CONSUMER/docs/…` path is **still** reported. Measured against both destructive mutants — the
+`[ -e … ]` accumulation line deleted, and the whole function stubbed to `return 0` — the receipt
+exits **1** in each, while the correct fix exits **0** and the unfixed tree exits **1**. A sanity
+arm exits **9** (which reverify reports as STILL-LIVE, the safe direction) if the extraction
+captured no function body, proven live by renaming the definition.
+
+Found while adjudicating whether the v0.378.0 close channel reached the reference consumer. It did:
+all four `PC-` ids produced `NAMED-UPSTREAM` rows. This is the one entry among them whose close was
+mechanically earned and mechanically refused.
+
+
+verify: sh L=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; f=$(sed -n "/^receipt_absent_subjects() {/,/^}/p" "$L"); case "$f" in *"receipt_absent_subjects()"*) : ;; *) exit 9 ;; esac; d=$(mktemp -d); c="$d/c"; mkdir -p "$c/scripts/ai-dlc" "$c/docs"; printf "x\n" > "$c/scripts/ai-dlc/validate-steering-budget.sh"; [ -e "$c/scripts/ai-dlc/validate-steering-budget.sh" ] || { rm -rf "$d"; exit 9; }; if [ -e "$c/scripts/validate-steering-budget.sh" ] || [ -e "$c/docs/no-such-file.md" ]; then rm -rf "$d"; exit 9; fi; a=$(CONSUMER="$c" bash -c "$f"'; receipt_absent_subjects "$1"' _ 'git -C "$DIST" show "$THEIRS:core/scripts/validate-steering-budget.sh" > "$d/v.sh"'); b=$(CONSUMER="$c" bash -c "$f"'; receipt_absent_subjects "$1"' _ 'grep -q probe "$CONSUMER/docs/no-such-file.md"'); rm -rf "$d"; [ -z "$a" ] && [ -n "$b" ]

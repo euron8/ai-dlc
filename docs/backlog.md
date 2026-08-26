@@ -57,6 +57,64 @@ not a closed entry.
 
 ---
 
+## BL-092
+
+**The rev-path defence is keyed on a `core/` PREFIX, so a distribution path that does not start
+with `core/` is still read as a missing consumer subject.** `receipt_path_tokens()` at
+`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:611` splits on non-path bytes, and the
+four `case` prefixes then reject the `core/…` half of a rev-spec. A rev-path whose right side is
+`docs/…`, `.claude/…` or `_bmad-output/…` has no such half. Measured at HEAD: a receipt naming
+`$THEIRS:docs/backlog.md` yields `[ docs/backlog.md]` and `$THEIRS:.claude/rules/tool-hazards.md`
+yields `[ .claude/rules/tool-hazards.md]` — both reported as absent consumer subjects when both
+are distribution paths at a ref. **The shipped comment at `:599-600` asserts the opposite** —
+"its distribution half fails the prefix test" — which is false for exactly these spellings, so
+the file documents a defence it does not have.
+
+**ZERO INSTANCES REPRODUCE TODAY, AND THAT IS THE ENTRY'S POINT, NOT A REASON TO SKIP IT.** All
+10 rev-path right-hand sides in the reference consumer's 25-receipt live corpus are `core/`
+prefixed (control: 48 of 48 rev-specs across the 70-receipt live + archive corpus begin `core/`),
+so the guard is correct on every receipt anyone has written. It fails on the first receipt that
+names a distribution `docs/` path at a ref, and it fails silently, by downgrading a close that
+receipt had earned. This is the latent half of `BL-081`, separated from it deliberately:
+`BL-081`'s title, mechanism, evidence and receipt are all specific to the
+`core/scripts/<x>` → `scripts/<x>` substring, and that half is dead.
+
+**Why this receipt.** It drives the shipping function rather than grepping the comment that
+states the claim, because the comment is the thing that is wrong. It asserts both directions in
+one run — the `docs/` rev-path must stop being reported AND a genuinely absent consumer path
+must still be reported — so a fix that deletes the guard fails it.
+
+verify: sh S=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -f "$S" ] || exit 9; D="$(mktemp -d)" || exit 9; trap 'rm -rf "$D"' EXIT; mkdir -p "$D/c/docs" || exit 9; printf 'x\n' > "$D/c/docs/present.md" || exit 9; f="$(awk '/^receipt_path_tokens\(\) \{/,/^\}/' "$S")"; [ -n "$f" ] || exit 9; printf '%s\n' "$f" > "$D/lib.sh"; grep -q 'receipt_path_tokens()' "$D/lib.sh" || exit 9; grep -q 'receipt_absent_subjects()' "$D/lib.sh" || exit 9; bash -n "$D/lib.sh" 2>/dev/null || exit 9; probe() { CONSUMER="$D/c" bash -c '. "$1"; receipt_absent_subjects "$2"' _ "$D/lib.sh" "$1" 2>/dev/null; }; ctl="$(probe 'grep -q x "$CONSUMER/docs/gone.md"')"; [ -n "$ctl" ] || exit 9; pres="$(probe 'grep -q x "$CONSUMER/docs/present.md"')"; [ -z "$pres" ] || exit 9; bad="$(probe 'git -C "$DIST" show "$THEIRS:docs/backlog.md" | diff - x')"; [ -z "$bad" ]
+
+## BL-091
+
+**52 of the 64 headings in this file carry no title, so an extractor keyed on `## BL-0NN ` gets
+zero bytes — and an empty script exits 0, which this ledger reads as "the fix is present".**
+The heading grammar is inconsistent: `docs/backlog.md` currently holds **52** headings matching
+`^## BL-[0-9]+[ \t]*$` and **12** matching `^## BL-[0-9]+[ \t]+`, against a total of 64 (all
+three derived in one invocation, so the partition is closed). An extractor written against a
+titled entry and keyed on a trailing space therefore returns 4151 bytes for `BL-090` and **0
+bytes** for `BL-066`, silently, for four-fifths of the corpus.
+
+**The failure is a FALSE CLOSE, which is the direction that loses data.** A zero-byte extract
+is a valid empty shell program; it parses, runs, and exits 0. Anything that pipes an extracted
+entry into `sh` — which is what a receipt-repair or an audit pass does — reads that 0 as
+CLOSE-CANDIDATE and proposes retiring a live entry. Measured during the batch-10 triage sweep:
+one hand hit it and caught it only because it had run a byte-count control; a second hand
+reproduced it independently and established the 52/12 split.
+
+**The shipping readers are NOT affected, and that is what makes this latent rather than broken.**
+`backlog-reverify.sh` extracts labels with `match(line, /^BL-[0-9]+/)` after stripping the
+heading marker, and `backlog-rotate.sh` goes through `ledger_entry_shape()`; neither keys on a
+trailing space. So no gate fails today and nothing will start failing on its own — the cost is
+paid by the next ad-hoc extractor, which is exactly the reader no mechanism watches.
+
+**The fix is to make the grammar uniform** by giving every entry a title, which removes the
+ambiguity rather than documenting it, and is the `remove the affordance` form this repo prefers
+over a check that looks for the mistake afterwards.
+
+verify: sh L=docs/backlog.md; [ -f "$L" ] || exit 9; t="$(grep -cE '^## BL-[0-9]+' "$L")"; [ "$t" -gt 0 ] || exit 9; ttl="$(grep -cE '^## BL-[0-9]+[ \t]+[^ \t]' "$L")"; bare="$(grep -cE '^## BL-[0-9]+[ \t]*$' "$L")"; [ "$((ttl + bare))" -eq "$t" ] || exit 9; [ "$bare" -eq 0 ]
+
 ## BL-090 — `I93` asks whether every DECLARED emitter emits the token and never whether every EMITTER is declared, so a new one is invisible
 
 **The join runs one way only.** `scripts/validate-enforcement-map.sh`'s arm A walks the
@@ -106,6 +164,35 @@ the one-comment close on a copy of `origin/main`.
 verify: sh M=core/skills/ai-dlc/enforcement-map.yaml; V=scripts/validate-enforcement-map.sh; [ -f "$M" ] && [ -f "$V" ] || exit 9; tok="$(awk '/^empty_subject_verdict:/{on=1;next} on&&/^[^[:space:]#]/{exit} on&&/^  token:[[:space:]]/{v=$0;sub(/^  token:[[:space:]]*/,"",v);print v}' "$M")"; [ -n "$tok" ] || exit 9; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$V" >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; printf '%s\n' '#!/bin/bash' "echo \"probe: ${tok} — seeded undeclared emitter\"" 'exit 0' > "$D/core/scripts/validate-bl090-probe.sh"; n="$(awk -v t="$tok" '{ if (index($0,t)==0) next; s=$0; sub(/^[[:space:]]+/,"",s); if (substr(s,1,1)=="#") next; c++ } END { print c+0 }' "$D/core/scripts/validate-bl090-probe.sh")"; [ "$n" -gt 0 ] || { rm -rf "$D"; exit 9; }; grep -qF 'validate-bl090-probe.sh' "$D/$M" && { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$V" >/dev/null 2>&1 ); rc=$?; rm -rf "$D"; [ "$rc" -ne 0 ] || exit 1; exit 0
 
 ## BL-089 — an EXPIRED receipt and a live defect are the same row, so a receipt that can no longer measure anything reads as evidence that it did
+
+**WIDER THAN FILED: the population is not the exit-9 receipts.** This entry was filed against
+the exit-9 convention, and its cited population has since moved — `BL-076` is archived, leaving
+one live exit-9 member. The batch-10 triage sweep measured the class directly and found the
+larger and more dangerous half is receipts that exit **1** having measured nothing, which is
+byte-indistinguishable from a genuine reproduction and does not even carry the 9 as a hint:
+
+- **`BL-081`'s receipt** returned exit 1 from `v0.402.0` until this sweep retired it. `d983feb9`
+  factored the token split into `receipt_path_tokens()` one line ABOVE the receipt's
+  `sed -n "/^receipt_absent_subjects() {/,/^}/p"` range, so both arms died with
+  `receipt_path_tokens: command not found` and the empty `b` failed the test. It had correctly
+  earned a close for the 16 releases between `v0.386.0` and `v0.402.0`, then went silently
+  wrong. Its sanity arm could not see it: the arm tests only that the extracted text CONTAINS
+  the function name, which mangled text still does.
+- **`BL-066`'s receipt** exits 9, but for the same structural reason rather than the documented
+  one: the fix introduced a multi-line parameter expansion whose continuation line is a bare
+  `}"`, which the `/^}/` range end matches, truncating the extraction to an unparseable
+  fragment. It is also unsatisfiable even once repaired, because the fix changed the return
+  shape from a version to a sha pair while the assertion still tests `$1 = "0.3.0"`.
+- **`BL-006`'s receipt** fails in the opposite direction — it exits 0 on a comment. See that
+  entry; it is currently the ledger's only CLOSE-CANDIDATE and it is false.
+
+**The shape to take from this: single-sourcing a helper to prevent drift BREAKS every receipt
+that extracts its caller by `sed`/`awk` range.** The two failures are the same edit seen from
+opposite ends. A receipt that reconstructs a function body from the file is coupled to the
+file's LAYOUT, and nothing declares that coupling. Any remedy for this entry should treat "the
+receipt errored" as its own status rather than folding it into either verdict — the distinction
+`backlog-reverify.sh` cannot currently draw is between *measured and reproduced* and *could not
+measure*, and the exit code alone will never carry it.
 
 **`backlog-reverify.sh` maps `sh` receipts on exit code alone — 0 is CLOSE-CANDIDATE and
 EVERY non-zero is `STILL-LIVE  … "sh receipt exited non-zero -- still reproduces here"`
@@ -356,6 +443,29 @@ verify: lacks core/fixtures/layer-contract-conformance/run.sh "layer-contract-co
 ---
 
 ## BL-006 — nothing bounds this ledger's size, and rotation alone does not
+
+**DO NOT CLOSE THIS ON ITS RECEIPT. The receipt reads CLOSE-CANDIDATE and the defect is LIVE.**
+Measured during the batch-10 triage sweep, and re-derived independently: the receipt exits **0**
+on two COMMENT lines in `scripts/validate-claude-rules.sh` — `:287` ("THE CEILING IS A POLICY
+NUMBER, NOT A MEASUREMENT", which is arm A6's rationale and bounds `CLAUDE.md` plus
+`.claude/rules/`, per `durable_files()` at `:374`) and `:365`, which says in as many words that
+an arm over `docs/backlog.md` **"was offered and declined for now"**. Control in the same
+invocation: an impossible token against the same file list returns nothing, rc=1, so the grep
+discriminates. **The flip was established, not inferred** — `git blame -L365,365` attributes
+`:365` to `e2f3e42a`, and running the same receipt against a `e2f3e42a^` sandbox exits **1**.
+A documentation sentence turned this receipt green. Nothing landed.
+
+**The receipt is wrong in BOTH directions and must be re-anchored before anyone reads that 0.**
+It can be closed by prose, as above; and it can REJECT a correct fix, because its pathspec is
+`scripts/*.sh` only — an arm landed in `core/scripts/` is invisible to it — and its token set
+`CEILING|MAX_BYTES|MAX_ENTRIES` omits `MAX_LINES`, though a line bound is one of the two forms
+this entry argues for.
+
+**The defect is present, established without the receipt.** No arm bounds this file:
+`validate-plan-shape.sh`'s only `wc -l` is at `:131`, resolving a cited line number, and
+`backlog-rotate.sh:8-10` still states in its own header that nothing here bounds a file that
+way; the one size-adjacent arm, `backlog-rotate.sh:222`, is a partition-conservation check, not
+a ceiling. The ledger has meanwhile passed the pathological state this entry was forked from.
 
 `backlog-rotate.sh` moves closed entries to `docs/backlog.archive.md`, but rotation is something
 an operator RUNS. Nothing fails a push when this file stops being a queue and becomes a log, so
@@ -2300,7 +2410,47 @@ the consumer's closer.
 
 verify: sh d=$(mktemp -d); n="$d/env"; printf "#!/bin/sh\ncat >/dev/null\nenv > %s\n" "$n" > "$d/python3"; chmod +x "$d/python3"; PATH="$d:$PATH" bash core/scripts/report-propagation-fanout.sh HEAD~1 >/dev/null 2>&1; [ -s "$n" ] || { rm -rf "$d"; exit 9; }; p=$(grep -c "PATH=" "$n"); f=$(grep -c "core/scripts/report-propagation-fanout.sh" "$n"); g=$(grep -c "^@@ " "$n"); rm -rf "$d"; [ "$p" -ge 1 ] || exit 9; [ "$f" -eq 0 ] && [ "$g" -eq 0 ]
 
-## BL-066
+## BL-066 — the `named_absorbed` half landed at v0.387.0; the SIBLING half did not, and the release notes say it did
+
+**TRIAGED AT BATCH 10: FOUR OF THE FIVE CLAIMS ARE ABSORBED, THE SIBLING CLAIM SURVIVES, AND
+THIS ENTRY STAYS OPEN ON THAT CLAIM ALONE.** Two verifiers attacked the proposed close
+independently, agreed on every measurement, and split on scope; the entry text below decided
+it. `34c77736` (`v0.387.0`) genuinely fixed `named_absorbed()` — it removed 3 `tail -1` lines
+and 3 `VERSION` reads, `na_v` now occurs **0** times in tracked code (controls in the same
+invocation: `na_c` 3, `na_o` 2, `na_h` 2), the three surviving `tail -1` occurrences at `:393`,
+`:457` and `:473` all classify as COMMENT against a control returning CODE at `:254-256`, and
+driving the real function returns `<newest-sha> <oldest-sha> <n> <how>` with no version at all.
+The consumer's installed copy is byte-identical. So the version-into-a-permanent-annotation harm
+is closed.
+
+**What survives is the SIBLING paragraph below, and it survives on its own words.** That
+paragraph names two mechanisms (`| tail -1`, the `VERSION` read) and a distinct harm: *"its
+output is the sha an operator is told to go and read. A fix keyed only on `named_absorbed`
+leaves that half emitting the same wrong commit."* The mechanisms are gone; **the harm is not**.
+`named_ambiguous()` at `:537-541` still resolves the message-grep to a set and emits ONE commit
+— `_c="${_hits%%\n*}"`, now the NEWEST rather than the oldest — with no commit count and no
+range, and its second field is the number of ledger ENTRIES sharing the prefix, not the number
+of citing commits. Driven against a synthetic upstream where THREE commits cite the prefix, the
+row emits `a6b80ae 2`, and `a6b80ae` is the ledger-drain docs commit — precisely the
+"cited it while closing the ledger" confusion this entry names. Control in the same invocation:
+with a one-entry ledger the function returns empty, so the arm discriminates.
+
+**Two things make this a defect rather than an asymmetry worth noting.** `named_absorbed`'s own
+shipped header at `:472` states the remedy standard — *"reports WHAT IT KNOWS — how many commits
+name the id, and the two ends of the range — and stops electing one of them"* — and the sibling
+did not receive it. And **`v0.387.0`'s CHANGELOG asserts *"Both name joins now report what they
+know … and elect none of them"*, which is false as measured.** Nothing guards it:
+`core/fixtures/ledger-reverify/run.sh:866-890` carries three `NAMED-UPSTREAM-AMBIGUOUS` arms and
+none asserts a commit count or a range (control: a bogus token greps 0 in that file while
+`NAMED-UPSTREAM` greps 18).
+
+**THE RECEIPT BELOW IS DEAD AND MUST BE REPLACED, NOT RE-ANCHORED.** It exits 9 because
+`sed -n "/^named_absorbed() {/,/^}/p"` truncates at the bare `}"` at `:504`, and repairing the
+extraction does not rescue it — the assertion tests `$1 = "0.3.0"` and field 1 is now a short
+sha, so a repaired receipt exits 1 against the *correct* fix and can never go green. That is the
+trap this entry's own "Why this receipt" paragraph says an earlier draft was rewritten to avoid.
+The replacement should assert that the `NAMED-UPSTREAM-AMBIGUOUS` row names ≥2 commits when ≥2
+cite the prefix. Filed as evidence under `BL-089`, which this widens.
 
 **`named_absorbed()` joins on the OLDEST commit whose MESSAGE mentions the id, which is not the
 commit that absorbed the entry, and the version it reads there is interpolated into a permanent
@@ -2866,72 +3016,6 @@ a corpus where the vacuous road was measured at roughly one story in five.
 
 
 verify: sh M=core/skills/ai-dlc/enforcement-map.yaml; V=core/scripts/validate-locked-anchor.sh; F=core/fixtures/check-3b-locked-anchor; [ -f "$M" ] && [ -r "$V" ] && [ -d "$F" ] || exit 9; ( cd "$F" && bash "../../../$V" bad-story.md >/dev/null 2>&1 ); b=$?; ( cd "$F" && bash "../../../$V" nothing-verified-story.md >/dev/null 2>&1 ); n=$?; [ "$b" -eq 1 ] || exit 9; [ "$n" -eq 0 ] || exit 9; ROW=$(awk '/- site: gate-validation.md Check 3b$/{on=1} on{print; c++} on && c>=6{exit}' "$M"); [ -n "$ROW" ] || exit 9; printf '%s' "$ROW" | grep -qiE 'EXAMINED NOTHING|empty.subject|empty_subject'
-## BL-081
-
-**`receipt_absent_subjects()` fabricates a consumer-relative path out of a substring of a
-distribution-relative rev-path, and downgrades the close that receipt had just earned.**
-`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:521` scans the receipt text with
-`grep -oE '(\$CONSUMER/)?(docs|_bmad-output|scripts|\.claude)/[A-Za-z0-9_./-]+'`. That expression
-is **unanchored**, so the token `core/scripts/validate-steering-budget.sh` — which the receipt uses
-only as `git -C "$DIST" show "$THEIRS:core/scripts/…"`, a rev-path resolved inside the distribution
-clone — yields the substring `scripts/validate-steering-budget.sh`. `:520` then tests that against
-`$CONSUMER`, finds nothing, and `:1031` routes the receipt's non-zero exit to NEEDS-REVIEW instead
-of CLOSE-CANDIDATE. The fabricated token names a file that exists in **neither** tree: `install.sh`
-splits `core/scripts/<x>` to `scripts/ai-dlc/<x>`, which is the two-layout rule invariant **I33**
-exists to enforce, so `scripts/<x>` is the one spelling that is wrong on both sides of the
-boundary. The guard is the code that checks whether a receipt's subject moved, and it is reading a
-path the receipt never asked any consumer about.
-
-**Measured on the shipping function, driven against a synthetic consumer carrying both layouts.**
-With `scripts/ai-dlc/validate-steering-budget.sh` present and bare
-`scripts/validate-steering-budget.sh` absent, the function returns
-` scripts/validate-steering-budget.sh` for a receipt whose only path token is a `$THEIRS:`
-rev-path, and ` docs/no-such-file.md` for a receipt naming a genuinely absent consumer path. The
-first is the defect; the second is the behaviour that must survive any fix.
-
-**It cost a correct close on the release that is in the consumer's tree now.**
-`PC-S297-VALIDATE-STEERING-BUDGET-TRANSCRIPT-PROVENANCE`'s receipt asserts the validator prints the
-transcript it read. Extracted and run at `6011d94^` it exits **0**; at `6011d94` — the v0.378.0
-release commit that landed exactly that change — it exits **1**, the two blobs differing
-(`fe66c6d0…` → `d7f2febc…`). Non-zero is CLOSE-CANDIDATE. The consumer's 0.373.0 → 0.378.0
-reconcile instead recorded `NEEDS-REVIEW … the receipt exited 1, but consumer-relative path(s) it
-names DO NOT EXIST: scripts/validate-steering-budget.sh`, and the entry is still live. The same
-report carries that entry's `NAMED-UPSTREAM` row at v0.378.0 and calls the pair *"the highest-value
-pair the tool prints"* — the signal was complete and the guard talked the session out of it.
-
-**Scope: three of the twelve findings the guard emits on the reference consumer are of this class,
-and the other nine are a different problem that must not be swept in with it.** Over all **69**
-`verify: sh` receipts in that consumer's live and archive ledgers, driven through the shipping
-function with `CONSUMER` set to the real consumer root: **14** receipts contain a `$THEIRS:`/`$BASE:`
-rev-path, **12** emit an absent-subject finding, and **3** of those findings vanish when rev-paths
-are stripped from the input. Those three are wholly fabricated. The remaining nine name a bare
-`scripts/<x>.sh` token, and **9 of the 10 distinct tokens exist at `scripts/ai-dlc/<x>.sh`**
-(control in the same invocation: an impossible `scripts/NO-SUCH-CONTROL.sh` absent in both layouts;
-one token genuinely absent in both). Those receipts really are mis-anchored, and the guard is right
-to say so — the report's own "Re-anchor at `scripts/ai-dlc/…`" is the correct remedy for them.
-**The two classes need different fixes**: this entry is the one where no consumer path was ever
-named, and a fix that merely taught the guard the `scripts/` → `scripts/ai-dlc/` mapping would
-close the wrong nine and leave this one reporting.
-
-**Why the receipt is the receipt.** A substring anchor on the regex is unusable — the fix will
-quote the old expression in the comment recording what it replaced, which is this file's habit at
-`:1011-1017`. The receipt therefore `sed`-extracts the shipping `receipt_absent_subjects()` and
-drives it against a `mktemp` consumer holding both layouts, so the two-layout split is exercised
-rather than described. Its decisive arm is a **negative control**: a receipt asserting only that the
-fabricated token disappears is satisfied by deleting the guard, and deleting the guard is the
-destructive remedy this class invites, so the receipt additionally requires that a genuinely absent
-`$CONSUMER/docs/…` path is **still** reported. Measured against both destructive mutants — the
-`[ -e … ]` accumulation line deleted, and the whole function stubbed to `return 0` — the receipt
-exits **1** in each, while the correct fix exits **0** and the unfixed tree exits **1**. A sanity
-arm exits **9** (which reverify reports as STILL-LIVE, the safe direction) if the extraction
-captured no function body, proven live by renaming the definition.
-
-Found while adjudicating whether the v0.378.0 close channel reached the reference consumer. It did:
-all four `PC-` ids produced `NAMED-UPSTREAM` rows. This is the one entry among them whose close was
-mechanically earned and mechanically refused.
-
-
-verify: sh L=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; f=$(sed -n "/^receipt_absent_subjects() {/,/^}/p" "$L"); case "$f" in *"receipt_absent_subjects()"*) : ;; *) exit 9 ;; esac; d=$(mktemp -d); c="$d/c"; mkdir -p "$c/scripts/ai-dlc" "$c/docs"; printf "x\n" > "$c/scripts/ai-dlc/validate-steering-budget.sh"; [ -e "$c/scripts/ai-dlc/validate-steering-budget.sh" ] || { rm -rf "$d"; exit 9; }; if [ -e "$c/scripts/validate-steering-budget.sh" ] || [ -e "$c/docs/no-such-file.md" ]; then rm -rf "$d"; exit 9; fi; a=$(CONSUMER="$c" bash -c "$f"'; receipt_absent_subjects "$1"' _ 'git -C "$DIST" show "$THEIRS:core/scripts/validate-steering-budget.sh" > "$d/v.sh"'); b=$(CONSUMER="$c" bash -c "$f"'; receipt_absent_subjects "$1"' _ 'grep -q probe "$CONSUMER/docs/no-such-file.md"'); rm -rf "$d"; [ -z "$a" ] && [ -n "$b" ]
 ## BL-082
 
 **On a case-folding filesystem `--strays` reports a declared home as a stray when the caller
