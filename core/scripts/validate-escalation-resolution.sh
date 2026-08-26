@@ -140,7 +140,7 @@ else
     exit 2
   fi
   # No escalations file is a legitimate clean state -- nothing to adjudicate.
-  [ -f "$ESCALATIONS" ] || { echo "OK: no escalations file ($ESCALATIONS); nothing to check."; exit 0; }
+  [ -f "$ESCALATIONS" ] || { echo "OK: EXAMINED NOTHING — no escalations file ($ESCALATIONS); nothing to check."; exit 0; }
 
   # Normalize the sprint token: accept "290" or "S290".
   SPRINT_NUM="$(printf '%s' "$SPRINT" | tr -cd '0-9')"

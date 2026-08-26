@@ -57,6 +57,54 @@ not a closed entry.
 
 ---
 
+## BL-090 — `I93` asks whether every DECLARED emitter emits the token and never whether every EMITTER is declared, so a new one is invisible
+
+**The join runs one way only.** `scripts/validate-enforcement-map.sh`'s arm A walks the
+`empty_subject_verdict: emitters:` list in `core/skills/ai-dlc/enforcement-map.yaml` and fails
+the push if a declared file does not print the token outside a comment. Arm C sweeps
+`core/scripts/*.sh` for RETIRED spellings. **Nothing asks the reverse question** — whether a
+file printing the DECLARED token is declared at all — so a validator that adopts the
+vocabulary without being registered joins it silently and the index under-reports the set.
+
+**Measured, by seeding rather than by reading the arms.** A new `core/scripts` validator whose
+only emission is the declared token, named nowhere in the declaration, is added to a scratch
+copy and the shipping validator is driven over it: **rc 0**, no finding. Controls in the same
+invocation: the unseeded copy passes (so a later non-zero would be attributable to the seed),
+the seed genuinely emits under the same non-comment reader arm A uses, and the seeded name is
+genuinely absent from the map.
+
+**It is not hypothetical — there is a live instance today.**
+`scripts/validate-plan-shape.sh:54` emits `EXAMINED NOTHING` and is deliberately NOT declared,
+because `enforcement-map.yaml` SHIPS to consumers while that script does not, so declaring it
+would write a permanently false emitter path into every consumer tree, unfalsifiable at the
+only place it is wrong. That exemption is correct and it is exactly what makes the gap
+invisible: the one file that proves the reverse arm is missing is also the one file that must
+not be declared. A reverse arm therefore needs a stated exemption, not just a sweep.
+
+**THE DECLARATION IS THREE HAND-LISTS AND NOTHING BINDS ANY TWO OF THEM.** The yaml's
+`emitters:` and `readers:` are consumed by arms A and B. The arm header's
+`# vocabulary-readers:` marker at `scripts/validate-enforcement-map.sh:7233` is consumed by
+`scripts/render-vocabulary-index.sh` and by nothing else — no arm checks that a path in it
+exists, carries the token, or agrees with the yaml. That third list is what makes
+`BL-078`'s receipt satisfiable by editing one comment, and it is why the rendered Readers
+column currently carries EMITTERS, which is not what arm B means by a reader.
+
+**The clean fix is subtraction, and it was scoped out of batch 9 deliberately rather than
+missed.** A `# vocabulary-emitters:` field rendered as its own column, with both columns
+DERIVED from the yaml the owner already declares, removes the third hand-list, closes the
+reverse-arm gap and fixes the column semantics in one change. It touches the renderer, every
+row and the pre-push byte-compare, which is more than the token-binding `BL-078` was closed
+under, so it is filed rather than folded in.
+
+Tiered **DEFECT**. Nothing is emitting a wrong verdict today; the harm is that the vocabulary's
+population is whatever the last author remembered to declare, which is the state `BL-058` and
+`BL-078` both exist to end.
+
+Found by two independent hands re-deriving `BL-078` during batch 9, one of which demonstrated
+the one-comment close on a copy of `origin/main`.
+
+verify: sh M=core/skills/ai-dlc/enforcement-map.yaml; V=scripts/validate-enforcement-map.sh; [ -f "$M" ] && [ -f "$V" ] || exit 9; tok="$(awk '/^empty_subject_verdict:/{on=1;next} on&&/^[^[:space:]#]/{exit} on&&/^  token:[[:space:]]/{v=$0;sub(/^  token:[[:space:]]*/,"",v);print v}' "$M")"; [ -n "$tok" ] || exit 9; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$V" >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; printf '%s\n' '#!/bin/bash' "echo \"probe: ${tok} — seeded undeclared emitter\"" 'exit 0' > "$D/core/scripts/validate-bl090-probe.sh"; n="$(awk -v t="$tok" '{ if (index($0,t)==0) next; s=$0; sub(/^[[:space:]]+/,"",s); if (substr(s,1,1)=="#") next; c++ } END { print c+0 }' "$D/core/scripts/validate-bl090-probe.sh")"; [ "$n" -gt 0 ] || { rm -rf "$D"; exit 9; }; grep -qF 'validate-bl090-probe.sh' "$D/$M" && { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$V" >/dev/null 2>&1 ); rc=$?; rm -rf "$D"; [ "$rc" -ne 0 ] || exit 1; exit 0
+
 ## BL-089 — an EXPIRED receipt and a live defect are the same row, so a receipt that can no longer measure anything reads as evidence that it did
 
 **`backlog-reverify.sh` maps `sh` receipts on exit code alone — 0 is CLOSE-CANDIDATE and
@@ -2758,7 +2806,52 @@ and leaving four → **1**; a per-run nonce that discriminates without naming �
 fix scores **0** in the same invocation, so the receipt is satisfiable and not merely strict.
 
 
-verify: sh T=$(printf '\140'); S(){ P="$1"; Q="$2"; mkdir -p "$P/spec"; H=$(printf hi | shasum -a 256 | cut -d' ' -f1); printf '%s\n' "- user_request_verbatim: x" "- scope_confirmed: confirmed" "- scope_confirmed_cite: $H" > "$P/snap.md"; printf '%s\n' "- SHA256: $H" > "$Q/ans.md"; printf '%s\n' "add CI gate ${T}g1${T} here." > "$P/retro.md"; printf '%s\n' "run: g1" > "$Q/w.yml"; printf '%s\n' "<!-- AC_UNBOUNDED_TERMS v1 -->" "aaa, bbb" "<!-- AC_UNBOUNDED_TERMS_END -->" > "$P/lex.md"; printf '%s\n' "- **AC1 (unit).** counter increments by exactly 1." > "$Q/story.md"; printf '%s\n' "- CAP-1 x" > "$P/spec/SPEC.md"; printf '%s\n' "- (capability) LR-S1-1 -> CAP-1" > "$P/spec/.memlog.md"; printf '%s\n' "- FR-1 (CAP-1) x" > "$Q/prd.md"; printf '%s\n' "# esc" > "$P/esc.md"; }; R(){ P="$1"; Q="$2"; O1=$(bash core/scripts/validate-scope-confirmation.sh --snapshot "$P/snap.md" --answers "$Q/ans.md" 2>&1); C1=$?; O2=$(AI_DLC_RETRO_DIR="$P" AI_DLC_CI_SURFACE="$Q" bash core/scripts/validate-ci-gates.sh 2>&1); C2=$?; O3=$(bash core/scripts/validate-ac-falsifiability.sh --lexicon-from "$P/lex.md" "$Q/story.md" 2>&1); C3=$?; O4=$(bash core/scripts/validate-spec-join.sh --spec "$P/spec" --prd "$Q/prd.md" 2>&1); C4=$?; O5=$(bash core/scripts/validate-suppression-lifetime.sh --escalations "$P/esc.md" 2>&1); C5=$?; }; A1=$(mktemp -d); A2=$(mktemp -d); B1=$(mktemp -d); B2=$(mktemp -d); [ "$A1" != "$B1" ] && [ "$A2" != "$B2" ] || exit 9; S "$A1" "$A2"; S "$B1" "$B2"; R "$A1" "$A2"; a1=$O1; a2=$O2; a3=$O3; a4=$O4; a5=$O5; c1=$C1; c2=$C2; c3=$C3; c4=$C4; c5=$C5; R "$B1" "$B2"; b1=$O1; b2=$O2; b3=$O3; b4=$O4; b5=$O5; rm -rf "$A1" "$A2" "$B1" "$B2"; [ "$c1" = 0 ] && [ "$c2" = 0 ] && [ "$c3" = 0 ] && [ "$c4" = 0 ] && [ "$c5" = 0 ] || exit 9; grep -qF "answers_entries_scanned" <<<"$a1" && grep -qF " retros," <<<"$a2" && grep -qF "term(s) loaded" <<<"$a3" && grep -qF "locked requirement(s)" <<<"$a4" && grep -qF "entries_scanned=" <<<"$a5" || exit 9; [ "$a1" != "$b1" ] && [ "$a2" != "$b2" ] && [ "$a3" != "$b3" ] && [ "$a4" != "$b4" ] && [ "$a5" != "$b5" ] || exit 1; grep -qF "$A1" <<<"$a1" && grep -qF "$A2" <<<"$a1" && grep -qF "$A1" <<<"$a2" && grep -qF "$A2" <<<"$a2" && grep -qF "$A1" <<<"$a3" && grep -qF "$A2" <<<"$a3" && grep -qF "$A1" <<<"$a4" && grep -qF "$A2" <<<"$a4" && grep -qF "$A1" <<<"$a5" || exit 1; grep -qF "$B1" <<<"$b1" && grep -qF "$B1" <<<"$b2" && grep -qF "$B1" <<<"$b3" && grep -qF "$B1" <<<"$b4" && grep -qF "$B1" <<<"$b5"
+**RE-DERIVED FOR BATCH 9, AND THE ENTRY WAS WRONG IN FOUR PLACES.** Each correction carries
+the measurement that produced it.
+
+**The receipt above had been unable to measure anything for 28 releases.** Its seed wrote
+`- CAP-1 x` into `SPEC.md`, and `validate-spec-join.sh` DISARMs that spelling at rc 2 —
+*"mentions CAP-<n> identifiers but DEFINES none in the '- **CAP-<n>** — <intent>' bullet shape
+this check reads"* — so the `[ "$c4" = 0 ]` sanity arm tripped and the receipt exited 9 against
+every implementation, a correct one included. Bisected against four revisions each carrying a
+positive control in the same invocation: PASS at `6011d94d` (v0.378.0, where it was filed) and
+at `0218b490` (v0.387.0); DISARMED from `80ed80c8` (v0.388.0) onward, the commit that
+introduced the `**`-anchored `CAP_DEFS` extractor and the DISARM together. The grammar is the
+`**` emphasis, not the em dash: `- **CAP-1**` with nothing after it passes, `- __CAP-1__` and
+`- **CAP-1 stores things**` do not. This is the class `BL-089` was filed about — an expired
+receipt and a live defect are one `STILL-LIVE` row.
+
+**`validate-ci-gates.sh` has TWO success emitters, not one.** `:144` exits **0** after
+`Scanned N retros, 0 gates declared, 0 dormant`, and that is a different `echo` from the `:251`
+verdict line. It is the site this entry itself ranks worst — the retro tree that exists, holds
+no declarations, and passes clean — and the old receipt never reached it. A fix touching `:251`
+alone would have closed this entry with the measured false pass unfixed.
+
+**`--story` is unnamed on the success path too**, so the entry undercounts
+`validate-spec-join.sh`'s undisclosed caller-supplied corpora by one. Control: a story missing
+its `capabilities:` frontmatter fails rc 1 and names the story path, so the search sees a named
+story when one is there.
+
+**v0.415.0 half-discharged `validate-spec-join.sh`, and only on one branch.** Its
+`join (1) reads N locked requirement(s) from <source>` line is emitted unconditionally on the
+success path, but `$LR_POP_SOURCE` has two spellings: the `--spec`-derived memlog when
+`--locked-requirements` is omitted, and the `--locked-requirements` file itself when it is not.
+On the second, the `--spec` root disappears from the success path entirely — measured at rc 0
+over three disjoint roots, spec present 0 times, prd present 0 times. A fix leaning on that line
+discloses nothing there, so the rebuilt receipt drives the validator WITH
+`--locked-requirements` and names `--spec` explicitly.
+
+**The rebuilt receipt uses four disjoint roots per side** so that naming one caller-supplied
+corpus cannot satisfy the clause for another. Proven in both directions and against nine
+mutants, the two sides asserted to differ by `diff -rq` first: shipping tree **1**, correct fix
+**0**; a hardcoded constant corpus string **1**; naming one of two caller corpora **1**;
+rendering the path then failing the verdict **9**; fixing the ci-gates verdict but not its
+zero-gate exit **1**; a per-run nonce that discriminates without naming **1**; fixing four of
+the five validators **1**; the evidence line itself deleted **9**; naming `--spec` and `--prd`
+but not `--story` **1**; leaning on join (1) for the spec root **1**.
+
+
+verify: sh T=$(printf '\140'); S() { P="$1"; Q="$2"; Z="$3"; L="$4"; mkdir -p "$P/spec" "$P/retro-nogates"; H=$(printf hi | shasum -a 256 | cut -d' ' -f1); printf '%s\n' "- user_request_verbatim: x" "- scope_confirmed: confirmed" "- scope_confirmed_cite: $H" > "$P/snap.md"; printf '%s\n' "- SHA256: $H" > "$Q/ans.md"; printf '%s\n' "add CI gate ${T}g1${T} here." > "$P/retro.md"; printf '%s\n' "a retro that declares no gates at all." > "$P/retro-nogates/r.md"; printf '%s\n' "run: g1" > "$Q/w.yml"; printf '%s\n' "<!-- AC_UNBOUNDED_TERMS v1 -->" "aaa, bbb" "<!-- AC_UNBOUNDED_TERMS_END -->" > "$P/lex.md"; printf '%s\n' "- **AC1 (unit).** counter increments by exactly 1." > "$Q/story.md"; printf '%s\n' "- **CAP-1** — the system stores a thing." > "$P/spec/SPEC.md"; printf '%s\n' "- (capability) LR-S1-1 -> CAP-1" > "$P/spec/.memlog.md"; printf '%s\n' "- FR-1 (CAP-1) x" > "$Q/prd.md"; printf '%s\n' "# esc" > "$P/esc.md"; printf '%s\n' "<!-- LOCKED_REQUIREMENTS -->" "- LR-S1-1 the thing is stored" "<!-- END LOCKED_REQUIREMENTS -->" > "$L/lr.md"; printf '%s\n' "---" "capabilities: CAP-1" "---" "- **AC1 (unit).** counter increments by exactly 1." > "$Z/s.md"; }; R() { P="$1"; Q="$2"; Z="$3"; L="$4"; O1=$(bash core/scripts/validate-scope-confirmation.sh --snapshot "$P/snap.md" --answers "$Q/ans.md" 2>&1); C1=$?; O2=$(AI_DLC_RETRO_DIR="$P" AI_DLC_CI_SURFACE="$Q" bash core/scripts/validate-ci-gates.sh 2>&1); C2=$?; O3=$(bash core/scripts/validate-ac-falsifiability.sh --lexicon-from "$P/lex.md" "$Q/story.md" 2>&1); C3=$?; O4=$(bash core/scripts/validate-spec-join.sh --spec "$P/spec" --prd "$Q/prd.md" --story "$Z/s.md" --locked-requirements "$L/lr.md" 2>&1); C4=$?; O5=$(bash core/scripts/validate-suppression-lifetime.sh --escalations "$P/esc.md" 2>&1); C5=$?; O6=$(AI_DLC_RETRO_DIR="$P/retro-nogates" AI_DLC_CI_SURFACE="$Q" bash core/scripts/validate-ci-gates.sh 2>&1); C6=$?; }; A1=$(mktemp -d); A2=$(mktemp -d); A3=$(mktemp -d); A4=$(mktemp -d); B1=$(mktemp -d); B2=$(mktemp -d); B3=$(mktemp -d); B4=$(mktemp -d); [ "$A1" != "$B1" ] && [ "$A2" != "$B2" ] && [ "$A3" != "$B3" ] && [ "$A4" != "$B4" ] || exit 9; S "$A1" "$A2" "$A3" "$A4"; S "$B1" "$B2" "$B3" "$B4"; R "$A1" "$A2" "$A3" "$A4"; a1=$O1 a2=$O2 a3=$O3 a4=$O4 a5=$O5 a6=$O6; c1=$C1 c2=$C2 c3=$C3 c4=$C4 c5=$C5 c6=$C6; R "$B1" "$B2" "$B3" "$B4"; b1=$O1 b2=$O2 b3=$O3 b4=$O4 b5=$O5 b6=$O6; rm -rf "$A1" "$A2" "$A3" "$A4" "$B1" "$B2" "$B3" "$B4"; [ "$c1" = 0 ] && [ "$c2" = 0 ] && [ "$c3" = 0 ] && [ "$c4" = 0 ] && [ "$c5" = 0 ] && [ "$c6" = 0 ] || { echo "GUARD: exit statuses $c1 $c2 $c3 $c4 $c5 $c6" >&2; exit 9; }; grep -qF "answers_entries_scanned" <<<"$a1" && grep -qF " retros," <<<"$a2" && grep -qF "term(s) loaded" <<<"$a3" && grep -qF "locked requirement(s)" <<<"$a4" && grep -qF "entries_scanned=" <<<"$a5" && grep -qF "0 gates declared" <<<"$a6" || { echo "GUARD: an evidence line vanished" >&2; exit 9; }; [ "$a1" != "$b1" ] && [ "$a2" != "$b2" ] && [ "$a3" != "$b3" ] && [ "$a4" != "$b4" ] && [ "$a5" != "$b5" ] && [ "$a6" != "$b6" ] || { echo "LIVE: outputs do not discriminate" >&2; exit 1; }; grep -qF "$A1" <<<"$a1" && grep -qF "$A2" <<<"$a1" && grep -qF "$A1" <<<"$a2" && grep -qF "$A2" <<<"$a2" && grep -qF "$A1" <<<"$a3" && grep -qF "$A2" <<<"$a3" && grep -qF "$A1" <<<"$a4" && grep -qF "$A2" <<<"$a4" && grep -qF "$A3" <<<"$a4" && grep -qF "$A1" <<<"$a5" && grep -qF "$A1" <<<"$a6" && grep -qF "$A2" <<<"$a6" || { echo "LIVE: side A does not name its roots" >&2; exit 1; }; grep -qF "$B1" <<<"$b1" && grep -qF "$B1" <<<"$b2" && grep -qF "$B1" <<<"$b3" && grep -qF "$B1" <<<"$b4" && grep -qF "$B1" <<<"$b5" && grep -qF "$B1" <<<"$b6" || { echo "LIVE: side B does not name its roots" >&2; exit 1; }
 
 ## BL-077
 
@@ -2999,7 +3092,62 @@ Split from `BL-058`, which unified the token for its three named emitters only. 
 population and the exit-code question were left out of that remediation deliberately.
 
 
-verify: sh V=docs/vocabulary-index.md; [ -f "$V" ] || exit 9; grep -q "^| Vocabulary | Members | Owner | Bound by | Readers |$" "$V" || exit 9; row="$(grep -iE "^\|[^|]*(vacuous|empty.subject|examined nothing|nothing to check|not.applicable|nothing verified)[^|]*\|" "$V")"; [ -n "$row" ] || exit 1; n=0; for f in validate-spec-join validate-plan-shape audit-layer-debt validate-bmad-invocations validate-ac-falsifiability validate-escalation-status-vocabulary validate-artifact-paths validate-request-coverage validate-gate-adjudication validate-snapshot-conservation; do case "$row" in *"$f"*) n=$((n+1));; esac; done; case "$row" in *"core/scripts/*"*) n=99;; esac; [ "$n" -ge 3 ] || exit 1; exit 0
+**RE-DERIVED FOR BATCH 9. THE CORE DEFECT HOLDS; FOUR CLAIMS AROUND IT DO NOT, AND THE
+RECEIPT HAD A HOLE THAT WAS MEASURED RATHER THAN ARGUED.**
+
+**The filed receipt could be closed by PROSE.** It read only the RENDERED ROW of
+`docs/vocabulary-index.md`, whose Readers column is populated from a `# vocabulary-readers:`
+COMMENT in the arm header — and `scripts/render-vocabulary-index.sh` checks those entries for
+file EXISTENCE and nothing else. Measured on a copy of `origin/main`: appending three of the
+ten basenames to that one comment and re-rendering gave receipt **0**, render **0** and
+`validate-enforcement-map.sh` **0**, with no owner, no invariant, no emitter and no behaviour
+changed. The entry's assurance that *"a row cannot be hand-written to satisfy this"* is
+therefore false. The rebuilt receipt keeps the registration arm and adds the one a comment
+cannot satisfy: every declared emitter must PRINT the token on a NON-COMMENT line. Against the
+same prose-only mutant it exits **1** where the filed one exits 0.
+
+**The receipt's `core/scripts/*` escape hatch is unreachable by its intended route.** The
+renderer fails closed on a glob in Readers, so that clause could only ever have been satisfied
+by free prose in the vocabulary NAME — the same hand-written close one field over.
+
+**Five of the seventeen cited sites do not resolve, and they are the whole exit-2 spec-join
+list.** `:141` is a comment about suppression expiry, `:173` is a bare `rc=1`, `:180` and
+`:207` are comments, `:275` is `return 1`. The offsets are 16/105/101/75/8, so this is not one
+stale rebase — the five were never a coherent set. Control: an impossible line number in the
+same file returns NO SUCH LINE, and the other twelve citations do land on real emissions. The
+REAL empty-subject verdicts in that file are `:767, :799, :934, :945, :1007, :1027, :1211`,
+each a `DISARMED — <subject> contains ZERO/no <thing>` at exit 2, and those are what this
+batch fixed.
+
+**`EXAMINED NOTHING` was already registered when the entry claimed it was not.** The entry
+reports 0 hits in `docs/vocabulary-index.md` for each of five tokens; measured today,
+`EXAMINED NOTHING` returns **1** — the `I93` row — against the entry's own control of 6 for
+`vocabulary`, an exact match, so it was the same file. `BL-058` landed that row in the same
+commit this entry was filed in. The narrow surviving claim, that `DISARMED` is an unregistered
+24-site vocabulary, holds in direction; the count is **38** emission sites, 33 of them in the
+four files the entry names and all of those at exit 2.
+
+**The class spans FIVE exit codes, not four.** `validate-escalation-resolution.sh:135` and
+`:221` emit `NONE:` at exit **1**. The entry cites `:135` by name and then excludes the file
+from its own tally by designating it the exemplar. Those two sites are left alone deliberately:
+that file draws the legitimate-empty vs nothing-ran line BY MODE on purpose, and it is the
+distinction the whole entry is about.
+
+**Sites the entry's seventeen omits, found by re-derivation and fixed here:**
+`validate-suppression-lifetime.sh:115` and `validate-snapshot-conservation.sh:173, :203, :236`.
+**Left unfixed and recorded rather than swept in:** `core-paths.sh:263`,
+`audit-rule-files.sh:311, :474, :479` (per-check `N/A n=[]` rows inside an audit, not a run
+verdict) and `scripts/validate-enforcement-map.sh:5709, :5713, :5716` — the entry's four
+citations there are all offset by exactly +445, which confirms its reasoning and only its
+numbers were stale.
+
+**`scripts/validate-plan-shape.sh:54` emits the token but is NOT a declared emitter.** It sits
+outside `core/scripts/`, and `enforcement-map.yaml` SHIPS — a declared emitter absent from a
+consumer tree is an arm-A failure by construction. Its edit is unguarded and that is stated
+rather than hidden.
+
+
+verify: sh V=docs/vocabulary-index.md; M=core/skills/ai-dlc/enforcement-map.yaml; [ -f "$V" ] && [ -f "$M" ] || exit 9; grep -q "^| Vocabulary | Members | Owner | Bound by | Readers |$" "$V" || exit 9; row="$(grep -iE "^\|[^|]*(vacuous|empty.subject|examined nothing|nothing to check|not.applicable|nothing verified)[^|]*\|" "$V")"; [ -n "$row" ] || exit 1; tok="$(awk '/^empty_subject_verdict:/{on=1;next} on&&/^[^[:space:]#]/{exit} on&&/^  token:[[:space:]]/{v=$0;sub(/^  token:[[:space:]]*/,"",v);print v}' "$M")"; [ -n "$tok" ] || exit 9; ems="$(awk '/^empty_subject_verdict:/{on=1;next} on&&/^[^[:space:]#]/{exit} on&&/^  emitters:[[:space:]]*$/{e=1;next} on&&e&&/^  [a-z_]+:/{e=0} on&&e&&/^    - /{v=$0;sub(/^    - /,"",v);print v}' "$M")"; [ -n "$ems" ] || exit 9; n=0; for f in validate-spec-join validate-plan-shape audit-layer-debt validate-bmad-invocations validate-ac-falsifiability validate-escalation-status-vocabulary validate-artifact-paths validate-request-coverage validate-gate-adjudication validate-snapshot-conservation; do case "$ems" in *"$f.sh"*) n=$((n+1)) ;; esac; done; [ "$n" -ge 3 ] || exit 1; bad=0; while IFS= read -r f; do [ -n "$f" ] || continue; [ -f "$f" ] || { bad=1; continue; }; hit="$(awk -v t="$tok" '{ if (index($0,t)==0) next; s=$0; sub(/^[[:space:]]+/,"",s); if (substr(s,1,1)=="#") next; c++ } END { print c+0 }' "$f")"; [ "$hit" -gt 0 ] || bad=1; done <<<"$ems"; [ "$bad" -eq 0 ] || exit 1; ctl="$(awk -v t="$tok" '{ if (index($0,t)==0) next; s=$0; sub(/^[[:space:]]+/,"",s); if (substr(s,1,1)=="#") next; c++ } END { print c+0 }' VERSION)"; [ "$ctl" -eq 0 ] || exit 9; exit 0
 
 ## BL-080
 

@@ -51,7 +51,7 @@ else
   FILES=()
   while IFS= read -r f; do [ -n "$f" ] && FILES+=("$f"); done < <(find docs/plans -maxdepth 1 -name '*.md' 2>/dev/null | sort)
   if [ "${#FILES[@]}" -eq 0 ]; then
-    echo "validate-plan-shape: no plan files under docs/plans/ — nothing to check." >&2
+    echo "validate-plan-shape: EXAMINED NOTHING — no plan files under docs/plans/ — nothing to check." >&2
     echo "  This is a PASS only if the repo genuinely holds no plans. If you expected one," >&2
     echo "  the plan was never promoted out of ~/.claude/plans/ and will not survive the session." >&2
     exit 2

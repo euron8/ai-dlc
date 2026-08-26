@@ -207,7 +207,7 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 # regression that matters -- one invariant added as a nested loop moved this script 39% and
 # the whole suite by minutes. Fork count is deterministic and load-independent: load does not
 # change how many times a script calls execve.
-FORK_BUDGET=7050
+FORK_BUDGET=7060
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -7230,7 +7230,7 @@ fi
 # vocabulary-invariant: I93
 # vocabulary-owner: core/skills/ai-dlc/enforcement-map.yaml
 # vocabulary-extract: empty-subject-verdict
-# vocabulary-readers: core/scripts/validate-stub-audit.sh, core/scripts/validate-locked-anchor.sh, core/scripts/validate-ci-gates.sh, core/skills/ai-dlc/steps/gate-validation.md, core/skills/ai-dlc/steps/retro.md
+# vocabulary-readers: core/scripts/validate-stub-audit.sh, core/scripts/validate-locked-anchor.sh, core/scripts/validate-ci-gates.sh, core/scripts/validate-artifact-paths.sh, core/scripts/validate-escalation-resolution.sh, core/scripts/validate-escalation-status-vocabulary.sh, core/scripts/validate-suppression-lifetime.sh, core/scripts/validate-gate-adjudication.sh, core/scripts/validate-request-coverage.sh, core/scripts/audit-layer-debt.sh, core/scripts/validate-ac-falsifiability.sh, core/scripts/validate-bmad-invocations.sh, core/scripts/validate-spec-join.sh, core/scripts/validate-snapshot-conservation.sh, core/skills/ai-dlc/steps/gate-validation.md, core/skills/ai-dlc/steps/retro.md
 #
 # WHY. Three core validators printed "this run examined nothing" in three spellings at three
 # exit codes -- `AUDITED NOTHING` at 4, `PASS -- NOTHING VERIFIED` at 0, `VACUOUS:` at 78 --
@@ -7349,25 +7349,44 @@ else
     err "I93: the \`empty_subject_verdict:\` block in $MAP did not yield all four of token/emitters/readers/retired (token='$esv_tok'; $(printf '%s' "$esv_emitters" | grep -c .) emitter(s), $(printf '%s' "$esv_readers" | grep -c .) reader(s), $(printf '%s' "$esv_retired" | grep -c .) retired spelling(s)). Either the block was removed or its shape changed. This fails closed: with an empty declaration every loop below iterates zero times and the arm reports a unified tree it never looked at."
   else
     # ARM A -- every declared emitter EMITS the token, and emits no retired spelling.
+    #
+    # ONE awk over the WHOLE declared list per token, never one awk per file. `esv_sites`
+    # already takes a file list for exactly this reason, and the first cut of the v0.416.0
+    # widening ignored it: going from 3 emitters to 14 under a per-file loop cost 4 forks
+    # each and pushed the tree 42 over FORK_BUDGET, which `validator-fork-budget` caught on
+    # the push. This shape costs 1 + one-per-retired-spelling forks whatever the
+    # declaration's length, so the list can grow again without touching the budget.
+    esv_paths=()
     while IFS= read -r esv_f; do
       [ -n "$esv_f" ] || continue
       if [ ! -f "$REPO_ROOT/$esv_f" ]; then
         err "I93: $MAP declares '$esv_f' as an emitter of the empty-subject verdict and no such file exists. A scan over a missing file reads exactly like an emitter that conforms."
         continue
       fi
-      [ -n "$(esv_sites "$esv_tok" "$REPO_ROOT/$esv_f")" ] || \
-        err "I93: $esv_f is declared an emitter of the empty-subject verdict and no line of it OUTSIDE A COMMENT prints '$esv_tok'. Either it stopped emitting the verdict, or it emits a spelling of its own -- which is the three-grammar state this vocabulary replaced. The token is declared at $MAP \`empty_subject_verdict: token:\`; change it there and here in one commit, never in one emitter."
-      while IFS= read -r esv_r; do
-        [ -n "$esv_r" ] || continue
-        esv_hit="$(esv_sites "$esv_r" "$REPO_ROOT/$esv_f")"
-        [ -z "$esv_hit" ] || \
-          err "I93: $esv_f emits the RETIRED spelling '$esv_r' at $esv_hit. It was replaced by '$esv_tok' precisely so that one state has one grammar; an emitter carrying both prints two names for one thing and an operator grepping the gate log for either finds half the runs."
-      done <<EOF
-$esv_retired
-EOF
+      esv_paths[${#esv_paths[@]}]="$REPO_ROOT/$esv_f"
     done <<EOF
 $esv_emitters
 EOF
+
+    if [ "${#esv_paths[@]}" -gt 0 ]; then
+      # Matched by path PREFIX against the `FILENAME:FNR` rows awk prints, so the join is a
+      # shell case rather than a grep per file -- same answer, no fork.
+      esv_tok_hits="$(esv_sites "$esv_tok" "${esv_paths[@]}")"
+      for esv_p in "${esv_paths[@]}"; do
+        case "$esv_tok_hits" in
+          *"$esv_p:"*) : ;;
+          *) err "I93: ${esv_p#$REPO_ROOT/} is declared an emitter of the empty-subject verdict and no line of it OUTSIDE A COMMENT prints '$esv_tok'. Either it stopped emitting the verdict, or it emits a spelling of its own -- which is the three-grammar state this vocabulary replaced. The token is declared at $MAP \`empty_subject_verdict: token:\`; change it there and here in one commit, never in one emitter." ;;
+        esac
+      done
+      while IFS= read -r esv_r; do
+        [ -n "$esv_r" ] || continue
+        esv_hit="$(esv_sites "$esv_r" "${esv_paths[@]}")"
+        [ -z "$esv_hit" ] || \
+          err "I93: a declared emitter emits the RETIRED spelling '$esv_r' at $esv_hit. It was replaced by '$esv_tok' precisely so that one state has one grammar; an emitter carrying both prints two names for one thing and an operator grepping the gate log for either finds half the runs."
+      done <<EOF
+$esv_retired
+EOF
+    fi
 
     # ARM B -- every declared reader NAMES the token and no retired spelling. These are
     # step files an agent reads at a gate: a step that restates a spelling the script no

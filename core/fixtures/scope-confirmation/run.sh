@@ -633,6 +633,177 @@ else
   bad "only $kills of 5 field_of mutants were killed — an unkilled mutant means either the arm cannot fire or the mutation landed on a copy this run never executed"
 fi
 
+# =============================================================================
+# ASSERTIONS 33-36: CORPUS IDENTITY.
+# =============================================================================
+# THE DEFECT. Both inputs are caller-supplied (`--snapshot`, `--answers`) and default to
+# paths under a root this script resolves for itself, so a run pointed at the wrong tree
+# is a real state. Before the identity lines, `answers_entries_scanned: 3` plus
+# `PASS  scope_confirmed: confirmed` was the WHOLE of a passing run's output — no path
+# anywhere — so two runs over two different trees holding identical bytes were
+# BYTE-IDENTICAL. Nothing on screen separated a verdict about this sprint from a verdict
+# about a copy of it.
+#
+# THE ARM IS KEYED ON DISCRIMINATION, NOT ON A SPELLING. The pair is driven twice over two
+# mktemp corpora seeded with the same bytes; the outputs must DIFFER **and** each must
+# carry ITS OWN two paths. Those are separate requirements and the second is the load-
+# bearing one: a nonce, a PID or a timestamp makes two runs differ while naming nothing,
+# and mutant G below is exactly that fix. No label text is grepped, so re-wording
+# `snapshot:` leaves this working; what is demanded is the resolved path, and the roots
+# are mktemp names, so no implementation can hardcode the literal.
+#
+# THE ARM IS PRESENCE-SHAPED. It requires two specific paths to APPEAR in a run that
+# reached the PASS emitter, so a validator replaced by `exit 0` fails it by construction.
+SC_IDENT_WHY=""
+sc_ident_corpus() {   # -> prints a fresh corpus root holding a copy of the healthy pair
+  local d
+  d="$(mktemp -d "$WORK/ident.XXXXXX")" || return 1
+  cp "$WORK/snap-good.md" "$d/snapshot.md" || return 1
+  cp "$ANSWERS"           "$d/answers.md"  || return 1
+  printf '%s\n' "$d"
+}
+# sc_ident_holds <validator> — 0 iff the run reached PASS, the two runs are
+# distinguishable, and each names the snapshot and the answers file it actually read.
+sc_ident_holds() {
+  local v="$1" a b oa ob ra rb
+  SC_IDENT_WHY=""
+  a="$(sc_ident_corpus)" || { SC_IDENT_WHY="could not build corpus A"; return 1; }
+  b="$(sc_ident_corpus)" || { SC_IDENT_WHY="could not build corpus B"; return 1; }
+  oa="$(bash "$v" --snapshot "$a/snapshot.md" --answers "$a/answers.md" 2>&1)"; ra=$?
+  ob="$(bash "$v" --snapshot "$b/snapshot.md" --answers "$b/answers.md" 2>&1)"; rb=$?
+  if [ "$ra" != "0" ] || [ "$rb" != "0" ]; then
+    SC_IDENT_WHY="rc=$ra/$rb, expected 0/0 — the run never reached the PASS emitter"; return 1
+  fi
+  if ! grep -qF 'PASS  scope_confirmed:' <<<"$oa"; then
+    SC_IDENT_WHY="no PASS line — this arm did not reach the emitter it claims to guard"; return 1
+  fi
+  if [ "$oa" = "$ob" ]; then
+    SC_IDENT_WHY="two different trees holding identical bytes produced byte-identical output"
+    return 1
+  fi
+  if ! grep -qF "$a/snapshot.md" <<<"$oa" || ! grep -qF "$a/answers.md" <<<"$oa"; then
+    SC_IDENT_WHY="run A names neither the snapshot it read nor the capture file it counted"
+    return 1
+  fi
+  if ! grep -qF "$b/snapshot.md" <<<"$ob" || ! grep -qF "$b/answers.md" <<<"$ob"; then
+    SC_IDENT_WHY="run B names neither the snapshot it read nor the capture file it counted"
+    return 1
+  fi
+  if grep -qF "$b" <<<"$oa"; then
+    SC_IDENT_WHY="run A's output carries run B's root — the paths are not the ones it resolved"
+    return 1
+  fi
+  return 0
+}
+
+# --- Assertion 33: the passing run names both corpora --------------------------
+if sc_ident_holds "$VALIDATOR"; then
+  ok "a passing run names the snapshot it read and the capture file it counted, and two identical corpora in different trees are distinguishable"
+else
+  bad "a passing run carries no corpus identity — $SC_IDENT_WHY. Two sprints' worth of identical content produce one verdict, and the operator cannot tell which tree it is about"
+fi
+
+# --- Assertion 34: the DEFAULT-RESOLVED paths are named, not the arguments -----
+# THE ATTACK THIS CLOSES. Assertion 33 drives both corpora through `--snapshot`/`--answers`,
+# so a "fix" that echoed the argument vector — `echo "$@"` on the way out — satisfies it
+# while proving nothing about what the script RESOLVED. The interesting case is the one
+# with no arguments at all: both inputs default to paths under a root this script walks up
+# for, and that root is exactly where a run can silently be about the wrong tree. Nothing
+# is passed here, so an argument echo names nothing and this arm fires.
+SC_D="$(mktemp -d "$WORK/dflt.XXXXXX")"
+mkdir -p "$SC_D/_bmad-output"
+cp "$WORK/snap-good.md" "$SC_D/_bmad-output/pipeline-snapshot.md"
+cp "$ANSWERS"           "$SC_D/_bmad-output/operator-answers-history.md"
+SC_DOUT="$(AI_DLC_PROJECT_ROOT="$SC_D" bash "$VALIDATOR" 2>&1)"; SC_DRC=$?
+if [ "$SC_DRC" = "0" ] \
+   && grep -qF "$SC_D/_bmad-output/pipeline-snapshot.md" <<<"$SC_DOUT" \
+   && grep -qF "$SC_D/_bmad-output/operator-answers-history.md" <<<"$SC_DOUT"; then
+  ok "a run with NO path arguments names the two files it resolved for itself — the identity is the resolved value, not an echo of argv"
+else
+  bad "a defaulted run (rc=$SC_DRC) did not name the snapshot and capture file it resolved — the identity lines could be satisfied by echoing the argument vector, which says nothing about a run that was given no arguments: $SC_DOUT"
+fi
+
+# --- Assertion 35: UNMUTATED CONTROL for the identity mutants ------------------
+# Positive conjunct included: `sc_ident_holds` demands the PASS line and two paths, so this
+# control cannot pass against a copy replaced by `exit 0`.
+SC_CTL="$WORK/ident-control.sh"; cp "$VALIDATOR" "$SC_CTL"
+SC_CTL_OK=0
+if sc_ident_holds "$SC_CTL"; then
+  ok "control: an unmutated copy reproduces the identity lines, so a mutant's silence below means mutation and not breakage"
+  SC_CTL_OK=1
+else
+  bad "CONTROL FAILED ($SC_IDENT_WHY) — the two identity mutants below are uninterpretable"
+fi
+
+if [ "$SC_CTL_OK" = "1" ]; then
+  # --- Assertion 36: MUTANT F — the identity lines deleted --------------------
+  # The state this release replaced. Assertion 33 MUST go red; the arms above must not.
+  MUT_F="$WORK/validator-mutant-f.sh"
+  anchor_f1='say "  snapshot: '
+  anchor_f2='say "  answers:  '
+  if [ "$(grep -cF "$anchor_f1" "$VALIDATOR")" != "1" ] \
+     || [ "$(grep -cF "$anchor_f2" "$VALIDATOR")" != "1" ]; then
+    bad "FIXTURE STALE: mutant F's anchors are not unique in the validator, so the deletion could land on another emitter"
+  else
+    awk -v s="$anchor_f1" -v n="$anchor_f2" \
+      'index($0,s) || index($0,n) { next } { print }' "$VALIDATOR" > "$MUT_F"
+    if cmp -s "$VALIDATOR" "$MUT_F"; then
+      bad "FIXTURE STALE: mutant F is byte-identical to the original — the identity lines were reworded and the deletion matched nothing"
+    elif ! bash -n "$MUT_F" 2>/dev/null; then
+      bad "FIXTURE BROKEN: mutant F is not a valid shell script, so a 'kill' below would only mean the copy could not run"
+    else
+      if sc_ident_holds "$MUT_F"; then
+        bad "MUTANT F SURVIVED — a validator that names neither corpus still satisfies assertion 33, so that assertion is not testing the identity lines"
+      else
+        ok "mutant F: deleting the identity lines makes two different trees indistinguishable ($SC_IDENT_WHY) — assertion 33 has teeth"
+      fi
+      # And nothing else moves. The identity lines are additive; every verdict arm above
+      # must survive their removal, or assertion 33 is entangled with the ones that matter.
+      r=$(rc_of "$MUT_F" "$WORK/snap-good.md" "$ANSWERS")
+      r2=$(rc_of "$MUT_F" "$WORK/snap-nofield.md" "$ANSWERS")
+      r3=$(rc_of "$MUT_F" "$WORK/snap-citenone.md" "$ANSWERS")
+      if [ "$r" = "0" ] && [ "$r2" = "1" ] && [ "$r3" = "1" ]; then
+        ok "mutant F leaves assertions 1, 2 and 5 intact — corpus identity is asserted by an arm no verdict arm covers"
+      else
+        bad "mutant F ALSO moved a verdict (rc=$r/$r2/$r3) — the identity lines are not additive and assertion 33 is entangled with the verdict arms"
+      fi
+      # Assertion 34 gets its teeth from the same mutant. Without this cell that arm is
+      # never driven against a subject that fails it, and an arm nothing can falsify reads
+      # exactly like one that passed.
+      SC_FOUT="$(AI_DLC_PROJECT_ROOT="$SC_D" bash "$MUT_F" 2>&1)"
+      if grep -qF "$SC_D/_bmad-output/pipeline-snapshot.md" <<<"$SC_FOUT"; then
+        bad "MUTANT F SURVIVED assertion 34 — the defaulted run still names its resolved snapshot with the identity lines deleted, so assertion 34 is reading a path emitted somewhere else"
+      else
+        ok "mutant F also kills assertion 34 — the defaulted run's resolved paths come from the identity lines and nowhere else"
+      fi
+    fi
+  fi
+
+  # --- Assertion 37: MUTANT G — identity replaced by a per-run NONCE ----------
+  # THE FIX THAT DISCRIMINATES WITHOUT NAMING. `$$-$RANDOM` is evaluated by the mutant at
+  # run time, so its two runs differ from each other exactly as the real validator's do,
+  # and neither carries a path. An arm keyed only on "the outputs differ" passes against
+  # it. This is the arm's own false-fix control, and it is why assertion 33 demands the
+  # resolved path rather than a difference.
+  MUT_G="$WORK/validator-mutant-g.sh"
+  awk -v s="$anchor_f1" -v n="$anchor_f2" '
+    index($0,s) { print "say \"  snapshot: nonce-$$-$RANDOM\""; next }
+    index($0,n) { print "say \"  answers:  nonce-$$-$RANDOM\""; next }
+                { print }
+  ' "$VALIDATOR" > "$MUT_G"
+  if cmp -s "$VALIDATOR" "$MUT_G"; then
+    bad "FIXTURE STALE: mutant G is byte-identical to the original — the nonce substitution matched nothing and assertion 33's nonce-resistance is unproved"
+  elif ! bash -n "$MUT_G" 2>/dev/null; then
+    bad "FIXTURE BROKEN: mutant G is not a valid shell script, so a 'kill' below would only mean the copy could not run"
+  else
+    if sc_ident_holds "$MUT_G"; then
+      bad "MUTANT G SURVIVED — a per-run nonce that names no corpus satisfies assertion 33, so that assertion is a differ-check and not a naming check"
+    else
+      ok "mutant G: a per-run nonce varies the output exactly as the real paths do and still fails assertion 33 ($SC_IDENT_WHY) — the arm demands the corpus be NAMED"
+    fi
+  fi
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "scope-confirmation: PASS"; exit 0; fi
 echo "scope-confirmation: $fails assertion(s) FAILED" >&2

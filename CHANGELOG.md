@@ -15,6 +15,101 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.416.0] - 2026-08-26
+
+### Five validators reported how many files they read and never which
+
+`BL-076`. `validate-scope-confirmation.sh`, `validate-ci-gates.sh`,
+`validate-ac-falsifiability.sh`, `validate-spec-join.sh` and
+`validate-suppression-lifetime.sh` each took its corpus from the caller — an argv flag or an
+`AI_DLC_*` override — and each printed a COUNT over it without ever naming it on a success
+path. Driven twice over two `mktemp -d` corpora holding identical content, all five produced
+byte-identical output, so a run over the wrong corpus was indistinguishable from a run over
+the right one. Each now names every caller-supplied corpus it read, appended below the count
+line it already emitted; nothing is rewritten, because four fixtures read those lines by
+label or prefix.
+
+**`validate-ci-gates.sh` had THREE success emitters and the entry named one.** Besides the
+verdict line, a retro tree that EXISTS and declares no gates exits **0** after
+`Scanned N retros, 0 gates declared, 0 dormant`, and an ABSENT retro dir exits **0** naming the
+retro tree and not the enforcement surface — a state every consumer without `docs/retro` takes
+on every run. Both roots are consumer-tunable by design and the verdict ships to a consumer's
+CI. All three name what they resolved now, and the receipt drives two of them: fixing the
+verdict line alone scores as unfixed.
+
+**Four more caller-supplied corpora were unnamed and are now named**, each measured
+byte-identical across two corpora holding identical content before the change:
+`AI_DLC_CI_ALIAS_TABLE` — the input that RESOLVES an otherwise-dormant gate, so a run pointed
+at the wrong suppression table printed the identical green line — plus
+`validate-suppression-lifetime.sh`'s `--gate-metrics` and `--baseline`, and
+`validate-spec-join.sh`'s `--spine-lint` and `--trace-verdict`, which are borrowed verdicts the
+gate adopts. The alias table is named only on the main verdict, because it is resolved BELOW
+the two earlier exits and naming it on those would report a corpus the run never consulted.
+
+**`validate-spec-join.sh` was only half-discharged by v0.415.0, and only on one branch.** Its
+`join (1) reads N locked requirement(s) from <source>` line names the `--spec`-derived memlog
+when `--locked-requirements` is omitted and the `--locked-requirements` file when it is not —
+so on that second branch the `--spec` root left the success path entirely, at rc 0. `--story`
+was never named on any of them. All three are named explicitly rather than inferred from join
+(1)'s alternative.
+
+**The entry's own receipt had been unable to measure anything for 28 releases.** Its seed wrote
+`- CAP-1 x` into `SPEC.md`, a capability spelling this validator has DISARMed since
+`80ed80c8` (v0.388.0, the commit that introduced the
+`**`-anchored extractor and the DISARM together), so its sanity arm tripped and it exited 9
+against every implementation, a correct one included — reported as `STILL-LIVE` throughout.
+That is the class `BL-089` names. The rebuilt receipt drives four disjoint roots per side and
+is proven against nine mutants.
+
+### One empty-subject verdict, twelve emitters, one token
+
+`BL-078`. `EXAMINED NOTHING` was unified across three validators by `BL-058` and left there;
+the wider population it was lifted out of was empty-subject verdicts spread across a dozen
+more files at four exit codes, with nothing recording that they were one state. Each of those
+now emits the declared token and **keeps its own exit code** — 0, 2, 4 and 78 are per-validator
+caller contracts argued in their own headers, roughly forty fixture arms contract exit 2 as
+fail-closed, and `retro.md` names code 78 to the lead in shipped prose. One token says nothing
+was examined; the code still says what that is worth.
+
+`I93`'s declaration in `enforcement-map.yaml` widens from three emitters to fourteen, so arm A
+now requires each of them to emit the token outside a comment and arm C still refuses any
+revival of a retired spelling. Proven able to fire on the widened set: a declared emitter that
+stops emitting, one that does not exist, and one reviving `VACUOUS:` each fail the push,
+against a clean control in the same invocation.
+
+**The entry's five `validate-spec-join.sh` citations pointed at nothing** — two comments, a
+bare `rc=1`, another comment, and a `return 1`, at offsets 16/105/101/75/8, so they were never
+one coherent set. Its real empty-subject verdicts are eight sites, all at exit 2, and those are
+what shipped. `validate-suppression-lifetime.sh:115` and `validate-snapshot-conservation.sh`'s
+three sites are absent from the entry's enumeration while its own receipt NAMES that file;
+they are fixed too.
+
+**`BL-078`'s own receipt could be closed by prose, and that was measured rather than argued.**
+It read only the rendered row of `docs/vocabulary-index.md`, whose Readers column comes from a
+comment the renderer checks for file existence and nothing else — appending three basenames to
+that one line and re-rendering returned receipt 0, render 0 and gate 0 with no behaviour
+changed. The rebuilt receipt requires every declared emitter to PRINT the token on a
+non-comment line, and exits 1 against that same prose-only mutant.
+
+Widening `I93` from three emitters to fourteen under its original per-file loop cost four
+forks each and put the tree **42 over `FORK_BUDGET`**, which `validator-fork-budget` caught on
+the push — this script runs well over a hundred times per full suite, so that is a change to
+the wall clock rather than a style point. Arm A now makes ONE `awk` pass over the whole
+declared list per token, which `esv_sites` always supported and the first cut ignored: 7092
+forks back down to 7054, and the arm's cost is now flat in the length of the declaration. The
+budget moves 7050 → 7060 for the remaining diffuse growth, with the ceiling asserted still
+reachable.
+
+### Filed, not fixed
+
+`BL-090`. `I93` asks whether every DECLARED emitter emits the token and never whether every
+emitter is DECLARED, so a validator adopting the vocabulary unregistered joins it silently —
+seeded and measured at rc 0 with no finding. The declaration is three hand-lists with nothing
+binding any two of them, which is what made the receipt above closable by a comment. The clean
+fix is subtraction — a `# vocabulary-emitters:` field with both columns DERIVED from the yaml —
+and it is filed rather than folded in because it touches the renderer, every row and the
+pre-push byte-compare.
+
 ## [0.415.0] - 2026-08-26
 
 ### A validator convicted a consumer for writing down that its search could return nothing

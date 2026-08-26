@@ -108,6 +108,7 @@ if [ ! -d "${RETRO_DIR}" ]; then
   # Name the resolved root. A wrong root produces this same line, and without the
   # path there is nothing on screen to tell "no retros" from "looked in the wrong tree".
   echo "Scanned 0 retros, 0 gates declared, 0 dormant (no ${RETRO_DIR})"
+  echo "  enforcement surface:  ${WORKFLOW_DIR}"
   exit 0
 fi
 retro_count=0
@@ -142,6 +143,8 @@ unique_gates=$(printf '%s' "$declared_gates" | awk 'NF' | sort -u)
 
 if [ -z "$unique_gates" ]; then
   echo "Scanned ${retro_count} retros, 0 gates declared, 0 dormant"
+  echo "  retro dir:            ${RETRO_DIR}"
+  echo "  enforcement surface:  ${WORKFLOW_DIR}"
   exit 0
 fi
 
@@ -249,6 +252,9 @@ EOF
 unique_count=$(printf '%s\n' "$unique_gates" | awk 'NF' | wc -l | tr -d ' ')
 
 echo "Scanned ${retro_count} retros, ${unique_count} gates declared, ${dormant_count} dormant"
+echo "  retro dir:            ${RETRO_DIR}"
+echo "  enforcement surface:  ${WORKFLOW_DIR}"
+echo "  alias table:          ${ALIAS_TABLE_FILE:-(none set)}"
 
 if [ "$dormant_count" -gt 0 ]; then
   dormant_enum="$(printf '%s\n' "$dormant_gates" | awk 'NF' | tr '\n' ',' | sed 's/,$//')"

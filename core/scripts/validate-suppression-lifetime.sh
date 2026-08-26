@@ -112,7 +112,7 @@ AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 
 # No escalations file is a legitimate clean state — nothing to adjudicate.
 if [ ! -f "$ESCALATIONS" ]; then
-  echo "OK: entries_scanned=0 suppressed=0 terminal_naming_check=0 -- no escalations file ($ESCALATIONS)."
+  echo "OK: EXAMINED NOTHING — entries_scanned=0 suppressed=0 terminal_naming_check=0 -- no escalations file ($ESCALATIONS)."
   exit 0
 fi
 
@@ -425,4 +425,8 @@ if [ "$bad" -gt 0 ]; then
 fi
 
 echo "OK: $SUMMARY -- no suppression is past its lifetime on a still-failing check."
+echo "  escalations:   $ESCALATIONS"
+echo "  catalog:       $ENFORCEMENT_MAP"
+echo "  gate metrics:  ${GATE_METRICS:-(none given)}"
+echo "  baseline:      ${BASELINE:-(none given)}"
 exit 0

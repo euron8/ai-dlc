@@ -2190,6 +2190,184 @@ else
   bad "ARMS-RAN: expected 67 BL-079 arms, counted $LRJ_ARMS — the block is unreachable, truncated, or short-circuited"
 fi
 
+# --- (8) CORPUS IDENTITY on the PASS line --------------------------------------
+# THE DEFECT. Every input this check joins is caller-supplied — a spec DIRECTORY, a PRD,
+# and zero or more story files — and the PASS line reported only a TALLY:
+# `PASS (3 locked requirement(s), 4 capability(ies), 1 story(ies), ...)`. Two runs over two
+# different trees holding identical bytes were therefore BYTE-IDENTICAL, and a gate that
+# joined last sprint's spec against this sprint's PRD printed the same green line as one
+# that got both right. A count is not an identity.
+#
+# THE ARM IS KEYED ON DISCRIMINATION, NOT ON A SPELLING. The set is driven twice over two
+# mktemp corpora seeded with the same bytes; the outputs must DIFFER **and** each must
+# carry ITS OWN six paths. Those halves are separate requirements, and the second is the
+# load-bearing one — a nonce, a PID or a timestamp makes two runs differ while naming
+# nothing, and mutant `ident-nonce` below is exactly that fix. Nothing greps a label, so
+# re-wording `spec:` leaves this working; what is demanded is the resolved path, and the
+# roots are mktemp names, so no implementation can hardcode the literal it needs.
+#
+# IT IS PRESENCE-SHAPED — six paths must APPEAR in a run that reached the PASS emitter —
+# so a subject replaced by `exit 0` fails it by construction.
+#
+# THE `oa = ob` CONJUNCT CANNOT FIRE ON THIS SUBJECT TODAY, AND THAT IS A MEASUREMENT, NOT
+# AN OVERSIGHT. Driven over two corpora with all three identity lines deleted, the two runs
+# still DIFFER: `join (1) reads N locked requirement(s) from <spec>/.memlog.md` already
+# carried the spec directory before this release. So of the six paths the fix adds, only
+# the PRD and the stories were previously unnamed, and a differ-only arm would have scored
+# green against the unfixed validator here. The NAMING conjunct is what kills the mutants
+# below; the differ conjunct is kept because it is the half that dies first if that memlog
+# line is ever silenced, and it costs one comparison.
+SJ_IDENT_WHY=""
+sj_ident_corpus() {   # -> prints a fresh corpus root holding all SIX inputs
+  local d
+  d="$(mktemp -d "$R/ident.XXXXXX")" || return 1
+  cp -R "$R/ok" "$d/spec"           || return 1
+  cp "$R/prd-ok.md"    "$d/prd.md"   || return 1
+  cp "$R/story-ok.md"  "$d/story.md" || return 1
+  cp "$R/spine-all.md" "$d/spine.md" || return 1
+  cp "$R/spine-ok.json" "$d/lint.json" || return 1
+  cp "$R/trace-pass.json" "$d/trace.json" || return 1
+  printf '%s\n' "$d"
+}
+# sj_ident_holds <validator> — 0 iff the run reached PASS, the two runs are
+# distinguishable, and each names ALL SIX inputs it actually read.
+#
+# SIX, NOT THE THREE THIS RELEASE STARTED WITH. `--spine-lint` and `--trace-verdict` are
+# BORROWED VERDICTS: the gate adopts another tool's finding as its own. Measured before they
+# were named, two runs over two different lint envelopes holding identical bytes were
+# byte-identical, so a gate that adopted the wrong tool's verdict printed the same PASS line
+# as one that adopted the right tool's. That is the worst member of this defect class,
+# because the corpus it cannot identify is the one whose CONTENT it is deferring to.
+sj_ident_holds() {
+  local v="$1" a b oa ob ra rb
+  SJ_IDENT_WHY=""
+  a="$(sj_ident_corpus)" || { SJ_IDENT_WHY="could not build corpus A"; return 1; }
+  b="$(sj_ident_corpus)" || { SJ_IDENT_WHY="could not build corpus B"; return 1; }
+  oa="$(bash "$v" --spec "$a/spec" --prd "$a/prd.md" --story "$a/story.md" \
+          --spine "$a/spine.md" --spine-lint "$a/lint.json" \
+          --trace-verdict "$a/trace.json" 2>&1)"; ra=$?
+  ob="$(bash "$v" --spec "$b/spec" --prd "$b/prd.md" --story "$b/story.md" \
+          --spine "$b/spine.md" --spine-lint "$b/lint.json" \
+          --trace-verdict "$b/trace.json" 2>&1)"; rb=$?
+  if [ "$ra" != "0" ] || [ "$rb" != "0" ]; then
+    SJ_IDENT_WHY="rc=$ra/$rb, expected 0/0 — the run never reached the PASS emitter"; return 1
+  fi
+  if ! grep -qF ': PASS (' <<<"$oa"; then
+    SJ_IDENT_WHY="no PASS line — this arm did not reach the emitter it claims to guard"; return 1
+  fi
+  if [ "$oa" = "$ob" ]; then
+    SJ_IDENT_WHY="two different trees holding identical bytes produced byte-identical output"
+    return 1
+  fi
+  if ! grep -qF "$a/spec" <<<"$oa" || ! grep -qF "$a/prd.md" <<<"$oa" \
+     || ! grep -qF "$a/story.md" <<<"$oa" || ! grep -qF "$a/spine.md" <<<"$oa" \
+     || ! grep -qF "$a/lint.json" <<<"$oa" || ! grep -qF "$a/trace.json" <<<"$oa"; then
+    SJ_IDENT_WHY="run A does not name all six of the spec dir, PRD, story, spine, lint envelope and trace verdict"
+    return 1
+  fi
+  if ! grep -qF "$b/spec" <<<"$ob" || ! grep -qF "$b/prd.md" <<<"$ob" \
+     || ! grep -qF "$b/story.md" <<<"$ob" || ! grep -qF "$b/spine.md" <<<"$ob" \
+     || ! grep -qF "$b/lint.json" <<<"$ob" || ! grep -qF "$b/trace.json" <<<"$ob"; then
+    SJ_IDENT_WHY="run B does not name all six of the spec dir, PRD, story, spine, lint envelope and trace verdict"
+    return 1
+  fi
+  if grep -qF "$b" <<<"$oa"; then
+    SJ_IDENT_WHY="run A's output carries run B's root — the paths are not the ones it resolved"
+    return 1
+  fi
+  return 0
+}
+
+if sj_ident_holds "$V"; then
+  ok "IDENTITY: the PASS line names all six inputs it joined — spec dir, PRD, story, spine, lint envelope and trace verdict — and two identical corpora in different trees are distinguishable"
+else
+  bad "IDENTITY: the PASS line carries no corpus identity — $SJ_IDENT_WHY. A join against another sprint's spec reports the same green tally as one against this sprint's"
+fi
+
+# THE UNMUTATED CONTROL, with a positive conjunct. The mutants below are copies placed in
+# $R; a copy that could not run would emit nothing, and "no output" would otherwise score
+# as a kill. `sj_ident_holds` demands a PASS line and three paths, so this control cannot
+# pass against a copy replaced by `exit 0`.
+SJ_CTL="$R/ident-control.sh"; cp "$V" "$SJ_CTL"
+SJ_CTL_OK=0
+if sj_ident_holds "$SJ_CTL"; then
+  ok "IDENTITY CONTROL: an unmutated copy reproduces the identity lines, so a mutant's silence below means mutation and not breakage"
+  SJ_CTL_OK=1
+else
+  bad "IDENTITY CONTROL FAILED ($SJ_IDENT_WHY) — the two identity mutants below are uninterpretable"
+fi
+
+if [ "$SJ_CTL_OK" = "1" ]; then
+  # MUTANT ident-drop: the identity BLOCK deleted — the state this release replaced.
+  #
+  # ANCHORED ON THE PASS LINE, NOT ON THE SIX LABELS. Three of the six sit at column 0 and
+  # three are indented two spaces, so a label-keyed deletion needs six literals and six
+  # uniqueness guards, every one of which goes stale on a respacing. The verdict sentence is
+  # the emitter's own text and is unique to this site, so the mutation follows the block
+  # however the labels move — and the count guard below is what stops the block silently
+  # shrinking under the arms that assert all six.
+  SJ_MD="$R/ident-mutant-drop.sh"
+  sj_av=': PASS ($NLRS locked requirement(s)'
+  sj_nid="$(grep -cE '^ *echo "  ' "$V")"
+  if [ "$(grep -cF "$sj_av" "$V")" != "1" ]; then
+    bad "FIXTURE ERROR: mutation 'ident-drop' has a non-unique anchor — the deletion could land on another emitter"
+  elif [ "$sj_nid" -lt 6 ]; then
+    bad "FIXTURE ERROR: only $sj_nid identity lines follow the PASS verdict, expected 6 — the block this fixture guards has shrunk and the IDENTITY arm may be asserting a subset"
+  else
+    awk -v A="$sj_av" '
+      index($0, A)          { print; hit=1; next }
+      hit && /^ *echo "  /  { next }
+                            { hit=0; print }
+    ' "$V" > "$SJ_MD"
+    if cmp -s "$V" "$SJ_MD"; then
+      bad "FIXTURE ERROR: mutation 'ident-drop' matched nothing — its assertion would prove nothing"
+    elif ! bash -n "$SJ_MD" 2>/dev/null; then
+      bad "FIXTURE ERROR: mutant 'ident-drop' is not a valid shell script — its silence is not a kill"
+    else
+      if sj_ident_holds "$SJ_MD"; then
+        bad "MUTATION 'ident-drop' SURVIVED — a validator naming no corpus still satisfies the IDENTITY arm, so that arm is not testing the identity lines"
+      else
+        ok "MUTATION 'ident-drop': deleting the identity lines makes two different trees indistinguishable ($SJ_IDENT_WHY) — the IDENTITY arm has teeth"
+      fi
+      # The lines are additive. Every verdict arm above must survive their removal, or the
+      # IDENTITY arm is entangled with the joins that carry this check.
+      bash "$SJ_MD" --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-ok.md" >/dev/null 2>&1
+      sj_g1=$?
+      bash "$SJ_MD" --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-dangling.md" >/dev/null 2>&1
+      sj_g2=$?
+      bash "$SJ_MD" --spec "$R/no-caps" --prd "$R/prd-ok.md" >/dev/null 2>&1
+      sj_g3=$?
+      if [ "$sj_g1" -eq 0 ] && [ "$sj_g2" -eq 1 ] && [ "$sj_g3" -eq 2 ]; then
+        ok "MUTATION 'ident-drop' leaves the PASS, FAIL and DISARM verdicts intact — corpus identity is asserted by an arm no join arm covers"
+      else
+        bad "MUTATION 'ident-drop' ALSO moved a verdict (rc=$sj_g1/$sj_g2/$sj_g3) — the identity lines are not additive and the IDENTITY arm is entangled"
+      fi
+    fi
+  fi
+
+  # MUTANT ident-nonce: identity replaced by a per-run nonce — THE FIX THAT DISCRIMINATES
+  # WITHOUT NAMING. `$$-$RANDOM` is evaluated by the mutant at run time, so its two runs
+  # differ exactly as the real validator's do while naming no file at all. An arm keyed
+  # only on "the outputs differ" passes against it; this one must not.
+  SJ_MN="$R/ident-mutant-nonce.sh"
+  awk -v A="$sj_av" '
+    index($0, A)          { print; hit=1; next }
+    hit && /^ *echo "  /  { print "echo \"  nonce: $$-$RANDOM\""; next }
+                          { hit=0; print }
+  ' "$V" > "$SJ_MN"
+  if cmp -s "$V" "$SJ_MN"; then
+    bad "FIXTURE ERROR: mutation 'ident-nonce' matched nothing — the IDENTITY arm's nonce-resistance is unproved"
+  elif ! bash -n "$SJ_MN" 2>/dev/null; then
+    bad "FIXTURE ERROR: mutant 'ident-nonce' is not a valid shell script — its silence is not a kill"
+  else
+    if sj_ident_holds "$SJ_MN"; then
+      bad "MUTATION 'ident-nonce' SURVIVED — a per-run nonce naming no corpus satisfies the IDENTITY arm, so that arm is a differ-check and not a naming check"
+    else
+      ok "MUTATION 'ident-nonce': a per-run nonce varies the output exactly as the real paths do and still fails the IDENTITY arm ($SJ_IDENT_WHY) — the arm demands the corpus be NAMED"
+    fi
+  fi
+fi
+
 echo
 if [ "$rc" -eq 0 ]; then echo "spec-join-integrity: PASS"; else echo "spec-join-integrity: FAILED" >&2; fi
 exit $rc

@@ -520,7 +520,7 @@ def run_series():
         print(
             f"VALIDATE-GATE-ADJUDICATION: PASS — 0 series carrying a gate_series_id across "
             f"{len(files)} .json file(s) in scope, all {len(benign_legacy)} of them legacy. "
-            f"Nothing to count; nothing counted."
+            f"EXAMINED NOTHING — nothing to count; nothing counted."
         )
         sys.exit(0)
 

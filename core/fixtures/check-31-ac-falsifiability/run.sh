@@ -139,6 +139,150 @@ mutate term-off 's/if grep -qiE "(\^|\[\^\[:alnum:\]_\])\${term}(\[\^\[:alnum:\]
 mutate evidence-off 's/\[ -f "\$base\/\$cpath" \] \&\&/true \&\&/' \
   dangling-evidence.md "MUTATION: neutering the -f existence test turns dangling-evidence green (that test is what fails it)"
 
+# --- CORPUS IDENTITY on the PASS line -----------------------------------------
+# THE DEFECT. Both inputs are caller-supplied — the lexicon through `--lexicon-from`, the
+# stories as positional arguments — and the PASS line reported only a TALLY:
+# `PASS (1 story file(s), 2 AC block(s), 9 term(s) loaded, 0 waiver(s))`. Two runs over two
+# different trees holding identical bytes were therefore BYTE-IDENTICAL. The lexicon is the
+# consequential half: it is the term list the whole check is, and `9 term(s) loaded` is a
+# COUNT, which is exactly what cannot distinguish this sprint's list from another's.
+#
+# THE ARM IS KEYED ON DISCRIMINATION, NOT ON A SPELLING. The pair is driven twice over two
+# mktemp corpora seeded with the same bytes; the outputs must DIFFER **and** each must carry
+# ITS OWN two paths. Those halves are separate requirements and the second is load-bearing:
+# a nonce, a PID or a timestamp makes two runs differ while naming nothing, and the nonce
+# mutant below is that fix. No label text is grepped, so re-wording `lexicon:` leaves the arm
+# working; what it demands is the resolved path, and the roots are mktemp names, so no
+# implementation can hardcode the literal it needs.
+#
+# IT IS PRESENCE-SHAPED — two paths must APPEAR in a run that reached the PASS emitter — so
+# a subject replaced by `exit 0` fails it by construction.
+AC_IDENT_WHY=""
+ac_ident_corpus() {   # -> prints a fresh corpus root holding a copy of the passing pair
+  local d
+  d="$(mktemp -d "$WORK/ident.XXXXXX")" || return 1
+  cp "$LEX"                 "$d/lexicon.md" || return 1
+  cp "$DIR/good-bounded.md" "$d/story.md"   || return 1
+  printf '%s\n' "$d"
+}
+ac_ident_holds() {   # <validator>
+  local v="$1" a b oa ob ra rb
+  AC_IDENT_WHY=""
+  a="$(ac_ident_corpus)" || { AC_IDENT_WHY="could not build corpus A"; return 1; }
+  b="$(ac_ident_corpus)" || { AC_IDENT_WHY="could not build corpus B"; return 1; }
+  oa="$(bash "$v" --lexicon-from "$a/lexicon.md" "$a/story.md" 2>&1)"; ra=$?
+  ob="$(bash "$v" --lexicon-from "$b/lexicon.md" "$b/story.md" 2>&1)"; rb=$?
+  if [ "$ra" != "0" ] || [ "$rb" != "0" ]; then
+    AC_IDENT_WHY="rc=$ra/$rb, expected 0/0 — the run never reached the PASS emitter"; return 1
+  fi
+  if ! grep -qF ': PASS (' <<<"$oa"; then
+    AC_IDENT_WHY="no PASS line — this arm did not reach the emitter it claims to guard"; return 1
+  fi
+  if [ "$oa" = "$ob" ]; then
+    AC_IDENT_WHY="two different trees holding identical bytes produced byte-identical output"
+    return 1
+  fi
+  if ! grep -qF "$a/lexicon.md" <<<"$oa" || ! grep -qF "$a/story.md" <<<"$oa"; then
+    AC_IDENT_WHY="run A names neither the lexicon it loaded nor the story file it scanned"
+    return 1
+  fi
+  if ! grep -qF "$b/lexicon.md" <<<"$ob" || ! grep -qF "$b/story.md" <<<"$ob"; then
+    AC_IDENT_WHY="run B names neither the lexicon it loaded nor the story file it scanned"
+    return 1
+  fi
+  if grep -qF "$b" <<<"$oa"; then
+    AC_IDENT_WHY="run A's output carries run B's root — the paths are not the ones it resolved"
+    return 1
+  fi
+  return 0
+}
+
+if ac_ident_holds "$V"; then
+  ok "IDENTITY: the PASS line names the lexicon it loaded and the story files it scanned, and two identical corpora in different trees are distinguishable"
+else
+  bad "IDENTITY: the PASS line carries no corpus identity — $AC_IDENT_WHY. A scan against another sprint's term list reports the same green tally as one against this sprint's"
+fi
+
+# THE UNMUTATED CONTROL, with a positive conjunct. The mutants below are copies in $WORK;
+# a copy that could not run would emit nothing, and "no output" would otherwise score as a
+# kill. `ac_ident_holds` demands a PASS line and two paths, so this cannot pass against a
+# copy replaced by `exit 0`.
+AC_CTL="$WORK/ident-control.sh"; cp "$V" "$AC_CTL"
+AC_CTL_OK=0
+if ac_ident_holds "$AC_CTL"; then
+  ok "IDENTITY CONTROL: an unmutated copy reproduces the identity lines, so a mutant's silence below means mutation and not breakage"
+  AC_CTL_OK=1
+else
+  bad "IDENTITY CONTROL FAILED ($AC_IDENT_WHY) — the two identity mutants below are uninterpretable"
+fi
+
+if [ "$AC_CTL_OK" = "1" ]; then
+  # MUTANT ident-drop: the identity block deleted — the state this release replaced.
+  # Anchored on the PASS verdict line rather than on the two labels, so the mutation follows
+  # the block through a respacing, and guarded on the line count so the block cannot shrink
+  # under the arm that asserts both paths.
+  AC_MD="$WORK/ident-mutant-drop.sh"
+  ac_av=': PASS (${#FILES[@]} story file(s)'
+  ac_nid="$(grep -cE '^ *echo "  ' "$V")"
+  if [ "$(grep -cF "$ac_av" "$V")" != "1" ]; then
+    bad "FIXTURE ERROR: mutation 'ident-drop' has a non-unique anchor — the deletion could land on another emitter"
+  elif [ "$ac_nid" -lt 2 ]; then
+    bad "FIXTURE ERROR: only $ac_nid identity lines follow the PASS verdict, expected 2 — the block this fixture guards has shrunk"
+  else
+    awk -v A="$ac_av" '
+      index($0, A)          { print; hit=1; next }
+      hit && /^ *echo "  /  { next }
+                            { hit=0; print }
+    ' "$V" > "$AC_MD"
+    if cmp -s "$V" "$AC_MD"; then
+      bad "FIXTURE ERROR: mutation 'ident-drop' matched nothing — its assertion would prove nothing"
+    elif ! bash -n "$AC_MD" 2>/dev/null; then
+      bad "FIXTURE ERROR: mutant 'ident-drop' is not a valid shell script — its silence is not a kill"
+    else
+      if ac_ident_holds "$AC_MD"; then
+        bad "MUTATION 'ident-drop' SURVIVED — a validator naming no corpus still satisfies the IDENTITY arm, so that arm is not testing the identity lines"
+      else
+        ok "MUTATION 'ident-drop': deleting the identity lines makes two different trees indistinguishable ($AC_IDENT_WHY) — the IDENTITY arm has teeth"
+      fi
+      # The lines are additive. Every verdict arm above must survive their removal, or the
+      # IDENTITY arm is entangled with the arms that carry this check.
+      ( cd "$DIR" && bash "$AC_MD" --lexicon-from "$LEX" "$DIR/good-bounded.md" ) >/dev/null 2>&1
+      ac_g1=$?
+      ( cd "$DIR" && bash "$AC_MD" --lexicon-from "$LEX" "$DIR/bad-unbounded.md" ) >/dev/null 2>&1
+      ac_g2=$?
+      ( cd "$DIR" && bash "$AC_MD" --lexicon-from "$LEX" "$DIR/undeclared-form.md" ) >/dev/null 2>&1
+      ac_g3=$?
+      if [ "$ac_g1" -eq 0 ] && [ "$ac_g2" -eq 1 ] && [ "$ac_g3" -eq 2 ]; then
+        ok "MUTATION 'ident-drop' leaves the PASS, FAIL and DISARM verdicts intact — corpus identity is asserted by an arm no verdict arm covers"
+      else
+        bad "MUTATION 'ident-drop' ALSO moved a verdict (rc=$ac_g1/$ac_g2/$ac_g3) — the identity lines are not additive and the IDENTITY arm is entangled"
+      fi
+    fi
+  fi
+
+  # MUTANT ident-nonce: identity replaced by a per-run nonce — THE FIX THAT DISCRIMINATES
+  # WITHOUT NAMING. `$$-$RANDOM` is evaluated by the mutant at run time, so its two runs
+  # differ exactly as the real validator's do while naming no file at all. An arm keyed only
+  # on "the outputs differ" passes against it; this one must not.
+  AC_MN="$WORK/ident-mutant-nonce.sh"
+  awk -v A="$ac_av" '
+    index($0, A)          { print; hit=1; next }
+    hit && /^ *echo "  /  { print "  echo \"  nonce: $$-$RANDOM\""; next }
+                          { hit=0; print }
+  ' "$V" > "$AC_MN"
+  if cmp -s "$V" "$AC_MN"; then
+    bad "FIXTURE ERROR: mutation 'ident-nonce' matched nothing — the IDENTITY arm's nonce-resistance is unproved"
+  elif ! bash -n "$AC_MN" 2>/dev/null; then
+    bad "FIXTURE ERROR: mutant 'ident-nonce' is not a valid shell script — its silence is not a kill"
+  else
+    if ac_ident_holds "$AC_MN"; then
+      bad "MUTATION 'ident-nonce' SURVIVED — a per-run nonce naming no corpus satisfies the IDENTITY arm, so that arm is a differ-check and not a naming check"
+    else
+      ok "MUTATION 'ident-nonce': a per-run nonce varies the output exactly as the real paths do and still fails the IDENTITY arm ($AC_IDENT_WHY) — the arm demands the corpus be NAMED"
+    fi
+  fi
+fi
+
 echo
 if [ "$rc" -eq 0 ]; then
   echo "check-31-ac-falsifiability: PASS"

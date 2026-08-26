@@ -129,7 +129,7 @@ TERMS="$(sed -n '/<!-- AC_UNBOUNDED_TERMS v1 -->/,/<!-- AC_UNBOUNDED_TERMS_END -
 
 TERM_COUNT="$(printf '%s\n' "$TERMS" | grep -c . )"
 if [ "$TERM_COUNT" -eq 0 ]; then
-  echo "$PROG: DISARMED — the AC_UNBOUNDED_TERMS block in $LEXICON parsed to ZERO terms. Either the sentinels moved or the list was emptied. Exiting 2: a zero-term scan passes every story and prints the same shape of output as a full one." >&2
+  echo "$PROG: DISARMED — EXAMINED NOTHING — the AC_UNBOUNDED_TERMS block in $LEXICON parsed to ZERO terms. Either the sentinels moved or the list was emptied. Exiting 2: a zero-term scan passes every story and prints the same shape of output as a full one." >&2
   exit 2
 fi
 
@@ -247,5 +247,7 @@ done
 
 if [ "$rc" -eq 0 ]; then
   echo "$PROG: PASS (${#FILES[@]} story file(s), $checked AC block(s), $TERM_COUNT term(s) loaded, $waivers waiver(s))"
+  echo "  lexicon:     $LEXICON"
+  echo "  story files: ${FILES[*]:-}"
 fi
 exit $rc

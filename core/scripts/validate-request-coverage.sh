@@ -353,7 +353,7 @@ print("locked_blocks: %d  committed_bullets_for_sprint_%s: %d" % (len(blocks), s
 print("request: %s (%s)" % (entry["ts"], entry["cmd"]))
 
 if not wanted:
-    print("NOT-APPLICABLE: the operator's request named no CO-/LR-/CAP-/Epic- identifier.")
+    print("NOT-APPLICABLE: EXAMINED NOTHING — the operator's request named no CO-/LR-/CAP-/Epic- identifier.")
     print("  This check has no subject here and is NOT evidence that scope is faithful;")
     print("  5 of 23 measured asks fall in this class.")
     sys.exit(0)

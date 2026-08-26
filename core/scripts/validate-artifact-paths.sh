@@ -326,7 +326,7 @@ echo ""
 # A greenfield consumer has no artifacts on its first push; failing it would make the grammar
 # unadoptable, and printing PASS would be the zero-verification pass this repo keeps finding.
 if [ "$N_SUBJECT" -eq 0 ]; then
-  echo "NOT-APPLICABLE: no tracked file sits under any scan root, so no path was judged."
+  echo "NOT-APPLICABLE: EXAMINED NOTHING — no tracked file sits under any scan root, so no path was judged."
   echo "  This is not a pass. It is the correct answer for a consumer that has produced no"
   echo "  artifact yet, and it becomes a real verdict as soon as one exists."
   exit 0

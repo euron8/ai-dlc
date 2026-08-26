@@ -764,7 +764,7 @@ if [ -z "$CAPS" ] && grep -qE "$CAP_GRAMMAR" <<<"$KERNEL_PROSE"; then
 fi
 NCAPS="$(printf '%s\n' "$CAPS" | grep -c . )"
 if [ "$NCAPS" -eq 0 ]; then
-  echo "$PROG: DISARMED — $KERNEL defines ZERO capabilities (no CAP-<n> found). Every join below would close against an empty set and print the same PASS line as a spec that closes them for real." >&2
+  echo "$PROG: DISARMED — EXAMINED NOTHING — $KERNEL defines ZERO capabilities (no CAP-<n> found). Every join below would close against an empty set and print the same PASS line as a spec that closes them for real." >&2
   exit 2
 fi
 
@@ -796,7 +796,7 @@ note=0
 # the group also swallows `(capability-review)`, and the join widens to a different type.
 CAP_ENTRIES="$(grep -E '^[[:space:]]*[-*][[:space:]]*\((capability|capabilities)([[:space:]][^)]*)?\)' "$MEMLOG")"
 if [ -z "$CAP_ENTRIES" ]; then
-  echo "$PROG: DISARMED — $MEMLOG contains no '(capability)' entries. The LR->CAP join reads those entries and only those; with none present it would close against an empty set. An optional qualifier after the type — '(capability by <author>)' — is legal and is read here; a memlog with neither form has no capability entries at all. If bmad-spec's memlog entry TYPES change, this predicate must change with them rather than fall back to scanning every line." >&2
+  echo "$PROG: DISARMED — EXAMINED NOTHING — $MEMLOG contains no '(capability)' entries. The LR->CAP join reads those entries and only those; with none present it would close against an empty set. An optional qualifier after the type — '(capability by <author>)' — is legal and is read here; a memlog with neither form has no capability entries at all. If bmad-spec's memlog entry TYPES change, this predicate must change with them rather than fall back to scanning every line." >&2
   exit 2
 fi
 
@@ -923,7 +923,7 @@ if [ -n "$LOCKED_REQS" ]; then
   }
   LR_BLOCK="$(tr '\014' '\n' <<<"$LR_RAW")"
   if [ -z "$LR_BLOCK" ]; then
-    echo "$PROG: DISARMED — $LOCKED_REQS yielded no LOCKED_REQUIREMENTS block CONTENT. Either the file carries no block at all, or every block it carries is empty. The block is what DECLARES join (1)'s population; with no content there is no population, and closing the join against an empty set prints the same PASS line as a spec that closes it for real. If this sprint genuinely ships no locked requirements, omit --locked-requirements and say so at the call site." >&2
+    echo "$PROG: DISARMED — EXAMINED NOTHING — $LOCKED_REQS yielded no LOCKED_REQUIREMENTS block CONTENT. Either the file carries no block at all, or every block it carries is empty. The block is what DECLARES join (1)'s population; with no content there is no population, and closing the join against an empty set prints the same PASS line as a spec that closes it for real. If this sprint genuinely ships no locked requirements, omit --locked-requirements and say so at the call site." >&2
     exit 2
   fi
   LRS="$(printf '%s\n' "$LR_BLOCK" | grep -ohE '^[[:space:]]*[-*][[:space:]]+(\*\*|__)?LR-[A-Za-z0-9]+-[0-9]+[a-z]?' | grep -ohE 'LR-[A-Za-z0-9]+-[0-9]+[a-z]?' | sort -u)"
@@ -931,7 +931,7 @@ if [ -n "$LOCKED_REQS" ]; then
     if grep -qE '\bLR-[A-Za-z0-9]+-[0-9]+[a-z]?\b' <<<"$LR_BLOCK"; then
       echo "$PROG: DISARMED — the LOCKED_REQUIREMENTS block of $LOCKED_REQS mentions LR-<...> identifiers but DECLARES none in the list-item shape this check reads — a bullet whose subject is the id, optionally emphasised: '- LR-<id>', '- **LR-<id>**', '- __LR-<id>__'. Either the file is malformed, or the declaration grammar has changed and this reader must change with it. It is not a sprint that locked zero requirements, and it must not be scored as one." >&2
     else
-      echo "$PROG: DISARMED — the LOCKED_REQUIREMENTS block of $LOCKED_REQS declares no locked requirements at all. Join (1) would close against an empty set and print the same PASS line as a spec that closes it for real." >&2
+      echo "$PROG: DISARMED — EXAMINED NOTHING — the LOCKED_REQUIREMENTS block of $LOCKED_REQS declares no locked requirements at all. Join (1) would close against an empty set and print the same PASS line as a spec that closes it for real." >&2
     fi
     exit 2
   fi
@@ -942,7 +942,7 @@ if [ -z "$LOCKED_REQS" ]; then
 fi
 NLRS="$(printf '%s\n' "$LRS" | grep -c . )"
 if [ "$NLRS" -eq 0 ]; then
-  echo "$PROG: DISARMED — no LR-<...> identifiers found in $MEMLOG. Join (1) has nothing to check, which is not the same as closing." >&2
+  echo "$PROG: DISARMED — EXAMINED NOTHING — no LR-<...> identifiers found in $MEMLOG. Join (1) has nothing to check, which is not the same as closing." >&2
   exit 2
 fi
 echo "join (1) reads $NLRS locked requirement(s) from $LR_POP_SOURCE"
@@ -1004,7 +1004,7 @@ done
 # checked nothing. The reference consumer is already 1-of-8 in that branch at s303 and 1-of-8
 # at s304, so the distance to all-of-N is one wrong path.
 if [ -n "$LOCKED_REQS" ] && [ "$lr_checked" -eq 0 ]; then
-  echo "$PROG: DISARMED — all $NLRS locked requirement(s) declared in $LOCKED_REQS are absent from $MEMLOG, so join (1) checked NOTHING and would print the same PASS line as a spec that closes it for real. The usual cause is --locked-requirements naming a different sprint's file than --spec. Confirm the two name the same sprint." >&2
+  echo "$PROG: DISARMED — EXAMINED NOTHING — all $NLRS locked requirement(s) declared in $LOCKED_REQS are absent from $MEMLOG, so join (1) checked NOTHING and would print the same PASS line as a spec that closes it for real. The usual cause is --locked-requirements naming a different sprint's file than --spec. Confirm the two name the same sprint." >&2
   exit 2
 fi
 
@@ -1024,7 +1024,7 @@ fi
 # `- **FR-S300-1 (CAP-1)** ...` alongside the existing `(← LR-...)` form.
 FR_LINES="$(grep -nE '(^|[^A-Za-z0-9-])N?FR-?[A-Za-z0-9]*-?[0-9]+' "$PRD")"
 if [ -z "$FR_LINES" ]; then
-  echo "$PROG: DISARMED — $PRD contains no functional-requirement identifiers (nothing matching FR-<n> / FR-S<N>-<n>). Join (2) has nothing to read, which is not the same as closing." >&2
+  echo "$PROG: DISARMED — EXAMINED NOTHING — $PRD contains no functional-requirement identifiers (nothing matching FR-<n> / FR-S<N>-<n>). Join (2) has nothing to read, which is not the same as closing." >&2
   exit 2
 fi
 for cap in $CAPS; do
@@ -1208,7 +1208,7 @@ if [ -n "$SPINE_MD" ]; then
     print
   }')"
   if [ -z "$BINDS" ]; then
-    echo "$PROG: DISARMED — $SPINE_MD contains no '- **Binds:**' entries, so no AD declares what it governs. Either this is not an ARCHITECTURE-SPINE.md or the AD entry shape changed; both would close this join against an empty set." >&2
+    echo "$PROG: DISARMED — EXAMINED NOTHING — $SPINE_MD contains no '- **Binds:**' entries, so no AD declares what it governs. Either this is not an ARCHITECTURE-SPINE.md or the AD entry shape changed; both would close this join against an empty set." >&2
     exit 2
   fi
   # `all` IS READ OFF THE PHYSICAL MARKER LINE, AND MUST BE THE WHOLE VALUE. This is the
@@ -1417,5 +1417,11 @@ fi
 
 if [ "$rc" -eq 0 ]; then
   echo "$PROG: PASS ($NLRS locked requirement(s), $NCAPS capability(ies), ${#STORIES[@]} story(ies), $note recorded note(s), $n_base baselined)"
+  echo "  spec:          $SPEC"
+  echo "  prd:           $PRD"
+  echo "  stories:       ${STORIES[*]:-(none)}"
+  echo "  spine:         ${SPINE_MD:-(none given)}"
+  echo "  spine-lint:    ${SPINE:-(none given)}"
+  echo "  trace-verdict: ${TRACE:-(none given)}"
 fi
 exit $rc

@@ -157,7 +157,7 @@ NAMES="$(grep -rhoE '(^|[^A-Za-z0-9_.-])/bmad-[a-z0-9-]+([^A-Za-z0-9_/-]|$)' "$R
 
 COUNT="$(printf '%s\n' "$NAMES" | grep -c . )"
 if [ "$COUNT" -eq 0 ]; then
-  echo "$PROG: DISARMED — zero /bmad-* call sites enumerated under $RULES. Either the rulebook stopped invoking BMAD or this scan is looking in the wrong place; both print the same clean line, so this exits 2." >&2
+  echo "$PROG: DISARMED — EXAMINED NOTHING — zero /bmad-* call sites enumerated under $RULES. Either the rulebook stopped invoking BMAD or this scan is looking in the wrong place; both print the same clean line, so this exits 2." >&2
   exit 2
 fi
 

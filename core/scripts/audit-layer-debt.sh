@@ -78,7 +78,7 @@ AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 # and "I could not read the ledger" are different claims and must not share an exit code —
 # this file's whole subject is obligations that went invisible.
 if [ ! -f "$REGISTER" ]; then
-  echo "audit-layer-debt: DISARMED — no register at $REGISTER. This is not 'zero open debts'; nothing was read." >&2
+  echo "audit-layer-debt: DISARMED — EXAMINED NOTHING — no register at $REGISTER. This is not 'zero open debts'; nothing was read." >&2
   exit 2
 fi
 

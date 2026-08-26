@@ -69,6 +69,17 @@ empty_subject_verdict:
     - core/scripts/validate-stub-audit.sh
     - core/scripts/validate-locked-anchor.sh
     - core/scripts/validate-ci-gates.sh
+    - core/scripts/validate-artifact-paths.sh
+    - core/scripts/validate-escalation-resolution.sh
+    - core/scripts/validate-escalation-status-vocabulary.sh
+    - core/scripts/validate-suppression-lifetime.sh
+    - core/scripts/validate-gate-adjudication.sh
+    - core/scripts/validate-request-coverage.sh
+    - core/scripts/audit-layer-debt.sh
+    - core/scripts/validate-ac-falsifiability.sh
+    - core/scripts/validate-bmad-invocations.sh
+    - core/scripts/validate-spec-join.sh
+    - core/scripts/validate-snapshot-conservation.sh
   readers:
     - core/skills/ai-dlc/steps/gate-validation.md
     - core/skills/ai-dlc/steps/retro.md

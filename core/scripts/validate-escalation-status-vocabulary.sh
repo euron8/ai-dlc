@@ -141,7 +141,7 @@ fi
 
 # No escalations file is a legitimate clean state — nothing to adjudicate.
 [ -f "$ESCALATIONS" ] || {
-  echo "OK: no escalations file ($ESCALATIONS); nothing to check."
+  echo "OK: EXAMINED NOTHING — no escalations file ($ESCALATIONS); nothing to check."
   exit 0
 }
 

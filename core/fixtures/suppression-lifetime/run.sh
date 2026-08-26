@@ -291,6 +291,237 @@ if [ "${CONTROL_OK:-0}" = "1" ]; then
   fi
 fi
 
+# ------------------------------------------------------------------------------
+# ASSERTIONS 14-17: CORPUS IDENTITY on the OK path.
+# ------------------------------------------------------------------------------
+# THE DEFECT. `--escalations` and `--enforcement-map` are both caller-supplied, and the
+# catalog additionally FALLS BACK to a candidate search when the flag is omitted — so
+# which file was adjudicated and which catalog the ids were joined against are two
+# separate open questions on every green run. Before the identity lines, the whole of a
+# clean verdict was `OK: entries_scanned=N suppressed=M ...`, which is a COUNT: two runs
+# over two different pending files holding identical bytes were BYTE-IDENTICAL. A gate
+# that adjudicated last sprint's escalations against this sprint's catalog reported the
+# same green line as one that got both right.
+#
+# THE ARM IS KEYED ON DISCRIMINATION, NOT ON A SPELLING. The pair is driven twice over two
+# mktemp corpora holding the same bytes; the outputs must DIFFER **and** each must carry
+# ITS OWN two paths. The second half is what the first cannot do: a nonce or a PID makes
+# two runs differ and names nothing, and mutant E below is that fix. No label text is
+# grepped, so re-wording `escalations:` leaves the arm working; what it demands is the
+# resolved path, and the roots are mktemp names, so no implementation can hardcode them.
+#
+# IT IS PRESENCE-SHAPED — two paths must APPEAR in a run that reached the OK line — so a
+# subject replaced by `exit 0` fails it by construction.
+SL_IDENT_WHY=""
+sl_ident_corpus() {   # -> prints a fresh corpus root holding all FOUR inputs
+  local d
+  d="$(mktemp -d "$WORK/ident.XXXXXX")" || return 1
+  cp "$CASES/in-force/pending.md" "$d/pending.md"    || return 1
+  cp "$MAP"                       "$d/catalog.yaml"  || return 1
+  cp "$GM_FAILING"                "$d/gm.jsonl"      || return 1
+  # THE BASELINE IS DELIBERATELY VERDICT-NEUTRAL, and that is not laziness. `$BASELINE_GOOD`
+  # baselines the terminal-names-failing key; against the in-force case that key does not
+  # reproduce, and assertion 13 is the arm that makes a non-reproducing baseline a FAIL — so
+  # copying it here turned rc 0 into rc 1 and this arm went red for a reason that has nothing
+  # to do with corpus identity. Measured, not reasoned: rc=1/1 on the first cut. A baseline
+  # with no rows is still OPENED, still resolved, and still named, which is the whole of what
+  # this arm asserts.
+  printf '# no baselined violations\n' > "$d/baseline.txt"
+  printf '%s\n' "$d"
+}
+# sl_ident_holds <validator> — 0 iff the run reached the OK emitter, the two runs are
+# distinguishable, and each names ALL FOUR inputs it actually read.
+#
+# ALL FOUR, NOT THE TWO THIS RELEASE STARTED WITH. `--gate-metrics` is the input that decides
+# whether a suppressed check is still failing, and `--baseline` is itself a suppression list;
+# a green run that names neither is a verdict whose two most consequential corpora are
+# unidentified. The tallies `gates_recorded=N catalog=N` in the OK line are counts, which is
+# precisely the thing a count cannot do.
+sl_ident_holds() {
+  local v="$1" a b oa ob ra rb
+  SL_IDENT_WHY=""
+  a="$(sl_ident_corpus)" || { SL_IDENT_WHY="could not build corpus A"; return 1; }
+  b="$(sl_ident_corpus)" || { SL_IDENT_WHY="could not build corpus B"; return 1; }
+  oa="$(bash "$v" --escalations "$a/pending.md" --gate-metrics "$a/gm.jsonl" \
+                  --enforcement-map "$a/catalog.yaml" --baseline "$a/baseline.txt" 2>&1)"; ra=$?
+  ob="$(bash "$v" --escalations "$b/pending.md" --gate-metrics "$b/gm.jsonl" \
+                  --enforcement-map "$b/catalog.yaml" --baseline "$b/baseline.txt" 2>&1)"; rb=$?
+  if [ "$ra" != "0" ] || [ "$rb" != "0" ]; then
+    SL_IDENT_WHY="rc=$ra/$rb, expected 0/0 — the run never reached the OK emitter"; return 1
+  fi
+  # THE EMITTER TOKEN IS THE ONE UNIQUE TO THIS LINE, NOT `OK: entries_scanned=`. There are
+  # two `OK:` emitters — this one at the end and the no-escalations early exit — and their
+  # shared prefix cannot tell them apart, so an arm keyed on it would pass having reached
+  # the wrong one. BL-078 then inserted `EXAMINED NOTHING — ` into the early exit's line,
+  # between `OK: ` and `entries_scanned=`, which is exactly the junction the old literal
+  # spanned. Keying on the sentence only this emitter writes fixes both at once.
+  if ! grep -qF 'no suppression is past its lifetime' <<<"$oa"; then
+    SL_IDENT_WHY="no final OK line — this arm did not reach the emitter it claims to guard"; return 1
+  fi
+  if [ "$oa" = "$ob" ]; then
+    SL_IDENT_WHY="two different trees holding identical bytes produced byte-identical output"
+    return 1
+  fi
+  if ! grep -qF "$a/pending.md" <<<"$oa" || ! grep -qF "$a/catalog.yaml" <<<"$oa" \
+     || ! grep -qF "$a/gm.jsonl" <<<"$oa" || ! grep -qF "$a/baseline.txt" <<<"$oa"; then
+    SL_IDENT_WHY="run A does not name all four of the escalations file, the catalog, the gate metrics and the baseline"
+    return 1
+  fi
+  if ! grep -qF "$b/pending.md" <<<"$ob" || ! grep -qF "$b/catalog.yaml" <<<"$ob" \
+     || ! grep -qF "$b/gm.jsonl" <<<"$ob" || ! grep -qF "$b/baseline.txt" <<<"$ob"; then
+    SL_IDENT_WHY="run B does not name all four of the escalations file, the catalog, the gate metrics and the baseline"
+    return 1
+  fi
+  if grep -qF "$b" <<<"$oa"; then
+    SL_IDENT_WHY="run A's output carries run B's root — the paths are not the ones it resolved"
+    return 1
+  fi
+  return 0
+}
+
+# --- Assertion 14: the clean verdict names both corpora -------------------------
+if sl_ident_holds "$VALIDATOR"; then
+  ok "the OK verdict names all four inputs — escalations, catalog, gate metrics and baseline — and two identical corpora in different trees are distinguishable"
+else
+  bad "the OK verdict carries no corpus identity — $SL_IDENT_WHY. A run against last sprint's pending file reports the same green line as one against this sprint's"
+fi
+
+# --- Assertion 15: the RESOLVED catalog, not the one an argument named -----------
+# THE ATTACK THIS CLOSES, and it is the one an earlier pass of this fixture could not.
+# Assertion 14 supplies all four inputs as flags, so a "fix" that dumped the argument vector
+# into the success line — `echo "$@"` on the way out — satisfies it completely while proving
+# nothing about a value the script RESOLVED for itself. The catalog is the one input here
+# with a resolution path of its own: omit `--enforcement-map` and it is found by walking a
+# candidate list under the project root. Nothing names it on the command line, so an argv
+# echo prints nothing here and this arm fires.
+#
+# It is the same two-corpora shape, so it also carries the discrimination half: two roots
+# holding identical catalogs must not produce the same verdict text.
+sl_cand_corpus() {   # -> prints a root whose catalog is DISCOVERABLE, never passed
+  local d
+  d="$(mktemp -d "$WORK/cand.XXXXXX")" || return 1
+  mkdir -p "$d/core/skills/ai-dlc" || return 1
+  cp "$MAP" "$d/core/skills/ai-dlc/enforcement-map.yaml" || return 1
+  cp "$CASES/in-force/pending.md" "$d/pending.md" || return 1
+  printf '%s\n' "$d"
+}
+SL_CAND_WHY=""
+sl_cand_holds() {
+  local v="$1" a b oa ob ra rb
+  SL_CAND_WHY=""
+  a="$(sl_cand_corpus)" || { SL_CAND_WHY="could not build corpus A"; return 1; }
+  b="$(sl_cand_corpus)" || { SL_CAND_WHY="could not build corpus B"; return 1; }
+  oa="$(AI_DLC_PROJECT_ROOT="$a" bash "$v" --escalations "$a/pending.md" \
+          --gate-metrics "$GM_FAILING" 2>&1)"; ra=$?
+  ob="$(AI_DLC_PROJECT_ROOT="$b" bash "$v" --escalations "$b/pending.md" \
+          --gate-metrics "$GM_FAILING" 2>&1)"; rb=$?
+  if [ "$ra" != "0" ] || [ "$rb" != "0" ]; then
+    SL_CAND_WHY="rc=$ra/$rb, expected 0/0 — the candidate walk did not find a catalog"; return 1
+  fi
+  if ! grep -qF 'no suppression is past its lifetime' <<<"$oa"; then
+    SL_CAND_WHY="no final OK line — this arm did not reach the emitter it claims"; return 1
+  fi
+  if [ "$oa" = "$ob" ]; then
+    SL_CAND_WHY="two roots holding identical catalogs produced byte-identical output"; return 1
+  fi
+  if ! grep -qF "$a/core/skills/ai-dlc/enforcement-map.yaml" <<<"$oa" \
+     || ! grep -qF "$b/core/skills/ai-dlc/enforcement-map.yaml" <<<"$ob"; then
+    SL_CAND_WHY="the DISCOVERED catalog path is absent from the verdict — an argv echo would satisfy assertion 14 and fail here, which is why this arm exists"
+    return 1
+  fi
+  return 0
+}
+if sl_cand_holds "$VALIDATOR"; then
+  ok "a catalog found by the CANDIDATE WALK is named in the verdict — the identity is a value the script resolved, not an echo of the arguments it was given"
+else
+  bad "the discovered catalog is not named — $SL_CAND_WHY"
+fi
+
+# --- Assertion 16: UNMUTATED CONTROL for the identity mutants -------------------
+SL_CTL="$WORK/ident-control.sh"; cp "$VALIDATOR" "$SL_CTL"
+SL_CTL_OK=0
+if sl_ident_holds "$SL_CTL"; then
+  ok "IDENTITY CONTROL — an unmutated copy reproduces the identity lines, so a mutant's silence below means mutation and not breakage"
+  SL_CTL_OK=1
+else
+  bad "IDENTITY CONTROL FAILED ($SL_IDENT_WHY) — the two mutants below are uninterpretable"
+fi
+
+if [ "$SL_CTL_OK" = "1" ]; then
+  # --- MUTANT D: the identity lines deleted ------------------------------------
+  # The state this release replaced. Assertion 14 MUST go red and no verdict may move.
+  #
+  # ANCHORED ON THE VERDICT LINE, NOT ON THE FOUR LABELS. The labels are the thing most
+  # likely to be reworded, and an anchor that goes stale produces a mutant identical to the
+  # original — which `cmp -s` catches, but only after someone reads the failure. The verdict
+  # sentence is the emitter's own text and it is unique to this site, so the mutation follows
+  # the block however the labels are respaced. It also scales: when the block went from two
+  # lines to four, this form needed no edit.
+  MUT_D="$WORK/mutant-d.sh"
+  sl_anchor_v='no suppression is past its lifetime on a still-failing check."'
+  if [ "$(grep -cF "$sl_anchor_v" "$VALIDATOR")" != "1" ]; then
+    bad "MUTANT D anchor is not unique in the validator — the deletion could land on another emitter"
+  elif [ "$(grep -cE '^echo "  ' "$VALIDATOR")" -lt 4 ]; then
+    bad "MUTANT D: fewer than four identity lines follow the verdict — the block this fixture guards has shrunk and the arms above may be asserting a subset"
+  else
+    awk -v A="$sl_anchor_v" '
+      index($0, A)               { print; hit=1; next }
+      hit && /^echo "  /         { next }
+                                 { hit=0; print }
+    ' "$VALIDATOR" > "$MUT_D"
+    if cmp -s "$VALIDATOR" "$MUT_D"; then
+      bad "MUTANT D did not change the file — the identity lines were reworded and the anchor matched nothing"
+    elif ! bash -n "$MUT_D" 2>/dev/null; then
+      bad "MUTANT D is not a valid program — its absence would have scored as a kill"
+    else
+      if sl_ident_holds "$MUT_D"; then
+        bad "MUTANT D SURVIVED — a validator naming neither corpus still satisfies assertion 14, so that assertion is not testing the identity lines"
+      else
+        ok "MUTANT D killed — deleting the identity lines makes two different trees indistinguishable ($SL_IDENT_WHY)"
+      fi
+      # The identity lines are additive: every verdict arm above must survive their
+      # removal, or assertion 14 is entangled with the arms that carry the release.
+      drive "$MUT_D" expired-still-failing "$GM_FAILING"; rc="$LAST_RC"
+      drive "$MUT_D" in-force "$GM_FAILING"; rc2="$LAST_RC"
+      if [ "$rc" = "1" ] && [ "$rc2" = "0" ]; then
+        ok "MUTANT D leaves assertions 1 and 2 intact — corpus identity is asserted by an arm no verdict arm covers"
+      else
+        bad "MUTANT D ALSO moved a verdict (rc=$rc/$rc2) — the identity lines are not additive and assertion 14 is entangled"
+      fi
+      # Assertion 15 gets its teeth from the same mutant. Without this cell the
+      # candidate-walk arm is never driven against a subject that fails it, and an arm
+      # nothing can falsify reads exactly like one that passed.
+      if sl_cand_holds "$MUT_D"; then
+        bad "MUTANT D SURVIVED assertion 15 — the discovered catalog is still named with the identity block deleted, so assertion 15 reads a path emitted somewhere else"
+      else
+        ok "MUTANT D also kills assertion 15 — the discovered catalog path comes from the identity block and nowhere else ($SL_CAND_WHY)"
+      fi
+    fi
+  fi
+
+  # --- MUTANT E: identity replaced by a per-run NONCE --------------------------
+  # THE FIX THAT DISCRIMINATES WITHOUT NAMING. `$$-$RANDOM` is evaluated by the mutant at
+  # run time, so its two runs differ exactly as the real validator's do while naming no
+  # file at all. An arm keyed only on "the outputs differ" passes against it.
+  MUT_E="$WORK/mutant-e.sh"
+  awk -v A="$sl_anchor_v" '
+    index($0, A)       { print; hit=1; next }
+    hit && /^echo "  / { print "echo \"  nonce: $$-$RANDOM\""; next }
+                       { hit=0; print }
+  ' "$VALIDATOR" > "$MUT_E"
+  if cmp -s "$VALIDATOR" "$MUT_E"; then
+    bad "MUTANT E did not change the file — the nonce substitution matched nothing and assertion 14's nonce-resistance is unproved"
+  elif ! bash -n "$MUT_E" 2>/dev/null; then
+    bad "MUTANT E is not a valid program — its absence would have scored as a kill"
+  else
+    if sl_ident_holds "$MUT_E"; then
+      bad "MUTANT E SURVIVED — a per-run nonce naming no corpus satisfies assertion 14, so that assertion is a differ-check and not a naming check"
+    else
+      ok "MUTANT E killed — a per-run nonce varies the output exactly as the real paths do and still fails assertion 14 ($SL_IDENT_WHY)"
+    fi
+  fi
+fi
+
 echo
 if [ "$fails" -ne 0 ]; then
   echo "suppression-lifetime: $fails assertion(s) FAILED" >&2

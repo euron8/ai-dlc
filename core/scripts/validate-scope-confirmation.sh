@@ -129,6 +129,8 @@ fi
 [ -n "$ENTRIES" ] || ENTRIES=0
 
 say "answers_entries_scanned: ${ENTRIES}"
+say "  snapshot: ${SNAPSHOT}"
+say "  answers:  ${ANSWERS}"
 
 # -----------------------------------------------------------------------------
 # FIELD EXTRACTION, AND WHY IT IS NOT ANCHORED TO THE START OF A LINE.

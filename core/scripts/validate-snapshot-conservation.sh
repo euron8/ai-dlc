@@ -170,7 +170,7 @@ SNAPSHOT="${SNAPSHOT#"$ROOT"/}"
 
 if [ -z "$SNAPSHOT" ] || [ ! -f "$ROOT/$SNAPSHOT" ]; then
   say "snapshot            : (absent)"
-  say "verdict             : NOT-APPLICABLE -- no pipeline-snapshot.md to evaluate."
+  say "verdict             : NOT-APPLICABLE -- EXAMINED NOTHING -- no pipeline-snapshot.md to evaluate."
   say "                      A pipeline before route.md Step 0 has not written one."
   exit 0
 fi
@@ -200,7 +200,7 @@ if [ -z "$BASE" ]; then
     say "base_sha            : none"
     say "lines_removed       : 0"
     say "lines_destroyed     : 0"
-    say "verdict             : NOT-APPLICABLE -- no gate-metrics.jsonl, so no gate has"
+    say "verdict             : NOT-APPLICABLE -- EXAMINED NOTHING -- no gate-metrics.jsonl, so no gate has"
     say "                      closed yet in this repository. There is no prior gate to"
     say "                      measure from. The first gate of the first sprint creates"
     say "                      the base this check reads on every gate after it."
@@ -233,7 +233,7 @@ if [ -z "$BASE" ]; then
     say "gate_shas_recorded  : $(printf '%s\n' "$SHAS" | sort -u | wc -l | tr -d ' ')"
     say "lines_removed       : 0"
     say "lines_destroyed     : 0"
-    say "verdict             : NOT-APPLICABLE -- none of the recorded gate shas resolves"
+    say "verdict             : NOT-APPLICABLE -- EXAMINED NOTHING -- none of the recorded gate shas resolves"
     say "                      to a commit reachable from HEAD. Shas written from a"
     say "                      worktree, or rewritten by a rebase, are not defects here."
     exit 0
