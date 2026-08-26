@@ -165,8 +165,9 @@ so no block written before it changes verdict.
    TASK LOOKS.** The `Agent` tool takes `model: "opus" | "sonnet" | "haiku"`, and it is IGNORED
    for `subagent_type: "fork"`, which always inherits yours. Set it explicitly on every spawn —
    an omitted `model` is a default nobody chose. **Do NOT restate the pipeline's own
-   role-to-model mapping here**: `SKILL.md` Rule 19 binds that through `aiDlcRoles` in
-   `.claude/settings.json` and `ai-dlc-dispatch-guard.sh` enforces it. That is a different
+   role-to-model mapping here**: `core/skills/ai-dlc/SKILL.md` Rule 19 binds that through
+   `aiDlcRoles` in `.claude/settings.json` and `core/hooks/ai-dlc-dispatch-guard.sh` enforces
+   it — three files carry that basename and only the one named above owns the rule. That is a different
    system — these are ad-hoc hands with no role file — so the choice is yours to make and to
    state.
 
