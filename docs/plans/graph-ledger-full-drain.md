@@ -67,11 +67,20 @@ from the unindented grep; the revision after it fixed the PROSE and left the COM
 file stated 7 beside a command returning 5. Run the engine:
 
 This one is a LOOP, so run it through `bash -c` — your shell is zsh, where an unquoted `$var`
-is not word-split and a loop written for bash iterates once over the whole string:
+is not word-split and a loop written for bash iterates once over the whole string.
+
+**IT GATES ON A `## BL-` HEADING FOR THE SAME REASON THE CONTROL BELOW USES THE ENGINE.** A bare
+`grep "^verify: sh "` returns 57 against a true count of 56, because it also matches the
+`verify: sh <one-liner>` line in the `## Receipts` LEGEND at `docs/backlog.md:22` — prose about
+the grammar, which then gets EVALUATED as though it were a receipt and lands in the histogram as
+a real exit code. It misses indented receipts too. Both halves of this block have now been wrong
+in that same way, once each; the ledger's preamble is a receipt-shaped trap and every reader of
+this file must skip it:
 
 ```
-bash -c 'while IFS= read -r l; do ( eval "${l#verify: sh }" ) >/dev/null 2>&1; echo "$?"; done \
-  < <(grep "^verify: sh " docs/backlog.md) | sort | uniq -c'
+bash -c 'while IFS= read -r l; do ( eval "$l" ) >/dev/null 2>&1; echo "$?"; done \
+  < <(awk "/^## BL-[0-9]+/{e=1} e && sub(/^[ \t]*verify: sh /,\"\")" docs/backlog.md) \
+  | sort | uniq -c'
 bash scripts/backlog-reverify.sh | grep -c '^HAND-REVIEW'   # the control: these DO reach it
 ```
 
