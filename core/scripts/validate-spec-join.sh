@@ -3,6 +3,7 @@
 #
 # Usage: ./scripts/ai-dlc/validate-spec-join.sh --spec DIR --prd FILE [--story FILE]...
 #                                              [--spine-lint JSON] [--trace-verdict FILE]
+#                                              [--locked-requirements FILE]
 #
 # Gate-validation Check 30 enforcer (story gates).
 #
@@ -27,7 +28,10 @@
 # none of them does is FAIL. This is the caller that decides.
 #
 # THE JOINS, all ID-mechanical:
-#   (1) every LOCKED_REQUIREMENTS bullet in the spec's memlog maps to >=1 CAP-N
+#   (1) every LOCKED_REQUIREMENTS bullet maps to >=1 CAP-N. WHICH BULLETS THOSE ARE is
+#       `--locked-requirements`' answer when it is passed and the memlog's when it is
+#       not; the join prints which population it read on every path. See the long note
+#       at join (1) for why a memlog cannot declare its own population.
 #   (2) every CAP-N in SPEC.md is cited by a functional-requirement entry in prd.md
 #       -- NOT in BMAD's FR Coverage Map, whose content propagates whatever FR label
 #       the PRD used and is therefore a derived surface, not an independent one
@@ -62,7 +66,7 @@
 set -u
 
 PROG="validate-spec-join.sh"
-SPEC=""; PRD=""; SPINE=""; SPINE_MD=""; TRACE=""; BASELINE=""
+SPEC=""; PRD=""; SPINE=""; SPINE_MD=""; TRACE=""; BASELINE=""; LOCKED_REQS=""
 STORIES=()
 
 while [ $# -gt 0 ]; do
@@ -74,7 +78,16 @@ while [ $# -gt 0 ]; do
     --spine-lint)    SPINE="${2:-}"; shift 2 || exit 2 ;;
     --trace-verdict) TRACE="${2:-}"; shift 2 || exit 2 ;;
     --baseline)      BASELINE="${2:-}"; shift 2 || exit 2 ;;
-    -h|--help) echo "usage: $PROG --spec DIR --prd FILE [--story FILE]... [--spine FILE] [--spine-lint JSON] [--trace-verdict FILE] [--baseline FILE]" >&2; exit 2 ;;
+    # AN EMPTY VALUE IS REJECTED HERE, NOT TOLERATED DOWNSTREAM. Every gate below tests
+    # `[ -n "$LOCKED_REQS" ]`, so `--locked-requirements ""` is byte-indistinguishable from
+    # omitting the flag: it reverts to the memlog scan and reproduces the exact false
+    # positive this flag exists to kill, while the caller believes it declared a population.
+    # Omission and intent must not share a spelling.
+    --locked-requirements)
+      LOCKED_REQS="${2:-}"
+      [ -n "$LOCKED_REQS" ] || { echo "$PROG: --locked-requirements was given an EMPTY value. That is not the same as omitting it: omitting the flag falls back to scanning the memlog and says so, while an empty value asks for a declared population and supplies none. Pass the sprint's locked-requirements.md, or drop the flag." >&2; exit 2; }
+      shift 2 || exit 2 ;;
+    -h|--help) echo "usage: $PROG --spec DIR --prd FILE [--story FILE]... [--spine FILE] [--spine-lint JSON] [--trace-verdict FILE] [--baseline FILE] [--locked-requirements FILE]" >&2; exit 2 ;;
     *) echo "$PROG: unexpected argument '$1'" >&2; exit 2 ;;
   esac
 done
@@ -818,13 +831,141 @@ fi
 # entry rather than prose.
 DISP_ENTRIES="$(grep -E '^[[:space:]]*[-*][[:space:]]*\((disposition|decision)([[:space:]][^)]*)?\)' "$MEMLOG" || true)"
 
-LRS="$(grep -ohE '\bLR-[A-Za-z0-9]+-[0-9]+[a-z]?\b' "$MEMLOG" | sort -u)"
+# THE POPULATION IS A DECLARATION, NOT A SCAN, AND THE MEMLOG CANNOT DECLARE IT.
+# Taking the LR set from the memlog reads the spec's own self-report as data -- the
+# defect the CAP_ENTRIES comment above refuses three lines up, committed on the other
+# side of the same join. Measured on the reference consumer at s302: an absent-id
+# CONTROL TOKEN quoted inside an `(event by bmad-spec)` entry recording "an id-presence
+# sweep run with an absent-id control (LR-S999-9) that returned zero" was read back as a
+# locked requirement and hard-blocked the gate. It appears in no locked-requirements.md
+# anywhere in that tree. That is this project's own zero-is-not-a-finding discipline,
+# written into a consumer's memlog and convicted by a validator for being written down.
+#
+# NO PREDICATE OVER THE MEMLOG CAN SEPARATE THOSE TWO INPUTS. An absent-id control is BY
+# CONSTRUCTION an id shaped exactly like a real one -- typed entry, sprint-shaped id,
+# ordinary prose. Five narrowings were driven over the whole corpus and every one loses
+# genuine declared requirements or disarms the check; requiring a `CAP-<n>` on the LR's
+# own line returns rc 0 on a corpus carrying a genuinely uncited locked requirement,
+# because an LR that reaches no capability is exactly an LR with no CAP- on any of its
+# lines. So `--locked-requirements` names the artifact that DECLARES the population and
+# the memlog is demoted to evidence about it.
+#
+# THE FLAG IS OPTIONAL AND ITS ABSENCE FALLS BACK TO THE SCAN, DELIBERATELY. Check 30 is
+# a hard block on a consumer running its own installed engine; DISARMing every caller
+# that has not yet been updated wedges live work at a gate, and a wedged gate is a gate
+# somebody turns off. The population actually used is printed on every path instead, so
+# which one ran is never inferred from silence.
+#
+# THREE THINGS ABOUT THE DECLARED FILE'S SHAPE, EACH MEASURED, EACH FATAL TO A NAIVE READ:
+#
+#   THE BLOCK IS MARKER-DELIMITED AND THE FILE IS WIDER THAN THE BLOCK. The reference
+#   consumer's s304 file carries LR-S304-8 and LR-S304-9 BELOW its end marker as Rule 12
+#   Tier 2 DECIDED_AUTONOMOUSLY addenda, and that spec's own SPEC.md states the locked
+#   block is lines 3-42, i.e. LR-S304-0..LR-S304-7, calling LR-S304-9 "not an
+#   operator-locked requirement". A whole-file scan adopts both and produces two findings
+#   against a gate that is green, on entries nobody locked.
+#
+#   THE MARKER GRAMMAR IS NOT THIS SCRIPT'S AND IS NOT RE-DERIVED HERE. s299 closes with
+#   `<!-- END S299 LOCKED_REQUIREMENTS -->` and every other sprint with
+#   `<!-- END LOCKED_REQUIREMENTS -->`; validate-locked-anchor.sh's own census records SIX
+#   spellings across opener and closer, an unrecognised closer extracts as NOTHING, and a
+#   non-greedy span lets one block SWALLOW dozens of real ones. That grammar cost a release
+#   to get right, which is why `--emit-blocks` exists there and why validate-request-coverage.sh
+#   calls it rather than matching markers itself. This is the third reader and it does the
+#   same. A hand-rolled pair of regexes here read 2 of the 6 spellings and DISARMED on the
+#   rest -- loud rather than wrong, and still a second grammar in a second file.
+#
+#   THE DECLARATION GRAMMAR DRIFTS BETWEEN SPRINTS. Three shapes in three consecutive
+#   sprints: `- **LR-S303-0 (...):**`, `- **LR-S304-7** — `, `- LR-S305-1: "..."`. What
+#   is stable across all of them is that the id is the SUBJECT of a list item, so that is
+#   what is read: a bullet, optional bold or underscore emphasis, then the id. Prose
+#   mentions inside the block are excluded by the same anchor -- s299's block cites
+#   `LR-S177-2` in a parenthetical at line 120 and it is correctly not adopted.
+#
+# EVERY OTHER SHAPE DISARMS RATHER THAN DROPPING, on the CAP block's precedent above:
+# a file whose markers are missing, or whose block declares nothing the anchor can take,
+# is a producer whose grammar has moved and this reader must move with it. It is not a
+# sprint that locked zero requirements, and it must not be scored as one.
+LR_POP_SOURCE="$MEMLOG (every LR-<...> identifier appearing anywhere in it)"
+if [ -n "$LOCKED_REQS" ]; then
+  [ -f "$LOCKED_REQS" ] || { echo "$PROG: DISARMED — --locked-requirements names an unreadable file: $LOCKED_REQS. An unreadable declaration is not an empty one; exiting rather than closing join (1) against a population nobody supplied. If this sprint genuinely ships no locked-requirements file, omit the flag — the memlog scan is the documented fallback and it reports what it read." >&2; exit 2; }
+  # Resolve the sibling that OWNS the block grammar, in both layouts (core/scripts/ in
+  # the distribution, scripts/ai-dlc/ in a consumer). Same shape as
+  # validate-request-coverage.sh's, which is the second reader of these blocks.
+  #
+  # THIS LEG NEEDS python3 AND SAYS SO WHEN IT IS MISSING, because the DISARM would
+  # otherwise read as a defect in the spec rather than in the environment. It is not a NEW
+  # dependency -- validate-locked-anchor.sh is Check 3b's own hard-blocking enforcer and 18
+  # shipped validators already require it -- but a tree that has lost python3 fails Check 3b
+  # first, and that is the diagnosis to act on.
+  LR_SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+  LR_ANCHOR="$LR_SELF_DIR/validate-locked-anchor.sh"
+  if [ ! -f "$LR_ANCHOR" ]; then
+    echo "$PROG: DISARMED — validate-locked-anchor.sh not found beside this script at $LR_ANCHOR. It owns the LOCKED_REQUIREMENTS block grammar and this join extracts the declared population through its --emit-blocks mode; re-deriving those markers here would be a third grammar in a third file. Fix the install rather than matching markers locally." >&2
+    exit 2
+  fi
+  # THE OUTPUT IS FORM-FEED-JOINED AND MUST BE SPLIT BEFORE IT IS READ AS LINES. The owner
+  # emits `"\f".join(blocks)` deliberately, "so a caller can split on a byte that cannot
+  # occur in a requirement bullet", and validate-request-coverage.sh splits on it. Grepping
+  # the joined text instead GLUES block N's last line to block N+1's first line, so the
+  # anchored bullet at the head of every block after the first cannot match. Measured: a
+  # two-block file declaring three requirements reported `join (1) reads 2` and dropped the
+  # middle one -- and it CANNOT disarm, because a narrowed population is still non-empty, so
+  # the count prints as authoritative. This is not hypothetical for the shape the grammar
+  # exists to serve: a product brief accumulates one block per sprint, 198 openers in the
+  # owner's own census.
+  # THE SPLIT IS A SEPARATE STATEMENT, NOT A PIPE STAGE. This script sets no `pipefail`, so
+  # a pipeline answers with its LAST command's status -- `tr` succeeds unconditionally, and
+  # putting the split inline would silently retire the refusal arm below.
+  LR_RAW="$(bash "$LR_ANCHOR" "$LOCKED_REQS" --emit-blocks)" || {
+    echo "$PROG: DISARMED — could not extract LOCKED_REQUIREMENTS blocks from $LOCKED_REQS (validate-locked-anchor.sh reported the reason above). An opener with no recognised closer extracts as NOTHING, which is indistinguishable from a sprint that locked no requirements, so this refuses rather than closing join (1) against an empty set." >&2
+    exit 2
+  }
+  LR_BLOCK="$(tr '\014' '\n' <<<"$LR_RAW")"
+  if [ -z "$LR_BLOCK" ]; then
+    echo "$PROG: DISARMED — $LOCKED_REQS yielded no LOCKED_REQUIREMENTS block CONTENT. Either the file carries no block at all, or every block it carries is empty. The block is what DECLARES join (1)'s population; with no content there is no population, and closing the join against an empty set prints the same PASS line as a spec that closes it for real. If this sprint genuinely ships no locked requirements, omit --locked-requirements and say so at the call site." >&2
+    exit 2
+  fi
+  LRS="$(printf '%s\n' "$LR_BLOCK" | grep -ohE '^[[:space:]]*[-*][[:space:]]+(\*\*|__)?LR-[A-Za-z0-9]+-[0-9]+[a-z]?' | grep -ohE 'LR-[A-Za-z0-9]+-[0-9]+[a-z]?' | sort -u)"
+  if [ -z "$LRS" ]; then
+    if grep -qE '\bLR-[A-Za-z0-9]+-[0-9]+[a-z]?\b' <<<"$LR_BLOCK"; then
+      echo "$PROG: DISARMED — the LOCKED_REQUIREMENTS block of $LOCKED_REQS mentions LR-<...> identifiers but DECLARES none in the list-item shape this check reads — a bullet whose subject is the id, optionally emphasised: '- LR-<id>', '- **LR-<id>**', '- __LR-<id>__'. Either the file is malformed, or the declaration grammar has changed and this reader must change with it. It is not a sprint that locked zero requirements, and it must not be scored as one." >&2
+    else
+      echo "$PROG: DISARMED — the LOCKED_REQUIREMENTS block of $LOCKED_REQS declares no locked requirements at all. Join (1) would close against an empty set and print the same PASS line as a spec that closes it for real." >&2
+    fi
+    exit 2
+  fi
+  LR_POP_SOURCE="$LOCKED_REQS (declared in its LOCKED_REQUIREMENTS block)"
+fi
+if [ -z "$LOCKED_REQS" ]; then
+  LRS="$(grep -ohE '\bLR-[A-Za-z0-9]+-[0-9]+[a-z]?\b' "$MEMLOG" | sort -u)"
+fi
 NLRS="$(printf '%s\n' "$LRS" | grep -c . )"
 if [ "$NLRS" -eq 0 ]; then
   echo "$PROG: DISARMED — no LR-<...> identifiers found in $MEMLOG. Join (1) has nothing to check, which is not the same as closing." >&2
   exit 2
 fi
+echo "join (1) reads $NLRS locked requirement(s) from $LR_POP_SOURCE"
+lr_checked=0
+lr_unjournalled=0
 for lr in $LRS; do
+  # DECLARED AND NEVER JOURNALLED IS A NOTE, NOT A FAILURE, AND THE DIFFERENCE IS
+  # MEASURED. This class only exists once the population is declared: a scan of the
+  # memlog cannot contain an id the memlog never mentions. Two live instances on the
+  # reference consumer -- s303's LR-S303-7 and s304's LR-S304-7 -- and they are not the
+  # same defect. LR-S304-7 IS mapped, in that spec's own SPEC.md prose (`CAP-3` ←
+  # `LR-S304-1`/`-4`/`-7`); what is missing is the memlog entry recording it, and that
+  # gate is green today. Failing it reddens a passing consumer on a requirement the spec
+  # demonstrably reaches, which is how a correct check gets switched off. LR-S303-7 is
+  # the other kind -- an operator-locked defect that appears in no s303 spec file at all.
+  # A NOTE names both, and the join keeps its failures for what it can actually prove.
+  if [ -n "$LOCKED_REQS" ] && ! grep -qE "(^|[^A-Za-z0-9-])$lr([^A-Za-z0-9-]|\$)" "$MEMLOG"; then
+    echo "  note  $lr is declared in $LOCKED_REQS but appears nowhere in $MEMLOG — the spec never journalled it, so this join has no evidence either way about whether it reaches a capability."
+    note=$((note+1))
+    lr_unjournalled=$((lr_unjournalled+1))
+    continue
+  fi
+  lr_checked=$((lr_checked+1))
   # THE LR MUST BE THE SUBJECT, NOT MERELY ON THE LINE. Two chained greps -- "a line
   # naming this LR" then "a line containing NO-CAPABILITY" -- ask nothing about whether
   # the token disposes THIS requirement, which is the self-report class join (1)'s own
@@ -849,6 +990,23 @@ for lr in $LRS; do
     fail_join "lr:$lr" "$lr appears in the memlog but no capability entry cites it alongside a CAP-<n>. A locked requirement that reaches no capability is dropped, and every artifact downstream stays internally consistent while it is missing. Either map it to a capability, record an explicit SUPERSEDED/AMENDED disposition for it, or — if it asserts no behaviour of its own and correctly maps to none — record '- (disposition) $lr NO-CAPABILITY <reason>' in $MEMLOG."
   fi
 done
+
+# A DECLARED POPULATION AND A CHECKED POPULATION ARE NOT THE SAME SET, AND THE NOTE BRANCH
+# IS WHAT SEPARATED THEM. The `NLRS -eq 0` DISARM above guards what was DECLARED; if every
+# declared id then turns out to be absent from the memlog, every iteration takes the
+# never-journalled note and `continue`s, `rc` is never touched, and the run prints PASS
+# having performed ZERO joins. That is the vacuity every DISARM in this file exists to
+# refuse, arriving through a door the notes opened.
+#
+# IT ARRIVES BY AN ORDINARY SLIP, not by a malformed artifact: `--locked-requirements` is
+# hand-passed per gate-validation.md, and pointing it at the WRONG SPRINT's file declares a
+# population none of whose ids this memlog has ever mentioned. Check 30 would go green having
+# checked nothing. The reference consumer is already 1-of-8 in that branch at s303 and 1-of-8
+# at s304, so the distance to all-of-N is one wrong path.
+if [ -n "$LOCKED_REQS" ] && [ "$lr_checked" -eq 0 ]; then
+  echo "$PROG: DISARMED — all $NLRS locked requirement(s) declared in $LOCKED_REQS are absent from $MEMLOG, so join (1) checked NOTHING and would print the same PASS line as a spec that closes it for real. The usual cause is --locked-requirements naming a different sprint's file than --spec. Confirm the two name the same sprint." >&2
+  exit 2
+fi
 
 # --- (2) every capability is cited by a functional requirement -----------------
 # READ THE PRD's FR ENTRIES, NOT BMAD's FR COVERAGE MAP.
