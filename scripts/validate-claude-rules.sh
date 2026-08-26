@@ -369,8 +369,29 @@ fi
 # drafting. That is the second time an author's pre-drafting estimate has moved this number,
 # and it is why the figure above is a measurement and the prose was not ground down to meet
 # the quote. Cost prose after writing it, never before.
+#
+# RAISED A FIFTH TIME, 45377 -> 45900, ON AN OPERATOR RULING, FOR ONE RULE COSTING 520 BYTES.
+# THE SUBTRACTION WAS OFFERED AND DECLINED AGAIN, WHICH IS NOW THE PATTERN AND NOT THE
+# EXCEPTION -- two raises running have carried none, and a guard that only ever moves upward is
+# on its way to decorative. The next author should read this block as four precedents for
+# raising and ZERO for the sequence the header mandates.
+#
+# The rule is `verification-discipline.md`'s "an entry with two subjects expires only when both
+# do", earned at v0.417.0 by the triage sweep over all 64 live backlog entries. Two verifiers
+# attacking one proposed close agreed on EVERY measurement and split on what the entry CLAIMED:
+# the named fix was real and the cited code genuinely gone, while a second subject one paragraph
+# down was untouched. The close was rejected on scope, not on evidence. It cannot be SCOPED --
+# it is prose-only, which `resident-context.md` bars, and the hands that need it are SUBAGENTS,
+# whose reads never reach the parent that dispatches them. It is not plausibly MECHANIZABLE
+# either: the predicate is "enumerate the distinct claims in an entry's prose", and no arm
+# parses that. Unlike the fourth raise, there is no mechanization to hand this one back to.
+#
+# THE ESTIMATE WAS RIGHT THIS TIME, because it was made the way the line above prescribes --
+# the rule was drafted first, measured at 520 bytes with `wc -c`, and the ceiling set from the
+# measurement. That is the header's own instruction working; record it as the first raise that
+# followed it.
 # ---------------------------------------------------------------------------
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-45377}"
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-45900}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

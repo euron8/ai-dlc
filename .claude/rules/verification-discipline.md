@@ -137,3 +137,11 @@ CONSUMER's hook `core/git-hooks/pre-push` prints a green banner here having run 
 nothing; the content-key skip prints one too, correctly — neither is evidence your change ran.
 The TALLY is not the verdict either: 159 ok / 0 FAIL while the gate exited 1 on a phase outside
 the suite. Read the gate's exit, never a backgrounded wrapper's.
+
+## An entry with two subjects expires only when both do
+
+Measured on a proposed close: two verifiers agreed on every measurement and split on what the
+entry CLAIMED. The named fix was real, the cited code was genuinely gone, and a second subject
+one paragraph down was untouched. Enumerate the entry's distinct claims BEFORE reading a good
+measurement as a close, and say which survive. A release note asserting the fix is not evidence
+either — the one that shipped this half-landed fix says "both" in as many words.
