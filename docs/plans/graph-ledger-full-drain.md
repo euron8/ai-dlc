@@ -150,7 +150,9 @@ so no block written before it changes verdict.
    **A receipt is a hypothesis too, and batch 9 broke both of its own.** Ask what ELSE satisfies
    it. `BL-078`'s read only a RENDERED row whose cell came from a comment no arm validates, so
    one comment line closed it with no behaviour changed — measured on a copy of `origin/main`,
-   not argued. Prefer a receipt that DRIVES the shipping code over one that reads a document.
+   not argued. The standing rule out of that is in
+   `.claude/rules/verification-discipline.md`, "a receipt that reads a RENDERED artifact is
+   closable by prose"; it is not restated here.
 2. **Keep the batch to ONE subsystem.** Take one group or the other, not both.
 3. **Put independent hands on SCOPE, FIXTURE and RECEIPT, every time.** In batch 8 they found
    THREE defects in work already committed on the branch; in batch 9 the fixture hand found
@@ -183,11 +185,12 @@ so no block written before it changes verdict.
    Say the model and the one-clause reason in the spawn, so a thin result can be re-run one
    tier up rather than re-argued.
 
-   **A HAND WILL GO IDLE WITHOUT DELIVERING, AND AN IDLE NOTICE IS NOT A RESULT.** All five
-   hands in batch 9 did it. Tell every hand to WRITE ITS REPORT TO A FILE and treat that file
-   as the deliverable, then ask by name when the notice arrives. A hand's closing summary can
-   also be STALE — batch 9's fixture hand reported four defects as outstanding that had already
-   been fixed, because it had not re-read the files. Check the tree, not the report.
+   **THE REMEDY FOR BOTH DELEGATION HAZARDS IS ONE INSTRUCTION: TELL EVERY HAND TO WRITE ITS
+   REPORT TO A FILE**, name that file in the brief, and treat it as the deliverable. All five
+   hands in batch 9 went idle without their report reaching the lead, and one's closing summary
+   was stale. The hazards themselves are in `.claude/rules/tool-hazards.md` under "Delegation
+   hazards" and are not restated here; this line is the remedy, which is specific to how this
+   program dispatches.
    Ask of every receipt: does a correct fix satisfy it, what ELSE satisfies it, and can the
    CORRECT fix be one it REJECTS. Key mutants on LOCATION and observable BEHAVIOUR, never on a
    spelling. **A hand can die mid-task** — one did, to a machine sleep, leaving a fixture
