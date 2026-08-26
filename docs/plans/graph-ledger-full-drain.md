@@ -37,14 +37,15 @@ grep -cE '^## BL-[0-9]+' docs/backlog.archive.md  # archived
 bash scripts/backlog-reverify.sh | grep -oE 'CLOSE-CANDIDATE|STILL-LIVE|HAND-REVIEW|NEEDS-REVIEW' | sort | uniq -c
 ```
 
-At the last session's close those read **65 live / 24 archived / 58 STILL-LIVE + 7 HAND-REVIEW**,
+At the last session's close those read **64 live / 26 archived / 57 STILL-LIVE + 7 HAND-REVIEW**,
 with 0 CLOSE-CANDIDATE, against an impossible-id control of 0.
 
 **A `STILL-LIVE` ROW IS NOT EVIDENCE THAT THE ENTRY IS LIVE, AND `BL-089` IS THE ENTRY THAT SAYS
 SO.** `backlog-reverify.sh` maps every non-zero `sh` exit to `STILL-LIVE  … "still reproduces
 here"`, but this corpus's receipts use **exit 9** to mean *"a precondition moved and I measured
-nothing"*. The two are one row. Measured at batch 8's close: **2 exit 9** — `BL-066`, whose
-receipt is broken shell, and **`BL-076`, which is a candidate subject for the next batch**.
+nothing"*. The two are one row. Measured at batch 9's close: **1 exit 9** — `BL-066`, whose
+receipt is broken shell. Batch 9 rebuilt the other one; `BL-076`'s had been unable to measure
+anything for 28 releases and read as `STILL-LIVE` the whole time.
 Derive the current pair rather than trusting that one; the count of live `sh` receipts moves
 with every batch and the control is the 5 entries declaring `verify: manual`, which the engine
 does route to HAND-REVIEW:
@@ -64,18 +65,30 @@ the row above told you nothing.
 ### What is DONE — do not redo any of it
 
 **Phases 0–2, 4 and 5 are COMPLETE.** Phase 3 is the batch loop and it is the only remaining
-work. Batches 1–8 have all MERGED AND PUSHED; the releases are `v0.374.0`, `v0.375.0`,
-`v0.376.0`, `v0.377.0`, `v0.378.0`, `v0.379.0`, `v0.380.0` and `v0.415.0`, each recorded in
-`CHANGELOG.md`. `v0.381.0` and `v0.382.0` followed batch 7 as machinery releases; many further
-machinery releases have shipped between `v0.383.0` and `v0.414.0` that are NOT part of this
-program, which is why the batch numbering and the version numbering stopped agreeing.
+work. Batches 1–9 have all MERGED AND PUSHED; the releases are `v0.374.0`, `v0.375.0`,
+`v0.376.0`, `v0.377.0`, `v0.378.0`, `v0.379.0`, `v0.380.0`, `v0.415.0` and `v0.416.0`, each
+recorded in `CHANGELOG.md`. `v0.381.0` and `v0.382.0` followed batch 7 as machinery releases;
+many further machinery releases have shipped between `v0.383.0` and `v0.414.0` that are NOT part
+of this program, which is why the batch numbering and the version numbering stopped agreeing.
 
-**BATCH 8 IS COMPLETE, MERGED AND PUSHED AS `v0.415.0`.** `BL-079` closed. Merge `8d4d7424`,
-release `2b474ad2`, close-and-rotate `20599835`. Live **65 → 64**, archive **23 → 24**,
-`--check` PASSing before `--apply`, no id in both files, and `backlog-reverify` reporting **0
-CLOSE-CANDIDATE** afterwards against an impossible-id control of 0. Gate read directly, not
-through a pipe: exit **0**, **16 of 16** phases PASS, `spec-join-integrity` read BY NAME against
-an impossible-name control of 0 and a second present-name control of 1.
+**BATCH 9 IS COMPLETE, MERGED AND PUSHED AS `v0.416.0`.** `BL-076` and `BL-078` closed,
+`BL-090` filed. Release and merge are one fast-forward commit, `727ddc6c`. Live **66 → 64**,
+archive **24 → 26**, `--check` PASSing before `--apply`, no id in both files (control: `BL-076`
+present in the archive), and `backlog-reverify` reporting **0 CLOSE-CANDIDATE** afterwards
+against an impossible-id control of 0. Gate read directly, not through a pipe: push exit **0**,
+**16 of 16** phases PASS, all six changed fixtures read BY NAME against an impossible-name
+control of 0.
+
+**THE FIRST PUSH WAS BLOCKED AND THE BLOCK WAS RIGHT.** Widening `I93`'s emitter list from 3 to
+14 under its existing per-file loop cost 4 forks per emitter and put the tree **42 over
+`FORK_BUDGET`** — `validator-fork-budget` failed the push. `esv_sites` already took a file
+LIST for exactly this reason and the first cut ignored it; one `awk` per token over the whole
+list took 7092 back to 7054, and the arm's cost is now flat in the declaration's length. **Reach
+for the mechanism the file already has before adding a loop** — the same lesson `I97` was built
+on in batch 8, one release later, in the same file.
+
+**BATCH 8 IS ALSO COMPLETE** (`v0.415.0`, `BL-079`; merge `8d4d7424`, release `2b474ad2`,
+close-and-rotate `20599835`).
 
 **FOUR THINGS THE ENTRY ASSERTED DID NOT HOLD, AND THE RE-DERIVATION IS WHY THEY WERE FOUND.**
 Its own `verify:` receipt was EXPIRED — the seed used a capability grammar the validator now
@@ -111,27 +124,46 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **Batch 9. Pick its subject from the live ledger and say why.** `BL-076` (five sibling
-   count-without-identity validators) and `BL-078` (17 empty-subject verdicts at 4 exit codes
-   across 13 files) are one coherent subsystem and were deferred out of batch 8 by operator
-   ruling. `BL-081`, `BL-082` and `BL-083` are the coherent alternative.
+1. **Batch 10. Pick its subject from the live ledger and say why.** `BL-081`, `BL-082` and
+   `BL-083` are the group batch 9 did not take. They are NOT one subsystem on reading —
+   `BL-081` is a `ledger-reverify` regex, `BL-082` is a case-folding entry explicitly *filed
+   rather than fixed* with no code remedy, `BL-083` is a rule-vs-mechanism drift — so if you
+   take them, say which single thing you are closing. **`BL-090` is the other candidate and it
+   is the coherent one**: it was filed by batch 9 out of two independent re-derivations, its
+   fix is subtraction (a `# vocabulary-emitters:` field with both index columns DERIVED from
+   the yaml, deleting the third unbound hand-list), and it closes the reverse-arm gap and the
+   column semantics together.
 
-   **`BL-076`'S RECEIPT EXITS 9 AND ITS `STILL-LIVE` ROW IS NOT EVIDENCE THAT IT IS LIVE.** It
-   is one of the two entries `BL-089` was filed about — a precondition moved, so the receipt
-   measured nothing, and `backlog-reverify.sh` reports that in the same words as a defect that
-   reproduces. **Run its receipt directly and read the raw exit code before you scope it**, and
-   expect to REBUILD the receipt as part of the batch, as batch 8 had to for `BL-079`. The other
-   one is `BL-066`, whose receipt is not merely expired but broken shell.
+   **Run every candidate's receipt directly and read the raw exit code before you scope it.**
+   A `STILL-LIVE` row is not evidence the entry is live; `BL-089` is the entry that says so.
+   At batch 9's close exactly one receipt exits 9 — `BL-066`, whose receipt is broken shell —
+   against a control of 5 entries declaring `verify: manual`, which DO reach HAND-REVIEW.
 
-   **Then re-derive the entry's population rather than believing it.** Measured across five
-   batches, **4 of 5 entries were WIDER than filed, and batch 8's was wrong in four separate
-   places** — its receipt, its population, a blocker that did not exist, and what its fix would
-   achieve. That is the base case, not the exception.
+   **Then re-derive the entry's population rather than believing it.** Measured across six
+   batches, **5 of 6 entries were WIDER than filed**. Batch 8's was wrong in four places;
+   batch 9's two were wrong in nine between them — an expired receipt, a receipt closable by
+   PROSE, five citations pointing at comments and `return` statements, a claim that a token was
+   unregistered when it had been registered since the entry was filed, four exit codes where
+   there are five, and four more live instances of `BL-076`'s own defect that the entry never
+   named. That is the base case, not the exception.
+
+   **A receipt is a hypothesis too, and batch 9 broke both of its own.** Ask what ELSE satisfies
+   it. `BL-078`'s read only a RENDERED row whose cell came from a comment no arm validates, so
+   one comment line closed it with no behaviour changed — measured on a copy of `origin/main`,
+   not argued. Prefer a receipt that DRIVES the shipping code over one that reads a document.
 2. **Keep the batch to ONE subsystem.** Take one group or the other, not both.
 3. **Put independent hands on SCOPE, FIXTURE and RECEIPT, every time.** In batch 8 they found
-   THREE defects in work already committed on the branch, every one of which returned a WRONG
-   ANSWER rather than an error, plus an overstated claim in the CHANGELOG. Across five batches
+   THREE defects in work already committed on the branch; in batch 9 the fixture hand found
+   FOUR more live instances of the entry's own defect, and two scope hands independently found
+   that the entry's receipt could be closed by prose. Every one returned a WRONG ANSWER rather
+   than an error. Across six batches
    this is the only mechanism that has ever told a session it was wrong about its own change.
+
+   **A HAND WILL GO IDLE WITHOUT DELIVERING, AND AN IDLE NOTICE IS NOT A RESULT.** All five
+   hands in batch 9 did it. Tell every hand to WRITE ITS REPORT TO A FILE and treat that file
+   as the deliverable, then ask by name when the notice arrives. A hand's closing summary can
+   also be STALE — batch 9's fixture hand reported four defects as outstanding that had already
+   been fixed, because it had not re-read the files. Check the tree, not the report.
    Ask of every receipt: does a correct fix satisfy it, what ELSE satisfies it, and can the
    CORRECT fix be one it REJECTS. Key mutants on LOCATION and observable BEHAVIOUR, never on a
    spelling. **A hand can die mid-task** — one did, to a machine sleep, leaving a fixture
