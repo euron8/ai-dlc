@@ -1659,3 +1659,98 @@ verify: sh test "$(grep -c 'container_start(' core/scripts/validate-spec-join.sh
 
 ---
 
+## BL-079
+
+**`validate-spec-join.sh`'s join (1) reads its locked-requirement population with a whole-file
+scan of the memlog, while the capability predicate three lines below it is deliberately
+restricted to typed entries — with a comment refusing to read the spec's own self-report as
+evidence. The LR side reads that same self-report as its population.** The scan is
+`LRS="$(grep -ohE '\bLR-[A-Za-z0-9]+-[0-9]+[a-z]?\b' "$MEMLOG" | sort -u)"` (re-derive the line;
+it drifts). Measured on the reference consumer across all four spec memlogs: **18 join-(1)
+findings, exactly 1 false** — `LR-S999-9` in s302, an absent-id CONTROL TOKEN quoted inside an
+`(event by bmad-spec)` entry recording *"an id-presence sweep run with an absent-id control
+(LR-S999-9) that returned zero, proving the search could return nothing"*. That is this repo's own
+zero-is-not-a-finding discipline, written into a consumer's memlog and read back by a validator as
+data. It appears in no `locked-requirements.md` anywhere in the tree; positive control in the same
+sweep, `LR-S302-1` is present in 35 files. Genuineness of the other 17 is not a judgment call: 13
+are declared in their sprint's own `planning-artifacts/<sprint>/locked-requirements.md`, and 4 are
+undeterminable only because s301 ships no such file.
+
+**This became reachable rather than newly broken, and the entry that exposed it is `BL-063`.**
+Before the capability predicate was widened to accept the producer's optional qualifier, s302
+returned rc 2 DISARMED — the LR scan ran and nothing downstream of it did. The widening takes s302
+from **0 of 7 LR ids checked to 7 checked, 6 correct, 1 false**, which is a strict gain in
+coverage, and it is why the false finding is tolerable in the interim rather than blocking.
+
+**It is NOT fixable by symmetrizing the predicate, and that refutes the obvious patch.**
+Restricting the LR side to typed entries — the symmetric change the asymmetry invites — drops
+**0**: every LR occurrence in the corpus is already on a typed entry line, so the change is a
+measured no-op. Four further discriminators were driven over all four sprints and every one loses
+genuine declared locked requirements: excluding ids seen only in `(event)`/`(note)` entries loses
+**5**; excluding `(event)`-only loses **3**; requiring a `CAP-<n>` on the same line loses **5**,
+two of them already baselined, which additionally converts two suppressed findings into
+did-not-reproduce failures; requiring the sprint prefix to match the spec directory loses **1**, a
+declared cross-sprint carry-over this consumer demonstrably has.
+
+**The leading candidate is a DISARM and both the seeded corpus and the fixture say so
+independently.** Requiring a `CAP-<n>` on the LR's own line returns **rc 0 on a corpus carrying a
+genuinely uncited locked requirement** — because an LR that reaches no capability is, in the
+ordinary case, exactly an LR with no `CAP-` on any of its lines, so the candidate excludes the
+primary failure mode from its own population. `mechanism-design.md`: a fix that satisfies a join by
+deleting the join's subject reads as green forever. Swapped into a copy of `core/` asserted
+byte-different, it turns three arms of `core/fixtures/spec-join-integrity` red — including *"join
+(1): a locked requirement citing no capability FAILS"* — against a sanity control on the identical
+temp-tree harness with unpatched code at 56 ok / 0 FAIL.
+
+**No predicate can separate these two inputs, which is why this needs a design change rather than
+a regex.** The absent-id control is BY CONSTRUCTION an id shaped exactly like a real one — that is
+its whole purpose. Typed entry, sprint-shaped id, ordinary prose. The only thing distinguishing it
+is the surrounding English, and keying a validator on prose phrasing is the failure
+`verification-discipline.md` names as text-about-a-program. **The sound remedy is a DECLARED
+population** — take the sprint's `locked-requirements.md` as the LR set through a new flag — and it
+is blocked on two things that must be settled in the same change: s301 carries no such file, so the
+flag needs SKIP semantics that do not silently pass; and the deployed baseline is a single
+project-wide file measured against s299, which fires its did-not-reproduce arm **15** times when
+run at s302. **So "just baseline the false positive" is not available either** — the shared
+baseline cannot absorb a sprint-local entry without breaking at the other three sprints, and that
+is why the interim disposition is to leave the finding reported.
+
+**Why the receipt is the receipt.** It must reject a disarm, because every candidate remedy
+measured here is one. It therefore drives the shipping script twice and requires BOTH directions in
+the same invocation: a seeded memlog carrying a genuinely uncited locked requirement must still
+exit 1, AND the absent-id control token must stop being reported. A remedy satisfying only the
+second is the disarm above, and it is the shape a narrowing naturally takes. The seeded arm is
+built at run time rather than lifted from the consumer, so the receipt carries no dependency on a
+tree outside this repo. Tier: **DEFECT** — one false finding today on a gate the consumer already
+records as failing, against a coverage gain that is strictly larger.
+
+**LANDED (v0.415.0, verified 2b474ad2).** `--locked-requirements` declares join (1)'s
+population; the memlog scan remains as the documented fallback. Three things in this entry were
+re-derived and did not hold. **Its own `verify:` receipt was EXPIRED** — the seeded `SPEC.md`
+used a capability grammar the validator now DISARMs, so both arms returned 2 and the receipt
+exited 9 against every implementation including a correct one; it is replaced. **The population
+is six memlogs, not four**, and the partition is 12 declared / 5 from the sprint shipping no
+declarations file / 1 false. **The shared baseline this entry names as a blocker does not exist
+and is not tracked in that consumer**, so the did-not-reproduce hazard it describes is not live.
+
+**Two of the entry's own prescriptions were NOT delivered, and that is a substitution rather
+than a satisfied precondition.** What shipped is a FALLBACK, not SKIP semantics: a sprint with
+no declarations file omits the flag and keeps the memlog scan, so it keeps both its findings and
+its exposure to this defect. And the false positive dying does not turn that gate green — run
+the way the consumer's own gate log records the invocation, a join (2a) spine finding survives,
+byte-identical either way.
+
+**The declared population also ADDS ids a memlog scan structurally could not see**: a locked
+requirement absent from the memlog entirely. Two live instances, and they are different
+defects — one is an operator-locked item appearing in no spec file at all, the other is mapped
+to a capability in the spec's own prose and never journalled. Both report as `note` by operator
+ruling, because failing the second reddens a gate that is green today on a requirement the spec
+demonstrably reaches.
+
+**`I97` is the carrier for the single-source decision** and it exists because the first cut
+violated it: a hand-rolled marker pair read 2 of the grammar's 6 measured spellings.
+`validate-locked-anchor.sh --emit-blocks` is the owner and this is its third caller.
+
+
+verify: sh V=core/scripts/validate-spec-join.sh; A="$(dirname "$V")/validate-locked-anchor.sh"; { [ -r "$V" ] && [ -r "$A" ]; } || exit 9; D=$(mktemp -d) || exit 9; X(){ rm -rf "$D"; exit "$1"; }; mkdir -p "$D/a" "$D/b" || X 9; printf '%s\n' '# PRD' '' '- **FR-S1-1 (CAP-1)** the functional requirement' > "$D/prd.md"; printf '%s\n' '# SPEC' '' '- **CAP-1** the capability' > "$D/a/SPEC.md"; cp "$D/a/SPEC.md" "$D/b/SPEC.md" || X 9; printf '%s\n' '- (capability by bmad-spec) LR-S1-1 -> CAP-1' '- (event by bmad-spec) an id-presence sweep run with an absent-id control (LR-S999-9) that returned zero' '- (constraint by bmad-spec) LR-S1-9 is a Tier 2 addendum, recorded below the locked block' > "$D/a/.memlog.md"; printf '%s\n' '- (capability by bmad-spec) LR-S1-1 -> CAP-1' '- (constraint by bmad-spec) LR-S1-2 is locked and reaches no capability' > "$D/b/.memlog.md"; L1='- **LR-S1-1** the locked requirement'; L5='- **LR-S1-5** locked and never journalled'; L9='- **LR-S1-9** the Tier 2 addendum'; printf '%s\n' '<!-- LOCKED_REQUIREMENTS -->' "$L1" "$L5" '<!-- END S1 LOCKED_REQUIREMENTS -->' "$L9" > "$D/a/narrow.md"; printf '%s\n' '<!-- LOCKED_REQUIREMENTS -->' "$L1" "$L5" "$L9" '<!-- END S1 LOCKED_REQUIREMENTS -->' > "$D/a/wide.md"; printf '%s\n' '<!-- LOCKED_REQUIREMENTS_BEGIN -->' "$L1" "$L5" '<!-- LOCKED_REQUIREMENTS_END -->' "$L9" > "$D/a/exotic.md"; printf '%s\n' '<!-- LOCKED_REQUIREMENTS -->' "$L1" "$L9" > "$D/a/dangling.md"; printf '%s\n' '<!-- LOCKED_REQUIREMENTS -->' 'no requirements were locked this sprint' '<!-- END LOCKED_REQUIREMENTS -->' > "$D/a/empty.md"; printf '%s\n' '<!-- LOCKED_REQUIREMENTS -->' "$L1" '- **LR-S1-2** locked and reaching no capability' '<!-- END LOCKED_REQUIREMENTS -->' > "$D/b/locked.md"; ab=$(bash "$A" "$D/a/narrow.md" --emit-blocks 2>/dev/null); rab=$?; { [ "$rab" -eq 0 ] && grep -qF 'LR-S1-1' <<<"$ab" && ! grep -qF 'LR-S1-9' <<<"$ab"; } || X 9; cmp -s "$D/a/narrow.md" "$D/a/wide.md" && X 9; [ "$(sort "$D/a/narrow.md")" = "$(sort "$D/a/wide.md")" ] || X 9; cmp -s "$D/a/narrow.md" "$D/a/exotic.md" && X 9; [ "$(grep -v '<!--' "$D/a/narrow.md")" = "$(grep -v '<!--' "$D/a/exotic.md")" ] || X 9; cmp -s "$D/a/.memlog.md" "$D/b/.memlog.md" && X 9; on=$(bash "$V" --spec "$D/a" --prd "$D/prd.md" 2>&1); rn=$?; { [ "$rn" -eq 1 ] && grep -qF 'LR-S999-9' <<<"$on"; } || X 9; oa=$(bash "$V" --spec "$D/a" --prd "$D/prd.md" --locked-requirements "$D/a/narrow.md" 2>&1); ra=$?; ow=$(bash "$V" --spec "$D/a" --prd "$D/prd.md" --locked-requirements "$D/a/wide.md" 2>&1); rw=$?; og=$(bash "$V" --spec "$D/a" --prd "$D/prd.md" --locked-requirements "$D/a/exotic.md" 2>&1); rg=$?; ob=$(bash "$V" --spec "$D/b" --prd "$D/prd.md" --locked-requirements "$D/b/locked.md" 2>&1); rb=$?; bash "$V" --spec "$D/a" --prd "$D/prd.md" --locked-requirements "$D/a/empty.md" >/dev/null 2>&1; re=$?; bash "$V" --spec "$D/a" --prd "$D/prd.md" --locked-requirements "$D/a/dangling.md" >/dev/null 2>&1; rd=$?; [ "$oa" != "$on" ] || X 1; [ "$ra" -eq 0 ] || X 1; grep -qF 'LR-S999-9' <<<"$oa" && X 1; grep -qF 'LR-S1-9' <<<"$oa" && X 1; grep -qF 'LR-S1-5' <<<"$oa" || X 1; [ "$rg" -eq 0 ] || X 1; grep -qF 'LR-S1-9' <<<"$og" && X 1; [ "$rw" -eq 1 ] || X 1; grep -qF 'LR-S1-9' <<<"$ow" || X 1; [ "$rb" -eq 1 ] || X 1; grep -qF 'LR-S1-2' <<<"$ob" || X 1; [ "$re" -eq 2 ] || X 1; [ "$rd" -eq 2 ] || X 1; X 0
+
