@@ -32,15 +32,51 @@ grep -cE '^## BL-[0-9]+' docs/backlog.archive.md  # archived
 bash scripts/backlog-reverify.sh | grep -oE 'CLOSE-CANDIDATE|STILL-LIVE|HAND-REVIEW|NEEDS-REVIEW' | sort | uniq -c
 ```
 
-At the last session's close those read **61 live / 22 archived / 57 STILL-LIVE + 4 HAND-REVIEW**,
+At the last session's close those read **64 live / 24 archived / 57 STILL-LIVE + 7 HAND-REVIEW**,
 with 0 CLOSE-CANDIDATE, against an impossible-id control of 0.
+
+**The `md5` above is NOT a fixed value and a change to it is not automatically your doing.**
+Measured during batch 8: it moved mid-session while a live graph session appended an S305 retro
+entry, with that consumer's `HEAD` advancing and its own s305 artifacts appearing untracked.
+Record the value at your first action, and when it moves, READ THE DIFF before treating it as a
+boundary violation — `git -C /Users/n8/git/graph diff` on that path names the writer.
 
 ### What is DONE — do not redo any of it
 
 **Phases 0–2, 4 and 5 are COMPLETE.** Phase 3 is the batch loop and it is the only remaining
-work. Batches 1–7 have all MERGED AND PUSHED; the releases are `v0.374.0`, `v0.375.0`,
-`v0.376.0`, `v0.377.0`, `v0.378.0`, `v0.379.0` and `v0.380.0`, each recorded in `CHANGELOG.md`.
-`v0.381.0` and `v0.382.0` followed as machinery releases and are also shipped.
+work. Batches 1–8 have all MERGED AND PUSHED; the releases are `v0.374.0`, `v0.375.0`,
+`v0.376.0`, `v0.377.0`, `v0.378.0`, `v0.379.0`, `v0.380.0` and `v0.415.0`, each recorded in
+`CHANGELOG.md`. `v0.381.0` and `v0.382.0` followed batch 7 as machinery releases; many further
+machinery releases have shipped between `v0.383.0` and `v0.414.0` that are NOT part of this
+program, which is why the batch numbering and the version numbering stopped agreeing.
+
+**BATCH 8 IS COMPLETE, MERGED AND PUSHED AS `v0.415.0`.** `BL-079` closed. Merge `8d4d7424`,
+release `2b474ad2`, close-and-rotate `20599835`. Live **65 → 64**, archive **23 → 24**,
+`--check` PASSing before `--apply`, no id in both files, and `backlog-reverify` reporting **0
+CLOSE-CANDIDATE** afterwards against an impossible-id control of 0. Gate read directly, not
+through a pipe: exit **0**, **16 of 16** phases PASS, `spec-join-integrity` read BY NAME against
+an impossible-name control of 0 and a second present-name control of 1.
+
+**FOUR THINGS THE ENTRY ASSERTED DID NOT HOLD, AND THE RE-DERIVATION IS WHY THEY WERE FOUND.**
+Its own `verify:` receipt was EXPIRED — the seed used a capability grammar the validator now
+DISARMs, so both arms returned 2 and it exited 9 against every implementation, a correct one
+included. Its population was six memlogs, not four. The shared baseline it names as a blocker
+does not exist in that consumer. And the false positive dying does NOT turn that gate green: a
+join (2a) spine finding survives, byte-identical either way, and a figure taken on `--spec --prd`
+alone is a figure about join (1) rather than about Check 30.
+
+**THE INDEPENDENT HANDS PAID AGAIN, 5 OF 5 BATCHES.** Three defects in work already committed on
+the branch, each returning a WRONG answer rather than an error: the borrowed grammar joins its
+blocks with a FORM FEED and this reader was grepping the join, silently dropping the head
+declaration of every block after the first with no DISARM available; a declared population none
+of whose ids the memlog mentions took the note branch on every iteration and printed PASS having
+joined nothing; and `--locked-requirements ""` reverted to the memlog scan and reproduced the
+original false positive. A fourth hand found the CHANGELOG's own s302 claim overstated.
+
+**AND THE FIRST CUT COMMITTED THE DEFECT `I97` NOW BLOCKS.** `validate-locked-anchor.sh` owns
+the `LOCKED_REQUIREMENTS` block grammar and exposes `--emit-blocks` so a second reader need not
+re-derive it. A hand-rolled marker pair went in anyway and read 2 of the grammar's 6 measured
+spellings. **Grep for the mechanism before writing one.**
 
 **The consumer wall-clock investigation is CLOSED and its record is
 `docs/v0.380.0-pipeline-cost-investigation.md`.** It refutes ELEVEN hypotheses, each with its
@@ -55,16 +91,14 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **Batch 8. `BL-079` is its subject, by operator ruling.** It is a live false positive on the
-   reference consumer's s302 gate, and its remedy is a design change — a declared-population flag
-   with SKIP semantics for a sprint shipping no `locked-requirements.md`, plus a shared baseline
-   that fires did-not-reproduce 15 times at s302 — which the entry says must be settled in one
-   change. Read the entry in `docs/backlog.md` before scoping it; **re-derive its population
-   rather than believing it.** Measured across four batches, **4 of 5 entries were WIDER than
-   filed**, and that is now the base case rather than the exception.
-2. **Keep the batch to ONE subsystem.** `BL-076` (five sibling count-without-identity validators)
-   and `BL-078` are same-family and may join it. `BL-081`, `BL-082` and `BL-083` are a coherent
-   alternative subsystem — take one group or the other, not both.
+1. **Batch 9. Pick its subject from the live ledger and say why.** `BL-076` (five sibling
+   count-without-identity validators) and `BL-078` (17 empty-subject verdicts at 4 exit codes
+   across 13 files) are one coherent subsystem and were deferred out of batch 8 by operator
+   ruling. `BL-081`, `BL-082` and `BL-083` are the coherent alternative. Read the entry in
+   `docs/backlog.md` before scoping it, and **re-derive its population rather than believing
+   it.** Measured across five batches, **4 of 5 entries were WIDER than filed and batch 8's was
+   wrong in four separate places**; that is the base case, not the exception.
+2. **Keep the batch to ONE subsystem.** Take one group or the other, not both.
 3. **Put independent hands on SCOPE, FIXTURE and RECEIPT, every time.** In the last session they
    refuted work already committed on the branch twice out of three, and across four batches this
    is the only mechanism that has ever told a session it was wrong about its own change. Ask of
