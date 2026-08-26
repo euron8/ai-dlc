@@ -1,4 +1,12 @@
-# Retire the "2+ passes" floor: converge on the exit condition, not a pass count
+# DISCHARGED — Retire the "2+ passes" floor: converge on the exit condition, not a pass count
+
+> **THIS PLAN IS SPENT. DO NOT EXECUTE IT.** Shipped as **v0.413.0** (`81bcc00d`) on
+> `origin/main`, with the follow-on mechanisms in **v0.414.0**. Every numbered action below
+> is done. Kept as the RECORD of what was measured and why, never as a set of instructions.
+>
+> A spent runbook still written in the imperative is this repo's recorded handoff hazard:
+> a session told to FOLLOW it redoes merged work.
+
 
 **Resume with: `READ and FOLLOW docs/plans/adversarial-pass-floor-retirement.md`.**
 That is the whole instruction the operator gives. This block is the entry point;

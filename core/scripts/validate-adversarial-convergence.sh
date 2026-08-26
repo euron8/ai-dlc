@@ -948,6 +948,12 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
 
 F_WHY=""
 RESOLVED_TERMINAL=0
+# Arm F's finding, as a FLAG rather than only as a message. Arm F ran in --cycle-state and
+# its verdict reached nothing: a series that walked past a hard block without a valid
+# resolution and then stamped MET was emitted as CONVERGED/0, so the GATE refused it while
+# the HOOKS were told to proceed. Measured on four fixture cases -- divergent-unresolved,
+# divergent-frozen, divergent-laundered-cut, divergent-laundered-revert.
+F_UNRESOLVED=0
 N="${#P_FILE[@]}"
 
 # Has the operator already adjudicated the TERMINAL pass? One implementation, because
@@ -979,6 +985,7 @@ for ((i = 0; i < N; i++)); do
       FIX: write the resolution record the operator's adjudication authorized --
       $(dirname "$ver_file")/<sprint>-<artifact>-resolution-p$((i + 1)).md -- and have the
       verification pass declare it in 'resolves_divergence:'."
+      F_UNRESOLVED=1
       continue
     fi
     # Resolve the record path relative to the artifact directory when it is bare.
@@ -986,6 +993,7 @@ for ((i = 0; i < N; i++)); do
     if ! validate_record "$rec" "${P_FILE[$i]}" "$i"; then
       err "F -- RESOLUTION" "$(basename "$ver_file") claims to resolve
       $(basename "${P_FILE[$i]}"), but $F_WHY"
+      F_UNRESOLVED=1
     fi
   else
     # The hard block IS the terminal pass. Arm D owns that failure at the gate -- but
@@ -1273,39 +1281,41 @@ if [ "$CYCLE_STATE" -eq 1 ]; then
   fi
   STATE="CONTINUE"
   RC=0
+  DIV_LIVE=0
+  if [ "$LAST_VERDICT" = "DIVERGENT_HARD_BLOCK" ] || [ "$C_DIVERGED" -eq 1 ] \
+   || [ "$F_UNRESOLVED" -eq 1 ]; then DIV_LIVE=1; fi
+
+  # EVERY DENY-WORTHY RUNG OUTRANKS "the last pass stamped MET", AND THAT ORDERING IS THE
+  # WHOLE MECHANISM. A rung placed after the thing it polices cannot fire -- this file
+  # already paid for that twice (arm E inside arm D's case, then the CEILING hoist), and
+  # both fixes moved one branch without asking what else sat behind the same door.
+  #
+  # WHAT SAT BEHIND IT. `--cycle-state` runs arms C, E, F and J, but a series that walked
+  # past an unresolved hard block and then reached MET leaves LAST_VERDICT =
+  # EXIT_CONDITION_MET, so a CONVERGED branch reached first answered CONVERGED/0 and every
+  # one of those rungs went silent. The GATE refused those same series (exit 1) while the
+  # HOOKS were told to proceed -- two readers of one predicate disagreeing, which is
+  # precisely what this file's "THE HOOKS HOLD NO LOGIC" contract exists to prevent.
+  # Measured on the fixture: divergent-unresolved, divergent-frozen,
+  # divergent-laundered-cut and divergent-laundered-revert all failed the gate and all
+  # reported CONVERGED/0 here.
+  #
+  # ONLY THE rc-3 CONDITIONS ARE HOISTED, and that is deliberate. A divergence or stall
+  # that was RESOLVED on the record and then ran to MET has converged, and must keep
+  # saying so -- hoisting the resolved states too would relabel every healthy recovered
+  # series as RESOLVED and lose the distinction the hooks report to the operator.
   if [ "$REOPEN_LIVE" -eq 1 ]; then
-    # BEFORE the CONVERGED branch, and that ordering IS the arm. A re-open whose successor
-    # pass itself stamped MET leaves LAST_VERDICT = EXIT_CONDITION_MET, so a CONVERGED
-    # branch reached first answers CONVERGED/0 and the rung never speaks -- the hooks then
-    # allow the very dispatch the re-open should deny.
-    #
-    # THIS WAS UNREACHABLE UNDER THE OLD PREDICATE AND IS REACHABLE UNDER THIS ONE. While
-    # arm J required blocking > 0, a re-open implied the successor was NOT_MET, so the MET
-    # branch could never win the race. Keying on artifact_sha makes a clean-but-moved
-    # successor expressible, and the state machine had no way to say it. Caught by the
-    # `reopen-moved-clean` fixture case, which passed in gate mode and failed here.
     STATE="REOPENED"; RC=3
+  elif [ "$CEILING_LIVE" -eq 1 ]; then
+    STATE="CEILING"; RC=3
+  elif [ "$DIV_LIVE" -eq 1 ] && [ "$RESOLVED_TERMINAL" -ne 1 ]; then
+    STATE="DIVERGENT"; RC=3
+  elif [ "$STALL_LIVE" -eq 1 ] && [ "$RESOLVED_TERMINAL" -ne 1 ]; then
+    STATE="STALLED"; RC=3
   elif [ "$LAST_VERDICT" = "EXIT_CONDITION_MET" ]; then
     STATE="CONVERGED"
-  elif [ "$CEILING_LIVE" -eq 1 ]; then
-    # BEFORE the divergence and stall branches, and that ordering is the arm. Both of
-    # those consult RESOLVED_TERMINAL, which is TRUE here by construction -- a record
-    # exists, that is the whole finding -- so either branch reached first would report
-    # RESOLVED and the arm would never speak. A rung placed after the thing it polices
-    # cannot fire, and this file already paid for that once (arm E inside arm D's case).
-    STATE="CEILING"; RC=3
-  elif [ "$LAST_VERDICT" = "DIVERGENT_HARD_BLOCK" ] || [ "$C_DIVERGED" -eq 1 ]; then
-    if [ "$RESOLVED_TERMINAL" -eq 1 ]; then
-      STATE="RESOLVED"
-    else
-      STATE="DIVERGENT"; RC=3
-    fi
-  elif [ "$STALL_LIVE" -eq 1 ]; then
-    if [ "$RESOLVED_TERMINAL" -eq 1 ]; then
-      STATE="RESOLVED"
-    else
-      STATE="STALLED"; RC=3
-    fi
+  elif [ "$DIV_LIVE" -eq 1 ] || [ "$STALL_LIVE" -eq 1 ]; then
+    STATE="RESOLVED"
   fi
   printf '%s\t%s\n' "$STATE" "$LAST_FILE"
   exit "$RC"
