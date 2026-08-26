@@ -368,7 +368,33 @@ Cut the branch from `origin/main`, not from local `main`.
   `docs/analysis/compliance-review-20260323.md:183`.** Frozen historical
   records.
 
-## Verification
+## Verification — CLOSED, and items 6 and 7 were closed LATE
+
+**The DISCHARGED label above was applied while items 6 and 7 of this section were still
+unrun.** Items 1-5 were complete; 6 was partial (an installed tree was checked, but the
+suite was never run in the consumer layout) and 7 had been substituted with a synthetic
+`mktemp` series instead of the consumer-side close it asks for. Both are now done, and the
+substitution is the point worth keeping: a synthetic N=1 check exercises the VALIDATOR, and
+item 7 asks about the HOOK. They are different programs.
+
+- **6, closed.** `scripts/install.sh` into an empty tree; `check-24` run from
+  `tests/fixtures/` in the consumer layout: 103/103. Then the CONSUMER's copy of
+  `validate-adversarial-convergence.sh` was mutated (arm J's sha compare disabled) and the
+  fixture went red on `reopen-moved-clean` and `reopen-unrecorded` -- which is what
+  establishes that the consumer copy is the one that ran, rather than the fixture reaching
+  back into the distribution tree.
+- **7, closed.** A scratch consumer tree, never `/Users/n8/git/graph` itself. The real
+  `ai-dlc-acknowledge.sh` on a `PreToolUse` Agent payload: a series converged at pass 1
+  reports `CONVERGED`, the hook exits 0 and emits NO deny. **Control, in the same run:** add
+  a successor pass at a changed `artifact_sha` and the same hook emits the deny. Without
+  that control a hook that never armed would have produced an identical "no deny".
+- **The boundary was checked by a JOIN, not by intent.** `graph` showed four dirty files
+  during the run. The hook writes `- Session: <session_id>` into
+  `_bmad-output/pipeline-continuation-log.md`, and the payload used `s7`: that token appears
+  **once in the scratch tree and zero times in graph**, whose entries carry a concurrent
+  session's UUID. Proximity in time proved nothing; the session-id join did.
+
+## Verification (as planned)
 
 1. **Prove I96 can fail before trusting its zero.** Under `mktemp`, seed a tree
    carrying `Adversarial Review (2+ passes)` and a near-miss carrying
