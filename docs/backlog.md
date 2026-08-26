@@ -57,6 +57,59 @@ not a closed entry.
 
 ---
 
+## BL-089 — an EXPIRED receipt and a live defect are the same row, so a receipt that can no longer measure anything reads as evidence that it did
+
+**`backlog-reverify.sh` maps `sh` receipts on exit code alone — 0 is CLOSE-CANDIDATE and
+EVERY non-zero is `STILL-LIVE  … "sh receipt exited non-zero -- still reproduces here"`
+(`scripts/backlog-reverify.sh:182-187`).** But this corpus's receipts use **exit 9** as their
+own HAND-REVIEW convention: it is what a receipt returns when a PRECONDITION has moved and it
+therefore measured nothing. The engine folds that into STILL-LIVE, so a receipt asserting *"I
+could not tell"* is reported in the same words as one asserting *"the defect is still here"*.
+
+**Driven through the shipping engine on a two-entry probe ledger, both verdicts byte-identical:**
+
+```
+STILL-LIVE	BL-901	sh receipt exited non-zero -- still reproduces here     (receipt: exit 1)
+STILL-LIVE	BL-902	sh receipt exited non-zero -- still reproduces here     (receipt: exit 9)
+```
+
+**The population is 2 of the 56 live `verify: sh` entries, and it is derived twice.** Running
+every live receipt directly: 0 exit 0, **2 exit 9**, 54 other non-zero, against a control of 5
+entries declaring `verify: manual` which the engine does route to HAND-REVIEW. They are
+**`BL-066`** and **`BL-076`**. Independently, a mutant of the engine that routes 9 to
+NEEDS-REVIEW takes the real ledger from 54 STILL-LIVE to **52** — the same 2, arrived at from
+the other side.
+
+**`BL-066`'s receipt does not merely expire, it is BROKEN SHELL**: it dies with
+`syntax error: unexpected end of file` and is reported as a defect that still reproduces. That
+is the direction that matters — a receipt with no valid parse and a defect with no fix are one
+row, and the row reads as the second.
+
+**This is not hypothetical damage and the cost is measured in releases.** `BL-079`'s receipt
+seeded a `SPEC.md` in a capability grammar the validator had since started DISARMing, so both
+its arms returned 2 and its own guard `[ "$c" -eq 1 ] || exit 9` fired against **every**
+implementation, a correct one included. It sat as STILL-LIVE from `v0.378.0` to `v0.415.0` and
+was found only because a session re-derived the entry by hand rather than believing its row.
+**A receipt that rejects all answers is the CLOSE side of the same coin the engine's own
+comments already worry about**: its `has`/`lacks` arms carry a paragraph on a false CLOSE
+retiring a live item, and this is a false STILL-LIVE keeping a dead one — cheaper per instance
+and unbounded in duration, because nothing ever revisits a STILL-LIVE row.
+
+**Why the receipt is the receipt.** It cannot assert on the engine's WORDING, since any fix is
+free to phrase a new verdict differently, and it must not assert on the real ledger, whose
+membership moves every batch. It seeds a two-entry ledger under `mktemp` — one receipt exiting
+1, one exiting 9 — drives the shipping engine over it, and requires the two rows to receive
+DIFFERENT verdicts. Its control runs FIRST and is that the exit-1 entry is reported STILL-LIVE:
+without that, "the two differ" is equally satisfied by an engine that emitted nothing, and by
+one that never ran. It exits 9 itself if either probe row is missing or either verdict is empty.
+Proven both directions: **1** against this tree, **0** against a mutant routing exit 9 to
+NEEDS-REVIEW, with the two sides asserted to differ and the mutant asserted to be valid shell
+first. Tier: **DEFECT** — it silently disables the only instrument this backlog has.
+
+verify: sh R=scripts/backlog-reverify.sh; [ -r "$R" ] || exit 9; D=$(mktemp -d) || exit 9; X(){ rm -rf "$D"; exit "$1"; }; printf '%s\n' '# probe ledger' '' '## BL-901' '' 'A genuinely live entry whose receipt reproduces the defect.' '' 'verify: sh exit 1' '' '## BL-902' '' 'An entry whose receipt cannot measure anything and says so.' '' 'verify: sh exit 9' > "$D/probe.md" || X 9; O=$(bash "$R" "$D/probe.md" 2>/dev/null); [ "$(grep -c 'BL-901' <<<"$O")" -eq 1 ] || X 9; [ "$(grep -c 'BL-902' <<<"$O")" -eq 1 ] || X 9; V1=$(grep 'BL-901' <<<"$O" | cut -f1); V2=$(grep 'BL-902' <<<"$O" | cut -f1); [ "$V1" = "STILL-LIVE" ] || X 9; [ -n "$V2" ] || X 9; [ "$V2" != "STILL-LIVE" ]; X $?
+
+---
+
 ## BL-088 — one fixture is 119s of a 130.9s suite, which is what makes the default 2-minute tool timeout unsurvivable
 
 **The pole, not the budget, is the durable fix.** v0.405.0 prescribed an explicit long timeout
