@@ -54,10 +54,17 @@ receipt is broken shell. Batch 9 rebuilt the other one; `BL-076`'s had been unab
 anything for 28 releases and read as `STILL-LIVE` the whole time.
 Derive the current pair rather than trusting that one; the count of live `sh` receipts moves
 with every batch and the control is the entries declaring `verify: manual`, which the engine
-does route to HAND-REVIEW. **Count those with `^[ \t]*verify:`, not `^verify:`** — three entries
-indent the line, `backlog-reverify.sh`'s own grammar allows the indent, and an unindented grep
-undercounts. That grep is why an earlier revision of this block said 5; the measured number at
-v0.417.0 is 7:
+does route to HAND-REVIEW.
+
+**DERIVE THAT CONTROL FROM THE ENGINE, NOT FROM A GREP, AND HERE IS WHY BOTH GREPS ARE WRONG.**
+`^verify: manual` returns 5 — it misses the three entries that INDENT the line, which
+`backlog-reverify.sh`'s own grammar (`^[ \t]*verify:`) accepts. Fixing the indent gives 8, which
+is also wrong: both counts include the `verify: manual` line in the `## Receipts` LEGEND at
+`docs/backlog.md:25`, which is prose about the grammar and not an entry. The true number at
+v0.417.0 is **7**, and the only reader that gets it right is the engine, because it starts
+entries at a `BL-` id and never counts the preamble. An earlier revision of this block quoted 5
+from the unindented grep; the revision after it fixed the PROSE and left the COMMAND, so the
+file stated 7 beside a command returning 5. Run the engine:
 
 This one is a LOOP, so run it through `bash -c` — your shell is zsh, where an unquoted `$var`
 is not word-split and a loop written for bash iterates once over the whole string:
@@ -65,7 +72,7 @@ is not word-split and a loop written for bash iterates once over the whole strin
 ```
 bash -c 'while IFS= read -r l; do ( eval "${l#verify: sh }" ) >/dev/null 2>&1; echo "$?"; done \
   < <(grep "^verify: sh " docs/backlog.md) | sort | uniq -c'
-grep -c '^verify: manual' docs/backlog.md    # the control: these DO reach HAND-REVIEW
+bash scripts/backlog-reverify.sh | grep -c '^HAND-REVIEW'   # the control: these DO reach it
 ```
 
 **Before scoping any entry, run its receipt directly and read the raw exit code.** A 9 means
@@ -243,7 +250,28 @@ so no block written before it changes verdict.
    `scripts/backlog-rotate.sh --check`, then `--apply`. **Confirm the archive count MOVED.** A
    release has shipped with this step silently skipped and was reported complete; it was caught
    only because the operator asked.
-6. **Cite every closed id verbatim in the RELEASE COMMIT MESSAGE**, not only in `CHANGELOG.md`.
+6. **AFTER THE MERGE, BEFORE YOU STOP: re-derive this file's own RESUME block and prove it is
+   resumable.** This is a numbered action because it is the step that decays silently — the
+   merge is the moment the block you were following becomes a description of work already done,
+   and a session that stops there hands the next one an instruction to redo it.
+
+   Do these four, and REPORT the result:
+
+   - **Run the derive block above, verbatim, and compare every figure to what it CLAIMS.** Not
+     "does it look right" — run it and diff. Fix the file where they disagree.
+   - **Read the numbered action 1 as a stranger would.** If it still names work you just
+     finished, it is wrong. Replace it with the next action; do not append beside it.
+   - **Fix the COMMAND, never only the prose.** Measured at v0.417.0: that release corrected a
+     stale figure in the sentence and left the grep beneath it returning a different number, so
+     the file asserted 7 above a command printing 5. A resuming session runs the command.
+   - **`bash scripts/validate-plan-shape.sh`**, which is the only mechanical half of this. It
+     cannot see whether an action is stale, so it passing is not the answer — it is the floor.
+
+   **The three failures this catches are all one shape: the file describing a tree that has
+   moved.** A stale action 1 costs a whole session redoing a batch. A stale figure costs the
+   trust that makes the other figures usable. A stale command costs whichever the reader
+   believes.
+7. **Cite every closed id verbatim in the RELEASE COMMIT MESSAGE**, not only in `CHANGELOG.md`.
    `named_absorbed()` resolves the signal with `git log -F --grep`, which reads commit MESSAGES;
    a `###` section in the CHANGELOG is in the diff and produces no row at all.
 
