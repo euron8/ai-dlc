@@ -207,7 +207,7 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    proceed.
 2. `/bmad-advanced-elicitation` — probe until zero ambiguity and update the
    artifact. **Run sub-step snapshot update**, then proceed.
-3. **Adversarial convergence** — 2+ passes (a floor, not a target) through the
+3. **Adversarial convergence** — passes through the
    **Adversarial review dispatch** and **Adversarial repair dispatch**
    sub-routines (below), carrying the step's declared focus. **Run sub-step
    snapshot update after each pass**, then **run auto-handoff evaluation**

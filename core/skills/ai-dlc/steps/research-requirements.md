@@ -124,10 +124,11 @@ dispatch** sub-routines. Parameters:
   requested, not a generalized or lower-effort alternative, preserving specific
   details from its source.
 - **adversarial focus:** none beyond the adversary's default contract.
-- **intensity:** on `validation_intensity == lightweight`, run one adversarial
-  pass only — skip party-mode and advanced-elicitation. It is still a convergence
-  pass (Check 24's scope includes `research-requirements`), so it stamps a
-  `verdict:`; a single pass is not a one-shot review.
+- **intensity:** on `validation_intensity == lightweight`, skip party-mode and
+  advanced-elicitation. **That skip is the whole of `lightweight`; it is NOT a
+  cap on passes.** The cycle still converges (Check 24's scope includes
+  `research-requirements`), so each pass stamps a `verdict:` and the series ends
+  when one stamps `EXIT_CONDITION_MET`. A single pass is not a one-shot review.
 - **`Seam D` label:** `research-requirements adversarial pass <N>`.
 - **on convergence:** append a changelog to
   `_bmad-output/planning-artifacts/s<N>/changelog-prd.md` (`_gate-procedures.md` —

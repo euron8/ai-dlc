@@ -174,8 +174,8 @@ H1/H2 stay with the lead — a self-test is never escalated into the mechanism i
 <!-- CHECK_LOADED: 1 -->
 
 - For planning artifacts: Party Mode completed? Advanced Elicitation
-  completed? Adversarial Review completed (2+ passes, only nitpicks
-  remain)?
+  completed? Adversarial Review CONVERGED — does its terminal pass stamp
+  `EXIT_CONDITION_MET`?
 - For implementation artifacts: Code Review approved? QA approved?
   Story Validation passed?
 - **Read each verdict from its review file, do not assert it.** The Code
@@ -1258,9 +1258,8 @@ Party Mode, and deploy-validate smoke remain mandatory at every
 intensity.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: a planning gate that
-under-ran its declared intensity (a `full` sprint that skipped Advanced
-Elicitation or ran a single adversarial pass), silently downgrading
-operator-selected rigor. False-positive cost: a sanctioned fast-track
+under-ran its declared intensity by SKIPPING an evaluation its row names,
+silently downgrading operator-selected rigor. False-positive cost: a sanctioned fast-track
 (architecture NO-CHANGES-NEEDED) counted as a miss — resolve by
 recording skip provenance in the gate log, not by failing. Removal
 condition: retire once validation-cycle invocation is made structurally
@@ -1571,9 +1570,8 @@ one in which the operator spoke. Checking one file made every record unverifiabl
 handoff, `/clear` or auto-compact: the citation reported NOMATCH, the record stopped
 counting, and the cycle re-deadlocked at `STALLED`/rc 3 with every dispatch denied.
 
-It does NOT enforce the per-intensity pass floor ("2+ passes"). Rule 8 delegates
-that to each planning step's own intensity gate; duplicating it here would fail
-every legitimate `standard` / `lightweight` single-pass cycle.
+It is COUNT-BLIND. Rule 8's intensity table names evaluations, not pass counts,
+and a series that converges in one pass is a converged series.
 
 **The resume contract — STOP → ADJUDICATE → RESOLVE → VERIFY.** A hard block does not
 end the cycle; it stops it until the operator adjudicates. The exit is a **resolution

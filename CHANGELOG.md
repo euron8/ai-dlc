@@ -15,6 +15,98 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.413.0] - 2026-08-26
+
+### The adversarial cycle had two stopping rules; now it has one
+
+Rule 8's intensity table required `Adversarial Review (2+ passes)` at `full`, and the cycle
+also had to reach `EXIT_CONDITION_MET`. Two stopping rules where one suffices, and the
+second one could only ever disagree with the first. The exit condition is now honoured the
+moment it is met, including at pass 1.
+
+**The number was never derived.** `git log -S 'Adversarial Review (2+ passes)' --reverse`
+traces it to `5212c786`, the initial framework commit, where it arrives fully formed in
+three files at once with no rationale; it moved verbatim into Rule 8 at `09c170f0`, and the
+four-tier table that produced the `full` = 2+ / `standard` = 1+ split was absorbed at
+[0.4.2] with no derivation either. A search for any text deriving or admitting the number
+returns nothing, with a positive control confirming the search was live.
+
+**The floor had no enforcer.** `minimum_met` occurs 0 times in `core/scripts/` and
+`core/hooks/` (control: `validation_intensity`, 1). Check 20 is `adjudication: llm`,
+`enforcer: []`. `validate-adversarial-convergence.sh` said outright it did not enforce the
+floor. The only code that touched it was arm J's exemption, which EXCUSED a floor pass
+rather than requiring one. Removing the floor removes no enforcement.
+
+**Measured on the reference consumer: 71 pass series, 161 consecutive pass pairs.** Six
+pairs follow a pass that stamped MET. Exactly ONE re-reviews the same `artifact_sha` -- a
+true floor pass -- and it found nothing. The other five reviewed CHANGED bytes, which is a
+re-open rather than floor value. The repo's own prior figures agree: 12 of 13 second passes
+find no CRITICAL and no MAJOR (`check-17-counts/run.sh`, `provenance-block.json`), and 78%
+of MAJORs raised at pass 2+ were introduced by a prior repair
+(`validate-artifact-derivations.sh`).
+
+**The plateau backtest in `docs/plans/graph-ledger-full-drain.md` is NOT refuted by this**
+and was not re-run. It killed a *plateau* predicate (non-increasing MAJOR) for skipping
+prior-scope CRITICALs already in the text. This release adds no exit predicate; it removes
+a count beside the existing zero-CRITICAL/zero-MAJOR one, which already refuses every input
+that disqualified the plateau form.
+
+### Arm J now keys the re-open on `artifact_sha`, and its old rationale named the wrong case
+
+Arm J's `blocking > 0` narrowing was justified by the floor: a `full` p1-MET series "still
+OWES its second pass". With the floor gone that justification goes too. Re-measuring the two
+series its comment cited as false fires showed they were never the same shape:
+
+- `s292-stories` p1 -> p2 at `307b013da152` both sides. SAME bytes, genuinely exempt.
+- `s290-discovery` p1 `0db9fd8392bf` -> p2 `cd1450150cd7`, same `artifact: product-brief.md`.
+  The brief MOVED after it was notarised -- a re-open by the arm's own definition, which the
+  old predicate let through only because the successor happened to find nothing.
+
+The predicate now asks whether the artifact moved, which is what a re-open IS. Differential
+over the corpus: 4 fires against the old form's 3, the added one being `s290/discovery`, and
+none removed. An absent sha on either side exempts -- a deliberate fail-open, since the field
+postdates the earliest passes and a check that errors on pre-migration data gets turned off.
+
+**`--cycle-state` could not express a re-open whose successor converged.** The `CONVERGED`
+branch was tested before the `REOPENED` one, so a MET successor won the race and the hooks
+allowed the very dispatch the re-open should deny. Unreachable under the old predicate --
+`blocking > 0` implied the successor was NOT_MET -- and reachable under this one. The
+`reopen-moved-clean` fixture case caught it: green in gate mode, red in state mode.
+
+**Three fixture cases in `check-24-adversarial-convergence` were seeded with no
+`artifact_sha` at all**, including arm J's own true positive `reopen-unrecorded`. Under the
+fail-open that case would have stopped firing silently, and `reopen-recorded` would have
+passed without ever exercising the resolution door. All are now seeded with shas.
+`reopen-floor-pass` is renamed `reopen-same-bytes` and pinned to one sha on both sides;
+`reopen-moved-clean` and `reopen-sha-absent` are new.
+
+### I96 -- a pass count may not be restated beside the adversarial cycle
+
+The count had drifted into three copies that no invariant reached: `_gate-procedures.md`,
+`gate-validation.md` Check 1, and two in `templates/QUICKSTART.md.template`, which nothing
+binds to SKILL.md at all. I19 could not see any of them -- it keys on a backticked intensity
+name and an evaluation name on one line, which is how a table ROW is written, not how prose
+restates a number.
+
+The grammar is two tokens on one line, and it is two because a count alone flags five lines
+using the word in its other sense, including SKILL.md's STALL sentence whose 2 is arm E's
+`STALL_THRESHOLD` and a different number entirely. False-positive set: 10 before the count
+was retired, every one a site this release had to change; 0 after. Probed both directions
+under `mktemp`.
+
+### Changed
+
+- `core/skills/ai-dlc/SKILL.md` -- Rule 8's `Minimum cycle` column names EVALUATIONS only;
+  all four rows lose their pass counts. The always-required list loses `(1+ pass ...)`.
+- `core/skills/ai-dlc/steps/_gate-procedures.md`, `steps/gate-validation.md` (Check 1,
+  Check 20's failure example, Check 24's spec), `steps/research-requirements.md` (the
+  `lightweight` wording that read as a CEILING and contradicted arm D).
+- `core/scripts/validate-adversarial-convergence.sh` -- arm J's predicate and the
+  `--cycle-state` branch order.
+- `templates/QUICKSTART.md.template` -- three consumer-facing copies.
+- `scripts/validate-enforcement-map.sh` -- I96; `docs/invariant-index.md` re-rendered.
+- `docs/plans/adversarial-pass-floor-retirement.md` -- the plan, promoted.
+
 ## [0.412.0] - 2026-08-25
 
 ### A close on an entry's own boundary line was archived by nothing and reported by nothing

@@ -293,10 +293,14 @@ fi
 
 # --- arm J: RE-OPEN ------------------------------------------------------------
 expect reopen-unrecorded 1 "a pass ran after EXIT_CONDITION_MET reporting 1C/2M -- RE-OPEN, FAIL (J)" s1-adversarial-p
-expect reopen-floor-pass 0 "THE DECOY: p1 MET -> p2 MET with 0 findings is the intensity FLOOR, not a re-open" s1-adversarial-p
+expect reopen-same-bytes 0 "THE DECOY: p1 MET -> p2 MET at the SAME artifact_sha -- same bytes, same residue, not a re-open" s1-adversarial-p
+expect reopen-moved-clean 1 "p1 MET -> p2 MET at a CHANGED artifact_sha with 0 findings -- the artifact MOVED after sign-off, RE-OPEN, FAIL (J)" s1-adversarial-p
+expect reopen-sha-absent 0 "no artifact_sha on either side -- the arm fails OPEN rather than erroring on pre-migration data" s1-adversarial-p
 expect reopen-recorded   0 "a re-open DECLARED with resolution: REOPEN_AFTER_MET resumes -- the arm has a door" s1-adversarial-p
 expect_state reopen-unrecorded s1-adversarial-p REOPENED  3 "the hooks must deny the dispatch on a live re-open"
-expect_state reopen-floor-pass s1-adversarial-p CONVERGED 0 "the floor pass must not be denied"
+expect_state reopen-same-bytes  s1-adversarial-p CONVERGED 0 "a same-bytes re-review must not be denied"
+expect_state reopen-moved-clean s1-adversarial-p REOPENED  3 "the hooks must deny on a re-open even when the successor pass found nothing"
+expect_state reopen-sha-absent  s1-adversarial-p CONVERGED 0 "an unevidenced re-open must not be denied"
 expect_state reopen-recorded   s1-adversarial-p CONVERGED 0 "a declared re-open ran its sub-cycle to convergence -- never denied"
 echo
 # --- arm I: RESOLUTION CEILING -------------------------------------------------
