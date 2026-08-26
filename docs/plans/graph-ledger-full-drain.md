@@ -159,6 +159,30 @@ so no block written before it changes verdict.
    than an error. Across six batches
    this is the only mechanism that has ever told a session it was wrong about its own change.
 
+   **PICK EACH HAND'S MODEL BY WHAT A WRONG ANSWER FROM IT WOULD COST, NEVER BY HOW LARGE THE
+   TASK LOOKS.** The `Agent` tool takes `model: "opus" | "sonnet" | "haiku"`, and it is IGNORED
+   for `subagent_type: "fork"`, which always inherits yours. Set it explicitly on every spawn —
+   an omitted `model` is a default nobody chose. **Do NOT restate the pipeline's own
+   role-to-model mapping here**: `SKILL.md` Rule 19 binds that through `aiDlcRoles` in
+   `.claude/settings.json` and `ai-dlc-dispatch-guard.sh` enforces it. That is a different
+   system — these are ad-hoc hands with no role file — so the choice is yours to make and to
+   state.
+
+   - **`opus` when a wrong answer would be SILENT.** Adjudicating scope, partitioning a
+     population, attacking a claim, writing a fixture arm or a mutant, deciding whether a
+     receipt is satisfiable by something other than the correct fix. Every finding that has
+     ever told this program it was wrong came from that shape. Batch 9's two best — a receipt
+     closable by one comment line, and a provenance line that names a different corpus on its
+     other branch — were judgments no stated grammar would have surfaced.
+   - **`sonnet` when a wrong answer would be LOUD.** Resolving citations, counting a corpus
+     against a grammar fixed before dispatch, running a fixture and reporting its exit code,
+     confirming a path exists. A control in the same invocation catches the error.
+   - **Never `sonnet` for the adversarial hand.** Its whole job is to find what the brief did
+     not anticipate, and that is precisely what a cheaper model reproduces least.
+
+   Say the model and the one-clause reason in the spawn, so a thin result can be re-run one
+   tier up rather than re-argued.
+
    **A HAND WILL GO IDLE WITHOUT DELIVERING, AND AN IDLE NOTICE IS NOT A RESULT.** All five
    hands in batch 9 did it. Tell every hand to WRITE ITS REPORT TO A FILE and treat that file
    as the deliverable, then ask by name when the notice arrives. A hand's closing summary can
