@@ -114,16 +114,28 @@ so no block written before it changes verdict.
 1. **Batch 9. Pick its subject from the live ledger and say why.** `BL-076` (five sibling
    count-without-identity validators) and `BL-078` (17 empty-subject verdicts at 4 exit codes
    across 13 files) are one coherent subsystem and were deferred out of batch 8 by operator
-   ruling. `BL-081`, `BL-082` and `BL-083` are the coherent alternative. Read the entry in
-   `docs/backlog.md` before scoping it, and **re-derive its population rather than believing
-   it.** Measured across five batches, **4 of 5 entries were WIDER than filed and batch 8's was
-   wrong in four separate places**; that is the base case, not the exception.
+   ruling. `BL-081`, `BL-082` and `BL-083` are the coherent alternative.
+
+   **`BL-076`'S RECEIPT EXITS 9 AND ITS `STILL-LIVE` ROW IS NOT EVIDENCE THAT IT IS LIVE.** It
+   is one of the two entries `BL-089` was filed about — a precondition moved, so the receipt
+   measured nothing, and `backlog-reverify.sh` reports that in the same words as a defect that
+   reproduces. **Run its receipt directly and read the raw exit code before you scope it**, and
+   expect to REBUILD the receipt as part of the batch, as batch 8 had to for `BL-079`. The other
+   one is `BL-066`, whose receipt is not merely expired but broken shell.
+
+   **Then re-derive the entry's population rather than believing it.** Measured across five
+   batches, **4 of 5 entries were WIDER than filed, and batch 8's was wrong in four separate
+   places** — its receipt, its population, a blocker that did not exist, and what its fix would
+   achieve. That is the base case, not the exception.
 2. **Keep the batch to ONE subsystem.** Take one group or the other, not both.
-3. **Put independent hands on SCOPE, FIXTURE and RECEIPT, every time.** In the last session they
-   refuted work already committed on the branch twice out of three, and across four batches this
-   is the only mechanism that has ever told a session it was wrong about its own change. Ask of
-   every receipt: does a correct fix satisfy it, what ELSE satisfies it, and can the CORRECT fix
-   be one it REJECTS. Key mutants on LOCATION and observable BEHAVIOUR, never on a spelling.
+3. **Put independent hands on SCOPE, FIXTURE and RECEIPT, every time.** In batch 8 they found
+   THREE defects in work already committed on the branch, every one of which returned a WRONG
+   ANSWER rather than an error, plus an overstated claim in the CHANGELOG. Across five batches
+   this is the only mechanism that has ever told a session it was wrong about its own change.
+   Ask of every receipt: does a correct fix satisfy it, what ELSE satisfies it, and can the
+   CORRECT fix be one it REJECTS. Key mutants on LOCATION and observable BEHAVIOUR, never on a
+   spelling. **A hand can die mid-task** — one did, to a machine sleep, leaving a fixture
+   half-edited and RED; check each one's deliverable rather than its report.
 4. **Gate it the way the hook runs it, and read the GATE's own exit.**
    `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`, or simply push and let the hook's own run
    be the single gate — running it manually and then pushing pays for it twice. **The fixture
@@ -2092,10 +2104,14 @@ to grow fourfold carries the identical hazard.
 
 ## Done when
 
-**STATUS: 1, 2, 4 and 5 are SATISFIED and BANKED. 6 is SATISFIED. 3 is the only one still open, and
-it is open only because Phase 3 has not been released — it is a per-release-branch criterion with no
-release branch yet cut.** Each is still stated in full below because a fresh session must be able to
-re-check them, not take this line's word for it.
+**STATUS: 1, 2, 4, 5 and 6 are SATISFIED and BANKED. 3 is PER-RELEASE-BRANCH and is re-satisfied
+on each batch — it was green on batch 8's branch (`v0.415.0`), which says nothing about batch 9's.**
+Each is still stated in full below because a fresh session must be able to re-check them, not take
+this line's word for it.
+
+**An earlier revision of this line said criterion 3 was open "with no release branch yet cut", and
+eight had been.** It went stale because it recorded a STATE where the criterion records a PER-BRANCH
+OBLIGATION. Do not restate 3 as done; it is owed again by the branch you are about to cut.
 
 Two of these were satisfied in ways worth knowing before you re-read them. **Criterion 5 was
 NARROWED on measurement** — it split by channel because one criterion over both sets was
