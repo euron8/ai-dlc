@@ -298,6 +298,22 @@ expect reopen-moved-clean 1 "p1 MET -> p2 MET at a CHANGED artifact_sha with 0 f
 expect reopen-sha-absent 0 "no artifact_sha on either side -- the arm fails OPEN rather than erroring on pre-migration data" s1-adversarial-p
 expect reopen-recorded   0 "a re-open DECLARED with resolution: REOPEN_AFTER_MET resumes -- the arm has a door" s1-adversarial-p
 expect_state reopen-unrecorded s1-adversarial-p REOPENED  3 "the hooks must deny the dispatch on a live re-open"
+# GATE MODE AND HOOK MODE MUST NOT DISAGREE. Each of these failed the gate (exit 1) while
+# --cycle-state answered CONVERGED/0, so the hooks were told to proceed on a series the gate
+# had already refused. Arm F ran and set nothing the emit block could read.
+expect_state divergent-unresolved       s1-adversarial-p    DIVERGENT 3 "a pass ran past a hard block with no resolution -- deny"
+expect_state divergent-frozen           s1-adversarial-p    DIVERGENT 3 "FREEZE_SCOPE is not a resolution -- deny"
+expect_state divergent-laundered-cut    s1-adversarial-p    DIVERGENT 3 "a repair wearing CUT_SCOPE's name is not a release -- deny"
+expect_state divergent-laundered-revert s1-adversarial-p    DIVERGENT 3 "REVERT_REPAIR onto an unnotarized sha is not a release -- deny"
+expect_state divergent                  s1-adversarial-pass DIVERGENT 3 "a live divergence denies dispatch"
+expect_state repair-injected            s1-adversarial-pass DIVERGENT 3 "a repair injecting defects denies dispatch"
+expect_state stalled-then-diverges      s1-adversarial-p    DIVERGENT 3 "divergence outranks the stall it followed"
+expect_state restart-cycle              s1-adversarial-p    REOPENED  3 "a RESTART_CYCLE series still owes its declaration"
+# Found by the pairing arm below, not by hand: an adjudication that presents no real choice
+# denies the dispatch, and none of the three said so.
+expect_state adjudication-no-options        s1-adversarial-p DIVERGENT 3 "a record presenting no options denies dispatch"
+expect_state adjudication-one-option        s1-adversarial-p DIVERGENT 3 "a menu of one denies dispatch"
+expect_state adjudication-no-recommendation s1-adversarial-p DIVERGENT 3 "a menu with no recommendation denies dispatch"
 expect_state reopen-same-bytes  s1-adversarial-p CONVERGED 0 "a same-bytes re-review must not be denied"
 expect_state reopen-moved-clean s1-adversarial-p REOPENED  3 "the hooks must deny on a re-open even when the successor pass found nothing"
 expect_state reopen-sha-absent  s1-adversarial-p CONVERGED 0 "an unevidenced re-open must not be denied"
@@ -668,6 +684,52 @@ expect_says underived-partial-blocks s1-adversarial-p "B-blocking-count" \
   "1 blocking MAJOR" "3 MAJOR less 2 underived"
 expect_says underived-exceeds s1-adversarial-p "B-partition" \
   "findings_major_underived=4" "3 MAJOR"
+
+# --- PAIRING: a case that DENIES must assert the state the hooks read -------------
+# THE MECHANISM FOR A DEFECT CLASS THIS FIXTURE HAS NOW HIT TWICE. Gate mode and
+# --cycle-state are different code paths with different branch ordering, and the second one
+# is what the hooks call to deny a dispatch. A case asserted only in gate mode leaves that
+# path untested, which is how `reopen-moved-clean` passed while the state machine reported
+# CONVERGED, and how four divergence cases sat green for their whole lifetime while telling
+# the hooks to proceed on a series the gate refused.
+#
+# It is DERIVED, not a hand list: any seeded case whose --cycle-state exits 3 must carry an
+# expect_state naming it. Cases that do not deny are exempt, because arms D and H are
+# gate-only by design and pairing them would fire on correct cases -- of the 39 cases
+# carrying a gate expect, 15 deny and 24 are quiet, so a blanket pairing rule would have
+# been wrong 24 times.
+#
+# ELEVEN OF THOSE FIFTEEN WERE UNPAIRED WHEN THIS ARM WAS WRITTEN, and three of the eleven
+# were found BY the arm rather than by the hand-census that preceded it -- that census had
+# been run without --transcript/--transcript-dir, so the adjudication cases answered
+# CONVERGED and looked exempt. Run this arm the way the harness runs the validator, or it
+# measures a different program.
+PAIR_MISSING=""
+for _d in "$ROOT"/*/; do
+  [ -d "$_d" ] || continue
+  _c="$(basename "$_d")"
+  _pfx=""
+  for _f in "$_d"*adversarial*p*.md; do
+    [ -f "$_f" ] || continue
+    case "$_f" in *-repair-p*) continue ;; esac
+    _pfx="$_d$(basename "$_f" | sed 's/[0-9]*\.md$//')"
+    break
+  done
+  [ -n "$_pfx" ] || continue
+  bash "$VALIDATOR" --series "$_pfx" --cycle-state --transcript "$TRANSCRIPT" \
+    --transcript-dir "$ROOT" >/dev/null 2>&1
+  [ $? -eq 3 ] || continue
+  grep -qE "^expect_state[[:space:]]+${_c}([[:space:]]|\$)" "$DIR/run.sh" \
+    || PAIR_MISSING="$PAIR_MISSING $_c"
+done
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ -n "$PAIR_MISSING" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s case(s) deny via --cycle-state but assert only gate mode:%s\n' \
+    "state-mode-pairing" "$PAIR_MISSING"
+else
+  printf '  ok    %-28s every denying case asserts the state the hooks read\n' "state-mode-pairing"
+fi
 
 echo
 if [ "$FAILURES" -gt 0 ]; then

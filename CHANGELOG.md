@@ -15,6 +15,55 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.414.0] - 2026-08-26
+
+### The gate refused four series while the hooks told them to proceed
+
+`--cycle-state` is what the hooks call to deny a dispatch, and it emitted `CONVERGED/0` for
+any series that reached `EXIT_CONDITION_MET` -- including one that had walked past an
+unresolved hard block to get there. Arm F ran, found exactly that, and set nothing the emit
+block could read. So the GATE exited 1 and the HOOKS said proceed, on the same series, from
+the same predicate the file's own contract says has ONE implementation.
+
+Arm F now sets `F_UNRESOLVED`, and every deny-worthy rung is tested BEFORE the `CONVERGED`
+branch. Only the rc-3 conditions were hoisted: a divergence or stall that was resolved on
+the record and then ran to MET has converged and keeps saying so.
+
+**Measured on the reference consumer: 3 of 78 series change, all `CONVERGED/0` ->
+`DIVERGENT/3`, and the gate ALREADY exited 1 on all three** (`s299/coe`,
+`s300/.../architecture`, `s301/.../stories`). No refusal is invented; the hooks were blind
+to a verdict that was already there.
+
+### Two mechanisms, because this class has now been hit twice in two releases
+
+**`state-mode-pairing`** -- a derived fixture arm: any seeded case whose `--cycle-state`
+exits 3 must carry an `expect_state`. Gate mode and hook mode are different code paths with
+different branch ordering, and a case asserted only in gate mode leaves the path that gates
+every consumer dispatch untested. Of the 39 cases carrying a gate `expect`, **15 deny and 24
+are quiet**, so a blanket pairing rule would have been wrong 24 times -- the arm is scoped to
+the denying ones. Eleven of the fifteen were unpaired when it was written, and **three of
+those eleven were found by the arm rather than by the hand census that preceded it**: that
+census had been run without `--transcript`/`--transcript-dir`, so the adjudication cases
+answered `CONVERGED` and looked exempt.
+
+**`pass()` now requires `artifact_sha`, with a `NOSHA` sentinel.** Arm J fails open when
+either side is missing, so a case seeded without a sha exercises the fail-open branch while
+claiming to test something else -- v0.413.0 found three such cases, one of them arm J's own
+true positive. An omission and a deliberate absence were byte-identical; now they are
+different tokens. The guard also rejects an EMPTY sha, which caught four further call sites
+passing `""`. Seeding is byte-identical before and after across all 198 files, so the
+call-site rewrite is provably behaviour-preserving.
+
+### Changed
+
+- `core/scripts/validate-adversarial-convergence.sh` -- `F_UNRESOLVED`; deny-worthy rungs
+  hoisted above `CONVERGED` in the `--cycle-state` emit block.
+- `core/fixtures/check-24-adversarial-convergence/run.sh` -- the `state-mode-pairing` arm and
+  11 `expect_state` assertions. 91 -> 103 assertions.
+- `core/fixtures/check-24-adversarial-convergence/seed.sh` -- the `pass()` sha partition;
+  83 call sites carry `NOSHA`, 4 converted from `""`.
+- `docs/plans/adversarial-pass-floor-retirement.md` -- marked DISCHARGED.
+
 ## [0.413.0] - 2026-08-26
 
 ### The adversarial cycle had two stopping rules; now it has one
