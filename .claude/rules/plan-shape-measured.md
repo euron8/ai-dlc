@@ -37,5 +37,21 @@ its own subject, state the observation point** — before which step, against wh
 the third criterion in this repo's runbooks that an executor had to reinterpret rather than
 satisfy literally.
 
+## The merge is when a handoff goes stale, measured twice in one session
+
+A sweep merged and the plan's action 1 still read *"RUN THE TRIAGE SWEEP"* — a resuming session
+would have re-derived all 64 entries a second time. Corrected, and the second failure landed
+inside the correction: the stale figure was fixed in the SENTENCE while the `grep` beneath it
+kept printing the old number, so the file asserted a control of 7 above a command returning 5.
+**A resuming session runs the command.** Both were found because a human asked "is this
+resumable?" after the merge, which is the check that never happens on its own.
+
+Both greps were wrong in different directions, which is why the block now runs the engine:
+`^verify: manual` misses the entries that INDENT the line, and `^[ \t]*verify: manual` counts
+the `## Receipts` legend, which is prose about the grammar rather than an entry.
+
+`P11` binds the instruction, not the act. Verifying a figure was re-measured is not a property
+of the file's text, and an arm claiming to check it would be a check that cannot fire.
+
 The opt-out rule's own measurement stays in `CLAUDE.md` beside the rule, for the reason
 given in [[plan-shape]].

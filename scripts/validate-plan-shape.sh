@@ -265,6 +265,42 @@ for f in "${FILES[@]}"; do
     fi
   fi
 
+  # --- P11: a LIVE plan tells its executor to re-derive the resume block after a merge ---
+  # THE MERGE IS WHEN A HANDOFF GOES STALE, AND NOTHING ELSE MARKS THAT MOMENT. The block a
+  # session followed becomes, at merge time, a description of work already done. A session
+  # that stops there hands the next one an instruction to REDO IT -- which is the single
+  # most expensive failure this file exists to prevent, because the cost is a whole session.
+  #
+  # MEASURED ON THIS REPO'S OWN PLAN, AT v0.417.0, TWICE IN ONE SESSION. The plan's action 1
+  # still read "RUN THE TRIAGE SWEEP" after that sweep had merged. And when the figures were
+  # corrected, the fix landed in the PROSE and not in the COMMAND beneath it: the file
+  # asserted a manual-receipt control of 7 above a `grep` printing 5, and a resuming session
+  # runs the command. Both were caught by a human asking "is this resumable?", which is
+  # exactly the check that does not happen on its own.
+  #
+  # THIS ARM CANNOT VERIFY THE RE-DERIVATION HAPPENED, AND DOES NOT PRETEND TO. Whether a
+  # figure was re-measured is a property of an action taken at a point in time, not of the
+  # file's text, and an arm claiming otherwise would be a check that cannot fire. What it
+  # binds is that every live plan TELLS its executor to do it -- the same standing this
+  # repo's other required elements have, and the same one P3b has for the operator ping,
+  # which is a required instruction for the identical reason: the reader who pays is not in
+  # the session and cannot see that it was skipped.
+  #
+  # THE FALSE-POSITIVE SET WAS MEASURED BEFORE SHIPPING AND IS EMPTY. The corpus is 29
+  # plans, of which 2 are live by the P9/P10 discharge test; both carry the instruction as
+  # of this release, `pre-push-wall-clock.md` having been given one in the same commit. A
+  # discharged plan is a record and is out of scope by construction, not by exemption.
+  #
+  # THE GRAMMAR IS LOOSE ON PURPOSE, for the reason P3b states: pinning an exact sentence
+  # turns a required instruction into a copy-paste ritual. Any phrasing that ties re-deriving
+  # or re-checking the plan's OWN state to the merge (or to stopping) satisfies it.
+  if ! grep -qiE "$DISCHARGE_BANNER" <<<"$(head -12 "$f")"; then
+    # HERE-STRING, NOT A PIPE (I54b), for the reason P6, P9 and P10 all record.
+    if ! grep -qiE '(re-?deriv|re-?check|re-?deriv|refresh|re-?run|update)[^.]{0,120}(resume|status record|derive block|this (file|plan)|own state|numbered action)|(after|following)[^.]{0,40}merge[^.]{0,120}(re-?deriv|re-?check|resume|stale|resumab)' <<<"$(cat "$f")"; then
+      err "$rel" "is a LIVE plan that never tells its executor to re-derive this file's own resume block after the merge. That is the moment a handoff goes stale -- the block just followed becomes a description of finished work -- and a session that stops there hands the next one an instruction to redo it. Measured at v0.417.0 on this repo's own plan: action 1 still said RUN THE TRIAGE SWEEP after the sweep had merged, and a corrected figure was fixed in the prose while the command beneath it kept printing the old number. Add it as a numbered action, not as advice."
+    fi
+  fi
+
   # --- P7: an instruction that ships its own opt-out --------------------------------
   # THE DEFECT, measured on this repo's own runbook before it was handed over. A section
   # told a graph session to run a consolidation pass. Beside it sat a fenced decision

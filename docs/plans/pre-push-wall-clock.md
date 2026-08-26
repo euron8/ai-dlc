@@ -62,6 +62,16 @@ v0.370.0 landed on `main` as `d4fd318`, squashed from `perf/pre-push-wall-clock`
    duplicating the 27s prerequisite, or overlapping the seeded run with the attribution sweep.
    Both were measured; neither was taken. **This is the next program, not this one.**
 
+3. **AFTER ANY MERGE, BEFORE YOU STOP: re-derive this file's own resume block and prove it is
+   still resumable.** Every figure above is a wall-clock measurement of a suite that moves with
+   each release, so this block decays faster than most — the header already says the numbers are
+   stale by construction. Re-run the measurements the block quotes and compare them to what it
+   CLAIMS; read action 1 as a stranger would and replace it if it names work now finished; and
+   **fix the COMMAND, never only the prose** — measured on the sibling plan at v0.417.0, a
+   corrected figure landed in the sentence while the command beneath it kept printing the old
+   number, and a resuming session runs the command. `bash scripts/validate-plan-shape.sh` is the
+   floor, not the answer: it cannot see that an action is stale.
+
 **Do not re-open Steps 7 or 8.** Both are marked DROPPED ON MEASUREMENT with the figures that
 killed them, and both sections are kept in full below because their hazard notes are the reason
 to read them if the numbers ever change back.

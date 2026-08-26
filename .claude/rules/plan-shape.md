@@ -48,6 +48,12 @@ it was handed off:
   reporting, including one sitting on a blocking question and one that had already FINISHED.
 - **A done-when whose PASS you have CHECKED IS REACHABLE.** See [[plan-shape-measured]] for
   the two measured failures that produced this clause and the observation-point rule.
+- **A numbered action telling the executor to re-derive this block AFTER THE MERGE.** The merge
+  is when a handoff goes stale and nothing else marks that moment: the block just followed
+  becomes a description of finished work, and a session that stops there hands the next one an
+  instruction to redo it. Carried by **P11**, scoped to live plans. The arm cannot check that
+  the re-derivation HAPPENED — that is an act, not a property of the text — so it binds only
+  that the plan says to. Fix the COMMAND and not merely the prose: see [[plan-shape-measured]].
 
 None of that is about writing quality. Each one makes the file produce WRONG WORK when
 followed literally, which is the only thing a handoff is for.

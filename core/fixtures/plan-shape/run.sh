@@ -57,6 +57,8 @@ Ping the operator on any question or decision, and when this plan completes.
 1. Do the first thing.
 2. Do the second thing.
 
+After the merge, re-derive this plan's own resume block before stopping.
+
 ## Where things stand
 
 Evidence: `scripts/validate-plan-shape.sh:1` is the subject of this fixture.
@@ -213,6 +215,32 @@ grep -q 'does not carry its own resume one-liner' <<<"$(run "$T/p10b.md")" \
 grep -q 'does not carry its own resume one-liner' <<<"$(run "$T/p10c.md")" \
   && bad "P10 fired on a DISCHARGED plan — a spent record is not resumable and must not be a backlog item" \
   || ok "  and it exempts a banner-marked plan, so only live plans owe the sentence"
+
+# --- P11 a live plan says to re-derive its resume block after the merge -----------
+# THE MERGE IS THE MOMENT A HANDOFF GOES STALE, and no other event marks it. The block a
+# session followed becomes a description of finished work, and a session that stops there
+# hands the next one an instruction to redo it. Measured on this repo's own plan twice in
+# one session: an action still said RUN THE TRIAGE SWEEP after that sweep had merged, and a
+# corrected figure was fixed in the PROSE while the command beneath it kept printing the old
+# number.
+#
+# THE SEED IS A DELETION OF THE INSTRUCTION, WHICH IS THE REAL OFFENDER SHAPE, and it is
+# anchored on the sentence rather than on a numbered-list prefix DELIBERATELY. P2's seed
+# strips `^[12]\. ` to prove a plan with nothing to follow fires; if this arm's subject were
+# a numbered action, that one seed would remove both subjects and a single mutant would fail
+# two assertions -- entangled arms, one of which is then vacuous. Each arm gets a subject the
+# other cannot see.
+conforming p11.md | grep -v 're-derive this plan' > "$T/p11.md"
+grep -q 'never tells its executor to re-derive' <<<"$(run "$T/p11.md")" \
+  && ok "P11 fires on a live plan that never says to re-derive after the merge" \
+  || bad "P11 silent on a plan that cannot tell it has gone stale — the next session redoes merged work"
+
+# THE SCOPING CONTROL, the same shape as P9b and P10c. A discharged plan is a record; nobody
+# merges against it, so it owes no re-derivation.
+{ printf -- '# Some plan — DISCHARGED\n'; conforming p11b.md | tail -n +2 | grep -v 're-derive this plan'; } > "$T/p11b.md"
+grep -q 'never tells its executor to re-derive' <<<"$(run "$T/p11b.md")" \
+  && bad "P11 fired on a DISCHARGED plan — a spent record is not resumed and owes no re-derivation" \
+  || ok "  and it exempts a banner-marked plan, so only live plans owe the instruction"
 
 # --- empty corpus is not a pass ---------------------------------------------------
 # `for f in docs/plans/*.md` over an empty directory reads exactly like a clean run.
