@@ -36,7 +36,7 @@ output whose SHAPE is the answer — exit codes, counts, `git status` — and fo
 Where a Bash result has to be exact, DERIVE it instead of reading it: `md5`, `wc -c`,
 `cmp -s`, `grep -c`.
 
-## Delegation hazards: three ways a tool call lies about another agent
+## Delegation hazards: four ways a tool call lies about another agent
 
 **A backgrounded `sleep` returns immediately**, so chained "waits" are rapid polling granting no
 wall clock. Measured: apparent ten-minute waits spanned one minute, four agents were called silent
@@ -50,6 +50,11 @@ same block as that find, which returned the file.
 cannot see one, and the clean run reads as a real absence. Measured: three delegated deliverables
 declared missing while on disk as `??`. `ls` it, check `git status --porcelain`, ask the agent by
 name. An idle notification is not a result; silence is not death.
+
+**A delegate's CLOSING SUMMARY can be stale.** It reports what it found when it looked, not
+what is true now. Measured: a hand's final message listed four defects as outstanding that had
+already been fixed, because it had not re-read the files between finding them and reporting.
+Check the tree, not the report.
 
 ## Never read `$?` after a pipe, and never feed `grep -q` from one
 

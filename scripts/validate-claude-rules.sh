@@ -348,8 +348,29 @@ fi
 # because it corrupts the one input every other reading is derived from, and the corrupted
 # form is syntactically valid -- the failure it prevents is a confident wrong answer, which
 # is the class this whole channel exists for. The bump is 1024 bytes and leaves 345 free.
+#
+# RAISED A FOURTH TIME, 44544 -> 45377, ON AN OPERATOR RULING, FOR TWO RULES COSTING 831 BYTES.
+# THIS ONE CARRIED NO SUBTRACTION, AND THAT IS WHAT SEPARATES IT FROM THE THREE ABOVE. The
+# operator was shown the cheaper sequence this header mandates -- measure today's vestigial
+# pool, then try to mechanize -- and ruled to raise without it, having been told in the same
+# breath that an unearned raise is how this guard becomes decorative. Recorded as the standard
+# it did NOT meet, so the next author does not read four raises as four precedents.
+#
+# The two rules are batch 9's: `verification-discipline.md` gains "a receipt that reads a
+# RENDERED artifact is closable by prose" -- a receipt keyed on a generated index row whose
+# cell renders from an unvalidated COMMENT returned 0 for three names appended to that one
+# line, with nothing else changed -- and `tool-hazards.md` gains "a delegate's CLOSING SUMMARY
+# can be stale", measured on a hand that reported four defects as outstanding after they were
+# fixed. Neither can be SCOPED: both are prose-only, which `resident-context.md` bars. The
+# receipt rule is plausibly MECHANIZABLE as an arm over `docs/backlog.md`, and that was offered
+# and declined for now; if it is ever built, this raise is the one to hand back.
+#
+# THE ESTIMATE WAS WRONG AGAIN, BY A FACTOR OF TWO -- 400 bytes quoted, 831 measured after
+# drafting. That is the second time an author's pre-drafting estimate has moved this number,
+# and it is why the figure above is a measurement and the prose was not ground down to meet
+# the quote. Cost prose after writing it, never before.
 # ---------------------------------------------------------------------------
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-44544}"
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-45377}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

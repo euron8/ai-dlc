@@ -43,6 +43,14 @@ Measured: an expected-outcome row went to another session without stating that i
 unapplied document and its guard unreachable in the current state. That session measured zero,
 correctly, and nearly filed a defect against a working engine.
 
+## A receipt that reads a RENDERED artifact is closable by prose
+
+Drive the shipping program; do not grep the document it produced. Measured: a backlog receipt
+keyed on a row of a generated index, where that row's cell rendered from a COMMENT no arm
+validates — three names appended to that one line returned receipt 0, render 0 and gate 0 with
+no owner, no invariant and no behaviour changed. Ask of every receipt what ELSE satisfies it,
+and prefer the arm that RUNS the subject over the one that reads its output.
+
 ## A control that agrees with the verdict is not a control
 
 Run the control against the thing the verdict claims is ABSENT, and read its output. A
