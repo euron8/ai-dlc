@@ -2139,6 +2139,23 @@ carries one), passing `--spine` with the
 `ARCHITECTURE-SPINE.md` path, `--spine-lint` with
 `lint_spine.py`'s JSON output. Exit 0 required.
 
+**PASS `--locked-requirements` WITH THIS SPRINT'S `locked-requirements.md` WHENEVER THE
+SPRINT HAS ONE.** That file DECLARES join (1)'s population. Without it the population is
+every `LR-<...>` identifier appearing anywhere in the memlog, and a memlog is a running
+narrative rather than a declaration — an id that a typed entry merely MENTIONS, including
+one written down precisely because it does not exist, is then read back as a locked
+requirement and hard-blocks the gate.
+
+**It must name the SAME SPRINT as `--spec`.** Pointing it at a neighbouring sprint declares
+a population this memlog has never mentioned; the validator refuses that rather than
+passing, and the refusal names this as the likely cause.
+
+**A sprint that genuinely ships no `locked-requirements.md` OMITS the flag** and falls back
+to the scan. Record the omission and its reason in the check's line. Passing an empty value
+is refused: it is not a way to say "there is none".
+
+The validator prints the population it read on every path. Read that line and record it.
+
 **`--trace-verdict` is NOT passed at this gate, and that is by construction rather
 than by omission.** The only `bmad-testarch-trace` run the pipeline takes is at
 `stories-test-strategy.md` §5, at planning phase, where no story is implemented yet:

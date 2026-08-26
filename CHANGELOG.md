@@ -15,6 +15,96 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.415.0] - 2026-08-26
+
+### A validator convicted a consumer for writing down that its search could return nothing
+
+`BL-079`. Check 30's join (1) took its population of locked requirements by scanning the
+spec memlog for anything shaped like an `LR-` id. A memlog is a running narrative, so at the
+reference consumer's s302 an absent-id CONTROL TOKEN, quoted inside an `(event by bmad-spec)`
+entry recording *"an id-presence sweep run with an absent-id control (LR-S999-9) that
+returned zero, proving the search could return nothing"*, was read back as a locked
+requirement and hard-blocked the gate. That is this project's own zero-is-not-a-finding
+discipline, written into a consumer's memlog and convicted by a validator for being written
+down. It was 1 of 1: s302's Check 30 failed on nothing else.
+
+**No predicate over the memlog can separate those two inputs**, because an absent-id control
+is by construction an id shaped exactly like a real one. Five narrowings were driven over the
+whole consumer corpus and every one of them either loses genuine declared requirements or
+disarms the check outright — requiring a `CAP-<n>` on the LR's own line returns rc 0 on a
+corpus carrying a genuinely uncited locked requirement, because an LR that reaches no
+capability is exactly an LR with no `CAP-` on any of its lines.
+
+So `--locked-requirements` now names the artifact that DECLARES the population and the memlog
+is demoted to evidence about it. The flag is optional and its absence falls back to the scan,
+because Check 30 is a hard block on a consumer running its own installed engine and DISARMing
+every not-yet-updated caller wedges live work at a gate. The population actually read is
+printed on every path, so which of the two ran is never inferred from silence.
+
+Measured across the reference consumer's six spec memlogs, 18 join-(1) findings before and
+after: **s302's join (1) goes to 0 findings**, and no sprint loses a genuine one. Two ids
+enter the population that a memlog scan structurally could not see — `LR-S303-7`, an
+operator-locked defect appearing in no s303 spec file at all, and `LR-S304-7`, which that
+spec's own `SPEC.md` maps to `CAP-3` in prose and never journalled. Both report as `note`
+rather than failure: s304's gate is green today, and failing a requirement the spec
+demonstrably reaches is how a correct check gets switched off.
+
+**s302's GATE does not thereby go green, and the difference is the invocation.** Run the way
+the consumer's own gate log records — `--spine`, `--spine-lint`, `--story`×N — s302 goes from
+2 FAIL lines to 1, and the survivor is a join (2a) ARCHITECTURE-SPINE finding this change does
+not touch, byte-identical between the two runs. A figure taken on `--spec --prd` alone is a
+figure about join (1), not about Check 30.
+
+**What shipped is a FALLBACK, not the SKIP semantics the entry asked for**, and that is a
+deliberate substitution rather than a satisfied precondition. s301 ships no
+`locked-requirements.md`, keeps all five of its join-(1) findings, and keeps its exposure to
+this defect. The entry's other stated blocker turns out not to be live at all: the
+project-wide baseline it describes, whose did-not-reproduce arm was said to fire 15 times at
+s302, does not exist and is not tracked in that consumer.
+
+### The block grammar has one owner, and now nothing else may match it
+
+`I97`. The first cut of the above hand-rolled a `<!-- LOCKED_REQUIREMENTS -->` opener/closer
+pair. `validate-locked-anchor.sh` already owns that grammar — its header carries a measured
+census of SIX spellings, and `--emit-blocks` exists there precisely so a second reader does
+not re-derive them, which is why `validate-request-coverage.sh` calls it. The hand-rolled pair
+read 2 of the 6 and left the consumer's s299 unterminated, whose closer is
+`<!-- END S299 LOCKED_REQUIREMENTS -->`. Nothing caught it.
+
+`validate-spec-join.sh` is now the third caller of `--emit-blocks`, and `I97` fails the push
+on any shipped script that matches the sentinel itself. False-positive set measured over
+`core/scripts/*.sh`, `scripts/*.sh`, `core/hooks/*.sh`, `core/git-hooks/*` and `.githooks/*`:
+four hits, all four inside the owner, zero elsewhere. The arm carries its own positive control
+— the owner must appear in its scan, since an arm that finds the owner clean is scanning
+nothing. `I54` then fired twice on the new code, once inside `I97` itself.
+
+### Three defects in the above, found by an independent hand, none of which could fail loudly
+
+Every one returned a WRONG answer rather than an error, which is why they are recorded.
+
+**The owner joins its blocks with a form feed and this reader was grepping the join.** The
+separator is deliberate — "so a caller can split on a byte that cannot occur in a requirement
+bullet" — and `validate-request-coverage.sh` splits on it. Grepping the joined text glues
+block N's last line to block N+1's first, so the anchored bullet at the head of every block
+after the first cannot match. Measured: a two-block file declaring three requirements read
+`join (1) reads 2` and dropped the middle one. **It cannot DISARM**, because a narrowed
+population is still non-empty, so the count prints as authoritative. The split is a separate
+statement rather than a pipe stage: this script sets no `pipefail`, so putting `tr` inline
+would have answered with `tr`'s status and silently retired the refusal arm above it.
+
+**A declared population and a CHECKED population are different sets, and the note branch
+separated them.** With every declared id absent from the memlog, every iteration took the
+never-journalled note and `continue`d, `rc` was never touched, and the run printed PASS having
+performed zero joins — the exact vacuity every DISARM in the file refuses, arriving through
+the door the notes opened. It needs no malformed artifact: the flag is hand-passed, and
+naming the wrong sprint's file is enough. The consumer is already 1-of-8 in that branch at
+both s303 and s304.
+
+**`--locked-requirements ""` reverted to the memlog scan and reproduced the original false
+positive**, because every gate downstream tested `[ -n ... ]` and an empty value is
+byte-indistinguishable from omission. Rejected at the parse site now, which is the standing
+lesson from `v0.414.0`'s `NOSHA` sentinel.
+
 ## [0.414.0] - 2026-08-26
 
 ### The gate refused four series while the hooks told them to proceed

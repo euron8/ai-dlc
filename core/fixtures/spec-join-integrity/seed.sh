@@ -1604,4 +1604,287 @@ cat > "$ROOT/spine-cont-nested.md" <<'SPINECN'
 - **Rule:** one core resolver maps routing config to a venue decision
 SPINECN
 
+# --- BL-079: join (1)'s population is DECLARED, not scanned ---------------------
+# SEEDED FROM THE PRODUCER, NEVER FROM THE READER'S ACCEPT-SET. Every shape below was
+# read off the reference consumer's five real locked-requirements.md files and its s302
+# spec memlog, not off the regexes in validate-spec-join.sh. Derived there, in the same
+# invocation as its control:
+#
+#   - the absent-id CONTROL TOKEN is real and it is in a memlog, not in prose somewhere
+#     harmless: `specs/s302/position-usd-create-position/.memlog.md`, an
+#     `(event by bmad-spec)` entry recording "an id-presence sweep run with an absent-id
+#     control (LR-S999-9) that returned zero, proving the search could return nothing".
+#     The control for that grep was `LR-S302`, which hits in the same file.
+#   - the THREE declaration grammars, one per consecutive sprint: s303 writes
+#     `- **LR-S303-0 (...):**`, s304 writes `- **LR-S304-7** — `, s305 writes
+#     `- LR-S305-1: "..."`. All three appear in ONE seeded block here, deliberately: a
+#     reader that anchors on bold sees two of the three and the third leaves the
+#     population in silence.
+#   - the SPRINT-INTERPOLATED CLOSER is s299's, `<!-- END S299 LOCKED_REQUIREMENTS -->`,
+#     against four sprints closing with the bare form.
+#   - the BELOW-MARKER addenda are s304's LR-S304-8/-9, which sit under a paragraph
+#     explaining that they carry an `LR-` id and are not operator-locked. That paragraph
+#     spells `LOCKED_REQUIREMENTS` in backticks, and it is reproduced here because a
+#     marker matcher anchored anywhere but line-start adopts it as a marker.
+#   - the PROSE MENTION inside a block is s299's parenthetical `LR-S177-2`, on a
+#     continuation line under a real declaration bullet.
+#
+# ONE MEMLOG, FOUR VARIANTS, AND THE DIFFERENCE IS ONE LINE EACH. The clean one closes
+# join (1) for all three declared ids; the others each add exactly one reachable-and-
+# uncited id so that a "quiet" arm above them is a DISCRIMINATION rather than an inert
+# corpus. Every one of those ids is proven reachable by a paired arm that omits the flag
+# and watches it FAIL -- without that pair, `rc 0` here is equally what a corpus with
+# nothing in it produces.
+
+LR_MEMLOG_HEAD='- (constraint by bmad-spec) sprint scope is the operator-locked bullets in locked-requirements.md and nothing else
+- (capability by bmad-spec) CAP-1 realises LR-S303-0: the create-execution seam re-architecture
+- (capability by bmad-spec) CAP-2 realises LR-S303-1: the decimals silent default, same seam
+'
+# The CONTROL TOKEN entry, reproduced in the producer's own shape. This is the whole
+# motivating defect: an id that exists precisely BECAUSE it does not exist.
+LR_MEMLOG_CONTROL='- (event by bmad-spec) Self-validate pass 2 (preservation): PASS. Nothing load-bearing is dropped and every locked bullet still lands unchanged (LR-S303-0, LR-S303-1, LR-S303-2), verified by an id-presence sweep run with an absent-id control (LR-S999-9) that returned zero, proving the search could return nothing.
+'
+
+# (a) CLEAN: all three declared ids reach a capability. The control token is the only
+# thing in here a memlog SCAN would add to the population.
+mk_spec "$ROOT/lr-decl" "$LR_MEMLOG_HEAD- (capability by bmad-spec) CAP-2 realises LR-S303-2: the pre-push GIT_DIR scrub, upstreamed
+$LR_MEMLOG_CONTROL"
+
+# (b) THE CENTRAL CORPUS. Identical but for LR-S303-2's capability entry, demoted to a
+# note. Under the declared population this corpus must FAIL for LR-S303-2 and be SILENT
+# about LR-S999-9, in the same run. A remedy that only silenced the control token exits 0
+# here, and every candidate remedy for this defect was one.
+mk_spec "$ROOT/lr-decl-orphan" "$LR_MEMLOG_HEAD- (note by bmad-spec) LR-S303-2 was raised at the scope pause and then not carried into any capability this sprint
+$LR_MEMLOG_CONTROL"
+
+# (c) the BELOW-MARKER addenda, journalled and uncited. Both ids are reachable in this
+# memlog, so a reader that runs past the closing marker produces two findings against a
+# gate that is green -- which is the s304 defect, not a hypothetical.
+mk_spec "$ROOT/lr-decl-addenda" "$LR_MEMLOG_HEAD- (capability by bmad-spec) CAP-2 realises LR-S303-2: the pre-push GIT_DIR scrub, upstreamed
+- (note by bmad-spec) LR-S303-8 and LR-S303-9 were decided autonomously under Rule 12 Tier 2 and sit below the block; nobody locked them
+$LR_MEMLOG_CONTROL"
+
+# (d) the PRIOR-SPRINT id a block's prose cites. Journalled and uncited for the same
+# reason: a whole-block scan adopts it and convicts this sprint of dropping s177's work.
+mk_spec "$ROOT/lr-decl-prior" "$LR_MEMLOG_HEAD- (capability by bmad-spec) CAP-2 realises LR-S303-2: the pre-push GIT_DIR scrub, upstreamed
+- (note by bmad-spec) the S177 decision LR-S177-2 still governs the zero-TVL branch and is not re-opened here
+$LR_MEMLOG_CONTROL"
+
+# THE DECLARED FILE, canonical. Three sprints' declaration grammars in one block, and
+# s299's opener spelling (the sentinel carries trailing prose, which a `-->`-anchored
+# opener match cannot see).
+cat > "$ROOT/lr-decl.md" <<'LRDECL'
+# S303 — locked requirements
+
+<!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->
+
+- **LR-S303-0 (`CO-S302-CREATE-EXECUTION-SEAM`, story one, capital-path re-architecture):** "Fix the create-position capital-sizing seam." Status: IN SPRINT.
+- **LR-S303-1** — "Fold CO-S302-CREATE-DECIMALS-SILENT-DEFAULT in, same seam." Status: IN SPRINT, folded into LR-S303-0.
+- LR-S303-2: "Upstream the pre-push GIT_DIR scrub. No /ai-dlc-update in this project until it lands." Status: IN SPRINT.
+
+<!-- END LOCKED_REQUIREMENTS -->
+LRDECL
+
+# THE SAME BLOCK PLUS TIER 2 ADDENDA BELOW THE CLOSER, in s304's shape. The explanatory
+# paragraph spells `LOCKED_REQUIREMENTS` in backticks on purpose -- it is what a marker
+# matcher that is not anchored at line start adopts as a second marker.
+cat > "$ROOT/lr-below-marker.md" <<'LRBELOW'
+# S303 — locked requirements
+
+<!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->
+
+- **LR-S303-0 (`CO-S302-CREATE-EXECUTION-SEAM`, story one, capital-path re-architecture):** "Fix the create-position capital-sizing seam." Status: IN SPRINT.
+- **LR-S303-1** — "Fold CO-S302-CREATE-DECIMALS-SILENT-DEFAULT in, same seam." Status: IN SPRINT.
+- LR-S303-2: "Upstream the pre-push GIT_DIR scrub." Status: IN SPRINT.
+
+<!-- END LOCKED_REQUIREMENTS -->
+
+## Tier 2 addenda — DECIDED_AUTONOMOUSLY, not operator-locked
+
+  *Why these carry an `LR-` id but sit below the `LOCKED_REQUIREMENTS` block:* they were
+  decided autonomously under Rule 12 Tier 2. They are not operator-locked requirements
+  and the sprint's own SPEC.md says so.
+
+- **LR-S303-8** — **session-scoped percentage cap.** The cap is per session and adds no config key.
+- **LR-S303-9** — **a skipped layer is reported separately from an attempted-and-failed layer.**
+LRBELOW
+
+# THE SPRINT-INTERPOLATED CLOSER, s299's. Byte-for-byte the same block, closed with the
+# other spelling, and carrying the SAME addenda below it -- so a matcher that recognises
+# only the bare closer does not merely DISARM here, it runs past the addenda and adopts
+# them, which is an observable rather than a silence.
+cat > "$ROOT/lr-end-sprint.md" <<'LRSPRINT'
+# S303 — locked requirements
+
+<!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->
+
+- **LR-S303-0 (`CO-S302-CREATE-EXECUTION-SEAM`, story one, capital-path re-architecture):** "Fix the create-position capital-sizing seam." Status: IN SPRINT.
+- **LR-S303-1** — "Fold CO-S302-CREATE-DECIMALS-SILENT-DEFAULT in, same seam." Status: IN SPRINT.
+- LR-S303-2: "Upstream the pre-push GIT_DIR scrub." Status: IN SPRINT.
+
+<!-- END S303 LOCKED_REQUIREMENTS -->
+
+## Tier 2 addenda — DECIDED_AUTONOMOUSLY, not operator-locked
+
+- **LR-S303-8** — **session-scoped percentage cap.** The cap is per session and adds no config key.
+- **LR-S303-9** — **a skipped layer is reported separately from an attempted-and-failed layer.**
+LRSPRINT
+
+# NO MARKER PAIR AT ALL. Well-formed declarations, no block. `--emit-blocks` returns 0
+# and prints NOTHING here, which is a different code path from the dangling-opener one
+# below and reads identically to a sprint that locked nothing.
+cat > "$ROOT/lr-nomarkers.md" <<'LRNOMARK'
+# S303 — locked requirements
+
+- **LR-S303-0 (`CO-S302-CREATE-EXECUTION-SEAM`, story one):** "Fix the create-position capital-sizing seam."
+- **LR-S303-1** — "Fold CO-S302-CREATE-DECIMALS-SILENT-DEFAULT in, same seam."
+- LR-S303-2: "Upstream the pre-push GIT_DIR scrub."
+LRNOMARK
+
+# AN OPENER WITH NO CLOSER, and Tier 2 addenda below where the closer should be. If this
+# runs to EOF it does not fail loudly -- it silently WIDENS the population by two, both
+# of which are journalled and uncited in the addenda corpus, so the mutant that removes
+# the bound is convicted by a FAIL rather than by a missing DISARM.
+cat > "$ROOT/lr-unclosed.md" <<'LRUNCLOSED'
+# S303 — locked requirements
+
+<!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->
+
+- **LR-S303-0 (`CO-S302-CREATE-EXECUTION-SEAM`, story one):** "Fix the create-position capital-sizing seam."
+- **LR-S303-1** — "Fold CO-S302-CREATE-DECIMALS-SILENT-DEFAULT in, same seam."
+- LR-S303-2: "Upstream the pre-push GIT_DIR scrub."
+
+## Tier 2 addenda — DECIDED_AUTONOMOUSLY, not operator-locked
+
+- **LR-S303-8** — **session-scoped percentage cap.**
+- **LR-S303-9** — **a skipped layer is reported separately.**
+LRUNCLOSED
+
+# THE BLOCK MENTIONS IDS AND DECLARES NONE. This is a producer whose grammar moved, and
+# scoring it as "this sprint locked zero requirements" is the failure mode -- the PASS
+# line would be byte-identical to a spec that closed the join for real.
+cat > "$ROOT/lr-mentions-only.md" <<'LRMENTION'
+# S303 — locked requirements
+
+<!-- LOCKED_REQUIREMENTS -->
+
+This sprint locks LR-S303-0, LR-S303-1 and LR-S303-2; the verbatim operator text lives
+in pipeline-snapshot.md and is deliberately not duplicated here.
+
+<!-- END LOCKED_REQUIREMENTS -->
+LRMENTION
+
+# THE NEAR-MISS FOR THE ARM ABOVE. Same emptiness, no LR- token anywhere in the block, so
+# the two DISARMs must say DIFFERENT things. One of them tells the reader the grammar has
+# moved; the other must not, because here it has not.
+cat > "$ROOT/lr-empty-block.md" <<'LREMPTY'
+# S303 — locked requirements
+
+<!-- LOCKED_REQUIREMENTS -->
+
+(No operator-locked requirements were recorded at the scope pause for this sprint.)
+
+<!-- END LOCKED_REQUIREMENTS -->
+LREMPTY
+
+# A PROSE MENTION INSIDE THE BLOCK, on a continuation line under a real declaration.
+# s299's shape exactly. The id is a PRIOR sprint's, so adopting it convicts this sprint
+# of dropping work it never owned.
+cat > "$ROOT/lr-prose-mention.md" <<'LRPROSE'
+# S303 — locked requirements
+
+<!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->
+
+- **LR-S303-0 (`CO-S302-CREATE-EXECUTION-SEAM`, story one):** "Fix the create-position capital-sizing seam."
+  This routes the pool into the existing zero-TVL branch already used by every other
+  tracked pool (`pool.ts:97-98`, `LR-S177-2`/`ADR-S177-A4-bis`) — no new branch needed.
+- **LR-S303-1** — "Fold CO-S302-CREATE-DECIMALS-SILENT-DEFAULT in, same seam."
+- LR-S303-2: "Upstream the pre-push GIT_DIR scrub."
+
+<!-- END LOCKED_REQUIREMENTS -->
+LRPROSE
+
+# DECLARED AND NEVER JOURNALLED. LR-S303-7 is s303's real one -- an operator-locked
+# defect that appears in no s303 spec file at all. It exists in this file and NOWHERE in
+# the clean memlog, which is a class the memlog scan cannot construct.
+cat > "$ROOT/lr-decl-never.md" <<'LRNEVER'
+# S303 — locked requirements
+
+<!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->
+
+- **LR-S303-0 (`CO-S302-CREATE-EXECUTION-SEAM`, story one):** "Fix the create-position capital-sizing seam." Status: IN SPRINT.
+- **LR-S303-1** — "Fold CO-S302-CREATE-DECIMALS-SILENT-DEFAULT in, same seam." Status: IN SPRINT.
+- LR-S303-2: "Upstream the pre-push GIT_DIR scrub." Status: IN SPRINT.
+- **LR-S303-7 (PVC-blocking dashboard defect):** "Reviewing production and I'm noticing on the dashboard that the pool card renders a stale TVL." Status: IN SPRINT.
+
+<!-- END LOCKED_REQUIREMENTS -->
+LRNEVER
+
+# TWO BLOCKS IN ONE FILE, which is the shape the borrowed grammar exists to serve -- a
+# product brief accumulates one block per sprint. The owner returns the bodies joined by a
+# FORM FEED, so a reader that greps the joined text glues block 1's last line to block 2's
+# first and cannot match the bullet at the head of every block after the first.
+#
+# THE DECLARATION SPLIT IS DELIBERATE: LR-S303-0 alone in the first block, LR-S303-1 and
+# LR-S303-2 in the second, with LR-S303-1 as the FIRST line of that second body. It is the
+# one the glue destroys, and it is the one a narrowed population silently drops -- with no
+# DISARM available, because a narrowed set is still non-empty.
+cat > "$ROOT/lr-twoblocks.md" <<'LRTWO'
+# S302–S303 — locked requirements, accumulated
+
+<!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->
+- **LR-S303-0 (`CO-S302-CREATE-EXECUTION-SEAM`, story one):** "Fix the create-position capital-sizing seam." Status: IN SPRINT.
+<!-- END LOCKED_REQUIREMENTS -->
+
+The sprint was re-scoped here, and the second block is what the operator locked after it.
+
+<!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->
+- **LR-S303-1** — "Fold CO-S302-CREATE-DECIMALS-SILENT-DEFAULT in, same seam." Status: IN SPRINT.
+- LR-S303-2: "Upstream the pre-push GIT_DIR scrub." Status: IN SPRINT.
+<!-- END LOCKED_REQUIREMENTS -->
+LRTWO
+
+# THE DIFFERENTIAL CONTROL FOR IT: the SAME THREE DECLARATIONS in ONE block. The two files
+# must yield the same population, and a reader that splits on the form feed makes them
+# agree. Without this control, "reads 3" from the two-block file proves nothing about
+# whether the boundary was crossed correctly -- only that some number came back.
+cat > "$ROOT/lr-oneblock.md" <<'LRONE'
+# S302–S303 — locked requirements, accumulated
+
+<!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->
+- **LR-S303-0 (`CO-S302-CREATE-EXECUTION-SEAM`, story one):** "Fix the create-position capital-sizing seam." Status: IN SPRINT.
+- **LR-S303-1** — "Fold CO-S302-CREATE-DECIMALS-SILENT-DEFAULT in, same seam." Status: IN SPRINT.
+- LR-S303-2: "Upstream the pre-push GIT_DIR scrub." Status: IN SPRINT.
+<!-- END LOCKED_REQUIREMENTS -->
+LRONE
+
+# THE WRONG SPRINT'S FILE. Every id here is well-formed, correctly declared, and absent
+# from the s303 memlogs above -- which is what pointing --locked-requirements at a
+# neighbouring sprint produces. Each one then takes the never-journalled note and
+# `continue`s, so the join checks NOTHING and prints PASS. The flag is hand-passed at the
+# gate, so this is an ordinary slip rather than a malformed artifact.
+cat > "$ROOT/lr-wrong-sprint.md" <<'LRWRONG'
+# S299 — locked requirements
+
+<!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->
+- **LR-S299-0 (constraints, standing):** "Index-and-display only; no capital moves this sprint." Status: IN SPRINT.
+- **LR-S299-1** — "Onboard the ETH-REWARDS pool on Base." Status: IN SPRINT.
+- LR-S299-2: "Follow the WETH-REWARDS pool's existing config shape." Status: IN SPRINT.
+<!-- END LOCKED_REQUIREMENTS -->
+LRWRONG
+
+# THE NEAR-MISS FOR IT: the same file with ONE id the memlog does journal and joins. The
+# checked set is then 1 rather than 0, so the vacuity arm must stay SILENT here. Without
+# this, an arm that fires on any note at all is indistinguishable from one that fires on a
+# checked set of zero.
+cat > "$ROOT/lr-wrong-sprint-partial.md" <<'LRWRONGP'
+# S299 — locked requirements, with one carry-over this spec did journal
+
+<!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->
+- **LR-S299-0 (constraints, standing):** "Index-and-display only; no capital moves this sprint." Status: IN SPRINT.
+- **LR-S299-1** — "Onboard the ETH-REWARDS pool on Base." Status: IN SPRINT.
+- **LR-S303-0 (`CO-S302-CREATE-EXECUTION-SEAM`, carried over):** "Fix the create-position capital-sizing seam." Status: IN SPRINT.
+<!-- END LOCKED_REQUIREMENTS -->
+LRWRONGP
+
 printf '%s\n' "$ROOT"

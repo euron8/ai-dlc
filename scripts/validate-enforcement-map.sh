@@ -2260,6 +2260,70 @@ if [ -n "$i96_hits" ]; then
 $i96_hits"
 fi
 
+# --- I97: only validate-locked-anchor.sh may MATCH a LOCKED_REQUIREMENTS marker ---------
+# The block sentinel has SIX measured spellings across opener and closer -- the census is in
+# validate-locked-anchor.sh's own header -- an unrecognised closer extracts as NOTHING, and a
+# non-greedy span lets one block SWALLOW dozens of real ones. That grammar cost a release to
+# get right, which is why `--emit-blocks` exists there and why every other reader calls it.
+#
+# THIS ARM EXISTS BECAUSE THE VIOLATION SHIPPED INTO A WORKING TREE. Adding the declared LR
+# population to validate-spec-join.sh, a hand-rolled opener/closer pair went in and read 2 of
+# the 6 spellings; on the reference consumer it left s299 unterminated, whose closer is
+# `<!-- END S299 LOCKED_REQUIREMENTS -->`. Nothing caught it. Three readers now exist
+# (validate-request-coverage.sh, validate-spec-join.sh, and the owner) and a fourth will be
+# written the same way unless the affordance is removed rather than the violation policed.
+#
+# THE GRAMMAR IS TWO TOKENS ON ONE NON-COMMENT LINE: the HTML comment opener and the
+# sentinel word. One token alone is useless -- the sentinel appears in DISARM message strings
+# in validate-spec-join.sh and in three hooks' prose, five files in all, none of them matching
+# anything. Requiring `<!--` on the same line drops every one of them.
+#
+# FALSE-POSITIVE SET: measured over core/scripts/*.sh, scripts/*.sh, core/hooks/*.sh,
+# core/git-hooks/* and .githooks/* -- FOUR hits, all four inside the owner, ZERO elsewhere.
+# Two of the owner's four are its real regexes and two are the remediation sentence it prints;
+# both stay, because the owner is the file allowed to carry them. The positive control is that
+# the owner MUST be in the set: an arm that finds the owner clean is scanning nothing.
+# THE OPENER LITERAL IS ASSEMBLED, NOT WRITTEN. Spelled out, this arm's own grep line
+# carries both tokens and the arm convicts itself -- measured, it did. Building the literal
+# from two halves keeps the source line below the arm's own grammar without weakening it.
+i97_open="$(printf '<!%s' '--')"
+i97_owner="core/scripts/validate-locked-anchor.sh"
+i97_files=""
+for _d in "$REPO_ROOT"/core/scripts/*.sh "$REPO_ROOT"/scripts/*.sh "$REPO_ROOT"/core/hooks/*.sh \
+          "$REPO_ROOT"/core/git-hooks/* "$REPO_ROOT"/.githooks/*; do
+  [ -f "$_d" ] || continue
+  i97_files="$i97_files $_d"
+done
+if [ -z "$i97_files" ]; then
+  err "I97 found no shipped scripts to scan. A scan over nothing reports clean, which is the shape this check exists to end."
+else
+  # ONE FORK FOR THE WHOLE SCAN. This validator's fork count IS the suite's wall clock --
+  # `validator-fork-budget` is a fixture, not a guideline -- and this arm was measured three
+  # ways before it landed: a per-file loop of four commands over ~60 files cost 240 forks and
+  # put the budget 344 OVER; one grep pass plus two filters and a sed cost 4 and left it 1
+  # over; this awk costs 1. EVERY hit line carries its own path, because grep -n emits one
+  # line per hit and labelling the BLOCK rather than the line is how the owner's own four
+  # lines first read as four violations. Path stripping is index/substr rather than a
+  # dynamic regex, so a root containing a regex metacharacter cannot silently mis-strip.
+  i97_all="$(awk -v root="$REPO_ROOT/" -v open="$i97_open" '
+    index($0, "LOCKED_REQUIREMENTS") == 0 { next }
+    index($0, open) == 0 { next }
+    { s = $0; sub(/^[ \t]+/, "", s); if (substr(s, 1, 1) == "#") next
+      p = FILENAME; if (index(p, root) == 1) p = substr(p, length(root) + 1)
+      print p ":" FNR ":" $0 }
+  ' $i97_files 2>/dev/null || true)"
+  # POSITIVE CONTROL, in the same pass: the owner carries the grammar, so it must appear.
+  # Without this the arm reads identically whether it scanned the corpus or missed it.
+  if ! grep -qF "$i97_owner" <<<"$i97_all"; then
+    err "I97's positive control failed: $i97_owner carries the LOCKED_REQUIREMENTS marker grammar and did not appear in this arm's own scan. The arm is reading the wrong corpus or the wrong grammar, and its silence about every OTHER file means nothing."
+  fi
+  i97_hits="$(printf '%s\n' "$i97_all" | grep -v "^$i97_owner:" | grep -v '^$' || true)"
+  if [ -n "$i97_hits" ]; then
+    err "these shipped scripts MATCH a LOCKED_REQUIREMENTS marker themselves instead of asking the tool that owns it. The sentinel has six measured spellings and a partial matcher reads an unrecognised closer as NO BLOCK, which is indistinguishable from a sprint that locked nothing. Call \`bash validate-locked-anchor.sh <file> --emit-blocks\` and read its output, as validate-request-coverage.sh and validate-spec-join.sh do:
+$i97_hits"
+  fi
+fi
+
 # --- I16: runtime-pipeline prose must cite CONSUMER paths, never `core/`-prefixed ones.
 # install.sh maps core/<x> -> .claude/<x>, but that governs where files LAND, not path
 # references in the prose INSIDE them. So installed core kept citing the distribution's own

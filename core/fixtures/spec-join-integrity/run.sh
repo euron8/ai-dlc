@@ -1694,6 +1694,502 @@ else
   bad "ARMS-RAN: expected 19 v0.389.0 arms, counted $U_ARMS — the block is unreachable, truncated, or short-circuited"
 fi
 
+# =============================================================================
+# BL-079 — join (1)'s population is DECLARED, and the block grammar is BORROWED
+# =============================================================================
+# THIS BLOCK MUST STAY ABOVE `exit $rc`, for the reason the two blocks above record.
+# $LRJ_ARMS is the answer and it is asserted exactly at the end.
+#
+# WHAT IS UNDER TEST. `--locked-requirements FILE` replaces join (1)'s population —
+# "every LR-<...> token anywhere in the memlog" — with "the ids DECLARED inside that
+# file's LOCKED_REQUIREMENTS block". The motivating defect is that the memlog is the
+# spec's SELF-REPORT, and a self-report can contain an id that exists precisely BECAUSE
+# it does not exist: the reference consumer's s302 memlog records "an id-presence sweep
+# run with an absent-id control (LR-S999-9) that returned zero", and the gate convicted
+# that consumer of dropping a locked requirement for writing its own control token down.
+#
+# THE DISARM TRAP THIS BATTERY EXISTS FOR. Every remedy for that defect that narrows the
+# MEMLOG predicate also silences genuine orphans, and the two are indistinguishable by rc
+# alone: both produce a green run. So the arms here are built in PAIRS — one input the
+# check must stay quiet on and one it must still convict, wherever possible in the SAME
+# corpus and, for the central pair, in the SAME invocation.
+#
+# AND THE POPULATION-SOURCE PAIRING GENERALISES. Every "quiet under the flag" arm below
+# has a partner that omits the flag and watches the same id FAIL. Without that partner,
+# rc=0 is equally what a corpus containing nothing produces, and the arm certifies an
+# empty tree rather than a discrimination.
+#
+# AUTHORSHIP. Written by a hand that did not write the change, as
+# `.claude/rules/fixture-mutants.md` requires, and every seed below is taken from what
+# the PRODUCER emits — the reference consumer's five real locked-requirements.md files
+# and its s302 spec memlog — never from the regexes in the subject.
+LRJ_ARMS=0
+j_want()     { LRJ_ARMS=$((LRJ_ARMS+1)); want     "$@"; }
+j_says()     { LRJ_ARMS=$((LRJ_ARMS+1)); says     "$@"; }
+j_mut()      { LRJ_ARMS=$((LRJ_ARMS+1)); mut      "$@"; }
+j_mut_says() { LRJ_ARMS=$((LRJ_ARMS+1)); mut_says "$@"; }
+
+# THE MUTANT'S SIBLING, AND WHY THIS `cp` IS AN ASSERTION RATHER THAN SETUP. The subject
+# no longer owns the LOCKED_REQUIREMENTS marker grammar; validate-locked-anchor.sh does,
+# and the subject resolves it by `dirname "$0"`. `mut` builds every mutant as a lone copy
+# in $R, where that sibling does not exist — so WITHOUT this line every `--locked-requirements`
+# mutant below DISARMs at exit 2 for the wrong reason, and a battery of mutants that all
+# died by one unrelated arm reads exactly like a battery that works.
+cp "$(cd "$(dirname "$V")" && pwd)/validate-locked-anchor.sh" "$R/validate-locked-anchor.sh" 2>/dev/null || true
+LRJ_ARMS=$((LRJ_ARMS+1))
+if [ -f "$R/validate-locked-anchor.sh" ]; then
+  ok "SETUP: validate-locked-anchor.sh is beside the mutants in \$R — the mutation arms below can reach the block grammar"
+else
+  bad "SETUP: validate-locked-anchor.sh is NOT in \$R — every --locked-requirements mutation below DISARMs for the wrong reason and proves nothing"
+fi
+
+# UNMUTATED CONTROL, with a POSITIVE CONJUNCT. A copy in $R that misbehaves for any reason
+# other than its mutation makes every mutation arm vacuous, and rc=0-with-nothing-said is
+# exactly what a subject replaced by `exit 0` produces — so the population COUNT is
+# asserted here, not merely the exit code.
+cp "$V" "$R/control-lr-unmutated.sh"
+LRJ_ARMS=$((LRJ_ARMS+1))
+LRJ_CTL="$(bash "$R/control-lr-unmutated.sh" --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md" 2>&1)"
+if ! grep -qF "join (1) reads 3 locked requirement(s) from" <<<"$LRJ_CTL"; then
+  bad "CONTROL: an unmutated copy in \$R does not read the declared population — every mutation below is vacuous"
+else
+  ok "CONTROL: an unmutated copy in \$R reads all 3 declared requirements"
+fi
+
+# --- (1) THE DEFECT, AND THE DISARM THAT LOOKS LIKE ITS REMEDY -----------------
+# rc=0 alone is what `exit 0` produces, so the COUNT and the PASS LINE are asserted beside
+# it: `3 locked requirement(s)` is readable only if the block was parsed, and it is exactly
+# 2 under a bold-only declaration anchor and 4 under the memlog scan.
+j_want 0 "DECLARED: a spec whose three declared requirements all reach a capability PASSES" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md"
+j_says "DECLARED: the population SOURCE and its size are announced, so which reader ran is never inferred from silence" \
+  "join (1) reads 3 locked requirement(s) from" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md"
+j_says "DECLARED: all THREE declaration grammars are counted into the population, not merely tolerated" \
+  "PASS (3 locked requirement(s), 2 capability(ies), 0 story(ies), 0 recorded note(s), 0 baselined)" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md"
+
+# THE FLAG OMITTED. Unchanged behaviour is a CLAIM and it needs the old defect reproduced,
+# not merely an rc. The same tree, the same memlog, no flag: the control token is adopted
+# and convicts the spec, which is the state a consumer that has not updated its call site
+# is still in.
+j_want 1 "FALLBACK: with the flag OMITTED the memlog scan still runs, and the same corpus still FAILS" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md"
+j_says "FALLBACK: and the id it convicts is the ABSENT-ID CONTROL TOKEN — the defect, reproduced on demand" \
+  "LR-S999-9 appears in the memlog but no capability entry cites it" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md"
+j_says "FALLBACK: the scan announces ITSELF as the population, so a silent fallback is not a thing that can happen" \
+  "(every LR-<...> identifier appearing anywhere in it)" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md"
+
+# THE ARM THAT SEPARATES A FIX FROM A DISARM. One corpus carries BOTH inputs: the control
+# token quoted in `(event by bmad-spec)` prose, and LR-S303-2 declared, journalled and
+# cited by nothing. A remedy that silenced the memlog exits 0 here and passes every arm
+# above it. Every candidate remedy for this defect was one.
+j_want 1 "DECLARED: an uncited DECLARED requirement still FAILS — the population narrowed, the join did not" \
+  --spec "$R/lr-decl-orphan" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md"
+j_says "DECLARED: and the failing requirement is NAMED, so the declared population is feeding join (1)" \
+  "LR-S303-2 appears in the memlog but no capability entry cites it" \
+  --spec "$R/lr-decl-orphan" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md"
+
+# BOTH DIRECTIONS, ONE INVOCATION. Split across two runs this is two claims about two
+# programs; in one run it is the discrimination itself. The positive conjunct is what stops
+# it passing against a subject that emits nothing — an absence and a silence are the same
+# bytes.
+LRJ_ARMS=$((LRJ_ARMS+1))
+LRJ_OUT="$(bash "$V" --spec "$R/lr-decl-orphan" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md" 2>&1)"
+if grep -qF "LR-S999-9" <<<"$LRJ_OUT"; then
+  bad "DISCRIMINATION: the absent-id CONTROL TOKEN is STILL reported under a declared population — the defect survives"
+elif ! grep -qF "LR-S303-2 appears in the memlog but no capability entry cites it" <<<"$LRJ_OUT"; then
+  bad "DISCRIMINATION: the genuine orphan is NOT named either — this absence arm would pass against a subject that emits nothing"
+else
+  ok "DISCRIMINATION: the control token is NOT reported AND the genuine orphan IS, in one run over one corpus"
+fi
+
+# THE PAIR THAT MAKES THE ARM ABOVE A MEASUREMENT. Same corpus, no flag: the scan reports
+# BOTH. Without this, "LR-S999-9 is absent from the output" is equally satisfied by a token
+# that was never reachable in that corpus at all.
+j_want 1 "DISCRIMINATION CONTROL: the same corpus under the SCAN convicts both ids" \
+  --spec "$R/lr-decl-orphan" --prd "$R/prd-ok.md"
+j_says "DISCRIMINATION CONTROL: including the control token, so it WAS reachable and the silence above is a decision" \
+  "LR-S999-9 appears in the memlog but no capability entry cites it" \
+  --spec "$R/lr-decl-orphan" --prd "$R/prd-ok.md"
+
+# --- (2) THE BLOCK BOUNDARY, and the two roads to an empty extraction ----------
+# NO MARKER PAIR and AN OPENER WITH NO CLOSER are different LINES in the subject and
+# different EXIT PATHS in the borrowed grammar: --emit-blocks returns 0 with empty output
+# for the first and non-zero for the second. A fix to either leaves the other, so both are
+# armed and each asserts its own sentence.
+j_want 2 "BOUNDARY: a declarations file with NO marker pair DISARMS at exit 2, never 0" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-nomarkers.md"
+j_says "BOUNDARY: the no-block case says the block is what declares the population" \
+  "yielded no LOCKED_REQUIREMENTS block CONTENT" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-nomarkers.md"
+
+j_want 2 "BOUNDARY: an OPENER WITH NO CLOSER DISARMS at exit 2 — it does NOT run to EOF" \
+  --spec "$R/lr-decl-addenda" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-unclosed.md"
+j_says "BOUNDARY: the dangling-opener case is reported as an EXTRACTION failure, a different line from the empty one" \
+  "could not extract LOCKED_REQUIREMENTS blocks from" \
+  --spec "$R/lr-decl-addenda" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-unclosed.md"
+
+# THE SPRINT-INTERPOLATED CLOSER. s299 closes with `<!-- END S299 LOCKED_REQUIREMENTS -->`
+# and four other sprints with the bare form; the owning grammar's own census records SIX
+# spellings. THIS IS THE ARM THAT PROVES THE DELEGATION WORKS, and it is the one that must
+# go red if anybody re-inlines a narrow local matcher here. The file carries Tier 2 addenda
+# BELOW that closer, so a matcher that cannot see it does not merely DISARM — it runs on
+# and adopts them, which is an observable rather than a silence.
+j_want 0 "SPRINT CLOSER: '<!-- END S303 LOCKED_REQUIREMENTS -->' closes the block, and the run PASSES" \
+  --spec "$R/lr-decl-addenda" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-end-sprint.md"
+j_says "SPRINT CLOSER: and it closes THERE — the population is 3, not the 5 an unterminated block would read" \
+  "join (1) reads 3 locked requirement(s) from" \
+  --spec "$R/lr-decl-addenda" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-end-sprint.md"
+
+# IDS BELOW THE CLOSER ARE NOT ADOPTED. s304's real file carries LR-S304-8/-9 under a
+# paragraph saying they are not operator-locked; a whole-file scan produces two findings
+# against a gate that is green. The paragraph here spells `LOCKED_REQUIREMENTS` in
+# backticks, as s304's does, because a marker match that is not anchored at line start
+# takes it for a marker.
+j_want 0 "BELOW-MARKER: Tier 2 addenda under the closer are NOT adopted into the population" \
+  --spec "$R/lr-decl-addenda" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-below-marker.md"
+j_says "BELOW-MARKER: the population stays at the 3 the block declares" \
+  "join (1) reads 3 locked requirement(s) from" \
+  --spec "$R/lr-decl-addenda" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-below-marker.md"
+
+# THE PAIR. Both addenda ids are journalled and cited by nothing in this corpus, so the two
+# quiet arms above are DISCRIMINATIONS. Drop this and they are satisfied by a memlog in
+# which those ids do not appear at all.
+j_want 1 "BELOW-MARKER CONTROL: under the SCAN the same two addenda ids are convicted" \
+  --spec "$R/lr-decl-addenda" --prd "$R/prd-ok.md"
+j_says "BELOW-MARKER CONTROL: LR-S303-8 IS reachable in this memlog — the silence above is a decision, not an empty tree" \
+  "LR-S303-8 appears in the memlog but no capability entry cites it" \
+  --spec "$R/lr-decl-addenda" --prd "$R/prd-ok.md"
+
+# --- (3) THE DECLARATION GRAMMAR ----------------------------------------------
+# A BLOCK THAT MENTIONS IDS AND DECLARES NONE is a producer whose grammar moved. Scoring it
+# as "this sprint locked zero requirements" prints a PASS line byte-identical to a spec that
+# closed the join for real, and that is the whole reason this exits 2.
+j_want 2 "GRAMMAR: a block that MENTIONS ids but declares none in the anchored shape DISARMS at exit 2" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-mentions-only.md"
+j_says "GRAMMAR: and it says the GRAMMAR has moved, which is the remedy — not that the sprint locked nothing" \
+  "mentions LR-<...> identifiers but DECLARES none" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-mentions-only.md"
+
+# THE NEAR-MISS FOR THE SENTENCE ABOVE. Same empty population, no LR- token in the block at
+# all. Both exit 2, so rc is the wrong instrument for this pair; the SENTENCES are the
+# assertion, and telling this file its grammar has moved would be a false diagnosis.
+j_want 2 "GRAMMAR: a block that declares NOTHING AT ALL also DISARMS at exit 2" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-empty-block.md"
+j_says "GRAMMAR: and it gets the OTHER sentence — the two empty populations are not one finding" \
+  "declares no locked requirements at all" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-empty-block.md"
+
+# A PROSE MENTION INSIDE THE BLOCK IS NOT A DECLARATION. s299's block cites `LR-S177-2` in
+# a parenthetical on a continuation line under a real bullet. The id belongs to a PRIOR
+# sprint, so adopting it convicts this sprint of dropping work it never owned.
+j_want 0 "SUBJECT ANCHOR: a prose mention on a continuation line INSIDE the block is not adopted" \
+  --spec "$R/lr-decl-prior" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-prose-mention.md"
+j_says "SUBJECT ANCHOR: the population is the 3 BULLET SUBJECTS, not the 4 ids the block contains" \
+  "join (1) reads 3 locked requirement(s) from" \
+  --spec "$R/lr-decl-prior" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-prose-mention.md"
+j_want 1 "SUBJECT ANCHOR CONTROL: under the SCAN the prior-sprint id IS convicted" \
+  --spec "$R/lr-decl-prior" --prd "$R/prd-ok.md"
+j_says "SUBJECT ANCHOR CONTROL: LR-S177-2 is reachable and uncited here, so the quiet arm above discriminates" \
+  "LR-S177-2 appears in the memlog but no capability entry cites it" \
+  --spec "$R/lr-decl-prior" --prd "$R/prd-ok.md"
+
+# --- (4) AN UNREADABLE DECLARATION IS NOT AN EMPTY ONE -------------------------
+j_want 2 "UNREADABLE: --locked-requirements naming a file that does not exist DISARMS at exit 2" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-no-such-file.md"
+j_says "UNREADABLE: and says so, rather than reporting the borrowed grammar's failure to parse a file it never opened" \
+  "names an unreadable file" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-no-such-file.md"
+
+# --- (5) DECLARED AND NEVER JOURNALLED IS A NOTE ------------------------------
+# A class the memlog scan cannot construct: an id the memlog never mentions. On the
+# reference consumer both live instances sit on GREEN gates, so failing them reddens a
+# passing consumer over evidence this join does not have — which is how a correct check
+# gets switched off. rc=0 is asserted WITH the note text and the note COUNT, because rc=0
+# and silence is also what dropping the id entirely produces.
+j_want 0 "NOTE: a requirement declared in the file and journalled NOWHERE is a note, and the run still exits 0" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl-never.md"
+j_says "NOTE: the never-journalled requirement is NAMED — a note nobody can see is not a note" \
+  "LR-S303-7 is declared in" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl-never.md"
+j_says "NOTE: it stays IN the population and is counted as a recorded note, not dropped from the tally" \
+  "PASS (4 locked requirement(s), 2 capability(ies), 0 story(ies), 1 recorded note(s), 0 baselined)" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl-never.md"
+
+# --- (6) THE DELEGATION ITSELF ------------------------------------------------
+# The marker grammar is validate-locked-anchor.sh's and is not re-derived here. With the
+# sibling ABSENT the flag must DISARM and NAME it — it must not fall back to a local match,
+# and it must not close join (1). `want`/`says` run $V and cannot express this, so the arms
+# below name their own program. The copy lives inside $R, which is already a mktemp -d; no
+# real tree is touched.
+mkdir -p "$R/lr-no-anchor"
+cp "$V" "$R/lr-no-anchor/validate-spec-join.sh"
+p_want() { # <prog> <expected-rc> <label> <args...>
+  local prog="$1" exp="$2" lab="$3"; shift 3
+  LRJ_ARMS=$((LRJ_ARMS+1))
+  bash "$prog" "$@" >/dev/null 2>&1
+  local g=$?
+  [ "$g" -eq "$exp" ] && ok "$lab" || bad "$lab (expected rc=$exp, got rc=$g)"
+}
+p_says() { # <prog> <label> <must-contain> <args...>
+  local prog="$1" lab="$2" want_s="$3"; shift 3
+  LRJ_ARMS=$((LRJ_ARMS+1))
+  local out; out="$(bash "$prog" "$@" 2>&1)"
+  if grep -qF -- "$want_s" <<<"$out"; then ok "$lab"
+  else bad "$lab (message missing: \"$want_s\")"; fi
+}
+
+p_want "$R/lr-no-anchor/validate-spec-join.sh" 2 \
+  "DELEGATION: with validate-locked-anchor.sh absent, --locked-requirements DISARMS at exit 2 rather than matching markers locally" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md"
+p_says "$R/lr-no-anchor/validate-spec-join.sh" \
+  "DELEGATION: and the DISARM names the owner, so the remedy is the install rather than a third marker grammar" \
+  "validate-locked-anchor.sh not found beside this script" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md"
+
+# THE ARM WITHOUT WHICH THE TWO ABOVE MEAN "THIS COPY IS BROKEN". Same copy, no flag: it
+# runs the memlog scan and convicts the control token, exactly as $V does. The DISARM is
+# scoped to the flag, not to a dead file.
+p_want "$R/lr-no-anchor/validate-spec-join.sh" 1 \
+  "DELEGATION CONTROL: the SAME sibling-less copy still runs the scan when the flag is omitted — it is not simply broken" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md"
+
+# AND THE NEAR-MISS: restore the sibling beside that copy and it PASSES. One directory, one
+# file, two verdicts — which is what makes the DISARM attributable to the sibling.
+cp "$R/validate-locked-anchor.sh" "$R/lr-no-anchor/validate-locked-anchor.sh"
+p_want "$R/lr-no-anchor/validate-spec-join.sh" 0 \
+  "DELEGATION NEAR-MISS: with the sibling restored beside it, the same copy reads the block and PASSES" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md"
+# THE POSITIVE CONJUNCT FOR THE ARM ABOVE, and it was added because it was MEASURED
+# missing: rc=0 alone is what `exit 0` produces, and against a subject replaced by `exit 0`
+# that arm was one of seven in this block still printing `ok`. The COUNT is readable only
+# if the borrowed grammar was actually invoked from this directory.
+p_says "$R/lr-no-anchor/validate-spec-join.sh" \
+  "DELEGATION NEAR-MISS: and it reads the block for real — the population COUNT is what the restored sibling produced" \
+  "join (1) reads 3 locked requirement(s) from" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md"
+
+# --- MUTATION controls --------------------------------------------------------
+# THE MOST VALUABLE MUTANT IN THIS SET, and the one that guards the single-source decision:
+# the delegation replaced by a re-inlined local marker regex recognising exactly ONE closer
+# spelling. That is not a strawman — it is what this script did one revision ago, and what
+# any future author reaching for `awk` here will write.
+j_mut lr-local-regex \
+  'bash "$LR_ANCHOR" "$LOCKED_REQS" --emit-blocks' \
+  "awk '/^<!--[[:space:]]*LOCKED_REQUIREMENTS/{f=1;next} /^<!-- END LOCKED_REQUIREMENTS -->/{f=0;next} f' \"\$LOCKED_REQS\"" \
+  1 "MUTATION: a re-inlined local marker regex cannot see the SPRINT-INTERPOLATED closer, runs past it and FAILS the run" \
+  --spec "$R/lr-decl-addenda" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-end-sprint.md"
+j_mut_says lr-local-regex \
+  'bash "$LR_ANCHOR" "$LOCKED_REQS" --emit-blocks' \
+  "awk '/^<!--[[:space:]]*LOCKED_REQUIREMENTS/{f=1;next} /^<!-- END LOCKED_REQUIREMENTS -->/{f=0;next} f' \"\$LOCKED_REQS\"" \
+  "LR-S303-8 appears in the memlog but no capability entry cites it" \
+  "MUTATION: and the ids it swallows are the Tier 2 addenda — the failure is attributable, not incidental" \
+  --spec "$R/lr-decl-addenda" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-end-sprint.md"
+# THE SAME MUTANT, SECOND OBSERVABLE. An unterminated block under a local matcher does not
+# DISARM — it runs to EOF, silently widening the population. This is the arm that makes
+# "do NOT run to EOF" a measurement rather than a claim about a code path.
+j_mut lr-local-regex-eof \
+  'bash "$LR_ANCHOR" "$LOCKED_REQS" --emit-blocks' \
+  "awk '/^<!--[[:space:]]*LOCKED_REQUIREMENTS/{f=1;next} /^<!-- END LOCKED_REQUIREMENTS -->/{f=0;next} f' \"\$LOCKED_REQS\"" \
+  1 "MUTATION: under a local matcher an UNCLOSED block runs to EOF and FAILS instead of DISARMing at 2" \
+  --spec "$R/lr-decl-addenda" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-unclosed.md"
+# AND THE ARM THAT PROVES IT DIES BY THE RIGHT ONE. A mutant that fails everything scores
+# kills it did not earn. Against the BARE closer the local matcher is correct, and it must
+# stay green there — otherwise the three arms above are attributing a general breakage to a
+# specific closer spelling.
+j_mut lr-local-regex-baseform \
+  'bash "$LR_ANCHOR" "$LOCKED_REQS" --emit-blocks' \
+  "awk '/^<!--[[:space:]]*LOCKED_REQUIREMENTS/{f=1;next} /^<!-- END LOCKED_REQUIREMENTS -->/{f=0;next} f' \"\$LOCKED_REQS\"" \
+  0 "MUTATION SCOPE: the same local matcher is still GREEN on the BARE closer — it dies by the sprint-closer arm, not by everything" \
+  --spec "$R/lr-decl-addenda" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-below-marker.md"
+
+# THE DECLARATION ANCHOR WIDENED TO A WHOLE-BLOCK SCAN. Its subject is the prose mention,
+# which no other guard here can see.
+j_mut lr-anchor-wide \
+  "'^[[:space:]]*[-*][[:space:]]+(\*\*|__)?LR-[A-Za-z0-9]+-[0-9]+[a-z]?'" \
+  "'LR-[A-Za-z0-9]+-[0-9]+[a-z]?'" \
+  1 "MUTATION: widening the declaration anchor to a whole-block scan adopts the block's PROSE MENTION and fails the run" \
+  --spec "$R/lr-decl-prior" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-prose-mention.md"
+j_mut_says lr-anchor-wide \
+  "'^[[:space:]]*[-*][[:space:]]+(\*\*|__)?LR-[A-Za-z0-9]+-[0-9]+[a-z]?'" \
+  "'LR-[A-Za-z0-9]+-[0-9]+[a-z]?'" \
+  "LR-S177-2 appears in the memlog but no capability entry cites it" \
+  "MUTATION: and it convicts this sprint of dropping a PRIOR sprint's requirement" \
+  --spec "$R/lr-decl-prior" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-prose-mention.md"
+
+# THE ANCHOR NARROWED TO REQUIRE EMPHASIS. `?` is the whole of what admits s305's
+# `- LR-S305-1: "..."`, and the failure is SILENT: the id leaves the population and the run
+# goes green. The seed puts the plain-shape declaration on the ORPHAN, so the mutant flips
+# a FAIL to a PASS rather than merely changing a count.
+j_mut lr-anchor-bold '(\*\*|__)?LR-[A-Za-z0-9]' '(\*\*|__)LR-[A-Za-z0-9]' \
+  0 "MUTATION: a bold-only anchor drops the plain '- LR-<id>:' shape, and the uncited requirement goes UNREPORTED" \
+  --spec "$R/lr-decl-orphan" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md"
+j_mut_says lr-anchor-bold '(\*\*|__)?LR-[A-Za-z0-9]' '(\*\*|__)LR-[A-Za-z0-9]' \
+  "join (1) reads 2 locked requirement(s) from" \
+  "MUTATION: and the drop is visible in the announced population — 2 read where 3 are declared" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md"
+
+# THE FLAG MADE INERT. The declared population is computed and then overwritten by the scan.
+# Every arm that asserts a COUNT still passes under this — the source line even keeps naming
+# the declared file — and the only thing that changes is that the control token comes back.
+j_mut_says lr-flag-inert 'if [ -z "$LOCKED_REQS" ]; then' 'if true; then' \
+  "LR-S999-9 appears in the memlog but no capability entry cites it" \
+  "MUTATION: letting the scan overwrite the declared population brings the control token back — the shipped defect on demand" \
+  --spec "$R/lr-decl-orphan" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md"
+
+# THE TWO EMPTY-POPULATION DIAGNOSES COLLAPSED. Both exit 2 before and after, so rc is
+# blind to this and only the sentence can see it: a producer whose grammar moved is told
+# it locked nothing, and the next author deletes the flag instead of fixing the reader.
+j_mut_says lr-grammar-moved-collapsed \
+  "grep -qE '\bLR-[A-Za-z0-9]+-[0-9]+[a-z]?\b'" "grep -qE 'ZZ-NO-SUCH-DECLARATION-TOKEN'" \
+  "declares no locked requirements at all" \
+  "MUTATION: collapsing the empty-population discrimination tells a MOVED GRAMMAR that it locked nothing" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-mentions-only.md"
+
+# THE `carries no LOCKED_REQUIREMENTS block` LINE, given its own subject. With it off, a
+# file with no markers falls through to the declares-nothing message — still exit 2, and
+# still a false statement about a file that has no block at all.
+j_mut_says lr-emptyblock-silent 'if [ -z "$LR_BLOCK" ]; then' 'if false; then' \
+  "declares no locked requirements at all" \
+  "MUTATION: dropping the empty-extraction arm tells a file with NO BLOCK that its block declares nothing" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-nomarkers.md"
+
+# THE UNREADABLE-FILE GUARD CHANGES NO VERDICT — the borrowed grammar exits non-zero on a
+# missing file either way — so it is armed on the DIAGNOSIS, which is the only thing it
+# decides. Arming it on rc would be an arm that cannot fire.
+j_mut_says lr-unreadable-tolerated '[ -f "$LOCKED_REQS" ] || {' '[ -n "$PROG" ] || {' \
+  "could not extract LOCKED_REQUIREMENTS blocks from" \
+  "MUTATION: without the readability guard a MISSING FILE is reported as a parse failure of the block grammar" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-no-such-file.md"
+
+# THE NEVER-JOURNALLED NOTE, TURNED BACK INTO A FAILURE. This is the direction that reddens
+# a green consumer.
+j_mut lr-note-fails 'if [ -n "$LOCKED_REQS" ] && ! grep -qE' 'if false && ! grep -qE' \
+  1 "MUTATION: dropping the never-journalled branch FAILS a requirement this join has no evidence about" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl-never.md"
+
+# THE NOTE TURNED INTO A SILENT SKIP. rc stays 0 and the tally still says `1 recorded
+# note(s)`, so neither `mut` nor `mut_says` can express this: the claim is that a LINE
+# DISAPPEARS. An absence needs its positive conjunct in the same run, and the PASS line is
+# it — a mutant that died on a syntax error also prints no note.
+LRJ_ARMS=$((LRJ_ARMS+1))
+LRJ_M="$R/mutant-lr-note-silent.sh"
+cp "$V" "$LRJ_M"
+FROM='echo "  note  $lr is declared in $LOCKED_REQS' TO=': "  note  $lr is declared in $LOCKED_REQS' \
+  perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$LRJ_M"
+if cmp -s "$V" "$LRJ_M"; then
+  bad "FIXTURE ERROR: mutation 'lr-note-silent' matched nothing — its assertion would prove nothing"
+elif ! bash -n "$LRJ_M" 2>/dev/null; then
+  bad "FIXTURE ERROR: mutant 'lr-note-silent' is not a valid shell script — its silence is not a kill"
+else
+  LRJ_NS="$(bash "$LRJ_M" --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl-never.md" 2>&1)"
+  if ! grep -qF "1 recorded note(s)" <<<"$LRJ_NS"; then
+    bad "MUTATION: the note-silencing mutant produced no PASS line at all — this arm cannot tell a silenced note from a dead script"
+  elif grep -qF "LR-S303-7 is declared in" <<<"$LRJ_NS"; then
+    bad "MUTATION: silencing the note echo changed nothing — the note text is emitted from somewhere else, so the arm asserting it is not keyed on this line"
+  else
+    ok "MUTATION: silencing the note echo makes the requirement vanish from the output while the tally still counts it — the note line is load-bearing"
+  fi
+fi
+
+# THE SIBLING-PRESENCE GUARD. Like the readability guard it decides a MESSAGE, not a
+# verdict: without it the missing sibling surfaces as a parse failure of a grammar that was
+# never invoked. It cannot be exercised by `mut`, whose mutants live in $R where the
+# sibling exists, so it is built in the sibling-less directory instead.
+LRJ_ARMS=$((LRJ_ARMS+1))
+LRJ_MS="$R/lr-no-anchor-mutant"
+mkdir -p "$LRJ_MS"
+cp "$V" "$LRJ_MS/validate-spec-join.sh"
+FROM='if [ ! -f "$LR_ANCHOR" ]; then' TO='if false; then' \
+  perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$LRJ_MS/validate-spec-join.sh"
+if cmp -s "$V" "$LRJ_MS/validate-spec-join.sh"; then
+  bad "FIXTURE ERROR: mutation 'lr-sibling-unchecked' matched nothing — its assertion would prove nothing"
+elif ! bash -n "$LRJ_MS/validate-spec-join.sh" 2>/dev/null; then
+  bad "FIXTURE ERROR: mutant 'lr-sibling-unchecked' is not a valid shell script — its silence is not a kill"
+else
+  LRJ_SB="$(bash "$LRJ_MS/validate-spec-join.sh" --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md" 2>&1)"
+  if grep -qF "could not extract LOCKED_REQUIREMENTS blocks from" <<<"$LRJ_SB"; then
+    ok "MUTATION: without the sibling-presence guard a MISSING OWNER is misreported as a failure to parse the declarations file"
+  else
+    bad "MUTATION: dropping the sibling-presence guard produced neither diagnosis — the arm asserting it is not keyed on that check"
+  fi
+fi
+
+# --- (7) THE THREE DEFECTS AN INDEPENDENT HAND FOUND IN THE FIRST CUT ----------
+# Each returned a WRONG ANSWER rather than an error, so each gets an arm that would have
+# caught it and, where the arm is absence-shaped, a mutant.
+
+# MULTI-BLOCK: the owner joins block bodies with a FORM FEED. Grepping the join glues one
+# block's last line to the next block's first, so the head declaration of every block after
+# the first cannot match its bullet anchor. THE DIFFERENTIAL IS THE POINT: the two files
+# declare the same three requirements and must yield the same population, and the pair is
+# asserted to DIFFER as files first, because a differential whose sides are the same file
+# establishes nothing.
+LRJ_ARMS=$((LRJ_ARMS+1))
+if cmp -s "$R/lr-twoblocks.md" "$R/lr-oneblock.md"; then
+  bad "FIXTURE ERROR: the two-block and one-block declaration files are byte-identical — the multi-block differential below compares a file with itself"
+else
+  ok "MULTI-BLOCK: the two-block and one-block declaration files differ, so the comparison below is a real differential"
+fi
+j_says "MULTI-BLOCK: a file whose declarations span TWO blocks yields all three, not the first block's one" \
+  "join (1) reads 3 locked requirement(s)" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-twoblocks.md"
+j_says "MULTI-BLOCK CONTROL: the same three declarations in ONE block yield the same population" \
+  "join (1) reads 3 locked requirement(s)" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-oneblock.md"
+# THE MUTANT IS MANDATORY HERE. `reads 3` is a presence assertion, but the defect it guards
+# is a SILENT NARROWING that cannot disarm, so nothing else in this file would notice the
+# split coming back out. Reverting the split must move the count and nothing else.
+j_mut_says lr-formfeed-unsplit \
+  'LR_BLOCK="$(tr '"'"'\014'"'"' '"'"'\n'"'"' <<<"$LR_RAW")"' 'LR_BLOCK="$LR_RAW"' \
+  "join (1) reads 2 locked requirement(s)" \
+  "MUTATION: leaving the form-feed join unsplit GLUES the blocks and silently drops the head declaration of the second" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-twoblocks.md"
+
+# CHECKED-SET VACUITY: a declared population every one of whose ids is absent from the
+# memlog takes the never-journalled note on every iteration, never touches `rc`, and prints
+# PASS having joined nothing. The DISARM above it guards what was DECLARED; this guards what
+# was CHECKED, and the note branch is what made those two different sets.
+j_want 2 "VACUITY: a declared population NONE of whose ids the memlog mentions DISARMS — it does not PASS having checked nothing" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-wrong-sprint.md"
+j_says "VACUITY: the diagnosis names the likely cause, which is --locked-requirements pointed at another sprint" \
+  "The usual cause is --locked-requirements naming a different sprint's file" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-wrong-sprint.md"
+# THE NEAR-MISS. One declared id IS journalled and joins, so the checked set is 1, not 0.
+# An arm that fires on the presence of notes rather than on an empty checked set convicts
+# this corpus too, and every real consumer sprint carrying a note with it.
+j_want 0 "VACUITY NEAR-MISS: one journalled id among two unjournalled ones is a CHECKED set of 1 — the arm stays silent" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-wrong-sprint-partial.md"
+j_mut lr-vacuity-tolerated 'if [ -n "$LOCKED_REQS" ] && [ "$lr_checked" -eq 0 ]; then' 'if false; then' \
+  0 "MUTATION: without the checked-set guard a join that examined NOTHING reports PASS" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-wrong-sprint.md"
+
+# THE EMPTY FLAG VALUE. Every gate downstream tests `[ -n "$LOCKED_REQS" ]`, so an empty
+# value was byte-indistinguishable from omitting the flag: it reverted to the memlog scan
+# and reported the control token again, while the caller believed it had declared a
+# population. Both arms run on the corpus where the two answers differ.
+j_want 2 "EMPTY VALUE: --locked-requirements '' is REFUSED, not silently treated as omission" \
+  --spec "$R/lr-decl-orphan" --prd "$R/prd-ok.md" --locked-requirements ""
+j_says "EMPTY VALUE: the refusal says what omission would have done instead" \
+  "was given an EMPTY value" \
+  --spec "$R/lr-decl-orphan" --prd "$R/prd-ok.md" --locked-requirements ""
+# THE DISCRIMINATION CONTROL: omitting the flag on the SAME corpus reaches the scan and
+# convicts the control token. Without it, "exit 2" above is equally satisfied by a build in
+# which that corpus could never have produced anything else.
+j_says "EMPTY VALUE CONTROL: OMITTING the flag on the same corpus reaches the scan and reports the control token" \
+  "LR-S999-9 appears in the memlog but no capability entry cites it" \
+  --spec "$R/lr-decl-orphan" --prd "$R/prd-ok.md"
+
+# ARMS-RAN. Non-zero and exact, for the reason the two blocks above state.
+if [ "$LRJ_ARMS" -eq 67 ]; then
+  ok "ARMS-RAN: all 67 BL-079 arms EXECUTED (counted $LRJ_ARMS)"
+else
+  bad "ARMS-RAN: expected 67 BL-079 arms, counted $LRJ_ARMS — the block is unreachable, truncated, or short-circuited"
+fi
+
 echo
 if [ "$rc" -eq 0 ]; then echo "spec-join-integrity: PASS"; else echo "spec-join-integrity: FAILED" >&2; fi
 exit $rc
