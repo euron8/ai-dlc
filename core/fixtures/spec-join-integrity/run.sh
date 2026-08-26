@@ -2217,6 +2217,20 @@ fi
 # green against the unfixed validator here. The NAMING conjunct is what kills the mutants
 # below; the differ conjunct is kept because it is the half that dies first if that memlog
 # line is ever silenced, and it costs one comparison.
+# THE `echo "$@"` ATTACK, AND THE HALF OF IT THAT NO ARM HERE CAN CLOSE. A fix that dumps the
+# argument vector instead of the values it RESOLVED satisfies "the outputs differ" and "the
+# path appears" without the validator ever disclosing a resolution. Measured against a mutant
+# that replaced all six identity lines with one `echo "  argv: $@"`: this fixture goes RED, two
+# cells, because the arm requires all SIX paths BY NAME and a collapsed dump carries one.
+# Control in the same run: the unmutated copy is green and the two trees were asserted to
+# differ first.
+#
+# What survives is narrower and is a property of the SUBJECT, not a hole in the arm: every
+# input here is a required flag with no defaulted form, so `$2` and the resolved variable hold
+# the same string and no observation can separate them. It becomes a real gap the moment any
+# of these flags gains a default -- `validate-scope-confirmation.sh` already has one, and its
+# fixture closes this by driving that validator with NO path arguments at all. If a default
+# lands here, add that arm; until then there is nothing for it to discriminate.
 SJ_IDENT_WHY=""
 sj_ident_corpus() {   # -> prints a fresh corpus root holding all SIX inputs
   local d

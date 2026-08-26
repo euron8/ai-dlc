@@ -139,6 +139,14 @@ mutate term-off 's/if grep -qiE "(\^|\[\^\[:alnum:\]_\])\${term}(\[\^\[:alnum:\]
 mutate evidence-off 's/\[ -f "\$base\/\$cpath" \] \&\&/true \&\&/' \
   dangling-evidence.md "MUTATION: neutering the -f existence test turns dangling-evidence green (that test is what fails it)"
 
+# THE `echo "$@"` ATTACK IS OPEN HERE AND THAT IS RECORDED RATHER THAN PAPERED OVER. The
+# lexicon arrives through `--lexicon-from` and the stories are positionals, so a fix echoing
+# its arguments rather than what it RESOLVED would satisfy every arm below -- for a
+# caller-supplied flag with no defaulted form the two strings are identical and no observation
+# here can separate them. `validate-ac-falsifiability.sh` DOES default its lexicon when the
+# flag is omitted (it walks candidates), so the arm that would close this drives the validator
+# with NO `--lexicon-from` and requires the DEFAULTED path to appear. That arm is not built;
+# the gap is stated so the next author knows it is a gap and not a covered case.
 # --- CORPUS IDENTITY on the PASS line -----------------------------------------
 # THE DEFECT. Both inputs are caller-supplied — the lexicon through `--lexicon-from`, the
 # stories as positional arguments — and the PASS line reported only a TALLY:
