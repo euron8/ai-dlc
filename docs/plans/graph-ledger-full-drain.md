@@ -37,8 +37,14 @@ grep -cE '^## BL-[0-9]+' docs/backlog.archive.md  # archived
 bash scripts/backlog-reverify.sh | grep -oE 'CLOSE-CANDIDATE|STILL-LIVE|HAND-REVIEW|NEEDS-REVIEW' | sort | uniq -c
 ```
 
-At the last session's close those read **64 live / 26 archived / 57 STILL-LIVE + 7 HAND-REVIEW**,
-with 0 CLOSE-CANDIDATE, against an impossible-id control of 0.
+At the last session's close those read **65 live / 27 archived / 57 STILL-LIVE + 7 HAND-REVIEW
++ 1 CLOSE-CANDIDATE**, against an impossible-id control of 0.
+
+**THAT CLOSE-CANDIDATE IS `BL-006` AND IT IS FALSE. DO NOT CLOSE IT.** Its receipt exits 0 on
+two COMMENT lines in `scripts/validate-claude-rules.sh`, one of which says the mechanism "was
+offered and declined for now". The flip was established rather than inferred: `git blame`
+attributes that line to `e2f3e42a` and the same receipt against an `e2f3e42a^` sandbox exits 1,
+so a documentation sentence turned it green. The entry carries the full measurement.
 
 **A `STILL-LIVE` ROW IS NOT EVIDENCE THAT THE ENTRY IS LIVE, AND `BL-089` IS THE ENTRY THAT SAYS
 SO.** `backlog-reverify.sh` maps every non-zero `sh` exit to `STILL-LIVE  … "still reproduces
@@ -47,8 +53,11 @@ nothing"*. The two are one row. Measured at batch 9's close: **1 exit 9** — `B
 receipt is broken shell. Batch 9 rebuilt the other one; `BL-076`'s had been unable to measure
 anything for 28 releases and read as `STILL-LIVE` the whole time.
 Derive the current pair rather than trusting that one; the count of live `sh` receipts moves
-with every batch and the control is the 5 entries declaring `verify: manual`, which the engine
-does route to HAND-REVIEW:
+with every batch and the control is the entries declaring `verify: manual`, which the engine
+does route to HAND-REVIEW. **Count those with `^[ \t]*verify:`, not `^verify:`** — three entries
+indent the line, `backlog-reverify.sh`'s own grammar allows the indent, and an unindented grep
+undercounts. That grep is why an earlier revision of this block said 5; the measured number at
+v0.417.0 is 7:
 
 This one is a LOOP, so run it through `bash -c` — your shell is zsh, where an unquoted `$var`
 is not word-split and a loop written for bash iterates once over the whole string:
@@ -70,6 +79,26 @@ work. Batches 1–9 have all MERGED AND PUSHED; the releases are `v0.374.0`, `v0
 recorded in `CHANGELOG.md`. `v0.381.0` and `v0.382.0` followed batch 7 as machinery releases;
 many further machinery releases have shipped between `v0.383.0` and `v0.414.0` that are NOT part
 of this program, which is why the batch numbering and the version numbering stopped agreeing.
+
+**THE TRIAGE SWEEP IS COMPLETE, MERGED AND PUSHED AS `v0.417.0` (`8eb98209`). It was action 1
+and it is DONE. Do not re-run it.** All 64 live entries re-derived by 14 independent hands, one
+question each, then 4 verifiers briefed to BREAK the proposed closes. **62 REPRODUCES, 2
+proposed closes, 1 survived attack.** Coverage joined both ways against the live ledger: nothing
+unexamined, nothing examined twice, no duplicates. Live **64 → 65**, archive **26 → 27**. Gate
+exit **0** read from `git push`'s own `$?`, 16/16 phases PASS, 166 dispatched / 166 ok / 0 FAIL
+against an impossible-name control of 0.
+
+`BL-081` CLOSED (fixed at `5d02dcf4`/`v0.386.0`, thirty releases before anyone joined the row to
+it). `BL-066` REJECTED and held open, narrowed to its sibling claim. `BL-091` and `BL-092`
+filed. `BL-006`, `BL-066` and `BL-089` amended with what the sweep measured.
+
+**THE VERIFIER PASS CAUGHT A FALSE CLOSE ON SCOPE, NOT ON MEASUREMENT, AND THAT IS THE
+TRANSFERABLE LESSON.** Both `BL-066` verifiers agreed on every number and split on what the
+entry CLAIMED. Its sibling paragraph names a harm distinct from the one that was fixed — "its
+output is the sha an operator is told to go and read" — and `named_ambiguous()` still elects one
+commit from its match set. **`v0.387.0`'s CHANGELOG asserts both joins were fixed and that
+sentence is false.** An entry with two subjects expires only when both do; ask that question
+before reading a good measurement as a close.
 
 **BATCH 9 IS COMPLETE, MERGED AND PUSHED AS `v0.416.0`.** `BL-076` and `BL-078` closed,
 `BL-090` filed. Release and merge are one fast-forward commit, `727ddc6c`. Live **66 → 64**,
@@ -124,76 +153,42 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **RUN THE TRIAGE SWEEP FIRST, BEFORE ANY MORE FIX BATCHES. This is an operator ruling and it
-   replaces "pick the next batch" as the opening move.**
+1. **BATCH 10. The triage sweep is done — see the block above — and the survivors are the
+   corpus. Pick the subject and say why.**
 
-   **Why, measured.** Between 2026-08-18 and 2026-08-26 the ledger closed 6 entries and gained
-   8: live went 62 → 64 while archive went 20 → 26. The batches file most of them —
-   `BL-081`/`082`/`083` came out of v0.379.0, `BL-084` out of v0.380.0, `BL-089` out of batch 8,
-   `BL-090` out of batch 9 — so widening a fix batch raises the filing rate along with the
-   closing rate. **52 of the 64 live entries were filed on or before 2026-08-17**, 38 of them on
-   the single Phase 1 adjudication day, and none has been re-tested since across roughly forty
-   releases.
+   **`BL-006` is the recommendation, and it is the only entry whose defect is mis-reporting
+   RIGHT NOW.** It is the ledger's single CLOSE-CANDIDATE and that row is false; a session that
+   reads it and closes the entry retires a live defect, which is the one direction that loses
+   data permanently. Its receipt is broken in BOTH directions — closable by a comment, and its
+   `scripts/*.sh` pathspec makes a correct fix landed in `core/scripts/` invisible to it, while
+   its token set omits `MAX_LINES`. Closing it means choosing the bound (lines, bytes, or
+   entries), re-anchoring the receipt on the emitting arm, and building the arm that
+   `validate-claude-rules.sh:365` records as "offered and declined". The sweep deliberately did
+   NOT choose the bound: that is scope, and scope is the operator's.
 
-   **The sweep answers ONE question per entry: does this still reproduce?** It does not
-   adjudicate worth, does not scope a fix, and writes no code. Three verdicts only —
-   **REPRODUCES**, **EXPIRED** (the subject moved; nothing to fix), **RECEIPT-BROKEN** (the
-   receipt cannot measure, so the entry is unjudged until it is rebuilt). RECEIPT-BROKEN is NOT
-   a close.
+   `BL-090` remains the coherent alternative the earlier revision named — filed out of two
+   independent re-derivations, its fix subtractive. `BL-082` and `BL-083` are still not one
+   subsystem, so taking them means saying which single thing you are closing.
 
-   **Read RAW exit codes, never `backlog-reverify.sh`'s label.** It maps every non-zero exit to
-   `STILL-LIVE`, and this corpus uses **exit 9** for "a precondition moved and I measured
-   nothing". `BL-076` sat at exit 9 for 28 releases reading `STILL-LIVE`; `BL-089` is the entry
-   about that.
+   **Run every candidate's receipt directly and read the RAW exit code before you scope it.**
+   The sweep re-established that a `STILL-LIVE` row is not evidence the entry is live, and
+   found the population is wider than `BL-089` filed: receipts exiting **1** having measured
+   nothing outnumber the exit-9 ones and carry no hint at all. `BL-081`'s did that for 16
+   releases while reading as a genuine reproduction.
 
-   **Shape.** Roughly 14 hands, 4–5 entries each, every hand in its own `mktemp` copy made with
-   `git archive HEAD | tar -x`, every hand told to WRITE ITS REPORT TO A FILE named in the
-   brief. Spawn them `model: "opus"` — a wrong close retires a live defect and nothing catches
-   it, which is the silent-wrong-answer case action 3 reserves opus for.
+   **Then re-derive the entry's population rather than believing it.** The sweep measured this
+   directly across 64 entries: `BL-019`, `BL-052`, `BL-072` and `BL-086` are all WIDER than
+   filed, `BL-081`'s claim 7 was wrong in the direction that strengthened its close, and
+   citation drift is routine and mostly not load-bearing. That is the base case, not the
+   exception.
 
-   **Then a verifier pass over the PROPOSED CLOSES ONLY**, briefed to break them, never over the
-   REPRODUCES set. That is Phase 1's proven shape: 115 entries in 29 parallel batches of 4, then
-   12 independent verifiers attacking all 48 proposed closes. **When a hand is uncertain the
-   verdict is REPRODUCES** — a false STILL-LIVE costs one re-derivation later, a false EXPIRED
-   retires a real defect permanently.
-
-   **THE ONLY CLOSE FORM THE ROTATOR RECOGNISES IS `**LANDED (v` AT THE START OF A LINE**
-   (`scripts/backlog-rotate.sh` matches `^(<br>)?\*\*LANDED \(v[0-9]`). There is no separate
-   spelling for an expired entry, so an EXPIRED close still uses that form, naming the version
-   whose change made it expire. Rotate once at the end, `--check` before `--apply`, and confirm
-   the archive count MOVED.
-
-2. **Then batch 10, from whatever survives. Pick its subject and say why.** `BL-081`, `BL-082` and
-   `BL-083` are the group batch 9 did not take. They are NOT one subsystem on reading —
-   `BL-081` is a `ledger-reverify` regex, `BL-082` is a case-folding entry explicitly *filed
-   rather than fixed* with no code remedy, `BL-083` is a rule-vs-mechanism drift — so if you
-   take them, say which single thing you are closing. **`BL-090` is the other candidate and it
-   is the coherent one**: it was filed by batch 9 out of two independent re-derivations, its
-   fix is subtraction (a `# vocabulary-emitters:` field with both index columns DERIVED from
-   the yaml, deleting the third unbound hand-list), and it closes the reverse-arm gap and the
-   column semantics together.
-
-   **Run every candidate's receipt directly and read the raw exit code before you scope it.**
-   A `STILL-LIVE` row is not evidence the entry is live; `BL-089` is the entry that says so.
-   At batch 9's close exactly one receipt exits 9 — `BL-066`, whose receipt is broken shell —
-   against a control of 5 entries declaring `verify: manual`, which DO reach HAND-REVIEW.
-
-   **Then re-derive the entry's population rather than believing it.** Measured across six
-   batches, **5 of 6 entries were WIDER than filed**. Batch 8's was wrong in four places;
-   batch 9's two were wrong in nine between them — an expired receipt, a receipt closable by
-   PROSE, five citations pointing at comments and `return` statements, a claim that a token was
-   unregistered when it had been registered since the entry was filed, four exit codes where
-   there are five, and four more live instances of `BL-076`'s own defect that the entry never
-   named. That is the base case, not the exception.
-
-   **A receipt is a hypothesis too, and batch 9 broke both of its own.** Ask what ELSE satisfies
-   it. `BL-078`'s read only a RENDERED row whose cell came from a comment no arm validates, so
-   one comment line closed it with no behaviour changed — measured on a copy of `origin/main`,
-   not argued. The standing rule out of that is in
+   **Ask what ELSE satisfies the receipt.** Three of the four receipt defects the sweep found
+   are the `BL-078` shape — `BL-006` closable by a comment, `BL-051` by a comment naming a
+   bucket, `BL-074` by a deletion its own entry forbids. The standing rule is in
    `.claude/rules/verification-discipline.md`, "a receipt that reads a RENDERED artifact is
    closable by prose"; it is not restated here.
-3. **Keep the batch to ONE subsystem.** Take one group or the other, not both.
-4. **Put independent hands on SCOPE, FIXTURE and RECEIPT, every time.** In batch 8 they found
+2. **Keep the batch to ONE subsystem.** Take one group or the other, not both.
+3. **Put independent hands on SCOPE, FIXTURE and RECEIPT, every time.** In batch 8 they found
    THREE defects in work already committed on the branch; in batch 9 the fixture hand found
    FOUR more live instances of the entry's own defect, and two scope hands independently found
    that the entry's receipt could be closed by prose. Every one returned a WRONG ANSWER rather
@@ -235,20 +230,20 @@ so no block written before it changes verdict.
    CORRECT fix be one it REJECTS. Key mutants on LOCATION and observable BEHAVIOUR, never on a
    spelling. **A hand can die mid-task** — one did, to a machine sleep, leaving a fixture
    half-edited and RED; check each one's deliverable rather than its report.
-5. **Gate it the way the hook runs it, and read the GATE's own exit.**
+4. **Gate it the way the hook runs it, and read the GATE's own exit.**
    `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`, or simply push and let the hook's own run
    be the single gate — running it manually and then pushing pays for it twice. **The fixture
    tally is NOT the verdict**: a run has exited 1 with the suite reporting PASS. Tabulate every
    `── phase` header against PASS/FAIL, and read each changed fixture BY NAME against an
    impossible-name control in the same invocation. This shell has no `PIPESTATUS`, so
    `cmd | tail` reports `tail`'s status — never read a push's exit through a pipe.
-6. **Close the batch properly. A `CLOSE-CANDIDATE` row is the instrument saying the fix is
+5. **Close the batch properly. A `CLOSE-CANDIDATE` row is the instrument saying the fix is
    present; it is NOT the close.** Annotate each entry with `**LANDED (v<version>, verified
    <sha>).**` at the START of a line — that FORM is what the rotator keys on — then
    `scripts/backlog-rotate.sh --check`, then `--apply`. **Confirm the archive count MOVED.** A
    release has shipped with this step silently skipped and was reported complete; it was caught
    only because the operator asked.
-7. **Cite every closed id verbatim in the RELEASE COMMIT MESSAGE**, not only in `CHANGELOG.md`.
+6. **Cite every closed id verbatim in the RELEASE COMMIT MESSAGE**, not only in `CHANGELOG.md`.
    `named_absorbed()` resolves the signal with `git log -F --grep`, which reads commit MESSAGES;
    a `###` section in the CHANGELOG is in the diff and produces no row at all.
 
