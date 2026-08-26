@@ -13,8 +13,13 @@ instruction from it.**
 `/Users/n8/git/graph` is the reference consumer and is **READ ONLY** — an ai-dlc session never
 writes to a consumer. Assert it by ledger CONTENT, not by dirty count and not by `HEAD`:
 `md5 -q /Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md`. Record the
-value before your first action and re-check it after every phase; a change is a stop-and-ping
-condition. Full boundary in `## Start here` below, and in `.claude/rules/consumer-boundary.md`.
+value before your first action and re-check it after every phase. **When it moves, run
+`git -C /Users/n8/git/graph diff` on that path, identify the writer, and PING THE OPERATOR
+either way** — the ping is not conditional on the answer, only its content is. Measured during
+batch 8: it moved mid-session because a live graph session was appending an S305 retro entry,
+with that consumer's `HEAD` advancing and its own s305 artifacts appearing untracked. A
+concurrent graph session is the expected cause; your own write is the one that stops the work.
+Full boundary in `## Start here` below, and in `.claude/rules/consumer-boundary.md`.
 
 **Never run `git checkout --`, `git restore`, `git clean`, `git stash`, or `git reset --hard`
 in either repo, and tell every delegate the same.** Delegates work in `mktemp` copies made with
@@ -32,14 +37,29 @@ grep -cE '^## BL-[0-9]+' docs/backlog.archive.md  # archived
 bash scripts/backlog-reverify.sh | grep -oE 'CLOSE-CANDIDATE|STILL-LIVE|HAND-REVIEW|NEEDS-REVIEW' | sort | uniq -c
 ```
 
-At the last session's close those read **64 live / 24 archived / 57 STILL-LIVE + 7 HAND-REVIEW**,
+At the last session's close those read **65 live / 24 archived / 58 STILL-LIVE + 7 HAND-REVIEW**,
 with 0 CLOSE-CANDIDATE, against an impossible-id control of 0.
 
-**The `md5` above is NOT a fixed value and a change to it is not automatically your doing.**
-Measured during batch 8: it moved mid-session while a live graph session appended an S305 retro
-entry, with that consumer's `HEAD` advancing and its own s305 artifacts appearing untracked.
-Record the value at your first action, and when it moves, READ THE DIFF before treating it as a
-boundary violation — `git -C /Users/n8/git/graph diff` on that path names the writer.
+**A `STILL-LIVE` ROW IS NOT EVIDENCE THAT THE ENTRY IS LIVE, AND `BL-089` IS THE ENTRY THAT SAYS
+SO.** `backlog-reverify.sh` maps every non-zero `sh` exit to `STILL-LIVE  … "still reproduces
+here"`, but this corpus's receipts use **exit 9** to mean *"a precondition moved and I measured
+nothing"*. The two are one row. Measured at batch 8's close: **2 exit 9** — `BL-066`, whose
+receipt is broken shell, and **`BL-076`, which is a candidate subject for the next batch**.
+Derive the current pair rather than trusting that one; the count of live `sh` receipts moves
+with every batch and the control is the 5 entries declaring `verify: manual`, which the engine
+does route to HAND-REVIEW:
+
+This one is a LOOP, so run it through `bash -c` — your shell is zsh, where an unquoted `$var`
+is not word-split and a loop written for bash iterates once over the whole string:
+
+```
+bash -c 'while IFS= read -r l; do ( eval "${l#verify: sh }" ) >/dev/null 2>&1; echo "$?"; done \
+  < <(grep "^verify: sh " docs/backlog.md) | sort | uniq -c'
+grep -c '^verify: manual' docs/backlog.md    # the control: these DO reach HAND-REVIEW
+```
+
+**Before scoping any entry, run its receipt directly and read the raw exit code.** A 9 means
+the row above told you nothing.
 
 ### What is DONE — do not redo any of it
 
@@ -514,8 +534,13 @@ passes, and 7 version-less rows correctly do not trip it.
 
 **START HERE ON A FRESH SESSION — the numbered next actions.**
 
-**ACTION ZERO: BATCH 7 IS COMPLETE, MERGED AND PUSHED AS `v0.380.0`. `v0.381.0` FOLLOWED IT. THE
-NEXT BATCH IS BATCH 8 AND `BL-079` IS ITS SUBJECT.**
+### BATCH 7 — COMPLETE, SHIPPED AS `v0.380.0`, WITH `v0.381.0` AFTER IT. A RECORD, NOT AN INSTRUCTION. DO NOT RE-DO IT.
+
+**The line that stood here read `ACTION ZERO: … THE NEXT BATCH IS BATCH 8 AND BL-079 IS ITS
+SUBJECT`, and batch 8 shipped as `v0.415.0`.** It is rewritten as a heading because it was the
+loudest sentence in the file and the only one shaped like an order, so a resuming session that
+skimmed would have taken a spent directive from the history half — the exact failure the
+`## RESUME HERE` preamble exists to prevent, sitting in a form that outranks the preamble.
 
 **`v0.380.0`** — merge `5b1fea28`, release `56fbd212`, close+rotate `b2df8e00`. `BL-084` filed and
 `BL-073` closed, both annotated `**LANDED (v0.380.0, verified 5b1fea28).**` and rotated: live
