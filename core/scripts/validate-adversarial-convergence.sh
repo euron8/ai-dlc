@@ -61,9 +61,10 @@
 #                   follow another but was written BEFORE it is not part of this
 #                   cycle -- it is the tail of a dead one.
 #
-# It does NOT enforce the per-intensity pass FLOOR ("2+ passes"). Rule 8 delegates
-# that to each planning step's own intensity gate, and duplicating it here would
-# fail every legitimate `standard`/`lightweight` single-pass cycle.
+# IT IS COUNT-BLIND. Rule 8's intensity table names EVALUATIONS, not pass counts, and
+# the only thing that ends a cycle is the terminal pass stamping EXIT_CONDITION_MET. A
+# series that converges in one pass is a converged series, at every intensity. Arm D is
+# the whole rule.
 #
 # USAGE
 #   validate-adversarial-convergence.sh --series <path-prefix>
@@ -1194,36 +1195,61 @@ fi
 # (adversarial p3 -> repair -> p4 fresh MAJOR -> repair -> p5 MET) and nothing in Rule 8
 # governed it, because nothing named the state it walked past.
 #
-# THE `blocking > 0` REFINEMENT IS WHAT EMPTIES THE FALSE-POSITIVE SET, and it was
-# measured rather than reasoned. Across 28 series, the naive form ("a MET pass followed
-# by any pass") fires 5 times and TWO are false: `s290-discovery` p1 MET -> p2 MET and
-# `s292-stories` p1 MET -> p2 MET, both the same shape -- a `full` cycle whose p1 already
-# converged still OWES its second pass, and that pass finding nothing is the intensity
-# FLOOR being met. Requiring the successor to report CRITICAL+MAJOR >= 1 leaves 3 fires,
-# 3 true positives, 0 false positives.
+# THE PREDICATE KEYS ON `artifact_sha`, AND IT USED TO KEY ON `blocking > 0`. The old
+# form asked whether the successor pass FOUND anything; this one asks the question that
+# actually defines a re-open -- did the artifact MOVE after it was signed off.
 #
-# It is also closed by construction rather than by taste: the same bytes reviewed under
-# the same contract yield the same residue, so a NON-ZERO residue after a MET pass is
-# proof the artifact moved after it was signed off. A zero residue costs nothing.
+# WHY IT CHANGED (v0.413.0). The `blocking > 0` narrowing was justified by Rule 8's
+# per-intensity pass FLOOR: across 28 series the naive form ("a MET pass followed by any
+# pass") fired 5 times and two were called false -- `s290-discovery` p1 MET -> p2 MET and
+# `s292-stories` p1 MET -> p2 MET -- on the grounds that a `full` cycle whose p1 already
+# converged still OWED its second pass. v0.413.0 retired that floor, so the justification
+# is gone. RE-MEASURING THE TWO CASES ALSO SHOWED THE OLD COMMENT WAS WRONG ABOUT THEM:
+# they are NOT the same shape.
+#
+#   s292-stories  p1 sha 307b013da152 -> p2 sha 307b013da152   SAME bytes. Re-reviewed,
+#                 same contract, same residue, nothing learned and nothing lost.
+#   s290-discovery p1 sha 0db9fd8392bf -> p2 sha cd1450150cd7  DIFFERENT bytes, same
+#                 `artifact: product-brief.md`. The brief MOVED after it was notarised.
+#                 That is a re-open by this arm's own definition, and the old predicate
+#                 let it through only because the successor happened to find nothing.
+#
+# Measured over the reference consumer at the time of the change: 71 series, 161
+# consecutive pass pairs, 6 of them following a MET pass. Keying on the sha leaves 5
+# fires and exempts 1 -- the same-bytes pass -- against the old form's 4 fires and 2
+# exemptions. One new catch, zero new false positives, and the exemption is now closed
+# BY CONSTRUCTION: identical bytes under an identical contract cannot yield a different
+# residue, so re-reviewing them costs nothing and can never be a re-open.
+#
+# AN ABSENT SHA ON EITHER SIDE EXEMPTS, and that is a deliberate fail-open. The field
+# postdates the earliest passes, and a check that errors on pre-migration data is one the
+# operator turns off. In the measured corpus the field is present on 161 of 161 pairs, so
+# the tolerance costs nothing there; `reopen-sha-absent` in the fixture pins it so it
+# cannot be silently withdrawn.
 REOPEN_LIVE=0
 REOPEN_AT=""
 REOPEN_FROM=""
 for ((i = 0; i + 1 < N; i++)); do
   [ "${P_VERDICT[$i]}" = "EXIT_CONDITION_MET" ] || continue
   j=$((i + 1))
+  # Fail open where the evidence is absent: a pass with no notarised sha cannot be
+  # compared, and guessing is worse than abstaining.
+  [ -n "${P_SHA[$i]}" ] && [ -n "${P_SHA[$j]}" ] || continue
+  # Same bytes, same contract, same residue -- re-reviewing them costs nothing.
+  [ "${P_SHA[$i]}" != "${P_SHA[$j]}" ] || continue
   nxt_block=$(( ${P_CRIT[$j]:-0} + ${P_MAJOR[$j]:-0} ))
-  [ "$nxt_block" -gt 0 ] || continue          # the intensity FLOOR pass -- not a re-open
   REOPEN_LIVE=1
   REOPEN_FROM="$(basename "${P_FILE[$i]}")"
   REOPEN_AT="$(basename "${P_FILE[$j]}")"
   if [ -z "${P_RESOLVES[$j]}" ]; then
-    err "J -- REOPEN" "$REOPEN_FROM stamps EXIT_CONDITION_MET and $REOPEN_AT ran after it,
-      reporting $nxt_block CRITICAL+MAJOR finding(s).
+    err "J -- REOPEN" "$REOPEN_FROM stamps EXIT_CONDITION_MET and $REOPEN_AT ran after it
+      against DIFFERENT BYTES -- ${P_SHA[$i]} then ${P_SHA[$j]} -- reporting $nxt_block
+      CRITICAL+MAJOR finding(s).
       EXIT_CONDITION_MET IS A FREEZE POINT. The same bytes reviewed under the same contract
-      yield the same residue, so a non-zero residue after a MET pass is proof the artifact
+      yield the same residue, so a CHANGED artifact_sha after a MET pass is proof the artifact
       MOVED after it was signed off -- that is a RE-OPEN, and it costs a fresh sub-cycle.
-      A pass after MET that finds NOTHING is the intensity floor being met and costs nothing;
-      this one is not that.
+      A pass that re-reviews the SAME sha finds the same residue and costs nothing; this one
+      is not that, whatever it happened to find.
       The cycle is ORDERED: Party Mode -> Advanced Elicitation -> Adversarial Review.
       Elicitation runs BEFORE the convergence cycle, never after it. The measured instance of
       this arm was exactly that -- an elicitation editing an artifact its series had already
@@ -1247,7 +1273,19 @@ if [ "$CYCLE_STATE" -eq 1 ]; then
   fi
   STATE="CONTINUE"
   RC=0
-  if [ "$LAST_VERDICT" = "EXIT_CONDITION_MET" ]; then
+  if [ "$REOPEN_LIVE" -eq 1 ]; then
+    # BEFORE the CONVERGED branch, and that ordering IS the arm. A re-open whose successor
+    # pass itself stamped MET leaves LAST_VERDICT = EXIT_CONDITION_MET, so a CONVERGED
+    # branch reached first answers CONVERGED/0 and the rung never speaks -- the hooks then
+    # allow the very dispatch the re-open should deny.
+    #
+    # THIS WAS UNREACHABLE UNDER THE OLD PREDICATE AND IS REACHABLE UNDER THIS ONE. While
+    # arm J required blocking > 0, a re-open implied the successor was NOT_MET, so the MET
+    # branch could never win the race. Keying on artifact_sha makes a clean-but-moved
+    # successor expressible, and the state machine had no way to say it. Caught by the
+    # `reopen-moved-clean` fixture case, which passed in gate mode and failed here.
+    STATE="REOPENED"; RC=3
+  elif [ "$LAST_VERDICT" = "EXIT_CONDITION_MET" ]; then
     STATE="CONVERGED"
   elif [ "$CEILING_LIVE" -eq 1 ]; then
     # BEFORE the divergence and stall branches, and that ordering is the arm. Both of
@@ -1268,8 +1306,6 @@ if [ "$CYCLE_STATE" -eq 1 ]; then
     else
       STATE="STALLED"; RC=3
     fi
-  elif [ "$REOPEN_LIVE" -eq 1 ]; then
-    STATE="REOPENED"; RC=3
   fi
   printf '%s\t%s\n' "$STATE" "$LAST_FILE"
   exit "$RC"

@@ -2220,6 +2220,46 @@ if [ -n "$r8_dupes" ]; then
 $r8_dupes"
 fi
 
+# --- I96: the adversarial cycle's stopping rule is a VERDICT, never a pass count -----
+# Rule 8's intensity table names EVALUATIONS. The cycle ends when a pass stamps
+# EXIT_CONDITION_MET and at no other moment, so a minimum, maximum or expected number of
+# adversarial passes stated anywhere in shipped prose is a SECOND stopping rule that can
+# only disagree with the first.
+#
+# WHY I19 CANNOT COVER THIS. I19 keys on a backticked intensity name AND an evaluation
+# name on one line, which is how a table ROW is written. The count drifted three times
+# into prose that names no intensity -- `_gate-procedures.md` ("2+ passes (a floor, not a
+# target)"), `gate-validation.md` Check 1 ("completed (2+ passes, only nitpicks remain)?")
+# and two copies in `templates/QUICKSTART.md.template`, which no invariant reached at all.
+# All three sat under I19 for their whole lifetime and it never saw one of them.
+#
+# THE GRAMMAR IS TWO TOKENS ON ONE LINE, and it is two rather than one because measurement
+# said so. A pass COUNT alone flags five lines that use the word in its other sense --
+# `artifact-consolidation.md` "Only Steps 3-4 pass:", `_gate-procedures.md` "preconditions
+# 3-7 pass, fire", `gate-validation.md` "seed H1 passes means", `remediator.md` "Measured:
+# 13 passes, ~12 hours", and SKILL.md's STALL sentence "a nonzero MAJOR held at zero
+# CRITICAL across 2+ passes", whose 2 is arm E's STALL_THRESHOLD and a different number
+# entirely. Requiring the line to ALSO name the adversarial cycle drops all five.
+#
+# FALSE-POSITIVE SET: measured at 10 hits before the count was retired, every one of them
+# a site that had to change; 0 after. The near-miss control is SKILL.md's STALL sentence,
+# which must stay silent -- if it ever fires, the grammar has been widened to a single
+# token and arm E's threshold is being read as a floor.
+#
+# WHAT IT DOES NOT CATCH, stated because an unstated limit is read as coverage: a bare
+# count in running prose that names no adversarial token on its own line. Widening to one
+# token buys that case and the five false positives above with it, so the narrow form
+# ships. This arm catches the RESTATEMENT shape, which is the one that actually drifted.
+i96_cnt='[0-9]+\+?[[:space:]]+pass(es)?([^a-zA-Z]|$)'
+i96_adv='Adversarial Review|adversarial convergence|convergence cycle|Rule 8|adversarial pass'
+i96_hits="$(grep -rniE "$i96_cnt" \
+             "$REPO_ROOT/core/skills/" "$REPO_ROOT/core/team-roles/" "$REPO_ROOT/templates/" \
+             2>/dev/null | grep -iE "$i96_adv" || true)"
+if [ -n "$i96_hits" ]; then
+  err "a pass COUNT is stated beside the adversarial cycle. Rule 8's intensity table names evaluations, and the cycle ends when a pass stamps EXIT_CONDITION_MET -- a count is a second stopping rule that can only disagree with the first. Cite the verdict, not a number:
+$i96_hits"
+fi
+
 # --- I16: runtime-pipeline prose must cite CONSUMER paths, never `core/`-prefixed ones.
 # install.sh maps core/<x> -> .claude/<x>, but that governs where files LAND, not path
 # references in the prose INSIDE them. So installed core kept citing the distribution's own

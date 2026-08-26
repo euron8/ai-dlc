@@ -438,7 +438,7 @@ insufficient; findings that remove mechanism are applied with the same
 directness (SKILL.md Rule 26).
 
 **Planning artifacts** (brief, PRD, architecture, stories):
-Party Mode --> Advanced Elicitation --> Adversarial Review (2+ passes) -->
+Party Mode --> Advanced Elicitation --> Adversarial Review (converge) -->
 Apply all fixes --> Changelog
 
 **Implementation artifacts** (code, tests):
@@ -641,8 +641,9 @@ your-project/
 ## Key Gotchas
 
 **Adversarial review false positives.** The AI will manufacture some
-findings. The autonomous loop applies real fixes and discards noise. After
-2-3 passes, only nitpicks remain and the cycle terminates.
+findings. The autonomous loop applies real fixes and discards noise. The
+cycle terminates when a pass reports zero CRITICAL and zero MAJOR -- however
+many passes that takes, including one.
 
 **Token usage.** This workflow prioritizes thoroughness. Expect 5-10x token
 usage vs. a standard approach. Break sprints to 3-5 stories.
@@ -704,7 +705,7 @@ planning artifacts. Do not implement."
 /bmad-agent-tea-tea                -- TEA test strategy
 ```
 
-The Rule 8 **convergence cycle** (2+ passes to zero CRITICAL/MAJOR) is NOT a skill:
+The Rule 8 **convergence cycle** (run until zero CRITICAL/MAJOR) is NOT a skill:
 the lead dispatches the `adversary` role, which runs the native method in
 `team-roles/adversary.md` and stamps `skill: ai-dlc-adversary-review`. The bmad
 review skill above is for ONE-SHOT sweeps (`bug-investigation`, `sprint-review`,

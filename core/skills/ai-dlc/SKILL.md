@@ -225,13 +225,16 @@ more is always permitted.
 
 | Intensity | Trigger | Minimum cycle per planning artifact |
 |---|---|---|
-| `full` | ≥3 stories touching service code paths | Party Mode → Advanced Elicitation → Adversarial Review (2+ passes) |
-| `standard` | 1-2 stories touching service code paths | Party Mode → Adversarial Review (1+ passes) |
-| `carry-over-single` | carry-over variant with ≤2 stories touching service code paths | Party Mode → Adversarial Review (1+ passes) |
-| `lightweight` | All stories touch only pipeline-infra paths | Adversarial Review (1 pass) at discovery + stories-test-strategy only |
+| `full` | ≥3 stories touching service code paths | Party Mode → Advanced Elicitation → Adversarial Review |
+| `standard` | 1-2 stories touching service code paths | Party Mode → Adversarial Review |
+| `carry-over-single` | carry-over variant with ≤2 stories touching service code paths | Party Mode → Adversarial Review |
+| `lightweight` | All stories touch only pipeline-infra paths | Adversarial Review at discovery + stories-test-strategy only |
 
-**"2+ passes" is a FLOOR; the cycle must CONVERGE to leave it.** Pass 2+ reviews the
-REPAIR, not the document again, and verifies the prior pass's findings landed.
+**The Adversarial Review runs until a pass stamps `EXIT_CONDITION_MET`. That
+verdict is the only thing that ends it, and it is honoured the moment it is met,
+including at pass 1.** The residue that decides it: `team-roles/adversary.md`.
+Pass 2+ reviews the REPAIR, not the document again, and verifies the prior
+pass's findings landed.
 
 **Divergence is a HARD_BLOCK, not a reason for another pass.** Pass N+1's
 `findings_critical_prior_scope` above pass N's `findings_critical` means the repair
@@ -260,7 +263,7 @@ adversarial passes at discovery is a violation.
 Intensity does NOT reduce the following (always required regardless):
 - Carry-over eval party mode (evaluates slot/close/defer decisions)
 - Story validation party mode (real subagents)
-- Adversarial review (1+ pass on stories and sprint output)
+- Adversarial review on stories and sprint output (run it; converge it)
 - Deploy-validate smoke test (hard gate, see deploy-validate.md)
 - Retro party mode (Rule 20 Skill invocation mandate)
 

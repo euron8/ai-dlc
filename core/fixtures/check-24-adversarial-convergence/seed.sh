@@ -575,21 +575,59 @@ record "$TARGET/stalled-record-invalid/s1-resolution-p4.md" \
 # an Advanced Elicitation run that edited the artifact AFTER convergence, buying a
 # five-pass sub-cycle nobody scheduled. J must fire, and the state must be REOPENED so
 # the hooks deny the dispatch.
+#
+# THE SHAS ARE LOAD-BEARING AND WERE ABSENT UNTIL v0.413.0. The arm keys on
+# artifact_sha, and it fails OPEN where either side is missing -- so this case, seeded
+# with no shas at all, would have stopped firing silently the moment the predicate
+# changed. p2 -> p3 must differ for the re-open to be expressible here.
 mkdir -p "$TARGET/reopen-unrecorded"
-pass "$TARGET/reopen-unrecorded/s1-adversarial-p1.md" 1 4 2 1 EXIT_CONDITION_NOT_MET 0
-pass "$TARGET/reopen-unrecorded/s1-adversarial-p2.md" 2 0 0 0 EXIT_CONDITION_MET     0
-pass "$TARGET/reopen-unrecorded/s1-adversarial-p3.md" 3 1 2 1 EXIT_CONDITION_NOT_MET 0
+pass "$TARGET/reopen-unrecorded/s1-adversarial-p1.md" 1 4 2 1 EXIT_CONDITION_NOT_MET 0 aaa1
+pass "$TARGET/reopen-unrecorded/s1-adversarial-p2.md" 2 0 0 0 EXIT_CONDITION_MET     0 aaa2
+pass "$TARGET/reopen-unrecorded/s1-adversarial-p3.md" 3 1 2 1 EXIT_CONDITION_NOT_MET 0 aaa3
 repair "$TARGET/reopen-unrecorded/s1-brief-repair-p1.md"
 
-# --- reopen-floor-pass: THE DECOY FOR J, and the one Rule 8's FLOOR depends on --
-# `full` intensity owes 2+ passes. A series whose p1 already converged still owes p2, and
-# that pass finding NOTHING is the floor being met -- not a re-open. Seeded from a REAL
-# trajectory (s292-stories p1 MET -> p2 MET, 0 findings). The naive arm fires here; if
-# this case ever goes red the `blocking > 0` refinement has been lost and Rule 8's floor
-# is being punished as a defect.
-mkdir -p "$TARGET/reopen-floor-pass"
-pass "$TARGET/reopen-floor-pass/s1-adversarial-p1.md" 1 0 0 2 EXIT_CONDITION_MET 0
-pass "$TARGET/reopen-floor-pass/s1-adversarial-p2.md" 2 0 0 1 EXIT_CONDITION_MET 0
+# --- reopen-same-bytes: THE DECOY FOR J ---------------------------------------
+# A pass that re-reviews the SAME artifact_sha after a MET pass. The same bytes under the
+# same contract yield the same residue, so it can learn nothing and cost nothing, and
+# SKILL.md Rule 8 permits running more passes than the cycle needed. Seeded from a REAL
+# trajectory: s292-stories p1 MET -> p2 MET, both at artifact_sha 307b013da152, 0
+# findings. The naive arm ("a MET pass followed by any pass") fires here and must not.
+#
+# Until v0.413.0 this case was called `reopen-floor-pass` and carried NO shas, so it
+# exercised the absent-sha branch rather than the same-bytes one -- a decoy testing an arm
+# other than the one it named. `reopen-sha-absent` below now owns that branch.
+mkdir -p "$TARGET/reopen-same-bytes"
+pass "$TARGET/reopen-same-bytes/s1-adversarial-p1.md" 1 0 0 2 EXIT_CONDITION_MET 0 bbb1
+pass "$TARGET/reopen-same-bytes/s1-adversarial-p2.md" 2 0 0 1 EXIT_CONDITION_MET 0 bbb1
+
+# --- reopen-moved-clean: THE CATCH THE OLD PREDICATE MISSED -------------------
+# A pass that ran after MET against DIFFERENT bytes and happened to find nothing. The
+# artifact moved after it was notarised, which is a re-open whatever the successor
+# reported -- the old `blocking > 0` form let it through for finding nothing.
+#
+# Seeded from a REAL trajectory: s290-discovery p1 MET at artifact_sha 0db9fd8392bf ->
+# p2 MET at cd1450150cd7, same `artifact: product-brief.md`, 0 findings. The old arm's
+# own comment named this series as a FALSE fire; re-measuring the shas showed it was a
+# true one. This case is why the predicate moved off the residue.
+mkdir -p "$TARGET/reopen-moved-clean"
+pass "$TARGET/reopen-moved-clean/s1-adversarial-p1.md" 1 0 0 2 EXIT_CONDITION_MET 0 ddd1
+pass "$TARGET/reopen-moved-clean/s1-adversarial-p2.md" 2 0 0 1 EXIT_CONDITION_MET 0 ddd2
+
+# --- reopen-sha-absent: the fail-open, pinned ---------------------------------
+# artifact_sha postdates the earliest passes, and an arm that ERRORS on pre-migration data
+# is one the operator turns off. So an absent sha on either side exempts, and this case
+# pins that so it cannot be withdrawn silently.
+#
+# IT IS DELIBERATELY THE SHAPE THAT WOULD OTHERWISE FIRE: p1 MET, then a successor
+# reporting 1 CRITICAL / 2 MAJOR. Under the old `blocking > 0` predicate this FAILS; under
+# the sha predicate it passes, because there is no evidence either way and guessing is
+# worse than abstaining. That is the cost of the tolerance, stated as a test rather than
+# as a sentence. p3 returns the series to MET so arm D is not the thing being measured.
+mkdir -p "$TARGET/reopen-sha-absent"
+pass "$TARGET/reopen-sha-absent/s1-adversarial-p1.md" 1 0 0 2 EXIT_CONDITION_MET     0
+pass "$TARGET/reopen-sha-absent/s1-adversarial-p2.md" 2 1 2 1 EXIT_CONDITION_NOT_MET 0
+pass "$TARGET/reopen-sha-absent/s1-adversarial-p3.md" 3 0 0 1 EXIT_CONDITION_MET     0
+repair "$TARGET/reopen-sha-absent/s1-brief-repair-p2.md"
 
 # --- reopen-recorded: the sanctioned exit ------------------------------------
 # A declared re-open resumes, exactly as a resolved hard block does. Without this case
@@ -597,7 +635,7 @@ pass "$TARGET/reopen-floor-pass/s1-adversarial-p2.md" 2 0 0 1 EXIT_CONDITION_MET
 # delete a pass file.
 mkdir -p "$TARGET/reopen-recorded"
 pass "$TARGET/reopen-recorded/s1-adversarial-p1.md" 1 4 2 1 EXIT_CONDITION_NOT_MET 0
-pass "$TARGET/reopen-recorded/s1-adversarial-p2.md" 2 0 0 0 EXIT_CONDITION_MET     0
+pass "$TARGET/reopen-recorded/s1-adversarial-p2.md" 2 0 0 0 EXIT_CONDITION_MET     0 ccc1
 record "$TARGET/reopen-recorded/s1-resolution-p2.md" \
   s1-adversarial-p2.md REOPEN_AFTER_MET ccc1 ccc2 4000 4300 \
   "advanced elicitation edited the artifact after it was notarised" \
