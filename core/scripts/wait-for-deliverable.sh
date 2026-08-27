@@ -118,6 +118,79 @@
 # on a path that does not exist and on the state dir (see the guards below) -- both
 # are ways this check could silently never fire.
 #
+# SLOW AND NEVER LOOK THE SAME, WHICH IS A DIFFERENT DEFECT FROM THE ONE ABOVE.
+# --progress-path answers "is the teammate working?" only when the caller can name
+# the tree it works in, and only once the sequence is spent. Everywhere else this
+# beat's entire output vocabulary was `WAITING ... not yet delivered` / `DELIVERED`,
+# printed IDENTICALLY beat after beat. Reproduced S306: two teammates had both
+# finished their real work and gone idle, having written their answers to paths this
+# join was not watching. The beat reported the same non-delivery text every beat, the
+# lead re-armed it twice against an unchanging false negative, and it stopped only
+# because the operator asked whether the wait was still appropriate -- a manual check
+# then showed both idle at once. Absent that question the join would have reported the
+# same line indefinitely. The cause is general: ANY way a teammate can finish without
+# satisfying the watched path -- a crash after partial delivery, a role that answers in
+# text, a path typo in either direction -- produces that identical silent symptom.
+#
+# TWO REPAIRS, AND THEY ARE INDEPENDENT OF EACH OTHER.
+#
+# (1) THE LINE MUST NOT REPEAT. Every WAITING line now carries the beat number AND the
+#     elapsed time since this join armed, so beat N is textually distinct from beat
+#     N+1 and a --reset that restarts the clock is visible as a reset rather than as
+#     more of the same. The chained-sibling WAITING line carried neither, and it was
+#     the one that was byte-identical on every invocation.
+#
+# (2) TEAMMATE LIVENESS IS REACHABLE FROM A SHELL, AND ASSUMING OTHERWISE IS WHY THIS
+#     TOOK THREE SPRINTS. This is a process, not the lead, so it cannot call the
+#     agent-listing tool -- and it does not need to. The harness exports
+#     CLAUDE_CODE_SESSION_ID into every Bash subprocess it starts (including a
+#     backgrounded beat, and including one started from inside a teammate, where the
+#     value is still the LEAD's session), and it appends one transcript per teammate
+#     under
+#
+#         $HOME/.claude/projects/<project-slug>/<session>/subagents/*.jsonl
+#
+#     as that teammate takes turns. The mtime of those files IS the liveness signal.
+#     It needs no flag, and it is the same KIND of evidence --progress-path already
+#     uses: an mtime DELTA, never a state.
+#
+#     WHAT IT CAN AND CANNOT ANSWER. It cannot say which teammate owed which
+#     deliverable -- nothing on disk joins a teammate name to a path, and this script
+#     does not guess one, for the same reason it will not guess a progress path. What
+#     it can say is a SESSION-scoped fact: whether ANY teammate has taken a turn
+#     recently. That is exactly the fact the operator's question surfaced in S306,
+#     where the answer was "no -- both went idle an hour ago".
+#
+#     THE ERROR DIRECTION IS DELIBERATE. The age is the MINIMUM across every teammate
+#     in the session, so one live teammate suppresses the idle report for the whole
+#     wave, and a beat invoked from inside a teammate can never call itself idle. That
+#     under-reports idleness and never over-reports it; under-reporting leaves today's
+#     behaviour exactly as it was.
+#
+#     IT CHANGES NO DECISION THIS SCRIPT MAKES -- not the exit code, not the beat
+#     counter, not a progress grant. It is a status line, and here the status line IS
+#     the outcome: this file's contract is that stdout carries the verdict (see WHY
+#     WAITING IS NOT NONZERO), and S306 was a lead acting on output that could not
+#     distinguish two states. Wiring an mtime heuristic into the exit code would be
+#     re-dispatching live teammates on a guess, which is the failure the whole file
+#     exists to prevent.
+#
+#     THE THRESHOLD IS MEASURED, NOT PICKED. Over 1,337 real teammate transcripts from
+#     this pipeline and the reference consumer's -- 57,050 consecutive appends -- a
+#     teammate that was ALIVE and merely running one long tool call was silent for
+#     more than one beat quantum (600s) in 13 of those appends, more than 900s in 3,
+#     and more than 1200s in 2: 0.0036%. Teammates that had genuinely gone idle and
+#     were later re-messaged were silent past 1200s in 57 of 844 episodes. Two quanta
+#     is therefore the default, and AI_DLC_TEAMMATE_IDLE_SECS retunes it.
+#
+#     WHEN THE SIGNAL IS ABSENT THE BEAT SAYS SO, AND THAT LINE IS NOT DECORATION.
+#     Only 47 of 172 sessions in this project have a subagents directory at all -- a
+#     join on a Skill spawn, on a backgrounded command, or on a teammate the harness
+#     did not record has none. An absent directory must never read as "idle"; it reads
+#     as "this beat cannot see liveness", which the lead needs, because a sensor that
+#     is silent because all is well and one that is silent because it is broken are
+#     otherwise the same output. That is this whole section's failure, one level down.
+#
 # USAGE
 #   scripts/ai-dlc/wait-for-deliverable.sh <path> [<path>...] [--reset] [--quiet]
 #                                   [--since <epoch|ISO8601>]
@@ -129,6 +202,11 @@
 #                     summary line. Consume ONLY the delivered paths.
 #                     `PROGRESS <path>` means an exhausted sequence was extended
 #                     because work was observed -- do NOT re-dispatch, beat again.
+#                     `TEAMMATE IDLE, DELIVERABLE ABSENT` means no teammate in this
+#                     session has taken a turn for a long time while the join is
+#                     still out: the likely cause is a DIVERGED delivery, not a slow
+#                     teammate. Check the path before beating again. It is a report,
+#                     not a verdict -- the exit code is unaffected.
 #   1  NON-DELIVERY   a path exhausted max_wait_beats. Rule 20 non-delivery:
 #                     re-dispatch ONCE (with --reset), then HARD_BLOCK.
 #
@@ -151,6 +229,13 @@
 #                            wait is 2 x quantum x this -- still finite)
 #   AI_DLC_WAIT_MARGIN_SECS  reserve held back from quantum (default 10)
 #   AI_DLC_STATE_DIR         state dir                      (default _bmad-output)
+#   AI_DLC_TEAMMATE_IDLE_SECS  quiet seconds before the beat reports TEAMMATE IDLE
+#                            (default 2 x the beat quantum; see the measurement above)
+#   AI_DLC_TEAMMATE_DIR      override the teammate-transcript directory. Exists so
+#                            the fixture can point the sensor at a tree it built --
+#                            a sensor that resolves its own location cannot be
+#                            probed, and one that cannot be probed cannot be shown
+#                            to fire.
 #
 # AI_DLC_STEERING_BUDGET is deliberately NOT read here -- see "THE BEAT QUANTUM
 # IS NOT THE STEERING BUDGET" above. It bounds foreground calls and belongs to
@@ -192,6 +277,16 @@ mtime_of() {  # epoch of $1's last write, or 0 if it cannot be read
   fi
 }
 
+human_age() {  # $1 = seconds -> "3d" / "4h" / "12m". Single-sourced: two callers
+               # printed the same three-branch ladder and drifting them apart would
+               # give one beat's lines a different clock from the next line's.
+  ha_="$1"
+  if   [ "$ha_" -ge 86400 ]; then printf '%sd' "$(( ha_ / 86400 ))"
+  elif [ "$ha_" -ge 3600 ];  then printf '%sh' "$(( ha_ / 3600 ))"
+  else                            printf '%sm' "$(( ha_ / 60 ))"
+  fi
+}
+
 to_epoch() {  # accept a bare epoch or an ISO8601 stamp; empty on failure
   case "$1" in
     ''|*[!0-9]*) : ;;
@@ -225,7 +320,7 @@ while [ $# -gt 0 ]; do
         exit 64; }
       PROGRESS_PATHS="${PROGRESS_PATHS}${PROGRESS_PATHS:+|}$1"
       shift ;;
-    -h|--help) sed -n '2,164p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,250p' "$0"; exit 0 ;;
     -*) echo "unknown arg: $1" >&2; exit 64 ;;
     *) TARGETS="${TARGETS}${TARGETS:+|}$1"; shift ;;
   esac
@@ -373,6 +468,75 @@ progressed_since() {  # $1 = mark file; 0 iff a tracked file is newer than it
   done
   IFS="$ps_ifs_"
   return 1
+}
+
+# ---------------------------------------------------------------------------
+# THE TEAMMATE LIVENESS SENSOR. Why this signal exists, why it changes no decision,
+# which direction it errs in and where its threshold came from are all in the header
+# ("SLOW AND NEVER LOOK THE SAME"). This is only the implementation.
+#
+# IT HAS THREE ANSWERS, NOT TWO, AND COLLAPSING TWO OF THEM IS THE WHOLE HAZARD.
+# "unavailable" and "quiet for zero seconds" are different facts: the first says the
+# beat cannot see, the second says it looked and found a live teammate. A caller that
+# read only the printed number would treat a dead sensor as a live teammate -- silent,
+# and in the direction that keeps the lead waiting. So teammate_quiet_for RETURNS 1
+# and prints nothing when there is no signal, and every reader branches on the return.
+# ---------------------------------------------------------------------------
+TEAMMATE_DIR="${AI_DLC_TEAMMATE_DIR:-}"
+if [ -z "$TEAMMATE_DIR" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+  # THE SESSION ID IS INSIDE THE GLOB, not matched after it. Only the project slug
+  # is wild, so this expands to AT MOST ONE path -- and to the literal pattern, `*`
+  # and all, when this session has no teammates. teammate_quiet_for's own `[ -d ]`
+  # rejects that literal, which is why there is no second existence test here: it
+  # would change no outcome in any state, and a condition that changes no outcome is
+  # one nobody can ever prove works. It was written that way first, and the mutant
+  # built to kill it came back green.
+  for td_ in "${HOME:-/nonexistent}"/.claude/projects/*/"${CLAUDE_CODE_SESSION_ID}"/subagents; do
+    TEAMMATE_DIR="$td_"; break
+  done
+fi
+IDLE_SECS="${AI_DLC_TEAMMATE_IDLE_SECS:-$(( BUDGET * 2 ))}"
+case "$IDLE_SECS" in ''|*[!0-9]*) IDLE_SECS=$(( BUDGET * 2 )) ;; esac
+
+teammate_quiet_for() {  # prints seconds since the most recent teammate turn in this
+                        # session; returns 1 and prints nothing when there is no signal
+  [ -n "$TEAMMATE_DIR" ] && [ -d "$TEAMMATE_DIR" ] || return 1
+  tq_now_="$(date +%s)"; tq_best_=""
+  for tq_f_ in "$TEAMMATE_DIR"/*.jsonl; do
+    [ -f "$tq_f_" ] || continue
+    tq_m_="$(mtime_of "$tq_f_")"
+    [ "$tq_m_" -gt 0 ] || continue
+    tq_a_=$(( tq_now_ - tq_m_ ))
+    [ "$tq_a_" -lt 0 ] && tq_a_=0   # clock skew must not manufacture a future turn
+    if [ -z "$tq_best_" ] || [ "$tq_a_" -lt "$tq_best_" ]; then tq_best_="$tq_a_"; fi
+  done
+  [ -n "$tq_best_" ] || return 1
+  printf '%s' "$tq_best_"
+}
+
+# ONE function, called from all THREE places a beat can end -- the exhaustion path,
+# the chained-sibling path and the post-sleep report. A lead that reads only one of
+# them has to get the same three-way answer, and three copies of this ladder would
+# be three chances for one of them to stop agreeing.
+say_liveness() {
+  if ! sl_q_="$(teammate_quiet_for)"; then
+    say "LIVENESS  unavailable (no teammate transcripts for this session) -- this beat"
+    say "  cannot tell a working teammate from one that finished and delivered elsewhere."
+    return 0
+  fi
+  if [ "$sl_q_" -ge "$IDLE_SECS" ]; then
+    # echo, not say: this is the line that tells the lead the wait itself is the
+    # wrong action, and --quiet must not be able to hide it -- the same reason the
+    # PROGRESS and NON-DELIVERY lines below are echoed.
+    echo "TEAMMATE IDLE, DELIVERABLE ABSENT -- no teammate in this session has taken a"
+    echo "  turn for $(human_age "$sl_q_"), and the path(s) above are still absent. A teammate that"
+    echo "  finished and wrote its answer to a path this join is NOT watching looks exactly"
+    echo "  like one still working, and beating again cannot resolve a diverged path."
+    echo "  Check that what you are joining is the path the teammate was told to write,"
+    echo "  and read the teammate's own last message before you beat or re-dispatch."
+  else
+    say "LIVENESS  a teammate in this session took a turn $(human_age "$sl_q_") ago."
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -541,6 +705,11 @@ if [ -n "$EXHAUSTED" ]; then
     echo "  teammate may still be working, re-arm with --reset --progress-path <its"
     echo "  worktree> and this beat will extend the sequence while it keeps writing."
   fi
+  # The highest-value moment for the liveness report: NON-DELIVERY tells the lead to
+  # re-dispatch, and "no teammate has taken a turn in an hour" is the fact that says
+  # the deliverable diverged rather than the teammate being slow. Re-dispatching on a
+  # path typo repeats the typo.
+  say_liveness
   exit 1
 fi
 
@@ -548,10 +717,7 @@ if [ -n "$PREEXISTING" ]; then
   NOW_="$(date +%s)"
   IFS='|'; for t in $PREEXISTING; do
     AGE_=$(( NOW_ - $(mtime_of "$t") ))
-    if   [ "$AGE_" -ge 86400 ]; then AGE_H="$(( AGE_ / 86400 ))d old"
-    elif [ "$AGE_" -ge 3600 ];  then AGE_H="$(( AGE_ / 3600 ))h old"
-    else                             AGE_H="$(( AGE_ / 60 ))m old"
-    fi
+    AGE_H="$(human_age "$AGE_") old"
     echo "NOTE      $t already had content when this join armed (${AGE_H})."
   done; IFS="$OLDIFS"
   echo "  Not accepting it on sight; this join waits for a write NEWER than the"
@@ -567,7 +733,21 @@ fi
 [ -z "$PENDING" ] && exit 0   # everything was already delivered
 
 if [ "$MAY_SLEEP" -eq 0 ]; then
-  IFS='|'; for t in $PENDING; do echo "WAITING   $t -- not yet delivered."; done; IFS="$OLDIFS"
+  # This was the line that was BYTE-IDENTICAL on every invocation -- no beat number,
+  # no clock, nothing a lead could use to tell beat three from beat one. It now
+  # carries both, so a repeat is visibly a repeat and a --reset is visibly a reset.
+  NOW_="$(date +%s)"
+  IFS='|'
+  for t in $PENDING; do
+    IFS="$OLDIFS"
+    c="${COUNTER_DIR}/$(key_of "$t")"
+    b="$(cat "$c" 2>/dev/null || echo 0)"; case "$b" in ''|*[!0-9]*) b=0 ;; esac
+    echo "WAITING   $t -- beat ${b}/${MAX_BEATS} (no beat charged), $(human_age "$(( NOW_ - $(join_of "$t") ))") since"
+    echo "  this join armed, not yet delivered."
+    IFS='|'
+  done
+  IFS="$OLDIFS"
+  say_liveness
   echo "  NOTE: a sibling beat already ran in this same Bash call, so this one did"
   echo "  NOT sleep and did NOT consume a beat -- two beats in one call serialize"
   echo "  into 2 x ${BUDGET}s for a wave that ONE call polls concurrently. Do not loop"
@@ -643,6 +823,7 @@ done
 RC=0
 N_DELIVERED=0
 N_WAITING=0
+NOW_="$(date +%s)"
 IFS='|'
 for t in $PENDING; do
   c="${COUNTER_DIR}/$(key_of "$t")"
@@ -653,7 +834,10 @@ for t in $PENDING; do
     N_DELIVERED=$(( N_DELIVERED + 1 ))
   else
     b="$(cat "$c" 2>/dev/null || echo '?')"
-    say "WAITING   $t -- beat $b/$MAX_BEATS, not yet delivered. Beat again."
+    # The elapsed clock is the half of this line that a --reset cannot flatten into
+    # sameness: the beat number restarts at 1 on every re-arm, the clock restarts
+    # too, and a lead that sees both restart can SEE that it re-armed.
+    say "WAITING   $t -- beat $b/$MAX_BEATS, $(human_age "$(( NOW_ - $(join_of "$t") ))") since this join armed, not yet delivered. Beat again."
     N_WAITING=$(( N_WAITING + 1 ))
   fi
 done
@@ -666,6 +850,9 @@ IFS="$OLDIFS"
 if [ "$N_WAITING" -eq 0 ]; then
   say "BEAT COMPLETE -- all ${N_DELIVERED} delivered. Consume them."
 else
+  # Only when something is STILL OUT. A join that closed needs no liveness report,
+  # and printing one there would train the lead to skip the line.
+  say_liveness
   say "BEAT COMPLETE -- ${N_DELIVERED} delivered, ${N_WAITING} still out. Consume only the DELIVERED paths, then beat again."
 fi
 
