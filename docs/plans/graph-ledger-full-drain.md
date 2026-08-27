@@ -495,24 +495,20 @@ so no block written before it changes verdict.
 4. **Gate it the way the hook runs it, and read the GATE's own exit.** Simply push and let the
    hook's own run be the single gate — running it manually and then pushing pays for it twice.
 
-   **`AI_DLC_FIXTURE_NO_SKIP=1` IS FOR THE RELEASE PUSH ONLY. DO NOT SET IT ON A DOC-ONLY
-   FOLLOW-UP.** It disables the skip that exists to make exactly those pushes cheap, and setting
-   it by reflex is a measured waste, not a theoretical one: batch 12 set it on **nine**
-   consecutive pushes, several of which changed only `docs/`. `scripts/suite-content-key.sh`
-   lists `docs` in its `EXCLUDE` set and states the consequence itself — *"a new file under
-   `docs/` moves the key; editing one does not"* — so with the flag left alone those runs skip
-   the fixture suite outright. Forced instead: **167 units**, against **0** fixtures whose
-   read-set names the edited file.
+   **DO NOT SET `AI_DLC_FIXTURE_NO_SKIP=1`. IT IS NOT A VERIFICATION STANCE.** It exists for
+   MEASUREMENT — pinning the dispatched set while sweeping `-P`, and the two fixtures that need
+   the skip disabled to test it. Reaching for it to "be thorough" is a measured waste: batch 12
+   set it on **nine** consecutive pushes, several of which edited only `docs/`.
+   `scripts/suite-content-key.sh` lists `docs` in `EXCLUDE` and states the consequence itself —
+   *"a new file under `docs/` moves the key; editing one does not"* — so those runs would have
+   skipped the fixture suite outright. Forced instead: **167 units**, against **0** fixtures
+   whose read-set names the edited file.
 
-   The rule, and it is a two-way test rather than a preference:
-   - **changed a tracked path outside `EXCLUDE`** (`core/`, `scripts/`, `.githooks/`,
-     `.claude/`, or ANY NEW file, `docs/` included) → set the flag, this is the release gate;
-   - **edited only existing `docs/`, `CHANGELOG.md`, `VERSION` or `CLAUDE.md`** → do NOT set it,
-     and let the content key and the read-set map decide.
-
-   A NEW file under `docs/` DOES move the key, so the second branch is about EDITING, not about
-   the directory. When unsure, derive it — `bash scripts/suite-content-key.sh` before and after,
-   and compare.
+   The skip IS the mechanism. The content key and the read-set map already decide what a change
+   can affect, in both directions, and they are more conservative than a session's judgement —
+   a path in no read-set forces all N, and a NEW file is in no read-set by construction. Let
+   them run. When you genuinely need to know whether a change moves the suite, derive it:
+   `bash scripts/suite-content-key.sh` before and after, and compare.
 
    **The fixture tally is NOT the verdict**: a run has exited 1 with the suite reporting PASS.
    Tabulate every `── phase` header against PASS/FAIL, and read each changed fixture BY NAME
