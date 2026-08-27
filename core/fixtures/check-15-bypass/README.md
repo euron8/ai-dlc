@@ -16,9 +16,13 @@ so the driver can assert *which* element rejects it:
 | V7 | cites `Item 7`, which is CLOSED | 2 (item OPEN/IN SPRINT) |
 | V12 | a 16-char reason: clears the density floor, under the length floor | 4 (reason) |
 | V5 | honest stub — the positive control | none; passes all four |
-| V8 | upstream-owned `reconcile/apply.sh` — bare `Phase 3` marker | none; **dropped from scope** |
-| V9 | consumer-owned `.claude/hooks/my-own-hook.sh` — same bare marker | 1 (item ref) |
-| V10 | core fixture `tests/fixtures/check-15-bypass/seed.sh` — bare `Phase 3` | none; **dropped from scope** |
+| V13 | a module docstring reading `Harmonization Phase 4` — prose | none; **not a marker** |
+| V16 | `# Phase 2: drain remaining records…` — a section label | none; **not a marker** |
+| V14 | `# Phase 1: no live snapshots yet (subgraph not deployed)` | 1 (item ref) |
+| V15 | a bare `raise NotImplementedError()` with no prose beside it | 1 (item ref) |
+| V8 | upstream-owned `reconcile/apply.sh` — `TODO` marker | none; **dropped from scope** |
+| V9 | consumer-owned `.claude/hooks/my-own-hook.sh` — same marker | 1 (item ref) |
+| V10 | core fixture `tests/fixtures/check-15-bypass/seed.sh` — `TODO` | none; **dropped from scope** |
 | V11 | consumer fixture `tests/fixtures/check-15-bypass-local/seed.sh` — same marker | 1 (item ref) |
 
 V5 is what makes the fixture able to fail. Without it, an element mutated into
@@ -35,14 +39,39 @@ so deleting either left the other catching all of them and the fixture stayed
 green with one published floor untestable. V4 is under density only; V12 is
 under length only. Each floor now has a mutant that flips exactly one variant.
 
+**V13/V14/V15/V16 are the `Phase N` marker in both directions.** It is the one
+alternative in the marker set that is also ordinary English, and as a bare
+alternative it was the check's dominant false positive: on the reference
+consumer it was the sole matcher on 129 tracked hot-path lines, and all 23
+findings in the largest recorded Check 16 failure came from it, every one
+suppressed by the operator. A consumer-owned file has no escape hatch — the
+only exemption is upstream ownership — so the remediation is rewording true
+prose, and a consumer did exactly that, deleting a factual phase reference from
+a module docstring to clear a gate. It is now a marker only inside a statement
+of absence. V13 is that docstring verbatim and V16 the section-label shape that
+accounts for most of the 129; V14 is a real deferral written only as a phase
+reference, so deleting the alternative outright rather than narrowing it goes
+red; V15 is a marker outside the phase rule, so applying the absence
+requirement to the whole set goes red.
+
+V13 and V16 are not redundant, and the difference is which future fix clears
+them. A marker gate keyed on comment TEXT — the remedy filed for the sibling
+defect, where an identifier named `stub` matches in code — clears V13, which
+sits in a docstring carrying no comment prefix, and leaves V16 untouched
+because V16 *is* a comment. Only the absence requirement clears V16.
+
 **V8/V9 are a pair, and neither means anything alone.** They cover the
 upstream-owned exemption: Check 16 drops core-manifest paths before the marker
 grep, because the four elements are unsatisfiable there (element 1 wants an
 `Item N` from the *consumer's* backlog, and `ai-dlc-core-guard.sh` denies the
 edit that would add one). Both variants live under `.claude/`, both carry the
-same bare `Phase 3` marker, and both satisfy zero elements — only ownership
-differs. V8's comment is the verbatim text that failed a real consumer's §6
-gate four times at ai-dlc 0.156.0.
+same `TODO` marker, and both satisfy zero elements — only ownership differs.
+V8's block also carries the verbatim text that failed a real consumer's §6 gate
+four times at ai-dlc 0.156.0; that text is no longer a marker, which is V13/V16's
+rule read a second time in the one file where the false positive was
+unclearable. The payload is a `TODO` and not a phase reference on purpose: an
+ownership arm seeded on a phase marker reports on the marker vocabulary too, and
+narrowing that vocabulary failed this arm alongside its own.
 
 Why the pair rather than V8 alone: if the exemption were a blanket `.claude/`
 carve-out instead of a core-manifest resolve, V8 would pass **and so would
@@ -82,6 +111,20 @@ re-implemented the published element regexes inline — proving this fixture's
 claim rather than the shipping path's, which its header said outright. The
 elements now live in `scripts/ai-dlc/validate-stub-audit.sh` and this driver
 calls it, so the code under test and the code that ships are the same bytes.
+
+**Four mutants, because two of the arms are absence-shaped.** V13 and V16 pass
+when the validator reports nothing about their file, and a validator that
+reported nothing about *any* file would pass them too — a seeded near-miss shows
+an arm discriminates between two inputs, not that it discriminates at all. So
+each of the three lines the phase rule is spelled on gets a mutant of its own,
+run against copies under `mktemp` with `core-paths.sh` copied beside each (the
+validator finds its resolver as a sibling, and a copy that cannot resolve one
+dies at exit 2, reports nothing, and every absence-shaped arm reads that silence
+as a pass). The control runs first and is presence-shaped for that reason.
+Restoring the bare alternative flips V13 and V16; deleting the phase marker
+flips only V14; widening the absence vocabulary to match anything flips V13 and
+V16; dropping `NotImplementedError` from the other markers flips only V15, which
+no other arm here notices.
 
 Three assertions are deliberately NOT about the elements, so no element
 mutation can flip one: an all-out-of-scope set must exit **4**, not 0
