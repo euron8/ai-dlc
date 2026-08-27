@@ -1,0 +1,19 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is the MUTATION BATTERY behind core/hooks/ai-dlc-context-provenance.sh. It builds copies of
+that library -- core's own source -- under `mktemp`, removes one behaviour at a time, and drives
+each copy with real emissions to prove the library's properties are load-bearing rather than
+incidental. `ai-dlc-core-guard.sh` denies a consumer the in-place edit of an installed hook, so
+the surface these mutants perturb cannot change in a consumer tree: every assertion here is a
+question about whether THIS repository's library still discriminates, and a consumer that ran
+them would be re-deriving an answer about a file it is forbidden to touch.
+
+It also runs the probe fifteen times -- a pristine sweep, a no-op sweep and one per mutant --
+and each sweep drives more than fifty emissions in their own processes. Shipping it would put
+several times the subject's runtime, in a unit no consumer can act on, into the consumer's suite
+schedule: the v0.230.0 defect, where a distribution-only battery became the reference consumer's
+suite pole.
+
+The consumer-facing half of this subject is the shipped fixture that asserts the hooks installed
+in a consumer's own tree mark their context. This one asserts that the library those hooks call
+would notice if it stopped.

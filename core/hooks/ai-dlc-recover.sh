@@ -380,7 +380,15 @@ mkdir -p "$STATE_DIR" 2>/dev/null || true
   printf 'step_file_resolved=%s\n' "$STEP_FILE_RESOLVED"
 } >"$MARKER" 2>/dev/null || true
 
-jq -n --arg ctx "$CONTEXT" \
+# PROVENANCE MARKER -- PC-S306-UNSOLICITED-CONTEXT-HAS-NO-PROVENANCE-SIGNAL. The
+# library is a SIBLING in both layouts (core/hooks/, .claude/hooks/), so this is a
+# same-directory read and never a walk up from a resolved path. Fail-open: a hook
+# that cannot mark its output still emits it.
+_AI_DLC_PROV="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-context-provenance.sh"
+if [ -r "$_AI_DLC_PROV" ]; then . "$_AI_DLC_PROV"
+else ai_dlc_provenance_tag() { :; }; fi
+
+jq -n --arg ctx "$(ai_dlc_provenance_tag ai-dlc-recover SessionStart)$CONTEXT" \
   '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $ctx}}'
 
 exit 0

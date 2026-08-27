@@ -15,6 +15,130 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.429.0] - 2026-08-27
+
+### A hook-appended context block now carries a provenance marker the lead can check
+
+Discharges `PC-S306-UNSOLICITED-CONTEXT-HAS-NO-PROVENANCE-SIGNAL`.
+
+Nine hooks under `core/hooks/` emit `additionalContext`, which reaches the lead as an
+unsolicited `system-reminder` block. Text arriving through a file read, a fetched page or a
+subagent's returned report reaches it in the SAME form, and nothing separated the two. The
+measured cost: a lead facing a merge plus a live production deploy met such a block, had no
+cheap way to establish where it came from, and paused the pipeline to ask the operator. Both
+facts were already established, so the pause produced no information and cost several turns
+during a production incident.
+
+`core/hooks/ai-dlc-context-provenance.sh` is a SOURCED LIBRARY — no event invokes it. Every
+emission opens with a marker line carrying a nonce; the nonce is appended to
+`_bmad-output/.ai-dlc-context-nonce`, which the lead reads and compares. Verification is by
+MEMBERSHIP in an append-only store, not equality with the last line, so a concurrent rotation
+cannot make a correctly-marked block fail — a check that errors on correct data is the one
+thing this repo will not ship.
+
+**`SessionStart` rotates the nonce and restates the contract, and that is the whole reason the
+mechanism has a carrier.** A resident rule file could not hold the instruction: a compaction
+keeps roughly a quarter of the rulebook, including the part that would say to re-read it.
+SessionStart fires at startup, on resume and after a compaction, so the paragraph telling the
+lead what the marker means reappears exactly when the lead has forgotten it.
+
+**Both limits are stated in the library's header and are part of the deliverable.** It cannot
+authenticate blocks the harness itself generates, so an UNMARKED block is unattributed rather
+than hostile. And it is not a signature: anything that has already read this transcript has
+read the nonce. What it does establish is narrow and real — content authored outside the
+transcript cannot quote a value that appears only inside it and in a local file.
+
+**The first spelling of the reuse path was wrong and the fixture caught it.** Reading the
+newest nonce with `tail -n 1` re-mints on a store whose last line is blank or half-written,
+which a concurrent append can produce. Re-minting there rotates the nonce on an event that must
+not rotate, so a block marked a moment earlier stops matching what the lead is about to read.
+The reader now takes the newest WELL-FORMED line in one `awk` pass.
+
+Every call site is fail-open: a consumer mid-pull can hold the hook without the library, and an
+unguarded source would kill the hook — the lead would lose the whole payload to gain a marker.
+
+### `I98`, and `I13`'s registration exemption is now derived rather than named
+
+`I98` binds the hook fleet in both directions: an emitter that does not tag, and a tagger that
+does not emit. **The mechanism is worthless at nine-tenths coverage**, which is why it is an
+invariant and not a convention — one unmarked genuine emitter turns the lead's rule into a
+false positive, the lead learns to ignore the marker, and the check becomes worse than absent.
+It also requires both halves of the fail-open guard at every call site, and forbids any hook
+from spelling the marker token itself.
+
+**The obvious grammar missed a real emitter and the positive control is keyed on it.** Eight of
+the nine write `additionalContext:` at the head of an indented line; `ai-dlc-recover.sh` writes
+it inline inside a one-line `jq` program. A first cut spelled the population `^ *additionalContext:`
+and scored **8**, with both difference sets empty — a clean, plausible, wrong answer.
+
+`I13` fails the push on a hook in `core/hooks/` that no settings matcher invokes. A sourced
+library is not a hook, and the obvious fix — a skip list — exempts a file by NAME, so deleting
+the last `source` of a library leaves the exemption behind and the arm then permits a genuinely
+unregistered hook. The predicate is the other side of the join instead: a file is a library
+exactly while some sibling sources it. Probed both ways — orphaning the library restores the
+unregistered-hook finding, and a hook sourcing a sibling that does not exist is now reported,
+because under the fail-open guard that case is otherwise silent forever.
+
+`.ai-dlc-context-nonce` is declared TRANSIENT in `core/schemas/pipeline-state-paths.json`, for
+a reason stronger than tidiness: a committed nonce is a nonce published to anything that can
+read the repository, and the check it backs would then certify text that had merely read
+history.
+
+### The wait beat can now tell a working teammate from one that finished elsewhere
+
+Discharges `PC-S306-WAIT-BEAT-CANNOT-DISTINGUISH-SLOW-FROM-NEVER`.
+
+`wait-for-deliverable.sh` reported `WAITING ... not yet delivered` whether the teammate was
+still working or had gone idle having written its answer to a path the beat was not watching.
+**The two were byte-identical, and that is what did the damage** — the lead re-armed the same
+beat twice against an unchanging false negative and found out only because the operator asked.
+
+**A liveness signal is reachable from a shell, which the candidate doubted.** The harness writes
+each teammate's transcript under `~/.claude/projects/<slug>/<session-id>/subagents/*.jsonl` and
+exports `CLAUDE_CODE_SESSION_ID`, so the newest mtime across those files is the time since any
+teammate in this session took a turn. The beat now reports `TEAMMATE IDLE, DELIVERABLE ABSENT`,
+`LIVENESS a teammate took a turn N ago`, or `LIVENESS unavailable`, and the WAITING line carries
+the beat count and elapsed time so consecutive beats stop being identical.
+
+**The threshold is measured over 1,337 real teammate transcripts** — gaps beyond 1200s occur in
+0.0036% of turns — and the report errs toward UNDER-reporting idleness: one live teammate
+suppresses the report for the whole wave, and an absent transcript directory reads as
+`unavailable` rather than as idle. Reporting an absent signal as idleness is the direction that
+re-dispatches a working teammate, and it is the one this must never take.
+
+### A worktree-isolated teammate's deliverable path resolves in its own worktree, and the lead is now told so
+
+Discharges `PC-S306-WORKTREE-DELIVERABLE-PATH-AMBIGUOUS-PRIMARY-VS-WORKTREE`.
+
+A dev dispatch asked its teammate to write to a worktree path "resolved relative to the primary
+tree" — two filesystem roots for one file, in one sentence. The teammate wrote inside its own
+worktree, which is correct. The lead's `wait-for-deliverable.sh` beat then watched the
+primary-tree path, which could not exist until the branch merged, and the merge is downstream
+of the join.
+
+**The equivalent warning already existed at `core/team-roles/adversary.md:81-89` — in the one
+role that is told never to run worktree-isolated.** It sat where it could not fire, which is
+this repo's named recurring defect wearing a role file. Item 7 of the worktree-explicit dev
+dispatch protocol in `core/skills/ai-dlc/steps/implementation.md` now states the rule where the
+lead authors the prompt, as a NUMBERED action rather than prose beside the list, with the two
+consequences that cost the time: do not arm a beat on a primary-tree path for a worktree
+dispatch, and a beat reporting non-delivery is not evidence the teammate is working.
+
+Measured cost: the dev's fix was complete and idle in about seven minutes while the beat was
+re-armed twice, and the real state took three separate reads to reconstruct.
+
+### `FORK_BUDGET` 7073 → 7114, and this one is not purely a corpus raise
+
+Three fixture directories and one new arm, measured separately. The directories — moved aside
+together and restored — cost **17** forks (7108 present, 7091 moved), the per-directory cost the
+three previous raises already measured. The `I98` arm — removed from the validator, measured, and
+the file restored byte-identically — costs **7** (7108 with it, 7101 without): one `awk` pass over
+the hook fleet, one `grep` control, four `awk` filters over a string already in memory. A per-hook
+loop was the obvious shape and would have cost a fork per hook per filter.
+
+The two differentials do not sum to the whole rise, and the residual is diffuse corpus growth
+rather than a hot loop. Saying so is more useful than inventing a third attribution.
+
 ## [0.428.0] - 2026-08-27
 
 ### `FORK_BUDGET` 7061 → 7073, a corpus raise

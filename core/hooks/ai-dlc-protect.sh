@@ -362,6 +362,15 @@ if [ ${#PROTECTED_HITS[@]} -gt 0 ]; then
     CONTEXT="This path is protected by AI/DLC integrity rules. Use the native Read tool for verbatim file content. Protected categories: rule files, schemas, pipeline snapshot, gate log, escalations, audit anchors, sprint status, story files. Archives and the planning corpus (prd/architecture/product-brief/carry-over) are NOT protected — consolidate those freely."
   fi
 
+  # PROVENANCE MARKER -- PC-S306-UNSOLICITED-CONTEXT-HAS-NO-PROVENANCE-SIGNAL. The
+  # library is a SIBLING in both layouts (core/hooks/, .claude/hooks/), so this is a
+  # same-directory read and never a walk up from a resolved path. Fail-open: a hook
+  # that cannot mark its output still emits it.
+  _AI_DLC_PROV="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-context-provenance.sh"
+  if [ -r "$_AI_DLC_PROV" ]; then . "$_AI_DLC_PROV"
+  else ai_dlc_provenance_tag() { :; }; fi
+  CONTEXT="$(ai_dlc_provenance_tag ai-dlc-protect PreToolUse)$CONTEXT"
+
   jq -n \
     --arg reason "$REASON" \
     --arg context "$CONTEXT" \

@@ -432,6 +432,15 @@ emit() {
   [ "$NEEDS_MODEL" = true ] && ctx="${ctx} — model=${EXPECT} (${PIN_MODEL}), requested: ${REQUESTED:-<absent>}"
   [ "$NEEDS_EFFORT" = true ] && ctx="${ctx} — effort=${PIN_EFFORT} appended to the prompt"
 
+  # PROVENANCE MARKER -- PC-S306-UNSOLICITED-CONTEXT-HAS-NO-PROVENANCE-SIGNAL. The
+  # library is a SIBLING in both layouts (core/hooks/, .claude/hooks/), so this is a
+  # same-directory read and never a walk up from a resolved path. Fail-open: a hook
+  # that cannot mark its output still emits it.
+  _AI_DLC_PROV="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-context-provenance.sh"
+  if [ -r "$_AI_DLC_PROV" ]; then . "$_AI_DLC_PROV"
+  else ai_dlc_provenance_tag() { :; }; fi
+  ctx="$(ai_dlc_provenance_tag ai-dlc-dispatch-guard PreToolUse)$ctx"
+
   jq -n --arg reason "$reason" --arg ctx "$ctx" --argjson ui "$updated" '{
     hookSpecificOutput: {
       hookEventName: "PreToolUse",

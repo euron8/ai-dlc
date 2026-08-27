@@ -55,11 +55,22 @@ if [ -z "$ver" ]; then
 fi
 
 names="$(printf '%s\n' "${shipped[@]}" | while read -r p; do basename "$p"; done | paste -sd', ' -)"
-emit() { printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":%s}}\n' "$1"; }
+# PROVENANCE MARKER -- PC-S306-UNSOLICITED-CONTEXT-HAS-NO-PROVENANCE-SIGNAL. The
+# library is a SIBLING in both layouts (core/hooks/, .claude/hooks/), so this is a
+# same-directory read and never a walk up from a resolved path. Fail-open: a hook
+# that cannot mark its output still emits it.
+_AI_DLC_PROV="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-context-provenance.sh"
+if [ -r "$_AI_DLC_PROV" ]; then . "$_AI_DLC_PROV"
+else ai_dlc_provenance_tag() { :; }; fi
+
+# `emit` takes RAW text and does its own escaping, so the marker is prepended in ONE
+# place rather than at each call site. Both call sites below pass raw text.
+emit() { printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":%s}}\n' \
+           "$(jstr "$(ai_dlc_provenance_tag ai-dlc-rules-floor SessionStart)$1")"; }
 jstr() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/' | tr -d '\n' | sed 's/^/"/; s/$/"/'; }
 
 if [ -z "$ver" ]; then
-  emit "$(jstr "AI/DLC RULES FLOOR -- UNRESOLVED. Could not determine the Claude Code version from AI_AGENT or \`claude --version\`, so it is NOT known whether $names under .claude/rules/ is being read. Those files require Claude Code >= ${FLOOR_MAJOR}.${FLOOR_MINOR}.${FLOOR_PATCH}. Treat Rule 23 as carried by SKILL.md alone until this resolves.")"
+  emit "AI/DLC RULES FLOOR -- UNRESOLVED. Could not determine the Claude Code version from AI_AGENT or \`claude --version\`, so it is NOT known whether $names under .claude/rules/ is being read. Those files require Claude Code >= ${FLOOR_MAJOR}.${FLOOR_MINOR}.${FLOOR_PATCH}. Treat Rule 23 as carried by SKILL.md alone until this resolves."
   exit 0
 fi
 
@@ -74,7 +85,7 @@ elif [ "$a" -eq "$FLOOR_MAJOR" ] && [ "$b" -eq "$FLOOR_MINOR" ] && [ "$c" -lt "$
 fi
 
 if [ "$below" = "1" ]; then
-  emit "$(jstr "AI/DLC RULES FLOOR NOT MET -- an installed rule file is INERT. Claude Code $ver is below ${FLOOR_MAJOR}.${FLOOR_MINOR}.${FLOOR_PATCH}, the release that added the .claude/rules/ loader. These file(s) are present and are NOT being read: $names. Rule 23 (resident-context discipline) is therefore carried by .claude/skills/ai-dlc/SKILL.md ALONE, and its Carrier declaration overstates what is in force -- do not rely on it surviving a compaction. Upgrade Claude Code, or treat SKILL.md as the only source. Nothing else in this tree reports this: the audit scans the file and passes, and .ai-dlc-version says the tree is current.")"
+  emit "AI/DLC RULES FLOOR NOT MET -- an installed rule file is INERT. Claude Code $ver is below ${FLOOR_MAJOR}.${FLOOR_MINOR}.${FLOOR_PATCH}, the release that added the .claude/rules/ loader. These file(s) are present and are NOT being read: $names. Rule 23 (resident-context discipline) is therefore carried by .claude/skills/ai-dlc/SKILL.md ALONE, and its Carrier declaration overstates what is in force -- do not rely on it surviving a compaction. Upgrade Claude Code, or treat SKILL.md as the only source. Nothing else in this tree reports this: the audit scans the file and passes, and .ai-dlc-version says the tree is current."
 fi
 
 exit 0

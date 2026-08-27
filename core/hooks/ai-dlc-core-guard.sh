@@ -180,6 +180,15 @@ route_and_deny() {
       ctx="AI/DLC core-layer guard: core files are upstream-owned and reconciled by /ai-dlc-update, never hand-edited. Put the change in overrides/ (shadow a core rule) or extensions/ (additive). The retro-gate core-layer-immutability check is the backstop; this hook is the primary. Editing a declared /ai-dlc-setup config region (a team-role model string, a dev/qa ## Ownership block, a deploy/smoke command) is allowed — this deny means the edit fell outside every such region."
       ;;
   esac
+  # PROVENANCE MARKER -- PC-S306-UNSOLICITED-CONTEXT-HAS-NO-PROVENANCE-SIGNAL. The
+  # library is a SIBLING in both layouts (core/hooks/, .claude/hooks/), so this is a
+  # same-directory read and never a walk up from a resolved path. Fail-open: a hook
+  # that cannot mark its output still emits it.
+  _AI_DLC_PROV="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-context-provenance.sh"
+  if [ -r "$_AI_DLC_PROV" ]; then . "$_AI_DLC_PROV"
+  else ai_dlc_provenance_tag() { :; }; fi
+  ctx="$(ai_dlc_provenance_tag ai-dlc-core-guard PreToolUse)$ctx"
+
   jq -n --arg reason "$reason" --arg ctx "$ctx" '{
     hookSpecificOutput: {
       hookEventName: "PreToolUse",

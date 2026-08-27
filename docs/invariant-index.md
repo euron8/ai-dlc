@@ -114,3 +114,4 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I95 | every pipeline state path is CLASSIFIED transient or durable, in one place |
 | I96 | the adversarial cycle's stopping rule is a VERDICT, never a pass count |
 | I97 | only validate-locked-anchor.sh may MATCH a LOCKED_REQUIREMENTS marker |
+| I98 | every hook that emits additionalContext marks it, and only the library spells the |

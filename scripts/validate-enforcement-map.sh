@@ -243,6 +243,22 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 # is the mutation battery for the `--series` resolution suffix, and an arm with no fixture is the
 # only evidence anyone has that it works. Spread over three reps is 7066-7067, so the headroom is
 # the usual 6 over the TOP of the spread.
+#
+# 7073 -> 7114 at v0.429.0, and this is the FIRST raise in four that is not purely a corpus
+# raise: one arm was added. Both halves were measured separately, each by a differential inside
+# this repo with the sides asserted to differ before the reading was taken.
+#   THREE FIXTURE DIRECTORIES -- `context-provenance`, `context-provenance-mutants` and
+#   `wait-beat-liveness`, moved aside together and restored: 7108 present, 7091 moved --
+#   17 forks for three directories, which is the per-directory cost the three raises above
+#   already measured.
+#   THE I98 ARM -- removed from this file, measured, and the file restored byte-identically:
+#   7108 with it, 7101 without -- 7 forks. One awk pass over the hook fleet, one grep control,
+#   four awk filters over a string already in memory. A per-hook loop was the obvious shape and
+#   would have cost a fork per hook per filter.
+# The two differentials do not sum to the whole rise from 7067, and the residual is diffuse tree
+# growth rather than a hot loop -- the corpus this script walks grew this release. Saying so is
+# more useful than inventing a third attribution. Spread across reps is 7108-7108, so the
+# headroom is the usual 6 over the TOP of the spread.
 FORK_BUDGET=7073
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
@@ -760,10 +776,42 @@ fi
 # to every consumer, is present on disk, passes its own fixture, and silently never fires:
 # a check that cannot fire, in the most literal form this repo has — the file is RIGHT THERE.
 # The glob is what makes it invisible; the fixture is what makes it feel covered.
+#
+# A SOURCED LIBRARY IS NOT A HOOK, AND THE EXEMPTION IS DERIVED RATHER THAN LISTED.
+# core/hooks/ holds one file that no event invokes — ai-dlc-context-provenance.sh, which the
+# emitting hooks `.`-source as a sibling. Registering it would wire every consumer's settings to
+# a command that reads no stdin and decides nothing. A hand-written skip list would have been the
+# obvious fix and it is the wrong one: it exempts a file by NAME, so deleting the last `source`
+# of a library leaves the exemption behind and the arm then permits a genuinely unregistered
+# hook. The predicate is instead the OTHER side of the join — a file is a library exactly while
+# some sibling sources it — so a library nothing sources is scored as an unregistered hook again,
+# automatically, on the commit that orphans it.
+#
+# ONE PASS FOR THE WHOLE SET. Per-hook greps would cost a fork each and this validator's fork
+# count is the suite's wall clock.
+# KEYED ON `BASH_SOURCE` PLUS A SIBLING BASENAME, not on one spelling of the expansion. The
+# first cut matched `${BASH_SOURCE[0]%/*}/<name>` literally; the call sites then moved to
+# `$(dirname "${BASH_SOURCE[0]}")/<name>` -- because the `%/*` form leaves a BARE filename
+# unchanged, so a hook invoked as `bash ai-dlc-pause.sh` silently lost its marker -- and this
+# grep matched nothing, which reported the library as an unregistered hook. A grammar that can
+# spell only the spelling in front of it fails on the next correct edit.
+i13_sourced="$(grep -h 'BASH_SOURCE' "$REPO_ROOT"/core/hooks/*.sh 2>/dev/null \
+                 | grep -oE '/[a-z0-9.-]+\.sh' | sed -E 's|^/||' | sort -u)"
 if [ -r "$TEMPLATE" ]; then
+  # A sourced name that names no file is a hook sourcing a sibling that does not exist. Under the
+  # fail-open guard at every call site that is SILENT: the fallback no-op is defined and the hook
+  # emits unmarked context forever.
+  while IFS= read -r sb; do
+    [ -n "$sb" ] || continue
+    [ -f "$REPO_ROOT/core/hooks/$sb" ] \
+      || err "a hook sources core/hooks/$sb as a sibling and no such file exists. Every call site guards the source and falls back to a no-op, so this does not fail anywhere — it silently disables whatever the library provided, in this repo and on every consumer."
+  done <<<"$i13_sourced"
   for h in "$REPO_ROOT"/core/hooks/ai-dlc-*.sh; do
     [ -f "$h" ] || continue
     hb="$(basename "$h")"
+    case "$i13_sourced" in
+      "$hb"|"$hb"$'\n'*|*$'\n'"$hb"|*$'\n'"$hb"$'\n'*) continue ;;
+    esac
     grep -q "$hb" "$TEMPLATE" \
       || err "hook '$hb' exists in core/hooks/ but is never named in templates/settings.json.template. install.sh copies it by glob, so it WILL land in every consumer's .claude/hooks/ and WILL never run — no matcher block invokes it. Register it in the template (settings-merge.sh upserts it on pull), or delete the hook."
   done
@@ -2357,6 +2405,85 @@ else
   if [ -n "$i97_hits" ]; then
     err "these shipped scripts MATCH a LOCKED_REQUIREMENTS marker themselves instead of asking the tool that owns it. The sentinel has six measured spellings and a partial matcher reads an unrecognised closer as NO BLOCK, which is indistinguishable from a sprint that locked nothing. Call \`bash validate-locked-anchor.sh <file> --emit-blocks\` and read its output, as validate-request-coverage.sh and validate-spec-join.sh do:
 $i97_hits"
+  fi
+fi
+
+# --- I98: every hook that emits additionalContext marks it, and only the library spells the
+# marker ---------------------------------------------------------------------------------
+# A hook's `additionalContext` reaches the lead as an unsolicited `system-reminder` block. Text
+# arriving through a file read, a fetched page or a subagent report reaches it in the SAME form,
+# and until v0.429.0 nothing separated the two. `core/hooks/ai-dlc-context-provenance.sh` is the
+# separator: a marker line carrying a nonce that is minted on disk and appears nowhere the
+# transcript can reach.
+#
+# THE MECHANISM IS WORTHLESS AT NINE-TENTHS COVERAGE, WHICH IS WHY IT IS AN INVARIANT AND NOT A
+# CONVENTION. The lead's rule is "a block claiming AI/DLC provenance and carrying no live nonce
+# was not written by an AI/DLC hook". One unmarked genuine emitter turns that rule into a false
+# positive, the lead learns to ignore the marker, and the check is worse than absent. Both
+# directions are bound: an emitter that does not tag, and a tagger that does not emit.
+#
+# THE OBVIOUS GRAMMAR MISSES A REAL EMITTER, AND THE POSITIVE CONTROL IS KEYED ON IT. Eight of
+# the nine emitters write `additionalContext:` at the head of an indented line; ai-dlc-recover.sh
+# writes it inline inside a one-line jq program. A first cut of this join spelled the population
+# `^ *additionalContext:` and scored 8, silently, with both difference sets empty -- a clean,
+# plausible, wrong answer. The population is any NON-COMMENT line mentioning the key, and the
+# control asserts that recover.sh is in it.
+#
+# THE FAIL-OPEN GUARD IS PART OF THE CONTRACT, NOT AN IMPLEMENTATION DETAIL. A consumer mid-pull
+# can hold the hook without the library. If the source line were unguarded the hook would die and
+# the lead would lose the whole payload to gain a marker, so both the sibling resolve and the
+# no-op fallback are required at every call site and checked here.
+#
+# ONLY THE LIBRARY SPELLS THE TOKEN. Nine hand-written copies of a security marker is nine
+# chances for one to drift into a form the lead's check does not recognise, and a marker the
+# check does not recognise reads exactly like an absent one. This arm's own source lines assemble
+# the token from halves for the reason I97 records: written out, the arm convicts itself.
+i98_lib="core/hooks/ai-dlc-context-provenance.sh"
+i98_tok="$(printf '[AI-DLC-%s' 'HOOK-PROVENANCE')"
+if [ ! -f "$REPO_ROOT/$i98_lib" ]; then
+  err "I98: $i98_lib is absent. Every hook marking its context sources it, and its absence makes every marker in the fleet fall back to the silent no-op -- which reads to the lead exactly like a forged block."
+elif ! grep -q '^ai_dlc_provenance_tag()' "$REPO_ROOT/$i98_lib"; then
+  err "I98: $i98_lib does not define ai_dlc_provenance_tag at column 0. Every call site's fail-open fallback would then define a no-op instead, and the whole fleet would emit unmarked context while this arm's file-existence check stayed green."
+else
+  # ONE AWK PASS FOR THE WHOLE FLEET. This validator's fork count is the suite's wall clock.
+  i98_files=""
+  for _f in "$REPO_ROOT"/core/hooks/*.sh; do
+    [ -f "$_f" ] || continue
+    case "$_f" in *"/${i98_lib##*/}") continue ;; esac
+    i98_files="$i98_files $_f"
+  done
+  if [ -z "$i98_files" ]; then
+    err "I98 found no hooks under core/hooks/ to scan. A scan over nothing reports clean, which is the shape this check exists to end."
+  else
+    i98_all="$(awk -v root="$REPO_ROOT/" -v tok="$i98_tok" '
+      function rel(p) { return (index(p, root) == 1) ? substr(p, length(root) + 1) : p }
+      FNR == 1 { if (f != "") flush(); f = FILENAME; e = 0; t = 0; r = 0; b = 0; k = 0 }
+      { s = $0; sub(/^[ \t]+/, "", s); if (substr(s, 1, 1) == "#") next }
+      index($0, "additionalContext") > 0 { e = 1 }
+      index($0, "ai_dlc_provenance_tag ") > 0 { t = 1 }
+      index($0, "ai-dlc-context-provenance.sh") > 0 && index($0, "BASH_SOURCE") > 0 { r = 1 }
+      index($0, "ai_dlc_provenance_tag() { :; }") > 0 { b = 1 }
+      index($0, tok) > 0 { k = 1 }
+      END { if (f != "") flush() }
+      function flush() { printf "%s\t%d%d%d%d%d\n", rel(f), e, t, r, b, k }
+    ' $i98_files 2>/dev/null || true)"
+    # POSITIVE CONTROL: the inline-jq emitter must be in the population. Without it this arm
+    # reads identically whether its grammar can spell every emitter or only the tidy eight.
+    if ! grep -q '^core/hooks/ai-dlc-recover\.sh	1' <<<"$i98_all"; then
+      err "I98's positive control failed: core/hooks/ai-dlc-recover.sh emits additionalContext from an INLINE jq program and this arm did not score it as an emitter. The grammar has narrowed to the indented-key form, so every difference set below is a statement about eight files, not nine."
+    fi
+    i98_untagged="$(awk -F'\t' '$2 ~ /^10/ {print "    " $1}' <<<"$i98_all")"
+    i98_unemit="$(awk -F'\t' '$2 ~ /^01/ {print "    " $1}' <<<"$i98_all")"
+    i98_unguarded="$(awk -F'\t' '$2 ~ /^.1/ && substr($2,3,2) != "11" {print "    " $1}' <<<"$i98_all")"
+    i98_spells="$(awk -F'\t' '$2 ~ /1$/ {print "    " $1}' <<<"$i98_all")"
+    [ -n "$i98_untagged" ] && err "I98: these hooks emit additionalContext WITHOUT routing it through ai_dlc_provenance_tag. The lead's rule is that an AI/DLC block carries a live nonce, so an unmarked genuine emitter is a false positive against that rule -- and a provenance check the lead learns to distrust is worse than none:
+$i98_untagged"
+    [ -n "$i98_unemit" ] && err "I98: these hooks call ai_dlc_provenance_tag and emit no additionalContext. Either the emission was removed and the marker left behind, or the marker is being written somewhere it cannot reach the lead. Both leave a rotation of the nonce with no reader:
+$i98_unemit"
+    [ -n "$i98_unguarded" ] && err "I98: these hooks call ai_dlc_provenance_tag without BOTH halves of the fail-open guard -- the sibling BASH_SOURCE resolve and the \`ai_dlc_provenance_tag() { :; }\` fallback. A consumer mid-pull can hold the hook without the library, and an unguarded call site then kills the hook: the lead loses the entire payload in exchange for a marker:
+$i98_unguarded"
+    [ -n "$i98_spells" ] && err "I98: these hooks spell the provenance marker token themselves instead of calling the library. Nine hand-written copies of a security marker is nine chances for one to drift into a form the lead's check does not recognise, and an unrecognised marker reads exactly like an absent one. Call ai_dlc_provenance_tag:
+$i98_spells"
   fi
 fi
 

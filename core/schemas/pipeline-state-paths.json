@@ -83,6 +83,13 @@
       "reason": "Genesis commit recorded for --audit range selection. Local to the machine running the audit; a committed watermark would impose one checkout's history on every other."
     },
     {
+      "name": ".ai-dlc-context-nonce",
+      "transient": true,
+      "producer": "core/hooks/ai-dlc-context-provenance.sh",
+      "ignore": "_bmad-output/.ai-dlc-context-nonce",
+      "reason": "The append-only set of context-provenance nonces for this checkout. Transient for a reason stronger than tidiness: the whole property the marker buys is that the nonce reaches the lead only through a hook emission and a local file read, so a committed copy is a nonce published to anything that can read the repository, and the check it backs would then certify text that had merely read history."
+    },
+    {
       "name": ".beat-inflight",
       "transient": true,
       "producer": "core/hooks/ai-dlc-continue.sh",
