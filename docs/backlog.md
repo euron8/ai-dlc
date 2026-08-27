@@ -2253,8 +2253,41 @@ sites leaves the receipt at 1, and it reaches 0 only when `apply.sh:1252` is quo
 Discharges the consumer entry `PC-S333-SKILL-RENDERS-THE-THEIRS-REF-UNQUOTED-AND-ZSH-EATS-IT` at
 pinned ledger line 4096.
 
+**RE-DERIVED AT v0.422.0. THE POPULATION IS 13 SITES ACROSS 8 FILES, NOT 5 ACROSS 2, AND THE
+RECEIPT ABOVE COULD NOT SPELL ITS OWN SUBJECT.** `show +<(theirs|base|ours)>:` misses
+`SKILL.md:1148`, which renders `<ancestor>:<core-path>` and sits INSIDE the receipt's own scoped
+directory. The scope then excluded a printed REMEDY at
+`core/scripts/validate-snapshot-conservation.sh:344`, a step-file instruction at
+`core/skills/ai-dlc/steps/gate-validation.md:2506`, descriptive prose at `steps/retro.md:100`,
+three shell comments, and `core/fixtures/settings-merge-unparseable-template/.dist-only:19`.
+Derivation: `git ls-files -z 'core/*' | xargs -0 grep -HnE '(show|cat-file -p|ls-tree|archive|diff)[[:space:]]+<[^>]+>:'`
+returns 13 on the pre-fix tree and 0 on the fixed one, against a control over `docs/` that
+returns 8 in the same invocation.
 
-verify: sh D=core/skills/ai-dlc-update; grep -rqF 'settings.json.template' "$D" || { echo "CONTROL FAILED"; exit 9; }; n=$(grep -rlE 'show +<(theirs|base|ours)>:' "$D" | wc -l); [ "$n" -eq 0 ] && exit 0; exit 1
+**THE UNFALSIFIABLE-CASE ARGUMENT ABOVE IS WRONG, AND THE EXCLUSION IT JUSTIFIED WAS THE DEFECT.**
+It holds only for a grep that cannot change the comment. A rev-path rendered inside a comment is
+pasted exactly as readily as one rendered in a heredoc, so the comments are SITES rather than
+exemptions; quoting them makes the wider grammar reach zero with no exemption list at all. Two of
+the thirteen were comments.
+
+**The narrowing that was NOT taken, recorded so it is not re-proposed.** Requiring the word `git`
+on the same line finds the same 13 over `core/` — the difference set is empty — so it is rejected
+on structure, not on a measured miss: a rendering can wrap and leave `git -C <dist>` on the line
+above while the bracketed `<ref>:` token stays whole. Tree-wide the two patterns differ 37 to 29,
+and all 8 of those are `docs/` prose quoting the bare fragment. That number is about this file, not
+about the corpus the arm scans.
+
+**The receipt below DRIVES `S8` of `scripts/validate-shell-portability.sh` rather than restating
+its grammar**, so the corpus derivation and the battery exclusion cannot drift from the arm's.
+It self-probes FIRST, in a seeded `mktemp` tree, and refuses to read the clean run until S8 has
+reported a seeded offender by name — a gutted S8 yields exit 9, not exit 0. Measured in all three
+directions: 0 on the fixed tree, 1 on a tree with one rendering reintroduced, 9 with `S8` removed
+from `ARMS` (mutant applied under `cmp -s`). **What else satisfies it:** deleting the instructions
+outright, or moving the files out of `core/` — both of which unship the text they are written to
+deliver.
+
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/scripts" "$d/core/rules" || { rm -rf "$d"; exit 9; }; echo 0.0.0 > "$d/VERSION"; cp scripts/validate-shell-portability.sh "$d/scripts/" || { rm -rf "$d"; exit 9; }; printf "#!/usr/bin/env bash\necho ok\n" > "$d/scripts/clean.sh"; printf "git show <theirs>:<p>\n" > "$d/core/rules/probe.md"; ( cd "$d" && git init -q . && git add -A ) >/dev/null 2>&1; o=$( cd "$d" && bash scripts/validate-shell-portability.sh 2>&1 ); p=$?; rm -rf "$d"; [ "$p" -eq 1 ] && grep -q "FAIL: S8:" <<<"$o" || exit 9; bash scripts/validate-shell-portability.sh --quiet
 ## BL-053
 
 **Core's two readers of an escalation's `**Status:**` field disagree on which line in an entry

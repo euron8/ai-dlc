@@ -1249,7 +1249,7 @@ if [ -n "$HR_VALIDATOR" ]; then
   hr_names="$(printf '%s\n' "$hr_out" | sed -n 's@^ *\.claude/hooks/@@p' | tr '\n' ' ')"
   if [ "$hr_rc" = "1" ] && [ -n "$hr_names" ]; then
     say WORKLIST settings-merge ".claude/settings.json" \
-      "hook(s) present and UNREGISTERED after this apply: ${hr_names}— each is on disk, wired to nothing, and indistinguishable from one that is working. Run the settings reconcile, which is the one program that owns this contract: \`t=\$(mktemp); git -C <dist> show <theirs>:templates/settings.json.template > \"\$t\"; reconcile/settings-merge.sh --consumer .claude/settings.json --template \"\$t\" [--model-row <operator's answer>]\`. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery."
+      "hook(s) present and UNREGISTERED after this apply: ${hr_names}— each is on disk, wired to nothing, and indistinguishable from one that is working. Run the settings reconcile, which is the one program that owns this contract: \`t=\$(mktemp); git -C <dist> show \"<theirs>:templates/settings.json.template\" > \"\$t\"; reconcile/settings-merge.sh --consumer .claude/settings.json --template \"\$t\" [--model-row <operator's answer>]\`. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery."
   elif [ "$hr_rc" = "2" ]; then
     say DECISION hook-registration-unreadable ".claude/settings.json" \
       "the hook-registration check could not run, so whether this pull's hooks are wired is UNKNOWN — and unknown reads exactly like clean. Detail: $(printf '%s' "$hr_out" | tr '\n' ' ')"

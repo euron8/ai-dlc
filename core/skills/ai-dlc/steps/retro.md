@@ -97,7 +97,7 @@ the discussion:
    `transcript_path` field uses the `path@<sha>` format where
    `<sha>` is the **commit** SHA of the commit that added the transcript
    — NOT the blob SHA. `scripts/ai-dlc/validate-retro-evidence.sh` resolves the
-   citation with `git cat-file -p <sha>:<path>`, and that syntax takes a
+   citation with `git cat-file -p "<sha>:<path>"`, and that syntax takes a
    tree-ish: handed a blob it exits `fatal: path '<path>' exists on disk,
    but not in '<sha>'`. It then enforces byte-match between the cited
    SHA's content and the file on HEAD.

@@ -16,7 +16,7 @@ that occurrence is an ASSIGNMENT reading it out of the distribution
 (`$SCRIPT_DIR/../templates/`). No `cp` puts it under `$PROJECT_ROOT`. The control in the same
 invocation is coding-conventions.md.template, which does appear on a `cp ... "$PROJECT_ROOT/..."`
 line. The two documented invocation sites agree: SKILL.md:879 and apply.sh:1252 both reach the
-template as `git -C <dist> show <theirs>:templates/settings.json.template`, a git object in the
+template as `git -C <dist> show "<theirs>:templates/settings.json.template"`, a git object in the
 distribution clone, never a path in the consumer tree.
 
 So on a consumer this fixture's positive control has nothing to point --template at. It would

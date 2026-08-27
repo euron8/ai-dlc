@@ -2,6 +2,11 @@
 # validate-shell-portability.sh -- every shipped shell file must run on THIS machine's floor:
 # bash 3.2 and the BSD userland, where the GNU idioms fail SILENTLY rather than erroring.
 #
+# S8 EXTENDS THAT FLOOR FROM THE SHELL FILES TO THE TEXT THAT TELLS A HUMAN WHAT TO TYPE, and
+# the two belong in one program because the failure is the same one: an idiom that returns a
+# wrong answer on this machine instead of an error. Its corpus is `core/`, not `*.sh`, so the
+# arm table below carries a per-arm CORPUS column rather than one global file list.
+#
 # WHY A STANDALONE SCRIPT AND NOT AN ARM IN THE ENFORCEMENT MAP. That validator is invoked by
 # five of the six slowest fixtures, and the repo's own measurement is 13.0s -> 18.1s inside it
 # taking the suite pole 442s -> 595s: roughly 30 seconds of gate wall clock per second of
@@ -76,11 +81,27 @@ S6_WHY="\`\\s\` in a sed expression. Same as grep: BSD sed has no \`\\s\`, and t
 # the capture being back-referenced comes from -- the first cut could not see its own probe.
 S7_PAT="g?sub\\(.*,.*\\\\[0-9]"
 S7_WHY="a backreference in an \`awk\` \`sub()\`/\`gsub()\` replacement. awk has no \`\\1\`; it emits the literal text and the capture is lost. Use \`match()\` with \`substr()\`."
+# S8 KEYS ON THE PLACEHOLDER, NOT ON `git`, AND THE TWO ARE INDISTINGUISHABLE ON TODAY'S
+# CORPUS. Measured on the pre-fix tree: over `core/` this pattern finds 13 renderings and a
+# variant additionally requiring the word `git` on the same line finds the same 13. The
+# difference set is empty. The narrowing is rejected on a STRUCTURAL argument rather than a
+# measured miss: a rendering can wrap and leave `git -C <dist>` on the line above while the
+# bracketed `<ref>:` token stays whole, because that token is never itself split -- so the
+# placeholder is the half a line-oriented scan can always reach. Requiring a second token on
+# the same line is strictly narrower for no gain currently visible.
+#
+# Do not "confirm" this by counting tree-wide. Over the whole tree the two patterns DO differ,
+# 37 to 29 -- and all 8 of those are `docs/` prose and receipts quoting the bare fragment
+# without the word `git`. That number is about this repo's writing about the defect, not about
+# the corpus this arm scans, and reading it as the latter is how the first cut of this comment
+# shipped a false justification.
+S8_PAT="(show|cat-file -p|ls-tree|archive|diff)[[:space:]]+<[^>]+>:"
+S8_WHY="an UNQUOTED git rev-path in shipped instruction text. A reader who binds the ref to a variable and pastes this into zsh loses the character after the colon: \`:c\` and \`:t\` are history modifiers that consume it, so \`git show \$THEIRS:templates/x\` reports \`fatal: ambiguous argument 'ca1fb6eemplates/x'\` -- and any \`>\` redirect in the same line still creates the target as a 0-byte file that the next command reads and reports on. Render it quoted: \`git show \"<theirs>:<path>\"\`."
 
 # Only S1 subtracts. Declared explicitly rather than defaulted in a loop, because `set -u`
 # turns a missing one into an abort mid-scan, and an aborted scan prints fewer findings than
 # a clean one rather than more.
-S2_SKIP=""; S3_SKIP=""; S4_SKIP=""; S5_SKIP=""; S6_SKIP=""
+S2_SKIP=""; S3_SKIP=""; S4_SKIP=""; S5_SKIP=""; S6_SKIP=""; S8_SKIP=""
 # S7's one measured false positive is PYTHON, not awk. Several shell files here embed a
 # heredoc'd python program, and `re.sub(r"...", r"\1...")` is correct there -- python has
 # backreferences and awk does not. The subtraction is on the LANGUAGE (`re.` qualifies the
@@ -88,7 +109,25 @@ S2_SKIP=""; S3_SKIP=""; S4_SKIP=""; S5_SKIP=""; S6_SKIP=""
 # lands and an awk backreference in the same file is still caught.
 S7_SKIP="re\\.g?sub\\("
 
-ARMS="S1 S2 S3 S4 S5 S6 S7"
+ARMS="S1 S2 S3 S4 S5 S6 S7 S8"
+
+# Two more per-arm columns, declared for EVERY arm for the reason the SKIP block above gives:
+# under `set -u` a missing one aborts the scan mid-way, and an aborted scan prints FEWER
+# findings than a clean one rather than more.
+#
+# CORPUS. `shell` is `git ls-files '*.sh'`; `instr` is `git ls-files 'core/*'` -- every shipped
+# file regardless of extension, because the instruction that gets pasted lives in a `SKILL.md`
+# or a step file as often as in a script.
+#
+# COMMENTS. `skip` drops `#` comment lines, which is right for S1-S7: a comment naming
+# `mapfile` is prose, and that subtraction is the reason this file has no exemption list. It is
+# WRONG for S8, whose whole subject is text a human copies -- a rev-path rendered inside a
+# comment is pasted exactly as readily as one rendered in a heredoc, and two of the sites that
+# motivated this arm were comments. `keep` scans them.
+S1_CORPUS=shell; S2_CORPUS=shell; S3_CORPUS=shell; S4_CORPUS=shell
+S5_CORPUS=shell; S6_CORPUS=shell; S7_CORPUS=shell; S8_CORPUS=instr
+S1_COMMENTS=skip; S2_COMMENTS=skip; S3_COMMENTS=skip; S4_COMMENTS=skip
+S5_COMMENTS=skip; S6_COMMENTS=skip; S7_COMMENTS=skip; S8_COMMENTS=keep
 
 # Corpus: every tracked shell file except this one and its own mutation battery.
 #
@@ -105,8 +144,17 @@ ARMS="S1 S2 S3 S4 S5 S6 S7"
 # THIS WAS FOUND AT PUSH, NOT LOCALLY, AND THE REASON IS WORTH KEEPING: the corpus is
 # `git ls-files`, so a NEW file is invisible to this scan until it is committed. The local
 # run before the commit and the gate's run after it are over different corpora.
+# The battery exclusion is why `instr` is derived the same way rather than being a bare
+# `git ls-files 'core/*'`: the battery lives UNDER `core/`, so an S8 offender seeded there
+# would pin this arm non-zero for as long as the fixture exists.
 SELF_BATTERY="core/fixtures/$(basename "$SELF" .sh | sed 's/^validate-//')/"
-corpus() { git ls-files '*.sh' | grep -vxF "$SELF" | grep -v "^${SELF_BATTERY}"; }
+corpus() { # corpus shell|instr
+  case "$1" in
+    shell) git ls-files '*.sh' ;;
+    instr) git ls-files 'core/*' ;;
+    *) return 1 ;;
+  esac | grep -vxF "$SELF" | grep -v "^${SELF_BATTERY}"
+}
 
 # A comment line is not code. `validate-ci-gates.sh` carries the word `mapfile` in a comment
 # explaining why it avoids mapfile, which is the single measured false positive across all
@@ -115,10 +163,11 @@ corpus() { git ls-files '*.sh' | grep -vxF "$SELF" | grep -v "^${SELF_BATTERY}";
 # SINGLE file, the comment filter's `file:line:` anchor stops matching, and three arms report
 # their own probe's comment line as a violation. The probes caught that; a corpus-only test
 # would not have, because the corpus is always more than one file.
-scan() { # scan <pattern> <skip-pattern-or-empty> <file...>
-  local pat="$1" skip="$2"; shift 2
+scan() { # scan <pattern> <skip-pattern-or-empty> <skip|keep comments> <file...>
+  local pat="$1" skip="$2" comments="$3"; shift 3
   local out
-  out="$(grep -HnE "$pat" "$@" 2>/dev/null | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#')"
+  out="$(grep -HnE "$pat" "$@" 2>/dev/null)"
+  [ "$comments" = "skip" ] && out="$(grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' <<<"$out")"
   [ -n "$skip" ] && out="$(grep -vE "$skip" <<<"$out")"
   printf '%s' "$out"
 }
@@ -136,6 +185,7 @@ setsid sleep 1
 grep -E 'a\sb' f
 sed -E 's/a\sb/c/' f
 awk '{ gsub(/(a)b/, "\1x") }' f
+git -C <dist> show <theirs>:templates/settings.json.template > "$t"
 BADEOF
 cat > "$probe/good.sh" <<'GOODEOF'
 sed -i.bak 's/a/b/' f && rm -f f.bak
@@ -144,14 +194,17 @@ while IFS= read -r l; do :; done < f
 grep -E 'a[[:space:]]b' f
 sed -E 's/a[[:blank:]]b/c/' f
 awk '{ if (match($0, /(a)b/)) print substr($0, RSTART, RLENGTH) }' f
+git -C <dist> show "<theirs>:templates/settings.json.template" > "$t"
+git show HEAD:templates/settings.json.template > "$t"
 # mapfile and declare -A and setsid named in a comment are prose, not code
 GOODEOF
 
 for a in $ARMS; do
   eval "p=\$${a}_PAT"
   eval "sk=\$${a}_SKIP"
-  hit_bad="$(scan "$p" "$sk" "$probe/bad.sh")"
-  hit_good="$(scan "$p" "$sk" "$probe/good.sh")"
+  eval "cm=\$${a}_COMMENTS"
+  hit_bad="$(scan "$p" "$sk" "$cm" "$probe/bad.sh")"
+  hit_good="$(scan "$p" "$sk" "$cm" "$probe/good.sh")"
   if [ -z "$hit_bad" ]; then
     err "$a's own probe did not fire: the seeded offender was not reported. Its zero over the corpus below would be a scan that cannot find anything, which reads exactly like a clean tree."
   elif [ -n "$hit_good" ]; then
@@ -160,17 +213,26 @@ for a in $ARMS; do
 done
 
 # --- the corpus ----------------------------------------------------------------------------
-FILES="$(corpus)"
-n_files="$(grep -c . <<<"$FILES" || true)"
+FILES_shell="$(corpus shell)"
+FILES_instr="$(corpus instr)"
+n_shell="$(grep -c . <<<"$FILES_shell" || true)"
+n_instr="$(grep -c . <<<"$FILES_instr" || true)"
+n_files="$n_shell"
 # ZERO is the failure, not "few". A threshold tuned to this repo's 325 files would make the
 # guard fire on any legitimately small tree -- including the fixture's own seed, which is how
 # the first cut was caught.
-if [ "${n_files:-0}" -lt 1 ]; then
-  err "the corpus is $n_files file(s). \`git ls-files '*.sh'\` found nothing to scan, and an empty corpus passes every arm it never ran. Failing closed."
+#
+# BOTH corpora are guarded, separately. One combined count would let a dead `core/*` listing
+# hide behind a live `*.sh` one, and S8's zero over nothing reads exactly like S8's zero over
+# 510 files -- which is the failure this whole script exists to refuse.
+if [ "${n_shell:-0}" -lt 1 ] || [ "${n_instr:-0}" -lt 1 ]; then
+  err "the corpora are $n_shell shell file(s) and $n_instr core file(s). \`git ls-files\` found nothing to scan on at least one of them, and an empty corpus passes every arm it never ran. Failing closed."
 else
   for a in $ARMS; do
     eval "p=\$${a}_PAT"; eval "w=\$${a}_WHY"; eval "sk=\$${a}_SKIP"
-    hits="$(scan "$p" "$sk" $FILES)"
+    eval "cm=\$${a}_COMMENTS"; eval "cp_kind=\$${a}_CORPUS"
+    eval "files=\$FILES_${cp_kind}"
+    hits="$(scan "$p" "$sk" "$cm" $files)"
     if [ -n "$hits" ]; then
       err "$a: $w"
       printf '%s\n' "$hits" | sed 's/^/    /' >&2
@@ -179,6 +241,6 @@ else
 fi
 
 if [ "$fail" -eq 0 ]; then
-  say "validate-shell-portability: PASS -- $n_files shell file(s), 7 arms (S1 sed -i, S2 mapfile, S3 declare -A, S4 setsid, S5/S6 backslash-s, S7 awk backreference), every arm probed in both directions."
+  say "validate-shell-portability: PASS -- $n_shell shell file(s) + $n_instr core file(s), 8 arms (S1 sed -i, S2 mapfile, S3 declare -A, S4 setsid, S5/S6 backslash-s, S7 awk backreference, S8 unquoted rev-path), every arm probed in both directions."
 fi
 exit "$fail"

@@ -341,7 +341,7 @@ fi
       REMEDY. Recover them from git and append them verbatim to
       pipeline-snapshot-history.md, then re-run:
 
-        git show <base>:<snapshot path> > /tmp/snapshot-before.md
+        git show "<base>:<snapshot path>" > /tmp/snapshot-before.md
 
       and take the missing entries from it. The history file is append-only, so
       adding to it cannot break anything a later gate reads.

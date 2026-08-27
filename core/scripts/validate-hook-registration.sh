@@ -288,7 +288,7 @@ if not present and not registered:
 #   the fix      a command with NO placeholders. `templates/settings.json.template` is not
 #                installed onto a consumer, so the template has to come from the
 #                distribution — and `upstream`/`commit` are in the consumer's own stamp.
-#                Reading them turns `git -C <dist> show <theirs>:...` into something a
+#                Reading them turns `git -C <dist> show "<theirs>:..."` into something a
 #                reader can paste. When the stamp cannot be read the command is still
 #                printed, with the two unresolved values named.
 def purpose(name):

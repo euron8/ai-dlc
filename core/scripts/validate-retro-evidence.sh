@@ -52,7 +52,7 @@
 # per LR-S138-21):
 #   4a. retro doc citation has @<sha> suffix form
 #       (path like _bmad-output/party-mode-transcripts/s<N>/retro.md@<sha>)
-#   4b. `git cat-file -p <sha>:<path>` successfully reads the transcript at
+#   4b. `git cat-file -p "<sha>:<path>"` successfully reads the transcript at
 #       the cited commit
 #   4c. Blob at cited SHA matches `git show HEAD:<path>` byte-for-byte
 #       (transcript immutability — any later edit to the transcript invalidates
@@ -240,7 +240,7 @@ except FileNotFoundError:
 #
 # Multi-step check:
 #   (i) retro doc citation has @<sha> suffix (captured above as citation_sha)
-#   (ii) `git cat-file -p <sha>:<path>` reads the transcript at cited SHA
+#   (ii) `git cat-file -p "<sha>:<path>"` reads the transcript at cited SHA
 #   (iii) `git show HEAD:<path>` reads the transcript at HEAD
 #   (iv) compare blobs byte-for-byte; mismatch means the transcript was
 #        edited after the citation was locked in

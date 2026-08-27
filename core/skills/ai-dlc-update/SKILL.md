@@ -647,7 +647,7 @@ prose is itself generated rather than composed.
      **revert**, not an override, and telling the operator to refile it would be actively
      wrong advice. It still **blocks**: a revert DELETES consumer text, so the operator
      confirms the upstream version covers their delta first. Show them the diff, then run
-     the `git show <theirs>:<core-path> > <consumer-path>` command the status carries.
+     the `git show "<theirs>:<core-path>" > <consumer-path>` command the status carries.
      This is the core-drift twin of `EXTENSION-RETIRE-CANDIDATE`.
 
    - `HARD-CORE-BEHIND` → **this copy is STALE, not forked.** It best-matches a historical
@@ -884,7 +884,7 @@ prose is itself generated rather than composed.
    a **settings-provisioning question**, obtained by
    running (no writes; `--template` needs a FILESYSTEM path, and `theirs` is a ref,
    so materialize it first — the bare `--check` form exits 1 with usage):
-   `t=$(mktemp); git -C <dist> show <theirs>:templates/settings.json.template > "$t";`
+   `t=$(mktemp); git -C <dist> show "<theirs>:templates/settings.json.template" > "$t";`
    `reconcile/settings-merge.sh --consumer .claude/settings.json --template "$t" --check`
    — when it reports
    `model_row_needed=yes`, reproduce its `ask:` lines verbatim as an operator
@@ -1145,7 +1145,7 @@ prose is itself generated rather than composed.
    - **`HARD-CORE-BEHIND`** → **the copy is stale; the remedy is TAKE THEIRS.** Do not reach
      for `register-drift.sh`: there is little here to refile, and an override authored from a
      three-month-old blob anchors to headings upstream may have rewritten. Read the residual
-     the detail names — `git -C <dist> show <ancestor>:<core-path> | diff - <consumer-path>` —
+     the detail names — `git -C <dist> show "<ancestor>:<core-path>" | diff - <consumer-path>` —
      and dispose of THAT, not of the base-relative diff. Typically the residual is small and
      already absorbed upstream by another route, in which case take theirs and say which
      upstream mechanism now carries each piece. If part of it is genuinely still consumer-only,
@@ -1161,7 +1161,7 @@ prose is itself generated rather than composed.
      delta is not consumer-specific behavior to preserve — it is a duplicate of core, and
      keeping it means carrying a fork of a file upstream now maintains. Revert with the
      command the detail string hands you:
-     `git -C <dist> show <theirs>:<core-path> > <consumer-path>`.
+     `git -C <dist> show "<theirs>:<core-path>" > <consumer-path>`.
      **Before you propose it, prove nothing is destroyed**: diff ours against theirs and
      confirm no consumer-only guard, path, flag, or exit code exists in ours that theirs
      lacks. If something does, it is a genuine consumer delta wearing an absorbed file's
@@ -1407,7 +1407,7 @@ prose is itself generated rather than composed.
      flag that file for operator adjudication — never best-effort-place a
      preserved value.
    - `TEMPLATE-JSON-MERGE` (`.claude/settings.json` — from step 3b) → run
-     `t=$(mktemp); git -C <dist> show <theirs>:templates/settings.json.template > "$t"`
+     `t=$(mktemp); git -C <dist> show "<theirs>:templates/settings.json.template" > "$t"`
      then `reconcile/settings-merge.sh --consumer .claude/settings.json --template
      "$t" --model-row <operator's answer>`. `--template` is read with `-r` and
      `theirs` is a git ref, so a ref-qualified template path fails the read guard.

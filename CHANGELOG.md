@@ -15,6 +15,144 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.422.0] - 2026-08-27
+
+### An unquoted git rev-path in shipped instruction text, and the eight sites the entry's own grammar could not spell
+
+Closes `BL-052`, discharging the graph consumer's ledger entry
+`PC-S333-SKILL-RENDERS-THE-THEIRS-REF-UNQUOTED-AND-ZSH-EATS-IT`.
+
+Thirteen renderings under `core/` printed a git rev-path unquoted — `git show <theirs>:<path>`.
+A reader who binds the ref to a variable, which is what `t=$(mktemp); git -C <dist> show
+<theirs>:…` leads them to do, pastes that into zsh and loses the character after the colon:
+`:c` and `:t` are history modifiers that consume it, so git reports
+`fatal: ambiguous argument 'ca1fb6eemplates/settings.json.template'`. The `>` redirect still
+runs, so the target exists as a 0-byte file, and the next command reads it and reports on it.
+The hazard fires only on parameter expansion; a literal sha is safe, and the entry never
+claimed otherwise.
+
+**The most exposed site is not an instruction a reader may adapt — it is a string a tool
+PRINTS at the moment the operator is told to paste it.** `reconcile/apply.sh:1252` emits the
+templates form as the fix for "hook(s) present and UNREGISTERED after this apply", and
+`core/scripts/validate-snapshot-conservation.sh:344` emits its own as the REMEDY on a failed
+conservation check.
+
+**THE ENTRY FILED FIVE SITES AND THE POPULATION IS THIRTEEN, AND THE REASON IS THAT ITS
+RECEIPT COULD NOT SPELL ITS OWN SUBJECT.** The grammar was `show +<(theirs|base|ours)>:`
+scoped to `core/skills/ai-dlc-update/`. `SKILL.md:1148` renders `<ancestor>:<core-path>` and
+sat inside the receipt's own directory, invisible to it. Beyond the scope sat a printed remedy,
+a step-file instruction in `steps/gate-validation.md`, descriptive prose in `steps/retro.md`,
+three shell comments and a fixture marker. This is `verification-discipline.md`'s "point a
+search grammar at its own subject before trusting its zero", met on a receipt that had been
+returning a confident 2 for as long as it existed.
+
+**THE SCOPE WAS NARROWED TO DODGE A COMMENT, AND THE EXCLUSION WAS THE DEFECT.** The entry
+records that a tree-wide grep would be pinned non-zero forever by
+`core/scripts/validate-hook-registration.sh:291`, a comment quoting the hazardous form back
+while explaining it — "the unfalsifiable case". That is true of a grep that cannot change the
+comment. The answer here is to quote the comment too: a rev-path rendered inside a comment is
+pasted exactly as readily as one rendered in a heredoc, so the comments are sites rather than
+exemptions, and the arm reaches zero with NO exemption list at all.
+
+### `S8` — the eighth arm of `validate-shell-portability.sh`, and two new columns in its arm table
+
+New arm binding the class. Its corpus is `git ls-files 'core/*'`, not `*.sh`, so the arm table
+gained a per-arm `CORPUS` column (`shell` | `instr`) and a per-arm `COMMENTS` column
+(`skip` | `keep`); `corpus()` now takes a kind and `scan()` a comments flag. Both are declared
+for every arm rather than defaulted, for the reason the `SKIP` block beside them already gives
+— under `set -u` a missing one aborts the scan mid-way, and an aborted scan prints FEWER
+findings than a clean one rather than more.
+
+`S8` is `instr`/`keep`. The empty-corpus guard now checks both corpora SEPARATELY: one
+combined count would let a dead `core/*` listing hide behind a live `*.sh` one, and S8's zero
+over nothing reads exactly like S8's zero over 508 files.
+
+**THAT GUARD TURNS OUT TO PREVENT A HANG, NOT ONLY A FALSE ZERO, AND THAT WAS FOUND BY THE
+BATTERY RATHER THAN BY THE AUTHOR.** `scan()` ends in `grep -HnE "$pat" "$@"`, and grep handed
+an EMPTY file list reads STDIN — so an arm whose corpus is empty blocks forever instead of
+reporting. The guard makes that state unreachable in the shipped path: `scan` is called only
+inside the guard's `else` branch, verified by disabling the guard under a `cmp -s`-checked
+mutant. The `x4` mutant is the state the guard refuses, which is why the fixture's `run_v`
+now redirects `</dev/null` — under the suite's 16-way pool stdin is a live descriptor and the
+hang is real there while an interactive run happens to get EOF. Measured: the fixture wedged
+two processes for two minutes before that redirect existed, and reported nothing at all.
+
+**IT KEYS ON THE PLACEHOLDER AND NOT ON `git`, AND THE TWO ARE INDISTINGUISHABLE ON TODAY'S
+CORPUS — WHICH IS STATED HERE BECAUSE THE FIRST CUT OF THIS ENTRY CLAIMED OTHERWISE.** Over
+`core/` on the pre-fix tree the shipped pattern finds **13** renderings and a variant
+additionally requiring the word `git` on the same line finds the same **13**; the difference
+set is EMPTY. The narrowing is rejected structurally rather than on a measured miss: a
+rendering can wrap and leave `git -C <dist>` on the line above while the bracketed `<ref>:`
+token stays whole, because that token is never itself split.
+
+**The number that made the first version of this paragraph wrong was taken over the wrong
+set.** Tree-wide the two patterns DO differ, **37** to **29** — and all eight of those are
+`docs/` prose and receipts quoting the bare fragment without the word `git`. That is a
+measurement of this repo's writing ABOUT the defect, not of the corpus the arm scans. It was
+caught by re-deriving the difference set instead of reporting the two totals.
+
+**The false-positive set over the shipped corpus is EMPTY BY CONSTRUCTION rather than by
+tuning.** All 24 tree-wide hits outside `core/` are in `docs/` and `CHANGELOG.md` — this
+repo's own prose ABOUT the defect, including the sentence you are reading. `core/` is a
+partition that excludes them, not a detector with exemptions.
+
+Differential, sides asserted to differ before the comparison was read: the new validator run
+against `git archive origin/main` exits **1** and names all thirteen sites; against the fixed
+tree it exits **0**. Validator wall clock 0.57s → 0.85s, three interleaved reps, both sides
+run from the repo root. It is pre-push step 1f and is NOT invoked by the fixture pole, so
+`FORK_BUDGET` in `scripts/validate-enforcement-map.sh` is untouched. The validator and its
+battery are distribution-only — 0 hits in `scripts/install.sh` against a control of 3 for
+`core/scripts`, and `core/fixtures/shell-portability/.dist-only`.
+
+**THE ARM TABLE'S NEW CELLS ARE PROVEN LOAD-BEARING INDIVIDUALLY, WHICH A SEEDED OFFENDER
+ALONE WOULD NOT DO.** `S8` is a pattern plus three decisions, and a seeded offender is reported
+if any one of them is still right — so the battery adds a second unit shape beside the
+offender mutants: the shipped arm reports **1** line and the mutated arm reports **0**. `x1`
+forces `S8_CORPUS` to `shell`, `x2` forces `S8_COMMENTS` to `skip`, `x3` narrows `S8_PAT` to
+require `git` on the line — that last one against a SEEDED wrapped rendering, which is the
+evidence for a choice the measurement above could not supply. `x4` proves the SECOND count in
+the empty-corpus guard is load-bearing: the one-count mutant scans nothing and reports PASS.
+`m10` empties the core corpus and must fail closed; `n3` requires the quoted form, a literal
+`HEAD:` ref and a `"$SHA:` rev-path to stay silent. Fixture: control green, **10/10** corpus
+mutants killed by their own arm and only their own, **4/4** arm-table cells load-bearing,
+**3/3** negatives silent. Cost 1.49s → 4.20s solo, against a recorded pole of **245s**
+(`layer-reference-resolution`) across 169 fixture directories, so it cannot move the makespan.
+
+**Probed against the states the population EXCLUDES, because the previous release shipped a
+defect of exactly that shape.** With an offender always present so that going quiet is
+visible: a broken symlink under `core/`, a binary file, a filename carrying a space, a
+filename carrying a COLON (the comment filter is anchored `^[^:]+:[0-9]+:`), CRLF, and no
+trailing newline all still report S8. `grep` SKIPS a path it cannot open where BSD `awk`
+aborts, which is the difference that made `v0.420.0`'s arm D go blind. A file made unreadable
+before staging leaves both corpora empty and the guard refuses LOUDLY, naming them.
+**One honesty gap is recorded rather than fixed:** `scan()` sends grep's stderr to
+`/dev/null`, so a rendering inside a file that is tracked but unreadable at scan time is
+skipped without a word. `S8` inherits that from the seven arms beside it rather than
+introducing it, and widening it is outside this entry.
+
+**A malformed arm table fails closed under `set -u`, verified with `cmp -s`-guarded mutants.**
+An arm added to `ARMS` with no columns aborts at `S9_PAT: unbound variable` during the PROBE
+phase, before the corpus is touched; a typo'd `S8_CORPUS=instrr` aborts at
+`FILES_instrr: unbound variable`. Both exit **1** with no PASS line, so neither can read as a
+clean scan.
+
+Consumer-side measurement, which is what the goal is denominated in: the graph ledger's own
+`PC-S333` receipt greps `SKILL.md` at `theirs` for the unquoted rendering and finds **2** at
+`origin/main` and **0** here, with the quoted form present at **2** as the control in the same
+invocation.
+
+**Verified on a tree built by running `scripts/install.sh` into an empty directory**, because a
+green push here proves nothing about a consumer. Zero unquoted renderings anywhere in the
+installed tree, against a control in the same invocation showing the quoted form arriving in
+**6** files across BOTH install destinations — `.claude/skills/ai-dlc-update/SKILL.md`,
+`.claude/skills/ai-dlc/steps/{retro,gate-validation}.md`, and
+`scripts/ai-dlc/validate-{snapshot-conservation,hook-registration,retro-evidence}.sh`. Two zeros
+that agreed would have been one broken pattern rather than a finding; the first attempt at this
+measurement WAS that, because `install.sh` refuses a target with no `_bmad/` and the empty
+result read as a clean tree. `reconcile/apply.sh` is checked separately since its rendering is
+backslash-escaped inside an emitted string: escaped-quoted form **1**, unquoted **0**, `bash -n`
+clean on the installed copy.
+
 ## [0.421.0] - 2026-08-27
 
 ### A marker field declared twice is refused, and the receipt that would have closed it on one field of five is gone
