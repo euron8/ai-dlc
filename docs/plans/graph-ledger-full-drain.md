@@ -37,8 +37,9 @@ grep -cE '^## BL-[0-9]+' docs/backlog.archive.md  # archived
 bash scripts/backlog-reverify.sh | grep -oE 'CLOSE-CANDIDATE|STILL-LIVE|HAND-REVIEW|NEEDS-REVIEW' | sort | uniq -c
 ```
 
-At the last session's close those read **66 live / 27 archived / 58 STILL-LIVE + 8 HAND-REVIEW
-+ 0 CLOSE-CANDIDATE**, against an impossible-id control of 0.
+At the last session's close those read **65 live / 28 archived / 57 STILL-LIVE + 8 HAND-REVIEW
++ 0 CLOSE-CANDIDATE**, against an impossible-id control of 0. Every one of those was RE-DERIVED
+by running the four commands above after batch 11 merged, not by editing the sentence.
 
 **THE LEDGER NOW REPORTS ZERO `CLOSE-CANDIDATE`, AND THAT IS A RESULT RATHER THAN AN ABSENCE.**
 The one it used to carry was `BL-006`, and it was FALSE — the receipt exited 0 on two COMMENT
@@ -50,8 +51,8 @@ directly, read the raw exit code, and ask what ELSE satisfies it before closing 
 **A `STILL-LIVE` ROW IS NOT EVIDENCE THAT THE ENTRY IS LIVE, AND `BL-089` IS THE ENTRY THAT SAYS
 SO.** `backlog-reverify.sh` maps every non-zero `sh` exit to `STILL-LIVE  … "still reproduces
 here"`, but this corpus's receipts use **exit 9** to mean *"a precondition moved and I measured
-nothing"*. The two are one row. Measured at batch 10's close: **55 exit 1, 1 exit 9, 0 exit 0**
-across 56 `sh` receipts — the 9 is `BL-066`, whose receipt is broken shell. Batch 9 rebuilt the other one; `BL-076`'s had been unable to measure
+nothing"*. The two are one row. Measured at batch 11's close: **54 exit 1, 1 exit 9, 0 exit 0**
+across 55 `sh` receipts — the 9 is `BL-066`, whose receipt is broken shell. Batch 9 rebuilt the other one; `BL-076`'s had been unable to measure
 anything for 28 releases and read as `STILL-LIVE` the whole time.
 Derive the current pair rather than trusting that one; the count of live `sh` receipts moves
 with every batch and the control is the entries declaring `verify: manual`, which the engine
@@ -62,17 +63,17 @@ does route to HAND-REVIEW.
 `backlog-reverify.sh`'s own grammar (`^[ \t]*verify:`) accepts. Fixing the indent gives 9, which
 is also wrong: both counts include the `verify: manual` line in the `## Receipts` LEGEND at
 `docs/backlog.md:25`, which is prose about the grammar and not an entry. The true number at
-v0.418.0 is **8**, and the only reader that gets it right is the engine, because it starts
+v0.419.0 is **8**, and the only reader that gets it right is the engine, because it starts
 entries at a `BL-` id and never counts the preamble. An earlier revision of this block quoted 5
 from the unindented grep; the revision after it fixed the PROSE and left the COMMAND, so the
 file stated 7 beside a command returning 5. Every figure in this block was re-derived at
-v0.418.0 by running the commands, not by reading the sentences. Run the engine:
+v0.419.0 by running the commands, not by reading the sentences. Run the engine:
 
 This one is a LOOP, so run it through `bash -c` — your shell is zsh, where an unquoted `$var`
 is not word-split and a loop written for bash iterates once over the whole string.
 
 **IT GATES ON A `## BL-` HEADING FOR THE SAME REASON THE CONTROL BELOW USES THE ENGINE.** A bare
-`grep "^verify: sh "` returns 57 against a true count of 56, because it also matches the
+`grep "^verify: sh "` returns 56 against a true count of 55, because it also matches the
 `verify: sh <one-liner>` line in the `## Receipts` LEGEND at `docs/backlog.md:22` — prose about
 the grammar, which then gets EVALUATED as though it were a receipt and lands in the histogram as
 a real exit code. It misses indented receipts too. Both halves of this block have now been wrong
@@ -92,11 +93,54 @@ the row above told you nothing.
 ### What is DONE — do not redo any of it
 
 **Phases 0–2, 4 and 5 are COMPLETE.** Phase 3 is the batch loop and it is the only remaining
-work. Batches 1–10 have all MERGED AND PUSHED; the releases are `v0.374.0`, `v0.375.0`,
-`v0.376.0`, `v0.377.0`, `v0.378.0`, `v0.379.0`, `v0.380.0`, `v0.415.0`, `v0.416.0` and
-`v0.418.0`, each recorded in `CHANGELOG.md`. `v0.381.0` and `v0.382.0` followed batch 7 as machinery releases;
+work. Batches 1–11 have all MERGED AND PUSHED; the releases are `v0.374.0`, `v0.375.0`,
+`v0.376.0`, `v0.377.0`, `v0.378.0`, `v0.379.0`, `v0.380.0`, `v0.415.0`, `v0.416.0`,
+`v0.418.0` and `v0.419.0`, each recorded in `CHANGELOG.md`. `v0.381.0` and `v0.382.0` followed batch 7 as machinery releases;
 many further machinery releases have shipped between `v0.383.0` and `v0.414.0` that are NOT part
 of this program, which is why the batch numbering and the version numbering stopped agreeing.
+
+**BATCH 11 IS COMPLETE, MERGED AND PUSHED AS `v0.419.0`.** `BL-090` CLOSED and rotated.
+Release `5efb3d17`, close-and-rotate `874d4f41`, fast-forward merge. Live **66 → 65**, archive
+**27 → 28**, `--check` PASSing before `--apply`, `BL-090` in the archive and not in the live
+file, control `BL-006` still live. Gate exit **0** read from a sentinel file CLEARED before the
+run, 17 of 17 phases PASS, 0 FAIL lines, **167 units** with `AI_DLC_FIXTURE_NO_SKIP=1`, all five
+changed fixtures read BY NAME against a positive control of 1 and an impossible-name control of
+0 in the same invocation.
+
+**A CONTROL THAT AGREES WITH THE VERDICT TOLD ME NOTHING, AND I NEARLY BANKED IT.** The first
+by-name read of the gate log returned 0 for all five changed fixtures — and 0 for the
+impossible-name control too, because both patterns anchored on a single space where the log
+writes a column of them. Two zeros that agree are one broken pattern, not a finding. The
+re-read carried a control that MUST come back non-zero, and it did.
+
+**THE POPULATION WAS WRONG IN EXACTLY THE WAY THE ENTRY DESCRIBED, ONE GRAIN OVER.** The first
+cut of the reverse join swept `*.sh`. `core/scripts/gen-architecture-index.js` and
+`scripts/verify-backlog-bl056.py` exist today, so an extension filter would have shipped a
+one-way blind spot inside the arm built to close a one-way blind spot. **Ask of every new
+detector what its population EXCLUDES, and check the exclusion is not the defect itself.**
+
+**A GUARD THAT CANNOT FIRE ON THE STATE IT EXISTS FOR.** `esv_glob_matched` answers for ONE
+glob. The first arm D concatenated both populations into one array and tested the count — but a
+tree where NEITHER glob matched still holds two literal patterns, so the count test reads as a
+match. Each population is now tested on its own.
+
+**BUILDING THE ARM IS WHAT EXPOSED WHAT THE OLD ONE WAS PAYING**, and the change came out
+fork-NEGATIVE by 47. `for f in dir/*.sh; do [ -f "$f" ] && ...; done` costs one fork PER
+CANDIDATE; arm C had been running it over 48 files. Differential on two extracted trees with
+the sides asserted to differ before the comparison was read: HEAD **7049**, branch **7002**.
+`FORK_BUDGET` was ratcheted DOWN 7076 → 7029 rather than left where it was. No wall-clock
+claim: 20.4s before, 20.0s after, three reps each, which cannot resolve 47 forks of 7050.
+
+**FIVE HANDS, ONE DELIVERABLE, AND THE PRESCRIBED REMEDY DID NOT WORK.** Scope, receipt,
+fixture-recon and adversary each had a named report file and a brief telling them the file was
+the deliverable; none wrote one in over two hours. The FIXTURE hand delivered, and its work was
+the best part of the batch — ~230 lines deriving the token and the exempt path from the seed
+rather than typing them, anchoring the two `esv_undeclared` mutations on the argument that
+SEPARATES them, and asserting the probe's EXACT score so neither mutation can score the
+other's kill. **Check the deliverable, not the report: this one existed only as a diff.**
+The cost is real and is recorded here rather than smoothed over — the two arms the lead added
+share an author with the code they test, which is the one thing `fixture-mutants.md` says not
+to do, and the adversarial pass on the close was the lead's own.
 
 **BATCH 10 IS COMPLETE, MERGED AND PUSHED AS `v0.418.0`.** `BL-006` NARROWED and held open,
 `BL-093` filed. It was action 1 and it is DONE. Do not re-run it. Live **65 → 66**, archive
@@ -200,23 +244,21 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **BATCH 11. Batch 10 is done — see the block above — and the survivors are the corpus.
+1. **BATCH 12. Batch 11 is done — see the block above — and the 65 survivors are the corpus.
    Pick the subject and say why.**
 
-   **`BL-090` is the recommendation.** It was filed out of two independent re-derivations, its
-   fix is SUBTRACTIVE, and this repo's rule is to prefer the reshaped or reduced form over the
-   additive one — batch 10 was additive in every direction and cost a `FORK_BUDGET` raise for
-   it. Its subject is `I93`, which asks whether every DECLARED emitter emits the token and never
-   whether every EMITTER is declared, so a new one is invisible; that is a join that cannot fail
-   in one direction, which `mechanism-design.md` names as the mirror of a check that cannot
-   fire.
+   **There is no standing recommendation, and that is deliberate.** `BL-090` was the last
+   entry filed with a named, subtractive fix already argued out. Re-derive before choosing:
+   run each candidate's receipt directly and read the RAW exit code, then re-derive the
+   entry's population rather than believing it.
 
-   `BL-006` is now NARROWED and still live, and it is the coherent alternative — but read its
+   `BL-006` is NARROWED and still live, and it is the coherent alternative — but read its
    receipt first: it is a CONJUNCTION over two corpora in two trees, and the consumer half is
-   not reachable from a distribution-side change. Taking it means taking the `docs/plans/` half
-   and saying so. `BL-093`, filed by batch 10, is a per-file judgment rather than one fix and is
-   NOT a batch subject as it stands. `BL-082` and `BL-083` are still not one subsystem, so
-   taking them means saying which single thing you are closing.
+   not reachable from a distribution-side change. Taking it means taking the `docs/plans/`
+   half and saying so. `BL-093` is a per-file judgment rather than one fix and is NOT a batch
+   subject as it stands. `BL-082` and `BL-083` are still not one subsystem, so taking them
+   means saying which single thing you are closing. `BL-066` was REJECTED at v0.417.0 and
+   narrowed to its sibling claim, which `named_ambiguous()` still exhibits.
 
    **Run every candidate's receipt directly and read the RAW exit code before you scope it.**
    The sweep re-established that a `STILL-LIVE` row is not evidence the entry is live, and
@@ -235,6 +277,10 @@ so no block written before it changes verdict.
    bucket, `BL-074` by a deletion its own entry forbids. The standing rule is in
    `.claude/rules/verification-discipline.md`, "a receipt that reads a RENDERED artifact is
    closable by prose"; it is not restated here.
+
+   **And ask what the fix's own population EXCLUDES.** Batch 11's first cut answered a
+   one-way-blindness entry with an arm that was blind by file extension. The exclusion has to
+   be stated in the arm and it has to not be the defect itself.
 2. **Keep the batch to ONE subsystem.** Take one group or the other, not both.
 3. **Put independent hands on SCOPE, FIXTURE and RECEIPT, every time.** In batch 8 they found
    THREE defects in work already committed on the branch; in batch 9 the fixture hand found
