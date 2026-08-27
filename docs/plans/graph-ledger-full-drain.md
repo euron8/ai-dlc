@@ -182,13 +182,14 @@ grep -cx 'PC-S300-SEVEN-VALIDATORS-SHIPPED-NON-EXECUTABLE-AT-0.242.0' /tmp/arch.
 grep -cx 'PC-S999-NEVER' /tmp/filed.txt                                                  # control: 0
 ```
 
-At v0.425.0, after the graph consumer pulled to `0.425.0`: **60 live candidates, 122 archived**,
-partition control 0, all three presence controls 1, absence control 0. Batch 14's figures — 49
+Re-derived at v0.426.0: **60 live candidates, 122 archived**, partition control 0, all three
+presence controls 1, absence control 0. The live/archive split has not moved since v0.425.0
+because the consumer has not pulled since; it moves when THEY close, not when we ship. Batch 14's figures — 49
 live, 90 archived — were the same ledger read through a grammar missing one record form.
 
 **"CITED" IS STILL NOT THE PROGRESS METRIC, AND THIS IS THE LAST STEP OF THE DERIVATION.** A
 candidate cited by a LIVE entry is work in flight; one cited by an entry in the ARCHIVE has been
-discharged. Splitting the 29 is what turns this block into a measurement of the goal instead of a
+discharged. Splitting the cited set is what turns this block into a measurement of the goal instead of a
 measurement of coverage — and the operator has had to say so twice, because every report of this
 program has led with `docs/backlog.md`'s live count, which moves for reasons that have nothing to
 do with the ledger. **Report the partition below. Never report live/archive entry counts as
@@ -208,10 +209,10 @@ comm -12 /tmp/live.txt /tmp/closed_here | comm -23 - /tmp/in_msgs   # discharged
 comm -12 /tmp/arch.txt /tmp/closed_here | wc -l
 ```
 
-At v0.425.0: **5 DISCHARGED, 23 in flight, 32 untouched**, summing to 60, **0
-discharged-but-unnamed**, and **14 TERMINAL**. That unnamed line is a real failure mode and not a
-formality: a fix that ships without its id in the commit MESSAGE discharges the candidate and
-produces no row anywhere, so the consumer never learns of it.
+Re-derived at v0.426.0 by running the commands: **6 DISCHARGED, 22 in flight, 32 untouched**,
+summing to 60, **0 discharged-but-unnamed**, and **14 TERMINAL**. That unnamed line is a real
+failure mode and not a formality: a fix that ships without its id in the commit MESSAGE discharges
+the candidate and produces no row anywhere, so the consumer never learns of it.
 
 **THE `DISCHARGED` LINE FALLS WHEN THIS PROGRAM SUCCEEDS, AND THAT IS WHY `TERMINAL` IS NOW BESIDE
 IT.** `DISCHARGED` intersects our archive with the LIVE ledger, so the moment a consumer closes a
@@ -221,8 +222,8 @@ pull that closed two candidates — the program's own scoreboard resets on succe
 forever", inverted: here the subject's deletion reads as REGRESS.
 
 **REPORT `TERMINAL` AS THE DELIVERED TOTAL AND `DISCHARGED` AS WORK AWAITING THE CONSUMER'S OWN
-CLOSE.** They are disjoint, because `live.txt` and `arch.txt` partition. At v0.425.0 that is
-**14 delivered and closed, 5 delivered and awaiting close — 19 in total against a headline of 5.**
+CLOSE.** They are disjoint, because `live.txt` and `arch.txt` partition. At v0.426.0 that is
+**14 delivered and closed, 6 delivered and awaiting close — 20 in total against a headline of 6.**
 Both figures are ceilings on coverage rather than adjudications, for the reason the next paragraph
 gives: a citation is a filing, not a disposition.
 
@@ -234,7 +235,7 @@ backlog entry here, so the `DISCHARGED` line could not see them either. Delivere
 nowhere. They are the reason both repairs in this block had to land together: fixing the grammar
 alone would still have left them in no bucket.
 
-**FIVE OF SIXTY, OR NINETEEN OF ONE HUNDRED AND EIGHTY-TWO, DEPENDING ON WHICH QUESTION YOU ASKED.**
+**SIX OF SIXTY, OR TWENTY OF ONE HUNDRED AND EIGHTY-TWO, DEPENDING ON WHICH QUESTION YOU ASKED.**
 State which. Every progress figure quoted before v0.425.0 was against a denominator 28% too small
 and a numerator that silently shed its own successes.
 
@@ -250,14 +251,16 @@ cat VERSION                                                                     
 git log --format='%H' -F --grep="<id>" origin/main | tail -1                            # then git show "${sha}:VERSION"
 ```
 
-At v0.425.0 the gap is **ZERO** — consumer installed **0.425.0**, distribution **0.425.0**, and
-`git rev-list --count <stamp-commit>..origin/main -- VERSION` returns 0. This is the first time in
-the program it has been closed. **`PC-S333` and `PC-S314` are CLOSED in the consumer's own ledger**
-(live=0, archive=1 for each), which is the terminal state the whole program aims at, reached by the
-`0.415.0 → 0.425.0` pull recorded in `docs/plans/graph-pull-0415-to-0425.md`.
+**AT v0.426.0 THE GAP IS ONE RELEASE AND A RUNBOOK IS ALREADY WRITTEN.** Consumer installed
+**0.425.0**, distribution **0.426.0**, one discharged candidate the consumer cannot see
+(`PC-S304`). The runbook is `docs/plans/graph-pull-0425-to-0426.md`, LIVE and NOT STARTED. **It is
+not yours to run** — hand it to a graph session the operator drives.
 
-**A ZERO GAP IS A STATE, NOT AN ACHIEVEMENT THAT STAYS TRUE.** It goes non-zero on the next release
-that discharges anything. Re-derive it every batch rather than reading this sentence.
+The gap was ZERO at v0.425.0, which was the first time in the program it had been closed. **A ZERO
+GAP IS A STATE, NOT AN ACHIEVEMENT THAT STAYS TRUE**, and it went non-zero on the very next release
+that discharged anything — which is this one. Re-derive it every batch rather than reading any
+sentence here. `PC-S333` and `PC-S314` remain CLOSED in the consumer's own ledger (live=0,
+archive=1 for each), reached by the `0.415.0 → 0.425.0` pull.
 
 **THE PULL IS NOT YOURS TO RUN.** `.claude/rules/consumer-boundary.md` is unconditional — an
 ai-dlc session never writes to a consumer. The pull happens in a GRAPH session the operator
@@ -322,8 +325,8 @@ those have not been examined at all. Their status in the consumer's own ledger i
 ESTABLISHED**; some may already be `WITHDRAWN` or `ADOPTED` upstream. **Establish that before
 treating 20 as a workload.**
 
-Re-derived at v0.425.0 by running the commands, not by editing the sentence: **69 live / 32
-archived / 61 STILL-LIVE + 8 HAND-REVIEW + 0 CLOSE-CANDIDATE**, against an impossible-verdict
+Re-derived at v0.426.0 by running the commands, not by editing the sentence: **68 live / 33
+archived / 60 STILL-LIVE + 8 HAND-REVIEW + 0 CLOSE-CANDIDATE**, against an impossible-verdict
 control of 0 and a `BL-006`-still-live control of 1. **Batch 14 recorded 31 archived and the
 rotation of `BL-101` moved it to 32 without the sentence being updated** — which is this block's
 own failure mode, one release after it was written down.
@@ -385,10 +388,34 @@ the row above told you nothing.
 
 ### What is DONE — do not redo any of it
 
+**BATCH 15 IS COMPLETE, MERGED AND PUSHED AS `v0.426.0`.** `BL-030` CLOSED and rotated,
+discharging `PC-S304`, with the id in the RELEASE COMMIT MESSAGE where `named_absorbed()` can read
+it (verified: 1 hit, against an impossible-id control of 0). Release `5cc6c4f5`, close-and-rotate
+`601f20f4`, fast-forward merge. Live **69 → 68**, archive **32 → 33**; recorded to show the
+rotation HAPPENED, **not as progress**. `--check PASS` before `--apply` with the receipt reporting
+`CLOSE-CANDIDATE [sha 5cc6c4f5 resolves]`, `BL-030` in the archive and not in the live file,
+control `BL-006` still live. Gate exit **0** read from a sentinel CLEARED before the run, **17 of
+17** phases PASS, **0 FAIL** lines ANSI-stripped, **169 ok / 0 FAIL** with
+`AI_DLC_FIXTURE_NO_SKIP=1` confirmed live in the log, the new fixture read BY NAME against a
+present-name control of 1 and an impossible-name control of 0 in the same invocation.
+
+**THE FIX WEDGED ITS OWN ESCAPE HATCH ON THE FIRST END-TO-END RUN, AND ONLY RUNNING IT FOUND
+THAT.** `--finish` counted every row it re-derived, including `DECISION hook-registration-unchecked`
+— whose stated remedy is to re-run the apply that delivers the missing validator, on the phase
+`--finish` skips. Unclearable by construction, and a withheld stamp nobody can advance is a
+consumer whose own `pre-push` refuses to run. **Ask what a new gate makes permanently true
+downstream; it is not visible in the diff.** The repair is two counters, and only ONE `WORKLIST`
+row is reachable under `--finish` at all — derived over the code that mode actually executes, with
+a control proving the grammar can see rows, then proved terminating end to end.
+
+**A ZERO GAP LASTED EXACTLY ONE RELEASE.** The delivery gap is now **1** and
+`docs/plans/graph-pull-0425-to-0426.md` is written, LIVE and NOT STARTED. **It is not yours to
+run.**
+
 **Phases 0–2, 4 and 5 are COMPLETE.** Phase 3 is the batch loop and it is the only remaining
-work. Batches 1–14 have all MERGED AND PUSHED; the releases are `v0.374.0`, `v0.375.0`,
+work. Batches 1–15 have all MERGED AND PUSHED; the releases are `v0.374.0`, `v0.375.0`,
 `v0.376.0`, `v0.377.0`, `v0.378.0`, `v0.379.0`, `v0.380.0`, `v0.415.0`, `v0.416.0`,
-`v0.418.0`, `v0.419.0`, `v0.421.0`, `v0.422.0` and `v0.423.0`, each recorded in `CHANGELOG.md`. `v0.381.0` and `v0.382.0` followed batch 7 as machinery releases;
+`v0.418.0`, `v0.419.0`, `v0.421.0`, `v0.422.0`, `v0.423.0` and `v0.426.0`, each recorded in `CHANGELOG.md`. `v0.381.0` and `v0.382.0` followed batch 7 as machinery releases;
 many further machinery releases have shipped between `v0.383.0` and `v0.414.0` that are NOT part
 of this program, which is why the batch numbering and the version numbering stopped agreeing.
 
@@ -396,8 +423,11 @@ of this program, which is why the batch numbering and the version numbering stop
 FIELDS.** Five PRs in a graph session the operator drove; the runbook is DISCHARGED at
 `docs/plans/graph-pull-0415-to-0425.md` and its Discharge section is the record. **`PC-S333` and
 `PC-S314` are CLOSED in the consumer's own ledger** — live=0, archive=1 each — which is the
-terminal state this program aims at, reached for the first time. The delivery gap is **ZERO**.
-Do not re-run the detection in action 7 expecting work; derive it, and it will say so.
+terminal state this program aims at, reached for the first time.
+
+**THAT PULL'S ZERO GAP IS SPENT.** `v0.426.0` discharged `PC-S304`, so the gap is **1** again and
+`docs/plans/graph-pull-0425-to-0426.md` is the runbook for it — LIVE, NOT STARTED, and for a graph
+session the operator drives. Action 7's detection still applies; derive it rather than reading this.
 
 **BATCH 14 IS COMPLETE, MERGED AND PUSHED AS `v0.423.0`.** Its own report said "CANDIDATES
 DISCHARGED 6 → 7 OF 49", and **both halves of that figure were wrong** — the denominator through a
@@ -712,8 +742,8 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **BATCH 15. THE CORPUS IS THE 23 LIVE ENTRIES WHOSE CITED CANDIDATE IS STILL LIVE UPSTREAM.**
-   Batch 14 is done, and so is the `0.415.0 → 0.425.0` pull — see the block above. Pick the
+1. **BATCH 16. THE CORPUS IS THE 22 LIVE ENTRIES WHOSE CITED CANDIDATE IS STILL LIVE UPSTREAM.**
+   Batch 15 is done — `BL-030` closed and rotated as `v0.426.0`, discharging `PC-S304`. Pick the
    subject from that set and say which candidate it discharges.
 
    **THE PC-BACKED COUNT IS NOT THE CORPUS.** Live entries citing a `PC-` id outnumber the corpus,
@@ -732,30 +762,35 @@ so no block written before it changes verdict.
    done
    ```
 
-   At v0.425.0 that returns **23 entries**: `BL-029`, `BL-030`, `BL-034`, `BL-037`, `BL-039`,
+   Re-derived at v0.426.0 it returns **22 entries**: `BL-029`, `BL-034`, `BL-037`, `BL-039`,
    `BL-040`, `BL-041`, `BL-042`, `BL-043`, `BL-044`, `BL-045`, `BL-047`, `BL-049`, `BL-051`,
    `BL-053`, `BL-054`, `BL-055`, `BL-057`, `BL-062`, `BL-064`, `BL-067`, `BL-069`, `BL-075`.
+   `BL-030` left the set by being CLOSED, which is the only way an entry should leave it.
 
    **BATCH 14 REPORTED 16 AND THE TRUE FIGURE WAS NEVER 16.** Re-run at v0.425.0, the batch-14
-   grammar itself now returns 22 — `docs/backlog.md` moved under it — and the corrected grammar
-   returns 23. Nothing was removed; seven entries were never visible. **Re-derive this list; do not
-   read it.** It is a snapshot of two files that both move.
+   grammar itself returned 22 — `docs/backlog.md` moved under it — and the corrected grammar
+   returned 23. Nothing was removed; seven entries were never visible. **Re-derive this list; do
+   not read it.** It is a snapshot of two files that both move.
 
-   **The standing recommendation is `BL-030`**, on consequence: `apply.sh` writes the re-stamp
-   and clears the mid-pull marker on a run whose worklist is not done, so the consumer's
-   `.claude/.ai-dlc-version` asserts a version the tree did not receive — and the next pull bases
-   its merge on that stamp. `apply.sh`'s own comments name this the `v0.70.1` class in as many
-   words, and the file has a withheld-re-stamp path already built for exactly this, so the
-   question is which states reach it. Discharges `PC-S304-APPLY-SH-RESTAMPS-BEFORE-THE-WORKLIST-IS-DONE`,
-   verified live in the consumer ledger against an impossible-id control of 0. Batch 14 worked
-   inside `apply.sh` and did not touch the stamp path, so it is not warm ground — re-derive it.
+   **The standing recommendation is `BL-051`** — step 2 computes which machinery paths the
+   consumer edited and then discards the answer, discharging
+   `PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH`. Verify that id is
+   still live upstream, against an impossible-id control, before scoping it.
 
-   **The coherent alternative is `BL-051`** — step 2 computes which machinery paths the consumer
-   edited and then discards the answer, discharging `PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH`.
-   It is the same step-2 machinery batch 14's subject fed, which is an argument for it and also
-   the reason to be careful: **its receipt is one of the four the `v0.417.0` sweep found closable
-   by prose** — by a comment naming a bucket. Taking it means replacing that receipt first, the
-   way batch 14 had to.
+   **Its receipt must be replaced FIRST, and that is not optional.** It is one of the four the
+   `v0.417.0` sweep found closable by prose — by a comment naming a bucket. Batches 14 and 15 both
+   had to replace their subject's receipt before landing the fix, and batch 15's old receipt
+   scored **0 against two regressions that resolved nothing** — a trivial second disjunct on the
+   guard line, and one unused assignment. Build the correct fix AND at least two plausible
+   regressions, score every one, and only then write the entry's `verify:` line. Score a SECOND
+   SPELLING of the correct fix too: a receipt that rejects a competent author's other phrasing is
+   as broken as one that accepts a regression, and batch 15 nearly shipped exactly that.
+
+   **The coherent alternative is `BL-049`**, whose candidate
+   `PC-S318-SELF-UPDATE-SLICE-CANNOT-CARRY-THE-FIXTURE-FIX-THAT-UNBLOCKS-ITS-OWN-PUSH` is the
+   bootstrapping class batch 15 had to reason about from the outside: the broken version is the
+   one that runs the delivery. Batch 15 measured that hazard for its own release and it did not
+   bite; this entry is about the case where it does.
 
    **THE SELECTION RULE IS PROVENANCE FIRST, THEN CONSEQUENCE — NOT READINESS.** Operator
    ruling. "Readiest to close" is what pointed batch 13 at three entries with no consumer
