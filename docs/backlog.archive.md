@@ -2661,3 +2661,342 @@ ledger line 1977.
 
 
 verify: sh bash -c 'a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$a" ] || exit 3; s=$(LC_ALL=C grep -n "^say() {" "$a" | head -1 | cut -d: -f1); w=$(LC_ALL=C grep -n "say DECISION restamp-withheld" "$a" | head -1 | cut -d: -f1); f=$(LC_ALL=C grep -n "say DECISION restamp-failed" "$a" | head -1 | cut -d: -f1); [ -n "$s" ] && [ -n "$w" ] && [ -n "$f" ] && [ "$w" -gt 2 ] && [ "$f" -gt "$w" ] || exit 3; v=$(LC_ALL=C sed -n "$((s+1)),$((s+8))p" "$a" | LC_ALL=C sed -n "s/.*WORKLIST[^)]*)[[:blank:]]*\([a-z_][a-z_]*\)=\$((.*/\1/p" | head -1); [ -n "$v" ] || exit 1; LC_ALL=C grep -q "\$$v" <<<"$(sed -n "$((w-2)),$((w-1))p" "$a")" || exit 1; LC_ALL=C grep -q -- "--finish)" "$a" || exit 1; [ "$(LC_ALL=C grep -c "rm -f \"\$APPLYING\"" "$a")" = 1 ] || exit 1; c=$(LC_ALL=C grep -n "rm -f \"\$APPLYING\"" "$a" | head -1 | cut -d: -f1); [ "$c" -gt "$w" ] && [ "$c" -lt "$f" ] || exit 1; exit 0'
+## BL-104 — gate-validation Check 2 blocked on any unresolved HARD_BLOCK ever filed, with no sprint or relevance scope
+
+**LANDED (v0.428.0, verified 1e129935).** Check 2's blocking clause is scoped by the entry header's sprint, a past-sprint HARD_BLOCK is surfaced at implementation/story/retro gates and still blocks at planning and sprint-review, and an entry naming no sprint blocks everywhere.
+
+**Discharges `PC-S306-CHECK-2-HAS-NO-SPRINT-SCOPE`, filed by the reference consumer in
+sprint 306.** Check 2's rule read *"If any entry has status `HARD_BLOCK` and is not RESOLVED,
+do NOT proceed"* and named no sprint, story or path scope anywhere in its body. Measured over
+the check's whole span with a control in the same invocation: `grep -ci sprint` = **0**,
+control `grep -c HARD_BLOCK` = **4**. So any unresolved `HARD_BLOCK` ever filed in
+`docs/escalations/pending.md` blocked every gate of every later sprint, including one with no
+relationship to the blocker's subject.
+
+**The cost is measured, not hypothesised.** On the reference consumer, during a live
+production bug-fix sprint, a nine-day-old sprint-303 finding about a declined UI refactor and
+a CI alias-table gap FAILed the implementation gate. The mechanism to release it existed
+(Check 2's own `DEFERRAL_REQUEST` branch), but reaching it cost a full extra operator
+round-trip on a completely unrelated topic at the worst moment to ask for one.
+
+**The scoping predicate was already one check away.** Check 2a's body says *"legacy sprints
+are out of scope, so the gate does not wedge on old data"*, and
+`core/scripts/validate-escalation-resolution.sh:160` implements it as
+`header ~ ("[Ss]" sprint "([^0-9]|$)")`. Check 2 sat directly above it, over the same corpus,
+unscoped.
+
+**The escape hatch this creates is closed in the same change, and that is the load-bearing
+half.** A stale `HARD_BLOCK` that stops blocking is a `HARD_BLOCK` you can outrun by waiting
+one sprint. So a past-sprint entry is SURFACED at an `implementation`, `story` or `retro` gate
+and still BLOCKS at every `planning` and `sprint-review` gate — the boundary where the
+operator is already dispositioning scope. An entry whose header names no sprint blocks at
+every gate; an unknown sprint is not a past one.
+
+Tiered **DEFECT**. It cost the operator a live incident interruption, and the failure mode is
+the gate correctly enforcing a rule whose scope was never written down.
+
+**The receipt is bullet-partitioned and that is not cosmetic.** A span-level grep for `sprint`
+over Check 2's body is satisfied by any sentence anywhere in the check — scored against a
+build that adds one HTML comment to the span and changes nothing else, a span-level receipt
+returns 0. This one partitions the span into bullets and fails any bullet that issues a
+`HARD_BLOCK` do-not-proceed directive without a sprint qualifier in that same bullet. Scored
+against five builds: the shipped fix **0**, a second spelling by a different author **0**, the
+pre-fix body **1**, a straight revert **1**, and the comment-only prose attack **1**. Exits 9
+if the span extractor returns fewer than 10 lines, so a renamed heading reports a moved
+precondition rather than a false close.
+
+verify: sh g=core/skills/ai-dlc/steps/gate-validation.md; [ -f "$g" ] || exit 9; span=$(awk '/^### 2\. No unresolved/{s=1;next} /^### 2a\./{s=0} s' "$g"); [ "$(printf '%s\n' "$span" | grep -c .)" -ge 10 ] || exit 9; bad=$(printf '%s\n' "$span" | awk 'function p(){ if (b ~ /HARD_BLOCK/ && b ~ /do NOT/ && b !~ /[Ss]print/) print "UNSCOPED" } /^- /{ if (b != "") p(); b = $0; next } { b = b " " $0 } END { if (b != "") p() }'); [ -z "$bad" ]
+
+---
+
+## BL-105 — a suppression declared by its fields is discarded in silence when the status line's first token is something else
+
+**LANDED (v0.428.0, verified 5d66d9f7).** An entry carrying `**Suppresses:**` or `**Expires after:**` while classifying as anything other than `SUPPRESSED` is reported, and the verdict line carries `malformed_attempt=`.
+
+**Discharges `PC-S306-SUPPRESSED-STATUS-FIRST-TOKEN-SILENT-NO-OP`, filed by the reference
+consumer in sprint 306.** `core/scripts/validate-suppression-lifetime.sh:183` reads the
+disposition as `if (match(s,/[A-Z_]+/)) status=substr(s,RSTART,RLENGTH)` — the first
+uppercase run after `**Status:**` — and the `case` that branches on it has no else. An entry
+whose status line reads `DECIDED_AUTONOMOUSLY (root cause), with a SUPPRESSED marker on
+Check 22 below.` classifies as `DECIDED_AUTONOMOUSLY`, and its `**Suppresses:**`,
+`**Expires after:**` and `**Operator authorization:**` fields are never read. `entries_scanned`
+increments, `suppressed` does not, and the run reports PASS.
+
+**The failure is silent on both sides.** The tool's output was identical for "no suppressions
+this pass" and "one suppression attempted and silently dropped", and the entry reads as
+resolved to a human skimming the file, because the parenthetical literally contains the word
+`SUPPRESSED`.
+
+**Both directions the candidate proposed were built and measured, and both are unshippable.**
+Requiring the `**Status:**` line to be exactly one vocabulary token rejects most of the
+corpus — a suppression conventionally carries `SUPPRESSED (operator, <ts>)`. Flagging a second
+vocabulary token elsewhere on the line scores **5 of 108** status lines on the reference
+consumer's `pending.md` and **all five are false**: four are `DECIDED_AUTONOMOUSLY (…) — not a
+HARD_BLOCK` and one is `DEFERRAL_REQUEST (items 3 and 5 only; item 2 already RESOLVED BY FACT
+below)`. The negation and the intent are the same shape to that rule, so it cannot separate the
+true positive from its own false positives. **Both filed directions passing their own reading
+and failing on the corpus is the finding, not a detail of it.**
+
+**The shipped arm keys on the FIELDS.** `**Suppresses:**` and `**Expires after:**` are
+adjudicated for exactly one disposition, so an entry carrying either while classifying as
+anything other than `SUPPRESSED` has had its authorization discarded. False-positive set
+measured on the reference consumer: **0 of 123 entries**, against a control of **16** entries
+that do classify `SUPPRESSED`. The verdict line carries `malformed_attempt=` so the two states
+the tool used to conflate are now distinguishable in its own output.
+
+**Sited above the `case`, not as its else**, because `RESOLVED`/`OVERRIDDEN` match an earlier
+branch and an else-shaped arm cannot reach the same discard through them.
+
+Tiered **DEFECT**. An operator authorization is adjudicated by nothing and no party is told.
+
+Guarded by `core/fixtures/suppression-lifetime` assertions 17–21 and MUTANT F, which demotes
+the predicate to one that can never hold and must kill assertion 17 while leaving the lifetime
+arms green. The receipt is three-armed and was scored against five builds — the shipped fix
+**0**, a second spelling `[ -n "${supp}${expires}" ]` **0**, a regression that drops the field
+predicate **1**, a regression that demotes the arm into the `case` **1**, and the unfixed
+subject on `origin/main` **1**.
+
+verify: sh v=core/scripts/validate-suppression-lifetime.sh; [ -f "$v" ] || exit 9; d=$(mktemp -d); printf '## E\n**Status:** DECIDED_AUTONOMOUSLY (x), with a SUPPRESSED marker below.\n**Suppresses:** `2`\n**Expires after:** 2 gates\n**Operator authorization:** 2026-01-01T00:00:00Z | "ok"\n' > "$d/a.md"; printf '## E\n**Status:** RESOLVED (the SUPPRESSED marker below carries it)\n**Suppresses:** `2`\n**Expires after:** 2 gates\n**Operator authorization:** 2026-01-01T00:00:00Z | "ok"\n' > "$d/b.md"; printf '## E\n**Status:** DECIDED_AUTONOMOUSLY (x), not a HARD_BLOCK and not a SUPPRESSED entry.\n' > "$d/c.md"; bash "$v" --escalations "$d/a.md" >/dev/null 2>&1; r=$?; bash "$v" --escalations "$d/b.md" >/dev/null 2>&1; s=$?; bash "$v" --escalations "$d/c.md" >/dev/null 2>&1; t=$?; rm -rf "$d"; { [ "$r" = 2 ] || [ "$s" = 2 ] || [ "$t" = 2 ]; } && exit 9; [ "$r" -ne 0 ] && [ "$s" -ne 0 ] && [ "$t" -eq 0 ]
+
+---
+
+## BL-106 — the propagation-fanout corpus is tracked-only, so every artifact a remediator writes mid-sprint is invisible to it
+
+**LANDED (v0.428.0, verified 2fb3d244).** The corpus is tracked plus `--others --exclude-standard`, de-duplicated, with the untracked share printed in band. The `@SPRINT@` half is a second subject and stays open.
+
+**Discharges `PC-S306-FANOUT-UNTRACKED-FILES-INVISIBLE`, filed by the reference consumer in
+sprint 306.** `core/scripts/report-propagation-fanout.sh:253` built its mutable corpus from
+`git ls-files -z`, which lists TRACKED files only. The consumer commits planning and
+implementation artifacts at PR time, so every artifact a remediator writes or edits DURING a
+sprint is untracked at the moment this script runs, and invisible to both the corpus scan and
+`git diff -U0 <base>`.
+
+**The caller is the gate remediation loop, which runs mid-sprint by construction, so this was
+not an edge case — it was the tool's only operating condition.** Reproduced: a run over a tree
+that held two new files at exactly the right sprint-scoped path printed `SCOPING FAILURE:
+sprint 306 was declared, but not one corpus file came from its artifact directory` and exited
+3. The wrong-tree exit, fired on the right tree, and a scoping failure reads identically for
+"wrong tree" and "right tree, nothing staged yet".
+
+**The header's original justification was a real measurement and it was the wrong KIND of
+measurement.** It read *"Untracked scratch under `docs/` is not an artifact anyone cites, and
+including it made the corpus 47% larger without moving the worklist"* — a COST argument, taken
+over one consumer's untracked set at one instant, which is the population that varies most. It
+is superseded by a measurement of the CORRECTNESS cost, and the superseding is recorded beside
+it rather than replacing it silently.
+
+**`--exclude-standard` is load-bearing and the figure is measured, not asserted.** On the
+reference consumer `git ls-files --others` alone lists **84371** paths, **12640** of them under
+the two corpus roots (build output, caches, `node_modules`); with `--exclude-standard` that same
+tree contributes **0**, against a control of **10666** tracked files. The admitted share is now
+printed in band on every run, because a one-instant measurement of another consumer's untracked
+set cannot be carried across consumers.
+
+**`git ls-files` can emit one path twice** (an unmerged path lists once per stage), so the
+corpus is de-duplicated in document order. A duplicate would double-count a citation into the
+worklist.
+
+Tiered **DEFECT**. The script is advisory and non-gating by its own docstring, so it blocked
+nothing — but it could not fulfil its stated purpose for any consumer that does not commit
+mid-sprint artifacts, and it failed silently, through an exit code that names the wrong cause.
+
+**The `@SPRINT@` half of the candidate is a SECOND SUBJECT and it is not closed here.** Upstream
+also reports that the consumer's `_bmad-output/implementation-artifacts/` is flat, so the
+script's `_bmad-output/implementation-artifacts/@SPRINT@` root can never match anything in that
+layout regardless of tracked state, and it asks the consumer be consulted on whether that
+directory is meant to be flat or per-sprint before the root shape is assumed. That is a question
+for the consumer, not a distribution-side measurement, so it stays open and this entry does not
+claim it.
+
+Guarded by `core/fixtures/fanout-untracked-corpus`, which drives the shipping script through a
+`git` shim and carries mutants for both halves of the change.
+
+**The receipt sets `AI_DLC_PROJECT_ROOT`, and without it the receipt measures the WRONG TREE.**
+`report-propagation-fanout.sh:213` does `cd "$AI_DLC_ROOT"`, resolved by walking up from the
+script's own directory — so a probe repo built under `mktemp` and entered with `cd` is silently
+ignored and the run reports on the distribution. The first cut of this receipt did exactly that
+and its worklist cited `docs/backlog.archive.md`. Three arms, scored against five builds: the
+shipped fix **0**, a second spelling using `git status --porcelain` **0**, the unfixed subject
+**1**, a regression dropping `--exclude-standard` **1**, and a regression that collects the
+untracked half and never unions it into the corpus **1**.
+
+verify: sh s=core/scripts/report-propagation-fanout.sh; [ -f "$s" ] || exit 9; s="$(cd "$(dirname "$s")" && pwd)/$(basename "$s")"; d=$(mktemp -d) || exit 9; ( cd "$d" && git init -q . && git config user.email t@t && git config user.name t && mkdir -p docs _bmad-output/planning-artifacts/s901 && printf 'seed\n' > docs/a.md && git add docs/a.md && git commit -qm base && printf 'x `docs/a.md:1` y\n' > docs/b.md && git add docs/b.md && git commit -qm second ) >/dev/null 2>&1 || { rm -rf "$d"; exit 9; }; r() { ( cd "$d" && AI_DLC_PROJECT_ROOT="$d" bash "$s" HEAD~1 --sprint s901 ) 2>/dev/null; }; printf 'cites `docs/a.md:1`\n' > "$d/_bmad-output/planning-artifacts/s901/note.md"; r >/dev/null; ok=$?; n1=$(r | sed -n 's/^  mutable corpus: \([0-9]*\) files.*/\1/p'); mkdir -p "$d/docs/ignored"; printf 'docs/ignored/\n' > "$d/.gitignore"; printf 'cites `docs/a.md:1`\n' > "$d/docs/ignored/j.md"; n2=$(r | sed -n 's/^  mutable corpus: \([0-9]*\) files.*/\1/p'); rm -rf "$d/docs/ignored" "$d/.gitignore" "$d/_bmad-output/planning-artifacts/s901/note.md"; r >/dev/null; ctl=$?; rm -rf "$d"; [ "$ok" = 2 ] && exit 9; [ -n "$n1" ] && [ -n "$n2" ] || exit 9; [ "$ok" -ne 3 ] && [ "$ctl" -eq 3 ] && [ "$n1" -eq "$n2" ]
+
+---
+
+## BL-107 — `--series` accepts only the remediator's repair-record name, so a lead-authored resolution reads as MISSING
+
+**LANDED (v0.428.0, verified af3515ed).** `gate-<type>-resolution-p<M>.md` is accepted alongside the repair name, the `gate-` anchor is kept, and the structure requirement is unchanged.
+
+**Discharges `PC-S306-SERIES-VALIDATOR-NO-LEAD-RESOLUTION-PATH`, filed by the reference
+consumer in sprint 306.** `core/scripts/validate-gate-adjudication.sh:688` globbed
+`gate-*-repair-p<M>.md` and nothing else when deciding whether a pass-to-pass FAIL shrink was
+backed by a record. That is the REMEDIATOR artifact-repair convention:
+`core/hooks/ai-dlc-gate-remediation-guard.sh` requires a real remediator `agent_id` and a bound
+edit to produce one.
+
+**A FAIL can close without a remediator, and the same guard says so.** It leaves
+`docs/escalations/**` and `*-resolution-p*.md` LEAD-editable. Reproduced sprint 306: pass 1
+FAILed Check 2 on a stale sprint-303 `HARD_BLOCK`; the lead closed it with a two-line status
+edit to `docs/escalations/pending.md`, no gate-log or protected-artifact edit, so no remediator
+dispatch was warranted or possible, and pass 2 independently confirmed the resolution. The
+lead's only exits were to file a record asserting a dispatch that never happened, or to take a
+`MISSING REPAIR RECORD` finding for work correctly done.
+
+`gate-<type>-resolution-p<M>.md` is now accepted alongside the repair name.
+
+**The `gate-` anchor is what makes the widening safe, and dropping it repeats a measured
+mistake one suffix over.** `<artifact>-resolution-p<M>.md` is the ADVERSARIAL resolution record
+and sits in the same sprint directory with the same pass numbers. Measured on the reference
+consumer at depth 2 under `planning-artifacts`: `gate-*-repair-p<M>` **15** files,
+`*-repair-p<M>` **113**, `*-resolution-p<M>` **17** — of which **16** are adversarial and
+exactly **one** is a gate record. The unanchored form pulls in sixteen foreign records; `gate-*`
+pulls in the one meant.
+
+**The accepted NAME widened; the STANDARD did not.** A record still has to carry
+`disposition:`, `edit:` and `derivation:` read literally, so `MISSING REPAIR RECORD` keeps its
+subject: a FAIL repaired with no record on disk still fires. **And the consumer's own
+`gate-implementation-resolution-p1.md` states its disposition, edit site and derivation in
+PROSE and labels none of them, so it scores UNSTRUCTURED under this arm** — that is a finding
+about the consumer's record, not a reason to relax the standard, and the fixture's `(h)` case
+says it out loud.
+
+Tiered **DEFECT**. A false `MISSING REPAIR RECORD` on a genuinely-resolved FAIL trains a lead
+to fabricate remediator dispatches, which is pure overhead with no correctness benefit and
+poisons the corpus the arm reads.
+
+Guarded by `core/fixtures/gate-repair-record` cases (f), (g) and (h), and by
+`core/fixtures/gate-repair-record-mutants`, which scores five mutants — removing the resolution
+suffix, its anchor, its structure check, or the subject itself each kills the one case that
+owns that property. **Case (g) is seeded STRUCTURED on purpose**, which is harder than the real
+corpus where none of the 16 adversarial records are: a seed that leaned on their being
+unstructured would leave the anchor untested, because the arm would still say UNSTRUCTURED and
+the mutant would come back green.
+
+**The receipt drives the shipping validator against the fixture's own seeded corpus, four arms.**
+Scored against five builds: the shipped fix **0**, a second spelling using two concatenated
+globs **0**, the unfixed subject **1**, a regression dropping the `gate-` anchor **1**, and a
+regression dropping the structure requirement **1**. Exits 9 if the seed does not produce the
+four case directories, so a reshaped fixture reports a moved precondition rather than a false
+close.
+
+verify: sh V=core/scripts/validate-gate-adjudication.sh; S=core/fixtures/gate-repair-record/seed.sh; [ -f "$V" ] && [ -f "$S" ] || exit 9; R=$(bash "$S") || exit 9; [ -n "$R" ] && [ -d "$R" ] || exit 9; g() { bash "$V" --series "$R/$1/_bmad-output/gate-adjudication" >/dev/null 2>&1; }; for k in gate-repaired-lead-resolution gate-repaired-adversarial-resolution-only gate-repaired-inline-no-record gate-repaired-resolution-off-label; do [ -d "$R/$k/_bmad-output/gate-adjudication" ] || { rm -rf "$R"; exit 9; }; done; g gate-repaired-lead-resolution; a=$?; g gate-repaired-adversarial-resolution-only; b=$?; g gate-repaired-inline-no-record; c=$?; g gate-repaired-resolution-off-label; d=$?; rm -rf "$R"; [ "$a" = 2 ] && exit 9; [ "$a" -eq 0 ] && [ "$b" -ne 0 ] && [ "$c" -ne 0 ] && [ "$d" -ne 0 ]
+
+---
+
+## BL-108 — an entering gate is treated as one monolithic blocker on the next step, so a FAIL on a check the next step never reads serialises the whole dispatch
+
+**LANDED (v0.428.0, verified a00076c3).** Section 6 carries a numbered action list conditioning the routing on the next step's read-set, and Section 7's completion condition names the entering gate.
+
+**Discharges `PC-S306-GATE-REMEDIATION-BLOCKS-INDEPENDENT-DEV-DISPATCH`, filed by the reference
+consumer in sprint 306.** Rule 4 — *"do not jump to the next step file until the current step's
+execution sequence is complete and its gate validation has passed"* — plus
+`core/skills/ai-dlc/steps/bug-investigation.md:134`'s literal sequencing read as a strict gate:
+`implementation.md` Section 2 does not begin until every escalated check on the entering
+`implementation` gate has PASSed.
+
+**The checks are heterogeneous and nothing said so.** Some gate bookkeeping the next step does
+not consume; others gate content it needs. Reproduced sprint 306: Check 22 (Teammate-spawn role
+binding, which reads `_bmad-output/spawn-ledger.jsonl` and role contracts, not the story or its
+acceptance criteria) FAILed on a pre-ledger defect and took three adjudication passes across two
+sprints to close. The lead ran the whole repair-and-reverify cycle serially before dispatching
+the story's dev, and the two only ran in parallel because the operator asked an ETA question that
+prompted the lead to notice.
+
+**The fix is prose in the two step files, and the schema extension upstream suggested was
+rejected on measurement.** That direction adds a per-check `blocks_next_step` field to
+`core/skills/ai-dlc/enforcement-map.yaml`. That file carries **57** per-check entries, so it is
+57 hand-assigned judgments about what the next step reads, and a check added later without one
+is a silent hole. It is also the file `scripts/validate-enforcement-map.sh` validates, which the
+fixture suite's POLE invokes — measured at **20.3s** on this tree before any change, and
+`CLAUDE.md` records one arm added there as a nested loop taking that validator 13.0s → 18.1s and
+the whole suite to ten minutes. **The decisive reason is neither of those.** The value is a
+judgment about the NEXT STEP's read-set, which the lead has in front of it at the moment of the
+FAIL; a declared value goes stale the first time a check's remediation changes what it writes,
+and a stale one authorises skipping a gate that check does gate. A wrong `blocks_next_step: []`
+is worse than no field.
+
+**The escape hatch is closed in the same change, and that is the load-bearing half.**
+`implementation.md` Section 7's completion condition now names the ENTERING gate: no story lands
+and the sprint does not complete until that gate PASSes, including any check whose repair was
+dispatched in parallel with the routing. Without that, "route now, repair in parallel" is a way
+to finish a sprint over a FAIL.
+
+Tiered **DEFECT**. It costs real wall clock on every FAIL that lands on a check the next step
+does not read, and nothing in the step files distinguished the two classes.
+
+**The receipt partitions Section 6 by NUMBERED ACTION rather than scanning its span**, because
+the bold sentence introducing the rule contains the same words as the condition and survives a
+regression that guts the numbered item beneath it — scored, that build returns 0 under a
+span-level receipt. Two arms, scored against five builds: the shipped fix **0**, a second
+spelling that rewords both the introduction and the numbered item **0**, the unfixed pair **1**,
+a regression shipping the parallel dispatch while reverting Section 7's land bar **1**, and a
+regression making the routing unconditional **1**. Exits 9 if either span comes back shorter
+than its minimum, so a renamed heading reports a moved precondition rather than a false close.
+
+verify: sh B=core/skills/ai-dlc/steps/bug-investigation.md; I=core/skills/ai-dlc/steps/implementation.md; [ -f "$B" ] && [ -f "$I" ] || exit 9; s6=$(awk '/^### 6\. Gate Validation/{s=1;next} /^### 7\./{s=0} s' "$B"); s7=$(awk '/^### 7\. All Gates Passed/{s=1} s' "$I"); [ "$(printf '%s\n' "$s6" | grep -c .)" -ge 3 ] || exit 9; [ "$(printf '%s\n' "$s7" | grep -c .)" -ge 2 ] || exit 9; printf '%s\n' "$s6" | awk 'function p(){ if (b ~ /^[0-9]+\./ && b ~ /[Rr]oute/ && b ~ /the next step (does not consume|reads|needs)/) f=1 } /^[0-9]+\. /{ p(); b=$0; next } { b=b" "$0 } END{ p(); exit f?0:1 }' || exit 1; grep -qiE 'entering gate' <<<"$s7"
+
+---
+
+## BL-109 — the stub-audit marker set treats `Phase [0-9]` as an unfinished-work token, so ordinary prose fails Check 16
+
+**LANDED (v0.428.0, verified ab311230).** `Phase [0-9]` requires a statement of absence on the same line; the other four markers require nothing, and the alternative is narrowed rather than deleted.
+
+**Discharges `PC-S306-STUB-AUDIT-PHASE-N-MATCHES-WORD-BOUNDED-PROSE`, filed by the reference
+consumer in sprint 306 while this batch was being written.** `core/scripts/validate-stub-audit.sh`'s
+marker set was `(stub|TODO|FIXME|wired later|Phase [0-9]|NotImplementedError)`. Four of those five
+are unfinished-work tokens; the fifth is an ordinary English noun phrase that any codebase with
+numbered delivery phases writes in ordinary prose.
+
+**It is DISTINCT from `PC-S303-STUB-AUDIT-MARKER-REGEX-MATCHES-LOCAL-VAR-NAMED-STUB`, and the
+adjacent fix does not close it.** That entry proposes word-boundary anchoring on `stub`.
+`Phase 4` in `"""Alert Evaluator — Harmonization Phase 4 (Stories 103-1 and 103-2)."""` is
+already word-bounded on both sides, so a `\b` fix leaves this false positive exactly as it was.
+
+Reproduced sprint 306: that module docstring predated story 306-1 and had never been audited;
+Check 16 FAILed on it and clearing the gate took a dedicated commit rewording
+`"Harmonization Phase 4"` to `"Harmonization work"` — **a factual historical phase reference
+deleted to satisfy a detector.** The consumer's own commit `35cf53978` is that workaround, in
+its history. A consumer-owned file has no exemption; the only one is upstream ownership.
+
+**`Phase [0-9]` is kept and NARROWED, not deleted, and that choice is measured.** It is a stub
+marker only inside a statement of ABSENCE, so it now requires an absence phrase on the same
+line while the other four markers require nothing. Deleting it outright was built and rejected:
+a real deferral written only as a phase reference stops being seen by anything, and a detector
+that cannot fire reads exactly like one with nothing to find.
+
+**The narrowing, measured over both trees with a control in the same invocation.** Over tracked
+hot-path files (`.py .ts .tsx .js .sh .sql`) — **377** here and **1754** on the reference
+consumer — the lines where `Phase [0-9]` is the SOLE matcher number **19** here and **129**
+there; requiring the absence phrase takes those to **1** and **8**. Control: an impossible token
+returns 0 on both. **That is a line-level count over whole files and is a FLOOR relative to what
+the script sees**, which decomments each line and applies the upstream-ownership exemption
+first; the fixture enumerates the survivors rather than describing them.
+
+**`exposed` was in the absence vocabulary and was removed**, because it was the one term that
+kept a prose line firing — *"... does NOT belong here and is not exposed to the same fault"*,
+the sentence the check's own body records as having failed a consumer gate four times. Nothing
+is lost: a genuine "not yet exposed" is carried by `[Nn]ot yet`.
+
+**The absence vocabulary is a FLOOR, not a closed set.** A deferral phrased outside it is a
+false NEGATIVE against a check whose other four markers still run. A false POSITIVE has no
+escape hatch for a consumer-owned file and its only remediation is rewording true prose.
+
+**Nothing is being reversed.** The marker set came in wholesale from the reference consumer's
+own hand-written check and carried no measurement; nothing recorded chose the bare alternative
+over the narrowed one.
+
+Tiered **DEFECT**. Its remediation is to delete true information from a consumer's source.
+
+Guarded by `core/fixtures/check-15-bypass` arms V13, V14 and V16 and three mutants — the bare
+alternative restored (killed by V13), the alternative deleted outright (killed by V14), and a
+marker OUTSIDE the phase rule dropped (killed by V15, which no other arm here notices).
+
+**The receipt drives the shipping script over three seeded files rather than grepping its
+regex**, so it survives any spelling of the fix. Three arms, scored against five builds: the
+shipped fix **0**, a second spelling reordering the absence vocabulary and adding a synonym
+**0**, the unfixed subject **1**, a regression restoring the bare alternative **1**, and a
+regression deleting the alternative outright **1**. Exits 9 on any exit-2 refusal, so a missing
+resolver reports a moved precondition rather than a false close.
+
+verify: sh v=core/scripts/validate-stub-audit.sh; [ -f "$v" ] || exit 9; v="$(cd "$(dirname "$v")" && pwd)/$(basename "$v")"; d=$(mktemp -d) || exit 9; mkdir -p "$d/src"; printf '"""Alert Evaluator — Harmonization Phase 4 (Stories 103-1 and 103-2)."""\n\ndef f():\n    return 1\n' > "$d/src/prose.py"; printf 'def g():\n    # Deferred to Phase 2: the pool scoping lands with the evaluator.\n    return None\n' > "$d/src/deferral.py"; printf 'def h():\n    raise NotImplementedError()\n' > "$d/src/bare.py"; r() { ( cd "$d" && AI_DLC_PROJECT_ROOT="$d" bash "$v" --root "$d" "src/$1" ) >/dev/null 2>&1; }; r prose.py; a=$?; r deferral.py; b=$?; r bare.py; c=$?; rm -rf "$d"; { [ "$a" = 2 ] || [ "$b" = 2 ] || [ "$c" = 2 ]; } && exit 9; [ "$a" -eq 0 ] && [ "$b" -eq 1 ] && [ "$c" -eq 1 ]
