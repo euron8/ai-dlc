@@ -37,9 +37,15 @@ grep -cE '^## BL-[0-9]+' docs/backlog.archive.md  # archived
 bash scripts/backlog-reverify.sh | grep -oE 'CLOSE-CANDIDATE|STILL-LIVE|HAND-REVIEW|NEEDS-REVIEW' | sort | uniq -c
 ```
 
-At the last session's close those read **65 live / 28 archived / 57 STILL-LIVE + 8 HAND-REVIEW
+At the last session's close those read **68 live / 29 archived / 60 STILL-LIVE + 8 HAND-REVIEW
 + 0 CLOSE-CANDIDATE**, against an impossible-id control of 0. Every one of those was RE-DERIVED
-by running the four commands above after batch 11 merged, not by editing the sentence.
+by running the four commands above after batch 12 merged, not by editing the sentence.
+
+**THE LIVE COUNT WENT UP ACROSS A BATCH THAT CLOSED AN ENTRY, AND THAT IS THE NORMAL CASE RATHER
+THAN AN ERROR.** Batch 12 closed and rotated one (`BL-094`) and filed three (`BL-095`, `BL-096`,
+`BL-097`), all three found by asking whether the entry being closed was WIDER than filed. Do not
+read a rising live count as a batch that failed; read the ARCHIVE count, which only ever moves on
+a real close.
 
 **THE LEDGER NOW REPORTS ZERO `CLOSE-CANDIDATE`, AND THAT IS A RESULT RATHER THAN AN ABSENCE.**
 The one it used to carry was `BL-006`, and it was FALSE — the receipt exited 0 on two COMMENT
@@ -51,8 +57,8 @@ directly, read the raw exit code, and ask what ELSE satisfies it before closing 
 **A `STILL-LIVE` ROW IS NOT EVIDENCE THAT THE ENTRY IS LIVE, AND `BL-089` IS THE ENTRY THAT SAYS
 SO.** `backlog-reverify.sh` maps every non-zero `sh` exit to `STILL-LIVE  … "still reproduces
 here"`, but this corpus's receipts use **exit 9** to mean *"a precondition moved and I measured
-nothing"*. The two are one row. Measured at batch 11's close: **54 exit 1, 1 exit 9, 0 exit 0**
-across 55 `sh` receipts — the 9 is `BL-066`, whose receipt is broken shell. Batch 9 rebuilt the other one; `BL-076`'s had been unable to measure
+nothing"*. The two are one row. Measured at batch 12's close: **57 exit 1, 1 exit 9, 0 exit 0**
+across 58 `sh` receipts — the 9 is `BL-066`, whose receipt is broken shell. Batch 9 rebuilt the other one; `BL-076`'s had been unable to measure
 anything for 28 releases and read as `STILL-LIVE` the whole time.
 Derive the current pair rather than trusting that one; the count of live `sh` receipts moves
 with every batch and the control is the entries declaring `verify: manual`, which the engine
@@ -93,11 +99,60 @@ the row above told you nothing.
 ### What is DONE — do not redo any of it
 
 **Phases 0–2, 4 and 5 are COMPLETE.** Phase 3 is the batch loop and it is the only remaining
-work. Batches 1–11 have all MERGED AND PUSHED; the releases are `v0.374.0`, `v0.375.0`,
+work. Batches 1–12 have all MERGED AND PUSHED; the releases are `v0.374.0`, `v0.375.0`,
 `v0.376.0`, `v0.377.0`, `v0.378.0`, `v0.379.0`, `v0.380.0`, `v0.415.0`, `v0.416.0`,
-`v0.418.0` and `v0.419.0`, each recorded in `CHANGELOG.md`. `v0.381.0` and `v0.382.0` followed batch 7 as machinery releases;
+`v0.418.0`, `v0.419.0` and `v0.421.0`, each recorded in `CHANGELOG.md`. `v0.381.0` and `v0.382.0` followed batch 7 as machinery releases;
 many further machinery releases have shipped between `v0.383.0` and `v0.414.0` that are NOT part
 of this program, which is why the batch numbering and the version numbering stopped agreeing.
+
+**BATCH 12 IS COMPLETE, MERGED AND PUSHED AS `v0.421.0`.** `BL-094` CLOSED and rotated;
+`BL-095`, `BL-096` and `BL-097` FILED. Four commits, fast-forwarded to `main` as
+`b8714e0d..f121b1dc`. Live **65 → 68** (one closed, three filed), archive **28 → 29**, `--check`
+PASSing before `--apply`, `BL-094` in the archive and not in the live file, control `BL-006` still
+live. Gate exit **0** read from a sentinel CLEARED before the run and its mtime checked, 17 of 17
+phases, **0 FAIL lines**, 167 units with `AI_DLC_FIXTURE_NO_SKIP=1`, the changed fixture read BY
+NAME (2 hits) against a positive control of 1 and an impossible-name control of 0 in the same
+invocation.
+
+**THE ADVERSARIAL PASS RAN BEFORE THE MERGE THIS TIME, AND IT PAID FOR ITSELF ON THE FIRST
+FINDING.** A guard firing only on an ADJACENT repeat passed the clean tree, the entry's own
+replacement receipt, and all 21 fixture mutants — then rendered a genuine duplicate at exit 0.
+**Three independent-looking verification channels shared ONE input shape**: every duplicate seed
+in all of them placed the repeat beside the first declaration, and the receipt could only ever do
+so, because `awk NR==n{print} {print}` duplicates a line in place. The gap was in the SEED, not
+the mechanism, so the repair was one seed per channel and no new guard. **Ask of a verification
+suite not whether it has enough arms, but whether its inputs are all the same shape.**
+
+**THE RECEIPT CLOSED ON ONE MEMBER OF A FIVE-MEMBER SET THE ENTRY ITSELF ENUMERATES.** A partition
+covering `vocabulary-readers:` alone returned exit 0 while the other four fields stayed silent.
+The standing rule is "ask what ELSE satisfies the receipt"; the new form is that **the SET was
+under-sampled rather than the mechanism** — the receipt exercised a real behaviour, correctly, on
+one member.
+
+**ASKING WHETHER THE ENTRY WAS WIDER THAN FILED PRODUCED THREE OF THE FOUR FILINGS.** It is worth
+making that the default question: `BL-095` (a rule file may declare `paths:` twice and the arm
+named "declares its scope exactly once" is about something else), `BL-096` (the sibling renderer
+refuses a duplicate SOLO declaration and accepts a duplicate GROUP one), `BL-097` (**the renderer
+declares TWO populations and this release hardened one** — its schema walker still last-wins a
+duplicate JSON key, under a header calling that half "total by construction").
+
+**A WIDENING BEYOND THE ENTRY'S FILED TEXT WAS TAKEN DELIBERATELY AND RECORDED AS ONE.** A field
+declared ABOVE its block's `# vocabulary:` line survived the shipped partition — `flush()` clears
+the seen-flags at the name line, so the stray and the real declaration are not a repeat. Eight of
+eight name lines, silent. Fixed here because it is the same function and the last silent-discard
+path in that reader; an orphan is not a repeat, and the CHANGELOG says so.
+
+**TWO MEASUREMENTS OF MINE WERE WRONG AND BOTH WERE CAUGHT BY A CONTROL.** A duplicate-`paths:`
+test run under `git archive` had no `.git`, so an unrelated arm failed on BOTH sides and read as a
+refusal — the real answer needed a `file://` clone. And a claim that 17 "loose-but-not-strict"
+arm-header lines could merge two marker blocks was simply wrong: a line not matching `I[0-9]` was
+never a flush point. **There is no "ought to flush" independent of the reader's own regex.**
+
+**A HOOK FORBIDS SUBAGENTS FROM WRITING REPORT FILES, AND A BRIEF THAT DEMANDS ONE WASTES THE
+HAND.** Every hand was told its report file was the deliverable; the hook refuses the write with
+`Subagents should return findings as text, not write report files`. Two hands worked around it by
+returning text, one delivered a file, one delivered only a diff. **Ask for findings AS TEXT in
+the final message, and treat the tree as the deliverable for anything that is code.**
 
 **A FOLLOW-UP SHIPPED AS `v0.420.0` (`32ad4896`), AND THE ADVERSARIAL PASS THAT FOUND IT RAN
 AFTER THE MERGE.** Arm D's population is a bare `dir/*` glob, and BSD awk ABORTS on a path it
@@ -268,13 +323,25 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **BATCH 12. Batch 11 is done — see the block above — and the 65 survivors are the corpus.
+1. **BATCH 13. Batch 12 is done — see the block above — and the 68 survivors are the corpus.
    Pick the subject and say why.**
 
-   **There is no standing recommendation, and that is deliberate.** `BL-090` was the last
-   entry filed with a named, subtractive fix already argued out. Re-derive before choosing:
+   **There is no standing recommendation, and that is deliberate.** Re-derive before choosing:
    run each candidate's receipt directly and read the RAW exit code, then re-derive the
    entry's population rather than believing it.
+
+   **`BL-096` and `BL-097` are the readiest subjects and they are ONE subsystem together** —
+   both are "a repeated declaration is resolved silently", in the two index renderers, and
+   batch 12 filed each with a candidate fix already built and measured against an empty
+   false-positive set (`solo[id] > 1 || gcollide[id]` for one, an `object_pairs_hook` that
+   raises for the other). That is the `BL-090` shape: a named, subtractive fix already argued
+   out. Taking both means saying in the release that the subject is the renderer pair, not
+   two unrelated files.
+
+   `BL-095` is the same class but a DIFFERENT subsystem (the rule-file validator) and a
+   different defect — the validator UNIONS both `paths:` blocks while a YAML loader keeps one,
+   so nothing is discarded and the two readers disagree instead. Do not fold it in with the
+   two above on the grounds that it "sounds the same".
 
    `BL-006` is NARROWED and still live, and it is the coherent alternative — but read its
    receipt first: it is a CONJUNCTION over two corpora in two trees, and the consumer half is
