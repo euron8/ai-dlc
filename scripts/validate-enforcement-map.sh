@@ -207,7 +207,14 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 # regression that matters -- one invariant added as a nested loop moved this script 39% and
 # the whole suite by minutes. Fork count is deterministic and load-independent: load does not
 # change how many times a script calls execve.
-FORK_BUDGET=7060
+# 7060 -> 7076 at v0.418.0, and the raise is a CORPUS raise rather than a code one. No arm here
+# gained a loop; `core/fixtures/backlog-size-ceiling/` was added, and this script's per-fixture
+# passes cost forks per DIRECTORY. Isolated by differential on one tree: 7050 with that directory
+# present, 7044 with it removed -- 6 forks, which is what one fixture costs. The fixture is not
+# optional (the ceiling arm it guards is new, and an arm with no fixture is the only evidence
+# anyone has that it works), so the cost is real and intended. Headroom is 6 over the measured
+# 7070, the same margin 7060 carried over v0.416.0's 7054.
+FORK_BUDGET=7076
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

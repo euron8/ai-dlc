@@ -124,6 +124,8 @@ verify: has VERSION "."
 
 <br>**LANDED (v0.372.0, verified 0cadda4).** Done.
 
+verify: has VERSION "."
+
 The fix rewrote the example, which read:
 
 ```markdown
@@ -148,6 +150,8 @@ mkcase "$B" <<'EOM'
 
 <br>**LANDED (v0.372.0, verified 0cadda4).** Done.
 
+verify: has VERSION "."
+
 ```markdown
 - **BL-902 — FENCED-OFFENDER-BULLET**
 ```
@@ -164,6 +168,8 @@ mkcase "$C" <<'EOM'
 ## BL-402 — closed
 
 <br>**LANDED (v0.372.0, verified 0cadda4).** Done.
+
+verify: has VERSION "."
 
 ~~~markdown
 ## BL-901 — FENCED-OFFENDER-TILDE
@@ -185,6 +191,8 @@ mkcase "$D" <<'EOM'
 ```markdown
 ## BL-901 — FENCED-OFFENDER-PHANTOM
 **LANDED (v0.372.0, verified 0cadda4).** Done.
+
+verify: has VERSION "."
 ```
 
 tail of BL-401.
@@ -201,6 +209,8 @@ mkcase "$E" <<'EOM'
 
 <br>**LANDED (v0.372.0, verified 0cadda4).** Done.
 
+verify: has VERSION "."
+
 ```markdown
 this fence never closes
 EOM
@@ -215,6 +225,8 @@ printf '%s\n' \
   '## BL-402 — closed, and its fence holds only near-misses' \
   '' \
   '<br>**LANDED (v0.372.0, verified 0cadda4).** Done.' \
+  '' \
+  'verify: has VERSION "."' \
   '' \
   '```markdown' \
   '#BL-9 — one hash, no space' \
@@ -242,6 +254,8 @@ mkcase "$N" <<'EOM'
 
 <br>**LANDED (v0.372.0, verified 0cadda4).** Done.
 
+verify: has VERSION "."
+
 ````markdown
 ```sh
 echo "an inner fence, displayed"
@@ -267,6 +281,8 @@ verify: lacks VERSION "."
 ## BL-402 — closed, balanced fence, nothing entry-shaped inside
 
 <br>**LANDED (v0.372.0, verified 0cadda4).** Done.
+
+verify: has VERSION "."
 
 ```sh
 grep -n 'nothing entry-shaped here' "$f"
@@ -467,6 +483,33 @@ mkroot() { # mkroot <name> -> echoes the root path
 # `mutate` is called inside `$( )`, so every assignment it makes is lost to a subshell: the
 # counter read 0 while five mutants had in fact been built and killed. Caught by this section's
 # own accounting arm, which is the only reason it was not shipped as `0 of 5 built`.
+# MUTATE WHICHEVER FILE ACTUALLY OWNS THE LINE, AND FAIL LOUDLY IF NEITHER DOES.
+# The entry-boundary and label rules moved OUT of the rotator and into reconcile/lib.sh while
+# this fixture was being repaired. A sed aimed at the rotator then matched nothing, `mutate`
+# correctly refused to score a kill, and m3 stopped being BUILT at all -- the accounting arm
+# reported "5 of 6 built" and that is the only reason it was not read as a fixture that simply
+# had fewer mutants. This variant tries the rotator, falls back to the library, and treats
+# "neither" as a finding, so a third relocation turns this file red instead of quietly
+# shrinking the battery.
+mutate_either() { # mutate_either <name> <sed-args...> -> echoes the rotator path in a mutated root
+  local n="$1"; shift
+  local r m l; r="$(mkroot "$n")" || return 1
+  m="$r/scripts/backlog-rotate.sh"; l="$r/core/skills/ai-dlc-update/reconcile/lib.sh"
+  LC_ALL=C sed "$@" "$RT" > "$m" || return 1
+  if ! cmp -s "$m" "$RT"; then
+    : > "$r/.mutant-built"; printf '%s' "$m"; return 0
+  fi
+  LC_ALL=C sed "$@" "$LIB" > "$l.new" || return 1
+  if cmp -s "$l.new" "$LIB"; then
+    rm -f "$l.new"
+    bad "$n" "the sed matched nothing in EITHER the rotator or reconcile/lib.sh — the line it targets has moved again, so this mutant would test nothing"
+    return 1
+  fi
+  mv "$l.new" "$l"
+  : > "$r/.mutant-built"
+  printf '%s' "$m"
+}
+
 mutate() { # mutate <name> <sed-args...> -> echoes the mutated script path, empty on failure
   local n="$1"; shift
   local r m; r="$(mkroot "$n")" || return 1
@@ -483,6 +526,78 @@ killed() { KILLS=$((KILLS + 1)); ok "$1" "$2"; }
 
 # CONTROL, UNMUTATED, FIRST. A sandbox root that cannot source lib.sh emits an error and exits 2,
 # and "exit 2 with a complaint" is indistinguishable from a guard firing. If this arm fails,
+
+# ---------------------------------------------------------------------------------------
+# WHICH ARM REFUSED. `REFUSING` IS NO LONGER A DISCRIMINATOR AND KEYING ON IT SCORES A
+# MUTANT AS SURVIVED WHEN IT WAS KILLED BY THE WRONG ARM.
+#
+# The rotator now refuses for THREE independent reasons and every message carries the word
+# `REFUSING`. Measured while this section was rewritten: with the fence guard mutated off, a
+# bullet-shaped entry is no longer recognised, so the moved partition holds a fragment the
+# receipt engine cannot produce a verdict for -- and the ENGINE arm refuses at exit 2. The
+# old predicate, `[ "$LAST_RC" -eq 0 ] && ! has "REFUSING" "$LAST_OUT"`, then reads FALSE and
+# reports the mutant as surviving. Both m3-heading-only and m5-drop-a-line failed exactly
+# this way, and both were killed by the same sentence:
+#   "the receipt engine did not return a verdict for every entry being moved"
+#
+# THERE IS NO ORDERING OF THE GUARDS THAT AVOIDS THIS. The evidence arms exist precisely to
+# refuse inputs the fence arm lets through, so any mutant that blinds the fence arm hands its
+# input to them. The exit code cannot say which arm spoke and neither can the shared word.
+#
+# So each mutant keys on the sentence ITS OWN arm emits. The three are disjoint:
+FENCE_SAYS="the entry-boundary rule cannot parse it safely"
+CONSERVE_SAYS="the partition does not conserve the file"
+ENGINE_SAYS="the receipt engine did not return a verdict for every entry being moved"
+EVIDENCE_SAYS="an entry is annotated LANDED but its evidence does not hold"
+
+# AND THE DISCRIMINATOR IS ITSELF CHECKED, BEFORE ANY MUTANT RUNS. A sentence that stopped
+# appearing in the subject makes `! has` vacuously true and every kill below unearned -- the
+# same failure one level down from the one this section exists to fix. A sentence that is a
+# substring of another stops discriminating the moment both arms can fire.
+#
+# THE EVIDENCE ARMS ARE REQUIRED ONLY IF THE SUBJECT HAS THEM, AND THAT IS NOT A SOFTENING.
+# This fixture is versioned beside a rotator that gains arms over time, and a subject that
+# predates the evidence guard emits neither of its two sentences. Demanding them
+# unconditionally made this file RED against the pre-guard rotator -- measured -- which would
+# have wedged any push that landed the fixture and the guard in separate commits. The
+# distinction is drawn on a LOCATION, the `--closed-receipts` call the guard is built on, and
+# the mode is PRINTED: "the subject has no evidence guard" and "the evidence guard is silent"
+# are otherwise the same absence. The two arms every version has are still unconditional.
+if grep -qF -- '--closed-receipts' "$RT"; then
+  HAS_EVIDENCE_GUARD=1; SENTS_REQUIRED="$FENCE_SAYS
+$CONSERVE_SAYS
+$ENGINE_SAYS
+$EVIDENCE_SAYS"
+else
+  HAS_EVIDENCE_GUARD=0; SENTS_REQUIRED="$FENCE_SAYS
+$CONSERVE_SAYS"
+fi
+sent_ok=1
+while IFS= read -r _s; do
+  [ -n "$_s" ] || continue
+  if [ "$(grep -cF "$_s" "$RT")" -ne 1 ]; then
+    bad "arm-sentences" "the subject does not emit exactly one copy of: $_s"
+    sent_ok=0
+  fi
+done <<<"$SENTS_REQUIRED"
+while IFS= read -r _a; do
+  [ -n "$_a" ] || continue
+  while IFS= read -r _b; do
+    [ -n "$_b" ] || continue
+    if [ "$_a" != "$_b" ] && case "$_a" in *"$_b"*) true ;; *) false ;; esac; then
+      bad "arm-sentences" "one arm's sentence contains another's, so it cannot discriminate: [$_a] vs [$_b]"
+      sent_ok=0
+    fi
+  done <<<"$SENTS_REQUIRED"
+done <<<"$SENTS_REQUIRED"
+if [ "$sent_ok" -eq 1 ]; then
+  if [ "$HAS_EVIDENCE_GUARD" -eq 1 ]; then
+    ok "arm-sentences" "four refusal reasons, four disjoint sentences, each emitted exactly once"
+  else
+    ok "arm-sentences" "two refusal reasons, disjoint, each emitted once — this subject predates the evidence guard, so its two sentences are not required"
+  fi
+fi
+
 # every kill below is unearned.
 CTRL="$(mkroot control)"; cp "$RT" "$CTRL/scripts/backlog-rotate.sh"
 reseed "$A"
@@ -503,7 +618,7 @@ if [ -n "$M1" ]; then
   reseed "$A"
   run_rt "$M1" "$A" --apply
   M1_LIVE="$(fences "$A/backlog.md")"; M1_ARCH="$(fences "$A/backlog.archive.md")"
-  if [ "$LAST_RC" -eq 0 ] && ! has "REFUSING" "$LAST_OUT" \
+  if [ "$LAST_RC" -eq 0 ] && ! has "$FENCE_SAYS" "$LAST_OUT" \
      && { [ $((M1_LIVE % 2)) -ne 0 ] || [ $((M1_ARCH % 2)) -ne 0 ]; }; then
     killed m1-guard-off "fires-heading would FAIL: exit 0, and the split left live=$M1_LIVE archive=$M1_ARCH fence delimiters"
   else
@@ -519,8 +634,8 @@ if [ -n "$M2" ]; then
   cp "$NM/pristine.ledger" "$NM/backlog.md"
   printf '# pre-existing archive\nSENTINEL-ARCHIVE-LINE\n' > "$NM/backlog.archive.md"
   run_rt "$M2" "$NM" --apply
-  if [ "$LAST_RC" -ne 0 ] && has "REFUSING" "$LAST_OUT"; then
-    killed m2-shape-only "near-miss would FAIL: a fenced '## Some prose heading' is refused (exit $LAST_RC)"
+  if [ "$LAST_RC" -ne 0 ] && has "$FENCE_SAYS" "$LAST_OUT"; then
+    killed m2-shape-only "near-miss would FAIL: the FENCE arm refuses a fenced '## Some prose heading' (exit $LAST_RC)"
   else
     bad "mutant:m2-shape-only" "the guard widened to any heading and near-miss still passed — it cannot discriminate (exit $LAST_RC)"
   fi
@@ -528,14 +643,18 @@ fi
 
 # M3 — the label reader blinded to the BULLET shape. Targets `fires-bullet` and must leave
 # `fires-heading` alone; a mutant that fails two arms means one of them is vacuous.
-M3="$(mutate m3-heading-only -e 's/^  if (shape == "") return ""$/  if (shape != "heading") return ""/')"
+M3="$(mutate_either m3-heading-only -e 's/^  if (shape == "") return ""$/  if (shape != "heading") return ""/')"
 if [ -n "$M3" ]; then
-  reseed "$B"; run_rt "$M3" "$B" --apply; M3_B_RC="$LAST_RC"; M3_B_OUT="$LAST_OUT"
-  reseed "$C"; run_rt "$M3" "$C" --apply; M3_C_RC="$LAST_RC"
-  if [ "$M3_B_RC" -eq 0 ] && ! has "REFUSING" "$M3_B_OUT" && [ "$M3_C_RC" -ne 0 ]; then
-    killed m3-heading-only "fires-bullet would FAIL (exit 0) while fires-tilde still holds — the arms are not entangled"
+  reseed "$B"; run_rt "$M3" "$B" --apply; M3_B_OUT="$LAST_OUT"
+  reseed "$C"; run_rt "$M3" "$C" --apply; M3_C_OUT="$LAST_OUT"
+  # NOT the exit code. Blinding the label reader to the bullet shape also makes the moved
+  # partition unverifiable, so the ENGINE arm refuses at exit 2 and a rc-based predicate reads
+  # this mutant as surviving. What the mutant actually did is silence the FENCE arm on the
+  # bullet offender, and the tilde offender is the control that says the silence is specific.
+  if ! has "$FENCE_SAYS" "$M3_B_OUT" && has "$FENCE_SAYS" "$M3_C_OUT"; then
+    killed m3-heading-only "fires-bullet would FAIL: the FENCE arm went silent on the bullet offender while still firing on the tilde one"
   else
-    bad "mutant:m3-heading-only" "bullet blinding did not flip fires-bullet alone (bullet exit $M3_B_RC, tilde exit $M3_C_RC)"
+    bad "mutant:m3-heading-only" "bullet blinding did not silence the FENCE arm on the bullet offender alone (bullet fence-arm=$(has "$FENCE_SAYS" "$M3_B_OUT" && echo fired || echo silent), tilde fence-arm=$(has "$FENCE_SAYS" "$M3_C_OUT" && echo fired || echo silent))"
   fi
 fi
 
@@ -543,12 +662,12 @@ fi
 # check against the backtick offender.
 M4="$(mutate m4-backtick-only -e 's/(```|~~~)/(```)/')"
 if [ -n "$M4" ]; then
-  reseed "$C"; run_rt "$M4" "$C" --apply; M4_C_RC="$LAST_RC"; M4_C_OUT="$LAST_OUT"
-  reseed "$B"; run_rt "$M4" "$B" --apply; M4_B_RC="$LAST_RC"
-  if [ "$M4_C_RC" -eq 0 ] && ! has "REFUSING" "$M4_C_OUT" && [ "$M4_B_RC" -ne 0 ]; then
-    killed m4-backtick-only "fires-tilde would FAIL (exit 0) while fires-bullet still holds"
+  reseed "$C"; run_rt "$M4" "$C" --apply; M4_C_OUT="$LAST_OUT"
+  reseed "$B"; run_rt "$M4" "$B" --apply; M4_B_OUT="$LAST_OUT"
+  if ! has "$FENCE_SAYS" "$M4_C_OUT" && has "$FENCE_SAYS" "$M4_B_OUT"; then
+    killed m4-backtick-only "fires-tilde would FAIL: the FENCE arm went silent on the tilde offender while still firing on the bullet one"
   else
-    bad "mutant:m4-backtick-only" "dropping '~~~' did not flip fires-tilde alone (tilde exit $M4_C_RC, bullet exit $M4_B_RC)"
+    bad "mutant:m4-backtick-only" "dropping '~~~' did not silence the FENCE arm on the tilde offender alone (tilde fence-arm=$(has "$FENCE_SAYS" "$M4_C_OUT" && echo fired || echo silent), bullet fence-arm=$(has "$FENCE_SAYS" "$M4_B_OUT" && echo fired || echo silent))"
   fi
 fi
 
@@ -558,22 +677,36 @@ fi
 M5="$(mutate m5-drop-a-line \
   -e 's/for (i = 1; i <= n; i++) print buf\[i\] > MOVED/for (i = 2; i <= n; i++) print buf[i] > MOVED/' \
   -e 's/^if \[ "\$((LIVE_LINES + MOVE_LINES))" -ne "\$ORIG_LINES" \]; then$/if false; then/')"
-if [ -n "$M5" ]; then
-  reseed "$H"; run_rt "$M5" "$H" --apply
-  if [ "$LAST_RC" -eq 0 ] && ! conserved "$H"; then
-    killed m5-drop-a-line "conservation would FAIL: the rotation dropped a line and exited 0"
+# ITS TWIN IS THE OTHER HALF OF THE PROOF. The dropped line is buf[1] -- the entry's own
+# heading -- so the archived fragment has no id and the receipt ENGINE refuses at exit 2
+# before anything is written. Nothing reaches disk, so `! conserved` is FALSE and the old
+# predicate scored this as a survivor. The observable that belongs to the targeted arm is its
+# SENTENCE: absent when both layers are mutated, present when only the line-drop is. Absence
+# alone would also hold if the partition genuinely conserved, which is why the twin is not
+# optional.
+M5A="$(mutate m5a-drop-a-line-conservation-intact \
+  -e 's/for (i = 1; i <= n; i++) print buf\[i\] > MOVED/for (i = 2; i <= n; i++) print buf[i] > MOVED/')"
+if [ -n "$M5" ] && [ -n "$M5A" ]; then
+  reseed "$H"; run_rt "$M5"  "$H" --apply; M5_OUT="$LAST_OUT"
+  reseed "$H"; run_rt "$M5A" "$H" --apply; M5A_OUT="$LAST_OUT"
+  if ! has "$CONSERVE_SAYS" "$M5_OUT" && has "$CONSERVE_SAYS" "$M5A_OUT"; then
+    killed m5-drop-a-line "conservation would FAIL: with the arm disabled the dropped line goes unreported, while the same drop with the arm intact IS reported"
   else
-    bad "mutant:m5-drop-a-line" "a line was dropped and conservation still passed (exit $LAST_RC)"
+    bad "mutant:m5-drop-a-line" "disabling the conservation arm did not silence it on a dropped line (both-layers=$(has "$CONSERVE_SAYS" "$M5_OUT" && echo fired || echo silent), drop-only=$(has "$CONSERVE_SAYS" "$M5A_OUT" && echo fired || echo silent))"
   fi
 fi
 
 # THE KILL COUNT ITSELF. A mutant that killed nothing reads exactly like an arm that cannot
 # fire, and a battery whose seds all silently missed reads as five clean passes.
 MUT_ATTEMPTED="$(find "$WORK/roots" -name '.mutant-built' -type f 2>/dev/null | wc -l | tr -d ' ')"
-if [ "${MUT_ATTEMPTED:-0}" -eq 5 ] && [ "$KILLS" -eq 5 ]; then
-  ok "mutants" "5 mutants built and all 5 killed the arm they target"
+# SIX BUILT, FIVE KILLS. `m5a` is a single-layer TWIN, not a sixth target: it exists to show
+# the conservation arm still speaks when only the line-drop is applied, which is what makes
+# m5's silence a measurement instead of an absence. Counting it as a kill would be counting
+# the control as a result.
+if [ "${MUT_ATTEMPTED:-0}" -eq 6 ] && [ "$KILLS" -eq 5 ]; then
+  ok "mutants" "6 mutants built (5 targets + m5's single-layer twin) and all 5 targets killed the arm they name"
 else
-  bad "mutants" "$MUT_ATTEMPTED of 5 mutants built, $KILLS killed — an unkilled mutant means an arm cannot fire"
+  bad "mutants" "$MUT_ATTEMPTED of 6 mutants built, $KILLS of 5 killed — an unkilled mutant means an arm cannot fire"
 fi
 
 echo

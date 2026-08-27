@@ -61,7 +61,23 @@ if [ -z "$REPO_ROOT" ]; then
   exit 0
 fi
 
-LEDGER="${1:-$REPO_ROOT/docs/backlog.md}"
+# `--closed-receipts` DISABLES THE ANNOTATION SHORT-CIRCUIT BELOW, AND EXISTS FOR ONE CALLER.
+# Without it an entry annotated `**LANDED (v` is reported ALREADY-CLOSED and its receipt is
+# NEVER RUN AGAIN by anything -- so the annotation, which is a FORM and not a verification, is
+# the last word on whether the entry was really fixed. `backlog-rotate.sh` needs the receipt's
+# answer for exactly the entries it is about to move, and this flag is how it gets it WITHOUT a
+# second copy of the verb grammar, the anchor guards and the exit-code mapping. Proven inert
+# when not passed: patched and unpatched engines produce byte-identical output over one tree.
+CLOSED_RECEIPTS=false
+LEDGER=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --closed-receipts) CLOSED_RECEIPTS=true; shift ;;
+    -*) printf 'INPUT-UNRESOLVED\t%s\tunresolved: unknown option. Nothing was re-verified; a zero row count here is not a clean corpus.\n' "$1"; exit 0 ;;
+    *)  LEDGER="$1"; shift ;;
+  esac
+done
+[ -n "$LEDGER" ] || LEDGER="$REPO_ROOT/docs/backlog.md"
 if [ ! -f "$LEDGER" ] || [ ! -r "$LEDGER" ]; then
   printf 'INPUT-UNRESOLVED\t%s\tunresolved: the ledger path is not a readable file. Nothing was re-verified; a zero row count here is not a clean corpus.\n' "$LEDGER"
   exit 0
@@ -156,7 +172,7 @@ emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
 while IFS="$(printf '\t')" read -r LABEL CLOSED RECEIPT; do
   [ -n "$LABEL" ] || continue
 
-  if [ "$CLOSED" = "1" ]; then
+  if [ "$CLOSED" = "1" ] && [ "$CLOSED_RECEIPTS" != true ]; then
     emit "ALREADY-CLOSED" "$LABEL" "annotated LANDED and awaiting backlog-rotate.sh"
     continue
   fi

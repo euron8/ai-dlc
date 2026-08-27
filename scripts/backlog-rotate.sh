@@ -108,19 +108,13 @@ LIB="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
 # heading all stay quiet while the real corrupting shape still fires). An unmeasured lint is one
 # the operator turns off, which is worse than no lint.
 #
-# `backlog_entry_label()` is defined ONCE, below, and used by BOTH this guard and the split that
-# follows. A guard keyed on a restatement of the predicate it protects drifts from it, and the
-# drift is invisible until it either wedges a good ledger or passes a corrupting one.
-BACKLOG_LABEL_AWK='
-function backlog_entry_label(l,   line, shape) {
-  shape = ledger_entry_shape(l)
-  if (shape == "") return ""
-  line = l
-  if (shape == "heading") { sub(/^#{2,6}[ \t]+/, "", line) }
-  else                    { sub(/^- \*\*/, "", line); sub(/\*\*.*$/, "", line) }
-  if (match(line, /^BL-[0-9]+/)) return substr(line, 1, RLENGTH)
-  return ""
-}'
+# `backlog_entry_label()` is defined ONCE and used by BOTH this guard and the split that follows.
+# A guard keyed on a restatement of the predicate it protects drifts from it, and the drift is
+# invisible until it either wedges a good ledger or passes a corrupting one. It now lives in
+# reconcile/lib.sh beside the boundary rule it calls, because a SECOND reader appeared --
+# `validate-backlog-size.sh` -- and the first thing that reader did was restate it. That is the
+# same drift this file's header warns about, one file over.
+BACKLOG_LABEL_AWK="$(backlog_entry_label_awk)"
 FENCE_FINDINGS="$(LC_ALL=C awk "$(ledger_entry_awk)$BACKLOG_LABEL_AWK"'
   function report(msg) { print msg }
   # A real entry start at depth 0 closes the previous span and resets, so an unterminated fence
@@ -220,6 +214,132 @@ LIVE_LINES="$(wc -l < "$AWKF.live" 2>/dev/null | tr -d ' ')"; LIVE_LINES="${LIVE
 MOVE_LINES="$(wc -l < "$AWKF.moved" 2>/dev/null | tr -d ' ')"; MOVE_LINES="${MOVE_LINES:-0}"
 if [ "$((LIVE_LINES + MOVE_LINES))" -ne "$ORIG_LINES" ]; then
   echo "backlog-rotate: REFUSING TO APPLY — the partition does not conserve the file: $ORIG_LINES lines in, $LIVE_LINES live + $MOVE_LINES moved = $((LIVE_LINES + MOVE_LINES)) out. A rotation that loses a line is the failure this tool exists to not have." >&2
+  exit 2
+fi
+
+# ---------------------------------------------------------------------------------------------
+# THE EVIDENCE GUARD -- an entry leaves this ledger only if its evidence holds.
+#
+# WHY IT EXISTS. The close predicate is a FORM, never a verification: `:192` matches
+# `**LANDED (v[0-9]`, and `backlog-reverify.sh` reports any such entry ALREADY-CLOSED and NEVER
+# RUNS ITS RECEIPT AGAIN. Nothing re-reads the archive either. So before this guard, appending
+# ONE line to any entry moved it out of the ledger with a green verdict -- measured on this tree
+# against `## BL-006`, an entry whose own first line reads "DO NOT CLOSE THIS ON ITS RECEIPT ...
+# the defect is LIVE": `--check` reported PASS and `--apply` archived it, rc=0 both.
+#
+# WHY `--check` CANNOT CATCH IT AND THIS GUARD IS NOT SITED INSIDE EITHER BRANCH. The acceptance
+# test below filters `^ALREADY-CLOSED` from BOTH sides, so a falsely-annotated entry is removed
+# from the very comparison meant to police its removal. This block therefore runs BEFORE the
+# `if CHECK` and `if APPLY` branches and all three entry points read the same variables: a guard
+# inside `if APPLY` is bypassed by running `--check`, and one inside `if CHECK` by omitting it.
+#
+# IT TAKES TWO ARMS, AND THE RECEIPT ARM ALONE WOULD HAVE MISSED ITS OWN MOTIVATING CASE.
+# Measured over all 56 live `sh` receipts: 1 exits 0, 54 exit 1, 1 exits 9. The single 0 is
+# `BL-006` -- the entry the attack seeded -- because its receipt is genuinely green and wrong.
+# A guard keyed only on "the receipt exits 0" PERMITS it. The sha arm is what refuses it, and
+# `sha deadbeef DOES NOT RESOLVE` is the line that fires. Neither arm subsumes the other.
+#
+# THE POPULATION IS THE MOVED SET, NOT THE LEDGER. `$AWKF.moved` is the partition computed two
+# blocks above -- it is not a join that can drift from the moved set, it IS the moved set. The
+# whole-ledger engine costs 52-71s; verifying only what is leaving costs under a second, and it
+# keeps the rotator's verdict independent of the 60-odd entries it is not touching.
+#
+# FALSE-POSITIVE SET, MEASURED ON THE DISCRIMINATING POPULATION. Today's ledger carries zero
+# closed entries, so a clean run on it proves nothing. Re-presented to this guard, all 27 entries
+# this repo has ever rotated, staged at each rotation's pre-rotation tree: 26 PERMIT, 1 REFUSE.
+# The one is `BL-081`, a correct close whose receipt was never re-anchored because the close went
+# through two verifiers rather than through the receipt. That is a genuine false positive and its
+# remedy is a one-line edit the entry already contains. The SHA arm's false-positive set over the
+# same 27 is EMPTY -- all 27 annotations name a resolving commit (control: `deadbeef` rc=128).
+#
+# `manual` IS PERMITTED, AND THE HOLE IS NAMED RATHER THAN PAPERED OVER. `verify: manual` is
+# declared at FILING, by a different session than the one closing, before any ceiling pressure
+# existed -- so it is not a closer granting themselves an exemption. 7 of 65 live entries declare
+# it; refusing them would make 7 entries permanently unarchivable underneath the very bound they
+# count against, which is a check that wedges live work. The residual attack is that a closer
+# edits `verify: sh ...` down to `verify: manual` and then annotates. That is two lines instead
+# of one and it is legible in the diff; no mechanism available to a tool that sees one tree and
+# one ledger can separate it from a correct re-classification.
+#
+# EXIT 9 IS REFUSED. It means a precondition moved and the receipt measured nothing. No entry has
+# ever been rotated on one: across all 27 rotations the codes are 25x0 and 1x1. `BL-076` is the
+# corpus's own answer -- it was one of the two exit-9 entries and its receipt was RE-ANCHORED
+# before its close, exiting 0 at the rotation commit and its parent. Refusing wedges an entry
+# until someone edits one line; permitting loses the work it recorded.
+#
+# NOTE, not fixed here: an exit-9 refusal prints "still reproduces here", which is the wrong
+# sentence for a receipt that measured nothing. The refusal is right; the wording belongs to the
+# live entry that owns the exit-9/exit-1 conflation.
+# ---------------------------------------------------------------------------------------------
+MOVED_ANN="$(LC_ALL=C awk "$(ledger_entry_awk)$BACKLOG_LABEL_AWK"'
+  function flush() { if (label != "") printf "%s\t%s\n", label, ann; label = ""; ann = "" }
+  {
+    lbl = backlog_entry_label($0)
+    if (lbl != "") { flush(); label = lbl; next }
+    if (label != "" && ann == "" && $0 ~ /^(<br>)?\*\*LANDED \(v[0-9]/) ann = $0
+  }
+  END { flush() }
+' "$AWKF.moved")"
+
+# The sha arm SKIPS rather than refuses outside a git repository, because refusing there would
+# wedge every scratch ledger, including the ones core/fixtures/backlog-ledger builds.
+R1_SKIP=false
+if ! git -C "$(dirname "$LEDGER")" rev-parse --git-dir >/dev/null 2>&1; then R1_SKIP=true; fi
+
+EVID_ROWS="$(bash "$REPO_ROOT/scripts/backlog-reverify.sh" --closed-receipts "$AWKF.moved" 2>/dev/null)"
+
+# EVERY DISPATCHED ENTRY MUST PRODUCE A VERDICT, ASSERTED AS A SET AND NOT AS A COUNT. An engine
+# that answers for no entry and an engine that finds nothing wrong are the same silence; and
+# `INPUT-UNRESOLVED` emits exactly one row whose label is a PATH, which a count check would
+# happily accept against a single moved entry.
+WANT_LABELS="$(printf '%s\n' "$MOVED_ANN"  | cut -f1 | grep -v '^$' | sort)"
+GOT_LABELS="$(printf  '%s\n' "$EVID_ROWS" | cut -f2 | grep -v '^$' | sort)"
+if [ "$WANT_LABELS" != "$GOT_LABELS" ]; then
+  echo "backlog-rotate: REFUSING TO APPLY — the receipt engine did not return a verdict for every entry being moved." >&2
+  echo "  dispatched $MOVED_COUNT entr(y|ies); backlog-reverify.sh answered for a DIFFERENT set." >&2
+  diff <(printf '%s\n' "$WANT_LABELS") <(printf '%s\n' "$GOT_LABELS") >&2
+  echo "  An engine that answers for no entry and an engine that finds nothing wrong are the same" >&2
+  echo "  zero, so this is refused rather than passed over. Nothing was moved and nothing was written." >&2
+  exit 2
+fi
+
+EVID_TABLE=""; EVID_REFUSE=""; OLDIFS="$IFS"
+while IFS="$(printf '\t')" read -r ST LB DT; do
+  [ -n "$LB" ] || continue
+  ANN="$(printf '%s\n' "$MOVED_ANN" | awk -F'\t' -v l="$LB" '$1==l{print $2; exit}')"
+  SHA="$(printf '%s\n' "$ANN" | sed -n 's/.*verified \([0-9a-f][0-9a-f]*\).*/\1/p')"
+  if   [ "$R1_SKIP" = true ]; then SHAV="sha SKIPPED (ledger is not in a git repository)"
+  elif [ -z "$SHA" ];          then SHAV="sha ABSENT"
+  elif git -C "$(dirname "$LEDGER")" cat-file -e "${SHA}^{commit}" 2>/dev/null; then SHAV="sha $SHA resolves"
+  else SHAV="sha $SHA DOES NOT RESOLVE"; fi
+  EVID_TABLE="$EVID_TABLE  $LB  $ST  [$SHAV]
+"
+  case "$ST" in
+    CLOSE-CANDIDATE|HAND-REVIEW) : ;;
+    *) EVID_REFUSE="$EVID_REFUSE  $LB  $ST — $DT
+" ;;
+  esac
+  case "$SHAV" in
+    *"DOES NOT RESOLVE"|*ABSENT)
+      EVID_REFUSE="$EVID_REFUSE  $LB  the annotation's $SHAV, so it attests to no commit in this repository.
+" ;;
+  esac
+done <<EOF
+$EVID_ROWS
+EOF
+IFS="$OLDIFS"
+
+echo "  receipt verdicts for the entries being moved:"
+printf '%s' "$EVID_TABLE"
+
+if [ -n "$EVID_REFUSE" ]; then
+  echo "backlog-rotate: REFUSING TO MOVE — an entry is annotated LANDED but its evidence does not hold." >&2
+  printf '%s' "$EVID_REFUSE" >&2
+  echo "  The annotation is a FORM, not a verification. Re-anchor the entry's 'verify:' receipt so it" >&2
+  echo "  exits 0 against this tree, or correct the sha the annotation names, and run this again." >&2
+  echo "  Do NOT weaken this guard to move the entry: it moves, it never deletes, and an entry" >&2
+  echo "  wrongly kept costs one more read while one wrongly archived costs the work it recorded." >&2
+  echo "  Nothing was moved and nothing was written." >&2
   exit 2
 fi
 

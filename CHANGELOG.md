@@ -15,6 +15,100 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.418.0] - 2026-08-26
+
+### `docs/backlog.md` is a queue and now has a depth — and the ceiling brought a hazard with it
+
+`BL-006` NARROWED and held open. `BL-093` filed. New arm `B1` in
+`scripts/validate-backlog-size.sh`, registered as pre-push step 1f: `docs/backlog.md` carries at
+most `AI_DLC_BACKLOG_MAX_ENTRIES` entries, default **75** against today's 66.
+`docs/backlog.archive.md` stays unbounded — it is an append-only log, and rotation into it is the
+arm's only remedy.
+
+**The entry was the ledger's single `CLOSE-CANDIDATE` and that row was FALSE**, which is why it
+was taken first: a session reading it and closing the entry retires a live defect. It now reads
+`STILL-LIVE`, and the ledger reports **0 CLOSE-CANDIDATE** against an impossible-id control of 0.
+
+**A byte clause was ruled, built, and WITHDRAWN on measurement, and the withdrawal is the more
+useful half of this release.** The case for it was that entry count had been flat while bytes grew
+17.5%. That figure was wrong: the series started at `158d7528`, which is **not on the first-parent
+trunk** (control: `b77410b2` is), so it measured from a branch state; and the growth it did show is
+**n=1**, sitting almost entirely in v0.378.0, with bytes-per-entry falling across the other 43
+releases. The premise also inverts. Archived entries average **7193 bytes** against a live mean of
+**3758** (n=27, n=65), so archiving one entry frees 1.9x the live mean — rotation IS the byte lever
+and it is denominated in ENTRIES. A byte ceiling admitting the same growth sat within **1.5%** of
+the entry ceiling and bound FIRST, which would have made the entry clause vacuous. And at all four
+states where such a clause approached firing — `c01d588a` 279422B, `890b921b` 275114B, `727ddc6c`
+271884B, and HEAD — the count of rotatable entries was **ZERO**, so its only sanctioned remedy was
+a measured no-op exactly when it fired. A per-entry cap fails too: 10 of 27 archived entries exceed
+8000 bytes and the largest, 16137, is bigger than any live entry.
+
+### The ceiling makes a red push, and one line of markdown was the cheapest way to clear it
+
+`scripts/backlog-rotate.sh` gains an evidence guard, and `scripts/backlog-reverify.sh` gains
+`--closed-receipts` to feed it. **Reproduced before the fix**: appending
+`**LANDED (v0.418.0, verified deadbeef).**` under `## BL-006` — an entry whose own first line reads
+*"DO NOT CLOSE THIS ON ITS RECEIPT ... the defect is LIVE"* — made `--check` print PASS and
+`--apply` archive it, rc=0 both. The close predicate is a FORM, never a verification; an annotated
+entry's receipt is never run again by anything; and `--check` could not see it because the
+acceptance test filters `^ALREADY-CLOSED` from BOTH sides, removing the entry from the very
+comparison meant to police its removal. The guard therefore sits BEFORE both the `--check` and
+`--apply` branches, so neither mode can bypass it.
+
+**It needs two arms, and the arm that was specified would have missed its own motivating case.**
+Across all 56 live `sh` receipts: 1 exits 0, 54 exit 1, 1 exits 9 — and the single 0 is `BL-006`
+itself, because its receipt is genuinely green and wrong. A guard keyed only on "the receipt exits
+0" PERMITS the attack. Measured on the discriminating input, a real clone where that receipt does
+exit 0: receipt green + bogus sha is REFUSED by the sha arm while the receipt arm reports
+`CLOSE-CANDIDATE`; receipt green + real sha is PERMITTED. False-positive set over the 27 entries
+this repo has ever rotated, each staged at its own pre-rotation tree: **26 permit, 1 refuse** —
+`BL-081`, a correct close whose receipt was never re-anchored. The sha arm's false-positive set
+over the same 27 is **empty** (control: `deadbeef` rc=128). `verify: manual` is permitted, because
+refusing it would strand 7 entries underneath the very bound they count against; exit 9 is refused,
+and no entry has ever been rotated on one.
+
+### Three spellings of "count the entries", three different wrong answers
+
+The arm counts through `ledger_entry_awk` plus `backlog_entry_label_awk`, both from
+`reconcile/lib.sh`. `^## BL-` under-counts — it MISSES the `### BL-` and `- **BL-` forms the
+ledger's own tooling accepts, so a seeded h3 entry and a seeded bullet entry take the arm to 67
+while the grep stays at 65, making the ceiling evadable by heading level. `ledger_entry_id()`
+over-counts to 68, being backtick-tolerant by design, on the three prose cross-reference bullets at
+`docs/backlog.md:174/181/186`. An unanchored heading grep also reads 68, on three DIFFERENT lines —
+`BL-091`'s prose and receipt, which quote the pattern.
+
+`backlog_entry_label_awk` MOVED into `reconcile/lib.sh` this release. It lived in
+`backlog-rotate.sh` under a comment reading *"defined ONCE ... a guard keyed on a restatement of the
+predicate it protects drifts from it"*; a second reader then needed it and the first draft restated
+it, which is the drift that file's own header records happening within one release.
+
+### `BL-006`'s two surviving subjects, and a wrong-target citation
+
+The narrowed entry carries a CONJUNCTION receipt — it exits 0 only when BOTH halves are discharged,
+so no single-corpus fix retires it. `docs/plans/` has no size arm (`validate-plan-shape.sh`'s only
+`wc -l`, at `:131`, resolves a cited line number; it has no `wc -c`), and
+`docs/plans/retire-graph-consumer-layer.md` is 384817 bytes against a 17021-byte median across 29
+plans. The consumer's own push-candidate ledger is unbounded, and `docs/backlog.md` does not ship,
+so the distribution-side arm reaches no consumer by construction.
+
+**The entry cited `SKILL.md:1678` for the consumer figures and that citation was WRONG-TARGET** —
+`:1678` is prose about a checker obeying an over-wide declaration; `2830` occurs at `:1723`. It is
+the `v0.390.0` class: the citation RESOLVES, so the resolvability arm passes it, and a dangling-ref
+detector is blind to a wrong-target ref by construction. Corrected to `:1723-1724`. The filed
+figures for the plans corpus had also drifted (16726 across 23 plans); the ratio had not.
+
+`FORK_BUDGET` 7060 → **7076**, and it is a CORPUS raise rather than a code one. No arm gained a
+loop; `core/fixtures/backlog-size-ceiling/` was added, and `validate-enforcement-map.sh`'s
+per-fixture passes cost forks per DIRECTORY. Isolated by differential on one tree: **7050 with
+that directory present, 7044 without** — 6 forks, what one fixture costs. Headroom is 6 over the
+measured 7070, the same margin 7060 carried over v0.416.0's 7054, and the guard's `stale-high`
+arm confirms the ceiling is still reachable at 70%.
+
+`BL-093` records that the ceiling bounds the **5th** largest unbounded file in the tree —
+`CHANGELOG.md` is 2004483 bytes, `.ai-dlc-fixture-readsets.tsv` is a tracked machine-appended
+1638114-byte register, and `docs/context-hardening-notes.md` is 104394 bytes and is the file
+`resident-context.md` tells every session to append to.
+
 ## [0.417.0] - 2026-08-26
 
 ### A triage sweep over all 64 live backlog entries, none re-tested for forty releases

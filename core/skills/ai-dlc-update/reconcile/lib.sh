@@ -306,6 +306,37 @@ AWK
 # produced a wrong row under the old colon gate, because that gate fired on nothing at all.
 # A leading backtick is tolerated because the ledger's own label rule strips backticks only
 # after the caller has extracted the span.
+# THE `BL-` LABEL RULE -- distinct from `ledger_entry_id()` below, and the distinction is
+# load-bearing rather than stylistic. Its readers are the distribution's own backlog tooling; a
+# consumer tree carries no `BL-` ledger, so nothing here fires there.
+#
+# WHY IT IS NOT `ledger_entry_id()`. That one is backtick-tolerant by design (see its header), and
+# the `BL-` readers do not strip backticks before matching. Measured on the live backlog: this rule
+# counts 65 entries and `ledger_entry_id()` counts 68, the three extra being prose cross-reference
+# bullets of the form `- **`BL-081`'s receipt**`. The next author will reach for the shared id
+# function on principle; this exists so that reaching for the shared thing is still correct.
+#
+# WHY IT IS HERE AND NOT IN ITS CALLER. It was defined in `backlog-rotate.sh`, whose own comment
+# said it "is defined ONCE ... A guard keyed on a restatement of the predicate it protects drifts
+# from it." A second reader -- the backlog depth ceiling -- then needed it and restated it, which
+# is exactly the drift this file's `ledger_entry_awk` header records happening within ONE release.
+# Moved here so both readers load it. NOTE this does NOT unify rotate's and reverify's label rules
+# with each other -- that stays barred for the reason stated above, because it would change
+# rotate's `moved-names` output.
+backlog_entry_label_awk() {
+  cat <<'AWK'
+function backlog_entry_label(l,   line, shape) {
+  shape = ledger_entry_shape(l)
+  if (shape == "") return ""
+  line = l
+  if (shape == "heading") { sub(/^#{2,6}[ \t]+/, "", line) }
+  else                    { sub(/^- \*\*/, "", line); sub(/\*\*.*$/, "", line) }
+  if (match(line, /^BL-[0-9]+/)) return substr(line, 1, RLENGTH)
+  return ""
+}
+AWK
+}
+
 ledger_entry_id_awk() {
   cat <<'AWK'
 function ledger_entry_id(label) {

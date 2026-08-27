@@ -128,7 +128,20 @@ step "plan shape (docs/plans/ is resumable by a session that never saw this one)
 step "claude-rules joins (tracked paths, live globs, paths-only frontmatter, pointers)" \
   bash scripts/validate-claude-rules.sh
 
-# 1f. The bash-3.2 / BSD-userland floor for every shipped shell file. GNU-only idioms do not
+# 1f. docs/backlog.md is a QUEUE and a queue has a depth. Nothing bounded it: A6's byte ceiling
+#     in validate-claude-rules.sh covers CLAUDE.md and .claude/rules/ only, and the two scripts
+#     that DO own this ledger cannot gate -- backlog-reverify.sh declares itself a classifier
+#     that always exits 0, and backlog-rotate.sh returns early whenever nothing is closed, which
+#     is precisely the state a ledger is in when it is longest. Neither runs here. Push is the
+#     seam: it is the last point before the queue becomes the thing the next triage sweep has to
+#     read end to end. Standalone and ~0.06s at 11 forks: deliberately NOT an arm inside
+#     validate-enforcement-map.sh, which the suite's mutation batteries drive through ~20 mutants
+#     apiece. The ARCHIVE is not bounded -- it is an append-only log, and rotation into it is
+#     this arm's only remedy.
+step "backlog depth (docs/backlog.md stays a queue, not a log)" \
+  bash scripts/validate-backlog-size.sh
+
+# 1g. The bash-3.2 / BSD-userland floor for every shipped shell file. GNU-only idioms do not
 #     error here, they return the WRONG ANSWER quietly -- `sed -i` takes the script as a
 #     backup suffix, `\s` matches a literal `s`, `mapfile` reads nothing. Every arm reports
 #     zero over the corpus today and is a pure regression guard, so its fixture is the only

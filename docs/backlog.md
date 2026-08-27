@@ -442,56 +442,77 @@ verify: lacks core/fixtures/layer-contract-conformance/run.sh "layer-contract-co
 
 ---
 
-## BL-006 — nothing bounds this ledger's size, and rotation alone does not
+## BL-006 — the PLANS corpus and the CONSUMER's own ledger are still unbounded
 
-**DO NOT CLOSE THIS ON ITS RECEIPT. The receipt reads CLOSE-CANDIDATE and the defect is LIVE.**
-Measured during the batch-10 triage sweep, and re-derived independently: the receipt exits **0**
-on two COMMENT lines in `scripts/validate-claude-rules.sh` — `:287` ("THE CEILING IS A POLICY
-NUMBER, NOT A MEASUREMENT", which is arm A6's rationale and bounds `CLAUDE.md` plus
-`.claude/rules/`, per `durable_files()` at `:374`) and `:365`, which says in as many words that
-an arm over `docs/backlog.md` **"was offered and declined for now"**. Control in the same
-invocation: an impossible token against the same file list returns nothing, rc=1, so the grep
-discriminates. **The flip was established, not inferred** — `git blame -L365,365` attributes
-`:365` to `e2f3e42a`, and running the same receipt against a `e2f3e42a^` sandbox exits **1**.
-A documentation sentence turned this receipt green. Nothing landed.
+**NARROWED at v0.418.0. The original subject is discharged; two subjects are not, and this entry
+is those two.** `docs/backlog.md` is now bounded by `scripts/validate-backlog-size.sh` (arm `B1`,
+`AI_DLC_BACKLOG_MAX_ENTRIES`, default 75), registered as a `step` in `.githooks/pre-push`. What
+follows is what that arm does NOT reach. **An entry with two subjects expires only when both do**,
+and the receipt below is a conjunction for exactly that reason — it exits 0 only when both halves
+are discharged, so no single-corpus fix can retire this entry.
 
-**The receipt is wrong in BOTH directions and must be re-anchored before anyone reads that 0.**
-It can be closed by prose, as above; and it can REJECT a correct fix, because its pathspec is
-`scripts/*.sh` only — an arm landed in `core/scripts/` is invisible to it — and its token set
-`CEILING|MAX_BYTES|MAX_ENTRIES` omits `MAX_LINES`, though a line bound is one of the two forms
-this entry argues for.
+**`docs/plans/` is unbounded and the ledger ceiling does not touch it.**
+`scripts/validate-plan-shape.sh` has no size arm at all: its only `wc -l`, at `:131`, resolves a
+cited line number, and it contains no `wc -c`. Re-derived on this tree —
+`docs/plans/retire-graph-consumer-layer.md` is **384817 bytes** against a **17021-byte median
+across 29 plans**, a 22.6x ratio, and no push has ever failed over it. (The figures this entry
+was filed with, a 16726-byte median across 23 plans, have drifted; the ratio has not.) That
+validator is already standalone and already runs at pre-push (`.githooks/pre-push:117`), so the
+arm has a home that costs no suite-pole wall clock.
 
-**The defect is present, established without the receipt.** No arm bounds this file:
-`validate-plan-shape.sh`'s only `wc -l` is at `:131`, resolving a cited line number, and
-`backlog-rotate.sh:8-10` still states in its own header that nothing here bounds a file that
-way; the one size-adjacent arm, `backlog-rotate.sh:222`, is a partition-conservation check, not
-a ceiling. The ledger has meanwhile passed the pathological state this entry was forked from.
+**The CONSUMER's own push-candidate ledger is unbounded, and the distribution-side arm reaches no
+consumer by construction.** `core/skills/ai-dlc-update/SKILL.md:1723-1724` records the reference
+consumer's ledger at **2830 lines / 220 KB / 50 entries, of which only 39 are still classified** —
+the state this whole pattern was forked from. `core/skills/ai-dlc-update/reconcile/ledger-rotate.sh`
+carries no ceiling of any kind. `docs/backlog.md` does not ship: `install.sh` copies from
+`core/scripts/`, never from top-level `scripts/`, so `validate-backlog-size.sh` is
+distribution-only and a consumer inherits nothing from it.
 
-`backlog-rotate.sh` moves closed entries to `docs/backlog.archive.md`, but rotation is something
-an operator RUNS. Nothing fails a push when this file stops being a queue and becomes a log, so
-the bound depends on someone remembering — which is the state that produced the numbers below.
+**This entry previously cited `SKILL.md:1678` for those figures and that citation was WRONG-TARGET.**
+`:1678` is prose about a checker obeying an over-wide declaration; `2830` occurs at `:1723`.
+It is the `v0.390.0` class — the citation RESOLVES, so `validate-plan-shape.sh`'s resolvability
+arm passes it, and a dangling-ref detector is blind to a wrong-target ref by construction.
 
-Measured when this ledger was built: `scripts/validate-plan-shape.sh` has **no** size arm at all
-(its one `wc -l` resolves a cited line number), and the byte ceiling that does exist — A6 in
-`scripts/validate-claude-rules.sh` — covers `CLAUDE.md` and `.claude/rules/` only. With nothing
-watching, `docs/plans/retire-graph-consumer-layer.md` reached **384817 bytes** against a
-16726-byte median across 23 plans, and no push ever failed over it. The pattern this ledger was
-forked from hit the same wall: `core/skills/ai-dlc-update/SKILL.md:1678` records the reference
-consumer's push-candidate ledger at 2830 lines / 220 KB / 50 entries, only 39 still classified.
+**Put the consumer-side ceiling where a LEDGER PATH is the argument.** Measured over the 22
+`reconcile/*.sh`: four accept a bare ledger path (`ledger-rotate.sh`, `adopt-extension-checks.sh`,
+`lib.sh`, `relabel-extension-checks.sh`) and the other 18 exit non-zero on any ledger, being usage
+errors. `ledger-reverify.sh` is one of the 18 — its argument order is a `<dist> <base> <consumer>
+<theirs>` pull triple — so a remedy landing inside it would read STILL-LIVE against the receipt
+below. `ledger-rotate.sh` is the natural home: it is the shipped program whose declared subject is
+already this ledger's SIZE, and its default is dry-run.
 
-The arm has to name a ceiling AND name this ledger, which is what the receipt joins. Where it
-lives is open, with one measured constraint: an arm added to `validate-enforcement-map.sh` is
-invoked by the suite pole and costs wall clock there, which is why `validate-plan-shape.sh` and
-`validate-claude-rules.sh` are deliberately standalone.
+**What the discharged half cost, recorded because the next author will propose it again.** A BYTE
+clause was ruled, built and withdrawn on measurement: rotation is the only sanctioned lever and it
+is denominated in ENTRIES; archived entries average 7193 bytes against a live mean of 3758, so
+archiving one frees 1.9x the live mean; a byte ceiling admitting the same growth sat within 1.5% of
+the entry ceiling and bound first, making the entry clause vacuous; and at all four states where
+such a clause approached firing the count of rotatable entries was ZERO. A per-entry cap fails too
+— 10 of 27 archived entries exceed 8000 bytes and the largest is 16137.
 
-An entry count is likely the better bound than a byte count — the failure being prevented is a
-queue nobody can read, not a large file — but a bound that fires is worth more than the right
-bound argued about.
-
-verify: sh F=$(git grep -lE "CEILING|MAX_BYTES|MAX_ENTRIES" -- "scripts/*.sh"); test -n "$F" && test -n "$(grep -lF "docs/backlog.md" $F)"
+verify: sh D=$(mktemp -d) || exit 9; trap 'rm -rf "$D"' EXIT; git clone -q --local . "$D/r" 2>/dev/null || exit 9; (git ls-files -z -mo --exclude-standard | tar -cf - --null -T - 2>/dev/null) | (cd "$D/r" && tar -xf - 2>/dev/null); RC="$D/r/core/skills/ai-dlc-update/reconcile"; H="$D/r/.githooks/pre-push"; [ -d "$RC" ] && [ -f "$H" ] || exit 9; n=0; for f in "$RC"/*.sh; do [ -f "$f" ] && n=$((n+1)); done; [ "$n" -ge 2 ] || exit 9; awk '/^step /{s=1;next} s&&/^  bash /{print;s=0}' "$H" > "$D/cmds"; [ -s "$D/cmds" ] || exit 9; P=$( cd "$D/r" && wc -c docs/plans/*.md 2>/dev/null | awk '$2!="total" && $1>m {m=$1; f=$2} END{print f}' ); [ -n "$P" ] && [ -f "$D/r/$P" ] || exit 9; mkl() { mkdir -p "$(dirname "$1")"; { printf '# Push-candidate ledger\n\nPreamble prose that belongs to no entry.\n\n'; awk -v n="$2" 'BEGIN{for(i=1;i<=n;i++)printf "## PC-S900-%04d — an open push candidate\n\nBody text.\n\nverify: theirs_has core/scripts/thing.sh \"MARKER_A\"\n\n---\n\n", i}'; } > "$1"; }; mkl "$D/s/l.md" 10 && mkl "$D/b/l.md" 500 || exit 9; [ "$(grep -c '^## PC-' "$D/b/l.md")" -eq 500 ] && [ "$(grep -c '^## PC-' "$D/s/l.md")" -eq 10 ] || exit 9; C8=0; for f in "$RC"/*.sh; do bash "$f" "$D/s/l.md" >/dev/null 2>&1 || continue; bash "$f" "$D/b/l.md" >/dev/null 2>&1 || { C8=1; break; }; done; [ "$C8" = 1 ] || exit 1; cp "$D/r/$P" "$D/po" || exit 9; awk 'BEGIN{for(i=0;i<4000000;i++)print ""}' >> "$D/r/$P" || exit 9; cp "$D/r/$P" "$D/ps"; C6=0; while IFS= read -r c; do ( cd "$D/r" && eval "$c" ) >/dev/null 2>&1 && continue; cp "$D/po" "$D/r/$P"; ( cd "$D/r" && eval "$c" ) >/dev/null 2>&1 && C6=1; cp "$D/ps" "$D/r/$P"; [ "$C6" = 1 ] && break; done < "$D/cmds"; [ "$C6" = 1 ]
 
 ---
 
+## BL-093 — the ledger ceiling bounds one member of a wider unbounded population
+
+`scripts/validate-backlog-size.sh` bounds `docs/backlog.md`. Derived by ranking every tracked
+file by `wc -c`, it is the **5th** largest and not the largest unbounded queue in the tree:
+`CHANGELOG.md` is **2004483 bytes / 504 release headings**; `.ai-dlc-fixture-readsets.tsv` is a
+**tracked, machine-appended 1638114-byte / 21107-line register**; `docs/plans/retire-graph-consumer-layer.md`
+is **384817 bytes**; and `docs/context-hardening-notes.md` is **104394 bytes** and is the file
+`.claude/rules/resident-context.md` directs every session to append stories to. The only other
+ceiling in the repo is A6's `DURABLE_MAX` over `CLAUDE.md` + `.claude/rules/`.
+
+Two of these are DEFENSIBLY unbounded — a CHANGELOG is a history and an archive is an archive —
+and saying so in their own headers is the cheaper half of the fix, because an audit that has to
+re-derive "is this a queue or a log" each time will keep re-filing this entry. The one that is
+neither is `docs/context-hardening-notes.md`: it is a live read target with a standing instruction
+to append to it and nothing bounding it.
+
+Decide per file whether it is a QUEUE (bound it) or a LOG (say so, in its own header, so the next
+audit stops). The plans corpus is NOT part of this entry — it is `BL-006`'s surviving half.
+
+verify: manual — the disposition is a judgment per file, not a predicate.
 ## BL-004 — the nine inner pools are owed, and the hook records them as owed
 
 66 workers sit on top of the outer pool. They cannot be swept with an environment variable —
