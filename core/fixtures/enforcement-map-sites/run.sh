@@ -2033,6 +2033,68 @@ mv "$V.orig" "$V"
 }
 
 
+# --- Assertion 38: I93 arm D -- an ABORTED sweep is attributed, and only once -----
+# BSD awk ABORTS on a path it cannot open rather than skipping it, so ONE broken symlink in
+# core/scripts/ or scripts/ ends arm D's walk. Before the scan-status arm existed the run still
+# went red -- correctly, because the exemption control refused to certify a zero over a corpus
+# nobody finished reading -- but the only message named the EXEMPTION, sending the reader to
+# scripts/validate-plan-shape.sh when the cause was a dangling link somewhere else.
+#
+# THE ARM IS THE PAIR, NOT EITHER HALF. Asserting the new message APPEARS would pass while the
+# exemption message also fired, which is the state this exists to end; asserting the exemption
+# message is ABSENT would pass against a validator that stopped checking exemptions at all. So
+# both are asserted in one arm, over one tree, and the finding COUNT is asserted too -- one
+# cause must produce exactly one finding.
+A38_i93_scan_status() {
+esv_tok="$(i93_token)"
+if [ -z "$esv_tok" ]; then
+  bad "FIXTURE BROKEN: could not derive empty_subject_verdict.token from the seed, so this arm has no subject"
+  return
+fi
+
+# A DANGLING SYMLINK, not a chmod 000 file: a permissions seed behaves differently for root,
+# and a fixture whose subject depends on who runs it is a fixture that reports the runner.
+esv_dangle="$ROOT/scripts/esv-dangling.sh"
+ln -s /nonexistent/esv-target "$esv_dangle"
+if [ -e "$esv_dangle" ]; then
+  rm -f "$esv_dangle"
+  bad "FIXTURE BROKEN: the seeded symlink RESOLVES, so awk can open it and this arm's subject does not exist"
+  return
+fi
+out="$(vrun)"
+rm -f "$esv_dangle"
+
+esv_n="$(printf '%s\n' "$out" | grep -c '^FAIL: I93')"
+if ! grep -q "did not finish reading its population" <<<"$out"; then
+  bad "a path arm D cannot open ended its sweep and I93 did not say so -- the run's only diagnosis is a bare awk error on stderr, and every absence arm D reported came from a walk that stopped early"
+elif grep -q "arm D exempts .* and arm D's own sweep found no line of it" <<<"$out"; then
+  bad "an aborted sweep fired BOTH the scan-status arm and the exemption control -- one cause, two findings, and the second one names scripts/validate-plan-shape.sh, which is not the file at fault"
+elif [ "$esv_n" -ne 1 ]; then
+  bad "an aborted sweep produced $esv_n I93 finding(s) where exactly 1 is correct -- one cause must yield one finding, or the reader cannot tell which arm owns the case"
+else
+  ok "a path arm D cannot open is reported BY THE SCAN-STATUS ARM and by that arm alone (the exemption control stands down, so one cause yields one finding and it names the right question)"
+fi
+
+# THE STAND-DOWN MUST NOT HAVE DISARMED THE EXEMPTION CONTROL. Same tree, no dangling link,
+# exempt file mutated to stop emitting: the control it just stood aside for must still fire on
+# its OWN case. Without this, deleting the exemption check entirely would pass the arm above.
+XP="$ROOT/scripts/validate-plan-shape.sh"
+cp "$XP" "$XP.orig"
+sed "s@$esv_tok@REDACTED BY THE FIXTURE@g" "$XP.orig" > "$XP"
+if cmp -s "$XP.orig" "$XP"; then
+  bad "FIXTURE BROKEN: the exempt-file mutation matched nothing, so the stand-down's counterpart is unproven"
+else
+  out="$(vrun)"
+  if grep -q "arm D exempts .* and arm D's own sweep found no line of it" <<<"$out"; then
+    ok "the exemption control still fires on its OWN case when the sweep COMPLETED (the stand-down narrowed it to the aborted-scan case rather than switching it off)"
+  else
+    bad "the exemption control no longer fires when an exempt file stops emitting -- the stand-down disarmed arm D's positive control, and every zero it licenses is now unproven"
+  fi
+fi
+mv "$XP.orig" "$XP"
+}
+
+
 # ---------------------------------------------------------------------------
 # THE DRIVER
 # ---------------------------------------------------------------------------

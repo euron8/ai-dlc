@@ -15,6 +15,51 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.420.0] - 2026-08-27
+
+### An aborted sweep now names its own cause, instead of blaming the exemption
+
+Follow-up to `v0.419.0`, from an adversarial pass that ran AFTER that release merged. Arm D's
+population is a bare `dir/*` glob, and **BSD awk ABORTS on a path it cannot open rather than
+skipping it**. So one broken symlink in `core/scripts/` or `scripts/` ended the walk:
+`esv_sites` returned nothing, and the only message the run produced was arm D's exemption
+control -- which can only say "the exempt file does not emit", sending the reader to
+`scripts/validate-plan-shape.sh` when the cause was a dangling link somewhere else entirely.
+
+Measured by differential: `5efb3d17^` exits **0** on such a tree and `5efb3d17` exits **1**,
+with a bare `awk: can't open file` on stderr as the whole diagnosis.
+
+**The exit code is NOT reverted, and that is deliberate.** Failing is the right direction: a
+dangling path in a validator directory silently shrinks the population, which is the class of
+defect `BL-090` existed to end, and `v0.419.0`'s guard was right to refuse to certify a zero
+over a corpus it had not finished reading. What was wrong was the ATTRIBUTION. Arm D now reads
+its own scan's exit status and says so, naming the two causes that produce it.
+
+**The exemption control STANDS DOWN for that case.** Both arms are genuinely true when awk
+aborts, and two findings for one cause is how a reader reaches the wrong file. The scan-status
+arm owns the aborted-scan case; the exemption control owns the case where the scan COMPLETED
+and the exemption is genuinely stale. Measured: one I93 finding for each cause, zero on a clean
+tree.
+
+**`find -maxdepth 1 -type f` WAS BUILT AND REJECTED ON MEASUREMENT.** It excludes the dangling
+link by construction, which is the partition this repo prefers over a detector, and it is one
+process for both populations. But this file's cost metric charges per DIRECTORY ENTRY
+EXAMINED, not per `execve`: the find measured **+116** against a budget with 26 of headroom,
+where the two tests it would have replaced cost 2. A per-file `[ -f ]` filter is worse again at
+one per candidate. The rejection is recorded beside the arm so the next author does not rebuild
+it. Net cost of the shipped fix: **-2** (7003 -> 7001 by differential on two extracted trees,
+sides asserted to differ); `FORK_BUDGET` is unchanged at 7029 against a live 7022.
+
+### Fixtures
+
+`core/fixtures/enforcement-map-sites/` gained **A38**, and it is the pair rather than either
+half: over one tree carrying a dangling symlink it demands the scan-status message APPEARS, the
+exemption message is ABSENT, and the I93 finding count is exactly **1** -- asserting only the
+first would pass while both fired, and asserting only the second would pass against a validator
+that stopped checking exemptions at all. Its second arm mutates the exempt file on a tree with
+no dangling link and demands the exemption control still fires, so the stand-down cannot be
+widened into a switch-off.
+
 ## [0.419.0] - 2026-08-26
 
 ### `I93`'s join now runs BOTH ways, and the third hand-list behind it is deleted

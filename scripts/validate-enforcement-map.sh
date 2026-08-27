@@ -7591,13 +7591,43 @@ EOF
       esv_rev_ok=0
     }
     esv_all_hits=""
-    [ "$esv_rev_ok" -eq 0 ] || \
+    esv_scan_rc=0
+    if [ "$esv_rev_ok" -ne 0 ]; then
       esv_all_hits="$(esv_sites "$esv_tok" "${esv_rev_core[@]}" "${esv_rev_dist[@]}")"
+      esv_scan_rc=$?
+    fi
+
+    # THE SCAN'S OWN STATUS IS READ, AND IT IS THE ARM THAT WAS MISSING AT v0.419.0.
+    # BSD awk ABORTS on a file it cannot open rather than skipping it, so ONE broken symlink in
+    # either directory ends the walk: esv_sites returns nothing, arm D reports no undeclared
+    # emitter over a corpus it never finished, and the only surviving symptom is the exemption
+    # control below firing with a message about the EXEMPTION -- which sends the reader to
+    # scripts/validate-plan-shape.sh when the cause is a dangling link somewhere else entirely.
+    # Measured on the release that shipped this: `5efb3d17^` exited 0 on such a tree and
+    # `5efb3d17` exited 1, with a bare `awk: can't open file` on stderr as the whole diagnosis.
+    #
+    # THE GLOB IS NOT NARROWED TO REGULAR FILES, and that is a measurement rather than a
+    # preference. `find -maxdepth 1 -type f` would exclude the dangling link by construction,
+    # which is the partition this repo prefers over a detector -- but this file's cost metric
+    # charges per directory entry examined, and one find over the two populations measured
+    # +116 against a budget with 26 of headroom. A per-file `[ -f ]` filter is worse again at
+    # one per candidate. So the abort is ATTRIBUTED rather than prevented, the arm fails
+    # CLOSED, and the operator is told which question to ask.
+    [ "$esv_scan_rc" -eq 0 ] || \
+      err "I93: arm D's sweep over core/scripts/ and scripts/ exited $esv_scan_rc rather than 0, so it did not finish reading its population and every absence it reports below is a zero taken over a corpus nobody proved was read. The cause is a path in one of those two directories that this run cannot open -- a broken symlink, or a regular file without read permission. awk names it on stderr."
 
     # THE EXEMPTION IS ARM D'S POSITIVE CONTROL, IN THE SAME INVOCATION AS ITS ZERO. Every
-    # exempt file must still be found EMITTING by the sweep above; if it is not, either the
-    # exemption is vestigial or the scan is not reading the tree, and both make the "no
-    # undeclared emitter" verdict below a zero taken over nothing.
+    # exempt file must still be found EMITTING by the sweep above; if it is not, the exemption
+    # is vestigial and the "no undeclared emitter" verdict below is a zero taken over nothing.
+    #
+    # IT STANDS DOWN WHEN THE SCAN DID NOT FINISH. Both arms are genuinely true when awk aborts
+    # mid-walk, and two findings for one cause is exactly how a reader ends up at the wrong
+    # file: all this control can say is "the exempt file does not emit", which is a statement
+    # about the exemption, while the cause is a path the run could not open. The scan-status arm
+    # OWNS that case; this one owns the case where the scan COMPLETED and the exemption is
+    # genuinely stale. Two arms that overlap are made to disagree here rather than left to fire
+    # together.
+    [ "$esv_scan_rc" -eq 0 ] || esv_exempt_paths=""
     while IFS= read -r esv_xp; do
       [ -n "$esv_xp" ] || continue
       if [ ! -f "$REPO_ROOT/$esv_xp" ]; then
