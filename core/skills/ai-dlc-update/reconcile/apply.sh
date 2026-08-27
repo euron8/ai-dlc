@@ -24,11 +24,31 @@
 #                                         so re-read the entry and record a verdict (LLM)
 #   DECISION <kind> <path> <why>          a genuine operator call (unknown drift refile-vs-revert,
 #                                         a deletion, a value with no default)
-#   DECISION restamp-withheld <stamp>     a file that SHOULD have applied mechanically did not,
-#                                         so the stamp was NOT advanced — this one is a bug in
-#                                         THIS file, not a call the operator can make
+#   DECISION restamp-withheld <stamp>     work is still outstanding — a file that SHOULD have
+#                                         applied mechanically did not, or a WORKLIST/DECISION row
+#                                         above is undisposed — so the stamp was NOT advanced and
+#                                         the in-flight marker was NOT cleared. Finish the rows,
+#                                         then re-run with --finish.
+#
+# THE STAMP IS THE NEXT PULL'S BASE, AND A HAND-BACK IS NOT DONE WHEN THIS PROGRAM EXITS.
+# This driver used to gate the stamp on `mech_fail` alone -- its own inability to place a file --
+# and to treat every WORKLIST/DECISION row as work "the caller completes in this same run, so the
+# stamp is still true once it does". The caller completes it AFTER this program has exited, and
+# nothing made that true. Filed by the reference consumer as
+# PC-S304-APPLY-SH-RESTAMPS-BEFORE-THE-WORKLIST-IS-DONE, reproduced across two pulls a month
+# apart: one run printed `RESOLVED restamp` beside 37 outstanding rows -- 13 semantic merges, 4
+# override readopts, 20 extension re-reads. An apply that then aborts, errors, or is simply
+# abandoned leaves a tree CLAIMING to be at theirs. The next pull diffs from that stamp, sees no
+# delta for the un-merged files, and the work becomes invisible: not BOTH-CHANGED, not
+# UPSTREAM-ONLY, but ALREADY-AT-THEIRS-shaped to every detector that compares against the stamp.
+#
+# So the stamp is now withheld while ANY row is outstanding, and `--finish` is the act that
+# advances it once they are disposed. Withholding without a reachable finisher would WEDGE the
+# consumer -- `core/git-hooks/pre-push` refuses the fixture suite while the marker exists -- so
+# the withheld row names the exact command, and the fixture asserts that it does.
 #
 # Usage:  apply.sh [--carried-machinery-slice] <dist> <base> <consumer> <theirs>
+#         apply.sh --finish [--carried-machinery-slice] <dist> <base> <consumer> <theirs>
 # Exit:   0 = mechanical resolution completed (a residual WORKLIST/DECISION is normal, not failure)
 #         1 = an error while resolving; 2 = usage.
 set -uo pipefail
@@ -62,21 +82,28 @@ set -uo pipefail
 # sites, every one exactly four positional arguments, NONE passing a fifth — so no existing
 # caller changes behaviour. (Control: the same extraction reports four redirection-carrying
 # lines as non-four, so it is not an argument counter stuck on the answer it was looking for.)
+#
+# `--finish` is the SECOND HALF of a withheld run: it skips every resolution phase and does only
+# the re-stamp and the marker clear, for a tree whose worklist the caller has since disposed. It
+# is a mode rather than a separate script because the stamp is written in exactly one place and a
+# second copy of that logic is a second thing to drift.
 CARRIED_MACHINERY=0
+FINISH=0
 _pos_n=0
 for _a in "$@"; do
   case "$_a" in
     --carried-machinery-slice) CARRIED_MACHINERY=1 ;;
+    --finish) FINISH=1 ;;
     --*)
       echo "apply: unknown option: $_a" >&2
-      echo "usage: apply.sh [--carried-machinery-slice] <dist> <base> <consumer> <theirs>" >&2
+      echo "usage: apply.sh [--finish] [--carried-machinery-slice] <dist> <base> <consumer> <theirs>" >&2
       exit 2 ;;
     *)
       _pos_n=$((_pos_n+1))
       case "$_pos_n" in
         1) _p1="$_a" ;; 2) _p2="$_a" ;; 3) _p3="$_a" ;; 4) _p4="$_a" ;;
         *) echo "apply: too many arguments: $_a" >&2
-           echo "usage: apply.sh [--carried-machinery-slice] <dist> <base> <consumer> <theirs>" >&2
+           echo "usage: apply.sh [--finish] [--carried-machinery-slice] <dist> <base> <consumer> <theirs>" >&2
            exit 2 ;;
       esac ;;
   esac
@@ -117,7 +144,36 @@ self_replaced=0
 # The fourth field is emitted only when non-empty, so a genuinely 3-argument call site
 # (`semantic-merge` with no addendum) is byte-identical to what it printed before and no reader
 # gains a trailing tab it did not have.
+#
+# THE HAND-BACK COUNT IS TAKEN HERE, IN THE EMITTER, AND NOT AT THE CALL SITES. There are ten
+# `say WORKLIST` sites and twenty-one `say DECISION` sites today, and a counter incremented at
+# each is a hand-list that the next row added silently falls out of -- the same shape as the
+# `mech_fail` list below, which is why that one had to be measured rather than trusted. Every row
+# reaches this function, so this is the one place the duty cannot be missed.
+#
+# `restamp-withheld` and the `restamp-failed` rows are DECISIONs too, and they self-count. That is
+# harmless: they are emitted at or after the guard reads the value, so they cannot cause the
+# withholding they report. The fixture's C3 arm is what proves a clean run still stamps.
+#
+# TWO COUNTERS, BECAUSE THE TWO MODES CAN GATE ON DIFFERENT THINGS AND ONE OF THEM MUST
+# TERMINATE. Measured on the first end-to-end run of this change: `--finish` counted every row it
+# re-derived, the hook-registration site emitted `DECISION hook-registration-unchecked` on a
+# consumer with no `validate-hook-registration.sh`, and the finisher withheld -- FOREVER. That
+# row's own stated remedy is to re-run the apply, which is how the validator arrives, and
+# `--finish` skips the phase that delivers it. A withheld stamp the operator cannot clear leaves
+# `.ai-dlc-applying` in place and `core/git-hooks/pre-push` refusing the fixture suite, so the
+# consumer is wedged with no exit. That is the failure this change exists to avoid, reintroduced
+# one layer down by the change itself.
+#
+# So: the ORDINARY run gates on both kinds, which is the filed fix shape and is terminating
+# because `--finish` is the exit. `--finish` gates on WORKLIST only -- a row naming concrete work
+# that clears when the work is done -- and never on a DECISION, which at that point is either
+# already adjudicated by the operator or is this program saying it could not look.
+handback=0
+worklist_n=0
 say() {
+  case "$1" in WORKLIST|DECISION) handback=$((handback+1)) ;; esac
+  case "$1" in WORKLIST)          worklist_n=$((worklist_n+1)) ;; esac
   if [ -n "${4:-}" ]; then printf '%s\t%s\t%s\t%s\n' "$1" "$2" "${3:-}" "$4"
   else                     printf '%s\t%s\t%s\n'     "$1" "$2" "${3:-}"
   fi
@@ -143,9 +199,15 @@ err() { echo "apply: $*" >&2; exit 1; }
 # exists, and names it so an abandoned pull can be cleared by hand.
 #
 # NOT a manifest entry: it is consumer runtime state, like .ai-dlc-version beside it.
+#
+# NOT REWRITTEN UNDER `--finish`. That mode writes nothing to core, so there is no window to
+# mark; re-creating the marker there would only re-assert a mixture this invocation is about to
+# declare resolved.
 APPLYING="$CONSUMER/.claude/.ai-dlc-applying"
 mkdir -p "$CONSUMER/.claude" 2>/dev/null || true
-printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$APPLYING" 2>/dev/null || true
+if [ "$FINISH" = 0 ]; then
+  printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$APPLYING" 2>/dev/null || true
+fi
 
 # core/<rel> -> consumer path. ONE mapper.
 #
@@ -265,6 +327,17 @@ overwrite_from_theirs() { # <core-rel>
 # installer ships. That is a bug in this file, and it must not end with a stamp saying the
 # tree is at THEIRS.
 mech_fail=0
+
+# =============================================================================================
+# THE RESOLUTION PHASES. Everything to the matching `fi` -- phases 0 through the exec-bit audit
+# -- is what `--finish` SKIPS. That mode exists to advance a stamp this program deliberately
+# withheld on an earlier run, over a tree the caller has since finished by hand; re-running the
+# phases there would not merely be wasted work, it would NOT TERMINATE. A file the caller
+# semantically merged keeps a consumer delta by definition, so preclassify buckets it
+# BOTH-CHANGED->CLASSIFY on every subsequent run (preclassify.sh, the `ours_h` comparisons) and
+# the hand-back re-appears forever. The finisher must therefore be the stamp and nothing else.
+# =============================================================================================
+if [ "$FINISH" = 0 ]; then
 
 # ------------------------------------------------- 0. MEASURE, before anything is written
 #
@@ -1094,7 +1167,14 @@ $NOEXEC
 EOF
 fi
 
+fi  # ---- end of the resolution phases; see the `--finish` guard that opens them --------------
+
 # version landed when it did not costs a silent divergence nobody looks for.
+#
+# A FUNCTION BECAUSE IT HAS TWO CALL SITES AND ONE BODY. `--finish` runs it over a tree this
+# program did not touch on this invocation; the ordinary run runs it after the phases above. The
+# two orders are dispatched once, at the foot of this file, with the reason for each stated there.
+write_stamp() {
 STAMP="$CONSUMER/.claude/.ai-dlc-version"
 # BOTH PAIRS OR NEITHER. The skill pair is written inside the same branch as the rulebook pair,
 # so a withheld re-stamp withholds it too. Advancing `skill_version` over a tree that is missing
@@ -1102,11 +1182,21 @@ STAMP="$CONSUMER/.claude/.ai-dlc-version"
 # half, because `unregistered-drift.sh` reads `skill_commit` as a suppression ref: a stamp
 # naming a ref the tree does not match turns the NEXT pull's report into false drift work.
 withheld_extra=""
+# BOTH DERIVED IN THE ONE BLOCK THAT ALREADY READS THE MACHINERY FLAG, and deliberately not in a
+# second test on it beside the row below. `core/fixtures/apply-machinery-stamp` mutates every
+# guard on that flag together and refuses to score a PARTIAL revert; a third reader would have
+# left that battery proving the layer it could not reach. It caught this on the first run.
+# `finish_flag` is what makes the printed command reproduce THIS invocation rather than a generic
+# one -- a finisher run without the flag would withhold the machinery pair the first run was
+# carrying, which is the same false claim in the opposite direction.
+finish_flag=""
 if [ "$CARRIED_MACHINERY" = 1 ]; then
   withheld_extra=" This run carried step 2's deferred machinery slice, so \`skill_version\`/\`skill_commit\` are withheld with it — both pairs or neither."
+  finish_flag=" --carried-machinery-slice"
 fi
-if [ "$mech_fail" -gt 0 ]; then
-  say DECISION restamp-withheld "$STAMP" "${mech_fail} file(s) could not be placed mechanically — the stamp would claim ${THEIRS} while the tree lacks them. Left at ${BASE}; fix the paths above and re-run.${withheld_extra}"
+if [ "$FINISH" = 1 ]; then outstanding="$worklist_n"; else outstanding="$handback"; fi
+if [ "$mech_fail" -gt 0 ] || [ "$outstanding" -gt 0 ]; then
+  say DECISION restamp-withheld "$STAMP" "${mech_fail} file(s) could not be placed mechanically and ${outstanding} WORKLIST/DECISION row(s) above are undisposed — the stamp would claim ${THEIRS} while the tree does not yet match it, and the next pull computes its merge base from that stamp. Left at ${BASE}, and \`${APPLYING##*/}\` is deliberately left in place so the fixture suite keeps blocking. Do the rows above, then advance the stamp with: apply.sh --finish${finish_flag} <dist> ${BASE} <consumer> ${THEIRS}${withheld_extra}"
 elif [ -f "$STAMP" ]; then
   theirs_sha="$(git -C "$DIST" rev-parse --short "$THEIRS" 2>/dev/null || echo "$THEIRS")"
   # From THEIRS, not the working tree. Every file copy above resolves through
@@ -1207,6 +1297,7 @@ elif [ -f "$STAMP" ]; then
   echo "  It records the gates, the post-apply re-runs, the validators and the ledger decisions." >&2
   echo "  This program can see none of those, so it does not write them. Step 7 is where you do." >&2
 fi
+}
 
 # --- HOOK REGISTRATION: the other half of a hook delivery, which this tool does NOT do ------
 #
@@ -1239,6 +1330,16 @@ fi
 #
 # UNCONDITIONAL -- outside the re-stamp branch above -- because a withheld stamp does not make
 # an inert hook less inert.
+#
+# UNDER `--finish` IT RUNS FIRST INSTEAD, AND THAT IS THE ONE ORDERING DIFFERENCE BETWEEN THE TWO
+# MODES. The paragraph above is why it runs LAST on an ordinary apply: settings.json is merged
+# several bullets later in step 7, so a gate here would fire on every correct run. `--finish` is
+# invoked at the END of step 7, after that merge, which is exactly when the question becomes
+# answerable -- and its answer is VERIFIED rather than attested, because the validator either
+# exits 0 or names the unwired hooks. Running it first there means its row is counted by the same
+# `handback` guard as every other, so the one WORKLIST site that structurally could not reach the
+# stamp predicate now does, on the invocation where it means something.
+hook_registration_row() {
 HR_VALIDATOR=""
 if [ -x "$CONSUMER/scripts/ai-dlc/validate-hook-registration.sh" ]; then
   # Theirs' copy: the pure-apply phase above already wrote scripts/ai-dlc/ from THEIRS.
@@ -1259,6 +1360,25 @@ else
   # so is the difference between "checked and clean" and "never looked".
   say DECISION hook-registration-unchecked ".claude/settings.json" \
     "scripts/ai-dlc/validate-hook-registration.sh is not on this consumer, so nothing verified that the hook files this apply wrote are registered in settings.json. Run the settings reconcile (step 7's TEMPLATE-JSON-MERGE bullet) and re-run this apply; from the next pull on, the check is automatic."
+fi
+}
+
+# --- THE TWO ORDERS, DISPATCHED ONCE ---------------------------------------------------------
+#
+# Ordinary apply: stamp, then the hook row. The hook row cannot gate the stamp here because the
+# settings merge that answers it has not happened yet -- it is several bullets further into
+# step 7 -- so gating on it would withhold every correct run and wedge the consumer.
+#
+# `--finish`: the hook row FIRST, then the stamp. This invocation happens after that merge, so
+# the question is answerable and its answer is verified by a validator rather than attested. A
+# still-unwired hook therefore raises `handback` before the guard reads it, and the finisher
+# withholds -- which terminates, because registering the hooks is work that clears the row.
+if [ "$FINISH" = 1 ]; then
+  hook_registration_row
+  write_stamp
+else
+  write_stamp
+  hook_registration_row
 fi
 
 exit 0

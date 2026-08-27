@@ -1080,6 +1080,13 @@ prose is itself generated rather than composed.
    what makes the update end-to-end**: the operator runs it and it lands; you handle the semantic
    remainder, not the mechanical bulk.
 
+   **IF THE MANIFEST CARRIES ANY `WORKLIST` OR `DECISION` ROW, THE RE-STAMP WAS WITHHELD AND THE
+   PULL IS NOT OVER WHEN THE ROWS ARE.** You will see `DECISION restamp-withheld` in place of
+   `RESOLVED restamp`, and `.claude/.ai-dlc-applying` is still on the consumer, blocking its
+   fixture suite on purpose. Dispose of every row, then run the finisher — the re-stamp bullet at
+   the end of this step has the command and the reason. A pull left un-finished leaves the
+   consumer at `<base>` with its own gate refusing to run.
+
    Do NOT hand the operator a list of blockers and ask them how to respond. A blocker
    list is a to-do list with extra steps: it makes them hand-merge prose, hand-author
    YAML frontmatter, and hand-pick a `shadows:` anchor — the three things this repo has
@@ -1564,6 +1571,39 @@ prose is itself generated rather than composed.
      `apply` run is to advance the stamp; the log records "already current, stamp
      advanced <base> → <theirs>." Without this, a skill-only pull would leave the
      stamp stuck forever and every later pull would re-diff from a stale base.**
+
+     **THE STAMP IS WITHHELD WHILE ANY ROW IS OUTSTANDING, AND `--finish` IS HOW YOU
+     ADVANCE IT. THIS IS A REQUIRED STEP, NOT A RECOVERY PATH.** The first `apply.sh`
+     run of a pull that hands back ANY `WORKLIST` or `DECISION` row now emits
+     `DECISION restamp-withheld` instead of `RESOLVED restamp`, leaves the stamp at
+     `<base>`, and leaves `.claude/.ai-dlc-applying` in place — so the consumer's
+     `pre-push` keeps refusing the fixture suite. That is correct: the tree really is
+     a mixture until you have done the rows. **When every `WORKLIST` and `DECISION`
+     row above is disposed, run
+     `reconcile/apply.sh --finish [--carried-machinery-slice] <dist> <base> <consumer> <theirs>`.**
+     It does the stamp and the marker clear and NOTHING else — it runs no resolution
+     phase, so it cannot undo or redo your merges. Carry `--carried-machinery-slice`
+     through to it if the first run had it; the withheld row prints the exact command,
+     flag included.
+
+     *Why a second invocation rather than a smarter first one.* The rows are work YOU
+     complete after this program has exited, so there is no moment during the first run
+     at which the stamp is true. And the finisher cannot simply re-run the phases: a file
+     you semantically merged keeps a consumer delta by definition, so it re-buckets
+     `BOTH-CHANGED->CLASSIFY` on every subsequent run and the hand-back would never
+     clear. Filed by the reference consumer as
+     `PC-S304-APPLY-SH-RESTAMPS-BEFORE-THE-WORKLIST-IS-DONE`, reproduced across two pulls
+     a month apart — one run printed `RESOLVED restamp` beside 37 outstanding rows. The
+     stamp is the next pull's merge base, so an abandoned apply left a tree claiming to
+     be at theirs, and the un-merged files then read as `ALREADY-AT-THEIRS` to every
+     detector that compares against it.
+
+     *What `--finish` still checks.* It runs the hook-registration validator FIRST and
+     withholds again on a `WORKLIST settings-merge` row, because by then the settings
+     merge has happened and the answer is verifiable rather than attested. It does not
+     gate on a `DECISION` row: those you have already adjudicated, or they are the tool
+     saying it could not look, and gating on one that cannot clear would wedge the
+     consumer with no exit.
 
    - **YOU write `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`, and `apply.sh` does NOT.**
      Write it LAST, after the post-apply re-runs, because it records them. It carries the gates
