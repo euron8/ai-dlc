@@ -109,6 +109,8 @@ follow the worktree-explicit dispatch protocol:
 3. The Agent call MUST set `mode: "bypassPermissions"` and include
    the worktree absolute path in the prompt. The dev prompt MUST
    instruct the dev to `cd` into the worktree as its first action.
+   The worktree path is the ONLY absolute path the prompt may carry
+   (see 7).
 4. On story completion, the lead merges the dev branch into the
    sprint branch and removes the worktree:
    `git merge dev/sprint-<N>/story-<X> && git worktree remove <path>`
@@ -125,6 +127,35 @@ follow the worktree-explicit dispatch protocol:
    cost: none — an isolated alternative (`--detach`) is provided.
    Removal condition: only if worktrees under one repository stop
    sharing a single stash stack (a git invariant today).
+7. A worktree-isolated teammate's deliverable path is ALWAYS relative
+   to its OWN worktree root, never to the primary tree. The lead MUST
+   NOT ask it to write outside that worktree, and MUST NOT name a
+   primary-tree path for a file the teammate is to produce. Naming two
+   roots for one file in one sentence — "write to `<worktree>/…/x.md`,
+   resolved relative to the primary tree" — is satisfiable in neither
+   reading, and the teammate correctly writes inside its own worktree.
+   The lead reads the file from the primary tree AFTER merging the dev
+   branch (step 4), and translates the path itself if it needs one.
+   Two consequences, and both have to be stated because the second is
+   where the cost landed:
+   - **Do not arm a `wait-for-deliverable.sh` beat on a primary-tree
+     path for a worktree dispatch.** That path cannot exist until the
+     merge, and the merge is downstream of the join, so the beat can
+     never be satisfied. Join on the WORKTREE path, or join on nothing
+     and read the file after step 4.
+   - **A beat reporting non-delivery is not evidence the teammate is
+     working.** Before re-arming the same beat a second time, check
+     teammate liveness directly; an idle teammate with an absent
+     deliverable is a diverged path, not a slow one.
+   Failure caught: a dev completed its fix in ~7 minutes and went idle
+   while the lead's beat watched a primary-tree path, re-armed twice,
+   and the real state took three separate reads to reconstruct. The
+   equivalent warning already existed in `team-roles/adversary.md`,
+   which is the ONE role told never to run worktree-isolated — so it
+   sat where it could not fire. False-positive cost: none, the lead
+   loses no capability it had. Removal condition: only if a
+   worktree-isolated agent's absolute paths begin resolving against
+   the primary tree.
 
 **Bounded-join dispatch mandate (Rule 29).** A gated story-dev cycle is
 synchronous: the lead's immediate next action reads the dev's result
