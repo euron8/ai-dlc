@@ -234,6 +234,7 @@ core_manifest:
   - fixtures/trunk-push-bound/**
   - fixtures/pause-hook-origin/**
   - fixtures/postcompact-rulebook-recovery/**
+  - fixtures/preclassify-mode-bucket/**
   - fixtures/provenance-not-accessible/**
   - fixtures/reconcile-blocking-list/**
   - fixtures/reconcile-emit-report/**

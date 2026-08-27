@@ -120,6 +120,47 @@ setup_sited() { grep -qxF "$1" <<<"$SETUP_SITED_PATHS"; }
 blob_hash() { git -C "$DIST" rev-parse -q --verify "$1:$2" 2>/dev/null || echo MISSING; }
 file_hash() { local f="$CONS/$1"; [ -f "$f" ] && git -C "$DIST" hash-object "$f" 2>/dev/null || echo MISSING; }
 
+# BOTH HASHES ABOVE ARE CONTENT-ONLY, AND THE MODE IS PART OF WHAT A PULL DELIVERS. A blob
+# sha and `hash-object` both answer the same question about bytes and neither carries the
+# exec bit, so a bucket meaning "nothing left to do" that is decided on them alone is wrong
+# for every path whose content already matches theirs and whose MODE does not.
+#
+# That is not a hypothetical gap in this pipeline: `apply.sh`'s `sync_mode_from_theirs()`
+# chmods every file it writes, deriving the bit from `git ls-tree`, and its EXEC-BIT AUDIT
+# counts a mechanical failure and WITHHOLDS THE RE-STAMP for any upstream-100755 path the
+# consumer cannot execute. So the bit is the driver's responsibility -- and the only thing
+# that ever sets it is a bucket that APPLIES. Drop the path as already-satisfied and nothing
+# downstream will ever look at it again.
+#
+# DERIVED FROM THEIRS' OWN TREE, never from a list of which paths are executable. A list
+# rots the first time someone adds a hook, which is exactly the case that breaks. Same
+# derivation and same source of truth as `sync_mode_from_theirs()`, so the classifier and
+# the applier cannot disagree about what theirs' mode IS.
+#
+# NOT FOLDED INTO blob_hash/file_hash, deliberately, and this was measured rather than
+# reasoned. Those two feed the `A` and `D` branches as well: a mode-aware hash there turns
+# an `ALREADY-PRESENT` consumer copy into a spurious `BOTH-ADDED->CLASSIFY` hand-back, and
+# makes a `D`-branch path whose content matches base read as consumer-modified, refusing a
+# delete that is safe. The mode question belongs on the arms that mean "nothing to do", not
+# in the definition of content equality.
+#
+# `[ -x ]` AND NOT A NUMERIC COMPARE. git records exactly two file modes, 100644 and
+# 100755; a consumer file may be 600, 664, 775 or anything else the umask produced, and
+# none of those is a defect. The only question this can answer is the only one git asks.
+#
+# UNKNOWN MODE RETURNS SUCCESS, so an unreadable or absent `ls-tree` answer never invents
+# work. A symlink (120000) and a gitlink (160000) land here too and neither is a file this
+# driver chmods -- same posture as `sync_mode_from_theirs()`, which leaves them alone.
+mode_at_theirs() { # <core-rel-path> <consumer-rel-path> -> 0 if the consumer copy's exec bit already matches theirs
+  local entry
+  entry="$(git -C "$DIST" ls-tree "$THEIRS" -- "$1" 2>/dev/null)"
+  case "${entry%% *}" in
+    100755) [ -x "$CONS/$2" ] ;;
+    100644) [ ! -x "$CONS/$2" ] ;;
+    *) return 0 ;;
+  esac
+}
+
 if [ "$MODE" = "--templates" ]; then
   # Reconcile the generated files that live OUTSIDE core/ (CLAUDE.md,
   # coding-conventions.md, QUICKSTART.md, settings.json). Bucket on the
@@ -297,7 +338,8 @@ git -C "$DIST" diff --name-status "$BASE" "$THEIRS" -- core/ | while IFS=$'\t' r
       if   [ "$ours_h" = MISSING ] && setup_sited "$path"; then
                                                 bucket="UPSTREAM-ONLY-ADD+SETUP-TOKENS->SUBSTITUTE"
       elif [ "$ours_h" = MISSING ];        then bucket="UPSTREAM-ONLY-ADD"        # pure apply
-      elif [ "$ours_h" = "$theirs_h" ];    then bucket="ALREADY-PRESENT"          # noop
+      elif [ "$ours_h" = "$theirs_h" ] && mode_at_theirs "$path" "$cons"; then bucket="ALREADY-PRESENT"   # content AND mode -> noop
+      elif [ "$ours_h" = "$theirs_h" ];    then bucket="UPSTREAM-ONLY-ADD"        # content present, bit is not -> apply delivers it
       else                                      bucket="BOTH-ADDED->CLASSIFY"; fi
       ;;
     D)  # upstream removed this file; branch on whether the consumer touched it
@@ -306,9 +348,17 @@ git -C "$DIST" diff --name-status "$BASE" "$THEIRS" -- core/ | while IFS=$'\t' r
       else                                      bucket="UPSTREAM-DELETED+consumer-modified->CLASSIFY"; fi
       ;;
     *)  # M and renames
+      # THE NOOP ARM IS TESTED FIRST, AND ONLY BECAUSE IT CARRIES THE MODE CONJUNCT.
+      # Reordering these two arms WITHOUT it is the obvious-looking fix and it is a
+      # REGRESSION: on a mode-only upstream change all three content hashes are equal, so a
+      # bare `ours_h = theirs_h` cannot tell the consumer that already has the bit from the
+      # one that still needs it, and answers "nothing to do" for both. Measured -- see the
+      # fixture. Today's order gets the second case RIGHT by accident, which is why the
+      # repair adds a discriminator rather than swapping two lines.
       if   [ "$ours_h" = MISSING ];        then bucket="UPSTREAM-MOD+consumer-deleted->CLASSIFY"
+      elif [ "$ours_h" = "$theirs_h" ] && mode_at_theirs "$path" "$cons"; then bucket="ALREADY-AT-THEIRS" # content AND mode -> noop
       elif [ "$ours_h" = "$base_h" ];      then bucket="UPSTREAM-ONLY"            # consumer untouched -> apply
-      elif [ "$ours_h" = "$theirs_h" ];    then bucket="ALREADY-AT-THEIRS"        # noop
+      elif [ "$ours_h" = "$theirs_h" ];    then bucket="UPSTREAM-ONLY"            # content at theirs, bit is not -> apply delivers it
       else                                      bucket="BOTH-CHANGED->CLASSIFY"; fi
       ;;
   esac

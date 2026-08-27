@@ -15,6 +15,62 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.423.0] - 2026-08-27
+
+### A pull that decides "nothing to do" on content alone, when the file mode is part of what it delivers
+
+Closes `BL-033`, discharging the graph consumer's ledger entry
+`PC-S314-PRECLASSIFY-BUCKETS-A-MODE-ONLY-CHANGE-AS-UPSTREAM-ONLY-SO-THE-SELF-UPDATE-CANNOT-TERMINATE`.
+
+`reconcile/preclassify.sh` buckets every path of the `base..theirs` delta. Its two hashes are
+content-only — `blob_hash()` is a blob sha, `file_hash()` is `hash-object` — and neither
+carries the exec bit. The mode nevertheless IS part of what the pull delivers: `apply.sh`'s
+`sync_mode_from_theirs()` chmods every file it writes from `git ls-tree`, and the EXEC-BIT
+AUDIT counts a mechanical failure and withholds the re-stamp for any upstream-100755 path the
+consumer cannot execute. The only thing that ever sets the bit is a bucket that APPLIES.
+
+Measured through the shipping classifier on synthetic three-ref repos, four rows were wrong,
+and the filed entry named one of them:
+
+- a mode-only upstream change (same blob, `100644 -> 100755`) whose consumer copy is already
+  at `755` — fully in sync, nothing left to do — bucketed `UPSTREAM-ONLY` forever, because
+  all three content hashes are equal and the `ours_h = base_h` arm shadows the
+  `ours_h = theirs_h` arm below it. `SKILL.md`'s step 2 subtracts `ALREADY-AT-THEIRS` to
+  terminate, so the path could never leave the slice. **This is the entry as filed.**
+- the same shape in the `100755 -> 100644` direction, which the entry does not mention.
+- a path whose content already matches theirs but whose bit does NOT, reaching
+  `ALREADY-AT-THEIRS` at the arm below and being dropped from the worklist — so the chmod is
+  never delivered. This one is SILENT in the `100644` direction: the exec-bit audit inspects
+  only upstream-100755 paths, so nothing anywhere reports it.
+- the same silent drop on the `A` branch's `ALREADY-PRESENT`.
+
+The repair is a mode conjunct on the arms that mean "nothing to do", deriving theirs' bit from
+`git ls-tree` — the same derivation and the same source of truth `sync_mode_from_theirs()`
+uses, so the classifier and the applier cannot disagree about what theirs' mode is. A path
+whose content is right and whose bit is not now routes to `UPSTREAM-ONLY` /
+`UPSTREAM-ONLY-ADD`, which `apply.sh:323` already handles as a pure apply, and the apply is
+what sets the bit. No bucket name is added, so no reader changes.
+
+**The obvious fix is a regression and was rejected on a measurement.** Swapping the two arms
+so `ALREADY-AT-THEIRS` is tested first looks like a one-line repair and is what the entry's
+own receipt accepts. It answers `ALREADY-AT-THEIRS` for BOTH a consumer that already has the
+bit and one that still needs it — on a mode-only change the content hashes cannot separate
+them — so it converts an automatic mode delivery into a path silently dropped from the
+worklist. Today's arm order gets that second case right by accident, which is why the repair
+adds a discriminator rather than reordering two lines.
+
+**Two of the four rows are wider than `BL-033` filed**, and the widening was taken
+deliberately rather than narrowed away: it is the same predicate, in the same function, on
+the two remaining arms that answer "already satisfied" without consulting the mode.
+
+**A correction to the entry's own text.** `BL-033` records its alternative fix — a mode-aware
+hash — as blocked because "`apply` must actually restore the mode, which it does not do
+today". That clause is false at HEAD and the entry already says so. The mode-aware hash was
+nevertheless rejected here for a different, measured reason: `blob_hash`/`file_hash` feed the
+`A` and `D` branches too, where mode-aware equality turns an `ALREADY-PRESENT` consumer copy
+into a spurious `BOTH-ADDED->CLASSIFY` hand-back and makes a `D`-branch path whose content
+matches base read as consumer-modified, refusing a safe delete.
+
 ## [0.422.0] - 2026-08-27
 
 ### An unquoted git rev-path in shipped instruction text, and the eight sites the entry's own grammar could not spell

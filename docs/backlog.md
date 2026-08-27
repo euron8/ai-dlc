@@ -57,6 +57,96 @@ not a closed entry.
 
 ---
 
+## BL-099 — the exec-bit audit is one-directional, so a consumer file that upstream STOPPED shipping executable is never reported
+
+**`apply.sh`'s EXEC-BIT AUDIT is LEVEL-triggered and covers exactly one of the two directions
+it could.** It walks `git ls-tree -r "$THEIRS" -- core/`, keeps `$1=="100755"`, and reports every
+one whose consumer copy is not executable. There is no mirror arm: a path upstream ships
+`100644` whose consumer copy IS executable produces no finding anywhere, ever.
+
+Measured, with a control in the same invocation: `100644` occurs three times in `apply.sh` and two
+of those are comment prose — the only live one is the `chmod -x` inside `sync_mode_from_theirs()`,
+which runs only on a file being APPLIED. `100755` occurs eight times, and both audit arms
+(`apply.sh:878`, `apply.sh:1081`) test it alone.
+
+**The asymmetry matters because the two directions have different backstops.** A file that should
+be executable and is not gets caught on every subsequent pull, whatever earlier release left it
+that way — that is what LEVEL buys. A file that should NOT be executable and is gets caught only
+if some pull happens to APPLY it. `v0.423.0` closed the classifier half of that (a path whose
+content matches theirs and whose bit does not now routes to a bucket that applies, so
+`sync_mode_from_theirs` runs and `chmod -x` fires), but a bit left set by a pull that predates
+that fix is still invisible, and nothing will look at it again.
+
+The consequence is smaller than the `100755` direction — an over-permissive mode rather than an
+inert validator — which is why this is filed rather than fixed inside `v0.423.0`. It is
+nonetheless a hole in a check whose own header says "LEVEL, NOT EDGE ... an event-driven audit
+would never look at it again".
+
+**Candidate fix**: a second `awk` arm over the same `ls-tree` output keeping `$1=="100644"` and
+reporting consumer copies that ARE executable. One walk, two filters — the enumeration is already
+paid for. False-positive set NOT yet measured; that measurement is the first thing this entry
+owes, because a consumer tree may hold executable copies for reasons this driver did not create.
+
+**The receipt below is TEXT-KEYED, deliberately, and its weakness is stated rather than hidden.**
+Driving `apply.sh` end-to-end needs the harness the `apply-*` fixtures carry and does not fit a
+one-liner. It extracts the `NOEXEC` command substitution, STRIPS COMMENTS, and requires a
+`100644` to survive — so the obvious prose close does not work: measured, a seeded
+`# seeded: a 100644 arm` comment leaves it at exit 1, while a seeded `awk` arm takes it to 0.
+It still cannot tell a real arm from any other live mention of the token in that block. The
+proper proof belongs in a fixture that drives the audit.
+
+Tiered **DEFECT**.
+
+Found while closing `BL-033` at `v0.423.0`; not a `PC-` candidate, so it ranks below the
+PC-backed set.
+
+verify: sh P=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$P" ] || exit 9; B="$(awk '/^NOEXEC="\$\($/{f=1} f{print} f && /^\)"$/{exit}' "$P" | sed 's/#.*//')"; [ -n "$B" ] || exit 9; printf '%s\n' "$B" | grep -q '100755' || exit 9; printf '%s\n' "$B" | grep -q '\[ -x' || exit 9; printf '%s\n' "$B" | grep -q '100644'
+
+## BL-100 — `--untangle` gives a mode-drifted consumer copy the same verdict as a correct one
+
+**`preclassify.sh`'s `--untangle` mode buckets on `ours_h = base_h` and that comparison is
+content-only**, so a consumer file holding the right bytes with the wrong exec bit reads
+`ALREADY-AT-THEIRS` — "consumer never touched it, nothing to untangle".
+
+Driven through the shipping script against this distribution as `DIST` with `HEAD` as both base
+and theirs, and a synthetic consumer. The subject the population itself selects first is
+`core/git-hooks/pre-push`, which maps to the consumer's `.githooks/pre-push`:
+
+```
+consumer copy 755, right content   ALREADY-AT-THEIRS      <- control
+consumer copy 644, right content   ALREADY-AT-THEIRS      <- the finding: same answer
+```
+
+**The control and the subject returning the SAME value is what the finding IS here**, and it is
+worth saying plainly because a control that agrees with the verdict is normally the sign of a
+broken probe. Not in this shape: the claim is that the arm cannot discriminate, so the two arms
+of the probe agreeing is the positive result. The probe is shown to be live by its own `exit 9`
+guards — an empty row set, an unresolvable blob, or a control that is not `ALREADY-AT-THEIRS`
+all abort rather than pass.
+
+**The consequence is bounded by a backstop, which is why this is not a BLOCKER.** `--untangle`
+is a one-time Phase-2 migration, and any later ordinary pull runs the level-triggered EXEC-BIT
+AUDIT, which does cover `core/git-hooks/pre-push` in the `100755` direction. So the wrong verdict
+is `--untangle`'s own report rather than a permanent state. In the `100644` direction there is no
+backstop at all — see `BL-099`.
+
+**Remedy NOT decided, deliberately.** `--untangle`'s three buckets are `UPSTREAM-ONLY-ADD`,
+`ALREADY-AT-THEIRS` and `BOTH-CHANGED->CLASSIFY`, and it is not established which a mode-drifted
+copy should take: it is not a content tangle, so `BOTH-CHANGED->CLASSIFY` overstates it. The
+receipt therefore asserts only that the bucket is NOT `ALREADY-AT-THEIRS`, which any of the
+plausible remedies satisfies. Whoever takes this decides the bucket first.
+
+Note the `v0.423.0` conjunct is NOT reusable as-is: `mode_at_theirs()` reads `$THEIRS`, and in
+`--untangle` base and theirs are the same ref by construction, so the helper resolves but answers
+a question about a ref the mode never came from. Re-derive rather than copying the call.
+
+Tiered **DEFECT**.
+
+Found while closing `BL-033` at `v0.423.0`; not a `PC-` candidate, so it ranks below the
+PC-backed set.
+
+verify: sh P=core/skills/ai-dlc-update/reconcile/preclassify.sh; [ -f "$P" ] || exit 9; H="$(git rev-parse HEAD)" || exit 9; C="$(mktemp -d)" || exit 9; u() { bash "$P" . "$H" "$H" "$C" --untangle 2>/dev/null; }; R="$(u | LC_ALL=C awk -F'\t' '$1=="U"{print $2 "\t" $3}' | while IFS="$(printf '\t')" read -r cp cons; do [ "$(git ls-tree "$H" -- "$cp" | cut -c1-6)" = 100755 ] && { printf '%s\t%s\n' "$cp" "$cons"; break; }; done)"; [ -n "$R" ] || { rm -rf "$C"; exit 9; }; CP="$(printf '%s' "$R" | cut -f1)"; CO="$(printf '%s' "$R" | cut -f2)"; mkdir -p "$C/$(dirname "$CO")" || { rm -rf "$C"; exit 9; }; git show "${H}:${CP}" > "$C/$CO" 2>/dev/null || { rm -rf "$C"; exit 9; }; b() { u | LC_ALL=C awk -F'\t' -v p="$CP" '$2==p{print $4}'; }; chmod 755 "$C/$CO"; [ "$(b)" = ALREADY-AT-THEIRS ] || { rm -rf "$C"; exit 9; }; chmod 644 "$C/$CO"; D="$(b)"; rm -rf "$C"; [ "$D" != ALREADY-AT-THEIRS ]
+
 ## BL-098 — two blocks may declare the same vocabulary NAME, and the index renders the row twice
 
 **`BL-094` one level up: the contradiction is between two BLOCKS rather than two fields.**
@@ -1520,12 +1610,37 @@ the shipping file first — takes the receipt to exit 0 with the control still g
 line-order anchor was rejected: the fix is a reorder of two existing lines, so no token is added or
 removed, but a reformat of the surrounding `case` would move it with no behavioural change.
 
+**AMENDED at v0.423.0 — the entry is WIDER than filed, in three ways, all measured through the
+shipping classifier on synthetic three-ref repos.** (a) The same shape holds in the
+`100755 -> 100644` direction, which the filing does not mention. (b) A path whose content
+already matches theirs but whose bit does NOT reaches `ALREADY-AT-THEIRS` at the arm BELOW the
+one filed, and is dropped from the worklist, so the chmod is never delivered — and that one is
+SILENT in the `100644` direction, because the exec-bit audit inspects only upstream-100755
+paths. (c) The `A` branch's `ALREADY-PRESENT` has the identical defect. All four rows are
+repaired by one mode conjunct on the arms that mean "nothing to do".
+
+**AMENDED — THE RECEIPT BELOW REPLACES ONE THAT CERTIFIED A REGRESSION, and that is the
+transferable finding.** The original asserted only that a mode-only change with the consumer
+copy already at `755` reaches `ALREADY-AT-THEIRS`. The entry's own prose said it "takes either
+fix", and it did: a bare swap of the `ours_h = base_h` and `ours_h = theirs_h` arms took it to
+exit **0**. That swap is a REGRESSION — with a mode-only change every content hash is equal, so
+a bare `ours_h = theirs_h` cannot separate the consumer that already has the bit from the one
+that still needs it, and answers "nothing to do" for both. Measured across three trees built by
+`git archive HEAD`, asserted pairwise-different before the verdicts were read: original receipt
+`head 1 / reorder 0 / conjunct 0`; replacement `head 1 / reorder 1 / conjunct 0`. **A receipt
+that accepts either of two candidate fixes has not established which one it accepts** — the
+replacement carries both mode-only consumers in ONE invocation, so no implementation can satisfy
+it by collapsing them. It also pins `core.fileMode true` on its own scratch repo: under a global
+`core.fileMode = false` the `chmod` never reaches the tree, theirs records `100644`, and the
+whole case degrades into a no-op that passes — an exit 9 guard on theirs' recorded mode catches
+that rather than reporting a false green.
+
 Discharges the consumer entry
 `PC-S314-PRECLASSIFY-BUCKETS-A-MODE-ONLY-CHANGE-AS-UPSTREAM-ONLY-SO-THE-SELF-UPDATE-CANNOT-TERMINATE`
 at pinned ledger line 3018.
 
 
-verify: sh D=$(mktemp -d); P=core/skills/ai-dlc-update/reconcile/preclassify.sh; export GIT_AUTHOR_NAME=p GIT_AUTHOR_EMAIL=p@p GIT_COMMITTER_NAME=p GIT_COMMITTER_EMAIL=p@p; mkdir -p "$D/d/core/rules" "$D/c/.claude/rules"; git -C "$D/d" init -q; printf "body\n" > "$D/d/core/rules/modeonly.sh"; printf "old\n" > "$D/d/core/rules/content.sh"; chmod 644 "$D/d/core/rules/modeonly.sh" "$D/d/core/rules/content.sh"; git -C "$D/d" add -A >/dev/null; git -C "$D/d" commit -qm base >/dev/null; B=$(git -C "$D/d" rev-parse HEAD); chmod 755 "$D/d/core/rules/modeonly.sh"; printf "new\n" > "$D/d/core/rules/content.sh"; git -C "$D/d" add -A >/dev/null; git -C "$D/d" commit -qm theirs >/dev/null; T=$(git -C "$D/d" rev-parse HEAD); printf "body\n" > "$D/c/.claude/rules/modeonly.sh"; chmod 755 "$D/c/.claude/rules/modeonly.sh"; printf "new\n" > "$D/c/.claude/rules/content.sh"; O=$(bash "$P" "$D/d" "$B" "$T" "$D/c" 2>&1); rm -rf "$D"; CTRL=$(LC_ALL=C awk -F"\t" "\$2 ~ /content/{print \$4}" <<<"$O"); ARM=$(LC_ALL=C awk -F"\t" "\$2 ~ /modeonly/{print \$4}" <<<"$O"); [ "$CTRL" = ALREADY-AT-THEIRS ] || exit 1; [ "$ARM" = ALREADY-AT-THEIRS ]
+verify: sh D=$(mktemp -d); P=core/skills/ai-dlc-update/reconcile/preclassify.sh; export GIT_AUTHOR_NAME=p GIT_AUTHOR_EMAIL=p@p GIT_COMMITTER_NAME=p GIT_COMMITTER_EMAIL=p@p; mkdir -p "$D/d/core/rules" "$D/c/.claude/rules"; git -C "$D/d" init -q; git -C "$D/d" config core.fileMode true; for f in synced needsbit content; do printf "body\n" > "$D/d/core/rules/$f.sh"; chmod 644 "$D/d/core/rules/$f.sh"; done; printf "old\n" > "$D/d/core/rules/content.sh"; git -C "$D/d" add -A >/dev/null; git -C "$D/d" commit -qm base >/dev/null; B=$(git -C "$D/d" rev-parse HEAD); chmod 755 "$D/d/core/rules/synced.sh" "$D/d/core/rules/needsbit.sh"; printf "new\n" > "$D/d/core/rules/content.sh"; git -C "$D/d" add -A >/dev/null; git -C "$D/d" commit -qm theirs >/dev/null; T=$(git -C "$D/d" rev-parse HEAD); [ "$(git -C "$D/d" ls-tree "$T" -- core/rules/synced.sh | cut -c1-6)" = 100755 ] || { rm -rf "$D"; exit 9; }; printf "body\n" > "$D/c/.claude/rules/synced.sh"; chmod 755 "$D/c/.claude/rules/synced.sh"; printf "body\n" > "$D/c/.claude/rules/needsbit.sh"; chmod 644 "$D/c/.claude/rules/needsbit.sh"; printf "new\n" > "$D/c/.claude/rules/content.sh"; O=$(bash "$P" "$D/d" "$B" "$T" "$D/c" 2>&1); rm -rf "$D"; g() { LC_ALL=C awk -F"\t" -v n="$1" '$2 ~ n {print $4}' <<<"$O"; }; [ "$(g content)" = ALREADY-AT-THEIRS ] || exit 1; [ "$(g synced)" = ALREADY-AT-THEIRS ] || exit 1; [ "$(g needsbit)" = UPSTREAM-ONLY ]
 ## BL-034
 
 **The `reconcile-mechanical` region that `SKILL.md` calls "every mechanical finding, complete, from

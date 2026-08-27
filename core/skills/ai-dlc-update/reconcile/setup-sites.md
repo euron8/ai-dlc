@@ -175,6 +175,7 @@ core_manifest:
   - core/fixtures/trunk-push-bound/**
   - core/fixtures/pause-hook-origin/**
   - core/fixtures/postcompact-rulebook-recovery/**
+  - core/fixtures/preclassify-mode-bucket/**
   - core/fixtures/provenance-not-accessible/**
   - core/fixtures/reconcile-blocking-list/**
   - core/fixtures/reconcile-emit-report/**
