@@ -64,9 +64,18 @@ if [ -r "$_AI_DLC_PROV" ]; then . "$_AI_DLC_PROV"
 else ai_dlc_provenance_wrap() { printf %s "${3:-}"; }; fi
 
 # `emit` takes RAW text and does its own escaping, so the marker is prepended in ONE
-# place rather than at each call site. Both call sites below pass raw text.
+# place rather than at each call site. Every call site below passes raw text.
+#
+# THIS HOOK CARRIES THE PROVENANCE CONTRACT FOR THE WHOLE FLEET -- the 4th argument -- and the
+# siting is a BUDGET decision, not a topical one. The paragraph has to recur after a compaction,
+# which means a SessionStart hook; attaching it to EVERY SessionStart emission put
+# ai-dlc-recover.sh's recovery block at 10482 characters against a 9500 bound and a 10000 cliff
+# past which the harness discards the whole block. This hook is SessionStart, runs every session,
+# and carries almost no payload of its own, so it has the room. I98 binds the count to exactly
+# one: two carriers would double the cost, and zero would leave a marker the lead never learns
+# to check.
 emit() { printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":%s}}\n' \
-           "$(jstr "$(ai_dlc_provenance_wrap ai-dlc-rules-floor SessionStart "$1")")"; }
+           "$(jstr "$(ai_dlc_provenance_wrap ai-dlc-rules-floor SessionStart "$1" contract)")"; }
 jstr() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/' | tr -d '\n' | sed 's/^/"/; s/$/"/'; }
 
 if [ -z "$ver" ]; then
@@ -86,6 +95,12 @@ fi
 
 if [ "$below" = "1" ]; then
   emit "AI/DLC RULES FLOOR NOT MET -- an installed rule file is INERT. Claude Code $ver is below ${FLOOR_MAJOR}.${FLOOR_MINOR}.${FLOOR_PATCH}, the release that added the .claude/rules/ loader. These file(s) are present and are NOT being read: $names. Rule 23 (resident-context discipline) is therefore carried by .claude/skills/ai-dlc/SKILL.md ALONE, and its Carrier declaration overstates what is in force -- do not rely on it surviving a compaction. Upgrade Claude Code, or treat SKILL.md as the only source. Nothing else in this tree reports this: the audit scans the file and passes, and .ai-dlc-version says the tree is current."
+else
+  # FLOOR MET. Before this release that was a silent exit, and it still says nothing about the
+  # floor -- the empty body is deliberate. What it does carry is the provenance contract, which
+  # is why this branch exists at all: the contract must reach the lead on EVERY session, not
+  # only on the sessions where an unrelated check happens to fire.
+  emit ""
 fi
 
 exit 0

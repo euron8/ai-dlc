@@ -67,6 +67,27 @@ SessionStart-only, where the tag emits two lines and the CONTRACT paragraph abso
 `ai_dlc_provenance_wrap` owns the newline now, and `I98` fails the push on a hook calling the tag
 directly, because leaving the broken spelling callable leaves it reachable.
 
+**The contract paragraph then had to be SITED, and that is the more interesting half.** Attached
+to every SessionStart emission it put `ai-dlc-recover.sh`'s post-compaction recovery block at
+**10482** characters against a 9500 bound and a **10000 cliff past which the harness replaces the
+entire block with a file-path stub** — so the fix for one silent failure would have caused
+another, in the one hook whose whole job is surviving a compaction. That block had 427 characters
+of headroom and the paragraph is 1409.
+
+Shortening it to fit was the wrong repair: it is a security explanation, its reader is a lead
+deciding whether to trust unsolicited text, and this repo does not trim rule text for token cost.
+It is emitted by exactly one hook instead — `ai-dlc-rules-floor.sh`, SessionStart, runs every
+session, and carries almost no payload of its own. That hook previously exited silently when the
+floor was met; it now always emits, with the floor finding still conditional. Recovery is back to
+**9225**.
+
+**Three fixtures asserted the contract's old location and one asserted byte-identity of two hook
+emissions.** All four were re-anchored rather than relaxed: a per-emission nonce makes two
+emissions of the same hook differ BY DESIGN, so `postcompact-rulebook-recovery` now strips the
+marker LINE before comparing and still compares every other byte. `hook-registration-join`
+duplicated `I13`'s join and learned the same derived library exemption — proven by orphaning the
+library and watching the finding come back.
+
 **Three claims in the header were corrected by that same pass, and the corrections ship with the
 mechanism.** The contract said the nonce appears nowhere "a tool result can reach" — false; the
 store is an ordinary file and `cat` puts it in a tool result. The property is about ORDERING, not

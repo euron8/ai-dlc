@@ -111,9 +111,15 @@ EMIT_RC=0
 sb() { rm -rf "$SCR/$1" 2>/dev/null; mkdir -p "$SCR/$1" 2>/dev/null; printf '%s' "$SCR/$1"; }
 
 # emitf <project-dir> <hook> <event> <outfile> -- one emission, in its own process.
+# DRIVEN THROUGH `wrap`, WHICH IS WHAT THE CALL SITES USE, NOT THROUGH `tag`. The contract moved
+# out of tag() and behind wrap's 4th argument when it turned out that attaching it to every
+# SessionStart emission pushed the post-compaction recovery block past its size bound. A battery
+# that keeps driving the internal producer measures a path no hook takes. The SessionStart
+# emission asks for the contract because exactly one hook does; the ordinary event does not.
 emitf() {
-  CLAUDE_PROJECT_DIR="$1" bash -c '. "$1" 2>/dev/null || exit 0; ai_dlc_provenance_tag "$2" "$3"' \
-    _ "$LIB" "$2" "$3" >"$4" 2>/dev/null
+  _c=""; [ "$3" = SessionStart ] && _c=contract
+  CLAUDE_PROJECT_DIR="$1" bash -c '. "$1" 2>/dev/null || exit 0; ai_dlc_provenance_wrap "$2" "$3" "" "$4"' \
+    _ "$LIB" "$2" "$3" "$_c" >"$4" 2>/dev/null
   EMIT_RC=$?
   return 0
 }
@@ -373,9 +379,12 @@ mutate "SessionStart does not rotate" \
 # `printf "%.0s"` consumes the argument and emits nothing, so the mutation is the paragraph's
 # absence and not a syntax change. Nothing then restates the check after a compaction, and a
 # lead that never learns the marker exists cannot run the check whatever the marker says.
+# RE-ANCHORED: the paragraph moved out of `tag` into its own `ai_dlc_provenance_contract` when
+# the contract had to be sited on ONE hook to stay under the recovery block's size bound. The
+# old expression matched nothing, and the battery reported that rather than scoring a kill.
 mutate "contract paragraph suppressed" \
   "CONTRACT_ON_SESSIONSTART" \
-  -e 's#^    printf .%s.n. .AI/DLC PROVENANCE CONTRACT#    printf "%.0s" "AI/DLC PROVENANCE CONTRACT#'
+  -e 's#^  printf .%s. .AI/DLC PROVENANCE CONTRACT#  printf "%.0s" "AI/DLC PROVENANCE CONTRACT#'
 
 # --- 5. the marker token drifts ----------------------------------------------
 # Keyed on the CONSTANT, not on any prose, and the mutation is a single leading character so
@@ -413,9 +422,15 @@ mutate "trim depth collapsed to one line" \
 
 # --- 10. the marker loses its line terminator --------------------------------
 # Measured through the awk-NR/wc-l pair rather than by reading bytes back through a shell.
+# RE-ANCHORED ONTO `wrap`, WHICH NOW OWNS THE NEWLINE. Stripping the terminator from `tag`'s own
+# printf stopped being observable the moment wrap started supplying one, so this mutant SURVIVED
+# -- correctly, and it reported that rather than passing. The separator wrap inserts between the
+# marker and the body is the thing that must be load-bearing, because that separator is what
+# makes the marker a LINE at a call site.
 mutate "marker emitted without its newline" \
   "MARKER_TERMINATED" \
-  -e 's#verify=%s].n#verify=%s]#'
+  -e 's#^    printf .%s.n%s.n%s.#    printf "%s%s%s"#' \
+  -e 's#^    printf .%s.n%s. .\$(ai_dlc_provenance_tag#    printf "%s%s" "$(ai_dlc_provenance_tag#'
 
 # --- 11. the marker stops naming the store -----------------------------------
 # Anchored on `"$nonce" "$AI_DLC_PROVENANCE_STORE"`, because the store variable also ends the

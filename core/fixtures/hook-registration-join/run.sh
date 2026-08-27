@@ -235,6 +235,21 @@ if [ -f "$ROOT/templates/settings.json.template" ] && [ -d "$ROOT/core/hooks" ];
 import glob, json, os, re, sys
 root = sys.argv[1]
 shipped = {os.path.basename(p) for p in glob.glob(os.path.join(root, "core/hooks/ai-dlc-*.sh"))}
+# A SOURCED LIBRARY IS NOT A HOOK, AND THE EXEMPTION IS DERIVED FROM THE OTHER SIDE OF THE JOIN
+# RATHER THAN NAMED. core/hooks/ holds one file no event invokes: the emitting hooks `.`-source
+# it as a sibling. Registering it would wire every consumer's settings to a command that reads
+# no stdin and decides nothing. A hand-written skip list would exempt it by NAME, so deleting
+# the last `source` of a library would leave the exemption behind and this arm would then permit
+# a genuinely unregistered hook. Keying on "some sibling sources it" means a library nothing
+# sources is scored as an unregistered hook again, automatically, on the commit that orphans it.
+# I13 in scripts/validate-enforcement-map.sh derives the same set the same way.
+sourced = set()
+for p in glob.glob(os.path.join(root, "core/hooks/*.sh")):
+    for line in open(p, encoding="utf-8"):
+        if "BASH_SOURCE" not in line:
+            continue
+        sourced.update(re.findall(r"/([a-z0-9.-]+\.sh)", line))
+shipped -= sourced
 doc = json.load(open(os.path.join(root, "templates/settings.json.template"), encoding="utf-8"))
 cmds = []
 def walk(n):

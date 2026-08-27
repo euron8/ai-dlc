@@ -55,6 +55,13 @@ fire() { # <hook-path> -> prints additionalContext
   fire_at "$1" "$PROJECT"
 }
 
+# STRIP THE PROVENANCE MARKER BEFORE COMPARING TWO EMISSIONS. Every hook emission now opens with
+# a marker line carrying a per-emission nonce, so two invocations of the SAME hook differ BY
+# DESIGN and a raw byte comparison reports entanglement for a reason that has nothing to do with
+# the mutation under test. Only the marker LINE is dropped -- every other byte the mutant could
+# have changed is still compared -- so this normalizes the arm rather than weakening it.
+demark() { grep -v '^\[AI-DLC-HOOK-PROVENANCE ' <<<"$1" || true; }
+
 echo "postcompact-rulebook-recovery:"
 
 # --- Assertion 0: SANITY — the hook produces a directive at all ---------------
@@ -1132,7 +1139,7 @@ else
   MCTX2="$(fire "$MUT_FB")"
   if [ "$r" = PASS ]; then
     bad "MUTANT DID NOT FAIL — the old unexecutable fallback passes assertion 23, so that arm asserts nothing"
-  elif [ "$MCTX2" != "$CTX" ]; then
+  elif [ "$(demark "$MCTX2")" != "$(demark "$CTX")" ]; then
     bad "MUTANT FAILED TOO MUCH — it also changed the directive emitted for a snapshot that DOES resolve, so assertion 23 is entangled with the text arms above"
   else
     ok "mutant: restoring the \${STEP_FILE} fallback fails ONLY the second-mandate arm — byte-identical output where the step file resolves"

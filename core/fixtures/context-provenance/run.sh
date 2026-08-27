@@ -482,9 +482,15 @@ if MD="$(mutlib m1 's@if \[ "$event" != "SessionStart" \] && \[ -r "$file" \]; t
   fi
 fi
 
-# MUTANT 2 -- the contract branch is always taken, so every event restates it. Kills arm
-# 4's absence half. The nonce must still be REUSED, so arm 3 is unmoved.
-if MD="$(mutlib m2 's@if \[ "$event" = "SessionStart" \]; then@if true; then@')"; then
+# MUTANT 2 -- the contract is emitted whether or not the caller asked for it, so every event
+# restates it. Kills arm 4's absence half. The nonce must still be REUSED, so arm 3 is unmoved.
+#
+# RE-ANCHORED ONTO `wrap`'S 4th-ARGUMENT TEST. The contract used to live behind an event test
+# inside `tag`, and attaching it to every SessionStart emission put the post-compaction recovery
+# block past its size bound -- so it moved behind an opt-in that exactly one hook passes. The old
+# expression matched nothing after that move, and the fixture reported the mutation as matching
+# nothing rather than scoring a kill it had not earned.
+if MD="$(mutlib m2 's@if \[ -n "${4:-}" \]; then@if true; then@')"; then
   M2P="$WORK/mp-m2"; mkproj "$M2P"
   mfire_floor  "$MD" "$M2P" "$WORK/m2a.json"; ctx_of "$WORK/m2a.json" "$WORK/m2a.ctx"
   mfire_sensor "$MD" "$M2P" "$WORK/m2b.json"; ctx_of "$WORK/m2b.json" "$WORK/m2b.ctx"
