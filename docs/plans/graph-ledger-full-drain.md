@@ -17,6 +17,18 @@ instruction from it.**
 instrument, not the goal. **OPERATOR RULING, and it settles the priority: the original goal
 stands. Hardening ai-dlc is secondary — worthwhile, and ranked BELOW the ledger.**
 
+**THE GOAL WAS IN THE FILENAME, THE TITLE AND THE OPENING SENTENCE, AND IT STILL DRIFTED FOR TEN
+CONSECUTIVE FILINGS.** The session that drifted typed `graph-ledger-full-drain.md` a dozen times
+while doing it. So the failure was not that the goal went unstated — it was that nothing DERIVED
+it. Every command in the numbered action list measured `docs/backlog.md`; not one measured the
+ledger, so every batch's evidence was about the instrument and none was about the subject. A goal
+stated in prose at the top of a file is carried by the reader's ATTENTION, and twelve batches is
+longer than attention lasts; `resident-context.md` already says a rule survives only if something
+other than memory carries it, and a title is memory. The `PC-` join in the derive block above is
+the carrier. The title never was one. **So do not read the drift as the previous session being
+careless, because the next session will then assume it would have noticed — assume instead that
+whatever this file does not DERIVE, it will lose.**
+
 **THIS PLAN IS NOT A MECHANISM FOR EMPTYING `docs/backlog.md`, AND READING IT AS ONE IS WHAT
 WENT WRONG.** Measured at batch 12's close: **the last TEN entries filed — `BL-089` through
 `BL-098` — cite ZERO `PC-` ids.** Every one is an ai-dlc-internal discovery. 34 of 69 live
