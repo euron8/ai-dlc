@@ -99,6 +99,30 @@ work. Batches 1–11 have all MERGED AND PUSHED; the releases are `v0.374.0`, `v
 many further machinery releases have shipped between `v0.383.0` and `v0.414.0` that are NOT part
 of this program, which is why the batch numbering and the version numbering stopped agreeing.
 
+**A FOLLOW-UP SHIPPED AS `v0.420.0` (`32ad4896`), AND THE ADVERSARIAL PASS THAT FOUND IT RAN
+AFTER THE MERGE.** Arm D's population is a bare `dir/*` glob, and BSD awk ABORTS on a path it
+cannot open rather than skipping it — so one broken symlink in either directory ended the walk,
+and the only message was arm D's exemption control, which can only say "the exempt file does
+not emit". Differential: `5efb3d17^` exits 0 on that tree, `5efb3d17` exits 1, with a bare
+`awk: can't open file` on stderr as the whole diagnosis. **The guard was RIGHT and its message
+was WRONG** — it refused to certify a zero over a corpus it had not finished reading, then
+named the wrong file. The exit code is not reverted; the attribution is fixed, and the
+exemption control now stands down for that case so one cause yields one finding.
+
+**RUN THE ADVERSARIAL PASS BEFORE THE MERGE, NOT AFTER.** Batch 11 gated green, merged, and
+still shipped a defect that one hour of seeding found. The gate cannot catch this class: the
+tree it runs on has no broken symlink, so every arm was correct and silent about a state
+nobody constructed. **Seed the states your own population EXCLUDES** — a directory where a file
+is expected, a dangling link, an unreadable file — and read what the arm says, not just whether
+it exits 0.
+
+**A PARTITION WAS BUILT, MEASURED AND REJECTED, WHICH IS THE PART WORTH REMEMBERING.**
+`find -maxdepth 1 -type f` excludes the dangling link BY CONSTRUCTION and is one process for
+both populations, which is the shape `mechanism-design.md` prefers over a detector. It measured
+**+116**. This file's cost metric charges per DIRECTORY ENTRY EXAMINED, not per `execve`, so a
+single `find` over 71 files costs more than the 48-iteration `[ -f ]` loop batch 11 deleted.
+**Do not rebuild it** — the rejection is recorded beside the arm. Shipped cost of the fix: −2.
+
 **BATCH 11 IS COMPLETE, MERGED AND PUSHED AS `v0.419.0`.** `BL-090` CLOSED and rotated.
 Release `5efb3d17`, close-and-rotate `874d4f41`, fast-forward merge. Live **66 → 65**, archive
 **27 → 28**, `--check` PASSing before `--apply`, `BL-090` in the archive and not in the live
