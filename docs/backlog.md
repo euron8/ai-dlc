@@ -57,6 +57,40 @@ not a closed entry.
 
 ---
 
+## BL-098 — two blocks may declare the same vocabulary NAME, and the index renders the row twice
+
+**`BL-094` one level up: the contradiction is between two BLOCKS rather than two fields.**
+`MARKER_AWK` tracks a declared field per block, and nothing tracks a declared NAME across the
+file. Two `# vocabulary:` lines carrying one name therefore both render, and the exit code never
+moves. Re-derived on the tree with `v0.421.0`'s field partition and orphan refusal both in place —
+control in the same invocation: an orphan seed exits 1, so this is measured on the FIXED reader,
+not on a stale copy.
+
+```
+CONTROL, unseeded:  exit 0 ; rows whose Vocabulary cell is 'push-candidate ledger statuses' = 1
+SEEDED, block 3 renamed to block 2's name:
+                    exit 0 ; rows with that same cell = 2
+                    "OK: wrote docs/vocabulary-index.md — 8 cross-file vocabular(ies), 5 schema enum(s)."
+```
+
+**1 → 2 against an exit code that never moves.** A reader of `docs/vocabulary-index.md` looking up
+a vocabulary finds two rows, each claiming to be the one set, with different owners and different
+members. The file exists precisely so that a set has ONE home.
+
+**Candidate fix and its measured false-positive set.** A file-scope `seenname[]` in `MARKER_AWK`,
+refusing the second declaration and emitting a `#DUPNAME` diagnostic — the same partition shape
+already there for fields, no new reader and no new grammar. It flips the receipt to 0 and leaves
+the real 8 blocks green (`--check` exit 0).
+
+Tiered **NOTE**, on the same grounds as `BL-094`: nothing emits a wrong verdict today and the
+state requires an author to write it. It is the third member of the group with `BL-096` and
+`BL-097` — one class, one subsystem pair, three one-arm fixes.
+
+Found by the scope hand of batch 12; the numbers above are the lead's independent re-derivation,
+not the hand's, because the renderer moved twice while that hand was measuring.
+
+verify: sh R=scripts/render-vocabulary-index.sh; M=scripts/validate-enforcement-map.sh; [ -f "$R" ] && [ -f "$M" ] || exit 9; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" --check >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; P="^[[:blank:]]*#[[:blank:]]*vocabulary:"; set -- $(grep -n "$P" "$D/$M" | head -2 | cut -d: -f1 | tr '\n' ' '); [ -n "${1:-}" ] && [ -n "${2:-}" ] && [ "$2" -gt "$1" ] || { rm -rf "$D"; exit 9; }; N="$(sed -n "${1}p" "$D/$M" | sed "s/$P[[:blank:]]*//")"; [ -n "$N" ] || { rm -rf "$D"; exit 9; }; b0="$(grep -c "^| $N |" "$D/docs/vocabulary-index.md")"; [ "$b0" -eq 1 ] || { rm -rf "$D"; exit 9; }; awk -v n="$2" -v nm="$N" 'NR==n{print "# vocabulary: " nm; next} {print}' "$D/$M" > "$D/t" || { rm -rf "$D"; exit 9; }; mv "$D/t" "$D/$M"; [ "$(grep -c "^[[:blank:]]*#[[:blank:]]*vocabulary:[[:blank:]]*$N\$" "$D/$M")" -eq 2 ] || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" >/dev/null 2>&1 ); rc=$?; n2="$(grep -c "^| $N |" "$D/docs/vocabulary-index.md")"; rm -rf "$D"; [ "$rc" -eq 0 ] && [ "$n2" -eq 2 ] || exit 0; exit 1
+
 ## BL-097 — the vocabulary renderer declares TWO populations and only one of them refuses a repeated declaration
 
 **In the file `v0.421.0` hardened, in the half that release did not reach.** `SCHEMA_PY` in
@@ -119,6 +153,29 @@ prefers over a second arm.
 Tiered **NOTE**. Latent, one-arm fix, and the consequence is a wrong DESCRIPTION on a row rather
 than a wrong verdict — but `docs/invariant-index.md` is the file every bold citation in the
 resident rulebooks resolves against.
+
+**THE POPULATION BEHIND THIS ENTRY AND `BL-097` IS BOUNDED, NOT SAMPLED, AND THAT IS WORTH
+STATING BECAUSE THE FIRST SWEEP COULD NOT SPELL ITS OWN SUBJECT.** Sweep 1 keyed on awk
+PATTERN-ACTION rules and therefore missed `MARKER_AWK` itself, whose rules are `if (line ~ /…/)`
+bodies — so its count was a floor of unknown depth and was discarded. Sweep 2 keyed instead on a
+property invariant to how the assignment is written: a start-anchored regex literal matching a
+comment line carrying a colon. **81 sites across 31 tracked files**, with a containment control
+showing it strictly supersets sweep 1, and a control showing it reaches
+`render-vocabulary-index.sh` (10 sites) — the construct sweep 1 missed. 45 sit in fixtures or in
+the three already-adjudicated files. **Of the 36 shipping-reader sites outside those: 35 are
+markdown-heading extractors** — a grammar that pulls an ID out of a heading and cannot express
+this contradiction — **and 1 is `scripts/render-path-mapping.sh:102`, a `case`-arm matcher that
+NEGATES `#`** and reads no marker at all. Zero further instances.
+
+**The classifier behind that zero was controlled first, and its first version failed.** A
+`[^:]*` fragment cannot cross the colons inside `[[:blank:]]`, so it scored all of `MARKER_AWK`'s
+own sites as OTHER — a classifier that cannot classify its own subject cannot certify an absence,
+and its zero was discarded rather than reported. The replacement was proven on 6 of 6 subject
+sites plus a near-miss before its corpus was read.
+
+**The one residual, narrow and named**: a reader that builds its marker pattern entirely at
+runtime with NO literal fragment in source escapes this grammar. None of the three marker readers
+in this tree is of that shape.
 
 Found by the scope hand of batch 12, asking whether `BL-094` was wider than filed.
 

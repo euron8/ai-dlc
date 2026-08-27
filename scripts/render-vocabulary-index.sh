@@ -901,6 +901,18 @@ while IFS="$SEP" read -r vname vinv vowner vext vreaders vemitters; do
     if ! vfpaths="$(vocab_pathlist "$vfield" "$vfval" "$vext" "$ROOT/$vowner")"; then
       fail "the vocabulary '$vname' declares \`vocabulary-$vfield: $DERIVE_SENTINEL\` and this renderer implements no path extractor for the slug \`$vext\`. The row would render an em dash, which reads exactly like a vocabulary with no $vfield."
     fi
+    # THIS GUARD COVERS THE SENTINEL FORM ONLY, AND THE LITERAL FORM IS DELIBERATELY UNGUARDED.
+    # A row that names its paths outright and resolves to none cannot be refused here, because
+    # the consumer-owned row legitimately has no readers and no emitters -- so an unconditional
+    # "empty column" refusal would fail the corpus on a correct file.
+    #
+    # THE COST IS A FALSE EMPTY CELL, and it is worth knowing before widening this. Measured on
+    # the reader BEFORE the repeated-field partition existed: a real `vocabulary-readers:` list
+    # followed by an EMPTY declaration of the same field gave exit 0 and rendered the Readers
+    # cell as an em dash, against a control where the unseeded copy rendered both real paths.
+    # A wrong rendered artifact, in the column this file calls the half a reader acts on. What
+    # closes it is the SEEN-FLAG partition above, not a check here -- the empty second
+    # declaration is now refused as a repeat, and an emptiness test could never have caught it.
     if [ "$vfval" = "$DERIVE_SENTINEL" ] && [ -z "$vfpaths" ]; then
       fail "the vocabulary '$vname' derives its $vfield from $vowner and got ZERO paths. The owner's list shape changed and the extractor no longer matches it; an empty column is not a reading."
     fi
