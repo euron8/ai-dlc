@@ -15,6 +15,48 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.424.0] - 2026-08-27
+
+### Half of the previous release's fix could be reverted with the suite green
+
+Closes `BL-101`, filed and closed in the same cycle. No consumer ledger candidate — this is a
+hole in `v0.423.0`'s own guard.
+
+`v0.423.0` changed TWO branches of `reconcile/preclassify.sh`: the `M`/rename branch's
+`ALREADY-AT-THEIRS` and the `A` branch's `ALREADY-PRESENT`. The fixture built for it guarded
+one. Its `CASE_TABLE` was nine cases and an `S2` arm asserting every one of them is status `M`
+in the `base..theirs` diff — so the `A` branch had no case, no mutant and no assertion.
+
+Measured by reverting exactly the `A`-branch half on a `git archive HEAD` copy, with the
+`M`-branch conjunct asserted still present in the same invocation so the revert is the `A` half
+alone:
+
+```
+fixture vs the shipped tree                     exit 0   <- control, the harness works
+fixture vs dropbase   (delete the base_h arm)   exit 1   killed by C5
+fixture vs halfmode   (100755 direction only)   exit 1   killed by C4
+fixture vs modehash   (the mode-aware hash)     exit 1   killed by C7
+fixture vs arevert    (the A-branch half gone)  exit 0   <- SURVIVED
+```
+
+**Three of those four came from an attack on `BL-033`'s replacement receipt, and the split is
+the point.** All four satisfy that receipt. The fixture independently kills three of them,
+because it carries an ordinary-content-change case and both mode directions — so the receipt was
+weak and the battery was not. Only the fourth reached a real gap. **Run a proposed
+receipt-weakness against the FIXTURE before reading it as a coverage gap; they are different
+guards and the archived receipt is not the live one.**
+
+The battery now carries a per-case expected STATUS rather than a blanket `M` assertion, and six
+`A`-branch cases: a net-new upstream file the consumer lacks; both mode-matched siblings as
+adjacent controls; both mode-mismatched directions (`100755` upstream with a `644` consumer copy
+and the reverse), which are the two that must reach `UPSTREAM-ONLY-ADD` so the apply delivers
+the bit; and a both-added case. The mutation battery gained the `A`-branch reverts and its
+mode-derivation mutant now spans both branches.
+
+**This is the repo's own recurring defect, caught one release later in its own work.** A guard
+that cannot fire reads exactly like a guard that passed, and the `A`-branch arm had a green
+suite standing behind it while asserting nothing about it.
+
 ## [0.423.0] - 2026-08-27
 
 ### A pull that decides "nothing to do" on content alone, when the file mode is part of what it delivers
