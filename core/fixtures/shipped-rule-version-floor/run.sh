@@ -93,9 +93,27 @@ fi
 
 # --- C/D: the boundary, both sides -----------------------------------------
 d="$(proj)"; printf 'x\n' > "$d/.claude/rules/$RULE"
-[ -z "$(hook_out "$d" claude-code_2-0-64_agent)" ] \
-  && note "ok    C floor exactly (2.0.64) -- silent" \
-  || { note "FAIL  C 2.0.64 IS the floor and must be accepted"; rc=1; }
+# KEYED ON THE FLOOR FINDING, NOT ON SILENCE. This hook stopped being silent when the floor is
+# met: it also carries the fleet's provenance contract, which has to reach the lead on EVERY
+# session and not only on the sessions where an unrelated check happens to fire. The property
+# arm C owns is that a met floor produces NO FLOOR COMPLAINT, and that is what it now asserts.
+# Asserting emptiness would make this arm fail on any future payload the hook legitimately
+# carries, which is a check that errors on correct data.
+out_c="$(hook_out "$d" claude-code_2-0-64_agent)"
+if grep -q 'FLOOR NOT MET' <<<"$out_c" || grep -q 'FLOOR -- UNRESOLVED' <<<"$out_c"; then
+  note "FAIL  C 2.0.64 IS the floor and must be accepted"; rc=1
+else
+  note "ok    C floor exactly (2.0.64) -- no floor complaint"
+fi
+# The control the emptiness test used to give for free: the hook must still be SAYING something,
+# or "no complaint" would be satisfied by a hook that died. And it must still be valid JSON.
+if [ -z "$out_c" ]; then
+  note "FAIL  C the hook emitted NOTHING at the floor -- the provenance contract has no carrier, and a silent hook satisfies the no-complaint test above for the wrong reason"; rc=1
+elif ! python3 -c 'import json,sys; json.load(sys.stdin)' <<<"$out_c" 2>/dev/null; then
+  note "FAIL  C emitted invalid JSON at the floor; the harness would discard the whole block"; rc=1
+elif ! grep -q 'AI-DLC-HOOK-PROVENANCE' <<<"$out_c"; then
+  note "FAIL  C the floor-met emission carries no provenance marker, so this hook is not carrying the contract it is sited to carry"; rc=1
+fi
 grep -q 'FLOOR NOT MET' <<<"$(hook_out "$d" claude-code_2-0-63_agent)" \
   && note "ok    D one below floor (2.0.63) -- loud" \
   || { note "FAIL  D 2.0.63 is below the floor and must be reported"; rc=1; }
