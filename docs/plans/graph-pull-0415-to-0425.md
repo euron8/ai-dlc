@@ -1,10 +1,13 @@
-# Runbook — pull the graph consumer from 0.415.0 to 0.425.0
+# DISCHARGED — DO NOT EXECUTE — pull the graph consumer from 0.415.0 to 0.425.0
 
-**You were started with one sentence: `READ and FOLLOW docs/plans/graph-pull-0415-to-0425.md`.**
-This file is the whole of your entry point.
+**This runbook is SPENT.** It was executed on 2026-08-27 and the pull it describes has landed: the
+consumer is at `0.425.0` and both push-candidates it targeted are closed in that consumer's own
+ledger. **Nothing below this line is an instruction.** It is the record of a completed run, kept
+because the `## Discharge` section at the foot names four things this file got wrong, and those are
+worth more than the file was.
 
-**No ref and no sha is written down in this file, deliberately.** The `ai-dlc-update` skill pulls
-latest by default and resolves the distribution ref itself. Nothing here needs to name one, and a
+**No ref and no sha was written down in this file, deliberately.** The `ai-dlc-update` skill pulls
+latest by default and resolves the distribution ref itself. Nothing here needed to name one, and a
 name written down goes stale the moment anything lands — including a docs commit to this very
 file.
 
@@ -187,8 +190,140 @@ else in this list means anything.
 
 ## Discharge
 
-*Not yet executed. When it runs, record here what actually happened — the stamp before and after,
-the bucket counts the real run produced against the rehearsal's, the ledger verdicts by id, and
-anything this file got wrong — then retitle the file `DISCHARGED — DO NOT EXECUTE` and say so in
-the first paragraph. A spent runbook that still reads as instructions is this directory's
-recurring hazard.*
+**EXECUTED 2026-08-27. The pull landed and both push-candidates are CLOSED in the consumer's own
+ledger**, which is the terminal state this runbook existed to reach.
+
+Attribution, because the two halves were measured by different sessions: consumer-side figures
+(PR numbers, bucket splits, gate results, register counts) are the executing session's. Everything
+attributed to the distribution below was re-derived independently in `/Users/n8/git/ai-dlc`, each
+with a control in the same invocation.
+
+### Final state
+
+```
+version:       0.415.0 -> 0.425.0
+commit:        f86e085c -> e7898c7d
+skill_version: 0.415.0 -> 0.425.0
+skill_commit:  f86e085c -> e7898c7d
+```
+
+Consumer `main` at `c55f66edc`, in sync with upstream, nothing dirty outside `_bmad-output/`.
+Three PRs, each merged on explicit operator approval: **#965** self-update 0.415.0→0.421.0,
+**#966** reconcile 0.415.0→0.421.0, **#967** reconcile 0.421.0→0.425.0.
+
+Ledger, re-derived here: **`PC-S333` and `PC-S314` both live=0, archive=1**. Both annotated
+`**ADOPTED UPSTREAM (v0.425.0, verified 2026-08-27)**`, the form `ledger-rotate.sh:212` keys on.
+
+### THE PULL WAS SPLIT, AND THIS FILE DID NOT ANTICIPATE IT
+
+The single largest thing the runbook got wrong. Step 2 returned `SELF-UPDATE-DEFER` with a
+`SELF-UPDATE-SAFE-STOP` naming `045ef6d9` (0.421.0), so the pull ran as two hops rather than one:
+`ai-dlc-update 045ef6d9 apply`, then `ai-dlc-update apply`.
+
+**The DEFER prose and the SAFE-STOP row are not in conflict, and reading them as conflicting is the
+trap.** `SKILL.md:317`'s "do NOT cut the branch" governs the pull whose gate deferred; the SAFE-STOP
+row decides *which range to pull*. Under a split, hop 1 has its own step 2 — measured
+`SELF-UPDATE-OK` — so it cuts its branch legitimately and hop 2 re-invokes on the landed engine.
+"Fold the slice into the gated apply" is the branch taken when **no** safe stop exists,
+`self-update-gate.sh:178`. A third branch at `:173` says "SPLIT BUYS NOTHING HERE" when the
+consumer's own `skill_commit` is already at or past the named ref; that is what makes the row a
+measurement rather than a suggestion, and it did not fire here.
+
+Hop 2 then returned `SELF-UPDATE-SAFE-STOP -` — no intermediate release self-updates cleanly — so
+its slice was folded in with `apply.sh --carried-machinery-slice`, which advanced all four stamp
+fields.
+
+### Four more things this file got wrong
+
+1. **The rehearsal's 38 rows do not decompose across a split.** Re-derived: hop 1 **26** core rows,
+   hop 2 **14**, full range **38**. 26 + 14 = 40 because two paths change in both segments and are
+   classified twice. The real run reproduced 26 then 14 exactly. A per-hop mismatch against 38 is
+   not the disagreement this file said to stop on.
+2. **`NAMED-UPSTREAM` was predicted; both candidates returned `CLOSE-CANDIDATE`** — a stronger
+   result, because the receipts re-verified rather than an id merely being named. Step 4 should tell
+   the next operator to expect either.
+3. **Step 4's description of `named_absorbed()` was false for the shipped code.** It does not take
+   `tail -1` and does not elect one commit; it reports the whole match set
+   (`<newest-sha> <oldest-sha> <n> <how>`), changed upstream as
+   `PC-S334-NAMED-ABSORBED-JOINS-ON-THE-OLDEST-MESSAGE-MENTION`. Verified against the consumer's
+   installed copy, byte-identical to the distribution's. **A multi-commit row is correct output.**
+   Corollary: the join reads the full ancestry of `THEIRS`, not `BASE..THEIRS`, so a split cannot
+   break it.
+4. **The stop list was incomplete.** It named only `->CLASSIFY` rows and a settings reconcile. The
+   run hit a `SELF-UPDATE-DEFER` and six `HARD-LAYER-ADJUDICATION-MISSING` blockers, neither of
+   which it named, so both had to be escalated as "a decision this file does not settle". A future
+   runbook states the stop condition as a class, not as an enumeration.
+
+### Verified as predicted
+
+Zero mode-only `core/` changes, so the `0.423.0` bootstrapping hazard could not bite — re-derived
+per hop as well as over the full range, all three zero, every mode change being a
+`000000 -> 1007xx` ADD taking the `A` branch. Both hops mechanical at the bucket level with
+**0 `->CLASSIFY`** in each. No settings reconcile in either hop. All four templates
+`TEMPLATE-UNCHANGED-NOOP`.
+
+**`PC-S314`'s fix was NOT exercised by this pull** and its annotation says so: `preclassify`
+classified the range on the pre-fix engine by construction. It takes effect on the next pull.
+
+### Six blockers from a three-line delta
+
+The entire rulebook delta in hop 2 is **2 files, 3 insertions, 3 deletions** — re-derived here,
+control being `preclassify.sh` at 52 insertions in the same range — and all three lines are the
+same quoting fix, `PC-S333` itself. Semantics unchanged.
+
+That is what licensed a text search as sufficient evidence for all six adjudications: with
+semantics unchanged, an extension can only go stale by *textually restating* the broken form, so
+there is no behavioural channel to miss. **That reasoning does not generalise to anchor drift** and
+should be restated, not assumed, next time.
+
+Five were dispositioned `still-additive`; one, `overrides/steps__retro__domain-sections.md`
+(`OVERRIDE-SUPERSEDED`, LC-O15), took `still-additive` **plus a declared debt**. Executing its
+narrowing would strand ~114 consumer-only lines as an override body with no anchor claiming it —
+a direction `E7`, `readopt-override.sh:247`, `LC-O9` and `LC-O14` all leave uncovered, so the
+orphan would be reported by nothing. Debts declared: `OWED-S338-RETRO-4A-ANCHOR-NARROW`,
+`OWED-S338-EXTENDS-PROCESS-IMPROVEMENTS`, `OWED-S338-EXTENDS-SPRINT-SHIP`. Layer debt OPEN 11 → 14;
+register 261 → 269.
+
+### Operational notes for the next runbook
+
+- **The consumer's `bash .githooks/pre-push` now exceeds a 10-minute foreground budget.** Background
+  it. Result here: rc 0, 11 PASS, 0 FAIL.
+- **`apply.sh` updates itself mid-run** and prints `RESOLVED driver-self-update`. Re-running on the
+  new driver was idempotent; a third run emitted 0 WORKLIST / 0 DECISION.
+- **`gh` was mis-authenticated for the consumer** — the active account could not see a private repo,
+  so every `gh` call 404'd and the PR could not be opened. A `GH_CONFIG_DIR` override fixes an
+  agent's own calls but **not** `.claude/hooks/guarded-merge.sh`, which shells out to `gh pr view`
+  in its own subprocess. Resolved by the operator, and it is an operator decision: it mutates
+  global `gh` state and races their other sessions.
+- **`zsh` ate a quoted git rev-path** — `"$THEIRS:core/…"` expanded via the `:c` history modifier
+  and left 20 empty files before failing, because the redirect had already opened. `"${THEIRS}:…"`
+  is correct. This is `PC-S333` reproducing live in the session that closed it.
+- **Four `retired-*` detectors given unsplit arguments** exited `parameter null or not set` while
+  printing zero rows — byte-identical to a clean corpus.
+
+### Left open, then handled as separate work
+
+Nine ledger entries were CLOSED at re-verification but not archivable: `ledger-reverify` skips them
+and `ledger-rotate` refuses them, so they appeared in exactly one block of output and had never been
+filed. **Deliberately not folded into this pull**, and resolved afterwards as its own change.
+
+The nine were two populations, which is why "fix all nine" was the wrong frame. **Five** were list
+items inside one human record section, counted only because the entry-boundary rule opens an entry
+on any line-leading `- **…**`; they were never push-candidates. **Four** are real entries that fall
+inside the carve-out `ledger-rotate.sh:405-406` names in as many words — *"If the close is genuine
+but has no version (absorbed before base, withdrawn, a retained copy), that is a legitimate state
+and the row is the record of it."*
+
+Resolution: the five de-listed, the four untouched. That is the remedy the tool itself prescribes
+at `ledger-rotate.sh:244` — *"If the reported line is an ANNOTATION, re-indent it so it does not
+start a line, or drop its bold."* **Two of the four are WITHDRAWN, so annotating them
+`ADOPTED UPSTREAM` would not be imprecise but false.** Three version-bearing record markers were
+deliberately NOT normalised into archivable form: they are not push-candidates, and rotating them
+into the candidate archive would inflate the only durable progress signal this program has by three.
+
+Result **9 → 4 unarchivable**, with `ledger-reverify`'s row set identical at 92 = 92 before and
+after, and `0 closed entries — nothing to rotate` afterwards, which is the correct outcome rather
+than a null one.
+
+Artifacts: `reconcile-log-20260827T152847Z.md` (hop 1), `reconcile-log-20260827T155404Z.md`
+(hop 2), `self-update-fixtures-20260827T150503Z.md` (37 green / 0 red / 0 missing of 37 named).

@@ -87,20 +87,55 @@ to candidates that now live in the ARCHIVE. It also never opened
 unexamined one.
 
 **BATCH 13 REPLACED IT WITH A `^## PC-` HEADING GREP, AND THAT GRAMMAR CANNOT SPELL A THIRD OF
-THE LEDGER.** The consumer records a candidate in TWO forms, and the heading is only one of them:
+THE LEDGER. BATCH 14 ADDED A BULLET ARM AND IT STILL MISSED A THIRD FORM.** The consumer records
+a candidate in THREE forms. This grammar has now been wrong THREE TIMES, each time in a way that
+returned a clean, plausible number:
 
 ```
 ## PC-S314-PRECLASSIFY-BUCKETS-A-MODE-ONLY-CHANGE-...
 - **PC-S295-RETRO-CHECK5-SELF-REFERENTIAL — Check 5 compares two hand-maintained records to
   each other and cannot fail (filed 2026-07-21)**
+- **PC-S336-STEP-1-AUTOPUSH-IS-THE-UNGUARDED-TWIN-OF-THE-PUSH-STEP-2-HARDENED** — step 1's ...
 ```
 
-Measured at batch 14: the live ledger holds **40 headings and 9 bullets**, the archive **79 and
-11**. So the denominator is **49 live / 90 archived**, not 40 / 79. The control that exposed it
-is the one `verification-discipline.md` prescribes — five backlog entries cited candidate ids
-that the heading grammar resolved to NEITHER file, and `grep`-ing the raw ledger for one of them
-returned four hits. **A cited id that resolves to nothing is a claim about your GRAMMAR before it
-is a claim about the ledger.** Point the grammar at its own subject before believing its zero.
+**The third form closes its bold IMMEDIATELY after the id**, where the second continues into
+prose. Batch 14's bullet arm required a trailing SPACE after the id (`^- \*\*PC-[A-Z0-9-]+ `),
+so it scored every bare-bold entry as a non-instance. Measured at v0.425.0, both directions, with
+the partition and an impossible id as controls:
+
+```
+              batch 14's grammar    actual    invisible
+live                  47              60         13
+archive               92             122         30
+```
+
+**THE ENTRY THAT PROVES IT IS ITSELF IN THE MISSED SET.** The consumer had already filed
+`PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY`, in bare-bold form, describing this exact
+defect — and it was invisible to this grammar BECAUSE of the defect it describes.
+
+**DO NOT READ THAT ENTRY'S TITLE AS OVERSTATED. A REVISION OF THIS BLOCK DID, AND IT WAS WRONG.**
+The reasoning was that `ledger-reverify` still emits a `HAND-REVIEW` row for the entry, so
+"invisible to EVERY reverify" must be too strong. That **conflates the entry's own FORM with its
+SUBJECT**. The entry is written as a dashed bullet, so of course reverify sees it; its subject is
+the DASH-LESS `**<id>**` at column 0, and for that form the title is exact. Measured here: one such
+line exists in the archive today. **Ask what a finding's subject is before scoring its title against
+the artifact that carries it** — the carrier and the claim are different objects.
+
+**A FOURTH SHAPE, AND IT PRODUCES A WRONG ID RATHER THAN A MISSING ONE, WHICH IS WORSE.** An id may
+embed a version: `PC-S300-SEVEN-VALIDATORS-SHIPPED-NON-EXECUTABLE-AT-0.242.0`. A `[A-Z0-9-]`
+character class stops at the `.`, so the loose arm above MATCHES the line and extracts
+`…-NON-EXECUTABLE-AT-0` — a truncated id that is a FALSE MEMBER of the set, joins against no
+backlog citation, and never appears as an absence. The class is `[A-Z0-9.-]` below for that reason.
+Cardinality is unaffected (122 either way); one id stops being wrong.
+
+Under the widened class the bullet forms partition with NO REMAINDER, which is the control that the
+counts are complete rather than merely larger — live **22 = 9 spaced + 13 bare-bold**, archive
+**41 = 11 + 30**.
+
+**A cited id that resolves to nothing is a claim about your GRAMMAR before it is a claim about the
+ledger.** Point the grammar at its own subject before believing its zero, and note that the two
+earlier repairs both PASSED their own controls — a control drawn from the form you already know
+about cannot discover the form you do not.
 
 **`sed -E '...;t;d'` IS NOT PORTABLE AND THE FIRST CUT OF THIS BLOCK USED IT.** BSD sed answers
 `undefined label ';d'`, both files come back EMPTY, and the partition control — *"must be 0"* —
@@ -116,8 +151,14 @@ taken up when a BACKLOG ENTRY cites it. Prose is not a filing.
 
 ```
 D=/Users/n8/git/graph/_bmad-output/ai-dlc-update
-lids() { { grep -h '^## PC-' "$1" | sed -E 's/^## (PC-[A-Z0-9][A-Z0-9-]*).*/\1/'
-           grep -hE '^- \*\*PC-[A-Z0-9][A-Z0-9-]+ ' "$1" | sed -E 's/^- \*\*(PC-[A-Z0-9][A-Z0-9-]*) .*/\1/'
+# TWO deliberate widenings, each one a measured defect:
+#   1. NO TRAILING SPACE after the id -- that space hid 43 of 63 bullet-form entries.
+#   2. THE CLASS INCLUDES `.` -- an id may embed a version, and [A-Z0-9-] truncates it into a
+#      FALSE MEMBER that joins against nothing and reports as no absence at all.
+# The optional `-? ?` also admits the DASH-LESS `**<id>**` at column 0, which is the subject of
+# PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY.
+lids() { { grep -h '^## PC-' "$1" | sed -E 's/^## (PC-[A-Z0-9][A-Z0-9.-]*).*/\1/'
+           grep -hE '^-? ?\*\*PC-[A-Z0-9]' "$1" | sed -E 's/^-? ?\*\*(PC-[A-Z0-9][A-Z0-9.-]*).*/\1/'
          } | sort -u; }
 lids "$D/push-candidate-ledger.md"         > /tmp/live.txt
 lids "$D/push-candidate-ledger.archive.md" > /tmp/arch.txt
@@ -128,14 +169,22 @@ comm -12 /tmp/live.txt /tmp/arch.txt | wc -l          # control: must be 0, the 
 comm -12 /tmp/live.txt /tmp/filed.txt | wc -l         # live candidates a backlog entry cites
 comm -23 /tmp/live.txt /tmp/filed.txt                 # live candidates NOTHING has filed
 grep -cx 'PC-S333-SKILL-RENDERS-THE-THEIRS-REF-UNQUOTED-AND-ZSH-EATS-IT' /tmp/filed.txt  # control: 1
-grep -cx 'PC-S295-RETRO-CHECK5-SELF-REFERENTIAL' /tmp/live.txt   # control: 1, and it is a BULLET
+grep -cx 'PC-S295-RETRO-CHECK5-SELF-REFERENTIAL' /tmp/live.txt   # control: 1, a SPACED bullet
+grep -cx 'PC-S336-STEP-1-AUTOPUSH-IS-THE-UNGUARDED-TWIN-OF-THE-PUSH-STEP-2-HARDENED' /tmp/live.txt
+                                                      # control: 1, a BARE-BOLD bullet -- this is
+                                                      # the arm that fails if anyone reinstates the
+                                                      # trailing space, and a reinstated grammar
+                                                      # reads as a clean, plausible 47
+grep -cx 'PC-S300-SEVEN-VALIDATORS-SHIPPED-NON-EXECUTABLE-AT-0.242.0' /tmp/arch.txt
+                                                      # control: 1, a DOTTED id. Fails as a TRUNCATION
+                                                      # if the class loses its `.`, and a truncated id
+                                                      # is a false member, never a reported absence
 grep -cx 'PC-S999-NEVER' /tmp/filed.txt                                                  # control: 0
 ```
 
-At batch 14's close: **49 live candidates, 90 archived, 29 cited by a backlog entry, 20 cited by
-none**, partition control 0, both presence controls 1, absence control 0. The bullet control is
-there deliberately — it is the one that fails if someone reverts this grammar to headings alone,
-and a heading-only run reads as a clean, plausible 40.
+At v0.425.0, after the graph consumer pulled to `0.425.0`: **60 live candidates, 122 archived**,
+partition control 0, all three presence controls 1, absence control 0. Batch 14's figures — 49
+live, 90 archived — were the same ledger read through a grammar missing one record form.
 
 **"CITED" IS STILL NOT THE PROGRESS METRIC, AND THIS IS THE LAST STEP OF THE DERIVATION.** A
 candidate cited by a LIVE entry is work in flight; one cited by an entry in the ARCHIVE has been
@@ -150,23 +199,44 @@ pc() { grep -rohE 'PC-[A-Z0-9][A-Z0-9-]+' "$1" | sort -u; }
 pc docs/backlog.archive.md > /tmp/closed_here
 pc docs/backlog.md         > /tmp/open_here
 git log --format='%B' origin/main | grep -ohE 'PC-[A-Z0-9][A-Z0-9-]+' | sort -u > /tmp/in_msgs
-comm -12 /tmp/live.txt /tmp/closed_here                    # DISCHARGED -- the goal metric
+comm -12 /tmp/live.txt /tmp/closed_here                    # DISCHARGED, still live upstream
 comm -12 /tmp/live.txt /tmp/open_here                      # in flight
 comm -23 /tmp/live.txt <(sort -u /tmp/closed_here /tmp/open_here)   # untouched
 # control: the three MUST sum to the live denominator, or the partition is lying
 comm -12 /tmp/live.txt /tmp/closed_here | comm -23 - /tmp/in_msgs   # discharged but INVISIBLE
+# TERMINAL -- discharged here AND closed in the consumer's ledger. The line above CANNOT see these.
+comm -12 /tmp/arch.txt /tmp/closed_here | wc -l
 ```
 
-At batch 14's close: **7 DISCHARGED, 22 in flight, 20 untouched**, summing to 49, and **0
-discharged-but-unnamed** — every one of the 7 appears in a release COMMIT MESSAGE, which is the
-only channel `named_absorbed()` reads. That last line is a real failure mode and not a formality:
-a fix that ships without its id in the message discharges the candidate and produces no row
-anywhere, so the consumer never learns of it.
+At v0.425.0: **5 DISCHARGED, 23 in flight, 32 untouched**, summing to 60, **0
+discharged-but-unnamed**, and **14 TERMINAL**. That unnamed line is a real failure mode and not a
+formality: a fix that ships without its id in the commit MESSAGE discharges the candidate and
+produces no row anywhere, so the consumer never learns of it.
 
-**SEVEN OF FORTY-NINE ACROSS FOURTEEN BATCHES, AND THE DENOMINATOR IS NOT SHRINKING.** State that
-rate when reporting. It is roughly one candidate per batch, and the grammar repair at batch 14
-moved the target from 40 to 49 without moving the numerator — so every progress figure this
-program quoted before batch 14 was against a denominator 18% too small.
+**THE `DISCHARGED` LINE FALLS WHEN THIS PROGRAM SUCCEEDS, AND THAT IS WHY `TERMINAL` IS NOW BESIDE
+IT.** `DISCHARGED` intersects our archive with the LIVE ledger, so the moment a consumer closes a
+candidate it leaves `live.txt` and drops out of the numerator. The count went **7 → 5** across the
+pull that closed two candidates — the program's own scoreboard resets on success. This is
+`mechanism-design.md`'s "a fix that satisfies a join by deleting the join's subject reads as green
+forever", inverted: here the subject's deletion reads as REGRESS.
+
+**REPORT `TERMINAL` AS THE DELIVERED TOTAL AND `DISCHARGED` AS WORK AWAITING THE CONSUMER'S OWN
+CLOSE.** They are disjoint, because `live.txt` and `arch.txt` partition. At v0.425.0 that is
+**14 delivered and closed, 5 delivered and awaiting close — 19 in total against a headline of 5.**
+Both figures are ceilings on coverage rather than adjudications, for the reason the next paragraph
+gives: a citation is a filing, not a disposition.
+
+**TWO CANDIDATES REACHED TERMINAL STATE AND NO COUNT THIS PROGRAM EVER MADE INCLUDED THEM** —
+`PC-S329-NAMED-UPSTREAM-DETAIL-INSTRUCTS-THE-CLOSE-ITS-OWN-STATUS-FORBIDS` and
+`PC-S330-LEDGER-ROTATE-STUCK-SET-CONTRADICTS-THE-SKIP-RULE-IT-CITES`. Both are bare-bold in the
+consumer's ARCHIVE, so the old grammar could not see them there, and both are cited by an archived
+backlog entry here, so the `DISCHARGED` line could not see them either. Delivered, closed, counted
+nowhere. They are the reason both repairs in this block had to land together: fixing the grammar
+alone would still have left them in no bucket.
+
+**FIVE OF SIXTY, OR NINETEEN OF ONE HUNDRED AND EIGHTY-TWO, DEPENDING ON WHICH QUESTION YOU ASKED.**
+State which. Every progress figure quoted before v0.425.0 was against a denominator 28% too small
+and a numerator that silently shed its own successes.
 
 **AND "DISCHARGED" IS STILL A CLAIM ABOUT THIS TREE, NOT ABOUT THE CONSUMER.** A consumer runs
 its OWN installed engine. Until graph PULLS, none of this reaches it, its ledger does not move,
@@ -180,11 +250,14 @@ cat VERSION                                                                     
 git log --format='%H' -F --grep="<id>" origin/main | tail -1                            # then git show "${sha}:VERSION"
 ```
 
-At batch 14's close: consumer installed **0.415.0**, distribution **0.425.0**, ten releases
-behind. Of the 7 discharged, **5 DELIVERED and 2 PENDING A PULL** — `PC-S333` (v0.422.0) and
-`PC-S314` (v0.423.0), which is to say **both of the last two batches' output is sitting
-undelivered.** Controls: an impossible id resolves to no commit, and the version compare was run
-in both directions.
+At v0.425.0 the gap is **ZERO** — consumer installed **0.425.0**, distribution **0.425.0**, and
+`git rev-list --count <stamp-commit>..origin/main -- VERSION` returns 0. This is the first time in
+the program it has been closed. **`PC-S333` and `PC-S314` are CLOSED in the consumer's own ledger**
+(live=0, archive=1 for each), which is the terminal state the whole program aims at, reached by the
+`0.415.0 → 0.425.0` pull recorded in `docs/plans/graph-pull-0415-to-0425.md`.
+
+**A ZERO GAP IS A STATE, NOT AN ACHIEVEMENT THAT STAYS TRUE.** It goes non-zero on the next release
+that discharges anything. Re-derive it every batch rather than reading this sentence.
 
 **THE PULL IS NOT YOURS TO RUN.** `.claude/rules/consumer-boundary.md` is unconditional — an
 ai-dlc session never writes to a consumer. The pull happens in a GRAPH session the operator
@@ -208,12 +281,19 @@ So the hazard is real in general and does not bite this pull. **`PC-S314`'s fix 
 the pull AFTER the one that delivers it** — say so in the brief rather than claiming the next
 pull is protected by it.
 
-**ELEVEN IDS CITED BY LIVE BACKLOG ENTRIES RESOLVE TO NEITHER LEDGER FILE, AND SIX OF THOSE ARE
-ARTIFACTS OF THE CITATION GREP** — `PC-S308`, `PC-S334`, `PC-S336`, `PC-S900-`, and two
-`PC-S999-` probe tokens that live inside receipts. The other **five are real, full slugs naming
-candidates the consumer's ledger does not contain in either file**: `BL-039`, `BL-066`, `BL-016`,
-`BL-049` and `BL-017` are the entries that cite them. Closing one of those discharges nothing
-measurable, so establish the citation resolves BEFORE picking it as a batch subject.
+**THE "FIVE UNRESOLVABLE FULL SLUGS" WERE ALL GRAMMAR ARTIFACTS, AND THAT CLAIM IS WITHDRAWN.**
+Batch 14 reported eleven ids cited by live entries resolving to NEITHER ledger file, of which six
+were citation-grep noise (`PC-S308`, `PC-S334`, `PC-S336`, `PC-S900-`, two `PC-S999-` probe
+tokens) and **five were said to be real slugs naming candidates the ledger does not contain**:
+`BL-039`, `BL-066`, `BL-016`, `BL-049`, `BL-017`. Re-measured at v0.425.0 under the corrected
+grammar, **every one of the five has a resolving citation** — `BL-016`, `BL-017` and `BL-049`
+resolve 1 of 1, `BL-039` 1 of 2, `BL-066` 4 of 8. The candidates were in the ledger the whole time,
+in a record form the grammar could not spell.
+
+**That is the same defect scoring its own subject as absent, one level over.** A missing candidate
+and an unspellable one are the same output. Still establish that a citation resolves before picking
+an entry as a batch subject — but run the CORRECTED grammar, and treat a non-resolving citation as
+a hypothesis about the grammar first.
 
 **Two of those 20 are new to this block at batch 14**, because they are bullet-form and the
 heading grammar could not see them: `PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD` and
@@ -620,15 +700,13 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **BATCH 15. THE CORPUS IS THE 16 LIVE ENTRIES WHOSE CITED CANDIDATE IS STILL LIVE UPSTREAM,
-   NOT THE 69 AND NOT THE 32.** Batch 14 is done — see the block above. Pick the subject from
-   that set and say which candidate it discharges.
+1. **BATCH 15. THE CORPUS IS THE 23 LIVE ENTRIES WHOSE CITED CANDIDATE IS STILL LIVE UPSTREAM.**
+   Batch 14 is done, and so is the `0.415.0 → 0.425.0` pull — see the block above. Pick the
+   subject from that set and say which candidate it discharges.
 
-   **THE PC-BACKED COUNT IS NOT THE CORPUS, AND BATCH 14 FOUND THAT OUT.** 32 live entries cite
-   a `PC-` id, but only **16** of them cite one that is still LIVE in the consumer's ledger:
-   7 cite candidates already ARCHIVED upstream — closing those discharges something the consumer
-   closed itself — and 5 cite full slugs that resolve to NEITHER ledger file. Derive the corpus
-   with the join below, which is the one the old command did not do:
+   **THE PC-BACKED COUNT IS NOT THE CORPUS.** Live entries citing a `PC-` id outnumber the corpus,
+   because some cite candidates already ARCHIVED upstream — closing those discharges something the
+   consumer closed itself. Derive the corpus with the join below rather than trusting the list:
 
    ```
    # /tmp/live.txt comes from the derive block above -- BOTH record forms
@@ -642,9 +720,14 @@ so no block written before it changes verdict.
    done
    ```
 
-   At batch 14's close that returned **16 entries**: `BL-029`, `BL-030`, `BL-034`, `BL-037`,
-   `BL-042`, `BL-043`, `BL-044`, `BL-045`, `BL-051`, `BL-055`, `BL-057`, `BL-062`, `BL-064`,
-   `BL-067`, `BL-069`, `BL-075`. Every one has a receipt exiting 1.
+   At v0.425.0 that returns **23 entries**: `BL-029`, `BL-030`, `BL-034`, `BL-037`, `BL-039`,
+   `BL-040`, `BL-041`, `BL-042`, `BL-043`, `BL-044`, `BL-045`, `BL-047`, `BL-049`, `BL-051`,
+   `BL-053`, `BL-054`, `BL-055`, `BL-057`, `BL-062`, `BL-064`, `BL-067`, `BL-069`, `BL-075`.
+
+   **BATCH 14 REPORTED 16 AND THE TRUE FIGURE WAS NEVER 16.** Re-run at v0.425.0, the batch-14
+   grammar itself now returns 22 — `docs/backlog.md` moved under it — and the corrected grammar
+   returns 23. Nothing was removed; seven entries were never visible. **Re-derive this list; do not
+   read it.** It is a snapshot of two files that both move.
 
    **The standing recommendation is `BL-030`**, on consequence: `apply.sh` writes the re-stamp
    and clears the mid-pull marker on a run whose worklist is not done, so the consumer's
