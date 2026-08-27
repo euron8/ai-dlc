@@ -75,14 +75,32 @@ bash scripts/backlog-reverify.sh | grep -oE 'CLOSE-CANDIDATE|STILL-LIVE|HAND-REV
 commands describe the INSTRUMENT. This one describes the SUBJECT, and until batch 12 nothing in
 this file derived it:
 
-**KEY IT ON THE `## PC-` HEADING, AND READ THE ARCHIVE. A BARE TOKEN GREP IS NOT A CANDIDATE
-COUNT, AND FOR THIRTEEN BATCHES THIS BLOCK USED ONE.** The command below replaces one that
-grepped every `PC-`-shaped token out of the live ledger and called the result "candidates". It
-counted **82** where there are **40**: the surplus is bare sprint prefixes (`PC-S296`,
-`PC-S333`), truncations (`PC-S3`, `PC-S295-`), and cross-references in prose to candidates that
-now live in the ARCHIVE. It also never opened
-`push-candidate-ledger.archive.md`, where **79** already-closed candidates sit — so every
-mention of one scored as an unexamined candidate.
+**READ THE ARCHIVE, AND KEY IT ON BOTH RECORD FORMS. A BARE TOKEN GREP IS NOT A CANDIDATE
+COUNT, AND NEITHER IS A HEADING GREP.** This block has now been wrong twice, in opposite
+directions, and the second time is the instructive one.
+
+The first version grepped every `PC-`-shaped token out of the live ledger and called the result
+"candidates". It counted **82** where the headings give **40**: the surplus is bare sprint
+prefixes (`PC-S296`, `PC-S333`), truncations (`PC-S3`, `PC-S295-`), and cross-references in prose
+to candidates that now live in the ARCHIVE. It also never opened
+`push-candidate-ledger.archive.md` — so every mention of an already-closed candidate scored as an
+unexamined one.
+
+**BATCH 13 REPLACED IT WITH A `^## PC-` HEADING GREP, AND THAT GRAMMAR CANNOT SPELL A THIRD OF
+THE LEDGER.** The consumer records a candidate in TWO forms, and the heading is only one of them:
+
+```
+## PC-S314-PRECLASSIFY-BUCKETS-A-MODE-ONLY-CHANGE-...
+- **PC-S295-RETRO-CHECK5-SELF-REFERENTIAL — Check 5 compares two hand-maintained records to
+  each other and cannot fail (filed 2026-07-21)**
+```
+
+Measured at batch 14: the live ledger holds **40 headings and 9 bullets**, the archive **79 and
+11**. So the denominator is **49 live / 90 archived**, not 40 / 79. The control that exposed it
+is the one `verification-discipline.md` prescribes — five backlog entries cited candidate ids
+that the heading grammar resolved to NEITHER file, and `grep`-ing the raw ledger for one of them
+returned four hits. **A cited id that resolves to nothing is a claim about your GRAMMAR before it
+is a claim about the ledger.** Point the grammar at its own subject before believing its zero.
 
 **`sed -E '...;t;d'` IS NOT PORTABLE AND THE FIRST CUT OF THIS BLOCK USED IT.** BSD sed answers
 `undefined label ';d'`, both files come back EMPTY, and the partition control — *"must be 0"* —
@@ -98,7 +116,9 @@ taken up when a BACKLOG ENTRY cites it. Prose is not a filing.
 
 ```
 D=/Users/n8/git/graph/_bmad-output/ai-dlc-update
-lids() { grep -h '^## PC-' "$1" | sed -E 's/^## (PC-[A-Z0-9][A-Z0-9-]*).*/\1/' | sort -u; }
+lids() { { grep -h '^## PC-' "$1" | sed -E 's/^## (PC-[A-Z0-9][A-Z0-9-]*).*/\1/'
+           grep -hE '^- \*\*PC-[A-Z0-9][A-Z0-9-]+ ' "$1" | sed -E 's/^- \*\*(PC-[A-Z0-9][A-Z0-9-]*) .*/\1/'
+         } | sort -u; }
 lids "$D/push-candidate-ledger.md"         > /tmp/live.txt
 lids "$D/push-candidate-ledger.archive.md" > /tmp/arch.txt
 grep -rohE 'PC-[A-Z0-9][A-Z0-9-]+' docs/backlog.md docs/backlog.archive.md | sort -u > /tmp/filed.txt
@@ -108,13 +128,28 @@ comm -12 /tmp/live.txt /tmp/arch.txt | wc -l          # control: must be 0, the 
 comm -12 /tmp/live.txt /tmp/filed.txt | wc -l         # live candidates a backlog entry cites
 comm -23 /tmp/live.txt /tmp/filed.txt                 # live candidates NOTHING has filed
 grep -cx 'PC-S333-SKILL-RENDERS-THE-THEIRS-REF-UNQUOTED-AND-ZSH-EATS-IT' /tmp/filed.txt  # control: 1
+grep -cx 'PC-S295-RETRO-CHECK5-SELF-REFERENTIAL' /tmp/live.txt   # control: 1, and it is a BULLET
 grep -cx 'PC-S999-NEVER' /tmp/filed.txt                                                  # control: 0
 ```
 
-At batch 13's close: **40 live candidates, 79 archived, 22 cited by a backlog entry, 18 cited by
-none**, partition control 0, presence control 1, absence control 0.
+At batch 14's close: **49 live candidates, 90 archived, 29 cited by a backlog entry, 20 cited by
+none**, partition control 0, both presence controls 1, absence control 0. The bullet control is
+there deliberately — it is the one that fails if someone reverts this grammar to headings alone,
+and a heading-only run reads as a clean, plausible 40.
 
-**Two of the 18 are already dead upstream** — `PC-S300-ORIGIN-TAG-GATE-HAS-NO-WAIVER-FOR-TRACEABILITY-CITATIONS`
+**ELEVEN IDS CITED BY LIVE BACKLOG ENTRIES RESOLVE TO NEITHER LEDGER FILE, AND SIX OF THOSE ARE
+ARTIFACTS OF THE CITATION GREP** — `PC-S308`, `PC-S334`, `PC-S336`, `PC-S900-`, and two
+`PC-S999-` probe tokens that live inside receipts. The other **five are real, full slugs naming
+candidates the consumer's ledger does not contain in either file**: `BL-039`, `BL-066`, `BL-016`,
+`BL-049` and `BL-017` are the entries that cite them. Closing one of those discharges nothing
+measurable, so establish the citation resolves BEFORE picking it as a batch subject.
+
+**Two of those 20 are new to this block at batch 14**, because they are bullet-form and the
+heading grammar could not see them: `PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD` and
+`PC-S304-STUB-MARKER-REGEX-MATCHES-DOCSTRING-PROSE-AND-BARE-IDENTIFIERS`. Neither has been
+examined by any batch.
+
+**Two of the 20 are already dead upstream** — `PC-S300-ORIGIN-TAG-GATE-HAS-NO-WAIVER-FOR-TRACEABILITY-CITATIONS`
 is **WITHDRAWN 2026-07-25, the premise was false**, and
 `PC-S305-CHECK-17-BYPASS-CONSUMER-CASES-V8-V9-AND-A-PASSING-CONTROL` is **WITHDRAWN 2026-07-27,
 REFUTED — its premise was a case-sensitivity artifact**. **Ten more are one sprint's cluster**,
@@ -130,17 +165,15 @@ catches it is running the same expression against the ledger itself: if the SOUR
 either, the grammar is the defect. This is `verification-discipline.md`'s "point a search grammar
 at its own subject before trusting its zero", met in the wild an hour after it was written down.
 
-**"Named" IS NOT "adjudicated".** `grep`-matching an id somewhere under `docs/` is a MENTION, and
-a mention is not a disposition — so 61 is a ceiling on coverage, not a measurement of it. The 21
-is the solid half: those have not been examined at all. Their status in the consumer's own ledger
-is **NOT ESTABLISHED** — a per-id status read returned `UNKNOWN` for 13 of them, against a control
-that cleanly separated `ADOPTED` from `OPEN` on the named ids, so the extraction works and simply
-does not reach these. Some may already be `WITHDRAWN` or `ADOPTED` upstream. **Establish that
-before treating 21 as a workload.**
+**"Cited" IS NOT "adjudicated".** A backlog entry naming an id is a FILING, not a disposition —
+so the **29** is a ceiling on coverage, not a measurement of it. The **20** is the solid half:
+those have not been examined at all. Their status in the consumer's own ledger is **NOT
+ESTABLISHED**; some may already be `WITHDRAWN` or `ADOPTED` upstream. **Establish that before
+treating 20 as a workload.**
 
-At the last session's close those read **68 live / 30 archived / 60 STILL-LIVE + 8 HAND-REVIEW
+At batch 14's close those read **69 live / 31 archived / 61 STILL-LIVE + 8 HAND-REVIEW
 + 0 CLOSE-CANDIDATE**, against an impossible-id control of 0. Every one of those was RE-DERIVED
-by running the four commands above after batch 13 merged, not by editing the sentence.
+by running the commands above after the rotation, not by editing the sentence.
 
 **THE LIVE COUNT WENT UP ACROSS A BATCH THAT CLOSED AN ENTRY, AND THAT IS THE NORMAL CASE RATHER
 THAN AN ERROR.** Batch 12 closed and rotated one (`BL-094`) and filed FOUR (`BL-095`, `BL-096`,
@@ -158,8 +191,8 @@ directly, read the raw exit code, and ask what ELSE satisfies it before closing 
 **A `STILL-LIVE` ROW IS NOT EVIDENCE THAT THE ENTRY IS LIVE, AND `BL-089` IS THE ENTRY THAT SAYS
 SO.** `backlog-reverify.sh` maps every non-zero `sh` exit to `STILL-LIVE  … "still reproduces
 here"`, but this corpus's receipts use **exit 9** to mean *"a precondition moved and I measured
-nothing"*. The two are one row. Measured at batch 13's close: **57 exit 1, 1 exit 9, 0 exit 0**
-across 58 `sh` receipts — the 9 is `BL-066`, whose receipt is broken shell. Batch 9 rebuilt the other one; `BL-076`'s had been unable to measure
+nothing"*. The two are one row. Measured at batch 14's close: **58 exit 1, 1 exit 9, 0 exit 0**
+across 59 `sh` receipts — the 9 is `BL-066`, whose receipt is broken shell. Batch 9 rebuilt the other one; `BL-076`'s had been unable to measure
 anything for 28 releases and read as `STILL-LIVE` the whole time.
 Derive the current pair rather than trusting that one; the count of live `sh` receipts moves
 with every batch and the control is the entries declaring `verify: manual`, which the engine
@@ -200,11 +233,47 @@ the row above told you nothing.
 ### What is DONE — do not redo any of it
 
 **Phases 0–2, 4 and 5 are COMPLETE.** Phase 3 is the batch loop and it is the only remaining
-work. Batches 1–13 have all MERGED AND PUSHED; the releases are `v0.374.0`, `v0.375.0`,
+work. Batches 1–14 have all MERGED AND PUSHED; the releases are `v0.374.0`, `v0.375.0`,
 `v0.376.0`, `v0.377.0`, `v0.378.0`, `v0.379.0`, `v0.380.0`, `v0.415.0`, `v0.416.0`,
-`v0.418.0`, `v0.419.0`, `v0.421.0` and `v0.422.0`, each recorded in `CHANGELOG.md`. `v0.381.0` and `v0.382.0` followed batch 7 as machinery releases;
+`v0.418.0`, `v0.419.0`, `v0.421.0`, `v0.422.0` and `v0.423.0`, each recorded in `CHANGELOG.md`. `v0.381.0` and `v0.382.0` followed batch 7 as machinery releases;
 many further machinery releases have shipped between `v0.383.0` and `v0.414.0` that are NOT part
 of this program, which is why the batch numbering and the version numbering stopped agreeing.
+
+**BATCH 14 IS COMPLETE, MERGED AND PUSHED AS `v0.423.0`.** `BL-033` CLOSED and rotated,
+discharging `PC-S314`. Release `5c3711e2`, close-and-rotate `c174b60a`. Live **70 → 69**, archive
+**30 → 31**, `--check PASS` before `--apply` with the receipt reported
+`CLOSE-CANDIDATE [sha 5c3711e2 resolves]`, `BL-033` in the archive and not in the live file,
+control `BL-006` still live and the two entries filed this batch still live. Gate exit **0** read
+from a sentinel CLEARED before the run and its mtime checked, **17 of 17** phases PASS, **0 FAIL**
+lines ANSI-stripped, **168 ok / 0 FAIL** with `AI_DLC_FIXTURE_NO_SKIP=1` confirmed live in the
+log, the new fixture read BY NAME against a present-name control of 1 and an impossible-name
+control of 0 in the same invocation.
+
+**THE OBVIOUS ONE-LINE FIX WAS A REGRESSION, AND THE ENTRY'S OWN RECEIPT ACCEPTED IT.** `BL-033`
+proposed reordering two arms; measured, that answers `ALREADY-AT-THEIRS` for BOTH a consumer that
+already carries the exec bit and one that still needs it, because on a mode-only change every
+content hash is equal. Its receipt scored `head 1 / reorder 0 / conjunct 0` — it could not tell
+the correct fix from the regression, and the entry SAID so in as many words ("takes either fix")
+without anyone reading that as a defect. **When an entry tells you its receipt accepts two
+different fixes, that is the finding, not a convenience.** Replacement scores
+`head 1 / reorder 1 / conjunct 0`.
+
+**THE ENTRY WAS WIDER THAN FILED IN THREE WAYS, AND ASKING THE QUESTION IS WHAT FOUND THEM** —
+the `100755 -> 100644` direction, a path whose content is at theirs but whose bit is not (a
+DIFFERENT arm, and silent), and the `A` branch's `ALREADY-PRESENT`. That is now four batches
+running where "is this entry wider than filed?" paid.
+
+**A CHANGELOG CLAIM OF MINE WAS TRUE AND UNMEASURED, AND THE CASE THAT PROVED IT WAS NOT IN MY
+MATRIX.** I asserted a mode-aware hash would refuse a safe `UPSTREAM-DELETED`. My first matrix
+showed no such effect — because every `D`-branch case in it had the consumer's mode matching
+base's, so the mode-aware hashes still agreed. The claim needed a consumer whose CONTENT matches
+base and whose MODE does not, and only then did it reproduce. **A differential over a matrix you
+built yourself tests the cases you thought of.**
+
+**FILED `BL-099` AND `BL-100`.** The exec-bit audit is one-directional — it tests `$1=="100755"`
+at both arms, so a file upstream STOPPED shipping executable is never reported, and that
+direction has no level-triggered backstop at all. And `--untangle`'s noop arm is mode-blind: a
+`.githooks/pre-push` copy at 644 with correct content buckets identically to one at 755.
 
 **BATCH 13 IS COMPLETE, MERGED AND PUSHED AS `v0.422.0` (`bccc8d9c`).** `BL-052` CLOSED and
 rotated, discharging `PC-S333`. Live **69 → 68**, archive **29 → 30**, `--check PASS` before
@@ -457,38 +526,62 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **BATCH 14. THE CORPUS IS THE 33 PC-BACKED LIVE ENTRIES, NOT THE 68.** Batch 13 is done —
-   see the block above. Pick the subject from the PC-backed set and say which candidate it
-   discharges.
+1. **BATCH 15. THE CORPUS IS THE 16 LIVE ENTRIES WHOSE CITED CANDIDATE IS STILL LIVE UPSTREAM,
+   NOT THE 69 AND NOT THE 32.** Batch 14 is done — see the block above. Pick the subject from
+   that set and say which candidate it discharges.
 
-   **The standing recommendation is `BL-033`**, which batch 13 scoped and did not take.
-   `preclassify.sh:309-312` tests `ours_h = base_h -> UPSTREAM-ONLY` BEFORE
-   `ours_h = theirs_h -> ALREADY-AT-THEIRS`, and both hashes are content-only, so a MODE-ONLY
-   upstream change makes all three equal and the earlier arm shadows the later one. The
-   consequence is the one `SKILL.md:292-303` names in as many words — step 2's termination
-   subtraction can never drop the path, so the self-update does not terminate. It is one file,
-   one arm order, and its receipt drives the shipping `preclassify.sh` on a synthetic three-ref
-   case with a reachability control in the same invocation. Discharges
-   `PC-S314-PRECLASSIFY-BUCKETS-A-MODE-ONLY-CHANGE-AS-UPSTREAM-ONLY-SO-THE-SELF-UPDATE-CANNOT-TERMINATE`.
+   **THE PC-BACKED COUNT IS NOT THE CORPUS, AND BATCH 14 FOUND THAT OUT.** 32 live entries cite
+   a `PC-` id, but only **16** of them cite one that is still LIVE in the consumer's ledger:
+   7 cite candidates already ARCHIVED upstream — closing those discharges something the consumer
+   closed itself — and 5 cite full slugs that resolve to NEITHER ledger file. Derive the corpus
+   with the join below, which is the one the old command did not do:
 
-   **Its own entry records that the filing is WRONG about its escape hatch**, in the direction
-   that changes which fix a reader picks — so re-derive that before choosing between the arm
-   reorder and a mode-aware hash.
+   ```
+   # /tmp/live.txt comes from the derive block above -- BOTH record forms
+   awk '/^## BL-[0-9]+/{if(id!="")out(); id=$2; pcs=""}
+        match($0,/PC-[A-Z0-9][A-Z0-9-]+/){p=substr($0,RSTART,RLENGTH); if(index(pcs,p)==0) pcs=pcs (pcs?",":"") p}
+        END{if(id!="")out()} function out(){ if(pcs!="") printf "%s\t%s\n", id, pcs }' docs/backlog.md |
+   while IFS="$(printf '\t')" read -r id pcs; do
+     for p in $(printf '%s' "$pcs" | tr ',' ' '); do
+       grep -qx "$p" /tmp/live.txt && { printf '%s\t%s\n' "$id" "$p"; break; }
+     done
+   done
+   ```
+
+   At batch 14's close that returned **16 entries**: `BL-029`, `BL-030`, `BL-034`, `BL-037`,
+   `BL-042`, `BL-043`, `BL-044`, `BL-045`, `BL-051`, `BL-055`, `BL-057`, `BL-062`, `BL-064`,
+   `BL-067`, `BL-069`, `BL-075`. Every one has a receipt exiting 1.
+
+   **The standing recommendation is `BL-030`**, on consequence: `apply.sh` writes the re-stamp
+   and clears the mid-pull marker on a run whose worklist is not done, so the consumer's
+   `.claude/.ai-dlc-version` asserts a version the tree did not receive — and the next pull bases
+   its merge on that stamp. `apply.sh`'s own comments name this the `v0.70.1` class in as many
+   words, and the file has a withheld-re-stamp path already built for exactly this, so the
+   question is which states reach it. Discharges `PC-S304-APPLY-SH-RESTAMPS-BEFORE-THE-WORKLIST-IS-DONE`,
+   verified live in the consumer ledger against an impossible-id control of 0. Batch 14 worked
+   inside `apply.sh` and did not touch the stamp path, so it is not warm ground — re-derive it.
+
+   **The coherent alternative is `BL-051`** — step 2 computes which machinery paths the consumer
+   edited and then discards the answer, discharging `PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH`.
+   It is the same step-2 machinery batch 14's subject fed, which is an argument for it and also
+   the reason to be careful: **its receipt is one of the four the `v0.417.0` sweep found closable
+   by prose** — by a comment naming a bucket. Taking it means replacing that receipt first, the
+   way batch 14 had to.
 
    **THE SELECTION RULE IS PROVENANCE FIRST, THEN CONSEQUENCE — NOT READINESS.** Operator
    ruling. "Readiest to close" is what pointed batch 13 at three entries with no consumer
    provenance and no consumer surface, and it will do it again, because a session always finds
    its own discoveries easiest to fix. Derive the corpus rather than trusting this list:
 
-   ```
-   awk '/^## BL-[0-9]+/{if(id!="")out(); id=$2; pcs=""}
-        match($0,/PC-[A-Z0-9][A-Z0-9-]+/){p=substr($0,RSTART,RLENGTH); if(index(pcs,p)==0) pcs=pcs (pcs?",":"") p}
-        END{if(id!="")out()} function out(){ if(pcs!="") printf "%s\t%s\n", id, pcs }' docs/backlog.md
-   ```
+   The join that derives it is the one at the top of this action — **run that one, not the
+   bare `awk` half of it.** The `awk` alone answers "which entries cite a `PC-` id", which is a
+   question about `docs/backlog.md` and not about the consumer; it returned **32** at batch 14's
+   close against a true corpus of **16**. Piping it through `/tmp/live.txt` is what makes it a
+   measurement of the goal.
 
-   At batch 13's close that returned **33 entries**, of which **32 have receipts exiting 1** and
-   one — `BL-066` — exits **9** and has therefore measured nothing. Almost all name `core/`
-   paths, so the consumer surface is there; `BL-086` is the one that names none.
+   Of the 32, **31 have receipts exiting 1** and one — `BL-066` — exits **9** and has therefore
+   measured nothing. Almost all name `core/` paths, so the consumer surface is there; `BL-086`
+   is the one that names none.
 
    **`BL-095` through `BL-098` are DEFERRED, not rejected.** They are real, each carries a
    candidate fix already measured against an empty false-positive set, and they are the
