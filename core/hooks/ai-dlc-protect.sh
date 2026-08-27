@@ -368,8 +368,8 @@ if [ ${#PROTECTED_HITS[@]} -gt 0 ]; then
   # that cannot mark its output still emits it.
   _AI_DLC_PROV="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-context-provenance.sh"
   if [ -r "$_AI_DLC_PROV" ]; then . "$_AI_DLC_PROV"
-  else ai_dlc_provenance_tag() { :; }; fi
-  CONTEXT="$(ai_dlc_provenance_tag ai-dlc-protect PreToolUse)$CONTEXT"
+  else ai_dlc_provenance_wrap() { printf %s "${3:-}"; }; fi
+  CONTEXT="$(ai_dlc_provenance_wrap ai-dlc-protect PreToolUse "$CONTEXT")"
 
   jq -n \
     --arg reason "$REASON" \

@@ -541,8 +541,8 @@ CONTEXT="[AI/DLC context sensor] Resident context is ~${TOKENS} tokens (~${PCT}%
 # that cannot mark its output still emits it.
 _AI_DLC_PROV="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-context-provenance.sh"
 if [ -r "$_AI_DLC_PROV" ]; then . "$_AI_DLC_PROV"
-else ai_dlc_provenance_tag() { :; }; fi
-CONTEXT="$(ai_dlc_provenance_tag ai-dlc-context-sensor "$EVENT")$CONTEXT"
+else ai_dlc_provenance_wrap() { printf %s "${3:-}"; }; fi
+CONTEXT="$(ai_dlc_provenance_wrap ai-dlc-context-sensor "$EVENT" "$CONTEXT")"
 
 jq -n --arg context "$CONTEXT" --arg event "$EVENT" '{
   hookSpecificOutput: {

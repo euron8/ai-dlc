@@ -386,9 +386,9 @@ mkdir -p "$STATE_DIR" 2>/dev/null || true
 # that cannot mark its output still emits it.
 _AI_DLC_PROV="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-context-provenance.sh"
 if [ -r "$_AI_DLC_PROV" ]; then . "$_AI_DLC_PROV"
-else ai_dlc_provenance_tag() { :; }; fi
+else ai_dlc_provenance_wrap() { printf %s "${3:-}"; }; fi
 
-jq -n --arg ctx "$(ai_dlc_provenance_tag ai-dlc-recover SessionStart)$CONTEXT" \
+jq -n --arg ctx "$(ai_dlc_provenance_wrap ai-dlc-recover SessionStart "$CONTEXT")" \
   '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $ctx}}'
 
 exit 0

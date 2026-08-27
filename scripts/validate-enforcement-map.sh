@@ -2457,15 +2457,16 @@ else
   else
     i98_all="$(awk -v root="$REPO_ROOT/" -v tok="$i98_tok" '
       function rel(p) { return (index(p, root) == 1) ? substr(p, length(root) + 1) : p }
-      FNR == 1 { if (f != "") flush(); f = FILENAME; e = 0; t = 0; r = 0; b = 0; k = 0 }
+      FNR == 1 { if (f != "") flush(); f = FILENAME; e = 0; t = 0; r = 0; b = 0; k = 0; d = 0 }
       { s = $0; sub(/^[ \t]+/, "", s); if (substr(s, 1, 1) == "#") next }
       index($0, "additionalContext") > 0 { e = 1 }
-      index($0, "ai_dlc_provenance_tag ") > 0 { t = 1 }
+      index($0, "ai_dlc_provenance_wrap ") > 0 { t = 1 }
       index($0, "ai-dlc-context-provenance.sh") > 0 && index($0, "BASH_SOURCE") > 0 { r = 1 }
-      index($0, "ai_dlc_provenance_tag() { :; }") > 0 { b = 1 }
+      index($0, "ai_dlc_provenance_wrap() { printf") > 0 { b = 1 }
       index($0, tok) > 0 { k = 1 }
+      index($0, "ai_dlc_provenance_tag ") > 0 { d = 1 }
       END { if (f != "") flush() }
-      function flush() { printf "%s\t%d%d%d%d%d\n", rel(f), e, t, r, b, k }
+      function flush() { printf "%s\t%d%d%d%d%d%d\n", rel(f), e, t, r, b, k, d }
     ' $i98_files 2>/dev/null || true)"
     # POSITIVE CONTROL: the inline-jq emitter must be in the population. Without it this arm
     # reads identically whether its grammar can spell every emitter or only the tidy eight.
@@ -2475,15 +2476,18 @@ else
     i98_untagged="$(awk -F'\t' '$2 ~ /^10/ {print "    " $1}' <<<"$i98_all")"
     i98_unemit="$(awk -F'\t' '$2 ~ /^01/ {print "    " $1}' <<<"$i98_all")"
     i98_unguarded="$(awk -F'\t' '$2 ~ /^.1/ && substr($2,3,2) != "11" {print "    " $1}' <<<"$i98_all")"
-    i98_spells="$(awk -F'\t' '$2 ~ /1$/ {print "    " $1}' <<<"$i98_all")"
+    i98_spells="$(awk -F'\t' 'substr($2,5,1) == "1" {print "    " $1}' <<<"$i98_all")"
+    i98_direct="$(awk -F'\t' '$2 ~ /1$/ {print "    " $1}' <<<"$i98_all")"
     [ -n "$i98_untagged" ] && err "I98: these hooks emit additionalContext WITHOUT routing it through ai_dlc_provenance_tag. The lead's rule is that an AI/DLC block carries a live nonce, so an unmarked genuine emitter is a false positive against that rule -- and a provenance check the lead learns to distrust is worse than none:
 $i98_untagged"
     [ -n "$i98_unemit" ] && err "I98: these hooks call ai_dlc_provenance_tag and emit no additionalContext. Either the emission was removed and the marker left behind, or the marker is being written somewhere it cannot reach the lead. Both leave a rotation of the nonce with no reader:
 $i98_unemit"
     [ -n "$i98_unguarded" ] && err "I98: these hooks call ai_dlc_provenance_tag without BOTH halves of the fail-open guard -- the sibling BASH_SOURCE resolve and the \`ai_dlc_provenance_tag() { :; }\` fallback. A consumer mid-pull can hold the hook without the library, and an unguarded call site then kills the hook: the lead loses the entire payload in exchange for a marker:
 $i98_unguarded"
-    [ -n "$i98_spells" ] && err "I98: these hooks spell the provenance marker token themselves instead of calling the library. Nine hand-written copies of a security marker is nine chances for one to drift into a form the lead's check does not recognise, and an unrecognised marker reads exactly like an absent one. Call ai_dlc_provenance_tag:
+    [ -n "$i98_spells" ] && err "I98: these hooks spell the provenance marker token themselves instead of calling the library. Nine hand-written copies of a security marker is nine chances for one to drift into a form the lead's check does not recognise, and an unrecognised marker reads exactly like an absent one. Call ai_dlc_provenance_wrap:
 $i98_spells"
+    [ -n "$i98_direct" ] && err "I98: these hooks call ai_dlc_provenance_tag DIRECTLY instead of ai_dlc_provenance_wrap. Command substitution strips trailing newlines, so \`\$(ai_dlc_provenance_tag ...)\$body\` glues the body onto the marker's own line -- measured, a line-anchored marker match scored 0 on a real PreToolUse emission and 1 on the library's own output. The contract the lead reads says the block OPENS WITH THE MARKER LINE, so that spelling makes the check the contract describes fail on correct output. The wrap owns the newline; this arm exists because the affordance to get it wrong is what got it wrong:
+$i98_direct"
   fi
 fi
 

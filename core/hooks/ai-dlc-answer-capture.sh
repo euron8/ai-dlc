@@ -341,9 +341,9 @@ ROUTE_CONTEXT="$(jq -rj '(.answer_pause_preamble // "") + (.pause_branch_text //
 # that cannot mark its output still emits it.
 _AI_DLC_PROV="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-context-provenance.sh"
 if [ -r "$_AI_DLC_PROV" ]; then . "$_AI_DLC_PROV"
-else ai_dlc_provenance_tag() { :; }; fi
+else ai_dlc_provenance_wrap() { printf %s "${3:-}"; }; fi
 
-jq -n --arg context "$(ai_dlc_provenance_tag ai-dlc-answer-capture PostToolUse)$ROUTE_CONTEXT" '{
+jq -n --arg context "$(ai_dlc_provenance_wrap ai-dlc-answer-capture PostToolUse "$ROUTE_CONTEXT")" '{
   hookSpecificOutput: {
     hookEventName: "PostToolUse",
     additionalContext: $context

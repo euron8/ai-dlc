@@ -438,8 +438,8 @@ emit() {
   # that cannot mark its output still emits it.
   _AI_DLC_PROV="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-context-provenance.sh"
   if [ -r "$_AI_DLC_PROV" ]; then . "$_AI_DLC_PROV"
-  else ai_dlc_provenance_tag() { :; }; fi
-  ctx="$(ai_dlc_provenance_tag ai-dlc-dispatch-guard PreToolUse)$ctx"
+  else ai_dlc_provenance_wrap() { printf %s "${3:-}"; }; fi
+  ctx="$(ai_dlc_provenance_wrap ai-dlc-dispatch-guard PreToolUse "$ctx")"
 
   jq -n --arg reason "$reason" --arg ctx "$ctx" --argjson ui "$updated" '{
     hookSpecificOutput: {

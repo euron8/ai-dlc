@@ -144,10 +144,10 @@ STAGE="$(cat "$PROGRESS" 2>/dev/null || printf 'snapshot')"
 # that cannot mark its output still emits it.
 _AI_DLC_PROV="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-context-provenance.sh"
 if [ -r "$_AI_DLC_PROV" ]; then . "$_AI_DLC_PROV"
-else ai_dlc_provenance_tag() { :; }; fi
+else ai_dlc_provenance_wrap() { printf %s "${3:-}"; }; fi
 
 deny() {
-  jq -n --arg reason "$1" --arg context "$(ai_dlc_provenance_tag ai-dlc-recover-gate PreToolUse)$2" \
+  jq -n --arg reason "$1" --arg context "$(ai_dlc_provenance_wrap ai-dlc-recover-gate PreToolUse "$2")" \
     '{
       hookSpecificOutput: {
         hookEventName: "PreToolUse",

@@ -57,6 +57,27 @@ The reader now takes the newest WELL-FORMED line in one `awk` pass.
 Every call site is fail-open: a consumer mid-pull can hold the hook without the library, and an
 unguarded source would kill the hook — the lead would lose the whole payload to gain a marker.
 
+**The marker was not a LINE at seven of the nine call sites, and an adversarial pass found it
+before the release landed.** `$( )` strips trailing newlines, so `"$(tag ...)$body"` glued the
+body onto the marker's own line: a line-anchored match scored **0** on a real `PreToolUse`
+emission and **1** on the library's own output. The contract tells the lead the block opens with
+the marker LINE, so the check it describes failed on correct output — the same "a check that
+errors on correct data" failure one level up. It hid because the hook probed first is
+SessionStart-only, where the tag emits two lines and the CONTRACT paragraph absorbed the glue.
+`ai_dlc_provenance_wrap` owns the newline now, and `I98` fails the push on a hook calling the tag
+directly, because leaving the broken spelling callable leaves it reachable.
+
+**Three claims in the header were corrected by that same pass, and the corrections ship with the
+mechanism.** The contract said the nonce appears nowhere "a tool result can reach" — false; the
+store is an ordinary file and `cat` puts it in a tool result. The property is about ORDERING, not
+about the channel: it holds for content authored before any read of that path. The header said
+rotation bounds the window to one session segment — the store retains the last 40 mints and
+membership accepts every one. And a THIRD limit was unstated and now is: membership is membership
+in a MUTABLE LOCAL FILE, so anything that can append one line to the checkout can make any value
+verify — one action, of exactly the kind the injected text being checked would be asking for.
+`pipeline-state-paths.json` reasoned about not COMMITTING the store and never considered the
+write side.
+
 ### `I98`, and `I13`'s registration exemption is now derived rather than named
 
 `I98` binds the hook fleet in both directions: an emitter that does not tag, and a tagger that
@@ -138,6 +159,10 @@ loop was the obvious shape and would have cost a fork per hook per filter.
 
 The two differentials do not sum to the whole rise, and the residual is diffuse corpus growth
 rather than a hot loop. Saying so is more useful than inventing a third attribution.
+
+Both differentials were taken before `I98` gained its direct-call filter; the shipped tree
+measures **7109**, five under the ceiling. The figures above are the attributions, not the
+final reading, and the two are different claims.
 
 ## [0.428.0] - 2026-08-27
 

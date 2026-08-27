@@ -303,6 +303,37 @@ chk "  a third event through the real library carries the marker" "$(countF "$LI
 chk "  and carries no contract paragraph either" "$(countF "$LIBOUT" 'AI/DLC PROVENANCE CONTRACT')" "0"
 chk "  the library reused the newest nonce for it" "$(nonce_of "$LIBOUT")" "$N3"
 
+# --- ARM 4b: the marker occupies a LINE OF ITS OWN in a real emission ----------
+# THIS IS THE ARM THAT WOULD HAVE CAUGHT THE DEFECT THAT SHIPPED TO THE GATE. The library's
+# own output was newline-terminated and every library-level arm passed, while the CALL SITES
+# spelled it `"$(ai_dlc_provenance_tag ...)$body"` -- and command substitution strips trailing
+# newlines, so the body was glued onto the marker's own line. The contract tells the lead the
+# block "opens with the marker line", so a lead running that line-anchored check scored ZERO on
+# correct output. Composition was wrong while both halves were right, which is why this arm
+# reads a HOOK's emission and not the library's.
+#
+# The check is LINE-ANCHORED on purpose. A prefix match (`case "$ctx" in "[AI-DLC..."*)`) passes
+# under the broken spelling too -- it was in the lead's own probe and in the first receipt, and
+# neither saw this.
+# `grep -c` PRINTS 0 and EXITS 1 on no match, so a `|| printf 0` fallback emits a SECOND zero
+# and the comparison reads a two-line value. That was this arm's first spelling and its control
+# failed with "expected '0', got '0\n0'" -- the arm was right and its instrument was not.
+anchored() { _a="$(grep -cE '^\[AI-DLC-HOOK-PROVENANCE .*\]$' "$1" 2>/dev/null || true)"; printf '%s' "${_a:-0}"; }
+chk "the marker is its own LINE in the non-SessionStart hook's emission" \
+  "$(anchored "$WORK/a-sensor.ctx")" "1"
+chk "  and in the SessionStart hook's emission" \
+  "$(anchored "$WORK/a-floor.ctx")" "1"
+# The control is the DEFECTIVE construction, built here from the same library. Without it this
+# arm cannot distinguish a grammar that anchors from one that matches anything.
+GLUED="$WORK/glued.txt"
+( cd "$WORK" && CLAUDE_PROJECT_DIR="$B" bash -c \
+    '. "$1"; printf "%s" "$(ai_dlc_provenance_tag ai-dlc-probe PreToolUse)payload line one"' \
+    _ "$LIB" ) > "$GLUED" 2>/dev/null
+chk "  CONTROL: the tag-and-concatenate spelling scores 0 under the same grammar" \
+  "$(anchored "$GLUED")" "0"
+chk "  CONTROL: and that spelling still carries the token, so the arm keys on the LINE" \
+  "$(countF "$GLUED" "$TOKEN")" "1"
+
 # --- ARM 5: FAIL-OPEN with the library absent ---------------------------------
 # The hook resolves the library as a SIBLING of its own path, so a copy into a directory
 # without it is the real absent-library state and needs no edit to the hook.

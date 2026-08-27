@@ -61,12 +61,12 @@ names="$(printf '%s\n' "${shipped[@]}" | while read -r p; do basename "$p"; done
 # that cannot mark its output still emits it.
 _AI_DLC_PROV="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-context-provenance.sh"
 if [ -r "$_AI_DLC_PROV" ]; then . "$_AI_DLC_PROV"
-else ai_dlc_provenance_tag() { :; }; fi
+else ai_dlc_provenance_wrap() { printf %s "${3:-}"; }; fi
 
 # `emit` takes RAW text and does its own escaping, so the marker is prepended in ONE
 # place rather than at each call site. Both call sites below pass raw text.
 emit() { printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":%s}}\n' \
-           "$(jstr "$(ai_dlc_provenance_tag ai-dlc-rules-floor SessionStart)$1")"; }
+           "$(jstr "$(ai_dlc_provenance_wrap ai-dlc-rules-floor SessionStart "$1")")"; }
 jstr() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/' | tr -d '\n' | sed 's/^/"/; s/$/"/'; }
 
 if [ -z "$ver" ]; then
