@@ -473,6 +473,15 @@ distribution-only and a consumer inherits nothing from it.
 It is the `v0.390.0` class — the citation RESOLVES, so `validate-plan-shape.sh`'s resolvability
 arm passes it, and a dangling-ref detector is blind to a wrong-target ref by construction.
 
+**WHAT A `CLOSE-CANDIDATE` ON THIS ENTRY WOULD AND WOULD NOT MEAN.** The receipt's consumer half
+drives shipped `reconcile/*.sh` against two synthetic ledgers inside a clone. It therefore
+certifies that **the DISTRIBUTION ships a program that refuses an oversized ledger** — never that
+any consumer's ledger is actually bounded, which no distribution-side receipt can observe. A
+consumer runs its own installed engine, so the bound arrives only on the pull that carries it.
+Read a green row here as "the refusal is shipped", and confirm the consumer separately. This
+entry has already produced one false `CLOSE-CANDIDATE`; this paragraph exists so the next one is
+not merely a misread.
+
 **Put the consumer-side ceiling where a LEDGER PATH is the argument.** Measured over the 22
 `reconcile/*.sh`: four accept a bare ledger path (`ledger-rotate.sh`, `adopt-extension-checks.sh`,
 `lib.sh`, `relabel-extension-checks.sh`) and the other 18 exit non-zero on any ledger, being usage
