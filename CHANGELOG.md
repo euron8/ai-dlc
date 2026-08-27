@@ -15,6 +15,80 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.426.0] - 2026-08-27
+
+### The re-stamp is withheld while any hand-back is outstanding, and `--finish` is the exit
+
+Discharges `PC-S304-APPLY-SH-RESTAMPS-BEFORE-THE-WORKLIST-IS-DONE`, filed by the reference
+consumer at the `0.173.2 → 0.175.0` pull and re-observed at `0.360.0 → 0.368.0`.
+
+**The defect.** `reconcile/apply.sh` gated the consumer re-stamp on `mech_fail` alone — its own
+inability to place a file — and its comment at the counter declared `WORKLIST`/`DECISION` rows
+deliberately excluded, on the grounds that they are "work the caller completes in this same run,
+and the stamp is still true once it does". The caller completes them AFTER this program has
+exited. So the same run that handed back semantic merges wrote `version:`/`commit:` at theirs,
+removed `.claude/.ai-dlc-applying`, and printed `RESOLVED consistent "the tree matches <theirs>"`.
+The stamp is the next pull's merge base: an apply that aborted or was abandoned left a tree
+CLAIMING to be at theirs, and the un-merged files then read as `ALREADY-AT-THEIRS` to every
+detector that compares against the stamp — invisible rather than conflicting.
+
+**Not a risk to weigh — a regression with a count.** The reference consumer's own committed
+reconcile logs record it. Of the **40** logs that carry a manifest this grammar can read, **16**
+carry a `WORKLIST` or `DECISION` row, and **15 of those 16 also carry `RESOLVED restamp`**: the
+tool stamped over an unfinished tree fifteen recorded times. (Denominator control: a first pass
+scored this over all **126** reconcile logs and found 16 — the same numerator against a set 86
+files of which carry no readable manifest at all. The figure is 15 of 40, not 15 of 126.)
+
+**The fix.** `say()` counts every row it emits, because a counter incremented at the call sites
+is a hand-list of ten `WORKLIST` and twenty-one `DECISION` sites that the next row silently falls
+out of — which is exactly how `mech_fail` came to have the scope it did. The guard withholds both
+the stamp and the marker clear, and the withheld row prints the finishing command with the
+machinery flag already resolved.
+
+**`--finish` is required, not a recovery path, and that is the whole design constraint.**
+Withholding with no reachable finisher WEDGES the consumer: `core/git-hooks/pre-push:751` refuses
+the fixture suite outright while `.ai-dlc-applying` exists — `applying_guard` returns 1, and its
+own contract at `:710-716` says "REFUSE rather than skip: a skipped suite is the green light
+nobody earned" — so a stamp nobody can advance is a repository that cannot push. (`BL-030` cited
+that refusal at `:667` and its comment at `:644`; neither resolves today, and the claim was
+re-derived rather than inherited.) `apply.sh --finish` runs no resolution phase. It cannot: a file the caller
+semantically merged keeps a consumer delta by definition, so `preclassify.sh` re-buckets it
+`BOTH-CHANGED->CLASSIFY` on every subsequent run and a finisher that re-ran the phases would
+never terminate. `SKILL.md` step 7 carries the instruction in two places.
+
+**The change wedged its own finisher on the first end-to-end run, which is the part worth
+recording.** `--finish` counted every row it re-derived, and on a consumer without
+`scripts/ai-dlc/validate-hook-registration.sh` the hook-registration site emits `DECISION
+hook-registration-unchecked` — whose stated remedy is to re-run the apply, which is how that
+validator arrives, on the phase `--finish` skips. Unclearable by construction. Hence two
+counters: the ordinary run gates on `WORKLIST`+`DECISION`, and `--finish` gates on `WORKLIST`
+only and runs the hook-registration check FIRST, where its answer is verified by a validator
+rather than attested by the operator. **Asking what a new gate makes permanently true downstream
+is the check that caught it; it was not visible in the diff.**
+
+**A silent branch was found beside it and closed.** A consumer with no `.ai-dlc-version` at all
+fell through the `elif` and the run said NOTHING about the stamp, on either mode — a missing row
+that reads as a clean run to every reader and every grep over the manifest. It now emits
+`DECISION restamp-absent`. Pre-existing, in the same guard, found by probing `--finish` against a
+bare `.claude/`.
+
+**`FORK_BUDGET` 7029 → 7061, a CORPUS raise rather than a code one.** No arm in
+`validate-enforcement-map.sh` gained a loop; the new fixture directory did, and that script's
+per-fixture passes cost forks per DIRECTORY. Isolated by differential inside the repo, with the
+two sides asserted to differ before the reading was taken: **7054** with the directory present,
+**7040** with it moved aside — **14 forks**, which is what this one fixture costs. The observed
+spread is 7054–7055, so the headroom is the usual 6 over the TOP of the spread. The fixture's own
+`A4` arm confirms the ceiling stays reachable at 7055 of 7061 rather than ratcheting into a check
+that cannot fire.
+
+**An existing mutant caught a third reader of the machinery flag before any human did.**
+`core/fixtures/apply-machinery-stamp`'s m2 reverts every guard on `--carried-machinery-slice`
+together and refuses to score a PARTIAL revert; the withheld row's first draft tested the flag
+inline and tripped it. Folded into the block that already reads it. The second trip was this
+CHANGELOG's own sibling — a COMMENT quoting the guard satisfied m2's whole-file grep, which is
+"a whole-file `grep -qF` is satisfied by a comment" arriving as a false PARTIAL rather than a
+false pass. Reworded rather than loosening the check that correctly refused to certify.
+
 ## [0.425.0] - 2026-08-27
 
 ### A receipt that accepts two candidate fixes has established neither

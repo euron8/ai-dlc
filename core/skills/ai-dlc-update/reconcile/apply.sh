@@ -1296,6 +1296,14 @@ elif [ -f "$STAMP" ]; then
   echo "apply: NOT WRITTEN BY THIS TOOL -- _bmad-output/ai-dlc-update/reconcile-log-<ts>.md" >&2
   echo "  It records the gates, the post-apply re-runs, the validators and the ledger decisions." >&2
   echo "  This program can see none of those, so it does not write them. Step 7 is where you do." >&2
+else
+  # NO STAMP FILE AT ALL, AND THIS ARM USED TO BE ABSENT -- the `elif` simply fell through and the
+  # run said NOTHING about the stamp, on either mode. Found by probing `--finish` against a
+  # consumer with a bare `.claude/`: the operator invokes the finisher, whose entire purpose is
+  # this one write, and gets a manifest with no stamp row in it. Silence there is the worst
+  # available answer, because a missing row reads as a clean run to the reader and to every
+  # grep over the manifest.
+  say DECISION restamp-absent "$STAMP" "there is no version stamp on this consumer, so nothing recorded which release it is at and this run had nothing to advance. That is not an apply failure and it is not a success either — the next pull has no base to compute from. Write one in schema (version/commit/skill_version/skill_commit/installed_at/upstream) at ${BASE}, then re-run."
 fi
 }
 

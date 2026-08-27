@@ -223,7 +223,15 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 # ratcheted rather than left where it was because 73 forks of unearned headroom is a budget that
 # cannot fire, which reads exactly like one that is being respected. Headroom is 6 over the
 # measured 7023, the same margin 7076 carried over 7070 and 7060 over v0.416.0's 7054.
-FORK_BUDGET=7029
+#
+# 7029 -> 7061 at v0.426.0, and it is a CORPUS raise again: no arm here gained a loop.
+# `core/fixtures/apply-restamp-worklist/` was added for the re-stamp withholding, and this
+# script's per-fixture passes cost forks per DIRECTORY. Isolated by differential inside this
+# repo, with the two sides asserted to differ before the reading was taken: 7054 with that
+# directory present, 7040 with it moved aside -- 14 forks, which is what this one costs. The
+# observed spread across runs is 7054-7055, so the headroom is the usual 6 over the TOP of the
+# spread rather than over a single reading.
+FORK_BUDGET=7061
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

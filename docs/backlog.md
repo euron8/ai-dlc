@@ -1554,11 +1554,37 @@ a counter at the `say WORKLIST` sites. It deliberately does not anchor on the ra
 `:261-266`, which is the obvious target and the known-bad one: fixes in this repo document what
 they removed, so that sentence would survive inside the comment recording its own reversal.
 
+**THAT ANCHOR WAS THE DEFECT, AND THE RECEIPT BELOW REPLACES IT. Disjoining so that "either
+plausible fix shape turns it green" is the same sentence as "this receipt cannot tell a fix from a
+regression", one clause apart, and it was written as a convenience.** Scored at v0.426.0 against
+six implementations built as real edited copies, each proved to differ from its parent before the
+cell was read: the correct fix **0**, a second spelling of the correct fix **0**, the unfixed
+program **1** — and then `if [ "$mech_fail" -gt 0 ] || [ "$mech_fail" -gt 999 ]; then`, which
+withholds nothing new, **0**; and a bare `worklist_note=0` inserted at the top of the file,
+changing no behaviour whatever, **0**. Both disjuncts were satisfiable by text that resolves
+nothing. This is the `BL-033` shape a release earlier — an entry whose own text tells you its
+receipt takes either fix — and it is now two for two.
+
+The replacement keys on the EMISSION SITE and on a relationship rather than on a spelling. It
+reads the counter name out of `say()`'s own `WORKLIST` case, requires that name to appear in the
+two lines preceding the `say DECISION restamp-withheld` call, requires `--finish)` to be a
+recognised option, and requires the single `rm -f "$APPLYING"` to lie between the withheld row and
+the `restamp-failed` row — which is what a partial fix breaks. Scores: correct **0**, second
+spelling **0**, unfixed **1**, both trivial regressions **1**, and a partial fix that withholds the
+stamp while hoisting the marker clear out of the read-back **1**. Precondition arm proved
+reachable in three states (no file, empty file, `say()` present with no restamp rows), all **3**.
+
+**The citations here are as filed and two of them do not resolve.** Re-derived at v0.426.0:
+`apply.sh:146`, `:884`, `:1184` and `:1251` are exact; `:1109` is the `say` row and the guard it
+names is `:1108`; and `core/git-hooks/pre-push:667`/`:644` resolve to unrelated lines — the marker
+refusal is `applying_guard` at `:751`, its contract comment at `:710-716`. The claim was true; only
+the line numbers had moved.
+
 Discharges the consumer entry `PC-S304-APPLY-SH-RESTAMPS-BEFORE-THE-WORKLIST-IS-DONE` at pinned
 ledger line 1977.
 
 
-verify: sh bash -c 'a=core/skills/ai-dlc-update/reconcile/apply.sh; w=$(LC_ALL=C grep -c "say WORKLIST" "$a"); m=$(LC_ALL=C grep -cE "^[^#]*mech_fail=" "$a"); [ "$w" -gt 0 ] && [ "$m" -gt 0 ] || exit 3; n=$(LC_ALL=C grep -n "say DECISION restamp-withheld" "$a" | head -1 | cut -d: -f1); [ -n "$n" ] || exit 3; g=$(sed -n "$((n-1))p" "$a"); LC_ALL=C grep -qE "[&][&]|[|][|]" <<< "$g" && exit 0; LC_ALL=C grep -qiE "^[^#]*worklist[a-z_]*=" "$a" && exit 0; exit 1'
+verify: sh bash -c 'a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$a" ] || exit 3; s=$(LC_ALL=C grep -n "^say() {" "$a" | head -1 | cut -d: -f1); w=$(LC_ALL=C grep -n "say DECISION restamp-withheld" "$a" | head -1 | cut -d: -f1); f=$(LC_ALL=C grep -n "say DECISION restamp-failed" "$a" | head -1 | cut -d: -f1); [ -n "$s" ] && [ -n "$w" ] && [ -n "$f" ] && [ "$w" -gt 2 ] && [ "$f" -gt "$w" ] || exit 3; v=$(LC_ALL=C sed -n "$((s+1)),$((s+8))p" "$a" | LC_ALL=C sed -n "s/.*WORKLIST[^)]*)[[:blank:]]*\([a-z_][a-z_]*\)=\$((.*/\1/p" | head -1); [ -n "$v" ] || exit 1; LC_ALL=C grep -q "\$$v" <<<"$(sed -n "$((w-2)),$((w-1))p" "$a")" || exit 1; LC_ALL=C grep -q -- "--finish)" "$a" || exit 1; [ "$(LC_ALL=C grep -c "rm -f \"\$APPLYING\"" "$a")" = 1 ] || exit 1; c=$(LC_ALL=C grep -n "rm -f \"\$APPLYING\"" "$a" | head -1 | cut -d: -f1); [ "$c" -gt "$w" ] && [ "$c" -lt "$f" ] || exit 1; exit 0'
 ## BL-034
 
 **The `reconcile-mechanical` region that `SKILL.md` calls "every mechanical finding, complete, from

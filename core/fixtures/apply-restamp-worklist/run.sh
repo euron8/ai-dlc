@@ -39,8 +39,17 @@
 # no resolution phases — and C6 asserts the withheld row NAMES it. A withheld stamp whose row
 # does not reach the escape is not a safer program, it is a stuck one.
 #
-# HOW IT DRIVES THE REAL SCRIPT. Nothing is stubbed. Two throwaway git repos and four consumer
-# trees produce the three input shapes out of preclassify's own vocabulary:
+# AND THE ESCAPE HAS TO TERMINATE, WHICH IS WHY THERE ARE TWO COUNTERS. `--finish` re-derives the
+# hook-registration row before it stamps, and on a consumer with no
+# `scripts/ai-dlc/validate-hook-registration.sh` that row is `DECISION hook-registration-unchecked`
+# — whose own stated remedy is to re-run the apply, which is the phase `--finish` skips. Gate the
+# finisher on `handback` and it withholds forever over a row it can never clear. So the ordinary
+# run gates on WORKLIST *and* DECISION rows, and `--finish` gates on `worklist_n` alone: a row
+# naming concrete work, which clears when the work is done. C4 and C8 are two seeds that separate
+# those two counters, and m8 is the mutant that collapses them.
+#
+# HOW IT DRIVES THE REAL SCRIPT. Nothing inside apply.sh is stubbed. Two throwaway git repos and
+# a consumer tree per arm produce the three input shapes out of preclassify's own vocabulary:
 #
 #   green      every core file at base, none locally edited  -> pure applies only, no hand-back
 #   worklist   one core file edited on both sides            -> BOTH-CHANGED->CLASSIFY
@@ -92,7 +101,10 @@ fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
-echo "apply-restamp-worklist:"
+# THE RESOLVED PATH IS PRINTED, not inferred from the layout. Two candidates exist and the first
+# that resolves wins, so a mutant edited into the other copy leaves every arm green and reads
+# exactly like an arm that cannot fire. This line is what makes that visible in a suite log.
+echo "apply-restamp-worklist: driving $APPLY"
 
 # A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. On a consumer this file can arrive on the pull that
 # also carries the apply.sh it tests, and the fixture batch is written last, so an interrupted
@@ -140,9 +152,22 @@ printf '9.9.9\n' > "$DIST/VERSION"
 
 DRIVER_REL=".claude/session-driver/ai-dlc-session-driver.sh"
 
-mk_consumer() { # mk_consumer <dir> <green|worklist|decision>
+# mk_consumer <dir> <green|worklist|decision> [hrv]
+#
+# `hrv` installs a stub `scripts/ai-dlc/validate-hook-registration.sh` that exits 0. That is the
+# ONE thing separating C4's tree from C8's: without it apply.sh's hook-registration site emits
+# `DECISION hook-registration-unchecked` on every run, and under `--finish` that row is emitted
+# BEFORE the stamp. A finisher gating on `handback` therefore withholds on it, and the row's own
+# remedy is the phase `--finish` skips. C4 runs without that row, C8 runs with it.
+mk_consumer() {
   local c="$1" mode="$2"
   mkdir -p "$c/.claude/session-driver" "$c/tests/fixtures/synthetic-fx" "$c/scripts/ai-dlc" || return 1
+  if [ "${3:-}" = hrv ]; then
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$c/scripts/ai-dlc/validate-hook-registration.sh"
+    chmod +x "$c/scripts/ai-dlc/validate-hook-registration.sh"
+  else
+    rm -f "$c/scripts/ai-dlc/validate-hook-registration.sh"
+  fi
   printf '#!/usr/bin/env bash\n# driver v1\n' > "$c/$DRIVER_REL"
   printf '#!/usr/bin/env bash\n# fx v1\n'     > "$c/tests/fixtures/synthetic-fx/run.sh"
   printf '#!/usr/bin/env bash\necho v\n'      > "$c/scripts/ai-dlc/validate-synthetic.sh"
@@ -165,29 +190,34 @@ run_apply() { # run_apply <apply-path> <consumer> [flag...]
 stamp_ver()  { sed -n 's/^version:[[:space:]]*//p' "$1/.claude/.ai-dlc-version" 2>/dev/null | head -1; }
 stamp_sha()  { sed -n 's/^commit:[[:space:]]*//p'  "$1/.claude/.ai-dlc-version" 2>/dev/null | head -1; }
 marker()     { [ -f "$1/.claude/.ai-dlc-applying" ] && echo PRESENT || echo GONE; }
-has_row()    { printf '%s\n' "$1" | awk -F'\t' -v a="$2" -v b="$3" '$1==a && $2==b {n++} END {exit !(n>0)}'; }
-detail_of()  { printf '%s\n' "$1" | awk -F'\t' -v a="$2" -v b="$3" '$1==a && $2==b && NF>=4 {print $4; exit}'; }
+# HERE-STRINGS, NOT PIPES, wherever the reader stops at its first match. Under `pipefail` a
+# reader that leaves early makes the pipeline answer with the WRITER's EPIPE, so the test reports
+# "not found" on input that contains the pattern. It is a size threshold rather than a race:
+# correct until the output after the match fills the pipe buffer, then wrong permanently and with
+# no symptom. I54b in `validate-enforcement-map.sh` caught this file with four of them.
+has_row()    { awk -F'\t' -v a="$2" -v b="$3" '$1==a && $2==b {n++} END {exit !(n>0)}' <<< "$1"; }
+detail_of()  { awk -F'\t' -v a="$2" -v b="$3" '$1==a && $2==b && NF>=4 {print $4; exit}' <<< "$1"; }
 
 # ROWS EMITTED BEFORE THE GUARD IS READ. `handback` is a running counter, so what gates the
 # stamp is the rows printed UP TO the re-stamp verdict, not the whole manifest. That distinction
-# is load-bearing: apply.sh emits `DECISION hook-registration-unchecked` unconditionally after
-# the re-stamp on any consumer lacking scripts/ai-dlc/validate-hook-registration.sh — measured on
-# all four trees here, the clean one included. A counter read at exit instead of at the guard
-# would withhold the stamp on EVERY correct pull and wedge every consumer. S1 is what separates
-# the two readings.
+# is load-bearing: apply.sh emits `DECISION hook-registration-unchecked` on any consumer lacking
+# scripts/ai-dlc/validate-hook-registration.sh, and on an ordinary run it emits it AFTER the
+# re-stamp — measured on every tree below that omits the validator, the clean one included. A
+# counter read at exit instead of at the guard would withhold the stamp on EVERY correct pull and
+# wedge every consumer. S1 is what separates the two readings.
 pre_guard() {
-  printf '%s\n' "$1" | awk -F'\t' '
+  awk -F'\t' '
     $1=="RESOLVED" && ($2=="restamp" || $2=="restamp-machinery") { exit }
     $1=="DECISION" && $2 ~ /^(restamp-withheld|restamp-failed|skill-restamp-withheld|skill-restamp-failed)$/ { exit }
-    { print }'
+    { print }' <<< "$1"
 }
-n_handback() { pre_guard "$1" | awk -F'\t' '$1=="WORKLIST" || $1=="DECISION" {n++} END {print n+0}'; }
+n_handback() { awk -F'\t' '$1=="WORKLIST" || $1=="DECISION" {n++} END {print n+0}' <<< "$(pre_guard "$1")"; }
 
 # --- SUBJECT PROBE: is the change installed at all? -------------------------------------------
 # The guard fix and `--finish` land together, so one probe covers both halves. `--finish` with no
 # positionals reaches the option parser and nothing else, so this costs a fork and writes nothing.
 PROBE="$(bash "$APPLY" --finish 2>&1)"
-if printf '%s\n' "$PROBE" | grep -q -- 'unknown option: --finish'; then
+if grep -q -- 'unknown option: --finish' <<< "$PROBE"; then
   if [ "$IS_DIST" = 1 ]; then
     bad "the resolved apply.sh ($APPLY) rejects --finish, so the whole subject of this fixture is absent. HARD in the distribution: the subject must be present here."
     echo
@@ -301,7 +331,7 @@ fi
 
 # --- C4/C5: --finish stamps, and does nothing else --------------------------------------------
 C_FIN="$WORK/cons-finish"
-mk_consumer "$C_FIN" green || { echo "FIXTURE BROKEN — could not build the finish consumer" >&2; exit 2; }
+mk_consumer "$C_FIN" green hrv || { echo "FIXTURE BROKEN — could not build the finish consumer" >&2; exit 2; }
 # The state --finish is FOR: a previous run withheld, so the marker is on disk and the operator
 # has since disposed of the worklist by hand.
 printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$C_FIN/.claude/.ai-dlc-applying"
@@ -318,6 +348,25 @@ else
   bad "C5 --finish overwrote $DRIVER_REL from theirs, so it ran the resolution phases. In the real workflow that deadlocks: a BOTH-CHANGED file the operator has just merged re-buckets to CLASSIFY on every subsequent run, so the hand-back never empties and the stamp is never reached"
 fi
 
+# --- C8: --finish TERMINATES over a DECISION row it cannot clear -------------------------------
+# The same tree as C4 minus the hook-registration validator, so apply.sh emits
+# `DECISION hook-registration-unchecked` and — under --finish alone — emits it BEFORE the stamp.
+# A finisher gating on the same counter as the ordinary run withholds on that row, and the row's
+# own remedy is to re-run the apply, which is the phase --finish exists to skip. The consumer is
+# then wedged with the marker on disk and no invocation that can clear it, which is the failure
+# this whole change exists to prevent, reintroduced one layer down by the change itself.
+C_TERM="$WORK/cons-terminate"
+mk_consumer "$C_TERM" green || { echo "FIXTURE BROKEN — could not build the terminate consumer" >&2; exit 2; }
+printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$C_TERM/.claude/.ai-dlc-applying"
+OUT_TERM="$(run_apply "$APPLY" "$C_TERM" --finish)"
+if ! has_row "$OUT_TERM" DECISION hook-registration-unchecked; then
+  bad "C8 setup: --finish emitted no DECISION row on a consumer with no validate-hook-registration.sh, so this arm cannot distinguish the two counters and its pass is vacuous"
+elif [ "$(stamp_ver "$C_TERM")" = "$THEIRS_VER" ] && [ "$(marker "$C_TERM")" = GONE ]; then
+  ok "C8 --finish stamps over a DECISION row it has no phase to clear — the escape terminates"
+else
+  bad "C8 --finish withheld on DECISION hook-registration-unchecked (stamp '$(stamp_ver "$C_TERM")', marker $(marker "$C_TERM")). That row's remedy is to re-run the apply, which is the phase --finish skips, so the operator has a refused push, a marker on disk and no invocation that clears it"
+fi
+
 # --- C6: the withheld row hands the operator the escape ---------------------------------------
 # A withheld stamp with no reachable finish command WEDGES the consumer. The premise is asserted
 # beside the arm rather than assumed: if pre-push stops refusing on the marker, C6 is guarding a
@@ -328,10 +377,30 @@ case "$WITHHELD_DETAIL" in
   "")         bad "C6 the withheld row carried NO detail field at all — the operator is told the stamp was withheld and nothing about how to finish" ;;
   *)          bad "C6 the withheld row does not name --finish: ${WITHHELD_DETAIL} — with the marker on disk pre-push refuses every push, and the row that caused it points nowhere" ;;
 esac
-if [ -n "$PREPUSH" ] && grep -q 'ai-dlc-applying' "$PREPUSH"; then
-  ok "C6 premise: $PREPUSH still refuses while the marker exists, so a row with no escape really does wedge the tree"
+# KEYED ON THE EMITTING TEST, NOT ON THE FILE. This arm was a whole-file `grep -q ai-dlc-applying`
+# for one revision, and it was closable by prose: four lines in `core/git-hooks/pre-push` carry the
+# token and only ONE of them is the refusal — the other three are a comment and two lines of the
+# message the refusal prints. Measured on a copy with the refusal deleted and every comment kept,
+# the whole-file grep still passed. So the premise for C6's severity would have survived the
+# removal of the thing that gives C6 its severity.
+#
+# BOTH DIRECTIONS, in the same invocation, because a grammar that cannot spell its own subject
+# scores that subject as a non-instance and returns a clean zero either way. The stripped copy is
+# built by deleting exactly the lines this arm's grammar matches, so a grammar that matched
+# nothing to begin with fails the control rather than passing the arm.
+PP_TEST='^[[:space:]]*if[[:space:]]+\[[[:space:]]+-f[[:space:]]+\.claude/\.ai-dlc-applying[[:space:]]+\]'
+if [ -z "$PREPUSH" ]; then
+  bad "C6 premise: no pre-push was resolved in either layout (looked for core/git-hooks/pre-push and .githooks/pre-push). C6 asserts an escape from a refusal this fixture cannot see, so its severity is unverified"
 else
-  bad "C6 premise: no pre-push carrying the marker refusal was resolved (looked for core/git-hooks/pre-push and .githooks/pre-push). C6 asserts an escape from a refusal this fixture can no longer see, so its severity is unverified"
+  PP_STRIPPED="$WORK/pp-stripped"
+  grep -vE "$PP_TEST" "$PREPUSH" > "$PP_STRIPPED"
+  if ! grep -qE "$PP_TEST" "$PREPUSH"; then
+    bad "C6 premise: $PREPUSH carries no \`if [ -f .claude/.ai-dlc-applying ]\` test. Either the refusal was removed — in which case a withheld stamp no longer wedges anything and C6's severity needs re-reading — or it was respelled and this grammar can no longer see it, which returns the same clean zero"
+  elif grep -qE "$PP_TEST" "$PP_STRIPPED"; then
+    bad "C6 premise CONTROL: the grammar still matches a copy with every matching line deleted, so it is not keyed on what it claims and its pass above proves nothing"
+  else
+    ok "C6 premise: $PREPUSH still TESTS for the marker, and the arm goes quiet on a copy with that test removed — so the wedge C6 hands an escape from is real"
+  fi
 fi
 
 # --- CWD: the verdict does not depend on where the runner stands ------------------------------
@@ -356,10 +425,11 @@ build_rec() { # build_rec <dir>
   mkdir -p "$1" && cp "$REC"/* "$1"/ 2>/dev/null && [ -f "$1/apply.sh" ]
 }
 # Every mutant verdict is PRESENCE-shaped: a mutant that emits nothing must not score as a kill.
-mut_stamp()  { # mut_stamp <rec-dir> <mode> [flag...] -> "<ver>|<marker>|<withheld?>|<driverUPSTREAM?>"
-  local rec="$1" mode="$2"; shift 2
+mut_stamp()  { # mut_stamp <rec-dir> <mode> <hrv|-> [flag...] -> "<ver>|<marker>|<withheld?>|<driver?>"
+  local rec="$1" mode="$2" hrv="$3"; shift 3
   local c="$WORK/m-$$-$RANDOM"
-  mk_consumer "$c" "$mode" || { echo "BROKEN|||"; return; }
+  [ "$hrv" = hrv ] || hrv=""
+  mk_consumer "$c" "$mode" "$hrv" || { echo "BROKEN|||"; return; }
   [ "${1:-}" = --finish ] && printf 'x\n' > "$c/.claude/.ai-dlc-applying"
   local out; out="$(run_apply "$rec/apply.sh" "$c" "$@")"
   printf '%s|%s|%s|%s\n' "$(stamp_ver "$c")" "$(marker "$c")" \
@@ -372,8 +442,8 @@ mut_stamp()  { # mut_stamp <rec-dir> <mode> [flag...] -> "<ver>|<marker>|<withhe
 # to be THERE and the green run to stamp, so a copy that cannot run reports as broken rather than
 # as clean.
 if build_rec "$WORK/mut-ctl"; then
-  CTL_W="$(mut_stamp "$WORK/mut-ctl" worklist)"
-  CTL_G="$(mut_stamp "$WORK/mut-ctl" green)"
+  CTL_W="$(mut_stamp "$WORK/mut-ctl" worklist -)"
+  CTL_G="$(mut_stamp "$WORK/mut-ctl" green -)"
   if [ "$CTL_W" = "1.0.0|PRESENT|WITHHELD|OVERWRITTEN" ] && [ "${CTL_G%%|*}" = "$THEIRS_VER" ]; then
     ok "CONTROL an unmutated copy in a fresh directory reproduces both verdicts, so a mutant's silence is the mutation and not the copy"
   else
@@ -393,13 +463,13 @@ mut_apply() { # mut_apply <dir> ; transform reads $REC/apply.sh from stdin, writ
 # --- m1: the guard reverted to `mech_fail` alone — the unfixed program. Must die on C1. -------
 if sed 's/^if \[ "$mech_fail" -gt 0 \].*$/if [ "$mech_fail" -gt 0 ]; then/' "$REC/apply.sh" \
    | mut_apply "$WORK/m1"; then
-  M1="$(mut_stamp "$WORK/m1" worklist)"
+  M1="$(mut_stamp "$WORK/m1" worklist -)"
   case "$M1" in
     "$THEIRS_VER|GONE|"*) ok "m1 (guard on mech_fail alone): C1 goes red — the WORKLIST run stamps $THEIRS_VER and clears the marker, which is the shipped defect" ;;
     "1.0.0|PRESENT|"*)    bad "m1 SURVIVED: the stamp was still withheld with the guard reading mech_fail only, so C1 is not testing the handback term ($M1)" ;;
     *)                    bad "m1 produced a verdict this fixture does not recognise ($M1) — it may have died for an unrelated reason, in which case C1's kill is unearned" ;;
   esac
-  M1G="$(mut_stamp "$WORK/m1" green)"
+  M1G="$(mut_stamp "$WORK/m1" green -)"
   if [ "${M1G%%|*}" = "$THEIRS_VER" ]; then
     ok "m1 and C3 stays green under it — the two arms are not entangled"
   else
@@ -415,7 +485,7 @@ fi
 # kills C4 as well and the verdict becomes unreadable.
 if awk '/^exit 0$/ { print "rm -f \"$APPLYING\"" } { print }' "$REC/apply.sh" \
    | mut_apply "$WORK/m2"; then
-  M2="$(mut_stamp "$WORK/m2" worklist)"
+  M2="$(mut_stamp "$WORK/m2" worklist -)"
   case "$M2" in
     "1.0.0|GONE|WITHHELD|"*) ok "m2 (marker cleared outside the read-back): C1's marker half goes red while its stamp half stays green — the half a row-count assertion cannot see" ;;
     "1.0.0|PRESENT|"*)       bad "m2 SURVIVED: the marker was still present with an unconditional rm at the tail, so C1 is not reading the file ($M2)" ;;
@@ -434,13 +504,13 @@ if awk '
     inside { gsub(/DECISION/, "NODECISION") }
     inside && /^\}/ { inside=0 }
     { print }' "$REC/apply.sh" | mut_apply "$WORK/m3"; then
-  M3D="$(mut_stamp "$WORK/m3" decision)"
+  M3D="$(mut_stamp "$WORK/m3" decision -)"
   case "$M3D" in
     "$THEIRS_VER|GONE|"*) ok "m3 (handback counts WORKLIST only): C7 goes red — a gated deletion is outstanding work and it stamps anyway" ;;
     "1.0.0|"*)            bad "m3 SURVIVED: the DECISION-only run was still withheld with DECISION renamed inside say(), so C7 is not testing the DECISION half ($M3D)" ;;
     *)                    bad "m3 produced an unrecognised verdict ($M3D) — its kill would be unearned" ;;
   esac
-  M3W="$(mut_stamp "$WORK/m3" worklist)"
+  M3W="$(mut_stamp "$WORK/m3" worklist -)"
   case "$M3W" in
     "1.0.0|PRESENT|"*) ok "m3 and C1 stays green under it — the WORKLIST seed and the DECISION seed are separately losable, which is why both arms exist" ;;
     *)                 bad "m3 also killed C1 ($M3W): the two seeds are not independent and one of the arms proves nothing" ;;
@@ -470,19 +540,42 @@ else
   bad "m4 did not apply — the literal \`--finish\` is not on the \`say DECISION restamp-withheld\` statement or its continuation lines. If it is interpolated from a variable, re-anchor this mutant on that assignment; C6 is unproven until it is."
 fi
 
-# --- m5: the guard compares `-lt 0`. Must die on C1. -------------------------------------------
-# A distinct mutation from m1 with the same target: m1 removes the term, this one keeps it and
-# makes it unsatisfiable. A guard that is present and can never be true reads, in a diff, exactly
-# like one that works.
-if sed 's/"$handback" -gt 0/"$handback" -lt 0/' "$REC/apply.sh" | mut_apply "$WORK/m5"; then
-  M5="$(mut_stamp "$WORK/m5" worklist)"
+# --- m5: the hand-back term present and unsatisfiable. Must die on C1. -------------------------
+# A distinct mutation from m1 against the same arm: m1 REMOVES the term, this one keeps it and
+# makes it never true. A guard that is present and cannot fire reads, in a diff, exactly like one
+# that works — which is this repo's recurring defect, applied to the guard itself.
+if sed 's/"$outstanding" -gt 0/"$outstanding" -lt 0/' "$REC/apply.sh" | mut_apply "$WORK/m5"; then
+  M5="$(mut_stamp "$WORK/m5" worklist -)"
   case "$M5" in
-    "$THEIRS_VER|GONE|"*) ok "m5 (handback compared -lt 0): C1 goes red — the term is present and unsatisfiable, which no diff distinguishes from a working guard" ;;
-    "1.0.0|PRESENT|"*)    bad "m5 SURVIVED: the stamp was withheld with a term that can never be true, so something other than handback is withholding it ($M5)" ;;
+    "$THEIRS_VER|GONE|"*) ok "m5 (hand-back term compared -lt 0): C1 goes red — the term is present and unsatisfiable" ;;
+    "1.0.0|PRESENT|"*)    bad "m5 SURVIVED: the stamp was withheld with a term that can never be true, so something other than the hand-back count is withholding it ($M5)" ;;
     *)                    bad "m5 produced an unrecognised verdict ($M5)" ;;
   esac
 else
-  bad "m5 did not apply — the guard does not compare \`\"\$handback\" -gt 0\`, so this mutant proves nothing. Re-anchor it on the current spelling."
+  bad "m5 did not apply — the guard does not compare \`\"\$outstanding\" -gt 0\`, so this mutant proves nothing. Re-anchor it on the current spelling."
+fi
+
+# --- m8: the two counters collapsed into one. Must die on C8. ----------------------------------
+# `--finish` gating on `handback` instead of `worklist_n`. Measured by the implementer on the
+# first end-to-end run of this change: the finisher counted the hook-registration DECISION row it
+# had itself just emitted and withheld forever. C4's tree cannot see it — that consumer carries
+# the validator, so no such row exists — which is why C8 has a tree of its own.
+if sed 's/^if \[ "$FINISH" = 1 \]; then outstanding="$worklist_n";/if [ "$FINISH" = 1 ]; then outstanding="$handback";/' \
+   "$REC/apply.sh" | mut_apply "$WORK/m8"; then
+  M8="$(mut_stamp "$WORK/m8" green - --finish)"
+  case "$M8" in
+    "1.0.0|PRESENT|WITHHELD|"*) ok "m8 (--finish gates on handback): C8 goes red — the finisher withholds over the DECISION row it emitted itself, and no invocation can clear it" ;;
+    "$THEIRS_VER|GONE|"*)       bad "m8 SURVIVED: --finish still stamped while gating on handback, so C8's tree emits no DECISION row and the arm is vacuous ($M8)" ;;
+    *)                          bad "m8 produced an unrecognised verdict ($M8)" ;;
+  esac
+  M8H="$(mut_stamp "$WORK/m8" green hrv --finish)"
+  if [ "${M8H%%|*}" = "$THEIRS_VER" ]; then
+    ok "m8 and C4 stays green under it — the two counters are separately observable, which is the whole reason C8 exists beside C4"
+  else
+    bad "m8 also killed C4 ($M8H): C4's consumer is emitting a hand-back row it should not, so the two arms read one input"
+  fi
+else
+  bad "m8 did not apply — no \`outstanding=\"\$worklist_n\"\` assignment under the FINISH branch, so the two-counter design is unproven"
 fi
 
 # --- m6: over-broad — `--finish` withholds too. Must die on C4. --------------------------------
@@ -492,13 +585,13 @@ fi
 if grep -q '^FINISH=0' "$REC/apply.sh"; then
   if sed 's/^\(if \[ "$mech_fail" -gt 0 \].*\); then$/\1 || [ "$FINISH" = 1 ]; then/' "$REC/apply.sh" \
      | mut_apply "$WORK/m6"; then
-    M6="$(mut_stamp "$WORK/m6" green --finish)"
+    M6="$(mut_stamp "$WORK/m6" green hrv --finish)"
     case "$M6" in
       "1.0.0|"*)            ok "m6 (--finish withholds too): C4 goes red — the only exit from a withheld stamp is itself withheld and the tree can never push again" ;;
       "$THEIRS_VER|GONE|"*) bad "m6 SURVIVED: --finish still stamped with the guard extended to cover it, so C4 is not reading the stamp this mode writes ($M6)" ;;
       *)                    bad "m6 produced an unrecognised verdict ($M6)" ;;
     esac
-    M6G="$(mut_stamp "$WORK/m6" green)"
+    M6G="$(mut_stamp "$WORK/m6" green -)"
     if [ "${M6G%%|*}" = "$THEIRS_VER" ]; then
       ok "m6 and C3 stays green under it — the ordinary clean pull is untouched, so C4 owns this case alone"
     else
@@ -515,7 +608,7 @@ fi
 # Anchored on the option-parser branch rather than on any variable, so it holds whatever the flag
 # is called: the option is still accepted and sets nothing, which is exactly a full run.
 if sed 's/^\([[:space:]]*\)--finish).*$/\1--finish) : ;;/' "$REC/apply.sh" | mut_apply "$WORK/m7"; then
-  M7="$(mut_stamp "$WORK/m7" green --finish)"
+  M7="$(mut_stamp "$WORK/m7" green hrv --finish)"
   case "$M7" in
     *"|OVERWRITTEN") ok "m7 (--finish runs the phases): C5 goes red — the driver file was overwritten from theirs, and in the real workflow a just-merged file re-buckets to CLASSIFY on every run so the hand-back never empties" ;;
     *"|UNTOUCHED")   bad "m7 SURVIVED: no resolution work ran with the --finish branch neutered, so C5 is not testing the phase skip ($M7)" ;;
