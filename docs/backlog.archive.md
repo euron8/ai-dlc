@@ -2518,3 +2518,58 @@ at pinned ledger line 3018.
 
 
 verify: sh D=$(mktemp -d); P=core/skills/ai-dlc-update/reconcile/preclassify.sh; export GIT_AUTHOR_NAME=p GIT_AUTHOR_EMAIL=p@p GIT_COMMITTER_NAME=p GIT_COMMITTER_EMAIL=p@p; mkdir -p "$D/d/core/rules" "$D/c/.claude/rules"; git -C "$D/d" init -q; git -C "$D/d" config core.fileMode true; for f in synced needsbit content; do printf "body\n" > "$D/d/core/rules/$f.sh"; chmod 644 "$D/d/core/rules/$f.sh"; done; printf "old\n" > "$D/d/core/rules/content.sh"; git -C "$D/d" add -A >/dev/null; git -C "$D/d" commit -qm base >/dev/null; B=$(git -C "$D/d" rev-parse HEAD); chmod 755 "$D/d/core/rules/synced.sh" "$D/d/core/rules/needsbit.sh"; printf "new\n" > "$D/d/core/rules/content.sh"; git -C "$D/d" add -A >/dev/null; git -C "$D/d" commit -qm theirs >/dev/null; T=$(git -C "$D/d" rev-parse HEAD); [ "$(git -C "$D/d" ls-tree "$T" -- core/rules/synced.sh | cut -c1-6)" = 100755 ] || { rm -rf "$D"; exit 9; }; printf "body\n" > "$D/c/.claude/rules/synced.sh"; chmod 755 "$D/c/.claude/rules/synced.sh"; printf "body\n" > "$D/c/.claude/rules/needsbit.sh"; chmod 644 "$D/c/.claude/rules/needsbit.sh"; printf "new\n" > "$D/c/.claude/rules/content.sh"; O=$(bash "$P" "$D/d" "$B" "$T" "$D/c" 2>&1); rm -rf "$D"; g() { LC_ALL=C awk -F"\t" -v n="$1" '$2 ~ n {print $4}' <<<"$O"; }; [ "$(g content)" = ALREADY-AT-THEIRS ] || exit 1; [ "$(g synced)" = ALREADY-AT-THEIRS ] || exit 1; [ "$(g needsbit)" = UPSTREAM-ONLY ]
+## BL-101 — half of `v0.423.0`'s fix can be reverted and the fixture stays green
+
+**LANDED (v0.424.0, verified 98ad402e).** `CASE_TABLE` now carries a per-case expected STATUS
+instead of a blanket `M`, and six `A`-branch cases: the consumer-absent add, both mode-matched
+siblings as adjacent controls, both mode-mismatched directions, and a both-added case. The
+mutation battery gained the `A`-branch reverts and its mode-derivation mutant spans both branches
+now. Green on the shipped tree at 5s; exit 1 on the `A`-reverted copy, naming `A3` and `A5`.
+**The receipt read 1 while the fix sat uncommitted** — it extracts `git archive HEAD`, which
+cannot see a working-tree change, so the flip to 0 came with the commit rather than with the fix.
+Filed and closed in one cycle.
+
+**`core/fixtures/preclassify-mode-bucket` guards the `M`/rename branch and nothing else, but the
+fix it was built for changed TWO branches.** Its `CASE_TABLE` is nine cases, every one asserted
+by `S2` to be status `M` in the `base..theirs` diff. The `A` branch's `ALREADY-PRESENT` arm — item
+(c) of `BL-033`'s own amendment, and one of the four rows that release repaired — has no case, no
+mutant and no assertion anywhere in the battery.
+
+Measured by reverting exactly the `A`-branch half on a `git archive HEAD` copy (the `ALREADY-PRESENT`
+conjunct dropped and the `UPSTREAM-ONLY-ADD` fall-through deleted, with the `M`-branch conjunct
+asserted still present in the same invocation, so this is the `A` half alone):
+
+```
+fixture vs the shipped tree                     exit 0   <- control, the harness works
+fixture vs dropbase   (delete the base_h arm)   exit 1   killed by C5
+fixture vs halfmode   (100755 direction only)   exit 1   killed by C4
+fixture vs arevert    (the A-branch half gone)  exit 0   <- SURVIVES
+```
+
+**`C5` and `C4` are the reason this is filed narrowly rather than as "the battery is weak".** The
+same sweep that found this proposed four implementations that satisfy `BL-033`'s receipt; the
+fixture independently kills three of them, because it carries an ordinary-content-change case and
+both mode directions. It is a good battery with one uncovered branch, not a broken one.
+
+**This is the repo's own recurring defect, in work this repo shipped hours earlier.** A guard that
+cannot fire reads exactly like a guard that passed, and the `A`-branch arm now has a green suite
+standing behind it while asserting nothing.
+
+**Candidate fix**: one `A`-status case pair — a net-new upstream file at `100755` whose consumer
+copy is byte-identical at `644` (`-> UPSTREAM-ONLY-ADD`), and its mode-matched sibling at `755`
+(`-> ALREADY-PRESENT`) as the adjacent control — plus a mutant that reverts the `A` conjunct and
+is killed by exactly that pair. `S2` asserts every case is status `M`, so it needs a per-case
+expected status rather than a blanket one; that is the only structural change. False-positive set
+NOT yet measured.
+
+**Provenance.** Found by the receipt hand of batch 14, as finding (e) of an attack on `BL-033`'s
+replacement receipt. Three of its other four findings are real against the RECEIPT and already
+covered by the FIXTURE — that split was measured by the lead, not taken from the report. The
+receipt itself is archived with `BL-033` and is not the live guard, which is why this entry is
+about the fixture.
+
+Tiered **DEFECT**. Not a `PC-` candidate, so it ranks below the PC-backed set — but it is a hole in
+`v0.423.0`'s own guard, which is an argument for taking it early.
+
+verify: sh F=core/fixtures/preclassify-mode-bucket/run.sh; P=core/skills/ai-dlc-update/reconcile/preclassify.sh; [ -f "$F" ] && [ -f "$P" ] || exit 9; D="$(mktemp -d)" || exit 9; git archive HEAD 2>/dev/null | tar -x -C "$D" || { rm -rf "$D"; exit 9; }; grep -q 'ALREADY-PRESENT' "$D/$P" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$F" >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; perl -0pi -e 's/^(\s*elif \[ "\$ours_h" = "\$theirs_h" \] && mode_at_theirs [^\n]*ALREADY-PRESENT[^\n]*\n)(\s*elif \[ "\$ours_h" = "\$theirs_h" \];\s*then bucket="UPSTREAM-ONLY-ADD"[^\n]*\n)/      elif [ "\$ours_h" = "\$theirs_h" ];    then bucket="ALREADY-PRESENT"\n/m' "$D/$P" || { rm -rf "$D"; exit 9; }; cmp -s "$D/$P" "$P" && { rm -rf "$D"; exit 9; }; bash -n "$D/$P" 2>/dev/null || { rm -rf "$D"; exit 9; }; grep -q 'mode_at_theirs "$path" "$cons"; then bucket="ALREADY-AT-THEIRS"' "$D/$P" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$F" >/dev/null 2>&1 ); rc=$?; rm -rf "$D"; [ "$rc" -ne 0 ]
+
