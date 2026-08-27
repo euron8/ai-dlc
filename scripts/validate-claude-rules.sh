@@ -438,8 +438,30 @@ fi
 #
 # Prose-only, so it may NOT be scoped, and it is exactly the kind of judgment a subagent
 # adjudicating a receipt needs -- which bars `paths:` independently of the prose-only bar.
+#
 # ---------------------------------------------------------------------------
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-48100}"
+#
+# RAISED AN EIGHTH TIME, 48100 -> 48800, FOR ONE RULE COSTING 690 BYTES, ON AN EXPLICIT OPERATOR
+# RULING. The subtraction is STILL OWED and this is the eighth consecutive raise without one.
+# The choice was put as three costed options -- raise, sweep for a 640-byte subtraction first, or
+# leave the rule uncarried -- with the shortfall measured (690 bytes against 50 free) before the
+# question was asked, and with it stated that no vestigial sweep had been attempted.
+#
+# THE RULE: "a validator that resolves its own root ignores the probe tree you built for it", in
+# `tool-hazards.md`. Earned at v0.428.0 and it cost real work: `report-propagation-fanout.sh` and
+# `validate-gate-adjudication.sh` both `cd` to a root found by walking up from the SCRIPT's own
+# directory, so a `mktemp` probe repo entered with `cd` is discarded and the run answers about the
+# DISTRIBUTION. Two of six receipts were scored against the wrong tree before a control caught it,
+# and the first fanout receipt read green with a worklist citing `docs/backlog.archive.md`.
+#
+# WHY IT CANNOT BE SCOPED, AND THE ANSWER IS NOT THE PROSE-ONLY BAR THIS TIME. There IS a
+# mechanism nearby -- `I33`/`I33b` fail the push on a fixture reaching a core subtree by walking
+# up -- but it binds the VALIDATOR's own path resolution, not the caller's probe. The failure here
+# happens in an ad-hoc tool call, against a copy under `mktemp`, in a tree no gate scans; that is
+# the whole subject of `tool-hazards.md` and the reason that file has no corpus. A `paths:` list
+# could not fire either, because building a probe reads nothing that matches.
+# ---------------------------------------------------------------------------
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-48800}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

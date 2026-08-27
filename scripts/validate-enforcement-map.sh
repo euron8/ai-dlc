@@ -259,7 +259,7 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 # growth rather than a hot loop -- the corpus this script walks grew this release. Saying so is
 # more useful than inventing a third attribution. Spread across reps is 7108-7108, so the
 # headroom is the usual 6 over the TOP of the spread.
-FORK_BUDGET=7073
+FORK_BUDGET=7114
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

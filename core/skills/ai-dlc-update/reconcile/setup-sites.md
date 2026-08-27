@@ -134,6 +134,7 @@ core_manifest:
   - core/fixtures/layer-adjudication-tier/**
   - core/fixtures/layer-title-join/**
   - core/fixtures/context-mode-protect/**
+  - core/fixtures/context-provenance/**
   - core/fixtures/context-sensor/**
   - core/fixtures/core-paths-audit-diff/**
   - core/fixtures/core-script-boundary/**
@@ -207,6 +208,7 @@ core_manifest:
   - core/fixtures/validate-mandatory-rules-revive/**
   - core/fixtures/validator-path-resolution/**
   - core/fixtures/verdict-pass-content/**
+  - core/fixtures/wait-beat-liveness/**
   - core/fixtures/wait-stale-deliverable/**
   - core/fixtures/whole-read-pool/**
   - core/fixtures/notify-hook-channel/**

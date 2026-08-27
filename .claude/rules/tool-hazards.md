@@ -95,6 +95,16 @@ against a positive control before trusting a zero from it.
   would answer are the ones a squash removed. Test by content.
 - Commit or stash before any `git checkout` that names a path.
 
+## A validator that resolves its own root ignores the probe tree you built for it
+
+Several shipped validators `cd` to a root found by walking up from the SCRIPT's directory, so a
+`mktemp` probe repo entered with `cd` is discarded and the run answers about the DISTRIBUTION.
+Measured twice in one release, on `report-propagation-fanout.sh` and
+`validate-gate-adjudication.sh`: the first receipt read green and its worklist cited
+`docs/backlog.archive.md`. Set `AI_DLC_PROJECT_ROOT`, and read the OUTPUT for a path that could
+only have come from the wrong tree. A copied validator also needs its siblings beside it —
+`core-paths.sh` absent is exit 2, which is a refusal and not a finding.
+
 ## Environment floor
 
 `bash` is 3.2, and an empty array under `set -u` is an error. `mapfile`, `readarray`,

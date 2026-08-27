@@ -193,6 +193,7 @@ core_manifest:
   - fixtures/layer-adjudication-tier/**
   - fixtures/layer-title-join/**
   - fixtures/context-mode-protect/**
+  - fixtures/context-provenance/**
   - fixtures/context-sensor/**
   - fixtures/core-paths-audit-diff/**
   - fixtures/core-script-boundary/**
@@ -266,6 +267,7 @@ core_manifest:
   - fixtures/validate-mandatory-rules-revive/**
   - fixtures/validator-path-resolution/**
   - fixtures/verdict-pass-content/**
+  - fixtures/wait-beat-liveness/**
   - fixtures/wait-stale-deliverable/**
   - fixtures/whole-read-pool/**
   - fixtures/artifact-path-migration/**
