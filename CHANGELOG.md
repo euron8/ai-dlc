@@ -17,6 +17,15 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.428.0] - 2026-08-27
 
+### `FORK_BUDGET` 7061 → 7073, a corpus raise
+
+Two fixture directories were added for the candidates above, and
+`validate-enforcement-map.sh`'s per-fixture passes cost forks per DIRECTORY. No arm gained a
+loop. Isolated by differential inside this repo with the two directories moved aside and
+restored: **7067** with them present, **7054** with them moved — **13** forks for two
+directories, which is the per-directory cost the two previous raises already measured. Spread
+over three reps is 7066–7067, so the headroom is the usual 6 over the top of the spread.
+
 ### `Phase [0-9]` is a stub marker only inside a statement of absence
 
 `PC-S306-STUB-AUDIT-PHASE-N-MATCHES-WORD-BOUNDED-PROSE`, filed by the reference consumer while

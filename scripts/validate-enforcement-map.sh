@@ -231,7 +231,19 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 # directory present, 7040 with it moved aside -- 14 forks, which is what this one costs. The
 # observed spread across runs is 7054-7055, so the headroom is the usual 6 over the TOP of the
 # spread rather than over a single reading.
-FORK_BUDGET=7061
+#
+# 7061 -> 7073 at v0.428.0, and it is a CORPUS raise for the third time running: no arm here
+# gained a loop. `core/fixtures/fanout-untracked-corpus/` and
+# `core/fixtures/gate-repair-record-mutants/` were added for the sprint-306 candidate set, and
+# this script's per-fixture passes cost forks per DIRECTORY. Isolated by differential inside this
+# repo, the two directories moved aside and restored, with the sides asserted to differ before
+# the reading was taken: 7067 with them present, 7054 with them moved -- 13 forks for two
+# directories, which is the per-directory cost the two raises above already measured. Neither
+# fixture is optional: one guards a corpus change to `report-propagation-fanout.sh` and the other
+# is the mutation battery for the `--series` resolution suffix, and an arm with no fixture is the
+# only evidence anyone has that it works. Spread over three reps is 7066-7067, so the headroom is
+# the usual 6 over the TOP of the spread.
+FORK_BUDGET=7073
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
