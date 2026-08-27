@@ -51,6 +51,11 @@ cannot see one, and the clean run reads as a real absence. Measured: three deleg
 declared missing while on disk as `??`. `ls` it, check `git status --porcelain`, ask the agent by
 name. An idle notification is not a result; silence is not death.
 
+**A hook DENIES a subagent writing a report file** — `Subagents should return findings as text,
+not write report files`. A brief naming a report path as the deliverable spends the hand:
+measured across four, the most valuable report arrived after the lead had committed. Ask for
+findings AS TEXT; the TREE is the deliverable for code.
+
 **A delegate's CLOSING SUMMARY can be stale.** It reports what it found when it looked, not
 what is true now. Measured: a hand's final message listed four defects as outstanding that had
 already been fixed, because it had not re-read the files between finding them and reporting.

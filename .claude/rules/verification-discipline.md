@@ -23,6 +23,22 @@ Measured: an inclusive and an exclusive range return the same commit when walked
 of the discriminating input, so the control passed under both the broken and the fixed
 implementation. Where two candidate semantics exist, compute both and REFUSE unless they differ.
 
+## Count a suite's distinct input SHAPES, not its arms
+
+Channels written by different hands converge on the obvious way to build the input and then
+agree for that reason rather than because the subject is right. Measured: a wrong fix passed a
+self-probe, a receipt and twenty-one mutants, because every one seeded the duplicate ADJACENT to
+the original — the receipt could only ever do so. The gap is in the SEED; the repair is one seed
+per channel, never another arm.
+
+## Point a search grammar at its own subject before trusting its zero
+
+`CLAUDE.md`'s "prove it can fail" applied to a SCAN, where the failure is silent: the grammar
+cannot spell the thing it hunts, so it scores its own subject as a non-instance. Measured twice
+in one sweep — a scan keyed on `awk` pattern-action rules could not express `if (line ~ /…/)`
+bodies, and `[^:]*` could not cross the colons inside `[[:blank:]]`. Both returned clean. That
+zero is a floor of unknown depth; discard it rather than report it.
+
 ## Text about a program is not the program
 
 Six instances in one program, by two parties both watching for it: a path a receipt READS vs

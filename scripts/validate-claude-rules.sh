@@ -391,7 +391,30 @@ fi
 # measurement. That is the header's own instruction working; record it as the first raise that
 # followed it.
 # ---------------------------------------------------------------------------
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-45900}"
+#
+# RAISED A SIXTH TIME, 45900 -> 47600, FOR FOUR RULES COSTING 1700 BYTES, AND THIS IS THE SIXTH
+# CONSECUTIVE RAISE CARRYING NO SUBTRACTION. The block above predicted exactly that and called a
+# guard that only ever moves upward "on its way to decorative". It is right, and this raise does
+# not refute it.
+#
+# WHAT WAS ATTEMPTED, SO THE NEXT AUTHOR KNOWS WHICH SUBTRACTION IS STILL OWED. The four rules
+# were drafted, measured at 2131 bytes, then rewritten denser and re-measured at 1700 -- a 20%
+# cut taken from the NEW prose, which is the header's own sequence working. What was NOT done is
+# a vestigial sweep of the EXISTING channel. That is the subtraction the header actually asks
+# for, and it was skipped deliberately rather than missed: `resident-context.md` permits cutting
+# only text whose enforcing mechanism can be NAMED and whose instruction lives authoritatively
+# elsewhere, and requires grepping for inbound references before each cut. Done carelessly under
+# time pressure that deletes scar tissue, which is strictly worse than a raise.
+#
+# The four rules, each earned at v0.421.0 by batch 12 and each prose-only, so none may be SCOPED:
+# "count a suite's distinct input SHAPES, not its arms" (a wrong fix passed a self-probe, a
+# receipt and 21 mutants because all three seeded the duplicate adjacent to the original);
+# "point a search grammar at its own subject before trusting its zero" (two grammars in one sweep
+# scored their own subject as a non-instance); the unobservable-property clause in
+# `mechanism-design.md`; and the subagent report-file hook in `tool-hazards.md`. The first three
+# are needed by SUBAGENTS, whose reads never reach the parent, which bars scoping independently.
+# ---------------------------------------------------------------------------
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-47600}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

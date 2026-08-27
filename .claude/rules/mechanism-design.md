@@ -38,6 +38,11 @@ A condition that changes no outcome today will change one when the surrounding s
 and nobody will be looking. Either give it a subject or delete it — a guard whose removal
 changes nothing is not load-bearing. Fix by subtraction first.
 
+A property is also unobservable when an EARLIER exit pre-empts its only reader. Measured:
+"refuses to overwrite" was asserted by a row COUNT — true either way — and the refusal exits
+before that row is read, so a mutant reporting AND overwriting passed everything. Ask what READS
+the property under the shipped control flow, and assert the value, not the count.
+
 ## Ask what a change makes always-true downstream
 
 Every new constraint has three questions attached: what does this make permanently true or
