@@ -71,7 +71,9 @@ emit_verdict "$GATE-20260811T190000Z" 7:PASS 22:PASS 24:PASS
 
 # ---------------------------------------------------------------- the three cases
 for case_dir in gate-repaired-delegated gate-repaired-inline-no-record gate-repaired-record-off-label \
-                gate-repaired-adversarial-record-only gate-repaired-record-beside-verdicts; do
+                gate-repaired-adversarial-record-only gate-repaired-record-beside-verdicts \
+                gate-repaired-lead-resolution gate-repaired-adversarial-resolution-only \
+                gate-repaired-resolution-off-label; do
   mkdir -p "$ROOT/$case_dir/_bmad-output/gate-adjudication" \
            "$ROOT/$case_dir/_bmad-output/planning-artifacts/$SPRINT"
   cp "$SRC"/*.verdict.json "$ROOT/$case_dir/_bmad-output/gate-adjudication/"
@@ -158,6 +160,53 @@ write_record gate-repaired-record-beside-verdicts 1 edit \
   "$ROOT/gate-repaired-record-beside-verdicts/_bmad-output/gate-adjudication/gate-$GATE-repair-p1.md"
 write_record gate-repaired-record-beside-verdicts 2 edit \
   "$ROOT/gate-repaired-record-beside-verdicts/_bmad-output/gate-adjudication/gate-$GATE-repair-p2.md"
+
+# (f) LEAD RESOLUTION — no remediator repaired anything, and none could have. The FAILs
+#     closed on an edit to a file the remediation guard leaves LEAD-editable
+#     (ai-dlc-gate-remediation-guard.sh:284-285: `docs/escalations/**` and
+#     `*-resolution-p*.md`), so a repair record would assert a dispatch that never
+#     happened. The record is at `gate-<type>-resolution-p<M>.md` and carries the same
+#     three fields. Nothing is owed.
+#
+#     WITHOUT THIS CASE the arm's only accepted name is the remediator's, and a lead is
+#     left choosing between fabricating a dispatch and taking a MISSING finding for work
+#     correctly done. It is also the case that makes the second suffix load-bearing:
+#     delete the suffix from the validator's comprehension and only this case goes red.
+write_record gate-repaired-lead-resolution 1 edit \
+  "$ROOT/gate-repaired-lead-resolution/_bmad-output/planning-artifacts/$SPRINT/gate-$GATE-resolution-p1.md"
+write_record gate-repaired-lead-resolution 2 edit \
+  "$ROOT/gate-repaired-lead-resolution/_bmad-output/planning-artifacts/$SPRINT/gate-$GATE-resolution-p2.md"
+
+# (g) ADVERSARIAL RESOLUTION ONLY — case (d) one suffix over, and it is what keeps the
+#     `gate-` anchor load-bearing on the NEW name. `<artifact>-resolution-p<M>.md` is the
+#     adversarial cycle's resolution record (_gate-procedures.md:324) and sits in the same
+#     sprint directory with the same pass numbers. On the reference consumer's real tree,
+#     depth 2 under planning-artifacts: 17 files match `*-resolution-p<M>.md`, 16 of them
+#     adversarial and one a gate record — so an unanchored second suffix would pull in
+#     sixteen foreign records.
+#
+#     IT IS SEEDED STRUCTURED ON PURPOSE, and that is deliberately harder than the real
+#     corpus, where zero of those 16 carry all three fields under arm H's reader. A seed
+#     that leans on their being unstructured would leave the anchor untested: drop it and
+#     the arm would still say UNSTRUCTURED, the assertion regex would still match, and the
+#     mutant would come back green. Structured, the anchor is the ONLY thing between this
+#     file and a false PASS, which is exactly the property the case is here to pin.
+write_record gate-repaired-adversarial-resolution-only 1 edit \
+  "$ROOT/gate-repaired-adversarial-resolution-only/_bmad-output/planning-artifacts/$SPRINT/$GATE-resolution-p1.md"
+write_record gate-repaired-adversarial-resolution-only 2 edit \
+  "$ROOT/gate-repaired-adversarial-resolution-only/_bmad-output/planning-artifacts/$SPRINT/$GATE-resolution-p2.md"
+
+# (h) RESOLUTION, OFF-LABEL — case (c) on the new name. The accepted NAME widened; the
+#     STANDARD did not. A resolution record still has to carry `disposition:`, `edit:` and
+#     `derivation:` read literally, or the second suffix becomes a way to close any FAIL by
+#     filing a differently-named file. This is also the reference consumer's actual state:
+#     its one `gate-implementation-resolution-p1.md` states its disposition, its edit site
+#     and its derivation in PROSE and labels none of them, so it scores unstructured under
+#     arm H's reader and this case is what says so out loud.
+write_record gate-repaired-resolution-off-label 1 "edit sites" \
+  "$ROOT/gate-repaired-resolution-off-label/_bmad-output/planning-artifacts/$SPRINT/gate-$GATE-resolution-p1.md"
+write_record gate-repaired-resolution-off-label 2 "edit sites" \
+  "$ROOT/gate-repaired-resolution-off-label/_bmad-output/planning-artifacts/$SPRINT/gate-$GATE-resolution-p2.md"
 
 rm -rf "$SRC"
 echo "$ROOT"

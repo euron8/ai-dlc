@@ -1,0 +1,7 @@
+A MUTATION BATTERY behind the shipped `gate-repair-record` fixture. It builds sandbox
+copies of `core/scripts/validate-gate-adjudication.sh`, edits them, and re-runs the shipped
+fixture against each — so its subject is this repo's own source tree, which a consumer does
+not have. On a consumer the mutated file would be `scripts/ai-dlc/validate-gate-adjudication.sh`,
+its own installed engine, and a battery that rewrites the engine a consumer is mid-pipeline on
+is not something to ship. The fixture it scores, `gate-repair-record`, DOES ship and is what a
+consumer runs.

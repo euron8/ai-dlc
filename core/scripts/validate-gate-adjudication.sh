@@ -684,10 +684,49 @@ def run_series():
                 # green and only a same-name-wrong-place fixture case notices. One expression
                 # cannot half-regress. Exact name first, so the message names the right file
                 # when a wrong-gate-type record is also present.
+                #
+                # TWO SUFFIXES, ONE EXPRESSION, AND THE `gate-` ANCHOR SURVIVES BOTH. Not every
+                # FAIL closes by a remediator repair. A check whose input is a file the
+                # remediation guard leaves LEAD-editable — `docs/escalations/**` and
+                # `*-resolution-p*.md`, ai-dlc-gate-remediation-guard.sh:284-285 — closes by a
+                # lead-authored RESOLUTION, and no remediator dispatch is warranted or possible
+                # for it. With one accepted suffix the lead's only ways out were to file the
+                # record under a name asserting a dispatch that did not happen, or to take a
+                # MISSING finding for work correctly done. `gate-<gt>-resolution-p<M>.md` is the
+                # truthful name and is now accepted.
+                #
+                # THE ANCHOR IS WHAT MAKES THAT SAFE, and dropping it repeats the measured
+                # mistake above one suffix over. `<artifact>-resolution-p<M>.md` is the
+                # ADVERSARIAL resolution record (_gate-procedures.md:324) and sits in the same
+                # sprint directory, exactly as `<artifact>-repair-p<M>.md` does. Measured on the
+                # reference consumer, at depth 2 under planning-artifacts: `gate-*-repair-p<M>`
+                # 15 files, `*-repair-p<M>` 113, `*-resolution-p<M>` 17 of which 16 are
+                # adversarial and ONE is a gate record. So the unanchored form would pull in 16
+                # foreign records; `gate-*` pulls in one, the one meant.
+                #
+                # STRUCTURE IS UNCHANGED, which is why this widens the accepted NAME and not the
+                # standard. A candidate still has to carry `disposition:`, `edit:` and
+                # `derivation:` under arm H's executed reader, so MISSING REPAIR RECORD keeps its
+                # subject: a FAIL repaired with no record on disk still fires. Measured against
+                # the same 16 adversarial resolution records, ZERO are structured under that
+                # reader — so even the unanchored form could not have produced a false PASS here,
+                # only a foreign file misreported as a malformed gate record. That is the reason
+                # a marker check rejecting ADVERSARIAL_RESOLUTION is NOT here: it would change no
+                # verdict on any tree measured, and a guard whose removal changes nothing is not
+                # load-bearing.
+                #
+                # It is still ONE expression. The comprehension takes one `pa` and one pattern
+                # TEMPLATE, so a path regression breaks both suffixes together — the half-regress
+                # this comment warns about needs two independently written lookups, which is not
+                # what a loop over a suffix tuple is.
                 want = f"gate-{gt}-repair-p{M}.md"
-                cands = sorted(glob.glob(os.path.join(pa, "*", f"gate-*-repair-p{M}.md")),
-                               key=lambda p: (os.path.basename(p) != want, p))
-                named = next((p for p in cands if os.path.basename(p) == want),
+                alt = f"gate-{gt}-resolution-p{M}.md"
+                cands = sorted(
+                    (p for kind in ("repair", "resolution")
+                     for p in glob.glob(os.path.join(pa, "*", f"gate-*-{kind}-p{M}.md"))),
+                    key=lambda p: (os.path.basename(p) not in (want, alt),
+                                   os.path.basename(p) != want, p))
+                named = next((p for p in cands if os.path.basename(p) in (want, alt)),
                              os.path.join(pa, "s<N>", want))
                 structured = None
                 unstructured = None
@@ -712,7 +751,9 @@ def run_series():
                         f"UNSTRUCTURED REPAIR RECORD: series {sid!r} ({gt}) pass {M} was "
                         f"repaired before pass {M + 1} ({fell}), and {unstructured} exists but "
                         f"is not a structured record — it lacks one of 'disposition:', "
-                        f"'edit:', 'derivation:' (remediator.md). The label is read literally "
+                        f"'edit:', 'derivation:' (remediator.md; a lead-authored "
+                        f"'gate-<type>-resolution-p<M>.md' carries the same three fields). "
+                        f"The label is read literally "
                         f"and must open a line with the colon immediately after; emphasis "
                         f"(**, _, backticks) is fine, RENAMING is not ('edit sites:' is not "
                         f"'edit:'; a '### Derivation' heading is not the field)."
@@ -726,7 +767,12 @@ def run_series():
                         f"record the next pass verifies against. A missing record is the lead "
                         f"having repaired inline, and the verdict series alone cannot tell "
                         f"that from a delegated repair, which is why this arm reads the "
-                        f"record and not the series."
+                        f"record and not the series. Where the FAIL closed WITHOUT a "
+                        f"remediator — a lead-authored escalation resolution on a file the "
+                        f"remediation guard leaves lead-editable — write "
+                        f"{os.path.join(pa, 's<N>', alt)} instead, carrying the same "
+                        f"'disposition:', 'edit:', 'derivation:'. Do not file a repair record "
+                        f"for a dispatch that did not happen."
                     )
 
     check_repair_records()

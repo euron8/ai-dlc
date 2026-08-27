@@ -67,7 +67,9 @@ note_fail() { echo "FAIL: $*"; FAILURES=$((FAILURES + 1)); }
 # 0. THE DIFFERENTIAL ITSELF. Everything below is worthless if this does not hold.
 # --------------------------------------------------------------------------
 CASES="gate-repaired-delegated gate-repaired-inline-no-record gate-repaired-record-off-label
-gate-repaired-adversarial-record-only gate-repaired-record-beside-verdicts"
+gate-repaired-adversarial-record-only gate-repaired-record-beside-verdicts
+gate-repaired-lead-resolution gate-repaired-adversarial-resolution-only
+gate-repaired-resolution-off-label"
 A="$ROOT/gate-repaired-delegated/_bmad-output/gate-adjudication"
 B="$ROOT/gate-repaired-inline-no-record/_bmad-output/gate-adjudication"
 
@@ -191,12 +193,45 @@ expect gate-repaired-record-beside-verdicts 1 'repair record|repair-record' \
   one caller where it stops being true. If this case exits 0 the arm has drifted back to
   reading the verdict's own directory."
 
-expect gate-repaired-record-off-label 1 'structur|disposition|edit|derivation' \
+expect gate-repaired-lead-resolution 0 '' \
+"Both repaired passes carry a structured record named \`gate-<type>-resolution-p<M>.md\` and
+  no \`-repair-p<M>.md\` exists. Not every FAIL closes by a remediator repair: a check whose
+  input is a file the remediation guard leaves LEAD-editable
+  (ai-dlc-gate-remediation-guard.sh:284-285 — \`docs/escalations/**\`, \`*-resolution-p*.md\`)
+  closes by a lead-authored resolution, and no dispatch is warranted or possible for it. If
+  this case exits 1 the arm accepts only the remediator's filename, which leaves the lead
+  choosing between fabricating a dispatch it did not make and taking a MISSING finding for
+  work correctly done. This is the ONLY case the second suffix decides."
+
+expect gate-repaired-adversarial-resolution-only 1 'repair record|repair-record' \
+"The record is structured, in the right sprint directory, with the matching pass number, and
+  it is the ADVERSARIAL cycle's resolution record (\`<artifact>-resolution-p<M>.md\`,
+  _gate-procedures.md:324) rather than the gate's (\`gate-<type>-resolution-p<M>.md\`). This
+  is case (d) one suffix over and it is what keeps the \`gate-\` anchor load-bearing on the
+  new name. If this case exits 0 the second suffix has been widened to \`*-resolution-p<M>\`
+  and the arm now adopts an adversarial resolution as proof of a gate repair — the same hole
+  the prefixed \`gate-*-repair\` glob was narrowed to close, reopened one suffix over.
+  Measured on the reference consumer, depth 2 under planning-artifacts: 17 files match
+  \`*-resolution-p<M>.md\`, 16 adversarial and ONE a gate record."
+
+expect gate-repaired-resolution-off-label 1 'UNSTRUCTURED REPAIR RECORD' \
+"The resolution record exists for both repaired passes and renames a field ('edit sites:'
+  for 'edit:'). The accepted NAME widened; the STANDARD did not. If this case exits 0 the
+  structure check has been skipped for the resolution suffix, and the second name becomes a
+  way to close any FAIL by filing a differently-named file — which is worse than the gap it
+  was added to close, because it looks like a repair record and is not one."
+
+expect gate-repaired-record-off-label 1 'UNSTRUCTURED REPAIR RECORD' \
 "The record EXISTS for both repaired passes but renames a field ('edit sites:' for
   'edit:'). The labels are read literally, and this is the boundary at the far end: an
   arm widened until it accepts a renamed field is an arm widened until it accepts prose,
   and one that accepts prose can never fire. If this case exits 0, check whether the
-  field reader has been loosened rather than whether the record is really structured."
+  field reader has been loosened rather than whether the record is really structured.
+  The assertion names the UNSTRUCTURED class and not its field labels because the MISSING
+  message also spells 'disposition:', 'edit:' and 'derivation:' — it has to, it tells the
+  lead what to write — so a field-name regex here is satisfied by the finding that says
+  the record is ABSENT, which is the opposite verdict. An arm cannot be keyed on a token
+  its sibling finding also carries."
 
 # --------------------------------------------------------------------------
 # 2. THE STALL RUNG MUST NOT BE WHAT MADE THE RED CASES RED.

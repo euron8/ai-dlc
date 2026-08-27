@@ -3432,3 +3432,61 @@ shipped fix **0**, a second spelling using `git status --porcelain` **0**, the u
 untracked half and never unions it into the corpus **1**.
 
 verify: sh s=core/scripts/report-propagation-fanout.sh; [ -f "$s" ] || exit 9; s="$(cd "$(dirname "$s")" && pwd)/$(basename "$s")"; d=$(mktemp -d) || exit 9; ( cd "$d" && git init -q . && git config user.email t@t && git config user.name t && mkdir -p docs _bmad-output/planning-artifacts/s901 && printf 'seed\n' > docs/a.md && git add docs/a.md && git commit -qm base && printf 'x `docs/a.md:1` y\n' > docs/b.md && git add docs/b.md && git commit -qm second ) >/dev/null 2>&1 || { rm -rf "$d"; exit 9; }; r() { ( cd "$d" && AI_DLC_PROJECT_ROOT="$d" bash "$s" HEAD~1 --sprint s901 ) 2>/dev/null; }; printf 'cites `docs/a.md:1`\n' > "$d/_bmad-output/planning-artifacts/s901/note.md"; r >/dev/null; ok=$?; n1=$(r | sed -n 's/^  mutable corpus: \([0-9]*\) files.*/\1/p'); mkdir -p "$d/docs/ignored"; printf 'docs/ignored/\n' > "$d/.gitignore"; printf 'cites `docs/a.md:1`\n' > "$d/docs/ignored/j.md"; n2=$(r | sed -n 's/^  mutable corpus: \([0-9]*\) files.*/\1/p'); rm -rf "$d/docs/ignored" "$d/.gitignore" "$d/_bmad-output/planning-artifacts/s901/note.md"; r >/dev/null; ctl=$?; rm -rf "$d"; [ "$ok" = 2 ] && exit 9; [ -n "$n1" ] && [ -n "$n2" ] || exit 9; [ "$ok" -ne 3 ] && [ "$ctl" -eq 3 ] && [ "$n1" -eq "$n2" ]
+
+---
+
+## BL-107 — `--series` accepts only the remediator's repair-record name, so a lead-authored resolution reads as MISSING
+
+**Discharges `PC-S306-SERIES-VALIDATOR-NO-LEAD-RESOLUTION-PATH`, filed by the reference
+consumer in sprint 306.** `core/scripts/validate-gate-adjudication.sh:688` globbed
+`gate-*-repair-p<M>.md` and nothing else when deciding whether a pass-to-pass FAIL shrink was
+backed by a record. That is the REMEDIATOR artifact-repair convention:
+`core/hooks/ai-dlc-gate-remediation-guard.sh` requires a real remediator `agent_id` and a bound
+edit to produce one.
+
+**A FAIL can close without a remediator, and the same guard says so.** It leaves
+`docs/escalations/**` and `*-resolution-p*.md` LEAD-editable. Reproduced sprint 306: pass 1
+FAILed Check 2 on a stale sprint-303 `HARD_BLOCK`; the lead closed it with a two-line status
+edit to `docs/escalations/pending.md`, no gate-log or protected-artifact edit, so no remediator
+dispatch was warranted or possible, and pass 2 independently confirmed the resolution. The
+lead's only exits were to file a record asserting a dispatch that never happened, or to take a
+`MISSING REPAIR RECORD` finding for work correctly done.
+
+`gate-<type>-resolution-p<M>.md` is now accepted alongside the repair name.
+
+**The `gate-` anchor is what makes the widening safe, and dropping it repeats a measured
+mistake one suffix over.** `<artifact>-resolution-p<M>.md` is the ADVERSARIAL resolution record
+and sits in the same sprint directory with the same pass numbers. Measured on the reference
+consumer at depth 2 under `planning-artifacts`: `gate-*-repair-p<M>` **15** files,
+`*-repair-p<M>` **113**, `*-resolution-p<M>` **17** — of which **16** are adversarial and
+exactly **one** is a gate record. The unanchored form pulls in sixteen foreign records; `gate-*`
+pulls in the one meant.
+
+**The accepted NAME widened; the STANDARD did not.** A record still has to carry
+`disposition:`, `edit:` and `derivation:` read literally, so `MISSING REPAIR RECORD` keeps its
+subject: a FAIL repaired with no record on disk still fires. **And the consumer's own
+`gate-implementation-resolution-p1.md` states its disposition, edit site and derivation in
+PROSE and labels none of them, so it scores UNSTRUCTURED under this arm** — that is a finding
+about the consumer's record, not a reason to relax the standard, and the fixture's `(h)` case
+says it out loud.
+
+Tiered **DEFECT**. A false `MISSING REPAIR RECORD` on a genuinely-resolved FAIL trains a lead
+to fabricate remediator dispatches, which is pure overhead with no correctness benefit and
+poisons the corpus the arm reads.
+
+Guarded by `core/fixtures/gate-repair-record` cases (f), (g) and (h), and by
+`core/fixtures/gate-repair-record-mutants`, which scores five mutants — removing the resolution
+suffix, its anchor, its structure check, or the subject itself each kills the one case that
+owns that property. **Case (g) is seeded STRUCTURED on purpose**, which is harder than the real
+corpus where none of the 16 adversarial records are: a seed that leaned on their being
+unstructured would leave the anchor untested, because the arm would still say UNSTRUCTURED and
+the mutant would come back green.
+
+**The receipt drives the shipping validator against the fixture's own seeded corpus, four arms.**
+Scored against five builds: the shipped fix **0**, a second spelling using two concatenated
+globs **0**, the unfixed subject **1**, a regression dropping the `gate-` anchor **1**, and a
+regression dropping the structure requirement **1**. Exits 9 if the seed does not produce the
+four case directories, so a reshaped fixture reports a moved precondition rather than a false
+close.
+
+verify: sh V=core/scripts/validate-gate-adjudication.sh; S=core/fixtures/gate-repair-record/seed.sh; [ -f "$V" ] && [ -f "$S" ] || exit 9; R=$(bash "$S") || exit 9; [ -n "$R" ] && [ -d "$R" ] || exit 9; g() { bash "$V" --series "$R/$1/_bmad-output/gate-adjudication" >/dev/null 2>&1; }; for k in gate-repaired-lead-resolution gate-repaired-adversarial-resolution-only gate-repaired-inline-no-record gate-repaired-resolution-off-label; do [ -d "$R/$k/_bmad-output/gate-adjudication" ] || { rm -rf "$R"; exit 9; }; done; g gate-repaired-lead-resolution; a=$?; g gate-repaired-adversarial-resolution-only; b=$?; g gate-repaired-inline-no-record; c=$?; g gate-repaired-resolution-off-label; d=$?; rm -rf "$R"; [ "$a" = 2 ] && exit 9; [ "$a" -eq 0 ] && [ "$b" -ne 0 ] && [ "$c" -ne 0 ] && [ "$d" -ne 0 ]
