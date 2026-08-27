@@ -20,6 +20,9 @@
 #   m9  no-reader    a marker naming a reader file that does not exist   -> must FAIL
 #   m10 empty-set    an owner reshaped so its extractor yields nothing   -> must FAIL
 #   m11 both-shapes  (consumer-owned) declared alongside an extractor    -> must FAIL
+#   m12 bad-sentinel @owner-declares on a slug with no path extractor    -> must FAIL
+#   m13 empty-derived  an owner whose derived path list is empty         -> must FAIL
+#   m14 derived-absent a DERIVED path naming a file that does not exist  -> must FAIL
 #
 # WHY THIS FIXTURE IS THE ONLY EVIDENCE THE RENDERER WORKS. Its finding set over the real
 # tree is EMPTY by design -- a green `--check` is the steady state, and a renderer that
@@ -94,9 +97,19 @@ seed() {
   # The block reader gets a `token:` on BOTH sides of its block, so this owner is also
   # the seed's standing proof that the extractor is SCOPED rather than matching `token:`
   # file-wide -- the near-miss the renderer's own probe asserts, asserted here too.
-  printf '%s\n' 'preamble:' '  token: BEFORE-BLOCK' 'empty_subject_verdict:' \
-                '  token: SEEDED NOTHING' '  emitters:' '    - a.sh' 'after:' \
-                '  token: AFTER-BLOCK' > "$d/owners/emap.yaml"
+  #
+  # IT IS ALSO THE ONLY OWNER THAT DECLARES ITS OWN EMITTER AND READER LISTS, which is what
+  # the `@owner-declares` sentinel resolves against. Both lists are seeded, and BOTH are
+  # bracketed by decoy lists under other top-level keys, so a path reader that keys on `- `
+  # indentation rather than on the block AND the list name renders the decoys.
+  printf '%s\n' 'preamble:' '  token: BEFORE-BLOCK' '  emitters:' '    - owners/decoy-before.sh' \
+                'empty_subject_verdict:' \
+                '  token: SEEDED NOTHING' \
+                '  emitters:' '    - owners/emap-emitter.sh' \
+                '  readers:' '    - readers/emap.md' \
+                'after:' '  token: AFTER-BLOCK' '  readers:' '    - readers/decoy-after.md' \
+                > "$d/owners/emap.yaml"
+  printf 'echo "SEEDED NOTHING"\n' > "$d/owners/emap-emitter.sh"
 
   # --- the readers each vocabulary is joined to ---
   for r in ledger kinds contract cycle skill hook emap; do
@@ -159,7 +172,8 @@ err "I807 fired"
 # vocabulary-invariant: I810
 # vocabulary-owner: owners/emap.yaml
 # vocabulary-extract: empty-subject-verdict
-# vocabulary-readers: readers/emap.md
+# vocabulary-emitters: @owner-declares
+# vocabulary-readers: @owner-declares
 err "I810 fired"
 # --- I808: an ordinary arm, and a NEAR MISS -- it binds ONE string, not a set -
 # The wording is deliberate. `one string` is one character-class away from `one set`, which
@@ -220,8 +234,25 @@ if ! grep -q '| gadget classes | — consumer-owned | (consumer-owned)' "$TMP/co
   grep 'gadget' "$TMP/controlB/docs/vocabulary-index.md" | sed 's/^/      /'
   exit 1
 fi
+# THE DERIVED COLUMNS, ASSERTED AS PRESENCE. `@owner-declares` on I810 means the emitters and
+# readers cells come from the OWNER rather than from the marker, and a resolver that silently
+# returned nothing would render two em dashes -- which reads exactly like a vocabulary with no
+# emitters. Both cells are demanded by content, and the two DECOY lists the seeded owner
+# carries under neighbouring top-level keys are demanded ABSENT in the same arm: a reader
+# keyed on `- ` indentation instead of on the block and the list name passes the first half
+# and fails this one.
+if ! grep -q '| `owners/emap-emitter.sh` | `readers/emap.md` |' "$TMP/controlB/docs/vocabulary-index.md"; then
+  note "FIXTURE BROKEN: the @owner-declares sentinel did not resolve to the owner's own emitter and reader lists."
+  grep 'empty-subject' "$TMP/controlB/docs/vocabulary-index.md" | sed 's/^/      /'
+  exit 1
+fi
+if grep -qE 'decoy-before|decoy-after' "$TMP/controlB/docs/vocabulary-index.md"; then
+  note "FIXTURE BROKEN: a derived column picked up a list from OUTSIDE the empty_subject_verdict: block."
+  grep 'empty-subject' "$TMP/controlB/docs/vocabulary-index.md" | sed 's/^/      /'
+  exit 1
+fi
 if outB2="$(check_in "$TMP/controlB")" && grep -q "in sync" <<<"$outB2"; then
-  note "ok    controlB -- seed renders all six extractors, the consumer-owned row, and round-trips"
+  note "ok    controlB -- seed renders every extractor, the derived columns, the consumer-owned row, and round-trips"
 else
   note "FIXTURE BROKEN: a freshly rendered index did not survive its own --check."
   printf '%s\n' "$outB2" | sed 's/^/      /' | head -6
@@ -339,7 +370,38 @@ else
   note "SKIP  m11 -- sed matched nothing; no mutation occurred"; rc=1
 fi
 
+# m12 -- the @owner-declares sentinel on a row whose extractor cannot yield paths
+#
+# NOT the empty-subject row: the sentinel is CORRECT there, so the mutation has to move it
+# somewhere it is wrong. The ledger owner is a shell script declaring MEMBERS and nothing
+# about who reads them, which is precisely the case the literal form exists for.
+seed "$TMP/m12"
+if mutate "$TMP/m12/$MAP" 's|^# vocabulary-readers: readers/ledger.md$|# vocabulary-readers: @owner-declares|'; then
+  kill_check "m12 bad-sentinel   derive from a slug with no path extractor" "$TMP/m12" "implements no path extractor" render
+else
+  note "SKIP  m12 -- sed matched nothing; no mutation occurred"; rc=1
+fi
+
+# m13 -- the owner's derived list emptied. An empty column renders as an em dash, which reads
+# exactly like a vocabulary nobody reads, so ZERO derived paths must be a failure.
+seed "$TMP/m13"
+if mutate "$TMP/m13/owners/emap.yaml" '/^    - readers\/emap.md$/d'; then
+  kill_check "m13 empty-derived  owner declares no readers" "$TMP/m13" "got ZERO paths" render
+else
+  note "SKIP  m13 -- sed matched nothing; no mutation occurred"; rc=1
+fi
+
+# m14 -- a DERIVED path that does not exist. m9 covers the literal form; this is the same
+# duty on the other shape, and without it the sentinel would be the one way into this index
+# that skips the existence check.
+seed "$TMP/m14"
+if mutate "$TMP/m14/owners/emap.yaml" 's|^    - owners/emap-emitter.sh$|    - owners/gone.sh|'; then
+  kill_check "m14 derived-absent derived emitter file absent" "$TMP/m14" "names emitters" render
+else
+  note "SKIP  m14 -- sed matched nothing; no mutation occurred"; rc=1
+fi
+
 if [ "$rc" -eq 0 ]; then
-  note "PASS  vocabulary-index -- 2 controls green, 11/11 mutants killed by their own arm"
+  note "PASS  vocabulary-index -- 2 controls green, 14/14 mutants killed by their own arm"
 fi
 exit "$rc"

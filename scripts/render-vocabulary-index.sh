@@ -126,15 +126,15 @@ trap 'rm -rf "$PROBE_DIR"' EXIT
 MARKER_AWK='
 function flush() {
   if (name != "") {
-    printf "%s%s%s%s%s%s%s%s%s\n", name, SEP, inv, SEP, owner, SEP, ext, SEP, readers
+    printf "%s%s%s%s%s%s%s%s%s%s%s\n", name, SEP, inv, SEP, owner, SEP, ext, SEP, readers, SEP, emitters
   }
-  name = ""; inv = ""; owner = ""; ext = ""; readers = ""
+  name = ""; inv = ""; owner = ""; ext = ""; readers = ""; emitters = ""
 }
 BEGIN {
   # SEP is built here rather than passed with `awk -v`, which strips one level of escaping
   # and is the documented way to make a correct expression look wrong.
   SEP = sprintf("%c", 31)
-  name=""; inv=""; owner=""; ext=""; readers=""; armprose=""; marked=0
+  name=""; inv=""; owner=""; ext=""; readers=""; emitters=""; armprose=""; marked=0
 }
 {
   line = $0
@@ -164,6 +164,9 @@ BEGIN {
   }
   if (line ~ /^[[:blank:]]*#[[:blank:]]*vocabulary-readers:/) {
     v = line; sub(/^[[:blank:]]*#[[:blank:]]*vocabulary-readers:[[:blank:]]*/, "", v); readers = v; next
+  }
+  if (line ~ /^[[:blank:]]*#[[:blank:]]*vocabulary-emitters:/) {
+    v = line; sub(/^[[:blank:]]*#[[:blank:]]*vocabulary-emitters:[[:blank:]]*/, "", v); emitters = v; next
   }
 }
 END {
@@ -240,6 +243,72 @@ vocab_extract_empty_subject_verdict() {
 
 IMPLEMENTED='ledger-statuses extension-kinds adjudicated-codes pr-class-keys intensity-table syntax-globs empty-subject-verdict'
 
+# =========================================================================================
+# THE PATH LISTS. A marker's `vocabulary-readers:` and `vocabulary-emitters:` fields carry
+# EITHER a literal comma-separated list OR the sentinel `@owner-declares`.
+#
+# WHY THE SENTINEL EXISTS. A literal list in an arm-header comment is a THIRD hand-list: the
+# yaml declares `emitters:` and `readers:`, arms A and B consume those, and the comment
+# restated all sixteen paths with nothing binding it to either. Measured before this changed:
+# that comment listed the fourteen EMITTERS in a column headed Readers, which is not what arm
+# B means by a reader, and one edit to it would have satisfied a backlog receipt without
+# changing any behaviour. Where the owner already declares the list in a form a machine can
+# read, the marker says so and this file DERIVES it -- a hand-list nobody can drift.
+#
+# THE LITERAL FORM STAYS FOR THE OTHER SIX. Their owners are shell scripts and markdown that
+# declare a vocabulary's MEMBERS and say nothing about who reads them, so there is nothing to
+# derive and the marker is the only declaration there is.
+DERIVE_SENTINEL='@owner-declares'
+
+# `vocab_paths_empty_subject_verdict <readers|emitters> <owner>` -> one path per line.
+# SCOPED TO THE BLOCK AND KEYED ON THE LIST NAME, so `readers:` cannot leak into the emitters
+# column and a `token:` line -- a scalar, not a list -- cannot be read as a path. The near-miss
+# probes below seed both of those.
+vocab_paths_empty_subject_verdict() {
+  awk -v want="$1" '
+    /^empty_subject_verdict:/              { on = 1; next }
+    on && /^[^[:space:]#]/                 { exit }
+    !on                                    { next }
+    /^  [a-z_]+:[[:space:]]*$/             { k = $1; sub(/:$/, "", k); next }
+    /^  [a-z_]+:[[:space:]]*[^[:space:]]/  { k = ""; next }
+    /^    - / && k == want                 { v = $0; sub(/^    - /, "", v)
+                                             gsub(/^"|"$/, "", v); print v }
+  ' "$2"
+}
+
+# `vocab_paths <slug> <readers|emitters> <owner>`. Keyed on the row's EXISTING extract slug
+# rather than on a second slug vocabulary: one declaration per row, and the two-way slug join
+# above already holds it. A slug with no path extractor returns 3 and the caller fails loudly,
+# because a row that silently renders no readers reads like a vocabulary nobody reads.
+vocab_paths() {
+  case "$1" in
+    empty-subject-verdict) vocab_paths_empty_subject_verdict "$2" "$3" ;;
+    *) return 3 ;;
+  esac
+}
+
+# `vocab_pathlist <readers|emitters> <field-value> <slug> <owner-abs>` -> one path per line.
+# The single resolver for both fields and both shapes, used by the existence checks AND by
+# the renderer, so a path can never be validated in one form and rendered in another.
+vocab_pathlist() {
+  case "$2" in
+    "") return 0 ;;
+    "$DERIVE_SENTINEL")
+      vocab_paths "$3" "$1" "$4" || return 3 ;;
+    *)
+      printf '%s' "$2" | tr ',' '\n' \
+        | sed 's/^[[:blank:]]*//; s/[[:blank:]]*$//' | grep -v '^$' || true ;;
+  esac
+}
+
+# One path per line on stdin -> a single-line `a`, `b`, `c` cell, or an em dash when empty.
+# ONE implementation for both columns, for the reason md_code_list is one implementation.
+md_path_cell() {
+  mpc_in="$(cat)"
+  if [ -z "$mpc_in" ]; then printf '%s' "—"; return 0; fi
+  printf '%s\n' "$mpc_in" | sed "s/^/${BT}/; s/\$/${BT}/" | paste -sd, - | sed 's/,/, /g'
+}
+
 extract_with() { # extract_with <slug> <owner-path>
   case "$1" in
     ledger-statuses)    vocab_extract_ledger_statuses    "$2" ;;
@@ -300,6 +369,7 @@ cat > "$PROBE_DIR/markers.sh" <<'PROBE'
 # vocabulary-owner: probe/owner.txt
 # vocabulary-extract: probe-slug
 # vocabulary-readers: probe/reader.txt
+# vocabulary-emitters: probe/emitter.txt
 err "I901 fired"
 # --- I902: an arm binding a consumer-owned taxonomy -------------------------
 # vocabulary: probe consumer things
@@ -315,17 +385,18 @@ p_n="$(grep -c . <<<"$p_out")"
 # Parsed field by field rather than compared against one separator-joined literal, so a
 # failure names WHICH field moved instead of printing two strings that differ by an
 # invisible byte.
-IFS="$SEP" read -r f_name f_inv f_owner f_ext f_read <<<"$(head -1 <<<"$p_out")"
-[ "$f_name"  = "probe things" ]     || probe_fail "name capture: got '$f_name'"
-[ "$f_inv"   = "I901" ]             || probe_fail "invariant capture: got '$f_inv'"
-[ "$f_owner" = "probe/owner.txt" ]  || probe_fail "owner capture: got '$f_owner'"
-[ "$f_ext"   = "probe-slug" ]       || probe_fail "extract capture: got '$f_ext'"
-[ "$f_read"  = "probe/reader.txt" ] || probe_fail "readers capture: got '$f_read'"
+IFS="$SEP" read -r f_name f_inv f_owner f_ext f_read f_emit <<<"$(head -1 <<<"$p_out")"
+[ "$f_name"  = "probe things" ]      || probe_fail "name capture: got '$f_name'"
+[ "$f_inv"   = "I901" ]              || probe_fail "invariant capture: got '$f_inv'"
+[ "$f_owner" = "probe/owner.txt" ]   || probe_fail "owner capture: got '$f_owner'"
+[ "$f_ext"   = "probe-slug" ]        || probe_fail "extract capture: got '$f_ext'"
+[ "$f_read"  = "probe/reader.txt" ]  || probe_fail "readers capture: got '$f_read'"
+[ "$f_emit"  = "probe/emitter.txt" ] || probe_fail "emitters capture: got '$f_emit'. The emitters field is the one added when the readers column turned out to be carrying emitters; if it reads back empty the marker grammar did not take, and every emitters cell would render as an em dash that looks like a vocabulary with no emitters."
 
 # THE EMPTY-FIELD CASE, which is the one a tab separator silently gets wrong. The
 # consumer-owned marker declares no extractor and no readers, so fields 4 and 5 must both
 # come back EMPTY and field 3 must still hold the owner.
-IFS="$SEP" read -r c_name c_inv c_owner c_ext c_read <<<"$(sed -n '2p' <<<"$p_out")"
+IFS="$SEP" read -r c_name c_inv c_owner c_ext c_read c_emit <<<"$(sed -n '2p' <<<"$p_out")"
 [ "$c_name" = "probe consumer things" ] || probe_fail "consumer-owned name capture: got '$c_name'"
 case "$c_owner" in
   "(consumer-owned) lives in THEIRS and is read through git show") : ;;
@@ -333,6 +404,7 @@ case "$c_owner" in
 esac
 [ -z "$c_ext" ]  || probe_fail "the consumer-owned marker read back extract='$c_ext'; the empty field collapsed and every field after it shifted."
 [ -z "$c_read" ] || probe_fail "the consumer-owned marker read back readers='$c_read'; the empty field collapsed."
+[ -z "$c_emit" ] || probe_fail "the consumer-owned marker read back emitters='$c_emit'; the empty field collapsed."
 
 # --- probe 2: the marker reader, negative -- a header whose prose DEMANDS a marker ----
 cat > "$PROBE_DIR/demand.sh" <<'PROBE'
@@ -434,6 +506,48 @@ printf '%s\n' 'other_block:' '  token: SOMETHING ELSE' > "$PROBE_DIR/emap-none.y
 [ -z "$(vocab_extract_empty_subject_verdict "$PROBE_DIR/emap-none.yaml")" ] || \
   probe_fail "the empty-subject-verdict extractor returned a member from a file carrying no empty_subject_verdict: block; it is matching \`token:\` file-wide."
 
+# --- probe 3b: the PATH lists, positive and in every near-miss direction ---------------
+# The seed carries both lists, a scalar `token:` inside the block, and a decoy list under a
+# LATER top-level key. A reader that keys only on `- ` indentation returns all of them.
+printf '%s\n' \
+  'decoy_before:' \
+  '  readers:' \
+  '    - before/leak.txt' \
+  'empty_subject_verdict:' \
+  '  token: PROBE VERDICT' \
+  '  emitters:' \
+  '    - probe/emit-one.sh' \
+  '    - probe/emit-two.sh' \
+  '  readers:' \
+  '    - probe/read-one.md' \
+  '  retired:' \
+  '    - "OLD:"' \
+  'checks:' \
+  '  emitters:' \
+  '    - after/leak.sh' > "$PROBE_DIR/emap-paths.yaml"
+pp_e="$(vocab_paths empty-subject-verdict emitters "$PROBE_DIR/emap-paths.yaml" | tr '\n' ' ')"
+pp_r="$(vocab_paths empty-subject-verdict readers  "$PROBE_DIR/emap-paths.yaml" | tr '\n' ' ')"
+[ "$pp_e" = "probe/emit-one.sh probe/emit-two.sh " ] || \
+  probe_fail "the emitters path list read back '$pp_e'. Either it lost the list, took the readers list, or leaked a decoy from outside the block."
+[ "$pp_r" = "probe/read-one.md " ] || \
+  probe_fail "the readers path list read back '$pp_r'. Either it lost the list, took the emitters list, or leaked a decoy from outside the block."
+[ -z "$(vocab_paths empty-subject-verdict token "$PROBE_DIR/emap-paths.yaml")" ] || \
+  probe_fail "asking for the 'token' list returned members; the reader is not keyed on the list NAME, so a scalar renders as a path and every column would carry whatever the block happens to hold."
+vocab_paths no-such-slug emitters "$PROBE_DIR/emap-paths.yaml" >/dev/null 2>&1
+[ "$?" -eq 3 ] || \
+  probe_fail "vocab_paths accepted an unimplemented slug instead of returning 3. A row deriving its paths from a slug with no extractor would render an em dash, which reads exactly like a vocabulary with no readers."
+
+# The sentinel resolves; a literal list splits; an empty field yields nothing. All three
+# shapes, because the either-or is the whole of this field's grammar.
+pl_d="$(vocab_pathlist emitters "$DERIVE_SENTINEL" empty-subject-verdict "$PROBE_DIR/emap-paths.yaml" | tr '\n' ' ')"
+[ "$pl_d" = "probe/emit-one.sh probe/emit-two.sh " ] || \
+  probe_fail "the $DERIVE_SENTINEL sentinel resolved to '$pl_d'."
+pl_l="$(vocab_pathlist readers 'a/one.md,  b/two.md ' empty-subject-verdict "$PROBE_DIR/emap-paths.yaml" | tr '\n' ' ')"
+[ "$pl_l" = "a/one.md b/two.md " ] || \
+  probe_fail "a LITERAL reader list resolved to '$pl_l'; the comma split or the whitespace trim moved, and a path with a leading space fails its own existence check with a message about the wrong thing."
+[ -z "$(vocab_pathlist readers '' empty-subject-verdict "$PROBE_DIR/emap-paths.yaml")" ] || \
+  probe_fail "an EMPTY readers field resolved to something; the consumer-owned row would render paths it does not have."
+
 printf '%s\n' 'LAYER_KINDS="alpha beta"' > "$PROBE_DIR/kinds-double.sh"
 [ -z "$(vocab_extract_extension_kinds "$PROBE_DIR/kinds-double.sh")" ] || \
   probe_fail "the extension-kinds extractor matched a DOUBLE-quoted assignment; it must key on the shape the owner actually uses so a changed shape reads as zero, not as a guess."
@@ -502,7 +616,7 @@ done
 live_ids="$(sed -n 's/^| \(I[0-9][0-9a-c]*\) |.*/\1/p' "$IDX" | LC_ALL=C sort -u)"
 [ -n "$live_ids" ] || fail "read ZERO invariant IDs out of docs/invariant-index.md. Its table shape changed, and an empty set would let every citation below resolve."
 
-while IFS="$SEP" read -r vname vinv vowner vext vreaders; do
+while IFS="$SEP" read -r vname vinv vowner vext vreaders vemitters; do
   [ -n "$vname" ] || continue
   [ -n "$vinv" ] || fail "the vocabulary '$vname' declares no \`vocabulary-invariant:\`. A vocabulary in this index with nothing binding it is a glossary entry, and a glossary is what this file exists instead of."
   grep -qxF "$vinv" <<<"$live_ids" || \
@@ -521,26 +635,40 @@ while IFS="$SEP" read -r vname vinv vowner vext vreaders; do
       [ -f "$ROOT/$vowner" ] || fail "the vocabulary '$vname' names owner '$vowner', which does not exist. An extraction over a missing file reads exactly like a vocabulary with no members."
       ;;
   esac
-  # EVERY READER MUST EXIST. The readers column is the half a reader of this index actually
-  # acts on -- it is where they go to check whether their file is one of the ones bound --
-  # and a path that has moved sends them to a file that is not there. Literal paths only, no
-  # globs: a glob that matches nothing is indistinguishable here from a correct path, which
-  # is the failure mode this whole file is about.
-  if [ -n "$vreaders" ]; then
-    old_ifs="$IFS"; IFS=','
-    for rp in $vreaders; do
-      rp="${rp# }"; rp="${rp% }"
+  # EVERY READER AND EVERY EMITTER MUST EXIST. These columns are the half a reader of this
+  # index actually acts on -- it is where they go to check whether their file is one of the
+  # ones bound -- and a path that has moved sends them to a file that is not there. Literal
+  # paths only, no globs: a glob that matches nothing is indistinguishable here from a correct
+  # path, which is the failure mode this whole file is about.
+  #
+  # BOTH COLUMNS GO THROUGH ONE RESOLVER, and the SAME one the renderer uses. A path checked
+  # in one form and rendered in another is a validation of something other than what ships.
+  for vfield in readers emitters; do
+    case "$vfield" in
+      readers)  vfval="$vreaders" ;;
+      emitters) vfval="$vemitters" ;;
+    esac
+    [ -n "$vfval" ] || continue
+    if [ "$vfval" = "$DERIVE_SENTINEL" ] && [ -z "$vext" ]; then
+      fail "the vocabulary '$vname' declares \`vocabulary-$vfield: $DERIVE_SENTINEL\` and names no extractor slug, so there is nothing to derive the list FROM. Name the owner's extractor, or write the paths out."
+    fi
+    if ! vfpaths="$(vocab_pathlist "$vfield" "$vfval" "$vext" "$ROOT/$vowner")"; then
+      fail "the vocabulary '$vname' declares \`vocabulary-$vfield: $DERIVE_SENTINEL\` and this renderer implements no path extractor for the slug \`$vext\`. The row would render an em dash, which reads exactly like a vocabulary with no $vfield."
+    fi
+    if [ "$vfval" = "$DERIVE_SENTINEL" ] && [ -z "$vfpaths" ]; then
+      fail "the vocabulary '$vname' derives its $vfield from $vowner and got ZERO paths. The owner's list shape changed and the extractor no longer matches it; an empty column is not a reading."
+    fi
+    while IFS= read -r rp; do
       [ -n "$rp" ] || continue
       case "$rp" in
-        *'*'*) IFS="$old_ifs"; fail "the vocabulary '$vname' names reader '$rp', which contains a glob. A glob matching nothing renders the same row as a glob matching everything; name the files." ;;
+        *'*'*) fail "the vocabulary '$vname' names $vfield '$rp', which contains a glob. A glob matching nothing renders the same row as a glob matching everything; name the files." ;;
       esac
-      if [ ! -f "$ROOT/$rp" ]; then
-        IFS="$old_ifs"
-        fail "the vocabulary '$vname' names reader '$rp', which does not exist. The row would point a reader at a file that has moved or been retired."
-      fi
-    done
-    IFS="$old_ifs"
-  fi
+      [ -f "$ROOT/$rp" ] || \
+        fail "the vocabulary '$vname' names $vfield '$rp', which does not exist. The row would point a reader at a file that has moved or been retired."
+    done <<EOF
+$vfpaths
+EOF
+  done
 done <<<"$rows"
 
 # =========================================================================================
@@ -565,10 +693,10 @@ right.
 Each of these is one set spread across an owner and one or more readers, and each has an
 invariant because the set kept getting restated from memory somewhere else.
 
-| Vocabulary | Members | Owner | Bound by | Readers |
-|---|---|---|---|---|
+| Vocabulary | Members | Owner | Bound by | Emitters | Readers |
+|---|---|---|---|---|---|
 HEADER
-  while IFS="$SEP" read -r vname vinv vowner vext vreaders; do
+  while IFS="$SEP" read -r vname vinv vowner vext vreaders vemitters; do
     [ -n "$vname" ] || continue
     if [ -n "$vext" ]; then
       members="$(extract_with "$vext" "$ROOT/$vowner" | md_code_list)"
@@ -577,14 +705,10 @@ HEADER
       members="— consumer-owned"
       ownercell="${vowner}"
     fi
-    if [ -n "$vreaders" ]; then
-      readercell="$(printf '%s' "$vreaders" | tr ',' '\n' \
-        | sed 's/^[[:blank:]]*//; s/[[:blank:]]*$//' \
-        | sed "s/^/${BT}/; s/\$/${BT}/" | paste -sd, - | sed 's/,/, /g')"
-    else
-      readercell="—"
-    fi
-    printf '| %s | %s | %s | %s | %s |\n' "$vname" "$members" "$ownercell" "$vinv" "$readercell"
+    emittercell="$(vocab_pathlist emitters "$vemitters" "$vext" "$ROOT/$vowner" | md_path_cell)"
+    readercell="$(vocab_pathlist readers "$vreaders" "$vext" "$ROOT/$vowner" | md_path_cell)"
+    printf '| %s | %s | %s | %s | %s | %s |\n' \
+      "$vname" "$members" "$ownercell" "$vinv" "$emittercell" "$readercell"
   done <<<"$rows"
 
   cat <<'MID'

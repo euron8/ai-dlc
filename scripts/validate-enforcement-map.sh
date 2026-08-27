@@ -212,9 +212,18 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 # passes cost forks per DIRECTORY. Isolated by differential on one tree: 7050 with that directory
 # present, 7044 with it removed -- 6 forks, which is what one fixture costs. The fixture is not
 # optional (the ceiling arm it guards is new, and an arm with no fixture is the only evidence
-# anyone has that it works), so the cost is real and intended. Headroom is 6 over the measured
-# 7070, the same margin 7060 carried over v0.416.0's 7054.
-FORK_BUDGET=7076
+# anyone has that it works), so the cost is real and intended.
+#
+# 7076 -> 7029 at v0.419.0, and this one is a RATCHET DOWN taken while ADDING an arm. I93 gained
+# its reverse join (arm D) and the tree got cheaper, because building the arm exposed what the
+# existing one was paying: `for f in dir/*.sh; do [ -f "$f" ] && arr[...]="$f"; done` costs one
+# fork PER CANDIDATE, and arm C was running it over 48 files. Replacing both populations with a
+# single glob expansion and one `esv_glob_matched` test is a net -47 by differential against
+# HEAD on two extracted trees, asserted to differ before the comparison was read. The budget is
+# ratcheted rather than left where it was because 73 forks of unearned headroom is a budget that
+# cannot fire, which reads exactly like one that is being respected. Headroom is 6 over the
+# measured 7023, the same margin 7076 carried over 7070 and 7060 over v0.416.0's 7054.
+FORK_BUDGET=7029
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -7237,7 +7246,8 @@ fi
 # vocabulary-invariant: I93
 # vocabulary-owner: core/skills/ai-dlc/enforcement-map.yaml
 # vocabulary-extract: empty-subject-verdict
-# vocabulary-readers: core/scripts/validate-stub-audit.sh, core/scripts/validate-locked-anchor.sh, core/scripts/validate-ci-gates.sh, core/scripts/validate-artifact-paths.sh, core/scripts/validate-escalation-resolution.sh, core/scripts/validate-escalation-status-vocabulary.sh, core/scripts/validate-suppression-lifetime.sh, core/scripts/validate-gate-adjudication.sh, core/scripts/validate-request-coverage.sh, core/scripts/audit-layer-debt.sh, core/scripts/validate-ac-falsifiability.sh, core/scripts/validate-bmad-invocations.sh, core/scripts/validate-spec-join.sh, core/scripts/validate-snapshot-conservation.sh, core/skills/ai-dlc/steps/gate-validation.md, core/skills/ai-dlc/steps/retro.md
+# vocabulary-emitters: @owner-declares
+# vocabulary-readers: @owner-declares
 #
 # WHY. Three core validators printed "this run examined nothing" in three spellings at three
 # exit codes -- `AUDITED NOTHING` at 4, `PASS -- NOTHING VERIFIED` at 0, `VACUOUS:` at 78 --
@@ -7291,6 +7301,46 @@ esv_sites() {
   ' "$@"
 }
 
+# `esv_glob_matched <count> <first-element>` -> 0 if a `*` glob matched, 1 if it did not.
+#
+# WHY THIS EXISTS RATHER THAN A PER-FILE `[ -f ]` FILTER. The obvious idiom --
+# `for f in dir/*.sh; do [ -f "$f" ] && arr[...]="$f"; done` -- costs ONE FORK PER CANDIDATE.
+# Measured by differential on this file: the loop over scripts/*.sh, 19 files, cost 18 forks
+# on its own, and the identical loop over core/scripts/*.sh was paying 48. This script is
+# invoked by the fixture-suite pole, where a fork is wall clock. An unmatched glob expands to
+# the literal pattern, which is exactly one element and is not a file, so ONE test decides the
+# whole question and the array is taken from the expansion in one step.
+esv_glob_matched() { [ "$1" -gt 1 ] || [ -f "$2" ]; }
+
+# `esv_undeclared <sites> <declared> <exempt> <root>` -> one REPO-RELATIVE path per line,
+# deduped, for every file appearing in <sites> (esv_sites' "path:line" rows) that is in
+# NEITHER <declared> nor <exempt>. This is arm D's whole decision, factored out so the probe
+# below can drive it in all four directions before the corpus is read -- an inline reverse
+# join would be a check whose ability to fire nobody had established.
+#
+# FORK-FREE ON PURPOSE. The dedupe is an in_lines accumulator rather than `sort -u`, and the
+# membership tests are the same helper for the reason stated at its definition: this script is
+# invoked by the fixture-suite pole, where a fork is wall clock.
+esv_undeclared() {
+  esv_u_seen=""; esv_u_out=""
+  while IFS= read -r esv_u_row; do
+    [ -n "$esv_u_row" ] || continue
+    esv_u_p="${esv_u_row%:*}"
+    esv_u_p="${esv_u_p#$4/}"
+    [ -n "$esv_u_p" ] || continue
+    in_lines "$esv_u_p" "$esv_u_seen" && continue
+    esv_u_seen="$esv_u_seen$esv_u_p
+"
+    in_lines "$esv_u_p" "$2" && continue
+    in_lines "$esv_u_p" "$3" && continue
+    esv_u_out="$esv_u_out$esv_u_p
+"
+  done <<EOF
+$1
+EOF
+  printf '%s' "$esv_u_out"
+}
+
 # `esv_rows <yaml>` -> "<key><TAB><value>" rows for the empty_subject_verdict: block ALONE.
 # Scoped to the block and exited at the next top-level key, so a `token:` under any other
 # key cannot leak in -- the probe below seeds one on each side to prove it.
@@ -7342,10 +7392,22 @@ esv_score=0
 [ -n "$(esv_sites 'PROBE93 TOKEN' "$ESV_TMP/emit.sh")" ] || esv_score=$((esv_score + 1000))
 [ -z "$(esv_sites 'PROBE93 TOKEN' "$ESV_TMP/comment.sh")" ] || esv_score=$((esv_score + 10000))
 [ -z "$(esv_sites 'PROBE93 TOKEN' "$ESV_TMP/silent.sh")" ] || esv_score=$((esv_score + 100000))
+
+# ARM D's decision, driven in all four directions. The seed carries one undeclared emitter,
+# one declared emitter cited TWICE (so the dedupe is exercised, not assumed) and one exempt
+# emitter. Only the undeclared one may come back.
+esv_p_und="$(esv_undeclared "$ESV_TMP/core/scripts/undeclared.sh:1
+$ESV_TMP/core/scripts/declared.sh:3
+$ESV_TMP/scripts/exempt.sh:9
+$ESV_TMP/core/scripts/declared.sh:7" 'core/scripts/declared.sh' 'scripts/exempt.sh' "$ESV_TMP")"
+in_lines 'core/scripts/undeclared.sh' "$esv_p_und"    || esv_score=$((esv_score + 1000000))
+! in_lines 'core/scripts/declared.sh' "$esv_p_und"    || esv_score=$((esv_score + 10000000))
+! in_lines 'scripts/exempt.sh' "$esv_p_und"           || esv_score=$((esv_score + 100000000))
+[ "$esv_p_und" = 'core/scripts/undeclared.sh' ]       || esv_score=$((esv_score + 1000000000))
 rm -rf "$ESV_TMP"
 
 if [ "$esv_score" -ne 0 ]; then
-  err "I93's probe scored $esv_score where 0 is the only correct total, so nothing below was read by a working reader. +1 the block reader lost the token or picked up a decoy \`token:\` outside the block; +10 it read the wrong number of emitters, so the list grammar moved; +100 it did not strip the quotes off a retired spelling, so arm C would search for a literal with quotes in it and find nothing forever; +1000 esv_sites found no emission in a file whose only line EMITS the token, which makes arm A pass by finding nothing; +10000 it counted a COMMENT as an emission, which is the whole of this arm's false-positive narrowing and makes arm C fire on every exit-code table; +100000 it reported a site in a file carrying no token at all."
+  err "I93's probe scored $esv_score where 0 is the only correct total, so nothing below was read by a working reader. +1 the block reader lost the token or picked up a decoy \`token:\` outside the block; +10 it read the wrong number of emitters, so the list grammar moved; +100 it did not strip the quotes off a retired spelling, so arm C would search for a literal with quotes in it and find nothing forever; +1000 esv_sites found no emission in a file whose only line EMITS the token, which makes arm A pass by finding nothing; +10000 it counted a COMMENT as an emission, which is the whole of this arm's false-positive narrowing and makes arm C fire on every exit-code table; +100000 it reported a site in a file carrying no token at all; +1000000 arm D's reverse join did not report a seeded UNDECLARED emitter, which is the whole of that arm and makes it a check that cannot fire; +10000000 it reported a DECLARED emitter, so arm D would fire on every conforming file; +100000000 it reported an EXEMPT emitter, so the exemption is inert and the arm fails the tree as it stands; +1000000000 it returned something other than the one expected path, so it is double-reporting a file cited twice or carrying a path it was not given."
 else
   esv_rows_all="$(esv_rows "$MAP")"
   esv_tok="$(esv_val token "$esv_rows_all")"
@@ -7426,13 +7488,16 @@ EOF
     # emitter would appear. Scoped to emissions for the reason in the header: every one of
     # the three retired spellings still appears, correctly, in the exit-code COMMENT tables
     # and headers that record what each code used to be called.
-    esv_files=()
-    for esv_f in "$REPO_ROOT"/core/scripts/*.sh; do
-      [ -f "$esv_f" ] && esv_files[${#esv_files[@]}]="$esv_f"
-    done
+    esv_files=("$REPO_ROOT"/core/scripts/*.sh)
+    esv_glob_matched "${#esv_files[@]}" "${esv_files[0]}" || esv_files=()
+    # HELD IN A VARIABLE RATHER THAN COMPUTED AND DISCARDED, so the message below can say what
+    # the scan actually found. Assigned INSIDE the empty-glob guard,
+    # never above it: `esv_sites "$tok"` with no file arguments reads STDIN and hangs, and an
+    # empty array expansion is an error under `set -u` on the bash 3.2 this must run on.
+    esv_core_hits=""
     if [ "${#esv_files[@]}" -eq 0 ]; then
       err "I93: the glob core/scripts/*.sh matched no file, so arm C's sweep for revived spellings would report a clean tree having opened nothing. An unmatched glob and a conforming corpus print the same zero."
-    elif [ -z "$(esv_sites "$esv_tok" "${esv_files[@]}")" ]; then
+    elif esv_core_hits="$(esv_sites "$esv_tok" "${esv_files[@]}")"; [ -z "$esv_core_hits" ]; then
       # THE POSITIVE CONTROL, IN THE SAME INVOCATION AS THE ZEROS BELOW. Arm A already
       # requires each declared emitter to print the token and all three live under
       # core/scripts/, so the identical scan over this file list MUST find them. If it does
@@ -7449,6 +7514,107 @@ EOF
 $esv_retired
 EOF
     fi
+
+    # ARM D -- THE REVERSE JOIN: every file that EMITS the token is DECLARED an emitter.
+    #
+    # WHY IT IS A SEPARATE ARM AND NOT A WIDENING OF ARM A. Arms A and B ask whether every
+    # DECLARED file emits. Nothing asked the other direction, so a validator that adopted this
+    # vocabulary without registering joined it silently and docs/vocabulary-index.md
+    # under-reported the set by however many files the last author forgot. A join that runs one
+    # way is the mirror of a check that cannot fire -- green forever in the direction nobody is
+    # watching. Measured before this arm existed: a new core/scripts validator whose ONLY
+    # emission was the declared token, named nowhere in the map, drove this script to rc 0 with
+    # no finding, against controls showing the unseeded copy passed, the seed genuinely emitted
+    # under the same non-comment reader arm A uses, and the seeded name was genuinely absent.
+    #
+    # THE POPULATION IS THE TWO VALIDATOR DIRECTORIES AND THE EXCLUSIONS ARE STATED. A file
+    # that EMITS this verdict is a validator, and a validator lives in core/scripts/ (shipped)
+    # or scripts/ (distribution-only). Both are swept. core/fixtures/ is NOT, and that is a
+    # decision rather than an oversight: a fixture carries the token because it ASSERTS on one,
+    # so sweeping fixtures would demand an exemption per fixture, which is exactly the
+    # hand-list this arm exists to delete. docs/ and CHANGELOG.md are prose about the
+    # vocabulary and are excluded for the same reason. Ask of this arm what its population
+    # EXCLUDES, because a coverage proof cannot see outside its own.
+    #
+    # WIDER THAN ARM C's `*.sh`, AND DELIBERATELY. Arm C sweeps shipped SHELL validators for a
+    # retired SPELLING, which is a shell-grammar question. This arm asks who joined a
+    # vocabulary, and no file extension answers that: core/scripts/gen-architecture-index.js,
+    # scripts/ab-lead-model.js and scripts/verify-backlog-bl056.py exist TODAY, so an `*.sh`
+    # sweep would have shipped a reverse join carrying the same blind spot, one grain over,
+    # as the forward join it exists to fix. Both directories are FLAT -- derived, `find
+    # -mindepth 1 -maxdepth 1 -type d` returns 0 for each against a control of 10 under core/
+    # -- so a bare `*` matches files only and awk is never handed a directory.
+    #
+    # THE EXEMPTION CARRIES ITS REASON AND IS ITSELF CHECKED IN THREE DIRECTIONS. An
+    # unreasoned exemption is indistinguishable from a forgotten declaration; an exemption for
+    # a file that no longer exists, or that no longer emits, is a silent widening of the blind
+    # spot. So a bare path fails, a missing file fails, a non-emitting file fails, and a path
+    # that is BOTH declared and exempt fails. That last one is the state that satisfies neither
+    # reading of the declaration.
+    #
+    # ONE LINE PER EXEMPTION, `<path> <reason>`. There is exactly one today and it is the file
+    # that PROVED this arm was missing, which is the shape the entry that filed this predicted:
+    # the only file demonstrating the gap is also the only file that must not be declared.
+    ESV_EXEMPT='scripts/validate-plan-shape.sh does not ship, while core/skills/ai-dlc/enforcement-map.yaml does, so declaring it would write an emitter path into every consumer tree that resolves nowhere and can never be falsified at the only place it is wrong.'
+
+    esv_exempt_paths=""
+    while IFS= read -r esv_x; do
+      [ -n "$esv_x" ] || continue
+      esv_xp="${esv_x%% *}"
+      esv_xr="${esv_x#* }"
+      if [ -z "$esv_xp" ] || [ "$esv_xr" = "$esv_xp" ] || [ -z "$esv_xr" ]; then
+        err "I93: arm D's exemption list carries '$esv_x' with no reason after the path. An unreasoned exemption reads exactly like a forgotten declaration, and the next author cannot tell which it was. Write '<path> <why this file must not be declared>'."
+        continue
+      fi
+      if in_lines "$esv_xp" "$esv_emitters"; then
+        err "I93: '$esv_xp' is BOTH declared an emitter in $MAP and exempted from arm D's reverse join. Those are opposite claims about one file and nothing downstream can tell which was meant; delete one."
+      fi
+      esv_exempt_paths="$esv_exempt_paths$esv_xp
+"
+    done <<EOF
+$ESV_EXEMPT
+EOF
+
+    # TWO ARRAYS AND TWO TESTS, ONE SCAN. `esv_glob_matched` answers for ONE glob: with two
+    # patterns concatenated, a tree where NEITHER matched still holds two elements and the
+    # count test reads as a match, which is a guard that cannot fire on the state it exists
+    # for. So each population is tested on its own and the awk still runs once.
+    esv_rev_core=("$REPO_ROOT"/core/scripts/*)
+    esv_rev_dist=("$REPO_ROOT"/scripts/*)
+    esv_rev_ok=1
+    esv_glob_matched "${#esv_rev_core[@]}" "${esv_rev_core[0]}" || {
+      err "I93: the glob core/scripts/* matched no file, so arm D's reverse sweep would report every emitter declared having opened half of nothing. An unmatched glob and a conforming corpus print the same zero."
+      esv_rev_ok=0
+    }
+    esv_glob_matched "${#esv_rev_dist[@]}" "${esv_rev_dist[0]}" || {
+      err "I93: the glob scripts/* matched no file, so arm D's reverse sweep would never see a distribution-only emitter -- which is the half that PROVED this arm was missing."
+      esv_rev_ok=0
+    }
+    esv_all_hits=""
+    [ "$esv_rev_ok" -eq 0 ] || \
+      esv_all_hits="$(esv_sites "$esv_tok" "${esv_rev_core[@]}" "${esv_rev_dist[@]}")"
+
+    # THE EXEMPTION IS ARM D'S POSITIVE CONTROL, IN THE SAME INVOCATION AS ITS ZERO. Every
+    # exempt file must still be found EMITTING by the sweep above; if it is not, either the
+    # exemption is vestigial or the scan is not reading the tree, and both make the "no
+    # undeclared emitter" verdict below a zero taken over nothing.
+    while IFS= read -r esv_xp; do
+      [ -n "$esv_xp" ] || continue
+      if [ ! -f "$REPO_ROOT/$esv_xp" ]; then
+        err "I93: arm D exempts '$esv_xp' from the reverse join and no such file exists. An exemption naming a file that has moved silently widens the sweep's blind spot, and it reads exactly like an exemption that is doing its job."
+      elif ! in_body "$REPO_ROOT/$esv_xp:" "$esv_all_hits"; then
+        err "I93: arm D exempts '$esv_xp' and arm D's own sweep found no line of it outside a comment printing '$esv_tok'. Either the file stopped emitting the verdict -- in which case the exemption is vestigial and must be deleted, since a guard whose removal changes nothing is not load-bearing -- or the sweep is not reading its population and every zero it reports below is worthless."
+      fi
+    done <<EOF
+$esv_exempt_paths
+EOF
+
+    while IFS= read -r esv_u; do
+      [ -n "$esv_u" ] || continue
+      err "I93: $esv_u prints '$esv_tok' outside a comment and $MAP declares it neither an emitter of the empty-subject verdict nor an exemption. It has joined a controlled vocabulary without registering, so docs/vocabulary-index.md under-reports the set and nothing binds this file to the token if the token ever changes. Add it to \`empty_subject_verdict: emitters:\` in $MAP, or -- if it must not be declared, as a distribution-only file must not be -- add it to arm D's ESV_EXEMPT list with the reason."
+    done <<EOF
+$(esv_undeclared "$esv_all_hits" "$esv_emitters" "$esv_exempt_paths" "$REPO_ROOT")
+EOF
   fi
 fi
 

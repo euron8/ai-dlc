@@ -1757,6 +1757,281 @@ else
 fi
 mv "$V.orig" "$V"
 }
+# `i93_token` -> the declared empty-subject verdict token, read out of the SEED's own owner.
+#
+# NEVER TYPED HERE, and that is the whole subject of I93 one level out. A fixture that
+# restates a controlled vocabulary is a second copy of it, and a second copy drifts: the day
+# the token changes at the owner, a hand-typed seed below would emit a string nothing declares
+# and arm D would fire on it for the wrong reason, which is a green cell earned by accident.
+# Callers must treat an empty result as FIXTURE BROKEN -- a seed emitting the empty string
+# reaches no branch, arm D correctly stays quiet, and that silence would score as a kill.
+i93_token() {
+  awk '
+    /^empty_subject_verdict:/ { on = 1; next }
+    on && /^[^[:space:]#]/    { exit }
+    on && /^  token:/         { sub(/^  token:[[:space:]]*/, ""); print; exit }
+  ' "$ROOT/core/skills/ai-dlc/enforcement-map.yaml"
+}
+
+# --- Assertion 35: I93 arm D — the reverse join, over BOTH halves of its population ---
+# Arms A and B ask whether every DECLARED emitter emits. Nothing asked the other direction
+# until arm D, so a validator that adopted this vocabulary without registering joined it
+# silently: docs/vocabulary-index.md under-reported the set, and nothing bound the new file to
+# the token if the token ever changed. That is a join running one way, which is the mirror of a
+# check that cannot fire -- green forever in the direction nobody watches.
+#
+# THE TWO POPULATION HALVES ARE SEPARATE ARMS ON PURPOSE. Arm D sweeps core/scripts/ (shipped)
+# AND scripts/ (distribution-only), and the file that PROVED the gap -- the one exemption the
+# arm carries -- lives in the second. An arm-1-only battery passes against a sweep narrowed to
+# core/scripts/, and that narrowing deletes the only half with a live subject in it.
+#
+# ARM 2 IS THE SAME PATH AS ARM 1 WITH ONE CHARACTER CHANGED. arm D's false-positive narrowing
+# is the emission SITE: a `#` line carrying the token is a validator's exit-code table, not an
+# emission, and there are dozens of those. Seeding the near-miss at a different path would
+# leave the two arms comparing two files; keeping the path fixed makes the pair a differential
+# whose only variable is the thing the narrowing keys on.
+A35_i93_reverse_join() {
+esv_tok="$(i93_token)"
+if [ -z "$esv_tok" ]; then
+  bad "FIXTURE BROKEN: could not derive empty_subject_verdict.token from the seed's enforcement-map.yaml — every seed below would emit nothing, arm D would rightly stay quiet, and that silence would score as a kill"
+  return
+fi
+
+# ARM 1 — AN UNDECLARED EMITTER UNDER core/scripts/. Deliberately not named validate-*.sh:
+# arm D's population is every FILE in the directory, and a name matching the validator
+# convention would leave the assertion unable to tell that from a narrower grammar.
+esv_core_new="$ROOT/core/scripts/esv-newcomer.sh"
+printf '%s\n' '#!/usr/bin/env bash' "echo \"$esv_tok: this run opened no file\"" > "$esv_core_new"
+out="$(vrun)"
+if grep -q "core/scripts/esv-newcomer.sh prints '$esv_tok' outside a comment" <<<"$out"; then
+  ok "a core/scripts/ file emitting the declared token while the map declares it nowhere FAILS I93 (a validator cannot join this vocabulary without registering)"
+else
+  bad "an undeclared core/scripts/ emitter of the empty-subject verdict did not fail I93 — the reverse join is one-way again and docs/vocabulary-index.md under-reports the set by one file"
+fi
+
+# ARM 2 — THE NEAR-MISS, at the same path. The token in a COMMENT is what every emitter's
+# exit-code table already carries; a whole-file `grep -qF` would fire on all of them.
+printf '%s\n' '#!/usr/bin/env bash' "#   78 = $esv_tok, in an exit-code table" \
+              "  #   and once more, indented, as a header records a retirement" > "$esv_core_new"
+out="$(vrun)"
+if grep -q 'esv-newcomer.sh' <<<"$out"; then
+  bad "arm D fired on a file whose only mention of the token is a COMMENT — every emitter's own exit-code table is that shape, so the arm would demand a declaration for each of them"
+elif grep -q '^OK: enforcement-map.yaml in sync' <<<"$out"; then
+  ok "a core/scripts/ file carrying the token only in a comment does NOT fail I93, and the run still reaches its verdict (the narrowing is the emission site, not the token)"
+else
+  bad "the near-miss tree neither failed on the seeded path nor reached I93's OK verdict — the run did not get far enough for this arm's silence to mean anything"
+fi
+rm -f "$esv_core_new"
+
+# ARM 3 — AN UNDECLARED EMITTER UNDER scripts/. This is the half a core/scripts-only reading
+# of the arm would miss, and it is where the file that proved the gap lives.
+esv_dist_new="$ROOT/scripts/esv-dist-newcomer.sh"
+printf '%s\n' '#!/usr/bin/env bash' "echo \"$esv_tok: this run opened no file\"" > "$esv_dist_new"
+out="$(vrun)"
+if grep -q "scripts/esv-dist-newcomer.sh prints '$esv_tok' outside a comment" <<<"$out"; then
+  ok "an undeclared emitter under scripts/ FAILS I93 too (the distribution-only half of arm D's population is swept, not just core/scripts/)"
+else
+  bad "an undeclared scripts/ emitter did not fail I93 — arm D's sweep has narrowed to core/scripts/, and the only file that ever demonstrated this gap lives in the half it stopped reading"
+fi
+rm -f "$esv_dist_new"
+
+# ARM 3b — AN UNDECLARED EMITTER THAT IS NOT A SHELL SCRIPT. Arm D is deliberately wider than
+# arm C: arm C sweeps `*.sh` because a retired SPELLING is a shell-grammar question, while
+# this arm asks who joined a vocabulary, which no file extension answers. The seed is a `.js`
+# because core/scripts/gen-architecture-index.js exists TODAY, so an `*.sh` narrowing would
+# reintroduce the same one-way blindness one grain over -- and the two arms above cannot see
+# that narrowing, because both of their seeds end in .sh.
+esv_js_new="$ROOT/core/scripts/esv-newcomer.js"
+printf '%s\n' "console.log(\"$esv_tok: this run opened no file\");" > "$esv_js_new"
+out="$(vrun)"
+if grep -q "core/scripts/esv-newcomer.js prints '$esv_tok' outside a comment" <<<"$out"; then
+  ok "an undeclared emitter that is NOT a .sh FAILS I93 (arm D's population is the directory, not an extension, and a JS validator can join this vocabulary too)"
+else
+  bad "an undeclared .js emitter did not fail I93 — arm D has narrowed to *.sh, which is the blind spot it exists to close, moved one file type over"
+fi
+rm -f "$esv_js_new"
+
+# ARM 4 — THE MUTANT, AND WHAT IT ESTABLISHES THAT ARM 1 DOES NOT. Arm 1 asserts a message
+# APPEARS; it cannot tell whether arm D produced it or some other I93 arm did, and a kill
+# credited to the wrong guard survives arm D's deletion. So arm D's reporter is neutered in a
+# copy of the validator, with the SAME seed in place, and the two halves are asserted
+# together: the seeded path is no longer named, AND the run still reaches its own OK verdict.
+# The second half is what stops this being an absence — a subject replaced by `exit 0` prints
+# no verdict and fails here — and it is also the check that the seed trips nothing else, which
+# is what makes arm 1 arm D's kill rather than a finding it borrowed from a neighbour.
+#
+# ANCHORED ON `declares it neither an emitter`, which is arm D's reporter alone. Arm A's
+# message and the exemption arm's both contain "outside a comment"; a mutation keyed on the
+# shared phrase would edit more than one arm and move cells this assertion never earned.
+printf '%s\n' '#!/usr/bin/env bash' "echo \"$esv_tok: this run opened no file\"" > "$esv_core_new"
+cp "$V" "$V.orig"
+sed 's@^\( *\)err "I93: .*declares it neither an emitter.*@\1:@' "$V.orig" > "$V"
+if cmp -s "$V.orig" "$V"; then
+  bad "FIXTURE BROKEN: the arm D reporter mutation matched nothing in the validator, so arm 1 above is a message somebody observed and not a finding attributed to arm D"
+else
+  out="$(vrun)"
+  if grep -q 'esv-newcomer.sh' <<<"$out"; then
+    bad "arm D's reporter was neutered and the seeded undeclared emitter was STILL named — the finding arm 1 scores as arm D's kill is coming from somewhere else, and deleting arm D would leave this battery green"
+  elif grep -q '^OK: enforcement-map.yaml in sync' <<<"$out"; then
+    ok "neutering arm D's reporter makes the SAME seeded emitter go unreported while the rest of I93 still reaches its verdict (arm 1's kill belongs to arm D, and the seed trips no other arm)"
+  else
+    bad "with arm D's reporter neutered the run neither named the seeded emitter nor reached I93's OK verdict — the mutant broke something other than the arm it aimed at, so it proves nothing about arm D"
+  fi
+fi
+mv "$V.orig" "$V"
+rm -f "$esv_core_new"
+}
+
+# --- Assertion 36: I93 arm D — the exemption is itself checked, in four directions ---
+# Arm D carries one exemption: the distribution-only validator that must NOT be declared,
+# because enforcement-map.yaml SHIPS and a declared path would resolve nowhere in a consumer
+# tree and could never be falsified where it is wrong. An exemption is a hole in a guard, so
+# every way the hole can silently widen is its own arm, and each asserts its OWN wording --
+# all four would satisfy a grep for "I93".
+#
+# ARM 2 IS ARM D'S POSITIVE CONTROL AND IS THE ONE THAT MATTERS MOST. Arm D reports an
+# ABSENCE. If its sweep stops reading the population, it reports that same absence forever;
+# the exemption is the one path the sweep is REQUIRED to find emitting, in the same invocation
+# as the zero. An arm-2 that cannot fire makes every zero arm D prints worthless.
+A36_i93_exemption_arms() {
+esv_tok="$(i93_token)"
+# The exempt path is DERIVED from the validator's own ESV_EXEMPT line rather than typed, for
+# the reason the token is: a hand-copied path stays green after the exemption moves.
+esv_xp="$(awk -F"'" '/^[[:space:]]*ESV_EXEMPT=/ { split($2, a, " "); print a[1]; exit }' "$V")"
+if [ -z "$esv_tok" ] || [ -z "$esv_xp" ] || [ ! -f "$ROOT/$esv_xp" ]; then
+  bad "FIXTURE BROKEN: could not derive the token and an existing exempt path from the seed (token='$esv_tok', exempt='$esv_xp') — the mutations below would have no subject"
+  return
+fi
+
+# ARM 1 — THE EXEMPT FILE IS GONE. An exemption naming a path that has moved reads exactly
+# like an exemption doing its job, while the sweep's blind spot now covers nothing at all.
+mv "$ROOT/$esv_xp" "$ROOT/$esv_xp.hidden"
+out="$(vrun)"
+mv "$ROOT/$esv_xp.hidden" "$ROOT/$esv_xp"
+if grep -q "arm D exempts '$esv_xp' from the reverse join and no such file exists" <<<"$out"; then
+  ok "an arm D exemption for a file that no longer exists FAILS I93 (a hole aimed at nothing is a hole nobody can audit)"
+else
+  bad "arm D exempted a path that is not in the tree and I93 reported clean — the exemption list can be left pointing at moved files indefinitely"
+fi
+
+# ARM 2 — THE EXEMPT FILE NO LONGER EMITS. Two readings, and the arm must refuse both: the
+# exemption has gone vestigial, or the sweep is not reading its population. Mutating the
+# token OUT of the file (rather than deleting the file) is what separates this from arm 1.
+cp "$ROOT/$esv_xp" "$ROOT/$esv_xp.orig"
+sed "s@$esv_tok@REDACTED BY THE FIXTURE@g" "$ROOT/$esv_xp.orig" > "$ROOT/$esv_xp"
+if cmp -s "$ROOT/$esv_xp.orig" "$ROOT/$esv_xp"; then
+  bad "FIXTURE BROKEN: the arm D positive-control mutation matched nothing in $esv_xp, so this assertion is unproven"
+else
+  out="$(vrun)"
+  if grep -q "arm D exempts '$esv_xp' and arm D's own sweep found no line of it outside a comment" <<<"$out"; then
+    ok "an exempt file that stopped emitting FAILS I93 (arm D's positive control fires in the same invocation as the zero it licenses)"
+  else
+    bad "the one file arm D's sweep is REQUIRED to find emitting stopped emitting and I93 said nothing — every 'no undeclared emitter' verdict from this arm is now a zero taken over a corpus nobody proved was read"
+  fi
+fi
+mv "$ROOT/$esv_xp.orig" "$ROOT/$esv_xp"
+
+# ARM 3 — BOTH DECLARED AND EXEMPT. Two opposite claims about one file, and nothing
+# downstream can tell which was meant. Inserted into the owner's emitters list, scoped to the
+# block: the file exists and does emit, so arm A stays quiet and this arm owns the case.
+MAPY="$ROOT/core/skills/ai-dlc/enforcement-map.yaml"
+cp "$MAPY" "$MAPY.orig"
+awk -v add="$esv_xp" '
+  /^empty_subject_verdict:/ { on = 1; print; next }
+  on && /^[^[:space:]#]/    { on = 0 }
+  on && /^  emitters:/      { print; print "    - " add; on = 0; next }
+                            { print }
+' "$MAPY.orig" > "$MAPY"
+if cmp -s "$MAPY.orig" "$MAPY"; then
+  bad "FIXTURE BROKEN: the I93 both-declared-and-exempt mutation matched nothing in enforcement-map.yaml, so this assertion is unproven"
+else
+  out="$(vrun)"
+  if grep -q "'$esv_xp' is BOTH declared an emitter" <<<"$out"; then
+    ok "a path that is both declared in the map and exempted from arm D FAILS I93 (the two are opposite claims and nothing downstream can resolve them)"
+  else
+    bad "one path was simultaneously declared an emitter and exempted from the reverse join and I93 accepted both — the map and the exemption list can disagree about the same file silently"
+  fi
+fi
+mv "$MAPY.orig" "$MAPY"
+
+# ARM 4 — AN EXEMPTION WITH NO REASON. An unreasoned exemption is indistinguishable from a
+# forgotten declaration, and the next author cannot tell which it was. This one mutates the
+# VALIDATOR, since the exemption list lives there. The run also reports the now-unexempted
+# file as undeclared, which is correct and is why the assertion is on this arm's OWN wording:
+# a grep for the undeclared-emitter message would be satisfied by arm D's ordinary finding.
+cp "$V" "$V.orig"
+sed "s@^\\([[:space:]]*ESV_EXEMPT='\\)\\([^ ']*\\) [^']*'@\\1\\2'@" "$V.orig" > "$V"
+if cmp -s "$V.orig" "$V"; then
+  bad "FIXTURE BROKEN: the I93 unreasoned-exemption mutation matched nothing in the validator, so this assertion is unproven"
+else
+  out="$(vrun)"
+  if grep -q "exemption list carries '$esv_xp' with no reason after the path" <<<"$out"; then
+    ok "an arm D exemption with no reason after the path FAILS I93 (a bare path reads exactly like a declaration somebody forgot)"
+  else
+    bad "arm D accepted an exemption with no reason — a hole in the guard can be opened with no record of why, and the next author reading it cannot tell it from an omission"
+  fi
+fi
+mv "$V.orig" "$V"
+}
+
+# --- Assertion 37: I93 — arm D's four SELF-PROBE bits can actually fire ---------
+# I93 runs a scored probe over a seeded tree BEFORE it reads the corpus, and arm D's decision
+# (`esv_undeclared`) is factored out so the probe can drive it in all four directions. On a
+# working tree that probe scores 0 and prints nothing, which is precisely the shape of a check
+# that cannot fire: nothing else in this battery would notice if the four bits arm D added
+# were unreachable, because every OTHER assertion here needs the probe to score 0 in order to
+# reach the corpus at all.
+#
+# SO THE SUBJECT IS MUTATED, NOT THE TREE, and the assertion is on the EXACT SCORE. The score
+# names which bits fired: a mutant that neuters the join and one that widens it to match
+# everything must produce two DIFFERENT totals, and asserting on the number rather than on
+# "the probe complained" is what stops one mutation scoring the other's kill.
+A37_i93_probe_arm_d_bits() {
+# ARM 1 — THE JOIN RETURNS NOTHING. `return 0` ahead of the body, so the guard matches
+# NOTHING rather than everything: a widened guard often prints what the original printed and
+# scores a kill it did not earn. Expected 1001000000 = +1000000 (the seeded undeclared path
+# was not reported, which is the whole of arm D) +1000000000 (the result is not the one
+# expected path). The declared/exempt suppression bits must stay quiet: an empty result
+# contains neither, and a total that included them would mean the probe cannot tell a join
+# that reports nothing from one that reports everything.
+cp "$V" "$V.orig"
+sed 's@^esv_undeclared() {$@esv_undeclared() { return 0@' "$V.orig" > "$V"
+if cmp -s "$V.orig" "$V"; then
+  bad "FIXTURE BROKEN: the I93 esv_undeclared neutering mutation matched nothing, so the probe's arm D bits are unproven"
+else
+  out="$(vrun)"
+  if grep -q "I93's probe scored 1001000000" <<<"$out"; then
+    ok "a reverse join that reports nothing is caught by I93's own probe BEFORE the corpus is read (arm D's +1000000 and +1000000000 bits are reachable)"
+  else
+    bad "esv_undeclared was neutered to return nothing and I93's probe still scored 0 — the four bits guarding arm D cannot fire, so arm D's silence over the real tree establishes only that it ran"
+  fi
+fi
+mv "$V.orig" "$V"
+
+# ARM 2 — THE JOIN REPORTS EVERYTHING. The two membership tests are anchored on the argument
+# that SEPARATES them ($2 the declared list, $3 the exempt list), never on the shared call
+# shape: one sed keyed on the common text would edit both lines, and a mutation that moves two
+# cells scores a kill neither arm earned. Expected 1110000000 = +10000000 (a DECLARED emitter
+# came back, so arm D would fire on every conforming file) +100000000 (an EXEMPT one came
+# back, so the exemption is inert) +1000000000 (the result is not the one expected path). The
+# +1000000 bit must stay quiet here: the undeclared path IS reported, and a total carrying it
+# would mean the probe is scoring the mutation rather than the behaviour.
+cp "$V" "$V.orig"
+sed -e 's@in_lines "$esv_u_p" "$2" && continue@:@' \
+    -e 's@in_lines "$esv_u_p" "$3" && continue@:@' "$V.orig" > "$V"
+if cmp -s "$V.orig" "$V"; then
+  bad "FIXTURE BROKEN: the I93 esv_undeclared widening mutation matched nothing, so the probe's suppression bits are unproven"
+else
+  out="$(vrun)"
+  if grep -q "I93's probe scored 1110000000" <<<"$out"; then
+    ok "a reverse join that reports DECLARED and EXEMPT files too is caught by the same probe (the suppression bits score separately from the fires-at-all bit)"
+  else
+    bad "esv_undeclared was widened to report every file it was handed and I93's probe did not score it — arm D could fail the tree as it stands, on files the map declares, with nothing upstream to catch it"
+  fi
+fi
+mv "$V.orig" "$V"
+}
+
 
 # ---------------------------------------------------------------------------
 # THE DRIVER

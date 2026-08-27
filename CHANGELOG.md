@@ -15,6 +15,78 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.419.0] - 2026-08-26
+
+### `I93`'s join now runs BOTH ways, and the third hand-list behind it is deleted
+
+`BL-090` closed. Its subject was a join that could not fail in one direction:
+`scripts/validate-enforcement-map.sh`'s arm A asked whether every DECLARED emitter of the
+empty-subject verdict prints the token, and nothing asked whether every file PRINTING the
+token is declared. A validator that adopted the vocabulary without registering joined it
+silently and `docs/vocabulary-index.md` under-reported the set. Measured before the fix, by
+seeding rather than by reading the arms: a new `core/scripts` file whose only emission was the
+declared token, named nowhere in the map, drove the validator to **rc 0** with no finding.
+
+**Arm D is the reverse join.** Its population is every file under `core/scripts/` and
+`scripts/` -- deliberately wider than arm C's `*.sh`, because arm C asks a shell-grammar
+question and this one asks who joined a vocabulary, which no file extension answers;
+`core/scripts/gen-architecture-index.js` and `scripts/verify-backlog-bl056.py` exist today.
+`core/fixtures/`, `docs/` and `CHANGELOG.md` are excluded and the exclusion is stated in the
+arm: a fixture carries the token because it ASSERTS on one, so sweeping fixtures would demand
+an exemption per fixture -- the hand-list this arm exists to delete.
+
+**The one exemption is the file that PROVED the arm was missing**, which is the shape
+`BL-090` predicted: `scripts/validate-plan-shape.sh` emits the token and must NOT be declared,
+because `enforcement-map.yaml` ships to consumers and that script does not, so a declared path
+would resolve nowhere in a consumer tree and could never be falsified where it is wrong. An
+exemption is a hole in a guard, so the hole is checked four ways -- a bare path with no reason
+fails, a path both declared and exempt fails, an exempt file that has moved fails, and an
+exempt file that no longer EMITS fails. That last one is arm D's positive control: it is the
+one path the sweep is required to find emitting, in the same invocation as the zero it
+licenses.
+
+**The third hand-list is gone.** `# vocabulary-readers:` in the I93 arm header restated
+sixteen paths the yaml already declares, consumed only by
+`scripts/render-vocabulary-index.sh` and bound by no arm -- which is what made `BL-078`'s
+receipt satisfiable by editing one comment. Both path fields now accept the sentinel
+`@owner-declares`, and the renderer DERIVES the lists from the owner through the row's
+existing extract slug. The literal form stays for the other six vocabularies, whose owners
+declare members and say nothing about who reads them.
+
+**`docs/vocabulary-index.md` gained an Emitters column.** Its Readers column had been carrying
+the fourteen emitters, which is not what arm B means by a reader.
+
+**The change is fork-NEGATIVE by 47, and building it is what exposed why.**
+`for f in dir/*.sh; do [ -f "$f" ] && arr[...]="$f"; done` costs one fork PER CANDIDATE, and
+arm C was running it over 48 files. Both populations now come from a single glob expansion
+plus one `esv_glob_matched` test. Differential on two extracted trees, asserted to differ
+before the comparison was read: HEAD **7049**, branch **7002**. `FORK_BUDGET` is ratcheted
+**7076 -> 7029** rather than left where it was, because 73 forks of unearned headroom is a
+budget that cannot fire. Wall clock did not move and no speed-up is claimed -- 47 forks of
+7050 is below what three reps can resolve (20.4s before, 20.0s after).
+
+**`esv_glob_matched` answers for ONE glob**, and arm D tests each population separately: with
+two patterns concatenated, a tree where NEITHER matched still holds two elements and a count
+test reads as a match. That is a guard that cannot fire on the state it exists for, caught
+while writing it.
+
+### Fixtures
+
+`core/fixtures/enforcement-map-sites/` gained assertions **A35-A37**: arm D fires on an
+undeclared emitter under `core/scripts/`, under `scripts/`, and on one that is not a `.sh`;
+stays quiet on the near-miss where the token appears only in a comment; a mutant with arm D
+neutered; all four exemption arms; and both directions of the four self-probe bits
+`esv_undeclared` added, asserted on the EXACT score (`1001000000` for a join that reports
+nothing, `1110000000` for one that reports everything) so neither mutation can score the
+other's kill. The token and the exempt path are DERIVED from the seed rather than typed -- a
+fixture that restates a controlled vocabulary is a second copy of it.
+
+`core/fixtures/vocabulary-index/` went from 11 mutants to 14: the sentinel on a slug with no
+path extractor, an owner whose derived list is empty, and a DERIVED path naming a file that
+does not exist. Its seed now exercises `@owner-declares` in both fields, with decoy lists
+under neighbouring top-level keys demanded ABSENT -- a reader keyed on `- ` indentation rather
+than on the block and the list name passes the presence arm and fails that one.
+
 ## [0.418.0] - 2026-08-26
 
 ### `docs/backlog.md` is a queue and now has a depth — and the ceiling brought a hazard with it
