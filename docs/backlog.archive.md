@@ -2262,3 +2262,69 @@ probe's four new bits; `vocabulary-index` went 11 -> 14 mutants. The change is f
 
 verify: sh M=core/skills/ai-dlc/enforcement-map.yaml; V=scripts/validate-enforcement-map.sh; [ -f "$M" ] && [ -f "$V" ] || exit 9; tok="$(awk '/^empty_subject_verdict:/{on=1;next} on&&/^[^[:space:]#]/{exit} on&&/^  token:[[:space:]]/{v=$0;sub(/^  token:[[:space:]]*/,"",v);print v}' "$M")"; [ -n "$tok" ] || exit 9; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$V" >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; printf '%s\n' '#!/bin/bash' "echo \"probe: ${tok} — seeded undeclared emitter\"" 'exit 0' > "$D/core/scripts/validate-bl090-probe.sh"; n="$(awk -v t="$tok" '{ if (index($0,t)==0) next; s=$0; sub(/^[[:space:]]+/,"",s); if (substr(s,1,1)=="#") next; c++ } END { print c+0 }' "$D/core/scripts/validate-bl090-probe.sh")"; [ "$n" -gt 0 ] || { rm -rf "$D"; exit 9; }; grep -qF 'validate-bl090-probe.sh' "$D/$M" && { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$V" >/dev/null 2>&1 ); rc=$?; rm -rf "$D"; [ "$rc" -ne 0 ] || exit 1; exit 0
 
+## BL-094 — a marker field declared TWICE is last-wins and silent, so a contradiction between two declarations of one field is never reported
+
+**LANDED (v0.421.0, verified 045ef6d9).** `MARKER_AWK` now carries a per-block partition — five
+scalar seen-flags reset in `flush()` and `BEGIN` — so a second declaration of any of the five
+fields is refused rather than resolved by overwriting, naming the block, the line, the field and
+BOTH values. The seen-flags are separate from the values because an emptiness test accepts a
+second declaration whose first was EMPTY, which is the contradiction being refused.
+
+**The likely fix named below was right and the receipt filed below was NOT**, which is the part
+worth reading. The original receipt seeded one of the five fields, so a partition covering that
+field alone returned exit 0 while a duplicated `vocabulary-owner:` still rendered silently. It
+has been replaced; see the paragraph above the `verify:` line. Two further defects were found by
+seeding states this entry's own population excludes: a finding naming only the field and its two
+values does not LOCATE the offending block, and an unreadable corpus was reported as a changed
+grammar. Both fixed in the same release.
+
+**The renderer resolves a repeated field by overwriting, and says nothing.**
+`scripts/render-vocabulary-index.sh`'s `MARKER_AWK` assigns on every matching comment line —
+`vocabulary-readers:`, `vocabulary-emitters:`, `vocabulary-owner:`, `vocabulary-extract:` and
+`vocabulary-invariant:` alike — so a second declaration of the same field silently discards the
+first. The row renders from the LAST one, `--check` byte-compares clean, and the gate is green.
+
+**Measured on the real renderer, in a scratch copy.** A literal reader path inserted immediately
+above the `@owner-declares` sentinel gives two `# vocabulary-readers:` lines with different
+values: renderer **exit 0**, index written, the derived list rendered and the literal
+declaration discarded with no message. Control in the same invocation: the unseeded copy passes
+`--check`.
+
+**It is PRE-EXISTING, not introduced by the field that exposed it.** Driven against
+`5efb3d17^` — before `vocabulary-emitters:` existed — with `# vocabulary-readers:` duplicated:
+renderer **exit 0** there too, against a control confirming that copy carries no emitters field.
+`v0.419.0` widened the surface from four fields to five; it did not create the behaviour.
+
+**Why it matters here specifically.** This file's whole subject is that one declaration has one
+home. Two declarations of one field is the state that satisfies NEITHER reading, and the
+renderer already refuses the sibling case — `(consumer-owned)` alongside an extractor fails
+loudly with "one of the two declarations is wrong". A repeated field is the same class and is
+accepted. Arm D of `I93` refuses the same shape one level out, failing the push when a path is
+both declared an emitter and exempted.
+
+**The likely fix is a partition rather than a detector**: have `MARKER_AWK` refuse to overwrite
+a field that is already set within one marker block, so the contradictory state cannot be
+expressed. Measure the false-positive set first — a marker block is delimited by the next arm
+header, and an arm header inside a heredoc or a quoted string could make two unrelated blocks
+read as one.
+
+Tiered **NOTE**. Nothing emits a wrong verdict today and the rendered index is correct on the
+live tree; the cost is that a contradiction is unreportable, which is the state every other
+declaration in this file is held out of.
+
+Found by an adversarial pass over `v0.419.0`/`v0.420.0` run after both had merged.
+
+**The receipt below REPLACED the one filed with this entry, and the reason is a measured false
+close.** The original seeded a duplicate `vocabulary-readers:` only, so a partition applied to
+that ONE field returned exit 0 while a duplicated `vocabulary-owner:` still rendered silently —
+four fifths of this entry's stated subject closable without being fixed. Two more defects went
+with it: a bare count guard over the same line satisfied it while detecting nothing about
+duplication, and its `-ge 2` seed assertion was VACUOUS, because six `^# vocabulary-readers:`
+lines pre-exist and a no-op seed passes it. It also anchored on `^# ` where `MARKER_AWK` accepts
+`^[[:blank:]]*#[[:blank:]]*`, and this file already carries one INDENTED marker block, so two
+spaces on the sentinel sent it to exit 9 — reported as STILL-LIVE. The replacement seeds a
+VERBATIM duplicate of each of the five fields in turn, restoring between rounds, asserts the
+seed landed by both line count and field count, and requires all five to be refused.
+
+verify: sh R=scripts/render-vocabulary-index.sh; M=scripts/validate-enforcement-map.sh; [ -f "$R" ] && [ -f "$M" ] || exit 9; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" --check >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; cp "$D/$M" "$D/m.orig" || { rm -rf "$D"; exit 9; }; n=0; for f in invariant owner extract readers emitters; do cp "$D/m.orig" "$D/$M"; L="$(grep -n "^[[:blank:]]*#[[:blank:]]*vocabulary-$f:" "$D/$M" | head -1 | cut -d: -f1)"; [ -n "$L" ] || { rm -rf "$D"; exit 9; }; b0="$(wc -l < "$D/$M")"; c0="$(grep -c "^[[:blank:]]*#[[:blank:]]*vocabulary-$f:" "$D/$M")"; awk -v n="$L" 'NR==n{print} {print}' "$D/$M" > "$D/m.tmp" || { rm -rf "$D"; exit 9; }; mv "$D/m.tmp" "$D/$M"; [ "$(wc -l < "$D/$M")" -eq "$((b0+1))" ] || { rm -rf "$D"; exit 9; }; [ "$(grep -c "^[[:blank:]]*#[[:blank:]]*vocabulary-$f:" "$D/$M")" -eq "$((c0+1))" ] || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" >/dev/null 2>&1 ) || n=$((n+1)); done; cp "$D/m.orig" "$D/$M"; ( cd "$D" && bash "$R" >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; rm -rf "$D"; [ "$n" -eq 5 ] || exit 1; exit 0
+
