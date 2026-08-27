@@ -826,29 +826,63 @@ so no block written before it changes verdict.
    moved.** A stale action 1 costs a whole session redoing a batch. A stale figure costs the
    trust that makes the other figures usable. A stale command costs whichever the reader
    believes.
-7. **REPORT THE DELIVERY GAP, EVERY BATCH, AND RECOMMEND A PULL WHEN IT IS NON-ZERO.** Run the
-   delivery-gap derivation above and give the operator three things: how many discharged
-   candidates are PENDING, how many releases behind the consumer is, and whether the range
-   carries a MODE-ONLY change to `core/` (measured, not asserted — see the hazard note above).
+7. **DETECT WHETHER A PULL IS OWED, AND IF IT IS, WRITE A RUNBOOK. Do not run the pull.**
 
-   **You cannot run the pull and must not try.** It happens in a graph session the operator
-   drives; this repo's side is the released version plus the brief. What you owe is the number
-   and the recommendation.
+   **THE DETECTION, run every batch after the merge.** Three readings from the delivery-gap
+   derivation above, and the first one is the trigger:
 
-   **The gap is what makes this program's own metric honest.** Every batch discharges roughly one
-   candidate and adds it to the pending queue; only a pull moves it to the consumer, where its
-   ledger entry can actually close. A program that never prompts a pull reports progress that the
-   consumer cannot see — which is the shape `consumer-boundary.md` exists to prevent.
+   - **PENDING count > 0** — at least one discharged candidate the consumer cannot see. **This is
+     the trigger on its own.** It is normally 1 per batch, so it goes non-zero almost every time
+     and the question is only whether to bank it or send it.
+   - **releases behind** — `installed` vs `VERSION`. Past **five**, treat the range as WIDE and
+     say so; the consumer's own history is `0.373.0 → 0.378.0` then `0.412.0 → 0.415.0`, and a
+     wide range means more paths adjudicated in one session and a bigger blast radius if a
+     bootstrapping step is in it.
+   - **is a BOOTSTRAPPING step in the range** — did this program change `preclassify.sh`,
+     `apply.sh`, `ledger-reverify.sh` or the skill itself? The consumer's INSTALLED copy runs the
+     pull that carries its own repair, so the fix cannot protect the pull delivering it.
+     **MEASURE the specific hazard rather than warning about it** — for the mode defect that is
+     `git diff --raw <installed-commit>..origin/main -- core/`, mode-only being modes-differ and
+     blobs-equal. Batch 14 measured 0 of them and the warning would have been false.
 
-   **Prefer SMALL, FREQUENT pulls, and this is a measured preference rather than a taste.** The
-   consumer's own history shows the opposite pattern — `0.373.0 → 0.378.0`, then `0.412.0 →
-   0.415.0` — sporadic and wide. A wide range is more paths to adjudicate in one session, more
-   `BOTH-CHANGED->CLASSIFY` hand-backs, and a larger blast radius if a bootstrapping step is among
-   them. Recommend a pull once the pending count is non-zero and the batch has merged.
+   **THE PATTERN IS A RUNBOOK IN `docs/plans/`, and it already exists — do not invent one.**
+   `graph-pull-0353-to-0354.md` through `graph-pull-0356-to-0357.md`, `graph-0396-to-0403-pull.md`
+   and roughly a dozen others are the corpus; **read the most recent before writing a new one.**
+   `docs/plans/graph-pull-0415-to-0425.md` is batch 14's, written to that shape. What the shape
+   requires:
 
-   **Rehearse a wide pull on a `file://` clone before recommending it**, per
-   `consumer-boundary.md`, and take every figure in the brief from that run rather than from a
-   reading of the code.
+   - **Name it `graph-pull-<from>-to-<to>.md`** and open with the `READ and FOLLOW` one-liner
+     naming ITSELF. `validate-plan-shape.sh` checks the shape; a live plan also needs at least one
+     resolving `path:line` citation or **P4** fails the push.
+   - **Write NO ref and NO sha into it.** The skill pulls latest and resolves the ref itself. A
+     sha written down goes stale the moment anything lands — including the docs commit adding the
+     runbook.
+   - **Do NOT re-describe the pull.** The `ai-dlc-update` skill owns resolving the ref, gating its
+     self-update, carrying the machinery slice and emitting the worklist. Every step a runbook
+     writes about that is a restatement that will drift. Say what the RANGE carries and what is
+     special; let the skill's own report be the authority.
+   - **`## Start here` must say the session's PROJECT ROOT is `/Users/n8/git/graph`** — skill
+     scope follows the session root, not a Bash `cd`, and a session rooted in the distribution
+     cannot invoke the skill at all.
+   - **Say the consumer's tree is dirty and that this is EXPECTED** (`_bmad-output/` pipeline
+     state), do not enumerate the files because the set grows while the pipeline runs, and forbid
+     commit/revert/stash/clean — committing makes the branch ahead and the preflight auto-pushes
+     in-flight state on a bare dry run.
+   - **REHEARSE ON A `file://` CLONE FIRST and put the rehearsal's numbers in the file**, marked
+     as an expectation rather than a guarantee, with an instruction to STOP and ping if the real
+     run disagrees. Batch 14's rehearsal: 38 rows, 29 `UPSTREAM-ONLY`, 1 add, 8 `DIST-ONLY-SKIP`,
+     **0 `->CLASSIFY`**, all four templates `TEMPLATE-UNCHANGED-NOOP`. A disagreement is
+     information and is worth more than a clean report.
+   - **Make closing the candidates a NUMBERED ACTION, by id.** The pull is not the point; the
+     ledger closing is. Tell the session to run `ledger-reverify` **from the consumer root** — a
+     distribution-root run has turned a live `STILL-LIVE` into a `CLOSE-CANDIDATE`, and a false
+     close retires a live entry — and to report which ids closed and which did not.
+   - **Leave a `## Discharge` section empty for the executor**, and require the file be retitled
+     `DISCHARGED — DO NOT EXECUTE` when spent. A spent runbook still reading as instructions is
+     this directory's recurring hazard: measured once at 5 of 6 files.
+
+   **You cannot run the pull and must not try.** `consumer-boundary.md` is unconditional. Your
+   deliverable is the released version, the runbook, and the number.
 8. **Cite every closed id verbatim in the RELEASE COMMIT MESSAGE**, not only in `CHANGELOG.md`.
    `named_absorbed()` resolves the signal with `git log -F --grep`, which reads commit MESSAGES;
    a `###` section in the CHANGELOG is in the diff and produces no row at all.
