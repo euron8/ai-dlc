@@ -322,9 +322,11 @@ those have not been examined at all. Their status in the consumer's own ledger i
 ESTABLISHED**; some may already be `WITHDRAWN` or `ADOPTED` upstream. **Establish that before
 treating 20 as a workload.**
 
-At batch 14's close those read **69 live / 31 archived / 61 STILL-LIVE + 8 HAND-REVIEW
-+ 0 CLOSE-CANDIDATE**, against an impossible-id control of 0. Every one of those was RE-DERIVED
-by running the commands above after the rotation, not by editing the sentence.
+Re-derived at v0.425.0 by running the commands, not by editing the sentence: **69 live / 32
+archived / 61 STILL-LIVE + 8 HAND-REVIEW + 0 CLOSE-CANDIDATE**, against an impossible-verdict
+control of 0 and a `BL-006`-still-live control of 1. **Batch 14 recorded 31 archived and the
+rotation of `BL-101` moved it to 32 without the sentence being updated** — which is this block's
+own failure mode, one release after it was written down.
 
 **THE LIVE COUNT WENT UP ACROSS A BATCH THAT CLOSED AN ENTRY, AND THAT IS THE NORMAL CASE RATHER
 THAN AN ERROR.** Batch 12 closed and rotated one (`BL-094`) and filed FOUR (`BL-095`, `BL-096`,
@@ -390,8 +392,18 @@ work. Batches 1–14 have all MERGED AND PUSHED; the releases are `v0.374.0`, `v
 many further machinery releases have shipped between `v0.383.0` and `v0.414.0` that are NOT part
 of this program, which is why the batch numbering and the version numbering stopped agreeing.
 
-**BATCH 14 IS COMPLETE, MERGED AND PUSHED AS `v0.423.0`. CANDIDATES DISCHARGED 6 → 7 OF 49**,
-which is the only figure that measures this program. `BL-033` CLOSED and rotated, discharging
+**THE `0.415.0 → 0.425.0` PULL IS COMPLETE AND THE CONSUMER IS AT `0.425.0` ON ALL FOUR STAMP
+FIELDS.** Five PRs in a graph session the operator drove; the runbook is DISCHARGED at
+`docs/plans/graph-pull-0415-to-0425.md` and its Discharge section is the record. **`PC-S333` and
+`PC-S314` are CLOSED in the consumer's own ledger** — live=0, archive=1 each — which is the
+terminal state this program aims at, reached for the first time. The delivery gap is **ZERO**.
+Do not re-run the detection in action 7 expecting work; derive it, and it will say so.
+
+**BATCH 14 IS COMPLETE, MERGED AND PUSHED AS `v0.423.0`.** Its own report said "CANDIDATES
+DISCHARGED 6 → 7 OF 49", and **both halves of that figure were wrong** — the denominator through a
+grammar missing two record forms, the numerator through a metric that sheds its own successes. The
+current partition is in the derive block above: **5 DISCHARGED, 14 TERMINAL, 60 live**. Read it
+there and nowhere else. `BL-033` CLOSED and rotated, discharging
 `PC-S314`, with the id in the RELEASE COMMIT MESSAGE where `named_absorbed()` can read it.
 Release `5c3711e2`, close-and-rotate `c174b60a`. The entry counters moved **70 → 69** live and
 **30 → 31** archived; those are recorded to show the rotation HAPPENED, **not as progress** —
@@ -931,8 +943,11 @@ so no block written before it changes verdict.
    **THE PATTERN IS A RUNBOOK IN `docs/plans/`, and it already exists — do not invent one.**
    `graph-pull-0353-to-0354.md` through `graph-pull-0356-to-0357.md`, `graph-0396-to-0403-pull.md`
    and roughly a dozen others are the corpus; **read the most recent before writing a new one.**
-   `docs/plans/graph-pull-0415-to-0425.md` is batch 14's, written to that shape. What the shape
-   requires:
+   `docs/plans/graph-pull-0415-to-0425.md` is the most recent and is **DISCHARGED — read it as a
+   worked example, not as a live plan.** Its `## Discharge` section is the more useful half: it
+   records that the pull SPLIT on a `SELF-UPDATE-SAFE-STOP`, that its rehearsal's row count did not
+   decompose across the split, and that its stop list was an ENUMERATION where it should have been
+   a class — the run hit two stop-worthy states it had not named. What the shape requires:
 
    - **Name it `graph-pull-<from>-to-<to>.md`** and open with the `READ and FOLLOW` one-liner
      naming ITSELF. `validate-plan-shape.sh` checks the shape; a live plan also needs at least one
