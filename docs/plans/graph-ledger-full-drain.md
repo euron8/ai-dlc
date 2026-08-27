@@ -492,12 +492,31 @@ so no block written before it changes verdict.
    CORRECT fix be one it REJECTS. Key mutants on LOCATION and observable BEHAVIOUR, never on a
    spelling. **A hand can die mid-task** — one did, to a machine sleep, leaving a fixture
    half-edited and RED; check each one's deliverable rather than its report.
-4. **Gate it the way the hook runs it, and read the GATE's own exit.**
-   `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`, or simply push and let the hook's own run
-   be the single gate — running it manually and then pushing pays for it twice. **The fixture
-   tally is NOT the verdict**: a run has exited 1 with the suite reporting PASS. Tabulate every
-   `── phase` header against PASS/FAIL, and read each changed fixture BY NAME against an
-   impossible-name control in the same invocation. This shell has no `PIPESTATUS`, so
+4. **Gate it the way the hook runs it, and read the GATE's own exit.** Simply push and let the
+   hook's own run be the single gate — running it manually and then pushing pays for it twice.
+
+   **`AI_DLC_FIXTURE_NO_SKIP=1` IS FOR THE RELEASE PUSH ONLY. DO NOT SET IT ON A DOC-ONLY
+   FOLLOW-UP.** It disables the skip that exists to make exactly those pushes cheap, and setting
+   it by reflex is a measured waste, not a theoretical one: batch 12 set it on **nine**
+   consecutive pushes, several of which changed only `docs/`. `scripts/suite-content-key.sh`
+   lists `docs` in its `EXCLUDE` set and states the consequence itself — *"a new file under
+   `docs/` moves the key; editing one does not"* — so with the flag left alone those runs skip
+   the fixture suite outright. Forced instead: **167 units**, against **0** fixtures whose
+   read-set names the edited file.
+
+   The rule, and it is a two-way test rather than a preference:
+   - **changed a tracked path outside `EXCLUDE`** (`core/`, `scripts/`, `.githooks/`,
+     `.claude/`, or ANY NEW file, `docs/` included) → set the flag, this is the release gate;
+   - **edited only existing `docs/`, `CHANGELOG.md`, `VERSION` or `CLAUDE.md`** → do NOT set it,
+     and let the content key and the read-set map decide.
+
+   A NEW file under `docs/` DOES move the key, so the second branch is about EDITING, not about
+   the directory. When unsure, derive it — `bash scripts/suite-content-key.sh` before and after,
+   and compare.
+
+   **The fixture tally is NOT the verdict**: a run has exited 1 with the suite reporting PASS.
+   Tabulate every `── phase` header against PASS/FAIL, and read each changed fixture BY NAME
+   against an impossible-name control in the same invocation. This shell has no `PIPESTATUS`, so
    `cmd | tail` reports `tail`'s status — never read a push's exit through a pipe.
 5. **Close the batch properly. A `CLOSE-CANDIDATE` row is the instrument saying the fix is
    present; it is NOT the close.** Annotate each entry with `**LANDED (v<version>, verified
