@@ -15,6 +15,36 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.425.0] - 2026-08-27
+
+### A receipt that accepts two candidate fixes has established neither
+
+Adds one rule to `.claude/rules/verification-discipline.md`, folded into the existing receipt
+section rather than opening a new one, and raises the compaction-durable channel ceiling
+**47600 → 48100** to fit it. Measured before and after: 47573/47600 with 27 bytes free,
+48050/48100 after. The A6 arm still fires — forced to a ceiling of 1000 it exits 1.
+
+**The rule.** `BL-033` said in its own text that its receipt "takes either fix", and it did:
+one of the two was an arm reorder that answers `ALREADY-AT-THEIRS` for both a consumer that
+already carries the exec bit and one that still needs it. Build both candidates and score them;
+a receipt that cannot separate them is the finding, not a convenience. The second clause was
+learned with it — once an entry ROTATES, its receipt is archived and inert while the FIXTURE
+still runs, so a proposed receipt-weakness must be scored against the fixture before it is read
+as a coverage gap. At `v0.424.0` four implementations satisfied one receipt and the fixture
+killed three of them; only the fourth was a real gap.
+
+**THE SUBTRACTION IS STILL OWED, AND THIS IS THE SEVENTH CONSECUTIVE RAISE WITHOUT ONE.** What
+is different is only procedural, and the arm header says so rather than dressing it up: the
+choice was put to the operator as three costed options — raise, subtract first, or do not carry
+it — with the shortfall measured (477 bytes against 27 free) before the question was asked. They
+chose the raise knowing a vestigial sweep had NOT been attempted. That makes this a decision on
+record rather than a default taken under time pressure, which is the only respect in which it
+improves on the sixth.
+
+The rule is prose-only, so it may not be SCOPED; it is also exactly the judgment a subagent
+adjudicating a receipt needs, and a subagent's read of a scoped file never reaches the parent.
+Both bars apply independently.
+
 ## [0.424.0] - 2026-08-27
 
 ### Half of the previous release's fix could be reverted with the suite green

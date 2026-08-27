@@ -67,6 +67,12 @@ validates — three names appended to that one line returned receipt 0, render 0
 no owner, no invariant and no behaviour changed. Ask of every receipt what ELSE satisfies it,
 and prefer the arm that RUNS the subject over the one that reads its output.
 
+**A receipt that accepts TWO candidate fixes has established neither.** Measured: an entry said
+its receipt "takes either fix" and it did — one of the two was a regression that shipped nothing.
+Build both and score them. Once an entry rotates its receipt is ARCHIVED and inert while the
+FIXTURE still runs, so score a proposed receipt-weakness against the fixture before reading it as
+a coverage gap: four implementations satisfied one receipt and the fixture killed three.
+
 ## A control that agrees with the verdict is not a control
 
 Run the control against the thing the verdict claims is ABSENT, and read its output. A

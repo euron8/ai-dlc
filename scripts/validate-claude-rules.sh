@@ -413,8 +413,33 @@ fi
 # scored their own subject as a non-instance); the unobservable-property clause in
 # `mechanism-design.md`; and the subagent report-file hook in `tool-hazards.md`. The first three
 # are needed by SUBAGENTS, whose reads never reach the parent, which bars scoping independently.
+#
 # ---------------------------------------------------------------------------
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-47600}"
+#
+# RAISED A SEVENTH TIME, 47600 -> 48100, FOR ONE RULE COSTING 477 BYTES, ON AN EXPLICIT OPERATOR
+# RULING. The subtraction is STILL OWED and this is the seventh consecutive raise without one.
+#
+# WHAT IS DIFFERENT THIS TIME, AND IT IS ONLY PROCEDURAL: the choice was put to the operator as
+# three costed options -- raise, subtract first, or do not carry it -- with the shortfall measured
+# (477 bytes against 27 free) before the question was asked rather than after. They chose the
+# raise knowing a vestigial sweep had NOT been attempted. So this raise is a decision on record
+# rather than a default taken under time pressure, which is the only respect in which it improves
+# on the sixth.
+#
+# THE RULE: "a receipt that accepts TWO candidate fixes has established neither", folded into the
+# existing receipt section of `verification-discipline.md` rather than opening a new one. Earned
+# at v0.423.0/v0.424.0 -- `BL-033` said in its own text that its receipt "takes either fix", and
+# it did: one of the two was an arm reorder that answers ALREADY-AT-THEIRS for both a consumer
+# that has the exec bit and one that still needs it. It carries a second clause because the two
+# were learned together: once an entry ROTATES, its receipt is archived and inert while the
+# FIXTURE still runs, so a proposed receipt-weakness must be scored against the fixture before it
+# is read as a coverage gap. Measured at v0.424.0 -- four implementations satisfied one receipt
+# and the fixture killed three of them; only the fourth was a real gap.
+#
+# Prose-only, so it may NOT be scoped, and it is exactly the kind of judgment a subagent
+# adjudicating a receipt needs -- which bars `paths:` independently of the prose-only bar.
+# ---------------------------------------------------------------------------
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-48100}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done
