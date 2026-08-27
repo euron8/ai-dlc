@@ -329,9 +329,13 @@ so no block written before it changes verdict.
 1. **BATCH 13. Batch 12 is done — see the block above — and the 69 survivors are the corpus.
    Pick the subject and say why.**
 
-   **There is no standing recommendation, and that is deliberate.** Re-derive before choosing:
-   run each candidate's receipt directly and read the RAW exit code, then re-derive the
-   entry's population rather than believing it.
+   **There IS a standing recommendation this time, and it is named below.** Earlier batches
+   deliberately carried none, because no entry had a fix argued out; batch 12 ended with three
+   that do. Take it or reject it, but do not read the recommendation and the re-derivation
+   instruction as alternatives — **the recommendation does not excuse the re-derivation.** Run
+   each candidate's receipt directly and read the RAW exit code, then re-derive the entry's
+   population rather than believing it. Batch 12's own subject was filed with a receipt that
+   closed on one field of the five its entry enumerates, and only running it found that.
 
    **`BL-096`, `BL-097` and `BL-098` are the readiest subjects and they are ONE subsystem
    together** — all three are "a repeated declaration is resolved silently" in the two index
