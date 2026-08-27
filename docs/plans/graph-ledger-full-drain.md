@@ -37,34 +37,36 @@ grep -cE '^## BL-[0-9]+' docs/backlog.archive.md  # archived
 bash scripts/backlog-reverify.sh | grep -oE 'CLOSE-CANDIDATE|STILL-LIVE|HAND-REVIEW|NEEDS-REVIEW' | sort | uniq -c
 ```
 
-At the last session's close those read **65 live / 27 archived / 57 STILL-LIVE + 7 HAND-REVIEW
-+ 1 CLOSE-CANDIDATE**, against an impossible-id control of 0.
+At the last session's close those read **66 live / 27 archived / 58 STILL-LIVE + 8 HAND-REVIEW
++ 0 CLOSE-CANDIDATE**, against an impossible-id control of 0.
 
-**THAT CLOSE-CANDIDATE IS `BL-006` AND IT IS FALSE. DO NOT CLOSE IT.** Its receipt exits 0 on
-two COMMENT lines in `scripts/validate-claude-rules.sh`, one of which says the mechanism "was
-offered and declined for now". The flip was established rather than inferred: `git blame`
-attributes that line to `e2f3e42a` and the same receipt against an `e2f3e42a^` sandbox exits 1,
-so a documentation sentence turned it green. The entry carries the full measurement.
+**THE LEDGER NOW REPORTS ZERO `CLOSE-CANDIDATE`, AND THAT IS A RESULT RATHER THAN AN ABSENCE.**
+The one it used to carry was `BL-006`, and it was FALSE — the receipt exited 0 on two COMMENT
+lines in `scripts/validate-claude-rules.sh`, one of which said the mechanism "was offered and
+declined for now". Batch 10 re-anchored it, so a zero here now means what it says. **If a
+`CLOSE-CANDIDATE` appears, it is a hypothesis and not a verdict**: run the entry's receipt
+directly, read the raw exit code, and ask what ELSE satisfies it before closing anything.
 
 **A `STILL-LIVE` ROW IS NOT EVIDENCE THAT THE ENTRY IS LIVE, AND `BL-089` IS THE ENTRY THAT SAYS
 SO.** `backlog-reverify.sh` maps every non-zero `sh` exit to `STILL-LIVE  … "still reproduces
 here"`, but this corpus's receipts use **exit 9** to mean *"a precondition moved and I measured
-nothing"*. The two are one row. Measured at batch 9's close: **1 exit 9** — `BL-066`, whose
-receipt is broken shell. Batch 9 rebuilt the other one; `BL-076`'s had been unable to measure
+nothing"*. The two are one row. Measured at batch 10's close: **55 exit 1, 1 exit 9, 0 exit 0**
+across 56 `sh` receipts — the 9 is `BL-066`, whose receipt is broken shell. Batch 9 rebuilt the other one; `BL-076`'s had been unable to measure
 anything for 28 releases and read as `STILL-LIVE` the whole time.
 Derive the current pair rather than trusting that one; the count of live `sh` receipts moves
 with every batch and the control is the entries declaring `verify: manual`, which the engine
 does route to HAND-REVIEW.
 
 **DERIVE THAT CONTROL FROM THE ENGINE, NOT FROM A GREP, AND HERE IS WHY BOTH GREPS ARE WRONG.**
-`^verify: manual` returns 5 — it misses the three entries that INDENT the line, which
-`backlog-reverify.sh`'s own grammar (`^[ \t]*verify:`) accepts. Fixing the indent gives 8, which
+`^verify: manual` returns 6 — it misses the three entries that INDENT the line, which
+`backlog-reverify.sh`'s own grammar (`^[ \t]*verify:`) accepts. Fixing the indent gives 9, which
 is also wrong: both counts include the `verify: manual` line in the `## Receipts` LEGEND at
 `docs/backlog.md:25`, which is prose about the grammar and not an entry. The true number at
-v0.417.0 is **7**, and the only reader that gets it right is the engine, because it starts
+v0.418.0 is **8**, and the only reader that gets it right is the engine, because it starts
 entries at a `BL-` id and never counts the preamble. An earlier revision of this block quoted 5
 from the unindented grep; the revision after it fixed the PROSE and left the COMMAND, so the
-file stated 7 beside a command returning 5. Run the engine:
+file stated 7 beside a command returning 5. Every figure in this block was re-derived at
+v0.418.0 by running the commands, not by reading the sentences. Run the engine:
 
 This one is a LOOP, so run it through `bash -c` — your shell is zsh, where an unquoted `$var`
 is not word-split and a loop written for bash iterates once over the whole string.
@@ -90,14 +92,43 @@ the row above told you nothing.
 ### What is DONE — do not redo any of it
 
 **Phases 0–2, 4 and 5 are COMPLETE.** Phase 3 is the batch loop and it is the only remaining
-work. Batches 1–9 have all MERGED AND PUSHED; the releases are `v0.374.0`, `v0.375.0`,
-`v0.376.0`, `v0.377.0`, `v0.378.0`, `v0.379.0`, `v0.380.0`, `v0.415.0` and `v0.416.0`, each
-recorded in `CHANGELOG.md`. `v0.381.0` and `v0.382.0` followed batch 7 as machinery releases;
+work. Batches 1–10 have all MERGED AND PUSHED; the releases are `v0.374.0`, `v0.375.0`,
+`v0.376.0`, `v0.377.0`, `v0.378.0`, `v0.379.0`, `v0.380.0`, `v0.415.0`, `v0.416.0` and
+`v0.418.0`, each recorded in `CHANGELOG.md`. `v0.381.0` and `v0.382.0` followed batch 7 as machinery releases;
 many further machinery releases have shipped between `v0.383.0` and `v0.414.0` that are NOT part
 of this program, which is why the batch numbering and the version numbering stopped agreeing.
 
-**THE TRIAGE SWEEP IS COMPLETE, MERGED AND PUSHED AS `v0.417.0` (`8eb98209`). It was action 1
-and it is DONE. Do not re-run it.** All 64 live entries re-derived by 14 independent hands, one
+**BATCH 10 IS COMPLETE, MERGED AND PUSHED AS `v0.418.0`.** `BL-006` NARROWED and held open,
+`BL-093` filed. It was action 1 and it is DONE. Do not re-run it. Live **65 → 66**, archive
+**27** (nothing rotated — the entry was narrowed, not closed), and the ledger now reports
+**0 CLOSE-CANDIDATE** where it carried one false one. Gate exit **0** read from the hook's own
+status file with its mtime checked, 17 of 17 phases PASS, 0 FAIL lines, 167 units with the skip
+disabled, all five changed fixtures read BY NAME against an impossible-name control of 0.
+
+**THE ENTRY COULD NOT BE CLOSED, AND FINDING THAT OUT COST ONE ADVERSARIAL HAND.** `BL-006` had
+TEN separable claims and the ruled remedy discharged eight. The two survivors are a different
+corpus each — `docs/plans/` has no size arm, and the CONSUMER's own ledger is unbounded and
+unreachable from here — so the narrowed entry carries a CONJUNCTION receipt that cannot go green
+on one of them. **Enumerate an entry's distinct claims BEFORE reading a good measurement as a
+close**; that is `v0.417.0`'s lesson and it fired again immediately.
+
+**A CEILING MAKES A RED PUSH, AND THE CHEAPEST WAY TO CLEAR A RED PUSH WAS ONE LINE OF MARKDOWN.**
+Before the fix, annotating any entry `**LANDED (v...)**` archived it with `--check PASS`, rc=0 —
+reproduced against `BL-006` itself, whose own first line says DO NOT CLOSE. `backlog-rotate.sh`
+now refuses to move an entry whose evidence does not hold, and the guard sits before BOTH
+branches because `--check` filters `^ALREADY-CLOSED` from both sides of its own comparison.
+**The guard as originally specified would have missed its own motivating case**: `BL-006` was the
+only live entry whose receipt exits 0, so a receipt-only arm permits it and the SHA arm is what
+refuses. Ask of every new detector whether it fires on the case that motivated it.
+
+**A MEASUREMENT I GAVE THE OPERATOR WAS DEFECTIVE AND THEY RULED ON IT.** A byte clause was
+ruled, built, and withdrawn: the series behind it started at `158d7528`, which is not on the
+first-parent trunk, and its trend was n=1. Archived entries average 7193 bytes against a live
+mean of 3758, so rotation is the byte lever and it is denominated in ENTRIES. **Check that a
+series' endpoints are on the trunk before drawing a trend from it**, and say so when a figure
+you supplied turns out to be wrong.
+
+**THE TRIAGE SWEEP IS ALSO COMPLETE, MERGED AND PUSHED AS `v0.417.0` (`8eb98209`).** All 64 live entries re-derived by 14 independent hands, one
 question each, then 4 verifiers briefed to BREAK the proposed closes. **62 REPRODUCES, 2
 proposed closes, 1 survived attack.** Coverage joined both ways against the live ledger: nothing
 unexamined, nothing examined twice, no duplicates. Live **64 → 65**, archive **26 → 27**. Gate
@@ -169,22 +200,23 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **BATCH 10. The triage sweep is done — see the block above — and the survivors are the
-   corpus. Pick the subject and say why.**
+1. **BATCH 11. Batch 10 is done — see the block above — and the survivors are the corpus.
+   Pick the subject and say why.**
 
-   **`BL-006` is the recommendation, and it is the only entry whose defect is mis-reporting
-   RIGHT NOW.** It is the ledger's single CLOSE-CANDIDATE and that row is false; a session that
-   reads it and closes the entry retires a live defect, which is the one direction that loses
-   data permanently. Its receipt is broken in BOTH directions — closable by a comment, and its
-   `scripts/*.sh` pathspec makes a correct fix landed in `core/scripts/` invisible to it, while
-   its token set omits `MAX_LINES`. Closing it means choosing the bound (lines, bytes, or
-   entries), re-anchoring the receipt on the emitting arm, and building the arm that
-   `validate-claude-rules.sh:365` records as "offered and declined". The sweep deliberately did
-   NOT choose the bound: that is scope, and scope is the operator's.
+   **`BL-090` is the recommendation.** It was filed out of two independent re-derivations, its
+   fix is SUBTRACTIVE, and this repo's rule is to prefer the reshaped or reduced form over the
+   additive one — batch 10 was additive in every direction and cost a `FORK_BUDGET` raise for
+   it. Its subject is `I93`, which asks whether every DECLARED emitter emits the token and never
+   whether every EMITTER is declared, so a new one is invisible; that is a join that cannot fail
+   in one direction, which `mechanism-design.md` names as the mirror of a check that cannot
+   fire.
 
-   `BL-090` remains the coherent alternative the earlier revision named — filed out of two
-   independent re-derivations, its fix subtractive. `BL-082` and `BL-083` are still not one
-   subsystem, so taking them means saying which single thing you are closing.
+   `BL-006` is now NARROWED and still live, and it is the coherent alternative — but read its
+   receipt first: it is a CONJUNCTION over two corpora in two trees, and the consumer half is
+   not reachable from a distribution-side change. Taking it means taking the `docs/plans/` half
+   and saying so. `BL-093`, filed by batch 10, is a per-file judgment rather than one fix and is
+   NOT a batch subject as it stands. `BL-082` and `BL-083` are still not one subsystem, so
+   taking them means saying which single thing you are closing.
 
    **Run every candidate's receipt directly and read the RAW exit code before you scope it.**
    The sweep re-established that a `STILL-LIVE` row is not evidence the entry is live, and
