@@ -254,9 +254,28 @@ Two arms, either satisfies (dual-arm OR):
   no-op. Past its `**Expires after:**` count a suppression whose named check is
   still recorded `FAIL` needs fresh authorization; one whose cause was fixed
   reports nothing. See `escalations.md` for the `SUPPRESSED` field set.
-- If any entry has status `HARD_BLOCK` and is not RESOLVED, do NOT
-  proceed. `touch _bmad-output/pipeline-paused.flag` (Rule 3), then
-  report the block and wait for human input.
+- **The blocking clause is SCOPED BY SPRINT, and the entry header carries the scope.**
+  If an entry has status `HARD_BLOCK`, is not RESOLVED, and its header names THIS
+  sprint, do NOT proceed. `touch _bmad-output/pipeline-paused.flag` (Rule 3), then
+  report the block and wait for human input. The sprint predicate is Check 2a's, and
+  it is the same one `validate-escalation-resolution.sh` applies: `S<N>` in the
+  header, not followed by another digit.
+- **A `HARD_BLOCK` filed by an EARLIER sprint is SURFACED, not blocking, at an
+  `implementation`, `story` or `retro` gate.** Report it by header and by the sprint
+  that filed it, proceed, and carry it to the next `planning` or `sprint-review` gate.
+  Measured on the reference consumer: a nine-day-old sprint-303 finding about a
+  declined UI refactor and a CI alias-table gap blocked a live production bug-fix
+  sprint's implementation gate, and clearing it cost a fresh operator round-trip on an
+  unrelated subject at the worst moment to ask for one. The rule as previously written
+  could not distinguish this sprint's own unresolved decision from any decision anyone
+  left open, ever.
+- **It blocks at every `planning` and `sprint-review` gate whatever sprint filed it,
+  and that is what stops the bullet above being an escape hatch.** An unresolved
+  `HARD_BLOCK` cannot outrun the next planning boundary, which is where the operator is
+  already dispositioning scope and where the question is not an interruption. Letting a
+  sprint elapse buys a gate, never a disposition.
+- **An entry whose header names NO sprint blocks at EVERY gate.** An unknown sprint is
+  not a past one, and this arm fails closed.
 - `DECIDED_AUTONOMOUSLY` entries do not block. They are informational.
 - `SUPPRESSED` entries do not block **while in force**. They name a check, an
   expiry and an operator citation, and the script above adjudicates them. Past

@@ -15,6 +15,32 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.428.0] - 2026-08-27
+
+### Check 2 scopes its blocking clause by sprint
+
+`PC-S306-CHECK-2-HAS-NO-SPRINT-SCOPE`. Check 2's rule was *"if any entry has status
+`HARD_BLOCK` and is not RESOLVED, do NOT proceed"*, and read in full it named no sprint,
+story or path scope anywhere — `grep -ci sprint` over the check's whole body returned **0**
+against a control of 4 `HARD_BLOCK` occurrences in the same span. So any unresolved
+`HARD_BLOCK` ever filed blocked every gate of every later sprint.
+
+Reproduced on the reference consumer during a live production bug-fix sprint: a nine-day-old
+sprint-303 finding about a declined UI refactor and a CI alias-table gap FAILed the
+implementation gate, and clearing it cost a fresh operator round-trip on an unrelated subject
+mid-incident.
+
+The blocking clause is now scoped by the entry header's sprint — the same predicate Check 2a's
+`validate-escalation-resolution.sh` already applies (`S<N>` not followed by another digit). A
+`HARD_BLOCK` filed by an earlier sprint is SURFACED at an `implementation`, `story` or `retro`
+gate and blocks at every `planning` and `sprint-review` gate, so letting a sprint elapse buys a
+gate and never a disposition. An entry whose header names no sprint blocks everywhere: an
+unknown sprint is not a past one, and that arm fails closed.
+
+**The scoping precedent was already one check away and unread.** Check 2a's body has said
+*"legacy sprints are out of scope, so the gate does not wedge on old data"* since it shipped.
+Check 2 sat directly above it, unscoped, for the same corpus.
+
 ## [0.427.0] - 2026-08-27
 
 ### `--finish` refuses an unresolvable ref, and the consumer hook stops printing a circular remedy

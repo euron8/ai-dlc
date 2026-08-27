@@ -3275,3 +3275,49 @@ Found by an adversarial pass on `v0.426.0`. Not a `PC-` candidate, so it ranks b
 PC-backed set.
 
 verify: sh s=core/skills/ai-dlc-update/reconcile/settings-merge.sh; a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$s" ] && [ -f "$a" ] || exit 9; grep -q 'say WORKLIST settings-merge' "$a" || exit 9; grep -q 'worklist_n' "$a" || exit 9; code=$(sed 's/#.*//' "$s"); grep -q 'jq' <<<"$code" || exit 9; grep -qE '(echo|printf|say)[^#]*(retired hook|not carried by the template|cannot be registered)' <<<"$code" && exit 0; exit 1
+
+---
+
+## BL-104 — gate-validation Check 2 blocked on any unresolved HARD_BLOCK ever filed, with no sprint or relevance scope
+
+**Discharges `PC-S306-CHECK-2-HAS-NO-SPRINT-SCOPE`, filed by the reference consumer in
+sprint 306.** Check 2's rule read *"If any entry has status `HARD_BLOCK` and is not RESOLVED,
+do NOT proceed"* and named no sprint, story or path scope anywhere in its body. Measured over
+the check's whole span with a control in the same invocation: `grep -ci sprint` = **0**,
+control `grep -c HARD_BLOCK` = **4**. So any unresolved `HARD_BLOCK` ever filed in
+`docs/escalations/pending.md` blocked every gate of every later sprint, including one with no
+relationship to the blocker's subject.
+
+**The cost is measured, not hypothesised.** On the reference consumer, during a live
+production bug-fix sprint, a nine-day-old sprint-303 finding about a declined UI refactor and
+a CI alias-table gap FAILed the implementation gate. The mechanism to release it existed
+(Check 2's own `DEFERRAL_REQUEST` branch), but reaching it cost a full extra operator
+round-trip on a completely unrelated topic at the worst moment to ask for one.
+
+**The scoping predicate was already one check away.** Check 2a's body says *"legacy sprints
+are out of scope, so the gate does not wedge on old data"*, and
+`core/scripts/validate-escalation-resolution.sh:160` implements it as
+`header ~ ("[Ss]" sprint "([^0-9]|$)")`. Check 2 sat directly above it, over the same corpus,
+unscoped.
+
+**The escape hatch this creates is closed in the same change, and that is the load-bearing
+half.** A stale `HARD_BLOCK` that stops blocking is a `HARD_BLOCK` you can outrun by waiting
+one sprint. So a past-sprint entry is SURFACED at an `implementation`, `story` or `retro` gate
+and still BLOCKS at every `planning` and `sprint-review` gate — the boundary where the
+operator is already dispositioning scope. An entry whose header names no sprint blocks at
+every gate; an unknown sprint is not a past one.
+
+Tiered **DEFECT**. It cost the operator a live incident interruption, and the failure mode is
+the gate correctly enforcing a rule whose scope was never written down.
+
+**The receipt is bullet-partitioned and that is not cosmetic.** A span-level grep for `sprint`
+over Check 2's body is satisfied by any sentence anywhere in the check — scored against a
+build that adds one HTML comment to the span and changes nothing else, a span-level receipt
+returns 0. This one partitions the span into bullets and fails any bullet that issues a
+`HARD_BLOCK` do-not-proceed directive without a sprint qualifier in that same bullet. Scored
+against five builds: the shipped fix **0**, a second spelling by a different author **0**, the
+pre-fix body **1**, a straight revert **1**, and the comment-only prose attack **1**. Exits 9
+if the span extractor returns fewer than 10 lines, so a renamed heading reports a moved
+precondition rather than a false close.
+
+verify: sh g=core/skills/ai-dlc/steps/gate-validation.md; [ -f "$g" ] || exit 9; span=$(awk '/^### 2\. No unresolved/{s=1;next} /^### 2a\./{s=0} s' "$g"); [ "$(printf '%s\n' "$span" | grep -c .)" -ge 10 ] || exit 9; bad=$(printf '%s\n' "$span" | awk 'function p(){ if (b ~ /HARD_BLOCK/ && b ~ /do NOT/ && b !~ /[Ss]print/) print "UNSCOPED" } /^- /{ if (b != "") p(); b = $0; next } { b = b " " $0 } END { if (b != "") p() }'); [ -z "$bad" ]
