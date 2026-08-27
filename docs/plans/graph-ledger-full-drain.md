@@ -168,6 +168,46 @@ rate when reporting. It is roughly one candidate per batch, and the grammar repa
 moved the target from 40 to 49 without moving the numerator — so every progress figure this
 program quoted before batch 14 was against a denominator 18% too small.
 
+**AND "DISCHARGED" IS STILL A CLAIM ABOUT THIS TREE, NOT ABOUT THE CONSUMER.** A consumer runs
+its OWN installed engine. Until graph PULLS, none of this reaches it, its ledger does not move,
+and this program's goal — draining THAT ledger — cannot be closed on the side that matters.
+Derive the gap; it is not optional bookkeeping:
+
+```
+awk -F': ' '/^version:/{print $2; exit}' /Users/n8/git/graph/.claude/.ai-dlc-version   # installed
+cat VERSION                                                                            # shipped
+# per discharged id, the release that FIRST named it -- named_absorbed() takes tail -1
+git log --format='%H' -F --grep="<id>" origin/main | tail -1                            # then git show "${sha}:VERSION"
+```
+
+At batch 14's close: consumer installed **0.415.0**, distribution **0.425.0**, ten releases
+behind. Of the 7 discharged, **5 DELIVERED and 2 PENDING A PULL** — `PC-S333` (v0.422.0) and
+`PC-S314` (v0.423.0), which is to say **both of the last two batches' output is sitting
+undelivered.** Controls: an impossible id resolves to no commit, and the version compare was run
+in both directions.
+
+**THE PULL IS NOT YOURS TO RUN.** `.claude/rules/consumer-boundary.md` is unconditional — an
+ai-dlc session never writes to a consumer. The pull happens in a GRAPH session the operator
+drives. What this plan owes is the GAP, measured, and a recommendation; **report it every batch
+so the queue never becomes a surprise.**
+
+**CHECK THE BOOTSTRAPPING HAZARD BEFORE RECOMMENDING A PULL, AND MEASURE IT RATHER THAN WARNING
+ABOUT IT.** A fix to a step can never be delivered by that step: the broken version is the one
+that runs the delivery. `PC-S314` repaired `preclassify.sh`, which IS the program the pull runs,
+so the consumer's unfixed copy classifies the very pull carrying its own repair — and its defect
+is a MODE-ONLY change bucketing `UPSTREAM-ONLY` forever, which is a non-terminating step 2.
+
+Measured for this pull rather than asserted, and it comes back CLEAN:
+
+```
+git diff --raw <installed-commit>..origin/main -- core/    # mode-only = modes differ, blobs equal
+```
+**0 mode-only changes** across 38 changed core paths. The three mode changes in the range are all
+`000000 -> 100755` file ADDS, which take the `A` branch, not the `M` branch the defect lives in.
+So the hazard is real in general and does not bite this pull. **`PC-S314`'s fix takes effect on
+the pull AFTER the one that delivers it** — say so in the brief rather than claiming the next
+pull is protected by it.
+
 **ELEVEN IDS CITED BY LIVE BACKLOG ENTRIES RESOLVE TO NEITHER LEDGER FILE, AND SIX OF THOSE ARE
 ARTIFACTS OF THE CITATION GREP** — `PC-S308`, `PC-S334`, `PC-S336`, `PC-S900-`, and two
 `PC-S999-` probe tokens that live inside receipts. The other **five are real, full slugs naming
@@ -786,7 +826,30 @@ so no block written before it changes verdict.
    moved.** A stale action 1 costs a whole session redoing a batch. A stale figure costs the
    trust that makes the other figures usable. A stale command costs whichever the reader
    believes.
-7. **Cite every closed id verbatim in the RELEASE COMMIT MESSAGE**, not only in `CHANGELOG.md`.
+7. **REPORT THE DELIVERY GAP, EVERY BATCH, AND RECOMMEND A PULL WHEN IT IS NON-ZERO.** Run the
+   delivery-gap derivation above and give the operator three things: how many discharged
+   candidates are PENDING, how many releases behind the consumer is, and whether the range
+   carries a MODE-ONLY change to `core/` (measured, not asserted — see the hazard note above).
+
+   **You cannot run the pull and must not try.** It happens in a graph session the operator
+   drives; this repo's side is the released version plus the brief. What you owe is the number
+   and the recommendation.
+
+   **The gap is what makes this program's own metric honest.** Every batch discharges roughly one
+   candidate and adds it to the pending queue; only a pull moves it to the consumer, where its
+   ledger entry can actually close. A program that never prompts a pull reports progress that the
+   consumer cannot see — which is the shape `consumer-boundary.md` exists to prevent.
+
+   **Prefer SMALL, FREQUENT pulls, and this is a measured preference rather than a taste.** The
+   consumer's own history shows the opposite pattern — `0.373.0 → 0.378.0`, then `0.412.0 →
+   0.415.0` — sporadic and wide. A wide range is more paths to adjudicate in one session, more
+   `BOTH-CHANGED->CLASSIFY` hand-backs, and a larger blast radius if a bootstrapping step is among
+   them. Recommend a pull once the pending count is non-zero and the batch has merged.
+
+   **Rehearse a wide pull on a `file://` clone before recommending it**, per
+   `consumer-boundary.md`, and take every figure in the brief from that run rather than from a
+   reading of the code.
+8. **Cite every closed id verbatim in the RELEASE COMMIT MESSAGE**, not only in `CHANGELOG.md`.
    `named_absorbed()` resolves the signal with `git log -F --grep`, which reads commit MESSAGES;
    a `###` section in the CHANGELOG is in the diff and produces no row at all.
 
