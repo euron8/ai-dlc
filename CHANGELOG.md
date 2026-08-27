@@ -17,6 +17,47 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.428.0] - 2026-08-27
 
+### The fanout corpus sees the artifacts a remediator has not committed yet
+
+`PC-S306-FANOUT-UNTRACKED-FILES-INVISIBLE`. `report-propagation-fanout.sh` sourced its mutable
+corpus from `git ls-files`, which lists tracked files only. The consumer commits
+planning/implementation artifacts at PR time, so every artifact a remediator writes DURING a
+sprint is untracked when this script runs — and the script's caller is the gate remediation
+loop, which runs mid-sprint by construction. Reproduced: `SCOPING FAILURE: sprint 306 was
+declared, but not one corpus file came from its artifact directory`, exit 3, over a tree that
+held those files at exactly the right path. **The wrong-tree exit, fired on the right tree.**
+
+The corpus is now tracked plus `--others --exclude-standard`. **The header's original note —
+*"including it made the corpus 47% larger without moving the worklist"* — was a real
+measurement and a COST argument, and it is superseded by a measurement of the correctness
+cost.** `--exclude-standard` is load-bearing: on the reference consumer `git ls-files --others`
+alone lists **84371** paths, **12640** of them under the two corpus roots, and with
+`--exclude-standard` that same tree contributes **0**. The untracked share of the corpus is
+now printed in band, because a one-instant measurement of somebody else's untracked set cannot
+be carried across consumers, and a cost nobody prints is one nobody can see.
+
+### `--series` accepts a lead-authored resolution record
+
+`PC-S306-SERIES-VALIDATOR-NO-LEAD-RESOLUTION-PATH`. The `--series` check that flags
+`MISSING REPAIR RECORD` globbed only `gate-*-repair-p<M>.md`, which is the REMEDIATOR
+artifact-repair convention — `ai-dlc-gate-remediation-guard.sh` requires a real remediator
+`agent_id` and a bound edit to produce one. A FAIL that closes by a LEAD-authored escalation
+resolution, on files that same guard explicitly leaves lead-editable, had no accepted name.
+The lead's only exits were to file a record asserting a dispatch that did not happen, or to
+take a `MISSING` finding for work correctly done. `gate-<type>-resolution-p<M>.md` is now
+accepted alongside it.
+
+**The `gate-` anchor is what makes that safe, and dropping it would repeat a measured mistake
+one suffix over.** `<artifact>-resolution-p<M>.md` is the ADVERSARIAL resolution record and
+sits in the same sprint directory. Measured on the reference consumer at depth 2 under
+`planning-artifacts`: `gate-*-repair-p<M>` 15 files, `*-repair-p<M>` 113, `*-resolution-p<M>`
+17 — of which 16 are adversarial and exactly one is a gate record. The unanchored form pulls
+in 16 foreign records; `gate-*` pulls in the one meant.
+
+**The standard is unchanged, only the accepted NAME.** A candidate still has to carry
+`disposition:`, `edit:` and `derivation:`, so `MISSING REPAIR RECORD` keeps its subject: a
+FAIL repaired with no record on disk still fires.
+
 ### A suppression declared by its fields is no longer discarded in silence
 
 `PC-S306-SUPPRESSED-STATUS-FIRST-TOKEN-SILENT-NO-OP`. `validate-suppression-lifetime.sh`

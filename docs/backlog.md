@@ -3370,3 +3370,65 @@ predicate **1**, a regression that demotes the arm into the `case` **1**, and th
 subject on `origin/main` **1**.
 
 verify: sh v=core/scripts/validate-suppression-lifetime.sh; [ -f "$v" ] || exit 9; d=$(mktemp -d); printf '## E\n**Status:** DECIDED_AUTONOMOUSLY (x), with a SUPPRESSED marker below.\n**Suppresses:** `2`\n**Expires after:** 2 gates\n**Operator authorization:** 2026-01-01T00:00:00Z | "ok"\n' > "$d/a.md"; printf '## E\n**Status:** RESOLVED (the SUPPRESSED marker below carries it)\n**Suppresses:** `2`\n**Expires after:** 2 gates\n**Operator authorization:** 2026-01-01T00:00:00Z | "ok"\n' > "$d/b.md"; printf '## E\n**Status:** DECIDED_AUTONOMOUSLY (x), not a HARD_BLOCK and not a SUPPRESSED entry.\n' > "$d/c.md"; bash "$v" --escalations "$d/a.md" >/dev/null 2>&1; r=$?; bash "$v" --escalations "$d/b.md" >/dev/null 2>&1; s=$?; bash "$v" --escalations "$d/c.md" >/dev/null 2>&1; t=$?; rm -rf "$d"; { [ "$r" = 2 ] || [ "$s" = 2 ] || [ "$t" = 2 ]; } && exit 9; [ "$r" -ne 0 ] && [ "$s" -ne 0 ] && [ "$t" -eq 0 ]
+
+---
+
+## BL-106 — the propagation-fanout corpus is tracked-only, so every artifact a remediator writes mid-sprint is invisible to it
+
+**Discharges `PC-S306-FANOUT-UNTRACKED-FILES-INVISIBLE`, filed by the reference consumer in
+sprint 306.** `core/scripts/report-propagation-fanout.sh:253` built its mutable corpus from
+`git ls-files -z`, which lists TRACKED files only. The consumer commits planning and
+implementation artifacts at PR time, so every artifact a remediator writes or edits DURING a
+sprint is untracked at the moment this script runs, and invisible to both the corpus scan and
+`git diff -U0 <base>`.
+
+**The caller is the gate remediation loop, which runs mid-sprint by construction, so this was
+not an edge case — it was the tool's only operating condition.** Reproduced: a run over a tree
+that held two new files at exactly the right sprint-scoped path printed `SCOPING FAILURE:
+sprint 306 was declared, but not one corpus file came from its artifact directory` and exited
+3. The wrong-tree exit, fired on the right tree, and a scoping failure reads identically for
+"wrong tree" and "right tree, nothing staged yet".
+
+**The header's original justification was a real measurement and it was the wrong KIND of
+measurement.** It read *"Untracked scratch under `docs/` is not an artifact anyone cites, and
+including it made the corpus 47% larger without moving the worklist"* — a COST argument, taken
+over one consumer's untracked set at one instant, which is the population that varies most. It
+is superseded by a measurement of the CORRECTNESS cost, and the superseding is recorded beside
+it rather than replacing it silently.
+
+**`--exclude-standard` is load-bearing and the figure is measured, not asserted.** On the
+reference consumer `git ls-files --others` alone lists **84371** paths, **12640** of them under
+the two corpus roots (build output, caches, `node_modules`); with `--exclude-standard` that same
+tree contributes **0**, against a control of **10666** tracked files. The admitted share is now
+printed in band on every run, because a one-instant measurement of another consumer's untracked
+set cannot be carried across consumers.
+
+**`git ls-files` can emit one path twice** (an unmerged path lists once per stage), so the
+corpus is de-duplicated in document order. A duplicate would double-count a citation into the
+worklist.
+
+Tiered **DEFECT**. The script is advisory and non-gating by its own docstring, so it blocked
+nothing — but it could not fulfil its stated purpose for any consumer that does not commit
+mid-sprint artifacts, and it failed silently, through an exit code that names the wrong cause.
+
+**The `@SPRINT@` half of the candidate is a SECOND SUBJECT and it is not closed here.** Upstream
+also reports that the consumer's `_bmad-output/implementation-artifacts/` is flat, so the
+script's `_bmad-output/implementation-artifacts/@SPRINT@` root can never match anything in that
+layout regardless of tracked state, and it asks the consumer be consulted on whether that
+directory is meant to be flat or per-sprint before the root shape is assumed. That is a question
+for the consumer, not a distribution-side measurement, so it stays open and this entry does not
+claim it.
+
+Guarded by `core/fixtures/fanout-untracked-corpus`, which drives the shipping script through a
+`git` shim and carries mutants for both halves of the change.
+
+**The receipt sets `AI_DLC_PROJECT_ROOT`, and without it the receipt measures the WRONG TREE.**
+`report-propagation-fanout.sh:213` does `cd "$AI_DLC_ROOT"`, resolved by walking up from the
+script's own directory — so a probe repo built under `mktemp` and entered with `cd` is silently
+ignored and the run reports on the distribution. The first cut of this receipt did exactly that
+and its worklist cited `docs/backlog.archive.md`. Three arms, scored against five builds: the
+shipped fix **0**, a second spelling using `git status --porcelain` **0**, the unfixed subject
+**1**, a regression dropping `--exclude-standard` **1**, and a regression that collects the
+untracked half and never unions it into the corpus **1**.
+
+verify: sh s=core/scripts/report-propagation-fanout.sh; [ -f "$s" ] || exit 9; s="$(cd "$(dirname "$s")" && pwd)/$(basename "$s")"; d=$(mktemp -d) || exit 9; ( cd "$d" && git init -q . && git config user.email t@t && git config user.name t && mkdir -p docs _bmad-output/planning-artifacts/s901 && printf 'seed\n' > docs/a.md && git add docs/a.md && git commit -qm base && printf 'x `docs/a.md:1` y\n' > docs/b.md && git add docs/b.md && git commit -qm second ) >/dev/null 2>&1 || { rm -rf "$d"; exit 9; }; r() { ( cd "$d" && AI_DLC_PROJECT_ROOT="$d" bash "$s" HEAD~1 --sprint s901 ) 2>/dev/null; }; printf 'cites `docs/a.md:1`\n' > "$d/_bmad-output/planning-artifacts/s901/note.md"; r >/dev/null; ok=$?; n1=$(r | sed -n 's/^  mutable corpus: \([0-9]*\) files.*/\1/p'); mkdir -p "$d/docs/ignored"; printf 'docs/ignored/\n' > "$d/.gitignore"; printf 'cites `docs/a.md:1`\n' > "$d/docs/ignored/j.md"; n2=$(r | sed -n 's/^  mutable corpus: \([0-9]*\) files.*/\1/p'); rm -rf "$d/docs/ignored" "$d/.gitignore" "$d/_bmad-output/planning-artifacts/s901/note.md"; r >/dev/null; ctl=$?; rm -rf "$d"; [ "$ok" = 2 ] && exit 9; [ -n "$n1" ] && [ -n "$n2" ] || exit 9; [ "$ok" -ne 3 ] && [ "$ctl" -eq 3 ] && [ "$n1" -eq "$n2" ]

@@ -56,7 +56,9 @@
 # file, a verdict. A stale citation inside one of those is not a defect: it is an
 # accurate record of what an earlier pass read. Repairing it would falsify the record.
 #
-# Measured on the reference consumer at commit 0fd25d10d, base HEAD~1, sprint s302:
+# Measured on the reference consumer at commit 0fd25d10d, base HEAD~1, sprint s302, over a
+# TRACKED-ONLY corpus — the rule in force at the time, and the one the untracked-file defect
+# below replaced. Both figures are floors under the current rule:
 #
 #     shifting files 31   mutable corpus 455 files   WORKLIST 10
 #     with --no-frozen:   corpus 1956 files          WORKLIST 48
@@ -70,7 +72,9 @@
 # worklist is the same output whether nothing moved, nothing was scanned, or everything
 # is genuinely consistent. So the header always states the shifting-file count and the
 # corpus file count, and a zero in either is called out as an instrument reading rather
-# than a clean result.
+# than a clean result. The header also states how much of the corpus is UNTRACKED, for the
+# same reason in the other direction: that half is admitted on the strength of a consumer's
+# .gitignore, and a number nobody prints is a cost nobody can see.
 #
 # AND THE SCOPING ZERO IS WIRED TO THE EXIT CODE, not only to a printed note. The two
 # are different readers: a note is for an agent that reads the output, an exit code is
@@ -248,11 +252,42 @@ else
   RANGE="${BASE}..<working tree>"
 fi
 
-# The corpus is the tracked file set. Untracked scratch under docs/ is not an artifact
-# anyone cites, and including it made the corpus 47% larger without moving the worklist.
-CORPUS_FILES="$(git ls-files -z | tr '\0' '\n')"
+# THE CORPUS IS TRACKED **PLUS** UNTRACKED-NOT-IGNORED, and the second half is here
+# because the first half alone produced this script's own signature failure.
+#
+# The original text read: "The corpus is the tracked file set. Untracked scratch under
+# docs/ is not an artifact anyone cites, and including it made the corpus 47% larger
+# without moving the worklist." That measurement was real, and it was taken over one
+# consumer's untracked set at one instant — which is the population that varies most.
+# It is a COST argument, never a correctness one, and it was superseded by a measurement
+# of the correctness cost.
+#
+# Filed by the reference consumer, sprint 306: this project never `git add`s
+# planning/implementation artifacts mid-sprint (they are committed at PR time), so every
+# artifact a remediator writes DURING the sprint is untracked at the moment this script
+# runs. `git ls-files` could not see them, the sprint-scoped roots contributed nothing,
+# and the run exited 3 with `SCOPING FAILURE: sprint 306 was declared, but not one
+# corpus file came from its artifact directory` — over a tree that held those files at
+# exactly the right path. The wrong-tree exit, fired on the right tree. The caller is
+# the gate remediation loop, which runs mid-sprint by construction, so this is not an
+# edge case: it is the tool's ONLY operating condition.
+#
+# `--exclude-standard` is load-bearing and not decoration. Measured on the reference
+# consumer: `git ls-files --others` alone lists 84309 files, 12641 of them under `docs/`
+# or `_bmad-output/` — build output, caches and node_modules that would swamp a corpus of
+# a few hundred. With `--exclude-standard` that same tree contributes 0, because neither
+# corpus root is gitignored there (`git check-ignore` exits 1 on a probe under each).
+#
+# The admitted set is REPORTED IN BAND rather than argued about here, because a one-instant
+# measurement of somebody else's untracked set cannot be carried across consumers. The
+# header prints how many corpus files came from the untracked half, so a consumer whose
+# .gitignore is imperfect sees the number on the run that matters instead of in a comment.
+CORPUS_TRACKED="$(git ls-files -z | tr '\0' '\n')"
+CORPUS_UNTRACKED="$(git ls-files --others --exclude-standard -z | tr '\0' '\n')"
+CORPUS_FILES="$(printf '%s\n%s\n' "$CORPUS_TRACKED" "$CORPUS_UNTRACKED")"
 
 export FANOUT_DIFF="$DIFF" FANOUT_FILES="$CORPUS_FILES" FANOUT_SPRINT="$SPRINT" \
+       FANOUT_UNTRACKED="$CORPUS_UNTRACKED" \
        FANOUT_RANGE="$RANGE" FANOUT_APPLY_FROZEN="$APPLY_FROZEN" \
        FANOUT_EXTS="$CITED_EXTS" FANOUT_ROOTS="$CORPUS_ROOTS" \
        FANOUT_FROZEN_COMPONENTS="$FROZEN_PATH_COMPONENTS" \
@@ -344,18 +379,30 @@ def is_frozen(p):
 def under_sprint_root(p):
     return any(p == r or p.startswith(r + "/") for r in roots_sprint)
 
+# The untracked half of the corpus, as its own set. It is counted separately and printed
+# in band: a consumer whose .gitignore is imperfect admits junk here, and the only honest
+# place to say how much is the run itself. `git ls-files` can emit the same path twice
+# (an unmerged path lists once per stage), so the corpus is de-duplicated while keeping
+# document order — a duplicate would double-count a citation into the worklist.
+untracked = set(p for p in os.environ.get("FANOUT_UNTRACKED", "").splitlines() if p)
+
 corpus = []
+seen = set()
 n_sprint_scoped = 0
+n_untracked = 0
 for p in os.environ["FANOUT_FILES"].splitlines():
-    if not p or not in_corpus_roots(p):
+    if not p or p in seen or not in_corpus_roots(p):
         continue
     if "." not in os.path.basename(p) or p.rsplit(".", 1)[-1] not in exts:
         continue
     if apply_frz and is_frozen(p):
         continue
+    seen.add(p)
     corpus.append(p)
     if under_sprint_root(p):
         n_sprint_scoped += 1
+    if p in untracked:
+        n_untracked += 1
 
 # --- step 3: the citations ---------------------------------------------------
 cite = re.compile(r"`\.?/?([A-Za-z0-9._][A-Za-z0-9._/+-]*\.(?:%s)):(\d+)`"
@@ -396,6 +443,7 @@ out("  shifting files: %d\n" % len(first_shift))
 out("  mutable corpus: %d files%s\n"
     % (len(corpus), "" if apply_frz else "   [--no-frozen: this is the CONTROL run]"))
 out("    of those, from the current sprint: %d\n" % n_sprint_scoped)
+out("    of those, untracked (not yet git-added): %d\n" % n_untracked)
 out("  frozen set:     %s\n" % ("applied" if apply_frz else "DISABLED"))
 if unreadable:
     out("  unreadable:     %d file(s) skipped\n" % unreadable)
