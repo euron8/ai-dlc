@@ -2573,3 +2573,91 @@ Tiered **DEFECT**. Not a `PC-` candidate, so it ranks below the PC-backed set �
 
 verify: sh F=core/fixtures/preclassify-mode-bucket/run.sh; P=core/skills/ai-dlc-update/reconcile/preclassify.sh; [ -f "$F" ] && [ -f "$P" ] || exit 9; D="$(mktemp -d)" || exit 9; git archive HEAD 2>/dev/null | tar -x -C "$D" || { rm -rf "$D"; exit 9; }; grep -q 'ALREADY-PRESENT' "$D/$P" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$F" >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; perl -0pi -e 's/^(\s*elif \[ "\$ours_h" = "\$theirs_h" \] && mode_at_theirs [^\n]*ALREADY-PRESENT[^\n]*\n)(\s*elif \[ "\$ours_h" = "\$theirs_h" \];\s*then bucket="UPSTREAM-ONLY-ADD"[^\n]*\n)/      elif [ "\$ours_h" = "\$theirs_h" ];    then bucket="ALREADY-PRESENT"\n/m' "$D/$P" || { rm -rf "$D"; exit 9; }; cmp -s "$D/$P" "$P" && { rm -rf "$D"; exit 9; }; bash -n "$D/$P" 2>/dev/null || { rm -rf "$D"; exit 9; }; grep -q 'mode_at_theirs "$path" "$cons"; then bucket="ALREADY-AT-THEIRS"' "$D/$P" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$F" >/dev/null 2>&1 ); rc=$?; rm -rf "$D"; [ "$rc" -ne 0 ]
 
+## BL-030
+
+**LANDED (v0.426.0, verified 5cc6c4f5).** The guard now withholds on `mech_fail` OR an
+outstanding hand-back count taken in `say()` itself, and withholds the marker clear with it;
+`apply.sh --finish` is the terminating exit, and `SKILL.md` step 7 instructs it. The `:1251`
+arm this entry flagged as NOT covered by its receipt is covered after all, in the direction
+that was available: under `--finish` the hook-registration check runs BEFORE the stamp, where
+its answer is verified by a validator rather than attested, so the one `WORKLIST` site that
+structurally could not reach the stamp predicate now does on the invocation where it means
+something. The ordinary run's ordering is unchanged, for the reason its own comment gives.
+
+**`apply.sh` writes the re-stamp and clears the mid-pull marker on any run whose only guard,
+`mech_fail`, is zero — and that guard is declared in the file itself to exclude outstanding
+`WORKLIST` hand-backs, so a tree with unfinished semantic merges is stamped as being at THEIRS and
+has its fixture suite re-enabled.** `core/skills/ai-dlc-update/reconcile/apply.sh:1109` is
+`if [ "$mech_fail" -gt 0 ]; then` and nothing else; `:261-266` states the exclusion in terms —
+"NOT the same as the declared hand-backs: a WORKLIST semantic-merge or an operator DECISION is work
+the caller completes in this same run, and the stamp is still true once it does." Measured over the
+file: **10** `say WORKLIST` emission sites and **0** lines tallying them, against **16**
+`mech_fail=` assignments found by the same grammar in the same invocation — so the absence is
+established, not merely searched for. The else-branch at `:1174-1185` then emits
+`RESOLVED restamp`, `rm -f "$APPLYING"` and `RESOLVED consistent "the tree matches …; fixture suite
+re-enabled"`.
+
+Clearing that marker is the part the filing does not name and it is the wider half.
+`APPLYING="$CONSUMER/.claude/.ai-dlc-applying"` (`:146`) is the consumer's own mid-pull block:
+`core/git-hooks/pre-push:667` refuses the fixture suite while it exists, and its comment at `:644`
+states the contract this breaks — "clears `.claude/.ai-dlc-applying` only when it writes the
+re-stamp, so while that marker exists the tree is a mixture of two releases … REFUSE rather than
+skip: a skipped suite is the green light nobody earned." With semantic merges outstanding the tree
+is exactly that mixture, and the marker is gone.
+
+The filing's stated cause is false and the correction is to a different cause, not a wider or
+narrower one. It says "apply.sh does it first" and "the prose ordering and the driver ordering
+disagree". Against the working tree the re-stamp is last: 9 of the 10 `say WORKLIST` sites (354,
+356, 439, 581, 583, 589, 591, 626, 648) precede the guard at 1109, and the declared-token gate at
+`:884` precedes it too. The defect is the guard's PREDICATE SCOPE, not statement order. The filing
+also declares `verify: manual` on the reasoning that "no substring predicate distinguishes
+'restamp is emitted last' from 'restamp is emitted'; the receipt is the relative position of two
+lines in the driver's own output" — also false, and it is why this entry had no mechanical receipt
+for a year: the withholding condition is one named variable on one line and is directly checkable.
+
+The filing's ordering claim does survive in one place, and it is worth recording because the
+receipt below does not cover it. The tenth `say WORKLIST` site is at `:1251` — the
+hook-registration row, "hook(s) present and UNREGISTERED after this apply … on disk, wired to
+nothing, and indistinguishable from one that is working." It runs strictly after the marker clear
+at `:1184` and after `RESOLVED consistent` at `:1185`. No predicate at the stamp can account for a
+row emitted after it, so closing that arm means moving the hook-registration check above the stamp,
+which is a second and different change. The receipt gates only the predicate-scope arm; an operator
+confirming a close should read `:1251` before annotating.
+
+The anchor is the guard line's condition count plus the absence of any worklist tally, disjoined so
+that either plausible fix shape turns it green — a second condition on the guard, or incrementing
+a counter at the `say WORKLIST` sites. It deliberately does not anchor on the rationale comment at
+`:261-266`, which is the obvious target and the known-bad one: fixes in this repo document what
+they removed, so that sentence would survive inside the comment recording its own reversal.
+
+**THAT ANCHOR WAS THE DEFECT, AND THE RECEIPT BELOW REPLACES IT. Disjoining so that "either
+plausible fix shape turns it green" is the same sentence as "this receipt cannot tell a fix from a
+regression", one clause apart, and it was written as a convenience.** Scored at v0.426.0 against
+six implementations built as real edited copies, each proved to differ from its parent before the
+cell was read: the correct fix **0**, a second spelling of the correct fix **0**, the unfixed
+program **1** — and then `if [ "$mech_fail" -gt 0 ] || [ "$mech_fail" -gt 999 ]; then`, which
+withholds nothing new, **0**; and a bare `worklist_note=0` inserted at the top of the file,
+changing no behaviour whatever, **0**. Both disjuncts were satisfiable by text that resolves
+nothing. This is the `BL-033` shape a release earlier — an entry whose own text tells you its
+receipt takes either fix — and it is now two for two.
+
+The replacement keys on the EMISSION SITE and on a relationship rather than on a spelling. It
+reads the counter name out of `say()`'s own `WORKLIST` case, requires that name to appear in the
+two lines preceding the `say DECISION restamp-withheld` call, requires `--finish)` to be a
+recognised option, and requires the single `rm -f "$APPLYING"` to lie between the withheld row and
+the `restamp-failed` row — which is what a partial fix breaks. Scores: correct **0**, second
+spelling **0**, unfixed **1**, both trivial regressions **1**, and a partial fix that withholds the
+stamp while hoisting the marker clear out of the read-back **1**. Precondition arm proved
+reachable in three states (no file, empty file, `say()` present with no restamp rows), all **3**.
+
+**The citations here are as filed and two of them do not resolve.** Re-derived at v0.426.0:
+`apply.sh:146`, `:884`, `:1184` and `:1251` are exact; `:1109` is the `say` row and the guard it
+names is `:1108`; and `core/git-hooks/pre-push:667`/`:644` resolve to unrelated lines — the marker
+refusal is `applying_guard` at `:751`, its contract comment at `:710-716`. The claim was true; only
+the line numbers had moved.
+
+Discharges the consumer entry `PC-S304-APPLY-SH-RESTAMPS-BEFORE-THE-WORKLIST-IS-DONE` at pinned
+ledger line 1977.
+
+
+verify: sh bash -c 'a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$a" ] || exit 3; s=$(LC_ALL=C grep -n "^say() {" "$a" | head -1 | cut -d: -f1); w=$(LC_ALL=C grep -n "say DECISION restamp-withheld" "$a" | head -1 | cut -d: -f1); f=$(LC_ALL=C grep -n "say DECISION restamp-failed" "$a" | head -1 | cut -d: -f1); [ -n "$s" ] && [ -n "$w" ] && [ -n "$f" ] && [ "$w" -gt 2 ] && [ "$f" -gt "$w" ] || exit 3; v=$(LC_ALL=C sed -n "$((s+1)),$((s+8))p" "$a" | LC_ALL=C sed -n "s/.*WORKLIST[^)]*)[[:blank:]]*\([a-z_][a-z_]*\)=\$((.*/\1/p" | head -1); [ -n "$v" ] || exit 1; LC_ALL=C grep -q "\$$v" <<<"$(sed -n "$((w-2)),$((w-1))p" "$a")" || exit 1; LC_ALL=C grep -q -- "--finish)" "$a" || exit 1; [ "$(LC_ALL=C grep -c "rm -f \"\$APPLYING\"" "$a")" = 1 ] || exit 1; c=$(LC_ALL=C grep -n "rm -f \"\$APPLYING\"" "$a" | head -1 | cut -d: -f1); [ "$c" -gt "$w" ] && [ "$c" -lt "$f" ] || exit 1; exit 0'
