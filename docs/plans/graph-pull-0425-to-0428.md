@@ -1,8 +1,8 @@
-# Pull the graph consumer from 0.425.0 to 0.427.0
+# Pull the graph consumer from 0.425.0 to 0.428.0
 
 ## RESUME HERE
 
-**You were started with one sentence: `READ and FOLLOW docs/plans/graph-pull-0425-to-0427.md`.**
+**You were started with one sentence: `READ and FOLLOW docs/plans/graph-pull-0425-to-0428.md`.**
 This block is the whole of your entry point and the only current status record in this file.
 
 **Status: NOT STARTED.** Nothing below has been executed.
@@ -30,7 +30,42 @@ intended as a dry run.
 
 ### What this range carries, and what is special about it
 
-Two releases, `0.426.0` and `0.427.0`. Five modified core files and one added fixture:
+**Three releases, `0.426.0`, `0.427.0` and `0.428.0`, and the third one is most of the range.**
+Twenty-three changed core paths in all: fourteen modified and three added by `0.428.0` alone.
+
+**`0.428.0` DISCHARGES THE WHOLE SPRINT-306 CANDIDATE SET — SIX CANDIDATES THIS CONSUMER FILED
+ITSELF, AGAINST DEFECTS IT HIT LIVE.** They are the reason this pull is worth running, and each
+one changes something this consumer touches every sprint:
+
+- `core/skills/ai-dlc/steps/gate-validation.md` — **Check 2's blocking clause is now scoped by
+  sprint.** A `HARD_BLOCK` filed by an EARLIER sprint is surfaced at an `implementation`, `story`
+  or `retro` gate rather than blocking it, and still blocks at every `planning` and
+  `sprint-review` gate. An entry whose header names no sprint blocks everywhere. This is the one
+  that cost a live-incident gate an operator round-trip on a nine-day-old sprint-303 entry.
+- `core/scripts/validate-suppression-lifetime.sh` — an entry carrying `**Suppresses:**` or
+  `**Expires after:**` while its `**Status:**` classifies as anything other than `SUPPRESSED` is
+  now REPORTED rather than silently skipped, and the verdict line carries `malformed_attempt=`.
+  **Expect this to FAIL on your first gate if any such entry is still in `pending.md`** — that is
+  the fix working, not a regression. Set the status to `SUPPRESSED` or remove the fields.
+- `core/scripts/validate-gate-adjudication.sh` — `--series` accepts
+  `gate-<type>-resolution-p<M>.md` alongside the remediator's repair-record name, so a FAIL closed
+  by a lead-authored escalation resolution no longer reads as `MISSING REPAIR RECORD`. The
+  structure requirement is unchanged: `disposition:`, `edit:` and `derivation:`, read literally.
+  **Your existing `gate-implementation-resolution-p1.md` states all three in prose and labels
+  none, so it will score UNSTRUCTURED.** Label the three fields and it closes.
+- `core/scripts/report-propagation-fanout.sh` — the corpus is tracked plus
+  `--others --exclude-standard`, so artifacts written mid-sprint and not yet `git add`ed are
+  visible. The `SCOPING FAILURE` you were getting on a correct tree should stop. The untracked
+  share is printed in band.
+- `core/scripts/validate-stub-audit.sh` — `Phase [0-9]` counts as a stub marker only inside a
+  statement of absence. The docstring reword that cleared your last Check 16 was not necessary
+  and would not be necessary now.
+- `core/skills/ai-dlc/steps/bug-investigation.md` and `steps/implementation.md` — a FAIL on a
+  check the next step does not consume repairs in PARALLEL with the routing, and Section 7's
+  completion condition names the entering gate so nothing lands over a FAIL.
+
+`0.426.0` and `0.427.0` carry the re-stamp withholding and its finisher, and they are what the
+rest of this file is about:
 
 - `core/skills/ai-dlc-update/reconcile/apply.sh` — the re-stamp is now WITHHELD while any
   `WORKLIST` or `DECISION` row is outstanding, and a new `--finish` mode advances it once the
@@ -44,15 +79,23 @@ Two releases, `0.426.0` and `0.427.0`. Five modified core files and one added fi
   fixture.
 - `core/fixtures/apply-restamp-worklist/` — new, shipping.
 
-It discharges `PC-S304-APPLY-SH-RESTAMPS-BEFORE-THE-WORKLIST-IS-DONE`.
+Between them these three releases discharge **seven** candidates:
+`PC-S304-APPLY-SH-RESTAMPS-BEFORE-THE-WORKLIST-IS-DONE` and the sprint-306 six —
+`PC-S306-CHECK-2-HAS-NO-SPRINT-SCOPE`,
+`PC-S306-SUPPRESSED-STATUS-FIRST-TOKEN-SILENT-NO-OP`,
+`PC-S306-SERIES-VALIDATOR-NO-LEAD-RESOLUTION-PATH`,
+`PC-S306-FANOUT-UNTRACKED-FILES-INVISIBLE`,
+`PC-S306-GATE-REMEDIATION-BLOCKS-INDEPENDENT-DEV-DISPATCH` and
+`PC-S306-STUB-AUDIT-PHASE-N-MATCHES-WORD-BOUNDED-PROSE`.
 
 **THE CORRECTED `pre-push` MESSAGE ARRIVES ONE PULL BEHIND ITSELF, AND THAT IS NOT FIXABLE IN
 CODE.** `core/git-hooks/pre-push` is a consumer file this pull WRITES, so during this pull the
 consumer is still running the OLD guard text — the one that says "re-run; it resumes and
 re-stamps when the tree is consistent" and never mentions `--finish`. If this pull withholds and
 you then hit that message, **ignore its first remedy and use `--finish`.** The rehearsal below
-predicts the withholding will not fire at all on this consumer, so this is a contingency, not an
-expectation.
+predicts the copy that actually runs this pull will stamp without withholding, so this stays a
+contingency — but it is a nearer one than it was, because the same rehearsal shows the INCOMING
+copy withholding on eight outstanding rows.
 
 The guard this release changes is `core/skills/ai-dlc-update/reconcile/apply.sh:1199` in the
 distribution, and the refusal that makes a withheld stamp consequential is
@@ -63,15 +106,20 @@ draft of this file would not resolve.)
 
 **A BOOTSTRAPPING STEP IS IN THE RANGE, AND THE HAZARD IS MEASURED RATHER THAN WARNED ABOUT.**
 `apply.sh` IS the program this pull runs, so the consumer's INSTALLED copy applies the release
-that repairs it. Measured on a `file://` clone of the distribution against a scratch copy of this
-consumer's committed `HEAD`, with the two `apply.sh` copies asserted to differ first: the
-installed copy carries `--finish` **0** times and `handback` **0** times, the incoming copy
-carries `--finish` **1** time. **So the withholding takes effect on the pull AFTER this one.**
-This pull is classified and applied by the OLD program throughout, and the old program's
-behaviour is unchanged by definition.
+that repairs it. Re-measured for the widened range on a `file://` clone of the distribution
+against a scratch copy of this consumer's committed `HEAD`, with the two `apply.sh` copies
+asserted to differ before any reading was taken: the installed copy carries `--finish` **0**
+times and `handback` **0** times; the incoming copy carries `--finish` **22** times and
+`handback` **5**. **So the withholding still takes effect on the pull AFTER this one.** This pull
+is classified and applied by the OLD program throughout.
 
-**That is the good case and it is not luck — it is why this pull is safe.** Do not read it as a
-guarantee for the next pull, which WILL withhold if it hands anything back.
+**THE MODE-ONLY HAZARD IS MEASURED AND ABSENT.** `git diff --raw` over the whole range across
+**23** changed core paths reports **0** mode-only changes — modes differing with blobs equal. The
+three mode transitions in the range are all `000000 -> 100755` file ADDS, which take the `A`
+branch and not the `M` branch the defect lives in.
+
+**That is the good case for the STAMP. It is not the good case for the WORKLIST, and that has
+changed since this file was first written — read the rehearsal.**
 
 ### The rehearsal, and what to do when the real run disagrees
 
@@ -80,36 +128,63 @@ committed `HEAD` — never against this tree in place. **These are an EXPECTATIO
 guarantee.** The consumer has moved since the rehearsal, and every figure here is a hypothesis
 about a tree that changes.
 
-`preclassify.sh` produced **5 rows**:
+`preclassify.sh` produced **23 rows**:
 
 | bucket | count |
 |---|---|
-| `UPSTREAM-ONLY` | 4 |
-| `UPSTREAM-ONLY-ADD` | 1 |
+| `UPSTREAM-ONLY` | 19 |
+| `UPSTREAM-ONLY-ADD` | 2 |
+| `DIST-ONLY-SKIP` | 2 |
 | `->CLASSIFY` | **0** |
-| `DIST-ONLY-SKIP` | 0 |
+
+The two `DIST-ONLY-SKIP` rows are `core/fixtures/gate-repair-record-mutants/`, a mutation battery
+that carries a `.dist-only` marker and is correctly not shipped.
 
 `apply.sh` was then driven for real, twice — once with the consumer's installed copy and once
-with the incoming one. **Both stamped, and neither left the marker behind:**
+with the incoming one. **They no longer agree, and the disagreement is the point:**
 
 ```
-installed apply.sh   5 RESOLVED pure-apply, 1 RESOLVED driver-self-update,
-                     1 RESOLVED restamp, 1 RESOLVED consistent, 1 NOTE override-adjudicated
-                     stamp -> 0.427.0        .ai-dlc-applying -> ABSENT
-incoming  apply.sh   5 RESOLVED pure-apply, 1 RESOLVED restamp, 1 RESOLVED consistent,
-                     1 NOTE override-adjudicated
-                     stamp -> 0.427.0        .ai-dlc-applying -> ABSENT
+installed apply.sh   21 RESOLVED pure-apply, 1 RESOLVED driver-self-update,
+                     1 RESOLVED restamp, 1 RESOLVED consistent, 1 NOTE override-adjudicated,
+                     8 WORKLIST extension-reread
+                     stamp -> 0.428.0        .ai-dlc-applying -> ABSENT
+incoming  apply.sh   21 RESOLVED pure-apply, 1 NOTE override-adjudicated,
+                     8 WORKLIST extension-reread, 1 DECISION restamp-withheld
+                     stamp -> 0.425.0        .ai-dlc-applying -> PRESENT
 ```
 
 `RESOLVED driver-self-update` appears only under the installed copy: that row IS the old driver
-replacing itself mid-run, which is the bootstrapping event named above.
+replacing itself mid-run, which is the bootstrapping event named above. **The installed copy is
+what actually runs this pull, so the STAMP is expected to advance and the marker to clear.**
 
-**ZERO `WORKLIST` rows and ZERO `DECISION` rows in the rehearsal, so nothing should be withheld.**
+**EXPECT EIGHT `WORKLIST extension-reread` ROWS, AND THEY ARE REAL WORK RATHER THAN NOISE.** This
+range changes `steps/gate-validation.md`, `steps/bug-investigation.md` and `steps/implementation.md`
+— three core files this consumer's own extensions hook into. The eight entries are
+`extensions/checks/attribution-provenance.md`, `extensions/checks/gate-validation-domain.md`,
+`extensions/checks/gate-validation-push.md`, `extensions/checks/validator-honesty.md`,
+`extensions/steps-domain/bug-investigation-domain.md`,
+`extensions/steps-domain/bug-investigation-push.md`,
+`extensions/steps-domain/implementation-domain.md` and
+`extensions/steps-domain/implementation-push.md`. Each has to be re-read against the new core text
+and given a verdict — still-additive, contradicts-core, or retire. **Check 2's new sprint scoping
+is the change most likely to make an extension entry contradict core**, so read the two
+`gate-validation-*` entries against it first.
 
-**STOP AND PING THE OPERATOR if the real run disagrees** — specifically if you see any
-`WORKLIST` row, any `DECISION restamp-withheld`, or a `.claude/.ai-dlc-applying` still on disk
-when the run ends. A disagreement is information and is worth more than a clean report. It does
-not mean the pull is broken; it means the consumer moved and the rehearsal's premise expired.
+**THE PREVIOUS REVISION OF THIS FILE PREDICTED ZERO `WORKLIST` ROWS AND THAT PREDICTION IS
+WITHDRAWN.** It was taken over the `0.425.0 → 0.427.0` range, which touched no step file. Do not
+read a `WORKLIST` row here as a disagreement.
+
+**STOP AND PING THE OPERATOR if the real run disagrees with the table above** — specifically if
+the stamp does NOT reach `0.428.0`, if `.claude/.ai-dlc-applying` is still on disk when the run
+ends, if any `DECISION restamp-withheld` appears, if any row buckets `->CLASSIFY`, or if the
+`WORKLIST` count is not 8. A disagreement is information and is worth more than a clean report.
+It does not mean the pull is broken; it means the consumer moved and the rehearsal's premise
+expired.
+
+**THE CONSUMER WAS BEING WRITTEN WHILE THIS REHEARSAL RAN.** Its ledger's md5 moved three times
+during the release that produced this range, and a seventh sprint-306 candidate was filed
+uncommitted while the rehearsal was in progress. The scratch copy was taken from committed
+`HEAD`, so anything filed after that is not in these figures.
 
 **If the run DOES withhold**, it is not a defect and there is nothing to debug: dispose of every
 `WORKLIST` and `DECISION` row it printed, then run the finisher. The withheld row prints the
@@ -140,7 +215,7 @@ empty adjudication register: three consecutive ordinary applies, 11 rows each ti
 
 4. **If and only if the run emitted `DECISION restamp-withheld`:** dispose of every `WORKLIST`
    and `DECISION` row, then run the finishing command exactly as that row printed it. Confirm
-   afterwards that `.claude/.ai-dlc-version` reads `0.427.0` on all four fields and that
+   afterwards that `.claude/.ai-dlc-version` reads `0.428.0` on all four fields and that
    `.claude/.ai-dlc-applying` is gone. This is a CONDITIONAL action and the rehearsal predicts it
    will not fire.
 
@@ -169,7 +244,7 @@ preapproved — do not stop to ask for one.
 
 ### Done when
 
-1. `.claude/.ai-dlc-version` reads `0.427.0` on `version`, `commit`, `skill_version` and
+1. `.claude/.ai-dlc-version` reads `0.428.0` on `version`, `commit`, `skill_version` and
    `skill_commit`. **Observation point: after action 4, or after action 2 if action 4 did not
    fire.** Reachable today: the rehearsal reached exactly this state under both drivers.
 2. `.claude/.ai-dlc-applying` is absent. Same observation point.
