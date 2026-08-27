@@ -75,6 +75,16 @@ SCHEMA_GLOB="$ROOT/core/schemas"
 OUT="$ROOT/docs/vocabulary-index.md"
 IDX="$ROOT/docs/invariant-index.md"
 [ -f "$SRC" ] || { echo "render-vocabulary-index: missing $SRC" >&2; exit 2; }
+# READABILITY IS ESTABLISHED HERE, NOT LEFT TO awk. BSD awk ABORTS on a file it cannot open
+# rather than skipping it, and every marker reader below is a PIPELINE ending in a filter, so
+# the abort is swallowed and each one returns EMPTY -- which is indistinguishable from "this
+# file declares no markers" and from "this file declares no repeated fields". The zero-rows
+# guard downstream does fail closed, but it fails closed reporting that the GRAMMAR changed,
+# which sends the reader to a file that is fine. Measured on a mode-000 copy: exit 1 either
+# way, and the only true diagnosis was a bare `awk: can't open file` above the wrong message.
+# Refusing before awk is invoked makes the state unconstructible instead of detected, and it
+# is the same wrong-attribution shape v0.420.0 fixed one level out.
+[ -r "$SRC" ] || { echo "render-vocabulary-index: cannot READ $SRC. It exists, so this is a permission or filesystem fault, not a missing file. Every marker reader below would return empty and the failure would be reported as a changed marker grammar." >&2; exit 2; }
 
 fail() { echo "render-vocabulary-index: $*" >&2; exit 1; }
 probe_fail() { echo "render-vocabulary-index SELF-PROBE FAILED: $1" >&2; exit 1; }
@@ -122,6 +132,21 @@ trap 'rm -rf "$PROBE_DIR"' EXIT
 # extract slug: its members live in a tree this repo never reads. Exactly one of the two
 # shapes must hold, which is the same either-or discipline `.dist-only` markers and
 # `no-stub` reasons are already held to.
+#
+# A FIELD MAY BE DECLARED AT MOST ONCE PER BLOCK, AND THAT IS A PARTITION RATHER THAN A
+# DETECTOR. Assigning on every matching line resolves a repeat by overwriting, so the row
+# renders from the LAST declaration, `--check` byte-compares clean and the gate is green --
+# a contradiction between two declarations of one field was unreportable. The reader now
+# refuses to overwrite and emits a `#DUPFIELD` line instead, which the corpus section below
+# turns into a failure. This is the same either-or discipline as the `(consumer-owned)` case
+# one line up, and the same shape arm D of I93 refuses one level out when a path is both
+# declared an emitter and exempted.
+#
+# THE FLAGS ARE SEPARATE FROM THE VALUES, DELIBERATELY. Testing `inv != ""` would accept a
+# second declaration of a field whose first declaration was EMPTY (`# vocabulary-owner:` and
+# nothing after it), which is exactly the contradiction this refuses -- and it would read as
+# working, because every field in the live corpus is non-empty. Five scalars rather than an
+# array: `delete arr` is an extension this repo's BSD awk floor does not promise.
 # =========================================================================================
 MARKER_AWK='
 function flush() {
@@ -129,12 +154,25 @@ function flush() {
     printf "%s%s%s%s%s%s%s%s%s%s%s\n", name, SEP, inv, SEP, owner, SEP, ext, SEP, readers, SEP, emitters
   }
   name = ""; inv = ""; owner = ""; ext = ""; readers = ""; emitters = ""
+  s_inv = 0; s_owner = 0; s_ext = 0; s_read = 0; s_emit = 0
+}
+function dupfield(f, old, new) {
+  # THE BLOCK AND THE LINE ARE EMITTED BECAUSE THE FIELD AND THE VALUES DO NOT LOCATE IT.
+  # Two blocks repeating the same field with the same value produce two byte-identical
+  # findings and nothing to grep for; three declarations of one field produce two findings
+  # that both name the same first value. Both locators are already in hand here -- `name`
+  # holds the vocabulary this block declares and FNR holds the line -- and emitting neither
+  # is the v0.420.0 shape one notch finer: a guard that refuses correctly and cannot say
+  # where. NO APOSTROPHES IN THIS PROGRAM: it is a single-quoted shell string, and one
+  # possessive here terminated it and produced a shell syntax error 100 lines away.
+  printf "#DUPFIELD %s%s%s%s%s%s%s%s%s\n", f, SEP, old, SEP, new, SEP, name, SEP, FNR
 }
 BEGIN {
   # SEP is built here rather than passed with `awk -v`, which strips one level of escaping
   # and is the documented way to make a correct expression look wrong.
   SEP = sprintf("%c", 31)
   name=""; inv=""; owner=""; ext=""; readers=""; emitters=""; armprose=""; marked=0
+  s_inv=0; s_owner=0; s_ext=0; s_read=0; s_emit=0
 }
 {
   line = $0
@@ -154,19 +192,29 @@ BEGIN {
     name = v; marked = 1; next
   }
   if (line ~ /^[[:blank:]]*#[[:blank:]]*vocabulary-invariant:/) {
-    v = line; sub(/^[[:blank:]]*#[[:blank:]]*vocabulary-invariant:[[:blank:]]*/, "", v); inv = v; next
+    v = line; sub(/^[[:blank:]]*#[[:blank:]]*vocabulary-invariant:[[:blank:]]*/, "", v)
+    if (s_inv) { dupfield("vocabulary-invariant", inv, v); next }
+    s_inv = 1; inv = v; next
   }
   if (line ~ /^[[:blank:]]*#[[:blank:]]*vocabulary-owner:/) {
-    v = line; sub(/^[[:blank:]]*#[[:blank:]]*vocabulary-owner:[[:blank:]]*/, "", v); owner = v; next
+    v = line; sub(/^[[:blank:]]*#[[:blank:]]*vocabulary-owner:[[:blank:]]*/, "", v)
+    if (s_owner) { dupfield("vocabulary-owner", owner, v); next }
+    s_owner = 1; owner = v; next
   }
   if (line ~ /^[[:blank:]]*#[[:blank:]]*vocabulary-extract:/) {
-    v = line; sub(/^[[:blank:]]*#[[:blank:]]*vocabulary-extract:[[:blank:]]*/, "", v); ext = v; next
+    v = line; sub(/^[[:blank:]]*#[[:blank:]]*vocabulary-extract:[[:blank:]]*/, "", v)
+    if (s_ext) { dupfield("vocabulary-extract", ext, v); next }
+    s_ext = 1; ext = v; next
   }
   if (line ~ /^[[:blank:]]*#[[:blank:]]*vocabulary-readers:/) {
-    v = line; sub(/^[[:blank:]]*#[[:blank:]]*vocabulary-readers:[[:blank:]]*/, "", v); readers = v; next
+    v = line; sub(/^[[:blank:]]*#[[:blank:]]*vocabulary-readers:[[:blank:]]*/, "", v)
+    if (s_read) { dupfield("vocabulary-readers", readers, v); next }
+    s_read = 1; readers = v; next
   }
   if (line ~ /^[[:blank:]]*#[[:blank:]]*vocabulary-emitters:/) {
-    v = line; sub(/^[[:blank:]]*#[[:blank:]]*vocabulary-emitters:[[:blank:]]*/, "", v); emitters = v; next
+    v = line; sub(/^[[:blank:]]*#[[:blank:]]*vocabulary-emitters:[[:blank:]]*/, "", v)
+    if (s_emit) { dupfield("vocabulary-emitters", emitters, v); next }
+    s_emit = 1; emitters = v; next
   }
 }
 END {
@@ -180,7 +228,11 @@ END {
 # itself about what a vocabulary header looks like.
 DEMAND_RE='vocabular|taxonom|one set|key set'
 
-markers_of() { awk "$MARKER_AWK" "$1" | grep -v '^#DEMAND' || true; }
+markers_of() { awk "$MARKER_AWK" "$1" | grep -vE '^#(DEMAND|DUPFIELD) ' || true; }
+# The repeated-field reader. Kept beside the other two so all three consume ONE marker
+# grammar -- a second parse of these comment lines here would be this file restating the
+# thing the index exists to stop being restated.
+dups_of() { awk "$MARKER_AWK" "$1" | sed -n 's/^#DUPFIELD //p' || true; }
 demands_of() {
   # `\t` in a sed PATTERN is not a tab to BSD sed -- it is the letter t. The demand line is
   # space-delimited for exactly that reason; there is no escape to get wrong.
@@ -406,6 +458,97 @@ esac
 [ -z "$c_read" ] || probe_fail "the consumer-owned marker read back readers='$c_read'; the empty field collapsed."
 [ -z "$c_emit" ] || probe_fail "the consumer-owned marker read back emitters='$c_emit'; the empty field collapsed."
 
+# --- probe 1b: the repeated-field refusal, in BOTH directions -------------------------
+# THE NEAR-MISS IS THE HALF THAT MATTERS. A reader that reported every repeated field
+# FILE-WIDE would pass the positive seed below and be wrong about the real corpus, where
+# five of the eight blocks declare `vocabulary-readers:` and none of them is a duplicate.
+# So the quiet direction is asserted first, on the seed that already carries two blocks, and
+# then on one where BOTH blocks declare the SAME field -- which is the input that separates
+# a block-scoped reader from a file-wide one.
+[ -z "$(dups_of "$PROBE_DIR/markers.sh")" ] || \
+  probe_fail "the repeated-field reader reported a duplicate in a seed that has none. Its false-positive set is not empty, and the real corpus would never render."
+
+cat > "$PROBE_DIR/dup-nearmiss.sh" <<'PROBE'
+# --- I907: an arm binding a vocabulary --------------------------------------
+# vocabulary: probe alpha
+# vocabulary-invariant: I907
+# vocabulary-owner: probe/owner.txt
+# vocabulary-extract: probe-slug
+# vocabulary-readers: probe/reader.txt
+err "I907 fired"
+# --- I908: another arm binding another vocabulary ---------------------------
+# vocabulary: probe beta
+# vocabulary-invariant: I908
+# vocabulary-owner: probe/owner.txt
+# vocabulary-extract: probe-slug
+# vocabulary-readers: probe/reader.txt
+err "I908 fired"
+PROBE
+[ -z "$(dups_of "$PROBE_DIR/dup-nearmiss.sh")" ] || \
+  probe_fail "two ADJACENT blocks each declaring \`vocabulary-readers:\` ONCE were read as a repeat. The reader is scoped to the file rather than to the block."
+
+# That seed also carries the second `# vocabulary:` case, which is the one marker line that
+# is SUPPOSED to appear twice: it opens a new block rather than repeating a field, and a
+# reader that counted it would refuse every file holding more than one vocabulary -- which is
+# every file this renderer has ever read. The empty assertion above covers it; a separate
+# arm here would have no subject the one above cannot see.
+
+# The positive direction: one block, one field, twice.
+cat > "$PROBE_DIR/dup-offender.sh" <<'PROBE'
+# --- I909: an arm binding a vocabulary --------------------------------------
+# vocabulary: probe gamma
+# vocabulary-invariant: I909
+# vocabulary-owner: probe/owner.txt
+# vocabulary-extract: probe-slug
+# vocabulary-readers: probe/first.txt
+# vocabulary-readers: probe/second.txt
+err "I909 fired"
+PROBE
+u_out="$(dups_of "$PROBE_DIR/dup-offender.sh")"
+u_n="$(grep -c . <<<"$u_out")"
+[ "$u_n" -eq 1 ] || probe_fail "a block declaring ONE field twice produced $u_n finding(s); exactly 1 is required. More than one means the arms are entangled; none means the refusal cannot fire."
+IFS="$SEP" read -r u_field u_first u_second u_name u_line <<<"$u_out"
+[ "$u_field"  = "vocabulary-readers" ] || probe_fail "the repeat named field '$u_field'"
+[ "$u_first"  = "probe/first.txt" ]    || probe_fail "the repeat reported first='$u_first'. BOTH values must reach the operator: naming only the survivor tells them which declaration won, which is the half they already know."
+[ "$u_second" = "probe/second.txt" ]   || probe_fail "the repeat reported second='$u_second'"
+# THE LOCATORS. Field-and-values do not locate a repeat: two blocks repeating one field with
+# the SAME value emit two byte-identical findings, and nothing in them can be grepped for.
+[ "$u_name" = "probe gamma" ] || probe_fail "the repeat reported block='$u_name', not the vocabulary whose block it is. Without it, two offending blocks produce indistinguishable findings."
+[ "$u_line" = "7" ]           || probe_fail "the repeat reported line='$u_line'; the second \`# vocabulary-readers:\` in that seed is on line 7. A finding that cannot be located sends the reader to grep for a value that appears twice legitimately."
+
+# THE EMPTY FIRST DECLARATION, which is the case a `!= ""` test silently accepts. Every
+# field in the live corpus is non-empty, so an emptiness test would read as working forever.
+cat > "$PROBE_DIR/dup-empty.sh" <<'PROBE'
+# --- I910: an arm binding a vocabulary --------------------------------------
+# vocabulary: probe delta
+# vocabulary-invariant: I910
+# vocabulary-owner:
+# vocabulary-owner: probe/owner.txt
+# vocabulary-extract: probe-slug
+err "I910 fired"
+PROBE
+e_out="$(dups_of "$PROBE_DIR/dup-empty.sh")"
+[ "$(grep -c . <<<"$e_out")" -eq 1 ] || \
+  probe_fail "an EMPTY first declaration of \`vocabulary-owner:\` followed by a second was not reported. The reader is testing the VALUE rather than tracking that the field was declared."
+IFS="$SEP" read -r e_field e_first e_second e_name e_line <<<"$e_out"
+[ "$e_field" = "vocabulary-owner" ] || probe_fail "the empty-first repeat named field '$e_field'"
+[ -z "$e_first" ] || probe_fail "the empty-first repeat reported first='$e_first', not empty."
+
+# AND THE ROW ITSELF MUST STILL PARSE, CARRYING THE FIRST VALUE. The refusal is a REFUSAL,
+# not a parser abort, and it is FIRST-WINS.
+#
+# THE VALUE ASSERTION IS WHAT GIVES "does not overwrite" A SUBJECT, and without it that claim
+# is watched by nothing: the corpus section exits before `markers_of "$SRC"` is ever called,
+# so on the real corpus a reader that reported the repeat AND overwrote anyway is
+# indistinguishable from this one. Measured -- such a mutant passed every other probe here and
+# every mutant in core/fixtures/vocabulary-index/run.sh. A row count alone is true either way.
+d_row="$(markers_of "$PROBE_DIR/dup-offender.sh")"
+[ "$(grep -c . <<<"$d_row")" -eq 1 ] || \
+  probe_fail "the block carrying a repeated field produced no row at all. The repeat must be reported, not make the block vanish."
+IFS="$SEP" read -r d_name d_inv d_owner d_ext d_read d_emit <<<"$d_row"
+[ "$d_read" = "probe/first.txt" ] || \
+  probe_fail "the block carrying a repeated \`vocabulary-readers:\` read back readers='$d_read'; the FIRST declaration must survive. A reader that reports the repeat and overwrites anyway is silently last-wins everywhere the refusal is not fatal."
+
 # --- probe 2: the marker reader, negative -- a header whose prose DEMANDS a marker ----
 cat > "$PROBE_DIR/demand.sh" <<'PROBE'
 # --- I904: the widget vocabulary is one set across two readers ---------------
@@ -580,6 +723,29 @@ PROBE
 # =========================================================================================
 # THE CORPUS.
 # =========================================================================================
+# THE REPEATED-FIELD REFUSAL RUNS FIRST, because every check below it reads a row whose
+# provenance a repeat has made unanswerable. Which of the two declarations the row came from
+# is not something a later arm can recover, so there is nothing useful to say about a corpus
+# that carries one.
+dups="$(dups_of "$SRC")"
+if [ -n "$dups" ]; then
+  echo "render-vocabulary-index: a marker block in $SRC declares one field TWICE. A repeated" >&2
+  echo "  field is not merged and it is not a widening -- one of the two declarations is wrong," >&2
+  echo "  and the reader cannot tell you which. Delete one:" >&2
+  while IFS="$SEP" read -r dfield dfirst dsecond dname dline; do
+    [ -n "$dfield" ] || continue
+    # A block with no `# vocabulary:` line above the repeat is a real state -- the marker
+    # fields are ordinary comments and nothing requires one -- so it is named as such rather
+    # than rendered as an empty cell that reads like a bug in this message.
+    printf '    line %s, in the block for %s: %s declared as %s and again as %s\n' \
+      "$dline" "${dname:-a block with no \`# vocabulary:\` line}" \
+      "\`# $dfield:\`" "'$dfirst'" "'$dsecond'" >&2
+  done <<EOF
+$dups
+EOF
+  exit 1
+fi
+
 rows="$(markers_of "$SRC")"
 n_rows="$(grep -c . <<<"$rows")"
 [ "$n_rows" -gt 0 ] || fail "parsed ZERO vocabulary markers out of $SRC.

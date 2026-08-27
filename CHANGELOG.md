@@ -15,6 +15,154 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.421.0] - 2026-08-27
+
+### A marker field declared twice is refused, and the receipt that would have closed it on one field of five is gone
+
+Closes `BL-094`. `MARKER_AWK` in `scripts/render-vocabulary-index.sh` assigned on every
+matching `# vocabulary-<field>:` comment line, so a SECOND declaration of one field inside one
+marker block silently discarded the first. Last-wins, no message: the row rendered from the
+last declaration, `--check` byte-compared clean, and the gate was green. A contradiction
+between two declarations of one field was unreportable — in the file whose entire subject is
+that one declaration has one home, and which already refuses the sibling case loudly when
+`(consumer-owned)` appears alongside an extractor.
+
+**The fix is a PARTITION, not a detector.** Five scalar seen-flags, reset in `flush()` and in
+`BEGIN`, make the second declaration unconstructible rather than looked for; the reader emits a
+`#DUPFIELD` line naming the field and BOTH values, and the corpus section refuses before `rows=`
+is read, because which of the two declarations a row came from is not something a later arm can
+recover. Scalars rather than an array: `delete arr` is an extension this repo's BSD awk floor
+does not promise.
+
+**The flags are separate from the values, and that is the half a review would wave through.**
+Testing `readers != ""` accepts a second declaration of a field whose first declaration was
+EMPTY — which is exactly the contradiction being refused — and it would read as working
+forever, because every field in the live corpus is non-empty.
+
+Differential, sides asserted to differ before the comparison was read: pre-fix renderer on a
+tree carrying a duplicated `# vocabulary-readers:` exits **0**; post-fix exits **1**. `--check`
+on the real tree exits **0** either way — **8** cross-file vocabularies, **5** schema enums,
+`docs/vocabulary-index.md` byte-unchanged.
+
+**False-positive set measured EMPTY over the real corpus, and the direction that mattered was
+not the obvious one.** A repeated field cannot be manufactured by a MISSED arm header, because a
+`# vocabulary:` line also flushes — so a merge only matters for a field line sitting outside any
+block. `scripts/validate-enforcement-map.sh` carries 103 lines matching the strict arm-header
+regex against 120 matching a loose `# ---` rule, and those 17 loose-but-not-strict lines produce
+**0** orphan field lines. Control in the same invocation: with one `# vocabulary:` line deleted,
+**4**. The first control written for this returned 0 on both sides and established nothing — it
+broke an arm header rather than a `vocabulary:` line, which is not the input that discriminates.
+
+### The receipt covered ONE of the five fields the entry named, and a partial fix closed it
+
+**Found by an independent hand, and it is the transferable part of this release.** `BL-094`'s
+filed receipt seeded a duplicate `vocabulary-readers:` and nothing else. A partition applied to
+that one field returned exit **0** — a close — while a duplicated `vocabulary-owner:` on the
+same tree still rendered silently at exit **0**. Four fifths of the entry's stated subject was
+closable without being fixed, and the row would have read `CLOSE-CANDIDATE`.
+
+Two more defects went with it. A bare count guard over the same line satisfied the receipt while
+detecting nothing about duplication at all. And its `-ge 2` seed assertion was VACUOUS: six
+`^# vocabulary-readers:` lines pre-exist, so a no-op seed passes it — proven against a variant
+whose seeding `awk` was replaced by `cat`, which returned 1 against a tree that was fixed.
+
+The standing rule is "ask what ELSE satisfies the receipt". **The new form is that the SET was
+under-sampled rather than the mechanism** — the receipt exercised a real behaviour, correctly,
+on one member of a five-member set the entry itself enumerates. The replacement seeds a VERBATIM
+duplicate of each of the five fields in turn, restores between rounds, asserts the seed landed by
+both line count and field count, and requires all five to be refused. Measured both ways, and
+against the partial fix that motivated it:
+
+| tree | old receipt | new receipt |
+|---|---|---|
+| unfixed (`git archive HEAD`) | 1 | **1** |
+| fixed | 0 | **0** |
+| readers-only partition | **0** — false close | **1** |
+| count guard, detecting nothing | **0** — false close | **1** |
+| sentinel indented two spaces | **9** — spurious | **1** |
+
+That last row is its own small lesson: the old receipt anchored on `^# ` where `MARKER_AWK`
+accepts `^[[:blank:]]*#[[:blank:]]*`, and this repo already carries one INDENTED marker block.
+A receipt stricter than the grammar it is about reports exit 9, which `backlog-reverify.sh` maps
+to `STILL-LIVE`, which reads as a live defect.
+
+**A receipt's CONTROLS must not be sensitive to tree state outside the entry's subject.** The
+`sh` verb's population is the working directory rather than a committed ref, and that is the
+verb's design — keying on a ref would make every receipt blind to a fix until after it landed.
+But BL-094's opening `--check` control moved its verdict from 1 to 9 on an UNTRACKED malformed
+`core/schemas/*.json`, at the same commit with zero tracked changes.
+
+### An unreadable source file was reported as a changed grammar
+
+Pre-existing, found while seeding states the fix's own population excludes. A mode-000
+`scripts/validate-enforcement-map.sh` PASSES `[ -f ]`. BSD awk then ABORTS on it rather than
+skipping, and every marker reader is a pipeline ending in a filter, so each returns EMPTY and the
+abort is swallowed. The renderer did fail closed — reporting that the marker GRAMMAR had changed,
+which sends the reader to a file that is fine. This is `v0.420.0`'s wrong-attribution shape one
+level down, one release later.
+
+`[ -r "$SRC" ]` now refuses before awk is invoked at all, naming the cause. Measured on a
+mode-000 copy:
+
+| renderer | `awk: can't open` lines | exit | diagnosis |
+|---|---|---|---|
+| `b8714e0d` | 1 | 1 | "the marker grammar or the file changed" |
+| this change, before the guard | 2 | 1 | the same, and doubled |
+| this change, with the guard | **0** | **2** | "cannot READ … a permission or filesystem fault" |
+
+**The new reader made it worse before the guard fixed it**, and that is worth stating plainly:
+`dups_of` is a second awk pass, so it silently certified "no repeated fields" over a corpus it
+had never read. Adding a reader to a program that swallows its scanner's aborts adds a silent
+zero, every time.
+
+### The adversarial pass ran BEFORE the merge this time, and it found the property nothing was watching
+
+`v0.420.0` shipped a defect that an adversarial pass found one hour after the merge, and its
+lesson was to run that pass first. Run first, here is what it returned.
+
+**A finding that names no location cannot be acted on.** Seeding a repeat into every block gave
+six findings naming the field and both values — and where the two values were IDENTICAL, six
+BYTE-IDENTICAL lines with nothing to grep for. Three declarations of one field give two findings
+that both name the same first value. Both locators were already in hand at the call site: awk's
+`name` holds the block's vocabulary and `FNR` holds the line, and neither was emitted. This is
+`v0.420.0`'s shape one notch finer — a guard that refuses correctly and cannot say where. The
+message now leads with the line and the block, and the same seed gives **6 findings, 6 unique**.
+
+**"Refuses to overwrite" was watched by NOTHING, and that is the finding worth carrying.** The
+corpus refusal exits before `markers_of "$SRC"` is ever called, so on the real corpus a reader
+that reported the repeat AND overwrote anyway is indistinguishable from one that did not. A
+mutant doing exactly that passed every self-probe here and all twenty fixture mutants — green
+everywhere. The row-count assertion that was supposed to cover it is true with or without the
+overwrite. **A guard whose property is unobservable under the shipped control flow is not a
+guard**, and the row-count arm read exactly like one that discriminated. The probe now reads the
+row back and asserts the FIRST value survived, which kills it.
+
+**The self-probes cover 2 of the 5 fields; the fixture covers all 5.** Measured across 18
+renderer mutants: deleting the `extract`, `emitters` or `invariant` guard survives every
+in-script probe and dies only in `core/fixtures/vocabulary-index/run.sh`. That split is
+defensible — the fixture is the shipping gate — but it is worth knowing that the probes alone
+would let three of the five guards be deleted silently.
+
+**Verified clean, with controls, because these were the absences.** Hostile values reach stderr
+verbatim and unexecuted (`read -r` plus a heredoc fed an already-expanded variable does no
+re-expansion; both `printf`s take values as arguments, so `%s%d%n` prints literally). No space
+after the colon, leading tabs, CRLF, UTF-8 multibyte values and identical-value repeats are all
+detected, and all are cases the pre-fix renderer exited 0 on. Duplicating `# vocabulary:` itself
+is correctly NOT a repeat. `$SRC` absent, a directory and a dangling symlink all exit 2 — only
+unreadable-but-present was a hole, and it is now closed.
+
+**One self-inflicted defect, recorded because it is the class this repo keeps meeting.** The
+comment explaining the locator fix contained the word `block's`. `MARKER_AWK` is a
+SINGLE-QUOTED shell string, so that apostrophe terminated it and produced a bash syntax error
+reported at a `}` a hundred lines away that was perfectly fine. `bash -n` caught it; reading
+would not have.
+
+`core/fixtures/vocabulary-index/run.sh` gains a near-miss control and seven mutants — the
+near-miss (one field declared once in each of two ADJACENT blocks, which a file-scoped refusal
+would wrongly flag), a duplicate on each of four different fields, a verbatim same-value repeat,
+an empty-first declaration, and the unreadable corpus. **2 controls + 1 near-miss green, 21 of 21
+mutants killed by their own arm.**
+
 ## [0.420.0] - 2026-08-27
 
 ### An aborted sweep now names its own cause, instead of blaming the exemption

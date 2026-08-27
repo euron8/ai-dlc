@@ -492,7 +492,19 @@ declaration in this file is held out of.
 
 Found by an adversarial pass over `v0.419.0`/`v0.420.0` run after both had merged.
 
-verify: sh R=scripts/render-vocabulary-index.sh; M=scripts/validate-enforcement-map.sh; [ -f "$R" ] && [ -f "$M" ] || exit 9; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" --check >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; L="$(grep -n '^# vocabulary-readers: @owner-declares' "$D/$M" | head -1 | cut -d: -f1)"; [ -n "$L" ] || { rm -rf "$D"; exit 9; }; awk -v n="$L" 'NR==n{print "# vocabulary-readers: core/skills/ai-dlc/steps/retro.md"} {print}' "$D/$M" > "$D/m.tmp" || { rm -rf "$D"; exit 9; }; mv "$D/m.tmp" "$D/$M" || { rm -rf "$D"; exit 9; }; [ "$(grep -c '^# vocabulary-readers:' "$D/$M")" -ge 2 ] || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" >/dev/null 2>&1 ); rc=$?; rm -rf "$D"; [ "$rc" -eq 0 ] || exit 0; exit 1
+**The receipt below REPLACED the one filed with this entry, and the reason is a measured false
+close.** The original seeded a duplicate `vocabulary-readers:` only, so a partition applied to
+that ONE field returned exit 0 while a duplicated `vocabulary-owner:` still rendered silently —
+four fifths of this entry's stated subject closable without being fixed. Two more defects went
+with it: a bare count guard over the same line satisfied it while detecting nothing about
+duplication, and its `-ge 2` seed assertion was VACUOUS, because six `^# vocabulary-readers:`
+lines pre-exist and a no-op seed passes it. It also anchored on `^# ` where `MARKER_AWK` accepts
+`^[[:blank:]]*#[[:blank:]]*`, and this file already carries one INDENTED marker block, so two
+spaces on the sentinel sent it to exit 9 — reported as STILL-LIVE. The replacement seeds a
+VERBATIM duplicate of each of the five fields in turn, restoring between rounds, asserts the
+seed landed by both line count and field count, and requires all five to be refused.
+
+verify: sh R=scripts/render-vocabulary-index.sh; M=scripts/validate-enforcement-map.sh; [ -f "$R" ] && [ -f "$M" ] || exit 9; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" --check >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; cp "$D/$M" "$D/m.orig" || { rm -rf "$D"; exit 9; }; n=0; for f in invariant owner extract readers emitters; do cp "$D/m.orig" "$D/$M"; L="$(grep -n "^[[:blank:]]*#[[:blank:]]*vocabulary-$f:" "$D/$M" | head -1 | cut -d: -f1)"; [ -n "$L" ] || { rm -rf "$D"; exit 9; }; b0="$(wc -l < "$D/$M")"; c0="$(grep -c "^[[:blank:]]*#[[:blank:]]*vocabulary-$f:" "$D/$M")"; awk -v n="$L" 'NR==n{print} {print}' "$D/$M" > "$D/m.tmp" || { rm -rf "$D"; exit 9; }; mv "$D/m.tmp" "$D/$M"; [ "$(wc -l < "$D/$M")" -eq "$((b0+1))" ] || { rm -rf "$D"; exit 9; }; [ "$(grep -c "^[[:blank:]]*#[[:blank:]]*vocabulary-$f:" "$D/$M")" -eq "$((c0+1))" ] || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" >/dev/null 2>&1 ) || n=$((n+1)); done; cp "$D/m.orig" "$D/$M"; ( cd "$D" && bash "$R" >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; rm -rf "$D"; [ "$n" -eq 5 ] || exit 1; exit 0
 
 ## BL-093 — the ledger ceiling bounds one member of a wider unbounded population
 
