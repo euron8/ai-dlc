@@ -9,6 +9,28 @@ and status records that were current when they were written and that THIS BLOCK 
 it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from it.**
 
+### THE GOAL, restated because this program measurably drifted off it
+
+**The subject of this plan is the GRAPH CONSUMER'S push-candidate ledger — the 82 `PC-` ids in
+`/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md`. It is NOT
+`docs/backlog.md`.** The backlog is the working form the candidates were filed into; it is an
+instrument, not the goal. **OPERATOR RULING, and it settles the priority: the original goal
+stands. Hardening ai-dlc is secondary — worthwhile, and ranked BELOW the ledger.**
+
+**THIS PLAN IS NOT A MECHANISM FOR EMPTYING `docs/backlog.md`, AND READING IT AS ONE IS WHAT
+WENT WRONG.** Measured at batch 12's close: **the last TEN entries filed — `BL-089` through
+`BL-098` — cite ZERO `PC-` ids.** Every one is an ai-dlc-internal discovery. 34 of 69 live
+entries trace to a candidate; **35 do not.** Batch 13 had been queued against three entries with
+no consumer provenance and no consumer surface, because the selection rule was "readiest to
+close", which systematically favours defects the session found itself and already knows how to
+fix. Pick by PROVENANCE first, then by consequence.
+
+**A RISING BACKLOG IS NOT THIS PROGRAM FAILING, AND THE OPERATOR HAS RULED ON IT.** Resolving a
+PC-backed entry will often FILE new entries, and will sometimes close pre-existing ones that
+carry no classification at all. Both are expected. Do not treat the live count as a progress
+metric and do not narrow a fix to avoid filing what it uncovers — **the number that measures this
+program is candidates discharged, never entries remaining.**
+
 **Two repos, and the boundary is absolute.** `/Users/n8/git/ai-dlc` is WRITE.
 `/Users/n8/git/graph` is the reference consumer and is **READ ONLY** — an ai-dlc session never
 writes to a consumer. Assert it by ledger CONTENT, not by dirty count and not by `HEAD`:
@@ -36,6 +58,35 @@ grep -cE '^## BL-[0-9]+' docs/backlog.md          # live entries
 grep -cE '^## BL-[0-9]+' docs/backlog.archive.md  # archived
 bash scripts/backlog-reverify.sh | grep -oE 'CLOSE-CANDIDATE|STILL-LIVE|HAND-REVIEW|NEEDS-REVIEW' | sort | uniq -c
 ```
+
+**AND THE JOIN THAT MEASURES THE ACTUAL GOAL, which the block above does not.** Those four
+commands describe the INSTRUMENT. This one describes the SUBJECT, and until batch 12 nothing in
+this file derived it:
+
+```
+L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
+grep -ohE 'PC-[A-Z0-9][A-Z0-9-]+' "$L" | sort -u | wc -l              # candidates in the ledger
+grep -rohE 'PC-[A-Z0-9][A-Z0-9-]+' docs/ | sort -u > /tmp/ours.txt    # candidates we have NAMED
+comm -23 <(grep -ohE 'PC-[A-Z0-9][A-Z0-9-]+' "$L" | sort -u) /tmp/ours.txt | wc -l   # never named
+grep -ohE 'ZQ-[A-Z0-9][A-Z0-9-]+' "$L" | wc -l                        # control: must be 0
+```
+
+At batch 12's close: **82 candidates, 61 named somewhere, 21 named NOWHERE**, control 0.
+
+**THE ID GRAMMAR IS `PC-<SLUG>`, NOT `PC-<NUMBER>`, and getting that wrong returns a clean zero
+from BOTH sides.** A first pass keyed on `PC-[0-9]+` reported 0 ids in the ledger AND 0 in the
+backlog, which reads as "the join is dead" rather than "the grammar is wrong". The control that
+catches it is running the same expression against the ledger itself: if the SOURCE has none
+either, the grammar is the defect. This is `verification-discipline.md`'s "point a search grammar
+at its own subject before trusting its zero", met in the wild an hour after it was written down.
+
+**"Named" IS NOT "adjudicated".** `grep`-matching an id somewhere under `docs/` is a MENTION, and
+a mention is not a disposition — so 61 is a ceiling on coverage, not a measurement of it. The 21
+is the solid half: those have not been examined at all. Their status in the consumer's own ledger
+is **NOT ESTABLISHED** — a per-id status read returned `UNKNOWN` for 13 of them, against a control
+that cleanly separated `ADOPTED` from `OPEN` on the named ids, so the extraction works and simply
+does not reach these. Some may already be `WITHDRAWN` or `ADOPTED` upstream. **Establish that
+before treating 21 as a workload.**
 
 At the last session's close those read **69 live / 29 archived / 61 STILL-LIVE + 8 HAND-REVIEW
 + 0 CLOSE-CANDIDATE**, against an impossible-id control of 0. Every one of those was RE-DERIVED
@@ -326,30 +377,36 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **BATCH 13. Batch 12 is done — see the block above — and the 69 survivors are the corpus.
-   Pick the subject and say why.**
+1. **BATCH 13. THE CORPUS IS THE 34 PC-BACKED LIVE ENTRIES, NOT THE 69.** Batch 12 is done —
+   see the block above. Pick the subject from the PC-backed set and say which candidate it
+   discharges.
 
-   **There IS a standing recommendation this time, and it is named below.** Earlier batches
-   deliberately carried none, because no entry had a fix argued out; batch 12 ended with three
-   that do. Take it or reject it, but do not read the recommendation and the re-derivation
-   instruction as alternatives — **the recommendation does not excuse the re-derivation.** Run
-   each candidate's receipt directly and read the RAW exit code, then re-derive the entry's
-   population rather than believing it. Batch 12's own subject was filed with a receipt that
-   closed on one field of the five its entry enumerates, and only running it found that.
+   **THE SELECTION RULE IS PROVENANCE FIRST, THEN CONSEQUENCE — NOT READINESS.** Operator
+   ruling. "Readiest to close" is what pointed batch 13 at three entries with no consumer
+   provenance and no consumer surface, and it will do it again, because a session always finds
+   its own discoveries easiest to fix. Derive the corpus rather than trusting this list:
 
-   **`BL-096`, `BL-097` and `BL-098` are the readiest subjects and they are ONE subsystem
-   together** — all three are "a repeated declaration is resolved silently" in the two index
-   renderers, and batch 12 filed each with a candidate fix already built and measured against
-   an empty false-positive set: `solo[id] > 1 || gcollide[id]` for `BL-096`, an
-   `object_pairs_hook` that raises for `BL-097`, and a file-scope `seenname[]` for `BL-098`.
-   That is the `BL-090` shape three times over — a named, subtractive fix already argued out.
-   Taking them means saying in the release that the subject is the renderer pair, not three
-   unrelated files.
+   ```
+   awk '/^## BL-[0-9]+/{if(id!="")out(); id=$2; pcs=""}
+        match($0,/PC-[A-Z0-9][A-Z0-9-]+/){p=substr($0,RSTART,RLENGTH); if(index(pcs,p)==0) pcs=pcs (pcs?",":"") p}
+        END{if(id!="")out()} function out(){ if(pcs!="") printf "%s\t%s\n", id, pcs }' docs/backlog.md
+   ```
 
-   `BL-095` is the same class but a DIFFERENT subsystem (the rule-file validator) and a
-   different defect — the validator UNIONS both `paths:` blocks while a YAML loader keeps one,
-   so nothing is discarded and the two readers disagree instead. Do not fold it in with the
-   two above on the grounds that it "sounds the same".
+   At batch 12's close that returned **34 entries**, of which **33 have receipts exiting 1** and
+   one — `BL-066` — exits **9** and has therefore measured nothing. Almost all name `core/`
+   paths, so the consumer surface is there; `BL-086` is the one that names none.
+
+   **`BL-095` through `BL-098` are DEFERRED, not rejected.** They are real, each carries a
+   candidate fix already measured against an empty false-positive set, and they are the
+   secondary goal the operator ranked BELOW this one. They are also all distribution-only —
+   `scripts/render-invariant-index.sh` and `scripts/render-vocabulary-index.sh` reach no
+   consumer. Take them when the PC-backed set is discharged, or when one of them blocks a
+   PC-backed fix.
+
+   **The recommendation does not excuse the re-derivation.** Run each candidate's receipt
+   directly and read the RAW exit code, then re-derive the entry's population rather than
+   believing it. Batch 12's own subject was filed with a receipt that closed on one field of
+   the five its entry enumerates, and only running it found that.
 
    `BL-006` is NARROWED and still live, and it is the coherent alternative — but read its
    receipt first: it is a CONJUNCTION over two corpora in two trees, and the consumer half is
@@ -436,6 +493,27 @@ so no block written before it changes verdict.
    `scripts/backlog-rotate.sh --check`, then `--apply`. **Confirm the archive count MOVED.** A
    release has shipped with this step silently skipped and was reported complete; it was caught
    only because the operator asked.
+
+   **THEN LOOK FOR THE ENTRIES YOU CLOSED WITHOUT MEANING TO.** Operator ruling: a PC-backed fix
+   will sometimes discharge pre-existing entries that carry no classification, and those closes
+   are free — but only if someone looks. The receipt histogram you already run is the
+   instrument: **any entry other than your subject reporting exit 0 is an incidental close.**
+   Run it before and after, and diff the two.
+
+   ```
+   bash -c 'while IFS= read -r l; do ( eval "$l" ) >/dev/null 2>&1; echo "$?"; done \
+     < <(awk "/^## BL-[0-9]+/{e=1} e && sub(/^[ \t]*verify: sh /,\"\")" docs/backlog.md) \
+     | sort | uniq -c'
+   ```
+
+   A 0 in that histogram is a HYPOTHESIS, exactly as `CLOSE-CANDIDATE` is: run that entry's
+   receipt alone, read the raw exit, and ask what ELSE satisfies it before annotating anything.
+   And record the incidental close in the release commit message — `named_absorbed()` reads
+   commit MESSAGES, so an id discharged but not cited produces no row anywhere.
+
+   **THE MIRROR CASE IS ALSO EXPECTED AND IS NOT A FAILURE.** A PC-backed fix will file new
+   entries; batch 12 filed four while closing one. File them, tier them, give each a provenance
+   line, and do NOT narrow the fix to avoid uncovering them.
 6. **AFTER THE MERGE, BEFORE YOU STOP: re-derive this file's own RESUME block and prove it is
    resumable.** This is a numbered action because it is the step that decays silently — the
    merge is the moment the block you were following becomes a description of work already done,
