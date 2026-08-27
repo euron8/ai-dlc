@@ -3490,3 +3490,55 @@ four case directories, so a reshaped fixture reports a moved precondition rather
 close.
 
 verify: sh V=core/scripts/validate-gate-adjudication.sh; S=core/fixtures/gate-repair-record/seed.sh; [ -f "$V" ] && [ -f "$S" ] || exit 9; R=$(bash "$S") || exit 9; [ -n "$R" ] && [ -d "$R" ] || exit 9; g() { bash "$V" --series "$R/$1/_bmad-output/gate-adjudication" >/dev/null 2>&1; }; for k in gate-repaired-lead-resolution gate-repaired-adversarial-resolution-only gate-repaired-inline-no-record gate-repaired-resolution-off-label; do [ -d "$R/$k/_bmad-output/gate-adjudication" ] || { rm -rf "$R"; exit 9; }; done; g gate-repaired-lead-resolution; a=$?; g gate-repaired-adversarial-resolution-only; b=$?; g gate-repaired-inline-no-record; c=$?; g gate-repaired-resolution-off-label; d=$?; rm -rf "$R"; [ "$a" = 2 ] && exit 9; [ "$a" -eq 0 ] && [ "$b" -ne 0 ] && [ "$c" -ne 0 ] && [ "$d" -ne 0 ]
+
+---
+
+## BL-108 — an entering gate is treated as one monolithic blocker on the next step, so a FAIL on a check the next step never reads serialises the whole dispatch
+
+**Discharges `PC-S306-GATE-REMEDIATION-BLOCKS-INDEPENDENT-DEV-DISPATCH`, filed by the reference
+consumer in sprint 306.** Rule 4 — *"do not jump to the next step file until the current step's
+execution sequence is complete and its gate validation has passed"* — plus
+`core/skills/ai-dlc/steps/bug-investigation.md:134`'s literal sequencing read as a strict gate:
+`implementation.md` Section 2 does not begin until every escalated check on the entering
+`implementation` gate has PASSed.
+
+**The checks are heterogeneous and nothing said so.** Some gate bookkeeping the next step does
+not consume; others gate content it needs. Reproduced sprint 306: Check 22 (Teammate-spawn role
+binding, which reads `_bmad-output/spawn-ledger.jsonl` and role contracts, not the story or its
+acceptance criteria) FAILed on a pre-ledger defect and took three adjudication passes across two
+sprints to close. The lead ran the whole repair-and-reverify cycle serially before dispatching
+the story's dev, and the two only ran in parallel because the operator asked an ETA question that
+prompted the lead to notice.
+
+**The fix is prose in the two step files, and the schema extension upstream suggested was
+rejected on measurement.** That direction adds a per-check `blocks_next_step` field to
+`core/skills/ai-dlc/enforcement-map.yaml`. That file carries **57** per-check entries, so it is
+57 hand-assigned judgments about what the next step reads, and a check added later without one
+is a silent hole. It is also the file `scripts/validate-enforcement-map.sh` validates, which the
+fixture suite's POLE invokes — measured at **20.3s** on this tree before any change, and
+`CLAUDE.md` records one arm added there as a nested loop taking that validator 13.0s → 18.1s and
+the whole suite to ten minutes. **The decisive reason is neither of those.** The value is a
+judgment about the NEXT STEP's read-set, which the lead has in front of it at the moment of the
+FAIL; a declared value goes stale the first time a check's remediation changes what it writes,
+and a stale one authorises skipping a gate that check does gate. A wrong `blocks_next_step: []`
+is worse than no field.
+
+**The escape hatch is closed in the same change, and that is the load-bearing half.**
+`implementation.md` Section 7's completion condition now names the ENTERING gate: no story lands
+and the sprint does not complete until that gate PASSes, including any check whose repair was
+dispatched in parallel with the routing. Without that, "route now, repair in parallel" is a way
+to finish a sprint over a FAIL.
+
+Tiered **DEFECT**. It costs real wall clock on every FAIL that lands on a check the next step
+does not read, and nothing in the step files distinguished the two classes.
+
+**The receipt partitions Section 6 by NUMBERED ACTION rather than scanning its span**, because
+the bold sentence introducing the rule contains the same words as the condition and survives a
+regression that guts the numbered item beneath it — scored, that build returns 0 under a
+span-level receipt. Two arms, scored against five builds: the shipped fix **0**, a second
+spelling that rewords both the introduction and the numbered item **0**, the unfixed pair **1**,
+a regression shipping the parallel dispatch while reverting Section 7's land bar **1**, and a
+regression making the routing unconditional **1**. Exits 9 if either span comes back shorter
+than its minimum, so a renamed heading reports a moved precondition rather than a false close.
+
+verify: sh B=core/skills/ai-dlc/steps/bug-investigation.md; I=core/skills/ai-dlc/steps/implementation.md; [ -f "$B" ] && [ -f "$I" ] || exit 9; s6=$(awk '/^### 6\. Gate Validation/{s=1;next} /^### 7\./{s=0} s' "$B"); s7=$(awk '/^### 7\. All Gates Passed/{s=1} s' "$I"); [ "$(printf '%s\n' "$s6" | grep -c .)" -ge 3 ] || exit 9; [ "$(printf '%s\n' "$s7" | grep -c .)" -ge 2 ] || exit 9; printf '%s\n' "$s6" | awk 'function p(){ if (b ~ /^[0-9]+\./ && b ~ /[Rr]oute/ && b ~ /the next step (does not consume|reads|needs)/) f=1 } /^[0-9]+\. /{ p(); b=$0; next } { b=b" "$0 } END{ p(); exit f?0:1 }' || exit 1; grep -qiE 'entering gate' <<<"$s7"

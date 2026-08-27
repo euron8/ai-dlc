@@ -17,6 +17,33 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.428.0] - 2026-08-27
 
+### A FAIL on a check the next step never reads no longer serialises the dispatch
+
+`PC-S306-GATE-REMEDIATION-BLOCKS-INDEPENDENT-DEV-DISPATCH`. Rule 4 plus
+`bug-investigation.md` Section 6's sequencing read as a strict gate: `implementation.md`
+Section 2 did not begin until every escalated check on the entering gate had PASSed. But the
+checks are heterogeneous — some gate bookkeeping the next step does not consume, others gate
+content it needs — and nothing said so. Reproduced sprint 306: Check 22 (spawn-ledger role
+binding, which reads no story and no acceptance criterion) FAILed and took three adjudication
+passes across two sprints, run serially before the story dev was dispatched.
+
+Section 6 now carries a numbered action list: name the artifacts each FAILing check's
+remediation writes, dispatch every repair backgrounded, and route in the same message when no
+FAILing check's remediation writes an artifact the next step reads.
+
+**The escape hatch is closed in the same change.** `implementation.md` Section 7's completion
+condition now names the ENTERING gate, so no story lands and no sprint completes until it
+PASSes — including a check whose repair was dispatched in parallel with the routing.
+
+**The `enforcement-map.yaml` schema extension upstream suggested was rejected on measurement,
+and not on the cost.** That file carries **57** per-check entries, so the field is 57
+hand-assigned judgments and a later check without one is a silent hole; the validator that
+reads it runs **20.3s** and is invoked by the fixture suite's pole. The decisive reason is
+neither: the value is a judgment about the NEXT STEP's read-set, which the lead has in front of
+it at the moment of the FAIL. A declared value goes stale the first time a check's remediation
+changes what it writes, and a stale `blocks_next_step: []` authorises skipping a gate that check
+does gate. A wrong field is worse than no field.
+
 ### The fanout corpus sees the artifacts a remediator has not committed yet
 
 `PC-S306-FANOUT-UNTRACKED-FILES-INVISIBLE`. `report-propagation-fanout.sh` sourced its mutable

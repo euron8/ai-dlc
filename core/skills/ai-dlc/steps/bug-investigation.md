@@ -133,7 +133,24 @@ Run `/bmad-sprint-planning` to set up a single-story sprint.
 
 ### 6. Gate Validation and Proceed
 
-Run gate validation [implementation] (`gate-validation.md`), then:
+Run gate validation [implementation] (`gate-validation.md`).
+
+**A FAIL on a check the next step does not consume routes now and repairs
+in parallel.** On any FAIL, before routing:
+
+1. For each FAILing check, name the artifacts its remediation writes.
+2. Dispatch the repair for every FAILing check through the **Adversarial
+   repair dispatch** sub-routine (`_gate-procedures.md`), backgrounded.
+3. Route below in the SAME message as that dispatch when no FAILing
+   check's remediation writes an artifact the next step reads. A check
+   whose remediation writes only the gate log, the snapshot, the spawn
+   ledger, or a role contract writes nothing a story dev reads. A FAIL on
+   story content or on acceptance criteria writes what the dev reads, and
+   holds the routing until it PASSes.
+4. Re-run gate validation when the repair lands. No story lands and the
+   sprint does not complete until the entering gate PASSes.
+
+Then:
 
 If design flaw detected:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/discovery.md`

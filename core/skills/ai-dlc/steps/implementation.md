@@ -25,6 +25,10 @@ a story lacks refs.
 
 Create an agent team.
 
+A backgrounded repair on the entering gate does not delay this spawn. The
+lead dispatches the story dev now and joins the repair on its own beat;
+Section 7 holds the land bar until that gate PASSes.
+
 Spawn the following teammates using role files in `.claude/team-roles/`.
 Each spawn MUST bind the FULL role contract, not just the model
 (SKILL.md Rule 19):
@@ -474,5 +478,7 @@ orchestration resumes.
 
 ### 7. All Gates Passed
 
-When ALL sprint stories have passed all three gates:
+When ALL sprint stories have passed all three gates AND the entering gate
+that routed into this step has reached PASS — including any check whose
+repair was dispatched in parallel with that routing:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/sprint-review.md`
