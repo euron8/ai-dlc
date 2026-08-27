@@ -454,6 +454,46 @@ verify: sh D=$(mktemp -d) || exit 9; trap 'rm -rf "$D"' EXIT; git clone -q --loc
 
 ---
 
+## BL-094 — a marker field declared TWICE is last-wins and silent, so a contradiction between two declarations of one field is never reported
+
+**The renderer resolves a repeated field by overwriting, and says nothing.**
+`scripts/render-vocabulary-index.sh`'s `MARKER_AWK` assigns on every matching comment line —
+`vocabulary-readers:`, `vocabulary-emitters:`, `vocabulary-owner:`, `vocabulary-extract:` and
+`vocabulary-invariant:` alike — so a second declaration of the same field silently discards the
+first. The row renders from the LAST one, `--check` byte-compares clean, and the gate is green.
+
+**Measured on the real renderer, in a scratch copy.** A literal reader path inserted immediately
+above the `@owner-declares` sentinel gives two `# vocabulary-readers:` lines with different
+values: renderer **exit 0**, index written, the derived list rendered and the literal
+declaration discarded with no message. Control in the same invocation: the unseeded copy passes
+`--check`.
+
+**It is PRE-EXISTING, not introduced by the field that exposed it.** Driven against
+`5efb3d17^` — before `vocabulary-emitters:` existed — with `# vocabulary-readers:` duplicated:
+renderer **exit 0** there too, against a control confirming that copy carries no emitters field.
+`v0.419.0` widened the surface from four fields to five; it did not create the behaviour.
+
+**Why it matters here specifically.** This file's whole subject is that one declaration has one
+home. Two declarations of one field is the state that satisfies NEITHER reading, and the
+renderer already refuses the sibling case — `(consumer-owned)` alongside an extractor fails
+loudly with "one of the two declarations is wrong". A repeated field is the same class and is
+accepted. Arm D of `I93` refuses the same shape one level out, failing the push when a path is
+both declared an emitter and exempted.
+
+**The likely fix is a partition rather than a detector**: have `MARKER_AWK` refuse to overwrite
+a field that is already set within one marker block, so the contradictory state cannot be
+expressed. Measure the false-positive set first — a marker block is delimited by the next arm
+header, and an arm header inside a heredoc or a quoted string could make two unrelated blocks
+read as one.
+
+Tiered **NOTE**. Nothing emits a wrong verdict today and the rendered index is correct on the
+live tree; the cost is that a contradiction is unreportable, which is the state every other
+declaration in this file is held out of.
+
+Found by an adversarial pass over `v0.419.0`/`v0.420.0` run after both had merged.
+
+verify: sh R=scripts/render-vocabulary-index.sh; M=scripts/validate-enforcement-map.sh; [ -f "$R" ] && [ -f "$M" ] || exit 9; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" --check >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; L="$(grep -n '^# vocabulary-readers: @owner-declares' "$D/$M" | head -1 | cut -d: -f1)"; [ -n "$L" ] || { rm -rf "$D"; exit 9; }; awk -v n="$L" 'NR==n{print "# vocabulary-readers: core/skills/ai-dlc/steps/retro.md"} {print}' "$D/$M" > "$D/m.tmp" || { rm -rf "$D"; exit 9; }; mv "$D/m.tmp" "$D/$M" || { rm -rf "$D"; exit 9; }; [ "$(grep -c '^# vocabulary-readers:' "$D/$M")" -ge 2 ] || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" >/dev/null 2>&1 ); rc=$?; rm -rf "$D"; [ "$rc" -eq 0 ] || exit 0; exit 1
+
 ## BL-093 — the ledger ceiling bounds one member of a wider unbounded population
 
 `scripts/validate-backlog-size.sh` bounds `docs/backlog.md`. Derived by ranking every tracked
