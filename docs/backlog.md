@@ -3205,3 +3205,73 @@ the install did not produce a tree, so a broken probe cannot read as a fix.
 
 verify: sh R="$PWD"; D=$(mktemp -d) || exit 9; mkdir -p "$D/_bmad"; bash scripts/install.sh "$D" >/dev/null 2>&1; [ -d "$D/tests/fixtures" ] || { rm -rf "$D"; exit 9; }; n=$(find "$D" -name VERSION -type f 2>/dev/null | wc -l | tr -d ' '); rm -rf "$D"; [ "$n" -gt 0 ] && exit 0; c=$(grep -l '/VERSION"' "$R"/core/fixtures/*/run.sh 2>/dev/null | wc -l | tr -d ' '); k=$(grep -l 'FIXTURE' "$R"/core/fixtures/*/run.sh 2>/dev/null | wc -l | tr -d ' '); [ "$k" -gt 0 ] || exit 9; [ "$c" -eq 0 ]
 
+
+## BL-102 — `apply.sh --finish` verifies nothing it stamps, because `mech_fail` is initialised above the phase guard it is mutated inside
+
+**`--finish` skips the resolution phases, so `mech_fail` is always the `0` assigned above the
+guard, and the finisher prints `RESOLVED consistent "the tree matches <theirs>; fixture suite
+re-enabled"` over any tree the operator hands it.** The read-set of `write_stamp()` and
+`hook_registration_row()` was derived against the shipped file, with the intersection asserted
+non-empty as a control: **`mech_fail` is the only variable assigned before the phase guard and
+mutated only inside it.** Everything else those two functions read (`APPLYING`, `BASE`,
+`CARRIED_MACHINERY`, `CONSUMER`, `DIST`, `FINISH`, `THEIRS`, `handback`, `worklist_n`) is
+assigned above the guard and is unaffected.
+
+Measured on a synthetic tree where no file was ever applied: `--finish` emitted
+`RESOLVED restamp` and `RESOLVED consistent`, wrote `version`/`commit` at theirs, and cleared
+the in-flight marker, with the consumer's driver still byte-identical to base. That is verbatim
+the false claim `v0.426.0` exists to prevent, reached by one operator command.
+
+**It is not a regression against the pre-change behaviour** — the ordinary run never verified
+the mechanical set against theirs either; `mech_fail` counts what this program failed to place,
+not what the tree holds. What `--finish` changes is that the false claim becomes reachable
+deliberately, on a tree the operator ASSERTS is done, and `v0.426.0` makes that assertion a
+routine step rather than a rare one. The finisher verifies exactly one property today, hook
+registration, and takes the operator's word for everything else.
+
+The fix needs no phase and cannot loop: for each core path the manifest ships, compare the
+consumer copy against `git show "${THEIRS}:core/<rel>"` and withhold on a mismatch. The mapper
+is already loaded above the guard.
+
+Tiered **DEFECT** — a wrong stamp mis-bases the next pull's merge, but reaching it requires the
+operator to assert completion over a tree that is not complete.
+
+Found by an adversarial pass on `v0.426.0`, run after the merge. Not a `PC-` candidate, so it
+ranks below the PC-backed set.
+
+The receipt is the STRUCTURAL fact, not the behaviour: it exits 1 while `write_stamp()` contains
+no comparison against theirs' blob, and 0 once one is added. It exits 9 if the phase guard or the
+counter initialisation cannot be located, so a reshaped file reports a moved precondition rather
+than a false close.
+
+verify: sh a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$a" ] || exit 9; g=$(grep -n 'FINISH" = 0 \]; then' "$a" | tail -1 | cut -d: -f1); i=$(grep -n '^mech_fail=0$' "$a" | head -1 | cut -d: -f1); w=$(grep -n '^write_stamp() {' "$a" | head -1 | cut -d: -f1); [ -n "$g" ] && [ -n "$i" ] && [ -n "$w" ] || exit 9; [ "$i" -lt "$g" ] || exit 9; body=$(sed -n "${w},\$p" "$a" | awk 'NR>1 && /^}$/{exit} {print}' | sed 's/#.*//'); grep -q 'THEIRS}:VERSION' <<<"$body" || exit 9; grep -q 'THEIRS}:core/' <<<"$body" && exit 0; exit 1
+
+## BL-103 — an `ai-dlc-*.sh` hook the settings template cannot register withholds `--finish` forever
+
+**`--finish` gates on `WORKLIST settings-merge`, and that row's own prescribed remedy does not
+always clear it.** `settings-merge.sh` re-applies the TEMPLATE's owned hook block; it cannot
+register a hook the template does not carry. So a consumer holding an `ai-dlc-*.sh` hook that
+upstream has retired — or one whose registration the operator declined — gets
+`validate-hook-registration.sh` rc 1 on every run, and the finisher withholds with no reachable
+exit short of deleting the hook by hand.
+
+Measured against a consumer built from the shipped template with the real validator: clean
+consumer rc 0 gives `RESOLVED restamp` and a cleared marker; one unregistered `ai-dlc-*.sh` on
+disk gives rc 1, `WORKLIST settings-merge`, `DECISION restamp-withheld` and a present marker;
+running the row's own remedy left the validator still at rc 1 and the state unchanged.
+
+Reachable because `apply.sh` emits `DECISION deletion` and never removes a consumer file, so a
+hook retired upstream persists across every later pull.
+
+**The population is EMPTY today and that is stated rather than assumed**: the reference consumer
+carries 19 hooks and registers 19, validator rc 0, and `git log -p templates/settings.json.template`
+shows zero genuinely retired hook names — the one candidate on a `-` line is still in the current
+template, a moved line. A loaded gun, not live fire.
+
+Tiered **DEFECT**. It wedges a consumer's push with no in-band exit, but nothing reaches the
+state today.
+
+Found by an adversarial pass on `v0.426.0`. Not a `PC-` candidate, so it ranks below the
+PC-backed set.
+
+verify: sh s=core/skills/ai-dlc-update/reconcile/settings-merge.sh; a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$s" ] && [ -f "$a" ] || exit 9; grep -q 'say WORKLIST settings-merge' "$a" || exit 9; grep -q 'worklist_n' "$a" || exit 9; code=$(sed 's/#.*//' "$s"); grep -q 'jq' <<<"$code" || exit 9; grep -qE '(echo|printf|say)[^#]*(retired hook|not carried by the template|cannot be registered)' <<<"$code" && exit 0; exit 1

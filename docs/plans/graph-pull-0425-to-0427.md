@@ -1,8 +1,8 @@
-# Pull the graph consumer from 0.425.0 to 0.426.0
+# Pull the graph consumer from 0.425.0 to 0.427.0
 
 ## RESUME HERE
 
-**You were started with one sentence: `READ and FOLLOW docs/plans/graph-pull-0425-to-0426.md`.**
+**You were started with one sentence: `READ and FOLLOW docs/plans/graph-pull-0425-to-0427.md`.**
 This block is the whole of your entry point and the only current status record in this file.
 
 **Status: NOT STARTED.** Nothing below has been executed.
@@ -30,12 +30,15 @@ intended as a dry run.
 
 ### What this range carries, and what is special about it
 
-One release. Four modified core files and one added fixture:
+Two releases, `0.426.0` and `0.427.0`. Five modified core files and one added fixture:
 
 - `core/skills/ai-dlc-update/reconcile/apply.sh` — the re-stamp is now WITHHELD while any
   `WORKLIST` or `DECISION` row is outstanding, and a new `--finish` mode advances it once the
-  rows are disposed. This is the behaviour change that matters to you.
+  rows are disposed. `--finish` also refuses an unresolvable `<theirs>` or `<dist>` rather than
+  writing the literal argument into `commit:`. This is the behaviour change that matters to you.
 - `core/skills/ai-dlc-update/SKILL.md` — step 7 instructs `--finish` in two places.
+- `core/git-hooks/pre-push` — `applying_guard()`'s message now separates the two reasons a
+  re-stamp is withheld and names `--finish` for the one a re-run cannot resolve.
 - `core/skills/ai-dlc/core-manifest.md` and
   `core/skills/ai-dlc-update/reconcile/setup-sites.md` — one manifest row each for the new
   fixture.
@@ -43,10 +46,20 @@ One release. Four modified core files and one added fixture:
 
 It discharges `PC-S304-APPLY-SH-RESTAMPS-BEFORE-THE-WORKLIST-IS-DONE`.
 
+**THE CORRECTED `pre-push` MESSAGE ARRIVES ONE PULL BEHIND ITSELF, AND THAT IS NOT FIXABLE IN
+CODE.** `core/git-hooks/pre-push` is a consumer file this pull WRITES, so during this pull the
+consumer is still running the OLD guard text — the one that says "re-run; it resumes and
+re-stamps when the tree is consistent" and never mentions `--finish`. If this pull withholds and
+you then hit that message, **ignore its first remedy and use `--finish`.** The rehearsal below
+predicts the withholding will not fire at all on this consumer, so this is a contingency, not an
+expectation.
+
 The guard this release changes is `core/skills/ai-dlc-update/reconcile/apply.sh:1199` in the
 distribution, and the refusal that makes a withheld stamp consequential is
-`core/git-hooks/pre-push:751` — `applying_guard`, which REFUSES the fixture suite rather than
-skipping it while `.claude/.ai-dlc-applying` exists.
+`core/git-hooks/pre-push:767`, dispatching `applying_guard()` at `:717` — it REFUSES the fixture
+suite rather than skipping it while `.claude/.ai-dlc-applying` exists. (Both re-derived at
+`0.427.0`; the guard moved when its message was rewritten, so a figure copied from the `0.426.0`
+draft of this file would not resolve.)
 
 **A BOOTSTRAPPING STEP IS IN THE RANGE, AND THE HAZARD IS MEASURED RATHER THAN WARNED ABOUT.**
 `apply.sh` IS the program this pull runs, so the consumer's INSTALLED copy applies the release
@@ -82,10 +95,10 @@ with the incoming one. **Both stamped, and neither left the marker behind:**
 ```
 installed apply.sh   5 RESOLVED pure-apply, 1 RESOLVED driver-self-update,
                      1 RESOLVED restamp, 1 RESOLVED consistent, 1 NOTE override-adjudicated
-                     stamp -> 0.426.0        .ai-dlc-applying -> ABSENT
+                     stamp -> 0.427.0        .ai-dlc-applying -> ABSENT
 incoming  apply.sh   5 RESOLVED pure-apply, 1 RESOLVED restamp, 1 RESOLVED consistent,
                      1 NOTE override-adjudicated
-                     stamp -> 0.426.0        .ai-dlc-applying -> ABSENT
+                     stamp -> 0.427.0        .ai-dlc-applying -> ABSENT
 ```
 
 `RESOLVED driver-self-update` appears only under the installed copy: that row IS the old driver
@@ -102,6 +115,18 @@ not mean the pull is broken; it means the consumer moved and the rehearsal's pre
 `WORKLIST` and `DECISION` row it printed, then run the finisher. The withheld row prints the
 exact command, machinery flag already resolved. Do not hand-edit the stamp.
 
+**COPY THAT COMMAND CAREFULLY.** It prints `<dist>` and `<consumer>` as literal placeholders and
+passes `<theirs>` through verbatim, so you are substituting three arguments by hand into the one
+invocation that writes the next pull's merge base. `0.427.0` makes a wrong one REFUSE — you get
+`DECISION restamp-unresolvable` and nothing is written — but the copy the consumer runs during
+THIS pull is the `0.425.0` one, which has no such refusal. Check the substitutions before you
+press return.
+
+**A re-run of `/ai-dlc-update` does NOT clear a hand-back row.** Those rows are derived from the
+upstream range against your extensions, not from the tree, so an ordinary re-run re-emits them
+and withholds again. `--finish` is the only exit for that case. Measured on a consumer with an
+empty adjudication register: three consecutive ordinary applies, 11 rows each time.
+
 ### Numbered actions
 
 1. **Confirm your project root is `/Users/n8/git/graph`.** If it is not, stop and ping.
@@ -115,7 +140,7 @@ exact command, machinery flag already resolved. Do not hand-edit the stamp.
 
 4. **If and only if the run emitted `DECISION restamp-withheld`:** dispose of every `WORKLIST`
    and `DECISION` row, then run the finishing command exactly as that row printed it. Confirm
-   afterwards that `.claude/.ai-dlc-version` reads `0.426.0` on all four fields and that
+   afterwards that `.claude/.ai-dlc-version` reads `0.427.0` on all four fields and that
    `.claude/.ai-dlc-applying` is gone. This is a CONDITIONAL action and the rehearsal predicts it
    will not fire.
 
@@ -144,7 +169,7 @@ preapproved — do not stop to ask for one.
 
 ### Done when
 
-1. `.claude/.ai-dlc-version` reads `0.426.0` on `version`, `commit`, `skill_version` and
+1. `.claude/.ai-dlc-version` reads `0.427.0` on `version`, `commit`, `skill_version` and
    `skill_commit`. **Observation point: after action 4, or after action 2 if action 4 did not
    fire.** Reachable today: the rehearsal reached exactly this state under both drivers.
 2. `.claude/.ai-dlc-applying` is absent. Same observation point.

@@ -717,16 +717,32 @@ run_fixtures() {
 applying_guard() {
   cat <<'MSG'
    .claude/.ai-dlc-applying exists — this tree is mid-pull, and its fixture suite would
-   report failures that are neither a regression nor your fault. Finish the update:
+   report failures that are neither a regression nor your fault.
 
-     /ai-dlc-update        (re-run; it resumes and re-stamps when the tree is consistent)
+   The re-stamp was withheld for ONE of two reasons, and they have different exits. The
+   apply manifest says which: look for the DECISION restamp-withheld row.
+
+   1. A file could not be placed mechanically. Fix the paths that row names, then:
+
+        /ai-dlc-update      (re-run; it resumes and re-stamps once the tree is consistent)
+
+   2. WORKLIST or DECISION rows were handed back and are not yet disposed. Do them —
+      each semantic merge, each override readopt/retire, each extension re-read, each
+      operator call — and then run the finisher:
+
+        reconcile/apply.sh --finish [--carried-machinery-slice] <dist> <base> . <theirs>
+
+      RE-RUNNING /ai-dlc-update DOES NOT CLEAR THESE. A hand-back row is derived from the
+      upstream range against your extensions, not from the tree, so a re-run re-emits it and
+      withholds again. --finish is the only exit for this case. The withheld row prints the
+      exact command with the machinery flag already resolved.
 
    If that pull was abandoned and the tree is known good, remove the marker:
 
      rm .claude/.ai-dlc-applying
 
-   Do not push a half-applied core. A withheld re-stamp means files are missing, and the
-   stamp still names the OLD release, so the next pull will mis-compute its base.
+   Do not push a half-applied core. While this marker exists the stamp does not name the
+   release this tree holds, and the next pull computes its merge base from that stamp.
 MSG
   return 1
 }

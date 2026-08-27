@@ -15,6 +15,71 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.427.0] - 2026-08-27
+
+### `--finish` refuses an unresolvable ref, and the consumer hook stops printing a circular remedy
+
+Two defects in `v0.426.0`, both found by an adversarial pass that ran AFTER the merge — the
+fourth time this program has recorded that, and the standing instruction to run it BEFORE is
+still the one being skipped.
+
+**`--finish` wrote a bogus ref into `commit:` and declared the tree consistent.**
+`theirs_sha="$(git rev-parse --short "$THEIRS" || echo "$THEIRS")"` falls back to the caller's
+LITERAL argument. Measured: `--finish <dist> <base> <consumer> no-such-ref-xyz` produced
+`commit: no-such-ref-xyz` with `version:` still at base, `RESOLVED restamp`, `RESOLVED consistent
+"the tree matches no-such-ref-xyz"`, and the in-flight marker CLEARED. The stamp is the next
+pull's merge base, so this is the exact false claim `v0.426.0` exists to prevent, reached by a
+typo. It now emits `DECISION restamp-unresolvable` and writes nothing — verified across a
+slash-free bogus ref, a slashed one, a wrong `<dist>`, and a real ref as control, and separately
+that an existing marker SURVIVES the refusal while a good ref clears it.
+
+**It is `--finish`-shaped specifically.** The ordinary run dies in its phases long before the
+stamp when those arguments are wrong; `--finish` skips them, so this is the first thing it
+touches — and the finishing command is retyped by hand from a row that prints `<dist>` and
+`<consumer>` as literal placeholders.
+
+**A SLASHED BOGUS REF MASKS IT, AND THAT IS HOW IT WAS NEARLY MISSED.** A first probe used
+`refs/heads/nope`, whose slashes break the `sed` replacement; the `|| true` swallows it, the
+read-back disagrees, and the run correctly reports `restamp-failed`. That probe passed for the
+wrong reason and was reported as evidence the path was sound. Only a slash-free ref
+discriminates — `verification-discipline.md`'s "run the control on the input that DISCRIMINATES",
+met in the wild one release after the guard it was checking shipped.
+
+**The consumer's own `pre-push` told a wedged operator to do the thing that loops.**
+`applying_guard()` printed "`/ai-dlc-update` (re-run; it resumes and re-stamps when the tree is
+consistent)" and named `--finish` zero times. A hand-back row is derived from the upstream range
+against the consumer's extensions, not from the tree, so a re-run re-emits it and withholds
+again. Measured on a scratch copy of the reference consumer with its adjudication register
+EMPTIED — modelling a consumer that has extensions and has never adjudicated: three consecutive
+ordinary applies each produced 11 hand-back rows and `DECISION restamp-withheld`, and `--finish`
+then stamped. The guard now separates the two withholding causes and names the finisher for the
+one its old text could not resolve. **It is consumer-facing, so the corrected text arrives one
+pull behind** — the pull delivering this reaches a consumer still running the old message, and
+the runbook says so rather than the code pretending otherwise.
+
+**The reference consumer does not reach that state, and its 269 adjudication records are why.**
+An adversarial measurement that initially read as two blockers was withdrawn when an `rsync`
+exclusion turned out to have deleted `layer-adjudication-register.jsonl`; with the register
+present, four realistic ranges all stamp cleanly with zero hand-backs and the ordinary run is
+idempotent. The retraction is recorded because the defective setup and the real one produce
+identically plausible manifests — `say NOTE` increments neither counter, so an adjudicated row
+correctly does not withhold, and only the register's presence separates the two readings.
+
+**Filed, not fixed. `BL-102`** — `--finish` verifies nothing it stamps. `mech_fail` is
+initialised above the phase guard and mutated only inside it, so the finisher always reads 0 and
+prints `RESOLVED consistent` over a tree where nothing was applied. The read-set of both
+post-guard functions was derived with the intersection asserted non-empty as a control:
+`mech_fail` is the only member of that silent class. Not a regression — the ordinary run never
+verified the mechanical set either — but `v0.426.0` makes the operator's assertion routine.
+**`BL-103`** — an `ai-dlc-*.sh` hook the settings template cannot register withholds `--finish`
+forever, and the row's own prescribed remedy does not clear it. Population measured EMPTY today:
+19 hooks, 19 registered, and zero genuinely retired hook names in the template's history.
+
+**Both new receipts were wrong on the first cut, in the direction this repo names most often.**
+`BL-102`'s whole-file grep was satisfied by a COMMENT inside `apply.sh`; `BL-103`'s by a comment
+appended to `settings-merge.sh`. Both now strip comments and key on an emitting line, and both
+were scored in both directions with a moved-precondition arm returning 9.
+
 ## [0.426.0] - 2026-08-27
 
 ### The re-stamp is withheld while any hand-back is outstanding, and `--finish` is the exit

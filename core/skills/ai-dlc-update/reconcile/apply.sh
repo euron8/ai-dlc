@@ -1198,7 +1198,30 @@ if [ "$FINISH" = 1 ]; then outstanding="$worklist_n"; else outstanding="$handbac
 if [ "$mech_fail" -gt 0 ] || [ "$outstanding" -gt 0 ]; then
   say DECISION restamp-withheld "$STAMP" "${mech_fail} file(s) could not be placed mechanically and ${outstanding} WORKLIST/DECISION row(s) above are undisposed — the stamp would claim ${THEIRS} while the tree does not yet match it, and the next pull computes its merge base from that stamp. Left at ${BASE}, and \`${APPLYING##*/}\` is deliberately left in place so the fixture suite keeps blocking. Do the rows above, then advance the stamp with: apply.sh --finish${finish_flag} <dist> ${BASE} <consumer> ${THEIRS}${withheld_extra}"
 elif [ -f "$STAMP" ]; then
-  theirs_sha="$(git -C "$DIST" rev-parse --short "$THEIRS" 2>/dev/null || echo "$THEIRS")"
+  # RESOLVE THEIRS BEFORE WRITING ANYTHING, AND REFUSE IF IT DOES NOT RESOLVE.
+  #
+  # `rev-parse ... || echo "$THEIRS"` falls back to the caller's LITERAL argument, and the two
+  # `sed`s below then write that literal into `commit:` and report `RESOLVED restamp` over it.
+  # Measured on `--finish <dist> <base> <consumer> no-such-ref-xyz`: the stamp came back
+  # `commit: no-such-ref-xyz` with `version:` still at base, `RESOLVED consistent "the tree
+  # matches no-such-ref-xyz"`, and the in-flight marker CLEARED. The stamp is the next pull's
+  # merge base, so this is the exact false claim this whole guard exists to prevent, reached by
+  # a typo.
+  #
+  # IT IS A `--finish`-SHAPED HAZARD SPECIFICALLY, which is why it is fixed here rather than
+  # left. The ordinary run dies in its phases long before the stamp when `<dist>`/`<theirs>` are
+  # wrong; `--finish` skips those phases, so this is the FIRST thing it touches. And the
+  # finishing command is RETYPED BY HAND from the withheld row, which prints `<dist>` and
+  # `<consumer>` as literal placeholders -- the one invocation in this program most exposed to a
+  # fumbled argument.
+  #
+  # A BOGUS REF WITH A SLASH IN IT MASKS THIS, and that is how it was nearly missed: a
+  # `refs/heads/nope` breaks the `sed` replacement, the `|| true` swallows it, the read-back
+  # disagrees and the run correctly reports `restamp-failed`. Only a slash-FREE bogus ref
+  # reaches the defect. The control has to be the input that discriminates.
+  if ! theirs_sha="$(git -C "$DIST" rev-parse --short "$THEIRS" 2>/dev/null)" || [ -z "$theirs_sha" ]; then
+    say DECISION restamp-unresolvable "$STAMP" "\`${THEIRS}\` does not resolve in ${DIST}, so there is no sha to stamp and nothing was written. The stamp is left at ${BASE} and the in-flight marker is left in place. Check the <dist> path and the <theirs> ref -- if you retyped this from a withheld row, note that it prints <dist> and <consumer> as placeholders and passes <theirs> through verbatim."
+  else
   # From THEIRS, not the working tree. Every file copy above resolves through
   # `git show "${THEIRS}:core/..."`; reading VERSION with `cat` was the one place that
   # trusted whatever ref the operator's distribution checkout happened to be sitting on.
@@ -1296,6 +1319,7 @@ elif [ -f "$STAMP" ]; then
   echo "apply: NOT WRITTEN BY THIS TOOL -- _bmad-output/ai-dlc-update/reconcile-log-<ts>.md" >&2
   echo "  It records the gates, the post-apply re-runs, the validators and the ledger decisions." >&2
   echo "  This program can see none of those, so it does not write them. Step 7 is where you do." >&2
+  fi  # ---- end of the resolvable-<theirs> arm; the else below is the no-stamp case ----
 else
   # NO STAMP FILE AT ALL, AND THIS ARM USED TO BE ABSENT -- the `elif` simply fell through and the
   # run said NOTHING about the stamp, on either mode. Found by probing `--finish` against a
