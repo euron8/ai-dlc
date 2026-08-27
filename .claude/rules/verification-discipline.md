@@ -148,10 +148,7 @@ forced input beats a larger N.
 
 ## Verify a release the way the gate runs it
 
-Push and let the hook run, then read the fixture by NAME. **Do NOT reach for
-`AI_DLC_FIXTURE_NO_SKIP=1` to force a full suite** — it exists for MEASUREMENT (pinning the
-dispatched set while sweeping `-P`, and fixtures that need the skip off) and using it as a
-verification stance forced 167 units on nine consecutive pushes, several doc-only. The
+`AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`, and read the fixture by NAME. The
 CONSUMER's hook `core/git-hooks/pre-push` prints a green banner here having run almost
 nothing; the content-key skip prints one too, correctly — neither is evidence your change ran.
 The TALLY is not the verdict either: 159 ok / 0 FAIL while the gate exited 1 on a phase outside
