@@ -2345,3 +2345,83 @@ adjacency-only fix **1**, readers-only partial fix **1**.
 
 verify: sh R=scripts/render-vocabulary-index.sh; M=scripts/validate-enforcement-map.sh; [ -f "$R" ] && [ -f "$M" ] || exit 9; F="^[[:blank:]]*#[[:blank:]]*vocabulary-"; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" --check >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; cp "$D/$M" "$D/m.orig" || { rm -rf "$D"; exit 9; }; n=0; for f in invariant owner extract readers emitters; do for mode in beside apart; do cp "$D/m.orig" "$D/$M"; L="$(grep -n "$F$f:" "$D/$M" | head -1 | cut -d: -f1)"; [ -n "$L" ] || { rm -rf "$D"; exit 9; }; if [ "$mode" = beside ]; then T="$L"; elif sed -n "$((L-1))p" "$D/$M" | grep -qE "$F"; then T="$((L-2))"; elif sed -n "$((L+1))p" "$D/$M" | grep -qE "$F"; then T="$((L+1))"; else rm -rf "$D"; exit 9; fi; b0="$(wc -l < "$D/$M")"; c0="$(grep -c "$F$f:" "$D/$M")"; awk -v l="$L" -v t="$T" 'NR==l{s=$0} {a[NR]=$0} END{for(i=1;i<=NR;i++){print a[i]; if(i==t) print s}}' "$D/$M" > "$D/m.tmp" || { rm -rf "$D"; exit 9; }; mv "$D/m.tmp" "$D/$M"; [ "$(wc -l < "$D/$M")" -eq "$((b0+1))" ] || { rm -rf "$D"; exit 9; }; [ "$(grep -c "$F$f:" "$D/$M")" -eq "$((c0+1))" ] || { rm -rf "$D"; exit 9; }; set -- $(grep -n "$F$f:" "$D/$M" | head -2 | cut -d: -f1 | tr '\n' ' '); B="$(awk -v x="$1" -v y="$2" 'NR>x && NR<y && /^[[:blank:]]*#[[:blank:]]*vocabulary-/{c++} END{print c+0}' "$D/$M")"; if [ "$mode" = beside ]; then [ "$(($2-$1))" -eq 1 ] || { rm -rf "$D"; exit 9; }; else [ "$B" -ge 1 ] || { rm -rf "$D"; exit 9; }; fi; ( cd "$D" && bash "$R" >/dev/null 2>&1 ) || n=$((n+1)); done; done; cp "$D/m.orig" "$D/$M"; ( cd "$D" && bash "$R" >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; rm -rf "$D"; [ "$n" -eq 10 ] || exit 1; exit 0
 
+## BL-052
+
+**LANDED (v0.422.0, verified bccc8d9c).** All thirteen renderings quoted, not the five filed —
+the population was re-derived rather than believed, and the entry's own receipt grammar could
+not spell two of them. `S8` of `scripts/validate-shell-portability.sh` now binds the class over
+a `core/` corpus that scans comment lines, so the comments are sites rather than the exemption
+the original scope was narrowed to dodge. Verified on a tree built by `scripts/install.sh`:
+0 unquoted renderings, against a control of 6 files carrying the quoted form across both
+install destinations.
+
+**The update skill renders every `git show <ref>:<path>` unquoted, and under zsh the `:c`/`:t`
+history modifiers eat the path.** Five sites, two files, none quoted:
+`core/skills/ai-dlc-update/SKILL.md:642` and `:1156` (`show <theirs>:<core-path> > <consumer-path>`),
+`:879` and `:1402` (`show <theirs>:templates/settings.json.template`), and
+`core/skills/ai-dlc-update/reconcile/apply.sh:1252`, which EMITS the templates form at runtime as a
+command the operator is told to run. Measured over `core/skills/ai-dlc-update/`: files matching
+`show +<(theirs|base|ours)>:` = **2**; control, the same pattern with the ref quoted = **0**. A
+reader who binds the ref to a variable — which is what `t=$(mktemp); git -C <dist> show <theirs>:…`
+leads them to do — gets `fatal: ambiguous argument 'ca1fb6eemplates/settings.json.template'`, while
+the redirect still creates `"$t"` as a 0-byte file that the next command reads and reports on.
+
+**The filing counted 2 and the defect is 5.** It grepped only the literal
+`show <theirs>:templates/settings.json.template`, so it missed both `<core-path>` renderings in
+SKILL.md and the `apply.sh` emission. The `apply.sh` site is the most exposed of the five: the other
+four are instructions a reader may adapt, that one is a string the tool prints as the fix for
+"hook(s) present and UNREGISTERED after this apply", at the moment the operator is being told to
+paste it.
+
+Nothing else in the filing was wrong. The correct form is established practice in the same tree —
+this repo's own `CLAUDE.md` names the hazard by name and the backlog's `verify: sh` receipts write
+`"${SHA}:core/…"` quoted throughout.
+
+**Not claimed:** that a reader substituting a literal sha hits this. They do not; the modifier fires
+only on parameter expansion.
+
+The anchor is the unquoted rendering itself — adding the quotes IS the fix, so it is a token the fix
+cannot leave in place. It is scoped to `core/skills/ai-dlc-update/` deliberately, and the scope was
+measured rather than chosen: `core/scripts/validate-hook-registration.sh:291` is a COMMENT that
+quotes the hazardous form back while explaining it, and a wider grep would be pinned non-zero by
+that comment forever — the unfalsifiable case. Probed with a partial fix: quoting four of the five
+sites leaves the receipt at 1, and it reaches 0 only when `apply.sh:1252` is quoted too.
+
+Discharges the consumer entry `PC-S333-SKILL-RENDERS-THE-THEIRS-REF-UNQUOTED-AND-ZSH-EATS-IT` at
+pinned ledger line 4096.
+
+**RE-DERIVED AT v0.422.0. THE POPULATION IS 13 SITES ACROSS 8 FILES, NOT 5 ACROSS 2, AND THE
+RECEIPT ABOVE COULD NOT SPELL ITS OWN SUBJECT.** `show +<(theirs|base|ours)>:` misses
+`SKILL.md:1148`, which renders `<ancestor>:<core-path>` and sits INSIDE the receipt's own scoped
+directory. The scope then excluded a printed REMEDY at
+`core/scripts/validate-snapshot-conservation.sh:344`, a step-file instruction at
+`core/skills/ai-dlc/steps/gate-validation.md:2506`, descriptive prose at `steps/retro.md:100`,
+three shell comments, and `core/fixtures/settings-merge-unparseable-template/.dist-only:19`.
+Derivation: `git ls-files -z 'core/*' | xargs -0 grep -HnE '(show|cat-file -p|ls-tree|archive|diff)[[:space:]]+<[^>]+>:'`
+returns 13 on the pre-fix tree and 0 on the fixed one, against a control over `docs/` that
+returns 8 in the same invocation.
+
+**THE UNFALSIFIABLE-CASE ARGUMENT ABOVE IS WRONG, AND THE EXCLUSION IT JUSTIFIED WAS THE DEFECT.**
+It holds only for a grep that cannot change the comment. A rev-path rendered inside a comment is
+pasted exactly as readily as one rendered in a heredoc, so the comments are SITES rather than
+exemptions; quoting them makes the wider grammar reach zero with no exemption list at all. Two of
+the thirteen were comments.
+
+**The narrowing that was NOT taken, recorded so it is not re-proposed.** Requiring the word `git`
+on the same line finds the same 13 over `core/` — the difference set is empty — so it is rejected
+on structure, not on a measured miss: a rendering can wrap and leave `git -C <dist>` on the line
+above while the bracketed `<ref>:` token stays whole. Tree-wide the two patterns differ 37 to 29,
+and all 8 of those are `docs/` prose quoting the bare fragment. That number is about this file, not
+about the corpus the arm scans.
+
+**The receipt below DRIVES `S8` of `scripts/validate-shell-portability.sh` rather than restating
+its grammar**, so the corpus derivation and the battery exclusion cannot drift from the arm's.
+It self-probes FIRST, in a seeded `mktemp` tree, and refuses to read the clean run until S8 has
+reported a seeded offender by name — a gutted S8 yields exit 9, not exit 0. Measured in all three
+directions: 0 on the fixed tree, 1 on a tree with one rendering reintroduced, 9 with `S8` removed
+from `ARMS` (mutant applied under `cmp -s`). **What else satisfies it:** deleting the instructions
+outright, or moving the files out of `core/` — both of which unship the text they are written to
+deliver.
+
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/scripts" "$d/core/rules" || { rm -rf "$d"; exit 9; }; echo 0.0.0 > "$d/VERSION"; cp scripts/validate-shell-portability.sh "$d/scripts/" || { rm -rf "$d"; exit 9; }; printf "#!/usr/bin/env bash\necho ok\n" > "$d/scripts/clean.sh"; printf "git show <theirs>:<p>\n" > "$d/core/rules/probe.md"; ( cd "$d" && git init -q . && git add -A ) >/dev/null 2>&1; o=$( cd "$d" && bash scripts/validate-shell-portability.sh 2>&1 ); p=$?; rm -rf "$d"; [ "$p" -eq 1 ] && grep -q "FAIL: S8:" <<<"$o" || exit 9; bash scripts/validate-shell-portability.sh --quiet
