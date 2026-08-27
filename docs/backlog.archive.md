@@ -2195,3 +2195,70 @@ mechanically earned and mechanically refused.
 
 
 verify: sh L=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; f=$(sed -n "/^receipt_absent_subjects() {/,/^}/p" "$L"); case "$f" in *"receipt_absent_subjects()"*) : ;; *) exit 9 ;; esac; d=$(mktemp -d); c="$d/c"; mkdir -p "$c/scripts/ai-dlc" "$c/docs"; printf "x\n" > "$c/scripts/ai-dlc/validate-steering-budget.sh"; [ -e "$c/scripts/ai-dlc/validate-steering-budget.sh" ] || { rm -rf "$d"; exit 9; }; if [ -e "$c/scripts/validate-steering-budget.sh" ] || [ -e "$c/docs/no-such-file.md" ]; then rm -rf "$d"; exit 9; fi; a=$(CONSUMER="$c" bash -c "$f"'; receipt_absent_subjects "$1"' _ 'git -C "$DIST" show "$THEIRS:core/scripts/validate-steering-budget.sh" > "$d/v.sh"'); b=$(CONSUMER="$c" bash -c "$f"'; receipt_absent_subjects "$1"' _ 'grep -q probe "$CONSUMER/docs/no-such-file.md"'); rm -rf "$d"; [ -z "$a" ] && [ -n "$b" ]
+## BL-090 — `I93` asks whether every DECLARED emitter emits the token and never whether every EMITTER is declared, so a new one is invisible
+
+**The join runs one way only.** `scripts/validate-enforcement-map.sh`'s arm A walks the
+`empty_subject_verdict: emitters:` list in `core/skills/ai-dlc/enforcement-map.yaml` and fails
+the push if a declared file does not print the token outside a comment. Arm C sweeps
+`core/scripts/*.sh` for RETIRED spellings. **Nothing asks the reverse question** — whether a
+file printing the DECLARED token is declared at all — so a validator that adopts the
+vocabulary without being registered joins it silently and the index under-reports the set.
+
+**Measured, by seeding rather than by reading the arms.** A new `core/scripts` validator whose
+only emission is the declared token, named nowhere in the declaration, is added to a scratch
+copy and the shipping validator is driven over it: **rc 0**, no finding. Controls in the same
+invocation: the unseeded copy passes (so a later non-zero would be attributable to the seed),
+the seed genuinely emits under the same non-comment reader arm A uses, and the seeded name is
+genuinely absent from the map.
+
+**It is not hypothetical — there is a live instance today.**
+`scripts/validate-plan-shape.sh:54` emits `EXAMINED NOTHING` and is deliberately NOT declared,
+because `enforcement-map.yaml` SHIPS to consumers while that script does not, so declaring it
+would write a permanently false emitter path into every consumer tree, unfalsifiable at the
+only place it is wrong. That exemption is correct and it is exactly what makes the gap
+invisible: the one file that proves the reverse arm is missing is also the one file that must
+not be declared. A reverse arm therefore needs a stated exemption, not just a sweep.
+
+**THE DECLARATION IS THREE HAND-LISTS AND NOTHING BINDS ANY TWO OF THEM.** The yaml's
+`emitters:` and `readers:` are consumed by arms A and B. The arm header's
+`# vocabulary-readers:` marker at `scripts/validate-enforcement-map.sh:7233` is consumed by
+`scripts/render-vocabulary-index.sh` and by nothing else — no arm checks that a path in it
+exists, carries the token, or agrees with the yaml. That third list is what makes
+`BL-078`'s receipt satisfiable by editing one comment, and it is why the rendered Readers
+column currently carries EMITTERS, which is not what arm B means by a reader.
+
+**The clean fix is subtraction, and it was scoped out of batch 9 deliberately rather than
+missed.** A `# vocabulary-emitters:` field rendered as its own column, with both columns
+DERIVED from the yaml the owner already declares, removes the third hand-list, closes the
+reverse-arm gap and fixes the column semantics in one change. It touches the renderer, every
+row and the pre-push byte-compare, which is more than the token-binding `BL-078` was closed
+under, so it is filed rather than folded in.
+
+Tiered **DEFECT**. Nothing is emitting a wrong verdict today; the harm is that the vocabulary's
+population is whatever the last author remembered to declare, which is the state `BL-058` and
+`BL-078` both exist to end.
+
+Found by two independent hands re-deriving `BL-078` during batch 9, one of which demonstrated
+the one-comment close on a copy of `origin/main`.
+
+**LANDED (v0.419.0, verified 5efb3d17).** All three claims discharged in one change. Arm D is
+the reverse join: every file under `core/scripts/` and `scripts/` that prints the token
+outside a comment must be declared in the map or exempted, and the single exemption is
+`scripts/validate-plan-shape.sh` -- the file this entry named as the live instance, and the one
+file that must not be declared. The exemption carries its reason and is checked four ways; the
+arm requiring an exempt file to still EMIT is arm D's own positive control, fired in the same
+invocation as the zero it licenses. The population is every FILE in those two directories
+rather than every `*.sh`, because a file extension answers no question about who joined a
+vocabulary and `core/scripts/gen-architecture-index.js` exists today -- an `*.sh` sweep would
+have reproduced this entry's own defect one grain over. The third hand-list is deleted: the
+marker's sixteen restated paths are now an `@owner-declares` sentinel the renderer resolves
+against the owner, and `docs/vocabulary-index.md` gained an Emitters column, so its Readers
+column no longer carries emitters. Measured: this entry's own receipt went raw exit 1 -> 0, the
+validator stays 0 on the clean tree, it fires on a seeded undeclared emitter in both halves of
+the population and on a non-`.sh` one, and stays quiet on both near-misses.
+`enforcement-map-sites` gained A35-A37 including an arm-D mutant and both directions of the
+probe's four new bits; `vocabulary-index` went 11 -> 14 mutants. The change is fork-NEGATIVE by
+47 and `FORK_BUDGET` ratcheted 7076 -> 7029.
+
+verify: sh M=core/skills/ai-dlc/enforcement-map.yaml; V=scripts/validate-enforcement-map.sh; [ -f "$M" ] && [ -f "$V" ] || exit 9; tok="$(awk '/^empty_subject_verdict:/{on=1;next} on&&/^[^[:space:]#]/{exit} on&&/^  token:[[:space:]]/{v=$0;sub(/^  token:[[:space:]]*/,"",v);print v}' "$M")"; [ -n "$tok" ] || exit 9; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$V" >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; printf '%s\n' '#!/bin/bash' "echo \"probe: ${tok} — seeded undeclared emitter\"" 'exit 0' > "$D/core/scripts/validate-bl090-probe.sh"; n="$(awk -v t="$tok" '{ if (index($0,t)==0) next; s=$0; sub(/^[[:space:]]+/,"",s); if (substr(s,1,1)=="#") next; c++ } END { print c+0 }' "$D/core/scripts/validate-bl090-probe.sh")"; [ "$n" -gt 0 ] || { rm -rf "$D"; exit 9; }; grep -qF 'validate-bl090-probe.sh' "$D/$M" && { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$V" >/dev/null 2>&1 ); rc=$?; rm -rf "$D"; [ "$rc" -ne 0 ] || exit 1; exit 0
+

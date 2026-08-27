@@ -115,54 +115,6 @@ over a check that looks for the mistake afterwards.
 
 verify: sh L=docs/backlog.md; [ -f "$L" ] || exit 9; t="$(grep -cE '^## BL-[0-9]+' "$L")"; [ "$t" -gt 0 ] || exit 9; ttl="$(grep -cE '^## BL-[0-9]+[ \t]+[^ \t]' "$L")"; bare="$(grep -cE '^## BL-[0-9]+[ \t]*$' "$L")"; [ "$((ttl + bare))" -eq "$t" ] || exit 9; [ "$bare" -eq 0 ]
 
-## BL-090 — `I93` asks whether every DECLARED emitter emits the token and never whether every EMITTER is declared, so a new one is invisible
-
-**The join runs one way only.** `scripts/validate-enforcement-map.sh`'s arm A walks the
-`empty_subject_verdict: emitters:` list in `core/skills/ai-dlc/enforcement-map.yaml` and fails
-the push if a declared file does not print the token outside a comment. Arm C sweeps
-`core/scripts/*.sh` for RETIRED spellings. **Nothing asks the reverse question** — whether a
-file printing the DECLARED token is declared at all — so a validator that adopts the
-vocabulary without being registered joins it silently and the index under-reports the set.
-
-**Measured, by seeding rather than by reading the arms.** A new `core/scripts` validator whose
-only emission is the declared token, named nowhere in the declaration, is added to a scratch
-copy and the shipping validator is driven over it: **rc 0**, no finding. Controls in the same
-invocation: the unseeded copy passes (so a later non-zero would be attributable to the seed),
-the seed genuinely emits under the same non-comment reader arm A uses, and the seeded name is
-genuinely absent from the map.
-
-**It is not hypothetical — there is a live instance today.**
-`scripts/validate-plan-shape.sh:54` emits `EXAMINED NOTHING` and is deliberately NOT declared,
-because `enforcement-map.yaml` SHIPS to consumers while that script does not, so declaring it
-would write a permanently false emitter path into every consumer tree, unfalsifiable at the
-only place it is wrong. That exemption is correct and it is exactly what makes the gap
-invisible: the one file that proves the reverse arm is missing is also the one file that must
-not be declared. A reverse arm therefore needs a stated exemption, not just a sweep.
-
-**THE DECLARATION IS THREE HAND-LISTS AND NOTHING BINDS ANY TWO OF THEM.** The yaml's
-`emitters:` and `readers:` are consumed by arms A and B. The arm header's
-`# vocabulary-readers:` marker at `scripts/validate-enforcement-map.sh:7233` is consumed by
-`scripts/render-vocabulary-index.sh` and by nothing else — no arm checks that a path in it
-exists, carries the token, or agrees with the yaml. That third list is what makes
-`BL-078`'s receipt satisfiable by editing one comment, and it is why the rendered Readers
-column currently carries EMITTERS, which is not what arm B means by a reader.
-
-**The clean fix is subtraction, and it was scoped out of batch 9 deliberately rather than
-missed.** A `# vocabulary-emitters:` field rendered as its own column, with both columns
-DERIVED from the yaml the owner already declares, removes the third hand-list, closes the
-reverse-arm gap and fixes the column semantics in one change. It touches the renderer, every
-row and the pre-push byte-compare, which is more than the token-binding `BL-078` was closed
-under, so it is filed rather than folded in.
-
-Tiered **DEFECT**. Nothing is emitting a wrong verdict today; the harm is that the vocabulary's
-population is whatever the last author remembered to declare, which is the state `BL-058` and
-`BL-078` both exist to end.
-
-Found by two independent hands re-deriving `BL-078` during batch 9, one of which demonstrated
-the one-comment close on a copy of `origin/main`.
-
-verify: sh M=core/skills/ai-dlc/enforcement-map.yaml; V=scripts/validate-enforcement-map.sh; [ -f "$M" ] && [ -f "$V" ] || exit 9; tok="$(awk '/^empty_subject_verdict:/{on=1;next} on&&/^[^[:space:]#]/{exit} on&&/^  token:[[:space:]]/{v=$0;sub(/^  token:[[:space:]]*/,"",v);print v}' "$M")"; [ -n "$tok" ] || exit 9; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$V" >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; printf '%s\n' '#!/bin/bash' "echo \"probe: ${tok} — seeded undeclared emitter\"" 'exit 0' > "$D/core/scripts/validate-bl090-probe.sh"; n="$(awk -v t="$tok" '{ if (index($0,t)==0) next; s=$0; sub(/^[[:space:]]+/,"",s); if (substr(s,1,1)=="#") next; c++ } END { print c+0 }' "$D/core/scripts/validate-bl090-probe.sh")"; [ "$n" -gt 0 ] || { rm -rf "$D"; exit 9; }; grep -qF 'validate-bl090-probe.sh' "$D/$M" && { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$V" >/dev/null 2>&1 ); rc=$?; rm -rf "$D"; [ "$rc" -ne 0 ] || exit 1; exit 0
-
 ## BL-089 — an EXPIRED receipt and a live defect are the same row, so a receipt that can no longer measure anything reads as evidence that it did
 
 **WIDER THAN FILED: the population is not the exit-9 receipts.** This entry was filed against
