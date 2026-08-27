@@ -31,6 +31,7 @@
 #   m19 dup-emitters `vocabulary-emitters:` twice, literal AND sentinel  -> must FAIL
 #   m20 dup-same-value a field repeated VERBATIM, so the values agree    -> must FAIL
 #   m21 unreadable-src the marker corpus at mode 000 -- exists, unreadable -> must FAIL
+#   m22 dup-nonadjacent a repeat SEPARATED from the first declaration      -> must FAIL
 #
 # WHY THIS FIXTURE IS THE ONLY EVIDENCE THE RENDERER WORKS. Its finding set over the real
 # tree is EMPTY by design -- a green `--check` is the steady state, and a renderer that
@@ -70,6 +71,8 @@
 # implementation and a single-field arm cannot see it. m17 seeds an EMPTY first declaration, which is the case a
 # refusal written as "the field already holds a value" silently accepts and a refusal
 # written as a seen-flag catches; without it the two implementations are indistinguishable.
+# m22 seeds a repeat SEPARATED from its first declaration, which every other arm here places
+# beside it -- see that arm's own header for what passed all of them without it.
 #
 # The verdicts assert the FIELD NAME and BOTH VALUES rather than a sentence, because the
 # contract is that the message names them; a fixture keyed on the wording would be asserting
@@ -664,7 +667,54 @@ else
   fi
 fi
 
+# m22 -- one field declared twice in one block, with the two declarations SEPARATED.
+#
+# EVERY OTHER DUPLICATE ARM HERE PLACES THE REPEAT BESIDE ITS FIRST DECLARATION, and so did
+# both of the renderer's own probes and this entry's receipt, whose seeding expression
+# (`awk NR==n{print} {print}`) duplicates a line in place and can produce nothing else. Three
+# channels that look independent, one input shape.
+#
+# WHAT THAT SHAPE LETS THROUGH, MEASURED. A refusal keyed on the PRECEDING marker line --
+# `s_read && lastfield == "read"`, the five guards otherwise untouched -- rendered the real
+# tree at exit 0, satisfied this entry's receipt, and was killed by NONE of m15-m21. It then
+# rendered a genuine duplicate byte-identically and exited 0. Separation is the property that
+# tells a per-block seen-flag from a look-at-the-previous-line test, and nothing here held it.
+#
+# THE SEPARATION IS ASSERTED, NOT ARRANGED AND TRUSTED. The two declarations are three lines
+# apart only because `vocabulary-owner:` and `vocabulary-extract:` sit between them in the
+# seed; reorder that block and this arm degrades silently into a second m15, green the whole
+# way. The gap is DERIVED from the mutated corpus below and refused if it is not greater than
+# one, so the seed cannot lose the property the arm exists to carry.
+#
+# THE INSERTED READER IS A COPY UNDER ITS OWN NAME, for m16's reason and one more: the token
+# has to occur exactly ONCE in the corpus or the gap is measured between the wrong two lines.
+# `readers/contract.md` alone appears in the I803 block and `readers/ledger.md` in I801, so a
+# gap keyed on either would span blocks and pass while measuring nothing.
+DUP_N_ANCHOR='I803'; DUP_N_A='readers/contract-alt.md'; DUP_N_B='readers/contract.md'
+seed "$TMP/m22"
+if ! cp "$TMP/m22/$DUP_N_B" "$TMP/m22/$DUP_N_A" 2>/dev/null; then
+  note "SKIP  m22 -- the seed no longer carries $DUP_N_B"; rc=1
+elif ! mutate "$TMP/m22/$MAP" \
+     "s|^# vocabulary-invariant: ${DUP_N_ANCHOR}\$|# vocabulary-invariant: ${DUP_N_ANCHOR}\\n# vocabulary-readers: ${DUP_N_A}|"; then
+  note "SKIP  m22 -- sed matched nothing; no mutation occurred"; rc=1
+else
+  # The gap between the two declarations, derived from the corpus the renderer will read.
+  dup_n_gap="$(awk -v tok="# vocabulary-readers: ${DUP_N_A}" '
+    $0 == tok           { first = NR; next }
+    first && /^# vocabulary-readers:/ { print NR - first; exit }
+  ' "$TMP/m22/$MAP")"
+  if [ -z "$dup_n_gap" ]; then
+    note "SKIP  m22 -- could not locate both declarations in the mutated corpus"; rc=1
+  elif [ "$dup_n_gap" -le 1 ]; then
+    note "SKIP  m22 -- the two declarations are ADJACENT (gap $dup_n_gap); this arm would duplicate m15"
+    note "      and could not see a refusal keyed on the preceding line"; rc=1
+  else
+    kill_check_all "m22 dup-nonadjacent a repeat separated from its first declaration" "$TMP/m22" render \
+      'vocabulary-readers' "$DUP_N_A" "$DUP_N_B"
+  fi
+fi
+
 if [ "$rc" -eq 0 ]; then
-  note "PASS  vocabulary-index -- 2 controls + 1 near-miss green, 21/21 mutants killed by their own arm"
+  note "PASS  vocabulary-index -- 2 controls + 1 near-miss green, 22/22 mutants killed by their own arm"
 fi
 exit "$rc"

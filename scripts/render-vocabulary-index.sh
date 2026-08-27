@@ -494,13 +494,26 @@ PROBE
 # arm here would have no subject the one above cannot see.
 
 # The positive direction: one block, one field, twice.
+#
+# THE TWO DECLARATIONS ARE DELIBERATELY NOT ADJACENT, and this ordering is the whole arm.
+# A guard that fires only when the repeat sits on the line IMMEDIATELY AFTER the first
+# declaration -- `s_read && lastfield == "read"` -- is silent on a real duplicate separated by
+# other fields, which is the ordinary shape of the defect. It was MEASURED to pass the clean
+# tree, this entry's receipt, and every mutant in core/fixtures/vocabulary-index/run.sh, then
+# render a genuine repeat byte-identically at exit 0.
+#
+# THE CAUSE WAS ONE SHARED PROPERTY ACROSS THREE INDEPENDENT-LOOKING CHANNELS: every duplicate
+# seed in all of them placed the repeat beside the first declaration. The receipt could only
+# ever do so -- `awk NR==n{print} {print}` duplicates a line in place. Three channels, one
+# input shape, and a whole class of wrong fix underneath it. Do not "tidy" these five lines
+# back into declaration order.
 cat > "$PROBE_DIR/dup-offender.sh" <<'PROBE'
 # --- I909: an arm binding a vocabulary --------------------------------------
 # vocabulary: probe gamma
 # vocabulary-invariant: I909
+# vocabulary-readers: probe/first.txt
 # vocabulary-owner: probe/owner.txt
 # vocabulary-extract: probe-slug
-# vocabulary-readers: probe/first.txt
 # vocabulary-readers: probe/second.txt
 err "I909 fired"
 PROBE

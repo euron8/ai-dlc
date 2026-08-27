@@ -57,6 +57,47 @@ not a closed entry.
 
 ---
 
+## BL-095 — a rule file declaring `paths:` TWICE is accepted, and the arm named "declares its scope exactly once" is not about that
+
+**`BL-094`'s defect, one subsystem over, found by asking whether that entry was wider than filed.**
+A `.claude/rules/*.md` file may carry two `paths:` keys in its frontmatter and
+`scripts/validate-claude-rules.sh` exits **0**. Measured in a real `file://` clone, because this
+validator needs `git ls-files` and a `git archive` extraction has no `.git` — control: the
+unseeded clone exits 0, and the seeded one exits 0 as well while `A3b` prints
+`ok -- every rule declares its scope exactly once (probe fired all three ways)`.
+
+**That arm is not about this, and its name is why the gap survives a reading.** `A3b`'s three
+branches are: no scope at all, BOTH a `paths:` block and an `<!-- unconditional: -->` marker, and
+an EMPTY `unconditional:` reason. A repeated `paths:` key is none of the three. `A3` checks that
+the frontmatter carries nothing BUT `paths:`, and `A2` checks that each declared glob matches a
+tracked path — so both are satisfied by two contradictory declarations that each resolve.
+
+**The harm is the same harm.** The scope of a rule file decides whether it loads on a matching
+read or is re-injected on every compaction of every session, which is the most expensive
+declaration in this repo. Two `paths:` keys is a contradiction that no reader reports, and which
+of them the loader obeys is a property of a YAML parser this repo does not own.
+
+**NOT MEASURED, and it is measurable by someone with the harness**: which of the two keys Claude
+Code's own frontmatter parser actually takes. The finding here is that the contradiction is
+unreportable, not that a specific wrong scope results — the same framing `BL-094` was filed
+under, and the reason both are NOTE rather than DEFECT.
+
+**The fix is probably one arm, and its false-positive set is measured EMPTY**: a crude
+`grep -c '^paths:' > 1` loop over `.claude/rules/*.md` added ahead of `A3b` flips the receipt to
+0 and leaves the real corpus green. Whether it belongs as a fourth `A3b` branch rather than a new
+arm is the open question — `A3b` already owns "the scope declaration is well-formed", and
+`mechanism-design.md` prefers routing a new answer through the row that already exists.
+
+Tiered **NOTE**. Nothing emits a wrong verdict today; all ten rule files declare `paths:` at most
+once, which is why this has never fired.
+
+Found while re-deriving whether `BL-094` was wider than filed, during batch 12. Two neighbouring
+readers were checked in the same pass and are NOT affected: an invariant ID claimed by two arm
+headers is refused by `scripts/render-invariant-index.sh` with an explicit message, and
+`MARKER_AWK` is fixed as of `v0.421.0`.
+
+verify: sh V=scripts/validate-claude-rules.sh; [ -f "$V" ] || exit 9; git rev-parse --git-dir >/dev/null 2>&1 || exit 9; D="$(mktemp -d)" || exit 9; git clone -q --shared "file://$(pwd)" "$D/r" >/dev/null 2>&1 || { rm -rf "$D"; exit 9; }; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D/r" || { rm -rf "$D"; exit 9; }; ( cd "$D/r" && bash "$V" >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; F="$(cd "$D/r" && grep -l '^paths:' .claude/rules/*.md 2>/dev/null | head -1)"; [ -n "$F" ] || { rm -rf "$D"; exit 9; }; [ "$(grep -c '^paths:' "$D/r/$F")" -eq 1 ] || { rm -rf "$D"; exit 9; }; awk 'NR==1{print; print "paths: core/**"; next} {print}' "$D/r/$F" > "$D/t" || { rm -rf "$D"; exit 9; }; mv "$D/t" "$D/r/$F"; [ "$(grep -c '^paths:' "$D/r/$F")" -eq 2 ] || { rm -rf "$D"; exit 9; }; ( cd "$D/r" && bash "$V" >/dev/null 2>&1 ); rc=$?; rm -rf "$D"; [ "$rc" -eq 0 ] || exit 0; exit 1
+
 ## BL-092
 
 **The rev-path defence is keyed on a `core/` PREFIX, so a distribution path that does not start

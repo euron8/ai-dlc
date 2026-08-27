@@ -2322,9 +2322,26 @@ with it: a bare count guard over the same line satisfied it while detecting noth
 duplication, and its `-ge 2` seed assertion was VACUOUS, because six `^# vocabulary-readers:`
 lines pre-exist and a no-op seed passes it. It also anchored on `^# ` where `MARKER_AWK` accepts
 `^[[:blank:]]*#[[:blank:]]*`, and this file already carries one INDENTED marker block, so two
-spaces on the sentinel sent it to exit 9 — reported as STILL-LIVE. The replacement seeds a
-VERBATIM duplicate of each of the five fields in turn, restoring between rounds, asserts the
-seed landed by both line count and field count, and requires all five to be refused.
+spaces on the sentinel sent it to exit 9 — reported as STILL-LIVE.
 
-verify: sh R=scripts/render-vocabulary-index.sh; M=scripts/validate-enforcement-map.sh; [ -f "$R" ] && [ -f "$M" ] || exit 9; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" --check >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; cp "$D/$M" "$D/m.orig" || { rm -rf "$D"; exit 9; }; n=0; for f in invariant owner extract readers emitters; do cp "$D/m.orig" "$D/$M"; L="$(grep -n "^[[:blank:]]*#[[:blank:]]*vocabulary-$f:" "$D/$M" | head -1 | cut -d: -f1)"; [ -n "$L" ] || { rm -rf "$D"; exit 9; }; b0="$(wc -l < "$D/$M")"; c0="$(grep -c "^[[:blank:]]*#[[:blank:]]*vocabulary-$f:" "$D/$M")"; awk -v n="$L" 'NR==n{print} {print}' "$D/$M" > "$D/m.tmp" || { rm -rf "$D"; exit 9; }; mv "$D/m.tmp" "$D/$M"; [ "$(wc -l < "$D/$M")" -eq "$((b0+1))" ] || { rm -rf "$D"; exit 9; }; [ "$(grep -c "^[[:blank:]]*#[[:blank:]]*vocabulary-$f:" "$D/$M")" -eq "$((c0+1))" ] || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" >/dev/null 2>&1 ) || n=$((n+1)); done; cp "$D/m.orig" "$D/$M"; ( cd "$D" && bash "$R" >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; rm -rf "$D"; [ "$n" -eq 5 ] || exit 1; exit 0
+**THEN THE REPLACEMENT WAS FOUND TO SHARE A BLIND SPOT WITH BOTH OTHER CHANNELS, AND THAT IS THE
+FINDING OF THIS ENTRY.** Its first cut seeded each of the five fields VERBATIM by duplicating the
+declaration IN PLACE — `awk NR==n{print} {print}` — which can only ever produce an ADJACENT pair.
+So did the renderer's own self-probe, and so did every `dup-*` mutant in
+`core/fixtures/vocabulary-index/run.sh`. Three independent-looking channels, ONE input shape.
+A guard firing only when the repeat sits on the line immediately after the first declaration
+(`s_read && lastfield == "read"`) was MEASURED to pass the clean tree, this receipt, and all 21
+fixture mutants — and then render a genuine duplicate separated by two other fields at exit 0,
+byte-identically. That is this entry reopened, closed, and green. **A separator that is not
+itself a marker field does not defeat it either** — a bare `#` line between the two declarations
+leaves the adjacency state untouched, so the seed must be separated by ANOTHER FIELD.
+
+The receipt below therefore runs TEN rounds, not five: each field seeded twice, once BESIDE its
+original and once APART from it with at least one other field line between, with the gap asserted
+in each direction before the renderer is consulted. Both new controls were proven able to fire —
+a variant whose seeding `awk` is replaced by `cat` exits 9, and a variant whose apart-mode
+insertion point is collapsed back onto the original exits 9. Measured: unfixed **1**, fixed **0**,
+adjacency-only fix **1**, readers-only partial fix **1**.
+
+verify: sh R=scripts/render-vocabulary-index.sh; M=scripts/validate-enforcement-map.sh; [ -f "$R" ] && [ -f "$M" ] || exit 9; F="^[[:blank:]]*#[[:blank:]]*vocabulary-"; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" --check >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; cp "$D/$M" "$D/m.orig" || { rm -rf "$D"; exit 9; }; n=0; for f in invariant owner extract readers emitters; do for mode in beside apart; do cp "$D/m.orig" "$D/$M"; L="$(grep -n "$F$f:" "$D/$M" | head -1 | cut -d: -f1)"; [ -n "$L" ] || { rm -rf "$D"; exit 9; }; if [ "$mode" = beside ]; then T="$L"; elif sed -n "$((L-1))p" "$D/$M" | grep -qE "$F"; then T="$((L-2))"; elif sed -n "$((L+1))p" "$D/$M" | grep -qE "$F"; then T="$((L+1))"; else rm -rf "$D"; exit 9; fi; b0="$(wc -l < "$D/$M")"; c0="$(grep -c "$F$f:" "$D/$M")"; awk -v l="$L" -v t="$T" 'NR==l{s=$0} {a[NR]=$0} END{for(i=1;i<=NR;i++){print a[i]; if(i==t) print s}}' "$D/$M" > "$D/m.tmp" || { rm -rf "$D"; exit 9; }; mv "$D/m.tmp" "$D/$M"; [ "$(wc -l < "$D/$M")" -eq "$((b0+1))" ] || { rm -rf "$D"; exit 9; }; [ "$(grep -c "$F$f:" "$D/$M")" -eq "$((c0+1))" ] || { rm -rf "$D"; exit 9; }; set -- $(grep -n "$F$f:" "$D/$M" | head -2 | cut -d: -f1 | tr '\n' ' '); B="$(awk -v x="$1" -v y="$2" 'NR>x && NR<y && /^[[:blank:]]*#[[:blank:]]*vocabulary-/{c++} END{print c+0}' "$D/$M")"; if [ "$mode" = beside ]; then [ "$(($2-$1))" -eq 1 ] || { rm -rf "$D"; exit 9; }; else [ "$B" -ge 1 ] || { rm -rf "$D"; exit 9; }; fi; ( cd "$D" && bash "$R" >/dev/null 2>&1 ) || n=$((n+1)); done; done; cp "$D/m.orig" "$D/$M"; ( cd "$D" && bash "$R" >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; rm -rf "$D"; [ "$n" -eq 10 ] || exit 1; exit 0
 

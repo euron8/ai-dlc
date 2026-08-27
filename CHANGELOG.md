@@ -157,11 +157,63 @@ SINGLE-QUOTED shell string, so that apostrophe terminated it and produced a bash
 reported at a `}` a hundred lines away that was perfectly fine. `bash -n` caught it; reading
 would not have.
 
-`core/fixtures/vocabulary-index/run.sh` gains a near-miss control and seven mutants — the
+`core/fixtures/vocabulary-index/run.sh` gains a near-miss control and eight mutants — the
 near-miss (one field declared once in each of two ADJACENT blocks, which a file-scoped refusal
 would wrongly flag), a duplicate on each of four different fields, a verbatim same-value repeat,
-an empty-first declaration, and the unreadable corpus. **2 controls + 1 near-miss green, 21 of 21
-mutants killed by their own arm.**
+an empty-first declaration, the unreadable corpus, and the non-adjacent repeat below. **2
+controls + 1 near-miss green, 22 of 22 mutants killed by their own arm.**
+
+### THREE INDEPENDENT VERIFICATION CHANNELS SHARED ONE INPUT SHAPE, AND A WRONG FIX PASSED ALL THREE
+
+**This is the finding of the release, and it was found by the adversarial pass, before the
+merge.** A guard that fires only when the repeat sits on the line IMMEDIATELY AFTER the first
+declaration — `s_read && lastfield == "read"`, everything else unchanged — was measured to pass:
+
+| gate | shipped fix | adjacency-only fix |
+|---|---|---|
+| `--check` on the clean tree | 0 | **0** |
+| `BL-094`'s replacement receipt | 0 | **0** |
+| `core/fixtures/vocabulary-index/run.sh` | PASS 21/21 | **PASS 21/21, 0 FAIL** |
+
+And then it renders a genuine duplicate — one separated from its original by two other fields,
+carrying the same value — **byte-identically, at exit 0.** That is `BL-094` reopened, closed and
+green, past a self-probe, a receipt and a mutation battery.
+
+**The cause is one shared property, and naming it precisely is the whole lesson: every duplicate
+seed in all three channels placed the repeat beside the first declaration.** The receipt could
+only ever do so — `awk NR==n{print} {print}` duplicates a line in place. The self-probe seeded an
+adjacent pair. Every `dup-*` fixture mutant seeded an adjacent pair. Three channels that look
+independent, written by three different hands, agreeing because they were all shaped by the same
+obvious way to write a duplicate.
+
+**A near-miss control does not catch this, and neither does adding a fourth channel.** The gap is
+in the SEED, not in the mechanism, and the repair is one seed in each channel rather than any new
+guard: the probe block is reordered so the two declarations are separated by `owner` and
+`extract`, the receipt now runs TEN rounds instead of five — each field seeded once BESIDE its
+original and once APART from it, with the gap asserted in both directions before the renderer is
+consulted — and the fixture gains `m22 dup-nonadjacent`. Each was verified to be the arm that
+fires: `m22` is the ONLY arm that goes red against the adjacency-only fix.
+
+**A separator that is not itself a marker field does not work either.** The first repair attempt
+put a bare `#` line between the two declarations; the adjacency state is only advanced by an
+accepted FIELD, so the wrong fix stayed silent and the repair read as working. The seed has to be
+separated by another declaration.
+
+### `BL-095` filed — the same defect one subsystem over
+
+Found by asking whether `BL-094` was WIDER than filed, which is a standing question here and
+which the measured base rate says is worth asking. A `.claude/rules/*.md` file may declare
+`paths:` TWICE and `scripts/validate-claude-rules.sh` exits **0** — while `A3b` prints
+`ok -- every rule declares its scope exactly once`. That arm is not about this: its three branches
+are no scope at all, both `paths:` and an `<!-- unconditional: -->` marker, and an empty
+`unconditional:` reason. A repeated key is none of them, `A3` is satisfied because the frontmatter
+still carries nothing but `paths:`, and `A2` is satisfied because both globs resolve.
+
+**The first measurement of this was invalid and the control is what caught it.** A `git archive`
+extraction has no `.git`, so `A2` fails there for an unrelated reason — the seeded and unseeded
+trees both exited 1, which reads as "the duplicate is refused". Re-run in a real `file://` clone:
+unseeded **0**, seeded **0**. Two neighbouring readers were checked in the same pass and are NOT
+affected: an invariant ID claimed by two arm headers is refused with an explicit message.
 
 ## [0.420.0] - 2026-08-27
 
