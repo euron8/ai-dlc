@@ -167,6 +167,16 @@ function dupfield(f, old, new) {
   # possessive here terminated it and produced a shell syntax error 100 lines away.
   printf "#DUPFIELD %s%s%s%s%s%s%s%s%s\n", f, SEP, old, SEP, new, SEP, name, SEP, FNR
 }
+function orphanfield(f, v) {
+  # THE OTHER WAY TO LOSE A DECLARATION SILENTLY, and after the repeat is refused it is the
+  # only one left in this reader. A field written ABOVE its block `# vocabulary:` line is
+  # discarded by the flush that line performs -- the author wrote it, the index never saw it,
+  # and nothing said so. Measured on the shipped partition BEFORE this branch existed: an
+  # owner seeded above each of the 8 name lines in turn gave exit 0 all 8 times, index
+  # unchanged, --check clean. It is not a REPEAT, so the seen-flags cannot see it, and it
+  # gets its own message rather than being folded into the duplicate one.
+  printf "#ORPHANFIELD %s%s%s%s%s\n", f, SEP, v, SEP, FNR
+}
 BEGIN {
   # SEP is built here rather than passed with `awk -v`, which strips one level of escaping
   # and is the documented way to make a correct expression look wrong.
@@ -193,26 +203,31 @@ BEGIN {
   }
   if (line ~ /^[[:blank:]]*#[[:blank:]]*vocabulary-invariant:/) {
     v = line; sub(/^[[:blank:]]*#[[:blank:]]*vocabulary-invariant:[[:blank:]]*/, "", v)
+    if (name == "") { orphanfield("vocabulary-invariant", v); next }
     if (s_inv) { dupfield("vocabulary-invariant", inv, v); next }
     s_inv = 1; inv = v; next
   }
   if (line ~ /^[[:blank:]]*#[[:blank:]]*vocabulary-owner:/) {
     v = line; sub(/^[[:blank:]]*#[[:blank:]]*vocabulary-owner:[[:blank:]]*/, "", v)
+    if (name == "") { orphanfield("vocabulary-owner", v); next }
     if (s_owner) { dupfield("vocabulary-owner", owner, v); next }
     s_owner = 1; owner = v; next
   }
   if (line ~ /^[[:blank:]]*#[[:blank:]]*vocabulary-extract:/) {
     v = line; sub(/^[[:blank:]]*#[[:blank:]]*vocabulary-extract:[[:blank:]]*/, "", v)
+    if (name == "") { orphanfield("vocabulary-extract", v); next }
     if (s_ext) { dupfield("vocabulary-extract", ext, v); next }
     s_ext = 1; ext = v; next
   }
   if (line ~ /^[[:blank:]]*#[[:blank:]]*vocabulary-readers:/) {
     v = line; sub(/^[[:blank:]]*#[[:blank:]]*vocabulary-readers:[[:blank:]]*/, "", v)
+    if (name == "") { orphanfield("vocabulary-readers", v); next }
     if (s_read) { dupfield("vocabulary-readers", readers, v); next }
     s_read = 1; readers = v; next
   }
   if (line ~ /^[[:blank:]]*#[[:blank:]]*vocabulary-emitters:/) {
     v = line; sub(/^[[:blank:]]*#[[:blank:]]*vocabulary-emitters:[[:blank:]]*/, "", v)
+    if (name == "") { orphanfield("vocabulary-emitters", v); next }
     if (s_emit) { dupfield("vocabulary-emitters", emitters, v); next }
     s_emit = 1; emitters = v; next
   }
@@ -228,7 +243,8 @@ END {
 # itself about what a vocabulary header looks like.
 DEMAND_RE='vocabular|taxonom|one set|key set'
 
-markers_of() { awk "$MARKER_AWK" "$1" | grep -vE '^#(DEMAND|DUPFIELD) ' || true; }
+markers_of() { awk "$MARKER_AWK" "$1" | grep -vE '^#(DEMAND|DUPFIELD|ORPHANFIELD) ' || true; }
+orphans_of() { awk "$MARKER_AWK" "$1" | sed -n 's/^#ORPHANFIELD //p' || true; }
 # The repeated-field reader. Kept beside the other two so all three consume ONE marker
 # grammar -- a second parse of these comment lines here would be this file restating the
 # thing the index exists to stop being restated.
@@ -547,6 +563,37 @@ IFS="$SEP" read -r e_field e_first e_second e_name e_line <<<"$e_out"
 [ "$e_field" = "vocabulary-owner" ] || probe_fail "the empty-first repeat named field '$e_field'"
 [ -z "$e_first" ] || probe_fail "the empty-first repeat reported first='$e_first', not empty."
 
+# --- probe 1c: the ORPHAN refusal, both directions ------------------------------------
+# The quiet direction first, on every seed above: none of them declares a field before its
+# name line, so an arm that fired on an ordinary block would be caught here rather than by
+# the corpus.
+for pseed in markers.sh dup-nearmiss.sh dup-offender.sh dup-empty.sh; do
+  [ -z "$(orphans_of "$PROBE_DIR/$pseed")" ] || \
+    probe_fail "the orphan-field reader reported a field declared above its name line in $pseed, which has none. Every ordinary marker block would fail to render."
+done
+
+cat > "$PROBE_DIR/orphan.sh" <<'PROBE'
+# --- I911: an arm whose field is written ABOVE the name line ----------------
+# vocabulary-owner: probe/stray.txt
+# vocabulary: probe epsilon
+# vocabulary-invariant: I911
+# vocabulary-owner: probe/owner.txt
+# vocabulary-extract: probe-slug
+err "I911 fired"
+PROBE
+o_out="$(orphans_of "$PROBE_DIR/orphan.sh")"
+[ "$(grep -c . <<<"$o_out")" -eq 1 ] || \
+  probe_fail "a field declared ABOVE its block name line produced $(grep -c . <<<"$o_out") finding(s); exactly 1 is required. The flush at the name line erases it, so nothing downstream can see it and this is the only place it can be reported."
+IFS="$SEP" read -r o_field o_value o_line <<<"$o_out"
+[ "$o_field" = "vocabulary-owner" ]   || probe_fail "the orphan named field '$o_field'"
+[ "$o_value" = "probe/stray.txt" ]    || probe_fail "the orphan reported value='$o_value'; it must name the declaration that is being DISCARDED, not the one that survives."
+[ "$o_line"  = "2" ]                  || probe_fail "the orphan reported line='$o_line'; the stray declaration is on line 2."
+# AND IT MUST NOT BE MISREPORTED AS A REPEAT. The same seed declares `vocabulary-owner:`
+# twice in the file, once above the name and once inside the block -- which is NOT a repeat,
+# because the flush separates them. One cause, one finding, and the right one.
+[ -z "$(dups_of "$PROBE_DIR/orphan.sh")" ] || \
+  probe_fail "a field above the name line was ALSO reported as a repeated field. The flush at the name line separates them; two findings for one cause sends the reader to the wrong remedy."
+
 # AND THE ROW ITSELF MUST STILL PARSE, CARRYING THE FIRST VALUE. The refusal is a REFUSAL,
 # not a parser abort, and it is FIRST-WINS.
 #
@@ -747,14 +794,34 @@ if [ -n "$dups" ]; then
   echo "  and the reader cannot tell you which. Delete one:" >&2
   while IFS="$SEP" read -r dfield dfirst dsecond dname dline; do
     [ -n "$dfield" ] || continue
-    # A block with no `# vocabulary:` line above the repeat is a real state -- the marker
-    # fields are ordinary comments and nothing requires one -- so it is named as such rather
-    # than rendered as an empty cell that reads like a bug in this message.
+    # `dname` is never empty here: a field arriving with no name in scope is refused as an
+    # ORPHAN below, before it can reach the repeat branch. No fallback, because a fallback
+    # nothing can reach is a guard with no subject.
     printf '    line %s, in the block for %s: %s declared as %s and again as %s\n' \
-      "$dline" "${dname:-a block with no \`# vocabulary:\` line}" \
-      "\`# $dfield:\`" "'$dfirst'" "'$dsecond'" >&2
+      "$dline" "$dname" "\`# $dfield:\`" "'$dfirst'" "'$dsecond'" >&2
   done <<EOF
 $dups
+EOF
+  exit 1
+fi
+
+# THE OTHER SILENT DISCARD, AND AFTER THE REPEAT IS REFUSED IT IS THE ONLY ONE LEFT HERE.
+# A field written ABOVE its block `# vocabulary:` line is erased by the flush that line
+# performs. Measured on the partition before this arm existed: an owner seeded above each of
+# the 8 name lines in turn gave exit 0 all 8 times, index unchanged and --check clean.
+# False-positive set measured EMPTY over all three corpora that carry marker lines -- the
+# validator, the fixture seed and this file's own probes -- against a seeded control of 1.
+orphans="$(orphans_of "$SRC")"
+if [ -n "$orphans" ]; then
+  echo "render-vocabulary-index: a marker field in $SRC is declared ABOVE its block's" >&2
+  echo "  \`# vocabulary:\` line. That line opens the block, so everything before it belongs to" >&2
+  echo "  no vocabulary and is discarded unread. Move it below the name:" >&2
+  while IFS="$SEP" read -r ofield ovalue oline; do
+    [ -n "$ofield" ] || continue
+    printf '    line %s: %s declared as %s, with no vocabulary open\n' \
+      "$oline" "\`# $ofield:\`" "'$ovalue'" >&2
+  done <<EOF
+$orphans
 EOF
   exit 1
 fi

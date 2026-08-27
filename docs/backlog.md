@@ -57,6 +57,73 @@ not a closed entry.
 
 ---
 
+## BL-097 — the vocabulary renderer declares TWO populations and only one of them refuses a repeated declaration
+
+**In the file `v0.421.0` hardened, in the half that release did not reach.** `SCHEMA_PY` in
+`scripts/render-vocabulary-index.sh` calls `json.load`, which resolves a duplicate mapping key by
+keeping the LAST. So a `core/schemas/*.json` declaring one field's `enum` twice renders from the
+second and discards the first, silently. Driven with the shipping renderer:
+
+```
+core/schemas/zzprobe.json = {"properties": {"zzprobe": {"enum": ["FIRSTDECL"], "enum": ["SECONDDECL"]}}}
+  -> renderer exit 0, no parse error, rendered row: | `zzprobe.json` | `zzprobe` | `SECONDDECL` |
+  CONTROL: FIRSTDECL anywhere in the rendered index = 0 ; SECONDDECL = 1 (so the row rendered)
+```
+
+**The file's own header calls this half total.** It says the schema walker is *"Total by
+construction — the walker descends each whole document, so a schema cannot gain a vocabulary this
+table does not show."* It can lose one. `MARKER_AWK`'s partition does not reach here and was never
+going to: this is a different reader over a different corpus, and the two share only the header
+that claims totality for both.
+
+**Candidate fix and its measured false-positive set.** An `object_pairs_hook` that raises on a
+repeated key flips the receipt to 0 and leaves the real 8 schemas green — `--check` exit 0. Live
+occurrences today: **0** duplicate keys across those 8, which is why this has never fired.
+
+Tiered **NOTE**, for the same reason `BL-094` was: nothing emits a wrong verdict on the live tree,
+and the state requires an author to write it. The cost is that the header's totality claim is
+false for one of its two halves.
+
+Found by the scope hand of batch 12, asking whether `BL-094` was wider than filed.
+
+verify: sh R=scripts/render-vocabulary-index.sh; [ -f "$R" ] || exit 9; [ -d core/schemas ] || exit 9; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" --check >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; J="$D/core/schemas/zzprobe.json"; printf '%s\n' '{"properties": {"zzprobe": {"enum": ["FIRSTDECL"], "enum": ["SECONDDECL"]}}}' > "$J" || { rm -rf "$D"; exit 9; }; [ "$(grep -c FIRSTDECL "$J")" -eq 1 ] && [ "$(grep -c SECONDDECL "$J")" -eq 1 ] || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" >/dev/null 2>&1 ); rc=$?; f=0; s=0; grep -qF FIRSTDECL "$D/docs/vocabulary-index.md" 2>/dev/null && f=1; grep -qF SECONDDECL "$D/docs/vocabulary-index.md" 2>/dev/null && s=1; rm -rf "$D"; [ "$rc" -eq 0 ] && [ "$s" -eq 1 ] && [ "$f" -eq 0 ] || exit 0; exit 1
+
+## BL-096 — the invariant renderer refuses a duplicate SOLO declaration and accepts a duplicate GROUP one
+
+**`BL-094`'s defect in the sibling renderer, at mirror polarity.**
+`scripts/render-invariant-index.sh`'s collision arm keys on `solo[id] > 1` — declarations by an arm
+header naming ONE id. The group path is `if (!(id in gdesc)) gdesc[id] = armdesc[i]`, which is
+FIRST-wins and reports nothing. Two arm headers that each declare a set of ids sharing one member
+therefore resolve silently.
+
+Driven, with the covered case as the control in the same construction:
+
+```
+CONTROL, two SOLO headers claiming I801:
+  -> exit 1, "1 invariant ID(s) are claimed by more than one arm ... I801"
+THE GAP, two GROUP headers both declaring I803:
+  # --- I802 / I803: FIRSTDESC ---   /   # --- I803 / I804: SECONDDESC ---
+  -> exit 0, index written, row: | I803 | FIRSTDESC |     <- SECONDDESC discarded
+```
+
+**The group path is live, not dead code**: 7 ids appear in at least one group header today, against
+101 distinct ids total. Ids group-declared more than once with no solo arm: **0**, which is why this
+has never fired.
+
+**Candidate fix and its measured false-positive set.** Tracking a disagreement in `gdesc` and
+widening the existing collision arm to `solo[id] > 1 || gcollide[id]` flips the receipt to 0 and
+leaves the real corpus green — `--check` exit 0, 101 invariants across 98 arms. That is one
+clause in the arm that already owns this question, which is the shape `mechanism-design.md`
+prefers over a second arm.
+
+Tiered **NOTE**. Latent, one-arm fix, and the consequence is a wrong DESCRIPTION on a row rather
+than a wrong verdict — but `docs/invariant-index.md` is the file every bold citation in the
+resident rulebooks resolves against.
+
+Found by the scope hand of batch 12, asking whether `BL-094` was wider than filed.
+
+verify: sh R=scripts/render-invariant-index.sh; M=scripts/validate-enforcement-map.sh; [ -f "$R" ] && [ -f "$M" ] || exit 9; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" --check >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; cp "$D/$M" "$D/m.orig" || { rm -rf "$D"; exit 9; }; printf '%s\n' '# --- I801: FIRSTCLAIM ------------------------------------------' '  err "I801 fired"' '# --- I801: SECONDCLAIM -----------------------------------------' '  err "I801 fired"' >> "$D/$M"; ( cd "$D" && bash "$R" >/dev/null 2>&1 ); solo=$?; cp "$D/m.orig" "$D/$M"; printf '%s\n' '# --- I802 / I803: FIRSTDESC ------------------------------------' '  err "I802 fired"; err "I803 fired"' '# --- I803 / I804: SECONDDESC -----------------------------------' '  err "I803 fired"; err "I804 fired"' >> "$D/$M"; ( cd "$D" && bash "$R" >/dev/null 2>&1 ); grp=$?; I="$D/docs/invariant-index.md"; f="$(grep -c '^| I803 | FIRSTDESC |' "$I" 2>/dev/null || true)"; s="$(grep -c '^| I803 | SECONDDESC |' "$I" 2>/dev/null || true)"; rm -rf "$D"; [ "$solo" -ne 0 ] || exit 9; [ "$grp" -eq 0 ] && [ "$f" -eq 1 ] && [ "$s" -eq 0 ] || exit 0; exit 1
+
 ## BL-095 — a rule file declaring `paths:` TWICE is accepted, and the arm named "declares its scope exactly once" is not about that
 
 **`BL-094`'s defect, one subsystem over, found by asking whether that entry was wider than filed.**
@@ -72,10 +139,16 @@ an EMPTY `unconditional:` reason. A repeated `paths:` key is none of the three. 
 the frontmatter carries nothing BUT `paths:`, and `A2` checks that each declared glob matches a
 tracked path — so both are satisfied by two contradictory declarations that each resolve.
 
-**The harm is the same harm.** The scope of a rule file decides whether it loads on a matching
-read or is re-injected on every compaction of every session, which is the most expensive
-declaration in this repo. Two `paths:` keys is a contradiction that no reader reports, and which
-of them the loader obeys is a property of a YAML parser this repo does not own.
+**IT IS NOT LAST-WINS, AND THE DIFFERENCE IS THE WHOLE RISK.** `rule_globs` UNIONS both blocks, so
+the validator discards nothing and checks every glob from both. A YAML loader resolves a duplicate
+mapping key to exactly ONE of them. So the validator can certify a glob the loader then throws
+away — `A2` reports "this rule loads on these paths" about a block that never reaches the loader.
+That is worse than last-wins, because the two readers disagree in a direction nothing compares.
+
+**The harm.** The scope of a rule file decides whether it loads on a matching read or is
+re-injected on every compaction of every session, which is the most expensive declaration in this
+repo. Two `paths:` keys is a contradiction that no reader reports, and which of them the loader
+obeys is a property of a YAML parser this repo does not own.
 
 **NOT MEASURED, and it is measurable by someone with the harness**: which of the two keys Claude
 Code's own frontmatter parser actually takes. The finding here is that the contradiction is

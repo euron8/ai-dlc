@@ -44,14 +44,23 @@ tree carrying a duplicated `# vocabulary-readers:` exits **0**; post-fix exits *
 on the real tree exits **0** either way — **8** cross-file vocabularies, **5** schema enums,
 `docs/vocabulary-index.md` byte-unchanged.
 
-**False-positive set measured EMPTY over the real corpus, and the direction that mattered was
-not the obvious one.** A repeated field cannot be manufactured by a MISSED arm header, because a
-`# vocabulary:` line also flushes — so a merge only matters for a field line sitting outside any
-block. `scripts/validate-enforcement-map.sh` carries 103 lines matching the strict arm-header
-regex against 120 matching a loose `# ---` rule, and those 17 loose-but-not-strict lines produce
-**0** orphan field lines. Control in the same invocation: with one `# vocabulary:` line deleted,
-**4**. The first control written for this returned 0 on both sides and established nothing — it
-broke an arm header rather than a `vocabulary:` line, which is not the input that discriminates.
+**False-positive set measured EMPTY over the real corpus, and the merge direction is empty BY
+CONSTRUCTION rather than merely today.** A repeated field cannot be manufactured by a MISSED arm
+header, because a `# vocabulary:` line also flushes — so a merge only matters for a field line
+sitting outside any block. Orphan field lines on the real corpus: **0**, against a control of **4**
+with one `# vocabulary:` line deleted. The first control written for this returned 0 on BOTH sides
+and established nothing — it broke an arm header rather than a `vocabulary:` line, which is not the
+input that discriminates.
+
+**The decisive measurement is stronger than that, and it corrects a figure this release first
+reported wrongly.** An earlier draft said "103 lines match the strict arm-header regex against 120
+matching a loose `# ---` rule, and those 17 loose-but-not-strict lines are the ones that could
+merge two blocks." **The 17 are irrelevant**: a line that does not match `I[0-9]` was never a flush
+point, so it cannot remove one. More sharply, there is no "ought to flush" independent of
+`MARKER_AWK`'s own regex — the regex DEFINES flushing, so no line can fail to flush when it should.
+The measurement that actually settles it is the maximal missing-flush case: **remove all 103 flush
+points and render.** Result — exit **0**, DUPFIELD findings **0**, 8 vocabularies and 5 schema
+enums unchanged. No arm header anywhere, heredoc or quoted or real, can merge two marker blocks.
 
 ### The receipt covered ONE of the five fields the entry named, and a partial fix closed it
 
@@ -212,8 +221,55 @@ still carries nothing but `paths:`, and `A2` is satisfied because both globs res
 **The first measurement of this was invalid and the control is what caught it.** A `git archive`
 extraction has no `.git`, so `A2` fails there for an unrelated reason — the seeded and unseeded
 trees both exited 1, which reads as "the duplicate is refused". Re-run in a real `file://` clone:
-unseeded **0**, seeded **0**. Two neighbouring readers were checked in the same pass and are NOT
-affected: an invariant ID claimed by two arm headers is refused with an explicit message.
+unseeded **0**, seeded **0**.
+
+**And it is not last-wins, which is worse rather than better.** `rule_globs` UNIONS both blocks, so
+the validator checks every glob from both while a YAML loader keeps exactly one. `A2` can therefore
+certify a glob the loader discards — two readers disagreeing in a direction nothing compares.
+
+### `BL-096` and `BL-097` filed — the same question answered twice more
+
+The wider-population sweep found two more, both latent, both one-arm fixes, both with their
+candidate fix measured against an empty false-positive set.
+
+**`BL-096`** — `scripts/render-invariant-index.sh` refuses a duplicate SOLO declaration and accepts
+a duplicate GROUP one. Its collision arm keys on `solo[id] > 1`; the group path is `if (!(id in
+gdesc)) gdesc[id] = armdesc[i]`, first-wins and silent. `BL-094` at mirror polarity. Driven with
+the covered case as the control in one construction: two solo headers claiming `I801` exit **1**
+with an explicit message; two group headers both declaring `I803` exit **0** and render
+`| I803 | FIRSTDESC |`, discarding the second description. 7 ids sit in a group header today out
+of 101, so the path is live; ids group-declared twice: 0.
+
+**`BL-097`** — **the vocabulary renderer declares TWO populations and this release hardened one.**
+`SCHEMA_PY` calls `json.load`, which keeps the last duplicate mapping key, so a schema declaring one
+field's `enum` twice renders the second and discards the first at exit 0. The file's own header
+calls that half *"Total by construction — a schema cannot gain a vocabulary this table does not
+show."* It can lose one. **Any sentence in this release saying "the renderer now refuses a repeated
+declaration" is true of its marker half and not of its schema half**, which is why this is filed
+rather than folded in: folding would make `BL-094`'s receipt pass on work that is not `BL-094`'s.
+
+### A field declared ABOVE its block's name line was still discarded silently
+
+**Found against the SHIPPED partition, not against the old code** — the fix was already in the tree
+and this survived it. `flush()` clears the seen-flags, so a field written above its block's
+`# vocabulary:` line and the real declaration below it land in different regions and are not a
+repeat. Measured: `# vocabulary-owner: VERSION` seeded immediately above each of the 8 name lines in
+turn gave exit **0** all 8 times, index unchanged, `--check` clean.
+
+That was the last remaining way to lose a declaration silently in this reader, so it is closed here
+rather than filed: same function, same partition, one branch per field. A field arriving with no
+vocabulary open is now refused by name, value and line, and the 8 seeds give exit **1** all 8 times
+against an unseeded control of 0. False-positive set measured EMPTY across all three corpora that
+carry marker lines — the validator, the fixture's synthetic seed, and this file's own probe
+heredocs — against a seeded control of 1.
+
+**This is a widening beyond `BL-094`'s filed text and is recorded as one.** The entry describes a
+repeat; an orphan is not a repeat. It is fixed here because it is the same function and the same
+class, and because shipping a release that says a declaration cannot be silently discarded while one
+path still discards them is the worse outcome.
+
+It also removed a guard that had just become vacuous: the duplicate message carried a fallback for
+a block with no name, and once an orphan is refused first that fallback is unreachable.
 
 ## [0.420.0] - 2026-08-27
 
