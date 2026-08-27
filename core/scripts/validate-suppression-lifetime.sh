@@ -34,9 +34,33 @@
 # silently dropped — a dropped id is a subject the operator never hears about.
 #
 # ZERO-CONTROL. Every verdict line carries the counts it was computed over
-# (`entries_scanned`, `suppressed`, `terminal_naming_check`). A run that matched nothing
-# prints zeros rather than the same clean line a fully-conforming file prints. Per
-# CLAUDE.md: a regex matching nothing must not read like full coverage.
+# (`entries_scanned`, `suppressed`, `terminal_naming_check`, `malformed_attempt`). A run
+# that matched nothing prints zeros rather than the same clean line a fully-conforming
+# file prints. Per CLAUDE.md: a regex matching nothing must not read like full coverage.
+#
+# A SUPPRESSION IS DECLARED BY ITS FIELDS, AND THE STATUS TOKEN IS NOT THE DECLARATION
+# `**Status:**` is parsed by taking the first `[A-Z_]+` run after the label, so a line
+# reading `DECIDED_AUTONOMOUSLY (root cause), with a SUPPRESSED marker on Check 22 below.`
+# classifies as `DECIDED_AUTONOMOUSLY`. The `case` below has no else, so the entry is
+# scanned, skipped, and counted only in `entries_scanned`: the `suppressed` figure is
+# identical whether one suppression was attempted and dropped or none was attempted at all.
+# Measured on the reference consumer, that is the failure mode that shipped — the author
+# added `**Suppresses:**`, `**Expires after:**` and an operator citation directly below,
+# and not one of them was read.
+#
+# BOTH FIXES THE CANDIDATE PROPOSED WERE MEASURED AND BOTH ARE UNSHIPPABLE. Requiring the
+# `**Status:**` line to be EXACTLY one token rejects most of the corpus, because a
+# suppression conventionally carries `SUPPRESSED (operator, <ts>)`. Flagging a second
+# vocabulary token elsewhere on the line scores 5 of 108 status lines on the reference
+# consumer and ALL FIVE ARE FALSE — four say "not a HARD_BLOCK" and one says "already
+# RESOLVED BY FACT below", so the negation and the intent are the same shape, and the
+# rule cannot separate the true positive from them.
+#
+# So the arm keys on the FIELDS, not on the line. `**Suppresses:**` and `**Expires
+# after:**` exist for exactly one disposition; an entry carrying either while classifying
+# as anything other than `SUPPRESSED` has had its authorization silently discarded.
+# False-positive set on the reference consumer: 0 of 123 entries, against a control of 16
+# entries that do classify `SUPPRESSED`.
 #
 # USAGE
 #   validate-suppression-lifetime.sh --escalations <pending.md>
@@ -47,7 +71,8 @@
 # EXIT
 #   0  no suppression is past its expiry on a still-failing check, and no terminal entry
 #      closes a still-failing check; or there is nothing in scope
-#   1  a violation above, or a malformed SUPPRESSED entry
+#   1  a violation above, a malformed SUPPRESSED entry, or suppression fields on an
+#      entry that does not classify as SUPPRESSED
 #   2  bad arguments, or a required input could not be read — a refusal, not a pass
 set -u
 
@@ -64,7 +89,7 @@ while [ $# -gt 0 ]; do
     --enforcement-map) ENFORCEMENT_MAP="${2:-}"; shift 2 ;;
     --baseline)        BASELINE="${2:-}"; shift 2 ;;
     -h|--help)
-      sed -n '1,55p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '1,76p' "$0" | sed 's/^# \{0,1\}//'
       exit 0 ;;
 # MODE_DISPATCH_END
     *)
@@ -112,7 +137,7 @@ AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 
 # No escalations file is a legitimate clean state — nothing to adjudicate.
 if [ ! -f "$ESCALATIONS" ]; then
-  echo "OK: EXAMINED NOTHING — entries_scanned=0 suppressed=0 terminal_naming_check=0 -- no escalations file ($ESCALATIONS)."
+  echo "OK: EXAMINED NOTHING — entries_scanned=0 suppressed=0 terminal_naming_check=0 malformed_attempt=0 -- no escalations file ($ESCALATIONS)."
   exit 0
 fi
 
@@ -299,6 +324,7 @@ baselined() { [ -n "$BASELINE_KEYS" ] && grep -qxF "$1" <<<"$BASELINE_KEYS"; }
 bad=0
 suppressed_n=0
 terminal_naming_n=0
+malformed_attempt_n=0
 unknown_n=0
 matched_baseline=""
 
@@ -311,6 +337,31 @@ matched_baseline=""
 while IFS="$(printf '\037')" read -r header status supp expires authts named; do
   [ -n "${header:-}" ] || continue
   short="$(printf '%s' "$header" | cut -c1-92)"
+
+  # --- a suppression declared by its fields but classified as something else ---
+  # Sited ABOVE the case, not inside it as an else, because the case branches on the
+  # status token and the status token is the thing that is wrong. An entry reaching a
+  # RESOLVED/OVERRIDDEN branch with these fields is the same silent discard.
+  if [ "${status:-}" != "SUPPRESSED" ] && { [ -n "$supp" ] || [ -n "$expires" ]; }; then
+    malformed_attempt_n=$((malformed_attempt_n + 1))
+    key="ATTEMPT:$(printf '%s' "$short" | tr -d ' ')"
+    if baselined "$key"; then
+      matched_baseline="$matched_baseline$key
+"
+    else
+      bad=$((bad + 1))
+      echo "FAIL: suppression fields on an entry that does not classify as SUPPRESSED." >&2
+      echo "      entry: $short" >&2
+      echo "      Parsed **Status:** as '${status:-(none)}'; the entry carries" \
+           "${supp:+**Suppresses:** $supp}${supp:+ }${expires:+**Expires after:** $expires}." >&2
+      echo "      The status token is read as the first [A-Z_] run after the label, so a" >&2
+      echo "      trailing parenthetical naming another disposition does not change it." >&2
+      echo "      Those fields are adjudicated for SUPPRESSED and for nothing else, so as" >&2
+      echo "      written this entry's target, expiry and citation are never examined." >&2
+      echo "      Set the status to SUPPRESSED, or remove the fields." >&2
+      echo "      Baseline key: $key" >&2
+    fi
+  fi
 
   case "${status:-}" in
     SUPPRESSED)
@@ -418,7 +469,7 @@ $BASELINE_KEYS
 EOF
 fi
 
-SUMMARY="entries_scanned=$ENTRIES_N suppressed=$suppressed_n terminal_naming_check=$terminal_naming_n gates_recorded=$GATES_N catalog=$CATALOG_N"
+SUMMARY="entries_scanned=$ENTRIES_N suppressed=$suppressed_n terminal_naming_check=$terminal_naming_n malformed_attempt=$malformed_attempt_n gates_recorded=$GATES_N catalog=$CATALOG_N"
 if [ "$bad" -gt 0 ]; then
   echo "FAIL: $bad suppression-lifetime violation(s). $SUMMARY" >&2
   exit 1

@@ -181,6 +181,57 @@ cat > "$f" <<EOF
 No check named here.
 EOF
 
+# --- 10. a suppression declared by its FIELDS but classified as something else ---
+# The reproduced defect. `**Status:**` is read as the first [A-Z_] run after the label,
+# so this line classifies as DECIDED_AUTONOMOUSLY, the `case` has no branch for it, and
+# the three fields below are never read. The tool's `suppressed=` figure is identical
+# whether this entry exists or not.
+f="$(mkcase attempt-first-token)"
+cat > "$f" <<EOF
+## [S400 gate — dispatch guard] [lead] - ${A0}
+**Status:** DECIDED_AUTONOMOUSLY (root cause), with a SUPPRESSED marker on Check 32 below.
+**Suppresses:** [core] 32 — bmad-invocation-resolves
+**Expires after:** 2 gates
+**Operator authorization:** ${A0} | "Override, proceed, file backlog item"
+EOF
+
+# --- 11. NEAR-MISS: the word SUPPRESSED on the status line, no suppression fields ---
+# Separates the arm from the rule that was measured and rejected. Flagging a second
+# vocabulary token anywhere on the status line scores 5 of 108 lines on the reference
+# consumer and all five are negations of this exact shape. This entry must stay SILENT.
+f="$(mkcase attempt-word-only)"
+cat > "$f" <<EOF
+## [S400 gate — a finding, not a disposition] [lead] - ${A0}
+**Status:** DECIDED_AUTONOMOUSLY (Rule 12 Tier 2) — not a HARD_BLOCK and not a SUPPRESSED entry.
+
+Body text mentioning Check 16 in prose.
+EOF
+
+# --- 12. NEAR-MISS: the same fields under a status that DOES classify SUPPRESSED ---
+# The corrected form of case 10. Same fields, same target, same citation; only the
+# status token differs. If this fires, the arm is keyed on the fields alone and every
+# legitimate suppression in the corpus trips it.
+f="$(mkcase attempt-corrected)"
+cat > "$f" <<EOF
+## [S400 gate — dispatch guard] [lead] - ${A0}
+**Status:** SUPPRESSED (operator, ${A0})
+**Suppresses:** [core] 32 — bmad-invocation-resolves
+**Expires after:** 3 gates
+**Operator authorization:** ${A0} | "Override, proceed, file backlog item"
+EOF
+
+# --- 13. the same discard reached through a TERMINAL branch ----------------------
+# RESOLVED has its own `case` branch, so an arm written as the case's `else` would never
+# see this entry. Its suppression fields are discarded exactly as case 10's are.
+f="$(mkcase attempt-under-terminal)"
+cat > "$f" <<EOF
+## [S400 gate — closed out] [lead] - ${A0}
+**Status:** RESOLVED (the SUPPRESSED marker below carries the authorization)
+**Suppresses:** [core] 16 — gate-dormancy
+**Expires after:** 2 gates
+**Operator authorization:** ${A0} | "Override, proceed, file backlog item"
+EOF
+
 # ---- baseline files --------------------------------------------------------
 printf 'TERMINAL:##[S400][Lead]-%s—gateBLOCKED\n' "$A0" > "$WORK/baseline-good.txt"
 printf 'TERMINAL:##[S400][Lead]-%s—gateBLOCKED\nEXPIRED:16\n' "$A0" > "$WORK/baseline-stale.txt"

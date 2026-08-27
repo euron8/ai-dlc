@@ -3321,3 +3321,52 @@ if the span extractor returns fewer than 10 lines, so a renamed heading reports 
 precondition rather than a false close.
 
 verify: sh g=core/skills/ai-dlc/steps/gate-validation.md; [ -f "$g" ] || exit 9; span=$(awk '/^### 2\. No unresolved/{s=1;next} /^### 2a\./{s=0} s' "$g"); [ "$(printf '%s\n' "$span" | grep -c .)" -ge 10 ] || exit 9; bad=$(printf '%s\n' "$span" | awk 'function p(){ if (b ~ /HARD_BLOCK/ && b ~ /do NOT/ && b !~ /[Ss]print/) print "UNSCOPED" } /^- /{ if (b != "") p(); b = $0; next } { b = b " " $0 } END { if (b != "") p() }'); [ -z "$bad" ]
+
+---
+
+## BL-105 — a suppression declared by its fields is discarded in silence when the status line's first token is something else
+
+**Discharges `PC-S306-SUPPRESSED-STATUS-FIRST-TOKEN-SILENT-NO-OP`, filed by the reference
+consumer in sprint 306.** `core/scripts/validate-suppression-lifetime.sh:183` reads the
+disposition as `if (match(s,/[A-Z_]+/)) status=substr(s,RSTART,RLENGTH)` — the first
+uppercase run after `**Status:**` — and the `case` that branches on it has no else. An entry
+whose status line reads `DECIDED_AUTONOMOUSLY (root cause), with a SUPPRESSED marker on
+Check 22 below.` classifies as `DECIDED_AUTONOMOUSLY`, and its `**Suppresses:**`,
+`**Expires after:**` and `**Operator authorization:**` fields are never read. `entries_scanned`
+increments, `suppressed` does not, and the run reports PASS.
+
+**The failure is silent on both sides.** The tool's output was identical for "no suppressions
+this pass" and "one suppression attempted and silently dropped", and the entry reads as
+resolved to a human skimming the file, because the parenthetical literally contains the word
+`SUPPRESSED`.
+
+**Both directions the candidate proposed were built and measured, and both are unshippable.**
+Requiring the `**Status:**` line to be exactly one vocabulary token rejects most of the
+corpus — a suppression conventionally carries `SUPPRESSED (operator, <ts>)`. Flagging a second
+vocabulary token elsewhere on the line scores **5 of 108** status lines on the reference
+consumer's `pending.md` and **all five are false**: four are `DECIDED_AUTONOMOUSLY (…) — not a
+HARD_BLOCK` and one is `DEFERRAL_REQUEST (items 3 and 5 only; item 2 already RESOLVED BY FACT
+below)`. The negation and the intent are the same shape to that rule, so it cannot separate the
+true positive from its own false positives. **Both filed directions passing their own reading
+and failing on the corpus is the finding, not a detail of it.**
+
+**The shipped arm keys on the FIELDS.** `**Suppresses:**` and `**Expires after:**` are
+adjudicated for exactly one disposition, so an entry carrying either while classifying as
+anything other than `SUPPRESSED` has had its authorization discarded. False-positive set
+measured on the reference consumer: **0 of 123 entries**, against a control of **16** entries
+that do classify `SUPPRESSED`. The verdict line carries `malformed_attempt=` so the two states
+the tool used to conflate are now distinguishable in its own output.
+
+**Sited above the `case`, not as its else**, because `RESOLVED`/`OVERRIDDEN` match an earlier
+branch and an else-shaped arm cannot reach the same discard through them.
+
+Tiered **DEFECT**. An operator authorization is adjudicated by nothing and no party is told.
+
+Guarded by `core/fixtures/suppression-lifetime` assertions 17–21 and MUTANT F, which demotes
+the predicate to one that can never hold and must kill assertion 17 while leaving the lifetime
+arms green. The receipt is three-armed and was scored against five builds — the shipped fix
+**0**, a second spelling `[ -n "${supp}${expires}" ]` **0**, a regression that drops the field
+predicate **1**, a regression that demotes the arm into the `case` **1**, and the unfixed
+subject on `origin/main` **1**.
+
+verify: sh v=core/scripts/validate-suppression-lifetime.sh; [ -f "$v" ] || exit 9; d=$(mktemp -d); printf '## E\n**Status:** DECIDED_AUTONOMOUSLY (x), with a SUPPRESSED marker below.\n**Suppresses:** `2`\n**Expires after:** 2 gates\n**Operator authorization:** 2026-01-01T00:00:00Z | "ok"\n' > "$d/a.md"; printf '## E\n**Status:** RESOLVED (the SUPPRESSED marker below carries it)\n**Suppresses:** `2`\n**Expires after:** 2 gates\n**Operator authorization:** 2026-01-01T00:00:00Z | "ok"\n' > "$d/b.md"; printf '## E\n**Status:** DECIDED_AUTONOMOUSLY (x), not a HARD_BLOCK and not a SUPPRESSED entry.\n' > "$d/c.md"; bash "$v" --escalations "$d/a.md" >/dev/null 2>&1; r=$?; bash "$v" --escalations "$d/b.md" >/dev/null 2>&1; s=$?; bash "$v" --escalations "$d/c.md" >/dev/null 2>&1; t=$?; rm -rf "$d"; { [ "$r" = 2 ] || [ "$s" = 2 ] || [ "$t" = 2 ]; } && exit 9; [ "$r" -ne 0 ] && [ "$s" -ne 0 ] && [ "$t" -eq 0 ]

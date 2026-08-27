@@ -522,6 +522,103 @@ if [ "$SL_CTL_OK" = "1" ]; then
   fi
 fi
 
+# --- Assertion 17: suppression FIELDS under a non-SUPPRESSED status ------------
+# The reproduced defect: the authorization is discarded and the tool's own output cannot
+# distinguish that from no attempt at all. PRESENCE-shaped — it demands the diagnostic and
+# demands the counter, so a subject that emits nothing fails it by construction.
+drive "$VALIDATOR" attempt-first-token "$GM_FAILING"; rc="$LAST_RC"
+if [ "$rc" = "1" ]; then
+  ok "suppression fields under a status that classifies as something else are REPORTED"
+else
+  bad "a discarded suppression scored clean (rc=$rc) — the target, expiry and citation were never examined and nothing said so"
+fi
+if grep -q "Parsed \*\*Status:\*\* as 'DECIDED_AUTONOMOUSLY'" <<<"$LAST_OUT"; then
+  ok "the diagnostic names the token the entry actually classified as"
+else
+  bad "the diagnostic does not name the parsed status — the author cannot tell which token won"
+fi
+if grep -q 'malformed_attempt=1' <<<"$LAST_OUT"; then
+  ok "the verdict line carries malformed_attempt=1 — an attempted-and-dropped suppression is no longer indistinguishable from none"
+else
+  bad "no malformed_attempt count in the verdict line — 'one attempted and dropped' still prints what 'none attempted' prints"
+fi
+
+# --- Assertion 18: the NEAR-MISS the rejected rule would have flagged ----------
+# Four of the five reference-consumer false positives are this exact sentence.
+drive "$VALIDATOR" attempt-word-only "$GM_FAILING"; rc="$LAST_RC"
+if [ "$rc" = "0" ] && grep -q 'malformed_attempt=0' <<<"$LAST_OUT"; then
+  ok "a status line NAMING another disposition in prose, with no suppression fields, stays silent"
+else
+  bad "the arm fired on a status line's prose (rc=$rc) — it is keyed on the line, not on the fields, and the corpus is full of 'not a HARD_BLOCK'"
+fi
+
+# --- Assertion 19: the corrected form of assertion 17's entry ------------------
+drive "$VALIDATOR" attempt-corrected "$GM_FAILING"; rc="$LAST_RC"
+if [ "$rc" = "0" ] && grep -q 'suppressed=1' <<<"$LAST_OUT" \
+   && grep -q 'malformed_attempt=0' <<<"$LAST_OUT"; then
+  ok "the same fields under a status that DOES classify SUPPRESSED are adjudicated, not flagged"
+else
+  bad "a well-formed suppression was flagged (rc=$rc) — the arm is keyed on the fields alone and every real suppression trips it"
+fi
+
+# --- Assertion 20: the discard reached through a TERMINAL branch ---------------
+# The reason the arm is sited ABOVE the case rather than as its else. RESOLVED has its own
+# branch, so an else-shaped arm cannot see this entry at all.
+drive "$VALIDATOR" attempt-under-terminal "$GM_FAILING"; rc="$LAST_RC"
+if [ "$rc" = "1" ] && grep -q 'malformed_attempt=1' <<<"$LAST_OUT"; then
+  ok "suppression fields under RESOLVED are reported — the arm is not the case's else"
+else
+  bad "a discard under a status WITH its own branch went unreported (rc=$rc) — the arm sits inside the case and cannot reach it"
+fi
+
+# --- Assertion 21: UNMUTATED CONTROL for MUTANT F ------------------------------
+SL_F_CTL="$WORK/attempt-control.sh"; cp "$VALIDATOR" "$SL_F_CTL"
+SL_F_CTL_OK=0
+drive "$SL_F_CTL" attempt-first-token "$GM_FAILING"; rc="$LAST_RC"
+if [ "$rc" = "1" ] && grep -q 'malformed_attempt=1' <<<"$LAST_OUT"; then
+  ok "ATTEMPT CONTROL — an unmutated copy reproduces the finding, so MUTANT F's silence means mutation and not breakage"
+  SL_F_CTL_OK=1
+else
+  bad "ATTEMPT CONTROL FAILED (rc=$rc) — MUTANT F below is uninterpretable"
+fi
+
+if [ "$SL_F_CTL_OK" = "1" ]; then
+  # --- MUTANT F: the arm demoted to the case's else ----------------------------
+  # The plausible regression, not a deletion: an author siting the same test inside the
+  # `case` writes it as a `*)` branch. It reaches case 10 and NOT case 13, because
+  # RESOLVED matches an earlier branch. Anchored on the `if` line's own condition, which
+  # is unique to this site — the `case` line below it is shared with three other files.
+  MUT_F="$WORK/mutant-f.sh"
+  sl_anchor_f='if [ "${status:-}" != "SUPPRESSED" ] && { [ -n "$supp" ] || [ -n "$expires" ]; }; then'
+  if [ "$(grep -cF "$sl_anchor_f" "$VALIDATOR")" != "1" ]; then
+    bad "MUTANT F anchor is not unique in the validator — the mutation could land elsewhere"
+  else
+    awk -v A="$sl_anchor_f" '
+      index($0, A) { sub(/!= "SUPPRESSED"/, "= \"__never__\"", $0); print; next }
+                   { print }
+    ' "$VALIDATOR" > "$MUT_F"
+    if cmp -s "$VALIDATOR" "$MUT_F"; then
+      bad "MUTANT F did not change the file — the condition was reworded and the anchor matched nothing"
+    elif ! bash -n "$MUT_F" 2>/dev/null; then
+      bad "MUTANT F is not a valid program — its absence would have scored as a kill"
+    else
+      drive "$MUT_F" attempt-first-token "$GM_FAILING"; rc="$LAST_RC"
+      if [ "$rc" = "0" ]; then
+        ok "MUTANT F killed — a condition that can never hold restores the silent discard, so assertion 17 is testing the predicate and not the counter"
+      else
+        bad "MUTANT F SURVIVED (rc=$rc) — assertion 17 fires without the predicate, so something else is reporting this entry"
+      fi
+      drive "$MUT_F" expired-still-failing "$GM_FAILING"; rc="$LAST_RC"
+      drive "$MUT_F" in-force "$GM_FAILING"; rc2="$LAST_RC"
+      if [ "$rc" = "1" ] && [ "$rc2" = "0" ]; then
+        ok "MUTANT F leaves assertions 1 and 2 intact — the new arm is additive and not entangled with the lifetime arms"
+      else
+        bad "MUTANT F ALSO moved a lifetime verdict (rc=$rc/$rc2) — the arms are entangled and one of them is vacuous"
+      fi
+    fi
+  fi
+fi
+
 echo
 if [ "$fails" -ne 0 ]; then
   echo "suppression-lifetime: $fails assertion(s) FAILED" >&2

@@ -17,6 +17,34 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.428.0] - 2026-08-27
 
+### A suppression declared by its fields is no longer discarded in silence
+
+`PC-S306-SUPPRESSED-STATUS-FIRST-TOKEN-SILENT-NO-OP`. `validate-suppression-lifetime.sh`
+reads an entry's disposition as the first `[A-Z_]` run after `**Status:**`, and its `case`
+has no else. A line reading `DECIDED_AUTONOMOUSLY (root cause), with a SUPPRESSED marker on
+Check 22 below.` therefore classifies as `DECIDED_AUTONOMOUSLY`, the `**Suppresses:**`,
+`**Expires after:**` and `**Operator authorization:**` fields below it are never read, and
+the run reports a clean PASS. Nothing in the output distinguished *one suppression attempted
+and dropped* from *none attempted* — both printed the same `suppressed=` figure.
+
+**Both fixes the candidate proposed were built, measured against the reference consumer's own
+`pending.md`, and both are unshippable.** Requiring the `**Status:**` line to be exactly one
+token rejects most of the corpus, because a suppression conventionally carries
+`SUPPRESSED (operator, <ts>)`. Flagging a second vocabulary token elsewhere on the line scores
+**5 of 108** status lines and **all five are false** — four say *"not a HARD_BLOCK"* and one
+says *"already RESOLVED BY FACT below"*. The negation and the intent are the same shape, so
+that rule cannot separate the true positive from its own false positives.
+
+So the arm keys on the FIELDS, not on the line: `**Suppresses:**` and `**Expires after:**`
+exist for one disposition, and an entry carrying either while classifying as anything else has
+had its authorization discarded. False-positive set on the reference consumer: **0 of 123
+entries**, against a control of **16** entries that do classify `SUPPRESSED`. The verdict line
+now carries `malformed_attempt=`.
+
+**The arm is sited above the `case`, not inside it as an else.** `RESOLVED` and `OVERRIDDEN`
+have their own branch, so an else-shaped arm cannot see the same discard reached through them —
+which is the fixture's assertion 20 and the mutant that proves it.
+
 ### Check 2 scopes its blocking clause by sprint
 
 `PC-S306-CHECK-2-HAS-NO-SPRINT-SCOPE`. Check 2's rule was *"if any entry has status
