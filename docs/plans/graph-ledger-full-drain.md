@@ -37,15 +37,15 @@ grep -cE '^## BL-[0-9]+' docs/backlog.archive.md  # archived
 bash scripts/backlog-reverify.sh | grep -oE 'CLOSE-CANDIDATE|STILL-LIVE|HAND-REVIEW|NEEDS-REVIEW' | sort | uniq -c
 ```
 
-At the last session's close those read **68 live / 29 archived / 60 STILL-LIVE + 8 HAND-REVIEW
+At the last session's close those read **69 live / 29 archived / 61 STILL-LIVE + 8 HAND-REVIEW
 + 0 CLOSE-CANDIDATE**, against an impossible-id control of 0. Every one of those was RE-DERIVED
 by running the four commands above after batch 12 merged, not by editing the sentence.
 
 **THE LIVE COUNT WENT UP ACROSS A BATCH THAT CLOSED AN ENTRY, AND THAT IS THE NORMAL CASE RATHER
-THAN AN ERROR.** Batch 12 closed and rotated one (`BL-094`) and filed three (`BL-095`, `BL-096`,
-`BL-097`), all three found by asking whether the entry being closed was WIDER than filed. Do not
-read a rising live count as a batch that failed; read the ARCHIVE count, which only ever moves on
-a real close.
+THAN AN ERROR.** Batch 12 closed and rotated one (`BL-094`) and filed FOUR (`BL-095`, `BL-096`,
+`BL-097`, `BL-098`), every one found by asking whether the entry being closed was WIDER than
+filed. Do not read a rising live count as a batch that failed; read the ARCHIVE count, which only
+ever moves on a real close.
 
 **THE LEDGER NOW REPORTS ZERO `CLOSE-CANDIDATE`, AND THAT IS A RESULT RATHER THAN AN ABSENCE.**
 The one it used to carry was `BL-006`, and it was FALSE — the receipt exited 0 on two COMMENT
@@ -57,8 +57,8 @@ directly, read the raw exit code, and ask what ELSE satisfies it before closing 
 **A `STILL-LIVE` ROW IS NOT EVIDENCE THAT THE ENTRY IS LIVE, AND `BL-089` IS THE ENTRY THAT SAYS
 SO.** `backlog-reverify.sh` maps every non-zero `sh` exit to `STILL-LIVE  … "still reproduces
 here"`, but this corpus's receipts use **exit 9** to mean *"a precondition moved and I measured
-nothing"*. The two are one row. Measured at batch 12's close: **57 exit 1, 1 exit 9, 0 exit 0**
-across 58 `sh` receipts — the 9 is `BL-066`, whose receipt is broken shell. Batch 9 rebuilt the other one; `BL-076`'s had been unable to measure
+nothing"*. The two are one row. Measured at batch 12's close: **58 exit 1, 1 exit 9, 0 exit 0**
+across 59 `sh` receipts — the 9 is `BL-066`, whose receipt is broken shell. Batch 9 rebuilt the other one; `BL-076`'s had been unable to measure
 anything for 28 releases and read as `STILL-LIVE` the whole time.
 Derive the current pair rather than trusting that one; the count of live `sh` receipts moves
 with every batch and the control is the entries declaring `verify: manual`, which the engine
@@ -106,8 +106,11 @@ many further machinery releases have shipped between `v0.383.0` and `v0.414.0` t
 of this program, which is why the batch numbering and the version numbering stopped agreeing.
 
 **BATCH 12 IS COMPLETE, MERGED AND PUSHED AS `v0.421.0`.** `BL-094` CLOSED and rotated;
-`BL-095`, `BL-096` and `BL-097` FILED. Four commits, fast-forwarded to `main` as
-`b8714e0d..f121b1dc`. Live **65 → 68** (one closed, three filed), archive **28 → 29**, `--check`
+`BL-095`, `BL-096`, `BL-097` and `BL-098` FILED. The release branch was four commits,
+fast-forwarded to `main` as `b8714e0d..f121b1dc`; a follow-up branch then carried `BL-098`, the
+sweep bound and the rule carriers, merged as `c37dcb08..5cddec48`. **`BL-098` was filed AFTER the
+resume block had already been re-derived once, which made it stale again inside the same session
+— re-derive after the LAST write, not after the merge you were thinking of.** Live **65 → 69** (one closed, four filed), archive **28 → 29**, `--check`
 PASSing before `--apply`, `BL-094` in the archive and not in the live file, control `BL-006` still
 live. Gate exit **0** read from a sentinel CLEARED before the run and its mtime checked, 17 of 17
 phases, **0 FAIL lines**, 167 units with `AI_DLC_FIXTURE_NO_SKIP=1`, the changed fixture read BY
@@ -323,20 +326,21 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **BATCH 13. Batch 12 is done — see the block above — and the 68 survivors are the corpus.
+1. **BATCH 13. Batch 12 is done — see the block above — and the 69 survivors are the corpus.
    Pick the subject and say why.**
 
    **There is no standing recommendation, and that is deliberate.** Re-derive before choosing:
    run each candidate's receipt directly and read the RAW exit code, then re-derive the
    entry's population rather than believing it.
 
-   **`BL-096` and `BL-097` are the readiest subjects and they are ONE subsystem together** —
-   both are "a repeated declaration is resolved silently", in the two index renderers, and
-   batch 12 filed each with a candidate fix already built and measured against an empty
-   false-positive set (`solo[id] > 1 || gcollide[id]` for one, an `object_pairs_hook` that
-   raises for the other). That is the `BL-090` shape: a named, subtractive fix already argued
-   out. Taking both means saying in the release that the subject is the renderer pair, not
-   two unrelated files.
+   **`BL-096`, `BL-097` and `BL-098` are the readiest subjects and they are ONE subsystem
+   together** — all three are "a repeated declaration is resolved silently" in the two index
+   renderers, and batch 12 filed each with a candidate fix already built and measured against
+   an empty false-positive set: `solo[id] > 1 || gcollide[id]` for `BL-096`, an
+   `object_pairs_hook` that raises for `BL-097`, and a file-scope `seenname[]` for `BL-098`.
+   That is the `BL-090` shape three times over — a named, subtractive fix already argued out.
+   Taking them means saying in the release that the subject is the renderer pair, not three
+   unrelated files.
 
    `BL-095` is the same class but a DIFFERENT subsystem (the rule-file validator) and a
    different defect — the validator UNIONS both `paths:` blocks while a YAML loader keeps one,
