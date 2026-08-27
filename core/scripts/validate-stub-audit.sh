@@ -105,7 +105,44 @@ fi
 [ "${#paths[@]}" -gt 0 ] || die "no paths given. Pass the gate's changed_files set, or --changed-from <base-ref>."
 
 # --- the four elements. This script is their one home; the fixture drives it. ------
-STUB_MARKER='(stub|TODO|FIXME|wired later|Phase [0-9]|NotImplementedError)'
+STUB_MARKER='(stub|TODO|FIXME|wired later|NotImplementedError)'
+
+# `Phase [0-9]` IS a stub marker -- but only inside a statement of ABSENCE. On its own
+# it is a TOPIC LABEL, and the four other alternatives are unfinished-work tokens while
+# this one is an ordinary English noun phrase that any codebase with numbered delivery
+# phases writes in ordinary prose. It came in with the marker set absorbed wholesale
+# from the reference consumer's own hand-written check, carrying no measurement; nothing
+# recorded chose it over the narrower form, so nothing is being reversed here.
+#
+# MEASURED, driving THIS script over the reference consumer's tree at the revision its
+# own gate log names. The largest Check 16 failure on record -- 23 findings in one file,
+# every one suppressed by the operator as a false positive -- was 23 of 23 matched by
+# `Phase [0-9]`, and 22 of the 23 matched by NOTHING ELSE. The one genuine deferral in
+# that set (`# TODO: ... deferred to Phase 2`) carries `TODO` and survives without this
+# alternative at all. Tree-wide, `Phase [0-9]` is the SOLE matcher on 17 lines here and
+# 129 on the consumer; requiring the absence statement takes those 146 to 13, and the
+# 13 are enumerated in the fixture's PHASE arms rather than described.
+#
+# The cost of the obvious alternative -- deleting the phase alternative outright -- is
+# that a real deferral written only as a phase reference (consumer
+# `rebalancer/data_provider.py` carries three, one of them a bare code-only fallback
+# annotated with the phase that will replace it) stops being seen by anything. That is a
+# detector that cannot fire, which reads exactly like one with nothing to find, so the
+# alternative is kept and narrowed rather than dropped.
+#
+# `exposed` is deliberately NOT in the absence vocabulary. It was, and it was the one
+# term that kept a prose line firing -- "... does NOT belong here and is not exposed to
+# the same fault", the exact sentence that failed a consumer gate four times. Nothing is
+# lost by its removal: a genuine "not yet exposed" is already carried by `[Nn]ot yet`.
+#
+# The absence vocabulary is a FLOOR, not a closed set: a deferral phrased outside it is
+# a false NEGATIVE against a check whose other four markers still run. A false POSITIVE
+# here has no escape hatch for a consumer-owned file -- the only exemption is upstream
+# ownership -- and its only remediation is rewording true prose, which is how a factual
+# phase reference was deleted from a consumer's module docstring to clear a gate.
+PHASE_MARKER='Phase [0-9]'
+PHASE_ABSENCE='([Dd]eferr|[Pp]ending|TBD|[Pp]laceholder|[Nn]ot yet|[Yy]et to be|[Nn]o [^[:space:]]+ yet|[Nn]ot (wired|implemented|deployed|available|supported|populated)|[Ww]ill (be|supply)|[Uu]ntil .* (deployed|lands|ships))'
+
 E1_ITEM='Item [0-9]+'
 E3_FILE_LINE='(^|[[:space:]])[^[:space:]]+:[0-9]+([[:space:]]|$)'
 E4_REASON='^deferral-reason:[[:space:]]+[^[:space:]].{19,}'
@@ -181,7 +218,13 @@ for rel in "${paths[@]}"; do
   while [ "$i" -lt "${#lines[@]}" ]; do
     line="${lines[$i]}"
     i=$((i + 1))                      # i is now the 1-based line number of "$line"
-    [[ $line =~ $STUB_MARKER ]] || continue
+    # Two conditions, never folded into one alternation: `Phase [0-9]` needs the
+    # absence statement on the same line and the other four markers must NOT, or a
+    # `raise NotImplementedError()` with no prose beside it stops being examined.
+    if ! [[ $line =~ $STUB_MARKER ]]; then
+      [[ $line =~ $PHASE_MARKER ]]   || continue
+      [[ $line =~ $PHASE_ABSENCE ]]  || continue
+    fi
     n_markers=$((n_markers + 1))
 
     # The block is kept as LINES, not as one blob. The elements are `^`-anchored

@@ -133,6 +133,63 @@ def trim_ack_window():
     raise NotImplementedError  # stub
 EOF
 
+# ---- V13 / V14 / V15 / V16: the `Phase N` marker, and what it must NOT match --
+# `Phase [0-9]` is the one marker in the set that is also ORDINARY ENGLISH. As a bare
+# alternative it produced the check's dominant false positive: on the reference consumer
+# it was the sole matcher on 129 tracked hot-path lines, and every one of the 23 findings
+# in the largest recorded Check 16 failure came from it, all suppressed by the operator.
+# Its only remediation for a consumer-owned file is rewording true prose — there is no
+# escape hatch but upstream ownership — and a consumer did exactly that, deleting a
+# factual phase reference from a module docstring to clear a gate.
+#
+# So it is a marker only inside a statement of ABSENCE. These four are the two directions
+# of that, and neither is meaningful alone: V13/V16 are prose that must be ignored, V14 is
+# a real deferral written only as a phase reference that must still be caught, and V15 is
+# the guard against fixing it in the wrong place. Fold the absence requirement onto ALL
+# the markers instead of onto the phase one and V15 goes silent, which is a check that
+# stopped examining `raise NotImplementedError()` while every other arm here stays green.
+
+# V13: the verbatim docstring a consumer rewrote to clear its gate. Prose. NO finding.
+cat > "$TREE/src/v13_phase_prose_docstring.py" <<'EOF'
+"""Alert Evaluator — Harmonization Phase 4 (Stories 103-1 and 103-2)."""
+
+
+def evaluate(window):
+    return sum(window) / len(window)
+EOF
+
+# V14: a genuine deferred implementation whose ONLY marker is the phase reference —
+# verbatim from the reference consumer. Satisfies zero elements, so element 1 rejects it.
+# Drop `Phase [0-9]` from the marker set outright and this file goes silent.
+cat > "$TREE/src/v14_phase_deferral.py" <<'EOF'
+def build_position():
+    return Position(
+        burn_snapshots=[],  # Phase 1: no live snapshots yet (subgraph not deployed)
+    )
+EOF
+
+# V15: an unambiguous marker with no prose beside it. The absence requirement is scoped
+# to the phase alternative alone, so this must still be examined and rejected.
+cat > "$TREE/src/v15_notimplemented_bare.py" <<'EOF'
+def collect_fees():
+    raise NotImplementedError()
+EOF
+
+# V16: a phase reference used as a SECTION LABEL — the shape that accounts for most of
+# the consumer's 129. Prose. NO finding.
+#
+# V13 and V16 are not redundant and the difference is which FUTURE fix clears them. V13
+# sits in a docstring, which carries no comment prefix; a marker gate that required
+# comment TEXT — the remedy filed for the sibling defect, where an identifier named
+# `stub` matches in code — would clear V13 on its own and leave V16 exactly as it was,
+# because V16 IS a comment. Only the absence requirement clears V16, so it is the arm
+# that stays load-bearing after that fix lands.
+cat > "$TREE/src/v16_phase_section_label.py" <<'EOF'
+def drain(cursor):
+    # Phase 2: drain remaining records in cursor_block above cursor_logindex
+    return cursor.advance()
+EOF
+
 # ---- V5: the positive control — satisfies all four elements ------------------
 cat > "$TREE/src/v5_honest.py" <<'EOF'
 def widen_read_path():
@@ -178,8 +235,18 @@ done
 [ -n "$MANIFEST_SRC" ] || { echo "seed: FAIL — no core-manifest.md found walking up from $0. V8/V9 would compare against nothing." >&2; exit 2; }
 cp "$MANIFEST_SRC" "$TREE/.claude/skills/ai-dlc/core-manifest.md"
 
+# THE OWNERSHIP PAIRS CARRY A `TODO`, NOT A PHASE REFERENCE, AND THAT IS DELIBERATE.
+# They were seeded on a bare `Phase 3`, which coupled a question about OWNERSHIP to a
+# question about the marker VOCABULARY: narrowing the phase alternative moved V9 and V11
+# as well as its own arms, so one mutation failed three assertions and two of the three
+# were reporting someone else's defect. An ownership arm must survive every legitimate
+# change to the marker set, so its payload is the least ambiguous marker in the set.
+#
 # V8: upstream-owned (`skills/ai-dlc-update/**`). Zero elements satisfied. EXEMPT.
-# The comment block is the verbatim text that failed the real gate.
+# The verbatim text that failed the real gate stays in the block and is no longer a
+# marker at all — a bare `Phase 3` in prose stopped being one. Keeping it here is the
+# record of what this pair was seeded on and a second reading of V13/V16's rule in the
+# one file where a false positive was historically unclearable.
 cat > "$TREE/.claude/skills/ai-dlc-update/reconcile/apply.sh" <<'EOF'
 #!/usr/bin/env bash
 # So both captures happen here, together, in the only state in which ours-vs-base
@@ -187,6 +254,8 @@ cat > "$TREE/.claude/skills/ai-dlc-update/reconcile/apply.sh" <<'EOF'
 #
 # Phase 3's layer-drift.sh does NOT belong here and is not exposed to the same fault: its
 # consumer-side reads are layer_files(), which walks consumer-authored *.md.
+#
+# TODO: the drift ledger is not wired here yet.
 PC="$(bash "$SELF/preclassify.sh" || true)"
 EOF
 
@@ -194,7 +263,7 @@ EOF
 # core, sits one directory from files that are, and MUST still be audited.
 cat > "$TREE/.claude/hooks/my-own-hook.sh" <<'EOF'
 #!/usr/bin/env bash
-# Phase 3's dispatch table is not wired here yet.
+# TODO: the dispatch table is not wired here yet.
 exit 0
 EOF
 
@@ -205,13 +274,15 @@ EOF
 # entries have to be name-exact. That exactness is what V11 tests.
 #
 # V10 and V11 are a PAIR, same construction as V8/V9: both under tests/fixtures/, both
-# carrying one bare `Phase 3` marker, both satisfying ZERO elements, differing ONLY in
-# ownership. V11's directory name is deliberately a core fixture's name plus a suffix — a
-# malformed entry (`fixtures/check-15-bypass**`, one dropped slash) over-captures it and
-# flips V11, where a neutrally-named control would not notice.
+# carrying one `TODO` marker, both satisfying ZERO elements, differing ONLY in ownership.
+# V11's directory name is deliberately a core fixture's name plus a suffix — a malformed
+# entry (`fixtures/check-15-bypass**`, one dropped slash) over-captures it and flips V11,
+# where a neutrally-named control would not notice.
 #
 # These markers are the payload. Scrubbing either one makes its file marker-free, the
-# audit returns `ok`, and the assertion mismatches — loudly, not vacuously.
+# audit returns `ok`, and the assertion mismatches — loudly, not vacuously. The reason it
+# is a `TODO` and not a phase reference is the one given at V8/V9: an ownership arm that
+# borrows the marker vocabulary reports on the vocabulary too.
 mkdir -p "$TREE/tests/fixtures/check-15-bypass" \
          "$TREE/tests/fixtures/check-15-bypass-local"
 
@@ -219,13 +290,14 @@ mkdir -p "$TREE/tests/fixtures/check-15-bypass" \
 cat > "$TREE/tests/fixtures/check-15-bypass/seed.sh" <<'EOF'
 #!/usr/bin/env bash
 # Phase 3's layer-drift.sh is not exercised by this seed.
+# TODO: the drift ledger is not wired here yet.
 : # seeded
 EOF
 
 # V11: a CONSUMER-authored fixture, one suffix from a core name. NOT core. Audited.
 cat > "$TREE/tests/fixtures/check-15-bypass-local/seed.sh" <<'EOF'
 #!/usr/bin/env bash
-# Phase 3's dispatch table is not wired here yet.
+# TODO: the dispatch table is not wired here yet.
 : # seeded
 EOF
 

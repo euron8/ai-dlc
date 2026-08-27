@@ -17,6 +17,38 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.428.0] - 2026-08-27
 
+### `Phase [0-9]` is a stub marker only inside a statement of absence
+
+`PC-S306-STUB-AUDIT-PHASE-N-MATCHES-WORD-BOUNDED-PROSE`, filed by the reference consumer while
+this release was being written. Four of `validate-stub-audit.sh`'s five markers are
+unfinished-work tokens; `Phase [0-9]` is an ordinary English noun phrase. It is DISTINCT from
+`PC-S303`'s word-boundary fix, which cannot reach it: `Phase 4` in
+`"""Alert Evaluator — Harmonization Phase 4 (Stories 103-1 and 103-2)."""` is already
+word-bounded on both sides.
+
+Clearing that gate cost the consumer a dedicated commit rewording `"Harmonization Phase 4"` to
+`"Harmonization work"` — **a factual historical phase reference deleted to satisfy a detector**,
+with no exemption available because the only one is upstream ownership.
+
+The alternative is now NARROWED, not deleted: it requires an absence phrase on the same line,
+while the other four markers require nothing. **Deleting it outright was built and rejected** —
+a real deferral written only as a phase reference would stop being seen by anything, and a
+detector that cannot fire reads exactly like one with nothing to find.
+
+Measured over tracked hot-path files, **377** here and **1754** on the reference consumer: the
+lines where `Phase [0-9]` is the SOLE matcher number **19** and **129**; requiring the absence
+phrase takes those to **1** and **8**, against an impossible-token control of 0 on both. That is
+a line-level floor relative to what the script sees, which decomments and applies the ownership
+exemption first.
+
+**`exposed` was in the absence vocabulary and is removed.** It was the one term that kept a
+prose line firing — *"... does NOT belong here and is not exposed to the same fault"*, the
+sentence the check's own body records as having failed a consumer gate four times. A genuine
+"not yet exposed" is carried by `[Nn]ot yet`.
+
+Nothing is reversed: the marker set came in wholesale from the consumer's own hand-written check
+and carried no measurement.
+
 ### A FAIL on a check the next step never reads no longer serialises the dispatch
 
 `PC-S306-GATE-REMEDIATION-BLOCKS-INDEPENDENT-DEV-DISPATCH`. Rule 4 plus

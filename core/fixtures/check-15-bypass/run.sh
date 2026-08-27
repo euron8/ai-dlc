@@ -78,7 +78,25 @@ fi
 # SUBSHELL, so an exit code assigned inside it never reaches the caller and every variant
 # reads as 0 — a driver that cannot fail, in the fixture written to prove one can.
 OUT=""; RC=0
-audit() { OUT="$(bash "$AUDIT" --root "$TREE" "$@" 2>&1)"; RC=$?; }
+audit() { OUT="$(bash "${AUDIT_BIN:-$AUDIT}" --root "$TREE" "$@" 2>&1)"; RC=$?; }
+AUDIT_BIN=""
+
+# classify <validator> <tree-relative-path> -> the same token `expect` reads, so the
+# mutant section at the end scores against the SAME classifier as the arms it is proving
+# load-bearing. Two classifiers would be two grammars, and the copy that cannot ship is
+# the one that stays green.
+classify() {
+  local bin="$1" p="$2" out got
+  out="$(bash "$bin" --root "$TREE" "$p" src/v5_honest.py 2>&1)"
+  case "$out" in
+    *"EXEMPT $p "*) got="exempt-upstream" ;;
+    *"FINDING $p:"*)
+      got="$(sed -nE "s@^FINDING $p:[0-9]+ ([a-z0-9-]+) .*@\1@p" <<<"$out" | head -1)"
+      [ -n "$got" ] || got="rejected-without-naming-an-element" ;;
+    *) got="ok" ;;
+  esac
+  printf '%s' "$got"
+}
 
 # expect <tree-relative-path> <want-element-token|ok|exempt-upstream> <label>
 #
@@ -128,6 +146,20 @@ expect src/v12_reason_short.py  element4-reason    "V12 reason-short"
 # The positive control. Break any element into always-rejecting and this goes red;
 # without it, all the adversaries would still be "correctly" rejected.
 expect src/v5_honest.py         ok                 "V5 honest control"
+
+# THE `Phase N` MARKER, in both directions. V13 and V16 are ABSENCE-shaped — they assert
+# that nothing is reported — so they are the arms that need the mutants in the section at
+# the end of this file, not a seeded near-miss. V14 is their opposite number and the one
+# that makes deleting the alternative visible; V15 sits outside the phase rule entirely
+# and is what a fix applied to the WHOLE marker set breaks.
+expect src/v13_phase_prose_docstring.py \
+                                ok                 "V13 phase prose in a docstring"
+expect src/v16_phase_section_label.py \
+                                ok                 "V16 phase as a section label"
+expect src/v14_phase_deferral.py \
+                                element1-item-ref  "V14 phase deferral (control)"
+expect src/v15_notimplemented_bare.py \
+                                element1-item-ref  "V15 bare NotImplementedError"
 
 # The exemption pair. V8 satisfies zero elements and must NEVER reach the elements
 # at all; V9 satisfies zero elements at a core-ADJACENT path and must reach them.
@@ -189,17 +221,85 @@ else
   fails=$((fails + 1))
 fi
 
+# --- THE MUTANTS, and why an arm above is not enough without them.
+#
+# V13 and V16 are ABSENCE-shaped: they pass when the validator reports nothing about their
+# file, and a validator that reported nothing about ANY file would pass them too. A seeded
+# near-miss does not close that — it shows the arm discriminates between two inputs, not
+# that it discriminates at all. So each of the three lines the phase rule is spelled on
+# gets a mutant, and each must move exactly the arms that read it.
+#
+# The mutants edit COPIES under $WORK, never the installed validator, and the resolver is
+# copied beside each one because the validator finds `core-paths.sh` as a SIBLING in both
+# layouts (I33). A copy that cannot resolve its sibling dies at exit 2, reports no
+# EXEMPT and no FINDING, and every absence-shaped arm reads that silence as a pass —
+# which is why the CONTROL below is presence-shaped and runs first.
+MUT="$WORK/mut"
+mkdir -p "$MUT"
+cp "$(dirname "$AUDIT")/core-paths.sh" "$MUT/core-paths.sh" 2>/dev/null \
+  || { echo "FAIL: no core-paths.sh beside $AUDIT — every mutant would die resolving it and score a false kill" >&2; exit 2; }
+
+cp "$AUDIT" "$MUT/control.sh"
+c_pros="$(classify "$MUT/control.sh" src/v13_phase_prose_docstring.py)"
+c_defr="$(classify "$MUT/control.sh" src/v14_phase_deferral.py)"
+c_nie="$(classify "$MUT/control.sh" src/v15_notimplemented_bare.py)"
+if [ "$c_defr" = "element1-item-ref" ] && [ "$c_nie" = "element1-item-ref" ] && [ "$c_pros" = "ok" ]; then
+  note "ok" "mutant control" "an unmutated copy reports V14 and V15 and stays quiet on V13"
+else
+  note "BAD" "mutant control" "an unmutated copy answered V13='$c_pros' V14='$c_defr' V15='$c_nie' — the mutants below would be scoring the harness"
+  fails=$((fails + 1))
+fi
+
+# name | sed program | probe | the token the mutant must produce
+MUT_NAME=( phase-alternative-restored phase-marker-dropped absence-widened notimplementederror-dropped )
+MUT_SED=(
+  "s@^STUB_MARKER='(stub|TODO|FIXME|wired later|NotImplementedError)'\$@STUB_MARKER='(stub|TODO|FIXME|wired later|Phase [0-9]|NotImplementedError)'@"
+  "s@^PHASE_MARKER='Phase \[0-9\]'\$@PHASE_MARKER='PhaseThatCannotOccur [0-9]'@"
+  "s@^PHASE_ABSENCE='.*'\$@PHASE_ABSENCE='.'@"
+  "s@|NotImplementedError)'\$@)'@"
+)
+MUT_PROBE=( src/v13_phase_prose_docstring.py src/v14_phase_deferral.py src/v16_phase_section_label.py src/v15_notimplemented_bare.py )
+MUT_WANT=( element1-item-ref ok element1-item-ref ok )
+MUT_WHY=(
+  "V13 — the sprint-306 docstring is a finding again the moment the bare alternative returns"
+  "V14 — a real phase deferral goes unexamined the moment the alternative is deleted outright"
+  "V16 — a section label is a finding again the moment the absence vocabulary matches anything"
+  "V15 — a marker OUTSIDE the phase rule goes unexamined, which no other arm here notices"
+)
+
+for i in 0 1 2 3; do
+  label="${MUT_NAME[$i]}"; copy="$MUT/$label.sh"
+  sed "${MUT_SED[$i]}" "$AUDIT" > "$copy" 2>/dev/null
+  # `cmp -s` first: a sed that matched nothing produces an unmutated copy, which answers
+  # the baseline on every probe and scores a survival that reads as a working arm.
+  if cmp -s "$AUDIT" "$copy"; then
+    note "BAD" "MUTANT $label" "the sed matched nothing — no mutation applied, so nothing was proven"
+    fails=$((fails + 1)); continue
+  fi
+  got="$(classify "$copy" "${MUT_PROBE[$i]}")"
+  if [ "$got" = "${MUT_WANT[$i]}" ]; then
+    note "ok" "MUTANT $label" "killed by ${MUT_WHY[$i]}"
+  else
+    note "BAD" "MUTANT $label" "SURVIVED — ${MUT_PROBE[$i]} answered '$got', wanted '${MUT_WANT[$i]}'"
+    fails=$((fails + 1))
+  fi
+done
+
 echo
 if [ "$fails" -eq 0 ]; then
-  echo "PASS  check-15-bypass: 12 variants correct against the shipping validator. Each"
+  echo "PASS  check-15-bypass: 16 variants correct against the shipping validator. Each"
   echo "      adversary is rejected on its intended element — absent item, CLOSED item, no"
   echo "      file:line, digitless file ref, and element 4's two floors separately (a"
   echo "      padded reason under density, a short reason under length) — the honest stub"
   echo "      satisfies all four, and both ownership pairs discriminate: the upstream-owned"
   echo "      file and the core fixture are dropped from scope while their consumer-owned"
-  echo "      neighbours at adjacent paths are still audited. The three non-element"
-  echo "      assertions hold too: the exit mapping separates audited-nothing from clean"
-  echo "      and from a finding, and the run reports what it looked at."
+  echo "      neighbours at adjacent paths are still audited. The phase marker holds in"
+  echo "      both directions: prose in a docstring and prose as a section label are"
+  echo "      ignored, a real deferral written only as a phase reference is still caught,"
+  echo "      and a bare NotImplementedError is examined without any prose beside it. The"
+  echo "      three non-element assertions hold too: the exit mapping separates"
+  echo "      audited-nothing from clean and from a finding, and the run reports what it"
+  echo "      looked at. Four mutants prove the phase rule's three lines load-bearing."
   exit 0
 fi
 echo "FAIL  check-15-bypass: $fails assertion(s) wrong." >&2

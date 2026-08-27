@@ -3542,3 +3542,66 @@ regression making the routing unconditional **1**. Exits 9 if either span comes 
 than its minimum, so a renamed heading reports a moved precondition rather than a false close.
 
 verify: sh B=core/skills/ai-dlc/steps/bug-investigation.md; I=core/skills/ai-dlc/steps/implementation.md; [ -f "$B" ] && [ -f "$I" ] || exit 9; s6=$(awk '/^### 6\. Gate Validation/{s=1;next} /^### 7\./{s=0} s' "$B"); s7=$(awk '/^### 7\. All Gates Passed/{s=1} s' "$I"); [ "$(printf '%s\n' "$s6" | grep -c .)" -ge 3 ] || exit 9; [ "$(printf '%s\n' "$s7" | grep -c .)" -ge 2 ] || exit 9; printf '%s\n' "$s6" | awk 'function p(){ if (b ~ /^[0-9]+\./ && b ~ /[Rr]oute/ && b ~ /the next step (does not consume|reads|needs)/) f=1 } /^[0-9]+\. /{ p(); b=$0; next } { b=b" "$0 } END{ p(); exit f?0:1 }' || exit 1; grep -qiE 'entering gate' <<<"$s7"
+
+---
+
+## BL-109 — the stub-audit marker set treats `Phase [0-9]` as an unfinished-work token, so ordinary prose fails Check 16
+
+**Discharges `PC-S306-STUB-AUDIT-PHASE-N-MATCHES-WORD-BOUNDED-PROSE`, filed by the reference
+consumer in sprint 306 while this batch was being written.** `core/scripts/validate-stub-audit.sh`'s
+marker set was `(stub|TODO|FIXME|wired later|Phase [0-9]|NotImplementedError)`. Four of those five
+are unfinished-work tokens; the fifth is an ordinary English noun phrase that any codebase with
+numbered delivery phases writes in ordinary prose.
+
+**It is DISTINCT from `PC-S303-STUB-AUDIT-MARKER-REGEX-MATCHES-LOCAL-VAR-NAMED-STUB`, and the
+adjacent fix does not close it.** That entry proposes word-boundary anchoring on `stub`.
+`Phase 4` in `"""Alert Evaluator — Harmonization Phase 4 (Stories 103-1 and 103-2)."""` is
+already word-bounded on both sides, so a `\b` fix leaves this false positive exactly as it was.
+
+Reproduced sprint 306: that module docstring predated story 306-1 and had never been audited;
+Check 16 FAILed on it and clearing the gate took a dedicated commit rewording
+`"Harmonization Phase 4"` to `"Harmonization work"` — **a factual historical phase reference
+deleted to satisfy a detector.** The consumer's own commit `35cf53978` is that workaround, in
+its history. A consumer-owned file has no exemption; the only one is upstream ownership.
+
+**`Phase [0-9]` is kept and NARROWED, not deleted, and that choice is measured.** It is a stub
+marker only inside a statement of ABSENCE, so it now requires an absence phrase on the same
+line while the other four markers require nothing. Deleting it outright was built and rejected:
+a real deferral written only as a phase reference stops being seen by anything, and a detector
+that cannot fire reads exactly like one with nothing to find.
+
+**The narrowing, measured over both trees with a control in the same invocation.** Over tracked
+hot-path files (`.py .ts .tsx .js .sh .sql`) — **377** here and **1754** on the reference
+consumer — the lines where `Phase [0-9]` is the SOLE matcher number **19** here and **129**
+there; requiring the absence phrase takes those to **1** and **8**. Control: an impossible token
+returns 0 on both. **That is a line-level count over whole files and is a FLOOR relative to what
+the script sees**, which decomments each line and applies the upstream-ownership exemption
+first; the fixture enumerates the survivors rather than describing them.
+
+**`exposed` was in the absence vocabulary and was removed**, because it was the one term that
+kept a prose line firing — *"... does NOT belong here and is not exposed to the same fault"*,
+the sentence the check's own body records as having failed a consumer gate four times. Nothing
+is lost: a genuine "not yet exposed" is carried by `[Nn]ot yet`.
+
+**The absence vocabulary is a FLOOR, not a closed set.** A deferral phrased outside it is a
+false NEGATIVE against a check whose other four markers still run. A false POSITIVE has no
+escape hatch for a consumer-owned file and its only remediation is rewording true prose.
+
+**Nothing is being reversed.** The marker set came in wholesale from the reference consumer's
+own hand-written check and carried no measurement; nothing recorded chose the bare alternative
+over the narrowed one.
+
+Tiered **DEFECT**. Its remediation is to delete true information from a consumer's source.
+
+Guarded by `core/fixtures/check-15-bypass` arms V13, V14 and V16 and three mutants — the bare
+alternative restored (killed by V13), the alternative deleted outright (killed by V14), and a
+marker OUTSIDE the phase rule dropped (killed by V15, which no other arm here notices).
+
+**The receipt drives the shipping script over three seeded files rather than grepping its
+regex**, so it survives any spelling of the fix. Three arms, scored against five builds: the
+shipped fix **0**, a second spelling reordering the absence vocabulary and adding a synonym
+**0**, the unfixed subject **1**, a regression restoring the bare alternative **1**, and a
+regression deleting the alternative outright **1**. Exits 9 on any exit-2 refusal, so a missing
+resolver reports a moved precondition rather than a false close.
+
+verify: sh v=core/scripts/validate-stub-audit.sh; [ -f "$v" ] || exit 9; v="$(cd "$(dirname "$v")" && pwd)/$(basename "$v")"; d=$(mktemp -d) || exit 9; mkdir -p "$d/src"; printf '"""Alert Evaluator — Harmonization Phase 4 (Stories 103-1 and 103-2)."""\n\ndef f():\n    return 1\n' > "$d/src/prose.py"; printf 'def g():\n    # Deferred to Phase 2: the pool scoping lands with the evaluator.\n    return None\n' > "$d/src/deferral.py"; printf 'def h():\n    raise NotImplementedError()\n' > "$d/src/bare.py"; r() { ( cd "$d" && AI_DLC_PROJECT_ROOT="$d" bash "$v" --root "$d" "src/$1" ) >/dev/null 2>&1; }; r prose.py; a=$?; r deferral.py; b=$?; r bare.py; c=$?; rm -rf "$d"; { [ "$a" = 2 ] || [ "$b" = 2 ] || [ "$c" = 2 ]; } && exit 9; [ "$a" -eq 0 ] && [ "$b" -eq 1 ] && [ "$c" -eq 1 ]
