@@ -137,6 +137,37 @@ none**, partition control 0, both presence controls 1, absence control 0. The bu
 there deliberately — it is the one that fails if someone reverts this grammar to headings alone,
 and a heading-only run reads as a clean, plausible 40.
 
+**"CITED" IS STILL NOT THE PROGRESS METRIC, AND THIS IS THE LAST STEP OF THE DERIVATION.** A
+candidate cited by a LIVE entry is work in flight; one cited by an entry in the ARCHIVE has been
+discharged. Splitting the 29 is what turns this block into a measurement of the goal instead of a
+measurement of coverage — and the operator has had to say so twice, because every report of this
+program has led with `docs/backlog.md`'s live count, which moves for reasons that have nothing to
+do with the ledger. **Report the partition below. Never report live/archive entry counts as
+progress.**
+
+```
+pc() { grep -rohE 'PC-[A-Z0-9][A-Z0-9-]+' "$1" | sort -u; }
+pc docs/backlog.archive.md > /tmp/closed_here
+pc docs/backlog.md         > /tmp/open_here
+git log --format='%B' origin/main | grep -ohE 'PC-[A-Z0-9][A-Z0-9-]+' | sort -u > /tmp/in_msgs
+comm -12 /tmp/live.txt /tmp/closed_here                    # DISCHARGED -- the goal metric
+comm -12 /tmp/live.txt /tmp/open_here                      # in flight
+comm -23 /tmp/live.txt <(sort -u /tmp/closed_here /tmp/open_here)   # untouched
+# control: the three MUST sum to the live denominator, or the partition is lying
+comm -12 /tmp/live.txt /tmp/closed_here | comm -23 - /tmp/in_msgs   # discharged but INVISIBLE
+```
+
+At batch 14's close: **7 DISCHARGED, 22 in flight, 20 untouched**, summing to 49, and **0
+discharged-but-unnamed** — every one of the 7 appears in a release COMMIT MESSAGE, which is the
+only channel `named_absorbed()` reads. That last line is a real failure mode and not a formality:
+a fix that ships without its id in the message discharges the candidate and produces no row
+anywhere, so the consumer never learns of it.
+
+**SEVEN OF FORTY-NINE ACROSS FOURTEEN BATCHES, AND THE DENOMINATOR IS NOT SHRINKING.** State that
+rate when reporting. It is roughly one candidate per batch, and the grammar repair at batch 14
+moved the target from 40 to 49 without moving the numerator — so every progress figure this
+program quoted before batch 14 was against a denominator 18% too small.
+
 **ELEVEN IDS CITED BY LIVE BACKLOG ENTRIES RESOLVE TO NEITHER LEDGER FILE, AND SIX OF THOSE ARE
 ARTIFACTS OF THE CITATION GREP** — `PC-S308`, `PC-S334`, `PC-S336`, `PC-S900-`, and two
 `PC-S999-` probe tokens that live inside receipts. The other **five are real, full slugs naming
@@ -239,9 +270,12 @@ work. Batches 1–14 have all MERGED AND PUSHED; the releases are `v0.374.0`, `v
 many further machinery releases have shipped between `v0.383.0` and `v0.414.0` that are NOT part
 of this program, which is why the batch numbering and the version numbering stopped agreeing.
 
-**BATCH 14 IS COMPLETE, MERGED AND PUSHED AS `v0.423.0`.** `BL-033` CLOSED and rotated,
-discharging `PC-S314`. Release `5c3711e2`, close-and-rotate `c174b60a`. Live **70 → 69**, archive
-**30 → 31**, `--check PASS` before `--apply` with the receipt reported
+**BATCH 14 IS COMPLETE, MERGED AND PUSHED AS `v0.423.0`. CANDIDATES DISCHARGED 6 → 7 OF 49**,
+which is the only figure that measures this program. `BL-033` CLOSED and rotated, discharging
+`PC-S314`, with the id in the RELEASE COMMIT MESSAGE where `named_absorbed()` can read it.
+Release `5c3711e2`, close-and-rotate `c174b60a`. The entry counters moved **70 → 69** live and
+**30 → 31** archived; those are recorded to show the rotation HAPPENED, **not as progress** —
+`--check PASS` before `--apply` with the receipt reported
 `CLOSE-CANDIDATE [sha 5c3711e2 resolves]`, `BL-033` in the archive and not in the live file,
 control `BL-006` still live and the two entries filed this batch still live. Gate exit **0** read
 from a sentinel CLEARED before the run and its mtime checked, **17 of 17** phases PASS, **0 FAIL**
