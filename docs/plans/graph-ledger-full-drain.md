@@ -270,6 +270,26 @@ base's, so the mode-aware hashes still agreed. The claim needed a consumer whose
 base and whose MODE does not, and only then did it reproduce. **A differential over a matrix you
 built yourself tests the cases you thought of.**
 
+**A FOLLOW-UP SHIPPED AS `v0.424.0` (`98ad402e`), AND IT IS A HOLE IN BATCH 14'S OWN GUARD.** The
+release changed TWO branches of `preclassify.sh`; the fixture built for it guarded one, so the
+`A`-branch half could be reverted with the suite green. Filed and closed as `BL-101` in one
+cycle. **The finding came from an adversarial pass that ran AFTER the merge — again** — which is
+the third time this plan has recorded that, and the standing instruction to run it BEFORE the
+merge is still the one being skipped.
+
+**THE ATTACK PRODUCED FOUR CANDIDATE WEAKNESSES AND ONLY ONE WAS A REAL COVERAGE GAP, WHICH IS
+ITSELF THE LESSON.** All four satisfy `BL-033`'s replacement receipt; the FIXTURE independently
+kills three, because it carries an ordinary-content-change case and both mode directions. **Run a
+proposed receipt-weakness against the FIXTURE before reading it as a coverage gap.** They are
+different guards, and once an entry is rotated its receipt is archived and inert while the fixture
+is what still runs. Measured: `dropbase` killed by `C5`, `halfmode` by `C4`, `modehash` by `C7`,
+`arevert` survived.
+
+**A RECEIPT KEYED ON `git archive HEAD` CANNOT SEE THE FIX THAT IS SITTING IN THE WORKING TREE.**
+`BL-101`'s read 1 with the repair complete on disk and flipped to 0 on the commit. That is correct
+behaviour and it reads exactly like a repair that did not work — check what the receipt EXTRACTS
+before believing its verdict about uncommitted work.
+
 **FILED `BL-099` AND `BL-100`.** The exec-bit audit is one-directional — it tests `$1=="100755"`
 at both arms, so a file upstream STOPPED shipping executable is never reported, and that
 direction has no level-triggered backstop at all. And `--untangle`'s noop arm is mode-blind: a
