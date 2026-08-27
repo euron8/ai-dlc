@@ -9,6 +9,19 @@ and status records that were current when they were written and that THIS BLOCK 
 it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from it.**
 
+### TWO OPERATOR RULINGS, 2026-08-27, AND THEY SET BATCH 16
+
+**BATCH 16 IS THE SPRINT-306 CANDIDATE SET — ALL FIVE, NOT ONE.** *"The upstream push candidates
+that have been filed as part of graph's current sprint need to be addressed with priority. I'd
+like the plan to address each of them in the next batch."* This overrides the one-subject-per-batch
+convention and the standing `BL-051` recommendation for batch 16 only. **The five ids, their
+distribution-side subjects and their re-derived premises are in numbered action 1.**
+
+**THE PULL IS DEFERRED BY THE OPERATOR.** *"I won't execute the pull to graph right now."*
+`docs/plans/graph-pull-0425-to-0427.md` is written, correct and NOT STARTED. Leave it that way.
+The delivery gap will keep growing and that is now an accepted state, not a trigger — keep
+MEASURING and REPORTING it per action 7, and do not let it reorder the work.
+
 ### THE GOAL, restated because this program measurably drifted off it
 
 **The subject of this plan is the GRAPH CONSUMER'S push-candidate ledger — the 82 `PC-` ids in
@@ -182,9 +195,12 @@ grep -cx 'PC-S300-SEVEN-VALIDATORS-SHIPPED-NON-EXECUTABLE-AT-0.242.0' /tmp/arch.
 grep -cx 'PC-S999-NEVER' /tmp/filed.txt                                                  # control: 0
 ```
 
-Re-derived at v0.426.0: **60 live candidates, 122 archived**, partition control 0, all three
-presence controls 1, absence control 0. The live/archive split has not moved since v0.425.0
-because the consumer has not pulled since; it moves when THEY close, not when we ship. Batch 14's figures — 49
+Re-derived at v0.427.0: **65 live candidates, 122 archived**, partition control 0, all three
+presence controls 1, absence control 0. **The live count rose from 60 to 65 DURING a single
+ai-dlc session** — a graph session filed sprint 306's candidates while this file was being
+edited, and the ledger's md5 moved twice in ten minutes with the file uncommitted in the
+consumer's working tree. **It moves when the CONSUMER WRITES, not only when they close**, so a
+figure here is a snapshot of a file someone else is holding open. Batch 14's figures — 49
 live, 90 archived — were the same ledger read through a grammar missing one record form.
 
 **"CITED" IS STILL NOT THE PROGRESS METRIC, AND THIS IS THE LAST STEP OF THE DERIVATION.** A
@@ -209,8 +225,8 @@ comm -12 /tmp/live.txt /tmp/closed_here | comm -23 - /tmp/in_msgs   # discharged
 comm -12 /tmp/arch.txt /tmp/closed_here | wc -l
 ```
 
-Re-derived at v0.426.0 by running the commands: **6 DISCHARGED, 22 in flight, 32 untouched**,
-summing to 60, **0 discharged-but-unnamed**, and **14 TERMINAL**. That unnamed line is a real
+Re-derived at v0.427.0 by running the commands: **6 DISCHARGED, 22 in flight, 37 untouched**,
+summing to 65, **0 discharged-but-unnamed**, and **14 TERMINAL**. That unnamed line is a real
 failure mode and not a formality: a fix that ships without its id in the commit MESSAGE discharges
 the candidate and produces no row anywhere, so the consumer never learns of it.
 
@@ -235,7 +251,8 @@ backlog entry here, so the `DISCHARGED` line could not see them either. Delivere
 nowhere. They are the reason both repairs in this block had to land together: fixing the grammar
 alone would still have left them in no bucket.
 
-**SIX OF SIXTY, OR TWENTY OF ONE HUNDRED AND EIGHTY-TWO, DEPENDING ON WHICH QUESTION YOU ASKED.**
+**SIX OF SIXTY-FIVE, OR TWENTY OF ONE HUNDRED AND EIGHTY-SEVEN, DEPENDING ON WHICH QUESTION
+YOU ASKED.**
 State which. Every progress figure quoted before v0.425.0 was against a denominator 28% too small
 and a numerator that silently shed its own successes.
 
@@ -251,10 +268,11 @@ cat VERSION                                                                     
 git log --format='%H' -F --grep="<id>" origin/main | tail -1                            # then git show "${sha}:VERSION"
 ```
 
-**AT v0.426.0 THE GAP IS ONE RELEASE AND A RUNBOOK IS ALREADY WRITTEN.** Consumer installed
-**0.425.0**, distribution **0.426.0**, one discharged candidate the consumer cannot see
-(`PC-S304`). The runbook is `docs/plans/graph-pull-0425-to-0426.md`, LIVE and NOT STARTED. **It is
-not yours to run** — hand it to a graph session the operator drives.
+**AT v0.427.0 THE GAP IS TWO RELEASES AND THE OPERATOR HAS DEFERRED CLOSING IT.** Consumer
+installed **0.425.0**, distribution **0.427.0**, one discharged candidate the consumer cannot see
+(`PC-S304`). The runbook is `docs/plans/graph-pull-0425-to-0427.md`, LIVE and NOT STARTED, and the
+operator has said they will not run it now. **Keep measuring the gap and reporting it; do not run
+it, and do not treat its growth as a reason to reorder the work.**
 
 The gap was ZERO at v0.425.0, which was the first time in the program it had been closed. **A ZERO
 GAP IS A STATE, NOT AN ACHIEVEMENT THAT STAYS TRUE**, and it went non-zero on the very next release
@@ -325,8 +343,8 @@ those have not been examined at all. Their status in the consumer's own ledger i
 ESTABLISHED**; some may already be `WITHDRAWN` or `ADOPTED` upstream. **Establish that before
 treating 20 as a workload.**
 
-Re-derived at v0.426.0 by running the commands, not by editing the sentence: **68 live / 33
-archived / 60 STILL-LIVE + 8 HAND-REVIEW + 0 CLOSE-CANDIDATE**, against an impossible-verdict
+Re-derived at v0.427.0 by running the commands, not by editing the sentence: **70 live / 33
+archived**, the two new entries being `BL-102` and `BL-103`, filed by v0.427.0's adversarial pass, against an impossible-verdict
 control of 0 and a `BL-006`-still-live control of 1. **Batch 14 recorded 31 archived and the
 rotation of `BL-101` moved it to 32 without the sentence being updated** — which is this block's
 own failure mode, one release after it was written down.
@@ -388,6 +406,29 @@ the row above told you nothing.
 
 ### What is DONE — do not redo any of it
 
+**`v0.427.0` FOLLOWED BATCH 15 AND IS ALSO MERGED AND PUSHED (`144fd252`).** It is the
+adversarial pass's own findings, landed as a follow-up rather than carried into batch 16. Two
+fixes: `--finish` now REFUSES an unresolvable `<theirs>`/`<dist>` instead of writing the literal
+argument into `commit:` and declaring the tree consistent; and `core/git-hooks/pre-push`'s
+`applying_guard()` no longer tells a wedged operator to re-run the pull, which cannot clear a
+range-derived hand-back row. Two entries FILED and not fixed — `BL-102` (`--finish` verifies
+nothing it stamps; `mech_fail` is the only variable assigned above the phase guard and mutated
+only inside it) and `BL-103` (a hook the template cannot register withholds `--finish` forever;
+population measured EMPTY at 19/19). Gate exit 0, 17 of 17 phases, 169 ok / 0 FAIL.
+
+**THE ADVERSARIAL PASS RAN AFTER THE MERGE FOR THE FOURTH TIME, AND ITS BEST ACT WAS A
+RETRACTION.** It filed two BLOCKERs, then withdrew them: its `rsync` had excluded
+`_bmad-output/`, deleting the consumer's `layer-adjudication-register.jsonl` and its 269 records,
+so every adjudicated row re-fired as an outstanding hand-back. With the register present, four
+realistic ranges stamp cleanly. **A defective setup and a correct one produced identically
+plausible manifests, and only the register's presence separated them.**
+
+**A CONTROL OF MINE PASSED FOR THE WRONG REASON AND I REPORTED IT AS EVIDENCE.** I probed
+`--finish` with a bogus `<theirs>` of `refs/heads/nope` and got a correct refusal, so I called
+the path sound. The slashes break the `sed`; the `|| true` swallows it; the read-back disagrees.
+A slash-FREE bogus ref writes straight through. **Run the control on the input that
+DISCRIMINATES** — the rule was already in `verification-discipline.md`.
+
 **BATCH 15 IS COMPLETE, MERGED AND PUSHED AS `v0.426.0`.** `BL-030` CLOSED and rotated,
 discharging `PC-S304`, with the id in the RELEASE COMMIT MESSAGE where `named_absorbed()` can read
 it (verified: 1 hit, against an impossible-id control of 0). Release `5cc6c4f5`, close-and-rotate
@@ -408,14 +449,14 @@ downstream; it is not visible in the diff.** The repair is two counters, and onl
 row is reachable under `--finish` at all — derived over the code that mode actually executes, with
 a control proving the grammar can see rows, then proved terminating end to end.
 
-**A ZERO GAP LASTED EXACTLY ONE RELEASE.** The delivery gap is now **1** and
-`docs/plans/graph-pull-0425-to-0426.md` is written, LIVE and NOT STARTED. **It is not yours to
+**A ZERO GAP LASTED EXACTLY ONE RELEASE, AND THE GAP IS NOW 2 AND HELD OPEN ON PURPOSE.**
+`docs/plans/graph-pull-0425-to-0427.md` is written, LIVE and NOT STARTED. **It is not yours to
 run.**
 
 **Phases 0–2, 4 and 5 are COMPLETE.** Phase 3 is the batch loop and it is the only remaining
 work. Batches 1–15 have all MERGED AND PUSHED; the releases are `v0.374.0`, `v0.375.0`,
 `v0.376.0`, `v0.377.0`, `v0.378.0`, `v0.379.0`, `v0.380.0`, `v0.415.0`, `v0.416.0`,
-`v0.418.0`, `v0.419.0`, `v0.421.0`, `v0.422.0`, `v0.423.0` and `v0.426.0`, each recorded in `CHANGELOG.md`. `v0.381.0` and `v0.382.0` followed batch 7 as machinery releases;
+`v0.418.0`, `v0.419.0`, `v0.421.0`, `v0.422.0`, `v0.423.0` and `v0.426.0`, each recorded in `CHANGELOG.md`; `v0.427.0` followed batch 15 as its adversarial-pass follow-up. `v0.381.0` and `v0.382.0` followed batch 7 as machinery releases;
 many further machinery releases have shipped between `v0.383.0` and `v0.414.0` that are NOT part
 of this program, which is why the batch numbering and the version numbering stopped agreeing.
 
@@ -426,7 +467,7 @@ FIELDS.** Five PRs in a graph session the operator drove; the runbook is DISCHAR
 terminal state this program aims at, reached for the first time.
 
 **THAT PULL'S ZERO GAP IS SPENT.** `v0.426.0` discharged `PC-S304`, so the gap is **1** again and
-`docs/plans/graph-pull-0425-to-0426.md` is the runbook for it — LIVE, NOT STARTED, and for a graph
+`docs/plans/graph-pull-0425-to-0427.md` is the runbook for it — LIVE, NOT STARTED, and for a graph
 session the operator drives. Action 7's detection still applies; derive it rather than reading this.
 
 **BATCH 14 IS COMPLETE, MERGED AND PUSHED AS `v0.423.0`.** Its own report said "CANDIDATES
@@ -742,9 +783,89 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **BATCH 16. THE CORPUS IS THE 22 LIVE ENTRIES WHOSE CITED CANDIDATE IS STILL LIVE UPSTREAM.**
-   Batch 15 is done — `BL-030` closed and rotated as `v0.426.0`, discharging `PC-S304`. Pick the
-   subject from that set and say which candidate it discharges.
+1. **BATCH 16 IS THE SPRINT-306 SET. ALL FIVE OF THEM, NOT ONE. OPERATOR RULING, 2026-08-27.**
+
+   **This action REPLACES the standing "pick one subject from the PC-backed corpus" rule for this
+   batch only.** The operator ruled: *"the upstream push candidates that have been filed as part of
+   graph's current sprint need to be addressed with priority. I'd like the plan to address each of
+   them in the next batch."* Each of them. The one-subject-per-batch convention and the
+   `BL-051`/`BL-049` recommendation below are SUPERSEDED for batch 16 and resume at batch 17.
+
+   **THE OPERATOR ALSO DEFERRED THE PULL.** *"I won't execute the pull to graph right now."*
+   `docs/plans/graph-pull-0425-to-0427.md` stays written and NOT STARTED. Do not run it, do not
+   re-litigate it, and do not treat the growing delivery gap as a reason to reorder this batch.
+   Keep reporting the gap per action 7.
+
+   **THE FIVE, each with its distribution-side subject and its premise re-derived at `v0.427.0`
+   with a control in the same invocation. None is cited by any backlog entry — the join returns 0
+   for all five against a control of 1 for `PC-S304`. So batch 16 FILES five entries before it
+   fixes anything.**
+
+   | candidate | distribution subject | premise, as measured |
+   |---|---|---|
+   | `PC-S306-CHECK-2-HAS-NO-SPRINT-SCOPE` | `core/skills/ai-dlc/steps/gate-validation.md` Check 2, span **230..284** | `grep -ci sprint` over that span = **0**; control `HARD_BLOCK` = 4 |
+   | `PC-S306-SUPPRESSED-STATUS-FIRST-TOKEN-SILENT-NO-OP` | `core/scripts/validate-suppression-lifetime.sh:183` | the line is `if (match(s,/[A-Z_]+/)) status=substr(s,RSTART,RLENGTH)` — first-token-wins, exactly as filed |
+   | `PC-S306-SERIES-VALIDATOR-NO-LEAD-RESOLUTION-PATH` | `core/scripts/validate-gate-adjudication.sh:688` | the line globs `gate-*-repair-p{M}.md`; `resolution-p` appears **0** times in the file |
+   | `PC-S306-FANOUT-UNTRACKED-FILES-INVISIBLE` | `core/scripts/report-propagation-fanout.sh:253` | the line is `CORPUS_FILES="$(git ls-files -z \| tr '\0' '\n')"`; `--others`/`--exclude-standard` appear **0** times |
+   | `PC-S306-GATE-REMEDIATION-BLOCKS-INDEPENDENT-DEV-DISPATCH` | `core/skills/ai-dlc/steps/bug-investigation.md:134-142` + `steps/implementation.md` | `:134` is `### 6. Gate Validation`, and `blocks_next_step` appears **0** times anywhere in `core/` (control: `enforcement-map.yaml` carries 64 per-check keys) |
+
+   **A SIXTH `PC-S306` ID EXISTS AND IS NOT YOURS.**
+   `PC-S306-OVERRIDE-DELEGATES-INTO-THE-SECTION-IT-SHADOWS` is in the consumer's ARCHIVE, already
+   closed upstream. Do not open it. The partition control (live ∩ archive) is 0, so the two sets
+   really are disjoint.
+
+   **THE LEDGER WAS BEING WRITTEN WHILE THIS WAS DERIVED, AND ITS md5 MOVED TWICE IN TEN MINUTES**
+   (`d09a0d37` → `a3366db6` → `7c4675c2`), with the file `M` in the consumer's working tree rather
+   than committed. **Every figure in this action is a snapshot of a file a live graph session is
+   still appending to.** Re-run the derive block before you scope anything; expect the S306 set to
+   have GROWN, and treat a sixth or seventh id as in scope for this batch if its header says
+   sprint 306.
+
+   **ALL FIVE ARE `verify: manual` UPSTREAM, AND FOUR SAY IN TERMS THAT NO SUBSTRING ANCHORS A
+   FIX.** That is the hardest receipt problem this program has had. Do not copy their `verify:`
+   text into the backlog entries — upstream's `verify: manual` is a statement about what the
+   CONSUMER can check on its own tree, not about what is checkable here. Two of the five have an
+   obvious mechanical receipt on the distribution side already visible in the table above (the
+   `resolution-p` absence, the `--others` absence). The other three need one authored, and
+   `PC-S306-CHECK-2-HAS-NO-SPRINT-SCOPE` explicitly warns its own fix "could add a scoping
+   paragraph in several different places/wordings" — so anchor on the CHECK'S BEHAVIOUR, not on
+   its prose, and score the receipt against at least two spellings of the correct fix and two
+   regressions before writing it down. Batch 15's first replacement receipt REJECTED the correct
+   fix; batch 15's original ACCEPTED two regressions.
+
+   **THEY ARE NOT ONE SUBSYSTEM, AND THAT IS A DELIBERATE EXCEPTION TO NUMBERED ACTION 2.** Three
+   are validators (`core/scripts/`), two are step-file prose plus a possible
+   `enforcement-map.yaml` schema extension. **Land them as SEPARATE COMMITS on one release
+   branch**, one commit per candidate, each naming its `PC-` id in the COMMIT MESSAGE where
+   `named_absorbed()` can read it. Do not squash them into one. If any single one turns out to be
+   large enough to need its own release, say so and ship it alone rather than widening the others
+   to match.
+
+   **START WITH `PC-S306-CHECK-2-HAS-NO-SPRINT-SCOPE`.** It is the one that cost the operator a
+   live incident: a nine-day-old sprint-303 housekeeping entry gate-blocked a production bug-fix
+   sprint, and the operator's own recorded words are *"This is a bug sprint, active issue in
+   production and you're asking me to disposition house keeping items?!"* Consequence ordering,
+   not readiness ordering.
+
+   **`PC-S306-GATE-REMEDIATION-BLOCKS-INDEPENDENT-DEV-DISPATCH` IS THE ONE MOST LIKELY TO BE
+   WRONG TO FIX AS FILED.** Its suggested direction adds a per-check `blocks_next_step` field to
+   `enforcement-map.yaml`, which is a schema change to the file `validate-enforcement-map.sh`
+   validates and the suite pole invokes — read `CLAUDE.md` on what an arm added there costs in
+   wall clock, and measure the validator before and after from inside the repo. A prose-only
+   clarification in the two step files may discharge the candidate at a fraction of the cost.
+   **Establish which, with a measurement, before building either.**
+
+   **THE RECURRENCE NOTE IS EVIDENCE, NOT A SIXTH ITEM.** Sprint 306 also appended a `RECURRED
+   2026-08-27` block to `PC-S305-DISPATCH-GUARD-SED-PATTERN-BOLD-MISMATCH` (consumer ledger line
+   2614, inside the entry anchored at 2588). It records that the defect blocked a live incident
+   fix, that the consumer applied a SCHEMA-side workaround the entry's own text says does not
+   close it, and that the entry's `verify:` clause is HOOK-side only and therefore **structurally
+   cannot detect a schema-side close**. That last clause is a receipt defect in an upstream entry
+   and it is the same class this program has hit five times. Read it while working the five; it is
+   in scope only if the operator says so.
+
+   The rest of this action — the corpus join, the selection rule, the receipt discipline — still
+   applies at batch 17 and is left in place below.
 
    **THE PC-BACKED COUNT IS NOT THE CORPUS.** Live entries citing a `PC-` id outnumber the corpus,
    because some cite candidates already ARCHIVED upstream — closing those discharges something the
@@ -761,6 +882,8 @@ so no block written before it changes verdict.
      done
    done
    ```
+
+   **The list below is BATCH 17's corpus, not batch 16's.** Batch 16 is the S306 set above.
 
    Re-derived at v0.426.0 it returns **22 entries**: `BL-029`, `BL-034`, `BL-037`, `BL-039`,
    `BL-040`, `BL-041`, `BL-042`, `BL-043`, `BL-044`, `BL-045`, `BL-047`, `BL-049`, `BL-051`,
@@ -849,6 +972,9 @@ so no block written before it changes verdict.
    one-way-blindness entry with an arm that was blind by file extension. The exclusion has to
    be stated in the arm and it has to not be the defect itself.
 2. **Keep the batch to ONE subsystem.** Take one group or the other, not both.
+   **EXCEPT BATCH 16, which the operator scoped to five candidates across three subsystems.** Its
+   own action says how to land them: separate commits on one branch, one per candidate. This rule
+   resumes at batch 17.
 3. **Put independent hands on SCOPE, FIXTURE and RECEIPT, every time.** In batch 8 they found
    THREE defects in work already committed on the branch; in batch 9 the fixture hand found
    FOUR more live instances of the entry's own defect, and two scope hands independently found
