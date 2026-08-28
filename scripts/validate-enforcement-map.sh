@@ -8025,19 +8025,6 @@ EOF
   fi
 fi
 
-# --- Verdict ------------------------------------------------------------------
-if [ "$fail" -eq 0 ]; then
-  n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  # THE ENUMERATION IS DERIVED, and this line is why the renderer exists. It used to carry a
-  # hand-typed list of the invariants considered live, 12,243 characters of it. Measured when
-  # that list was replaced: it named 71 IDs while 93 arms in this file could fire, so 22
-  # invariants were enforcing the tree while absent from the only enumeration that claimed to
-  # cover them -- including I1 and I2, the catalog joins everything here is built on. Nothing
-  # read the sentence but a human, and a human cannot audit a 12,000-character sentence.
-  #
-  # The list now lives in docs/invariant-index.md, rendered by scripts/render-invariant-index.sh
-  # from THIS file's own arm headers and byte-compared at pre-push. It is not restated here:
-  # a second copy is a second thing to go stale, which is what this replaced.
 # --- I100: no step file prescribes a BARE `git push` -----------------------------------
 # A bare `git push` CANNOT SUCCEED on a branch that has never been pushed, and that is not an
 # edge case: it is every sprint's FIRST handoff wherever a branch is cut per sprint. The
@@ -8076,7 +8063,19 @@ if [ -n "$i100_hits" ]; then
   printf '  %s\n' $i100_hits >&2
 fi
 
-
+# --- Verdict ------------------------------------------------------------------
+if [ "$fail" -eq 0 ]; then
+  n="$(printf '%s\n' "$map_ids" | grep -c .)"
+  # THE ENUMERATION IS DERIVED, and this line is why the renderer exists. It used to carry a
+  # hand-typed list of the invariants considered live, 12,243 characters of it. Measured when
+  # that list was replaced: it named 71 IDs while 93 arms in this file could fire, so 22
+  # invariants were enforcing the tree while absent from the only enumeration that claimed to
+  # cover them -- including I1 and I2, the catalog joins everything here is built on. Nothing
+  # read the sentence but a human, and a human cannot audit a 12,000-character sentence.
+  #
+  # The list now lives in docs/invariant-index.md, rendered by scripts/render-invariant-index.sh
+  # from THIS file's own arm headers and byte-compared at pre-push. It is not restated here:
+  # a second copy is a second thing to go stale, which is what this replaced.
   echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match. The live invariant enumeration is docs/invariant-index.md, rendered from this file and gated at pre-push."
   exit 0
 fi
