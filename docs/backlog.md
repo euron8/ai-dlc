@@ -3307,3 +3307,4 @@ fails to parse yet measures correctly. Whether any such receipt exists is NOT es
 this entry must not be closed on a fix whose FP set was never taken.
 
 verify: sh e=$(awk '/^## BL-[0-9]+/{f=1} f && sub(/^[ \t]*verify: sh /,"")' docs/backlog.md); [ -n "$e" ] || exit 9; n=$(printf '%s\n' "$e" | grep -c .); [ "$n" -ge 40 ] || exit 9; bad=$(printf '%s\n' "$e" | while IFS= read -r l; do [ -n "$l" ] || continue; bash -n -c "$l" 2>/dev/null || echo x; done | grep -c x); [ -f scripts/backlog-reverify.sh ] || exit 9; grep -q 'bash -n -c' scripts/backlog-reverify.sh || exit 1; grep -q MALFORMED scripts/backlog-reverify.sh || exit 1; [ "${bad:-1}" -eq 0 ]
+

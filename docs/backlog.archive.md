@@ -3124,3 +3124,79 @@ that re-dispatches a working teammate.
 verify: sh W=core/scripts/wait-for-deliverable.sh; [ -f "$W" ] || exit 9; W="$(cd "$(dirname "$W")" && pwd)/$(basename "$W")"; d=$(mktemp -d) || exit 9; mkdir -p "$d/tm" || exit 9; r() { ( cd "$d" && AI_DLC_WAIT_BEAT_SECS=1 AI_DLC_TEAMMATE_IDLE_SECS=60 AI_DLC_TEAMMATE_DIR="$1" CLAUDE_PROJECT_DIR="$d" bash "$W" docs/never.md ) 2>&1; }; : > "$d/tm/a.jsonl"; touch -t 202001010000 "$d/tm/a.jsonl"; stale=$(r "$d/tm"); : > "$d/tm/a.jsonl"; fresh=$(r "$d/tm"); none=$(r "$d/absent"); rm -rf "$d"; case "$stale$fresh$none" in *WAITING*) ;; *) exit 9 ;; esac; case "$stale" in *"TEAMMATE IDLE"*) ;; *) exit 1 ;; esac; case "$fresh" in *"TEAMMATE IDLE"*) exit 1 ;; esac; case "$fresh" in *LIVENESS*) ;; *) exit 1 ;; esac; case "$none" in *"TEAMMATE IDLE"*) exit 1 ;; esac; case "$none" in *LIVENESS*) ;; *) exit 1 ;; esac; exit 0
 
 ---
+## BL-114 — core prescribes a gate-evidence path whose sprint token is invisible to the invariant that forbids it
+
+**LANDED (v0.430.0, verified c1f594b4).**
+
+**Consumer provenance: `PC-S306-GATE-REVIEW-ARTIFACTS-WRITTEN-OUTSIDE-SPRINT-SLOT`.** The
+consumer recorded the same defect class on two sprints, s304 and s306, each time discovered at
+push time and never at write time.
+
+`artifact-path-grammar.md` rule 2 forbids a sprint token in any basename, and **I82** enforces
+that over core's own prescriptions — corpus `core/skills/ai-dlc/steps/*.md`,
+`core/skills/ai-dlc/*.md`, `core/team-roles/*.md`. `core/team-roles/code-reviewer.md` prescribed
+`docs/reviews/<story-id>-review.md`, which is IN that corpus and PASSED, while the path it
+expands to on a real sprint is a violation.
+
+**Measured, with a positive control in the same invocation.** Against the ERE I82 resolves from
+`core/scripts/artifact-path-config.sh --token-re-prescribed`:
+
+```
+FLAGGED   sprint-<N>.md            control: the ERE sees a VISIBLE placeholder
+FLAGGED   s306-story-1-gate1.md    control: the EXPANDED form is a real violation
+not-seen  <story-id>-review.md     the prescription core actually shipped
+not-seen  story-<id>-<slug>.md     the same class
+```
+
+`artifact-path-grammar.md` already documents this limit and hands it to the consumer-side
+`validate-artifact-paths.sh` at PUSH time. That posture is what cost the consumer two sprints:
+the file is written, passes gate-1 and gate-2 and an 18/18 sprint-review gate, and surfaces as a
+`VERDICT: FAIL` buried among roughly 160 checks mid-deploy, blocking a push already authorized.
+
+**The QA half is an ABSENCE, not a wrong prescription.** `core/team-roles/qa.md` prescribed no
+gate-evidence path at all, so the role invented one and the invented name carried the sprint.
+An unprescribed path is where the writer guesses, and the guess is what rule 2 forbids.
+
+**No reader keyed on the old basename shape** — every programmatic reader of `docs/reviews/` is
+area-level (`docs/reviews/**`) or is a grammar enforcer, so rewriting the prescription broke no
+glob. The conforming destination is not invented either: `core/fixtures/artifact-path-migration/run.sh:129`
+already derives `docs/reviews/S301-1-code-review.md` -> `docs/reviews/s301/1-code-review.md`.
+
+**`code-reviewer-escalated.md` needed no edit** — it delegates to `code-reviewer.md` in full and
+deliberately holds no second copy.
+
+verify: sh [ -n "$(grep -E "docs/reviews/s<N>/" core/team-roles/code-reviewer.md | grep -v "^[[:space:]]*<!--")" ] && [ -n "$(grep -E "docs/reviews/s<N>/" core/team-roles/qa.md | grep -v "^[[:space:]]*<!--")" ] && ! grep -qE "docs/reviews/<story-id>-review\.md" core/team-roles/code-reviewer.md
+
+## BL-115 — core states a harness behaviour as unconditional fact, and a retro check scores a COMPLETE audit as mis-scoped on the strength of it
+
+**LANDED (v0.430.0, verified 1046eb6d).**
+
+**Consumer provenance: `PC-S306-RETRO-AUTOCOMPACT-TRANSCRIPT-FILE-ASSUMPTION-UNVERIFIED`.**
+
+`steps/retro.md` stated that *every handoff and every auto-compact starts a new transcript
+file*, and gated its steerability audit on it: `transcripts scanned : N` **must be > 1 on any
+sprint that handed off OR auto-compacted**, with N=1 scored as a mis-scoped audit.
+
+**The auto-compact half is false on Claude Code, measured here on an independent corpus.** All
+174 `.jsonl` transcripts under this repo's own project directory, keyed on a STRUCTURAL
+`isCompactSummary: true` field rather than a substring — the substring is contaminated, because
+this repo's sessions discuss compaction in prose and 2 of 4 substring hits carried no such
+field. Two files hold a real boundary. **Both sit MID-FILE**: record 1318 of 2845 and record
+2067 of 3590, with 1317 and 2066 records of conversation before them, ~1500 after, and ONE
+unchanging `sessionId` spanning both sides. A compaction continues in the same file.
+
+So a sprint that auto-compacted but never handed off legitimately reports N=1, and the rule
+scored that as mis-scoped. The HANDOFF half stands and was kept.
+
+**The claim sat at FOUR sites, one more than the candidate names**, including the `--cite`
+deadlock comment which reasoned FROM it. The fourth now cites the usage block rather than
+restating it.
+
+**The consumer's own suggested remedy would have shipped a silent false confirmation.** It
+pointed at `find -newermt <ISO>` as the way to confirm N=1 is complete. **BSD `find` REJECTS
+the `Z`-suffixed ISO-8601 form** `--since` takes — `find: Can't parse date/time`, exit 1, empty
+stdout — which is byte-identical to a window holding no transcript and reads as confirmation of
+exactly the narrow scan being checked for. The space-and-offset form is prescribed instead, with
+an instruction to read the exit status.
+
+verify: sh ! grep -rqiE "handoff and (every )?auto-compact starts a new" core/ && [ -n "$(awk "/N must be greater than 1 on/,/mis-scoped/" core/skills/ai-dlc/steps/retro.md | grep -i "HANDED OFF")" ] && [ -z "$(awk "/N must be greater than 1 on/,/mis-scoped/" core/skills/ai-dlc/steps/retro.md | grep -i "auto-compact")" ] && grep -q newermt core/skills/ai-dlc/steps/retro.md
