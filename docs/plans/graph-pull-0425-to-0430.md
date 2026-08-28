@@ -22,6 +22,34 @@ range and named `SELF-UPDATE-SAFE-STOP 144fd252` (v0.427.0). Action 2 below says
 `/ai-dlc-update`" and never anticipates a split. The correct execution was
 `/ai-dlc-update 144fd252 apply` then `/ai-dlc-update apply`.
 
+### Start here
+
+**Nothing here is an instruction. This section records the boundary the run was held to, and it
+is retained because `validate-plan-shape.sh` requires every plan in `docs/plans/` to declare an
+entry point — a spent plan that drops it reads, to the next reader, like a plan that never had
+one.** The first discharge of this file deleted the section and the gate caught it.
+
+**The boundary that applied, in the past tense.** The executing session's PROJECT ROOT was
+`/Users/n8/git/graph` — skill scope follows the session root, not a Bash `cd`. That consumer repo
+was the only tree the run WROTE, and the pull itself is what wrote it. `/Users/n8/git/ai-dlc` was
+**READ ONLY** for the run: the executing session was to read it, never write it — which is the
+clause the discharge below turned out to violate. The consumer's tree was dirty throughout from live `_bmad-output/`
+pipeline state, which was expected and correctly left alone; nothing was committed, reverted,
+stashed or cleaned there.
+
+**WHO DISCHARGES A RUNBOOK, WHICH THIS FILE GOT WRONG AND THE NEXT ONE MUST NOT.** `### Start
+here` declared the distribution READ ONLY for the whole run while numbered action 6 ordered the
+executor to update and commit THIS FILE, which lives inside the distribution. Those cannot both
+hold. The executing consumer session resolved it toward action 6, committed here, and stopped
+short of pushing — a judgement call it should not have had to make mid-run.
+
+**The rule, for the next runbook: the DISCHARGE is written and committed by a DISTRIBUTION
+session in `/Users/n8/git/ai-dlc`. The executing consumer session reports its numbers and stops.**
+That keeps one rule true instead of two in tension, and it puts the discharge write in front of
+this repo's own gate. It is not a formality: the first discharge commit was authored by a session
+that could not push, so it never met `validate-plan-shape.sh`, and it removed this very section
+without anything noticing until a distribution session tried to land it.
+
 **AND THE WITHHOLDING FIRED, WHICH THIS FILE PREDICTED IT WOULD NOT.** Action 4 below calls itself
 conditional and says the rehearsal predicts it will not fire. It fired on leg 2, against 17
 outstanding rows, and `--finish --carried-machinery-slice` was a required step rather than a
