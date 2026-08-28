@@ -3000,3 +3000,127 @@ regression deleting the alternative outright **1**. Exits 9 on any exit-2 refusa
 resolver reports a moved precondition rather than a false close.
 
 verify: sh v=core/scripts/validate-stub-audit.sh; [ -f "$v" ] || exit 9; v="$(cd "$(dirname "$v")" && pwd)/$(basename "$v")"; d=$(mktemp -d) || exit 9; mkdir -p "$d/src"; printf '"""Alert Evaluator — Harmonization Phase 4 (Stories 103-1 and 103-2)."""\n\ndef f():\n    return 1\n' > "$d/src/prose.py"; printf 'def g():\n    # Deferred to Phase 2: the pool scoping lands with the evaluator.\n    return None\n' > "$d/src/deferral.py"; printf 'def h():\n    raise NotImplementedError()\n' > "$d/src/bare.py"; r() { ( cd "$d" && AI_DLC_PROJECT_ROOT="$d" bash "$v" --root "$d" "src/$1" ) >/dev/null 2>&1; }; r prose.py; a=$?; r deferral.py; b=$?; r bare.py; c=$?; rm -rf "$d"; { [ "$a" = 2 ] || [ "$b" = 2 ] || [ "$c" = 2 ]; } && exit 9; [ "$a" -eq 0 ] && [ "$b" -eq 1 ] && [ "$c" -eq 1 ]
+## BL-110 — a hook-appended context block is indistinguishable from adversarially-shaped text of the same form
+
+**Discharges `PC-S306-UNSOLICITED-CONTEXT-HAS-NO-PROVENANCE-SIGNAL`.** Filed by the reference
+consumer, session-level rather than against a repo script, and its subject is the transcript
+form itself.
+
+**Nine hooks under `core/hooks/` emit `additionalContext`, and it reaches the lead as an
+unsolicited `system-reminder` block attached to a turn it did not ask for.** Text arriving
+through a file read, a fetched page or a subagent's returned report reaches the lead in the
+SAME form. Nothing separated the two: no checksum, no tool-call correlation, no origin tag.
+
+**The cost is measured, not hypothetical.** Mid-sprint, a lead facing a merge plus a live
+production deploy met a block of unsolicited `system-reminder` content, had no cheap way to
+establish where it came from, and took the only action available — paused the pipeline, set
+`pipeline-paused.flag`, and asked the operator to re-confirm authorization. Both facts were
+already established, so the pause produced no information and cost several turns during a
+production incident.
+
+**The wrong fix is "trust unsolicited content more".** That trades a real security property
+for speed. The right one is a check the lead can run itself, so a pause is spent on an anomaly
+that needs one.
+
+**Fix**: `core/hooks/ai-dlc-context-provenance.sh`, a sourced library. Every emission opens
+with a marker line carrying a nonce; the nonce is appended to
+`_bmad-output/.ai-dlc-context-nonce`, which the lead reads and compares. `SessionStart`
+rotates it and restates the contract — the only event that recurs after a compaction, and
+therefore the only carrier a resident rule file could not have been. The store is append-only
+and verification is by MEMBERSHIP, so a concurrent rotation cannot make a correctly-marked
+block fail. Every call site is fail-open: a hook that cannot mark its output still emits it.
+**I98** binds the fleet in both directions and **I13**'s registration arm now derives its
+library exemption from the source join rather than a name list.
+
+**What it does NOT establish is in the library's header and is part of the fix**: it cannot
+authenticate blocks the harness itself generates, so an unmarked block is unattributed rather
+than hostile; and it is not a signature, because anything that has read this transcript has
+read the nonce.
+
+**THE MARKER HAS TO BE A LINE, AND THE FIRST CUT MADE IT ONE ONLY BY ACCIDENT.** Call sites
+spelled it `"$(ai_dlc_provenance_tag ...)$body"`; command substitution strips trailing newlines,
+so the body was glued onto the marker's own line. Measured: a line-anchored match scored **0** on
+a real `PreToolUse` emission and **1** on the library's own output. The contract tells the lead
+the block opens with the marker LINE, so that spelling made the check the contract describes fail
+on correct output. It hid because the only hook probed first is SessionStart-only, where the tag
+emits two lines and the CONTRACT paragraph absorbed the glue instead. `ai_dlc_provenance_wrap`
+now owns the newline and `I98` fails the push on a hook that calls the tag directly — the
+affordance removed rather than the violation policed.
+
+**LANDED (v0.429.0, verified 7133e404).**
+
+verify: sh L=core/hooks/ai-dlc-context-provenance.sh; [ -f "$L" ] || exit 9; d=$(mktemp -d) || exit 9; ( CLAUDE_PROJECT_DIR="$d"; export CLAUDE_PROJECT_DIR; . "$L" || exit 9; S="$d/_bmad-output/.ai-dlc-context-nonce"; t=$(ai_dlc_provenance_tag probe SessionStart) || exit 9; case "$t" in "[AI-DLC-HOOK-PROVENANCE "*) ;; *) exit 1 ;; esac; n=$(printf '%s' "$t" | sed -n 's/.*nonce=\([0-9a-f][0-9a-f]*\).*/\1/p' | head -1); [ -n "$n" ] || exit 1; [ -f "$S" ] || exit 1; s=$(cat "$S"); case "$s" in *"$n"*) ;; *) exit 1 ;; esac; case "$s" in *deadbeefdeadbeef*) exit 1 ;; esac; case "$t" in *"PROVENANCE CONTRACT"*) exit 1 ;; esac; t2=$(ai_dlc_provenance_tag probe PreToolUse); case "$t2" in *"nonce=$n"*) ;; *) exit 1 ;; esac; case "$t2" in *"PROVENANCE CONTRACT"*) exit 1 ;; esac; t3=$(ai_dlc_provenance_tag probe SessionStart); case "$t3" in *"nonce=$n"*) exit 1 ;; esac; s2=$(cat "$S"); case "$s2" in *"$n"*) ;; *) exit 1 ;; esac; w=$(ai_dlc_provenance_wrap probe PreToolUse "$(printf 'body one\nbody two')") || exit 1; a=$(printf '%s\n' "$w" | grep -cE '^\[AI-DLC-HOOK-PROVENANCE .*\]$' || true); [ "${a:-0}" = 1 ] || exit 1; g=$(printf '%s' "$(ai_dlc_provenance_tag probe PreToolUse)body one"); ga=$(printf '%s\n' "$g" | grep -cE '^\[AI-DLC-HOOK-PROVENANCE .*\]$' || true); [ "${ga:-0}" = 0 ] || exit 1; case "$w" in *"body two"*) ;; *) exit 1 ;; esac; wc=$(ai_dlc_provenance_wrap probe SessionStart "" contract); case "$wc" in *"PROVENANCE CONTRACT"*) ;; *) exit 1 ;; esac; wn=$(ai_dlc_provenance_wrap probe SessionStart ""); case "$wn" in *"PROVENANCE CONTRACT"*) exit 1 ;; esac; exit 0 ); r=$?; rm -rf "$d"; [ "$r" -eq 9 ] && exit 9; [ "$r" -eq 0 ] || exit 1; u=""; for f in core/hooks/*.sh; do case "$f" in *ai-dlc-context-provenance.sh) continue ;; esac; e=$(awk '!/^[[:space:]]*#/' "$f"); case "$e" in *additionalContext*) ;; *) continue ;; esac; case "$e" in *"ai_dlc_provenance_wrap "*) ;; *) u="$u $f" ;; esac; case "$e" in *"ai_dlc_provenance_tag "*) u="$u $f" ;; esac; done; [ -z "$u" ]
+
+---
+
+## BL-112 — the warning against naming a primary-tree path for a worktree teammate lives in the one role that is never worktree-isolated
+
+**Discharges `PC-S306-WORKTREE-DELIVERABLE-PATH-AMBIGUOUS-PRIMARY-VS-WORKTREE`.**
+
+**A worktree-isolated dev dispatch asked its teammate to write to a worktree path "resolved
+relative to the primary tree" — two filesystem roots for one file, in one sentence.** The
+teammate wrote inside its own worktree, which is correct and is what the role contract says
+happens. The lead's `wait-for-deliverable.sh` beat then watched the primary-tree path, which
+could not exist until the branch merged, and the merge is downstream of the join.
+
+**The equivalent warning already existed, at `core/team-roles/adversary.md:81-89`** — "an
+absolute output path handed to a worktree-isolated agent resolves inside that agent's own
+worktree". That file is the ONE role told never to run worktree-isolated, so the warning sat
+where it could not fire, and nothing warned the LEAD authoring a dispatch that IS
+worktree-isolated. This is the shape this repo calls a check that cannot fire, in a role file.
+
+**Measured cost**: the dev's fix was complete and idle in about seven minutes; the beat sat
+reporting non-delivery, was re-armed twice, and the real state took three separate reads to
+reconstruct. Caught only because the operator asked whether the wait was still appropriate.
+
+**Fix**: item 7 of the worktree-explicit dev dispatch protocol in
+`core/skills/ai-dlc/steps/implementation.md`. A worktree-isolated teammate's deliverable path
+is always relative to its own worktree root; the lead MUST NOT name a primary-tree path for a
+file that teammate is to produce, and reads the file after the merge instead. Two consequences
+are stated with it because the second is where the cost landed: do not arm a beat on a
+primary-tree path for a worktree dispatch, and a beat reporting non-delivery is not evidence
+the teammate is working. Sited in the numbered action list rather than beside it, because that
+is where the executor decides deliberately and the operator can see the branch.
+
+**LANDED (v0.429.0, verified 7133e404).**
+
+verify: sh I=core/skills/ai-dlc/steps/implementation.md; [ -f "$I" ] || exit 9; s=$(awk '/^\*\*Worktree-explicit dev dispatch/{f=1} /^\*\*Bounded-join/{f=0} f' "$I"); [ -n "$s" ] || exit 9; [ "$(printf '%s\n' "$s" | grep -cE '^[0-9]+\. ')" -ge 7 ] || exit 9; printf '%s\n' "$s" | awk 'function p(){ if (b ~ /^[0-9]+\./ && b ~ /own worktree/ && b ~ /MUST NOT/ && b ~ /wait-for-deliverable/) f=1 } /^[0-9]+\. /{ p(); b=$0; next } /^[[:space:]]/{ if (b != "") b = b " " $0; next } { p(); b="" } END{ p(); exit f?0:1 }'
+
+## BL-111 — the wait beat's output was identical whether a teammate was working or had gone idle without delivering
+
+**Discharges `PC-S306-WAIT-BEAT-CANNOT-DISTINGUISH-SLOW-FROM-NEVER`.**
+
+`wait-for-deliverable.sh`'s only vocabulary was `WAITING ... not yet delivered` / `DELIVERED`.
+A teammate that finished its real work and went idle — having written its answer to a path the
+beat was not watching — produced text byte-identical to one still in progress, beat after beat.
+**The identity is what did the damage**: the lead re-armed the same beat twice against an
+unchanging false negative and only found out because the operator asked whether the wait was
+still appropriate.
+
+**The blind spot is general, not specific to the dispatch-wording mistake that exposed it.** A
+crash after partial delivery, a role that returns text instead of a file, or a path typo in
+either direction all produce the identical silent-forever symptom.
+
+**A liveness signal IS reachable from a shell, which the entry was not sure of.** The harness
+writes each teammate's transcript under `~/.claude/projects/<slug>/<session-id>/subagents/*.jsonl`,
+`CLAUDE_CODE_SESSION_ID` is exported into a hook's environment, and the newest mtime across
+those files is the time since any teammate in this session took a turn. Verified independently
+of the change: the directory exists for a live session and holds one file per teammate.
+
+**Fix**: the beat reports `TEAMMATE IDLE, DELIVERABLE ABSENT` when no teammate has taken a turn
+within the threshold and the watched paths are still absent, `LIVENESS a teammate took a turn N
+ago` when one has, and `LIVENESS unavailable` when no transcripts are reachable. The WAITING
+line also carries the beat count and the elapsed time since the join armed, so consecutive beats
+are no longer byte-identical.
+
+**The threshold is measured, not picked** — over 1,337 real teammate transcripts, gaps beyond
+1200s occur in 0.0036% of turns. The report errs toward UNDER-reporting: one live teammate
+suppresses the idle report for the whole wave, and an absent transcript directory reads as
+`unavailable`, never as idle. An absent signal reported as idleness would be the false direction
+that re-dispatches a working teammate.
+
+**LANDED (v0.429.0, verified 7133e404).**
+
+verify: sh W=core/scripts/wait-for-deliverable.sh; [ -f "$W" ] || exit 9; W="$(cd "$(dirname "$W")" && pwd)/$(basename "$W")"; d=$(mktemp -d) || exit 9; mkdir -p "$d/tm" || exit 9; r() { ( cd "$d" && AI_DLC_WAIT_BEAT_SECS=1 AI_DLC_TEAMMATE_IDLE_SECS=60 AI_DLC_TEAMMATE_DIR="$1" CLAUDE_PROJECT_DIR="$d" bash "$W" docs/never.md ) 2>&1; }; : > "$d/tm/a.jsonl"; touch -t 202001010000 "$d/tm/a.jsonl"; stale=$(r "$d/tm"); : > "$d/tm/a.jsonl"; fresh=$(r "$d/tm"); none=$(r "$d/absent"); rm -rf "$d"; case "$stale$fresh$none" in *WAITING*) ;; *) exit 9 ;; esac; case "$stale" in *"TEAMMATE IDLE"*) ;; *) exit 1 ;; esac; case "$fresh" in *"TEAMMATE IDLE"*) exit 1 ;; esac; case "$fresh" in *LIVENESS*) ;; *) exit 1 ;; esac; case "$none" in *"TEAMMATE IDLE"*) exit 1 ;; esac; case "$none" in *LIVENESS*) ;; *) exit 1 ;; esac; exit 0
+
+---
