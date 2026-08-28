@@ -579,7 +579,7 @@ next `/ai-dlc-update`; triage WARNs into the backlog. Warn-only — never blocks
 pipeline. On a consumer with no layer directories the script exits clean.
 <!-- inline-ok: a layer-entry ERROR is repaired by the lead inline, not dispatched. The subject is a `.claude/ai-dlc-layer/` registry entry — the project's own record of which core rules it shadows — not a planning artifact, and the disposition and the edit are one act: deciding that a `base_sha` is poisoned IS deciding what to write in its place. Routing the decided value to a dev is the dispatch hop Rule 26 names, the same posture as the rule-rewriting carve-out earlier in this step. -->
 
-#### `## Machine Audits` — one table, not five transcriptions
+### `## Machine Audits` — one table, not five transcriptions
 
 Every scan above reports into ONE `## Machine Audits` table in the retro doc.
 Do NOT paste a clean run's output: a PASS's detail is reproducible by

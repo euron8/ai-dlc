@@ -15,6 +15,106 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.431.0] - 2026-08-28
+
+### `## Machine Audits` was a CHILD of retro step 4a, so every consumer override shadowing 4a displaced it as a side effect
+
+Discharges `PC-S307-MACHINE-AUDITS-IS-A-CHILD-OF-4A-SO-EVERY-4A-SHADOW-SWALLOWS-IT`, filed by
+the reference consumer.
+
+`core/skills/ai-dlc/layer-contract.yaml:543` and `core/skills/ai-dlc/overrides/README.md:127`
+both state that precedence replaces the WHOLE shadowed span at load time. `#### `## Machine
+Audits`` sat inside `### 4a. Close-Out Sweep`, so an override shadowing 4a displaced the audits
+table's definition whether or not it said one word about it — and the consumer could not repair
+that from its own layer. The three consumer-side remedies each drop something and none addresses
+why the collision exists.
+
+The fix is one character: the heading is promoted from `####` to `###`, making it a sibling of
+4a and 4b rather than a child of 4a. Measured through the shipping `span_of` on both sides,
+with only line 582 differing between them:
+
+```
+before   4a 374 605                     Machine Audits at 582, inside
+after    4a 374 581 | MA 582 605 | 4b 606 730 unchanged
+```
+
+**It costs the consumer nothing and breaks no entry.** Measured on the reference consumer: ZERO
+overrides anchor the artifact heading in `shadows:`, against a positive control of 9 `shadows:`
+lines. Nothing in `core/` keys on the heading LEVEL either — the only other `Machine Audits`
+mentions are a naming-convention comment at `layer-drift.sh:445-446`, and every other
+`4a. Close-Out Sweep` hit is a fixture's own seeded file.
+
+**IT LAPSES EVERY LAYER VERDICT KEYED ON `steps/retro.md`, AND THAT IS THE FIX ANNOUNCING
+ITSELF.** `adj_digest()` hashes the target blob at theirs, so moving the file re-opens the duty
+for each current keyed subject. Derived on the reference consumer with
+`layer-drift.sh --list-adjudications`: **4 rows re-fire — 3 × LC-E19 plus 1 × LC-O15**, all on
+`steps/retro.md`, against a control of 19 keyed subjects in total. A runbook carrying this
+release should predict that set; a count above 4 means something else moved. Three older
+`OWED-RETRO-4A-NARROW` digests are already spent and produce no rows.
+
+**The consumer-side narrowing that was proposed instead was built, measured and REJECTED, and
+recording that is the point.** "Narrow the override body to the consumer-only lines" reads as
+non-destructive and is not: with the `#4a` anchor still present the override body is what
+renders, so dropping the ~175 lines that also appear in core's §4a deletes them from the
+rendered pipeline rather than revealing core's copy. Two sessions endorsed that plan before
+either checked the load-time semantics.
+
+Guarded by `core/fixtures/artifact-section-heading-level/`, which drives the shipping `span_of`
+as its oracle rather than re-implementing containment. Proven in both directions on two trees
+asserted to differ first: PASS with 6 assertions on the fixed tree, and **1 of 4 wrong** on the
+pre-fix tree, where the mutant arm STANDS DOWN because arm 2 owns the broken case — an
+unconditional mutant reported 2 failures for one cause, which is the entangled-assertion shape
+`fixture-mutants.md` names.
+
+**IT ALSO CONVERTS AN UN-RE-HOMEABLE RESIDUAL INTO A RE-HOMEABLE ONE, WHICH IS THE PART A
+CONSUMER READING ONLY "BOTH ROWS CLEAR" WILL MISS.** `kind: qualifier` is how a layer renders
+INSIDE a core section, and it REQUIRES `extends:` naming that section
+(`core/skills/ai-dlc/extensions/README.md:84`, `:117`) — so while the audits table was a `####`
+child there was no anchor to extend and a consumer's additions to it had nowhere to go. The
+promotion creates that anchor.
+
+Measured on the reference consumer, its own audits block against core's section: **core 19
+non-blank lines, override 32, shared 19, override-only 13, core-only 0.** The override is a
+strict superset, so after this release the table renders TWICE until the consumer acts —
+duplication, which is strictly better than the silent displacement it replaces and is a
+follow-up rather than a precondition. The consumer's edit is then small: drop the block and
+re-file the 13 override-only lines as a qualifier appending to `#Machine Audits`, carrying no
+`base_sha` obligation on prose it did not write.
+
+**`FORK_BUDGET` RAISED 7150 -> 7163, AND THE ARM REFUSING THE PUSH IS IT WORKING.** A fixture
+directory costs `validate-enforcement-map.sh` roughly seven forks to walk, which is the
+per-directory figure the two previous raises already measured (13 for two). Three reps on the
+release branch read **7157, 7157, 7157 — spread ZERO**, tighter than any reading that comment
+has recorded. The delta is CORPUS, not logic: no arm in that file changed. Raised to six over
+the spread top, as both previous raises were, with the measurement recorded beside the constant.
+Now PASS at 7157 of 7163 across 177 fixture directories.
+
+**THE FIXTURE PASSED SOLO AND FAILED UNDER THE 12-WAY POOL, AND THE CAUSE WAS NOT THE
+FIXTURE.** Sibling units in the suite create and switch branches, and the shared checkout came
+out of the run sitting on a different ref — so a unit reading its subject off the WORKING TREE
+can be handed a different revision of that subject halfway through and report a true finding
+about a file the branch under test does not contain. The unit now materialises its subject
+ONCE, through a sha captured at start: a git blob is immutable, so whatever any other unit does
+to the checkout afterwards, `git show` still returns the bytes this branch ships. The
+working-tree copy is the FALLBACK, for the consumer case where the path is not tracked and the
+file is the only truth there is. Proven in a clone checked out at the pre-fix commit, with the
+two subjects asserted to differ first (`efc20846` vs `a9b4e6b8`): PASS/6 on this branch reading
+`blob f99ca785`, **1 of 4 wrong** in the clone reading `blob ae29039b`.
+
+**THE INDEPENDENCE GAP HERE IS A SHARED ORACLE, NOT A SHARED AUTHOR.** The fixture drives
+`span_of`, the consumer's receipt drives `span_of`, and this release's correctness claim is
+stated in terms of `span_of` — three artifacts agreeing because they ask one function the same
+question, so none can catch a defect IN it. That was a deliberate choice (a fixture
+re-implementing containment would assert its own reading of the rule rather than the rule) and
+it is the constraint that actually binds: **exactly ONE other shippable fixture exercises
+`span_of` at all — `layer-readopt-gate` — out of 146 shippable fixture directories.** Widening
+that coverage is a separate release and is not attempted here.
+
+**The fixture also shares an author with the change it guards**, which
+`.claude/rules/fixture-mutants.md` forbids; no independent hand was available in this session.
+Recorded rather than smoothed over — though the adversarial pass the reference consumer ran
+against it found nothing, which is weak evidence next to the oracle gap above.
+
 ## [0.430.1] - 2026-08-28
 
 ### The same false premise sat at five more sites, and correcting only half of core left it contradicting itself

@@ -95,6 +95,7 @@ core_manifest:
   - core/fixtures/snapshot-supersession-marker/**
   - core/fixtures/artifact-path-migration/**
   - core/fixtures/artifact-path-conformance/**
+  - core/fixtures/artifact-section-heading-level/**
   - core/fixtures/setup-site-drift/**
   - core/fixtures/story-corpus-sprint-slot/**
   - core/fixtures/apply-worklist-rows/**

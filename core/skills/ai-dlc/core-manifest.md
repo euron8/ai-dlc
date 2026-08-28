@@ -272,6 +272,7 @@ core_manifest:
   - fixtures/whole-read-pool/**
   - fixtures/artifact-path-migration/**
   - fixtures/artifact-path-conformance/**
+  - fixtures/artifact-section-heading-level/**
   - fixtures/setup-site-drift/**
   - fixtures/story-corpus-sprint-slot/**
   - fixtures/apply-worklist-rows/**

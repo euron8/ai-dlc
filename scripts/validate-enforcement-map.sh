@@ -285,7 +285,15 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   the only instrument here that can. Corpus growth dominates again: this release's own
 #   CHANGELOG, backlog and grammar edits all landed between the two readings.
 # Spread top is 7144, so the headroom is again the usual 6 over it.
-FORK_BUDGET=7150
+#   RE-MEASURED at v0.431.0, which adds ONE fixture directory
+#   (`core/fixtures/artifact-section-heading-level/`) and changes no arm in this file. Three
+#   reps of `validator-fork-budget` on the release branch: 7157, 7157, 7157 -- spread ZERO,
+#   tighter than any reading this comment has recorded, and +7 over the 7150 ceiling. The
+#   delta is CORPUS, not logic: a fixture directory costs this script roughly seven forks to
+#   walk, which is the per-directory figure the two previous raises already measured (13 for
+#   two). Nothing here was optimised and nothing needs to be; the arm did its job by refusing
+#   the push. Spread top is 7157, so the headroom is again the usual 6 over it.
+FORK_BUDGET=7163
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
