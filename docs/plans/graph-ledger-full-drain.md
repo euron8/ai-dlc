@@ -12,23 +12,85 @@ instruction from it.**
 ### START HERE: SWEEP THE CONSUMER FOR NEW PUSH CANDIDATES, THEN PICK FROM THE UNFILED SET.
 
 **YOUR FIRST ACTION IS NUMBERED ACTION 1 BELOW — the sweep for candidates the consumer has filed
-since `v0.430.0`.** Standing operator instruction: do it before picking any subject, and report
-what it finds. The sweep is cheap and it has caught a same-day filing twice running.
+since `v0.433.0`.** Standing operator instruction: do it before picking any subject, and report
+what it finds. The sweep is cheap and it has now caught a same-day filing four batches running,
+including one that arrived WHILE batch 19 was running.
 
-**SPRINT 306 IS NOW FULLY DISCHARGED AND IS NO LONGER A SOURCE OF WORK.** Derived at
-`v0.430.0` with a control: **11 of 11** live `PC-S306-*` ids are cited by a backlog entry, **0**
-uncited, and a twelfth was closed by the consumer itself. The control is `PC-S312`, which
-returns **10** uncited in the same invocation — so the zero discriminates rather than reflecting
-a broken join. **Do not go looking for sprint-306 work; there is none left.**
+**The baseline, re-derived at `v0.433.0` by running the derive block below: 66 live candidates,
+130 archived, of which 33 are UNFILED.** The partition is **10 DISCHARGED / 23 IN-FLIGHT /
+33 UNTOUCHED**, summing to 66, with **0** discharged-but-unnamed and **22 TERMINAL** — so 32
+candidates delivered in total, 22 of them already closed by the consumer. Re-derive it: the live
+count moved by one DURING batch 19, and it has moved between two consecutive commands in this
+program more than once.
 
-**The baseline is 71 live candidates, of which 32 are UNFILED.** That unfiled set is the batch-19
-corpus and it is where action 1 points you. Re-derive it — this number has moved between two
-consecutive commands in this program more than once.
+**SPRINT 306 IS FULLY DISCHARGED AND IS NOT A SOURCE OF WORK. Do not go looking for it.**
 
-Everything from here to the numbered actions is a RECORD of batches 17 and 18. Read it for the
+### BATCH 20's SUBJECT IS RECOMMENDED AND MEASURED: `BL-119`.
+
+**This is the strongest-evidenced recommendation this plan has carried, because for once the
+number comes from the CONSUMER's own state rather than from ours.** Batch 19 fixed the override
+half of the adjudication branch and then measured what that does to the reference consumer: it
+changes **zero rows today**. The non-keep verdicts are not on the override side. Counted in
+`/Users/n8/git/graph/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl`, with the
+`still-additive` count as the control in the same invocation:
+
+```
+17 contradicts-core + 3 retire = 20 non-keep records   (265 still-additive)
+19 of the 20 are against `extensions/` entries
+ 1 is against an `overrides/` entry, and the digest that currently resolves for it
+   carries `still-additive` -- which is why batch 19's fix moves nothing here yet
+```
+
+`BL-119` is the extension half: `apply.sh` correctly suppresses the re-read row on any recorded
+verdict, because any verdict discharges a re-read — but `retire` and `contradicts-core` are
+recordable against an extension, are honest answers, and **authorize nothing, because no extension
+remedy emitter exists anywhere in `core/`**. Nineteen consumer decisions currently reach no actor.
+It carries a scored receipt already. **It is NOT PC-backed** — it was found here, so it ranks
+below anything the sweep turns up; take it if the sweep is quiet.
+
+Everything from here to the numbered actions is a RECORD of batches 17, 18 and 19. Read it for the
 measured episodes; **do not take an instruction from it.**
 
-### BATCH 18 IS DONE AND SHIPPED AS `v0.430.0`. IT DISCHARGED THE LAST TWO SPRINT-306 CANDIDATES.
+### BATCH 19 IS DONE AND SHIPPED AS `v0.433.0`, MERGED AT `ecaf3577ce85`.
+
+It took `PC-S307-RECORDED-VERDICT-SUPPRESSES-THE-REMEDY-IT-AUTHORIZES`, filed by the consumer the
+same morning the batch opened. `apply.sh` matched the adjudication token's PRESENCE and suppressed
+the ATOMIC override-retire sequence for every member of a three-member vocabulary, so recording
+the honest `retire` was what made the remedy unreachable. The suppression now branches on a
+`ADJ_KEEP_VERDICT` declared once in `layer-drift.sh` and resolved by `apply.sh`, `I86` binds the
+second name and joins it to the schema that owns the member set, and `apply-worklist-rows` gained
+four directions plus a differential.
+
+**THE FIX INTRODUCED A SECOND FAILURE THAT COULD NOT HAVE EXISTED BEFORE IT, AND ONLY DRIVING THE
+LOOP FOUND IT.** The detail field's tokens are an ordered prefix parsed positionally and the
+adjudication token sits ahead of them, so a row falling through with it attached matches neither
+`replaces_with=` nor `retire_anchor=` and lands in the arm that says *"core supersedes this
+entry"* — which an operator obeys by deleting an override file core superseded ONE anchor of.
+**Ask what a branch makes REACHABLE, not only what it decides.**
+
+**THE FIRST DRAFT OF THE NEW INVARIANT ARM WAS VACUOUS AND ITS OWN MUTANT SAID SO.** A whole-file
+grep for `$ADJ_KEEP_VERDICT` is satisfied by the RESOLUTION block's own `[ -z ... ]` guard twenty
+lines above the branch, so a file that resolves the name and then branches on something else
+passed. Scoping the read to the loop body fixed it. **Four mutants and two near-misses, and only
+the mutant caught it.**
+
+**A NEW FATAL MADE ANOTHER ENTRY'S RECEIPT REPORT FIXED, AND THE HISTOGRAM IS THE ONLY REASON
+ANYONE LOOKED.** `BL-037` drives the real `apply.sh` against a stub `layer-drift.sh` declaring only
+the row token; the new fail-closed gate aborted before the rows it asserts, and its receipt read
+the absence as the fix — exit 1 at `origin/main`, exit 0 on the branch, identical receipt text,
+three runs each. Run the receipt histogram BEFORE and AFTER, every batch.
+
+**THE GATE REFUSED ONE PUSH AND THE REFUSAL WAS CORRECT** — a shipping fixture's comment cited
+`docs/vocabulary-index.md`, a dev-repo doc `install.sh` does not ship, so the citation is dead in
+every consumer tree.
+
+**ONE OF FOUR HANDS DELIVERED, AND IT WAS THE ONE WITH A TREE DELIVERABLE — for the fourth batch
+running.** The fixture hand produced the batch's best work unprompted, including the strip arm and
+the verdict differential. The scope and receipt hands went idle without reporting and were still
+idle after a direct request; the lead did both jobs. **Budget for that. It is not an anomaly any
+more, it is the base rate.**
+
+### BATCH 18 — A RECORD, SHIPPED AS `v0.430.0`. IT DISCHARGED THE LAST TWO SPRINT-306 CANDIDATES.
 
 **Merged to `main` at `1febf3b9`, all gates green.** Operator ruled to take both. What landed:
 
@@ -321,7 +383,7 @@ grep -cx 'PC-S300-SEVEN-VALIDATORS-SHIPPED-NON-EXECUTABLE-AT-0.242.0' /tmp/arch.
 grep -cx 'PC-S999-NEVER' /tmp/filed.txt                                                  # control: 0
 ```
 
-Re-derived at v0.430.0: **71 live candidates, 122 archived**, partition control 0, all three
+Re-derived at v0.433.0: **66 live candidates, 130 archived**, partition control 0, all three
 presence controls 1, absence control 0. **The live count rose from 60 to 65 and then to 66
 across two consecutive ai-dlc sessions** — graph sessions filed sprint 306's candidates while
 this file was being edited, and the ledger's md5 moved four times in all, twice while a batch
@@ -351,8 +413,8 @@ comm -12 /tmp/live.txt /tmp/closed_here | comm -23 - /tmp/in_msgs   # discharged
 comm -12 /tmp/arch.txt /tmp/closed_here | wc -l
 ```
 
-Re-derived at v0.430.0 by running the commands: **17 DISCHARGED, 22 in flight, 32 untouched**,
-summing to 71, **0 discharged-but-unnamed**, and **14 TERMINAL**. The overlap the control catches
+Re-derived at v0.433.0 by running the commands: **10 DISCHARGED, 23 in flight, 33 untouched**,
+summing to 66, **0 discharged-but-unnamed**, and **22 TERMINAL**. The overlap the control catches
 is still the single `PC-S303-STUB-AUDIT-MARKER-...` id, subtracted from DISCHARGED. That unnamed line is a real
 failure mode and not a formality: a fix that ships without its id in the commit MESSAGE discharges
 the candidate and produces no row anywhere, so the consumer never learns of it.
@@ -387,8 +449,11 @@ pull that closed two candidates — the program's own scoreboard resets on succe
 forever", inverted: here the subject's deletion reads as REGRESS.
 
 **REPORT `TERMINAL` AS THE DELIVERED TOTAL AND `DISCHARGED` AS WORK AWAITING THE CONSUMER'S OWN
-CLOSE.** They are disjoint, because `live.txt` and `arch.txt` partition. At v0.430.0 that is
-**14 delivered and closed, 17 delivered and awaiting close — 31 in total against a headline of 17.**
+CLOSE.** They are disjoint, because `live.txt` and `arch.txt` partition. At v0.433.0 that is
+**22 delivered and closed, 10 delivered and awaiting close — 32 in total against a headline of 10.**
+The 0.430.1 -> 0.432.0 pull is what moved eight of them from the second bucket to the first, and
+the headline FELL from 17 to 10 as it did — which is the scoreboard resetting on success, exactly
+as the paragraph above says it does.
 Both figures are ceilings on coverage rather than adjudications, for the reason the next paragraph
 gives: a citation is a filing, not a disposition.
 
@@ -417,22 +482,24 @@ cat VERSION                                                                     
 git log --format='%H' -F --grep="<id>" origin/main | tail -1                            # then git show "${sha}:VERSION"
 ```
 
-**AT v0.430.0 THE GAP IS FIVE RELEASES AND ELEVEN CANDIDATES, AND IT HAS CROSSED THIS FILE'S OWN
-"WIDE" THRESHOLD.** Consumer installed **0.425.0**, distribution **0.430.0**; the pending set is
-`PC-S304` from `v0.426.0`, the sprint-306 six from `v0.428.0`, three from `v0.429.0` and the
-sprint-306 pair from `v0.430.0`. Derived per-id against an impossible-id control of 0.
+**THE GAP CLOSED AND THEN REOPENED AT ONE RELEASE. AT v0.433.0 IT IS ONE RELEASE AND ONE
+CANDIDATE.** The deferred pull RAN: the consumer reconciled `0.430.1 -> 0.432.0` on 2026-08-28
+and `.claude/.ai-dlc-version` reads **0.432.0** on all four fields. That pull is what moved eight
+candidates from DISCHARGED to TERMINAL. Consumer installed **0.432.0**, distribution **0.433.0**,
+pending set **`PC-S307`** from `v0.433.0`. Derived per-id against an impossible-id control of 0.
 
-**Action 7 below says: past FIVE releases, treat the range as WIDE and say so.** It is now
-exactly five. A wide range means more paths adjudicated in one session and a bigger blast radius
-if a bootstrapping step is in it — and `v0.430.0` changed `core/scripts/artifact-path-config.sh`,
-which `migrate-artifact-paths.sh` and `validate-artifact-paths.sh` both read, so **the
-bootstrapping hazard must be re-measured for this range rather than carried forward from the
-0429 rehearsal.**
+**The range is NOT wide, and the bootstrapping hazard IS live and has been measured rather than
+warned about.** One release, three core paths, `self-update-gate.sh` returns `SELF-UPDATE-OK`
+because no `core/scripts/` path is in the range, and zero mode-only changes. The specific hazard:
+`apply.sh` now resolves a second declaration out of its sibling `layer-drift.sh` and is FATAL when
+it cannot, so landing one without the other aborts every later apply — **both are in the range and
+both bucket the same way, so the split cannot occur here.** That is a measurement on a `file://`
+clone of both trees, not a reading of the code.
 
-The runbook is `docs/plans/graph-pull-0425-to-0430.md` — **its RANGE IS NOW STALE by one
-release**, and it must be re-scoped and RE-REHEARSED before any figure in it is trusted. The
-operator has deferred the pull. **Keep measuring the gap and reporting it; do not run it, and do
-not treat its growth as a reason to reorder the work.**
+The runbook is `docs/plans/graph-pull-0432-to-0433.md`, written and REHEARSED at `v0.433.0`, and
+**NOT STARTED**. `docs/plans/graph-pull-0425-to-0430.md` is DISCHARGED — read it as a worked
+example, never as a live plan. **Keep measuring the gap and reporting it; do not run the pull, and
+do not treat its growth as a reason to reorder the work.**
 
 **EVERY PENDING CANDIDATE IS FROM A SPRINT THE CONSUMER IS STILL RUNNING.** That raises what the
 deferral costs; it does not change whose call it is. Report the number and stop.
@@ -510,7 +577,7 @@ those have not been examined at all. Their status in the consumer's own ledger i
 ESTABLISHED**; some may already be `WITHDRAWN` or `ADOPTED` upstream. **Establish that before
 treating 20 as a workload.**
 
-Re-derived at v0.430.0 by running the commands, not by editing the sentence: **71 live / 45
+Re-derived at v0.433.0 by running the commands, not by editing the sentence: **73 live / 46
 archived**, against an impossible-verdict control of 0 and a `BL-006`-still-live control of 1.
 Batch 16 filed six (`BL-104`–`BL-109`) and rotated all six in the same release, so live went
 70 → 76 → 70 and the archive went 33 → 39. **Batch 14 recorded 31 archived and the rotation of
@@ -703,8 +770,8 @@ session the operator drives. Action 7's detection still applies; derive it rathe
 **BATCH 14 IS COMPLETE, MERGED AND PUSHED AS `v0.423.0`.** Its own report said "CANDIDATES
 DISCHARGED 6 → 7 OF 49", and **both halves of that figure were wrong** — the denominator through a
 grammar missing two record forms, the numerator through a metric that sheds its own successes. The
-current partition is in the derive block above: **5 DISCHARGED, 14 TERMINAL, 60 live**. Read it
-there and nowhere else. `BL-033` CLOSED and rotated, discharging
+partition AS OF THAT BATCH was **5 DISCHARGED, 14 TERMINAL, 60 live**; the current one is in the
+derive block above and nowhere else. `BL-033` CLOSED and rotated, discharging
 `PC-S314`, with the id in the RELEASE COMMIT MESSAGE where `named_absorbed()` can read it.
 Release `5c3711e2`, close-and-rotate `c174b60a`. The entry counters moved **70 → 69** live and
 **30 → 31** archived; those are recorded to show the rotation HAPPENED, **not as progress** —
@@ -1039,22 +1106,30 @@ so no block written before it changes verdict.
    real id means the grammar or the path is wrong, not that the candidate is old** — the ledger
    path is the only argument, and the archive is a SEPARATE file.
 
-   **THE BASELINE IS 71 LIVE CANDIDATES AT `v0.430.0`, 32 OF THEM UNFILED, AND SPRINT 306 IS
+   **THE BASELINE IS 66 LIVE CANDIDATES AT `v0.433.0`, 33 OF THEM UNFILED, AND SPRINT 306 IS
    FULLY DISCHARGED.** A higher count means the consumer filed while nobody was looking.
    **Re-derive rather than trusting those numbers** — they have moved between two consecutive
-   commands in this program.
+   commands in this program, and the live count moved by one DURING batch 19.
 
-   **THE SPRINT-306 RULING IS SPENT. DO NOT LOOK FOR SPRINT-306 WORK.** Derived at `v0.430.0`,
-   11 of 11 live `PC-S306-*` ids are cited and 0 are uncited, against a `PC-S312` control
-   returning 10 uncited in the same invocation. The operator's twice-given "take the whole set"
-   ruling was about sprint 306 specifically and there is nothing left for it to apply to.
+   **THE SPRINT-306 RULING IS SPENT. DO NOT LOOK FOR SPRINT-306 WORK.**
 
    **IF THE SWEEP FINDS A NEW SPRINT'S SET, REPORT AND ASK — DO NOT ASSUME THE RULING EXTENDS.**
    Batch 18 asked and the operator said take both; that answer was about sprint 306's remainder.
    Extending it to a different sprint is theirs to do, not yours.
 
-   **IF THE SWEEP FINDS NOTHING NEW, THE STANDING RECOMMENDATION IS `BL-051`** — step 2 computes
-   which machinery paths the consumer edited and then discards the answer, discharging
+   **THE TWO FRESHEST FILINGS ARE BOTH DATED 2026-08-28 AND ONE IS ALREADY TAKEN.**
+   `PC-S339-WITHDRAWAL-COMMIT-BECOMES-THE-NEW-ATTRIBUTION` is filed here as `BL-117` and is IN
+   FLIGHT — do not re-scope it. `PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER`
+   arrived WHILE batch 19 was running, is UNFILED, and is the freshest thing in the corpus.
+   Read its own status line in the consumer's ledger before treating it as work.
+
+   **IF THE SWEEP FINDS NOTHING NEWER, THE STANDING RECOMMENDATION IS `BL-119`**, for the reason
+   measured on the consumer's own register and set out under "BATCH 20's SUBJECT" in the resume
+   block above: 19 of the 20 non-keep verdicts that consumer has recorded are against extensions,
+   and every one of them authorizes an action no code in `core/` emits. It is not PC-backed — it
+   was found here — so it ranks below anything the sweep turns up. `BL-051` remains the coherent
+   PC-backed alternative: step 2 computes which machinery paths the consumer edited and then
+   discards the answer, discharging
    `PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH`. Verify that id is
    still live upstream, against an impossible-id control, before scoping it.
 
@@ -1075,12 +1150,13 @@ so no block written before it changes verdict.
    line. **Score a SECOND SPELLING of the correct fix too**: a receipt that rejects a competent
    author's other phrasing is as broken as one that accepts a regression.
 
-   **THE PULL IS STILL DEFERRED, AND THE GAP IS FOUR RELEASES AND NINE CANDIDATES.**
-   `docs/plans/graph-pull-0425-to-0430.md` is written and NOT STARTED, and its figures are STALE
-   by one release — it was rehearsed for `0425 -> 0429` and the distribution is now `0.430.0`.
-   **It must be RE-REHEARSED on a `file://` clone before any figure in it is trusted**, and the
-   bootstrapping hazard re-measured, because `0.430.0` changed `artifact-path-config.sh`, which
-   both `migrate-artifact-paths.sh` and `validate-artifact-paths.sh` read. Do not run the pull,
+   **THE PULL RAN. THE GAP IS ONE RELEASE AND ONE CANDIDATE.** The consumer reconciled
+   `0.430.1 -> 0.432.0` on 2026-08-28, which is what moved eight candidates to TERMINAL, and
+   `docs/plans/graph-pull-0425-to-0430.md` is DISCHARGED — a worked example, never a live plan.
+   `docs/plans/graph-pull-0432-to-0433.md` is its successor: written, REHEARSED at `v0.433.0` on
+   `file://` clones of both trees, and NOT STARTED. Its rehearsal measured the bootstrapping
+   hazard rather than warning about it — `apply.sh` and `layer-drift.sh` both moved and both
+   bucket the same way, so the fail-closed split cannot occur in that range. Do not run the pull,
    do not re-litigate it, and do not treat the gap as a reason to reorder this batch.
 
    **REHEARSE BEFORE WRITING ANY RUNBOOK FIGURE, AND TREAT THE REHEARSAL AS A DETECTOR.**
