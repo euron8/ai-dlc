@@ -550,6 +550,19 @@ if [ -n "$LD_SUP" ] || [ -n "$LD_HOOK" ]; then
     echo "  and would emit retire steps or a re-read worklist over a recorded verdict (PC-S327)." >&2
     exit 2
   fi
+  # THE VERDICT THAT MEANS "KEEP", RESOLVED THE SAME WAY AND FROM THE SAME FILE, AND FATAL FOR
+  # THE SAME REASON. Which verdicts a recorded decision AUTHORIZES is the whole content of the
+  # branch below; unresolvable, this script is back to reading the token's presence and cannot
+  # tell a decision that forbids the remedy from one that orders it. Stopping is the only answer
+  # that is wrong in neither direction — guessing "keep" re-creates PC-S307 and guessing "act"
+  # re-creates PC-S327, and those are the two defects this arm sits between.
+  ADJ_KEEP_VERDICT="$(sed -n 's/^ADJ_KEEP_VERDICT="\([A-Za-z][A-Za-z0-9_-]*\)".*/\1/p' "$SELF/layer-drift.sh" 2>/dev/null | head -1)"
+  if [ -z "$ADJ_KEEP_VERDICT" ]; then
+    echo "apply.sh: FATAL — OVERRIDE-SUPERSEDED or EXTENSION-HOOK-DRIFT row(s) present and ADJ_KEEP_VERDICT could not be resolved from $SELF/layer-drift.sh." >&2
+    echo "  Without it this script cannot tell a verdict that FORBIDS the retire sequence from one" >&2
+    echo "  that ORDERS it, and either default is a filed defect: PC-S327 one way, PC-S307 the other." >&2
+    exit 2
+  fi
 fi
 
 while IFS="$TAB_CH" read -r ovr detail; do
@@ -572,12 +585,37 @@ while IFS="$TAB_CH" read -r ovr detail; do
   # theirs, a SPENT verdict cannot suppress anything -- the token is simply absent and the
   # sequence below is emitted as before. That is what keeps this from becoming a permanent
   # exemption for a path.
+  # THE VERDICT IS READ, NOT COUNTED. This arm matched the token's PRESENCE and suppressed the
+  # sequence for every member of the vocabulary, while `adj_v` was extracted for nothing but
+  # interpolation into the message -- so the NOTE asserted a property of the verdict on a path
+  # that never read the verdict. Its own sentence is the proof: "acting on them would undo a
+  # decision, not complete one" is true of the keep verdict and FALSE of the other two, and on a
+  # `retire` recording the honest answer is exactly what made the remedy unreachable. There was
+  # no verdict available that both told the truth and left the steps emitted. Hit live on the
+  # reference consumer's 0.427.0 -> 0.430.1 pull, filed as PC-S307.
+  #
+  # THE STRIP IS PART OF THE FIX AND NOT TIDYING. The tokens below are an ordered prefix parsed
+  # positionally, and the adjudication token sits AHEAD of them; falling through with it still
+  # attached makes `replaces_with=` and `retire_anchor=` both miss, which lands a superseded
+  # single anchor in the `else` arm and prescribes `--stamp retire` -- deleting the whole
+  # override file when core superseded ONE of its anchors. That failure could not exist while
+  # this arm always `continue`d, so it arrives WITH the branch.
+  adj_v=""
   case "$detail" in
     "$ADJ_ROW_TOKEN"=*)
       adj_v="${detail#"$ADJ_ROW_TOKEN"=}"; adj_v="${adj_v%% ::*}"
-      say NOTE override-adjudicated "$ovr" "core superseded a shadowed anchor here, and this project has ALREADY RECORDED a verdict of '${adj_v}' for this exact subject in the layer adjudication register. No retire steps are emitted: acting on them would undo a decision, not complete one. The row is reported so the supersession stays visible. If you want to revisit it, change the register entry -- and note the verdict is digest-keyed, so it lapses on its own the next time either this entry or the core file it hooks moves."
-      continue ;;
+      if [ "$adj_v" = "$ADJ_KEEP_VERDICT" ]; then
+        say NOTE override-adjudicated "$ovr" "core superseded a shadowed anchor here, and this project has ALREADY RECORDED a verdict of '${adj_v}' for this exact subject in the layer adjudication register. No retire steps are emitted: acting on them would undo a decision, not complete one. The row is reported so the supersession stays visible. If you want to revisit it, change the register entry. The verdict is digest-keyed over this entry AND the core file it hooks as of this pull, so it is spent when either changes NEXT -- which may be several pulls away, or never: this is not a decision that expires on its own schedule."
+        continue
+      fi
+      detail="${detail#*" :: "}"
+      ;;
   esac
+  # THE RECORDED VERDICT IS THE AUTHORIZATION FOR THE ROWS, SO IT IS CITED IN THEM. An operator
+  # who recorded a decision and is then handed destructive-looking steps needs to see that the
+  # steps are the decision being carried out, not the pull ignoring it.
+  adj_auth=""
+  [ -n "$adj_v" ] && adj_auth=" This project has RECORDED the verdict '${adj_v}' for this exact subject in the layer adjudication register, and that verdict is what AUTHORIZES this sequence: acting on it completes the recorded decision rather than undoing one."
   # ORDERED AND ATOMIC, AS ROWS RATHER THAN AS PROSE.
   #
   # Retiring a superseded override is two writes that MUST land together, and the order is
@@ -653,15 +691,15 @@ while IFS="$TAB_CH" read -r ovr detail; do
       key_n=$(( key_n + 1 ))
       say WORKLIST override-retire "$ovr" "${key_n}/${key_total} ATOMIC — write ${one_key} into .claude/settings.json \"env\" (derive its value per override_supersessions in layer-contract.yaml; do NOT copy the example). Doing the retire stamp first re-imposes the core constraint this entry was widening and reds the next gate."
     done <<< "$(printf '%s' "$env_key" | tr ',' '\n')"
-    say WORKLIST override-retire "$ovr" "${key_total}/${key_total} ATOMIC — ${last_act} Same commit as the row(s) above."
+    say WORKLIST override-retire "$ovr" "${key_total}/${key_total} ATOMIC — ${last_act} Same commit as the row(s) above.${adj_auth}"
   elif [ -n "$drop_anchor" ]; then
     # No key to write, so there is no ordering to enforce and no ATOMIC sequence — but the action
     # still is not a retire, and the single row has to SAY so rather than repeat the detail and
     # leave the operator to notice the difference between "delete this entry" and "delete one of
     # its anchors".
-    say WORKLIST override-retire "$ovr" "core supersedes ONE anchor of this entry: ${last_act} Full reason: $detail"
+    say WORKLIST override-retire "$ovr" "core supersedes ONE anchor of this entry: ${last_act} Full reason: ${detail}${adj_auth}"
   else
-    say WORKLIST override-retire "$ovr" "core supersedes this entry: $detail"
+    say WORKLIST override-retire "$ovr" "core supersedes this entry: ${detail}${adj_auth}"
   fi
 done <<EOF
 $LD_SUP
@@ -693,7 +731,7 @@ while IFS="$TAB_CH" read -r ext detail; do
   case "$detail" in
     "$ADJ_ROW_TOKEN"=*)
       adj_v="${detail#"$ADJ_ROW_TOKEN"=}"; adj_v="${adj_v%% ::*}"
-      say NOTE extension-adjudicated "$ext" "this entry's hooked core file changed, and this project has ALREADY RECORDED a verdict of '${adj_v}' for this exact subject in the layer adjudication register. No re-read is prescribed: the reading has been done. The row is reported so the drift stays visible. The verdict is digest-keyed over this entry AND the core file it hooks, so it lapses on its own the next time either moves."
+      say NOTE extension-adjudicated "$ext" "this entry's hooked core file changed, and this project has ALREADY RECORDED a verdict of '${adj_v}' for this exact subject in the layer adjudication register. No re-read is prescribed: the reading has been done. The row is reported so the drift stays visible. The verdict is digest-keyed over this entry AND the core file it hooks as of this pull, so it is spent when either changes NEXT -- which may be several pulls away, or never: this is not a decision that expires on its own schedule."
       ;;
     *)
       say WORKLIST extension-reread "$ext" "hooked core file changed; re-read this entry against the new core text and record a verdict (still-additive / contradicts-core / retire)"

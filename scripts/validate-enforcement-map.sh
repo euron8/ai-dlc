@@ -6723,7 +6723,7 @@ if [ -n "$i85_hits" ]; then
 $(printf '%s\n' "$i85_hits" | sed 's|^|  |')"
 fi
 
-# --- I86: the adjudication row token is ONE string, and apply.sh may not restate it ----
+# --- I86: the adjudication row token and the keep-verdict name are resolved, never restated ----
 # apply.sh had NO reader for the adjudication register and therefore emitted a destructive
 # override-retire worklist over an entry whose `still-additive` verdict was already recorded --
 # while layer-drift.sh, which DOES read the register, correctly emitted no blocking row. The two
@@ -6745,7 +6745,20 @@ i86_read="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/apply.sh"
 if [ ! -r "$i86_decl" ] || [ ! -r "$i86_read" ]; then
   err "I86 cannot read both sides of the join ($i86_decl, $i86_read). An unreadable side reports the same silence as an agreeing one."
 else
-  i86_tok="$(sed -n 's/^ADJ_ROW_TOKEN="\([A-Za-z_][A-Za-z0-9_-]*\)".*/\1/p' "$i86_decl" | head -1)"
+  # BOTH DECLARATIONS IN ONE PASS, AND THE REASON IS THE FORK BUDGET. A `sed | head` per name is
+  # four forks for two strings, and this validator runs well over a hundred times per push -- the
+  # split form measured 3 over FORK_BUDGET on its own. The first match wins, exactly as `head -1`
+  # did; the read loop costs nothing because a here-string starts no subshell.
+  i86_decls="$(sed -n \
+    -e 's/^ADJ_ROW_TOKEN="\([A-Za-z_][A-Za-z0-9_-]*\)".*/TOK \1/p' \
+    -e 's/^ADJ_KEEP_VERDICT="\([A-Za-z][A-Za-z0-9_-]*\)".*/KEEP \1/p' "$i86_decl")"
+  i86_tok=""; i86_keep=""
+  while read -r i86_k i86_v; do
+    case "$i86_k" in
+      TOK)  [ -n "$i86_tok" ]  || i86_tok="$i86_v" ;;
+      KEEP) [ -n "$i86_keep" ] || i86_keep="$i86_v" ;;
+    esac
+  done <<< "$i86_decls"
   if [ -z "$i86_tok" ]; then
     err "I86 found no ADJ_ROW_TOKEN declaration in layer-drift.sh. It is the single home of the token apply.sh resolves; without it apply.sh fails closed at runtime, and this invariant has no subject."
   else
@@ -6759,6 +6772,60 @@ else
     # And the writer must still WRITE it into the row, or the reader matches nothing forever.
     grep -q '\${ADJ_ROW_TOKEN}=' "$i86_decl" 2>/dev/null \
       || err "I86 layer-drift.sh declares ADJ_ROW_TOKEN but never writes it into a row. The token has a home and no emitter, so apply.sh's suppression can never fire — a check that cannot fire reading exactly like one that passed."
+
+    # THE SAME JOIN, ONE VALUE OVER, AND IT ARRIVED FROM THE OPPOSITE DEFECT. Knowing a verdict
+    # is RECORDED is not knowing what it decided. apply.sh matched the token's presence and
+    # suppressed the retire sequence for every member, so recording the honest `retire` is what
+    # made the remedy unreachable, and the NOTE told the operator that acting would "undo a
+    # decision, not complete one" -- true of the keep verdict alone. Filed by the reference
+    # consumer as PC-S307 after it hit the case live. So which verdict means KEEP is now a second
+    # declaration in layer-drift.sh, resolved by apply.sh the same way and bound here the same way.
+    #
+    # THE THIRD ARM IS THE ONE THE FIRST TWO CANNOT COVER, and it is why the schema is read. A
+    # declaration and a reader can agree perfectly on a name the register can never hold: rename
+    # the member in the schema enum and this string keeps resolving, apply.sh keeps branching, and
+    # every recorded verdict takes the OTHER arm forever -- silently, and in the destructive
+    # direction, because a keep decision would then be read as an order to retire. The name is
+    # therefore checked against the enum that OWNS it rather than against a copy. layer-drift.sh
+    # asserts the same join at runtime, over the schema as of THEIRS; this one runs at every push
+    # over the schema as of HEAD, and neither subsumes the other.
+    i86_schema="$REPO_ROOT/core/schemas/layer-adjudication-register.json"
+    if [ -z "$i86_keep" ]; then
+      err "I86 found no ADJ_KEEP_VERDICT declaration in layer-drift.sh. It is the single home of the name apply.sh branches the override retire-sequence on; without it apply.sh fails closed at runtime and this half of the invariant has no subject."
+    else
+      grep -q 'ADJ_KEEP_VERDICT=.*layer-drift\.sh' "$i86_read" 2>/dev/null \
+        || err "I86 apply.sh does not resolve ADJ_KEEP_VERDICT from layer-drift.sh. Without that resolution it either restates the member literal (which drifts silently against the schema) or leaves the variable unbound, which under set -u aborts the apply mid-run."
+      if grep -qE "(\"|')${i86_keep}(\"|')" "$i86_read" 2>/dev/null; then
+        err "I86 apply.sh restates the keep-verdict literal '${i86_keep}' instead of resolving it from layer-drift.sh. A second copy of the one member whose disposition differs from the others is the drift this join exists to prevent: the branch keeps evaluating and silently takes the wrong arm."
+      fi
+      # THE NEGATIVE ARM ABOVE HAS A HOLE THAT THE POSITIVE ONE HERE CLOSES, and the hole is
+      # exactly the shape a competent author would write: `case "$adj_v" in still-additive)` needs
+      # no quote around the member, so a quoted-literal scan scores it as a non-instance. Widening
+      # to a bare word match is not available -- apply.sh legitimately names all three members in
+      # the extension-reread WORKLIST text an operator reads, and it names one in a comment, so the
+      # FALSE-POSITIVE SET OF THE WIDE FORM IS 2 OF 2 HITS AT HEAD, both prose. The narrowing that
+      # gets it to zero is to stop scanning for the wrong spelling and bind the RIGHT one instead:
+      # the value must be READ where the decision is taken.
+      #
+      # THE SPAN IS THE LOOP BODY, AND THE FIRST DRAFT OF THIS ARM WAS VACUOUS FOR WANT OF IT. A
+      # whole-file `grep` for the variable is satisfied by the RESOLUTION block's own `[ -z ... ]`
+      # guard, twenty lines above -- so a file that resolves the name and then branches on
+      # something else passed. It was caught by a mutant that deleted the comparison and did not
+      # turn the arm red. The resolution sits ahead of the loop, so scoping the read to the loop
+      # body is what makes the two states distinguishable, and it does not care how the comparison
+      # is spelled.
+      i86_body="$(sed -n '/^while IFS="\$TAB_CH" read -r ovr detail; do$/,/^done <<EOF$/p' "$i86_read")"
+      if [ -z "$i86_body" ]; then
+        err "I86 could not locate the override-supersession loop in apply.sh, so the arm that proves the keep verdict is READ where the decision is taken could not run. An unlocatable span reports the same silence as a satisfied one."
+      elif ! grep -q 'ADJ_KEEP_VERDICT' <<<"$i86_body"; then
+        err "I86 apply.sh resolves \$ADJ_KEEP_VERDICT and never reads it inside the override-supersession loop. Resolving a value and then branching on something else is the failure this pair of arms exists to catch, and it is invisible to the literal scan above: the case arm a competent author writes carries the member name unquoted."
+      fi
+      if [ ! -r "$i86_schema" ]; then
+        err "I86 cannot read $i86_schema, which owns the verdict vocabulary ADJ_KEEP_VERDICT must name a member of. An unreadable owner reports the same silence as an agreeing one."
+      elif ! grep -q "\"${i86_keep}\"" "$i86_schema" 2>/dev/null; then
+        err "I86 ADJ_KEEP_VERDICT is '${i86_keep}', which does not appear in ${i86_schema#"$REPO_ROOT/"} — the schema whose verdict enum is the only home of that member set. A name the register can never hold makes apply.sh's branch take the other arm for every subject, and it does so without erroring: a recorded keep decision would be read as an order to retire the override."
+      fi
+    fi
   fi
 fi
 

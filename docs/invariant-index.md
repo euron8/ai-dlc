@@ -103,7 +103,7 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I83 | the grammar's blocks have exactly ONE reader |
 | I84 | the story corpus location is ONE declaration |
 | I85 | no shipped script command-substitutes inside its own operator message |
-| I86 | the adjudication row token is ONE string, and apply.sh may not restate it |
+| I86 | the adjudication row token and the keep-verdict name are resolved, never restated |
 | I87 | a fixture cannot inherit a consumer's AI_DLC_* tunable and test the CONFIG |
 | I89 | the procedure citation join, and the fix-imperative attribution |
 | I90 | the procedure citation join, and the fix-imperative attribution |

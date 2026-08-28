@@ -1610,7 +1610,7 @@ Discharges the consumer entry
 ledger line 4258.
 
 
-verify: sh R=core/skills/ai-dlc-update/reconcile; W=$(mktemp -d); O='.claude/skills/ai-dlc/overrides/steps__w__probe.md'; for r in dist cons; do mkdir -p "$W/$r"; git -C "$W/$r" init -q .; echo seed > "$W/$r/f"; git -C "$W/$r" add -A >/dev/null 2>&1; git -C "$W/$r" -c user.email=f@x -c user.name=f commit -qm seed >/dev/null 2>&1; done; mkdir -p "$W/rec"; cp "$R"/*.sh "$W/rec"/; printf '#!/usr/bin/env bash\nADJ_ROW_TOKEN="adjudicated"\nprintf %s\n' "'HARD-OVERRIDE-DRIFT-SECTION\t$O\tsteps/w.md\tthe shadowed section changed upstream\nOVERRIDE-SUPERSEDED\t$O\tsteps/w.md\treplaces_with=AI_DLC_PROBE_KEY :: core provides what this entry was written to work around.\n'" > "$W/rec/layer-drift.sh"; chmod +x "$W/rec/layer-drift.sh"; M=$(bash "$W/rec/apply.sh" "$W/dist" HEAD "$W/cons" HEAD 2>/dev/null); rm -rf "$W"; n() { LC_ALL=C awk -F'\t' -v o="$O" -v k="$1" '$1=="WORKLIST" && $2==k && $3==o' <<<"$M" | LC_ALL=C grep -c . ; }; RE=$(n override-readopt); RT=$(n override-retire); SC=$(LC_ALL=C awk -F'\t' -v o="$O" '$1=="WORKLIST" && $2=="override-retire" && $3==o' <<<"$M" | LC_ALL=C grep -cF 'Same commit as the row(s) above.'); [ "$RE" -ge 1 ] || exit 1; ! { [ "$RT" -ge 1 ] && [ "$SC" -ge 1 ]; }
+verify: sh R=core/skills/ai-dlc-update/reconcile; W=$(mktemp -d); O='.claude/skills/ai-dlc/overrides/steps__w__probe.md'; for r in dist cons; do mkdir -p "$W/$r"; git -C "$W/$r" init -q .; echo seed > "$W/$r/f"; git -C "$W/$r" add -A >/dev/null 2>&1; git -C "$W/$r" -c user.email=f@x -c user.name=f commit -qm seed >/dev/null 2>&1; done; mkdir -p "$W/rec"; cp "$R"/*.sh "$W/rec"/; printf '#!/usr/bin/env bash\nADJ_ROW_TOKEN="adjudicated"\nADJ_KEEP_VERDICT="still-additive"\nprintf %s\n' "'HARD-OVERRIDE-DRIFT-SECTION\t$O\tsteps/w.md\tthe shadowed section changed upstream\nOVERRIDE-SUPERSEDED\t$O\tsteps/w.md\treplaces_with=AI_DLC_PROBE_KEY :: core provides what this entry was written to work around.\n'" > "$W/rec/layer-drift.sh"; chmod +x "$W/rec/layer-drift.sh"; M=$(bash "$W/rec/apply.sh" "$W/dist" HEAD "$W/cons" HEAD 2>/dev/null); rm -rf "$W"; n() { LC_ALL=C awk -F'\t' -v o="$O" -v k="$1" '$1=="WORKLIST" && $2==k && $3==o' <<<"$M" | LC_ALL=C grep -c . ; }; RE=$(n override-readopt); RT=$(n override-retire); SC=$(LC_ALL=C awk -F'\t' -v o="$O" '$1=="WORKLIST" && $2=="override-retire" && $3==o' <<<"$M" | LC_ALL=C grep -cF 'Same commit as the row(s) above.'); [ "$RE" -ge 1 ] || exit 1; ! { [ "$RT" -ge 1 ] && [ "$SC" -ge 1 ]; }
 ## BL-038
 
 **Core's sprint-review §3 lets a "genuinely environmental" integration seam defer with no
@@ -3277,6 +3277,61 @@ PC-backed set.
 verify: sh s=core/skills/ai-dlc-update/reconcile/settings-merge.sh; a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$s" ] && [ -f "$a" ] || exit 9; grep -q 'say WORKLIST settings-merge' "$a" || exit 9; grep -q 'worklist_n' "$a" || exit 9; code=$(sed 's/#.*//' "$s"); grep -q 'jq' <<<"$code" || exit 9; grep -qE '(echo|printf|say)[^#]*(retired hook|not carried by the template|cannot be registered)' <<<"$code" && exit 0; exit 1
 
 ---
+
+## BL-118 — a recorded verdict suppressed the remedy it authorizes
+
+**`apply.sh` matched the adjudication token's PRESENCE and suppressed the whole ATOMIC
+override-retire sequence for it.** `adj_v` was extracted and used for exactly one thing —
+interpolation into the NOTE — so the row asserted a property of the verdict on a code path that
+never read the verdict. The message is the proof rather than a symptom: *"No retire steps are
+emitted: acting on them would undo a decision, not complete one"* is true of `still-additive` and
+false of the other two members. The register's vocabulary has three
+(`core/schemas/layer-adjudication-register.json:35-37`), and `adj_lookup()`
+(`core/skills/ai-dlc-update/reconcile/layer-drift.sh:615`) clears on any conforming record, so
+**the suppression fired at 2 of 3**. On a `retire`, acting COMPLETES the decision; on a
+`contradicts-core` the register records that the override contradicts core and the remedy is then
+suppressed. Recording the honest verdict is what made the remedy unreachable, and no verdict
+existed that both told the truth and left the steps emitted.
+
+**A second failure was invisible from outside the code and arrives WITH the branch.** The detail
+field's tokens are an ordered prefix parsed positionally
+(`core/skills/ai-dlc-update/reconcile/apply.sh:625-641`) and the adjudication token sits ahead of
+them, so a row falling through with it still attached misses both `replaces_with=` and
+`retire_anchor=`. Measured against the shipping loop, one input, strip present and deleted:
+
+```
+detail = adjudicated=retire :: retire_anchor=steps/retro.md#4a :: core moved
+  with strip: WORKLIST override-retire — remove the anchor `steps/retro.md#4a` … leave its
+              other anchors byte-untouched
+  without:    WORKLIST override-retire — core supersedes this entry: adjudicated=retire :: …
+```
+
+The second row is obeyed by deleting an override file that core superseded ONE anchor of, which
+is the outcome `apply.sh:607-612` exists to forbid. It could not occur while the arm always
+`continue`d.
+
+**The provenance is the mirror image, and that is the lesson.** `apply.sh:558-567` names the
+motivating case: a recorded `still-additive` overrun by a prescribed step 2 that would have
+deleted 119 consumer-only lines, filed as `PC-S327`. That fix generalised from one member to the
+whole vocabulary without asking what the exemption ACQUITS — the same shape as `I99` at
+`v0.430.0`, one release earlier.
+
+Filed by the reference consumer as
+`PC-S307-RECORDED-VERDICT-SUPPRESSES-THE-REMEDY-IT-AUTHORIZES`, hit live on its
+`0.427.0 -> 0.430.1` pull. Tiered **DEFECT**: it silences a remedy rather than prescribing a wrong
+one, and the consumer had to reason its way out of a state where no honest verdict worked.
+
+The receipt DRIVES the shipping loop rather than grepping it, so no comment, rename or doc line
+closes it. It runs the loop twice from one extraction — once on a `retire` verdict, which must
+produce the anchor-narrowing row, and once on the keep verdict, which must NOT. **The second
+drive is not symmetry.** Scored against five constructions in one invocation, a receipt fed only
+the `retire` case scores the over-correction — emit the sequence for every verdict, `PC-S327`
+back — as FIXED. With both: the committed fix 0, a `case`-arm-on-the-literal spelling of the same
+behaviour 0, the live defect 1, a mutant naming all three members in the NOTE text 1, the
+over-correction 1, an unread second assignment of the verdict 1. Exit 9 if the loop cannot be
+located, so a reshaped file reports a moved precondition rather than a false close.
+
+verify: sh set -e; a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$a" ] || exit 9; t=$(mktemp -d); sed -n '/^while IFS="$TAB_CH" read -r ovr detail; do$/,/^EOF$/p' "$a" > "$t/l.sh"; [ -s "$t/l.sh" ] || exit 9; { echo 'TAB_CH="$(printf "\t")"'; echo 'say(){ printf "%s %s %s\n" "$1" "$2" "$4"; }'; echo 'ADJ_ROW_TOKEN=adjudicated'; echo 'ADJ_KEEP_VERDICT=still-additive'; echo 'LD_SUP="$(printf "overrides/x.md\t%s" "$D")"'; echo '. "$T/l.sh"'; } > "$t/d.sh"; r=$(T="$t" D='adjudicated=retire :: retire_anchor=A :: p' bash "$t/d.sh" 2>&1) || exit 9; k=$(T="$t" D='adjudicated=still-additive :: retire_anchor=A :: p' bash "$t/d.sh" 2>&1) || exit 9; rm -rf "$t"; case "$k" in *"remove the anchor"*) exit 1 ;; esac; case "$r" in *"remove the anchor"*) exit 0 ;; esac; exit 1
 
 ## BL-117 — a commit that WITHDRAWS an attribution becomes the new attribution, permanently
 

@@ -625,6 +625,32 @@ adj_lookup() { # $1 digest -> 0 if a record with a vocabulary verdict exists
 # destructive work the project had already decided against (PC-S326's sibling, PC-S327).
 ADJ_ROW_TOKEN="adjudicated"
 
+# WHICH VERDICT MEANS "KEEP THE OVERRIDE". The vocabulary is the schema's, read above into
+# ADJ_VERDICTS and never restated; what is NOT in the schema is which member says the shadow
+# stays. That is a disposition, and it is declared here -- beside the token, in the file that
+# already owns every other property of this row -- so apply.sh can resolve it rather than
+# carrying a second copy of a vocabulary member.
+#
+# WHY THE DISPOSITION HAD TO BE NAMED AT ALL. apply.sh matched the token's PRESENCE and
+# suppressed the retire sequence for ANY recorded verdict, so the suppression fired at 2 of 3:
+# recording the honest `retire` is what made the retire steps unreachable, and the NOTE then
+# told the operator that acting on them "would undo a decision, not complete one" -- true of
+# this verdict alone. Hit live on the reference consumer's 0.427.0 -> 0.430.1 pull and filed as
+# PC-S307. The over-generalisation ran from PC-S327's fix, which correctly stopped the sequence
+# from overrunning a recorded keep and then applied it to the whole vocabulary without asking
+# what the exemption ACQUITS.
+#
+# A NAME AND AN ENUM THAT DISAGREE ARE THE ONE WAY THIS CAN GO WRONG QUIETLY: rename the member
+# in the schema and this string keeps resolving, apply.sh keeps branching, and every subject
+# takes the OTHER arm forever. The membership assertion below is that join, and it can fire --
+# it is checked against the schema enum this run actually read, not against a copy.
+ADJ_KEEP_VERDICT="still-additive"
+
+if adj_active && ! grep -qxF -- "$ADJ_KEEP_VERDICT" <<<"$ADJ_VERDICTS"; then
+  echo "layer-drift: ADJ_KEEP_VERDICT is '${ADJ_KEEP_VERDICT}', which is not a member of the verdict vocabulary read from ${ADJ_SCHEMA_REL} at ${THEIRS} ($(printf '%s' "$ADJ_VERDICTS" | tr '\n' ' ')). apply.sh branches the override retire-sequence on this name, so every recorded verdict would take the wrong arm. Fix the declaration or the schema enum; do not read the resulting rows as findings." >&2
+  exit 1
+fi
+
 # THE "A VERDICT IS ALREADY RECORDED" PREFIX, IN ONE PLACE. Prints `adjudicated=<verdict> :: ` when
 # the register already holds a verdict for this exact subject, and nothing otherwise.
 #

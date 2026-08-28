@@ -15,6 +15,70 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.433.0] - 2026-08-28
+
+### A recorded verdict suppressed the remedy it authorizes
+
+`PC-S307-RECORDED-VERDICT-SUPPRESSES-THE-REMEDY-IT-AUTHORIZES`, filed by the reference consumer
+off its `0.427.0 -> 0.430.1` pull.
+
+`apply.sh` matched the adjudication token's PRESENCE and suppressed the whole ATOMIC
+override-retire sequence for it. `adj_v` was extracted and used for one thing — interpolation
+into the NOTE — so the row asserted a property of the verdict on a path that never read the
+verdict. Its own sentence is the proof: *"acting on them would undo a decision, not complete
+one"* is true of `still-additive` and false of the other two members. The register's vocabulary
+has three, so **the suppression fired at 2 of 3**, and on a `retire` recording the honest answer
+was exactly what made the remedy unreachable. There was no verdict available that both told the
+truth and left the steps emitted.
+
+The suppression now branches. `layer-drift.sh` declares `ADJ_KEEP_VERDICT` beside
+`ADJ_ROW_TOKEN` — which verdict means *keep* is a disposition, not something the schema enum
+says — and `apply.sh` resolves it the same way, with the same FATAL when it cannot, because
+guessing "keep" re-creates `PC-S307` and guessing "act" re-creates `PC-S327`. The rows a
+non-keep verdict produces now cite that verdict as their authorization.
+
+**The strip is part of the fix and was not visible from the outside.** The detail field's tokens
+are an ordered prefix parsed positionally, and the adjudication token sits ahead of them. Falling
+through with it still attached makes `replaces_with=` and `retire_anchor=` both miss, which lands
+a superseded single anchor in the `else` arm — *"core supersedes this entry"* — where obeying the
+row deletes an override file that core superseded ONE anchor of. Measured against the shipping
+loop, same input, strip present and deleted:
+
+```
+adjudicated=retire :: retire_anchor=steps/retro.md#4a :: core moved
+  with strip:  WORKLIST override-retire — remove the anchor `steps/retro.md#4a` … leave its
+               other anchors byte-untouched
+  without:     WORKLIST override-retire — core supersedes this entry: adjudicated=retire :: …
+```
+
+That failure could not exist while the arm always `continue`d, so it arrives with the branch.
+
+**`I86` grew the same join one value over, and a third arm the first two cannot cover.** A
+declaration and a reader can agree perfectly on a name the register can never hold: rename the
+member in the schema and the string keeps resolving, the branch keeps evaluating, and every
+subject takes the other arm forever — silently, in the destructive direction. The name is checked
+against `core/schemas/layer-adjudication-register.json`, which owns it. `layer-drift.sh` asserts
+the same join at runtime over the schema at `THEIRS`; neither subsumes the other.
+
+**The new FATAL made another entry's receipt report FIXED, and the receipt histogram is the only
+reason anyone looked.** `BL-037` drives the real `apply.sh` against a hand-written stub
+`layer-drift.sh` that declared `ADJ_ROW_TOKEN` and nothing else. `apply.sh` now fails closed on
+the second name, so it aborted before the retire sequence, the rows `BL-037` asserts were never
+emitted, and its receipt read the absence as the fix. Measured, identical receipt text in both
+trees: **exit 1 at `origin/main`, exit 0 on this branch, three runs each.** The stub carries both
+declarations now and the entry reports live again — 1 on this tree, 0 against the remedy its own
+entry names. Nothing else in the tree was exposed: the same abort would have fired on the row
+token since `v0.428.0`, so every stub that passes today already declares one, and the affected set
+is the stubs that declare exactly that one. Four fixtures and one receipt; the fixtures were
+already green.
+
+**The negative arm has a hole the positive one closes.** `case "$adj_v" in still-additive)` needs
+no quote, so a quoted-literal scan scores it as a non-instance — and widening to a bare word match
+is not available, because `apply.sh` legitimately names all three members in the
+`extension-reread` WORKLIST text an operator reads. False-positive set of the wide form: **2 of 2
+hits at HEAD, both prose.** The narrowing is to bind the comparison site instead — `apply.sh` must
+READ `$ADJ_KEEP_VERDICT`.
+
 ## [0.432.0] - 2026-08-28
 
 ### The shared oracle had one test, and three artifacts were leaning on it
