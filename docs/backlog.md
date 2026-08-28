@@ -1939,77 +1939,6 @@ line 1571.
 
 
 verify: sh grep -qF "EXIT_CONDITION_MET" docs/vocabulary-index.md || exit 1; grep -qF "NEEDS_REWORK" docs/vocabulary-index.md
-## BL-045
-
-**Core's `## Machine Audits` table is a `####` child of `### 4a. Close-Out Sweep`, so every
-override that shadows §4a deletes the table as a side effect — and core's own §4 delegates into
-it too, which no detector can see.** Driven through the shipping resolver
-(`core/skills/ai-dlc-update/reconcile/lib.sh:71`, `span_of`), `span_of "4a. Close-Out Sweep"` over
-`core/skills/ai-dlc/steps/retro.md` returns **`373 604`**, and that span contains exactly ONE
-sub-heading: `core/skills/ai-dlc/steps/retro.md:581`,
-``#### `## Machine Audits` — one table, not five transcriptions``. Occurrences of the construct
-inside the §4a span: **2**. **Control in the same invocation** — the sibling span
-`span_of "4b. Operator-steerability audit"` = `605 705`, occurrences there **0**, so the counter
-discriminates rather than answering yes everywhere. The detector that reports the consequence is
-live: `OVERRIDE-DELEGATES-INTO-SHADOW` occurs **4** times in
-`core/skills/ai-dlc-update/reconcile/layer-drift.sh` (emit site `:1289`); control, the impossible
-status `OVERRIDE-DELEGATES-INTO-NOWHERE`, **0** in the same file.
-
-The consumer entry framed the victims as its own two `OVERRIDE-DELEGATES-INTO-SHADOW` rows. **The
-correction is WIDER, and it is core's.** `core/skills/ai-dlc/steps/retro.md:290` — "Record the
-verdicts in the `## Machine Audits` table (below)" — sits in §4, whose span is `205 334`, while the
-table it names is at 581 inside §4a. So core itself holds a cross-section delegation into the
-shadowable span. The emit at `layer-drift.sh:1289` fires inside the per-override loop keyed on an
-entry's `shadows:` value, so its population is `overrides/` entries; core has no `shadows:` and
-never enters that loop. A consumer that shadows §4a therefore drops core's own §4 delegation target
-as well as its override's, and **that half is structurally outside every arm's population** — not
-merely unreported today, unreportable by this detector's join key.
-
-The entry's remaining claims hold as written. Its middle remedy — "narrow `shadows:` to the
-sub-headings actually rewritten" — is genuinely unavailable for an override that rewrites §4a,
-because the one sub-heading in the span IS the delegation target; that is the measurement above,
-re-derived, not transcribed. Its `verify: manual` reasoning does not carry across the boundary: it
-was correct for a consumer ledger grepping a `theirs` ref, and this tree is executable.
-
-**The prescribed fix works when executed**, which is worth stating because it usually does not
-here. Promoting line 581 from `####` to `###` — one character, no new prose, so no date, version
-tag or origin narrative enters resident text — moves `span_of "4a. Close-Out Sweep"` from
-`373 604` to **`373 580`**, drops the construct count inside §4a from 2 to **0**, and makes the
-table its own resolvable span `581 604`, addressable by the existing `<file>#<anchor>` key with no
-new anchor vocabulary. The two sides were asserted to differ before the comparison was read (`diff`
-= 4 lines, the single heading). An unnumbered `###` sibling is already the house form in this file:
-`### Empirical gate validation` (335) and `### Sprint-Ship Verification` (706).
-
-Blast radius, measured on a `--local` clone with the promotion applied, both sides asserted
-different: `scripts/validate-enforcement-map.sh` output **byte-identical** across the two, and
-`section_of`/`span_of` appear in that validator only inside comments, so it cannot resolve a
-retro.md heading at all. `core/scripts/audit-rule-files.sh` output **byte-identical** across the
-two, all three tier-1 classes `CLEAN` on both. Both validators exit 1 on both sides for
-pre-existing tier-2 findings that name other files. The only two fixtures that read the real
-`retro.md` are `core/fixtures/check-17-counts/run.sh:49` (provenance block) and
-`core/fixtures/enforcement-map-sites/run.sh:1023` (an audit-anchor template string); neither keys
-on heading level.
-
-**Why the anchor is the anchor.** The receipt asserts a relation between two spans the shipping
-resolver computes, not a substring. The looser form — "does the §4a span still contain the string
-`## Machine Audits`" — was probed and **false-OPENS forever**: seeding the fix plus one comment
-line above 581 quoting the old heading back (the dominant failure mode in this corpus, since fixes
-here document what they moved) leaves **1** occurrence inside the shrunken §4a, so a substring
-predicate reports STILL-LIVE against a landed fix. The span predicate returned **0** on that same
-seeded tree. Both directions of anchor death report STILL-LIVE rather than closing: renaming the
-heading so `span_of` cannot resolve it exits **1**, and removing `lib.sh` exits **1**.
-
-Not a settled decision. `CHANGELOG.md:2517` (v0.334.0) measured this exact span — "231 lines with
-exactly ONE sub-heading, at offset 207" — and declined to restructure, but for a different
-question: making a non-heading ARM addressable, which needs a declaration format. That section
-names `Machine Audits` **0** times; controls in the same section and invocation, `Close-Out Sweep`
-**2** and `strikethrough` **1**. The nesting was never adjudicated.
-
-Discharges the consumer entry `PC-S307-MACHINE-AUDITS-IS-A-CHILD-OF-4A-SO-EVERY-4A-SHADOW-SWALLOWS-IT`
-at pinned ledger line 2101.
-
-
-verify: sh . core/skills/ai-dlc-update/reconcile/lib.sh; F=core/skills/ai-dlc/steps/retro.md; A=$(span_of "4a. Close-Out Sweep" < "$F"); B=$(span_of "## Machine Audits" < "$F"); [ -n "$A" ] && [ -n "$B" ] || exit 1; [ "${B%% *}" -gt "${A##* }" ]
 ## BL-047
 
 **A Pipeline Position carrying two `Current step file` values makes `ai-dlc-recover.sh` mandate
@@ -3391,3 +3320,79 @@ this entry must not be closed on a fix whose FP set was never taken.
 
 verify: sh e=$(awk '/^## BL-[0-9]+/{f=1} f && sub(/^[ \t]*verify: sh /,"")' docs/backlog.md); [ -n "$e" ] || exit 9; n=$(printf '%s\n' "$e" | grep -c .); [ "$n" -ge 40 ] || exit 9; bad=$(printf '%s\n' "$e" | while IFS= read -r l; do [ -n "$l" ] || continue; bash -n -c "$l" 2>/dev/null || echo x; done | grep -c x); [ -f scripts/backlog-reverify.sh ] || exit 9; grep -q 'bash -n -c' scripts/backlog-reverify.sh || exit 1; grep -q MALFORMED scripts/backlog-reverify.sh || exit 1; [ "${bad:-1}" -eq 0 ]
 
+## BL-122 — one unreadable layer entry suppresses every finding about every other entry
+
+**Found by an adversarial pass over `v0.435.0`'s own fix, and it is the cost that fix chose to pay
+rather than a defect it introduced.** `entry_unreadable` exits immediately, and the first guard sits
+in the `conforms_to` census loop, which runs before any pass prints. So one unreadable file ends the
+run before a single finding about any other entry is emitted.
+
+Measured on the `layer-entry-unreadable` fixture's own `bad-consumer` tree with
+`extensions/above-cv.md` at mode 000, pre-fix against post-fix in the same invocation:
+
+```
+pre-fix   rc=1  errors=8  warns=2      (4 of those 8 were FALSE, about the unreadable file)
+post-fix  rc=2  errors=0  warns=0      no footer
+```
+
+The fix correctly removes the 4 false errors and takes the **4 true ones about the other three
+entries** with them. Both exits refuse the push, so this wedges TRIAGE rather than correctness — but
+an operator on a tree with one persistently unreadable file gets a run that says nothing about the
+43 files it read fine, and no way to see them without fixing the read first.
+
+**Why this was not taken in `v0.435.0`.** The remedy is a behavioural restructure rather than a
+guard: collect unreadable paths, exclude them from the census by name, let the passes finish, print
+the footer with an `unreadable=N` field, and exit 2 at the end. That changes what a clean run looks
+like and what the footer means, and it needs its own fixture arms for the partial-census state. It
+is a different change from "stop reporting a finding about content you never read", which is what
+that release claimed and did.
+
+**Do not close this by making the abort later.** The property is that findings about READABLE
+entries survive an unreadable sibling, and a fix that merely moves the exit point still loses them
+whenever the unreadable file sorts first.
+
+verify: sh V=core/scripts/validate-layer-entries.sh; C=core/skills/ai-dlc/layer-contract.yaml; [ -f "$V" ] && [ -f "$C" ] || exit 9; d=$(mktemp -d) || exit 9; trap 'chmod -R u+rwX "$d" 2>/dev/null; rm -rf "$d"' EXIT; K="$d/.claude/skills/ai-dlc"; mkdir -p "$K/extensions" "$K/steps" || exit 9; cp "$C" "$K/" || exit 9; printf -- '---\nname: retro\ndescription: s\n---\n\n# R\n' > "$K/steps/retro.md"; printf -- '---\nkind: role\nid: good\nhooks: steps/retro.md\npush_candidate: false\nconforms_to: 1\n---\n# G\n' > "$K/extensions/zz-broken.md"; printf -- '---\nkind: role\nid: u\nhooks: steps/retro.md\npush_candidate: false\nconforms_to: 1\n---\n# U\n' > "$K/extensions/aa-unreadable.md"; B=$(bash "$V" "$d" 2>/dev/null | grep -c 'zz-broken'); [ "$B" -ge 1 ] || { echo "HARNESS BROKEN: the readable control entry drew no finding to lose"; exit 9; }; chmod 000 "$K/extensions/aa-unreadable.md"; if awk '{exit}' "$K/extensions/aa-unreadable.md" 2>/dev/null; then echo "HARNESS BROKEN: seal did not take"; exit 9; fi; A=$(bash "$V" "$d" 2>/dev/null | grep -c 'zz-broken'); [ "$A" -ge 1 ]
+
+## BL-123 — the read-failure collapse is unfixed on `layer-contract.yaml`, and its message tells the operator the file is malformed
+
+**Same class as `PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER`, one level up, and
+`v0.435.0` did not touch it.** The contract is read at `core/scripts/validate-layer-entries.sh:781`
+and `:782` with the status discarded, and again at `:1001`, `:1105` and `:1109` behind `2>/dev/null`.
+An `awk` that cannot open the contract prints nothing and exits 2; a contract genuinely lacking
+`contract_version:` prints nothing and exits 0. Both land in the same arm.
+
+Measured with the contract present at mode 000, identical before and after `v0.435.0`:
+
+```
+rc=1
+ERROR  E17  read no usable contract_version out of .../layer-contract.yaml (got '<none>')
+ERROR  E17  read ZERO clauses with a since: out of .../layer-contract.yaml
+ERROR  E16  could not read 'consumer_crosswalk_file:' from .../layer-contract.yaml
+ERROR  E16  RETIRED-ID HISTORY UNREADABLE
+LAYER_CONFORMANCE v1 contract_version=- entries=0 ... errors=4 warnings=1
+```
+
+**This is a WRONG-MESSAGE defect, not a false-PASS defect, and the distinction is why it was
+deferred rather than treated as a blocker.** The run refuses, the footer honestly reads
+`contract_version=-` and `entries=0`, and nothing is acquitted. But `got '<none>'` is not a value
+that was read — it is a read that never happened — and the operator is told their contract is
+malformed when it is intact and merely unreadable. The remedy they will reach for is to rewrite or
+restore a file that has nothing wrong with it.
+
+**The second-order cost is the one worth stating.** An unreadable contract empties `LC_CV`, which
+SKIPS the census loop entirely, which is the only guard a healthy consumer exercises. So this state
+silently disarms `v0.435.0`'s primary protection at the same moment it misreports its own cause.
+
+**A SIBLING INSTANCE THIS ENTRY DOES NOT COVER, named so a close here is not read as a close there.**
+`:1770`/`:1771` read `stories_dir` and `stories_dir_sprint_placeholder` out of
+`schemas/sprint-status.json` with the status discarded; empty values leave `LC_ST_PARENT_RE` empty and
+`:1839`'s `|| continue` skips the subject in silence. It gates one emitter, `warn W11`, so it costs a
+warning and can never move an exit code — which is why it is NOT folded into this entry's subject and
+NOT asserted by the receipt below. This entry expires when the `layer-contract.yaml` reads report a
+read failure as a read failure, and that leaves the schema instance open.
+
+**Not closable by rewording alone.** The message can only become accurate if the status is taken off
+the read, which is the same fix shape `fm()` received. Note that `layer-conforms-to` asserts on E17
+text, so a message change has a fixture obligation.
+
+verify: sh V=core/scripts/validate-layer-entries.sh; C=core/skills/ai-dlc/layer-contract.yaml; [ -f "$V" ] && [ -f "$C" ] || exit 9; d=$(mktemp -d) || exit 9; trap 'chmod -R u+rwX "$d" 2>/dev/null; rm -rf "$d"' EXIT; K="$d/.claude/skills/ai-dlc"; mkdir -p "$K/extensions" || exit 9; cp "$C" "$K/" || exit 9; printf -- '---\nkind: role\nid: r\nhooks: steps/retro.md\npush_candidate: false\nconforms_to: 1\n---\n# R\n' > "$K/extensions/e.md"; O=$(bash "$V" "$d" 2>&1); grep -q "contract_version" <<<"$O" || { echo "HARNESS BROKEN: readable control produced no contract line"; exit 9; }; chmod 000 "$K/layer-contract.yaml"; if awk '{exit}' "$K/layer-contract.yaml" 2>/dev/null; then echo "HARNESS BROKEN: seal did not take"; exit 9; fi; U=$(bash "$V" "$d" 2>&1); grep -qE "could not READ|unreadable|cannot read" <<<"$U" || exit 1; grep -q "got '<none>'" <<<"$U" && exit 1; exit 0
