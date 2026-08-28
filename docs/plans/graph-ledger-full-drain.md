@@ -48,6 +48,23 @@ PC-backed, so it ranks below anything the sweep turns up. Its evidence is the co
 register: 20 non-keep verdicts recorded there, 19 of them extensions, where no remedy emitter exists
 in `core/` at all — nineteen recorded decisions that reach no actor.
 
+**`BL-122` AND `BL-123` WERE FILED BY BATCH 21 OFF MEASUREMENT AND ARE THE STRONGEST NON-SWEEP
+OPTIONS, BUT THEY ARE NOT PC-BACKED FOR DRAIN PURPOSES.** `BL-123` cites
+`PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER`, which is already DISCHARGED — so
+closing either discharges nothing further upstream and neither outranks anything the sweep turns up.
+Among the non-PC-backed options they outrank `BL-119` on consequence:
+
+- **`BL-123`** — the same read-failure collapse, unfixed on `layer-contract.yaml`. Its second-order
+  cost is the sharp part: an unreadable contract empties `LC_CV`, which SKIPS the census loop, which
+  is the only guard a healthy consumer exercises — so this state silently disarms `v0.435.0`'s
+  primary protection at the same moment it misreports its own cause as a malformed file. It names a
+  NOTE-tier sibling at `:1770` that its receipt does NOT cover; do not close it on that.
+- **`BL-122`** — one unreadable entry aborts before any finding about any OTHER entry prints. A
+  triage wedge rather than a correctness one, and its remedy is a restructure, not a guard.
+
+**They are also the likely second release**, which is the condition the pull section says to revisit
+on. Taking them is the cheapest way to make a pull worth sending.
+
 **`BL-051`'s receipt must be replaced FIRST if you take it, and that is not optional.** It is one of
 the four the `v0.417.0` sweep found closable by prose — by a comment naming a bucket. Build the
 correct fix AND at least two plausible regressions, score every one, and score a SECOND SPELLING of
