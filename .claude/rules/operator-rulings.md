@@ -11,6 +11,18 @@ No plan and no task stops to ask for merge authorization. Cut the branch, run th
 it. Where a branch carries more than one release the release-version validator will say so —
 that is a mechanical constraint on branch shape, not a request for approval.
 
+## A consumer pull is NOT preapproved, and being ready is not being told
+
+The mirror of the ruling above, and the one place the two differ. Measure the delivery gap,
+write the runbook, rehearse it, report the number — then STOP. A runbook that is written,
+rehearsed and green is READY, never AUTHORIZED, and neither a `PENDING` count nor an earlier
+answer about WHETHER a pull should happen is a decision about WHEN. Never dispatch one, and
+never hand one to a peer session.
+
+Before sending any peer work at all, check what it is DOING and put that state into the
+QUESTION you ask the operator rather than keeping it in your own head. `busy` in `ListAgents`
+is a reason to look further, never a green light.
+
 ## Everything is sourced and validated with ground truth
 
 Every claim in a plan, a brief, a commit message or a report is derived against the working

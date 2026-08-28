@@ -6,6 +6,12 @@
 the current state; everything under `## Rehearsal` is an EXPECTATION measured before the run, not
 a guarantee.
 
+**THIS FILE IS NOT ITS OWN AUTHORIZATION. The pull is initiated by the OPERATOR and by nobody
+else** — not by a distribution session that notices the gap, not by a consumer session that finds
+this file, and not by the fact that the runbook is written and rehearsed. Being ready is not being
+told. If you are reading this without an explicit instruction to run it, that instruction is the
+thing to go and get.
+
 **One release, three core paths, no self-update split predicted.** The range carries one fix —
 the adjudication suppression now branches on the recorded verdict instead of on the token's
 presence (`PC-S307`). Read `## Rehearsal` before you start and STOP if the real run disagrees
@@ -66,6 +72,22 @@ moment the next thing lands — including the commit that adds this runbook.
 1. **Confirm the project root is `/Users/n8/git/graph`.** If it is not, stop and ping. Then read
    `.claude/.ai-dlc-version` and confirm it says `0.432.0` on all four fields. A different value
    means this runbook was written for a range you are not in — stop and ping.
+
+   **AND CONFIRM NO SPRINT IS RUNNING IN THIS TREE. This range replaces the machinery a sprint
+   EXECUTES**, so it is not merely disruptive to pull mid-sprint, it swaps the pipeline's own
+   steps out from under a run that is using them:
+   `.claude/skills/ai-dlc-update/reconcile/apply.sh`,
+   `.claude/skills/ai-dlc-update/reconcile/layer-drift.sh` and the skill files under
+   `.claude/skills/` are all in this range. That is the consumer-side form of the bootstrapping
+   hazard named at the top of this file, and the operator's own words for the right moment are
+   *"after the sprint paused"*. **If a sprint is in flight, stop and ping — do not run the pull
+   and do not pause the sprint yourself.**
+
+   This is a numbered action rather than advice because the omission has already happened once:
+   a distribution session handed this runbook to a consumer session that was mid-sprint, having
+   read `busy` on that session and treated it as "reachable". Nothing landed — the stamp, the
+   `.ai-dlc-applying` sentinel and the reconcile machinery were all checked and untouched — but
+   nothing in this file would have stopped it.
 
 2. **Run `/ai-dlc-update`.** The skill owns resolving the ref, gating its own self-update,
    carrying the machinery slice and emitting the worklist; none of that is re-described here.

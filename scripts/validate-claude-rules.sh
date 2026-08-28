@@ -488,8 +488,30 @@ fi
 # itself. A `paths:` list could not fire either -- the first is exercised while writing an ad-hoc
 # measurement, and the second while writing a validator arm, neither of which reliably begins
 # with a matching Read. `resident-context.md` forbids scoping a prose-only rule outright.
+#
+# RAISED A TENTH TIME, 49550 -> 50202, FOR ONE RULE COSTING 711 BYTES, ON AN EXPLICIT OPERATOR
+# RULING. The subtraction is STILL OWED and this is the tenth consecutive raise without one. Put
+# as four costed options -- raise, pay for it with a subtraction first, land a shorter rule, or
+# leave it in the memory corpus uncarried -- with the shortfall measured (711 bytes against 59
+# free) before the question was asked, and with it stated plainly that no vestigial sweep had
+# been attempted and that guessing at one would not be honest.
+#
+# THE RULE: "a consumer pull is NOT preapproved, and being ready is not being told", in
+# `operator-rulings.md`, directly beneath "Merges are preapproved" so the two read as the pair
+# they are. Earned the same day: a distribution session measured the delivery gap, wrote and
+# rehearsed a runbook, asked the operator "dispatch or bank", got "dispatch" -- and handed the
+# runbook straight to a peer session that `ListAgents` had just reported as `busy`. It was
+# mid-sprint, and the range replaces `apply.sh`, `layer-drift.sh` and the skill files a sprint
+# EXECUTES. Nothing landed, and the operator caught it rather than the session. The deeper half
+# is the second paragraph: the QUESTION was defective before the send was, because the peer's
+# state was known and was not put in front of the person deciding.
+#
+# WHY IT CANNOT BE SCOPED OR MECHANIZED. There is no act to detect -- sending a peer a message is
+# not a tracked write, and no validator can see it. The work does not begin with a matching Read
+# either: the session that did this was reading its own plan, not the runbook. That leaves the
+# unconditional channel, and `resident-context.md` forbids scoping a prose-only rule outright.
 # ---------------------------------------------------------------------------
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-49550}"
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-50202}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done
