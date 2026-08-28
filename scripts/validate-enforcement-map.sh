@@ -259,7 +259,22 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 # growth rather than a hot loop -- the corpus this script walks grew this release. Saying so is
 # more useful than inventing a third attribution. Spread across reps is 7108-7108, so the
 # headroom is the usual 6 over the TOP of the spread.
-FORK_BUDGET=7114
+#
+# 7114 -> 7137: the I99 arm was added and it is NOT what raised this. Measured by the
+# differential this comment block already prescribes -- the arm cut out of THIS file, profiled
+# untargeted in a clean environment, and the file restored byte-identically (asserted with
+# `cmp -s`, and both runs EXIT 0): 7130 without it and 7130 with it, spread 7129-7131. The arm
+# costs ZERO forks, because its predicate is `[[ =~ ]]` throughout and its only external call
+# is the single resolver invocation the token/slot pair above already pays for.
+#   THE RISE IS CORPUS GROWTH, and it is this release's own. Against origin/main the reading
+#   is 7088; against this tree, 7130. The script walks docs/ and core/, and this release adds
+#   two backlog entries, their archive rows and a CHANGELOG section. Attributing that to the
+#   new arm would be a false attribution that the next author would then try to optimise away.
+#   PROFILE UNTARGETED AND UNDER `env -i`. `--target <copy>` answers 7218 with EXIT 1 -- a
+#   different and FAILING run -- and an inherited environment answers 7218 too. Both read like
+#   a real reading; only the untargeted clean-environment run reproduces the fixture's number.
+# Spread top is 7131, so the headroom is again the usual 6 over it.
+FORK_BUDGET=7137
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

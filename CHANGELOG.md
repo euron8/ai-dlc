@@ -60,6 +60,17 @@ programmatic reader of `docs/reviews/` is area-level or is a grammar enforcer. T
 destination was not invented either — `artifact-path-migration`'s fixture already derives
 `docs/reviews/S301-1-code-review.md` -> `docs/reviews/s301/1-code-review.md`.
 
+**`FORK_BUDGET` rises 7114 -> 7137, and the new arm is not what raised it.** The gate refused
+the first push on it, correctly. Measured by cutting the arm out of the validator, profiling
+untargeted under `env -i`, and restoring the file byte-identically with `cmp -s`, both runs
+exiting 0: **7130 without the arm and 7130 with it**, spread 7129-7131 — the arm costs ZERO
+forks, its predicate being `[[ =~ ]]` throughout with one resolver call the existing token/slot
+pair already pays for. The rise from origin/main's 7088 is this release's own corpus growth:
+the script walks `docs/` and `core/`, and this release adds two backlog entries, their archive
+rows and a CHANGELOG section. Profiling `--target <copy>` instead answers 7218 with EXIT 1, a
+different and FAILING run, and an inherited environment answers 7218 too; only the untargeted
+clean-environment run reproduces the fixture's number.
+
 Section 7 of the `artifact-path-conformance` fixture guards both prescriptions, keyed on the
 reserved slot and the resolved token ERE and never on a basename spelling — `<story-index>-code-review.md`
 and `code-review-<story-index>.md` are both correct, and a fixture rejecting a competent
