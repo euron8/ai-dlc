@@ -9,27 +9,100 @@ and status records that were current when they were written and that THIS BLOCK 
 it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from it.**
 
-### BATCH 16 IS DONE. THE RULING THAT SET IT IS DISCHARGED. BATCH 17 RESUMES THE CONVENTION.
+### BATCH 17 IS DONE AND SHIPPED AS `v0.429.0`. THE SPRINT-306 SET IS FULLY DISCHARGED.
 
-**BATCH 16 DISCHARGED THE WHOLE SPRINT-306 SET AND SHIPPED AS `v0.428.0`.** The operator's
-ruling — *"the upstream push candidates that have been filed as part of graph's current sprint
-need to be addressed with priority. I'd like the plan to address each of them in the next
-batch."* — is SATISFIED. **The one-subject-per-batch convention and the standing `BL-051`
-recommendation resume at batch 17**, and numbered action 1 below is batch 17's, not batch 16's.
+**BATCH 17 TOOK THE REMAINING THREE SPRINT-306 CANDIDATES AND SHIPPED THEM AS `v0.429.0`**, on an
+explicit operator ruling taken twice: first on the seventh candidate alone, then — when the
+consumer filed two more WHILE THE BATCH WAS RUNNING — on all three together. **The sprint-306 set
+is now nine candidates and every one is discharged.** The three:
 
-**THE SET GREW FROM FIVE TO SIX WHILE THE BATCH WAS RUNNING, AND THAT IS THE NORMAL CASE, NOT A
-SURPRISE.** A live graph session filed `PC-S306-STUB-AUDIT-PHASE-N-MATCHES-WORD-BOUNDED-PROSE`
-mid-batch; it was taken into scope under this file's own rule and discharged with the other
-five. **The consumer's ledger moves while you read it.** Its md5 changed twice more during the
-batch and the consumer's tree went from dirty-with-the-ledger-uncommitted to clean, because a
-graph session committed. Re-derive the S306 set at the START of any batch that touches it, and
-expect it to have grown.
+| candidate | what landed |
+|---|---|
+| `PC-S306-UNSOLICITED-CONTEXT-HAS-NO-PROVENANCE-SIGNAL` | `core/hooks/ai-dlc-context-provenance.sh`, a sourced library; all nine `additionalContext` emitters open with a marker line carrying a nonce written to `_bmad-output/.ai-dlc-context-nonce`. `I98` binds the fleet both ways |
+| `PC-S306-WAIT-BEAT-CANNOT-DISTINGUISH-SLOW-FROM-NEVER` | the beat reads teammate transcript mtimes and reports `TEAMMATE IDLE, DELIVERABLE ABSENT` / `LIVENESS` / `unavailable`; threshold measured over 1,337 real transcripts |
+| `PC-S306-WORKTREE-DELIVERABLE-PATH-AMBIGUOUS-PRIMARY-VS-WORKTREE` | item 7 of the worktree dispatch protocol, sited in the NUMBERED list where the lead authors the prompt |
 
-**THE PULL REMAINS DEFERRED BY THE OPERATOR.** *"I won't execute the pull to graph right now."*
-The runbook is `docs/plans/graph-pull-0425-to-0428.md` — retitled and re-scoped for the wider
-range this release created — written, NOT STARTED, and not yours to run. The delivery gap is
-now THREE releases and that is an accepted state, not a trigger. Keep MEASURING and REPORTING it
-per action 7, and do not let its growth reorder the work.
+**THE CONSUMER FILED TWO CANDIDATES MID-BATCH AND THAT IS NOW THE SECOND CONSECUTIVE BATCH IT HAS
+HAPPENED IN.** Live candidates went 67 → 69 → 70 while this batch ran. **Re-derive the set at the
+START of any batch and again before you close it**, and do not treat a growing set as a reason to
+narrow scope — that is the operator's call and they have now made it the same way twice.
+
+**THE PULL REMAINS DEFERRED BY THE OPERATOR AND THE GAP IS NOW FOUR RELEASES.** The runbook is
+`docs/plans/graph-pull-0425-to-0429.md`, renamed, re-scoped and **RE-REHEARSED** for this range.
+Consumer installed **0.425.0**, distribution **0.429.0**, **nine** discharged candidates the
+consumer cannot see. Keep measuring and reporting it per action 7; do not run it.
+
+### THE REHEARSAL FOUND A DEFECT THAT WOULD HAVE REACHED EVERY CONSUMER, AND THAT IS THE BATCH'S BEST FINDING
+
+The incoming `apply.sh` emitted `WORKLIST settings-merge … hook(s) present and UNREGISTERED:
+ai-dlc-context-provenance.sh`. That file is a SOURCED LIBRARY — no event invokes it — so the row's
+own remedy, registering it, would have wired every consumer's settings to a command that reads no
+stdin and decides nothing. **The pull would have handed every consumer an instruction to do the
+wrong thing, in a row whose entire purpose is to be obeyed.**
+
+The exemption had been taught to the distribution's `I13` and to the `hook-registration-join`
+fixture, and NOT to `core/scripts/validate-hook-registration.sh` — the copy a CONSUMER runs and
+the OWNER of the predicate. **A green run here and a green run there are not the same claim, and
+this is the shape that difference takes.** Nothing in this repo could have found it: only driving
+the real pull against a real consumer copy did.
+
+**REHEARSE EVERY RUNBOOK AGAINST A SCRATCH COPY BEFORE WRITING ITS NUMBERS.** This is the first
+time in the program that the rehearsal caught a consumer-facing defect rather than merely
+producing figures.
+
+### WHAT ELSE THIS BATCH MEASURED, EACH OF WHICH COST A GATE RUN
+
+**THE GATE REFUSED FOUR PUSHES AND EVERY REFUSAL WAS CORRECT.** `I77` twice on the same file,
+then a fixture bound, then a boundary arm. Budget for it: a batch that adds a hook, a library or
+a fixture directory will not pass first time.
+
+**`git update-index --chmod=+x` SETS THE INDEX, AND THE NEXT `git add` UNDOES IT.** `I77` fired
+twice on `ai-dlc-context-provenance.sh` because the working-tree file was still 0644 and a later
+`git add -A` re-read the mode off disk. `chmod +x` the FILE, then add.
+
+**A NEW SessionStart PAYLOAD CAN BREAK POST-COMPACTION RECOVERY, SILENTLY.** The provenance
+contract attached to every SessionStart emission put `ai-dlc-recover.sh`'s block at **10482**
+characters against a 9500 bound and a **10000 cliff past which the harness replaces the entire
+block with a file-path stub** — the fix for one silent failure causing another, in the one hook
+whose job is surviving a compaction. It had 427 characters of headroom. **Site a new payload on a
+hook with budget; do not shorten a security explanation to fit.**
+
+**A PER-EMISSION NONCE BREAKS EVERY BYTE-COMPARISON OF HOOK OUTPUT.** Four fixture arms asserted
+either the contract's old location or byte-identity across two emissions. All four were
+re-anchored, none relaxed. **Ask what a change makes permanently true downstream** — here, that
+two emissions of one hook now differ by design.
+
+**AN ADVERSARIAL HAND FOUND FOUR DEFECTS IN THE FIX BEFORE IT LANDED AND ALL FOUR WERE REAL.** The
+marker was not a LINE at seven of nine call sites (`$( )` strips trailing newlines, so a
+line-anchored check scored **0** on a real emission and **1** on the library's own output); the
+header claimed the nonce was unreachable by a tool result, which is false — the property is about
+ORDERING, not the channel; the stated replay window was tighter than the enforced one; and a third
+limit went unstated, that membership in a MUTABLE LOCAL FILE makes write access forge access.
+**Run the adversarial pass BEFORE the merge. This is the first batch that did, and it is the
+reason the release is correct.**
+
+**THE ADVERSARY ALSO FILED A FALSE FINDING WORTH KEEPING.** It reported a destructive `git clean`
+deleting untracked fixture directories mid-flight, having measured three directories vanishing
+together with zero `??` entries. That was the lead's own `FORK_BUDGET` differential — `mv` out,
+measure, `mv` back. **The observation was right and the inference was wrong, and the underlying
+ask still stands**: an untracked directory moved aside is indistinguishable from one deleted, and
+a hand writing into that path during the window would have been clobbered by the restore. Commit
+new fixture directories BEFORE taking a differential over them.
+
+**TWO OF THE LEAD'S OWN INSTRUMENTS WERE WRONG AND THE HARNESS SAID SO RATHER THAN SCORING A
+KILL.** `grep -c` PRINTS 0 and EXITS 1 on no match, so a `|| printf 0` fallback emitted a SECOND
+zero and a comparison read a two-line value. And a receipt carried a LITERAL NEWLINE inside a
+quoted payload — `backlog-reverify.sh` extracts one line, so it scored 0 from the file and 1
+through the engine. **A multi-line receipt mis-scores silently forever.**
+
+**A RECEIPT ORDERING BUG THAT ONLY SCORING FOUND.** New contract assertions called a function
+that ROTATES the nonce, and sat between capturing a nonce and asserting its reuse — so the
+receipt failed against the correct fix. **Scoring is not a formality; it has now moved a receipt
+in four consecutive batches.**
+
+**FOUR OF FOUR HANDS DELIVERED AGAIN**, every one with a TREE deliverable. The fixture hand's
+arms were RIGHT and the lead's library was WRONG on the blank-line path — the fixture failed,
+the library was fixed, and that is the mechanism working in the direction it is built for.
 
 ### THE GOAL, restated because this program measurably drifted off it
 
@@ -204,7 +277,7 @@ grep -cx 'PC-S300-SEVEN-VALIDATORS-SHIPPED-NON-EXECUTABLE-AT-0.242.0' /tmp/arch.
 grep -cx 'PC-S999-NEVER' /tmp/filed.txt                                                  # control: 0
 ```
 
-Re-derived at v0.428.0: **66 live candidates, 122 archived**, partition control 0, all three
+Re-derived at v0.429.0: **70 live candidates, 122 archived**, partition control 0, all three
 presence controls 1, absence control 0. **The live count rose from 60 to 65 and then to 66
 across two consecutive ai-dlc sessions** — graph sessions filed sprint 306's candidates while
 this file was being edited, and the ledger's md5 moved four times in all, twice while a batch
@@ -234,8 +307,9 @@ comm -12 /tmp/live.txt /tmp/closed_here | comm -23 - /tmp/in_msgs   # discharged
 comm -12 /tmp/arch.txt /tmp/closed_here | wc -l
 ```
 
-Re-derived at v0.428.0 by running the commands: **12 DISCHARGED, 22 in flight, 32 untouched**,
-summing to 66, **0 discharged-but-unnamed**, and **14 TERMINAL**. That unnamed line is a real
+Re-derived at v0.429.0 by running the commands: **15 DISCHARGED, 22 in flight, 33 untouched**,
+summing to 70, **0 discharged-but-unnamed**, and **14 TERMINAL**. The overlap the control catches
+is still the single `PC-S303-STUB-AUDIT-MARKER-...` id, subtracted from DISCHARGED. That unnamed line is a real
 failure mode and not a formality: a fix that ships without its id in the commit MESSAGE discharges
 the candidate and produces no row anywhere, so the consumer never learns of it.
 
@@ -269,8 +343,8 @@ pull that closed two candidates — the program's own scoreboard resets on succe
 forever", inverted: here the subject's deletion reads as REGRESS.
 
 **REPORT `TERMINAL` AS THE DELIVERED TOTAL AND `DISCHARGED` AS WORK AWAITING THE CONSUMER'S OWN
-CLOSE.** They are disjoint, because `live.txt` and `arch.txt` partition. At v0.428.0 that is
-**14 delivered and closed, 12 delivered and awaiting close — 26 in total against a headline of 12.**
+CLOSE.** They are disjoint, because `live.txt` and `arch.txt` partition. At v0.429.0 that is
+**14 delivered and closed, 15 delivered and awaiting close — 29 in total against a headline of 15.**
 Both figures are ceilings on coverage rather than adjudications, for the reason the next paragraph
 gives: a citation is a filing, not a disposition.
 
@@ -299,16 +373,19 @@ cat VERSION                                                                     
 git log --format='%H' -F --grep="<id>" origin/main | tail -1                            # then git show "${sha}:VERSION"
 ```
 
-**AT v0.428.0 THE GAP IS THREE RELEASES AND THE OPERATOR HAS DEFERRED CLOSING IT.** Consumer
-installed **0.425.0**, distribution **0.428.0**, **seven** discharged candidates the consumer
-cannot see — `PC-S304` from `v0.426.0` and the whole sprint-306 six from this release. The
-runbook is `docs/plans/graph-pull-0425-to-0428.md`, LIVE and NOT STARTED, and the operator has
-said they will not run it now. **Keep measuring the gap and reporting it; do not run it, and do
-not treat its growth as a reason to reorder the work.**
+**AT v0.429.0 THE GAP IS FOUR RELEASES AND THE OPERATOR HAS DEFERRED CLOSING IT.** Consumer
+installed **0.425.0**, distribution **0.429.0**, **nine** discharged candidates the consumer
+cannot see — `PC-S304` from `v0.426.0`, the sprint-306 six from `v0.428.0` and the sprint-306
+three from `v0.429.0`. The runbook is `docs/plans/graph-pull-0425-to-0429.md`, LIVE, RE-REHEARSED
+and NOT STARTED, and the operator has said they will not run it now. **Keep measuring the gap and
+reporting it; do not run it, and do not treat its growth as a reason to reorder the work.**
 
-**THE PENDING SET IS NOW SEVEN AND EVERY ONE OF THEM IS A SPRINT THE CONSUMER IS STILL RUNNING.**
-The six sprint-306 fixes were filed by that consumer days ago, against defects it hit live. That
-raises what the deferral costs; it does not change whose call it is. Report the number and stop.
+**THE PENDING SET IS NINE AND EVERY ONE IS A SPRINT THE CONSUMER IS STILL RUNNING.** That raises
+what the deferral costs; it does not change whose call it is. Report the number and stop.
+
+**AND THE REHEARSAL IS NOT OPTIONAL BOOKKEEPING — IT IS WHERE THIS PROGRAM'S ONLY CONSUMER-FACING
+DEFECT WAS CAUGHT.** `v0.429.0`'s rehearsal found a `WORKLIST` row instructing every consumer to
+register a sourced library as a hook. Re-rehearse before writing any figure into a runbook.
 
 The gap was ZERO at v0.425.0, which was the first time in the program it had been closed. **A ZERO
 GAP IS A STATE, NOT AN ACHIEVEMENT THAT STAYS TRUE**, and it went non-zero on the very next release
@@ -379,7 +456,7 @@ those have not been examined at all. Their status in the consumer's own ledger i
 ESTABLISHED**; some may already be `WITHDRAWN` or `ADOPTED` upstream. **Establish that before
 treating 20 as a workload.**
 
-Re-derived at v0.428.0 by running the commands, not by editing the sentence: **70 live / 39
+Re-derived at v0.429.0 by running the commands, not by editing the sentence: **70 live / 42
 archived**, against an impossible-verdict control of 0 and a `BL-006`-still-live control of 1.
 Batch 16 filed six (`BL-104`–`BL-109`) and rotated all six in the same release, so live went
 70 → 76 → 70 and the archive went 33 → 39. **Batch 14 recorded 31 archived and the rotation of
@@ -884,42 +961,32 @@ so no block written before it changes verdict.
 
 1. **PICK ONE SUBJECT FROM THE PC-BACKED CORPUS. THE STANDING RECOMMENDATION IS `BL-051`.**
 
-   **Batch 16's five-candidate exception is SPENT.** The operator's sprint-306 ruling was
-   discharged by `v0.428.0` and the one-subject-per-batch convention is back in force. Do not
-   read the batch-16 record above as an instruction.
+   **THE SPRINT-306 EXCEPTION IS FULLY SPENT.** All nine of that sprint's candidates were
+   discharged across `v0.428.0` and `v0.429.0`. The one-subject-per-batch convention is back in
+   force. **Do not read the batch-16 or batch-17 records above as an instruction.**
 
-   **A SEVENTH SPRINT-306 CANDIDATE WAS FILED WHILE `v0.428.0` WAS BEING MERGED, AND IT IS
-   UNDECIDED.** `PC-S306-UNSOLICITED-CONTEXT-HAS-NO-PROVENANCE-SIGNAL`, filed uncommitted in the
-   consumer's working tree minutes after the batch closed. Its subject is the HARNESS rather than
-   a repo script: hook-appended `system-reminder` blocks carry no structural marker separating
-   them from adversarially-shaped text of the same form, so a lead facing a merge plus a live
-   production deploy had no cheap provenance check and paused to ask the operator. The operator
-   confirmed both points were already established, so the pause produced no information and cost
-   several turns during a production incident. **The suggested direction — a fixed preamble tag
-   plus a session-scoped nonce the lead cross-checks against a value it reads from disk — is
-   buildable in `core/hooks/`, so this is NOT out of scope for being harness-level.**
+   **RE-DERIVE THE LIVE SET BEFORE ANYTHING ELSE, AND EXPECT IT TO HAVE GROWN.** The consumer
+   filed candidates MID-BATCH in each of the last two batches — six became seven became nine.
+   If a NEW sprint's set has opened, say so and ask the operator whether the sprint-306 priority
+   applies to it. **Do not assume it does, and do not assume it does not**; they have ruled on
+   that question twice and both times the answer was to take the whole set.
 
-   **It was NOT taken into batch 16**, because batch 16 had already merged when it appeared, and
-   taking it means a new release. **That is a scope decision and it belongs to the operator.**
-   Present it as a choice with a marked recommendation; do not decide it yourself.
+   **THE PULL IS STILL DEFERRED, AND THE GAP IS NOW FOUR RELEASES AND NINE CANDIDATES.**
+   `docs/plans/graph-pull-0425-to-0429.md` is written, re-rehearsed and NOT STARTED. Do not run
+   it, do not re-litigate it, and do not treat the gap as a reason to reorder this batch. Report
+   it per action 7.
 
-   **RE-DERIVE THE SPRINT-306 SET BEFORE ANYTHING ELSE, AND EXPECT IT TO HAVE GROWN AGAIN.** The
-   consumer filed six across that sprint, the sixth arrived mid-batch and the seventh arrived
-   after the merge. If sprint 307's set has opened, say so and ask the operator whether the same
-   priority applies — do not assume it does, and do not assume it does not.
-
-   **THE PULL IS STILL DEFERRED.** `docs/plans/graph-pull-0425-to-0428.md` stays written and NOT
-   STARTED. Do not run it, do not re-litigate it, and do not treat the growing delivery gap as a
-   reason to reorder this batch. Report the gap per action 7; it is now **3 releases and 7 pending
-   candidates**.
+   **REHEARSE BEFORE YOU WRITE ANY RUNBOOK FIGURE, AND TREAT THE REHEARSAL AS A DETECTOR RATHER
+   THAN A FORMALITY.** `v0.429.0`'s rehearsal caught a `WORKLIST` row that would have told every
+   consumer to register a sourced library as a hook. That is the only consumer-facing defect this
+   program has ever caught before delivery, and nothing inside this repo could have found it.
 
    **THE RECURRENCE NOTE IS STILL OPEN AND STILL NOT YOURS UNLESS THE OPERATOR SAYS SO.** Sprint
-   306 appended a `RECURRED 2026-08-27` block to
-   `PC-S305-DISPATCH-GUARD-SED-PATTERN-BOLD-MISMATCH`. It records that the defect blocked a live
-   incident fix, that the consumer applied a SCHEMA-side workaround the entry's own text says does
-   not close it, and that the entry's `verify:` clause is HOOK-side only and therefore
-   **structurally cannot detect a schema-side close**. That is a receipt defect in an upstream
-   entry, the same class this program has now hit six times. Read it; take it only on a ruling.
+   306 appended a `RECURRED` block to `PC-S305-DISPATCH-GUARD-SED-PATTERN-BOLD-MISMATCH`,
+   recording that the defect blocked a live incident fix, that the consumer applied a SCHEMA-side
+   workaround the entry's own text says does not close it, and that the entry's `verify:` clause
+   is HOOK-side only and therefore **structurally cannot detect a schema-side close**. Read it;
+   take it only on a ruling.
 
    **THE PC-BACKED COUNT IS NOT THE CORPUS.** Live entries citing a `PC-` id outnumber the corpus,
    because some cite candidates already ARCHIVED upstream — closing those discharges something the

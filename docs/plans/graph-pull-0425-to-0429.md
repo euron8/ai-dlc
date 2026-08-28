@@ -1,8 +1,8 @@
-# Pull the graph consumer from 0.425.0 to 0.428.0
+# Pull the graph consumer from 0.425.0 to 0.429.0
 
 ## RESUME HERE
 
-**You were started with one sentence: `READ and FOLLOW docs/plans/graph-pull-0425-to-0428.md`.**
+**You were started with one sentence: `READ and FOLLOW docs/plans/graph-pull-0425-to-0429.md`.**
 This block is the whole of your entry point and the only current status record in this file.
 
 **Status: NOT STARTED.** Nothing below has been executed.
@@ -30,10 +30,10 @@ intended as a dry run.
 
 ### What this range carries, and what is special about it
 
-**Three releases, `0.426.0`, `0.427.0` and `0.428.0`, and the third one is most of the range.**
-Twenty-three changed core paths in all: fourteen modified and three added by `0.428.0` alone.
+**Three releases, `0.426.0`, `0.427.0` and `0.429.0`, and the third one is most of the range.**
+Twenty-three changed core paths in all: fourteen modified and three added by `0.429.0` alone.
 
-**`0.428.0` DISCHARGES THE WHOLE SPRINT-306 CANDIDATE SET — SIX CANDIDATES THIS CONSUMER FILED
+**`0.429.0` DISCHARGES THE WHOLE SPRINT-306 CANDIDATE SET — SIX CANDIDATES THIS CONSUMER FILED
 ITSELF, AGAINST DEFECTS IT HIT LIVE.** They are the reason this pull is worth running, and each
 one changes something this consumer touches every sprint:
 
@@ -125,82 +125,60 @@ changed since this file was first written — read the rehearsal.**
 
 Rehearsed on a `file://` clone of the distribution against a scratch copy of this consumer's
 committed `HEAD` — never against this tree in place. **These are an EXPECTATION, not a
-guarantee.** The consumer has moved since the rehearsal, and every figure here is a hypothesis
-about a tree that changes.
+guarantee.** The consumer moves constantly; every figure here is a hypothesis about a tree that
+has changed since it was measured. **A disagreement is information and is worth more than a
+clean report — STOP and ping the operator rather than reconciling it yourself.**
 
-`preclassify.sh` produced **23 rows**:
+`preclassify.sh` produced **45 rows**:
 
 | bucket | count |
 |---|---|
-| `UPSTREAM-ONLY` | 19 |
-| `UPSTREAM-ONLY-ADD` | 2 |
-| `DIST-ONLY-SKIP` | 2 |
+| `UPSTREAM-ONLY` | 33 |
+| `UPSTREAM-ONLY-ADD` | 6 |
+| `DIST-ONLY-SKIP` | 6 |
 | `->CLASSIFY` | **0** |
 
-The two `DIST-ONLY-SKIP` rows are `core/fixtures/gate-repair-record-mutants/`, a mutation battery
-that carries a `.dist-only` marker and is correctly not shipped.
+The six `DIST-ONLY-SKIP` rows are two mutation batteries that carry a `.dist-only` marker and one
+distribution-only fixture: `core/fixtures/context-provenance-mutants/` (3 paths),
+`core/fixtures/gate-repair-record-mutants/` (2), and `core/fixtures/shipped-rule-version-floor/run.sh`.
 
-`apply.sh` was then driven for real, twice — once with the consumer's installed copy and once
-with the incoming one. **They no longer agree, and the disagreement is the point:**
+`apply.sh` was then driven for real, twice — once with the consumer's INSTALLED copy and once
+with the incoming one. **They disagree, and the disagreement is the point:**
 
 ```
-installed apply.sh   21 RESOLVED pure-apply, 1 RESOLVED driver-self-update,
-                     1 RESOLVED restamp, 1 RESOLVED consistent, 1 NOTE override-adjudicated,
-                     8 WORKLIST extension-reread
-                     stamp -> 0.428.0        .ai-dlc-applying -> ABSENT
-incoming  apply.sh   21 RESOLVED pure-apply, 1 NOTE override-adjudicated,
+installed apply.sh   39 RESOLVED pure-apply, 1 RESOLVED driver-self-update,
+                     1 RESOLVED restamp, 1 RESOLVED consistent,
+                     1 NOTE override-adjudicated, 8 WORKLIST extension-reread
+                     stamp -> 0.429.0        .ai-dlc-applying -> ABSENT
+incoming  apply.sh   39 RESOLVED pure-apply, 1 NOTE override-adjudicated,
                      8 WORKLIST extension-reread, 1 DECISION restamp-withheld
-                     stamp -> 0.425.0        .ai-dlc-applying -> PRESENT
+                     stamp -> 0.425.0        .ai-dlc-applying -> ABSENT
 ```
 
 `RESOLVED driver-self-update` appears only under the installed copy: that row IS the old driver
-replacing itself mid-run, which is the bootstrapping event named above. **The installed copy is
-what actually runs this pull, so the STAMP is expected to advance and the marker to clear.**
+replacing itself mid-run. **The installed copy is what actually runs this pull, so the stamp is
+expected to advance and no applying-marker should be left behind.**
 
-**EXPECT EIGHT `WORKLIST extension-reread` ROWS, AND THEY ARE REAL WORK RATHER THAN NOISE.** This
-range changes `steps/gate-validation.md`, `steps/bug-investigation.md` and `steps/implementation.md`
-— three core files this consumer's own extensions hook into. The eight entries are
-`extensions/checks/attribution-provenance.md`, `extensions/checks/gate-validation-domain.md`,
-`extensions/checks/gate-validation-push.md`, `extensions/checks/validator-honesty.md`,
-`extensions/steps-domain/bug-investigation-domain.md`,
-`extensions/steps-domain/bug-investigation-push.md`,
-`extensions/steps-domain/implementation-domain.md` and
-`extensions/steps-domain/implementation-push.md`. Each has to be re-read against the new core text
-and given a verdict — still-additive, contradicts-core, or retire. **Check 2's new sprint scoping
-is the change most likely to make an extension entry contradict core**, so read the two
-`gate-validation-*` entries against it first.
+**EXPECT EIGHT `WORKLIST extension-reread` ROWS. THEY ARE REAL WORK, NOT NOISE.** This range
+changes core step files this consumer's own extensions hook into, so each listed extension has to
+be re-read against the new core text. The count is stable across both apply directions, which is
+what says the work is a property of the RANGE rather than of which copy ran.
 
-**THE PREVIOUS REVISION OF THIS FILE PREDICTED ZERO `WORKLIST` ROWS AND THAT PREDICTION IS
-WITHDRAWN.** It was taken over the `0.425.0 → 0.427.0` range, which touched no step file. Do not
-read a `WORKLIST` row here as a disagreement.
+**A `WORKLIST settings-merge` ROW APPEARED IN AN EARLIER REHEARSAL OF THIS SAME RANGE AND WAS A
+DEFECT IN THE DISTRIBUTION, NOT IN THIS CONSUMER.** It named `ai-dlc-context-provenance.sh` as a
+hook present and unregistered. That file is a SOURCED LIBRARY — no event invokes it, the emitting
+hooks source it as a sibling — so the row's own remedy, registering it, would have wired this
+consumer's settings to a command that reads no stdin and decides nothing. `v0.429.0` fixed the
+owner of that predicate, `core/scripts/validate-hook-registration.sh`, to derive the exemption
+from "some sibling sources it" rather than from a name list. **The row is GONE from both apply
+directions in the rehearsal above, measured against a control of 0 in each. If it reappears on
+the real run, STOP** — it means the fixed validator did not reach this tree, and the instruction
+that row carries is the wrong one to follow.
 
-**STOP AND PING THE OPERATOR if the real run disagrees with the table above** — specifically if
-the stamp does NOT reach `0.428.0`, if `.claude/.ai-dlc-applying` is still on disk when the run
-ends, if any `DECISION restamp-withheld` appears, if any row buckets `->CLASSIFY`, or if the
-`WORKLIST` count is not 8. A disagreement is information and is worth more than a clean report.
-It does not mean the pull is broken; it means the consumer moved and the rehearsal's premise
-expired.
-
-**THE CONSUMER WAS BEING WRITTEN WHILE THIS REHEARSAL RAN.** Its ledger's md5 moved three times
-during the release that produced this range, and a seventh sprint-306 candidate was filed
-uncommitted while the rehearsal was in progress. The scratch copy was taken from committed
-`HEAD`, so anything filed after that is not in these figures.
-
-**If the run DOES withhold**, it is not a defect and there is nothing to debug: dispose of every
-`WORKLIST` and `DECISION` row it printed, then run the finisher. The withheld row prints the
-exact command, machinery flag already resolved. Do not hand-edit the stamp.
-
-**COPY THAT COMMAND CAREFULLY.** It prints `<dist>` and `<consumer>` as literal placeholders and
-passes `<theirs>` through verbatim, so you are substituting three arguments by hand into the one
-invocation that writes the next pull's merge base. `0.427.0` makes a wrong one REFUSE — you get
-`DECISION restamp-unresolvable` and nothing is written — but the copy the consumer runs during
-THIS pull is the `0.425.0` one, which has no such refusal. Check the substitutions before you
-press return.
-
-**A re-run of `/ai-dlc-update` does NOT clear a hand-back row.** Those rows are derived from the
-upstream range against your extensions, not from the tree, so an ordinary re-run re-emits them
-and withholds again. `--finish` is the only exit for that case. Measured on a consumer with an
-empty adjudication register: three consecutive ordinary applies, 11 rows each time.
+**The mode-only bootstrapping hazard was measured for this range and does not bite: 0 mode-only
+changes across 45 changed core paths**, where mode-only means the modes differ and the blobs are
+equal. Eleven paths are ADDS, which take the `A` branch rather than the `M` branch the defect
+lives in.
 
 ### Numbered actions
 
@@ -215,7 +193,7 @@ empty adjudication register: three consecutive ordinary applies, 11 rows each ti
 
 4. **If and only if the run emitted `DECISION restamp-withheld`:** dispose of every `WORKLIST`
    and `DECISION` row, then run the finishing command exactly as that row printed it. Confirm
-   afterwards that `.claude/.ai-dlc-version` reads `0.428.0` on all four fields and that
+   afterwards that `.claude/.ai-dlc-version` reads `0.429.0` on all four fields and that
    `.claude/.ai-dlc-applying` is gone. This is a CONDITIONAL action and the rehearsal predicts it
    will not fire.
 
@@ -244,7 +222,7 @@ preapproved — do not stop to ask for one.
 
 ### Done when
 
-1. `.claude/.ai-dlc-version` reads `0.428.0` on `version`, `commit`, `skill_version` and
+1. `.claude/.ai-dlc-version` reads `0.429.0` on `version`, `commit`, `skill_version` and
    `skill_commit`. **Observation point: after action 4, or after action 2 if action 4 did not
    fire.** Reachable today: the rehearsal reached exactly this state under both drivers.
 2. `.claude/.ai-dlc-applying` is absent. Same observation point.
