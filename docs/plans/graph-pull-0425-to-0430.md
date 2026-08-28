@@ -162,9 +162,42 @@ sprint-306 set and is a `docs(backlog)` closure, not an implementation; `git sho
 
 Two entries the file listed as discharged did NOT close and are still open:
 `PC-S306-FANOUT-UNTRACKED-FILES-INVISIBLE` and
-`PC-S306-GATE-REMEDIATION-BLOCKS-INDEPENDENT-DEV-DISPATCH` — upstream's history does not name
-either id, though the behaviours this file describes for both are present at theirs. Their
-receipts, not the entries, are the thing to look at next.
+`PC-S306-GATE-REMEDIATION-BLOCKS-INDEPENDENT-DEV-DISPATCH`.
+
+**THE FIRST DRAFT OF THIS PARAGRAPH SAID "upstream's history does not name either id" AND THAT
+IS FALSE.** Re-derived against `origin/main` with an impossible-id control returning 0: each id
+is named by **two** commit messages, and one of the two is an IMPLEMENTATION commit, not the
+`docs(backlog)` closure this section already discounts —
+`2fb3d244 feat(v0.428.0): build the propagation-fanout corpus from untracked files too` and
+`a00076c3 feat(v0.428.0): let a FAIL on a check the next step never reads repair in parallel`.
+`named_absorbed()` takes `tail -1`, the OLDEST match, which is the `feat` commit in both cases,
+so the upstream side resolves correctly to `v0.428.0`.
+
+So the cause is NOT a missing citation, and "look at the receipts" was an inference from the
+false premise rather than a measurement. The cause is on the CONSUMER's side of the join, and it
+was then MEASURED: both entries state `verify: manual` INLINE, inside backticked prose,
+mid-sentence. `flush()` gates on `has_verify`, which is set only by the anchored pattern at
+`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:1042` — line-start, optional whitespace,
+optional `<br>`, optional `-`/`*` bullet, optional backtick, then `verify:`. Prose before the
+token does not match. **So the directive is present to a READER and absent to the ENGINE, and
+the entry looks complete on inspection.** The remedy is to move it to column 0, not to write a
+receipt. Repaired and closed at `v0.428.0` in consumer PR #976.
+
+**The population is therefore wider than "entries nobody wrote a receipt for" — it includes
+entries whose receipt WAS written and is unparseable, which is the worse half**, because the
+first is visibly empty and the second reads as done.
+
+**And do not measure this with `grep -c '^verify:'`.** That instrument is NARROWER than
+`:1042`'s grammar: it misses an indented, bulleted or backticked directive the engine accepts.
+It returns the right answer for a mid-sentence directive and a FALSE ZERO for the other three
+shapes. Drive the shipping pattern.
+
+The second reachable cause, unmeasured here and still worth checking on any entry that stays
+silent: `named_absorbed()` rejects a label with any character outside `A-Z0-9-`.
+
+**Do not "fix" the drain plan's `0 discharged-but-unnamed` on the strength of this.** That line
+joins our archive against the live ledger through OUR commit messages, and it is correct — the
+invisibility here is on the consumer's side of a different join.
 
 ### Filed against upstream
 
