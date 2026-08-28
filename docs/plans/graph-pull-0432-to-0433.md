@@ -38,6 +38,25 @@ the file set grows while the pipeline runs, so it is not enumerated here. **Do n
 stash or clean it.** Committing makes the branch ahead and the preflight auto-pushes in-flight
 state on what you intended as a dry run.
 
+**AND THE AUTO-PUSH TRIGGER IS WIDER THAN THAT SENTENCE SAYS — MEASURED, ON THIS CONSUMER, BY THE
+SESSION THIS FILE WAS HANDED TO.** The paragraph above names COMMITTING as what makes the branch
+ahead. The real trigger also fires on a branch that has **no upstream configured at all**, which
+needs no commit from you and is already true here:
+
+```
+$ git rev-parse --abbrev-ref --symbolic-full-name @{u}
+fatal: no upstream configured for branch 'ai-dlc/carry-over/dashboard-backlog-s307'
+```
+
+`SKILL.md` step 1 treats that as `AUTO-PUSH: git push -u origin <branch>`, and the preflight runs
+on EVERY invocation — so `/ai-dlc-update` in ANY form, bare and with no `apply` argument, publishes
+the current in-flight branch to origin. **That is an outward-facing write, it is not reversible by
+you, and it is not yours to decide.** If the current branch has no upstream, STOP and ping the
+operator before invoking the skill at all. This is upstream candidate
+`PC-S336-STEP-1-AUTOPUSH-IS-THE-UNGUARDED-TWIN-OF-THE-PUSH-STEP-2-HARDENED`, which was filed
+2026-08-21 and had never been observed live until this run; `BL-086` in the distribution's backlog
+carries its composed root cause with step 2.
+
 The version stamp is `.claude/.ai-dlc-version`. Read the base from there; **no sha is written into
 this file**, because the skill resolves the ref itself and anything written down goes stale the
 moment the next thing lands — including the commit that adds this runbook.
