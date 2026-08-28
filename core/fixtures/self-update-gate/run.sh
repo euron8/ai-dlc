@@ -297,6 +297,282 @@ ss_assert "ss-equals-base" "$(ss_detail "$SS_R2" | grep -c 'SPLIT BUYS NOTHING')
   "skill_commit == commit (no self-update hop) falls back to the original advice"
 ss_stamp -
 
+# --- ARM C: SELF-UPDATE-CARRY, one row per machinery path the consumer diverged on ----
+#
+# Step 2 justifies its autonomy -- no operator gate, auto-merged PR -- on the claim that the
+# skill's own files are overwrite-safe, and then writes the WHOLE machinery set from
+# `theirs`. For a machinery path the consumer has edited that destroys the edit with nothing
+# anywhere reporting it. Filed on the reference consumer as
+# PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH after that tree's
+# own `.githooks/pre-push` came back BOTH-CHANGED on a live pull.
+#
+# ITS OWN MINIATURE DISTRIBUTION, for the same reason --safe-stop needed one: the seeded tree
+# above DEFERS, and an advisory that has only ever been seen beside a DEFER cannot show that
+# it leaves the verdict alone. These arms need a CARRY row and a SELF-UPDATE-OK in one output.
+#
+# THE POPULATION IS THE SUBJECT, NOT THE STRING `BOTH-CHANGED`. Four buckets record a consumer
+# divergence on a machinery path, and a fix keyed on the modified-both-sides one catches a
+# quarter of them while reading as complete. All four are seeded, and one of them carries no
+# `->CLASSIFY` marker at all:
+#
+#   core/git-hooks/pre-push   M  BOTH-CHANGED->CLASSIFY                        literal entry
+#   core/rules/edited.md      M  BOTH-CHANGED->CLASSIFY                        GLOBBED entry
+#   core/rules/doomed.md      D  UPSTREAM-DELETED+consumer-modified->CLASSIFY  absent at THEIRS
+#   core/schemas/fresh.json   A  BOTH-ADDED->CLASSIFY                          absent at BASE
+#   core/scripts/reloc.sh     R  RELOCATE-MOVE+consumer-edited                 no marker
+#
+# ...and TWO NEAR-MISSES, which are the arms that a check emitting unconditionally fails.
+# Each differs from a real offender in exactly one respect, so neither can be excluded by an
+# accident of the tree:
+#
+#   core/rules/steady.md            machinery and in the pull, but the consumer is UNTOUCHED
+#   .../steps/gate-validation.md    diverged, same BOTH-CHANGED bucket, but NOT machinery
+AC="$(dirname "$DIST")/armc"
+rm -rf "$AC"
+mkdir -p "$AC/dist/core/rules" "$AC/dist/core/git-hooks" "$AC/dist/core/schemas" \
+         "$AC/dist/core/scripts" "$AC/dist/core/skills/ai-dlc/steps" \
+         "$AC/cons/.claude/rules" "$AC/cons/.claude/schemas" "$AC/cons/scripts" \
+         "$AC/cons/.claude/skills/ai-dlc/steps" "$AC/cons/.githooks" \
+         "$AC/clean/.claude/rules" "$AC/clean/.claude/skills/ai-dlc/steps" "$AC/clean/.githooks" \
+         "$AC/cwd/core/rules" "$AC/cwd/core/schemas" "$AC/cwd/core/scripts/ai-dlc"
+
+# A DECOY WORKING DIRECTORY, AND IT IS LOAD-BEARING FOR THE `set -f` MUTANT BELOW. The
+# manifest entries are git PATHSPECS; without `set -f` the shell expands them against
+# whatever CWD the caller happened to be in, BEFORE git sees them. That defect is therefore
+# invisible from a CWD with no `core/` in it -- the globs stay literal and reach git intact --
+# so a mutant run from an arbitrary directory would come back green against a real defect.
+# These three files guarantee the expansion has something to bite on, which makes the kill a
+# property of the mutation rather than of where the suite was launched from.
+printf 'decoy\n' > "$AC/cwd/core/rules/decoy.md"
+printf '{}\n'    > "$AC/cwd/core/schemas/decoy.json"
+printf 'decoy\n' > "$AC/cwd/core/scripts/ai-dlc/decoy.sh"
+
+git -C "$AC/dist" init -q
+printf '0.1.0\n'          > "$AC/dist/VERSION"
+printf 'hook base\n'      > "$AC/dist/core/git-hooks/pre-push"
+printf 'doomed base\n'    > "$AC/dist/core/rules/doomed.md"
+printf 'edited base\n'    > "$AC/dist/core/rules/edited.md"
+printf 'steady base\n'    > "$AC/dist/core/rules/steady.md"
+printf 'reloc base\n'     > "$AC/dist/core/scripts/reloc.sh"
+gvv 1                     > "$AC/dist/core/skills/ai-dlc/steps/gate-validation.md"
+git -C "$AC/dist" add -A >/dev/null 2>&1
+git -C "$AC/dist" -c user.email=f@x -c user.name=f commit -qm base >/dev/null 2>&1
+AC_BASE="$(git -C "$AC/dist" rev-parse HEAD)"
+
+printf '0.2.0\n'          > "$AC/dist/VERSION"
+printf 'hook theirs\n'    > "$AC/dist/core/git-hooks/pre-push"
+rm -f                       "$AC/dist/core/rules/doomed.md"
+printf 'edited theirs\n'  > "$AC/dist/core/rules/edited.md"
+printf 'steady theirs\n'  > "$AC/dist/core/rules/steady.md"
+printf '{"v":"theirs"}\n' > "$AC/dist/core/schemas/fresh.json"
+{ gvv 1; printf 'theirs prose\n'; } > "$AC/dist/core/skills/ai-dlc/steps/gate-validation.md"
+git -C "$AC/dist" add -A >/dev/null 2>&1
+git -C "$AC/dist" -c user.email=f@x -c user.name=f commit -qm theirs >/dev/null 2>&1
+AC_THEIRS="$(git -C "$AC/dist" rev-parse HEAD)"
+
+# The diverged consumer. `core/scripts/reloc.sh` is UNCHANGED base->theirs on purpose: its
+# bucket is level-triggered off the consumer's un-migrated copy, and leaving it out of the
+# range also keeps the gating set empty so the verdict below is a clean OK.
+printf 'hook LOCAL EDIT\n'            > "$AC/cons/.githooks/pre-push"
+printf 'doomed LOCAL EDIT\n'          > "$AC/cons/.claude/rules/doomed.md"
+printf 'edited LOCAL EDIT\n'          > "$AC/cons/.claude/rules/edited.md"
+printf 'steady base\n'                > "$AC/cons/.claude/rules/steady.md"
+printf '{"v":"LOCAL"}\n'              > "$AC/cons/.claude/schemas/fresh.json"
+printf 'reloc LOCAL EDIT\n'           > "$AC/cons/scripts/reloc.sh"
+{ gvv 1; printf 'consumer prose\n'; } > "$AC/cons/.claude/skills/ai-dlc/steps/gate-validation.md"
+
+# The undiverged consumer: every copy is BASE, so every bucket is a plain apply. It holds no
+# `scripts/` and no `schemas/` at all, which is the ordinary state -- the relocation pass and
+# the added-file arm both have nothing to say about it.
+printf 'hook base\n'   > "$AC/clean/.githooks/pre-push"
+printf 'doomed base\n' > "$AC/clean/.claude/rules/doomed.md"
+printf 'edited base\n' > "$AC/clean/.claude/rules/edited.md"
+printf 'steady base\n' > "$AC/clean/.claude/rules/steady.md"
+gvv 1                  > "$AC/clean/.claude/skills/ai-dlc/steps/gate-validation.md"
+
+ac_carry() { # ac_carry <gate> <consumer> <cwd> -> CARRY paths, sorted, comma-terminated
+  ( cd "$3" && bash "$1" "$AC/dist" "$AC_BASE" "$AC_THEIRS" "$2" 2>/dev/null ) |
+    awk -F'\t' '$1 == "SELF-UPDATE-CARRY" {print $2}' | sort | tr '\n' ','
+}
+AC_ALL='core/git-hooks/pre-push,core/rules/doomed.md,core/rules/edited.md,core/schemas/fresh.json,core/scripts/reloc.sh,'
+
+# SELF-PROBE, AND IT RUNS BEFORE THE ARMS IT UNDERWRITES. Both absence arms below are claims
+# about a path the bucket derivation DID see and did NOT carry. If preclassify never bucketed
+# them at all, those arms are absences over an empty set: they pass, they read exactly like a
+# discriminating check, and they would go on passing against a gate that emits nothing.
+AC_PRE="$(bash "$(dirname "$GATE")/preclassify.sh" \
+             "$AC/dist" "$AC_BASE" "$AC_THEIRS" "$AC/cons" 2>/dev/null)"
+ac_bucket() { printf '%s\n' "$AC_PRE" | awk -F'\t' -v p="$1" '$2 == p {print $4; exit}'; }
+
+ss_assert "carry-probe-untouched" "$(ac_bucket core/rules/steady.md)" "UPSTREAM-ONLY" \
+  "the untouched machinery near-miss IS in the bucket set, so its missing CARRY row is a decision"
+ss_assert "carry-probe-nonmach" "$(ac_bucket core/skills/ai-dlc/steps/gate-validation.md)" \
+  "BOTH-CHANGED->CLASSIFY" \
+  "the non-machinery near-miss carries a REAL offender's bucket, so only membership can separate them"
+
+AC_OUT="$(bash "$GATE" "$AC/dist" "$AC_BASE" "$AC_THEIRS" "$AC/cons" 2>&1)"
+
+# The row names the CORE path and its detail names the CONSUMER path -- an advisory the
+# operator cannot act on without both is a dead end of the kind advise_safe_stop exists to
+# remove.
+ss_assert "carry-names-path" \
+  "$(printf '%s\n' "$AC_OUT" | awk -F'\t' \
+      '$1 == "SELF-UPDATE-CARRY" && $2 == "core/git-hooks/pre-push" && $3 ~ /\.githooks\/pre-push/ {print "named"; exit}')" \
+  "named" "a consumer-modified machinery path produces a CARRY row naming that path and the consumer's copy"
+
+# THE ARM THAT SEPARATES THE SHIPPED FIX FROM THE PLAUSIBLE WRONG ONE. Exact set, not a
+# count: a check keyed on `BOTH-CHANGED` alone reaches one of these five and every other
+# assertion here still passes.
+ss_assert "carry-population" "$(printf '%s\n' "$AC_OUT" | awk -F'\t' \
+      '$1 == "SELF-UPDATE-CARRY" {print $2}' | sort | tr '\n' ',')" "$AC_ALL" \
+  "every divergence bucket carries -- deleted-upstream, added-both-sides and the relocation row that has no ->CLASSIFY marker"
+
+ss_assert "carry-quiet-untouched" \
+  "$(printf '%s\n' "$AC_OUT" | awk -F'\t' '$1 == "SELF-UPDATE-CARRY" && $2 == "core/rules/steady.md"' | grep -c .)" \
+  "0" "a machinery path in the pull the consumer has NOT touched carries no row"
+
+ss_assert "carry-not-machinery" \
+  "$(printf '%s\n' "$AC_OUT" | awk -F'\t' '$1 == "SELF-UPDATE-CARRY" && $2 ~ /steps\/gate-validation/' | grep -c .)" \
+  "0" "a diverged NON-machinery path carries no row; this gate decides the machinery self-update only"
+
+# ADVISORY, NOT VERDICT. Asserted as the exact verdict set: OK present AND no DEFER or
+# UNDECIDED anywhere. A CARRY row that moved the verdict would stop a cycle that the rest of
+# the slice can complete perfectly well.
+ss_assert "carry-verdict-ok" \
+  "$(printf '%s\n' "$AC_OUT" | awk -F'\t' \
+      '$1 == "SELF-UPDATE-OK" || $1 == "SELF-UPDATE-DEFER" || $1 == "SELF-UPDATE-UNDECIDED" {print $1}' \
+      | sort -u | tr '\n' ',')" \
+  "SELF-UPDATE-OK," "the CARRY rows sit beside an unchanged SELF-UPDATE-OK -- the advisory does not move the verdict"
+
+# THE ZERO CARRIES ITS CONTROL IN THE SAME BREATH. An undiverged consumer must produce no row,
+# and a gate that produced no rows for any other reason would satisfy that identically -- so
+# the bucket count on the SAME tree is asserted non-zero beside it.
+ss_assert "carry-clean-consumer" "$(ac_carry "$GATE" "$AC/clean" "$DIR")" "" \
+  "a consumer that has diverged on nothing gets no CARRY row at all"
+ss_assert "carry-clean-control" \
+  "$(bash "$(dirname "$GATE")/preclassify.sh" "$AC/dist" "$AC_BASE" "$AC_THEIRS" "$AC/clean" 2>/dev/null \
+     | grep -c . | awk '{print ($1 > 0) ? "buckets" : "none"}')" \
+  "buckets" "...and that zero is a decision, not a derivation that never ran"
+
+# COST GUARD WITH AN OBSERVABLE. --safe-stop reads only DEFER and UNDECIDED, so a CARRY row
+# cannot change any answer it computes, and emitting one per release candidate in the range
+# buys nothing. Unlike advise_safe_stop's re-entry guard this one IS observable, so it gets an
+# assertion rather than a comment.
+ss_assert "carry-safe-stop" \
+  "$(AI_DLC_GATE_IN_SAFE_STOP=1 bash "$GATE" "$AC/dist" "$AC_BASE" "$AC_THEIRS" "$AC/cons" 2>/dev/null \
+     | grep -c 'SELF-UPDATE-CARRY')" \
+  "0" "the advisory is suppressed inside a --safe-stop walk, where it could change nothing"
+
+# CWD-INVARIANCE, ASSERTED RATHER THAN INHERITED. The pre-push runner drives this fixture from
+# the repo root; the arms above therefore only ever see one CWD, and the pathspec-expansion
+# defect the `set -f` mutant models is CWD-dependent by nature. Same gate, same tree, a
+# directory built to make the expansion bite.
+ss_assert "carry-cwd-invariant" "$(ac_carry "$GATE" "$AC/cons" "$AC/cwd")" "$AC_ALL" \
+  "the shipped gate answers identically from a CWD whose own core/ would swallow every globbed entry"
+
+# --- MUTANTS on arm C -----------------------------------------------------------------
+#
+# THE COPY NEEDS ITS SIBLINGS. Arm C resolves setup-sites.md and preclassify.sh by
+# `dirname "$0"`, so a lone gate.sh in a bare directory has no machinery manifest and no
+# bucket derivation. It would emit no CARRY row for want of a subject, every mutant would
+# come back "killed", and the battery would be certifying silence.
+#
+# EACH MUTANT IS SCORED ON ITS EXACT CARRY SET, and the five sets are all distinct. Two
+# mutants that produce the same output are one mutant: the first cut of this battery narrowed
+# the bucket key and removed `set -f` and both collapsed to the same single row, so one of
+# them was proving nothing. `core/rules/edited.md` is the seed that separates them -- a
+# BOTH-CHANGED path reached through a GLOB, which survives the narrowed key and dies with the
+# pathname expansion.
+ac_mut() { # ac_mut <name> <sed-expr> -> path to the mutated gate, siblings beside it
+  local d="$AC/m-$1"
+  rm -rf "$d"; mkdir -p "$d"
+  cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$d"/ 2>/dev/null
+  sed "$2" "$GATE" > "$d/self-update-gate.sh"
+  printf '%s\n' "$d/self-update-gate.sh"
+}
+ac_kill() { # ac_kill <label> <sed-expr> <want-carry-set> <why>
+  local g got
+  g="$(ac_mut "$1" "$2")"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if cmp -s "$GATE" "$g"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "$1"
+    return
+  fi
+  got="$(ac_carry "$g" "$AC/cons" "$AC/cwd")"
+  if [ "$got" = "$3" ]; then
+    printf '  ok    %-16s KILLED (%s)\n' "$1" "$4"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]  %s\n' "$1" "$got" "$3" "$4"
+  fi
+}
+
+# THE UNMUTATED CONTROL, and it is doing three jobs: the copy resolves its siblings, the decoy
+# CWD does not change the answer, and the harness can still produce the FULL set -- so a
+# mutant's shortfall below is attributable to the mutation. It is PRESENCE-shaped on purpose:
+# a gate replaced by `exit 0` produces the empty set and fails it, where an arm asserting
+# "nothing went wrong" would pass.
+#
+# It does NOT go through ac_kill: that helper refuses a sed matching nothing, which is the
+# right refusal for a mutant and the wrong one for a control that must not be mutated at all.
+# A control faked with a no-op substitution would trip exactly that guard.
+rm -rf "$AC/m-control"; mkdir -p "$AC/m-control"
+cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$AC/m-control"/ 2>/dev/null
+ss_assert "armc-control" "$(ac_carry "$AC/m-control/self-update-gate.sh" "$AC/cons" "$AC/cwd")" \
+  "$AC_ALL" \
+  "an unmutated copy reproduces the FULL carry set from the decoy CWD, so a mutant's shortfall is the mutation"
+
+ac_kill "armc-mut-bucket" \
+  "s@^          \\*'->CLASSIFY'\\*|\\*consumer-edited\\*) ;;\$@          *'BOTH-CHANGED'*) ;;@" \
+  'core/git-hooks/pre-push,core/rules/edited.md,' \
+  "keying on the modified-both-sides bucket alone drops the deleted, the added and the relocated path"
+
+ac_kill "armc-mut-setf" 's@^    set -f$@    : set -f removed@' \
+  'core/git-hooks/pre-push,' \
+  "without set -f the pathspecs expand against the CWD and the machinery set collapses to the entries carrying no glob character"
+
+ac_kill "armc-mut-base" '/--with-tree="\$BASE"/d' \
+  'core/git-hooks/pre-push,core/rules/edited.md,core/schemas/fresh.json,core/scripts/reloc.sh,' \
+  "resolving the globs at THEIRS alone loses the path deleted upstream, where the consumer's copy is the only copy left"
+
+ac_kill "armc-mut-uncond" 's@^          \*) continue ;;$@          *) ;;@' \
+  'core/git-hooks/pre-push,core/rules/doomed.md,core/rules/edited.md,core/rules/steady.md,core/schemas/fresh.json,core/scripts/reloc.sh,' \
+  "dropping the bucket filter carries a machinery path the consumer never touched"
+
+# THE REMAINING TWO ARE FOR ARMS THAT PASS AGAINST A SUBJECT THAT EMITS NOTHING. Measured, by
+# running this fixture against a gate replaced with `exit 0`: carry-quiet-untouched,
+# carry-not-machinery, carry-clean-consumer and carry-safe-stop all reported ok. They are
+# absence-shaped, so only a mutant on their OWN guard establishes that they discriminate --
+# and arm C has THREE independent guards, not one. The bucket filter above reaches the first;
+# these reach the other two, and neither is covered by any mutant already here: dropping the
+# bucket filter does NOT carry the non-machinery path, and dropping the membership test does
+# NOT carry the untouched one.
+ac_kill "armc-mut-member" \
+  's@^        grep -qxF "\$c_path" <<EOF || continue$@        true <<EOF || continue@' \
+  'core/git-hooks/pre-push,core/rules/doomed.md,core/rules/edited.md,core/schemas/fresh.json,core/scripts/reloc.sh,core/skills/ai-dlc/steps/gate-validation.md,' \
+  "dropping the machinery-membership test carries a diverged path this gate does not decide"
+
+# Scored under the env var rather than without it, because that IS the guard's subject: the
+# arm it backs asserts an absence that only exists inside a --safe-stop walk.
+AC_M6="$(ac_mut safestop 's@^if \[ -z "\${AI_DLC_GATE_IN_SAFE_STOP:-}" \]; then$@if true; then@')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$AC_M6"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "armc-mut-safestop"
+else
+  ac_got6="$( AI_DLC_GATE_IN_SAFE_STOP=1; export AI_DLC_GATE_IN_SAFE_STOP
+              ac_carry "$AC_M6" "$AC/cons" "$AC/cwd" )"
+  if [ "$ac_got6" = "$AC_ALL" ]; then
+    printf '  ok    %-16s KILLED (%s)\n' "armc-mut-safestop" \
+      "removing the re-entry guard emits the whole advisory inside a --safe-stop walk"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]  %s\n' "armc-mut-safestop" "$ac_got6" "$AC_ALL" \
+      "removing the re-entry guard must emit the whole advisory inside a --safe-stop walk"
+  fi
+fi
+
 echo
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."

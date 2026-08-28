@@ -2113,18 +2113,30 @@ not, because its operator stopped and reasoned about it. The finding is that not
 would have stopped it. **And this is the bootstrapping shape** — step 2 delivers step 2, so the
 release carrying the fix is written by the unfixed step.
 
-The anchor is the condition, in either place a fix can be sited, and it is not the filing's own
-anchor. That one was `theirs_has SKILL.md "the consumer never edits them"` — an inverted verb: the
-sentence is present at `:207` today, so the receipt reads CLOSE while the defect is live. A gate arm
-or a step-2 subtraction must both NAME the bucket. Probed in both directions: `preclassify` already
-appearing in step 2, and `BOTH-CHANGED` appearing in `SKILL.md` outside step 2, each leave it
-non-zero.
+**The receipt DRIVES the gate; it no longer reads either file.** The filing's own anchor was
+`theirs_has SKILL.md "the consumer never edits them"` — an inverted verb, so it read CLOSE while the
+defect was live. The receipt that replaced it grepped both files for the bucket token, and a
+COMMENT naming the bucket closed it with no behaviour changed. The one here seeds a throwaway
+distribution and two consumers under `mktemp`, runs `self-update-gate.sh` against both, and requires
+a `SELF-UPDATE-CARRY` row for the diverged consumer on TWO different divergence shapes while
+requiring the non-diverged consumer to get NONE. Scored against six implementations before it
+shipped — defect-live 1, prose-only comment 1, unconditional emission 1, a key narrowed to the
+literal `BOTH-CHANGED` 1, a second spelling of the correct fix 0, the shipped fix 0.
+
+**The population is wider than this entry filed it, and keying on `BOTH-CHANGED` catches one case of
+three.** `preclassify.sh` marks a consumer-diverged machinery path `BOTH-CHANGED->CLASSIFY` when
+both sides edited it, `UPSTREAM-DELETED+consumer-modified->CLASSIFY` when upstream deleted what the
+consumer kept and changed, and `BOTH-ADDED->CLASSIFY` when both sides created it independently. All
+three destroy consumer state on a blind write, and the last two carry the most, since in the deleted
+case the consumer's copy is the only copy left. The shipped key is the `->CLASSIFY` marker plus
+`RELOCATE-MOVE+consumer-edited`, which is the same key `apply.sh`'s own `*CLASSIFY*)` dispatch reads
+to emit the `WORKLIST semantic-merge` row this fix hands the path to.
 
 Discharges the consumer entry `PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH`
 at pinned ledger line 3918.
 
 
-verify: sh S=core/skills/ai-dlc-update/SKILL.md; G=core/skills/ai-dlc-update/reconcile/self-update-gate.sh; s="$(sed -n '/^2\. \*\*Self-update/,/^3\. \*\*Mechanical/p' "$S")"; grep -qF ALREADY-AT-THEIRS <<<"$s" && grep -qF SELF-UPDATE-OK "$G" || { echo "CONTROL FAILED"; exit 9; }; grep -qE 'BOTH-CHANGED|consumer-modified' <<<"$s" && exit 0; grep -qE 'BOTH-CHANGED|consumer-modified' "$G" && exit 0; exit 1
+verify: sh t=$(mktemp -d "${TMPDIR:-/tmp}/bl051-XXXXXX") || exit 9; d=$t/d; c=$t/c; k=$t/k; mkdir -p "$d/core/git-hooks" "$d/core/rules" "$c/.githooks" "$c/.claude/rules" "$k/.githooks" || exit 9; git -C "$d" init -q && git -C "$d" config user.email r@r && git -C "$d" config user.name r || exit 9; printf '#!/usr/bin/env bash\nexit 0\n' > "$d/core/git-hooks/pre-push"; printf 'base rule\n' > "$d/core/rules/doomed.md"; printf '0.1.0\n' > "$d/VERSION"; git -C "$d" add -A && git -C "$d" commit -qm base || exit 9; b=$(git -C "$d" rev-parse HEAD); cp "$d/core/git-hooks/pre-push" "$k/.githooks/pre-push"; printf '#!/usr/bin/env bash\n# upstream reworks it\nexit 0\n' > "$d/core/git-hooks/pre-push"; git -C "$d" rm -q core/rules/doomed.md; printf '0.2.0\n' > "$d/VERSION"; git -C "$d" add -A && git -C "$d" commit -qm theirs || exit 9; h=$(git -C "$d" rev-parse HEAD); printf '#!/usr/bin/env bash\nexit 0\n# consumer local edit\n' > "$c/.githooks/pre-push"; printf 'base rule\nconsumer kept and edited this\n' > "$c/.claude/rules/doomed.md"; g=core/skills/ai-dlc-update/reconcile/self-update-gate.sh; p=core/skills/ai-dlc-update/reconcile/preclassify.sh; [ -f "$g" ] && [ -f "$p" ] || exit 9; o=$(bash "$g" "$d" "$b" "$h" "$c" 2>/dev/null); q=$(bash "$g" "$d" "$b" "$h" "$k" 2>/dev/null); n=$(printf '%s\n' "$o" | grep -c '^SELF-UPDATE-'); m=$(printf '%s\n' "$q" | grep -c '^SELF-UPDATE-'); z=$(bash "$p" "$d" "$b" "$h" "$c" 2>/dev/null); u=$(printf '%s\n' "$z" | grep -c 'core/git-hooks/pre-push.*CLASSIFY'); w=$(printf '%s\n' "$z" | grep -c 'core/rules/doomed.md.*CLASSIFY'); v=$(bash "$p" "$d" "$b" "$h" "$k" 2>/dev/null | grep -c 'CLASSIFY'); [ "$n" -gt 0 ] && [ "$m" -gt 0 ] && [ "$u" -eq 1 ] && [ "$w" -eq 1 ] && [ "$v" -eq 0 ] || { echo "CONTROL FAILED (gate rows $n/$m, both-changed=$u, upstream-deleted=$w, near-miss=$v)"; rm -rf "$t"; exit 9; }; printf '%s\n' "$o" | awk -F'\t' '$1=="SELF-UPDATE-CARRY" && $2=="core/git-hooks/pre-push"{a=1} $1=="SELF-UPDATE-CARRY" && $2=="core/rules/doomed.md"{e=1} END{exit !(a&&e)}' && ! printf '%s\n' "$q" | awk -F'\t' '$1=="SELF-UPDATE-CARRY"{f=1} END{exit !f}'; r=$?; rm -rf "$t"; exit $r
 ## BL-053
 
 **Core's two readers of an escalation's `**Status:**` field disagree on which line in an entry
@@ -3352,6 +3364,49 @@ entries survive an unreadable sibling, and a fix that merely moves the exit poin
 whenever the unreadable file sorts first.
 
 verify: sh V=core/scripts/validate-layer-entries.sh; C=core/skills/ai-dlc/layer-contract.yaml; [ -f "$V" ] && [ -f "$C" ] || exit 9; d=$(mktemp -d) || exit 9; trap 'chmod -R u+rwX "$d" 2>/dev/null; rm -rf "$d"' EXIT; K="$d/.claude/skills/ai-dlc"; mkdir -p "$K/extensions" "$K/steps" || exit 9; cp "$C" "$K/" || exit 9; printf -- '---\nname: retro\ndescription: s\n---\n\n# R\n' > "$K/steps/retro.md"; printf -- '---\nkind: role\nid: good\nhooks: steps/retro.md\npush_candidate: false\nconforms_to: 1\n---\n# G\n' > "$K/extensions/zz-broken.md"; printf -- '---\nkind: role\nid: u\nhooks: steps/retro.md\npush_candidate: false\nconforms_to: 1\n---\n# U\n' > "$K/extensions/aa-unreadable.md"; B=$(bash "$V" "$d" 2>/dev/null | grep -c 'zz-broken'); [ "$B" -ge 1 ] || { echo "HARNESS BROKEN: the readable control entry drew no finding to lose"; exit 9; }; chmod 000 "$K/extensions/aa-unreadable.md"; if awk '{exit}' "$K/extensions/aa-unreadable.md" 2>/dev/null; then echo "HARNESS BROKEN: seal did not take"; exit 9; fi; A=$(bash "$V" "$d" 2>/dev/null | grep -c 'zz-broken'); [ "$A" -ge 1 ]
+
+## BL-124
+
+**Arm C's carry list falsifies a premise `unregistered-drift.sh` states in its own remedy text, and
+that file was not touched by the change that broke it.**
+`core/skills/ai-dlc-update/SKILL.md:722` describes the `CORE-AT-SELF-UPDATE` row as resting on
+"Step 2's autonomous self-update rewrites the whole MACHINERY set", and
+`core/skills/ai-dlc-update/reconcile/unregistered-drift.sh:359` prints the same claim to the
+operator — "the autonomous self-update (step 2) wrote it ... No action: `apply` carries it to theirs
+with the rest of the machinery."
+
+**As of v0.436.0 step 2 no longer rewrites the whole machinery set.** `self-update-gate.sh`'s ARM C
+emits a `SELF-UPDATE-CARRY` row for every machinery path the consumer has diverged on, and step 2
+writes none of them. So after a self-update the machinery set sits at `skill_commit` EXCEPT the
+carried paths, and a carried path is byte-identical to neither `base` nor `skill_commit` nor
+`theirs`. It therefore falls past the `CORE-AT-SELF-UPDATE` arm into an ordinary drift status whose
+printed remedy is to re-adopt upstream's text — against the one path the consumer deliberately owns
+and which step 7 is already carrying as a `WORKLIST semantic-merge` item.
+
+**Not claimed:** that this loses data. The path is reported twice rather than zero times, and the
+second report argues for the opposite action from the first. The consequence is a contradictory
+worklist, not an overwrite — which is why this is filed rather than folded into the release that
+caused it. The remedy is a row in `unregistered-drift.sh`'s own vocabulary for a path the gate
+carried, and that is a different subsystem from the one v0.436.0 changed.
+
+**The stamp is the second half and is stated separately.** Step 2 advances
+`skill_version`/`skill_commit` to `theirs` on a cycle that carried a path, so
+`self-update-gate.sh`'s `machinery_at_or_past()` then reads a stamp asserting machinery landed that
+did not. Its only consumer is the SAFE-STOP advisory wording, so the cost is a misleading sentence
+rather than a wrong verdict — but the two halves want one answer, not two.
+
+**The receipt's limit, stated rather than discovered later.** It keys on the emission LINE and on
+the row's own description block, and it carries a control that exits 9 if arm C is absent — without
+arm C nothing falsifies the premise and the entry is not yet live. Scored three ways: unfixed 1,
+the claim withdrawn from the emitter 0, the file taught the `SELF-UPDATE-CARRY` token 0. **That
+last arm is a whole-file `grep` and a COMMENT naming the token satisfies it** — the same weakness
+`BL-051` was closed for. It is accepted here because the alternative keys on wording a fix is free
+to rephrase, and because the first two arms cannot be closed by prose. Whoever takes this entry
+should replace the third arm with one that drives `unregistered-drift.sh` against a seeded tree
+holding a carried path, the way `BL-051`'s receipt drives the gate.
+
+verify: sh U=core/skills/ai-dlc-update/reconcile/unregistered-drift.sh; S=core/skills/ai-dlc-update/SKILL.md; G=core/skills/ai-dlc-update/reconcile/self-update-gate.sh; [ -r "$U" ] && [ -r "$S" ] && [ -r "$G" ] || exit 9; grep -qF 'SELF-UPDATE-CARRY' "$G" || { echo 'CONTROL FAILED: arm C absent, so nothing falsifies the premise'; exit 9; }; e=$(awk 'index($0,"emit CORE-AT-SELF-UPDATE")' "$U"); r=$(awk 'index($0,"CORE-AT-SELF-UPDATE"){f=1} f{print} f && index($0,"HARD-DRIFT-SCAN-UNAVAILABLE"){exit}' "$S"); [ -n "$e" ] && [ -n "$r" ] || { echo 'CONTROL FAILED: emission site or row description not found'; exit 9; }; grep -qF 'SELF-UPDATE-CARRY' "$U" && exit 0; printf '%s\n' "$r" | grep -qF 'SELF-UPDATE-CARRY' && exit 0; printf '%s\n' "$e" | grep -qF 'with the rest of the machinery' || exit 0; printf '%s\n' "$r" | grep -qF 'rewrites the whole MACHINERY set' || exit 0; exit 1
+
 
 ## BL-123 — the read-failure collapse is unfixed on `layer-contract.yaml`, and its message tells the operator the file is malformed
 
