@@ -314,8 +314,17 @@ S5_delivered_is_silent() {
   W="$(mk_work)"
   TD="$TMPROOT/s5-td"; mk_transcript "$TD" 7200 agent-aone-1.jsonl
 
+  # ARM FROM AN EPOCH THAT PRECEDES THE WRITE, and this is the subject's own escape hatch
+  # rather than a workaround. The join accepts a deliverable only if it was written SINCE the
+  # join armed, and a single-shot beat arms at invocation — so a file created on the line above
+  # can only ever be as new as the arming instant, never newer. It passed for as long as the two
+  # landed inside one second of each other and FAILED the moment they did not, which under the
+  # pre-push pool is a red unit on a green tree: measured green 3 of 3 solo on two trees, and red
+  # as the single failing unit of 174 at pool width 12. `--since` is clamped so it can only pull
+  # the threshold EARLIER, so this widens nothing the subject would otherwise enforce.
+  S5_SINCE=$(( $(date +%s) - 5 ))
   printf 'answer\n' > "$W/deliv.md"
-  beat "$SUBJ" "$W" 60 "$TD"
+  beat "$SUBJ" "$W" 60 "$TD" --since "$S5_SINCE"
   if has "DELIVERED deliv.md"; then ok "delivered: the join closes"
   else bad "delivered: a non-empty fresh file was not accepted: $OUT"; fi
   if has "$IDLE_BANNER" || has "$LIVE_LINE" || has "$UNAVAIL_LINE"; then
