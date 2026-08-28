@@ -156,11 +156,21 @@ has recorded. The delta is CORPUS, not logic: no arm in that file changed. Raise
 the spread top, as both previous raises were, with the measurement recorded beside the constant.
 Now PASS at 7157 of 7163 across 177 fixture directories.
 
-**THE FIXTURE PASSED SOLO AND FAILED UNDER THE 12-WAY POOL, AND THE CAUSE WAS NOT THE
-FIXTURE.** Sibling units in the suite create and switch branches, and the shared checkout came
-out of the run sitting on a different ref — so a unit reading its subject off the WORKING TREE
-can be handed a different revision of that subject halfway through and report a true finding
-about a file the branch under test does not contain. The unit now materialises its subject
+**THE FIXTURE PASSED SOLO AND FAILED UNDER THE 12-WAY POOL.** The shared checkout came out of
+the run sitting on a different ref, so a unit reading its subject off the WORKING TREE was handed
+a different revision of that subject halfway through and reported a true finding about a file the
+branch under test does not contain.
+
+**THIS SECTION ORIGINALLY BLAMED SIBLING FIXTURES FOR THAT, AND THAT ATTRIBUTION IS WITHDRAWN —
+IT WAS NEVER MEASURED.** Two measurements taken at `v0.432.0` refute it: all ten fixtures that
+call `git checkout` were run SOLO and none moved `HEAD` or dirtied the tree, and a full
+175-fixture `AI_DLC_FIXTURE_NO_SKIP=1` run sampled `HEAD` **7158 times** and saw only `main`.
+What remains is one unreproducible observation. **The likelier cause is the DRIVING SESSION, not
+the suite**: this session repeatedly ran foreground `git` commands against the repo while a gate
+ran in the background, and it demonstrated that mechanism by accident while hunting the
+supposed leak — committing mid-run produced five fixture failures that were artifacts of a
+moving tree rather than findings. **Do not run git commands against the repo while its own gate
+is running**, and treat any suite result taken across such a window as void. The unit now materialises its subject
 ONCE, through a sha captured at start: a git blob is immutable, so whatever any other unit does
 to the checkout afterwards, `git show` still returns the bytes this branch ships. The
 working-tree copy is the FALLBACK, for the consumer case where the path is not tracked and the
