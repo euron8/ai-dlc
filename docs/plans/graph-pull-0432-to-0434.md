@@ -1,6 +1,14 @@
+# DISCHARGED — DO NOT EXECUTE
+
 # Pull the graph consumer from 0.432.0 to 0.434.0
 
 ## RESUME HERE
+
+**Status: DISCHARGED. The pull ran and landed; nothing below is an instruction any more.**
+The consumer stamp reads **0.434.0 / `f0b8ddcc`** on all four fields, which is this
+distribution's `origin/main` at the time of the run, and all five Done-when criteria are met.
+The numbered actions are retained as a record of what was done. See `## Discharge` for the
+measured outcome.
 
 **Resume with exactly: `READ and FOLLOW docs/plans/graph-pull-0432-to-0434.md`.** This block is
 the current state; everything under `## Rehearsal` is an EXPECTATION measured before the run, not
@@ -172,6 +180,74 @@ distribution and the adjudicated row did NOT change**, and that was re-derived r
 
 ## Discharge
 
-*Empty. Written and committed by a DISTRIBUTION session in `/Users/n8/git/ai-dlc` after the run
-reports, never by the executing consumer session. When it is written, retitle this file
-`DISCHARGED — DO NOT EXECUTE` at the top.*
+**The runbook agreed with the run on every predicted row, which is the first time in this
+program that has happened.** Two legs as rehearsed; the gate returned
+`SELF-UPDATE-DEFER  rulebook-coupled-fixtures` over `[_gate-procedures.md handoff.md]` with 37
+coupled fixtures and named the `0.433.0` safe stop, and re-running it over `base..0.433.0`
+returned `SELF-UPDATE-OK` — which is what made the split legal rather than merely necessary.
+Leg 2's safe stop was terminal.
+
+Verified from the distribution side rather than taken from the report, each with a control in the
+same invocation:
+
+```
+consumer stamp        0.434.0 / f0b8ddcc on all four fields   (== our origin/main)
+both ids              live 0, archived 1 each                 (control: impossible id 0/0)
+consumer ledger       archived 130 -> 132, live 65, partition control 0
+our partition         9 DISCHARGED / 23 IN-FLIGHT / 33 UNTOUCHED = 65, TERMINAL 22 -> 24
+```
+
+**Both candidates closed as `ADOPTED UPSTREAM`** — `PC-S307-RECORDED-VERDICT-SUPPRESSES-THE-REMEDY-IT-AUTHORIZES`
+at `v0.433.0`, and `PC-S307-HANDOFF-PUSH-IS-A-BARE-GIT-PUSH-SO-A-FIRST-HANDOFF-CANNOT-SUCCEED`
+at `v0.434.0`, absorbed by `3bde1ca9`. Neither was taken off a reverify row alone; the executor
+resolved each to the shipped line.
+
+**Action 3 never saw the split state.** Both reconcile files landed together in leg 1's machinery
+slice: `ADJ_KEEP_VERDICT` 3 and 4, controls `ADJ_ROW_TOKEN` 3 and 7 unchanged, and the pre-pull
+baseline of 0/0 reproduced on the consumer tree before the write.
+
+**Action 7 held on both legs** — `NOTE override-adjudicated`, no ATOMIC sequence, zero rows
+changed. The executor confirmed the premise independently instead of accepting the re-derivation:
+`layer-drift` reported `EXTENSION-OK  hooked core file unchanged` for the retro entries, so the
+`LC-O15` digest could not have moved.
+
+### What this run taught that the file did not say
+
+**Action 5's three `WORKLIST` rows are a SINGLE-LEG expectation.** Under the split they all land
+in leg 1, and recording their verdicts clears the `EXTENSION-TITLE-MATCHES-CORE` rows — so leg 2's
+`layer-drift` is 48 rather than 51 and emits none. A leg-2 executor checking against the table
+would see three rows missing and must not read that as a finding. **A rehearsal taken as one leg
+does not decompose across two**, which the previous runbook's discharge also recorded and this one
+still did not carry into its table.
+
+**Action 3's stop condition can only arise in leg 1.** Both reconcile files are in that slice, so
+the check after leg 2 is a re-confirmation rather than a second risk. Worth saying, because a
+runbook asking for the same assertion twice implies two chances to fail.
+
+**`PC-S336` fires ONCE PER TREE, not once per invocation.** Leg 1's auto-push set tracking and
+disarmed it; leg 2 found `@{u}` set, 0/0, and needed no push. The trigger being keyed on tracking
+configuration is what makes it self-clearing on first use — the sharper form of the refinement
+established before the run.
+
+**The pre-push hook exceeds the ten-minute foreground cap on this consumer**, so all four pushes
+had to be backgrounded at roughly three minutes each. Not a defect, but the run is wall-clock-bound
+in a way no figure in `## Rehearsal` hints at.
+
+### A correction to the dispatch brief, and it was right
+
+The brief said the handoff fix "shipped with `I100` behind it". **That is true of the distribution
+and must not be read as a consumer-side guarantee.** `I100` lives in
+`scripts/validate-enforcement-map.sh` at the distribution root; `core/` ships no copy, so the
+consumer receives the corrected step file and not the arm. Verified discriminatingly rather than
+by assertion: 0 copies of that validator in the consumer tree against 1 of `validate-layer-entries.sh`,
+which `core/scripts/` does ship. The arm guards `handoff.md` where it is AUTHORED, which is the
+right place for it and not a shipping gap.
+
+### Left alone, and not from this range
+
+`ledger-rotate` surfaced **4 entries closed for re-verification but not archivable** — closed with
+an annotation form the archiver rejects, so `ledger-reverify` skips them while `rotate` refuses
+them, and that row is the only place they appear. Pre-existing, each needing a per-entry judgement
+on which version absorbed it. The executor correctly left them untouched.
+
+The s307 sprint was untouched throughout: pause flag still up, no pipeline step run.
