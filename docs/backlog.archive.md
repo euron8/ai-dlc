@@ -3200,3 +3200,65 @@ exactly the narrow scan being checked for. The space-and-offset form is prescrib
 an instruction to read the exit status.
 
 verify: sh ! grep -rqiE "handoff and (every )?auto-compact starts a new" core/ && [ -n "$(awk "/N must be greater than 1 on/,/mis-scoped/" core/skills/ai-dlc/steps/retro.md | grep -i "HANDED OFF")" ] && [ -z "$(awk "/N must be greater than 1 on/,/mis-scoped/" core/skills/ai-dlc/steps/retro.md | grep -i "auto-compact")" ] && grep -q newermt core/skills/ai-dlc/steps/retro.md
+## BL-116 — `wait-beat-liveness`'s delivered case arms its join AFTER writing the deliverable, and fails only under pool load
+
+**LANDED (v0.430.0, verified 5e864a38).**
+
+**DEFECT. Found by batch 18's gate run, which it refused.** No consumer provenance — this is
+an ai-dlc-internal discovery.
+
+**IT WENT ON TO BLOCK THE MERGE PUSH TOO — 2 of 5 pushes on the branch — so it was fixed
+rather than carried.** The load-dependent reproduction was replaced by a deterministic one:
+injecting a 2s gap between the write and the beat forces it every time, and the differential
+is decisive — with `--since` PASS and 0 failures, without it FAIL and 2 failures byte-identical
+to the gate's own. The fix is the subject's documented escape hatch and `--since` is CLAMPED to
+pull the threshold only EARLIER, so it widens nothing the subject would otherwise enforce.
+
+`core/fixtures/wait-beat-liveness/run.sh:317-318` writes `deliv.md` and THEN arms the join:
+
+```
+printf 'answer\n' > "$W/deliv.md"
+beat "$SUBJ" "$W" 60 "$TD"
+```
+
+The subject deliberately refuses a file that predates the arming instant — *"this join waits
+for a write NEWER than the arming instant. A file that predates the join cannot be shown to be
+THIS dispatch's answer."* That refusal is correct and is the behaviour the fixture elsewhere
+asserts. So the delivered case passes only while the write and the arming instant land close
+enough together to be indistinguishable, and it fails when they do not.
+
+**It is load-dependent, which is why it has survived.** Measured: 3 of 3 runs PASS solo on this
+branch AND 3 of 3 PASS solo on `origin/main`; under the pre-push pool at width 12 it was the
+single red unit of 174. A fixture that is green solo and red under the pool is invisible to
+every way an author checks their own work.
+
+**NOT caused by the branch that found it**, established by read-set rather than by inspection:
+the fixture's subject set is `{core,scripts}/…/wait-for-deliverable.sh`, and the intersection
+with this branch's 13 changed files is EMPTY, against a positive control — the one fixture the
+branch does change appears in that same comparison.
+
+**Candidate fix**: arm the join before creating the deliverable, or pass the dispatch instant
+via `--since`, which is the escape hatch the subject already documents for exactly this shape.
+The receipt takes either, because both make the ordering sound; it does NOT take a sleep,
+which would leave the same race with a wider window.
+
+**The receipt was REPLACED after an adversarial pass closed the first one two ways without
+changing anything.** Both holes are recorded because both are general:
+
+- `grep -q -- "--since"` over the whole window was satisfied by a COMMENT — and the comment a
+  reader would naturally write is a paraphrase of this entry's own candidate-fix sentence, so
+  the entry was steering its reader into closing it vacuously. `--since` occurs 0 times in the
+  window today, so that clause was inert and would have become the entire verdict the moment
+  anyone typed it. It now requires `--since` on a NON-COMMENT line.
+- The write anchor `/deliv[.]md"$/` also matched the TEARDOWN `rm -f "$W/deliv.md"` below the
+  subject. Redirect the real write to a variable and the anchor silently re-points at a line
+  that is always after the beat, and the receipt passes forever with the race untouched. It now
+  anchors on a REDIRECTION into the deliverable, and when that anchor stops resolving it exits
+  **9** — measured — rather than 0, so a moved subject reports "I measured nothing" instead of
+  a close.
+
+Scored against six cases: unfixed HEAD 1, both real fixes 0, comment-only 1, sleep 1,
+variable-redirect 9. No mutant reaches 0 without the ordering actually being sound.
+
+verify: sh s=$(grep -n "^S5_delivered_is_silent()" core/fixtures/wait-beat-liveness/run.sh | cut -d: -f1); [ -n "$s" ] || exit 9; e=$((s+30)); f=core/fixtures/wait-beat-liveness/run.sh; w=$(awk -v s="$s" -v e="$e" "NR>=s && NR<=e && /> *\"[\$]W\/deliv[.]md\"/{print NR; exit}" "$f"); bt=$(awk -v s="$s" -v e="$e" "NR>=s && NR<=e && /beat \"[\$]SUBJ\"/{print NR; exit}" "$f"); [ -n "$bt" ] || exit 9; sn=$(awk -v s="$s" -v e="$e" "NR>=s && NR<=e && /--since/ && \$0 !~ /^[[:space:]]*#/{print NR; exit}" "$f"); [ -n "$sn" ] && exit 0; [ -n "$w" ] || exit 9; [ "$w" -gt "$bt" ]
+
