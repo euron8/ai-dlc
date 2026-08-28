@@ -1,11 +1,33 @@
-# Pull the graph consumer from 0.425.0 to 0.429.0
+# Pull the graph consumer from 0.425.0 to 0.430.0
 
 ## RESUME HERE
 
-**You were started with one sentence: `READ and FOLLOW docs/plans/graph-pull-0425-to-0429.md`.**
+**You were started with one sentence: `READ and FOLLOW docs/plans/graph-pull-0425-to-0430.md`.**
 This block is the whole of your entry point and the only current status record in this file.
 
 **Status: NOT STARTED.** Nothing below has been executed.
+
+**EVERY FIGURE BELOW IS STALE BY ONE RELEASE AND MUST BE RE-REHEARSED BEFORE IT IS TRUSTED.**
+This file was written and rehearsed for `0.425.0 -> 0.429.0`. The distribution is now
+**`0.430.0`** and the range carries **eleven** discharged candidates, not nine. The row counts,
+the `WORKLIST` contents and the changed-path tallies below were measured on the shorter range and
+**no figure in this file has been re-measured against `0.430.0`.**
+
+**RE-REHEARSE ON A `file://` CLONE BEFORE WRITING ANY NEW NUMBER.** That is not bookkeeping: the
+`0.429.0` rehearsal is the only thing in this program's history that caught a consumer-facing
+defect before delivery — a `WORKLIST` row instructing every consumer to register a SOURCED
+LIBRARY as a hook. Nothing inside the distribution could have found it.
+
+**AND RE-MEASURE THE BOOTSTRAPPING HAZARD FOR THIS RANGE RATHER THAN CARRYING THE OLD ANSWER.**
+`0.430.0` changed `core/scripts/artifact-path-config.sh`, which BOTH `migrate-artifact-paths.sh`
+and `validate-artifact-paths.sh` read, and it added invariant `I99`. The consumer runs its own
+installed copies. The mode-only check is
+`git diff --raw <installed-commit>..origin/main -- core/` — mode-only being modes-differ and
+blobs-equal — and the `0429` answer of zero does NOT carry forward.
+
+**The gap has crossed the WIDE threshold.** Five releases; past five the drain plan's action 7
+says to say so, because a wide range means more paths adjudicated in one session and a bigger
+blast radius if a bootstrapping step is in it.
 
 ### Start here
 

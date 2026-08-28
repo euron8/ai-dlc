@@ -9,27 +9,45 @@ and status records that were current when they were written and that THIS BLOCK 
 it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from it.**
 
-### START HERE: SWEEP THE CONSUMER FOR NEW PUSH CANDIDATES. THE SWEEP HAS ALREADY FOUND ONE.
+### START HERE: SWEEP THE CONSUMER FOR NEW PUSH CANDIDATES, THEN PICK FROM THE UNFILED SET.
 
 **YOUR FIRST ACTION IS NUMBERED ACTION 1 BELOW — the sweep for candidates the consumer has filed
-since `v0.429.0`.** Operator instruction, given at the close of batch 17 and the reason this
-session exists. Do it before picking any subject, and report what it finds.
+since `v0.430.0`.** Standing operator instruction: do it before picking any subject, and report
+what it finds. The sweep is cheap and it has caught a same-day filing twice running.
 
-**IT ALREADY HAS A RESULT, AND THE RESULT ARRIVED WHILE THIS BLOCK WAS BEING WRITTEN.** Running
-the sweep to prove its command worked turned up
-**`PC-S306-GATE-REVIEW-ARTIFACTS-WRITTEN-OUTSIDE-SPRINT-SLOT`**, live, filed `2026-08-27` with
-the sprint-306 retro, and cited by NO backlog entry. **So the sentence below this one — that the
-sprint-306 set was fully discharged — was true when batch 17 closed and false within the hour.**
-That is this program's measured base rate of expired premises meeting itself; re-derive, do not
-read.
+**SPRINT 306 IS NOW FULLY DISCHARGED AND IS NO LONGER A SOURCE OF WORK.** Derived at
+`v0.430.0` with a control: **11 of 11** live `PC-S306-*` ids are cited by a backlog entry, **0**
+uncited, and a twelfth was closed by the consumer itself. The control is `PC-S312`, which
+returns **10** uncited in the same invocation — so the zero discriminates rather than reflecting
+a broken join. **Do not go looking for sprint-306 work; there is none left.**
 
-The sprint-306 set is **TEN**, of which **NINE are discharged** and this one is outstanding. The
-baseline is **70 live candidates**.
+**The baseline is 71 live candidates, of which 32 are UNFILED.** That unfiled set is the batch-19
+corpus and it is where action 1 points you. Re-derive it — this number has moved between two
+consecutive commands in this program more than once.
 
-Everything from here to the numbered actions is a RECORD of batch 17. Read it for the measured
-episodes; **do not take an instruction from it.**
+Everything from here to the numbered actions is a RECORD of batches 17 and 18. Read it for the
+measured episodes; **do not take an instruction from it.**
 
-### BATCH 17 IS DONE AND SHIPPED AS `v0.429.0`. IT DISCHARGED NINE OF THE SPRINT-306 TEN.
+### BATCH 18 IS DONE AND SHIPPED AS `v0.430.0`. IT DISCHARGED THE LAST TWO SPRINT-306 CANDIDATES.
+
+**Merged to `main` at `1febf3b9`, all gates green.** Operator ruled to take both. What landed:
+
+| candidate | what landed |
+|---|---|
+| `PC-S306-GATE-REVIEW-ARTIFACTS-WRITTEN-OUTSIDE-SPRINT-SLOT` | `code-reviewer.md` and `qa.md` now prescribe `docs/reviews/s<N>/…`; invariant **I99** catches the class at prescription time; `artifact-path-conformance` section 7 guards both |
+| `PC-S306-RETRO-AUTOCOMPACT-TRANSCRIPT-FILE-ASSUMPTION-UNVERIFIED` | `retro.md` and `validate-steering-budget.sh` at FOUR sites; the N>1 rule now gates on HANDOFF only |
+
+**THE ADVERSARIAL PASS RAN BEFORE THE MERGE AND IT PAID FOR ITSELF AGAIN.** It found that **I99
+acquitted a path that BLOCKS a consumer push** — `s<N>/<story-id>-review.md`, where the slot is
+correctly placed and the id still expands sprint-first — and that the arm's own remedy pointed at
+that form while its own probe asserted the acquittal every run. The same false claim had already
+reached consumer-facing prose. **A mechanism that defends its own defect is the worst shape this
+program produces, and only an adversary looking at it before the merge found it.**
+
+**THE GATE REFUSED THREE OF SIX PUSHES AND EVERY REFUSAL WAS CORRECT** — `validator-fork-budget`
+twice, `wait-beat-liveness` twice. Budget for it.
+
+### BATCH 17 — A RECORD, SHIPPED AS `v0.429.0`. IT DISCHARGED NINE OF THE SPRINT-306 TWELVE.
 
 **BATCH 17 TOOK THE REMAINING THREE SPRINT-306 CANDIDATES AND SHIPPED THEM AS `v0.429.0`**, on an
 explicit operator ruling taken twice: first on the seventh candidate alone, then — when the
@@ -49,8 +67,12 @@ HAPPENED IN.** Live candidates went 67 → 69 → 70 while this batch ran. **Re-
 START of any batch and again before you close it**, and do not treat a growing set as a reason to
 narrow scope — that is the operator's call and they have now made it the same way twice.
 
-**THE PULL REMAINS DEFERRED BY THE OPERATOR AND THE GAP IS NOW FOUR RELEASES.** The runbook is
-`docs/plans/graph-pull-0425-to-0429.md`, renamed, re-scoped and **RE-REHEARSED** for this range.
+**THE PULL REMAINED DEFERRED AND THE GAP WAS FOUR RELEASES AT THAT POINT.** Batch 17 renamed,
+re-scoped and RE-REHEARSED the runbook for the `0425 -> 0429` range. **That rehearsal is now
+SPENT: batch 18 shipped `0.430.0`, so the file was renamed again to
+`docs/plans/graph-pull-0425-to-0430.md` and every figure in it is stale by one release and
+marked as such in its own head block. Do not read this paragraph as saying a current rehearsal
+exists.**
 Consumer installed **0.425.0**, distribution **0.429.0**, **nine** discharged candidates the
 consumer cannot see. Keep measuring and reporting it per action 7; do not run it.
 
@@ -299,7 +321,7 @@ grep -cx 'PC-S300-SEVEN-VALIDATORS-SHIPPED-NON-EXECUTABLE-AT-0.242.0' /tmp/arch.
 grep -cx 'PC-S999-NEVER' /tmp/filed.txt                                                  # control: 0
 ```
 
-Re-derived at v0.429.0: **70 live candidates, 122 archived**, partition control 0, all three
+Re-derived at v0.430.0: **71 live candidates, 122 archived**, partition control 0, all three
 presence controls 1, absence control 0. **The live count rose from 60 to 65 and then to 66
 across two consecutive ai-dlc sessions** — graph sessions filed sprint 306's candidates while
 this file was being edited, and the ledger's md5 moved four times in all, twice while a batch
@@ -329,8 +351,8 @@ comm -12 /tmp/live.txt /tmp/closed_here | comm -23 - /tmp/in_msgs   # discharged
 comm -12 /tmp/arch.txt /tmp/closed_here | wc -l
 ```
 
-Re-derived at v0.429.0 by running the commands: **15 DISCHARGED, 22 in flight, 33 untouched**,
-summing to 70, **0 discharged-but-unnamed**, and **14 TERMINAL**. The overlap the control catches
+Re-derived at v0.430.0 by running the commands: **17 DISCHARGED, 22 in flight, 32 untouched**,
+summing to 71, **0 discharged-but-unnamed**, and **14 TERMINAL**. The overlap the control catches
 is still the single `PC-S303-STUB-AUDIT-MARKER-...` id, subtracted from DISCHARGED. That unnamed line is a real
 failure mode and not a formality: a fix that ships without its id in the commit MESSAGE discharges
 the candidate and produces no row anywhere, so the consumer never learns of it.
@@ -365,8 +387,8 @@ pull that closed two candidates — the program's own scoreboard resets on succe
 forever", inverted: here the subject's deletion reads as REGRESS.
 
 **REPORT `TERMINAL` AS THE DELIVERED TOTAL AND `DISCHARGED` AS WORK AWAITING THE CONSUMER'S OWN
-CLOSE.** They are disjoint, because `live.txt` and `arch.txt` partition. At v0.429.0 that is
-**14 delivered and closed, 15 delivered and awaiting close — 29 in total against a headline of 15.**
+CLOSE.** They are disjoint, because `live.txt` and `arch.txt` partition. At v0.430.0 that is
+**14 delivered and closed, 17 delivered and awaiting close — 31 in total against a headline of 17.**
 Both figures are ceilings on coverage rather than adjudications, for the reason the next paragraph
 gives: a citation is a filing, not a disposition.
 
@@ -395,15 +417,25 @@ cat VERSION                                                                     
 git log --format='%H' -F --grep="<id>" origin/main | tail -1                            # then git show "${sha}:VERSION"
 ```
 
-**AT v0.429.0 THE GAP IS FOUR RELEASES AND THE OPERATOR HAS DEFERRED CLOSING IT.** Consumer
-installed **0.425.0**, distribution **0.429.0**, **nine** discharged candidates the consumer
-cannot see — `PC-S304` from `v0.426.0`, the sprint-306 six from `v0.428.0` and the sprint-306
-three from `v0.429.0`. The runbook is `docs/plans/graph-pull-0425-to-0429.md`, LIVE, RE-REHEARSED
-and NOT STARTED, and the operator has said they will not run it now. **Keep measuring the gap and
-reporting it; do not run it, and do not treat its growth as a reason to reorder the work.**
+**AT v0.430.0 THE GAP IS FIVE RELEASES AND ELEVEN CANDIDATES, AND IT HAS CROSSED THIS FILE'S OWN
+"WIDE" THRESHOLD.** Consumer installed **0.425.0**, distribution **0.430.0**; the pending set is
+`PC-S304` from `v0.426.0`, the sprint-306 six from `v0.428.0`, three from `v0.429.0` and the
+sprint-306 pair from `v0.430.0`. Derived per-id against an impossible-id control of 0.
 
-**THE PENDING SET IS NINE AND EVERY ONE IS A SPRINT THE CONSUMER IS STILL RUNNING.** That raises
-what the deferral costs; it does not change whose call it is. Report the number and stop.
+**Action 7 below says: past FIVE releases, treat the range as WIDE and say so.** It is now
+exactly five. A wide range means more paths adjudicated in one session and a bigger blast radius
+if a bootstrapping step is in it — and `v0.430.0` changed `core/scripts/artifact-path-config.sh`,
+which `migrate-artifact-paths.sh` and `validate-artifact-paths.sh` both read, so **the
+bootstrapping hazard must be re-measured for this range rather than carried forward from the
+0429 rehearsal.**
+
+The runbook is `docs/plans/graph-pull-0425-to-0430.md` — **its RANGE IS NOW STALE by one
+release**, and it must be re-scoped and RE-REHEARSED before any figure in it is trusted. The
+operator has deferred the pull. **Keep measuring the gap and reporting it; do not run it, and do
+not treat its growth as a reason to reorder the work.**
+
+**EVERY PENDING CANDIDATE IS FROM A SPRINT THE CONSUMER IS STILL RUNNING.** That raises what the
+deferral costs; it does not change whose call it is. Report the number and stop.
 
 **AND THE REHEARSAL IS NOT OPTIONAL BOOKKEEPING — IT IS WHERE THIS PROGRAM'S ONLY CONSUMER-FACING
 DEFECT WAS CAUGHT.** `v0.429.0`'s rehearsal found a `WORKLIST` row instructing every consumer to
@@ -478,7 +510,7 @@ those have not been examined at all. Their status in the consumer's own ledger i
 ESTABLISHED**; some may already be `WITHDRAWN` or `ADOPTED` upstream. **Establish that before
 treating 20 as a workload.**
 
-Re-derived at v0.429.0 by running the commands, not by editing the sentence: **70 live / 42
+Re-derived at v0.430.0 by running the commands, not by editing the sentence: **71 live / 45
 archived**, against an impossible-verdict control of 0 and a `BL-006`-still-live control of 1.
 Batch 16 filed six (`BL-104`–`BL-109`) and rotated all six in the same release, so live went
 70 → 76 → 70 and the archive went 33 → 39. **Batch 14 recorded 31 archived and the rotation of
@@ -1007,35 +1039,34 @@ so no block written before it changes verdict.
    real id means the grammar or the path is wrong, not that the candidate is old** — the ledger
    path is the only argument, and the archive is a SEPARATE file.
 
-   **THE SWEEP HAS ALREADY RETURNED ONE, SO YOU KNOW WHAT A HIT LOOKS LIKE BEFORE YOU RUN IT.**
-   `PC-S306-GATE-REVIEW-ARTIFACTS-WRITTEN-OUTSIDE-SPRINT-SLOT`, filed `2026-08-27` with sprint
-   306's retro, live, cited by no backlog entry. Its subject is a WRITE-TIME gap: the
-   code-reviewer and QA role contracts let a gate-evidence file be created with the sprint token
-   in the BASENAME instead of inside the reserved `docs/reviews/s306/` slot, and nothing catches
-   it at creation. Two gate PASSes and an 18/18 sprint-review gate went by before a pre-push
-   `VERDICT: FAIL` surfaced it, buried among roughly 160 other checks. **The entry records the
-   identical class on sprint 304** and says the remedy has only ever been applied at PUSH time,
-   never at the WRITE path. **Confirm it is still uncited before scoping it** — a backlog entry
-   may have been filed against it since.
+   **THE BASELINE IS 71 LIVE CANDIDATES AT `v0.430.0`, 32 OF THEM UNFILED, AND SPRINT 306 IS
+   FULLY DISCHARGED.** A higher count means the consumer filed while nobody was looking.
+   **Re-derive rather than trusting those numbers** — they have moved between two consecutive
+   commands in this program.
 
-   **THE BASELINE IS 70 LIVE CANDIDATES AT `v0.429.0`, WITH NINE OF THE SPRINT-306 TEN
-   DISCHARGED.** A higher count means the consumer filed while nobody was looking. **Re-derive
-   rather than trusting that number** — it has moved between two consecutive commands in this
-   session.
+   **THE SPRINT-306 RULING IS SPENT. DO NOT LOOK FOR SPRINT-306 WORK.** Derived at `v0.430.0`,
+   11 of 11 live `PC-S306-*` ids are cited and 0 are uncited, against a `PC-S312` control
+   returning 10 uncited in the same invocation. The operator's twice-given "take the whole set"
+   ruling was about sprint 306 specifically and there is nothing left for it to apply to.
 
-   **THE CONSUMER WAS MID-SPRINT-306 RETRO WHEN THIS WAS WRITTEN, AND A RETRO IS WHERE THAT
-   CONSUMER FILES.** Its last observed commit was `docs(retro): sprint 306 party-mode retro
-   transcript`. Expect new candidates; the sweep is aimed at exactly that.
-
-   **THEN REPORT AND ASK, DO NOT ASSUME.** If the sweep finds a new sprint's set, say so and ask
-   the operator whether the sprint-306 priority applies to it. They have ruled on that question
-   twice, both times to take the WHOLE set in one release — but the ruling was about sprint 306,
-   and extending it is theirs to do, not yours.
+   **IF THE SWEEP FINDS A NEW SPRINT'S SET, REPORT AND ASK — DO NOT ASSUME THE RULING EXTENDS.**
+   Batch 18 asked and the operator said take both; that answer was about sprint 306's remainder.
+   Extending it to a different sprint is theirs to do, not yours.
 
    **IF THE SWEEP FINDS NOTHING NEW, THE STANDING RECOMMENDATION IS `BL-051`** — step 2 computes
    which machinery paths the consumer edited and then discards the answer, discharging
    `PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH`. Verify that id is
    still live upstream, against an impossible-id control, before scoping it.
+
+   **THE UNFILED SET IS THE CORPUS, AND IT IS DOMINATED BY TWO OLD CLUSTERS.** Of the 32, ten are
+   `PC-S312-*` — several of which describe themselves as falsifiability probes for a retirement
+   rather than as defects — and two are already WITHDRAWN upstream
+   (`PC-S300-ORIGIN-TAG-GATE-HAS-NO-WAIVER-FOR-TRACEABILITY-CITATIONS`,
+   `PC-S305-CHECK-17-BYPASS-CONSUMER-CASES-V8-V9-AND-A-PASSING-CONTROL`). **Read each
+   candidate's own status line in the consumer's ledger before treating it as work** — this
+   block has asked for that since batch 1 and it still has not been done for the S312 cluster.
+   The most recent filings (`2026-08-26`/`2026-08-27`, the `PC-S337-*` and `PC-S305-*` rows) are
+   the freshest and the likeliest to still be real.
 
    **`BL-051`'s receipt must be replaced FIRST, and that is not optional.** It is one of the four
    the `v0.417.0` sweep found closable by prose — by a comment naming a bucket. Batches 14, 15
@@ -1045,8 +1076,12 @@ so no block written before it changes verdict.
    author's other phrasing is as broken as one that accepts a regression.
 
    **THE PULL IS STILL DEFERRED, AND THE GAP IS FOUR RELEASES AND NINE CANDIDATES.**
-   `docs/plans/graph-pull-0425-to-0429.md` is written, re-rehearsed and NOT STARTED. Do not run
-   it, do not re-litigate it, and do not treat the gap as a reason to reorder this batch.
+   `docs/plans/graph-pull-0425-to-0430.md` is written and NOT STARTED, and its figures are STALE
+   by one release — it was rehearsed for `0425 -> 0429` and the distribution is now `0.430.0`.
+   **It must be RE-REHEARSED on a `file://` clone before any figure in it is trusted**, and the
+   bootstrapping hazard re-measured, because `0.430.0` changed `artifact-path-config.sh`, which
+   both `migrate-artifact-paths.sh` and `validate-artifact-paths.sh` read. Do not run the pull,
+   do not re-litigate it, and do not treat the gap as a reason to reorder this batch.
 
    **REHEARSE BEFORE WRITING ANY RUNBOOK FIGURE, AND TREAT THE REHEARSAL AS A DETECTOR.**
    `v0.429.0`'s rehearsal caught a `WORKLIST` row that would have told every consumer to register
