@@ -3278,6 +3278,49 @@ verify: sh s=core/skills/ai-dlc-update/reconcile/settings-merge.sh; a=core/skill
 
 ---
 
+## BL-117 — a commit that WITHDRAWS an attribution becomes the new attribution, permanently
+
+**`named_absorbed()` joins an id to the OLDEST commit whose MESSAGE contains it, and a
+withdrawal names the ids it is withdrawing.** So the commit saying *"this attribution was
+wrong"* is itself a naming, it is early, and `tail -1` elects it. The entry can never shed the
+row: every later correct citation is younger and loses the election.
+
+Measured on `origin/main`, with the anchoring control in the same invocation:
+
+```
+git log --format='%h %s' -F --grep=PC-S304-APPLY-SH-RESTAMPS-BEFORE-THE-WORKLIST-IS-DONE origin/main | tail -1
+  -> 29516443  fix: the short-id fallback was unanchored and archive-blind, and it misattributed 4 entries
+git log -1 --format=%B 29516443 | grep -coE 'PC-S331[^-A-Z]'   -> 0   # bare prefix: the anchoring fix HOLDS
+git log -1 --format=%B 29516443 | grep -cF PC-S304-APPLY-SH-RESTAMPS-BEFORE-THE-WORKLIST-IS-DONE
+                                                               -> 1   # the FULL SLUG, in the withdrawal list
+```
+
+`29516443` withdrew four wrong `NAMED-UPSTREAM` attributions and named all four in full to say
+so. It now supplies the attribution for all four. Its own report reads `NAMED-UPSTREAM 13 -> 9`;
+**four of those nine survivors are the four it withdrew**, re-attached through the longer slug
+the anchoring change was never scoped to.
+
+**The direction is the damaging one.** `29516443` predates the releases that really absorbed
+these ids — `PC-S304` was genuinely closed at `v0.426.0` — so the consumer is handed an absorbing
+version that is too early, inside a PERMANENT paste-ready annotation. Same family as `BL-066`,
+reached by a new route: not a passing mention, but a deliberate DENIAL read as a claim.
+
+**A grammar fix cannot reach it.** A withdrawal has to name the id to be auditable, and no regex
+separates "names it to claim it" from "names it to disown it" — that is intent, not text. The
+remedy has to be a declared channel: a `Withdraws-attribution: <id>` trailer that the join
+SUBTRACTS, one line for whoever writes the withdrawal.
+
+Filed by the reference consumer as `PC-S339-WITHDRAWAL-COMMIT-BECOMES-THE-NEW-ATTRIBUTION`,
+observed on the `0.430.1 -> 0.432.0` pull. Tiered **DEFECT**: it emits a wrong permanent
+annotation, but reaching it requires someone to have written a withdrawal, which is rare and
+deliberate.
+
+The receipt is STRUCTURAL: it exits 1 while `named_absorbed()` carries no withdrawal-trailer
+subtraction, 0 once one exists, and 9 if the function cannot be located or its body does not
+parse — so a reshaped file reports a moved precondition rather than a false close.
+
+verify: sh f=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -f "$f" ] || exit 9; b=$(sed -n '/^named_absorbed() {/,/^}/p' "$f" | sed 's/#.*//'); [ -n "$b" ] || exit 9; grep -q 'grep' <<<"$b" || exit 9; grep -qi 'withdraw' <<<"$b" && exit 0; exit 1
+
 ## BL-113 — a `verify: sh` receipt that spans two lines is TRUNCATED by the engine and mis-scores silently
 
 **Found while authoring `BL-110` in `v0.429.0`, and it produced a wrong verdict before it was

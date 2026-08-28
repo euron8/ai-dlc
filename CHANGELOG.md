@@ -141,20 +141,27 @@ child there was no anchor to extend and a consumer's additions to it had nowhere
 promotion creates that anchor.
 
 Measured on the reference consumer, its own audits block against core's section: **core 19
-non-blank lines, override 32, shared 19, override-only 13, core-only 0.** The override is a
-strict superset, so after this release the table renders TWICE until the consumer acts —
-duplication, which is strictly better than the silent displacement it replaces and is a
-follow-up rather than a precondition. The consumer's edit is then small: drop the block and
-re-file the 13 override-only lines as a qualifier appending to `#Machine Audits`, carrying no
-`base_sha` obligation on prose it did not write.
+non-blank lines, override 32, shared 19, override-only 13, core-only 0.**
 
-**`FORK_BUDGET` RAISED 7150 -> 7163, AND THE ARM REFUSING THE PUSH IS IT WORKING.** A fixture
-directory costs `validate-enforcement-map.sh` roughly seven forks to walk, which is the
-per-directory figure the two previous raises already measured (13 for two). Three reps on the
-release branch read **7157, 7157, 7157 — spread ZERO**, tighter than any reading that comment
-has recorded. The delta is CORPUS, not logic: no arm in that file changed. Raised to six over
-the spread top, as both previous raises were, with the measurement recorded beside the constant.
-Now PASS at 7157 of 7163 across 177 fixture directories.
+**AN EARLIER REVISION SAID THE TABLE WOULD THEREFORE RENDER TWICE UNTIL THE CONSUMER RE-HOMED
+13 LINES. IT DOES NOT, AND THE PROMOTION IS WHY — this release is worth more than it claimed
+for itself.** The block does not merely gain an `extends:` anchor; it moves OUT of the shadowed
+span entirely. At theirs `### Machine Audits` sits at 582 while `#4a. Close-Out Sweep` spans
+`374 581`, so an override shadowing `#4a` no longer covers it and core's table renders on its
+own with no re-homing at all.
+
+**And the double render was never reachable anyway**, which the earlier revision also got wrong
+by recommending it: `readopt-override.sh:325` REFUSES `--stamp readopt` while superseded core
+text remains in the body, and the promotion made the whole restated table superseded at once.
+So "keep the copy and file the duplication as a debt" was not a state the tool would stamp.
+
+Measured on the pull that took this release: the consumer deleted the 31 superseded lines — the
+verbatim table plus a `RESTATED FROM CORE` rationale whose stated premise, *"core's
+`## Machine Audits` table lives inside §4a"*, this promotion made false — repointed two live
+pointers, and kept one 6-line consumer row. `--check` then reported *"body carries no superseded
+core text"*. **`LC-O9` is discharged, the table renders exactly once, and the standing
+"re-sync the table on every re-adoption" obligation is gone with it.** No debt was opened,
+correctly: the narrowing is already open twice and a third row would have been a restatement.
 
 **THE FIXTURE PASSED SOLO AND FAILED UNDER THE 12-WAY POOL.** The shared checkout came out of
 the run sitting on a different ref, so a unit reading its subject off the WORKING TREE was handed
