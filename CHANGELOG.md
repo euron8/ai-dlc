@@ -44,13 +44,33 @@ lines. Nothing in `core/` keys on the heading LEVEL either — the only other `M
 mentions are a naming-convention comment at `layer-drift.sh:445-446`, and every other
 `4a. Close-Out Sweep` hit is a fixture's own seeded file.
 
-**IT LAPSES EVERY LAYER VERDICT KEYED ON `steps/retro.md`, AND THAT IS THE FIX ANNOUNCING
-ITSELF.** `adj_digest()` hashes the target blob at theirs, so moving the file re-opens the duty
-for each current keyed subject. Derived on the reference consumer with
-`layer-drift.sh --list-adjudications`: **4 rows re-fire — 3 × LC-E19 plus 1 × LC-O15**, all on
-`steps/retro.md`, against a control of 19 keyed subjects in total. A runbook carrying this
-release should predict that set; a count above 4 means something else moved. Three older
-`OWED-RETRO-4A-NARROW` digests are already spent and produce no rows.
+**WHAT A CONSUMER SHOULD EXPECT ON PULLING THIS — MEASURED AGAINST THE LANDED COMMIT, NOT
+PREDICTED FROM IT.** A consumer at `0.430.1` should expect **3 `HARD-*` rows, all on
+`steps/retro.md`**: `HARD-LAYER-ADJUDICATION-MISSING` and `HARD-OVERRIDE-DRIFT-SECTION` on an
+entry shadowing `#4a`, plus `HARD-LAYER-ADJUDICATION-MISSING` on an entry whose `extends:`
+anchor the promotion moved. **`HARD-OVERRIDE-DRIFT-SECTION` withholds the apply** —
+`apply.sh:509` reads it into `LD_HARD` and it becomes a `WORKLIST override-readopt` hand-back —
+so the pull does NOT sail through on informational re-raises; it stops until that row is
+adjudicated. Recorded `LC-E19` title-match verdicts on `retro.md` are NOT spent by this change:
+the promotion moves one heading line and does not touch their matched sections.
+
+**These figures are the REFERENCE CONSUMER's layer, not a universal expectation.** A consumer
+with a different layer will differ. Measure rather than carry them.
+
+**AN EARLIER REVISION OF THIS SECTION PREDICTED "4 rows — 3 × LC-E19 plus 1 × LC-O15" AND WAS
+WRONG ON EVERY AXIS BUT ONE.** The count was 3, not 4; the three `LC-E19` subjects did not
+re-fire at all; an entry that was not a keyed subject at all DID fire; and it forecast no
+blocking status where the blocking row is the one that matters. Only the single `LC-O15` was
+right. **The method was the defect, and it is worth more than the numbers**: both the prediction
+and its correction were derived from `layer-drift.sh --list-adjudications`, which answers *which
+subjects are keyed TODAY* — and then assumed one re-fired row per keyed subject. Nothing answers
+*what will fire tomorrow* except running the pass against tomorrow's ref.
+
+**So "derive the expected row set beforehand" is not satisfiable as usually written**, because
+the release does not exist when the runbook is drafted. The sound method is
+`layer-drift.sh <dist> <consumer-stamp> <ref> <consumer>` against the ACTUAL ref — and a release
+BRANCH is a usable ref days before the merge. One existed here and neither party asked for a
+measurement against it.
 
 **The consumer-side narrowing that was proposed instead was built, measured and REJECTED, and
 recording that is the point.** "Narrow the override body to the consumer-only lines" reads as
