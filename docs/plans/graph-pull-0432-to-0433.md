@@ -1,3 +1,19 @@
+# DO NOT EXECUTE — replaced by `docs/plans/graph-pull-0432-to-0434.md`
+
+**The operator chose to BUNDLE this pull with `0.434.0`, so the range this file was written
+and rehearsed for will never be run.** Nothing here was wrong; it decayed on a scheduling
+decision rather than on a merge, which is a door its own action 9 does not watch.
+
+**Do not execute it, and do not read its `## Rehearsal` table as an expectation.** That table
+describes a manifest the bundled run does not produce — the range grew 3 → 5 core paths and
+the self-update gate now DEFERS into two legs where this file predicts one. Its own
+instruction to STOP and ping on any disagreement would then fire on nearly every row, and
+that instruction is right, which is what would make following this file costly.
+
+Retained as the record of the range that became leg 1 of the bundle, and for the pre-pull
+`ADJ_KEEP_VERDICT` baseline measured on the real consumer tree at 0.432.0, which is
+unrecoverable once the bundled pull lands.
+
 # Pull the graph consumer from 0.432.0 to 0.433.0
 
 ## RESUME HERE
