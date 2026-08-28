@@ -15,6 +15,53 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.432.0] - 2026-08-28
+
+### The shared oracle had one test, and three artifacts were leaning on it
+
+`v0.431.0` shipped a fixture whose oracle is `span_of`, alongside a consumer receipt with the
+same oracle and a correctness claim stated in its terms. Three artifacts agreeing because they
+put one question to one function — and **none of them able to catch a defect IN that function.**
+Measured at that release: **2 of 146 shippable fixture directories exercised `span_of` at all**,
+and one of the two had just arrived.
+
+`core/fixtures/span-of-containment/` tests the function itself. The properties are
+`lib.sh:70-83`'s own rather than any caller's expectation:
+
+- a span ends at the next heading of level **<=** its own;
+- a DEEPER heading does not end it, which is the rule `v0.431.0` turned on;
+- a parent span therefore SWALLOWS every deeper heading under it, which is why shadowing a
+  parent section displaces its children;
+- an unclosed section runs to EOF;
+- headings are normalised — lowercased, backticks stripped — before comparison;
+- matching is containment in EITHER direction, with a length floor on the reverse arm;
+- no match yields an EMPTY span, so a caller can tell "missing" from "line 1".
+
+**The seeds are not drawn from any caller.** `fixture-mutants.md` forbids seeding from what the
+reader accepts, and a seed lifted from `retro.md` would establish that `span_of` handles
+`retro.md`. These are minimal documents built to separate one rule per case.
+
+**The mutant moves the one comparison every other arm depends on.** Weakening `lvl <= mylvl` to
+`lvl < mylvl` in a copy makes an equal-level sibling stop ending a span, so `Step One` answers
+`3 8` instead of `3 6` — a real behavioural difference, not a message change. Guarded with
+`cmp -s` so a `sed` that matched nothing cannot pass as a mutation, sourced in a SUBSHELL so the
+real `span_of` is not clobbered for the arms above, and paired with an unmutated control
+carrying a positive conjunct, because a copy that died sourcing answers empty and empty would
+otherwise score as a kill. 10 assertions.
+
+**This buys coverage, not independence.** The fixture is still authored by the hand that wrote
+the release before it. What it changes is that a defect in `span_of` now has somewhere to be
+caught other than in the artifacts that assume it.
+
+### Also
+
+The `0425 -> 0430` runbook records the verify-directive grammar measurement in full:
+`grep -c '^verify:'` reads **32** where the shipping pattern at `ledger-reverify.sh:1042` reads
+**77** on the same ledger. The ratio is the transferable part — a hand grep narrower than the
+shipping pattern reads CLEAN on every entry it never opened, and it happened to give the right
+answer for the two entries that pull repaired only because their directives sit mid-sentence,
+where both grammars score zero.
+
 ## [0.431.0] - 2026-08-28
 
 ### `## Machine Audits` was a CHILD of retro step 4a, so every consumer override shadowing 4a displaced it as a side effect

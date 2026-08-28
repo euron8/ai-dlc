@@ -96,6 +96,7 @@ core_manifest:
   - core/fixtures/artifact-path-migration/**
   - core/fixtures/artifact-path-conformance/**
   - core/fixtures/artifact-section-heading-level/**
+  - core/fixtures/span-of-containment/**
   - core/fixtures/setup-site-drift/**
   - core/fixtures/story-corpus-sprint-slot/**
   - core/fixtures/apply-worklist-rows/**

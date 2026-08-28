@@ -273,6 +273,7 @@ core_manifest:
   - fixtures/artifact-path-migration/**
   - fixtures/artifact-path-conformance/**
   - fixtures/artifact-section-heading-level/**
+  - fixtures/span-of-containment/**
   - fixtures/setup-site-drift/**
   - fixtures/story-corpus-sprint-slot/**
   - fixtures/apply-worklist-rows/**

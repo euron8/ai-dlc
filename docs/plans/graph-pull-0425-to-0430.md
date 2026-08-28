@@ -220,6 +220,14 @@ first is visibly empty and the second reads as done.
 It returns the right answer for a mid-sentence directive and a FALSE ZERO for the other three
 shapes. Drive the shipping pattern.
 
+**MEASURED ON THE REFERENCE CONSUMER'S OWN LEDGER, AND THE RATIO IS THE PART THAT CARRIES:
+`^verify:` reads 32 where the shipping pattern reads 77.** A 45-entry blind spot, on a corpus
+the narrow grep reports as fully examined. It happened to give the right answer for the two
+entries this pull repaired only because their directives sit mid-sentence, where both grammars
+score zero — being right for a reason that does not generalise. Do not read the delta as the
+lesson; a reader who sees only a small gap will not feel it. **A hand grep narrower than the
+shipping pattern reads CLEAN on every entry it never opened.**
+
 The second reachable cause, unmeasured here and still worth checking on any entry that stays
 silent: `named_absorbed()` rejects a label with any character outside `A-Z0-9-`.
 

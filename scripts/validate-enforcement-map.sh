@@ -293,7 +293,13 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   walk, which is the per-directory figure the two previous raises already measured (13 for
 #   two). Nothing here was optimised and nothing needs to be; the arm did its job by refusing
 #   the push. Spread top is 7157, so the headroom is again the usual 6 over it.
-FORK_BUDGET=7163
+#   RE-MEASURED at v0.432.0, which adds one more fixture directory
+#   (`core/fixtures/span-of-containment/`). Two reps: 7170, 7170 -- spread zero again, +13 over
+#   the previous reading. **THE PER-DIRECTORY COST IS NOT A CONSTANT AND SHOULD NOT BE QUOTED AS
+#   ONE.** The two additions in consecutive releases cost +7 and +13, both single-file
+#   directories, so whatever drives the difference is not the file count. Do not budget a future
+#   directory at either figure -- measure it. Spread top is 7170, headroom the usual 6 over it.
+FORK_BUDGET=7176
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
