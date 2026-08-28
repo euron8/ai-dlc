@@ -3278,6 +3278,84 @@ verify: sh s=core/skills/ai-dlc-update/reconcile/settings-merge.sh; a=core/skill
 
 ---
 
+## BL-120 — the handoff's push is a bare `git push`, so a sprint's FIRST handoff cannot succeed
+
+**`core/skills/ai-dlc/steps/handoff.md:36-37` prescribes a bare `git push`, and that command
+cannot succeed on a branch that has never been pushed** — which is every sprint's first handoff on
+a consumer that cuts a branch per sprint. Reproduced by the reference consumer in its live tree, on
+the branch it stranded:
+
+```
+$ git push --dry-run
+fatal: The current branch ai-dlc/carry-over/dashboard-backlog-s307 has no upstream branch.
+```
+
+**The failure fallback then routes the defect past itself.** `handoff.md:41-44` says *"If the push
+fails (no remote configured, offline, or a protected branch), report it to the operator in one line
+and continue; the local commits still stand and the handoff is not blocked."* All three enumerated
+causes are environmental and genuinely non-blocking. **An upstream-less branch is none of them** —
+it is a defect in the command as written — and *"the local commits still stand"* is separately
+false whenever step 2 was also skipped, which is what happened.
+
+**The distribution already knows the right form, one step file away.**
+`core/skills/ai-dlc-update/SKILL.md:173` handles this exact state: *"**AUTO-PUSH**: run
+`git push -u origin <branch>` to publish it, then proceed."* Two step files, one repo, one state,
+two commands, one of which works. Derived, with the control in the same invocation:
+
+```
+handoff.md   grep -cF '(`git push`)'                        -> 1   # the bare form, present
+handoff.md   grep -cE 'push -u|set-upstream|push origin'    -> 0
+SKILL.md     grep -cE 'push -u|set-upstream|push origin'    -> 1   # control: the grammar CAN see it
+```
+
+**It composes with `PC-S336`, and each supplies the other's precondition.** This entry guarantees a
+never-pushed sprint branch after every first handoff; `PC-S336` means the next bare
+`/ai-dlc-update` — no commit, no `apply` argument — silently publishes whatever that branch is. So
+a consumer's standing state between its first handoff and its next pull is: durable state stranded
+locally, and a dry run that will publish it unasked. Neither is visible from inside a session.
+`BL-086` carries the composed root cause with step 2; this is a third strand of the same rope.
+
+**The asymmetry is why it stayed invisible.** Step 1 has a mechanical enforcer —
+`core/hooks/ai-dlc-continue.sh` Check 0 blocks the stop while any teammate row reads `in-flight`.
+Steps 4 and 5 produce artifacts whose presence IS their verification. **Steps 2 and 3 are the only
+two that produce OFF-MACHINE state, and neither has an enforcer.** Measured at `origin/main`:
+
+```
+files under core/hooks + core/scripts mentioning "handoff"          14
+of those, any reasoning about push/upstream state                    0
+control: the same grammar over core/skills/ai-dlc-update/            1   # it can see it where it exists
+```
+
+`ai-dlc-continue.sh` returns 6 hits for `push|upstream` and **all six are unrelated prose** —
+*"upstream cause"*, *"pre-push"*, *"pushes DELTA"*. Reading the hits rather than trusting the count
+is what separates that from a finding.
+
+**What it cost, on the reference consumer.** The handoff ran its bookends and skipped its middle:
+step 1 done, steps 4 and 5 done, steps 2 and 3 absent. 19 uncommitted paths, `@{u}` fatal,
+`git ls-remote origin <branch>` empty. Among the 19, an entire sprint's
+`_bmad-output/planning-artifacts/s307/` and `_bmad-output/party-mode-transcripts/s307/` are
+untracked — in git nowhere — plus 8 of 14 staged repairs living only in an ended session's
+scratchpad. **The handoff emitted a resume line for a successor with nothing durable behind it.**
+
+Filed by the reference consumer as
+`PC-S307-HANDOFF-PUSH-IS-A-BARE-GIT-PUSH-SO-A-FIRST-HANDOFF-CANNOT-SUCCEED`. Tiered **BLOCKER**:
+it silently discards a sprint's output, the loss is off-machine and unrecoverable from the session
+that caused it, and it fires on a schedule — every sprint's first handoff.
+
+**Whether the predecessor attempted step 3 and took the fallback, or never reached step 3, is NOT
+established** — the consumer flagged that as inference rather than finding, correctly, and the
+receipt does not depend on which.
+
+The receipt is anchored on the durable prose, not on the defective command, **because the first cut
+was anchored on `` (`git push`) `` and a correct fix DELETES that string** — scored, and it returned
+9 against the fix rather than 0, reporting a working repair as unmeasurable. Re-anchored it scores:
+live **1**; `git push -u origin HEAD` **0**; a `set-upstream` phrasing **0**; the prose reworded
+with no fix **9**, which is unmeasurable rather than a false close. Note the consumer's ledger runs
+the OPPOSITE polarity to this file — 0 reproduces there, 1 here — so the two receipts are not
+interchangeable.
+
+verify: sh set -e; h=core/skills/ai-dlc/steps/handoff.md; [ -f "$h" ] || exit 9; grep -qF "push the current branch to origin" "$h" || exit 9; grep -qE "push -u|set-upstream|push origin" "$h" && exit 0; exit 1
+
 ## BL-119 — a `retire` verdict on an EXTENSION reaches no actor, because no step exists to reach
 
 **Uncovered while fixing `BL-118`, and it is the same class one subject over — but not the same
