@@ -3308,3 +3308,38 @@ this entry must not be closed on a fix whose FP set was never taken.
 
 verify: sh e=$(awk '/^## BL-[0-9]+/{f=1} f && sub(/^[ \t]*verify: sh /,"")' docs/backlog.md); [ -n "$e" ] || exit 9; n=$(printf '%s\n' "$e" | grep -c .); [ "$n" -ge 40 ] || exit 9; bad=$(printf '%s\n' "$e" | while IFS= read -r l; do [ -n "$l" ] || continue; bash -n -c "$l" 2>/dev/null || echo x; done | grep -c x); [ -f scripts/backlog-reverify.sh ] || exit 9; grep -q 'bash -n -c' scripts/backlog-reverify.sh || exit 1; grep -q MALFORMED scripts/backlog-reverify.sh || exit 1; [ "${bad:-1}" -eq 0 ]
 
+## BL-116 — `wait-beat-liveness`'s delivered case arms its join AFTER writing the deliverable, and fails only under pool load
+
+**DEFECT. Found by batch 18's gate run, which it refused.** No consumer provenance — this is
+an ai-dlc-internal discovery.
+
+`core/fixtures/wait-beat-liveness/run.sh:317-318` writes `deliv.md` and THEN arms the join:
+
+```
+printf 'answer\n' > "$W/deliv.md"
+beat "$SUBJ" "$W" 60 "$TD"
+```
+
+The subject deliberately refuses a file that predates the arming instant — *"this join waits
+for a write NEWER than the arming instant. A file that predates the join cannot be shown to be
+THIS dispatch's answer."* That refusal is correct and is the behaviour the fixture elsewhere
+asserts. So the delivered case passes only while the write and the arming instant land close
+enough together to be indistinguishable, and it fails when they do not.
+
+**It is load-dependent, which is why it has survived.** Measured: 3 of 3 runs PASS solo on this
+branch AND 3 of 3 PASS solo on `origin/main`; under the pre-push pool at width 12 it was the
+single red unit of 174. A fixture that is green solo and red under the pool is invisible to
+every way an author checks their own work.
+
+**NOT caused by the branch that found it**, established by read-set rather than by inspection:
+the fixture's subject set is `{core,scripts}/…/wait-for-deliverable.sh`, and the intersection
+with this branch's 13 changed files is EMPTY, against a positive control — the one fixture the
+branch does change appears in that same comparison.
+
+**Candidate fix**: arm the join before creating the deliverable, or pass the dispatch instant
+via `--since`, which is the escape hatch the subject already documents for exactly this shape.
+The receipt takes either, because both make the ordering sound; it does NOT take a sleep,
+which would leave the same race with a wider window.
+
+verify: sh s=$(grep -n "^S5_delivered_is_silent()" core/fixtures/wait-beat-liveness/run.sh | cut -d: -f1); [ -n "$s" ] || exit 9; e=$((s+30)); w=$(awk -v s="$s" -v e="$e" "NR>=s && NR<=e && /deliv[.]md\"\$/{print NR; exit}" core/fixtures/wait-beat-liveness/run.sh); bt=$(awk -v s="$s" -v e="$e" "NR>=s && NR<=e && /beat \"[\$]SUBJ\"/{print NR; exit}" core/fixtures/wait-beat-liveness/run.sh); [ -n "$w" ] && [ -n "$bt" ] || exit 9; awk -v s="$s" -v e="$e" "NR>=s && NR<=e" core/fixtures/wait-beat-liveness/run.sh | grep -q -- "--since" || [ "$w" -gt "$bt" ]
+
