@@ -90,7 +90,7 @@ ADJ_KEEP="$(printf '%s\n' "$ADJ_DECLS" | sed -n 's/^ADJ_KEEP_VERDICT="\([^"]*\)"
 
 # THE TWO VERDICTS THAT AUTHORIZE THE REMEDY, as seed input. The vocabulary is owned by
 # `core/schemas/layer-adjudication-register.json`'s enum and bound to it by `layer-adjudication-tier`
-# and `docs/vocabulary-index.md`; nothing here restates that join. These are the two members that
+# and by the distribution's own vocabulary join; nothing here restates it. These are the two members that
 # are NOT the keep disposition, and the control below is what makes them so -- seeding a literal
 # that silently became the keep verdict would leave every act-direction arm asserting the
 # suppression it exists to forbid.
