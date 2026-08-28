@@ -53,21 +53,51 @@ the four the `v0.417.0` sweep found closable by prose — by a comment naming a 
 correct fix AND at least two plausible regressions, score every one, and score a SECOND SPELLING of
 the correct fix too. Batch 21 is the fifth consecutive batch in which scoring moved the receipt.
 
-### A PULL IS OWED AGAIN. WRITE THE RUNBOOK; DO NOT RUN ONE.
+### A PULL IS OWED AND WAS MEASURED AS NOT REQUIRED. DO NOT WRITE A RUNBOOK YET.
 
 **The gap reopened with `v0.435.0`.** Consumer installed **0.434.0**, distribution **0.435.0** — one
-release behind, with **__PENDING__ PENDING** discharged candidates the consumer cannot see. No
-bootstrapping step is in the range: this release touched `validate-layer-entries.sh`, one new
-fixture, one sibling fixture's mutant anchor, and three packaging lists — none of
-`preclassify.sh`, `apply.sh`, `ledger-reverify.sh` or the skill itself. Derived, with the mode-only
-hazard checked: every changed blob is mode-identical except the two new files, which are `100755` as
-intended.
+release behind, with **12 PENDING** discharged candidates the consumer cannot see. No bootstrapping
+step is in the range: this release touched `validate-layer-entries.sh`, one new fixture, one sibling
+fixture's mutant anchor, and three packaging lists — none of `preclassify.sh`, `apply.sh`,
+`ledger-reverify.sh` or the skill itself. Derived, with the mode-only hazard checked: every changed
+blob is mode-identical except the two new files, which are `100755` as intended.
 
-**A PULL IS INITIATED BY THE OPERATOR AND BY NOBODY ELSE.** Measure the gap, write the runbook,
-rehearse it on a `file://` clone, report the number — then STOP. This is a standing ruling in
-`.claude/rules/operator-rulings.md`. Readiness is not authorization, and neither the PENDING count
-nor an earlier answer about WHETHER a pull should happen is a decision about WHEN. Never dispatch
-one; never hand one to a peer session.
+**THE OPERATOR ASKED WHETHER THE PULL WAS REQUIRED NOW, AND THE MEASURED ANSWER WAS NO.** Do not
+re-derive this from scratch before reading it, and do not read it as authorization for anything —
+it is a measurement, and the standing ruling below is untouched. Three readings, all against the
+consumer's real tree:
+
+- **The differential is NULL.** The consumer's INSTALLED `scripts/ai-dlc/validate-layer-entries.sh`
+  and this distribution's copy were both run against `/Users/n8/git/graph`: both `rc=0`, both one
+  warning, and the finding sets are byte-identical under `diff`. A `cmp -s` control in the same
+  invocation confirmed the two binaries actually differ, so the null is a real null and not two runs
+  of one program.
+- **The consumer is in none of the states the release fixes.** 0 of 47 layer entries unreadable (38
+  extensions, 9 overrides); `core-manifest.md` present, readable, and `consumer_machinery_home:`
+  parses to `scripts/ai-dlc-local/`, so it is not exposed to the false PASS either.
+- **It is mid-sprint.** s307 at "repair pass 1 (8/14 findings)", 18 uncommitted pipeline paths, and
+  a peer session live on it. Delivering a range that replaces machinery a sprint is EXECUTING is the
+  specific mistake recorded in `operator-rulings.md`.
+
+**WHAT THE NULL DOES NOT PROVE, because over-reading it is the likelier error.** The fix fires on a
+TRANSIENT — a read that fails — which by definition is not present when nothing is failing. The
+consumer filed this candidate off a real incident, so the state does occur. Today's zero says "not
+currently firing", never "worthless".
+
+**The one asymmetry that argues against deferring indefinitely:** the machinery false PASS is
+SILENT. A typo in that hand-maintained key at any moment turns the gate green while a segregation
+clause is dead, with no signal to anyone. Not live today; it has no warning shot when it becomes
+live.
+
+**REVISIT WHEN EITHER holds, and not on the PENDING count alone:** a second release accumulates
+(`BL-122` and `BL-123` are the likely source and are the same subsystem, so they would bundle
+cleanly), or s307 closes. **If you take a batch and the differential stops being null, that is the
+trigger — say so immediately, because it means the consumer is now missing a finding.**
+
+**A PULL IS INITIATED BY THE OPERATOR AND BY NOBODY ELSE.** Measure the gap, report the number —
+then STOP. This is a standing ruling in `.claude/rules/operator-rulings.md`. Readiness is not
+authorization, and neither the PENDING count nor an earlier answer about WHETHER a pull should
+happen is a decision about WHEN. Never dispatch one; never hand one to a peer session.
 
 **Read `docs/plans/graph-pull-0432-to-0434.md` as the worked example** — it is DISCHARGED, not a live
 plan, and its `## Discharge` section is the more useful half. `graph-pull-0432-to-0433.md` is marked
@@ -78,7 +108,7 @@ DO NOT EXECUTE.
 **`fm()` read failure and absent key are now different facts.** An `awk` that cannot open its file
 prints nothing and exits 2; a file genuinely lacking the key prints nothing and exits 0. Every caller
 read the value through `$( )` and discarded the status, so a consumer got 20 false missing-key ERRORs
-about two well-formed files. Four call sites now take the status off a read that already happens.
+about two well-formed files. EIGHT call sites now take the status off a read that already happens.
 
 **THE RECEIPT SHIPPED WAS THE THIRD VERSION, AND THE FIRST TWO WERE CERTIFIED BY THEIR AUTHOR.** Draft
 one exercised only ONE of the four sites — on an ordinary tree the census loop aborts first, so a
@@ -1534,7 +1564,27 @@ so no block written before it changes verdict.
    moved.** A stale action 1 costs a whole session redoing a batch. A stale figure costs the
    trust that makes the other figures usable. A stale command costs whichever the reader
    believes.
-7. **DETECT WHETHER A PULL IS OWED, AND IF IT IS, WRITE A RUNBOOK. Do not run the pull.**
+7. **DETECT WHETHER A PULL IS OWED, AND SEPARATELY WHETHER IT IS REQUIRED. Do not run the pull,
+   and do not write a runbook until the second test says yes.**
+
+   **THE PENDING COUNT IS NOT A DECISION, AND TREATING IT AS ONE COSTS A SESSION.** It goes non-zero
+   almost every batch by construction — this program discharges candidates, so the number rises
+   whenever it succeeds. Measured at `v0.435.0`: PENDING was **12** while the pull was NOT required,
+   and a session that read the count alone would have spent itself writing and rehearsing a runbook
+   nobody needed. Owed and required are two claims; take both.
+
+   **THE SECOND TEST IS A DIFFERENTIAL AGAINST THE CONSUMER'S REAL TREE, and it is cheap.** Run the
+   consumer's INSTALLED `scripts/ai-dlc/validate-layer-entries.sh` and this distribution's copy, both
+   against `/Users/n8/git/graph`, and diff the finding sets. **Put a `cmp -s` control in the same
+   invocation asserting the two binaries differ** — otherwise two runs of one program produce a
+   perfect null and it reads exactly like agreement. If the findings are identical, the pull changes
+   nothing observable today and the answer is BANK IT. If they diverge, the consumer is missing a
+   finding and that IS the trigger — report it immediately.
+
+   **Then ask what the null does not cover.** A fix that fires on a TRANSIENT is invisible to a
+   differential taken while nothing is failing, and a fix for a SILENT failure has no warning shot
+   when it becomes live. Both were true at `v0.435.0` and both were stated rather than hidden behind
+   the null. Report the null AND its limits, never the null alone.
 
    **THE DETECTION, run every batch after the merge.** Three readings from the delivery-gap
    derivation above, and the first one is the trigger:
