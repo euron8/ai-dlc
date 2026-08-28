@@ -50,6 +50,11 @@ permanently false further down, what does it UNBLOCK, and does it turn an existi
 a tautology. A fix that satisfies a join by deleting the join's subject reads as green
 forever.
 
+**Ask what it ACQUITS, not only what it catches.** Measured: a new arm's exemption acquitted a
+path the consumer-side validator BLOCKS, its own remedy pointed at that form, and its own probe
+asserted the acquittal on every run — a mechanism defending its own defect. An exemption needs a
+probe proving it does NOT cover the arm's own subject.
+
 ## Site the duty where the declaration decides
 
 Detect at USE time when a property has to hold across several delivery paths, and put the

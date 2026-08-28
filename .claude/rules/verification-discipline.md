@@ -88,6 +88,12 @@ overridable expanded to the identical line, so both runs used the fixed copy and
 matched perfectly — which reads as "no regression". Assert the sides differ, in the same
 invocation, before reading the comparison.
 
+**AND IT MUST BE ABLE TO RESOLVE THE EFFECT.** A differential whose spread across reps is the
+size of the thing being measured reports a null that means nothing. Measured: a removal
+differential read 7130 against 7130 with a spread of ±2 and shipped the claim "costs ZERO",
+which a per-line attribution table then contradicted directly. Ask what a differential can
+RESOLVE before reading a null off it.
+
 ## Time both sides the same way, and interleave the reps
 
 A `mktemp` extraction timed against the live repo compares two TREES, not two revisions.

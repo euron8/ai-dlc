@@ -460,8 +460,36 @@ fi
 # happens in an ad-hoc tool call, against a copy under `mktemp`, in a tree no gate scans; that is
 # the whole subject of `tool-hazards.md` and the reason that file has no corpus. A `paths:` list
 # could not fire either, because building a probe reads nothing that matches.
+#
+# RAISED A NINTH TIME, 48800 -> 49550, FOR TWO RULES COSTING 743 BYTES, ON AN EXPLICIT OPERATOR
+# RULING. The subtraction is STILL OWED and this is the ninth consecutive raise without one.
+# Put as four costed options -- take both, take only the higher-consequence one, sweep for a
+# subtraction first, or leave both uncarried -- with the shortfall measured (743 bytes against 60
+# free) before the question was asked, and with it stated that no vestigial sweep had been
+# attempted.
+#
+# RULE ONE: "a differential must be able to RESOLVE the effect", in `verification-discipline.md`,
+# beside the rule that a differential must prove its two sides differ. Earned at v0.430.0: a
+# removal differential read 7130 against 7130 with a spread of +/-2 and shipped "costs ZERO
+# forks", which a per-line attribution table contradicted directly. The existing paragraph covers
+# two sides that are IDENTICAL; this covers two sides that genuinely differ by less than the
+# instrument can see, which reads as a clean null rather than as a broken comparison.
+#
+# RULE TWO: "ask what it ACQUITS, not only what it catches", in `mechanism-design.md`, beside
+# "ask what a change makes always-true downstream". Earned the same release and it is the more
+# expensive of the two: a new arm's slot exemption acquitted a path the consumer-side validator
+# BLOCKS, the arm's own remedy pointed at that form, and its own probe asserted the acquittal on
+# every run. A mechanism that defends its own defect passes every check its author would run, and
+# only a pre-merge adversarial pass found it -- after the same false claim had already been
+# carried into consumer-facing prose.
+#
+# WHY NEITHER CAN BE SCOPED. Both are prose-only: no mechanism can decide whether a differential
+# could resolve its effect, or whether an exemption is too wide, without being the judgment
+# itself. A `paths:` list could not fire either -- the first is exercised while writing an ad-hoc
+# measurement, and the second while writing a validator arm, neither of which reliably begins
+# with a matching Read. `resident-context.md` forbids scoping a prose-only rule outright.
 # ---------------------------------------------------------------------------
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-48800}"
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-49550}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done
