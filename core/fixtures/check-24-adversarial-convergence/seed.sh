@@ -538,7 +538,7 @@ JSONL
 # not in the session that later asks permission -- which is the whole defect. A resolution
 # record outlives the session that wrote it, and `transcript_path` is always the session
 # ASKING, never the one in which the operator spoke. A single-file check therefore made
-# every record unverifiable across a handoff, /clear or auto-compact.
+# every record unverifiable across a handoff or /clear.
 cat > "$TARGET/prior-session-transcript.jsonl" <<'JSONL'
 {"type":"user","timestamp":"2026-07-12T05:00:00Z","message":{"content":"Cut the claim and re-verify — if it cannot be checked cheaply it is not load-bearing."}}
 JSONL

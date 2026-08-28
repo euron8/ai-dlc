@@ -83,12 +83,25 @@
 #       the hooks now pass it. A resolution record OUTLIVES the session that wrote it,
 #       while `transcript_path` is always the session ASKING permission -- never the one
 #       in which the operator spoke. Checking one file therefore made every record
-#       unverifiable across a handoff, /clear or auto-compact: the citation reported
+#       unverifiable across a handoff or /clear: the citation reported
 #       NOMATCH, the record stopped counting, and --cycle-state regressed RESOLVED ->
 #       STALLED -> rc 3 -> every dispatch denied. The failure was also INVERTED against
 #       honesty -- with NO transcript the hook path fails OPEN and the record counts, but
 #       with a readable transcript merely lacking the quote it failed CLOSED, so supplying
 #       ground truth was strictly worse than supplying none.
+#
+#       THE BOUNDARY LIST EXCLUDES AUTO-COMPACT, AND THAT IS A MEASUREMENT RATHER THAN AN
+#       OMISSION. This sentence read "a handoff, /clear or auto-compact" at five sites across
+#       four files, and the auto-compact clause is false on Claude Code: a compaction continues
+#       in the SAME transcript file under one `sessionId`, so a record and the operator message
+#       it cites stay in one file across it. Measured over this project's transcripts, keyed on
+#       the structural compaction-boundary record rather than a substring -- the substring is
+#       contaminated because these sessions discuss compaction in prose -- every boundary found
+#       sits MID-file with conversation on both sides. `steps/retro.md` and
+#       `validate-steering-budget.sh` carry the same correction. **The REMEDY is unchanged and
+#       was never wrong**: `--transcript-dir` is unconditional and stays correct for the two
+#       boundaries that do start a new file. Only the justification over-enumerated -- which is
+#       the shape that put a false rule into retro.md's steerability audit, so do not restore it.
 #
 # EXIT (gate mode)
 #   0  the cycle converged: every pass is adjudicable, consistent, non-divergent,
@@ -844,7 +857,7 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
   # operator's message does not move with it. The caller passes the CURRENT session's
   # transcript, which is always the session asking permission and never the one in which
   # the operator spoke, so a single-file check made every record unverifiable across a
-  # handoff, /clear or auto-compact -- and re-closed the stall deadlock v0.247.0 opened.
+  # handoff or /clear -- and re-closed the stall deadlock v0.247.0 opened.
   # A transcript DIRECTORY is the corpus the citation actually lives in; prefer it.
   # SCALARS, NOT AN ARRAY. `arr=()` then `${#arr[@]}` under `set -u` is an unbound-variable
   # error on bash 3.2, which is what macOS ships and what this repo has already shipped a

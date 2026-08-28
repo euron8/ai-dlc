@@ -463,7 +463,7 @@ if [ -n "$SERIES" ]; then
     # AND THE DIRECTORY IT LIVES IN. `transcript_path` is always THIS session -- the one
     # asking permission -- never the session in which the operator spoke. A resolution
     # record outlives its session; its citation must too, or every record goes
-    # unverifiable across a handoff, /clear or auto-compact and the stall re-deadlocks.
+    # unverifiable across a handoff or /clear and the stall re-deadlocks.
     [ -n "$TRANSCRIPT" ] && [ -d "$(dirname "$TRANSCRIPT")" ] && \
       CYCLE_ARGS+=(--transcript-dir "$(dirname "$TRANSCRIPT")")
     OUT="$(bash "$CONVERGENCE_VALIDATOR" "${CYCLE_ARGS[@]}" 2>/dev/null)"

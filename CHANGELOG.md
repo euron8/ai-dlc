@@ -15,6 +15,48 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.430.1] - 2026-08-28
+
+### The same false premise sat at five more sites, and correcting only half of core left it contradicting itself
+
+`v0.430.0` corrected the claim that *every handoff and every auto-compact starts a new
+transcript file* in `steps/retro.md` and `validate-steering-budget.sh`. It did not reach five
+further sites, across four files, spelling it *"unverifiable across a handoff, `/clear` or
+auto-compact"*:
+
+```
+core/hooks/ai-dlc-acknowledge.sh                        core/hooks/ai-dlc-continue.sh
+core/scripts/validate-adversarial-convergence.sh  (x2)  core/fixtures/check-24-.../seed.sh
+```
+
+**So core asserted both halves at once** — that a compaction continues in the same file, and
+that a citation dies across one. A consumer reading both got contradictory guidance, and the
+contradiction was introduced by the release that fixed the first half.
+
+**The REMEDY at all five was never wrong and is unchanged.** `--transcript-dir` is
+unconditional and stays correct for the two boundaries that do start a new file. Only the
+justification over-enumerated. That distinction is why this is a patch: no behaviour moves.
+
+**It is worth more than a tidy-up for two reasons.** It is a false premise sitting in prose that
+REASONS FROM it — the exact shape that put a false rule into `retro.md`'s steerability audit in
+the first place — and one of the five is a FIXTURE SEED comment, which is how a future arm gets
+built around a case that cannot fire. The boundary list at the owning file now records why
+auto-compact is excluded, so the clause cannot be restored as an oversight.
+
+**`N > 1` NEVER HAD A MECHANICAL ENFORCER, which changes how the next reader should scope the
+blast radius.** Derived with controls: one emitter of `transcripts scanned` and no consumer of
+the number anywhere in `core/`, `scripts/` or `.githooks/`; `check-25`'s arm pins the LINE'S
+BYTES because `retro.md` reads it by label and never evaluates whether 1 is acceptable; and
+`enforcement-map.yaml` declares the retro site `posture: reports; the retro adjudicates`, with
+zero `hard_block` keys against a control of 17 elsewhere in that file. **The false positive was
+never gate-blocking**, so anyone measuring its cost by hunting archived gate FAILs will find
+zero and misread it as harmless — the real population is retros whose audit was hand-recorded as
+mis-scoped.
+
+**A downstream restatement was more accurate than its source.** `check-25`'s own comment already
+said *"requires N > 1 on any sprint that handed off"*, with no auto-compact clause, for as long
+as the defect existed — the inverse of the drift direction this repo usually guards against.
+
 ## [0.430.0] - 2026-08-27
 
 ### A prescribed artifact path can hide a sprint inside a placeholder, and the invariant that forbids it could not see one
