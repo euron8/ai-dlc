@@ -3278,60 +3278,45 @@ verify: sh s=core/skills/ai-dlc-update/reconcile/settings-merge.sh; a=core/skill
 
 ---
 
-## BL-118 — a recorded verdict suppressed the remedy it authorizes
+## BL-119 — a `retire` verdict on an EXTENSION reaches no actor, because no step exists to reach
 
-**`apply.sh` matched the adjudication token's PRESENCE and suppressed the whole ATOMIC
-override-retire sequence for it.** `adj_v` was extracted and used for exactly one thing —
-interpolation into the NOTE — so the row asserted a property of the verdict on a code path that
-never read the verdict. The message is the proof rather than a symptom: *"No retire steps are
-emitted: acting on them would undo a decision, not complete one"* is true of `still-additive` and
-false of the other two members. The register's vocabulary has three
-(`core/schemas/layer-adjudication-register.json:35-37`), and `adj_lookup()`
-(`core/skills/ai-dlc-update/reconcile/layer-drift.sh:615`) clears on any conforming record, so
-**the suppression fired at 2 of 3**. On a `retire`, acting COMPLETES the decision; on a
-`contradicts-core` the register records that the override contradicts core and the remedy is then
-suppressed. Recording the honest verdict is what made the remedy unreachable, and no verdict
-existed that both told the truth and left the steps emitted.
+**Uncovered while fixing `BL-118`, and it is the same class one subject over — but not the same
+defect, and the difference is the whole finding.** `apply.sh:731-741` suppresses the
+`WORKLIST extension-reread` row on any recorded verdict, exactly as the override loop did. That
+suppression is CORRECT: the row's obligation is *"re-read this entry against the new core text and
+record a verdict"*, and any recorded verdict discharges it. The reading has been done.
 
-**A second failure was invisible from outside the code and arrives WITH the branch.** The detail
-field's tokens are an ordered prefix parsed positionally
-(`core/skills/ai-dlc-update/reconcile/apply.sh:625-641`) and the adjudication token sits ahead of
-them, so a row falling through with it still attached misses both `replaces_with=` and
-`retire_anchor=`. Measured against the shipping loop, one input, strip present and deleted:
+**What is missing is the other half.** For an override, `still-additive` means keep and the other
+two authorize a remedy the script emits. For an extension, `retire` and `contradicts-core` are
+recordable, are honest answers, and authorize nothing — **there is no extension remedy emitter in
+the tree at all.** Derived over `core/`, with the override path as the control in the same
+invocation:
 
 ```
-detail = adjudicated=retire :: retire_anchor=steps/retro.md#4a :: core moved
-  with strip: WORKLIST override-retire — remove the anchor `steps/retro.md#4a` … leave its
-              other anchors byte-untouched
-  without:    WORKLIST override-retire — core supersedes this entry: adjudicated=retire :: …
+say (NOTE|WORKLIST|HARD…) <kind>  across apply.sh   -> 8 distinct kinds, none of them a retire
+                                                       or repair for an extension
+grep -rn 'extension-retire' core/                   -> 0
+grep -c  'stamp retire' …/apply.sh                  -> 4    # control: the OVERRIDE path has one
 ```
 
-The second row is obeyed by deleting an override file that core superseded ONE anchor of, which
-is the outcome `apply.sh:607-612` exists to forbid. It could not occur while the arm always
-`continue`d.
+`layer-drift.sh:1526` does tell a consumer to retire an extension that merely duplicates core, but
+that is the `EXTENSION-TITLE-MATCHES-CORE` row and a different subject; nothing carries a
+`retire` recorded against `EXTENSION-HOOK-DRIFT`. So a consumer that reads the entry, concludes it
+should go, and records that honestly is left with a decision nobody is told to act on — the
+outcome `BL-118` names, reached by a route `BL-118`'s fix does not touch.
 
-**The provenance is the mirror image, and that is the lesson.** `apply.sh:558-567` names the
-motivating case: a recorded `still-additive` overrun by a prescribed step 2 that would have
-deleted 119 consumer-only lines, filed as `PC-S327`. That fix generalised from one member to the
-whole vocabulary without asking what the exemption ACQUITS — the same shape as `I99` at
-`v0.430.0`, one release earlier.
+Tiered **DEFECT**, and the consequence is silence rather than a wrong prescription: no consumer
+has been observed hitting it, unlike `PC-S307`, which was filed off a live pull. Not filed
+upstream — it was found here.
 
-Filed by the reference consumer as
-`PC-S307-RECORDED-VERDICT-SUPPRESSES-THE-REMEDY-IT-AUTHORIZES`, hit live on its
-`0.427.0 -> 0.430.1` pull. Tiered **DEFECT**: it silences a remedy rather than prescribing a wrong
-one, and the consumer had to reason its way out of a state where no honest verdict worked.
+The receipt is the same DIFFERENTIAL the `apply-worklist-rows` fixture uses on the override side,
+and its first cut was wrong in a way worth recording: comparing the two runs' full output scored
+**0** on the unfixed tree, because the NOTE interpolates the verdict name and the two messages
+therefore differ by construction. Keyed on the row SEVERITY and KIND instead it reads 1 here, and
+0 against a mutant that emits any distinct row for a non-keep verdict. Exit 9 if the loop cannot
+be located or the keep run emits nothing.
 
-The receipt DRIVES the shipping loop rather than grepping it, so no comment, rename or doc line
-closes it. It runs the loop twice from one extraction — once on a `retire` verdict, which must
-produce the anchor-narrowing row, and once on the keep verdict, which must NOT. **The second
-drive is not symmetry.** Scored against five constructions in one invocation, a receipt fed only
-the `retire` case scores the over-correction — emit the sequence for every verdict, `PC-S327`
-back — as FIXED. With both: the committed fix 0, a `case`-arm-on-the-literal spelling of the same
-behaviour 0, the live defect 1, a mutant naming all three members in the NOTE text 1, the
-over-correction 1, an unread second assignment of the verdict 1. Exit 9 if the loop cannot be
-located, so a reshaped file reports a moved precondition rather than a false close.
-
-verify: sh set -e; a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$a" ] || exit 9; t=$(mktemp -d); sed -n '/^while IFS="$TAB_CH" read -r ovr detail; do$/,/^EOF$/p' "$a" > "$t/l.sh"; [ -s "$t/l.sh" ] || exit 9; { echo 'TAB_CH="$(printf "\t")"'; echo 'say(){ printf "%s %s %s\n" "$1" "$2" "$4"; }'; echo 'ADJ_ROW_TOKEN=adjudicated'; echo 'ADJ_KEEP_VERDICT=still-additive'; echo 'LD_SUP="$(printf "overrides/x.md\t%s" "$D")"'; echo '. "$T/l.sh"'; } > "$t/d.sh"; r=$(T="$t" D='adjudicated=retire :: retire_anchor=A :: p' bash "$t/d.sh" 2>&1) || exit 9; k=$(T="$t" D='adjudicated=still-additive :: retire_anchor=A :: p' bash "$t/d.sh" 2>&1) || exit 9; rm -rf "$t"; case "$k" in *"remove the anchor"*) exit 1 ;; esac; case "$r" in *"remove the anchor"*) exit 0 ;; esac; exit 1
+verify: sh set -e; a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$a" ] || exit 9; t=$(mktemp -d); sed -n '/^while IFS="$TAB_CH" read -r ext detail; do$/,/^EOF$/p' "$a" > "$t/l.sh"; [ -s "$t/l.sh" ] || exit 9; { echo 'TAB_CH="$(printf "\t")"'; echo 'say(){ printf "%s %s\n" "$1" "$2"; }'; echo 'ADJ_ROW_TOKEN=adjudicated'; echo 'ADJ_KEEP_VERDICT=still-additive'; echo 'LD_HOOK="$(printf "extensions/e.md\t%s" "$D")"'; echo '. "$T/l.sh"'; } > "$t/d.sh"; r=$(T="$t" D="adjudicated=retire :: p" bash "$t/d.sh" 2>&1) || exit 9; k=$(T="$t" D="adjudicated=still-additive :: p" bash "$t/d.sh" 2>&1) || exit 9; rm -rf "$t"; [ -n "$k" ] || exit 9; [ "$r" = "$k" ] && exit 1; exit 0
 
 ## BL-117 — a commit that WITHDRAWS an attribution becomes the new attribution, permanently
 
