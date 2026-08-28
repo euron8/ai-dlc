@@ -260,12 +260,18 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 # more useful than inventing a third attribution. Spread across reps is 7108-7108, so the
 # headroom is the usual 6 over the TOP of the spread.
 #
-# 7114 -> 7137: the I99 arm was added and it is NOT what raised this. Measured by the
-# differential this comment block already prescribes -- the arm cut out of THIS file, profiled
-# untargeted in a clean environment, and the file restored byte-identically (asserted with
-# `cmp -s`, and both runs EXIT 0): 7130 without it and 7130 with it, spread 7129-7131. The arm
-# costs ZERO forks, because its predicate is `[[ =~ ]]` throughout and its only external call
-# is the single resolver invocation the token/slot pair above already pays for.
+# 7114 -> 7137: the I99 arm was added and it is NOT what raised this -- but it does not cost
+# nothing either, and the first draft of this note said it did. Measured by the differential this
+# comment block already prescribes -- the arm cut out of THIS file, profiled untargeted in a clean
+# environment, and the file restored byte-identically (asserted with `cmp -s`, both runs EXIT 0):
+# 7130 without it and 7130 with it, spread 7129-7131.
+#   THAT DIFFERENTIAL CANNOT RESOLVE THE ARM'S COST, AND READING IT AS "ZERO" WAS WRONG. Its own
+#   spread is +/-1, the same order as the effect. The by-line table answers directly: I99 makes
+#   its OWN resolver call, `1 <line> bash` for `--conceal-id-re-prescribed` and another for
+#   `--conceal-re-prescribed`, NOT shared with the token/slot pair above -- the four I82 `bash`
+#   rows are the control that the instrument attributes this class of call at all. With the `$( )`
+#   subshell this file's profiler names as its own known undercount, the arm costs roughly 2-4.
+#   Ask what a differential can RESOLVE before reading a null result off it.
 #   THE RISE IS CORPUS GROWTH, and it is this release's own. Against origin/main the reading
 #   is 7088; against this tree, 7130. The script walks docs/ and core/, and this release adds
 #   two backlog entries, their archive rows and a CHANGELOG section. Attributing that to the
@@ -273,8 +279,13 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   PROFILE UNTARGETED AND UNDER `env -i`. `--target <copy>` answers 7218 with EXIT 1 -- a
 #   different and FAILING run -- and an inherited environment answers 7218 too. Both read like
 #   a real reading; only the untargeted clean-environment run reproduces the fixture's number.
-# Spread top is 7131, so the headroom is again the usual 6 over it.
-FORK_BUDGET=7137
+#   RE-MEASURED after the adversarial pass added conjunct (c)'s second resolver call. The fixture
+#   reads 7144; the removal differential reads 7142 without the arm against 7143 with it, spread
+#   7140-7142 on one side -- so it STILL cannot resolve the arm, and the by-line table remains
+#   the only instrument here that can. Corpus growth dominates again: this release's own
+#   CHANGELOG, backlog and grammar edits all landed between the two readings.
+# Spread top is 7144, so the headroom is again the usual 6 over it.
+FORK_BUDGET=7150
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -6329,10 +6340,24 @@ The \`areas:\` block IS the declaration of where an \`s<N>/\` directory may live
     #   (a) the BASENAME carries a placeholder whose NAME can carry a sprint;
     #   (b) the basename does NOT already carry a visible sprint token. That is I82's subject, and
     #       reporting it here would make one defect two findings with two remedies;
-    #   (c) NO component of the path is the reserved slot. A prescription already inside `s<N>/`
-    #       conceals nothing — the sprint is in the directory, where the grammar puts it, so
-    #       whatever the placeholder expands to is legal by position. `<story-index>` under a slot
-    #       is the shape this conjunct exists to acquit.
+    #   (c) NO component of the path is the reserved slot — EXCEPT that the slot does not excuse an
+    #       ID. `<story-index>` under a slot is the shape this conjunct exists to acquit.
+    #
+    #       THE SLOT EXEMPTION WAS WRITTEN TOO WIDE AND AN ADVERSARIAL PASS CAUGHT IT BEFORE THE
+    #       MERGE. It read "a prescription already inside `s<N>/` conceals nothing", which holds
+    #       for a placeholder naming the SPRINT and FAILS for one naming an ID: the pipeline mints
+    #       ids sprint-first (`s306-1`, `S292-1` in the reference consumer's own history), so
+    #       `s<N>/<story-id>-review.md` expands to a BASENAME carrying the sprint with the slot
+    #       correctly placed. `validate-artifact-paths.sh` — the consumer-side reader of real
+    #       filenames, and the authority here — exempts only the component AT `slotidx`, and a
+    #       basename is never at `slotidx`. Measured on a scratch consumer tree, one invocation,
+    #       the conforming file as the control:
+    #           docs/reviews/s306/1-code-review.md        CONFORMING
+    #           docs/reviews/s306/s306-1-code-review.md   BLOCKING, VERDICT: FAIL, exit 1
+    #       So the wide form acquitted a path that BLOCKS a consumer push, and this arm's own
+    #       remedy — "put the sprint in the directory" — is exactly what would have produced it.
+    #       An arm that sends an author to a push-time failure by way of its own advice is worse
+    #       than no arm.
     #
     # ALL THREE EXPRESSIONS ARE RESOLVED AND NONE IS WRITTEN HERE, for the reason I82's own header
     # records: this file carried a local copy of the token ERE once, it forked from the resolver,
@@ -6359,7 +6384,8 @@ The \`areas:\` block IS the declaration of where an \`s<N>/\` directory may live
     # same rewrite, and an arm with no escape hatch wedges a prescription whose readers cannot move
     # yet. I82's converse direction keeps the ledger from outliving what it excuses.
     i99_conceal_re="$(bash "$REPO_ROOT/core/scripts/artifact-path-config.sh" --conceal-re-prescribed 2>/dev/null)"
-    if [ -z "$i99_conceal_re" ]; then
+    i99_conceal_id_re="$(bash "$REPO_ROOT/core/scripts/artifact-path-config.sh" --conceal-id-re-prescribed 2>/dev/null)"
+    if [ -z "$i99_conceal_re" ] || [ -z "$i99_conceal_id_re" ]; then
       err "I99 could not resolve the concealing-placeholder ERE from core/scripts/artifact-path-config.sh --conceal-re-prescribed. That resolver is the single home of the expression; without it this invariant has no predicate, and a predicate that matches nothing reports every prescription core makes as conforming."
     elif [ -z "$i82_slot_re" ] || [ -z "$i82_tok_re" ]; then
       err "I99 needs the slot and prescribed-token expressions I82 resolves above, and at least one came back empty. Without the slot it cannot exempt a correctly placed prescription; without the token it cannot stand down for I82's subject. Either way every finding it produced would be unattributable, so it refuses rather than guessing."
@@ -6372,12 +6398,15 @@ The \`areas:\` block IS the declaration of where an \`s<N>/\` directory may live
         # reads as a dead predicate rather than as a quoting bug. Measured on bash 3.2.
         [[ "$b" =~ $i99_conceal_re ]] || return 1     # (a) no placeholder that can carry one
         [[ "$b" =~ $i82_tok_re ]] && return 1         # (b) visible token: I82's finding, not this one
+        # (c) the slot excuses a SPRINT placeholder and never an ID one -- an id expands
+        # sprint-first, so the slot being right does not make the basename right.
+        [[ "$b" =~ $i99_conceal_id_re ]] && return 0
         rest="$p"
         while [ -n "$rest" ]; do
           c="${rest%%/*}"
           if [ "$c" = "$rest" ]; then rest=""; else rest="${rest#*/}"; fi
           [ -n "$c" ] || continue
-          [[ "$c" =~ $i82_slot_re ]] && return 1      # (c) the slot is placed; nothing is concealed
+          [[ "$c" =~ $i82_slot_re ]] && return 1      # the slot is placed; nothing is concealed
         done
         return 0
       }
@@ -6391,7 +6420,9 @@ The \`areas:\` block IS the declaration of where an \`s<N>/\` directory may live
         || err "I99's own probe: '${i82b_a1}/<story-id>-probe.md' was NOT flagged. That is the exact shape measured on the reference consumer twice, so the predicate cannot see the defect it exists to catch and every PASS below means nothing."
       i99_conceals "${i82b_a1}/story-<id>-<slug>-probe.md" \
         || err "I99's own probe: '${i82b_a1}/story-<id>-<slug>-probe.md' was NOT flagged. artifact-path-grammar.md names that spelling alongside the first as the same concealment, so a predicate seeing one and not the other covers half the class while reading complete."
-      for i99_p in "${i82b_a1}/s<N>/<story-id>-probe.md" "${i82b_a1}/<story-index>-probe.md" "${i82b_a1}/<slug>-probe.md" "${i82b_a1}/probe-<M>.md" "${i82b_a1}/changelog-<artifact>.md" "${i82b_a1}/sprint-<N>.md"; do
+      i99_conceals "${i82b_a1}/s<N>/<story-id>-probe.md" \
+        || err "I99's own probe: '${i82b_a1}/s<N>/<story-id>-probe.md' was NOT flagged. The reserved slot does not excuse an ID placeholder — the pipeline mints ids sprint-first, so this expands to a basename carrying the sprint with the slot correctly placed, and \`validate-artifact-paths.sh\` BLOCKS it on a consumer because it exempts only the component at slotidx. An earlier revision of this arm asserted the OPPOSITE here, which made the acquittal a defended property and pointed this arm's own remedy at a push-time failure."
+      for i99_p in "${i82b_a1}/s<N>/<story-index>-probe.md" "${i82b_a1}/<story-index>-probe.md" "${i82b_a1}/<slug>-probe.md" "${i82b_a1}/probe-<M>.md" "${i82b_a1}/changelog-<artifact>.md" "${i82b_a1}/sprint-<N>.md" "${i82b_a1}/s<N>/<artifact>-p<M>.md"; do
         i99_conceals "$i99_p" \
           && err "I99's own probe: '$i99_p' was flagged and must not be. It is either already inside the reserved slot, or a placeholder naming nothing sprint-scoped, or a VISIBLE sprint token that I82 above already owns. An arm that reports it fires on paths that conform, which is how an operator learns to stop reading a check."
       done

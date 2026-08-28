@@ -8,6 +8,7 @@
 #   artifact-path-config.sh --slot-re
 #   artifact-path-config.sh --slot-re-prescribed
 #   artifact-path-config.sh --conceal-re-prescribed
+#   artifact-path-config.sh --conceal-id-re-prescribed
 #   artifact-path-config.sh --grammar-file  [--root <dir>] [--grammar <file>]
 #   artifact-path-config.sh --consumer-file [--root <dir>]
 #   artifact-path-config.sh --consumer-syntax [--root <dir>]
@@ -130,22 +131,37 @@ SLOT_RE='^s[0-9]+$'
 # make one defect two findings and put the remedy in two places.
 CONCEAL_RE_PRESCRIBED='<([^>]*-)?(id|N|sprint)(-[^>]*)?>'
 
+# THE SUBSET THE RESERVED SLOT DOES NOT EXCUSE, and it is a correction rather than an addition.
+# A caller may exempt a prescription that already sits inside `s<N>/`, on the reasoning that the
+# sprint is then in the directory where the grammar puts it. That reasoning holds for a
+# placeholder naming the SPRINT (`<N>`, `<sprint>`) and FAILS for one naming an ID: an id the
+# pipeline mints is spelled sprint-first (`s306-1`, `S292-1` in the reference consumer's own
+# history), so `s<N>/<story-id>-review.md` expands to a BASENAME carrying the sprint even though
+# the slot is correctly placed.
+#
+# MEASURED against the shipping consumer validator, which is the authority here because it reads
+# real filenames: `validate-artifact-paths.sh` exempts only the component AT `slotidx`, and a
+# basename is never at `slotidx`. So `docs/reviews/s306/s306-1-code-review.md` is a BLOCKING path
+# on a consumer while `docs/reviews/s306/1-code-review.md` is clean. A prescription-time check
+# that acquits the first one sends an author to a push-time failure by way of its own remedy.
+CONCEAL_ID_RE_PRESCRIBED='<([^>]*-)?id(-[^>]*)?>'
+
 while [ $# -gt 0 ]; do
   case "$1" in
-    --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--conceal-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax)
+    --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--conceal-re-prescribed|--conceal-id-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax)
       [ -z "$MODE" ] || { echo "$PROG: two modes given ('$MODE' and '$1'); it answers one question per call" >&2; exit 2; }
       MODE="$1"; shift ;;
     --root) ROOT="${2:-}"; [ -n "$ROOT" ] || { echo "$PROG: --root needs a directory" >&2; exit 2; }; shift 2 ;;
     --grammar) GRAMMAR_ARG="${2:-}"; [ -n "$GRAMMAR_ARG" ] || { echo "$PROG: --grammar needs a file" >&2; exit 2; }; shift 2 ;;
     -h|--help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "$PROG: unknown option '$1'" >&2
-       echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--conceal-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax [--root <dir>] [--grammar <file>]" >&2
+       echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--conceal-re-prescribed|--conceal-id-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax [--root <dir>] [--grammar <file>]" >&2
        exit 2 ;;
   esac
 done
 
 [ -n "$MODE" ] || { echo "$PROG: no mode given" >&2
-                    echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--conceal-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax [--root <dir>] [--grammar <file>]" >&2
+                    echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--conceal-re-prescribed|--conceal-id-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax [--root <dir>] [--grammar <file>]" >&2
                     exit 2; }
 
 # --token-re answers before any tree is consulted. It is a property of the grammar's RULES, not
@@ -156,6 +172,7 @@ if [ "$MODE" = "--token-re-prescribed" ]; then printf '%s\n' "$TOKEN_RE_PRESCRIB
 if [ "$MODE" = "--slot-re" ]; then printf '%s\n' "$SLOT_RE"; exit 0; fi
 if [ "$MODE" = "--slot-re-prescribed" ]; then printf '%s\n' "$SLOT_RE_PRESCRIBED"; exit 0; fi
 if [ "$MODE" = "--conceal-re-prescribed" ]; then printf '%s\n' "$CONCEAL_RE_PRESCRIBED"; exit 0; fi
+if [ "$MODE" = "--conceal-id-re-prescribed" ]; then printf '%s\n' "$CONCEAL_ID_RE_PRESCRIBED"; exit 0; fi
 
 # RESOLVE --grammar BEFORE the cd, for migrate-artifact-paths.sh's reason exactly: it is the
 # caller's path, relative to where THEY are standing, and this then changes directory.

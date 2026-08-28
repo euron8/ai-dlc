@@ -54,6 +54,25 @@ one revision back it reports exactly 1 and no other path of the 81; that pair, n
 is what says the arm discriminates. It costs nothing measurable on the validator that the
 fixture suite's pole invokes: interleaved, four reps each, 22.53s before and 22.35s after.
 
+**AN ADVERSARIAL PASS CAUGHT I99 ACQUITTING A PATH THAT BLOCKS A CONSUMER PUSH, BEFORE THE
+MERGE.** The arm's slot exemption was written as *"a prescription already inside `s<N>/`
+conceals nothing"*. That holds for a placeholder naming the SPRINT and fails for one naming an
+ID: the pipeline mints ids sprint-first (`s306-1`, `S292-1` in the reference consumer's own
+history), so `s<N>/<story-id>-review.md` expands to a basename carrying the sprint with the slot
+correctly placed. `validate-artifact-paths.sh` exempts only the component AT the slot index and a
+basename is never at that index, so it BLOCKS the expansion — measured on a scratch consumer
+tree, `docs/reviews/s306/1-code-review.md` conforming against
+`docs/reviews/s306/s306-1-code-review.md` blocking, `VERDICT: FAIL`, exit 1.
+
+**The arm's own remedy pointed at the acquitted form, and its own probe asserted the acquittal on
+every run** — so the defect was a defended property, and the same false claim had already been
+carried into consumer-facing prose in `artifact-path-grammar.md`. The slot exemption now excuses
+a sprint placeholder and never an ID one, via a `--conceal-id-re-prescribed` mode on the single
+resolver; the probe is inverted to require the flag; and the grammar paragraph is corrected.
+False-positive set is still 0 over the 82 prescriptions, and the legitimate under-slot shapes —
+`s<N>/<story-index>-…`, `s<N>/<artifact>-p<M>.md`, `docs/retro/s<N>/retro.md` — are all still
+acquitted, with `docs/reviews/sprint-<N>.md` standing down to I82 as before.
+
 `code-reviewer-escalated.md` needed no edit — it delegates to `code-reviewer.md` in full and
 deliberately holds no second copy. No reader keyed on the old basename shape; every
 programmatic reader of `docs/reviews/` is area-level or is a grammar enforcer. The conforming
@@ -63,9 +82,14 @@ destination was not invented either — `artifact-path-migration`'s fixture alre
 **`FORK_BUDGET` rises 7114 -> 7137, and the new arm is not what raised it.** The gate refused
 the first push on it, correctly. Measured by cutting the arm out of the validator, profiling
 untargeted under `env -i`, and restoring the file byte-identically with `cmp -s`, both runs
-exiting 0: **7130 without the arm and 7130 with it**, spread 7129-7131 — the arm costs ZERO
-forks, its predicate being `[[ =~ ]]` throughout with one resolver call the existing token/slot
-pair already pays for. The rise from origin/main's 7088 is this release's own corpus growth:
+exiting 0: **7130 without the arm and 7130 with it**, spread 7129-7131.
+
+**That differential cannot resolve the arm's cost, and the first draft of this note read it as
+"zero forks", which was wrong.** The spread is ±1, the same order as the effect. The by-line
+table answers directly — I99 makes its own resolver calls, not shared with the token/slot pair,
+against the four I82 `bash` rows as the control that the instrument attributes this class of
+call at all — so the arm costs roughly 2-4. The substantive claim survives and the raise stands:
+the rise from origin/main's 7088 is this release's own corpus growth:
 the script walks `docs/` and `core/`, and this release adds two backlog entries, their archive
 rows and a CHANGELOG section. Profiling `--target <copy>` instead answers 7218 with EXIT 1, a
 different and FAILING run, and an inherited environment answers 7218 too; only the untargeted

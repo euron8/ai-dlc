@@ -156,9 +156,18 @@ reaching an operator as one FAIL row among roughly 160 push-time checks, after t
 so each occurrence bought a migration. **`validate-enforcement-map.sh` I99 now closes the
 prescription-side half**, by keying on the placeholder's NAME rather than on a token: a basename
 placeholder naming something the pipeline mints per sprint (`sprint`, `N`, `id` as a
-hyphen-delimited segment), with no `s<N>/` component anywhere in the path, is reported where it is
-written. A prescription already inside the slot is exempt, because the sprint is then in the
-directory and the placeholder conceals nothing.
+hyphen-delimited segment) is reported where it is written.
+
+**The reserved slot excuses a SPRINT placeholder and never an ID one**, and that distinction is
+the arm rather than a detail of it. `s<N>/<artifact>-p<M>.md` is exempt: the sprint is in the
+directory and the placeholder conceals nothing. `s<N>/<story-id>-review.md` is NOT, because the
+pipeline mints ids sprint-first — `s306-1`, `S292-1` — so it expands to a basename carrying the
+sprint with the slot correctly placed. `validate-artifact-paths.sh` exempts only the component AT
+the slot index, and a basename is never at that index, so it BLOCKS the expansion: measured on a
+scratch consumer tree, `docs/reviews/s306/1-code-review.md` is conforming and
+`docs/reviews/s306/s306-1-code-review.md` is a blocking path. An earlier revision of this
+paragraph claimed the whole in-slot case was exempt, which would have sent an author following
+this page's own remedy straight to a push-time failure.
 
 **What survives is per-NAME rather than per-class.** A placeholder whose name gives no hint —
 `<slug>`, `<artifact>` — can still expand to a filename carrying a sprint, and no expression can

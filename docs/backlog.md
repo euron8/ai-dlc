@@ -3341,5 +3341,23 @@ via `--since`, which is the escape hatch the subject already documents for exact
 The receipt takes either, because both make the ordering sound; it does NOT take a sleep,
 which would leave the same race with a wider window.
 
-verify: sh s=$(grep -n "^S5_delivered_is_silent()" core/fixtures/wait-beat-liveness/run.sh | cut -d: -f1); [ -n "$s" ] || exit 9; e=$((s+30)); w=$(awk -v s="$s" -v e="$e" "NR>=s && NR<=e && /deliv[.]md\"\$/{print NR; exit}" core/fixtures/wait-beat-liveness/run.sh); bt=$(awk -v s="$s" -v e="$e" "NR>=s && NR<=e && /beat \"[\$]SUBJ\"/{print NR; exit}" core/fixtures/wait-beat-liveness/run.sh); [ -n "$w" ] && [ -n "$bt" ] || exit 9; awk -v s="$s" -v e="$e" "NR>=s && NR<=e" core/fixtures/wait-beat-liveness/run.sh | grep -q -- "--since" || [ "$w" -gt "$bt" ]
+**The receipt was REPLACED after an adversarial pass closed the first one two ways without
+changing anything.** Both holes are recorded because both are general:
+
+- `grep -q -- "--since"` over the whole window was satisfied by a COMMENT — and the comment a
+  reader would naturally write is a paraphrase of this entry's own candidate-fix sentence, so
+  the entry was steering its reader into closing it vacuously. `--since` occurs 0 times in the
+  window today, so that clause was inert and would have become the entire verdict the moment
+  anyone typed it. It now requires `--since` on a NON-COMMENT line.
+- The write anchor `/deliv[.]md"$/` also matched the TEARDOWN `rm -f "$W/deliv.md"` below the
+  subject. Redirect the real write to a variable and the anchor silently re-points at a line
+  that is always after the beat, and the receipt passes forever with the race untouched. It now
+  anchors on a REDIRECTION into the deliverable, and when that anchor stops resolving it exits
+  **9** — measured — rather than 0, so a moved subject reports "I measured nothing" instead of
+  a close.
+
+Scored against six cases: unfixed HEAD 1, both real fixes 0, comment-only 1, sleep 1,
+variable-redirect 9. No mutant reaches 0 without the ordering actually being sound.
+
+verify: sh s=$(grep -n "^S5_delivered_is_silent()" core/fixtures/wait-beat-liveness/run.sh | cut -d: -f1); [ -n "$s" ] || exit 9; e=$((s+30)); f=core/fixtures/wait-beat-liveness/run.sh; w=$(awk -v s="$s" -v e="$e" "NR>=s && NR<=e && /> *\"[\$]W\/deliv[.]md\"/{print NR; exit}" "$f"); bt=$(awk -v s="$s" -v e="$e" "NR>=s && NR<=e && /beat \"[\$]SUBJ\"/{print NR; exit}" "$f"); [ -n "$bt" ] || exit 9; sn=$(awk -v s="$s" -v e="$e" "NR>=s && NR<=e && /--since/ && \$0 !~ /^[[:space:]]*#/{print NR; exit}" "$f"); [ -n "$sn" ] && exit 0; [ -n "$w" ] || exit 9; [ "$w" -gt "$bt" ]
 
