@@ -12,80 +12,171 @@ instruction from it.**
 ### START HERE: SWEEP THE CONSUMER FOR NEW PUSH CANDIDATES, THEN FIX ONE.
 
 **YOUR FIRST ACTION IS NUMBERED ACTION 1 BELOW — the sweep for candidates the consumer has filed
-since `v0.434.0`.** Standing operator instruction: do it before picking any subject, and report
-what it finds. It has caught a same-day filing in five consecutive batches, twice while the batch
-was already running.
+since `v0.435.0`.** Standing operator instruction: do it before picking any subject, and report
+what it finds. It has caught a same-day filing in five of the last six batches, twice while the
+batch was already running. Batch 21 is the exception: it swept twice, at the start and mid-run, and
+both came back empty.
 
-**THE OPERATOR'S CORRECTION, AND IT OVERRIDES HOW THE PREVIOUS FIVE BATCHES WERE RUN.** Their
-words: *"The purpose of this plan is to drain the upstream push candidate ledger — that does not
-mean we just shuffle items to the backlog. It means we address them with priority."* Filing a
-candidate as a `BL-` entry moves it from UNFILED to IN-FLIGHT and discharges NOTHING. It changes a
-number and reports as progress. **When the sweep finds a live candidate you can fix, FIX IT and
+**THE OPERATOR'S CORRECTION STILL GOVERNS.** Their words: *"The purpose of this plan is to drain the
+upstream push candidate ledger — that does not mean we just shuffle items to the backlog. It means
+we address them with priority."* Filing a candidate as a `BL-` entry moves it from UNFILED to
+IN-FLIGHT and discharges NOTHING. **When the sweep finds a live candidate you can fix, FIX IT and
 ship it, in this batch, and cite the id in the release commit message.** File only what you
-genuinely cannot take now, and say why in the same breath. This correction was earned: a
-BLOCKER-tiered candidate was filed rather than fixed, and the operator caught it.
+genuinely cannot take now, and say why in the same breath.
 
-**The baseline, re-derived by running the derive block below: 65 live candidates, 132 archived,
-33 of them UNFILED.** Partition **9 DISCHARGED / 23 IN-FLIGHT / 33 UNTOUCHED = 65**, with
-**24 TERMINAL** — so **33 candidates delivered in total**, 24 already closed by the consumer.
-Controls in the same run: partition 0, a spaced-bullet id 1, an impossible id 0. Re-derive rather
-than trusting these; the live count has moved during a batch more than once.
+**The baseline, re-derived after the merge: 65 live candidates, 132 archived upstream, 32 of them
+UNFILED.** Partition **12 DISCHARGED / 23 IN-FLIGHT / 32 UNTOUCHED = 67 against a denominator of
+65**, with **24 TERMINAL** and **12 PENDING**. Controls in the same run: partition control 0,
+spaced-bullet id 1, bare-bold id 1, dotted id 1, impossible id 0.
 
-### THE NEXT SUBJECT IS ALREADY CHOSEN, BUILT AND PARKED — READ THIS BEFORE PICKING ANYTHING.
+**The two-over is EXPECTED and both causes are named.** DISCHARGED and IN-FLIGHT are not disjoint:
+an id cited by an archived entry AND by a live one lands in both. Today that is
+`PC-S303-STUB-AUDIT-MARKER-REGEX-MATCHES-LOCAL-VAR-NAMED-STUB` (archived, and live `BL-075` cites it
+to say the opposite — the v0.428.0 cause) and `PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER`
+(discharged as `BL-121`, and live `BL-123` cites it as the class it belongs to). **Filing an entry
+that cites an already-discharged id ADDS an overlap**, so expect this number to move with the
+backlog rather than with the ledger. Re-derive rather than trusting any of it.
 
-**`PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER`, filed 2026-08-28, is the freshest
-unfiled candidate, the operator picked it, and its fix is ALREADY WRITTEN AND PROVEN.** It is not
-merged only because the session ran out of room around it.
+### NO SUBJECT IS PRE-CHOSEN. THE PARKED ONE SHIPPED.
 
-`fm()` in `core/scripts/validate-layer-entries.sh` reads a frontmatter key with `awk`. An `awk`
-that cannot open its file prints nothing and exits 2; a file genuinely lacking the key prints
-nothing and exits 0. **Every caller read the value through `$( )` and discarded the status**, so
-"I could not read this file" and "this key is absent" collapsed into one missing-key ERROR. All
-four states, measured:
+**`PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER` IS DISCHARGED, as `v0.435.0`.** Do not
+pick it up; do not look for the parked branch. `PC-S307-MACHINE-AUDITS-IS-A-CHILD-OF-4A-SO-EVERY-4A-SHADOW-SWALLOWS-IT`
+went with it, via `BL-045`, whose fix had landed at `v0.431.0` and which nobody had ever closed.
 
-```
-ok         stdout=[x]  rc=0        keyless     stdout=[]  rc=0
-unreadable stdout=[]   rc=2        missing     stdout=[]  rc=2
-```
+**So the sweep decides your subject, and if it finds nothing, `BL-119` is the next-best.** It is NOT
+PC-backed, so it ranks below anything the sweep turns up. Its evidence is the consumer's own
+register: 20 non-keep verdicts recorded there, 19 of them extensions, where no remedy emitter exists
+in `core/` at all — nineteen recorded decisions that reach no actor.
 
-The fix takes the status off the read each loop already performs, at FOUR call sites, and exits 2
-with a distinct message rather than reporting a finding about content it never saw. **The fourth
-site was found by the probe, not by reading**: the `conforms_to` census loop runs before the
-override and extension loops, so with the other three guarded an unreadable entry still produced
-exactly one `E17`. Proven in both directions — unreadable gives exit 2 and **zero** ERROR lines
-naming the file; a mutant with the guards deleted reproduces the consumer's exact symptom.
+**`BL-051`'s receipt must be replaced FIRST if you take it, and that is not optional.** It is one of
+the four the `v0.417.0` sweep found closable by prose — by a comment naming a bucket. Build the
+correct fix AND at least two plausible regressions, score every one, and score a SECOND SPELLING of
+the correct fix too. Batch 21 is the fifth consecutive batch in which scoring moved the receipt.
 
-**HOW TO PICK IT UP, MEASURED SO YOU DO NOT HAVE TO GUESS:**
+### A PULL IS OWED AGAIN. WRITE THE RUNBOOK; DO NOT RUN ONE.
 
-- The work is commit **`61b831f0`**, on branch `v0.434.0-fm-read-vs-absent`.
-- **Do NOT reuse that branch.** Its tip `ce7d1cf4` is already on `main` by content — it was
-  cherry-picked — so the branch carries one wanted commit and one duplicate, and its `VERSION`
-  reads `0.433.0` against a `main` at `0.434.0`.
-- **Cut a fresh branch from `origin/main` and cherry-pick `61b831f0`.** Tested in a clone rather
-  than asserted: it applies **CLEAN**, leaving 5 `entry_unreadable` occurrences (one definition,
-  four call sites). Then bump `VERSION` to `0.435.0`, write the CHANGELOG section, and gate it.
-- **Still owed on it:** fixture arms, a backlog entry with a scored receipt, CHANGELOG, `VERSION`,
-  and the gate. **The worktree race the filing declines to claim is NOT addressed** — say so
-  rather than reporting the candidate fully closed.
-
-**`BL-119` is the other live thing worth taking**, and it is NOT PC-backed so it ranks below
-anything the sweep turns up. Its evidence is the consumer's own register: of the 20 non-keep
-verdicts recorded there, **19 are against extensions**, where no remedy emitter exists in `core/`
-at all — nineteen recorded decisions that reach no actor.
-
-### THE PULL IS DONE. DO NOT PLAN ONE UNTIL THE GAP REOPENS.
-
-The bundled `0.432.0 -> 0.434.0` pull RAN and landed. The consumer stamp reads **0.434.0 /
-`f0b8ddcc`** on all four fields, and `docs/plans/graph-pull-0432-to-0434.md` is **DISCHARGED** —
-read it as a worked example, never as a live plan. `graph-pull-0432-to-0433.md` is marked DO NOT
-EXECUTE; it was superseded by a scheduling decision rather than a merge.
+**The gap reopened with `v0.435.0`.** Consumer installed **0.434.0**, distribution **0.435.0** — one
+release behind, with **__PENDING__ PENDING** discharged candidates the consumer cannot see. No
+bootstrapping step is in the range: this release touched `validate-layer-entries.sh`, one new
+fixture, one sibling fixture's mutant anchor, and three packaging lists — none of
+`preclassify.sh`, `apply.sh`, `ledger-reverify.sh` or the skill itself. Derived, with the mode-only
+hazard checked: every changed blob is mode-identical except the two new files, which are `100755` as
+intended.
 
 **A PULL IS INITIATED BY THE OPERATOR AND BY NOBODY ELSE.** Measure the gap, write the runbook,
-rehearse it, report the number — then STOP. That is now a standing ruling in
-`.claude/rules/operator-rulings.md`, and it exists because this program dispatched a runbook to a
-consumer session that was mid-sprint.
+rehearse it on a `file://` clone, report the number — then STOP. This is a standing ruling in
+`.claude/rules/operator-rulings.md`. Readiness is not authorization, and neither the PENDING count
+nor an earlier answer about WHETHER a pull should happen is a decision about WHEN. Never dispatch
+one; never hand one to a peer session.
 
-Everything from here to the numbered actions is a RECORD of batches 17 through 20. Read it for the
+**Read `docs/plans/graph-pull-0432-to-0434.md` as the worked example** — it is DISCHARGED, not a live
+plan, and its `## Discharge` section is the more useful half. `graph-pull-0432-to-0433.md` is marked
+DO NOT EXECUTE.
+
+### BATCH 21 — SHIPPED AS `v0.435.0`. TWO CANDIDATES, ONE OF THEM UNCLAIMED FOR FOUR RELEASES.
+
+**`fm()` read failure and absent key are now different facts.** An `awk` that cannot open its file
+prints nothing and exits 2; a file genuinely lacking the key prints nothing and exits 0. Every caller
+read the value through `$( )` and discarded the status, so a consumer got 20 false missing-key ERRORs
+about two well-formed files. Four call sites now take the status off a read that already happens.
+
+**THE RECEIPT SHIPPED WAS THE THIRD VERSION, AND THE FIRST TWO WERE CERTIFIED BY THEIR AUTHOR.** Draft
+one exercised only ONE of the four sites — on an ordinary tree the census loop aborts first, so a
+one-of-four fix scored 0. Draft two fixed that and still had two holes an independent hand found by
+BUILDING the variants: an unanchored `grep` reading stderr REJECTED a correct fix whose FATAL
+contained the word `ERROR`, and a bare `rc=2` check was satisfied by the pre-fix original plus any
+unrelated early `exit 2`. **What closed both is a readable control INSIDE the receipt**: each tree
+runs once readable, requiring an `^ERROR ` line naming the probe, before it is sealed. A receipt that
+never establishes its run REACHED the subject is vacuous no matter how precise its assertion.
+
+**"GUARD THE FIRST READ IN EACH LOOP" WAS THE WRONG RULE, AND THE LEAD SHIPPED IT AND DEFENDED IT
+BEFORE AN ADVERSARIAL HAND KILLED IT.** It is sound for the ABORT and wrong for the FINDING. On
+`extends`, `position`, `gate_types` and the reference loop's `shadows`, EVERY consuming arm is gated
+on the value being NON-empty, so an empty read means "key absent" — the CONFORMING answer. A read
+failure there does not manufacture a finding, **it DELETES one.** Measured: errors 4 → 1, E12/E13/E14
+gone, no FATAL, full plausible footer over a file the run could not read. Eight sites are now
+guarded and the rule is **"guard every read whose EMPTY value is PERMISSIVE"**.
+
+**THE LEAD'S OWN SEARCH FOR THAT DEFECT RETURNED A CLEAN ZERO, TWICE OVER.** The grep hunted
+`[ -z "$v" ]` and `[ -n "$v" ] || continue` and could not spell `if [ -n "$extends" ]`, so it scored
+its own subject a non-instance. The exhaustive re-derivation then nearly missed `push_candidate`,
+whose empty case is a `case` arm rather than either polarity. **Point a grammar at its own subject
+before believing its zero** — this is the third instance in this program's history and the first
+where the lead had already written the false conclusion into a CHANGELOG and reported it.
+
+**THE FIRST PROBE OF THE DEFECT WAS A FALSE NEGATIVE, AND IT LOOKED EXACTLY LIKE A CLEAN RESULT.**
+The seed lacked `steps/retro.md`, so the entry took an E5 and `continue`d before ever reaching the
+arms under test. A fixture whose tree cannot EXPRESS the defect proves nothing; assert the arms fire
+on the readable baseline before trusting anything the sealed run says.
+
+**THE ONLY TRUE FALSE PASS IN THE CLASS WAS FOUND LAST AND WAS NOT AN `fm()` CALL.** `:1109` reads
+`consumer_machinery_home:` out of `core-manifest.md` with the status discarded, and the gate wraps
+the WHOLE of E18 and W10 in a non-empty test. Measured: readable `rc=1 errors=1`; same tree at mode
+000 `rc=0 errors=0`, no FATAL, full footer, `step()` prints PASS over a rogue path. **Its guard is
+keyed on the VALUE, not the read's status — the opposite choice from `fm()`'s, deliberately** —
+because a status test misses a readable file with the key MISSPELLED, measured as a third state
+giving the identical `rc=0`. Four states scored; **ABSENT stays quiet**, because every seeded tree in
+the suite lacks the file.
+
+**ONE OF THE FOUR PERMISSIVE SITES WAS THE INVERSE AND THE LEAD'S COMMENT SAID THE OPPOSITE.**
+`shadow_anc`'s only consumer is an ACQUITTAL, so an empty read WITHDRAWS one and MANUFACTURES a
+finding — a W12 APPEARS. Its arm must assert an appearance; an absence-shaped arm passes there
+forever. **That site is also the universal backstop** (extensions AND overrides, running last), and
+its arrival silently disabled two shipped mutants keyed on `rc` dropping 2 → 1. **Adding a late guard
+invalidates every earlier arm keyed on a verdict change, and the symptom is a GREEN arm.**
+
+**THE FIVE REMAINING UNGUARDED READS ARE EXHAUSTIVELY LOUD**: `base_sha`→E1, `reason`→E8,
+`hooks`→E4, `id`→E4, `push_candidate`→E9. `push_candidate` is a `case` arm, not a `-n`/`-z` test, so
+a polarity grep scores it a non-instance — the same blindness that hid the four permissive sites.
+
+**`awk 'END{}'` EXITS 0 ON A MODE-000 FILE.** With no input-reading rule awk never opens its operand,
+so only a grammar that READS is a faithful seal probe. Every readability probe in the live receipts
+is `awk '{exit}'` (rc 2 sealed, rc 0 readable), verified — `END{}` would have reported a false close
+forever.
+
+**THE GATE REFUSED THE RELEASE ONCE AND BOTH FAILURES WERE CAUSED BY THE CHANGE ITSELF.**
+`layer-conforms-to`'s m1 anchors a `sed` on the exact text of the census line this fix edits, so the
+mutation matched nothing and the fixture correctly reported that its kill would prove nothing.
+**Editing a line means grepping the fixture corpus for mutants anchored on it.** And a new fixture
+DIRECTORY costs forks in `validate-enforcement-map.sh`'s per-fixture passes: `FORK_BUDGET` 7177 →
+7192, the top of a measured 7191–7192 spread.
+
+**A DISCHARGED ID IN THE DIFF IS NOT A CITATION.** Rotating `BL-045` moved its text — including its
+`PC-` id — into the archive, so a pickaxe search finds it. `named_absorbed()` reads commit MESSAGES.
+The id was nearly shipped uncited, which produces no row anywhere; caught by deriving the discharged
+set and joining it against `git log --format=%B` rather than by trusting the commit.
+
+**RUN THE RECEIPT HISTOGRAM BEFORE THE WORK, NOT ONLY AFTER.** `BL-045` was found that way: its
+receipt had reported CLOSE-CANDIDATE since `v0.431.0` and no release claimed it. Run only afterwards,
+the same exit 0 reads as an incidental close caused by this release, which it was not.
+
+**A DELEGATE'S CLAIM WAS QUOTED INTO THE SHIPPED VALIDATOR AS A MEASUREMENT AND IT WAS FALSE.** The
+adversary reported "E18/W10 are dead in every seeded tree because none carries `core-manifest.md`";
+the lead wrote it into `validate-layer-entries.sh`'s own prose as the justification for a scoping
+decision. Derived, with two controls in the same invocation: **THREE** fixtures `cp` the manifest
+into a seeded tree (`check-15-bypass`, `consumer-machinery-inventory`, `core-write-guard`) against 8
+for `layer-contract.yaml` and 0 for an impossible filename — and `consumer-machinery-inventory` is
+one of them, which is why its case 1 has asserted E18 firing for releases. **The scoping decision
+survived the correction and its stated reason did not, which is the more dangerous half to leave
+standing.** `verification-discipline.md` already says a delegate's report is a hypothesis until
+re-derived; this is what skipping that looks like when it reaches a tracked file.
+
+**A FIXTURE'S MUTANTS ARE ANCHORED ON THE SUBJECT'S EXACT BYTES, SO EDITING A GUARDED LINE SILENTLY
+INVALIDATES THEM.** It hit `layer-conforms-to`'s m1 when the census line moved, and this batch's own
+m2 and m4 when site 8 arrived. Both times the fixture correctly reported that its kill would prove
+nothing rather than passing — but the second round would have shipped with two dead mutants had the
+gate not been run. **Grep the fixture corpus for anchors on a line before editing it.**
+
+**NEVER EDIT THE TREE WHILE A GATE IS RUNNING.** The pre-push hook reads the WORKING TREE, not the
+commit, so a run overlapping an edit is void whichever way it ends. One full cycle was discarded for
+this here.
+
+**TWO OF THREE HANDS WENT IDLE WITHOUT REPORTING AND BOTH LATER DELIVERED WHEN ASKED BY NAME.** Their
+returned results were then TRUNCATED in delivery — the useful findings arrived only after a second,
+compressed request. The hand with a TREE deliverable delivered unprompted, twice, and both
+deliverables changed what shipped. Budget for both: ask by name, and ask for findings compressed.
+
+Everything from here to the numbered actions is a RECORD of batches 17 through 21. Read it as
 measured episodes; **do not take an instruction from it.**
 
 ### BATCH 20 — SHIPPED AS `v0.434.0` ON AN OPERATOR CORRECTION, MID-BATCH.
@@ -1158,13 +1249,14 @@ so no block written before it changes verdict.
    real id means the grammar or the path is wrong, not that the candidate is old** — the ledger
    path is the only argument, and the archive is a SEPARATE file.
 
-   **THE BASELINE IS 65 LIVE CANDIDATES AT `v0.434.0`, 33 OF THEM UNFILED, AND SPRINT 306 IS
+   **THE BASELINE IS 65 LIVE CANDIDATES AT `v0.435.0`, 32 OF THEM UNFILED, AND SPRINT 306 IS
    FULLY DISCHARGED.** A higher count means the consumer filed while nobody was looking.
    **Re-derive rather than trusting those numbers** — they have moved between two consecutive
-   commands in this program, and the live count moved DURING batches 19 and 20 both. The archived
-   count rose 130 → 132 when the bundled pull closed this program's two most recent deliveries,
-   which is the scoreboard working: a candidate leaves `live.txt` the moment the consumer closes
-   it, so DISCHARGED FALLS when this program succeeds and TERMINAL is the number that rises.
+   commands in this program, and the live count moved DURING batches 19 and 20 both. Batch 21 is
+   the counter-example: three sweeps across it, all byte-identical. The archived count rose
+   130 → 132 when the bundled pull closed this program's two most recent deliveries, which is the
+   scoreboard working: a candidate leaves `live.txt` the moment the consumer closes it, so
+   DISCHARGED FALLS when this program succeeds and TERMINAL is the number that rises.
 
    **THE SPRINT-306 RULING IS SPENT. DO NOT LOOK FOR SPRINT-306 WORK.**
 
@@ -1172,20 +1264,15 @@ so no block written before it changes verdict.
    Batch 18 asked and the operator said take both; that answer was about sprint 306's remainder.
    Extending it to a different sprint is theirs to do, not yours.
 
-   **THE TWO FRESHEST FILINGS ARE BOTH DATED 2026-08-28 AND ONE IS ALREADY TAKEN.**
-   `PC-S339-WITHDRAWAL-COMMIT-BECOMES-THE-NEW-ATTRIBUTION` is filed here as `BL-117` and is IN
-   FLIGHT — do not re-scope it. `PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER`
-   arrived WHILE batch 19 was running, is UNFILED, and is the freshest thing in the corpus.
-   Read its own status line in the consumer's ledger before treating it as work.
+   **THERE IS NO PARKED SUBJECT. THE SWEEP DECIDES.** Batch 21 shipped
+   `PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER` as `v0.435.0` and took
+   `PC-S307-MACHINE-AUDITS-IS-A-CHILD-OF-4A-SO-EVERY-4A-SHADOW-SWALLOWS-IT` with it, via `BL-045`,
+   whose fix had landed at `v0.431.0` and which nobody had closed. Do not go looking for a parked
+   branch; `61b831f0` is spent and merged. `PC-S339-WITHDRAWAL-COMMIT-BECOMES-THE-NEW-ATTRIBUTION`
+   is still filed here as `BL-117` and still IN FLIGHT — do not re-scope it.
 
-   **IF THE SWEEP FINDS NOTHING NEWER, FINISH THE ONE ALREADY BUILT.**
-   `PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER` is the freshest unfiled candidate,
-   the operator picked it, and its `fm()` fix is written and proven at commit **`61b831f0`** —
-   cut a fresh branch from `origin/main`, cherry-pick it (tested CLEAN), bump `VERSION` to
-   `0.435.0`, and finish the fixture, entry, receipt and gate. The resume block above carries the
-   measurement and the reason not to reuse the old branch. **Shipping a built fix outranks
-   starting a new one, and it outranks filing anything.**
-
+   **IF THE SWEEP FINDS NOTHING, `BL-119` IS THE NEXT-BEST AND IT IS NOT PC-BACKED.** Take it only
+   after the sweep comes back empty, and say in the release that it was not candidate-driven.
    `BL-119` is the next-best alternative, measured on the consumer's own register: 19 of the 20
    non-keep verdicts recorded there are against extensions, and every one authorizes an action no
    code in `core/` emits. It is NOT PC-backed — it was found here — so it ranks below anything the
