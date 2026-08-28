@@ -9,12 +9,34 @@ and status records that were current when they were written and that THIS BLOCK 
 it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from it.**
 
-### BATCH 17 IS DONE AND SHIPPED AS `v0.429.0`. THE SPRINT-306 SET IS FULLY DISCHARGED.
+### START HERE: SWEEP THE CONSUMER FOR NEW PUSH CANDIDATES. THE SWEEP HAS ALREADY FOUND ONE.
+
+**YOUR FIRST ACTION IS NUMBERED ACTION 1 BELOW — the sweep for candidates the consumer has filed
+since `v0.429.0`.** Operator instruction, given at the close of batch 17 and the reason this
+session exists. Do it before picking any subject, and report what it finds.
+
+**IT ALREADY HAS A RESULT, AND THE RESULT ARRIVED WHILE THIS BLOCK WAS BEING WRITTEN.** Running
+the sweep to prove its command worked turned up
+**`PC-S306-GATE-REVIEW-ARTIFACTS-WRITTEN-OUTSIDE-SPRINT-SLOT`**, live, filed `2026-08-27` with
+the sprint-306 retro, and cited by NO backlog entry. **So the sentence below this one — that the
+sprint-306 set was fully discharged — was true when batch 17 closed and false within the hour.**
+That is this program's measured base rate of expired premises meeting itself; re-derive, do not
+read.
+
+The sprint-306 set is **TEN**, of which **NINE are discharged** and this one is outstanding. The
+baseline is **70 live candidates**.
+
+Everything from here to the numbered actions is a RECORD of batch 17. Read it for the measured
+episodes; **do not take an instruction from it.**
+
+### BATCH 17 IS DONE AND SHIPPED AS `v0.429.0`. IT DISCHARGED NINE OF THE SPRINT-306 TEN.
 
 **BATCH 17 TOOK THE REMAINING THREE SPRINT-306 CANDIDATES AND SHIPPED THEM AS `v0.429.0`**, on an
 explicit operator ruling taken twice: first on the seventh candidate alone, then — when the
 consumer filed two more WHILE THE BATCH WAS RUNNING — on all three together. **The sprint-306 set
-is now nine candidates and every one is discharged.** The three:
+was nine candidates at the moment batch 17 closed and every one of those nine is
+discharged. A TENTH arrived with the retro minutes later and is outstanding — see the block
+above.** The three batch 17 took:
 
 | candidate | what landed |
 |---|---|
@@ -959,27 +981,77 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **PICK ONE SUBJECT FROM THE PC-BACKED CORPUS. THE STANDING RECOMMENDATION IS `BL-051`.**
+1. **SWEEP THE CONSUMER FOR NEW PUSH CANDIDATES FIRST. THAT IS THIS BATCH'S OPENING ACTION AND
+   IT IS NOT OPTIONAL.** Operator instruction, given at the close of batch 17. Do this BEFORE
+   picking any subject, and report what it finds.
 
-   **THE SPRINT-306 EXCEPTION IS FULLY SPENT.** All nine of that sprint's candidates were
-   discharged across `v0.428.0` and `v0.429.0`. The one-subject-per-batch convention is back in
-   force. **Do not read the batch-16 or batch-17 records above as an instruction.**
+   Run the derive block above first — it builds `/tmp/live.txt` and `/tmp/filed.txt`, and the set
+   you want is the live candidates NO backlog entry cites. Then DATE each one's filing from the
+   consumer's own history, because "unfiled" mixes genuinely new candidates with old ones no
+   batch has examined, and only the date separates them:
 
-   **RE-DERIVE THE LIVE SET BEFORE ANYTHING ELSE, AND EXPECT IT TO HAVE GROWN.** The consumer
-   filed candidates MID-BATCH in each of the last two batches — six became seven became nine.
-   If a NEW sprint's set has opened, say so and ask the operator whether the sprint-306 priority
-   applies to it. **Do not assume it does, and do not assume it does not**; they have ruled on
-   that question twice and both times the answer was to take the whole set.
+   ```
+   D=_bmad-output/ai-dlc-update
+   comm -23 /tmp/live.txt /tmp/filed.txt > /tmp/unfiled.txt
+   wc -l < /tmp/unfiled.txt
+   while IFS= read -r id; do
+     printf '%s  %s\n' \
+       "$(git -C /Users/n8/git/graph log --format='%ad' --date=short -S"$id" -- "$D/push-candidate-ledger.md" | tail -1)" \
+       "$id"
+   done < /tmp/unfiled.txt | sort
+   ```
 
-   **THE PULL IS STILL DEFERRED, AND THE GAP IS NOW FOUR RELEASES AND NINE CANDIDATES.**
+   `-S` reports the commit that INTRODUCED the string, so `tail -1` is the filing. Measured, with
+   both controls in the same run: a candidate filed during batch 17 dates `2026-08-27`, a
+   long-standing one dates `2026-07-21`, and an impossible id returns ZERO lines. **A zero for a
+   real id means the grammar or the path is wrong, not that the candidate is old** — the ledger
+   path is the only argument, and the archive is a SEPARATE file.
+
+   **THE SWEEP HAS ALREADY RETURNED ONE, SO YOU KNOW WHAT A HIT LOOKS LIKE BEFORE YOU RUN IT.**
+   `PC-S306-GATE-REVIEW-ARTIFACTS-WRITTEN-OUTSIDE-SPRINT-SLOT`, filed `2026-08-27` with sprint
+   306's retro, live, cited by no backlog entry. Its subject is a WRITE-TIME gap: the
+   code-reviewer and QA role contracts let a gate-evidence file be created with the sprint token
+   in the BASENAME instead of inside the reserved `docs/reviews/s306/` slot, and nothing catches
+   it at creation. Two gate PASSes and an 18/18 sprint-review gate went by before a pre-push
+   `VERDICT: FAIL` surfaced it, buried among roughly 160 other checks. **The entry records the
+   identical class on sprint 304** and says the remedy has only ever been applied at PUSH time,
+   never at the WRITE path. **Confirm it is still uncited before scoping it** — a backlog entry
+   may have been filed against it since.
+
+   **THE BASELINE IS 70 LIVE CANDIDATES AT `v0.429.0`, WITH NINE OF THE SPRINT-306 TEN
+   DISCHARGED.** A higher count means the consumer filed while nobody was looking. **Re-derive
+   rather than trusting that number** — it has moved between two consecutive commands in this
+   session.
+
+   **THE CONSUMER WAS MID-SPRINT-306 RETRO WHEN THIS WAS WRITTEN, AND A RETRO IS WHERE THAT
+   CONSUMER FILES.** Its last observed commit was `docs(retro): sprint 306 party-mode retro
+   transcript`. Expect new candidates; the sweep is aimed at exactly that.
+
+   **THEN REPORT AND ASK, DO NOT ASSUME.** If the sweep finds a new sprint's set, say so and ask
+   the operator whether the sprint-306 priority applies to it. They have ruled on that question
+   twice, both times to take the WHOLE set in one release — but the ruling was about sprint 306,
+   and extending it is theirs to do, not yours.
+
+   **IF THE SWEEP FINDS NOTHING NEW, THE STANDING RECOMMENDATION IS `BL-051`** — step 2 computes
+   which machinery paths the consumer edited and then discards the answer, discharging
+   `PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH`. Verify that id is
+   still live upstream, against an impossible-id control, before scoping it.
+
+   **`BL-051`'s receipt must be replaced FIRST, and that is not optional.** It is one of the four
+   the `v0.417.0` sweep found closable by prose — by a comment naming a bucket. Batches 14, 15
+   and 17 all had to repair their subject's receipt before landing the fix. Build the correct fix
+   AND at least two plausible regressions, score every one, and only then write the `verify:`
+   line. **Score a SECOND SPELLING of the correct fix too**: a receipt that rejects a competent
+   author's other phrasing is as broken as one that accepts a regression.
+
+   **THE PULL IS STILL DEFERRED, AND THE GAP IS FOUR RELEASES AND NINE CANDIDATES.**
    `docs/plans/graph-pull-0425-to-0429.md` is written, re-rehearsed and NOT STARTED. Do not run
-   it, do not re-litigate it, and do not treat the gap as a reason to reorder this batch. Report
-   it per action 7.
+   it, do not re-litigate it, and do not treat the gap as a reason to reorder this batch.
 
-   **REHEARSE BEFORE YOU WRITE ANY RUNBOOK FIGURE, AND TREAT THE REHEARSAL AS A DETECTOR RATHER
-   THAN A FORMALITY.** `v0.429.0`'s rehearsal caught a `WORKLIST` row that would have told every
-   consumer to register a sourced library as a hook. That is the only consumer-facing defect this
-   program has ever caught before delivery, and nothing inside this repo could have found it.
+   **REHEARSE BEFORE WRITING ANY RUNBOOK FIGURE, AND TREAT THE REHEARSAL AS A DETECTOR.**
+   `v0.429.0`'s rehearsal caught a `WORKLIST` row that would have told every consumer to register
+   a sourced library as a hook. That is the only consumer-facing defect this program has caught
+   before delivery, and nothing inside this repo could have found it.
 
    **THE RECURRENCE NOTE IS STILL OPEN AND STILL NOT YOURS UNLESS THE OPERATOR SAYS SO.** Sprint
    306 appended a `RECURRED` block to `PC-S305-DISPATCH-GUARD-SED-PATTERN-BOLD-MISMATCH`,
