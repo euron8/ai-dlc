@@ -216,10 +216,38 @@ if rx.search(NEG):
                 "It would count a third-party block as our registration." % (merge, pattern))
 
 # --- side A: what is on disk ----------------------------------------------------------
+#
+# A SOURCED LIBRARY IS NOT A HOOK, AND THE EXEMPTION IS DERIVED FROM THE OTHER SIDE OF THE JOIN
+# RATHER THAN NAMED. `.claude/hooks/` holds one file no event invokes: the emitting hooks
+# `.`-source it as a sibling for the context-provenance marker. Registering it would wire a
+# consumer's settings to a command that reads no stdin and decides nothing.
+#
+# MEASURED ON A REHEARSAL, WHICH IS THE ONLY REASON THIS WAS CAUGHT BEFORE A CONSUMER SAW IT.
+# Without this, a pull carrying the library emits `WORKLIST settings-merge ... hook(s) present
+# and UNREGISTERED` naming it, and the row's remedy is to register it — so the pull would hand
+# every consumer an instruction to do the wrong thing, in a row whose whole purpose is to be
+# obeyed. A green run here and a green run there are not the same claim, and this is the shape
+# that difference takes.
+#
+# KEYED ON "SOME SIBLING SOURCES IT", NEVER ON A NAME. A hand-written skip list exempts a file
+# by name, so deleting the last `source` of a library would leave the exemption behind and this
+# check would then permit a genuinely unregistered hook. Derived, a library nothing sources is
+# scored as an unregistered hook again on the commit that orphans it. I13 in the distribution's
+# validate-enforcement-map.sh and the hook-registration-join fixture derive the same set the
+# same way; this copy is the one a CONSUMER runs.
+sourced = set()
+for p in glob.glob(os.path.join(hookdir, "*.sh")):
+    try:
+        for line in open(p, encoding="utf-8", errors="replace"):
+            if "BASH_SOURCE" in line:
+                sourced.update(re.findall(r"/([a-z0-9.-]+\.sh)", line))
+    except OSError:
+        pass
+
 present = sorted(
     os.path.basename(p)
     for p in glob.glob(os.path.join(hookdir, "ai-dlc-*.sh"))
-    if os.path.isfile(p)
+    if os.path.isfile(p) and os.path.basename(p) not in sourced
 )
 
 # --- side B: what settings register ---------------------------------------------------
