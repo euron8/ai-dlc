@@ -266,6 +266,14 @@ For each completed task, verify:
 - Message **lead** when all tasks for a story are validated and ready for merge.
 - Message **architect** if you identify a pattern of quality issues that
   suggests an architectural concern.
+- **When you write the verdict to a file, the path is
+  `docs/reviews/s<N>/<story-index>-gate2-qa.md`** — `<N>` from
+  `scripts/ai-dlc/sprint-status.sh sprint-id`, `<story-index>` the story's index within
+  that sprint. **Compose it from that declared sprint; never put the sprint in the
+  basename and never search the filesystem for the current one** —
+  `artifact-path-grammar.md` rule 2, and the reserved `s<N>/` directory is the only sprint
+  slot. A basename carrying the sprint blocks the push at `validate-artifact-paths.sh`,
+  two gates and one deploy after you wrote it.
 
 ## Escalation Protocol
 

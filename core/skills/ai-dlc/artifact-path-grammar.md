@@ -144,11 +144,27 @@ The grammar governs artifacts a sprint PRODUCES. It does not govern:
 
 `story-<id>-<slug>.md` and `<story-id>-review.md` both PASS rule 2 as written, because `<id>` is a
 placeholder and the sprint is hidden inside it — and `story-<id>-` is the exact form Check 6's
-glob broke on. **A syntactic check on the prescription cannot see a sprint number that a
-placeholder conceals.** That is a real limit of the enforcement, not a gap in the rule: rule 2
-still forbids the expanded form, and it is `validate-artifact-paths.sh` — the consumer-side
-validator, which reads real filenames rather than prescriptions — that sees it. Stated here so a
-later session does not read `artifact-path-grammar` as covering it.
+glob broke on. **A check keyed on the sprint TOKEN cannot see a sprint number that a placeholder
+conceals**, and for a whole band of releases that was read here as a limit of prescription-time
+enforcement altogether: rule 2 still forbids the expanded form, so the class was handed to
+`validate-artifact-paths.sh` — the consumer-side validator, which reads real filenames rather than
+prescriptions.
+
+**THAT HANDOFF WAS TOO WIDE, and the cost of reading it as total is measured.** One prescription
+sent the same blocking defect to the reference consumer in two sprints two apart, each time
+reaching an operator as one FAIL row among roughly 160 push-time checks, after the files existed —
+so each occurrence bought a migration. **`validate-enforcement-map.sh` I99 now closes the
+prescription-side half**, by keying on the placeholder's NAME rather than on a token: a basename
+placeholder naming something the pipeline mints per sprint (`sprint`, `N`, `id` as a
+hyphen-delimited segment), with no `s<N>/` component anywhere in the path, is reported where it is
+written. A prescription already inside the slot is exempt, because the sprint is then in the
+directory and the placeholder conceals nothing.
+
+**What survives is per-NAME rather than per-class.** A placeholder whose name gives no hint —
+`<slug>`, `<artifact>` — can still expand to a filename carrying a sprint, and no expression can
+tell that from the prescription. `validate-artifact-paths.sh` remains the reader for that residue
+and for every already-written file. Stated at this width so a later session does not take the
+residue for the whole class and re-defer the half that is now checkable.
 
 **And that validator closes MOST of the gap, not all of it — measured, because the sentence above
 used to claim all of it.** `<story-id>-review.md` expands to `S292-ff-s3-…-review.md` and is

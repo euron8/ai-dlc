@@ -15,6 +15,88 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.430.0] - 2026-08-27
+
+### A prescribed artifact path can hide a sprint inside a placeholder, and the invariant that forbids it could not see one
+
+Discharges `PC-S306-GATE-REVIEW-ARTIFACTS-WRITTEN-OUTSIDE-SPRINT-SLOT`.
+
+`artifact-path-grammar.md` rule 2 forbids a sprint token in any basename, and **I82** enforces
+that over core's own prescriptions. `core/team-roles/code-reviewer.md` prescribed
+`docs/reviews/<story-id>-review.md`, which is IN I82's corpus and PASSED, while the path it
+expands to on a real sprint is a violation. Measured against the ERE I82 resolves, with the
+controls in the same invocation:
+
+```
+FLAGGED   sprint-<N>.md            control: the ERE sees a VISIBLE placeholder
+FLAGGED   s306-story-1-gate1.md    control: the EXPANDED form is a real violation
+not-seen  <story-id>-review.md     the prescription core shipped
+```
+
+The grammar file had recorded this as a limit of prescription-time checking and handed the
+class to the consumer-side `validate-artifact-paths.sh`, which reads real filenames. **That
+handoff was too wide.** One prescription sent the same blocking defect to the reference
+consumer in two sprints two apart, each time surfacing as one `VERDICT: FAIL` row among
+roughly 160 push-time checks, after the files existed and after two gates and a sprint-review
+gate had passed — so each occurrence bought a migration.
+
+**The QA half was an ABSENCE, not a wrong prescription.** `core/team-roles/qa.md` prescribed no
+gate-evidence path at all, so the role invented one and the invented name carried the sprint.
+An unprescribed path is where the writer guesses.
+
+**I99** closes the prescription-side half, keying on the placeholder's NAME rather than on a
+token: a basename placeholder naming something the pipeline mints per sprint (`sprint`, `N`,
+`id` as hyphen-delimited segments) with no `s<N>/` component anywhere in the path. The
+false-positive set is 0 of 82 prescriptions and the narrowing that got it there is recorded
+beside the arm — 18 carry a basename placeholder, and the segment match plus the slot
+exemption acquit 17 of the 18, all of which already sit inside a slot. Run against the corpus
+one revision back it reports exactly 1 and no other path of the 81; that pair, not the zero,
+is what says the arm discriminates. It costs nothing measurable on the validator that the
+fixture suite's pole invokes: interleaved, four reps each, 22.53s before and 22.35s after.
+
+`code-reviewer-escalated.md` needed no edit — it delegates to `code-reviewer.md` in full and
+deliberately holds no second copy. No reader keyed on the old basename shape; every
+programmatic reader of `docs/reviews/` is area-level or is a grammar enforcer. The conforming
+destination was not invented either — `artifact-path-migration`'s fixture already derives
+`docs/reviews/S301-1-code-review.md` -> `docs/reviews/s301/1-code-review.md`.
+
+Section 7 of the `artifact-path-conformance` fixture guards both prescriptions, keyed on the
+reserved slot and the resolved token ERE and never on a basename spelling — `<story-index>-code-review.md`
+and `code-review-<story-index>.md` are both correct, and a fixture rejecting a competent
+author's other phrasing is as broken as one accepting the regression. Against the pre-fix role
+files it reports 2 of 53 assertions FAILED, naming both defects; against the fixed tree, PASS.
+
+### Core stated a harness behaviour as unconditional fact, and a retro check scored a COMPLETE audit as mis-scoped
+
+Discharges `PC-S306-RETRO-AUTOCOMPACT-TRANSCRIPT-FILE-ASSUMPTION-UNVERIFIED`.
+
+`steps/retro.md` stated that *every handoff and every auto-compact starts a new transcript
+file* and gated its steerability audit on it: `transcripts scanned : N` must be > 1 on any
+sprint that handed off OR auto-compacted, with N=1 scored as a mis-scoped audit.
+
+**The auto-compact half is false on Claude Code**, measured on an independent corpus — this
+repo's own project transcripts, keyed on a STRUCTURAL `isCompactSummary: true` field rather
+than a substring, because the substring is contaminated: these sessions discuss compaction in
+prose, and 2 of 4 substring hits carried no such field. Two files hold a real boundary and
+**both sit MID-FILE** — record 1318 of 2845 and record 2067 of 3590, with conversation on both
+sides and one unchanging `sessionId` spanning both. A compaction continues in the same file.
+
+So a sprint that auto-compacted but never handed off legitimately reports N=1, and the rule
+scored that as mis-scoped. The HANDOFF half stands and is kept, along with the vacuous-pass
+warning and the measured three-transcript episode behind it.
+
+**The claim sat at FOUR sites**, one more than the candidate names, including the `--cite`
+deadlock comment that reasoned FROM it; that site now cites the usage block rather than
+restating it.
+
+**The consumer's own suggested remedy would have shipped a silent false confirmation.** It
+pointed at `find -newermt <ISO>` as the way to confirm N=1 is complete. BSD `find` REJECTS the
+`Z`-suffixed form `--since` takes — `find: Can't parse date/time`, exit 1, empty stdout — which
+is byte-identical to a window holding no transcript and reads as confirmation of exactly the
+narrow scan being checked for. Measured both ways with a far-past control that must match every
+file: the space-and-offset form returns all 168, the `Z` form returns 0 and exits 1. The
+working form is prescribed, with an instruction to read the exit status.
+
 ## [0.429.0] - 2026-08-27
 
 ### A hook-appended context block now carries a provenance marker the lead can check

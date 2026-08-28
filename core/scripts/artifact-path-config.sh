@@ -7,6 +7,7 @@
 #   artifact-path-config.sh --token-re-prescribed
 #   artifact-path-config.sh --slot-re
 #   artifact-path-config.sh --slot-re-prescribed
+#   artifact-path-config.sh --conceal-re-prescribed
 #   artifact-path-config.sh --grammar-file  [--root <dir>] [--grammar <file>]
 #   artifact-path-config.sh --consumer-file [--root <dir>]
 #   artifact-path-config.sh --consumer-syntax [--root <dir>]
@@ -40,6 +41,12 @@
 #                   token check needs and every caller used to hand-list. Anchored to a whole
 #                   component, and split into a real-path form (digits) and a prose form
 #                   (placeholder or digits) for the same reason the token pair is.
+#   --conceal-re-prescribed
+#                   whether ONE placeholder in a prescribed BASENAME names a thing whose
+#                   expansion carries a sprint. The token pair above reads what a prescription
+#                   SPELLS; this reads what it HIDES, and the grammar's own "what a syntactic
+#                   check cannot catch" section is the measurement it comes from. Prose only --
+#                   an expanded filename has no placeholders, so there is no real-path twin.
 #   --grammar-file  the grammar path this resolver settled on, so a caller can report it.
 #   --consumer-file the contract-declared consumer artifact-paths file. Printed whether or not
 #                   it exists, because "go write this file" is the correct remedy when it does
@@ -103,22 +110,42 @@ TOKEN_RE_PRESCRIBED='(^|-)(s|S|sprint-)(<N>|N|\*|[0-9]+)($|[-.])'
 SLOT_RE_PRESCRIBED='^s(<N>|N|\*|[0-9]+)$'
 SLOT_RE='^s[0-9]+$'
 
+# THE PLACEHOLDER THAT HIDES A SPRINT. `TOKEN_RE_PRESCRIBED` above reads what a prescription
+# SPELLS; a prescription can also DECLINE to spell it, and `<story-id>-review.md` matches nothing
+# in that expression while expanding to `S292-ff-s3-...-review.md` on a real sprint. Two sprints
+# apart, the same consumer filed the same defect from that one prescription, each time found at
+# push time in a real filename rather than at prescription time.
+#
+# THE NARROWING, and it is the whole content of this expression. Not every placeholder hides a
+# sprint: over core's own prescriptions the basename placeholders are `<artifact>`, `<M>`, `<N>`,
+# `<type>`, `<slug>`, `<story-id>` and `<story-index>`, and only two of those name something the
+# pipeline mints sprint-scoped. So the match is on the placeholder's NAME, by hyphen-delimited
+# segment: `sprint` names the sprint, `N` is this grammar's own spelling of the sprint number, and
+# `id` is the segment every sprint-scoped identifier in the pipeline ends on. Segment equality and
+# not substring is load-bearing -- `<candidate>` and `<identifier>` contain `id` and name nothing
+# sprint-scoped, and a substring match would report both.
+#
+# A CALLER MUST STILL SUBTRACT `TOKEN_RE_PRESCRIBED`'s OWN SUBJECT. `sprint-<N>.md` matches this
+# too, and it is a VISIBLE token that the token expression already owns; reporting it here would
+# make one defect two findings and put the remedy in two places.
+CONCEAL_RE_PRESCRIBED='<([^>]*-)?(id|N|sprint)(-[^>]*)?>'
+
 while [ $# -gt 0 ]; do
   case "$1" in
-    --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax)
+    --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--conceal-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax)
       [ -z "$MODE" ] || { echo "$PROG: two modes given ('$MODE' and '$1'); it answers one question per call" >&2; exit 2; }
       MODE="$1"; shift ;;
     --root) ROOT="${2:-}"; [ -n "$ROOT" ] || { echo "$PROG: --root needs a directory" >&2; exit 2; }; shift 2 ;;
     --grammar) GRAMMAR_ARG="${2:-}"; [ -n "$GRAMMAR_ARG" ] || { echo "$PROG: --grammar needs a file" >&2; exit 2; }; shift 2 ;;
     -h|--help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "$PROG: unknown option '$1'" >&2
-       echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax [--root <dir>] [--grammar <file>]" >&2
+       echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--conceal-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax [--root <dir>] [--grammar <file>]" >&2
        exit 2 ;;
   esac
 done
 
 [ -n "$MODE" ] || { echo "$PROG: no mode given" >&2
-                    echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax [--root <dir>] [--grammar <file>]" >&2
+                    echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--conceal-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax [--root <dir>] [--grammar <file>]" >&2
                     exit 2; }
 
 # --token-re answers before any tree is consulted. It is a property of the grammar's RULES, not
@@ -128,6 +155,7 @@ if [ "$MODE" = "--token-re" ]; then printf '%s\n' "$TOKEN_RE"; exit 0; fi
 if [ "$MODE" = "--token-re-prescribed" ]; then printf '%s\n' "$TOKEN_RE_PRESCRIBED"; exit 0; fi
 if [ "$MODE" = "--slot-re" ]; then printf '%s\n' "$SLOT_RE"; exit 0; fi
 if [ "$MODE" = "--slot-re-prescribed" ]; then printf '%s\n' "$SLOT_RE_PRESCRIBED"; exit 0; fi
+if [ "$MODE" = "--conceal-re-prescribed" ]; then printf '%s\n' "$CONCEAL_RE_PRESCRIBED"; exit 0; fi
 
 # RESOLVE --grammar BEFORE the cd, for migrate-artifact-paths.sh's reason exactly: it is the
 # caller's path, relative to where THEY are standing, and this then changes directory.

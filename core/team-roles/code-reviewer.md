@@ -68,7 +68,13 @@ Before reviewing any task, read:
 
 ## Review Document Template
 
-For each review, create a file at `docs/reviews/<story-id>-review.md`:
+For each review, create a file at `docs/reviews/s<N>/<story-index>-code-review.md`, where
+`<N>` is the sprint from `scripts/ai-dlc/sprint-status.sh sprint-id` and `<story-index>` is
+the story's index within that sprint. **Compose the path from that declared sprint; never
+put the sprint in the basename and never search the filesystem for the current one** —
+`artifact-path-grammar.md` rule 2, and the reserved `s<N>/` directory is the only sprint
+slot. A basename carrying the sprint blocks the push at `validate-artifact-paths.sh`, two
+gates and one deploy after you wrote it.
 
 ```markdown
 # Code Review: <Story ID>

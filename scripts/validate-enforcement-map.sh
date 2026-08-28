@@ -6295,6 +6295,105 @@ An area root has exactly two legal shapes below it — a durable \`<name>.md\`, 
 
 The \`areas:\` block IS the declaration of where an \`s<N>/\` directory may live, and I82 above already requires every area to sit under a scan root. A slot prescribed outside that set is a home core invented in one rule file and told no reader about — the consumer's migrate and validate both resolve an artifact's area from this block, so the position holds only for as long as nobody asks. Add the parent to \`areas:\`, or move the prescription under an area already declared."
     fi
+
+    # --- I99: a placeholder in a prescribed BASENAME that CONCEALS a sprint --------
+    #
+    # WHAT I82 STRUCTURALLY CANNOT SEE. I82 asks whether a prescription SPELLS a sprint token. A
+    # prescription can instead decline to spell it: `docs/reviews/<story-id>-review.md` matches no
+    # token expression in either spelling, and expands on a real sprint to
+    # `s306-story-1-…-review.md` — a sprint token in a basename, which is what rule 2 forbids.
+    # artifact-path-grammar.md recorded this as a limit of prescription-time checking and handed
+    # the class to the consumer-side `validate-artifact-paths.sh`, which reads real filenames.
+    #
+    # WHY THAT POSTURE WAS NOT ENOUGH, measured on the reference consumer: ONE prescription
+    # produced the same blocking defect in two sprints two apart, each time reaching the operator
+    # as a single FAIL row among roughly 160 push-time checks, after the files existed. A check
+    # that can only fire once the artifact is written costs a migration every time it fires.
+    #
+    # THE PREDICATE, three conjuncts, all lexical on the prescribed path:
+    #   (a) the BASENAME carries a placeholder whose NAME can carry a sprint;
+    #   (b) the basename does NOT already carry a visible sprint token. That is I82's subject, and
+    #       reporting it here would make one defect two findings with two remedies;
+    #   (c) NO component of the path is the reserved slot. A prescription already inside `s<N>/`
+    #       conceals nothing — the sprint is in the directory, where the grammar puts it, so
+    #       whatever the placeholder expands to is legal by position. `<story-index>` under a slot
+    #       is the shape this conjunct exists to acquit.
+    #
+    # ALL THREE EXPRESSIONS ARE RESOLVED AND NONE IS WRITTEN HERE, for the reason I82's own header
+    # records: this file carried a local copy of the token ERE once, it forked from the resolver,
+    # and it then reported a clean zero on its own subject. An unresolvable expression is a
+    # REFUSAL below, never a fallback to a literal — a fallback is how the fork grows back.
+    #
+    # HOW THE FALSE-POSITIVE SET REACHED ZERO, which is the part the next author will widen back.
+    # Of 82 prescriptions the extraction above yields, 18 carry a `<...>` placeholder in the
+    # basename: `<artifact>` ×8, `<M>` ×7, `<N>` ×4, `<type>`, `<slug>`, `<story-index>` ×2,
+    # `<story-id>`. A rule firing on ANY placeholder reports all 18. Two narrowings take it to 0,
+    # and both are derived from a declaration rather than listed here:
+    #   * (a) matches the placeholder NAME by hyphen-delimited segment — `sprint`, `N`, `id` — the
+    #     three the pipeline mints sprint-scoped. Acquits `<artifact>`, `<M>`, `<type>`, `<slug>`,
+    #     `<story-index>`. SEGMENT AND NOT SUBSTRING is load-bearing: `<candidate>` and
+    #     `<identifier>` contain `id` and name nothing sprint-scoped;
+    #   * (c) acquits every remaining `<N>`/`<artifact>` prescription, all of which sit under
+    #     `s<N>/`. That is 17 of the 18.
+    # What survives is a story id named outside the slot. On the corpus as it stands the arm
+    # reports 0; run against the same corpus one revision back, where `docs/reviews/` was
+    # prescribed with the story id in the basename, it reports exactly 1 and no other path of the
+    # 81 with it. That pair, not the zero, is what says this arm discriminates on a REAL corpus.
+    #
+    # THE MIGRATION LEDGER IS HONOURED, as it is by I82. The remedy for a concealed sprint is the
+    # same rewrite, and an arm with no escape hatch wedges a prescription whose readers cannot move
+    # yet. I82's converse direction keeps the ledger from outliving what it excuses.
+    i99_conceal_re="$(bash "$REPO_ROOT/core/scripts/artifact-path-config.sh" --conceal-re-prescribed 2>/dev/null)"
+    if [ -z "$i99_conceal_re" ]; then
+      err "I99 could not resolve the concealing-placeholder ERE from core/scripts/artifact-path-config.sh --conceal-re-prescribed. That resolver is the single home of the expression; without it this invariant has no predicate, and a predicate that matches nothing reports every prescription core makes as conforming."
+    elif [ -z "$i82_slot_re" ] || [ -z "$i82_tok_re" ]; then
+      err "I99 needs the slot and prescribed-token expressions I82 resolves above, and at least one came back empty. Without the slot it cannot exempt a correctly placed prescription; without the token it cannot stand down for I82's subject. Either way every finding it produced would be unattributable, so it refuses rather than guessing."
+    else
+      i99_conceals() {                            # 0 == this prescription HIDES a sprint
+        local p="$1" b="" rest c
+        b="${p##*/}"                                   # SEPARATE STATEMENT: a `local` builtin
+        # expands all its words BEFORE it runs, so `local p="$1" b="${p##*/}"` reads the OUTER
+        # p and sets b EMPTY. Every probe below then reports NOT-FLAGGED with no error, which
+        # reads as a dead predicate rather than as a quoting bug. Measured on bash 3.2.
+        [[ "$b" =~ $i99_conceal_re ]] || return 1     # (a) no placeholder that can carry one
+        [[ "$b" =~ $i82_tok_re ]] && return 1         # (b) visible token: I82's finding, not this one
+        rest="$p"
+        while [ -n "$rest" ]; do
+          c="${rest%%/*}"
+          if [ "$c" = "$rest" ]; then rest=""; else rest="${rest#*/}"; fi
+          [ -n "$c" ] || continue
+          [[ "$c" =~ $i82_slot_re ]] && return 1      # (c) the slot is placed; nothing is concealed
+        done
+        return 0
+      }
+
+      # PROVE IT CAN FIRE, BEFORE THE CORPUS IS READ. The silence this arm normally produces is
+      # also what a dead predicate produces, and the two are told apart here rather than below.
+      # Both directions, every run, and every probe is built on a LIVE area root so that renaming
+      # an area moves the probes with it instead of leaving them exercising a tree the grammar no
+      # longer describes.
+      i99_conceals "${i82b_a1}/<story-id>-probe.md" \
+        || err "I99's own probe: '${i82b_a1}/<story-id>-probe.md' was NOT flagged. That is the exact shape measured on the reference consumer twice, so the predicate cannot see the defect it exists to catch and every PASS below means nothing."
+      i99_conceals "${i82b_a1}/story-<id>-<slug>-probe.md" \
+        || err "I99's own probe: '${i82b_a1}/story-<id>-<slug>-probe.md' was NOT flagged. artifact-path-grammar.md names that spelling alongside the first as the same concealment, so a predicate seeing one and not the other covers half the class while reading complete."
+      for i99_p in "${i82b_a1}/s<N>/<story-id>-probe.md" "${i82b_a1}/<story-index>-probe.md" "${i82b_a1}/<slug>-probe.md" "${i82b_a1}/probe-<M>.md" "${i82b_a1}/changelog-<artifact>.md" "${i82b_a1}/sprint-<N>.md"; do
+        i99_conceals "$i99_p" \
+          && err "I99's own probe: '$i99_p' was flagged and must not be. It is either already inside the reserved slot, or a placeholder naming nothing sprint-scoped, or a VISIBLE sprint token that I82 above already owns. An arm that reports it fires on paths that conform, which is how an operator learns to stop reading a check."
+      done
+
+      i99_viol=""
+      while IFS= read -r i99_p; do
+        [ -n "$i99_p" ] || continue
+        i99_conceals "$i99_p" || continue
+        grep -qxF "$i99_p" <<<"$i82_ledger" && continue
+        i99_viol="${i99_viol}
+  $i99_p"
+      done <<<"$i82_seen"
+
+      [ -n "$i99_viol" ] && err "I99 core prescribes artifact path(s) whose basename hides a sprint inside a placeholder, outside the reserved \`s<N>/\` directory slot:${i99_viol}
+
+The placeholder names something the pipeline mints per sprint, so the expanded filename carries a sprint token however the prescription is written — I82 above cannot see it, because at prose time there is no token to read. The consumer's pre-push validator does see it, and only after the files exist, which makes every occurrence a migration. Put the sprint in the directory: <area>/s<N>/<kind>.md, naming the artifact by its position within the sprint rather than by an id that repeats the sprint. If the readers cannot move yet, add the path to artifact-path-grammar.md's migration ledger with the sub-release that removes it."
+    fi
     fi
   fi
 fi
