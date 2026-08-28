@@ -15,6 +15,47 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.434.0] - 2026-08-28
+
+### The handoff's push could not succeed on a sprint's first handoff
+
+`PC-S307-HANDOFF-PUSH-IS-A-BARE-GIT-PUSH-SO-A-FIRST-HANDOFF-CANNOT-SUCCEED`, filed by the
+reference consumer off a live incident.
+
+`steps/handoff.md` step 3 prescribed a bare `git push`. That cannot succeed on a branch that has
+never been pushed — **every sprint's first handoff wherever a branch is cut per sprint** — and it
+fails with `fatal: The current branch <b> has no upstream branch`. The step's own fallback then
+routed the failure past itself: it enumerates three ENVIRONMENTAL causes (no remote, offline, a
+protected branch) and an unpublishable branch is none of them, so the handoff reported success.
+On the consumer that meant a sprint's `planning-artifacts/` and `party-mode-transcripts/` left in
+git nowhere, eight of fourteen staged repairs surviving only in an ended session's scratchpad, and
+a resume line emitted for a successor with nothing durable behind it.
+
+**The fix was already in the tree, one step file over.** `ai-dlc-update`'s step 1 has resolved this
+exact state with `git push -u origin <branch>` all along, and `steps/retro.md` uses the `-u` form
+too. Three step files, two spellings of one command, and the wrong one survived because nothing
+joined them.
+
+**Both copies were repaired, and the second was found by the detector rather than by reading.**
+`_gate-procedures.md:622` carried the same prescription for the auto-handoff path; a fix landing
+only in `handoff.md` would have been half-shipped. Both fallbacks now say outright that the three
+environmental causes are the whole of what they cover, and that *"the local commits still stand"*
+is false whenever step 2 was skipped.
+
+**`I100` binds the shape, and the narrowing is the whole arm.** Scanning for a bare `git push`
+token flags PROSE ABOUT the command — `ai-dlc-update/SKILL.md` says *"report the `git push` error"*
+three times. A proximity scan keyed on the prescription sentence flagged **both repaired files, on
+their own prohibition text: 2 of 2 hits were the fix itself.** What discriminates is that a
+prescribed command appears parenthesised as the thing to run. **False-positive set measured at 0**
+over `core/**/*.md`, firing on a seeded offender in each copy independently and quiet on both
+near-misses. `FORK_BUDGET` 7176 → 7177 for its one `grep`.
+
+**Publishing the branch does not exit the state, and neither side assumed that.** A later run
+pushed the branch WITHOUT `-u`: the ref is on origin and byte-identical to local, and a bare
+`git push` still fails, because the condition is keyed on branch tracking configuration rather than
+on the ref existing remotely. Getting the bytes to the remote is not the fix; setting tracking is.
+That is the consequence for `PC-S336`, established jointly with the consumer.
+
 ## [0.433.0] - 2026-08-28
 
 ### A recorded verdict suppressed the remedy it authorizes

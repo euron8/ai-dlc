@@ -619,8 +619,13 @@ carry the no-human-present additions:
    in-flight state, current sub-step, and the stopped-teammate
    record from Step 1. Commit the finalized snapshot if the project
    tracks `_bmad-output/`, then push the current branch to origin
-   (`git push`) so the Step 2 commit and the finalized state reach the
-   remote and are not stranded on this machine.
+   (`git push -u origin HEAD`) so the Step 2 commit and the finalized
+   state reach the remote and are not stranded on this machine.
+   **`-u origin HEAD`, never a bare `git push`** — a bare push cannot
+   succeed on a branch that has never been pushed, which is every
+   sprint's FIRST auto-handoff wherever a branch is cut per sprint.
+   `steps/handoff.md` step 3 owns the full reason and it is not
+   restated here.
 
    **EVERY `git push` IN THIS PIPELINE RUNS WITH AN EXPLICIT 10-MINUTE
    TIMEOUT — `timeout: 600000` on the Bash call — AND IN THE FOREGROUND.**
@@ -637,7 +642,12 @@ carry the no-human-present additions:
    If the push fails (no
    remote configured, offline, or a protected branch), note the reason
    in the auto-handoff line and continue; the local commits still stand
-   and the handoff is not blocked.
+   and the handoff is not blocked. **Those three are ENVIRONMENTAL and
+   are the whole of what this fallback covers. A branch that cannot be
+   published is not one of them**, and routing it here reports success
+   over a sprint's output left in git nowhere. "The local commits still
+   stand" is also false whenever Step 2 was skipped, so verify Step 2
+   landed before relying on it.
 4. Output the distinguishing auto-handoff line (substitute mode,
    seam label, and trigger basis), then output the resume prompt
    (SKILL.md Handoff Protocol template) wrapped in `----` delimiter

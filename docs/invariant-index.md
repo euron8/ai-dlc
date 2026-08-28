@@ -116,3 +116,4 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I97 | only validate-locked-anchor.sh may MATCH a LOCKED_REQUIREMENTS marker |
 | I98 | every hook that emits additionalContext marks it, and only the library spells the |
 | I99 | a placeholder in a prescribed BASENAME that CONCEALS a sprint |
+| I100 | no step file prescribes a BARE `git push` |

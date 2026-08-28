@@ -299,7 +299,7 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   ONE.** The two additions in consecutive releases cost +7 and +13, both single-file
 #   directories, so whatever drives the difference is not the file count. Do not budget a future
 #   directory at either figure -- measure it. Spread top is 7170, headroom the usual 6 over it.
-FORK_BUDGET=7176
+FORK_BUDGET=7177
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -8038,6 +8038,45 @@ if [ "$fail" -eq 0 ]; then
   # The list now lives in docs/invariant-index.md, rendered by scripts/render-invariant-index.sh
   # from THIS file's own arm headers and byte-compared at pre-push. It is not restated here:
   # a second copy is a second thing to go stale, which is what this replaced.
+# --- I100: no step file prescribes a BARE `git push` -----------------------------------
+# A bare `git push` CANNOT SUCCEED on a branch that has never been pushed, and that is not an
+# edge case: it is every sprint's FIRST handoff wherever a branch is cut per sprint. The
+# reference consumer hit it live -- `fatal: The current branch <b> has no upstream branch` --
+# and the handoff's own failure fallback swallowed it, because that fallback enumerates three
+# ENVIRONMENTAL causes (no remote, offline, protected branch) and an unpublishable branch is
+# none of them. The run reported success over a sprint's planning artifacts and party-mode
+# transcripts left in git nowhere, and emitted a resume line for a successor with nothing
+# durable behind it. Filed by that consumer as
+# `PC-S307-HANDOFF-PUSH-IS-A-BARE-GIT-PUSH-SO-A-FIRST-HANDOFF-CANNOT-SUCCEED`.
+#
+# PUBLISHING THE BRANCH DOES NOT EXIT THE STATE, which is the half neither side assumed. A
+# later run pushed the branch WITHOUT `-u`: the ref is on origin and byte-identical to local,
+# and a bare `git push` STILL fails, because the condition is keyed on branch tracking
+# configuration rather than on the ref existing remotely. Getting the bytes to the remote is
+# not the fix; setting tracking is. Established jointly with that consumer, by neither of us
+# beforehand.
+#
+# THE FIX WAS ALREADY IN THE TREE, ONE STEP FILE OVER. `ai-dlc-update`'s step 1 has resolved
+# this exact state with `git push -u origin <branch>` all along, and `steps/retro.md` uses the
+# `-u` form too. Two spellings of one command across three step files is what let the wrong one
+# survive, so this binds the shape rather than trusting the next author to copy the right file.
+#
+# THE GRAMMAR IS THE PARENTHESISED PRESCRIPTION, AND THE NARROWING IS THE WHOLE ARM. Scanning
+# for a bare `git push` token anywhere flags PROSE ABOUT the command -- `ai-dlc-update/SKILL.md`
+# legitimately says "report the `git push` error" three times, and the repaired step files each
+# carry the bold prohibition "never a bare `git push`". A proximity scan keyed on the
+# prescription sentence flagged BOTH repaired files, on their own prohibition text: measured, 2
+# of 2 hits were the fix itself. What discriminates is that a PRESCRIBED command appears
+# parenthesised as the thing to run. FALSE-POSITIVE SET MEASURED AT 0 over core/**/*.md, with
+# the arm firing on a seeded offender and staying quiet on both near-misses -- the compliant
+# parenthesised `-u origin HEAD` form, and prose naming the bare command.
+i100_hits="$(grep -rlF '(`git push`)' "$REPO_ROOT/core" --include='*.md' 2>/dev/null || true)"
+if [ -n "$i100_hits" ]; then
+  err "I100 step file(s) prescribe a BARE \`git push\`, which cannot succeed on a branch that has never been pushed -- every sprint's FIRST handoff where a branch is cut per sprint. Use \`git push -u origin HEAD\`, as ai-dlc-update step 1 and steps/retro.md already do. The failure does not surface: the handoff fallback treats it as environmental and reports success over work that reached no remote:"
+  printf '  %s\n' $i100_hits >&2
+fi
+
+
   echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match. The live invariant enumeration is docs/invariant-index.md, rendered from this file and gated at pre-push."
   exit 0
 fi

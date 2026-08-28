@@ -34,14 +34,28 @@ Execute this 5-step procedure in order:
    anything not yet reflected, including the stopped-teammate
    record from Step 1. Commit the finalized snapshot if the project
    tracks `_bmad-output/`, then push the current branch to origin
-   (`git push`) so the Step 2 commit and the finalized state reach the
-   remote and are not stranded on this machine. **Push in the foreground
+   (`git push -u origin HEAD`) so the Step 2 commit and the finalized
+   state reach the remote and are not stranded on this machine.
+   **`-u origin HEAD`, never a bare `git push`.** A bare push cannot
+   succeed on a branch that has never been pushed — which is every
+   sprint's FIRST handoff wherever a branch is cut per sprint — and it
+   fails with `fatal: The current branch <b> has no upstream branch`.
+   `ai-dlc-update`'s step 1 has resolved this exact state with the `-u`
+   form all along; two step files disagreeing about one command is what
+   made this survivable. **Push in the foreground
    with `timeout: 600000`** — `_gate-procedures.md` ("Auto-handoff
    evaluation", step 3) owns why, and the reason is not restated here.
    If the push fails (no
    remote configured, offline, or a protected branch), report it to the
    operator in one line and continue; the local commits still stand and
-   the handoff is not blocked.
+   the handoff is not blocked. **Those three are ENVIRONMENTAL and are
+   the whole of what this fallback covers. A branch that cannot be
+   published is not one of them** — routing it here is what discarded a
+   sprint's planning artifacts and party-mode transcripts, leaving them
+   in git nowhere while the handoff reported success and emitted a
+   resume line for a successor with nothing durable behind it. And
+   "the local commits still stand" is false whenever Step 2 was also
+   skipped, so verify Step 2 landed before relying on this sentence.
 4. Emit the successor's entry line — exactly `/ai-dlc resume`, wrapped in
    `----` delimiter lines (one before, one after) for copy-paste. Nothing
    else: no narrated body. Then `touch _bmad-output/.driver/handoff` —
