@@ -90,9 +90,13 @@
 #   core/scripts/validate-steering-budget.sh --transcript PATH [--quiet]
 #   core/scripts/validate-steering-budget.sh --dir PATH [--since ISO] [--quiet]
 #       Scan a corpus. This is the SPRINT-scoped mode: a sprint spans many transcripts
-#       (every handoff and auto-compact starts a new one), so a single --transcript run
-#       audits only the window since the last compaction and cannot fail for anything
-#       earlier. --since bounds the corpus by file mtime to the sprint window; without it
+#       whenever it HANDED OFF, because a fresh CLI invocation or a /resume starts a new
+#       file. An auto-compact does not do so on Claude Code -- it continues in the same
+#       file under one sessionId -- so splitting is a property of the handoff, not of
+#       compaction. A single --transcript run audits only the file it names and cannot
+#       fail for anything in the sessions it never opened; a sprint that only
+#       auto-compacted has one file, and a count of 1 there is complete rather than
+#       narrow. --since bounds the corpus by file mtime to the sprint window; without it
 #       the scan reaches back across sprint boundaries. The count of transcripts scanned
 #       and the count excluded are both printed, so a narrow scan is visible rather than
 #       assumed.
@@ -164,15 +168,18 @@ say(){ [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"; }
 # --cite TAKES A CORPUS, and withholding that was a live deadlock.
 #
 # This used to read "--cite is a single-transcript query; it never scans a corpus" and
-# reject --dir. But --dir exists for a reason stated a few lines up in this file's own
-# usage block -- "a sprint spans many transcripts (every handoff and auto-compact starts a
-# new one)" -- and that reason applies to a CITATION with more force than to an audit.
+# reject --dir. But --dir exists for the reason the --dir usage line above states -- a
+# sprint spans many transcripts once it has handed off -- and that reason applies to a
+# CITATION with more force than to an audit. Cited, not restated: a copy of that sentence
+# here would drift from it silently.
 #
 # A resolution record's operator_authorization is verified by shelling here. The caller
 # (ai-dlc-acknowledge.sh) passes the CURRENT session's transcript, which is always the
 # session asking permission and never the session in which the operator spoke. So a record
-# was verifiable only inside the session that wrote it: cross any handoff, /clear or
-# auto-compact and the citation reported NOMATCH, the record stopped counting, and
+# was verifiable only inside the session that wrote it: cross any boundary that starts a
+# NEW TRANSCRIPT FILE -- a handoff, or a /clear that opens a new session, but NOT an
+# auto-compact, which continues in the same file -- and the citation reported NOMATCH,
+# the record stopped counting, and
 # --cycle-state regressed RESOLVED -> STALLED -> rc 3 -> every dispatch denied. The record
 # survived on disk; its provenance did not survive the session boundary.
 #
@@ -407,11 +414,15 @@ const isDenied = (b) => {
   return DENY_MARK.test(raw);
 };
 
-// A sprint does not run in one session. Every handoff and every auto-compact starts a new
-// transcript file, so a single --transcript scan covers only the window since the last
-// compaction -- in a long sprint, a minority of it. Checks A and B therefore cannot fail for
-// anything earlier, and the retro cites a PASS produced by a scope that excluded the region
-// where its failures live. Measured on the reference consumer: run as retro.md then directed
+// A sprint that HANDED OFF does not run in one transcript: a fresh CLI invocation or a
+// /resume starts a new file. An AUTO-COMPACT does not, on Claude Code -- the compaction
+// boundary record sits mid-file, with conversation on both sides of it and one unchanging
+// sessionId spanning both -- so a compacted session is still one transcript, and a scan of 1
+// on a sprint that never handed off is complete rather than narrow. Where a handoff DID
+// occur, a single --transcript scan covers only the file it names -- in a long sprint, a
+// minority of it. Checks A and B therefore cannot fail for anything in the sessions it never
+// opened, and the retro cites a PASS produced by a scope that excluded the region where its
+// failures live. Measured on the reference consumer: run as retro.md then directed
 // (one transcript) the audit returned PASS; run across that sprint's three transcripts,
 // Check B returned FAIL (B -- STEAMROLL): 2 -- both in a session the directed invocation
 // never opened, and one of them a violation the sprint had already recorded by hand.

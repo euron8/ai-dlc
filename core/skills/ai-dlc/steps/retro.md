@@ -617,12 +617,36 @@ session's:
       --since <ISO-8601 UTC of the sprint's first commit>
 
 Record the reported `transcripts scanned : N` in the retro. **N must be greater than 1 on
-any sprint that handed off or auto-compacted**, and a scan of 1 on such a sprint is a
-mis-scoped audit, not a clean one. The findings here are sprint-level lead-conduct
-findings, but a sprint does not run in one session: every handoff and every auto-compact
-starts a new transcript file, so a single-session scan cannot fail for anything before the
-last compaction — which in a long sprint is most of it. That is the vacuous-pass shape, and
-it is worse than an unrun check because it produces a PASS the retro then cites.
+any sprint that HANDED OFF**, and a scan of 1 on such a sprint is a mis-scoped audit, not a
+clean one. A handoff starts a new transcript file — a fresh CLI invocation, or a `/resume`,
+opens a new session — so a sprint that changed sessions has its conduct split across files.
+
+**An auto-compact is not a handoff, and whether it starts a new file is a property of the
+HARNESS, not of compaction.** On Claude Code it does not: the compaction boundary record
+sits MID-FILE, with conversation on both sides of it and one unchanging `sessionId`
+spanning both, so a compacted session is still one transcript. `N = 1` on a sprint that
+auto-compacted but never handed off is therefore a COMPLETE scan, and scoring it as
+mis-scoped is a false finding. Where a scan of 1 needs confirming, enumerate the window's
+transcripts directly rather than inferring the count from what the sprint did:
+
+    find ~/.claude/projects/<project-slug>/ -maxdepth 1 -name '*.jsonl' \
+      -newermt '<sprint start as YYYY-MM-DD HH:MM:SS +0000>'
+
+One file means `N = 1` covered the whole sprint window. More files than the validator
+scanned means the scan was narrow, whatever produced them.
+
+**Restate the timestamp; do not paste the `--since` value.** BSD `find` REJECTS the
+`Z`-suffixed ISO-8601 form `--since` takes — `find: Can't parse date/time`, exit 1, and
+nothing on stdout, which is byte-identical to a window holding no transcript and reads as
+confirmation of exactly the narrow scan you were checking for. The space-and-offset form
+above parses and honours the offset; the same instant written as local time selects a
+different set. Read the command's exit status, not just its output.
+
+The findings here are sprint-level lead-conduct findings, and a sprint that handed off does
+not run in one transcript, so a single-transcript scan of such a sprint cannot fail for
+anything in the sessions it never opened — which in a long sprint is most of it. That is
+the vacuous-pass shape, and it is worse than an unrun check because it produces a PASS the
+retro then cites.
 
 - **Check A (starvation)** — any foreground tool call that outlasted the steering
   budget. While it was in flight there was no tool boundary, so a queued operator
