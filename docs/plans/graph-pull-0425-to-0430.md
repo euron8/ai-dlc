@@ -1,223 +1,64 @@
-# Pull the graph consumer from 0.425.0 to 0.430.0
+# DISCHARGED — DO NOT EXECUTE
+
+# Pull the graph consumer from 0.425.0 to 0.430.1
 
 ## RESUME HERE
 
-**You were started with one sentence: `READ and FOLLOW docs/plans/graph-pull-0425-to-0430.md`.**
-This block is the whole of your entry point and the only current status record in this file.
+**Status: DISCHARGED 2026-08-28. DO NOT EXECUTE. Nothing below is an instruction any more.**
 
-**Status: NOT STARTED.** Nothing below has been executed.
+The pull ran and landed. `.claude/.ai-dlc-version` on the graph consumer reads **0.430.1 /
+`1115a426` on all four fields**, `.claude/.ai-dlc-applying` is absent, and `main` is level with
+`origin/main`. The numbered actions below are retained as a record of what was done, not as work
+to do. See `## Discharge` at the foot of this file for the real numbers.
 
-**EVERY FIGURE BELOW IS STALE BY ONE RELEASE AND MUST BE RE-REHEARSED BEFORE IT IS TRUSTED.**
-This file was written and rehearsed for `0.425.0 -> 0.429.0`. The distribution is now
-**`0.430.0`** and the range carries **eleven** discharged candidates, not nine. The row counts,
-the `WORKLIST` contents and the changed-path tallies below were measured on the shorter range and
-**no figure in this file has been re-measured against `0.430.0`.**
+**The range this file was written for was wrong by the time it ran, in both directions.** It was
+drafted for `0.425.0 -> 0.429.0`, its own banner corrected that to `0.430.0`, and the distribution
+was actually at **`0.430.1`** — six releases, 42 commits, **56** changed core paths against the 23
+this file predicted. Every figure was re-measured on a `file://` clone before use, exactly as the
+banner demanded, and the re-rehearsal is what caught the two things this file got wrong.
 
-**RE-REHEARSE ON A `file://` CLONE BEFORE WRITING ANY NEW NUMBER.** That is not bookkeeping: the
-`0.429.0` rehearsal is the only thing in this program's history that caught a consumer-facing
-defect before delivery — a `WORKLIST` row instructing every consumer to register a SOURCED
-LIBRARY as a hook. Nothing inside the distribution could have found it.
+**IT RAN AS TWO LEGS, NOT ONE.** `self-update-gate.sh` returned `SELF-UPDATE-DEFER` for the full
+range and named `SELF-UPDATE-SAFE-STOP 144fd252` (v0.427.0). Action 2 below says "run
+`/ai-dlc-update`" and never anticipates a split. The correct execution was
+`/ai-dlc-update 144fd252 apply` then `/ai-dlc-update apply`.
 
-**AND RE-MEASURE THE BOOTSTRAPPING HAZARD FOR THIS RANGE RATHER THAN CARRYING THE OLD ANSWER.**
-`0.430.0` changed `core/scripts/artifact-path-config.sh`, which BOTH `migrate-artifact-paths.sh`
-and `validate-artifact-paths.sh` read, and it added invariant `I99`. The consumer runs its own
-installed copies. The mode-only check is
-`git diff --raw <installed-commit>..origin/main -- core/` — mode-only being modes-differ and
-blobs-equal — and the `0429` answer of zero does NOT carry forward.
+**AND THE WITHHOLDING FIRED, WHICH THIS FILE PREDICTED IT WOULD NOT.** Action 4 below calls itself
+conditional and says the rehearsal predicts it will not fire. It fired on leg 2, against 17
+outstanding rows, and `--finish --carried-machinery-slice` was a required step rather than a
+contingency. The inversion is a consequence of the split: leg 1 installs the new driver, so leg 2
+is applied BY it rather than by the old one.
 
-**The gap has crossed the WIDE threshold.** Five releases; past five the drain plan's action 7
-says to say so, because a wide range means more paths adjudicated in one session and a bigger
-blast radius if a bootstrapping step is in it.
-
-### Start here
-
-**Your session's PROJECT ROOT must be `/Users/n8/git/graph`.** Skill scope follows the session
-root, not a Bash `cd`, so a session rooted in the distribution cannot invoke `/ai-dlc-update` at
-all. If you are rooted anywhere else, stop and say so.
-
-**The read/write boundary, and it is absolute.** `/Users/n8/git/graph` — the operator's consumer
-repo — is the only tree this run WRITES, and the pull itself is what writes it.
-`/Users/n8/git/ai-dlc` is the distribution and is **READ ONLY** for this run: read it, never write
-it. You are pulling FROM it, and nothing in this runbook edits it. If you find yourself wanting to
-change a distribution file to make the pull succeed, stop and ping — that is a defect to file
-upstream, not a step here.
-
-**The consumer's tree is dirty and that is EXPECTED.** `_bmad-output/` carries live pipeline
-state, and the set of dirty files grows while the pipeline runs, so it is deliberately not
-enumerated here. **Do not commit, revert, stash or clean it.** Committing makes the branch ahead
-of its remote and the update preflight then auto-pushes in-flight pipeline state on what you
-intended as a dry run.
-
-**Do not run `git checkout --`, `git restore`, `git clean`, `git stash` or `git reset --hard`.**
-
-### What this range carries, and what is special about it
-
-**Three releases, `0.426.0`, `0.427.0` and `0.429.0`, and the third one is most of the range.**
-Twenty-three changed core paths in all: fourteen modified and three added by `0.429.0` alone.
-
-**`0.429.0` DISCHARGES THE WHOLE SPRINT-306 CANDIDATE SET — SIX CANDIDATES THIS CONSUMER FILED
-ITSELF, AGAINST DEFECTS IT HIT LIVE.** They are the reason this pull is worth running, and each
-one changes something this consumer touches every sprint:
-
-- `core/skills/ai-dlc/steps/gate-validation.md` — **Check 2's blocking clause is now scoped by
-  sprint.** A `HARD_BLOCK` filed by an EARLIER sprint is surfaced at an `implementation`, `story`
-  or `retro` gate rather than blocking it, and still blocks at every `planning` and
-  `sprint-review` gate. An entry whose header names no sprint blocks everywhere. This is the one
-  that cost a live-incident gate an operator round-trip on a nine-day-old sprint-303 entry.
-- `core/scripts/validate-suppression-lifetime.sh` — an entry carrying `**Suppresses:**` or
-  `**Expires after:**` while its `**Status:**` classifies as anything other than `SUPPRESSED` is
-  now REPORTED rather than silently skipped, and the verdict line carries `malformed_attempt=`.
-  **Expect this to FAIL on your first gate if any such entry is still in `pending.md`** — that is
-  the fix working, not a regression. Set the status to `SUPPRESSED` or remove the fields.
-- `core/scripts/validate-gate-adjudication.sh` — `--series` accepts
-  `gate-<type>-resolution-p<M>.md` alongside the remediator's repair-record name, so a FAIL closed
-  by a lead-authored escalation resolution no longer reads as `MISSING REPAIR RECORD`. The
-  structure requirement is unchanged: `disposition:`, `edit:` and `derivation:`, read literally.
-  **Your existing `gate-implementation-resolution-p1.md` states all three in prose and labels
-  none, so it will score UNSTRUCTURED.** Label the three fields and it closes.
-- `core/scripts/report-propagation-fanout.sh` — the corpus is tracked plus
-  `--others --exclude-standard`, so artifacts written mid-sprint and not yet `git add`ed are
-  visible. The `SCOPING FAILURE` you were getting on a correct tree should stop. The untracked
-  share is printed in band.
-- `core/scripts/validate-stub-audit.sh` — `Phase [0-9]` counts as a stub marker only inside a
-  statement of absence. The docstring reword that cleared your last Check 16 was not necessary
-  and would not be necessary now.
-- `core/skills/ai-dlc/steps/bug-investigation.md` and `steps/implementation.md` — a FAIL on a
-  check the next step does not consume repairs in PARALLEL with the routing, and Section 7's
-  completion condition names the entering gate so nothing lands over a FAIL.
-
-`0.426.0` and `0.427.0` carry the re-stamp withholding and its finisher, and they are what the
-rest of this file is about:
-
-- `core/skills/ai-dlc-update/reconcile/apply.sh` — the re-stamp is now WITHHELD while any
-  `WORKLIST` or `DECISION` row is outstanding, and a new `--finish` mode advances it once the
-  rows are disposed. `--finish` also refuses an unresolvable `<theirs>` or `<dist>` rather than
-  writing the literal argument into `commit:`. This is the behaviour change that matters to you.
-- `core/skills/ai-dlc-update/SKILL.md` — step 7 instructs `--finish` in two places.
-- `core/git-hooks/pre-push` — `applying_guard()`'s message now separates the two reasons a
-  re-stamp is withheld and names `--finish` for the one a re-run cannot resolve.
-- `core/skills/ai-dlc/core-manifest.md` and
-  `core/skills/ai-dlc-update/reconcile/setup-sites.md` — one manifest row each for the new
-  fixture.
-- `core/fixtures/apply-restamp-worklist/` — new, shipping.
-
-Between them these three releases discharge **seven** candidates:
-`PC-S304-APPLY-SH-RESTAMPS-BEFORE-THE-WORKLIST-IS-DONE` and the sprint-306 six —
-`PC-S306-CHECK-2-HAS-NO-SPRINT-SCOPE`,
-`PC-S306-SUPPRESSED-STATUS-FIRST-TOKEN-SILENT-NO-OP`,
-`PC-S306-SERIES-VALIDATOR-NO-LEAD-RESOLUTION-PATH`,
-`PC-S306-FANOUT-UNTRACKED-FILES-INVISIBLE`,
-`PC-S306-GATE-REMEDIATION-BLOCKS-INDEPENDENT-DEV-DISPATCH` and
-`PC-S306-STUB-AUDIT-PHASE-N-MATCHES-WORD-BOUNDED-PROSE`.
-
-**THE CORRECTED `pre-push` MESSAGE ARRIVES ONE PULL BEHIND ITSELF, AND THAT IS NOT FIXABLE IN
-CODE.** `core/git-hooks/pre-push` is a consumer file this pull WRITES, so during this pull the
-consumer is still running the OLD guard text — the one that says "re-run; it resumes and
-re-stamps when the tree is consistent" and never mentions `--finish`. If this pull withholds and
-you then hit that message, **ignore its first remedy and use `--finish`.** The rehearsal below
-predicts the copy that actually runs this pull will stamp without withholding, so this stays a
-contingency — but it is a nearer one than it was, because the same rehearsal shows the INCOMING
-copy withholding on eight outstanding rows.
-
-The guard this release changes is `core/skills/ai-dlc-update/reconcile/apply.sh:1199` in the
-distribution, and the refusal that makes a withheld stamp consequential is
-`core/git-hooks/pre-push:767`, dispatching `applying_guard()` at `:717` — it REFUSES the fixture
-suite rather than skipping it while `.claude/.ai-dlc-applying` exists. (Both re-derived at
-`0.427.0`; the guard moved when its message was rewritten, so a figure copied from the `0.426.0`
-draft of this file would not resolve.)
-
-**A BOOTSTRAPPING STEP IS IN THE RANGE, AND THE HAZARD IS MEASURED RATHER THAN WARNED ABOUT.**
-`apply.sh` IS the program this pull runs, so the consumer's INSTALLED copy applies the release
-that repairs it. Re-measured for the widened range on a `file://` clone of the distribution
-against a scratch copy of this consumer's committed `HEAD`, with the two `apply.sh` copies
-asserted to differ before any reading was taken: the installed copy carries `--finish` **0**
-times and `handback` **0** times; the incoming copy carries `--finish` **22** times and
-`handback` **5**. **So the withholding still takes effect on the pull AFTER this one.** This pull
-is classified and applied by the OLD program throughout.
-
-**THE MODE-ONLY HAZARD IS MEASURED AND ABSENT.** `git diff --raw` over the whole range across
-**23** changed core paths reports **0** mode-only changes — modes differing with blobs equal. The
-three mode transitions in the range are all `000000 -> 100755` file ADDS, which take the `A`
-branch and not the `M` branch the defect lives in.
-
-**That is the good case for the STAMP. It is not the good case for the WORKLIST, and that has
-changed since this file was first written — read the rehearsal.**
-
-### The rehearsal, and what to do when the real run disagrees
-
-Rehearsed on a `file://` clone of the distribution against a scratch copy of this consumer's
-committed `HEAD` — never against this tree in place. **These are an EXPECTATION, not a
-guarantee.** The consumer moves constantly; every figure here is a hypothesis about a tree that
-has changed since it was measured. **A disagreement is information and is worth more than a
-clean report — STOP and ping the operator rather than reconciling it yourself.**
-
-`preclassify.sh` produced **45 rows**:
-
-| bucket | count |
-|---|---|
-| `UPSTREAM-ONLY` | 33 |
-| `UPSTREAM-ONLY-ADD` | 6 |
-| `DIST-ONLY-SKIP` | 6 |
-| `->CLASSIFY` | **0** |
-
-The six `DIST-ONLY-SKIP` rows are two mutation batteries that carry a `.dist-only` marker and one
-distribution-only fixture: `core/fixtures/context-provenance-mutants/` (3 paths),
-`core/fixtures/gate-repair-record-mutants/` (2), and `core/fixtures/shipped-rule-version-floor/run.sh`.
-
-`apply.sh` was then driven for real, twice — once with the consumer's INSTALLED copy and once
-with the incoming one. **They disagree, and the disagreement is the point:**
-
-```
-installed apply.sh   39 RESOLVED pure-apply, 1 RESOLVED driver-self-update,
-                     1 RESOLVED restamp, 1 RESOLVED consistent,
-                     1 NOTE override-adjudicated, 8 WORKLIST extension-reread
-                     stamp -> 0.429.0        .ai-dlc-applying -> ABSENT
-incoming  apply.sh   39 RESOLVED pure-apply, 1 NOTE override-adjudicated,
-                     8 WORKLIST extension-reread, 1 DECISION restamp-withheld
-                     stamp -> 0.425.0        .ai-dlc-applying -> ABSENT
-```
-
-`RESOLVED driver-self-update` appears only under the installed copy: that row IS the old driver
-replacing itself mid-run. **The installed copy is what actually runs this pull, so the stamp is
-expected to advance and no applying-marker should be left behind.**
-
-**EXPECT EIGHT `WORKLIST extension-reread` ROWS. THEY ARE REAL WORK, NOT NOISE.** This range
-changes core step files this consumer's own extensions hook into, so each listed extension has to
-be re-read against the new core text. The count is stable across both apply directions, which is
-what says the work is a property of the RANGE rather than of which copy ran.
-
-**A `WORKLIST settings-merge` ROW APPEARED IN AN EARLIER REHEARSAL OF THIS SAME RANGE AND WAS A
-DEFECT IN THE DISTRIBUTION, NOT IN THIS CONSUMER.** It named `ai-dlc-context-provenance.sh` as a
-hook present and unregistered. That file is a SOURCED LIBRARY — no event invokes it, the emitting
-hooks source it as a sibling — so the row's own remedy, registering it, would have wired this
-consumer's settings to a command that reads no stdin and decides nothing. `v0.429.0` fixed the
-owner of that predicate, `core/scripts/validate-hook-registration.sh`, to derive the exemption
-from "some sibling sources it" rather than from a name list. **The row is GONE from both apply
-directions in the rehearsal above, measured against a control of 0 in each. If it reappears on
-the real run, STOP** — it means the fixed validator did not reach this tree, and the instruction
-that row carries is the wrong one to follow.
-
-**The mode-only bootstrapping hazard was measured for this range and does not bite: 0 mode-only
-changes across 45 changed core paths**, where mode-only means the modes differ and the blobs are
-equal. Eleven paths are ADDS, which take the `A` branch rather than the `M` branch the defect
-lives in.
+**The one hazard this file warned about hardest did not happen, and the split is why.** It warns
+that the corrected `pre-push` guard naming `--finish` "arrives one pull behind itself". Under the
+split it arrives in leg 1 and the withhold happens in leg 2, so the corrected message was already
+installed when the only thing that triggers it occurred. Verified rather than assumed: the
+consumer's `.githooks/pre-push` was byte-identical to the base blob, so it bucketed pure-apply.
 
 ### Numbered actions
 
 1. **Confirm your project root is `/Users/n8/git/graph`.** If it is not, stop and ping.
 
-2. **Run `/ai-dlc-update`.** Do NOT re-describe or re-implement the pull here — the skill owns
-   resolving the ref, gating its self-update, carrying the machinery slice and emitting the
-   worklist, and its own report is the authority. Write no ref and no sha into this file.
+2. **Run `/ai-dlc-update` — AS EXECUTED, TWO LEGS.** The gate deferred and named a safe stop, so
+   the actual commands were:
+
+       /ai-dlc-update 144fd252cb0146ef2a7bdd77bcd29023281ae273 apply
+       /ai-dlc-update apply
+
+   Leg 1 self-updated autonomously (`SELF-UPDATE-OK` at that ref) and re-invoked itself; leg 2
+   deferred with no further safe stop and folded the machinery slice into the gated apply.
 
 3. **Compare the run's manifest against the rehearsal table above.** Report both. If they agree,
    say so; if they do not, stop and ping before applying.
 
-4. **If and only if the run emitted `DECISION restamp-withheld`:** dispose of every `WORKLIST`
-   and `DECISION` row, then run the finishing command exactly as that row printed it. Confirm
-   afterwards that `.claude/.ai-dlc-version` reads `0.429.0` on all four fields and that
-   `.claude/.ai-dlc-applying` is gone. This is a CONDITIONAL action and the rehearsal predicts it
-   will not fire.
+4. **IT FIRED ON LEG 2 — this was not conditional in the event.** 17 rows were disposed, then:
+
+       apply.sh --finish --carried-machinery-slice <dist> 144fd252 <consumer> 1115a426
+
+   Afterwards `.claude/.ai-dlc-version` read **0.430.1** on all four fields and
+   `.claude/.ai-dlc-applying` was gone. NOTE: `--finish` prints `RESOLVED consistent` without
+   verifying anything (BL-102), so the omitted check was run by hand — every shipped path against
+   `git show "1115a426:core/<rel>"`, 44 match / 2 mismatch / 0 absent with a control, the two
+   mismatches being the semantic-merge files that must differ.
 
 5. **Close the candidate, by id.** Run `ledger-reverify` **from the consumer root** — a run from
    the distribution root has turned a live `STILL-LIVE` into a `CLOSE-CANDIDATE`, and a false
@@ -244,18 +85,105 @@ preapproved — do not stop to ask for one.
 
 ### Done when
 
-1. `.claude/.ai-dlc-version` reads `0.429.0` on `version`, `commit`, `skill_version` and
-   `skill_commit`. **Observation point: after action 4, or after action 2 if action 4 did not
-   fire.** Reachable today: the rehearsal reached exactly this state under both drivers.
-2. `.claude/.ai-dlc-applying` is absent. Same observation point.
+1. `.claude/.ai-dlc-version` reads **`0.430.1`** on `version`, `commit`, `skill_version` and
+   `skill_commit`. (This criterion said `0.429.0` when written; that was stale twice over.)
+   **MET** — observed after action 4 on leg 2.
+2. `.claude/.ai-dlc-applying` is absent. Same observation point. **MET.**
 3. `PC-S304-APPLY-SH-RESTAMPS-BEFORE-THE-WORKLIST-IS-DONE` is reported closed or the reason it
-   is not is stated. **This one may legitimately come back NOT closed** — the ledger entry is
+   is not is stated. **MET — closed by hand at v0.426.0.** This range discharged more than this
+   one id, so the criterion under-reported its own pull: six entries closed in total (see
+   `## Discharge`). **This one may legitimately come back NOT closed** — the ledger entry is
    `verify: manual`, so `ledger-reverify` cannot adjudicate it mechanically and will say so.
    That is a PASS for this criterion provided you report which it was; it is a FAIL only if
    nobody looked.
 
 ## Discharge
 
-*Left empty for the executor. Fill it in when the run is done, then retitle this file
-`DISCHARGED — DO NOT EXECUTE`. A spent runbook still reading as instructions is this
-directory's recurring hazard — measured once at 5 of 6 files.*
+**Discharged 2026-08-28.** Consumer at **0.430.1 / `1115a426`**, all four stamp fields,
+`.ai-dlc-applying` absent, `main` level with `origin/main`.
+
+Landed as three PRs on the consumer: **#973** (leg-1 self-update), **#974** (leg-1 reconcile),
+**#975** (leg-2 reconcile).
+
+### What the range actually was
+
+Six releases (0.426.0 → 0.430.1), 42 commits, **56** changed core paths (45 M, 11 A) — against
+the 23 this file predicted. Both hazards it named were re-measured and held: **0** mode-only
+changes across all 56 paths (every mode transition is a `000000 ->` ADD), and the bootstrapping
+split confirmed by `--finish` 0→22 / `handback` 0→5 between the installed and incoming
+`apply.sh`, with the two blobs asserted to differ as a control.
+
+### The manifests, as run
+
+    leg 1  e7898c7d -> 144fd252   (0.426.0, 0.427.0)
+      step 2 SELF-UPDATE-OK -> autonomous self-update, 15/15 fixtures green, PR #973
+      step 3: 5 ALREADY-AT-THEIRS, 1 ALREADY-PRESENT  (the whole delta WAS the machinery)
+      apply: 1 NOTE override-adjudicated, RESOLVED restamp, RESOLVED consistent
+      0 WORKLIST, 0 DECISION.  stamp -> 0.427.0/144fd252
+
+    leg 2  144fd252 -> 1115a426   (0.428.0, 0.429.0, 0.430.0, 0.430.1)
+      step 2 SELF-UPDATE-DEFER, SAFE-STOP "-" -> --carried-machinery-slice
+      step 3: 39 UPSTREAM-ONLY, 6 DIST-ONLY-SKIP, 5 UPSTREAM-ONLY-ADD, 2 ->CLASSIFY
+      apply: 44 RESOLVED pure-apply, 10 NOTE extension-adjudicated,
+             3 WORKLIST extension-title-match, 2 WORKLIST semantic-merge,
+             1 NOTE override-adjudicated, 1 DECISION restamp-withheld
+      after --finish: stamp -> 0.430.1/1115a426, marker cleared
+
+**The `->CLASSIFY` count was 2, not the 0 this file predicted** — `team-roles/qa.md` (a declared
+setup site, so mask/reinject rather than a freehand merge) and
+`fixtures/artifact-path-conformance/run.sh` (one reworded rationale kept onto theirs, with a
+control confirming upstream had not also moved that line).
+
+### The row this file told the executor to STOP on did not appear
+
+`WORKLIST settings-merge` naming `ai-dlc-context-provenance.sh` as an unregistered hook: **absent
+from both legs, control 0 each.** Now confirmable at the mechanism rather than by its absence —
+the library landed on leg 2, is correctly unregistered, and **four** sibling hooks source it
+(`ai-dlc-protect`, `ai-dlc-dispatch-guard`, `ai-dlc-recover-gate`, `ai-dlc-recover`), which is the
+"some sibling sources it" exemption v0.429.0 derived to replace the name list.
+
+### Ledger — the point of the exercise
+
+**Six entries closed**, each by hand against its implementing commit's containing release:
+
+| entry | release |
+|---|---|
+| `PC-S304-APPLY-SH-RESTAMPS-BEFORE-THE-WORKLIST-IS-DONE` | v0.426.0 |
+| `PC-S306-CHECK-2-HAS-NO-SPRINT-SCOPE` | v0.428.0 |
+| `PC-S306-SUPPRESSED-STATUS-FIRST-TOKEN-SILENT-NO-OP` | v0.428.0 |
+| `PC-S306-SERIES-VALIDATOR-NO-LEAD-RESOLUTION-PATH` | v0.428.0 |
+| `PC-S306-STUB-AUDIT-PHASE-N-MATCHES-WORD-BOUNDED-PROSE` | v0.428.0 |
+| `PC-S306-UNSOLICITED-CONTEXT-HAS-NO-PROVENANCE-SIGNAL` | v0.429.0 |
+
+**This file attributes the sprint-306 set to `0.429.0`. Four of the five landed in `0.428.0`.**
+And the version must not be read off the commit that names an id: `593fb466` names the whole
+sprint-306 set and is a `docs(backlog)` closure, not an implementation; `git show
+81237656:VERSION` reads `0.425.0` for a fix contained in `0.426.0`.
+
+Two entries the file listed as discharged did NOT close and are still open:
+`PC-S306-FANOUT-UNTRACKED-FILES-INVISIBLE` and
+`PC-S306-GATE-REMEDIATION-BLOCKS-INDEPENDENT-DEV-DISPATCH` — upstream's history does not name
+either id, though the behaviours this file describes for both are present at theirs. Their
+receipts, not the entries, are the thing to look at next.
+
+### Filed against upstream
+
+`PC-S307-RECORDED-VERDICT-SUPPRESSES-THE-REMEDY-IT-AUTHORIZES` — `apply.sh:575-579` suppresses the
+ATOMIC `override-retire` steps on ANY recorded verdict, including `retire` and `contradicts-core`,
+whose purpose is to authorize them. The `case` matches the token's presence and never branches on
+the value, so the emitted NOTE asserts a property of the verdict on a path that never reads it.
+2 of 3 vocabulary members. Receipt scored three ways before filing.
+
+### Left for the operator
+
+**One `retire` verdict is recorded and deliberately not executed**:
+`overrides/steps__retro__domain-sections.md` / `steps/retro.md#4a. Close-Out Sweep`, digest
+`c86e7face729c84db493143c0653bbe7a06ea751`. §4a is byte-identical across the range (span 374-605,
+232 lines, re-derived through the shipping `span_of` with a control), so the pull did not need it;
+executing it orphans ~289 non-blank lines including ~101 of consumer close-out machinery. Step 1
+of its ATOMIC pair is already satisfied (`AI_DLC_SNAPSHOT_STRIKETHROUGH=forbid`).
+
+**It will not resolve itself.** `adj_digest()` hashes the consumer entry plus core's target at
+THEIRS, and the verdict was recorded with THEIRS already at `1115a426`, so the core move that
+fired the row is not what spends the digest. It reaches a terminal state only by being executed
+deliberately.
