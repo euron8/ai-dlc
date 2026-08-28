@@ -209,6 +209,71 @@ printf '#!/bin/sh\n' > "$C9/scripts/ai-dlc-local/untracked-but-present.sh"
     || ok "outside a git repository the tracked test is skipped rather than failed"
 }
 
+# ---- 10: AN UNREAD `consumer_machinery_home:` IS THE ONLY TRUE FALSE PASS IN THIS FILE.
+#
+# Every arm above is gated on `[ -n "$MACHINERY_REL" ] && [ -n "$MACHINERY_HOME" ]`, so an
+# empty home retires the WHOLE of E18 and W10 with no finding: `rc` 1 -> 0 and the footer is
+# fully plausible over a tree with a rogue path in it. Measured before the fix, one consumer
+# with one path declared outside the home:
+#
+#   core-manifest.md readable   rc=1  errors=1  ERROR E18 <path> does not live under ...
+#   same tree, mode 000         rc=0  errors=0  no finding, full footer, step() prints PASS
+#
+# Four trees, identical but for how the manifest is treated, because two of the states are
+# indistinguishable in the output and the other two are opposites:
+C10="$WORK/c10"; C11="$WORK/c11"; C12="$WORK/c12"; C13="$WORK/c13"
+for _c in "$C10" "$C11" "$C12" "$C13"; do
+  mk_consumer "$_c" "scripts/rogue.sh"
+  printf '#!/bin/sh\n' > "$_c/scripts/rogue.sh"        # declared machinery, outside the home
+done
+chmod 000 "$C11/.claude/skills/ai-dlc/core-manifest.md"
+# The key MISSPELLED in a fully readable file. This is not a variant of the mode-000 case:
+# core-manifest.md is hand-maintained, so a typo needs no accident at all, and the guard is
+# keyed on the VALUE rather than on any read's status precisely so it covers both.
+sed 's/^consumer_machinery_home:/consumer_machinery_hom:/' \
+  "$C12/.claude/skills/ai-dlc/core-manifest.md" > "$C12/.claude/skills/ai-dlc/cm.tmp"
+mv "$C12/.claude/skills/ai-dlc/cm.tmp" "$C12/.claude/skills/ai-dlc/core-manifest.md"
+rm -f "$C13/.claude/skills/ai-dlc/core-manifest.md"
+
+# THE SEED ASSERTS ITSELF. chmod 000 does not make a file unreadable for root, and a `sed`
+# that matched nothing leaves case 12 spelled correctly — either way the two refusal arms
+# below would pass having asserted nothing.
+if cat "$C11/.claude/skills/ai-dlc/core-manifest.md" >/dev/null 2>&1; then
+  bad "FIXTURE BROKEN: case 11's manifest is still readable after chmod 000 (running as root?)"
+elif grep -q '^consumer_machinery_home:' "$C12/.claude/skills/ai-dlc/core-manifest.md"; then
+  bad "FIXTURE BROKEN: case 12's key was not misspelled, so it is a copy of case 10"
+elif ! grep -q '^consumer_machinery_home:' "$C10/.claude/skills/ai-dlc/core-manifest.md"; then
+  bad "FIXTURE BROKEN: case 10's manifest carries no consumer_machinery_home: to read"
+else
+  out10="$(run_val "$C10")"; out11="$(run_val "$C11")"
+  out12="$(run_val "$C12")"; out13="$(run_val "$C13")"; rc13=$?
+  chmod 644 "$C11/.claude/skills/ai-dlc/core-manifest.md" 2>/dev/null
+
+  # THE CONTROL, and without it the three arms under it are vacuous: this group's trees have
+  # to reach the segregation arm at all before "it stopped reaching it" means anything.
+  grep -q 'rogue.sh.*does not live under' <<<"$out10" \
+    && ok "READABLE home: the rogue path is reported, so this group's tree reaches the segregation arm" \
+    || bad "READABLE home: no segregation finding — cases 11-13 below are asserting nothing"
+  grep -q "could not read 'consumer_machinery_home:'" <<<"$out10" \
+    && bad "the unread-home refusal fired on a manifest that reads perfectly well" \
+    || ok "and the unread-home refusal stays quiet when the key reads"
+
+  grep -q "could not read 'consumer_machinery_home:'" <<<"$out11" \
+    && ok "UNREADABLE manifest: refuses instead of retiring E18 and W10 behind a clean footer" \
+    || bad "UNREADABLE manifest: no finding — the false pass this arm exists to end"
+  grep -q "could not read 'consumer_machinery_home:'" <<<"$out12" \
+    && ok "MISSPELLED key, file readable: refuses too — the guard reads the VALUE, not a status" \
+    || bad "MISSPELLED key: silent, so the guard is keyed on the read and misses the likelier typo"
+
+  # THE ONE THAT MUST STAY QUIET. Every other seeded consumer in this suite is built by
+  # mk_consumer, which copies core-manifest.md, so absence is a state only this case carries —
+  # and an arm that erred on it would turn red every fixture whose tree was never meant to
+  # hold the file. An exemption needs a probe proving it does not cover the arm's own subject.
+  { [ "$rc13" -eq 0 ] && ! grep -qE '^ERROR +E18' <<<"$out13"; } \
+    && ok "ABSENT manifest: silent and exit 0 — the refusal is scoped to a file that is there" \
+    || bad "ABSENT manifest: reported, so the arm fires on trees that were never meant to carry it"
+fi
+
 # ---- the run itself is a control: a validator that died prints nothing, and so does a clean tree
 [ -n "$out1" ] && ok "the validator produced output (the run is not a silent death)" \
                || bad "the validator printed NOTHING — every assertion above is vacuous"
@@ -253,7 +318,11 @@ ctl="$(mut_reds control "")"
 
 # M1 — the home comparison always matches, so nothing is ever "outside" it. The segregation
 # arm goes silent while the existence arm keeps working.
-expect_set home-always-matches 2 'outside the home|does not name a runnable move' \
+# THE THIRD RED IS CASE 10's REACHABILITY CONTROL, and it is overlap rather than entanglement.
+# That control asserts case 10's tree reaches the segregation arm, which is the exact arm this
+# mutant disables, so any faithful control here MUST move with it. Goal 2's assertion still OWNS
+# the finding; the control is a precondition for cases 11-13 and stands down to it in wording.
+expect_set home-always-matches 3 'outside the home|does not name a runnable move|READABLE home: no segregation finding' \
   's@^          "\$MACHINERY_HOME"\*) ;;@          *) ;;@'
 
 # M2 — the absent-path arm is removed. Only the absent-path assertion moves.
@@ -299,6 +368,22 @@ expect_set unscoped-to-declaration 1 'predates the declaration' \
 # earlier.
 expect_set remedy-unusable 1 'does not name a runnable move' \
   's@git mv @move @'
+
+# M8 — the unread-home refusal is removed, which is the FALSE PASS exactly as it shipped.
+# TWO reds, and both are POSITIVE assertions about a finding that must appear: an arm keyed on
+# "no ERROR mentioning the home" would have passed against this mutant, because a retired
+# clause and a satisfied one print the same nothing. The two states share one refusal, so a
+# mutant that silences it must move both or the arms are not measuring the same guard.
+expect_set no-unread-home-refusal 2 'UNREADABLE manifest: no finding|MISSPELLED key: silent' \
+  's@^if \[ -z "\$MACHINERY_HOME" \] && \[ -f "\$SKILL_DIR/core-manifest.md" \]; then@if false; then@'
+
+# M9 — the refusal stops being scoped to a manifest that EXISTS. One red, and it is the
+# absent-file case: every other consumer here is built by mk_consumer, which copies the
+# manifest, so nothing else in this file can see the difference. This is the mutant that
+# keeps M8's exemption honest — without it "scoped to a file that is there" is a clause no
+# assertion would notice the loss of, and it would silently widen back.
+expect_set refusal-ignores-file-presence 1 'ABSENT manifest: reported' \
+  's@^if \[ -z "\$MACHINERY_HOME" \] && \[ -f "\$SKILL_DIR/core-manifest.md" \]; then@if [ -z "$MACHINERY_HOME" ]; then@'
 
 if [ "$fails" -eq 0 ]; then echo "PASS consumer-machinery-inventory"; exit 0; fi
 echo "FAIL consumer-machinery-inventory ($fails)"; exit 1

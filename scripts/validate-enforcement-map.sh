@@ -299,7 +299,7 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   ONE.** The two additions in consecutive releases cost +7 and +13, both single-file
 #   directories, so whatever drives the difference is not the file count. Do not budget a future
 #   directory at either figure -- measure it. Spread top is 7170, headroom the usual 6 over it.
-FORK_BUDGET=7177
+FORK_BUDGET=7192
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

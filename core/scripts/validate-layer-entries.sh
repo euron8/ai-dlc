@@ -310,12 +310,51 @@ shadow_parts() { # shadow_parts <shadows-value>  -> one `<file>\t<anchor>` line 
   ' < /dev/null
 }
 
-fm() { # fm <file> <key> -- first frontmatter scalar, trimmed
+# EMPTY STDOUT MEANS TWO OPPOSITE THINGS AND THE EXIT STATUS IS THE ONLY THING THAT SEPARATES
+# THEM. `awk` that cannot open its file writes to stderr, prints nothing, and exits 2; a file
+# that genuinely has no `k:` line prints nothing and exits 0. Every caller here reads the value
+# through `$( )` and, before this, threw the status away — so "I could not read this file" and
+# "this key is absent" collapsed into the same missing-key ERROR. Measured, all four states:
+#
+#     ok          stdout=[x]   rc=0        keyless     stdout=[]   rc=0
+#     unreadable  stdout=[]    rc=2        missing     stdout=[]   rc=2
+#
+# Filed by the reference consumer as PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER
+# after a pre-push run inside a freshly created git worktree reported 20 ERRORs against two
+# files that were demonstrably well-formed, alongside `awk: can't open file` on stderr.
+#
+# KEYED ON THE STATUS, NOT ON A PRE-FLIGHT `[ -r ]`, AND THAT IS THE WHOLE REASON IT IS SITED
+# HERE. The filing could not isolate WHY awk failed to open a readable file and says so; a
+# worktree still materialising is at least as likely as a path bug. A readability test before
+# the read cannot cover that case — the file passes the test and vanishes from under the read —
+# whereas the status is reported by the read that actually failed, whichever cause produced it.
+# It also costs nothing: the status rides the call every caller already makes.
+#
+# TODAY'S DIRECTION IS THE SAFE ONE AND THAT IS NOT A REASON TO LEAVE IT. A read failure
+# currently manufactures a missing-key ERROR, so the pull is refused rather than wrongly passed.
+# One inversion away — any caller that reads a non-empty default, or a key whose ABSENCE is the
+# permissive answer — the same collapse green-lights a malformed entry instead.
+fm() { # fm <file> <key> -- first frontmatter scalar, trimmed. rc 0 read it, non-zero could NOT.
   awk -v k="$2" '
     NR==1 && $0=="---" { inf=1; next }
     inf && $0=="---"   { exit }
     inf && index($0, k":")==1 { sub("^"k":[[:space:]]*", ""); print; exit }
   ' "$1"
+}
+
+# A VALIDATOR THAT CANNOT READ ITS SUBJECT HAS NO FINDING TO REPORT ABOUT IT, so this exits
+# rather than counting an error. Reporting one would be a claim about the file's CONTENT made by
+# a run that never saw the content, which is the defect above wearing a better message; and
+# skipping the file silently would drop it from a census whose whole job is completeness. Exit 2
+# is this script's existing "could not run" code, beside "Not an ai-dlc consumer" — a state that
+# produced no verdict must never share an exit with one that ran and passed.
+entry_unreadable() { # entry_unreadable <file>
+  echo "validate-layer-entries: FATAL — could not READ '$1'. The file is listed as a layer entry" >&2
+  echo "  and awk failed to open it, so this run has no verdict about its frontmatter. It is NOT" >&2
+  echo "  being reported as missing keys: a read failure and an absent key are different facts," >&2
+  echo "  and conflating them is PC-S307. Check permissions, and if this is a git worktree that" >&2
+  echo "  was just created, re-run once the checkout has finished materialising." >&2
+  exit 2
 }
 
 # Does the frontmatter block CLOSE? Nothing asked before, and the omission hid a real
@@ -765,7 +804,14 @@ if [ -n "$LC_CV" ]; then
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     LC_ENTRIES=$((LC_ENTRIES+1))
-    ct="$(fm "$f" conforms_to)"
+    # THE FOURTH SITE, AND IT IS THE ONE THE FIRST THREE GUARDS DID NOT COVER. This census loop
+    # runs BEFORE the override and extension loops, so an unreadable entry drew an E17
+    # "missing conforms_to" here and then hit the fatal below — one collapsed finding still
+    # reaching the operator ahead of the abort. Measured on the probe: with the other three
+    # guards in place and this one absent, the unreadable entry produced exactly 1 ERROR line.
+    # Asking which loop READS FIRST is the question a fix keyed on "the loops that matter" does
+    # not ask.
+    ct="$(fm "$f" conforms_to)" || entry_unreadable "$f"
     if [ -z "$ct" ]; then
       LC_UNDECLARED=$((LC_UNDECLARED+1))
       err E17 "$(rel "$f"): missing 'conforms_to:' frontmatter. Every layer entry declares the contract version it has been migrated to; without it neither you nor core can say which of the contract's ${LC_CV} versions of clauses this entry has ever been read against. Add 'conforms_to: ${LC_CV}' once the entry holds every clause, or the lower version it was last migrated to."
@@ -803,7 +849,12 @@ echo "== overrides =="
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   LC_N_OVERRIDE=$((LC_N_OVERRIDE+1))
-  shadows="$(fm "$f" shadows)"; base_sha="$(fm "$f" base_sha)"
+  # THE STATUS IS TAKEN OFF THE CALL THAT ALREADY HAPPENS, so the guard costs no extra read and
+  # cannot drift out of step with the loop it protects. Split off `base_sha` because `a=$(x);
+  # b=$(y)` reports only y's status — the first assignment's rc is discarded by the `;` and the
+  # guard would have watched the wrong call.
+  shadows="$(fm "$f" shadows)" || entry_unreadable "$f"
+  base_sha="$(fm "$f" base_sha)"
 
   fm_unterminated "$f" \
     && err E1 "$(rel "$f"): frontmatter opens with '---' but never closes. Every reader here scans to EOF for its keys, so the entry looks well-formed while its body is still inside the YAML block — where the '### …' heading that carries the override parses as a comment, not a section."
@@ -1056,6 +1107,43 @@ MACHINERY_REL="$(sed -n 's/^consumer_machinery_file:[[:space:]]*//p' "$LC_FILE" 
 # ships inside THIS skill, carries the same literal, and I43 holds every surface to one string --
 # so reading it here is a join, not a fifth spelling.
 MACHINERY_HOME="$(sed -n 's/^consumer_machinery_home:[[:space:]]*//p' "$SKILL_DIR/core-manifest.md" 2>/dev/null | head -1 | sed 's/[[:space:]]*$//')"
+# THE ONLY FALSE PASS THIS FILE'S READ-FAILURE CLASS PRODUCED, AND IT WAS FOUND LAST. Everything
+# else in the PC-S307 sweep was loud: a read failure manufactured a wrong finding, or deleted one
+# from a run that errored anyway. Here the gate below wraps the WHOLE of E18 and W10 in
+# `[ -n "$MACHINERY_REL" ] && [ -n "$MACHINERY_HOME" ]`, so an empty value retires both clauses with
+# no finding at all. Measured, one consumer, one rogue path declared outside the home:
+#
+#   core-manifest.md readable   rc=1  errors=1  ERROR E18 scripts/elsewhere/rogue.sh …
+#   same tree, mode 000         rc=0  errors=0  no FATAL, full plausible footer
+#
+# rc 1 -> 0. The consumer's pre-push step() prints PASS, and the one clause whose whole job is to
+# make an inventory unforgeable is the clause that vanished.
+#
+# KEYED ON THE VALUE AND NOT ON THE READ'S STATUS, WHICH IS THE OPPOSITE CHOICE FROM fm()'s AND IS
+# DELIBERATE. A status test catches the unreadable file. It does NOT catch a file that is perfectly
+# readable and has the key MISSPELLED -- measured as a third state, and it produces the identical
+# rc=0 with the identical footer. This is a hand-maintained file, so a typo is the likelier cause of
+# the two and no permissions accident is required. Testing the VALUE covers both.
+#
+# SCOPED TO A MANIFEST THAT EXISTS, for the reason the crosswalk arm above states about its own
+# subject. This arm's subject is a manifest that is PRESENT and silent about the key -- the only
+# state it can speak to. An ABSENT manifest is a different thing entirely: a partial install, which
+# this clause has no standing to adjudicate and which would be reported through a segregation
+# clause rather than through anything an operator could act on. The absent case therefore stays
+# silent, which is the state before this release and is NOT what this arm claims to close.
+#
+# AN EARLIER REVISION OF THIS PARAGRAPH JUSTIFIED THE SCOPING WITH A FALSE MEASUREMENT, and it is
+# recorded because the scoping survived the correction and the reasoning did not. It claimed "a
+# seeded tree with no core-manifest.md is every fixture in this suite today". Derived, with two
+# controls in the same invocation: THREE fixtures cp the manifest into a seeded tree
+# (check-15-bypass, consumer-machinery-inventory, core-write-guard) against 8 for
+# layer-contract.yaml and 0 for an impossible filename. consumer-machinery-inventory is one of the
+# three, which is exactly why its case 1 has asserted E18 firing since long before this release.
+# The claim reached this file because it arrived in a delegate's report and was written down
+# without being re-derived -- a hypothesis about the tree, quoted as a measurement.
+if [ -z "$MACHINERY_HOME" ] && [ -f "$SKILL_DIR/core-manifest.md" ]; then
+  err E18 "could not read 'consumer_machinery_home:' from $(rel "$SKILL_DIR/core-manifest.md"), though the file is present. The machinery segregation clauses are gated on that value, so an unread one retires E18 and W10 for this entire run WITHOUT a finding -- a rogue path declared outside the home reports the same clean footer as a conforming project. Either the file could not be read, or the key is misspelled; both produce this state and neither is visible in the output otherwise."
+fi
 
 # Both arms are SILENT on a tree with no contract, exactly as E16 is. A distribution that
 # predates the declaration is not a consumer failing to migrate, and v0.228.0 recorded what
@@ -1142,7 +1230,11 @@ while IFS= read -r _lf; do
 $(defined_anchors "$_lf")"
   LIVE_RULES="$LIVE_RULES
 $(defined_rules "$_lf")"
-  _lh="$(fm "$_lf" hooks)"
+  _lh="$(fm "$_lf" hooks)" || entry_unreadable "$_lf"
+  # AND THIS `continue` IS EXACTLY WHY THE GUARD ABOVE IT IS NOT OPTIONAL. An unreadable entry
+  # yields an empty `hooks`, which reads as "declares no hook" and drops the file out of the
+  # resolvability set WITHOUT a finding — the silent direction of PC-S307, in the one loop whose
+  # output another arm consumes as a completeness claim.
   [ -n "$_lh" ] || continue
   _lc="$(resolve_target "$_lh")"
   [ -f "$_lc" ] || continue
@@ -1175,7 +1267,12 @@ fi
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   LC_N_EXTENSION=$((LC_N_EXTENSION+1))
-  kind="$(fm "$f" kind)"; hooks="$(fm "$f" hooks | awk '{print $1}')"; id="$(fm "$f" id)"
+  # THE GUARD GOES ON `kind`, NOT ON `hooks`, and the pipe is the reason. `$(fm … | awk …)`
+  # reports AWK's status, never fm's, so a read failure behind a pipe is invisible here — the
+  # same subshell-swallows-the-status shape one line over. `kind` is unpiped and is the first
+  # read of this file, so it is the one call whose failure still reaches the caller.
+  kind="$(fm "$f" kind)" || entry_unreadable "$f"
+  hooks="$(fm "$f" hooks | awk '{print $1}')"; id="$(fm "$f" id)"
 
   fm_unterminated "$f" \
     && err E4 "$(rel "$f"): frontmatter opens with '---' but never closes. Every reader here scans to EOF for its keys, so the entry looks well-formed while its body is still inside the YAML block — where the '### …' heading that carries the extension parses as a comment, not a section."
@@ -1224,8 +1321,23 @@ while IFS= read -r f; do
   # `team-roles/remediator.md`, `steps/gate-validation.md`) and an unanchored grammar
   # for this key matches 8 of its 9 occurrences in core. Any future reader of this key
   # anchors the same way or inherits that false-positive set.
-  extends="$(unquote "$(fm "$f" extends)")"
-  position="$(unquote "$(fm "$f" position)")"
+  # THE RULE IS NOT "GUARD THE FIRST READ", IT IS "GUARD EVERY READ WHOSE EMPTY VALUE IS
+  # PERMISSIVE", and these three are the permissive ones. Every arm that consumes them is gated
+  # on the value being NON-empty (:1290, :1329, :1350, :1354), so an empty read means "the key is
+  # absent" and absent is the CONFORMING answer for every kind but qualifier and check. A read
+  # failure here does not manufacture a finding the way the missing-key path does -- it DELETES
+  # one. Measured on a kind: role entry declaring position and gate_types, with fm failing for
+  # these keys only, every earlier read having succeeded: errors 4 -> 1, the E12/E13/E14 findings
+  # gone, no FATAL, and a full plausible footer over a file the run could not read. That is the
+  # inversion this file's own fm() header calls "one inversion away"; it was already here.
+  #
+  # SPLIT OFF `unquote`, for the same reason `shadows` is split from `base_sha`. `$(unquote "$(fm
+  # ...)")` reports UNQUOTE's status and never fm's -- the guard would have watched the wrong call,
+  # which is the `$(fm ... | awk ...)` hazard one loop up wearing different brackets.
+  _ext_raw="$(fm "$f" extends)"     || entry_unreadable "$f"
+  extends="$(unquote "$_ext_raw")"
+  _pos_raw="$(fm "$f" position)"    || entry_unreadable "$f"
+  position="$(unquote "$_pos_raw")"
 
   if [ -n "$extends" ]; then
     # Parsed by shadow_parts — the SAME reading `shadows:` gets, bound byte-identical
@@ -1286,7 +1398,9 @@ while IFS= read -r f; do
   # anchors anything, and whether it hooks the file carrying the manifest are all
   # questions about the RENDERED manifest, which only validate-gate-manifest.sh holds.
   # Answering them here would need a second GATE_MANIFEST grammar (I26).
-  gate_types="$(unquote "$(fm "$f" gate_types)")"
+  # Permissive too: :1350 fires only when this is non-empty, so a failed read acquits the entry.
+  _gt_raw="$(fm "$f" gate_types)"   || entry_unreadable "$f"
+  gate_types="$(unquote "$_gt_raw")"
   if [ -n "$gate_types" ] && [ "$kind" != check ]; then
     err E14 "$(rel "$f"): gate_types '$gate_types' is declared on kind '$kind'. Only a check is loaded from a GATE_MANIFEST row, so on this kind nothing reads the key and it states a loading rule that never happens. Use kind 'check' if this entry defines gate checks."
   fi
@@ -1980,7 +2094,27 @@ raw_in() { # raw_in <file-list> <anchor> -> first matching raw heading line
 
 while IFS= read -r f; do
   [ -n "$f" ] || continue
-  shadow_anc="$(shadow_parts "$(unquote "$(fm "$f" shadows)")" 2>/dev/null | head -1 | cut -f2)"
+  # NOT THE PERMISSIVE CLASS. IT IS THE INVERSE, AND AN EARLIER REVISION OF THIS COMMENT SAID THE
+  # OPPOSITE. `shadow_anc`'s only consumer is the ACQUITTAL below -- `elif [ -n "$shadow_anc" ] && …
+  # then verdict="quiet"` -- so an empty read does not delete a finding here, it WITHDRAWS an
+  # acquittal and manufactures one. Measured on a seeded extension whose `shadows:` anchor acquits a
+  # bare `Check 12` in its own body: readable gives exit 0 and no W12; with this guard removed and
+  # the read failing, a W12 APPEARS that the readable run does not produce.
+  #
+  # THE ARM THAT WATCHES IT THEREFORE ASSERTS AN APPEARANCE, NOT AN ABSENCE. An arm keyed on a row
+  # going missing would pass here forever, in both directions, because nothing ever goes missing.
+  #
+  # The guard is still necessary and the reason is still the status: the `2>/dev/null` swallows
+  # awk's own "can't open file" line, so this read failure left no trace anywhere. Take the status
+  # off fm directly -- through the pipe it is head's, and through the nesting it is unquote's.
+  #
+  # AND THIS SITE IS THE UNIVERSAL BACKSTOP, WHICH IS NOT FREE. Its population is extensions AND
+  # overrides and it runs last, so it now aborts any permanently unreadable entry whichever earlier
+  # guard is missing. Two shipped fixture arms keyed on an exit code dropping 2 -> 1 stopped being
+  # able to fire when it landed. Adding a late guard invalidates every earlier arm keyed on a
+  # verdict change; key them on the spurious ROWS printed before the abort instead.
+  _sh_raw="$(fm "$f" shadows)" || entry_unreadable "$f"
+  shadow_anc="$(shadow_parts "$(unquote "$_sh_raw")" 2>/dev/null | head -1 | cut -f2)"
   while IFS= read -r hit; do
     [ -n "$hit" ] || continue
     ln="${hit%%	*}"; rest="${hit#*	}"; sec="${rest%%	*}"

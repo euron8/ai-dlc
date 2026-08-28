@@ -145,7 +145,7 @@ say "$([ "$CTL_RC" -eq 1 ] && [ "$(footer_field "$CTL_OUT" errors)" = "$(footer_
   "CONTROL: an unmutated copy reproduces the shipped error count, so a mutant's change is attributable"
 
 # --- m1: the receipt made OPTIONAL ------------------------------------------------------
-if mk m1 sed 's@^    ct="$(fm "$f" conforms_to)"$@    ct="$(fm "$f" conforms_to)"; [ -n "$ct" ] || continue@'; then
+if mk m1 sed 's@^    ct="$(fm "$f" conforms_to)" || entry_unreadable "$f"$@    ct="$(fm "$f" conforms_to)" || entry_unreadable "$f"; [ -n "$ct" ] || continue@'; then
   M1_OUT="$(bash "$TMP/m1.sh" "$BAD" 2>&1)"
   say "$([ "$(footer_field "$M1_OUT" errors)" = 3 ] && [ "$(footer_field "$M1_OUT" undeclared)" = 0 ] && echo 1 || echo 0)" \
     "MUTANT m1 killed: with the missing-key arm skipped the error count drops 4 -> 3 and undeclared reads 0 on a tree that has one"

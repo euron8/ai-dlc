@@ -3399,3 +3399,173 @@ interchangeable.
 
 verify: sh set -e; h=core/skills/ai-dlc/steps/handoff.md; [ -f "$h" ] || exit 9; grep -qF "push the current branch to origin" "$h" || exit 9; grep -qE "push -u|set-upstream|push origin" "$h" && exit 0; exit 1
 
+## BL-045
+
+**LANDED (v0.431.0, verified 6060f787).** Closed as bookkeeping in v0.435.0, not fixed by it. The
+prescribed change — promoting the `## Machine Audits` heading from `####` to `###` so it stops
+sitting inside the `4a. Close-Out Sweep` span — landed at `6060f787`, whose subject says so in as
+many words. The entry was never annotated or rotated, so its receipt has reported CLOSE-CANDIDATE
+ever since and no release claimed it. Found by running the receipt histogram BEFORE this batch's
+own work, which is the only instrument that surfaces a landed-but-unclosed entry.
+
+**Core's `## Machine Audits` table is a `####` child of `### 4a. Close-Out Sweep`, so every
+override that shadows §4a deletes the table as a side effect — and core's own §4 delegates into
+it too, which no detector can see.** Driven through the shipping resolver
+(`core/skills/ai-dlc-update/reconcile/lib.sh:71`, `span_of`), `span_of "4a. Close-Out Sweep"` over
+`core/skills/ai-dlc/steps/retro.md` returns **`373 604`**, and that span contains exactly ONE
+sub-heading: `core/skills/ai-dlc/steps/retro.md:581`,
+``#### `## Machine Audits` — one table, not five transcriptions``. Occurrences of the construct
+inside the §4a span: **2**. **Control in the same invocation** — the sibling span
+`span_of "4b. Operator-steerability audit"` = `605 705`, occurrences there **0**, so the counter
+discriminates rather than answering yes everywhere. The detector that reports the consequence is
+live: `OVERRIDE-DELEGATES-INTO-SHADOW` occurs **4** times in
+`core/skills/ai-dlc-update/reconcile/layer-drift.sh` (emit site `:1289`); control, the impossible
+status `OVERRIDE-DELEGATES-INTO-NOWHERE`, **0** in the same file.
+
+The consumer entry framed the victims as its own two `OVERRIDE-DELEGATES-INTO-SHADOW` rows. **The
+correction is WIDER, and it is core's.** `core/skills/ai-dlc/steps/retro.md:290` — "Record the
+verdicts in the `## Machine Audits` table (below)" — sits in §4, whose span is `205 334`, while the
+table it names is at 581 inside §4a. So core itself holds a cross-section delegation into the
+shadowable span. The emit at `layer-drift.sh:1289` fires inside the per-override loop keyed on an
+entry's `shadows:` value, so its population is `overrides/` entries; core has no `shadows:` and
+never enters that loop. A consumer that shadows §4a therefore drops core's own §4 delegation target
+as well as its override's, and **that half is structurally outside every arm's population** — not
+merely unreported today, unreportable by this detector's join key.
+
+The entry's remaining claims hold as written. Its middle remedy — "narrow `shadows:` to the
+sub-headings actually rewritten" — is genuinely unavailable for an override that rewrites §4a,
+because the one sub-heading in the span IS the delegation target; that is the measurement above,
+re-derived, not transcribed. Its `verify: manual` reasoning does not carry across the boundary: it
+was correct for a consumer ledger grepping a `theirs` ref, and this tree is executable.
+
+**The prescribed fix works when executed**, which is worth stating because it usually does not
+here. Promoting line 581 from `####` to `###` — one character, no new prose, so no date, version
+tag or origin narrative enters resident text — moves `span_of "4a. Close-Out Sweep"` from
+`373 604` to **`373 580`**, drops the construct count inside §4a from 2 to **0**, and makes the
+table its own resolvable span `581 604`, addressable by the existing `<file>#<anchor>` key with no
+new anchor vocabulary. The two sides were asserted to differ before the comparison was read (`diff`
+= 4 lines, the single heading). An unnumbered `###` sibling is already the house form in this file:
+`### Empirical gate validation` (335) and `### Sprint-Ship Verification` (706).
+
+Blast radius, measured on a `--local` clone with the promotion applied, both sides asserted
+different: `scripts/validate-enforcement-map.sh` output **byte-identical** across the two, and
+`section_of`/`span_of` appear in that validator only inside comments, so it cannot resolve a
+retro.md heading at all. `core/scripts/audit-rule-files.sh` output **byte-identical** across the
+two, all three tier-1 classes `CLEAN` on both. Both validators exit 1 on both sides for
+pre-existing tier-2 findings that name other files. The only two fixtures that read the real
+`retro.md` are `core/fixtures/check-17-counts/run.sh:49` (provenance block) and
+`core/fixtures/enforcement-map-sites/run.sh:1023` (an audit-anchor template string); neither keys
+on heading level.
+
+**Why the anchor is the anchor.** The receipt asserts a relation between two spans the shipping
+resolver computes, not a substring. The looser form — "does the §4a span still contain the string
+`## Machine Audits`" — was probed and **false-OPENS forever**: seeding the fix plus one comment
+line above 581 quoting the old heading back (the dominant failure mode in this corpus, since fixes
+here document what they moved) leaves **1** occurrence inside the shrunken §4a, so a substring
+predicate reports STILL-LIVE against a landed fix. The span predicate returned **0** on that same
+seeded tree. Both directions of anchor death report STILL-LIVE rather than closing: renaming the
+heading so `span_of` cannot resolve it exits **1**, and removing `lib.sh` exits **1**.
+
+Not a settled decision. `CHANGELOG.md:2517` (v0.334.0) measured this exact span — "231 lines with
+exactly ONE sub-heading, at offset 207" — and declined to restructure, but for a different
+question: making a non-heading ARM addressable, which needs a declaration format. That section
+names `Machine Audits` **0** times; controls in the same section and invocation, `Close-Out Sweep`
+**2** and `strikethrough` **1**. The nesting was never adjudicated.
+
+Discharges the consumer entry `PC-S307-MACHINE-AUDITS-IS-A-CHILD-OF-4A-SO-EVERY-4A-SHADOW-SWALLOWS-IT`
+at pinned ledger line 2101.
+
+
+verify: sh . core/skills/ai-dlc-update/reconcile/lib.sh; F=core/skills/ai-dlc/steps/retro.md; A=$(span_of "4a. Close-Out Sweep" < "$F"); B=$(span_of "## Machine Audits" < "$F"); [ -n "$A" ] && [ -n "$B" ] || exit 1; [ "${B%% *}" -gt "${A##* }" ]
+## BL-121 — a validator reported a finding about content it never read, because empty stdout means two opposite things
+
+**LANDED (v0.435.0, verified 15f4f5c8).** Filed and discharged in the same release, which is what the
+operator's standing correction asks for: a candidate moved from UNFILED to a `BL-` row and no
+further is a number changing, not a defect closing. The receipt scores the shipped validator, not
+this file.
+
+**Upstream `PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER`, filed by the reference
+consumer off a live `git push`.** A pre-push run from inside a freshly-created `git worktree`
+reported 20 ERRORs against exactly two files, both of which declare every key the run named as
+missing, with `awk: can't open file` on stderr beside them. The same commit from the normal
+checkout gave 0 errors.
+
+`fm()` reads one frontmatter scalar with one `awk` per file per key, and its stdout cannot
+distinguish the two states that matter. Measured, all four, with the ok-case as the control:
+
+```
+ok          stdout=[x]  rc=0
+keyless     stdout=[]   rc=0
+unreadable  stdout=[]   rc=2
+missing     stdout=[]   rc=2
+```
+
+Only the status separates them, and every caller read the value through `$( )`, which discards it.
+
+**The fix takes the status off a read each loop already performs**, at four call sites, and exits 2
+with a distinct FATAL rather than reporting a finding about content it never saw. Keyed on the
+STATUS and not on a pre-flight `[ -r ]`: the filing declines to say why `awk` could not open a
+readable file and names a `worktree add` race as at least as likely as a path bug, and a
+readability test cannot cover a file that passes the test and vanishes under the read.
+
+**The fourth site was found by a probe, not by reading.** The `conforms_to` census loop runs before
+the override and extension loops, so with the other three guards in place an unreadable entry still
+produced exactly one `E17`. Two of the four are sited on a specific read for a reason a later author
+would undo: `shadows` is split from `base_sha` because `a=$(x); b=$(y)` reports only y's status, and
+the extensions loop guards `kind` and not `hooks` because `$(fm … | awk …)` reports awk's status and
+never `fm`'s.
+
+**Measured both directions on the shipped script, seeded root as the subject and the pre-fix copy as
+the control in the same invocation:** an unreadable entry gives exit 2 and **0** ERROR lines naming
+it, where the pre-fix copy gives exit 1 and **5**. A genuinely keyless entry still takes its normal
+missing-key ERROR, so the guard discriminates rather than refusing everything.
+
+**This is not a wedge, and the direction is the reason.** `layer_files()` yields only `*.md` under
+`extensions/` and `overrides/`, so an unreadable file there is always a real entry and there is no
+irrelevant-file false refusal. A read failure already refused the push; what changes is that the
+refusal now names the true cause instead of manufacturing four content findings per file.
+
+**What this does NOT close.** The filing's other half — reproducing the `worktree add` race that
+made `awk` fail on a readable file — is untouched and stays open upstream. Do not read a close here
+as a close of that.
+
+**The receipt DRIVES the shipped validator and asserts observable behaviour**, rather than grepping
+the source, so no comment and no renamed function can satisfy it and any second spelling with the
+same behaviour passes — scored: a variant that renames `entry_unreadable` throughout still exits 0.
+It refuses (exit 9) rather than reporting a verdict when `chmod 000` did not take, because `chmod`
+does nothing for root and a receipt whose seed silently failed would report a false close.
+
+**The receipt shipped here is the THIRD version, and each earlier one was certified by its author
+and killed by someone else.** Draft one seeded a single tree; on an ordinary tree the census loop
+reaches every entry FIRST and aborts, so a fix guarding that one site alone produces exit 2 and zero
+ERROR lines, and the receipt scored it 0. Draft two added a second tree with an unreadable
+`layer-contract.yaml` — which empties `LC_CV` and skips the census — and that fixed the narrowness
+but left two holes an independent hand found by building the variants: its `grep -c "ERROR.*probe"`
+was UNANCHORED and read stderr, so a correct fix whose FATAL happened to open with the word `ERROR`
+was REJECTED (today's wording passes by luck, not by property); and `rc=2` alone is satisfied by ANY
+early refusal — the pre-fix original plus one unrelated early `exit 2` scored 0, reporting
+CLOSE-CANDIDATE on a tree where all four sites still collapse the two facts.
+
+**What closes both is a readable control inside the receipt.** Each of its three trees runs TWICE:
+first with the probe readable, requiring at least one `^ERROR ` line naming it — which is what
+establishes the run REACHED the probe — then sealed with `chmod 000`, requiring exit 2 and zero.
+A run that never got there now fails the control instead of passing the assertion. It probes
+readability with `awk '{exit}'` rather than `[ -r ]`, testing the operation that actually fails, and
+it distinguishes HARNESS BROKEN from a finding.
+
+**One limitation, stated because it is invisible rather than because it is severe.**
+`backlog-reverify.sh:199` maps the status through a single `-eq 0`, so its exit 9 and an ordinary
+exit 1 produce a byte-identical STILL-LIVE row. On a box where `chmod 000` does not seal — root —
+this receipt reports the defect as still reproducing when in fact nothing was measured. Read a
+STILL-LIVE here as "not measured or not fixed", never as a measurement.
+
+**The superseded second draft seeded TWO trees.** On an ordinary tree
+the census loop reaches every entry FIRST and aborts, so a fix guarding that one site alone produces
+exit 2 and zero ERROR lines — measured, and the one-tree receipt certified it. Tree B makes
+`layer-contract.yaml` unreadable, which empties `LC_CV` and skips the census loop entirely; that is
+the only state in which the override, extension and live-layer guards are reachable at all. Scored
+against the census-only variant: tree A passes, tree B gives exit 1 with 4 ERROR lines, receipt
+rejects. A one-tree receipt here would have closed this entry against three of four sites still
+broken.
+
+verify: sh V=core/scripts/validate-layer-entries.sh; [ -r "$V" ] || exit 9; D=$(mktemp -d) || exit 9; trap 'chmod -R u+rwX "$D" 2>/dev/null; rm -rf "$D"' EXIT; S="$D/c/.claude/skills/ai-dlc"; mkdir -p "$S/extensions" "$S/overrides" || exit 9; W=0; sc(){ printf '%s\n' "$1" > "$S/layer-contract.yaml" || exit 9; rm -f "$S/extensions/zzprobe.md" "$S/overrides/zzprobe.md"; printf -- '---\ntitle: zzprobe\n---\n' > "$2" || exit 9; awk '{exit}' "$2" 2>/dev/null || { echo "HARNESS BROKEN: $3 probe unreadable before it was sealed"; exit 9; }; C=$(bash "$V" "$D/c" 2>/dev/null | grep -c '^ERROR .*zzprobe' || true); [ "$C" -ge 1 ] || { echo "HARNESS BROKEN: $3 readable control emitted no ERROR naming the probe"; exit 9; }; chmod 000 "$2"; if awk '{exit}' "$2" 2>/dev/null; then echo "HARNESS BROKEN: $3 seal did not take, awk still opens the probe"; exit 9; fi; O=$(bash "$V" "$D/c" 2>/dev/null); R=$?; N=$(grep -c '^ERROR .*zzprobe' <<<"$O" || true); chmod 644 "$2"; echo "$3 control_errors=$C rc=$R errors_naming_probe=$N"; { [ "$R" -eq 2 ] && [ "$N" -eq 0 ]; } || W=1; }; sc 'contract_version: 1' "$S/extensions/zzprobe.md" census; sc 'clauses: []' "$S/overrides/zzprobe.md" overrides; sc 'clauses: []' "$S/extensions/zzprobe.md" extensions; [ "$W" -eq 0 ]

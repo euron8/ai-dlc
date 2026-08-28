@@ -15,6 +15,193 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.435.0] - 2026-08-28
+
+### A validator could not tell "this file has no `hooks:` line" from "I could not read this file"
+
+`PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER`, filed by the reference consumer off a
+live `git push`. A pre-push run from inside a freshly-created `git worktree` reported **20 ERRORs
+against exactly two files, both of which declare every key the run said they were missing** —
+`kind:`, `hooks:`, `id:`, `push_candidate:` — with `awk: can't open file` on stderr beside them.
+Re-running the same commit from the normal checkout gave 0 errors.
+
+**The `awk` line was not noise beside the ERRORs. It was the ERRORs.** `fm()` reads one frontmatter
+scalar with one `awk` invocation per file per key, and empty stdout means two opposite things:
+
+```
+ok          stdout=[x]  rc=0
+keyless     stdout=[]   rc=0
+unreadable  stdout=[]   rc=2
+missing     stdout=[]   rc=2
+```
+
+Only the exit status separates them, and every caller read the value through `$( )`, which throws
+the status away. So a file the run never opened was reported as a file whose content the run had
+judged.
+
+**The fix takes the status off a read that already happens** — at eight call sites by the time it
+shipped, four of them added after an adversarial pass — and exits 2 with a distinct FATAL rather than
+reporting a finding about content it never saw. A validator that cannot
+read its subject has no finding about it: reporting one is the same defect wearing a better message,
+and skipping the file silently would drop it from a census whose whole job is completeness.
+
+**It is keyed on the status and not on a pre-flight `[ -r ]`, and that is why it is sited on the
+read.** The filing declines to say WHY `awk` could not open a readable file and names a
+`worktree add` race as at least as likely as a path bug — and a readability test cannot cover a file
+that passes the test and vanishes under the read. The status covers it whatever the cause, and costs
+nothing, because it rides a call every caller already makes.
+
+**The first cut's fourth site was found by a probe, not by reading.** The `conforms_to` census loop runs
+before the override and extension loops, so with the other three guards in place an unreadable entry
+still produced exactly one `E17`. Measured both directions: unreadable now gives exit 2 and **zero**
+ERROR lines naming the file, while a genuinely keyless entry still takes its normal missing-key
+ERROR.
+
+**Two of that first four are sited on a specific read for a reason a later author would undo.**
+`shadows` is split off from `base_sha` because `a=$(x); b=$(y)` reports only y's status, so a guard
+written on the pair would have watched the wrong call. The extensions loop guards `kind` and not
+`hooks`, because `$(fm … | awk …)` reports awk's status and never `fm`'s — the same
+subshell-swallows-the-status shape one line over.
+
+**Today's direction is the safe one, and that is not a reason to leave it.** A read failure currently
+manufactures a missing-key ERROR, so a pull is refused rather than wrongly passed. One inversion
+away — a caller reading a non-empty default, or key absence becoming the permissive answer — the
+same collapse green-lights a malformed entry instead.
+
+**EIGHT sites are guarded, and the rule is not the one this fix shipped with.** The first cut
+guarded each loop's FIRST read, reasoning that the other nine calls follow a guarded one on the same
+file in the same iteration. That reasoning is sound for the ABORT and wrong for the FINDING, and an
+adversarial pass found the difference: **on `extends`, `position`, `gate_types` and the reference
+loop's `shadows`, every consuming arm is gated on the value being NON-empty** — `if [ -n "$extends" ]`,
+`elif [ -n "$position" ]`, `if [ -n "$gate_types" ] && …`, `elif [ -n "$shadow_anc" ] && …`. An empty
+read there means "the key is absent", and absent is the CONFORMING answer for every kind but
+`qualifier` and `check`. A read failure on those keys does not manufacture a finding the way the
+missing-key path does. **It deletes one.**
+
+**Measured, on a `kind: role` entry declaring `position: sideways` and `gate_types: universal`, with
+`fm` failing for those keys only and every earlier read succeeding: errors 4 → 1, the E12, E13 and
+E14 findings gone, no FATAL, and a full plausible footer over a file the run could not read.** That
+is the silent inversion this file's own `fm()` header calls "one inversion away" — it was not one
+release away, it was already here, and it was reachable only through the calls the first cut left
+unguarded. After the guard: exit 2, one FATAL, zero ERROR.
+
+**Three of those four are the permissive class. The fourth is its INVERSE, and the first draft of
+the comment beside it said the opposite.** `shadow_anc`'s only consumer is an ACQUITTAL —
+`elif [ -n "$shadow_anc" ] && … then verdict="quiet"` — so an empty read there withdraws an acquittal
+and MANUFACTURES a finding. Measured on an extension whose `shadows:` anchor acquits a bare
+`Check 12` in its own body: readable gives exit 0 and no W12; with the guard removed and the read
+failing, **a W12 appears that the readable run does not produce**. The guard is right and the
+rationale was wrong, which is the more dangerous of the two to leave in a file. Its fixture arm
+asserts the APPEARANCE, because an arm keyed on a row going missing would pass there forever.
+
+**That site is also the universal backstop, and that was not free.** Its population is extensions AND
+overrides and it runs last, so it aborts any permanently unreadable entry whichever earlier guard is
+missing — which silently disabled two shipped mutants that asserted an exit code dropping 2 → 1. Both
+were rewritten to assert the spurious ROWS printed before the abort. **Adding a late guard
+invalidates every earlier arm keyed on a verdict change**, and the symptom is a green arm, not a red
+one.
+
+**So the rule in the code is now "guard every read whose EMPTY value CHANGES THE VERDICT", not "guard
+the first read".** All four are split off `unquote` first, for the same reason `shadows` is split from
+`base_sha`: `$(unquote "$(fm …)")` reports UNQUOTE's status and never `fm`'s, so a guard on the
+nested form watches the wrong call — the `$(fm … | awk …)` hazard one loop up wearing different
+brackets. The reference loop's `shadows` was the worst-instrumented of the four: its `2>/dev/null`
+swallowed awk's own `can't open file` line, so that read failure left no trace at all.
+
+**The census guard is still the only one a healthy consumer exercises.** The census loop reads both
+populations and is gated only on `if [ -n "$LC_CV" ]`, so on any tree whose `contract_version`
+parses, site 1 is the only guard that can fire on an entry unreadable from the start; reaching the
+others required seeding trees with a deliberately unreadable contract. The extensions-loop `kind`
+guard goes further — deleting it alone is byte-identical on all five seeded trees, because the
+live-layer loop pre-empts it over the same `layer_files "$EXT_DIR"` — so its mutant reverts both
+extension-side layers, a single-layer revert being green. The four permissive guards are different
+in kind: they are reachable on a HEALTHY consumer, through the race, which is what makes them worth
+more than the depth they sit behind.
+
+**The five remaining unguarded reads are exhaustively LOUD, derived rather than sampled.**
+`base_sha` → E1, `reason` → E8, `hooks` → E4 then `continue`, `id` → E4, `push_candidate` → E9. A
+mid-run race on any of those still routes through the old collapse and produces a wrong-but-VISIBLE
+finding; no guard sited on a first read closes that, and saying so is not the same as fixing it.
+**`push_candidate` is the one to notice**: its empty case is handled by a `case` arm, not a `[ -n ]`
+or `[ -z ]` test, so a grep written for either polarity scores it a non-instance and returns a clean
+zero. That is precisely how the four permissive sites were missed the first time — the grammar could
+not spell the shape it was hunting, and it came back quiet.
+
+**THE ONE FALSE PASS IN THE CLASS WAS FOUND LAST, AND IT WAS NOT AN `fm()` CALL.** Everything above
+is loud: a read failure manufactures a wrong finding, or deletes one from a run that errors anyway.
+`:1109` reads `consumer_machinery_home:` out of `core-manifest.md` with its status discarded, and the
+gate below it wraps the WHOLE of E18 and W10 in `[ -n "$MACHINERY_REL" ] && [ -n "$MACHINERY_HOME" ]`.
+An empty value retires both clauses with no finding. Measured, one consumer, one path declared
+outside the home:
+
+```
+core-manifest.md readable   rc=1  errors=1  ERROR E18 scripts/elsewhere/rogue.sh …
+same tree, mode 000         rc=0  errors=0  no FATAL, full plausible footer
+```
+
+**`rc` 1 → 0.** The consumer's pre-push `step()` prints PASS, and the one clause whose whole job is
+to make an inventory unforgeable is the clause that disappears.
+
+**The refusal is keyed on the VALUE, not on the read's status, which is the opposite choice from
+`fm()`'s and is deliberate.** A status test catches the unreadable file and does NOT catch a file
+that is perfectly readable with the key MISSPELLED — measured as a third state, producing the
+identical `rc=0` and the identical footer. `core-manifest.md` is hand-maintained, so the typo is the
+likelier of the two causes and no permissions accident is needed for this to be live. Scored across
+all four states: readable → E18 fires unchanged; unreadable → refuses; typo → refuses; **manifest
+absent → still quiet**, because an absent manifest is a partial install rather than a segregation
+failure, and this clause has no standing to adjudicate one. The absent case remains the state it was
+before this release, and this arm does not claim it.
+
+**The first version of that scoping paragraph justified itself with a FALSE measurement, and the
+fixture author caught it after it had shipped into the validator's own prose.** It claimed a seeded
+tree with no `core-manifest.md` was every fixture in the suite. Derived, with two controls in the
+same invocation: **three** fixtures `cp` the manifest into a seeded tree — `check-15-bypass`,
+`consumer-machinery-inventory`, `core-write-guard` — against 8 for `layer-contract.yaml` and 0 for an
+impossible filename. `consumer-machinery-inventory` is one of the three, which is why its case 1 has
+asserted E18 firing since long before this release. **The claim reached the file because it arrived
+in a delegate's report and was written down without being re-derived** — a hypothesis about the tree,
+quoted as a measurement. The scoping decision survived the correction; only its stated reason did
+not, which is the more dangerous half to leave standing.
+
+**One NOTE-tier instance of the same class is left alone, measured.** `:1770`/`:1771` read
+`stories_dir` out of `schemas/sprint-status.json` with the status discarded; empty values leave
+`LC_ST_PARENT_RE` empty and `:1839`'s `|| continue` skips the subject silently. It gates exactly one
+emitter — `warn W11` — so it costs one warning and cannot move an exit code. Recorded rather than
+fixed, and it is NOT covered by `BL-123`'s receipt.
+
+**The gate refused this release twice and both refusals were correct, and both were caused by this
+change.** `layer-conforms-to`'s m1 mutant anchors a `sed` on the exact text of the census line, which
+this fix edits, so the mutation matched nothing and the fixture correctly reported that its kill
+would prove nothing rather than reporting a kill — the failure mode `fixture-mutants.md` exists to
+produce. Re-anchored on the new text with the mutant's intent unchanged. And `validator-fork-budget`
+went red at 7192 against a budget of 7177: a new fixture DIRECTORY costs forks in
+`validate-enforcement-map.sh`'s per-fixture passes, and the suite drives that validator over a
+hundred times per push. Raised to 7192 as the deliberate one-line diff the arm asks for, which is
+the top of a measured 7191–7192 spread rather than a round number.
+
+**The receipt shipped for this is the third version; the first two were certified by their author
+and killed by an independent hand.** The first exercised only one of the four sites. The second
+fixed that and still had two holes: an unanchored `grep` reading stderr, which REJECTED a correct
+fix whose FATAL happened to contain the word `ERROR`, and a bare `rc=2` check that the pre-fix
+original satisfied when given any unrelated early `exit 2` — CLOSE-CANDIDATE on a tree where the
+defect was fully live. What closes both is a readable control inside the receipt: each tree runs
+once readable, requiring an `^ERROR ` line naming the probe, before it is sealed. Scoring a receipt
+against plausible regressions is not a formality; it has now moved the receipt in five consecutive
+batches.
+
+**What this release does NOT close, and it is more than the filing's own remainder.** Two defects
+found while hardening this one are filed rather than fixed, with their measurements: `BL-122`, one
+unreadable entry aborts before any finding about any OTHER entry is printed, so the fix removes 4
+false errors and takes 4 true ones with them — a triage wedge, not a correctness one, whose remedy is
+a restructure rather than a guard; and `BL-123`, the identical read-failure collapse is UNFIXED on
+`layer-contract.yaml` itself, where it reports `got '<none>'` and tells the operator an intact file is
+malformed. `BL-123` is the sharper of the two: an unreadable contract empties `LC_CV`, which skips the
+census loop, which silently disarms this release's primary guard at the same moment it misreports its
+own cause. Both are loud — neither acquits anything — which is why neither blocked this release.
+
+The filing's other half — reproducing the `worktree add` race
+that made `awk` fail on a readable file — is untouched and stays open upstream.
+
 ## [0.434.0] - 2026-08-28
 
 ### The handoff's push could not succeed on a sprint's first handoff
