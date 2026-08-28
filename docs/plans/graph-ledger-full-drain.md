@@ -9,86 +9,136 @@ and status records that were current when they were written and that THIS BLOCK 
 it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from it.**
 
-### START HERE: SWEEP THE CONSUMER FOR NEW PUSH CANDIDATES, THEN PICK FROM THE UNFILED SET.
+### START HERE: SWEEP THE CONSUMER FOR NEW PUSH CANDIDATES, THEN FIX ONE.
 
 **YOUR FIRST ACTION IS NUMBERED ACTION 1 BELOW — the sweep for candidates the consumer has filed
-since `v0.433.0`.** Standing operator instruction: do it before picking any subject, and report
-what it finds. The sweep is cheap and it has now caught a same-day filing four batches running,
-including one that arrived WHILE batch 19 was running.
+since `v0.434.0`.** Standing operator instruction: do it before picking any subject, and report
+what it finds. It has caught a same-day filing in five consecutive batches, twice while the batch
+was already running.
 
-**The baseline, re-derived at `v0.433.0` by running the derive block below: 66 live candidates,
-130 archived, of which 33 are UNFILED.** The partition is **10 DISCHARGED / 23 IN-FLIGHT /
-33 UNTOUCHED**, summing to 66, with **0** discharged-but-unnamed and **22 TERMINAL** — so 32
-candidates delivered in total, 22 of them already closed by the consumer. Re-derive it: the live
-count moved by one DURING batch 19, and it has moved between two consecutive commands in this
-program more than once.
+**THE OPERATOR'S CORRECTION, AND IT OVERRIDES HOW THE PREVIOUS FIVE BATCHES WERE RUN.** Their
+words: *"The purpose of this plan is to drain the upstream push candidate ledger — that does not
+mean we just shuffle items to the backlog. It means we address them with priority."* Filing a
+candidate as a `BL-` entry moves it from UNFILED to IN-FLIGHT and discharges NOTHING. It changes a
+number and reports as progress. **When the sweep finds a live candidate you can fix, FIX IT and
+ship it, in this batch, and cite the id in the release commit message.** File only what you
+genuinely cannot take now, and say why in the same breath. This correction was earned: a
+BLOCKER-tiered candidate was filed rather than fixed, and the operator caught it.
 
-**SPRINT 306 IS FULLY DISCHARGED AND IS NOT A SOURCE OF WORK. Do not go looking for it.**
+**The baseline, re-derived by running the derive block below: 65 live candidates, 132 archived,
+33 of them UNFILED.** Partition **9 DISCHARGED / 23 IN-FLIGHT / 33 UNTOUCHED = 65**, with
+**24 TERMINAL** — so **33 candidates delivered in total**, 24 already closed by the consumer.
+Controls in the same run: partition 0, a spaced-bullet id 1, an impossible id 0. Re-derive rather
+than trusting these; the live count has moved during a batch more than once.
 
-### BATCH 20's SUBJECT IS RECOMMENDED AND MEASURED: `BL-119`.
+### THE NEXT SUBJECT IS ALREADY CHOSEN, BUILT AND PARKED — READ THIS BEFORE PICKING ANYTHING.
 
-**This is the strongest-evidenced recommendation this plan has carried, because for once the
-number comes from the CONSUMER's own state rather than from ours.** Batch 19 fixed the override
-half of the adjudication branch and then measured what that does to the reference consumer: it
-changes **zero rows today**. The non-keep verdicts are not on the override side. Counted in
-`/Users/n8/git/graph/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl`, with the
-`still-additive` count as the control in the same invocation:
+**`PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER`, filed 2026-08-28, is the freshest
+unfiled candidate, the operator picked it, and its fix is ALREADY WRITTEN AND PROVEN.** It is not
+merged only because the session ran out of room around it.
+
+`fm()` in `core/scripts/validate-layer-entries.sh` reads a frontmatter key with `awk`. An `awk`
+that cannot open its file prints nothing and exits 2; a file genuinely lacking the key prints
+nothing and exits 0. **Every caller read the value through `$( )` and discarded the status**, so
+"I could not read this file" and "this key is absent" collapsed into one missing-key ERROR. All
+four states, measured:
 
 ```
-17 contradicts-core + 3 retire = 20 non-keep records   (265 still-additive)
-19 of the 20 are against `extensions/` entries
- 1 is against an `overrides/` entry, and the digest that currently resolves for it
-   carries `still-additive` -- which is why batch 19's fix moves nothing here yet
+ok         stdout=[x]  rc=0        keyless     stdout=[]  rc=0
+unreadable stdout=[]   rc=2        missing     stdout=[]  rc=2
 ```
 
-`BL-119` is the extension half: `apply.sh` correctly suppresses the re-read row on any recorded
-verdict, because any verdict discharges a re-read — but `retire` and `contradicts-core` are
-recordable against an extension, are honest answers, and **authorize nothing, because no extension
-remedy emitter exists anywhere in `core/`**. Nineteen consumer decisions currently reach no actor.
-It carries a scored receipt already. **It is NOT PC-backed** — it was found here, so it ranks
-below anything the sweep turns up; take it if the sweep is quiet.
+The fix takes the status off the read each loop already performs, at FOUR call sites, and exits 2
+with a distinct message rather than reporting a finding about content it never saw. **The fourth
+site was found by the probe, not by reading**: the `conforms_to` census loop runs before the
+override and extension loops, so with the other three guarded an unreadable entry still produced
+exactly one `E17`. Proven in both directions — unreadable gives exit 2 and **zero** ERROR lines
+naming the file; a mutant with the guards deleted reproduces the consumer's exact symptom.
 
-Everything from here to the numbered actions is a RECORD of batches 17, 18 and 19. Read it for the
+**HOW TO PICK IT UP, MEASURED SO YOU DO NOT HAVE TO GUESS:**
+
+- The work is commit **`61b831f0`**, on branch `v0.434.0-fm-read-vs-absent`.
+- **Do NOT reuse that branch.** Its tip `ce7d1cf4` is already on `main` by content — it was
+  cherry-picked — so the branch carries one wanted commit and one duplicate, and its `VERSION`
+  reads `0.433.0` against a `main` at `0.434.0`.
+- **Cut a fresh branch from `origin/main` and cherry-pick `61b831f0`.** Tested in a clone rather
+  than asserted: it applies **CLEAN**, leaving 5 `entry_unreadable` occurrences (one definition,
+  four call sites). Then bump `VERSION` to `0.435.0`, write the CHANGELOG section, and gate it.
+- **Still owed on it:** fixture arms, a backlog entry with a scored receipt, CHANGELOG, `VERSION`,
+  and the gate. **The worktree race the filing declines to claim is NOT addressed** — say so
+  rather than reporting the candidate fully closed.
+
+**`BL-119` is the other live thing worth taking**, and it is NOT PC-backed so it ranks below
+anything the sweep turns up. Its evidence is the consumer's own register: of the 20 non-keep
+verdicts recorded there, **19 are against extensions**, where no remedy emitter exists in `core/`
+at all — nineteen recorded decisions that reach no actor.
+
+### THE PULL IS DONE. DO NOT PLAN ONE UNTIL THE GAP REOPENS.
+
+The bundled `0.432.0 -> 0.434.0` pull RAN and landed. The consumer stamp reads **0.434.0 /
+`f0b8ddcc`** on all four fields, and `docs/plans/graph-pull-0432-to-0434.md` is **DISCHARGED** —
+read it as a worked example, never as a live plan. `graph-pull-0432-to-0433.md` is marked DO NOT
+EXECUTE; it was superseded by a scheduling decision rather than a merge.
+
+**A PULL IS INITIATED BY THE OPERATOR AND BY NOBODY ELSE.** Measure the gap, write the runbook,
+rehearse it, report the number — then STOP. That is now a standing ruling in
+`.claude/rules/operator-rulings.md`, and it exists because this program dispatched a runbook to a
+consumer session that was mid-sprint.
+
+Everything from here to the numbered actions is a RECORD of batches 17 through 20. Read it for the
 measured episodes; **do not take an instruction from it.**
 
-### BATCH 19 IS DONE AND SHIPPED AS `v0.433.0`, MERGED AT `ecaf3577ce85`.
+### BATCH 20 — SHIPPED AS `v0.434.0` ON AN OPERATOR CORRECTION, MID-BATCH.
 
-It took `PC-S307-RECORDED-VERDICT-SUPPRESSES-THE-REMEDY-IT-AUTHORIZES`, filed by the consumer the
-same morning the batch opened. `apply.sh` matched the adjudication token's PRESENCE and suppressed
-the ATOMIC override-retire sequence for every member of a three-member vocabulary, so recording
-the honest `retire` was what made the remedy unreachable. The suppression now branches on a
-`ADJ_KEEP_VERDICT` declared once in `layer-drift.sh` and resolved by `apply.sh`, `I86` binds the
-second name and joins it to the schema that owns the member set, and `apply-worklist-rows` gained
-four directions plus a differential.
+It took `PC-S307-HANDOFF-PUSH-IS-A-BARE-GIT-PUSH-SO-A-FIRST-HANDOFF-CANNOT-SUCCEED`. The handoff's
+step 3 prescribed a bare `git push`, which cannot succeed on a branch that has never been pushed —
+every sprint's FIRST handoff where a branch is cut per sprint — and its own fallback routed the
+failure past itself, because that fallback enumerates three ENVIRONMENTAL causes and an
+unpublishable branch is none of them. On the consumer it left a sprint's planning artifacts and
+party-mode transcripts in git nowhere while reporting success.
 
-**THE FIX INTRODUCED A SECOND FAILURE THAT COULD NOT HAVE EXISTED BEFORE IT, AND ONLY DRIVING THE
-LOOP FOUND IT.** The detail field's tokens are an ordered prefix parsed positionally and the
-adjudication token sits ahead of them, so a row falling through with it attached matches neither
-`replaces_with=` nor `retire_anchor=` and lands in the arm that says *"core supersedes this
-entry"* — which an operator obeys by deleting an override file core superseded ONE anchor of.
-**Ask what a branch makes REACHABLE, not only what it decides.**
+**BOTH COPIES NEEDED REPAIRING AND THE SECOND WAS FOUND BY THE DETECTOR, NOT BY READING.**
+`_gate-procedures.md` carried the same prescription for the auto-handoff path. A fix in
+`handoff.md` alone would have been half-shipped and would have read as complete.
 
-**THE FIRST DRAFT OF THE NEW INVARIANT ARM WAS VACUOUS AND ITS OWN MUTANT SAID SO.** A whole-file
-grep for `$ADJ_KEEP_VERDICT` is satisfied by the RESOLUTION block's own `[ -z ... ]` guard twenty
-lines above the branch, so a file that resolves the name and then branches on something else
-passed. Scoping the read to the loop body fixed it. **Four mutants and two near-misses, and only
-the mutant caught it.**
+**`I100`'s NARROWING IS THE WHOLE ARM.** A bare-token scan flags PROSE ABOUT the command, and a
+proximity scan keyed on the prescription sentence flagged **both repaired files on their own
+prohibition text — 2 of 2 hits were the fix itself.** Keyed on the parenthesised prescription:
+false-positive set 0, fires on each copy independently. **Sited above the `# --- Verdict` epilogue
+anchor**; the first placement put it below and turned five fixtures red with `FIXTURE BROKEN`,
+which the batteries correctly reported as a usage failure rather than scoring a kill.
 
-**A NEW FATAL MADE ANOTHER ENTRY'S RECEIPT REPORT FIXED, AND THE HISTOGRAM IS THE ONLY REASON
-ANYONE LOOKED.** `BL-037` drives the real `apply.sh` against a stub `layer-drift.sh` declaring only
-the row token; the new fail-closed gate aborted before the rows it asserts, and its receipt read
-the absence as the fix — exit 1 at `origin/main`, exit 0 on the branch, identical receipt text,
-three runs each. Run the receipt histogram BEFORE and AFTER, every batch.
+**`I100` DOES NOT REACH THE CONSUMER, AND THAT IS BY DESIGN.** It lives in
+`scripts/validate-enforcement-map.sh` at the distribution root; `core/` ships no copy — 0 in the
+consumer tree against 1 for `validate-layer-entries.sh` as the control. The consumer gets the
+corrected step file, not the arm. Do not describe an invariant as shipping with a fix without
+checking which side of `core/` it lives on.
 
-**THE GATE REFUSED ONE PUSH AND THE REFUSAL WAS CORRECT** — a shipping fixture's comment cited
-`docs/vocabulary-index.md`, a dev-repo doc `install.sh` does not ship, so the citation is dead in
-every consumer tree.
+### BATCH 19 — SHIPPED AS `v0.433.0`.
+
+It took `PC-S307-RECORDED-VERDICT-SUPPRESSES-THE-REMEDY-IT-AUTHORIZES`. `apply.sh` matched the
+adjudication token's PRESENCE and suppressed the ATOMIC override-retire sequence for every member
+of a three-member vocabulary, so recording the honest `retire` is what made the remedy unreachable.
+The suppression now branches on `ADJ_KEEP_VERDICT`, declared once in `layer-drift.sh` and resolved
+by `apply.sh`.
+
+**THE FIX MADE A NEW FAILURE REACHABLE.** The detail field's tokens are an ordered prefix parsed
+positionally and the adjudication token sits ahead of them, so a row falling through with it
+attached lands in the arm that says *"core supersedes this entry"* — obeyed by deleting an override
+file core superseded ONE anchor of. **Ask what a branch makes REACHABLE, not only what it decides.**
+
+**THE FIRST DRAFT OF THE NEW INVARIANT ARM WAS VACUOUS AND ONLY ITS MUTANT SAID SO.** A whole-file
+grep for `$ADJ_KEEP_VERDICT` is satisfied by the RESOLUTION block's own guard twenty lines above
+the branch. Scoping the read to the loop body fixed it.
+
+**A NEW FATAL MADE ANOTHER ENTRY'S RECEIPT REPORT FIXED.** `BL-037` drives the real `apply.sh`
+against a stub declaring only the row token; the fail-closed gate aborted before the rows it
+asserts, and its receipt read the absence as the fix. **Run the receipt histogram BEFORE and AFTER,
+every batch.**
 
 **ONE OF FOUR HANDS DELIVERED, AND IT WAS THE ONE WITH A TREE DELIVERABLE — for the fourth batch
-running.** The fixture hand produced the batch's best work unprompted, including the strip arm and
-the verdict differential. The scope and receipt hands went idle without reporting and were still
-idle after a direct request; the lead did both jobs. **Budget for that. It is not an anomaly any
-more, it is the base rate.**
+running.** The scope and receipt hands went idle without reporting even after a direct request.
+**Budget for that; it is the base rate, not an anomaly.**
 
 ### BATCH 18 — A RECORD, SHIPPED AS `v0.430.0`. IT DISCHARGED THE LAST TWO SPRINT-306 CANDIDATES.
 
@@ -383,7 +433,7 @@ grep -cx 'PC-S300-SEVEN-VALIDATORS-SHIPPED-NON-EXECUTABLE-AT-0.242.0' /tmp/arch.
 grep -cx 'PC-S999-NEVER' /tmp/filed.txt                                                  # control: 0
 ```
 
-Re-derived at v0.433.0: **66 live candidates, 130 archived**, partition control 0, all three
+Re-derived at v0.434.0: **65 live candidates, 132 archived**, partition control 0, all three
 presence controls 1, absence control 0. **The live count rose from 60 to 65 and then to 66
 across two consecutive ai-dlc sessions** — graph sessions filed sprint 306's candidates while
 this file was being edited, and the ledger's md5 moved four times in all, twice while a batch
@@ -413,7 +463,7 @@ comm -12 /tmp/live.txt /tmp/closed_here | comm -23 - /tmp/in_msgs   # discharged
 comm -12 /tmp/arch.txt /tmp/closed_here | wc -l
 ```
 
-Re-derived at v0.433.0 by running the commands: **10 DISCHARGED, 23 in flight, 33 untouched**,
+Re-derived at v0.434.0 by running the commands: **9 DISCHARGED, 23 in flight, 33 untouched**,
 summing to 66, **0 discharged-but-unnamed**, and **22 TERMINAL**. The overlap the control catches
 is still the single `PC-S303-STUB-AUDIT-MARKER-...` id, subtracted from DISCHARGED. That unnamed line is a real
 failure mode and not a formality: a fix that ships without its id in the commit MESSAGE discharges
@@ -450,7 +500,9 @@ forever", inverted: here the subject's deletion reads as REGRESS.
 
 **REPORT `TERMINAL` AS THE DELIVERED TOTAL AND `DISCHARGED` AS WORK AWAITING THE CONSUMER'S OWN
 CLOSE.** They are disjoint, because `live.txt` and `arch.txt` partition. At v0.433.0 that is
-**22 delivered and closed, 10 delivered and awaiting close — 32 in total against a headline of 10.**
+**24 delivered and closed, 9 delivered and awaiting close — 33 in total against a headline of 9.**
+The bundled `0.432.0 -> 0.434.0` pull moved two more across, and DISCHARGED fell 10 → 9 as it did:
+the headline drops every time this program actually succeeds, which is why TERMINAL sits beside it.
 The 0.430.1 -> 0.432.0 pull is what moved eight of them from the second bucket to the first, and
 the headline FELL from 17 to 10 as it did — which is the scoreboard resetting on success, exactly
 as the paragraph above says it does.
@@ -577,7 +629,7 @@ those have not been examined at all. Their status in the consumer's own ledger i
 ESTABLISHED**; some may already be `WITHDRAWN` or `ADOPTED` upstream. **Establish that before
 treating 20 as a workload.**
 
-Re-derived at v0.433.0 by running the commands, not by editing the sentence: **73 live / 46
+Re-derived at v0.434.0 by running the commands, not by editing the sentence: **73 live / 47
 archived**, against an impossible-verdict control of 0 and a `BL-006`-still-live control of 1.
 Batch 16 filed six (`BL-104`–`BL-109`) and rotated all six in the same release, so live went
 70 → 76 → 70 and the archive went 33 → 39. **Batch 14 recorded 31 archived and the rotation of
@@ -1106,10 +1158,13 @@ so no block written before it changes verdict.
    real id means the grammar or the path is wrong, not that the candidate is old** — the ledger
    path is the only argument, and the archive is a SEPARATE file.
 
-   **THE BASELINE IS 66 LIVE CANDIDATES AT `v0.433.0`, 33 OF THEM UNFILED, AND SPRINT 306 IS
+   **THE BASELINE IS 65 LIVE CANDIDATES AT `v0.434.0`, 33 OF THEM UNFILED, AND SPRINT 306 IS
    FULLY DISCHARGED.** A higher count means the consumer filed while nobody was looking.
    **Re-derive rather than trusting those numbers** — they have moved between two consecutive
-   commands in this program, and the live count moved by one DURING batch 19.
+   commands in this program, and the live count moved DURING batches 19 and 20 both. The archived
+   count rose 130 → 132 when the bundled pull closed this program's two most recent deliveries,
+   which is the scoreboard working: a candidate leaves `live.txt` the moment the consumer closes
+   it, so DISCHARGED FALLS when this program succeeds and TERMINAL is the number that rises.
 
    **THE SPRINT-306 RULING IS SPENT. DO NOT LOOK FOR SPRINT-306 WORK.**
 
@@ -1123,12 +1178,18 @@ so no block written before it changes verdict.
    arrived WHILE batch 19 was running, is UNFILED, and is the freshest thing in the corpus.
    Read its own status line in the consumer's ledger before treating it as work.
 
-   **IF THE SWEEP FINDS NOTHING NEWER, THE STANDING RECOMMENDATION IS `BL-119`**, for the reason
-   measured on the consumer's own register and set out under "BATCH 20's SUBJECT" in the resume
-   block above: 19 of the 20 non-keep verdicts that consumer has recorded are against extensions,
-   and every one of them authorizes an action no code in `core/` emits. It is not PC-backed — it
-   was found here — so it ranks below anything the sweep turns up. `BL-051` remains the coherent
-   PC-backed alternative: step 2 computes which machinery paths the consumer edited and then
+   **IF THE SWEEP FINDS NOTHING NEWER, FINISH THE ONE ALREADY BUILT.**
+   `PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER` is the freshest unfiled candidate,
+   the operator picked it, and its `fm()` fix is written and proven at commit **`61b831f0`** —
+   cut a fresh branch from `origin/main`, cherry-pick it (tested CLEAN), bump `VERSION` to
+   `0.435.0`, and finish the fixture, entry, receipt and gate. The resume block above carries the
+   measurement and the reason not to reuse the old branch. **Shipping a built fix outranks
+   starting a new one, and it outranks filing anything.**
+
+   `BL-119` is the next-best alternative, measured on the consumer's own register: 19 of the 20
+   non-keep verdicts recorded there are against extensions, and every one authorizes an action no
+   code in `core/` emits. It is NOT PC-backed — it was found here — so it ranks below anything the
+   sweep turns up. `BL-051` remains the coherent PC-backed alternative: step 2 computes which machinery paths the consumer edited and then
    discards the answer, discharging
    `PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH`. Verify that id is
    still live upstream, against an impossible-id control, before scoping it.
