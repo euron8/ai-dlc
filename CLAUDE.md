@@ -54,32 +54,28 @@ for d in core/fixtures/*/; do (cd "$d" && bash run.sh); done   5 FAILED
 bash "$d/run.sh"   (from the repo root, as the hook does)      0 FAILED
 ```
 
-All five — `consumer-machinery-home`, `enforcement-map-derivations`,
-`enforcement-map-sites`, `layer-contract-conformance`, `ledger-status-vocabulary` —
-resolve the repo root from the process working directory, so `cd`-ing into the fixture
-dir breaks their sanity arm. Four of the five said `FIXTURE BROKEN`, which reads
-exactly like a regression in the change under test. The whole suite through the pool is
-**4m57s at 949% CPU**; the serial loop was roughly ten times that and wrong.
+All five resolve the repo root from the process working directory, so `cd`-ing into
+the fixture dir breaks their sanity arm. Four of the five said `FIXTURE BROKEN`, which reads
+exactly like a regression in the change under test. The serial loop was roughly ten times the
+pool's wall clock, and wrong.
 
-**THAT FIGURE WENT STALE AND NOBODY NOTICED, WHICH IS ITS OWN LESSON. IT THEN WENT STALE
-AGAIN, AND THAT IS WHY NO CURRENT COUNT APPEARS HERE.** A raw total written into this file
-decays silently and reads identically to a fresh one; dating it is not available either,
-because a date in resident rule prose is a tier-1 finding in `audit-rule-files.sh`. **Derive
-the count, never quote one** — `find core/fixtures -mindepth 1 -maxdepth 1 -type d | wc -l` —
-and read the CHANGELOG for when a figure was taken. Re-measured on a 133-fixture suite:
-**7m40s at 1303% CPU**, 133 ok / 0 FAIL, which is a FLOOR because the suite has grown since.
-The suite is
+**EVERY RAW TOTAL EVER WRITTEN HERE WENT STALE, AND THE PASSAGE FORBIDDING THEM WAS ITSELF
+CARRYING TWO UNTIL THEY WERE CUT.** A total decays silently and reads exactly like a fresh one, and dating
+it is not available either — a date in resident rule prose is a tier-1 `audit-rule-files.sh`
+finding. **Derive the count, never quote one** —
+`find core/fixtures -mindepth 1 -maxdepth 1 -type d | wc -l` — and read the CHANGELOG for when a
+figure was taken. The suite is
 **POLE-BOUND** — wall clock tracks the single longest DIRECTORY, not the sum over the pool — so
-the number to watch is the top of `.git/ai-dlc-fixture-durations`, not the total. Six fixtures
-sit at 395–442s and everything else is under 220s. **A cost recorded there is a LOADED cost,
-measured under the 16-way pool; running the same unit alone gives a completely different number
-(one shard: 442s loaded, 112s solo at 424% CPU) and the two must never be compared.**
+the number to watch is the top of `.git/ai-dlc-fixture-durations`, not the total. **A cost recorded
+there is a LOADED cost, measured under the pool; the same unit run alone gives a completely
+different number — one shard, 442s loaded against 112s solo — and the two must never be
+compared.**
 
 **A CHANGE TO A VALIDATOR THE POLE INVOKES IS A CHANGE TO THE SUITE'S WALL CLOCK.** One
 invariant added to `validate-enforcement-map.sh` as a nested loop over (subtree × fixture file)
 moved that validator from 13.0s to 18.1s — 39% — which the sharded mutation batteries multiply by
-roughly thirty. The pole went 442s → 595s and the whole suite went to ten minutes.
-Reshaped to one recursive grep per subtree it is back to 13.2s. **Time the validator before and
+roughly thirty, and the pole rose by a third. Reshaped to one recursive grep per subtree it is
+back to 13.2s. **Time the validator before and
 after, from inside the repo** — a copy run from `/tmp` resolves its root elsewhere and exits in
 5ms, which reads as an enormous speed-up and is a broken measurement.
 
