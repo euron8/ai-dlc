@@ -1415,14 +1415,34 @@ so no block written before it changes verdict.
    The most recent filings (`2026-08-26`/`2026-08-27`, the `PC-S337-*` and `PC-S305-*` rows) are
    the freshest and the likeliest to still be real.
 
-   **`BL-051`'s receipt must be replaced FIRST, and that is not optional.** It is one of the four
-   the `v0.417.0` sweep found closable by prose — by a comment naming a bucket. Batches 14, 15
-   and 17 all had to repair their subject's receipt before landing the fix. Build the correct fix
-   AND at least two plausible regressions, score every one, and only then write the `verify:`
-   line. **Score a SECOND SPELLING of the correct fix too**: a receipt that rejects a competent
-   author's other phrasing is as broken as one that accepts a regression.
+   **REPLACE YOUR SUBJECT'S RECEIPT BEFORE YOU LAND ITS FIX. NOT OPTIONAL, AND NEVER ONCE SKIPPED
+   WITHOUT COST.** Batches 14, 15, 17, 21 and 22 all had to; the `v0.417.0` sweep found four
+   entries closable by PROSE alone. Build the correct fix AND at least two plausible regressions,
+   score every one, and only then write the `verify:` line. **Score a SECOND SPELLING too** — a
+   receipt rejecting a competent author's other phrasing is as broken as one accepting a
+   regression.
 
-   **THE PULL RAN. THE GAP IS ONE RELEASE AND ONE CANDIDATE.** The consumer reconciled
+   **Batch 22 shipped a receipt that did BOTH and needed three more rounds after the merge.** Its
+   three holes, in the order they surfaced, each invisible until the previous one closed:
+
+   - **A near-miss in a SEPARATE run is an ADJACENT input.** A second clean tree can only ask
+     *does the arm fire at all*, never *does it fire on the RIGHT paths*, because in the run where
+     the arm fires there is nothing present it should stay quiet about. Put the negative BESIDE
+     the offender, in the same run.
+   - **Never key on a token nothing BINDS.** It keyed on a status word carried by no
+     `docs/vocabulary-index.md` entry and no `# vocabulary:` arm, so an author who spelled it
+     differently — one did, independently — scored as still-live. Key on BEHAVIOUR: the shape of
+     the row and a basename, not a word. Check whether your token is bound before keying on it.
+   - **The seed must reach the point where a fix could be SITED.** It stopped at the first of four
+     early exits, so arm PLACEMENT decided the verdict. Add a control asserting the run got that
+     deep.
+
+   Three rounds of scoring is not evidence of a good receipt. It is evidence the inputs were all
+   the same SHAPE.
+
+   **THE GAP IS NOW TWO RELEASES AND 13 PENDING, AND THE RESUME BLOCK ABOVE IS THE CURRENT
+   RECORD OF IT — read that, not this paragraph, which is kept for the worked examples it names.**
+   The consumer reconciled
    `0.430.1 -> 0.432.0` on 2026-08-28, which is what moved eight candidates to TERMINAL, and
    `docs/plans/graph-pull-0425-to-0430.md` is DISCHARGED — a worked example, never a live plan.
    `docs/plans/graph-pull-0432-to-0433.md` is its successor: written, REHEARSED at `v0.433.0` on
@@ -1471,19 +1491,9 @@ so no block written before it changes verdict.
    returned 23. Nothing was removed; seven entries were never visible. **Re-derive this list; do
    not read it.** It is a snapshot of two files that both move.
 
-   **The standing recommendation is `BL-051`** — step 2 computes which machinery paths the
-   consumer edited and then discards the answer, discharging
-   `PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH`. Verify that id is
-   still live upstream, against an impossible-id control, before scoping it.
-
-   **Its receipt must be replaced FIRST, and that is not optional.** It is one of the four the
-   `v0.417.0` sweep found closable by prose — by a comment naming a bucket. Batches 14 and 15 both
-   had to replace their subject's receipt before landing the fix, and batch 15's old receipt
-   scored **0 against two regressions that resolved nothing** — a trivial second disjunct on the
-   guard line, and one unused assignment. Build the correct fix AND at least two plausible
-   regressions, score every one, and only then write the entry's `verify:` line. Score a SECOND
-   SPELLING of the correct fix too: a receipt that rejects a competent author's other phrasing is
-   as broken as one that accepts a regression, and batch 15 nearly shipped exactly that.
+   **THE STANDING RECOMMENDATION USED TO BE `BL-051`. IT SHIPPED AS `v0.436.0` AND IS ROTATED
+   INTO `docs/backlog.archive.md`. Do not take it; do not re-scope it.** Derive the current
+   PC-backed set from the join at the top of this action rather than reading any name here.
 
    **The coherent alternative is `BL-049`**, whose candidate
    `PC-S318-SELF-UPDATE-SLICE-CANNOT-CARRY-THE-FIXTURE-FIX-THAT-UNBLOCKS-ITS-OWN-PUSH` is the

@@ -3319,11 +3319,15 @@ that file was not touched by the change that broke it.**
 operator — "the autonomous self-update (step 2) wrote it ... No action: `apply` carries it to theirs
 with the rest of the machinery."
 
-**As of v0.436.0 step 2 no longer rewrites the whole machinery set.** `self-update-gate.sh`'s ARM C
-emits a `SELF-UPDATE-CARRY` row for every machinery path the consumer has diverged on, and step 2
-writes none of them. So after a self-update the machinery set sits at `skill_commit` EXCEPT the
-carried paths, and a carried path is byte-identical to neither `base` nor `skill_commit` nor
-`theirs`. It therefore falls past the `CORE-AT-SELF-UPDATE` arm into an ordinary drift status whose
+**THE QUOTED PREMISE WAS ALREADY LOOSE, AND v0.436.0 WIDENED THE GAP RATHER THAN OPENING IT.**
+Step 2 has never written the whole machinery set: it writes the `base→theirs` diff RESTRICTED to
+that set, and `SKILL.md:233` has said so since 2026-07-26 — derived with `git log -S` against a
+control string that resolves to nothing. So the sentence both files print was inexact before this
+release, which is worth stating because an earlier revision of THIS entry repeated it and had to be
+withdrawn. What v0.436.0 changed is the size of the discrepancy: `self-update-gate.sh`'s ARM C emits
+a `SELF-UPDATE-CARRY` row for every machinery path the consumer has diverged on and step 2 writes
+none of them, so the written set is now that diff MINUS the carried paths. A carried path is
+byte-identical to neither `base` nor `skill_commit` nor `theirs`. It therefore falls past the `CORE-AT-SELF-UPDATE` arm into an ordinary drift status whose
 printed remedy is to re-adopt upstream's text — against the one path the consumer deliberately owns
 and which step 7 is already carrying as a `WORKLIST semantic-merge` item.
 
