@@ -18,9 +18,11 @@ That distance is the file's main resumability hazard: a reader working downward 
 batch records, each written in the imperative, before reaching the one instruction that is live.
 The action itself is the sweep for candidates the consumer has filed since `v0.436.0`.
 
-Standing operator instruction: sweep before picking any subject, and report what it finds. It has caught a same-day filing in five of the last eight batches, twice while the
-batch was already running. Batches 21 and 22 are the exceptions: both swept and both came back
-empty, so an empty sweep is now an ordinary outcome rather than a sign the sweep is broken.
+Standing operator instruction: sweep before picking any subject, and report what it finds. It has caught a same-day filing in five of the last eleven batches, twice while the
+batch was already running. Batches 21, 22 and 23 are the exceptions: all three swept and all three
+came back empty, so an empty sweep is now an ordinary outcome rather than a sign the sweep is
+broken. Three consecutive empties do NOT license skipping it — the sweep is cheap and the filings
+it caught arrived without warning.
 
 **THE OPERATOR'S CORRECTION STILL GOVERNS.** Their words: *"The purpose of this plan is to drain the
 upstream push candidate ledger — that does not mean we just shuffle items to the backlog. It means
@@ -29,33 +31,43 @@ IN-FLIGHT and discharges NOTHING. **When the sweep finds a live candidate you ca
 ship it, in this batch, and cite the id in the release commit message.** File only what you
 genuinely cannot take now, and say why in the same breath.
 
-**The baseline, re-derived after the v0.436.0 merge: 65 live candidates, 132 archived upstream, 33
-cited by a backlog entry, 32 UNFILED.** Controls in the same run: live/archive partition control 0,
-a known-present id 1, impossible id 0. **PC-backed live backlog entries: 22.** The live count did
-not move when `BL-051` closed and it will not: closing an entry here changes what the DISTRIBUTION
-has done, never what the consumer's ledger says. Only a pull moves the upstream number.
+**The baseline, re-derived after the v0.437.0 merge AND the `BL-049` rotation: 65 live candidates,
+132 archived upstream, 33 cited by a backlog entry, 32 UNFILED.** Controls in the same run:
+live/archive partition control 0, a known-present id 1, impossible id 0. **PC-backed live backlog
+entries: 21** — down from 22 because `BL-049` rotated, which is the only way an entry should leave
+that set. The live count did not move when `BL-049` closed and it will not: closing an entry here
+changes what the DISTRIBUTION has done, never what the consumer's ledger says. Only a pull moves
+the upstream number.
+
+**The goal partition, which is the measurement that matters: DISCHARGED 14, IN-FLIGHT 21,
+UNTOUCHED 32.** Those sum to 67 against a denominator of 65 because DISCHARGED and IN-FLIGHT are
+NOT disjoint — the overlap is 2, and 67 − 2 = 65 is the control. Never report the live/archive
+BACKLOG entry counts as progress.
 
 **Re-derive every figure above before trusting it.** The derive block is in `### Derive the state`
 below; run it, do not read these numbers.
 
-### NO SUBJECT IS PRE-CHOSEN. THE LAST TWO PC-BACKED PICKS HAVE SHIPPED.
+### NO SUBJECT IS PRE-CHOSEN. THE LAST THREE PC-BACKED PICKS HAVE SHIPPED.
 
-**`PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH` IS DISCHARGED, as
-`v0.436.0`, and `BL-051` is ROTATED to the archive.** Do not pick it up and do not re-scope it.
-`PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER` went at `v0.435.0` with
-`PC-S307-MACHINE-AUDITS-IS-A-CHILD-OF-4A-SO-EVERY-4A-SHADOW-SWALLOWS-IT` beside it.
+**`PC-S318-SELF-UPDATE-SLICE-CANNOT-CARRY-THE-FIXTURE-FIX-THAT-UNBLOCKS-ITS-OWN-PUSH` IS
+DISCHARGED, as `v0.437.0`, and `BL-049` is ROTATED to the archive.** Do not pick it up and do not
+re-scope it. `PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH` went at
+`v0.436.0` via `BL-051`, and `PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER` at
+`v0.435.0` with `PC-S307-MACHINE-AUDITS-IS-A-CHILD-OF-4A-SO-EVERY-4A-SHADOW-SWALLOWS-IT` beside it.
 
 **So the sweep decides your subject. If it comes back empty, the PC-backed set decides it, and
-`BL-049` is the strongest member.** It carries
-`PC-S318-SELF-UPDATE-SLICE-CANNOT-CARRY-THE-FIXTURE-FIX-THAT-UNBLOCKS-ITS-OWN-PUSH`, it is the
-bootstrapping class — the broken version is the one that runs the delivery — and it sits in the
-same subsystem `v0.436.0` just worked in, so its surrounding code is freshly measured. Verify the id
-is still live upstream against an impossible-id control before scoping it, and run its receipt raw
-and read the exit code before believing the entry.
+`BL-037` is the strongest member.** It carries
+`PC-S331-APPLY-SH-CO-EMITS-READOPT-AND-RETIRE-FOR-ONE-SUBJECT-AS-IF-BOTH-WERE-OWED`, and its
+subject is `apply.sh` — a BOOTSTRAPPING step, so the consumer's installed copy runs the pull that
+would carry its own repair, which raises the cost of deferring it again. Verified at the close of
+batch 23: the id is live upstream (archive control 0, impossible-id control 0) and the receipt
+exits 1. Re-derive both before scoping it, and run the receipt raw rather than believing the entry.
 
-**`BL-119`, `BL-122` and `BL-123` are NOT PC-backed and rank below any PC-backed entry.** The
-selection rule is PROVENANCE first, then consequence — never readiness. `BL-123` cites a candidate
-that is already DISCHARGED, so closing it discharges nothing further upstream.
+**`BL-119` and `BL-122` are NOT PC-backed and rank below any PC-backed entry.** The selection rule
+is PROVENANCE first, then consequence — never readiness. `BL-123` IS PC-backed by the join, but the
+candidate it cites was discharged at `v0.435.0`, so closing it discharges nothing further upstream;
+an earlier revision of this block called it "not PC-backed", which was wrong about the mechanism
+and right about the ranking.
 
 **`BL-124` was filed by batch 22 and is the mirror case, not a defect in the release.** Arm C
 WIDENS a discrepancy in a premise `unregistered-drift.sh` states in its own remedy text — it did
@@ -64,11 +76,11 @@ weakness in its own third receipt arm and tells you how to replace it; read that
 
 ### THE PULL'S REVISIT CONDITION HAS NOW FIRED. THE OPERATOR DECIDES; YOU DO NOT.
 
-**The gap is now TWO releases.** Consumer installed **0.434.0**, distribution **0.436.0**, with
-**13 PENDING** discharged candidates the consumer cannot see (up one: `PC-S330` joined at
-v0.436.0). The condition the previous block said to revisit on — *"a second release accumulates"* —
-is satisfied. **That makes the pull worth PROPOSING to the operator. It does not make it authorized,
-and it is not a decision you may take.**
+**The gap is now THREE releases.** Consumer installed **0.434.0**, distribution **0.437.0**, with
+**14 PENDING** discharged candidates the consumer cannot see (up one: `PC-S318` joined at
+v0.437.0). The condition the previous block said to revisit on — *"a second release accumulates"* —
+was satisfied a release ago and remains so. **That makes the pull worth PROPOSING to the operator.
+It does not make it authorized, and it is not a decision you may take.**
 
 **The differential is still NULL, measured twice, on two different subjects.** Both against
 `/Users/n8/git/graph`, each with a `cmp -s` control in the same invocation proving the two binaries
@@ -96,18 +108,26 @@ overwrite of that edit on the next autonomous self-update. **Do not report the n
 paragraph beside it** — a null taken while the state is absent says "not firing today", and reading
 it as "not worth delivering" is the error this section exists to prevent.
 
-**What the pull would still cost, stated so the operator can weigh it.** No bootstrapping step is in
-the 0.434.0→0.436.0 range: it touched `validate-layer-entries.sh`, `self-update-gate.sh`,
-`SKILL.md` step 2, one fixture and one budget constant — but NOT `preclassify.sh`, `apply.sh`,
-`ledger-reverify.sh`, or the skill's dispatch. **Re-derive that rather than trusting it**, including
-the mode-only hazard: `git diff --raw <installed-commit>..origin/main -- core/`, looking for blobs
-that are mode-different and content-equal.
+**What the pull would still cost, stated so the operator can weigh it.** Re-derived at the close of
+batch 23 over `0.434.0→0.437.0`: `preclassify.sh`, `apply.sh` and `ledger-reverify.sh` are NOT in
+the range (control: 13 core paths changed). What IS in it is `ai-dlc-update/SKILL.md` and
+`reconcile/self-update-fixtures.sh` — the step-2 machinery itself — so the consumer's INSTALLED
+step 2 classifies the very release that repairs it. **That specific hazard was measured rather than
+warned about, and it does NOT bite**: `self-update-fixtures.sh` is a changed machinery path and
+`core/fixtures/self-update-fixture-log` names it (5 hits in `run.sh`, 1 in `seed.sh`, 0 for an
+impossible token), so the unfixed term-a-only derivation still reaches this release's own fixture.
+Mode-only changes in the range: **0**, against a control of 2 rows whose modes differ at all — both
+adds. **Re-derive all of it rather than trusting it**, mode-only being
+`git diff --raw <installed-commit>..origin/main -- core/` filtered to blobs that are mode-different
+and content-equal.
 
-**Check s307 before proposing anything.** At the previous batch it was mid-sprint — "repair pass 1
-(8/14 findings)", 18 uncommitted pipeline paths, a peer session live on it. Delivering a range that
-replaces machinery a sprint is EXECUTING is the specific mistake recorded in `operator-rulings.md`,
-and `busy` in `ListAgents` is a reason to look further, never a green light. Put what that session
-is DOING into the QUESTION you ask the operator, rather than keeping it in your own head.
+**Check s307 before proposing anything.** Re-derived at the close of batch 23 and UNCHANGED from
+batch 22: the consumer sits on branch `ai-dlc/carry-over/dashboard-backlog-s307`, HEAD
+`chore(s307): complete advanced-elicitation repair pass 1 (8/14 findings)`, with 27 uncommitted
+pipeline paths and a peer session live on that tree. Delivering a range that replaces machinery a
+sprint is EXECUTING is the specific mistake recorded in `operator-rulings.md`, and `busy` in
+`ListAgents` is a reason to look further, never a green light. Put what that session is DOING into
+the QUESTION you ask the operator, rather than keeping it in your own head.
 
 **A PULL IS INITIATED BY THE OPERATOR AND BY NOBODY ELSE.** Measure the gap, report the number —
 then STOP. This is a standing ruling in `.claude/rules/operator-rulings.md`. Readiness is not
@@ -119,6 +139,75 @@ AUTHORIZED, and writing one unasked spends the session on work nobody ordered.
 **Read `docs/plans/graph-pull-0432-to-0434.md` as the worked example** — it is DISCHARGED, not a live
 plan, and its `## Discharge` section is the more useful half. `graph-pull-0432-to-0433.md` is marked
 DO NOT EXECUTE.
+
+### BATCH 23 — SHIPPED AS `v0.437.0`. THE RECEIPT WAS WRONG THREE TIMES, IN THREE DIFFERENT DIRECTIONS.
+
+**The sweep was empty for the third consecutive batch** — 65/132/33/32, byte-identical to the
+v0.435.0 and v0.436.0 baselines, newest filing still `2026-08-26`. So the PC-backed set decided the
+subject: `BL-049`, carrying `PC-S318`.
+
+**MEASURE THE REACH BEFORE BUILDING, AND THE ENTRY'S OWN WORDING WILL OFTEN BE WRONG.** Step 2's
+fixture term greps the FIXTURES for machinery paths the diff moved, so a fixture the pull REPAIRS
+names none and falls outside the slice. Over the last 69 release-to-release ranges, **16 carry at
+least one SHIPPING fixture in exactly that state** (21 dir-instances; 29/47 before excluding
+`.dist-only`). An independent hand replicated it at 35 of 159 on a different sample and by a
+different matching rule. **But the entry's widest sentence — "no derivation anywhere reads the diff
+for fixtures" — was NEVER TRUE**: `preclassify.sh:295` diffs `-- core/`, which contains
+`core/fixtures/`. The entry's own zero scored that site a non-instance because it grepped for the
+literal `core/fixtures` and the pathspec is `core/`. The subject survived the correction; the
+sentence carrying it did not.
+
+**THE RECEIPT WAS REPLACED THREE TIMES AND EACH ROUND'S DEFECT WAS INVISIBLE UNTIL THE PREVIOUS
+ONE CLOSED.** Round one keyed on two prose sentences and closed if either changed. Round two drove
+the runner but seeded no `.dist-only` dir, no deleted-at-theirs dir and no untouched dir, so the
+entire EXEMPTION half went unexercised and **five wrong runners scored CLOSE — four of which WEDGE
+the self-update on correct input**, which is worse than the defect. Round three added a
+`SKILL.md` conjunct as a literal uppercase `grep -qF`, and **a literal phrase test is at once too
+STRICT and too WEAK**: the same fix with the sentence merely lowercased scored STILL-LIVE, while
+unfixed prose plus a bare `<!-- … -->` comment scored CLOSE. Thirteen implementations were finally
+scored — five correct accepted, eight wrong rejected.
+
+**TWO SEED PROPERTIES DID THE KILLING, AND NEITHER IS OBVIOUS.** The omitting run must name the
+SAME NUMBER of fixtures as the control, because a count cannot tell a complete set from an
+incomplete one of the same size — that is what kills an arity-only implementation. And the
+`.dist-only` marker must be written AT THEIRS and then removed from the working tree, which is what
+separates a read at `theirs` from a read at `base` or on disk.
+
+**A JOIN WHOSE DERIVED SIDE COMES FROM A CALLER-SUPPLIED REPO PASSES VACUOUSLY WHEN THAT REPO IS
+THE WRONG ONE.** A `$DIST` with no `core/fixtures` returns an EMPTY diff, so the join reports
+nothing having OBSERVED nothing. Reachable, not theoretical: a caller resolving `$DIST` by walking
+up from a CONSUMER-layout copy lands on the consumer root. Found by an adversarial hand probing the
+arm, not by anyone reading it.
+
+**TWO GUARDS THAT COVER EACH OTHER HAVE ONE KILLING INPUT BETWEEN THEM, AND IT IS NOT THE OBVIOUS
+ONE.** The ref-resolution guard and the diff-failure arm both exit 2 on a bogus ref, so a mutant
+neutering the peel survives a bogus-ref seed. The input that kills it is a sha naming a **TREE**:
+`rev-parse --verify '<r>^{commit}'` rejects it while `git diff <tree> <commit>` ACCEPTS, so with
+the peel gone the join runs against a base that never resolved and reports green.
+
+**AN INSTRUCTION THAT CHANGES A PARAMETER FROM DECORATIVE TO LOAD-BEARING BREAKS EVERY CALLER THAT
+PASSED A STUB.** `self-update-fixtures.sh`'s `dist-repo` was documented "recorded in the header
+only", and the covering fixture passed literal `base-sha`/`theirs-ref` at six sites. The fix turned
+that comment false and the fixture red — correctly, the arm firing — and repairing it meant
+building throwaway git repositories inside the fixture rather than pointing at the live checkout,
+which would have reproduced the v0.431.0 moving-working-tree hazard.
+
+**THE FIXTURE WENT 10 → 28 ASSERTIONS, and the number that matters is not 28.** Replacing the
+runner with `exit 0` fails **26 of them**; the two survivors read the SEED rather than the subject.
+That ratio is the test of whether arms discriminate or merely pass.
+
+**ALL THREE HANDS CHANGED WHAT SHIPPED, AND TWO OF THEM WERE ALSO WRONG.** The scope hand
+self-downgraded its own DEFECT after re-deriving. The receipt hand filed a BLOCKER measured against
+a revision of the fixture that another hand had already replaced — the delegate-summary hazard, and
+it had cited that same hazard at the lead one message earlier — and a `case`-pattern finding that
+was simply wrong about POSIX (a QUOTED expansion inside a `case` pattern is literal; tested both
+directions). **Neither is a reason to weight their findings down**: the seed diagnosis alone caught
+five wrong implementations the lead was shipping.
+
+**A ZERO FROM `grep -c 'git init'` WAS THE LEAD'S OWN FALSE ZERO** — the fixture builds its repos
+as `git -c init.templateDir= init`. And an `audit-rule-files.sh` exit read as 0 was `tail`'s status
+through a pipe; the script's bare exit is 1 on `HEAD` too, and 0 under the flag the gate actually
+passes. Both are the documented hazards, hit by the person who had just written them down.
 
 ### BATCH 22 — SHIPPED AS `v0.436.0`. THE SWEEP WAS EMPTY AND A PC-BACKED ENTRY DECIDED IT.
 
@@ -1401,14 +1490,14 @@ so no block written before it changes verdict.
    real id means the grammar or the path is wrong, not that the candidate is old** — the ledger
    path is the only argument, and the archive is a SEPARATE file.
 
-   **THE BASELINE IS 65 LIVE CANDIDATES AT `v0.436.0`, 33 CITED, 32 UNFILED, AND SPRINT 306 IS
+   **THE BASELINE IS 65 LIVE CANDIDATES AT `v0.437.0`, 33 CITED, 32 UNFILED, AND SPRINT 306 IS
    FULLY DISCHARGED.** A higher count means the consumer filed while nobody was looking.
    **Re-derive rather than trusting those numbers** — they have moved between two consecutive
-   commands in this program, and the live count moved DURING batches 19 and 20 both. Batches 21
-   and 22 are the counter-examples: sweeps across both were byte-identical. **The live count does
-   not move when this program ships.** Closing an entry here changes what the DISTRIBUTION has
-   done; the consumer's ledger only moves on a pull, which is why DISCHARGED rises and the
-   denominator does not.
+   commands in this program, and the live count moved DURING batches 19 and 20 both. Batches 21,
+   22 and 23 are the counter-examples: sweeps across all three were byte-identical. **The live
+   count does not move when this program ships.** Closing an entry here changes what the
+   DISTRIBUTION has done; the consumer's ledger only moves on a pull, which is why DISCHARGED
+   rises and the denominator does not.
 
    **THE SPRINT-306 RULING IS SPENT. DO NOT LOOK FOR SPRINT-306 WORK.**
 
@@ -1416,22 +1505,25 @@ so no block written before it changes verdict.
    Batch 18 asked and the operator said take both; that answer was about sprint 306's remainder.
    Extending it to a different sprint is theirs to do, not yours.
 
-   **THERE IS NO PARKED SUBJECT. THE SWEEP DECIDES.** Batch 22 shipped
+   **THERE IS NO PARKED SUBJECT. THE SWEEP DECIDES.** Batch 23 shipped
+   `PC-S318-SELF-UPDATE-SLICE-CANNOT-CARRY-THE-FIXTURE-FIX-THAT-UNBLOCKS-ITS-OWN-PUSH` as
+   `v0.437.0` and ROTATED `BL-049`; batch 22 shipped
    `PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH` as `v0.436.0` and
-   ROTATED `BL-051` to the archive; batch 21 shipped
+   ROTATED `BL-051`; batch 21 shipped
    `PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER` as `v0.435.0` and took
    `PC-S307-MACHINE-AUDITS-IS-A-CHILD-OF-4A-SO-EVERY-4A-SHADOW-SWALLOWS-IT` with it via `BL-045`.
    Do not pick up any of those and do not go looking for a parked branch.
    `PC-S339-WITHDRAWAL-COMMIT-BECOMES-THE-NEW-ATTRIBUTION` is still filed here as `BL-117` and
    still IN FLIGHT — do not re-scope it.
 
-   **IF THE SWEEP FINDS NOTHING, TAKE THE STRONGEST PC-BACKED ENTRY, AND THAT IS `BL-049`.** The
+   **IF THE SWEEP FINDS NOTHING, TAKE THE STRONGEST PC-BACKED ENTRY, AND THAT IS `BL-037`.** The
    selection rule is PROVENANCE first, then consequence — never readiness — so a PC-backed entry
-   outranks `BL-119`, `BL-122` and `BL-123`, none of which discharge anything upstream. `BL-049`
-   carries `PC-S318-SELF-UPDATE-SLICE-CANNOT-CARRY-THE-FIXTURE-FIX-THAT-UNBLOCKS-ITS-OWN-PUSH`,
-   the bootstrapping class — the broken version is the one that runs the delivery — and it sits in
-   the subsystem `v0.436.0` just worked in, so the surrounding code is freshly measured. Verify the
-   id is still live upstream against an impossible-id control before scoping it.
+   outranks `BL-119` and `BL-122`, which discharge nothing upstream, and `BL-123`, whose candidate
+   was already discharged at `v0.435.0`. `BL-037` carries
+   `PC-S331-APPLY-SH-CO-EMITS-READOPT-AND-RETIRE-FOR-ONE-SUBJECT-AS-IF-BOTH-WERE-OWED`, and its
+   subject is `apply.sh` — a BOOTSTRAPPING step, where the consumer's installed copy runs the pull
+   that would carry its own repair. Measured at the close of batch 23: live upstream with archive
+   and impossible-id controls both 0, receipt raw exit 1. Re-derive both before scoping it.
 
    **Derive the PC-backed set rather than reading that name.** The join below is the only command
    in this action that measures the SUBJECT rather than the instrument; it returned 22 entries
@@ -1470,6 +1562,21 @@ so no block written before it changes verdict.
    score every one, and only then write the `verify:` line. **Score a SECOND SPELLING too** — a
    receipt rejecting a competent author's other phrasing is as broken as one accepting a
    regression.
+
+   **BATCH 23 REPLACED ITS RECEIPT THREE TIMES AND EACH ROUND WAS WRONG IN A DIFFERENT
+   DIRECTION.** Take these three before you write a line:
+
+   - **SEED THE EXEMPTIONS, OR THE EXEMPTION HALF IS UNTESTED.** Round two drove the real program
+     and still accepted five wrong implementations, because its seed held no exempt case and no
+     untouched case. Four of the five WEDGED the subject on correct input, which is worse than the
+     defect being fixed. For every exemption your fix has, the seed needs an instance of it.
+   - **MAKE THE FAILING RUN THE SAME SIZE AS THE CONTROL RUN.** An implementation that reads
+     nothing and keys on a COUNT passes any receipt whose bad input is smaller than its good one.
+   - **A LITERAL PHRASE ARM IS TOO STRICT AND TOO WEAK AT ONCE.** Round three's `grep -qF` on an
+     uppercase sentence rejected the same fix merely lowercased — reporting a shipped fix as
+     unshipped — and was satisfied by an HTML comment carrying the phrase over unfixed prose. If
+     you must key on prose, make it case-insensitive and reject a match inside a comment, and write
+     down in the entry that a rewrite still scores STILL-LIVE.
 
    **Batch 22 shipped a receipt that did BOTH and needed three more rounds after the merge.** Its
    three holes, in the order they surfaced, each invisible until the previous one closed:
