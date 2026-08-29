@@ -49,12 +49,14 @@ MUTANT="${RESUME_FIXTURE_MUTANT:-}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROUTE=""
 MAP=""
+HANDOFF=""
 d="$HERE"
 while [ "$d" != "/" ]; do
   for rel in core/skills/ai-dlc .claude/skills/ai-dlc; do
     if [ -f "$d/$rel/steps/route.md" ]; then
       ROUTE="$d/$rel/steps/route.md"
       MAP="$d/$rel/enforcement-map.yaml"
+      HANDOFF="$d/$rel/steps/handoff.md"
       break 2
     fi
   done
@@ -67,6 +69,17 @@ if [ -z "$ROUTE" ]; then
   exit 2
 fi
 [ -f "$MAP" ] || { echo "FIXTURE ERROR: enforcement-map.yaml not found beside route.md" >&2; exit 2; }
+[ -f "$HANDOFF" ] || { echo "FIXTURE ERROR: handoff.md not found beside route.md" >&2; exit 2; }
+
+# The entry line the PRODUCER emits, derived from handoff.md's own fenced block
+# rather than written here. A8/A9 join it to what the READER accepts; hard-coding
+# the string would let the two drift apart with the fixture still green.
+ENTRY_LINE="$(awk '/^```$/{f=!f;next} f && /^\/ai-dlc /{print;exit}' "$HANDOFF")"
+if [ -z "$ENTRY_LINE" ]; then
+  echo "FIXTURE ERROR: handoff.md emits no fenced /ai-dlc entry line, so the join in" >&2
+  echo "  A8/A9 has no left-hand side and would pass over nothing." >&2
+  exit 2
+fi
 
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
@@ -97,6 +110,19 @@ if [ -n "$MUTANT" ]; then
         | sed 's|^\(   full\*\*\. This is the single load.*\)$|\1\n   `scripts/ai-dlc/verdict.sh validate-artifact-budget --only pipeline-snapshot.md`.|' \
         > "$MUT"
       ;;
+    no-entry-line)
+      # The reader forgets the entry line the producer emits. This is the state
+      # BL-125 filed: handoff.md said "exactly /ai-dlc resume" while route.md's
+      # resume grammar accepted only two prose forms that, measured over 67
+      # recorded consumer prompts, had never matched once. Must fail A8 ALONE.
+      sed 's|`/ai-dlc resume`|the bare invocation|g' "$ROUTE" > "$MUT"
+      ;;
+    no-handoff-token)
+      # The `handoff` entry token loses its dispatch, so a session whose FIRST
+      # input is the request falls through to Step 1 and is routed as a new
+      # feature. Must fail A9 ALONE.
+      sed 's|^   - \*\*`handoff`\*\* .*|   - (removed)|' "$ROUTE" > "$MUT"
+      ;;
     blank)
       # Vacuity control. Must fail the POSITIVES while passing A2 -- the
       # demonstration that a bare absence check proves nothing.
@@ -104,7 +130,8 @@ if [ -n "$MUTANT" ]; then
       ;;
     *)
       echo "FIXTURE ERROR: unknown RESUME_FIXTURE_MUTANT '$MUTANT'" >&2
-      echo "  known: section-read | no-budget | reorder | blank" >&2
+      echo "  known: section-read | no-budget | reorder | no-entry-line |" >&2
+      echo "         no-handoff-token | blank" >&2
       exit 2
       ;;
   esac
@@ -182,6 +209,39 @@ if grep -q 'tests/fixtures/resume-whole-read' "$MAP"; then
 else
   bad "A7 enforcement-map registers this fixture"
 fi
+
+# --- A8: the READER accepts the entry line the PRODUCER emits ----------------
+# A JOIN, both sides derived: $ENTRY_LINE comes out of handoff.md's fenced block
+# above, and route.md must name that exact string. Neither side is written here,
+# so re-wording either one on its own turns this red instead of leaving it green
+# over a disagreement.
+#
+# The state this exists for: handoff.md step 4 mandated `/ai-dlc resume` while
+# route.md's Step 0 accepted only "Resuming an ai-dlc sprint" or a reference to
+# "pipeline snapshot". Measured over 67 recorded prompts from the reference
+# consumer, those two forms matched 0 and the emitted line matched 3 -- so the
+# documented handoff entry line fell through Step 0 to Step 1 fresh-pipeline
+# routing, and Step 6 archived as stale the snapshot the handoff had just spent
+# five steps preserving.
+case "$NORM" in
+  *"$ENTRY_LINE"*)
+    ok "A8 route.md accepts the entry line handoff.md emits ($ENTRY_LINE)" ;;
+  *) bad "A8 route.md accepts the entry line handoff.md emits ($ENTRY_LINE)" ;;
+esac
+
+# --- A9: the `handoff` entry token dispatches to handoff.md ------------------
+# PAIRED with A8 and separately mutated, because the two failed independently:
+# teaching the reader the resume line leaves `/ai-dlc handoff` unrouted, and
+# routing `handoff` leaves the successor's own entry line unrecognised.
+#
+# SKILL.md's handoff trigger (a) cannot cover this: it is a natural-language
+# judgment a lead makes MID-SESSION, and a session whose first input IS the
+# request has no lead in conversation to make it.
+case "$NORM" in
+  *'**`handoff`**'*'steps/handoff.md'*)
+    ok "A9 route.md dispatches the handoff entry token to steps/handoff.md" ;;
+  *) bad "A9 route.md dispatches the handoff entry token to steps/handoff.md" ;;
+esac
 
 echo
 if [ -n "$MUTANT" ]; then

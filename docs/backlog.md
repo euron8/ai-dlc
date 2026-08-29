@@ -3358,6 +3358,20 @@ verify: sh V=core/scripts/validate-layer-entries.sh; C=core/skills/ai-dlc/layer-
 
 ## BL-125 — the handoff procedure emits an entry line its own router does not recognise, and `handoff` is not routed at all
 
+**BOTH SUBJECTS CLOSED TOGETHER, which the receipt required and which each half alone failed.**
+`route.md` Step 0 now reads an ENTRY TOKEN before anything else: `handoff` dispatches to
+`steps/handoff.md`, and `resume` is a resume signal with `/ai-dlc resume` named verbatim so the two
+files agree on a STRING rather than on a description. Probed both ways on the release branch —
+removing the handoff arm returns the receipt to 1, and replacing the named entry line returns it
+to 1.
+
+**The gap this entry named as its own is now closed too.** It shipped with no fixture and no
+invariant behind it; `core/fixtures/resume-whole-read` gains **A8** and **A9**, and A8 derives BOTH
+sides — it extracts the entry line from `handoff.md`'s fenced block and requires `route.md` to name
+that exact string, so re-wording either file alone turns the arm red rather than leaving it green
+over a disagreement. Two mutants added, each failing its own arm alone. The receipt archives when
+this entry rotates; the fixture does not.
+
 **`steps/handoff.md` tells the successor session to enter with exactly `/ai-dlc resume`, and
 `steps/route.md` Step 0 does not accept that string as a resume signal.** The producer and the
 reader are two prose files that must agree and nothing joins them.

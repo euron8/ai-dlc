@@ -20,17 +20,51 @@ nextStepFile: dynamically determined by routing logic
 
 ## EXECUTION SEQUENCE
 
-### Step 0: Resume Check
+### Step 0: Entry-token and Resume Check
 
-Before running the full routing sequence, check for an existing
-pipeline snapshot that indicates a resume from a previous session.
+Before running the full routing sequence, read the entry token and check
+for an existing pipeline snapshot that indicates a resume from a
+previous session.
+
+0. **If `user_input` is an ENTRY TOKEN, dispatch on it.** An entry token
+   is the WHOLE of the user's input — optionally preceded by `/ai-dlc`
+   and whitespace, and nothing else besides surrounding whitespace:
+
+   - **`handoff`** — **READ AND FOLLOW** `steps/handoff.md` and skip the
+     rest of this routing sequence.
+   - **`resume`** — this is a resume signal for path 2 below. With the
+     prefix it is `/ai-dlc resume`, which is the line `handoff.md` step 4
+     emits verbatim, so it is the form a successor session actually
+     arrives with. Accept that exact string.
+
+   **`SKILL.md`'s handoff trigger (a) cannot cover the token form.** That
+   trigger is a natural-language judgment a lead makes MID-SESSION, and a
+   session whose FIRST input is the request has no lead in conversation to
+   make it — so without this arm the request falls through to Step 1 and
+   is routed as a new feature.
+
+   **Match the WHOLE input, never a substring.** Measured over 67 recorded
+   prompts from the reference consumer: a predicate matching any prompt
+   CONTAINING `handoff` scores 9, and at least two of those are prompts
+   ABOUT a handoff rather than requests for one — "the handoff that I
+   issued should have pushed it", "you are not supposed to ask me if I
+   want to handoff". Whole-input matching scores 6 with no false positive.
+   A prompt that merely mentions the word is still covered mid-session by
+   trigger (a), so the narrow predicate loses nothing.
 
 1. Check if `_bmad-output/pipeline-snapshot.md` exists and is non-empty.
-2. If YES and the user input contains a resume signal — begins with
-   "Resuming an ai-dlc sprint" OR explicitly references "pipeline
-   snapshot" — this is a resume. **Before dispatching, run Step 0a
-   snapshot integrity validation below.** If integrity validation
-   passes:
+2. If YES and the user input carries a resume signal — the `resume` entry
+   token above, OR input beginning with "Resuming an ai-dlc sprint", OR
+   input explicitly referencing "pipeline snapshot" — this is a resume.
+   **Before dispatching, run Step 0a snapshot integrity validation
+   below.** If integrity validation passes:
+
+   **The entry token is listed FIRST because it is the only one that has
+   ever fired.** Across those same 67 prompts the other two forms match
+   **0** and the bare entry line matches **3** — so a reader carrying only
+   the prose forms has never once recognised a real resume, and the
+   snapshot a handoff spent five steps preserving was archived as stale by
+   Step 6 on the next invocation.
    - Take `current_step_file` from the snapshot Step 0a loaded. Do NOT
      re-read or re-grep the snapshot — that one load serves all of it.
    - Acknowledge the resume in the first output line:

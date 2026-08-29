@@ -15,6 +15,53 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.438.0] - 2026-08-29
+
+### The handoff procedure emitted an entry line its own router did not recognise
+
+`BL-125`, filed from an operator report on the reference consumer. `steps/handoff.md:59` told the
+successor session to enter with **exactly** `/ai-dlc resume`, and `:72-74` stated the contract:
+"the resume path (`route.md` Step 0) reads `_bmad-output/pipeline-snapshot.md` for ALL state."
+`steps/route.md` Step 0 accepted two signals and only two — input BEGINNING WITH
+`Resuming an ai-dlc sprint`, or input REFERENCING `pipeline snapshot`. **`/ai-dlc resume` is
+neither.**
+
+**The consequence was not a failed resume, it was a discarded one.** Step 0 path 3 sends input
+that does not indicate a resume to Step 1, which is fresh-pipeline routing, and Step 6 then
+archives the snapshot as stale. So the documented handoff entry line was classified as a NEW
+FEATURE REQUEST, and the state the handoff had just spent five steps preserving was retired by
+the session sent to pick it up.
+
+**MEASURED ON THE CONSUMER'S OWN PROMPT HISTORY RATHER THAN REASONED ABOUT.** Across 67 recorded
+prompts, the two forms the reader accepted matched **0** and the entry line the producer emits
+matched **3**. The reader's grammar had never once fired.
+
+**A second subject, which is what the operator actually hit.** `handoff` had no dispatch arm at
+all — `route.md` named the word three times and every one was incidental. `SKILL.md:441-446` makes
+handoff trigger (a) a natural-language judgment a lead makes MID-SESSION, so a lead already in
+conversation honours the bare word while the same word arriving as a skill argument falls through
+to Step 1 with everything else. That asymmetry is exactly the reported symptom: `/ai-dlc handoff`
+did something pipeline-shaped, and bare `handoff` worked.
+
+Step 0 now reads an ENTRY TOKEN before anything else. `handoff` dispatches to `steps/handoff.md`;
+`resume` is a resume signal, and `route.md` now names `/ai-dlc resume` verbatim so the two files
+agree on a string rather than on a description.
+
+**THE PREDICATE IS WHOLE-INPUT, AND THE FALSE-POSITIVE SET WAS MEASURED BEFORE IT SHIPPED.** Over
+the same 67 prompts, a predicate matching any prompt CONTAINING `handoff` scores 9, and at least
+two of those are prompts ABOUT a handoff rather than requests for one — "the handoff that I issued
+should have pushed it", "you are not supposed to ask me if I want to handoff". Whole-input matching
+scores 6 with no false positive, and loses nothing: a prompt that merely mentions the word is still
+covered mid-session by trigger (a).
+
+**The join is now carried by a fixture, not only by the entry's receipt.** `resume-whole-read`
+gains A8 and A9, and A8 derives BOTH sides — it extracts the entry line from `handoff.md`'s own
+fenced block and requires `route.md` to name that exact string, so re-wording either file alone
+turns the arm red instead of leaving it green over a disagreement. Two mutants were added and each
+fails its own arm alone: `no-entry-line` fails A8, `no-handoff-token` fails A9. The existing `blank`
+vacuity control now fails both as positives. The fixture is 9 assertions, 6 mutants, and no new
+fixture directory, so `FORK_BUDGET` is unchanged.
+
 ## [0.437.0] - 2026-08-28
 
 ### The self-update slice could not carry a fixture the pull itself repairs
