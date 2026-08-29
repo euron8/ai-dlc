@@ -3355,3 +3355,65 @@ the read, which is the same fix shape `fm()` received. Note that `layer-conforms
 text, so a message change has a fixture obligation.
 
 verify: sh V=core/scripts/validate-layer-entries.sh; C=core/skills/ai-dlc/layer-contract.yaml; [ -f "$V" ] && [ -f "$C" ] || exit 9; d=$(mktemp -d) || exit 9; trap 'chmod -R u+rwX "$d" 2>/dev/null; rm -rf "$d"' EXIT; K="$d/.claude/skills/ai-dlc"; mkdir -p "$K/extensions" || exit 9; cp "$C" "$K/" || exit 9; printf -- '---\nkind: role\nid: r\nhooks: steps/retro.md\npush_candidate: false\nconforms_to: 1\n---\n# R\n' > "$K/extensions/e.md"; O=$(bash "$V" "$d" 2>&1); grep -q "contract_version" <<<"$O" || { echo "HARNESS BROKEN: readable control produced no contract line"; exit 9; }; chmod 000 "$K/layer-contract.yaml"; if awk '{exit}' "$K/layer-contract.yaml" 2>/dev/null; then echo "HARNESS BROKEN: seal did not take"; exit 9; fi; U=$(bash "$V" "$d" 2>&1); grep -qE "could not READ|unreadable|cannot read" <<<"$U" || exit 1; grep -q "got '<none>'" <<<"$U" && exit 1; exit 0
+
+## BL-125 — the handoff procedure emits an entry line its own router does not recognise, and `handoff` is not routed at all
+
+**`steps/handoff.md` tells the successor session to enter with exactly `/ai-dlc resume`, and
+`steps/route.md` Step 0 does not accept that string as a resume signal.** The producer and the
+reader are two prose files that must agree and nothing joins them.
+
+`core/skills/ai-dlc/steps/handoff.md:59` instructs the handing-off session to "emit the successor's
+entry line — exactly `/ai-dlc resume`", and `:82` carries it in a fenced copy-paste block. `:72-74`
+then states the contract outright: "the resume path (`route.md` Step 0) reads
+`_bmad-output/pipeline-snapshot.md` for ALL state."
+
+`core/skills/ai-dlc/steps/route.md:29-30` defines the only two inputs Step 0 accepts as a resume:
+input that **begins with** `Resuming an ai-dlc sprint`, or that **explicitly references**
+`pipeline snapshot`. **`/ai-dlc resume` is neither.** Measured, with both controls in the same run:
+the two accepted forms are present in `route.md` (1 and 3 hits), the emitted entry line matches
+neither (0 and 0), and a control string containing `pipeline snapshot` matches (1) — so the test
+discriminates rather than merely returning zeros.
+
+**The consequence is not "resume fails", it is `route.md:51-55` — Step 0 path 3.** Input that does
+not indicate a resume falls through to Step 1, which is fresh-pipeline routing, and Step 6 then
+archives the snapshot as stale. So the documented handoff entry line is classified as a NEW FEATURE
+REQUEST, and the state the handoff spent five steps preserving is retired by the session sent to
+pick it up.
+
+**SECOND SUBJECT: `handoff` has no dispatch arm at all.** `route.md` mentions the word three times
+(`:41`, `:539`, `:582`) and every one is incidental — teammate-table semantics, a cross-reference to
+`handoff.md` Step 1, and a note about context reminders. None routes the token. `SKILL.md:441-446`
+makes handoff trigger (a) a NATURAL-LANGUAGE judgment the lead makes mid-session, so a lead already
+in conversation honours the bare word `handoff` while the same word arriving as a skill argument
+falls to Step 1 with the rest.
+
+**PROVENANCE — operator-reported from the graph consumer, 2026-08-29, and the report is what found
+this.** The operator observed three attempts: the first handoff did not run all of the handoff
+steps; a second, invoked as `/ai-dlc handoff`, **resumed the pipeline instead of handing off**; a
+third, typed as the bare word `handoff`, ran every step. Corroborated from the consumer's own
+`_bmad-output/pipeline-continuation-log.md`, which records `USER_PAUSE` for each attempt — including
+the slash form — and one `HANDOFF_GUARD_BLOCK (1/3)`, consistent with the incomplete first attempt.
+**The pause hook is not the defect**; it fired correctly every time. What the log cannot settle is
+the dispatch behaviour, which is why the mechanism above is derived from the two step files rather
+than from the log.
+
+**Both subjects must close together and the receipt requires it**, because fixing either alone
+leaves the other live: teaching the reader the bare entry line still leaves `/ai-dlc handoff`
+unrouted, and routing `handoff` still leaves the successor's own entry line unrecognised.
+
+**Scored across six inputs before shipping**, not reasoned about: current tree **1**, reader taught
+the entry line only **1**, `handoff` routed only **1**, both **0**, `route.md` deleted **9**, and
+`handoff.md`'s fenced entry line removed **9** — the last two are control failures rather than
+false closes, which is the direction that matters.
+
+**The receipt derives BOTH SIDES rather than grepping for a sentence.** It extracts the entry line
+from `handoff.md`'s fenced block and tests it against the forms `route.md` accepts, so a reworded
+remedy still closes it and a comment does not. It is still prose-on-prose: neither step file is a
+program, so there is nothing to drive. **This entry has no fixture and no invariant behind it, and
+that is the gap** — the join it describes is exactly the kind `CLAUDE.md` says to bind mechanically,
+and doing so is not this filing.
+
+**NOT a consumer filing.** A `PC-` id belongs in the consumer's ledger and an ai-dlc session never
+writes to a consumer tree, so this is filed here, where the subject lives.
+
+verify: sh H=core/skills/ai-dlc/steps/handoff.md; R=core/skills/ai-dlc/steps/route.md; { [ -f "$H" ] && [ -f "$R" ]; } || { echo "CONTROL FAILED: subject absent"; exit 9; }; E=$(awk '/^```$/{f=!f;next} f && /^\/ai-dlc /{print;exit}' "$H"); [ -n "$E" ] || { echo "CONTROL FAILED: handoff.md emits no fenced /ai-dlc entry line"; exit 9; }; grep -qF 'Resuming an ai-dlc sprint' "$R" || { echo "CONTROL FAILED: route.md carries neither accepted resume form"; exit 9; }; ok=0; case "$E" in "Resuming an ai-dlc sprint"*) ok=1 ;; esac; case "$E" in *"pipeline snapshot"*) ok=1 ;; esac; case "$(grep -c 'ai-dlc resume' "$R")" in 0) ;; *) ok=1 ;; esac; h=0; grep -qE '^[^#]*\bhandoff\b.*steps/handoff\.md' "$R" && h=1; [ "$ok" -eq 1 ] && [ "$h" -eq 1 ] && exit 0; exit 1
