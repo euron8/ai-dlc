@@ -132,12 +132,24 @@ every globbed pathspec while rejecting `:(glob)` magic outright — so the globs
 `git ls-files --with-tree=<ref>`, at BOTH base and theirs, because resolving at the checkout alone
 drops the upstream-deleted case where the consumer's copy is the only copy left.
 
-**THE RECEIPT WAS REPLACED FIRST AND SCORED SIX WAYS, AND THE SCORING IS WHAT CAUGHT ITS HOLE.** The
-first replacement asserted a carry row for one path and PASSED an implementation that emitted the
-row unconditionally; adding a non-diverged near-miss consumer inside the receipt killed that. The
-second still ACCEPTED the narrowed `BOTH-CHANGED` key; adding the deleted-path case killed that too.
-Final score — defect-live 1, prose-only comment 1, unconditional emission 1, narrowed key 1, a
-second spelling of the correct fix 0, the shipped fix 0.
+**THE RECEIPT WAS SCORED THREE TIMES AND WAS STILL WRONG WHEN IT SHIPPED.** Draft one PASSED an
+implementation emitting the row unconditionally; a non-diverged near-miss CONSUMER killed that.
+Draft two ACCEPTED the narrowed `BOTH-CHANGED` key; the deleted-path case killed that. **Draft
+three shipped, and an independent hand then killed it too** — it returned 0 for an arm that carries
+the WHOLE slice the moment anything diverges, which satisfies every clause the receipt stated and
+contradicts the arm's own "ADVISORY, NOT A VERDICT" header.
+
+**THE STRUCTURAL LESSON, AND IT GENERALISES PAST THIS ENTRY: A NEAR-MISS IN A SEPARATE RUN IS AN
+ADJACENT INPUT, NOT A DISCRIMINATING ONE.** A second clean consumer can only ask *does the arm fire
+at all*. It can never ask *does it fire on the RIGHT paths*, because in the run where the arm fires
+there is nothing present it is supposed to stay quiet about. The fix is a negative standing BESIDE
+the offender in the same run — here, an upstream-changed machinery path whose consumer copy is at
+base. That receipt is simpler than the one it replaced and kills one more implementation.
+
+**The gap was in the CERTIFICATE, never in the guard.** Re-derived rather than taken on report: the
+live fixture's `carry-quiet-untouched` arm kills that implementation outright (`got=[1] want=[0]`,
+9 of 44 assertions red). Score the proposed receipt-weakness against the FIXTURE before reading it
+as a coverage gap — the archived receipt is inert and the fixture runs on every push.
 
 **`FORK_BUDGET` ROSE WITHOUT A NEW FIXTURE DIRECTORY, WHICH BREAKS THE PATTERN EVERY PREVIOUS RAISE
 TAUGHT.** 7192 → 7195 on 276 added lines in one existing `run.sh`; the corpus still holds 179
@@ -145,13 +157,20 @@ directories. ATTRIBUTED, not assumed: checking that ONE file back out to `origin
 the subject returned exactly 7192. A reader who prices a large arm addition at zero because the last
 three raises all accompanied a new directory will be wrong.
 
-**TWO OF THREE HANDS WENT IDLE WITHOUT REPORTING, AND STILL HAD NOT REPORTED AFTER A DIRECT REQUEST
-BY NAME.** The scope hand and the receipt hand delivered nothing; both jobs were done by the lead in
-parallel, which is why the batch still closed. The FIXTURE hand — the one whose deliverable is the
-TREE — delivered, and delivered well: 26 → 44 assertions, eleven arms each with a both-directions
-probe, six mutants all killed including two nobody asked for, and a cwd-invariance arm. **This is the
-fourth consecutive batch with that exact split. Budget for it: give a hand a TREE deliverable or
-expect nothing.**
+**ALL THREE HANDS DELIVERED, AND THE LEAD CALLED TWO OF THEM EMPTY BEFORE THEY LANDED.** The idle
+notifications arrived AFTER the release merged and every one was TRUNCATED mid-sentence — the lead
+read `idle` plus a truncated payload as "returned nothing", wrote that into a report, and was
+wrong. **`idle` is not a verdict about a hand's output, and a truncated result is not an absent
+one: ask for the rest by name.** The receipt hand's finding was the best of the batch and arrived
+entirely after the lead had shipped the receipt it refuted. The fixture hand delivered 26 → 44
+assertions, eleven arms each with a both-directions probe, SEVEN mutants all killed — three more
+than asked for, after it found that running the fixture against a gate stubbed to `exit 0` left
+four absence-shaped arms still green. It also caught that its own first two mutants produced
+byte-identical output, so one was proving nothing.
+
+**Budget the LATENCY, not the loss.** The tree deliverable still arrives first and most reliably;
+what the message-deliverable hands cost is that their findings land after the window in which they
+were cheap to act on. Ask for findings compressed AND leave the merge until they are in.
 
 **`BL-124` filed as the mirror case.** Arm C makes false a premise `unregistered-drift.sh` prints in
 its own remedy text — `CORE-AT-SELF-UPDATE` rests on "step 2 rewrites the whole MACHINERY set", which

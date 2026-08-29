@@ -214,9 +214,12 @@ machinery_at_or_past() {
 
 # ---- ARM C: A MACHINERY PATH THE CONSUMER HAS DIVERGED ON ------------------------------
 # Step 2 justifies autonomy -- no operator gate, auto-merged PR -- on the declaration that the
-# skill's own files are overwrite-safe, and then writes the whole MACHINERY set from `theirs`.
-# For a machinery path the consumer has edited those two sentences conflict and the step used
-# to supply no rule, so the literal reading destroys the consumer's delta. Filed on the
+# skill's own files are overwrite-safe, and it USED TO write the whole MACHINERY set from
+# `theirs` on the strength of it. The tense matters and it is not pedantry: this arm is what
+# made that sentence false, so a reader tracing "does step 2 write the whole machinery set?"
+# through a present-tense comment here gets the wrong answer from the very file that fixed it.
+# For a machinery path the consumer had edited those two sentences conflicted and the step
+# supplied no rule, so the literal reading destroyed the consumer's delta. Filed on the
 # reference consumer as PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH
 # after that tree's own `.githooks/pre-push` -- the fourth `machinery:` entry -- came back
 # BOTH-CHANGED->CLASSIFY on a live pull. The operator stopped and reasoned about it by hand;
