@@ -1,10 +1,21 @@
+# DISCHARGED — DO NOT EXECUTE
+
 # Pull the graph consumer from 0.434.0 to 0.438.0
 
 ## RESUME HERE
 
+**Status: DISCHARGED. Both phases ran and landed; nothing below is an instruction any more.**
+The consumer stamp reads **0.438.0 / `1b9f53ec`** on all four fields — this distribution's
+`origin/main` at the time of the run — and all seven Done-when criteria are met. The numbered
+actions are retained as a record of what was done. See `## Discharge` for the measured outcome and
+for the two figures this file got wrong.
+
 **Resume with exactly: `READ and FOLLOW docs/plans/graph-pull-0434-to-0438.md`.** This block is the
 current state. Everything under `## Rehearsal` is an EXPECTATION measured before the run, not a
-guarantee, and `## Discharge` is empty until the run reports.
+guarantee.
+
+**The authorization recorded below is SPENT.** It named one range, one executor and one date, and
+that range has landed. A later pull is not authorized by anything in this file.
 
 **Status: AUTHORIZED — PHASE 1 MAY START.** The operator authorized this pull on 2026-08-29 and
 named `graph-70`, rooted in `/Users/n8/git/graph`, as the executor. **That decision covers PHASE 1
@@ -207,8 +218,12 @@ written into this file**, because the skill resolves them and anything written d
 
 9. **Close the candidates, by id.** Run `ledger-reverify` **from the consumer root** — a
    distribution-root run has turned a live `STILL-LIVE` into a `CLOSE-CANDIDATE`, and a false close
-   retires a live entry. The four ids this range discharges, each verified in-range against an
-   impossible-id control:
+   retires a live entry.
+
+   **THIS ACTION'S PREMISE WAS WRONG — see `## Discharge`.** It calls the four ids below "discharged
+   by this range", derived by reading the range for their commits. The tool, driven from the
+   consumer root, returned `NAMED-UPSTREAM` for all four. Naming is not absorption and none were
+   closed. The four ids, retained as the record of what was checked:
 
    - `PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER`
    - `PC-S307-MACHINE-AUDITS-IS-A-CHILD-OF-4A-SO-EVERY-4A-SHADOW-SWALLOWS-IT`
@@ -310,4 +325,93 @@ the range: **0**, against a control of 2 rows whose modes differ at all, both ad
 
 ## Discharge
 
-*Empty until the run reports. The distribution session that fills this in also retitles the file.*
+**The run landed both phases and agreed with the rehearsal on every row it predicted. It disagreed
+on two figures, and BOTH were this file's error rather than the consumer's.** That is the useful
+half of this section.
+
+### Measured on the consumer AFTER the run, from the distribution side, each with a control in the same invocation
+
+```
+stamp                 0.438.0 / 1b9f53ec on all four fields   (control: 0 fields at the old 0.437.0/fa92ac44)
+.ai-dlc-applying      absent                                  (control: .ai-dlc-version PRESENT in the same test)
+action 8 router fix   grep 'ai-dlc resume'        -> 1        (pre-pull baseline 0)
+                      control 'STEP_LOADED_TOKEN' -> 1        (1 before AND after)
+                      impossible token            -> 0
+working branch        ai-dlc/carry-over/dashboard-backlog-s307, 0/0 with its upstream
+leftover branches     0 local ai-dlc-update/0.437* or /0.438*
+pipeline              still PAUSED, last decision USER_PAUSE
+derived fixtures      "# summary: 25 green, 0 red, 0 missing, of 25 named"   read verbatim from the log
+reconcile logs        2, one per leg
+```
+
+Landed as PRs **#981** (self-update machinery slice), **#982** (reconcile, stamp-only bump) and
+**#983** (the phase-2 gated apply).
+
+### The two figures this file got wrong
+
+**The phase-1 derived-fixture count was 5 and the answer is 25.** Corrected mid-run at `1b9f53ec`,
+before the branch was cut. The five were TERM B alone — the fixtures the diff itself touches — and
+TERM A, every fixture naming a machinery path the diff moved, never entered the prediction because
+the rehearsal wrote its slice BY HAND. `core/scripts/validate-layer-entries.sh` changes `+143/-9` in
+this range and twelve to thirteen fixtures cover it. **Nothing would have caught the omission**:
+the coverage join at `self-update-fixtures.sh:119` joins the passed set against TERM B only, so a
+five-directory slice passes it and still strands twenty covering fixtures. All 25 ran green.
+
+**Action 9's premise — that this range DISCHARGES four candidate ids — is not what the tool
+reports.** `ledger-reverify`, run from the consumer root, returned **`NAMED-UPSTREAM` for all four**,
+with an impossible-id control at 0 rows. Naming is not absorption: a commit can name an id to record
+a rejection or a split, step 8 closes `CLOSE-CANDIDATE` only, and each of the four needs its named
+commit read and a CONTAINING release established first. **The executor closed none and annotated
+nothing, which is correct.** Full-range tally: 49 `STILL-LIVE`, 23 `HAND-REVIEW`, 16
+`NAMED-UPSTREAM`, 6 `NAMED-UPSTREAM-AMBIGUOUS`, 1 `RECEIPTS-UNDECIDED`, 1 `CLOSE-CANDIDATE`.
+
+Both defects are the same shape: **a figure derived by a method the real run does not use.** The
+rehearsal hand-wrote a slice; this section's action 9 read the range for discharging commits rather
+than driving `ledger-reverify`. `verification-discipline.md`'s "run the shipping code against the
+real corpus" names both.
+
+### What the rehearsal did not predict, and what it cost
+
+**Phase 2 carried 2 HARD blockers** — `HARD-LAYER-ADJUDICATION-MISSING`, code `EXTENSION-HOOK-DRIFT`,
+clause **LC-E4**, on the consumer's `extensions/steps-domain/route-domain.md` and `route-push.md`.
+Both hook `steps/route.md`, the one rulebook file in the range, so each needed a recorded verdict
+before `apply` could write. Recorded: `route-domain.md` **still-additive**, no `owed`;
+`route-push.md` **contradicts-core**, re-declaring the SAME `owed.id`
+`OWED-S302-RESET-SNAPSHOT-ROTATOR` under the new digest.
+
+**Re-using that id rather than minting a second is the load-bearing choice.** The debt's handle is
+the only thing that survives a digest change, and this pull moved `route.md`, so the old digest
+became unaddressable. Verified rather than assumed, from the distribution side: the id appears 3
+times as `owed` and **0 times as `closes_owed`** across 290 register rows; its `closes_when` — *"the
+reset script no longer writes a dated `pipeline-snapshot.archive.*` path"* — is still UNMET. On the
+CONSUMER (no such file exists in this repo, so this is deliberately not written as a resolvable
+citation), line 69 of `scripts/ai-dlc-local/ai-dlc-reset-snapshot.sh` still holds
+`ARCHIVE="$ROOT/_bmad-output/pipeline-snapshot.archive.${TS}.md"`, and `rotate-snapshot-archive`
+matches 0 times there — control: `pipeline-snapshot` matches 2 in that same file, an impossible
+token 0, so the zero is a real absence. The debt is left OPEN. Discharging it would have meant
+repointing snapshot tooling, far outside a 2-row range.
+
+**`supersedes` was correctly omitted.** LC-A2 binds two records under ONE key stating DIFFERENT
+verdicts; this is the same verdict under a NEW key.
+
+### A sequencing hazard this file did not carry, and should have
+
+**The distribution's `main` was three commits UNPUSHED when phase 2 was about to stamp.** Those
+commits touch **0** core paths, so the delivered content was identical either way — but the STAMP
+records a sha, and `1b9f53ec` existed only on the operator's disk. Stamping it would have written a
+base commit no later pull could resolve from the consumer's GitHub upstream. The operator chose to
+push first; the ref update was then verified by CONTENT — local `main`, `origin/main` and
+`git ls-remote` on the consumer's configured upstream all reading the same sha — rather than by the
+push's exit code.
+
+**The hold sent to the executor did not arrive before it cut its branch.** No harm followed: the
+stamp had not advanced and the branch was local and unpushed. But the ordering was luck, not design.
+**A runbook whose executor resolves `theirs` from the operator's working tree needs a numbered
+action asserting that tree is PUBLISHED before anything stamps.** This file had no such action.
+
+### What a future runbook should copy
+
+The executor stopped twice before writing anything — once on a status line that forbade starting,
+once on the 5-vs-25 disagreement — and both stops were correct and cheap. Action 5's instruction to
+treat a rehearsal disagreement as information rather than reconcile it is what produced the
+fixture-count fix. **Keep that instruction verbatim.**
