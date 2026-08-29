@@ -15,6 +15,65 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.441.0] - 2026-08-29
+
+### The Stop hook's no-next-action list was an enumeration, and an unattended session was not in it
+
+Addresses the reference consumer's `PC-S307-CONTINUE-HOOK-CANNOT-DISTINGUISH-A-DIRECTED-SESSION-FROM-AN-UNATTENDED-ONE`,
+filed 2026-08-29 during its own sprint-307 carry-over session. **Most of that filing is refuted by
+ground truth, and the part that survives is one sentence.** Both halves are recorded here because
+which half died is the load-bearing part.
+
+`ai-dlc-continue.sh:695` told the lead to create the pause flag when it genuinely has no next
+action, and parenthesised four instances: `HARD_BLOCK, PVC, handoff, retro commentary`. A session
+in which no human has spoken at all is a fifth, and the list read as closed. The line now names
+the class, marks those four as examples, and adds the unattended case — with the derivation beside
+it, because the difference between a derived state and a felt one is the difference between a
+report and an opt-out from Rule 3. It points at `validate-steering-budget.sh`, which already
+classifies harness-raised turns against `schemas/harness-origin.json`, and at
+`operator-requests-history.md`, which records genuine requests keyed by session. It closes by
+saying that having no next action is the condition and not wanting to take one is not.
+
+Text only. No new branch, no new state file, no gate on the block — a derived zero is the normal
+case on any driver-reseeded session, so gating on it would arm an opt-out on the common path
+rather than the exceptional one.
+
+**Three claims in the filing are refuted, each against shipped code.** The branch it says is
+missing is line 695 itself, which names the filing's own remedy verbatim. Its "the hook fired three
+times against that stopped state" is false: the consumer's own `pipeline-continuation-log.md` shows
+all three blocks PRECEDING the flag and `ALLOWED_BY_PAUSE` ten seconds after it was armed — Check 1
+at `:552` allows unconditionally on flag presence and exits 139 lines above the retry text, so that
+text is unreachable while the flag exists. And its `verify:` sentence, *"there is nothing to grep
+for the absence of"*, is falsified by `genuineOperatorText` at `validate-steering-budget.sh:234`,
+which is installed on that consumer and returns exactly 0 genuine turns for the disputed window
+(4 survivors across the session, all later; control 16 without the prefix filter).
+
+**Its proposed remedy is withdrawn rather than deferred.** A session-scoped flag "set at launch by
+whatever started the session" cannot be built as described — `harness-origin.json` states in its own
+description that origin is readable only from the text, never from the event — and the one shipping
+launcher, `ai-dlc-session-driver.sh`, injects a replayed resume command on an ATTENDED session, so
+it would mark the common case unattended. Both absent-flag defaults are also wrong: absent-means-
+unattended freezes every fresh consumer at its first Stop, absent-means-attended never fires.
+
+**The rapid-fire backoff was examined and is NOT a defect, against a report that it was.** An
+independent hand measured that `:657-663` resets the counter whenever more than
+`RAPID_WINDOW_SECONDS` has elapsed, so at agent turn latency the backoff at `:668` cannot fire, and
+filed that as the real cause. The hook's own header is explicit that this is a RAPID-FIRE detector
+which deliberately replaced `stop_hook_active`: two blocks more than 30s apart are not one stall
+attempt, and `implementation-join-yield` arms 6b and 6c assert that property in both directions —
+a beat that consumed time MUST reset the counter, or a healthy long join is reported as a stall.
+Changing it would have broken two deliberate arms to fix a specification.
+
+**The filing's second claim is filed, not fixed, as `BL-126`** — the PreToolUse deny reads no
+agent-identity field, so it cannot let an in-flight teammate write reach a consistent stopping
+point, and no quiesce concept exists in `core/hooks/` to hang one on. Different hook, different
+subsystem. Its "binary blast radius" framing is corrected there: four carve-outs already ship, and
+the filing's attribution of the denied writes to a named teammate is not established by any
+artifact — the `ACK_DENIED` rows carry no path and no identity.
+
+Verified with `pause-hook-origin` forced, because the read-set map does not select it for a change
+to this hook and it is the fixture that owns the five-hook log legend.
+
 ## [0.440.0] - 2026-08-29
 
 ### The `NAMED-UPSTREAM` row elected two commits, and on 3 of 9 measured ids neither was the fix

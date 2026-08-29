@@ -3263,3 +3263,58 @@ text, so a message change has a fixture obligation.
 
 verify: sh V=core/scripts/validate-layer-entries.sh; C=core/skills/ai-dlc/layer-contract.yaml; [ -f "$V" ] && [ -f "$C" ] || exit 9; d=$(mktemp -d) || exit 9; trap 'chmod -R u+rwX "$d" 2>/dev/null; rm -rf "$d"' EXIT; K="$d/.claude/skills/ai-dlc"; mkdir -p "$K/extensions" || exit 9; cp "$C" "$K/" || exit 9; printf -- '---\nkind: role\nid: r\nhooks: steps/retro.md\npush_candidate: false\nconforms_to: 1\n---\n# R\n' > "$K/extensions/e.md"; O=$(bash "$V" "$d" 2>&1); grep -q "contract_version" <<<"$O" || { echo "HARNESS BROKEN: readable control produced no contract line"; exit 9; }; chmod 000 "$K/layer-contract.yaml"; if awk '{exit}' "$K/layer-contract.yaml" 2>/dev/null; then echo "HARNESS BROKEN: seal did not take"; exit 9; fi; U=$(bash "$V" "$d" 2>&1); grep -qE "could not READ|unreadable|cannot read" <<<"$U" || exit 1; grep -q "got '<none>'" <<<"$U" && exit 1; exit 0
 
+
+## BL-126 — the pause-flag deny hook reads no agent identity, so it cannot let an in-flight teammate write reach a consistent stop
+
+**The PreToolUse deny at `core/hooks/ai-dlc-acknowledge.sh:466` fires the moment
+`_bmad-output/pipeline-paused.flag` exists, and the hook reads no field that could tell a
+TEAMMATE's in-flight write from the LEAD's next advancing action.** Its whole read-set is
+`.session_id` (`:60`), `.tool_name` (`:61`), `.transcript_path` (`:62`), `.tool_input.skill`
+(`:161`) and `.tool_input.file_path` (`:402`). Grepping that file for `subagent`, `agent_type`,
+`parent` or `teammate` returns only two prose comments (`:427`, `:521`) and no read — control in
+the same invocation: `UPDATER_SESSION` returns 7 hits, so the grammar fires.
+
+There is also no quiesce concept anywhere to hang a fix on: `grep -rn 'quiesce|drain|in-flight|inflight' core/hooks/`
+returns nothing, against a control of `pipeline-paused` matching in five hook files.
+
+**The consequence is an artifact left less consistent than either endpoint.** Arming the flag
+while a teammate is mid-derive denies its next `Write`/`Edit` under `_bmad-output/`, so a
+multi-section artifact keeps the sections already amended and the sections still carrying the text
+those amendments contradict. Filed by the reference consumer as
+`PC-S307-CONTINUE-HOOK-CANNOT-DISTINGUISH-A-DIRECTED-SESSION-FROM-AN-UNATTENDED-ONE`, whose second
+claim this is, observed on its sprint-307 carry-over session.
+
+**TWO PARTS OF THAT FILING ARE REFUTED AND ARE NOT THIS ENTRY'S SUBJECT.** It calls the blast
+radius "binary (block everything, immediately)". It is not: the deny is scoped to
+`Agent|Task|Skill|TaskCreate` plus `Write|Edit|MultiEdit|NotebookEdit` whose `file_path` is under
+`_bmad-output/`, `:481` leaves Read/Grep/Glob/Bash allowed, and FOUR carve-outs already ship —
+`:411` `_bmad-output/ai-dlc-update/*`, `:424` `*-resolution-p*.md`, `:438` `pipeline-snapshot.md`,
+`:459` `pipeline-snapshot-history.md`. The exemption precedent is established; what is missing is a
+predicate, not permission. And the filing's attribution of the denied writes to a named teammate is
+**not established by any shipped artifact**: the `ACK_DENIED` log rows carry no `file_path` and no
+agent identity, and both rows recorded that session carry the LEAD's session id. That
+observability gap is part of this entry's subject — a deny nobody can attribute is a deny nobody
+can adjudicate.
+
+**Why this is not folded into the release that shipped the other half.** The sibling claim was a
+retry-text gap in `ai-dlc-continue.sh`, a Stop hook. This is the PreToolUse deny path, a different
+hook and a different subsystem, and the remedy is a quiesce semantic that does not exist yet
+anywhere in `core/hooks/`. Under this repo's one-subsystem-per-batch rule those do not belong in
+one release.
+
+**Do NOT fix this by widening the carve-out list.** A fifth path pattern acquits a path for every
+caller including the lead, which is the thing the flag exists to stop. The predicate has to be
+about WHO is writing, and the hook is currently blind to that — so the first thing this entry owes
+is a measurement of whether a PreToolUse payload carries any usable subagent discriminator at all.
+If it does not, the entry's remedy is the observability half alone: record `file_path` and whatever
+identity IS available on every `ACK_DENIED` row, so the next occurrence is attributable.
+
+**Tiered DEFECT.** It corrupts a shared artifact rather than losing work outright, and reaching it
+requires a pause to be armed while a teammate write is in flight.
+
+The receipt is STRUCTURAL and keys on the READ-SET, not on prose: it exits 1 while
+`ai-dlc-acknowledge.sh` reads no agent-identity field from its PreToolUse payload, 0 once it reads
+one, and 9 if the hook or its `jq` reads cannot be located, so a reshaped hook reports a moved
+precondition rather than a false close.
+
+verify: sh f=core/hooks/ai-dlc-acknowledge.sh; [ -f "$f" ] || exit 9; r=$(grep -oE 'jq -r [^|]*\.[a-z_.]+' "$f" | grep -oE '\.[a-z_][a-z_.]*' | sort -u); [ -n "$r" ] || exit 9; printf '%s\n' "$r" | grep -q '^\.tool_name$' || exit 9; printf '%s\n' "$r" | grep -qE '^\.(subagent|agent_type|agent_id|parent_session_id|invoked_by)' && exit 0; exit 1
