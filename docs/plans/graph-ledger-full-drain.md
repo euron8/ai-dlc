@@ -58,7 +58,8 @@ selection rule is PROVENANCE first, then consequence — never readiness. `BL-12
 that is already DISCHARGED, so closing it discharges nothing further upstream.
 
 **`BL-124` was filed by batch 22 and is the mirror case, not a defect in the release.** Arm C
-falsifies a premise `unregistered-drift.sh` states in its own remedy text. Its entry names the
+WIDENS a discrepancy in a premise `unregistered-drift.sh` states in its own remedy text — it did
+not open it; the premise was already inexact. Its entry names the
 weakness in its own third receipt arm and tells you how to replace it; read that before taking it.
 
 ### THE PULL'S REVISIT CONDITION HAS NOW FIRED. THE OPERATOR DECIDES; YOU DO NOT.
@@ -82,8 +83,14 @@ actually differ, so neither null is two runs of one program:
 **THAT SECOND NULL IS EXPLAINED, AND THE EXPLANATION IS THE ARGUMENT FOR PULLING.** The consumer's
 `.githooks/pre-push` is byte-identical to the distribution's copy at its installed commit right now,
 so there is nothing to carry — but that path is one the consumer edits ROUTINELY. Measured in its
-committed history: **9 non-reconcile commits touch `.githooks/pre-push`**, the most recent
-`f53453868` on 2026-08-26, a Sprint 305 commit adding 22 lines to a machinery file. The state arm C
+committed history: **6 CONSUMER-AUTHORED commits touch `.githooks/pre-push`, across five distinct
+sprints — s298, s302 (twice), s303, s304 and s305** — the most recent `f53453868` on 2026-08-26,
+adding 22 lines to a machinery file. **An earlier revision of this block said 9, and that figure
+was wrong in the direction that flattered the argument.** The exclusion grammar was
+`grep -vE 'ai-dlc-update|self-update|reconcile'`, which cannot spell `chore(ai-dlc): pull …` or
+`chore(ai-dlc): land distribution …`, so three UPSTREAM PULLS were counted as consumer edits. The
+honest denominators: 20 commits touch the path in total, 6 of them are the consumer's own work.
+Derive it as `grep -vE '^chore\(ai-dlc'` and read the subjects. The state arm C
 exists for is one this consumer enters roughly once a sprint, and the failure mode is a SILENT
 overwrite of that edit on the next autonomous self-update. **Do not report the null without this
 paragraph beside it** — a null taken while the state is absent says "not firing today", and reading
@@ -203,9 +210,14 @@ byte-identical output, so one was proving nothing.
 what the message-deliverable hands cost is that their findings land after the window in which they
 were cheap to act on. Ask for findings compressed AND leave the merge until they are in.
 
-**`BL-124` filed as the mirror case.** Arm C makes false a premise `unregistered-drift.sh` prints in
-its own remedy text — `CORE-AT-SELF-UPDATE` rests on "step 2 rewrites the whole MACHINERY set", which
-stops being true the moment a path is carried. Filed rather than folded in, because the remedy
+**`BL-124` filed as the mirror case, and its framing had to be corrected twice.** The premise
+`unregistered-drift.sh` prints — `CORE-AT-SELF-UPDATE` rests on "step 2 rewrites the whole
+MACHINERY set" — was ALREADY inexact before this release: step 2 writes the `base→theirs` diff
+RESTRICTED to that set, and `SKILL.md:233` has said so since 2026-07-26. Arm C did not make that
+sentence false; it WIDENED the discrepancy, because the written set is now that diff minus the
+carried paths, and a carried path therefore falls past the `CORE-AT-SELF-UPDATE` arm into an
+ordinary drift status whose printed remedy is to re-adopt upstream's text. The entry's subject
+stands and its receipt still exits 1. Filed rather than folded in, because the remedy
 belongs to a different subsystem than this release changed.
 
 ### BATCH 21 — SHIPPED AS `v0.435.0`. TWO CANDIDATES, ONE OF THEM UNCLAIMED FOR FOUR RELEASES.
@@ -683,15 +695,20 @@ git log --format='%B' origin/main | grep -ohE 'PC-[A-Z0-9][A-Z0-9-]+' | sort -u 
 comm -12 /tmp/live.txt /tmp/closed_here                    # DISCHARGED, still live upstream
 comm -12 /tmp/live.txt /tmp/open_here                      # in flight
 comm -23 /tmp/live.txt <(sort -u /tmp/closed_here /tmp/open_here)   # untouched
-# control: the three MUST sum to the live denominator, or the partition is lying
+# control: the three sum to the live denominator PLUS the known overlap below -- never to the
+# denominator alone. DISCHARGED and IN-FLIGHT are NOT disjoint, so a bare sum reads as a partition
+# failure on a correct derivation. Compute the overlap and subtract it before judging:
+#   comm -12 /tmp/live.txt /tmp/closed_here | comm -12 - <(comm -12 /tmp/live.txt /tmp/open_here)
 comm -12 /tmp/live.txt /tmp/closed_here | comm -23 - /tmp/in_msgs   # discharged but INVISIBLE
 # TERMINAL -- discharged here AND closed in the consumer's ledger. The line above CANNOT see these.
 comm -12 /tmp/arch.txt /tmp/closed_here | wc -l
 ```
 
-Re-derived at v0.434.0 by running the commands: **9 DISCHARGED, 23 in flight, 33 untouched**,
-summing to 66, **0 discharged-but-unnamed**, and **22 TERMINAL**. The overlap the control catches
-is still the single `PC-S303-STUB-AUDIT-MARKER-...` id, subtracted from DISCHARGED. That unnamed line is a real
+Re-derived at v0.436.0 by running the commands: **13 DISCHARGED, 22 in flight, 32 untouched**,
+summing to **67 against a live denominator of 65**, **0 discharged-but-unnamed**, and **24
+TERMINAL**. The two-over is EXPECTED and both causes are named — `PC-S303-STUB-AUDIT-MARKER-...`
+and `PC-S307-AWK-CANT-OPEN-FILE-...`, each cited by an archived entry AND by a live one. Do not
+read that sum as a partition failure; compute the overlap, as the control above now says. That unnamed line is a real
 failure mode and not a formality: a fix that ships without its id in the commit MESSAGE discharges
 the candidate and produces no row anywhere, so the consumer never learns of it.
 
@@ -1443,7 +1460,8 @@ so no block written before it changes verdict.
    `PC-S305-CHECK-17-BYPASS-CONSUMER-CASES-V8-V9-AND-A-PASSING-CONTROL`). **Read each
    candidate's own status line in the consumer's ledger before treating it as work** — this
    block has asked for that since batch 1 and it still has not been done for the S312 cluster.
-   The most recent filings (`2026-08-26`/`2026-08-27`, the `PC-S337-*` and `PC-S305-*` rows) are
+   The most recent filings (all `2026-08-26` — there are no `2026-08-27` rows; the
+   `PC-S337-*` and `PC-S305-*` ones) are
    the freshest and the likeliest to still be real.
 
    **REPLACE YOUR SUBJECT'S RECEIPT BEFORE YOU LAND ITS FIX. NOT OPTIONAL, AND NEVER ONCE SKIPPED
