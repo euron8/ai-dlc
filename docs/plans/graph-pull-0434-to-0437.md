@@ -1,3 +1,12 @@
+# SUPERSEDED — DO NOT EXECUTE. Follow `docs/plans/graph-pull-0434-to-0438.md` instead.
+
+**Superseded before it ran.** `v0.438.0` added a RULEBOOK file (`steps/route.md`) to this
+range, so the pull is no longer one leg and this file's Done-when 1 — the stamp reading
+`0.437.0` — can no longer be met: the skill resolves `theirs` at run time and now delivers
+`0.438.0`. Superseded rather than patched, because the RANGE changed, which is the condition
+action 9 below names. **Its rehearsal is not wasted — that range is now LEG 1 of the
+successor, and the gate names the stop itself.**
+
 # Pull the graph consumer from 0.434.0 to 0.437.0
 
 ## RESUME HERE
