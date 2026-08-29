@@ -6,9 +6,23 @@
 current state. Everything under `## Rehearsal` is an EXPECTATION measured before the run, not a
 guarantee, and `## Discharge` is empty until the run reports.
 
-**Status: WRITTEN, REHEARSED, NOT STARTED.** Asking for this file is not the act of dispatching the
-run — **do not start until the operator says to start.** A previous deferral does not carry forward
-as approval, and neither does the existence of this paragraph.
+**Status: AUTHORIZED — PHASE 1 MAY START.** The operator authorized this pull on 2026-08-29 and
+named `graph-70`, rooted in `/Users/n8/git/graph`, as the executor. **That decision covers PHASE 1
+and nothing else.**
+
+**PHASE 2's apply is a SEPARATE approval and this line does not carry it.** Present it and stop, per
+numbered action 4.
+
+**THIS AUTHORIZATION IS SPENT THE MOMENT THIS RUN REPORTS.** It names one range, one executor and
+one date. It does not carry to the next range, and a later session reading this paragraph has not
+been told to start anything — the standing ruling in `.claude/rules/operator-rulings.md` governs
+again from that point.
+
+An earlier revision of this block read `WRITTEN, REHEARSED, NOT STARTED` with `do not start until
+the operator says to start`. The executor read it and correctly declined to run, because the
+authorization was recorded in `docs/plans/graph-ledger-full-drain.md` and never in this file. **The
+authorization belongs in the file that gets followed**, which is why it is here rather than in the
+dispatching message.
 
 **IT SUPERSEDES `docs/plans/graph-pull-0434-to-0437.md`, WHICH MUST NOT BE EXECUTED.** That file was
 written and rehearsed for a machinery-only range, and `v0.438.0` then added a RULEBOOK file to it.
