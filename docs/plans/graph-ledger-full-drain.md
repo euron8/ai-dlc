@@ -133,6 +133,15 @@ weakness in its own third receipt arm and tells you how to replace it; read that
 The revisit condition the previous revisions tracked — *"a second release accumulates"* — has now
 re-fired. **Reporting it is the ceiling. Do not write a runbook, and do not dispatch one.**
 
+**THE OPERATOR WAS ASKED AT THE CLOSE OF BATCH 24 AND RULED: BANK IT, DO NOTHING.** No pull, no
+runbook. **That ruling is about the 0.438.0 → 0.440.0 gap and it does not pre-authorize anything
+later** — re-measure and re-report each batch, and ask again rather than reading this as a standing
+answer. The reasoning, recorded so it is not re-litigated: the divergence is real but its blast
+radius is the readability of a `NAMED-UPSTREAM` row an operator reads by hand — it changes no
+apply, no gate and no push — while the range replaces the reconcile machinery a LIVE sprint is
+mid-execution on. **A YES on the second test is not by itself a reason to pull.** Weigh what the
+divergence COSTS against what the consumer is DOING, and put both in the question.
+
 **THE SECOND TEST SAYS YES, FOR THE FIRST TIME IN THIS PROGRAM.** Installed vs distribution
 `ledger-reverify.sh`, both run against a SCRATCH COPY of the consumer's committed tree with its own
 stamp's `commit` as base, both with their siblings beside them so an absent `lib.sh` cannot masquerade
