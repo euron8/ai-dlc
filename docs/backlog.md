@@ -3318,3 +3318,54 @@ one, and 9 if the hook or its `jq` reads cannot be located, so a reshaped hook r
 precondition rather than a false close.
 
 verify: sh f=core/hooks/ai-dlc-acknowledge.sh; [ -f "$f" ] || exit 9; r=$(grep -oE 'jq -r [^|]*\.[a-z_.]+' "$f" | grep -oE '\.[a-z_][a-z_.]*' | sort -u); [ -n "$r" ] || exit 9; printf '%s\n' "$r" | grep -q '^\.tool_name$' || exit 9; printf '%s\n' "$r" | grep -qE '^\.(subagent|agent_type|agent_id|parent_session_id|invoked_by)' && exit 0; exit 1
+
+## BL-127 — a fixture is skipped by the read-set map on exactly the change that breaks it
+
+**`.ai-dlc-fixture-readsets.tsv` decides which fixtures a push runs, and a MAPPED fixture whose row
+omits a file its `run.sh` actually opens is skipped on the one change most likely to break it.** The
+fail-closed arm in `.githooks/pre-push` rescues only UNMAPPED fixtures — a mapped row with a hole
+is trusted, so the hole is silent.
+
+**Measured on the working tree, filtered to files that really exist under `core/hooks/`: 20
+(fixture, hook) pairs across 15 distinct fixtures.** Control in the same derivation: the map does
+carry hook paths — `ai-dlc-pause.sh` appears in 35 rows — so a zero would have meant the grammar,
+not the corpus.
+
+The instance that motivated this entry: **`pause-hook-origin` parses `ai-dlc-continue.sh` at four
+sites and does not list it.** That fixture owns the `cat > "$LOG_FILE" <<'EOF'` log legend, 2860
+bytes required byte-identical across FIVE hooks, and it is the only thing guarding that invariant.
+A push touching only `ai-dlc-continue.sh` does not select it. `v0.441.0` edited that hook and
+passed only because the release was gated with `AI_DLC_FIXTURE_NO_SKIP=1` by hand.
+
+**THE FALSE-POSITIVE SET IS NOT MEASURED, AND MEASURING IT IS THE FIRST THING THIS ENTRY OWES.**
+"Parses" here means the `run.sh` mentions the basename, and at least one hit is known to be
+path-as-data rather than a read — `layer-readopt-gate` passes `hooks/ai-dlc-continue.sh` as an
+ARGUMENT to the override-registration script and never opens it. So 20 is a CEILING on the real
+population, not a count of defects, and this entry must not be closed on a fix whose FP set was
+never taken. The discriminator is whether the path is OPENED, which a mention-grep cannot see.
+
+**Do NOT fix this by hand-editing 20 rows.** The map is trace-derived; hand-patching it puts a
+second, drifting declaration beside the derivation and the next regeneration silently reverts it.
+The fix belongs at the point the map is GENERATED, or in an arm that fails the push when a mapped
+fixture's row omits a `core/hooks/` path its `run.sh` opens — which is the same shape as the
+existing bidirectional joins and is why the receipt below keys on an arm existing rather than on
+the count reaching zero.
+
+**A count-reaching-zero receipt would be unattainable and is deliberately not used.** Until the FP
+set is enumerated, some of the 20 are legitimate, so "the gap is 0" is a criterion that can never
+go green — the documented failure mode for acceptance criteria in this repo.
+
+Discovered while shipping `v0.441.0`, which addressed the reference consumer's
+`PC-S307-CONTINUE-HOOK-CANNOT-DISTINGUISH-A-DIRECTED-SESSION-FROM-AN-UNATTENDED-ONE`. Not filed by
+that consumer and carries no `PC-` id of its own; it is an ai-dlc-internal discovery and ranks
+below any PC-backed entry under the provenance-first rule.
+
+**Tiered DEFECT.** It does not corrupt anything; it removes a guard silently, and the symptom of a
+missing guard is a green push.
+
+The receipt is STRUCTURAL: it exits 1 while no arm in `scripts/validate-enforcement-map.sh` binds a
+fixture's read-set row to the `core/hooks/` paths its `run.sh` resolves, 0 once one does, and 9 if
+the map or the read-set file cannot be located, so a relocated map reports a moved precondition
+rather than a false close.
+
+verify: sh m=scripts/validate-enforcement-map.sh; r=.ai-dlc-fixture-readsets.tsv; [ -f "$m" ] || exit 9; [ -f "$r" ] || exit 9; grep -q ai-dlc-pause.sh "$r" || exit 9; h=$(grep -cE "^# --- I[0-9]+[a-z]?:" "$m"); [ "${h:-0}" -ge 10 ] || exit 9; grep -qiE "^# --- I[0-9]+[a-z]?:.*(read-set|readset)" "$m" && exit 0; exit 1
