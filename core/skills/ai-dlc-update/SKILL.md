@@ -230,6 +230,22 @@ prose is itself generated rather than composed.
    `seed.sh` as well as `run.sh` (a fixture commonly resolves the tooling path in its seed,
    so a run.sh-only derivation misses it).
 
+   **The fixture term has a SECOND half, and the first cannot see it: every
+   `core/fixtures/<dir>/` THE DIFF ITSELF TOUCHES.** The grep above runs over the fixtures
+   and keys on machinery that MOVED, so a fixture the pull REPAIRS — one whose only change
+   is its own `run.sh` or `seed.sh` — names no moved machinery path and is outside the slice
+   by construction. The consumer's pre-push runs the WHOLE suite, not the slice, so its
+   unrepaired copy stays red and blocks the very push this cycle is making. Measured over 69
+   release-to-release ranges of the distribution: **16 carry at least one SHIPPING fixture in
+   exactly that state**. Two exclusions, both read AT `theirs`, and both stated as the
+   ENFORCER spells them rather than as a paraphrase: a dir carrying `.dist-only` never ships,
+   and a dir with **no `run.sh` at `theirs`** has nothing to write. That second one is not
+   "a dir the diff deletes" — a dir that keeps a README and loses only its driver satisfies
+   it — and deriving this term by hand from the looser wording yields a set the runner then
+   accepts as over-complete. `reconcile/self-update-fixtures.sh` joins this term against the
+   set you pass it and REFUSES the run when one is missing, so it is enforced rather than
+   remembered.
+
    **Against the CHANGED paths, not the whole machinery list — the difference is two orders
    of magnitude.** `machinery:` carries `core/scripts/ai-dlc/*`, which the substitution below
    turns into *every distribution script*; and a fixture's whole job is to invoke a validator,
@@ -391,8 +407,15 @@ prose is itself generated rather than composed.
      **A derived fixture whose consumer copy differs from `base` is a consumer edit — never
      overwrite it.** Report the path, leave the file, and continue the cycle. Only
      `.claude/skills/ai-dlc-update/**` is overwrite-safe by declaration; a fixture is not,
-     and the derived set is grepped from the fixtures rather than from the diff, so it names
-     fixtures this pull does not change.
+     and the derived set's FIRST term is grepped from the fixtures rather than from the diff,
+     so it names fixtures this pull does not change.
+
+     **KEEP IT IN THE DERIVED SET ANYWAY. "Leave the file" is about the WRITE, never about
+     the NAMING, and reading it as both makes the coverage join refuse a legitimate state.**
+     `reconcile/self-update-fixtures.sh` joins the diff-touched term against the set you pass
+     it, so a fixture dropped from that set because you declined to overwrite it comes back as
+     an omission and exits 2 on a pull that did nothing wrong. Name every derived fixture;
+     write only the ones the consumer has not edited.
 
      **A red derived fixture STOPS the self-update; it does not get pushed and sorted out
      later.** The machinery slice closes the common dependency case by construction — a

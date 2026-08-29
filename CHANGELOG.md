@@ -15,6 +15,80 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.437.0] - 2026-08-28
+
+### The self-update slice could not carry a fixture the pull itself repairs
+
+`PC-S318-SELF-UPDATE-SLICE-CANNOT-CARRY-THE-FIXTURE-FIX-THAT-UNBLOCKS-ITS-OWN-PUSH`, carried by
+`BL-049`. Step 2 of `ai-dlc-update` derives the self-update slice's fixture term by grepping the
+FIXTURES for machinery paths the diff moved. A fixture the pull REPAIRS — one whose only change is
+its own `run.sh` or `seed.sh` — names no moved machinery path, so it is outside the slice by
+construction, and nothing downstream recovers it:
+`reconcile/self-update-fixtures.sh` took the set as an argument and refused to derive anything.
+
+**The consequence is a wedge, not a gap.** The consumer's pre-push runs the WHOLE suite, not the
+slice, so the unrepaired copy stays red and blocks the very push the self-update is making — the
+bootstrapping shape, where the broken version is the one that runs the delivery.
+`reconcile/self-update-gate.sh` is correct to return OK throughout: it is a differential over
+individual scripts, and a pre-existing red cannot move a differential.
+
+**The reach was measured, not assumed.** Over the last 69 release-to-release ranges of this
+distribution, **16 carry at least one SHIPPING fixture directory that the range changes and that
+the grep term cannot see** — 21 directory-instances, `.dist-only` dirs excluded. Unfiltered the
+figures are 29 ranges and 47 instances.
+
+Step 2's fixture term is now a UNION: the existing grep term, PLUS every `core/fixtures/<dir>/`
+the diff itself touches, with the same two exclusions read AT `theirs` — a `.dist-only` dir never
+ships, and a dir the diff DELETES has nothing to write.
+
+**The second term is JOINED rather than remembered.** `reconcile/self-update-fixtures.sh` now
+derives that term itself, from `base..theirs` in the distribution checkout it is already handed,
+and refuses the run — exit 2, with the omitted directories named on stderr and in its log — when
+the set step 2 passed omits one. That is one derived side against one passed-in side, not the
+duplicate derivation the file's header refuses; the grep term is still step 2's alone.
+
+**Two states now refuse rather than pass, and both were found by probing the arm rather than by
+reading it.** An unresolvable `base..theirs` is exit 2, because a coverage join that did not run
+reads exactly like one that found nothing. And a `$DIST` whose `theirs` carries no `core/fixtures`
+tree is exit 2, because it returns an EMPTY diff — the join then reports nothing having OBSERVED
+nothing, which is indistinguishable from a complete set. That second state is reachable, not
+theoretical: a caller resolving `$DIST` by walking up from a CONSUMER-layout copy of the script
+lands on the consumer root, which is a git repo with no `core/fixtures`.
+
+The parameter carrying the distribution checkout was documented as "recorded in the header only"
+and is now load-bearing, which is what lets the join exist without a second path table.
+
+**THE BOOTSTRAPPING HAZARD WAS MEASURED FOR THIS RELEASE AND DOES NOT BITE.** `BL-049` warns that a
+fix shipping inside the step that is broken is classified by the unfixed derivation. Here the
+changed set includes `reconcile/self-update-fixtures.sh`, which IS a machinery path, and
+`core/fixtures/self-update-fixture-log/` NAMES it — five times in `run.sh`, once in `seed.sh`,
+against 0 for an impossible token in the same files. So the OLD term-a-only derivation reaches this
+release's own fixture, and the pull that delivers the fix can carry it. Everything here is machinery
+by `setup-sites.md`'s list; no rulebook path is in the change.
+
+`BL-049`'s receipt was REPLACED before the fix landed, and the replacement was itself replaced. The
+original keyed on two prose sentences and closed if either changed. The first replacement drove the
+runner against a seeded two-commit repository — but its seed held no `.dist-only` dir, no
+deleted-at-theirs dir and no untouched dir, so the whole EXEMPTION half went unexercised and five
+wrong runners scored CLOSE, four of which WEDGE the self-update on correct input. The seed that
+ships carries six directories, and the omitting run names the SAME NUMBER of fixtures as the
+control, because a count cannot tell a complete set from an incomplete one of the same size.
+
+**The third replacement fixed an error in the opposite direction, which is the worse one.** The
+`SKILL.md` conjunct was a literal uppercase `grep -qF`, and a literal phrase test is at once too
+STRICT and too WEAK: the same fix with step 2's sentence merely lowercased scored STILL-LIVE — a
+receipt reporting a shipped fix as unshipped — while unfixed prose plus a bare `<!-- … -->` comment
+carrying the phrase scored CLOSE. Thirteen implementations were finally scored: five correct
+accepted, eight wrong rejected.
+
+**The covering fixture went from 10 assertions to 28**, with five mutants each failing only its own
+arm. Two properties in it are worth naming. Replacing the runner with `exit 0` fails 26 of the 28 —
+the two survivors read the SEED rather than the subject, which is the shape that tells an
+absence-shaped arm from a discriminating one. And the ref-resolution guard has exactly one input
+that kills it: a sha naming a TREE, which `rev-parse --verify '<r>^{commit}'` rejects while
+`git diff <tree> <commit>` accepts, so with the peel gone the join runs against a base that never
+resolved and reports green. Seeded only with bogus refs, that mutant comes back alive.
+
 ## [0.436.0] - 2026-08-28
 
 ### The autonomous self-update had no disposition for a machinery path the consumer had edited

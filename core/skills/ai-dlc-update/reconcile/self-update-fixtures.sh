@@ -23,22 +23,38 @@
 # re-learning: prefer a mechanism the step INVOKES over a rule it must remember.
 #
 # Usage: self-update-fixtures.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root> <fixture>...
-#   dist-repo      path to the distribution git checkout (recorded in the header only)
+#   dist-repo      path to the distribution git checkout. READ AS A REPO, not decoration:
+#                  the coverage join below derives its side from `base..theirs` in it.
 #   base-sha       the `commit` field from the consumer's .ai-dlc-version stamp
 #   theirs-ref     target upstream ref
 #   consumer-root  the consumer project root (contains .claude/)
 #   fixture...     the derived covering fixture DIRECTORY NAMES, as step 2 derived them
 #
-# The fixture set is passed IN rather than re-derived here. Step 2 greps it from the
-# fixtures themselves, and a second derivation in this file would be two derivations to
-# keep in agreement — the exact drift `lib.sh` exists to end for the section resolver.
+# Step 2 derives that set in TWO terms and this file treats them differently.
+#
+# The FIRST term — fixtures whose `*.sh` name a machinery path the diff moved — is passed
+# IN rather than re-derived here. It is grepped from the fixtures themselves, and a second
+# derivation of it in this file would be two derivations to keep in agreement — the exact
+# drift `lib.sh` exists to end for the section resolver.
+#
+# The SECOND term — the fixtures the diff ITSELF touches — is derived HERE, and joined
+# against the named set rather than added to it. That is not the duplication the paragraph
+# above refuses: one side comes from `base..theirs`, the other is what step 2 passed, and a
+# disagreement is the finding. It exists because the first term cannot see a fixture the
+# pull REPAIRS: such a fixture's only change is its own driver, so it names no moved
+# machinery path and falls outside the grep by construction — while the consumer's pre-push
+# runs the WHOLE suite, so the unrepaired copy stays red and blocks the very push this
+# cycle is making. Measured over 69 release-to-release ranges of the distribution: 16 carry
+# at least one SHIPPING fixture in exactly that state.
 #
 # Output: a per-fixture verdict line on stdout, then the log path.
 # Exit:   0 all green · 1 at least one red · 2 the harness could not run
-#         (no fixtures named, fixture root underivable, log unwritable). A run that
-#         could not happen must NOT exit 0: "no failures" and "no assertions" are the
+#         (no fixtures named, fixture root underivable, log unwritable, the `base..theirs`
+#         range unresolvable, or the named set omitting a fixture the diff changes). A run
+#         that could not happen must NOT exit 0: "no failures" and "no assertions" are the
 #         same byte to the caller, and this whole file exists because that difference
-#         was invisible once already.
+#         was invisible once already. An INCOMPLETE set is the same class — a slice missing
+#         the fixture that guards it reports green over the gap.
 set -u
 
 DIST="${1:?usage: self-update-fixtures.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root> <fixture>...}"
@@ -99,6 +115,95 @@ mkdir -p "$OUT_DIR" 2>/dev/null || { echo "self-update-fixtures: cannot create $
   echo "# Nothing below is reproducible from the tree once that has happened."
   echo ""
 } >> "$LOG"
+
+# --- The COVERAGE join: every fixture the DIFF changes must be in the named set ----------
+# One side derived here from `base..theirs`, the other passed in by step 2. Run BEFORE the
+# fixtures, because an incomplete set that runs green is the state this arm exists to refuse
+# and running it first would only produce a plausible green above the finding.
+#
+# THE TERM IS JOINED AGAINST THE NAMED SET, NEVER ADDED TO IT, and the reason is that this
+# file cannot write a fixture into the consumer — only step 2's slice can, and nothing here
+# copies into `$CONSUMER`. So ADDING a diff-touched dir to the run set would execute the
+# consumer's STALE copy: red with no remedy, because nothing here can reach step 2 to tell it
+# what to carry, or green over a repair that was never delivered — which is the
+# "no failures and no assertions are the same byte" collapse this whole file exists to refuse.
+#
+# Both refs are resolved first. An unresolvable range means the join did not run, and a join
+# that did not run reads exactly like one that found nothing — so it is exit 2, never a
+# silent skip. In the real cycle `$DIST` is the checkout the slice was computed from and
+# both refs are the ones that computed it, so this arm is unreachable on correct input.
+for r in "$BASE" "$THEIRS"; do
+  git -C "$DIST" rev-parse --verify --quiet "${r}^{commit}" >/dev/null 2>&1 && continue
+  echo "self-update-fixtures: cannot resolve '${r}' in $DIST, so the diff-side coverage join" >&2
+  echo "  could not run. A coverage check that did not run reads exactly like one that passed." >&2
+  { echo "COVERAGE: UNRESOLVABLE — '${r}' does not name a commit in $DIST. Nothing was run."; } >> "$LOG"
+  exit 2
+done
+
+# AND `$DIST` MUST BE THE DISTRIBUTION, not merely a git repo. A checkout with no
+# `core/fixtures/` at `theirs` returns an EMPTY diff, `uncovered` stays empty, and the join
+# reports nothing having observed nothing — a pass that is indistinguishable from a complete
+# set. That state is reachable, not theoretical: a caller resolving `$DIST` by walking up from
+# a CONSUMER-layout copy of this script lands on the consumer root, which is a git repo whose
+# `theirs` carries no `core/fixtures` tree.
+#
+# IT IS THE PAIR THAT CLOSES THIS, NOT THIS ARM ALONE. This one asks whether the repo has the
+# right SHAPE; the ref resolution above asks whether it has the right HISTORY, `$BASE` being
+# the consumer's own stamp sha. Either alone admits a wrong repo that satisfies it. Do NOT
+# also require the diff-side set to be NON-EMPTY: a pull touching no fixture at all is an
+# ordinary pull, and failing it would be a check firing on correct data.
+if ! git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures" 2>/dev/null; then
+  echo "self-update-fixtures: '${THEIRS}' in $DIST has no core/fixtures tree, so \$DIST is not" >&2
+  echo "  the distribution and the coverage join would pass over an empty set. Nothing was run." >&2
+  { echo "COVERAGE: WRONG-REPO — '${THEIRS}:core/fixtures' does not resolve in $DIST."; } >> "$LOG"
+  exit 2
+fi
+
+# The diff is taken into a variable, not straight into the loop, so its STATUS is readable:
+# inside a `$( )` fed to a heredoc it would be lost to a subshell, and a diff that failed
+# would arrive as an empty set — the coverage join reporting nothing to cover, which is the
+# exact silent pass the ref resolution above refuses.
+cov_raw="$(git -C "$DIST" diff --name-only "$BASE" "$THEIRS" -- core/fixtures/)" || {
+  echo "self-update-fixtures: git diff ${BASE}..${THEIRS} failed in $DIST, so the diff-side" >&2
+  echo "  coverage join could not run. Nothing was run." >&2
+  { echo "COVERAGE: UNRESOLVABLE — git diff ${BASE}..${THEIRS} failed in $DIST."; } >> "$LOG"
+  exit 2
+}
+
+# Exemptions, and each one is a state where the slice is RIGHT to omit the directory:
+#   `.dist-only` at theirs — never shipped, so it cannot exist on a consumer to run;
+#   no `run.sh` at theirs  — deleted upstream, so there is nothing to write.
+# Both are read AT THEIRS. Reading them from the distribution checkout instead answers for
+# whatever is on disk, which is a different tree from the one being delivered.
+#
+# The `grep` before the `sed` is not decoration: a path directly under `core/fixtures/` with
+# no directory component does not match the substitution, and `sed` passes a non-match through
+# UNCHANGED — so the whole path would enter the set as a bogus directory name. It would then
+# be swallowed by the deleted-upstream exemption and report as nothing at all.
+uncovered=""
+while IFS= read -r d; do
+  [ -n "$d" ] || continue
+  git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${d}/.dist-only" 2>/dev/null && continue
+  git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${d}/run.sh" 2>/dev/null || continue
+  case " $* " in *" ${d} "*) continue ;; esac
+  uncovered="$uncovered $d"
+done <<COVEOF
+$(printf '%s\n' "$cov_raw" | grep -E '^core/fixtures/[^/]+/' \
+  | sed -E 's#^core/fixtures/([^/]+)/.*#\1#' | sort -u)
+COVEOF
+
+if [ -n "$uncovered" ]; then
+  { echo "COVERAGE: the diff changes these shippable fixtures and the named set omits them:"
+    for d in $uncovered; do echo "  $d"; done
+    echo ""; } >> "$LOG"
+  echo "self-update-fixtures: the slice omits fixtures this diff CHANGES:${uncovered}" >&2
+  echo "  Step 2's first fixture term greps the fixtures for machinery paths the diff moved." >&2
+  echo "  A fixture the pull REPAIRS names none of them, so that term cannot see it — and the" >&2
+  echo "  consumer's pre-push runs the whole suite, so its unrepaired copy blocks the push this" >&2
+  echo "  cycle is making. Add the diff-touched fixtures to the slice and re-run." >&2
+  echo "  log: $LOG" >&2
+  exit 2
+fi
 
 n_run=0; n_ok=0; n_fail=0; n_missing=0; reds=""
 for name in "$@"; do

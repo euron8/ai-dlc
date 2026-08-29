@@ -2039,8 +2039,9 @@ Discharges the consumer entry `extensions/roles/dev-push.md` at pinned ledger li
 verify: manual
 ## BL-049
 
-**The self-update slice cannot carry a fixture the pull itself fixes, because no derivation
-anywhere reads the diff for fixtures.** `core/skills/ai-dlc-update/SKILL.md:215-217` defines the
+**The self-update slice cannot carry a fixture the pull itself fixes, because ~~no derivation
+anywhere reads the diff for fixtures~~ THE FIXTURE TERM OF THE SLICE does not.**
+`core/skills/ai-dlc-update/SKILL.md:215-217` defines the
 slice's fixture term as "every `core/fixtures/<dir>/` whose `*.sh` names one of the machinery
 paths **this diff actually touched**", and `:355` states the exclusion outright — "the derived set
 is grepped from the fixtures rather than from the diff, so it names fixtures this pull does not
@@ -2068,19 +2069,99 @@ documented OK.
 step 2, so the release carrying this fix is classified by the unfixed derivation. The fix has to
 land machinery-only, or the first pull that needs it is the one that cannot deliver it.
 
-The receipt is a proxy and the positive form was measured and rejected. The obvious positive
-predicate — a line joining `diff` to `core/fixtures` — **exits 0 today**, because `SKILL.md:216`
-already carries both tokens on one line. So the anchor is the pair of sentences that STATE the
-diff-independence, one in each of the two files that own it, and either one changing closes the
-entry. A quote-back inside a `~~strikethrough~~ **CORRECTED**` block — the correction form this
-very file already uses at `:267-269` — would keep it non-zero, which is the safe direction: it
-reports still-open rather than false-closing.
+**CORRECTED — THE FILING'S WIDEST SENTENCE WAS NEVER TRUE, AND IT SURVIVED FOUR RELEASES BECAUSE
+THE GREP THAT WOULD HAVE KILLED IT WAS POINTED AT THE WRONG LITERAL.** `preclassify.sh:295` runs
+`git -C "$DIST" diff --name-status "$BASE" "$THEIRS" -- core/`, and `core/fixtures/` is inside
+`core/`, so a derivation reading the diff for fixtures has existed all along — driven against a
+scratch copy of the reference consumer at `base=f0b8ddcc theirs=origin/main` it returns 10 rows,
+**5 of them `core/fixtures/` rows** with correct `tests/fixtures/` destinations. The entry's
+own measurement — "files joining a `git diff` to `core/fixtures` = 0" — scored that site a
+non-instance because the pathspec is the literal `core/`, never `core/fixtures`. What is true, and
+is the entry's actual subject, is narrower: **step 2's FIXTURE TERM does not read the diff**, and
+those preclassify rows are bucketed for the WRITE and never consulted when the fixture set is
+derived. The subject stands; the sentence that carried it did not.
+
+**Its line citations were all stale by the time the fix landed** — `SKILL.md:215-217`/`:355` are
+now `226-231`/`391-395`, the gate's OK arms are not `:332`/`:339`/`:406`, and `$HOOK` is not at
+`:317-319`. Named here rather than repaired in place, because the entry is a record of what was
+filed and the rotation is about to archive it.
+
+**THE REACH WAS MEASURED, AND IT IS NOT A CORNER CASE.** Over the last 69 release-to-release
+ranges of this distribution, **16 carry at least one SHIPPING fixture directory the range changes
+and the grep term cannot see** — 21 directory-instances. Unfiltered by `.dist-only` the figures are
+29 ranges and 47 instances. Derived by building the fixture→token map once at `HEAD` and
+intersecting it per range against the non-fixture `core/` paths that range changed; the map is
+taken at `HEAD` rather than per-range, so a fixture that named different tokens then is mis-scored
+and the figure is a floor rather than an exact count.
+
+**THE RECEIPT WAS REPLACED BEFORE THE FIX LANDED, AND THE ONE IT REPLACES WAS CLOSABLE BY PROSE.**
+The old receipt anchored on two sentences — one in each file — and either one changing closed it,
+so deleting a comment shipped nothing and reported CLOSE. The replacement DRIVES
+`reconcile/self-update-fixtures.sh` against a seeded two-commit repository in which the diff
+repairs a fixture that names no moved machinery path, and asks whether a named set OMITTING that
+fixture is accepted. It carries a positive control in the same invocation — the COMPLETE set must
+run green — so a run that died at one of the runner's four earlier exits reports 9 rather than a
+false close, and it keys on the runner's BEHAVIOUR rather than on any status word or path spelling.
+
+**BOTH HALVES ARE REQUIRED, AND A SCRIPT-ONLY FIX IS A WEDGE RATHER THAN A PARTIAL FIX.** The
+runner only ever REFUSES a set; it never produces one. So a runner that asserts coverage while
+step 2 still derives term (a) alone turns a silent gap into a hard stop on every range where the
+two disagree — independently measured at **35 of 159** ranges under strict path matching, 23 under
+basename matching, replicating this entry's 16-of-69 from a different sample. The receipt therefore
+carries a `SKILL.md` conjunct whose only job is to reject that spelling; the behavioural arm carries
+the weight, and the prose arm alone cannot close anything.
+
+**THE FIRST REPLACEMENT SEED WAS ITSELF DEFECTIVE, AND AN INDEPENDENT HAND FOUND IT BY BUILDING
+TWENTY-SEVEN IMPLEMENTATIONS RATHER THAN BY READING IT.** That seed held one repaired fixture and
+one named one — no `.dist-only` dir, no dir DELETED at theirs, and no present-but-untouched dir. So
+the entire EXEMPTION half of the fix was unexercised, and five wrong runners scored CLOSE:
+deleting both exemptions, reading them at `base`, reading them from the working tree, demanding
+every dir in the consumer's fixture root, and a pure ARITY test that read nothing at all. Four of
+those five WEDGE the self-update on correct input, which is a worse outcome than the defect.
+
+**The seed that stands carries six directories and one non-obvious property: the omitting run names
+the SAME NUMBER of fixtures as the control.** `lonely` is repaired and omitted, `named` is repaired
+and named, `distonly` gains its marker at theirs, `doomed` is deleted at theirs, `other` is
+untouched and named, `spare` is present at the consumer and never mentioned. Equal cardinality is
+what kills the arity implementation — a count cannot tell a complete set from an incomplete one of
+the same size — and the marker is written at THEIRS then removed from the working tree, which is
+what separates a read at `theirs` from a read at `base` or on disk.
+
+**AND THE SECOND REPLACEMENT WAS WRONG IN THE OTHER DIRECTION, WHICH IS THE WORSE ONE.** Its
+`SKILL.md` conjunct was a literal uppercase `grep -qF`, and a literal phrase test is simultaneously
+too STRICT and too WEAK. Measured: the same fix with step 2's sentence merely lowercased scored
+**STILL-LIVE** — a receipt that reports a shipped fix as unshipped — while `HEAD`'s unfixed prose
+plus a bare `<!-- … -->` comment carrying the phrase scored **CLOSE**. That is the
+closable-by-prose hazard reintroduced one level up, by the arm added to avoid it. The conjunct is
+now case-insensitive and rejects a match that sits inside an HTML comment.
+
+**A THIRD RUN WAS ADDED because the seed's `$DIST` was always well-formed**, so the WRONG-REPO arm
+was unexercised and deleting it scored CLOSE. The third run hands the runner a repository carrying
+`core/fixtures` at BASE and not at THEIRS, which separates the arm from the ref-resolution guard
+beside it: a repo with no such tree at all fails ref resolution first, and the two guards would
+then cover each other.
+
+Thirteen implementations were built and scored, not reasoned about. Accepted, all correct: the
+shipped fix **0**, `git diff-tree` instead of `git diff` **0**, refusal as `exit 1` **0**,
+`git show` instead of `cat-file -e` **0**, step 2's prose REWORDED **0**. Rejected, all wrong:
+pre-fix **1**, script-only **1**, prose-only **1**, arity-only **1**, a vacuous join whose result
+is never read **1**, the WRONG-REPO arm deleted **1**, unfixed prose plus a comment **1**, and — as
+control failures, because they refuse the CONTROL run — no exemptions **9**, exemptions at `base`
+**9**, exemptions at the working tree **9**, whole-suite **9**.
+
+**WHAT THIS RECEIPT STILL CANNOT DO, stated rather than left to be discovered.** Its `SKILL.md`
+half is a phrase anchor, not a behavioural test, because step 2's derivation is prose an agent
+executes and there is no program to drive. A wholesale rewrite of that sentence scores STILL-LIVE.
+That is accepted deliberately: dropping the arm instead accepts a SCRIPT-ONLY change, which turns
+this defect into a hard stop on 35 of 159 ranges. The live guard on the behavioural half is
+`core/fixtures/self-update-fixture-log`, which is not archived when this entry rotates, and it
+kills the WRONG-REPO deletion independently — measured.
 
 Discharges the consumer entry `PC-S318-SELF-UPDATE-SLICE-CANNOT-CARRY-THE-FIXTURE-FIX-THAT-UNBLOCKS-ITS-OWN-PUSH`
 at pinned ledger line 3413.
 
 
-verify: sh S=core/skills/ai-dlc-update/SKILL.md; F=core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh; grep -qF core/fixtures "$S" && grep -qF core/fixtures "$F" || { echo "CONTROL FAILED"; exit 9; }; grep -qF 'grepped from the fixtures rather than from the diff' "$S" && grep -qF 'passed IN rather than re-derived here' "$F" && exit 1; exit 0
+verify: sh R=core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh; S=core/skills/ai-dlc-update/SKILL.md; { [ -f "$R" ] && [ -f "$S" ]; } || { echo "CONTROL FAILED: subject absent"; exit 9; }; G="-c user.email=a@b -c user.name=n -c commit.gpgsign=false"; T=$(mktemp -d); C=$(mktemp -d); W=$(mktemp -d); git init -q "$T"; git init -q "$W"; for d in lonely named distonly doomed other spare; do mkdir -p "$T/core/fixtures/$d" "$C/tests/fixtures/$d"; printf 'exit 0\n' > "$T/core/fixtures/$d/run.sh"; printf 'exit 0\n' > "$C/tests/fixtures/$d/run.sh"; done; git -C "$T" add -A >/dev/null 2>&1; git -C "$T" $G commit -qm base >/dev/null 2>&1; B=$(git -C "$T" rev-parse HEAD); for d in lonely named distonly; do printf '# repaired\n' >> "$T/core/fixtures/$d/run.sh"; done; printf 'battery\n' > "$T/core/fixtures/distonly/.dist-only"; rm -rf "$T/core/fixtures/doomed"; git -C "$T" add -A >/dev/null 2>&1; git -C "$T" $G commit -qm theirs >/dev/null 2>&1; H=$(git -C "$T" rev-parse HEAD); rm -f "$T/core/fixtures/distonly/.dist-only"; mkdir -p "$W/core/fixtures/named"; printf 'exit 0\n' > "$W/core/fixtures/named/run.sh"; git -C "$W" add -A >/dev/null 2>&1; git -C "$W" $G commit -qm wbase >/dev/null 2>&1; WB=$(git -C "$W" rev-parse HEAD); rm -rf "$W/core"; printf 'x\n' > "$W/README"; git -C "$W" add -A >/dev/null 2>&1; git -C "$W" $G commit -qm wtheirs >/dev/null 2>&1; WH=$(git -C "$W" rev-parse HEAD); mkdir -p "$W/core/fixtures/named"; printf 'exit 0\n' > "$W/core/fixtures/named/run.sh"; bash "$R" "$T" "$B" "$H" "$C" lonely named other >/dev/null 2>&1; ctl=$?; bash "$R" "$T" "$B" "$H" "$C" distonly named other >/dev/null 2>&1; sub=$?; bash "$R" "$W" "$WB" "$WH" "$C" named other >/dev/null 2>&1; wr=$?; rm -rf "$T" "$C" "$W"; [ "$ctl" -eq 0 ] || { echo "CONTROL FAILED: the complete-and-exempt set did not run green (rc=$ctl)"; exit 9; }; [ "$sub" -eq 0 ] && exit 1; [ "$wr" -eq 0 ] && exit 1; M=$(grep -iE 'the diff itself touches' "$S" | grep -v '<!--'); [ -n "$M" ] || exit 1; exit 0
 ## BL-053
 
 **Core's two readers of an escalation's `**Status:**` field disagree on which line in an entry

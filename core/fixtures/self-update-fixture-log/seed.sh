@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 # Build a throwaway consumer tree for the self-update fixture runner.
 #
-# No git repository: `self-update-fixtures.sh` reads no history — it takes the base and
-# theirs strings for the log header only. Seeding a repo would make the fixture look like
-# it depends on one, and the next reader would preserve that dependency.
+# This tree is the CONSUMER half only. `self-update-fixtures.sh` now reads real history for
+# its coverage join, and the distribution repo it reads is built by `run.sh` — the two halves
+# are separate because the runner takes them as separate arguments and a consumer never
+# contains the distribution's git history.
+#
+# `touched-shippable` and `touched-named` exist here so the coverage parts can name every
+# diff-touched fixture and watch the run go GREEN. Without a consumer-side driver for them
+# the only reachable verdict would be MISSING, and "the join stood down" would be
+# indistinguishable from "the loop could not run".
 #
 # Prints the consumer root on stdout; the caller owns removing it.
 set -eu
@@ -39,6 +45,17 @@ cat > "$ROOT/tests/fixtures/cwd-probe/run.sh" <<'EOF'
 echo "cwd-probe ran from: $PWD"
 exit 0
 EOF
+
+# The two fixtures the seeded distribution's `base..theirs` range CHANGES and which are not
+# exempt. Named, they must let the run reach the loop; omitted, they must be refused.
+for f in touched-shippable touched-named; do
+  mkdir -p "$ROOT/tests/fixtures/$f"
+  cat > "$ROOT/tests/fixtures/$f/run.sh" <<EOF
+#!/usr/bin/env bash
+echo "$f: every assertion held"
+exit 0
+EOF
+done
 
 chmod +x "$ROOT/tests/fixtures"/*/run.sh
 printf '%s\n' "$ROOT"
