@@ -68,6 +68,13 @@
 #   SELF-UPDATE-UNDECIDED the differential could not attribute the failure. Report it; treat as
 #                         DEFER, because acting autonomously on an unattributable failure is the
 #                         one thing this gate exists to prevent.
+#   SELF-UPDATE-CARRY     ADVISORY, and it accompanies any verdict including OK. One row per
+#                         machinery path the consumer has DIVERGED on. It does not stop the
+#                         cycle; it removes that path from it. Step 2 writes none of them and
+#                         carries each to the step-7 gated apply, where apply.sh already emits
+#                         a WORKLIST semantic-merge row. A CARRY row beside an OK verdict means
+#                         "self-update the rest, hand this path to the operator" -- the case
+#                         step 2 previously had no disposition for at all.
 #   SELF-UPDATE-SAFE-STOP accompanies every DEFER: the furthest release in the range that DOES
 #                         self-update cleanly, so the operator can split the pull and land the
 #                         engine before it is used — or the explicit statement that no such
@@ -204,6 +211,113 @@ machinery_at_or_past() {
   # `--is-ancestor` is true for equality too, which is the "at" in "at or past".
   git -C "$DIST" merge-base --is-ancestor "$1" "$_sk" 2>/dev/null
 }
+
+# ---- ARM C: A MACHINERY PATH THE CONSUMER HAS DIVERGED ON ------------------------------
+# Step 2 justifies autonomy -- no operator gate, auto-merged PR -- on the declaration that the
+# skill's own files are overwrite-safe, and then writes the whole MACHINERY set from `theirs`.
+# For a machinery path the consumer has edited those two sentences conflict and the step used
+# to supply no rule, so the literal reading destroys the consumer's delta. Filed on the
+# reference consumer as PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH
+# after that tree's own `.githooks/pre-push` -- the fourth `machinery:` entry -- came back
+# BOTH-CHANGED->CLASSIFY on a live pull. The operator stopped and reasoned about it by hand;
+# nothing in the tooling would have.
+#
+# ADVISORY, NOT A VERDICT. This does not stop the cycle and must not: the remaining paths
+# self-update perfectly well. It removes paths FROM the cycle, one SELF-UPDATE-CARRY row each,
+# and step 2 carries them to the step-7 gated apply where `apply.sh` already emits a
+# `WORKLIST semantic-merge <path>` row. Deferring the whole slice instead would strand it for
+# a reason the operator-gated half already handles, which is the false positive this file's
+# header exists to warn about.
+#
+# THE BUCKET IS NOT RE-DERIVED HERE. `preclassify.sh` owns the base/theirs/ours comparison and
+# step 2 already calls it for the ALREADY-AT-THEIRS subtraction; a second implementation of
+# that rule is the one whose drift nobody finds. This arm runs it and filters.
+#
+# KEYED ON THE `->CLASSIFY` MARKER, NOT ON `BOTH-CHANGED`. That token is only the
+# modified-both-sides member. `BOTH-ADDED->CLASSIFY`, `UPSTREAM-DELETED+consumer-modified->CLASSIFY`
+# and `UPSTREAM-MOD+consumer-deleted->CLASSIFY` all carry consumer state on a machinery path,
+# and a subtraction spelled with the one bucket name overwrites three of the four cases while
+# reading as if it had fixed them. `RELOCATE-MOVE+consumer-edited` records a divergence without
+# the marker, so it is matched by name -- the only bucket that has to be.
+#
+# THAT KEY IS NOT INVENTED HERE. `apply.sh`'s own dispatch already reads the same marker the same
+# way -- its `*CLASSIFY*)` arm is what turns such a path into the `WORKLIST semantic-merge` row
+# this arm tells step 2 to carry it to. Keying on anything narrower would name a set the
+# downstream half does not agree with, which is how the two would drift apart silently.
+if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ]; then
+  # Suppressed under --safe-stop for COST, not correctness: that walk reads only DEFER and
+  # UNDECIDED, so an advisory row cannot change any answer it computes, and running this once
+  # per release candidate in the range buys nothing. Same reasoning as advise_safe_stop's guard.
+
+  # The machinery globs, read from the co-located manifest rather than listed here -- the list
+  # gaining an entry is exactly when this arm matters most. `core/scripts/ai-dlc/*` is the one
+  # CONSUMER-shaped entry: upstream the path is `core/scripts/<name>`, and matching a dist path
+  # against it directly yields nothing at all, silently. SKILL.md documents the same
+  # substitution for the same reason.
+  #
+  # `set -f` IS LOAD-BEARING AND ITS ABSENCE IS SILENT. These entries are git PATHSPECS, and an
+  # unquoted `$C_GLOBS` in a `for` is subject to shell pathname expansion first -- so
+  # `core/rules/*.md` expands against the CWD before git ever sees it, and every glob entry
+  # degrades to whatever happened to be on disk there. Measured while building this arm: the
+  # machinery set collapsed from thirteen globs to the ONE entry that carries no glob character,
+  # the arm went quiet on two real divergences, and nothing anywhere reported an error.
+  #
+  # RESOLVED AGAINST BOTH REFS, NOT THE WORKING TREE. A machinery path DELETED at `theirs` is
+  # absent from a `ls-files` of the checkout, and that path is exactly the
+  # `UPSTREAM-DELETED+consumer-modified->CLASSIFY` case -- the one where the consumer's copy is
+  # the only copy left. Keying on the checkout drops it, quietly, and it is the divergence with
+  # the most to lose.
+  #
+  # `ls-files --with-tree`, NOT `ls-tree`. These entries are the manifest's own glob dialect and
+  # only the index commands speak it: `ls-tree` matches a pathspec by literal prefix, returns
+  # EMPTY for every globbed entry, and reports no error while doing it -- and `:(glob)` magic is
+  # rejected by that command outright. `--with-tree=<ref>` gives ls-files semantics against an
+  # arbitrary ref, which is what resolving each entry at BASE and at THEIRS requires.
+  C_MANIFEST="$(dirname "$SELF_SRC")/setup-sites.md"
+  C_PATHS=""
+  if [ -f "$C_MANIFEST" ]; then
+    C_GLOBS="$(awk '/^machinery:/{f=1;next} f&&/^  - /{sub(/^  - /,"");print;next} f{exit}' "$C_MANIFEST")"
+    set -f
+    for c_g in $C_GLOBS; do
+      case "$c_g" in core/scripts/ai-dlc/*) c_g="core/scripts/${c_g#core/scripts/ai-dlc/}" ;; esac
+      C_PATHS="$C_PATHS
+$(git -C "$DIST" ls-files --with-tree="$BASE" -- "$c_g" 2>/dev/null)
+$(git -C "$DIST" ls-files --with-tree="$THEIRS" -- "$c_g" 2>/dev/null)"
+    done
+    set +f
+    C_PATHS="$(printf '%s\n' "$C_PATHS" | grep -v '^$' | sort -u)"
+  fi
+
+  C_PRE="$(dirname "$SELF_SRC")/preclassify.sh"
+  if [ -n "$C_PATHS" ] && [ -f "$C_PRE" ]; then
+    c_out="$(bash "$C_PRE" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null || true)"
+
+    # A SILENT ZERO HERE IS THE FAILURE MODE THIS ARM WOULD OTHERWISE HAVE. preclassify
+    # printing nothing reads exactly like "no path diverged", and both produce no CARRY row.
+    # So the emptiness is only believed when the range is genuinely empty; a non-empty
+    # base..theirs with no buckets at all means the derivation did not run, and this gate's
+    # own doctrine for an unattributable failure is UNDECIDED -- reported, treated as defer,
+    # never silently OK.
+    if [ -z "$c_out" ] \
+       && [ -n "$(git -C "$DIST" diff --name-only "${BASE}..${THEIRS}" -- core/ 2>/dev/null)" ]; then
+      emit SELF-UPDATE-UNDECIDED "preclassify.sh" "the bucket derivation returned no rows while ${BASE}..${THEIRS} changes core/ paths, so whether any machinery path is consumer-modified is UNKNOWN. An empty bucket set reads exactly like a clean one; a gate that cannot read its own subject must not return OK."
+    else
+      while IFS="$(printf '\t')" read -r c_st c_path c_cons c_bucket; do
+        [ -n "${c_bucket:-}" ] && [ -n "${c_path:-}" ] || continue
+        case "$c_bucket" in
+          *'->CLASSIFY'*|*consumer-edited*) ;;
+          *) continue ;;
+        esac
+        grep -qxF "$c_path" <<EOF || continue
+$C_PATHS
+EOF
+        emit SELF-UPDATE-CARRY "$c_path" "the consumer's copy at ${c_cons:-?} has DIVERGED (status ${c_st:-?}, bucket $c_bucket). This is a machinery path, so the self-update would write \`theirs\` over it autonomously and auto-merge the result. Do NOT write it: drop it from the slice, report it, and carry it to the step-7 gated apply, which emits a WORKLIST semantic-merge row for it. The rest of the slice is unaffected by this row."
+      done <<EOF
+$c_out
+EOF
+    fi
+  fi
+fi
 
 # ---- THE MACHINERY SLICE CANNOT ALWAYS STAND ALONE -------------------------------------
 # Step 2's stated premise is "a fixture's subject is always machinery". It is FALSE, and the

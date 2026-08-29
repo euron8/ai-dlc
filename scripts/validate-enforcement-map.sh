@@ -299,7 +299,17 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   ONE.** The two additions in consecutive releases cost +7 and +13, both single-file
 #   directories, so whatever drives the difference is not the file count. Do not budget a future
 #   directory at either figure -- measure it. Spread top is 7170, headroom the usual 6 over it.
-FORK_BUDGET=7192
+#   RE-MEASURED at v0.436.0, and this one is NOT a new directory -- the corpus still holds 179 of
+#   them. `core/fixtures/self-update-gate/run.sh` grew by 276 lines of new arms and the reading
+#   went 7192 -> 7195. ATTRIBUTED, not assumed: checking that ONE file back out to origin/main and
+#   re-running the subject returned exactly 7192, so the +3 is that file's added content and
+#   nothing else in the release. **A DIRECTORY IS NOT THE ONLY UNIT THAT COSTS FORKS HERE** -- the
+#   three previous raises all read as per-directory because every one of them happened to add a
+#   directory, and a reader budgeting the next change on that pattern would price a large arm
+#   addition at zero. Spread top is 7195, and the headroom is deliberately NOT the usual 6: the
+#   arm reported 7195 against a spread of 7194-7195, so 7195 is the top of a live spread rather
+#   than a stable point, and a budget below the spread top fails on rep variance alone.
+FORK_BUDGET=7195
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

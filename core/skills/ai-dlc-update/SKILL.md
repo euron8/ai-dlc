@@ -204,10 +204,21 @@ prose is itself generated rather than composed.
    consumer; a pull can include a change to that copy, so the logic executing the
    reconcile may be stale relative to `theirs`. The skill's own files
    (`core/skills/ai-dlc-update/**` — SKILL.md + `reconcile/*`) are **upstream-owned
-   tooling, overwrite-safe** — the consumer never edits them (like `core`), so
+   tooling, overwrite-safe** — that is a DECLARATION scoped to those paths, and
    refreshing them carries no consumer-divergence risk. Therefore the self-update
    lands on its OWN cycle, **autonomously — no operator approval**, distinct from
    the operator-gated rulebook reconcile (step 8).
+
+   **That declaration does NOT extend to the rest of the machinery set, and reading it as
+   if it did is how this step overwrites a consumer edit.** Machinery is upstream-OWNED —
+   a statement about who decides its content, not a claim that no consumer has ever edited
+   its copy. The reference consumer edited its `.githooks/pre-push`, a `machinery:` entry,
+   and this cycle would otherwise have written `theirs` over it autonomously and
+   auto-merged the result. The second subtraction below is what disposes of that state,
+   and `reconcile/self-update-gate.sh` names every such path in its output. Where the
+   two sentences here and at "only the paths that diff names" below appear to conflict,
+   the subtraction is the resolution: a consumer-modified machinery path is never written
+   by this cycle.
 
    Diff `base→theirs` restricted to **the MACHINERY set** — read
    `reconcile/setup-sites.md`'s `machinery:` list (the manifest, `git-hooks/pre-push`,
@@ -302,6 +313,28 @@ prose is itself generated rather than composed.
    hand-roll that comparison: `reconcile/preclassify.sh` already buckets exactly this as
    `ALREADY-AT-THEIRS`. The slice is the sliced paths MINUS those.
 
+   **Then subtract a SECOND set from the SAME call: every path whose bucket records a
+   consumer divergence.** That call already returns them; this step used to read one bucket
+   and drop the rest on the floor, which is the whole defect — a machinery path the consumer
+   has edited comes back `BOTH-CHANGED->CLASSIFY` and was written from `theirs` anyway.
+   **Key the subtraction on the CLASSIFY marker, not on that one bucket name.** Every bucket
+   `preclassify.sh` sends `->CLASSIFY` is a path whose two sides diverged and which therefore
+   needs an adjudication this autonomous cycle does not perform, and `BOTH-CHANGED` is only
+   the modified-both-sides member of that set — the added-both-sides, upstream-deleted and
+   consumer-deleted members carry consumer state too. `RELOCATE-MOVE+consumer-edited` records
+   a divergence without carrying the marker, so match it as well.
+
+   **Do NOT write those paths, and do NOT treat the subtraction as a silent drop.** Report
+   each by name in one line, and carry it to the step-7 gated apply, which already emits a
+   `WORKLIST semantic-merge <path>` row for it — so the path reaches the operator instead of
+   being overwritten. `reconcile/self-update-gate.sh` emits one `SELF-UPDATE-CARRY` row per
+   such path; if its set and yours disagree, stop and report that, because one of the two
+   derivations is wrong.
+
+   A carried path stays in the `base→theirs` diff on every later invocation, since `base`
+   advances only at step 7. That is correct and is NOT the non-termination case above: it is
+   a standing worklist item, reported each run and never re-attempted.
+
    If the slice is EMPTY after that subtraction, say so in one line and continue to step 3.
 
    If NON-EMPTY, **first run `reconcile/self-update-gate.sh <dist> <base> <theirs> <consumer>`.**
@@ -324,6 +357,11 @@ prose is itself generated rather than composed.
      read step 7's "preserve them" as overriding this. The two instructions describe different
      runs and the flag is what tells them apart — see step 7's re-stamp bullet.
    - On `SELF-UPDATE-OK`: proceed autonomously as below.
+   - `SELF-UPDATE-CARRY` rows are ADVISORY and accompany any verdict, OK included. Each names
+     one machinery path the consumer has diverged on. They do not stop the cycle; they remove
+     paths from it. Report every one, write none of them, and carry each to the step-7 gated
+     apply. A carry row and an OK verdict together mean "self-update the rest, hand this path
+     to the operator" — the case this step had no disposition for.
 
    The gate's verdict is a DIFFERENTIAL — the incoming script and the consumer's current one, run
    under identical conditions — so a script that merely fails to resolve from a temp path cannot
@@ -332,7 +370,8 @@ prose is itself generated rather than composed.
    If NON-EMPTY and the gate says OK:
    - **Run the self-update cycle autonomously:** cut a dedicated branch
      `ai-dlc-update/self-update-<theirs-version>-<ts>`, write from `theirs` **only the paths
-     that diff names** — each at the consumer destination `map_consumer()` gives it, and
+     that diff names AND that survived both subtractions above** — never a path carried by a
+     `SELF-UPDATE-CARRY` row — each at the consumer destination `map_consumer()` gives it, and
      `tests/fixtures/<dir>/` for the covering fixtures — never the derived set per
      directory, **update the stamp's
      `skill_version`/`skill_commit` to `theirs`** (rewrite the stamp in schema,

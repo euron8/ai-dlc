@@ -15,6 +15,68 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.436.0] - 2026-08-28
+
+### The autonomous self-update had no disposition for a machinery path the consumer had edited
+
+`PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH`, filed by the reference
+consumer off a live pull. Step 2 of `ai-dlc-update` runs the machinery self-update **autonomously —
+no operator gate, auto-merged PR** — and justifies that autonomy on a premise it states outright:
+machinery files are "upstream-owned tooling, overwrite-safe — the consumer never edits them". It
+then instructs the cycle to write from `theirs` **only the paths that diff names**. For a machinery
+path the consumer HAS edited those two sentences conflict, and the step supplied no rule to resolve
+them, so the literal reading destroys the consumer's delta.
+
+**That state was not hypothetical.** `core/git-hooks/pre-push` is the fourth entry of the
+`machinery:` list, the reference consumer had edited its copy, and `preclassify.sh` bucketed it
+`BOTH-CHANGED->CLASSIFY` on a real pull. The operator stopped and reasoned about it by hand.
+Nothing in the tooling would have.
+
+**The remedy is a second subtraction from a call step 2 already makes.** It calls `preclassify.sh`
+for the `ALREADY-AT-THEIRS` subtraction, reads that one bucket, and drops the rest on the floor.
+Step 2 now subtracts the consumer-diverged paths as well, writes none of them, and carries each to
+the step-7 gated apply — where `apply.sh` already emits a `WORKLIST semantic-merge` row for it, so
+the path reaches the operator instead of being overwritten. The premise sentence is qualified in
+place: the overwrite-safe declaration is scoped to the skill's own files and says nothing about the
+rest of the machinery set.
+
+**`self-update-gate.sh` gained ARM C, and it is ADVISORY.** One `SELF-UPDATE-CARRY` row per diverged
+machinery path, accompanying any verdict including `OK`. It does not stop the cycle — it removes
+paths from it. Deferring the whole slice instead would strand it for a reason the operator-gated
+half already handles, which is the precise false positive that file's header exists to warn about.
+
+**KEYED ON `->CLASSIFY`, NOT ON `BOTH-CHANGED`, AND THAT IS THE DIFFERENCE BETWEEN FIXING ONE CASE
+AND THREE.** Measured on a seeded tree carrying all three shapes at once: a machinery path both
+sides edited is `BOTH-CHANGED->CLASSIFY`, one upstream DELETED that the consumer kept and changed is
+`UPSTREAM-DELETED+consumer-modified->CLASSIFY`, and one both sides created independently is
+`BOTH-ADDED->CLASSIFY`. Arm C carries **3 of 3**; a subtraction spelled with the literal
+`BOTH-CHANGED` — which is how both the filing and the backlog entry described it — carries **1 of
+3** and reads as complete. The key that shipped is the same one `apply.sh`'s `*CLASSIFY*)` dispatch
+already reads, so the two halves cannot drift apart. The deleted case matters most: there the
+consumer's copy is the only copy left.
+
+**Two defects were found in the arm itself, by probing it rather than reading it.** Iterating the
+machinery globs with an unquoted `for` put those git PATHSPECS through shell pathname expansion
+first, collapsing thirteen globs to the one entry carrying no glob character — the arm went quiet on
+two real divergences and reported no error; `set -f` fixes it. And resolving those globs with
+`git ls-tree` returns EMPTY for every globbed entry while rejecting `:(glob)` magic outright, so the
+paths are resolved with `git ls-files --with-tree=<ref>` at BOTH `base` and `theirs` — resolving
+only at the checkout drops the upstream-deleted case entirely.
+
+**`FORK_BUDGET` 7192 → 7195, and this raise is not a new fixture directory.** The corpus still
+holds 179. Checking `core/fixtures/self-update-gate/run.sh` alone back out to `origin/main` and
+re-running the subject returned exactly 7192, so the +3 is that file's 276 added lines and nothing
+else in the release. Every previous raise happened to accompany a new directory, which makes the
+per-directory reading look like the rule; it is not, and pricing a large arm addition at zero
+follows from believing it.
+
+**The entry's receipt was replaced first, and scored before the fix shipped.** The old one grepped
+both files for the bucket token and was closable by a COMMENT with no behaviour changed. The one
+that replaced it drives the gate against seeded `mktemp` trees and requires a carry row on two
+divergence shapes plus silence on a non-diverged near-miss consumer. Scored six ways: defect-live 1,
+prose-only comment 1, unconditional emission 1, narrowed `BOTH-CHANGED` key 1, a second spelling of
+the correct fix 0, the shipped fix 0.
+
 ## [0.435.0] - 2026-08-28
 
 ### A validator could not tell "this file has no `hooks:` line" from "I could not read this file"
