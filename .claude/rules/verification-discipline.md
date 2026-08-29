@@ -66,6 +66,7 @@ keyed on a row of a generated index, where that row's cell rendered from a COMME
 validates — three names appended to that one line returned receipt 0, render 0 and gate 0 with
 no owner, no invariant and no behaviour changed. Ask of every receipt what ELSE satisfies it,
 and prefer the arm that RUNS the subject over the one that reads its output.
+Isolating the subject is not running the PROGRAM: a defect in its CALLER stays invisible.
 
 **A receipt that accepts TWO candidate fixes has established neither.** Measured: an entry said
 its receipt "takes either fix" and it did — one of the two was a regression that shipped nothing.
