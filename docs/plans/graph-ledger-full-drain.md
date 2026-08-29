@@ -132,24 +132,50 @@ every globbed pathspec while rejecting `:(glob)` magic outright — so the globs
 `git ls-files --with-tree=<ref>`, at BOTH base and theirs, because resolving at the checkout alone
 drops the upstream-deleted case where the consumer's copy is the only copy left.
 
-**THE RECEIPT WAS SCORED THREE TIMES AND WAS STILL WRONG WHEN IT SHIPPED.** Draft one PASSED an
-implementation emitting the row unconditionally; a non-diverged near-miss CONSUMER killed that.
-Draft two ACCEPTED the narrowed `BOTH-CHANGED` key; the deleted-path case killed that. **Draft
-three shipped, and an independent hand then killed it too** — it returned 0 for an arm that carries
-the WHOLE slice the moment anything diverges, which satisfies every clause the receipt stated and
-contradicts the arm's own "ADVISORY, NOT A VERDICT" header.
+**THE RECEIPT TOOK SIX DRAFTS AND THREE OF THEM WERE FOUND WRONG AFTER THE MERGE.** Draft one
+passed an implementation emitting the row unconditionally. Draft two accepted the narrowed
+`BOTH-CHANGED` key. Draft three SHIPPED — and an independent hand then killed it, and killed its
+successor, and found a third hole in the one after that. Each was invisible until the previous
+closed, which is the tell: **three rounds of scoring is not evidence of a good receipt, it is
+evidence the inputs were all the same SHAPE.** The three lessons generalise past this entry and
+are restated in numbered action 1, where a subject-picker will actually read them:
 
-**THE STRUCTURAL LESSON, AND IT GENERALISES PAST THIS ENTRY: A NEAR-MISS IN A SEPARATE RUN IS AN
-ADJACENT INPUT, NOT A DISCRIMINATING ONE.** A second clean consumer can only ask *does the arm fire
-at all*. It can never ask *does it fire on the RIGHT paths*, because in the run where the arm fires
-there is nothing present it is supposed to stay quiet about. The fix is a negative standing BESIDE
-the offender in the same run — here, an upstream-changed machinery path whose consumer copy is at
-base. That receipt is simpler than the one it replaced and kills one more implementation.
+- **A near-miss in a SEPARATE run is an ADJACENT input.** Draft three's negative was a second
+  clean CONSUMER, so it could only ask *does the arm fire at all* — never *does it fire on the
+  RIGHT paths*, because in the run where the arm fires there is nothing present it should stay
+  quiet about. It returned 0 for an arm carrying the WHOLE slice the moment anything diverges,
+  which satisfies every clause it stated and contradicts the arm's own "ADVISORY, NOT A VERDICT"
+  header. The negative must stand BESIDE the offender, in the same run.
+- **Never key on a token nothing BINDS.** Draft four keyed on `SELF-UPDATE-CARRY`, carried by no
+  `docs/vocabulary-index.md` entry and no `# vocabulary:` arm — measured 0 and 0 against a control
+  of 1 for a vocabulary that IS bound. A hand writing the fix blind chose
+  `SELF-UPDATE-CONSUMER-MODIFIED` and was scored still-live. Same for the path SPELLING: naming
+  the CORE path and naming the CONSUMER path are both defensible. Key on BEHAVIOUR — the shape of
+  the row, and a basename.
+- **The seed must reach the point where a fix could be SITED.** Draft five stopped at the first of
+  the gate's four early exits, so arm PLACEMENT decided the verdict: a correct fix sited after the
+  differential loop scored still-live for no reason but where its author put it. Add a control
+  asserting the run got that deep.
 
-**The gap was in the CERTIFICATE, never in the guard.** Re-derived rather than taken on report: the
-live fixture's `carry-quiet-untouched` arm kills that implementation outright (`got=[1] want=[0]`,
-9 of 44 assertions red). Score the proposed receipt-weakness against the FIXTURE before reading it
+The receipt that stands is SHORTER than the one it replaced, uses one consumer instead of two, and
+kills three more implementations.
+
+**Every one of those gaps was in the CERTIFICATE, never in the guard — the shipped fix never
+changed.** Re-derived rather than taken on report: the live fixture's `carry-quiet-untouched` arm
+kills the whole-slice implementation outright (`got=[1] want=[0]`, 9 of 44 assertions red). Score the proposed receipt-weakness against the FIXTURE before reading it
 as a coverage gap — the archived receipt is inert and the fixture runs on every push.
+
+**I CORRECTED A WRONG SENTENCE WITH ANOTHER WRONG SENTENCE, AND REPORTED THE SECOND ONE AS A
+FINDING.** Arm C's header said step 2 "writes the whole MACHINERY set"; I "fixed" that to "USED TO
+write" and told the operator this release had *shipped the cause while filing the symptom* as
+`BL-124`. Both were false. Step 2 has NEVER written the whole machinery set — it writes the
+`base→theirs` diff RESTRICTED to that set, and `SKILL.md:233` has said so since 2026-07-26, a month
+before arm C existed. The real fault was a CONFLATION of two scopes in one sentence: the
+DECLARATION covers the whole machinery set, the WRITE covers the diff intersected with it.
+**WHEN CORRECTING A CLAIM ABOUT BEHAVIOUR, DATE THE BEHAVIOUR WITH `git log -S` BEFORE WRITING THE
+CORRECTION** — I asserted a past tense without first checking there was a past. `BL-124` still
+stands on its own subject, `unregistered-drift.sh`, and its receipt still exits 1; it had inherited
+the same loose framing and was corrected in place.
 
 **`FORK_BUDGET` ROSE WITHOUT A NEW FIXTURE DIRECTORY, WHICH BREAKS THE PATTERN EVERY PREVIOUS RAISE
 TAUGHT.** 7192 → 7195 on 276 added lines in one existing `run.sh`; the corpus still holds 179
