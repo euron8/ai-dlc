@@ -141,12 +141,45 @@ written into this file**, because the skill resolves them and anything written d
    deferred cycle cuts no branch and runs no derived fixtures, so there is no second fixture run to
    look for. This range ships the fix that makes step 2's fixture term include the fixtures the diff
    itself touches (`core/skills/ai-dlc-update/SKILL.md:233`), enforced by a coverage join in
-   `core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh:119`. Phase 1 should name five:
+   `core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh:119`.
+
+   **THE FIXTURE TERM HAS TWO HALVES AND THE SLICE IS THEIR UNION.** `SKILL.md:226-231` is TERM A —
+   every `core/fixtures/<dir>/` whose `*.sh` NAMES a machinery path this diff touched.
+   `SKILL.md:233-247` is TERM B — every `core/fixtures/<dir>/` THE DIFF ITSELF TOUCHES. Both
+   exclusions are read at `theirs`: a `.dist-only` marker, and no `run.sh` at `theirs`.
+
+   **Phase 1 should name TWENTY-FIVE.** Derived over the six changed machinery paths in this range,
+   matching each in BOTH its distribution and its consumer spelling, union term B, minus two
+   `.dist-only` dirs (`enforcement-map-sites`, `path-mapping-render`):
 
    ```
-   consumer-machinery-inventory   layer-conforms-to   layer-entry-unreadable
-   self-update-fixture-log        self-update-gate
+   blocker-adjudication-record   check-15-bypass                consumer-machinery-home
+   consumer-machinery-inventory  core-paths-audit-diff          core-script-boundary
+   core-write-guard              layer-absorption-retire        layer-anchor-declaration
+   layer-artifact-path-prescriptions                            layer-catalog-collision
+   layer-conforms-to             layer-contract-conformance     layer-crosswalk-home
+   layer-entry-unreadable        layer-extends-grain            layer-qualifier-grain
+   layer-reference-resolution    layer-retired-id-crosswalk     layer-title-join
+   ledger-status-vocabulary      retired-layer-contract         self-update-fixture-log
+   self-update-gate              self-update-join-gate
    ```
+
+   **THE COVERAGE JOIN CANNOT CATCH AN UNDER-DERIVED TERM A, WHICH IS WHY THIS FIGURE IS WRITTEN
+   OUT.** `self-update-fixtures.sh:119` joins the set you pass it against TERM B only, so a slice
+   naming just term B's five passes the join and is still wrong by twenty dirs. The five are a
+   SUBSET, not the answer: `core/scripts/validate-layer-entries.sh` changes `+143/-9` in this range
+   and twelve to thirteen fixtures cover it, and stranding those is the state
+   `SKILL.md:280-286` describes — the consumer's pre-push runs the WHOLE suite, not the slice, so an
+   uncarried covering fixture goes red and blocks the very push this cycle is making.
+
+   **An earlier revision of this action predicted five.** The rehearsal wrote its slice by hand and
+   term A never entered it — the gap this file's own `WHAT THE REHEARSAL COULD NOT COVER` paragraph
+   predicted, landing on the figure rather than on the cycle. The executor derived 25 from
+   `SKILL.md` and stopped rather than proceeding on the difference, which is what action 5 asks for.
+
+   **Derive it again yourself before naming it, and report your figure whatever it is.** Twenty-five
+   is a measurement taken in the distribution tree, not a target to reproduce; if yours differs,
+   that difference is the finding and it outranks this list.
 
    **If the runner refuses with `the slice omits fixtures this diff CHANGES`, that is the new arm
    firing and it is a real finding — report the named directories verbatim and stop.** If it refuses
@@ -245,7 +278,8 @@ report — stop and ping rather than reconciling it yourself.**
 | phase 1 rows | 13 — a strict SUBSET of the full range, asserted, not assumed |
 | phase 2 rows | exactly 2: `.claude/skills/ai-dlc/steps/route.md`, `tests/fixtures/resume-whole-read/run.sh` |
 | templates | 4, all `TEMPLATE-UNCHANGED-NOOP` |
-| phase-1 derived fixtures, full slice written | **5 green, 0 red, 0 missing, of 5 named** |
+| phase-1 derived fixtures, hand-written slice — **TERM B ONLY, NOT THE FIGURE TO RUN** | 5 green, 0 red, 0 missing, of 5 named |
+| phase-1 derived fixtures, both terms — **the figure to run** | **25 named**; 20 of them term A, unrehearsed, no green/red prediction |
 | phase-2 gate, rehearsed from the stop | `SELF-UPDATE-DEFER` again, safe-stop row reads *no intermediate release … self-updates cleanly* |
 | phase-2 derived fixtures | **none — a deferred cycle cuts no branch and runs no fixtures** |
 
