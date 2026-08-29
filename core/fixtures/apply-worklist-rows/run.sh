@@ -73,6 +73,15 @@ OVR_JR="overrides/steps__w__adjudicated_act_twin.md"
 OVR_KR="overrides/steps__w__adjudicated_act_key.md"
 OVR_KC="overrides/steps__w__adjudicated_act_contra.md"
 OVR_AR="overrides/steps__w__adjudicated_act_anchor.md"
+# BOTH DRIFT-HARD AND SUPERSEDED — the shape PC-S331 was filed on, and the one this fixture's
+# tree could not EXPRESS until it was seeded here. Every other subject above is superseded ONLY,
+# so no arm could ever have observed the co-emission, and a fixture whose tree cannot express the
+# defect proves nothing about it. `_H` takes a FULL retire and must be marked subsumed; `_HA` is
+# the exemption's own probe — drift-hard AND superseded, but by `retire_anchor=`, which leaves the
+# entry on disk and its readopt REAL work. Without `_HA` a guard that marked every drift-hard
+# supersession would pass every arm while destroying live work.
+OVR_H="overrides/steps__w__hard_and_superseded.md"
+OVR_HA="overrides/steps__w__hard_and_anchor_only.md"
 ANCHOR='steps/w.md#4a. Close-Out Sweep'
 
 # --- WHAT THE STUB HAS TO DECLARE, DERIVED FROM THE REAL SCRIPT --------------------------------
@@ -153,6 +162,10 @@ printf 'OVERRIDE-SUPERSEDED\t${OVR_JR}\tsteps/w.md\t${ADJ_TOK}=${V_ACT1} :: repl
 printf 'OVERRIDE-SUPERSEDED\t${OVR_KR}\tsteps/w.md\t${ADJ_TOK}=${V_ACT1} :: replaces_with=AI_DLC_ONE_KEY :: core 0.1.0 provides what this entry was written to work around.\n'
 printf 'OVERRIDE-SUPERSEDED\t${OVR_KC}\tsteps/w.md\t${ADJ_TOK}=${V_ACT2} :: replaces_with=AI_DLC_ONE_KEY :: core 0.1.0 provides what this entry was written to work around.\n'
 printf 'OVERRIDE-SUPERSEDED\t${OVR_AR}\tsteps/w.md\t${ADJ_TOK}=${V_ACT1} :: retire_anchor=${ANCHOR} :: core 0.1.0 ADOPTED what this entry says under that anchor.\n'
+printf 'HARD-OVERRIDE-DRIFT-SECTION\t${OVR_H}\tsteps/w.md\tthe shadowed section moved upstream\n'
+printf 'OVERRIDE-SUPERSEDED\t${OVR_H}\tsteps/w.md\treplaces_with=AI_DLC_ONE_KEY :: core 0.1.0 provides what this entry was written to work around.\n'
+printf 'HARD-OVERRIDE-DRIFT-SECTION\t${OVR_HA}\tsteps/w.md\tthe shadowed section moved upstream\n'
+printf 'OVERRIDE-SUPERSEDED\t${OVR_HA}\tsteps/w.md\tretire_anchor=${ANCHOR} :: core 0.1.0 ADOPTED what this entry says under that anchor.\n'
 STUB
   chmod +x "$1/layer-drift.sh"
 }
@@ -524,6 +537,96 @@ else
     ok "  and the keep direction is untouched by it — assertions 5 and 8 are not entangled"
   else
     bad "  MUTANT 7 also moved the keep direction: assertions 5 and 8 are entangled"
+  fi
+fi
+
+# --- AN OVERRIDE THAT IS BOTH DRIFT-HARD AND SUPERSEDED (PC-S331) -------------------------------
+# Two remedies were built for this and BOTH were regressions, which is why the arms below assert
+# what SURVIVES and not merely that something changed:
+#   - suppressing the retire sequence left only the readopt — deleting the real work and keeping
+#     the futile work, so arm 10 requires the retire rows to still be there;
+#   - deleting "Same commit as the row(s) above." took the ATOMIC ordering instruction with it,
+#     and that order is a safety property (SKILL.md:1131-1137), so arm 11 requires an atomicity
+#     instruction to still be present while arm 12 requires it to stop saying "above".
+subsumed_for() { # subsumed_for <rec-dir> <entry>
+  bash "$1/apply.sh" "$W/dist" HEAD "$W/cons" HEAD 2>/dev/null \
+    | awk -F'\t' -v o="$2" '$1=="NOTE" && $2=="override-readopt-subsumed" && $3==o' | grep -c . || true
+}
+H_ROWS="$(rows_for "$W/rec" "$OVR_H")"
+H_LAST="$(last_detail "$H_ROWS")"
+
+if [ "$(subsumed_for "$W/rec" "$OVR_H")" -ge 1 ]; then
+  ok "9  a drift-hard AND superseded entry gets an override-readopt-subsumed NOTE — the reason the readopt is futile reaches the OPERATOR, not just the source comment"
+else
+  bad "9  no override-readopt-subsumed NOTE for $OVR_H: the readopt row and the retire sequence are printed for one path with nothing marking the first as subsumed (PC-S331)"
+fi
+
+if [ "$(printf '%s\n' "$H_ROWS" | grep -c . || true)" -ge 1 ]; then
+  ok "10 and its retire sequence is STILL EMITTED — the subsumption marks the readopt, it does not delete the work that resolves the supersession"
+else
+  bad "10 the retire sequence for $OVR_H is gone: marking the readopt must not suppress the retire, which is the only row that resolves the supersession"
+fi
+
+case "$H_LAST" in
+  *"Same commit"*) ok "11 the final ATOMIC step still carries its atomicity instruction — the ordering is a safety property and survives the rewording" ;;
+  *)               bad "11 the final ATOMIC step for $OVR_H no longer says the steps share a commit: retire-before-key-write re-imposes the constraint and reds the next gate" ;;
+esac
+
+case "$H_LAST" in
+  *"row(s) above"*) bad "12 the final ATOMIC step still says \"the row(s) above\", which for this entry names the override-readopt row it must NOT be committed with" ;;
+  *)                ok "12 and it no longer says \"the row(s) above\" — it names its own sequence, so the readopt row printed above is not swept into the commit" ;;
+esac
+
+# THE EXEMPTION'S OWN PROBE. A guard that marked EVERY drift-hard supersession would pass arms
+# 9-12 and destroy live work: `retire_anchor=` leaves the entry on disk, so its readopt is how the
+# sections core did NOT supersede get the moved text. An exemption needs a probe proving it does
+# not cover the arm's own subject.
+if [ "$(subsumed_for "$W/rec" "$OVR_HA")" -eq 0 ]; then
+  ok "13 a drift-hard entry superseded by retire_anchor= is NOT marked subsumed — the entry survives the anchor drop, so its readopt is real work"
+else
+  bad "13 $OVR_HA was marked subsumed, but retire_anchor= drops ONE anchor and leaves the file: the readopt is how its remaining shadowed sections get the moved text"
+fi
+
+# --- MUTANT 8 — the subsumption guard widened to every supersession. Arm 13 must go red while
+# arm 9 stays green: a mutant that moves both is not testing the exemption.
+build_rec "$W/mut8"
+sed 's@^  if \[ -z "\$drop_anchor" \]; then$@  if true; then@' "$REC/apply.sh" > "$W/mut8/apply.sh"
+if cmp -s "$REC/apply.sh" "$W/mut8/apply.sh"; then
+  bad "MUTANT 8 did not apply — the drop_anchor guard it targets is spelled differently or is not there, so arm 13 proves nothing"
+else
+  if [ "$(subsumed_for "$W/mut8" "$OVR_HA")" -ge 1 ]; then
+    ok "MUTANT 8 (subsumption guard widened to every supersession): the anchor-only entry is wrongly marked subsumed — arm 13 is what catches a guard that would strand live work"
+  else
+    bad "MUTANT 8 SURVIVED: widening the guard changed nothing, so arm 13 is not testing the drop_anchor exemption"
+  fi
+  if [ "$(subsumed_for "$W/mut8" "$OVR_H")" -ge 1 ]; then
+    ok "  and the full-retire subject stays marked under it — arms 9 and 13 are not entangled"
+  else
+    bad "  MUTANT 8 also moved the full-retire subject: arms 9 and 13 are entangled"
+  fi
+fi
+
+# --- MUTANT 9 — the marked readopt turned into a SUPPRESSED retire. This is the first remedy that
+# was built for PC-S331 and rejected: it deletes the sequence that resolves the supersession and
+# keeps the readopt that cannot. Arm 10 must go red; arm 9 must NOT, because the NOTE is still
+# emitted — a mutant that moves both would mean the two arms are one.
+# `continue` is INSERTED rather than an existing line edited, because the shipped code never
+# suppresses and arm 10 would otherwise be a guard with no subject.
+build_rec "$W/mut9"
+awk '{ print } /say NOTE override-readopt-subsumed/ { print "        continue" }' \
+  "$REC/apply.sh" > "$W/mut9/apply.sh"
+if cmp -s "$REC/apply.sh" "$W/mut9/apply.sh"; then
+  bad "MUTANT 9 did not apply — the subsumption NOTE it keys on is spelled differently or is not there, so arm 10 proves nothing"
+else
+  if [ "$(printf '%s\n' "$(rows_for "$W/mut9" "$OVR_H")" | grep -c . || true)" -eq 0 ]; then
+    ok "MUTANT 9 (retire suppressed for a marked readopt): the retire sequence disappears — arm 10 is what catches a remedy that deletes the work instead of marking the readopt"
+  else
+    bad "MUTANT 9 SURVIVED: the retire sequence was still emitted with the loop short-circuited, so arm 10 is not testing that the work survives"
+  fi
+  if [ "$(subsumed_for "$W/mut9" "$OVR_H")" -ge 1 ]; then
+    ok "  and the NOTE is still emitted under it — arms 9 and 10 are not entangled"
+  else
+    bad "  MUTANT 9 also removed the NOTE: arms 9 and 10 are entangled and one of them is vacuous"
   fi
 fi
 

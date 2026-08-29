@@ -520,6 +520,13 @@ EOF
 # result is an entry that still freezes its shadowed span. Each loop carries its own
 # heredoc: sharing one silently leaves the other reading stdin, which parses fine.
 TAB_CH="$(printf '\t')"
+# A LITERAL NEWLINE, for the membership tests below. `$LD_HARD` and `$LD_SUP` are
+# newline-separated lists, so a member test has to bracket the candidate with newlines:
+# a bare `*"$ovr"*` matches any path that CONTAINS this one as a substring, and override
+# paths share long prefixes by construction. Built as an assignment rather than through
+# `$( )`, which strips the trailing newline this needs.
+NL_CH='
+'
 
 LD_SUP="$(printf '%s\n' "$LD_OUT" | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED"{print $2 "\t" $4}')"
 # THE ROW TOKEN IS RESOLVED FROM ITS ONE HOME, NEVER RESTATED HERE, AND ONLY WHEN THERE IS
@@ -660,6 +667,34 @@ while IFS="$TAB_CH" read -r ovr detail; do
     last_act="readopt-override.sh --stamp retire ${ovr}."
   fi
 
+  # AN OVERRIDE CAN BE BOTH DRIFT-HARD AND SUPERSEDED, AND THE MANIFEST SAID SO NOWHERE.
+  #
+  # The co-emission is deliberate and the comment above the readopt loop has always said why:
+  # under a supersession the readopt is "work whose result is an entry that still freezes its
+  # shadowed span." That reason reached the SOURCE and never the OPERATOR, who was handed an
+  # `override-readopt` row and a `--stamp retire` sequence for one path, in a list SKILL.md
+  # tells them to work top-down, with nothing marking the first as subsumed by the second.
+  # Filed by the reference consumer as PC-S331.
+  #
+  # SITED HERE, IN THE LOOP THAT ALREADY KNOWS. The readopt loop cannot answer this: it runs
+  # before `$LD_SUP` is parsed, before the adjudication token is resolved, and before
+  # `retire_anchor=` has been read -- so asking it would mean a second copy of all three
+  # parses, and a second copy is a second thing to keep in step.
+  #
+  # A FULL RETIRE ONLY. The two cases that are NOT a full retire both leave the entry on disk,
+  # where a readopt is real work rather than futile work, and neither may be suppressed:
+  #   - `retire_anchor=` drops ONE anchor and leaves the file, so the sections it still
+  #     shadows keep their override and the readopt is exactly how they get the moved text.
+  #   - a recorded KEEP verdict `continue`s above and emits no retire at all.
+  # Guarding on `$drop_anchor` covers the first; the second never reaches this line.
+  if [ -z "$drop_anchor" ]; then
+    case "${NL_CH}${LD_HARD}${NL_CH}" in
+      *"${NL_CH}${ovr}${NL_CH}"*)
+        say NOTE override-readopt-subsumed "$ovr" "The \`override-readopt\` row printed above for this same path is SUBSUMED by the retire sequence below and must NOT be landed. Core both moved the section this entry shadows AND now provides what the entry was written to supply; merging the moved section in would produce an entry that still freezes its shadowed span, and the retire then deletes the file you just edited. Do the retire sequence; skip the readopt."
+        ;;
+    esac
+  fi
+
   if [ -n "$env_key" ]; then
     # N keys, N+1 rows. The count is derived from the field rather than fixed at two,
     # because a supersession needing a second key could not be expressed at all until
@@ -691,7 +726,13 @@ while IFS="$TAB_CH" read -r ovr detail; do
       key_n=$(( key_n + 1 ))
       say WORKLIST override-retire "$ovr" "${key_n}/${key_total} ATOMIC — write ${one_key} into .claude/settings.json \"env\" (derive its value per override_supersessions in layer-contract.yaml; do NOT copy the example). Doing the retire stamp first re-imposes the core constraint this entry was widening and reds the next gate."
     done <<< "$(printf '%s' "$env_key" | tr ',' '\n')"
-    say WORKLIST override-retire "$ovr" "${key_total}/${key_total} ATOMIC — ${last_act} Same commit as the row(s) above.${adj_auth}"
+    # "THE ROW(S) ABOVE" NAMED THE WRONG ROWS THE MOMENT ANYTHING ELSE PRINTED FOR THIS PATH.
+    # The steps that must land together are the other steps of THIS sequence, and the phrase
+    # said "above" -- which, for an override that is also drift-hard, points at an
+    # `override-readopt` row for the same path that must NOT be in the commit at all. The
+    # atomicity instruction is a safety property (SKILL.md:1131-1137), so it is reworded to
+    # name its own sequence rather than dropped.
+    say WORKLIST override-retire "$ovr" "${key_total}/${key_total} ATOMIC — ${last_act} Same commit as the other $(( key_total - 1 )) step(s) of THIS ATOMIC sequence, and nothing else.${adj_auth}"
   elif [ -n "$drop_anchor" ]; then
     # No key to write, so there is no ordering to enforce and no ATOMIC sequence — but the action
     # still is not a retire, and the single row has to SAY so rather than repeat the detail and

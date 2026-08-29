@@ -1580,8 +1580,11 @@ Three `WORKLIST` rows for one subject; the control in the same invocation is the
 count, **3**, so nothing else in the manifest is contributing. Structurally, `apply.sh:436` builds
 `LD_HARD` and `:451` builds `LD_SUP` from the same `LD_OUT` with no join between them, and
 `grep -n 'LD_HARD\|LD_SUP'` over the file returns 7 lines, none of which compares the two sets.
-`SKILL.md:1062-1068` then binds the reader: "Do every step of that subject in the printed order and
-commit them together. Do not reorder them, do not land one without the others."
+`SKILL.md:1131-1137` then binds the reader: "Do every step of that subject in the printed order and
+commit them together. Do not reorder them, do not land one without the others." **An earlier
+revision of this entry cited `SKILL.md:1062-1068` for that sentence; those lines are the step-7 git
+isolation preconditions and say nothing of the kind.** The claim was right and the citation was
+wrong by about seventy lines.
 
 **The correction is narrower than the filing, in one specific way: the co-emission is deliberate,
 and the defect is that the reason never reaches the manifest.** `apply.sh:444-448` already
@@ -1593,24 +1596,44 @@ That moves this from "two detectors are unaware of each other" to "a known inter
 documented only on the emitting side", which is a smaller claim and a different fix. Everything
 else in the filing reproduces unchanged, including the exact three-row shape it quotes.
 
-The filing chose `verify: manual` on the grounds that any anchor would guess at unwritten prose.
-That is avoidable: the anchor is behavioural, drives the real `apply.sh`, and keys on a string
-`apply.sh:583` emits TODAY rather than one describing a fix. It closes on either remedy the filing
-asks for, which is why it is not a guess — measured against two separate mutated copies, each
-asserted byte-different from the original before it was read: suppressing the retire sequence while
-a readopt is outstanding gave exit **0**, and replacing the "Same commit as the row(s) above."
-phrasing gave exit **0**. Against the tree today: exit **1**. The readopt row is the control arm —
-a change that emits nothing at all fails the receipt rather than closing it. **Known limit:** a fix
-that adds an exclusivity marker while keeping both the retire rows and that phrasing leaves this
-receipt reporting still-open; the filing asks for the phrasing to be dropped in that case, so the
-receipt is aligned with what was asked, not with every conceivable fix.
+**BOTH REMEDIES THE PREVIOUS RECEIPT ACCEPTED WERE BUILT AND BOTH ARE REGRESSIONS.** That receipt
+closed on either "suppress the retire sequence while a readopt is outstanding" or "drop the 'Same
+commit as the row(s) above.' phrasing", and scored exit 0 for each. Driven through the real
+`apply.sh` on a seed that is both drift-hard and superseded:
+
+- **Suppressing the retire** leaves ONE row, the readopt — deleting the only work that resolves the
+  supersession and keeping the work `apply.sh:517-521` calls futile. Backwards.
+- **Dropping the phrasing** deletes the ATOMIC ordering instruction. `SKILL.md:1131-1137` calls that
+  order "a safety property, not a preference", because writing the replacement key BEFORE the retire
+  stamp is what stops the next gate failing.
+
+**The defect is the WORD "above", not the instruction.** For an entry that is also drift-hard, "the
+row(s) above" names the `override-readopt` row for the same path — the one row that must NOT be in
+that commit. So the fix marks the readopt as subsumed and rewords the atomicity instruction to name
+its own sequence, keeping every row and the safety property.
+
+The receipt is REPLACED rather than kept, because the old one accepted two fixes and therefore
+established neither. The new one is behavioural, drives the real `apply.sh`, and was scored five
+ways against copies each asserted byte-different before it was read: **the tree before the fix
+exits 1, retire-suppressed exits 1, phrasing-deleted exits 1, a subject replaced by `exit 0` exits
+1, and only the shipped fix exits 0.** It requires the readopt row (control arm), the retire rows
+(so a suppression cannot pass), the subsumption NOTE, a surviving `Same commit` instruction (so a
+deletion cannot pass), and zero occurrences of `row(s) above`.
+
+**The durable half is the fixture, not this receipt** — a rotated entry archives its receipt while
+`core/fixtures/apply-worklist-rows/run.sh` keeps running. Arms 9-13 there cover the same ground,
+and the fixture's tree could not EXPRESS this defect before: every override it seeded was
+superseded only, never also drift-hard, which is why it scored 42 ok against the defect and against
+both regressions alike. Two mutants guard the new arms — one widens the exemption to every
+supersession, one suppresses the retire under a marked readopt — and each is asserted not to move
+the other's arm.
 
 Discharges the consumer entry
 `PC-S331-APPLY-SH-CO-EMITS-READOPT-AND-RETIRE-FOR-ONE-SUBJECT-AS-IF-BOTH-WERE-OWED` at pinned
 ledger line 4258.
 
 
-verify: sh R=core/skills/ai-dlc-update/reconcile; W=$(mktemp -d); O='.claude/skills/ai-dlc/overrides/steps__w__probe.md'; for r in dist cons; do mkdir -p "$W/$r"; git -C "$W/$r" init -q .; echo seed > "$W/$r/f"; git -C "$W/$r" add -A >/dev/null 2>&1; git -C "$W/$r" -c user.email=f@x -c user.name=f commit -qm seed >/dev/null 2>&1; done; mkdir -p "$W/rec"; cp "$R"/*.sh "$W/rec"/; printf '#!/usr/bin/env bash\nADJ_ROW_TOKEN="adjudicated"\nADJ_KEEP_VERDICT="still-additive"\nprintf %s\n' "'HARD-OVERRIDE-DRIFT-SECTION\t$O\tsteps/w.md\tthe shadowed section changed upstream\nOVERRIDE-SUPERSEDED\t$O\tsteps/w.md\treplaces_with=AI_DLC_PROBE_KEY :: core provides what this entry was written to work around.\n'" > "$W/rec/layer-drift.sh"; chmod +x "$W/rec/layer-drift.sh"; M=$(bash "$W/rec/apply.sh" "$W/dist" HEAD "$W/cons" HEAD 2>/dev/null); rm -rf "$W"; n() { LC_ALL=C awk -F'\t' -v o="$O" -v k="$1" '$1=="WORKLIST" && $2==k && $3==o' <<<"$M" | LC_ALL=C grep -c . ; }; RE=$(n override-readopt); RT=$(n override-retire); SC=$(LC_ALL=C awk -F'\t' -v o="$O" '$1=="WORKLIST" && $2=="override-retire" && $3==o' <<<"$M" | LC_ALL=C grep -cF 'Same commit as the row(s) above.'); [ "$RE" -ge 1 ] || exit 1; ! { [ "$RT" -ge 1 ] && [ "$SC" -ge 1 ]; }
+verify: sh R=core/skills/ai-dlc-update/reconcile; W=$(mktemp -d); O='.claude/skills/ai-dlc/overrides/steps__w__probe.md'; for r in dist cons; do mkdir -p "$W/$r"; git -C "$W/$r" init -q .; echo seed > "$W/$r/f"; git -C "$W/$r" add -A >/dev/null 2>&1; git -C "$W/$r" -c user.email=f@x -c user.name=f commit -qm seed >/dev/null 2>&1; done; mkdir -p "$W/rec"; cp "$R"/*.sh "$W/rec"/; printf '#!/usr/bin/env bash\nADJ_ROW_TOKEN="adjudicated"\nADJ_KEEP_VERDICT="still-additive"\nprintf %s\n' "'HARD-OVERRIDE-DRIFT-SECTION\t$O\tsteps/w.md\tthe shadowed section changed upstream\nOVERRIDE-SUPERSEDED\t$O\tsteps/w.md\treplaces_with=AI_DLC_PROBE_KEY :: core provides what this entry was written to work around.\n'" > "$W/rec/layer-drift.sh"; chmod +x "$W/rec/layer-drift.sh"; M=$(bash "$W/rec/apply.sh" "$W/dist" HEAD "$W/cons" HEAD 2>/dev/null); rm -rf "$W"; f() { LC_ALL=C awk -F'\t' -v o="$O" -v t="$1" -v k="$2" '$1==t && $2==k && $3==o' <<<"$M"; }; RE=$(f WORKLIST override-readopt | LC_ALL=C grep -c .); RT=$(f WORKLIST override-retire | LC_ALL=C grep -c .); NS=$(f NOTE override-readopt-subsumed | LC_ALL=C grep -c .); AT=$(f WORKLIST override-retire | LC_ALL=C grep -cF 'Same commit'); AMB=$(f WORKLIST override-retire | LC_ALL=C grep -cF 'row(s) above'); [ "$RE" -ge 1 ] && [ "$RT" -ge 1 ] && [ "$NS" -ge 1 ] && [ "$AT" -ge 1 ] && [ "$AMB" -eq 0 ]
 ## BL-038
 
 **Core's sprint-review §3 lets a "genuinely environmental" integration seam defer with no

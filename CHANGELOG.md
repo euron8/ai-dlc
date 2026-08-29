@@ -15,6 +15,59 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.439.0] - 2026-08-29
+
+### `apply.sh` handed the operator a readopt and a retire for one override, and told them to commit both together
+
+`BL-037`, discharging the reference consumer's
+`PC-S331-APPLY-SH-CO-EMITS-READOPT-AND-RETIRE-FOR-ONE-SUBJECT-AS-IF-BOTH-WERE-OWED`.
+
+An override can be BOTH drift-hard and superseded. `apply.sh:509` builds `LD_HARD` and `:524`
+builds `LD_SUP` from one `LD_OUT` with no join between them, so such a path drew an
+`override-readopt` row AND a two-step ATOMIC `override-retire` sequence — three `WORKLIST` rows for
+one subject, in a list `SKILL.md:1131-1137` tells the operator to work top-down and commit
+together. The readopt is futile under a supersession, and `apply.sh:517-521` has always said so in
+a comment. **The reason reached the source and never the manifest.**
+
+**Both remedies the entry's own receipt accepted were built, scored, and rejected as regressions.**
+Suppressing the retire while a readopt is outstanding leaves one row — deleting the work that
+resolves the supersession and keeping the work that cannot. Deleting the "Same commit as the
+row(s) above." phrasing deletes the ATOMIC ordering instruction, and that order is a safety
+property: writing the replacement key before the retire stamp is what stops the next gate failing.
+
+**The defect is the word "above", not the instruction.** For a drift-hard entry it names the
+`override-readopt` row — the one row that must not be in that commit.
+
+### Fixed
+
+- `apply.sh` emits a `NOTE override-readopt-subsumed` row for an override that is both drift-hard
+  and fully superseded, stating that the readopt above it must not be landed and why. Sited in the
+  retire loop, which already knows: the readopt loop runs before `LD_SUP` is parsed, before the
+  adjudication token is resolved and before `retire_anchor=` has been read.
+- The final ATOMIC step now names its own sequence — "Same commit as the other N step(s) of THIS
+  ATOMIC sequence, and nothing else" — instead of "the row(s) above". Every row and the safety
+  property survive.
+- The subsumption is guarded on `[ -z "$drop_anchor" ]`. A `retire_anchor=` supersession drops ONE
+  anchor and leaves the file, so its readopt is how the sections core did NOT supersede get the
+  moved text; a recorded KEEP verdict `continue`s earlier and emits no retire at all.
+- Newline-bracketed membership test rather than a bare substring match: override paths share long
+  prefixes by construction.
+
+### Testing
+
+- `core/fixtures/apply-worklist-rows/run.sh` gains arms 9-13 and two mutants. **Its tree could not
+  EXPRESS this defect before** — every override it seeded was superseded only, never also
+  drift-hard — so it scored 42 ok against the defect and against both regressions alike. It now
+  seeds both, and reports 51 ok.
+- Arm 13 is the exemption's own probe, and MUTANT 8 widens the guard to every supersession to prove
+  it fires. MUTANT 9 inserts a `continue` after the NOTE to suppress the retire, proving arm 10 has
+  a subject; each mutant is asserted not to move the other's arm.
+- `BL-037`'s receipt is REPLACED. The previous one closed on either remedy and so established
+  neither. The new one scores five ways — before the fix, retire-suppressed, phrasing-deleted, and
+  a subject replaced by `exit 0` all exit 1; only the shipped fix exits 0.
+- The entry's citation of `SKILL.md:1062-1068` was wrong by about seventy lines; those lines are the
+  step-7 git isolation preconditions. Corrected to `:1131-1137`.
+
 ## [0.438.0] - 2026-08-29
 
 ### The handoff procedure emitted an entry line its own router did not recognise
