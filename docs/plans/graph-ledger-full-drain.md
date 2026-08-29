@@ -9,7 +9,38 @@ and status records that were current when they were written and that THIS BLOCK 
 it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from it.**
 
-### BATCH 24 SHIPPED AS `v0.440.0`. START AT THE ORDINARY BATCH LOOP: SWEEP, THEN FIX ONE.
+### BATCH 25 SHIPPED AS `v0.441.0`. START AT THE ORDINARY BATCH LOOP: SWEEP, THEN FIX ONE.
+
+**THE SWEEP FOUND A SAME-DAY FILING AND THAT ENDED A FOUR-BATCH EMPTY STREAK.** The consumer filed
+`PC-S307-CONTINUE-HOOK-CANNOT-DISTINGUISH-A-DIRECTED-SESSION-FROM-AN-UNATTENDED-ONE` on 2026-08-29,
+UNCOMMITTED in its working tree, while a peer session was live on that branch. **The ledger md5
+MOVED mid-session, which is the boundary check firing as designed, not an alarm** — the writer was
+the consumer's own sprint-307 session and the archive md5 never moved. Four consecutive empty
+sweeps did not make the fifth one safe to skip.
+
+**THAT CANDIDATE IS NOT DISCHARGED AND MUST NOT BE READ AS ONE.** It carries TWO claims. The first
+shipped as `v0.441.0`; the second is filed here as `BL-126` and is untouched. This repo closes a
+two-subject entry only when both expire, so the id stays live upstream and stays IN-FLIGHT.
+
+**MOST OF THAT FILING WAS REFUTED, AND THE REFUTATION IS THE REUSABLE PART.** Three of its claims
+died against shipped code: the branch it said was missing is the line that names its own remedy;
+its "the hook fired three times against that stopped state" is contradicted by the consumer's own
+continuation log, where all three blocks PRECEDE the flag; and its `verify:` sentence "there is
+nothing to grep for the absence of" is falsified by a predicate already INSTALLED on that consumer.
+Its proposed remedy was withdrawn rather than deferred — the schema it would depend on states in
+its own description that the fact cannot be read from the event, and the only shipping launcher
+would set the flag backwards. **Read a filing's MECHANISM as a hypothesis and its SYMPTOM as the
+evidence; here the symptom was real and every mechanism sentence was wrong.**
+
+**I REJECTED MY OWN HAND'S HEADLINE DEFECT, AND THAT WAS THE RIGHT CALL.** A hand measured that the
+rapid-fire backoff cannot fire at agent turn latency and filed it as the true cause. The hook's own
+header says it is a RAPID-FIRE detector that deliberately replaced `stop_hook_active`, and
+`implementation-join-yield` arms 6b and 6c assert that property in BOTH directions. Changing it
+would have broken two deliberate arms to "fix" a specification. **A hand's finding is a hypothesis
+too — check whether the behaviour it calls a defect is a documented design with fixture arms
+asserting it.**
+
+### BATCH 24 SHIPPED AS `v0.440.0`.
 
 **THE FOUR `NAMED-UPSTREAM` IDS THE PREVIOUS BLOCK CALLED "REAL, UNFILED WORK" ARE DONE, AND THE
 ANSWER WAS NOT WHAT THAT BLOCK EXPECTED.** Their containing releases, derived per id against an
@@ -56,17 +87,17 @@ IN-FLIGHT and discharges NOTHING. **When the sweep finds a live candidate you ca
 ship it, in this batch, and cite the id in the release commit message.** File only what you
 genuinely cannot take now, and say why in the same breath.
 
-**The baseline, re-derived after the `v0.440.0` merge AND the `BL-117` rotation: 65 live candidates,
-132 archived upstream, 33 cited by a backlog entry, 32 UNFILED.** Controls in the same run:
+**The baseline, re-derived after the `v0.441.0` merge AND the `BL-126` filing: 66 live candidates,
+132 archived upstream, 34 cited by a backlog entry, 32 UNFILED.** Controls in the same run:
 live/archive partition control 0, a spaced-bullet id 1, a bare-bold id 1, a dotted id 1, a
-known-filed id 1, impossible id 0. **PC-backed live backlog entries: 19** — down from 20 because
-`BL-117` rotated, which is the only way an entry should leave that set. Derived by parsing entry
-BLOCKS rather than joining on a line: 71 blocks parsed against a heading grep of 71.
+known-filed id 1, impossible id 0. **PC-backed live backlog entries: 20** — up from 19 because `BL-126` was filed against a live
+candidate. Derived by parsing entry BLOCKS rather than joining on a line: 72 blocks parsed against
+a heading grep of 72.
 
-**The goal partition, which is the measurement that matters: DISCHARGED 16, IN-FLIGHT 19,
-UNTOUCHED 32.** Those sum to 67 against a denominator of 65 because DISCHARGED and IN-FLIGHT are
+**The goal partition, which is the measurement that matters: DISCHARGED 16, IN-FLIGHT 20,
+UNTOUCHED 32.** Those sum to 68 against a denominator of 66 because DISCHARGED and IN-FLIGHT are
 NOT disjoint — the overlap is 2 (`PC-S303-STUB-AUDIT-MARKER-…` and `PC-S307-AWK-CANT-OPEN-FILE-…`),
-and 67 − 2 = 65 is the control. TERMINAL 25, discharged-but-unnamed 0. Never report the live/archive
+and 68 − 2 = 66 is the control. TERMINAL 25, discharged-but-unnamed 0. Never report the live/archive
 BACKLOG entry counts as progress.
 
 **`v0.440.0` MOVED THE PARTITION for the second batch running.** `PC-S339` crossed from IN-FLIGHT to
@@ -129,14 +160,21 @@ weakness in its own third receipt arm and tells you how to replace it; read that
 
 ### THE REVISIT CONDITION HAS RE-FIRED, AND THE DIFFERENTIAL IS NO LONGER NULL. THE DECISION IS STILL THE OPERATOR'S.
 
-**The gap is TWO releases.** Consumer installed **0.438.0 / `1b9f53ec`**, distribution **0.440.0**.
+**The gap is THREE releases.** Consumer installed **0.438.0 / `1b9f53ec`**, distribution **0.441.0**.
 The revisit condition the previous revisions tracked — *"a second release accumulates"* — has now
 re-fired. **Reporting it is the ceiling. Do not write a runbook, and do not dispatch one.**
 
 **THE OPERATOR WAS ASKED AT THE CLOSE OF BATCH 24 AND RULED: BANK IT, DO NOTHING.** No pull, no
 runbook. **That ruling is about the 0.438.0 → 0.440.0 gap and it does not pre-authorize anything
 later** — re-measure and re-report each batch, and ask again rather than reading this as a standing
-answer. The reasoning, recorded so it is not re-litigated: the divergence is real but its blast
+answer.
+
+**BATCH 25 RE-MEASURED, REPORTED THREE RELEASES, AND DID NOT RE-ASK.** The reason is stated so the
+next batch can disagree: the factor the ruling turned on — a LIVE sprint 307 on the consumer,
+mid-execution on the reconcile machinery the range replaces — was unchanged, and re-asking an
+unchanged question every batch is the noise that makes the signal unreadable when it does change.
+**Ask again when the DECIDING FACTOR moves, not when the counter does.** Sprint 307 landing, or a
+divergence that reaches something other than a row an operator reads by hand, is that moment. The reasoning, recorded so it is not re-litigated: the divergence is real but its blast
 radius is the readability of a `NAMED-UPSTREAM` row an operator reads by hand — it changes no
 apply, no gate and no push — while the range replaces the reconcile machinery a LIVE sprint is
 mid-execution on. **A YES on the second test is not by itself a reason to pull.** Weigh what the
