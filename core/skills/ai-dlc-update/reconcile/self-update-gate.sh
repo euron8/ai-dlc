@@ -214,12 +214,18 @@ machinery_at_or_past() {
 
 # ---- ARM C: A MACHINERY PATH THE CONSUMER HAS DIVERGED ON ------------------------------
 # Step 2 justifies autonomy -- no operator gate, auto-merged PR -- on the declaration that the
-# skill's own files are overwrite-safe, and it USED TO write the whole MACHINERY set from
-# `theirs` on the strength of it. The tense matters and it is not pedantry: this arm is what
-# made that sentence false, so a reader tracing "does step 2 write the whole machinery set?"
-# through a present-tense comment here gets the wrong answer from the very file that fixed it.
-# For a machinery path the consumer had edited those two sentences conflicted and the step
-# supplied no rule, so the literal reading destroyed the consumer's delta. Filed on the
+# skill's own files are overwrite-safe, and then reads that declaration as covering the whole
+# MACHINERY set. What it WRITES is narrower: the `base->theirs` diff restricted to that set
+# (SKILL.md's "Against the CHANGED paths, not the whole machinery list"). THE TWO SCOPES ARE
+# DIFFERENT AND CONFLATING THEM IS EASY -- an earlier draft of this header said step 2 "writes
+# the whole MACHINERY set", which was never true and predates this arm by a month. This arm's
+# population is that same intersection, which is why a consumer edit to a machinery path the
+# pull does NOT touch is correctly out of scope here; that case was seeded and confirmed silent
+# rather than assumed, and stating it stops the next reader repeating the build to rule it out.
+#
+# For a machinery path the consumer had edited and the pull changes, the declaration and the
+# write instruction conflicted and the step supplied no rule, so the literal reading destroyed
+# the consumer's delta. Filed on the
 # reference consumer as PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH
 # after that tree's own `.githooks/pre-push` -- the fourth `machinery:` entry -- came back
 # BOTH-CHANGED->CLASSIFY on a live pull. The operator stopped and reasoned about it by hand;
@@ -242,6 +248,12 @@ machinery_at_or_past() {
 # and a subtraction spelled with the one bucket name overwrites three of the four cases while
 # reading as if it had fixed them. `RELOCATE-MOVE+consumer-edited` records a divergence without
 # the marker, so it is matched by name -- the only bucket that has to be.
+#
+# `*consumer-edited*` IS A SUBSTRING CLASS, NOT THAT ONE BUCKET, AND THAT IS DELIBERATE BUT
+# UNDER-CONSTRAINED. `RELOCATE-MOVE+consumer-edited` is the only one of preclassify's bucket
+# assignments matching it today, so the false-positive set is empty and was measured empty --
+# but a future `+consumer-edited` bucket joins this arm silently, without this header changing.
+# That direction is fail-safe (it refuses to overwrite) and is the reason it is left wide.
 #
 # THAT KEY IS NOT INVENTED HERE. `apply.sh`'s own dispatch already reads the same marker the same
 # way -- its `*CLASSIFY*)` arm is what turns such a path into the `WORKLIST semantic-merge` row

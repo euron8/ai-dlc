@@ -409,7 +409,7 @@ measure*, and the exit code alone will never carry it.
 
 **`backlog-reverify.sh` maps `sh` receipts on exit code alone — 0 is CLOSE-CANDIDATE and
 EVERY non-zero is `STILL-LIVE  … "sh receipt exited non-zero -- still reproduces here"`
-(`scripts/backlog-reverify.sh:182-187`).** But this corpus's receipts use **exit 9** as their
+(`scripts/backlog-reverify.sh:198-203`).** But this corpus's receipts use **exit 9** as their
 own HAND-REVIEW convention: it is what a receipt returns when a PRECONDITION has moved and it
 therefore measured nothing. The engine folds that into STILL-LIVE, so a receipt asserting *"I
 could not tell"* is reported in the same words as one asserting *"the defect is still here"*.
