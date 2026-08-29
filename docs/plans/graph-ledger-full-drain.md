@@ -55,41 +55,43 @@ IN-FLIGHT and discharges NOTHING. **When the sweep finds a live candidate you ca
 ship it, in this batch, and cite the id in the release commit message.** File only what you
 genuinely cannot take now, and say why in the same breath.
 
-**The baseline, re-derived AFTER the 0.438.0 pull landed: 65 live candidates, 132 archived upstream,
-33 cited by a backlog entry, 32 UNFILED.** Controls in the same run: live/archive partition control
-0, a spaced-bullet id 1, a bare-bold id 1, a known-filed id 1, impossible id 0. **PC-backed live
-backlog entries: 21**, derived by parsing entry blocks rather than joining on a line — 73 blocks
-parsed against a heading grep of 73, 31 citing any `PC-` token, 7 citing only archived ids. A first
-cut of that join returned **0** and was a FALSE ZERO from a broken `join`; it is only trustworthy
-because the block count matched the heading count.
+**The baseline, re-derived after the `v0.439.0` merge AND the `BL-037` rotation: 65 live candidates,
+132 archived upstream, 33 cited by a backlog entry, 32 UNFILED.** Controls in the same run:
+live/archive partition control 0, a spaced-bullet id 1, a bare-bold id 1, a known-filed id 1,
+impossible id 0. **PC-backed live backlog entries: 20** — down from 21 because `BL-037` rotated,
+which is the only way an entry should leave that set. Derived by parsing entry BLOCKS rather than
+joining on a line: 72 blocks parsed against a heading grep of 72. A first cut of that join returned
+**0** and was a FALSE ZERO from a broken `join`; it is only trustworthy because the two counts match.
 
-**The goal partition, which is the measurement that matters: DISCHARGED 14, IN-FLIGHT 21,
+**The goal partition, which is the measurement that matters: DISCHARGED 15, IN-FLIGHT 20,
 UNTOUCHED 32.** Those sum to 67 against a denominator of 65 because DISCHARGED and IN-FLIGHT are
 NOT disjoint — the overlap is 2 (`PC-S303-STUB-AUDIT-MARKER-…` and `PC-S307-AWK-CANT-OPEN-FILE-…`),
 and 67 − 2 = 65 is the control. TERMINAL 24, discharged-but-unnamed 0. Never report the live/archive
 BACKLOG entry counts as progress.
 
-**Every one of those figures is unchanged by the pull.** That is measured, not assumed — see the
-block above for why a delivery closes nothing on its own.
+**`v0.439.0` MOVED THE PARTITION, and that is the first time in several batches that anything did.**
+`PC-S331` crossed from IN-FLIGHT to DISCHARGED, so 14/21 became 15/20. The live count did not move
+and will not: closing an entry here changes what the DISTRIBUTION has done, never what the
+consumer's ledger says.
 
 **Re-derive every figure above before trusting it.** The derive block is in `### Derive the state`
 below; run it, do not read these numbers.
 
-### NO SUBJECT IS PRE-CHOSEN. THE LAST THREE PC-BACKED PICKS HAVE SHIPPED.
+### NO SUBJECT IS PRE-CHOSEN. THE LAST FOUR PC-BACKED PICKS HAVE SHIPPED.
 
-**`PC-S318-SELF-UPDATE-SLICE-CANNOT-CARRY-THE-FIXTURE-FIX-THAT-UNBLOCKS-ITS-OWN-PUSH` IS
-DISCHARGED, as `v0.437.0`, and `BL-049` is ROTATED to the archive.** Do not pick it up and do not
-re-scope it. `PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH` went at
-`v0.436.0` via `BL-051`, and `PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER` at
-`v0.435.0` with `PC-S307-MACHINE-AUDITS-IS-A-CHILD-OF-4A-SO-EVERY-4A-SHADOW-SWALLOWS-IT` beside it.
+**`PC-S331-APPLY-SH-CO-EMITS-READOPT-AND-RETIRE-FOR-ONE-SUBJECT-AS-IF-BOTH-WERE-OWED` IS
+DISCHARGED, as `v0.439.0`, and `BL-037` is ROTATED to the archive.** Do not pick it up and do not
+re-scope it. `PC-S318-…-UNBLOCKS-ITS-OWN-PUSH` went at `v0.437.0` via `BL-049`,
+`PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH` at `v0.436.0` via
+`BL-051`, and `PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER` at `v0.435.0` with
+`PC-S307-MACHINE-AUDITS-IS-A-CHILD-OF-4A-SO-EVERY-4A-SHADOW-SWALLOWS-IT` beside it.
 
 **So the sweep decides your subject. If it comes back empty, the PC-backed set decides it, and
-`BL-037` is the strongest member.** It carries
-`PC-S331-APPLY-SH-CO-EMITS-READOPT-AND-RETIRE-FOR-ONE-SUBJECT-AS-IF-BOTH-WERE-OWED`, and its
-subject is `apply.sh` — a BOOTSTRAPPING step, so the consumer's installed copy runs the pull that
-would carry its own repair, which raises the cost of deferring it again. Verified at the close of
-batch 23: the id is live upstream (archive control 0, impossible-id control 0) and the receipt
-exits 1. Re-derive both before scoping it, and run the receipt raw rather than believing the entry.
+there are 20 members with no pre-chosen favourite.** Rank by PROVENANCE first, then consequence,
+never readiness. Whatever you pick, re-derive that its id is live upstream (archive control 0,
+impossible-id control 0) and run its receipt RAW rather than believing the entry — and score any
+receipt that accepts more than one candidate fix before trusting it, because `v0.439.0` measured
+both remedies its entry sanctioned and BOTH were regressions.
 
 **`BL-119` and `BL-122` are NOT PC-backed and rank below any PC-backed entry.** The selection rule
 is PROVENANCE first, then consequence — never readiness. `BL-123` IS PC-backed by the join, but the
@@ -104,9 +106,9 @@ weakness in its own third receipt arm and tells you how to replace it; read that
 
 ### THE GAP IS CLOSED. THE NEXT PULL IS THE OPERATOR'S DECISION, NOT YOURS.
 
-**The gap is ZERO releases.** Consumer installed **0.438.0 / `1b9f53ec`**, distribution
-`origin/main` at the same sha. The revisit condition the previous revisions of this block tracked —
-*"a second release accumulates"* — is reset and has not re-fired. **Do not propose a pull until it
+**The gap is ONE release.** Consumer installed **0.438.0 / `1b9f53ec`**, distribution **0.439.0**.
+The revisit condition the previous revisions of this block tracked — *"a second release
+accumulates"* — was reset by the pull and has NOT re-fired at one. **Do not propose a pull until it
 has**, and proposing is the ceiling in any case.
 
 **The 14 DISCHARGED candidates are now DELIVERED to the consumer and still LIVE in its ledger.**
