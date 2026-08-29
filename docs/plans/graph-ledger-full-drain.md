@@ -9,30 +9,31 @@ and status records that were current when they were written and that THIS BLOCK 
 it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from it.**
 
-### THE PULL IS DONE. START AT THE ORDINARY BATCH LOOP: SWEEP, THEN FIX ONE.
+### BATCH 24 SHIPPED AS `v0.440.0`. START AT THE ORDINARY BATCH LOOP: SWEEP, THEN FIX ONE.
 
-**THE 0.434.0 → 0.438.0 PULL RAN AND LANDED.** `docs/plans/graph-pull-0434-to-0438.md` is retitled
-`DISCHARGED — DO NOT EXECUTE`; read its `## Discharge` for the measured outcome, and do not execute
-it or its two predecessors. The consumer stamp reads **0.438.0 / `1b9f53ec`** on all four fields,
-`graph-70` ran it, and the pipeline was left PAUSED exactly as it was found.
+**THE FOUR `NAMED-UPSTREAM` IDS THE PREVIOUS BLOCK CALLED "REAL, UNFILED WORK" ARE DONE, AND THE
+ANSWER WAS NOT WHAT THAT BLOCK EXPECTED.** Their containing releases, derived per id against an
+impossible-id control of 0 naming commits: `PC-S307-AWK-CANT-OPEN-FILE-…` **v0.435.0**,
+`PC-S307-MACHINE-AUDITS-…` **v0.431.0**, `PC-S330-STEP-2-…` **v0.436.0**, `PC-S318-SELF-UPDATE-…`
+**v0.437.0**. All four are at or below the consumer's installed 0.438.0, so all four are
+DELIVERED and none needs a further release.
 
-**THAT AUTHORIZATION IS SPENT.** It named one range, one executor and one date. The standing ruling
-in `.claude/rules/operator-rulings.md` governs again: measure the gap, write the runbook if asked,
-report the number, then STOP. Readiness is not authorization and nothing in this file is a decision
-about WHEN.
+**READING THOSE FOUR IS WHAT FOUND THIS BATCH'S SUBJECT, AND THE ROUTE MATTERS MORE THAN THE
+ANSWER.** Two of the four resolved to a `docs(plan)` commit rather than a fix, which is how the
+`NAMED-UPSTREAM` row's own defect surfaced: it elected the two ENDS of the naming range, and the
+ends are systematically the filing and the rotation rather than the fix. That shipped as
+`v0.440.0` and discharged `PC-S339`. **When a bookkeeping task keeps returning the wrong kind of
+answer, the instrument is the subject.**
 
-**THE PULL MOVED THE LEDGER BY NOTHING, AND THAT IS THE FINDING, NOT AN ERROR.** Re-derived after it
-landed: 65 live / 132 archived / 33 cited / 32 UNFILED, byte-identical to the pre-pull baseline, all
-four controls holding. The partition is unmoved too. **The cause is that `ledger-reverify`, run from
-the consumer root, returned `NAMED-UPSTREAM` for all four ids the runbook expected to discharge, and
-`graph-70` correctly closed none** — naming is not absorption, and step 8 closes `CLOSE-CANDIDATE`
-only. **So an earlier revision of this block was wrong to say "only a pull moves the upstream
-number": a pull moves it only when the consumer's own reverify CLOSES something.** Delivery and
-closure are different events, and this pull was delivery.
+**THE 0.434.0 → 0.438.0 PULL RAN AND LANDED, AND THAT AUTHORIZATION IS SPENT.**
+`docs/plans/graph-pull-0434-to-0438.md` is retitled `DISCHARGED — DO NOT EXECUTE`; read its
+`## Discharge` for the measured outcome, and do not execute it or its two predecessors. It named
+one range, one executor and one date. The standing ruling in `.claude/rules/operator-rulings.md`
+governs again.
 
-**Each of those four ids now needs its named commit read and a CONTAINING release established before
-anything can be annotated. That is real, unfiled work, and it is the most direct route to moving the
-number this plan exists to move.** The four are named in the discharged runbook's action 9.
+**A PULL MOVES THE UPSTREAM NUMBER ONLY WHEN THE CONSUMER'S OWN REVERIFY CLOSES SOMETHING.**
+Delivery and closure are different events. That pull was delivery, and the ledger did not move by
+one id — which is the expected outcome, not an error.
 
 ### THE ORDINARY BATCH LOOP: SWEEP THE CONSUMER FOR NEW PUSH CANDIDATES, THEN FIX ONE.
 
@@ -55,75 +56,109 @@ IN-FLIGHT and discharges NOTHING. **When the sweep finds a live candidate you ca
 ship it, in this batch, and cite the id in the release commit message.** File only what you
 genuinely cannot take now, and say why in the same breath.
 
-**The baseline, re-derived after the `v0.439.0` merge AND the `BL-037` rotation: 65 live candidates,
+**The baseline, re-derived after the `v0.440.0` merge AND the `BL-117` rotation: 65 live candidates,
 132 archived upstream, 33 cited by a backlog entry, 32 UNFILED.** Controls in the same run:
-live/archive partition control 0, a spaced-bullet id 1, a bare-bold id 1, a known-filed id 1,
-impossible id 0. **PC-backed live backlog entries: 20** — down from 21 because `BL-037` rotated,
-which is the only way an entry should leave that set. Derived by parsing entry BLOCKS rather than
-joining on a line: 72 blocks parsed against a heading grep of 72. A first cut of that join returned
-**0** and was a FALSE ZERO from a broken `join`; it is only trustworthy because the two counts match.
+live/archive partition control 0, a spaced-bullet id 1, a bare-bold id 1, a dotted id 1, a
+known-filed id 1, impossible id 0. **PC-backed live backlog entries: 19** — down from 20 because
+`BL-117` rotated, which is the only way an entry should leave that set. Derived by parsing entry
+BLOCKS rather than joining on a line: 71 blocks parsed against a heading grep of 71.
 
-**The goal partition, which is the measurement that matters: DISCHARGED 15, IN-FLIGHT 20,
+**The goal partition, which is the measurement that matters: DISCHARGED 16, IN-FLIGHT 19,
 UNTOUCHED 32.** Those sum to 67 against a denominator of 65 because DISCHARGED and IN-FLIGHT are
 NOT disjoint — the overlap is 2 (`PC-S303-STUB-AUDIT-MARKER-…` and `PC-S307-AWK-CANT-OPEN-FILE-…`),
-and 67 − 2 = 65 is the control. TERMINAL 24, discharged-but-unnamed 0. Never report the live/archive
+and 67 − 2 = 65 is the control. TERMINAL 25, discharged-but-unnamed 0. Never report the live/archive
 BACKLOG entry counts as progress.
 
-**`v0.439.0` MOVED THE PARTITION, and that is the first time in several batches that anything did.**
-`PC-S331` crossed from IN-FLIGHT to DISCHARGED, so 14/21 became 15/20. The live count did not move
-and will not: closing an entry here changes what the DISTRIBUTION has done, never what the
-consumer's ledger says.
+**`v0.440.0` MOVED THE PARTITION for the second batch running.** `PC-S339` crossed from IN-FLIGHT to
+DISCHARGED, so 15/20 became 16/19, and TERMINAL rose 24 → 25 because rotating `BL-117` carried its
+second citation, `PC-S334`, into the archive. The live count did not move and will not: closing an
+entry here changes what the DISTRIBUTION has done, never what the consumer's ledger says.
+
+**DO NOT WRITE THE PLAN'S OWN CONTROL TOKEN INTO `docs/backlog.md`. THIS BATCH BROKE ITS OWN
+INSTRUMENT THAT WAY.** `BL-117`'s prose quoted the impossible-id control verbatim as
+`--grep=PC-S999-NEVER`, and rotating the entry moved that token into `docs/backlog.archive.md` —
+which is half of the corpus `filed.txt` is built from. The control that must return 0 returned
+**1**, on the very next derivation. It is renamed in the archive now. The general form: the derive
+block greps both backlog files, so any id-shaped token written into an entry becomes a member of
+the set that entry is later measured against.
 
 **Re-derive every figure above before trusting it.** The derive block is in `### Derive the state`
 below; run it, do not read these numbers.
 
-### NO SUBJECT IS PRE-CHOSEN. THE LAST FOUR PC-BACKED PICKS HAVE SHIPPED.
+### NO SUBJECT IS PRE-CHOSEN. THE LAST FIVE PC-BACKED PICKS HAVE SHIPPED.
 
-**`PC-S331-APPLY-SH-CO-EMITS-READOPT-AND-RETIRE-FOR-ONE-SUBJECT-AS-IF-BOTH-WERE-OWED` IS
-DISCHARGED, as `v0.439.0`, and `BL-037` is ROTATED to the archive.** Do not pick it up and do not
-re-scope it. `PC-S318-…-UNBLOCKS-ITS-OWN-PUSH` went at `v0.437.0` via `BL-049`,
+**`PC-S339-WITHDRAWAL-COMMIT-BECOMES-THE-NEW-ATTRIBUTION` IS DISCHARGED, as `v0.440.0`, and
+`BL-117` is ROTATED to the archive.** Do not pick it up and do not re-scope it. Before it,
+`PC-S331-…-AS-IF-BOTH-WERE-OWED` went at `v0.439.0` via `BL-037`,
+`PC-S318-…-UNBLOCKS-ITS-OWN-PUSH` at `v0.437.0` via `BL-049`,
 `PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH` at `v0.436.0` via
 `BL-051`, and `PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER` at `v0.435.0` with
 `PC-S307-MACHINE-AUDITS-IS-A-CHILD-OF-4A-SO-EVERY-4A-SHADOW-SWALLOWS-IT` beside it.
 
 **So the sweep decides your subject. If it comes back empty, the PC-backed set decides it, and
-there are 20 members with no pre-chosen favourite.** Rank by PROVENANCE first, then consequence,
+there are 19 members with no pre-chosen favourite.** Rank by PROVENANCE first, then consequence,
 never readiness. Whatever you pick, re-derive that its id is live upstream (archive control 0,
-impossible-id control 0) and run its receipt RAW rather than believing the entry — and score any
-receipt that accepts more than one candidate fix before trusting it, because `v0.439.0` measured
-both remedies its entry sanctioned and BOTH were regressions.
+impossible-id control 0) and run its receipt RAW rather than believing the entry.
+
+**AN ENTRY'S PREMISE MAY HAVE HALF-EXPIRED, AND THE HALF THAT DIED IS THE PART THAT NAMES THE
+REMEDY.** `BL-117` was filed against a `tail -1` election that a later release had already removed,
+and against a "permanent paste-ready annotation" that no longer carries a version — while its real
+subject, and the population, had grown WIDER than the filing. Enumerate an entry's distinct claims
+and score each BEFORE building, and say in the entry which survived. Taking the filed text at face
+value would have built a commit-trailer channel the defect no longer needs.
+
+**COUNT A CLAIM ABOUT EMITTED ROWS OVER EMITTED ROWS.** `v0.440.0`'s headline was first derived by
+grepping the ledger and read 21 / 12 / 5; driving the tool and counting what it actually emits gives
+16 / 9 / 3. The ledger grep counts entries already carrying `ADOPTED UPSTREAM` or `WITHDRAWN`
+markers, which `ledger-reverify` skips by design, so no row is ever emitted for them.
 
 **`BL-119` and `BL-122` are NOT PC-backed and rank below any PC-backed entry.** The selection rule
 is PROVENANCE first, then consequence — never readiness. `BL-123` IS PC-backed by the join, but the
-candidate it cites was discharged at `v0.435.0`, so closing it discharges nothing further upstream;
-an earlier revision of this block called it "not PC-backed", which was wrong about the mechanism
-and right about the ranking.
+candidate it cites was discharged at `v0.435.0`, so closing it discharges nothing further upstream.
+
+**`BL-066` NOW EXITS 1 RATHER THAN 9, AND THAT IS NOT A CLOSE.** Its receipt extracts
+`named_absorbed` with a `sed` range ending at `/^}/`, and the pre-`v0.440.0` body carried a bare `}`
+at column 0 — so it had been reading a TRUNCATED body and reporting that it measured nothing.
+`v0.440.0` removed that brace. The corpus histogram is now **61 exit 1, one exit 0, no exit 9**;
+the plan's older note naming `BL-066` as "the 9, whose receipt is broken shell" is superseded.
 
 **`BL-124` was filed by batch 22 and is the mirror case, not a defect in the release.** Arm C
 WIDENS a discrepancy in a premise `unregistered-drift.sh` states in its own remedy text — it did
 not open it; the premise was already inexact. Its entry names the
 weakness in its own third receipt arm and tells you how to replace it; read that before taking it.
 
-### THE GAP IS CLOSED. THE NEXT PULL IS THE OPERATOR'S DECISION, NOT YOURS.
+### THE REVISIT CONDITION HAS RE-FIRED, AND THE DIFFERENTIAL IS NO LONGER NULL. THE DECISION IS STILL THE OPERATOR'S.
 
-**The gap is ONE release.** Consumer installed **0.438.0 / `1b9f53ec`**, distribution **0.439.0**.
-The revisit condition the previous revisions of this block tracked — *"a second release
-accumulates"* — was reset by the pull and has NOT re-fired at one. **Do not propose a pull until it
-has**, and proposing is the ceiling in any case.
+**The gap is TWO releases.** Consumer installed **0.438.0 / `1b9f53ec`**, distribution **0.440.0**.
+The revisit condition the previous revisions tracked — *"a second release accumulates"* — has now
+re-fired. **Reporting it is the ceiling. Do not write a runbook, and do not dispatch one.**
 
-**The 14 DISCHARGED candidates are now DELIVERED to the consumer and still LIVE in its ledger.**
+**THE SECOND TEST SAYS YES, FOR THE FIRST TIME IN THIS PROGRAM.** Installed vs distribution
+`ledger-reverify.sh`, both run against a SCRATCH COPY of the consumer's committed tree with its own
+stamp's `commit` as base, both with their siblings beside them so an absent `lib.sh` cannot masquerade
+as a finding: **both `rc=0`, both 96 rows, zero stderr — and 20 differing lines.** The controls that
+make that readable are in the same invocation: the two copies are not byte-identical, and the two runs
+are the SAME SIZE, so the divergence is in the row content and not in what was reached. The consumer's
+installed copy emits the two-ends `NAMED-UPSTREAM` rows that `v0.440.0` replaced.
+
+**RUN THE DIFFERENTIAL ON A BINARY THAT ACTUALLY CHANGED IN THE RANGE.** This batch first ran it on
+`validate-layer-entries.sh`, as previous batches did, and the `cmp -s` control FIRED: that script is
+byte-identical across 0.438.0 → 0.440.0, so its perfect null was two runs of one program and says
+nothing. Derive the changed set first — `git diff --name-only <installed-commit>..origin/main -- core/`
+returns 5 paths — and pick the subject from it.
+
+**Mode-only changes in the range: 0**, and the first cut of that measurement was WRONG in the direction
+that manufactures a hazard. `git diff --raw` prints the source mode with a LEADING COLON, so a naive
+`$1 != $2` compares `:100755` against `100755` and reports every row as mode-differing — 5 false
+positives out of 5. Strip the colon first, and carry a control printing the distinct modes seen.
+
+**Two BOOTSTRAPPING paths are in the range** — `apply.sh` and `ledger-reverify.sh` — so the consumer's
+installed reconcile is what would run the pull carrying its own repair. That is the state to put in the
+question, not a reason to decide.
+
+**The 16 DISCHARGED candidates are DELIVERED to the consumer and still LIVE in its ledger.**
 Those are not in tension: the fixes are installed, and the ledger rows stay open until the
 consumer's own reverify closes them. Do not report the delivery as a discharge.
-
-**The differential is still NULL, measured twice, on two different subjects.** Both against
-`/Users/n8/git/graph`, each with a `cmp -s` control in the same invocation proving the two binaries
-actually differ, so neither null is two runs of one program:
-
-- **`validate-layer-entries.sh`**, installed vs distribution: both `rc=0`, both 2 findings, finding
-  sets byte-identical under `cmp`.
-- **`self-update-gate.sh`**, installed (0.434.0) vs distribution (0.436.0), run against the
-  consumer's real tree with its own stamp's `commit` as base: both emit exactly one row,
-  `SELF-UPDATE-OK`, and the new gate emits **0** `SELF-UPDATE-CARRY` rows today.
 
 **THAT SECOND NULL IS EXPLAINED, AND THE EXPLANATION IS THE ARGUMENT FOR PULLING.** The consumer's
 `.githooks/pre-push` is byte-identical to the distribution's copy at its installed commit right now,
@@ -1533,14 +1568,14 @@ so no block written before it changes verdict.
    real id means the grammar or the path is wrong, not that the candidate is old** — the ledger
    path is the only argument, and the archive is a SEPARATE file.
 
-   **THE BASELINE IS 65 LIVE CANDIDATES AT `v0.437.0`, 33 CITED, 32 UNFILED, AND SPRINT 306 IS
+   **THE BASELINE IS 65 LIVE CANDIDATES AT `v0.440.0`, 33 CITED, 32 UNFILED, AND SPRINT 306 IS
    FULLY DISCHARGED.** A higher count means the consumer filed while nobody was looking.
    **Re-derive rather than trusting those numbers** — they have moved between two consecutive
-   commands in this program, and the live count moved DURING batches 19 and 20 both. Batches 21,
-   22 and 23 are the counter-examples: sweeps across all three were byte-identical. **The live
-   count does not move when this program ships.** Closing an entry here changes what the
-   DISTRIBUTION has done; the consumer's ledger only moves on a pull, which is why DISCHARGED
-   rises and the denominator does not.
+   commands in this program, and the live count moved DURING batches 19 and 20 both. Batches 21
+   through 24 are the counter-examples: sweeps across all four were byte-identical, newest filing
+   still `2026-08-26`. **The live count does not move when this program ships.** Closing an entry
+   here changes what the DISTRIBUTION has done; the consumer's ledger only moves on a pull, which
+   is why DISCHARGED rises and the denominator does not.
 
    **THE SPRINT-306 RULING IS SPENT. DO NOT LOOK FOR SPRINT-306 WORK.**
 
@@ -1559,14 +1594,26 @@ so no block written before it changes verdict.
    `PC-S339-WITHDRAWAL-COMMIT-BECOMES-THE-NEW-ATTRIBUTION` is still filed here as `BL-117` and
    still IN FLIGHT — do not re-scope it.
 
-   **IF THE SWEEP FINDS NOTHING, TAKE THE STRONGEST PC-BACKED ENTRY, AND THAT IS `BL-037`.** The
-   selection rule is PROVENANCE first, then consequence — never readiness — so a PC-backed entry
-   outranks `BL-119` and `BL-122`, which discharge nothing upstream, and `BL-123`, whose candidate
-   was already discharged at `v0.435.0`. `BL-037` carries
-   `PC-S331-APPLY-SH-CO-EMITS-READOPT-AND-RETIRE-FOR-ONE-SUBJECT-AS-IF-BOTH-WERE-OWED`, and its
-   subject is `apply.sh` — a BOOTSTRAPPING step, where the consumer's installed copy runs the pull
-   that would carry its own repair. Measured at the close of batch 23: live upstream with archive
-   and impossible-id controls both 0, receipt raw exit 1. Re-derive both before scoping it.
+   **IF THE SWEEP FINDS NOTHING, TAKE A PC-BACKED ENTRY. THERE ARE 19 AND NONE IS PRE-CHOSEN.**
+   The selection rule is PROVENANCE first, then consequence — never readiness — so a PC-backed
+   entry outranks `BL-119` and `BL-122`, which discharge nothing upstream, and `BL-123`, whose
+   candidate was already discharged at `v0.435.0`. **`BL-037` and `BL-117` are both ROTATED and are
+   NOT available** — they shipped as `v0.439.0` and `v0.440.0`. Derive the set with the join below
+   and rank it yourself; re-derive that your pick's id is live upstream, with the archive and
+   impossible-id controls both 0, and run its receipt RAW before scoping it.
+
+   **ENUMERATE THE ENTRY'S DISTINCT CLAIMS BEFORE YOU BUILD, BECAUSE HALF OF ONE MAY HAVE
+   EXPIRED.** Batch 24's subject was filed against a mechanism a later release had already removed
+   and against a damage claim that no longer held, while its real population had grown WIDER than
+   the filing. Both dead halves named the REMEDY, so building from the filed text would have added
+   a declared channel the defect no longer needs. Score each claim, then say in the entry which
+   survived — and keep the entry whole rather than re-filing it, because which half died is the
+   part that stops the next reader repeating the mistake.
+
+   **AND COUNT A CLAIM ABOUT A TOOL'S OUTPUT OVER THAT TOOL'S OUTPUT.** The same batch's headline
+   was first taken by grepping the consumer's ledger and read 21 / 12 / 5; driving the tool against
+   a scratch copy and counting the rows it emits gives 16 / 9 / 3. The ledger holds entries the
+   tool SKIPS by design, and they can never be instances of a defect in a row it never emits.
 
    **Derive the PC-backed set rather than reading that name.** The join below is the only command
    in this action that measures the SUBJECT rather than the instrument; it returned 22 entries
