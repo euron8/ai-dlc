@@ -11,9 +11,14 @@ instruction from it.**
 
 ### START HERE: SWEEP THE CONSUMER FOR NEW PUSH CANDIDATES, THEN FIX ONE.
 
-**YOUR FIRST ACTION IS NUMBERED ACTION 1 BELOW — the sweep for candidates the consumer has filed
-since `v0.436.0`.** Standing operator instruction: do it before picking any subject, and report
-what it finds. It has caught a same-day filing in five of the last eight batches, twice while the
+**YOUR FIRST ACTION IS NUMBERED ACTION 1, UNDER THE HEADING `### NEXT ACTIONS — numbered, in
+order`. SEARCH FOR THAT HEADING AND GO THERE — do not scroll to it.** It sits roughly twelve
+hundred lines below this block, and everything in between is HISTORY that this block replaces.
+That distance is the file's main resumability hazard: a reader working downward meets a dozen
+batch records, each written in the imperative, before reaching the one instruction that is live.
+The action itself is the sweep for candidates the consumer has filed since `v0.436.0`.
+
+Standing operator instruction: sweep before picking any subject, and report what it finds. It has caught a same-day filing in five of the last eight batches, twice while the
 batch was already running. Batches 21 and 22 are the exceptions: both swept and both came back
 empty, so an empty sweep is now an ordinary outcome rather than a sign the sweep is broken.
 
