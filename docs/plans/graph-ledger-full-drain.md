@@ -9,14 +9,54 @@ and status records that were current when they were written and that THIS BLOCK 
 it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from it.**
 
-### START HERE: SWEEP THE CONSUMER FOR NEW PUSH CANDIDATES, THEN FIX ONE.
+### START HERE: ORCHESTRATE THE PULL. THIS SUPERSEDES THE SWEEP FOR THIS BATCH ONLY.
 
-**YOUR FIRST ACTION IS NUMBERED ACTION 1, UNDER THE HEADING `### NEXT ACTIONS — numbered, in
-order`. SEARCH FOR THAT HEADING AND GO THERE — do not scroll to it.** It sits roughly twelve
-hundred lines below this block, and everything in between is HISTORY that this block replaces.
-That distance is the file's main resumability hazard: a reader working downward meets a dozen
-batch records, each written in the imperative, before reaching the one instruction that is live.
-The action itself is the sweep for candidates the consumer has filed since `v0.436.0`.
+**THE OPERATOR HAS AUTHORIZED THE PULL AND NAMED WHO RUNS IT. That authorization is recorded here
+because it is the one thing this program's standing rules say never to assume.** Their instruction,
+2026-08-29: get the rehearsal done, update the runbook, and *"update the plan so that a fresh
+session will resume with orchestrating the pull runbook with `@graph-70`."*
+
+**YOUR JOB THIS BATCH IS TO ORCHESTRATE, NOT TO EXECUTE.** You are a distribution session. You
+cannot invoke the pull: skill scope follows the session root, and a session rooted in
+`/Users/n8/git/ai-dlc` cannot invoke `/ai-dlc-update` against the consumer at all. The executing
+session is **`graph-70`**, which is rooted in `/Users/n8/git/graph`.
+
+1. **Read `docs/plans/graph-pull-0434-to-0438.md` in full before you say anything to anyone.** It is
+   WRITTEN, REHEARSED and NOT STARTED. Its predecessor `graph-pull-0434-to-0437.md` is retitled
+   `SUPERSEDED — DO NOT EXECUTE`; do not send that one.
+2. **Re-derive its premises before dispatching, because they are hypotheses about two trees that
+   move.** At minimum: the consumer stamp still reads `0.434.0` on all four fields, the pipeline is
+   still paused (`USER_PAUSE` then `ALLOWED_BY_PAUSE` in its continuation log, and no
+   `.claude/.ai-dlc-applying`), and the distribution `VERSION` still reads `0.438.0`. If any has
+   moved, the runbook's range changed and it must be SUPERSEDED rather than patched — that has
+   already happened once in this program, within hours of the file being written.
+3. **Check what `graph-70` is DOING before you send it anything, and put that state into the message
+   rather than keeping it in your own head.** `busy` in `ListAgents` is a reason to look further,
+   never a green light. This is the specific mistake recorded in `operator-rulings.md`.
+4. **Send it the one-liner and nothing else**: `READ and FOLLOW docs/plans/graph-pull-0434-to-0438.md`.
+   Do not restate the runbook's contents in the message — a restatement drifts from the file, and
+   the file is what gets followed.
+5. **The phase-2 apply is OPERATOR-GATED and you do not grant it.** The runbook ends at an approval
+   the executor must present and stop on. Relay it; do not answer it.
+6. **When the run reports, discharge the runbook from THIS repo** — write its `## Discharge`, retitle
+   it `DISCHARGED — DO NOT EXECUTE`, and re-derive this block. A consumer session cannot do that; the
+   file is subject to this repo's gate.
+
+**THEN, AND ONLY THEN, RESUME THE ORDINARY BATCH LOOP BELOW** — sweep first, then pick a subject.
+The sweep instruction has not been retired; it is deferred behind the pull for this batch because
+the operator named the pull as the work.
+
+### THE ORDINARY BATCH LOOP: SWEEP THE CONSUMER FOR NEW PUSH CANDIDATES, THEN FIX ONE.
+
+**YOUR FIRST ACTION IS THE NUMBERED LIST DIRECTLY ABOVE — orchestrating the pull. It is the whole of
+your entry point for this batch and you do not need to scroll anywhere to find it.**
+
+**AFTER the pull reports and is discharged**, the ordinary batch loop resumes at numbered action 1
+under the heading `### NEXT ACTIONS — numbered, in order`. **SEARCH FOR THAT HEADING — do not scroll
+to it.** It sits roughly twelve hundred lines below this block, and everything in between is HISTORY
+that this block replaces. That distance is the file's main resumability hazard: a reader working
+downward meets a dozen batch records, each written in the imperative, before reaching the one
+instruction that is live.
 
 Standing operator instruction: sweep before picking any subject, and report what it finds. It has caught a same-day filing in five of the last eleven batches, twice while the
 batch was already running. Batches 21, 22 and 23 are the exceptions: all three swept and all three
@@ -135,6 +175,12 @@ authorization, and neither the PENDING count nor an earlier answer about WHETHER
 happen is a decision about WHEN. Never dispatch one; never hand one to a peer session. **Do not
 write the runbook until the operator says to** — a written, rehearsed, green runbook is READY, never
 AUTHORIZED, and writing one unasked spends the session on work nobody ordered.
+
+**FOR THIS BATCH THAT AUTHORIZATION HAS BEEN GIVEN, and the RESUME block at the top of this file
+records it.** The operator asked for the runbook, then asked that a fresh session orchestrate it
+with `graph-70`. That is a decision about WHEN and about WHO, and it is the only thing that lifts
+the ruling above. **It is spent once this pull reports** — it does not carry to the next range, and
+the paragraph above governs again the moment the runbook is discharged.
 
 **Read `docs/plans/graph-pull-0432-to-0434.md` as the worked example** — it is DISCHARGED, not a live
 plan, and its `## Discharge` section is the more useful half. `graph-pull-0432-to-0433.md` is marked

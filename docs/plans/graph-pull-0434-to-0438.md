@@ -14,17 +14,35 @@ as approval, and neither does the existence of this paragraph.
 written and rehearsed for a machinery-only range, and `v0.438.0` then added a RULEBOOK file to it.
 Its Done-when 1 checks the stamp reads `0.437.0`, but the skill resolves `theirs` at run time and
 will now deliver `0.438.0` — so following it would fail on a criterion that cannot be met and would
-predict a one-leg pull that no longer exists. Superseded rather than patched, because its RANGE
+predict a one-leg pull that no longer exists, and it is silent about the operator gate
+the real range ends in. Superseded rather than patched, because its RANGE
 changed, which is the condition its own action 9 names.
 
-**THE RANGE NOW SPLITS INTO TWO LEGS, AND THE GATE PRESCRIBES THE SPLIT RATHER THAN YOU.**
+**THE RANGE SPLITS INTO TWO PHASES, AND THE SECOND ONE IS NOT A SECOND SELF-UPDATE.** This was
+measured by rehearsing each phase separately, and the first draft of this file got it wrong.
+
 `v0.438.0` changes `steps/route.md`, which is rulebook, and roughly three dozen fixtures are coupled
 to rulebook — so `self-update-gate.sh` returns `SELF-UPDATE-DEFER rulebook-coupled-fixtures` and
-emits a `SELF-UPDATE-SAFE-STOP` naming the `0.437.0` commit. Leg 1 runs to the stop the gate names;
-leg 2 completes. **The gate names the stop itself; no sha is written into this file.**
+emits a `SELF-UPDATE-SAFE-STOP` naming the `0.437.0` commit.
 
-**The superseded runbook's rehearsal is not wasted — it IS leg 1**, and its figures are reproduced
-below as the leg-1 row of the table.
+- **PHASE 1 — an autonomous self-update to the stop the gate names.** Rehearsed at that range the
+  gate returns `SELF-UPDATE-OK`, so this phase cuts its own branch, runs its derived fixtures and
+  auto-merges, exactly as an ordinary machinery pull does.
+- **PHASE 2 — NOT another cycle. It is the operator-gated apply.** Rehearsed from the stop to
+  upstream HEAD the gate returns `SELF-UPDATE-DEFER` again and its safe-stop row reads *"no
+  intermediate release … self-updates cleanly"* — there is no further stop to run to.
+  `SKILL.md:366-374` is explicit about what happens instead: **do NOT cut a branch and do NOT
+  push.** The machinery slice is carried into the step-7 gated apply so machinery and rulebook land
+  on ONE branch, and `skill_version`/`skill_commit` advance **with that apply**, via
+  `reconcile/apply.sh --carried-machinery-slice`. **Do not set those two fields by hand.**
+
+**So the stamp reaches `0.438.0` only through an operator-approved apply, not through a second
+autonomous leg.** A session waiting for phase 2 to complete on its own will wait forever.
+
+**The gate names the stop itself; no sha is written into this file.**
+
+**The superseded runbook's rehearsal is not wasted — it IS phase 1**, and its figures are
+reproduced below as the phase-1 row of the table rather than re-derived by a different method.
 
 **THE CONSUMER IS PAUSED, AND THAT WAS VERIFIED RATHER THAN ASSUMED.** Its continuation log records
 `USER_PAUSE` followed by `ALLOWED_BY_PAUSE`, and `.claude/.ai-dlc-applying` is absent. **Re-verify
@@ -38,8 +56,8 @@ Operator-reported: the first handoff did not run all of the handoff steps; a sec
 `handoff`, ran every step.
 
 `v0.438.0` closes both halves of that (`BL-125`). But **the fix is in the range you are delivering,
-so it is not in the copy you are running.** Until leg 2 lands, the consumer's installed `route.md`
-still has the old Step 0.
+so it is not in the copy you are running.** Until the phase-2 apply lands, the consumer's
+installed `route.md` still has the old Step 0.
 
 **So the only skill you invoke in that tree is `/ai-dlc-update`. Do not type `/ai-dlc <anything>`
 else, and do not type a bare `handoff` or `resume`** — on the installed router those fall through to
@@ -80,23 +98,36 @@ written into this file**, because the skill resolves them and anything written d
    rather than a live beat, and that `.claude/.ai-dlc-applying` is absent. **If a sprint is running,
    stop and ping; do not pause it yourself.**
 
-3. **Run `/ai-dlc-update`, and expect TWO LEGS.** The rehearsal predicts
-   `SELF-UPDATE-DEFER rulebook-coupled-fixtures` naming `route.md`, plus a `SELF-UPDATE-SAFE-STOP`
-   at the `0.437.0` commit. Run leg 1 to the stop the gate names, then leg 2 to complete. **The
-   skill owns resolving the ref, gating its self-update, carrying the machinery slice and emitting
-   the worklist; none of that is re-described here.** If the gate does NOT defer, that disagrees
-   with the rehearsal — stop and ping rather than proceeding on the difference.
+3. **Run `/ai-dlc-update` and read the gate's verdict before doing anything else.** The rehearsal
+   predicts `SELF-UPDATE-DEFER rulebook-coupled-fixtures` naming `route.md`, plus a
+   `SELF-UPDATE-SAFE-STOP` at the `0.437.0` commit. If the gate does NOT defer, that disagrees with
+   the rehearsal — stop and ping rather than proceeding on the difference.
 
-4. **Compare each leg's manifest against the `## Rehearsal` table. Report BOTH, agreeing or not.**
+   **PHASE 1: re-invoke with the safe-stop ref the gate named**, which is what the skill's own
+   description prescribes for this state — prefixing the invocation with a distribution ref stops
+   short of upstream HEAD. That range self-updates autonomously.
+
+4. **PHASE 2 IS AN OPERATOR-GATED APPLY, NOT A SECOND CYCLE. Do not wait for one, and do not force
+   one.** From the stop to upstream HEAD the gate defers again with no further safe stop. Per
+   `SKILL.md:366-374`: report the rows, do NOT cut a branch, do NOT push, and carry the machinery
+   slice into the step-7 gated apply so machinery and rulebook land on one branch. The stamp
+   advances **through that apply** — `reconcile/apply.sh --carried-machinery-slice` — and **you do
+   not set `skill_version`/`skill_commit` by hand.**
+
+   **That apply needs the operator's approval and it is not yours to grant.** Present it, then
+   stop and ping.
+
+5. **Compare each phase's manifest against the `## Rehearsal` table. Report BOTH, agreeing or not.**
    The full range is **15 rows, 13 `UPSTREAM-ONLY` and 2 `UPSTREAM-ONLY-ADD`, ZERO `->CLASSIFY`**;
-   leg 1 is a strict subset at 13 rows and leg 2 adds exactly two. **A `->CLASSIFY` row is the
+   phase 1 is a strict subset at 13 rows and phase 2 is exactly two. **A `->CLASSIFY` row is the
    disagreement most worth stopping on** — it means the consumer edited a machinery path since the
    last pull and the rehearsal could not see it. Do not dispose of such a row; stop and ping.
 
-5. **Assert the derived fixtures were NAMED and ran, after EACH leg.** This range ships the fix that
-   makes step 2's fixture term include the fixtures the diff itself touches
-   (`core/skills/ai-dlc-update/SKILL.md:233`), enforced by a coverage join in
-   `core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh:119`. Leg 1 should name five:
+6. **Assert the derived fixtures were NAMED and ran — PHASE 1 ONLY.** Phase 2 defers, and a
+   deferred cycle cuts no branch and runs no derived fixtures, so there is no second fixture run to
+   look for. This range ships the fix that makes step 2's fixture term include the fixtures the diff
+   itself touches (`core/skills/ai-dlc-update/SKILL.md:233`), enforced by a coverage join in
+   `core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh:119`. Phase 1 should name five:
 
    ```
    consumer-machinery-inventory   layer-conforms-to   layer-entry-unreadable
@@ -111,12 +142,12 @@ written into this file**, because the skill resolves them and anything written d
    `layer-entry-unreadable` is NEW and arrives as two `UPSTREAM-ONLY-ADD` rows. A `MISS` verdict for
    it means the slice did not write it, which is a finding about the cycle rather than the fixture.
 
-6. **Dispose of the worklist rows from BOTH legs.** `apply` is not clean while one is outstanding.
+7. **Dispose of the worklist rows from BOTH phases.** `apply` is not clean while one is outstanding.
    The rehearsal emitted no `->CLASSIFY` row, so any adjudication row is new information — report it
    before disposing of it.
 
-7. **After leg 2, confirm the router fix actually landed**, because it is the reason this range is
-   two legs and it is the one file a rulebook deferral could strand:
+8. **After the phase-2 apply, confirm the router fix actually landed.** It is the reason this range
+   defers at all, and it is the one file a deferral strands if the apply is not carried through:
 
    ```
    grep -c 'ai-dlc resume' .claude/skills/ai-dlc/steps/route.md     # want >= 1
@@ -127,7 +158,7 @@ written into this file**, because the skill resolves them and anything written d
    So a post-pull `0` on the first is unambiguous. If the control is not 1 both times, the grep is
    reading the wrong file — stop and ping.
 
-8. **Close the candidates, by id.** Run `ledger-reverify` **from the consumer root** — a
+9. **Close the candidates, by id.** Run `ledger-reverify` **from the consumer root** — a
    distribution-root run has turned a live `STILL-LIVE` into a `CLOSE-CANDIDATE`, and a false close
    retires a live entry. The four ids this range discharges, each verified in-range against an
    impossible-id control:
@@ -145,9 +176,9 @@ written into this file**, because the skill resolves them and anything written d
    they landed at or before the base. If `ledger-reverify` closes any of them too, that is an
    incidental close; report it, do not chase it.
 
-9. **Report to the operator**, including an early stop. Then stop. You do not edit this file.
+10. **Report to the operator**, including an early stop. Then stop. You do not edit this file.
 
-10. **DISTRIBUTION SESSION ONLY — after the run reports, re-derive this file's own RESUME block and
+11. **DISTRIBUTION SESSION ONLY — after the run reports, re-derive this file's own RESUME block and
     prove it is resumable, then write `## Discharge` and retitle the file
     `DISCHARGED — DO NOT EXECUTE`.** The report is the moment the block above stops being an
     instruction and becomes a description of finished work. Re-run the `## Rehearsal` commands and
@@ -163,15 +194,19 @@ is thinking and a session that is waiting on a human look identical.
 
 ### Done when
 
-1. `.claude/.ai-dlc-version` reads `0.438.0` on all four fields. Observation point: after leg 2
-   completes, before any further work.
+1. `.claude/.ai-dlc-version` reads `0.438.0` on all four fields. Observation point: after the
+   phase-2 apply is approved and completes, before any further work. **If the operator does not
+   approve that apply, this criterion is correctly UNMET and the run stops there** — report the
+   stamp you did reach and say the apply is pending. Do not advance the fields by hand to satisfy
+   this line.
 2. `.claude/.ai-dlc-applying` is absent, at the same observation point.
-3. Action 7's grep returns non-zero with its control at 1, checked after leg 2.
+3. Action 8's grep returns non-zero with its control at 1, checked after the phase-2 apply. Not
+   reachable before it — `route.md` is rulebook and phase 1 does not carry it.
 4. The derived-fixture runner's log exists under `_bmad-output/ai-dlc-update/` for each leg and its
    summary line has been reported verbatim — **whatever it says.** Satisfied by REPORTING, not by a
    green run.
 5. `ledger-reverify`, run from the consumer root, has been run and its verdict for each of the four
-   ids in action 8 reported by name — **whatever that verdict is.** Satisfied by REPORTING, not by a
+   ids in action 9 reported by name — **whatever that verdict is.** Satisfied by REPORTING, not by a
    close: the tool decides, and a runbook demanding a particular answer would be asking its executor
    to produce one.
 6. Every worklist row emitted by either leg is disposed of, so `apply` reports clean.
@@ -193,10 +228,12 @@ report — stop and ping rather than reconciling it yourself.**
 | `UPSTREAM-ONLY` | 13 |
 | `UPSTREAM-ONLY-ADD` | 2 (`layer-entry-unreadable/run.sh`, `.../seed.sh`) |
 | `->CLASSIFY` | **0** |
-| leg 1 rows | 13 — a strict SUBSET of the full range, asserted, not assumed |
-| leg 2 adds | exactly 2: `.claude/skills/ai-dlc/steps/route.md`, `tests/fixtures/resume-whole-read/run.sh` |
+| phase 1 rows | 13 — a strict SUBSET of the full range, asserted, not assumed |
+| phase 2 rows | exactly 2: `.claude/skills/ai-dlc/steps/route.md`, `tests/fixtures/resume-whole-read/run.sh` |
 | templates | 4, all `TEMPLATE-UNCHANGED-NOOP` |
-| leg-1 derived fixtures, full slice written | **5 green, 0 red, 0 missing, of 5 named** |
+| phase-1 derived fixtures, full slice written | **5 green, 0 red, 0 missing, of 5 named** |
+| phase-2 gate, rehearsed from the stop | `SELF-UPDATE-DEFER` again, safe-stop row reads *no intermediate release … self-updates cleanly* |
+| phase-2 derived fixtures | **none — a deferred cycle cuts no branch and runs no fixtures** |
 
 **THE FIXTURE FIGURE HAS A PRECONDITION AND THE FIRST ATTEMPT AT IT WAS WRONG.** Run against a clone
 with only the fixture files copied in, all five came back RED — they were asserting against
@@ -207,8 +244,10 @@ landed; check the slice is complete before reading the verdict.
 **WHAT THE REHEARSAL COULD NOT COVER.** It wrote the slice by hand rather than driving step 2, so it
 exercised the coverage join and the fixture run but not the skill's own branch/commit/push cycle.
 **Leg 2's fixture run was not rehearsed at all** — it depends on a rulebook state that only exists
-after leg 1 lands, and constructing it by hand would have been a second implementation of the thing
-under test. And a `->CLASSIFY` row cannot appear in a rehearsal taken while the consumer has no
+after phase 1 lands, and constructing it by hand would have been a second implementation of the
+thing under test. **Rehearsing it settled the question rather than deferring it: phase 2 DEFERS, so
+it cuts no branch and runs no derived fixtures at all — there is no second fixture run to rehearse.
+That is why this file no longer claims one.** And a `->CLASSIFY` row cannot appear in a rehearsal taken while the consumer has no
 divergence: the zero above says "none today", not "none possible".
 
 **THE BOOTSTRAPPING HAZARD WAS MEASURED, NOT WARNED ABOUT.** The range changes
