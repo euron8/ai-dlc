@@ -930,15 +930,25 @@ cp "$(dirname "$CLOSER")"/*.sh "$MUTB/" 2>/dev/null
 # THE EARLIER FORM MATCHED ON `--grep="$_pfx"` AND A FIX TO THE GREP EXPRESSION SILENTLY DODGED IT.
 # When the prefix searches were anchored (`-E --grep="${_pfx}([^0-9A-Za-z-]|\$)"`), the sed pattern
 # stopped matching, the prefix arms stayed unbounded in the mutant, and this arm reported a
-# surviving named row. It failed LOUDLY, which is why the mutant is now keyed on
-# `--format=%H "$THEIRS"` — the ref argument IS what bounding changes, it is identical at every
-# search site, and it does not move when a grep expression is rewritten. `git log -S` at :269 is
-# already range-bounded and carries no bare `"$THEIRS"`, so it is untouched.
-sed -e 's@--format=%H "$THEIRS"@--format=%H "${BASE}..${THEIRS}"@g' \
+# surviving named row. It failed LOUDLY, which is why the mutant is keyed on the REF ARGUMENT of
+# a `--format=` search — the ref IS what bounding changes, it is identical at every search site,
+# and it does not move when a grep expression is rewritten. `git log -S` at :269 is already
+# range-bounded and carries no bare `"$THEIRS"`, so it is untouched.
+#
+# AND THE FORMAT LETTER IS NOT PART OF THE ANCHOR, WHICH IS A SECOND INSTANCE OF THE SAME LESSON.
+# The pattern was `--format=%H "$THEIRS"` spelled out. When `named_absorbed`'s two searches moved
+# to `--format=%h` — because the function now emits abbreviated shas directly instead of walking
+# them through `rev-parse --short` — the sed stopped matching THOSE TWO lines while still matching
+# `named_ambiguous`'s. `MUTB_LEFT` counted the same spelling, so it read 0 and the guard passed:
+# a HALF-bounded mutant, reported by this arm as six surviving named rows. The class is the one
+# the paragraph above already names, caught a second time by its own leftover-count guard. `%[hH]`
+# is what the site means — a `git log` asking for shas at the tip — and the leftover count is now
+# keyed the same way, so the two cannot drift apart.
+sed -E -e 's@(--format=%[hH]) "\$THEIRS"@\1 "\$\{BASE\}\.\.\$\{THEIRS\}"@g' \
   "$CLOSER" > "$MUTB/ledger-reverify.sh"
 # The mutation must have hit EVERY search, or a partial revert reads as a surviving mutant again.
-MUTB_HITS="$(LC_ALL=C grep -c -- '--format=%H "${BASE}..${THEIRS}"' "$MUTB/ledger-reverify.sh" || true)"
-MUTB_LEFT="$(LC_ALL=C grep -c -- '--format=%H "$THEIRS"' "$MUTB/ledger-reverify.sh" || true)"
+MUTB_HITS="$(LC_ALL=C grep -c -E -- '--format=%[hH] "\$\{BASE\}\.\.\$\{THEIRS\}"' "$MUTB/ledger-reverify.sh" || true)"
+MUTB_LEFT="$(LC_ALL=C grep -c -E -- '--format=%[hH] "\$THEIRS"' "$MUTB/ledger-reverify.sh" || true)"
 
 ASSERTIONS=$((ASSERTIONS + 1))
 if cmp -s "$CLOSER" "$MUTB/ledger-reverify.sh"; then
@@ -972,11 +982,319 @@ rm -rf "$CTLD"; mkdir -p "$CTLD"
 cp "$(dirname "$CLOSER")"/*.sh "$CTLD/" 2>/dev/null
 cp "$CLOSER" "$CTLD/ledger-reverify.sh"
 ctl_named="$(bash "$CTLD/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1 | awk -F'\t' '$1 == "NAMED-UPSTREAM" {c++} END{print c+0}')"
-if [ "$ctl_named" -eq 3 ]; then
-  printf '  ok    %-22s unmutated copy in the same directory emits both named rows (harness is sound)\n' "mutation-control"
+# COMPARED TO THE IN-PLACE RUN, NOT TO A LITERAL, and with a FLOOR beside it. The literal was 3
+# and it went stale the moment the seed grew the PC-S904/905/906 trio below; a hand-written total
+# in a control is a number that decays silently and then reads as a real kill. Equality is the
+# property being asserted — a byte-identical copy must agree with the detector in place — and the
+# floor is what stops two silences agreeing.
+own_named="$(printf '%s\n' "$OUT" | awk -F'\t' '$1 == "NAMED-UPSTREAM" {c++} END{print c+0}')"
+if [ "$ctl_named" -eq "$own_named" ] && [ "$own_named" -ge 3 ]; then
+  printf '  ok    %-22s unmutated copy in the same directory emits the same %s named rows (harness is sound)\n' "mutation-control" "$own_named"
 else
   FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s unmutated copy emitted %s named rows, want 3 — a copy that cannot run scores as a kill\n' "mutation-control" "$ctl_named"
+  printf '  FAIL  %-22s unmutated copy emitted %s named rows against %s in place (want equal, and >= 3) — a copy that cannot run scores as a kill\n' "mutation-control" "$ctl_named" "$own_named"
+fi
+
+# --- EVERY NAMING COMMIT IS LISTED, AND NO END IS ELECTED --------------------------------
+# THE DEFECT. The row reported the NEWEST and the OLDEST commit whose message names the id and
+# nothing between them, so for n > 2 the middle commits were never shown — and the two ends are
+# the WORST pair to elect. The oldest mention of an id is the commit that FILED it, or a plan;
+# the newest is the withdrawal or the docs commit written after the fix landed. Measured over the
+# reference consumer's 65 live ledger ids against this distribution's history: 21 have at least
+# one naming commit, 12 have more than one, and in 5 of those 12 NEITHER advertised end is a
+# `fix`/`feat` commit. Control in the same run: an impossible id returns 0 commits.
+#
+# THE EXPECTED SET IS DERIVED FROM THE REPO, NEVER READ OFF THE ROW. A count taken from a
+# rendering is not a derived count, and an arm that parses the row it is testing agrees with
+# itself whatever the row says. `named_set` asks git the question the subject asks and
+# abbreviates each sha the way the subject does, so what follows compares two independently
+# computed sets.
+named_set() { # <id> -> newline-separated SHORT shas, newest first
+  local _h
+  for _h in $(git -C "$DIST" log -F --grep="$1" --format=%H "$THEIRS" 2>/dev/null); do
+    git -C "$DIST" rev-parse --short "$_h" 2>/dev/null
+  done
+}
+named_detail() { # <rows> <id> -> field 3 of that id's NAMED-UPSTREAM row, or empty
+  printf '%s\n' "$1" | awk -F'\t' -v l="^$2\$" '$1=="NAMED-UPSTREAM" && $2 ~ l {print $3; exit}'
+}
+# <rows> <id> -> how many of that id's naming shas are ABSENT from its row, or NOROW.
+# NOROW is distinguished from 0 deliberately: a row that never appeared hides nothing and reports
+# nothing, and scoring it as "no shas missing" is how a subject emitting silence sweeps an
+# absence-shaped arm clean.
+named_missing() {
+  local _detail _s _miss=0
+  _detail="$(named_detail "$1" "$2")"
+  [ -n "$_detail" ] || { printf 'NOROW'; return 0; }
+  for _s in $(named_set "$2"); do
+    case "$_detail" in *"$_s"*) : ;; *) _miss=$((_miss + 1)) ;; esac
+  done
+  printf '%s' "$_miss"
+}
+# Does this id's row carry this sha? Used to say WHICH sha a mutant kept, so two mutants that
+# both drop one sha are scored on different observables instead of on the same one.
+named_has_sha() { case "$(named_detail "$1" "$2")" in *"$3"*) return 0 ;; *) return 1 ;; esac; }
+
+# PRECONDITION — THE MOTIVATING SHAPE, ASSERTED AGAINST THE REPO AND NOT AGAINST ANY ROW.
+# Three commits must name PC-S904, the MIDDLE one must be the commit that touched a subject, and
+# NEITHER end may have. Without that shape the arm below still prints ok while testing nothing:
+# at n <= 2 there is no middle commit to hide and the two-ends form and the whole-set form are the
+# same string, so a seed that drifts to n = 2 would silently retire the case it exists for.
+#
+# THIS IS THE ONE ARM HERE THAT READS NO OUTPUT OF THE SUBJECT, which is why it is labelled a
+# precondition: it would print ok against a subject replaced by `exit 0`. What stops that from
+# mattering is that every other arm in this block is PRESENCE-shaped — each requires a specific
+# row and a specific sha to appear — so silence fails them by construction.
+s904_id=PC-S904-ABSORBED-IN-THE-MIDDLE-COMMIT
+s905_id=PC-S905-ONE-NAMING-COMMIT-ONLY
+s906_id=PC-S906-TWO-NAMING-COMMITS-NOTHING-HIDDEN
+s904_shas="$(named_set "$s904_id")"
+s904_n="$(printf '%s\n' "$s904_shas" | grep -c . )"
+s904_new="$(printf '%s\n' "$s904_shas" | sed -n '1p')"
+s904_mid="$(printf '%s\n' "$s904_shas" | sed -n '2p')"
+s904_old="$(printf '%s\n' "$s904_shas" | sed -n '3p')"
+s906_shas="$(named_set "$s906_id")"
+s906_new="$(printf '%s\n' "$s906_shas" | sed -n '1p')"
+s906_old="$(printf '%s\n' "$s906_shas" | sed -n '2p')"
+# NO PIPE INTO `grep -q`. `git show --name-only` is fed into a command substitution and matched
+# with `case`, per this repo's standing rule about a reader that leaves before the writer has
+# finished; the output is small here, and the point is that the shape is correct anywhere.
+s904_touched() { case "$(git -C "$DIST" show --format= --name-only "$1" 2>/dev/null)" in
+    *core/scripts/s904-subject.sh*) return 0 ;; *) return 1 ;; esac; }
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ "$s904_n" -ne 3 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s %s commit(s) name %s, want 3 — below three there is no middle commit, and the two forms are the same string\n' "named-seed-shape" "$s904_n" "$s904_id"
+elif s904_touched "$s904_new" || s904_touched "$s904_old"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s an END of the range is the absorbing commit, so electing the two ends would have been RIGHT here and the arm below tests nothing\n' "named-seed-shape"
+elif ! s904_touched "$s904_mid"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the MIDDLE commit %s did not touch core/scripts/s904-subject.sh, so no commit in this range absorbed the entry\n' "named-seed-shape" "${s904_mid:-<none>}"
+else
+  printf '  ok    %-22s 3 commits name PC-S904; the MIDDLE one (%s) absorbed it and NEITHER end (%s newest, %s oldest) did\n' "named-seed-shape" "$s904_mid" "$s904_new" "$s904_old"
+fi
+
+# THE ARM. Every sha that names an id must appear in that id's row. The offender and BOTH
+# near-misses are read out of the SAME `$OUT`: PC-S904 at n=3 with one commit the two ends cannot
+# reach, PC-S906 at n=2 where the two ends ARE the whole set, and PC-S905 at n=1. The three carry
+# byte-identical receipts and emit two rows each, so the run is the same size whichever is being
+# read — an implementation that branches on `n > 1` and never reads a sha treats PC-S904 and
+# PC-S906 identically and cannot pass this. Held in one arm on purpose: each mutant below is then
+# a single failure rather than three entangled ones.
+ASSERTIONS=$((ASSERTIONS + 1))
+m904="$(named_missing "$OUT" "$s904_id")"
+m905="$(named_missing "$OUT" "$s905_id")"
+m906="$(named_missing "$OUT" "$s906_id")"
+if [ "$m904" = NOROW ] || [ "$m905" = NOROW ] || [ "$m906" = NOROW ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s a NAMED-UPSTREAM row is MISSING (904=%s 905=%s 906=%s) — a row that never appeared hides nothing and reports nothing, so this arm cannot discriminate\n' "named-lists-all" "$m904" "$m905" "$m906"
+elif [ "$m904" -eq 0 ] && [ "$m905" -eq 0 ] && [ "$m906" -eq 0 ]; then
+  printf '  ok    %-22s every naming sha is on its row — 3 for PC-S904 (the middle one included), 2 for PC-S906, 1 for PC-S905\n' "named-lists-all"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s naming shas ABSENT from their rows: PC-S904 %s of 3, PC-S906 %s of 2, PC-S905 %s of 1. A commit the row does not name is a commit the operator never reads\n' "named-lists-all" "$m904" "$m906" "$m905"
+  printf '%s\n' "$OUT" | awk -F'\t' '$1=="NAMED-UPSTREAM"{print $2"  "substr($3,1,120)}' | sed 's/^/          | /'
+fi
+
+# AND THE STATED COUNT MUST AGREE WITH THE LIST. A row saying "in 3 commits" while carrying two
+# shas sends the operator looking for a commit the row does not name, which is the same injury in
+# the other direction. Both spellings the row uses are accepted — the assertion is that the two
+# NUMBERS agree, not that either is phrased a particular way — and a row that states no count at
+# all fails, because "is this list complete" is then unanswerable from the row.
+ASSERTIONS=$((ASSERTIONS + 1))
+stated_count() { # <rows> <id> -> integer, or empty when the row states no count
+  local _d
+  _d="$(named_detail "$1" "$2")"
+  case "$_d" in
+    *"in one commit"*) printf '1' ;;
+    *) printf '%s' "$_d" | sed -n 's/.*NAMES this entry.s id in \([0-9][0-9]*\) commits.*/\1/p' ;;
+  esac
+}
+c904="$(stated_count "$OUT" "$s904_id")"
+c905="$(stated_count "$OUT" "$s905_id")"
+c906="$(stated_count "$OUT" "$s906_id")"
+if [ -z "$c904" ] || [ -z "$c905" ] || [ -z "$c906" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s a row states no commit count at all (904=[%s] 905=[%s] 906=[%s]) — without one the operator cannot tell a complete list from a truncated one\n' "named-count-agrees" "$c904" "$c905" "$c906"
+elif [ "$c904" = "3" ] && [ "$c906" = "2" ] && [ "$c905" = "1" ]; then
+  printf '  ok    %-22s the stated counts are 3 / 2 / 1 and each matches the number of shas the row carries\n' "named-count-agrees"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s stated counts 904=%s 906=%s 905=%s against derived 3 / 2 / 1 — the row is telling the operator to read a different number of commits than it names\n' "named-count-agrees" "$c904" "$c906" "$c905"
+fi
+
+# --- FOUR MUTANTS, ALL ANCHORED ON THE SLUG SEARCH --------------------------------------------
+# KEYED ON LOCATION, NOT ON A SPELLING, and on the ONE line that decides which commits exist as
+# far as this row is concerned. Everything downstream — the count, the list, the branch, the
+# sentence — is a rendering of that line's output, so a mutant here cannot be dodged by rewording
+# the row, and it survives the row being reworded. Each is a PIPELINE spliced into that line, so
+# each states its election as a behaviour rather than as a form of words.
+#
+# THE ANCHOR IS RESOLVED OUT OF THE FILE, NOT SPELLED OUT HERE, and that is a measurement rather
+# than a preference. The first draft of this block spelled the line
+# `--format=%H "$THEIRS"`; the detector then moved its two `named_absorbed` searches to
+# `--format=%h` — same query, abbreviated shas asked of git instead of walked through
+# `rev-parse --short` — and all three mutants below stopped applying in the same run. `cmp -s`
+# caught it, which is the guard working, but a mutant that stops mutating on a REWORDING is a
+# mutant keyed on a spelling, and this file's own `mutation-bound` arm was carrying the identical
+# defect twenty lines up. So the line is located by what it IS — the assignment of `_hits` from a
+# fixed-string `git log --grep` on the entry's own id — and whatever bytes that line currently
+# holds are the anchor.
+#
+# THE PATTERN SEPARATES THREE NEARLY IDENTICAL LINES. `named_ambiguous` runs the same query and
+# assigns it to `_slug_hit`; the prefix fallback in this same function assigns `_hits` from an
+# `-E` search on the SHORT id. The assignment target and `-F --grep="$_id"` together pick exactly
+# one, and the arm below asserts that it picked exactly one before any mutant is built.
+NAMED_ANCHOR="$(LC_ALL=C awk '/^  _hits="\$\(git .*log -F --grep="\$_id"/' "$CLOSER")"
+anchor_n="$(printf '%s\n' "$NAMED_ANCHOR" | grep -c . )"
+ASSERTIONS=$((ASSERTIONS + 1))
+# AND IT MUST END IN `)"`, because the three mutants below splice a pipeline in just before that
+# close. Asserted rather than assumed: a line ending some other way would be truncated by two
+# characters and every mutant would be a syntax error, which emits nothing — and "no rows" is
+# what a kill looks like.
+case "$NAMED_ANCHOR" in *')"') anchor_tail=ok ;; *) anchor_tail=no ;; esac
+if [ "$anchor_n" -eq 1 ] && [ "$anchor_tail" = ok ]; then
+  printf '  ok    %-22s the slug search resolves to exactly one line, ending in )" as the mutants require: %s\n' "named-anchor-unique" "$(printf '%s' "$NAMED_ANCHOR" | sed 's/^  //')"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the slug search resolved to %s line(s) (want 1) with a spliceable tail=%s — the three mutants below would edit the wrong site, or nothing at all\n' "named-anchor-unique" "$anchor_n" "$anchor_tail"
+fi
+
+# $1 tag, $2 a pipeline spliced into the resolved line just inside its closing `)"` -> prints the
+# mutant's output on stdout, or nothing if the mutation did not apply. The caller checks the empty
+# case, and `cmp -s` is what makes a substitution that matched nothing fail rather than pass.
+named_mutant() {
+  local _tag="$1" _pipe="$2" _d
+  _d="$(dirname "$DIST")/mut-named-$_tag"
+  rm -rf "$_d"; mkdir -p "$_d"
+  cp "$(dirname "$CLOSER")"/*.sh "$_d/" 2>/dev/null
+  awk -v anchor="$NAMED_ANCHOR" -v pipe="$_pipe" '
+    $0 == anchor { print substr($0, 1, length($0) - 2) " " pipe ")\""; next }
+    { print }' "$CLOSER" > "$_d/ledger-reverify.sh"
+  cmp -s "$CLOSER" "$_d/ledger-reverify.sh" && return 1
+  bash "$_d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1
+}
+
+# MUTANT A — `| head -1`, the newest-only election. PC-S906 must lose its OLDER sha and KEEP its
+# newest; PC-S905 must be untouched, or the mutant blinded the search rather than truncating it.
+ASSERTIONS=$((ASSERTIONS + 1))
+ma_out="$(named_mutant head '| head -1')" || ma_out=""
+if [ -z "$ma_out" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation did not apply, or the mutant emitted nothing — either way the list assertion is unproven\n' "mutation-named-head"
+elif [ "$(named_missing "$ma_out" "$s905_id")" != "0" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutant also dropped the single-commit id PC-S905, so it broke the search instead of truncating it\n' "mutation-named-head"
+elif [ "$(named_missing "$ma_out" "$s906_id")" = "1" ] && named_has_sha "$ma_out" "$s906_id" "$s906_new" ; then
+  printf '  ok    %-22s newest-only: PC-S906 keeps %s and loses %s, PC-S905 unmoved — the arm sees a dropped sha\n' "mutation-named-head" "$s906_new" "$s906_old"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s newest-only left PC-S906 missing %s sha(s) and newest-present=%s (want 1 and yes) — named-lists-all cannot see an election\n' \
+    "mutation-named-head" "$(named_missing "$ma_out" "$s906_id")" "$(named_has_sha "$ma_out" "$s906_id" "$s906_new" && echo yes || echo no)"
+fi
+
+# MUTANT B — `| tail -1`, the OLDEST-only election, which is the shape this code actually shipped.
+# Scored on the OPPOSITE observable to mutant A: the sha PC-S906 keeps must be its OLDEST. Without
+# that half the two mutants would be graded on one fact and one of them would be proving nothing.
+ASSERTIONS=$((ASSERTIONS + 1))
+mb2_out="$(named_mutant tail '| tail -1')" || mb2_out=""
+if [ -z "$mb2_out" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation did not apply, or the mutant emitted nothing — the oldest-only election is unproven\n' "mutation-named-tail"
+elif [ "$(named_missing "$mb2_out" "$s905_id")" != "0" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutant also dropped the single-commit id PC-S905, so it broke the search instead of truncating it\n' "mutation-named-tail"
+elif [ "$(named_missing "$mb2_out" "$s906_id")" = "1" ] && named_has_sha "$mb2_out" "$s906_id" "$s906_old" ; then
+  printf '  ok    %-22s oldest-only (the shipped defect): PC-S906 keeps %s and loses %s, PC-S905 unmoved\n' "mutation-named-tail" "$s906_old" "$s906_new"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s oldest-only left PC-S906 missing %s sha(s) and oldest-present=%s (want 1 and yes)\n' \
+    "mutation-named-tail" "$(named_missing "$mb2_out" "$s906_id")" "$(named_has_sha "$mb2_out" "$s906_id" "$s906_old" && echo yes || echo no)"
+fi
+
+# MUTANT C — `| head -2`, which is THE TWO-ENDS DEFECT ITSELF wearing a different hat: it reports
+# two commits for an id that has three and says nothing about the third. It is the only one of the
+# three the NEAR-MISS cannot see — PC-S906 has exactly two naming commits, so its row is
+# byte-unchanged — and that asymmetry is the point. An arm satisfiable by the n=2 case alone would
+# score this mutant green, and the whole reason PC-S904 is in the seed is that at n=3 a truncation
+# to two becomes visible at all.
+ASSERTIONS=$((ASSERTIONS + 1))
+mc2_out="$(named_mutant maxcount '| head -2')" || mc2_out=""
+if [ -z "$mc2_out" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation did not apply, or the mutant emitted nothing — the n>2 case is unproven\n' "mutation-named-maxcount"
+elif [ "$(named_missing "$mc2_out" "$s906_id")" != "0" ] || [ "$(named_missing "$mc2_out" "$s905_id")" != "0" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s truncating at two also moved PC-S906 (%s missing) or PC-S905 (%s missing) — it is not a clean mutation of the n>2 case alone\n' \
+    "mutation-named-maxcount" "$(named_missing "$mc2_out" "$s906_id")" "$(named_missing "$mc2_out" "$s905_id")"
+elif [ "$(named_missing "$mc2_out" "$s904_id")" = "1" ] && ! named_has_sha "$mc2_out" "$s904_id" "$s904_old" ; then
+  printf '  ok    %-22s truncating at two loses PC-S904'"'"'s oldest naming commit %s while PC-S906 and PC-S905 do not move — only n>2 can see this\n' "mutation-named-maxcount" "$s904_old"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s PC-S904 lost %s sha(s) under a two-commit truncation (want 1, and it must be the oldest %s) — the n>2 half of the arm is vacuous\n' \
+    "mutation-named-maxcount" "$(named_missing "$mc2_out" "$s904_id")" "$s904_old"
+fi
+
+# MUTANT D — `| sed -n '1p;$p'`, WHICH IS THE DEFECT ITSELF. Keeping only the first and last line
+# of the match set is exactly what "newest X and oldest Y" reported, expressed as a behaviour on
+# the search rather than as a form of words in the row, so this mutant survives every future
+# rewording of the sentence. It is the case the whole block exists for: the sha it hides is the
+# MIDDLE one, which is the commit that actually absorbed the entry, and PC-S906 and PC-S905 are
+# byte-unchanged because at n <= 2 the two ends ARE the whole set.
+#
+# THIS IS THE ONE MUTANT THE NEAR-MISS ALONE COULD NEVER KILL. Run against PC-S906 by itself it
+# changes nothing at all — which is what makes PC-S904's presence in the same ledger, at the same
+# receipt and in the same run, the thing being tested rather than a decoration.
+ASSERTIONS=$((ASSERTIONS + 1))
+md2_out="$(named_mutant twoends "| sed -n '1p;\$p'")" || md2_out=""
+if [ -z "$md2_out" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation did not apply, or the mutant emitted nothing — the two-ends election is unproven and this arm has never been shown to fire\n' "mutation-named-twoends"
+elif [ "$(named_missing "$md2_out" "$s906_id")" != "0" ] || [ "$(named_missing "$md2_out" "$s905_id")" != "0" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s electing the two ends also moved PC-S906 (%s missing) or PC-S905 (%s missing), where the ends ARE the whole set — the mutant broke the search rather than electing\n' \
+    "mutation-named-twoends" "$(named_missing "$md2_out" "$s906_id")" "$(named_missing "$md2_out" "$s905_id")"
+elif [ "$(named_missing "$md2_out" "$s904_id")" = "1" ] && ! named_has_sha "$md2_out" "$s904_id" "$s904_mid" \
+     && named_has_sha "$md2_out" "$s904_id" "$s904_new" && named_has_sha "$md2_out" "$s904_id" "$s904_old" ; then
+  printf '  ok    %-22s the two-ends election hides exactly the ABSORBING commit %s while advertising the withdrawal %s and the handoff %s — PC-S906 and PC-S905 do not move\n' "mutation-named-twoends" "$s904_mid" "$s904_new" "$s904_old"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s PC-S904 lost %s sha(s) under the two-ends election and middle-present=%s (want 1 missing, and it must be the middle %s) — the arm is not watching the commit that did the work\n' \
+    "mutation-named-twoends" "$(named_missing "$md2_out" "$s904_id")" "$(named_has_sha "$md2_out" "$s904_id" "$s904_mid" && echo yes || echo no)" "$s904_mid"
+fi
+
+# NO TWO OF THE FOUR MUTANTS MAY PRODUCE THE SAME OUTPUT. Two mutants with byte-identical output
+# are one mutant counted twice, and the second one proves nothing while reading as extra coverage.
+# `| head -2` and `| sed -n '1p;$p'` differ ONLY at n > 2 and would have collapsed into one here if
+# PC-S904 were not in the seed; `| head -1` and `| tail -1` differ only in WHICH sha survives. The
+# unmutated control is compared too: a mutant that agrees with it did not mutate anything
+# observable.
+# THE UNMUTATED SIDE IS `$OUT` ITSELF, not a fourth invocation. The three mutants are copies of
+# the detector run against this same seed with the same four arguments, so `$OUT` is exactly what
+# each of them would have printed had its `sed` matched nothing — which is the comparison being
+# made, and it costs no extra run of the subject.
+ASSERTIONS=$((ASSERTIONS + 1))
+mdist_ctl="$OUT"
+mdist_dupe=""
+[ "$ma_out"  = "$mb2_out"   ] && mdist_dupe="${mdist_dupe} head=tail"
+[ "$ma_out"  = "$mc2_out"   ] && mdist_dupe="${mdist_dupe} head=head2"
+[ "$ma_out"  = "$md2_out"   ] && mdist_dupe="${mdist_dupe} head=twoends"
+[ "$mb2_out" = "$mc2_out"   ] && mdist_dupe="${mdist_dupe} tail=head2"
+[ "$mb2_out" = "$md2_out"   ] && mdist_dupe="${mdist_dupe} tail=twoends"
+[ "$mc2_out" = "$md2_out"   ] && mdist_dupe="${mdist_dupe} head2=twoends"
+[ "$ma_out"  = "$mdist_ctl" ] && mdist_dupe="${mdist_dupe} head=unmutated"
+[ "$mb2_out" = "$mdist_ctl" ] && mdist_dupe="${mdist_dupe} tail=unmutated"
+[ "$mc2_out" = "$mdist_ctl" ] && mdist_dupe="${mdist_dupe} head2=unmutated"
+[ "$md2_out" = "$mdist_ctl" ] && mdist_dupe="${mdist_dupe} twoends=unmutated"
+if [ -z "$mdist_ctl" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the unmutated control emitted nothing, so "every mutant differs from it" is satisfied by wreckage\n' "named-mutants-distinct"
+elif [ -z "$mdist_dupe" ]; then
+  printf '  ok    %-22s the four mutants and the unmutated control produce five different outputs\n' "named-mutants-distinct"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s byte-identical output between:%s — a duplicated mutant reads as coverage and is not\n' "named-mutants-distinct" "$mdist_dupe"
 fi
 
 # --- ENTRY-SWALLOWED: a bold-bullet annotation that became its own entry -----------------

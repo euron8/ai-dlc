@@ -15,6 +15,96 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.440.0] - 2026-08-29
+
+### The `NAMED-UPSTREAM` row elected two commits, and on 3 of 9 measured ids neither was the fix
+
+`BL-117`, discharging the reference consumer's
+`PC-S339-WITHDRAWAL-COMMIT-BECOMES-THE-NEW-ATTRIBUTION`.
+
+`named_absorbed()` reported `in <n> commits, newest <a> and oldest <b>`. Those two ends are the
+worst pair to elect: the oldest mention of an id is the commit that FILED the entry, or a plan, or
+the withdrawal that disowns it, and the newest is the rotate or docs commit written after the fix
+landed. The absorbing commit sits in the middle, and for `n > 2` it was never shown at all — in a
+row whose entire purpose is to be read.
+
+**Measured by DRIVING the tool against a scratch copy of the reference consumer and counting the
+rows it actually emits**, not by a grammar over the ledger: it emits **16** per-entry
+`NAMED-UPSTREAM` rows, of which **9 carry more than one commit, and in 3 of those 9 neither
+advertised end is a `fix`/`feat` commit**. On
+`PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER` the row advertised a merge and a
+`docs(plan)` commit while `81e8b69d`, the `fix(v0.435.0)` that actually absorbed it, was
+invisible. Controls in the same run: an impossible status matches 0 rows, and stderr is empty.
+
+**A first cut of these figures read 21 / 12 / 5 and was measured over the wrong SET.** That
+grammar counted every id in the ledger, including the entries already carrying an
+`ADOPTED UPSTREAM` or `WITHDRAWN` marker — which `ledger-reverify` deliberately skips, so no row
+is ever emitted for them. A claim about emitted rows has to be counted over emitted rows. Found by
+an independent hand that re-derived the population with the shipping extraction instead of a
+hand-written one, and reproduced here exactly.
+
+The function now returns every naming sha, newest first, and elects none. Driven end-to-end
+against a scratch copy of the reference consumer, old and new: both runs emit 96 rows and 22
+`NAMED-UPSTREAM` rows — the same size, so the change is in the detail field and nowhere else — and
+every row is still exactly three TSV fields, against a seeded two-field row the same check counts
+as malformed.
+
+**The entry's own filed remedy was withdrawn on measurement.** It asked for a
+`Withdraws-attribution: <id>` commit trailer that the join subtracts. That cannot reach a single
+commit already written, including the `29516443` that motivated the filing; it needs every future
+withdrawal author to remember one line; and it adds a declared channel to suppress one member of a
+list the operator is being told to read anyway. Emitting the whole list and electing nothing
+removes the privileged slot instead of policing it, and reaches the existing corpus.
+
+`n` is bounded and that was measured rather than assumed: the emitted distribution is 7 ids at
+n=1, 7 at n=2, one at n=3 and one at n=4. Shas rather than subjects, because `emit()` is a
+three-field TSV row on one line and a commit subject may contain a tab. The list is joined with
+one `tr` rather than a shell loop calling `rev-parse` per commit — both queries already ask for
+`%h` — which also removes a latent trap: `for _h in $_hits` word-splits under bash and does not
+under zsh, where it would have returned an EMPTY list with no error.
+
+**WHAT THIS DOES NOT FIX, STATED BECAUSE THE ROW NOW MAKES IT VISIBLE.** Of the 16 emitted rows,
+**7 name no `fix`/`feat` commit anywhere in their list** — they are named only by filings, backlog
+rotations and CHANGELOG commits. For those the honest answer is "none of these absorbed it", and
+the row still asks the operator to read them and decide. Listing every commit surfaces that state
+instead of hiding it behind two elected ends; it does not resolve it, and no version is claimed
+for it. `PC-S339` itself is one of the seven.
+
+**`BL-066`'s receipt went from exit 9 to exit 1, and that is a precondition unblocking rather than
+a close.** It extracts the function with `sed -n '/^named_absorbed() {/,/^}/p'`, and the old body
+carried a bare `}` at column 0 — the continuation of `_old="${_hits##*<newline>}"` — which
+terminated that range early. The receipt was reading a TRUNCATED body and reporting "I measured
+nothing". Removing those two lines removed the stray brace, so it now reaches the whole function
+and reports `STILL-LIVE`, which is a real measurement and not a discharge. `BL-066` stays open.
+**A fix sited below that brace would have scored still-live forever** — the receipt histogram
+across the corpus is 61 exit 1 and one exit 0 (this release's subject), with no exit 9 left.
+
+**`BL-117`'s own receipt was replaced, and the one it replaced was wrong in BOTH directions.** It
+grepped the function body for the token `withdraw`, which is the FILED remedy rather than the
+defect: it rejects the correct fix (no such token survives), and a vacuous `_withdrawn=""` with
+behaviour identical to HEAD closes it. The replacement DRIVES the shipping program — it builds a
+throwaway repository whose middle commit is the absorbing one and both ends are not, runs
+`ledger-reverify.sh` against a probe ledger, and asserts each of the three shas appears in the
+emitted row exactly once. All three present kills "shows only the ends" and "shows only a count";
+exactly-once kills "shows the list and still elects one".
+
+**Three naming commits is the minimum discriminating seed, measured.** The same harness with two
+commits scores 0 on the unfixed tree AND on the fixed one, because at n=2 the two elected ends
+ARE the whole list.
+
+**One candidate "second spelling" turned out to be a regression, and the first receipt written for
+this entry accepted it.** A space-joined list reads correctly from the function but the caller
+parses the return with `awk '{print $3}'`, so only the first sha survives into the row. A receipt
+that evaluates the extracted function instead of running the program cannot see that — it was
+scored 8 ways and the one that ran the program caught it. A genuine second spelling, differing in
+identifier and join, is accepted.
+
+**Half of `BL-117` had expired before it was taken, and the entry now records which half.** The
+`tail -1` election it was filed against was already gone, and the row it called a "permanent
+paste-ready annotation" carries no version at all. The entry is kept whole rather than re-filed,
+because a reader who takes the original text at face value builds a channel the defect no longer
+needs.
+
 ## [0.439.0] - 2026-08-29
 
 ### `apply.sh` handed the operator a readopt and a retire for one override, and told them to commit both together

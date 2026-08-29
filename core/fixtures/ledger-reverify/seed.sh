@@ -70,6 +70,61 @@ git -C "$DIST" commit -q -m 'feat(v0.099.0): land two consumer-filed entries' \
 # carried by TWO (ambiguous), and naming both would tell the operator to close an entry upstream
 # never touched.
 
+# --- pre-base: THE MIDDLE-COMMIT CASE, AND THE TWO NEAR-MISSES THAT SIT BESIDE IT ---
+#
+# `named_absorbed()` reported the NEWEST and the OLDEST commit whose message names the id and
+# nothing between them. The two ends are the worst pair to elect: the oldest mention is the commit
+# that FILED the entry, or a plan, and the newest is the withdrawal or the docs commit written
+# after the fix landed. The absorbing commit sits in the MIDDLE and was never shown.
+#
+#   PC-S904  THREE naming commits, the ABSORBING one in the MIDDLE. Newest is a WITHDRAWAL,
+#            oldest is a docs handoff, and NEITHER touches a subject. This is the motivating
+#            shape, and the arm that reads it fires here or the population is not what it looks.
+#   PC-S906  TWO naming commits, so the two ends ARE the whole set and nothing can be hidden.
+#            THE NEAR-MISS, and it is in the SAME ledger and the SAME run as PC-S904 carrying a
+#            byte-identical receipt, so both entries emit the same two rows and the run is the
+#            same size whichever is being read. An implementation that keys on the COUNT
+#            (`n > 1`) and reads no sha classifies the two identically and cannot pass. In a
+#            SEPARATE run it could only ever ask whether the arm fires at all, never whether it
+#            fires on the right commits.
+#   PC-S905  ONE naming commit -- the single-commit branch, which the list must leave alone.
+#
+# ALL OF THEM SIT BEFORE base, for the same reason the commit above does: the bounded-search
+# mutant must lose every named row together, and a naming commit inside `BASE..THEIRS` would
+# survive it and make that arm report a partial revert.
+#
+# EACH ABSORBING COMMIT TOUCHES A FILE OF ITS OWN. "Which commit did the work" is then derivable
+# from the repo, so the fixture's precondition arm does not have to read it off the row it is
+# about to test.
+mkdir -p "$DIST/docs"
+
+printf 'a handoff that files the entry\n' > "$DIST/docs/s904-handoff.md"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'docs(plan): file PC-S904-ABSORBED-IN-THE-MIDDLE-COMMIT as a handoff' \
+  -m 'Lands no fix. OLDEST of the three commits naming this id.'
+
+printf '#!/bin/sh\necho s904 fixed\n' > "$DIST/core/scripts/s904-subject.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: absorb PC-S904-ABSORBED-IN-THE-MIDDLE-COMMIT' \
+  -m 'THE ABSORBING COMMIT, and it is neither end of the range.'
+
+printf 'a handoff that files the entry\nwithdrawn\n' > "$DIST/docs/s904-handoff.md"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'docs(ledger): withdraw PC-S904-ABSORBED-IN-THE-MIDDLE-COMMIT, premise was false' \
+  -m 'Lands no fix. NEWEST of the three commits naming this id.'
+
+printf '#!/bin/sh\necho s905 fixed\n' > "$DIST/core/scripts/s905-subject.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: absorb PC-S905-ONE-NAMING-COMMIT-ONLY'
+
+printf '#!/bin/sh\necho s906 fixed\n' > "$DIST/core/scripts/s906-subject.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: absorb PC-S906-TWO-NAMING-COMMITS-NOTHING-HIDDEN'
+
+printf 'landed\n' > "$DIST/docs/s906-note.md"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'docs(ledger): record PC-S906-TWO-NAMING-COMMITS-NOTHING-HIDDEN as landed'
+
 # --- base: neither marker present ---
 printf '# SKILL\nrule one\nrule two\n' > "$SK"
 printf '0.100.0\n' > "$DIST/VERSION"
@@ -174,6 +229,21 @@ cat > "$LED" <<'LEDGER'
 - **PC-S903-NEVER-CITED-AT-ALL** — the control for both arms. Id-shaped, unique prefix, and
   upstream names neither its slug nor `PC-S903`. It must stay silent, or the prefix arm is
   matching on shape rather than on evidence.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **PC-S904-ABSORBED-IN-THE-MIDDLE-COMMIT** — THREE commits name this id and the one that
+  absorbed it is the MIDDLE. Its two ends are a docs handoff and a withdrawal, so the pair the
+  two-ends form advertised is exactly the pair that did not land the fix.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **PC-S905-ONE-NAMING-COMMIT-ONLY** — one naming commit, so there is no list to get wrong. The
+  single-commit branch has to stay unchanged, or the fix rewrites every row it was not about.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **PC-S906-TWO-NAMING-COMMITS-NOTHING-HIDDEN** — TWO naming commits, so the two ends ARE the
+  whole set and nothing is hidden. The near-miss for the entry three above, deliberately in the
+  same ledger and carrying the same receipt: both emit a STILL-LIVE and a NAMED-UPSTREAM row,
+  both take the `n > 1` branch, and only the SHA SET tells them apart.
   verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
 
 - **Entry H names an ambiguous basename.** Two files at theirs are called

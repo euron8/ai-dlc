@@ -444,8 +444,8 @@ prefix_entry_count() { # <PC-S<n>> -> integer
   } | sort -u | grep -cE "^$1-" 2>/dev/null || true
 }
 
-named_absorbed() { # <label> -> "<newest-sha> <oldest-sha> <n> <how>" if upstream's history names it, else ""
-  local _id="$1" _hits _new _old _n _pfx _how
+named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,..." if upstream's history names it, else ""
+  local _id="$1" _hits _list _n _pfx _how _h
   case "$_id" in
     *[!A-Z0-9-]*|'') return 0 ;;              # not id-shaped: prose label, nothing to ask
   esac
@@ -469,11 +469,32 @@ named_absorbed() { # <label> -> "<newest-sha> <oldest-sha> <n> <how>" if upstrea
   # message. The `ALREADY-FIXED-<sha>` verdict form has to be forward-walked to a release or it
   # misbuckets as incomparable -- which is how the filing's second count came out at 22 of 24.
   #
-  # So this reports WHAT IT KNOWS -- how many commits name the id, and the two ends of the range
-  # -- and stops electing one of them. The `tail -1` defence a few lines up argued SIGPIPE, which
-  # is real and is orthogonal: the list comes off a variable here, so no pipe is abandoned either
-  # way.
-  _hits="$(git -C "$DIST" log -F --grep="$_id" --format=%H "$THEIRS" 2>/dev/null)"
+  # So this reports WHAT IT KNOWS -- how many commits name the id, and WHICH ONES -- and stops
+  # electing any of them. The `tail -1` defence a few lines up argued SIGPIPE, which is real and is
+  # orthogonal: the list comes off a variable here, so no pipe is abandoned either way.
+  #
+  # EVERY SHA, NOT THE TWO ENDS. Reporting "newest X and oldest Y" replaced one election with two,
+  # and the two ends are the WORST pair to elect: the oldest mention of an id is the commit that
+  # FILED it, or a plan, or the withdrawal that disowns it, and the newest is the rotate or docs
+  # commit written after the fix landed. The absorbing commit sits in the MIDDLE and was never
+  # shown. Reported by the reference consumer as
+  # PC-S339-WITHDRAWAL-COMMIT-BECOMES-THE-NEW-ATTRIBUTION, which named the withdrawal case; the
+  # measured population is wider than that filing.
+  #
+  # MEASURED over that consumer's 65 live ledger ids against this distribution's history: 21 have
+  # at least one naming commit, 12 have more than one, and in 5 of those 12 NEITHER advertised end
+  # is a `fix`/`feat` commit -- both are docs, chore or merge commits. Control in the same run: an
+  # impossible id returns 0 commits. So on 5 of 12 the operator was handed two commits and neither
+  # was the answer, with no signal that more existed.
+  #
+  # THE LIST IS BOUNDED AND THAT WAS MEASURED, NOT ASSUMED. Max n over that live ledger is 4; the
+  # largest seen anywhere, in the archive, is 5. An id is written once in the commit that lands the
+  # entry and re-cited only by the release that fixes it and the docs commit that rotates it, so n
+  # tracks an entry's lifecycle and does not grow with the corpus.
+  #
+  # SHAS, NOT SUBJECTS. `emit()` is a THREE-FIELD TSV row on one line, and a commit subject may
+  # contain a tab. A sha cannot, so the list cannot corrupt the row that carries it.
+  _hits="$(git -C "$DIST" log -F --grep="$_id" --format=%h "$THEIRS" 2>/dev/null)"
   if [ -z "$_hits" ]; then
     # FALLBACK: the short id upstream actually writes. Only when it names ONE entry.
     _pfx="$(printf '%s' "$_id" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')"
@@ -494,19 +515,21 @@ named_absorbed() { # <label> -> "<newest-sha> <oldest-sha> <n> <how>" if upstrea
     # word boundary rather than `\b`, which BSD and GNU disagree about: the next character must not
     # extend the id, so a digit, a letter or a dash all disqualify. The SLUG search above stays `-F`
     # -- a full slug is already specific, and a fixed string is the right tool for it.
-    _hits="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z-]|\$)" --format=%H "$THEIRS" 2>/dev/null)"
+    _hits="$(git -C "$DIST" log -E --grep="${_pfx}([^0-9A-Za-z-]|\$)" --format=%h "$THEIRS" 2>/dev/null)"
     _how=prefix
   fi
   [ -n "$_hits" ] || return 0
-  _new="${_hits%%
-*}"                                    # git log is newest-first
-  _old="${_hits##*
-}"
   _n="$(printf '%s\n' "$_hits" | grep -c . 2>/dev/null || true)"
-  printf '%s %s %s %s' \
-    "$(git -C "$DIST" rev-parse --short "$_new" 2>/dev/null)" \
-    "$(git -C "$DIST" rev-parse --short "$_old" 2>/dev/null)" \
-    "${_n:-1}" "$_how"
+  # Newest-first, which is `git log`'s own order and therefore the order the operator reads them
+  # in. No end is privileged: the list is emitted whole and the caller elects nothing.
+  #
+  # `tr`, NOT A SHELL LOOP OVER $_hits. Both queries above ask for `%h`, so the shas are already
+  # abbreviated and joining them costs one fork instead of one PER NAMING COMMIT. The loop this
+  # replaces also carried a latent trap: `for _h in $_hits` word-splits under bash and does NOT
+  # under zsh, where it would iterate once over the whole newline-joined string, hand that to
+  # `rev-parse`, and return an EMPTY list with no error.
+  _list="$(printf '%s\n' "$_hits" | tr '\n' ',' | sed 's/,$//')"
+  printf '%s %s %s' "$_how" "${_n:-1}" "$_list"
 }
 
 # The ambiguous half, reported rather than guessed. Upstream cites the sprint prefix, two or more
@@ -1097,12 +1120,13 @@ while IFS="$(printf '\t')" read -r label ord directive; do
   na=""; nam=""
   case "$ord" in 1/*|"") na="$(named_absorbed "$label")"; [ -n "$na" ] || nam="$(named_ambiguous "$label")" ;; esac
   if [ -n "$na" ]; then
-    na_c="$(printf '%s' "$na" | awk '{print $1}')"
-    na_o="$(printf '%s' "$na" | awk '{print $2}')"
-    na_n="$(printf '%s' "$na" | awk '{print $3}')"
-    na_h="$(printf '%s' "$na" | awk '{print $4}')"
+    na_h="$(printf '%s' "$na" | awk '{print $1}')"
+    na_n="$(printf '%s' "$na" | awk '{print $2}')"
+    na_c="$(printf '%s' "$na" | awk '{print $3}')"
     if [ "${na_n:-1}" -gt 1 ] 2>/dev/null; then
-      na_where="in $na_n commits, newest $na_c and oldest $na_o"
+      # ALL OF THEM, newest first, none elected. Naming two ends told the operator to read two
+      # commits and hid the rest; on the measured corpus the absorbing commit is usually neither.
+      na_where="in $na_n commits, ALL of them: $na_c (newest first, and NONE of them is elected -- read them)"
     else
       na_where="in one commit, $na_c"
     fi

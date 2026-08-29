@@ -3109,48 +3109,117 @@ be located or the keep run emits nothing.
 
 verify: sh set -e; a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$a" ] || exit 9; t=$(mktemp -d); sed -n '/^while IFS="$TAB_CH" read -r ext detail; do$/,/^EOF$/p' "$a" > "$t/l.sh"; [ -s "$t/l.sh" ] || exit 9; { echo 'TAB_CH="$(printf "\t")"'; echo 'say(){ printf "%s %s\n" "$1" "$2"; }'; echo 'ADJ_ROW_TOKEN=adjudicated'; echo 'ADJ_KEEP_VERDICT=still-additive'; echo 'LD_HOOK="$(printf "extensions/e.md\t%s" "$D")"'; echo '. "$T/l.sh"'; } > "$t/d.sh"; r=$(T="$t" D="adjudicated=retire :: p" bash "$t/d.sh" 2>&1) || exit 9; k=$(T="$t" D="adjudicated=still-additive :: p" bash "$t/d.sh" 2>&1) || exit 9; rm -rf "$t"; [ -n "$k" ] || exit 9; [ "$r" = "$k" ] && exit 1; exit 0
 
-## BL-117 — a commit that WITHDRAWS an attribution becomes the new attribution, permanently
+## BL-117 — the `NAMED-UPSTREAM` row elects two commits and neither is usually the absorbing one
 
-**`named_absorbed()` joins an id to the OLDEST commit whose MESSAGE contains it, and a
-withdrawal names the ids it is withdrawing.** So the commit saying *"this attribution was
-wrong"* is itself a naming, it is early, and `tail -1` elects it. The entry can never shed the
-row: every later correct citation is younger and loses the election.
+**HALF OF THIS ENTRY EXPIRED BEFORE IT WAS TAKEN, AND THE HALF THAT SURVIVED IS WIDER THAN IT WAS
+FILED.** The entry is kept whole rather than re-filed, because which half died is the load-bearing
+part: a reader who takes the original text at face value builds a channel the defect no longer
+needs.
 
-Measured on `origin/main`, with the anchoring control in the same invocation:
+**DEAD — the `tail -1` election.** The filing said `named_absorbed()` "joins an id to the OLDEST
+commit whose MESSAGE contains it, and `tail -1` elects it". That was true when filed and is not
+now: `PC-S334-NAMED-ABSORBED-JOINS-ON-THE-OLDEST-MESSAGE-MENTION` removed the election, and the
+function returns the whole match set's shape rather than one elected member.
+
+**DEAD — the wrong version in a permanent annotation.** The filing's damage claim was that "the
+consumer is handed an absorbing version that is too early, inside a PERMANENT paste-ready
+annotation". The row now carries **no version at all**, deliberately, and says so in its own text.
+There is no version to be wrong.
+
+**SURVIVES, AND IS THE SUBJECT — electing two ends instead of one.** The replacement reported
+`in <n> commits, newest <a> and oldest <b>`, which swapped one election for two and picked the
+worst possible pair. The oldest mention of an id is the commit that FILED the entry, or a plan, or
+the withdrawal that disowns it; the newest is the rotate or docs commit written after the fix
+landed. **The absorbing commit sits in the middle and was never shown**, and for `n > 2` the
+operator was not told which of the named commits they were not being shown.
+
+**The population is WIDER than the withdrawal case this was filed as.** Measured by DRIVING
+`ledger-reverify` against a scratch copy of the reference consumer and counting the rows it
+actually emits: it emits **16** per-entry `NAMED-UPSTREAM` rows, **9 carry more than one commit,
+and in 3 of those 9 NEITHER advertised end is a `fix`/`feat` commit** — both ends are docs, chore
+or merge commits. A withdrawal is one way to occupy an end, not the only way. Controls in the same
+run: an impossible status matches 0 rows, stderr is empty.
+
+**COUNT THIS OVER EMITTED ROWS, NOT OVER THE LEDGER.** A first cut read 21 / 12 / 5 by grepping
+the ledger for ids. That set includes every entry already carrying an `ADOPTED UPSTREAM` or
+`WITHDRAWN` marker, which `ledger-reverify` skips by design — so no row is ever emitted for them
+and they cannot be instances of a defect in a row. The shipping extraction is the population.
+
+The clearest live instance, and the reason a grammar fix was never the answer:
 
 ```
-git log --format='%h %s' -F --grep=PC-S304-APPLY-SH-RESTAMPS-BEFORE-THE-WORKLIST-IS-DONE origin/main | tail -1
-  -> 29516443  fix: the short-id fallback was unanchored and archive-blind, and it misattributed 4 entries
-git log -1 --format=%B 29516443 | grep -coE 'PC-S331[^-A-Z]'   -> 0   # bare prefix: the anchoring fix HOLDS
-git log -1 --format=%B 29516443 | grep -cF PC-S304-APPLY-SH-RESTAMPS-BEFORE-THE-WORKLIST-IS-DONE
-                                                               -> 1   # the FULL SLUG, in the withdrawal list
+id=PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER
+git log --format='%h %s' -F --grep="$id" origin/main
+  81443020  Merge v0.435.0 ...              <- advertised as "newest"
+  e8a3f09b  docs(v0.435.0): close/rotate ...
+  81e8b69d  fix(v0.435.0): ...              <- THE ABSORBING COMMIT, never shown
+  edcb5ffa  docs(plan): re-derive ...       <- advertised as "oldest"
+git log -F --grep=PC-S999-NEVER --format=%H origin/main | grep -c .   -> 0   # control
 ```
 
-`29516443` withdrew four wrong `NAMED-UPSTREAM` attributions and named all four in full to say
-so. It now supplies the attribution for all four. Its own report reads `NAMED-UPSTREAM 13 -> 9`;
-**four of those nine survivors are the four it withdrew**, re-attached through the longer slug
-the anchoring change was never scoped to.
+**THE REMEDY IS SUBTRACTION, NOT A NEW CHANNEL, AND THE FILED REMEDY IS WITHDRAWN.** The filing
+asked for a `Withdraws-attribution: <id>` commit trailer that the join subtracts. That was
+rejected on measurement, for three reasons: it cannot reach a single commit already written,
+including the `29516443` that motivated the filing; it needs every future withdrawal author to
+remember one line, with nothing to remind them; and it adds a declared channel to keep in sync in
+order to suppress one member of a list the operator is being told to read anyway. Emitting the
+**whole** list and electing nothing removes the privileged slot the defect lives in, reaches every
+commit already written, and deletes code rather than adding a mechanism.
 
-**The direction is the damaging one.** `29516443` predates the releases that really absorbed
-these ids — `PC-S304` was genuinely closed at `v0.426.0` — so the consumer is handed an absorbing
-version that is too early, inside a PERMANENT paste-ready annotation. Same family as `BL-066`,
-reached by a new route: not a passing mention, but a deliberate DENIAL read as a claim.
+`n` is bounded and that was measured rather than assumed: over the emitted rows the distribution
+is 7 ids at n=1, 7 at n=2, one at n=3, one at n=4. An id is written once by the commit that lands
+the entry and re-cited only by the release that fixes it and the docs commit that rotates it, so
+`n` tracks one entry's lifecycle and does not grow with the corpus. Shas rather than subjects,
+because `emit()` is a three-field TSV row on one line and a commit subject may contain a tab.
 
-**A grammar fix cannot reach it.** A withdrawal has to name the id to be auditable, and no regex
-separates "names it to claim it" from "names it to disown it" — that is intent, not text. The
-remedy has to be a declared channel: a `Withdraws-attribution: <id>` trailer that the join
-SUBTRACTS, one line for whoever writes the withdrawal.
+**WHAT THIS DOES NOT FIX, RECORDED BECAUSE THE FIX MAKES IT VISIBLE AND SOMEONE WILL READ THAT AS
+A NEW DEFECT.** Of the 16 emitted rows, **7 name no `fix`/`feat` commit anywhere in their list** —
+only filings, backlog rotations and CHANGELOG commits. For those the honest answer is "none of
+these absorbed it", and the row still asks the operator to read them and decide. `PC-S339` itself
+is one of the seven: its sole naming commit is the `docs:` commit that FILED this entry. That is
+not this entry's subject and is not closed by it; the row already states in its own text that
+naming is not absorbing, and it claims no version. Listing every commit surfaces the state instead
+of hiding it behind two elected ends.
+
+**An n=1 row still names exactly one commit, and that is NOT a surviving election.** Listing every
+member of a one-member set is the same act as listing every member of a four-member set; there is
+no privileged slot left to remove. The n=1 concern is the paragraph above — whether any naming
+commit absorbed anything — not the shape of the row.
 
 Filed by the reference consumer as `PC-S339-WITHDRAWAL-COMMIT-BECOMES-THE-NEW-ATTRIBUTION`,
-observed on the `0.430.1 -> 0.432.0` pull. Tiered **DEFECT**: it emits a wrong permanent
-annotation, but reaching it requires someone to have written a withdrawal, which is rare and
-deliberate.
+observed on the `0.430.1 -> 0.432.0` pull. Tiered **DEFECT**: it points the operator at the wrong
+commits in a row whose entire purpose is to be read, on 5 of the 12 measured multi-commit ids.
 
-The receipt is STRUCTURAL: it exits 1 while `named_absorbed()` carries no withdrawal-trailer
-subtraction, 0 once one exists, and 9 if the function cannot be located or its body does not
-parse — so a reshaped file reports a moved precondition rather than a false close.
+**The receipt DRIVES THE SHIPPING PROGRAM and keys on BEHAVIOUR.** It builds a throwaway
+repository with three commits naming one probe id — the MIDDLE one absorbing, both ends not — and
+a probe ledger holding that id, runs `ledger-reverify.sh` against them, and asserts that each of
+the three shas appears in the emitted `NAMED-UPSTREAM` row EXACTLY ONCE. All three present kills
+"shows only the ends" and "shows only a count"; exactly-once kills "shows the list and still
+elects one". `NAMED-UPSTREAM` is the only identifier it keys on and it is a bound vocabulary
+member. Controls inside the receipt: the three shas must be pairwise distinct, so a silently
+failed commit cannot score the safe-but-wrong 1, and a row for the probe label must exist, which
+is what proves the run REACHED the emit site. Exit 9 means the subject moved — file gone, `git` or
+`mktemp` unusable, probe history not built, no such row — never a real still-live.
 
-verify: sh f=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -f "$f" ] || exit 9; b=$(sed -n '/^named_absorbed() {/,/^}/p' "$f" | sed 's/#.*//'); [ -n "$b" ] || exit 9; grep -q 'grep' <<<"$b" || exit 9; grep -qi 'withdraw' <<<"$b" && exit 0; exit 1
+**THREE naming commits is the minimum discriminating seed, and that was measured.** The same
+harness with TWO commits scores 0 on the unfixed tree and 0 on the fixed one, because at `n = 2`
+the two elected ends ARE the whole list. A two-commit seed would have certified anything.
+
+**What still scores STILL-LIVE, deliberately**: any implementation naming one commit twice,
+including one that prints the full list AND an `<oldest>..<newest>` range beside it — that is
+re-electing ends. A rewrite of the row's PROSE alone also scores 1, because the receipt reads the
+shas the function supplied and not the sentence around them.
+
+**The receipt this replaced was wrong in BOTH directions, and so was the first replacement.** The
+original grepped the function body for the token `withdraw` — the FILED remedy, not the defect —
+so it rejects the correct fix and is closed by a vacuous `_withdrawn=""` whose behaviour is
+identical to the unfixed code. The first replacement EVALUATED the extracted function instead of
+running the program, and therefore accepted a space-joined list: that reads correctly out of the
+function but the caller parses the return with `awk '{print $3}'`, so only the first sha ever
+reaches the row. **A receipt that reads the subject instead of running it cannot see a defect that
+lives in the caller.**
+
+verify: sh f=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -f "$f" ] || exit 9; t=$(mktemp -d) || exit 9; trap 'rm -rf "$t"' EXIT; d=$t/d; L=PC-S999-RECEIPT-PROBE-LABEL; mkdir -p "$d" "$t/c/_bmad-output/ai-dlc-update" || exit 9; git -c init.templateDir= -C "$d" init -q >/dev/null 2>&1 && git -C "$d" config user.email r@r && git -C "$d" config user.name r || exit 9; printf '0.1.0\n' >"$d/VERSION"; git -C "$d" add -A >/dev/null 2>&1; git -C "$d" commit -qm base >/dev/null 2>&1 || exit 9; B=$(git -C "$d" rev-parse HEAD); git -C "$d" commit -q --allow-empty -m "fix: oldest names $L" >/dev/null 2>&1; O=$(git -C "$d" rev-parse --short HEAD); git -C "$d" commit -q --allow-empty -m "chore: middle names $L" >/dev/null 2>&1; M=$(git -C "$d" rev-parse --short HEAD); git -C "$d" commit -q --allow-empty -m "docs: newest names $L" >/dev/null 2>&1; N=$(git -C "$d" rev-parse --short HEAD); [ -n "$O" ] && [ "$O" != "$M" ] && [ "$M" != "$N" ] && [ "$O" != "$N" ] || exit 9; printf '# probe ledger\n\n## %s\n\nverify: manual\n' "$L" >"$t/c/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; r=$(awk -F'\t' -v l="$L" '$1=="NAMED-UPSTREAM"&&$2==l{print $3}' <<<"$(bash "$f" "$d" "$B" "$t/c" HEAD 2>/dev/null)"); [ -n "$r" ] || exit 9; case "$(awk -v o="$O" -v m="$M" -v n="$N" '{a=gsub(o,"");b=gsub(m,"");c=gsub(n,"");print a b c}' <<<"$r")" in 111) exit 0 ;; esac; exit 1
 
 ## BL-113 — a `verify: sh` receipt that spans two lines is TRUNCATED by the engine and mis-scores silently
 
