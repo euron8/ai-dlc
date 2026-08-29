@@ -2081,62 +2081,6 @@ at pinned ledger line 3413.
 
 
 verify: sh S=core/skills/ai-dlc-update/SKILL.md; F=core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh; grep -qF core/fixtures "$S" && grep -qF core/fixtures "$F" || { echo "CONTROL FAILED"; exit 9; }; grep -qF 'grepped from the fixtures rather than from the diff' "$S" && grep -qF 'passed IN rather than re-derived here' "$F" && exit 1; exit 0
-## BL-051
-
-**Step 2 computes which machinery paths the consumer has edited and then discards the answer.**
-`core/skills/ai-dlc-update/SKILL.md:207` grounds the whole autonomous cycle on "the consumer never
-edits them (like `core`)", and instructs the write as "from `theirs` **only the paths that diff
-names**". `core/git-hooks/pre-push` is the fourth entry of the `machinery:` list in
-`reconcile/setup-sites.md`, and a consumer that has edited its `.githooks/pre-push` gets bucketed
-`BOTH-CHANGED->CLASSIFY` by `reconcile/preclassify.sh`. Nothing disposes of that state. Measured:
-occurrences of `BOTH-CHANGED|consumer-modified` in `reconcile/self-update-gate.sh` = **0** (grep
-exit 1); control, `SELF-UPDATE-OK` in the same file = **6**. Same tokens across step 2's region
-(`^2\. \*\*Self-update` to `^3\. \*\*Mechanical`) = **0**; control, `ALREADY-AT-THEIRS` in that
-region = non-zero.
-
-**The filing said the nearest rule was scoped elsewhere. It is worse than that, and narrower to
-fix.** Step 2 already CALLS the tool that answers this question — `:302-303`, "Do not hand-roll
-that comparison: `reconcile/preclassify.sh` already buckets exactly this as `ALREADY-AT-THEIRS`.
-The slice is the sliced paths MINUS those." The call is made, `BOTH-CHANGED->CLASSIFY` comes back
-in the same output, and step 2 reads one bucket. So the remedy is not a new derivation; it is a
-second subtraction from a call already in the instruction. The filing's other half stands unchanged:
-the only "never overwrite a consumer edit" rule in the step, at `:353-356`, is explicitly about
-FIXTURES, and its `.claude/skills/ai-dlc-update/**` carve-out sits inside it as a subordinate clause.
-
-The downstream half exists — `reconcile/apply.sh` emits `semantic-merge` worklist rows (6
-occurrences; control, `WORKLIST` = 24), so a path excluded here lands in front of the operator at
-step 7 rather than vanishing. What is missing is step 2 declining to overwrite it, and the gate
-having an arm that says so.
-
-**Not claimed:** that any consumer has lost a machinery delta this way. The reference consumer did
-not, because its operator stopped and reasoned about it. The finding is that nothing in the tool
-would have stopped it. **And this is the bootstrapping shape** — step 2 delivers step 2, so the
-release carrying the fix is written by the unfixed step.
-
-**The receipt DRIVES the gate; it no longer reads either file.** The filing's own anchor was
-`theirs_has SKILL.md "the consumer never edits them"` — an inverted verb, so it read CLOSE while the
-defect was live. The receipt that replaced it grepped both files for the bucket token, and a
-COMMENT naming the bucket closed it with no behaviour changed. The one here seeds a throwaway
-distribution and two consumers under `mktemp`, runs `self-update-gate.sh` against both, and requires
-a `SELF-UPDATE-CARRY` row for the diverged consumer on TWO different divergence shapes while
-requiring the non-diverged consumer to get NONE. Scored against six implementations before it
-shipped — defect-live 1, prose-only comment 1, unconditional emission 1, a key narrowed to the
-literal `BOTH-CHANGED` 1, a second spelling of the correct fix 0, the shipped fix 0.
-
-**The population is wider than this entry filed it, and keying on `BOTH-CHANGED` catches one case of
-three.** `preclassify.sh` marks a consumer-diverged machinery path `BOTH-CHANGED->CLASSIFY` when
-both sides edited it, `UPSTREAM-DELETED+consumer-modified->CLASSIFY` when upstream deleted what the
-consumer kept and changed, and `BOTH-ADDED->CLASSIFY` when both sides created it independently. All
-three destroy consumer state on a blind write, and the last two carry the most, since in the deleted
-case the consumer's copy is the only copy left. The shipped key is the `->CLASSIFY` marker plus
-`RELOCATE-MOVE+consumer-edited`, which is the same key `apply.sh`'s own `*CLASSIFY*)` dispatch reads
-to emit the `WORKLIST semantic-merge` row this fix hands the path to.
-
-Discharges the consumer entry `PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH`
-at pinned ledger line 3918.
-
-
-verify: sh t=$(mktemp -d "${TMPDIR:-/tmp}/bl051-XXXXXX") || exit 9; d=$t/d; c=$t/c; k=$t/k; mkdir -p "$d/core/git-hooks" "$d/core/rules" "$c/.githooks" "$c/.claude/rules" "$k/.githooks" || exit 9; git -C "$d" init -q && git -C "$d" config user.email r@r && git -C "$d" config user.name r || exit 9; printf '#!/usr/bin/env bash\nexit 0\n' > "$d/core/git-hooks/pre-push"; printf 'base rule\n' > "$d/core/rules/doomed.md"; printf '0.1.0\n' > "$d/VERSION"; git -C "$d" add -A && git -C "$d" commit -qm base || exit 9; b=$(git -C "$d" rev-parse HEAD); cp "$d/core/git-hooks/pre-push" "$k/.githooks/pre-push"; printf '#!/usr/bin/env bash\n# upstream reworks it\nexit 0\n' > "$d/core/git-hooks/pre-push"; git -C "$d" rm -q core/rules/doomed.md; printf '0.2.0\n' > "$d/VERSION"; git -C "$d" add -A && git -C "$d" commit -qm theirs || exit 9; h=$(git -C "$d" rev-parse HEAD); printf '#!/usr/bin/env bash\nexit 0\n# consumer local edit\n' > "$c/.githooks/pre-push"; printf 'base rule\nconsumer kept and edited this\n' > "$c/.claude/rules/doomed.md"; g=core/skills/ai-dlc-update/reconcile/self-update-gate.sh; p=core/skills/ai-dlc-update/reconcile/preclassify.sh; [ -f "$g" ] && [ -f "$p" ] || exit 9; o=$(bash "$g" "$d" "$b" "$h" "$c" 2>/dev/null); q=$(bash "$g" "$d" "$b" "$h" "$k" 2>/dev/null); n=$(printf '%s\n' "$o" | grep -c '^SELF-UPDATE-'); m=$(printf '%s\n' "$q" | grep -c '^SELF-UPDATE-'); z=$(bash "$p" "$d" "$b" "$h" "$c" 2>/dev/null); u=$(printf '%s\n' "$z" | grep -c 'core/git-hooks/pre-push.*CLASSIFY'); w=$(printf '%s\n' "$z" | grep -c 'core/rules/doomed.md.*CLASSIFY'); v=$(bash "$p" "$d" "$b" "$h" "$k" 2>/dev/null | grep -c 'CLASSIFY'); [ "$n" -gt 0 ] && [ "$m" -gt 0 ] && [ "$u" -eq 1 ] && [ "$w" -eq 1 ] && [ "$v" -eq 0 ] || { echo "CONTROL FAILED (gate rows $n/$m, both-changed=$u, upstream-deleted=$w, near-miss=$v)"; rm -rf "$t"; exit 9; }; printf '%s\n' "$o" | awk -F'\t' '$1=="SELF-UPDATE-CARRY" && $2=="core/git-hooks/pre-push"{a=1} $1=="SELF-UPDATE-CARRY" && $2=="core/rules/doomed.md"{e=1} END{exit !(a&&e)}' && ! printf '%s\n' "$q" | awk -F'\t' '$1=="SELF-UPDATE-CARRY"{f=1} END{exit !f}'; r=$?; rm -rf "$t"; exit $r
 ## BL-053
 
 **Core's two readers of an escalation's `**Status:**` field disagree on which line in an entry

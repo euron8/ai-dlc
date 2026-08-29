@@ -12,10 +12,10 @@ instruction from it.**
 ### START HERE: SWEEP THE CONSUMER FOR NEW PUSH CANDIDATES, THEN FIX ONE.
 
 **YOUR FIRST ACTION IS NUMBERED ACTION 1 BELOW — the sweep for candidates the consumer has filed
-since `v0.435.0`.** Standing operator instruction: do it before picking any subject, and report
-what it finds. It has caught a same-day filing in five of the last six batches, twice while the
-batch was already running. Batch 21 is the exception: it swept twice, at the start and mid-run, and
-both came back empty.
+since `v0.436.0`.** Standing operator instruction: do it before picking any subject, and report
+what it finds. It has caught a same-day filing in five of the last eight batches, twice while the
+batch was already running. Batches 21 and 22 are the exceptions: both swept and both came back
+empty, so an empty sweep is now an ordinary outcome rather than a sign the sweep is broken.
 
 **THE OPERATOR'S CORRECTION STILL GOVERNS.** Their words: *"The purpose of this plan is to drain the
 upstream push candidate ledger — that does not mean we just shuffle items to the backlog. It means
@@ -24,101 +24,139 @@ IN-FLIGHT and discharges NOTHING. **When the sweep finds a live candidate you ca
 ship it, in this batch, and cite the id in the release commit message.** File only what you
 genuinely cannot take now, and say why in the same breath.
 
-**The baseline, re-derived after the merge: 65 live candidates, 132 archived upstream, 32 of them
-UNFILED.** Partition **12 DISCHARGED / 23 IN-FLIGHT / 32 UNTOUCHED = 67 against a denominator of
-65**, with **24 TERMINAL** and **12 PENDING**. Controls in the same run: partition control 0,
-spaced-bullet id 1, bare-bold id 1, dotted id 1, impossible id 0.
+**The baseline, re-derived after the v0.436.0 merge: 65 live candidates, 132 archived upstream, 33
+cited by a backlog entry, 32 UNFILED.** Controls in the same run: live/archive partition control 0,
+a known-present id 1, impossible id 0. **PC-backed live backlog entries: 22.** The live count did
+not move when `BL-051` closed and it will not: closing an entry here changes what the DISTRIBUTION
+has done, never what the consumer's ledger says. Only a pull moves the upstream number.
 
-**The two-over is EXPECTED and both causes are named.** DISCHARGED and IN-FLIGHT are not disjoint:
-an id cited by an archived entry AND by a live one lands in both. Today that is
-`PC-S303-STUB-AUDIT-MARKER-REGEX-MATCHES-LOCAL-VAR-NAMED-STUB` (archived, and live `BL-075` cites it
-to say the opposite — the v0.428.0 cause) and `PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER`
-(discharged as `BL-121`, and live `BL-123` cites it as the class it belongs to). **Filing an entry
-that cites an already-discharged id ADDS an overlap**, so expect this number to move with the
-backlog rather than with the ledger. Re-derive rather than trusting any of it.
+**Re-derive every figure above before trusting it.** The derive block is in `### Derive the state`
+below; run it, do not read these numbers.
 
-### NO SUBJECT IS PRE-CHOSEN. THE PARKED ONE SHIPPED.
+### NO SUBJECT IS PRE-CHOSEN. THE LAST TWO PC-BACKED PICKS HAVE SHIPPED.
 
-**`PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER` IS DISCHARGED, as `v0.435.0`.** Do not
-pick it up; do not look for the parked branch. `PC-S307-MACHINE-AUDITS-IS-A-CHILD-OF-4A-SO-EVERY-4A-SHADOW-SWALLOWS-IT`
-went with it, via `BL-045`, whose fix had landed at `v0.431.0` and which nobody had ever closed.
+**`PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH` IS DISCHARGED, as
+`v0.436.0`, and `BL-051` is ROTATED to the archive.** Do not pick it up and do not re-scope it.
+`PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER` went at `v0.435.0` with
+`PC-S307-MACHINE-AUDITS-IS-A-CHILD-OF-4A-SO-EVERY-4A-SHADOW-SWALLOWS-IT` beside it.
 
-**So the sweep decides your subject, and if it finds nothing, `BL-119` is the next-best.** It is NOT
-PC-backed, so it ranks below anything the sweep turns up. Its evidence is the consumer's own
-register: 20 non-keep verdicts recorded there, 19 of them extensions, where no remedy emitter exists
-in `core/` at all — nineteen recorded decisions that reach no actor.
+**So the sweep decides your subject. If it comes back empty, the PC-backed set decides it, and
+`BL-049` is the strongest member.** It carries
+`PC-S318-SELF-UPDATE-SLICE-CANNOT-CARRY-THE-FIXTURE-FIX-THAT-UNBLOCKS-ITS-OWN-PUSH`, it is the
+bootstrapping class — the broken version is the one that runs the delivery — and it sits in the
+same subsystem `v0.436.0` just worked in, so its surrounding code is freshly measured. Verify the id
+is still live upstream against an impossible-id control before scoping it, and run its receipt raw
+and read the exit code before believing the entry.
 
-**`BL-122` AND `BL-123` WERE FILED BY BATCH 21 OFF MEASUREMENT AND ARE THE STRONGEST NON-SWEEP
-OPTIONS, BUT THEY ARE NOT PC-BACKED FOR DRAIN PURPOSES.** `BL-123` cites
-`PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER`, which is already DISCHARGED — so
-closing either discharges nothing further upstream and neither outranks anything the sweep turns up.
-Among the non-PC-backed options they outrank `BL-119` on consequence:
+**`BL-119`, `BL-122` and `BL-123` are NOT PC-backed and rank below any PC-backed entry.** The
+selection rule is PROVENANCE first, then consequence — never readiness. `BL-123` cites a candidate
+that is already DISCHARGED, so closing it discharges nothing further upstream.
 
-- **`BL-123`** — the same read-failure collapse, unfixed on `layer-contract.yaml`. Its second-order
-  cost is the sharp part: an unreadable contract empties `LC_CV`, which SKIPS the census loop, which
-  is the only guard a healthy consumer exercises — so this state silently disarms `v0.435.0`'s
-  primary protection at the same moment it misreports its own cause as a malformed file. It names a
-  NOTE-tier sibling at `:1770` that its receipt does NOT cover; do not close it on that.
-- **`BL-122`** — one unreadable entry aborts before any finding about any OTHER entry prints. A
-  triage wedge rather than a correctness one, and its remedy is a restructure, not a guard.
+**`BL-124` was filed by batch 22 and is the mirror case, not a defect in the release.** Arm C
+falsifies a premise `unregistered-drift.sh` states in its own remedy text. Its entry names the
+weakness in its own third receipt arm and tells you how to replace it; read that before taking it.
 
-**They are also the likely second release**, which is the condition the pull section says to revisit
-on. Taking them is the cheapest way to make a pull worth sending.
+### THE PULL'S REVISIT CONDITION HAS NOW FIRED. THE OPERATOR DECIDES; YOU DO NOT.
 
-**`BL-051`'s receipt must be replaced FIRST if you take it, and that is not optional.** It is one of
-the four the `v0.417.0` sweep found closable by prose — by a comment naming a bucket. Build the
-correct fix AND at least two plausible regressions, score every one, and score a SECOND SPELLING of
-the correct fix too. Batch 21 is the fifth consecutive batch in which scoring moved the receipt.
+**The gap is now TWO releases.** Consumer installed **0.434.0**, distribution **0.436.0**, with
+**13 PENDING** discharged candidates the consumer cannot see (up one: `PC-S330` joined at
+v0.436.0). The condition the previous block said to revisit on — *"a second release accumulates"* —
+is satisfied. **That makes the pull worth PROPOSING to the operator. It does not make it authorized,
+and it is not a decision you may take.**
 
-### A PULL IS OWED AND WAS MEASURED AS NOT REQUIRED. DO NOT WRITE A RUNBOOK YET.
+**The differential is still NULL, measured twice, on two different subjects.** Both against
+`/Users/n8/git/graph`, each with a `cmp -s` control in the same invocation proving the two binaries
+actually differ, so neither null is two runs of one program:
 
-**The gap reopened with `v0.435.0`.** Consumer installed **0.434.0**, distribution **0.435.0** — one
-release behind, with **12 PENDING** discharged candidates the consumer cannot see. No bootstrapping
-step is in the range: this release touched `validate-layer-entries.sh`, one new fixture, one sibling
-fixture's mutant anchor, and three packaging lists — none of `preclassify.sh`, `apply.sh`,
-`ledger-reverify.sh` or the skill itself. Derived, with the mode-only hazard checked: every changed
-blob is mode-identical except the two new files, which are `100755` as intended.
+- **`validate-layer-entries.sh`**, installed vs distribution: both `rc=0`, both 2 findings, finding
+  sets byte-identical under `cmp`.
+- **`self-update-gate.sh`**, installed (0.434.0) vs distribution (0.436.0), run against the
+  consumer's real tree with its own stamp's `commit` as base: both emit exactly one row,
+  `SELF-UPDATE-OK`, and the new gate emits **0** `SELF-UPDATE-CARRY` rows today.
 
-**THE OPERATOR ASKED WHETHER THE PULL WAS REQUIRED NOW, AND THE MEASURED ANSWER WAS NO.** Do not
-re-derive this from scratch before reading it, and do not read it as authorization for anything —
-it is a measurement, and the standing ruling below is untouched. Three readings, all against the
-consumer's real tree:
+**THAT SECOND NULL IS EXPLAINED, AND THE EXPLANATION IS THE ARGUMENT FOR PULLING.** The consumer's
+`.githooks/pre-push` is byte-identical to the distribution's copy at its installed commit right now,
+so there is nothing to carry — but that path is one the consumer edits ROUTINELY. Measured in its
+committed history: **9 non-reconcile commits touch `.githooks/pre-push`**, the most recent
+`f53453868` on 2026-08-26, a Sprint 305 commit adding 22 lines to a machinery file. The state arm C
+exists for is one this consumer enters roughly once a sprint, and the failure mode is a SILENT
+overwrite of that edit on the next autonomous self-update. **Do not report the null without this
+paragraph beside it** — a null taken while the state is absent says "not firing today", and reading
+it as "not worth delivering" is the error this section exists to prevent.
 
-- **The differential is NULL.** The consumer's INSTALLED `scripts/ai-dlc/validate-layer-entries.sh`
-  and this distribution's copy were both run against `/Users/n8/git/graph`: both `rc=0`, both one
-  warning, and the finding sets are byte-identical under `diff`. A `cmp -s` control in the same
-  invocation confirmed the two binaries actually differ, so the null is a real null and not two runs
-  of one program.
-- **The consumer is in none of the states the release fixes.** 0 of 47 layer entries unreadable (38
-  extensions, 9 overrides); `core-manifest.md` present, readable, and `consumer_machinery_home:`
-  parses to `scripts/ai-dlc-local/`, so it is not exposed to the false PASS either.
-- **It is mid-sprint.** s307 at "repair pass 1 (8/14 findings)", 18 uncommitted pipeline paths, and
-  a peer session live on it. Delivering a range that replaces machinery a sprint is EXECUTING is the
-  specific mistake recorded in `operator-rulings.md`.
+**What the pull would still cost, stated so the operator can weigh it.** No bootstrapping step is in
+the 0.434.0→0.436.0 range: it touched `validate-layer-entries.sh`, `self-update-gate.sh`,
+`SKILL.md` step 2, one fixture and one budget constant — but NOT `preclassify.sh`, `apply.sh`,
+`ledger-reverify.sh`, or the skill's dispatch. **Re-derive that rather than trusting it**, including
+the mode-only hazard: `git diff --raw <installed-commit>..origin/main -- core/`, looking for blobs
+that are mode-different and content-equal.
 
-**WHAT THE NULL DOES NOT PROVE, because over-reading it is the likelier error.** The fix fires on a
-TRANSIENT — a read that fails — which by definition is not present when nothing is failing. The
-consumer filed this candidate off a real incident, so the state does occur. Today's zero says "not
-currently firing", never "worthless".
-
-**The one asymmetry that argues against deferring indefinitely:** the machinery false PASS is
-SILENT. A typo in that hand-maintained key at any moment turns the gate green while a segregation
-clause is dead, with no signal to anyone. Not live today; it has no warning shot when it becomes
-live.
-
-**REVISIT WHEN EITHER holds, and not on the PENDING count alone:** a second release accumulates
-(`BL-122` and `BL-123` are the likely source and are the same subsystem, so they would bundle
-cleanly), or s307 closes. **If you take a batch and the differential stops being null, that is the
-trigger — say so immediately, because it means the consumer is now missing a finding.**
+**Check s307 before proposing anything.** At the previous batch it was mid-sprint — "repair pass 1
+(8/14 findings)", 18 uncommitted pipeline paths, a peer session live on it. Delivering a range that
+replaces machinery a sprint is EXECUTING is the specific mistake recorded in `operator-rulings.md`,
+and `busy` in `ListAgents` is a reason to look further, never a green light. Put what that session
+is DOING into the QUESTION you ask the operator, rather than keeping it in your own head.
 
 **A PULL IS INITIATED BY THE OPERATOR AND BY NOBODY ELSE.** Measure the gap, report the number —
 then STOP. This is a standing ruling in `.claude/rules/operator-rulings.md`. Readiness is not
 authorization, and neither the PENDING count nor an earlier answer about WHETHER a pull should
-happen is a decision about WHEN. Never dispatch one; never hand one to a peer session.
+happen is a decision about WHEN. Never dispatch one; never hand one to a peer session. **Do not
+write the runbook until the operator says to** — a written, rehearsed, green runbook is READY, never
+AUTHORIZED, and writing one unasked spends the session on work nobody ordered.
 
 **Read `docs/plans/graph-pull-0432-to-0434.md` as the worked example** — it is DISCHARGED, not a live
 plan, and its `## Discharge` section is the more useful half. `graph-pull-0432-to-0433.md` is marked
 DO NOT EXECUTE.
+
+### BATCH 22 — SHIPPED AS `v0.436.0`. THE SWEEP WAS EMPTY AND A PC-BACKED ENTRY DECIDED IT.
+
+**The sweep came back empty and that is now an ordinary outcome.** 65 live / 132 archived / 32
+unfiled, unchanged from the v0.435.0 baseline; the newest unfiled candidate dates 2026-08-26 and the
+ledger's last touch was a reconcile commit, not a filing. So the PC-backed set decided the subject,
+by the provenance-first rule: `BL-051`, carrying `PC-S330`.
+
+**THE FILING, THE BACKLOG ENTRY AND MY OWN FIRST DESIGN ALL SPELLED THE FIX `BOTH-CHANGED`, AND THAT
+CATCHES ONE CASE OF THREE.** A consumer-diverged machinery path comes back `BOTH-CHANGED->CLASSIFY`
+when both sides edited it, `UPSTREAM-DELETED+consumer-modified->CLASSIFY` when upstream deleted what
+the consumer kept and changed, and `BOTH-ADDED->CLASSIFY` when both sides created it independently.
+The shipped key is the `->CLASSIFY` marker — which is what `apply.sh`'s own `*CLASSIFY*)` dispatch
+already reads, so the key is a JOIN with the downstream half rather than a second declaration.
+**Ask what a fix's population EXCLUDES before building it; three of these were invisible to the
+grammar everyone involved had written down.**
+
+**TWO DEFECTS IN MY OWN ARM, BOTH FOUND BY PROBING IT AND NEITHER BY READING IT.** Iterating the
+machinery globs with an unquoted `for` put git PATHSPECS through SHELL PATHNAME EXPANSION first: the
+set collapsed from thirteen globs to the single entry carrying no glob character, the arm went
+silent on two real divergences, and NOTHING reported an error. And `git ls-tree` returns EMPTY for
+every globbed pathspec while rejecting `:(glob)` magic outright — so the globs resolve with
+`git ls-files --with-tree=<ref>`, at BOTH base and theirs, because resolving at the checkout alone
+drops the upstream-deleted case where the consumer's copy is the only copy left.
+
+**THE RECEIPT WAS REPLACED FIRST AND SCORED SIX WAYS, AND THE SCORING IS WHAT CAUGHT ITS HOLE.** The
+first replacement asserted a carry row for one path and PASSED an implementation that emitted the
+row unconditionally; adding a non-diverged near-miss consumer inside the receipt killed that. The
+second still ACCEPTED the narrowed `BOTH-CHANGED` key; adding the deleted-path case killed that too.
+Final score — defect-live 1, prose-only comment 1, unconditional emission 1, narrowed key 1, a
+second spelling of the correct fix 0, the shipped fix 0.
+
+**`FORK_BUDGET` ROSE WITHOUT A NEW FIXTURE DIRECTORY, WHICH BREAKS THE PATTERN EVERY PREVIOUS RAISE
+TAUGHT.** 7192 → 7195 on 276 added lines in one existing `run.sh`; the corpus still holds 179
+directories. ATTRIBUTED, not assumed: checking that ONE file back out to `origin/main` and re-running
+the subject returned exactly 7192. A reader who prices a large arm addition at zero because the last
+three raises all accompanied a new directory will be wrong.
+
+**TWO OF THREE HANDS WENT IDLE WITHOUT REPORTING, AND STILL HAD NOT REPORTED AFTER A DIRECT REQUEST
+BY NAME.** The scope hand and the receipt hand delivered nothing; both jobs were done by the lead in
+parallel, which is why the batch still closed. The FIXTURE hand — the one whose deliverable is the
+TREE — delivered, and delivered well: 26 → 44 assertions, eleven arms each with a both-directions
+probe, six mutants all killed including two nobody asked for, and a cwd-invariance arm. **This is the
+fourth consecutive batch with that exact split. Budget for it: give a hand a TREE deliverable or
+expect nothing.**
+
+**`BL-124` filed as the mirror case.** Arm C makes false a premise `unregistered-drift.sh` prints in
+its own remedy text — `CORE-AT-SELF-UPDATE` rests on "step 2 rewrites the whole MACHINERY set", which
+stops being true the moment a path is carried. Filed rather than folded in, because the remedy
+belongs to a different subsystem than this release changed.
 
 ### BATCH 21 — SHIPPED AS `v0.435.0`. TWO CANDIDATES, ONE OF THEM UNCLAIMED FOR FOUR RELEASES.
 
@@ -1296,14 +1334,14 @@ so no block written before it changes verdict.
    real id means the grammar or the path is wrong, not that the candidate is old** — the ledger
    path is the only argument, and the archive is a SEPARATE file.
 
-   **THE BASELINE IS 65 LIVE CANDIDATES AT `v0.435.0`, 32 OF THEM UNFILED, AND SPRINT 306 IS
+   **THE BASELINE IS 65 LIVE CANDIDATES AT `v0.436.0`, 33 CITED, 32 UNFILED, AND SPRINT 306 IS
    FULLY DISCHARGED.** A higher count means the consumer filed while nobody was looking.
    **Re-derive rather than trusting those numbers** — they have moved between two consecutive
-   commands in this program, and the live count moved DURING batches 19 and 20 both. Batch 21 is
-   the counter-example: three sweeps across it, all byte-identical. The archived count rose
-   130 → 132 when the bundled pull closed this program's two most recent deliveries, which is the
-   scoreboard working: a candidate leaves `live.txt` the moment the consumer closes it, so
-   DISCHARGED FALLS when this program succeeds and TERMINAL is the number that rises.
+   commands in this program, and the live count moved DURING batches 19 and 20 both. Batches 21
+   and 22 are the counter-examples: sweeps across both were byte-identical. **The live count does
+   not move when this program ships.** Closing an entry here changes what the DISTRIBUTION has
+   done; the consumer's ledger only moves on a pull, which is why DISCHARGED rises and the
+   denominator does not.
 
    **THE SPRINT-306 RULING IS SPENT. DO NOT LOOK FOR SPRINT-306 WORK.**
 
@@ -1311,22 +1349,42 @@ so no block written before it changes verdict.
    Batch 18 asked and the operator said take both; that answer was about sprint 306's remainder.
    Extending it to a different sprint is theirs to do, not yours.
 
-   **THERE IS NO PARKED SUBJECT. THE SWEEP DECIDES.** Batch 21 shipped
+   **THERE IS NO PARKED SUBJECT. THE SWEEP DECIDES.** Batch 22 shipped
+   `PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH` as `v0.436.0` and
+   ROTATED `BL-051` to the archive; batch 21 shipped
    `PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER` as `v0.435.0` and took
-   `PC-S307-MACHINE-AUDITS-IS-A-CHILD-OF-4A-SO-EVERY-4A-SHADOW-SWALLOWS-IT` with it, via `BL-045`,
-   whose fix had landed at `v0.431.0` and which nobody had closed. Do not go looking for a parked
-   branch; `61b831f0` is spent and merged. `PC-S339-WITHDRAWAL-COMMIT-BECOMES-THE-NEW-ATTRIBUTION`
-   is still filed here as `BL-117` and still IN FLIGHT — do not re-scope it.
+   `PC-S307-MACHINE-AUDITS-IS-A-CHILD-OF-4A-SO-EVERY-4A-SHADOW-SWALLOWS-IT` with it via `BL-045`.
+   Do not pick up any of those and do not go looking for a parked branch.
+   `PC-S339-WITHDRAWAL-COMMIT-BECOMES-THE-NEW-ATTRIBUTION` is still filed here as `BL-117` and
+   still IN FLIGHT — do not re-scope it.
 
-   **IF THE SWEEP FINDS NOTHING, `BL-119` IS THE NEXT-BEST AND IT IS NOT PC-BACKED.** Take it only
-   after the sweep comes back empty, and say in the release that it was not candidate-driven.
-   `BL-119` is the next-best alternative, measured on the consumer's own register: 19 of the 20
-   non-keep verdicts recorded there are against extensions, and every one authorizes an action no
-   code in `core/` emits. It is NOT PC-backed — it was found here — so it ranks below anything the
-   sweep turns up. `BL-051` remains the coherent PC-backed alternative: step 2 computes which machinery paths the consumer edited and then
-   discards the answer, discharging
-   `PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH`. Verify that id is
-   still live upstream, against an impossible-id control, before scoping it.
+   **IF THE SWEEP FINDS NOTHING, TAKE THE STRONGEST PC-BACKED ENTRY, AND THAT IS `BL-049`.** The
+   selection rule is PROVENANCE first, then consequence — never readiness — so a PC-backed entry
+   outranks `BL-119`, `BL-122` and `BL-123`, none of which discharge anything upstream. `BL-049`
+   carries `PC-S318-SELF-UPDATE-SLICE-CANNOT-CARRY-THE-FIXTURE-FIX-THAT-UNBLOCKS-ITS-OWN-PUSH`,
+   the bootstrapping class — the broken version is the one that runs the delivery — and it sits in
+   the subsystem `v0.436.0` just worked in, so the surrounding code is freshly measured. Verify the
+   id is still live upstream against an impossible-id control before scoping it.
+
+   **Derive the PC-backed set rather than reading that name.** The join below is the only command
+   in this action that measures the SUBJECT rather than the instrument; it returned 22 entries
+   after the v0.436.0 merge:
+
+   ```
+   # /tmp/live.txt comes from the derive block above -- BOTH record forms
+   awk '/^## BL-[0-9]+/{if(id!=""){out()}; id=$2; pcs=""}
+        match($0,/PC-[A-Z0-9][A-Z0-9.-]+/){p=substr($0,RSTART,RLENGTH); if(index(pcs,p)==0) pcs=pcs (pcs?",":"") p}
+        END{if(id!=""){out()}}
+        function out(){ if(pcs!="") printf "%s\t%s\n", id, pcs }' docs/backlog.md \
+   | while IFS="$(printf '\t')" read -r id pcs; do
+       for p in $(printf '%s' "$pcs" | tr ',' ' '); do
+         grep -qx "$p" /tmp/live.txt && { echo "$id"; break; }
+       done
+     done
+   ```
+
+   **Run the JOIN, never the bare `awk` half of it.** The `awk` alone answers "which entries cite a
+   `PC-` id", which is a question about `docs/backlog.md` and not about the consumer.
 
    **THE UNFILED SET IS THE CORPUS, AND IT IS DOMINATED BY TWO OLD CLUSTERS.** Of the 32, ten are
    `PC-S312-*` — several of which describe themselves as falsifiability probes for a retirement
