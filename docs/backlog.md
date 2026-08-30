@@ -3368,16 +3368,31 @@ useless. So the discriminating population at any future pull is the subset PREDA
 under test, never the total — and quoting a total is how a vacuous run reads as a clean one.
 
 **Derived, with a control, against the consumer at `0.443.0`:** of 94 series, **75 carry a
-derivable `invoked_at`**; of those, **72 predate the `v0.442.0` merge and 3 do not**. Control: the
-same query at an impossible-future cut returns 75, matching the derivable count. Two things follow
-and both are limits on the metric itself, not on the corpus:
+derivable `invoked_at`**, and **all 75 predate the `v0.442.0` merge — 0 do not**. Cut taken as a
+full UTC instant (`2026-08-30T02:54:46Z`), not a date. Control: the same query at an
+impossible-future cut returns 75, matching the derivable count.
 
-- **The decay has already begun** — 3 series were authored under the new predicate on day one, and
-  every series written from now on joins them. Today's near-coincidence of "total" and
-  "discriminating" is a property of this week and must not be assumed at the next pull.
+**AN EARLIER REVISION OF THIS ENTRY PUBLISHED "3 POST-CUT" AND IT WAS WRONG, BY THE SAME CLASS OF
+BUG THE ENTRY IS ABOUT.** The cut was written as the DATE `2026-08-29` and compared with `<`, so a
+series whose newest pass fell ON that date was not less-than and dropped into the post bucket. All
+three were `s307` series timestamped `2026-08-29`, i.e. genuinely pre-cut. **A date-only compare
+mis-buckets exactly the same-day window the question is about**, and the artifacts carry `Z` while
+`git show -s --format=%cI` returns an offset, so the two are not comparable as strings at all. Both
+parties hit this independently; one of them got the right answer from the wrong method on the first
+run, which is why it survived to be published here.
+
+Two things follow, and both are limits on the metric rather than on the corpus:
+
 - **19 of 94 series carry no derivable `invoked_at` at all**, so the discriminating-subset query
   cannot classify a fifth of the corpus and silently drops it. A figure taken from this metric is a
-  FLOOR, and reporting it without that sentence repeats the defect one level up.
+  FLOOR, and reporting it without that sentence repeats the defect one level up. **This is the
+  finding to keep** — it holds at 19-of-94 and at the peer's 27-of-105, and it does not depend on
+  which cut either party chose.
+- **0 post-cut is the EXPECTED answer today and is not reassuring.** That consumer's pipeline has
+  been paused throughout, so nothing could have been authored under the new predicate yet. The
+  decay has not begun because nothing has RUN; it begins the moment the sprint resumes. Do not read
+  today's total-equals-discriminating as a standing property — it is an artifact of a stopped
+  pipeline, and a later run reporting a small pre-cut subset cannot discriminate at all.
 
 **So the entry's subject is a BOUNDARY, not a missing tool**, and `consumer-boundary.md` already
 owns it: the only inputs that can discriminate are artifacts THIS SIDE DID NOT WRITE. Do not spend
