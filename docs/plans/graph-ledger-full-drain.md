@@ -247,7 +247,30 @@ partition can see it.
 **`TERMINAL` DID NOT MOVE AND WILL NOT UNTIL THE CONSUMER PULLS.** 26 either side. Closing an entry
 here changes what the DISTRIBUTION has done; only a pull moves the consumer's ledger.
 
-### THE DELIVERY GAP IS FIVE RELEASES AND THE SECOND TEST SAYS THE RANGE CARRIES A REAL FIX. THE DECISION IS THE OPERATOR'S.
+### BATCH 30's SWEEP WILL NOT BE EMPTY. TWO CANDIDATES WERE FILED AGAINST THIS TREE AFTER BATCH 29 CLOSED.
+
+**The consumer's ledger md5 moved from `b7dae36b…` to `968f51ce…` while the `0.443.0 → 0.448.0`
+pull ran**, and both new ids are against machinery this repo owns:
+
+- `PC-S307-SELF-UPDATE-CARRY-ARM-HAS-NO-CORE-AT-SELF-UPDATE-SUPPRESSION` — re-derived here
+  before recording it: `reconcile/self-update-gate.sh:322-325` selects the CARRY row on
+  `*'->CLASSIFY'*|*consumer-edited*` and the loop at `:316-333` consults the stamp **0** times,
+  against **5** stamp references in the SAFE-STOP arm at `:180-209` and **8** in the file, all
+  between `:82` and `:209`. **So `grep -c skill_commit` on that file is VACUOUS in both
+  directions** — it reads 8 on a correct fix and 8 on a regression. The entry declares
+  `verify: manual` for that reason and it is right to.
+- `PC-S307-STEP-2-FIXTURE-TERM-B-EXCLUSIONS-ARE-DERIVABLE-BY-HAND-AND-WERE-MIS-DERIVED` — the
+  `.dist-only` / no-`run.sh`-at-theirs exclusions.
+
+**BOTH WERE FILED ON A BRANCH, NOT ON THE CONSUMER'S DEFAULT.** `ai-dlc-update/0.448.0-reconcile-20260830T181128Z`,
+PR open and awaiting a second operator gate. If it does not merge the sweep's corpus shrinks back,
+so **re-derive rather than trusting either reading** — the standing rule, and here it has a named
+reason.
+
+**FIX THEM, DO NOT FILE THEM.** They are defects in machinery this repo owns, which is precisely
+the case the operator's standing correction governs.
+
+### THE DELIVERY GAP WAS FIVE RELEASES AND THE PULL HAS SINCE RUN. THE PR MERGE IS STILL THE OPERATOR'S.
 
 **Consumer installed `0.443.0`, distribution `0.448.0` — five releases, which is the WIDE threshold
 action 7 names, not past it.** PENDING is **2**, and both are this batch's. `preclassify.sh`,
@@ -268,8 +291,28 @@ exit 126 and no worklist. It has already done so twice, on sprint 303. A differe
 nothing is failing cannot see that, which is why the figure above is a percentage of the ceiling
 rather than a finding count.
 
-**REPORTING IT IS THE CEILING.** `.claude/rules/operator-rulings.md` is unconditional: a consumer
-pull is not preapproved, readiness is not authorization, and no runbook was written or dispatched.
+**REPORTING IT IS THE CEILING, AND THAT HELD.** `.claude/rules/operator-rulings.md` is
+unconditional: a consumer pull is not preapproved and readiness is not authorization. No runbook
+was written and nothing was dispatched from here. **The pull was run by a peer session
+(`graph-b7`) under its OWN operator authorization**, which this session neither confirmed nor
+extended; it consulted this one for technical review only. Its apply landed on a branch and the
+PR merge is a second gate that is still the operator's.
+
+**THE CONSULTATION IS WORTH THE PLAN'S SPACE BECAUSE ONE CORRECTION CHANGED THE PULL'S OUTPUT.**
+The peer's plan would have registered `core/hooks/ai-dlc-handoff-pending.sh` in the consumer's
+`settings.json`. It is **NOT A HOOK** — its own header says so, and two hooks `.`-source it as a
+sibling (`ai-dlc-continue.sh:280`, `ai-dlc-recover.sh:136`), with the library exemption DERIVED by
+`I13` here and by `validate-hook-registration.sh` there. Registering it is `v0.429.0`'s defect
+verbatim: a `WORKLIST` row telling a consumer to register a sourced library as a hook. The
+corrected run's own `WORKLIST` named only `ai-dlc-handoff-entry.sh`, and post-merge the consumer
+reads 0 pending / 1 registered with `validate-hook-registration.sh` at 20 of 20, rc=0.
+
+**AND A FILE-LEVEL `grep -l` MISCOUNTED THE SIBLINGS IN THE OTHER DIRECTION.** The peer reported
+THREE sourcing hooks. Stripping comments and requiring an emission gives **two**: `recover.sh`
+carries both a comment at `:133` and the source at `:136`, and `ai-dlc-handoff-entry.sh:8` mentions
+the library in prose and never sources it. **A grep hit inside a file is not a statement about that
+file** — bind to the line that EMITS. Their control was a nonexistent-sibling grep, which proved the
+grep RAN and never that a mention is a source.
 
 **THE LIVE COUNT MOVED TWICE SINCE BATCH 26 AND IN OPPOSITE DIRECTIONS** — 66 → 65 when the pull
 carried `PC-S330` into the consumer's archive, then 65 → 66 when the consumer filed the new
