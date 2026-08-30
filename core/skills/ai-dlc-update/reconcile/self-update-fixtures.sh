@@ -154,6 +154,9 @@ done
 # the consumer's own stamp sha. Either alone admits a wrong repo that satisfies it. Do NOT
 # also require the diff-side set to be NON-EMPTY: a pull touching no fixture at all is an
 # ordinary pull, and failing it would be a check firing on correct data.
+# `cat-file -e` IS CORRECT HERE AND WRONG BELOW, WHICH IS WHY THE ASYMMETRY IS STATED. This
+# probe resolves a TREE, and `--filter=blob:none` does not filter trees — measured present on a
+# blob-filtered clone with its promisor unreachable. The blob probes below cannot use it.
 if ! git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures" 2>/dev/null; then
   echo "self-update-fixtures: '${THEIRS}' in $DIST has no core/fixtures tree, so \$DIST is not" >&2
   echo "  the distribution and the coverage join would pass over an empty set. Nothing was run." >&2
@@ -184,16 +187,28 @@ fi
 # named should ever have been named.
 #
 # SITED AFTER THE REF RESOLUTION AND THE WRONG-REPO GUARD, and that is load-bearing rather
-# than tidy. Both probes below are `cat-file -e` AT THEIRS: against an unresolvable ref or a
+# than tidy. Both probes below resolve a path AT THEIRS: against an unresolvable ref or a
 # repo with no `core/fixtures` tree, every one of them fails and this arm convicts the whole
 # named set — a check whose failure mode is to indict correct input. The two guards above
 # turn that state into its own exit first.
+#
+# `rev-parse -q --verify`, NOT `cat-file -e`, AND THE DIFFERENCE IS A SHIPPED FALSE CONVICTION.
+# `cat-file -e <rev>:<path>` requires the BLOB OBJECT to be present locally. On a
+# `--filter=blob:none` clone whose promisor is unreachable it answers ABSENT for a path that
+# exists, so every named dir reads as "no run.sh at theirs" and the arm convicts a correct set.
+# `rev-parse -q --verify` resolves through the TREE and needs no blob. Measured on a real
+# blob-filtered clone (5115 missing objects) with the promisor moved away, at a historical ref:
+# `core/fixtures/self-update-gate/run.sh` reads ABSENT under `cat-file -e` and present under
+# `rev-parse`, while a nonexistent path reads ABSENT under both — so the two disagree exactly
+# where it matters and agree on the control. The guards above cannot catch it: the containing
+# TREE is not filtered and resolves fine, which is why this needed its own repair rather than a
+# third guard.
 unshippable=""
 for d in "$@"; do
-  if git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${d}/.dist-only" 2>/dev/null; then
+  if git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/.dist-only" >/dev/null 2>&1; then
     unshippable="$unshippable
   $d — carries .dist-only at ${THEIRS}: never shipped, so no consumer can hold it"
-  elif ! git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${d}/run.sh" 2>/dev/null; then
+  elif ! git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/run.sh" >/dev/null 2>&1; then
     unshippable="$unshippable
   $d — no run.sh at ${THEIRS}: upstream deleted the driver, so there is nothing to write"
   fi
@@ -237,8 +252,14 @@ cov_raw="$(git -C "$DIST" diff --name-only "$BASE" "$THEIRS" -- core/fixtures/)"
 uncovered=""
 while IFS= read -r d; do
   [ -n "$d" ] || continue
-  git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${d}/.dist-only" 2>/dev/null && continue
-  git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${d}/run.sh" 2>/dev/null || continue
+  # `rev-parse -q --verify`, not `cat-file -e`, for the reason spelled out at the over-arm
+  # above — and HERE the same defect is SILENT rather than loud. On a blob-filtered clone both
+  # probes fail, so every diff-touched dir takes the `|| continue` and `uncovered` stays empty:
+  # the join reports nothing having compared nothing, which is byte-identical to a complete set.
+  # Measured on the same clone, range 0.443.0 -> 0.446.0 with an empty named set: a full clone
+  # exits 2 naming `predicate-reclassification`, the filtered one exits 0 with "1 green, 0 red".
+  git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/.dist-only" >/dev/null 2>&1 && continue
+  git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/run.sh" >/dev/null 2>&1 || continue
   case " $* " in *" ${d} "*) continue ;; esac
   uncovered="$uncovered $d"
 done <<COVEOF

@@ -225,10 +225,18 @@ prose is itself generated rather than composed.
    hooks, `scripts/ai-dlc/*`, schemas, session-driver, templates, and the `ai-dlc-setup` /
    `ai-dlc-update` subtrees) — **plus the fixtures that cover THE CHANGED PATHS**: every
    `core/fixtures/<dir>/` whose `*.sh` names one of the machinery paths **this diff actually
-   touched**, EXCLUDING any dir carrying a `.dist-only` marker (never shipped, so it cannot
-   run on a consumer). Derive both sets rather than enumerating either here, and grep
+   touched**, EXCLUDING — read AT `theirs` — any dir carrying a `.dist-only` marker (never
+   shipped, so it cannot run on a consumer) and any dir with **no `run.sh` at `theirs`**
+   (nothing to write). Derive both sets rather than enumerating either here, and grep
    `seed.sh` as well as `run.sh` (a fixture commonly resolves the tooling path in its seed,
    so a run.sh-only derivation misses it).
+
+   **BOTH exclusions bind BOTH terms, and this one used to state only the first.** The
+   enforcer applies them to the whole set you pass it, so a dir reaching this term through the
+   grep — legitimately, because the grep reads `seed.sh` and a dir may carry a `seed.sh` and no
+   `run.sh` — was named here and refused there. This tree holds two such directories today; the
+   false-positive set was empty only because neither of their seeds names a machinery path, and
+   one added line would have wedged every self-update spanning a release that touches it.
 
    **The fixture term has a SECOND half, and the first cannot see it: every
    `core/fixtures/<dir>/` THE DIFF ITSELF TOUCHES.** The grep above runs over the fixtures
@@ -242,9 +250,11 @@ prose is itself generated rather than composed.
    and a dir with **no `run.sh` at `theirs`** has nothing to write. That second one is not
    "a dir the diff deletes" — a dir that keeps a README and loses only its driver satisfies
    it — and deriving this term by hand from the looser wording yields a set the runner then
-   accepts as over-complete. `reconcile/self-update-fixtures.sh` joins this term against the
-   set you pass it and REFUSES the run when one is missing, so it is enforced rather than
-   remembered.
+   refuses. `reconcile/self-update-fixtures.sh` joins this term against the set you pass it and
+   REFUSES the run in BOTH directions — when the set omits a diff-touched dir, and when it
+   CONTAINS a dir that is `.dist-only` or driverless at `theirs`. The second half exists because
+   a hand derivation on the reference consumer named `backlog-size-ceiling`, which carries
+   `.dist-only`, and wrote it into that consumer's `tests/fixtures/` as a RETIRED-FIXTURE-ORPHAN.
 
    **Against the CHANGED paths, not the whole machinery list — the difference is two orders
    of magnitude.** `machinery:` carries `core/scripts/ai-dlc/*`, which the substitution below

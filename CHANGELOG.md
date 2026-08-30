@@ -15,6 +15,66 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.450.0] - 2026-08-30
+
+### `cat-file -e` asks whether a BLOB is here, not whether a PATH exists there
+
+A correction to `v0.449.0`, found by an adversarial hand after that release merged and
+re-verified here against a purpose-built clone before being acted on.
+
+`self-update-fixtures.sh` probed both of its fixture-set exclusions with
+`git cat-file -e "${THEIRS}:core/fixtures/<d>/<file>"`. That command requires the BLOB OBJECT to
+be present locally. On a `--filter=blob:none` clone whose promisor is unreachable it answers
+ABSENT for a path that exists, and the two halves of the coverage join then fail in opposite
+directions — the OVER arm added in `v0.449.0` convicts every named directory, and the
+pre-existing UNDER join silently reports nothing, because every diff-touched dir takes its
+`|| continue` and `uncovered` stays empty over a comparison that never happened.
+
+Reproduced rather than reasoned. A bare clone of this repo with `uploadpack.allowFilter`, a
+`--filter=blob:none` clone from it over `file://`, and the promisor then moved away: 5115 missing
+objects, and at a historical ref `core/fixtures/self-update-gate/run.sh` reads ABSENT under
+`cat-file -e` and present under `rev-parse -q --verify`, while a nonexistent path reads ABSENT
+under both. The two spellings disagree exactly where it matters and agree on the control.
+
+**The guards above the arm cannot cover it, which is why it needed a repair rather than a third
+guard.** `${THEIRS}:core/fixtures` is a TREE and trees are not filtered — measured present on the
+same clone — so both the ref-resolution loop and the wrong-repo guard pass and hand the arm a
+repo it cannot read. That tree probe is left as `cat-file -e` deliberately, and the asymmetry is
+stated where it sits.
+
+All four blob probes now use `git rev-parse -q --verify`, which resolves through the tree.
+`preclassify.sh`'s own `blob_hash()` has always used that spelling.
+
+**`core/fixtures/self-update-fixture-log/` gains Part 20 and a committed mutant.** The arm builds
+its own filtered clone, asserts the clone DISCRIMINATES before scoring anything — missing objects
+non-zero, the two spellings disagreeing on a path that exists and agreeing on one that does not —
+and reports SKIP rather than a null when it cannot. Three of its own defects were found and
+recorded while building it, all of the same family: git blobs are content-addressed, so a seed
+writing one string into every file produces a clone missing nothing; a `blob:none` clone still
+holds every blob its CHECKOUT needs, so an arm whose `theirs` is the tip passes against its own
+mutant; and `mktemp -d` hands back `/var/folders/...` while `rev-parse --absolute-git-dir`
+answers `/private/var/folders/...`, so a literal compare in the probe-repo safety assert skipped
+the entire arm on a correct repo.
+
+**The mutant had to be sited beside its siblings.** Scored from a scratch directory it cannot
+load `map_consumer()` out of `preclassify.sh` and exits 2 as a REFUSAL — which read as a kill for
+both halves while the mutation itself never executed. Rebuilt in `$MUTDIR`, it convicts
+`keeper,mover` — the whole correct set — and silences the under join, and both halves of Part 20
+go red on it.
+
+### Step 2's first fixture term stated one exclusion and the enforcer applies two
+
+`SKILL.md` step 2 derives the covering fixture set in two terms. Term B stated both exclusions —
+`.dist-only` at theirs, and no `run.sh` at theirs — and term A stated only the first, while
+`self-update-fixtures.sh` applies both to the whole set it is passed. Term A's grep deliberately
+reads `seed.sh` as well as `run.sh`, so a directory carrying a `seed.sh` and no `run.sh` enters
+that term legitimately and is then refused by the enforcer.
+
+This tree holds two such directories today. The false-positive set measured empty over 2,088
+release ranges only because neither of their seeds names a machinery path; one added line would
+wedge every self-update spanning a release that touches it. Term A now states both exclusions,
+and the enforcement sentence names both directions of the join rather than only the missing half.
+
 ## [0.449.0] - 2026-08-30
 
 ### The classifier compared against two shas, and a split pull leaves the consumer at a third

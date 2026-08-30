@@ -666,10 +666,149 @@ else
   bad "FIXTURE ERROR: the empty-set anchor no longer occurs exactly once in the runner — Part 4 proves nothing. Re-anchor it on the runner's real empty-set guard"
 fi
 
+# --- Part 20: A BLOB-FILTERED $DIST MUST NOT CONVICT A CORRECT SET ---------------------------
+# `git cat-file -e <rev>:<path>` requires the BLOB OBJECT locally. On a `--filter=blob:none`
+# clone whose promisor is unreachable it answers ABSENT for a path that exists, so BOTH probes
+# fail: the over-completeness arm convicts every named directory, and the under-completeness
+# join silently reports nothing having compared nothing. `rev-parse -q --verify` resolves through
+# the TREE and needs no blob.
+#
+# THE GUARDS ABOVE CANNOT COVER THIS, WHICH IS WHY IT NEEDS ITS OWN ARM. `${THEIRS}:core/fixtures`
+# is a TREE, and trees are not filtered — it resolves fine, so both the ref-resolution loop and
+# the wrong-repo guard pass and hand the arm a repo it cannot read.
+#
+# BOTH DIRECTIONS, ONE RUN, and the probe is only believed once it is shown to DISCRIMINATE: the
+# arm below refuses to score unless the filtered clone is genuinely missing objects and the two
+# spellings disagree on a path that exists while agreeing on one that does not.
+# PART 20 BUILDS ITS OWN SOURCE REPO RATHER THAN CLONING `$DIST`, and the reason is a null this
+# arm produced on its first run. Git blobs are CONTENT-ADDRESSED, and `$DIST`'s seed writes the
+# same two strings into every file — so every historical blob collapses onto an object the
+# checkout already holds, a filtered clone is missing nothing, and the arm correctly reported
+# SKIP. Here every version of every file is UNIQUE, so the base-side blobs are genuinely absent
+# from a `blob:none` checkout and the two spellings can disagree.
+FILT_ROOT="$(mktemp -d)"
+FILT_SRC="$FILT_ROOT/src"
+FILT_SRV="$FILT_ROOT/src.git"
+FILT="$FILT_ROOT/filtered-dist"
+(
+  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+  git -c init.templateDir= init -q -b main "$FILT_SRC" >/dev/null 2>&1 \
+    || git -c init.templateDir= init -q "$FILT_SRC" >/dev/null 2>&1
+  # Assert the probe repo is its own before the first write — `GIT_DIR` outranks `git -C`, and a
+  # stray one has committed into the real repository from a fixture before. Compared against the
+  # SYMLINK-RESOLVED path: `mktemp -d` hands back `/var/folders/...` on this platform while
+  # `--absolute-git-dir` answers `/private/var/folders/...`, so a literal compare fails on a
+  # correct repo and silently skips the whole arm — which is how this one first read as
+  # "could not build a clone".
+  [ "$(git -C "$FILT_SRC" rev-parse --absolute-git-dir 2>/dev/null)" \
+    = "$(cd "$FILT_SRC" && pwd -P)/.git" ] || exit 1
+  FG() { git -C "$FILT_SRC" -c user.name=ai-dlc-fixture -c user.email=fixture@invalid \
+                            -c commit.gpgsign=false "$@"; }
+  for f in keeper mover; do
+    mkdir -p "$FILT_SRC/core/fixtures/$f"
+    printf 'unique-base-%s-aaaaaaaaaaaaaaaaaaaaaaaa\n' "$f" > "$FILT_SRC/core/fixtures/$f/run.sh"
+  done
+  mkdir -p "$FILT_SRC/core/scripts"
+  printf 'unique-base-machinery-bbbbbbbbbbbbbbbb\n' > "$FILT_SRC/core/scripts/machinery.sh"
+  FG add -A >/dev/null 2>&1; FG commit -q --no-verify -m base >/dev/null 2>&1
+  for f in keeper mover; do
+    printf 'unique-theirs-%s-cccccccccccccccccccccccc\n' "$f" > "$FILT_SRC/core/fixtures/$f/run.sh"
+  done
+  printf 'unique-theirs-machinery-dddddddddddddddd\n' > "$FILT_SRC/core/scripts/machinery.sh"
+  FG add -A >/dev/null 2>&1; FG commit -q --no-verify -m theirs >/dev/null 2>&1
+  FG tag filt-theirs >/dev/null 2>&1
+  # A FOURTH commit that moves the fixtures AGAIN, and it is what makes the arm discriminate.
+  # A `blob:none` clone still holds every blob its CHECKOUT needs, so if `filt-theirs` were the
+  # tip its fixture blobs would be present and `cat-file -e` would answer correctly — the arm
+  # would pass against its own mutant. Measured: the first version of this seed did exactly
+  # that. With HEAD moved past it, the blobs at `filt-theirs` are genuinely filtered out.
+  for f in keeper mover; do
+    printf 'unique-final-%s-ffffffffffffffffffffffff\n' "$f" > "$FILT_SRC/core/fixtures/$f/run.sh"
+  done
+  printf 'unique-final-machinery-eeeeeeeeeeeeeeee\n' > "$FILT_SRC/core/scripts/machinery.sh"
+  FG add -A >/dev/null 2>&1; FG commit -q --no-verify -m final >/dev/null 2>&1
+  git clone --quiet --bare "$FILT_SRC" "$FILT_SRV" >/dev/null 2>&1
+  git -C "$FILT_SRV" config uploadpack.allowFilter true
+  git clone --quiet --no-local --filter=blob:none "file://$FILT_SRV" "$FILT" >/dev/null 2>&1
+) >/dev/null 2>&1
+if [ -d "$FILT/.git" ]; then
+  # The promisor is moved away, which is what makes the clone genuinely OFFLINE. Without this
+  # every probe lazily refetches, the two spellings agree, and the null reads as a pass.
+  mv "$FILT_SRV" "${FILT_SRV}.gone" 2>/dev/null
+  f_base="$(git -C "$FILT" rev-parse -q --verify filt-theirs^ 2>/dev/null)"
+  f_missing="$(git -C "$FILT" rev-list --objects --all --missing=print 2>/dev/null | grep -c '^?')"
+  f_cat="$(git -C "$FILT" cat-file -e "${f_base}:core/fixtures/keeper/run.sh" 2>/dev/null && echo present || echo ABSENT)"
+  f_rev="$(git -C "$FILT" rev-parse -q --verify "${f_base}:core/fixtures/keeper/run.sh" >/dev/null 2>&1 && echo present || echo ABSENT)"
+  f_ctl="$(git -C "$FILT" rev-parse -q --verify "${f_base}:core/fixtures/zzz-no-such/run.sh" >/dev/null 2>&1 && echo present || echo ABSENT)"
+  if [ -z "$f_base" ] || [ "$f_missing" -eq 0 ] || [ "$f_cat" != ABSENT ] \
+     || [ "$f_rev" != present ] || [ "$f_ctl" != ABSENT ]; then
+    ok "SKIP: this git/transport did not produce a DISCRIMINATING blob-filtered clone (missing=$f_missing, cat-file=$f_cat, rev-parse=$f_rev, control=$f_ctl) — reporting that rather than scoring a null the probe could not have failed"
+  else
+    # The OVER arm. `theirs` is the HISTORICAL `filt-theirs`, never the tip: the named set is
+    # wholly shippable there, and its blobs are the ones the filter left out. Both dirs are named,
+    # so the under-completeness join is satisfied and this run scores the over-arm alone.
+    rm -f "$LOGDIR2"/self-update-fixtures-*.md
+    bash "$RUNNER" "$FILT" "$f_base" filt-theirs "$CONS2" keeper mover >/dev/null 2>&1
+    rc=$?
+    if [ "$rc" -ne 2 ] || [ -z "$(uns_set "$(newest_log2)")" ]; then
+      ok "a blob-filtered \$DIST does not convict a correct set — the probes resolve through the TREE, and a filtered blob is not a missing path"
+    else
+      bad "a blob-filtered \$DIST convicted a wholly shippable set (rc=$rc, refused '$(uns_set "$(newest_log2)")'). The probes are reading BLOBS: \`cat-file -e\` answers ABSENT for a filtered object and the arm indicts correct input"
+    fi
+    # ...and the UNDER-completeness join must still find its subject on the same clone. There the
+    # same defect is SILENT: both exemption probes fail, every diff-touched dir takes `|| continue`,
+    # `uncovered` stays empty, and the join reports nothing having compared nothing.
+    rm -f "$LOGDIR2"/self-update-fixtures-*.md
+    bash "$RUNNER" "$FILT" "$f_base" filt-theirs "$CONS2" keeper >/dev/null 2>&1
+    if [ "$(cov_set "$(newest_log2)")" = "mover," ]; then
+      ok "...and on the same clone the under-completeness join still names its subject — the silent half of the same defect is repaired too"
+    else
+      bad "on a blob-filtered \$DIST the under-completeness join reported '$(cov_set "$(newest_log2)")' instead of 'mover,'. Its exemption probes are reading BLOBS, so every diff-touched dir is skipped and an incomplete set passes over an empty comparison"
+    fi
+
+    # MUTANT 15, scored HERE because the clone it needs is alive only inside this block. Both
+    # arms above are the shape `fixture-mutants.md` warns about — one asserts an acquittal and
+    # the other a presence, and a subject that emits nothing would satisfy the first. This is
+    # what makes them load-bearing: put the blob-reading spelling back at all four probe sites.
+    #
+    # `mkmutant` writes into `$MUTDIR`, which already holds the reconcile siblings. A copy made
+    # anywhere else cannot load `map_consumer()` out of `preclassify.sh` and exits 2 as a
+    # REFUSAL — measured while building this arm, and it scored as a kill for both halves while
+    # the mutation itself was never executed.
+    M15="$MUTDIR/m15-probe-reads-the-blob.sh"
+    MUT_N=0
+    MUT_N="$(python3 -c 'import re,sys
+s = open(sys.argv[1]).read()
+pat = r"git -C \"\$DIST\" rev-parse -q --verify \"\$\{THEIRS\}:core/fixtures/([^\"]+)\" >/dev/null 2>&1"
+out, n = re.subn(pat, lambda m: "git -C \"$DIST\" cat-file -e \"${THEIRS}:core/fixtures/" + m.group(1) + "\" 2>/dev/null", s)
+open(sys.argv[2], "w").write(out)
+print(n)' "$RUNNER" "$M15" 2>/dev/null || echo 0)"
+    if [ "${MUT_N:-0}" -ne 4 ] || cmp -s "$RUNNER" "$M15"; then
+      bad "FIXTURE ERROR: expected 4 tree-resolving probe sites to mutate, moved ${MUT_N:-0} — Part 20 proves nothing"
+    else
+      rm -f "$LOGDIR2"/self-update-fixtures-*.md
+      bash "$M15" "$FILT" "$f_base" filt-theirs "$CONS2" keeper mover >/dev/null 2>&1
+      m_over="$(uns_set "$(newest_log2)")"
+      rm -f "$LOGDIR2"/self-update-fixtures-*.md
+      bash "$M15" "$FILT" "$f_base" filt-theirs "$CONS2" keeper >/dev/null 2>&1
+      m_under="$(cov_set "$(newest_log2)")"
+      if [ "$m_over" = "keeper,mover," ] && [ -z "$m_under" ]; then
+        ok "MUTATION — reading the BLOB instead of the tree convicts the whole correct set (keeper,mover) AND silences the under-completeness join on the same clone: both halves of Part 20 are what catch that"
+      else
+        bad "MUTATION — the probes were reverted to \`cat-file -e\` and Part 20 did not see it (over refused '$m_over', expected 'keeper,mover,'; under reported '$m_under', expected empty). One or both halves are asserting something no mutation can move"
+      fi
+    fi
+  fi
+  rm -rf "$FILT_ROOT"
+else
+  rm -rf "$FILT_ROOT"
+  ok "SKIP: could not build a blob-filtered clone here — reporting that rather than scoring a null"
+fi
+
 # --- MUTANT 1: the .dist-only exemption inverted ---------------------------------------------
 M1="$MUTDIR/m1-exemption-inverted.sh"
-if mkmutant "$M1" 'core/fixtures/${d}/.dist-only" 2>/dev/null && continue' \
-                  'core/fixtures/${d}/.dist-only" 2>/dev/null || true'; then
+if mkmutant "$M1" 'core/fixtures/${d}/.dist-only" >/dev/null 2>&1 && continue' \
+                  'core/fixtures/${d}/.dist-only" >/dev/null 2>&1 || true'; then
   rm -f "$LOGDIR2"/self-update-fixtures-*.md
   bash "$M1" "$DIST" "$D_BASE" theirs-tag "$CONS2" touched-named green-one >/dev/null 2>&1
   if [ "$(cov_set "$(newest_log2)")" = "touched-distonly,touched-shippable," ]; then
@@ -817,7 +956,7 @@ fi
 # anchor carries the `  if ` prefix that the diff-side copy of the same probe does not, so the
 # substitution cannot land on the miss-join's exemption instead.
 M7="$MUTDIR/m7-distonly-probe-gone.sh"
-if mkmutant "$M7" '  if git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${d}/.dist-only" 2>/dev/null; then' \
+if mkmutant "$M7" '  if git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/.dist-only" >/dev/null 2>&1; then' \
                   '  if false; then'; then
   rm -f "$LOGDIR2"/self-update-fixtures-*.md
   bash "$M7" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
@@ -835,7 +974,7 @@ fi
 
 # --- MUTANT 8: the run.sh probe neutered, the .dist-only probe kept ---------------------------
 M8="$MUTDIR/m8-runsh-probe-gone.sh"
-if mkmutant "$M8" '  elif ! git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${d}/run.sh" 2>/dev/null; then' \
+if mkmutant "$M8" '  elif ! git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/run.sh" >/dev/null 2>&1; then' \
                   '  elif false; then'; then
   rm -f "$LOGDIR2"/self-update-fixtures-*.md
   bash "$M8" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
@@ -911,9 +1050,9 @@ fi
 # INVERSE of Part 17's set, and it is wrong in both directions at once: it acquits an orphan
 # bound for the consumer and convicts two fixtures the pull genuinely delivers.
 M11="$MUTDIR/m11-probes-read-disk.sh"
-if mkmutant2 "$M11" 'if git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${d}/.dist-only" 2>/dev/null; then' \
+if mkmutant2 "$M11" 'if git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/.dist-only" >/dev/null 2>&1; then' \
                     'if [ -f "$DIST/core/fixtures/${d}/.dist-only" ]; then' \
-                    'elif ! git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${d}/run.sh" 2>/dev/null; then' \
+                    'elif ! git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/run.sh" >/dev/null 2>&1; then' \
                     'elif [ ! -f "$DIST/core/fixtures/${d}/run.sh" ]; then'; then
   rm -f "$LOGDIR2"/self-update-fixtures-*.md
   bash "$M11" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
@@ -963,9 +1102,9 @@ fi
 SPELL2="$MUTDIR/second-spelling-body.txt"
 cat > "$SPELL2" <<'SPELLEOF'
 unship_reason() { # $1=directory name — echoes the reason it cannot ship, or nothing
-  if git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${1}/.dist-only" 2>/dev/null; then
+  if git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${1}/.dist-only" >/dev/null 2>&1; then
     printf 'carries .dist-only at %s: never shipped, so no consumer can hold it' "$THEIRS"
-  elif ! git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${1}/run.sh" 2>/dev/null; then
+  elif ! git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${1}/run.sh" >/dev/null 2>&1; then
     printf 'no run.sh at %s: upstream deleted the driver, so there is nothing to write' "$THEIRS"
   fi
 }
@@ -1031,8 +1170,8 @@ fi
 # all, which is the state `fixture-mutants.md` names: an arm asserting that nothing was said
 # passes against a subject that says nothing, and only a widening copy tells the two apart.
 M14="$MUTDIR/m14-distonly-probe-widened.sh"
-if mkmutant "$M14" '  if git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${d}/.dist-only" 2>/dev/null; then' \
-                   '  if ! git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${d}/.dist-only" 2>/dev/null; then'; then
+if mkmutant "$M14" '  if git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/.dist-only" >/dev/null 2>&1; then' \
+                   '  if ! git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/.dist-only" >/dev/null 2>&1; then'; then
   rm -f "$LOGDIR2"/self-update-fixtures-*.md
   bash "$M14" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
        green-one cwd-probe touched-named touched-shippable >/dev/null 2>&1
