@@ -317,7 +317,22 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   one fork and the remaining +1 is that floor, not slack left in the spelling. The raise is
 #   taken only after the reduction, which is the order this budget exists to force. Spread top
 #   is 7196.
-FORK_BUDGET=7196
+#
+#   v0.444.0: 7196 -> 8000, ON AN OPERATOR RULING, and the headroom is deliberate. The MEASURED
+#   figure is 7223 against a spread of 7223-7223. ATTRIBUTED, both sides in the same corpus:
+#   origin/main's validator run against THIS tree forks 7313, and this tree's validator forks
+#   7223 -- so corpus growth (one new fixture directory and two new reconcile files, all of
+#   which this validator's loops walk) added ~117, and I39's span fix gave back 90 by ending
+#   step 3f's extraction at the next SUB-step instead of running on to step 4. The reduction
+#   was taken before the raise, which is the order this budget exists to force; the operator
+#   then set the ceiling above the reduced figure rather than at it.
+#
+#   THE HEADROOM IS THE COST. A budget at the spread top fails the next author's first extra
+#   fork and makes them attribute it. A budget 777 above it will not, so the next several
+#   raises will land unmeasured and this ledger will record nothing about them. That is the
+#   trade the ruling accepts, and it is written down here so the next reader knows the gap
+#   between 7223 and 8000 is slack nobody has accounted for rather than forks somebody measured.
+FORK_BUDGET=8000
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -1992,7 +2007,13 @@ if [ ! -f "$lr_file" ] || [ ! -f "$lr_skill" ]; then
   err "I39 cannot find ledger-reverify.sh or its ai-dlc-update/SKILL.md. A scan over a missing file reads exactly like agreement; both are core_manifest machinery and must exist."
 else
   lr_emitted="$(grep -oE '^[[:space:]]*emit [A-Z][A-Z0-9-]+' "$lr_file" | awk '{print $2}' | sort -u)"
-  lr_documented="$(awk '/^3f\. \*\*/{on=1} on && /^[0-9]+\. \*\*/{exit} on' "$lr_skill" \
+  # THE SPAN ENDS AT THE NEXT SUB-STEP, NOT ONLY THE NEXT TOP-LEVEL STEP. The terminator was
+  # `^[0-9]+\. \*\*`, which no `3g.`-shaped heading matches -- so a sub-step added after 3f fell
+  # INSIDE 3f's span and its statuses were read as ledger-reverify.sh's contract. Measured when
+  # step 3g (the predicate differential) landed: three PREDICATE-* tokens were reported as
+  # documented-but-never-emitted against an emitter that has nothing to do with them. The arm was
+  # right that the tokens had no emitter in ITS subject; it was wrong about whose step they were.
+  lr_documented="$(awk '/^3f\. \*\*/{on=1} on && /^[0-9]+[a-z]?\. \*\*/ && !/^3f\. \*\*/{exit} on' "$lr_skill" \
     | grep -oE '^[[:space:]]*- `[A-Z][A-Z0-9-]+` →' | grep -oE '[A-Z][A-Z0-9-]+' | sort -u)"
   # Either side coming back empty is the failure this check exists to prevent, not a pass:
   # an extraction that has stopped matching reports agreement between two empty sets.

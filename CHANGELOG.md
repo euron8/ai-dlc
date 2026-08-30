@@ -15,6 +15,60 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.444.0] - 2026-08-30
+
+### The pull could not see what a predicate change RECLASSIFIES — `PC-S307-PULL-CANNOT-SEE-WHAT-A-PREDICATE-CHANGE-RECLASSIFIES`
+
+Every detector in `reconcile/` compares TEXT: core against core, or core against a consumer
+layer file. A release that moves an ADJUDICATION PREDICATE produces no text difference on the
+consumer's side at all — the stored artifacts do not move, and only the verdict the incoming
+script renders on them does. So every bucket reads clean while the consumer's own history comes
+to mean something else.
+
+**This is the defect `v0.443.0` fixed, seen from the other side.** `v0.442.0` moved one ceiling
+constant and turned 33 of the reference consumer's 105 stored adversarial series from pass to
+fail, three of them in a sprint that had been PAUSED. The pull that carried it reported 15
+`UPSTREAM-ONLY` pure applies, zero conflicts and zero semantic merges. It was caught by hand,
+off the back of a peer session's warning. The consumer filed the boundary as a push candidate.
+
+**New: `reconcile/predicate-differential.sh` plus its `reconcile/predicate-sites.md` manifest**,
+run at step 3g. It materializes each declared predicate at `base` and at `theirs`, runs both
+over the consumer's stored artifacts, and reports every artifact whose verdict changes.
+Report-only, never blocking: accepting a reclassification is a legitimate call, and what must
+not happen is that it go unremarked.
+
+**The comparable verdict is the NAMED ARM, never the exit code, and that is measured rather
+than reasoned.** The first cut of this detector compared exit codes across `0.441.0..0.442.0`
+over the reference consumer's real corpus and reported **0 reclassifications** — a clean,
+plausible, wrong number. Sixteen series, sixteen identical `1 -> 1` pairs: the predicate fails
+CLOSED without `--transcript`, the probe cannot supply one, so both sides failed identically for
+an unrelated reason. Comparing the arm each side NAMES, same corpus and same refs, reports the
+series gaining `B -- CONSISTENCY` — the arm the consumer's own filing named.
+
+Measured in all three directions against the reference consumer, controls in the same runs:
+`0.441.0 -> 0.442.0` reports the reclassification, `0.442.0 -> 0.443.0` reports the repair, and
+`0.441.0 -> 0.443.0` reports **STABLE** — the corrected release is net-silent, as it should be.
+
+**Four states that produce no row while having measured nothing now report
+`PREDICATE-UNDECIDABLE` rather than clean**: an absent or unparsable manifest, a corpus pattern
+matching no file, a verdict grammar matching no output, and a corpus that moved mid-run because
+the consumer's own pipeline is live. The count in a `PREDICATE-RECLASSIFIES` row is stated as a
+**FLOOR** in the row's own text, because an artifact written under the incoming predicate agrees
+with it by construction and cannot discriminate.
+
+**This check cannot be sited upstream**, which is why it lives in the pull. `consumer-boundary.md`
+is unconditional, and the failure is not hypothetical: the distribution ran the same differential
+over its own fixture seeds before shipping `0.442.0` and could not tell the intended effect from
+the regression, because one session had authored both the predicate and the seed declaring the
+result correct. A green fixture, a green mutant battery and a green gate were all consistent with
+it.
+
+New shipping fixture `predicate-reclassification` — 25 assertions, offender and near-miss in one
+corpus so it asks WHICH series rather than merely whether one fired. Nine mutants scored, nine
+killed; two survived the first round because a second guard covered the first and the status
+stayed right while the operator's diagnosis named the wrong subject, so those two arms now assert
+the DETAIL and not only the status.
+
 ## [0.443.0] - 2026-08-30
 
 ### The exit ceiling licenses an exit; it does not compel one — 0.442.0 convicted 33 of the reference consumer's own series

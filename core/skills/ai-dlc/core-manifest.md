@@ -239,6 +239,7 @@ core_manifest:
   - fixtures/postcompact-rulebook-recovery/**
   - fixtures/fanout-untracked-corpus/**
   - fixtures/preclassify-mode-bucket/**
+  - fixtures/predicate-reclassification/**
   - fixtures/provenance-not-accessible/**
   - fixtures/reconcile-blocking-list/**
   - fixtures/reconcile-emit-report/**

@@ -903,6 +903,46 @@ prose is itself generated rather than composed.
    substring; all must match. Rendered into the step-5 report by
    `emit-report.sh`, so a CLOSE-CANDIDATE cannot be silently dropped.
 
+3g. **Predicate reclassification — what this pull re-decides about artifacts nobody touched.**
+   Run `reconcile/predicate-differential.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>`.
+
+   Every other detector in `reconcile/` compares TEXT: core against core, or core against a
+   consumer layer file. A release that moves an ADJUDICATION PREDICATE produces no text
+   difference at all on the consumer's side — the stored artifacts do not change, and only the
+   verdict the incoming script renders on them does. So every bucket reads clean while the
+   consumer's own history quietly comes to mean something else. Measured on the reference
+   consumer at `0.438.0 -> 0.443.0` and filed as
+   `PC-S307-PULL-CANNOT-SEE-WHAT-A-PREDICATE-CHANGE-RECLASSIFIES`: 0.442.0 moved one ceiling
+   constant and turned 33 of 105 stored adversarial series from pass to fail, three of them in a
+   sprint that had been PAUSED, with the pull reporting 15 UPSTREAM-ONLY pure applies and zero
+   conflicts. It was caught by hand.
+
+   The predicates in scope are declared in `reconcile/predicate-sites.md`; the script reads that
+   manifest and nothing else. Statuses:
+   - `PREDICATE-RECLASSIFIES` → the incoming predicate renders a different verdict on stored
+     artifacts, and the row names each one. **Report-only; never blocks `apply`.** Accepting a
+     reclassification is a legitimate call — the criteria may genuinely have moved and the new
+     verdict may genuinely be the right one. What must not happen is that it go unremarked.
+     **The count is a FLOOR, never a census**: an artifact written UNDER the incoming predicate
+     agrees with it by construction and cannot discriminate, so the discriminating subset is the
+     one predating the change and it is not fully derivable here.
+   - `PREDICATE-STABLE` → either the predicate is byte-identical across the range, or it moved
+     and no stored artifact changes verdict. The row says WHICH, because they are different
+     answers: the first measured nothing and the second measured something.
+   - `PREDICATE-UNDECIDABLE` → the differential could not attribute an answer — an absent or
+     unparsable manifest, a corpus pattern matching no file, a verdict grammar matching no
+     output, or a corpus that moved mid-run because the consumer's own pipeline is live. Every
+     one of those produces no reclassification row while having measured nothing, so it is
+     reported rather than folded into `PREDICATE-STABLE`. **A detector that cannot read its own
+     subject must not return clean.**
+
+   **This check cannot be sited upstream and that is structural, not an oversight.**
+   `consumer-boundary.md` is unconditional: no gate in the distribution reaches a consumer tree.
+   The distribution DID run the same differential over its own fixture seeds before shipping
+   0.442.0 and could not tell the intended effect from the regression, because one session had
+   authored both the predicate and the seed declaring the result correct. The pull is the only
+   process holding `base`, `theirs` and the consumer root at once.
+
 4. **Semantic per-block classify** — for every file the pre-pass marked
    `…CLASSIFY`, dispatch ONE generic agent per file (batch trivial single-block
    diffs) using `reconcile/classify-block.md` as the prompt. Block granularity
