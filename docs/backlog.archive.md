@@ -4050,3 +4050,96 @@ lives in the caller.**
 
 verify: sh f=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -f "$f" ] || exit 9; t=$(mktemp -d) || exit 9; trap 'rm -rf "$t"' EXIT; d=$t/d; L=PC-S999-RECEIPT-PROBE-LABEL; mkdir -p "$d" "$t/c/_bmad-output/ai-dlc-update" || exit 9; git -c init.templateDir= -C "$d" init -q >/dev/null 2>&1 && git -C "$d" config user.email r@r && git -C "$d" config user.name r || exit 9; printf '0.1.0\n' >"$d/VERSION"; git -C "$d" add -A >/dev/null 2>&1; git -C "$d" commit -qm base >/dev/null 2>&1 || exit 9; B=$(git -C "$d" rev-parse HEAD); git -C "$d" commit -q --allow-empty -m "fix: oldest names $L" >/dev/null 2>&1; O=$(git -C "$d" rev-parse --short HEAD); git -C "$d" commit -q --allow-empty -m "chore: middle names $L" >/dev/null 2>&1; M=$(git -C "$d" rev-parse --short HEAD); git -C "$d" commit -q --allow-empty -m "docs: newest names $L" >/dev/null 2>&1; N=$(git -C "$d" rev-parse --short HEAD); [ -n "$O" ] && [ "$O" != "$M" ] && [ "$M" != "$N" ] && [ "$O" != "$N" ] || exit 9; printf '# probe ledger\n\n## %s\n\nverify: manual\n' "$L" >"$t/c/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; r=$(awk -F'\t' -v l="$L" '$1=="NAMED-UPSTREAM"&&$2==l{print $3}' <<<"$(bash "$f" "$d" "$B" "$t/c" HEAD 2>/dev/null)"); [ -n "$r" ] || exit 9; case "$(awk -v o="$O" -v m="$M" -v n="$N" '{a=gsub(o,"");b=gsub(m,"");c=gsub(n,"");print a b c}' <<<"$r")" in 111) exit 0 ;; esac; exit 1
 
+## BL-064
+
+**LANDED (v0.448.0, verified d3b0f601).** All three
+unbounded payloads — `FANOUT_DIFF`, `FANOUT_FILES` and `FANOUT_UNTRACKED` — now travel by file.
+Measured on the reference consumer, both sides in one invocation with a `cmp -s` control that the
+two scripts differ: the child's environment falls from **700857 bytes to 3182**, 67% of `ARG_MAX`
+to 0.3%, with the corpus and diff signatures at 0 and the `PATH=` reach control at 1 on both
+sides. The worklist is byte-identical across the change.
+
+**THREE OF THIS ENTRY'S OWN PREMISES HAD EXPIRED BY THE TIME IT WAS TAKEN, AND TWO OF THEM WOULD
+HAVE MISDIRECTED THE WORK.** Recorded rather than edited away, because which half died is what
+stops the next reader repeating it.
+
+- Its citations `:255-261` and `:262` had drifted to `:289-295` and `:297`. A `path:line` that
+  resolves to the wrong line reads exactly like one that resolves.
+- *"That entry carries no `verify:` receipt of its own and is invisible to the consumer's
+  closer"* is **false**. The consumer has since given
+  `PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF` a receipt, and its sibling
+  `PC-S303-FANOUT-SCRIPT-ARG-MAX-VIA-EXPORTED-DIFF-ENV-VAR` carries
+  `theirs_has core/scripts/report-propagation-fanout.sh "export FANOUT_DIFF="` — which this fix
+  falsifies directly, so that second candidate closes on the consumer's own next reverify without
+  anything further from here.
+- *"Fixture directories matching `fanout` or `propagation`: 0"* is **false**;
+  `core/fixtures/fanout-untracked-corpus` exists and drives this same script. The new battery was
+  built beside it rather than folded into it: that fixture's subject is the corpus DEFINITION and
+  this one's is the payload CHANNEL, and a mutant of either would have to leave the other's arms
+  untouched to be readable.
+
+**THE FILED REMEDY WAS BUILT AS A MUTANT AND SCORED, AND IT DOES NOT CLOSE THIS.** Both consumer
+filings prescribe moving the diff. Scored against this entry's receipt with `AI_DLC_PROJECT_ROOT`
+pinned and reach asserted per arm: shipping exits 1, **diff-only exits 1**, corpus-only exits 1,
+the full fix exits 0, and a second spelling that passes the same three paths on ARGV rather than
+in `FANOUT_*_FILE` also exits 0 — so the receipt rejects neither a competent author's other
+phrasing nor accepts a partial. A sixth variant that writes the files and leaves the old exports
+beside them exits 1. The corpus is the fixed cost: 607945 bytes of `git ls-files` against an
+`ARG_MAX` of 1048576 is 58% of the ceiling before a byte of diff exists, so the prescribed remedy
+would have closed the filing and left the defect.
+
+**`report-propagation-fanout.sh` hands its whole corpus to `python3` through the ENVIRONMENT, and
+`execve` charges its size limit on that block whatever the heredoc does.**
+`core/scripts/report-propagation-fanout.sh:255-261` is a single `export` statement carrying **10**
+`FANOUT_*` variables — the full unified diff and the entire `git ls-files` corpus among them — and
+`:262` then runs `python3 - <<'PYEOF'`. Measured behaviourally against the shipping script with a
+`python3` shim first on `PATH`, so the thing under test is the program and not a restatement of it:
+the child's own environment is **2236** bytes when exec'd directly and **31962** bytes when exec'd by
+this script from this repo — a payload of **29726** bytes, stable across three consecutive runs, on a
+tree whose `git ls-files` is **27885** bytes and whose diff was **1741**. `ARG_MAX` here is
+**1048576**, and the ceiling is real in both directions in one invocation: a 1000KB environment execs
+`/usr/bin/true` fine and an 1100KB one returns `Argument list too long`.
+
+**It is a large-REPO defect, not the large-diff defect that was filed, and the named trigger cannot
+produce the crash.** The fixed cost is the file list, not the diff: on the reference consumer
+`git ls-files` is **607945** bytes across **10146** paths, which is **58%** of `ARG_MAX` consumed
+before a single byte of diff exists. A fix that moves only `FANOUT_DIFF` to a temp file leaves that
+58% in place. The filing also blames one variable when `:255-261` exports ten, so the subject is the
+env-passing pattern rather than any one name. And the stated consequence does not hold: the filing's
+harm is that "a caller checking `$? -in (0,2,3)` would misclassify this", but no such caller exists —
+`core/skills/ai-dlc/steps/_gate-procedures.md:457-458` states the report "is not a gate verdict and
+no exit code of it adjudicates a gate", and `:460` that "its exit codes say whether it could LOOK,
+never what it found". Exit 126 with empty stdout reads as could-not-look, which is correct. The real
+gap is that 126 is undocumented, which is milder than filed.
+
+**There is no fixture, and this repo's own corpus cannot build one.** Fixture directories matching
+`fanout` or `propagation`: **0**, against a control of **159** fixture directories; exactly **1**
+fixture names the script at all. A new one cannot use this tree as its corpus — ai-dlc is 27885 bytes
+across 633 paths against the consumer's 607945 across 10146 — so it has to synthesize the payload
+size rather than reach `ARG_MAX` honestly.
+
+**Why the receipt is the receipt.** It dumps the child's ENVIRONMENT and looks for each payload's
+SIGNATURE in it — a tracked path for the file list, a hunk header for the diff — rather than naming a
+variable or thresholding a total size. So a fix that renames `FANOUT_DIFF` while leaving it on the
+env channel cannot close it, no comment recording the change can satisfy it, and neither can a
+PARTIAL fix. Its control is that the shim was REACHED at all, asserted in the same invocation before
+the verdict is read: the env dump must be non-empty and must carry `PATH=`.
+
+**Both of those clauses are there because the first draft of this receipt failed them, measured.** It
+thresholded total env growth at 4096 bytes, and a mutant that moves only `FANOUT_FILES` off the env
+leaves the diff behind at **4113** bytes of child environment against a **2236**-byte baseline — under
+the threshold, so that draft reported the fix PRESENT while the diff channel was still live. Worse,
+its satisfiability proof was itself invalid: the mutant was a copy under `/tmp`, which resolves
+`AI_DLC_ROOT` elsewhere and **exited 2 before ever exec'ing `python3`**, so the receipt read a stale
+baseline as a clean environment and a dead mutant reported as a passing fix. Re-run with
+`AI_DLC_PROJECT_ROOT` pinned and with reach asserted per arm, three pairwise-different variants
+separate correctly: shipping gives corpus-signature **1** and diff-signature **1**, the partial fix
+gives **0** and **1** and stays open, and a full fix that moves both payloads off the env gives **0**
+and **0** and closes. That is the change which makes this receipt reach 0.
+
+Discharges the consumer entry `PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF` at LIVE ledger line
+4392, past the 4356-line pin. That entry carries no `verify:` receipt of its own and is invisible to
+the consumer's closer.
+
+verify: sh d=$(mktemp -d); n="$d/env"; printf "#!/bin/sh\ncat >/dev/null\nenv > %s\n" "$n" > "$d/python3"; chmod +x "$d/python3"; PATH="$d:$PATH" bash core/scripts/report-propagation-fanout.sh HEAD~1 >/dev/null 2>&1; [ -s "$n" ] || { rm -rf "$d"; exit 9; }; p=$(grep -c "PATH=" "$n"); f=$(grep -c "core/scripts/report-propagation-fanout.sh" "$n"); g=$(grep -c "^@@ " "$n"); rm -rf "$d"; [ "$p" -ge 1 ] || exit 9; [ "$f" -eq 0 ] && [ "$g" -eq 0 ]
+
