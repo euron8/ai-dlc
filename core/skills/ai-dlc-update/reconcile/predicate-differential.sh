@@ -74,14 +74,15 @@ trap 'rm -rf "$TMP"' EXIT
 # `verdict:` closes it. `verdict:` is REQUIRED and a site missing it is refused rather than
 # scored zero -- a site with no comparable verdict cannot produce a meaningful null.
 awk '
-  /^predicate:[[:space:]]/ { p=$2; c=""; s=""; i=""; v=""; next }
+  /^reads:[[:space:]]/     { r=substr($0, index($0,$2)); e=""; c=""; s=""; i=""; v=""; next }
+  /^entry:[[:space:]]/     { e=$2; next }
   /^corpus:[[:space:]]/    { c=substr($0, index($0,$2)); next }
   /^series:[[:space:]]/    { s=substr($0, index($0,$2)); next }
   /^invoke:[[:space:]]/    { i=substr($0, index($0,$2)); next }
   /^verdict:[[:space:]]/   { v=substr($0, index($0,$2));
-                             if (p!="" && c!="" && s!="" && i!="" && v!="")
-                               printf "%s\t%s\t%s\t%s\t%s\n", p, c, s, i, v;
-                             p=""; next }
+                             if (r!="" && e!="" && c!="" && s!="" && i!="" && v!="")
+                               printf "%s\t%s\t%s\t%s\t%s\t%s\n", r, e, c, s, i, v;
+                             r=""; next }
 ' "$MANIFEST" > "$TMP/sites.tsv"
 
 if [ ! -s "$TMP/sites.tsv" ]; then
@@ -89,25 +90,49 @@ if [ ! -s "$TMP/sites.tsv" ]; then
   exit 0
 fi
 
-while IFS="$(printf '\t')" read -r P_PATH P_CORPUS P_SERIES P_INVOKE P_VERDICT; do
-  [ -n "${P_PATH:-}" ] || continue
-  p_name="$(basename "$P_PATH")"
+while IFS="$(printf '\t')" read -r P_READS P_ENTRY P_CORPUS P_SERIES P_INVOKE P_VERDICT; do
+  [ -n "${P_READS:-}" ] || continue
+  p_name="$(basename "$P_ENTRY")"
 
-  # ---- both sides, out of the distribution ------------------------------------------
-  if ! git -C "$DIST" show "${BASE}:${P_PATH}" > "$TMP/base-$p_name" 2>/dev/null; then
+  # ---- MATERIALIZE THE WHOLE READ-SET PER SIDE, INTO A PROBE ROOT -------------------
+  # Not the script alone. A predicate that resolves a SCHEMA at runtime moves when the schema
+  # moves and the script does not -- measured at v0.382.0 (`d71d981e`), where
+  # provenance-block.json changed and validate-provenance-block.sh was byte-identical on both
+  # sides. Comparing scripts there returns 0 BY CONSTRUCTION, which is the failure this whole
+  # detector exists to catch. The probe root preserves dist-relative paths so the incoming
+  # script resolves the incoming schema by its own walk-up, exactly as it will on the consumer.
+  side_missing=0; side_absent_at_base=0
+  for side in base theirs; do
+    [ "$side" = base ] && ref="$BASE" || ref="$THEIRS"
+    rm -rf "$TMP/root-$side"; mkdir -p "$TMP/root-$side"
+    set -f
+    for member in $P_READS; do
+      set +f
+      for f in $(git -C "$DIST" ls-files --with-tree="$ref" -- "$member" 2>/dev/null); do
+        mkdir -p "$TMP/root-$side/$(dirname "$f")"
+        git -C "$DIST" show "${ref}:${f}" > "$TMP/root-$side/$f" 2>/dev/null || side_missing=1
+      done
+      set -f
+    done
+    set +f
+    [ -f "$TMP/root-$side/$P_ENTRY" ] || { [ "$side" = base ] && side_absent_at_base=1 || side_missing=1; }
+  done
+
+  if [ "$side_absent_at_base" -eq 1 ]; then
     emit PREDICATE-STABLE "$p_name" "the predicate does not exist at ${BASE}, so this pull ADDS it. There is no prior verdict for a stored artifact to be reclassified AGAINST, and a first-time verdict is not a reclassification."
     continue
   fi
-  if ! git -C "$DIST" show "${THEIRS}:${P_PATH}" > "$TMP/theirs-$p_name" 2>/dev/null; then
-    emit PREDICATE-UNDECIDABLE "$p_name" "cannot read ${P_PATH} at ${THEIRS}, so the differential has no incoming side. This is not the same as the predicate being unchanged."
+  if [ "$side_missing" -eq 1 ]; then
+    emit PREDICATE-UNDECIDABLE "$p_name" "could not materialize the declared read-set [$P_READS] at ${THEIRS}, so the differential has no incoming side. This is not the same as the predicate being unchanged."
     continue
   fi
 
-  # THE TWO SIDES MUST DIFFER. Two runs of one program produce a perfect null that reads
-  # exactly like agreement -- `verification-discipline.md`, "a differential must prove its two
-  # sides differ". Unchanged is a real and common answer; it is just not a measured one.
-  if cmp -s "$TMP/base-$p_name" "$TMP/theirs-$p_name"; then
-    emit PREDICATE-STABLE "$p_name" "byte-identical at ${BASE} and ${THEIRS} — this pull does not move this predicate, so no stored verdict can change. Reported rather than skipped: a null taken over two runs of the SAME program is not evidence about anything."
+  # THE TWO SIDES MUST DIFFER, AND THE SUBJECT OF THAT TEST IS THE READ-SET. Two runs of one
+  # program produce a perfect null that reads exactly like agreement -- `verification-discipline.md`,
+  # "a differential must prove its two sides differ". Unchanged is a real and common answer; it
+  # is just not a measured one.
+  if diff -r -q "$TMP/root-base" "$TMP/root-theirs" >/dev/null 2>&1; then
+    emit PREDICATE-STABLE "$p_name" "the whole declared read-set [$P_READS] is byte-identical at ${BASE} and ${THEIRS} — this pull moves neither the predicate nor any schema it reads, so no stored verdict can change. Reported rather than skipped: a null taken over two runs of the SAME program is not evidence about anything."
     continue
   fi
 
@@ -136,8 +161,8 @@ while IFS="$(printf '\t')" read -r P_PATH P_CORPUS P_SERIES P_INVOKE P_VERDICT; 
     rel="${s#"$CONSUMER"/}"
     # shellcheck disable=SC2086 -- P_INVOKE is a declared argument FORM, deliberately split.
     inv="$(printf '%s' "$P_INVOKE" | sed "s|{series}|$rel|")"
-    a_base="$( ( cd "$CONSUMER" && bash "$TMP/base-$p_name"   $inv 2>&1 ) | sed -nE "$P_VERDICT" | sort -u | tr '\n' ',')"
-    a_theirs="$( ( cd "$CONSUMER" && bash "$TMP/theirs-$p_name" $inv 2>&1 ) | sed -nE "$P_VERDICT" | sort -u | tr '\n' ',')"
+    a_base="$( ( cd "$CONSUMER" && bash "$TMP/root-base/$P_ENTRY"   $inv 2>&1 ) | sed -nE "$P_VERDICT" | sort -u | tr '\n' ',')"
+    a_theirs="$( ( cd "$CONSUMER" && bash "$TMP/root-theirs/$P_ENTRY" $inv 2>&1 ) | sed -nE "$P_VERDICT" | sort -u | tr '\n' ',')"
     [ -n "$a_base" ] || [ -n "$a_theirs" ] && n_parsed=$((n_parsed + 1))
     printf '%s\t%s\t%s\n' "$a_base" "$a_theirs" "$rel" >> "$TMP/pairs"
   done < "$TMP/series"
@@ -161,7 +186,7 @@ while IFS="$(printf '\t')" read -r P_PATH P_CORPUS P_SERIES P_INVOKE P_VERDICT; 
   n_changed="$(awk -F'\t' '$1!=$2' "$TMP/pairs" | grep -c . || true)"
 
   if [ "$n_changed" -eq 0 ]; then
-    emit PREDICATE-STABLE "$p_name" "the predicate moved and NO stored artifact changes verdict: ${n_series} series compared, ${n_parsed} of them yielding a verdict token on at least one side. The ${n_parsed} is the discriminating subset and it is a FLOOR — a series whose verdict is unparseable on both sides is counted as unchanged and cannot report otherwise."
+    emit PREDICATE-STABLE "$p_name" "the read-set moved and NO stored artifact changes verdict between ${BASE} and ${THEIRS}: ${n_series} series compared, ${n_parsed} of them yielding a verdict token on at least one side. THIS IS AN ENDPOINT COMPARISON AND SAYS NOTHING ABOUT THE INTERIOR of the range — a release that reclassifies and a later one in the same range that corrects it net to zero here, correctly, and that is not this detector failing. Measured: 0.441.0 -> 0.442.0 reclassifies, 0.442.0 -> 0.443.0 repairs, 0.441.0 -> 0.443.0 is silent. If you need per-release visibility, walk the release commits as \`self-update-gate.sh --safe-stop\` does. The ${n_parsed} is the discriminating subset and it is a FLOOR."
     continue
   fi
 
@@ -169,7 +194,7 @@ while IFS="$(printf '\t')" read -r P_PATH P_CORPUS P_SERIES P_INVOKE P_VERDICT; 
   # incoming predicate agree with it by construction, so they cannot discriminate; the series
   # that can are the ones predating the change, and which those are is not derivable here. A
   # detector that printed a bare count would reproduce the vacuous-clean failure one level up.
-  emit PREDICATE-RECLASSIFIES "$p_name" "AT LEAST ${n_changed} of ${n_series} stored series change verdict under the incoming ${p_name} (${n_parsed} yielded a comparable verdict at all). This is a FLOOR, not a count: a series written under the incoming predicate agrees with it by construction and cannot discriminate, and one whose verdict is unparseable on both sides is scored unchanged. Nothing in the pull's own diff is wrong — the artifacts did not move, the verdict on them did. Review the changed series before accepting this pull, and note that accepting it is a legitimate choice: this row does not block."
+  emit PREDICATE-RECLASSIFIES "$p_name" "AT LEAST ${n_changed} of ${n_series} stored series change verdict between ${BASE} and ${THEIRS} (${n_parsed} yielded a comparable verdict at all). This is a FLOOR, not a count: a series written under the incoming predicate agrees with it by construction and cannot discriminate, and one whose verdict is unparseable on both sides is scored unchanged. Nothing in the pull's own diff is wrong — the artifacts did not move, the verdict on them did. Review the changed series before accepting this pull, and note that accepting it is a legitimate choice: this row does not block. AND THIS IS AN ENDPOINT COMPARISON: a release INSIDE the range that reclassifies and a later one that corrects it cancel here, so this count can be far smaller than the disruption any single interior release would have caused. Measured on the reference consumer: 0.441.0 -> 0.442.0 moves 48 of 119 series, while 0.438.0 -> 0.443.0 across the same corpus moves 1, because 0.443.0 repaired 0.442.0. Both are correct answers to different questions. For per-release visibility, walk the release commits as \`self-update-gate.sh --safe-stop\` does."
 
   awk -F'\t' '$1!=$2 {print $3"\t["$1"] -> ["$2"]"}' "$TMP/pairs" \
   | while IFS="$(printf '\t')" read -r c_path c_delta; do

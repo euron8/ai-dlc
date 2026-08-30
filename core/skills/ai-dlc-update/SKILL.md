@@ -917,6 +917,23 @@ prose is itself generated rather than composed.
    sprint that had been PAUSED, with the pull reporting 15 UPSTREAM-ONLY pure applies and zero
    conflicts. It was caught by hand.
 
+   **IT COMPARES THE RANGE'S ENDPOINTS, AND THAT IS NOT THE SAME QUESTION AS "WHAT DID ANY
+   RELEASE IN HERE DO".** A release inside the range that reclassifies and a later one that
+   corrects it CANCEL. Measured on the reference consumer over one corpus of 119 series:
+   `0.441.0 -> 0.442.0` moves 48, and `0.438.0 -> 0.443.0` — the real pull, spanning both the
+   regression and its repair — moves 1. Both are correct. The endpoint answer is the one that
+   matters for accepting a pull, because it describes the state you will be IN; if you need
+   per-release visibility, walk the release commits the way `self-update-gate.sh --safe-stop`
+   does. **Do not read a small count as the detector having missed something.**
+
+   **A PREDICATE IS ITS READ-SET, NOT ITS SCRIPT.** `predicate-sites.md` declares `reads:` — the
+   script AND every schema whose content decides a verdict — because a script-only comparison is
+   vacuous for a predicate that resolves a schema at runtime.
+   `core/scripts/validate-provenance-block.sh:16` says "THE SCHEMA IS NOT IN THIS FILE" in its own
+   header, and `v0.382.0` changed `core/schemas/provenance-block.json` while leaving that script
+   BYTE-IDENTICAL. A script differential returns 0 there by construction rather than by
+   measurement, which is the failure this step exists to catch.
+
    The predicates in scope are declared in `reconcile/predicate-sites.md`; the script reads that
    manifest and nothing else. Statuses:
    - `PREDICATE-RECLASSIFIES` → the incoming predicate renders a different verdict on stored

@@ -38,11 +38,42 @@ matches nothing on BOTH sides is reported as UNDECIDABLE rather than clean.
 `verdict:` is therefore a required field. A site without one cannot be compared, and the
 detector refuses it instead of scoring it zero.
 
+## A PREDICATE IS ITS READ-SET, NEVER ITS SCRIPT, AND THE SCRIPT-ONLY FORM IS VACUOUS
+
+The first cut of this file declared one `predicate:` path and the detector compared that file at
+the two refs. **For a predicate that carries its thresholds inline that is correct, and for one
+that resolves a SCHEMA at runtime it is a confident wrong clean.**
+
+`core/scripts/validate-provenance-block.sh:16` says so in its own header — *"THE SCHEMA IS NOT IN
+THIS FILE"* — and resolves `.claude/schemas/provenance-block.json` at runtime at its lines
+118-120. (That is the CONSUMER path, which is the one a reader of this file needs: `install.sh`
+lands `core/schemas/` at `.claude/schemas/`, so a bare `schemas/…` pointer resolves against the
+skill root and is dead in every installed tree. The `reads:` globs below are DIST-relative
+because they are resolved with `git ls-files` against the distribution, which is a different
+question from where the file lives once installed.)
+`validate-gate-adjudication.sh` reads `gate-adjudication-verdict.json` the same way.
+
+**The dated instance: `v0.382.0` (`d71d981e`) changed `core/schemas/provenance-block.json` and
+left `core/scripts/validate-provenance-block.sh` BYTE-IDENTICAL** — md5 `8d27d35c…` on both sides,
+schema `c7154cf6…` -> `29528de5…`. A script-only differential across that range hits the
+sides-identical arm and reports `PREDICATE-STABLE, byte-identical, no stored verdict can change`.
+Returning 0 by construction rather than by measurement is the exact failure this whole detector
+exists to catch, so it must not be reproduced inside it.
+
+So `reads:` is the comparison subject and it is REQUIRED. The script path is simply its first
+member. A site whose `reads:` resolves to nothing at BOTH refs is refused, not scored zero.
+
 ## Fields
 
-- `predicate:` — path in the DISTRIBUTION, materialized at BASE and at THEIRS. Never read from
-  the consumer's installed copy: the question is what the INCOMING version says.
-- `corpus:` — a `find`-style name pattern, resolved under the consumer root. Consumer-relative.
+- `reads:` — space-separated DIST-relative globs: the predicate script AND every schema or data
+  file whose content decides a verdict. Materialized at BASE and at THEIRS into a probe root that
+  preserves these paths, so the incoming script runs against the incoming schema. Comparison is
+  over the whole set; if ANY member moved, the predicate moved.
+- `entry:` — which member of `reads:` is the executable, dist-relative.
+- `corpus:` — a `find`-style name pattern, resolved under the consumer root.
+  **DERIVE IT FROM THE SHIPPED GRAMMAR, NOT BY INVENTION.** The first cut used `*pass[0-9]*` and
+  reached 16 series where `core/hooks/ai-dlc-continue.sh:430`'s own live-series glob reaches 119
+  on the same tree. A narrow pattern lowers the reported FLOOR without lowering it visibly.
 - `series:` — a `sed -E` expression reducing a record path to its SERIES key. A predicate that
   adjudicates single files declares the identity expression.
 - `invoke:` — the argument form, `{series}` substituted. This mirrors the form the consumer's
@@ -52,8 +83,16 @@ detector refuses it instead of scoring it zero.
 
 ## Sites
 
-predicate: core/scripts/validate-adversarial-convergence.sh
-corpus: *pass[0-9]*
-series: s/pass[0-9]+.*$/pass/
+reads: core/scripts/validate-adversarial-convergence.sh
+entry: core/scripts/validate-adversarial-convergence.sh
+corpus: *adversarial*p*.md
+series: s/(pass|p)[0-9]+\.md$//
 invoke: --series {series}
 verdict: s/^FAIL \(([A-Z]+) --.*/\1/p
+
+reads: core/scripts/validate-provenance-block.sh core/schemas/provenance-block.json
+entry: core/scripts/validate-provenance-block.sh
+corpus: *adversarial*p*.md
+series: s/$//
+invoke: {series}
+verdict: s/^FAIL: ([A-Za-z0-9_-]+).*/\1/p

@@ -48,9 +48,10 @@ trap 'rm -rf "$ROOT"' EXIT
 DIST="$ROOT/dist"; CONS="$ROOT/consumer"
 
 BASE="$(git -C "$DIST" rev-list --max-parents=0 HEAD)"
-MID="$(git -C "$DIST" rev-parse HEAD~1)"
+MID="$(git -C "$DIST" rev-parse HEAD~2)"
+SCHEMA_ONLY="$(git -C "$DIST" rev-parse HEAD~1)"
 THEIRS="$(git -C "$DIST" rev-parse HEAD)"
-[ -n "$BASE" ] && [ -n "$MID" ] && [ -n "$THEIRS" ] || { echo "FIXTURE ERROR: seeded refs unresolvable" >&2; exit 2; }
+[ -n "$BASE" ] && [ -n "$MID" ] && [ -n "$SCHEMA_ONLY" ] && [ -n "$THEIRS" ] || { echo "FIXTURE ERROR: seeded refs unresolvable" >&2; exit 2; }
 
 fails=0
 # HERE-STRINGS, NEVER `printf | grep -q`. Under pipefail the pipeline reports the WRITER's
@@ -81,7 +82,17 @@ mkrecon() { # $1 = manifest body (empty string = write no manifest at all)
   printf '%s' "$d"
 }
 
-GOOD='predicate: core/scripts/toy-predicate.sh
+GOOD='reads: core/scripts/toy-predicate.sh
+entry: core/scripts/toy-predicate.sh
+corpus: *pass[0-9]*
+series: s/pass[0-9]+.*$/pass/
+invoke: --series {series}
+verdict: s/^FAIL \(([A-Z]+) --.*/\1/p'
+
+# The schema-backed site: the script is byte-identical across the schema-only commit, so this
+# site is the one that separates a read-set differential from a script differential.
+SCHEMA_SITE='reads: core/scripts/toy-schema-predicate.sh core/schemas/toy-schema.yaml
+entry: core/scripts/toy-schema-predicate.sh
 corpus: *pass[0-9]*
 series: s/pass[0-9]+.*$/pass/
 invoke: --series {series}
@@ -157,7 +168,7 @@ ck "7c and the row blames the ABSENT manifest"    "manifest is absent" "$out7"
 # There is no prior verdict for a stored artifact to be reclassified against, so a first-time
 # verdict is not a reclassification. Distinguishing this from an unreadable incoming side is the
 # difference between a real answer and a harness artifact.
-R8="$(mkrecon "$(printf '%s' "$GOOD" | sed 's|^predicate: .*|predicate: core/scripts/added-later.sh|')")"
+R8="$(mkrecon "$(printf '%s' "$GOOD" | sed 's|^reads: .*|reads: core/scripts/added-later.sh|; s|^entry: .*|entry: core/scripts/added-later.sh|')")"
 out8="$(bash "$R8/predicate-differential.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1)"
 ck "8a a predicate absent at BASE -> STABLE"    "PREDICATE-STABLE" "$out8"
 ck "8b and it says the pull ADDS it"            "ADDS it" "$out8"
@@ -168,6 +179,27 @@ for o in "$out" "$out4" "$out5" "$out6" "$out7" "$out8"; do
   grep -qF "HARD-" <<<"$o" && { echo "FAIL 9 a run emitted a blocking HARD- status"; fails=$((fails + 1)); }
 done
 printf 'ok   9 no run emits a blocking status\n'
+
+# ---- PART 10: A SCHEMA-ONLY CHANGE IS A PREDICATE CHANGE ------------------------------------
+# THE ARM THAT SEPARATES A READ-SET DIFFERENTIAL FROM A SCRIPT DIFFERENTIAL. Across
+# BASE..SCHEMA_ONLY the toy schema predicate's SCRIPT is byte-identical and only its schema
+# moved -- the v0.382.0 shape, where provenance-block.json changed and
+# validate-provenance-block.sh did not. A detector comparing scripts reports STABLE here by
+# construction, never by measurement, which is the exact false clean this whole file exists for.
+R10="$(mkrecon "$SCHEMA_SITE")"
+out10="$(bash "$R10/predicate-differential.sh" "$DIST" "$BASE" "$SCHEMA_ONLY" "$CONS" 2>&1)"
+# The control that makes the row readable: the ENTRY script really is byte-identical, so a
+# STABLE verdict here could only have come from comparing the wrong subject.
+sb="$(git -C "$DIST" show "${BASE}:core/scripts/toy-schema-predicate.sh" | md5 -q)"
+st="$(git -C "$DIST" show "${SCHEMA_ONLY}:core/scripts/toy-schema-predicate.sh" | md5 -q)"
+if [ "$sb" = "$st" ]; then
+  printf 'ok   10a control -- the entry script IS byte-identical across the schema-only commit\n'
+else
+  printf 'FAIL 10a the seed did not hold the script identical; part 10 asserts nothing\n'; fails=$((fails + 1))
+fi
+ck "10b a SCHEMA-only change is reported as a reclassification" "PREDICATE-RECLASSIFIES" "$out10"
+nk "10c and NOT as byte-identical/stable"                       "PREDICATE-STABLE" "$out10"
+ck "10d the crossing series is named"                           "crossing-adversarial-pass" "$out10"
 
 if [ "$fails" -ne 0 ]; then
   printf '\n%s assertion(s) FAILED\n' "$fails"; exit 1

@@ -13,11 +13,15 @@
 set -uo pipefail
 
 ROOT="$(mktemp -d "${TMPDIR:-/tmp}/predicate-reclass-XXXXXX")"
-mkdir -p "$ROOT/dist/core/scripts" "$ROOT/consumer/_bmad-output/planning-artifacts"
+mkdir -p "$ROOT/dist/core/scripts" "$ROOT/dist/core/schemas" "$ROOT/consumer/_bmad-output/planning-artifacts"
 
 # ---- the toy predicate ---------------------------------------------------------------------
-# Shaped like the real one in the ONE respect the detector depends on: it carries its threshold
-# as an inline constant and it NAMES the arm it fails on. Nothing else about it matters.
+# TWO SHAPES, BECAUSE THE DETECTOR MUST HANDLE BOTH AND ONE OF THEM IS THE HARD ONE.
+# `toy-predicate.sh` carries its ceiling INLINE, like validate-adversarial-convergence.sh.
+# `toy-schema-predicate.sh` RESOLVES its ceiling from a schema beside it, like
+# validate-provenance-block.sh, whose header says "THE SCHEMA IS NOT IN THIS FILE". A
+# script-only differential is vacuous for the second: measured at v0.382.0, where
+# provenance-block.json changed and its script was byte-identical on both sides.
 write_predicate() {  # $1 = ceiling
   cat > "$ROOT/dist/core/scripts/toy-predicate.sh" <<PRED
 #!/usr/bin/env bash
@@ -43,21 +47,60 @@ PRED
   chmod +x "$ROOT/dist/core/scripts/toy-predicate.sh"
 }
 
+# BYTE-IDENTICAL ACROSS EVERY REF, DELIBERATELY. Its verdict moves only because the schema
+# beside it moves. Any differential comparing scripts scores this as unchanged, forever.
+write_schema_predicate() {
+  cat > "$ROOT/dist/core/scripts/toy-schema-predicate.sh" <<'PRED'
+#!/usr/bin/env bash
+# toy schema-backed predicate — the ceiling is NOT in this file.
+set -uo pipefail
+SELF="$(cd "$(dirname "$0")" && pwd)"
+CEILING="$(sed -n 's/^ceiling:[[:space:]]*//p' "$SELF/../schemas/toy-schema.yaml" 2>/dev/null | head -1)"
+[ -n "$CEILING" ] || { echo "FAIL (S -- SCHEMA): schema not resolvable"; exit 2; }
+SERIES=""
+while [ $# -gt 0 ]; do
+  case "$1" in --series) SERIES="$2"; shift 2 ;; *) shift ;; esac
+done
+rc=0
+for f in "$SERIES"*; do
+  [ -f "$f" ] || continue
+  v="$(sed -n 's/^value:[[:space:]]*//p' "$f" | head -1)"
+  [ -n "$v" ] || continue
+  if [ "$v" -gt "$CEILING" ]; then
+    echo "FAIL (B -- CONSISTENCY): $f declares $v above ceiling $CEILING"
+    rc=1
+  fi
+done
+exit $rc
+PRED
+  chmod +x "$ROOT/dist/core/scripts/toy-schema-predicate.sh"
+}
+write_schema() { printf 'ceiling: %s\n' "$1" > "$ROOT/dist/core/schemas/toy-schema.yaml"; }
+
 # ---- the distribution, two refs ------------------------------------------------------------
 git -C "$ROOT/dist" init -q 2>/dev/null
 git -C "$ROOT/dist" config user.email fixture@example.invalid
 git -C "$ROOT/dist" config user.name fixture
 
 write_predicate 3
+write_schema_predicate
+write_schema 3
 echo 0.0.1 > "$ROOT/dist/VERSION"
 git -C "$ROOT/dist" add -A >/dev/null
-git -C "$ROOT/dist" commit -qm "base: ceiling 3" >/dev/null
+git -C "$ROOT/dist" commit -qm "base: ceiling 3, in the script and in the schema" >/dev/null
 
 # An UNRELATED commit, so a range exists in which the predicate did NOT move. Without it the
 # byte-identical arm has no input and that assertion could not be made at all.
 echo unrelated > "$ROOT/dist/README"
 git -C "$ROOT/dist" add -A >/dev/null
 git -C "$ROOT/dist" commit -qm "unrelated: predicate untouched" >/dev/null
+
+# THE SCHEMA MOVES AND ITS SCRIPT DOES NOT. This is the v0.382.0 shape, and it is the commit a
+# script-only differential is blind to. `write_schema_predicate` is not re-run, so the script
+# stays byte-identical across this commit by construction rather than by luck.
+write_schema 0
+git -C "$ROOT/dist" add -A >/dev/null
+git -C "$ROOT/dist" commit -qm "schema-only: ceiling 3 -> 0, script byte-identical" >/dev/null
 
 write_predicate 0
 git -C "$ROOT/dist" add -A >/dev/null

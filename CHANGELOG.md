@@ -15,6 +15,51 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.445.0] - 2026-08-30
+
+### A predicate is its READ-SET, not its script — and the corpus glob was 7x too narrow
+
+Three defects in `v0.444.0`'s own detector, all found by an adversarial review of it and all
+verified here against ground truth before being acted on.
+
+**A script-only differential is VACUOUS for a schema-backed predicate, and there is a dated
+instance.** `core/scripts/validate-provenance-block.sh:16` says "THE SCHEMA IS NOT IN THIS FILE"
+in its own header and resolves `schemas/provenance-block.json` at runtime.
+**`v0.382.0` (`d71d981e`) changed that schema and left the script BYTE-IDENTICAL** — md5
+`8d27d35c…` on both sides, schema `c7154cf6…` → `29528de5…`. `v0.444.0` compared one script path,
+so across that range it would hit its own sides-identical arm and report
+`PREDICATE-STABLE, byte-identical, no stored verdict can change`: a confident wrong clean,
+returned by construction rather than by measurement, which is the exact class the detector exists
+to catch. Reproducing that failure inside it is the worst available outcome.
+
+`predicate-sites.md` now declares **`reads:`** — the script AND every schema whose content decides
+a verdict — plus `entry:` naming the executable. Both sides are materialized into a probe root
+preserving dist-relative paths, so the incoming script resolves the incoming schema by its own
+walk-up exactly as it will on a consumer. `validate-provenance-block.sh` is declared as a second
+site.
+
+**The corpus glob under-covered by 7x.** `v0.444.0` invented `*pass[0-9]*` and reached **16**
+series on the reference consumer where the SHIPPED live-series grammar at
+`core/hooks/ai-dlc-continue.sh:430` reaches **119** on the same tree, control 0. A narrow pattern
+lowers the reported FLOOR without lowering it visibly. Re-derived from the shipped grammar, the
+`0.441.0 → 0.442.0` differential now reports **48 of 119** series reclassified where it previously
+reported 1 of 16.
+
+**The rows now name the endpoints they compared, and say that an endpoint comparison cancels.**
+A release inside the range that reclassifies and a later one that corrects it net out. Measured
+over the 119-series corpus: `0.441.0 → 0.442.0` moves 48, while `0.438.0 → 0.443.0` — the real
+pull, spanning both the regression and its repair — moves 1. Both are correct answers to
+different questions, and without the caveat a reader who knows 0.442.0 broke dozens of series
+reads the small count as a broken detector.
+
+Fixture gains part 10, the arm that separates a read-set differential from a script one: a
+schema-only commit whose entry script is held byte-identical BY CONSTRUCTION, with a control
+asserting that identity so a STABLE verdict there could only come from comparing the wrong
+subject. 29 assertions, 10 mutants, 10 killed — including `M10`, which reverts to the script-only
+comparison and dies on part 10 alone. The battery now guards every mutant with a `cmp -s`
+applied-check, after one mutant silently stopped applying when the line it targeted was replaced
+and SURVIVED as a false negative.
+
 ## [0.444.0] - 2026-08-30
 
 ### The pull could not see what a predicate change RECLASSIFIES — `PC-S307-PULL-CANNOT-SEE-WHAT-A-PREDICATE-CHANGE-RECLASSIFIES`
