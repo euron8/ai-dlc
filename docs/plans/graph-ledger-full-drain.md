@@ -114,14 +114,35 @@ IN-FLIGHT and discharges NOTHING. **When the sweep finds a live candidate you ca
 ship it, in this batch, and cite the id in the release commit message.** File only what you
 genuinely cannot take now, and say why in the same breath.
 
-**The baseline, re-derived after the `v0.441.0` merge AND the `BL-126` filing: 66 live candidates,
+### THE `0.438.0 → 0.443.0` PULL LANDED ON THE CONSUMER, AND THE DENOMINATOR MOVED FOR IT.
+
+**The operator authorized and ran it; a peer session (`graph-f4`) executed it as PR #984, stamped
+`0.443.0 @ f45907a6`.** Re-derived here against the consumer's merged tree, all controls in the
+same run: **65 live candidates, 133 archived, 33 cited, 32 UNFILED. DISCHARGED 15, IN-FLIGHT 20,
+UNTOUCHED 32, overlap 2, unnamed 0, TERMINAL 26.** Partition control closes: 15+20+32−2 = 65 = the
+live denominator.
+
+**ONE ID CROSSED, AND IT IS THE FIRST TIME IN THIS PROGRAM'S RECENT HISTORY THAT A PULL MOVED THE
+LIVE COUNT.** `PC-S330-STEP-2-HAS-NO-DISPOSITION-FOR-A-CONSUMER-MODIFIED-MACHINERY-PATH` was
+DISCHARGED here at `v0.436.0` and the consumer has now closed it `ADOPTED UPSTREAM (v0.443.0)` and
+rotated it. Verified against ground truth rather than the peer's report: 0 hits in the live ledger,
+1 in the archive, impossible-id control 0. So DISCHARGED 16 → 15 and TERMINAL 25 → 26 — the id did
+not vanish, it moved buckets. **This is the shape the plan predicted: closing an entry here changes
+what the DISTRIBUTION has done, and only a pull moves the consumer's ledger.**
+
+**Do not read `UNFILED 32` as unchanged-because-nothing-happened.** It is unchanged because the
+pull closed a candidate that was already cited; the unfiled set was untouched by it.
+
+**The baseline BEFORE that pull, kept for the delta only: 66 live candidates,
 132 archived upstream, 34 cited by a backlog entry, 32 UNFILED.** Controls in the same run:
 live/archive partition control 0, a spaced-bullet id 1, a bare-bold id 1, a dotted id 1, a
 known-filed id 1, impossible id 0. **PC-backed live backlog entries: 20** — up from 19 because `BL-126` was filed against a live
 candidate. Derived by parsing entry BLOCKS rather than joining on a line: 72 blocks parsed against
 a heading grep of 72.
 
-**The goal partition, which is the measurement that matters: DISCHARGED 16, IN-FLIGHT 20,
+**The goal partition, which is the measurement that matters — the post-pull block above REPLACES
+these figures (15/20/32, TERMINAL 26). This paragraph is the pre-pull reading and is kept for the
+arithmetic it explains: DISCHARGED 16, IN-FLIGHT 20,
 UNTOUCHED 32.** Those sum to 68 against a denominator of 66 because DISCHARGED and IN-FLIGHT are
 NOT disjoint — the overlap is 2 (`PC-S303-STUB-AUDIT-MARKER-…` and `PC-S307-AWK-CANT-OPEN-FILE-…`),
 and 68 − 2 = 66 is the control. TERMINAL 25, discharged-but-unnamed 0. Never report the live/archive
