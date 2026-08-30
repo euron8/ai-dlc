@@ -118,6 +118,52 @@ else
   [ -r "$_step_abs" ] || STEP_FILE_RESOLVED=0
 fi
 
+# A HANDOFF IS THE ONE SEAM WHERE `current_step_file` IS WRONG BY CONSTRUCTION. It records the
+# step in progress when the handoff was REQUESTED, and steps/handoff.md finalizes the snapshot at
+# its own step 3 -- so between the request and that step the field names the step the handoff is
+# interrupting. Every check downstream passes: the named file exists, is readable, and genuinely
+# was the step in progress, so the gate arms and the mandate reads as correct while sending the
+# recovering lead into the wrong procedure. Measured on the reference consumer: the session
+# recovered into implementation.md, answered gate questions correctly, and never executed
+# handoff step 3 (commit + push) or step 4 (resume line), leaving the branch 11 commits ahead of
+# origin with no resume line emitted. A third-party manual cross-check found it; nothing
+# mechanical did.
+#
+# THE PREDICATE IS SHARED WITH ai-dlc-continue.sh's Check 0 and is not spelled here -- see
+# ai-dlc-handoff-pending.sh for the three keys, why key 3 is bounded to the session, and the
+# measurement that rejected "the most recent log row". Fail-open: an unreadable library leaves
+# the snapshot's own resolution standing.
+_AI_DLC_HP="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-handoff-pending.sh"
+if [ -r "$_AI_DLC_HP" ]; then
+  . "$_AI_DLC_HP"
+  _hp_schema=""
+  for _prs in "${AI_DLC_PAUSE_ROUTING_SCHEMA:-}" \
+              "$(dirname "${BASH_SOURCE[0]}")/../schemas/pause-routing.json" \
+              "${PROJECT_DIR}/.claude/schemas/pause-routing.json" \
+              "${PROJECT_DIR}/core/schemas/pause-routing.json"; do
+    [ -n "$_prs" ] && [ -f "$_prs" ] && { _hp_schema="$_prs"; break; }
+  done
+  _hp_sess="$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)"
+  if ai_dlc_handoff_pending "$STATE_DIR" "$_hp_sess" "$_hp_schema"; then
+    # THE OVERRIDE ONLY FIRES WHERE IT CAN NAME A READABLE FILE, which is the same rule the
+    # block above enforces for `current_step_file`: replacing a working mandate with one naming
+    # a file the lead cannot open teaches it that these MUSTs are negotiable.
+    # THIS LOOP VARIABLE IS DELIBERATELY NOT THE ONE THE CANDIDATE-ROOT LOOP ABOVE USES.
+    # postcompact-rulebook-recovery builds a pre-fix mutant by cutting that loop out and then
+    # asserts the cut was TOTAL by counting that identifier, so a second loop sharing its name
+    # leaves residual occurrences the mutant cannot reach and the fixture reports FIXTURE STALE.
+    # Measured twice on two drafts -- and a third time when this very comment NAMED the
+    # identifier, because the assertion is a substring count and prose counts as an occurrence.
+    for _hcand in ".claude/skills/ai-dlc/steps" "core/skills/ai-dlc/steps"; do
+      if [ -r "${PROJECT_DIR}/${_hcand}/handoff.md" ]; then
+        STEP_FILE="${_hcand}/handoff.md"
+        STEP_FILE_RESOLVED=1
+        break
+      fi
+    done
+  fi
+fi
+
 # THE SECOND MANDATE IS BUILT, NOT INTERPOLATED, because its two branches are different
 # instructions rather than one sentence with a hole in it. When the step file resolved, the
 # lead is told which file to Read. When it did not, it is told to resolve it FROM the snapshot

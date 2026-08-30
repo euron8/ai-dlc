@@ -33,7 +33,12 @@
       "description": "Every top-level name the shipped machinery constructs under root, partitioned. Derived from a grep over core/hooks/, core/scripts/, core/session-driver/ and core/git-hooks/ for occurrences of ${STATE_DIR}/, ${LOG_DIR}/ or a literal _bmad-output/ on a non-comment line; I95 re-derives that same population and set-compares it against this array, so the two cannot drift.",
       "items": {
         "type": "object",
-        "required": ["name", "transient", "producer", "reason"],
+        "required": [
+          "name",
+          "transient",
+          "producer",
+          "reason"
+        ],
         "additionalProperties": false,
         "properties": {
           "name": {
@@ -165,6 +170,13 @@
       "producer": "core/hooks/ai-dlc-acknowledge.sh",
       "ignore": "_bmad-output/pipeline-paused.flag",
       "reason": "Pause flag, deleted by the lead on resume. A tracked copy pauses every checkout."
+    },
+    {
+      "name": ".handoff-in-progress",
+      "transient": true,
+      "producer": "core/hooks/ai-dlc-handoff-entry.sh",
+      "ignore": "_bmad-output/.handoff-in-progress",
+      "reason": "Handoff entry marker, written by the PostToolUse Read hook when the lead opens steps/handoff.md and removed by that file at step 5. Means the lead is INSIDE the handoff procedure, which is what ai-dlc-recover.sh routes a post-compact Read on. A tracked copy makes every checkout look mid-handoff."
     },
     {
       "name": "ai-dlc-update",

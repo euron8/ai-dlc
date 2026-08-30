@@ -15,6 +15,108 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.447.0] - 2026-08-30
+
+### Three releases have fixed a route to the same end state; this one asserts the state
+
+`v0.434.0` fixed `steps/handoff.md` step 3's push COMMAND (a bare `git push` cannot succeed on a
+branch that has never been pushed). `v0.438.0` fixed step 4's resume-line ROUTER (the handoff
+emitted an entry line its own `route.md` discarded). The reference consumer then filed a third
+report of the same symptom — steps 3 and 4 silently never ran — reached by a third route. Both
+prior fixes are intact and neither regressed; each removed one way to reach the end state, and
+nothing anywhere asserted the end state itself.
+
+`ai-dlc-continue.sh` Check 0 was the only gate on a handoff, and it had two holes that map onto
+the three episodes exactly.
+
+**It never checked the push.** Measured: 0 `push`/`origin`/`ahead` tokens in the check's region
+against a control of 5 resume-line tokens. The resume line and the teammate sweep are both
+recorded IN the conversation, so a lead that skips them is visible; an unpushed branch looks
+identical to a pushed one from inside the session. `PUSH_OK` now asserts it.
+
+**A handoff typed mid-turn was invisible to it.** The harness stores a message sent while the lead
+is working as a `queue-operation` record, which never becomes a `message.role=="user"` entry — so
+`LAST_USER` is whatever the harness raised instead. Measured on the consumer session that produced
+the report: 18 `queue-operation` records, and the word the operator actually typed appears **zero**
+times as a user text message, against a control of 3,296 non-empty ones. Every transcript-keyed
+guard was silent for that reason. `ai-dlc-pause.sh` is not, because it fires on `UserPromptSubmit`
+regardless of queuing and writes the request to the continuation log, so Check 0 now reads that
+log as a second trigger.
+
+**The narrowings, both measured rather than assumed:**
+
+- **No remote configured is not a failure.** `steps/handoff.md:48-51` names three environmental
+  causes it forgives, and a repo with no remote can never satisfy a push assertion — blocking
+  there would wedge every handoff in a local-only tree. A branch with no upstream WHERE A REMOTE
+  EXISTS is the opposite case and is `v0.434.0`'s exact state.
+- **The trigger is bounded to the current session, and that bound is the discharge.** The log is
+  rotated per sprint, so "any handoff row" would stay true for every later session in the sprint
+  and would block ordinary work at its first Stop. Measured on the episode: the request and every
+  turn for the next 37 minutes carry one session id, which changes at the next session — the
+  window closes exactly where it should, with no new log event and no new vocabulary.
+- The block dispatch is now ordered by the procedure's own steps (1, 3, 4) so the lead is told the
+  earliest unsatisfied one. With two arms the old code could infer the cause from `RESUME_OK`;
+  with three that inference is wrong and would answer a missing push with the teammate text.
+
+### And the routing half, which is the candidate's own proposed fix
+
+`ai-dlc-recover.sh` now resolves `STEP_FILE` to `steps/handoff.md` when a handoff is pending,
+instead of to the `current_step_file` the snapshot still names. That field is wrong here by
+construction: it records the step in progress when the handoff was REQUESTED, and `handoff.md`
+does not rewrite it until its own step 3 — so every check downstream passes (the named file
+exists, is readable, and genuinely was the step in progress) while the recovering lead is sent
+into the wrong procedure.
+
+**The predicate is shared, not copied.** `core/hooks/ai-dlc-handoff-pending.sh` is a new sourced
+library — not a hook, and needing no registration, because both `I13` and the consumer's
+`validate-hook-registration.sh` derive their library exemption from a sibling sourcing it. Two
+hooks ask the same question at two moments and had begun to answer it differently, which is the
+drift `schemas/pause-routing.json` already exists to prevent one level down.
+
+**Three keys, ordered by how much lead cooperation each needs, and the last needs none:**
+
+1. **An entry marker, written by a hook.** New `ai-dlc-handoff-entry.sh`, `PostToolUse` on `Read`:
+   when the lead opens `steps/handoff.md` it records `_bmad-output/.handoff-in-progress`, and
+   `handoff.md` removes it at step 5. The candidate's **One limit** asked for exactly this — "a
+   mechanical marker a hook can check, not just prose".
+
+   The first cut had the step file `touch` it, and that was wrong twice over.
+   `pipeline-state-paths.json` classifies "every top-level entry the shipped MACHINERY
+   constructs" and its `producer` is "a shipped file that CONSTRUCTS this path on a non-comment
+   line", so a file that merely tells a lead to construct it fails `I95` — which it did, and
+   correctly. Worse, the defect this change exists for is a lead that never executed the handoff
+   procedure, so a marker whose only writer is that procedure is absent in precisely the case that
+   motivated it.
+2. **A `HANDOFF POINT` record in the snapshot.** What real snapshots carry today; kept because
+   key 1 only starts appearing on the next handoff, while a consumer mid-handoff at pull time has
+   this and nothing else. Anchored to the start of a line, so a mention in prose is not a key.
+
+   **The first grammar required a markdown heading and scored ZERO against the only real instance
+   that exists.** The reference consumer's live record is a bold paragraph lead-in with no `#` —
+   `**HANDOFF POINT (operator-requested, mid gate-3 …).**` — against a control of 1 on a synthetic
+   heading, isolated by prepending `## ` to that one line and nothing else. The cause is worth more
+   than the fix: nothing in this tree PRODUCES that record, a lead writes it by hand, so there was
+   no producer to seed from and the grammar was written from the same imagination as its own test
+   case. It matched everything invented and nothing a consumer had written.
+3. **This session's request rows in the continuation log**, which no lead has to write.
+
+**"The most recent row" was built, measured and rejected.** Against the consumer's real log at
+each of its 22 recorded compactions it fires on 1, and not on the episode this exists for: the
+operator asked for the handoff, then asked ABOUT it four minutes later, and the second row is
+newer. Asking whether a handoff ran is the likeliest thing to type just before the compaction
+that lands inside one. Scanning the session's rows finds the request.
+
+A defect found by probing rather than by review, recorded because the two implementations are
+indistinguishable on a one-row log: the awk's `USER_PAUSE` rule ends in `next`, so without a
+flush-before-reset a second header discards the earlier block and only the LAST block survives —
+silently reimplementing the rejected rule inside the fix for it.
+
+Relates to `PC-S307-POSTCOMPACT-RECOVERY-NEVER-ROUTES-TO-HANDOFF-MD`, and now implements the
+remedy that candidate proposes, both halves.
+
+New shipping fixture `handoff-completion-assertion`. `handoff-resume-guard`,
+`postcompact-rulebook-recovery` and `resume-whole-read` stay green.
+
 ## [0.446.0] - 2026-08-30
 
 ### The backlog ceiling was calibrated to the high-water mark, so it first bound on ordinary work

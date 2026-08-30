@@ -211,6 +211,7 @@ core_manifest:
   - fixtures/gate-series-rung/**
   - fixtures/gate-verdict-grep-shape/**
   - fixtures/h2-attest-scripts-dir/**
+  - fixtures/handoff-completion-assertion/**
   - fixtures/handoff-resume-guard/**
   - fixtures/hook-registration-join/**
   - fixtures/implementation-join-yield/**

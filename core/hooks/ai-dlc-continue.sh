@@ -244,6 +244,47 @@ fi
 # variable would silently disarm an unrelated guard on the same event.
 HANDOFF_VOCAB_OK=0
 [ -n "$HANDOFF_INTENT_RE" ] && [ -n "$HANDOFF_MENTION_RE" ] && HANDOFF_VOCAB_OK=1
+
+# THE TRANSCRIPT CANNOT SEE A HANDOFF ASKED FOR MID-TURN, AND THAT IS HOW THE REPORTED EPISODE
+# BEGAN. A message typed while the lead is working is stored by the harness as a
+# `queue-operation` record and never becomes a `message.role=="user"` entry, so `LAST_USER` below
+# is whatever the harness raised instead. Measured on the reference consumer's session
+# `21c0f322`: 18 queue-operation records, and the bare word the operator actually typed appears
+# ZERO times as a user text message against a control of 3,296 non-empty ones. Every guard in
+# this system keyed on the transcript was silent for that reason, this one included.
+#
+# `ai-dlc-pause.sh` is not, because it fires on UserPromptSubmit regardless of queuing and writes
+# the request to the continuation log. So the DURABLE record of "the operator asked for a
+# handoff" is on disk, and this is the only channel that survives both a queued message and a
+# compaction. The log is read, never written, here.
+#
+# BOUNDED BY SESSION, WHICH IS ALSO THE DISCHARGE. The log is rotated per sprint (Rule 25(c)),
+# so "any handoff row" would stay true for every later session in the sprint and would block
+# ordinary work at its first Stop -- a guard that wedges correct sessions is worse than the
+# defect. Keying on THIS session's rows bounds it to the conversation that was actually asked,
+# needs no new log event, and ends when the session does. Measured on the same episode: the
+# request at 13:06:31Z and every turn through 13:43:15Z carry one session id, and it changes at
+# 13:45:38Z -- so the window closes exactly where it should.
+#
+# THE ROW'S OPERATOR-PROSE FIELD IS THE SIGNAL, NOT THE WHOLE ROW. `- Question` is lead-authored
+# and `ai-dlc-answer-capture.sh` labels it "NOT the intent signal" in the row itself; letting it
+# count would hand the lead a way to route its own guard. The patterns are the declared ones and
+# are applied to the extracted VALUE -- the anchored `^ *hand[ -]?off *$` alternative cannot
+# match a line still carrying its `- Prompt (first 120 chars): ` prefix, so a line-wise grep
+# reads a real request as a non-instance and returns a clean, plausible zero.
+# THE PREDICATE IS SOURCED, NOT SPELLED HERE. ai-dlc-recover.sh asks the same question after a
+# compaction and the two answers must not drift; the library's header carries the three keys and
+# the measurements behind them. Fail-open to today's behaviour if it is unreadable -- a Stop guard
+# that cannot load a helper must not start blocking every Stop.
+HANDOFF_ON_DISK=0
+_AI_DLC_HP="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-handoff-pending.sh"
+if [ -r "$_AI_DLC_HP" ]; then
+  . "$_AI_DLC_HP"
+  if ai_dlc_handoff_pending "$LOG_DIR" "$SESSION_ID" "$PAUSE_ROUTING_SCHEMA"; then
+    HANDOFF_ON_DISK=1
+  fi
+fi
+
 if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
   LAST_USER=$(jq -rs '[.[]|select(.message.role=="user")|.message.content|(if type=="string" then . else (map(select(.type=="text")|.text)|join(" ")) end)]|map(select(length>0))|last // ""' "$TRANSCRIPT" 2>/dev/null || echo "")
   # LAST_ASST is reconstructed with join("") (NOT " "): the format check below is
@@ -259,8 +300,9 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]
   # context): those are discussion, not a request, and a bare-substring regex fires on
   # every one of them and spams the operator with a spurious resume prompt. The second
   # grep excludes any message that IS a resume prompt or talks ABOUT the mechanism.
-  if grep -qiE "$HANDOFF_INTENT_RE" <<<"$LAST_USER" \
-     && ! grep -qiE "$HANDOFF_MENTION_RE" <<<"$LAST_USER"; then
+  if [ "$HANDOFF_ON_DISK" = "1" ] \
+     || { grep -qiE "$HANDOFF_INTENT_RE" <<<"$LAST_USER" \
+          && ! grep -qiE "$HANDOFF_MENTION_RE" <<<"$LAST_USER"; }; then
 
     RESUME_OK=$(printf '%s' "$LAST_ASST" | awk '
       /^[[:space:]]*-{4,}[[:space:]]*$/ { marks++; if (marks==1){opened=1;sawcmd=0} else if (marks>=2 && sawcmd){ok=1}; next }
@@ -289,7 +331,41 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]
       [ -n "$TEAMMATES_OK" ] || TEAMMATES_OK=1
     fi
 
-    if [ "$RESUME_OK" != "1" ] || [ "$TEAMMATES_OK" != "1" ]; then
+    # THE PUSH ARM. Step 3 is the half of this procedure nothing has ever checked, and it is the
+    # half that loses work: the resume line and the teammate sweep are both recorded IN the
+    # conversation, so a lead that skips them is visible, while an unpushed branch looks exactly
+    # like a pushed one from inside the session. Two prior releases fixed the push and neither
+    # asserted it -- v0.434.0 corrected the COMMAND (a bare `git push` cannot succeed on a branch
+    # that has never been pushed) and v0.438.0 corrected the resume line's ROUTER. Each removed
+    # one route to the same end state and the state came back by another. This asserts the state.
+    #
+    # NO REMOTE AT ALL IS NOT A FAILURE, AND THAT NARROWING IS THE WHOLE FALSE-POSITIVE STORY.
+    # `steps/handoff.md` step 3 names three ENVIRONMENTAL causes it forgives -- no remote
+    # configured, offline, protected branch -- and tells the lead to report and continue. A repo
+    # with no remote can never satisfy a push assertion, so blocking there would wedge every
+    # handoff in a local-only tree. A branch with no upstream WHERE A REMOTE EXISTS is the
+    # opposite case: it is precisely the state v0.434.0 was filed against, and `-u origin HEAD`
+    # is prescribed to resolve it. Offline and protected-branch both leave the commits ahead and
+    # DO block -- deliberately, because the operator needs to know the work is stranded, and the
+    # remediation text below says to report it rather than to retry forever. The backoff releases
+    # after MAX_RAPID_BLOCKS either way, so this can delay a handoff but cannot wedge one.
+    PUSH_OK=1
+    if command -v git >/dev/null 2>&1 && git -C "$PROJECT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+      if [ -n "$(git -C "$PROJECT_DIR" remote 2>/dev/null)" ]; then
+        if _up="$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref '@{u}' 2>/dev/null)" && [ -n "$_up" ]; then
+          _ahead="$(git -C "$PROJECT_DIR" rev-list --count '@{u}..HEAD' 2>/dev/null)"
+          case "$_ahead" in
+            ''|*[!0-9]*) : ;;                      # unreadable: do not invent a finding
+            0) : ;;
+            *) PUSH_OK=0 ;;
+          esac
+        else
+          PUSH_OK=0                                 # remote exists, branch never published
+        fi
+      fi
+    fi
+
+    if [ "$RESUME_OK" != "1" ] || [ "$TEAMMATES_OK" != "1" ] || [ "$PUSH_OK" != "1" ]; then
       H_LAST=0; H_CNT=0
       if [ -f "$HANDOFF_STATE" ]; then
         H_LAST=$(sed -n '1p' "$HANDOFF_STATE" 2>/dev/null); H_CNT=$(sed -n '2p' "$HANDOFF_STATE" 2>/dev/null)
@@ -302,6 +378,12 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]
       H_WHY=""
       [ "$RESUME_OK" != "1" ]    && H_WHY="no delimited /ai-dlc resume block"
       [ "$TEAMMATES_OK" != "1" ] && H_WHY="${H_WHY:+$H_WHY; }In-Flight Teammates still carries an \`in-flight\` row"
+      [ "$PUSH_OK" != "1" ]      && H_WHY="${H_WHY:+$H_WHY; }step 3's push has not landed (branch unpublished or ahead of its upstream)"
+      # WHICH CHANNEL SAW THE REQUEST IS PART OF THE RECORD TOO. A row reached only by the
+      # on-disk trigger means the transcript could not see the request -- a queued message, or a
+      # compaction between the ask and the Stop -- and that is a different investigation from a
+      # lead that was told plainly and skipped the steps.
+      [ "$HANDOFF_ON_DISK" = "1" ] && H_WHY="${H_WHY} [pending handoff seen on disk via ${AI_DLC_HANDOFF_KEY:-unknown}, not the transcript]"
       # The remediation text is assembled the same way, so a lead that satisfied one arm is
       # not told to redo it.
       H_FIX_RESUME="Per steps/handoff.md step 4, emit exactly this, and nothing else -- no narrated body:"
@@ -314,7 +396,17 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]
           echo "- Handoff requested but the turn ends with ${H_WHY}"
           echo ""
         } >> "$LOG_FILE"
-        if [ "$RESUME_OK" = "1" ]; then
+        # DISPATCHED IN THE PROCEDURE'S OWN ORDER -- step 1, then 3, then 4 -- so the lead is
+        # told the EARLIEST unsatisfied step rather than whichever arm this code tests first.
+        # With two arms the old form could infer the cause from `RESUME_OK`; with three that
+        # inference is wrong, and it would have answered a missing PUSH with the teammate text.
+        if [ "$PUSH_OK" != "1" ] && [ "$TEAMMATES_OK" = "1" ] && [ "$RESUME_OK" = "1" ]; then
+          jq -n --arg r "HANDOFF GUARD: the operator requested a handoff, the teammate sweep is recorded and the resume prompt is well-formed, but step 3's push has NOT landed -- this branch is either unpublished or still ahead of its upstream, so the commits this handoff just made exist only on this machine. Per steps/handoff.md step 3, run \`git push -u origin HEAD\` in the foreground with \`timeout: 600000\`. \`-u origin HEAD\`, never a bare \`git push\`: a bare push cannot succeed on a branch that has never been pushed, which is every sprint's FIRST handoff wherever a branch is cut per sprint.
+
+If the push genuinely cannot succeed -- no remote configured, offline, or a protected branch -- report that to the operator in ONE line and end the turn again; those three are environmental and the handoff is not blocked by them. A branch that merely has no upstream yet is NOT one of them. Do not resume pipeline work." '{decision:"block",reason:$r,suppressOutput:true}'
+          exit 0
+        fi
+        if [ "$TEAMMATES_OK" != "1" ]; then
           jq -n --arg r "HANDOFF GUARD: the operator requested a handoff and the resume prompt is well-formed, but the pipeline snapshot's \`## In-Flight Teammates\` section still carries a row whose status reads \`in-flight\`. ${H_FIX_TEAM}
 
 Then finalize the snapshot (step 3) and end the turn again. A handoff whose teammate sweep is not recorded looks identical to one that had no teammates." '{decision:"block",reason:$r,suppressOutput:true}'

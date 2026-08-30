@@ -15,6 +15,13 @@ path (a) procedure unchanged at a safe seam. Rule 11(b) preamble
 applies. Only path (a) initiates a handoff; paths (b)/(c) are reminders
 only.
 
+Reading this file recorded `_bmad-output/.handoff-in-progress`
+(`ai-dlc-handoff-entry.sh`). You do not create it. A compaction can land on
+any turn of the five steps below, and that marker is what routes the
+post-compact Read back to THIS file rather than to the step the handoff
+interrupted — the snapshot still names that step, correctly, until step 3
+rewrites it. Step 5 removes the marker.
+
 Execute this 5-step procedure in order:
 
 1. **Stop all in-flight teammates first.** Call `TaskStop` on
@@ -66,8 +73,16 @@ Execute this 5-step procedure in order:
    condition nobody can evaluate. With no driver the marker is inert —
    nothing reads it; with one, the driver consumes and deletes it.
 5. Create the pause flag so the continuation hook allows this session to
-   end cleanly: `touch _bmad-output/pipeline-paused.flag`. Then end the
-   session — do not continue the pipeline in this conversation.
+   end cleanly: `touch _bmad-output/pipeline-paused.flag`, and clear the
+   entry marker from the preamble: `rm -f _bmad-output/.handoff-in-progress`.
+   Then end the session — do not continue the pipeline in this conversation.
+
+   **The marker is cleared here and nowhere earlier.** It means "inside this
+   procedure", so removing it at step 3 or 4 would blind the recovery for the
+   steps that are still to run — which are exactly the steps that have been
+   skipped. If a later session finds it present with the pause flag gone, the
+   resume path has already cleared the pause and the marker is stale; delete
+   it and continue.
 
 **Resume is snapshot-driven.** The entry line is the bare skill
 invocation; the resume path (`route.md` Step 0) reads

@@ -154,6 +154,7 @@ core_manifest:
   - core/fixtures/gate-series-rung/**
   - core/fixtures/gate-verdict-grep-shape/**
   - core/fixtures/h2-attest-scripts-dir/**
+  - core/fixtures/handoff-completion-assertion/**
   - core/fixtures/handoff-resume-guard/**
   - core/fixtures/hook-registration-join/**
   - core/fixtures/implementation-join-yield/**

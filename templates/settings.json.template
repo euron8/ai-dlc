@@ -158,6 +158,15 @@
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-derivation-capture.sh"
           }
         ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-handoff-entry.sh"
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
