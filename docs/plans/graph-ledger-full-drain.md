@@ -9,7 +9,81 @@ and status records that were current when they were written and that THIS BLOCK 
 it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from it.**
 
-### BATCH 26 SHIPPED AS `v0.442.0`. THE OPERATOR'S ITEM IS DONE. YOU ARE BACK ON THE ORDINARY LOOP.
+### ONE DECISION IS OPEN AND IT IS THE OPERATOR'S. DO NOT RESOLVE IT YOURSELF.
+
+**A new PC-backed candidate arrived after batch 26 closed, the operator was given the choice of what
+to do with it, and THEY HAVE NOT ANSWERED YET.** Ask before acting. The candidate is
+`PC-S307-PULL-CANNOT-SEE-WHAT-A-PREDICATE-CHANGE-RECLASSIFIES`, filed by the consumer 2026-08-30,
+live and UNFILED here. The three options put to the operator, with the recommendation marked:
+
+1. **RECOMMENDED — take it as batch 27's subject and FIX it.** It is PC-backed, which is the top of
+   the provenance-first selection rule; it has a working primitive to extend rather than new
+   machinery to invent; and filing it instead would spend the last backlog slot and discharge
+   nothing upstream.
+2. File it as a backlog entry — **costs a rotation**, see the depth warning below, and discharges
+   nothing.
+3. Decline it; the consumer carries it locally.
+
+**If the operator has since answered, their answer governs and this list is spent.** If you cannot
+tell whether they answered, ASK — do not infer it from this file.
+
+### `docs/backlog.md` IS AT ITS CEILING: 75 of 75. A NEW FILING FAILS THE PUSH UNTIL SOMETHING ROTATES.
+
+`scripts/validate-backlog-size.sh` arm B1 enforces it. **Rotating an entry out is a disposition, not
+a tidy-up** — it means the entry is CLOSED, and closing one you did not verify is the defect this
+program has hit repeatedly. Do not rotate to make room; close on a measurement, or ask.
+
+### BATCH 26 SHIPPED TWICE — `v0.442.0` AND THEN `v0.443.0`, WHICH FIXED IT. THE NEXT BATCH IS 27.
+
+**Both releases are batch 26.** `v0.443.0` is a correction to `v0.442.0`, not a new sweep-driven
+batch, so do not number your batch 28.
+
+**THE EXIT CRITERIA LANDED, THEN HAD TO BE CORRECTED, AND THE CORRECTION IS THE LESSON.**
+`v0.442.0` made arm B a BICONDITIONAL: at a ceiling of three, `EXIT_CONDITION_NOT_MET` at or below
+it became an error. **That was an INFERENCE, not the operator's instruction, and it turned 33 of the
+consumer's own adversarial series from PASS to FAIL, 0 the other way, three of them in a sprint the
+consumer had PAUSED.** `v0.443.0` puts the ceiling on arm B's MET half and arm E only; the NOT_MET
+half fires at a fully clean residue. Re-measured: 0 regressions.
+
+**WHEN AN INSTRUCTION MOVES A THRESHOLD, ASK WHICH READING MAKES PREVIOUSLY-CORRECT DATA WRONG AND
+TAKE THE OTHER.** "The criteria become X" LICENSES an exit; it does not COMPEL one. Only the
+compelling reading is retroactive.
+
+**A GREEN GATE DID NOT SEE IT, AND THAT IS MEASURED, NOT RHETORICAL.** `v0.442.0` shipped with
+`check-24` at 111 assertions, seven mutants killed and the full gate green. The repo-side
+differential DID surface the regression — as ONE row, `ceiling-refuses-at-limit` — and scored it
+GREEN, because the same session authored both the predicate and the case declaring that row correct.
+**Run the differential against the consumer BEFORE cutting a release that touches
+`validate-adversarial-convergence.sh`, `core/schemas/provenance-block.json` or
+`core/team-roles/adversary.md`.** That instruction has no enforcer; it is prose and it is on you.
+
+**THE `0.438.0 → 0.443.0` PULL RAN AND LANDED.** Operator-authorized, executed by a peer session as
+the consumer's PR #984. `PC-S330-STEP-2-…` closed `ADOPTED UPSTREAM` and rotated, which is why
+DISCHARGED fell 16 → 15 and TERMINAL rose 25 → 26. **That authorization is SPENT** — the standing
+ruling in `.claude/rules/operator-rulings.md` governs again and no pull is preapproved.
+
+**`BL-128` AND `BL-129` ARE NEW, UNSCOPED, AND NOT WORK IN FLIGHT.** `BL-128`: an override can
+restate a rule that later MIGRATES INTO A VALIDATOR, and `layer-drift.sh` correctly reports
+`OVERRIDE-OK` because the section it shadows never moved. `BL-129`: nothing on this side can see
+what a predicate change RECLASSIFIES — a boundary, not a missing tool. **Neither is closable on a
+green suite and both say so in their own `verify:` lines.** The open candidate above is the
+consumer-side half of `BL-129` and supplies the mechanism site `BL-129` records as missing.
+
+### THE CURRENT FIGURES. RE-DERIVE THEM; DO NOT READ THEM.
+
+**Derived after the `v0.443.0` merge, after the pull landed, and after the consumer's 2026-08-30
+filing — all controls in the same run: 66 live candidates, 133 archived, 33 cited, 33 UNFILED.
+DISCHARGED 15, IN-FLIGHT 20, UNTOUCHED 33, overlap 2, unnamed 0, TERMINAL 26. PC-backed live
+backlog entries: 21. `docs/backlog.md` depth: 75 of 75.** Partition control closes: 15+20+33−2 = 66.
+
+**THE LIVE COUNT MOVED TWICE SINCE BATCH 26 AND IN OPPOSITE DIRECTIONS** — 66 → 65 when the pull
+carried `PC-S330` into the consumer's archive, then 65 → 66 when the consumer filed the new
+candidate on 2026-08-30. A figure here is a snapshot of a file another party is holding open.
+
+**The sweep's newest unfiled filing is now `2026-08-30`, not `2026-08-26`.** Four batches running,
+the newest was 2026-08-26 and an empty sweep was ordinary; that streak is broken. Do not skip it.
+
+### THE ORDINARY LOOP STILL APPLIES ONCE THE DECISION ABOVE IS SETTLED.
 
 **THE ADVERSARIAL EXIT CRITERIA ARE NOW `0 CRITICAL` AND `3 OR FEWER BLOCKING MAJOR`, DECLARED
 ONCE.** The operator's batch-26 item is discharged. `CRITICAL_EXIT_CEILING` and
@@ -96,10 +170,11 @@ one id — which is the expected outcome, not an error.
 ### THE ORDINARY BATCH LOOP: SWEEP THE CONSUMER FOR NEW PUSH CANDIDATES, THEN FIX ONE.
 
 **YOUR FIRST ACTION IS numbered action 1 under the heading `### NEXT ACTIONS — numbered, in order`.
-SEARCH FOR THAT HEADING — do not scroll to it.** It sits roughly twelve hundred lines below this
+SEARCH FOR THAT HEADING — do not scroll to it.** It sits over fifteen hundred lines below this
 block, and everything in between is HISTORY that this block replaces. That distance is the file's
 main resumability hazard: a reader working downward meets a dozen batch records, each written in the
-imperative, before reaching the one instruction that is live.
+imperative, before reaching the one instruction that is live. **The distance grows with every batch,
+so treat any figure for it as approximate and SEARCH.**
 
 Standing operator instruction: sweep before picking any subject, and report what it finds. It has caught a same-day filing in five of the last eleven batches, twice while the
 batch was already running. Batches 21, 22 and 23 are the exceptions: all three swept and all three
@@ -174,8 +249,9 @@ below; run it, do not read these numbers.
 
 ### NO SUBJECT IS PRE-CHOSEN. THE SWEEP DECIDES, AND IF IT IS EMPTY THE PC-BACKED SET DOES.
 
-**Batch 26's subject was named by the operator and is discharged. Batch 27's is not.** Everything
-below ranks candidates for a batch whose subject the SWEEP decides, which is again the case.
+**Batch 26's subject was named by the operator and is discharged (`v0.442.0` + `v0.443.0`).
+Batch 27's is not — but read the OPEN OPERATOR DECISION in the resume block before applying
+anything here**, because a PC-backed candidate is already sitting in front of it awaiting a ruling.
 
 **`PC-S339-WITHDRAWAL-COMMIT-BECOMES-THE-NEW-ATTRIBUTION` IS DISCHARGED, as `v0.440.0`, and
 `BL-117` is ROTATED to the archive.** Do not pick it up and do not re-scope it. Before it,
@@ -186,7 +262,7 @@ below ranks candidates for a batch whose subject the SWEEP decides, which is aga
 `PC-S307-MACHINE-AUDITS-IS-A-CHILD-OF-4A-SO-EVERY-4A-SHADOW-SWALLOWS-IT` beside it.
 
 **So the sweep decides your subject. If it comes back empty, the PC-backed set decides it, and
-there are 19 members with no pre-chosen favourite.** Rank by PROVENANCE first, then consequence,
+there are 21 members (re-derive it; the join is below) and no pre-chosen favourite.** Rank by PROVENANCE first, then consequence,
 never readiness. Whatever you pick, re-derive that its id is live upstream (archive control 0,
 impossible-id control 0) and run its receipt RAW rather than believing the entry.
 
@@ -1648,10 +1724,21 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **RUN THE SWEEP, REPORT IT, AND LET IT CHOOSE YOUR SUBJECT.** The operator's batch-26 item is
-   discharged as `v0.442.0` — see the resume block above — so there is no pre-chosen subject and
-   action 1b below is again the whole of your opening move. If the sweep is empty, take a
-   PC-backed entry by the selection rule in 1b.
+1. **RESOLVE THE OPEN OPERATOR DECISION FIRST — IT IS THE ONLY THING GATING YOUR SUBJECT.**
+   `PC-S307-PULL-CANNOT-SEE-WHAT-A-PREDICATE-CHANGE-RECLASSIFIES` is live, UNFILED, and was put to
+   the operator with three options and a marked recommendation; see the resume block above. **The
+   condition is: has the operator answered?**
+   - **If they have NOT answered, ASK, and do nothing else on this item.** Scope is theirs. Do not
+     pick it up, do not file it, do not decline it on your own authority.
+   - **If they HAVE answered, their answer governs** and the list above is spent.
+
+   **Still run the sweep and report it regardless** — action 1b, unchanged, is the standing
+   instruction and its newest filing is now 2026-08-30. If the sweep turns up something ELSE
+   urgent, report and ask; do not silently re-scope onto it.
+
+1a. **`docs/backlog.md` IS AT 75 OF 75.** Any new filing fails the push until an entry rotates, and
+   rotating means CLOSING, which needs a measurement. If your chosen path requires a filing, say so
+   to the operator before you start rather than discovering it at the gate.
 
 1b. **THE SWEEP, kept here because every later batch runs it as its opening action.** Operator
    instruction, given at the close of batch 17. Do this BEFORE picking any subject when the subject
