@@ -9,7 +9,68 @@ and status records that were current when they were written and that THIS BLOCK 
 it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from it.**
 
-### NO DECISION IS OPEN. BATCH 27 SHIPPED TWICE — `v0.444.0` AND `v0.445.0`, WHICH FIXED IT. NEXT IS 28.
+### NO DECISION IS OPEN. BATCH 28 SHIPPED AS `v0.446.0` AND `v0.447.0`. NEXT IS 29.
+
+**Two releases, two different subjects — this is NOT the correction pattern of batches 26 and 27.**
+`v0.446.0` raised the backlog ceiling on an operator instruction; `v0.447.0` is the batch's actual
+subject. Number yours 29.
+
+**THE OPERATOR RAISED THE BACKLOG CEILING FROM 75 TO 100 AND THE REASON GENERALISES.** They had not
+been consulted when 75 was set, and `validate-backlog-size.sh`'s own header already said the number
+is "a policy number, not a measurement, and the operator's to set". The justification that shipped
+with 75 recorded that the count had never exceeded 68, so 75 "would have fired zero times" — which
+is precisely what made it wrong: **a bound set seven entries above the historical maximum is a fuse
+sized to the normal load**, and it duly fired against a batch that had filed nothing. Filing is no
+longer blocked. Do not read the raise as licence to file rather than fix — the standing correction
+below still governs.
+
+**BATCH 28's SUBJECT WAS THE SWEEP'S, AND THE OPERATOR OVERRODE MY SCOPE TWICE. BOTH OVERRIDES ARE
+THE LESSON.** The sweep found
+`PC-S307-POSTCOMPACT-RECOVERY-NEVER-ROUTES-TO-HANDOFF-MD`, filed 2026-08-30.
+
+**FIRST OVERRIDE: I SUBSTITUTED MY OWN MECHANISM FOR THE ONE THE CANDIDATE PROPOSED, WITHOUT
+MEASURING EITHER.** The candidate carries an operator-authored fix. I refuted it in prose, never
+built it, and wrote the refutation into a shipped code comment where it read as established. My
+replacement was then refuted BY MEASUREMENT: driven against the consumer's real log at each of its
+22 recorded compactions it fires on 1, and not on the episode it was written for. **Build a filed
+remedy as a mutant and score it before preferring your own.**
+
+**SECOND OVERRIDE: I DELIVERED HALF THE FIX AND CALLED THE REST OPEN.** Told to assert handoff
+completion, I shipped that and declared the routing half out of scope — which is narrowing on my own
+authority, and the operator said so. Both halves shipped in the end. **The option you were given is
+not the option minus the parts you found harder.**
+
+**THIS WAS THE THIRD RELEASE AGAINST ONE SYMPTOM, AND THAT IS THE FINDING WORTH CARRYING.**
+`v0.434.0` fixed the handoff push COMMAND; `v0.438.0` fixed the resume-line ROUTER; both were still
+intact and neither had regressed. Each removed one ROUTE to the same end state and nothing asserted
+the END STATE. When a third report of one symptom arrives, stop patching routes and ask what
+asserts the outcome.
+
+**WHAT SHIPPED (v0.447.0).** A push assertion in `ai-dlc-continue.sh` Check 0; a durable on-disk
+trigger for it; routing in `ai-dlc-recover.sh` to `steps/handoff.md`; a new `PostToolUse` hook
+`ai-dlc-handoff-entry.sh` writing the entry marker; one shared predicate in the sourced library
+`ai-dlc-handoff-pending.sh`. New shipping fixture `handoff-completion-assertion` — 96 assertions,
+19 mutants built and 19 killed. Verified on a tree built by `install.sh`, both layouts.
+
+**THREE DEFECTS IN MY OWN WORK WERE FOUND BY MECHANISMS AND HANDS, NONE BY RE-READING IT.** `I95`
+rejected a state path whose only "producer" was prose telling a lead to create it. A hand found my
+near-miss phrase scored `intent=no`, so the exclusion conjunct was never consulted and the arm had
+passed for the wrong reason in BOTH my probe matrices. A hand found key 2's grammar scored **0**
+against the only real instance that exists — the line I had myself cited as its justification —
+because nothing in this tree PRODUCES that record, so I seeded from my own reader. **A probe you
+wrote to test a rule you wrote cannot disagree with you.**
+
+**AN `I54b` FALSE POSITIVE IS LIVE AND IS NOT FILED.** The arm reads a `sed` `s|…|…|` delimiter as a
+shell pipeline feeding `grep -q`. It failed the push on a line carrying no pipeline at all. Worked
+around in the fixture with an `@` delimiter and a comment; the arm itself is unchanged and will do
+this again. Its bluntness is deliberate, so weigh a narrowing carefully.
+
+**A DELEGATE DAMAGED THIS REPO AND REPAIRED IT.** A hand exported `GIT_DIR` in a hardening probe;
+`GIT_DIR` outranks `git -C <dir>`, so its seed ran against this repository — committing to the
+working branch, overwriting git identity, and **setting `core.hooksPath` to a nonexistent directory,
+disarming the pre-push gate**. It reported this itself. Verified repaired against the tree, not the
+report. **Tell every hand that builds probe repos to scrub the git environment and assert
+`rev-parse --absolute-git-dir` is its own before the first write.**
 
 **Both releases are batch 27**; `v0.445.0` corrects `v0.444.0`'s own detector and is not a new
 sweep-driven batch, so do not number your batch 29. This is the second batch running to ship a
@@ -70,11 +131,12 @@ this plan's own figures.** What separates them is the commit message: the id is 
 `NAMED-UPSTREAM` for it on the next pull. **When the operator's ruling is FIX-DON'T-FILE, say so in
 the report, because the partition cannot.**
 
-### `docs/backlog.md` IS AT ITS CEILING: 75 of 75. A NEW FILING FAILS THE PUSH UNTIL SOMETHING ROTATES.
+### `docs/backlog.md` IS AT 75 OF 100. FILING IS NO LONGER BLOCKED.
 
-`scripts/validate-backlog-size.sh` arm B1 enforces it. **Rotating an entry out is a disposition, not
-a tidy-up** — it means the entry is CLOSED, and closing one you did not verify is the defect this
-program has hit repeatedly. Do not rotate to make room; close on a measurement, or ask.
+`scripts/validate-backlog-size.sh` arm B1 enforces the ceiling, raised from 75 by the operator at
+`v0.446.0`. **Rotating an entry out is a disposition, not a tidy-up** — it means the entry is
+CLOSED, and closing one you did not verify is the defect this program has hit repeatedly. Do not
+rotate to make room; close on a measurement, or ask.
 
 ### BATCH 26 SHIPPED TWICE — `v0.442.0` AND THEN `v0.443.0`, WHICH FIXED IT.
 
@@ -115,16 +177,19 @@ consumer-side half of `BL-129` and supplies the mechanism site `BL-129` records 
 
 ### THE CURRENT FIGURES. RE-DERIVE THEM; DO NOT READ THEM.
 
-**Re-derived AFTER the `v0.444.0` merge — all controls in the same run: 66 live candidates, 133
-archived, 33 cited, 33 UNFILED. DISCHARGED 15, IN-FLIGHT 20, UNTOUCHED 33, overlap 2, unnamed 0,
-TERMINAL 26. `docs/backlog.md` depth: 75 of 75.** Partition control closes: 15+20+33−2 = 66.
-Presence controls: bare-bold id 1, filed id 1, dotted id 1; absence controls: partition 0,
-impossible id 0.
+**Re-derived AFTER the `v0.447.0` merge — all controls in the same run: 67 live candidates, 133
+archived, 33 cited, 34 UNFILED. DISCHARGED 15, IN-FLIGHT 20, UNTOUCHED 34, overlap 2, unnamed 0,
+TERMINAL 26. `docs/backlog.md` depth: 75 of 100.** Partition control closes: 15+20+34−2 = 67.
+Presence controls: bare-bold id 1, dotted id 1; absence controls: partition 0, impossible id 0.
 
-**EVERY FIGURE IS BYTE-IDENTICAL TO THE PRE-BATCH READING, AND THE BLOCK ABOVE EXPLAINS WHY** — a
-fix-don't-file ruling discharges a candidate through the commit message, which no bucket in this
-partition reads. Do not read the unmoved partition as a batch that achieved nothing, and do not
-"fix" it by filing an entry retroactively.
+**EVERY FIGURE IS BYTE-IDENTICAL TO THE PRE-BATCH READING, AND THAT IS EXPECTED FOR THE SECOND
+BATCH RUNNING** — batch 28's candidate was FIXED WITHOUT BEING FILED, so it can never enter
+`DISCHARGED`, which is keyed on a live candidate being cited by an entry in `docs/backlog.archive.md`.
+It sits in `UNFILED`, which is exactly where an untouched candidate sits, and **the two are
+indistinguishable in this plan's own figures.** What separates them is the commit message: the id is
+in one (control: 1 naming commit), so the consumer's `ledger-reverify` will emit `NAMED-UPSTREAM`
+for it on the next pull. Do not read the unmoved partition as a batch that achieved nothing, and do
+not "fix" it by filing an entry retroactively.
 
 **THE LIVE COUNT MOVED TWICE SINCE BATCH 26 AND IN OPPOSITE DIRECTIONS** — 66 → 65 when the pull
 carried `PC-S330` into the consumer's archive, then 65 → 66 when the consumer filed the new
@@ -1774,14 +1839,24 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **RUN THE SWEEP (action 1b below) AND LET IT PICK BATCH 28's SUBJECT. NOTHING IS GATING YOU.**
-   Batch 27 is merged as `v0.444.0` AND `v0.445.0` (both are batch 27; `v0.445.0` corrects
-   `v0.444.0`'s own detector, so number yours 28) and no operator decision is open. The candidate it closed,
-   `PC-S307-PULL-CANNOT-SEE-WHAT-A-PREDICATE-CHANGE-RECLASSIFIES`, is DONE — do not pick it up, do
-   not file it, do not re-scope onto it.
+1. **RUN THE SWEEP (action 1b below) AND LET IT PICK BATCH 29's SUBJECT. NOTHING IS GATING YOU.**
+   Batch 28 is merged as `v0.446.0` (the ceiling raise) and `v0.447.0` (the subject), so number
+   yours 29 and no operator decision is open. The candidate it addressed,
+   `PC-S307-POSTCOMPACT-RECOVERY-NEVER-ROUTES-TO-HANDOFF-MD`, is DONE — both halves of the remedy
+   it proposes shipped. Do not pick it up, do not file it, do not re-scope onto it.
 
    **If the sweep is empty, take a PC-backed backlog entry**, per the provenance-first rule in 1b.
    If it finds something new, report it and ask before re-scoping.
+
+   **ONE SUBJECT IS ALREADY IDENTIFIED, MEASURED, AND UNFILED — TAKE IT ONLY IF THE SWEEP IS EMPTY
+   OR THE OPERATOR SAYS SO.** A handoff requested MID-TURN never becomes a `message.role=="user"`
+   transcript entry: the harness stores it as a `queue-operation`. Measured on the consumer session
+   that produced batch 28's candidate — 18 such records, and the word the operator typed appears
+   **zero** times as a user text message against a control of 3,296 non-empty ones. **Every
+   transcript-keyed guard in the system is blind to it**, which is upstream of all three handoff
+   releases. `v0.447.0` works around it for Check 0 only, by reading the continuation log; the
+   general case is untouched and no entry exists for it. Filing is unblocked now — but the standing
+   correction applies: FIX it if you can, and file only what you genuinely cannot take.
 
    **CHECK THE CONSUMER'S SPRINT 307 STATE BEFORE YOU MEASURE ANYTHING OVER ITS ARTIFACTS.** It went
    from PAUSED to LIVE during batch 27 — its own pipeline resumed on a rate-limit reset and wrote
@@ -1821,7 +1896,7 @@ so no block written before it changes verdict.
    real id means the grammar or the path is wrong, not that the candidate is old** — the ledger
    path is the only argument, and the archive is a SEPARATE file.
 
-   **THE BASELINE IS 66 LIVE CANDIDATES AT `v0.444.0`, 33 CITED, 33 UNFILED, AND SPRINT 306 IS
+   **THE BASELINE IS 67 LIVE CANDIDATES AT `v0.447.0`, 33 CITED, 34 UNFILED, AND SPRINT 306 IS
    FULLY DISCHARGED.** A higher count means the consumer filed while nobody was looking.
    **Re-derive rather than trusting those numbers** — they have moved between two consecutive
    commands in this program, and the live count moved DURING batches 19 and 20 both. Batches 21
@@ -1848,7 +1923,7 @@ so no block written before it changes verdict.
    still IN FLIGHT — do not re-scope it.
 
    **THIS PARAGRAPH APPLIES AGAIN — batch 27's subject is discharged.** IF THE
-   SWEEP FINDS NOTHING, TAKE A PC-BACKED ENTRY; re-derived at `v0.444.0` there are 21 and none is
+   SWEEP FINDS NOTHING, TAKE A PC-BACKED ENTRY; re-derived at `v0.447.0` there are 21 and none is
    pre-chosen.
    The selection rule is PROVENANCE first, then consequence — never readiness — so a PC-backed
    entry outranks `BL-119` and `BL-122`, which discharge nothing upstream, and `BL-123`, whose
