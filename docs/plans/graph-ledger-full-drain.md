@@ -9,23 +9,39 @@ and status records that were current when they were written and that THIS BLOCK 
 it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from it.**
 
-### ONE DECISION IS OPEN AND IT IS THE OPERATOR'S. DO NOT RESOLVE IT YOURSELF.
+### NO DECISION IS OPEN. BATCH 27 SHIPPED AS `v0.444.0`. THE NEXT BATCH IS 28.
 
-**A new PC-backed candidate arrived after batch 26 closed, the operator was given the choice of what
-to do with it, and THEY HAVE NOT ANSWERED YET.** Ask before acting. The candidate is
-`PC-S307-PULL-CANNOT-SEE-WHAT-A-PREDICATE-CHANGE-RECLASSIFIES`, filed by the consumer 2026-08-30,
-live and UNFILED here. The three options put to the operator, with the recommendation marked:
+**The operator ruled on `PC-S307-PULL-CANNOT-SEE-WHAT-A-PREDICATE-CHANGE-RECLASSIFIES`: take it and
+FIX it.** Done, merged, and its id is in the release commit message. Do not re-scope onto it and do
+not file it — it was fixed rather than filed, which is why `docs/backlog.md` is still at 75 of 75
+and no rotation was spent.
 
-1. **RECOMMENDED — take it as batch 27's subject and FIX it.** It is PC-backed, which is the top of
-   the provenance-first selection rule; it has a working primitive to extend rather than new
-   machinery to invent; and filing it instead would spend the last backlog slot and discharge
-   nothing upstream.
-2. File it as a backlog entry — **costs a rotation**, see the depth warning below, and discharges
-   nothing.
-3. Decline it; the consumer carries it locally.
+**WHAT SHIPPED.** `reconcile/predicate-differential.sh` plus its `reconcile/predicate-sites.md`
+manifest, run at `SKILL.md` step 3g. It materializes each declared adjudication predicate at `base`
+and at `theirs`, runs both over the consumer's stored artifacts, and reports every artifact whose
+VERDICT changes while its text does not. Report-only, never blocking. New shipping fixture
+`predicate-reclassification`, 25 assertions, nine mutants scored and nine killed.
 
-**If the operator has since answered, their answer governs and this list is spent.** If you cannot
-tell whether they answered, ASK — do not infer it from this file.
+**THE COMPARABLE VERDICT IS THE NAMED ARM, NEVER THE EXIT CODE, AND THE EXIT-CODE SPELLING SHIPPED
+A CLEAN WRONG ZERO FIRST.** Compared across `0.441.0..0.442.0` over the consumer's real corpus, exit
+codes gave **0 reclassifications** — sixteen series, sixteen identical `1 -> 1` pairs — because the
+predicate fails CLOSED without `--transcript`, the probe cannot supply one, and both sides therefore
+failed identically for an unrelated reason. **An input set on which both sides fail the same way is
+non-discriminating and its null means nothing.** Comparing the arm each side NAMES reports the
+series gaining `B -- CONSISTENCY`, the arm the consumer's own filing named.
+
+**Measured in three directions, controls in the same runs**: `0.441.0 -> 0.442.0` reports the
+reclassification, `0.442.0 -> 0.443.0` reports the repair, `0.441.0 -> 0.443.0` reports STABLE.
+
+**THE GOAL PARTITION DID NOT MOVE, AND THAT IS AN INSTRUMENT GAP RATHER THAN A FAILURE — READ THIS
+BEFORE REPORTING PROGRESS.** `DISCHARGED` is keyed on a live candidate being cited by an entry in
+`docs/backlog.archive.md`. This candidate was FIXED WITHOUT EVER BEING FILED, so there is no `BL-`
+entry to archive and it can never enter that bucket, however completely it is discharged. It sits in
+`UNFILED` — which is exactly where an untouched candidate sits. **The two are indistinguishable in
+this plan's own figures.** What separates them is the commit message: the id is in one
+(control: 1 naming commit, impossible-id control 0), so the consumer's `ledger-reverify` will emit
+`NAMED-UPSTREAM` for it on the next pull. **When the operator's ruling is FIX-DON'T-FILE, say so in
+the report, because the partition cannot.**
 
 ### `docs/backlog.md` IS AT ITS CEILING: 75 of 75. A NEW FILING FAILS THE PUSH UNTIL SOMETHING ROTATES.
 
@@ -33,7 +49,7 @@ tell whether they answered, ASK — do not infer it from this file.
 a tidy-up** — it means the entry is CLOSED, and closing one you did not verify is the defect this
 program has hit repeatedly. Do not rotate to make room; close on a measurement, or ask.
 
-### BATCH 26 SHIPPED TWICE — `v0.442.0` AND THEN `v0.443.0`, WHICH FIXED IT. THE NEXT BATCH IS 27.
+### BATCH 26 SHIPPED TWICE — `v0.442.0` AND THEN `v0.443.0`, WHICH FIXED IT.
 
 **Both releases are batch 26.** `v0.443.0` is a correction to `v0.442.0`, not a new sweep-driven
 batch, so do not number your batch 28.
@@ -71,10 +87,16 @@ consumer-side half of `BL-129` and supplies the mechanism site `BL-129` records 
 
 ### THE CURRENT FIGURES. RE-DERIVE THEM; DO NOT READ THEM.
 
-**Derived after the `v0.443.0` merge, after the pull landed, and after the consumer's 2026-08-30
-filing — all controls in the same run: 66 live candidates, 133 archived, 33 cited, 33 UNFILED.
-DISCHARGED 15, IN-FLIGHT 20, UNTOUCHED 33, overlap 2, unnamed 0, TERMINAL 26. PC-backed live
-backlog entries: 21. `docs/backlog.md` depth: 75 of 75.** Partition control closes: 15+20+33−2 = 66.
+**Re-derived AFTER the `v0.444.0` merge — all controls in the same run: 66 live candidates, 133
+archived, 33 cited, 33 UNFILED. DISCHARGED 15, IN-FLIGHT 20, UNTOUCHED 33, overlap 2, unnamed 0,
+TERMINAL 26. `docs/backlog.md` depth: 75 of 75.** Partition control closes: 15+20+33−2 = 66.
+Presence controls: bare-bold id 1, filed id 1, dotted id 1; absence controls: partition 0,
+impossible id 0.
+
+**EVERY FIGURE IS BYTE-IDENTICAL TO THE PRE-BATCH READING, AND THE BLOCK ABOVE EXPLAINS WHY** — a
+fix-don't-file ruling discharges a candidate through the commit message, which no bucket in this
+partition reads. Do not read the unmoved partition as a batch that achieved nothing, and do not
+"fix" it by filing an entry retroactively.
 
 **THE LIVE COUNT MOVED TWICE SINCE BATCH 26 AND IN OPPOSITE DIRECTIONS** — 66 → 65 when the pull
 carried `PC-S330` into the consumer's archive, then 65 → 66 when the consumer filed the new
@@ -1724,17 +1746,21 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **RESOLVE THE OPEN OPERATOR DECISION FIRST — IT IS THE ONLY THING GATING YOUR SUBJECT.**
-   `PC-S307-PULL-CANNOT-SEE-WHAT-A-PREDICATE-CHANGE-RECLASSIFIES` is live, UNFILED, and was put to
-   the operator with three options and a marked recommendation; see the resume block above. **The
-   condition is: has the operator answered?**
-   - **If they have NOT answered, ASK, and do nothing else on this item.** Scope is theirs. Do not
-     pick it up, do not file it, do not decline it on your own authority.
-   - **If they HAVE answered, their answer governs** and the list above is spent.
+1. **RUN THE SWEEP (action 1b below) AND LET IT PICK BATCH 28's SUBJECT. NOTHING IS GATING YOU.**
+   Batch 27 is merged as `v0.444.0` and no operator decision is open. The candidate it closed,
+   `PC-S307-PULL-CANNOT-SEE-WHAT-A-PREDICATE-CHANGE-RECLASSIFIES`, is DONE — do not pick it up, do
+   not file it, do not re-scope onto it.
 
-   **Still run the sweep and report it regardless** — action 1b, unchanged, is the standing
-   instruction and its newest filing is now 2026-08-30. If the sweep turns up something ELSE
-   urgent, report and ask; do not silently re-scope onto it.
+   **If the sweep is empty, take a PC-backed backlog entry**, per the provenance-first rule in 1b.
+   If it finds something new, report it and ask before re-scoping.
+
+   **CHECK THE CONSUMER'S SPRINT 307 STATE BEFORE YOU MEASURE ANYTHING OVER ITS ARTIFACTS.** It went
+   from PAUSED to LIVE during batch 27 — its own pipeline resumed on a rate-limit reset and wrote
+   pipeline state, `docs/reviews/s307/` and a spawn ledger while this repo was working. The ledger
+   md5 did NOT move, so the sweep was unaffected, but any figure taken over
+   `_bmad-output/planning-artifacts/` is a snapshot of a corpus another party is holding open.
+   `predicate-differential.sh` fingerprints the corpus either side of its own run for exactly this
+   reason; a hand-rolled measurement has no such guard.
 
 1a. **`docs/backlog.md` IS AT 75 OF 75.** Any new filing fails the push until an entry rotates, and
    rotating means CLOSING, which needs a measurement. If your chosen path requires a filing, say so
@@ -1766,7 +1792,7 @@ so no block written before it changes verdict.
    real id means the grammar or the path is wrong, not that the candidate is old** — the ledger
    path is the only argument, and the archive is a SEPARATE file.
 
-   **THE BASELINE IS 65 LIVE CANDIDATES AT `v0.440.0`, 33 CITED, 32 UNFILED, AND SPRINT 306 IS
+   **THE BASELINE IS 66 LIVE CANDIDATES AT `v0.444.0`, 33 CITED, 33 UNFILED, AND SPRINT 306 IS
    FULLY DISCHARGED.** A higher count means the consumer filed while nobody was looking.
    **Re-derive rather than trusting those numbers** — they have moved between two consecutive
    commands in this program, and the live count moved DURING batches 19 and 20 both. Batches 21
@@ -1792,8 +1818,9 @@ so no block written before it changes verdict.
    `PC-S339-WITHDRAWAL-COMMIT-BECOMES-THE-NEW-ATTRIBUTION` is still filed here as `BL-117` and
    still IN FLIGHT — do not re-scope it.
 
-   **THIS PARAGRAPH APPLIES AGAIN — batch 26's operator-named subject is discharged.** IF THE
-   SWEEP FINDS NOTHING, TAKE A PC-BACKED ENTRY; there are 20 and none is pre-chosen.
+   **THIS PARAGRAPH APPLIES AGAIN — batch 27's subject is discharged.** IF THE
+   SWEEP FINDS NOTHING, TAKE A PC-BACKED ENTRY; re-derived at `v0.444.0` there are 21 and none is
+   pre-chosen.
    The selection rule is PROVENANCE first, then consequence — never readiness — so a PC-backed
    entry outranks `BL-119` and `BL-122`, which discharge nothing upstream, and `BL-123`, whose
    candidate was already discharged at `v0.435.0`. **`BL-037` and `BL-117` are both ROTATED and are
