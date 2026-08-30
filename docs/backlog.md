@@ -3400,6 +3400,31 @@ effort building a corpus to recover a property a differential has for free, and 
 frozen input set fixes it — a set harvested here and blessed here reproduces the same defect one
 layer down.
 
+**AND THE INPUTS ARE ONLY HALF OF IT: A SINGLE DERIVATION OVER PERFECT INPUTS IS STILL WORTHLESS.**
+Whoever scopes this will be tempted to read the paragraph above as "obtain the right artifacts, then
+measure". That is not what happened. Across this episode BOTH parties wrote a wrong query on the
+FIRST attempt, over the same real artifacts, every time:
+
+- a series-prefix grammar that stripped the `-pass` stem — returned a clean `12 of 12 unchanged`,
+  which reads as a refutation;
+- a `find -name` predicate matching the BASENAME — returned a confident `32 over 75`, and the
+  surviving exclusion was CORRECT BY LUCK;
+- a cut written as a DATE and compared with `<` — mis-bucketed the same-day window that was the
+  entire question, and published `3 post-cut` against a true `0`;
+- a string compare of a `Z` timestamp against a `-04:00` offset — which returned the RIGHT answer
+  for the WRONG reason, and would have shipped undetected on its own.
+
+**Not one of those was caught by the tree, by a control, or by the party that wrote it.** Every one
+was caught by a SECOND derivation, by a different hand, disagreeing out loud and then reconciling.
+`fixture-mutants.md` states this for fixtures — *"keep the fixture's author different from the
+arm's; an arm and a battery written by the same hand cannot disagree"* — and this entry is the
+same rule for MEASUREMENTS. A mechanism that hands one session the right artifacts and one query
+has reproduced the defect it was built to prevent.
+
+**Consequence for scoping: whatever is built here must produce a number a SECOND party can
+independently re-derive and compare**, and its output must carry the population definition it used,
+because that definition is where all four errors above lived — never in the arithmetic.
+
 **Candidate mechanism, NOT chosen and possibly not viable — a characterization corpus.** Freeze a
 set of real-shaped pass series in the tree with their adjudicated verdicts, and fail the push when a
 predicate change flips one without a declared reason. Read the paragraphs above FIRST; these three
