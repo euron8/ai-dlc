@@ -309,7 +309,15 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   addition at zero. Spread top is 7195, and the headroom is deliberately NOT the usual 6: the
 #   arm reported 7195 against a spread of 7194-7195, so 7195 is the top of a live spread rather
 #   than a stable point, and a budget below the spread top fails on rep variance alone.
-FORK_BUDGET=7195
+#
+#   v0.442.0: 7195 -> 7196. ONE fork, and it is arm I101's, which must read two files to compare
+#   two numbers and therefore cannot cost zero. ATTRIBUTED: the arm's first spelling
+#   (`grep | sed | head` per side) measured 7201, one `awk` per side measured 7196, and a single
+#   `awk` over both files measured 7196 against a spread of 7195-7196 -- so the arm's floor is
+#   one fork and the remaining +1 is that floor, not slack left in the spelling. The raise is
+#   taken only after the reduction, which is the order this budget exists to force. Spread top
+#   is 7196.
+FORK_BUDGET=7196
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -8072,6 +8080,55 @@ if [ -n "$i100_hits" ]; then
   err "I100 step file(s) prescribe a BARE \`git push\`, which cannot succeed on a branch that has never been pushed -- every sprint's FIRST handoff where a branch is cut per sprint. Use \`git push -u origin HEAD\`, as ai-dlc-update step 1 and steps/retro.md already do. The failure does not surface: the handoff fallback treats it as environmental and reports success over work that reached no remote:"
   printf '  %s\n' $i100_hits >&2
 fi
+
+# --- I101: the adversarial exit ceiling is ONE number, in the enforcer and in the role ---
+# The exit criteria are read by two parties that never meet. `team-roles/adversary.md` tells the
+# reviewer which verdict its residue earns; `validate-adversarial-convergence.sh` arm B refuses a
+# verdict the residue does not earn. If the two carry different numbers the reviewer stamps a
+# verdict the gate rejects, and the cycle cannot terminate at all -- the deadlock class this
+# validator's own header exists to describe, arrived at from the other side.
+#
+# WHY THIS ARM AND NOT PROSE. The criteria used to be the sentence "zero CRITICAL and zero MAJOR"
+# restated in SIX places across five files, plus three bare literals inside the enforcer, with
+# nothing joining any of them. Moving the number by operator instruction required finding all
+# nine by hand, and one of the six was in `templates/QUICKSTART.md.template` -- a consumer-facing
+# surface that no list of the sites named. The other five now CITE the declaration; these two
+# cannot, because one is a shell constant and the other is the rule a model reads, so they are
+# bound instead.
+#
+# BOTH SIDES ARE DERIVED AND AN UNRESOLVABLE SIDE IS A FAILURE, NOT A PASS. A grep that stops
+# matching returns empty, and two empty strings compare equal -- which is this repo's canonical
+# false green. Each side is required to be a number before they are compared.
+#
+# FALSE-POSITIVE SET: 0 by construction. The arm compares two derived integers and has no
+# corpus to over-match; its failure modes are a real disagreement and an unresolvable side,
+# and both are reported distinctly.
+#
+# ONE FORK FOR THE WHOLE ARM, DELIBERATELY. This validator is invoked by the suite pole and
+# `validator-fork-budget` counts every fork it makes: the obvious `grep | sed | head` spelling
+# of each side costs three apiece and put this file SIX over budget, and one `awk` per side
+# still cost one too many. Both sides are extracted by a single `awk` over both files. The two
+# patterns cannot collide across them -- one is a shell assignment, the other a markdown
+# expression -- so no file discrimination is needed, and a missing file leaves the pair empty,
+# which the `case` below reports as unresolvable rather than passing over.
+i101_pair="$(awk '
+  /^MAJOR_EXIT_CEILING=[0-9]+$/ { if (enf == "") { split($0, a, "="); enf = a[2] } }
+  match($0, /findings_major - findings_major_underived <= [0-9]+/) {
+    if (role == "") { s = substr($0, RSTART, RLENGTH); sub(/^.*<= /, "", s); role = s } }
+  END { printf "%s %s\n", (enf == "" ? "x" : enf), (role == "" ? "x" : role) }' \
+  "$REPO_ROOT/core/scripts/validate-adversarial-convergence.sh" \
+  "$REPO_ROOT/core/team-roles/adversary.md" 2>/dev/null)"
+i101_enf="${i101_pair%% *}"
+i101_role="${i101_pair##* }"
+[ -n "$i101_pair" ] || { i101_enf="x"; i101_role="x"; }
+case "${i101_enf:-x}${i101_role:-x}" in
+  *x*)
+    err "I101 the adversarial exit ceiling could not be derived from both sides, so the join is VACUOUS and its silence means nothing. Enforcer (MAJOR_EXIT_CEILING= in core/scripts/validate-adversarial-convergence.sh): '${i101_enf:-<unresolvable>}'. Role (the 'findings_major - findings_major_underived <= N' rule in core/team-roles/adversary.md): '${i101_role:-<unresolvable>}'. Restore the form the other side is keyed on, or move this arm with it." ;;
+  *)
+    if [ "$i101_enf" -ne "$i101_role" ] 2>/dev/null; then
+      err "I101 the adversarial exit ceiling disagrees across the two parties that read it: the enforcer refuses above $i101_enf blocking MAJOR (MAJOR_EXIT_CEILING in core/scripts/validate-adversarial-convergence.sh, arm B) while core/team-roles/adversary.md tells the reviewer to stamp EXIT_CONDITION_MET at up to $i101_role. The reviewer would stamp a verdict the gate rejects and the cycle could not terminate. Change the enforcer's declaration and the role's rule together."
+    fi ;;
+esac
 
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then

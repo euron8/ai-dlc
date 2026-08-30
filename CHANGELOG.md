@@ -15,6 +15,81 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.442.0] - 2026-08-29
+
+### The adversarial exit criteria are 0 CRITICAL and 3 or fewer blocking MAJOR, and they are now one declaration
+
+Operator instruction, given directly at the close of batch 25 of the graph-ledger drain and
+carried in `docs/plans/graph-ledger-full-drain.md`. Not PC-backed; the provenance-first
+selection rule ranks what the consumer sweep offers and does not override an item the operator
+named. The batch-26 sweep ran first and came back with nothing new — 66 live candidates, 132
+archived, 34 cited, 32 unfiled, newest unfiled filing still 2026-08-26, all five controls
+correct.
+
+**THE CRITERIA WERE NOT A DECLARATION AND NOTHING JOINED THEIR NINE SITES.** They were the
+literal `0` written into `validate-adversarial-convergence.sh` three times — arm B's MET half,
+arm B's NOT_MET half, arm E's stall accumulator — plus the sentence *"zero CRITICAL and zero
+MAJOR"* restated in six places across five files. Moving one number therefore meant finding all
+nine by hand. The plan's own locate named five of the six prose sites; the two it missed were
+`core/team-roles/adversary.md`, which is the file that TELLS the reviewer what to stamp, and
+`templates/QUICKSTART.md.template`, which ships to every consumer. **A count of restatement sites
+taken by reading is a floor.**
+
+`CRITICAL_EXIT_CEILING` and `MAJOR_EXIT_CEILING` are now declared once in the validator and read
+by all three predicates. The remaining prose cites them; `adversary.md` states the rule in the
+form a model reads, and **`I101` binds those two numbers to each other** — a producer that stamps
+`EXIT_CONDITION_MET` at a residue the gate refuses cannot terminate its cycle at all, which is
+the deadlock class this validator's header already describes, reached from the other side. Both
+sides of the join are derived and an unresolvable side is reported as a failure, not passed over.
+
+**THE CEILING SITS ON THE BLOCKING COUNT, NOT THE RAW ONE, AND THAT IS LOAD-BEARING.** `blocking`
+is `findings_major` less `findings_major_underived`. A raw ceiling of 3 would make a residue that
+is LEGAL TODAY illegal — 4 MAJOR all underived is 0 blocking and stamps MET on shipped machinery.
+A loosening that makes an existing exit illegal is a regression wearing a release note. Scored as
+a mutant: the raw-count spelling is killed by `underived-exits`.
+
+**ARM E AND ARM B WOULD OTHERWISE HAVE READ TWO DIFFERENT CEILINGS, and the plan flagged that
+conflict without resolving it.** Arm E treats a nonzero blocking MAJOR held at zero CRITICAL
+across K passes as a STALL; under the new criteria that same state at 1–3 is a PASS. Both now
+read the one declaration, so a plateau INSIDE the exit criteria is a converged series rather than
+a stalled one. The precedent is in the file already — arm E was moved from the raw MAJOR count to
+the blocking count for exactly this reason, and the paragraph saying so sits directly above.
+
+**ARM E'S BACKTEST NO LONGER SUPPORTS ITS THRESHOLD AND THE HEADER NOW SAYS SO.** K=2 was
+calibrated on s290-brief, whose plateau was 0 CRITICAL / 1 blocking MAJOR — inside the new
+criteria, so that series no longer accumulates a run at all. The reference corpus holds no series
+that plateaus above the ceiling, so no value of K can be shown to fire or false-fire on it. K=2 is
+retained because it is what the arm shipped with and `check-24`'s `stalled` case asserts the
+rung's reachability; **it is not retained because a measurement chose it**, and the header
+distinguishes the two rather than leaving a stale calibration reading as live evidence.
+
+**FOUR NEW FIXTURE CASES SEED THE BOUNDARY FROM BOTH SIDES.** `ceiling-at-limit` (0C / exactly 3
+blocking MAJOR stamped MET must PASS) is the headline and is RED against the previous validator.
+`ceiling-above-limit` is the over-fire control: without it the first case is satisfied by a
+validator that dropped arm B's MAJOR half entirely. `ceiling-refuses-at-limit` covers the
+biconditional's other half, seeded on a MIDDLE pass so arm D is not also firing.
+`ceiling-plateau-below` is the arm-E half — and its exit code proves nothing, because a legal
+series cannot plateau below the ceiling and keep running, so the assertion is that arm B SPEAKS
+and arm E is SILENT, with a positive control on the `stalled` series in the same shape proving
+the absence is real.
+
+**TWENTY-FIVE OF 139 SEEDED PASSES CHANGED CLASSIFICATION, AND THE SET WAS DERIVED, NOT
+EYEBALLED.** Fillers at 0C/1M that existed to build a series for arms A, G and H would have
+become arm-B failures, entangling every one of those cases with an arm that is not its subject.
+Their residues moved above the ceiling with the severity SHAPE preserved exactly. The
+`underived-*` partition moved from 3 MAJOR to 7 for a sharper reason: at a ceiling of 3 a
+three-MAJOR residue converges whether or not anything is underived, so seeded at 3 those five
+cases would have passed for a reason unrelated to the split they exist to test.
+`check-24`'s live-series arm needed the same treatment and is the clearest instance — at the old
+counts the shipped derivation and both of its mutants all report CONTINUE, so the arm would have
+been green on five rows while discriminating nothing.
+
+**SEVEN MUTANTS, SEVEN KILLS, EACH BY ITS OWN ASSERTION**: the old criteria (7 failing
+assertions), the raw-count ceiling (`underived-exits`), arm E left at `blocking > 0`
+(`ceiling-plateau-below`), arm B's NOT_MET half left at zero (`ceiling-refuses-at-limit`), the
+ceiling off by one in each direction (16 and 4), and the validator replaced by `exit 0` (92).
+`check-24` runs 111 assertions, up from 100.
+
 ## [0.441.0] - 2026-08-29
 
 ### The Stop hook's no-next-action list was an enumeration, and an unattended session was not in it

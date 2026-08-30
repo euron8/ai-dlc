@@ -352,7 +352,11 @@ fi
 #     it stamped DIVERGENT_HARD_BLOCK again at pass 17. Between them MAJORs went 1 -> 4 and
 #     CRITICALs began appearing in PRIOR scope. Earlier in the SAME cycle it had held
 #     0 CRITICAL / 1 MAJOR across passes 11-14 -- a stall, four passes long, and nothing
-#     spoke.
+#     spoke. THAT RESIDUE IS NO LONGER A STALL. The exit criteria are now 0 CRITICAL and at
+#     most 3 blocking MAJOR (CRITICAL_EXIT_CEILING / MAJOR_EXIT_CEILING in
+#     validate-adversarial-convergence.sh), so the plateau above is a MET exit condition and
+#     arm E does not count it. The episode is kept because it is why this check exists; read
+#     it as history, not as the live predicate.
 #   False-positive cost: one operator adjudication on a cycle that was going to need one.
 #   Removal condition: retire when two consecutive sprints record zero STOP states.
 #

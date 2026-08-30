@@ -642,8 +642,8 @@ your-project/
 
 **Adversarial review false positives.** The AI will manufacture some
 findings. The autonomous loop applies real fixes and discards noise. The
-cycle terminates when a pass reports zero CRITICAL and zero MAJOR -- however
-many passes that takes, including one.
+cycle terminates when a pass reports zero CRITICAL and no more than three
+blocking MAJOR -- however many passes that takes, including one.
 
 **Token usage.** This workflow prioritizes thoroughness. Expect 5-10x token
 usage vs. a standard approach. Break sprints to 3-5 stories.

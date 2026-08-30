@@ -122,7 +122,7 @@ expect_says scope-grew-unconverged s1-adversarial-pass "D-remedy" \
 echo
 # --- v0.55.3: numeric ordering + the STALL rung -------------------------------
 expect long-series-p-naming 0 "11 passes, -p<N>: ordered NUMERICALLY, so p11 (MET) is terminal, not p9" s1-adversarial-p
-expect stalled              1 "0 CRITICAL, MAJOR pinned at 1 for 3 passes -- STALLED, FAIL (E)" s1-adversarial-p
+expect stalled              1 "0 CRITICAL, blocking MAJOR pinned at 4 -- ABOVE the exit ceiling of 3 -- for 3 passes: STALLED, FAIL (E)" s1-adversarial-p
 expect stall-then-converges 0 "DECOY: holds MAJOR one pass short of K, then clears it -- E must NOT fire" s1-adversarial-p
 expect_says stalled s1-adversarial-p "E-remedy" \
   "E -- STALL" "ANOTHER PASS IS NOT THE REMEDY" "VERIFY THE DISPUTED FACT MECHANICALLY"
@@ -474,11 +474,17 @@ else
     printf '# pass\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\nmode: subagent\nlead_role: stories-test-strategy\ninvoked_at: 2026-08-07T0%s:00:00Z\ntool_use_id: toolu_ls%s\nfindings: 0 CRITICAL, %s MAJOR, 0 MINOR\nfindings_critical: 0\nfindings_major: %s\nfindings_minor: 0\nverdict: %s\nSKILL_INVOCATION_PROVENANCE_END -->\n' \
       "$2" "$2" "$3" "$3" "$4" > "$1"
   }
-  for i in 1 2 3; do prov "$SD/s9/stories-adversarial-p$i.md" "$i" 2 EXIT_CONDITION_NOT_MET; done
+  # THE MAJOR COUNT IS 5, ABOVE MAJOR_EXIT_CEILING, AND IT HAS TO BE. This arm's subject is
+  # WHICH SERIES the shipped derivation resolves, and it reads the answer off a STALLED
+  # verdict. At or below the ceiling the plateau is a met exit condition, arm E never
+  # accumulates, and every expression -- shipped and mutant alike -- reports CONTINUE. The
+  # arm would then be green on all five rows while discriminating nothing, which is this
+  # repo's own defect class inside the test written to catch it.
+  for i in 1 2 3; do prov "$SD/s9/stories-adversarial-p$i.md" "$i" 5 EXIT_CONDITION_NOT_MET; done
   sleep 1
   cp "$SD/s9/stories-adversarial-p3.md" "$SD/s9/adversarial-pass1-discovery.md"
   sleep 1
-  prov "$SD/s8/prd-adversarial-p1.md" 1 2 EXIT_CONDITION_NOT_MET
+  prov "$SD/s8/prd-adversarial-p1.md" 1 5 EXIT_CONDITION_NOT_MET
   prov "$SD/s8/prd-adversarial-p2.md" 2 0 EXIT_CONDITION_MET
 
   # $1 label  $2 the derivation expression  $3 expected STATE  $4 expected rc  $5 why
@@ -672,18 +678,64 @@ fi
 # findings_major and adversary.md grades an underived claim a MAJOR "whether or not you can
 # yet falsify it". These five are a partition of the ways the split can be got wrong, and the
 # last one is the migration proof.
-expect underived-exits               0 "0C, 3M ALL underived: 0 blocking -- MET is honest" s1-adversarial-p
-expect underived-partial-blocks      1 "0C, 3M with 2 underived: ONE blocking MAJOR -- MET is a false convergence (B)" s1-adversarial-p
-expect underived-exceeds             1 "4 underived of 3 MAJOR: the partition cannot exceed the whole (B)" s1-adversarial-p
+expect underived-exits               0 "0C, 7M ALL underived: 0 blocking -- MET is honest" s1-adversarial-p
+expect underived-partial-blocks      1 "0C, 7M with 2 underived: FIVE blocking MAJORs, above the ceiling -- MET is a false convergence (B)" s1-adversarial-p
+expect underived-exceeds             1 "8 underived of 7 MAJOR: the partition cannot exceed the whole (B)" s1-adversarial-p
 expect underived-refuses             1 "0 blocking and still NOT_MET -- the residue IS the exit condition (B)" s1-adversarial-p
-expect underived-absent-still-blocks 1 "MIGRATION: same residue, NO field -- absent means ZERO, so it still blocks" s1-adversarial-p
+expect underived-absent-still-blocks 1 "MIGRATION: same residue, NO field -- absent means ZERO, so 7 blocking still blocks" s1-adversarial-p
 
 # The exit codes above are necessary and not sufficient: three of those four failures are arm
 # B, so a message naming the wrong quantity would score identically.
 expect_says underived-partial-blocks s1-adversarial-p "B-blocking-count" \
-  "1 blocking MAJOR" "3 MAJOR less 2 underived"
+  "5 blocking MAJOR" "7 MAJOR less 2 underived"
 expect_says underived-exceeds s1-adversarial-p "B-partition" \
-  "findings_major_underived=4" "3 MAJOR"
+  "findings_major_underived=8" "7 MAJOR"
+
+# --- THE EXIT CEILING: 0 CRITICAL and at most 3 BLOCKING MAJOR ------------------
+# The criteria are declared once, at CRITICAL_EXIT_CEILING / MAJOR_EXIT_CEILING in the
+# validator, and read by arm B in both directions and by arm E's accumulator. These assert
+# the VALUE, not merely that some ceiling exists: at the limit must PASS and one above it
+# must FAIL, in the same block, or a validator that dropped arm B's MAJOR half entirely
+# would score identically on the first of them.
+expect ceiling-at-limit         0 "0C / exactly 3 blocking MAJOR stamped MET -- AT the criteria, converged" s1-adversarial-p
+expect ceiling-above-limit      1 "0C / 4 blocking MAJOR stamped MET -- ONE above the ceiling, false convergence (B)" s1-adversarial-p
+expect ceiling-refuses-at-limit 1 "0C / 3 blocking MAJOR stamped NOT_MET -- the biconditional's other half (B)" s1-adversarial-p
+
+expect_says ceiling-above-limit s1-adversarial-p "B-ceiling-exceeded" \
+  "B -- CONSISTENCY" "4 blocking MAJOR" "at most 3"
+expect_says ceiling-refuses-at-limit s1-adversarial-p "B-ceiling-refused" \
+  "B -- CONSISTENCY" "0 CRITICAL and 3 blocking MAJOR" "at most 3"
+
+# ARM E MUST BE SILENT ON A PLATEAU BELOW THE CEILING, and the exit code cannot say so --
+# the series fails arm B either way. See the seed's own header for why a legal series cannot
+# hold this shape. Two assertions, both required: B speaks, and E does not.
+expect_says ceiling-plateau-below s1-adversarial-p "B-fires-on-plateau" \
+  "B -- CONSISTENCY" "still" "stamps EXIT_CONDITION_NOT_MET"
+
+ASSERTIONS=$((ASSERTIONS + 1))
+if bash "$VALIDATOR" --series "$ROOT/ceiling-plateau-below/s1-adversarial-p" \
+     --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1 | grep -q "E -- STALL"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s %s\n' "ceiling-plateau-below" \
+    "arm E fired on a plateau INSIDE the exit criteria -- E and B are reading two different ceilings"
+else
+  printf '  ok    %-28s %s\n' "ceiling-plateau-below" \
+    "arm E silent below the ceiling -- E and B read the one declaration"
+fi
+
+# THE CONTROL FOR THE ASSERTION ABOVE. An absence is not a finding: `stalled` holds the same
+# trajectory ABOVE the ceiling and its arm E message must be present in the same invocation
+# shape, or the grep proves only that the string never appears anywhere.
+ASSERTIONS=$((ASSERTIONS + 1))
+if bash "$VALIDATOR" --series "$ROOT/stalled/s1-adversarial-p" \
+     --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1 | grep -q "E -- STALL"; then
+  printf '  ok    %-28s %s\n' "ceiling-plateau-below" \
+    "CONTROL: the same grep finds E -- STALL above the ceiling, so the absence above is real"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s %s\n' "ceiling-plateau-below" \
+    "CONTROL: E -- STALL absent from the stalled series too -- the negative assertion is vacuous"
+fi
 
 # --- PAIRING: a case that DENIES must assert the state the hooks read -------------
 # THE MECHANISM FOR A DEFECT CLASS THIS FIXTURE HAS NOW HIT TWICE. Gate mode and

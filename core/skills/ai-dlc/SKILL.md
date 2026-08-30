@@ -769,7 +769,7 @@ Rule 19 binding as (ii)); the METHOD is `team-roles/adversary.md` itself.
 Procedure: `_gate-procedures.md`, "Adversarial review dispatch".
 **Why it is not a sub-skill:** the bmad review skill demands *at least ten
 findings*, *HALTs on zero*, and emits *no severity or ranking* -- so a loop whose
-exit condition is zero CRITICAL and zero MAJOR has no fixed point under it, and the
+exit criteria are a bounded severity residue has no fixed point under it, and the
 skill forbids the very severity fields Check 24 adjudicates. The counts the gate
 reads had no source of truth. bmad remains correct, and still runs, for the
 ONE-SHOT reviews (`bug-investigation`, `sprint-review`, the test-strategy sweep),

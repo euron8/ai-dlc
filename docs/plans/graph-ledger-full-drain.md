@@ -9,52 +9,34 @@ and status records that were current when they were written and that THIS BLOCK 
 it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from it.**
 
-### YOUR SUBJECT IS ALREADY CHOSEN. THE OPERATOR DEFINED IT. DO NOT PICK YOUR OWN.
+### BATCH 26 SHIPPED AS `v0.442.0`. THE OPERATOR'S ITEM IS DONE. YOU ARE BACK ON THE ORDINARY LOOP.
 
-**CHANGE THE ADVERSARIAL REVIEW EXIT CRITERIA TO `0 CRITICAL` AND `3 OR FEWER MAJOR`.** Operator
-instruction, given directly at the close of batch 25 and recorded here because an authorization
-that lives where the executor cannot see it is not one. This is batch 26's subject. It is NOT
-PC-backed, and that does not matter — the provenance-first selection rule ranks candidates the
-SWEEP offers, and it does not override an item the operator named.
+**THE ADVERSARIAL EXIT CRITERIA ARE NOW `0 CRITICAL` AND `3 OR FEWER BLOCKING MAJOR`, DECLARED
+ONCE.** The operator's batch-26 item is discharged. `CRITICAL_EXIT_CEILING` and
+`MAJOR_EXIT_CEILING` live in `core/scripts/validate-adversarial-convergence.sh` and are read by
+arm B in both directions and by arm E's accumulator. Do not re-scope onto it and do not re-open
+the arm-E question — it was resolved by keying E on the same declaration, with the file's own
+precedent (E was moved from the raw MAJOR count to the blocking count for the same reason) and
+seven scored mutants behind it.
 
-**NOTHING HAS BEEN ACTIONED. NOT ONE BYTE OF THE CHANGE EXISTS.** The operator scoped this and
-explicitly deferred the work to a fresh session. What was done is a read-only locate, so the
-citations below resolve. Do not read any part of this file as design.
+**THE PREVIOUS BLOCK SAID FIVE SITES ACROSS FOUR FILES. THERE WERE NINE ACROSS SIX.** Three bare
+literals inside the enforcer, and the sentence restated in `core/team-roles/adversary.md` — the
+file that TELLS the reviewer what to stamp — and in `templates/QUICKSTART.md.template`, which
+ships to every consumer. **A restatement count taken by reading is a FLOOR**, and that block's own
+locate was the measurement that proved it. `I101` now binds the enforcer's constant to the role
+file's rule, so the next move of this number cannot half-land.
 
-**THE CURRENT CRITERION IS `zero CRITICAL and zero MAJOR`, AND IT IS RESTATED IN FIVE PLACES ACROSS
-FOUR FILES. IT IS NOT A DECLARED CONSTANT.** Derived with both controls in the same invocation —
-`CRITICAL` present in the validator returns 1, an impossible token returns 0:
+**THE CEILING SITS ON THE BLOCKING COUNT, NOT THE RAW ONE.** `findings_major` less
+`findings_major_underived`. A raw ceiling would have made a residue that is legal today illegal —
+4 MAJOR all underived is 0 blocking and stamps MET on shipped machinery. If you ever revisit this
+number, that is the constraint: a loosening must not make an existing exit illegal.
 
-- `core/skills/ai-dlc/steps/gate-validation.md:1552` and `:1636`
-- `core/skills/ai-dlc/steps/_gate-procedures.md:261`
-- `core/skills/ai-dlc/SKILL.md:772`
-- `core/scripts/validate-adversarial-convergence.sh:382` — the ENFORCER, plus its header at `:10`
-  and a consistency arm at `:552`
+**ARM E'S THRESHOLD K=2 IS NOW UNCALIBRATED AGAINST CONSUMER DATA AND THE HEADER SAYS SO.** It was
+backtested on a series whose plateau is inside the new criteria. The reference corpus holds no
+series that plateaus above the ceiling, so nothing can show K fires or false-fires. This is a
+known, declared gap, not a defect to file — re-backtest when such a series appears.
 
-**Re-derive that set before editing anything; it is a snapshot and this file's own rule is that a
-figure decays.** Grep for the phrasing rather than trusting the line numbers, and read
-`.claude/rules/mechanism-design.md` on single-sourcing before deciding whether the threshold
-becomes a declaration with readers or stays restated prose.
-
-**ONE CONSEQUENCE IS ALREADY VISIBLE AND IT IS THE HARD PART OF THIS ITEM.** The validator's arm E
-(`validate-adversarial-convergence.sh:53`) treats *nonzero MAJOR held at zero CRITICAL across K
-passes* as a **STALL**. Under the new criteria that same state is a **PASS** at three or fewer.
-Those two readings of one state cannot both stand. **This is stated so you confront it, not so you
-resolve it the way this sentence implies** — the operator set the criteria, and how arm E is
-reconciled is a mechanism decision that belongs to the session doing the work, with a measurement
-behind it.
-
-**Two fixtures cover this subject**: `core/fixtures/check-24-adversarial-convergence` (129s loaded,
-fourth from the suite pole — a change here moves the wall clock) and
-`core/fixtures/adversarial-citation`. Grep the fixture corpus for mutants anchored on the exact
-bytes of any line you edit BEFORE you edit it; this repo has shipped dead mutants twice that way.
-
-**Run the sweep first anyway, and report what it finds — but it does NOT choose your subject this
-time.** It is a standing operator instruction and it caught a same-day filing in batch 25 after
-four consecutive empties. If it turns up something urgent, REPORT it and ask; do not silently
-re-scope onto it and do not silently drop this item for it.
-
-### BATCH 25 SHIPPED AS `v0.441.0`. START AT THE ORDINARY BATCH LOOP: SWEEP, THEN FIX ONE.
+### BATCH 25 SHIPPED AS `v0.441.0`.
 
 **THE SWEEP FOUND A SAME-DAY FILING AND THAT ENDED A FOUR-BATCH EMPTY STREAK.** The consumer filed
 `PC-S307-CONTINUE-HOOK-CANNOT-DISTINGUISH-A-DIRECTED-SESSION-FROM-AN-UNATTENDED-ONE` on 2026-08-29,
@@ -161,11 +143,10 @@ the set that entry is later measured against.
 **Re-derive every figure above before trusting it.** The derive block is in `### Derive the state`
 below; run it, do not read these numbers.
 
-### FOR BATCH 26 A SUBJECT *IS* PRE-CHOSEN — SEE THE OPERATOR ITEM AT THE TOP. THIS SECTION IS THE RULE FOR THE BATCH AFTER IT.
+### NO SUBJECT IS PRE-CHOSEN. THE SWEEP DECIDES, AND IF IT IS EMPTY THE PC-BACKED SET DOES.
 
-**Everything below ranks candidates for a batch whose subject the SWEEP decides. Batch 26's does
-not — the operator named it.** Read this when you get back to the ordinary loop, and do not let it
-talk you out of the item above.
+**Batch 26's subject was named by the operator and is discharged. Batch 27's is not.** Everything
+below ranks candidates for a batch whose subject the SWEEP decides, which is again the case.
 
 **`PC-S339-WITHDRAWAL-COMMIT-BECOMES-THE-NEW-ATTRIBUTION` IS DISCHARGED, as `v0.440.0`, and
 `BL-117` is ROTATED to the archive.** Do not pick it up and do not re-scope it. Before it,
@@ -1638,14 +1619,10 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **BUILD THE OPERATOR'S ITEM: ADVERSARIAL REVIEW EXIT CRITERIA BECOME `0 CRITICAL` AND
-   `3 OR FEWER MAJOR`.** The full statement of it, its five restatement sites, its fixtures and the
-   arm-E conflict are in the resume block above, under **YOUR SUBJECT IS ALREADY CHOSEN**. Read
-   that, then re-derive the sites rather than trusting the line numbers.
-
-   **Run the sweep first and REPORT it — it does not choose your subject this batch.** The command
-   block and its controls are unchanged and are below. If it finds something urgent, report and
-   ask; do not re-scope onto it and do not drop the operator's item for it.
+1. **RUN THE SWEEP, REPORT IT, AND LET IT CHOOSE YOUR SUBJECT.** The operator's batch-26 item is
+   discharged as `v0.442.0` — see the resume block above — so there is no pre-chosen subject and
+   action 1b below is again the whole of your opening move. If the sweep is empty, take a
+   PC-backed entry by the selection rule in 1b.
 
 1b. **THE SWEEP, kept here because every later batch runs it as its opening action.** Operator
    instruction, given at the close of batch 17. Do this BEFORE picking any subject when the subject
@@ -1699,9 +1676,8 @@ so no block written before it changes verdict.
    `PC-S339-WITHDRAWAL-COMMIT-BECOMES-THE-NEW-ATTRIBUTION` is still filed here as `BL-117` and
    still IN FLIGHT — do not re-scope it.
 
-   **FOR BATCH 26 THIS PARAGRAPH DOES NOT APPLY — the operator named the subject. It governs the
-   batch after it.** IF THE SWEEP FINDS NOTHING, TAKE A PC-BACKED ENTRY; there are 20 and none is
-   pre-chosen.
+   **THIS PARAGRAPH APPLIES AGAIN — batch 26's operator-named subject is discharged.** IF THE
+   SWEEP FINDS NOTHING, TAKE A PC-BACKED ENTRY; there are 20 and none is pre-chosen.
    The selection rule is PROVENANCE first, then consequence — never readiness — so a PC-backed
    entry outranks `BL-119` and `BL-122`, which discharge nothing upstream, and `BL-123`, whose
    candidate was already discharged at `v0.435.0`. **`BL-037` and `BL-117` are both ROTATED and are
