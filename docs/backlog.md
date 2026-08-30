@@ -3338,9 +3338,39 @@ consumer before cutting the release" is correct and is being followed, but its o
 session's recollection, which `resident-context.md` says is not a carrier. It also lives on ONE
 side of the boundary: `v0.442.0` reached a consumer precisely because a single party was looking.
 
-**Candidate mechanism, NOT yet chosen — a characterization corpus.** Freeze a set of real-shaped
-pass series in the tree with their adjudicated verdicts, and fail the push when a predicate change
-flips one without a declared reason. Three objections to answer before building it:
+**THE FRAMING ABOVE IS WRONG IN A WAY THAT MATTERS, AND THIS PARAGRAPH IS THE CORRECTION.** The
+thing that caught `v0.442.0` was a DIFFERENTIAL, not a characterization: two predicates, old and
+new, over whatever tree exists at the time. Nothing is frozen, so there is no golden verdict and no
+moment at which today's bug becomes the reference — objection 1 below does not apply to it, and
+neither does objection 2, because a differential enumerates the same set TWICE IN ONE RUN and a
+wrong population definition cancels. Measured: the two parties' grammars disagreed 105 against 94
+and the CHANGED count was 33 under both, then 0 under both. So the instrument is not missing.
+
+**WHAT IS MISSING IS AN INPUT, AND THE REASON IS NOT ONLY THAT NO CONSUMER TREE IS ON THIS SIDE.**
+Run the same differential over THIS REPO'S OWN fixture seeds and it reports **2 changed cells
+against the consumer's 33** — and the two are the tell. Derived by driving the `0.441.0` and
+`0.442.0` validators over the seed as it stood AT `v0.442.0`:
+
+    ceiling-at-limit          0.441.0=1 -> 0.442.0=0     the INTENDED effect
+    ceiling-refuses-at-limit  0.441.0=0 -> 0.442.0=1     THIS WAS THE REGRESSION
+
+**The regression DID appear, as one row, and it was indistinguishable from the intended change
+because the same session authored both the predicate and the case declaring that row correct.**
+`ceiling-refuses-at-limit` was written to expect exit 1. The fixture scored it green. A differential
+on this side does not fail for want of volume; it fails because its expectations are authored by the
+hand being checked — the defect `.claude/rules/fixture-mutants.md` names as keeping the fixture
+author different from the arm's.
+
+**So the entry's subject is a BOUNDARY, not a missing tool**, and `consumer-boundary.md` already
+owns it: the only inputs that can discriminate are artifacts THIS SIDE DID NOT WRITE. Do not spend
+effort building a corpus to recover a property a differential has for free, and do not assume a
+frozen input set fixes it — a set harvested here and blessed here reproduces the same defect one
+layer down.
+
+**Candidate mechanism, NOT chosen and possibly not viable — a characterization corpus.** Freeze a
+set of real-shaped pass series in the tree with their adjudicated verdicts, and fail the push when a
+predicate change flips one without a declared reason. Read the paragraphs above FIRST; these three
+objections are why it is recorded as a candidate rather than a plan:
 
 - **A frozen verdict encodes today's behaviour as correct, and the counterfactual is exact.** Put
   by the peer session that measured the 33: *had `v0.442.0`'s arm B shipped a week earlier and the
