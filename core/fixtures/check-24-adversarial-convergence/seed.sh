@@ -849,34 +849,44 @@ pass "$TARGET/ceiling-above-limit/s1-adversarial-p1.md" 1 2 6 1 EXIT_CONDITION_N
 pass "$TARGET/ceiling-above-limit/s1-adversarial-p2.md" 2 0 4 2 EXIT_CONDITION_MET     0 NOSHA
 repair "$TARGET/ceiling-above-limit/s1-brief-repair-p1.md"
 
-# AT the ceiling and REFUSING to say so: 0C / 3 blocking MAJOR stamped NOT_MET. MUST FAIL (B).
-# Arm B is a BICONDITIONAL and this is its other half. A ceiling enforced only against an
-# over-claimed MET leaves the reviewer free to keep the loop running at a residue the criteria
-# call converged -- which is the S289 pass-4 shape, and the plateau this whole change exists
-# to end. The offender is p2, a MIDDLE pass, so arm D is not also firing: one case, one arm.
-mkdir -p "$TARGET/ceiling-refuses-at-limit"
-pass "$TARGET/ceiling-refuses-at-limit/s1-adversarial-p1.md" 1 2 6 1 EXIT_CONDITION_NOT_MET 1 NOSHA
-pass "$TARGET/ceiling-refuses-at-limit/s1-adversarial-p2.md" 2 0 3 2 EXIT_CONDITION_NOT_MET 0 NOSHA
-pass "$TARGET/ceiling-refuses-at-limit/s1-adversarial-p3.md" 3 0 0 2 EXIT_CONDITION_MET     0 NOSHA
-repair "$TARGET/ceiling-refuses-at-limit/s1-brief-repair-p1.md"
-repair "$TARGET/ceiling-refuses-at-limit/s1-brief-repair-p2.md"
+# A MID-CYCLE NOT_MET BELOW THE CEILING IS LEGAL, AND THIS IS THE REGRESSION GUARD.
+# 0C / 2 blocking MAJOR at p2, stamped NOT_MET, terminal MET at p3. MUST PASS.
+#
+# THIS EXACT SHAPE IS 32 OF THE REFERENCE CONSUMER'S 75 ADVERSARIAL SERIES. The first cut of
+# the ceiling made arm B a biconditional -- NOT_MET at or below the ceiling was an error -- and
+# driven over that consumer's own history it turned all 32 from PASS to FAIL, with 0 going the
+# other way. Every one was a mid-cycle pass stamping NOT_MET at 1-3 blocking MAJOR, correct
+# under the criteria in force when it was written. The ceiling LICENSES an exit; it does not
+# compel one, so declining it is the reviewer's call and not an error. If this case ever goes
+# red, the biconditional is back and every consumer's history is retroactively non-conforming.
+mkdir -p "$TARGET/ceiling-midcycle-below"
+pass "$TARGET/ceiling-midcycle-below/s1-adversarial-p1.md" 1 2 6 1 EXIT_CONDITION_NOT_MET 1 NOSHA
+pass "$TARGET/ceiling-midcycle-below/s1-adversarial-p2.md" 2 0 2 2 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/ceiling-midcycle-below/s1-adversarial-p3.md" 3 0 0 2 EXIT_CONDITION_MET     0 NOSHA
+repair "$TARGET/ceiling-midcycle-below/s1-brief-repair-p1.md"
+repair "$TARGET/ceiling-midcycle-below/s1-brief-repair-p2.md"
 
 # A PLATEAU BELOW THE CEILING IS NOT A STALL -- the arm E half of the reconciliation.
-# 0C / 2 blocking MAJOR held across p2, p3 and p4, terminal NOT_MET so arm E is NOT suppressed
-# by a MET verdict. Under the OLD accumulator this reaches STALL_PEAK 2 against K=2 and arm E
-# fires; under the new one, keyed on the same ceiling arm B reads, the run never starts.
+# 0C / 2 blocking MAJOR held flat across p2, p3 and p4, then a CRITICAL at p5 diverges. The
+# divergence is there so the terminal verdict is NOT EXIT_CONDITION_MET, because a MET terminal
+# SUPPRESSES arm E and would make this case silent for the wrong reason.
 #
-# THE SERIES IS STILL ILLEGAL, AND DELIBERATELY SO. Each of those three passes stamps
-# NOT_MET at a residue the criteria call converged, so arm B fires on all three and the case
-# exits 1 either way. THE EXIT CODE THEREFORE PROVES NOTHING HERE and run.sh asserts on the
-# MESSAGE: arm B must speak and arm E must be SILENT. That is not an accident of seeding --
-# it is the shape of the new criteria. A legal series cannot plateau below the ceiling and
-# keep running, because arm B forces the MET that ends it. So the only observable difference
-# between the two accumulators lives on a series that is already failing for another reason,
-# and asserting the exit code would have scored old and new identically.
+# Under the OLD accumulator (any nonzero blocking MAJOR) the run reaches STALL_PEAK 2 against
+# K=2 and arm E fires. Under the new one it never starts: the exit at 1-3 is OPEN, so the cycle
+# is not one that cannot terminate, which is the only thing arm E is for.
+#
+# THE EXIT CODE PROVES NOTHING HERE -- arms C and D fire on the divergence either way -- so
+# run.sh asserts on the MESSAGE, in three parts: C must speak, E must be SILENT, and B must be
+# SILENT. The last of those is the same regression guard as the case above, seeded on a plateau
+# rather than a single pass, because a biconditional would fire on all three plateau passes.
 mkdir -p "$TARGET/ceiling-plateau-below"
 pass "$TARGET/ceiling-plateau-below/s1-adversarial-p1.md" 1 2 6 1 EXIT_CONDITION_NOT_MET 1 NOSHA
 pass "$TARGET/ceiling-plateau-below/s1-adversarial-p2.md" 2 0 2 3 EXIT_CONDITION_NOT_MET 0 NOSHA
 pass "$TARGET/ceiling-plateau-below/s1-adversarial-p3.md" 3 0 2 3 EXIT_CONDITION_NOT_MET 0 NOSHA
 pass "$TARGET/ceiling-plateau-below/s1-adversarial-p4.md" 4 0 2 3 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/ceiling-plateau-below/s1-adversarial-p5.md" 5 2 0 1 DIVERGENT_HARD_BLOCK   2 NOSHA
+# p1->p2 and p4->p5 both FALL, so arm H owns those two transitions and wants a record for each.
+# Seeded, deliberately: without them arm H fires and this case reports two findings that have
+# nothing to do with the ceiling, which is the entanglement `fixture-mutants.md` forbids.
 repair "$TARGET/ceiling-plateau-below/s1-brief-repair-p1.md"
+repair "$TARGET/ceiling-plateau-below/s1-brief-repair-p4.md"

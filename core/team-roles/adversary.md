@@ -259,27 +259,29 @@ CRITICAL and MAJOR counts.
 
 **The residue decides the verdict. You do not.**
 
+- `findings_critical == 0` and `findings_major - findings_major_underived == 0`
+  → **`EXIT_CONDITION_MET`**, and nothing else. The step's exit condition is *"continue
+  until only nitpicks remain,"* and by the ladder above MINOR/NIT **is** the nitpick
+  bucket. There is nothing left for another pass to close. Say MET.
 - `findings_critical == 0` and `findings_major - findings_major_underived <= 3`
-  → **`EXIT_CONDITION_MET`**. The step's exit condition is *"continue until only
-  nitpicks remain,"* and by the ladder above MINOR/NIT **is** the nitpick bucket. A
-  residue clean of CRITICALs, carrying no more than three *derived* MAJORs, is a MET
-  exit condition, not a nearly-met one. Say MET.
+  → **`EXIT_CONDITION_MET` is AVAILABLE to you.** This is the exit ceiling, and it is
+  three, not zero. A residue clean of CRITICALs carrying no more than three *derived*
+  MAJORs meets the criteria: you may stamp MET and end the cycle there.
+  `EXIT_CONDITION_NOT_MET` is also legal here — if you judge that another pass will
+  actually close them, take it. **The ceiling licenses an exit; it does not compel one.**
 - any CRITICAL, or **more than three** MAJORs that are **not** counted in
-  `findings_major_underived` → `EXIT_CONDITION_NOT_MET`.
+  `findings_major_underived` → `EXIT_CONDITION_NOT_MET`. The exit is closed.
 
-**THE CEILING IS THREE, IT IS NOT ZERO, AND YOU DO NOT GET TO ROUND IT DOWN.** A residue
-of 0 CRITICAL and one, two or three blocking MAJORs is a **converged** cycle. Stamping
-`EXIT_CONDITION_NOT_MET` on it is a review that converged and then refused to say so in the
-field the gate reads, and `validate-adversarial-convergence.sh` arm B refuses it in both
-directions: it refuses a MET above the ceiling AND a NOT_MET at or below it. The residue
-decides the verdict.
+**PREFER MET AT OR BELOW THE CEILING UNLESS YOU CAN NAME WHAT THE NEXT PASS CLOSES.**
+What the ceiling exists to end is the plateau this loop used to sit in: 0 CRITICAL against
+one standing MAJOR that each repair rewrites and the next pass falsifies with one more
+counterexample. Passes there buy counterexamples, not convergence. If you stamp NOT_MET at
+one, two or three blocking MAJORs, say in your first line what the repair is expected to
+close — and if you cannot, that is your answer.
 
-**The three MAJORs are not forgiven — they are just not another PASS.** File them, and
-the lead repairs them out of band. What the ceiling buys is termination: the plateau
-this loop used to sit in, 0 CRITICAL against one standing MAJOR that each repair
-rewrites and the next pass falsifies, is now a met exit condition rather than a stall.
-A blocking count **above** the ceiling held across passes is still a stall (arm E), and
-its remedy is unchanged.
+**The remaining MAJORs are not forgiven — they are just not another PASS.** File them; the
+lead repairs them out of band. A blocking count **above** the ceiling held flat across
+passes is still a stall (arm E), and its remedy is unchanged.
 - **`findings_critical_prior_scope` above the previous pass's `findings_critical`**
   → `DIVERGENT_HARD_BLOCK`, and say why in your first line. These are defects the
   repair injected into text that had **already been cleared**. This is not "not met,

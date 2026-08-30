@@ -320,11 +320,29 @@ VALID_VERDICTS="EXIT_CONDITION_MET EXIT_CONDITION_NOT_MET DIVERGENT_HARD_BLOCK"
 # loosening of the criteria that makes an existing exit illegal is a regression wearing a
 # release note, so the ceiling sits on the count arm B already adjudicates.
 #
-# READERS -- all three must move together or the criteria are two criteria:
-#   arm B, the MET half      -- a verdict claiming convergence above the ceiling
-#   arm B, the NOT_MET half  -- a verdict refusing convergence at or below it
-#   arm E, the accumulator   -- a plateau INSIDE the exit condition is a converged series,
-#                               not a stall. See the note at the accumulator.
+# THE CEILING LICENSES AN EXIT; IT DOES NOT COMPEL ONE. Two readers, not three, and the arm
+# that is deliberately NOT a reader is the whole of this paragraph.
+#
+#   arm B, the MET half     -- READS IT. A verdict claiming convergence above the ceiling is
+#                              refused: you may not call 4 blocking MAJOR converged.
+#   arm E, the accumulator  -- READS IT. A plateau INSIDE the criteria is a series that MAY
+#                              exit, so it is not a cycle that cannot terminate. Not a stall.
+#   arm B, the NOT_MET half -- DOES NOT READ IT, and stays keyed on a fully clean residue.
+#                              A reviewer holding 1-3 blocking MAJOR and choosing to run
+#                              another pass is making a legitimate call, not an error.
+#
+# WHY THAT ASYMMETRY, MEASURED RATHER THAN REASONED. The first cut of this change made arm B a
+# BICONDITIONAL -- NOT_MET at or below the ceiling was an error, on the principle that the
+# residue decides the verdict. Driven over the reference consumer's own history, that spelling
+# turned 32 of its 75 adversarial series from PASS to FAIL, with 0 going the other way. Every
+# one of the 32 was a mid-cycle pass that stamped NOT_MET at 1-3 blocking MAJOR, which was the
+# CORRECT verdict under the criteria in force when it was written. A criteria loosening must
+# not retroactively convict correct data; `mechanism-design.md` says a check must not error on
+# correct data, and this is that rule meeting a real corpus. The same run against this spelling
+# is 75/75 unchanged.
+#
+# The residue still decides the verdict in the direction that matters: it decides what you may
+# NOT claim. What you may DECLINE to claim is the reviewer's judgment.
 CRITICAL_EXIT_CEILING=0
 MAJOR_EXIT_CEILING=3
 
@@ -587,14 +605,18 @@ for f in "${SORTED[@]}"; do
       findings_major_underived and does not block). A CRITICAL, or a blocking MAJOR count above
       the ceiling, is neither. This verdict claims a convergence the residue contradicts."
     fi
+    # KEYED ON A FULLY CLEAN RESIDUE, NOT ON THE CEILING -- see the declaration's own note.
+    # A pass holding 1-3 blocking MAJOR may legitimately choose another pass; a pass holding
+    # NOTHING has nothing left to find and cannot.
     if [ "$verdict" = "EXIT_CONDITION_NOT_MET" ] \
-       && [ "$crit" -le "$CRITICAL_EXIT_CEILING" ] && [ "$blocking" -le "$MAJOR_EXIT_CEILING" ]; then
-      err "B -- CONSISTENCY" "$f reports $crit CRITICAL and $blocking blocking MAJOR and still
-      stamps EXIT_CONDITION_NOT_MET. That residue is AT the exit criteria --
-      $CRITICAL_EXIT_CEILING CRITICAL and at most $MAJOR_EXIT_CEILING blocking MAJOR -- so the
-      exit condition is MET. This is the S289 pass-4 shape: the review converged, said so in its
-      prose, and then refused to say so in the field the gate reads. The residue decides the
-      verdict, not the reviewer. Stamp EXIT_CONDITION_MET, or reclassify the residue."
+       && [ "$crit" -le "$CRITICAL_EXIT_CEILING" ] && [ "$blocking" -eq 0 ]; then
+      err "B -- CONSISTENCY" "$f reports 0 CRITICAL and 0 blocking MAJOR and still stamps
+      EXIT_CONDITION_NOT_MET. Under the severity ladder that residue IS 'only nitpicks remain'
+      -- the exit condition is MET and there is nothing left for another pass to close. This is
+      the S289 pass-4 shape: the review converged, said so in its prose, and then refused to say
+      so in the field the gate reads. Stamp EXIT_CONDITION_MET, or reclassify the residue.
+      (A residue of 1 to $MAJOR_EXIT_CEILING blocking MAJOR is NOT this case: the criteria let
+      you exit there, and declining to is your call. This arm does not fire on it.)"
     fi
   fi
 
@@ -663,15 +685,19 @@ for f in "${SORTED[@]}"; do
   # would report a stall for a series that had already converged, which is the same wrong answer
   # in the opposite direction.
   #
-  # AND KEYED ON THE SAME CEILING ARM B READS, WHICH IS THE WHOLE OF THE ARM-E RECONCILIATION.
-  # When the exit criteria were 0 CRITICAL / 0 MAJOR the two agreed by construction: any nonzero
-  # blocking MAJOR was both "not converged" (B) and "a plateau worth counting" (E). At a ceiling
-  # of 3 they come apart, and a plateau at 0 CRITICAL / 1 blocking MAJOR would be read as a
-  # STALL by E and as a met exit condition by B -- two readings of one state, which is the defect
-  # this repo names "a rung that fires on a healthy cycle". The precedent is the paragraph
-  # directly above, decided the same way for the same reason: E counts only what BLOCKS. A
-  # plateau INSIDE the exit criteria is a converged series that has not yet said so, and arm B
-  # is the arm that says so.
+  # AND KEYED ON THE SAME CEILING ARM B's MET HALF READS, WHICH IS THE ARM-E RECONCILIATION.
+  # When the exit criteria were 0 CRITICAL / 0 MAJOR, E's subject and "not converged" were the
+  # same set by construction: any nonzero blocking MAJOR was both. At a ceiling of 3 they come
+  # apart, and the question is which one E is for. E EXISTS TO CATCH A CYCLE THAT CANNOT
+  # TERMINATE -- that is the whole of its header. A plateau at 1-3 blocking MAJOR is a cycle
+  # that CAN terminate whenever the lead decides to: the exit is open and stamping MET is legal
+  # at any pass. Nothing is stuck, so there is nothing for E to report, and firing there would
+  # be a rung punishing a cycle for taking passes it is entitled to take.
+  #
+  # Above the ceiling the exit is genuinely CLOSED, and a flat residue there is the original
+  # subject: not converging, not diverging, and another pass buys nothing. That is what E now
+  # counts. The precedent is the paragraph directly above, decided the same way for the same
+  # reason: E counts only what BLOCKS.
   if [ -n "$crit" ] && [ -n "$major" ] && [ "$crit" -le "$CRITICAL_EXIT_CEILING" ] \
      && [ "$blocking" -gt "$MAJOR_EXIT_CEILING" ] \
      && [ -n "$PREV_MAJOR" ] && [ "$major" -ge "$PREV_MAJOR" ]; then

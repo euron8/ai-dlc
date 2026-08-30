@@ -697,45 +697,53 @@ expect_says underived-exceeds s1-adversarial-p "B-partition" \
 # the VALUE, not merely that some ceiling exists: at the limit must PASS and one above it
 # must FAIL, in the same block, or a validator that dropped arm B's MAJOR half entirely
 # would score identically on the first of them.
-expect ceiling-at-limit         0 "0C / exactly 3 blocking MAJOR stamped MET -- AT the criteria, converged" s1-adversarial-p
-expect ceiling-above-limit      1 "0C / 4 blocking MAJOR stamped MET -- ONE above the ceiling, false convergence (B)" s1-adversarial-p
-expect ceiling-refuses-at-limit 1 "0C / 3 blocking MAJOR stamped NOT_MET -- the biconditional's other half (B)" s1-adversarial-p
+expect ceiling-at-limit        0 "0C / exactly 3 blocking MAJOR stamped MET -- AT the criteria, converged" s1-adversarial-p
+expect ceiling-above-limit     1 "0C / 4 blocking MAJOR stamped MET -- ONE above the ceiling, false convergence (B)" s1-adversarial-p
+expect ceiling-midcycle-below  0 "0C / 2 blocking MAJOR stamped NOT_MET mid-cycle -- declining an open exit is legal" s1-adversarial-p
 
 expect_says ceiling-above-limit s1-adversarial-p "B-ceiling-exceeded" \
   "B -- CONSISTENCY" "4 blocking MAJOR" "at most 3"
-expect_says ceiling-refuses-at-limit s1-adversarial-p "B-ceiling-refused" \
-  "B -- CONSISTENCY" "0 CRITICAL and 3 blocking MAJOR" "at most 3"
 
-# ARM E MUST BE SILENT ON A PLATEAU BELOW THE CEILING, and the exit code cannot say so --
-# the series fails arm B either way. See the seed's own header for why a legal series cannot
-# hold this shape. Two assertions, both required: B speaks, and E does not.
-expect_says ceiling-plateau-below s1-adversarial-p "B-fires-on-plateau" \
-  "B -- CONSISTENCY" "still" "stamps EXIT_CONDITION_NOT_MET"
+# THE NOT_MET HALF STILL FIRES AT A FULLY CLEAN RESIDUE, and `refused-to-converge` above is
+# its true positive. Asserted here by MESSAGE so that relaxing the ceiling cannot be mistaken
+# for deleting the arm: an implementation that dropped the NOT_MET half entirely passes every
+# exit-code assertion in this block and fails this one.
+expect_says refused-to-converge s1-adversarial-pass "B-notmet-at-clean" \
+  "B -- CONSISTENCY" "0 CRITICAL and 0 blocking MAJOR" "stamps"
 
-ASSERTIONS=$((ASSERTIONS + 1))
-if bash "$VALIDATOR" --series "$ROOT/ceiling-plateau-below/s1-adversarial-p" \
-     --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1 | grep -q "E -- STALL"; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-28s %s\n' "ceiling-plateau-below" \
-    "arm E fired on a plateau INSIDE the exit criteria -- E and B are reading two different ceilings"
-else
-  printf '  ok    %-28s %s\n' "ceiling-plateau-below" \
-    "arm E silent below the ceiling -- E and B read the one declaration"
-fi
+# TWO ARMS MUST BE SILENT ON A PLATEAU BELOW THE CEILING, and the exit code cannot say so --
+# arms C and D fire on the p5 divergence either way. Each negative carries its own positive
+# control in the same invocation shape, because an absence is not a finding.
+# Arm D, not arm C: p5 DECLARES DIVERGENT_HARD_BLOCK, so C is satisfied and D owns the
+# unresolved terminal. Naming the wrong arm here is how a silence assertion below could pass
+# against a run that failed for a third reason entirely.
+expect_says ceiling-plateau-below s1-adversarial-p "D-owns-plateau-series" \
+  "D -- TERMINAL" "DIVERGENT_HARD_BLOCK"
+expect_state ceiling-plateau-below s1-adversarial-p DIVERGENT 3 \
+  "the hooks must deny on the divergence that ended the plateau"
 
-# THE CONTROL FOR THE ASSERTION ABOVE. An absence is not a finding: `stalled` holds the same
-# trajectory ABOVE the ceiling and its arm E message must be present in the same invocation
-# shape, or the grep proves only that the string never appears anywhere.
-ASSERTIONS=$((ASSERTIONS + 1))
-if bash "$VALIDATOR" --series "$ROOT/stalled/s1-adversarial-p" \
-     --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1 | grep -q "E -- STALL"; then
-  printf '  ok    %-28s %s\n' "ceiling-plateau-below" \
-    "CONTROL: the same grep finds E -- STALL above the ceiling, so the absence above is real"
-else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-28s %s\n' "ceiling-plateau-below" \
-    "CONTROL: E -- STALL absent from the stalled series too -- the negative assertion is vacuous"
-fi
+ceiling_silent() {  # $1 case-dir  $2 token  $3 control-dir  $4 why-it-must-be-silent
+  local out ctl
+  out="$(bash "$VALIDATOR" --series "$ROOT/$1/s1-adversarial-p" \
+          --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
+  ctl="$(bash "$VALIDATOR" --series "$ROOT/$3/s1-adversarial-p" \
+          --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if grep -qF -- "$2" <<<"$out"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s %s fired below the ceiling -- %s\n' "$1" "$2" "$4"
+  elif ! grep -qF -- "$2" <<<"$ctl"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s CONTROL: %s absent from %s too -- the negative assertion is vacuous\n' "$1" "$2" "$3"
+  else
+    printf '  ok    %-28s %s silent below the ceiling, present in %s (control)\n' "$1" "$2" "$3"
+  fi
+}
+
+ceiling_silent ceiling-plateau-below "E -- STALL" stalled \
+  "E and B's MET half are reading two different ceilings"
+ceiling_silent ceiling-plateau-below "B -- CONSISTENCY" ceiling-above-limit \
+  "the biconditional is back and every consumer's mid-cycle NOT_MET is retroactively an error"
 
 # --- PAIRING: a case that DENIES must assert the state the hooks read -------------
 # THE MECHANISM FOR A DEFECT CLASS THIS FIXTURE HAS NOW HIT TWICE. Gate mode and

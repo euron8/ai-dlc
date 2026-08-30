@@ -3319,6 +3319,35 @@ precondition rather than a false close.
 
 verify: sh f=core/hooks/ai-dlc-acknowledge.sh; [ -f "$f" ] || exit 9; r=$(grep -oE 'jq -r [^|]*\.[a-z_.]+' "$f" | grep -oE '\.[a-z_][a-z_.]*' | sort -u); [ -n "$r" ] || exit 9; printf '%s\n' "$r" | grep -q '^\.tool_name$' || exit 9; printf '%s\n' "$r" | grep -qE '^\.(subagent|agent_type|agent_id|parent_session_id|invoked_by)' && exit 0; exit 1
 
+## BL-128 — an override can restate a threshold that later migrates into a validator, and layer-drift cannot see it
+
+**An `overrides/` file may restate a rule as prose; `layer-drift.sh` joins that override to the
+`SKILL.md` section it shadows by `base_sha`. When the rule MIGRATES OUT of `SKILL.md` into a
+shell validator, the shadowed section stops moving, the join keeps reporting `OVERRIDE-OK`, and
+the override is now wrong with nothing able to say so.** No override carries a `base_sha`
+against a script, so the migration is invisible to the only mechanism that watches overrides.
+
+**Found by a peer session during the 0.443.0 pull rehearsal, on a live instance, not
+hypothetically.** The reference consumer's `overrides/SKILL__Rule-8.md:31` restates arm E's
+predicate: *"A nonzero MAJOR held at zero CRITICAL across 2+ passes is a STALL."* `v0.443.0`
+moved arm E to `blocking > MAJOR_EXIT_CEILING`, so a plateau at 1–3 blocking MAJOR is no longer
+a stall and that sentence is false. `layer-drift.sh` reported `OVERRIDE-OK` and was CORRECT to:
+the `SKILL.md` section did not move. The rule did.
+
+**The consumer-side reword is the consumer's and is NOT this entry.** This entry is the
+distribution-side gap: nothing here detects an override whose subject has left the file the
+override is joined to.
+
+**Not yet scoped, and the population is unmeasured.** Two things to derive before building:
+how many shipped rules have migrated from a role/skill file into a validator (the join's
+blind set), and whether an override's prose can be bound to a validator at all without a
+second restatement — `mechanism-design.md` warns that a rule restating a mechanism drifts
+tighter than the mechanism. A detector keyed on "this override names a threshold" has an
+unmeasured false-positive set and must not ship before that set is enumerated.
+
+verify: unscoped — this entry records a gap, not a receipt. Do not close it on a green
+`layer-drift.sh` run; that green is the defect.
+
 ## BL-127 — a fixture is skipped by the read-set map on exactly the change that breaks it
 
 **`.ai-dlc-fixture-readsets.tsv` decides which fixtures a push runs, and a MAPPED fixture whose row

@@ -15,6 +15,57 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.443.0] - 2026-08-30
+
+### The exit ceiling licenses an exit; it does not compel one — 0.442.0 convicted 33 of the reference consumer's own series
+
+`v0.442.0` made arm B a **biconditional**: with the ceiling at three, `EXIT_CONDITION_NOT_MET`
+at or below it became an error, on the principle that the residue decides the verdict. Driven
+over the reference consumer's history before that release was pulled, that spelling turned
+**33 of its adversarial series from PASS to FAIL, with 0 going the other way**. Every one was a
+mid-cycle pass stamping `NOT_MET` at 1–3 blocking MAJOR — the CORRECT verdict under the
+criteria in force when it was written. Three were in the sprint the consumer currently has
+paused. Operator ruling: take the correction.
+
+**The ceiling now sits on arm B's MET half and arm E's accumulator only.** The NOT_MET half
+reverts to firing at a fully clean residue. You may not CLAIM convergence above three; you may
+freely DECLINE an exit that is open. The same differential against this release is
+**0 regressions, 0 releases, every series unchanged**.
+
+**THE BICONDITIONAL WAS AN INFERENCE, NOT THE INSTRUCTION, AND THAT IS THE REUSABLE PART.** The
+operator said the exit criteria become 0 CRITICAL and 3 or fewer MAJOR. Reading that as *may
+exit* is licensing; reading it as *must exit* is compulsion, and only the second one
+retroactively convicts correct data. `mechanism-design.md` already forbids a check that errors
+on correct data — this is that rule meeting a real corpus rather than a seeded one. **When an
+instruction moves a threshold, ask which of the two readings makes previously-correct data
+wrong, and take the other.**
+
+**NEITHER SIDE'S CORPUS GRAMMAR WAS RIGHT FIRST TIME, AND THE DISAGREEMENT IS WHAT FOUND IT.**
+The differential was run here over series discovered by `*adversarial*p1.md`, which silently
+excluded every `-pass<N>.md` series and reported **32 regressions over 75 series**. A peer
+session, deriving independently, first stripped the `-pass` stem and got a clean **12 series,
+12/12 unchanged** — a vacuous answer that read like a refutation. Both grammars were repaired
+and both then agreed on the number that matters: **33 regressions, 3 in s307**. A population
+derived by one grammar is a floor; the exit-code control is what exposed the vacuous run.
+
+**FOUR FIXTURE CASES, AND `ceiling-midcycle-below` IS BUILT FROM THE CONSUMER'S OWN SHAPE.** A
+mid-cycle `NOT_MET` at 2 blocking MAJOR with a terminal MET must PASS; it is red against
+`v0.442.0` and is the guard that stops the biconditional returning. `ceiling-plateau-below`
+asserts arm E AND arm B are both SILENT on a plateau below the ceiling, each negative carrying
+a positive control in the same invocation shape. `refused-to-converge` now also asserts by
+MESSAGE that the NOT_MET half still fires at a clean residue — an implementation that deleted
+that half instead of narrowing it passes every exit-code assertion in the block and fails that
+one. Eight mutants, eight kills, each by its own assertion, including both the regression and
+its opposite over-correction.
+
+**A KNOWN GAP THIS RELEASE DOES NOT CLOSE, recorded because an unstated limit reads as
+coverage.** The same peer found a consumer-authored `overrides/` file restating arm E's old
+predicate as prose. `layer-drift.sh` reports `OVERRIDE-OK` for it and is correct to: the
+`SKILL.md` section it shadows did not move — the rule that moved lives in a **validator**, and
+no override carries a `base_sha` against a script. An override can therefore restate a
+threshold that later migrates into shell, and nothing joins the two. Filed as `BL-128`; the
+consumer-side reword is theirs.
+
 ## [0.442.0] - 2026-08-29
 
 ### The adversarial exit criteria are 0 CRITICAL and 3 or fewer blocking MAJOR, and they are now one declaration
