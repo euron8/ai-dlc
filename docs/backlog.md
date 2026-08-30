@@ -659,7 +659,7 @@ verify: lacks core/fixtures/layer-contract-conformance/run.sh "layer-contract-co
 
 **NARROWED at v0.418.0. The original subject is discharged; two subjects are not, and this entry
 is those two.** `docs/backlog.md` is now bounded by `scripts/validate-backlog-size.sh` (arm `B1`,
-`AI_DLC_BACKLOG_MAX_ENTRIES`, default 75), registered as a `step` in `.githooks/pre-push`. What
+`AI_DLC_BACKLOG_MAX_ENTRIES`, default 100), registered as a `step` in `.githooks/pre-push`. What
 follows is what that arm does NOT reach. **An entry with two subjects expires only when both do**,
 and the receipt below is a conjunction for exactly that reason — it exits 0 only when both halves
 are discharged, so no single-corpus fix can retire this entry.

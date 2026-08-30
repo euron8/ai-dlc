@@ -15,6 +15,33 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.446.0] - 2026-08-30
+
+### The backlog ceiling was calibrated to the high-water mark, so it first bound on ordinary work
+
+`scripts/validate-backlog-size.sh` arm B1 capped `docs/backlog.md` at 75 entries. The operator
+raised it to 100, having not been consulted when 75 was chosen — and the arm's own header already
+declared the number "a policy number, not a measurement, and the operator's to set."
+
+The justification that shipped with 75 measured the wrong thing, which is the reusable part. It
+recorded that across every commit touching the file the count had never exceeded 68, so 75 would
+have fired zero times. That is true, and it is what makes the number wrong: a bound set seven
+entries above the historical maximum is not slack, it is a fuse sized to the normal load. It duly
+fired at exactly 75 against a batch that had filed nothing, where the only sanctioned remedy —
+rotation — means CLOSING an entry, and closing one that has not been verified is the defect this
+program has hit repeatedly.
+
+What the arm exists to catch is the bulk unrotated dump (`158d7528`, 42 entries at once). 100
+still catches that from any base above 58.
+
+- `AI_DLC_BACKLOG_MAX_ENTRIES` continues to override, unchanged.
+- The fixture's boundary probes move with the arm. `core/fixtures/backlog-size-ceiling/run.sh`
+  b01/b02 are the ONLY probes that can see the compiled-in default, and they asserted 75/76; a
+  raise that moved the arm and left them behind would have the fixture asserting a bound nothing
+  enforces, which is green and says nothing. Now 100/101, with the reason recorded beside them.
+- Verified both directions in one run: the arm reads `75/100` and exits 0 against the live
+  ledger, and forced to a ceiling of 74 it exits 1 on the same ledger. Fixture 16/16.
+
 ## [0.445.0] - 2026-08-30
 
 ### A predicate is its READ-SET, not its script — and the corpus glob was 7x too narrow

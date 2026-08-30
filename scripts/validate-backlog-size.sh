@@ -64,10 +64,22 @@
 # this arm illegal. The OK line says the archive was not read, because "exempt by design" and
 # "nobody thought about it" are otherwise the same silence.
 #
-# THE MEASURED FALSE-POSITIVE SET IS ONE COMMIT IN 42. Across every commit that has touched this
-# file the count has never exceeded 68, so this ceiling would have fired zero times; the one state
-# it blocks is a bulk triage filing like 158d7528, which added 42 entries at once without
-# rotating. The remedy is rotation, not a raise.
+# THE CEILING WAS 75 AND THE OPERATOR RAISED IT TO 100, HAVING NOT BEEN ASKED THE FIRST TIME.
+# The number above the arm is the only part of it that is a judgment rather than a measurement,
+# and the header already said so; it was nonetheless picked by a session. Recording the raise here
+# because the justification that shipped with 75 no longer describes the number in force.
+#
+# THAT ORIGINAL JUSTIFICATION MEASURED THE WRONG THING, and this is the reusable part. It read:
+# across every commit touching this file the count had never exceeded 68, so a ceiling of 75 would
+# have fired zero times. True, and it set the bound seven entries above the historical high-water
+# mark -- which guarantees the arm first binds on ordinary filing rather than on the abuse it was
+# built for. A ceiling calibrated to the maximum observed is not slack, it is a fuse sized to the
+# normal load. It duly fired at exactly 75 on a batch that had filed nothing.
+#
+# WHAT THE ARM IS FOR IS THE BULK UNROTATED DUMP -- 158d7528 added 42 entries at once without
+# rotating -- and 100 still catches that from any base above 58. The remedy for an ordinary
+# ledger reaching the bound remains rotation; the remedy for a bound that binds on ordinary work
+# is this raise.
 #
 # THERE IS NO PATH WHERE AN ABSENT OR UNREADABLE LEDGER RETURNS 0. The `-f` test below exits 2,
 # and a file that exists but parses to zero entries exits 1 -- an empty parse and a fully-rotated
@@ -103,7 +115,7 @@ DEFAULTED=0
 [ -n "$LEDGER" ] || { LEDGER="$ROOT/docs/backlog.md"; DEFAULTED=1; }
 [ -f "$LEDGER" ] || { echo "validate-backlog-size: FAIL -- $LEDGER is not a file" >&2; exit 2; }
 
-MAX="${AI_DLC_BACKLOG_MAX_ENTRIES:-75}"
+MAX="${AI_DLC_BACKLOG_MAX_ENTRIES:-100}"
 case "$MAX" in
   ''|*[!0-9]*) echo "validate-backlog-size: FAIL -- AI_DLC_BACKLOG_MAX_ENTRIES is not a non-negative integer: '$MAX'" >&2; exit 2 ;;
 esac
