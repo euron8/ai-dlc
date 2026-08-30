@@ -9,11 +9,64 @@ and status records that were current when they were written and that THIS BLOCK 
 it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from it.**
 
-### NO DECISION IS OPEN. BATCH 28 SHIPPED AS `v0.446.0` AND `v0.447.0`. NEXT IS 29.
+### NO DECISION IS OPEN. BATCH 29 SHIPPED AS `v0.448.0`. NEXT IS 30.
+
+**ONE RELEASE, ONE SUBJECT, AND THE PARTITION MOVED FOR THE FIRST TIME IN THREE BATCHES.**
+`DISCHARGED` went 15 → 17 and `IN-FLIGHT` 20 → 19. Two candidates closed on one fix. Number
+yours 30.
+
+**THE SWEEP CAME BACK EMPTY AND THE PC-BACKED SET DECIDED IT.** Newest unfiled filing is still
+`2026-08-30`, and both ids of that date are batch 28's and batch 27's, already discharged. The
+subject was `BL-064` / `PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF`, chosen because a
+SECOND live candidate — `PC-S303-FANOUT-SCRIPT-ARG-MAX-VIA-EXPORTED-DIFF-ENV-VAR`, unfiled here —
+names the same script and the same defect. One fix, two discharges.
+
+**WHAT SHIPPED (v0.448.0).** `report-propagation-fanout.sh`'s three unbounded payloads
+(`FANOUT_DIFF`, `FANOUT_FILES`, `FANOUT_UNTRACKED`) move off the environment onto files under a
+`mktemp -d`, with a cleanup trap and a fail-loud read. New shipping fixture
+`fanout-payload-channel` — 8 assertions, 6 mutants built and 6 killed, verified in both install
+layouts on a tree built by `install.sh`. Measured on the reference consumer, both sides in one
+invocation under a `cmp -s` control that the two scripts differ: the child's environment falls
+from **700857 bytes to 3182**, 66.8% of `ARG_MAX` to 0.3%, worklist byte-identical.
+
+**THE FILED REMEDY WAS BUILT AS A MUTANT AND SCORED, AND IT DOES NOT CLOSE THE DEFECT.** Both
+consumer filings prescribe moving the DIFF. The corpus is the fixed cost: `git ls-files` alone is
+607945 bytes against an `ARG_MAX` of 1048576, so 58% of the ceiling is spent before a byte of diff
+exists. Six variants scored — shipping 1, diff-only 1, corpus-only 1, belt-and-braces 1, full fix
+0, and a second spelling passing the same paths on ARGV rather than in `FANOUT_*_FILE` also 0.
+This is batch 28's lesson discharged in the other direction: **the remedy was built before it was
+preferred, and measurement is what rejected it.**
+
+**THREE OF THE ENTRY'S OWN PREMISES HAD EXPIRED, AND TWO WOULD HAVE MISDIRECTED THE WORK.** Its
+`path:line` citations had drifted by 34 lines; its "that candidate carries no `verify:` receipt of
+its own" is false, the consumer added one; its "fixture directories matching `fanout`: 0" is
+false, `fanout-untracked-corpus` exists and drives the same script. All three are recorded IN the
+rotated entry rather than edited away. **The base rate holds: the entry named a real defect and
+its bookkeeping was stale in three places.**
+
+**MY HAND-ROLLED PENDING LOOP REPRODUCED A DEFECT THE SHIPPING TOOL NO LONGER HAS, AND REPORTED A
+CLEAN WRONG ZERO.** It elected the release with `git log … | tail -1`, the OLDEST naming commit —
+which for both ids is a 2026-08-15/18 docs commit at `VERSION` 0.372.0 / 0.377.0, far below the
+consumer's installed 0.443.0 — so every discharge scored as already delivered. `named_absorbed()`
+at `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:457-482` stopped electing any commit at
+`v0.440.0` and reports the whole match set. **The true PENDING is 2.** A probe written by hand is
+a second implementation of a program that has already been fixed, and its bugs are the ones the
+fix removed.
+
+**A COMMIT LANDED WITH A SILENTLY TRUNCATED MESSAGE AND NEITHER `PC-` ID IN IT.** A heredoc
+carrying the message inside a `bash -c` was cut by zsh at the first line it tried to execute: 400
+bytes committed against 3500 intended, and `git` reported success. `named_absorbed()` reads commit
+MESSAGES, so that release would have discharged nothing anywhere. Caught by deriving
+`grep -cF <id>` over `git log -1 --format=%B` rather than reading the message back — the displayed
+text is compressed before you see it and a truncation reads as a rendering. **Write a release
+message to a FILE with the Write tool and commit with `-F <file>`; never through a heredoc.**
+
+### BATCH 28 SHIPPED AS `v0.446.0` AND `v0.447.0`. A RECORD, NOT AN INSTRUCTION.
 
 **Two releases, two different subjects — this is NOT the correction pattern of batches 26 and 27.**
 `v0.446.0` raised the backlog ceiling on an operator instruction; `v0.447.0` is the batch's actual
-subject. Number yours 29.
+subject. **That numbering instruction is SPENT — batch 29 has since shipped. Take your number from
+the block above.**
 
 **THE OPERATOR RAISED THE BACKLOG CEILING FROM 75 TO 100 AND THE REASON GENERALISES.** They had not
 been consulted when 75 was set, and `validate-backlog-size.sh`'s own header already said the number
@@ -131,7 +184,7 @@ this plan's own figures.** What separates them is the commit message: the id is 
 `NAMED-UPSTREAM` for it on the next pull. **When the operator's ruling is FIX-DON'T-FILE, say so in
 the report, because the partition cannot.**
 
-### `docs/backlog.md` IS AT 75 OF 100. FILING IS NO LONGER BLOCKED.
+### `docs/backlog.md` IS AT 74 OF 100. FILING IS NOT BLOCKED.
 
 `scripts/validate-backlog-size.sh` arm B1 enforces the ceiling, raised from 75 by the operator at
 `v0.446.0`. **Rotating an entry out is a disposition, not a tidy-up** — it means the entry is
@@ -177,19 +230,46 @@ consumer-side half of `BL-129` and supplies the mechanism site `BL-129` records 
 
 ### THE CURRENT FIGURES. RE-DERIVE THEM; DO NOT READ THEM.
 
-**Re-derived AFTER the `v0.447.0` merge — all controls in the same run: 67 live candidates, 133
-archived, 33 cited, 34 UNFILED. DISCHARGED 15, IN-FLIGHT 20, UNTOUCHED 34, overlap 2, unnamed 0,
-TERMINAL 26. `docs/backlog.md` depth: 75 of 100.** Partition control closes: 15+20+34−2 = 67.
-Presence controls: bare-bold id 1, dotted id 1; absence controls: partition 0, impossible id 0.
+**Re-derived AFTER the `v0.448.0` merge — all controls in the same run: 67 live candidates, 133
+archived, 34 cited, 33 UNFILED. DISCHARGED 17, IN-FLIGHT 19, UNTOUCHED 33, overlap 2, unnamed 0,
+TERMINAL 26. `docs/backlog.md` depth: 74 of 100, archive 55. PC-backed live entries: 20.**
+Partition control closes: 17+19+33−2 = 67. Presence controls: filed-known 1, spaced bullet 1,
+bare-bold 1, dotted 1; absence controls: partition 0, impossible id 0.
 
-**EVERY FIGURE IS BYTE-IDENTICAL TO THE PRE-BATCH READING, AND THAT IS EXPECTED FOR THE SECOND
-BATCH RUNNING** — batch 28's candidate was FIXED WITHOUT BEING FILED, so it can never enter
-`DISCHARGED`, which is keyed on a live candidate being cited by an entry in `docs/backlog.archive.md`.
-It sits in `UNFILED`, which is exactly where an untouched candidate sits, and **the two are
-indistinguishable in this plan's own figures.** What separates them is the commit message: the id is
-in one (control: 1 naming commit), so the consumer's `ledger-reverify` will emit `NAMED-UPSTREAM`
-for it on the next pull. Do not read the unmoved partition as a batch that achieved nothing, and do
-not "fix" it by filing an entry retroactively.
+**THE PARTITION MOVED, AND IT MOVED BY TWO ON ONE FIX.** `DISCHARGED` 15 → 17, `IN-FLIGHT` 20 → 19
+(`BL-064` rotated), `UNFILED` 34 → 33. The second candidate was never filed here and still landed
+in `DISCHARGED` rather than in batch 28's blind spot, because the ROTATED entry names it: an id
+cited by an entry in `docs/backlog.archive.md` is what that bucket is keyed on, and a fix-don't-file
+candidate enters it the moment the archived entry cites it. **That is the general repair for the
+instrument gap batch 28 hit** — name the unfiled sibling inside the entry you are rotating, and the
+partition can see it.
+
+**`TERMINAL` DID NOT MOVE AND WILL NOT UNTIL THE CONSUMER PULLS.** 26 either side. Closing an entry
+here changes what the DISTRIBUTION has done; only a pull moves the consumer's ledger.
+
+### THE DELIVERY GAP IS FIVE RELEASES AND THE SECOND TEST SAYS THE RANGE CARRIES A REAL FIX. THE DECISION IS THE OPERATOR'S.
+
+**Consumer installed `0.443.0`, distribution `0.448.0` — five releases, which is the WIDE threshold
+action 7 names, not past it.** PENDING is **2**, and both are this batch's. `preclassify.sh`,
+`apply.sh` and `ledger-reverify.sh` are unchanged across the range; `ai-dlc-update/SKILL.md` changed
+once, at `v0.444.0`'s step 3g.
+
+**THE SECOND TEST DIVERGES, WHICH IS THE FIRST TIME IT HAS.** The `validate-layer-entries.sh`
+differential the previous batches ran is UNAVAILABLE for this range, not null — the consumer's
+installed copy and this distribution's are byte-identical, and the `cmp -s` control caught it before
+the comparison was read. Re-pointed at the one consumer-facing script the range actually changed,
+both copies run against the consumer's own tree in one invocation: installed spends **66.8% of
+`ARG_MAX`** on the child environment, shipped spends **0.3%**, and the worklists are byte-identical.
+So the pull delivers a measured change and no behavioural risk.
+
+**AND THE NULL'S LIMIT IS THE PART THAT MATTERS HERE.** This is a THRESHOLD fix: the consumer's
+installed copy is correct until a sprint diff pushes it past `ARG_MAX`, and then it fails with
+exit 126 and no worklist. It has already done so twice, on sprint 303. A differential taken while
+nothing is failing cannot see that, which is why the figure above is a percentage of the ceiling
+rather than a finding count.
+
+**REPORTING IT IS THE CEILING.** `.claude/rules/operator-rulings.md` is unconditional: a consumer
+pull is not preapproved, readiness is not authorization, and no runbook was written or dispatched.
 
 **THE LIVE COUNT MOVED TWICE SINCE BATCH 26 AND IN OPPOSITE DIRECTIONS** — 66 → 65 when the pull
 carried `PC-S330` into the consumer's archive, then 65 → 66 when the consumer filed the new
@@ -1839,14 +1919,26 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **RUN THE SWEEP (action 1b below) AND LET IT PICK BATCH 29's SUBJECT. NOTHING IS GATING YOU.**
-   Batch 28 is merged as `v0.446.0` (the ceiling raise) and `v0.447.0` (the subject), so number
-   yours 29 and no operator decision is open. The candidate it addressed,
-   `PC-S307-POSTCOMPACT-RECOVERY-NEVER-ROUTES-TO-HANDOFF-MD`, is DONE — both halves of the remedy
-   it proposes shipped. Do not pick it up, do not file it, do not re-scope onto it.
+1. **RUN THE SWEEP (action 1b below) AND LET IT PICK BATCH 30's SUBJECT. NOTHING IS GATING YOU.**
+   Batch 29 is merged as `v0.448.0`, so number yours 30 and no operator decision is open. The two
+   candidates it discharged — `PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF` (via `BL-064`,
+   now rotated) and `PC-S303-FANOUT-SCRIPT-ARG-MAX-VIA-EXPORTED-DIFF-ENV-VAR` (never filed here) —
+   are DONE. Do not pick either up, do not file them, do not re-scope onto them.
 
    **If the sweep is empty, take a PC-backed backlog entry**, per the provenance-first rule in 1b.
-   If it finds something new, report it and ask before re-scoping.
+   There are 20; re-derive the set with the join in 1b rather than reading a name here. If the
+   sweep finds something new, report it and ask before re-scoping.
+
+   **PREFER A PC-BACKED ENTRY WHOSE CANDIDATE HAS A LIVE SIBLING, and derive that rather than
+   reading the entry.** Batch 29 discharged two candidates on one fix because two `PC-S303-FANOUT-*`
+   ids named the same script from two different sprint steps — one filed here, one not. The join
+   is cheap: group `/tmp/live.txt` by subsystem and look for an unfiled id beside a filed one. It
+   is also the only lever this program has found that moves the partition by more than one.
+
+   **NAME THE UNFILED SIBLING INSIDE THE ENTRY YOU ROTATE.** `DISCHARGED` is keyed on a live
+   candidate being cited by an entry in `docs/backlog.archive.md`, so a candidate fixed without
+   ever being filed is invisible to the goal partition — which is exactly where batch 28's work
+   went. Citing it in the rotating entry costs one line and puts it in the bucket it belongs in.
 
    **ONE SUBJECT IS ALREADY IDENTIFIED, MEASURED, AND UNFILED — TAKE IT ONLY IF THE SWEEP IS EMPTY
    OR THE OPERATOR SAYS SO.** A handoff requested MID-TURN never becomes a `message.role=="user"`
@@ -1866,9 +1958,10 @@ so no block written before it changes verdict.
    `predicate-differential.sh` fingerprints the corpus either side of its own run for exactly this
    reason; a hand-rolled measurement has no such guard.
 
-1a. **`docs/backlog.md` IS AT 75 OF 75.** Any new filing fails the push until an entry rotates, and
-   rotating means CLOSING, which needs a measurement. If your chosen path requires a filing, say so
-   to the operator before you start rather than discovering it at the gate.
+1a. **`docs/backlog.md` IS AT 74 OF 100.** The operator raised the ceiling at `v0.446.0`, so filing
+   is not blocked. That is not licence to file rather than fix — the standing correction in the
+   resume block still governs — but a filing no longer costs a rotation, and rotating still means
+   CLOSING, which needs a measurement.
 
 1b. **THE SWEEP, kept here because every later batch runs it as its opening action.** Operator
    instruction, given at the close of batch 17. Do this BEFORE picking any subject when the subject
@@ -1896,7 +1989,7 @@ so no block written before it changes verdict.
    real id means the grammar or the path is wrong, not that the candidate is old** — the ledger
    path is the only argument, and the archive is a SEPARATE file.
 
-   **THE BASELINE IS 67 LIVE CANDIDATES AT `v0.447.0`, 33 CITED, 34 UNFILED, AND SPRINT 306 IS
+   **THE BASELINE IS 67 LIVE CANDIDATES AT `v0.448.0`, 34 CITED, 33 UNFILED, AND SPRINT 306 IS
    FULLY DISCHARGED.** A higher count means the consumer filed while nobody was looking.
    **Re-derive rather than trusting those numbers** — they have moved between two consecutive
    commands in this program, and the live count moved DURING batches 19 and 20 both. Batches 21
@@ -1922,8 +2015,8 @@ so no block written before it changes verdict.
    `PC-S339-WITHDRAWAL-COMMIT-BECOMES-THE-NEW-ATTRIBUTION` is still filed here as `BL-117` and
    still IN FLIGHT — do not re-scope it.
 
-   **THIS PARAGRAPH APPLIES AGAIN — batch 27's subject is discharged.** IF THE
-   SWEEP FINDS NOTHING, TAKE A PC-BACKED ENTRY; re-derived at `v0.447.0` there are 21 and none is
+   **THIS PARAGRAPH APPLIES AGAIN — batch 29's subject is discharged.** IF THE
+   SWEEP FINDS NOTHING, TAKE A PC-BACKED ENTRY; re-derived at `v0.448.0` there are 20 and none is
    pre-chosen.
    The selection rule is PROVENANCE first, then consequence — never readiness — so a PC-backed
    entry outranks `BL-119` and `BL-122`, which discharge nothing upstream, and `BL-123`, whose
@@ -1965,7 +2058,7 @@ so no block written before it changes verdict.
    **Run the JOIN, never the bare `awk` half of it.** The `awk` alone answers "which entries cite a
    `PC-` id", which is a question about `docs/backlog.md` and not about the consumer.
 
-   **THE UNFILED SET IS THE CORPUS, AND IT IS DOMINATED BY TWO OLD CLUSTERS.** Of the 32, ten are
+   **THE UNFILED SET IS THE CORPUS, AND IT IS DOMINATED BY TWO OLD CLUSTERS.** Of the 33, ten are
    `PC-S312-*` — several of which describe themselves as falsifiability probes for a retirement
    rather than as defects — and two are already WITHDRAWN upstream
    (`PC-S300-ORIGIN-TAG-GATE-HAS-NO-WAIVER-FOR-TRACEABILITY-CITATIONS`,
