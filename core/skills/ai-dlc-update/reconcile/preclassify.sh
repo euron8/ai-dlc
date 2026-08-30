@@ -120,6 +120,136 @@ setup_sited() { grep -qxF "$1" <<<"$SETUP_SITED_PATHS"; }
 blob_hash() { git -C "$DIST" rev-parse -q --verify "$1:$2" 2>/dev/null || echo MISSING; }
 file_hash() { local f="$CONS/$1"; [ -f "$f" ] && git -C "$DIST" hash-object "$f" 2>/dev/null || echo MISSING; }
 
+# --- THE OTHER SHA IN THE STAMP, AND WHY THE `ours_h` COMPARISONS NEED IT ---------------
+#
+# Every bucket below decides "did the consumer touch this?" by comparing `ours_h` against
+# `base_h` and `theirs_h` — and that pair is not exhaustive. The autonomous self-update at
+# step 2 rewrites the whole MACHINERY set from an INTERMEDIATE ref, so on a split pull the
+# consumer's copy is byte-identical to the distribution at a third sha that is neither
+# `commit` nor `theirs`. Against `base_h` and `theirs_h` alone that reads as a consumer edit,
+# and the file falls to a `->CLASSIFY` bucket: a semantic-merge obligation manufactured on a
+# file with ZERO consumer delta.
+#
+# REPRODUCED AT GROUND TRUTH from the reference consumer's own committed history, not
+# reasoned. Its stamp at `c9919559c` records `commit: f45907a6` (0.443.0) and
+# `skill_commit: 94b5f35b` (0.446.0) mid-split; run against that tree with theirs=0.448.0 the
+# shipping classifier emits `BOTH-CHANGED->CLASSIFY` for
+# `core/skills/ai-dlc-update/reconcile/setup-sites.md` and `core/skills/ai-dlc/core-manifest.md`,
+# both of which `cmp -s` byte-identical to the distribution at `94b5f35b` and differ from it at
+# BOTH `f45907a6` and the theirs ref. Filed by that consumer as
+# `PC-S307-SELF-UPDATE-CARRY-ARM-HAS-NO-CORE-AT-SELF-UPDATE-SUPPRESSION`.
+#
+# THE COST IS NOT THE ROW, WHICH IS WHY THE FIX IS HERE AND NOT AT THE ROW. That filing names
+# `self-update-gate.sh`'s CARRY arm, which reads this bucket string. Both remedies were BUILT
+# and scored against the reproduction above: suppressing it in the gate silences the advisory
+# row and leaves 2 `WORKLIST semantic-merge` rows, `DECISION restamp-withheld`, and the stamp
+# stranded at 0.443.0 — because `apply.sh` never invokes that gate and reads this bucket
+# directly (`apply.sh`'s `*CLASSIFY*` arm). Fixing it here drives all three to zero, advances
+# the stamp, and the CARRY arm goes quiet with no change of its own. A residual legitimate
+# `WORKLIST settings-merge` row is present in both runs and is the control that this does not
+# silence work that is real.
+#
+# READ FROM THE STAMP, NOT PASSED IN, and guarded exactly as `unregistered-drift.sh:121-132`
+# guards the same read — that script already reaches the same verdict on the same file in the
+# same run, and a second spelling of one fact is a second thing to drift. All three of its
+# guards are kept and each has a subject: no stamp at all; `skill_commit` equal to `commit`,
+# where the whole question collapses into the `base_h` arm that already exists; and a ref this
+# distribution cannot resolve, which would compare against nothing and never match — reading
+# exactly like a tree that never split.
+SELF_UPDATE_REF=""
+_pc_stamp="$CONS/.claude/.ai-dlc-version"
+if [ -f "$_pc_stamp" ]; then
+  SELF_UPDATE_REF="$(sed -n 's/^skill_commit:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$_pc_stamp" | head -1)"
+  [ "$SELF_UPDATE_REF" = "$BASE" ] && SELF_UPDATE_REF=""
+  if [ -n "$SELF_UPDATE_REF" ] \
+     && ! git -C "$DIST" rev-parse --verify --quiet "${SELF_UPDATE_REF}^{commit}" >/dev/null 2>&1; then
+    SELF_UPDATE_REF=""
+  fi
+fi
+
+# NEVER `blob_hash "" "$path"`. An empty rev makes the underlying `git rev-parse -q --verify
+# ":<path>"` read the INDEX, which resolves for every tracked path in the DISTRIBUTION and
+# would match nothing in a way that is impossible to tell from a match. Measured on a
+# consumer with NO stamp at all: with the sentinel, 2 CLASSIFY / 0 UPSTREAM-ONLY; with
+# `blob_hash ""` instead, 0 / 2 — two paths silently suppressed on a tree that never split.
+# The sentinel is a string no sha can equal, so the arms below are unreachable rather than
+# accidentally live.
+self_update_hash() { # <core-rel-path> -> blob sha at the consumer's own skill_commit
+  [ -n "$SELF_UPDATE_REF" ] || { echo NO-SELF-UPDATE-REF; return 0; }
+  blob_hash "$SELF_UPDATE_REF" "$1"
+}
+
+# --- THE MACHINERY SET, RESOLVED ONCE AND OWNED HERE -------------------------------------
+#
+# The `skill_commit` arms below are SCOPED to this set, and the scoping is load-bearing
+# rather than tidy. Their whole justification is "step 2's autonomous self-update wrote this
+# file from an intermediate ref" — and step 2 writes the MACHINERY set and nothing else. A
+# non-machinery core file sitting at an intermediate ref got there by some route this arm
+# cannot name, so suppressing it is an exemption with no reason attached, and `apply.sh` then
+# writes theirs over it with no operator review. Measured on the discriminating input, base
+# 0.437.0 / skill 0.442.0 / theirs 0.443.0 with the consumer holding
+# `core/fixtures/check-24-adversarial-convergence/run.sh` at the intermediate blob: unscoped
+# the arm reclassifies it, scoped it does not, and the path is not in the machinery set.
+#
+# ONE DERIVATION, OWNED BY THE LOWEST SCRIPT. `self-update-gate.sh` needs the same set for its
+# CARRY arm's population and used to resolve it inline; it now `eval`s this function, the way
+# `self-update-fixtures.sh` already `eval`s `map_consumer()` out of this file. Two resolutions
+# of one manifest is two things to drift, and drift here is silent in both directions: a
+# narrower copy leaves the false obligation standing, a wider one suppresses beyond its reason.
+#
+# READ FROM THE CO-LOCATED MANIFEST, never listed here — the list gaining an entry is exactly
+# when this matters most. `core/scripts/ai-dlc/*` is the one CONSUMER-shaped entry: upstream
+# the path is `core/scripts/<name>`, and matching a dist path against it directly yields
+# nothing at all, silently.
+#
+# `set -f` IS LOAD-BEARING AND ITS ABSENCE IS SILENT. These entries are git PATHSPECS, and an
+# unquoted `$_mg` in a `for` is subject to shell pathname expansion first, so `core/rules/*.md`
+# expands against the CWD before git ever sees it. Measured when this derivation was first
+# written: the set collapsed from thirteen globs to the ONE entry carrying no glob character,
+# and nothing anywhere reported an error. Saved and restored, because this function has a
+# caller that does not expect its globbing turned off.
+#
+# `ls-files --with-tree`, NOT `ls-tree`. These are the manifest's own glob dialect and only the
+# index commands speak it: `ls-tree` matches a pathspec by literal prefix, returns EMPTY for
+# every globbed entry, reports no error, and rejects `:(glob)` outright. Resolved at BOTH refs,
+# because a machinery path DELETED at theirs is absent from one of them and is exactly the case
+# where the consumer's copy is the only copy left.
+machinery_paths() { # -> one core-relative machinery path per line, resolved at BASE and THEIRS
+  _mm="$(dirname "$0")/setup-sites.md"
+  [ -f "$_mm" ] || return 0
+  _mgs="$(awk '/^machinery:/{f=1;next} f&&/^  - /{sub(/^  - /,"");print;next} f{exit}' "$_mm")"
+  _mout=""
+  case "$-" in *f*) _mf=1 ;; *) _mf=0 ;; esac
+  set -f
+  for _mg in $_mgs; do
+    case "$_mg" in core/scripts/ai-dlc/*) _mg="core/scripts/${_mg#core/scripts/ai-dlc/}" ;; esac
+    _mout="$_mout
+$(git -C "$DIST" ls-files --with-tree="$BASE" -- "$_mg" 2>/dev/null)
+$(git -C "$DIST" ls-files --with-tree="$THEIRS" -- "$_mg" 2>/dev/null)"
+  done
+  [ "$_mf" = 1 ] || set +f
+  printf '%s\n' "$_mout" | grep -v '^$' | sort -u
+}
+
+# Resolved ONCE, and only when there is a self-update ref to scope. With no ref the arms are
+# already inert, and paying two `ls-files` per manifest glob on every ordinary pull would be a
+# cost with no reader.
+MACHINERY_PATHS=""
+[ -n "$SELF_UPDATE_REF" ] && MACHINERY_PATHS="$(machinery_paths)"
+is_machinery() { grep -qxF "$1" <<EOF
+$MACHINERY_PATHS
+EOF
+}
+
+# The whole predicate, in one place so the three call sites cannot disagree about it: this
+# consumer's copy is byte-identical to the distribution at the consumer's own `skill_commit`,
+# on a path step 2's self-update is the one thing that writes.
+at_self_update() { # <core-rel-path> <ours-hash>
+  [ -n "$SELF_UPDATE_REF" ] || return 1
+  [ "$2" = "$(self_update_hash "$1")" ] || return 1
+  is_machinery "$1"
+}
+
 # BOTH HASHES ABOVE ARE CONTENT-ONLY, AND THE MODE IS PART OF WHAT A PULL DELIVERS. A blob
 # sha and `hash-object` both answer the same question about bytes and neither carries the
 # exec bit, so a bucket meaning "nothing left to do" that is decided on them alone is wrong
@@ -340,9 +470,30 @@ git -C "$DIST" diff --name-status "$BASE" "$THEIRS" -- core/ | while IFS=$'\t' r
       elif [ "$ours_h" = MISSING ];        then bucket="UPSTREAM-ONLY-ADD"        # pure apply
       elif [ "$ours_h" = "$theirs_h" ] && mode_at_theirs "$path" "$cons"; then bucket="ALREADY-PRESENT"   # content AND mode -> noop
       elif [ "$ours_h" = "$theirs_h" ];    then bucket="UPSTREAM-ONLY-ADD"        # content present, bit is not -> apply delivers it
+      # THE SAME DEFECT ARRIVES THROUGH THIS BRANCH TOO, AND ONLY MEASUREMENT SAID SO. A file
+      # ADDED between base and theirs, written into the consumer by step 2's self-update at the
+      # intermediate ref and then changed again before theirs, is `A` here with `ours` matching
+      # neither MISSING nor `theirs_h` -- there is no `base_h` arm to catch it, because the path
+      # does not exist at base. Measured over 234 release triples against a consumer holding the
+      # distribution's own blob at the intermediate ref for every path -- a tree that authored
+      # NOTHING -- the M arm alone leaves 72 residual `BOTH-ADDED->CLASSIFY` rows on 8 distinct
+      # paths, every one of them a semantic-merge obligation on a zero-delta file. A second,
+      # independent run reached the same conclusion on `predicate-differential.sh`.
+      elif at_self_update "$path" "$ours_h"; then bucket="UPSTREAM-ONLY-ADD"
       else                                      bucket="BOTH-ADDED->CLASSIFY"; fi
       ;;
     D)  # upstream removed this file; branch on whether the consumer touched it
+      #
+      # NO `skill_commit` ARM HERE, AND THAT IS A MEASURED DECISION RATHER THAN AN OVERSIGHT.
+      # It is constructible on paper -- a machinery file present at base and at the
+      # intermediate ref, deleted by theirs, consumer holding the intermediate blob. It did not
+      # occur ONCE across the same 234 triples that produced 361 M-branch and 72 A-branch
+      # firings, in either of two independently written sweeps. An arm with no subject is a
+      # guard whose removal changes no answer, which this repo treats as indistinguishable from
+      # one that passed -- so it is left out, and the absence is written down here rather than
+      # rediscovered. That zero is an empty sample, not a proof of unreachability: if a D-branch
+      # instance ever appears, this is the arm it is owed, and `at_self_update` is already the
+      # predicate to key it on.
       if   [ "$ours_h" = MISSING ];        then bucket="UPSTREAM-DELETED-NOOP"        # already gone -> noop
       elif [ "$ours_h" = "$base_h" ];      then bucket="UPSTREAM-DELETED"             # consumer untouched -> delete (gated)
       else                                      bucket="UPSTREAM-DELETED+consumer-modified->CLASSIFY"; fi
@@ -359,6 +510,14 @@ git -C "$DIST" diff --name-status "$BASE" "$THEIRS" -- core/ | while IFS=$'\t' r
       elif [ "$ours_h" = "$theirs_h" ] && mode_at_theirs "$path" "$cons"; then bucket="ALREADY-AT-THEIRS" # content AND mode -> noop
       elif [ "$ours_h" = "$base_h" ];      then bucket="UPSTREAM-ONLY"            # consumer untouched -> apply
       elif [ "$ours_h" = "$theirs_h" ];    then bucket="UPSTREAM-ONLY"            # content at theirs, bit is not -> apply delivers it
+      # LAST BEFORE THE CLASSIFY FALLTHROUGH, DELIBERATELY. It must not pre-empt the
+      # ALREADY-AT-THEIRS arm, which carries the mode conjunct and is the only arm that can
+      # tell a consumer that already has the exec bit from one that still needs it. Reached
+      # only once `ours` has been shown to differ from BOTH base and theirs, so the state it
+      # names is precisely "upstream content the consumer never authored, at a ref neither
+      # endpoint knows about" -- and `UPSTREAM-ONLY` is what that means: apply writes theirs
+      # over it, mode included, exactly as it would for any untouched file.
+      elif at_self_update "$path" "$ours_h"; then bucket="UPSTREAM-ONLY"
       else                                      bucket="BOTH-CHANGED->CLASSIFY"; fi
       ;;
   esac

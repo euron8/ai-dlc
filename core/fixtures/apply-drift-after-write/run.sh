@@ -53,11 +53,28 @@ fi
 # --- Run the resolution driver -----------------------------------------------
 MANIFEST="$(bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
 
-# --- Assertion 1: both files applied ------------------------------------------
-if [ "$(printf '%s\n' "$MANIFEST" | grep -c 'RESOLVED.*pure-apply')" -eq 2 ]; then
-  ok "manifest: both files RESOLVED pure-apply"
+# --- Assertion 1: every file the range moves is applied ------------------------
+# THREE, and the third one is gamma, which arrived with `preclassify.sh`'s `skill_commit` arm.
+# gamma is machinery the consumer holds at the intermediate ref: before that arm it bucketed
+# `BOTH-CHANGED->CLASSIFY` and left a semantic-merge obligation on a file with zero consumer
+# delta, and now it buckets `UPSTREAM-ONLY` and applies. Asserted BY NAME rather than by count
+# alone — a count arm cannot tell three right rows from two right ones plus a wrong one, and
+# this arm has already had to move once.
+PURE="$(printf '%s\n' "$MANIFEST" | grep 'RESOLVED.*pure-apply' || true)"
+if [ "$(printf '%s\n' "$PURE" | grep -c .)" -eq 3 ] \
+   && grep -q 'alpha\.md' <<<"$PURE" && grep -q 'beta\.md' <<<"$PURE" \
+   && grep -q 'ai-dlc-gamma\.sh' <<<"$PURE"; then
+  ok "manifest: alpha, beta and the at-\`skill_commit\` machinery file all RESOLVED pure-apply"
 else
-  bad "expected 2 pure-apply rows, got: $(printf '%s\n' "$MANIFEST" | grep 'pure-apply' | tr '\n' ' ')"
+  bad "expected 3 pure-apply rows (alpha, beta, gamma), got: $(printf '%s\n' "$PURE" | tr '\n' ' ')"
+fi
+# ...and delta must NOT be among them: it is byte-identical across the range, so nothing should
+# emit a bucket for it at all. This is the arm that fails if the seed ever drifts delta into
+# the diff, which would silently move assertion 3c's subject back under apply's writer.
+if grep -q 'ai-dlc-delta\.sh' <<<"$MANIFEST"; then
+  bad "delta appeared in the manifest — it is identical at base and theirs, so the pull must not touch it: $(printf '%s\n' "$MANIFEST" | grep 'delta' | tr '\n' ' ')"
+else
+  ok "...and delta produced no row: outside the range, so apply cannot write it and 3c keeps its subject"
 fi
 
 # --- Assertion 2: THE FIX — a clean pull produces no drift decision -----------
@@ -187,12 +204,22 @@ fi
 # Reproduced at ground truth on the distribution's own history before this arm existed: the file
 # drew HARD-CORE-DRIFT-ABSORBED, whose printed remedy is to REVERT — deleting upstream's own text
 # as though the consumer had written it. 28 files are in both the machinery set and this scan.
+#
+# THE SUBJECT IS `delta`, NOT `gamma`, AND THE DIFFERENCE IS LOAD-BEARING. Both are machinery
+# held at the intermediate ref, but gamma is IN the base..theirs diff — so once `preclassify.sh`
+# learned to bucket that state `UPSTREAM-ONLY`, `apply.sh` phase 1 wrote gamma, and this arm
+# (which runs POST-write) found it already at theirs with `CORE-AT-THEIRS` claiming it first.
+# The arm did not go red for a wrong product change; it lost its subject to a right one, and
+# 3d below said so rather than passing quietly. delta is byte-identical at base and theirs, so
+# no bucket is emitted for it and apply cannot write it, while `unregistered-drift.sh` — which
+# is LEVEL-triggered over the consumer's core files rather than over the range — still reaches
+# it. The seed asserts that split rather than assuming it.
 PRE="$(bash "$DRIFT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
-GROW="$(printf '%s\n' "$PRE" | grep 'gamma' || true)"
+GROW="$(printf '%s\n' "$PRE" | grep 'delta' || true)"
 if grep -q '^CORE-AT-SELF-UPDATE' <<<"$GROW"; then
   ok "a machinery file at the intermediate \`skill_commit\` reads CORE-AT-SELF-UPDATE, not drift"
 else
-  bad "the self-update guard did not fire. Got: ${GROW:-<no gamma row at all>}"
+  bad "the self-update guard did not fire. Got: ${GROW:-<no delta row at all>}"
 fi
 # ...and it must not BLOCK. A HARD- prefix here would turn false work into a stopped pull.
 case "$GROW" in
@@ -211,7 +238,7 @@ if grep -q 'emit CORE-AT-SELF-UPDATE' "$NOSU"; then
 elif cmp -s "$DRIFT" "$NOSU"; then
   bad "FIXTURE STALE: the strip changed nothing, so assertion 3c is tested against the original"
 else
-  RAWSU="$(bash "$NOSU" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | grep 'gamma' || true)"
+  RAWSU="$(bash "$NOSU" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | grep 'delta' || true)"
   case "$RAWSU" in
     HARD-*) ok "guard removed: the same file returns as ${RAWSU%%$'\t'*} — the guard is what suppresses it" ;;
     *)      bad "FIXTURE VACUOUS — with the guard stripped the file did not become a HARD row, so 3c proves nothing. Got: ${RAWSU:-<nothing>}" ;;
@@ -223,7 +250,7 @@ fi
 # self-updated) must behave exactly as before — the guard must not invent a ref.
 SAVED="$(cat "$STAMP")"
 printf 'version: 0.0.1\ncommit: %s\n' "$BASE" > "$STAMP"
-NOFIELD="$(bash "$DRIFT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | grep 'gamma' || true)"
+NOFIELD="$(bash "$DRIFT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | grep 'delta' || true)"
 printf '%s\n' "$SAVED" > "$STAMP"
 case "$NOFIELD" in
   HARD-*) ok "with no \`skill_commit\` in the stamp the guard is inert — the ref is READ, never guessed" ;;

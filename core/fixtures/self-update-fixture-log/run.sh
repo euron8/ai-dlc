@@ -65,6 +65,19 @@ cov_set() {
     | sed -n 's/^  \([A-Za-z0-9._-][A-Za-z0-9._-]*\)$/\1/p' | sort | tr '\n' ','
 }
 
+# The OVER-completeness refusal list, read the same way and for the same reason. Its rows carry
+# a reason after the directory name, so the name is taken up to the first space; the em dash is
+# deliberately not in the pattern, because a multibyte character in a bracket class is three
+# separate bytes to a BSD `sed` and the match would depend on the locale the suite happens to
+# run under. Set equality here is what carries the ACQUITTALS: a legitimate directory that
+# started being refused shows up as an extra member, with no absence-shaped assertion written
+# for it separately.
+uns_set() {
+  { [ -n "${1:-}" ] && [ -f "$1" ]; } || return 0
+  sed -n '/^COVERAGE: the named set contains/,/^$/p' "$1" \
+    | sed -n 's/^  \([A-Za-z0-9._-][A-Za-z0-9._-]*\) .*$/\1/p' | sort | tr '\n' ','
+}
+
 # --- The throwaway DISTRIBUTION repo ------------------------------------------------------
 # `--no-verify` and an empty `init.templateDir` because this runs on an operator's machine:
 # a global hook path or commit template would otherwise decide whether the seed builds.
@@ -79,6 +92,31 @@ for f in touched-shippable touched-named touched-distonly touched-deleted untouc
   dput "core/fixtures/$f/run.sh" 'at base'
 done
 dput "core/fixtures/touched-distonly/.dist-only" 'a mutation battery over core sources; never shipped'
+
+# EVERY NAMED DIRECTORY IS READ IN THIS REPO, so every name any part below passes to the
+# runner has to exist here. The OVER-completeness arm probes `${THEIRS}:core/fixtures/<d>/...`
+# for each argument, so a consumer-side-only name — `green-one`, `red-one`, `cwd-probe`, the
+# deliberately-absent `never-written-by-the-slice` — resolves to nothing and is convicted as
+# unshippable before the run reaches whatever the part was actually asserting. That is not a
+# subject defect: a real step-2 set names directories that exist in `core/fixtures/`.
+for f in green-one cwd-probe red-one never-written-by-the-slice \
+         disk-only-distonly disk-missing-driver; do
+  dput "core/fixtures/$f/run.sh" 'at base'
+done
+
+# The OVER-completeness cases, all UNTOUCHED by base..theirs so that naming one exercises the
+# over-arm alone and Part 0's diff-side census is unmoved:
+#   named-distonly       carries the marker at theirs — the filed episode's shape
+#   theirs-only-distonly the marker at theirs and NOT on disk
+#   theirs-only-nodriver no run.sh at theirs, and one written to disk below
+#   disk-only-distonly   shippable at theirs, with a marker written to disk below
+#   disk-missing-driver  shippable at theirs, with its run.sh removed from disk below
+dput "core/fixtures/named-distonly/run.sh" 'at base'
+dput "core/fixtures/named-distonly/.dist-only" 'a mutation battery over core sources; never shipped'
+dput "core/fixtures/theirs-only-distonly/run.sh" 'at base'
+dput "core/fixtures/theirs-only-distonly/.dist-only" 'a mutation battery over core sources; never shipped'
+dput "core/fixtures/theirs-only-nodriver/.keep" 'a directory upstream carries with no driver in it'
+
 dput "core/scripts/machinery.sh" 'at base'
 G add -A >/dev/null 2>&1; G commit -q --no-verify -m base >/dev/null 2>&1
 D_BASE="$(G rev-parse HEAD 2>/dev/null)"
@@ -108,6 +146,20 @@ D_TREE="$(G rev-parse "${D_THEIRS}^{tree}" 2>/dev/null)"
 dput "core/fixtures/touched-shippable/run.sh" 'after quiet'
 G add -A >/dev/null 2>&1; G commit -q --no-verify -m ship >/dev/null 2>&1
 D_SHIP="$(G rev-parse HEAD 2>/dev/null)"
+
+# --- The DIST WORKTREE, made to DISAGREE with `theirs` in both directions -------------------
+# LAST, and uncommitted, because nothing below runs `G add`. Every probe in the runner reads at
+# a REF; an implementation reading `$DIST/core/fixtures/<d>/...` off disk answers for whatever
+# the checkout happens to hold, which is a different tree from the one being delivered. On a
+# seed where disk and theirs AGREE the two implementations are indistinguishable, so the wrong
+# one passes. These four writes split them for BOTH probes in BOTH directions, and they are
+# confined to four directories no other part names — the disk-reading mutant must fail Part 17
+# and nothing else, or the arm that owns the read is not identifiable.
+rm -f "$DIST/core/fixtures/theirs-only-distonly/.dist-only"
+mkdir -p "$DIST/core/fixtures/theirs-only-nodriver"
+printf '%s\n' 'on disk, committed nowhere' > "$DIST/core/fixtures/theirs-only-nodriver/run.sh"
+printf '%s\n' 'on disk, committed nowhere' > "$DIST/core/fixtures/disk-only-distonly/.dist-only"
+rm -f "$DIST/core/fixtures/disk-missing-driver/run.sh"
 
 # --- A repo that is a git checkout but NOT the distribution --------------------------------
 # The state is reachable from THIS fixture's own resolver: `pick` above takes the runner from
@@ -162,6 +214,26 @@ if ! W cat-file -e "${W_THEIRS}:core/fixtures" 2>/dev/null \
   ok "SEED: the wrong-repo checkout has core/fixtures at BASE and on DISK but not at THEIRS — only a read at theirs can refuse it"
 else
   bad "FIXTURE ERROR: the wrong-repo seed is not shaped to discriminate (theirs-tree present, or base tree and worktree copy absent). Part 13 would fire for a guard reading the base ref or the working directory, and could not tell them apart"
+fi
+
+# The over-completeness seed has to disagree with itself, and one equality carries all of it.
+# Six probes, each scored `<at-theirs><on-disk>`. Four of them are the discriminating pairs; the
+# last two are the directories Parts 14 and 15 use, asserted to AGREE so that a disk-reading
+# implementation moves Part 17 and leaves those two alone. Without this arm a seed whose disk
+# state had drifted back into agreement would leave Part 17 passing for either implementation.
+DISKSET=""
+for probe in theirs-only-distonly/.dist-only theirs-only-nodriver/run.sh \
+             disk-only-distonly/.dist-only disk-missing-driver/run.sh \
+             named-distonly/.dist-only touched-deleted/run.sh; do
+  pt=n; pd=n
+  G cat-file -e "${D_QUIET}:core/fixtures/${probe}" 2>/dev/null && pt=y
+  [ -e "$DIST/core/fixtures/${probe}" ] && pd=y
+  DISKSET="${DISKSET}${probe}:${pt}${pd},"
+done
+if [ "$DISKSET" = "theirs-only-distonly/.dist-only:yn,theirs-only-nodriver/run.sh:ny,disk-only-distonly/.dist-only:ny,disk-missing-driver/run.sh:yn,named-distonly/.dist-only:yy,touched-deleted/run.sh:nn," ]; then
+  ok "SEED: four directories disagree between the theirs tree and the DIST worktree, in both directions for both probes, and Parts 14 and 15's own directories agree"
+else
+  bad "FIXTURE ERROR: the disk/theirs disagreement seed reads '${DISKSET:-empty}'. Where disk and theirs agree, a probe reading the checkout and a probe reading the ref are the same program, and Part 17 would pass for either"
 fi
 
 # --- Part 1: an all-green run exits 0 and still writes the log --------------------------
@@ -362,11 +434,167 @@ else
   bad "the same checkout was refused with the refs swapped (rc=$rc), so the guard is keyed on something other than the theirs position. core/fixtures is committed at that end of this range"
 fi
 
+# --- Parts 14 to 19: the OVER-completeness arm ---------------------------------------------
+# The join above refuses a set that OMITS a diff-touched directory. These refuse a set that
+# CONTAINS one no consumer can ever hold. Filed by the reference consumer as
+# PC-S307-STEP-2-FIXTURE-TERM-B-EXCLUSIONS-ARE-DERIVABLE-BY-HAND-AND-WERE-MIS-DERIVED: a hand
+# derivation of step 2's term B yielded `backlog-size-ceiling`, which carries `.dist-only`, and
+# it was written into the consumer's `tests/fixtures/` as a RETIRED-FIXTURE-ORPHAN. The run was
+# GREEN — the slice delivered what was named, so the MISS arm had nothing to say.
+#
+# ALL OF THESE RUN OVER THE QUIET RANGE, whose diff touches no fixture at all. That is what
+# makes a refusal here unambiguous: the miss-join has nothing to report over that range, so any
+# COVERAGE finding is this arm's, and a mutation to one arm cannot be scored by the other.
+#
+# WHICH ARM OWNS WHICH MUTATION, measured by running THIS WHOLE FIXTURE against each of Mutants
+# 6 to 14 as its subject rather than by reading the scoring blocks below. Most of them move more
+# than one arm, and that is reported here rather than engineered away: the overlaps are
+# conservation rather than vacuity, because a wrong implementation of a two-probe guard is wrong
+# in several ways at once. No arm here may be deleted on the grounds that another also catches
+# its mutant.
+#   14  ordering, the reason text, and the exit code       shares every mutant with 15 or 17
+#   15  the deleted-driver exclusion, under its own reason shares every mutant with 14 or 17
+#   16  the ACQUITTAL of a wholly shippable set            the arm Mutant 14 is scored on, and
+#                                                          the only one a WIDENING copy fails
+#   17  the read is at THEIRS, not off the checkout        Mutant 11 moves THIS ARM ALONE
+#   18  sited below the ref-resolution loop                Mutant 9
+#   19  sited below the wrong-repo guard                   Mutant 10, which Part 18 cannot see
+# Mutants 9 and 10 also move Parts 11 and 13. That is the same property read from the other
+# side — an arm hoisted above a guard makes that guard unreachable — not a second subject.
+
+# --- Part 14: the .dist-only offender, convicted BESIDE three legitimate directories ---------
+# ONE run, four directories. A near-miss in a SEPARATE run is an ADJACENT input: it can only ask
+# whether the arm fires, never whether it fires on the right directory, and this repo has paid
+# three rounds for that shape already. The set equality is the whole assertion — `named-distonly`
+# present is the conviction, the other three absent is the acquittal, and both are decided by the
+# same invocation over the same tree.
+rm -f "$LOGDIR2"/self-update-fixtures-*.md
+OUT14="$CONS2/out-part14.txt"; ERR14="$CONS2/err-part14.txt"
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+     named-distonly green-one cwd-probe touched-shippable >"$OUT14" 2>"$ERR14"
+rc=$?
+L14="$(newest_log2)"
+UNS14="$(uns_set "$L14")"
+if [ "$rc" -eq 2 ] && grep -qF "the named set contains fixtures no consumer can run:" "$ERR14"; then
+  ok "a named directory carrying .dist-only at theirs is refused with exit 2 and the arm's own message"
+else
+  bad "the named set contained 'named-distonly', which carries .dist-only at theirs, and the runner did not refuse with that message (rc=$rc). Step 2 derives this set by hand; the exclusions were stated for the diff-side term only, and the surplus directory reaches the consumer as a fixture core never ships"
+fi
+if [ "$UNS14" = "named-distonly," ]; then
+  ok "the logged refusal is EXACTLY the unshippable directory — the three legitimate names beside it in the SAME run were all acquitted"
+else
+  bad "the logged refusal is '${UNS14:-empty}', not 'named-distonly,'. Anything extra is the arm convicting a directory a consumer can perfectly well run, which wedges every self-update; anything missing is the arm failing to see its own subject. Both are decided here, so neither can be an artefact of a separate invocation"
+fi
+if grep -qF "carries .dist-only at" "$ERR14"; then
+  ok "the refusal states WHICH exclusion it applied, so an operator can tell a never-shipped fixture from a deleted driver"
+else
+  bad "the refusal named the directory without its reason. Two exclusions produce this exit and a remedy that cannot say which one applied sends the reader to the wrong half of step 2"
+fi
+# ORDERING, both channels in one arm — they are one property and splitting them would give a
+# single placement change two cells to move.
+if [ "$rc" -eq 2 ] && [ -n "$L14" ] && ! grep -qF "===== FIXTURE " "$L14" \
+   && ! grep -qE '^ +(ok|FAIL|MISS) +' "$OUT14"; then
+  ok "the refusal is ORDERED BEFORE the fixture loop — no per-fixture section in the log and no per-fixture verdict on stdout"
+else
+  bad "the refusal was reported after the loop had already run: log sections $(grep -cF '===== FIXTURE ' "$L14" 2>/dev/null), stdout verdicts $(grep -cE '^ +(ok|FAIL|MISS) +' "$OUT14" 2>/dev/null). Running the surplus fixture first is how the orphan gets a green verdict printed above the finding that condemns it"
+fi
+
+# --- Part 15: the deleted-driver offender, in its own run and with its own reason ------------
+# The SECOND exclusion, and it needs its own run rather than a second offender in Part 14's: a
+# mutant that deletes one probe and keeps the other must move exactly one of these two arms.
+rm -f "$LOGDIR2"/self-update-fixtures-*.md
+ERR15="$CONS2/err-part15.txt"
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+     touched-deleted green-one cwd-probe touched-shippable \
+     >"$CONS2/out-part15.txt" 2>"$ERR15"
+rc=$?
+UNS15="$(uns_set "$(newest_log2)")"
+if [ "$rc" -eq 2 ] && [ "$UNS15" = "touched-deleted," ] && grep -qF "no run.sh at" "$ERR15"; then
+  ok "a named directory whose driver upstream DELETED is refused, named alone, and reported under the deleted-driver reason"
+else
+  bad "a named directory with no run.sh at theirs was not refused under its own reason (rc=$rc, refused '${UNS15:-empty}'). The MISS arm below reports this only when the slice FAILED to write the directory; when the slice writes it the run is green and the orphan survives, which is the episode that was filed"
+fi
+
+# --- Part 16: a wholly legitimate set does NOT trip the arm ----------------------------------
+# The negative direction, and it is keyed on the arm's OWN MESSAGE rather than on the exit code:
+# exit 2 has six producers in this runner and a control reading only the code cannot tell them
+# apart. The positive conjunct is a fixture section — an arm asserting only that nothing was said
+# passes against a subject replaced by `exit 0`.
+rm -f "$LOGDIR2"/self-update-fixtures-*.md
+ERR16="$CONS2/err-part16.txt"
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+     green-one cwd-probe touched-named touched-shippable \
+     >"$CONS2/out-part16.txt" 2>"$ERR16"
+rc=$?
+L16="$(newest_log2)"
+if [ "$rc" -eq 0 ] && [ -n "$L16" ] && grep -qF "===== FIXTURE touched-named =====" "$L16" \
+   && ! grep -qF "COVERAGE: the named set contains" "$L16" \
+   && ! grep -qF "no consumer can run" "$ERR16"; then
+  ok "a set of four directories a consumer CAN run reaches the loop and exits 0 — the arm stays silent on correct input"
+else
+  bad "a wholly shippable named set was refused, or never reached the loop (rc=$rc). An over-completeness arm that fires on a correct slice wedges every self-update, which is worse than the orphan it prevents"
+fi
+
+# --- Part 17: THE READ IS AT THEIRS, not off the distribution checkout -----------------------
+# Four directories whose disk state and theirs state DISAGREE, in one run, two convicted and two
+# acquitted. An implementation probing `$DIST/core/fixtures/<d>/...` on the filesystem returns the
+# exact inverse of this set, and would pass a seed where the two agreed. The distribution checkout
+# is not the tree being delivered: `$DIST` is a working copy at whatever revision the caller left
+# it, and the slice is computed from `theirs`.
+rm -f "$LOGDIR2"/self-update-fixtures-*.md
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+     theirs-only-distonly theirs-only-nodriver disk-only-distonly disk-missing-driver green-one \
+     >"$CONS2/out-part17.txt" 2>"$CONS2/err-part17.txt"
+rc=$?
+UNS17="$(uns_set "$(newest_log2)")"
+if [ "$rc" -eq 2 ] && [ "$UNS17" = "theirs-only-distonly,theirs-only-nodriver," ]; then
+  ok "the exclusions are read AT THEIRS: the two directories unshippable at theirs are refused though the checkout says otherwise, and the two the checkout condemns are acquitted"
+else
+  bad "the refusal is '${UNS17:-empty}', not 'theirs-only-distonly,theirs-only-nodriver,' (rc=$rc). 'disk-only-distonly,disk-missing-driver,' is the answer a probe reading \$DIST off the filesystem gives, and it is wrong in both directions at once: it acquits an orphan bound for the consumer and convicts two fixtures the pull delivers"
+fi
+
+# --- Part 18: the arm is SITED AFTER the ref resolution --------------------------------------
+# Both of its probes are `cat-file -e` at theirs. Against an unresolvable THEIRS every one of them
+# fails, so an arm placed above the resolution loop convicts the ENTIRE named set — a check whose
+# failure mode is to indict correct input, pointing the operator at a slice that is fine. Both
+# names here are directories the distribution genuinely ships, so the only thing the misplaced
+# copy can produce is a false conviction. The assertion is on the two MESSAGES, not on the exit
+# code, which is 2 either way.
+rm -f "$LOGDIR2"/self-update-fixtures-*.md
+bash "$RUNNER" "$DIST" "$D_THEIRS" no-such-theirs-ref "$CONS2" green-one touched-shippable \
+  >"$CONS2/out-part18.txt" 2>"$CONS2/err-part18.txt"
+rc=$?
+L18="$(newest_log2)"
+if [ "$rc" -eq 2 ] && [ -n "$L18" ] \
+   && grep -qF "COVERAGE: UNRESOLVABLE — 'no-such-theirs-ref' does not name a commit" "$L18" \
+   && ! grep -qF "COVERAGE: the named set contains" "$L18"; then
+  ok "an unresolvable THEIRS exits on the RESOLUTION arm — the over-completeness arm cannot speak before its own probes can resolve"
+else
+  bad "an unresolvable THEIRS did not exit on the resolution arm (rc=$rc). With the over-completeness arm above it, every \`cat-file -e\` fails and both of these perfectly shippable directories are convicted for a reason that has nothing to do with the slice"
+fi
+
+# --- Part 19: the arm is SITED AFTER the WRONG-REPO guard ------------------------------------
+# The input the arm above cannot see: both refs resolve here, so Part 18 is satisfied by a copy
+# sited between the resolution loop and this guard. What that copy gets wrong is a checkout with
+# no `core/fixtures` tree at theirs — every probe fails again, and both named directories are
+# condemned instead of the repo.
+rm -f "$LOGDIR2"/self-update-fixtures-*.md
+bash "$RUNNER" "$WREPO" "$W_BASE" "$W_THEIRS" "$CONS2" green-one touched-shippable \
+  >"$CONS2/out-part19.txt" 2>"$CONS2/err-part19.txt"
+rc=$?
+L19="$(newest_log2)"
+if [ "$rc" -eq 2 ] && [ -n "$L19" ] && grep -qF "COVERAGE: WRONG-REPO" "$L19" \
+   && ! grep -qF "COVERAGE: the named set contains" "$L19"; then
+  ok "a \$DIST with no core/fixtures at theirs exits on the WRONG-REPO guard — the over-completeness arm is sited below it and convicts nothing"
+else
+  bad "a checkout with no core/fixtures at theirs was reported as an over-complete named set (rc=$rc), not as the wrong repo. Both refs resolve here, so the resolution loop lets this through and only the wrong-repo guard's position keeps the arm from indicting two directories the distribution genuinely ships"
+fi
+
 # --- MUTATION: prove the arms above can fail -----------------------------------------------
 # The runner sources nothing from its own directory, so a lone copy is a working harness here
 # — but the copies are still taken beside the original and checked with an unmutated control,
 # because "the mutant emitted nothing" and "the mutant survived" are the same bytes.
-MUTDIR="$(mktemp -d)"; trap 'rm -rf "$CONS" "$CONS2" "$DIST" "$MUTDIR"' EXIT
+MUTDIR="$(mktemp -d)"; trap 'rm -rf "$CONS" "$CONS2" "$DIST" "$WREPO" "$MUTDIR"' EXIT
 cp "$RECONCILE"/*.sh "$MUTDIR"/ 2>/dev/null
 CTL="$MUTDIR/control-unmutated.sh"; cp "$RUNNER" "$CTL"
 
@@ -380,6 +608,22 @@ s = open(sys.argv[1]).read()
 old, new = os.environ["MUT_OLD"], os.environ["MUT_NEW"]
 if s.count(old) != 1: sys.exit(3)
 open(sys.argv[2], "w").write(s.replace(old, new, 1))' "$RUNNER" "$1" 2>/dev/null || return 1
+  [ -s "$1" ] && ! cmp -s "$RUNNER" "$1"
+}
+
+# A TWO-LAYER revert, for a state two guards independently refuse. A partial revert leaves a
+# mutant that proves whichever layer was left in place, and it comes out green — so where a
+# second guard covers the first, both come off in one copy and the arm scores the pair. The
+# second anchor is counted AFTER the first substitution, so an edit that makes it ambiguous is
+# a refusal rather than a silent wrong-site replacement.
+mkmutant2() { # $1=dest $2=old1 $3=new1 $4=old2 $5=new2
+  MUT_O1="$2" MUT_N1="$3" MUT_O2="$4" MUT_N2="$5" python3 -c 'import os,sys
+s = open(sys.argv[1]).read()
+for o, n in ((os.environ["MUT_O1"], os.environ["MUT_N1"]),
+             (os.environ["MUT_O2"], os.environ["MUT_N2"])):
+    if s.count(o) != 1: sys.exit(3)
+    s = s.replace(o, n, 1)
+open(sys.argv[2], "w").write(s)' "$RUNNER" "$1" 2>/dev/null || return 1
   [ -s "$1" ] && ! cmp -s "$RUNNER" "$1"
 }
 
@@ -510,9 +754,18 @@ fi
 # absence-shaped without this: the arm asks for a refusal, and a subject that refuses nothing
 # at all — including one replaced by `exit 0` — is exactly what a wrong repo looks like once
 # the guard is gone. The copy reports a GREEN SUITE over a checkout holding no fixtures.
+#
+# TWO LAYERS COME OFF, because a second guard now covers this one. The over-completeness arm
+# below also refuses a wrong repo — every `cat-file -e` at a theirs with no `core/fixtures`
+# tree fails, so it convicts the whole named set — and with the distribution check alone
+# removed this copy would still exit 2, scoring a kill for a guard that had not been reached.
+# Removing only the emission keeps the arm's own logic intact and reverts exactly the covering
+# layer. Which of the two SHOULD answer is Part 19's subject, not this one's.
 M5="$MUTDIR/m5-distcheck-neutered.sh"
-if mkmutant "$M5" 'if ! git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures" 2>/dev/null; then' \
-                  'if false; then'; then
+if mkmutant2 "$M5" 'if ! git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures" 2>/dev/null; then' \
+                   'if false; then' \
+                   'if [ -n "$unshippable" ]; then' \
+                   'if false; then'; then
   rm -f "$LOGDIR2"/self-update-fixtures-*.md
   bash "$M5" "$WREPO" "$W_BASE" "$W_THEIRS" "$CONS2" green-one >/dev/null 2>&1
   rc=$?
@@ -525,6 +778,273 @@ if mkmutant "$M5" 'if ! git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures" 2>/
   fi
 else
   bad "FIXTURE ERROR: the distribution-check anchor no longer occurs exactly once in the runner — Part 13 proves nothing"
+fi
+
+# --- MUTANTS 6 to 13: the OVER-completeness arm --------------------------------------------
+# Keyed on LOCATION and on observable BEHAVIOUR, never on a spelling — Mutant 13 is a competent
+# author's OTHER phrasing of the same fix and every arm above has to pass it. Each mutant's
+# scoring input is the input of the ONE part that owns it, so a mutant that moves two cells is
+# a report that two arms are watching the same subject.
+
+# --- MUTANT 6: the whole over-completeness arm excised ---------------------------------------
+# Excised rather than edited: a partial revert leaves a mutant that proves whichever probe was
+# left in place. The named set is Part 14's, and the surplus directory has a driver in the
+# consumer seed — so the copy runs it and reports a GREEN suite, which is exactly what the
+# reference consumer saw while the orphan was being committed.
+M6="$MUTDIR/m6-overarm-deleted.sh"
+python3 -c 'import sys
+s = open(sys.argv[1]).read()
+a, b = s.index("# --- The OVER-completeness arm"), s.index("# The diff is taken into a variable")
+open(sys.argv[2], "w").write(s[:a] + s[b:])' "$RUNNER" "$M6" 2>/dev/null
+if [ -s "$M6" ] && ! cmp -s "$RUNNER" "$M6"; then
+  rm -f "$LOGDIR2"/self-update-fixtures-*.md
+  bash "$M6" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+       named-distonly green-one cwd-probe touched-shippable >/dev/null 2>&1
+  rc=$?
+  LM="$(newest_log2)"
+  if [ "$rc" -eq 0 ] && [ -n "$LM" ] && grep -qF "===== FIXTURE named-distonly =====" "$LM" \
+     && ! grep -qF "COVERAGE: the named set contains" "$LM"; then
+    ok "MUTATION — with the over-completeness arm removed, a set naming a never-shipped fixture RUNS it and reports green: Part 14 is what catches that"
+  else
+    bad "MUTATION — the over-completeness arm was removed and the surplus directory was still refused (rc=$rc). Something else is producing Part 14's verdict, and the arm is untested"
+  fi
+else
+  bad "FIXTURE ERROR: the over-completeness block could not be excised — its start or end anchor has moved, and Parts 14 to 19 prove nothing"
+fi
+
+# --- MUTANT 7: the .dist-only probe neutered, the run.sh probe kept ---------------------------
+# One exclusion at a time, because a mutant that removes both cannot say which arm saw it. The
+# anchor carries the `  if ` prefix that the diff-side copy of the same probe does not, so the
+# substitution cannot land on the miss-join's exemption instead.
+M7="$MUTDIR/m7-distonly-probe-gone.sh"
+if mkmutant "$M7" '  if git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${d}/.dist-only" 2>/dev/null; then' \
+                  '  if false; then'; then
+  rm -f "$LOGDIR2"/self-update-fixtures-*.md
+  bash "$M7" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+       named-distonly green-one cwd-probe touched-shippable >/dev/null 2>&1
+  rc=$?
+  LM="$(newest_log2)"
+  if [ "$rc" -eq 0 ] && [ -n "$LM" ] && grep -qF "===== FIXTURE named-distonly =====" "$LM"; then
+    ok "MUTATION — with only the .dist-only probe gone the never-shipped directory has a run.sh at theirs, passes the surviving probe and is RUN: Part 14 is what catches that"
+  else
+    bad "MUTATION — the .dist-only probe was removed and the directory was still refused (rc=$rc). Part 14's verdict is coming from the run.sh probe, so the exclusion that produced the filed episode is untested"
+  fi
+else
+  bad "FIXTURE ERROR: the .dist-only probe anchor no longer occurs exactly once in the runner — Part 14 proves nothing"
+fi
+
+# --- MUTANT 8: the run.sh probe neutered, the .dist-only probe kept ---------------------------
+M8="$MUTDIR/m8-runsh-probe-gone.sh"
+if mkmutant "$M8" '  elif ! git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${d}/run.sh" 2>/dev/null; then' \
+                  '  elif false; then'; then
+  rm -f "$LOGDIR2"/self-update-fixtures-*.md
+  bash "$M8" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+       touched-deleted green-one cwd-probe touched-shippable >/dev/null 2>&1
+  rc=$?
+  LM="$(newest_log2)"
+  if [ "$rc" -eq 0 ] && [ -n "$LM" ] && grep -qF "===== FIXTURE touched-deleted =====" "$LM"; then
+    ok "MUTATION — with only the run.sh probe gone a directory upstream DELETED is accepted and run: Part 15 is what catches that"
+  else
+    bad "MUTATION — the run.sh probe was removed and the deleted-driver directory was still refused (rc=$rc). Part 15 is being answered by the .dist-only probe, so the second exclusion is untested"
+  fi
+else
+  bad "FIXTURE ERROR: the run.sh probe anchor no longer occurs exactly once in the runner — Part 15 proves nothing"
+fi
+
+# --- MUTANT 9: the arm relocated ABOVE the ref-resolution loop --------------------------------
+# The placement mutant Part 18 owns. It is a strictly wider move than Mutant 10's — above the
+# resolution loop is also above the wrong-repo guard — so Part 19 fires on this copy too. That
+# is the direction that is allowed: Mutant 10 is the input only Part 19 can see, and it is what
+# stops Part 19 from being an echo of Part 18.
+M9="$MUTDIR/m9-overarm-above-refloop.sh"
+python3 -c 'import sys
+s = open(sys.argv[1]).read()
+a, b = s.index("# --- The OVER-completeness arm"), s.index("# The diff is taken into a variable")
+blk, t = s[a:b], s[:a] + s[b:]
+c = t.index("for r in \"$BASE\" \"$THEIRS\"; do")
+open(sys.argv[2], "w").write(t[:c] + blk + t[c:])' "$RUNNER" "$M9" 2>/dev/null
+if [ -s "$M9" ] && ! cmp -s "$RUNNER" "$M9" && ! cmp -s "$M6" "$M9"; then
+  rm -f "$LOGDIR2"/self-update-fixtures-*.md
+  bash "$M9" "$DIST" "$D_THEIRS" no-such-theirs-ref "$CONS2" green-one touched-shippable \
+    >/dev/null 2>&1
+  rc=$?
+  LM="$(newest_log2)"
+  if [ "$rc" -eq 2 ] && [ "$(uns_set "$LM")" = "green-one,touched-shippable," ] \
+     && ! grep -qF "COVERAGE: UNRESOLVABLE" "$LM"; then
+    ok "MUTATION — sited above the ref-resolution loop the arm probes an unresolvable theirs, every cat-file fails, and it convicts two directories the distribution ships: Part 18 is what catches that"
+  else
+    bad "MUTATION — the arm was moved above the ref-resolution loop and Part 18's arm did not fire (rc=$rc, refused '$(uns_set "$LM")'). An arm keyed on the exit code alone cannot tell the resolution refusal from this one, because both are 2"
+  fi
+else
+  bad "FIXTURE ERROR: the over-completeness block could not be relocated above the ref loop — an anchor has moved, or the relocated copy is byte-identical to the deleted one, and Part 18 proves nothing"
+fi
+
+# --- MUTANT 10: the arm relocated ABOVE the wrong-repo guard, BELOW the ref loop ---------------
+# The input only Part 19 can see. Both refs resolve here, so the resolution loop is satisfied and
+# Part 18 passes against this copy — what it gets wrong is a checkout whose theirs carries no
+# `core/fixtures` tree at all, where every probe fails again and the repo's defect is reported as
+# the slice's.
+M10="$MUTDIR/m10-overarm-above-distguard.sh"
+python3 -c 'import sys
+s = open(sys.argv[1]).read()
+a, b = s.index("# --- The OVER-completeness arm"), s.index("# The diff is taken into a variable")
+blk, t = s[a:b], s[:a] + s[b:]
+c = t.index("# AND `$DIST` MUST BE THE DISTRIBUTION")
+open(sys.argv[2], "w").write(t[:c] + blk + t[c:])' "$RUNNER" "$M10" 2>/dev/null
+if [ -s "$M10" ] && ! cmp -s "$RUNNER" "$M10" && ! cmp -s "$M9" "$M10"; then
+  rm -f "$LOGDIR2"/self-update-fixtures-*.md
+  bash "$M10" "$WREPO" "$W_BASE" "$W_THEIRS" "$CONS2" green-one touched-shippable >/dev/null 2>&1
+  rc=$?
+  LM="$(newest_log2)"
+  if [ "$rc" -eq 2 ] && [ "$(uns_set "$LM")" = "green-one,touched-shippable," ] \
+     && ! grep -qF "COVERAGE: WRONG-REPO" "$LM"; then
+    ok "MUTATION — sited above the wrong-repo guard the arm indicts the named set of a checkout that is simply the wrong repo, and Part 18 cannot see it because both refs resolve: Part 19 is what catches that"
+  else
+    bad "MUTATION — the arm was moved above the wrong-repo guard and Part 19's arm did not fire (rc=$rc, refused '$(uns_set "$LM")'). Part 19 is then an echo of Part 18 and the ordering it asserts is untested"
+  fi
+else
+  bad "FIXTURE ERROR: the over-completeness block could not be relocated above the wrong-repo guard — an anchor has moved, or the copy is byte-identical to Mutant 9's, and Part 19 proves nothing"
+fi
+
+# --- MUTANT 11: both probes read the DISTRIBUTION CHECKOUT instead of theirs -------------------
+# The implementation a naive seed cannot distinguish from the right one. It returns the exact
+# INVERSE of Part 17's set, and it is wrong in both directions at once: it acquits an orphan
+# bound for the consumer and convicts two fixtures the pull genuinely delivers.
+M11="$MUTDIR/m11-probes-read-disk.sh"
+if mkmutant2 "$M11" 'if git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${d}/.dist-only" 2>/dev/null; then' \
+                    'if [ -f "$DIST/core/fixtures/${d}/.dist-only" ]; then' \
+                    'elif ! git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${d}/run.sh" 2>/dev/null; then' \
+                    'elif [ ! -f "$DIST/core/fixtures/${d}/run.sh" ]; then'; then
+  rm -f "$LOGDIR2"/self-update-fixtures-*.md
+  bash "$M11" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+       theirs-only-distonly theirs-only-nodriver disk-only-distonly disk-missing-driver green-one \
+       >/dev/null 2>&1
+  rc=$?
+  if [ "$rc" -eq 2 ] && [ "$(uns_set "$(newest_log2)")" = "disk-missing-driver,disk-only-distonly," ]; then
+    ok "MUTATION — probing the checkout instead of theirs inverts the verdict exactly: the two orphans are acquitted and two shippable fixtures convicted. Part 17 is what catches that"
+  else
+    bad "MUTATION — the probes were pointed at the \$DIST worktree and Part 17 did not change its answer (rc=$rc, refused '$(uns_set "$(newest_log2)")'). Then disk and theirs agree for every directory Part 17 names, and the arm cannot tell the two implementations apart"
+  fi
+else
+  bad "FIXTURE ERROR: one of the two probe anchors no longer occurs exactly once in the runner — Part 17 proves nothing"
+fi
+
+# --- MUTANT 12: the refusal degraded to a warning that falls through ---------------------------
+# `exit 2` becomes `:`. The two refusal blocks in this runner end in BYTE-IDENTICAL three-line
+# tails, so the anchor carries the remedy sentence that only this one has — keying on the shared
+# tail would edit the miss-join and score a kill this arm did not earn.
+M12="$MUTDIR/m12-refusal-is-a-warning.sh"
+if mkmutant "$M12" '  never ships — the RETIRED-FIXTURE-ORPHAN class. Drop them from the slice and re-run." >&2
+  echo "  log: $LOG" >&2
+  exit 2' \
+                   '  never ships — the RETIRED-FIXTURE-ORPHAN class. Drop them from the slice and re-run." >&2
+  echo "  log: $LOG" >&2
+  :'; then
+  rm -f "$LOGDIR2"/self-update-fixtures-*.md
+  bash "$M12" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+       named-distonly green-one cwd-probe touched-shippable >/dev/null 2>&1
+  rc=$?
+  LM="$(newest_log2)"
+  if [ "$rc" -eq 0 ] && [ -n "$LM" ] && grep -qF "COVERAGE: the named set contains" "$LM" \
+     && grep -qF "===== FIXTURE named-distonly =====" "$LM"; then
+    ok "MUTATION — reporting the surplus directory and then RUNNING it anyway exits 0, and a green exit is the only thing step 2 reads: Part 14's exit-code and ordering arms are what catch that"
+  else
+    bad "MUTATION — the refusal was degraded to a warning and the run still failed (rc=$rc). Part 14 is asserting on the message alone, and a finding printed above a green exit reaches nobody"
+  fi
+else
+  bad "FIXTURE ERROR: the refusal-tail anchor no longer occurs exactly once in the runner — Part 14's exit-code arm proves nothing"
+fi
+
+# --- MUTANT 13: a SECOND SPELLING of the CORRECT fix, which must PASS --------------------------
+# A competent author's other phrasing: the two probes lifted into a helper that returns the
+# reason, the loop reduced to a call and an append. Same reads, same ref, same messages, same
+# exit. A battery that rejects this is not testing the property, it is testing one author's
+# formatting — and the next correct change to the runner would come back red for no reason.
+SPELL2="$MUTDIR/second-spelling-body.txt"
+cat > "$SPELL2" <<'SPELLEOF'
+unship_reason() { # $1=directory name — echoes the reason it cannot ship, or nothing
+  if git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${1}/.dist-only" 2>/dev/null; then
+    printf 'carries .dist-only at %s: never shipped, so no consumer can hold it' "$THEIRS"
+  elif ! git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${1}/run.sh" 2>/dev/null; then
+    printf 'no run.sh at %s: upstream deleted the driver, so there is nothing to write' "$THEIRS"
+  fi
+}
+unshippable=""
+for d in "$@"; do
+  why="$(unship_reason "$d")"
+  [ -n "$why" ] || continue
+  unshippable="$unshippable
+  $d — $why"
+done
+
+if [ -n "$unshippable" ]; then
+  { echo "COVERAGE: the named set contains fixture(s) no consumer can run:"
+    printf '%s\n' "${unshippable#
+}"
+    echo ""; } >> "$LOG"
+  echo "self-update-fixtures: the named set contains fixtures no consumer can run:" >&2
+  printf '%s\n' "$unshippable" >&2
+  echo "  Step 2 derives the covering set by hand and the exclusions are stated for the" >&2
+  echo "  diff-side term. Writing one of these into the consumer creates a fixture core" >&2
+  echo "  never ships — the RETIRED-FIXTURE-ORPHAN class. Drop them from the slice and re-run." >&2
+  echo "  log: $LOG" >&2
+  exit 2
+fi
+
+SPELLEOF
+M13="$MUTDIR/m13-second-spelling.sh"
+python3 -c 'import sys
+s = open(sys.argv[1]).read()
+a, b = s.index("unshippable=\"\"\n"), s.index("# The diff is taken into a variable")
+open(sys.argv[2], "w").write(s[:a] + open(sys.argv[3]).read() + s[b:])' "$RUNNER" "$M13" "$SPELL2" 2>/dev/null
+if [ -s "$M13" ] && ! cmp -s "$RUNNER" "$M13"; then
+  s13=0
+  rm -f "$LOGDIR2"/self-update-fixtures-*.md
+  bash "$M13" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+       named-distonly green-one cwd-probe touched-shippable >/dev/null 2>&1
+  [ $? -eq 2 ] && [ "$(uns_set "$(newest_log2)")" = "named-distonly," ] || s13=$((s13+1))
+  rm -f "$LOGDIR2"/self-update-fixtures-*.md
+  bash "$M13" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+       theirs-only-distonly theirs-only-nodriver disk-only-distonly disk-missing-driver green-one \
+       >/dev/null 2>&1
+  [ $? -eq 2 ] && [ "$(uns_set "$(newest_log2)")" = "theirs-only-distonly,theirs-only-nodriver," ] || s13=$((s13+1))
+  rm -f "$LOGDIR2"/self-update-fixtures-*.md
+  bash "$M13" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+       green-one cwd-probe touched-named touched-shippable >/dev/null 2>&1
+  rc=$?
+  LM="$(newest_log2)"
+  { [ "$rc" -eq 0 ] && [ -n "$LM" ] && grep -qF "===== FIXTURE touched-named =====" "$LM" \
+      && ! grep -qF "COVERAGE: the named set contains" "$LM"; } || s13=$((s13+1))
+  if [ "$s13" -eq 0 ]; then
+    ok "SECOND SPELLING — the same fix written with a reason-returning helper passes Parts 14, 16 and 17 unchanged: the arms are keyed on the property, not on one author's phrasing"
+  else
+    bad "SECOND SPELLING — an equivalent implementation of the SAME fix failed $s13 of Parts 14, 16 and 17. A battery that only accepts the phrasing it was written against rejects the next correct change, and this repo has shipped a receipt that certified a regression and refused the real fix"
+  fi
+else
+  bad "FIXTURE ERROR: the second spelling could not be built — the over-completeness block's anchors have moved, and nothing establishes that Parts 14 to 19 accept an equivalent implementation"
+fi
+
+# --- MUTANT 14: the .dist-only probe WIDENED to convict every shippable directory -------------
+# The mutation the other seven cannot produce. Every one of them makes the arm say LESS, and an
+# arm that says less is caught by a set equality missing a member; this one makes it say MORE,
+# and Part 16 is the only arm whose subject that is. It was the last arm here with no mutant at
+# all, which is the state `fixture-mutants.md` names: an arm asserting that nothing was said
+# passes against a subject that says nothing, and only a widening copy tells the two apart.
+M14="$MUTDIR/m14-distonly-probe-widened.sh"
+if mkmutant "$M14" '  if git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${d}/.dist-only" 2>/dev/null; then' \
+                   '  if ! git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${d}/.dist-only" 2>/dev/null; then'; then
+  rm -f "$LOGDIR2"/self-update-fixtures-*.md
+  bash "$M14" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+       green-one cwd-probe touched-named touched-shippable >/dev/null 2>&1
+  rc=$?
+  if [ "$rc" -eq 2 ] \
+     && [ "$(uns_set "$(newest_log2)")" = "cwd-probe,green-one,touched-named,touched-shippable," ]; then
+    ok "MUTATION — with the .dist-only probe inverted the arm convicts every directory a consumer CAN run and wedges the self-update: Part 16 is what catches that"
+  else
+    bad "MUTATION — the .dist-only probe was widened to convict everything and the wholly shippable set was still accepted (rc=$rc, refused '$(uns_set "$(newest_log2)")'). Part 16 asserts an absence no run can produce, so it would pass against a subject that says nothing"
+  fi
+else
+  bad "FIXTURE ERROR: the .dist-only probe anchor no longer occurs exactly once in the runner — Part 16 proves nothing"
 fi
 
 echo

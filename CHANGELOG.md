@@ -15,6 +15,123 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.449.0] - 2026-08-30
+
+### The classifier compared against two shas, and a split pull leaves the consumer at a third
+
+`preclassify.sh` decided "did the consumer touch this?" by comparing the consumer's copy
+against `base` and `theirs`. That pair is not exhaustive. Step 2's autonomous self-update
+rewrites the whole MACHINERY set from an INTERMEDIATE ref — the stamp's `skill_commit` — so on
+a split pull the consumer's copy is byte-identical to the distribution at a third sha that is
+neither endpoint. Against `base` and `theirs` alone that read as a consumer edit, and the file
+fell to a `->CLASSIFY` bucket: a semantic-merge obligation manufactured on a file with zero
+consumer delta.
+
+Reproduced from the reference consumer's own committed history rather than reasoned. Its stamp
+at `c9919559c` records `commit: f45907a6` (0.443.0) and `skill_commit: 94b5f35b` (0.446.0)
+mid-split; run against a scratch extract of that tree with theirs `d3b0f601` (0.448.0), the
+shipping classifier emitted `BOTH-CHANGED->CLASSIFY` for
+`core/skills/ai-dlc-update/reconcile/setup-sites.md` and `core/skills/ai-dlc/core-manifest.md`
+— exactly the two paths the consumer's filing names. Control in the same run:
+`core/skills/ai-dlc/SKILL.md` is byte-identical at all three refs, so the comparison
+discriminates. Filed as `PC-S307-SELF-UPDATE-CARRY-ARM-HAS-NO-CORE-AT-SELF-UPDATE-SUPPRESSION`.
+
+**The filed remedy was built as a mutant, scored, and does not close the defect.** That entry
+prescribes suppressing the row in `self-update-gate.sh`'s CARRY arm. Built and measured against
+the reproduction: it silences the advisory row and leaves 2 `WORKLIST semantic-merge` rows,
+`DECISION restamp-withheld`, and the stamp stranded at 0.443.0 — because `apply.sh` never
+invokes that gate (control: `grep -n self-update-gate apply.sh` is 0 while the same invocation
+finds five other reconcile scripts it does invoke) and reads the bucket directly. The entry's
+own stated cost is the withheld re-stamp, not the row. Fixing the CLASSIFIER instead drives all
+three to zero, advances the stamp to 0.448.0, writes both files at theirs, and the CARRY arm
+goes quiet with no change of its own. A legitimate `WORKLIST settings-merge` row survives in
+both runs and is the control that nothing real was silenced.
+
+**The arm is SCOPED to the machinery set, and the scoping is load-bearing.** Its justification
+is that step 2's self-update wrote the file, and step 2 writes machinery and nothing else. An
+unscoped arm suppresses a non-machinery core file held at an intermediate ref by some route it
+cannot name, and `apply.sh` then overwrites it with no operator review — measured on the
+discriminating input, a consumer holding
+`core/fixtures/check-24-adversarial-convergence/run.sh` at the intermediate blob. Across the
+population below the scoping withholds 64 M-branch and 45 A-branch reclassifications that the
+unscoped arm would have made.
+
+**The same defect arrives through the `A` branch, and only measurement said so.** A path added
+in the range, written by the self-update at the intermediate ref and changed again before
+theirs, has no `base` arm to catch it. Over 234 release triples against a consumer holding the
+distribution's own blob at the intermediate ref for every core path — a tree that authored
+nothing — the M arm alone left 72 residual `BOTH-ADDED->CLASSIFY` rows. There is deliberately
+NO `D`-branch arm: it is constructible on paper and produced 0 firings across the same 234
+triples in two independently written sweeps, and an arm with no subject is a guard whose
+removal changes no answer.
+
+**The population, with both controls in the run.** 234 release triples, releases 0.420.0
+through 0.448.0, consumer reconstructed as step 2 leaves it. 324 rows change bucket: 297
+`M BOTH-CHANGED->CLASSIFY -> UPSTREAM-ONLY` and 27
+`A BOTH-ADDED->CLASSIFY -> UPSTREAM-ONLY-ADD`, none in any other direction and none on `D`.
+Every one is a true positive by construction — that consumer authored nothing. Controls: the
+two classifiers are asserted to DIFFER by `cmp -s` before the comparison is read, and the real
+consumer triple is replayed first and must reproduce its two known rows or the run refuses to
+report its own null. An earlier revision of that sweep pointed both sides at the same file and
+returned a perfect null that read exactly like agreement.
+
+**And the completeness question was asked separately from the false-positive one.** Over the
+same 234 triples, the number of MACHINERY paths still drawing a `->CLASSIFY` bucket against a
+consumer that authored nothing is **0**; 109 non-machinery paths still do, which is the scoping
+working rather than a gap. That zero is readable only because the counter was shown to fire
+first: on the reproduced consumer state it reads 2 under the pre-fix classifier and 0 under this
+one. An earlier revision of that probe reported the same 0 for a different reason — the
+`eval`'d `machinery_paths()` resolves its manifest from `$0`, so run from a scratch directory it
+returned an EMPTY set and scored every path as non-machinery.
+
+**The bucket name is reused, not minted.** Renaming the arm's bucket and running the SHIPPED
+`apply.sh` produces `DECISION unhandled-bucket` and a mechanical failure, against a control run
+with `UPSTREAM-ONLY` that produces none. A consumer runs its own installed `apply.sh`, so on the
+pull that delivers a new name the OLD driver classifies it — a new name reintroduces the exact
+withheld re-stamp this release removes.
+
+**The machinery set now has one owner.** `self-update-gate.sh` resolved it inline for its CARRY
+arm's population; it now `eval`s `machinery_paths()` out of `preclassify.sh`, the idiom
+`self-update-fixtures.sh` already uses for `map_consumer()`. Two resolutions of one manifest
+drift silently in both directions — a narrower copy leaves the false obligation standing, a
+wider one suppresses beyond its reason. The gate emits `SELF-UPDATE-UNDECIDED` if the set
+resolves EMPTY, because an empty set makes its membership test reject every path and its
+silence would read exactly like a clean pull.
+
+### The fixture set's exclusions were enforced in one direction and remembered in the other
+
+`self-update-fixtures.sh` refused a named fixture set that was MISSING a dir the diff touches,
+excluding two states read at theirs: a dir carrying `.dist-only`, and a dir with no `run.sh`.
+The OVER direction was unguarded, so a named set CONTAINING such a dir passed silently. Step 2
+asks the reader to derive that set by hand, so the exclusions held only as long as the reader
+remembered them.
+
+On the reference consumer they did not. A hand derivation of term B over the real
+`0.443.0 -> 0.448.0` range yields `backlog-size-ceiling`, which carries `.dist-only` at theirs;
+it was written into that consumer's `tests/fixtures/`, creating the `RETIRED-FIXTURE-ORPHAN`
+class `retired-fixtures.sh` exists to report, and was removed by hand before the commit. Filed
+as `PC-S307-STEP-2-FIXTURE-TERM-B-EXCLUSIONS-ARE-DERIVABLE-BY-HAND-AND-WERE-MIS-DERIVED`.
+
+`preclassify.sh` buckets that same path `DIST-ONLY-SKIP` in the same pull, so the fact was
+already derived and simply never reached the one place that could act on it. The new arm reads
+the same two exclusions at the same ref and refuses the set with exit 2, the class the header
+already assigns to an incomplete one.
+
+**The pre-existing MISS arm is not this check.** A named dir with no `run.sh` at the CONSUMER
+reports MISS and goes red — but only when the slice FAILED to write it. In the filed episode the
+slice DID write it, the run was green, and the orphan survived.
+
+**Placement is load-bearing rather than tidy.** Both probes are `cat-file -e` at theirs, so
+against an unresolvable ref or a repo with no `core/fixtures` tree every probe fails and the arm
+would convict the entire named set. It sits after the ref-resolution loop and after the
+wrong-repo guard, which turn those states into their own exits first.
+
+Measured against the real range, both directions in one invocation: naming all four
+diff-touched dirs exits 2 and names `backlog-size-ceiling` once and `fanout-payload-channel`
+zero times; naming only the three shippable dirs leaves the arm silent. Verified identically in
+the consumer layout on a tree built by `scripts/install.sh`, where both changed scripts install
+byte-identical to core.
+
 ## [0.448.0] - 2026-08-30
 
 ### The environment was the payload channel, and a heredoc on stdin bought nothing

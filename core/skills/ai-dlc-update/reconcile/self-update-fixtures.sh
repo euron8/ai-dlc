@@ -50,11 +50,13 @@
 # Output: a per-fixture verdict line on stdout, then the log path.
 # Exit:   0 all green · 1 at least one red · 2 the harness could not run
 #         (no fixtures named, fixture root underivable, log unwritable, the `base..theirs`
-#         range unresolvable, or the named set omitting a fixture the diff changes). A run
+#         range unresolvable, the named set omitting a fixture the diff changes, or the
+#         named set CONTAINING a fixture no consumer can run). A run
 #         that could not happen must NOT exit 0: "no failures" and "no assertions" are the
 #         same byte to the caller, and this whole file exists because that difference
 #         was invisible once already. An INCOMPLETE set is the same class — a slice missing
-#         the fixture that guards it reports green over the gap.
+#         the fixture that guards it reports green over the gap — and so is an OVER-complete
+#         one, whose surplus dir is written into the consumer as a fixture core never ships.
 set -u
 
 DIST="${1:?usage: self-update-fixtures.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root> <fixture>...}"
@@ -156,6 +158,58 @@ if ! git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures" 2>/dev/null; then
   echo "self-update-fixtures: '${THEIRS}' in $DIST has no core/fixtures tree, so \$DIST is not" >&2
   echo "  the distribution and the coverage join would pass over an empty set. Nothing was run." >&2
   { echo "COVERAGE: WRONG-REPO — '${THEIRS}:core/fixtures' does not resolve in $DIST."; } >> "$LOG"
+  exit 2
+fi
+
+# --- The OVER-completeness arm: every NAMED dir must be one a consumer can RUN -----------
+# The join below refuses a set that is MISSING a diff-touched dir. This one refuses a set
+# that CONTAINS a dir the consumer can never hold, and the two exclusions are the same two,
+# read at the same ref, for the same reason: `.dist-only` at theirs is never shipped, and no
+# `run.sh` at theirs means upstream deleted the driver.
+#
+# THE EXCLUSIONS WERE STATED FOR ONE HALF OF THE JOIN AND READ AS BELONGING ONLY TO IT.
+# Filed by the reference consumer as
+# PC-S307-STEP-2-FIXTURE-TERM-B-EXCLUSIONS-ARE-DERIVABLE-BY-HAND-AND-WERE-MIS-DERIVED after
+# a hand derivation of step 2's term B yielded `backlog-size-ceiling`, which carries
+# `.dist-only` at theirs. It was written into the consumer's `tests/fixtures/` — a
+# RETIRED-FIXTURE-ORPHAN, the class `retired-fixtures.sh` exists to report — and removed by
+# hand before the commit. Nothing in the tooling would have said so: `preclassify.sh` buckets
+# that same path `DIST-ONLY-SKIP` in the same pull, so the fact was already derived and simply
+# never reached the one place that could act on it.
+#
+# THE MISS ARM BELOW IS NOT THIS CHECK, and that is why this one is needed. A named dir with
+# no `run.sh` AT THE CONSUMER reports MISS and goes red — but only when the slice FAILED to
+# write it. In the filed episode the slice DID write it, so the run was green and the orphan
+# survived. One asks whether the slice delivered what was named; this asks whether what was
+# named should ever have been named.
+#
+# SITED AFTER THE REF RESOLUTION AND THE WRONG-REPO GUARD, and that is load-bearing rather
+# than tidy. Both probes below are `cat-file -e` AT THEIRS: against an unresolvable ref or a
+# repo with no `core/fixtures` tree, every one of them fails and this arm convicts the whole
+# named set — a check whose failure mode is to indict correct input. The two guards above
+# turn that state into its own exit first.
+unshippable=""
+for d in "$@"; do
+  if git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${d}/.dist-only" 2>/dev/null; then
+    unshippable="$unshippable
+  $d — carries .dist-only at ${THEIRS}: never shipped, so no consumer can hold it"
+  elif ! git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${d}/run.sh" 2>/dev/null; then
+    unshippable="$unshippable
+  $d — no run.sh at ${THEIRS}: upstream deleted the driver, so there is nothing to write"
+  fi
+done
+
+if [ -n "$unshippable" ]; then
+  { echo "COVERAGE: the named set contains fixture(s) no consumer can run:"
+    printf '%s\n' "${unshippable#
+}"
+    echo ""; } >> "$LOG"
+  echo "self-update-fixtures: the named set contains fixtures no consumer can run:" >&2
+  printf '%s\n' "$unshippable" >&2
+  echo "  Step 2 derives the covering set by hand and the exclusions are stated for the" >&2
+  echo "  diff-side term. Writing one of these into the consumer creates a fixture core" >&2
+  echo "  never ships — the RETIRED-FIXTURE-ORPHAN class. Drop them from the slice and re-run." >&2
+  echo "  log: $LOG" >&2
   exit 2
 fi
 

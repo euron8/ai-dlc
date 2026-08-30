@@ -53,13 +53,31 @@ cat > "$DIST/core/skills/ai-dlc/steps/beta.md" <<'MD'
 
 The lead reads this file at the top of the beta phase.
 MD
-# gamma: the MACHINERY case. Step 2's autonomous self-update rewrites this set on its own
-# cycle, so on a multi-hop pull the consumer holds it at an INTERMEDIATE ref that is neither
-# `commit` nor `theirs`. Three distinct versions, or the arm proves nothing.
+# gamma: the MACHINERY case as preclassify sees it. Step 2's autonomous self-update rewrites
+# this set on its own cycle, so on a multi-hop pull the consumer holds it at an INTERMEDIATE
+# ref that is neither `commit` nor `theirs`. Three distinct versions, or the arm proves nothing.
 cat > "$DIST/core/hooks/ai-dlc-gamma.sh" <<'MD'
 #!/usr/bin/env bash
 # The gamma hook fires on every dispatched teammate beat.
 # Its first responsibility is to resolve the declared sprint.
+MD
+# delta: the same state on a path THE PULL DOES NOT TOUCH, and it is a separate file for a
+# measured reason. gamma is in the base..theirs diff, so once `preclassify.sh` learned to
+# bucket an at-`skill_commit` machinery path `UPSTREAM-ONLY`, `apply.sh` phase 1 WRITES gamma
+# — and the post-write arms below, which exist to test `unregistered-drift.sh`'s own
+# `CORE-AT-SELF-UPDATE` suppression, then found it already at theirs and `CORE-AT-THEIRS`
+# claimed it first. The product behaviour was right and the arms had lost their subject; the
+# fixture's own anti-vacuity arm said so rather than passing quietly.
+#
+# delta's BASE and THEIRS blobs are IDENTICAL and its INTERMEDIATE blob differs, so it never
+# enters the `base..theirs` diff, no bucket is emitted for it, and `apply.sh` cannot write it.
+# `unregistered-drift.sh` is LEVEL-triggered — it walks the consumer's core files rather than
+# the range — so it still reaches delta, which is exactly why the two detectors need different
+# subjects here.
+cat > "$DIST/core/hooks/ai-dlc-delta.sh" <<'MD'
+#!/usr/bin/env bash
+# The delta hook records the beat that closed each dispatched brief.
+# It writes one line per brief and never rewrites an earlier one.
 MD
 printf '9.9.9\n' > "$DIST/VERSION"
 # THE ADJUDICATION VERDICT VOCABULARY, WITHOUT WHICH A RECORDED VERDICT CANNOT BE HONOURED HERE.
@@ -113,6 +131,14 @@ cat > "$DIST/core/hooks/ai-dlc-gamma.sh" <<'MD'
 # Its first responsibility is to resolve the declared sprint.
 # It refuses to resolve that sprint from the filesystem's mtime.
 MD
+# delta moves HERE and is put back at theirs, so base and theirs are byte-identical and the
+# only version that differs is the one the self-update left behind.
+cat > "$DIST/core/hooks/ai-dlc-delta.sh" <<'MD'
+#!/usr/bin/env bash
+# The delta hook records the beat that closed each dispatched brief.
+# It writes one line per brief and never rewrites an earlier one.
+# A brief closed twice is a defect in the caller, not a line to overwrite.
+MD
 git -C "$DIST" -c user.email=f@f -c user.name=fixture add -A
 git -C "$DIST" -c user.email=f@f -c user.name=fixture commit -q -m intermediate
 INTER="$(git -C "$DIST" rev-parse HEAD)"
@@ -145,15 +171,34 @@ cat > "$DIST/core/hooks/ai-dlc-gamma.sh" <<'MD'
 # It refuses to resolve that sprint from the filesystem's mtime.
 # The declared sprint is read from the canonical envelope, never searched.
 MD
+# delta goes BACK to its base text. Restored by `git show` rather than by re-typing the
+# heredoc, so the two blobs are identical by DERIVATION -- a retyped copy that drifted by one
+# byte would put delta into the base..theirs diff, apply would write it, and this fixture's
+# self-update arms would silently lose their subject exactly as they did once already.
+git -C "$DIST" show "$BASE:core/hooks/ai-dlc-delta.sh" > "$DIST/core/hooks/ai-dlc-delta.sh"
 git -C "$DIST" -c user.email=f@f -c user.name=fixture add -A
 git -C "$DIST" -c user.email=f@f -c user.name=fixture commit -q -m theirs
 THEIRS="$(git -C "$DIST" rev-parse HEAD)"
+# THE SEED'S OWN PRECONDITION, asserted here rather than assumed by the arms that depend on
+# it: delta must be OUT of the range and gamma must be IN it. If that ever inverts, every
+# CORE-AT-SELF-UPDATE arm below tests a file apply has already overwritten.
+if ! git -C "$DIST" diff --quiet "$BASE" "$THEIRS" -- core/hooks/ai-dlc-delta.sh; then
+  echo "seed.sh: FIXTURE BROKEN — delta differs between base and theirs, so the pull writes it" >&2
+  echo "  and the CORE-AT-SELF-UPDATE arms lose their subject." >&2
+  exit 2
+fi
+if git -C "$DIST" diff --quiet "$BASE" "$THEIRS" -- core/hooks/ai-dlc-gamma.sh; then
+  echo "seed.sh: FIXTURE BROKEN — gamma is identical across the range, so the pure-apply" >&2
+  echo "  count arm has no machinery subject." >&2
+  exit 2
+fi
 
 # ---- CONSUMER: byte-identical to BASE. Zero drift. -------------------------
 git -C "$DIST" show "$BASE:core/skills/ai-dlc/steps/alpha.md" > "$CONSUMER/.claude/skills/ai-dlc/steps/alpha.md"
 git -C "$DIST" show "$BASE:core/skills/ai-dlc/steps/beta.md"  > "$CONSUMER/.claude/skills/ai-dlc/steps/beta.md"
 mkdir -p "$CONSUMER/.claude/hooks"
 git -C "$DIST" show "$INTER:core/hooks/ai-dlc-gamma.sh" > "$CONSUMER/.claude/hooks/ai-dlc-gamma.sh"
+git -C "$DIST" show "$INTER:core/hooks/ai-dlc-delta.sh" > "$CONSUMER/.claude/hooks/ai-dlc-delta.sh"
 # BOTH shas, which is the whole point: `commit` is the rulebook merge-base every predicate
 # measures against, `skill_commit` is where step 2's autonomous self-update left the machinery.
 printf 'version: 0.0.1\ncommit: %s\nskill_version: 0.0.2\nskill_commit: %s\n' "$BASE" "$INTER" > "$CONSUMER/.claude/.ai-dlc-version"
