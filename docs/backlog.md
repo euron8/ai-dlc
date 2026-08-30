@@ -3319,6 +3319,46 @@ precondition rather than a false close.
 
 verify: sh f=core/hooks/ai-dlc-acknowledge.sh; [ -f "$f" ] || exit 9; r=$(grep -oE 'jq -r [^|]*\.[a-z_.]+' "$f" | grep -oE '\.[a-z_][a-z_.]*' | sort -u); [ -n "$r" ] || exit 9; printf '%s\n' "$r" | grep -q '^\.tool_name$' || exit 9; printf '%s\n' "$r" | grep -qE '^\.(subagent|agent_type|agent_id|parent_session_id|invoked_by)' && exit 0; exit 1
 
+## BL-129 — a change to an adjudication predicate has no mechanism that can see what it RECLASSIFIES
+
+**Every fixture seed for `validate-adversarial-convergence.sh` is hand-written, and written by
+whoever is changing the predicate. So the suite cannot answer the one question a predicate change
+raises: does this reclassify artifacts that were VALID under the predicate it replaces?** A green
+fixture, a green mutant battery and a green gate are all consistent with a change that turns a
+consumer's history non-conforming, because every input was authored against the new rule.
+
+**Measured, not hypothetical.** `v0.442.0` shipped with `check-24` at 111 assertions, seven mutants
+killed and the full gate green. Driven over the reference consumer's real pass series it turned
+**33 from PASS to FAIL, 0 the other way**, three of them in a sprint that consumer had PAUSED. The
+defect was found by running the shipped validator over a tree outside this repo, at the point the
+operator said they were about to pull — not by anything in the gate. `v0.443.0` corrected it.
+
+**THE PROMPT-SIDE REMEDY IS ALREADY KNOWN AND IS NOT ENOUGH.** "Run the differential against the
+consumer before cutting the release" is correct and is being followed, but its only carrier is a
+session's recollection, which `resident-context.md` says is not a carrier. It also lives on ONE
+side of the boundary: `v0.442.0` reached a consumer precisely because a single party was looking.
+
+**Candidate mechanism, NOT yet chosen — a characterization corpus.** Freeze a set of real-shaped
+pass series in the tree with their adjudicated verdicts, and fail the push when a predicate change
+flips one without a declared reason. Three objections to answer before building it:
+
+- **A frozen verdict encodes today's behaviour as correct**, so a corpus captured over a buggy
+  predicate makes the bug golden and the fix look like the regression. Capture needs a provenance
+  story of its own.
+- **`consumer-boundary.md` says no gate reaches the consumer's tree**, so the corpus must be
+  committed here — and a committed copy of another repo's artifacts goes stale silently, which is
+  the class this repo already has scars from.
+- **A declared-reason escape hatch is an opt-out**, and `CLAUDE.md` holds that an instruction
+  shipping its own opt-out is not an instruction. Whether the declaration can be made costly
+  enough to bind is the open design question.
+
+**Scope note: this is NOT specific to the adversarial validator.** Ask, before scoping, which other
+shipped predicates adjudicate persisted artifacts a consumer already holds — that population is the
+entry's real subject and it has not been derived.
+
+verify: unscoped — this entry records a gap and names a candidate, not a receipt. Do not close it
+on a green `check-24` run or a green suite; that green is exactly what failed to see the defect.
+
 ## BL-128 — an override can restate a threshold that later migrates into a validator, and layer-drift cannot see it
 
 **An `overrides/` file may restate a rule as prose; `layer-drift.sh` joins that override to the
