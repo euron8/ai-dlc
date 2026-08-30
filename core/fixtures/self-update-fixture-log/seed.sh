@@ -11,6 +11,12 @@
 # the only reachable verdict would be MISSING, and "the join stood down" would be
 # indistinguishable from "the loop could not run".
 #
+# `named-distonly` and `touched-deleted` are here for the OVER-completeness arm and they model
+# the filed episode literally: on the reference consumer the surplus directory was WRITTEN into
+# `tests/fixtures/` by the slice, so the run was green and the orphan survived. A consumer tree
+# that lacked them would make every over-completeness mutant die of MISSING instead of running
+# to the green suite the arm has to be able to see.
+#
 # Prints the consumer root on stdout; the caller owns removing it.
 set -eu
 
@@ -48,7 +54,7 @@ EOF
 
 # The two fixtures the seeded distribution's `base..theirs` range CHANGES and which are not
 # exempt. Named, they must let the run reach the loop; omitted, they must be refused.
-for f in touched-shippable touched-named; do
+for f in touched-shippable touched-named named-distonly touched-deleted; do
   mkdir -p "$ROOT/tests/fixtures/$f"
   cat > "$ROOT/tests/fixtures/$f/run.sh" <<EOF
 #!/usr/bin/env bash

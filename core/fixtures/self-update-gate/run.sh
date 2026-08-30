@@ -145,7 +145,8 @@ fi
 #
 # Own miniature distribution: the seeded one has no release history, and `--safe-stop`'s
 # candidate set IS the release history.
-SS="$(dirname "$DIST")/ss"; rm -rf "$SS"; mkdir -p "$SS/dist/core/skills/ai-dlc/steps" "$SS/cons/.claude/skills/ai-dlc/steps"
+SS="$(dirname "$DIST")/ss"; rm -rf "$SS"
+mkdir -p "$SS/dist/core/skills/ai-dlc/steps" "$SS/cons/.claude/skills/ai-dlc/steps" "$SS/dist/core/rules"
 gvv() { printf '# gate\n'; for a in "$@"; do printf '<!-- CHECK_LOADED: %s -->\n' "$a"; done; }
 gvv 1 2 > "$SS/cons/.claude/skills/ai-dlc/steps/gate-validation.md"
 # The consumer's hook is the authority on what can block ITS push, and its ABSENCE is
@@ -157,6 +158,14 @@ mkdir -p "$SS/cons/.githooks"
 printf '#!/usr/bin/env bash\n# invokes no scripts/ai-dlc/ validator, so the gating set is empty\nexit 0\n' > "$SS/cons/.githooks/pre-push"
 git -C "$SS/dist" init -q
 printf '1.0.0\n' > "$SS/dist/VERSION"; gvv 1 2 > "$SS/dist/core/skills/ai-dlc/steps/gate-validation.md"
+# ONE MACHINERY PATH, NEVER TOUCHED AGAIN, AND IT IS A PRECONDITION RATHER THAN DECORATION. Arm C
+# now resolves its population by `eval`ing `machinery_paths()` out of preclassify.sh, and reports
+# SELF-UPDATE-UNDECIDED when that set comes back EMPTY -- correctly, since a membership test over
+# an empty set rejects every path and its silence is byte-identical to a clean pull. A dist tree
+# holding only VERSION and a rulebook file resolves to nothing, so without this file every arm
+# below runs against an UNDECIDED verdict it never asked for. Unchanged across all five commits,
+# so it enters no base..theirs diff and produces no bucket and no CARRY row of its own.
+printf 'ss machinery\n' > "$SS/dist/core/rules/ss.md"
 git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm base >/dev/null 2>&1
 SS_BASE="$(git -C "$SS/dist" rev-parse HEAD)"
 # r1 — a release that moves VERSION and nothing the consumer's rulebook is joined against.
@@ -191,6 +200,13 @@ ss_assert() { # ss_assert <label> <got> <want> <why>
   if [ "$2" = "$3" ]; then printf '  ok    %-16s %s\n' "$1" "$4"
   else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s got=[%s] want=[%s]  %s\n' "$1" "$2" "$3" "$4"; fi
 }
+
+# PRECONDITION FOR THE PRECONDITIONS. An empty machinery set makes every classify run here answer
+# UNDECIDED, which the two arms below read as "defer" — they would then fail, or worse pass, for a
+# reason that has nothing to do with the walk they exist to underwrite.
+ss_assert "ss-machinery-set" \
+  "$(bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R2" "$SS/cons" 2>&1 | grep -c 'SELF-UPDATE-UNDECIDED')" \
+  "0" "the seeded tree resolves a NON-empty machinery set, so no arm below runs against a set-empty UNDECIDED"
 
 # PRECONDITION, or every arm below is vacuous: r2 must actually defer and r1 must not.
 ss_assert "safe-stop-pre" \
@@ -528,11 +544,42 @@ ac_kill "armc-mut-bucket" \
   'core/git-hooks/pre-push,core/rules/edited.md,' \
   "keying on the modified-both-sides bucket alone drops the deleted, the added and the relocated path"
 
-ac_kill "armc-mut-setf" 's@^    set -f$@    : set -f removed@' \
+# THE NEXT TWO MUTATE preclassify.sh, NOT THE GATE, AND THAT IS WHERE THEIR SUBJECT MOVED. This
+# arm's population used to be resolved inline here; it is now `machinery_paths()`, eval'd out of
+# preclassify.sh so that one derivation serves both the CARRY population and the `skill_commit`
+# suppression scope. A mutant aimed at the gate's old inline copy matches nothing today, which
+# reads as a broken fixture rather than as the relocation it is — and mutating the file the run
+# actually RESOLVES is the whole point.
+ac_mut_pre() { # ac_mut_pre <name> <sed-expr on preclassify.sh> -> path to a GATE beside it
+  local d="$AC/mp-$1"
+  rm -rf "$d"; mkdir -p "$d"
+  cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$d"/ 2>/dev/null
+  sed "$2" "$(dirname "$GATE")/preclassify.sh" > "$d/preclassify.sh"
+  printf '%s\n' "$d"
+}
+ac_kill_pre() { # ac_kill_pre <label> <sed-expr> <want-carry-set> <why>
+  local d got
+  d="$(ac_mut_pre "$1" "$2")"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if cmp -s "$(dirname "$GATE")/preclassify.sh" "$d/preclassify.sh"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s mutation matched nothing in preclassify.sh, so the arm it scores is unproven\n' "$1"
+    return
+  fi
+  got="$(ac_carry "$d/self-update-gate.sh" "$AC/cons" "$AC/cwd")"
+  if [ "$got" = "$3" ]; then
+    printf '  ok    %-16s KILLED (%s)\n' "$1" "$4"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]  %s\n' "$1" "$got" "$3" "$4"
+  fi
+}
+
+ac_kill_pre "armc-mut-setf" 's@^  set -f$@  : set -f removed@' \
   'core/git-hooks/pre-push,' \
   "without set -f the pathspecs expand against the CWD and the machinery set collapses to the entries carrying no glob character"
 
-ac_kill "armc-mut-base" '/--with-tree="\$BASE"/d' \
+ac_kill_pre "armc-mut-base" '/--with-tree="\$BASE"/d' \
   'core/git-hooks/pre-push,core/rules/edited.md,core/schemas/fresh.json,core/scripts/reloc.sh,' \
   "resolving the globs at THEIRS alone loses the path deleted upstream, where the consumer's copy is the only copy left"
 
@@ -572,6 +619,484 @@ else
       "removing the re-entry guard must emit the whole advisory inside a --safe-stop walk"
   fi
 fi
+
+# --- ARM D: THE THIRD SHA. A SPLIT PULL LEAVES THE CONSUMER AT A REF NEITHER ENDPOINT KNOWS --
+#
+# Arm C above reads preclassify's buckets and carries every machinery path that shows a consumer
+# divergence. That is correct only if the bucket derivation can TELL a divergence from a carry.
+# It could not. Every `ours_h` comparison in preclassify's M and A branches measured the consumer
+# against `base` and `theirs` alone, and on a SPLIT pull step 2's autonomous self-update has
+# already rewritten the machinery set from an INTERMEDIATE ref -- so the consumer's copy is
+# byte-identical to the distribution at a THIRD sha, the stamp's `skill_commit`, and against that
+# pair it reads as a consumer edit. The path fell to a `->CLASSIFY` bucket, arm C carried it, and
+# `apply.sh`'s own `*CLASSIFY*` arm -- which never invokes this gate -- turned it into a
+# `WORKLIST semantic-merge` row that WITHHELD the re-stamp. Filed by the reference consumer as
+# `PC-S307-SELF-UPDATE-CARRY-ARM-HAS-NO-CORE-AT-SELF-UPDATE-SUPPRESSION`.
+#
+# THE SUBJECT IS preclassify.sh AND ARM C IS THE READER, which is why these arms live here rather
+# than in a new directory: this fixture is the only one that drives both halves of that join in
+# one run, and the assertion that matters is that arm C goes QUIET without a line of its own
+# changing behaviour.
+#
+# THE PREDICATE IS `at_self_update`, NOT AN `elif`, and the mutants below are keyed on the
+# function for that reason. It has THREE conjuncts and each is a separate way to be wrong:
+# a self-update ref exists, the consumer's bytes match the distribution AT that ref, and the path
+# is in the MACHINERY set -- the only set step 2's self-update writes. Two branch arms call it.
+#
+# ITS OWN MINIATURE DISTRIBUTION, WITH THREE REFS. Every tree above has exactly two, and a two-ref
+# tree cannot express the defect at all -- the third sha IS the bug.
+#
+#   core/rules/carried.md    M  ours == dist@MID, differs at BASE and THEIRS  -> UPSTREAM-ONLY
+#   core/rules/added.md      A  absent at BASE, ours == dist@MID              -> UPSTREAM-ONLY-ADD
+#   core/rules/edited.md     M  ours matches NOTHING -- a real consumer edit   -> ->CLASSIFY
+#   core/rules/steady.md     M  ours == BASE                                  -> UPSTREAM-ONLY
+#   core/rules/indexed.md    M  ours == the dist repo INDEX and no ref         -> ->CLASSIFY
+#   core/rules/doomed.md     D  deleted at THEIRS, ours == dist@MID           -> ->CLASSIFY
+#   core/skills/ai-dlc/artifact-path-grammar.md
+#                            M  ours == dist@MID but NOT machinery            -> ->CLASSIFY
+#   core/session-driver/modeflip.sh  content fixed, 644->755, consumer HAS the bit -> ALREADY-AT-THEIRS
+#   core/session-driver/modeneed.sh  same, consumer LACKS the bit                  -> UPSTREAM-ONLY
+#
+# THE NEGATIVES SIT IN THE SAME TREE AND THE SAME RUN AS THE POSITIVES, and there are three of
+# them, each differing from a real carry in exactly ONE respect. `edited.md` differs in the BYTES.
+# `artifact-path-grammar.md` differs only in MEMBERSHIP -- same status, same three-way hash
+# relation, byte-identical to the distribution at the same ref, and not machinery. `doomed.md`
+# differs only in STATUS. A near-miss run separately is an ADJACENT input: it can only ask whether
+# the arm fires, never whether it fires on the RIGHT paths, and this repo has shipped that mistake
+# and paid three rounds for it. Every arm scores one EXACT bucket set, so a mutant that widens the
+# predicate cannot pass by satisfying the positives alone.
+#
+# `artifact-path-grammar.md` IS THE SCOPING SUBJECT AND NOTHING ELSE REACHES IT. Unscoped, a
+# non-machinery core file at an intermediate ref is reclassified to UPSTREAM-ONLY and `apply.sh`
+# writes theirs over it with no operator review -- an exemption with no reason attached, since
+# only the machinery set has a story for how it got to that ref. Every OTHER seeded path here is
+# machinery, so dropping the `is_machinery` conjunct moves this cell and no other.
+#
+# `doomed.md` CARRIES THE DELIBERATE ABSENCE. There is no `D`-branch arm, measured rather than
+# forgotten, and its verdict must stay `UPSTREAM-DELETED+consumer-modified->CLASSIFY`. Asserting
+# it here means a D-branch arm added later cannot land silently.
+#
+# `indexed.md` IS THE INDEX HAZARD'S SUBJECT AND IT EXISTS FOR NOTHING ELSE. `self_update_hash`
+# returns a sentinel rather than calling `blob_hash ""` because an empty rev makes the underlying
+# `git rev-parse -q --verify ":<path>"` read the dist repo's INDEX, which resolves for every
+# tracked path. The seed stages a content for that path that is committed at NO ref and gives the
+# consumer the same bytes -- so a build that drops the sentinel matches on it and NOTHING ELSE
+# does. Without that staged blob the hazard is unreachable: a clean index answers with THEIRS,
+# which an earlier arm has already claimed.
+#
+# `modeflip.sh` IS THE ORDERING SUBJECT. All three content hashes are equal there, so the
+# predicate holds -- and `ALREADY-AT-THEIRS`, which carries the `mode_at_theirs` conjunct, is the
+# only arm that can tell a consumer holding the exec bit from one that still needs it. Moving the
+# new arm above it answers UPSTREAM-ONLY for both, which is the regression the shipped comment
+# warns about and which no other seeded path can see.
+SU="$(dirname "$DIST")/su"
+rm -rf "$SU"
+mkdir -p "$SU/dist/core/rules" "$SU/dist/core/session-driver" "$SU/dist/core/skills/ai-dlc" \
+         "$SU/cons/.claude/rules" "$SU/cons/.claude/session-driver" "$SU/cons/.claude/skills/ai-dlc" "$SU/cons/.githooks" \
+         "$SU/nostamp/.claude/rules" "$SU/nostamp/.claude/session-driver" "$SU/nostamp/.claude/skills/ai-dlc" "$SU/nostamp/.githooks"
+
+# A probe repo is only a probe if git agrees. `GIT_DIR` outranks `git -C`, so an exported one
+# would send every write below into whatever repository the caller was standing in.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+git -C "$SU/dist" init -q
+# Compared PHYSICALLY on both sides. `$TMPDIR` carries a trailing slash and macOS resolves it
+# through /private, so a textual compare here fails on a probe that is perfectly isolated -- which
+# would be an arm that fires on the state it exists to bless.
+ss_assert "su-probe-isolated" "$(git -C "$SU/dist" rev-parse --absolute-git-dir 2>/dev/null)" \
+  "$( cd "$SU/dist" && pwd -P )/.git" \
+  "the probe repo is its own, so nothing below can reach the caller's repository"
+
+su_commit() { git -C "$SU/dist" add -A >/dev/null 2>&1
+              git -C "$SU/dist" -c user.email=f@x -c user.name=f commit -qm "$1" >/dev/null 2>&1
+              git -C "$SU/dist" rev-parse HEAD; }
+
+printf '0.1.0\n'        > "$SU/dist/VERSION"
+printf 'carried base\n' > "$SU/dist/core/rules/carried.md"
+printf 'edited base\n'  > "$SU/dist/core/rules/edited.md"
+printf 'steady base\n'  > "$SU/dist/core/rules/steady.md"
+printf 'indexed base\n' > "$SU/dist/core/rules/indexed.md"
+printf 'doomed base\n'  > "$SU/dist/core/rules/doomed.md"
+printf 'grammar base\n' > "$SU/dist/core/skills/ai-dlc/artifact-path-grammar.md"
+printf 'driver body\n'  > "$SU/dist/core/session-driver/modeflip.sh"
+printf 'driver body\n'  > "$SU/dist/core/session-driver/modeneed.sh"
+chmod 644 "$SU/dist/core/session-driver/modeflip.sh" "$SU/dist/core/session-driver/modeneed.sh"
+SU_BASE="$(su_commit base)"
+
+# MID -- the ref step 2's autonomous self-update wrote the machinery set from. A release commit,
+# because a VERSION is the only state a stamp can record. `added.md` is born here, which is what
+# puts it in the `A` branch with no `base_h` arm able to catch it.
+printf '0.2.0\n'        > "$SU/dist/VERSION"
+printf 'carried mid\n'  > "$SU/dist/core/rules/carried.md"
+printf 'edited mid\n'   > "$SU/dist/core/rules/edited.md"
+printf 'steady mid\n'   > "$SU/dist/core/rules/steady.md"
+printf 'indexed mid\n'  > "$SU/dist/core/rules/indexed.md"
+printf 'doomed mid\n'   > "$SU/dist/core/rules/doomed.md"
+printf 'added mid\n'    > "$SU/dist/core/rules/added.md"
+printf 'grammar mid\n'  > "$SU/dist/core/skills/ai-dlc/artifact-path-grammar.md"
+chmod 755 "$SU/dist/core/session-driver/modeflip.sh" "$SU/dist/core/session-driver/modeneed.sh"
+SU_MID="$(su_commit mid)"
+
+printf '0.3.0\n'          > "$SU/dist/VERSION"
+printf 'carried theirs\n' > "$SU/dist/core/rules/carried.md"
+printf 'edited theirs\n'  > "$SU/dist/core/rules/edited.md"
+printf 'steady theirs\n'  > "$SU/dist/core/rules/steady.md"
+printf 'indexed theirs\n' > "$SU/dist/core/rules/indexed.md"
+printf 'added theirs\n'   > "$SU/dist/core/rules/added.md"
+printf 'grammar theirs\n' > "$SU/dist/core/skills/ai-dlc/artifact-path-grammar.md"
+rm -f "$SU/dist/core/rules/doomed.md"
+SU_THEIRS="$(su_commit theirs)"
+
+# Committed at no ref, present only in the index. See `indexed.md` above.
+printf 'indexed STAGED\n' > "$SU/dist/core/rules/indexed.md"
+git -C "$SU/dist" add core/rules/indexed.md >/dev/null 2>&1
+
+# A TREE sha resolves as an OBJECT and not as a COMMIT, and `<tree>:<path>` resolves a blob
+# perfectly well -- so it is the input that separates the shipped `^{commit}` guard from its
+# absence. An all-zeros sha cannot do that job: `blob_hash` answers MISSING for it either way.
+SU_TREE="$(git -C "$SU/dist" rev-parse "${SU_MID}^{tree}")"
+
+# Writes NO stamp. `$SU/nostamp` is this tree with nothing else done to it, and `$SU/cons` gets
+# whichever stamp the arm under test needs; the two are byte-identical apart from that one file,
+# so the gate differential below is the stamp read and nothing else.
+su_seed_cons() {
+  printf 'carried mid\n'       > "$1/.claude/rules/carried.md"
+  printf 'edited LOCAL EDIT\n' > "$1/.claude/rules/edited.md"
+  printf 'steady base\n'       > "$1/.claude/rules/steady.md"
+  printf 'indexed STAGED\n'    > "$1/.claude/rules/indexed.md"
+  printf 'added mid\n'         > "$1/.claude/rules/added.md"
+  printf 'doomed mid\n'        > "$1/.claude/rules/doomed.md"
+  printf 'grammar mid\n'       > "$1/.claude/skills/ai-dlc/artifact-path-grammar.md"
+  printf 'driver body\n' > "$1/.claude/session-driver/modeflip.sh"; chmod 755 "$1/.claude/session-driver/modeflip.sh"
+  printf 'driver body\n' > "$1/.claude/session-driver/modeneed.sh"; chmod 644 "$1/.claude/session-driver/modeneed.sh"
+  printf '#!/usr/bin/env bash\n# invokes no scripts/ai-dlc/ validator, so the gating set is empty\nexit 0\n' \
+    > "$1/.githooks/pre-push"; chmod 755 "$1/.githooks/pre-push"
+}
+su_seed_cons "$SU/cons"
+su_seed_cons "$SU/nostamp"
+
+su_stamp() { # su_stamp <skill_commit> ; `-` removes the stamp, `+` writes one with no such field
+  case "$1" in
+    -) rm -f "$SU/cons/.claude/.ai-dlc-version" ;;
+    +) printf 'version: 0.1.0\ncommit: %s\nskill_version: 0.2.0\n' "$SU_BASE" \
+         > "$SU/cons/.claude/.ai-dlc-version" ;;
+    *) printf 'version: 0.1.0\ncommit: %s\nskill_version: 0.2.0\nskill_commit: %s\n' "$SU_BASE" "$1" \
+         > "$SU/cons/.claude/.ai-dlc-version" ;;
+  esac
+}
+
+SU_PC="$(dirname "$GATE")/preclassify.sh"
+su_buckets() { # su_buckets <preclassify> <consumer> -> "<core-path>=<bucket>," sorted
+  bash "$1" "$SU/dist" "$SU_BASE" "$SU_THEIRS" "$2" 2>/dev/null |
+    awk -F'\t' '$2 ~ /^core\// {print $2 "=" $4}' | sort | tr '\n' ','
+}
+
+# Composed cell by cell rather than written out eight times: every expectation below differs from
+# SU_LIVE in one or two cells, and spelling each set in full hides which cell a mutant moved.
+SU_A_ADD='core/rules/added.md=UPSTREAM-ONLY-ADD,'
+SU_A_CL='core/rules/added.md=BOTH-ADDED->CLASSIFY,'
+SU_CA_UO='core/rules/carried.md=UPSTREAM-ONLY,'
+SU_CA_CL='core/rules/carried.md=BOTH-CHANGED->CLASSIFY,'
+SU_DO='core/rules/doomed.md=UPSTREAM-DELETED+consumer-modified->CLASSIFY,'
+SU_ED_CL='core/rules/edited.md=BOTH-CHANGED->CLASSIFY,'
+SU_ED_UO='core/rules/edited.md=UPSTREAM-ONLY,'
+SU_IX_CL='core/rules/indexed.md=BOTH-CHANGED->CLASSIFY,'
+SU_IX_UO='core/rules/indexed.md=UPSTREAM-ONLY,'
+SU_ST='core/rules/steady.md=UPSTREAM-ONLY,'
+SU_MF_OK='core/session-driver/modeflip.sh=ALREADY-AT-THEIRS,'
+SU_MF_UO='core/session-driver/modeflip.sh=UPSTREAM-ONLY,'
+SU_MN='core/session-driver/modeneed.sh=UPSTREAM-ONLY,'
+SU_GR_CL='core/skills/ai-dlc/artifact-path-grammar.md=BOTH-CHANGED->CLASSIFY,'
+SU_GR_UO='core/skills/ai-dlc/artifact-path-grammar.md=UPSTREAM-ONLY,'
+SU_TAIL="${SU_DO}${SU_ED_CL}${SU_IX_CL}${SU_ST}${SU_MF_OK}${SU_MN}${SU_GR_CL}"
+SU_LIVE="${SU_A_ADD}${SU_CA_UO}${SU_TAIL}"                       # both branch arms reach their subject
+SU_INERT="${SU_A_CL}${SU_CA_CL}${SU_TAIL}"                       # the predicate is unreachable
+SU_NO_M="${SU_A_ADD}${SU_CA_CL}${SU_TAIL}"                       # the M-branch arm is gone
+SU_NO_A="${SU_A_CL}${SU_CA_UO}${SU_TAIL}"                        # the A-branch arm is gone
+SU_WIDE="${SU_A_ADD}${SU_CA_UO}${SU_DO}${SU_ED_UO}${SU_IX_UO}${SU_ST}${SU_MF_OK}${SU_MN}${SU_GR_CL}"
+SU_UNSCOPED="${SU_A_ADD}${SU_CA_UO}${SU_DO}${SU_ED_CL}${SU_IX_CL}${SU_ST}${SU_MF_OK}${SU_MN}${SU_GR_UO}"
+SU_ORDER="${SU_A_ADD}${SU_CA_UO}${SU_DO}${SU_ED_CL}${SU_IX_CL}${SU_ST}${SU_MF_UO}${SU_MN}${SU_GR_CL}"
+SU_IDXH="${SU_A_CL}${SU_CA_CL}${SU_DO}${SU_ED_CL}${SU_IX_UO}${SU_ST}${SU_MF_OK}${SU_MN}${SU_GR_CL}"
+
+# PRECONDITION. The mode seed is the whole subject of the ordering mutant, and git records a mode
+# only if the filesystem carried one -- a tree where both refs read 100644 makes that mutant
+# unkillable and reads exactly like a mutant that was scored.
+ss_assert "su-seed-mode" \
+  "$(git -C "$SU/dist" ls-tree "$SU_BASE" -- core/session-driver/modeflip.sh | cut -d' ' -f1)->$(git -C "$SU/dist" ls-tree "$SU_THEIRS" -- core/session-driver/modeflip.sh | cut -d' ' -f1)" \
+  "100644->100755" "the seeded mode really flips base->theirs, so ALREADY-AT-THEIRS has a subject"
+
+# PRECONDITION. The staged blob is the index hazard's only subject, and a `git add` that silently
+# did nothing would leave the index answering THEIRS -- a value an earlier arm already claims.
+ss_assert "su-seed-index" \
+  "$(git -C "$SU/dist" rev-parse -q --verify ':core/rules/indexed.md')" \
+  "$(git -C "$SU/dist" hash-object "$SU/cons/.claude/rules/indexed.md")" \
+  "the dist INDEX holds the consumer's bytes for indexed.md at no ref at all"
+ss_assert "su-seed-index-control" \
+  "$(git -C "$SU/dist" rev-parse -q --verify ":core/rules/indexed.md" 2>/dev/null | grep -cx "$(git -C "$SU/dist" rev-parse "${SU_THEIRS}:core/rules/indexed.md")")" \
+  "0" "...and it is NOT the blob at theirs, so a match on it can only have come from the index"
+
+# PRECONDITION FOR THE SCOPING NEGATIVE. `artifact-path-grammar.md` separates the shipped arm from
+# an unscoped one ONLY if it is genuinely outside the machinery set while every other seeded path
+# is inside it. Both halves are derived from the shipped function rather than read off the
+# manifest by eye, and both are asserted, because an arm that named a machinery path by mistake
+# would score the unscoped mutant as surviving and read as a coverage gap.
+#
+# LOADED THE WAY THE GATE LOADS IT, out of a directory holding preclassify's siblings, and NOT by
+# eval-ing into this shell. `machinery_paths()` resolves its manifest as `$(dirname "$0")/…`, and
+# `$0` is not assignable — an eval here reads THIS fixture's directory, finds no setup-sites.md,
+# returns EMPTY, and both arms below then score a zero that means nothing. Measured: the first cut
+# did exactly that, and only the control arm caught it.
+mkdir -p "$SU/mach"
+cp "$(dirname "$SU_PC")"/*.sh "$(dirname "$SU_PC")"/*.md "$SU/mach"/ 2>/dev/null
+cat > "$SU/mach/list-machinery.sh" <<'MACHEOF'
+DIST="$1"; BASE="$2"; THEIRS="$3"
+eval "$(awk '/^machinery_paths\(\) \{/,/^\}/' "$(dirname "$0")/preclassify.sh")"
+machinery_paths
+MACHEOF
+SU_MACH="$(bash "$SU/mach/list-machinery.sh" "$SU/dist" "$SU_BASE" "$SU_THEIRS" 2>/dev/null)"
+ss_assert "su-seed-scope" \
+  "$(printf '%s\n' "$SU_MACH" | grep -cx 'core/skills/ai-dlc/artifact-path-grammar.md')" "0" \
+  "the scoping near-miss is NOT machinery, so only the is_machinery conjunct can separate it"
+ss_assert "su-seed-scope-control" \
+  "$(printf '%s\n' "$SU_MACH" | grep -cx 'core/rules/carried.md')" "1" \
+  "...and the carried path IS, so that zero is a membership decision rather than an empty set"
+
+# THE POSITIVES AND THEIR THREE NEGATIVES, ONE EXACT SET, ONE RUN. Both branch arms, the D-branch
+# deliberate absence, the bytes near-miss and the membership near-miss are all in this one cell
+# comparison.
+su_stamp "$SU_MID"
+ss_assert "su-carried" "$(su_buckets "$SU_PC" "$SU/cons")" "$SU_LIVE" \
+  "M and A both suppress a copy identical to the distribution at the stamp's skill_commit, while a real edit, a non-machinery path and a deleted path in the same tree all still reach ->CLASSIFY"
+
+# THE THREE GUARDS ON THE STAMP READ, EACH WITH ITS OWN SUBJECT. In every one of them the arms must
+# be unreachable and every OTHER bucket unchanged -- which is why the whole set is asserted rather
+# than the two cells. A guard that also moved `steady.md` or `modeflip.sh` would be a regression
+# wearing the shape of a fix.
+ss_assert "su-guard-nostamp" "$(su_buckets "$SU_PC" "$SU/nostamp")" "$SU_INERT" \
+  "no stamp at all: nothing to read, so both arms are inert and every other bucket is untouched"
+su_stamp +
+ss_assert "su-guard-nofield" "$(su_buckets "$SU_PC" "$SU/cons")" "$SU_INERT" \
+  "a stamp with no skill_commit field -- the ordinary pre-split shape -- is inert too"
+su_stamp "$SU_BASE"
+ss_assert "su-guard-eqbase" "$(su_buckets "$SU_PC" "$SU/cons")" "$SU_INERT" \
+  "skill_commit == commit: no self-update hop ran, so the question collapses into the base_h arm"
+su_stamp "$SU_TREE"
+ss_assert "su-guard-unresolvable" "$(su_buckets "$SU_PC" "$SU/cons")" "$SU_INERT" \
+  "a skill_commit this distribution cannot resolve to a COMMIT compares against nothing"
+
+# --- MUTANTS on the preclassify predicate ---------------------------------------------
+#
+# THE COPY NEEDS ITS SIBLINGS, for the same reason arm C's battery does: preclassify resolves
+# setup-sites.md by `dirname "$0"` in TWO places -- the setup-substitution list and
+# `machinery_paths()` -- and a lone copy in a bare directory derives an empty machinery set, which
+# makes every arm inert and scores every mutant as killed. Mutated with awk rather than sed
+# because two of these REORDER or REWRITE a block, which sed cannot express portably, and a
+# battery whose mutants are written two ways is a battery with two things to review.
+#
+# EACH IS SCORED ON ITS EXACT BUCKET SET AND THE SEVEN SETS ARE DISTINCT. Two mutants producing
+# the same output are one mutant, and every seed above earns its place by separating one pair.
+su_mut() { # su_mut <name> <awk-program> -> path to the mutated preclassify, siblings beside it
+  local d="$SU/m-$1"
+  rm -rf "$d"; mkdir -p "$d"
+  cp "$(dirname "$SU_PC")"/*.sh "$(dirname "$SU_PC")"/*.md "$d"/ 2>/dev/null
+  awk "$2" "$SU_PC" > "$d/preclassify.sh" 2>/dev/null
+  printf '%s\n' "$d/preclassify.sh"
+}
+su_kill() { # su_kill <label> <awk> <stamp> <want-set> <why>
+  local g got
+  g="$(su_mut "$1" "$2")"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if cmp -s "$SU_PC" "$g"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "$1"
+    return
+  fi
+  su_stamp "$3"
+  got="$(su_buckets "$g" "$SU/cons")"
+  if [ "$got" = "$4" ]; then
+    printf '  ok    %-16s KILLED (%s)\n' "$1" "$5"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]  %s\n' "$1" "$got" "$4" "$5"
+  fi
+}
+
+# The two branch call sites open with byte-identical text and differ only in the bucket they
+# assign, so each mutation is anchored on the BUCKET, never on the shared condition. Anchoring on
+# `at_self_update` alone edits both, moves two cells, and scores a kill neither arm earned.
+SU_M_NOARM_M='index($0,"at_self_update \"$path\" \"$ours_h\"") && index($0,"bucket=\"UPSTREAM-ONLY\"") { next } { print }'
+SU_M_NOARM_A='index($0,"at_self_update \"$path\" \"$ours_h\"") && index($0,"bucket=\"UPSTREAM-ONLY-ADD\"") { next } { print }'
+SU_M_WIDE='index($0,"[ \"$2\" = \"$(self_update_hash \"$1\")\" ] || return 1") { next } { print }'
+SU_M_UNSCOPED='{ if (index($0,"at_self_update() {")) inf=1
+  if (inf && index($0,"  is_machinery \"$1\"")) { print "  return 0"; inf=0; next } print }'
+SU_M_ORDER='{ L[NR]=$0
+  if (index($0,"at_self_update \"$path\" \"$ours_h\"") && index($0,"bucket=\"UPSTREAM-ONLY\"")) A=NR
+  if (index($0,"ALREADY-AT-THEIRS") && index($0,"mode_at_theirs")) B=NR }
+END { if (!A || !B) exit 1
+  for (i=1;i<=NR;i++) { if (i==A) continue; if (i==B) print L[A]; print L[i] } }'
+SU_M_UNRES='{ if (index($0,"if [ -n \"$SELF_UPDATE_REF\" ] \\")) d=4; if (d>0) { d--; next } print }'
+SU_M_EQBASE='index($0,"= \"$BASE\" ] && SELF_UPDATE_REF=") { next } { print }'
+# THE SENTINEL IS THE THIRD LAYER, so a mutant that removes it ALONE changes nothing and would
+# score as a survivor. Two guards above it already refuse an empty ref -- `at_self_update`'s own
+# first conjunct, and the fact that MACHINERY_PATHS is only populated when a ref exists, which
+# makes `is_machinery` reject everything. Both layers are stripped in the pair below; the first
+# keeps the sentinel and the second does not, so the difference between them is the sentinel and
+# nothing else.
+SU_M_LAYERS='index($0,"[ -n \"$SELF_UPDATE_REF\" ] && MACHINERY_PATHS=") { print "MACHINERY_PATHS=\"$(machinery_paths)\""; next }
+index($0,"at_self_update() {") { print; getline; next }
+{ print }'
+SU_M_INDEX='index($0,"[ -n \"$SELF_UPDATE_REF\" ] && MACHINERY_PATHS=") { print "MACHINERY_PATHS=\"$(machinery_paths)\""; next }
+index($0,"at_self_update() {") { print; getline; next }
+index($0,"NO-SELF-UPDATE-REF") { next }
+{ print }'
+# THE SECOND SPELLING OF THE CORRECT PREDICATE, and it must PASS every arm above. A fixture that
+# rejects a competent author's other phrasing is as broken as one that accepts a regression: it
+# turns the next repair into a fixture edit and the author into someone who edits fixtures to go
+# green. This one streams the blob and hashes stdin instead of comparing two recorded blob shas,
+# and it orders its conjuncts the other way round.
+SU_M_SPELL='index($0,"at_self_update() {") {
+  print "at_self_update() { # <core-rel-path> <ours-hash>"
+  print "  [ -n \"$SELF_UPDATE_REF\" ] || return 1"
+  print "  is_machinery \"$1\" || return 1"
+  print "  git -C \"$DIST\" show \"${SELF_UPDATE_REF}:$1\" 2>/dev/null | git -C \"$DIST\" hash-object --stdin | grep -qxF \"$2\""
+  print "}"
+  s=4; next }
+s>0 { s--; next }
+{ print }'
+
+# THE UNMUTATED CONTROL, and it is PRESENCE-shaped: a copy that cannot resolve its siblings, or
+# one replaced by `exit 0`, emits the EMPTY set and fails this outright. An arm asserting "nothing
+# went wrong" would pass for both.
+rm -rf "$SU/m-control"; mkdir -p "$SU/m-control"
+cp "$(dirname "$SU_PC")"/*.sh "$(dirname "$SU_PC")"/*.md "$SU/m-control"/ 2>/dev/null
+su_stamp "$SU_MID"
+ss_assert "su-mut-control" "$(su_buckets "$SU/m-control/preclassify.sh" "$SU/cons")" "$SU_LIVE" \
+  "an unmutated copy beside its siblings reproduces the FULL live set, so a mutant's shift is the mutation"
+
+su_kill "su-mut-noarm-m" "$SU_M_NOARM_M" "$SU_MID" "$SU_NO_M" \
+  "deleting the M-branch arm sends the carried path back to the semantic-merge obligation that was filed, and touches the added path not at all"
+su_kill "su-mut-noarm-a" "$SU_M_NOARM_A" "$SU_MID" "$SU_NO_A" \
+  "and deleting the A-branch arm reaches the file BORN at the intermediate ref, which no base_h arm can catch"
+su_kill "su-mut-wide" "$SU_M_WIDE" "$SU_MID" "$SU_WIDE" \
+  "a predicate that stops comparing BYTES swallows the genuine consumer edit beside it -- the negative is what catches this"
+su_kill "su-mut-unscoped" "$SU_M_UNSCOPED" "$SU_MID" "$SU_UNSCOPED" \
+  "dropping the is_machinery conjunct suppresses a NON-machinery path, which apply.sh then overwrites with no operator review"
+su_kill "su-mut-order" "$SU_M_ORDER" "$SU_MID" "$SU_ORDER" \
+  "moved above ALREADY-AT-THEIRS the arm pre-empts the mode conjunct and calls a consumer that HAS the bit indistinguishable from one that needs it"
+su_kill "su-mut-unresolvable" "$SU_M_UNRES" "$SU_TREE" "$SU_LIVE" \
+  "without the ^{commit} guard a stamp naming a TREE resolves blobs and BOTH arms fire on a ref that means nothing"
+su_kill "su-mut-index" "$SU_M_INDEX" "-" "$SU_IDXH" \
+  "with its two upper layers stripped, dropping the sentinel makes an empty rev read the dist repo INDEX, which resolves for every tracked path"
+
+# THE OTHER HALF OF THAT PAIR, AND IT IS WHAT MAKES THE KILL ABOVE ATTRIBUTABLE. Same two layers
+# stripped, sentinel INTACT: the index is not read and nothing moves. Without this arm the kill
+# above could be crediting the sentinel for a change either of the other two guards produced.
+SU_G_LAYERS="$(su_mut su-layers "$SU_M_LAYERS")"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$SU_PC" "$SU_G_LAYERS"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-16s mutation matched nothing, so the sentinel kill above is unattributed\n' "su-mut-layers"
+else
+  su_stamp -
+  su_layers_got="$(su_buckets "$SU_G_LAYERS" "$SU/nostamp")"
+  if [ "$su_layers_got" = "$SU_INERT" ]; then
+    printf '  ok    %-16s HELD (the sentinel alone stops the index read once both layers above it are gone)\n' "su-mut-layers"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s got=[%s] want=[%s] -- the layers mutant moved a bucket on its own, so su-mut-index credits the sentinel for something else\n' \
+      "su-mut-layers" "$su_layers_got" "$SU_INERT"
+  fi
+fi
+
+# NOT A KILL, AND SAYING SO IS THE POINT. `skill_commit == commit` clears the ref, and with it left
+# in place `self_update_hash` returns `base_h` -- which the `ours_h = base_h` arm ABOVE has already
+# claimed, so no bucket can move. Measured across all four stamp states rather than reasoned: the
+# guard is a COST and a clarity guard with no behavioural subject, and an arm claiming to kill it
+# would be scoring the states either side of it. What IS asserted is su-guard-eqbase above.
+SU_G_EQBASE="$(su_mut su-eqbase "$SU_M_EQBASE")"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$SU_PC" "$SU_G_EQBASE"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-16s mutation matched nothing, so the inertness below is unproven\n' "su-mut-eqbase"
+else
+  su_stamp "$SU_BASE"
+  su_eq_got="$(su_buckets "$SU_G_EQBASE" "$SU/cons")"
+  if [ "$su_eq_got" = "$SU_INERT" ]; then
+    printf '  ok    %-16s INERT BY CONSTRUCTION (the base_h arm above already claims every state it could reach)\n' "su-mut-eqbase"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s got=[%s] want=[%s] -- removing the equality guard MOVED a bucket, so it has a subject after all and needs an arm\n' \
+      "su-mut-eqbase" "$su_eq_got" "$SU_INERT"
+  fi
+fi
+
+# NOT SCORED THROUGH su_kill, because it is not a kill: this build must AGREE with the shipped one
+# everywhere, and a helper that prints KILLED on agreement would read as its opposite.
+SU_G_SPELL="$(su_mut su-spelling "$SU_M_SPELL")"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$SU_PC" "$SU_G_SPELL"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-16s the re-spelling matched nothing, so the two arms below compare the shipped file with itself\n' "su-spelling"
+else
+  printf '  ok    %-16s the alternative spelling really is a different file\n' "su-spelling"
+fi
+su_stamp "$SU_MID"
+ss_assert "su-spelling-live" "$(su_buckets "$SU_G_SPELL" "$SU/cons")" "$SU_LIVE" \
+  "a predicate written with git show piped into hash-object answers identically, so these arms bind the BEHAVIOUR and not one phrasing"
+ss_assert "su-spelling-inert" "$(su_buckets "$SU_G_SPELL" "$SU/nostamp")" "$SU_INERT" \
+  "...and it is inert on an unstamped consumer too, so it satisfies the guards and not only the happy path"
+
+# --- THE GATE GOES QUIET WITH NO CHANGE TO ITS OWN ARM --------------------------------
+# The filing named arm C, and arm C's filter is not what was wrong. These two runs are the same
+# gate over the same tree, differing only in whether the consumer's stamp records the ref.
+su_stamp "$SU_MID"
+SU_GATE_MID="$(bash "$GATE" "$SU/dist" "$SU_BASE" "$SU_THEIRS" "$SU/cons" 2>&1)"
+SU_GATE_NO="$(bash "$GATE" "$SU/dist" "$SU_BASE" "$SU_THEIRS" "$SU/nostamp" 2>&1)"
+su_carry() { printf '%s\n' "$1" | awk -F'\t' '$1 == "SELF-UPDATE-CARRY" {print $2}' | sort | tr '\n' ','; }
+
+ss_assert "su-gate-quiet" "$(su_carry "$SU_GATE_MID")" \
+  'core/rules/doomed.md,core/rules/edited.md,core/rules/indexed.md,' \
+  "both carried paths drop out of the advisory while the edited one, the deleted one and the non-machinery one behave exactly as before"
+ss_assert "su-gate-differential" "$(su_carry "$SU_GATE_NO")" \
+  'core/rules/added.md,core/rules/carried.md,core/rules/doomed.md,core/rules/edited.md,core/rules/indexed.md,' \
+  "...and the SAME gate on a consumer with no stamp still carries both, so the quiet above is the stamp read and not a gate that went silent"
+
+# THE ZERO CARRIES ITS CONTROL. A gate emitting nothing satisfies the absence above identically.
+ss_assert "su-gate-verdict" \
+  "$(printf '%s\n' "$SU_GATE_MID" | awk -F'\t' \
+      '$1 == "SELF-UPDATE-OK" || $1 == "SELF-UPDATE-DEFER" || $1 == "SELF-UPDATE-UNDECIDED" {print $1}' \
+      | sort -u | tr '\n' ',')" \
+  "SELF-UPDATE-OK," "...and it still emits its own verdict, so the missing CARRY rows are a decision rather than a dead gate"
+
+# --- THE JOIN ITSELF: arm C now EVALS machinery_paths() out of preclassify.sh ----------
+# The population and the suppression scope are one derivation with one owner, loaded across a file
+# boundary by an `awk` range on the function's own text. That join has a failure mode no other arm
+# here can see: rename the function, or move it off column 0, and the extraction yields nothing,
+# `C_PATHS` is EMPTY, the membership test rejects every path, and the arm reports no divergence
+# having compared nothing -- output byte-identical to a clean pull. Scored on the GATE, not on the
+# buckets, because the row it must emit is the gate's.
+SU_G_MACHFN="$(su_mut su-machfn 'index($0,"machinery_paths() {") { print " machinery_paths() {"; next } { print }')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$SU_PC" "$SU_G_MACHFN"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-16s mutation matched nothing, so the set-empty row is unproven\n' "su-mut-machfn"
+else
+  su_machfn_out="$(bash "$(dirname "$SU_G_MACHFN")/self-update-gate.sh" \
+                     "$SU/dist" "$SU_BASE" "$SU_THEIRS" "$SU/cons" 2>&1)"
+  su_machfn_row="$(printf '%s\n' "$su_machfn_out" | awk -F'\t' '$1=="SELF-UPDATE-UNDECIDED" {print $2; exit}')"
+  su_machfn_carry="$(su_carry "$su_machfn_out")"
+  if [ "$su_machfn_row" = "setup-sites.md" ] && [ -z "$su_machfn_carry" ]; then
+    printf '  ok    %-16s KILLED (a function the extraction cannot find yields an EMPTY population, and the gate says so instead of going quiet)\n' "su-mut-machfn"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: row=[%s] carry=[%s] -- an unreadable machinery set must report UNDECIDED, never an empty advisory\n' \
+      "su-mut-machfn" "${su_machfn_row:-<none>}" "$su_machfn_carry"
+  fi
+fi
+# CONTROL: the SHIPPED gate over the same tree carries rows and emits no such verdict, so the row
+# above is the mutation and not a property of this probe.
+ss_assert "su-machfn-control" \
+  "$(printf '%s\n' "$SU_GATE_MID" | grep -c 'SELF-UPDATE-UNDECIDED')" "0" \
+  "the unmutated gate resolves a non-empty machinery set on this tree, so the UNDECIDED above is the mutation"
 
 echo
 if [ "$FAILURES" -gt 0 ]; then

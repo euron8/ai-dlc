@@ -264,43 +264,35 @@ if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ]; then
   # UNDECIDED, so an advisory row cannot change any answer it computes, and running this once
   # per release candidate in the range buys nothing. Same reasoning as advise_safe_stop's guard.
 
-  # The machinery globs, read from the co-located manifest rather than listed here -- the list
-  # gaining an entry is exactly when this arm matters most. `core/scripts/ai-dlc/*` is the one
-  # CONSUMER-shaped entry: upstream the path is `core/scripts/<name>`, and matching a dist path
-  # against it directly yields nothing at all, silently. SKILL.md documents the same
-  # substitution for the same reason.
+  # THE MACHINERY SET IS RESOLVED BY `preclassify.sh`, NOT HERE, AND THE MOVE IS THE POINT.
+  # This arm's population and preclassify's `skill_commit` suppression scope are the SAME set,
+  # and the two resolutions drifting apart is silent in both directions: a narrower copy leaves
+  # a false CARRY row standing, a wider one suppresses beyond the reason it was given. So the
+  # derivation has ONE owner, and it is the script this arm already runs. Loaded the way
+  # `self-update-fixtures.sh` already loads `map_consumer()` out of the same file -- an `eval`
+  # of the function's own text, rather than a second copy of it. All the reasoning that used to
+  # sit here -- why the manifest and not a list, why `set -f`, why `ls-files --with-tree` and
+  # not `ls-tree`, why BOTH refs -- travelled with the code and is in `machinery_paths()`.
   #
-  # `set -f` IS LOAD-BEARING AND ITS ABSENCE IS SILENT. These entries are git PATHSPECS, and an
-  # unquoted `$C_GLOBS` in a `for` is subject to shell pathname expansion first -- so
-  # `core/rules/*.md` expands against the CWD before git ever sees it, and every glob entry
-  # degrades to whatever happened to be on disk there. Measured while building this arm: the
-  # machinery set collapsed from thirteen globs to the ONE entry that carries no glob character,
-  # the arm went quiet on two real divergences, and nothing anywhere reported an error.
-  #
-  # RESOLVED AGAINST BOTH REFS, NOT THE WORKING TREE. A machinery path DELETED at `theirs` is
-  # absent from a `ls-files` of the checkout, and that path is exactly the
-  # `UPSTREAM-DELETED+consumer-modified->CLASSIFY` case -- the one where the consumer's copy is
-  # the only copy left. Keying on the checkout drops it, quietly, and it is the divergence with
-  # the most to lose.
-  #
-  # `ls-files --with-tree`, NOT `ls-tree`. These entries are the manifest's own glob dialect and
-  # only the index commands speak it: `ls-tree` matches a pathspec by literal prefix, returns
-  # EMPTY for every globbed entry, and reports no error while doing it -- and `:(glob)` magic is
-  # rejected by that command outright. `--with-tree=<ref>` gives ls-files semantics against an
-  # arbitrary ref, which is what resolving each entry at BASE and at THEIRS requires.
-  C_MANIFEST="$(dirname "$SELF_SRC")/setup-sites.md"
+  # THREE THINGS THE EVAL'D BODY READS OUT OF THIS SCRIPT'S SCOPE, and all three are asserted
+  # below rather than assumed: `DIST`, `BASE` and `THEIRS` carry the same names in both files,
+  # and the function resolves its manifest as `$(dirname "$0")/setup-sites.md` — which is this
+  # script's own directory, correct only because `install.sh` keeps the whole reconcile subtree
+  # together in both layouts. A rename on any of them makes this arm resolve an EMPTY set.
+  C_PRE_SRC="$(dirname "$SELF_SRC")/preclassify.sh"
   C_PATHS=""
-  if [ -f "$C_MANIFEST" ]; then
-    C_GLOBS="$(awk '/^machinery:/{f=1;next} f&&/^  - /{sub(/^  - /,"");print;next} f{exit}' "$C_MANIFEST")"
-    set -f
-    for c_g in $C_GLOBS; do
-      case "$c_g" in core/scripts/ai-dlc/*) c_g="core/scripts/${c_g#core/scripts/ai-dlc/}" ;; esac
-      C_PATHS="$C_PATHS
-$(git -C "$DIST" ls-files --with-tree="$BASE" -- "$c_g" 2>/dev/null)
-$(git -C "$DIST" ls-files --with-tree="$THEIRS" -- "$c_g" 2>/dev/null)"
-    done
-    set +f
-    C_PATHS="$(printf '%s\n' "$C_PATHS" | grep -v '^$' | sort -u)"
+  if [ -f "$C_PRE_SRC" ]; then
+    eval "$(awk '/^machinery_paths\(\) \{/,/^\}/' "$C_PRE_SRC" 2>/dev/null)"
+    if command -v machinery_paths >/dev/null 2>&1; then
+      C_PATHS="$(machinery_paths)"
+    fi
+  fi
+  # A SILENT EMPTY SET IS THIS ARM'S OTHER FALSE ZERO. `C_PATHS` empty makes the membership
+  # test below reject every path, so the arm reports no divergence having compared nothing --
+  # byte-identical output to a clean pull. It is the same doctrine as the preclassify-empty
+  # guard below: a gate that cannot read its own subject must not return OK.
+  if [ -z "$C_PATHS" ]; then
+    emit SELF-UPDATE-UNDECIDED "setup-sites.md" "the machinery path set resolved EMPTY, so whether any machinery path is consumer-modified is UNKNOWN. \`machinery_paths()\` is loaded out of preclassify.sh; if that function was renamed, moved off column 0, or its \`machinery:\` block emptied, this arm compares against nothing and its silence would read exactly like a clean pull."
   fi
 
   C_PRE="$(dirname "$SELF_SRC")/preclassify.sh"
