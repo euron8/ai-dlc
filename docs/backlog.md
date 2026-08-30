@@ -3361,6 +3361,24 @@ on this side does not fail for want of volume; it fails because its expectations
 hand being checked — the defect `.claude/rules/fixture-mutants.md` names as keeping the fixture
 author different from the arm's.
 
+**AND THE GENERAL FORM IS NEITHER AUTHORSHIP NOR VOLUME: AN INPUT SET THAT AGREES BY CONSTRUCTION
+CANNOT DISCRIMINATE.** The two rows above agree because one hand wrote the predicate and the case.
+A consumer artifact written AFTER a predicate ships agrees for a different reason and is equally
+useless. So the discriminating population at any future pull is the subset PREDATING the predicate
+under test, never the total — and quoting a total is how a vacuous run reads as a clean one.
+
+**Derived, with a control, against the consumer at `0.443.0`:** of 94 series, **75 carry a
+derivable `invoked_at`**; of those, **72 predate the `v0.442.0` merge and 3 do not**. Control: the
+same query at an impossible-future cut returns 75, matching the derivable count. Two things follow
+and both are limits on the metric itself, not on the corpus:
+
+- **The decay has already begun** — 3 series were authored under the new predicate on day one, and
+  every series written from now on joins them. Today's near-coincidence of "total" and
+  "discriminating" is a property of this week and must not be assumed at the next pull.
+- **19 of 94 series carry no derivable `invoked_at` at all**, so the discriminating-subset query
+  cannot classify a fifth of the corpus and silently drops it. A figure taken from this metric is a
+  FLOOR, and reporting it without that sentence repeats the defect one level up.
+
 **So the entry's subject is a BOUNDARY, not a missing tool**, and `consumer-boundary.md` already
 owns it: the only inputs that can discriminate are artifacts THIS SIDE DID NOT WRITE. Do not spend
 effort building a corpus to recover a property a differential has for free, and do not assume a
