@@ -79,7 +79,8 @@ program has hit repeatedly. Do not rotate to make room; close on a measurement, 
 ### BATCH 26 SHIPPED TWICE — `v0.442.0` AND THEN `v0.443.0`, WHICH FIXED IT.
 
 **Both releases are batch 26.** `v0.443.0` is a correction to `v0.442.0`, not a new sweep-driven
-batch, so do not number your batch 28.
+batch. **That numbering instruction has been SPENT — batch 27 has since shipped, and the block at
+the top of this file is the one that tells you your number. Do not take a batch number from here.**
 
 **THE EXIT CRITERIA LANDED, THEN HAD TO BE CORRECTED, AND THE CORRECTION IS THE LESSON.**
 `v0.442.0` made arm B a BICONDITIONAL: at a ceiling of three, `EXIT_CONDITION_NOT_MET` at or below
@@ -1774,7 +1775,8 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **RUN THE SWEEP (action 1b below) AND LET IT PICK BATCH 28's SUBJECT. NOTHING IS GATING YOU.**
-   Batch 27 is merged as `v0.444.0` and no operator decision is open. The candidate it closed,
+   Batch 27 is merged as `v0.444.0` AND `v0.445.0` (both are batch 27; `v0.445.0` corrects
+   `v0.444.0`'s own detector, so number yours 28) and no operator decision is open. The candidate it closed,
    `PC-S307-PULL-CANNOT-SEE-WHAT-A-PREDICATE-CHANGE-RECLASSIFIES`, is DONE — do not pick it up, do
    not file it, do not re-scope onto it.
 
