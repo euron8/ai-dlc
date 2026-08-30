@@ -3342,12 +3342,21 @@ side of the boundary: `v0.442.0` reached a consumer precisely because a single p
 pass series in the tree with their adjudicated verdicts, and fail the push when a predicate change
 flips one without a declared reason. Three objections to answer before building it:
 
-- **A frozen verdict encodes today's behaviour as correct**, so a corpus captured over a buggy
-  predicate makes the bug golden and the fix look like the regression. Capture needs a provenance
-  story of its own.
+- **A frozen verdict encodes today's behaviour as correct, and the counterfactual is exact.** Put
+  by the peer session that measured the 33: *had `v0.442.0`'s arm B shipped a week earlier and the
+  corpus been cut after it, the 33 would have frozen as CONFORMING and `v0.443.0` would have read
+  as the regression.* A corpus can only ever encode what the predicate said when it was frozen,
+  which is the thing under test. **This is the objection to answer first, and neither side has an
+  answer.** A characterization corpus is not an oracle and must not be scoped as one.
 - **`consumer-boundary.md` says no gate reaches the consumer's tree**, so the corpus must be
   committed here — and a committed copy of another repo's artifacts goes stale silently, which is
   the class this repo already has scars from.
+- **AND THAT CORPUS WAS NEVER STABLE TO BEGIN WITH, which is worse than going stale.** The only
+  tree holding real series is a LIVE sprint working directory: the population changes every
+  sprint, artifacts are archived into `*-cycle-1/` directories mid-cycle, and the population
+  DEFINITION was derived wrongly twice in one day by two parties before the two answers agreed —
+  once as a silent under-count, once as an over-wide set including repair and resolution records
+  that are not pass series at all. A harvest inherits all of that.
 - **A declared-reason escape hatch is an opt-out**, and `CLAUDE.md` holds that an instruction
   shipping its own opt-out is not an instruction. Whether the declaration can be made costly
   enough to bind is the open design question.
