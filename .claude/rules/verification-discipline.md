@@ -95,6 +95,11 @@ differential read 7130 against 7130 with a spread of ±2 and shipped the claim "
 which a per-line attribution table then contradicted directly. Ask what a differential can
 RESOLVE before reading a null off it.
 
+**DIFFERING SIDES ARE NOT ENOUGH: ASK WHAT MAKES BOTH FAIL.** Two different programs both failing
+for a reason NEITHER owns is non-discriminating and its null reads as agreement. Measured: 16
+series, 16 identical `1 -> 1` pairs, 0 findings — the subject fails CLOSED without a flag the probe
+cannot pass. The signal was the ARM each side NAMED, not its status.
+
 ## Time both sides the same way, and interleave the reps
 
 A `mktemp` extraction timed against the live repo compares two TREES, not two revisions.

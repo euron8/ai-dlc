@@ -510,8 +510,32 @@ fi
 # not a tracked write, and no validator can see it. The work does not begin with a matching Read
 # either: the session that did this was reading its own plan, not the runbook. That leaves the
 # unconditional channel, and `resident-context.md` forbids scoping a prose-only rule outright.
+#
+# RAISED AGAIN, 50202 -> 50600, ON AN OPERATOR RULING, FOR ONE RULE COSTING 351 BYTES.
+# THIS ONE CARRIED NO SUBTRACTION EITHER, AND IT IS THE SECOND CONSECUTIVE RAISE THAT DID NOT.
+# Recorded as the standard it did NOT meet, in the same form as the fourth raise above, so the
+# next author does not read the run of them as precedent. The author looked for a subtraction
+# and reported finding none defensible; the vestigial pool was NOT re-measured against
+# `resident-context.md`'s three clauses this time, which is a cheaper check than the raise and
+# was skipped. That omission is the honest part of this entry.
+#
+# The rule is `verification-discipline.md`'s "differing sides are not enough: ask what makes
+# both fail" -- two genuinely DIFFERENT programs both failing for a reason NEITHER owns is
+# non-discriminating, and the resulting null is byte-identical to agreement. The existing
+# section beside it covers only the case where the two sides are the SAME program, which is a
+# different defect with a different control. Earned at v0.444.0: an exit-code differential over
+# the reference consumer's real corpus read 16 series, 16 identical `1 -> 1` pairs and 0
+# findings, because the subject fails CLOSED without a flag a bare probe cannot pass. It shipped
+# as a clean, plausible, wrong ZERO and was caught only by comparing the ARM each side NAMED.
+#
+# WHY IT CANNOT BE SCOPED OR MECHANIZED. No tracked file carries a trace of it: the failure is a
+# property of the INPUT a differential is run on, decided in a tool call, and no arm can scan for
+# "both sides failed for the same unrelated reason". The specific instance IS mechanized -- the
+# `predicate-reclassification` fixture's M1 mutant kills the exit-code spelling -- but that arm
+# is bound to one detector and says nothing to the next differential in another subsystem. Prose
+# only, so `resident-context.md` bars scoping it.
 # ---------------------------------------------------------------------------
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-50202}"
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-50600}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done
