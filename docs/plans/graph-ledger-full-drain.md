@@ -127,6 +127,14 @@ NOT disjoint — the overlap is 2 (`PC-S303-STUB-AUDIT-MARKER-…` and `PC-S307-
 and 68 − 2 = 66 is the control. TERMINAL 25, discharged-but-unnamed 0. Never report the live/archive
 BACKLOG entry counts as progress.
 
+**`v0.442.0` DID NOT MOVE THE PARTITION, AND THAT IS THE CORRECT OUTCOME, NOT A MISS.** Every
+figure above was re-derived after the merge and is byte-identical to the pre-batch reading —
+66/132/34/32, DISCHARGED 16, IN-FLIGHT 20, UNTOUCHED 32, overlap 2, TERMINAL 25, unnamed 0, all
+controls correct. Batch 26's subject was named by the OPERATOR and is not PC-backed, so it
+discharges nothing upstream by construction. **Do not read an unmoved partition after an
+operator-named batch as a failure to make progress** — the goal metric moves when a PC-backed
+candidate closes, and this batch closed none because it was not given one.
+
 **`v0.440.0` MOVED THE PARTITION for the second batch running.** `PC-S339` crossed from IN-FLIGHT to
 DISCHARGED, so 15/20 became 16/19, and TERMINAL rose 24 → 25 because rotating `BL-117` carried its
 second citation, `PC-S334`, into the archive. The live count did not move and will not: closing an
