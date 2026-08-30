@@ -24,10 +24,10 @@ have nothing to defend.
 
 **The bmad review skill's rules do NOT apply to a convergence review.** It demands
 *at least ten findings*, *HALTs if it finds zero*, and emits *no severity, priority,
-or ranking*. All three are wrong for a cycle whose exit condition is zero CRITICAL
-and zero MAJOR, graded on the ladder below: a ten-finding floor has no fixed point,
-halting on zero forbids the terminal state, and the gate cannot read a severity
-nobody wrote. Ignore all three.
+or ranking*. All three are wrong for a cycle whose exit criteria are zero CRITICAL
+and at most three blocking MAJOR, graded on the ladder below: a ten-finding floor has
+no fixed point, halting on zero forbids the terminal state, and the gate cannot read a
+severity nobody wrote. Ignore all three.
 
 **On a ONE-SHOT sweep, ignore the floor and the HALT there too.** What the skill
 supplies on a one-shot is the METHOD — a cynical, breadth-first read with no loop
@@ -41,7 +41,7 @@ no gate ever objected. A finding floor and a HALT are not right for a one-shot.
 
 This is not a matter of tidiness. `stories-test-strategy.md` and
 `sprint-review.md` both say **"Apply fixes"** on the one-shot's output, against an
-artifact the Rule 8 cycle has just driven to zero CRITICAL and zero MAJOR. A
+artifact the Rule 8 cycle has just driven to its exit criteria. A
 manufactured finding there is an edit to a correct artifact, and the edit is where
 new defects come from — the same failure the convergence loop excluded this skill
 to avoid.
@@ -259,13 +259,27 @@ CRITICAL and MAJOR counts.
 
 **The residue decides the verdict. You do not.**
 
-- `findings_critical == 0` and `findings_major - findings_major_underived == 0`
+- `findings_critical == 0` and `findings_major - findings_major_underived <= 3`
   → **`EXIT_CONDITION_MET`**. The step's exit condition is *"continue until only
   nitpicks remain,"* and by the ladder above MINOR/NIT **is** the nitpick bucket. A
-  residue clean of CRITICALs and of *derived* MAJORs is a MET exit condition, not a
-  nearly-met one. Say MET.
-- any CRITICAL, or any MAJOR that is **not** counted in `findings_major_underived`
-  → `EXIT_CONDITION_NOT_MET`.
+  residue clean of CRITICALs, carrying no more than three *derived* MAJORs, is a MET
+  exit condition, not a nearly-met one. Say MET.
+- any CRITICAL, or **more than three** MAJORs that are **not** counted in
+  `findings_major_underived` → `EXIT_CONDITION_NOT_MET`.
+
+**THE CEILING IS THREE, IT IS NOT ZERO, AND YOU DO NOT GET TO ROUND IT DOWN.** A residue
+of 0 CRITICAL and one, two or three blocking MAJORs is a **converged** cycle. Stamping
+`EXIT_CONDITION_NOT_MET` on it is a review that converged and then refused to say so in the
+field the gate reads, and `validate-adversarial-convergence.sh` arm B refuses it in both
+directions: it refuses a MET above the ceiling AND a NOT_MET at or below it. The residue
+decides the verdict.
+
+**The three MAJORs are not forgiven — they are just not another PASS.** File them, and
+the lead repairs them out of band. What the ceiling buys is termination: the plateau
+this loop used to sit in, 0 CRITICAL against one standing MAJOR that each repair
+rewrites and the next pass falsifies, is now a met exit condition rather than a stall.
+A blocking count **above** the ceiling held across passes is still a stall (arm E), and
+its remedy is unchanged.
 - **`findings_critical_prior_scope` above the previous pass's `findings_critical`**
   → `DIVERGENT_HARD_BLOCK`, and say why in your first line. These are defects the
   repair injected into text that had **already been cleared**. This is not "not met,

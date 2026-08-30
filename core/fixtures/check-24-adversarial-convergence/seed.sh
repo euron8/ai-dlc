@@ -246,25 +246,33 @@ pass "$TARGET/long-series-p-naming/s1-adversarial-p11.md" 11 0 0 3 EXIT_CONDITIO
 for m in 1 3 6 7 9 10; do repair "$TARGET/long-series-p-naming/s1-brief-repair-p$m.md"; done
 
 # --- stalled: S290's brief cycle, passes 11-13 --------------------------------
-# ZERO CRITICAL, MAJOR pinned at 1, three passes running. Not converged (MAJOR>0), not
-# divergent (CRITICAL=0) -- so before v0.55.3 it fell through every rung into "run another
-# pass", forever. Must FAIL (E).
+# ZERO CRITICAL, blocking MAJOR pinned ABOVE the exit ceiling, three passes running. Not
+# converged (blocking > MAJOR_EXIT_CEILING), not divergent (CRITICAL=0) -- so before v0.55.3
+# it fell through every rung into "run another pass", forever. Must FAIL (E).
+#
+# THE PLATEAU IS PINNED AT 4, NOT AT 1, AND THE NUMBER IS LOAD-BEARING. The live S290 series
+# this case reproduces plateaued at ONE MAJOR, and at a ceiling of 3 that residue is a MET
+# exit condition -- arm B's business, not arm E's. Seeded at 1 this case would assert the
+# opposite of the shipped criteria, and it would do so while still exiting 1, because arm B
+# would fire on the same files for a different reason. The severity SHAPE is preserved
+# exactly (a fall into the plateau, then flat): p1 is one above the plateau so the run resets
+# there, and p3/p4 hold it so the peak reaches K.
 mkdir -p "$TARGET/stalled"
-pass "$TARGET/stalled/s1-adversarial-p1.md" 1 2 2 3 EXIT_CONDITION_NOT_MET 1 NOSHA
-pass "$TARGET/stalled/s1-adversarial-p2.md" 2 0 1 3 EXIT_CONDITION_NOT_MET 0 NOSHA
-pass "$TARGET/stalled/s1-adversarial-p3.md" 3 0 1 4 EXIT_CONDITION_NOT_MET 0 NOSHA
-pass "$TARGET/stalled/s1-adversarial-p4.md" 4 0 1 2 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/stalled/s1-adversarial-p1.md" 1 2 5 3 EXIT_CONDITION_NOT_MET 1 NOSHA
+pass "$TARGET/stalled/s1-adversarial-p2.md" 2 0 4 3 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/stalled/s1-adversarial-p3.md" 3 0 4 4 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/stalled/s1-adversarial-p4.md" 4 0 4 2 EXIT_CONDITION_NOT_MET 0 NOSHA
 
 # --- stall-then-converges: THE DECOY FOR E ------------------------------------
-# Holds MAJOR at 1 for two passes -- one short of the threshold -- and then actually
-# fixes it. E must NOT fire: a cycle that is slow is not a cycle that is stuck. This is
-# the case that decides the threshold; if it goes red, K is too tight.
+# Holds a blocking MAJOR above the ceiling for two passes -- one short of the threshold --
+# and then actually fixes it. E must NOT fire: a cycle that is slow is not a cycle that is
+# stuck. This is the case that decides the threshold; if it goes red, K is too tight.
 mkdir -p "$TARGET/stall-then-converges"
-pass "$TARGET/stall-then-converges/s1-adversarial-p1.md" 1 2 2 1 EXIT_CONDITION_NOT_MET 2 NOSHA
-pass "$TARGET/stall-then-converges/s1-adversarial-p2.md" 2 0 1 2 EXIT_CONDITION_NOT_MET 0 NOSHA
-pass "$TARGET/stall-then-converges/s1-adversarial-p3.md" 3 0 1 2 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/stall-then-converges/s1-adversarial-p1.md" 1 2 5 1 EXIT_CONDITION_NOT_MET 2 NOSHA
+pass "$TARGET/stall-then-converges/s1-adversarial-p2.md" 2 0 4 2 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/stall-then-converges/s1-adversarial-p3.md" 3 0 4 2 EXIT_CONDITION_NOT_MET 0 NOSHA
 pass "$TARGET/stall-then-converges/s1-adversarial-p4.md" 4 0 0 2 EXIT_CONDITION_MET     0 NOSHA
-# p1->p2 falls (2C->0C) and p3->p4 falls (1M->0M); both repairs recorded (arm H).
+# p1->p2 falls (2C->0C) and p3->p4 falls (4M->0M); both repairs recorded (arm H).
 repair "$TARGET/stall-then-converges/s1-brief-repair-p1.md"
 repair "$TARGET/stall-then-converges/s1-brief-repair-p3.md"
 
@@ -276,7 +284,11 @@ repair "$TARGET/stall-then-converges/s1-brief-repair-p3.md"
 # THE CASE THAT WOULD HAVE CAUGHT D2, AND THE REASON THE HOIST ALONE IS NOT ENOUGH.
 #
 # The live series held 0C/1M across p11..p14 (stall run = 3, against K=2) and then a
-# CRITICAL appeared at p15 and it diverged. Arm E used to live INSIDE the `*)` branch of
+# CRITICAL appeared at p15 and it diverged. The plateau here is seeded ABOVE the exit ceiling
+# rather than at the live series' 1 MAJOR, for the reason spelled out on `stalled` above: at
+# MAJOR_EXIT_CEILING=3 a one-MAJOR plateau is a MET exit condition and arm E must not count
+# it. The TRAJECTORY -- plateau, then a CRITICAL, then divergence -- is what this case tests
+# and it is unchanged. Arm E used to live INSIDE the `*)` branch of
 # the terminal-verdict case, so a series ending DIVERGENT took arm D's branch and E was
 # never evaluated at all. And a naively-hoisted E keyed on STALL_RUN is STILL false here:
 # the run RESETS at p5 when the CRITICAL lands. Only the PEAK survives the reset.
@@ -290,10 +302,10 @@ repair "$TARGET/stall-then-converges/s1-brief-repair-p3.md"
 # score a FALSE PASS against the broken validator -- this repo's own defect class, one
 # level up, inside the very test written to catch it.
 mkdir -p "$TARGET/stalled-then-diverges"
-pass "$TARGET/stalled-then-diverges/s1-adversarial-p1.md" 1 2 2 3 EXIT_CONDITION_NOT_MET 1 NOSHA
-pass "$TARGET/stalled-then-diverges/s1-adversarial-p2.md" 2 0 1 3 EXIT_CONDITION_NOT_MET 0 NOSHA
-pass "$TARGET/stalled-then-diverges/s1-adversarial-p3.md" 3 0 1 4 EXIT_CONDITION_NOT_MET 0 NOSHA
-pass "$TARGET/stalled-then-diverges/s1-adversarial-p4.md" 4 0 1 2 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/stalled-then-diverges/s1-adversarial-p1.md" 1 2 5 3 EXIT_CONDITION_NOT_MET 1 NOSHA
+pass "$TARGET/stalled-then-diverges/s1-adversarial-p2.md" 2 0 4 3 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/stalled-then-diverges/s1-adversarial-p3.md" 3 0 4 4 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/stalled-then-diverges/s1-adversarial-p4.md" 4 0 4 2 EXIT_CONDITION_NOT_MET 0 NOSHA
 pass "$TARGET/stalled-then-diverges/s1-adversarial-p5.md" 5 1 0 1 DIVERGENT_HARD_BLOCK   1 NOSHA
 
 # --- divergent-resolved: THE RELEASE ------------------------------------------
@@ -406,7 +418,7 @@ pass "$TARGET/restart-cycle/s1-adversarial-p2.md" 2 1 1 1 EXIT_CONDITION_NOT_MET
 pass "$TARGET/restart-cycle/s1-adversarial-p3.md" 3 0 0 2 EXIT_CONDITION_MET     0 n33 "" 2026-07-13T11:00:00Z
 # the corpse:
 pass "$TARGET/restart-cycle/s1-adversarial-p4.md" 4 1 2 1 EXIT_CONDITION_NOT_MET 1 d44 "" 2026-07-12T09:00:00Z
-pass "$TARGET/restart-cycle/s1-adversarial-p5.md" 5 0 3 1 EXIT_CONDITION_NOT_MET 0 d55 "" 2026-07-12T10:00:00Z
+pass "$TARGET/restart-cycle/s1-adversarial-p5.md" 5 0 4 1 EXIT_CONDITION_NOT_MET 0 d55 "" 2026-07-12T10:00:00Z
 pass "$TARGET/restart-cycle/s1-adversarial-p6.md" 6 2 4 1 DIVERGENT_HARD_BLOCK   2 d66 "" 2026-07-12T11:00:00Z
 
 # --- counts-omitted: arm A, and arm E's free bypass -----------------------------
@@ -415,9 +427,9 @@ pass "$TARGET/restart-cycle/s1-adversarial-p6.md" 6 2 4 1 DIVERGENT_HARD_BLOCK  
 # silently, with the gate still green. Arm A used to require only `verdict:`.
 # A check you can switch off by omitting a field is not a check.
 mkdir -p "$TARGET/counts-omitted"
-pass "$TARGET/counts-omitted/s1-adversarial-p1.md" 1 2 2 3 EXIT_CONDITION_NOT_MET 1 NOSHA
-pass "$TARGET/counts-omitted/s1-adversarial-p2.md" 2 0 1 3 EXIT_CONDITION_NOT_MET 0 NOSHA
-pass "$TARGET/counts-omitted/s1-adversarial-p3.md" 3 0 1 4 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/counts-omitted/s1-adversarial-p1.md" 1 2 5 3 EXIT_CONDITION_NOT_MET 1 NOSHA
+pass "$TARGET/counts-omitted/s1-adversarial-p2.md" 2 0 4 3 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/counts-omitted/s1-adversarial-p3.md" 3 0 4 4 EXIT_CONDITION_NOT_MET 0 NOSHA
 # strip BOTH the structured field and the free-text fallback severity_count reads
 sed -i.bak -e '/^findings_major:/d' -e 's/^findings: .*/findings: see prose/' \
   "$TARGET/counts-omitted/s1-adversarial-p3.md"
@@ -466,8 +478,8 @@ record "$TARGET/divergent-terminal-resolved/s1-resolution-p2.md" \
 # lead having repaired the artifact inline: every other arm passes, and only reading the
 # record for a file that is not there tells the difference.
 mkdir -p "$TARGET/repaired-inline-no-record"
-pass "$TARGET/repaired-inline-no-record/s1-adversarial-pass1.md" 1 2 1 1 EXIT_CONDITION_NOT_MET "" NOSHA
-pass "$TARGET/repaired-inline-no-record/s1-adversarial-pass2.md" 2 0 1 2 EXIT_CONDITION_NOT_MET "" NOSHA
+pass "$TARGET/repaired-inline-no-record/s1-adversarial-pass1.md" 1 2 5 1 EXIT_CONDITION_NOT_MET "" NOSHA
+pass "$TARGET/repaired-inline-no-record/s1-adversarial-pass2.md" 2 0 4 2 EXIT_CONDITION_NOT_MET "" NOSHA
 pass "$TARGET/repaired-inline-no-record/s1-adversarial-pass3.md" 3 0 0 2 EXIT_CONDITION_MET "" NOSHA
 
 # --- repaired-delegated: THE PASS TWIN -- MUST PASS ---------------------------
@@ -475,8 +487,8 @@ pass "$TARGET/repaired-inline-no-record/s1-adversarial-pass3.md" 3 0 0 2 EXIT_CO
 # the two repairs left structured records on disk. Arm H passes; the differential is the
 # proof arm H stats the record rather than reading the series.
 mkdir -p "$TARGET/repaired-delegated"
-pass "$TARGET/repaired-delegated/s1-adversarial-pass1.md" 1 2 1 1 EXIT_CONDITION_NOT_MET "" NOSHA
-pass "$TARGET/repaired-delegated/s1-adversarial-pass2.md" 2 0 1 2 EXIT_CONDITION_NOT_MET "" NOSHA
+pass "$TARGET/repaired-delegated/s1-adversarial-pass1.md" 1 2 5 1 EXIT_CONDITION_NOT_MET "" NOSHA
+pass "$TARGET/repaired-delegated/s1-adversarial-pass2.md" 2 0 4 2 EXIT_CONDITION_NOT_MET "" NOSHA
 pass "$TARGET/repaired-delegated/s1-adversarial-pass3.md" 3 0 0 2 EXIT_CONDITION_MET "" NOSHA
 repair "$TARGET/repaired-delegated/s1-brief-repair-p1.md"
 repair "$TARGET/repaired-delegated/s1-brief-repair-p2.md"
@@ -486,8 +498,8 @@ repair "$TARGET/repaired-delegated/s1-brief-repair-p2.md"
 # narrative prose -- no disposition/edit/derivation. Isolates the structure arm from bare
 # existence: a stub file is not a repair record.
 mkdir -p "$TARGET/repair-record-empty"
-pass "$TARGET/repair-record-empty/s1-adversarial-pass1.md" 1 2 1 1 EXIT_CONDITION_NOT_MET "" NOSHA
-pass "$TARGET/repair-record-empty/s1-adversarial-pass2.md" 2 0 1 2 EXIT_CONDITION_NOT_MET "" NOSHA
+pass "$TARGET/repair-record-empty/s1-adversarial-pass1.md" 1 2 5 1 EXIT_CONDITION_NOT_MET "" NOSHA
+pass "$TARGET/repair-record-empty/s1-adversarial-pass2.md" 2 0 4 2 EXIT_CONDITION_NOT_MET "" NOSHA
 pass "$TARGET/repair-record-empty/s1-adversarial-pass3.md" 3 0 0 2 EXIT_CONDITION_MET "" NOSHA
 repair "$TARGET/repair-record-empty/s1-brief-repair-p1.md" unstructured
 repair "$TARGET/repair-record-empty/s1-brief-repair-p2.md"
@@ -503,8 +515,8 @@ repair "$TARGET/repair-record-empty/s1-brief-repair-p2.md"
 # re-narrowed to the plain form, this goes red; if it is ever widened to "any line
 # mentioning the word", repair-record-off-label below goes red. Neither can move alone.
 mkdir -p "$TARGET/repaired-delegated-bold"
-pass "$TARGET/repaired-delegated-bold/s1-adversarial-pass1.md" 1 2 1 1 EXIT_CONDITION_NOT_MET "" NOSHA
-pass "$TARGET/repaired-delegated-bold/s1-adversarial-pass2.md" 2 0 1 2 EXIT_CONDITION_NOT_MET "" NOSHA
+pass "$TARGET/repaired-delegated-bold/s1-adversarial-pass1.md" 1 2 5 1 EXIT_CONDITION_NOT_MET "" NOSHA
+pass "$TARGET/repaired-delegated-bold/s1-adversarial-pass2.md" 2 0 4 2 EXIT_CONDITION_NOT_MET "" NOSHA
 pass "$TARGET/repaired-delegated-bold/s1-adversarial-pass3.md" 3 0 0 2 EXIT_CONDITION_MET "" NOSHA
 repair "$TARGET/repaired-delegated-bold/s1-brief-repair-p1.md" bold
 repair "$TARGET/repaired-delegated-bold/s1-brief-repair-p2.md" bold
@@ -517,8 +529,8 @@ repair "$TARGET/repaired-delegated-bold/s1-brief-repair-p2.md" bold
 # RIGHT to fail it. Measured on the reference consumer: 12 of 74 records look like this, and
 # admitting them would require a predicate that also matches ordinary prose.
 mkdir -p "$TARGET/repair-record-off-label"
-pass "$TARGET/repair-record-off-label/s1-adversarial-pass1.md" 1 2 1 1 EXIT_CONDITION_NOT_MET "" NOSHA
-pass "$TARGET/repair-record-off-label/s1-adversarial-pass2.md" 2 0 1 2 EXIT_CONDITION_NOT_MET "" NOSHA
+pass "$TARGET/repair-record-off-label/s1-adversarial-pass1.md" 1 2 5 1 EXIT_CONDITION_NOT_MET "" NOSHA
+pass "$TARGET/repair-record-off-label/s1-adversarial-pass2.md" 2 0 4 2 EXIT_CONDITION_NOT_MET "" NOSHA
 pass "$TARGET/repair-record-off-label/s1-adversarial-pass3.md" 3 0 0 2 EXIT_CONDITION_MET "" NOSHA
 repair "$TARGET/repair-record-off-label/s1-brief-repair-p1.md" off-label
 repair "$TARGET/repair-record-off-label/s1-brief-repair-p2.md" bold
@@ -559,10 +571,10 @@ printf '%s\n' "$TARGET"
 # Identical severity trajectory to `stalled` above -- the ONLY difference is the record.
 # That pairing is the assertion: same series, one file, opposite states.
 mkdir -p "$TARGET/stalled-resolved"
-pass "$TARGET/stalled-resolved/s1-adversarial-p1.md" 1 2 2 3 EXIT_CONDITION_NOT_MET 1 NOSHA
-pass "$TARGET/stalled-resolved/s1-adversarial-p2.md" 2 0 1 3 EXIT_CONDITION_NOT_MET 0 NOSHA
-pass "$TARGET/stalled-resolved/s1-adversarial-p3.md" 3 0 1 4 EXIT_CONDITION_NOT_MET 0 NOSHA
-pass "$TARGET/stalled-resolved/s1-adversarial-p4.md" 4 0 1 2 EXIT_CONDITION_NOT_MET 0 ddd4
+pass "$TARGET/stalled-resolved/s1-adversarial-p1.md" 1 2 5 3 EXIT_CONDITION_NOT_MET 1 NOSHA
+pass "$TARGET/stalled-resolved/s1-adversarial-p2.md" 2 0 4 3 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/stalled-resolved/s1-adversarial-p3.md" 3 0 4 4 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/stalled-resolved/s1-adversarial-p4.md" 4 0 4 2 EXIT_CONDITION_NOT_MET 0 ddd4
 record "$TARGET/stalled-resolved/s1-resolution-p4.md" \
   s1-adversarial-p4.md CHANGE_APPROACH ddd4 ddd5 4000 4200 \
   "cut the unverifiable universal the MAJORs kept falsifying" \
@@ -573,10 +585,10 @@ record "$TARGET/stalled-resolved/s1-resolution-p4.md" \
 # resume would be reachable by writing any file at all and the notarization would be
 # decoration.
 mkdir -p "$TARGET/stalled-record-invalid"
-pass "$TARGET/stalled-record-invalid/s1-adversarial-p1.md" 1 2 2 3 EXIT_CONDITION_NOT_MET 1 NOSHA
-pass "$TARGET/stalled-record-invalid/s1-adversarial-p2.md" 2 0 1 3 EXIT_CONDITION_NOT_MET 0 NOSHA
-pass "$TARGET/stalled-record-invalid/s1-adversarial-p3.md" 3 0 1 4 EXIT_CONDITION_NOT_MET 0 NOSHA
-pass "$TARGET/stalled-record-invalid/s1-adversarial-p4.md" 4 0 1 2 EXIT_CONDITION_NOT_MET 0 eee4
+pass "$TARGET/stalled-record-invalid/s1-adversarial-p1.md" 1 2 5 3 EXIT_CONDITION_NOT_MET 1 NOSHA
+pass "$TARGET/stalled-record-invalid/s1-adversarial-p2.md" 2 0 4 3 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/stalled-record-invalid/s1-adversarial-p3.md" 3 0 4 4 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/stalled-record-invalid/s1-adversarial-p4.md" 4 0 4 2 EXIT_CONDITION_NOT_MET 0 eee4
 record "$TARGET/stalled-record-invalid/s1-resolution-p4.md" \
   s1-adversarial-p4.md CHANGE_APPROACH WRONGSHA eee5 4000 4200 \
   "sha_before does not match the pass it claims to resolve" \
@@ -761,33 +773,41 @@ repair "$TARGET/ceiling-converged/s1-brief-repair-p5.md"
 #
 # THE FIVE CASES ARE A PARTITION OF THE WAYS THIS CAN GO WRONG, and the last one is the
 # migration proof.
+#
+# ALL FIVE CARRY SEVEN MAJORs, NOT THREE, AND THE COUNT IS WHAT MAKES THEM DISCRIMINATE.
+# At MAJOR_EXIT_CEILING=3 a residue of three MAJORs meets the exit condition whether or not
+# any of them is underived -- so seeded at 3 these cases would all pass for a reason that has
+# nothing to do with the split, and `underived-exits` in particular would score a MET against
+# a validator that ignored findings_major_underived entirely. Above the ceiling the SPLIT is
+# the only thing that can produce a legal MET, which is the property the partition is for.
 # =============================================================================
 
-# All three MAJORs are underived: 0 blocking, so MET is the honest verdict.
+# All seven MAJORs are underived: 0 blocking, so MET is the honest verdict.
 mkdir -p "$TARGET/underived-exits"
 pass "$TARGET/underived-exits/s1-adversarial-p1.md" 1 2 3 1 EXIT_CONDITION_NOT_MET 2 NOSHA
-pass "$TARGET/underived-exits/s1-adversarial-p2.md" 2 0 3 1 EXIT_CONDITION_MET     0 NOSHA "" "" 3
+pass "$TARGET/underived-exits/s1-adversarial-p2.md" 2 0 7 1 EXIT_CONDITION_MET     0 NOSHA "" "" 7
 repair "$TARGET/underived-exits/s1-brief-repair-p1.md"
 
-# TWO of three underived: ONE blocking MAJOR remains, so MET is a false convergence.
+# TWO of seven underived: FIVE blocking MAJORs remain -- above the ceiling -- so MET is a
+# false convergence.
 # This is the arm that stops the split becoming a free exit.
 mkdir -p "$TARGET/underived-partial-blocks"
 pass "$TARGET/underived-partial-blocks/s1-adversarial-p1.md" 1 2 3 1 EXIT_CONDITION_NOT_MET 2 NOSHA
-pass "$TARGET/underived-partial-blocks/s1-adversarial-p2.md" 2 0 3 1 EXIT_CONDITION_MET     0 NOSHA "" "" 2
+pass "$TARGET/underived-partial-blocks/s1-adversarial-p2.md" 2 0 7 1 EXIT_CONDITION_MET     0 NOSHA "" "" 2
 repair "$TARGET/underived-partial-blocks/s1-brief-repair-p1.md"
 
-# The partition EXCEEDS the whole: 4 underived of 3 MAJOR. Refused rather than clamped --
+# The partition EXCEEDS the whole: 8 underived of 7 MAJOR. Refused rather than clamped --
 # inflating this field is the single edit that would buy EXIT_CONDITION_MET outright.
 mkdir -p "$TARGET/underived-exceeds"
 pass "$TARGET/underived-exceeds/s1-adversarial-p1.md" 1 2 3 1 EXIT_CONDITION_NOT_MET 2 NOSHA
-pass "$TARGET/underived-exceeds/s1-adversarial-p2.md" 2 0 3 1 EXIT_CONDITION_MET     0 NOSHA "" "" 4
+pass "$TARGET/underived-exceeds/s1-adversarial-p2.md" 2 0 7 1 EXIT_CONDITION_MET     0 NOSHA "" "" 8
 repair "$TARGET/underived-exceeds/s1-brief-repair-p1.md"
 
 # 0 blocking and it still stamps NOT_MET -- the S289 pass-4 shape, one level down. The
 # residue IS the exit condition and the field the gate reads must say so.
 mkdir -p "$TARGET/underived-refuses"
 pass "$TARGET/underived-refuses/s1-adversarial-p1.md" 1 2 3 1 EXIT_CONDITION_NOT_MET 2 NOSHA
-pass "$TARGET/underived-refuses/s1-adversarial-p2.md" 2 0 3 1 EXIT_CONDITION_NOT_MET 0 NOSHA "" "" 3
+pass "$TARGET/underived-refuses/s1-adversarial-p2.md" 2 0 7 1 EXIT_CONDITION_NOT_MET 0 NOSHA "" "" 7
 repair "$TARGET/underived-refuses/s1-brief-repair-p1.md"
 
 # THE MIGRATION PROOF: the SAME residue with NO field at all still blocks. Absent means
@@ -795,5 +815,68 @@ repair "$TARGET/underived-refuses/s1-brief-repair-p1.md"
 # before this field existed can change verdict.
 mkdir -p "$TARGET/underived-absent-still-blocks"
 pass "$TARGET/underived-absent-still-blocks/s1-adversarial-p1.md" 1 2 3 1 EXIT_CONDITION_NOT_MET 2 NOSHA
-pass "$TARGET/underived-absent-still-blocks/s1-adversarial-p2.md" 2 0 3 1 EXIT_CONDITION_MET     0 NOSHA
+pass "$TARGET/underived-absent-still-blocks/s1-adversarial-p2.md" 2 0 7 1 EXIT_CONDITION_MET     0 NOSHA
 repair "$TARGET/underived-absent-still-blocks/s1-brief-repair-p1.md"
+
+# =============================================================================
+# THE EXIT CEILING -- 0 CRITICAL and at most 3 BLOCKING MAJOR.
+# =============================================================================
+# The criteria used to be 0 CRITICAL / 0 MAJOR and were the literal `0` written into arm B
+# twice and arm E's accumulator once. They are now CRITICAL_EXIT_CEILING /
+# MAJOR_EXIT_CEILING in the validator, and these four cases are the seed that discriminates
+# the new value from the old one. Three of the four are RED against the previous validator,
+# which is what makes them a test of the change rather than a restatement of it.
+#
+# THE BOUNDARY IS SEEDED ON BOTH SIDES OF ITSELF, IN THE SAME DIRECTORY SET. A ceiling
+# asserted only from below is satisfied by "any MAJOR count converges", and one asserted
+# only from above is satisfied by the old zero. AT the limit must PASS and ONE ABOVE it must
+# FAIL, or the number 3 is not established -- only the existence of some ceiling is.
+
+# AT the ceiling: 0C and exactly 3 blocking MAJOR, stamped MET. MUST PASS.
+# This is the headline case and the one the operator's change is for. Against the previous
+# validator it is RED: arm B refused any nonzero blocking MAJOR under a MET.
+mkdir -p "$TARGET/ceiling-at-limit"
+pass "$TARGET/ceiling-at-limit/s1-adversarial-p1.md" 1 2 6 1 EXIT_CONDITION_NOT_MET 1 NOSHA
+pass "$TARGET/ceiling-at-limit/s1-adversarial-p2.md" 2 0 3 2 EXIT_CONDITION_MET     0 NOSHA
+repair "$TARGET/ceiling-at-limit/s1-brief-repair-p1.md"
+
+# ONE ABOVE the ceiling: 0C and 4 blocking MAJOR, stamped MET. MUST FAIL (B).
+# The over-fire control. Without it the case above is satisfied by a validator that dropped
+# the MAJOR half of arm B altogether, which is a strictly larger change than the one asked
+# for and would read identically on every other case in this fixture.
+mkdir -p "$TARGET/ceiling-above-limit"
+pass "$TARGET/ceiling-above-limit/s1-adversarial-p1.md" 1 2 6 1 EXIT_CONDITION_NOT_MET 1 NOSHA
+pass "$TARGET/ceiling-above-limit/s1-adversarial-p2.md" 2 0 4 2 EXIT_CONDITION_MET     0 NOSHA
+repair "$TARGET/ceiling-above-limit/s1-brief-repair-p1.md"
+
+# AT the ceiling and REFUSING to say so: 0C / 3 blocking MAJOR stamped NOT_MET. MUST FAIL (B).
+# Arm B is a BICONDITIONAL and this is its other half. A ceiling enforced only against an
+# over-claimed MET leaves the reviewer free to keep the loop running at a residue the criteria
+# call converged -- which is the S289 pass-4 shape, and the plateau this whole change exists
+# to end. The offender is p2, a MIDDLE pass, so arm D is not also firing: one case, one arm.
+mkdir -p "$TARGET/ceiling-refuses-at-limit"
+pass "$TARGET/ceiling-refuses-at-limit/s1-adversarial-p1.md" 1 2 6 1 EXIT_CONDITION_NOT_MET 1 NOSHA
+pass "$TARGET/ceiling-refuses-at-limit/s1-adversarial-p2.md" 2 0 3 2 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/ceiling-refuses-at-limit/s1-adversarial-p3.md" 3 0 0 2 EXIT_CONDITION_MET     0 NOSHA
+repair "$TARGET/ceiling-refuses-at-limit/s1-brief-repair-p1.md"
+repair "$TARGET/ceiling-refuses-at-limit/s1-brief-repair-p2.md"
+
+# A PLATEAU BELOW THE CEILING IS NOT A STALL -- the arm E half of the reconciliation.
+# 0C / 2 blocking MAJOR held across p2, p3 and p4, terminal NOT_MET so arm E is NOT suppressed
+# by a MET verdict. Under the OLD accumulator this reaches STALL_PEAK 2 against K=2 and arm E
+# fires; under the new one, keyed on the same ceiling arm B reads, the run never starts.
+#
+# THE SERIES IS STILL ILLEGAL, AND DELIBERATELY SO. Each of those three passes stamps
+# NOT_MET at a residue the criteria call converged, so arm B fires on all three and the case
+# exits 1 either way. THE EXIT CODE THEREFORE PROVES NOTHING HERE and run.sh asserts on the
+# MESSAGE: arm B must speak and arm E must be SILENT. That is not an accident of seeding --
+# it is the shape of the new criteria. A legal series cannot plateau below the ceiling and
+# keep running, because arm B forces the MET that ends it. So the only observable difference
+# between the two accumulators lives on a series that is already failing for another reason,
+# and asserting the exit code would have scored old and new identically.
+mkdir -p "$TARGET/ceiling-plateau-below"
+pass "$TARGET/ceiling-plateau-below/s1-adversarial-p1.md" 1 2 6 1 EXIT_CONDITION_NOT_MET 1 NOSHA
+pass "$TARGET/ceiling-plateau-below/s1-adversarial-p2.md" 2 0 2 3 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/ceiling-plateau-below/s1-adversarial-p3.md" 3 0 2 3 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/ceiling-plateau-below/s1-adversarial-p4.md" 4 0 2 3 EXIT_CONDITION_NOT_MET 0 NOSHA
+repair "$TARGET/ceiling-plateau-below/s1-brief-repair-p1.md"

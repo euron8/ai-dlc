@@ -112,11 +112,15 @@ case "$CASE" in
     ;;
 
   # A nonzero MAJOR held at zero CRITICAL. Neither converging nor diverging.
+  # THE PLATEAU IS PINNED ABOVE MAJOR_EXIT_CEILING, AND THE NUMBER IS LOAD-BEARING. The exit
+  # criteria are 0 CRITICAL and at most 3 blocking MAJOR, so a plateau at 1 is a MET exit
+  # condition rather than a stall -- arm B's business, not arm E's. Seeded at 1 this case would
+  # assert the opposite of the shipped criteria and the hook would correctly ALLOW the dispatch.
   stalled)
-    pass 1 2 1 2 EXIT_CONDITION_NOT_MET aaa1
-    pass 2 0 0 1 EXIT_CONDITION_NOT_MET bbb2
-    pass 3 0 0 1 EXIT_CONDITION_NOT_MET ccc3
-    pass 4 0 0 1 EXIT_CONDITION_NOT_MET ddd4
+    pass 1 2 1 5 EXIT_CONDITION_NOT_MET aaa1
+    pass 2 0 0 4 EXIT_CONDITION_NOT_MET bbb2
+    pass 3 0 0 4 EXIT_CONDITION_NOT_MET ccc3
+    pass 4 0 0 4 EXIT_CONDITION_NOT_MET ddd4
     ;;
 
   # THE DECOYS. A guard that fires on a cycle that is working gets ripped out.

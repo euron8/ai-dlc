@@ -118,7 +118,7 @@ rm -rf "$W"
 W="$(bash "$HERE/seed.sh" stalled)"
 OUT="$(drive_ack "$W" Agent)"
 if denied "$OUT"; then ok "STALLED: the Agent dispatch is DENIED (a plateau is not a reason for another pass)"
-else bad "STALLED: dispatch ALLOWED — the cycle held 0C/1M for four passes and nothing stopped it"; fi
+else bad "STALLED: dispatch ALLOWED — the cycle held 0C/4M -- above the exit ceiling -- for four passes and nothing stopped it"; fi
 rm -rf "$W"
 
 # =============================================================================

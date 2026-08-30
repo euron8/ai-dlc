@@ -258,7 +258,7 @@ the Rule 8 cycle; the repair half is below.
 **No Skill runs.** The convergence review is ai-dlc-native: the method is `team-roles/adversary.md`,
 in full. The bmad skill `/bmad-review-adversarial-general` is NOT invoked here — its contract
 (*find at least ten issues; HALT if zero findings; emit no severity, priority, or ranking*) has
-no fixed point in a loop whose exit condition is zero CRITICAL and zero MAJOR, and it forbids the
+no fixed point in a loop whose exit criteria are a bounded severity residue, and it forbids the
 severity fields Check 24 reads. It remains correct for a ONE-SHOT cynical sweep, and the step
 files that run one still invoke it.
 

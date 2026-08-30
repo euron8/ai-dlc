@@ -1549,7 +1549,10 @@ Section 0, so it cannot drift.
 <!-- CHECK_LOADED: 24 -->
 
 **Scope.** Fires at every gate whose step ran an adversarial CONVERGENCE cycle —
-a loop that must reach zero CRITICAL and zero MAJOR to leave. Those steps are:
+a loop that must reach its exit criteria to leave — zero CRITICAL and at most three
+blocking MAJOR, declared once at `CRITICAL_EXIT_CEILING`/`MAJOR_EXIT_CEILING` in
+`scripts/ai-dlc/validate-adversarial-convergence.sh` and adjudicated by its arm B.
+Those steps are:
 `carry-over-evaluation`, `discovery`, `architecture`, `research-requirements`
 (**including its `lightweight` single-pass path** — one pass is still a convergence
 pass and still stamps a verdict), `stories-test-strategy`, `doc-repair-backfill`, and

@@ -117,3 +117,4 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I98 | every hook that emits additionalContext marks it, and only the library spells the |
 | I99 | a placeholder in a prescribed BASENAME that CONCEALS a sprint |
 | I100 | no step file prescribes a BARE `git push` |
+| I101 | the adversarial exit ceiling is ONE number, in the enforcer and in the role |
