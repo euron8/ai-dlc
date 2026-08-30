@@ -9,18 +9,45 @@ and status records that were current when they were written and that THIS BLOCK 
 it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from it.**
 
-### NO DECISION IS OPEN. BATCH 27 SHIPPED AS `v0.444.0`. THE NEXT BATCH IS 28.
+### NO DECISION IS OPEN. BATCH 27 SHIPPED TWICE — `v0.444.0` AND `v0.445.0`, WHICH FIXED IT. NEXT IS 28.
+
+**Both releases are batch 27**; `v0.445.0` corrects `v0.444.0`'s own detector and is not a new
+sweep-driven batch, so do not number your batch 29. This is the second batch running to ship a
+correction to itself, and the cause was the same both times: the review that would have caught it
+arrived AFTER the merge.
+
+**THE THREE DEFECTS `v0.445.0` FIXED WERE ALL IN `v0.444.0`'s DETECTOR, AND AN ADVERSARIAL HAND
+FOUND THEM AFTER IT SHIPPED.** Each was re-verified here before being acted on, and one of the
+hand's two headline BLOCKERS was REFUTED by that re-verification:
+
+- **A script-only differential is VACUOUS for a schema-backed predicate.** Dated:
+  `v0.382.0` (`d71d981e`) changed `core/schemas/provenance-block.json` and left
+  `validate-provenance-block.sh` byte-identical (md5 `8d27d35c…` both sides). `v0.444.0` compared
+  one script path and would have reported a confident `PREDICATE-STABLE`. `predicate-sites.md` now
+  declares a **`reads:` set**, not a script. CONFIRMED and fixed.
+- **The corpus glob under-covered 7x** — an invented `*pass[0-9]*` reached 16 series where the
+  SHIPPED grammar at `core/hooks/ai-dlc-continue.sh:430` reaches 119. CONFIRMED and fixed.
+  **Derive a corpus grammar from the shipped reader; never invent one.**
+- **REFUTED: "the detector would have emitted no row on the real pull `0.438.0 -> 0.443.0`."**
+  Re-measured at the widened corpus it emits one — `s307/stories-adversarial-`, `[B,] -> []` —
+  which is the same single row the hand's own A→C table reports. Their conclusion did not follow
+  from their data. What SURVIVES is the underlying point, and it is now in the rows themselves:
+  this is an ENDPOINT comparison, so a release inside the range and a later one correcting it
+  CANCEL. `0.441.0 -> 0.442.0` moves 48 of 119; `0.438.0 -> 0.443.0` moves 1.
+
+**A HAND'S FINDING IS A HYPOTHESIS, INCLUDING ITS SEVERITY.** Two of three held, one did not, and
+the one that did not was labelled BLOCKER. Re-derive before acting, and say which survived.
 
 **The operator ruled on `PC-S307-PULL-CANNOT-SEE-WHAT-A-PREDICATE-CHANGE-RECLASSIFIES`: take it and
 FIX it.** Done, merged, and its id is in the release commit message. Do not re-scope onto it and do
 not file it — it was fixed rather than filed, which is why `docs/backlog.md` is still at 75 of 75
 and no rotation was spent.
 
-**WHAT SHIPPED.** `reconcile/predicate-differential.sh` plus its `reconcile/predicate-sites.md`
+**WHAT SHIPPED (v0.444.0, corrected by v0.445.0).** `reconcile/predicate-differential.sh` plus its `reconcile/predicate-sites.md`
 manifest, run at `SKILL.md` step 3g. It materializes each declared adjudication predicate at `base`
 and at `theirs`, runs both over the consumer's stored artifacts, and reports every artifact whose
 VERDICT changes while its text does not. Report-only, never blocking. New shipping fixture
-`predicate-reclassification`, 25 assertions, nine mutants scored and nine killed.
+`predicate-reclassification` — 29 assertions, ten mutants scored and ten killed.
 
 **THE COMPARABLE VERDICT IS THE NAMED ARM, NEVER THE EXIT CODE, AND THE EXIT-CODE SPELLING SHIPPED
 A CLEAN WRONG ZERO FIRST.** Compared across `0.441.0..0.442.0` over the consumer's real corpus, exit
