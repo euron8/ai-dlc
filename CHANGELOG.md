@@ -15,6 +15,60 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.448.0] - 2026-08-30
+
+### The environment was the payload channel, and a heredoc on stdin bought nothing
+
+`report-propagation-fanout.sh` read its python program from `python3 - <<'PYEOF'`, which
+carries no argv payload at all, and then exported the data that program parses. `execve`
+charges its combined argv+envp ceiling on the environment block the CHILD INHERITS, so past
+`ARG_MAX` the exec failed before python3's first line ran — `Argument list too long`, exit
+126, a code the script's own header does not list among its {0,2,3}. The reference consumer
+filed it twice from two different sprint steps, on a real 274-file / +64,540-line range, and
+recorded that the step mandating this script after every repair could not discharge that
+mandate at all: not an empty worklist, but no execution.
+
+**All three unbounded payloads move, not the one both filings named.** `FANOUT_DIFF`,
+`FANOUT_FILES` and `FANOUT_UNTRACKED` are written to a `mktemp -d` directory and the paths
+travel instead; the remaining `FANOUT_*` variables are short scalars or fixed declarations
+from the file itself and stay where they are. The corpus is the fixed cost and the diff is
+only what tips it over — on the reference consumer `git ls-files` alone is 607945 bytes
+against an `ARG_MAX` of 1048576, so 58% of the ceiling is spent before a byte of diff
+exists. **The filed remedy was built as a mutant and scored before being rejected:** moving
+the diff alone leaves that 58% in place, and it exits 1 against the receipt that the full
+fix closes.
+
+Measured on the reference consumer, both sides in one invocation under a `cmp -s` control
+that the two scripts differ: the child's environment falls from **700857 bytes to 3182** —
+67% of `ARG_MAX` to 0.3% — with the corpus and diff signatures at 0 and the `PATH=` reach
+control at 1 on both sides. The worklist is byte-identical across the change.
+
+**The read that replaces the environment lookup fails LOUD.** An empty diff and an empty
+corpus are both legal inputs that print a clean, plausible zero, so a permissive `return ""`
+on an unreadable payload would delete every finding and still exit 0 — the shape this
+script's own header calls its signature defect. A missing payload file now writes
+`SCOPING FAILURE` to stderr and exits 3, the contract's wrong-tree code, and emits no
+worklist row.
+
+### Added
+
+- `core/fixtures/fanout-payload-channel` — 8 assertions, 6 mutants built and 6 killed;
+  ships to consumers and verified in both install layouts on a tree built by `install.sh`.
+  Assertion 2 names WHICH payload channel leaked rather than reporting that one did.
+  Assertion 3 asks the question no named channel can answer — whether the child's
+  environment grows with the tree — and it STANDS DOWN when assertion 2 has already fired,
+  because a payload that leaked by a known channel would fail both and one of two failures
+  is vacuous. That leaves assertion 3's subject as exactly the channel nobody named, with a
+  mutant (`m4-unnamed`) whose padding carries none of the three signatures.
+
+### Fixed
+
+- `PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF` (via `BL-064`)
+- `PC-S303-FANOUT-SCRIPT-ARG-MAX-VIA-EXPORTED-DIFF-ENV-VAR` — never filed here, and closed
+  by the same change. Its consumer-side receipt is
+  `theirs_has core/scripts/report-propagation-fanout.sh "export FANOUT_DIFF="`, which this
+  fix falsifies directly, so it closes on the consumer's own next reverify.
+
 ## [0.447.0] - 2026-08-30
 
 ### Three releases have fixed a route to the same end state; this one asserts the state

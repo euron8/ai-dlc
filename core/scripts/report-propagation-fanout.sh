@@ -286,8 +286,43 @@ CORPUS_TRACKED="$(git ls-files -z | tr '\0' '\n')"
 CORPUS_UNTRACKED="$(git ls-files --others --exclude-standard -z | tr '\0' '\n')"
 CORPUS_FILES="$(printf '%s\n%s\n' "$CORPUS_TRACKED" "$CORPUS_UNTRACKED")"
 
-export FANOUT_DIFF="$DIFF" FANOUT_FILES="$CORPUS_FILES" FANOUT_SPRINT="$SPRINT" \
-       FANOUT_UNTRACKED="$CORPUS_UNTRACKED" \
+# THE THREE UNBOUNDED PAYLOADS TRAVEL BY FILE, NEVER BY THE ENVIRONMENT.
+#
+# `execve` charges its combined argv+envp ceiling on the environment block the CHILD
+# INHERITS, so reading the python program from a heredoc on stdin buys nothing at all
+# while the data it parses is exported: the exec fails with `Argument list too long`
+# before python3's first line runs, and bash reports that as 126 — a code this script's
+# own contract above does not list. Filed twice by the reference consumer against one
+# script (`PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF`,
+# `PC-S303-FANOUT-SCRIPT-ARG-MAX-VIA-EXPORTED-DIFF-ENV-VAR`), from two different sprint
+# steps, on a real 274-file / +64,540-line range.
+#
+# THE CORPUS IS THE FIXED COST AND THE DIFF IS ONLY WHAT TIPS IT OVER, which is why all
+# three payloads move and not just the one the first filing named. Measured: on the
+# reference consumer `git ls-files` alone is 607945 bytes across 10146 paths against an
+# `ARG_MAX` of 1048576 — 58% of the ceiling consumed before a single byte of diff
+# exists. A fix that relocates `FANOUT_DIFF` alone leaves that 58% in place and leaves
+# the ceiling reachable, so it would close the filing and not the defect.
+#
+# The remaining `FANOUT_*` variables stay on the environment deliberately: each is a
+# short scalar or a fixed declaration from this file, none scales with the tree, and
+# moving them would trade a real bound for churn.
+FANOUT_TMP="$(mktemp -d "${TMPDIR:-/tmp}/fanout.XXXXXX")" || {
+  echo "SCOPING FAILURE: could not create a temporary directory for the payloads" >&2
+  exit 3
+}
+trap 'rm -rf "$FANOUT_TMP"' EXIT
+# `printf '%s'` and NOT `'%s\n'`: each of these three held the value of a command
+# substitution, which has already stripped its trailing newlines, and the python side
+# splits on lines. Adding one back here would be a second, silently different corpus.
+printf '%s' "$DIFF"              > "$FANOUT_TMP/diff"      || exit 3
+printf '%s' "$CORPUS_FILES"      > "$FANOUT_TMP/files"     || exit 3
+printf '%s' "$CORPUS_UNTRACKED"  > "$FANOUT_TMP/untracked" || exit 3
+
+export FANOUT_DIFF_FILE="$FANOUT_TMP/diff" \
+       FANOUT_FILES_FILE="$FANOUT_TMP/files" \
+       FANOUT_UNTRACKED_FILE="$FANOUT_TMP/untracked" \
+       FANOUT_SPRINT="$SPRINT" \
        FANOUT_RANGE="$RANGE" FANOUT_APPLY_FROZEN="$APPLY_FROZEN" \
        FANOUT_EXTS="$CITED_EXTS" FANOUT_ROOTS="$CORPUS_ROOTS" \
        FANOUT_FROZEN_COMPONENTS="$FROZEN_PATH_COMPONENTS" \
@@ -297,7 +332,30 @@ export FANOUT_DIFF="$DIFF" FANOUT_FILES="$CORPUS_FILES" FANOUT_SPRINT="$SPRINT" 
 python3 - <<'PYEOF'
 import os, re, sys, fnmatch
 
-diff       = os.environ["FANOUT_DIFF"]
+def payload(var):
+    """Read one of the three large payloads the shell wrote to a file.
+
+    A missing or unreadable file EXITS, and never returns "". An empty diff and an
+    empty corpus are both legal inputs that print a clean, plausible zero, so a
+    permissive read failure here would delete every finding and still exit 0 — the
+    exact shape this script's own header calls its signature defect. 3 is the
+    contract's wrong-tree code and is the closest true statement: nothing was judged.
+
+    `sys.getfilesystemencoding()` with `surrogateescape` is what `os.environ` itself
+    used to decode these values when they travelled on the environment, so a path
+    that is not valid UTF-8 survives the move unchanged.
+    """
+    path = os.environ[var]
+    try:
+        with open(path, "r", encoding=sys.getfilesystemencoding(),
+                  errors="surrogateescape") as fh:
+            return fh.read()
+    except OSError as exc:
+        sys.stderr.write("SCOPING FAILURE: could not read %s (%s): %s\n"
+                         % (var, path, exc))
+        sys.exit(3)
+
+diff       = payload("FANOUT_DIFF_FILE")
 sprint     = os.environ["FANOUT_SPRINT"]
 rng        = os.environ["FANOUT_RANGE"]
 apply_frz  = os.environ["FANOUT_APPLY_FROZEN"] == "1"
@@ -384,13 +442,13 @@ def under_sprint_root(p):
 # place to say how much is the run itself. `git ls-files` can emit the same path twice
 # (an unmerged path lists once per stage), so the corpus is de-duplicated while keeping
 # document order — a duplicate would double-count a citation into the worklist.
-untracked = set(p for p in os.environ.get("FANOUT_UNTRACKED", "").splitlines() if p)
+untracked = set(p for p in payload("FANOUT_UNTRACKED_FILE").splitlines() if p)
 
 corpus = []
 seen = set()
 n_sprint_scoped = 0
 n_untracked = 0
-for p in os.environ["FANOUT_FILES"].splitlines():
+for p in payload("FANOUT_FILES_FILE").splitlines():
     if not p or p in seen or not in_corpus_roots(p):
         continue
     if "." not in os.path.basename(p) or p.rsplit(".", 1)[-1] not in exts:

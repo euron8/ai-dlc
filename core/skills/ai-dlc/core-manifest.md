@@ -238,6 +238,7 @@ core_manifest:
   - fixtures/trunk-push-bound/**
   - fixtures/pause-hook-origin/**
   - fixtures/postcompact-rulebook-recovery/**
+  - fixtures/fanout-payload-channel/**
   - fixtures/fanout-untracked-corpus/**
   - fixtures/preclassify-mode-bucket/**
   - fixtures/predicate-reclassification/**

@@ -181,6 +181,7 @@ core_manifest:
   - core/fixtures/trunk-push-bound/**
   - core/fixtures/pause-hook-origin/**
   - core/fixtures/postcompact-rulebook-recovery/**
+  - core/fixtures/fanout-payload-channel/**
   - core/fixtures/fanout-untracked-corpus/**
   - core/fixtures/preclassify-mode-bucket/**
   - core/fixtures/predicate-reclassification/**

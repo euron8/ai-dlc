@@ -2240,6 +2240,42 @@ verify: sh R=$(mktemp -d); mkdir -p "$R/_bmad-output/implementation-artifacts" "
 
 ## BL-064
 
+**LANDED (v0.448.0, verified against `core/fixtures/fanout-payload-channel`).** All three
+unbounded payloads — `FANOUT_DIFF`, `FANOUT_FILES` and `FANOUT_UNTRACKED` — now travel by file.
+Measured on the reference consumer, both sides in one invocation with a `cmp -s` control that the
+two scripts differ: the child's environment falls from **700857 bytes to 3182**, 67% of `ARG_MAX`
+to 0.3%, with the corpus and diff signatures at 0 and the `PATH=` reach control at 1 on both
+sides. The worklist is byte-identical across the change.
+
+**THREE OF THIS ENTRY'S OWN PREMISES HAD EXPIRED BY THE TIME IT WAS TAKEN, AND TWO OF THEM WOULD
+HAVE MISDIRECTED THE WORK.** Recorded rather than edited away, because which half died is what
+stops the next reader repeating it.
+
+- Its citations `:255-261` and `:262` had drifted to `:289-295` and `:297`. A `path:line` that
+  resolves to the wrong line reads exactly like one that resolves.
+- *"That entry carries no `verify:` receipt of its own and is invisible to the consumer's
+  closer"* is **false**. The consumer has since given
+  `PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF` a receipt, and its sibling
+  `PC-S303-FANOUT-SCRIPT-ARG-MAX-VIA-EXPORTED-DIFF-ENV-VAR` carries
+  `theirs_has core/scripts/report-propagation-fanout.sh "export FANOUT_DIFF="` — which this fix
+  falsifies directly, so that second candidate closes on the consumer's own next reverify without
+  anything further from here.
+- *"Fixture directories matching `fanout` or `propagation`: 0"* is **false**;
+  `core/fixtures/fanout-untracked-corpus` exists and drives this same script. The new battery was
+  built beside it rather than folded into it: that fixture's subject is the corpus DEFINITION and
+  this one's is the payload CHANNEL, and a mutant of either would have to leave the other's arms
+  untouched to be readable.
+
+**THE FILED REMEDY WAS BUILT AS A MUTANT AND SCORED, AND IT DOES NOT CLOSE THIS.** Both consumer
+filings prescribe moving the diff. Scored against this entry's receipt with `AI_DLC_PROJECT_ROOT`
+pinned and reach asserted per arm: shipping exits 1, **diff-only exits 1**, corpus-only exits 1,
+the full fix exits 0, and a second spelling that passes the same three paths on ARGV rather than
+in `FANOUT_*_FILE` also exits 0 — so the receipt rejects neither a competent author's other
+phrasing nor accepts a partial. A sixth variant that writes the files and leaves the old exports
+beside them exits 1. The corpus is the fixed cost: 607945 bytes of `git ls-files` against an
+`ARG_MAX` of 1048576 is 58% of the ceiling before a byte of diff exists, so the prescribed remedy
+would have closed the filing and left the defect.
+
 **`report-propagation-fanout.sh` hands its whole corpus to `python3` through the ENVIRONMENT, and
 `execve` charges its size limit on that block whatever the heredoc does.**
 `core/scripts/report-propagation-fanout.sh:255-261` is a single `export` statement carrying **10**
