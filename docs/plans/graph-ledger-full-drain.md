@@ -9,11 +9,12 @@ and status records that were current when they were written and that THIS BLOCK 
 it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from it.**
 
-### BATCH 32 SHIPPED AS `v0.453.0`, CORRECTED BY `v0.454.0`. NEXT IS BATCH 33. A PULL IS NOW OWED **AND** REQUIRED, AND IT IS NOT AUTHORIZED.
+### BATCH 32 SHIPPED AS `v0.453.0`, CORRECTED BY `v0.454.0`; `v0.455.0` FOLLOWED IT OFF-PLAN. NEXT IS BATCH 33. A PULL IS NOW OWED **AND** REQUIRED, AND IT IS NOT AUTHORIZED.
 
 **Re-derived after the merge, every figure by running the command.** Distribution `VERSION` is
-`0.454.0` at `b634e42d`; the consumer's stamp still reads `0.452.0` / `11bdeb8e`. So the gap is
-**two releases** and **PENDING is 1** — `PC-S334-AUDIT-LAYER-DEBT-FLAGS-ITS-OWN-DISCHARGE-ROWS-AS-UNDECLARED-DEBT`
+`0.455.0` at `4f38ea75`; the consumer's stamp still reads `0.452.0` / `11bdeb8e`. So the gap is
+**three releases** — `0.453.0`, `0.454.0` and `0.455.0`, the last an operator-requested change
+outside this plan's scope that routes a consumer's AI/DLC findings to the push-candidate ledger and **PENDING is 1** — `PC-S334-AUDIT-LAYER-DEBT-FLAGS-ITS-OWN-DISCHARGE-ROWS-AS-UNDECLARED-DEBT`
 is discharged here (1 commit names it) and still LIVE in the consumer's ledger, against an
 impossible-id control of 0.
 
@@ -2375,7 +2376,8 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **RUN THE SWEEP (action 1b below) AND LET IT PICK BATCH 33's SUBJECT. ONE THING IS OWED FIRST —
-   SEE 1c.** Batch 32 is merged as `v0.453.0` with `v0.454.0` correcting it, so number yours 33.
+   SEE 1c.** Batch 32 is merged as `v0.453.0` with `v0.454.0` correcting it, and `v0.455.0`
+   landed after them off-plan, so number yours 33.
 
    `BL-069` is ROTATED and its candidate
    `PC-S334-AUDIT-LAYER-DEBT-FLAGS-ITS-OWN-DISCHARGE-ROWS-AS-UNDECLARED-DEBT` is DONE. Do not pick
@@ -2807,7 +2809,7 @@ so no block written before it changes verdict.
    **And ask what the fix's own population EXCLUDES.** Batch 11's first cut answered a
    one-way-blindness entry with an arm that was blind by file extension. The exclusion has to
    be stated in the arm and it has to not be the defect itself.
-1c. **WRITE AND REHEARSE THE `0.452.0 → 0.454.0` PULL RUNBOOK, THEN REPORT THE NUMBER AND STOP.**
+1c. **WRITE AND REHEARSE THE `0.452.0 → 0.455.0` PULL RUNBOOK, THEN REPORT THE NUMBER AND STOP.**
    This is owed from batch 32 and was the one piece of its scope left undelivered. Both tests were
    run there and both say yes: **PENDING is 1**, and the differential DIVERGES — the consumer's
    installed `audit-layer-debt.sh` reports **33 `UNDECLARED`** against the distribution copy's
@@ -2815,10 +2817,12 @@ so no block written before it changes verdict.
    `cmp -s` before either output was read and neither side refusing. Re-derive both before acting:
    the consumer may have pulled since.
 
-   The range is two releases and narrow. **No bootstrapping step is in it** — `preclassify.sh`,
-   `apply.sh`, `ledger-reverify.sh` and `SKILL.md` are all 0 commits against a control of 1 for
-   `audit-layer-debt.sh`, and there are 0 mode-only changes — so the pull is not delivering the
-   machinery that runs it, which is the hazard that usually complicates this.
+   The range is three releases. **No updater EXECUTABLE is in it** — `preclassify.sh`,
+   `apply.sh`, `ledger-reverify.sh` and `SKILL.md` are all 0 commits, against a control of 0 for a
+   path the range never touched. **But `setup-sites.md` has 2**, and that is not a footnote: it is
+   the manifest those executables READ to derive a pull's machinery slice, so the pull classifies
+   itself using a file the same pull replaces. Re-derive both halves — executables AND the
+   manifests they read — rather than asking only whether a step file changed.
 
    **Rehearse on a `file://` clone, never in place, and take every figure from that run.** The
    clone carries committed history, so check what that consumer has ACTUALLY been doing before
