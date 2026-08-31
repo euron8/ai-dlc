@@ -10,11 +10,24 @@ way does not lose the finding — it loses the fix.
 tool that owns the answer:
 
 ```
-scripts/ai-dlc/core-paths.sh --is-core <path>     # exit 0 = AI/DLC's, exit 1 = yours
+scripts/ai-dlc/core-paths.sh --is-core <path>     # 0 = AI/DLC's, 1 = yours, 2 = read the item
 ```
 
 Exit 0 means the next `/ai-dlc-update` overwrites that file, so a local edit to it is erased and
 no upstream reader ever sees the defect. Exit 1 means it is yours to change and upstream cannot.
+
+**Exit 2 is a third answer and it is not a failure.** It means the path sits at a destination
+AI/DLC owns and NO SUCH FILE IS HERE — the manifest claims whole namespaces such as
+`scripts/ai-dlc/*`, so a match is evidence about a DESTINATION, never about a file. Read the item
+before routing it:
+
+- A file the item **proposes to create** at that destination is still AI/DLC's. File the push
+  candidate.
+- A **renamed, deleted or fictional** path is neither. Filing it upstream produces a candidate
+  against a subject no tree contains, which nobody can act on and nobody can close. Find the real
+  path first, then ask again.
+- A **wildcard written in prose** — `.claude/hooks/ai-dlc-*.sh` — is not a filename. Name the file
+  you mean.
 
 Your `overrides/` and `extensions/` entries are YOURS — `--is-core` returns 1 for them. They are
 the supported way to change AI/DLC's behaviour here without editing AI/DLC's files.

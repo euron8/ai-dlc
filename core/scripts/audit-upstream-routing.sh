@@ -170,7 +170,7 @@ fi
 command -v python3 >/dev/null 2>&1 || {
   echo "audit-upstream-routing: DISARMED — EXAMINED NOTHING — python3 absent." >&2; exit 2; }
 
-BACKLOG="$BACKLOG" EMIT_JSON="$EMIT_JSON" GLOBS="$GLOBS" python3 <<'PY'
+BACKLOG="$BACKLOG" EMIT_JSON="$EMIT_JSON" GLOBS="$GLOBS" AI_DLC_ROOT="$AI_DLC_ROOT" python3 <<'PY'
 import fnmatch, json, os, re, sys
 
 backlog = os.environ["BACKLOG"]
@@ -205,7 +205,21 @@ def core_paths_in(body):
             hits.append(p)
     return hits
 
-findings, paired = [], 0
+# A GLOB MATCH IS A DESTINATION, AND THE PATH TOKENS HERE COME OUT OF PROSE, so some
+# of them name no file anywhere. This LABELS them and deliberately does not FILTER
+# them: measured on the reference consumer's own corpus, of 13 core-glob tokens 11
+# are present and 2 absent, and BOTH absent ones sit in entries that belong upstream
+# — one is a script the item PROPOSES at a core destination (`merge-gate-verdicts.sh`,
+# 0 commits in all of upstream history against a control of 7 for a real core script),
+# the other a bare `.claude/hooks/ai-dlc-*.sh` wildcard, which is not a filename. A
+# filter would therefore have ACQUITTED a true misroute in order to remove a label the
+# reader can apply themselves, which is the trade `mechanism-design.md` forbids. What
+# the reader gains is the discriminator they lacked: an absent path is either a
+# proposal (still ours) or a renamed/fictional subject (a candidate against a file no
+# tree contains), and only reading the item separates the two.
+root = os.environ["AI_DLC_ROOT"]
+
+findings, paired, absent_total = [], 0, 0
 for cid, ln, body in entries:
     mach = core_paths_in(body)
     if not mach:
@@ -213,11 +227,15 @@ for cid, ln, body in entries:
     if PC.search(body):
         paired += 1          # already routed upstream; the pairing is the discriminator
         continue
-    findings.append({"id": cid, "line": ln, "paths": mach[:6]})
+    rows = [{"path": p, "exists": os.path.exists(os.path.join(root, p))} for p in mach[:6]]
+    absent_total += sum(1 for r in rows if not r["exists"])
+    findings.append({"id": cid, "line": ln,
+                     "paths": [r["path"] for r in rows], "named": rows})
 
 if os.environ["EMIT_JSON"] == "1":
     print(json.dumps({"backlog": backlog, "entries": len(entries), "globs": len(globs),
-                      "paired": paired, "findings": findings}, indent=2))
+                      "paired": paired, "absent_named": absent_total,
+                      "findings": findings}, indent=2))
     raise SystemExit(0)
 
 print("AI/DLC UPSTREAM ROUTING  —  %s" % backlog)
@@ -234,11 +252,17 @@ print("PC- entry. Keep a CO- item too ONLY if local work remains — a workaroun
 print()
 for f in findings:
     print("  %s  [line %d]" % (f["id"], f["line"]))
-    for p in f["paths"]:
-        print("      names: %s" % p)
+    for r in f["named"]:
+        print("      names: %s%s" % (r["path"], "" if r["exists"] else "   [NO SUCH FILE HERE]"))
 print()
 print("REPORT-ONLY: this exits 0. Routing is a judgement and some of these may be consumer work")
 print("that merely USES a core tool — read each before refiling.")
+if absent_total:
+    print()
+    print("%d named path(s) marked [NO SUCH FILE HERE] match a core DESTINATION but name no file in" % absent_total)
+    print("this tree. That is not a verdict either way: a file an item PROPOSES at a core destination")
+    print("is still upstream's, while a renamed, fictional or wildcard path would arrive upstream as a")
+    print("candidate against a subject no tree contains. Read the item; do not route on the match alone.")
 PY
 rc=$?
 [ "$rc" = 2 ] && exit 2
