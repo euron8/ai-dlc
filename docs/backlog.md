@@ -2435,61 +2435,6 @@ Found by the graph consumer session. Cross-references the consumer entry
 
 verify: sh S=core/scripts/audit-layer-debt.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d); g="$d/reg.jsonl"; h="{\"clause\":\"LC-E1\",\"entry\":\"extensions/probe.md\",\"subject_digest\":\"da39a3e\",\"verdict\":\"still-additive\",\"recorded_utc\":\"1970-01-01T00:00:00Z\",\"reason\":\"probe row\",\"owed\":{\"id\":\"OWED-PROBE-1\",\"what\":\"split X out\",\"closes_when\":"; x="$h"'"immediately after scripts/ai-dlc/migrate-artifact-paths.sh --apply completes"}}'; y="$h"'"when the operator says so"}}'; [ "$x" != "$y" ] || { rm -rf "$d"; exit 9; }; printf '%s\n' "$x" > "$g"; a=$(bash "$S" --register "$g" 2>/dev/null); ra=$?; printf '%s\n' "$y" > "$g"; b=$(bash "$S" --register "$g" 2>/dev/null); rb=$?; rm -rf "$d"; [ "$ra" = 0 ] && [ "$rb" = 0 ] || exit 9; case "$a" in *OWED-PROBE-1*) : ;; *) exit 9 ;; esac; case "$b" in *OWED-PROBE-1*) : ;; *) exit 9 ;; esac; [ "$a" != "$b" ] || exit 9; ca=$(printf '%s\n' "$a" | grep -v 'closes when:'); cb=$(printf '%s\n' "$b" | grep -v 'closes when:'); [ "$ca" != "$cb" ]
 
-## BL-069
-
-**`audit-layer-debt.sh`'s migration arm files its own discharge rows as undeclared debt, so the
-metric moves the wrong way in response to the action it exists to encourage.** The arm at
-`core/scripts/audit-layer-debt.sh:189-190` skips a row only when `owed` is a dict:
-
-```
-    if isinstance(r.get("owed"), dict):
-        continue
-```
-
-It never consults `closes_owed`. A discharge row carries `closes_owed` and — by the convention
-every existing discharge row in the reference consumer's register follows — opens its `reason` with
-`Debt discharged.`, which matches the `debt` cue in `PROSE`. **The correct way to close a debt is
-also the phrasing that files it as an undeclared one.**
-
-Reproduced behaviourally against the shipping script, with the discriminating control in the same
-invocation: a one-row register whose only row is a discharge row with the conventional reason
-reports `UNDECLARED (1)`; the byte-differing register carrying the identical row with a neutral
-reason reports `UNDECLARED (0)`. The two registers are asserted to differ before either result is
-read.
-
-Measured on the reference consumer's register after a six-debt discharge, 213 rows: 21 rows flagged
-UNDECLARED, **8 of them carrying `closes_owed`** — false positives — leaving a genuine remainder of
-13. 10 discharge rows are present and 8 of the 10 trip it. **38% noise, and it grows by one every
-time a debt is correctly closed.** The consumer discharged six debts and watched UNDECLARED rise by
-exactly six, which is how it was found.
-
-**This is the second false-positive class in that arm and the first STRUCTURAL one.** The author had
-already measured and excluded a LEXICAL class — `debt` inside the identifier
-`test-check18-debt-audit`, which is why the `(?<![\w-])…(?![\w-])` guard exists. A narrowing that
-fixes cue matching cannot reach this one, because the prose here genuinely is about a debt; the row
-simply is not declaring one.
-
-The remedy is to `continue` on `r.get("closes_owed")` as well. Where a discharge row must still be
-scannable for a NEW obligation, the schema already permits `owed` and `closes_owed` on one row, so
-requiring an explicit `owed` keeps that case reachable rather than exempting it.
-
-The receipt keys on the BEHAVIOUR rather than a substring, because a fix may land in the skip
-condition, in the cue set, or in the discharge-row convention, and no anchor survives all three. Its
-sanity arms exit 9: the script must exist, the two registers must differ, both runs must exit 0,
-both counts must parse, and **the neutral-reason control must itself report 0** — without that last
-arm a script that flagged everything, or nothing, would read identically to one that discriminates.
-
-Verified in both directions: against the shipping tree the receipt exits **1** (STILL-LIVE); against
-a copy whose skip condition also honours `closes_owed` it exits **0**, with the copy asserted to
-differ from shipping before the result was read.
-
-Found by the graph consumer session while discharging six artifact-path layer debts. Cross-references
-the consumer entry
-`PC-S334-AUDIT-LAYER-DEBT-FLAGS-ITS-OWN-DISCHARGE-ROWS-AS-UNDECLARED-DEBT`.
-
-verify: sh S=core/scripts/audit-layer-debt.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; h="{\"clause\":\"LC-E1\",\"entry\":\"extensions/p.md\",\"subject_digest\":\"da39a3e\",\"verdict\":\"still-additive\",\"recorded_utc\":\"1970-01-01T00:00:00Z\",\"closes_owed\":[\"OWED-X\"],\"reason\":"; printf "%s\"Debt discharged. The repath landed.\"}\n" "$h" > "$d/a.jsonl"; printf "%s\"The repath landed.\"}\n" "$h" > "$d/b.jsonl"; cmp -s "$d/a.jsonl" "$d/b.jsonl" && { rm -rf "$d"; exit 9; }; a=$(bash "$S" --register "$d/a.jsonl" 2>/dev/null); ra=$?; b=$(bash "$S" --register "$d/b.jsonl" 2>/dev/null); rb=$?; rm -rf "$d"; [ "$ra" = 0 ] && [ "$rb" = 0 ] || exit 9; na=$(printf "%s" "$a" | sed -n "s/.*UNDECLARED (\([0-9]*\)).*/\1/p" | head -1); nb=$(printf "%s" "$b" | sed -n "s/.*UNDECLARED (\([0-9]*\)).*/\1/p" | head -1); [ -n "$na" ] && [ -n "$nb" ] || exit 9; [ "$nb" = 0 ] || exit 9; [ "$na" = 0 ]
-
-
 ## BL-071
 
 **`ledger-rotate.sh`'s split-refusal can still be silenced by a body line that merely MENTIONS the
