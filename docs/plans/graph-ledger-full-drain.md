@@ -130,8 +130,12 @@ GAP THIS FILE ALREADY RECORDS.** The bucket is keyed on a live candidate being c
 partition cannot move. The visible signal is PENDING.
 
 **A PULL IS OWED AND IS NOT REQUIRED, AND IT IS NOT AUTHORIZED.** Consumer installed **0.456.0**,
-shipped **0.458.0** — a gap of TWO releases. PENDING is **0 fixes and 1 adjudication**: the only id
-named upstream is the one `v0.458.0` REJECTED, so a pull delivers a decision, not a repair.
+shipped **0.459.0** — a gap of THREE releases, but only TWO of them touch `core/`: `v0.459.0` is
+`.claude/rules/` and a validator, neither of which installs. PENDING is **0 fixes and 1
+adjudication**: the only id named upstream is the one `v0.458.0` REJECTED, so a pull delivers a
+decision, not a repair. Re-derived against the consumer's tree AFTER a peer session restored
+uncommitted work there: 80 entries, 172 globs, 7 paired, 4 findings, 13 core-glob tokens with 11
+present and 2 absent, ledger md5 unchanged, dirty back to the 11 this batch started from.
 **The prescribed differential is UNAVAILABLE, not null**: the consumer's installed
 `validate-layer-entries.sh` is byte-identical to this distribution's under `cmp -s`, so two runs of
 one program would have produced a perfect null reading exactly like agreement. The subject-specific
