@@ -15,6 +15,60 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.454.0] - 2026-08-31
+
+### A receipt score is a claim about the mutant set it was run on, and `v0.453.0` shipped one that was too narrow
+
+`BL-067`'s replacement receipt was merged claiming it **ACCEPTS 2 and REJECTS 5**. Re-scored
+against a wider candidate set built by an adversarial hand, **it accepts SEVEN.** The claim was
+true of the five mutants it was run on and false as a statement about the receipt, which is the
+"count what a receipt ACCEPTS" failure applied one level up: **I counted acceptances over a set I
+chose myself.** The number is corrected here rather than quietly improved, because the entry is
+the record a later session will act on.
+
+**The hole was structural, not a missing arm.** Its two probe rows differed in length, digit
+content, vocabulary and self-reference — not solely in whether a command is named — so **any
+non-constant function of the field's bytes passed**: its length, an md5 of it, whether it
+contains a digit, its last word. Each of those reads `closes_when` and joins it to nothing, which
+is `BL-067`'s defect verbatim.
+
+**The repair is a fourth row, not another arm.** `OWED-PROBE-D` carries a SECOND
+predicate-shaped `closes_when` — different bytes, same kind — and the receipt now requires B and
+D to render IDENTICALLY before it reads A against B. A byte-function cannot satisfy that, because
+B and D differ in bytes; only a classifier that partitions by KIND can. Re-scored over eleven
+implementations: **ACCEPTS 3, REJECTS 8.** Rejected are shipping, the filed remedy, the relabel,
+a deleted printer, a re-echo under a new label, and four byte-functions. The third acceptance is
+a genuine third spelling — the same self-reference join rendered as a boolean — not a leak.
+
+### The `closes_owed` exemption has a cost, and now it is an assertion instead of a silence
+
+`v0.453.0` argued in a code comment that its exemption does not acquit the migration arm's own
+subject, on the grounds that a discharge row incurring a NEW obligation can declare it in `owed`.
+**That argument is about what an author SHOULD write, not about what the arm CATCHES.** A
+discharge row whose prose declares a new obligation and carries no `owed` is silenced, and the
+fixture's existing acquittal probe did not cover it — it proves the DECLARED route stays open,
+which is a different claim.
+
+**Measured before accepting the trade, on the reference consumer's register: of the 9 rows the
+exemption silences, 0 declare a new obligation.** Two that a forward-looking prose scan flags
+were read in full and both REPORT a completed close — one ends "Verdict unchanged", the other
+names a residual and calls it "migration backlog rather than a reason to keep prescribing the
+retired shape". So this is not a live regression, and the fix stands.
+
+But the shape is constructible, so `layer-debt-due-and-discharge` gains a 16th assertion and a
+seed, `ride.md`, carrying `both.md`'s reason VERBATIM with the `owed` removed. The arm asserts
+the row IS silenced and says why that is the accepted boundary — reporting any discharge row
+whose prose reads forward is the lexical narrowing this defect's own analysis rejects, and it
+reinstates the noise the exemption removed. **The next author meets the cost as an assertion
+rather than rediscovering it as a silence**, and if the behaviour ever changes the arm says
+FIXTURE STALE and asks for the noise to be re-measured, rather than reporting a bug.
+
+The battery still discriminates at 16 arms: **FAIL 5 of 16** against the pre-fix subject with the
+two sides asserted non-identical by `cmp -s` and differing md5s, **PASS 16 of 16** after. Its own
+arm-count guard caught the addition before the run did — 16 assertions ran where 15 were
+declared, which it reports as FAIL because an assertion that did not execute is not one that
+passed.
+
 ## [0.453.0] - 2026-08-31
 
 ### The correct way to close a layer debt also filed an undeclared one
