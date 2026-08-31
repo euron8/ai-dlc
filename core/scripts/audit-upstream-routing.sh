@@ -217,7 +217,31 @@ def core_paths_in(body):
 # the reader gains is the discriminator they lacked: an absent path is either a
 # proposal (still ours) or a renamed/fictional subject (a candidate against a file no
 # tree contains), and only reading the item separates the two.
-root = os.environ["AI_DLC_ROOT"]
+#
+# THE TREE IS THE BACKLOG'S, NOT THIS SCRIPT'S, AND KEYING IT ON `AI_DLC_ROOT` SHIPPED A
+# FALSE POSITIVE ON EVERY ROW. The paths in a carry-over entry are relative to the
+# consumer that wrote it, while `AI_DLC_ROOT` is wherever this copy resolved from — and
+# `--backlog` names a corpus in a third place. Measured on the released v0.457.0: the
+# distribution's copy, run with `--backlog` pointed at the reference consumer's real
+# backlog, marked 4 of 4 findings `[NO SUCH FILE HERE]`, because no consumer-relative
+# path exists in a distribution checkout. So the root is walked up from the BACKLOG's own
+# directory, using the layered-consumer activation rule (`--audit-diff`'s: a version stamp
+# plus both layer directories), and when no such root is found NOTHING is labelled. A
+# corpus whose tree cannot be identified is one where the question was never asked, which
+# is not the same answer as "the file is missing".
+def backlog_root(path):
+    d = os.path.dirname(os.path.abspath(path))
+    while True:
+        if (os.path.isfile(os.path.join(d, ".claude", ".ai-dlc-version"))
+                and os.path.isdir(os.path.join(d, ".claude/skills/ai-dlc/overrides"))
+                and os.path.isdir(os.path.join(d, ".claude/skills/ai-dlc/extensions"))):
+            return d
+        parent = os.path.dirname(d)
+        if parent == d:
+            return None
+        d = parent
+
+root = backlog_root(backlog)
 
 findings, paired, absent_total = [], 0, 0
 for cid, ln, body in entries:
@@ -227,7 +251,11 @@ for cid, ln, body in entries:
     if PC.search(body):
         paired += 1          # already routed upstream; the pairing is the discriminator
         continue
-    rows = [{"path": p, "exists": os.path.exists(os.path.join(root, p))} for p in mach[:6]]
+    # `root is None` means the corpus could not be placed in a tree, so every path is
+    # reported unlabelled — an unasked question renders as no claim, never as "present".
+    rows = [{"path": p,
+             "exists": True if root is None else os.path.exists(os.path.join(root, p))}
+            for p in mach[:6]]
     absent_total += sum(1 for r in rows if not r["exists"])
     findings.append({"id": cid, "line": ln,
                      "paths": [r["path"] for r in rows], "named": rows})

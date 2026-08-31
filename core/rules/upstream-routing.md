@@ -10,24 +10,29 @@ way does not lose the finding — it loses the fix.
 tool that owns the answer:
 
 ```
-scripts/ai-dlc/core-paths.sh --is-core <path>     # 0 = AI/DLC's, 1 = yours, 2 = read the item
+scripts/ai-dlc/core-paths.sh --is-core <path>     # exit 0 = AI/DLC's, exit 1 = yours
 ```
 
 Exit 0 means the next `/ai-dlc-update` overwrites that file, so a local edit to it is erased and
 no upstream reader ever sees the defect. Exit 1 means it is yours to change and upstream cannot.
 
-**Exit 2 is a third answer and it is not a failure.** It means the path sits at a destination
-AI/DLC owns and NO SUCH FILE IS HERE — the manifest claims whole namespaces such as
-`scripts/ai-dlc/*`, so a match is evidence about a DESTINATION, never about a file. Read the item
-before routing it:
+**It answers about the PATH, and that is deliberate — it does not require a file to be there.**
+The manifest claims whole namespaces: `scripts/ai-dlc/*` is AI/DLC's in its entirety, so a name
+nobody has created yet still answers 0. That is the same answer the edit-time guard gives, and it
+has to be, because a `Write` is denied BEFORE the file exists — which is the only moment a deny is
+worth anything. Consumer-authored pipeline tooling goes in `scripts/ai-dlc-local/`.
 
-- A file the item **proposes to create** at that destination is still AI/DLC's. File the push
-  candidate.
-- A **renamed, deleted or fictional** path is neither. Filing it upstream produces a candidate
-  against a subject no tree contains, which nobody can act on and nobody can close. Find the real
-  path first, then ask again.
+**So a path can answer 0 while naming no file, and the routing still differs.** Read the item:
+
+- A file the item **proposes to create** at that destination is AI/DLC's. File the push candidate.
+- A **renamed, deleted or fictional** path is a naming error, not a routing one. Filing it upstream
+  produces a candidate against a subject no tree contains, which nobody can act on and nobody can
+  close. Find the real path first.
 - A **wildcard written in prose** — `.claude/hooks/ai-dlc-*.sh` — is not a filename. Name the file
   you mean.
+
+`audit-upstream-routing.sh` marks such a path `[NO SUCH FILE HERE]` in its report so you can tell
+the three apart without checking by hand. It marks them; it never drops them.
 
 Your `overrides/` and `extensions/` entries are YOURS — `--is-core` returns 1 for them. They are
 the supported way to change AI/DLC's behaviour here without editing AI/DLC's files.

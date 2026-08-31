@@ -28,42 +28,11 @@ set -uo pipefail
 #   core-paths.sh --audit-diff <base-ref> [<head-ref>]
 #
 # exit (--is-core):
-#   0 = the path IS core-manifest-owned, and on a layered consumer a file is
-#       actually there
+#   0 = the path IS core-manifest-owned
 #   1 = the path is NOT core (consumer-authored, or a layer/doc/source path)
-#   2 = cannot determine. Two causes, each named in the message: no readable
-#       manifest in either layout, or -- on a layered consumer only -- the path
-#       matches a core glob and NO SUCH FILE EXISTS. NEVER degrades to a 0 or a
-#       1: "cannot determine" and "not core" are different answers and a caller
-#       that cannot tell them apart will exempt the whole tree.
-#
-# A GLOB MATCH IS EVIDENCE ABOUT A DESTINATION, NEVER ABOUT A FILE, and the two
-# were one answer until a consumer filed the difference. `scripts/ai-dlc/*` is a
-# whole namespace, so an invented filename under it answered 0: measured, three in
-# one invocation -- a name invented for the probe answering 0 beside a real core
-# file at 0, against `scripts/ai-dlc-local/audit-rule-exercise.sh` at 1. The
-# live cost is upstream: `audit-upstream-routing.sh` reads path tokens out of
-# carry-over PROSE, so a finding naming a fictional or long-renamed path routes to
-# the push-candidate ledger against a subject that exists in no tree. Measured on
-# the reference consumer's 80-entry corpus: 13 core-glob path tokens, 11 present,
-# 2 absent -- one a file an item PROPOSES, one a bare `.claude/hooks/ai-dlc-*.sh`
-# wildcard written in prose, which is not a filename at all.
-#
-# WHY MEMBERSHIP IS GATED ON THE LAYERED-CONSUMER ACTIVATION RULE, and not asked
-# everywhere. In the distribution there is no consumer-relative tree to look in:
-# `scripts/ai-dlc/X` is shipped from `core/scripts/X`, and `core/scripts/ai-dlc/`
-# does not exist (measured, against `core/scripts/` as the control). Reversing
-# that mapping means restating `install.sh`'s own path split inside a resolver
-# whose whole point is not to hand-list what core is, so the question is refused
-# where it cannot be answered rather than guessed at. The filing's own wording --
-# require the DISTRIBUTION to carry the corresponding `core/` file -- is
-# unbuildable for the same reason from the other side: an installed consumer has
-# no `core/` directory at all (measured on a tree built by `install.sh` into an
-# empty dir, and on the reference consumer, against the consumer-relative form as
-# the control). So the activation rule below is `--audit-diff`'s, reused: a
-# version stamp plus both layer directories. Dormant, this mode answers exactly as
-# it did before, which is what keeps the distribution's own fixtures and the
-# `--list`-vs-`--is-core` agreement arm measuring what they always measured.
+#   2 = cannot determine -- no readable manifest in either layout. NEVER degrades
+#       to a 0 or a 1: "no manifest found" and "not core" are different answers
+#       and a caller that cannot tell them apart will exempt the whole tree.
 #
 # exit (--list): 0 with one consumer-relative glob per line, 2 if unparseable.
 #
@@ -396,41 +365,11 @@ fi
 # `./scripts/ai-dlc/verdict.sh` and `scripts/ai-dlc/verdict.sh` agree.
 REL="${TARGET#./}"
 
-# THE TREE THE QUESTION IS ABOUT IS THE CALLER'S, NOT THIS SCRIPT'S. `--is-core`
-# is asked about a PROJECT-RELATIVE path, and `validate-stub-audit.sh:265` already
-# `cd`s to the root it means before asking. So walk UP from the working directory
-# for the stamp -- never up from ${BASH_SOURCE}, because this file is copied into a
-# temp directory by the reference consumer's own receipt for this defect, and a
-# self-relative walk would answer about /tmp. Never count `..` hops either: a hop
-# count answers differently from the root, from a subdirectory and from a sandbox,
-# and the sandbox answer is the silent one.
-LAYERED_ROOT=""
-if [ "$MODE" = "--is-core" ]; then
-  _d="$PWD"
-  while [ -n "$_d" ] && [ "$_d" != "/" ]; do
-    if [ -f "$_d/.claude/.ai-dlc-version" ] \
-       && [ -d "$_d/.claude/skills/ai-dlc/overrides" ] \
-       && [ -d "$_d/.claude/skills/ai-dlc/extensions" ]; then
-      LAYERED_ROOT="$_d"; break
-    fi
-    _d="$(dirname "$_d")"
-  done
-fi
-
 while IFS= read -r g; do
   [ -n "$g" ] || continue
   # shellcheck disable=SC2254
   case "$REL" in
-    $g)
-      if [ -n "$LAYERED_ROOT" ] && [ ! -e "${LAYERED_ROOT}/${REL}" ]; then
-        echo "core-destination: ${REL} (matches core-manifest glob '${g}' via ${USED}) -- but NO SUCH FILE under ${LAYERED_ROOT}."
-        echo "  Refusing to answer 0: a glob match is evidence about a DESTINATION, not about a file." >&2
-        echo "  Read the item before routing it. A path a proposal INTENDS to create at a core" >&2
-        echo "  destination is still upstream's; a renamed, fictional or wildcard path is neither" >&2
-        echo "  upstream's nor yours, and filing it upstream names a subject no tree contains." >&2
-        exit 2
-      fi
-      echo "core: ${REL} (matches core-manifest glob '${g}' via ${USED})"; exit 0 ;;
+    $g) echo "core: ${REL} (matches core-manifest glob '${g}' via ${USED})"; exit 0 ;;
   esac
 done <<EOF
 $CORE_GLOBS

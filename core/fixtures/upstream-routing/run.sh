@@ -74,13 +74,29 @@ CPATHS="$(dirname "$SUBJ")/core-paths.sh"
 MANIFEST_F="$(pick "$ROOT/.claude/skills/ai-dlc/core-manifest.md" "$ROOT/core/skills/ai-dlc/core-manifest.md")"
 [ -n "$MANIFEST_F" ] || { echo "FIXTURE ERROR: no core-manifest.md under $ROOT in either layout" >&2; exit 2; }
 
+# The core guard and the site data it needs, resolved HERE in whichever layout this tree is, for
+# the same reason the manifest is. The guard is the THIRD party to the agreement arm below and is
+# driven through its real PreToolUse contract rather than reimplemented.
+GUARD_F="$(pick "$ROOT/.claude/hooks/ai-dlc-core-guard.sh" "$ROOT/core/hooks/ai-dlc-core-guard.sh")"
+[ -n "$GUARD_F" ] || { echo "FIXTURE ERROR: no ai-dlc-core-guard.sh under $ROOT in either layout" >&2; exit 2; }
+# NOT optional, and its absence is SILENT: `[ -r "$SITES" ] || exit 0` sits ABOVE the guard's deny,
+# so a sandbox without this file allows every path and the agreement arm reads green having asked
+# the guard nothing.
+SITES_F="$(pick "$ROOT/.claude/skills/ai-dlc-update/reconcile/setup-sites.md" \
+                "$ROOT/core/skills/ai-dlc-update/reconcile/setup-sites.md")"
+[ -n "$SITES_F" ] || { echo "FIXTURE ERROR: no reconcile/setup-sites.md under $ROOT in either layout" >&2; exit 2; }
+
 command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 absent" >&2; exit 2; }
+# `jq` is the GUARD's own dependency, not this fixture's convenience. Without it the guard reads an
+# empty tool_name, falls through its `case` to `exit 0`, and ALLOWS every path — a fail-open that
+# reads exactly like three-way agreement.
+command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq absent — the core guard cannot be driven, and a guard that cannot run allows everything" >&2; exit 2; }
 
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
-EXPECTED_ASSERTIONS=44
+EXPECTED_ASSERTIONS=42
 fails=0; made=0
 ok()   { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad()  { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
@@ -193,11 +209,24 @@ else
 fi
 
 # =============================================================================================
-# 2-4. AGREEMENT WITH THE SHIPPING PREDICATE. The subject matches in-process against
-# `--list`; `core-paths.sh --is-core` matches with a shell `case`. Nothing in either program
-# makes them agree, and the subject's header banks the equivalence as measured. These arms carry
-# that measurement forward so the two cannot drift apart silently.
-# =============================================================================================
+# 2-4. AGREEMENT WITH THE SHIPPING PREDICATE, ACROSS THREE PARTIES. The subject matches
+# in-process against `--list`; `core-paths.sh --is-core` matches with a shell `case`;
+# `ai-dlc-core-guard.sh` decides deny/allow on a write. Nothing in the three programs makes them
+# agree, and all three must, because they are one rule with three readers.
+#
+# WHY THE GUARD IS HERE, AND WHY I25 IS NOT ENOUGH. `validate-enforcement-map.sh` (I25)
+# byte-compares `parse_manifest()` and `to_consumer_glob()` between the guard and the resolver,
+# and its own error text states the stake: "One denies edits to core, the other tells Check 16
+# which files are core; a rule that differs between them means a file the guard protects can be
+# audited as consumer-authored." Both functions are inside that join. THE DECISION IS NOT.
+# `v0.457.0` forked the two at the decision — the guard went on denying a write to an invented
+# name under `scripts/ai-dlc/`, while `--is-core` began refusing to call it core — and I25 passed
+# on every run. This arm closes the gap by comparing the ANSWERS instead of the parsers.
+#
+# THE INVENTED FILENAME IS THE INPUT THAT SEPARATES THEM. Every other seeded path either is or is
+# not core by a rule all three already share; only a name under a core glob that no tree contains
+# distinguishes destination-ownership from file-existence. It is last in the set and it is the
+# reason the set exists.
 AGREE_PATHS='scripts/ai-dlc/core-paths.sh
 .claude/hooks/ai-dlc-core-guard.sh
 .claude/skills/ai-dlc/SKILL.md
@@ -207,7 +236,9 @@ tests/fixtures/check-15-bypass/run.sh
 .claude/skills/ai-dlc/overrides/gate-validation.md
 scripts/ai-dlc-local/my-tool.sh
 docs/architecture/decisions.md
-src/services/billing.py'
+src/services/billing.py
+scripts/ai-dlc/NEVER-SHIPPED-BY-ANYONE.sh'
+INVENTED='scripts/ai-dlc/NEVER-SHIPPED-BY-ANYONE.sh'
 
 # One entry per path, none of them paired, so a path is reported if and only if the in-process
 # predicate classified it as machinery.
@@ -264,17 +295,76 @@ else
   show "${missed}$(cat "$WORK/all.json.err" 2>/dev/null)"
 fi
 
-# --- 3. AGREEMENT: in-process matching vs per-path `--is-core`, zero disagreements ------------
+# --- the guard sandbox: a LAYERED consumer, where all three parties are LIVE -------------------
+# THE THIRD PARTY MUST BE ASKED WHERE IT IS ACTIVE. `ai-dlc-core-guard.sh` is a no-op off a
+# layered consumer — a `.claude/.ai-dlc-version` stamp plus both layer dirs — so a guard probe run
+# against $ROOT answers ALLOW for everything and the "agreement" is between two parties and a
+# corpse. The resolver is asked from this same tree for the mirror reason: `v0.457.0`'s membership
+# fork was itself gated on the layered-consumer rule, so from the dormant distribution root it
+# answers exactly as the fixed one does and the defect is invisible. Measured while building this
+# arm: from $ROOT the re-applied defect moves ZERO verdicts; from here it moves exactly one.
+#
+# EVERY SEEDED PATH IS CREATED HERE EXCEPT THE INVENTED ONE, so presence is uniform across the set
+# and the invented path differs from its neighbours in exactly one property — the property under
+# test. Without that the arm would be varying two things at once.
+GTREE="$WORK/guard-tree"
+mkdir -p "$GTREE/.claude/skills/ai-dlc/overrides" \
+         "$GTREE/.claude/skills/ai-dlc/extensions" \
+         "$GTREE/.claude/skills/ai-dlc-update/reconcile"
+: > "$GTREE/.claude/.ai-dlc-version"
+cp "$MANIFEST_F" "$GTREE/.claude/skills/ai-dlc/core-manifest.md"
+cp "$SITES_F"    "$GTREE/.claude/skills/ai-dlc-update/reconcile/setup-sites.md"
+while IFS= read -r p; do
+  [ -n "$p" ] || continue
+  [ "$p" = "$INVENTED" ] && continue
+  mkdir -p "$GTREE/$(dirname "$p")" && : > "$GTREE/$p"
+done <<EOF
+$AGREE_PATHS
+EOF
+[ ! -e "$GTREE/$INVENTED" ] || { echo "FIXTURE ERROR: the invented path exists in the guard sandbox, so it is not invented" >&2; exit 2; }
+[ -e "$GTREE/scripts/ai-dlc/core-paths.sh" ] || { echo "FIXTURE ERROR: the guard sandbox carries no real core file, so a deny cannot be told from a fail-open" >&2; exit 2; }
+
+# THE GUARD'S VERDICT IS ITS STDOUT, NEVER ITS EXIT CODE. `route_and_deny` prints a
+# permissionDecision JSON and then exits 0, and the allow paths exit 0 too — so a probe keyed on
+# `$?` reads ALLOW for every input and can never fire. Measured while building this arm: 11 inputs,
+# 11 exit zeros, 7 of them denials. `Write` is the tool driven on purpose: the guard short-circuits
+# the /ai-dlc-setup config-region exemption for a whole-file overwrite, so its answer here is a
+# pure core-membership verdict and nothing else.
+guard_says() {   # <project-relative path> -> deny | allow
+  local out
+  out="$(printf '{"tool_name":"Write","tool_input":{"file_path":"%s"}}' "$1" \
+         | CLAUDE_PROJECT_DIR="$GTREE" bash "$GUARD_F" 2>/dev/null)"
+  if has '"permissionDecision": *"deny"' "$out"; then printf 'deny'; else printf 'allow'; fi
+}
+# Asked once and cached: the sandbox does not move between assertions 3 and 31, and the guard is a
+# bash+jq spawn per path on a pole-bound suite.
+GUARD_VERDICTS=""
+while IFS= read -r p; do
+  [ -n "$p" ] || continue
+  GUARD_VERDICTS="${GUARD_VERDICTS}${p} $(guard_says "$p")
+"
+done <<EOF
+$AGREE_PATHS
+EOF
+# Exact string compare, not a regex: a `.` in a path is a BRE wildcard and would let one seeded
+# path answer for another. MISSING is loud rather than defaulting to allow.
+guard_verdict() { awk -v p="$1" '$1==p {print $2; f=1} END{if(!f) print "MISSING"}' <<<"$GUARD_VERDICTS"; }
+
+# --- 3. AGREEMENT: three parties, one seeded set, zero disagreements ---------------------------
 run_json "$SUBJ" "$AGREE_BL" "$WORK/agree.json"; agree_rc=$RC
 inproc=""
 if [ "$agree_rc" = "0" ]; then
   inproc="$(summarize "$WORK/agree.json")"
 fi
-disagree=""; n_core=0; n_not=0; n_refused=0
+disagree=""; n_core=0; n_not=0; n_refused=0; n_deny=0; n_allow=0; n_in_core=0; n_in_not=0
 while IFS= read -r p; do
   [ -n "$p" ] || continue
-  ( cd "$ROOT" && bash "$CPATHS" --is-core "$p" >/dev/null 2>&1 ); is_rc=$?
-  if has "^path=CO-S400-AGREE[0-9]* ${p}\$" "$inproc"; then in_says=core; else in_says=not-core; fi
+  ( cd "$GTREE" && bash "$CPATHS" --is-core "$p" "$MANIFEST_F" >/dev/null 2>&1 ); is_rc=$?
+  if has "^path=CO-S400-AGREE[0-9]* ${p}\$" "$inproc"; then
+    in_says=core; n_in_core=$((n_in_core+1))
+  else
+    in_says=not-core; n_in_not=$((n_in_not+1))
+  fi
   case "$is_rc" in
     0) is_says=core ;;
     1) is_says=not-core ;;
@@ -282,24 +372,33 @@ while IFS= read -r p; do
   esac
   [ "$is_says" = core ]     && n_core=$((n_core+1))
   [ "$is_says" = not-core ] && n_not=$((n_not+1))
-  [ "$in_says" = "$is_says" ] || disagree="${disagree}${p}: in-process=${in_says} --is-core=${is_says}
+  case "$(guard_verdict "$p")" in
+    deny)  g_says=core;     n_deny=$((n_deny+1)) ;;
+    allow) g_says=not-core; n_allow=$((n_allow+1)) ;;
+    *)     g_says=MISSING ;;
+  esac
+  if [ "$in_says" != "$is_says" ] || [ "$in_says" != "$g_says" ]; then
+    disagree="${disagree}${p}: in-process=${in_says} --is-core=${is_says} guard=${g_says}
 "
+  fi
 done <<EOF
 $AGREE_PATHS
 EOF
 
 if [ "$agree_rc" = "0" ] && [ "$n_refused" = "0" ] && [ -z "$disagree" ]; then
-  ok "AGREEMENT: in-process matching and per-path \`--is-core\` agree on every seeded path"
+  ok "AGREEMENT: the router's in-process \`--list\` matching, \`core-paths.sh --is-core\` and \`ai-dlc-core-guard.sh\`'s deny/allow all give the same answer on every seeded path, INCLUDING an invented filename under a core glob"
 else
-  bad "AGREEMENT: rc=$agree_rc, $n_refused refusals, and the two routes disagreed — the subject's --list optimisation has drifted from the shipping resolver:"
+  bad "AGREEMENT: rc=$agree_rc, $n_refused refusal(s), and the three routes disagreed. A file the guard protects can now be audited as consumer-authored; I25 binds only parse_manifest() and to_consumer_glob(), so a fork at the DECISION passes it:"
   show "$disagree"
 fi
 
-# --- 4. and it DISCRIMINATES. Two routes that both answer `core` to everything also agree ------
-if [ "$n_core" -gt 0 ] && [ "$n_not" -gt 0 ]; then
-  ok "AGREEMENT DISCRIMINATES: the seeded set contains both classes ($n_core core, $n_not not-core)"
+# --- 4. and it DISCRIMINATES. Three routes that all answer one class to everything also agree --
+if [ "$n_core" -gt 0 ] && [ "$n_not" -gt 0 ] \
+   && [ "$n_deny" -gt 0 ] && [ "$n_allow" -gt 0 ] \
+   && [ "$n_in_core" -gt 0 ] && [ "$n_in_not" -gt 0 ]; then
+  ok "AGREEMENT DISCRIMINATES: every route produced BOTH answers (--is-core $n_core/$n_not, guard $n_deny deny/$n_allow allow, in-process $n_in_core/$n_in_not)"
 else
-  bad "AGREEMENT DISCRIMINATES: the seeded set resolved to $n_core core / $n_not not-core — a one-class set makes assertion 3 vacuous"
+  bad "AGREEMENT DISCRIMINATES: --is-core $n_core/$n_not, guard $n_deny deny/$n_allow allow, in-process $n_in_core/$n_in_not — a route answering one class to everything makes assertion 3 vacuous. A guard reading 0 deny is the BROKEN-PROBE shape: it exits 0 on allow AND on deny, so a probe must read the permissionDecision on stdout, and it fails open without a readable setup-sites.md in the sandbox"
 fi
 
 # =============================================================================================
@@ -680,59 +779,160 @@ else
 fi
 
 # =============================================================================================
-# 30-44. A GLOB MATCH IS EVIDENCE ABOUT A DESTINATION, NEVER ABOUT A FILE.
+# 30-42. A GLOB MATCH IS EVIDENCE ABOUT A DESTINATION, NEVER ABOUT A FILE — AND THE TREE THE
+# QUESTION IS ASKED ABOUT IS THE BACKLOG'S.
 #
-# Two subjects, one defect. `core-paths.sh --is-core` used to answer 0 for any path matching a
-# core glob whether or not a file was there, and `scripts/ai-dlc/*` is a whole namespace, so an
-# invented filename answered "core". It now exits 2 for a matched path naming no file — on a
-# LAYERED consumer only. Beside it, the reporter LABELS such a path `[NO SUCH FILE HERE]` and
+# ONE SUBJECT NOW, NOT TWO, AND THAT IS THE CORRECTION `v0.458.0` MAKES. `v0.457.0` taught
+# `core-paths.sh --is-core` to refuse a path matching a core glob that named no file on a layered
+# consumer. That was wrong: destination ownership of `scripts/ai-dlc/` is the shipped, deliberate
+# design, stated verbatim in `ai-dlc-core-guard.sh`'s own remedy text — "scripts/ai-dlc/ is
+# core-owned in its entirety (core-manifest.md claims `scripts/ai-dlc/*`), so this deny stands
+# whether or not the distribution ships a file by that name". The guard must deny a Write to a
+# path BEFORE it exists, which is exactly when a Write fires. `--is-core` answering 0 there was
+# the resolver AGREEING with the guard; the change made them disagree. It is reverted, and
+# assertions 3-4 and 31 are what would have caught it.
+#
+# WHAT SURVIVES IS THE REPORTER'S LABEL, whose root resolution is now the BACKLOG's tree rather
+# than the running copy's. The reporter LABELS an absent path `[NO SUCH FILE HERE]` and
 # deliberately does NOT filter it, because on the reference consumer both absent paths belonged
 # upstream and a filter would have acquitted a true misroute.
 #
 # BOTH HALVES FAIL SILENTLY. The label simply stops appearing, which reads like a corpus with
-# nothing absent in it; and the resolver's new answer is INVISIBLE in any tree that is dormant,
-# which is every tree this fixture ran in before today. So every arm below carries its opposite
-# in the same run — a seeded offender AND a seeded near-miss, a layered sandbox AND a dormant
-# one — and every one of them has a mutant, because a near-miss establishes that an arm
+# nothing absent in it; and a label keyed on the WRONG tree fires on everything, which reads like
+# a corpus where nothing exists. So every arm below carries its opposite in the same run — a
+# seeded offender AND a seeded near-miss, a rooted corpus AND an unrootable one, one tree AND a
+# second one — and every one has a mutant, because a near-miss establishes that an arm
 # DISCRIMINATES and only a mutant establishes that it fires at all.
 # =============================================================================================
 
-# --- 30. ASSERTION 3's PREMISE: the tree it asks `--is-core` in is DORMANT --------------------
-# A TRAP ARM 3 WILL HIT, WRITTEN BEFORE IT DOES. That assertion cross-checks in-process `--list`
-# matching against per-path `--is-core` and counts any exit other than 0 or 1 as a refusal, which
-# it fails on. On a LAYERED tree those two now legitimately DISAGREE for a path that matches a
-# glob and names no file: `--list` still emits the glob, `--is-core` answers 2. Every path in
-# AGREE_PATHS is exactly that shape here — `scripts/ai-dlc/core-paths.sh` is a core DESTINATION
-# and the distribution keeps the file at `core/scripts/`, so no consumer-relative core path is on
-# disk. Assertion 3 survives only because $ROOT is dormant. Pin that dependency, so a future
-# author who layers this sandbox gets a named failure instead of a mystery.
-#
-# The second probe is the CONTROL and it is in the same invocation set: a non-core path must come
-# back 1. Without it a 0 on the first probe cannot be told from a dead predicate — a resolver that
-# classified nothing would answer 0 for a matched path too, having matched none.
-( cd "$ROOT" && bash "$CPATHS" --is-core scripts/ai-dlc/core-paths.sh "$MANIFEST_F" >/dev/null 2>&1 ); prem_core=$?
-( cd "$ROOT" && bash "$CPATHS" --is-core docs/architecture/decisions.md "$MANIFEST_F" >/dev/null 2>&1 ); prem_not=$?
-if [ "$prem_core" = "0" ] && [ "$prem_not" = "1" ]; then
-  ok "ASSERTION 3's PREMISE: \$ROOT is DORMANT — an absent core destination answers 0, not 2 (control, same invocation set: a non-core path answers 1, so the resolver ran and discriminated)"
-elif [ "$prem_core" = "2" ]; then
-  bad "ASSERTION 3's PREMISE IS GONE: \$ROOT now resolves as a LAYERED consumer, so --is-core answers 2 for the absent core destinations in AGREE_PATHS and assertion 3 counts them as refusals. Assertion 3 is what needs changing, not this one"
+# --- 30. CONTROL: the core-paths mutator refuses an anchor that matches nothing ---------------
+# The second subject gets its own harness, so it gets its own control. A replacement that matched
+# nothing produces an unmutated copy, and an unmutated copy passes assertion 31 — a mutation that
+# killed nothing reads exactly like an arm that cannot fire.
+if [ -z "$(mkmutcp impossible 'ZZ-NOT-IN-THE-SUBJECT-ZZ' 'x')" ] \
+   && [ -n "$(mkmutcp control 'REL="${TARGET#./}"' 'REL="${TARGET#./}" # control')" ]; then
+  ok "CONTROL: mkmutcp refuses an anchor present 0 times and accepts one present exactly once — assertion 31 scores against a real mutation"
 else
-  bad "ASSERTION 3's PREMISE: core destination rc=$prem_core (want 0), non-core rc=$prem_not (want 1) — the resolver did not discriminate, so neither arm measures anything"
+  bad "CONTROL: mkmutcp accepted an impossible anchor or refused a real one — assertion 31's mutant is unscored"
 fi
 
-# --- the label sandbox: one tree, one corpus, present and absent side by side -----------------
+# --- 31. MUTANT: v0.457.0's `--is-core` re-applied (assertions 3-4 are live) ------------------
+# THE ARM THAT WOULD HAVE CAUGHT THE RELEASE THIS ONE CORRECTS, scored rather than argued about.
+# The mutation restores the reverted decision fork verbatim — walk up from $PWD for the layered
+# activation elements, then refuse a matched path naming no file. Only the exit is restored; the
+# diagnostic echoes that went with it move no verdict.
+#
+# IT MUST SPLIT THE PARTIES ON EXACTLY THE INVENTED PATH. Every other seeded path is on disk in
+# $GTREE, so a mutant moving more than one verdict is a broken mutation and not a caught defect,
+# and this arm fails on that too rather than reading a bigger number as a better kill. The
+# comparison replayed here IS assertion 3's, three routes and all, so what it demonstrates is that
+# assertion 3 goes red — not merely that the resolver changed its mind.
+#
+# THE FRAGMENTS GO THROUGH FILES, NOT `$(cat <<'X')`. A quoted heredoc nested inside a command
+# substitution does NOT reliably suppress expansion in bash 3.2 when its body itself contains
+# `$( )` — measured here: the `_d="$(dirname "$_d")"` line below made the whole body expand, and
+# `set -u` then killed the run on `LAYERED_ROOT` at the closing paren, four lines past anything
+# that names it. At top level the same heredoc is literal.
+cat >"$WORK/m457.find" <<'M457A'
+REL="${TARGET#./}"
+
+while IFS= read -r g; do
+  [ -n "$g" ] || continue
+  # shellcheck disable=SC2254
+  case "$REL" in
+M457A
+cat >"$WORK/m457.repl" <<'M457B'
+REL="${TARGET#./}"
+
+LAYERED_ROOT=""
+if [ "$MODE" = "--is-core" ]; then
+  _d="$PWD"
+  while [ -n "$_d" ] && [ "$_d" != "/" ]; do
+    if [ -f "$_d/.claude/.ai-dlc-version" ] \
+       && [ -d "$_d/.claude/skills/ai-dlc/overrides" ] \
+       && [ -d "$_d/.claude/skills/ai-dlc/extensions" ]; then
+      LAYERED_ROOT="$_d"; break
+    fi
+    _d="$(dirname "$_d")"
+  done
+fi
+
+while IFS= read -r g; do
+  [ -n "$g" ] || continue
+  # shellcheck disable=SC2254
+  case "$REL" in
+    $g) [ -n "$LAYERED_ROOT" ] && [ ! -e "${LAYERED_ROOT}/${REL}" ] && exit 2 ;;
+  esac
+  case "$REL" in
+M457B
+# The heredocs above are LITERAL, so a body that expanded is a fixture defect and not a finding.
+# `$MODE` names a variable this fixture never sets, which makes it the cheapest tell.
+if ! grep -q 'MODE' "$WORK/m457.repl"; then
+  echo "FIXTURE ERROR: the mutation fragment expanded instead of staying literal — assertion 31 would score a mutation nobody wrote" >&2
+  exit 2
+fi
+M457="$(mkmutcp is457 "$(cat "$WORK/m457.find")" "$(cat "$WORK/m457.repl")")"
+if [ -z "$M457" ]; then
+  bad "MUTANT is457: the anchor matched nothing — assertions 3-4 prove nothing"
+else
+  m457_dis=""; m457_ref=0
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    ( cd "$GTREE" && bash "$M457" --is-core "$p" "$MANIFEST_F" >/dev/null 2>&1 ); m_rc=$?
+    case "$m_rc" in
+      0) m_says=core ;;
+      1) m_says=not-core ;;
+      *) m_says="refused($m_rc)"; m457_ref=$((m457_ref+1)) ;;
+    esac
+    if has "^path=CO-S400-AGREE[0-9]* ${p}\$" "$inproc"; then mi_says=core; else mi_says=not-core; fi
+    if [ "$(guard_verdict "$p")" = "deny" ]; then mg_says=core; else mg_says=not-core; fi
+    if [ "$mi_says" != "$m_says" ] || [ "$mi_says" != "$mg_says" ]; then
+      m457_dis="${m457_dis}${p}: in-process=${mi_says} --is-core=${m_says} guard=${mg_says}
+"
+    fi
+  done <<EOF
+$AGREE_PATHS
+EOF
+  m457_n="$(printf '%s' "$m457_dis" | grep -c . || true)"
+  if [ "$m457_n" = "1" ] && [ "$m457_ref" = "1" ] && has "^${INVENTED}: " "$m457_dis"; then
+    ok "MUTANT is457: re-applying v0.457.0's \`--is-core\` splits the resolver from the guard on EXACTLY the invented path, which the guard still DENIES — so assertion 3 is what catches a fork at the DECISION, the fork I25 cannot see because it byte-compares only parse_manifest() and to_consumer_glob()"
+  else
+    bad "MUTANT is457: $m457_n disagreement(s) and $m457_ref refusal(s), want exactly 1 of each on $INVENTED — assertion 3 is vacuous or the mutation was not surgical: ${m457_dis:-none}"
+  fi
+fi
+
+# --- the label sandboxes: the tree is the BACKLOG's, and a SECOND tree is what proves it ------
 # THE PAIR MUST SHARE A RUN AND A CORPUS. A near-miss measured in a SEPARATE run is an ADJACENT
 # input: it can only ask whether the label fires at all, never whether it fires on the RIGHT path.
 # So CO-S410-MIXED names one present path and one absent path IN THE SAME ENTRY, and both come
 # from the SAME glob (`scripts/ai-dlc/*`) — the two probes differ in exactly one property, which
 # is the one under test.
-EXTREE="$WORK/exists-tree"
-mkdir -p "$EXTREE/.claude/skills/ai-dlc" "$EXTREE/scripts/ai-dlc"
-cp "$MANIFEST_F" "$EXTREE/.claude/skills/ai-dlc/core-manifest.md"
-: > "$EXTREE/scripts/ai-dlc/core-paths.sh"
-: > "$EXTREE/scripts/ai-dlc/verdict-lib.sh"
+#
+# THE FALSE POSITIVE THAT SHIPPED, AND THE REASON THERE ARE TWO TREES. `v0.457.0` keyed the
+# existence check on AI_DLC_ROOT — wherever the RUNNING COPY resolved from — while the paths in a
+# carry-over entry are relative to the consumer that WROTE it, and `--backlog` names a corpus in a
+# third place. Measured on that release: the distribution's copy, pointed at the reference
+# consumer's real backlog, marked 4 of 4 findings `[NO SUCH FILE HERE]`, because no
+# consumer-relative path exists in a distribution checkout. CTREE is a layered consumer holding
+# the corpus AND the files; OTHER is a different tree with a manifest and NONE of the paths,
+# standing in for that distribution. One tree cannot express the defect at all.
+CTREE="$WORK/consumer-tree"
+mkdir -p "$CTREE/.claude/skills/ai-dlc/overrides" \
+         "$CTREE/.claude/skills/ai-dlc/extensions" \
+         "$CTREE/scripts/ai-dlc" "$CTREE/_bmad-output"
+: > "$CTREE/.claude/.ai-dlc-version"
+cp "$MANIFEST_F" "$CTREE/.claude/skills/ai-dlc/core-manifest.md"
+: > "$CTREE/scripts/ai-dlc/core-paths.sh"
+: > "$CTREE/scripts/ai-dlc/verdict-lib.sh"
 
-ABSBL="$WORK/backlog-absent.md"
+OTHER="$WORK/other-tree"
+mkdir -p "$OTHER/.claude/skills/ai-dlc"
+cp "$MANIFEST_F" "$OTHER/.claude/skills/ai-dlc/core-manifest.md"
+# ASSERTED, NOT ASSUMED: if OTHER happened to carry the seeded paths, assertion 35 would compare
+# two identical labelings and pass while measuring nothing.
+[ ! -e "$OTHER/scripts/ai-dlc/core-paths.sh" ] || { echo "FIXTURE ERROR: the second tree carries a seeded path, so assertion 35 cannot discriminate" >&2; exit 2; }
+
+ABSBL="$CTREE/_bmad-output/backlog-absent.md"
 cat >"$ABSBL" <<'MD'
 # Carry-over backlog
 
@@ -753,21 +953,46 @@ MD
 # The SAME corpus with the two absent filenames swapped for present ones. Same ids, same entry
 # count, same number of named paths per entry — the ONLY property that moves is whether the file
 # is on disk. Assertion 32 reads the finding set off both and requires them identical.
-PRESBL="$WORK/backlog-allpresent.md"
+PRESBL="$CTREE/_bmad-output/backlog-allpresent.md"
 sed -e 's#scripts/ai-dlc/merge-gate-verdicts\.sh#scripts/ai-dlc/verdict-lib.sh#' \
     -e 's#scripts/ai-dlc/never-shipped-by-anyone\.sh#scripts/ai-dlc/verdict-lib.sh#' \
     "$ABSBL" >"$PRESBL"
 if cmp -s "$ABSBL" "$PRESBL"; then
-  echo "FIXTURE ERROR: the all-present corpus is byte-identical to the absent one — the sed matched nothing and assertion 32 would compare a corpus with itself" >&2
+  echo "FIXTURE ERROR: the all-present corpus is byte-identical to the absent one — the sed matched nothing and assertion 33 would compare a corpus with itself" >&2
   exit 2
 fi
 
-run_txt  "$SUBJ" "$ABSBL"  "$WORK/abs.txt"  "$EXTREE"; abs_rc=$RC
-abs_txt="$(cat "$WORK/abs.txt")"
-run_json "$SUBJ" "$ABSBL"  "$WORK/abs.json"  "$EXTREE"; absj_rc=$RC
-run_json "$SUBJ" "$PRESBL" "$WORK/pres.json" "$EXTREE"; presj_rc=$RC
+# THE SAME BYTES, OUTSIDE ANY LAYERED TREE. $WORK is a mktemp directory with no
+# `.claude/.ai-dlc-version` above it, so the corpus is identical and only its LOCATION differs —
+# which is the single property assertion 36 is about.
+UNROOTBL="$WORK/backlog-unrooted.md"
+cp "$ABSBL" "$UNROOTBL"
+# THE PREMISE, CHECKED RATHER THAN HOPED FOR. $WORK comes from `mktemp -d`, and if TMPDIR ever
+# pointed inside a layered tree the corpus would be rootable after all — assertion 36 would then
+# fail as though the subject were broken, when what moved was the sandbox. Report BROKEN instead.
+_d="$WORK"
+while [ -n "$_d" ] && [ "$_d" != "/" ]; do
+  if [ -f "$_d/.claude/.ai-dlc-version" ] \
+     && [ -d "$_d/.claude/skills/ai-dlc/overrides" ] \
+     && [ -d "$_d/.claude/skills/ai-dlc/extensions" ]; then
+    echo "FIXTURE ERROR: \$WORK ($WORK) sits under a layered tree at $_d, so the unrootable corpus is rootable and assertion 36 has no subject" >&2
+    exit 2
+  fi
+  _d="$(dirname "$_d")"
+done
 
-# --- 31. the label FIRES on the absent path and STAYS SILENT on the present one ---------------
+run_txt  "$SUBJ" "$ABSBL"  "$WORK/abs.txt"  "$CTREE"; abs_rc=$RC
+abs_txt="$(cat "$WORK/abs.txt")"
+run_json "$SUBJ" "$ABSBL"  "$WORK/abs.json"  "$CTREE"; absj_rc=$RC
+run_json "$SUBJ" "$PRESBL" "$WORK/pres.json" "$CTREE"; presj_rc=$RC
+# The same corpus read by a subject whose OWN root is a different tree entirely.
+run_json "$SUBJ" "$ABSBL"  "$WORK/abs-other.json" "$OTHER"; absother_rc=$RC
+# The unrootable corpus, read by a subject rooted in the layered tree — so a label appearing here
+# could only have come from the RUNNING COPY's root, which is the defect.
+run_txt  "$SUBJ" "$UNROOTBL" "$WORK/unroot.txt"  "$CTREE"; unroot_rc=$RC
+run_json "$SUBJ" "$UNROOTBL" "$WORK/unroot.json" "$CTREE"; unrootj_rc=$RC
+
+# --- 32. the label FIRES on the absent path and STAYS SILENT on the present one ---------------
 # Both readings come out of ONE run over ONE corpus, and the marked path and the unmarked path sit
 # in the SAME entry. The unmarked pattern is anchored at end-of-line: that is what makes it a
 # silence assertion rather than a substring that a marked row would also satisfy.
@@ -780,7 +1005,7 @@ else
   show "$abs_txt"
 fi
 
-# --- 32. the label LABELS; it does not FILTER -------------------------------------------------
+# --- 33. the label LABELS; it does not FILTER -------------------------------------------------
 # THE ARM THAT CATCHES SOMEONE LATER "IMPROVING" THIS INTO A FILTER. An entry whose ONLY machinery
 # path is absent must still be REPORTED: measured on the reference consumer, both absent paths sat
 # in entries that belong upstream — one a script an item PROPOSES at a core destination — so a
@@ -800,7 +1025,7 @@ else
   bad "the absent path moved the finding SET — absent ids [$(echo "$abs_ids" | tr '\n' ' ')] vs present ids [$(echo "$pres_ids" | tr '\n' ' ')], entries $abs_n vs $pres_n, rc=$absj_rc/$presj_rc"
 fi
 
-# --- 33. --json agrees with the TEXT, path by path and in total -------------------------------
+# --- 34. --json agrees with the TEXT, path by path and in total -------------------------------
 # TWO INDEPENDENTLY DERIVED VALUES, NOT ONE READ OFF A RENDERING. `absent_named` comes from the
 # JSON; the text count is derived by counting the `names:` ROWS that carry the marker.
 #
@@ -839,209 +1064,179 @@ else
   show "$abs_txt"
 fi
 
-# --- 34. MUTANT: existence never checked (assertion 31's FIRES direction is live) -------------
+# --- 35. THE TREE IS THE BACKLOG'S, NOT THE RUNNING COPY'S -------------------------------------
+# THE ARM THAT WOULD HAVE CAUGHT THE FALSE POSITIVE THAT SHIPPED, and the one this correction is
+# for. The same corpus is read twice, differing ONLY in the root the subject itself resolved to:
+# once from the layered tree that holds the files, once from a tree where none of them exist. The
+# reports must be byte-identical, because presence is a fact about the BACKLOG's tree and the
+# running copy has no standing to change it.
+#
+# TWO CONTROLS, BOTH NECESSARY, BOTH IN THIS ARM. Byte-equality between two reports that label
+# NOTHING is trivially true, so the run must still mark something absent; and byte-equality
+# between two reports that label EVERYTHING is equally trivial, so it must still mark something
+# present. Without the pair, `cmp -s` passing says only that the two runs failed the same way.
+other_sum="$(summarize "$WORK/abs-other.json" 2>/dev/null || true)"
+other_absent="$(printf '%s' "$other_sum" | sed -n 's/^absent_named=//p')"
+other_present_rows="$(printf '%s' "$other_sum" | grep '^named=.* present$' || true)"
+if [ "$absj_rc" = "0" ] && [ "$absother_rc" = "0" ] \
+   && cmp -s "$WORK/abs.json" "$WORK/abs-other.json" \
+   && [ "${other_absent:-0}" -gt 0 ] && [ -n "$other_present_rows" ]; then
+  ok "ROOT PROVENANCE: the same backlog read by a subject rooted in a DIFFERENT tree produces a BYTE-IDENTICAL report — a path is labelled by presence in the BACKLOG's tree, never because the running copy's own root happens to lack it (controls: ${other_absent} still marked absent AND at least one still marked present, so this is not two empty labelings agreeing)"
+else
+  bad "ROOT PROVENANCE: rc=$absj_rc/$absother_rc, absent_named=${other_absent:-?}, present rows [${other_present_rows:-none}] — the label follows the RUNNING COPY's root. That is the v0.457.0 false positive: the distribution's copy pointed at a consumer's backlog marked 4 of 4 findings absent"
+  show "$(diff "$WORK/abs.json" "$WORK/abs-other.json" 2>&1 | head -20)"
+fi
+
+# --- 36. NO RESOLVABLE ROOT -> NO LABELS, AND THE FINDINGS ARE UNCHANGED -----------------------
+# THE CONJUNCT THAT MATTERS IS THE SECOND ONE. "Nothing was labelled" and "the tool stopped
+# reporting" are the same observation from outside, and only the unchanged finding set separates
+# them — an unasked question must render as no claim, never as a smaller corpus.
+#
+# The subject is rooted in CTREE here while the corpus sits outside it, so a marker appearing in
+# this run could ONLY have come from the running copy's root. That is what makes this arm a probe
+# of provenance and not merely of silence.
+unroot_sum="$(summarize "$WORK/unroot.json" 2>/dev/null || true)"
+unroot_txt="$(cat "$WORK/unroot.txt" 2>/dev/null || true)"
+unroot_ids="$(printf '%s' "$unroot_sum" | grep '^finding=' || true)"
+unroot_absent="$(printf '%s' "$unroot_sum" | sed -n 's/^absent_named=//p')"
+unroot_entries="$(printf '%s' "$unroot_sum" | sed -n 's/^entries=//p')"
+abs_sum="$(summarize "$WORK/abs.json" 2>/dev/null || true)"
+rooted_ids="$(printf '%s' "$abs_sum" | grep '^finding=' || true)"
+rooted_absent="$(printf '%s' "$abs_sum" | sed -n 's/^absent_named=//p')"
+rooted_entries="$(printf '%s' "$abs_sum" | sed -n 's/^entries=//p')"
+if [ "$unrootj_rc" = "0" ] && [ "$unroot_rc" = "0" ] \
+   && [ "${unroot_absent:-x}" = "0" ] && ! has 'NO SUCH FILE HERE' "$unroot_txt" \
+   && [ -n "$unroot_ids" ] && [ "$unroot_ids" = "$rooted_ids" ] \
+   && [ "${unroot_entries:-x}" = "${rooted_entries:-y}" ] \
+   && [ "${rooted_absent:-0}" -gt 0 ]; then
+  ok "UNROOTABLE CORPUS: a backlog with no layered root above it is labelled NOT AT ALL, while the SAME bytes inside a layered tree mark ${rooted_absent} absent (the control that the two runs really differ) — and the findings are identical either way ($unroot_entries entries, $(printf '%s' "$unroot_ids" | grep -c .) reported), so silence is distinguishable from the tool having stopped reporting"
+else
+  bad "UNROOTABLE CORPUS: rc=$unrootj_rc/$unroot_rc, absent_named=${unroot_absent:-?} (want 0), entries ${unroot_entries:-?} vs ${rooted_entries:-?}, rooted absent ${rooted_absent:-?} (want >0) — either an unplaceable corpus is being labelled from the running copy's root, or the findings changed with the corpus's location, or \$WORK unexpectedly sits under a layered tree so the premise is gone"
+  show "$unroot_txt"
+fi
+
+# --- 37. MUTANT: existence never checked (assertion 32's FIRES direction is live) -------------
 # The label stops appearing and everything else about the report is unchanged, which is exactly
 # what a broken label looks like from the outside. The positive conjunct — the finding is still
 # named — is what stops a subject that emits NOTHING from scoring as a kill here.
-M_EXT="$(mkmut existstrue '"exists": os.path.exists(os.path.join(root, p))' '"exists": True')"
+M_EXT="$(mkmut existstrue '"exists": True if root is None else os.path.exists(os.path.join(root, p))' '"exists": True')"
 if [ -z "$M_EXT" ]; then
-  bad "MUTANT existstrue: the anchor matched nothing — assertion 31 proves nothing"
+  bad "MUTANT existstrue: the anchor matched nothing — assertion 32 proves nothing"
 else
-  run_txt "$M_EXT" "$ABSBL" "$WORK/mext.txt" "$EXTREE"; mext_rc=$RC
+  run_txt "$M_EXT" "$ABSBL" "$WORK/mext.txt" "$CTREE"; mext_rc=$RC
   mext_txt="$(cat "$WORK/mext.txt")"
   if [ "$mext_rc" = "0" ] && has 'CO-S410-ABSENTONLY' "$mext_txt" \
      && ! has 'NO SUCH FILE HERE' "$mext_txt"; then
-    ok "MUTANT existstrue: with existence hardcoded true the absent path renders unmarked while the finding is still reported — so assertion 31 is what makes the label fire"
+    ok "MUTANT existstrue: with existence hardcoded true the absent path renders unmarked while the finding is still reported — so assertion 32 is what makes the label fire"
   else
-    bad "MUTANT existstrue: rc=$mext_rc, marker still present or the finding vanished — assertion 31's fires-direction is vacuous"
+    bad "MUTANT existstrue: rc=$mext_rc, marker still present or the finding vanished — assertion 32's fires-direction is vacuous"
     show "$mext_txt"
   fi
 fi
 
-# --- 35. MUTANT: everything marked absent (assertion 31's SILENT direction is live) -----------
+# --- 38. MUTANT: everything marked absent (assertion 32's SILENT direction is live) -----------
 # The mirror, and the one that a fires-only arm cannot catch: a label that flags EVERY path reads
 # identically to one that discriminates, unless something asserts the near-miss stays quiet.
-M_EXF="$(mkmut existsfalse '"exists": os.path.exists(os.path.join(root, p))' '"exists": False')"
+M_EXF="$(mkmut existsfalse '"exists": True if root is None else os.path.exists(os.path.join(root, p))' '"exists": False')"
 if [ -z "$M_EXF" ]; then
-  bad "MUTANT existsfalse: the anchor matched nothing — assertion 31 proves nothing"
+  bad "MUTANT existsfalse: the anchor matched nothing — assertion 32 proves nothing"
 else
-  run_txt "$M_EXF" "$ABSBL" "$WORK/mexf.txt" "$EXTREE"; mexf_rc=$RC
+  run_txt "$M_EXF" "$ABSBL" "$WORK/mexf.txt" "$CTREE"; mexf_rc=$RC
   mexf_txt="$(cat "$WORK/mexf.txt")"
   if [ "$mexf_rc" = "0" ] \
      && has '^      names: scripts/ai-dlc/core-paths\.sh   \[NO SUCH FILE HERE\]$' "$mexf_txt"; then
-    ok "MUTANT existsfalse: with existence hardcoded false the PRESENT path is marked too — so assertion 31's near-miss is what stops a label that flags everything"
+    ok "MUTANT existsfalse: with existence hardcoded false the PRESENT path is marked too — so assertion 32's near-miss is what stops a label that flags everything"
   else
-    bad "MUTANT existsfalse: rc=$mexf_rc and the present path stayed unmarked — assertion 31's silent-direction is vacuous"
+    bad "MUTANT existsfalse: rc=$mexf_rc and the present path stayed unmarked — assertion 32's silent-direction is vacuous"
     show "$mexf_txt"
   fi
 fi
 
-# --- 36. MUTANT: the label turned into a filter (assertion 32 is live) ------------------------
-# The "improvement" assertion 32 exists to catch, built and scored rather than argued about: skip
+# --- 39. MUTANT: the label turned into a filter (assertion 33 is live) ------------------------
+# The "improvement" assertion 33 exists to catch, built and scored rather than argued about: skip
 # an entry whose named machinery is not on disk. CO-S410-MIXED survives with its marker intact, so
-# this mutant fails assertion 32 and ONLY assertion 32 — the acquittal is the whole finding.
+# this mutant fails assertion 33 and ONLY assertion 33 — the acquittal is the whole finding.
 M_FIL="$(mkmut absentfilter \
   '    absent_total += sum(1 for r in rows if not r["exists"])' \
   '    absent_total += sum(1 for r in rows if not r["exists"])
     if not any(r["exists"] for r in rows): continue')"
 if [ -z "$M_FIL" ]; then
-  bad "MUTANT absentfilter: the anchor matched nothing — assertion 32 proves nothing"
+  bad "MUTANT absentfilter: the anchor matched nothing — assertion 33 proves nothing"
 else
-  run_json "$M_FIL" "$ABSBL" "$WORK/mfil.json" "$EXTREE"; mfil_rc=$RC
+  run_json "$M_FIL" "$ABSBL" "$WORK/mfil.json" "$CTREE"; mfil_rc=$RC
   mfil_ids=""; [ "$mfil_rc" = "0" ] && mfil_ids="$(summarize "$WORK/mfil.json" | grep '^finding=' || true)"
   if [ "$mfil_rc" = "0" ] && ! has '^finding=CO-S410-ABSENTONLY$' "$mfil_ids" \
      && has '^finding=CO-S410-MIXED$' "$mfil_ids" \
      && has '^finding=CO-S410-PRESENT$' "$mfil_ids"; then
-    ok "MUTANT absentfilter: filtering on existence ACQUITS the entry whose only machinery path is absent while the other two survive — so assertion 32 is what keeps a true misroute reportable"
+    ok "MUTANT absentfilter: filtering on existence ACQUITS the entry whose only machinery path is absent while the other two survive — so assertion 33 is what keeps a true misroute reportable"
   else
-    bad "MUTANT absentfilter: rc=$mfil_rc, ids [$(echo "$mfil_ids" | tr '\n' ' ')] — assertion 32 is vacuous"
+    bad "MUTANT absentfilter: rc=$mfil_rc, ids [$(echo "$mfil_ids" | tr '\n' ' ')] — assertion 33 is vacuous"
   fi
 fi
 
-# --- 37. MUTANT: absent_named decoupled from the text (assertion 33 is live) ------------------
+# --- 40. MUTANT: absent_named decoupled from the text (assertion 34 is live) ------------------
 # The text still marks the rows and only the JSON total lies, which is the failure a single-value
-# read could never see — and the reason assertion 33 derives the count twice instead of once.
+# read could never see — and the reason assertion 34 derives the count twice instead of once.
 M_CNT="$(mkmut absentcount '"absent_named": absent_total,' '"absent_named": 0,')"
 if [ -z "$M_CNT" ]; then
-  bad "MUTANT absentcount: the anchor matched nothing — assertion 33 proves nothing"
+  bad "MUTANT absentcount: the anchor matched nothing — assertion 34 proves nothing"
 else
-  run_json "$M_CNT" "$ABSBL" "$WORK/mcnt.json" "$EXTREE"; mcnt_rc=$RC
+  run_json "$M_CNT" "$ABSBL" "$WORK/mcnt.json" "$CTREE"; mcnt_rc=$RC
   mcnt_absent=""; [ "$mcnt_rc" = "0" ] && mcnt_absent="$(summarize "$WORK/mcnt.json" | sed -n 's/^absent_named=//p')"
   mcnt_named=""; [ "$mcnt_rc" = "0" ] && mcnt_named="$(summarize "$WORK/mcnt.json" | grep '^named=.* absent$' || true)"
   if [ "$mcnt_rc" = "0" ] && [ "$mcnt_absent" = "0" ] && [ -n "$mcnt_named" ]; then
-    ok "MUTANT absentcount: the JSON total reads 0 while named[] still carries absent rows — so assertion 33's two derivations are what bind the count to the rendering"
+    ok "MUTANT absentcount: the JSON total reads 0 while named[] still carries absent rows — so assertion 34's two derivations are what bind the count to the rendering"
   else
-    bad "MUTANT absentcount: rc=$mcnt_rc, absent_named=$mcnt_absent, absent named[] rows [${mcnt_named:-none}] — assertion 33 is vacuous"
+    bad "MUTANT absentcount: rc=$mcnt_rc, absent_named=$mcnt_absent, absent named[] rows [${mcnt_named:-none}] — assertion 34 is vacuous"
   fi
 fi
 
-# --- the core-paths sandboxes: one LAYERED, one bare, otherwise identical ---------------------
-# The activation rule is read off the subject, not restated: a `.claude/.ai-dlc-version` FILE plus
-# the `overrides/` and `extensions/` layer DIRECTORIES, walked up from $PWD. Both sandboxes carry
-# the same real file at a core destination and the same subdirectory; the layered one carries the
-# three activation elements and the bare one carries none. That is the only difference, and it is
-# what makes the pair a control rather than two separate observations.
-#
-# NEITHER SANDBOX HOLDS A MANIFEST. `--is-core`'s manifest fallback is cwd-relative, so a manifest
-# here would be a second variable moving between the two trees; every probe is handed $MANIFEST_F
-# explicitly instead.
-LAY="$WORK/layered"; PLAIN="$WORK/plain"
-for _t in "$LAY" "$PLAIN"; do
-  mkdir -p "$_t/scripts/ai-dlc" "$_t/deep/nested"
-  : > "$_t/scripts/ai-dlc/core-paths.sh"
-done
-mkdir -p "$LAY/.claude/skills/ai-dlc/overrides" "$LAY/.claude/skills/ai-dlc/extensions"
-: > "$LAY/.claude/.ai-dlc-version"
-
-# THE TRIO IS THE ASSERTION, AND IT IS ONE INVOCATION SET. A real file under a core glob, an
-# INVENTED name under the SAME glob, and a non-core path. The first and third are the answers that
-# do NOT move between a layered tree and a dormant one, so they are the control: a middle verdict
-# read on its own cannot tell a working gate from a resolver that classified nothing.
-cp_trio() { # cp_trio <core-paths.sh> <cwd> -> "<rc-real> <rc-invented> <rc-noncore>"
-  local s="$1" c="$2" out="" p rc
-  for p in scripts/ai-dlc/core-paths.sh scripts/ai-dlc/NEVER-SHIPPED-BY-ANYONE.sh docs/architecture/decisions.md; do
-    ( cd "$c" && bash "$s" --is-core "$p" "$MANIFEST_F" >/dev/null 2>&1 ); rc=$?
-    out="${out}${rc} "
-  done
-  printf '%s' "${out% }"
-}
-lay_root="$(cp_trio "$CPATHS" "$LAY")"
-lay_sub="$(cp_trio "$CPATHS" "$LAY/deep/nested")"
-pln_root="$(cp_trio "$CPATHS" "$PLAIN")"
-pln_sub="$(cp_trio "$CPATHS" "$PLAIN/deep/nested")"
-
-# --- 38. CONTROL: the core-paths mutator refuses an anchor that matches nothing ---------------
-# The second subject gets its own harness, so it gets its own control. A `sed` that matched
-# nothing produces an unmutated copy, and an unmutated copy passes every arm below — a mutation
-# that killed nothing reads exactly like an arm that cannot fire.
-if [ -z "$(mkmutcp impossible 'ZZ-NOT-IN-THE-SUBJECT-ZZ' 'x')" ] \
-   && [ -n "$(mkmutcp control 'LAYERED_ROOT=""' 'LAYERED_ROOT="" # control')" ]; then
-  ok "CONTROL: mkmutcp refuses an anchor present 0 times and accepts one present exactly once — assertions 42-44 score against real mutations"
+# --- 41. MUTANT: the root re-keyed to the RUNNING COPY (assertion 35 is live) -----------------
+# `v0.457.0`'s exact spelling, restored: ask AI_DLC_ROOT instead of walking up from the backlog.
+# Under it the two runs of the SAME corpus diverge — the tree with the files reports them present,
+# the tree without reports them absent — which is the shipped false positive reproduced in one
+# line. The conjunct naming the PRESENT path is what makes this a kill rather than a coincidence:
+# a mutant that merely crashed would also make the reports differ.
+M_ROOTENV="$(mkmut rootenv 'root = backlog_root(backlog)' 'root = os.environ["AI_DLC_ROOT"]')"
+if [ -z "$M_ROOTENV" ]; then
+  bad "MUTANT rootenv: the anchor matched nothing — assertion 35 proves nothing"
 else
-  bad "CONTROL: mkmutcp accepted an impossible anchor or refused a real one — every core-paths mutant below is unscored"
-fi
-
-# --- 39. LAYERED: a matched path naming no file is a REFUSAL, not a 0 -------------------------
-if [ "$lay_root" = "0 2 1" ]; then
-  ok "on a LAYERED tree --is-core answers 0 / 2 / 1 for a real core file, an invented name under the SAME glob, and a non-core path — the glob match alone no longer decides"
-else
-  bad "on a LAYERED tree --is-core answered [$lay_root], want [0 2 1]"
-fi
-
-# --- 40. DORMANT: the same three inputs, and the mode behaves exactly as before ---------------
-# THE PAIR IS THE WHOLE POINT. Assertion 39 alone cannot tell a working gate from one that fires
-# everywhere, and assertion 40 alone cannot tell a dormant tree from a disarmed one. Same three
-# inputs, same file on disk, activation elements removed — the middle answer moves and nothing
-# else does.
-if [ "$pln_root" = "0 0 1" ]; then
-  ok "on a NON-layered tree the same three inputs answer 0 / 0 / 1 — the mode stays dormant, which is what keeps assertion 3 and the distribution's own gates measuring what they always measured"
-else
-  bad "on a NON-layered tree --is-core answered [$pln_root], want [0 0 1] — the new arm is not dormant off a layered consumer"
-fi
-
-# --- 41. the answer is cwd-INVARIANT: the root is walked up to, never counted in hops ---------
-# A validator that counts `..` hops answers differently from the root, from a subdirectory and
-# from a sandbox, and the sandbox answer is the silent one. The third conjunct is the control: if
-# both subdirectory runs collapsed to the same "found nothing" answer they would agree trivially,
-# and an equality between two identical failures reads exactly like invariance.
-if [ "$lay_root" = "$lay_sub" ] && [ "$pln_root" = "$pln_sub" ] && [ "$lay_sub" != "$pln_sub" ]; then
-  ok "the verdicts are cwd-invariant: layered root [$lay_root] == layered subdir, bare root [$pln_root] == bare subdir, and the two subdirs still DIFFER (the control — equal-because-both-blind would read as invariance)"
-else
-  bad "cwd changed the answer: layered [$lay_root] vs [$lay_sub], bare [$pln_root] vs [$pln_sub]"
-fi
-
-# --- 42. MUTANT: the layered root never recorded (assertion 39 is live) -----------------------
-# THE DISARMED GATE, AND IT READS EXACTLY LIKE THE DORMANT ONE. With the root never recorded the
-# existence check cannot run, so a layered consumer answers 0 / 0 / 1 — byte-identical to
-# assertion 40's dormant tree. That is why neither arm can stand alone.
-M_LOFF="$(mkmutcp layeroff 'LAYERED_ROOT="$_d"; break' 'break')"
-if [ -z "$M_LOFF" ]; then
-  bad "MUTANT layeroff: the anchor matched nothing — assertion 39 proves nothing"
-else
-  moff_lay="$(cp_trio "$M_LOFF" "$LAY")"
-  moff_pln="$(cp_trio "$M_LOFF" "$PLAIN")"
-  if [ "$moff_lay" = "0 0 1" ] && [ "$moff_pln" = "0 0 1" ]; then
-    ok "MUTANT layeroff: with the layered root never recorded the LAYERED tree answers [0 0 1] — indistinguishable from the dormant tree — so assertion 39 is the only thing that separates them"
+  run_json "$M_ROOTENV" "$ABSBL" "$WORK/mroot-c.json" "$CTREE"; mrootc_rc=$RC
+  run_json "$M_ROOTENV" "$ABSBL" "$WORK/mroot-o.json" "$OTHER"; mrooto_rc=$RC
+  mrooto_present=""; mrootc_present=""
+  [ "$mrooto_rc" = "0" ] && mrooto_present="$(summarize "$WORK/mroot-o.json" | grep '^named=.* present$' || true)"
+  [ "$mrootc_rc" = "0" ] && mrootc_present="$(summarize "$WORK/mroot-c.json" | grep '^named=.* present$' || true)"
+  if [ "$mrootc_rc" = "0" ] && [ "$mrooto_rc" = "0" ] \
+     && ! cmp -s "$WORK/mroot-c.json" "$WORK/mroot-o.json" \
+     && [ -n "$mrootc_present" ] && [ -z "$mrooto_present" ]; then
+    ok "MUTANT rootenv: keying existence on the RUNNING COPY's root makes one corpus render two ways — every path present from the tree that holds them, NONE present from the tree that does not — so assertion 35 is what pins the label to the backlog's tree"
   else
-    bad "MUTANT layeroff: layered [$moff_lay] bare [$moff_pln], want [0 0 1] for both — assertion 39 is vacuous"
+    bad "MUTANT rootenv: rc=$mrootc_rc/$mrooto_rc, reports $(cmp -s "$WORK/mroot-c.json" "$WORK/mroot-o.json" && echo identical || echo differing), present rows CTREE [${mrootc_present:-none}] OTHER [${mrooto_present:-none}] — assertion 35 is vacuous"
   fi
 fi
 
-# --- 43. MUTANT: the dormancy guard removed (assertion 40 is live) ----------------------------
-# The mirror failure, and the expensive one: with the activation test dropped, `${LAYERED_ROOT}`
-# is empty, every matched path is looked for at `/scripts/...`, and the distribution — where every
-# path IS core — starts refusing its own files. Assertion 40 is what makes that unshippable.
-M_LALW="$(mkmutcp layeralways \
-  'if [ -n "$LAYERED_ROOT" ] && [ ! -e "${LAYERED_ROOT}/${REL}" ]; then' \
-  'if [ ! -e "${LAYERED_ROOT}/${REL}" ]; then')"
-if [ -z "$M_LALW" ]; then
-  bad "MUTANT layeralways: the anchor matched nothing — assertion 40 proves nothing"
+# --- 42. MUTANT: an unplaceable corpus given a root anyway (assertion 36 is live) -------------
+# The walk terminates at `/` and returns it instead of refusing, so the unrootable backlog gets a
+# root where nothing exists and every path is labelled absent. This is the failure assertion 36's
+# no-labels conjunct owns; the findings-unchanged conjunct survives it, which is correct — the two
+# conjuncts are there for different failures and only one of them is this mutant's.
+M_ROOTANY="$(mkmut rootany '        if parent == d:
+            return None' '        if parent == d:
+            return d')"
+if [ -z "$M_ROOTANY" ]; then
+  bad "MUTANT rootany: the anchor matched nothing — assertion 36 proves nothing"
 else
-  malw_pln="$(cp_trio "$M_LALW" "$PLAIN")"
-  malw_lay="$(cp_trio "$M_LALW" "$LAY")"
-  if [ "$malw_pln" = "2 2 1" ] && [ "$malw_lay" = "0 2 1" ]; then
-    ok "MUTANT layeralways: without the dormancy guard a NON-layered tree refuses its own real core file [$malw_pln] while the layered tree is unchanged — so assertion 40 is what keeps the mode dormant"
+  run_txt "$M_ROOTANY" "$UNROOTBL" "$WORK/mrany.txt" "$CTREE"; mrany_rc=$RC
+  mrany_txt="$(cat "$WORK/mrany.txt")"
+  if [ "$mrany_rc" = "0" ] && has 'NO SUCH FILE HERE' "$mrany_txt" \
+     && has 'CO-S410-ABSENTONLY' "$mrany_txt"; then
+    ok "MUTANT rootany: returning a root rather than refusing labels the unplaceable corpus after all, while the findings still report — so assertion 36's no-labels conjunct is what keeps an unasked question from rendering as an answer"
   else
-    bad "MUTANT layeralways: bare [$malw_pln] (want [2 2 1]), layered [$malw_lay] (want [0 2 1]) — assertion 40 is vacuous"
+    bad "MUTANT rootany: rc=$mrany_rc, marker absent or the findings vanished — assertion 36 is vacuous"
+    show "$mrany_txt"
   fi
 fi
 
-# --- 44. MUTANT: the walk-up reduced to a single hop (assertion 41 is live) -------------------
-# One hop is the cheapest wrong answer available here and it is silent: the root run still sees
-# the stamp, so the tree looks correctly gated, while every run from a subdirectory quietly falls
-# back to the dormant answer.
-M_HOP="$(mkmutcp onehop '    _d="$(dirname "$_d")"' '    _d=""')"
-if [ -z "$M_HOP" ]; then
-  bad "MUTANT onehop: the anchor matched nothing — assertion 41 proves nothing"
-else
-  mhop_root="$(cp_trio "$M_HOP" "$LAY")"
-  mhop_sub="$(cp_trio "$M_HOP" "$LAY/deep/nested")"
-  if [ "$mhop_root" = "0 2 1" ] && [ "$mhop_sub" = "0 0 1" ]; then
-    ok "MUTANT onehop: checking only \$PWD leaves the root run correct [$mhop_root] and the subdirectory run dormant [$mhop_sub] — so assertion 41 is what rules out a cwd-dependent verdict"
-  else
-    bad "MUTANT onehop: root [$mhop_root] (want [0 2 1]), subdir [$mhop_sub] (want [0 0 1]) — assertion 41 is vacuous"
-  fi
-fi
 
 echo ""
 if [ "$made" -ne "$EXPECTED_ASSERTIONS" ]; then
