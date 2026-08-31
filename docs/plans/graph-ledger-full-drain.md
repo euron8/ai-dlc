@@ -9,11 +9,11 @@ and status records that were current when they were written and that THIS BLOCK 
 it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from it.**
 
-### BATCH 32 SHIPPED AS `v0.453.0`. NEXT IS BATCH 33. A PULL IS NOW OWED **AND** REQUIRED, AND IT IS NOT AUTHORIZED.
+### BATCH 32 SHIPPED AS `v0.453.0`, CORRECTED BY `v0.454.0`. NEXT IS BATCH 33. A PULL IS NOW OWED **AND** REQUIRED, AND IT IS NOT AUTHORIZED.
 
 **Re-derived after the merge, every figure by running the command.** Distribution `VERSION` is
-`0.453.0` at `28b44917`; the consumer's stamp still reads `0.452.0` / `11bdeb8e`. So the gap is
-**one release** and **PENDING is 1** — `PC-S334-AUDIT-LAYER-DEBT-FLAGS-ITS-OWN-DISCHARGE-ROWS-AS-UNDECLARED-DEBT`
+`0.454.0` at `b634e42d`; the consumer's stamp still reads `0.452.0` / `11bdeb8e`. So the gap is
+**two releases** and **PENDING is 1** — `PC-S334-AUDIT-LAYER-DEBT-FLAGS-ITS-OWN-DISCHARGE-ROWS-AS-UNDECLARED-DEBT`
 is discharged here (1 commit names it) and still LIVE in the consumer's ledger, against an
 impossible-id control of 0.
 
@@ -80,6 +80,31 @@ deliverable is the one that arrived, exactly as this file predicts.
 closed on its inherited receipt, which a total disarm also satisfies. The shipped fix is not that
 disarm and the differential says so independently, but the order was wrong. **The durable guard is
 the new fixture, whose M2 mutant is precisely that disarm and is KILLED.**
+
+**`v0.454.0` CORRECTED TWO THINGS `v0.453.0` SHIPPED, AND BOTH ARRIVED FROM HANDS AFTER THE MERGE
+— WHICH IS THE ARGUMENT FOR WAITING ON THEM, NOT FOR SKIPPING THEM.**
+
+**A RECEIPT SCORE IS A CLAIM ABOUT THE MUTANT SET IT WAS RUN ON.** `BL-067`'s replacement receipt
+merged claiming ACCEPTS 2 / REJECTS 5. Against a wider set **it accepted SEVEN** — its two probe
+rows differed in length, digits, vocabulary and self-reference, so **any non-constant function of
+the field's bytes passed**. The repair was a FOURTH ROW, not another arm: a second
+predicate-shaped `closes_when` that must render IDENTICALLY to the first, which a byte-function
+cannot satisfy. Now **ACCEPTS 3, REJECTS 8**. **Counting what a receipt accepts is worth nothing
+if you also chose the set — that is the same failure the rule warns about, one level up.**
+
+**AND WATCH FOR EXIT 9 WHILE DOING IT.** The first attempt to reproduce that attack built five
+mutants that all exited 9. **That is a sanity REFUSAL, not a rejection**, and reading it as "my
+receipt rejects them" would have closed the defect as fixed. Assert every candidate RUNS before
+reading any exit code from it.
+
+**AN ARGUMENT ABOUT WHAT AN AUTHOR SHOULD WRITE IS NOT A PROOF ABOUT WHAT AN ARM CATCHES.**
+`v0.453.0`'s code comment claimed its exemption does not acquit the arm's own subject because such
+a row can declare its obligation in `owed`. A discharge row that declares one in PROSE and carries
+no `owed` is silenced, and the existing acquittal probe covers the DECLARED route only. Measured
+before accepting it: **of the 9 rows the exemption silences, 0 declare a new obligation** — both
+that a forward-looking scan flags were read in full and both report a completed close. Not a
+regression, so the fix stands, and the fixture now carries a 16th arm asserting the TRADE so the
+next author meets it as an assertion rather than as a silence.
 
 ### THE `0.448.0 → 0.452.0` PULL LANDED. A RECORD, NOT AN INSTRUCTION — THE GAP IS NO LONGER ZERO.
 
@@ -2350,7 +2375,7 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **RUN THE SWEEP (action 1b below) AND LET IT PICK BATCH 33's SUBJECT. ONE THING IS OWED FIRST —
-   SEE 1c.** Batch 32 is merged as `v0.453.0`, so number yours 33.
+   SEE 1c.** Batch 32 is merged as `v0.453.0` with `v0.454.0` correcting it, so number yours 33.
 
    `BL-069` is ROTATED and its candidate
    `PC-S334-AUDIT-LAYER-DEBT-FLAGS-ITS-OWN-DISCHARGE-ROWS-AS-UNDECLARED-DEBT` is DONE. Do not pick
@@ -2782,7 +2807,7 @@ so no block written before it changes verdict.
    **And ask what the fix's own population EXCLUDES.** Batch 11's first cut answered a
    one-way-blindness entry with an arm that was blind by file extension. The exclusion has to
    be stated in the arm and it has to not be the defect itself.
-1c. **WRITE AND REHEARSE THE `0.452.0 → 0.453.0` PULL RUNBOOK, THEN REPORT THE NUMBER AND STOP.**
+1c. **WRITE AND REHEARSE THE `0.452.0 → 0.454.0` PULL RUNBOOK, THEN REPORT THE NUMBER AND STOP.**
    This is owed from batch 32 and was the one piece of its scope left undelivered. Both tests were
    run there and both say yes: **PENDING is 1**, and the differential DIVERGES — the consumer's
    installed `audit-layer-debt.sh` reports **33 `UNDECLARED`** against the distribution copy's
@@ -2790,7 +2815,7 @@ so no block written before it changes verdict.
    `cmp -s` before either output was read and neither side refusing. Re-derive both before acting:
    the consumer may have pulled since.
 
-   The range is one release and narrow. **No bootstrapping step is in it** — `preclassify.sh`,
+   The range is two releases and narrow. **No bootstrapping step is in it** — `preclassify.sh`,
    `apply.sh`, `ledger-reverify.sh` and `SKILL.md` are all 0 commits against a control of 1 for
    `audit-layer-debt.sh`, and there are 0 mode-only changes — so the pull is not delivering the
    machinery that runs it, which is the hazard that usually complicates this.
