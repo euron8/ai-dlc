@@ -49,7 +49,9 @@ same block as that find, which returned the file.
 **An untracked file is not a missing file.** `git ls-files`, `git show HEAD:` and any tree grep
 cannot see one, and the clean run reads as a real absence. Measured: three delegated deliverables
 declared missing while on disk as `??`. `ls` it, check `git status --porcelain`, ask the agent by
-name. An idle notification is not a result; silence is not death.
+name. An idle notification is not a result; silence is not death, and "it stopped reporting" is not a
+reason to merge: measured, two hands idle twice each, a release shipped, both then reported, both
+right, payloads TRUNCATED at ~16000 characters. Ask again for the tail.
 
 **A hook DENIES a subagent writing a report file** — `Subagents should return findings as text,
 not write report files`. A brief naming a report path as the deliverable spends the hand:
