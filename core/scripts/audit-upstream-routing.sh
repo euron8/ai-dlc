@@ -139,11 +139,16 @@ fi
 
 # PASS THE MANIFEST EXPLICITLY. `core-paths.sh --list` falls back to two RELATIVE candidate
 # paths, so bare it answers about the process working directory: run from a consumer root it
-# yields the full glob set, run one directory down it yields NONE. Measured on a tree built by
-# `install.sh` — 171 globs from the root, 0 from `scripts/`. Resolving the manifest against the
-# root marker instead makes this cwd-invariant, which is asserted in the fixture rather than
-# assumed. Both layouts are tried because the distribution and an installed consumer differ, and
-# invariant I33 forbids locating one core file by walking up from another.
+# yields the full glob set, run one directory down it yields NONE — measured on a tree built by
+# `install.sh`. The contrast is the whole point and it does not decay; the COUNT does, so derive
+# it rather than read one here: `core-paths.sh --list | wc -l` from each directory. An earlier
+# revision of this comment quoted the total and it was stale within one release, because adding
+# this tool's own fixture to `core-manifest.md` moved it.
+#
+# Resolving the manifest against the root marker instead makes this cwd-invariant, which is
+# asserted in the fixture rather than assumed. Both layouts are tried because the distribution
+# and an installed consumer differ, and invariant I33 forbids locating one core file by walking
+# up from another.
 MANIFEST=""
 for _m in "$AI_DLC_ROOT/.claude/skills/ai-dlc/core-manifest.md" \
           "$AI_DLC_ROOT/core/skills/ai-dlc/core-manifest.md"; do
