@@ -50,7 +50,7 @@ command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 absent" >&2
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-EXPECTED_ASSERTIONS=15
+EXPECTED_ASSERTIONS=16
 fails=0; made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
@@ -129,6 +129,7 @@ python3 "$WORK/mkreg.py" "$DREG" <<'SPEC'
 {"entry":"extensions/str.md","reason":"Debt discharged. The repath landed.","closes_owed":"OWED-D2"}
 {"entry":"extensions/emp.md","reason":"Debt discharged. The repath landed.","closes_owed":[]}
 {"entry":"extensions/both.md","reason":"Debt discharged. A follow-up split is still deferred.","closes_owed":["OWED-D3"],"owed":{"id":"OWED-B1","what":"refile as an override"}}
+{"entry":"extensions/ride.md","reason":"Debt discharged. A follow-up split is still deferred.","closes_owed":["OWED-D3"]}
 {"entry":"extensions/clean.md","reason":"additive; core says nothing about this surface"}
 SPEC
 dout="$(run "$DREG")"
@@ -211,6 +212,29 @@ if grep -qE '^OPEN \(1\)' <<<"$dout" && grep -q 'OWED-B1' <<<"$dout"; then
 else
   bad "the new obligation declared on a discharge row vanished — the exemption closed the only way to report the arm's subject"
   show "$dout"
+fi
+
+# --- 6b. THE EXEMPTION'S KNOWN COST, ASSERTED SO IT CANNOT BE FORGOTTEN ------------------------
+# `ride.md` carries `both.md`'s reason VERBATIM and declares no `owed`. It genuinely rides a new
+# obligation in on a discharge row, and the exemption DOES silence it. Arm 6 above proves the
+# DECLARED route stays open; it does not prove this one is caught, because it is not.
+#
+# THIS ARM ASSERTS THE TRADE RATHER THAN THE ABSENCE OF ONE. The alternative — reporting any
+# discharge row whose prose reads forward — is the lexical narrowing this arm's own header
+# rejects, and it reinstates the 27% noise the exemption removed. So the boundary is: an
+# obligation riding on a discharge row must be DECLARED in `owed`, and `ride.md` is here so the
+# next author meets that cost as an assertion instead of rediscovering it as a silence.
+#
+# MEASURED BEFORE ACCEPTING IT, on the reference consumer's register: of the 9 rows this
+# exemption silences, **0** declare a new obligation. Both candidates that a forward-looking
+# prose scan flags were read in full and both REPORT a completed close — one ends "Verdict
+# unchanged", the other names a residual and calls it "migration backlog rather than a reason to
+# keep prescribing the retired shape". The trade costs nothing on the only register that exists.
+if grep -q 'ride\.md' <<<"$dund"; then
+  bad "FIXTURE STALE: \`ride.md\` was reported, so the exemption no longer silences an undeclared obligation riding on a discharge row. That is a BEHAVIOUR CHANGE, not a bug — re-measure the noise it costs and rewrite this arm."
+  show "$dund"
+else
+  ok "KNOWN COST: an obligation riding on a discharge row without an explicit \`owed\` IS silenced — the documented trade, measured at 0 of 9 on the reference register"
 fi
 
 # --- 7. CONTROL: a row with neither a discharge nor a cue appears nowhere ----------------------

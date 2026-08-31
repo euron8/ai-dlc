@@ -2432,15 +2432,30 @@ one siting it in the body. Scored against four implementations: shipping **1**, 
 is there because the first draft scored the second spelling as **1** — it keyed on WHERE the fix
 put its output, which is the "a receipt rejecting a competent author's other phrasing" failure.
 
-**IT ERASES THE FIELD'S VALUE RATHER THAN STRIPPING A LABELLED LINE, and that is the second
-defect found in it before it landed.** The first draft filtered on the literal label
-`closes when:`. An adversarial hand showed that a one-token relabel to `closes-when:` defeats
-that filter and closes the entry while parsing nothing at all — the strip was keyed on a string
-the fix under test is free to rename. Substituting each debt's `closes_when` VALUE for a fixed
-token instead is invariant under any relabel. Re-scored with that hand's mutants added, the
-receipt now **ACCEPTS 2 and REJECTS 5**: shipping, the filed remedy, the relabel, a deleted
-printer (a regression for the operator) and a second echo of the same value under a new label
-are all rejected, and only the correct fix and its second spelling pass.
+**IT ERASES THE FIELD'S VALUE RATHER THAN STRIPPING A LABELLED LINE.** The first draft filtered
+on the literal label `closes when:`, and a one-token relabel to `closes-when:` defeats that
+filter and closes the entry while parsing nothing at all — the strip was keyed on a string the
+fix under test is free to rename. Substituting the VALUE for a fixed token is invariant under
+any relabel.
+
+**IT SEEDS TWO PREDICATE-SHAPED ROWS AND REQUIRES THEM TO RENDER ALIKE, and that arm exists
+because the version of this entry merged at `v0.453.0` CLAIMED A SCORE IT DID NOT HAVE.** That
+revision said the receipt accepted 2 and rejected 5. **Measured against a wider candidate set it
+accepted SEVEN.** Probe A and probe B differed in length, digit content, vocabulary and
+self-reference — not solely in whether a command is named — so **any non-constant function of the
+field's bytes passed**: its length, an md5 of it, whether it contains a digit, its last word.
+Each reads `closes_when` and joins it to nothing, which is the defect itself. **The score was
+right about the mutants it was run on and the mutant set was too narrow, which is the
+"count what a receipt ACCEPTS" failure one level up — I counted acceptances over a set I chose.**
+
+The repair is a fourth row, not another arm. `OWED-PROBE-D` carries a SECOND predicate-shaped
+`closes_when` — different bytes, same kind — and the receipt requires B and D to render
+IDENTICALLY before it reads A against B. A function of the bytes cannot satisfy that, because B
+and D differ in bytes; only a fix that classifies by KIND can. Re-scored over eleven
+implementations: **ACCEPTS 3, REJECTS 8.** Rejected are shipping, the filed remedy, the relabel,
+a deleted printer, a re-echo under a new label, and four byte-functions. Accepted are the correct
+fix, its second spelling sited on the header line, and a THIRD spelling that renders the same
+self-reference join as a boolean — that last one is a correct implementation, not a leak.
 
 **ONE HOLE IS KNOWN AND LEFT OPEN, STATED HERE RATHER THAN HIDDEN BEHIND THE SCORE.** The same
 hand showed that an implementation gated on `len(rows)` satisfies any receipt whose register has
@@ -2503,7 +2518,7 @@ byte-identical would leave this STILL-LIVE — the safe direction, but not a clo
 Found by the graph consumer session. Cross-references the consumer entry
 `PC-S334-CLOSES-WHEN-NAMES-A-COMMAND-AND-NOTHING-JOINS-THE-TWO`.
 
-verify: sh S=core/scripts/audit-layer-debt.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; A="a later register row for this entry names OWED-PROBE-A in closes_owed"; B="validate-gate-manifest.sh reports 914 resolving to a gate-type set that includes retro"; [ "$A" != "$B" ] || { rm -rf "$d"; exit 9; }; h="{\"clause\":\"LC-E1\",\"entry\":\"extensions/p.md\",\"subject_digest\":\"d0\",\"verdict\":\"still-additive\",\"recorded_utc\":\"1970-01-01T00:00:00Z\",\"reason\":\"probe row\",\"owed\":{\"what\":\"same what\","; { printf "%s\"id\":\"OWED-PROBE-A\",\"closes_when\":\"%s\"}}\n" "$h" "$A"; printf "%s\"id\":\"OWED-PROBE-B\",\"closes_when\":\"%s\"}}\n" "$h" "$B"; printf "%s\"id\":\"OWED-PROBE-C\"}}\n" "$h"; } > "$d/r.jsonl"; o=$(bash "$S" --register "$d/r.jsonl" 2>/dev/null); rc=$?; rm -rf "$d"; [ "$rc" = 0 ] || exit 9; for i in A B C; do case "$o" in *OWED-PROBE-$i*) : ;; *) exit 9 ;; esac; done; e=$(printf "%s\n" "$o" | sed "s|$A|<CW>|g; s|$B|<CW>|g"); case "$e" in *validate-gate-manifest.sh*) exit 1 ;; esac; a=$(printf "%s\n" "$e" | sed -n "/OWED-PROBE-A/,/OWED-PROBE-B/p" | sed "\$d" | sed "s/OWED-PROBE-A/OWED-PROBE-X/g"); b=$(printf "%s\n" "$e" | sed -n "/OWED-PROBE-B/,/OWED-PROBE-C/p" | sed "\$d" | sed "s/OWED-PROBE-B/OWED-PROBE-X/g"); [ -n "$a" ] && [ -n "$b" ] || exit 9; [ "$a" != "$b" ]
+verify: sh S=core/scripts/audit-layer-debt.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; A="a later register row for this entry names OWED-PROBE-A in closes_owed"; B="validate-gate-manifest.sh reports 914 resolving to a gate-type set that includes retro"; D="before the next pull, so the forked copy stops shadowing core validate-mutation-red.sh guidance"; [ "$A" != "$B" ] && [ "$B" != "$D" ] || { rm -rf "$d"; exit 9; }; h="{\"clause\":\"LC-E1\",\"entry\":\"extensions/p.md\",\"subject_digest\":\"d0\",\"verdict\":\"still-additive\",\"recorded_utc\":\"1970-01-01T00:00:00Z\",\"reason\":\"probe row\",\"owed\":{\"what\":\"same what\","; { printf "%s\"id\":\"OWED-PROBE-A\",\"closes_when\":\"%s\"}}\n" "$h" "$A"; printf "%s\"id\":\"OWED-PROBE-B\",\"closes_when\":\"%s\"}}\n" "$h" "$B"; printf "%s\"id\":\"OWED-PROBE-D\",\"closes_when\":\"%s\"}}\n" "$h" "$D"; printf "%s\"id\":\"OWED-PROBE-E\"}}\n" "$h"; } > "$d/r.jsonl"; o=$(bash "$S" --register "$d/r.jsonl" 2>/dev/null); rc=$?; rm -rf "$d"; [ "$rc" = 0 ] || exit 9; for i in A B D E; do case "$o" in *OWED-PROBE-$i*) : ;; *) exit 9 ;; esac; done; e=$(printf "%s\n" "$o" | sed "s|$A|<CW>|g; s|$B|<CW>|g; s|$D|<CW>|g"); case "$e" in *validate-gate-manifest.sh*|*validate-mutation-red.sh*) exit 1 ;; esac; blk() { printf "%s\n" "$e" | sed -n "/OWED-PROBE-$1/,/OWED-PROBE-$2/p" | sed "\$d" | sed "s/OWED-PROBE-$1/OWED-PROBE-X/g"; }; a=$(blk A B); b=$(blk B D); q=$(blk D E); [ -n "$a" ] && [ -n "$b" ] && [ -n "$q" ] || exit 9; [ "$b" = "$q" ] || exit 1; [ "$a" != "$b" ]
 
 ## BL-071
 
