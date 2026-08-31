@@ -190,6 +190,72 @@ def drain(cursor):
     return cursor.advance()
 EOF
 
+# ---- V17-V20: WHERE a prose marker is credible -------------------------------
+#
+# The four prose markers (`stub`, `TODO`, `FIXME`, `wired later`) are ordinary English
+# words. Matched on the raw line they fire on identifiers, on filenames and on test
+# vocabulary, and every one of those opens the four elements against a line that can
+# never satisfy them — the consumer paid a full HARD_BLOCK gate cycle and an operator
+# SUPPRESSED disposition for this class in two consecutive sprints. They are examined
+# only inside a comment, and only as whole words.
+#
+# THE TWO HALVES HAVE SEPARATE SUBJECTS ON PURPOSE. The boundary and the comment gate
+# cover each other on most real lines, and two guards that cover each other read exactly
+# like two guards that do not work — the symptom is zero failures, not two. So V17 is
+# reachable ONLY by the comment gate (a bare word, in code) and V18 ONLY by the boundary
+# (a substring, in a comment). Disabling either is visible in exactly one cell.
+
+# V17: the verbatim reproduction from the consumer's sprint-303 gate — a local variable
+# named `stub`. A whole word, so the boundary cannot save it; the comment gate is the
+# sole reason it is not examined. NO finding.
+cat > "$TREE/src/v17_code_bare_stub.py" <<'EOF'
+def make_driver():
+    stub = AsyncMock(return_value=None)
+    return stub
+EOF
+
+# V18: a comment whose only marker is a SUBSTRING inside an identifier. The comment gate
+# admits the line, so the word boundary is the sole reason it is not examined. NO finding.
+cat > "$TREE/src/v18_comment_substring.py" <<'EOF'
+def call_remote():
+    # the client_stub helper is fine and needs no follow-up
+    return 0
+EOF
+
+# V19: the positive control for the pair — a bare prose marker inside a real comment,
+# satisfying no element. This is what the gate is FOR, and it is what goes silent if the
+# marker set is disarmed (`\b` is not in Darwin's ERE: `STUB_MARKER='\b(...)\b'` examines
+# nothing at all and reports a clean tree). Element 1 rejects it.
+cat > "$TREE/src/v19_comment_bare_stub.py" <<'EOF'
+def settle():
+    # stub, wire later
+    return None
+EOF
+
+# V20: a prose marker in CODE that is not `stub`, so it also holds when only the `stub`
+# alternative is comment-gated — the narrower of the two filed remedies. NO finding.
+cat > "$TREE/src/v20_code_todo_data.py" <<'EOF'
+def rejected_reasons():
+    return ["TODO", "TBD", "n/a"]
+EOF
+
+# V21: the marker sits in a TRAILING `//` comment. The comment portion is not the whole
+# line and the opener is not `#`, so this is the arm that goes silent if either the
+# opener set narrows or the portion is taken as the leading prefix only. A finding.
+cat > "$TREE/src/v21_slashslash_comment.js" <<'EOF'
+function settle(order) {
+  return order.total;  // stub, wire later
+}
+EOF
+
+# V22: a comment opener INSIDE A STRING LITERAL. This is ordinary code — the consumer's
+# own fixtures print marker text — and it is what the quote guard is for. NO finding.
+cat > "$TREE/src/v22_quoted_opener.sh" <<'EOF'
+emit_marker() {
+  printf '# stub, wire later\n' > "$1"
+}
+EOF
+
 # ---- V5: the positive control — satisfies all four elements ------------------
 cat > "$TREE/src/v5_honest.py" <<'EOF'
 def widen_read_path():

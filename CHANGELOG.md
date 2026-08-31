@@ -15,6 +15,51 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.451.0] - 2026-08-30
+
+### An ordinary English word matched on a raw line is not a deferral marker
+
+Check 16's marker gate was applied to the RAW source line while all four elements it gates
+assume a comment block, so any occurrence of a marker in code opened those elements against a
+line that can never satisfy them. `stub` fired on a local variable named `stub`, on the filename
+`validate-stub-audit.sh`, on `'TODO'` inside a list of rejected reason strings, and on a
+docstring describing test doubles. The reference consumer paid a full HARD_BLOCK gate cycle and
+an operator SUPPRESSED disposition for this class in two consecutive sprints.
+
+The marker set now SPLITS on where each marker is credible. `NotImplementedError` is a language
+token and stays matched on the raw line — `raise NotImplementedError()` with no prose beside it
+is the most reliable deferral signal in the set. The four prose markers (`stub`, `TODO`,
+`FIXME`, `wired later`) are matched only inside a line's COMMENT PORTION, and only as whole
+words. `Phase [0-9]` keeps its own absence rule, unchanged.
+
+Measured on the reference consumer's own tree, both copies driven in one invocation under a
+`cmp -s` control that the two binaries differ: 1776 hot-path files, 1437 audited, **486 markers
+examined and 486 findings before, 73 and 73 after — 413 sites removed and 0 added.** The
+false-negative control is the one that decides it: **0 of the 413 removed lines carry
+`NotImplementedError`**, against 1 that does in the surviving set.
+
+**Both filed remedies were built as mutants and both were rejected on measurement.** The
+sprint-303 filing prescribes `STUB_MARKER='\b(...)\b'`; `\b` is not in Darwin's ERE under bash
+3.2, so that spelling examines **0 markers over every corpus file** and passes `# stub, wire
+later` and `raise NotImplementedError()` alike — a total disarm that reads as a fix and reports
+a clean tree. The sprint-304 filing prescribes comment-gating the `stub` alternative alone; it
+still fires on a substring inside an identifier and on `TODO` in a data literal. Ten candidate
+implementations were scored in all; the receipt accepts 2 — the correct fix and a second
+spelling of it — and rejects 8.
+
+**The comment predicate has to read the comment PORTION, not a leading prefix.** A
+leading-prefix test drops every trailing comment, which is where `: # TODO` and
+`x = 1  # stub` live, and it silently took element 3's own seeded adversary out of scope. The
+fixture caught that, not review. An opener inside a string literal is not a comment, so text
+before a candidate opener carrying a quote means the line is code.
+
+`core/fixtures/check-15-bypass` gains six variants and four mutants: each half of the new gate
+has a variant the other half cannot reach, so disabling either moves exactly one cell — 22
+variants, 34 assertions, 8 mutants, all killed.
+
+Discharges `PC-S303-STUB-AUDIT-MARKER-REGEX-MATCHES-LOCAL-VAR-NAMED-STUB` and its unfiled
+sibling `PC-S304-STUB-MARKER-REGEX-MATCHES-DOCSTRING-PROSE-AND-BARE-IDENTIFIERS`.
+
 ## [0.450.0] - 2026-08-30
 
 ### `cat-file -e` asks whether a BLOB is here, not whether a PATH exists there
