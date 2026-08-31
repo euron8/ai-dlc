@@ -2625,6 +2625,24 @@ such as `core/fixtures/check-15-bypass/seed.sh:188`. The site is unique: a sweep
 `:108` and nothing else, with a seeded `MY_MARKER='(foo|bar|baz)'` probe proving the sweep fires
 and an impossible-token control returning 0.
 
+**THREE OF THE FIGURES ABOVE HAVE SINCE EXPIRED AND ONE CLAIM IS NOW WRONG, kept rather than
+edited away because which half died is the part that stops the next reader repeating it.** A
+later release narrowed `Phase [0-9]` to require an absence statement on the same line, so it is
+no longer in the bare marker set: the `17 raw hits` sentence describes a rule that is gone, and
+`115 markers / 115 findings over 354 files` re-derived here is **138 / 138 over 393**. The
+`:184` and `:196` citations have drifted. **The central claim survived every re-derivation** —
+the marker set was still matched against the raw `$line`, unanchored and unbounded, and the four
+elements still assume a comment block.
+
+**RE-MEASURED ON THE REFERENCE CONSUMER, which is where the defect was observed and where the
+distribution's own corpus cannot speak for it.** Both copies driven against
+`/Users/n8/git/graph` in one invocation, `cmp -s` first asserting the two binaries differ:
+1776 hot-path files, 339 dropped upstream-owned, 1437 audited, **486 markers examined and 486
+findings before, 73 and 73 after — 413 sites removed and 0 added**. The false-negative control
+is the one that matters and it is clean: **0 of the 413 removed lines carry
+`NotImplementedError`**, against 1 that does in the surviving set, so the arm that keeps the
+most reliable deferral signal is live and the removals are all prose.
+
 **The filing's prescribed remedy is a total disarm on this platform, and its own receipt accepts
 it.** `\b` is not in Darwin's ERE under bash 3.2 — measured, `[[ "stub = 1" =~ \b(stub)\b ]]`
 does not match while `(stub)` matches — so `STUB_MARKER='\b(...)\b'` examines **0 markers over
@@ -2651,19 +2669,47 @@ and FAILS the bare-word arm on any indented code — which is all Python code. T
 and driven here and it returns rc=1 where the split returns rc=0. The prefix has to be tested
 directly.
 
-The receipt is four-armed and behavioural because every narrower anchor false-closes here. A
-textual anchor on `:108` closes on the `\b` disarm; an anchor on `element1-item-ref` closes on
-nothing, since element 1 is merely whichever element fails first when no backlog exists. Arms C
-and E are guards in opposite directions — C rejects a disarm, E rejects a comment-only gate — and
-without either the receipt certifies a check that has been weakened rather than corrected. Proven
-against patched copies under `mktemp`, each asserted byte-different from the shipping file first:
-shipping, `\b`, word-boundary and comment-gated all exit non-zero; the split set exits 0.
+The receipt is behavioural because every narrower anchor false-closes here. A textual anchor on
+the marker line closes on the `\b` disarm; an anchor on `element1-item-ref` closes on nothing,
+since element 1 is merely whichever element fails first when no backlog exists.
 
-Discharges the consumer entry `PC-S303-STUB-AUDIT-MARKER-REGEX-MATCHES-LOCAL-VAR-NAMED-STUB` at
-LIVE ledger line 2955.
+**THE FOUR-ARMED RECEIPT WAS NOT ENOUGH AND THE FIX IS WHY.** Its arms are a bare identifier in
+code, a substring in code, a bare marker in a comment and a bare `NotImplementedError` — and
+three separate wrong implementations satisfy all four. It is replaced by a seven-armed one and
+every arm below is the SOLE discriminator for one wrong answer, scored against ten candidate
+implementations built as copies under `mktemp`, each `cmp -s`-asserted byte-different from its
+source first: **it accepts 2 and rejects 8, with the pre-fix tree exiting 1, the post-fix tree 0
+and an absent subject 9.** The two it accepts are the correct fix and a second spelling of it —
+a receipt that rejects a competent author's other phrasing is as broken as one accepting a
+regression.
+
+The eight it rejects, each by a different arm, are: the shipping defect; **both filed remedies**;
+a word boundary with no comment gate; a comment gate over the whole marker set; the marker read
+off the raw line; the quote guard removed; and a comment test that looks only at a LEADING
+prefix. That last one is the arm this batch had to add, and it was found by the fixture rather
+than by reasoning: a leading-prefix test drops every TRAILING comment — `: # TODO` and
+`x = 1  # stub` — which is the commonest deferral idiom there is, and it silently took element
+3's own seeded adversary out of scope. **A fixture going red on a correct change has usually
+lost its subject; the repair is a new subject, not a relaxed assertion.**
+
+**THE WALL-CLOCK DIFFERENTIAL IS UNREADABLE AND IS RECORDED AS SUCH.** Three interleaved reps
+over 70 files from inside the repo: 14.49 / 14.09 / 13.59 before against 14.64 / 15.32 / 13.40
+after. The spread within one side is larger than the difference between them, so the null means
+nothing and is not a cost claim. What bounds the cost is structural — `comment_text` forks only
+where the cheap raw-line regex has already matched, which is once per marker rather than once
+per line.
+
+Discharges the consumer entry `PC-S303-STUB-AUDIT-MARKER-REGEX-MATCHES-LOCAL-VAR-NAMED-STUB`,
+**and its unfiled sibling
+`PC-S304-STUB-MARKER-REGEX-MATCHES-DOCSTRING-PROSE-AND-BARE-IDENTIFIERS`, which names the same
+script and the same line from the next sprint.** The sibling is cited here because `DISCHARGED`
+is keyed on a live candidate being named by an archived entry: fixed without being filed, it
+would be invisible to the goal partition. Its own prescribed remedy — comment-gating the `stub`
+alternative alone and leaving the other three on the raw line — was built and scored, and it is
+one of the eight the receipt rejects.
 
 
-verify: sh V=core/scripts/validate-stub-audit.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d) || exit 9; mkdir -p "$d/src"; printf 'def f():\n    stub = AsyncMock(return_value=None)\n    return stub\n' > "$d/src/a.py"; printf 'def f():\n    client_stub.call()\n    return 0\n' > "$d/src/b.py"; printf 'def f():\n    # stub, wire later\n    return 0\n' > "$d/src/c.py"; printf 'def f():\n    raise NotImplementedError()\n' > "$d/src/e.py"; bash "$V" --root "$d" src/a.py >/dev/null 2>&1; ra=$?; bash "$V" --root "$d" src/b.py >/dev/null 2>&1; rb=$?; bash "$V" --root "$d" src/c.py >/dev/null 2>&1; rc=$?; bash "$V" --root "$d" src/e.py >/dev/null 2>&1; re=$?; rm -rf "$d"; [ "$rc" -eq 1 ] || exit 1; [ "$re" -eq 1 ] || exit 1; [ "$ra" -eq 0 ] || exit 1; [ "$rb" -eq 0 ] || exit 1; exit 0
+verify: sh V=core/scripts/validate-stub-audit.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d) || exit 9; mkdir -p "$d/src" || exit 9; : > "$d/bl.md"; printf 'def f():\n    stub = AsyncMock(return_value=None)\n    return stub\n' > "$d/src/a.py"; printf 'def f():\n    # the client_stub helper is fine\n    return 0\n' > "$d/src/b.py"; printf 'def f():\n    # stub, wire later\n    return 0\n' > "$d/src/c.py"; printf 'def f():\n    raise NotImplementedError()\n' > "$d/src/e.py"; printf 'widen() {\n  : # TODO\n}\n' > "$d/src/h.sh"; printf 'emit() {\n  printf "# stub, wire later\\n"\n}\n' > "$d/src/i.sh"; printf 'function s(o) {\n  return o.t;  // stub, wire later\n}\n' > "$d/src/j.js"; r() { bash "$V" --root "$d" --backlog bl.md "$1" >/dev/null 2>&1; echo $?; }; ra=$(r src/a.py); rb=$(r src/b.py); rc=$(r src/c.py); re=$(r src/e.py); rh=$(r src/h.sh); ri=$(r src/i.sh); rj=$(r src/j.js); rm -rf "$d"; [ "$rc" = 1 ] || exit 1; [ "$re" = 1 ] || exit 1; [ "$rh" = 1 ] || exit 1; [ "$rj" = 1 ] || exit 1; [ "$ra" = 0 ] || exit 1; [ "$rb" = 0 ] || exit 1; [ "$ri" = 0 ] || exit 1; exit 0
 
 ## BL-077
 

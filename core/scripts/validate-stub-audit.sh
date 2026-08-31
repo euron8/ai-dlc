@@ -105,7 +105,39 @@ fi
 [ "${#paths[@]}" -gt 0 ] || die "no paths given. Pass the gate's changed_files set, or --changed-from <base-ref>."
 
 # --- the four elements. This script is their one home; the fixture drives it. ------
-STUB_MARKER='(stub|TODO|FIXME|wired later|NotImplementedError)'
+#
+# THE MARKER SET SPLITS ON WHERE A MARKER IS CREDIBLE, and the split is measured rather
+# than stylistic. `NotImplementedError` is a LANGUAGE TOKEN: `raise NotImplementedError()`
+# with no prose beside it is the most reliable deferral signal in the set, so it is matched
+# on the raw line. The other four are ORDINARY ENGLISH WORDS, and matched on a raw line
+# they fire on identifiers (`stub = AsyncMock(return_value=None)`), on filenames
+# (`validate-stub-audit.sh`), on fixture data (`'TODO'` inside a list of rejected reason
+# strings) and on prose describing test doubles. None of those is a deferred
+# implementation, and all four elements below already assume the text they are reading is
+# a COMMENT BLOCK -- element 1's own finding message says so. The gate was the one part of
+# the check that did not, so a marker in code opened the elements against a line that can
+# never satisfy them.
+#
+# MEASURED, driving THIS script over the 393 hot-path files here and the reference
+# consumer's tree. Of 130 markers examined here, 54 sit on non-comment lines and none is a
+# deferral; the consumer's own gate log records the class costing a full HARD_BLOCK cycle
+# and an operator SUPPRESSED disposition in two consecutive sprints.
+#
+# THE BOUNDARY IS SPELLED OUT, NOT `\b`. Darwin's ERE under bash 3.2 has no `\b` --
+# measured, `[[ "stub = 1" =~ \b(stub)\b ]]` does not match while `(stub)` does -- so the
+# obvious `STUB_MARKER='\b(...)\b'` is a TOTAL DISARM that examines 0 markers over every
+# corpus file and passes `# stub, wire later` and `raise NotImplementedError()` alike. It
+# reads as a fix and reports as a clean tree. The cited precedent for `\b` is
+# `audit-layer-debt.sh:186`, which is a PYTHON `re.compile` run through `python3`, not
+# something `[[ =~ ]]` can take.
+#
+# BOTH HALVES ARE LOAD-BEARING AND NEITHER COVERS THE OTHER. The boundary alone still
+# fires on `stub = AsyncMock(...)` -- `-` and `=` are both boundaries, so it does not even
+# clear the filename case that motivated it. The comment gate alone still fires on
+# `# the client_stub helper is fine`. The fixture seeds one case for each so that
+# disabling either is visible.
+CODE_MARKER='(^|[^[:alnum:]_])NotImplementedError([^[:alnum:]_]|$)'
+PROSE_MARKER='(^|[^[:alnum:]_])(stub|TODO|FIXME|wired later)([^[:alnum:]_]|$)'
 
 # `Phase [0-9]` IS a stub marker -- but only inside a statement of ABSENCE. On its own
 # it is a TOPIC LABEL, and the four other alternatives are unfinished-work tokens while
@@ -165,15 +197,52 @@ hot_path() { # 0 = hot-path file
 # under inspection is a comment block, and an unstripped anchor matches nothing. This
 # was unmatchable-as-written for the life of the check, invisible because an agent
 # strips the prefix without being told to.
+# The opener set is declared ONCE and read by both functions below. Spelled twice it is
+# the restatement this file exists to remove, and the copy that drifts is the one no arm
+# drives.
+COMMENT_OPENERS='# // --'
+
 decomment_line() {
-  local l="$1"
+  local l="$1" p
   l="${l#"${l%%[![:space:]]*}"}"
-  case "$l" in
-    '#'*)  l="${l#\#}"; l="${l#\#}"; l="${l#\#}"; l="${l# }" ;;
-    '//'*) l="${l#//}"; l="${l# }" ;;
-    '--'*) l="${l#--}"; l="${l# }" ;;
-  esac
+  for p in $COMMENT_OPENERS; do
+    case "$l" in
+      "$p"*)
+        l="${l#"$p"}"
+        [ "$p" = '#' ] && { l="${l#\#}"; l="${l#\#}"; }
+        l="${l# }"
+        break ;;
+    esac
+  done
   printf '%s' "$l"
+}
+
+# The COMMENT PORTION of a line -- everything from its first comment opener on -- or the
+# empty string if it carries none.
+#
+# WHY NOT "does the line START with a comment". Because `: # TODO` and
+# `raise NotImplementedError  # stub` are the two commonest deferral idioms there are, and
+# a leading-prefix test drops both. It also drops element 3's own seeded adversary, which
+# is how this was found: a whole element lost its subject while every arm still read ok.
+#
+# WHY THE QUOTE GUARD. An opener INSIDE a string literal is not a comment, and the corpus
+# is full of them -- `printf '# TODO reword marker\n'` and `"http://..."` are both ordinary
+# code. Text before a real opener does not carry a quote, so a quote before the candidate
+# means the line is code and the answer is EMPTY. This is deliberately conservative in the
+# false-NEGATIVE direction: the cost of guessing wrong the other way is a HARD_BLOCK gate
+# cycle on a line no consumer edit can clear, and this check is one of four that see the
+# same diff.
+comment_text() {
+  local l="$1" p pre best="" bestlen=-1
+  for p in $COMMENT_OPENERS; do
+    case "$l" in *"$p"*) ;; *) continue ;; esac
+    pre="${l%%"$p"*}"
+    case "$pre" in *[\'\"]*) continue ;; esac
+    if [ "$bestlen" -lt 0 ] || [ "${#pre}" -lt "$bestlen" ]; then
+      bestlen="${#pre}"; best="${l#"$pre"}"
+    fi
+  done
+  printf '%s' "$best"
 }
 
 load_backlog() {
@@ -218,12 +287,23 @@ for rel in "${paths[@]}"; do
   while [ "$i" -lt "${#lines[@]}" ]; do
     line="${lines[$i]}"
     i=$((i + 1))                      # i is now the 1-based line number of "$line"
-    # Two conditions, never folded into one alternation: `Phase [0-9]` needs the
-    # absence statement on the same line and the other four markers must NOT, or a
-    # `raise NotImplementedError()` with no prose beside it stops being examined.
-    if ! [[ $line =~ $STUB_MARKER ]]; then
-      [[ $line =~ $PHASE_MARKER ]]   || continue
-      [[ $line =~ $PHASE_ABSENCE ]]  || continue
+    # THREE conditions, never folded into one alternation, because each marker class is
+    # credible somewhere different: `NotImplementedError` on any line, the prose markers
+    # only inside a comment, `Phase [0-9]` only beside an absence statement. Folded
+    # together, whichever rule is loosest decides all three.
+    #
+    # The prose marker is matched TWICE and that is not redundant: once against the raw
+    # line as a cheap filter, then against the comment portion, which is the arm that
+    # decides. Without the first test comment_text would fork a subshell once per LINE OF
+    # EVERY FILE instead of once per marker -- the same verdict, three orders of magnitude
+    # more processes.
+    if ! [[ $line =~ $CODE_MARKER ]]; then
+      ctext=""
+      [[ $line =~ $PROSE_MARKER ]] && ctext="$(comment_text "$line")"
+      if ! { [ -n "$ctext" ] && [[ $ctext =~ $PROSE_MARKER ]]; }; then
+        [[ $line =~ $PHASE_MARKER ]]   || continue
+        [[ $line =~ $PHASE_ABSENCE ]]  || continue
+      fi
     fi
     n_markers=$((n_markers + 1))
 

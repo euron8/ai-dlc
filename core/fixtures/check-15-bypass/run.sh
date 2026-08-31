@@ -161,6 +161,25 @@ expect src/v14_phase_deferral.py \
 expect src/v15_notimplemented_bare.py \
                                 element1-item-ref  "V15 bare NotImplementedError"
 
+# WHERE A PROSE MARKER IS CREDIBLE. V17 and V18 are ABSENCE-shaped and each is reachable
+# by ONE half of the gate only — V17 by the comment test, V18 by the word boundary — so
+# disabling either half moves exactly one cell. Both have mutants at the end of this file.
+# V19 is their positive control and the arm that catches a DISARMED marker set: `\b` is
+# not in Darwin's ERE, so the obvious `STUB_MARKER='\b(...)\b'` examines nothing anywhere
+# and every absence-shaped arm here reads that silence as a pass.
+expect src/v17_code_bare_stub.py \
+                                ok                 'V17 bare stub identifier in code'
+expect src/v18_comment_substring.py \
+                                ok                 "V18 substring in a comment"
+expect src/v20_code_todo_data.py \
+                                ok                 "V20 TODO in code data"
+expect src/v22_quoted_opener.sh \
+                                ok                 "V22 opener inside a string literal"
+expect src/v19_comment_bare_stub.py \
+                                element1-item-ref  "V19 bare marker in a comment (control)"
+expect src/v21_slashslash_comment.js \
+                                element1-item-ref  "V21 marker in a trailing // comment"
+
 # The exemption pair. V8 satisfies zero elements and must NEVER reach the elements
 # at all; V9 satisfies zero elements at a core-ADJACENT path and must reach them.
 # Drop the exemption and V8 flips to element1-item-ref. Widen it to all of
@@ -251,23 +270,48 @@ else
 fi
 
 # name | sed program | probe | the token the mutant must produce
-MUT_NAME=( phase-alternative-restored phase-marker-dropped absence-widened notimplementederror-dropped )
+#
+# EACH SED IS ANCHORED ON THE LINE THAT DEFINES ONE RULE, never on text two rules share.
+# The `cmp -s` guard below turns a sed that stopped matching into a loud BAD rather than a
+# silent survival, which is what happened to the first two of these when the marker set
+# split: both were keyed on a `STUB_MARKER=` line that no longer exists.
+MUT_NAME=(
+  phase-alternative-restored phase-marker-dropped absence-widened
+  notimplementederror-dropped prose-marker-unbounded prose-gate-on-raw-line
+  comment-openers-emptied quote-guard-dropped
+)
 MUT_SED=(
-  "s@^STUB_MARKER='(stub|TODO|FIXME|wired later|NotImplementedError)'\$@STUB_MARKER='(stub|TODO|FIXME|wired later|Phase [0-9]|NotImplementedError)'@"
+  "s@^CODE_MARKER='.*'\$@CODE_MARKER='(NotImplementedError|Phase [0-9])'@"
   "s@^PHASE_MARKER='Phase \[0-9\]'\$@PHASE_MARKER='PhaseThatCannotOccur [0-9]'@"
   "s@^PHASE_ABSENCE='.*'\$@PHASE_ABSENCE='.'@"
-  "s@|NotImplementedError)'\$@)'@"
+  "s@^CODE_MARKER='.*'\$@CODE_MARKER='NotImplementedErrorThatCannotOccur'@"
+  "s@^PROSE_MARKER='.*'\$@PROSE_MARKER='(stub|TODO|FIXME|wired later)'@"
+  's@^      if ! { \[ -n "\$ctext" \] && \[\[ \$ctext =~ \$PROSE_MARKER \]\]; }; then$@      if ! [[ $line =~ $PROSE_MARKER ]]; then@'
+  "s@^COMMENT_OPENERS='.*'\$@COMMENT_OPENERS='#'@"
+  's@^    case "[$]pre" in .*$@    :@'
 )
-MUT_PROBE=( src/v13_phase_prose_docstring.py src/v14_phase_deferral.py src/v16_phase_section_label.py src/v15_notimplemented_bare.py )
-MUT_WANT=( element1-item-ref ok element1-item-ref ok )
+MUT_PROBE=(
+  src/v13_phase_prose_docstring.py src/v14_phase_deferral.py src/v16_phase_section_label.py
+  src/v15_notimplemented_bare.py src/v18_comment_substring.py src/v17_code_bare_stub.py
+  src/v21_slashslash_comment.js src/v22_quoted_opener.sh
+)
+MUT_WANT=(
+  element1-item-ref ok element1-item-ref
+  ok element1-item-ref element1-item-ref
+  ok element1-item-ref
+)
 MUT_WHY=(
-  "V13 — the sprint-306 docstring is a finding again the moment the bare alternative returns"
+  "V13 — the sprint-306 docstring is a finding again the moment the alternative is matched on the raw line"
   "V14 — a real phase deferral goes unexamined the moment the alternative is deleted outright"
   "V16 — a section label is a finding again the moment the absence vocabulary matches anything"
   "V15 — a marker OUTSIDE the phase rule goes unexamined, which no other arm here notices"
+  "V18 — a substring inside an identifier is a finding again without the word boundary"
+  "V17 — a variable named 'stub' is a finding again the moment the marker is read off the raw line"
+  "V21 — a // comment stops being read the moment the opener set is narrowed to #"
+  "V22 — an opener inside a string literal becomes a comment the moment the quote guard goes"
 )
 
-for i in 0 1 2 3; do
+for i in 0 1 2 3 4 5 6 7; do
   label="${MUT_NAME[$i]}"; copy="$MUT/$label.sh"
   sed "${MUT_SED[$i]}" "$AUDIT" > "$copy" 2>/dev/null
   # `cmp -s` first: a sed that matched nothing produces an unmutated copy, which answers
@@ -287,7 +331,7 @@ done
 
 echo
 if [ "$fails" -eq 0 ]; then
-  echo "PASS  check-15-bypass: 16 variants correct against the shipping validator. Each"
+  echo "PASS  check-15-bypass: 22 variants correct against the shipping validator. Each"
   echo "      adversary is rejected on its intended element — absent item, CLOSED item, no"
   echo "      file:line, digitless file ref, and element 4's two floors separately (a"
   echo "      padded reason under density, a short reason under length) — the honest stub"
@@ -297,9 +341,15 @@ if [ "$fails" -eq 0 ]; then
   echo "      both directions: prose in a docstring and prose as a section label are"
   echo "      ignored, a real deferral written only as a phase reference is still caught,"
   echo "      and a bare NotImplementedError is examined without any prose beside it. The"
-  echo "      three non-element assertions hold too: the exit mapping separates"
-  echo "      audited-nothing from clean and from a finding, and the run reports what it"
-  echo "      looked at. Four mutants prove the phase rule's three lines load-bearing."
+  echo "      prose markers hold in both directions too, and each half of that gate has a"
+  echo "      variant the other half cannot reach: a bare 'stub' identifier in code and a"
+  echo "      TODO in a data literal are ignored, a substring inside an identifier is"
+  echo "      ignored even inside a comment, an opener inside a string literal is not a"
+  echo "      comment, while a bare marker in a leading comment and one in a trailing //"
+  echo "      comment are both still caught. The three non-element assertions hold too:"
+  echo "      the exit mapping separates audited-nothing from clean and from a finding,"
+  echo "      and the run reports what it looked at. Eight mutants prove the phase rule's"
+  echo "      three lines and the prose gate's four load-bearing."
   exit 0
 fi
 echo "FAIL  check-15-bypass: $fails assertion(s) wrong." >&2
