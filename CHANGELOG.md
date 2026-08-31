@@ -15,6 +15,70 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.457.0] - 2026-08-31
+
+### A glob match is evidence about a destination, never about a file
+
+`PC-S340-IS-CORE-ANSWERS-BY-DECLARED-GLOB-NOT-BY-MEMBERSHIP`, filed by the reference consumer
+during the `0.452.0 → 0.456.0` pull.
+
+`core-paths.sh --is-core` decided by matching the path against `core-manifest.md`'s declared
+globs. One of those is `scripts/ai-dlc/*` — a whole namespace — so any path under that prefix
+answered exit 0 whether or not this distribution has ever shipped a file by that name. Measured,
+three inputs in one invocation: a name invented for the probe exits 0, a real core file exits 0,
+and `scripts/ai-dlc-local/audit-rule-exercise.sh` exits 1.
+
+That mattered because `v0.455.0` made the answer route retro findings upstream.
+`audit-upstream-routing.sh` reads path tokens out of carry-over PROSE, so a finding naming a
+fictional or long-renamed path reached the push-candidate ledger against a subject that exists in
+no tree. Measured on the consumer's own 80-entry corpus: 13 core-glob path tokens, 11 present,
+**2 absent** — one a script an item PROPOSES at a core destination, one a bare
+`.claude/hooks/ai-dlc-*.sh` wildcard, which is not a filename at all.
+
+**The filed remedy was built and refused on measurement, and the measurement is the useful part.**
+It asked that `--is-core` require the distribution to carry the corresponding `core/` file. An
+installed consumer has no `core/` directory — checked on a tree built by `install.sh` into an empty
+directory and on the reference consumer, against the consumer-relative form as the control — so the
+question is unanswerable in the tree where the router runs. From the other side, `scripts/ai-dlc/X`
+ships from `core/scripts/X` and `core/scripts/ai-dlc/` does not exist, so reversing the mapping
+means restating `install.sh`'s own path split inside the resolver whose entire purpose is not to
+hand-list what core is.
+
+So membership is asked where it can be answered and refused where it cannot. `--is-core` now
+resolves a layered-consumer root — a version stamp plus both layer directories, `--audit-diff`'s
+existing activation rule — by walking UP from the working directory, and when that root is found
+and the matched path names no file under it, prints `core-destination:` and exits **2**, the code
+already reserved for "cannot determine" and documented as never degrading to 0 or 1. With no
+layered root — the distribution, a bare temp dir, a fixture sandbox — the mode answers exactly as
+it did before, asserted against `HEAD` with a `cmp -s` control proving the two copies differ. The
+root is resolved from `$PWD` and deliberately not from `${BASH_SOURCE}`, because the consumer's own
+receipt for this defect copies the script into a mktemp directory and runs it with the consumer
+root as the working directory.
+
+`audit-upstream-routing.sh` LABELS an absent named path `[NO SUCH FILE HERE]` and deliberately
+does NOT filter it. Both absent paths in the consumer's corpus sit in entries that belong upstream,
+so a filter would have ACQUITTED a true misroute in order to suppress a label — the trade
+`mechanism-design.md` forbids. Positive control on the corpus that produced the filing: the
+consumer's backlog at its pre-pull commit reproduces `MISROUTED (10)` and the label fires on
+exactly one path, with the other nine unlabelled.
+
+**The candidate's own receipt accepts a total disarm, and that is worth knowing before anyone reads
+its verdict as a close.** It runs one arm — the invented name must not exit 0. Six implementations
+were built and scored against it in one invocation, each asserted to differ from the correct one
+first: the correct fix, a second spelling of it, and four regressions, and the receipt ACCEPTED all
+six. The one that matters is a `--is-core` that exits 2 unconditionally, which ships nothing and
+passes. The battery that discriminates needs three more inputs in the same run — a real core file
+still 0, a non-core path still 1, and the same verdicts from a subdirectory — and it kills all four:
+the unconditional 2 fails the first, a membership test resolved against the working directory rather
+than the layered root fails the third, and one applied before the glob loop rather than inside it
+fails the second. Every arm kills at least one, so none is vacuous.
+
+`.claude/rules/upstream-routing.md` gains the third branch, because an undocumented exit is a state
+a consumer session cannot route: a file an item proposes at a core destination is still upstream's,
+a renamed or fictional path is neither, and a wildcard in prose is not a filename. `retro.md` cites
+that rule rather than restating it. `gate-validation.md` already documented exit 2 as fail-closed
+and is unchanged.
+
 ## [0.456.0] - 2026-08-31
 
 ### A raw total in shipped prose went stale inside one release, exactly as the rule says they do
