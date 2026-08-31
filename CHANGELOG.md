@@ -15,6 +15,47 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.453.0] - 2026-08-31
+
+### The correct way to close a layer debt also filed an undeclared one
+
+`audit-layer-debt.sh`'s migration arm skipped a row only when `owed` was a dict and never
+consulted `closes_owed`. A discharge row carries `closes_owed`, and by the convention every
+discharge row on the reference register follows, opens its `reason` with `Debt discharged.` —
+which trips the arm's `debt` prose cue. So the arm charged the operator for doing the right
+thing, and **its noise grew by one every time a debt was correctly closed**: the reference
+consumer discharged six debts and watched `UNDECLARED` rise by exactly six.
+
+This is the SECOND false-positive class in that arm and it is structural where the known one is
+lexical. The author had already measured and excluded the lexical class — `debt` inside an
+identifier like `test-check18-debt-audit`, which is why the `(?<![\w-])…(?![\w-])` guard exists —
+and no narrowing of the cue can reach this one, because the prose on a discharge row is genuinely
+about a debt. The row simply declares no new one.
+
+Measured on the reference consumer's register, both binaries in one invocation under a `cmp -s`
+control asserting they differ, and with the copy's siblings beside it so neither side could exit 2
+and read as agreement: **33 `UNDECLARED` before, 24 after — 9 removed, 0 added.** The
+false-negative control is clean: **0 of the 9 removed rows lack `closes_owed`**. Two further
+controls establish that this narrowed rather than disarmed the arm — 11 rows carry `closes_owed`
+and only 9 of them were being flagged, so the arm was already silent on 2 and the fix removed a
+proper subset; and the OPEN-debt count and the `mistyped_closes_owed` count are byte-equal on both
+sides, so the debt join itself is untouched.
+
+The exemption does not acquit the arm's own subject, and that is asserted rather than assumed. Its
+subject is an obligation nobody declared; a discharge row that also incurs a NEW obligation stays
+in scope, because the schema permits `owed` and `closes_owed` on one row and such a row declares
+the new debt explicitly. Requiring that explicit `owed` keeps the case reachable instead of
+exempting it.
+
+The `closes_owed` coercion is now single-sourced as `closes_ids()` and read by both arms. It was
+restated in two places the moment the migration arm gained a second reader, and two readers of one
+predicate answering differently is how a row comes to close a debt for the join and not for the
+migration arm — closed AND filed as undeclared, the worst of both. A mistyped bare-string
+`closes_owed` is still counted as a schema violation and still honoured as a close, because the
+join already honours it and the two readers must agree.
+
+Discharges `PC-S334-AUDIT-LAYER-DEBT-FLAGS-ITS-OWN-DISCHARGE-ROWS-AS-UNDECLARED-DEBT`.
+
 ## [0.452.0] - 2026-08-30
 
 ### `\b` is honoured by `grep -E` here and ignored by bash's `[[ =~ ]]`, and v0.451.0 said the wrong one

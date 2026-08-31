@@ -99,6 +99,28 @@ with open(path, encoding="utf-8") as fh:
         except Exception:
             malformed += 1
 
+
+# ONE PREDICATE, ONE READER. `closes_owed` is now read by two arms — the debt join below and
+# the migration arm at the foot — and a restated coercion is how those two come to disagree
+# about whether a row discharges anything. A row that closes a debt for the join and does not
+# for the migration arm is the worst of both: the debt goes closed AND the row is filed as
+# undeclared. Single-sourced here so the two arms cannot drift apart.
+#
+# MISTYPED IS STILL A CLOSE. A bare-string `closes_owed` is a schema violation and is counted
+# as one, but the row plainly MEANS to discharge, and the join already honours it — so the
+# migration arm must honour it too or the two readers answer differently on the same row.
+def closes_ids(r):
+    """(ids, mistyped) — the ids this row discharges, coerced exactly as the join coerces."""
+    co = r.get("closes_owed")
+    if isinstance(co, str):
+        return [co], 1
+    if co is None:
+        return [], 0
+    if not isinstance(co, list):
+        return [], 1
+    return co, 0
+
+
 # A row that will not parse is not a row with no debt. Counted and reported, never dropped.
 declared, closed = {}, set()
 for r in rows:
@@ -125,13 +147,8 @@ for r in rows:
     # COERCED AND COUNTED, NOT SILENTLY REPAIRED. A quiet fix here would make the register's
     # schema unenforceable by making its violation harmless, which is the same defect one level
     # up; the count is surfaced beside `malformed` so the row still gets corrected.
-    co = r.get("closes_owed")
-    if isinstance(co, str):
-        co, mistyped = [co], mistyped + 1
-    elif co is None:
-        co = []
-    elif not isinstance(co, list):
-        co, mistyped = [], mistyped + 1
+    co, bad = closes_ids(r)
+    mistyped += bad
     for cid in co:
         closed.add(cid)
 
@@ -184,9 +201,28 @@ unowned = sorted({(r.get("clause") or "", r.get("entry") or "") for r in rows
 # `test-check18-debt-audit` is a filename, and it was 1 of the 2 false positives measured
 # on the reference register. Require the cue to stand alone, not to sit between hyphens.
 PROSE = re.compile(r"(?<![\w-])(owed|still owed|deferred|remediation|follow-?up|debt|TODO)(?![\w-])", re.I)
+#
+# A SECOND FALSE-POSITIVE CLASS, AND IT IS STRUCTURAL WHERE THE ONE ABOVE IS LEXICAL. The
+# cue narrowing cannot reach it: the prose on a DISCHARGE row is genuinely about a debt, and
+# the row genuinely declares no new one. The correct way to close a debt is to carry
+# `closes_owed` and to say so in `reason` — and every discharge row on the reference register
+# opens its reason `Debt discharged.`, which trips the `debt` cue. So the arm charged the
+# operator for doing the right thing, and its noise GREW BY ONE EVERY TIME A DEBT WAS
+# CORRECTLY CLOSED: the consumer discharged six and watched the count rise by exactly six.
+# Measured on the reference register at the time of this change: 33 flagged, 9 of them
+# carrying `closes_owed`, i.e. 27% noise against a genuine remainder of 24.
+#
+# THE EXEMPTION DOES NOT COVER THIS ARM'S OWN SUBJECT, and that is asserted rather than
+# assumed. Its subject is an obligation nobody declared. A discharge row that ALSO incurs a
+# NEW obligation is still reachable: the schema permits `owed` and `closes_owed` on one row,
+# so such a row declares the new debt explicitly and lands in the register proper. Requiring
+# that explicit `owed` keeps the case in scope instead of exempting it — which is why the
+# skip below reads `closes_ids`, not "mentions a debt".
 undeclared = []
 for r in rows:
     if isinstance(r.get("owed"), dict):
+        continue
+    if closes_ids(r)[0]:
         continue
     reason = r.get("reason", "") or ""
     hits = sorted({m.lower() for m in PROSE.findall(reason)})
