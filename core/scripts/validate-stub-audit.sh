@@ -123,7 +123,7 @@ fi
 # deferral; the consumer's own gate log records the class costing a full HARD_BLOCK cycle
 # and an operator SUPPRESSED disposition in two consecutive sprints.
 #
-# THE BOUNDARY IS SPELLED OUT, NOT `\b`. Darwin's ERE under bash 3.2 has no `\b` --
+# THE BOUNDARY IS SPELLED OUT, NOT `\b`. bash's `[[ =~ ]]` does not honour `\b` here --
 # measured, `[[ "stub = 1" =~ \b(stub)\b ]]` does not match while `(stub)` does -- so the
 # obvious `STUB_MARKER='\b(...)\b'` is a TOTAL DISARM that examines 0 markers over every
 # corpus file and passes `# stub, wire later` and `raise NotImplementedError()` alike. It

@@ -15,6 +15,40 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.452.0] - 2026-08-30
+
+### `\b` is honoured by `grep -E` here and ignored by bash's `[[ =~ ]]`, and v0.451.0 said the wrong one
+
+A wording correction to `v0.451.0` and the backlog entry it produced. The measurement that
+release shipped was right and its fix is unchanged; the GENERALISATION it drew from that
+measurement was wrong, and it was wrong in the direction that would mislead the next author.
+
+`v0.451.0` said `\b` "is not in Darwin's ERE". Measured, same shell, one invocation:
+`printf '%s\n' "stub = 1" | grep -cE '\bstub\b'` returns **1**, and returns **0** for
+`client_stub`, so BSD grep (2.6.0-FreeBSD, "GNU compatible") supports the boundary and applies it
+correctly. It is bash's `[[ =~ ]]` that ignores it — `re='\bstub\b'; [[ "stub = 1" =~ $re ]]` does
+not match, against a control without the boundary that does, inline and via-variable alike.
+
+The distinction matters because **17 live sites in this repo use `\b` in `grep -E` and are
+correct**, several of them load-bearing in `validate-enforcement-map.sh` and
+`validate-spec-join.sh`. An author who read the shipped sentence and went looking for `\b` to
+remove would have broken every one of them.
+
+Six sites carried the overreaching claim — `CHANGELOG.md`, `docs/backlog.archive.md`,
+`docs/plans/graph-ledger-full-drain.md` twice, and comments in `core/scripts/validate-stub-audit.sh`
+and both `core/fixtures/check-15-bypass/` files. All six now name bash's `[[ =~ ]]` specifically.
+
+`BL-130` is filed for the missing enforcement, with the reason it is not the table row it looks
+like: `validate-shell-portability.sh`'s arms are a same-line `grep -E` table, and the offender is
+a variable ASSIGNED a `\b` pattern at one line and consumed by `=~` at another — 116 lines apart
+in the `v0.451.0` case. Measured: that same-line grammar over 390 tracked shell files returns
+**0**, and a seeded two-line probe does not fire it, so the zero is a floor of unknown depth. The
+arm needs a two-pass join and a mandatory grep/sed exemption. Its receipt was built, proved
+STILL-LIVE against the live tree, proved SATISFIABLE against a tree carrying a prototype S9 arm,
+and carries a positive control (a seeded `mapfile`) so a probe repo that failed closed reports
+exit 9 rather than a false STILL-LIVE — which it did, on the first attempt, because the validator
+fails closed on an empty `core/` corpus.
+
 ## [0.451.0] - 2026-08-30
 
 ### An ordinary English word matched on a raw line is not a deferral marker
@@ -39,8 +73,8 @@ false-negative control is the one that decides it: **0 of the 413 removed lines 
 `NotImplementedError`**, against 1 that does in the surviving set.
 
 **Both filed remedies were built as mutants and both were rejected on measurement.** The
-sprint-303 filing prescribes `STUB_MARKER='\b(...)\b'`; `\b` is not in Darwin's ERE under bash
-3.2, so that spelling examines **0 markers over every corpus file** and passes `# stub, wire
+sprint-303 filing prescribes `STUB_MARKER='\b(...)\b'`; bash's `[[ =~ ]]` does not honour `\b`
+here, so that spelling examines **0 markers over every corpus file** and passes `# stub, wire
 later` and `raise NotImplementedError()` alike — a total disarm that reads as a fix and reports
 a clean tree. The sprint-304 filing prescribes comment-gating the `stub` alternative alone; it
 still fires on a substring inside an identifier and on `TODO` in a data literal. Ten candidate

@@ -4189,7 +4189,7 @@ is the one that matters and it is clean: **0 of the 413 removed lines carry
 most reliable deferral signal is live and the removals are all prose.
 
 **The filing's prescribed remedy is a total disarm on this platform, and its own receipt accepts
-it.** `\b` is not in Darwin's ERE under bash 3.2 — measured, `[[ "stub = 1" =~ \b(stub)\b ]]`
+it.** bash's `[[ =~ ]]` does not honour `\b` here — measured, `[[ "stub = 1" =~ \b(stub)\b ]]`
 does not match while `(stub)` matches — so `STUB_MARKER='\b(...)\b'` examines **0 markers over
 all 354 corpus files** and passes `# stub, wire later`, `raise NotImplementedError()` and
 `# TODO: fix` alike. The cited precedent, `core/scripts/audit-layer-debt.sh:186`, is a **Python**

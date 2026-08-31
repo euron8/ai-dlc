@@ -38,8 +38,8 @@ lines carrying `NotImplementedError`** against 1 in the survivors. Gate green, 1
 of 0.
 
 **BOTH FILED REMEDIES WERE BUILT AS MUTANTS AND BOTH WERE REJECTED ON MEASUREMENT, in opposite
-directions.** The sprint-303 filing prescribes `STUB_MARKER='\b(...)\b'`. `\b` is NOT in Darwin's
-ERE under bash 3.2, so that spelling examines **0 markers over every corpus file** and passes
+directions.** The sprint-303 filing prescribes `STUB_MARKER='\b(...)\b'`. bash's `[[ =~ ]]` does
+NOT honour `\b` here, so that spelling examines **0 markers over every corpus file** and passes
 `# stub, wire later` and `raise NotImplementedError()` alike — a total disarm that reads as a fix
 and reports a clean tree. The sprint-304 filing prescribes comment-gating the `stub` alternative
 alone; it still fires on a substring inside an identifier and on `TODO` in a data literal. **Two
@@ -2201,7 +2201,7 @@ so no block written before it changes verdict.
    itself complains about. Score both, on the same input, and say which measurement decided it.
 
    **AND WHEN TWO FILINGS NAME ONE DEFECT, BUILD BOTH REMEDIES — THEY WILL DISAGREE.** Batch 31
-   had two, and neither worked: one was a total DISARM on this platform (`\b` is not in Darwin's
+   had two, and neither worked: one was a total DISARM on this platform (bash's `[[ =~ ]]` ignores
    ERE, so the "fixed" check examined 0 markers over every corpus file and reported a clean tree),
    the other left two of the four false-positive shapes firing. **A filing is authoritative about
    the DEFECT and is evidence about nothing else.** Ten candidates were built and scored before one

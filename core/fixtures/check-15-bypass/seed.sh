@@ -224,7 +224,7 @@ EOF
 
 # V19: the positive control for the pair — a bare prose marker inside a real comment,
 # satisfying no element. This is what the gate is FOR, and it is what goes silent if the
-# marker set is disarmed (`\b` is not in Darwin's ERE: `STUB_MARKER='\b(...)\b'` examines
+# marker set is disarmed (bash's `[[ =~ ]]` ignores `\b`: `STUB_MARKER='\b(...)\b'` examines
 # nothing at all and reports a clean tree). Element 1 rejects it.
 cat > "$TREE/src/v19_comment_bare_stub.py" <<'EOF'
 def settle():

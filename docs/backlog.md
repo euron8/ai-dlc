@@ -3197,6 +3197,45 @@ precondition rather than a false close.
 
 verify: sh f=core/hooks/ai-dlc-acknowledge.sh; [ -f "$f" ] || exit 9; r=$(grep -oE 'jq -r [^|]*\.[a-z_.]+' "$f" | grep -oE '\.[a-z_][a-z_.]*' | sort -u); [ -n "$r" ] || exit 9; printf '%s\n' "$r" | grep -q '^\.tool_name$' || exit 9; printf '%s\n' "$r" | grep -qE '^\.(subagent|agent_type|agent_id|parent_session_id|invoked_by)' && exit 0; exit 1
 
+## BL-130
+
+**A `\b` word boundary works in `grep -E` on this platform and silently matches NOTHING in bash
+`[[ =~ ]]`, and no arm distinguishes the two.** Measured here, same shell, one invocation:
+`printf '%s\n' "stub = 1" | grep -cE '\bstub\b'` returns 1 and correctly returns 0 for
+`client_stub`, so BSD grep (2.6.0-FreeBSD, "GNU compatible") supports it; while `re='\bstub\b'`
+with `[[ "stub = 1" =~ $re ]]` does NOT match, against a control of the same test without the
+boundary, which does. Inline and via-variable both fail. bash is 3.2.57.
+
+**The consequence is a check that reads as hardened and examines nothing.** `v0.451.0`'s subject
+was filed with exactly this remedy — `STUB_MARKER='\b(...)\b'` — and built as a mutant it examined
+**0 markers over all 393 hot-path files**, passing `# stub, wire later` and
+`raise NotImplementedError()` alike while reporting a clean tree. It was rejected on measurement
+rather than on review, and nothing in the repo would have caught it.
+
+**`scripts/validate-shell-portability.sh` is the right home and a table row is NOT the right
+shape.** Its arms are a `S<N>_PAT` / `S<N>_WHY` / `S<N>_SKIP` table read by the loop at
+`scripts/validate-shell-portability.sh:112`, and S5/S6 already carry the sibling case (`\s` in
+grep and sed). But the same-line grammar this one looks like scores its own motivating case as a
+NON-INSTANCE: the offender is a variable ASSIGNED a pattern containing `\b` at one line and
+consumed by `=~` at another — 116 lines apart in the `v0.451.0` case. Measured: `=~` and `\b` on
+one line, comments stripped, over 390 tracked shell files returns **0**, and a seeded two-line
+probe under `mktemp` does NOT fire it. **That zero is a floor of unknown depth, not an absence.**
+
+**So the arm needs a two-pass join and one exemption that is not optional.** Pass 1 collects
+variables whose assigned value contains `\b`; pass 2 asks which of those reach a `[[ =~ ]]`. The
+exemption is the grep/sed consumer, where `\b` is CORRECT on this platform — 17 live sites use it
+that way today, several load-bearing in `scripts/validate-enforcement-map.sh:1127` and
+`core/scripts/validate-spec-join.sh:931`, and an arm without that exemption convicts every one of
+them. **A check that wedges correct code is worse than no check.**
+
+**Provenance.** Uncovered by `v0.451.0` (batch 31) while building the filed remedy as a mutant.
+Not consumer-filed and carries no `PC-` id, so it ranks BELOW any PC-backed entry by the
+provenance-first rule. Filed rather than fixed because it is a different subsystem from that
+batch and needs a join rather than the table row it resembles — recorded here so the next author
+does not ship the one-line version and read its zero as clean.
+
+  verify: sh V=scripts/validate-shell-portability.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d) || exit 9; mkdir -p "$d/scripts" "$d/core" || exit 9; cp "$V" "$d/scripts/" || exit 9; printf '0.0.0\n' > "$d/VERSION"; printf 'ok\n' > "$d/core/note.md"; printf 'x=1\nre="\\b(foo)\\b"\nif [[ $x =~ $re ]]; then :; fi\n' > "$d/probe.sh"; printf 'n=$(printf %%s a | grep -cE "\\bfoo\\b")\n' > "$d/exempt.sh"; printf 'mapfile -t arr < /dev/null\n' > "$d/control.sh"; git -C "$d" init -q && git -C "$d" add -A && git -C "$d" -c user.email=t@t -c user.name=t commit -qm s || exit 9; out=$(bash "$d/scripts/validate-shell-portability.sh" 2>&1); rc=$?; rm -rf "$d"; case "$out" in *control.sh*) ;; *) exit 9 ;; esac; case "$out" in *exempt.sh*) exit 1 ;; esac; case "$out" in *probe.sh*) ;; *) exit 1 ;; esac; [ "$rc" -ne 0 ] || exit 1; exit 0
+
 ## BL-129 — a change to an adjudication predicate has no mechanism that can see what it RECLASSIFIES
 
 **Every fixture seed for `validate-adversarial-convergence.sh` is hand-written, and written by
