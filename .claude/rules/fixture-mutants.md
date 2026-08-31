@@ -96,6 +96,16 @@ paths:
   a 17s unit read 32–43s while the leaks stole CPU, which is a self-inflicted false
   measurement that only `ps` reveals.
 
+- **A MUTATION THAT MATCHES NOTHING IS A LOST SUBJECT, AND THE REPAIR IS A NEW
+  SUBJECT — NEVER A RELAXED ASSERTION.** A refactor that single-sources a predicate
+  DELETES the literal block a mutation anchors on, and `mkmut` then correctly refuses
+  to let the no-op pass. The fixture goes red **on the commit that fixes the defect**,
+  which reads exactly like the fix being wrong. Measured: lifting a coercion into a
+  helper so two arms could stop restating it took two assertions with it, and the
+  mutations had to be re-anchored inside the helper asserting the identical
+  observable. Score a re-anchored mutation three ways before believing it — the anchor
+  is UNIQUE in the file (control: an impossible anchor returns 0), the mutant produces
+  the right observable FOR THE RIGHT REASON, and it fails ONLY its own assertion.
 - **Mutate the file the fixture RESOLVES, which is not always the one you are
   changing.** A fixture that names candidates in both install layouts takes the
   first that exists, and in this repo `core/git-hooks/pre-push` is found before
