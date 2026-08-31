@@ -31,11 +31,50 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 33 SHIPPED AS `v0.457.0`. THE SWEEP'S CORPUS IS NINE, NOT TEN, AND A PULL IS OWED BUT NOT REQUIRED.
+### BATCH 33 SHIPPED AS `v0.457.0` AND `v0.458.0` REVERSED ITS MAIN HALF. THE CANDIDATE WAS BY-DESIGN, THE CORPUS IS STILL TEN, AND A PULL IS OWED BUT NOT REQUIRED.
 
 **This block is the current state and it replaces the pull block below, whose figures were correct
 and whose instruction is spent.** Every figure here was re-derived AFTER the merge by running the
 derive block and the sweep, all controls in the same invocation.
+
+**READ THIS BEFORE PICKING A SUBJECT: BATCH 33 SHIPPED A DEFECT AND CORRECTED IT ONE RELEASE LATER,
+AND THE FAILURE IS REPEATABLE BY ANYONE WHO TAKES A FILING AT ITS WORD.**
+`PC-S340-IS-CORE-ANSWERS-BY-DECLARED-GLOB-NOT-BY-MEMBERSHIP` is **REJECTED AS BY-DESIGN**, adjudicated
+in `v0.458.0`'s commit message. `core-paths.sh` is byte-identical with `95670e58` again (`cmp -s`).
+
+**The answer was written inside the mechanism the filing wanted changed, in its own remedy text.**
+`core/hooks/ai-dlc-core-guard.sh` says `scripts/ai-dlc/` "is core-owned in its entirety
+(core-manifest.md claims `scripts/ai-dlc/*`), so **this deny stands whether or not the distribution
+ships a file by that name**". The guard denies a `Write` BEFORE the file exists, which is the only
+moment a deny is worth anything, so `--is-core` answering 0 for an uncreated name is the resolver
+AGREEING with the guard. **Before treating a resolver's answer as a defect, read the remedy text of
+the mechanism that consumes it** — one `sed -n` on that file would have ended this batch in ten
+minutes.
+
+**THE INVARIANT THAT EXISTS TO CATCH EXACTLY THIS COULD NOT SEE IT, and that is the finding worth
+carrying.** `I25` binds guard and resolver by byte-comparing `parse_manifest()` and
+`to_consumer_glob()` — verified, it loops over exactly those two names — while its own error text
+names the stake: "a rule that differs between them means a file the guard protects can be audited as
+consumer-authored." `v0.457.0` forked them at the DECISION, outside both functions, and `I25` passed
+on every run. The gate was green for the whole defect. A three-way guard/resolver/`fnmatch`
+agreement arm now lives in `core/fixtures/upstream-routing/run.sh`, over a seeded set including an
+invented filename under a core glob, proven to fire by re-applying the reverted behaviour to a copy.
+
+**THE OTHER HALF SHIPPED AN UNMEASURED FALSE-POSITIVE SET, WHICH `CLAUDE.md` FORBIDS IN AS MANY
+WORDS.** The router's `[NO SUCH FILE HERE]` label keyed existence on `AI_DLC_ROOT` — wherever the
+running copy resolved from — while a carry-over entry's paths are relative to the consumer that
+wrote it and `--backlog` names a corpus in a third place. On released `v0.457.0` the distribution's
+copy reading the consumer's real backlog marked **4 of 4** findings falsely. `v0.458.0` roots it at
+the BACKLOG's own directory: that case **4 → 0** with findings unchanged at 3, an unrootable corpus
+labels nothing while still reporting all 10 findings, and the positive control marks exactly the one
+path the filing names with 10 near-miss rows unlabelled in the same run. **The label survives; only
+its root moved.**
+
+**TWO HANDS GOT THIS RIGHT AND REPORTED AFTER THE MERGE.** Both recommended rejecting the candidate
+as by-design, with the guard's sentence as the evidence, and both had gone idle twice with nothing
+delivered before the release shipped. Their result payloads were TRUNCATED at ~16000 characters on
+arrival. **Do not treat an idle hand as a hand with nothing to say, and do not merge on the theory
+that it has stopped** — ask it by name, and budget for the answer arriving late rather than never.
 
 **WHAT SHIPPED.** `PC-S340-IS-CORE-ANSWERS-BY-DECLARED-GLOB-NOT-BY-MEMBERSHIP`, the first of the ten
 `PC-S340-*` candidates. `core-paths.sh --is-core` answered exit 0 for any path matching a declared
@@ -63,7 +102,9 @@ path still 1, the same verdicts from a subdirectory) and kills all four. **Do no
 receipt's verdict as a close on its own** — and expect the same shape from the other nine, which
 were filed by the same session in the same sprint.
 
-**THE CORPUS FOR BATCH 34 IS NINE**, the `PC-S340-*` set less the one that shipped. Three carry
+**THE CORPUS FOR BATCH 34 IS NINE FOR WORK AND TEN FOR ADJUDICATION** — the `PC-S340-*` set less
+the one that was rejected, which still needs its rejection carried to the consumer, and which is
+still UNFILED here so the sweep will keep offering it. Three carry
 killing controls already recorded in the pull block below;
 `STAMP-READOPT-GATE-IS-BLIND-TO-AN-ADDITIVE-CHANGE-AND-TO-A-REWRITTEN-BODY` and
 `SAFE-STOP-ACQUITTAL-TESTS-ANCESTRY-NOT-CONTENT` are the two defects in `v0.455.0` itself and are
@@ -89,7 +130,8 @@ GAP THIS FILE ALREADY RECORDS.** The bucket is keyed on a live candidate being c
 partition cannot move. The visible signal is PENDING.
 
 **A PULL IS OWED AND IS NOT REQUIRED, AND IT IS NOT AUTHORIZED.** Consumer installed **0.456.0**,
-shipped **0.457.0**, PENDING **1** (this batch's id, first named at `0.457.0`, derived per-id).
+shipped **0.458.0** — a gap of TWO releases. PENDING is **0 fixes and 1 adjudication**: the only id
+named upstream is the one `v0.458.0` REJECTED, so a pull delivers a decision, not a repair.
 **The prescribed differential is UNAVAILABLE, not null**: the consumer's installed
 `validate-layer-entries.sh` is byte-identical to this distribution's under `cmp -s`, so two runs of
 one program would have produced a perfect null reading exactly like agreement. The subject-specific
@@ -2587,7 +2629,15 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **RUN THE SWEEP (action 1b below) AND LET IT PICK BATCH 34's SUBJECT.** Batch 33 is merged as
-   `v0.457.0`, so number yours 34. **Nothing is owed ahead of the sweep.**
+   `v0.457.0` and corrected by `v0.458.0`, so number yours 34. **Nothing is owed ahead of the
+   sweep.**
+
+   **BEFORE YOU BUILD ANYTHING, READ THE REMEDY TEXT OF THE MECHANISM THAT CONSUMES THE ANSWER YOUR
+   SUBJECT CALLS WRONG.** Batch 33 shipped a fix for a filing whose premise was contradicted, in as
+   many words, by the guard that reads the value — and the invariant binding the two byte-compares
+   the wrong functions, so the gate was green for the whole defect. `PC-S340-IS-CORE-ANSWERS-BY-
+   DECLARED-GLOB-NOT-BY-MEMBERSHIP` is REJECTED as by-design and will keep appearing in your sweep,
+   because a rejection is not a filing and nothing here moves it out of UNFILED.
 
    **THE SWEEP WILL NOT COME BACK EMPTY.** Nine of the ten `PC-S340-*` candidates that arrived with
    the `0.452.0 → 0.456.0` pull's follow-ups are still UNFILED here; batch 33 took
