@@ -207,17 +207,20 @@ PY
   [ $? -eq 0 ] && ! cmp -s "$AUDIT" "$m" && printf '%s' "$m"
 }
 
-# 10 — the coercion reverted to the bare `or []` this release replaced. The string form must
-# stop closing its debt, i.e. the id REAPPEARS. Asserted as a positive outcome, not as the
-# absence of the new message.
-M10="$(mkmut a9 '    co = r.get("closes_owed")
-    if isinstance(co, str):
-        co, mistyped = [co], mistyped + 1
-    elif co is None:
-        co = []
-    elif not isinstance(co, list):
-        co, mistyped = [], mistyped + 1
-    for cid in co:' '    for cid in r.get("closes_owed") or []:')"
+# 10 — the string coercion broken so the id is iterated CHARACTER BY CHARACTER, which is the
+# defect assertion 9 names. The string form must stop closing its debt, i.e. the id REAPPEARS.
+# Asserted as a positive outcome, not as the absence of the new message.
+#
+# THE ANCHOR MOVED AT v0.453.0 AND THE MUTATION FOLLOWED IT. This coercion used to be spelled
+# inline in the declaration loop; that release lifted it into `closes_ids()` so the migration
+# arm could read the same predicate rather than restate it. The old anchor then matched
+# nothing, and `mkmut` correctly refused to let a no-op pass as a mutation — which is the
+# fixture working, not failing. **The repair for a fixture that has lost its subject is a NEW
+# SUBJECT, never a relaxed assertion**, so this mutates the coercion where it now lives and
+# asserts the identical observable.
+M10="$(mkmut a9 '    if isinstance(co, str):
+        return [co], 1' '    if isinstance(co, str):
+        return list(co), 1')"
 if [ -z "$M10" ]; then
   bad "FIXTURE ERROR: the assertion-9 mutation matched nothing — assertion 9 proves nothing"
 else
@@ -229,9 +232,8 @@ fi
 
 # 11 — the mistyped counter widened to flag well-formed lists. Assertion 11's control must go
 # red, which is what makes it a statement about correct data rather than about silence.
-M11="$(mkmut a11 '    elif co is None:' '    elif isinstance(co, list) and co:
-        mistyped += 1
-    elif co is None:')"
+# Anchor moved at v0.453.0 for the same reason as assertion 9's above.
+M11="$(mkmut a11 '    return co, 0' '    return co, (1 if co else 0)')"
 if [ -z "$M11" ]; then
   bad "FIXTURE ERROR: the assertion-11 mutation matched nothing — assertion 11's control proves nothing"
 else
