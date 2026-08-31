@@ -3,16 +3,40 @@
 ## RESUME HERE
 
 **You were started with one sentence: `READ and FOLLOW docs/plans/graph-ledger-full-drain.md`.
-This section is the whole of your entry point, and it is the ONLY CURRENT STATUS RECORD in this
-file.** Everything from `## Context` down is HISTORY — measured episodes, refuted hypotheses,
-and status records that were current when they were written and that THIS BLOCK REPLACES. Read
-it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
-instruction from it.**
+This section is the ONLY CURRENT STATUS RECORD in this file.** It tells you WHERE THINGS STAND.
+It does not tell you what to do.
+
+**YOUR INSTRUCTIONS ARE FOUR SECTIONS, AND THEY ARE NOT ALL NEXT TO THIS ONE. READ ALL FOUR
+BEFORE ACTING:**
+
+1. **`## Start here`** — the two repos and the READ/WRITE boundary. **Read this FIRST, before any
+   command.** One of those repos is READ ONLY and a write there is the most expensive mistake
+   available in this program.
+2. **`### NEXT ACTIONS — numbered, in order`** — what to do, starting at action 1. This is roughly
+   2,300 lines below this block; jump to the heading, do not scroll.
+3. **`### Ping the operator`** — when to stop and report.
+4. **`## Hazards`** and **`### Done when`** — what will bite you, and what finishing looks like.
+
+**THE HISTORY BOUNDARY IS BY HEADING, NOT BY POSITION, and an earlier revision of this block got
+that wrong in the direction that matters.** It said "everything from `## Context` down is
+HISTORY" — but `## Start here`, `## Hazards`, `## Verdict vocabulary` and `### Done when` all sit
+BELOW `## Context`, so a session obeying that sentence literally would skip its own read/write
+boundary and write to the consumer. `scripts/validate-plan-shape.sh:73` cannot catch this: it
+greps that `## Start here` EXISTS and never asks whether the reader was told to ignore it.
+
+So: the four sections above are LIVE. Everything else below `## Context` — the `## Status record`
+band, the per-batch records, `## Phases`, `## What the pull produced` — is HISTORY: measured
+episodes, refuted hypotheses, and status records that were current when written and that THIS
+BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evidence behind a
+figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
+own heading.
 
 ### BATCH 32 SHIPPED AS `v0.453.0`, CORRECTED BY `v0.454.0`; `v0.455.0` AND `v0.456.0` FOLLOWED IT OFF-PLAN. NEXT IS BATCH 33. A PULL IS NOW OWED **AND** REQUIRED, AND IT IS NOT AUTHORIZED.
 
 **Re-derived after the merge, every figure by running the command.** Distribution `VERSION` is
-`0.456.0` at `cb3ac04d`; the consumer's stamp still reads `0.452.0` / `11bdeb8e`. So the gap is
+`0.456.0`, set by the release commit `cb3ac04d` — **`main` HEAD is normally AHEAD of that**, since
+docs commits land after a release, so re-derive with `cat VERSION` rather than comparing shas and
+concluding this line is stale. The consumer's stamp still reads `0.452.0` / `11bdeb8e`. So the gap is
 **four releases** — `0.453.0`, `0.454.0`, then `0.455.0` and `0.456.0`, the last two an
 operator-requested change outside this plan's scope that routes a consumer's AI/DLC findings to
 the push-candidate ledger, plus its own correction and **PENDING is 1** — `PC-S334-AUDIT-LAYER-DEBT-FLAGS-ITS-OWN-DISCHARGE-ROWS-AS-UNDECLARED-DEBT`
@@ -2394,18 +2418,13 @@ so no block written before it changes verdict.
    one yet. Do not build the `.sh`-token partition; it is measured and refuted, and its own receipt
    used to accept it.
 
-   **THREE `PC-S307-*` ids in your unfiled set are already discharged** — batch 30's two plus
+   **Your sweep WILL still show THREE `PC-S307-*` ids in its unfiled set and all three are already
+   discharged** — batch 30's two plus
    `PC-S307-PULL-CANNOT-SEE-WHAT-A-PREDICATE-CHANGE-RECLASSIFIES`, which shipped as `v0.444.0`.
    Re-derived at batch 32: 3 of them, each naming 2–3 commits on `origin/main`, against an
    impossible-id control of 0 and a known-present control of 3. **They persist because they were
    fixed WITHOUT being filed, so no entry here cites them and nothing can move them out of
    `UNFILED` — that is the instrument gap this file records, not new work.**
-   **Your sweep WILL still show THREE `PC-S307-*` ids in its unfiled set and all three are already
-   discharged** — batch 30's two plus
-   `PC-S307-PULL-CANNOT-SEE-WHAT-A-PREDICATE-CHANGE-RECLASSIFIES`, which shipped as `v0.444.0`.
-   Re-derived after the pull: 3 of them, against an impossible-id control of 0. **They persist
-   because they were fixed WITHOUT being filed, so no entry here cites them and nothing can move
-   them out of `UNFILED` — that is the instrument gap this file records, not new work.**
    Re-derive rather than trusting that list: `git log -F --grep=<id> origin/main` before treating
    any id as new, and note the impossible-id control for THAT channel cannot be `PC-S999-NEVER`.
 
