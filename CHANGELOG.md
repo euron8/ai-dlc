@@ -15,6 +15,37 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.459.0] - 2026-08-31
+
+### The two rules `v0.457.0` earned, and the first ceiling raise that ran the check it costs
+
+The durable-channel ceiling goes 50600 → 51300 on an operator ruling, for two rules costing 707
+bytes. The channel had 47 free.
+
+`verification-discipline.md` gains **read the CONSUMING mechanism's own remedy text before calling
+its input wrong**, with the general form of why the gate could not help: a byte-comparison of two
+programs' shared HELPERS is not a binding on their ANSWER. `tool-hazards.md` gains the truncation
+clause — an idle hand is not a hand with nothing to say, and "it stopped reporting" is not a reason
+to merge.
+
+Both were earned in one batch. `v0.457.0` shipped a fix for a filing whose premise
+`ai-dlc-core-guard.sh` contradicts in its own deny message, and `v0.458.0` reverted it. The gate was
+green throughout, because `I25` byte-compares `parse_manifest()` and `to_consumer_glob()` while the
+fork landed at the decision, outside both. Two hands had measured the right answer and delivered it
+only after the merge, truncated.
+
+**This is the third consecutive raise carrying no subtraction, and the first to run the cheaper
+check the previous entry recorded as skipped.** Measured over the seven durable files: **zero**
+cross-file duplicate sentences above 60 characters, against a control confirming the scan finds a
+sentence known to sit in exactly one file, and all 19 enforcer references are citations of the form
+`mechanism-design.md` prescribes rather than restatements. The mechanical vestigial pool is empty.
+What it does not cover is stated in the arm's header rather than left implied: it finds
+restatement, not prose whose instruction lives authoritatively in a validator header outside the
+channel, and that form was not exhaustively enumerated.
+
+`A6` is proven to still fire at the new ceiling — seeded 800 bytes over, the arm reports and the
+run exits 1; restored, it exits 0.
+
 ## [0.458.0] - 2026-08-31
 
 ### `v0.457.0` made the resolver contradict the guard it exists to agree with

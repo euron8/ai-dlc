@@ -112,6 +112,14 @@ A hand-written probe is a second implementation whose bugs nobody finds. When a 
 the shipping code disagree, the probe is wrong until proven otherwise. Reach for the real
 program and the real tree; where that is impossible, say so in the same breath as the number.
 
+## Read the CONSUMING mechanism's own remedy text before calling its input wrong
+
+The contract is usually written inside whatever reads the value. Measured: a fix made
+`--is-core` refuse a path naming no file, and the guard that consumes that answer already said
+the deny "stands whether or not the distribution ships a file by that name". Reverted one release
+later. A byte-comparison of two programs' shared HELPERS is not a binding on their ANSWER, which
+is why that gate stayed green throughout.
+
 ## Verify the premise before building
 
 Every plan, catalog entry, ledger row, handoff tag and consumer report is a HYPOTHESIS about

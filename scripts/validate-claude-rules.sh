@@ -535,7 +535,37 @@ fi
 # is bound to one detector and says nothing to the next differential in another subsystem. Prose
 # only, so `resident-context.md` bars scoping it.
 # ---------------------------------------------------------------------------
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-50600}"
+# RAISED AGAIN, 50600 -> 51300, ON AN OPERATOR RULING, FOR TWO RULES COSTING 707 BYTES. THIS ONE
+# CARRIED NO SUBTRACTION EITHER, AND IT IS THE THIRD CONSECUTIVE RAISE THAT DID NOT -- but it is
+# the first where the cheaper check the entry above records as SKIPPED was actually run, and it
+# came back empty rather than unexamined. Measured over the seven durable files: ZERO cross-file
+# duplicate sentences above 60 characters, against a control confirming the scan finds a sentence
+# known to sit in exactly one file; and all 19 enforcer references in the channel are CITATIONS of
+# the form `mechanism-design.md` prescribes, not restatements of what the enforcer does. So the
+# mechanical vestigial pool is empty.
+#
+# WHAT THAT CHECK DID NOT COVER, stated because an unmeasured limit reads as a measured zero: it
+# finds RESTATEMENT, not prose whose behavioural instruction lives authoritatively in a validator
+# header OUTSIDE the channel. That second form needs judgement per passage and was not
+# exhaustively enumerated. The next author raising this ceiling should start there.
+#
+# The rules are `verification-discipline.md`'s "read the CONSUMING mechanism's own remedy text
+# before calling its input wrong" and `tool-hazards.md`'s truncation clause. Earned in one batch:
+# v0.457.0 shipped a fix for a filing whose premise `ai-dlc-core-guard.sh` contradicts in its own
+# deny message, and v0.458.0 reverted it. The gate was green throughout, because `I25` binds the
+# guard and the resolver by byte-comparing `parse_manifest()` and `to_consumer_glob()` while the
+# fork landed at the DECISION, outside both. Two hands had measured the answer and had gone idle
+# twice each, delivering nothing until after the merge, with their payloads then truncated.
+#
+# WHY NEITHER CAN BE SCOPED OR MECHANIZED. The first is a judgement about which file to open
+# before believing a filing -- no act to detect, and the work begins by reading the SUBJECT, never
+# the consuming mechanism, so a `paths:` trigger keyed on the thing you failed to read cannot
+# fire. The second is a property of a tool result, not of any tracked file. The specific instance
+# IS mechanized -- the three-way agreement arm in `core/fixtures/upstream-routing/run.sh` kills
+# the exact fork -- but that arm is bound to one resolver and says nothing to the next author
+# trusting a filing in another subsystem. Prose only, so `resident-context.md` bars scoping both.
+# ---------------------------------------------------------------------------
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-51300}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done
