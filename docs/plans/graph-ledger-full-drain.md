@@ -9,7 +9,7 @@ and status records that were current when they were written and that THIS BLOCK 
 it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from it.**
 
-### NO DECISION IS OPEN. BATCH 31 SHIPPED AS `v0.451.0`. NEXT IS 32.
+### NO DECISION IS OPEN. BATCH 31 SHIPPED AS `v0.451.0` AND `v0.452.0`. NEXT IS 32.
 
 **THE SWEEP WAS EMPTY AND A PC-BACKED ENTRY DECIDED IT.** Newest unfiled filing is still
 `2026-08-30`, and all three ids of that date are batch 30's and `v0.444.0`'s, already discharged.
@@ -25,6 +25,26 @@ ids differ in their sprint prefix (`S303` vs `S304`), so group by SUBSYSTEM, not
 entry mentions it only to say it is DISTINCT from its own subject, and the join cannot tell a
 citation from a disclaimer. **A membership in `DISCHARGED` is not by itself evidence the
 candidate was fixed; read the entry that cites it.**
+
+**`v0.452.0` IS A CORRECTION TO `v0.451.0` AND IT IS A WORDING CORRECTION, NOT A CODE ONE.** The
+fix is unchanged and no executable line moved. `v0.451.0` generalised its own measurement into
+"`\b` is not in Darwin's ERE", and that is FALSE in the direction that misleads: measured, same
+shell, one invocation, `grep -cE '\bstub\b'` returns 1 on `stub = 1` and 0 on `client_stub`, so
+BSD grep supports the boundary and applies it correctly. **It is bash's `[[ =~ ]]` that ignores
+it.** 17 live sites here use `\b` in `grep -E` and are correct, several load-bearing in
+`validate-enforcement-map.sh` and `validate-spec-join.sh`; an author who believed the shipped
+sentence would have broken every one. Six sites carried the claim and all six now name
+`[[ =~ ]]`. **A measurement can be exactly right and the sentence drawn from it still wrong —
+state the CONSTRUCT you tested, not the platform.**
+
+**`BL-130` IS FILED AND IS NOT THE TABLE ROW IT LOOKS LIKE.** `validate-shell-portability.sh`'s
+arms are a same-line `grep -E` table, and this offender is a variable ASSIGNED a `\b` pattern at
+one line and consumed by `=~` at another — 116 lines apart in `v0.451.0`'s own case. **That
+same-line grammar over 390 tracked shell files returns 0 and a seeded two-line probe does not
+fire it, so the zero is a floor of unknown depth.** The arm needs a two-pass join and a MANDATORY
+grep/sed exemption or it convicts the 17 correct sites. Filed rather than fixed because it is a
+different subsystem from this batch; the reasoning is in the entry so the next author does not
+ship the one-line version and read its zero as clean.
 
 **WHAT SHIPPED (v0.451.0).** Check 16's marker gate was applied to the RAW line while all four
 elements it gates assume a comment block. `validate-stub-audit.sh`'s marker set now SPLITS on
@@ -334,7 +354,7 @@ this plan's own figures.** What separates them is the commit message: the id is 
 `NAMED-UPSTREAM` for it on the next pull. **When the operator's ruling is FIX-DON'T-FILE, say so in
 the report, because the partition cannot.**
 
-### `docs/backlog.md` IS AT 73 OF 100. FILING IS NOT BLOCKED.
+### `docs/backlog.md` IS AT 74 OF 100. FILING IS NOT BLOCKED.
 
 `scripts/validate-backlog-size.sh` arm B1 enforces the ceiling, raised from 75 by the operator at
 `v0.446.0`. **Rotating an entry out is a disposition, not a tidy-up** — it means the entry is
@@ -380,10 +400,11 @@ consumer-side half of `BL-129` and supplies the mechanism site `BL-129` records 
 
 ### THE CURRENT FIGURES. RE-DERIVE THEM; DO NOT READ THEM.
 
-**Re-derived AFTER the `v0.451.0` merge, by running the block below and diffing every figure
+**Re-derived AFTER the `v0.452.0` merge, by running the block below and diffing every figure
 against this sentence — all controls in the same run: 66 live candidates, 136
 archived, 33 cited, 33 UNFILED. DISCHARGED 16, IN-FLIGHT 18, UNTOUCHED 33, overlap 1, unnamed 0,
-TERMINAL 28. `docs/backlog.md` depth: 73 of 100, archive 56.** Partition control closes:
+TERMINAL 28. `docs/backlog.md` depth: 74 of 100, archive 56** — depth rose by one because this
+batch FILED `BL-130`. Partition control closes:
 16+18+33−1 = 66. Presence controls: filed-known 1, spaced bullet 1, bare-bold 1, dotted 1;
 absence controls: partition 0, impossible id 0 in `filed`/`live`.
 
@@ -2169,7 +2190,8 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **RUN THE SWEEP (action 1b below) AND LET IT PICK BATCH 32's SUBJECT. NOTHING IS GATING YOU.**
-   Batch 31 is merged as `v0.451.0`, so number yours 32 and no operator decision is open. The two
+   Batch 31 is merged as `v0.451.0` and `v0.452.0`, so number yours 32 and no operator
+   decision is open. The two
    candidates it discharged — `PC-S303-STUB-AUDIT-MARKER-REGEX-MATCHES-LOCAL-VAR-NAMED-STUB` and
    `PC-S304-STUB-MARKER-REGEX-MATCHES-DOCSTRING-PROSE-AND-BARE-IDENTIFIERS` — are DONE, and
    `BL-075` is ROTATED. Do not pick either up and do not re-scope onto them.
@@ -2258,7 +2280,7 @@ so no block written before it changes verdict.
    `predicate-differential.sh` fingerprints the corpus either side of its own run for exactly this
    reason; a hand-rolled measurement has no such guard.
 
-1a. **`docs/backlog.md` IS AT 73 OF 100.** The operator raised the ceiling at `v0.446.0`, so filing
+1a. **`docs/backlog.md` IS AT 74 OF 100.** The operator raised the ceiling at `v0.446.0`, so filing
    is not blocked. That is not licence to file rather than fix — the standing correction in the
    resume block still governs — but a filing no longer costs a rotation, and rotating still means
    CLOSING, which needs a measurement.
@@ -2289,7 +2311,7 @@ so no block written before it changes verdict.
    real id means the grammar or the path is wrong, not that the candidate is old** — the ledger
    path is the only argument, and the archive is a SEPARATE file.
 
-   **THE BASELINE IS 66 LIVE CANDIDATES AT `v0.451.0`, 33 CITED, 33 UNFILED, AND SPRINT 306 IS
+   **THE BASELINE IS 66 LIVE CANDIDATES AT `v0.452.0`, 33 CITED, 33 UNFILED, AND SPRINT 306 IS
    FULLY DISCHARGED.** A higher count means the consumer filed while nobody was looking.
    **Re-derive rather than trusting those numbers** — they have moved between two consecutive
    commands in this program, and the live count moved DURING batches 19 and 20 both. Batches 21
