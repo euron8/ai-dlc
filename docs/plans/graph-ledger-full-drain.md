@@ -2338,10 +2338,16 @@ so no block written before it changes verdict.
    md5, the live count and the unfiled count. Nothing has been FILED unless one of those moved. A
    date that moves alone is the instrument, not the subject.
 
+   **The path is spelled ABSOLUTELY here on purpose.** `$D` in the sweep block above is RELATIVE
+   (`_bmad-output/ai-dlc-update`), because it is an argument to `git -C /Users/n8/git/graph`. Reuse
+   it with `md5` and it resolves against THIS repo and the command dies `No such file or
+   directory` — measured, in the first revision of this very block.
+
    ```
-   md5 -q "$D/push-candidate-ledger.md"   # 968f51ce... at v0.452.0; a MOVE here means a real filing
-   wc -l < /tmp/live.txt                  # 66 at v0.452.0
-   wc -l < /tmp/unfiled.txt               # 33 at v0.452.0
+   L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
+   md5 -q "$L"              # 968f51ce... at v0.452.0; a MOVE here means a real filing
+   wc -l < /tmp/live.txt    # 66 at v0.452.0
+   wc -l < /tmp/unfiled.txt # 33 at v0.452.0
    ```
 
    **THE BASELINE IS 66 LIVE CANDIDATES AT `v0.452.0`, 33 CITED, 33 UNFILED, AND SPRINT 306 IS
