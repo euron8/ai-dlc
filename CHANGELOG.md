@@ -15,6 +15,51 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.458.0] - 2026-08-31
+
+### `v0.457.0` made the resolver contradict the guard it exists to agree with
+
+**`PC-S340-IS-CORE-ANSWERS-BY-DECLARED-GLOB-NOT-BY-MEMBERSHIP` is REJECTED as by-design**, and the
+`--is-core` half of `v0.457.0` is reverted to byte-identical with `95670e58`. The label half stays,
+with the false positive it shipped repaired.
+
+**The answer was in the mechanism the filing wanted changed.** `core/hooks/ai-dlc-core-guard.sh`
+carries it verbatim in its own remedy text: `scripts/ai-dlc/` "is core-owned in its entirety
+(core-manifest.md claims `scripts/ai-dlc/*`), so **this deny stands whether or not the distribution
+ships a file by that name**". Destination ownership of that namespace is the shipped, deliberate
+design, and it must be, because the guard denies a `Write` BEFORE the file exists — which is the
+only moment a deny is worth anything. `--is-core` answering 0 for a name nobody has created was the
+resolver AGREEING with the guard. `v0.457.0` made them disagree, on exactly the input the guard's
+sentence is about.
+
+**The invariant that exists to prevent that could not see it, and this is the finding worth
+keeping.** `I25` binds the two programs by byte-comparing `parse_manifest()` and
+`to_consumer_glob()` — verified, it loops over exactly those two names — while its own error text
+states the stake: "One denies edits to core, the other tells Check 16 which files are core; a rule
+that differs between them means a file the guard protects can be audited as consumer-authored."
+`v0.457.0` forked them at the DECISION, outside both functions, and `I25` passed. The three-way
+agreement arm now lives in `core/fixtures/upstream-routing/run.sh`, over a seeded set that includes
+an invented filename under a core glob — the input that separates the three — and it is proven to
+fire by re-applying the reverted behaviour to a copy.
+
+**The label's false-positive set was not measured before it shipped, and it was not empty.** It
+keyed existence on `AI_DLC_ROOT`, which is wherever this copy resolved from, while the paths in a
+carry-over entry are relative to the consumer that wrote it and `--backlog` names a corpus in a
+third place. Measured on released `v0.457.0`: the distribution's copy with `--backlog` pointed at
+the reference consumer's real backlog marked **4 of 4** findings `[NO SUCH FILE HERE]`. The root is
+now walked up from the BACKLOG's own directory using the layered-consumer activation rule, and a
+corpus whose tree cannot be identified is labelled not at all — an unasked question renders as no
+claim, never as "present". Re-measured after: that case **4 → 0** with findings unchanged as the
+control; an unrootable corpus 0 labels with all 10 findings still reported; and the positive control
+holds — the consumer's pre-pull corpus placed under a layered root marks exactly the one path the
+filing names, with 10 near-miss rows unlabelled in the same run.
+
+**What was true in `v0.457.0` and stays true.** A filter would still have acquitted a true misroute:
+13 core-glob tokens in the consumer's corpus, 11 present, 2 absent, both in entries that belong
+upstream. The label labels; it never drops. And the candidate's receipt still accepts a total
+disarm — it accepted all six implementations scored against it — which is why its verdict was never
+the thing to read.
+
 ## [0.457.0] - 2026-08-31
 
 ### A glob match is evidence about a destination, never about a file

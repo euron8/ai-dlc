@@ -210,13 +210,13 @@ next `/ai-dlc-update` and reaches no upstream reader, so for every
 improvement below, run:
 
 ```
-scripts/ai-dlc/core-paths.sh --is-core <path>   # 0 = AI/DLC's, 1 = yours, 2 = read the item
+scripts/ai-dlc/core-paths.sh --is-core <path>   # 0 = AI/DLC's, 1 = yours
 ```
 
-Exit 2 means the path sits at a destination AI/DLC owns and no such file is
-here. It is not a failure and it is not an exemption; a proposal, a renamed
-path and a prose wildcard all land there and route differently.
-`.claude/rules/upstream-routing.md` carries the three branches.
+It answers about the PATH and does not require a file to be there — the
+manifest claims whole namespaces, so a name nobody has created yet still
+answers 0. A proposal, a renamed path and a prose wildcard all answer 0 and
+route differently. `.claude/rules/upstream-routing.md` carries the branches.
 
 Exit 0: file a push candidate in
 `_bmad-output/ai-dlc-update/push-candidate-ledger.md` as
