@@ -15,6 +15,38 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.456.0] - 2026-08-31
+
+### A raw total in shipped prose went stale inside one release, exactly as the rule says they do
+
+`audit-upstream-routing.sh` shipped a comment reading "171 globs from the root, 0 from
+`scripts/`" — the measurement that motivated passing the manifest explicitly. It was true when
+written and false when merged: adding that release's own fixture to `core-manifest.md` moved the
+total to 172, so the file described its own tree wrongly one commit after landing. Found by the
+fixture hand re-deriving the figure rather than reading it.
+
+`CLAUDE.md` says every raw total ever written here went stale and to derive rather than quote,
+and the repair follows that rather than updating the number: the comment now names the contrast —
+the full glob set from the root against NONE one directory down — and tells the reader to derive
+the count with `core-paths.sh --list | wc -l`. The contrast is the load-bearing half and it does
+not decay. Re-derived at this commit: 172 from the root, **0** from a subdirectory, so the defect
+the sentence documents is unchanged.
+
+Comment-only; no behaviour changes. `upstream-routing` still PASSES 29 assertions.
+
+### Recorded, not fixed: the fail-closed root guard has no arm
+
+`audit-upstream-routing.sh`'s terminal `exit 2` guard — mandated by **I75** on every script that
+resolves a project root — is untested. It is unreachable in practice on this machine: the chain
+consults `CLAUDE_PROJECT_DIR` before the cwd walk, the harness sets it, and a probe run from `/`
+with a copy under `mktemp` got past the guard to the backlog check instead of tripping it.
+
+No bespoke arm was built for it, and that is a deliberate call rather than an oversight. The guard
+is one uniform shape across every root-resolving validator, bound by I75 for the whole set; an arm
+here alone would assert for one script what I75 already binds for all of them, and the honest
+record is that this branch is unexercised. Stated here so the next author does not read its
+presence as coverage.
+
 ## [0.455.0] - 2026-08-31
 
 ### A consumer had one place to file a finding and two places it could belong
