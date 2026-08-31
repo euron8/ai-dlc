@@ -9,7 +9,79 @@ and status records that were current when they were written and that THIS BLOCK 
 it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from it.**
 
-### THE `0.448.0 → 0.452.0` PULL LANDED. THE DELIVERY GAP IS ZERO. NEXT IS BATCH 32 AND NO DECISION IS OPEN.
+### BATCH 32 SHIPPED AS `v0.453.0`. NEXT IS BATCH 33. A PULL IS NOW OWED **AND** REQUIRED, AND IT IS NOT AUTHORIZED.
+
+**Re-derived after the merge, every figure by running the command.** Distribution `VERSION` is
+`0.453.0` at `28b44917`; the consumer's stamp still reads `0.452.0` / `11bdeb8e`. So the gap is
+**one release** and **PENDING is 1** — `PC-S334-AUDIT-LAYER-DEBT-FLAGS-ITS-OWN-DISCHARGE-ROWS-AS-UNDECLARED-DEBT`
+is discharged here (1 commit names it) and still LIVE in the consumer's ledger, against an
+impossible-id control of 0.
+
+**THE SECOND TEST SAYS YES, WHICH IS RARE — RUN IT BEFORE BELIEVING THE FIRST.** The consumer's
+INSTALLED `scripts/ai-dlc/audit-layer-debt.sh` and this distribution's copy were run against the
+consumer's own register, `cmp -s` asserting they differ first (md5 `10d9db82…` vs `18e7d6a8…`) and
+both exiting 0 rather than refusing: **installed reports 33 `UNDECLARED`, the distribution 24 — the
+consumer is being shown 9 FALSE findings today, and 0 are missed.** That is a live divergence, not
+a bankable null. **No bootstrapping step is in the range** — `preclassify.sh`, `apply.sh`,
+`ledger-reverify.sh` and the skill are all 0 commits, against a control of 1 for
+`audit-layer-debt.sh`, so the query discriminates; 0 mode-only changes.
+
+**A RUNBOOK IS OWED AND WAS NOT WRITTEN. That is the one piece of this batch's scope left
+undelivered, and it is named here rather than dropped.** `operator-rulings.md` governs: readiness
+is not authorization, a pull is never preapproved, and it is never handed to a peer.
+
+**THE SWEEP WAS EMPTY AND THE PC-BACKED SET DECIDED IT, for the third batch running.** Ledger md5
+`32bdb378…`, live 64, cited 31, unfiled 33 — every anchor in action 1b unmoved, all five grammar
+controls right, date control 0. Newest genuine filing is still `2026-08-26`. **Those anchors are
+still current: the consumer has not pulled, so the ledger has not moved.**
+
+**THE S312 CLUSTER HAS NOW BEEN READ, which action 1b had asked for since batch 1.** Of the 33
+unfiled, **four are self-described falsifiability probes for a retirement and are MEANT to stay
+green** (`PROTECTED-CORE-PATHS-STAYS-RETIRED`, `MUTATION-RED-ANCHOR-STAYS-RETIRED`,
+`STRAY-SCAN-ARM-STAYS-RETIRED`, `FIXTURE-PROVENANCE-ARM-HAS-NO-LIVE-DRIVER`), two are **WITHDRAWN**
+upstream, and `PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD` is marked **MISFILED — NOT AN UPSTREAM
+CANDIDATE** in its own entry. **The unfiled set is a corpus of 33 and a workload of roughly 26.
+Read a candidate's own status line before treating it as work.**
+
+**THE SIBLING JOIN BY SUBSYSTEM RAN AND ITS FIRST CANDIDATE PAIR WAS A CO-MENTION.** Grouping the
+live set by the PATH each candidate names found seven shared paths. The strongest-looking pair —
+`PC-S334-CLOSES-WHEN-…` beside `PC-S336-STEP-1-AUTOPUSH-…` on `migrate-artifact-paths.sh` — is NOT
+one defect: the first is `closes_when` never joined to the migrator, the second is step 1's fatal
+auto-push that merely HIT a migrator-remediable blocker. **A shared path is a hypothesis about a
+shared subject, not the subject. Open both entries before scoping.** The pair that worked was
+`BL-067`/`BL-069` — same script, same field pair, both `PC-S334-*`.
+
+**WHAT SHIPPED.** `BL-069`: the UNDECLARED arm now also skips a row carrying `closes_owed`, with
+the coercion single-sourced as `closes_ids()` and read by both arms. Measured on the reference
+consumer, both binaries in one invocation under a `cmp -s` control: **33 → 24, 9 removed, 0 added**,
+false-negative control **0 of the 9 removed rows lacking `closes_owed`**, and two controls proving
+it narrowed rather than disarmed — 11 rows carry `closes_owed` and only 9 were flagged, and the
+OPEN-debt and mistyped counts are equal on both sides. Gate 17/17 phases PASS, 0 FAIL with ANSI
+stripped, both changed fixtures read `ok` BY NAME against an impossible-name control of 0.
+
+**`BL-067` WAS RE-SCORED, ANNOTATED, ITS RECEIPT REPLACED, AND NO FIX SHIPPED — on an operator
+ruling, not on this session's authority.** Its defect survives; its cost clause expired. The six
+`migrate-artifact-paths.sh --apply` debts are 6 declared and **0 still OPEN**, and of the 16 OPEN
+debts today **zero name a command**. **The filed remedy was BUILT, and it is accepted by the entry's
+own receipt at exit 0 while being 3-of-3 FALSE on the live register** — `validate-gate-manifest.sh`
+twice out of a CONDITION about a script's output, `validate-mutation-red.sh` where the script is a
+NOUN. Every alternative signal is zero or false, so nothing was built: **a check that cannot fire
+reads exactly like one that passed.**
+
+**THREE HANDS RAN AND EVERY ONE OF THEM CHANGED THE BATCH. Action 3 is not optional and batch 31's
+omission was a real gap.** The scope hand found that **the fix commit turned `main` RED** —
+`closes_ids()` deleted the literal blocks `layer-debt-ledger`'s M10 and M11 anchor on, `mkmut`
+correctly refused the no-op, `FAIL (2 of 16)`. The receipt hand found that **`BL-069`'s inherited
+receipt is satisfied by DELETING the arm**, and that a **one-token relabel** defeated the first
+draft of the replacement `BL-067` receipt. The fixture hand delivered the battery — and its
+deliverable is the one that arrived, exactly as this file predicts.
+
+**THE RECEIPT SHOULD HAVE BEEN REPLACED BEFORE THE FIX LANDED, AND IT WAS NOT.** `BL-069` was
+closed on its inherited receipt, which a total disarm also satisfies. The shipped fix is not that
+disarm and the differential says so independently, but the order was wrong. **The durable guard is
+the new fixture, whose M2 mutant is precisely that disarm and is KILLED.**
+
+### THE `0.448.0 → 0.452.0` PULL LANDED. A RECORD, NOT AN INSTRUCTION — THE GAP IS NO LONGER ZERO.
 
 **Operator-authorized, executed by a peer graph session (`graph-ad`) as the consumer's PR #990.** This
 session was consulted for technical review only and wrote nothing to either tree. Re-derived here
@@ -2277,17 +2349,29 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **RUN THE SWEEP (action 1b below) AND LET IT PICK BATCH 32's SUBJECT. NOTHING IS GATING YOU.**
-   Batch 31 is merged as `v0.451.0` and `v0.452.0`, so number yours 32 and no operator
-   decision is open. The two
-   candidates it discharged — `PC-S303-STUB-AUDIT-MARKER-REGEX-MATCHES-LOCAL-VAR-NAMED-STUB` and
-   `PC-S304-STUB-MARKER-REGEX-MATCHES-DOCSTRING-PROSE-AND-BARE-IDENTIFIERS` — are DONE, and
-   `BL-075` is ROTATED. Do not pick either up and do not re-scope onto them.
-   **Both are now CLOSED in the consumer's ledger too — the `0.452.0` pull carried them and the
-   consumer rotated them.** Re-derived after that pull: live=0, archive=1 for each, against an
-   impossible-id control of 0 in both files. **An earlier revision of this line told you they would
-   still appear in your sweep's unfiled set. They will not, and they never were unfiled — they were
-   CITED, by `BL-075`.**
+1. **RUN THE SWEEP (action 1b below) AND LET IT PICK BATCH 33's SUBJECT. ONE THING IS OWED FIRST —
+   SEE 1c.** Batch 32 is merged as `v0.453.0`, so number yours 33.
+
+   `BL-069` is ROTATED and its candidate
+   `PC-S334-AUDIT-LAYER-DEBT-FLAGS-ITS-OWN-DISCHARGE-ROWS-AS-UNDECLARED-DEBT` is DONE. Do not pick
+   it up and do not re-scope onto it. **It WILL still appear in your sweep as a live consumer
+   candidate** — the consumer has not pulled `0.453.0`, so its ledger still carries it. That is the
+   delivery gap, not new work.
+
+   **`BL-067` IS STILL LIVE AND IS NOT AVAILABLE AS A SUBJECT WITHOUT A NEW RULING.** Batch 32
+   re-scored it, annotated it, replaced its receipt, and shipped no fix on an operator ruling,
+   because the remedy its own entry prescribes is 3-of-3 FALSE on the live register and every
+   alternative signal returns zero findings. **Read the annotation at the head of the entry before
+   touching it.** What it needs is a POPULATION, and the entry is now the record that there is not
+   one yet. Do not build the `.sh`-token partition; it is measured and refuted, and its own receipt
+   used to accept it.
+
+   **THREE `PC-S307-*` ids in your unfiled set are already discharged** — batch 30's two plus
+   `PC-S307-PULL-CANNOT-SEE-WHAT-A-PREDICATE-CHANGE-RECLASSIFIES`, which shipped as `v0.444.0`.
+   Re-derived at batch 32: 3 of them, each naming 2–3 commits on `origin/main`, against an
+   impossible-id control of 0 and a known-present control of 3. **They persist because they were
+   fixed WITHOUT being filed, so no entry here cites them and nothing can move them out of
+   `UNFILED` — that is the instrument gap this file records, not new work.**
    **Your sweep WILL still show THREE `PC-S307-*` ids in its unfiled set and all three are already
    discharged** — batch 30's two plus
    `PC-S307-PULL-CANNOT-SEE-WHAT-A-PREDICATE-CHANGE-RECLASSIFIES`, which shipped as `v0.444.0`.
@@ -2698,6 +2782,26 @@ so no block written before it changes verdict.
    **And ask what the fix's own population EXCLUDES.** Batch 11's first cut answered a
    one-way-blindness entry with an arm that was blind by file extension. The exclusion has to
    be stated in the arm and it has to not be the defect itself.
+1c. **WRITE AND REHEARSE THE `0.452.0 → 0.453.0` PULL RUNBOOK, THEN REPORT THE NUMBER AND STOP.**
+   This is owed from batch 32 and was the one piece of its scope left undelivered. Both tests were
+   run there and both say yes: **PENDING is 1**, and the differential DIVERGES — the consumer's
+   installed `audit-layer-debt.sh` reports **33 `UNDECLARED`** against the distribution copy's
+   **24**, so it is showing **9 false findings today**, with the binaries asserted to differ by
+   `cmp -s` before either output was read and neither side refusing. Re-derive both before acting:
+   the consumer may have pulled since.
+
+   The range is one release and narrow. **No bootstrapping step is in it** — `preclassify.sh`,
+   `apply.sh`, `ledger-reverify.sh` and `SKILL.md` are all 0 commits against a control of 1 for
+   `audit-layer-debt.sh`, and there are 0 mode-only changes — so the pull is not delivering the
+   machinery that runs it, which is the hazard that usually complicates this.
+
+   **Rehearse on a `file://` clone, never in place, and take every figure from that run.** The
+   clone carries committed history, so check what that consumer has ACTUALLY been doing before
+   calling any risk unmeasurable — gate logs and archives are in the tree.
+
+   **THEN STOP. A runbook that is written, rehearsed and green is READY, never AUTHORIZED.**
+   `.claude/rules/operator-rulings.md` governs: a consumer pull is not preapproved, a PENDING count
+   is not a decision about WHEN, and it is never handed to a peer session. Report and wait.
 2. **Keep the batch to ONE subsystem.** Take one group or the other, not both.
    Batch 16 was a deliberate exception the operator scoped, and it is over. **When an exception is
    granted again, land it the way batch 16 did**: separate commits on ONE release branch, one per
