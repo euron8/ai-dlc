@@ -9,7 +9,58 @@ and status records that were current when they were written and that THIS BLOCK 
 it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from it.**
 
-### NO DECISION IS OPEN. BATCH 31 SHIPPED AS `v0.451.0` AND `v0.452.0`. NEXT IS 32.
+### THE `0.448.0 → 0.452.0` PULL LANDED. THE DELIVERY GAP IS ZERO. NEXT IS BATCH 32 AND NO DECISION IS OPEN.
+
+**Operator-authorized, executed by a peer graph session (`graph-ad`) as the consumer's PR #990.** This
+session was consulted for technical review only and wrote nothing to either tree. Re-derived here
+after the merge, all controls in the same run: the consumer's stamp reads `0.452.0` / `11bdeb8e` on
+all four fields against a distribution `VERSION` of `0.452.0`, so **PENDING is 0 and the range is 0
+releases** (control: an impossible id resolves to 0 naming commits). **That authorization is SPENT** —
+`.claude/rules/operator-rulings.md` governs again and no pull is preapproved.
+
+**THE DELIVERY IS ASSERTED BY CONTENT, NOT BY THE STAMP.** The consumer's installed
+`scripts/ai-dlc/validate-stub-audit.sh` is now byte-identical to this distribution's
+`core/scripts/validate-stub-audit.sh` — md5 `cb3e0aae…`, `cmp -s` in the same invocation, against a
+control comparing the installed copy to the pre-pull blob at `1f77800d` which correctly DIFFERS. A
+stamp is a claim about what ran; the byte-compare is the claim that the file arrived. So batch 31's
+measured **413-finding reduction is live on that consumer today**, not merely shipped.
+
+**TWO CANDIDATES REACHED TERMINAL STATE AND THE SCOREBOARD FELL AS THEY DID.**
+`PC-S303-STUB-AUDIT-MARKER-REGEX-MATCHES-LOCAL-VAR-NAMED-STUB` and
+`PC-S304-STUB-MARKER-REGEX-MATCHES-DOCSTRING-PROSE-AND-BARE-IDENTIFIERS` now read **live=0,
+archive=1** in the consumer's own ledger, against an impossible-id control of 0 in both files. So
+`DISCHARGED` fell and `TERMINAL` rose by the same two — read that pairing as progress, per the
+standing note below. **This is what the program aims at, and it is the first time two candidates have
+crossed on one pull since `PC-S330`.**
+
+**THE CONSULTATION CHANGED WHAT THE CONSUMER WROTE, AND THE CORRECTION IS THE REUSABLE PART.** The
+peer's reconcile emitted one `CLOSE-CANDIDATE` (`PC-S304`) and one `NEEDS-REVIEW` (`PC-S303`), and
+proposed annotating only the first. **Both were the same fix.** `PC-S303`'s receipt spells its own
+negative branch `exit 127` — `[ "$rc" -eq 1 ] || exit 127` — and 127 is the code
+`ledger-reverify.sh:1339` reserves for an unresolvable subject, so **a receipt reporting a genuine fix
+was rendered as a renamed-or-deleted one and could never have closed itself.** Annotating on the
+row alone would have left a fixed entry open forever, re-rendered identically on every later pull.
+The convention is not at fault and is stated at `docs/backlog.md:41-44`; the receipt misuses it.
+**When two sibling receipts name one subject, adjudicate the SUBJECT once and apply the answer to
+both rows — never read the two rows as two questions.**
+
+**THE CLOSE WAS ESTABLISHED BY A DIFFERENTIAL, NOT BY THE SUBSTRING'S DISAPPEARANCE.** A
+`theirs_has` anchor going absent cannot distinguish a fix from a RENAME, and here the construct did
+split rather than move: one raw-line `STUB_MARKER` became `CODE_MARKER` / `PROSE_MARKER` /
+`PHASE_MARKER`, with the prose markers matched a second time against the line's COMMENT PORTION.
+Both binaries were run over one seeded tree, `cmp -s` asserting they differ first: **base examines 5
+markers and emits 5 findings, theirs examines 1 and emits 1**, both sides reporting 1 path given, 1
+hot-path, 1 audited. The surviving finding is a genuine `# TODO` deferral that fires on BOTH sides —
+the known-positive that makes the null readable rather than vacuous.
+
+**TWO RIG TRAPS COST A ROUND AND BOTH PRODUCE A REFUSAL THAT READS AS AGREEMENT.** A copy of
+`validate-stub-audit.sh` needs `core-paths.sh` BESIDE it or both sides exit 2 with no findings, which
+is `v0.444.0`'s "both sides failed for a reason neither owns". And the sibling guard at `:95` is
+**`[ -x ]`, not `[ -f ]`** — `git show` writes without the exec bit, so a staged copy refuses with the
+file plainly present. **A `cmp -s` control on the sibling passed while both copies were unusable:
+identical is not the same as working.**
+
+### BATCH 31 SHIPPED AS `v0.451.0` AND `v0.452.0`. A RECORD, NOT AN INSTRUCTION.
 
 **THE SWEEP WAS EMPTY AND A PC-BACKED ENTRY DECIDED IT.** Newest unfiled filing is still
 `2026-08-30` BY CONTENT, and all three ids of that date are batch 30's and `v0.444.0`'s, already
@@ -406,13 +457,26 @@ consumer-side half of `BL-129` and supplies the mechanism site `BL-129` records 
 
 ### THE CURRENT FIGURES. RE-DERIVE THEM; DO NOT READ THEM.
 
-**Re-derived AFTER the `v0.452.0` merge, by running the block below and diffing every figure
-against this sentence — all controls in the same run: 66 live candidates, 136
-archived, 33 cited, 33 UNFILED. DISCHARGED 16, IN-FLIGHT 18, UNTOUCHED 33, overlap 1, unnamed 0,
-TERMINAL 28. `docs/backlog.md` depth: 74 of 100, archive 56** — depth rose by one because this
-batch FILED `BL-130`. Partition control closes:
-16+18+33−1 = 66. Presence controls: filed-known 1, spaced bullet 1, bare-bold 1, dotted 1;
-absence controls: partition 0, impossible id 0 in `filed`/`live`.
+**Re-derived AFTER the `0.448.0 → 0.452.0` PULL landed on the consumer, by running the block below
+and diffing every figure against this sentence — all controls in the same run: 64 live candidates,
+138 archived, 31 cited, 33 UNFILED. DISCHARGED 14 raw / 13 corrected, IN-FLIGHT 18, UNTOUCHED 33,
+overlap 1, unnamed 0, TERMINAL 30. `docs/backlog.md` depth: 74 of 100, archive 56** — depth is
+UNCHANGED because this session shipped no release; the pull moved the consumer, not this tree.
+Partition control closes on the RAW figure: 14+18+33−1 = 64. Presence controls: filed-known 1,
+spaced bullet 1, bare-bold 1, dotted 1; absence controls: partition 0, impossible id 0 in
+`filed`/`live`.
+
+**REPORT `DISCHARGED` AS BOTH NUMBERS OR THE ARITHMETIC BELOW WILL NOT CHECK.** The partition
+control sums the RAW intersection and subtracts the overlap; the CORRECTED figure already has the
+overlap removed, so quoting one number for both purposes makes a correct derivation read as a
+partition failure. Earlier revisions of this block quoted the raw figure alone and the reader could
+not tell which it was.
+
+**THE OVERLAPPING ID CHANGED, AND NOT BECAUSE ANYTHING WAS FIXED.** It is now
+`PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER`; it was `PC-S303-STUB-AUDIT-MARKER-…`,
+which left `live.txt` when the consumer closed it. **The overlap is a property of which ids are
+simultaneously live upstream and cited on both sides here — it moves when the consumer closes
+something, so never carry its membership forward.**
 
 **`discharged-unnamed` READ 1 BETWEEN THE RELEASE COMMIT AND THE MERGE, AND THAT IS THE
 INSTRUMENT WORKING.** `/tmp/in_msgs` is built from `git log origin/main`, so a candidate named
@@ -443,12 +507,13 @@ NOT one against `git log --format=%B`. Pick a different token there.
 
 ### BATCH 30's INBOUND — SPENT. BOTH CANDIDATES SHIPPED AS `v0.449.0`. DO NOT RE-SCOPE ONTO THEM.
 
-**A RECORD, NOT AN INSTRUCTION.** Both ids below are discharged and named in `db95295a`. What is
-still live here is the paragraph about WHERE they were filed: the consumer's work does not sit on
-`origin/main`. Re-measured this batch — `origin/main` in `/Users/n8/git/graph` is 4 reconciles
-stale and does NOT contain either id, while the branch `ai-dlc/carry-over/dashboard-backlog-s307`
-is the consumer's live line, is pushed, and carries both. **The sweep reads the WORKING TREE, so
-it was right; a reader who "corrects" it to `origin/main` will silently lose most of the ledger.**
+**A RECORD, NOT AN INSTRUCTION, AND ITS SECOND HALF HAS NOW EXPIRED TOO.** Both ids below are
+discharged and named in `db95295a`. This paragraph used to carry a live claim about WHERE the
+consumer files — that `origin/main` in `/Users/n8/git/graph` was 4 reconciles stale and did not
+contain either id, while `ai-dlc/carry-over/dashboard-backlog-s307` was the live line. **That was
+true when measured and is FALSE after the `0.452.0` pull**: the consumer is on `main`, `HEAD` equals
+`origin/main`, and the ledger is present there. The current statement of the sweep's read boundary,
+and the reason that outlives the branch, are in numbered action 1b — read that, not this.
 
 **The consumer's ledger md5 moved from `b7dae36b…` to `968f51ce…` while the `0.443.0 → 0.448.0`
 pull ran**, and both new ids are against machinery this repo owns:
@@ -467,13 +532,24 @@ pull ran**, and both new ids are against machinery this repo owns:
 into the carry-over branch, so both ids are committed and pushed on the consumer's live line.
 They were FIXED, not filed — the case the operator's standing correction governs.
 
-### THE DELIVERY GAP IS THREE RELEASES AND THE SECOND TEST DIVERGES HARDER THAN IT EVER HAS.
+### THAT GAP HAS BEEN CLOSED BY THE PULL. A RECORD OF WHAT WAS MEASURED, NOT AN INSTRUCTION.
+
+**THE PULL DESCRIBED BELOW HAS RUN. The gap is 0 releases and PENDING is 0 — the resume block above
+carries the current reading and the byte-level delivery control.** Everything in this section is the
+pre-pull measurement, kept because the differential it records is the strongest case this program has
+ever made for a pull and because action 7 reuses its method. **Do not read it as a live gap.**
 
 **Consumer installed `0.448.0` / `1f77800d`, distribution `0.451.0` — three releases
 (`v0.449.0`, `v0.450.0`, `v0.451.0`), inside the WIDE threshold of five that action 7 names.**
-PENDING is **2**, both batch 31's, derived by resolving each id to the highest `VERSION` among its
+PENDING was **2**, both batch 31's, derived by resolving each id to the highest `VERSION` among its
 naming commits on `origin/main` (control: an impossible id resolves to 0 commits). 16 ids resolve;
-14 are at or below the installed version and are DELIVERED.
+14 were at or below the installed version and were DELIVERED.
+
+**THE PREDICTION HELD, WHICH IS WORTH RECORDING BECAUSE IT USUALLY DOES NOT.** This section
+predicted the pull would remove 413 hot-path findings from that consumer. The pull ran, and the
+installed binary is now byte-identical to the one the differential was taken against — so the
+predicted effect is the delivered effect, established by content rather than inferred from the
+stamp.
 
 **THE SECOND TEST IS NOT NULL. IT IS THE LARGEST DIVERGENCE THIS PROGRAM HAS MEASURED, AND IT
 POINTS THE OTHER WAY FROM THE ONE ACTION 7 ANTICIPATES.** The consumer's INSTALLED
@@ -765,9 +841,14 @@ WIDENS a discrepancy in a premise `unregistered-drift.sh` states in its own reme
 not open it; the premise was already inexact. Its entry names the
 weakness in its own third receipt arm and tells you how to replace it; read that before taking it.
 
-### THE REVISIT CONDITION HAS RE-FIRED, AND THE DIFFERENTIAL IS NO LONGER NULL. THE DECISION IS STILL THE OPERATOR'S.
+### A RECORD OF THE `0.441.0`-ERA REVISIT CONDITION. IT IS SPENT — THE GAP IS ZERO. DO NOT TAKE AN INSTRUCTION FROM THIS SECTION.
 
-**The gap is THREE releases.** Consumer installed **0.438.0 / `1b9f53ec`**, distribution **0.441.0**.
+**This heading used to read as a live trigger, which is the shape this file's own preamble warns
+about: an imperative sentence in the history half outranks the preamble that disclaims it.** The
+gap it tracks was closed twice over — by the `0.443.0 → 0.448.0` pull and again by
+`0.448.0 → 0.452.0`. Kept for the ask-when-the-DECIDING-FACTOR-moves rule, which survives.
+
+**The gap was THREE releases.** Consumer installed **0.438.0 / `1b9f53ec`**, distribution **0.441.0**.
 The revisit condition the previous revisions tracked — *"a second release accumulates"* — has now
 re-fired. **Reporting it is the ceiling. Do not write a runbook, and do not dispatch one.**
 
@@ -2202,19 +2283,31 @@ so no block written before it changes verdict.
    candidates it discharged — `PC-S303-STUB-AUDIT-MARKER-REGEX-MATCHES-LOCAL-VAR-NAMED-STUB` and
    `PC-S304-STUB-MARKER-REGEX-MATCHES-DOCSTRING-PROSE-AND-BARE-IDENTIFIERS` — are DONE, and
    `BL-075` is ROTATED. Do not pick either up and do not re-scope onto them.
-   **Both are still LIVE in the consumer's ledger and will appear in your sweep's unfiled set**,
-   because only a pull moves that file. **Your sweep will show THREE `PC-S307-*` ids at the top of
-   its date order and all three are already discharged** — batch 30's two plus
+   **Both are now CLOSED in the consumer's ledger too — the `0.452.0` pull carried them and the
+   consumer rotated them.** Re-derived after that pull: live=0, archive=1 for each, against an
+   impossible-id control of 0 in both files. **An earlier revision of this line told you they would
+   still appear in your sweep's unfiled set. They will not, and they never were unfiled — they were
+   CITED, by `BL-075`.**
+   **Your sweep WILL still show THREE `PC-S307-*` ids in its unfiled set and all three are already
+   discharged** — batch 30's two plus
    `PC-S307-PULL-CANNOT-SEE-WHAT-A-PREDICATE-CHANGE-RECLASSIFIES`, which shipped as `v0.444.0`.
+   Re-derived after the pull: 3 of them, against an impossible-id control of 0. **They persist
+   because they were fixed WITHOUT being filed, so no entry here cites them and nothing can move
+   them out of `UNFILED` — that is the instrument gap this file records, not new work.**
    Re-derive rather than trusting that list: `git log -F --grep=<id> origin/main` before treating
    any id as new, and note the impossible-id control for THAT channel cannot be `PC-S999-NEVER`.
 
    **DO NOT READ A MOVED DATE AS A NEW FILING. VERIFY WITH THE LEDGER'S md5, NOT WITH THE DATE.**
    Measured 2026-08-31: those three ids dated `2026-08-30` one day and `2026-08-31` the next while
-   the ledger was BYTE-IDENTICAL throughout (`968f51ce…`, live 66, unfiled 33). The sweep dates an
+   the ledger was BYTE-IDENTICAL throughout — at the value it held THEN, `968f51ce…`, live 66,
+   unfiled 33. **That digest is the EPISODE'S and is not your baseline: the `0.452.0` pull moved the
+   ledger, so your anchor is `32bdb378…` / live 64, in action 1b and nowhere else.** Two digests in
+   one action is how a reader takes the wrong one, and the older value stays because it is the
+   evidence for the rule, not because it is current. The sweep dates an
    id with `git log -S … | tail -1`, the OLDEST commit introducing the string, and the consumer
-   squash-merges onto its carry-over branch — which REWRITES that history and moves the date of
-   candidates nobody touched. **The date column is a property of the consumer's git history, not
+   squash-merges its PRs — which REWRITES that history and moves the date of
+   candidates nobody touched. **It squash-merged onto a carry-over branch when this was measured and
+   onto `main` at the `0.452.0` pull; the branch is incidental, the squash is the mechanism.** **The date column is a property of the consumer's git history, not
    of the ledger.** Take the md5 and the two counts first; only if one of those moved has anything
    been filed.
 
@@ -2228,10 +2321,19 @@ so no block written before it changes verdict.
    is DISTINCT from that entry's own subject, and the join cannot tell a citation from a
    disclaimer. Open the citing entry before reading a candidate as closed.
 
-   **THE SWEEP READS THE CONSUMER'S WORKING TREE, AND THAT IS CORRECT.** `/Users/n8/git/graph` sits
-   on `ai-dlc/carry-over/dashboard-backlog-s307`, which is its live line and is pushed; its
-   `origin/main` is four reconciles stale and lacks most of the ledger. Do not "fix" the sweep to
-   read `origin/main`.
+   **THE SWEEP READS THE CONSUMER'S WORKING TREE, AND THAT IS STILL CORRECT — BUT THE REASON THIS
+   FILE GAVE FOR IT HAS EXPIRED, AND THE EXPIRED REASON IS THE DANGEROUS HALF.** Every revision up to
+   the `0.452.0` pull said `/Users/n8/git/graph` sits on `ai-dlc/carry-over/dashboard-backlog-s307`
+   with an `origin/main` four reconciles stale that "lacks most of the ledger". **Re-derived after
+   that pull: the consumer is on `main`, `HEAD` and `origin/main` are the SAME commit (`cca6304bd`),
+   and the ledger IS present at `origin/main`.** So the old justification is now false in the
+   direction that invites a reader to "correct" the sweep and feel vindicated when it agrees.
+
+   Read the working tree anyway, for the reason that survives rather than the one that died: the
+   consumer commits on its own schedule, keeps a dozen `ai-dlc/carry-over/*` branches, and can be
+   back on one at any moment — measured at this pull, 4 dirty `_bmad-output/` paths with the ledger
+   not among them. **The working tree is the only reading that is right in both states; `origin/main`
+   is right only in this one. Re-derive the branch before repeating either sentence.**
 
    **BUILD THE FILED REMEDY BEFORE YOU PREFER YOUR OWN, AND READ THE FILING'S COST CLAUSE, NOT ITS
    TITLE.** Batch 30's entry named one site in its title and a different site in its cost
@@ -2345,13 +2447,22 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 968f51ce... at v0.452.0; a MOVE here means a real filing
-   wc -l < /tmp/live.txt    # 66 at v0.452.0
-   wc -l < /tmp/unfiled.txt # 33 at v0.452.0
+   md5 -q "$L"              # 32bdb378... AFTER the 0.452.0 pull; a MOVE here means a real filing
+   wc -l < /tmp/live.txt    # 64 after the pull
+   wc -l < /tmp/unfiled.txt # 33 after the pull
    ```
 
-   **THE BASELINE IS 66 LIVE CANDIDATES AT `v0.452.0`, 33 CITED, 33 UNFILED, AND SPRINT 306 IS
-   FULLY DISCHARGED.** A higher count means the consumer filed while nobody was looking.
+   **THE BASELINE IS 64 LIVE CANDIDATES AFTER THE `0.448.0 → 0.452.0` PULL, 31 CITED, 33 UNFILED,
+   AND SPRINT 306 IS FULLY DISCHARGED.** A higher count means the consumer filed while nobody was
+   looking.
+
+   **THE md5 MOVED ON THE PULL, AND THAT IS THE ONE CAUSE THAT IS NOT A FILING.** It went
+   `968f51ce…` → `32bdb378…` and the file went 3024 → 2991 lines because the consumer ANNOTATED and
+   ROTATED two entries this program discharged. The live count fell 66 → 64 for the same reason.
+   **So a moved md5 has three causes now — a filing, a rotation, and a squash — and only the first
+   is work for you.** Take the live and cited counts beside it: a filing RAISES live, a rotation
+   LOWERS it. Anchor on this value; the ledger is committed and clean, so it is stable until the
+   consumer next writes.
    **Re-derive rather than trusting those numbers** — they have moved between two consecutive
    commands in this program, and the live count moved DURING batches 19 and 20 both. Batches 21
    through 24 are the counter-examples: sweeps across all four were byte-identical, newest filing
