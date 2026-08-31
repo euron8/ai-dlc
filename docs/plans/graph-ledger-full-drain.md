@@ -12,7 +12,13 @@ instruction from it.**
 ### NO DECISION IS OPEN. BATCH 31 SHIPPED AS `v0.451.0` AND `v0.452.0`. NEXT IS 32.
 
 **THE SWEEP WAS EMPTY AND A PC-BACKED ENTRY DECIDED IT.** Newest unfiled filing is still
-`2026-08-30`, and all three ids of that date are batch 30's and `v0.444.0`'s, already discharged.
+`2026-08-30` BY CONTENT, and all three ids of that date are batch 30's and `v0.444.0`'s, already
+discharged. **RE-MEASURED 2026-08-31: THE SWEEP'S DATE COLUMN NOW READS `2026-08-31` FOR THOSE
+SAME THREE IDS AND NOTHING WAS FILED.** The consumer squash-merged its PR #988 onto the carry-over
+branch, and the sweep dates an id with `git log -S … | tail -1` — the OLDEST commit introducing
+the string. A squash REWRITES that history, so the oldest introducing commit became the squash
+itself and three already-discharged ids jumped a day forward. **The ledger's md5 is the control
+and it did not move (`968f51ce…`), nor did the live count (66) or the unfiled count (33).**
 The subject was `BL-075` / `PC-S303-STUB-AUDIT-MARKER-REGEX-MATCHES-LOCAL-VAR-NAMED-STUB`, chosen
 because a SECOND live candidate — `PC-S304-STUB-MARKER-REGEX-MATCHES-DOCSTRING-PROSE-AND-BARE-IDENTIFIERS`,
 unfiled here — names the same script, the same line and the same defect from the next sprint. One
@@ -545,7 +551,8 @@ grep RAN and never that a mention is a source.
 carried `PC-S330` into the consumer's archive, then 65 → 66 when the consumer filed the new
 candidate on 2026-08-30. A figure here is a snapshot of a file another party is holding open.
 
-**The sweep's newest unfiled filing is now `2026-08-30`, not `2026-08-26`.** Four batches running,
+**The sweep's newest unfiled filing was `2026-08-30`, not `2026-08-26` — a record from that batch;
+the resume block above carries the current reading and the md5 caveat.** Four batches running,
 the newest was 2026-08-26 and an empty sweep was ordinary; that streak is broken. Do not skip it.
 
 ### THE ORDINARY LOOP STILL APPLIES ONCE THE DECISION ABOVE IS SETTLED.
@@ -2196,11 +2203,20 @@ so no block written before it changes verdict.
    `PC-S304-STUB-MARKER-REGEX-MATCHES-DOCSTRING-PROSE-AND-BARE-IDENTIFIERS` — are DONE, and
    `BL-075` is ROTATED. Do not pick either up and do not re-scope onto them.
    **Both are still LIVE in the consumer's ledger and will appear in your sweep's unfiled set**,
-   because only a pull moves that file. **Your sweep will show THREE `2026-08-30` ids and all
-   three are already discharged** — batch 30's two plus
+   because only a pull moves that file. **Your sweep will show THREE `PC-S307-*` ids at the top of
+   its date order and all three are already discharged** — batch 30's two plus
    `PC-S307-PULL-CANNOT-SEE-WHAT-A-PREDICATE-CHANGE-RECLASSIFIES`, which shipped as `v0.444.0`.
    Re-derive rather than trusting that list: `git log -F --grep=<id> origin/main` before treating
    any id as new, and note the impossible-id control for THAT channel cannot be `PC-S999-NEVER`.
+
+   **DO NOT READ A MOVED DATE AS A NEW FILING. VERIFY WITH THE LEDGER'S md5, NOT WITH THE DATE.**
+   Measured 2026-08-31: those three ids dated `2026-08-30` one day and `2026-08-31` the next while
+   the ledger was BYTE-IDENTICAL throughout (`968f51ce…`, live 66, unfiled 33). The sweep dates an
+   id with `git log -S … | tail -1`, the OLDEST commit introducing the string, and the consumer
+   squash-merges onto its carry-over branch — which REWRITES that history and moves the date of
+   candidates nobody touched. **The date column is a property of the consumer's git history, not
+   of the ledger.** Take the md5 and the two counts first; only if one of those moved has anything
+   been filed.
 
    **GROUP THE SIBLING JOIN BY SUBSYSTEM, NOT BY SPRINT PREFIX.** Batch 31's pair is `PC-S303-*`
    and `PC-S304-*` — the same script, the same line, the same defect, filed one sprint apart. A
@@ -2310,6 +2326,23 @@ so no block written before it changes verdict.
    long-standing one dates `2026-07-21`, and an impossible id returns ZERO lines. **A zero for a
    real id means the grammar or the path is wrong, not that the candidate is old** — the ledger
    path is the only argument, and the archive is a SEPARATE file.
+
+   **THE DATE IS A PROPERTY OF THE CONSUMER'S GIT HISTORY, NOT OF THE LEDGER, AND A SQUASH MOVES
+   IT.** `tail -1` takes the OLDEST commit introducing the string; the consumer squash-merges onto
+   its carry-over branch, and a squash REWRITES that history, so the oldest introducing commit
+   becomes the squash and every id it carries jumps forward a day. **Measured 2026-08-31: three
+   already-discharged `PC-S307-*` ids dated `2026-08-30` one day and `2026-08-31` the next, while
+   the ledger was byte-identical throughout.** Read as new filings they would have cost a session.
+
+   **SO TAKE THE md5 AND THE TWO COUNTS BEFORE YOU READ ANY DATE**, in the same run — the ledger's
+   md5, the live count and the unfiled count. Nothing has been FILED unless one of those moved. A
+   date that moves alone is the instrument, not the subject.
+
+   ```
+   md5 -q "$D/push-candidate-ledger.md"   # 968f51ce... at v0.452.0; a MOVE here means a real filing
+   wc -l < /tmp/live.txt                  # 66 at v0.452.0
+   wc -l < /tmp/unfiled.txt               # 33 at v0.452.0
+   ```
 
    **THE BASELINE IS 66 LIVE CANDIDATES AT `v0.452.0`, 33 CITED, 33 UNFILED, AND SPRINT 306 IS
    FULLY DISCHARGED.** A higher count means the consumer filed while nobody was looking.
