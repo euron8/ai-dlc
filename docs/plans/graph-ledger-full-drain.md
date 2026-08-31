@@ -9,11 +9,75 @@ and status records that were current when they were written and that THIS BLOCK 
 it when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
 instruction from it.**
 
-### NO DECISION IS OPEN. BATCH 30 SHIPPED AS `v0.449.0` AND `v0.450.0`. NEXT IS 31.
+### NO DECISION IS OPEN. BATCH 31 SHIPPED AS `v0.451.0`. NEXT IS 32.
 
-**THE SWEEP DECIDED IT AND IT WAS NOT EMPTY.** Two candidates were filed by the consumer on
-2026-08-30 against machinery this repo owns, both fixed and shipped, one subsystem:
-`core/skills/ai-dlc-update/reconcile/`. Number yours 31.
+**THE SWEEP WAS EMPTY AND A PC-BACKED ENTRY DECIDED IT.** Newest unfiled filing is still
+`2026-08-30`, and all three ids of that date are batch 30's and `v0.444.0`'s, already discharged.
+The subject was `BL-075` / `PC-S303-STUB-AUDIT-MARKER-REGEX-MATCHES-LOCAL-VAR-NAMED-STUB`, chosen
+because a SECOND live candidate — `PC-S304-STUB-MARKER-REGEX-MATCHES-DOCSTRING-PROSE-AND-BARE-IDENTIFIERS`,
+unfiled here — names the same script, the same line and the same defect from the next sprint. One
+fix, two discharges. **The sibling join is the only lever this program has that moves the
+partition by more than one, and the prefix grouping in action 1b CANNOT SEE THIS PAIR** — the two
+ids differ in their sprint prefix (`S303` vs `S304`), so group by SUBSYSTEM, not by prefix.
+
+**THE PARTITION MOVED.** `DISCHARGED` 15 → 16, `IN-FLIGHT` 19 → 18, `UNTOUCHED` 34 → 33, overlap
+2 → 1. `DISCHARGED` rose by only one because `PC-S303` was ALREADY counted there — an archived
+entry mentions it only to say it is DISTINCT from its own subject, and the join cannot tell a
+citation from a disclaimer. **A membership in `DISCHARGED` is not by itself evidence the
+candidate was fixed; read the entry that cites it.**
+
+**WHAT SHIPPED (v0.451.0).** Check 16's marker gate was applied to the RAW line while all four
+elements it gates assume a comment block. `validate-stub-audit.sh`'s marker set now SPLITS on
+where each marker is credible: `NotImplementedError` on the raw line, the four prose markers
+(`stub`, `TODO`, `FIXME`, `wired later`) only inside a line's COMMENT PORTION and only as whole
+words, `Phase [0-9]` unchanged. Measured on the reference consumer, both copies in one invocation
+under a `cmp -s` control that the binaries differ: **486 markers / 486 findings before, 73 / 73
+after — 413 removed, 0 added**, and the false-negative control is clean at **0 of the 413 removed
+lines carrying `NotImplementedError`** against 1 in the survivors. Gate green, 180/180 with
+`AI_DLC_FIXTURE_NO_SKIP=1`, `check-15-bypass` read `ok` by name against an impossible-name control
+of 0.
+
+**BOTH FILED REMEDIES WERE BUILT AS MUTANTS AND BOTH WERE REJECTED ON MEASUREMENT, in opposite
+directions.** The sprint-303 filing prescribes `STUB_MARKER='\b(...)\b'`. `\b` is NOT in Darwin's
+ERE under bash 3.2, so that spelling examines **0 markers over every corpus file** and passes
+`# stub, wire later` and `raise NotImplementedError()` alike — a total disarm that reads as a fix
+and reports a clean tree. The sprint-304 filing prescribes comment-gating the `stub` alternative
+alone; it still fires on a substring inside an identifier and on `TODO` in a data literal. **Two
+filings, both naming a real defect, neither prescribing a remedy that works.** Ten candidates were
+built and scored in all.
+
+**A FOUR-ARMED RECEIPT WAS SATISFIED BY THREE SEPARATE WRONG IMPLEMENTATIONS.** `BL-075`'s
+receipt tested a bare identifier in code, a substring in code, a bare marker in a comment and a
+bare `NotImplementedError` — and a boundary-only fix, a no-quote-guard fix and a leading-prefix
+fix all passed it. The replacement is seven-armed and every arm is the SOLE discriminator for one
+wrong answer: it accepts 2 of 10 and rejects 8, with the pre-fix tree exiting 1, the post-fix tree
+0 and an absent subject 9. **The two it accepts are the correct fix and a SECOND SPELLING of it.**
+
+**THE FIXTURE FOUND THE DEFECT IN MY OWN FIX, AND REVIEW WOULD NOT HAVE.** The first
+implementation asked whether a line STARTS with a comment. That drops every TRAILING comment —
+`: # TODO` and `x = 1  # stub`, the commonest deferral idiom there is — and it silently took
+element 3's own seeded adversary out of scope, so a whole element lost its subject while every
+other arm still read `ok`. **A fixture going red on a correct change has usually lost its
+subject, and the repair is a new subject, not a relaxed assertion.** The predicate now reads the
+comment PORTION, with a quote guard because an opener inside a string literal is not a comment.
+
+**THE WALL-CLOCK DIFFERENTIAL WAS UNREADABLE AND IS RECORDED AS UNREADABLE.** Three interleaved
+reps over 70 files: 14.49 / 14.09 / 13.59 before against 14.64 / 15.32 / 13.40 after. The spread
+within one side is larger than the difference between the sides, so the null means nothing and is
+not a cost claim. What bounds the cost is structural, not measured.
+
+**NO HANDS WERE DISPATCHED AND ACTION 3 WAS NOT EXECUTED.** This session's harness carried a
+standing instruction not to call the Agent tool unless the operator asked in the turn, which
+action 3 requires. The scope, fixture, receipt and adversary work was done by the lead alone.
+**Action 3 exists because independent hands are the only mechanism that has ever told a session
+it was wrong about its own change; a batch run without them has had no such check.** The next
+batch should run it.
+
+### BATCH 30 SHIPPED AS `v0.449.0` AND `v0.450.0`. A RECORD, NOT AN INSTRUCTION.
+
+**Two candidates, filed by the consumer on 2026-08-30 against machinery this repo owns, one
+subsystem: `core/skills/ai-dlc-update/reconcile/`. That numbering instruction is SPENT — batch 31
+has since shipped. Take your number from the block above.**
 
 **`v0.450.0` IS A CORRECTION TO `v0.449.0`, NOT A NEW BATCH, AND THE CAUSE IS THE ONE THIS
 PROGRAM KEEPS HITTING: THE REVIEW ARRIVED AFTER THE MERGE.** Batches 26, 27 and now 30 have all
@@ -270,7 +334,7 @@ this plan's own figures.** What separates them is the commit message: the id is 
 `NAMED-UPSTREAM` for it on the next pull. **When the operator's ruling is FIX-DON'T-FILE, say so in
 the report, because the partition cannot.**
 
-### `docs/backlog.md` IS AT 74 OF 100. FILING IS NOT BLOCKED.
+### `docs/backlog.md` IS AT 73 OF 100. FILING IS NOT BLOCKED.
 
 `scripts/validate-backlog-size.sh` arm B1 enforces the ceiling, raised from 75 by the operator at
 `v0.446.0`. **Rotating an entry out is a disposition, not a tidy-up** — it means the entry is
@@ -316,12 +380,17 @@ consumer-side half of `BL-129` and supplies the mechanism site `BL-129` records 
 
 ### THE CURRENT FIGURES. RE-DERIVE THEM; DO NOT READ THEM.
 
-**Re-derived AFTER the `v0.450.0` merge, by running the block below and diffing every figure
+**Re-derived AFTER the `v0.451.0` merge, by running the block below and diffing every figure
 against this sentence — all controls in the same run: 66 live candidates, 136
-archived, 32 cited, 34 UNFILED. DISCHARGED 15, IN-FLIGHT 19, UNTOUCHED 34, overlap 2, unnamed 0,
-TERMINAL 28. `docs/backlog.md` depth: 74 of 100, archive 55.** Partition control closes:
-15+19+34−2 = 66. Presence controls: filed-known 1, spaced bullet 1, bare-bold 1, dotted 1;
+archived, 33 cited, 33 UNFILED. DISCHARGED 16, IN-FLIGHT 18, UNTOUCHED 33, overlap 1, unnamed 0,
+TERMINAL 28. `docs/backlog.md` depth: 73 of 100, archive 56.** Partition control closes:
+16+18+33−1 = 66. Presence controls: filed-known 1, spaced bullet 1, bare-bold 1, dotted 1;
 absence controls: partition 0, impossible id 0 in `filed`/`live`.
+
+**`discharged-unnamed` READ 1 BETWEEN THE RELEASE COMMIT AND THE MERGE, AND THAT IS THE
+INSTRUMENT WORKING.** `/tmp/in_msgs` is built from `git log origin/main`, so a candidate named
+only in a commit still sitting on a release branch scores as discharged-but-invisible. It returns
+to 0 on the merge. Do not chase it before then.
 
 **THE DENOMINATOR MOVED BECAUSE THE CONSUMER PULLED, NOT BECAUSE THIS PROGRAM REGRESSED.**
 `DISCHARGED` 17 → 15, `TERMINAL` 26 → 28, archive 133 → 136: the `0.443.0 → 0.448.0` pull carried
@@ -329,8 +398,9 @@ candidates this program had discharged into the consumer's own archive, which is
 belong in and the only place delivery is visible. Read a fall in `DISCHARGED` beside a rise in
 `TERMINAL` as progress, not loss.
 
-**THIS BATCH'S TWO IDS ARE IN `UNTOUCHED` AND WILL STAY THERE, AND THAT IS THE INSTRUMENT, NOT THE
-WORK.** `DISCHARGED` is keyed on a live candidate being cited by an entry in
+**BATCH 30's TWO IDS WERE IN `UNTOUCHED` AND STAYED THERE, AND THAT IS THE INSTRUMENT, NOT THE
+WORK. Batch 31 is the counter-example and shows the repair: it named its unfiled sibling inside
+the entry it rotated, and that id moved from `UNTOUCHED` into `DISCHARGED` on the rotation.** `DISCHARGED` is keyed on a live candidate being cited by an entry in
 `docs/backlog.archive.md`. Neither candidate was ever filed here, so there is no `BL-` entry to
 rotate and no archived entry to cite them — the batch-29 repair (name the unfiled sibling inside
 the entry you rotate) needs an entry to rotate, and a batch that files nothing has none. What
@@ -370,33 +440,41 @@ pull ran**, and both new ids are against machinery this repo owns:
 into the carry-over branch, so both ids are committed and pushed on the consumer's live line.
 They were FIXED, not filed — the case the operator's standing correction governs.
 
-### THE DELIVERY GAP IS ONE RELEASE AND THE ANSWER IS BANK IT. NOTHING IS OWED TO A RUNBOOK.
+### THE DELIVERY GAP IS THREE RELEASES AND THE SECOND TEST DIVERGES HARDER THAN IT EVER HAS.
 
-**Consumer installed `0.448.0`, distribution `0.449.0` — one release, well inside the WIDE
-threshold action 7 names.** PENDING is **2**, and both are batch 30's, derived by resolving each
-`NAMED-UPSTREAM` id to the highest `VERSION` among its naming commits (control: an impossible id
-resolves to 0 commits). 23 ids carry `NAMED-UPSTREAM`; 21 are at or below the installed version
-and are DELIVERED.
+**Consumer installed `0.448.0` / `1f77800d`, distribution `0.451.0` — three releases
+(`v0.449.0`, `v0.450.0`, `v0.451.0`), inside the WIDE threshold of five that action 7 names.**
+PENDING is **2**, both batch 31's, derived by resolving each id to the highest `VERSION` among its
+naming commits on `origin/main` (control: an impossible id resolves to 0 commits). 16 ids resolve;
+14 are at or below the installed version and are DELIVERED.
 
-**THE SECOND TEST IS NULL, WITH A CONTROL THAT WORKED AND A LIMIT THAT MATTERS MORE THAN THE
-NULL.** The consumer's INSTALLED `preclassify.sh` and this distribution's copy were run against
-the consumer's own tree in one invocation, with `cmp -s` first asserting the two binaries DIFFER
-(they do). Both emit 8 rows and the bucket sets are identical. **That null is expected and it
-proves almost nothing about this release**: the consumer's stamp now has
-`commit == skill_commit`, so the new arm is INERT there by construction. This is a fix for a
-SPLIT state the consumer is not currently in and will next enter the moment a pull defers its
-machinery slice. A differential taken outside that state cannot see it — the same shape as
-`v0.435.0`'s transient, and it is stated rather than hidden behind the null.
+**THE SECOND TEST IS NOT NULL. IT IS THE LARGEST DIVERGENCE THIS PROGRAM HAS MEASURED, AND IT
+POINTS THE OTHER WAY FROM THE ONE ACTION 7 ANTICIPATES.** The consumer's INSTALLED
+`scripts/ai-dlc/validate-stub-audit.sh` and the copy this release ships were run against
+`/Users/n8/git/graph` in one invocation, `cmp -s` first asserting the two binaries differ. The
+installed copy is byte-identical to the distribution at the stamp and to `origin/main` before this
+release — md5 `d71a891a…`, checked three ways — so the differential ran against the real installed
+binary and not against a reconstruction. Over 1776 hot-path files, 1437 audited: **installed emits
+486 findings, shipped emits 73. 413 removed, 0 added.**
+
+**Action 7 says a divergence means the consumer is MISSING a finding. Here it is carrying 413 it
+should not have**, and that is the same trigger for the opposite reason: every one of those is a
+hot-path gate finding on a line no consumer edit can clear, and the consumer's own history records
+this class costing a full HARD_BLOCK cycle and an operator SUPPRESSED disposition in two
+consecutive sprints. **The null's usual limitation does not apply — this is not a fix for a
+transient, and the effect is live on that tree today.**
 
 **A BOOTSTRAPPING STEP IS IN THE RANGE AND THE SPECIFIC HAZARD WAS MEASURED RATHER THAN WARNED
-ABOUT.** This release changes `preclassify.sh`, `self-update-gate.sh` and `self-update-fixtures.sh`
-— the consumer's INSTALLED copies run the pull that carries their own repair. The mode-only
-hazard `git diff --raw 1f77800d..origin/main -- core/` reports **0** of 8 raw rows as
+ABOUT.** The range changes `preclassify.sh` (1 commit) and `ai-dlc-update/SKILL.md` (1);
+`apply.sh` and `ledger-reverify.sh` are untouched. The mode-only hazard
+`git diff --raw 1f77800d..origin/main -- core/` reports **0** of 12 raw rows as
 modes-differing-blobs-equal, so that particular split cannot occur here.
 
-**OWED IS NOT REQUIRED. BANK IT.** No runbook was written and nothing was dispatched. The
-standing ruling in `.claude/rules/operator-rulings.md` governs: a consumer pull is not
-preapproved, readiness is not authorization, and a `PENDING` count is not a decision about WHEN.
+**OWED IS NOT REQUIRED, AND A LARGE DIVERGENCE IS STILL NOT AN AUTHORIZATION.** No runbook was
+written and nothing was dispatched. The standing ruling in `.claude/rules/operator-rulings.md`
+governs: a consumer pull is not preapproved, readiness is not authorization, and neither a
+`PENDING` count nor a 413-finding differential is a decision about WHEN. **Report the number and
+stop.**
 
 ### THE PREVIOUS GAP RECORD — FIVE RELEASES, AND THAT PULL HAS RUN. A RECORD, NOT AN INSTRUCTION.
 
@@ -2090,18 +2168,27 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **RUN THE SWEEP (action 1b below) AND LET IT PICK BATCH 31's SUBJECT. NOTHING IS GATING YOU.**
-   Batch 30 is merged as `v0.449.0` and `v0.450.0`, so number yours 31 and no operator decision
-   is open. The two
-   candidates it discharged — `PC-S307-SELF-UPDATE-CARRY-ARM-HAS-NO-CORE-AT-SELF-UPDATE-SUPPRESSION`
-   and `PC-S307-STEP-2-FIXTURE-TERM-B-EXCLUSIONS-ARE-DERIVABLE-BY-HAND-AND-WERE-MIS-DERIVED`, neither
-   ever filed here — are DONE. Do not pick either up, do not file them, do not re-scope onto them.
+1. **RUN THE SWEEP (action 1b below) AND LET IT PICK BATCH 32's SUBJECT. NOTHING IS GATING YOU.**
+   Batch 31 is merged as `v0.451.0`, so number yours 32 and no operator decision is open. The two
+   candidates it discharged — `PC-S303-STUB-AUDIT-MARKER-REGEX-MATCHES-LOCAL-VAR-NAMED-STUB` and
+   `PC-S304-STUB-MARKER-REGEX-MATCHES-DOCSTRING-PROSE-AND-BARE-IDENTIFIERS` — are DONE, and
+   `BL-075` is ROTATED. Do not pick either up and do not re-scope onto them.
    **Both are still LIVE in the consumer's ledger and will appear in your sweep's unfiled set**,
    because only a pull moves that file. **Your sweep will show THREE `2026-08-30` ids and all
-   three are already discharged** — those two plus
+   three are already discharged** — batch 30's two plus
    `PC-S307-PULL-CANNOT-SEE-WHAT-A-PREDICATE-CHANGE-RECLASSIFIES`, which shipped as `v0.444.0`.
    Re-derive rather than trusting that list: `git log -F --grep=<id> origin/main` before treating
    any id as new, and note the impossible-id control for THAT channel cannot be `PC-S999-NEVER`.
+
+   **GROUP THE SIBLING JOIN BY SUBSYSTEM, NOT BY SPRINT PREFIX.** Batch 31's pair is `PC-S303-*`
+   and `PC-S304-*` — the same script, the same line, the same defect, filed one sprint apart. A
+   join keyed on the prefix scores them as unrelated and finds nothing. Key on the PATH the
+   candidate names.
+
+   **A MEMBERSHIP IN `DISCHARGED` IS NOT EVIDENCE THE CANDIDATE WAS FIXED.** `PC-S303` was already
+   in that bucket before batch 31 touched it, because an archived entry mentions it once to say it
+   is DISTINCT from that entry's own subject, and the join cannot tell a citation from a
+   disclaimer. Open the citing entry before reading a candidate as closed.
 
    **THE SWEEP READS THE CONSUMER'S WORKING TREE, AND THAT IS CORRECT.** `/Users/n8/git/graph` sits
    on `ai-dlc/carry-over/dashboard-backlog-s307`, which is its live line and is pushed; its
@@ -2112,6 +2199,19 @@ so no block written before it changes verdict.
    TITLE.** Batch 30's entry named one site in its title and a different site in its cost
    paragraph; the titled remedy was built, scored, and changed none of the three numbers the entry
    itself complains about. Score both, on the same input, and say which measurement decided it.
+
+   **AND WHEN TWO FILINGS NAME ONE DEFECT, BUILD BOTH REMEDIES — THEY WILL DISAGREE.** Batch 31
+   had two, and neither worked: one was a total DISARM on this platform (`\b` is not in Darwin's
+   ERE, so the "fixed" check examined 0 markers over every corpus file and reported a clean tree),
+   the other left two of the four false-positive shapes firing. **A filing is authoritative about
+   the DEFECT and is evidence about nothing else.** Ten candidates were built and scored before one
+   was preferred.
+
+   **YOUR RECEIPT WILL BE SATISFIED BY WRONG IMPLEMENTATIONS YOU HAVE NOT THOUGHT OF, AND THE ONLY
+   WAY TO FIND OUT IS TO BUILD THEM.** Batch 31's inherited four-armed receipt was satisfied by
+   three separate wrong fixes. Score every candidate against the receipt, count how many it
+   ACCEPTS, and do not stop until that count is the correct fix plus its second spelling and
+   nothing else.
 
    **EVERY DIFFERENTIAL YOU RUN NEEDS TWO ASSERTIONS BEFORE ITS NULL IS READABLE**, and batch 30
    produced five false zeros without them: `cmp -s` that the two sides DIFFER, and a known-positive
@@ -2125,8 +2225,9 @@ so no block written before it changes verdict.
    not answer whether the change is right, and that is what the hands are for.
 
    **If the sweep is empty, take a PC-backed backlog entry**, per the provenance-first rule in 1b.
-   There are 20; re-derive the set with the join in 1b rather than reading a name here. If the
-   sweep finds something new, report it and ask before re-scoping.
+   Re-derive the set with the join in 1b rather than reading a count or a name here — it returned
+   20 before batch 31 rotated `BL-075` out of it. If the sweep finds something new, report it and
+   ask before re-scoping.
 
    **PREFER A PC-BACKED ENTRY WHOSE CANDIDATE HAS A LIVE SIBLING, and derive that rather than
    reading the entry.** Batch 29 discharged two candidates on one fix because two `PC-S303-FANOUT-*`
@@ -2157,7 +2258,7 @@ so no block written before it changes verdict.
    `predicate-differential.sh` fingerprints the corpus either side of its own run for exactly this
    reason; a hand-rolled measurement has no such guard.
 
-1a. **`docs/backlog.md` IS AT 74 OF 100.** The operator raised the ceiling at `v0.446.0`, so filing
+1a. **`docs/backlog.md` IS AT 73 OF 100.** The operator raised the ceiling at `v0.446.0`, so filing
    is not blocked. That is not licence to file rather than fix — the standing correction in the
    resume block still governs — but a filing no longer costs a rotation, and rotating still means
    CLOSING, which needs a measurement.
@@ -2188,7 +2289,7 @@ so no block written before it changes verdict.
    real id means the grammar or the path is wrong, not that the candidate is old** — the ledger
    path is the only argument, and the archive is a SEPARATE file.
 
-   **THE BASELINE IS 66 LIVE CANDIDATES AT `v0.450.0`, 32 CITED, 34 UNFILED, AND SPRINT 306 IS
+   **THE BASELINE IS 66 LIVE CANDIDATES AT `v0.451.0`, 33 CITED, 33 UNFILED, AND SPRINT 306 IS
    FULLY DISCHARGED.** A higher count means the consumer filed while nobody was looking.
    **Re-derive rather than trusting those numbers** — they have moved between two consecutive
    commands in this program, and the live count moved DURING batches 19 and 20 both. Batches 21
