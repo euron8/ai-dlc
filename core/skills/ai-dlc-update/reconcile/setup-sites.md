@@ -198,6 +198,7 @@ core_manifest:
   - core/fixtures/retired-layer-passage/**
   - core/fixtures/retired-fixture-orphan/**
   - core/fixtures/consumer-machinery-inventory/**
+  - core/fixtures/upstream-routing/**
   - core/fixtures/retro-audit-scans/**
   - core/fixtures/route-defect-classification/**
   - core/fixtures/self-update-gate/**

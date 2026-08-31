@@ -75,6 +75,7 @@ empty_subject_verdict:
     - core/scripts/validate-suppression-lifetime.sh
     - core/scripts/validate-gate-adjudication.sh
     - core/scripts/validate-request-coverage.sh
+    - core/scripts/audit-upstream-routing.sh
     - core/scripts/audit-layer-debt.sh
     - core/scripts/validate-ac-falsifiability.sh
     - core/scripts/validate-bmad-invocations.sh
