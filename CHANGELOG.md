@@ -15,6 +15,93 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.455.0] - 2026-08-31
+
+### A consumer had one place to file a finding and two places it could belong
+
+A consumer session that found a defect had two possible destinations and core instructed only
+one. `carry-over-backlog.md` is where sprint steps send findings; `push-candidate-ledger.md` is
+an UPDATER artifact a mid-sprint session had no route into. So a defect in a shipped core program
+was filed as work the consumer owes itself, where no upstream reader would see it and the next
+pull overwrites the subject.
+
+Measured on the reference consumer before building anything, controls in the same invocation: its
+`CLAUDE.md` mentions "push candidate" **0 times** against 3 hits for carry-over in the same file,
+so the search discriminates and the absence is real. An exploratory grep over a looser heading
+grammar put 13 of 82 entries on AI/DLC machinery paths; the shipping tool's own grammar reads 80
+entries and is the figure quoted below, because two grammars over one corpus give two true
+numbers and only one of them is the one the tool acts on. The worst case is a P1
+repo-corruption defect in the shipped pre-push hook — it corrupted that repository twice — filed
+as a carry-over item with **0 mentions** in the push-candidate ledger (control: 116 `PC-` ids
+present). Routed as consumer work, it was discharged by editing the distribution checkout
+directly, which is the boundary violation this release exists to prevent, arrived at from the
+other side.
+
+**The routing test is DECLARED, never inferred, and that is the whole design.**
+`core/fixtures/consumer-machinery-inventory/run.sh` records that eight predicates asking core to
+INFER which consumer executables are ai-dlc were measured and ALL EIGHT REFUTED. A path-shape
+guess would have been the ninth. Instead the test asks the shipping authority:
+`core-paths.sh --is-core <path>` — exit 0 means AI/DLC installs the file, so the next pull
+overwrites any local edit to it. Verified both directions on real paths: 4 of 4 machinery paths
+return 0, 4 of 4 consumer-owned paths return 1, **including the consumer's own `overrides/`
+entries**, which is what makes the layer system the correct unblock.
+
+`core/skills/ai-dlc/steps/retro.md` §4 pointed the wrong way and now routes first. It told a
+session that changes to "team role files, pipeline step files" should be applied to the relevant
+file — and those ARE installed machinery, so the instruction directed an edit the next pull
+erases. §4a gets the same test where deferred escalations become new carry-over items. The rule
+itself lives once, in the new shipped `core/rules/upstream-routing.md`, and the steps cite it.
+
+Push candidate by default; a carry-over item IN ADDITION only when local work remains — a
+workaround to remove once the fix arrives. Never a carry-over item alone, because a defect in
+AI/DLC is work the consumer cannot do.
+
+### The detector reports, and its false-positive set is enumerated rather than claimed empty
+
+New `core/scripts/audit-upstream-routing.sh`, REPORT-ONLY and exit 0 on findings. Routing is a
+judgement and gating a sprint on it would wedge correct work. It exits 2 only for EXAMINED
+NOTHING — absent backlog, absent `core-paths.sh`, an empty glob set, or a corpus that parses to
+zero entries. That last pair matters most: an empty glob set classifies every path as
+consumer-owned and yields a confident clean report over a dead predicate.
+
+Run against the reference consumer's 80 entries it reports **10, of which 6 are genuine and 4 are
+false**, and all four are named in the script's header because an unenumerated false-positive set
+is a check the operator turns off. The true ones include a case no consumer edit can fix:
+`gate-validation.md` Check 22's scope clause and `validate-spawn-ledger.sh` disagree with each
+other, and both are core's.
+
+**The corpus moved during the measurement, and what arrived in the gap is the case for the whole
+release.** A first pass read 79 entries and 9 findings; the consumer committed another entry
+minutes later and the same command read 80 and 10. That new entry is a shipped AI/DLC hook whose
+rollback **deletes the entire target file** on a rejected write — filed the same day as a
+carry-over item, with no push candidate, its own text noting the fix "needs the hook's rollback
+logic inspected — dev work, not retro scope." `--is-core` returns 0 for it against a control of
+1, so the consumer cannot durably fix it and the next pull restores the defect. The detector
+caught a same-day data-loss defect in core on its first real run. Figures here are re-derived,
+not quoted; pin the blob when a number has to hold still.
+
+**Two things are recorded because they did not go as designed.** The pairing discriminator — skip
+an entry that already cites a `PC-` id — was expected to cut the false-positive rate and did not:
+only ONE entry on that corpus is paired, so the rate landed at ~44%, essentially the bare
+path-mention baseline. It is kept because it costs nothing and becomes load-bearing exactly as the
+tool starts working. And a narrower predicate keyed on the entry TITLE was built and REJECTED on
+measurement: it cuts 9 findings to 3 but drops two genuine misroutes while keeping a false one,
+trading recall for no precision. For a report-only nudge the missed misroute is the expensive
+error.
+
+**A cwd-dependence in `core-paths.sh --list` was found by this tool's own guard.** Bare, `--list`
+falls back to two RELATIVE manifest candidates, so it answers about the process working
+directory: measured on a tree built by `install.sh`, 171 globs from the consumer root and **0**
+from one directory down. The detector's EXAMINED-NOTHING arm caught it loudly instead of printing
+a confident clean report over a dead predicate — which is precisely why that arm exists. Fixed
+here by resolving the manifest against the root marker and passing it explicitly, in both
+layouts; three working directories now produce byte-identical output.
+
+`--list` once rather than `--is-core` per path, because the per-path form measured 32s across 99
+real paths and the suite is pole-bound. The two were asserted equivalent on those same paths — 12
+and 12, zero disagreements — and the fixture carries that agreement as an arm so they cannot
+drift apart silently.
+
 ## [0.454.0] - 2026-08-31
 
 ### A receipt score is a claim about the mutant set it was run on, and `v0.453.0` shipped one that was too narrow

@@ -255,6 +255,7 @@ core_manifest:
   - fixtures/retired-layer-passage/**
   - fixtures/retired-fixture-orphan/**
   - fixtures/consumer-machinery-inventory/**
+  - fixtures/upstream-routing/**
   - fixtures/retro-audit-scans/**
   - fixtures/route-defect-classification/**
   - fixtures/self-update-gate/**

@@ -204,8 +204,30 @@ it never substitutes agent consensus for it.
 
 ### 4. Apply Process Improvements
 
-If the retro identifies changes needed to CLAUDE.md, team role files,
-pipeline step files, or coding conventions:
+**FIRST, ROUTE THE FINDING. Team role files and pipeline step files are
+AI/DLC's own machinery, not yours.** Editing them here is erased by the
+next `/ai-dlc-update` and reaches no upstream reader, so for every
+improvement below, run:
+
+```
+scripts/ai-dlc/core-paths.sh --is-core <path>   # 0 = AI/DLC's, 1 = yours
+```
+
+Exit 0: file a push candidate in
+`_bmad-output/ai-dlc-update/push-candidate-ledger.md` as
+`PC-S<N>-<SLUG>`, naming the installed path and the derivation that shows
+the defect. If you must also unblock this sprint, add an `overrides/` or
+`extensions/` entry AND a carry-over item to remove it — never edit the
+AI/DLC file, and never file the defect as a carry-over item alone.
+
+Exit 1: it is yours; apply it as below.
+
+`.claude/rules/upstream-routing.md` carries the full test, the both-sides
+case, and what a push candidate must contain.
+
+For the improvements that came back exit 1 — CLAUDE.md, coding
+conventions, and your own `overrides/` and `extensions/` entries, which
+are how a role file's or step file's behaviour is changed here:
 
 **For new hard requirements (non-deferrable rules, hard gates):**
 Adding rule text to one file is not sufficient. Every new hard
@@ -496,7 +518,11 @@ gate.
    accepted at the production validation checkpoint get `DEFERRED -
    sprint <N>` and are moved to the next sprint's carry-over
    backlog (append to `carry-over-backlog.md` as a new OPEN item
-   citing the original escalation). Then **archive terminal entries
+   citing the original escalation) — **unless the deferred subject is
+   AI/DLC's own machinery, which `core-paths.sh --is-core <path>`
+   answers with exit 0. That one is a push candidate in
+   `push-candidate-ledger.md`, not a carry-over item; see
+   `.claude/rules/upstream-routing.md`.** Then **archive terminal entries
    (Rule 25(a)/(c)):** move every RESOLVED and OVERRIDDEN entry
    (cut-and-paste, verbatim) out of `pending.md` into
    `docs/escalations/pending-archive.md`, leaving only OPEN escalations
