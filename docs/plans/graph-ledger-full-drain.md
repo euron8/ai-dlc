@@ -316,7 +316,8 @@ consumer-side half of `BL-129` and supplies the mechanism site `BL-129` records 
 
 ### THE CURRENT FIGURES. RE-DERIVE THEM; DO NOT READ THEM.
 
-**Re-derived AFTER the `v0.449.0` merge — all controls in the same run: 66 live candidates, 136
+**Re-derived AFTER the `v0.450.0` merge, by running the block below and diffing every figure
+against this sentence — all controls in the same run: 66 live candidates, 136
 archived, 32 cited, 34 UNFILED. DISCHARGED 15, IN-FLIGHT 19, UNTOUCHED 34, overlap 2, unnamed 0,
 TERMINAL 28. `docs/backlog.md` depth: 74 of 100, archive 55.** Partition control closes:
 15+19+34−2 = 66. Presence controls: filed-known 1, spaced bullet 1, bare-bold 1, dotted 1;
@@ -2096,8 +2097,11 @@ so no block written before it changes verdict.
    and `PC-S307-STEP-2-FIXTURE-TERM-B-EXCLUSIONS-ARE-DERIVABLE-BY-HAND-AND-WERE-MIS-DERIVED`, neither
    ever filed here — are DONE. Do not pick either up, do not file them, do not re-scope onto them.
    **Both are still LIVE in the consumer's ledger and will appear in your sweep's unfiled set**,
-   because only a pull moves that file; check `git log -F --grep=<id> origin/main` before treating
-   any 2026-08-30 id as new.
+   because only a pull moves that file. **Your sweep will show THREE `2026-08-30` ids and all
+   three are already discharged** — those two plus
+   `PC-S307-PULL-CANNOT-SEE-WHAT-A-PREDICATE-CHANGE-RECLASSIFIES`, which shipped as `v0.444.0`.
+   Re-derive rather than trusting that list: `git log -F --grep=<id> origin/main` before treating
+   any id as new, and note the impossible-id control for THAT channel cannot be `PC-S999-NEVER`.
 
    **THE SWEEP READS THE CONSUMER'S WORKING TREE, AND THAT IS CORRECT.** `/Users/n8/git/graph` sits
    on `ai-dlc/carry-over/dashboard-backlog-s307`, which is its live line and is pushed; its
@@ -2184,7 +2188,7 @@ so no block written before it changes verdict.
    real id means the grammar or the path is wrong, not that the candidate is old** — the ledger
    path is the only argument, and the archive is a SEPARATE file.
 
-   **THE BASELINE IS 66 LIVE CANDIDATES AT `v0.449.0`, 32 CITED, 34 UNFILED, AND SPRINT 306 IS
+   **THE BASELINE IS 66 LIVE CANDIDATES AT `v0.450.0`, 32 CITED, 34 UNFILED, AND SPRINT 306 IS
    FULLY DISCHARGED.** A higher count means the consumer filed while nobody was looking.
    **Re-derive rather than trusting those numbers** — they have moved between two consecutive
    commands in this program, and the live count moved DURING batches 19 and 20 both. Batches 21
