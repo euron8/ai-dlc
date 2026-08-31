@@ -56,6 +56,68 @@ join already honours it and the two readers must agree.
 
 Discharges `PC-S334-AUDIT-LAYER-DEBT-FLAGS-ITS-OWN-DISCHARGE-ROWS-AS-UNDECLARED-DEBT`.
 
+### The refactor moved a fixture's mutation anchor, and the fixture was right to go red
+
+Lifting the coercion into `closes_ids()` deleted the two literal blocks
+`core/fixtures/layer-debt-ledger` keys its assertion-9 and assertion-11 mutations on, so `mkmut`
+found nothing to mutate and refused to let a no-op pass as a mutation: `FAIL (2 of 16)`, on the
+commit that fixed the defect. **That is the fixture working.** Assertions 9 and 11 guard the
+string-`closes_owed` coercion and its control — a defect measured in the wild — and a mutation
+that matches nothing proves neither.
+
+The repair is a NEW SUBJECT, never a relaxed assertion. Both mutations now anchor inside
+`closes_ids()` and assert the identical observable: assertion 9's makes the string branch return
+`list(co)` so the id is iterated character by character and the debt reappears, which is the
+defect that assertion names; assertion 11's widens the mistyped counter to flag well-formed
+lists so the control goes red. Back to `PASS (16 assertions)` with **0 `FIXTURE ERROR`** and both
+mutation arms reading `ok`.
+
+### The receipt that certified this fix is also satisfied by deleting the arm
+
+Reported by an adversarial hand, recorded because the entry is already archived and inert.
+`BL-069`'s inherited receipt requires both its registers to report `UNDECLARED (0)`, and **a
+script whose migration arm has been deleted reports 0 on both** — so a total disarm exits 0 and
+reads as the fix. The entry claims its neutral-reason control prevents exactly this; measured,
+that holds in one direction only. Flags-everything is caught at exit 9; flags-nothing is
+accepted. Nothing in the receipt asserts the arm still fires on a genuine undeclared row.
+
+**The fix that shipped is not that disarm, and this release does not rest on the receipt for
+saying so.** The differential is the evidence: 24 genuine findings SURVIVE, 11 rows carry
+`closes_owed` while only 9 were being flagged — so the arm was already silent on 2 and this
+removed a proper subset — and the OPEN-debt and `mistyped_closes_owed` counts are equal on both
+sides. **But the receipt should have been replaced before the fix landed rather than after it,
+and it was not.** The durable guard is the new fixture below, whose M2 mutant is precisely that
+disarm — the arm made to examine zero rows while still exiting 0 and printing `UNDECLARED (0)` —
+and it is KILLED.
+
+### New shipping fixture `layer-debt-due-and-discharge`
+
+15 assertions over synthetic `mktemp` registers, guarding the discharge-row exemption this
+release adds. It SHIPS — no `.dist-only` — because its subject installs to a consumer as
+`scripts/ai-dlc/audit-layer-debt.sh`, its corpus is synthetic rather than a corpus only this repo
+holds, and both defects it descends from were found ON the reference consumer. The three
+packaging edits are made accordingly: the `scripts/uninstall.sh` loop, `core-manifest.md` and
+`setup-sites.md`.
+
+Four mutants, all KILLED, keyed on location and observable behaviour rather than on a spelling.
+**M2 is the one that matters**: the migration arm made to examine zero rows while still exiting 0
+and printing `UNDECLARED (0)` — a disarm that reads as a clean tree, and the shape the archived
+receipt accepts. M1 files a discharge row as undeclared again; M3 keys the exemption on key
+PRESENCE so an empty-array row is wrongly acquitted; M4 lets the exemption reach the declaration
+loop, which deletes a commitment declared on a discharge row. The unmutated control carries a
+positive conjunct — it must NAME a baseline row, not merely exit 0 — so a subject that emits
+nothing fails by construction instead of scoring as a kill.
+
+**The battery found a false positive in its own arm, and only scoring a correct fix revealed
+it.** A seed control asserted `OPEN (4)`. Separating triggered debts from waiting ones IS a
+change to how the sections are cut, so a count keyed on today's single section convicts every
+correct fix. It now asserts the four ids are present, which survives any partition.
+
+Its `BL-067` arms were built, demonstrated satisfiable against two reference fixes at 24 of 24 —
+and then REMOVED, because those references implement the `.sh`-token partition measured above as
+3-of-3 false. **A fixture arm demanding a behaviour that should not ship is worse than no arm**,
+and it would have wedged the push for a fix deliberately not being made.
+
 ## [0.452.0] - 2026-08-30
 
 ### `\b` is honoured by `grep -E` here and ignored by bash's `[[ =~ ]]`, and v0.451.0 said the wrong one

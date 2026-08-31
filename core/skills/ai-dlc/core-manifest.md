@@ -222,6 +222,7 @@ core_manifest:
   - fixtures/layer-catalog-collision/**
   - fixtures/layer-contract-conformance/**
   - fixtures/layer-contract-conformance-b/**
+  - fixtures/layer-debt-due-and-discharge/**
   - fixtures/layer-debt-ledger/**
   - fixtures/layer-readopt-gate/**
   - fixtures/ledger-reverify/**

@@ -2380,6 +2380,76 @@ verify: sh L=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; f=$(sed -n 
 
 ## BL-067
 
+**RE-SCORED AT v0.453.0. THE DEFECT SURVIVES, ITS COST CLAUSE HAS EXPIRED, AND ITS OWN REMEDY IS
+UNSHIPPABLE. The entry is kept whole; the receipt below is REPLACED because the old one CERTIFIED
+that remedy.** Which half died is the part that stops the next reader repeating this, so all four
+claims are scored rather than the entry re-filed.
+
+*Claim 1 — the field is declared, schema'd, printed, and consumed by nothing.* **SURVIVES.** The
+three occurrences in `audit-layer-debt.sh` are unchanged, and nothing else reads the value.
+
+*Claim 2 — "six of this consumer's sixteen OPEN debts" name a command, and running it made them
+due silently.* **EXPIRED.** Re-derived against the reference register (297 rows, up from 213): the
+six `migrate-artifact-paths.sh --apply` debts are **6 declared and 0 still OPEN** — they were
+discharged, and by the same six closes that produced `BL-069`'s population. Control in the same
+invocation: an impossible `closes_when` token returns 0. **Of the 16 OPEN debts today, ZERO name a
+command to run.** The entry's cost paragraph therefore describes a state the only register that
+exists no longer holds.
+
+*Claim 3 — the remedy is a `TRIGGERED` list separating debts whose precondition has been met.*
+**UNSHIPPABLE AS SPECIFIED, and this was established by BUILDING it, not by reading it.** The
+entry's own satisfiability note describes the remedy as one line matching a `.sh` token out of
+`closes_when`. Built exactly so, it emits **3 `DUE-AFTER:` rows on the live register and all three
+are FALSE**: `validate-gate-manifest.sh` twice, out of *"validate-gate-manifest.sh reports 914
+resolving to a gate-type set that includes retro"* — a CONDITION about a script's output, not a
+command anyone runs to discharge — and `validate-mutation-red.sh`, out of *"so the forked copy
+stops shadowing core's validate-mutation-red.sh"*, where the script is a NOUN. A false-positive
+rate of 3 of 3 is a wrong answer delivered confidently to every consumer.
+
+*Claim 4 — the receipt is a differential and its stated limit is a flag-gated fix.* **REFUTED, and
+worse than its stated limit.** The remedy above **satisfies the old receipt at exit 0.** So the
+receipt certified the very implementation that is 3/3 false. That is not the limit the entry
+declares; it is the receipt accepting a regression.
+
+**NO REPLACEMENT FIX IS SHIPPED, because every derivable signal is zero or false on the only
+register that exists** — the `.sh` extractor is 3/3 false; an `OWED-`id join over `closes_when`
+finds 3, all naming their own debt and **0 dangling**; and every one of the 16 OPEN debts already
+carries a non-empty `closes_when`, so an absence check finds 0. A check that cannot fire reads
+exactly like one that passed, so none was built. **What a future fix needs is a population, and
+this entry is now the record that there is not one yet.**
+
+**THE REPLACEMENT RECEIPT REJECTS THE FILED REMEDY BY NAME.** It seeds three OPEN debts in ONE
+register so the negative sits beside the offender in the same run: `OWED-PROBE-A`, whose
+`closes_when` names its own id; `OWED-PROBE-B`, carrying the live register's own
+`validate-gate-manifest.sh` string verbatim; and `OWED-PROBE-C` as a bound so B's block is
+terminated. Sanity arms exit 9 — the script must exist, the run must exit 0, and all three ids
+must appear, which asserts the run got deep enough for a fix to be SITED. It then exits 1 on any
+output naming `validate-gate-manifest.sh` outside the `closes when:` echo, which is the sole
+discriminator against the filed remedy, and finally compares A's and B's rendered blocks **with
+the debt id normalised out**, so a fix siting its output on the header line counts equally with
+one siting it in the body. Scored against four implementations: shipping **1**, the filed remedy
+**1**, a correct fix **0**, and a SECOND SPELLING of that correct fix **0**. The id normalisation
+is there because the first draft scored the second spelling as **1** — it keyed on WHERE the fix
+put its output, which is the "a receipt rejecting a competent author's other phrasing" failure.
+
+**IT ERASES THE FIELD'S VALUE RATHER THAN STRIPPING A LABELLED LINE, and that is the second
+defect found in it before it landed.** The first draft filtered on the literal label
+`closes when:`. An adversarial hand showed that a one-token relabel to `closes-when:` defeats
+that filter and closes the entry while parsing nothing at all — the strip was keyed on a string
+the fix under test is free to rename. Substituting each debt's `closes_when` VALUE for a fixed
+token instead is invariant under any relabel. Re-scored with that hand's mutants added, the
+receipt now **ACCEPTS 2 and REJECTS 5**: shipping, the filed remedy, the relabel, a deleted
+printer (a regression for the operator) and a second echo of the same value under a new label
+are all rejected, and only the correct fix and its second spelling pass.
+
+**ONE HOLE IS KNOWN AND LEFT OPEN, STATED HERE RATHER THAN HIDDEN BEHIND THE SCORE.** The same
+hand showed that an implementation gated on `len(rows)` satisfies any receipt whose register has
+a fixed row count while leaving the report byte-identical on a real one. This receipt seeds three
+rows, so a mutant keyed on `len(rows)==3` would pass it. **No receipt over a fixed seed can close
+that**, and the durable guard is the fixture rather than the receipt — which is why
+`core/fixtures/layer-debt-due-and-discharge` exists and why its DISARM mutant matters more than
+this line does. A receipt is a tripwire against a false close; it is not the proof.
+
 **`closes_when` names the command that discharges a layer debt, and nothing in the tree joins the
 two — so running the named command clears the debt in fact and announces nothing.**
 `core/scripts/audit-layer-debt.sh:108` carries the field into the report dict and `:215-216` prints
@@ -2433,7 +2503,7 @@ byte-identical would leave this STILL-LIVE — the safe direction, but not a clo
 Found by the graph consumer session. Cross-references the consumer entry
 `PC-S334-CLOSES-WHEN-NAMES-A-COMMAND-AND-NOTHING-JOINS-THE-TWO`.
 
-verify: sh S=core/scripts/audit-layer-debt.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d); g="$d/reg.jsonl"; h="{\"clause\":\"LC-E1\",\"entry\":\"extensions/probe.md\",\"subject_digest\":\"da39a3e\",\"verdict\":\"still-additive\",\"recorded_utc\":\"1970-01-01T00:00:00Z\",\"reason\":\"probe row\",\"owed\":{\"id\":\"OWED-PROBE-1\",\"what\":\"split X out\",\"closes_when\":"; x="$h"'"immediately after scripts/ai-dlc/migrate-artifact-paths.sh --apply completes"}}'; y="$h"'"when the operator says so"}}'; [ "$x" != "$y" ] || { rm -rf "$d"; exit 9; }; printf '%s\n' "$x" > "$g"; a=$(bash "$S" --register "$g" 2>/dev/null); ra=$?; printf '%s\n' "$y" > "$g"; b=$(bash "$S" --register "$g" 2>/dev/null); rb=$?; rm -rf "$d"; [ "$ra" = 0 ] && [ "$rb" = 0 ] || exit 9; case "$a" in *OWED-PROBE-1*) : ;; *) exit 9 ;; esac; case "$b" in *OWED-PROBE-1*) : ;; *) exit 9 ;; esac; [ "$a" != "$b" ] || exit 9; ca=$(printf '%s\n' "$a" | grep -v 'closes when:'); cb=$(printf '%s\n' "$b" | grep -v 'closes when:'); [ "$ca" != "$cb" ]
+verify: sh S=core/scripts/audit-layer-debt.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; A="a later register row for this entry names OWED-PROBE-A in closes_owed"; B="validate-gate-manifest.sh reports 914 resolving to a gate-type set that includes retro"; [ "$A" != "$B" ] || { rm -rf "$d"; exit 9; }; h="{\"clause\":\"LC-E1\",\"entry\":\"extensions/p.md\",\"subject_digest\":\"d0\",\"verdict\":\"still-additive\",\"recorded_utc\":\"1970-01-01T00:00:00Z\",\"reason\":\"probe row\",\"owed\":{\"what\":\"same what\","; { printf "%s\"id\":\"OWED-PROBE-A\",\"closes_when\":\"%s\"}}\n" "$h" "$A"; printf "%s\"id\":\"OWED-PROBE-B\",\"closes_when\":\"%s\"}}\n" "$h" "$B"; printf "%s\"id\":\"OWED-PROBE-C\"}}\n" "$h"; } > "$d/r.jsonl"; o=$(bash "$S" --register "$d/r.jsonl" 2>/dev/null); rc=$?; rm -rf "$d"; [ "$rc" = 0 ] || exit 9; for i in A B C; do case "$o" in *OWED-PROBE-$i*) : ;; *) exit 9 ;; esac; done; e=$(printf "%s\n" "$o" | sed "s|$A|<CW>|g; s|$B|<CW>|g"); case "$e" in *validate-gate-manifest.sh*) exit 1 ;; esac; a=$(printf "%s\n" "$e" | sed -n "/OWED-PROBE-A/,/OWED-PROBE-B/p" | sed "\$d" | sed "s/OWED-PROBE-A/OWED-PROBE-X/g"); b=$(printf "%s\n" "$e" | sed -n "/OWED-PROBE-B/,/OWED-PROBE-C/p" | sed "\$d" | sed "s/OWED-PROBE-B/OWED-PROBE-X/g"); [ -n "$a" ] && [ -n "$b" ] || exit 9; [ "$a" != "$b" ]
 
 ## BL-071
 
