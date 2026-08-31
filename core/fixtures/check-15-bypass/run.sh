@@ -165,7 +165,7 @@ expect src/v15_notimplemented_bare.py \
 # by ONE half of the gate only — V17 by the comment test, V18 by the word boundary — so
 # disabling either half moves exactly one cell. Both have mutants at the end of this file.
 # V19 is their positive control and the arm that catches a DISARMED marker set: `\b` is
-# not in Darwin's ERE, so the obvious `STUB_MARKER='\b(...)\b'` examines nothing anywhere
+# not honoured by bash's `[[ =~ ]]` here, so `STUB_MARKER='\b(...)\b'` examines nothing at all
 # and every absence-shaped arm here reads that silence as a pass.
 expect src/v17_code_bare_stub.py \
                                 ok                 'V17 bare stub identifier in code'
