@@ -15,6 +15,48 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.466.0] - 2026-09-01
+
+### A stamp field that is ahead is not evidence that the tree matching it is complete
+
+`self-update-gate.sh` no longer acquits a split on a tree the applier itself has declared partial.
+
+**The acquittal at `advise_safe_stop()` is gated on `machinery_at_or_past()`, which is
+`git merge-base --is-ancestor` on the stamp's `skill_commit` and nothing else.** When it fires it
+tells the operator "SPLIT BUYS NOTHING HERE — its machinery has already landed". `apply.sh` writes
+`.claude/.ai-dlc-applying` at the start of every apply (`:209`) and removes it only on the success
+path (`:1436`); a run that withholds the re-stamp writes NO stamp at all and states the marker is
+"deliberately left in place" (`:1278`), over a tree `apply.sh:295` calls "tree partial".
+
+**The two coexist, and the reasoning that says they cannot is the reason this shipped.** The
+withheld run writes nothing, so a `skill_commit` step 2 advanced EARLIER survives untouched beside
+a `commit` still at base — split stamp plus marker. That state was constructed and driven through
+the shipping gate: with `skill_commit` advanced to the candidate and the marker on disk, the
+acquittal FIRED, against a control on the same tree and range with `skill_commit` unadvanced where
+it did not. Reproduced independently by a second party. The reference consumer's own committed
+stamp history carries ten-plus `commit != skill_commit` revisions out of 171, so the population is
+real; whether this exact pairing has occurred in the wild is **unanswerable**, because `.gitignore`
+covers the marker and it has been committed zero times. Recorded as reachable and demonstrated,
+never as observed.
+
+**Scored three ways, and the third is the one that matters.** `skill_commit` ahead with the marker
+present → acquittal withheld, withheld row emitted; ahead with no marker → acquittal still fires,
+so this is not a blanket refusal; NOT ahead with the marker present → the ordinary "pull FIRST"
+row and neither special row, proving the guard sits INSIDE the acquittal branch rather than
+over-reaching.
+
+**Refusing costs less than firing wrongly, and that asymmetry chose the default rather than any
+false-positive count.** Nothing branches on this row — it has no machine consumer — so a wrong
+acquittal silently withdraws the operator's only prompt to split and propagates into override
+decisions with nothing re-checking it, while a wrong refusal costs one extra pull that writes
+little and is visible immediately.
+
+The withheld row states the whole situation rather than falling through to a generic message: the
+`skill_commit` that would have acquitted, that the acquittal is withheld and why, and that the
+remedy is to finish or roll back the interrupted apply and re-run. `advise_safe_stop` returns early
+under `AI_DLC_GATE_IN_SAFE_STOP` (`:168`, exported at `:125`), so this is evaluated once per
+invocation and cannot scale with range length.
+
 ## [0.465.0] - 2026-09-01
 
 ### A correction is itself a measurement, and narrowing is not the safe direction
