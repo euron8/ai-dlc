@@ -108,7 +108,10 @@ jq -nc '{v:1,sprint:899,name:"dev-lastsprint",role:"dev",model_bound:"sonnet",mo
 # each for a dispatch Rule 19 does not bind. The offender sits BESIDE a clean in-scope row
 # in the SAME run: a near-miss in a separate run can only ask whether the filter fires at
 # all, never whether it fires on the right rows.
-row general-purpose inherit '' false false gp-utility                 > "$WORK/outscope.jsonl"
+# `model_requested` populated on purpose: with a null field here this arm rides on the
+# sentinel mutant, which shifts every later column — including the schema marker, so the
+# skipped row reads as one the guard did not write and the arm moves for the wrong reason.
+row general-purpose inherit inherit false false gp-utility            > "$WORK/outscope.jsonl"
 row dev sonnet sonnet true true dev-beside-gp                        >> "$WORK/outscope.jsonl"
 # The disjunct that keeps the filter from being a disarm: this dispatch CITED a role
 # contract, so it is judged whatever settings.json declares — and it is the input that keeps
@@ -503,6 +506,21 @@ fi
 # and was JUDGED, and its scope depended on whether the file declared any role at all. The
 # guard never writes a null role, but the ledger has more than one writer.
 row '' inherit '' false true norole                                   > "$WORK/norole.jsonl"
+
+# A ROW THE GUARD DID NOT WRITE. `--ledger` is an append-only file any session can write to,
+# and the single-writer premise was a convention rather than a guarantee: this is the
+# hand-written provenance schema found on the reference consumer, where 14 such rows produced
+# 24 of the 25 violations the check reported. Its absent fields are not observations — the
+# missing `role_contract_cited` reads as false and the missing `model_bound` compares as the
+# empty string against a real pin — so judging it manufactures two findings from nothing.
+# It names a DECLARED role and sits beside a genuine guard row in the SAME ledger.
+fgn() { # role name
+  jq -nc --arg r "$1" --arg n "$2" \
+    '{sprint:900, role:$r, dispatched_at:"2026-08-22T12:05:00Z",
+      deliverable:("_bmad-output/" + $n + ".md"), sha:"983048af", step:"research-requirements.md"}'
+}
+fgn dev fgn-dev                                                       > "$WORK/foreign.jsonl"
+row dev sonnet sonnet true true dev-beside-foreign                    >> "$WORK/foreign.jsonl"
 cat > "$WORK/noroles-block.json" <<'JSON'
 { "aiDlcModels": { "opus": "claude-opus-5[1m]" }, "aiDlcRoles": {} }
 JSON
@@ -524,6 +542,36 @@ else
     ok "MUTANT emptyrole: without the guard the same role-less row answers rc=$a with an empty roles block and rc=$b with a populated one — the collision the guard exists to stop"
   else
     bad "MUTANT emptyrole survived: both configs answered rc=$a without the guard"
+  fi
+fi
+
+# --- 8b. a row the guard did not write is not a dispatch record ---------------
+# Kept out of the battery: the skip shares the loop's top with the scope filter, so a battery
+# mutant on either moves both tokens.
+out="$(bash "$VSL" --ledger "$WORK/foreign.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ] && ! grep -q '^FAIL: \[' <<<"$out" \
+   && grep -q '1 row(s) the dispatch guard did not write (roles: dev)' <<<"$out" \
+   && grep -q 'examined 1 S900 spawn row' <<<"$out"; then
+  ok "a hand-written row naming a DECLARED role is counted and named as not-a-dispatch-record rather than judged, while the guard row beside it in the same ledger is still examined — its absent fields are not observations about a dispatch"
+else
+  bad "the foreign row was judged or miscounted (rc=$rc): $out"
+fi
+
+# `@` as the delimiter, because the expression itself contains `|` — the first spelling of
+# this mutant used `|` and sed answered "bad flag in substitute command", which left a
+# truncated copy that `cmp -s` happily called a mutation. A mutant file must also PARSE.
+sed 's@(if (\.v | type) == "number" then "guard" else "foreign" end)@"guard"@' "$VSL" > "$WORK/noschema.sh"
+if cmp -s "$VSL" "$WORK/noschema.sh"; then
+  bad "FIXTURE BROKEN: the schema-marker projection was renamed, so this mutant proves nothing"
+elif ! bash -n "$WORK/noschema.sh" 2>/dev/null; then
+  bad "FIXTURE BROKEN: the schema mutant does not parse — the sed damaged the script rather than mutating it"
+else
+  out="$(bash "$WORK/noschema.sh" --ledger "$WORK/foreign.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"; rc=$?
+  n=$(grep -c '^FAIL: \[' <<<"$out") || n=0
+  if [ "$rc" -eq 1 ] && [ "$n" -ge 2 ]; then
+    ok "MUTANT foreignschema: treating every row as guard-written manufactures $n findings from the foreign row's ABSENT fields — 24 of 25 on the reference consumer"
+  else
+    bad "MUTANT foreignschema survived: rc=$rc with $n FAIL arm(s)"
   fi
 fi
 

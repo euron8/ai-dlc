@@ -182,7 +182,12 @@ if [ -f "$LEDGER" ]; then
           (.model_bound | tok),
           (.model_requested | tok),
           (if .role_contract_cited == true then "true" else "false" end),
-          (if .role_file_readable == false then "false" else "true" end) ]
+          (if .role_file_readable == false then "false" else "true" end),
+          # THE SCHEMA MARKER, and it is the difference between a dispatch record and a
+          # line somebody appended. The guard emits `v` on every row from one `jq -nc`
+          # (ai-dlc-dispatch-guard.sh, SPAWN LEDGER block); a row without it was written
+          # by something else, and its ABSENT fields are not evidence about a dispatch.
+          (if (.v | type) == "number" then "guard" else "foreign" end) ]
       | @tsv
     ' "$LEDGER" 2>/dev/null || true)"
 fi
@@ -213,6 +218,8 @@ UNPINNED=0
 OUTSCOPE=0
 OUTSCOPE_ROLES=""
 SUSPECT=0
+FOREIGN=0
+FOREIGN_ROLES=""
 
 # THE LEDGER HOLDS ROWS RULE 19 DOES NOT BIND, AND JUDGING THEM IS A FALSE FAIL ON
 # CORRECT DATA. The dispatch guard derives `role` from `subagent_type` when the prompt
@@ -294,12 +301,35 @@ name_role() {  # dispatch name -> the longest declared role it is named after, o
   printf '%s' "$nr_best"
 }
 
-while IFS="$(printf '\t')" read -r name role bound requested cited readable; do
+while IFS="$(printf '\t')" read -r name role bound requested cited readable schema; do
   [ -n "$name" ] || continue
   [ "$name" = "__NONE__" ] && name="<unnamed>"
   [ "$role" = "__NONE__" ] && role=""
   [ "$bound" = "__NONE__" ] && bound=""
   [ "$requested" = "__NONE__" ] && requested=""
+
+  # A ROW THE GUARD DID NOT WRITE IS NOT A DISPATCH RECORD, and judging one manufactures
+  # violations out of ABSENT fields rather than observed ones. `--ledger` names an
+  # append-only file any session can write to, and the single-writer premise this check
+  # rested on is a convention, not a guarantee. Measured on the reference consumer: 14 rows
+  # carry a hand-written provenance schema (`deliverable`, `dispatched_at`, `sha`, `step`
+  # and no `v`), 13 of them name a DECLARED role, and they produced 24 of the 25 violations
+  # this check reported after the scope filter landed -- 13 citation arms, because an absent
+  # `role_contract_cited` reads as false, and 11 tier mismatches, because an absent
+  # `model_bound` compares as the empty string against a real pin. Exactly ONE of the 25 was
+  # a genuine finding by a guard-written row.
+  #
+  # They are NAMED rather than dropped: foreign content in the spawn ledger is itself
+  # something an adjudicator should see, and it is a different fact from a dispatch of an
+  # agent type Rule 19 does not bind.
+  if [ "$schema" != "guard" ]; then
+    FOREIGN=$((FOREIGN + 1))
+    case "${NL}${FOREIGN_ROLES}" in
+      *"${NL}${role:-<none>}${NL}"*) : ;;
+      *) FOREIGN_ROLES="${FOREIGN_ROLES}${role:-<none>}${NL}" ;;
+    esac
+    continue
+  fi
 
   # Out of scope is COUNTED and NAMED, never silently dropped. A real team role appearing
   # in this list is the visible symptom of a settings.json that lost its entry, which is
@@ -379,8 +409,11 @@ echo "  ${MISMATCH} tier mismatch(es), ${CORRECTED} guard-corrected request(s) (
 echo "  ${UNPINNED} row(s) whose role pins no model in ${SETTINGS},"
 OUTSCOPE_LIST="$(printf '%s' "$OUTSCOPE_ROLES" | tr '\n' ' ')"
 OUTSCOPE_LIST="${OUTSCOPE_LIST% }"
+FOREIGN_LIST="$(printf '%s' "$FOREIGN_ROLES" | tr '\n' ' ')"
+FOREIGN_LIST="${FOREIGN_LIST% }"
 echo "  ${OUTSCOPE} row(s) out of Rule 19 scope${OUTSCOPE_LIST:+ (roles: ${OUTSCOPE_LIST})},"
-echo "  ${SUSPECT} of them named after a declared role and NOTED above."
+echo "  ${SUSPECT} of them named after a declared role and NOTED above,"
+echo "  ${FOREIGN} row(s) the dispatch guard did not write${FOREIGN_LIST:+ (roles: ${FOREIGN_LIST})} -- not dispatch records."
 
 # EVERY IN-SPRINT ROW OUT OF SCOPE IS NOT A PASS, and it reaches this line by a different
 # route than PRE-LEDGER does: the ledger DOES cover this sprint, and nothing in it was a
@@ -390,10 +423,11 @@ echo "  ${SUSPECT} of them named after a declared role and NOTED above."
 # filter above would turn a settings.json that lost its `aiDlcRoles` block into a silent
 # exit 0 on a sprint full of uncited dispatches.
 if [ "$CHECKED" -eq 0 ]; then
-  echo "NO ROLE-BOUND ROWS: ${INSPRINT} S${SPRINT_NUM} row(s) exist and every one is out of"
-  echo "  Rule 19 scope${OUTSCOPE_LIST:+ (roles: ${OUTSCOPE_LIST})} -- no row cited a role contract and no row's role is"
-  echo "  declared in ${SETTINGS}. This is not a pass: nothing was compared. If a real team"
-  echo "  role is named above, that settings file has lost its aiDlcRoles entry for it."
+  echo "NO ROLE-BOUND ROWS: ${INSPRINT} S${SPRINT_NUM} row(s) exist and NONE of them was judged"
+  echo "  -- ${OUTSCOPE} out of Rule 19 scope${OUTSCOPE_LIST:+ (roles: ${OUTSCOPE_LIST})} and ${FOREIGN} not written by the dispatch"
+  echo "  guard${FOREIGN_LIST:+ (roles: ${FOREIGN_LIST})}. This is not a pass: nothing was compared. If a real team"
+  echo "  role is named in the out-of-scope list, that settings file has lost its aiDlcRoles"
+  echo "  entry for it; if one is named in the guard list, something appended to the ledger."
   echo "  Fall back to the gate log's spawn table and record that the verdict rests on"
   echo "  lead-authored evidence rather than a machine record (Check 22)."
   exit 3

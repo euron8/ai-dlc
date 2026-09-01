@@ -15,6 +15,62 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.473.0] - 2026-09-01
+
+### Twenty-four of the twenty-five findings `v0.472.0` left standing were on rows that were never dispatches
+
+Corrects `v0.472.0`. Same subject:
+`PC-S340-VALIDATE-SPAWN-LEDGER-OVERSHOOTS-CHECK-22-DECLARED-ROLE-SCOPE`.
+
+**`v0.472.0` reported its residue as "25 arms — 14 genuine uncited plus 11 tier
+mismatches". Driven against the reference consumer's ledger and read by ROW, 24 of those 25
+are on `<unnamed>` rows the dispatch guard did not write.** Exactly one is a real finding:
+`gate-adjudicator-s304-story4-impl`, missing its Rule 19(b) citation. The release fixed a
+false-FAIL class and left a larger one standing, in the same shape, one field over — which
+is what an adversarial hand's NOTE about a second writer turned out to be pointing at.
+
+**`--ledger` names an append-only file any session can write to.** The single-writer premise
+— "written by `ai-dlc-dispatch-guard.sh`, one row per role-bound dispatch" — was stated in
+the script header, in Check 22 and in the enforcement map, and it is a convention rather
+than a guarantee. That consumer's ledger carries **14 rows in a hand-written provenance
+schema** (`deliverable`, `dispatched_at`, `sha`, `step`, and no `v`), all sprint 305, **13 of
+them naming a declared role**.
+
+**Judging one manufactures findings out of ABSENT fields.** A missing `role_contract_cited`
+reads as `false` — a Rule 19(b) violation on a dispatch that never happened — and a missing
+`model_bound` compares as the empty string against a real pin, so it also reports a tier
+mismatch. 13 citation arms and 11 mismatches, all on one sprint. It clears the fail-closed
+arm by the same mechanism: a missing `role_file_readable` is not `false`, so it reads as
+readable.
+
+**The guard emits `v` on every row from a single `jq -nc`, so its presence is the schema
+marker.** A row without it is not a dispatch record: counted, its roles NAMED separately from
+the out-of-scope list, and not judged. Foreign content in the spawn ledger is itself
+something an adjudicator should see, and it is a different fact from an agent type Rule 19
+does not bind. Sprint 305 now exits 3 — nothing there was a dispatch record, which is the
+honest verdict rather than a pass. Measured across the same eight sprints: **25 arms → 1**,
+against a `jq` control of 14 rows lacking `v`.
+
+**A hand also found that the newest half of `v0.472.0` was unreceipted.** Deleting the
+empty-role guard — one line — left the receipt at exit 0, because none of its three ledgers
+carried a row with a null role. The receipt now drives a null-role ledger under two settings
+files and asserts the two answers AGREE, which is the property that guard exists for. Scored
+against sixteen implementations: **2 of 16**, the fix and a second spelling. That spelling
+was itself rejected on the first attempt, correctly — it had inlined the scope test without
+carrying the guard, so it was a regression rather than a rephrasing.
+
+The fixture is at 30 assertions. Its `X` arm had to have `model_requested` populated: with a
+null field it rode on the sentinel mutant, which shifts every later column and now includes
+the schema marker, so the arm moved for the wrong reason. And the schema mutant's first
+`sed` used `|` as its delimiter against an expression containing `|` — BSD sed answered
+"bad flag in substitute command" and left a truncated copy that `cmp -s` accepted as a
+mutation. **A mutant file must also parse**, and the guard now asserts it.
+
+Changed: `core/scripts/validate-spawn-ledger.sh`,
+`core/skills/ai-dlc/steps/gate-validation.md`, `core/skills/ai-dlc/enforcement-map.yaml`,
+`core/fixtures/check-22-spawn-ledger/run.sh`, `docs/backlog.archive.md` (`BL-134`
+annotated and its receipt replaced in place).
+
 ## [0.472.0] - 2026-09-01
 
 ### Check 22 judged the harness's own agent types against a role contract they never had
