@@ -15,6 +15,34 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.467.0] - 2026-09-01
+
+### The derived-fixture edit check compared against `base` on a tree whose fixtures live at `skill_commit`
+
+Step 2's rule now requires a difference from **both** `base` and the consumer's own
+`skill_commit` before calling a derived fixture a consumer edit.
+
+**Found by the reference consumer, on its own tree, minutes after the cycle that caused it.** The
+rule read "a derived fixture whose consumer copy differs from `base` is a consumer edit — never
+overwrite it". A consumer whose machinery pair has advanced past its rulebook pair holds its
+fixtures at `skill_commit`, and **this cycle is what creates that state**, so the check
+misclassified files it had itself installed.
+
+**Verified here independently against the consumer's committed split-stamp revision**, scoring
+each fixture in the range against both refs: four read `base=DIFF skill_commit=same` —
+`apply-restamp-worklist/run.sh`, `reconcile-emit-report/run.sh`, `reconcile-emit-report/seed.sh`,
+`upstream-routing/run.sh` — against a control fixture outside the range reading `base=same`. Under
+the one-term rule all four are consumer edits; under the two-term rule none is.
+
+**The verdict was wrong in the direction that refuses a legitimate write**, which is why this is a
+defect rather than noise: nothing was destroyed, because the write it blocked was a no-op, but the
+same misclassification on a fixture the pull genuinely needed to update would stop the write and
+report a consumer edit that never happened.
+
+**No third mechanism.** The suppression already exists twice — `unregistered-drift.sh` ships it as
+`CORE-AT-SELF-UPDATE` and `preclassify.sh` implements the predicate as `at_self_update()`. The rule
+now names them rather than restating the comparison.
+
 ## [0.466.0] - 2026-09-01
 
 ### A stamp field that is ahead is not evidence that the tree matching it is complete
