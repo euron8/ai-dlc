@@ -222,9 +222,14 @@ SUSPECT=0
 # `role_contract_cited=false` and `role_file_readable=false`, which are two Rule 19
 # violations each, permanently, for a dispatch that has no role contract to cite and no
 # role file to resolve. Measured on the reference consumer's ledger across sprints
-# 298-307: 97 of the 111 role-arm violations were of exactly that shape, so the check's
-# exit code carried an 87% false rate and the lead re-derived the in-scope subset by hand
-# at every implementation gate.
+# 298-307: 97 of the 111 role-arm violations were on rows the scope test now skips, and the
+# lead re-derived the in-scope subset by hand at every implementation gate.
+#
+# **THAT 97 IS TWO POPULATIONS AND AN EARLIER REVISION OF THIS COMMENT CALLED IT ONE.** Split
+# by whether the dispatch NAME is that of a declared role: 61 arms on agent types Rule 19
+# genuinely does not bind, and 36 on 18 rows whose names say a real role was routed through
+# the generic type -- which are not false at all. Those 36 leave the exit code and become the
+# NOTEs below; they are not dismissed. Control: 61 + 36 = 97.
 #
 # THE SCOPE KEY IS DECLARATION, NOT A ROLE LIST. `aiDlcRoles` is Rule 19's single source
 # of truth (see ai-dlc-dispatch-guard.sh's header) and this script already reads that file

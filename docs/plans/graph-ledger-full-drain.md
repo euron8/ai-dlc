@@ -51,9 +51,15 @@ from `subagent_type` whenever the prompt cited no `team-roles/<role>.md`, and th
 any lowercase agent type — so the HARNESS's own built-in types land in the ledger with
 `role_contract_cited=false` and `role_file_readable=false`. Two Rule 19 violations each, clearable
 by no consumer action, because there is no contract for a `general-purpose` dispatch to cite and no
-role file for it to resolve. **97 of the 111 role arms on that consumer were exactly that shape**
-(`general-purpose` 84, `fork` 12, one other) against 14 genuine, and seven of its eight sprints
-exited 1.
+role file for it to resolve. **97 of the 111 role arms on that consumer were on rows the scope
+test now skips**, against 14 genuine, and seven of its eight sprints exited 1. By ROLE that 97 is
+`general-purpose` 84, `fork` 12 and one other.
+
+**BUT IT IS TWO POPULATIONS, AND THE FIRST CUT OF THIS BLOCK CALLED IT ONE.** Split by whether the
+dispatch NAME is that of a declared role: **61 arms on agent types Rule 19 genuinely does not bind,
+and 36 on the 18 misrouted-role rows** — which are not false at all. Those 36 leave the exit code
+and become NOTEs; they are not dismissed. Control: 61 + 36 = 97. **Ask what SET a residue was taken
+over before calling all of it noise.**
 
 **THE SCOPE KEY IS DECLARATION, DERIVED — NOT A ROLE LIST.** A row is judged when it cited a role
 contract, or when its role is a key of `aiDlcRoles`: Rule 19's stated single source of truth, which
