@@ -15,6 +15,32 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.469.0] - 2026-09-01
+
+### A line number in shipped prose points into a file the consumer does not have
+
+`SKILL.md` now cites the arm it means by a greppable token instead of by line.
+
+**Found by the reference consumer**, which could not confirm a passage this side had cited by line:
+its tree was two releases behind, so the numbers landed on unrelated text. A consumer runs whatever
+version it last installed, so every line number written into shipped `core/` prose is wrong on every
+tree that is not at that exact release — and wrong silently, which is the failure this repo ranks
+above a missing citation.
+
+**THE COUNT OF HOW MANY OTHERS EXIST WAS WRONG FIRST, BY A GRAMMAR THAT COULD NOT SPELL ITS OWN
+SUBJECT.** The scan matched the path-plus-number form and not the bare colon-number form the
+offending citation actually used, so it scored its own subject as a non-instance and reported it as
+the only one in shipped prose. Re-run over both forms with a seeded positive control and a negative
+control: **four** remain, now filed as `BL-133`.
+
+**And the prose explaining the defect became an instance of it.** Spelling either form as an example
+made the passage match its own detector; the count read 6 until the examples were reworded to name
+the forms rather than show them. Recorded because any future check for this has to exempt the text
+that documents it.
+
+Tiered NOTE: nothing breaks, a reader follows a citation to the wrong place and recovers by
+searching — which is what they would have done with no citation at all.
+
 ## [0.468.0] - 2026-09-01
 
 ### The fixture edit-check was a second derivation of a question the classifier already answers
