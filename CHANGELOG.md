@@ -15,6 +15,39 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.468.0] - 2026-09-01
+
+### The fixture edit-check was a second derivation of a question the classifier already answers
+
+Step 2 now takes the verdict from `preclassify.sh`'s bucket instead of comparing refs by hand.
+
+**`v0.467.0` fixed the comparison and left the duplication, which is the actual defect.** That
+release corrected a one-term ref test to a two-term one. The reference consumer then measured the
+thing underneath it: in ONE invocation, `preclassify.sh` bucketed four derived fixtures
+`ALREADY-AT-THEIRS` while the hand-rolled comparison this step directs returned CONSUMER-EDITED for
+the same four. **Opposite verdicts, same files, same run — and the tool was right.**
+
+**The suppression was never missing; it was bypassed.** `at_self_update()` was present in the
+consumer's installed copy the whole time. A second derivation of a question a shipped tool already
+answers is the channel this repo keeps finding holes in, and this one is a release older than the
+bug it produced.
+
+**So the rule now cites rather than restates**, per `mechanism-design.md`: the verdict is the
+bucket, and the subtraction is the one ARM C of `self-update-gate.sh` already applies at `:342`,
+whose own header records that keying anything narrower names a set the downstream half does not
+agree with. The buckets are deliberately NOT re-enumerated here — there are twenty and they have no
+single owning declaration, so a copy in this file would be a fresh restatement of exactly the kind
+being removed.
+
+**One ambiguity in `v0.467.0`'s wording is also fixed.** It said to "consult the predicate that
+exists", which does not say whether to read it or call it — and `at_self_update()` is an internal
+function of `preclassify.sh` with no entry point, so an agent following that sentence literally
+looks for a CLI that is not there and hand-rolls anyway. That is what happened. Its answer reaches
+step 2 as the bucket; that is the only channel and it is sufficient.
+
+Found by the reference consumer while answering a question about whether the previous release's
+prose read clearly at the point of application.
+
 ## [0.467.0] - 2026-09-01
 
 ### The derived-fixture edit check compared against `base` on a tree whose fixtures live at `skill_commit`

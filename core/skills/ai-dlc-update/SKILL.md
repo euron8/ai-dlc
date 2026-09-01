@@ -414,22 +414,31 @@ prose is itself generated rather than composed.
      autonomous) self-update, and never touches `version`/`commit` (the rulebook
      base stays put until a gated apply).
 
-     **A derived fixture whose consumer copy differs from `base` AND from the consumer's own
-     `skill_commit` is a consumer edit — never overwrite it.** Report the path, leave the file,
-     and continue the cycle. Only `.claude/skills/ai-dlc-update/**` is overwrite-safe by
-     declaration; a fixture is not, and the derived set's FIRST term is grepped from the fixtures
-     rather than from the diff, so it names fixtures this pull does not change.
+     **A derived fixture is a consumer edit when, and only when, `preclassify.sh`'s BUCKET for
+     that path says so — never overwrite one that is.** Report the path, leave the file, and
+     continue the cycle. Only `.claude/skills/ai-dlc-update/**` is overwrite-safe by declaration;
+     a fixture is not, and the derived set's FIRST term is grepped from the fixtures rather than
+     from the diff, so it names fixtures this pull does not change.
 
-     **BOTH TERMS, BECAUSE `base` ALONE IS WRONG ON EVERY SPLIT STAMP.** A consumer whose
-     machinery pair has advanced past its rulebook pair holds fixtures at `skill_commit`, not at
-     `base` — that is the normal state after any self-update, and this cycle CREATES it. Measured
-     on the reference consumer immediately after one: four derived fixtures scored
-     `base=DIFF skill_commit=same`, against a control fixture outside the range reading
-     `base=same`. Under the one-term rule all four read as consumer edits minutes after this
-     cycle installed them, and the verdict is wrong in the direction that REFUSES a legitimate
-     write. This is the suppression `unregistered-drift.sh` already ships as
-     `CORE-AT-SELF-UPDATE` and `preclassify.sh` already implements as `at_self_update()`; do not
-     write a third — consult the predicate that exists.
+     **DO NOT DERIVE THE VERDICT BY COMPARING REFS. `preclassify.sh` has already answered this,
+     for these paths, in this run.** Take its bucket and apply the SAME subtraction ARM C of
+     `reconcile/self-update-gate.sh` applies at `:342` — that arm is authoritative for which
+     buckets mean consumer divergence, and its own header says keying on anything narrower names
+     a set the downstream half does not agree with. Read the arm; do not restate it here and do
+     not re-enumerate the buckets, which have no single owning declaration.
+
+     **A SECOND DERIVATION OF THIS QUESTION RETURNED THE OPPOSITE VERDICT, AND THE TOOL WAS
+     RIGHT.** Measured on the reference consumer, in ONE invocation: `preclassify.sh` bucketed
+     four derived fixtures `ALREADY-AT-THEIRS` while a hand-rolled ref comparison performed under
+     this step called all four CONSUMER-EDITED. The suppression was never missing —
+     `at_self_update()` was present in the installed copy throughout; it was BYPASSED by the
+     second derivation this step used to invite. A ref comparison is wrong here in the direction
+     that REFUSES a legitimate write, and it is wrong on every split stamp, which is the normal
+     state after any self-update and which this cycle itself CREATES.
+
+     `at_self_update()` is an internal function of `preclassify.sh` with no entry point of its
+     own, so it cannot be called from here. Its answer reaches you as the bucket; that is the
+     only channel, and it is enough.
 
      **KEEP IT IN THE DERIVED SET ANYWAY. "Leave the file" is about the WRITE, never about
      the NAMING, and reading it as both makes the coverage join refuse a legitimate state.**
