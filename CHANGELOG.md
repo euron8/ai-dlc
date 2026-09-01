@@ -15,6 +15,60 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.472.0] - 2026-09-01
+
+### Check 22 judged the harness's own agent types against a role contract they never had
+
+Closes `PC-S340-VALIDATE-SPAWN-LEDGER-OVERSHOOTS-CHECK-22-DECLARED-ROLE-SCOPE`.
+
+**`validate-spawn-ledger.sh` judged every spawn-ledger row for the sprint, and the dispatch
+guard writes a row for any lowercase `subagent_type`.** So the harness's own built-in agent
+types — `general-purpose`, `fork`, `claude` — arrived carrying `role_contract_cited=false`
+and `role_file_readable=false`, which are two Rule 19 violations each that no consumer action
+can clear: there is no contract for such a dispatch to cite and no role file for it to
+resolve. The gate failed on correct data, which `mechanism-design.md` forbids, and the lead
+re-derived the in-scope subset by hand at every implementation gate for the exit code to mean
+anything.
+
+**Measured on the reference consumer's ledger, sprints 298–307, two independent derivations
+reconciled exactly.** 122 FAIL arms = 48 unreadable + 63 uncited + 11 tier mismatch. Of the
+111 role arms, **97 were on roles that consumer declares nowhere** (`general-purpose` 84,
+`fork` 12, one other) against **14 genuine**. Seven of its eight sprints exited 1; after the
+fix, two do, and the 25 surviving arms are exactly the genuine ones — 122 − 97 = 25 closes on
+both sides.
+
+**The filed remedy was built first and is refuted.** It asks for Check 22's five roles as the
+row scope; scored on that same ledger it drops to 2 arms, acquitting 23 of the 25 genuine
+findings, because `adversary`, `remediator`, `pm`, `architect`, `gate-adjudicator`, `tea`,
+`ux` and `pm-escalated` are all roles Rule 19 binds and none of them is in the five. **The
+five are the gate TRIGGER, not the row scope**, and Check 22 now says so rather than leaving
+both readings of that section standing — which is the contradiction the candidate found.
+
+**The scope key is declaration, and it is derived rather than listed.** A row is judged when
+it cited a role contract, or when its role is a key of `aiDlcRoles` — the surface Rule 19
+already names as its single source of truth, which this script already reads for the pin, and
+which **I22** binds to `core/team-roles/*.md` in both directions. Restating the role set here
+would have been one more copy to drift.
+
+**The `role_contract_cited` disjunct is what keeps the filter from being a disarm.** Deleting
+an `aiDlcRoles` entry cannot silence a finding against a dispatch that cited its contract, and
+it is also what keeps the fail-closed `role_file_readable` arm reachable for an undeclared
+role. Out-of-scope rows are counted and NAMED in the `COUNTS:` line, so a real team role
+appearing there is the visible symptom of a settings file that lost its entry, and a sprint
+whose every row is out of scope now exits 3 — not a pass — rather than reporting clean on a
+comparison it never made.
+
+**The fixture found two entangled assertions in this change before it shipped**, both of them
+mine: the new scope test was byte-identical to the Rule 19(b) arm below it, so a mutant aimed
+at one hit both, and a new arm asserting on a null field rode on the sentinel mutant. The
+scope test is a function for that reason. Its battery is now fifteen arms with ten mutants,
+each moving exactly one.
+
+Changed: `core/scripts/validate-spawn-ledger.sh`,
+`core/skills/ai-dlc/steps/gate-validation.md`, `core/fixtures/check-22-spawn-ledger/run.sh`,
+`docs/backlog.md` (`BL-134`, filed and closed in the same release so the discharge is visible
+to the goal partition).
+
 ## [0.471.0] - 2026-09-01
 
 ### A rotation remedy named a destination the path grammar retires, and a consumer read it as a deadlock

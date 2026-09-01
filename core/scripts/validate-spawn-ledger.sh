@@ -42,6 +42,14 @@
 #     fail. That is Check 22's own rule: the guard caught the slip and the teammate ran
 #     on the key its role names.
 #
+# WHAT IT JUDGES, and the reason the scope is derived rather than listed. A row is in
+# Rule 19 scope when it CITED a role contract, or when its role is declared in
+# `aiDlcRoles`. Rows outside that -- the harness's own built-in agent types, which the
+# dispatch guard's `subagent_type` fallback records with no contract and no role file --
+# are counted and named in `COUNTS:` and are not judged. They are not Rule 19 dispatches:
+# there is no contract for them to cite and no role file for them to resolve, so judging
+# them is a false FAIL on correct data, which mechanism-design forbids.
+#
 # PRE-LEDGER IS ITS OWN EXIT CODE, and that is the point of writing this down. Zero
 # rows and zero spawns are different states, and Check 22 was rewritten once already
 # because a reader that cannot tell them apart passes vacuously on exactly the sprint
@@ -59,7 +67,8 @@
 #   1  at least one row does not (a Rule 19 violation, clearable only per Check 22's
 #      four-arm disposition)
 #   2  bad arguments, an unreadable settings.json, or no jq -- nothing was compared
-#   3  PRE-LEDGER: the ledger names no row for this sprint. Not a pass.
+#   3  NOTHING WAS COMPARED. Either PRE-LEDGER (the ledger names no row for this sprint)
+#      or every row it does name is outside Rule 19 scope. Not a pass either way.
 set -u
 
 LEDGER=""
@@ -201,13 +210,67 @@ UNCITED=0
 MISMATCH=0
 CORRECTED=0
 UNPINNED=0
+OUTSCOPE=0
+OUTSCOPE_ROLES=""
+
+# THE LEDGER HOLDS ROWS RULE 19 DOES NOT BIND, AND JUDGING THEM IS A FALSE FAIL ON
+# CORRECT DATA. The dispatch guard derives `role` from `subagent_type` when the prompt
+# carried no `team-roles/<role>.md` citation (ai-dlc-dispatch-guard.sh, FALLBACK branch),
+# and that pattern accepts any lowercase agent type — so the harness's OWN built-in types
+# (`general-purpose`, `fork`, `claude`) land in the ledger carrying
+# `role_contract_cited=false` and `role_file_readable=false`, which are two Rule 19
+# violations each, permanently, for a dispatch that has no role contract to cite and no
+# role file to resolve. Measured on the reference consumer's ledger across sprints
+# 298-307: 97 of the 111 role-arm violations were of exactly that shape, so the check's
+# exit code carried an 87% false rate and the lead re-derived the in-scope subset by hand
+# at every implementation gate.
+#
+# THE SCOPE KEY IS DECLARATION, NOT A ROLE LIST. `aiDlcRoles` is Rule 19's single source
+# of truth (see ai-dlc-dispatch-guard.sh's header), this script already reads that file to
+# resolve the pin, and I22 in scripts/validate-enforcement-map.sh binds its keys to
+# core/team-roles/*.md in both directions — so the scope is derived from a bound
+# vocabulary rather than restated as a list here, which would be one more copy to drift.
+#
+# THE `role_contract_cited` DISJUNCT IS WHAT KEEPS THE FIX FROM BEING A DISARM. A dispatch
+# that cited `team-roles/<role>.md` CLAIMED an AI/DLC role contract, and it is judged
+# whether or not settings.json still declares that role — so a consumer cannot silence a
+# genuine violation by deleting an `aiDlcRoles` entry, and the fail-closed
+# `role_file_readable=false` arm keeps its real subject: a cited role whose role FILE is
+# absent, which is the partial-install case the guard's own comment names.
+DECLARED_ROLES="$(jq -r '.aiDlcRoles // {} | keys[]' "$SETTINGS" 2>/dev/null || true)"
+NL='
+'
+DECLARED_NL="${NL}${DECLARED_ROLES}${NL}"
+
+# The scope test is a function so each half can be mutated on its own line. Spelled inline
+# it was byte-identical to the Rule 19(b) arm below, and a mutant aimed at one hit both --
+# caught by this check's own fixture before release.
+row_in_scope() {  # role, role_contract_cited
+  [ "$2" = "true" ] && return 0
+  case "$DECLARED_NL" in *"${NL}${1}${NL}"*) return 0 ;; esac
+  return 1
+}
+
 while IFS="$(printf '\t')" read -r name role bound requested cited readable; do
   [ -n "$name" ] || continue
-  CHECKED=$((CHECKED + 1))
   [ "$name" = "__NONE__" ] && name="<unnamed>"
   [ "$role" = "__NONE__" ] && role=""
   [ "$bound" = "__NONE__" ] && bound=""
   [ "$requested" = "__NONE__" ] && requested=""
+
+  # Out of scope is COUNTED and NAMED, never silently dropped. A real team role appearing
+  # in this list is the visible symptom of a settings.json that lost its entry, which is
+  # the one way this filter could hide a finding.
+  if ! row_in_scope "$role" "$cited"; then
+    OUTSCOPE=$((OUTSCOPE + 1))
+    case "${NL}${OUTSCOPE_ROLES}${NL}" in
+      *"${NL}${role}${NL}"*) : ;;
+      *) OUTSCOPE_ROLES="${OUTSCOPE_ROLES}${OUTSCOPE_ROLES:+ }${role:-<none>}" ;;
+    esac
+    continue
+  fi
+
+  CHECKED=$((CHECKED + 1))
 
   # Fail-closed arm, and it is unconditional: a teammate that ran without a resolvable
   # role-file binding is a Rule 19 violation, not a pass.
@@ -257,7 +320,25 @@ EOF
 echo "COUNTS: examined ${CHECKED} S${SPRINT_NUM} spawn row(s) of ${TOTAL} in ${LEDGER};"
 echo "  ${UNREADABLE} unreadable role file(s), ${UNCITED} missing Rule 19(b) citation(s),"
 echo "  ${MISMATCH} tier mismatch(es), ${CORRECTED} guard-corrected request(s) (not failures),"
-echo "  ${UNPINNED} row(s) whose role pins no model in ${SETTINGS}."
+echo "  ${UNPINNED} row(s) whose role pins no model in ${SETTINGS},"
+echo "  ${OUTSCOPE} row(s) out of Rule 19 scope${OUTSCOPE_ROLES:+ (roles: ${OUTSCOPE_ROLES})}."
+
+# EVERY IN-SPRINT ROW OUT OF SCOPE IS NOT A PASS, and it reaches this line by a different
+# route than PRE-LEDGER does: the ledger DOES cover this sprint, and nothing in it was a
+# role-bound dispatch this check can judge. The consequence is identical to PRE-LEDGER's --
+# nothing was compared, so the verdict rests on the gate log's spawn table -- which is why
+# it takes exit 3 rather than a new code the gate does not document. Without this arm the
+# filter above would turn a settings.json that lost its `aiDlcRoles` block into a silent
+# exit 0 on a sprint full of uncited dispatches.
+if [ "$CHECKED" -eq 0 ]; then
+  echo "NO ROLE-BOUND ROWS: ${INSPRINT} S${SPRINT_NUM} row(s) exist and every one is out of"
+  echo "  Rule 19 scope${OUTSCOPE_ROLES:+ (roles: ${OUTSCOPE_ROLES})} -- no row cited a role contract and no row's role is"
+  echo "  declared in ${SETTINGS}. This is not a pass: nothing was compared. If a real team"
+  echo "  role is named above, that settings file has lost its aiDlcRoles entry for it."
+  echo "  Fall back to the gate log's spawn table and record that the verdict rests on"
+  echo "  lead-authored evidence rather than a machine record (Check 22)."
+  exit 3
+fi
 
 if [ "$VIOL" -gt 0 ]; then
   echo "FAIL: ${VIOL} Rule 19 violation(s) across ${CHECKED} S${SPRINT_NUM} spawn row(s)." >&2

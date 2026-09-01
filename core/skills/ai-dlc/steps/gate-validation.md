@@ -1328,6 +1328,17 @@ it as new.
 dispatched teammates via the Agent tool (dev, dev-escalated, code-reviewer,
 qa, or a `protected-path-editor`). Skips gates with no Agent-tool spawn.
 
+**That list is the gate TRIGGER, not the row scope, and the two are
+different sets.** Rule 19 binds every team role, so the check judges every
+ledger row that CITED a role contract or whose role is declared in
+`aiDlcRoles` — an `adversary` or `remediator` dispatch is in scope. What is
+NOT in scope is a dispatch of an agent type AI/DLC declares no role for:
+the guard records `general-purpose`, `fork` and the harness's other built-in
+types from `subagent_type` alone, and they carry no contract to cite and no
+role file to resolve. Those rows are counted and named in `COUNTS:`, never
+judged. A real team role appearing in that out-of-scope list means the
+settings file has lost its `aiDlcRoles` entry for it.
+
 **Check.** `_bmad-output/spawn-ledger.jsonl` is written by
 `ai-dlc-dispatch-guard.sh` at PreToolUse, one row per role-bound Agent/Task
 dispatch. It is the source of record, NOT the gate log's spawn table: the
@@ -1340,7 +1351,8 @@ scripts/ai-dlc/validate-spawn-ledger.sh \
   --settings .claude/settings.json
 ```
 
-It filters to this sprint and decides all three Rule 19 comparisons per row:
+It filters to this sprint, drops the out-of-scope rows named above, and
+decides all three Rule 19 comparisons per remaining row:
 **(a)** `model_bound` — the value the guard actually bound, not a self-report —
 matches `aiDlcRoles.<role>.model`; **(b)** `role_contract_cited` is `true`; and
 `role_file_readable` is not `false`, which is Rule 19's fail-closed case. **The
@@ -1351,8 +1363,9 @@ that made it.
 
 **Exit 0 = clean. Exit 1 FAILS**, clearable only by the four-arm disposition
 below. **Exit 2 FAILS** — a fumbled invocation, an unreadable settings.json, or
-no `jq`; nothing was compared. **Exit 3 is PRE-LEDGER**, handled below; it is
-not a pass. **Record the command, its exit code and its `COUNTS:` line in the
+no `jq`; nothing was compared. **Exit 3 says nothing was compared** — either
+PRE-LEDGER, handled below, or every in-sprint row was out of scope; it is
+not a pass in either case, and the message names which. **Record the command, its exit code and its `COUNTS:` line in the
 gate-log entry.** A verdict without the counts cannot be told apart from one
 that examined nothing.
 
