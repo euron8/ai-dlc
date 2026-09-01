@@ -68,7 +68,11 @@ consumer extension and is reported, not edited.
 **`I102`** binds the spelling: no core file states a rotation destination as a dated archive
 (destination-shaped grammar, so the exempt `pipeline-snapshot-archive.md` measurement at
 `rotate-snapshot-archive.sh:29` is not convicted — false-positive set 0), and the grammar file
-must still state the destination verbatim or the forward arm is vacuous.
+must still state the destination verbatim or the forward arm is vacuous. Its third arm binds the
+two archive globs to travel together in every shell reader that globs archives — the fanout gap
+above was invisible precisely because the plain rotation such a reader is tested on still
+matches. Population 3, false-positive set 0: scoping to `*.sh` drops the two prose files naming
+the pair as a class, and readers naming a literal archive carry no `*` and fall out unlisted.
 
 ## [0.470.0] - 2026-09-01
 

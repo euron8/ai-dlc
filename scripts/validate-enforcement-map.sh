@@ -8202,6 +8202,34 @@ else
 $i102_hits"
   fi
 
+  # ARM C -- the two archive globs travel together in every reader that globs archives.
+  # The ordinal is not decoration: `<basename>-archive-2.md` is what an inter-sprint rotation
+  # writes, and a reader matching only `*-archive.md` silently drops it out of whatever it
+  # protects. MEASURED at v0.471.0, which is why this arm exists rather than a comment:
+  # ai-dlc-protect.sh and validate-artifact-budget.sh's is_archive() carried BOTH spellings
+  # while report-propagation-fanout.sh's FROZEN_NAME_GLOBS carried only the plain one, so an
+  # ordinal rotation was not frozen for fanout and nothing said so.
+  #
+  # THE POPULATION IS SHELL READERS, AND THE SCOPE IS THE FALSE-POSITIVE STORY. Unscoped, this
+  # convicts two PROSE files that name the pair as a class -- artifact-consolidation.md and
+  # carry-over-evaluation.md ("do NOT read the `*-history.md` / `*-archive.md`") -- which are
+  # descriptions, not readers. Scoped to *.sh the population is 3 and the FP set is 0.
+  # Note also that files naming a LITERAL archive (rotate-snapshot-archive.sh,
+  # validate-mandatory-rules.sh) carry no `*` and drop out on their own, hand-listed nowhere.
+  i102c_pop="$(grep -rl --include='*.sh' -- '\*-archive\.md' "$REPO_ROOT/core" 2>/dev/null \
+                | grep -v '/core/fixtures/' || true)"
+  if [ -z "$i102c_pop" ]; then
+    err "I102 arm C read ZERO shell readers carrying the '*-archive.md' glob, so the pairing join below is empty and its silence means nothing. Either the glob spelling moved or the scope is wrong; a zero here retires this direction silently."
+  else
+    i102c_missing=""
+    for i102c_f in $i102c_pop; do
+      grep -q -- '\*-archive-\*\.md' "$i102c_f" 2>/dev/null || i102c_missing="$i102c_missing $i102c_f"
+    done
+    if [ -n "$i102c_missing" ]; then
+      err "I102 arm C: a reader globs '*-archive.md' without its ordinal sibling '*-archive-*.md', so an inter-sprint rotation written as <basename>-archive-2.md falls out of whatever that list protects -- silently, because the plain rotation it was tested on still matches. Add the ordinal glob beside the plain one in:$i102c_missing"
+    fi
+  fi
+
   # ARM B -- reverse. The owner must still state the destination, or arm A is vacuous.
   if [ ! -r "$i102_owner" ]; then
     err "I102 reverse: the destination owner core/skills/ai-dlc/artifact-path-grammar.md is unreadable, so arm A is scanning for a spelling nothing defines and its silence means nothing."
