@@ -31,7 +31,65 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 34 SHIPPED AS `v0.464.0`. BOTH PULL-FOUND DEFECTS ARE FIXED; A THIRD AND LARGER ONE IS FILED AS `BL-131` AND IS NOT FIXED. START AT BATCH 35.
+### THE PULL RAN AND MERGED, AND THE GAP REACHED ZERO FOR THE FIRST TIME IN THIS PROGRAM. BATCHES 34, 35 AND 36 SHIPPED AS `v0.464.0`, `v0.466.0` AND `v0.467.0`. START AT BATCH 37.
+
+**This block is the current state and it replaces every block below.** Every figure was re-derived
+after the consumer's merge, all controls in the same invocation.
+
+**THE GAP REACHED ZERO AND HAS SINCE REOPENED AT ONE RELEASE.** The operator authorized the apply
+and it landed as the consumer's PR #997: stamp `0.462.0`/`d503d490` → **`0.466.0`/`a74e2e0b`** on
+all four fields, `RESOLVED restamp` and `RESOLVED consistent` with no `WORKLIST` or `DECISION` rows,
+marker cleared, nothing withheld and no `--finish` owed. `v0.467.0` shipped here afterwards, so the
+gap is ONE. **That authorization is spent** — `operator-rulings.md` governs again.
+
+**THE PULL IS THE DETECTOR, AND THAT IS THE FINDING OF THIS BAND.** Four of the last five defects
+were found by the consumer against its own tree, and two were in machinery this side had just
+shipped. Nothing in this repo could have found them: they need a real consumer in a real
+intermediate state.
+
+**BATCH 34 — `v0.464.0`.** The approval gate compared how the ref was TYPED, not what it names.
+`emit-report.sh --verify` is a precondition for any write (`SKILL.md:1175-1182`) and byte-compares a
+region that rendered the ref's SPELLING. The region now carries `<theirs>:core` as a tree hash and
+`<theirs>:VERSION` beside it — VERSION because it sits at the repository root, outside the hashed
+subtree, and `apply.sh:1312` reads it into the stamp (measured: 16 of 400 commits move it while
+touching no `core/` file, control 164 that do). `--finish` also stopped stamping any resolvable ref:
+`.ai-dlc-applying` records `theirs:` at `apply.sh:209` and had **zero** parsers in the tracked tree.
+
+**BATCH 35 — `v0.466.0`, and its filed remedy was REFUTED before it was built.**
+`PC-S340-SAFE-STOP-ACQUITTAL-TESTS-ANCESTRY-NOT-CONTENT` implies a content/byte-equality arm; driven
+against a reconstruction of the filing state it does not fire on the pull that filed it — 0 of 3
+paths, quiet at every candidate, control 120 match/0 differ at BASE. The defect survives restated:
+the gate tests ancestry where the claim is about BEHAVIOUR (0 changed classifier rows over 59 paths,
+control 4). What SHIPPED is one conjunct with a demonstrated subject — the acquittal now refuses on
+a tree carrying `.ai-dlc-applying`. **I argued that guard was vacuous and was wrong**: the withheld
+run writes NO stamp, so a `skill_commit` advanced earlier survives beside a `commit` at base, and
+the acquittal fired on that partial tree. The predicate itself is `BL-132`, filed not built.
+
+**BATCH 36 — `v0.467.0`, found by the consumer minutes after the cycle that caused it.**
+`SKILL.md`'s step-2 rule called a derived fixture differing from `base` a consumer edit. A consumer
+whose machinery pair has advanced holds fixtures at `skill_commit`, and step 2 CREATES that state.
+Verified here against the consumer's committed split-stamp revision: four fixtures read
+`base=DIFF skill_commit=same`, control outside the range `base=same`. Wrong in the direction that
+REFUSES a legitimate write.
+
+**TWO ENTRIES ARE OPEN AND BOTH CARRY THEIR MEASUREMENTS.** `BL-131` — nothing executes the union
+gate (0 call sites against 76 for `preclassify.sh`), three paths bypass it, and its receipt goes
+GREEN on a partial fix that closes only two; step 2's autonomous self-update is the one left open.
+`BL-132` — the ancestry-vs-behaviour predicate, with the refuted remedy recorded so it is not
+rebuilt, the cost measured at **≈7s per invocation, not per candidate**, and the real blockers named
+as the unmeasured FP set and the absence of a rule for choosing the control engine.
+
+**A `0 CLOSE-CANDIDATE` COUNT IS AN INSTRUMENT READING WHEN EVERY RECEIPT IS UNDECIDED** — see the
+paragraph below, measured at 7 of 7 `theirs_has` receipts undecidable.
+
+**THE FIGURES, re-derived after the consumer's merge.** Ledger md5 `28df5c39…` — UNCHANGED — **73
+live candidates, 139 archived, 30 cited, 43 UNFILED**, ten `PC-S340-*` still unfiled. Partition
+control 0; presence controls 1/1/1; absence control 0. `docs/backlog.md` **75 live / 57 archived**
+against a ceiling of 100.
+
+**STILL OWED AND NO SWEEP WILL SURFACE IT**: `IS-CORE`'s by-design rejection, now written into
+`docs/reviews/graph-s340-adjudication-brief.md` §1 together with batch 35's adjudication in §1b.
+**The brief is written; carrying it is the operator's.**
 
 **This block is the current state and it replaces the pull block below.** Every figure was
 re-derived after the batch by running the derive block and the sweep, all controls in the same
@@ -2680,8 +2738,18 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **RUN THE SWEEP (action 1b below), THEN PICK BATCH 35's SUBJECT.** Batch 34 is merged as
-   `v0.464.0`. Number yours 35. Batch 33 was `v0.457.0`, corrected by `v0.458.0`, with `v0.459.0`,
+1. **RUN THE SWEEP (action 1b below), THEN PICK BATCH 37's SUBJECT.** Batches 34, 35 and 36 are
+   merged as `v0.464.0`, `v0.466.0` and `v0.467.0`. Number yours 37.
+
+   **THE GAP IS ONE RELEASE AND THE PULL AUTHORIZATION IS SPENT.** The consumer is at
+   `0.466.0`/`a74e2e0b`; `v0.467.0` shipped after its merge. Do not dispatch a pull and do not hand
+   one to a peer session.
+
+   **BATCH 35's SUBJECT IS STILL OPEN AS `BL-132` AND ITS FILED REMEDY IS REFUTED — read the entry
+   before touching it.** A content/byte-equality arm does not fire on the pull that filed the
+   candidate; the surviving defect is ancestry-vs-BEHAVIOUR and needs a classifier-output
+   differential whose FP set nobody has run. The marker conjunct already shipped in `v0.466.0` and
+   must not be rebuilt there. Batch 33 was `v0.457.0`, corrected by `v0.458.0`, with `v0.459.0`,
    `v0.461.0`, `v0.462.0` and `v0.463.0` after it — `v0.461.0` off-plan on an operator redirect —
    and there is no `v0.460.0` to find: it was renumbered to `v0.462.0` after being parked mid-batch.
 
