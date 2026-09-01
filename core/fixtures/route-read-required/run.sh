@@ -129,7 +129,10 @@ echo "route-read-required:"
 # 1. THE BYPASS IS DENIED — and the near-miss, one property apart, is not.
 # =============================================================================
 W="$(seed live)"
-for T in Write Edit MultiEdit; do
+# `NotebookEdit` IS in this list. It is on the hook's registered matcher and writes a file like
+# the rest, so leaving it out would have left a bypassing session one unwatched way to produce
+# one -- an affordance to remove, not a hole to document.
+for T in Write Edit MultiEdit NotebookEdit; do
   OUT="$(drive "$W" "$T" "$TR_BYPASS" "$W/_bmad-output/pipeline-snapshot.md")"
   if denied "$OUT" && is_route_deny "$OUT"; then
     ok "BYPASS: \`$T\` is DENIED for an /ai-dlc session that only MENTIONED the router"
@@ -179,7 +182,7 @@ done
 # =============================================================================
 OUT="$(drive "$W" Write "$TR_UPDATER" "$W/_bmad-output/ai-dlc-update/reconcile-report.md")"
 if denied "$OUT"; then
-  bad "SCOPE updater: an /ai-dlc-update session's Write was DENIED. The updater advances no sprint and reads no router; denying it blocks a skill that has no pipeline to route."
+  bad "SCOPE updater: an /ai-dlc-update session's Write was DENIED. It holds because AIDLC_SESSION is 0 for an updater transcript, not because of a separate conjunct — the hook carries none, deliberately, and the census that removed it is recorded in the sibling battery's marker."
 else
   ok "SCOPE updater: an /ai-dlc-update session is untouched by the router check"
 fi

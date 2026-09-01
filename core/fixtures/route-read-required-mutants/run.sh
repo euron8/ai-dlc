@@ -77,10 +77,11 @@ printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu
 printf '{"type":"user","message":{"content":"<command-name>/ai-dlc-update</command-name>"}}\n' > "$TR_UPDATER"
 printf '{"type":"user","message":{"content":"fix the timezone bug in the ingest worker"}}\n' > "$TR_PLAIN"
 
-PROBE_NAME=( bypass    routed    skill     agent     bash      updater     plain    )
-PROBE_TOOL=( Write     Write     Skill     Agent     Bash      Write       Write    )
-PROBE_TR=(   BYPASS    ROUTED    BYPASS    BYPASS    BYPASS    UPDATER     PLAIN    )
-BASELINE='DENY ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW'
+PROBE_NAME=( bypass  routed  skill  agent  bash   notebook      updater  plain  )
+PROBE_TOOL=( Write   Write   Skill  Agent  Bash   NotebookEdit  Write    Write  )
+PROBE_TR=(   BYPASS  ROUTED  BYPASS BYPASS BYPASS BYPASS        UPDATER  PLAIN  )
+BASELINE='DENY ALLOW ALLOW ALLOW ALLOW DENY ALLOW ALLOW'
+CELLS='0 1 2 3 4 5 6 7'
 
 tr_of() { case "$1" in BYPASS) printf '%s' "$TR_BYPASS";; ROUTED) printf '%s' "$TR_ROUTED";;
                        UPDATER) printf '%s' "$TR_UPDATER";; PLAIN) printf '%s' "$TR_PLAIN";; esac; }
@@ -96,9 +97,9 @@ verdict() { # <hook copy> <tool> <transcript token> -> ALLOW | DENY
   esac
 }
 
-row() { # <hook copy> -> the seven verdicts in PROBE order
+row() { # <hook copy> -> the eight verdicts in PROBE order
   local h="$1" i out=""
-  for i in 0 1 2 3 4 5 6; do out="$out $(verdict "$h" "${PROBE_TOOL[$i]}" "${PROBE_TR[$i]}")"; done
+  for i in $CELLS; do out="$out $(verdict "$h" "${PROBE_TOOL[$i]}" "${PROBE_TR[$i]}")"; done
   printf '%s' "${out# }"
 }
 
@@ -133,13 +134,26 @@ mk() { # <label> <sed program> -> 0 = copy built and differs, 1 = refused (alrea
 # the mutant differed from the original, passed `cmp -s`, and produced a grep that still matched
 # nothing -- a mutation that changed the file and not the behaviour. The kill assertion caught
 # it; the anti-no-op guard could not. Locating the line and writing it whole removes the class.
-anchor() { # <fixed string, unique in the hook> -> line number, or "" (already reported)
-  local n c; c="$(grep -cF -- "$1" "$HOOK")"
-  if [ "$c" -ne 1 ]; then
-    bad "ANCHOR '$1' appears $c time(s) in the hook, not once — a mutation cannot be aimed at it"
-    printf ''; return
-  fi
-  n="$(grep -nF -- "$1" "$HOOK" | cut -d: -f1)"; printf '%s' "$n"
+#
+# AN ANCHOR HELPER PRINTS ONLY A NUMBER. It is called inside `$( )`, so anything else it writes
+# is CAPTURED rather than shown -- measured here: an early version reported a bad anchor through
+# `bad()`, the sentence was captured as the line number, and the arithmetic below died with
+# `invalid arithmetic operator` instead of naming the missing anchor. Report at the call site.
+anchor() { # <fixed string> -> line number if UNIQUE, else "" (caller reports)
+  [ "$(grep -cF -- "$1" "$HOOK")" = 1 ] || { printf ''; return; }
+  grep -nF -- "$1" "$HOOK" | cut -d: -f1 | tr -d '\n'
+}
+# ...and the STRUCTURAL form, for a string that is deliberately not unique. Check 2z and Check 3
+# both carry the `Write|Edit|MultiEdit|NotebookEdit)` surface, and they must: the tool sets are
+# the same question asked twice. Mutating the wrong copy leaves every arm green and reads
+# exactly like an arm that cannot fire, which `cmp -s` cannot catch because the edit applied
+# cleanly to a file the run never consulted. So the surface is located RELATIVE to the route
+# grep, which IS unique -- the nearest match above it is Check 2z's by construction, and the
+# caller asserts exactly one match lies above.
+anchor_before() { # <fixed string> <line> -> greatest matching line < <line>, if exactly one
+  local n; n="$(grep -nF -- "$1" "$HOOK" | cut -d: -f1 | awk -v L="$2" '$1 < L' | wc -l | tr -d ' ')"
+  [ "$n" = 1 ] || { printf ''; return; }
+  grep -nF -- "$1" "$HOOK" | cut -d: -f1 | awk -v L="$2" '$1 < L' | tail -1 | tr -d '\n'
 }
 splice() { # <label> <line> <replace|after> <text> -> 0 = built and differs, 1 = refused
   local copy="$WORK/$1.sh" n="$2" keep
@@ -167,7 +181,7 @@ echo "route-read-required-mutants:"
 cp "$HOOK" "$WORK/control.sh"
 CTRL="$(row "$WORK/control.sh")"
 if [ "$CTRL" = "$BASELINE" ]; then
-  ok "CONTROL: an unmutated copy DENIES the bypass and allows the other six (positive conjunct: cell 1 is DENY)"
+  ok "CONTROL: an unmutated copy DENIES both write cells and allows the other six (positive conjunct: \`bypass\` and \`notebook\` are DENY, so a subject that emitted nothing would fail this)"
 else
   bad "CONTROL: an unmutated copy answers '$CTRL' over (${PROBE_NAME[*]}), not '$BASELINE' — the harness, not the mutants, is what the arms below measure"
 fi
@@ -186,11 +200,14 @@ fi
 # reference consumer, a string-keyed check matches 69 of the 69 `/ai-dlc` sessions and detects
 # nothing at all, because SKILL.md's own INITIALIZATION prose carries the path.
 LN_KEY="$(anchor '"file_path":"[^"]*steps/route')"
-if [ -n "$LN_KEY" ] && \
-   splice route-key-widened-to-mention "$LN_KEY" replace \
-     '      if ! grep -q '"'"'steps/route\.md'"'"' "$TRANSCRIPT" 2>/dev/null; then'; then
-  score route-key-widened-to-mention 'ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW' \
-    "turns the bypass from DENY to ALLOW: keying on the string instead of a Read's file_path detects nothing"
+if [ -z "$LN_KEY" ]; then
+  bad "ANCHOR: the route grep line is not unique in the hook — every mutation below is aimed at nothing, and a battery that cannot locate its subject must say so rather than report survivals"
+elif splice route-key-widened-to-mention "$LN_KEY" replace \
+       '      if ! grep -q '"'"'steps/route\.md'"'"' "$TRANSCRIPT" 2>/dev/null; then'; then
+  # BOTH denial cells move, and they share ONE subject: the route key is what makes `bypass` and
+  # `notebook` deny at all. This is arms overlapping on a single mutation, not an entangled pair.
+  score route-key-widened-to-mention 'ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW' \
+    "turns both denial cells from DENY to ALLOW: keying on the string instead of a Read's file_path detects nothing"
 fi
 
 # =============================================================================
@@ -200,15 +217,31 @@ fi
 # Bash. One mutant per tool rather than one that adds all three: a single mutant adding the
 # whole set moves three cells at once, and a mutant that fails three assertions cannot tell an
 # entangled arm from a bad mutation program.
-for T in Skill Agent Bash; do
-  case "$T" in Skill) want='DENY ALLOW DENY ALLOW ALLOW ALLOW ALLOW';;
-               Agent) want='DENY ALLOW ALLOW DENY ALLOW ALLOW ALLOW';;
-               Bash)  want='DENY ALLOW ALLOW ALLOW DENY ALLOW ALLOW';; esac
-  if mk "surface-widened-to-$T" "s#Write|Edit|MultiEdit)#Write|Edit|MultiEdit|$T)#"; then
-    score "surface-widened-to-$T" "$want" \
-      "turns \`$T\` from ALLOW to DENY: the deny would forbid the act it demands, and the pipeline wedges at its first step"
+SURF='Write|Edit|MultiEdit|NotebookEdit)'
+LN_SURF=""
+[ -n "$LN_KEY" ] && LN_SURF="$(anchor_before "$SURF" "$LN_KEY")"
+if [ -z "$LN_SURF" ]; then
+  bad "ANCHOR: could not locate exactly one \`$SURF\` line above the route grep. Check 3 carries the same tool set, so a battery that cannot tell the two apart would mutate the wrong copy, leave every cell green, and report a full sweep."
+else
+  for T in Skill Agent Bash; do
+    case "$T" in Skill) want='DENY ALLOW DENY ALLOW ALLOW DENY ALLOW ALLOW';;
+                 Agent) want='DENY ALLOW ALLOW DENY ALLOW DENY ALLOW ALLOW';;
+                 Bash)  want='DENY ALLOW ALLOW ALLOW DENY DENY ALLOW ALLOW';; esac
+    if splice "surface-widened-to-$T" "$LN_SURF" replace "    Write|Edit|MultiEdit|NotebookEdit|$T)"; then
+      score "surface-widened-to-$T" "$want" \
+        "turns \`$T\` from ALLOW to DENY: the deny would forbid the act it demands, and the pipeline wedges at its first step"
+    fi
+  done
+
+  # THE OTHER DIRECTION ON THE SAME LINE. `NotebookEdit` was added to this surface because it is
+  # on the hook's registered matcher and writes a file like the rest; dropping it back out is the
+  # plausible "tidy the tool list" edit and it silently restores one unwatched way to produce a
+  # file. A widening mutant cannot detect a narrowing regression.
+  if splice surface-narrowed-drop-notebook "$LN_SURF" replace '    Write|Edit|MultiEdit)'; then
+    score surface-narrowed-drop-notebook 'DENY ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW' \
+      "turns \`NotebookEdit\` from DENY to ALLOW: the surface's coverage of it is load-bearing, not decorative"
   fi
-done
+fi
 
 # =============================================================================
 # 3. THE TWO SCOPE CONJUNCTS — one is load-bearing, one has no subject.
@@ -218,20 +251,26 @@ done
 # without it, "the updater conjunct moves nothing" is indistinguishable from a probe too coarse
 # to see either.
 if mk aidlc-guard-deleted 's#\[ "\$AIDLC_SESSION" = "1" \] && ##'; then
-  score aidlc-guard-deleted 'DENY ALLOW ALLOW ALLOW ALLOW ALLOW DENY' \
-    "turns a session that invoked NO ai-dlc skill from ALLOW to DENY — the guard is what keeps 12 of the reference consumer's 171 sessions out of this check"
+  # IT OWNS BOTH SCOPE CELLS, and that is the whole scope guard rather than two entangled arms.
+  # `updater` and `plain` are both outside this check for the same reason -- neither is an
+  # `/ai-dlc` session -- and one conjunct is what holds them there.
+  score aidlc-guard-deleted 'DENY ALLOW ALLOW ALLOW ALLOW DENY DENY DENY' \
+    "turns BOTH scope cells from ALLOW to DENY — the guard is what keeps the updater, and 12 of the reference consumer's 171 ordinary sessions, out of this check"
 fi
 
-if mk updater-guard-deleted 's#\[ "\$UPDATER_SESSION" = "0" \] && ##'; then
-  GOT_U="$(row "$WORK/updater-guard-deleted.sh")"
-  if [ "$GOT_U" = "$BASELINE" ]; then
-    # NOT scored as a failure. The finding belongs to the hook's author, and an arm that went
-    # red on it would go red again the moment they act on it. What must not happen is the
-    # measurement being silent, so it is PRINTED, with the control's result beside it.
-    ok "CENSUS: removing \`UPDATER_SESSION = 0\` from Check 2z moves NO cell (row unchanged: '$GOT_U'). It is covered by the AIDLC conjunct above, whose own removal DOES move a cell — so the probe can see a conjunct removal, and this one decides nothing. Reported to the hook's author; fix by subtraction."
-  else
-    ok "CENSUS: \`UPDATER_SESSION = 0\` is load-bearing after all — its removal answers '$GOT_U'"
-  fi
+# AND THE CONJUNCT THAT IS NO LONGER THERE. Check 2z carried `UPDATER_SESSION = 0` beside the
+# guard above until a census run from this battery measured that removing it moved no cell of
+# the probe table, against the control that removing `AIDLC_SESSION` DOES move one. The hook
+# deleted it and wrote the reason at the site. This arm is the regression guard on that
+# subtraction: a conjunct with no subject is a loaded gun, and the way it comes back is somebody
+# adding it because it "looks like it belongs".
+CHK2Z_IF="$(grep -F 'AIDLC_SESSION" = "1"' "$HOOK")"
+if [ -z "$CHK2Z_IF" ]; then
+  bad "REGRESSION GUARD: Check 2z's guard line could not be located, so this arm asserted nothing"
+elif printf '%s' "$CHK2Z_IF" | grep -q 'UPDATER_SESSION'; then
+  bad "REGRESSION: an \`UPDATER_SESSION\` conjunct is back in Check 2z's guard. It decides nothing — both flags come from one first-match-wins case whose patterns are mutually exclusive, and the payload arm that could split them fires only on a Skill call this surface never sees. Re-derive before re-adding it."
+else
+  ok "REGRESSION GUARD: Check 2z's guard carries no \`UPDATER_SESSION\` conjunct (the census removed one that decided nothing on any reachable input)"
 fi
 
 # =============================================================================
@@ -240,9 +279,8 @@ fi
 # Injected rather than deleted: the shipped fixture's log arms are one PRESENCE and one
 # ABSENCE, and only the absence needs a mutant. Splice a ROUTE_DENIED write above the guard so
 # it fires on every Write, which is what "log it while we are in here" looks like as a diff.
-LN_CASE="$(anchor 'Write|Edit|MultiEdit)')"
-if [ -n "$LN_CASE" ] && \
-   splice log-unconditional "$LN_CASE" after \
+if [ -n "$LN_SURF" ] && \
+   splice log-unconditional "$LN_SURF" after \
      '        echo "## ${TIMESTAMP} -- ROUTE_DENIED" >> "$LOG_FILE"'; then
   ML_D="$(logcell "$WORK/log-unconditional.sh" BYPASS)"; ML_A="$(logcell "$WORK/log-unconditional.sh" ROUTED)"
   ML_R="$(row "$WORK/log-unconditional.sh")"
@@ -267,10 +305,13 @@ JOIN_TOK=( 'BYPASS: \`$T\` is DENIED'
            'NEAR-MISS: adding the one'
            'REMEDY: \`$T\` is ALLOWED'
            'for T in Skill Agent Bash'
+           'for T in Write Edit MultiEdit NotebookEdit'
            'SCOPE updater:'
            'SCOPE not-an-ai-dlc-session:'
            'DOWNSTREAM: Check 3' )
-JOIN_WHY=( bypass "routed near-miss" "the remedy arms" "all three remedy tools" updater "not-an-ai-dlc-session" "the checks below Check 2z" )
+JOIN_WHY=( bypass "routed near-miss" "the remedy arms" "all three remedy tools" \
+           "the whole denied surface including NotebookEdit" updater "not-an-ai-dlc-session" \
+           "the checks below Check 2z" )
 i=0
 while [ "$i" -lt ${#JOIN_TOK[@]} ]; do
   if grep -qF -- "${JOIN_TOK[$i]}" "$SUBJ"; then
@@ -285,7 +326,7 @@ done
 if grep -qF -- 'SCOPE this-arm-does-not-exist:' "$SUBJ"; then
   bad "JOIN CONTROL: an impossible token matched the shipped subject — the greps above are not discriminating"
 else
-  ok "JOIN CONTROL: an impossible token does not match, so the seven hits above are real"
+  ok "JOIN CONTROL: an impossible token does not match, so the ${#JOIN_TOK[@]} hits above are real"
 fi
 
 echo
