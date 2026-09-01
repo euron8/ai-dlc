@@ -93,7 +93,26 @@ render() {
   # when, the bytes this pull would WRITE have changed -- which is precisely the condition
   # that invalidates the operator's approval, so the false-positive set is empty by
   # construction rather than by narrowing.
-  printf '_theirs_ `core/` tree `%s`.\n' "$(git -C "$DIST" rev-parse "${THEIRS}:core" 2>/dev/null || echo absent)"
+  # A FAILED RESOLUTION MUST NOT RENDER AS A SHARED CONSTANT. Two different unresolvable refs that
+  # both print `absent` are EQUAL to each other, so a report generated with a typo verifies clean
+  # against the same typo. Naming the ref makes the failure distinguishable.
+  printf '_theirs_ `core/` tree `%s`.\n' "$(git -C "$DIST" rev-parse "${THEIRS}:core" 2>/dev/null || echo "unresolvable:${THEIRS}")"
+  # AND `VERSION`, WHICH IS NOT UNDER `core/` AND REACHES CONSUMER STATE ANYWAY.
+  #
+  # The `core/` tree above acquits every upstream move that changes no file under `core/`, and that
+  # acquittal is the point -- a docs commit between releases must not wedge a pull. But it is one
+  # field too wide. `write_stamp()` reads `${THEIRS}:VERSION` from the REPOSITORY ROOT and writes it
+  # into the stamp's `version:` field, and under a carried machinery slice into `skill_version:`
+  # too. So a move across a commit that bumps `VERSION` and touches nothing in `core/` changes what
+  # the stamp CLAIMS while the tree hash above reports no change at all, and the stamp writer's own
+  # comment says an overstating version silently mis-bases the next pull's merge.
+  #
+  # Measured over the last 400 commits on the distribution's default branch: 236 touch no `core/`
+  # file and are acquitted here, 16 of those ALSO change `VERSION`, against a control of 164 that do
+  # touch `core/`. Rendering `VERSION` beside the tree leaves 220 of the 236 still acquitted -- the
+  # docs-only move still passes -- and covers the 16 that move a value the operator approved.
+  _theirs_version="$(git -C "$DIST" show "${THEIRS}:VERSION" 2>/dev/null | tr -d '[:space:]')"
+  printf '_theirs_ `VERSION` `%s`.\n' "${_theirs_version:-unresolvable:${THEIRS}}"
 
   local pc ud ld hb rl del classify
   pc="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null || true)"

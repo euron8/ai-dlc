@@ -3482,3 +3482,47 @@ the map or the read-set file cannot be located, so a relocated map reports a mov
 rather than a false close.
 
 verify: sh m=scripts/validate-enforcement-map.sh; r=.ai-dlc-fixture-readsets.tsv; [ -f "$m" ] || exit 9; [ -f "$r" ] || exit 9; grep -q ai-dlc-pause.sh "$r" || exit 9; h=$(grep -cE "^# --- I[0-9]+[a-z]?:" "$m"); [ "${h:-0}" -ge 10 ] || exit 9; grep -qiE "^# --- I[0-9]+[a-z]?:.*(read-set|readset)" "$m" && exit 0; exit 1
+
+## BL-131 — the mechanical union gate is prose, so nothing makes `apply` verify the approved report
+
+`SKILL.md` step 7 states that `apply` "may write only after BOTH hold", the first being that
+`reconcile/emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>` exits 0, "a nonzero
+exit means the approval was given without sight of a finding, so STOP and re-emit rather than
+write". That is the only thing standing between a stale or hand-edited approval and a write into a
+consumer's core.
+
+**Nothing executes it.** Measured across the tracked tree: **zero** invocation sites for
+`emit-report.sh` outside its own file and the fixtures, against **76** for `preclassify.sh` under
+the identical grammar in the same invocation. `apply.sh` names `emit-report` exactly once, in a
+comment. So the gate runs if and only if the narrating agent chooses to run it, and a run that
+skips it is indistinguishable from one that ran it and passed — there is no artifact either way.
+
+**This is the `CLAUDE.md` case in its purest form**: a prohibition whose enforcement is an
+instruction to a reader. The two fixes shipped in `v0.464.0` both sharpen what the gate DETECTS —
+the region now carries the `theirs` `core/` tree, so a moved symbolic ref cannot render identically
+— and neither of them causes the gate to be RUN. They are strictly downstream of this entry.
+
+**The fix is not simply "call it from `apply.sh`", which is why this is filed rather than taken.**
+`apply.sh` receives four paths and no report path; it does not know which report the operator
+approved, and inventing a convention for that is a change to the write path with real wedge risk
+for a consumer whose report sits under a name the convention does not predict. The candidate shapes
+— `apply.sh` taking the report as a required argument, or the ordinary run recording the verified
+report's digest into `.claude/.ai-dlc-applying` beside the `theirs:` it already records — differ in
+what they do to a consumer mid-pull, and that has to be measured on a scratch install before
+either is built.
+
+Discovered while shipping `v0.464.0`. Not filed by the reference consumer and carries no `PC-` id;
+it is an ai-dlc-internal discovery and ranks below any PC-backed entry under the provenance-first
+rule.
+
+**Tiered DEFECT.** Nothing is corrupted today. What is missing is the guarantee that the gate ran
+at all, and the symptom of a gate that did not run is a clean report.
+
+The receipt is STRUCTURAL and carries its own control, because a zero here is the claim being made:
+it counts non-comment invocation lines of `emit-report.sh` in tracked `.sh` files outside
+`core/fixtures/`, having first asserted that the same grammar finds callers of `preclassify.sh` —
+a grammar that finds neither has failed rather than found an absence. It exits 1 today, 0 once any
+executable invokes the gate, and 9 if the subject is missing or the control does not fire. Scored
+both directions: 1 against the tree, and 0 against a scratch copy with one real call site seeded.
+
+verify: sh e=core/skills/ai-dlc-update/reconcile/emit-report.sh; [ -f "$e" ] || exit 9; L=$(git ls-files "*.sh" | grep -vE "^core/fixtures/"); c=$(printf "%s\n" "$L" | grep -v "reconcile/preclassify.sh" | xargs grep -hE "(bash|sh) [^ ]*preclassify\.sh" 2>/dev/null | grep -vcE "^[[:space:]]*#"); [ "${c:-0}" -gt 0 ] || exit 9; n=$(printf "%s\n" "$L" | grep -v "reconcile/emit-report.sh" | xargs grep -hE "(bash|sh) [^ ]*emit-report\.sh" 2>/dev/null | grep -vcE "^[[:space:]]*#"); [ "${n:-0}" -gt 0 ] && exit 0; exit 1

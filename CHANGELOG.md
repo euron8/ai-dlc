@@ -54,13 +54,39 @@ is a property of a FRESH consumer, not of the renderer. The region is content-bl
 construction — every section renders a projection of detector output, statuses and paths
 (`emit-report.sh:76`, `:79`, `:174`, `:183`, `:226`, `:230`, `:251`) — and its only content-bearing
 block, the orientation diff, is gated at `:100` on `[ -n "$classify" ]` and renders only for
-CLASSIFY/BOTH-CHANGED files. The probe's consumer had none. So the blindness is exact for core
-changes OUTSIDE the CLASSIFY set — the pure applies, which are the bulk and are overwritten
-wholesale — while a CLASSIFY file's content change is caught by the orientation block. Measured
-independently by a second hand on the other axis: with the ref spelled as a SHA, ten lines differ
-at five sha-bearing sites, so a sha-spelled move is caught today — and is caught even when
-`core/` is byte-identical, which is a false positive rather than a catch. The gate was keyed on
-the wrong axis in both directions; this entry fixes the silent one.
+CLASSIFY/BOTH-CHANGED files. The probe's consumer had none.
+
+**The full square, measured independently by a second hand across renderer × consumer shape ×
+change class, with a one-byte-edit control at `1` on every row so no row is a dead scan.** Ref
+spelled as a branch throughout; only the branch target moves. `A` = docs-only, `B` = a PURE-APPLY
+core file changes, `C` = a CLASSIFY file changes.
+
+| | A | B | C |
+|---|---|---|---|
+| old renderer, diverged consumer | `0` | `0` | `1` |
+| old renderer, fresh consumer | `0` | `0` | `0` |
+| this release, either consumer | `0` | `1` | `1` |
+
+So the old gate's coverage was bounded by the CLASSIFY set on a diverged consumer, and **collapsed
+to nothing on an undiverged one** — the probe's `rc=0` was not a narrow miss but total blindness
+for that consumer shape. The fix is not bounded by CLASSIFY either: the line renders at
+`emit-report.sh:96`, OUTSIDE the `[ -n "$classify" ]` block, so its population is every change to
+`<theirs>:core` on both consumer shapes. On the other axis, a SHA-spelled move was already caught
+— and caught even when `core/` is byte-identical, which is a false positive, not a catch. The gate
+was keyed on the ref's SPELLING, an accident of how the caller typed the argument, and was wrong
+in both off-diagonal directions; one change removes the false positive and adds the missing catch.
+
+**`VERSION` is rendered beside the tree, because a `core/` hash is one field too narrow.**
+`write_stamp()` reads `${THEIRS}:VERSION` from the repository ROOT (`apply.sh:1312`) into the
+stamp's `version:` field, and under a carried machinery slice into `skill_version:` too. A move
+that bumps `VERSION` and touches nothing under `core/` therefore changes what the stamp CLAIMS
+while a core-tree key reports no change — and the stamp writer's own comment says an overstating
+version silently mis-bases the next pull's merge. Measured over the last 400 commits on the
+default branch: **236** touch no `core/` file and are acquitted, **16** of those also move
+`VERSION`, against a control of **164** that do touch `core/`. Rendering both leaves 220 of the
+236 acquitted — the docs-only move still passes, which is the whole point — and covers the 16.
+A failed resolution now renders as `unresolvable:<ref>` rather than a shared `absent`, so two
+different bad refs are no longer equal to each other.
 
 ### `--finish` asked whether the ref resolved, never whether it was the right one
 

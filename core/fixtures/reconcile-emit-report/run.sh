@@ -253,6 +253,19 @@ else
   bad "the region carries no resolved content key for theirs — a moved symbolic ref renders identically and --verify cannot see it"
 fi
 
+# --- Assertion: the region also keys on VERSION, which is OUTSIDE the hashed tree -----
+# PRESENCE-shaped for the same reason as the arm above. `VERSION` lives at the repository root, so
+# a `core/` tree hash cannot see it move — but `write_stamp()` reads `<theirs>:VERSION` into the
+# stamp's `version:` field, so an upstream move that bumps the version and touches nothing under
+# `core/` changes what the stamp CLAIMS while the tree hash reports no change. Measured upstream:
+# 236 of 400 commits touch no `core/` file, and 16 of those move `VERSION`. Deleting this line
+# re-opens exactly those 16 and nothing else, which is why it is asserted separately from the tree.
+if grep -qE '^_theirs_ `VERSION` `[^`]+`\.$' "$REGION_SYM"; then
+  ok "the region keys on theirs' VERSION as well as its \`core/\` tree — the stamp's version field is written from outside the hashed subtree"
+else
+  bad "the region carries no VERSION key — a move that bumps VERSION without touching core/ is invisible to --verify, and the stamp then claims a version the approval never covered"
+fi
+
 # --- Assertion: a CORE move under a fixed spelling FAILS --verify -------------
 git -C "$DIST" checkout -q "$MOVEREF" 2>/dev/null
 printf '#!/usr/bin/env bash\necho MOVED-REF-PROBE moved-after-approval\n' > "$DIST/$MOVED_PROBE_PATH"
@@ -264,7 +277,11 @@ bash "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$MOVEREF" > "$REGION_HARM" 2>/dev/null
 # bucket, `--verify` would fail on the bucket and the arm would pass against a renderer with no
 # content key whatsoever. Stripping the tree line must leave the two regions IDENTICAL — that
 # is the old renderer's whole field of view, and it is blind here.
-strip_tree() { grep -v '^_theirs_ `core/` tree ' "$1"; }
+# Strips BOTH identity lines, not only the tree. `VERSION` is rendered beside the tree because it
+# sits at the repo root, outside the hashed subtree, and still reaches the stamp. A strip that
+# removed only the tree line would leave this guard reporting FIXTURE BROKEN the first time a seed
+# moves the ref across a version bump — which is a true statement about the wrong row.
+strip_tree() { grep -vE '^_theirs_ (`core/` tree|`VERSION`) ' "$1"; }
 strip_tree "$REGION_SYM"  > "$WORK/stripped-approved.md"
 strip_tree "$REGION_HARM" > "$WORK/stripped-moved.md"
 if [ ! -s "$WORK/stripped-approved.md" ]; then
