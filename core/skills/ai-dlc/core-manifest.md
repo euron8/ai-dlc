@@ -290,6 +290,7 @@ core_manifest:
   - fixtures/layer-absorption-retire/**
   - fixtures/notify-hook-channel/**
   - fixtures/updater-session-signals/**
+  - fixtures/route-read-required/**
   - fixtures/artifact-derivations/**
   - fixtures/derivation-capture/**
   - fixtures/architecture-index-cell-escaping/**

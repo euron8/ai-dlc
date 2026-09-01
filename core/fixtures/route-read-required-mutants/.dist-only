@@ -1,0 +1,15 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is the MUTATION BATTERY behind Check 2z of `core/hooks/ai-dlc-acknowledge.sh` -- the guard
+that denies file production to an `/ai-dlc` session which never read `steps/route.md`. It edits
+COPIES of that hook, core's own source, widening one clause at a time to prove each cell of the
+verdict table is load-bearing rather than redundant. `ai-dlc-core-guard.sh` denies a consumer
+the in-place edit of an installed hook, so the surface these mutants perturb cannot change in a
+consumer tree: whether these assertions can fail is a question about a file only this
+repository edits.
+
+The behaviour a consumer does need is asserted by `route-read-required`, which ships and drives
+the same check through the real hook. This battery adds nothing a consumer can act on -- only
+the evidence that those assertions are load-bearing, which is a claim about this repository's
+own suite, plus the census recording that Check 2z's `UPDATER_SESSION = 0` conjunct decides
+nothing on any reachable input.

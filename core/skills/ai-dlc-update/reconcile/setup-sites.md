@@ -221,6 +221,7 @@ core_manifest:
   - core/fixtures/whole-read-pool/**
   - core/fixtures/notify-hook-channel/**
   - core/fixtures/updater-session-signals/**
+  - core/fixtures/route-read-required/**
   - core/fixtures/artifact-derivations/**
   - core/fixtures/derivation-capture/**
   - core/fixtures/architecture-index-cell-escaping/**
