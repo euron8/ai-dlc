@@ -13,7 +13,8 @@ BEFORE ACTING:**
    command.** One of those repos is READ ONLY and a write there is the most expensive mistake
    available in this program.
 2. **`### NEXT ACTIONS — numbered, in order`** — what to do, starting at action 1. This is roughly
-   2,300 lines below this block; jump to the heading, do not scroll.
+   3,000 lines below this block; jump to the heading BY NAME, do not scroll and do not trust
+   this figure — it is advisory and it has been stale before.
 3. **`### Ping the operator`** — when to stop and report.
 4. **`## Hazards`** and **`### Done when`** — what will bite you, and what finishing looks like.
 
@@ -41,7 +42,7 @@ invocation.
 DISARM.** `PC-S340-VALIDATE-SPAWN-LEDGER-OVERSHOOTS-CHECK-22-DECLARED-ROLE-SCOPE` asked for Check
 22's five roles as the row scope of `validate-spawn-ledger.sh`. Built and scored on the consumer's
 own ledger before it was preferred: that narrowing drops the finding set from 122 arms to **2**,
-acquitting **23 of the 25 genuine** violations, because `adversary`, `remediator`, `pm`,
+silencing every role outside the five, because `adversary`, `remediator`, `pm`,
 `architect`, `gate-adjudicator`, `tea`, `ux` and `pm-escalated` are all roles Rule 19 binds and
 none is in the five. The five are the gate TRIGGER; the row scope is every AI/DLC-role dispatch.
 Check 22 stated both readings and the fix settles it in the file.
@@ -290,6 +291,9 @@ are not comparable and reading one against the other manufactures a discrepancy.
 **`PC-S308` IS STILL LIVE IN THEIR LEDGER (1 live / 0 archived) EVEN THOUGH THE FIX IS
 DELIVERED.** The pull did not rotate it. The sweep WILL keep surfacing it; it is not available
 work. Its remaining half is the consumer's own Check 916 exemption regex, which that consumer
+**[CORRECTED at batch 38: the check is 915, not 916 — the consumer's own ledger annotation says
+916 is a different check and the regex sits under 915's heading. The number is left in place
+here because it is what this batch believed; grep 915.]**
 has already filed as its own carry-over.
 
 **BATCH 37 — `v0.471.0`, and the subject came from a peer session rather than from the sweep.**
@@ -344,6 +348,7 @@ here.
 14 dirty paths. Read it, never write it, and do not read a dirty path as a finding about `main`.
 
 **THE CONSUMER HAS ALREADY FILED THE HALF UPSTREAM CANNOT FIX.** Its Check 916 path-set exemption
+**[CORRECTED at batch 38: read 915. See the note above.]**
 (`gate-validation-domain.md:70,83`) ends `(-history|-archive)?\.md$` and does NOT match an ordinal
 rotation, so the first ordinal rotation commit after the pull silently loses its exemption. That
 is a consumer extension; it is reported in the `v0.471.0` CHANGELOG and was correctly not edited.
@@ -3066,7 +3071,7 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 39's
-   SUBJECT.** Batch 38 is merged as `v0.472.0`. Number yours 39.
+   SUBJECT.** Batch 38 is merged as `v0.472.0` AND its correction `v0.473.0`. Number yours 39.
 
    **A PEER SESSION IS A SUBJECT CHANNEL AND IT OUTRANKED THE SWEEP LAST BATCH.** Batch 37's
    subject arrived as a message from a blocked consumer session, not from the ledger — the sweep
@@ -3075,26 +3080,36 @@ so no block written before it changes verdict.
    against the tree before scoping anything else; a consumer stopped at a HARD_BLOCK outranks a
    candidate that has sat in the ledger for a month.
 
-   **THE GAP IS ONE RELEASE AND PENDING IS 1** — the consumer's stamp reads `0.471.0` and this
-   distribution is `0.472.0`. Your batch widens it to two. That is not permission to close it: a
+   **THE GAP IS TWO RELEASES AND PENDING IS 1** — the consumer's stamp reads `0.471.0`/`31b51d48`
+   on all four fields and this distribution is `0.473.0` at `808257ff`. PENDING is 1 rather than 2
+   because both releases carry the SAME candidate. Your batch widens the gap to three. That is not permission to close it: a
    pull is operator-initiated, readiness is not authorization, a `PENDING` count is not a
    decision about WHEN, and one is never handed to a peer session. `operator-rulings.md`
    governs. The consumer's operator initiated the last one in their own tree; that sets no
    precedent for dispatching from here.
 
    **BATCH 38's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW IT.**
-   `PC-S340-VALIDATE-SPAWN-LEDGER-OVERSHOOTS-CHECK-22-DECLARED-ROLE-SCOPE` shipped as `v0.472.0`
-   and is cited by `BL-134` in `docs/backlog.archive.md`, so it now reads DISCHARGED rather than
-   UNFILED — but it stays live in the consumer's ledger until they pull. Do not re-scope onto it.
+   `PC-S340-VALIDATE-SPAWN-LEDGER-OVERSHOOTS-CHECK-22-DECLARED-ROLE-SCOPE` shipped as `v0.472.0`,
+   corrected by `v0.473.0`, and is cited by `BL-134` in `docs/backlog.archive.md`, so it now reads
+   DISCHARGED rather than UNFILED — but it stays live in the consumer's ledger until they pull, and
+   its own receipt there reports STILL-LIVE for a reason recorded above. Do not re-scope onto it.
+
    **Its filed remedy was REFUTED by building it**: Check 22's five roles as the row scope drops
-   the finding set from 122 arms to 2, acquitting 23 of the 25 genuine ones. That is the general
-   case, not a special one — build the filed remedy and score it before you prefer your own, and
-   ask what it ACQUITS rather than only whether the defect is real.
+   the finding set from 122 arms to 2 by silencing every role outside the five — `adversary`,
+   `remediator`, `pm`, `architect`, `gate-adjudicator`, `tea`, `ux` and `pm-escalated` are all
+   bound by Rule 19 and none of them is in that list. That is the general case, not a special one:
+   build the filed remedy and score it before you prefer your own, and ask what it ACQUITS rather
+   than only whether the defect is real.
+
+   **DO NOT CARRY `v0.472.0`'s GLOSS ON THAT NUMBER.** That release described the narrowing as
+   "acquitting 23 of the 25 genuine findings", and `v0.473.0` showed 24 of those 25 were themselves
+   false — rows the dispatch guard never wrote. The refutation of the filed remedy stands on the
+   roles it silences, not on a residue count that has since been corrected.
 
    **`v0.471.0`'s SUBJECT IS ALSO SPENT AND THE SWEEP WILL STILL SHOW IT. DO NOT RE-SCOPE ONTO IT.**
    `PC-S308-STEP1A-ROTATE-REMEDY-NO-SPRINT-START-DESTINATION` is fixed, cited, DELIVERED and
    confirmed working on the consumer — and it is still LIVE in their ledger (1 live / 0
-   archived), because the pull did not rotate it. Its remaining half, the Check 916 exemption
+   archived), because the pull did not rotate it. Its remaining half, the Check 915 exemption
    regex, is a CONSUMER extension already filed there as that consumer's own carry-over.
    Neither half is available upstream work.
 
@@ -3347,7 +3362,7 @@ so no block written before it changes verdict.
    NEITHER MOVE WAS A PULL.** It went `28df5c39…` → `a8bdf944…` when a blocked consumer session
    filed `PC-S308` (live 73 → 74, unfiled unchanged at 43 because nothing here cited it yet), then
    → `fa399e8d…` when that consumer annotated the entry with the resolution and filed its own
-   Check 916 carry-over. **A moved md5 during YOUR batch is the normal case now, not an alarm** —
+   Check 915 carry-over. **A moved md5 during YOUR batch is the normal case now, not an alarm** —
    check whether the consumer wrote before concluding anything about a pull. An earlier such move
    went `32bdb378…` → `28df5c39…`, live ROSE 64 → 73 and unfiled 33 → 43, when the consumer's
    `v0.455.0` routing rule filed TEN new `PC-S340-*` candidates in its follow-ups while ROTATING the
