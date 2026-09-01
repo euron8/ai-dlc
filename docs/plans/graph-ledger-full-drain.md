@@ -31,7 +31,77 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### THE PULL RAN AND MERGED, AND THE GAP REACHED ZERO FOR THE FIRST TIME IN THIS PROGRAM. BATCHES 34, 35 AND 36 SHIPPED AS `v0.464.0`, `v0.466.0` AND `v0.467.0`. START AT BATCH 37.
+### BATCH 37 SHIPPED AS `v0.471.0`. THE CONSUMER IS AT `0.470.0` AND THE GAP IS ONE RELEASE. START AT BATCH 38.
+
+**This block is the current state and it replaces every block below.** Every figure was
+re-derived after the merge by running the derive block and the sweep serially, all controls in
+the same invocation.
+
+**BATCH 37 — `v0.471.0`, and the subject came from a peer session rather than from the sweep.**
+`PC-S308-STEP1A-ROTATE-REMEDY-NO-SPRINT-START-DESTINATION`: route.md Step 1a told a blocked
+session to move an over-budget log "to a dated archive" while `artifact-path-grammar.md:382`
+gives one sprint-keyed destination and `:387` retires date-carrying basenames. Rule 25's preamble
+forbids a basename sprint token; Rule 25(c) sixty lines below said "dated archive" AND named
+`retro.md` §4b as the rotation site, which is what let a consumer conclude its pipeline was
+circularly deadlocked — unable to start a sprint, unable to reach the retro that would rotate.
+It was never deadlocked: Step 1a's remedy IS a rotation site. Five sites carried the retired
+spelling. **The remedy is destination resolution, not permission**, and the grammar's existing
+ordinal already answered it — both remedies the filing proposed add grammar the same file retires.
+
+**THE FILING WAS `HOLDS-WIDER`, AND THE WIDENING WAS THE RULEBOOK CONTRADICTING ITSELF.** Read
+the entry's claims separately: it named the route.md/grammar conflict correctly and did NOT catch
+that `SKILL.md` states both destinations sixty lines apart. Its reproduction control also tested
+`planning-artifacts/s308` for absence where the destination at issue is
+`implementation-artifacts/s<N>/` — adjacent to the claim, not on it. Both absent, so the
+conclusion survived; the control did not discriminate.
+
+**AN ADVERSARIAL PEER FOUND FOUR DEFECTS IN THE FIX AND ONE WOULD HAVE SHIPPED.** The rule was
+first justified as *"the next sprint's number is not resolved yet"* — **false**, and falsifiable
+in one command (`sprint-status.sh sprint-id` answers it; core hooks call it on Stop and
+PreToolUse). A reader who falsifies that clause discounts the no-loss warning beside it, which is
+the half protecting a 182293-byte archive from being overwritten. Restated as ORDERING: `roll()`
+owns directory creation. Also: `mv` preserves bytes so the mandated span-in-first-line was
+unimplementable by the prescribed mechanism; rotating at Step 1a strands events between two
+retros' audits; and `FROZEN_NAME_GLOBS` carried only the plain archive glob. **Ask a hand what
+your fix makes always-true downstream, not only whether the defect is real.**
+
+**`I102` IS THE MECHANISM, three arms.** No core file spells a rotation destination as a dated
+archive — destination-shaped grammar, so the exempt `pipeline-snapshot-archive.md` measurement at
+`rotate-snapshot-archive.sh:29` is not convicted, FP set 0. The grammar must still state the
+destination verbatim or arm A is vacuous. And the two archive globs travel together in every
+shell reader that globs archives (population 3, FP set 0 — scoping to `*.sh` drops two prose
+files naming the pair as a class). Self-probe fires both ways before the corpus.
+
+**THE FIGURES, re-derived after the merge.** Ledger md5 `fa399e8d…` — **74 live candidates, 139
+archived, 31 cited, 43 UNFILED**. DISCHARGED **14 raw / 13 corrected**, IN-FLIGHT **18**,
+UNTOUCHED **43**, overlap **1**, TERMINAL **31**. Partition control closes on the raw figure:
+14+18+43−1 = 74. Presence controls 1/1/1; partition control 0; absence control 0.
+`docs/backlog.md` **76 live / 57 archived** against a ceiling of 100.
+
+**THE GAP IS ONE RELEASE AND A PULL IS NOT AUTHORIZED.** Consumer stamp reads **`0.470.0` /
+`052351a1`** on all four fields; distribution is `0.471.0` at `58952c5d`. PENDING is **1**
+(`PC-S308` named in an origin/main commit message, still live in their ledger, impossible-id
+control 0). **No bootstrapping step is in the range** — zero files under
+`core/skills/ai-dlc-update/` or `core/scripts/ai-dlc/` moved, against a control of 11 changed
+files overall. `operator-rulings.md` governs: readiness is not authorization, and a pull is never
+handed to a peer.
+
+**THE CONSUMER HAS ALREADY FILED THE HALF UPSTREAM CANNOT FIX.** Its Check 916 path-set exemption
+(`gate-validation-domain.md:70,83`) ends `(-history|-archive)?\.md$` and does NOT match an ordinal
+rotation, so the first ordinal rotation commit after the pull silently loses its exemption. That
+is a consumer extension; it is reported in the `v0.471.0` CHANGELOG and was correctly not edited.
+Do not take it as upstream work.
+
+**STILL OWED AND NO SWEEP WILL SURFACE IT**: `IS-CORE`'s by-design rejection, written into
+`docs/reviews/graph-s340-adjudication-brief.md` §1 with batch 35's adjudication in §1b. Batches
+34, 35, 36 and 37 have all left it. **The brief is written; carrying it is the operator's.**
+
+**A PEER SESSION IS A SUBJECT CHANNEL THE SWEEP CANNOT SEE, AND IT PRODUCED THIS BATCH.** The
+candidate arrived as a message from a blocked consumer session, was validated here against the
+tree, and was filed by that consumer while this side built. A session that only runs the sweep
+would have found none of it. Read `ListAgents` at the start of a batch.
+
+### BATCHES 34, 35 AND 36 SHIPPED AS `v0.464.0`, `v0.466.0` AND `v0.467.0` — A RECORD. BATCH 37 HAS SINCE RUN; TAKE THE STATE FROM THE BLOCK ABOVE, NOT FROM THIS HEADING.
 
 **This block is the current state and it replaces every block below.** Every figure was re-derived
 after the consumer's merge, all controls in the same invocation.
@@ -2738,12 +2808,40 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **RUN THE SWEEP (action 1b below), THEN PICK BATCH 37's SUBJECT.** Batches 34, 35 and 36 are
-   merged as `v0.464.0`, `v0.466.0` and `v0.467.0`. Number yours 37.
+1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 38's
+   SUBJECT.** Batch 37 is merged as `v0.471.0`. Number yours 38.
 
-   **THE GAP IS ONE RELEASE AND THE PULL AUTHORIZATION IS SPENT.** The consumer is at
-   `0.466.0`/`a74e2e0b`; `v0.467.0` shipped after its merge. Do not dispatch a pull and do not hand
-   one to a peer session.
+   **A PEER SESSION IS A SUBJECT CHANNEL AND IT OUTRANKED THE SWEEP LAST BATCH.** Batch 37's
+   subject arrived as a message from a blocked consumer session, not from the ledger — the sweep
+   could not have found it, because the candidate did not exist until that session filed it
+   mid-batch. `ListAgents` costs one call. If a peer is holding a live blocker, validate it
+   against the tree before scoping anything else; a consumer stopped at a HARD_BLOCK outranks a
+   candidate that has sat in the ledger for a month.
+
+   **THE GAP IS ONE RELEASE AND NO PULL IS AUTHORIZED.** The consumer is at
+   `0.470.0`/`052351a1`; `v0.471.0` shipped after its last reconcile. PENDING is 1. Do not
+   dispatch a pull, do not write a runbook, and do not hand one to a peer session —
+   `operator-rulings.md` governs and readiness is not authorization.
+
+   **`v0.471.0`'s SUBJECT IS SPENT. DO NOT RE-SCOPE ONTO IT.**
+   `PC-S308-STEP1A-ROTATE-REMEDY-NO-SPRINT-START-DESTINATION` is fixed and cited; it stays LIVE
+   in the consumer's ledger until they pull, so the sweep will keep showing it. Its remaining
+   half — the Check 916 exemption regex — is a CONSUMER extension the consumer has already filed
+   as its own carry-over. Neither half is available upstream work.
+
+   **VALIDATE A PEER'S ROOT CAUSE BEFORE ACTING ON IT, AND EXPECT THE HEADLINE TO BE WRONG.**
+   Batch 37's reporting session was right that its pipeline was blocked and wrong about why: it
+   read `retro.md` §4b as the only sanctioned rotation and concluded a circular deadlock, when
+   Step 1a's own remedy list sanctions rotating at sprint start. The real defect was one level
+   down, in the DESTINATION. A filing is authoritative about the SYMPTOM and is evidence about
+   nothing else.
+
+   **PUT AN ADVERSARIAL HAND ON YOUR OWN FIX, NOT ONLY ON THE FILING.** Batch 37 dispatched one
+   peer session against the fix mid-build and it returned four defects, one of which would have
+   shipped: a justification clause that was false and falsifiable in a single command, sitting
+   beside the warning that protects 182293 bytes from being overwritten. Ask specifically what
+   the fix makes always-true downstream and what it ACQUITS — "is the defect real" is the
+   question that was already answered.
 
    **BATCH 35's SUBJECT IS STILL OPEN AS `BL-132` AND ITS FILED REMEDY IS REFUTED — read the entry
    before touching it.** A content/byte-equality arm does not fire on the pull that filed the
@@ -2817,8 +2915,8 @@ so no block written before it changes verdict.
    **DO NOT READ A MOVED DATE AS A NEW FILING. VERIFY WITH THE LEDGER'S md5, NOT WITH THE DATE.**
    Measured 2026-08-31: those three ids dated `2026-08-30` one day and `2026-08-31` the next while
    the ledger was BYTE-IDENTICAL throughout — at the value it held THEN, `968f51ce…`, live 66,
-   unfiled 33. **That digest is the EPISODE'S and is not your baseline: two pulls have moved the
-   ledger since, so your anchor is `28df5c39…` / live 73, in action 1b and nowhere else.** Two digests in
+   unfiled 33. **That digest is the EPISODE'S and is not your baseline: pulls and filings have moved
+   the ledger since, so your anchor is `fa399e8d…` / live 74, in action 1b and nowhere else.** Two digests in
    one action is how a reader takes the wrong one, and the older value stays because it is the
    evidence for the rule, not because it is current. The sweep dates an
    id with `git log -S … | tail -1`, the OLDEST commit introducing the string, and the consumer
@@ -2966,16 +3064,21 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 28df5c39... AFTER the 0.456.0 pull; a MOVE here means a real filing
-   wc -l < /tmp/live.txt    # 73 after the pull
-   wc -l < /tmp/unfiled.txt # 43 after the pull
+   md5 -q "$L"              # fa399e8d... AFTER batch 37; a MOVE here means a real filing
+   wc -l < /tmp/live.txt    # 74 after batch 37
+   wc -l < /tmp/unfiled.txt # 43 after batch 37
    ```
 
-   **THE BASELINE IS 73 LIVE CANDIDATES AFTER THE `0.452.0 → 0.456.0` PULL, 30 CITED, 43 UNFILED.**
+   **THE BASELINE IS 74 LIVE CANDIDATES AFTER BATCH 37, 31 CITED, 43 UNFILED.**
    A higher count means the consumer filed while nobody was looking.
 
-   **THE md5 MOVED ON THE PULL, AND A FILING IS NOW THE LIKELIEST CAUSE RATHER THAN THE RAREST.** It
-   went `32bdb378…` → `28df5c39…`, live ROSE 64 → 73 and unfiled 33 → 43, because the consumer's
+   **THE md5 MOVED TWICE DURING BATCH 37, BOTH TIMES FROM THE CONSUMER WRITING MID-BATCH, AND
+   NEITHER MOVE WAS A PULL.** It went `28df5c39…` → `a8bdf944…` when a blocked consumer session
+   filed `PC-S308` (live 73 → 74, unfiled unchanged at 43 because nothing here cited it yet), then
+   → `fa399e8d…` when that consumer annotated the entry with the resolution and filed its own
+   Check 916 carry-over. **A moved md5 during YOUR batch is the normal case now, not an alarm** —
+   check whether the consumer wrote before concluding anything about a pull. An earlier such move
+   went `32bdb378…` → `28df5c39…`, live ROSE 64 → 73 and unfiled 33 → 43, when the consumer's
    `v0.455.0` routing rule filed TEN new `PC-S340-*` candidates in its follow-ups while ROTATING the
    one this program discharged. **So a moved md5 has three causes — a filing, a rotation, and a
    squash — and this pull produced two of them at once, which is why the counts must be read
