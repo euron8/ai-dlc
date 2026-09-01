@@ -15,6 +15,37 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.465.0] - 2026-09-01
+
+### A correction is itself a measurement, and narrowing is not the safe direction
+
+The durable rule channel's ceiling rises `51300` → `51800` on an operator ruling, for one rule
+costing 491 bytes.
+
+**The rule, earned in `v0.464.0` and by a mistake made in good faith.** A CHANGELOG entry in that
+release was corrected mid-batch to say a gate's blindness held only outside one file class. That
+was one ROW of a two-row table read as the whole table: on the other row — an undiverged consumer —
+the gate caught nothing at all, and an adversarial hand had to WIDEN the claim back. Correcting
+toward "narrower" reads as honesty and is exactly as capable of being wrong as the claim it
+replaces. It sits beside "Ask what SET a number was taken over" deliberately: that rule governs a
+figure, this one governs a REVISION to a figure, which is the case the first did not cover.
+
+**Why it is in the unconditional channel rather than scoped or mechanized.** It is a judgement
+about the population a correction was measured on, made while editing prose, and no tracked file
+carries a trace of the error — the narrowed claim and the true one are both well-formed English
+about the same subject. Nothing can scan for it, and `.claude/rules/resident-context.md` bars
+scoping a prose-only rule, because scoping deletes it from every session that has compacted once.
+
+**The duplicate scan ran BEFORE the raise, which the raise before last skipped.** Zero occurrences
+of the rule's subject across the durable channel, against a positive control finding a phrase known
+to sit in `CLAUDE.md` and a negative control returning nothing. The existing "narrow" hits are
+goal-narrowing, false-positive-set narrowing, and a narrower check — none is this. **A6 was also
+observed FAILING at 51791 against the old ceiling before it moved**, so the raise answers a check
+that fired rather than one assumed, and the arm still fires when given a lower ceiling.
+
+**What was still not covered, stated rather than carried quietly.** The judgement-per-passage
+vestigial form is again not exhaustively enumerated. That debt is now three raises old.
+
 ## [0.464.0] - 2026-09-01
 
 ### The gate that authorises a write compared the ref's spelling, not the ref
