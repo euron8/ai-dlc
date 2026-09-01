@@ -29,6 +29,14 @@ paths:
   mutation that WIDENS a guard to match everything often produces the same
   output as the unmutated original, so it scores a kill it did not earn —
   measured on a `case` pattern widened to `*)`. Make the guard match NOTHING.
+- **A DENY arm alone cannot tell a correctly-keyed guard from one that denies
+  unconditionally.** The mirror of the bullet above, and it is the direction that
+  looks finished: a probe asserting "this tool is denied" passes identically
+  whether the guard reads its key or refuses everything. Every denied cell needs
+  its ALLOW twin in the SAME run, one property apart. Measured on a hook arm whose
+  surface had just grown a tool: the DENY half was written, the near-miss half was
+  not, and nothing in the battery could have caught the tool being denied for the
+  wrong reason.
 - **An ABSENCE-shaped arm is the one that REQUIRES a mutant, and a seeded
   near-miss is not a substitute.** Both-directions controls establish that the
   arm discriminates between two inputs; only a mutant establishes that it
