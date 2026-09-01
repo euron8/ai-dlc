@@ -15,6 +15,36 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.470.0] - 2026-09-01
+
+### The base was taken on faith while the stamp recorded the answer
+
+The report's mechanical region now says so when the passed `base` disagrees with the consumer's
+recorded `commit:`.
+
+**`THEIRS` is rev-parsed and refused if it does not resolve; `BASE` was a bare required positional
+and validated nowhere.** Measured: the stamp is read in four reconcile scripts and every one of
+them reads `skill_commit`, never `commit`, except the post-write read-back in `apply.sh`. So
+nothing in the pipeline compared the base it was handed against the field that records what the
+tree was last reconciled to — against a control of four `rev-parse` calls guarding `THEIRS` in
+`apply.sh` alone.
+
+**The trap is that the stamp carries two sha-shaped fields and both look like plausible bases.**
+Found by the reference consumer, which hit it three times in one session: a cycle run with the
+PREVIOUS `commit:` — correct one pull earlier — inflated the range from 1 path and 0 fixtures to
+10 and 5. `self-update-fixtures.sh` then refused, correctly, naming omitted fixtures, and the first
+response was to widen the input until the refusal went away rather than ask why the diff had grown.
+**A refusal computed from a bad input is not a verdict on the thing it names.** Nothing was written
+wrongly — the inflated run was a passing superset — and it was caught only because a commit message
+contradicted the stamp on read-back.
+
+**A row, not a refusal.** Re-reconciling from an older base is legitimate — a deliberate re-run, a
+split pull, a recovery — so denying it would wedge real work. But silence is indistinguishable from
+agreement, which is the failure this band has now fixed twice elsewhere, so the disagreement is
+stated in the artifact the operator approves from. Scored three ways: base matching the stamp → row
+absent; base disagreeing → row present; no stamp at all → row absent, because a consumer that has
+never been reconciled has no recorded base to disagree with and must not produce a finding.
+
 ## [0.469.0] - 2026-09-01
 
 ### A line number in shipped prose points into a file the consumer does not have
