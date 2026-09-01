@@ -3159,7 +3159,32 @@ so no block written before it changes verdict.
    13 sent eight content-free idle notifications and two direct follow-up requests before the
    lead did all three jobs itself. **Budget for that**: dispatch the hands, do the work yourself
    in parallel, and treat anything a hand returns as a check on your own answer rather than as
-   the answer. A hand that has gone idle twice is not going to report.
+   the answer.
+
+   **BUT AN IDLE HAND IS NOT A HAND WITH NOTHING TO SAY, AND AN EARLIER REVISION OF THIS LINE
+   SAID IT WAS.** It read "a hand that has gone idle twice is not going to report", and a batch
+   merged on that reading. Both hands then reported, both were RIGHT, and both had measured the
+   thing that made the release wrong — the subject was by-design and the fix had to be reverted
+   one release later. Their payloads arrived TRUNCATED at ~16000 characters, so ask for the tail
+   by name. Waiting costs wall clock; merging without them cost a release.
+
+   **EVERY HAND THAT WRITES GETS ITS OWN WORKTREE.** Pass `isolation: "worktree"` in the `Agent`
+   spawn. Measured in one session with five hands in a single checkout: one lost its uncommitted
+   edits when the lead switched branches under it and began committing defensively as a
+   workaround; another ran `git commit --amend` while the LEAD's commit was at `HEAD` and
+   replaced the lead's message with its own. Both were recovered only because the hand checked
+   its own work afterward and said so. `--amend` names no commit, so it is only ever correct if
+   you know what `HEAD` is, and in a shared checkout with a live peer you do not.
+
+   A READ-ONLY hand — scope, adversary, census, map — does not need one and is not harmed by
+   one; the collision is a property of WRITING. Isolate on the deliverable, not on the job title.
+
+   **THE COST IS COLLECTION, AND IT IS YOURS.** A worktree hand's commits land on its own branch,
+   not in your tree, so the work does not appear where you last saw it. Ask for the branch name
+   and the commit shas in its final message, then collect them yourself and **verify the result
+   by CONTENT** — `cmp -s` the files against what the hand said it wrote, and check the ship
+   declarations separately. A hand reporting "committed" is a claim about a tree you have not
+   read.
 
    The hazards themselves are in `.claude/rules/tool-hazards.md` under "Delegation hazards" and
    are not restated here.
