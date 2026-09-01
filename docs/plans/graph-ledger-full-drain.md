@@ -31,7 +31,7 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 38 SHIPPED AS `v0.472.0`. THE GAP IS ONE RELEASE AND PENDING IS 1. START AT BATCH 39.
+### BATCH 38 SHIPPED AS `v0.472.0`, CORRECTED BY `v0.473.0`. THE GAP IS TWO RELEASES AND PENDING IS 1. START AT BATCH 39.
 
 **This block is the current state and it replaces every block below.** Every figure was
 re-derived by running the derive block and the sweep serially, all controls in the same
@@ -76,6 +76,31 @@ everything it can, so the capture keeps only the LAST DIGIT. It read 12 as `2` a
 the out-of-scope total came back **29 against a true 49** — a plausible number, off by 20, with no
 error anywhere. Caught by deriving the same population independently in `jq` and refusing to
 report until the two reconciled. **Two derivations, or the number is a hypothesis.**
+
+**`v0.472.0` FIXED A FALSE-FAIL CLASS AND LEFT A LARGER ONE STANDING ONE FIELD OVER, AND ITS OWN
+RESIDUE FIGURE IS WHERE THAT HID.** The release reported "25 arms survive — 14 genuine uncited plus
+11 tier mismatches". Read by ROW instead of by ARM, **24 of those 25 sit on `<unnamed>` rows the
+dispatch guard never wrote**, and exactly one is real: `gate-adjudicator-s304-story4-impl`, missing
+its Rule 19(b) citation. `v0.473.0` corrects it. **A residue reported in the unit the check emits
+(arms) rather than the unit the defect lives in (rows) is how a 96% false rate reads as a
+result** — count a residue in both units before publishing either.
+
+**`--ledger` NAMES AN APPEND-ONLY FILE ANY SESSION CAN WRITE TO.** The single-writer premise —
+"written by `ai-dlc-dispatch-guard.sh`, one row per role-bound dispatch" — was stated in the script
+header, in Check 22 and in the enforcement map, and it is a CONVENTION. That consumer's ledger
+carries 14 rows in a hand-written provenance schema (`deliverable`, `dispatched_at`, `sha`, `step`,
+no `v`), all sprint 305, 13 of them naming a declared role. **Judging one manufactures findings out
+of ABSENT fields**: a missing `role_contract_cited` reads as `false`, a missing `model_bound`
+compares as the empty string against a real pin, and a missing `role_file_readable` is not `false`
+so it clears the fail-closed arm by omission. The guard stamps `v` on every row from one `jq -nc`,
+so its presence is the schema marker; a row without it is counted, its roles named separately, and
+never judged. 25 arms → 1, and sprint 305 now exits 3 because nothing in it was a dispatch record.
+
+**AND THE NEWEST HALF OF THE FIX WAS UNRECEIPTED, WHICH IS THE STANDING SHAPE.** Deleting the
+empty-role guard — one line, added late — left the receipt at exit 0, because no ledger in it
+carried a null role. **Every guard added after a receipt is written is unreceipted until someone
+re-scores; adding an arm is not the same as adding a subject.** Now 2 of 16, and the second spelling
+was correctly rejected on its first build for inlining the scope test without carrying that guard.
 
 **AN ADVERSARIAL HAND FOUND THAT MY FILTER'S JOIN KEY WAS THE FIELD THE VIOLATION CORRUPTS, AND
 THAT IS THE BATCH'S BEST FINDING.** A real team role dispatched with `subagent_type:
@@ -181,9 +206,9 @@ closes on the raw figure: 15+18+42−1 = 74. Presence controls 1/1/1/1; absence 
 `docs/backlog.md` **76 live / 58 archived** against a ceiling of 100. The partition moved by
 exactly one, out of UNTOUCHED and into DISCHARGED, which is the batch-31 repair working.
 
-**THE GAP IS ONE RELEASE AND PENDING IS 1 — both DERIVED, with controls.** The consumer stamp
-reads `0.471.0`/`31b51d48` on all four fields against a distribution `VERSION` of `0.472.0` at
-`e92db525`. PENDING is the discharged set whose naming release sits above the consumer's stamp:
+**THE GAP IS TWO RELEASES AND PENDING IS 1 — both DERIVED, with controls.** The consumer stamp
+reads `0.471.0`/`31b51d48` on all four fields against a distribution `VERSION` of `0.473.0` at
+`808257ff`. PENDING stays 1 because both releases carry the SAME candidate. PENDING is the discharged set whose naming release sits above the consumer's stamp:
 exactly one, this batch's, with an impossible-id control of 0 and a known-present control of 1.
 **A PULL IS NOT AUTHORIZED.** The consumer's stamp reads
 `0.471.0`; the distribution is `0.472.0`. `operator-rulings.md` governs: readiness is not
