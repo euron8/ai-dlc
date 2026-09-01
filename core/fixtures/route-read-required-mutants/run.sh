@@ -267,7 +267,11 @@ fi
 CHK2Z_IF="$(grep -F 'AIDLC_SESSION" = "1"' "$HOOK")"
 if [ -z "$CHK2Z_IF" ]; then
   bad "REGRESSION GUARD: Check 2z's guard line could not be located, so this arm asserted nothing"
-elif printf '%s' "$CHK2Z_IF" | grep -q 'UPDATER_SESSION'; then
+elif case "$CHK2Z_IF" in *UPDATER_SESSION*) true ;; *) false ;; esac; then
+  # A `case`, not `printf | grep -q`. I54/I54b fired on the pipe form here, correctly: `grep -q`
+  # leaves at its first match while the writer is still pushing, and under `pipefail` the
+  # pipeline answers with the writer's EPIPE and reports NOT-FOUND on input that contains the
+  # pattern. This file sets `pipefail`, and the status decides an assertion.
   bad "REGRESSION: an \`UPDATER_SESSION\` conjunct is back in Check 2z's guard. It decides nothing — both flags come from one first-match-wins case whose patterns are mutually exclusive, and the payload arm that could split them fires only on a Skill call this surface never sees. Re-derive before re-adding it."
 else
   ok "REGRESSION GUARD: Check 2z's guard carries no \`UPDATER_SESSION\` conjunct (the census removed one that decided nothing on any reachable input)"
