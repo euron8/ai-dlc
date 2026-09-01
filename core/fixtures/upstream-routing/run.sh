@@ -96,7 +96,7 @@ WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
-EXPECTED_ASSERTIONS=42
+EXPECTED_ASSERTIONS=53
 fails=0; made=0
 ok()   { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad()  { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
@@ -151,6 +151,13 @@ print("globs=%d" % d["globs"])
 # answering, and a default would render that as a legitimate zero — the shape of silence
 # scoring as a kill. A KeyError here fails the arm loudly instead.
 print("absent_named=%d" % d["absent_named"])
+# Same rule as absent_named: indexed, never .get()-ed. A subject that stopped emitting the
+# PAIRED BUT UNPLACEABLE data must fail the arm loudly rather than render as an honest zero.
+print("unplaceable_n=%d" % len(d["paired_unplaceable"]))
+for u in d["paired_unplaceable"]:
+    print("unplaceable=%s" % u["id"])
+    for p in u["paths"]:
+        print("unplaceable_path=%s %s" % (u["id"], p))
 for f in d["findings"]:
     print("finding=%s" % f["id"])
     for p in f["paths"]:
@@ -1237,6 +1244,288 @@ else
   fi
 fi
 
+
+# =============================================================================================
+# 43-51. PAIRED BUT UNPLACEABLE — a candidate routed upstream against a subject no tree holds.
+#
+# THE SECTION EXISTS BECAUSE THE LABEL ABOVE HAD NO LIVE SUBJECT. `paired += 1; continue` runs
+# before the rows are built, so on the reference consumer both absent tokens — the only two the
+# label was written for — sat in paired entries and could never reach it. Routed is not the same
+# as actionable: a `PC-` id against a path nobody can locate cannot be worked and cannot be
+# closed, and it is the ORIGINAL harm the tool was filed about.
+#
+# A PAIRED ENTRY IS STILL NOT A FINDING, and every arm here says so in its own conjunct. The
+# section is additive: the finding set, the entry count and `paired` are all required to be
+# exactly what they were without it. `paired` counting an entry that the section ALSO lists is
+# deliberate and is asserted, because a reader who assumed the two partition would double-subtract.
+#
+# ITS OWN CORPUS, NOT THE LABEL'S. Adding paired entries to $ABSBL would move the entry count that
+# assertions 33 and 36 read, so a new subject gets a new seed rather than a widened one.
+PAIRBL="$CTREE/_bmad-output/backlog-paired.md"
+cat >"$PAIRBL" <<'MD'
+# Carry-over backlog
+
+### CO-S430-PAIRED-ABSENT
+**Status:** OPEN
+Routed upstream as PC-S430-VERDICT-MERGE. The subject is
+`scripts/ai-dlc/never-shipped-by-anyone.sh`, which no tree carries.
+
+### CO-S430-PAIRED-PRESENT
+**Status:** OPEN
+Routed upstream as PC-S430-MANIFEST-PICK. The subject is
+`scripts/ai-dlc/core-paths.sh`, which is on disk.
+
+### CO-S430-UNPAIRED
+**Status:** OPEN
+`scripts/ai-dlc/verdict-lib.sh` reports the wrong sprint id, and cites no push candidate.
+MD
+
+# THE NEAR-MISS, ONE PROPERTY APART. The same three entries with the absent filename swapped for
+# a present one, so both paired entries name a file on disk and the section has nothing to list.
+# The unpaired entry is untouched and still reports, which is what makes "silent" separable from
+# "the section was removed" — and from the tool having stopped altogether.
+PAIRSILENTBL="$CTREE/_bmad-output/backlog-paired-silent.md"
+sed -e 's#scripts/ai-dlc/never-shipped-by-anyone\.sh#scripts/ai-dlc/verdict-lib.sh#' \
+    "$PAIRBL" >"$PAIRSILENTBL"
+if cmp -s "$PAIRBL" "$PAIRSILENTBL"; then
+  echo "FIXTURE ERROR: the silent corpus is byte-identical to the unplaceable one — the sed matched nothing and assertion 46 would compare a corpus with itself" >&2
+  exit 2
+fi
+
+# The section is the tail of the report; slice it so an id appearing elsewhere cannot be read as
+# an id the section listed. `Text about a program is not the program` applies to its output too.
+pair_section() { awk '/^PAIRED BUT UNPLACEABLE/{f=1} f' <<<"$1"; }
+
+run_txt  "$SUBJ" "$PAIRBL"       "$WORK/pair.txt"    "$CTREE"; pair_rc=$RC
+pair_txt="$(cat "$WORK/pair.txt")"
+pair_sec="$(pair_section "$pair_txt")"
+run_json "$SUBJ" "$PAIRBL"       "$WORK/pair.json"   "$CTREE"; pairj_rc=$RC
+run_txt  "$SUBJ" "$PAIRSILENTBL" "$WORK/pairs.txt"   "$CTREE"; pairs_rc=$RC
+pairs_txt="$(cat "$WORK/pairs.txt")"
+run_json "$SUBJ" "$PAIRSILENTBL" "$WORK/pairs.json"  "$CTREE"; pairsj_rc=$RC
+pair_sum=""; [ "$pairj_rc" = "0" ] && pair_sum="$(summarize "$WORK/pair.json")"
+pairs_sum=""; [ "$pairsj_rc" = "0" ] && pairs_sum="$(summarize "$WORK/pairs.json")"
+
+# --- 43. the section LISTS the unplaceable paired entry and OMITS the placeable one -----------
+# Same run, same corpus, same glob, one property apart: both entries cite a PC- id and name one
+# `scripts/ai-dlc/*` path, and the only difference is whether that file is on disk.
+if [ "$pair_rc" = "0" ] && [ -n "$pair_sec" ] \
+   && has '^  CO-S430-PAIRED-ABSENT ' "$pair_sec" \
+   && has 'never-shipped-by-anyone\.sh' "$pair_sec" \
+   && ! has 'CO-S430-PAIRED-PRESENT' "$pair_sec" \
+   && ! has 'core-paths\.sh' "$pair_sec"; then
+  ok "PAIRED BUT UNPLACEABLE: the section lists the paired entry whose named path is absent and OMITS the paired entry whose named path is present — same run, same corpus, one property apart"
+else
+  bad "PAIRED BUT UNPLACEABLE: rc=$pair_rc, section [${pair_sec:-absent}] — it must name CO-S430-PAIRED-ABSENT and must not name CO-S430-PAIRED-PRESENT"
+  show "$pair_txt"
+fi
+
+# --- 44. and it changes NO finding ------------------------------------------------------------
+# The section is additive or it is a regression. Ids AND count, derived from both corpora, with a
+# non-empty id set as the control — two empty sets are identical and prove nothing.
+pair_ids="$(printf '%s' "$pair_sum" | grep '^finding=' || true)"
+pairs_ids="$(printf '%s' "$pairs_sum" | grep '^finding=' || true)"
+pair_ent="$(printf '%s' "$pair_sum" | sed -n 's/^entries=//p')"
+pairs_ent="$(printf '%s' "$pairs_sum" | sed -n 's/^entries=//p')"
+if [ "$pairj_rc" = "0" ] && [ "$pairsj_rc" = "0" ] \
+   && [ -n "$pair_ids" ] && [ "$pair_ids" = "$pairs_ids" ] \
+   && [ "${pair_ent:-x}" = "${pairs_ent:-y}" ]; then
+  ok "PAIRED BUT UNPLACEABLE changes NO finding: the id set and entry count are identical with and without an unplaceable paired entry in the corpus ($pair_ent entries, $(printf '%s' "$pair_ids" | grep -c .) reported, non-empty as the control)"
+else
+  bad "PAIRED BUT UNPLACEABLE changed the findings: rc=$pairj_rc/$pairsj_rc, ids [$(echo "$pair_ids" | tr '\n' ' ')] vs [$(echo "$pairs_ids" | tr '\n' ' ')], entries ${pair_ent:-?} vs ${pairs_ent:-?} — a paired entry is routed, not misrouted, and must never become a finding"
+fi
+
+# --- 45. --json agrees with the section, and `paired` still counts the listed entry -----------
+# TWO INDEPENDENTLY DERIVED VALUES: one parsed out of the JSON, one counted off the rendered text.
+# A single read cannot see the two disagree. The `paired` conjunct is the DOUBLE-COUNT trap stated
+# as an assertion: a listed entry appears in `paired` AND in the section by design, so a reader
+# who treats them as a partition subtracts it twice.
+pair_json_n="$(printf '%s' "$pair_sum" | sed -n 's/^unplaceable_n=//p')"
+pair_txt_n="$(printf '%s' "$pair_sec" | grep -c '^  CO-' || true)"
+pair_paired="$(printf '%s' "$pair_sum" | sed -n 's/^paired=//p')"
+if [ "$pairj_rc" = "0" ] && [ "${pair_json_n:-0}" -gt 0 ] \
+   && [ "${pair_json_n:-x}" = "${pair_txt_n:-y}" ] \
+   && [ "${pair_paired:-x}" = "2" ] \
+   && has '^unplaceable=CO-S430-PAIRED-ABSENT$' "$pair_sum"; then
+  ok "PAIRED BUT UNPLACEABLE json/text agree: paired_unplaceable carries $pair_json_n entry(s) and the rendered section lists $pair_txt_n (>0 as the control — 0 == 0 would pass vacuously), while \`paired\` still counts BOTH paired entries including the listed one"
+else
+  bad "PAIRED BUT UNPLACEABLE json/text: json=${pair_json_n:-?}, rendered=${pair_txt_n:-?}, paired=${pair_paired:-?} (want 2 — the listed entry is still a paired entry) — the JSON and the section are two renderings of one list and must not disagree"
+fi
+
+# --- 46. SILENT when no paired entry is unplaceable, and silence is not disappearance ---------
+# The conjunct that matters is the second one: a section that vanished and a section with nothing
+# to say look identical from outside, and only the findings still rendering separates them.
+pairs_json_n="$(printf '%s' "$pairs_sum" | sed -n 's/^unplaceable_n=//p')"
+if [ "$pairs_rc" = "0" ] && [ "$pairsj_rc" = "0" ] \
+   && ! has 'PAIRED BUT UNPLACEABLE' "$pairs_txt" \
+   && [ "${pairs_json_n:-x}" = "0" ] \
+   && has 'MISROUTED (1)' "$pairs_txt" \
+   && has 'CO-S430-UNPAIRED' "$pairs_txt"; then
+  ok "PAIRED BUT UNPLACEABLE stays SILENT when every paired entry names a file that exists — no heading, paired_unplaceable empty — while the findings still render (MISROUTED (1), CO-S430-UNPAIRED), so silence is distinguishable from the section having been removed"
+else
+  bad "PAIRED BUT UNPLACEABLE silence: rc=$pairs_rc/$pairsj_rc, heading $(has 'PAIRED BUT UNPLACEABLE' "$pairs_txt" && echo present || echo absent), json=${pairs_json_n:-?} (want 0), findings still rendering=$(has 'CO-S430-UNPAIRED' "$pairs_txt" && echo yes || echo NO)"
+  show "$pairs_txt"
+fi
+
+# --- 47. MUTANT: every named path listed (assertion 43's OMIT direction is live) --------------
+# A section that lists EVERY paired entry reads exactly like one that discriminates, until
+# something asserts the placeable entry stays out.
+M_ALLGONE="$(mkmut allgone '        gone = [p for p in mach[:6]
+                if not (root is None or os.path.exists(os.path.join(root, p)))]' '        gone = list(mach[:6])')"
+if [ -z "$M_ALLGONE" ]; then
+  bad "MUTANT allgone: the anchor matched nothing — assertion 43 proves nothing"
+else
+  run_txt "$M_ALLGONE" "$PAIRBL" "$WORK/mallgone.txt" "$CTREE"; mag_rc=$RC
+  mag_sec="$(pair_section "$(cat "$WORK/mallgone.txt")")"
+  if [ "$mag_rc" = "0" ] && has 'CO-S430-PAIRED-PRESENT' "$mag_sec" \
+     && has 'CO-S430-PAIRED-ABSENT' "$mag_sec"; then
+    ok "MUTANT allgone: listing every named path regardless of existence pulls the PLACEABLE paired entry into the section — so assertion 43's omit-direction is what makes the section discriminate"
+  else
+    bad "MUTANT allgone: rc=$mag_rc, section [${mag_sec:-absent}] — assertion 43's omit-direction is vacuous"
+  fi
+fi
+
+# --- 48. MUTANT: the listed entry promoted to a finding (assertion 44 is live) ----------------
+# The `continue` is what keeps a routed entry out of the findings. Removing it ONLY for the
+# unplaceable case leaves `paired` and the section untouched, so this mutant fails assertion 44
+# and only assertion 44 — the entanglement is deliberately avoided.
+M_PROMOTE="$(mkmut promote '        if gone:
+            unplaceable.append({"id": cid, "line": ln, "paths": gone})
+        continue' '        if gone:
+            unplaceable.append({"id": cid, "line": ln, "paths": gone})
+        else:
+            continue')"
+if [ -z "$M_PROMOTE" ]; then
+  bad "MUTANT promote: the anchor matched nothing — assertion 44 proves nothing"
+else
+  run_json "$M_PROMOTE" "$PAIRBL" "$WORK/mprom.json" "$CTREE"; mpr_rc=$RC
+  mpr_ids=""; [ "$mpr_rc" = "0" ] && mpr_ids="$(summarize "$WORK/mprom.json" | grep '^finding=' || true)"
+  if [ "$mpr_rc" = "0" ] && has '^finding=CO-S430-PAIRED-ABSENT$' "$mpr_ids" \
+     && has '^finding=CO-S430-UNPAIRED$' "$mpr_ids"; then
+    ok "MUTANT promote: dropping the skip for the unplaceable case turns a ROUTED entry into a misroute finding — so assertion 44 is what keeps the section additive"
+  else
+    bad "MUTANT promote: rc=$mpr_rc, ids [$(echo "$mpr_ids" | tr '\n' ' ')] — assertion 44 is vacuous"
+  fi
+fi
+
+# --- 49. MUTANT: the JSON list emptied (assertion 45's agreement is live) ---------------------
+# The text still renders the section and only the JSON lies, which is the failure a single-value
+# read could never see — the same shape as the absent_named mutant above.
+M_JEMPTY="$(mkmut jsonempty '"paired_unplaceable": unplaceable,' '"paired_unplaceable": [],')"
+if [ -z "$M_JEMPTY" ]; then
+  bad "MUTANT jsonempty: the anchor matched nothing — assertion 45 proves nothing"
+else
+  run_json "$M_JEMPTY" "$PAIRBL" "$WORK/mje.json" "$CTREE"; mje_rc=$RC
+  mje_n=""; [ "$mje_rc" = "0" ] && mje_n="$(summarize "$WORK/mje.json" | sed -n 's/^unplaceable_n=//p')"
+  if [ "$mje_rc" = "0" ] && [ "${mje_n:-x}" = "0" ]; then
+    ok "MUTANT jsonempty: the JSON reports an empty paired_unplaceable while the text section still lists the entry — so assertion 45's two derivations are what bind the machine-readable list to the rendered one"
+  else
+    bad "MUTANT jsonempty: rc=$mje_rc, unplaceable_n=${mje_n:-?} (want 0) — assertion 45 is vacuous"
+  fi
+fi
+
+# --- 50. MUTANT: the listed entry no longer counted as paired (assertion 45's count is live) --
+# The double-count trap from the other side: if `paired` stopped counting an entry the section
+# lists, the two numbers would partition and every downstream reader would be quietly correct to
+# add them. Assertion 45 pins `paired` at 2 precisely so that cannot change unnoticed.
+M_NOPAIR="$(mkmut nopair '        paired += 1          # already routed upstream; the pairing is the discriminator' '        paired += 0          # mutant: the listed entry is no longer counted as paired')"
+if [ -z "$M_NOPAIR" ]; then
+  bad "MUTANT nopair: the anchor matched nothing — assertion 45 proves nothing"
+else
+  run_json "$M_NOPAIR" "$PAIRBL" "$WORK/mnp.json" "$CTREE"; mnp_rc=$RC
+  mnp_paired=""; mnp_n=""
+  if [ "$mnp_rc" = "0" ]; then
+    mnp_paired="$(summarize "$WORK/mnp.json" | sed -n 's/^paired=//p')"
+    mnp_n="$(summarize "$WORK/mnp.json" | sed -n 's/^unplaceable_n=//p')"
+  fi
+  if [ "$mnp_rc" = "0" ] && [ "${mnp_paired:-x}" = "0" ] && [ "${mnp_n:-x}" = "1" ]; then
+    ok "MUTANT nopair: with the counter disarmed \`paired\` reads 0 while the section still lists 1 — so assertion 45's paired=2 conjunct is what stops the count and the section drifting into a partition"
+  else
+    bad "MUTANT nopair: rc=$mnp_rc, paired=${mnp_paired:-?} (want 0), unplaceable_n=${mnp_n:-?} (want 1) — assertion 45's count conjunct is vacuous"
+  fi
+fi
+
+# --- 51. MUTANT: the section rendered unconditionally (assertion 46 is live) ------------------
+# A heading that prints on every run reads as a working section on the corpus that has something
+# to say, and is only caught by the corpus that does not.
+M_ALWAYS="$(mkmut always 'if unplaceable:' 'if True:')"
+if [ -z "$M_ALWAYS" ]; then
+  bad "MUTANT always: the anchor matched nothing — assertion 46 proves nothing"
+else
+  run_txt "$M_ALWAYS" "$PAIRSILENTBL" "$WORK/malw.txt" "$CTREE"; mal_rc=$RC
+  mal_txt="$(cat "$WORK/malw.txt")"
+  if [ "$mal_rc" = "0" ] && has 'PAIRED BUT UNPLACEABLE' "$mal_txt" \
+     && has 'CO-S430-UNPAIRED' "$mal_txt"; then
+    ok "MUTANT always: an unconditional heading renders the section on a corpus with nothing to list — so assertion 46 is what keeps an empty section from reading as a finding"
+  else
+    bad "MUTANT always: rc=$mal_rc, heading $(has 'PAIRED BUT UNPLACEABLE' "$mal_txt" && echo present || echo absent) — assertion 46 is vacuous"
+  fi
+fi
+
+# --- 52. the section RENDERS when there are no findings at all --------------------------------
+# THE CORPUS THAT MOTIVATES THE SECTION IS THE ONE THAT USED TO HIDE IT. A `raise SystemExit(0)`
+# in the `MISROUTED (0)` branch returned before the section could print, so a consumer whose
+# machinery entries are ALL properly paired — the good state, and the state the section is written
+# for — saw "every entry naming AI/DLC machinery already cites a push candidate" and nothing else,
+# while `--json` carried the unplaceable list the whole time. Two renderings of one list
+# disagreeing, with no error anywhere. The better the consumer behaved, the more certainly the
+# section was invisible.
+#
+# THE `MISROUTED (0)` CONJUNCT IS THE CONTROL, not decoration: without it an arm that merely finds
+# the heading would also pass from the FINDINGS branch, which is the branch that always worked.
+# It has to be established that this run took the zero-findings path.
+PAIRZEROBL="$CTREE/_bmad-output/backlog-paired-zero.md"
+sed -e 's#and cites no push candidate\.#and is routed upstream as PC-S430-SPRINT-ID.#' \
+    "$PAIRBL" >"$PAIRZEROBL"
+if cmp -s "$PAIRBL" "$PAIRZEROBL"; then
+  echo "FIXTURE ERROR: the zero-findings corpus is byte-identical to the paired one — the sed matched nothing and assertion 52 would run against a corpus that still has a finding" >&2
+  exit 2
+fi
+run_txt  "$SUBJ" "$PAIRZEROBL" "$WORK/pairz.txt"  "$CTREE"; pairz_rc=$RC
+pairz_txt="$(cat "$WORK/pairz.txt")"
+pairz_sec="$(pair_section "$pairz_txt")"
+run_json "$SUBJ" "$PAIRZEROBL" "$WORK/pairz.json" "$CTREE"; pairzj_rc=$RC
+pairz_sum=""; [ "$pairzj_rc" = "0" ] && pairz_sum="$(summarize "$WORK/pairz.json")"
+pairz_find="$(printf '%s' "$pairz_sum" | grep -c '^finding=' || true)"
+pairz_n="$(printf '%s' "$pairz_sum" | sed -n 's/^unplaceable_n=//p')"
+if [ "$pairz_rc" = "0" ] && [ "$pairzj_rc" = "0" ] \
+   && has 'MISROUTED (0)' "$pairz_txt" \
+   && [ "${pairz_find:-x}" = "0" ] \
+   && [ -n "$pairz_sec" ] \
+   && has '^  CO-S430-PAIRED-ABSENT ' "$pairz_sec" \
+   && [ "${pairz_n:-x}" = "1" ]; then
+  ok "PAIRED BUT UNPLACEABLE RENDERS WITH ZERO FINDINGS: a corpus whose machinery entries are all paired reports MISROUTED (0) (the control that this run took the zero-findings branch, where an early exit used to return before the section) AND still lists CO-S430-PAIRED-ABSENT, with --json agreeing at $pairz_n"
+else
+  bad "PAIRED BUT UNPLACEABLE with zero findings: rc=$pairz_rc/$pairzj_rc, MISROUTED(0)=$(has 'MISROUTED (0)' "$pairz_txt" && echo yes || echo NO), findings=${pairz_find:-?} (want 0), section [${pairz_sec:-ABSENT}], json=${pairz_n:-?} (want 1) — an exit in the zero-findings branch hides the section on exactly the corpus it exists for, while --json goes on carrying the list"
+  show "$pairz_txt"
+fi
+
+# --- 53. MUTANT: the early exit restored (assertion 52 is live) -------------------------------
+# The defect as it shipped, one line. Everything else about the run is unchanged — the JSON still
+# carries the entry, the findings branch still renders — so this mutant fails assertion 52 and
+# only assertion 52.
+M_EXIT0="$(mkmut exitzero '    print("MISROUTED (0) — every entry naming AI/DLC machinery already cites a push candidate.")
+else:' '    print("MISROUTED (0) — every entry naming AI/DLC machinery already cites a push candidate.")
+    raise SystemExit(0)
+else:')"
+if [ -z "$M_EXIT0" ]; then
+  bad "MUTANT exitzero: the anchor matched nothing — assertion 52 proves nothing"
+else
+  run_txt "$M_EXIT0" "$PAIRZEROBL" "$WORK/mexit.txt" "$CTREE"; mex_rc=$RC
+  mex_txt="$(cat "$WORK/mexit.txt")"
+  run_json "$M_EXIT0" "$PAIRZEROBL" "$WORK/mexit.json" "$CTREE"; mexj_rc=$RC
+  mex_n=""; [ "$mexj_rc" = "0" ] && mex_n="$(summarize "$WORK/mexit.json" | sed -n 's/^unplaceable_n=//p')"
+  # The JSON conjunct is what makes this the RIGHT kill: the mutant must hide the section while
+  # still holding the data, which is the two-renderings-disagree shape. A mutant that simply
+  # emptied the list would also remove the heading and would not be this defect.
+  if [ "$mex_rc" = "0" ] && has 'MISROUTED (0)' "$mex_txt" \
+     && ! has 'PAIRED BUT UNPLACEABLE' "$mex_txt" \
+     && [ "${mex_n:-x}" = "1" ]; then
+    ok "MUTANT exitzero: restoring the exit in the zero-findings branch hides the section while --json still reports $mex_n unplaceable entry — two renderings of one list disagreeing with no error, which is exactly what shipped — so assertion 52 is what keeps the section reachable"
+  else
+    bad "MUTANT exitzero: rc=$mex_rc, heading $(has 'PAIRED BUT UNPLACEABLE' "$mex_txt" && echo present || echo absent), json=${mex_n:-?} (want 1) — assertion 52 is vacuous"
+  fi
+fi
 
 echo ""
 if [ "$made" -ne "$EXPECTED_ASSERTIONS" ]; then

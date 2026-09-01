@@ -243,13 +243,26 @@ def backlog_root(path):
 
 root = backlog_root(backlog)
 
+# THE PAIRING SKIP STARVED THE LABEL ABOVE OF ITS ONLY LIVE SUBJECT, which is how it shipped
+# with zero instances on the corpus that motivated it. Measured on the reference consumer: of
+# 13 core-glob path tokens, 2 are absent, and BOTH sit in entries that already cite a `PC-` id
+# — so the skip below reached them before the label could, and the report was silent on exactly
+# the case the label exists to show. A paired entry naming a path no tree contains is the
+# ORIGINAL harm: a candidate filed upstream against a subject nobody can act on and nobody can
+# close. It is still not a MISROUTE — it is routed — so it gets its own section rather than a
+# place in the findings, and `paired` still counts it.
 findings, paired, absent_total = [], 0, 0
+unplaceable = []
 for cid, ln, body in entries:
     mach = core_paths_in(body)
     if not mach:
         continue
     if PC.search(body):
         paired += 1          # already routed upstream; the pairing is the discriminator
+        gone = [p for p in mach[:6]
+                if not (root is None or os.path.exists(os.path.join(root, p)))]
+        if gone:
+            unplaceable.append({"id": cid, "line": ln, "paths": gone})
         continue
     # `root is None` means the corpus could not be placed in a tree, so every path is
     # reported unlabelled — an unasked question renders as no claim, never as "present".
@@ -263,6 +276,7 @@ for cid, ln, body in entries:
 if os.environ["EMIT_JSON"] == "1":
     print(json.dumps({"backlog": backlog, "entries": len(entries), "globs": len(globs),
                       "paired": paired, "absent_named": absent_total,
+                      "paired_unplaceable": unplaceable,
                       "findings": findings}, indent=2))
     raise SystemExit(0)
 
@@ -270,21 +284,39 @@ print("AI/DLC UPSTREAM ROUTING  —  %s" % backlog)
 print("  entries examined: %d    machinery globs: %d" % (len(entries), len(globs)))
 print("  already paired with a PC- id: %d" % paired)
 print()
+# THE EARLY EXIT USED TO END THE REPORT HERE, and that starved the section below of exactly
+# the corpus it exists for: a tree where every machinery-naming entry IS paired is the GOOD
+# state, and it is also the state in which an unplaceable ROUTED entry is the only thing left
+# worth saying. The better a consumer behaved, the more certainly the section was invisible.
+# Same shape as the pairing skip the section itself was written to repair — an earlier reader
+# exiting before the later one runs — and the `--json` output carried the entry throughout, so
+# the two renderings disagreed with no error anywhere.
 if not findings:
     print("MISROUTED (0) — every entry naming AI/DLC machinery already cites a push candidate.")
-    raise SystemExit(0)
-
-print("MISROUTED (%d) — these name AI/DLC's own machinery and cite no push candidate." % len(findings))
-print("A defect in machinery belongs in _bmad-output/ai-dlc-update/push-candidate-ledger.md as a")
-print("PC- entry. Keep a CO- item too ONLY if local work remains — a workaround to remove later.")
-print()
-for f in findings:
-    print("  %s  [line %d]" % (f["id"], f["line"]))
-    for r in f["named"]:
-        print("      names: %s%s" % (r["path"], "" if r["exists"] else "   [NO SUCH FILE HERE]"))
-print()
-print("REPORT-ONLY: this exits 0. Routing is a judgement and some of these may be consumer work")
-print("that merely USES a core tool — read each before refiling.")
+else:
+    print("MISROUTED (%d) — these name AI/DLC's own machinery and cite no push candidate." % len(findings))
+    print("A defect in machinery belongs in _bmad-output/ai-dlc-update/push-candidate-ledger.md as a")
+    print("PC- entry. Keep a CO- item too ONLY if local work remains — a workaround to remove later.")
+    print()
+    for f in findings:
+        print("  %s  [line %d]" % (f["id"], f["line"]))
+        for r in f["named"]:
+            print("      names: %s%s" % (r["path"], "" if r["exists"] else "   [NO SUCH FILE HERE]"))
+    print()
+    print("REPORT-ONLY: this exits 0. Routing is a judgement and some of these may be consumer work")
+    print("that merely USES a core tool — read each before refiling.")
+if unplaceable:
+    print()
+    print("PAIRED BUT UNPLACEABLE (%d) — already routed upstream, and naming one or more AI/DLC"
+          % len(unplaceable))
+    print("paths that resolve to no file here. Routed is not the same as actionable: a candidate")
+    print("against a subject nobody can locate cannot be worked and cannot be closed. Check the")
+    print("push candidate names a path that exists, or says plainly that it proposes a new one.")
+    print()
+    for u in unplaceable:
+        print("  %s  [line %d]" % (u["id"], u["line"]))
+        for p in u["paths"]:
+            print("      names: %s   [NO SUCH FILE HERE]" % p)
 if absent_total:
     print()
     print("%d named path(s) marked [NO SUCH FILE HERE] match a core DESTINATION but name no file in" % absent_total)

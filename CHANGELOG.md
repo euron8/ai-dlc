@@ -15,6 +15,31 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.462.0] - 2026-09-01
+
+### The label `v0.458.0` shipped could not reach its own subject
+
+`audit-upstream-routing.sh` gains a `PAIRED BUT UNPLACEABLE` section and `paired_unplaceable` in
+its JSON.
+
+**The `[NO SUCH FILE HERE]` label shipped with zero live instances, and the reason is structural.**
+`paired += 1; continue` runs before the rows the label decorates are built, so a paired entry can
+never be labelled. Measured on the reference consumer: of 13 core-glob path tokens, 2 are absent —
+and BOTH sit in paired entries. The check the previous release added was therefore silent on the
+exact case it exists to show, and silence reads identically to a check that never fires. That is
+the vacuous-guard shape `mechanism-design.md` says to give a subject or delete; this gives it one.
+
+**A paired entry naming an unplaceable path IS the original harm, stated precisely.** The filing
+that opened this batch described "a candidate against a subject that has never existed" — and that
+is what a routed entry naming no file is. It is not a misroute; it is routed. So it gets its own
+section rather than a place in the findings, and `paired` still counts it, which is a deliberate
+double count between the tally and the section.
+
+Live on the reference consumer today: **2** — `CO-S307-GATE26-VERDICT-MERGE-SCRIPT` naming
+`scripts/ai-dlc/merge-gate-verdicts.sh`, a script the item PROPOSES, and
+`CO-S305-DISPATCH-GUARD-SPRINT-STAMP-DEFECT` naming a bare `.claude/hooks/ai-dlc-*.sh` wildcard,
+which is not a filename. Findings are unchanged at 4 and `paired` unchanged at 7, both as controls.
+
 ## [0.461.0] - 2026-09-01
 
 ### `/ai-dlc` could be invoked and the router never read, and nothing anywhere noticed
