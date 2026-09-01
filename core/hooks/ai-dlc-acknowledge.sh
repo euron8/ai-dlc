@@ -131,6 +131,16 @@ TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 [ -f "$SNAPSHOT_FILE" ] || exit 0
 
 UPDATER_SESSION=0
+# A SEPARATE, POSITIVE SIGNAL, AND IT IS NOT THE COMPLEMENT OF THE ONE ABOVE.
+# `UPDATER_SESSION=0` means "not the updater", which a session that invoked NO ai-dlc skill
+# at all also satisfies -- it is the initial value. Check 2z's whole justification is that
+# `SKILL.md` INITIALIZATION binds a session that LOADED SKILL.md, so it must ask whether one
+# did, not whether one is something else. Measured on the reference consumer's 171
+# transcripts while this arm was being written: gating on `UPDATER_SESSION=0` fires on 46
+# sessions that never invoked `/ai-dlc`, 12 of which issued a Write or Edit and would have
+# been denied -- ordinary non-pipeline sessions, in a repo where the snapshot exists and the
+# hook is installed, told to read a router they have no reason to read.
+AIDLC_SESSION=0
 if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
   # STILL ONE SCAN, now over FOUR forms. The question is "whichever skill was
   # invoked LAST", so the last line matching ANY marker is the whole answer --
@@ -152,6 +162,8 @@ if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
   case "$LAST_SKILL" in
     *'/ai-dlc-update</command-name>') UPDATER_SESSION=1 ;;
     *'"skill":"ai-dlc-update"')       UPDATER_SESSION=1 ;;
+    *'/ai-dlc</command-name>')        AIDLC_SESSION=1 ;;
+    *'"skill":"ai-dlc"')              AIDLC_SESSION=1 ;;
   esac
 fi
 
@@ -160,8 +172,96 @@ fi
 # transcript verdict above stands unchanged.
 case "$(echo "$INPUT" | jq -r '.tool_input.skill // empty')" in
   ai-dlc-update) UPDATER_SESSION=1 ;;
-  ai-dlc)        UPDATER_SESSION=0 ;;
+  ai-dlc)        UPDATER_SESSION=0; AIDLC_SESSION=1 ;;
 esac
+
+# -----------------------------------------------------------------------------
+# Check 2z: `/ai-dlc` was invoked and the ROUTER WAS NEVER READ -- THE TEETH FOR
+# SKILL.md's INITIALIZATION
+# -----------------------------------------------------------------------------
+# Minimum mechanism (Rule 26(c)).
+#   Failure caught: a session is invoked with `/ai-dlc`, treats the task description as an
+#     ad hoc engineering request, and never reads `steps/route.md` at all -- so no variant
+#     detection, no Step 1a budget gate, no `sprint_id`, no envelope roll, no Rule 3(d)
+#     scope pause, no story files, and no gate ever runs. Every gate-time check is
+#     unreachable by construction, because reaching a gate is the thing that did not happen.
+#   Measured, on the reference consumer, over 171 local transcripts: 69 carry a real
+#     `Skill(ai-dlc)` tool_use, and only 38 ever Read `steps/route.md`. The other 28 wrote
+#     files anyway. `STEP_LOADED_TOKEN: route` agrees with the read count at exactly 38 --
+#     two independently derived values -- and NOTHING reads that token: `grep -rn` over
+#     hooks, scripts, session-driver and fixtures returns 0, against a control of 25 files
+#     that mention `route.md` at all. The evidence existed; no program consumed it.
+#   False-positive cost: NONE BY CONSTRUCTION, and this is the whole reason the check is a
+#     deny rather than a warning. `SKILL.md`'s INITIALIZATION says "Load the router step to
+#     determine the pipeline variant and begin execution: READ AND FOLLOW ... steps/route.md"
+#     with no condition on it -- not "if resuming", not "if a new sprint". A `/ai-dlc`
+#     session that has not read the router has skipped a mandatory step, so firing on one is
+#     a detection, never a false positive.
+#   AND A FIRE IS NOT A BLOCK. Denying one Write returns a routing instruction; the session
+#     reads the router and continues. Re-entry is safe by construction for a session that
+#     had already routed in an earlier turn: `sprint-status.sh` prints "already at sprint N
+#     (no-op)" (`:432`) and route.md's own Step 6 calls the roll "idempotent ... always safe
+#     to run". The cost of firing on a session that did route earlier is one Read.
+#
+# WHY THE SURFACE EXCLUDES Skill AND Agent, and this is the arm's own could-not-fire trap.
+# The remedy is to READ the router, and the lead reaches it through Skill/Agent dispatch. A
+# deny covering those would forbid the very act it demands and wedge the pipeline at its
+# first step. Only Write|Edit|MultiEdit are denied here: the session can always route, read,
+# investigate and run Bash. `MENTIONING` route.md is not reading it -- the incident's own
+# transcript mentions it once and Reads it zero times, which is why the pattern below keys
+# on the Read tool's `file_path` and not on the string.
+# NO `UPDATER_SESSION` CONJUNCT HERE, AND ITS ABSENCE IS DELIBERATE. It looks like it belongs
+# and it decided nothing on any reachable input: both flags are set from ONE first-match-wins
+# `case` over a single `LAST_SKILL` value whose `/ai-dlc` and `/ai-dlc-update` patterns are
+# mutually exclusive, so `AIDLC_SESSION=1` already implies the session is not the updater. The
+# payload arm is the only site that can set them independently, and `.tool_input.skill` is
+# populated only on a `Skill` call, which this surface never sees. Measured: removing the
+# conjunct moved no cell of a seven-cell probe table, against the control that removing the
+# `AIDLC_SESSION` conjunct DOES move one -- so the probe could see a removal and saw nothing.
+# `mechanism-design.md` says fix by subtraction, because a condition that changes no outcome
+# today changes one when the surrounding schema moves and nobody is looking.
+#
+# THE ONE THING THAT WOULD MAKE IT REACHABLE AGAIN: widening the surface below to include
+# `Skill`. Do not do that without re-deriving this -- and the arm's own reason for excluding
+# `Skill` is that the remedy travels through it.
+#
+# `NotebookEdit` IS in the surface because it is on the hook's registered matcher and writes a
+# file like the rest. Leaving it out would have left a bypassing session one unwatched way to
+# write, which is an affordance to remove rather than a hole to document.
+if [ "$AIDLC_SESSION" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+  case "$TOOL_NAME" in
+    Write|Edit|MultiEdit|NotebookEdit)
+      if ! grep -q '"file_path":"[^"]*steps/route\.md"' "$TRANSCRIPT" 2>/dev/null; then
+        ROUTE_REASON="AI/DLC: this session was invoked with /ai-dlc and has not read the router.
+
+SKILL.md INITIALIZATION is unconditional: \"Load the router step to determine the pipeline
+variant and begin execution: READ AND FOLLOW .claude/skills/ai-dlc/steps/route.md\".
+Nothing below it runs until that happens -- variant detection, the Step 1a artifact-budget
+gate, sprint_id, the envelope roll, the Rule 3(d) sprint-scope pause, story files and every
+gate all live behind it.
+
+This is not a judgement about the task being small. Rule 4: \"This is simple\" is never a
+valid reason to bypass a step. Rule 5: follow the routing, not your own read of the work.
+
+READ .claude/skills/ai-dlc/steps/route.md now and follow it. If you had already routed in an
+earlier turn, reading it again is cheap and the envelope roll is a documented no-op. Reads,
+Bash, Skill and Agent are all still allowed -- only this write is denied."
+        {
+          echo "## ${TIMESTAMP} -- ROUTE_DENIED"
+          echo "- Session: ${SESSION_ID}"
+          echo "- Tool denied: ${TOOL_NAME}"
+          echo "- /ai-dlc invoked; steps/route.md never read in this transcript"
+          echo ""
+        } >> "$LOG_FILE"
+        jq -n --arg reason "$ROUTE_REASON" \
+          '{hookSpecificOutput: {hookEventName: "PreToolUse",
+                                 permissionDecision: "deny",
+                                 permissionDecisionReason: $reason}}'
+        exit 0
+      fi
+      ;;
+  esac
+fi
 
 # -----------------------------------------------------------------------------
 # Check 2a: the adversarial cycle has STOPPED (Rule 8) -- THE TEETH
