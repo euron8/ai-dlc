@@ -1336,8 +1336,22 @@ NOT in scope is a dispatch of an agent type AI/DLC declares no role for:
 the guard records `general-purpose`, `fork` and the harness's other built-in
 types from `subagent_type` alone, and they carry no contract to cite and no
 role file to resolve. Those rows are counted and named in `COUNTS:`, never
-judged. A real team role appearing in that out-of-scope list means the
-settings file has lost its `aiDlcRoles` entry for it.
+judged.
+
+**THE FILTER'S JOIN KEY IS THE FIELD THE VIOLATION CORRUPTS, so read the
+`NOTE:` lines, not only the roles.** A lead that dispatches a real team role
+with `subagent_type: general-purpose` and no contract citation produces a row
+whose `role` reads `general-purpose` — the violation and the scope key are the
+same field, so the role list cannot surface it. The script reads the dispatch
+NAME as a second signal and NOTEs every skipped row named after a declared
+role. **Each of those is yours to disposition in the gate log**: say whether it
+was that role dispatched without its Rule 19(b) citation, or a utility that
+merely shares the name. It is a NOTE and not a FAIL because a consumer utility
+genuinely named `dev-*` would be a false failure on correct data — the exit
+code does not carry this, and the adjudicator does.
+
+A real team role appearing in the out-of-scope ROLE list is a different and
+rarer thing: it means the settings file has lost its `aiDlcRoles` entry for it.
 
 **Check.** `_bmad-output/spawn-ledger.jsonl` is written by
 `ai-dlc-dispatch-guard.sh` at PreToolUse, one row per role-bound Agent/Task

@@ -212,6 +212,7 @@ CORRECTED=0
 UNPINNED=0
 OUTSCOPE=0
 OUTSCOPE_ROLES=""
+SUSPECT=0
 
 # THE LEDGER HOLDS ROWS RULE 19 DOES NOT BIND, AND JUDGING THEM IS A FALSE FAIL ON
 # CORRECT DATA. The dispatch guard derives `role` from `subagent_type` when the prompt
@@ -251,6 +252,31 @@ row_in_scope() {  # role, role_contract_cited
   return 1
 }
 
+# THE SCOPE FILTER'S JOIN KEY IS THE FIELD THE VIOLATION CORRUPTS, so the filter needs a
+# second reading that does not depend on it. A lead that dispatches a real team role with
+# `subagent_type: general-purpose` and no contract citation produces a row whose `role` says
+# `general-purpose` -- and that IS the Rule 19(b) violation, recorded in the one field the
+# scope test reads. Measured on the reference consumer: 18 of the 49 rows this filter skips
+# are named `dev-escalated-s299-1-v4`, `code-reviewer-s299-1-fixforward`,
+# `gate-adjudicator-story-s302-v10` and so on -- role dispatches routed through the harness's
+# generic agent type across four sprints. Naming the ROLE in `COUNTS:` cannot surface them,
+# because the role reads `general-purpose` for every one.
+#
+# So the dispatch NAME is read as a second, independent signal. It is deliberately NOT a
+# finding: the guard's own header says a name is a convention the lead chooses while the
+# binding is the contract it must honour, and a consumer utility genuinely named `dev-tools-*`
+# would be a false FAIL on correct data. It is a NOTE the adjudicator dispositions, in the
+# same channel and for the same reason as a guard-corrected `model_requested`.
+name_role() {  # dispatch name -> the longest declared role it is named after, or empty
+  nr_best=""
+  for nr_k in $DECLARED_ROLES; do
+    case "$1" in
+      "$nr_k"|"$nr_k"-*) [ "${#nr_k}" -gt "${#nr_best}" ] && nr_best="$nr_k" ;;
+    esac
+  done
+  printf '%s' "$nr_best"
+}
+
 while IFS="$(printf '\t')" read -r name role bound requested cited readable; do
   [ -n "$name" ] || continue
   [ "$name" = "__NONE__" ] && name="<unnamed>"
@@ -263,10 +289,23 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable; do
   # the one way this filter could hide a finding.
   if ! row_in_scope "$role" "$cited"; then
     OUTSCOPE=$((OUTSCOPE + 1))
-    case "${NL}${OUTSCOPE_ROLES}${NL}" in
-      *"${NL}${role}${NL}"*) : ;;
-      *) OUTSCOPE_ROLES="${OUTSCOPE_ROLES}${OUTSCOPE_ROLES:+ }${role:-<none>}" ;;
+    # NEWLINE-delimited accumulator, tested the same way. Spelled as a SPACE-separated list
+    # against a newline-delimited membership test, the de-duplication silently matched only
+    # the whole string -- so the first role de-duplicated and every later one repeated, and
+    # `general-purpose fork general-purpose fork` reads as four skipped roles.
+    case "${NL}${OUTSCOPE_ROLES}" in
+      *"${NL}${role:-<none>}${NL}"*) : ;;
+      *) OUTSCOPE_ROLES="${OUTSCOPE_ROLES}${role:-<none>}${NL}" ;;
     esac
+    _nr="$(name_role "${name}")"
+    if [ -n "$_nr" ]; then
+      SUSPECT=$((SUSPECT + 1))
+      echo "NOTE: [$name] skipped as out of Rule 19 scope, role '${role:-<none>}' -- but its"
+      echo "      dispatch name is that of the declared role '${_nr}'. If it WAS that role, the"
+      echo "      dispatch named it via subagent_type alone and cited no role contract, which is"
+      echo "      the Rule 19(b) violation this check cannot see: the role field carries the"
+      echo "      agent type, not the role. Disposition it in the gate log (Check 22)."
+    fi
     continue
   fi
 
@@ -321,7 +360,10 @@ echo "COUNTS: examined ${CHECKED} S${SPRINT_NUM} spawn row(s) of ${TOTAL} in ${L
 echo "  ${UNREADABLE} unreadable role file(s), ${UNCITED} missing Rule 19(b) citation(s),"
 echo "  ${MISMATCH} tier mismatch(es), ${CORRECTED} guard-corrected request(s) (not failures),"
 echo "  ${UNPINNED} row(s) whose role pins no model in ${SETTINGS},"
-echo "  ${OUTSCOPE} row(s) out of Rule 19 scope${OUTSCOPE_ROLES:+ (roles: ${OUTSCOPE_ROLES})}."
+OUTSCOPE_LIST="$(printf '%s' "$OUTSCOPE_ROLES" | tr '\n' ' ')"
+OUTSCOPE_LIST="${OUTSCOPE_LIST% }"
+echo "  ${OUTSCOPE} row(s) out of Rule 19 scope${OUTSCOPE_LIST:+ (roles: ${OUTSCOPE_LIST})},"
+echo "  ${SUSPECT} of them named after a declared role and NOTED above."
 
 # EVERY IN-SPRINT ROW OUT OF SCOPE IS NOT A PASS, and it reaches this line by a different
 # route than PRE-LEDGER does: the ledger DOES cover this sprint, and nothing in it was a
@@ -332,7 +374,7 @@ echo "  ${OUTSCOPE} row(s) out of Rule 19 scope${OUTSCOPE_ROLES:+ (roles: ${OUTS
 # exit 0 on a sprint full of uncited dispatches.
 if [ "$CHECKED" -eq 0 ]; then
   echo "NO ROLE-BOUND ROWS: ${INSPRINT} S${SPRINT_NUM} row(s) exist and every one is out of"
-  echo "  Rule 19 scope${OUTSCOPE_ROLES:+ (roles: ${OUTSCOPE_ROLES})} -- no row cited a role contract and no row's role is"
+  echo "  Rule 19 scope${OUTSCOPE_LIST:+ (roles: ${OUTSCOPE_LIST})} -- no row cited a role contract and no row's role is"
   echo "  declared in ${SETTINGS}. This is not a pass: nothing was compared. If a real team"
   echo "  role is named above, that settings file has lost its aiDlcRoles entry for it."
   echo "  Fall back to the gate log's spawn table and record that the verdict rests on"

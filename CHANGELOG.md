@@ -58,11 +58,35 @@ appearing there is the visible symptom of a settings file that lost its entry, a
 whose every row is out of scope now exits 3 — not a pass — rather than reporting clean on a
 comparison it never made.
 
+**AN ADVERSARIAL HAND FOUND THAT THE FILTER'S JOIN KEY IS THE FIELD THE VIOLATION CORRUPTS,
+and that finding changed the fix.** A lead that dispatches a real team role with
+`subagent_type: general-purpose` and no contract citation produces a row whose `role` reads
+`general-purpose` — so the scope key and the violation are the same field, and naming the
+skipped ROLE in `COUNTS:` surfaces nothing. **18 of the 49 rows skipped on the reference
+consumer are exactly that**: `dev-escalated-s299-1-v4`, `code-reviewer-s299-1-fixforward`,
+`qa-s299-1-fixforward`, three `gate-adjudicator-story-s302-*` and twelve more, across four
+sprints. Four of them are roles in Check 22's own trigger list, and the adjudicator ones are
+the case `ai-dlc-dispatch-guard.sh` names in its own header as unverified. The
+`role_contract_cited` disjunct cannot reach them — being uncited IS the violation.
+
+So the dispatch NAME is read as a second, independent signal: every skipped row named after a
+declared role is NOTEd by name and counted. It is a NOTE and not a FAIL because a consumer
+utility genuinely named `dev-*` would be a false failure on correct data — the exit code does
+not carry it and Check 22's adjudicator does, which the check now says in as many words.
+**The doc sentence that stated the filter's only failure mode was also wrong**: it named a
+deleted `aiDlcRoles` entry, which is the rare case, while the common one hid inside the list
+it told the reader to ignore.
+
+**The `COUNTS:` role list de-duplicated only its first element** — a space-separated
+accumulator tested against a newline-delimited membership pattern, which read
+`(roles: general-purpose fork general-purpose fork)` for two distinct roles.
+
 **The fixture found two entangled assertions in this change before it shipped**, both of them
 mine: the new scope test was byte-identical to the Rule 19(b) arm below it, so a mutant aimed
 at one hit both, and a new arm asserting on a null field rode on the sentinel mutant. The
-scope test is a function for that reason. Its battery is now fifteen arms with ten mutants,
-each moving exactly one.
+scope test is a function for that reason. Its battery is fifteen arms with ten mutants each
+moving exactly one, plus four standalone arms whose subjects are shared and would entangle by
+construction — 24 assertions in all.
 
 Changed: `core/scripts/validate-spawn-ledger.sh`,
 `core/skills/ai-dlc/steps/gate-validation.md`, `core/fixtures/check-22-spawn-ledger/run.sh`,

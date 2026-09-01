@@ -4360,9 +4360,26 @@ dispatch that cited its contract, and it is also what keeps the fail-closed `rol
 arm reachable for an undeclared role. Out-of-scope rows are counted and NAMED in `COUNTS:`, and a
 sprint whose every row is out of scope exits 3 rather than passing on a comparison it never made.
 
-The receipt drives the shipping script over two ledgers and keys on which rows it judged, never on
-a sentence. Scored against seven implementations built for it: it ACCEPTS the fix and a second
-spelling of it, and REJECTS the pre-fix script, the filed five-role remedy, a total disarm, the fix
-minus its cited disjunct, and a fix that skips out-of-scope rows without naming them.
+**AN ADVERSARIAL HAND FOUND THE FILTER'S JOIN KEY IS THE FIELD THE VIOLATION CORRUPTS.** A real
+team role dispatched with `subagent_type: general-purpose` and no contract citation records
+`role: general-purpose`, so naming the skipped ROLE surfaces nothing. **18 of the 49 skipped rows
+on that consumer are that shape** — `dev-escalated-s299-1-v4`, `code-reviewer-s299-1-fixforward`,
+`qa-s299-1-fixforward`, three `gate-adjudicator-story-s302-*` and twelve more across four sprints,
+reproduced by two independent derivations. The `role_contract_cited` disjunct cannot reach them:
+being uncited IS the violation. The dispatch NAME is therefore read as a second signal and every
+skipped row named after a declared role is NOTEd by name and counted — a NOTE and not a FAIL,
+because a utility genuinely named `dev-*` is a false-positive path and `mechanism-design.md`
+forbids erroring on correct data. Check 22 now tells the adjudicator to disposition each one.
 
-verify: sh set -e; V=core/scripts/validate-spawn-ledger.sh; d=$(mktemp -d); printf '%s' '{"aiDlcModels":{"o":"opus"},"aiDlcRoles":{"adversary":{"model":"o"}}}' > "$d/s.json"; printf '%b' '{"v":1,"sprint":900,"name":"gp","role":"general-purpose","model_bound":"inherit","model_requested":"inherit","role_contract_cited":false,"role_file_readable":false}\n{"v":1,"sprint":900,"name":"adv","role":"adversary","model_bound":"o","model_requested":"o","role_contract_cited":false,"role_file_readable":true}\n' > "$d/l.jsonl"; printf '%b' '{"v":1,"sprint":900,"name":"gpc","role":"general-purpose","model_bound":"x","model_requested":"x","role_contract_cited":true,"role_file_readable":false}\n' > "$d/c.jsonl"; a=$(bash "$V" --ledger "$d/l.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) || true; b=$(bash "$V" --ledger "$d/c.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) || true; case "$a" in *general-purpose*) ;; *) exit 1 ;; esac; case "$a" in *"FAIL: [gp]"*) exit 1 ;; esac; case "$a" in *"FAIL: [adv]"*) ;; *) exit 1 ;; esac; case "$b" in *"FAIL: [gpc]"*) ;; *) exit 1 ;; esac; exit 0
+Two more from the same hand: the doc sentence naming the filter's only failure mode named the
+RARE one (a deleted `aiDlcRoles` entry) while the common one hid inside the list it told the
+reader to ignore; and the `COUNTS:` role list de-duplicated only its first element, a
+space-separated accumulator against a newline-delimited membership test.
+
+The receipt drives the shipping script over two ledgers and keys on which rows it judged, never on
+a sentence. Scored against eight implementations built for it: it ACCEPTS the fix and a second
+spelling of it, and REJECTS the pre-fix script, the filed five-role remedy, a total disarm, the fix
+minus its cited disjunct, a fix that skips out-of-scope rows without counting them, and a fix that
+skips a role-named row without NOTEing it.
+
+verify: sh set -e; V=core/scripts/validate-spawn-ledger.sh; d=$(mktemp -d); printf '%s' '{"aiDlcModels":{"o":"opus"},"aiDlcRoles":{"adversary":{"model":"o"}}}' > "$d/s.json"; printf '%b' '{"v":1,"sprint":900,"name":"gp","role":"general-purpose","model_bound":"inherit","model_requested":"inherit","role_contract_cited":false,"role_file_readable":false}\n{"v":1,"sprint":900,"name":"adv","role":"adversary","model_bound":"o","model_requested":"o","role_contract_cited":false,"role_file_readable":true}\n{"v":1,"sprint":900,"name":"adversary-misrouted","role":"general-purpose","model_bound":"inherit","model_requested":"inherit","role_contract_cited":false,"role_file_readable":false}\n' > "$d/l.jsonl"; printf '%b' '{"v":1,"sprint":900,"name":"gpc","role":"general-purpose","model_bound":"x","model_requested":"x","role_contract_cited":true,"role_file_readable":false}\n' > "$d/c.jsonl"; a=$(bash "$V" --ledger "$d/l.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) || true; b=$(bash "$V" --ledger "$d/c.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) || true; case "$a" in *"row(s) out"*) ;; *) exit 1 ;; esac; case "$a" in *general-purpose*) ;; *) exit 1 ;; esac; case "$a" in *"FAIL: [gp]"*) exit 1 ;; esac; case "$a" in *"FAIL: [adv]"*) ;; *) exit 1 ;; esac; case "$b" in *"FAIL: [gpc]"*) ;; *) exit 1 ;; esac; case "$a" in *"NOTE: [adversary-misrouted]"*) ;; *) exit 1 ;; esac; exit 0

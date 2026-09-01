@@ -125,6 +125,18 @@ row general-purpose sonnet sonnet true true gp-cited                  > "$WORK/o
 row adversary sonnet sonnet true true adv-wrongtier                   > "$WORK/declared-nonfive.jsonl"
 # Every in-sprint row out of scope. Nothing was compared, so this must not read as a pass.
 row general-purpose inherit '' false false gp-only                    > "$WORK/allout.jsonl"
+# THE SHAPE THE SCOPE FILTER CANNOT SEE BY ROLE. A real team role dispatched through the
+# harness's generic agent type records `role: general-purpose`, so the role field carries the
+# agent type and the violation at once. 18 of the 49 rows the filter skips on the reference
+# consumer are this. The dispatch NAME is the only surviving signal.
+row general-purpose inherit '' false false dev-story-1                > "$WORK/suspect.jsonl"
+row dev sonnet sonnet true true dev-beside-suspect                   >> "$WORK/suspect.jsonl"
+# Two skipped rows of the SAME role, so the COUNTS list has to de-duplicate more than its
+# first element.
+row general-purpose inherit '' false false gp-1                       > "$WORK/dupes.jsonl"
+row fork inherit '' false false fk-1                                 >> "$WORK/dupes.jsonl"
+row general-purpose inherit '' false false gp-2                      >> "$WORK/dupes.jsonl"
+row dev sonnet sonnet true true dev-beside-dupes                     >> "$WORK/dupes.jsonl"
 
 # battery <script> -> ten space-separated tokens, one per arm. A mutant must move EXACTLY one.
 battery() {
@@ -406,6 +418,58 @@ mutant scopefilter 's/^    continue$/    :/' X \
 #     here: it is what keeps a contract-citing row in scope when settings.json declares
 #     nothing, which is also exactly what the U arm rests on, so a battery mutant moves both
 #     tokens by construction and one of the two would be vacuous.
+
+# --- 6. the skipped row the ROLE field cannot describe ------------------------
+# The scope filter's join key is the field the violation corrupts: a lead that dispatches a
+# real team role through `subagent_type: general-purpose` with no contract citation produces a
+# row whose role reads `general-purpose`, and naming the ROLE in COUNTS surfaces nothing.
+# Kept out of the battery: the NOTE lives inside the skip branch, so the scopefilter mutant
+# moves this arm and the X arm together.
+out="$(bash "$VSL" --ledger "$WORK/suspect.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ] && grep -q "^NOTE: \[dev-story-1\]" <<<"$out" \
+   && grep -q "declared role 'dev'" <<<"$out" \
+   && grep -q '1 of them named after a declared role' <<<"$out" \
+   && ! grep -q '^FAIL: \[' <<<"$out"; then
+  ok "a skipped row whose dispatch NAME is a declared role is NOTED by name and counted — the one signal left when the role field carries the agent type — and it is a NOTE, not a FAIL, because a consumer utility named dev-* would be a false FAIL on correct data"
+else
+  bad "the suspect row was not surfaced (rc=$rc): $out"
+fi
+
+sed 's/^    _nr="\$(name_role "\${name}")"$/    _nr=""/' "$VSL" > "$WORK/nosus.sh"
+if cmp -s "$VSL" "$WORK/nosus.sh"; then
+  bad "FIXTURE BROKEN: the name_role call site was renamed, so this mutant proves nothing"
+else
+  out="$(bash "$WORK/nosus.sh" --ledger "$WORK/suspect.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"
+  if ! grep -q '^NOTE: \[dev-story-1\]' <<<"$out"; then
+    ok "MUTANT suspectnote: without the name reading, a misrouted role dispatch is skipped in total silence — 18 of them on the reference consumer"
+  else
+    bad "MUTANT suspectnote survived: the NOTE still printed without name_role"
+  fi
+fi
+
+# --- 7. the COUNTS role list de-duplicates past its first element -------------
+# Spelled as a SPACE-separated accumulator against a NEWLINE-delimited membership test, the
+# de-duplication matched only the whole string: the first role de-duplicated and every later
+# one repeated. Measured on the reference consumer before the repair:
+# `(roles: general-purpose fork general-purpose fork)` for two distinct roles.
+out="$(bash "$VSL" --ledger "$WORK/dupes.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"
+if grep -q '3 row(s) out of Rule 19 scope (roles: general-purpose fork),' <<<"$out"; then
+  ok "three skipped rows over two distinct roles name each role ONCE — the accumulator and its membership test use the same delimiter"
+else
+  bad "the COUNTS role list did not de-duplicate: $(grep 'out of Rule 19 scope' <<<"$out")"
+fi
+
+sed 's/^      \*) OUTSCOPE_ROLES="\${OUTSCOPE_ROLES}\${role:-<none>}\${NL}" ;;$/      *) OUTSCOPE_ROLES="${OUTSCOPE_ROLES}${OUTSCOPE_ROLES:+ }${role:-<none>}" ;;/' "$VSL" > "$WORK/nodedup.sh"
+if cmp -s "$VSL" "$WORK/nodedup.sh"; then
+  bad "FIXTURE BROKEN: the accumulator line was renamed, so this mutant proves nothing"
+else
+  out="$(bash "$WORK/nodedup.sh" --ledger "$WORK/dupes.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"
+  if grep -q 'general-purpose fork general-purpose' <<<"$out"; then
+    ok "MUTANT dedup: the space-separated accumulator against a newline-delimited test repeats every role after the first"
+  else
+    bad "MUTANT dedup survived: the list still de-duplicated with the delimiters mismatched"
+  fi
+fi
 
 # --- the cited disjunct, on its own copy --------------------------------------
 # A dispatch that CITED `team-roles/<role>.md` is judged whether or not settings.json still
