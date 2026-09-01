@@ -3497,8 +3497,30 @@ the identical grammar in the same invocation. `apply.sh` names `emit-report` exa
 comment. So the gate runs if and only if the narrating agent chooses to run it, and a run that
 skips it is indistinguishable from one that ran it and passed — there is no artifact either way.
 
+**THREE PATHS REACH CONSUMER STATE WITHOUT THE GATE, AND THE FIRST IS THE ONE A READER WILL NOT
+EXPECT.** They are ranked by what they write, and only the second is the one this entry was first
+written about:
+
+1. **Step 2's self-update.** `SKILL.md:396-409` cuts a branch, writes from `theirs` at the
+   `map_consumer()` destinations, advances `skill_version`/`skill_commit`, pushes and auto-merges
+   — in its own words, **"no operator gate"**. No report is produced at all, so there is no region
+   to verify and nothing for a rendered-identity fix to reach. `SKILL.md:160-161` records that this
+   runs on EVERY invocation, "step 2's autonomous push→auto-merge writes to `origin` even on a bare
+   dry-run". This is distribution `core/` content landing on a consumer with no approval artifact
+   anywhere in the path.
+2. **Step 7's apply.** `apply.sh` never invokes the gate; the prose sits beside it.
+3. **`apply.sh --finish`.** Writes no core but writes the stamp, which is the next pull's merge
+   base. `v0.464.0` closed the identity half of this one by reading `.claude/.ai-dlc-applying`;
+   it did not make the gate run.
+
+**So a check sited inside `apply.sh` — the obvious repair — closes 2 and 3 and leaves 1 open**,
+which is why the siting has to be decided against all three rather than against the one that
+prompted the entry.
+
 **This is the `CLAUDE.md` case in its purest form**: a prohibition whose enforcement is an
-instruction to a reader. The two fixes shipped in `v0.464.0` both sharpen what the gate DETECTS —
+instruction to a reader. `emit-report.sh:8-13` states the principle in its own header — the region
+exists because "an LLM stands between the detector and the operator and can drop the line" — and
+the gate guarding that region is itself a line an LLM can drop. The two fixes shipped in `v0.464.0` both sharpen what the gate DETECTS —
 the region now carries the `theirs` `core/` tree, so a moved symbolic ref cannot render identically
 — and neither of them causes the gate to be RUN. They are strictly downstream of this entry.
 
@@ -3524,5 +3546,12 @@ it counts non-comment invocation lines of `emit-report.sh` in tracked `.sh` file
 a grammar that finds neither has failed rather than found an absence. It exits 1 today, 0 once any
 executable invokes the gate, and 9 if the subject is missing or the control does not fire. Scored
 both directions: 1 against the tree, and 0 against a scratch copy with one real call site seeded.
+
+**The receipt is a FLOOR and will go green on a partial fix — that is stated rather than hidden,
+because it is the shape this repo closes entries on by mistake.** Any executable call site
+satisfies it, so wiring the gate into `apply.sh` flips it to 0 while path 1 above, step 2's
+autonomous self-update, is untouched and still writes core with no report in existence. Do not
+close this entry on the receipt alone: say what was done about step 2, or narrow the entry to
+paths 2 and 3 and file step 2 separately.
 
 verify: sh e=core/skills/ai-dlc-update/reconcile/emit-report.sh; [ -f "$e" ] || exit 9; L=$(git ls-files "*.sh" | grep -vE "^core/fixtures/"); c=$(printf "%s\n" "$L" | grep -v "reconcile/preclassify.sh" | xargs grep -hE "(bash|sh) [^ ]*preclassify\.sh" 2>/dev/null | grep -vcE "^[[:space:]]*#"); [ "${c:-0}" -gt 0 ] || exit 9; n=$(printf "%s\n" "$L" | grep -v "reconcile/emit-report.sh" | xargs grep -hE "(bash|sh) [^ ]*emit-report\.sh" 2>/dev/null | grep -vcE "^[[:space:]]*#"); [ "${n:-0}" -gt 0 ] && exit 0; exit 1
