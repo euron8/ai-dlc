@@ -31,7 +31,85 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### THE `0.456.0 → 0.462.0` PULL LANDED AND MERGED. BATCH 34 HAS NOT STARTED, AND TWO UPSTREAM DEFECTS CAME OUT OF THE PULL THAT ARE NOT IN THE LEDGER.
+### BATCH 34 SHIPPED AS `v0.464.0`. BOTH PULL-FOUND DEFECTS ARE FIXED; A THIRD AND LARGER ONE IS FILED AS `BL-131` AND IS NOT FIXED. START AT BATCH 35.
+
+**This block is the current state and it replaces the pull block below.** Every figure was
+re-derived after the batch by running the derive block and the sweep, all controls in the same
+invocation.
+
+**WHAT SHIPPED.** One release, three commits of subject plus a battery. The approved-ref defect the
+previous block ranked first was REAL but MIS-STATED, and the reshaping is the useful part: a
+comparison DID exist — `emit-report.sh --verify`, made a precondition for any write at
+`SKILL.md:1175-1182` — and it was keyed on the ref's SPELLING rather than on anything about the
+pull. The region now carries `<theirs>:core` as a tree hash and `<theirs>:VERSION` beside it, and
+`apply.sh --finish` now refuses a ref whose `core/` tree is not the one the tree was written from.
+
+**THE GATE WAS WRONG IN BOTH OFF-DIAGONAL DIRECTIONS, AND ONE CHANGE FIXED BOTH.** Two sessions
+measured two different cells and both were right. Ref spelled as a BRANCH that moves: `A` =
+docs-only, `B` = a PURE-APPLY core file changes, `C` = a CLASSIFY file changes; control is a
+one-byte report edit with the ref unmoved, `1` on every row.
+
+| | A | B | C |
+|---|---|---|---|
+| old renderer, diverged consumer | `0` | `0` | `1` |
+| old renderer, FRESH consumer | `0` | `0` | `0` |
+| `v0.464.0`, either consumer | `0` | `1` | `1` |
+
+A SHA-spelled move was already caught — and caught even when `core/` was byte-identical, which is a
+FALSE POSITIVE rather than a catch. **On an undiverged consumer the old gate caught nothing at
+all**, because the region's only content-bearing block is gated at `emit-report.sh:100` on a
+CLASSIFY file existing. The fix renders outside that block, so it is not CLASSIFY-bounded.
+
+**A CORRECTION CAN NARROW A TRUE CLAIM INTO A FALSE ONE, AND THIS BATCH DID IT ONCE.** The first
+`v0.464.0` CHANGELOG entry was corrected mid-batch to say the blindness held only outside the
+CLASSIFY set — which was the DIVERGED row read as though it were the whole table. An adversarial
+hand measured the other row and the claim had to be WIDENED back. Ask which row of the table a
+correction was measured on before believing it narrows anything.
+
+**`VERSION` IS NOT UNDER `core/` AND REACHES THE STAMP ANYWAY.** A core-tree key acquits every move
+that changes no file under `core/`, which is the point — but `write_stamp()` reads
+`${THEIRS}:VERSION` from the repository ROOT at `apply.sh:1312`. Measured over the last 400 commits
+on the default branch: **236** touch no `core/` file and are acquitted, **16** of those also move
+`VERSION`, control **164** that do touch `core/`. Both are rendered now; 220 of the 236 stay
+acquitted, so a docs-only move still cannot wedge a pull.
+
+**THE LARGEST FINDING IS FILED AND NOT FIXED, ON AN OPERATOR RULING.** Nothing EXECUTES the union
+gate: **zero** invocation sites for `emit-report.sh` outside its own file and the fixtures, against
+**76** for `preclassify.sh` under the identical grammar in the same invocation. `SKILL.md:1175-1182`
+is prose an LLM may decline to run. `BL-131` carries it, and names THREE paths reaching consumer
+state without it — step 2's autonomous self-update (`SKILL.md:396-409`, "no operator gate", no
+report in existence, and `:160-161` says it runs on every invocation including a bare dry run),
+step 7's apply, and `--finish`. **A check sited in `apply.sh` closes two of the three and leaves
+the biggest open**, which is why nothing was built. `BL-131`'s own receipt goes green on that
+partial fix and says so in the entry.
+
+**THE FIGURES, re-derived after the batch.** Ledger md5 `28df5c39…` — UNCHANGED, which is correct:
+this program shipping never moves the consumer's ledger. **73 live candidates, 139 archived, 30
+cited, 43 UNFILED**, and the ten `PC-S340-*` are all still unfiled. Partition control 0; presence
+controls spaced 1, bare-bold 1, dotted 1; absence control 0. `docs/backlog.md` is at **74 live / 57
+archived** against a ceiling of 100 — it rose by one because `BL-131` was filed.
+
+**NEITHER `PC-S340-STAMP-READOPT-GATE-IS-BLIND-TO-AN-ADDITIVE-CHANGE-AND-TO-A-REWRITTEN-BODY` NOR
+`PC-S340-SAFE-STOP-ACQUITTAL-TESTS-ANCESTRY-NOT-CONTENT` IS THIS DEFECT** — both read in full
+against a control of 49 `PC-` headings. The first is `readopt-override.sh`'s line-literal
+`grep -Fqx`; the second is `self-update-gate.sh`'s ancestry test. **`SAFE-STOP` is the MIRROR on the
+same axis** — identity-by-name where identity-by-bytes is needed — so read it beside this release
+when it comes up. The batch-34 slot did not free either.
+
+**STILL OWED FROM BATCH 33, AND NO SWEEP WILL SURFACE IT**: `PC-S340-IS-CORE-ANSWERS-BY-DECLARED-
+GLOB-NOT-BY-MEMBERSHIP` is REJECTED as by-design and that adjudication has not been carried to the
+consumer. It is not work and not a subject; a rejection is not a filing, so it appears in every
+sweep forever.
+
+**THE PULL IS TWO RELEASES BEHIND AND A BOOTSTRAPPING STEP IS IN THE RANGE.** The consumer stamp
+reads `0.462.0` / `d503d490`; the distribution is at `0.464.0`. Both `apply.sh` and
+`emit-report.sh` moved, so the consumer's INSTALLED copy runs the pull that carries its own repair
+and **neither `v0.464.0` guard protects the pull delivering it**. **The standing differential is
+UNAVAILABLE, not null**: the consumer's `scripts/ai-dlc/validate-layer-entries.sh` and this
+distribution's copy are BYTE-IDENTICAL (`cmp -s`), so it cannot discriminate and its silence is not
+agreement. Do not report it as a clean differential. A pull is not authorized and is not preapproved.
+
+### THE `0.456.0 → 0.462.0` PULL LANDED AND MERGED — A RECORD OF WHAT IT FOUND. BATCH 34 HAS SINCE RUN; TAKE THE STATE FROM THE BLOCK ABOVE, NOT FROM THIS HEADING.
 
 **This block is the current state and it replaces the pull block below.** Every figure was
 re-derived after the consumer's merge by running the derive block and the sweep, all controls in
@@ -2590,21 +2668,26 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **RUN THE SWEEP (action 1b below), THEN PICK BATCH 34's SUBJECT FROM THE SWEEP *AND* THE TWO
-   PULL-FOUND DEFECTS IN THE RESUME BLOCK.** Batch 33 is merged as `v0.457.0`, corrected by
-   `v0.458.0`, with `v0.459.0`, `v0.461.0`, `v0.462.0` and `v0.463.0` after it — `v0.461.0`
-   off-plan on an operator redirect. Number yours 34, and there is no `v0.460.0` to find: it was
-   renumbered to `v0.462.0` after being parked mid-batch.
+1. **RUN THE SWEEP (action 1b below), THEN PICK BATCH 35's SUBJECT.** Batch 34 is merged as
+   `v0.464.0`. Number yours 35. Batch 33 was `v0.457.0`, corrected by `v0.458.0`, with `v0.459.0`,
+   `v0.461.0`, `v0.462.0` and `v0.463.0` after it — `v0.461.0` off-plan on an operator redirect —
+   and there is no `v0.460.0` to find: it was renumbered to `v0.462.0` after being parked mid-batch.
 
-   **THE SWEEP IS NOT THE WHOLE CANDIDATE SET THIS TIME, AND A SESSION THAT ONLY RUNS IT WILL MISS
-   THE BEST SUBJECT.** Two upstream defects came out of the `0.456.0 → 0.462.0` pull, are verified
-   in the resume block above, and are in NO ledger — so no sweep can surface them. The
-   approved-ref-vs-stamped-ref gap ranks above every `PC-S340-*` candidate on consequence: it is
-   silent and it lands on the operator's own authorization. Take it unless you can say why not.
+   **BOTH PULL-FOUND DEFECTS ARE SPENT. DO NOT RE-SCOPE ONTO THEM.** Batch 34 took them and the
+   resume block records what they turned out to be. Neither is available.
 
-   **ONE PIECE OF BATCH 33 IS STILL OWED**: `IS-CORE`'s rejection has not been carried to the
-   consumer. It is not a subject and it is not work — it is an adjudication that needs to reach
-   the party still holding the candidate.
+   **THE OPEN ONE IS `BL-131`, AND IT IS FILED RATHER THAN TAKEN FOR A REASON YOU SHOULD READ
+   BEFORE PICKING IT UP.** Nothing executes the union gate, and the three write paths that bypass
+   it do not have one home — a check sited in `apply.sh` closes two and leaves step 2's autonomous
+   self-update open, which is the one that writes core with no report in existence. Its receipt goes
+   GREEN on that partial fix. Taking it means saying what you did about step 2, or narrowing the
+   entry and filing step 2 separately. It is distribution-internal and carries no `PC-` id, so under
+   the provenance-first rule it ranks BELOW any PC-backed entry the sweep turns up.
+
+   **ONE PIECE OF BATCH 33 IS STILL OWED, AND BATCH 34 DID NOT DO IT EITHER**: `IS-CORE`'s
+   rejection has not been carried to the consumer. It is not a subject and it is not work — it is
+   an adjudication that needs to reach the party still holding the candidate, and because a
+   rejection is not a filing it will surface in every sweep forever until it is delivered.
 
    **BEFORE YOU BUILD ANYTHING, READ THE REMEDY TEXT OF THE MECHANISM THAT CONSUMES THE ANSWER YOUR
    SUBJECT CALLS WRONG.** Batch 33 shipped a fix for a filing whose premise was contradicted, in as
