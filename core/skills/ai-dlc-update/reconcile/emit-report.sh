@@ -68,6 +68,32 @@ render() {
   # the region against a fresh render, so a consumer who wrote correct markdown got a FAIL
   # and was pushed back to the malformed text.
   printf '\n_base_ `%s` → _theirs_ `%s`.\n' "$BASE" "$THEIRS"
+  # THE BASE IS TAKEN ON FAITH WHILE THE TREE RECORDS THE ANSWER. `THEIRS` is rev-parsed and
+  # refused if it does not resolve; `BASE` is `${2:?}` and validated nowhere, against a stamp whose
+  # `commit:` field is exactly "the ref this tree was last reconciled to". Nothing in this pipeline
+  # compares the two -- the stamp is read in four scripts and every one of them reads
+  # `skill_commit`, never `commit`, except the post-write read-back in `apply.sh`.
+  #
+  # THE TRAP IS THAT THE STAMP CARRIES TWO SHA-SHAPED FIELDS AND BOTH LOOK LIKE PLAUSIBLE BASES.
+  # Measured on the reference consumer, three times in one session: a cycle run with the PREVIOUS
+  # `commit:` -- correct one pull earlier -- inflated the range from 1 path and 0 fixtures to 10 and
+  # 5. `self-update-fixtures.sh` then refused, correctly, naming omitted fixtures; and the first
+  # response was to WIDEN the input until the refusal went away rather than ask why the diff had
+  # grown. A refusal computed from a bad input is not a verdict on the thing it names.
+  #
+  # A ROW, NOT A REFUSAL, and the asymmetry is the reason. Re-reconciling from an older base is
+  # legitimate -- a deliberate re-run, a split pull, a recovery -- so denying it would wedge real
+  # work. But silence here is indistinguishable from agreement, which is the failure this release
+  # band has now fixed twice in other places, so a disagreement SAYS SO in the artifact the operator
+  # approves from. An absent or unreadable stamp renders nothing rather than inventing a finding:
+  # a consumer that has never been reconciled has no recorded base to disagree with.
+  _rendered_stamp="$CONSUMER/.claude/.ai-dlc-version"
+  if [ -f "$_rendered_stamp" ]; then
+    _rendered_base="$(sed -n 's/^commit:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$_rendered_stamp" | head -1)"
+    if [ -n "$_rendered_base" ] && [ "$_rendered_base" != "$BASE" ]; then
+      printf '_stamp_ records `commit: %s`, which is NOT the base above — re-derive the base before trusting this range.\n' "$_rendered_base"
+    fi
+  fi
   # THE REF'S SPELLING IS NOT THE REF, and this region is the only thing standing between a
   # moved upstream and a write. The line above renders what the caller TYPED. `--verify`
   # byte-compares the region, so a SYMBOLIC theirs -- `origin/main`, a branch, whatever a bare
