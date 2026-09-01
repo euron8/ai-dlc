@@ -4324,3 +4324,45 @@ the consumer entry
 verify: sh S=core/scripts/audit-layer-debt.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; h="{\"clause\":\"LC-E1\",\"entry\":\"extensions/p.md\",\"subject_digest\":\"da39a3e\",\"verdict\":\"still-additive\",\"recorded_utc\":\"1970-01-01T00:00:00Z\",\"closes_owed\":[\"OWED-X\"],\"reason\":"; printf "%s\"Debt discharged. The repath landed.\"}\n" "$h" > "$d/a.jsonl"; printf "%s\"The repath landed.\"}\n" "$h" > "$d/b.jsonl"; cmp -s "$d/a.jsonl" "$d/b.jsonl" && { rm -rf "$d"; exit 9; }; a=$(bash "$S" --register "$d/a.jsonl" 2>/dev/null); ra=$?; b=$(bash "$S" --register "$d/b.jsonl" 2>/dev/null); rb=$?; rm -rf "$d"; [ "$ra" = 0 ] && [ "$rb" = 0 ] || exit 9; na=$(printf "%s" "$a" | sed -n "s/.*UNDECLARED (\([0-9]*\)).*/\1/p" | head -1); nb=$(printf "%s" "$b" | sed -n "s/.*UNDECLARED (\([0-9]*\)).*/\1/p" | head -1); [ -n "$na" ] && [ -n "$nb" ] || exit 9; [ "$nb" = 0 ] || exit 9; [ "$na" = 0 ]
 
 
+## BL-134 — Check 22 judged the harness's own agent types against a role contract they never had
+
+**LANDED (v0.472.0, verified b4b82b03).**
+
+Closes `PC-S340-VALIDATE-SPAWN-LEDGER-OVERSHOOTS-CHECK-22-DECLARED-ROLE-SCOPE`, filed by the
+reference consumer while routing its carry-over `CO-S307-SPAWNLEDGER-SCOPE-OVERSHOOT`.
+
+`ai-dlc-dispatch-guard.sh` derives a row's `role` from `subagent_type` whenever the prompt cited
+no `team-roles/<role>.md`, and that fallback accepts any lowercase agent type — so the harness's
+built-in types land in the spawn ledger carrying `role_contract_cited=false` and
+`role_file_readable=false`. `validate-spawn-ledger.sh` judged every one of them, and each is two
+Rule 19 violations that no consumer action can ever clear: there is no contract for a
+`general-purpose` dispatch to cite and no role file for it to resolve.
+
+**Measured on the reference consumer's ledger, sprints 298–307, two independent derivations
+reconciled exactly.** 122 FAIL arms = 48 unreadable + 63 uncited + 11 tier mismatch. Of the 111
+role arms, 97 are on roles declared nowhere in that consumer's `aiDlcRoles` (`general-purpose` 84,
+`fork` 12, one other), against 14 genuine. Seven of eight sprints exited 1; the lead re-derived the
+in-scope subset by hand at every implementation gate for the exit code to mean anything.
+
+**THE FILED REMEDY WAS BUILT FIRST AND IS REFUTED.** It asks for Check 22's five gate-trigger roles
+as the row scope. Scored on that same ledger it drops to 2 arms — it acquits 23 of the 25 genuine
+findings, because `adversary`, `remediator`, `pm`, `architect`, `gate-adjudicator`, `tea`, `ux` and
+`pm-escalated` are all real team roles Rule 19 binds and none is in the five. The five are the
+gate TRIGGER, not the row scope, and the fix says so in `gate-validation.md` rather than leaving
+the two readings of that section standing.
+
+**The scope key is DECLARATION and it is derived, not listed.** A row is judged when it cited a
+role contract, or when its role is a key of `aiDlcRoles` — the surface Rule 19 already names as its
+single source of truth, which the script already reads for the pin, and which **I22** binds to
+`core/team-roles/*.md` in both directions. The `role_contract_cited` disjunct is what keeps the
+filter from being a disarm: deleting an `aiDlcRoles` entry cannot silence a finding against a
+dispatch that cited its contract, and it is also what keeps the fail-closed `role_file_readable`
+arm reachable for an undeclared role. Out-of-scope rows are counted and NAMED in `COUNTS:`, and a
+sprint whose every row is out of scope exits 3 rather than passing on a comparison it never made.
+
+The receipt drives the shipping script over two ledgers and keys on which rows it judged, never on
+a sentence. Scored against seven implementations built for it: it ACCEPTS the fix and a second
+spelling of it, and REJECTS the pre-fix script, the filed five-role remedy, a total disarm, the fix
+minus its cited disjunct, and a fix that skips out-of-scope rows without naming them.
+
+verify: sh set -e; V=core/scripts/validate-spawn-ledger.sh; d=$(mktemp -d); printf '%s' '{"aiDlcModels":{"o":"opus"},"aiDlcRoles":{"adversary":{"model":"o"}}}' > "$d/s.json"; printf '%b' '{"v":1,"sprint":900,"name":"gp","role":"general-purpose","model_bound":"inherit","model_requested":"inherit","role_contract_cited":false,"role_file_readable":false}\n{"v":1,"sprint":900,"name":"adv","role":"adversary","model_bound":"o","model_requested":"o","role_contract_cited":false,"role_file_readable":true}\n' > "$d/l.jsonl"; printf '%b' '{"v":1,"sprint":900,"name":"gpc","role":"general-purpose","model_bound":"x","model_requested":"x","role_contract_cited":true,"role_file_readable":false}\n' > "$d/c.jsonl"; a=$(bash "$V" --ledger "$d/l.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) || true; b=$(bash "$V" --ledger "$d/c.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) || true; case "$a" in *general-purpose*) ;; *) exit 1 ;; esac; case "$a" in *"FAIL: [gp]"*) exit 1 ;; esac; case "$a" in *"FAIL: [adv]"*) ;; *) exit 1 ;; esac; case "$b" in *"FAIL: [gpc]"*) ;; *) exit 1 ;; esac; exit 0
