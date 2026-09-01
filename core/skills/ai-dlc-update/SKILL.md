@@ -421,11 +421,27 @@ prose is itself generated rather than composed.
      from the diff, so it names fixtures this pull does not change.
 
      **DO NOT DERIVE THE VERDICT BY COMPARING REFS. `preclassify.sh` has already answered this,
-     for these paths, in this run.** Take its bucket and apply the SAME subtraction ARM C of
-     `reconcile/self-update-gate.sh` applies at `:342` — that arm is authoritative for which
-     buckets mean consumer divergence, and its own header says keying on anything narrower names
-     a set the downstream half does not agree with. Read the arm; do not restate it here and do
-     not re-enumerate the buckets, which have no single owning declaration.
+     for these paths, in this run.** Take its bucket and apply the SAME subtraction that
+     `reconcile/self-update-gate.sh` applies in the arm guarding its `SELF-UPDATE-CARRY` row —
+     grep that token to find it. That arm is authoritative for which buckets mean consumer
+     divergence, and its own header says keying on anything narrower names a set the downstream
+     half does not agree with. Read the arm; do not restate it here and do not re-enumerate the
+     buckets, which have no single owning declaration.
+
+     **CITED BY TOKEN AND NOT BY LINE NUMBER, DELIBERATELY.** A consumer runs whatever version it
+     last installed, so a line number written into shipped prose resolves against a DIFFERENT file
+     on every tree that is not at this exact release — it does not fail, it silently lands on
+     unrelated text. Caught by the reference consumer against a citation in this very passage.
+     Cite something greppable.
+
+     **THE FIRST COUNT OF HOW MANY OTHERS EXIST WAS WRONG, BY A GRAMMAR THAT COULD NOT SPELL ITS
+     OWN SUBJECT.** It matched the path-plus-number form and not the bare colon-number form this
+     passage had used, so it scored this very citation as a non-instance and reported it as the
+     only one. Re-run over both forms, with a seeded positive control and a negative control, FOUR
+     remain across shipped core prose. Point a search grammar at its own subject before believing
+     its number, and re-run the scan rather than taking this paragraph as the corpus. Note also
+     that writing either form here as an EXAMPLE would make this passage an instance of its own
+     subject, which is why neither is spelled out.
 
      **A SECOND DERIVATION OF THIS QUESTION RETURNED THE OPPOSITE VERDICT, AND THE TOOL WAS
      RIGHT.** Measured on the reference consumer, in ONE invocation: `preclassify.sh` bucketed

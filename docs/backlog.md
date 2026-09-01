@@ -3634,3 +3634,33 @@ ancestry line survives the fix — the co-occurrence trap the upstream entry nam
 engine extraction seeded, 9 with the subject removed.
 
 verify: sh g=core/skills/ai-dlc-update/reconcile/self-update-gate.sh; [ -f "$g" ] || exit 9; grep -q "advise_safe_stop" "$g" || exit 9; grep -vE "^[[:space:]]*#" "$g" | grep -qE "(show|archive|worktree)[^|]*preclassify" && exit 0; exit 1
+
+## BL-133 — line-number citations in shipped core prose resolve against a different file on every consumer
+
+A consumer runs whatever version it last installed, so a `<path>:<line>` written into shipped
+`core/` prose points into a file that has moved. It does not error; it silently lands on unrelated
+text, which is the failure mode this repo treats as worse than a missing citation.
+
+**Found by the reference consumer**, which could not confirm a passage this side cited by line
+because its tree was two releases behind and the numbers landed elsewhere. `v0.469.0` fixed the one
+instance introduced by `v0.468.0`, re-citing by a greppable token instead.
+
+**THE FIRST COUNT WAS WRONG, BY A GRAMMAR THAT COULD NOT SPELL ITS OWN SUBJECT — and that is the
+part worth keeping.** The scan matched the path-plus-number form and not the bare colon-number form
+the offending citation actually used, so it scored its own subject as a non-instance and reported
+"the only one". Re-run over both forms with a seeded positive control and a negative control: FOUR
+remain, in `core/skills/ai-dlc-update/SKILL.md`, `core/skills/ai-dlc-update/reconcile/predicate-sites.md`
+(2) and `core/skills/ai-dlc/steps/_gate-procedures.md`.
+
+**A second false-positive class was measured and removed rather than tolerated**: prose EXPLAINING
+this defect, if it spells either form as an example, becomes an instance of its own subject. The
+count read 6 until the examples were reworded. Any check built for this must exempt the passage
+that documents it, or it will flag its own remedy forever.
+
+**Tiered NOTE.** Nothing breaks; a reader follows a citation to the wrong place and has to recover
+by searching, which is what they would have done with no citation at all.
+
+The receipt counts BOTH forms across shipped `core/**/*.md`. Scored two directions: 1 against the
+tree, and 0 against a scratch copy with every citation redacted.
+
+verify: sh n=0; for f in $(git ls-files "core/**/*.md"); do a=$(grep -coE "\`[a-zA-Z0-9._/-]+\.(sh|md|yaml|json):[0-9]+" "$f"); b=$(grep -coE "\`:[0-9]+" "$f"); n=$((n+a+b)); done; [ "$n" -eq 0 ] && exit 0; exit 1
