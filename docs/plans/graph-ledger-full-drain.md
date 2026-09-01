@@ -31,11 +31,42 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 37 SHIPPED AS `v0.471.0`. THE CONSUMER IS AT `0.470.0` AND THE GAP IS ONE RELEASE. START AT BATCH 38.
+### BATCH 37 SHIPPED AS `v0.471.0`, THE CONSUMER PULLED IT, AND THE GAP IS ZERO. START AT BATCH 38.
 
 **This block is the current state and it replaces every block below.** Every figure was
-re-derived after the merge by running the derive block and the sweep serially, all controls in
-the same invocation.
+re-derived after the consumer's pull by running the derive block and the sweep serially, all
+controls in the same invocation.
+
+**THE GAP IS ZERO AND THE FIX IS CONFIRMED WORKING ON THE CONSUMER — this is the delivery
+measurement, not a reading of the code.** The consumer's stamp reads **`0.471.0` / `31b51d48`**
+on all four fields, matching the distribution. It then hit the very condition the release was
+built for and rotated under the new remedy, on branch `chore/s307-continuation-log-rotate`:
+
+- destination `implementation-artifacts/s307/pipeline-continuation-log-archive-2.md` — the
+  CLOSED sprint's slot plus the ordinal, which is the rule;
+- **the original archive is INTACT at 182293 bytes** — the Rule 25(a) no-loss breach this
+  release exists to prevent did not occur;
+- first line reads `# Pipeline Flow Log — INTER-SPRINT epoch <from> .. <to> (261 events)`, so
+  the span was written;
+- no `s308/` was minted ahead of the roll, and the live log is back to 3714 bytes.
+
+**THE FIRST-LINE CLAUSE ONLY EXISTS BECAUSE AN ADVERSARIAL HAND CAUGHT THAT `mv` CANNOT WRITE
+IT.** Without that finding the instruction would have shipped unimplementable and this
+rotation would have carried a bare re-seeded header, silently. That is the single highest-value
+thing a hand returned in this program.
+
+**THE ANCHOR MOVED WHILE EVERY ID COUNT HELD, AND THAT COMBINATION IS NOT AN ALARM.** md5 went
+`fa399e8d…` → `287f0566…` while live/archived/cited/unfiled stayed at 74/139/31/43 and every
+control held. The consumer annotated entries without adding or removing candidates. **Compare
+the md5 AND the id set; a moved digest alone says only that bytes changed.** A related trap
+measured in the same check: `grep -c '^## PC-'` returns 50 on this ledger while the derive
+block's `lids()` returns 74, because `lids()` also counts bare-bold entries. Those two numbers
+are not comparable and reading one against the other manufactures a discrepancy.
+
+**`PC-S308` IS STILL LIVE IN THEIR LEDGER (1 live / 0 archived) EVEN THOUGH THE FIX IS
+DELIVERED.** The pull did not rotate it. The sweep WILL keep surfacing it; it is not available
+work. Its remaining half is the consumer's own Check 916 exemption regex, which that consumer
+has already filed as its own carry-over.
 
 **BATCH 37 — `v0.471.0`, and the subject came from a peer session rather than from the sweep.**
 `PC-S308-STEP1A-ROTATE-REMEDY-NO-SPRINT-START-DESTINATION`: route.md Step 1a told a blocked
@@ -72,19 +103,21 @@ destination verbatim or arm A is vacuous. And the two archive globs travel toget
 shell reader that globs archives (population 3, FP set 0 — scoping to `*.sh` drops two prose
 files naming the pair as a class). Self-probe fires both ways before the corpus.
 
-**THE FIGURES, re-derived after the merge.** Ledger md5 `fa399e8d…` — **74 live candidates, 139
-archived, 31 cited, 43 UNFILED**. DISCHARGED **14 raw / 13 corrected**, IN-FLIGHT **18**,
-UNTOUCHED **43**, overlap **1**, TERMINAL **31**. Partition control closes on the raw figure:
-14+18+43−1 = 74. Presence controls 1/1/1; partition control 0; absence control 0.
+**THE FIGURES, re-derived after the consumer's pull.** Ledger md5 `287f0566…` — **74 live
+candidates, 139 archived, 31 cited, 43 UNFILED**. DISCHARGED **14 raw / 13 corrected**,
+IN-FLIGHT **18**, UNTOUCHED **43**, overlap **1**, TERMINAL **31**. Partition control closes on
+the raw figure: 14+18+43−1 = 74. Presence controls 1/1; partition control 0; absence control 0.
 `docs/backlog.md` **76 live / 57 archived** against a ceiling of 100.
 
-**THE GAP IS ONE RELEASE AND A PULL IS NOT AUTHORIZED.** Consumer stamp reads **`0.470.0` /
-`052351a1`** on all four fields; distribution is `0.471.0` at `58952c5d`. PENDING is **1**
-(`PC-S308` named in an origin/main commit message, still live in their ledger, impossible-id
-control 0). **No bootstrapping step is in the range** — zero files under
-`core/skills/ai-dlc-update/` or `core/scripts/ai-dlc/` moved, against a control of 11 changed
-files overall. `operator-rulings.md` governs: readiness is not authorization, and a pull is never
-handed to a peer.
+**THE GAP IS ZERO. THAT IS NOT PERMISSION TO OPEN THE NEXT ONE.** Consumer stamp `0.471.0` /
+`31b51d48` on all four fields; distribution `0.471.0` at `31b51d48`. When batch 38 ships, the
+gap becomes one again and `operator-rulings.md` governs: readiness is not authorization, a pull
+is operator-initiated, and one is never handed to a peer session. The consumer's operator
+initiated this one; that is their call in their tree and sets no precedent for dispatching from
+here.
+
+**THE CONSUMER IS MID-FLIGHT AND NOT ON `main`.** Branch `chore/s307-continuation-log-rotate`,
+14 dirty paths. Read it, never write it, and do not read a dirty path as a finding about `main`.
 
 **THE CONSUMER HAS ALREADY FILED THE HALF UPSTREAM CANNOT FIX.** Its Check 916 path-set exemption
 (`gate-validation-domain.md:70,83`) ends `(-history|-archive)?\.md$` and does NOT match an ordinal
@@ -2818,16 +2851,18 @@ so no block written before it changes verdict.
    against the tree before scoping anything else; a consumer stopped at a HARD_BLOCK outranks a
    candidate that has sat in the ledger for a month.
 
-   **THE GAP IS ONE RELEASE AND NO PULL IS AUTHORIZED.** The consumer is at
-   `0.470.0`/`052351a1`; `v0.471.0` shipped after its last reconcile. PENDING is 1. Do not
-   dispatch a pull, do not write a runbook, and do not hand one to a peer session —
-   `operator-rulings.md` governs and readiness is not authorization.
+   **THE GAP IS ZERO — the consumer pulled `v0.471.0` and its stamp reads `0.471.0`/`31b51d48`
+   on all four fields.** Your batch reopens it. That is not permission to close it: a pull is
+   operator-initiated, readiness is not authorization, and one is never handed to a peer
+   session. `operator-rulings.md` governs. The consumer's operator initiated the last one in
+   their own tree; that sets no precedent for dispatching from here.
 
-   **`v0.471.0`'s SUBJECT IS SPENT. DO NOT RE-SCOPE ONTO IT.**
-   `PC-S308-STEP1A-ROTATE-REMEDY-NO-SPRINT-START-DESTINATION` is fixed and cited; it stays LIVE
-   in the consumer's ledger until they pull, so the sweep will keep showing it. Its remaining
-   half — the Check 916 exemption regex — is a CONSUMER extension the consumer has already filed
-   as its own carry-over. Neither half is available upstream work.
+   **`v0.471.0`'s SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW IT. DO NOT RE-SCOPE ONTO IT.**
+   `PC-S308-STEP1A-ROTATE-REMEDY-NO-SPRINT-START-DESTINATION` is fixed, cited, DELIVERED and
+   confirmed working on the consumer — and it is still LIVE in their ledger (1 live / 0
+   archived), because the pull did not rotate it. Its remaining half, the Check 916 exemption
+   regex, is a CONSUMER extension already filed there as that consumer's own carry-over.
+   Neither half is available upstream work.
 
    **VALIDATE A PEER'S ROOT CAUSE BEFORE ACTING ON IT, AND EXPECT THE HEADLINE TO BE WRONG.**
    Batch 37's reporting session was right that its pipeline was blocked and wrong about why: it
@@ -2916,7 +2951,7 @@ so no block written before it changes verdict.
    Measured 2026-08-31: those three ids dated `2026-08-30` one day and `2026-08-31` the next while
    the ledger was BYTE-IDENTICAL throughout — at the value it held THEN, `968f51ce…`, live 66,
    unfiled 33. **That digest is the EPISODE'S and is not your baseline: pulls and filings have moved
-   the ledger since, so your anchor is `fa399e8d…` / live 74, in action 1b and nowhere else.** Two digests in
+   the ledger since, so your anchor is `287f0566…` / live 74, in action 1b and nowhere else.** Two digests in
    one action is how a reader takes the wrong one, and the older value stays because it is the
    evidence for the rule, not because it is current. The sweep dates an
    id with `git log -S … | tail -1`, the OLDEST commit introducing the string, and the consumer
@@ -3064,12 +3099,12 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # fa399e8d... AFTER batch 37; a MOVE here means a real filing
-   wc -l < /tmp/live.txt    # 74 after batch 37
-   wc -l < /tmp/unfiled.txt # 43 after batch 37
+   md5 -q "$L"              # 287f0566... AFTER the 0.471.0 pull; a MOVE alone is NOT an alarm -- check the id set too
+   wc -l < /tmp/live.txt    # 74 after the 0.471.0 pull
+   wc -l < /tmp/unfiled.txt # 43 after the 0.471.0 pull
    ```
 
-   **THE BASELINE IS 74 LIVE CANDIDATES AFTER BATCH 37, 31 CITED, 43 UNFILED.**
+   **THE BASELINE IS 74 LIVE CANDIDATES AFTER THE 0.471.0 PULL, 31 CITED, 43 UNFILED.**
    A higher count means the consumer filed while nobody was looking.
 
    **THE md5 MOVED TWICE DURING BATCH 37, BOTH TIMES FROM THE CONSUMER WRITING MID-BATCH, AND
