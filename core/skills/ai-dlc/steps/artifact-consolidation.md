@@ -18,7 +18,8 @@ anything**.
 
 **Not a consolidation target: `gate-log.md` (and any similar append-only log).**
 Logs are bounded by *rotation*, not consolidation: they rotate at epoch/sprint
-boundaries into a dated archive (Rule 25(c)), so a live log never accretes the
+boundaries into `implementation-artifacts/s<N>/<basename>-archive.md`
+(Rule 25(c)), so a live log never accretes the
 per-sprint narrative and superseded versions this step exists to collapse — and
 it never reaches a consolidation threshold in the first place. This step's
 targets are the threshold-bearing living *planning* artifacts enumerated above.

@@ -1205,9 +1205,24 @@ consolidate first (`artifact-consolidation.md`), then read whole.
 **(c) Rotate append-only logs.** `gate-log.md`, the hook-written flow log
 `pipeline-continuation-log.md`, the hook-written
 `context-mode-protection-log.md`, and similar logs rotate
-at epoch/sprint boundaries into a dated archive; the live log holds
-only the current epoch. Verifying an appended entry reads the **tail**,
-not the whole file. Rotation is `retro.md` §4b. A log bound by no rotation
+at epoch/sprint boundaries into
+`implementation-artifacts/s<N>/<basename>-archive.md` — the destination
+`artifact-path-grammar.md` owns, sprint-keyed by DIRECTORY, never dated in the
+basename, because the preamble above makes the directory the only sprint slot.
+The live log holds only the current epoch. Verifying an appended entry reads the
+**tail**, not the whole file.
+
+**ROTATION HAS TWO SITES AND NAMING ONLY THE FIRST IS WHAT DEADLOCKS A CONSUMER.**
+The scheduled rotation is `retro.md` §4b (`pipeline-continuation-log.md`,
+`context-mode-protection-log.md`) and §7a-post (`gate-log.md`,
+`compaction-log.md`). The UNSCHEDULED one is route.md Step 1a's `rotate` remedy,
+which fires when a log has grown past budget with no close in reach — the log
+re-fills from hook activity after a retro closes, and a session that reads §4b as
+the only sanctioned rotation concludes it cannot start the sprint and cannot
+close it either. Step 1a's remedy is a rotation site; see it for which `s<N>`
+an inter-sprint epoch takes and why the ordinal is mandatory there.
+
+A log bound by no rotation
 step is unbounded: every log is named here explicitly, and (d) is what
 catches one this list omits. The escalation log `pending.md` is
 bounded the same way: terminal (RESOLVED / OVERRIDDEN) entries move to

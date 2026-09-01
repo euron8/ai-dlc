@@ -207,8 +207,48 @@ script names per artifact — they are not interchangeable:
 
 - `consolidate` → the operator runs `artifact-consolidation.md` (a
   fidelity-critical rewrite; it is supervised, never automatic).
-- `rotate` → a rotation was **missed**. Move the epoch to a dated archive
+- `rotate` → a rotation was **missed**. Move the epoch to
+  `_bmad-output/implementation-artifacts/s<N>/<basename>-archive.md`, the one
+  destination `artifact-path-grammar.md` gives every rotation archive
   (Rule 25(c)). Never rewrite a log.
+
+  **`<N>` IS THE SPRINT THAT CLOSED, NOT THE ONE ABOUT TO START, AND THE REASON IS
+  ORDERING RATHER THAN AVAILABILITY.** The next sprint's number is perfectly
+  resolvable here — `scripts/ai-dlc/sprint-status.sh sprint-id` answers it, and
+  core hooks call it continuously — so do not justify this to yourself as "the
+  number is unknown" and do not act on `s<N+1>/` when you find that it is known.
+  What Step 1a runs before is Step 6's **`roll`**, which is what CREATES a sprint
+  directory (`sprint-status.sh` `roll()`, `path.parent.mkdir`). Making
+  `s<N+1>/` here pre-empts that roll and the HARD_BLOCK it performs on an
+  unclosed prior sprint.
+
+  So the destination is the CLOSED sprint's slot — the only one on disk — whose
+  `<basename>-archive.md` is already filled by that retro's own rotation.
+  **Writing this epoch there destroys that archive**: a Rule 25(a) no-loss
+  breach, irreversible outside git recovery. Append the ordinal instead, per the
+  grammar's rule for a second rotation into one sprint slot:
+
+      mv _bmad-output/pipeline-continuation-log.md \
+         _bmad-output/implementation-artifacts/s<N>/pipeline-continuation-log-archive-2.md
+
+  then **edit that file to put the epoch's span in its first line** — `mv`
+  preserves bytes, so the moved file opens with the log's own re-seeded
+  `# Pipeline Flow Log` header and states no span until you write one. Naming
+  the span is not optional here: this archive holds an INTER-SPRINT window that
+  belongs to neither sprint's retro, and the next paragraph is how that window
+  still gets read.
+
+  **RECORD THE WINDOW WHERE THE NEXT RETRO WILL LOOK.** Rotating at Step 1a moves
+  events out of the live log *after* sprint `<N>`'s §4b audit has run and *before*
+  sprint `<N+1>`'s exists, so neither audit opens them and the steerability
+  findings in that window are lost silently — a retro reporting zero findings on
+  a window nobody read, which §4b itself calls worse than an unrun check. Add an
+  `Open Items` entry to `_bmad-output/pipeline-snapshot.md` naming the archive
+  and its span, so the next retro reads it alongside the live log.
+
+  Do **not** invent a status token in the basename (`-pending` and the like): the
+  directory is the only sprint slot and no basename may carry a sprint token
+  (Rule 25).
 - `trim` → **move** the superseded content verbatim to
   `pipeline-snapshot-history.md` (write-only, Rule 25(a)), **then** delete it from
   `pipeline-snapshot.md`. Never delete it outright. The live file keeps all seven

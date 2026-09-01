@@ -388,6 +388,32 @@ with the only archive 10a did place. A second rotation inside one sprint appends
 retired; an archive covering more than its own sprint states the span in its first line, where a
 reader can act on it, instead of in a filename nothing parses).
 
+**AN INTER-SPRINT EPOCH TAKES THE CLOSED SPRINT'S SLOT PLUS AN ORDINAL, AND THAT IS WHAT THE
+ORDINAL IS FOR.** A hook-written log re-fills after its retro rotation, so route.md Step 1a can
+find it over budget at the START of the next sprint. The only `s<N>/` on disk is the closed
+sprint's, and its `<basename>-archive.md` is already that retro's output, so the epoch goes to
+`<basename>-archive-2.md` beside it. **Never overwrite the existing archive** (Rule 25(a)
+no-loss, irreversible), and never mint a status token like `-pending`: the ordinal already
+covers this and a second spelling would be the fourth destination this file exists to prevent.
+
+**THE BAR ON CREATING `s<N+1>/` EARLY IS ABOUT ORDERING, NOT ABOUT THE NUMBER BEING UNKNOWN.**
+It is knowable — `sprint-status.sh sprint-id` resolves it at that point and core hooks call it
+on Stop and PreToolUse. Stating it as unknown is falsifiable in one command, and a reader who
+falsifies it discounts the no-loss warning beside it. The real constraint is that `roll()` owns
+directory creation; a slot minted before the roll pre-empts it.
+
+**AN ORDINAL ARCHIVE MUST STATE ITS SPAN IN ITS FIRST LINE, AND `mv` CANNOT DO THAT.** The move
+preserves bytes, so the archive opens with the live log's re-seeded header and claims a span it
+does not have. Write the line explicitly after the move. This matters most for the inter-sprint
+window, which no retro's audit opens on its own.
+
+**A BASENAME ALREADY ON DISK MAY VIOLATE ALL OF THIS, AND NOTHING MIGRATES IT.** Measured on the
+reference consumer: `s251/gate-log-archive-pre.md` carries exactly the status token this rule
+forbids, and a dated `pipeline-continuation-log-archive-<ts>.md` sits at `_bmad-output/` ROOT —
+wrong directory and retired spelling, written while the prose still said "a dated archive".
+`is_archive()` exempts both from the budget check forever, so they are unmeasured rather than
+flagged. This rule binds what is WRITTEN from here; the orphans are a migration nobody has run.
+
 **ONE ARCHIVE IS EXEMPT FROM THAT DESTINATION RULE, and the exemption is stated here rather than
 left as two rules disagreeing.** `pipeline-snapshot-archive.md` lands at
 `_bmad-output/pipeline-history/`, not in a sprint slot. The rule above earns its sprint slot from

@@ -373,7 +373,18 @@ WHOLE_READ_POOL=$(( READER_WINDOW_TOKENS * ARTIFACT_SHARE_PCT / 100 ))
 #   consolidate  living planning artifact -> the one-shot, operator-invoked,
 #                fidelity-critical rewrite (artifact-consolidation.md). Rule 25(a)
 #                moves superseded content to *-history.md; nothing is dropped.
-#   rotate       append-only log -> move the epoch to a dated archive (Rule 25(c)).
+#   rotate       append-only log -> move the epoch to
+#                implementation-artifacts/s<N>/<basename>-archive.md (Rule 25(c),
+#                destination owned by artifact-path-grammar.md). NOT a dated name:
+#                the directory is the only sprint slot and no basename carries a
+#                sprint token. A second rotation into one slot appends an ordinal.
+#                COVERAGE OF THAT ORDINAL IS NOT GENERAL, so do not assume it:
+#                is_archive() below and ai-dlc-protect.sh carry both spellings,
+#                report-propagation-fanout.sh's FROZEN_NAME_GLOBS had only the
+#                plain one until v0.471.0, and a consumer path-set exemption keyed
+#                on `-archive.md$` still drops an ordinal rotation out of its
+#                exemption. Widening a reader to `-archive(-[0-9]+)?\.md` is the
+#                fix; assuming it already reads that way is how this was missed.
 #                A live log over threshold means a rotation was MISSED, not that it
 #                needs a rewrite. artifact-consolidation.md rejects logs as targets.
 #                audit-anchors.md is in this class and is the reason the class needed
@@ -1045,8 +1056,18 @@ if [ -s "$BREACH_FILE" ]; then
                        whether the growth is locked requirements (Rule 13), because
                        consolidation cannot retire one and relocating them needs
                        operator sign-off. Raising the pool is NOT a remedy.
-        rotate      -> a rotation was MISSED. Move the epoch to a dated archive
-                       (Rule 25(c)); never rewrite a log.
+        rotate      -> a rotation was MISSED. Move the epoch to
+                       implementation-artifacts/s<N>/<basename>-archive.md
+                       (Rule 25(c)); never rewrite a log. <N> is the sprint that
+                       CLOSED. If that slot is already filled -- which is the
+                       normal case at sprint START, where the only s<N>/ on disk
+                       belongs to the sprint whose retro just rotated this log --
+                       append an ordinal (-archive-2.md, then -3) and state the
+                       epoch's span in the archive's FIRST LINE. Overwriting the
+                       existing archive is a Rule 25(a) no-loss breach and is
+                       irreversible outside git recovery. Do NOT create the next
+                       sprint's directory here, and do NOT put a date or status
+                       token in the basename.
         trim        -> MOVE superseded content verbatim to pipeline-snapshot-history.md
                        (write-only, Rule 25(a)), THEN delete it from
                        pipeline-snapshot.md. Never delete it outright -- moving it is
