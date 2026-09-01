@@ -4392,10 +4392,29 @@ vocabulary claim named the wrong file — `I22` binds `templates/settings.json.t
 consumer's `.claude/settings.json` that `--settings` reads, so the scope key is bound at INSTALL
 and unbound thereafter.
 
-Scored against twelve implementations: it ACCEPTS the fix and a second spelling, and REJECTS the
+**THE SAME HOLE THEN SURVIVED ONE ARM OVER.** With the exit codes asserted, a build whose `COUNTS:`
+named no role at all still passed — the arm meant to bind the role list had been dropped, and the
+new `NOTE:` supplied the role token by itself. So did one whose out-of-scope counter never
+incremented, because the count sentence prints unconditionally. Both are now bound: the receipt
+asserts the COUNT and names an out-of-scope role (`rubric-walker`) that no implementation can
+produce without having read the row.
+
+**ONE COST, TAKEN DELIBERATELY.** A build that rewords the `COUNTS:` sentence while keeping the
+role list and the count now scores STILL-LIVE. That sentence is what `gate-validation.md` tells the
+lead to record in the gate log and what `enforcement-map.yaml`'s posture line points at, so a
+reword IS a change to the published contract. A rewrite of the SCOPE TEST is accepted — the second
+spelling deletes `row_in_scope` entirely and inlines it.
+
+Scored against fifteen implementations: it ACCEPTS the fix and a second spelling, and REJECTS the
 pre-fix script, the filed five-role remedy, a total disarm, the fix minus its cited disjunct, a fix
 that skips out-of-scope rows without counting them, one that skips a role-named row without NOTEing
 it, one that exits 0 on violations, one with the exit-3 arm deleted, one that hardcodes the harness
-types as an exclusion list, and a canned-output script that examines nothing.
+types as an exclusion list, a canned-output script that examines nothing, one whose `COUNTS:` names
+no role, one whose skip counter is stuck at zero, and the reword above.
 
-verify: sh V=core/scripts/validate-spawn-ledger.sh; set -e; d=$(mktemp -d); printf '%s' '{"aiDlcModels":{"o":"opus"},"aiDlcRoles":{"adversary":{"model":"o"}}}' > "$d/s.json"; printf '%b' '{"v":1,"sprint":900,"name":"gp","role":"general-purpose","model_bound":"i","model_requested":"i","role_contract_cited":false,"role_file_readable":false}\n{"v":1,"sprint":900,"name":"walker","role":"rubric-walker","model_bound":"i","model_requested":"i","role_contract_cited":false,"role_file_readable":false}\n{"v":1,"sprint":900,"name":"adversary-misrouted","role":"general-purpose","model_bound":"i","model_requested":"i","role_contract_cited":false,"role_file_readable":false}\n{"v":1,"sprint":900,"name":"adv","role":"adversary","model_bound":"o","model_requested":"o","role_contract_cited":false,"role_file_readable":true}\n' > "$d/l.jsonl"; printf '%b' '{"v":1,"sprint":900,"name":"gpc","role":"general-purpose","model_bound":"x","model_requested":"x","role_contract_cited":true,"role_file_readable":false}\n' > "$d/c.jsonl"; printf '%b' '{"v":1,"sprint":900,"name":"gponly","role":"general-purpose","model_bound":"i","model_requested":"i","role_contract_cited":false,"role_file_readable":false}\n' > "$d/o.jsonl"; a=$(bash "$V" --ledger "$d/l.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) && ra=0 || ra=$?; b=$(bash "$V" --ledger "$d/c.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) && rb=0 || rb=$?; o=$(bash "$V" --ledger "$d/o.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) && ro=0 || ro=$?; [ "$ra" -eq 1 ] || exit 1; [ "$rb" -eq 1 ] || exit 1; [ "$ro" -eq 3 ] || exit 1; case "$a" in *"row(s) out"*) ;; *) exit 1 ;; esac; case "$a" in *"FAIL: [adv]"*) ;; *) exit 1 ;; esac; case "$a" in *"NOTE: [adversary-misrouted]"*) ;; *) exit 1 ;; esac; case "$a" in *"FAIL: [gp]"*) exit 1 ;; esac; case "$a" in *"FAIL: [walker]"*) exit 1 ;; esac; case "$b" in *"FAIL: [gpc]"*) ;; *) exit 1 ;; esac; exit 0
+**THE FIXTURE IS THE STRONGER MECHANISM AND THAT IS MEASURED, NOT ASSERTED.** Every implementation
+this receipt ever accepted is killed by `core/fixtures/check-22-spawn-ledger/run.sh` — run in a
+probe tree with the shipped script as a passing control, the canned-output script fails all 28
+assertions, the hardcode 3, the missing exit-3 arm 5. No wrong-accept was ever a live coverage gap.
+
+verify: sh V=core/scripts/validate-spawn-ledger.sh; set -e; d=$(mktemp -d); printf '%s' '{"aiDlcModels":{"o":"opus"},"aiDlcRoles":{"adversary":{"model":"o"}}}' > "$d/s.json"; printf '%b' '{"v":1,"sprint":900,"name":"gp","role":"general-purpose","model_bound":"i","model_requested":"i","role_contract_cited":false,"role_file_readable":false}\n{"v":1,"sprint":900,"name":"walker","role":"rubric-walker","model_bound":"i","model_requested":"i","role_contract_cited":false,"role_file_readable":false}\n{"v":1,"sprint":900,"name":"adversary-misrouted","role":"general-purpose","model_bound":"i","model_requested":"i","role_contract_cited":false,"role_file_readable":false}\n{"v":1,"sprint":900,"name":"adv","role":"adversary","model_bound":"o","model_requested":"o","role_contract_cited":false,"role_file_readable":true}\n' > "$d/l.jsonl"; printf '%b' '{"v":1,"sprint":900,"name":"gpc","role":"general-purpose","model_bound":"x","model_requested":"x","role_contract_cited":true,"role_file_readable":false}\n' > "$d/c.jsonl"; printf '%b' '{"v":1,"sprint":900,"name":"gponly","role":"general-purpose","model_bound":"i","model_requested":"i","role_contract_cited":false,"role_file_readable":false}\n' > "$d/o.jsonl"; a=$(bash "$V" --ledger "$d/l.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) && ra=0 || ra=$?; b=$(bash "$V" --ledger "$d/c.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) && rb=0 || rb=$?; o=$(bash "$V" --ledger "$d/o.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) && ro=0 || ro=$?; [ "$ra" -eq 1 ] || exit 1; [ "$rb" -eq 1 ] || exit 1; [ "$ro" -eq 3 ] || exit 1; case "$a" in *"3 row(s) out"*) ;; *) exit 1 ;; esac; case "$a" in *rubric-walker*) ;; *) exit 1 ;; esac; case "$a" in *"FAIL: [adv]"*) ;; *) exit 1 ;; esac; case "$a" in *"NOTE: [adversary-misrouted]"*) ;; *) exit 1 ;; esac; case "$a" in *"FAIL: [gp]"*) exit 1 ;; esac; case "$a" in *"FAIL: [walker]"*) exit 1 ;; esac; case "$b" in *"FAIL: [gpc]"*) ;; *) exit 1 ;; esac; exit 0

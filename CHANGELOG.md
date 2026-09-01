@@ -129,8 +129,21 @@ script that examines nothing and prints canned text. All four arms were substrin
 merged stdout and stderr. The receipt now asserts three exit codes (1 on a violating ledger, 1
 on a cited undeclared row, 3 on an all-out-of-scope one) alongside its content arms, and adds a
 row whose undeclared role is not a harness built-in — which is what separates deriving the
-scope from hardcoding `{general-purpose, fork, claude}`. Re-scored: **2 of 12**, the fix and a
-second spelling.
+scope from hardcoding `{general-purpose, fork, claude}`.
+
+**The same hole then survived one arm over**, which is the part worth carrying: with the exit
+codes asserted, a build whose `COUNTS:` named no role still passed, because the arm binding the
+role list had been dropped and the new `NOTE:` supplied that token by itself — and so did one
+whose skip counter never incremented, because the count sentence prints unconditionally. The
+receipt now asserts the count and names an out-of-scope role no implementation can produce
+without having read the row. **Re-scored: 2 of 15.** One cost taken deliberately: a build that
+rewords the `COUNTS:` sentence while keeping its content scores STILL-LIVE, because that
+sentence is what the gate log records and what the enforcement map's posture points at.
+
+**The fixture kills every implementation the receipt ever accepted** — measured in a probe tree
+with the shipped script as a passing control: the canned-output script fails all 28 assertions,
+the hardcode 3, the missing exit-3 arm 5. The receipt is the weaker mechanism of the two, and no
+wrong-accept was ever a live coverage gap.
 
 Changed: `core/scripts/validate-spawn-ledger.sh`,
 `core/skills/ai-dlc/steps/gate-validation.md`, `core/fixtures/check-22-spawn-ledger/run.sh`,

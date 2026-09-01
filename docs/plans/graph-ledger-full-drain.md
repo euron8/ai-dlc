@@ -112,7 +112,21 @@ so every arm was a substring match over merged output. **Ask what a receipt READ
 what it asserts**: four content arms over a stream that a `printf` can forge are four arms
 about nothing. It now asserts three exit codes beside its content arms and carries a row whose
 undeclared role is not a harness built-in — the input that separates DERIVING the scope from
-hardcoding `{general-purpose, fork, claude}`. Re-scored 2 of 12.
+hardcoding `{general-purpose, fork, claude}`. Re-scored — and then the SAME HOLE turned up one arm over, which is the
+lesson rather than the fix. With the exit codes asserted, a build whose `COUNTS:` named no role
+still passed, because the arm binding the role list had been dropped and the new `NOTE:` supplied
+that token by itself; so did one whose skip counter never incremented, because the count sentence
+prints unconditionally. **Closing a receipt hole moves it; re-score the whole battery after every
+arm you change, never only the arm you changed.** Now 2 of 15, asserting the count and naming an
+out-of-scope role no implementation can produce without reading the row. One cost taken knowingly:
+a reword of the `COUNTS:` sentence scores STILL-LIVE, because that sentence is what the gate log
+records and what the enforcement map's posture points at.
+
+**AND THE RECEIPT WAS THE WEAKER MECHANISM THE WHOLE TIME.** Every implementation it ever accepted
+is killed by the fixture — measured in a probe tree with the shipped script as a passing control:
+the canned-output script fails all 28 assertions, the hardcode 3, the missing exit-3 arm 5. No
+wrong-accept was ever a live coverage gap. **Score a receipt weakness against the FIXTURE before
+reading it as one.**
 
 **A FIXTURE ARM PROVED NOTHING IT CLAIMED, AND ONLY A MUTANT AIMED AT THE OTHER DISJUNCT FOUND
 IT.** The battery row asserting that a declared role outside the five is judged was spelled
