@@ -22,6 +22,15 @@
 # distinction, ONE PROPERTY APART IN THE SAME RUN -- two transcripts differing by exactly one
 # line, the `"file_path":"...steps/route.md"` a Read emits.
 #
+# THIS FIXTURE'S OWN FALSIFIABILITY RECORD, because a green fixture is not evidence that any of
+# its arms CAN fire. Driven through the `AI_DLC_RRR_HOOK` seam against a copy of the hook from
+# before Check 2z existed -- sides asserted to differ by `md5` before the comparison was read --
+# FIVE arms go RED on the exact input the incident describes: all four tools on the denied
+# surface are ALLOWED for a session that never read the router, and no `ROUTE_DENIED` is logged.
+# Against the hook carrying the check, the same run is green. That differential is what says
+# these arms discriminate; re-run it the same way if they are ever suspected of being vacuous.
+# The count tracks the surface, so it moves when the surface does -- derive it, do not quote it.
+#
 # AND THE ARM'S OWN COULD-NOT-FIRE TRAP, which is arm 2. The remedy for this denial is to READ
 # the router, and the lead reaches a step file through `Skill`/`Agent` dispatch and `Bash`. An
 # arm that denied those would forbid the very act it demands and wedge the pipeline at its first
@@ -151,6 +160,17 @@ if denied "$OUT"; then
   bad "NEAR-MISS: a session that DID Read steps/route.md was denied anyway — the arm fires on /ai-dlc, not on the missing read, and every routed session is now blocked"
 else
   ok "NEAR-MISS: adding the one \`file_path\` line a Read emits turns the same Write from DENY to ALLOW"
+fi
+
+# THE NEAR-MISS FOR THE NEWEST MEMBER OF THE SURFACE. `NotebookEdit` was added because it is on
+# the hook's registered matcher and writes a file like the rest. A surface arm that only ever
+# asserts the DENY half of a tool cannot tell coverage from a tool that is denied unconditionally
+# -- which is the shape a careless widening produces -- so every member gets both halves.
+OUT="$(drive "$W" NotebookEdit "$TR_ROUTED" "$W/_bmad-output/analysis.ipynb")"
+if denied "$OUT"; then
+  bad "NEAR-MISS notebook: a routed session's NotebookEdit was DENIED — the tool is denied unconditionally rather than on the missing router read, so its DENY arm above proves nothing"
+else
+  ok "NEAR-MISS notebook: a routed session's \`NotebookEdit\` is ALLOWED, so the deny above is keyed on the missing read and not on the tool"
 fi
 
 # ...and the mention must not be what answered. If `bypass` were denied for carrying no route
