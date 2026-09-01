@@ -311,6 +311,125 @@ ss_assert "ss-unresolvable" "$(ss_detail "$SS_R2" | grep -c 'SPLIT BUYS NOTHING'
 ss_stamp "$SS_BASE"
 ss_assert "ss-equals-base" "$(ss_detail "$SS_R2" | grep -c 'SPLIT BUYS NOTHING')" "0" \
   "skill_commit == commit (no self-update hop) falls back to the original advice"
+
+# --- THE STAMP IS AHEAD AND THE TREE IS PARTIAL, SO THE ACQUITTAL IS WITHHELD -----------------
+# Every arm above scores the acquittal on the stamp FIELD alone, which is all
+# `machinery_at_or_past` reads -- a `merge-base --is-ancestor` against `skill_commit`. A FIELD
+# THAT IS AHEAD IS NOT EVIDENCE THAT THE TREE MATCHING IT IS COMPLETE. `apply.sh` writes
+# `.claude/.ai-dlc-applying` at the start of every apply and removes it only on the success path;
+# a run that WITHHOLDS the re-stamp writes no stamp at all, leaves that marker deliberately in
+# place, and calls the tree partial in as many words. Because such a run writes nothing, a
+# `skill_commit` an earlier step 2 advanced survives beside a `commit` still at base -- split
+# stamp plus marker on disk -- and in that state the acquittal FIRED on a partial tree.
+#
+# SCORED BY EFFECT, NOT BY ROW COUNT, AND THE `row=` CONJUNCT IS THE REASON. A gate replaced by
+# `exit 0` scores acq=0 wh=0 pf=0, which is most of what the offender arm below wants to see;
+# requiring the SAFE-STOP row to EXIST in the same tuple is what stops silence passing for
+# discrimination. Measured, by running this fixture against such a gate: with the conjunct the
+# three arms below fail, and every other cell of the tuple agrees with a clean run.
+ss_marker() { # ss_marker on|off -- the interrupted-apply marker on the seeded consumer
+  if [ "$1" = on ]; then : > "$SS/cons/.claude/.ai-dlc-applying"
+  else rm -f "$SS/cons/.claude/.ai-dlc-applying"; fi
+}
+# ss_ack <gate> <theirs> -> "row=<0|1> acq=<n> wh=<n> pf=<n>" off the SAFE-STOP row's DETAIL.
+#
+# `pf` KEYS ON "its slice self-updates cleanly", NOT ON "pull to ... FIRST". The withheld wording
+# opens with that same phrase on purpose -- it is still telling the operator to pull first -- so
+# the shorter token cannot separate the withheld row from the untouched one and arm C, whose
+# whole job is that separation, would have passed against a guard sited anywhere.
+ss_ack() {
+  local d
+  d="$(bash "$1" "$SS/dist" "$SS_BASE" "$2" "$SS/cons" 2>&1 |
+         awk -F'\t' '$1=="SELF-UPDATE-SAFE-STOP" {print $3; exit}')"
+  printf 'row=%s acq=%s wh=%s pf=%s\n' \
+    "$([ -n "$d" ] && printf 1 || printf 0)" \
+    "$(printf '%s' "$d" | grep -c 'SPLIT BUYS NOTHING')" \
+    "$(printf '%s' "$d" | grep -c 'ACQUITTAL IS WITHHELD')" \
+    "$(printf '%s' "$d" | grep -c 'its slice self-updates cleanly')"
+}
+
+# A -- OFFENDER. `skill_commit` at r1, which is at-or-past the ref the walk names, and the
+# interrupted-apply marker on disk.
+ss_stamp "$SS_R1"; ss_marker on
+ss_assert "ss-partial-A" "$(ss_ack "$GATE" "$SS_R2")" "row=1 acq=0 wh=1 pf=0" \
+  "stamp ahead + .ai-dlc-applying on disk: the acquittal is replaced by the withheld row"
+
+# B -- NEAR-MISS, IN THE SAME RUN AND ONE PROPERTY APART. Same stamp, marker removed. Without
+# this the guard could be refusing blanket and A would read identically.
+ss_marker off
+ss_assert "ss-partial-B" "$(ss_ack "$GATE" "$SS_R2")" "row=1 acq=1 wh=0 pf=0" \
+  "stamp ahead with no marker: the acquittal is untouched, so the guard reads the marker"
+
+# C -- THE NEAR-MISS THAT SITES THE GUARD. Marker on disk, but `skill_commit` BEHIND the ref the
+# walk names for r4, so `machinery_at_or_past` is false and the acquittal branch is never
+# entered. A guard sited ABOVE that branch -- refusing on the marker alone -- would replace this
+# pull-first row too, and A and B together cannot tell the two sitings apart.
+ss_stamp "$SS_R1"; ss_marker on
+ss_assert "ss-partial-C" "$(ss_ack "$GATE" "$SS_R4")" "row=1 acq=0 wh=0 pf=1" \
+  "marker on disk but stamp BEHIND: the original pull-first advice stands, so the guard is INSIDE the acquittal branch"
+
+# --- MUTANT: REMOVE THE MARKER GUARD -----------------------------------------------------
+# ss-partial-A is ABSENCE-shaped on the acquittal token, and that is the shape that survives a
+# subject which never ran. The `row=` conjunct blocks the silent case; only a mutant establishes
+# that the arm discriminates at all.
+#
+# THE COPY NEEDS ITS SIBLINGS. `machinery_paths()` resolves `$(dirname "$0")/setup-sites.md`, so
+# a lone gate in a bare directory gets an EMPTY machinery set, answers UNDECIDED with no
+# SAFE-STOP row, and every mutant would score as killed off a harness failure rather than a
+# mutation.
+SSM="$(dirname "$DIST")/ssmut"
+rm -rf "$SSM"; mkdir -p "$SSM/mut" "$SSM/ctl"
+cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$SSM/mut"/ 2>/dev/null
+cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$SSM/ctl"/ 2>/dev/null
+
+# ONE STRING SERVES THE GREP AND THE SED, so the uniqueness proved below is a property of the
+# expression that actually mutates. Written apart they drift, and the arm then proves that some
+# OTHER expression is unique.
+SS_ANCHOR='^      if \[ -f "\$CONSUMER/\.claude/\.ai-dlc-applying" \]; then$'
+ss_assert "ss-partial-anchor" "$(grep -c "$SS_ANCHOR" "$GATE")" "1" \
+  "the mutation's anchor matches exactly ONE line, so the sed below cannot move a second cell"
+# CONTROL, and it is what makes the 1 above mean something: a grammar that cannot spell its own
+# subject returns 0 on the real anchor too, and a 1 with no 0 beside it does not separate the two.
+ss_assert "ss-partial-anchor-ctl" \
+  "$(grep -c '^      if \[ -f "\$CONSUMER/\.claude/\.ai-dlc-NOT-A-MARKER" \]; then$' "$GATE")" "0" \
+  "an impossible anchor of the SAME shape returns 0, so the match above is a match and not a grammar artefact"
+
+# THE UNMUTATED CONTROL, PRESENCE-SHAPED ON PURPOSE. It runs before the mutant and demands the
+# withheld row from a plain copy: a copy that dies sourcing its siblings emits nothing, and
+# "nothing" is what the mutant is expected to stop producing. An rc-and-no-error control would
+# pass against `exit 0` here.
+ss_stamp "$SS_R1"; ss_marker on
+ss_assert "ss-partial-control" "$(ss_ack "$SSM/ctl/self-update-gate.sh" "$SS_R2")" \
+  "row=1 acq=0 wh=1 pf=0" \
+  "an UNMUTATED copy beside its siblings reproduces the withheld row, so a mutant's shift is the mutation"
+
+sed "s@${SS_ANCHOR}@      if false; then@" "$GATE" > "$SSM/mut/self-update-gate.sh"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$SSM/mut/self-update-gate.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "ss-partial-mut"
+else
+  ss_stamp "$SS_R1"; ss_marker on
+  ssm_got="$(ss_ack "$SSM/mut/self-update-gate.sh" "$SS_R2")"
+  if [ "$ssm_got" = "row=1 acq=1 wh=0 pf=0" ]; then
+    printf '  ok    %-16s KILLED (%s)\n' "ss-partial-mut" \
+      "with the marker guard gone the acquittal returns on the partial tree and the withheld row disappears"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]\n' "ss-partial-mut" "$ssm_got" "row=1 acq=1 wh=0 pf=0"
+  fi
+fi
+
+# THE MUTANT MOVES ONE CELL AND NO OTHER, which is how ss-partial-A is shown to OWN the case
+# rather than sharing it. Two arms moving under one mutation means one of them is vacuous.
+ss_marker off
+ss_assert "ss-partial-mut-B" "$(ss_ack "$SSM/mut/self-update-gate.sh" "$SS_R2")" \
+  "row=1 acq=1 wh=0 pf=0" "the mutant leaves B where it was -- B never entered the guard"
+ss_stamp "$SS_R1"; ss_marker on
+ss_assert "ss-partial-mut-C" "$(ss_ack "$SSM/mut/self-update-gate.sh" "$SS_R4")" \
+  "row=1 acq=0 wh=0 pf=1" "and C where it was -- C never reaches the acquittal branch at all"
+
+ss_marker off
 ss_stamp -
 
 # --- ARM C: SELF-UPDATE-CARRY, one row per machinery path the consumer diverged on ----
