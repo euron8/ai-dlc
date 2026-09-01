@@ -101,6 +101,18 @@ GLOB-NOT-BY-MEMBERSHIP` is REJECTED as by-design and that adjudication has not b
 consumer. It is not work and not a subject; a rejection is not a filing, so it appears in every
 sweep forever.
 
+**A `0 CLOSE-CANDIDATE` COUNT FROM A PULL IS NOT EVIDENCE THAT NOTHING CLOSED, AND THIS FILE HAS
+READ IT AS THOUGH IT WERE.** Measured by the consumer during the `0.462.0 → 0.465.0` dry run and
+reported back: `ledger-reverify.sh` returned **`RECEIPTS-UNDECIDED` on 7 of 7 `theirs_has`
+receipts**, every one keyed on a substring present at BOTH base and theirs. A receipt whose token
+survives the fix cannot produce a close, so that ledger's zero is consistent with "nothing closed"
+AND with "the instrument could not close anything", and those are different claims. **The tool
+caught this itself** — `RECEIPTS-UNDECIDED` firing is the reverify correctly reporting its own
+verdicts undecidable, not a defect in it. It is the co-occurrence trap that
+`PC-S340-SAFE-STOP-ACQUITTAL-TESTS-ANCESTRY-NOT-CONTENT` names in its own `verify: manual`
+rationale. **Read the UNDECIDED count before reading the CLOSE count; a zero underneath a full
+undecided row is an instrument reading, not a result.**
+
 **THE PULL IS TWO RELEASES BEHIND AND A BOOTSTRAPPING STEP IS IN THE RANGE.** The consumer stamp
 reads `0.462.0` / `d503d490`; the distribution is at `0.464.0`. Both `apply.sh` and
 `emit-report.sh` moved, so the consumer's INSTALLED copy runs the pull that carries its own repair
