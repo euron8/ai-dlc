@@ -181,7 +181,11 @@ closes on the raw figure: 15+18+42−1 = 74. Presence controls 1/1/1/1; absence 
 `docs/backlog.md` **76 live / 58 archived** against a ceiling of 100. The partition moved by
 exactly one, out of UNTOUCHED and into DISCHARGED, which is the batch-31 repair working.
 
-**THE GAP IS ONE RELEASE AND PENDING IS 1. A PULL IS NOT AUTHORIZED.** The consumer's stamp reads
+**THE GAP IS ONE RELEASE AND PENDING IS 1 — both DERIVED, with controls.** The consumer stamp
+reads `0.471.0`/`31b51d48` on all four fields against a distribution `VERSION` of `0.472.0` at
+`e92db525`. PENDING is the discharged set whose naming release sits above the consumer's stamp:
+exactly one, this batch's, with an impossible-id control of 0 and a known-present control of 1.
+**A PULL IS NOT AUTHORIZED.** The consumer's stamp reads
 `0.471.0`; the distribution is `0.472.0`. `operator-rulings.md` governs: readiness is not
 authorization, a pull is operator-initiated, a `PENDING` count is not a decision about WHEN, and
 one is never handed to a peer session.
@@ -207,6 +211,19 @@ the same invocation.
 **`PC-S308` IS STILL LIVE IN THEIR LEDGER (1 live / 0 archived) AND IS STILL NOT AVAILABLE WORK.**
 Delivered at `v0.471.0` and confirmed working there; the pull did not rotate it. Its remaining half
 is that consumer's own Check 915 exemption regex, already filed there as its own carry-over.
+
+**BATCH 38'S OWN CANDIDATE CANNOT CLOSE ITSELF ON THE CONSUMER, AND THAT IS DERIVED FROM THE
+SHIPPING TOOL RATHER THAN PREDICTED.** `ledger-reverify.sh`, run from the consumer root against
+`e92db525`, reports the id `NAMED-UPSTREAM` at that commit — the delivery signal — and in the same
+run `STILL-LIVE` on the entry's own receipt. The receipt declares `general-purpose` INSIDE
+`aiDlcRoles`, so under the fix that row is legitimately in scope and legitimately fails. **A
+receipt anchored on a configuration the fix does not change survives the fix**, which is the same
+class as the `theirs_has` group that run flagged: 7 of 7 reported STILL-LIVE on substrings present
+at BASE as well, so their verdicts restate the previous run rather than measuring this one. The
+consumer's adjudicator must read `e92db525` and annotate
+`**ADOPTED UPSTREAM (v0.472.0, verified <date>)**`; nothing on this side can do it, and a zero
+CLOSE-CANDIDATE count from that run is not evidence nothing was absorbed. **That is now the SECOND
+adjudication owed to the consumer.**
 
 **`IS-CORE`'s REJECTION IS STILL OWED AND HAS NOW SURVIVED FIVE BATCHES.**
 `PC-S340-IS-CORE-ANSWERS-BY-DECLARED-GLOB-NOT-BY-MEMBERSHIP` is REJECTED as by-design and will keep
