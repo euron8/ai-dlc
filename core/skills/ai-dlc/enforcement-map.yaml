@@ -403,8 +403,11 @@ checks:
       - core/scripts/validate-escalation-resolution.sh
     call_sites:
       - site: gate-validation.md Check 22 (spawn rows)
-        posture: FAILS the gate on exit 1 and on exit 2; exit 3 is PRE-LEDGER and
-          hands the verdict back to the gate log's spawn table
+        posture: FAILS the gate on exit 1 and on exit 2; exit 3 says nothing was
+          compared -- either PRE-LEDGER or every in-sprint row outside Rule 19 scope
+          -- and hands the verdict back to the gate log's spawn table. Rows outside
+          that scope are counted, and any of them NAMED after a declared role is
+          reported as a NOTE for the adjudicator rather than failed
         why: the check published three field comparisons per ledger row -- model_bound
           against aiDlcRoles.<role>.model, role_contract_cited true, role_file_readable
           not false -- and the row carried no enforcer, so a teammate performed all

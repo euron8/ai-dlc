@@ -15,6 +15,141 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.472.0] - 2026-09-01
+
+### Check 22 judged the harness's own agent types against a role contract they never had
+
+Closes `PC-S340-VALIDATE-SPAWN-LEDGER-OVERSHOOTS-CHECK-22-DECLARED-ROLE-SCOPE`.
+
+**`validate-spawn-ledger.sh` judged every spawn-ledger row for the sprint, and the dispatch
+guard writes a row for any lowercase `subagent_type`.** So the harness's own built-in agent
+types — `general-purpose`, `fork`, `claude` — arrived carrying `role_contract_cited=false`
+and `role_file_readable=false`, which are two Rule 19 violations each that no consumer action
+can clear: there is no contract for such a dispatch to cite and no role file for it to
+resolve. The gate failed on correct data, which `mechanism-design.md` forbids, and the lead
+re-derived the in-scope subset by hand at every implementation gate for the exit code to mean
+anything.
+
+**Measured on the reference consumer's ledger, sprints 298–307, two independent derivations
+reconciled exactly.** 122 FAIL arms = 48 unreadable + 63 uncited + 11 tier mismatch. Of the
+111 role arms, **97 were on roles that consumer declares nowhere** (`general-purpose` 84,
+`fork` 12, one other) against **14 genuine**. Seven of its eight sprints exited 1; after the
+fix, two do, and the 25 surviving arms are exactly the genuine ones — 122 − 97 = 25 closes on
+both sides.
+
+**The filed remedy was built first and is refuted.** It asks for Check 22's five roles as the
+row scope; scored on that same ledger it drops to 2 arms, acquitting 23 of the 25 genuine
+findings, because `adversary`, `remediator`, `pm`, `architect`, `gate-adjudicator`, `tea`,
+`ux` and `pm-escalated` are all roles Rule 19 binds and none of them is in the five. **The
+five are the gate TRIGGER, not the row scope**, and Check 22 now says so rather than leaving
+both readings of that section standing — which is the contradiction the candidate found.
+
+**The scope key is declaration, and it is derived rather than listed.** A row is judged when
+it cited a role contract, or when its role is a key of `aiDlcRoles` — the surface Rule 19
+already names as its single source of truth, which this script already reads for the pin, and
+which **I22** binds to `core/team-roles/*.md` in both directions. Restating the role set here
+would have been one more copy to drift.
+
+**The `role_contract_cited` disjunct is what keeps the filter from being a disarm.** Deleting
+an `aiDlcRoles` entry cannot silence a finding against a dispatch that cited its contract, and
+it is also what keeps the fail-closed `role_file_readable` arm reachable for an undeclared
+role. Out-of-scope rows are counted and NAMED in the `COUNTS:` line, so a real team role
+appearing there is the visible symptom of a settings file that lost its entry, and a sprint
+whose every row is out of scope now exits 3 — not a pass — rather than reporting clean on a
+comparison it never made.
+
+**AN ADVERSARIAL HAND FOUND THAT THE FILTER'S JOIN KEY IS THE FIELD THE VIOLATION CORRUPTS,
+and that finding changed the fix.** A lead that dispatches a real team role with
+`subagent_type: general-purpose` and no contract citation produces a row whose `role` reads
+`general-purpose` — so the scope key and the violation are the same field, and naming the
+skipped ROLE in `COUNTS:` surfaces nothing. **18 of the 49 rows skipped on the reference
+consumer are exactly that**: `dev-escalated-s299-1-v4`, `code-reviewer-s299-1-fixforward`,
+`qa-s299-1-fixforward`, three `gate-adjudicator-story-s302-*` and twelve more, across four
+sprints. Four of them are roles in Check 22's own trigger list, and the adjudicator ones are
+the case `ai-dlc-dispatch-guard.sh` names in its own header as unverified. The
+`role_contract_cited` disjunct cannot reach them — being uncited IS the violation.
+
+So the dispatch NAME is read as a second, independent signal: every skipped row named after a
+declared role is NOTEd by name and counted. It is a NOTE and not a FAIL because a consumer
+utility genuinely named `dev-*` would be a false failure on correct data — the exit code does
+not carry it and Check 22's adjudicator does, which the check now says in as many words.
+**The doc sentence that stated the filter's only failure mode was also wrong**: it named a
+deleted `aiDlcRoles` entry, which is the rare case, while the common one hid inside the list
+it told the reader to ignore.
+
+**The `COUNTS:` role list de-duplicated only its first element** — a space-separated
+accumulator tested against a newline-delimited membership pattern, which read
+`(roles: general-purpose fork general-purpose fork)` for two distinct roles.
+
+**An empty role was a DECLARED role.** With no `aiDlcRoles` block, `DECLARED_NL` is two
+newlines — exactly the pattern an empty role builds — so a role-less row matched the
+membership test and was judged, and its scope depended on whether the settings file declared
+any role at all: the same row answered exit 1 under `aiDlcRoles: {}` and exit 3 under a
+one-key block.
+
+**The scope key is bound at INSTALL and unbound thereafter, and the first draft of this fix
+claimed otherwise.** `I22` joins `core/team-roles/*.md` to `templates/settings.json.template`
+— what a fresh install starts from. `--settings` at gate time is the consumer's own
+`.claude/settings.json`, which that consumer may edit. That is precisely why a role dropped
+from it has to be visible in `COUNTS:` rather than silently out of scope.
+
+**The fail-closed `role_file_readable` arm is reachable and, on the reference consumer, has
+no live subject.** Constructed both ways — a cited dispatch of an undeclared role and an
+uncited dispatch of a declared one both fire it, and the near-miss stays quiet. But of the 64
+rows there carrying `role_file_readable=false`, **0 are in scope**. "Keeps the fail-closed
+arm's real subject" is a property of the design, not a measurement of that consumer, and it
+is stated here as the former.
+
+**Exit 3's meaning is spelled in three places and the first cut of this release updated
+two.** `enforcement-map.yaml`'s `posture:` line still called it PRE-LEDGER, and nothing binds
+posture prose to an enforcer's exit codes. `gate-validation.md` also said PRE-LEDGER was
+"handled below" of a paragraph that does not exist — a pre-existing dangling reference this
+release would have given a second branch to. The disposition now lives in the script's own
+message, which names which branch fired, and the doc says so instead of restating it.
+
+**The fixture found two entangled assertions in this change before it shipped**, both of them
+mine: the new scope test was byte-identical to the Rule 19(b) arm below it, so a mutant aimed
+at one hit both, and a new arm asserting on a null field rode on the sentinel mutant. The
+scope test is a function for that reason. Its battery is fifteen arms with ten mutants each
+moving exactly one, plus four standalone arms whose subjects are shared and would entangle by
+construction — 28 assertions in all, including a near-miss (`devops-audit`) seated beside the
+offender in the same run.
+
+**A hand also found that one battery arm proved nothing it claimed.** The row asserting that
+a declared role outside the five is judged was spelled `role_contract_cited: true`, so it
+reached the loop through the CITED disjunct — disabling the declared-role disjunct entirely
+left that arm unmoved. It is uncited now, and the declared disjunct has a mutant of its own.
+The `OUTSCOPE_ROLES` de-duplication branch likewise had zero coverage: no scenario carried two
+out-of-scope rows, which is exactly where the de-duplication defect lived.
+
+**The receipt accepted a total verdict disarm, and the reason is that it never read an exit
+code.** A second hand scored it against sixteen implementations and it accepted six: a fix
+that prints every `FAIL:` line and exits 0; one with the exit-3 arm deleted; and a five-line
+script that examines nothing and prints canned text. All four arms were substring matches over
+merged stdout and stderr. The receipt now asserts three exit codes (1 on a violating ledger, 1
+on a cited undeclared row, 3 on an all-out-of-scope one) alongside its content arms, and adds a
+row whose undeclared role is not a harness built-in — which is what separates deriving the
+scope from hardcoding `{general-purpose, fork, claude}`.
+
+**The same hole then survived one arm over**, which is the part worth carrying: with the exit
+codes asserted, a build whose `COUNTS:` named no role still passed, because the arm binding the
+role list had been dropped and the new `NOTE:` supplied that token by itself — and so did one
+whose skip counter never incremented, because the count sentence prints unconditionally. The
+receipt now asserts the count and names an out-of-scope role no implementation can produce
+without having read the row. **Re-scored: 2 of 15.** One cost taken deliberately: a build that
+rewords the `COUNTS:` sentence while keeping its content scores STILL-LIVE, because that
+sentence is what the gate log records and what the enforcement map's posture points at.
+
+**The fixture kills every implementation the receipt ever accepted** — measured in a probe tree
+with the shipped script as a passing control: the canned-output script fails all 28 assertions,
+the hardcode 3, the missing exit-3 arm 5. The receipt is the weaker mechanism of the two, and no
+wrong-accept was ever a live coverage gap.
+
+Changed: `core/scripts/validate-spawn-ledger.sh`,
+`core/skills/ai-dlc/steps/gate-validation.md`, `core/fixtures/check-22-spawn-ledger/run.sh`,
+`docs/backlog.md` (`BL-134`, filed and closed in the same release so the discharge is visible
+to the goal partition).
+
 ## [0.471.0] - 2026-09-01
 
 ### A rotation remedy named a destination the path grammar retires, and a consumer read it as a deadlock

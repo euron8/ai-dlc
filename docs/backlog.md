@@ -3664,3 +3664,4 @@ The receipt counts BOTH forms across shipped `core/**/*.md`. Scored two directio
 tree, and 0 against a scratch copy with every citation redacted.
 
 verify: sh n=0; for f in $(git ls-files "core/**/*.md"); do a=$(grep -coE "\`[a-zA-Z0-9._/-]+\.(sh|md|yaml|json):[0-9]+" "$f"); b=$(grep -coE "\`:[0-9]+" "$f"); n=$((n+a+b)); done; [ "$n" -eq 0 ] && exit 0; exit 1
+

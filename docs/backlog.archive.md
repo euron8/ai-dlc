@@ -4324,3 +4324,97 @@ the consumer entry
 verify: sh S=core/scripts/audit-layer-debt.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; h="{\"clause\":\"LC-E1\",\"entry\":\"extensions/p.md\",\"subject_digest\":\"da39a3e\",\"verdict\":\"still-additive\",\"recorded_utc\":\"1970-01-01T00:00:00Z\",\"closes_owed\":[\"OWED-X\"],\"reason\":"; printf "%s\"Debt discharged. The repath landed.\"}\n" "$h" > "$d/a.jsonl"; printf "%s\"The repath landed.\"}\n" "$h" > "$d/b.jsonl"; cmp -s "$d/a.jsonl" "$d/b.jsonl" && { rm -rf "$d"; exit 9; }; a=$(bash "$S" --register "$d/a.jsonl" 2>/dev/null); ra=$?; b=$(bash "$S" --register "$d/b.jsonl" 2>/dev/null); rb=$?; rm -rf "$d"; [ "$ra" = 0 ] && [ "$rb" = 0 ] || exit 9; na=$(printf "%s" "$a" | sed -n "s/.*UNDECLARED (\([0-9]*\)).*/\1/p" | head -1); nb=$(printf "%s" "$b" | sed -n "s/.*UNDECLARED (\([0-9]*\)).*/\1/p" | head -1); [ -n "$na" ] && [ -n "$nb" ] || exit 9; [ "$nb" = 0 ] || exit 9; [ "$na" = 0 ]
 
 
+## BL-134 — Check 22 judged the harness's own agent types against a role contract they never had
+
+**LANDED (v0.472.0, verified b4b82b03).**
+
+Closes `PC-S340-VALIDATE-SPAWN-LEDGER-OVERSHOOTS-CHECK-22-DECLARED-ROLE-SCOPE`, filed by the
+reference consumer while routing its carry-over `CO-S307-SPAWNLEDGER-SCOPE-OVERSHOOT`.
+
+`ai-dlc-dispatch-guard.sh` derives a row's `role` from `subagent_type` whenever the prompt cited
+no `team-roles/<role>.md`, and that fallback accepts any lowercase agent type — so the harness's
+built-in types land in the spawn ledger carrying `role_contract_cited=false` and
+`role_file_readable=false`. `validate-spawn-ledger.sh` judged every one of them, and each is two
+Rule 19 violations that no consumer action can ever clear: there is no contract for a
+`general-purpose` dispatch to cite and no role file for it to resolve.
+
+**Measured on the reference consumer's ledger, sprints 298–307, two independent derivations
+reconciled exactly.** 122 FAIL arms = 48 unreadable + 63 uncited + 11 tier mismatch. Of the 111
+role arms, 97 are on roles declared nowhere in that consumer's `aiDlcRoles` (`general-purpose` 84,
+`fork` 12, one other), against 14 genuine. Seven of eight sprints exited 1; the lead re-derived the
+in-scope subset by hand at every implementation gate for the exit code to mean anything.
+
+**THE FILED REMEDY WAS BUILT FIRST AND IS REFUTED.** It asks for Check 22's five gate-trigger roles
+as the row scope. Scored on that same ledger it drops to 2 arms — it acquits 23 of the 25 genuine
+findings, because `adversary`, `remediator`, `pm`, `architect`, `gate-adjudicator`, `tea`, `ux` and
+`pm-escalated` are all real team roles Rule 19 binds and none is in the five. The five are the
+gate TRIGGER, not the row scope, and the fix says so in `gate-validation.md` rather than leaving
+the two readings of that section standing.
+
+**The scope key is DECLARATION and it is derived, not listed.** A row is judged when it cited a
+role contract, or when its role is a key of `aiDlcRoles` — the surface Rule 19 already names as its
+single source of truth, which the script already reads for the pin, and which **I22** binds to
+`core/team-roles/*.md` in both directions. The `role_contract_cited` disjunct is what keeps the
+filter from being a disarm: deleting an `aiDlcRoles` entry cannot silence a finding against a
+dispatch that cited its contract, and it is also what keeps the fail-closed `role_file_readable`
+arm reachable for an undeclared role. Out-of-scope rows are counted and NAMED in `COUNTS:`, and a
+sprint whose every row is out of scope exits 3 rather than passing on a comparison it never made.
+
+**AN ADVERSARIAL HAND FOUND THE FILTER'S JOIN KEY IS THE FIELD THE VIOLATION CORRUPTS.** A real
+team role dispatched with `subagent_type: general-purpose` and no contract citation records
+`role: general-purpose`, so naming the skipped ROLE surfaces nothing. **18 of the 49 skipped rows
+on that consumer are that shape** — `dev-escalated-s299-1-v4`, `code-reviewer-s299-1-fixforward`,
+`qa-s299-1-fixforward`, three `gate-adjudicator-story-s302-*` and twelve more across four sprints,
+reproduced by two independent derivations. The `role_contract_cited` disjunct cannot reach them:
+being uncited IS the violation. The dispatch NAME is therefore read as a second signal and every
+skipped row named after a declared role is NOTEd by name and counted — a NOTE and not a FAIL,
+because a utility genuinely named `dev-*` is a false-positive path and `mechanism-design.md`
+forbids erroring on correct data. Check 22 now tells the adjudicator to disposition each one.
+
+Two more from the same hand: the doc sentence naming the filter's only failure mode named the
+RARE one (a deleted `aiDlcRoles` entry) while the common one hid inside the list it told the
+reader to ignore; and the `COUNTS:` role list de-duplicated only its first element, a
+space-separated accumulator against a newline-delimited membership test.
+
+**THE FIRST RECEIPT NEVER READ AN EXIT CODE AND ACCEPTED A TOTAL VERDICT DISARM.** Scored by a
+second hand against sixteen implementations, it accepted six — a fix that prints every `FAIL:`
+line and exits 0, one with the exit-3 arm removed, and a five-line script that examines nothing
+and prints canned text. Four content arms over merged stdout and stderr are four arms a `printf`
+can forge. The receipt asserts three EXIT CODES now — 1 on a violating ledger, 1 on a cited
+undeclared row, 3 on an all-out-of-scope one — beside its content arms, and carries a row whose
+undeclared role is not a harness built-in, which is the input separating a DERIVED scope from a
+hardcoded `{general-purpose, fork, claude}`.
+
+Two further correctness defects came out of the same pass. An empty role was a DECLARED role: with
+no `aiDlcRoles` block `DECLARED_NL` is two newlines, the pattern an empty role builds, so a
+role-less row was judged and its scope depended on how many roles the file declared. And the
+vocabulary claim named the wrong file — `I22` binds `templates/settings.json.template`, not the
+consumer's `.claude/settings.json` that `--settings` reads, so the scope key is bound at INSTALL
+and unbound thereafter.
+
+**THE SAME HOLE THEN SURVIVED ONE ARM OVER.** With the exit codes asserted, a build whose `COUNTS:`
+named no role at all still passed — the arm meant to bind the role list had been dropped, and the
+new `NOTE:` supplied the role token by itself. So did one whose out-of-scope counter never
+incremented, because the count sentence prints unconditionally. Both are now bound: the receipt
+asserts the COUNT and names an out-of-scope role (`rubric-walker`) that no implementation can
+produce without having read the row.
+
+**ONE COST, TAKEN DELIBERATELY.** A build that rewords the `COUNTS:` sentence while keeping the
+role list and the count now scores STILL-LIVE. That sentence is what `gate-validation.md` tells the
+lead to record in the gate log and what `enforcement-map.yaml`'s posture line points at, so a
+reword IS a change to the published contract. A rewrite of the SCOPE TEST is accepted — the second
+spelling deletes `row_in_scope` entirely and inlines it.
+
+Scored against fifteen implementations: it ACCEPTS the fix and a second spelling, and REJECTS the
+pre-fix script, the filed five-role remedy, a total disarm, the fix minus its cited disjunct, a fix
+that skips out-of-scope rows without counting them, one that skips a role-named row without NOTEing
+it, one that exits 0 on violations, one with the exit-3 arm deleted, one that hardcodes the harness
+types as an exclusion list, a canned-output script that examines nothing, one whose `COUNTS:` names
+no role, one whose skip counter is stuck at zero, and the reword above.
+
+**THE FIXTURE IS THE STRONGER MECHANISM AND THAT IS MEASURED, NOT ASSERTED.** Every implementation
+this receipt ever accepted is killed by `core/fixtures/check-22-spawn-ledger/run.sh` — run in a
+probe tree with the shipped script as a passing control, the canned-output script fails all 28
+assertions, the hardcode 3, the missing exit-3 arm 5. No wrong-accept was ever a live coverage gap.
+
+verify: sh V=core/scripts/validate-spawn-ledger.sh; set -e; d=$(mktemp -d); printf '%s' '{"aiDlcModels":{"o":"opus"},"aiDlcRoles":{"adversary":{"model":"o"}}}' > "$d/s.json"; printf '%b' '{"v":1,"sprint":900,"name":"gp","role":"general-purpose","model_bound":"i","model_requested":"i","role_contract_cited":false,"role_file_readable":false}\n{"v":1,"sprint":900,"name":"walker","role":"rubric-walker","model_bound":"i","model_requested":"i","role_contract_cited":false,"role_file_readable":false}\n{"v":1,"sprint":900,"name":"adversary-misrouted","role":"general-purpose","model_bound":"i","model_requested":"i","role_contract_cited":false,"role_file_readable":false}\n{"v":1,"sprint":900,"name":"adv","role":"adversary","model_bound":"o","model_requested":"o","role_contract_cited":false,"role_file_readable":true}\n' > "$d/l.jsonl"; printf '%b' '{"v":1,"sprint":900,"name":"gpc","role":"general-purpose","model_bound":"x","model_requested":"x","role_contract_cited":true,"role_file_readable":false}\n' > "$d/c.jsonl"; printf '%b' '{"v":1,"sprint":900,"name":"gponly","role":"general-purpose","model_bound":"i","model_requested":"i","role_contract_cited":false,"role_file_readable":false}\n' > "$d/o.jsonl"; a=$(bash "$V" --ledger "$d/l.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) && ra=0 || ra=$?; b=$(bash "$V" --ledger "$d/c.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) && rb=0 || rb=$?; o=$(bash "$V" --ledger "$d/o.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) && ro=0 || ro=$?; [ "$ra" -eq 1 ] || exit 1; [ "$rb" -eq 1 ] || exit 1; [ "$ro" -eq 3 ] || exit 1; case "$a" in *"3 row(s) out"*) ;; *) exit 1 ;; esac; case "$a" in *rubric-walker*) ;; *) exit 1 ;; esac; case "$a" in *"FAIL: [adv]"*) ;; *) exit 1 ;; esac; case "$a" in *"NOTE: [adversary-misrouted]"*) ;; *) exit 1 ;; esac; case "$a" in *"FAIL: [gp]"*) exit 1 ;; esac; case "$a" in *"FAIL: [walker]"*) exit 1 ;; esac; case "$b" in *"FAIL: [gpc]"*) ;; *) exit 1 ;; esac; exit 0

@@ -58,6 +58,7 @@ cat > "$WORK/settings.json" <<'JSON'
   "aiDlcRoles": {
     "dev": { "model": "sonnet", "effort": "high" },
     "protected-path-editor": { "model": "opus" },
+    "adversary": { "model": "opus" },
     "tea": { "effort": "medium" }
   }
 }
@@ -100,6 +101,52 @@ jq -nc '{v:1,sprint:899,name:"dev-lastsprint",role:"dev",model_bound:"sonnet",mo
 # whole file, and reporting zero rows for it would route to PRE-LEDGER — "the guard was not
 # installed yet" — for a file that is full of rows.
 { row dev sonnet sonnet true true dev-ok; printf '{"v":1,"sprint":900,"name":"dev-tr\n'; } > "$WORK/corrupt.jsonl"
+
+# --- Rule 19 SCOPE. The dispatch guard derives `role` from `subagent_type` when the prompt
+# cited no role file, and that accepts any lowercase agent type — so the harness's own
+# built-in types land here carrying no contract and no role file, which are two violations
+# each for a dispatch Rule 19 does not bind. The offender sits BESIDE a clean in-scope row
+# in the SAME run: a near-miss in a separate run can only ask whether the filter fires at
+# all, never whether it fires on the right rows.
+row general-purpose inherit '' false false gp-utility                 > "$WORK/outscope.jsonl"
+row dev sonnet sonnet true true dev-beside-gp                        >> "$WORK/outscope.jsonl"
+# The disjunct that keeps the filter from being a disarm: this dispatch CITED a role
+# contract, so it is judged whatever settings.json declares — and it is the input that keeps
+# the fail-closed role_file_readable arm reachable for an undeclared role.
+# Every field populated: a null `model_requested` here would entangle this arm with the
+# sentinel mutant, and the assertion is on the row being EXAMINED rather than on any
+# violation, so it does not ride on the fail-closed arm either.
+row general-purpose sonnet sonnet true true gp-cited                  > "$WORK/outscope-cited.jsonl"
+# A DECLARED role outside Check 22's five gate-trigger roles. Narrowing the script to those
+# five acquits this row; measured on the reference consumer, that narrowing dropped 23 of
+# the 25 true findings.
+#
+# **UNCITED ON PURPOSE, and an earlier revision of this row was NOT.** Spelled `cited=true`
+# it reached the loop through the CITED disjunct, so it asserted nothing about the
+# declaration it exists to test — disabling the declared-role disjunct entirely left this
+# arm unmoved. Uncited, the DECLARATION is the only thing keeping it in scope. Its asserted
+# violation stays the TIER MISMATCH rather than the missing citation, so the `cited` mutant
+# does not move it and the two arms stay independent.
+row adversary sonnet sonnet false true adv-wrongtier                  > "$WORK/declared-nonfive.jsonl"
+# Every in-sprint row out of scope. Nothing was compared, so this must not read as a pass.
+row general-purpose inherit '' false false gp-only                    > "$WORK/allout.jsonl"
+# THE SHAPE THE SCOPE FILTER CANNOT SEE BY ROLE. A real team role dispatched through the
+# harness's generic agent type records `role: general-purpose`, so the role field carries the
+# agent type and the violation at once. 18 of the 49 rows the filter skips on the reference
+# consumer are this. The dispatch NAME is the only surviving signal.
+row general-purpose inherit '' false false dev-story-1                > "$WORK/suspect.jsonl"
+row dev sonnet sonnet true true dev-beside-suspect                   >> "$WORK/suspect.jsonl"
+# THE NEAR-MISS SITS BESIDE THE OFFENDER, IN THE SAME RUN. `devops-audit` shares a prefix with
+# the declared role `dev` and is not it; the match needs the role to be the whole name or to be
+# followed by a dash. A second clean run could only ask whether the NOTE fires at all, never
+# whether it fires on the right names.
+row general-purpose inherit '' false false devops-audit             >> "$WORK/suspect.jsonl"
+# Two skipped rows of the SAME role, so the COUNTS list has to de-duplicate more than its
+# first element.
+row general-purpose inherit '' false false gp-1                       > "$WORK/dupes.jsonl"
+row fork inherit '' false false fk-1                                 >> "$WORK/dupes.jsonl"
+row general-purpose inherit '' false false gp-2                      >> "$WORK/dupes.jsonl"
+row dev sonnet sonnet true true dev-beside-dupes                     >> "$WORK/dupes.jsonl"
 
 # battery <script> -> ten space-separated tokens, one per arm. A mutant must move EXACTLY one.
 battery() {
@@ -145,15 +192,33 @@ battery() {
   run mismatch.jsonl norolepins.json
   if [ "$rc" -eq 0 ] && grep -q '^OK WITH NO PIN COMPARED:' <<<"$out"; then t="$t U:nopin"; else t="$t U:$rc"; fi
 
+  # An out-of-scope row BESIDE an in-scope one: the built-in agent type is skipped and NAMED,
+  # and the dev row beside it is still examined. Both halves, one run.
+  run outscope.jsonl
+  if [ "$rc" -eq 0 ] && grep -q '1 row(s) out of Rule 19 scope (roles: general-purpose)' <<<"$out" \
+     && grep -q 'examined 1 S900 spawn row' <<<"$out" && ! grep -q '^FAIL: \[' <<<"$out"
+  then t="$t X:skipped"; else t="$t X:$rc"; fi
+
+  # Same undeclared role, but it CITED a contract: EXAMINED, not skipped.
+  run outscope-cited.jsonl
+  if [ "$rc" -eq 0 ] && grep -q 'examined 1 S900 spawn row' <<<"$out" \
+     && grep -q '0 row(s) out of Rule 19 scope' <<<"$out"; then t="$t Y:judged"; else t="$t Y:$rc"; fi
+
+  # A declared role outside the five gate-trigger roles is judged, not acquitted.
+  run declared-nonfive.jsonl
+  if [ "$rc" -eq 1 ] && grep -q 'Rule 19(a) tier' <<<"$out" \
+     && grep -q 'examined 1 S900 spawn row' <<<"$out" \
+     && grep -q "role 'adversary'" <<<"$out"; then t="$t D:judged"; else t="$t D:$rc"; fi
+
   printf '%s' "$t"
 }
 
-EXPECTED="C:ok R:named B:named M:named T:ok P:preledger N:noted F:aligned S:refused J:refused A:usage U:nopin"
+EXPECTED="C:ok R:named B:named M:named T:ok P:preledger N:noted F:aligned S:refused J:refused A:usage U:nopin X:skipped Y:judged D:judged"
 
 # --- 1. the shipping validator answers every arm ------------------------------
 GOT="$(battery "$VSL")"
 if [ "$GOT" = "$EXPECTED" ]; then
-  ok "all twelve arms: clean, unreadable role file, missing 19(b) citation, tier mismatch, the containment tolerance, PRE-LEDGER, a guard-corrected request, a null field, an unreadable settings.json, an unparseable ledger, a fumbled invocation, and a readable settings.json that pins no role at all"
+  ok "all fifteen arms: clean, unreadable role file, missing 19(b) citation, tier mismatch, the containment tolerance, PRE-LEDGER, a guard-corrected request, a null field, an unreadable settings.json, an unparseable ledger, a fumbled invocation, a readable settings.json that pins no role at all, an out-of-scope built-in agent type beside an in-scope row, that same type when it CITED a contract, and a declared role outside the five gate-trigger roles"
 else
   bad "battery: expected [$EXPECTED], got [$GOT]"
 fi
@@ -223,6 +288,31 @@ if [ "$a" -eq 0 ] && [ "$b" -eq 1 ]; then
   ok "the verdict follows settings.json, not the ledger's own tier_pinned — repinning dev to opus turns the same clean row into a mismatch"
 else
   bad "the same ledger gave rc=$a and rc=$b across two different pins; expected 0 then 1 (the check is reading the guard's answer back, not the config)"
+fi
+
+# --- 5. every in-sprint row out of scope is NOT a pass ------------------------
+# The filter's own failure mode: a settings.json that lost its `aiDlcRoles` block, on a
+# sprint whose dispatches cited nothing, would drop every row and exit 0 having compared
+# nothing. Kept OUT of the battery deliberately — a mutant that disables the skip moves this
+# arm and the X arm together, and two moved tokens make one of them vacuous.
+out="$(bash "$VSL" --ledger "$WORK/allout.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"; rc=$?
+if [ "$rc" -eq 3 ] && grep -q 'NO ROLE-BOUND ROWS' <<<"$out" && grep -q 'general-purpose' <<<"$out"; then
+  ok "a sprint whose every row is out of scope exits 3 and NAMES the roles it skipped — not a pass, and the one way the filter could hide a real role is visible in the message"
+else
+  bad "an all-out-of-scope ledger reported rc=$rc: ${out%%$'\n'*}"
+fi
+
+# And prove that arm can fail, on its own copy: without it the same input exits 0.
+sed 's/^if \[ "\$CHECKED" -eq 0 \]; then$/if false; then/' "$VSL" > "$WORK/nzs.sh"
+if cmp -s "$VSL" "$WORK/nzs.sh"; then
+  bad "FIXTURE BROKEN: the all-out-of-scope guard's line was renamed, so this mutant proves nothing"
+else
+  bash "$WORK/nzs.sh" --ledger "$WORK/allout.jsonl" --sprint 900 --settings "$WORK/settings.json" >/dev/null 2>&1; rc=$?
+  if [ "$rc" -eq 0 ]; then
+    ok "MUTANT norolebound: dropping that guard turns the same all-out-of-scope ledger into a silent exit 0 — the arm above is load-bearing"
+  else
+    bad "MUTANT norolebound survived: rc=$rc without the guard, so the arm above cannot be what produced the 3"
+  fi
 fi
 
 # ============================================================================
@@ -326,6 +416,151 @@ mutant corrupt 's@"\$LEDGER" 2>/dev/null)" || {@"$LEDGER" 2>/dev/null || echo 0)
 #    the U arm — the clean arm still has a pinned row, so its sentence is still earned.
 mutant nopincompared 's/^if \[ "\$CHECKED" -gt 0 \] && \[ "\$UNPINNED" -eq "\$CHECKED" \]; then$/if false; then/' U \
   "dropping the untested-pin verdict lets a settings.json that lost its role block clear a mismatched ledger under the sentence that says the pin matched"
+
+# 9. the Rule 19 scope filter. Without it every built-in agent type the dispatch guard
+#    recorded from `subagent_type` is judged against a contract it never had — 97 of the 111
+#    role-arm violations on the reference consumer's ledger were exactly that.
+#    Targets the `continue` in the out-of-scope branch, not the scope test above it:
+#    mutating the test makes every row out of scope and moves four arms at once.
+mutant scopefilter 's/^    continue$/    :/' X \
+  "dropping the scope skip judges a built-in agent type against Rule 19 and fails a gate on correct data"
+
+# 10. the disjunct that keeps the filter from being a disarm is asserted BELOW rather than
+#     here: it is what keeps a contract-citing row in scope when settings.json declares
+#     nothing, which is also exactly what the U arm rests on, so a battery mutant moves both
+#     tokens by construction and one of the two would be vacuous.
+
+# --- 6. the skipped row the ROLE field cannot describe ------------------------
+# The scope filter's join key is the field the violation corrupts: a lead that dispatches a
+# real team role through `subagent_type: general-purpose` with no contract citation produces a
+# row whose role reads `general-purpose`, and naming the ROLE in COUNTS surfaces nothing.
+# Kept out of the battery: the NOTE lives inside the skip branch, so the scopefilter mutant
+# moves this arm and the X arm together.
+out="$(bash "$VSL" --ledger "$WORK/suspect.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ] && grep -q "^NOTE: \[dev-story-1\]" <<<"$out" \
+   && grep -q "declared role 'dev'" <<<"$out" \
+   && ! grep -q "^NOTE: \[devops-audit\]" <<<"$out" \
+   && grep -q '1 of them named after a declared role' <<<"$out" \
+   && ! grep -q '^FAIL: \[' <<<"$out"; then
+  ok "a skipped row whose dispatch NAME is a declared role is NOTED by name and counted, while devops-audit BESIDE it stays quiet — the one signal left when the role field carries the agent type, and a NOTE rather than a FAIL because a utility named dev-* is a live false-positive path"
+else
+  bad "the suspect row was not surfaced (rc=$rc): $out"
+fi
+
+# And the BOUNDARY is load-bearing, not decoration: widened to a bare prefix, the near-miss
+# beside the offender is flagged too, and the arm above would be reporting on a substring.
+sed 's|      "\$nr_k"\|"\$nr_k"-\*) |      "$nr_k"*) |' "$VSL" > "$WORK/widen.sh"
+if cmp -s "$VSL" "$WORK/widen.sh"; then
+  bad "FIXTURE BROKEN: the name_role boundary pattern was renamed, so this mutant proves nothing"
+else
+  out="$(bash "$WORK/widen.sh" --ledger "$WORK/suspect.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"
+  if grep -q '^NOTE: \[devops-audit\]' <<<"$out"; then
+    ok "MUTANT nameboundary: dropping the dash boundary flags devops-audit as the role dev — the boundary is what makes the NOTE a name match rather than a substring match"
+  else
+    bad "MUTANT nameboundary survived: devops-audit stayed quiet without the boundary"
+  fi
+fi
+
+sed 's/^    _nr="\$(name_role "\${name}")"$/    _nr=""/' "$VSL" > "$WORK/nosus.sh"
+if cmp -s "$VSL" "$WORK/nosus.sh"; then
+  bad "FIXTURE BROKEN: the name_role call site was renamed, so this mutant proves nothing"
+else
+  out="$(bash "$WORK/nosus.sh" --ledger "$WORK/suspect.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"
+  if ! grep -q '^NOTE: \[dev-story-1\]' <<<"$out"; then
+    ok "MUTANT suspectnote: without the name reading, a misrouted role dispatch is skipped in total silence — 18 of them on the reference consumer"
+  else
+    bad "MUTANT suspectnote survived: the NOTE still printed without name_role"
+  fi
+fi
+
+# --- 7. the COUNTS role list de-duplicates past its first element -------------
+# Spelled as a SPACE-separated accumulator against a NEWLINE-delimited membership test, the
+# de-duplication matched only the whole string: the first role de-duplicated and every later
+# one repeated. Measured on the reference consumer before the repair:
+# `(roles: general-purpose fork general-purpose fork)` for two distinct roles.
+out="$(bash "$VSL" --ledger "$WORK/dupes.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"
+if grep -q '3 row(s) out of Rule 19 scope (roles: general-purpose fork),' <<<"$out"; then
+  ok "three skipped rows over two distinct roles name each role ONCE — the accumulator and its membership test use the same delimiter"
+else
+  bad "the COUNTS role list did not de-duplicate: $(grep 'out of Rule 19 scope' <<<"$out")"
+fi
+
+sed 's/^      \*) OUTSCOPE_ROLES="\${OUTSCOPE_ROLES}\${role:-<none>}\${NL}" ;;$/      *) OUTSCOPE_ROLES="${OUTSCOPE_ROLES}${OUTSCOPE_ROLES:+ }${role:-<none>}" ;;/' "$VSL" > "$WORK/nodedup.sh"
+if cmp -s "$VSL" "$WORK/nodedup.sh"; then
+  bad "FIXTURE BROKEN: the accumulator line was renamed, so this mutant proves nothing"
+else
+  out="$(bash "$WORK/nodedup.sh" --ledger "$WORK/dupes.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"
+  if grep -q 'general-purpose fork general-purpose' <<<"$out"; then
+    ok "MUTANT dedup: the space-separated accumulator against a newline-delimited test repeats every role after the first"
+  else
+    bad "MUTANT dedup survived: the list still de-duplicated with the delimiters mismatched"
+  fi
+fi
+
+# --- 8. an empty role is not a declared one -----------------------------------
+# `DECLARED_NL` is two newlines when the settings file declares nothing, and that is exactly
+# the pattern an empty role builds — so a role-less row matched the declared-membership test
+# and was JUDGED, and its scope depended on whether the file declared any role at all. The
+# guard never writes a null role, but the ledger has more than one writer.
+row '' inherit '' false true norole                                   > "$WORK/norole.jsonl"
+cat > "$WORK/noroles-block.json" <<'JSON'
+{ "aiDlcModels": { "opus": "claude-opus-5[1m]" }, "aiDlcRoles": {} }
+JSON
+bash "$VSL" --ledger "$WORK/norole.jsonl" --sprint 900 --settings "$WORK/noroles-block.json" >"$WORK/nr-a.out" 2>&1; a=$?
+bash "$VSL" --ledger "$WORK/norole.jsonl" --sprint 900 --settings "$WORK/settings.json"      >"$WORK/nr-b.out" 2>&1; b=$?
+if [ "$a" -eq 3 ] && [ "$b" -eq 3 ] && grep -q '<none>' "$WORK/nr-a.out"; then
+  ok "a role-less row is out of scope under BOTH an empty aiDlcRoles block and a populated one, and is named <none> — its scope does not depend on how many roles the settings file happens to declare"
+else
+  bad "the role-less row answered rc=$a with an empty roles block and rc=$b with a populated one; expected 3 and 3"
+fi
+
+sed 's/^  \[ -n "\$1" \] || return 1$/  : ; /' "$VSL" > "$WORK/noguard.sh"
+if cmp -s "$VSL" "$WORK/noguard.sh"; then
+  bad "FIXTURE BROKEN: the empty-role guard line was renamed, so this mutant proves nothing"
+else
+  bash "$WORK/noguard.sh" --ledger "$WORK/norole.jsonl" --sprint 900 --settings "$WORK/noroles-block.json" >/dev/null 2>&1; a=$?
+  bash "$WORK/noguard.sh" --ledger "$WORK/norole.jsonl" --sprint 900 --settings "$WORK/settings.json"      >/dev/null 2>&1; b=$?
+  if [ "$a" -ne "$b" ]; then
+    ok "MUTANT emptyrole: without the guard the same role-less row answers rc=$a with an empty roles block and rc=$b with a populated one — the collision the guard exists to stop"
+  else
+    bad "MUTANT emptyrole survived: both configs answered rc=$a without the guard"
+  fi
+fi
+
+# --- 9. the DECLARED disjunct, on its own copy --------------------------------
+# The cited disjunct has a mutant; this one had none, and the arm that was supposed to cover
+# it reached the loop through the CITATION instead. Kept standalone because `uncited.jsonl`
+# is also declared-and-uncited, so a battery mutant moves the B arm with it.
+sed 's|^  case "\$DECLARED_NL" in \*"\${NL}\${1}\${NL}"\*) return 0 ;; esac$|  case "$DECLARED_NL" in *"__NEVER__"*) return 0 ;; esac|' "$VSL" > "$WORK/nodecl.sh"
+if cmp -s "$VSL" "$WORK/nodecl.sh"; then
+  bad "FIXTURE BROKEN: the declared-membership test was renamed, so this mutant proves nothing"
+else
+  bash "$VSL"           --ledger "$WORK/declared-nonfive.jsonl" --sprint 900 --settings "$WORK/settings.json" >/dev/null 2>&1; a=$?
+  bash "$WORK/nodecl.sh" --ledger "$WORK/declared-nonfive.jsonl" --sprint 900 --settings "$WORK/settings.json" >/dev/null 2>&1; b=$?
+  if [ "$a" -eq 1 ] && [ "$b" -eq 3 ]; then
+    ok "MUTANT declaredisjunct: without it an UNCITED dispatch of a declared role falls out of scope (3) instead of being judged (1) — the declaration is what carries the D arm, and it is now asserted rather than assumed"
+  else
+    bad "MUTANT declaredisjunct: shipping gave rc=$a and the mutant rc=$b; expected 1 then 3"
+  fi
+fi
+
+# --- the cited disjunct, on its own copy --------------------------------------
+# A dispatch that CITED `team-roles/<role>.md` is judged whether or not settings.json still
+# declares that role. Without it, deleting one `aiDlcRoles` entry silences every finding
+# against that role — a one-line disarm — and the fail-closed role_file_readable arm loses
+# its reachable input for any role the settings file does not name.
+sed 's/^  \[ "$2" = "true" \] && return 0$/  [ "$2" = "NEVER" ] \&\& return 0/' "$VSL" > "$WORK/nodisj.sh"
+if cmp -s "$VSL" "$WORK/nodisj.sh"; then
+  bad "FIXTURE BROKEN: the cited disjunct's line was renamed, so this mutant proves nothing"
+else
+  bash "$VSL"          --ledger "$WORK/mismatch.jsonl" --sprint 900 --settings "$WORK/norolepins.json" >/dev/null 2>&1; a=$?
+  bash "$WORK/nodisj.sh" --ledger "$WORK/mismatch.jsonl" --sprint 900 --settings "$WORK/norolepins.json" >/dev/null 2>&1; b=$?
+  if [ "$a" -eq 0 ] && [ "$b" -eq 3 ]; then
+    ok "MUTANT citeddisjunct: without it a settings.json that lost its role block drops every contract-citing row as out of scope (3) instead of examining them (0) — the disjunct is what stops an aiDlcRoles deletion disarming the check"
+  else
+    bad "MUTANT citeddisjunct: shipping gave rc=$a and the mutant rc=$b; expected 0 then 3"
+  fi
+fi
 
 echo
 if [ "$fails" -eq 0 ]; then

@@ -31,7 +31,189 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 37 SHIPPED AS `v0.471.0`, THE CONSUMER PULLED IT, AND THE GAP IS ZERO. START AT BATCH 38.
+### BATCH 38 SHIPPED AS `v0.472.0`. THE GAP IS ONE RELEASE AND PENDING IS 1. START AT BATCH 39.
+
+**This block is the current state and it replaces every block below.** Every figure was
+re-derived by running the derive block and the sweep serially, all controls in the same
+invocation.
+
+**THE FILING WAS AUTHORITATIVE ABOUT THE DEFECT AND WRONG ABOUT THE REMEDY, AND THE REMEDY WAS A
+DISARM.** `PC-S340-VALIDATE-SPAWN-LEDGER-OVERSHOOTS-CHECK-22-DECLARED-ROLE-SCOPE` asked for Check
+22's five roles as the row scope of `validate-spawn-ledger.sh`. Built and scored on the consumer's
+own ledger before it was preferred: that narrowing drops the finding set from 122 arms to **2**,
+acquitting **23 of the 25 genuine** violations, because `adversary`, `remediator`, `pm`,
+`architect`, `gate-adjudicator`, `tea`, `ux` and `pm-escalated` are all roles Rule 19 binds and
+none is in the five. The five are the gate TRIGGER; the row scope is every AI/DLC-role dispatch.
+Check 22 stated both readings and the fix settles it in the file.
+
+**THE REAL DEFECT WAS ONE LEVEL DOWN FROM THE TITLE.** `ai-dlc-dispatch-guard.sh` derives `role`
+from `subagent_type` whenever the prompt cited no `team-roles/<role>.md`, and that fallback accepts
+any lowercase agent type — so the HARNESS's own built-in types land in the ledger with
+`role_contract_cited=false` and `role_file_readable=false`. Two Rule 19 violations each, clearable
+by no consumer action, because there is no contract for a `general-purpose` dispatch to cite and no
+role file for it to resolve. **97 of the 111 role arms on that consumer were on rows the scope
+test now skips**, against 14 genuine, and seven of its eight sprints exited 1. By ROLE that 97 is
+`general-purpose` 84, `fork` 12 and one other.
+
+**BUT IT IS TWO POPULATIONS, AND THE FIRST CUT OF THIS BLOCK CALLED IT ONE.** Split by whether the
+dispatch NAME is that of a declared role: **61 arms on agent types Rule 19 genuinely does not bind,
+and 36 on the 18 misrouted-role rows** — which are not false at all. Those 36 leave the exit code
+and become NOTEs; they are not dismissed. Control: 61 + 36 = 97. **Ask what SET a residue was taken
+over before calling all of it noise.**
+
+**THE SCOPE KEY IS DECLARATION, DERIVED — NOT A ROLE LIST.** A row is judged when it cited a role
+contract, or when its role is a key of `aiDlcRoles`: Rule 19's stated single source of truth, which
+the script already reads for the pin, and which **I22** binds to `core/team-roles/*.md` in both
+directions. **The `role_contract_cited` disjunct is the half that keeps the filter from being a
+disarm** — deleting an `aiDlcRoles` entry cannot silence a finding against a dispatch that cited
+its contract, and it is what keeps the fail-closed `role_file_readable` arm reachable for an
+undeclared role. Out-of-scope rows are counted and NAMED in `COUNTS:`, and a sprint whose every row
+is out of scope exits 3 rather than passing on a comparison it never made.
+
+**MY OWN MEASURING INSTRUMENT WAS WRONG BEFORE THE FIX WAS, AND ONLY A SECOND DERIVATION CAUGHT
+IT.** A `sed -n 's/.*\([0-9][0-9]*\) row(s) out of scope.*/\1/p'` extraction is GREEDY: `.*` eats
+everything it can, so the capture keeps only the LAST DIGIT. It read 12 as `2` and 16 as `6`, and
+the out-of-scope total came back **29 against a true 49** — a plausible number, off by 20, with no
+error anywhere. Caught by deriving the same population independently in `jq` and refusing to
+report until the two reconciled. **Two derivations, or the number is a hypothesis.**
+
+**AN ADVERSARIAL HAND FOUND THAT MY FILTER'S JOIN KEY WAS THE FIELD THE VIOLATION CORRUPTS, AND
+THAT IS THE BATCH'S BEST FINDING.** A real team role dispatched with `subagent_type:
+general-purpose` and no contract citation records `role: general-purpose` — so the scope key and
+the violation are the same field, and naming the skipped ROLE in `COUNTS:` surfaces nothing. **18
+of the 49 skipped rows were that shape** (`dev-escalated-s299-1-v4`,
+`code-reviewer-s299-1-fixforward`, `qa-s299-1-fixforward`, three `gate-adjudicator-story-s302-*`,
+twelve more across four sprints), reproduced here by an independent derivation before acting. The
+`role_contract_cited` disjunct cannot reach them: being uncited IS the violation. **Ask what a
+detector's join key structurally EXCLUDES from its own population, and ask it of your own filter.**
+The repair reads the dispatch NAME as a second signal and NOTEs every skipped row named after a
+declared role — a NOTE and not a FAIL, because a utility named `dev-*` is a false-positive path and
+a check must not error on correct data. The same hand found the doc sentence stating the filter's
+only failure mode named the RARE case while the common one hid inside the list it told the reader
+to ignore, and a `COUNTS:` de-duplication that matched only its first element because a
+space-separated accumulator was tested against a newline-delimited pattern.
+
+**THE FIXTURE FOUND TWO ENTANGLED ASSERTIONS IN THIS CHANGE, BOTH INTRODUCED BY IT.** The new scope
+test was spelled `if [ "$cited" != "true" ]; then` — byte-identical to the Rule 19(b) arm sixteen
+lines below — so a `sed` mutant aimed at one hit BOTH, and the battery reported four arms moving at
+once. The scope test is a FUNCTION for that reason. A second new arm asserted on a row with a null
+`model_requested` and therefore rode on the sentinel mutant. **A mutant that moves two tokens is
+the fixture telling you one of your assertions is vacuous; it is not noise to be widened away.**
+Two more arms (all-out-of-scope, and the cited disjunct) are asserted OUTSIDE the battery on
+purpose — they share a subject with existing arms, so a battery mutant would move both tokens by
+construction.
+
+**TWO SHELL TRAPS MADE TWO SUCCESSIVE DRAFTS OF THE RECEIPT SILENTLY VACUOUS.** `set -e` does NOT
+apply to a command preceded by `!`, so an arm written `! grep -q "FAIL: [gp]" <<<"$a"` never
+aborts the receipt and asserts nothing — the relaxed draft ACCEPTED the unfixed script through it.
+The arms are `case` matches now, which also avoids the `grep -q`-from-a-pipe EPIPE trap. And
+`printf '%s'` does not interpret `\n`: a JSONL heredoc flattened into one line, `jq` refused the
+file, and the receipt exited 2 — which reads exactly like a real rejection. `printf '%b'`.
+
+**THE RECEIPT ACCEPTED A TOTAL VERDICT DISARM, BECAUSE IT NEVER READ AN EXIT CODE.** A second
+hand scored it against sixteen implementations and it accepted SIX — including a fix that
+prints every `FAIL:` line and exits 0, one with the exit-3 arm deleted, and a five-line script
+that examines nothing and prints canned text. `a=$(... 2>&1) || true` discards both statuses,
+so every arm was a substring match over merged output. **Ask what a receipt READS, not only
+what it asserts**: four content arms over a stream that a `printf` can forge are four arms
+about nothing. It now asserts three exit codes beside its content arms and carries a row whose
+undeclared role is not a harness built-in — the input that separates DERIVING the scope from
+hardcoding `{general-purpose, fork, claude}`. Re-scored — and then the SAME HOLE turned up one arm over, which is the
+lesson rather than the fix. With the exit codes asserted, a build whose `COUNTS:` named no role
+still passed, because the arm binding the role list had been dropped and the new `NOTE:` supplied
+that token by itself; so did one whose skip counter never incremented, because the count sentence
+prints unconditionally. **Closing a receipt hole moves it; re-score the whole battery after every
+arm you change, never only the arm you changed.** Now 2 of 15, asserting the count and naming an
+out-of-scope role no implementation can produce without reading the row. One cost taken knowingly:
+a reword of the `COUNTS:` sentence scores STILL-LIVE, because that sentence is what the gate log
+records and what the enforcement map's posture points at.
+
+**AND THE RECEIPT WAS THE WEAKER MECHANISM THE WHOLE TIME.** Every implementation it ever accepted
+is killed by the fixture — measured in a probe tree with the shipped script as a passing control:
+the canned-output script fails all 28 assertions, the hardcode 3, the missing exit-3 arm 5. No
+wrong-accept was ever a live coverage gap. **Score a receipt weakness against the FIXTURE before
+reading it as one.**
+
+**A FIXTURE ARM PROVED NOTHING IT CLAIMED, AND ONLY A MUTANT AIMED AT THE OTHER DISJUNCT FOUND
+IT.** The battery row asserting that a declared role outside the five is judged was spelled
+`role_contract_cited: true`, so it reached the loop through the CITED disjunct; disabling the
+declared-role disjunct entirely left the arm unmoved. **An arm is carried by whichever
+condition admits its input first, and that is not always the one the comment names.** The
+`OUTSCOPE_ROLES` de-duplication branch had zero coverage for the same reason — no scenario
+carried two out-of-scope rows, which is exactly where the de-duplication defect lived.
+
+**TWO MORE CORRECTNESS DEFECTS CAME OUT OF THE SAME PASS.** An EMPTY role was a DECLARED role:
+with no `aiDlcRoles` block, `DECLARED_NL` is two newlines, which is the pattern an empty role
+builds, so a role-less row was judged — and its scope depended on how many roles the settings
+file happened to declare (exit 1 under `{}`, exit 3 under a one-key block). And the "bound
+vocabulary" claim named the wrong file: **`I22` binds `templates/settings.json.template`, not
+the consumer's `.claude/settings.json` that `--settings` actually reads.** The vocabulary is
+bound at INSTALL and unbound thereafter, which is the reason a role dropped from it must be
+NAMED rather than silently skipped.
+
+**A CLAIM ABOUT A GUARD'S SUBJECT IS NOT A MEASUREMENT OF IT.** "The disjunct keeps the
+fail-closed arm's real subject" is true by construction and the fixture proves it both ways —
+but on the reference consumer, of 64 rows carrying `role_file_readable=false`, **0 are in
+scope**. Reachable in principle, empty in practice there, and the release note says which.
+
+**EXIT-CODE SEMANTICS WERE SPELLED IN THREE PLACES AND THE FIRST CUT UPDATED TWO.**
+`enforcement-map.yaml`'s `posture:` line still called exit 3 PRE-LEDGER, and nothing binds
+posture prose to an enforcer's exit codes — `posture:` appears 13 times in
+`validate-enforcement-map.sh` (control: `call_sites` 10) and every one is a presence check.
+`gate-validation.md` also said PRE-LEDGER was "handled below" of a paragraph that does not
+exist. **Before restating a mechanism's contract, grep for every copy of it and count them.**
+
+**THE FIRST SHIPPED RECEIPT SCORE WAS 2 OF 8.** Scored against the correct fix, a second spelling of it,
+the pre-fix script, the filed five-role remedy, a total disarm, the fix minus its cited disjunct, a
+fix that skips out-of-scope rows without counting them, and a fix that skips a role-named row
+without NOTEing it. **An arm that merely asserted the skipped role was MENTIONED accepted the
+unfixed script** once a NOTE quoting that role existed — the arm has to key on the reporting
+sentence, not on the token appearing somewhere. It accepts the first two and rejects
+the rest. `BL-134` was FILED AND CLOSED IN THE SAME RELEASE, deliberately: `DISCHARGED` is keyed on
+a live candidate being cited by an entry in `docs/backlog.archive.md`, so a candidate fixed without
+ever being filed here is invisible to the goal partition — which is where batches 28 and 30's work
+went.
+
+**THE FIGURES, re-derived after the rotation.** Ledger md5 `287f0566…` — UNCHANGED across the whole
+batch — **74 live candidates, 139 archived, 32 cited, 42 UNFILED**. DISCHARGED **15 raw / 14
+corrected**, IN-FLIGHT **18**, UNTOUCHED **42**, overlap **1**, TERMINAL **31**. Partition control
+closes on the raw figure: 15+18+42−1 = 74. Presence controls 1/1/1/1; absence controls 0 and 0.
+`docs/backlog.md` **76 live / 58 archived** against a ceiling of 100. The partition moved by
+exactly one, out of UNTOUCHED and into DISCHARGED, which is the batch-31 repair working.
+
+**THE GAP IS ONE RELEASE AND PENDING IS 1. A PULL IS NOT AUTHORIZED.** The consumer's stamp reads
+`0.471.0`; the distribution is `0.472.0`. `operator-rulings.md` governs: readiness is not
+authorization, a pull is operator-initiated, a `PENDING` count is not a decision about WHEN, and
+one is never handed to a peer session.
+
+**THE SECOND TEST — the differential — DIVERGES, and that is reportable rather than decisive.**
+The consumer's INSTALLED `scripts/ai-dlc/validate-spawn-ledger.sh` and this distribution's fixed
+copy were run against that consumer's real ledger across its eight sprints, with a `cmp -s` control
+in the same invocation asserting the two binaries differ. Installed: 7 of 8 sprints exit 1, **122
+FAIL arms**. Fixed: 2 of 8, **25 arms**. The divergence is in the FALSE direction — the consumer's
+gate is emitting 97 findings today that no consumer action can clear — so the pull removes a live
+false-FAIL rather than delivering a missing finding. **No bootstrapping step is in the range**:
+this release touched `validate-spawn-ledger.sh`, `gate-validation.md`, one fixture and the backlog
+— not `preclassify.sh`, `apply.sh`, `ledger-reverify.sh` or the update skill.
+
+**THE CONSUMER IS MID-FLIGHT AND MOVED BRANCH DURING THIS BATCH.** It left `main` for
+`ai-dlc/carry-over/pool-pnl-backlog-triage` and its dirty count went 14 → 22 while this batch ran;
+every one of those paths is its own `_bmad-output/` pipeline state, including `spawn-ledger.jsonl`,
+which is the corpus every figure above was measured over. **The ledger md5 did not move, so the
+sweep is unaffected** — but a figure taken over that spawn ledger is a snapshot of a file another
+party is holding open, and the differential above is the one to trust because both sides read it in
+the same invocation.
+
+**`PC-S308` IS STILL LIVE IN THEIR LEDGER (1 live / 0 archived) AND IS STILL NOT AVAILABLE WORK.**
+Delivered at `v0.471.0` and confirmed working there; the pull did not rotate it. Its remaining half
+is that consumer's own Check 915 exemption regex, already filed there as its own carry-over.
+
+**`IS-CORE`'s REJECTION IS STILL OWED AND HAS NOW SURVIVED FIVE BATCHES.**
+`PC-S340-IS-CORE-ANSWERS-BY-DECLARED-GLOB-NOT-BY-MEMBERSHIP` is REJECTED as by-design and will keep
+appearing in every sweep, because a rejection is not a filing and nothing here moves it out of
+UNFILED. It is not work; it is an adjudication that needs to reach the party holding the candidate.
+
+### BATCH 37 SHIPPED AS `v0.471.0` AND THE CONSUMER PULLED IT — A RECORD. BATCH 38 HAS SINCE RUN; TAKE THE STATE FROM THE BLOCK ABOVE, NOT FROM THIS HEADING.
 
 **This block is the current state and it replaces every block below.** Every figure was
 re-derived after the consumer's pull by running the derive block and the sweep serially, all
@@ -2841,8 +3023,8 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 38's
-   SUBJECT.** Batch 37 is merged as `v0.471.0`. Number yours 38.
+1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 39's
+   SUBJECT.** Batch 38 is merged as `v0.472.0`. Number yours 39.
 
    **A PEER SESSION IS A SUBJECT CHANNEL AND IT OUTRANKED THE SWEEP LAST BATCH.** Batch 37's
    subject arrived as a message from a blocked consumer session, not from the ledger — the sweep
@@ -2851,13 +3033,23 @@ so no block written before it changes verdict.
    against the tree before scoping anything else; a consumer stopped at a HARD_BLOCK outranks a
    candidate that has sat in the ledger for a month.
 
-   **THE GAP IS ZERO — the consumer pulled `v0.471.0` and its stamp reads `0.471.0`/`31b51d48`
-   on all four fields.** Your batch reopens it. That is not permission to close it: a pull is
-   operator-initiated, readiness is not authorization, and one is never handed to a peer
-   session. `operator-rulings.md` governs. The consumer's operator initiated the last one in
-   their own tree; that sets no precedent for dispatching from here.
+   **THE GAP IS ONE RELEASE AND PENDING IS 1** — the consumer's stamp reads `0.471.0` and this
+   distribution is `0.472.0`. Your batch widens it to two. That is not permission to close it: a
+   pull is operator-initiated, readiness is not authorization, a `PENDING` count is not a
+   decision about WHEN, and one is never handed to a peer session. `operator-rulings.md`
+   governs. The consumer's operator initiated the last one in their own tree; that sets no
+   precedent for dispatching from here.
 
-   **`v0.471.0`'s SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW IT. DO NOT RE-SCOPE ONTO IT.**
+   **BATCH 38's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW IT.**
+   `PC-S340-VALIDATE-SPAWN-LEDGER-OVERSHOOTS-CHECK-22-DECLARED-ROLE-SCOPE` shipped as `v0.472.0`
+   and is cited by `BL-134` in `docs/backlog.archive.md`, so it now reads DISCHARGED rather than
+   UNFILED — but it stays live in the consumer's ledger until they pull. Do not re-scope onto it.
+   **Its filed remedy was REFUTED by building it**: Check 22's five roles as the row scope drops
+   the finding set from 122 arms to 2, acquitting 23 of the 25 genuine ones. That is the general
+   case, not a special one — build the filed remedy and score it before you prefer your own, and
+   ask what it ACQUITS rather than only whether the defect is real.
+
+   **`v0.471.0`'s SUBJECT IS ALSO SPENT AND THE SWEEP WILL STILL SHOW IT. DO NOT RE-SCOPE ONTO IT.**
    `PC-S308-STEP1A-ROTATE-REMEDY-NO-SPRINT-START-DESTINATION` is fixed, cited, DELIVERED and
    confirmed working on the consumer — and it is still LIVE in their ledger (1 live / 0
    archived), because the pull did not rotate it. Its remaining half, the Check 916 exemption
@@ -3099,13 +3291,15 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 287f0566... AFTER the 0.471.0 pull; a MOVE alone is NOT an alarm -- check the id set too
-   wc -l < /tmp/live.txt    # 74 after the 0.471.0 pull
-   wc -l < /tmp/unfiled.txt # 43 after the 0.471.0 pull
+   md5 -q "$L"              # 287f0566... unchanged since the 0.471.0 pull; a MOVE alone is NOT an alarm -- check the id set too
+   wc -l < /tmp/live.txt    # 74
+   wc -l < /tmp/unfiled.txt # 42 after batch 38 rotated BL-134
    ```
 
-   **THE BASELINE IS 74 LIVE CANDIDATES AFTER THE 0.471.0 PULL, 31 CITED, 43 UNFILED.**
-   A higher count means the consumer filed while nobody was looking.
+   **THE BASELINE IS 74 LIVE CANDIDATES, 32 CITED, 42 UNFILED.** Live is unchanged since the
+   0.471.0 pull; cited rose and unfiled fell by one because batch 38 FILED its subject here and
+   rotated the entry, which is the only way a candidate leaves UNTOUCHED without the consumer
+   moving. A higher LIVE count means the consumer filed while nobody was looking.
 
    **THE md5 MOVED TWICE DURING BATCH 37, BOTH TIMES FROM THE CONSUMER WRITING MID-BATCH, AND
    NEITHER MOVE WAS A PULL.** It went `28df5c39…` → `a8bdf944…` when a blocked consumer session
