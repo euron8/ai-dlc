@@ -15,6 +15,40 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.464.0] - 2026-09-01
+
+### The gate that authorises a write compared the ref's spelling, not the ref
+
+`emit-report.sh`'s mechanical region now carries the `core/` tree of `theirs`, so a symbolic ref
+that moved between the dry run and the apply can no longer pass `--verify`.
+
+**The gate already existed and was blind, which is why nothing noticed.** `SKILL.md` step 7 makes
+`reconcile/emit-report.sh --verify` a precondition for any write — "a nonzero exit means the
+approval was given without sight of a finding, so STOP and re-emit rather than write". The region
+rendered `_theirs_ <ref>`, which is what the caller TYPED, and every other row in it is a bucket
+or a status keyed on STATUS+path carrying no content digest. So a core file whose bucket is
+unchanged and whose CONTENT moved left the whole region byte-identical.
+
+**Measured by driving the shipping renderer against a consumer built by `scripts/install.sh`,
+base `2c0cc4ef`.** Rendered at `86ee28aa` and at `569ebfd3` — two refs apart by exactly 2 core
+files and 0 new files, so every bucket is unchanged — the two regions differed in **exactly one
+line**, the `_base_`/`_theirs_` line. With the ref spelled as a BRANCH that was moved between
+render and verify, so that line was identical too, `--verify` exited **0** and printed `the
+report's mechanical region is present, current, and complete`. Control in the same probe: a
+one-byte hand-edit of the region still exited **1**, so the gate discriminates — it was simply
+never shown the thing that changed. `apply.sh:1301` resolves the ref to a sha for itself at apply
+time, so the re-stamp then attests to content the operator never approved.
+
+**Keyed on the `core/` tree and deliberately not on the commit, which is the whole
+false-positive story.** The live incident that surfaced this moved the ref by one docs-only
+commit, `86ee28aa` → `d503d490`: 0 core files changed, VERSION identical at both, and
+`<ref>:core` byte-identical at both. A commit-keyed line fires on that and pushes a consumer
+back to re-emit a report that was sound; a tree-keyed line stays quiet. It fires when, and only
+when, the bytes the pull would WRITE have changed — the condition that invalidates the approval —
+so the false-positive set is empty by construction rather than by narrowing.
+
+Scored three ways on the probe: move across core → `1`, docs-only move → `0`, no move → `0`.
+
 ## [0.463.0] - 2026-09-01
 
 ### A wildcard in prose is not a missing file, and the label said it was

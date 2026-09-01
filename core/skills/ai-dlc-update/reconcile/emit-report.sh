@@ -68,6 +68,32 @@ render() {
   # the region against a fresh render, so a consumer who wrote correct markdown got a FAIL
   # and was pushed back to the malformed text.
   printf '\n_base_ `%s` → _theirs_ `%s`.\n' "$BASE" "$THEIRS"
+  # THE REF'S SPELLING IS NOT THE REF, and this region is the only thing standing between a
+  # moved upstream and a write. The line above renders what the caller TYPED. `--verify`
+  # byte-compares the region, so a SYMBOLIC theirs -- `origin/main`, a branch, whatever a bare
+  # invocation resolves "upstream HEAD" to -- renders identically at the dry run and at the
+  # apply even when it has moved between them. Every other row here is a bucket or a status
+  # keyed on STATUS+path and carries no content digest, so a core file whose bucket is
+  # unchanged and whose CONTENT moved leaves the whole region byte-identical.
+  #
+  # Measured, driving this script against a consumer built by install.sh, with two refs two
+  # core files apart: the ONLY differing line was the one above. Spelled as a branch that was
+  # moved between render and verify, `--verify` exited 0 and printed "present, current, and
+  # complete" -- SKILL.md's mechanical union gate authorising a write of content the operator
+  # never saw, with apply.sh's re-stamp then attesting to it from a sha it resolves for itself
+  # at apply time. A hand-edit of one byte still failed, so the gate discriminates; it was
+  # simply never shown the thing that changed.
+  #
+  # KEYED ON THE `core/` TREE, NOT ON THE COMMIT, and that is the whole of the false-positive
+  # story. The distribution commits docs and plans between releases, and a consumer whose
+  # upstream gained one of those between its dry run and its apply must NOT be pushed back to
+  # re-emit a sound report. The live incident that surfaced this was exactly that shape: the
+  # ref moved by one docs-only commit and the `core` tree was unchanged. A commit-keyed line
+  # fires on it and wedges the pull; a tree-keyed line stays quiet. This fires when, and only
+  # when, the bytes this pull would WRITE have changed -- which is precisely the condition
+  # that invalidates the operator's approval, so the false-positive set is empty by
+  # construction rather than by narrowing.
+  printf '_theirs_ `core/` tree `%s`.\n' "$(git -C "$DIST" rev-parse "${THEIRS}:core" 2>/dev/null || echo absent)"
 
   local pc ud ld hb rl del classify
   pc="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null || true)"
