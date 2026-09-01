@@ -41,6 +41,65 @@ landed at the DECISION, so the gate was green throughout both the defect and its
 **Action for the consumer: mark the candidate REJECTED — by design — and cite the guard's own
 remedy sentence as the reason.** No code change on either side.
 
+## 1b. `PC-S340-SAFE-STOP-ACQUITTAL-TESTS-ANCESTRY-NOT-CONTENT` — the DEFECT stands, the stated REMEDY is refuted
+
+**Adjudicated here by reconstructing the filing state and driving the shipping gate against it, not
+by re-reading the entry.** The consumer's own stamp history carries the tree: at commit
+`8e53e4b41^` the stamp reads `0.452.0` / `11bdeb8e` on both pairs. Extracted and run:
+`self-update-gate.sh <dist> 11bdeb8e cb3ac04d <that tree>` emits `SELF-UPDATE-DEFER` and a
+`SELF-UPDATE-SAFE-STOP` naming **`b634e42d` — 0.454.0**. That is the real candidate, not a derived
+one.
+
+**THE REMEDY THE ENTRY IMPLIES DOES NOT FIRE ON THE PULL THAT FILED IT.** A content/byte-equality
+arm was scored against that tree at every candidate in the range — 0.453.0, 0.454.0, 0.455.0 — and
+stays quiet at all three. Over what a hop to 0.454.0 would actually write, the filing-state consumer
+matched **0 of 3**. Currency by set, widest to narrowest:
+
+| set | size | current? |
+|---|---|---|
+| machinery set — what the acquittal governs | 123 | **NO** — 3 differ, 1 consumer-absent |
+| `reconcile/` whole subtree | 27 | **NO** — 1 differs (`setup-sites.md`) |
+| `reconcile/` executables (mode 100755) | 23 | **YES** — 23 of 23 |
+
+Control that the scorer discriminates rather than being stuck on one answer: the same scorer with
+the candidate set to BASE returns 120 match / 0 differ.
+
+`setup-sites.md` is not an incidental miss. `preclassify.sh` reads it at three emitting lines
+(`:117`, `:218`, `:329`); it is a genuine classifier input and it genuinely changed. So byte
+equality is FALSE at every scope above the executable subset, and an entry whose remedy does not
+fire on its own motivating case has not been scoped.
+
+**THE DEFECT NEVERTHELESS STANDS, AND THE ENTRY'S CLAIM MEASURES TRUE — it is about BEHAVIOUR.**
+The consumer's installed engine and the engine extracted at 0.454.0 were run against the same tree
+with the same arguments and their classifications diffed:
+
+```
+base 0.432.0, theirs 0.456.0, 59 core paths, 59 rows
+  SUBJECT  consumer engine vs 0.454.0 engine :  0 changed lines
+  CONTROL  consumer engine vs 0.432.0 engine :  4 changed lines
+```
+
+The two sides are demonstrably different code (`diff -rq` names `setup-sites.md`) and the control
+fires, so the null is readable. **On that tree the two engines classify identically.** The gate
+could not see it because it tests ancestry instead of BEHAVIOUR — content is the wrong middle term,
+false exactly where the claim is true.
+
+**Action for the consumer: keep the candidate OPEN, and replace its remedy.** The honest predicate
+is the differential this same file already runs one level down — its own "the verdict is a
+differential, not an exit code" doctrine — lifted from gating-script exit codes to classifier
+OUTPUT: run the installed engine and the engine at the candidate against the consumer's tree and
+compare. That OBSERVES the filter's effect instead of modelling it, so it needs no knowledge of
+what `manifest_dests()` drops.
+
+**Not built on this side, and the reason is a measurement rather than a preference.** The output
+differential is a NEW predicate whose own false-positive set has not been run, and this repo does
+not ship a check whose FP set is unmeasured. One hazard is already known and is severe: at the
+filing range the same differential read `0` for the subject **and `0` for the control**, two
+demonstrably different engines producing identical output on a 10-row population. That null was
+worthless. Only at 59 rows did the control fire. **Any arm of this shape must assert its own
+resolution in the same run or report UNDECIDED**, which is already this gate's stated doctrine for
+an unattributable answer.
+
 ## 2. Three defects the pull surfaced. Two are fixed in `0.464.0`; the third is not.
 
 ### 2a. The approval gate compared how the ref was TYPED, not what it names — FIXED

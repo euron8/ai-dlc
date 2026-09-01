@@ -3555,3 +3555,67 @@ close this entry on the receipt alone: say what was done about step 2, or narrow
 paths 2 and 3 and file step 2 separately.
 
 verify: sh e=core/skills/ai-dlc-update/reconcile/emit-report.sh; [ -f "$e" ] || exit 9; L=$(git ls-files "*.sh" | grep -vE "^core/fixtures/"); c=$(printf "%s\n" "$L" | grep -v "reconcile/preclassify.sh" | xargs grep -hE "(bash|sh) [^ ]*preclassify\.sh" 2>/dev/null | grep -vcE "^[[:space:]]*#"); [ "${c:-0}" -gt 0 ] || exit 9; n=$(printf "%s\n" "$L" | grep -v "reconcile/emit-report.sh" | xargs grep -hE "(bash|sh) [^ ]*emit-report\.sh" 2>/dev/null | grep -vcE "^[[:space:]]*#"); [ "${n:-0}" -gt 0 ] && exit 0; exit 1
+
+## BL-132 — the safe-stop acquittal answers a question about BEHAVIOUR with a test on ancestry
+
+Carries the reference consumer's `PC-S340-SAFE-STOP-ACQUITTAL-TESTS-ANCESTRY-NOT-CONTENT`, so it is
+PC-backed and ranks above any distribution-internal entry under the provenance-first rule. **The
+candidate's DEFECT is real and its stated REMEDY is refuted — both halves were measured, and the
+adjudication has been carried back in `docs/reviews/graph-s340-adjudication-brief.md` §1b.**
+
+`self-update-gate.sh:180` acquits a split with "SPLIT BUYS NOTHING HERE", gated on
+`machinery_at_or_past()` (`:205-213`), which is `git merge-base --is-ancestor` on the stamp's
+`skill_commit` and nothing else. The sentence it emits is a claim about what the CLASSIFIER will
+do; the test underneath it is about where a sha sits in the graph.
+
+**DO NOT BUILD THE CONTENT/BYTE-EQUALITY ARM. It was scored and it does not fire on the pull that
+filed the candidate.** The filing state was reconstructed from the consumer's own stamp history and
+the shipping gate driven against it, giving a real candidate of 0.454.0. A byte arm stays quiet at
+every candidate in the range, and the filing-state consumer matched **0 of 3** paths a hop would
+write. Currency by set: machinery set (123) NO — 3 differ, 1 absent; `reconcile/` subtree (27) NO —
+`setup-sites.md` differs; `reconcile/` executables (23) YES, 23 of 23. Control: the same scorer with
+the candidate set to BASE returns 120 match / 0 differ, so it discriminates. `setup-sites.md` is a
+genuine classifier input — `preclassify.sh` reads it at `:117`, `:218` and `:329` — and it genuinely
+changed, so byte equality is FALSE at every scope above the executable subset.
+
+**The claim measures TRUE behaviourally, which is what makes this a defect rather than a bad
+filing.** The consumer's installed engine and the engine at 0.454.0, run against one tree with one
+set of arguments: **0 changed classifier rows over 59 paths, against a control of 4** changed rows
+versus a 0.432.0 engine, with `diff -rq` confirming the two engine directories differ. The hop's
+engine change was inert and the gate could not say so.
+
+**THE PREDICATE TO BUILD, and it is not a guess at what `manifest_dests()` filters.** Lift this
+file's own "the verdict is a differential, not an exit code" doctrine from gating-script exit codes
+to classifier OUTPUT: run the installed engine and the engine at the candidate against the
+consumer's tree and compare. It OBSERVES the filter's effect rather than modelling it.
+
+**THREE THINGS ARE UNMEASURED AND THEY ARE WHY THIS IS FILED RATHER THAN BUILT.** Shipping a check
+whose false-positive set has not been run is forbidden here, and this one has three open questions:
+
+- **The new predicate's own FP set has not been run.** It needs its own battery.
+- **A 10-ROW POPULATION CANNOT RESOLVE THIS DIFFERENTIAL.** Measured: at the filing range the
+  subject read `0` and **the control also read `0`** — two demonstrably different engines producing
+  identical output. That null was worthless and was nearly shipped as a result. Only at 59 rows did
+  the control fire. **An arm of this shape must assert its own resolution in the same run or report
+  UNDECIDED**, which is already this gate's doctrine for an unattributable answer.
+- **The production resolution control may not be affordable.** Proving a live run CAN resolve needs
+  a third, deliberately-older engine extracted per candidate ref. That cost is the fact that decides
+  whether this is buildable at all, and it is not yet a number.
+
+**A byte predicate would also be VACUOUSLY TRUE on a large minority of hops**, which is a second
+reason the refuted remedy must not come back: **7 of 39 consecutive release hops change ZERO
+machinery paths** (0.427→0.428, 0.433→0.434, 0.437→0.438, 0.445→0.446, 0.453→0.454, 0.458→0.459,
+0.464→0.465), against a control of **0 of 39** having an empty full diff.
+
+**Tiered DEFECT.** It wrongly advises a split on a consumer whose engine is already behaviourally
+current. It is bounded: `advise_safe_stop` is called only at `:431` and `:543`, both immediately
+after `emit SELF-UPDATE-DEFER`, so the acquittal is unreachable except behind a DEFER and a wrong
+answer can only mis-advise a consumer already deferring — never one on the happy path.
+
+The receipt keys on a behavioural comparison EXISTING, deliberately not on the ancestry test being
+absent: any real fix ADDS the behaviour check while KEEPING ancestry, so a receipt anchored on the
+ancestry line survives the fix — the co-occurrence trap the upstream entry names in its own
+`verify: manual` rationale. Scored three ways: 1 against the tree, 0 against a scratch copy with an
+engine extraction seeded, 9 with the subject removed.
+
+verify: sh g=core/skills/ai-dlc-update/reconcile/self-update-gate.sh; [ -f "$g" ] || exit 9; grep -q "advise_safe_stop" "$g" || exit 9; grep -vE "^[[:space:]]*#" "$g" | grep -qE "(show|archive|worktree)[^|]*preclassify" && exit 0; exit 1
