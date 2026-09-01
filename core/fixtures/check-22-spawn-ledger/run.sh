@@ -131,6 +131,11 @@ row general-purpose inherit '' false false gp-only                    > "$WORK/a
 # consumer are this. The dispatch NAME is the only surviving signal.
 row general-purpose inherit '' false false dev-story-1                > "$WORK/suspect.jsonl"
 row dev sonnet sonnet true true dev-beside-suspect                   >> "$WORK/suspect.jsonl"
+# THE NEAR-MISS SITS BESIDE THE OFFENDER, IN THE SAME RUN. `devops-audit` shares a prefix with
+# the declared role `dev` and is not it; the match needs the role to be the whole name or to be
+# followed by a dash. A second clean run could only ask whether the NOTE fires at all, never
+# whether it fires on the right names.
+row general-purpose inherit '' false false devops-audit             >> "$WORK/suspect.jsonl"
 # Two skipped rows of the SAME role, so the COUNTS list has to de-duplicate more than its
 # first element.
 row general-purpose inherit '' false false gp-1                       > "$WORK/dupes.jsonl"
@@ -428,11 +433,26 @@ mutant scopefilter 's/^    continue$/    :/' X \
 out="$(bash "$VSL" --ledger "$WORK/suspect.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ] && grep -q "^NOTE: \[dev-story-1\]" <<<"$out" \
    && grep -q "declared role 'dev'" <<<"$out" \
+   && ! grep -q "^NOTE: \[devops-audit\]" <<<"$out" \
    && grep -q '1 of them named after a declared role' <<<"$out" \
    && ! grep -q '^FAIL: \[' <<<"$out"; then
-  ok "a skipped row whose dispatch NAME is a declared role is NOTED by name and counted — the one signal left when the role field carries the agent type — and it is a NOTE, not a FAIL, because a consumer utility named dev-* would be a false FAIL on correct data"
+  ok "a skipped row whose dispatch NAME is a declared role is NOTED by name and counted, while devops-audit BESIDE it stays quiet — the one signal left when the role field carries the agent type, and a NOTE rather than a FAIL because a utility named dev-* is a live false-positive path"
 else
   bad "the suspect row was not surfaced (rc=$rc): $out"
+fi
+
+# And the BOUNDARY is load-bearing, not decoration: widened to a bare prefix, the near-miss
+# beside the offender is flagged too, and the arm above would be reporting on a substring.
+sed 's|      "\$nr_k"\|"\$nr_k"-\*) |      "$nr_k"*) |' "$VSL" > "$WORK/widen.sh"
+if cmp -s "$VSL" "$WORK/widen.sh"; then
+  bad "FIXTURE BROKEN: the name_role boundary pattern was renamed, so this mutant proves nothing"
+else
+  out="$(bash "$WORK/widen.sh" --ledger "$WORK/suspect.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"
+  if grep -q '^NOTE: \[devops-audit\]' <<<"$out"; then
+    ok "MUTANT nameboundary: dropping the dash boundary flags devops-audit as the role dev — the boundary is what makes the NOTE a name match rather than a substring match"
+  else
+    bad "MUTANT nameboundary survived: devops-audit stayed quiet without the boundary"
+  fi
 fi
 
 sed 's/^    _nr="\$(name_role "\${name}")"$/    _nr=""/' "$VSL" > "$WORK/nosus.sh"

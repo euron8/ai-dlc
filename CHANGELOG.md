@@ -86,7 +86,7 @@ mine: the new scope test was byte-identical to the Rule 19(b) arm below it, so a
 at one hit both, and a new arm asserting on a null field rode on the sentinel mutant. The
 scope test is a function for that reason. Its battery is fifteen arms with ten mutants each
 moving exactly one, plus four standalone arms whose subjects are shared and would entangle by
-construction — 24 assertions in all.
+construction — 25 assertions in all, including a near-miss (devops-audit) seated beside the offender in the same run.
 
 Changed: `core/scripts/validate-spawn-ledger.sh`,
 `core/skills/ai-dlc/steps/gate-validation.md`, `core/fixtures/check-22-spawn-ledger/run.sh`,
