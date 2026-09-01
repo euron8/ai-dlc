@@ -15,6 +15,35 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.463.0] - 2026-09-01
+
+### A wildcard in prose is not a missing file, and the label said it was
+
+`audit-upstream-routing.sh` expands a glob before deciding a named path is absent.
+
+**Found by the consumer, on its own tree, with the count as the control.** `os.path.exists()` does
+not expand a glob, so any path token carrying `*` was reported absent unconditionally. Measured:
+`.claude/hooks/ai-dlc-*.sh` matches **22 files** there and was labelled `[NO SUCH FILE HERE]`,
+against a control of a genuinely absent path matching 0. The `PAIRED BUT UNPLACEABLE` section
+`v0.462.0` shipped was **1-for-2** on the corpus that motivated it.
+
+**The sharp version, which is the consumer's and worth keeping.** The same release added prose to
+`retro.md` telling a reader that "a proposal, a renamed path and a prose wildcard all answer 0 and
+route differently" — while its own new label could not tell the third from the second. And the
+distribution side had the evidence first: this wildcard was measured that morning, named in
+`v0.462.0`'s own changelog as one of the two absent tokens, and shipped anyway, because
+"not a filename" was read as "absent". That is the conflation the label exists to prevent.
+
+Re-measured on the consumer's live corpus with `v0.462.0` and the fix in one invocation: findings
+**4** and paired **7** unchanged as controls, `PAIRED BUT UNPLACEABLE` **2 → 1**, and the row that
+survives is `CO-S307-GATE26-VERDICT-MERGE-SCRIPT`, whose path really is in neither tree.
+
+The fixture arm splits both directions over one corpus: a wildcard whose family EXISTS renders
+unlabelled while a wildcard matching NOTHING is still labelled. Either half alone passes under the
+defect — `exists()` reports every glob absent, so the labelled half was green for the wrong reason
+and read exactly like a working arm. Seeded in its OWN corpus rather than by widening the shared
+one, which is how this change first broke three arms that count the shared corpus's entries.
+
 ## [0.462.0] - 2026-09-01
 
 ### The label `v0.458.0` shipped could not reach its own subject

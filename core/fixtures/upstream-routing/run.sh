@@ -96,7 +96,7 @@ WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
-EXPECTED_ASSERTIONS=53
+EXPECTED_ASSERTIONS=54
 fails=0; made=0
 ok()   { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad()  { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
@@ -931,6 +931,13 @@ mkdir -p "$CTREE/.claude/skills/ai-dlc/overrides" \
 cp "$MANIFEST_F" "$CTREE/.claude/skills/ai-dlc/core-manifest.md"
 : > "$CTREE/scripts/ai-dlc/core-paths.sh"
 : > "$CTREE/scripts/ai-dlc/verdict-lib.sh"
+# A WILDCARD FAMILY THAT REALLY EXISTS. `os.path.exists()` does not expand a glob, so the first
+# cut of the label reported every `*` token absent unconditionally -- measured on the reference
+# consumer, `.claude/hooks/ai-dlc-*.sh` matched 22 files and was still marked missing. Two members
+# rather than one: a single file would leave a one-member glob and a literal path indistinguishable.
+mkdir -p "$CTREE/.claude/hooks"
+: > "$CTREE/.claude/hooks/ai-dlc-core-guard.sh"
+: > "$CTREE/.claude/hooks/ai-dlc-acknowledge.sh"
 
 OTHER="$WORK/other-tree"
 mkdir -p "$OTHER/.claude/skills/ai-dlc"
@@ -955,6 +962,22 @@ cat >"$ABSBL" <<'MD'
 ### CO-S410-ABSENTONLY
 **Status:** OPEN
 `scripts/ai-dlc/never-shipped-by-anyone.sh` reports the wrong sprint id.
+MD
+
+# A SEPARATE CORPUS, NOT A WIDER ONE. Assertions 33 and 36 count $ABSBL's entries and compare its
+# id set against a sibling; adding rows there moves numbers those arms read, which is how a new
+# arm breaks three old ones.
+GLOBBL="$CTREE/_bmad-output/backlog-glob.md"
+cat >"$GLOBBL" <<'MD'
+# Carry-over backlog
+
+### CO-S411-GLOBPRESENT
+**Status:** OPEN
+The dispatch guard family `.claude/hooks/ai-dlc-*.sh` stamps the wrong sprint.
+
+### CO-S411-GLOBABSENT
+**Status:** OPEN
+The reporter family `scripts/ai-dlc/never-shipped-*.sh` cannot resolve its own root.
 MD
 
 # The SAME corpus with the two absent filenames swapped for present ones. Same ids, same entry
@@ -1010,6 +1033,22 @@ if [ "$abs_rc" = "0" ] \
 else
   bad "the label did not discriminate: rc=$abs_rc, absent path marked / present path unmarked not both true"
   show "$abs_txt"
+fi
+
+# --- A WILDCARD THAT MATCHES IS NOT A MISSING FILE, and one that matches nothing still is -------
+# Both directions in ONE run over ONE corpus: a `*` token whose family exists on disk must go
+# UNLABELLED, and a `*` token matching nothing must still be labelled. Either alone passes under
+# the defect -- exists() reports every glob absent, so the labelled half is green for the wrong
+# reason and reads exactly like a working arm.
+run_txt "$SUBJ" "$GLOBBL" "$WORK/glob.txt" "$CTREE"; glob_rc=$RC; glob_txt="$(cat "$WORK/glob.txt")"
+if [ "$glob_rc" = "0" ] \
+   && has '^      names: \.claude/hooks/ai-dlc-\*\.sh$' "$glob_txt" \
+   && ! has 'ai-dlc-\*\.sh   \[NO SUCH FILE HERE\]' "$glob_txt" \
+   && has '^      names: scripts/ai-dlc/never-shipped-\*\.sh   \[NO SUCH FILE HERE\]$' "$glob_txt"; then
+  ok "GLOB: a wildcard whose family EXISTS is unlabelled while a wildcard matching NOTHING is labelled — same run, and the labelled half alone would pass under exists()-without-glob"
+else
+  bad "GLOB: the two wildcard tokens did not split — a matching family and a matching-nothing family must render differently:"
+  show "$(printf '%s\n' "$glob_txt" | grep -F 'names:' || true)"
 fi
 
 # --- 33. the label LABELS; it does not FILTER -------------------------------------------------
@@ -1126,7 +1165,7 @@ fi
 # The label stops appearing and everything else about the report is unchanged, which is exactly
 # what a broken label looks like from the outside. The positive conjunct — the finding is still
 # named — is what stops a subject that emits NOTHING from scoring as a kill here.
-M_EXT="$(mkmut existstrue '"exists": True if root is None else os.path.exists(os.path.join(root, p))' '"exists": True')"
+M_EXT="$(mkmut existstrue '"exists": path_is_present(root, p)' '"exists": True')"
 if [ -z "$M_EXT" ]; then
   bad "MUTANT existstrue: the anchor matched nothing — assertion 32 proves nothing"
 else
@@ -1144,7 +1183,7 @@ fi
 # --- 38. MUTANT: everything marked absent (assertion 32's SILENT direction is live) -----------
 # The mirror, and the one that a fires-only arm cannot catch: a label that flags EVERY path reads
 # identically to one that discriminates, unless something asserts the near-miss stays quiet.
-M_EXF="$(mkmut existsfalse '"exists": True if root is None else os.path.exists(os.path.join(root, p))' '"exists": False')"
+M_EXF="$(mkmut existsfalse '"exists": path_is_present(root, p)' '"exists": False')"
 if [ -z "$M_EXF" ]; then
   bad "MUTANT existsfalse: the anchor matched nothing — assertion 32 proves nothing"
 else
@@ -1370,8 +1409,7 @@ fi
 # --- 47. MUTANT: every named path listed (assertion 43's OMIT direction is live) --------------
 # A section that lists EVERY paired entry reads exactly like one that discriminates, until
 # something asserts the placeable entry stays out.
-M_ALLGONE="$(mkmut allgone '        gone = [p for p in mach[:6]
-                if not (root is None or os.path.exists(os.path.join(root, p)))]' '        gone = list(mach[:6])')"
+M_ALLGONE="$(mkmut allgone '        gone = [p for p in mach[:6] if not path_is_present(root, p)]' '        gone = list(mach[:6])')"
 if [ -z "$M_ALLGONE" ]; then
   bad "MUTANT allgone: the anchor matched nothing — assertion 43 proves nothing"
 else

@@ -171,7 +171,7 @@ command -v python3 >/dev/null 2>&1 || {
   echo "audit-upstream-routing: DISARMED — EXAMINED NOTHING — python3 absent." >&2; exit 2; }
 
 BACKLOG="$BACKLOG" EMIT_JSON="$EMIT_JSON" GLOBS="$GLOBS" AI_DLC_ROOT="$AI_DLC_ROOT" python3 <<'PY'
-import fnmatch, json, os, re, sys
+import fnmatch, glob, json, os, re, sys
 
 backlog = os.environ["BACKLOG"]
 globs = [g.strip() for g in os.environ["GLOBS"].splitlines() if g.strip()]
@@ -229,6 +229,22 @@ def core_paths_in(body):
 # plus both layer directories), and when no such root is found NOTHING is labelled. A
 # corpus whose tree cannot be identified is one where the question was never asked, which
 # is not the same answer as "the file is missing".
+# A WILDCARD IN PROSE IS NOT A MISSING FILE, AND THE FIRST CUT OF THIS LABEL SAID IT WAS.
+# `os.path.exists()` does not expand a glob, so any token carrying `*` was reported absent
+# unconditionally. Measured on the reference consumer: `.claude/hooks/ai-dlc-*.sh` matched 22
+# files on disk and was labelled `[NO SUCH FILE HERE]`, against a control of a genuinely absent
+# path matching 0. The section was 1-for-2 on the corpus that motivated it.
+#
+# The release that shipped that also added prose to `retro.md` telling a reader that a proposal,
+# a renamed path and a prose wildcard route differently — while its own label could not tell the
+# third from the second. Found by the consumer, on its own tree, with the count as the control.
+def path_is_present(root, p):
+    if root is None:
+        return True
+    full = os.path.join(root, p)
+    return os.path.exists(full) or bool(glob.glob(full))
+
+
 def backlog_root(path):
     d = os.path.dirname(os.path.abspath(path))
     while True:
@@ -259,16 +275,13 @@ for cid, ln, body in entries:
         continue
     if PC.search(body):
         paired += 1          # already routed upstream; the pairing is the discriminator
-        gone = [p for p in mach[:6]
-                if not (root is None or os.path.exists(os.path.join(root, p)))]
+        gone = [p for p in mach[:6] if not path_is_present(root, p)]
         if gone:
             unplaceable.append({"id": cid, "line": ln, "paths": gone})
         continue
     # `root is None` means the corpus could not be placed in a tree, so every path is
     # reported unlabelled — an unasked question renders as no claim, never as "present".
-    rows = [{"path": p,
-             "exists": True if root is None else os.path.exists(os.path.join(root, p))}
-            for p in mach[:6]]
+    rows = [{"path": p, "exists": path_is_present(root, p)} for p in mach[:6]]
     absent_total += sum(1 for r in rows if not r["exists"])
     findings.append({"id": cid, "line": ln,
                      "paths": [r["path"] for r in rows], "named": rows})
