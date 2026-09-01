@@ -15,6 +15,112 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.464.0] - 2026-09-01
+
+### The gate that authorises a write compared the ref's spelling, not the ref
+
+`emit-report.sh`'s mechanical region now carries the `core/` tree of `theirs`, so a symbolic ref
+that moved between the dry run and the apply can no longer pass `--verify`.
+
+**The gate already existed and was blind, which is why nothing noticed.** `SKILL.md` step 7 makes
+`reconcile/emit-report.sh --verify` a precondition for any write — "a nonzero exit means the
+approval was given without sight of a finding, so STOP and re-emit rather than write". The region
+rendered `_theirs_ <ref>`, which is what the caller TYPED, and every other row in it is a bucket
+or a status keyed on STATUS+path carrying no content digest. So a core file whose bucket is
+unchanged and whose CONTENT moved left the whole region byte-identical.
+
+**Measured by driving the shipping renderer against a consumer built by `scripts/install.sh`,
+base `2c0cc4ef`.** Rendered at `86ee28aa` and at `569ebfd3` — two refs apart by exactly 2 core
+files and 0 new files, so every bucket is unchanged — the two regions differed in **exactly one
+line**, the `_base_`/`_theirs_` line. With the ref spelled as a BRANCH that was moved between
+render and verify, so that line was identical too, `--verify` exited **0** and printed `the
+report's mechanical region is present, current, and complete`. Control in the same probe: a
+one-byte hand-edit of the region still exited **1**, so the gate discriminates — it was simply
+never shown the thing that changed. `apply.sh:1301` resolves the ref to a sha for itself at apply
+time, so the re-stamp then attests to content the operator never approved.
+
+**Keyed on the `core/` tree and deliberately not on the commit, which is the whole
+false-positive story.** The live incident that surfaced this moved the ref by one docs-only
+commit, `86ee28aa` → `d503d490`: 0 core files changed, VERSION identical at both, and
+`<ref>:core` byte-identical at both. A commit-keyed line fires on that and pushes a consumer
+back to re-emit a report that was sound; a tree-keyed line stays quiet. It fires when, and only
+when, the bytes the pull would WRITE have changed — the condition that invalidates the approval —
+so the false-positive set is empty by construction rather than by narrowing.
+
+Scored three ways on the probe: move across core → `1`, docs-only move → `0`, no move → `0`.
+
+**The population, stated because the first draft of this entry overstated it.** "Exactly one line"
+is a property of a FRESH consumer, not of the renderer. The region is content-blind by
+construction — every section renders a projection of detector output, statuses and paths
+(`emit-report.sh:76`, `:79`, `:174`, `:183`, `:226`, `:230`, `:251`) — and its only content-bearing
+block, the orientation diff, is gated at `:100` on `[ -n "$classify" ]` and renders only for
+CLASSIFY/BOTH-CHANGED files. The probe's consumer had none.
+
+**The full square, measured independently by a second hand across renderer × consumer shape ×
+change class, with a one-byte-edit control at `1` on every row so no row is a dead scan.** Ref
+spelled as a branch throughout; only the branch target moves. `A` = docs-only, `B` = a PURE-APPLY
+core file changes, `C` = a CLASSIFY file changes.
+
+| | A | B | C |
+|---|---|---|---|
+| old renderer, diverged consumer | `0` | `0` | `1` |
+| old renderer, fresh consumer | `0` | `0` | `0` |
+| this release, either consumer | `0` | `1` | `1` |
+
+So the old gate's coverage was bounded by the CLASSIFY set on a diverged consumer, and **collapsed
+to nothing on an undiverged one** — the probe's `rc=0` was not a narrow miss but total blindness
+for that consumer shape. The fix is not bounded by CLASSIFY either: the line renders at
+`emit-report.sh:96`, OUTSIDE the `[ -n "$classify" ]` block, so its population is every change to
+`<theirs>:core` on both consumer shapes. On the other axis, a SHA-spelled move was already caught
+— and caught even when `core/` is byte-identical, which is a false positive, not a catch. The gate
+was keyed on the ref's SPELLING, an accident of how the caller typed the argument, and was wrong
+in both off-diagonal directions; one change removes the false positive and adds the missing catch.
+
+**`VERSION` is rendered beside the tree, because a `core/` hash is one field too narrow.**
+`write_stamp()` reads `${THEIRS}:VERSION` from the repository ROOT (`apply.sh:1312`) into the
+stamp's `version:` field, and under a carried machinery slice into `skill_version:` too. A move
+that bumps `VERSION` and touches nothing under `core/` therefore changes what the stamp CLAIMS
+while a core-tree key reports no change — and the stamp writer's own comment says an overstating
+version silently mis-bases the next pull's merge. Measured over the last 400 commits on the
+default branch: **236** touch no `core/` file and are acquitted, **16** of those also move
+`VERSION`, against a control of **164** that do touch `core/`. Rendering both leaves 220 of the
+236 acquitted — the docs-only move still passes, which is the whole point — and covers the 16.
+A failed resolution now renders as `unresolvable:<ref>` rather than a shared `absent`, so two
+different bad refs are no longer equal to each other.
+
+### `--finish` asked whether the ref resolved, never whether it was the right one
+
+`apply.sh --finish` now refuses to advance the stamp to a ref whose `core/` tree is not the one
+this tree was written from.
+
+**Resolvable is not the same question as correct.** The existing guard (`apply.sh:1301`) refuses a
+ref that names nothing. A ref that names the WRONG thing resolves perfectly, and every arm
+downstream then did its job over it: the stamp took its sha, the read-back agreed with what had
+just been written, `RESOLVED consistent "the tree matches <ref>"` was printed over a tree never
+brought there, and the in-flight marker was removed. `--finish` is the one invocation retyped by
+hand from a withheld row, which `apply.sh` itself already says.
+
+**The second side of the join existed and nothing had ever read it.** `.claude/.ai-dlc-applying`
+records `theirs:` at `apply.sh:209`, and a census of the tracked tree found **zero** parsers of it
+— every reader is an existence test, e.g. `core/git-hooks/pre-push:767` — against a non-zero
+control of writes and existence tests in the same run. It is deliberately not rewritten under
+`--finish` (`:208`), so on that path it still holds the ref whose content was actually applied:
+the record of what was approved, sitting unread beside the argument most likely to be fumbled,
+and deleted by the same run that ignored it.
+
+**Keyed on the `core/` tree, for the same reason as the entry above.** Refusing on the commit
+would wedge a finisher whose only sin is naming the newer of two equivalent refs. Scored four
+ways: recorded `86ee28aa` / argv `569ebfd3` (trees differ) → `restamp-identity-mismatch`, stamp
+unmoved at `2c0cc4e`, marker PRESENT; argv `86ee28aa` → `restamp`, marker cleared; argv
+`d503d490` (docs-only, `<ref>:core` identical) → `restamp`, marker cleared, no false positive;
+no marker at all → `restamp-identity-unchecked` **and** `restamp`.
+
+**It never fails for want of the record.** A missing marker, a marker with no `theirs:` line, or
+an unresolvable recorded ref are UNCHECKED rather than refused — a consumer whose marker was
+cleared by hand, which is the remedy `core/git-hooks/pre-push` itself prints, must still be able
+to finish. Each says so on its own `DECISION` row, because "could not check" printing the same as
+"checked and agreed" is what let this survive unnoticed.
+
 ## [0.463.0] - 2026-09-01
 
 ### A wildcard in prose is not a missing file, and the label said it was

@@ -1298,8 +1298,60 @@ elif [ -f "$STAMP" ]; then
   # `refs/heads/nope` breaks the `sed` replacement, the `|| true` swallows it, the read-back
   # disagrees and the run correctly reports `restamp-failed`. Only a slash-FREE bogus ref
   # reaches the defect. The control has to be the input that discriminates.
+  # RESOLVABLE IS NOT THE SAME QUESTION AS CORRECT, AND THE GUARD BELOW ONLY EVER ASKED THE FIRST.
+  #
+  # The refusal above fires on a ref that names nothing. A ref that names the WRONG thing resolves
+  # perfectly, and every arm below then does its job over it: the stamp takes its sha, the
+  # read-back agrees with what was just written, `RESOLVED consistent "the tree matches <ref>"` is
+  # printed over a tree that was never brought there, and the marker is removed. Measured on
+  # `--finish`, with the marker recording one ref and argv carrying another: the run reported
+  # success on both rows and cleared the marker. The bogus-ref control refused in the same run,
+  # which is what makes this a gap in the guard rather than an absent guard.
+  #
+  # THE SECOND SIDE OF THE JOIN ALREADY EXISTED AND NOTHING HAD EVER READ IT. `.ai-dlc-applying`
+  # records `theirs:` at the top of this file, and a census of the whole tracked tree found no
+  # parser of it at all -- every reader is an existence test (`core/git-hooks/pre-push` asks only
+  # whether the file is there). It is written by the ORDINARY run and deliberately NOT rewritten
+  # under `--finish`, so on the one path that is retyped by hand it still holds the ref whose
+  # content was actually applied. That makes it the record of what the operator approved, sitting
+  # unread beside the argument most likely to be fumbled, and deleted by the same run that ignores
+  # it.
+  #
+  # KEYED ON THE `core/` TREE, for the reason `emit-report.sh` is: a distribution ships docs
+  # between releases, so two refs can differ as commits while the bytes this pull WRITES are
+  # identical. Refusing on the commit would wedge a finisher whose only sin is naming the newer of
+  # two equivalent refs; refusing on the tree fires exactly when the finish would stamp content
+  # the tree does not carry.
+  #
+  # IT NEVER FAILS FOR WANT OF THE RECORD. A missing marker, a marker with no `theirs:` line, or a
+  # recorded ref that no longer resolves are all UNCHECKED rather than refused -- a consumer whose
+  # marker was cleared by hand (the remedy `core/git-hooks/pre-push` itself prints) must still be
+  # able to finish. Those states say so on their own row instead of passing silently, because an
+  # unchecked identity reported as a clean one is the failure this guard exists to end.
+  finish_id_mismatch=""
+  finish_id_note=""
+  if [ "$FINISH" = 1 ]; then
+    if [ ! -f "$APPLYING" ]; then
+      finish_id_note="no \`${APPLYING##*/}\` on the consumer, so the ref this tree was actually written from is not recorded anywhere and \`${THEIRS}\` could not be checked against it"
+    else
+      _m_theirs="$(sed -n 's/^theirs:[[:space:]]*//p' "$APPLYING" 2>/dev/null | head -1)"
+      if [ -z "$_m_theirs" ]; then
+        finish_id_note="\`${APPLYING##*/}\` carries no \`theirs:\` line, so there is nothing to check \`${THEIRS}\` against"
+      else
+        _m_tree="$(git -C "$DIST" rev-parse "${_m_theirs}:core" 2>/dev/null || true)"
+        _a_tree="$(git -C "$DIST" rev-parse "${THEIRS}:core" 2>/dev/null || true)"
+        if [ -z "$_m_tree" ] || [ -z "$_a_tree" ]; then
+          finish_id_note="\`${_m_theirs}:core\` or \`${THEIRS}:core\` does not resolve in ${DIST}, so the recorded ref and the argument could not be compared"
+        elif [ "$_m_tree" != "$_a_tree" ]; then
+          finish_id_mismatch="this tree was written from \`${_m_theirs}\` (\`core/\` tree ${_m_tree}), but this command names \`${THEIRS}\` (\`core/\` tree ${_a_tree})"
+        fi
+      fi
+    fi
+  fi
   if ! theirs_sha="$(git -C "$DIST" rev-parse --short "$THEIRS" 2>/dev/null)" || [ -z "$theirs_sha" ]; then
     say DECISION restamp-unresolvable "$STAMP" "\`${THEIRS}\` does not resolve in ${DIST}, so there is no sha to stamp and nothing was written. The stamp is left at ${BASE} and the in-flight marker is left in place. Check the <dist> path and the <theirs> ref -- if you retyped this from a withheld row, note that it prints <dist> and <consumer> as placeholders and passes <theirs> through verbatim."
+  elif [ -n "$finish_id_mismatch" ]; then
+    say DECISION restamp-identity-mismatch "$STAMP" "${finish_id_mismatch}. Nothing was written: the stamp is left at ${BASE} and \`${APPLYING##*/}\` is left in place, so the fixture suite keeps blocking rather than this tree being declared finished at a ref it does not carry. The two refs differ in \`core/\`, which is the content this pull writes -- a docs-only difference would not have stopped here. Re-run with the ref the withheld row named, or, if you intend to move this tree to \`${THEIRS}\`, run the ordinary apply against it rather than finishing to it."
   else
   # From THEIRS, not the working tree. Every file copy above resolves through
   # `git show "${THEIRS}:core/..."`; reading VERSION with `cat` was the one place that
@@ -1309,6 +1361,14 @@ elif [ -f "$STAMP" ]; then
   # content — beside a `commit:` taken correctly from theirs, which is what makes the
   # result incoherent rather than merely stale. The stamp is the one field the NEXT pull
   # trusts to compute its base, so an overstating version silently mis-bases that merge.
+  # SAID ON ITS OWN ROW, because the alternative is that "could not check" and "checked and
+  # agreed" print the same thing -- which is the shape that let the unchecked case survive here
+  # unnoticed in the first place. It is a DECISION and not a WORKLIST deliberately: `--finish`
+  # gates on WORKLIST rows, and a consumer whose marker was legitimately cleared must still be
+  # able to finish.
+  if [ -n "$finish_id_note" ]; then
+    say DECISION restamp-identity-unchecked "$STAMP" "the stamp was advanced to \`${THEIRS}\` WITHOUT confirming it is the ref this tree was written from: ${finish_id_note}. Verify by hand that the tree matches before trusting the next pull's merge base, which is computed from this stamp."
+  fi
   ver="$(git -C "$DIST" show "${THEIRS}:VERSION" 2>/dev/null || true)"
   sed -i.bak -E "s/^(commit:).*/\1 ${theirs_sha}/" "$STAMP" 2>/dev/null || true
   [ -n "$ver" ] && sed -i.bak -E "s/^(version:).*/\1 ${ver}/" "$STAMP" 2>/dev/null || true

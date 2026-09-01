@@ -68,6 +68,51 @@ render() {
   # the region against a fresh render, so a consumer who wrote correct markdown got a FAIL
   # and was pushed back to the malformed text.
   printf '\n_base_ `%s` → _theirs_ `%s`.\n' "$BASE" "$THEIRS"
+  # THE REF'S SPELLING IS NOT THE REF, and this region is the only thing standing between a
+  # moved upstream and a write. The line above renders what the caller TYPED. `--verify`
+  # byte-compares the region, so a SYMBOLIC theirs -- `origin/main`, a branch, whatever a bare
+  # invocation resolves "upstream HEAD" to -- renders identically at the dry run and at the
+  # apply even when it has moved between them. Every other row here is a bucket or a status
+  # keyed on STATUS+path and carries no content digest, so a core file whose bucket is
+  # unchanged and whose CONTENT moved leaves the whole region byte-identical.
+  #
+  # Measured, driving this script against a consumer built by install.sh, with two refs two
+  # core files apart: the ONLY differing line was the one above. Spelled as a branch that was
+  # moved between render and verify, `--verify` exited 0 and printed "present, current, and
+  # complete" -- SKILL.md's mechanical union gate authorising a write of content the operator
+  # never saw, with apply.sh's re-stamp then attesting to it from a sha it resolves for itself
+  # at apply time. A hand-edit of one byte still failed, so the gate discriminates; it was
+  # simply never shown the thing that changed.
+  #
+  # KEYED ON THE `core/` TREE, NOT ON THE COMMIT, and that is the whole of the false-positive
+  # story. The distribution commits docs and plans between releases, and a consumer whose
+  # upstream gained one of those between its dry run and its apply must NOT be pushed back to
+  # re-emit a sound report. The live incident that surfaced this was exactly that shape: the
+  # ref moved by one docs-only commit and the `core` tree was unchanged. A commit-keyed line
+  # fires on it and wedges the pull; a tree-keyed line stays quiet. This fires when, and only
+  # when, the bytes this pull would WRITE have changed -- which is precisely the condition
+  # that invalidates the operator's approval, so the false-positive set is empty by
+  # construction rather than by narrowing.
+  # A FAILED RESOLUTION MUST NOT RENDER AS A SHARED CONSTANT. Two different unresolvable refs that
+  # both print `absent` are EQUAL to each other, so a report generated with a typo verifies clean
+  # against the same typo. Naming the ref makes the failure distinguishable.
+  printf '_theirs_ `core/` tree `%s`.\n' "$(git -C "$DIST" rev-parse "${THEIRS}:core" 2>/dev/null || echo "unresolvable:${THEIRS}")"
+  # AND `VERSION`, WHICH IS NOT UNDER `core/` AND REACHES CONSUMER STATE ANYWAY.
+  #
+  # The `core/` tree above acquits every upstream move that changes no file under `core/`, and that
+  # acquittal is the point -- a docs commit between releases must not wedge a pull. But it is one
+  # field too wide. `write_stamp()` reads `${THEIRS}:VERSION` from the REPOSITORY ROOT and writes it
+  # into the stamp's `version:` field, and under a carried machinery slice into `skill_version:`
+  # too. So a move across a commit that bumps `VERSION` and touches nothing in `core/` changes what
+  # the stamp CLAIMS while the tree hash above reports no change at all, and the stamp writer's own
+  # comment says an overstating version silently mis-bases the next pull's merge.
+  #
+  # Measured over the last 400 commits on the distribution's default branch: 236 touch no `core/`
+  # file and are acquitted here, 16 of those ALSO change `VERSION`, against a control of 164 that do
+  # touch `core/`. Rendering `VERSION` beside the tree leaves 220 of the 236 still acquitted -- the
+  # docs-only move still passes -- and covers the 16 that move a value the operator approved.
+  _theirs_version="$(git -C "$DIST" show "${THEIRS}:VERSION" 2>/dev/null | tr -d '[:space:]')"
+  printf '_theirs_ `VERSION` `%s`.\n' "${_theirs_version:-unresolvable:${THEIRS}}"
 
   local pc ud ld hb rl del classify
   pc="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null || true)"

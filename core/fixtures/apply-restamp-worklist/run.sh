@@ -48,6 +48,14 @@
 # naming concrete work, which clears when the work is done. C4 and C8 are two seeds that separate
 # those two counters, and m8 is the mutant that collapses them.
 #
+# AND THE ESCAPE'S ARGUMENT IS CHECKED FOR IDENTITY, NOT MERELY FOR RESOLVABILITY. `--finish` is
+# retyped by hand from a row that prints <dist> and <consumer> as placeholders, and its only guard
+# on <theirs> asked whether the ref resolves. A ref naming the WRONG thing resolves, so the stamp
+# took its sha, `RESOLVED consistent` printed over a tree never brought there, and the marker was
+# removed. `.ai-dlc-applying` already recorded `theirs:` and every reader in the tree was an
+# existence test. F1/F2/F3 are that join, keyed on the `core/` tree so a docs-only move of the ref
+# still finishes, and m9/m10/m11 are the three ways to break it.
+#
 # HOW IT DRIVES THE REAL SCRIPT. Nothing inside apply.sh is stubbed. Two throwaway git repos and
 # a consumer tree per arm produce the three input shapes out of preclassify's own vocabulary:
 #
@@ -146,6 +154,29 @@ THEIRS="$(git -C "$DIST" rev-parse HEAD)"
 THEIRS_SHORT="$(git -C "$DIST" rev-parse --short HEAD)"
 THEIRS_VER="$(git -C "$DIST" show "${THEIRS}:VERSION")"
 
+# TWO MORE REFS, FOR THE `--finish` IDENTITY ARMS F1/F2/F3. Both are committed BEFORE the working
+# tree is dirtied below, so `gitc add -A` here cannot capture the 9.9.9 S0 depends on.
+#
+# DOCS IS THE NEAR-MISS, and it is the reason this guard is keyed on the `core/` TREE rather than
+# on the commit: a different commit whose `core/` tree is byte-identical to THEIRS'. A
+# distribution ships docs between releases, so a finisher naming the newer of two equivalent refs
+# is the ordinary case, and a commit-keyed guard refuses it — wedging a consumer whose only sin is
+# a fresher ref. VERSION is deliberately NOT bumped here, which is what a docs-only commit does.
+mkdir -p "$DIST/docs" || exit 2
+printf 'a docs-only commit between releases\n' > "$DIST/docs/note.md"
+gitc add -A && gitc commit -q -m docs-only
+DOCS="$(git -C "$DIST" rev-parse HEAD)"
+DOCS_SHORT="$(git -C "$DIST" rev-parse --short HEAD)"
+
+# OTHER IS THE OFFENDER: `core/` genuinely moved, so a tree finished to this ref is content the
+# consumer does not carry. VERSION moves with it, so a wrongly advanced stamp is visible in the
+# FILE and not only in a row — which is what F1 asserts, because a row count is true either way.
+printf '3.0.0\n' > "$DIST/VERSION"
+printf '#!/usr/bin/env bash\n# driver v3 OTHER\n' > "$DIST/core/session-driver/ai-dlc-session-driver.sh"
+gitc add -A && gitc commit -q -m other
+OTHER="$(git -C "$DIST" rev-parse HEAD)"
+OTHER_VER="$(git -C "$DIST" show "${OTHER}:VERSION")"
+
 # The operator's checkout is on something else entirely. Live condition, and the reason
 # `apply-restamp-theirs` exists: the working tree says 9.9.9 while the pull brings 2.0.0.
 printf '9.9.9\n' > "$DIST/VERSION"
@@ -187,6 +218,14 @@ run_apply() { # run_apply <apply-path> <consumer> [flag...]
   local a="$1" c="$2"; shift 2
   bash "$a" "$@" "$DIST" "$BASE" "$c" "$THEIRS" 2>/dev/null
 }
+
+# run_finish_as <apply-path> <consumer> <argv-theirs>
+#
+# `run_apply` always passes THEIRS, which is precisely the argument F1/F2/F3 must vary: the
+# defect is that the ref the operator RETYPES was never checked against the ref the tree was
+# written from, and those two are the same value in every arm above.
+run_finish_as() { bash "$1" --finish "$DIST" "$BASE" "$2" "$3" 2>/dev/null; }
+
 stamp_ver()  { sed -n 's/^version:[[:space:]]*//p' "$1/.claude/.ai-dlc-version" 2>/dev/null | head -1; }
 stamp_sha()  { sed -n 's/^commit:[[:space:]]*//p'  "$1/.claude/.ai-dlc-version" 2>/dev/null | head -1; }
 marker()     { [ -f "$1/.claude/.ai-dlc-applying" ] && echo PRESENT || echo GONE; }
@@ -273,6 +312,22 @@ if grep -q 'UPSTREAM' "$C_GREEN/$DRIVER_REL"; then
   ok "S2 setup: a full apply overwrote $DRIVER_REL from theirs — C5's subject is one --finish must NOT touch"
 else
   bad "S2 setup: a full apply left $DRIVER_REL unchanged, so C5 cannot distinguish --finish from a normal run"
+fi
+
+# --- S3 SANITY: the two candidate identity keys CLASSIFY THE SEEDS DIFFERENTLY ----------------
+# F1 and F2 are only a test of the TREE key if a COMMIT key would answer differently on at least
+# one of them, so compute both semantics here and refuse unless they disagree. Without this the
+# whole F block goes quietly vacuous: if DOCS ever stopped being core-identical to THEIRS, F2
+# would become a second copy of F1 and both would pass under a commit-keyed guard.
+S3_T="$(git -C "$DIST" rev-parse "${THEIRS}:core" 2>/dev/null || true)"
+S3_D="$(git -C "$DIST" rev-parse "${DOCS}:core"   2>/dev/null || true)"
+S3_O="$(git -C "$DIST" rev-parse "${OTHER}:core"  2>/dev/null || true)"
+if [ -n "$S3_T" ] && [ "$S3_D" = "$S3_T" ] && [ "$DOCS" != "$THEIRS" ] \
+   && [ -n "$S3_O" ] && [ "$S3_O" != "$S3_T" ] && [ "$OTHER_VER" != "$THEIRS_VER" ]; then
+  ok "S3 setup: DOCS is a different COMMIT carrying THEIRS' exact core/ tree, OTHER differs in core/ AND in VERSION — a tree key and a commit key give different answers on DOCS"
+else
+  bad "S3 setup: the identity seeds collapsed (theirs:core=$S3_T docs:core=$S3_D other:core=$S3_O, docs==theirs? $([ "$DOCS" = "$THEIRS" ] && echo yes || echo no)). F2 can no longer tell a tree-keyed guard from a commit-keyed one, and F1's refusal would be unobservable in the stamp"
+  echo; echo "apply-restamp-worklist: FIXTURE BROKEN" >&2; exit 2
 fi
 
 # --- C1: a WORKLIST run leaves the stamp and the marker alone ---------------------------------
@@ -365,6 +420,97 @@ elif [ "$(stamp_ver "$C_TERM")" = "$THEIRS_VER" ] && [ "$(marker "$C_TERM")" = G
   ok "C8 --finish stamps over a DECISION row it has no phase to clear — the escape terminates"
 else
   bad "C8 --finish withheld on DECISION hook-registration-unchecked (stamp '$(stamp_ver "$C_TERM")', marker $(marker "$C_TERM")). That row's remedy is to re-run the apply, which is the phase --finish skips, so the operator has a refused push, a marker on disk and no invocation that clears it"
+fi
+
+# === F1/F2/F3: --finish CHECKS THE IDENTITY OF <theirs>, NOT MERELY THAT IT RESOLVES ==========
+#
+# THE DEFECT. `--finish`'s only guard on <theirs> asked whether the ref RESOLVES. A ref that
+# names the WRONG thing resolves perfectly, and every arm downstream then did its job over it:
+# the stamp took its sha, the read-back agreed with what had just been written, `RESOLVED
+# consistent "the tree matches <ref>"` printed over a tree never brought there, and the marker
+# was removed. The stamp is what the NEXT pull computes its merge base from, so the damage
+# surfaces a pull later. `--finish` is RETYPED BY HAND from a withheld row that prints <dist> and
+# <consumer> as placeholders — apply.sh's own comment calls it the invocation in this program
+# most exposed to a fumbled argument — and C4 above could never have caught it, because it passes
+# the same value as both the record and the argument.
+#
+# THE SECOND SIDE OF THE JOIN ALREADY EXISTED AND NOTHING READ IT. `.ai-dlc-applying` records
+# `theirs:` (this fixture has written that line since C1), is deliberately NOT rewritten under
+# `--finish`, and every reader in the tree was an existence test — `core/git-hooks/pre-push` asks
+# only whether the file is there. The same run then deleted it.
+#
+# SUBJECT PROBE, AND WHY IT IS NOT F1's OBSERVABLE. An apply.sh that predates this guard stamps
+# and clears on F1's input, which is the DEFECT signature — so probing on that would report a
+# regression on every consumer that simply has not received the fix yet. The no-record shape is
+# the one that separates absent from present without being the thing F1 asserts: it stamps under
+# BOTH programs, and only the fixed one says on its own row that it could not check.
+C_IDN="$WORK/cons-id-norecord"
+mk_consumer "$C_IDN" green hrv || { echo "FIXTURE BROKEN — could not build the no-record consumer" >&2; exit 2; }
+rm -f "$C_IDN/.claude/.ai-dlc-applying"
+OUT_IDN="$(run_finish_as "$APPLY" "$C_IDN" "$OTHER")"
+if ! has_row "$OUT_IDN" DECISION restamp-identity-unchecked; then
+  if [ "$IS_DIST" = 1 ]; then
+    bad "the resolved apply.sh ($APPLY) emitted no DECISION restamp-identity-unchecked on a --finish with no in-flight record, so the identity guard is absent and F1/F2/F3 cannot be evaluated. HARD in the distribution: the subject must be present here."
+  else
+    printf '  SKIP  %s\n' "F1/F2/F3 — the installed apply.sh predates the --finish identity guard; it lands with this same pull"
+  fi
+else
+  ok "F0 --finish says on its OWN row when it could not check identity, so \"could not check\" never prints the same as \"checked and agreed\""
+
+  # --- F1: THE OFFENDER — a resolvable ref naming content this tree does not carry ------------
+  # ASSERTED BY ITS EFFECT, NOT BY THE ROW. This repo has shipped a guard whose "refuses to
+  # overwrite" was asserted by a row COUNT — true either way — while the refusal exited before
+  # that row was ever read, so a mutant that both REPORTED and OVERWROTE passed everything. The
+  # load-bearing conjuncts here are the stamp still holding BASE's version and the marker still
+  # being on disk; the row is asserted too, but it is the weakest of the three.
+  C_IDM="$WORK/cons-id-mismatch"
+  mk_consumer "$C_IDM" green hrv || { echo "FIXTURE BROKEN — could not build the mismatch consumer" >&2; exit 2; }
+  printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$C_IDM/.claude/.ai-dlc-applying"
+  # READ THE STAMP BEFORE THE RUN AND COMPARE AGAINST ITSELF. Comparing against a derived
+  # constant would put a silent join between this arm and mk_consumer's literal; comparing
+  # against the pre-run bytes cannot drift. The non-empty conjunct is what stops an absent
+  # stamp making both sides equal and vacuously green.
+  F1_PRE_VER="$(stamp_ver "$C_IDM")"; F1_PRE_SHA="$(stamp_sha "$C_IDM")"
+  OUT_IDM="$(run_finish_as "$APPLY" "$C_IDM" "$OTHER")"
+  F1_VER="$(stamp_ver "$C_IDM")"; F1_SHA="$(stamp_sha "$C_IDM")"; F1_MK="$(marker "$C_IDM")"
+  if has_row "$OUT_IDM" DECISION restamp-identity-mismatch \
+     && [ -n "$F1_PRE_VER" ] && [ "$F1_VER" = "$F1_PRE_VER" ] && [ "$F1_SHA" = "$F1_PRE_SHA" ] \
+     && [ "$F1_MK" = PRESENT ]; then
+    ok "F1 --finish to a ref whose core/ tree this tree was never written from is REFUSED: the stamp is byte-for-byte the $F1_PRE_VER it held before the run and .ai-dlc-applying is still on disk"
+  else
+    bad "F1 --finish stamped a ref the recorded in-flight marker disagrees with. Recorded theirs=$THEIRS, argv=$OTHER, and the stamp moved from '$F1_PRE_VER @ $F1_PRE_SHA' to '$F1_VER @ $F1_SHA' with the marker $F1_MK (expected PRESENT and no movement at all). Resolvability was the only question asked of <theirs>, so a fumbled but valid ref advances the stamp the NEXT pull bases its merge on, over a tree that was never brought there"
+  fi
+
+  # --- F2: THE NEAR-MISS — a different COMMIT carrying the same core/ tree --------------------
+  # THIS ARM EXISTS TO STOP A FUTURE AUTHOR "SIMPLIFYING" THE TREE KEY INTO A COMMIT KEY. The
+  # distribution ships docs-only commits between releases, so two refs routinely differ as
+  # commits while the bytes this pull WRITES are identical; refusing on the commit wedges a
+  # finisher whose only sin is naming the newer of two equivalent refs, and it would look exactly
+  # like F1 working. Mutant m10 below is that simplification, and this is the arm that kills it.
+  C_IDD="$WORK/cons-id-docs"
+  mk_consumer "$C_IDD" green hrv || { echo "FIXTURE BROKEN — could not build the docs-only consumer" >&2; exit 2; }
+  printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$C_IDD/.claude/.ai-dlc-applying"
+  OUT_IDD="$(run_finish_as "$APPLY" "$C_IDD" "$DOCS")"
+  F2_VER="$(stamp_ver "$C_IDD")"; F2_SHA="$(stamp_sha "$C_IDD")"; F2_MK="$(marker "$C_IDD")"
+  if [ "$F2_VER" = "$THEIRS_VER" ] && [ "$F2_SHA" = "$DOCS_SHORT" ] && [ "$F2_MK" = GONE ] \
+     && ! has_row "$OUT_IDD" DECISION restamp-identity-mismatch \
+     && ! has_row "$OUT_IDD" DECISION restamp-identity-unchecked; then
+    ok "F2 a docs-only move of <theirs> still finishes — stamped $F2_VER @ $DOCS_SHORT, marker cleared, and NEITHER identity row printed"
+  else
+    bad "F2 a <theirs> differing from the record by a docs-only commit did not finish cleanly: stamp '$F2_VER @ $F2_SHA' (expected $THEIRS_VER @ $DOCS_SHORT), marker $F2_MK (expected GONE), mismatch row $(has_row "$OUT_IDD" DECISION restamp-identity-mismatch && echo present || echo absent), unchecked row $(has_row "$OUT_IDD" DECISION restamp-identity-unchecked && echo present || echo absent). ${DOCS} and ${THEIRS} carry the identical core/ tree $S3_T, so the bytes this pull writes are the same at both — a guard that stops here is keyed on the commit and wedges every finisher naming the newer of two equivalent refs"
+  fi
+
+  # --- F3: IT NEVER FAILS FOR WANT OF THE RECORD ----------------------------------------------
+  # The over-broad fix — refusing whenever identity could not be CONFIRMED — wedges the consumer
+  # whose marker was cleared by hand, which is the remedy `core/git-hooks/pre-push` itself prints.
+  # F0 above owns the ROW on this run; F3 owns the EFFECT, so neither is a restatement of the
+  # other. Mutant m11 below is that over-broad fix.
+  F3_VER="$(stamp_ver "$C_IDN")"; F3_MK="$(marker "$C_IDN")"
+  if [ "$F3_VER" = "$OTHER_VER" ] && [ "$F3_MK" = GONE ] && has_row "$OUT_IDN" RESOLVED restamp; then
+    ok "F3 an unusable record is UNCHECKED and not refused — the stamp still advanced to $OTHER_VER and the marker cleared"
+  else
+    bad "F3 --finish with no in-flight record refused to stamp: version '$F3_VER' (expected $OTHER_VER), marker $F3_MK (expected GONE), RESOLVED restamp $(has_row "$OUT_IDN" RESOLVED restamp && echo present || echo absent). A consumer that cleared the marker by hand — the remedy pre-push prints — then has a refused push, and the one invocation that clears it now refuses too"
+  fi
 fi
 
 # --- C6: the withheld row hands the operator the escape ---------------------------------------
@@ -622,6 +768,105 @@ else
   bad "m7 did not apply — the option parser carries no \`--finish)\` branch, so this mutant proves nothing"
 fi
 
+# --- m9/m10/m11: THE --finish IDENTITY GUARD ---------------------------------------------------
+# F1/F2/F3 are the arms these exist for. `mut_stamp` cannot drive them: it always passes THEIRS as
+# argv and writes a marker with no `theirs:` line at all, so under it the identity guard is
+# permanently in its UNCHECKED branch and none of these three mutations would change a cell.
+#
+# mut_finish_id <rec-dir> <argv-theirs> [nomarker] -> "<ver>|<marker>|<mismatch?>"
+# PRESENCE-shaped like the rest: every expected verdict below requires either a row to APPEAR or
+# the stamp to have MOVED, so a copy that dies emitting nothing fails rather than scoring a kill.
+mut_finish_id() {
+  local rec="$1" argv="$2" c="$WORK/mid-$$-$RANDOM"
+  mk_consumer "$c" green hrv || { echo "BROKEN||"; return; }
+  [ "${3:-}" = nomarker ] || printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$c/.claude/.ai-dlc-applying"
+  local out; out="$(run_finish_as "$rec/apply.sh" "$c" "$argv")"
+  printf '%s|%s|%s\n' "$(stamp_ver "$c")" "$(marker "$c")" \
+    "$(has_row "$out" DECISION restamp-identity-mismatch && echo MISMATCH || echo NO)"
+}
+
+# THE UNMUTATED CONTROL FOR THIS BATTERY, with positive conjuncts on BOTH sides: the offender must
+# produce the mismatch ROW and the near-miss must MOVE the stamp. The control above cannot stand in
+# for it — it never varies argv, so it exercises none of this code.
+if build_rec "$WORK/mut-id-ctl"; then
+  IDCTL_O="$(mut_finish_id "$WORK/mut-id-ctl" "$OTHER")"
+  IDCTL_D="$(mut_finish_id "$WORK/mut-id-ctl" "$DOCS")"
+  if [ "$IDCTL_O" = "1.0.0|PRESENT|MISMATCH" ] && [ "$IDCTL_D" = "$THEIRS_VER|GONE|NO" ]; then
+    ok "CONTROL(id) an unmutated copy refuses the offender and passes the docs-only near-miss, so m9/m10/m11's verdicts are the mutation and not the copy"
+  else
+    bad "CONTROL(id) the unmutated copy did not reproduce the shipped identity behaviour (offender=$IDCTL_O expected 1.0.0|PRESENT|MISMATCH, near-miss=$IDCTL_D expected $THEIRS_VER|GONE|NO) — m9/m10/m11 below are unreadable"
+  fi
+else
+  bad "CONTROL(id) could not stage a copy of $REC — m9/m10/m11 below are unreadable"
+fi
+
+# --- m9: the guard PRESENT and unsatisfiable — the unfixed program. Must die on F1. ------------
+# Made to match NOTHING rather than widened: a widening leaves the same output as the original on
+# some inputs and scores a kill it did not earn.
+if sed 's/\[ "$_m_tree" != "$_a_tree" \]/[ "$_m_tree" != "$_m_tree" ]/' "$REC/apply.sh" \
+   | mut_apply "$WORK/m9"; then
+  M9="$(mut_finish_id "$WORK/m9" "$OTHER")"
+  case "$M9" in
+    "$OTHER_VER|GONE|NO") ok "m9 (tree comparison unsatisfiable): F1 goes red — the offending ref is stamped $OTHER_VER and the marker cleared, which is the shipped defect" ;;
+    "1.0.0|PRESENT|MISMATCH") bad "m9 SURVIVED: the mismatch still fired with the comparison made unsatisfiable, so F1 is reading the refusal from somewhere this mutation does not reach ($M9)" ;;
+    *) bad "m9 produced a verdict this fixture does not recognise ($M9) — it may have died for an unrelated reason, in which case F1's kill is unearned" ;;
+  esac
+  M9D="$(mut_finish_id "$WORK/m9" "$DOCS")"
+  if [ "$M9D" = "$THEIRS_VER|GONE|NO" ]; then
+    ok "m9 and F2 stays green under it — F1 and F2 are not entangled"
+  else
+    bad "m9 also moved the near-miss ($M9D): F1 and F2 are entangled and one of them proves nothing on its own"
+  fi
+else
+  bad "m9 did not apply — the guard no longer compares \`\"\$_m_tree\" != \"\$_a_tree\"\`, so this mutant proves nothing. Re-anchor it on the current spelling."
+fi
+
+# --- m10: the tree key "simplified" into a commit key. Must die on F2. ------------------------
+# The exact edit F2's comment exists to prevent, and the one that looks like a tidy-up: drop
+# `:core` from both sides and the guard still refuses F1's offender, so every arm but F2 stays
+# green while the distribution's ordinary docs-only commit starts wedging finishers.
+if sed 's/rev-parse "${_m_theirs}:core"/rev-parse "${_m_theirs}"/; s/rev-parse "${THEIRS}:core"/rev-parse "${THEIRS}"/' "$REC/apply.sh" \
+   | mut_apply "$WORK/m10"; then
+  M10="$(mut_finish_id "$WORK/m10" "$DOCS")"
+  case "$M10" in
+    "1.0.0|PRESENT|MISMATCH") ok "m10 (commit key instead of core/ tree key): F2 goes red — a docs-only move of <theirs> is refused and the consumer is wedged" ;;
+    "$THEIRS_VER|GONE|NO")    bad "m10 SURVIVED: the docs-only near-miss still finished with \`:core\` removed from both sides, so F2 cannot tell a tree key from a commit key ($M10)" ;;
+    *) bad "m10 produced a verdict this fixture does not recognise ($M10) — F2's kill is unearned" ;;
+  esac
+  M10O="$(mut_finish_id "$WORK/m10" "$OTHER")"
+  if [ "$M10O" = "1.0.0|PRESENT|MISMATCH" ]; then
+    ok "m10 and F1 stays green under it — a commit key still catches a genuinely different ref, which is exactly why F2 is the only arm that can see this"
+  else
+    bad "m10 also moved the offender ($M10O): F1 and F2 are entangled"
+  fi
+else
+  bad "m10 did not apply — the guard no longer resolves \`\${_m_theirs}:core\` and \`\${THEIRS}:core\`, so this mutant proves nothing"
+fi
+
+# --- m11: over-broad — an UNCHECKED identity refuses too. Must die on F3. ----------------------
+# The fix that looks stricter and is worse: a consumer whose marker was cleared by hand, which is
+# the remedy `core/git-hooks/pre-push` prints, then has a refused push and no invocation that
+# clears it. Widening is safe to assert here because the observable genuinely changes — an
+# unchecked run stops stamping — so this is not the case where a widened guard prints what the
+# original did.
+if sed 's/elif \[ -n "$finish_id_mismatch" \]; then/elif [ -n "$finish_id_mismatch" ] || [ -n "$finish_id_note" ]; then/' "$REC/apply.sh" \
+   | mut_apply "$WORK/m11"; then
+  M11="$(mut_finish_id "$WORK/m11" "$OTHER" nomarker)"
+  case "$M11" in
+    "1.0.0|"*"|MISMATCH") ok "m11 (unchecked treated as mismatched): F3 goes red — a consumer with no in-flight record can no longer finish at all" ;;
+    "$OTHER_VER|GONE|NO") bad "m11 SURVIVED: the no-record run still stamped with the note folded into the refusal, so F3 is not reading the unchecked path ($M11)" ;;
+    *) bad "m11 produced a verdict this fixture does not recognise ($M11) — F3's kill is unearned" ;;
+  esac
+  M11D="$(mut_finish_id "$WORK/m11" "$DOCS")"
+  if [ "$M11D" = "$THEIRS_VER|GONE|NO" ]; then
+    ok "m11 and F2 stays green under it — a run with a usable record is untouched, so F3 owns this case alone"
+  else
+    bad "m11 also moved the near-miss ($M11D): F2 and F3 are entangled"
+  fi
+else
+  bad "m11 did not apply — the re-stamp no longer branches on \`elif [ -n \"\$finish_id_mismatch\" ]; then\`, so this mutant proves nothing"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "PASS  apply-restamp-worklist: a run that hands back a WORKLIST or a DECISION row leaves"
@@ -629,6 +874,10 @@ if [ "$fails" -eq 0 ]; then
   echo "      restamp-withheld rather than RESOLVED restamp, and names --finish so the operator"
   echo "      can stamp once the work is disposed; --finish stamps from theirs and runs no"
   echo "      resolution phase; and a pull with nothing outstanding still stamps as it did."
+  echo "      --finish also checks that <theirs> IS the ref the tree was written from, keyed on"
+  echo "      the core/ tree so a docs-only move still finishes, refusing by leaving the stamp"
+  echo "      and the marker untouched, and saying UNCHECKED rather than nothing when the"
+  echo "      in-flight record cannot answer."
   exit 0
 fi
 echo "apply-restamp-worklist: FAIL ($fails)"
