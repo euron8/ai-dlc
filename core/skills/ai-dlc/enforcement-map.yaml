@@ -407,7 +407,10 @@ checks:
           compared -- either PRE-LEDGER or every in-sprint row outside Rule 19 scope
           -- and hands the verdict back to the gate log's spawn table. Rows outside
           that scope are counted, and any of them NAMED after a declared role is
-          reported as a NOTE for the adjudicator rather than failed
+          reported as a NOTE for the adjudicator rather than failed. Rows the
+          dispatch guard did not write are counted separately and never judged:
+          the ledger is append-only, so the single-writer premise below is a
+          convention, and an absent field on a foreign row is not an observation
         why: the check published three field comparisons per ledger row -- model_bound
           against aiDlcRoles.<role>.model, role_contract_cited true, role_file_readable
           not false -- and the row carried no enforcer, so a teammate performed all

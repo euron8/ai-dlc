@@ -1357,7 +1357,16 @@ rarer thing: it means the settings file has lost its `aiDlcRoles` entry for it.
 `ai-dlc-dispatch-guard.sh` at PreToolUse, one row per role-bound Agent/Task
 dispatch. It is the source of record, NOT the gate log's spawn table: the
 table is authored by the lead about its own conduct, and a lead that
-mis-dispatched cannot vouch for its own dispatch. Run:
+mis-dispatched cannot vouch for its own dispatch.
+
+**That is a CONVENTION, not a guarantee — the file is append-only and any
+session can write to it.** A row the guard did not write has none of the
+guard's schema, and its absent fields are not observations: a missing
+`role_contract_cited` would read as a Rule 19(b) violation on a dispatch that
+never happened. The guard stamps `v` on every row, so a row without it is
+counted and its roles named separately, never judged. **A non-zero count there
+means something appended to your spawn ledger** — worth finding, and not a
+finding about any teammate. Run:
 
 ```
 scripts/ai-dlc/validate-spawn-ledger.sh \
