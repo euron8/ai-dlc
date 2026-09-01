@@ -3598,14 +3598,29 @@ whose false-positive set has not been run is forbidden here, and this one has th
   identical output. That null was worthless and was nearly shipped as a result. Only at 59 rows did
   the control fire. **An arm of this shape must assert its own resolution in the same run or report
   UNDECIDED**, which is already this gate's doctrine for an unattributable answer.
-- **The production resolution control may not be affordable.** Proving a live run CAN resolve needs
-  a third, deliberately-older engine extracted per candidate ref. That cost is the fact that decides
-  whether this is buildable at all, and it is not yet a number.
+- **COST IS NOT THE BLOCKER, AND AN EARLIER REVISION OF THIS ENTRY SAID IT MIGHT BE.** That
+  revision put the resolution control at "a third, deliberately-older engine extracted per candidate
+  ref" with a cost "not yet a number". **"Per candidate" was the load-bearing half and it is
+  wrong**: `advise_safe_stop()` returns at `self-update-gate.sh:168` on `AI_DLC_GATE_IN_SAFE_STOP`,
+  which `:125` exports before the `--safe-stop` walk begins, so every per-candidate recursion
+  short-circuits before reaching the acquittal and the differential is evaluated exactly once, on
+  the single candidate the walk elected. Measured at **≈7s per invocation, independent of range
+  length** — two subtree extractions at 0.03s each plus three `preclassify.sh` runs at ~2.3s over a
+  59-row population, three interleaved reps. What blocks this is the unmeasured FP set above and the
+  absence of a rule for CHOOSING the control engine, not the price.
 
 **A byte predicate would also be VACUOUSLY TRUE on a large minority of hops**, which is a second
 reason the refuted remedy must not come back: **7 of 39 consecutive release hops change ZERO
 machinery paths** (0.427→0.428, 0.433→0.434, 0.437→0.438, 0.445→0.446, 0.453→0.454, 0.458→0.459,
 0.464→0.465), against a control of **0 of 39** having an empty full diff.
+
+**ONE CONJUNCT OF THE EVENTUAL ARM ALREADY SHIPPED, IN `v0.466.0`, AND MUST NOT BE REBUILT HERE.**
+The acquittal now refuses on a tree carrying `.claude/.ai-dlc-applying`. That was filed as part of
+this entry and then found to have a subject TODAY under the current ancestry route — a withheld
+apply leaves `skill_commit` advanced beside a `commit` at base, and the acquittal fired on that
+partial tree. It survives the switch to a behavioural predicate, because a partial tree can classify
+identically and still not be a tree to acquit. **This entry is now only about the ancestry-vs-
+behaviour predicate**, and closing it requires that, not the marker guard.
 
 **Tiered DEFECT.** It wrongly advises a split on a consumer whose engine is already behaviourally
 current. It is bounded: `advise_safe_stop` is called only at `:431` and `:543`, both immediately

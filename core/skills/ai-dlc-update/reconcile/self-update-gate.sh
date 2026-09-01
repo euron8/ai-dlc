@@ -177,7 +177,34 @@ advise_safe_stop() {
   if [ -n "$_ss" ]; then
     _sv="$(git -C "$DIST" show "${_ss}:VERSION" 2>/dev/null | tr -d '[:space:]')"
     if machinery_at_or_past "$_ss"; then
+      # A STAMP FIELD THAT IS AHEAD IS NOT EVIDENCE THAT THE TREE MATCHING IT IS COMPLETE, and the
+      # acquittal below reads it as though it were. `apply.sh` writes `.ai-dlc-applying` at the
+      # start of every apply (`:209`) and removes it only on the success path (`:1436`); when a run
+      # withholds the re-stamp it writes NO stamp at all and says the marker is "deliberately left
+      # in place" (`:1278`). So the marker on disk means core files were written and the re-stamp
+      # was never reached -- a tree `apply.sh:295` calls "tree partial" in as many words.
+      #
+      # THE TWO CAN COEXIST, WHICH IS THE WHOLE REASON THIS GUARD EXISTS, and the reasoning that
+      # says they cannot is wrong in a way worth recording: the withheld run writes nothing, so a
+      # `skill_commit` that step 2 advanced EARLIER survives untouched beside a `commit` still at
+      # base. Split stamp plus marker. Constructed and driven through this gate: with
+      # `skill_commit` advanced to the candidate and the marker on disk, the acquittal below FIRES,
+      # against a control on the same tree and range with `skill_commit` unadvanced where it does
+      # not. The consumer's own committed stamp history carries ten-plus `commit != skill_commit`
+      # revisions out of 171, so the population is real; whether this exact pairing has occurred in
+      # the wild is UNANSWERABLE, because `.gitignore` covers the marker and it has been committed
+      # zero times. Reachable and demonstrated, not observed.
+      #
+      # REFUSING COSTS LESS THAN FIRING WRONGLY, and that asymmetry decides the default rather than
+      # any false-positive count. Nothing branches on this row -- it has no machine consumer -- so a
+      # wrong acquittal silently withdraws the operator's only prompt to split and propagates into
+      # override decisions with nothing re-checking it, while a wrong refusal costs one extra pull
+      # that writes little and is visible immediately.
+      if [ -f "$CONSUMER/.claude/.ai-dlc-applying" ]; then
+        emit SELF-UPDATE-SAFE-STOP "$_ss" "pull to ${_sv:-$_ss} FIRST — and note that this consumer's \`skill_commit\` (${_sk:-<absent>}) is already at or past it, which would normally mean the machinery had landed and the split bought nothing. THAT ACQUITTAL IS WITHHELD HERE: \`.ai-dlc-applying\` is on the consumer, so an apply wrote core files and never reached its re-stamp, and the applier itself calls that tree partial. A stamp field that is ahead is not evidence that the tree matching it is complete. Finish or roll back the interrupted apply — \`apply.sh --finish\` prints the exact command in its withheld row — then re-run this gate and take the answer it gives then. The DEFER above still stands and is unaffected by this."
+      else
       emit SELF-UPDATE-SAFE-STOP "$_ss" "SPLIT BUYS NOTHING HERE — this consumer's own \`skill_commit\` (${_sk}) is already at or past ${_sv:-$_ss}, so its machinery has already landed and step 3 will classify on an engine that is NOT the one this pull replaces. Pulling to ${_ss} first would advance only the rulebook pair. Fold the slice into the gated apply. The DEFER above still stands and is unaffected by this."
+      fi
     else
       emit SELF-UPDATE-SAFE-STOP "$_ss" "pull to ${_sv:-$_ss} FIRST — its slice self-updates cleanly, so the engine lands and step 2 re-invokes on it. Then pull again for the rest. Without the split, step 3 classifies this pull with the engine this pull was going to replace, and any classifier improvement in the range reports nothing. Run: ai-dlc-update ${_ss} apply, then ai-dlc-update apply."
     fi
