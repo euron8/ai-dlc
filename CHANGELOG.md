@@ -15,6 +15,65 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.471.0] - 2026-09-01
+
+### A rotation remedy named a destination the path grammar retires, and a consumer read it as a deadlock
+
+Closes `PC-S308-STEP1A-ROTATE-REMEDY-NO-SPRINT-START-DESTINATION`.
+
+**`route.md` Step 1a told a blocked session to move an over-budget log "to a dated archive".
+`artifact-path-grammar.md:382` gives every rotation archive one sprint-keyed destination and
+`:387` retires date-carrying basenames outright.** Rule 25's own preamble makes the directory the
+only sprint slot and forbids a basename carrying a sprint token — and Rule 25(c), sixty lines
+below it, said "dated archive" too. Five sites in all: the Step 1a remedy, `validate-artifact-budget.sh`
+twice including the operator-facing breach message, `artifact-consolidation.md`, and 25(c).
+
+**What it cost, measured on the reference consumer.** Step 1a HARD_BLOCKed a fresh start on a
+20052-token continuation log, the session could resolve no destination it was allowed to write,
+and reported the pipeline circularly deadlocked — unable to start the sprint, unable to reach the
+retro that 25(c) named as the only rotation site. It is not deadlocked; Step 1a's remedy IS a
+rotation site, and 25(c) now says both. The prose was what could not be followed.
+
+**"Dated archive" was load-bearing for no reader.** Nothing parses or globs a date out of an
+archive filename — 22 wildcard sites, all pattern lists or prose; 29 date-shaped hits, all
+gate-adjudication nonces; controls `is_archive` 17 and impossible token 0. The correction strands
+nobody. A dated archive HAD been written, though: `pipeline-continuation-log-archive-<ts>.md`,
+134019 bytes, at `_bmad-output/` root — wrong directory and retired spelling both, and
+`is_archive()` exempts it from the budget forever, so it sits unmeasured rather than flagged.
+
+**The destination for an inter-sprint epoch is the CLOSED sprint's slot plus the grammar's
+existing ordinal**, not a new `s<N+1>/` and not a minted `-pending` token. The filing proposed
+both of those; the grammar already answers it.
+
+**THE JUSTIFICATION WAS WRONG THE FIRST TIME AND AN ADVERSARIAL PASS CAUGHT IT.** The rule was
+written as "the next sprint's number is not resolved yet" — falsifiable in one command
+(`sprint-status.sh sprint-id` returns it, and core hooks call it on Stop and PreToolUse). A reader
+who falsifies that clause discounts the no-loss warning beside it, which is the half protecting a
+182293-byte archive from being overwritten. Restated as ordering: `roll()` owns directory
+creation, and a slot minted before the roll pre-empts it.
+
+**Two more the same pass found.** `mv` preserves bytes, so the mandated span-in-the-first-line
+could not be produced by the prescribed mechanism — every existing archive opens with the log's
+re-seeded `# Pipeline Flow Log` header; an explicit write-after-move step now says so. And
+rotating at Step 1a moves events out of the live log after sprint N's audit ran and before N+1's
+exists, so `retro.md` §4b now reads the ordinal siblings beside the sprint's archive — a clean
+report over a window nobody opened is the vacuous pass §4b already calls worse than an unrun check.
+
+**Ordinal coverage is not general, and the comment claiming it was is corrected.**
+`is_archive()` and `ai-dlc-protect.sh` carry both spellings; `report-propagation-fanout.sh`'s
+`FROZEN_NAME_GLOBS` carried only the plain one and now carries both. A consumer-side path-set
+exemption keyed on `-archive.md$` still drops an ordinal rotation out of its exemption; that is a
+consumer extension and is reported, not edited.
+
+**`I102`** binds the spelling: no core file states a rotation destination as a dated archive
+(destination-shaped grammar, so the exempt `pipeline-snapshot-archive.md` measurement at
+`rotate-snapshot-archive.sh:29` is not convicted — false-positive set 0), and the grammar file
+must still state the destination verbatim or the forward arm is vacuous. Its third arm binds the
+two archive globs to travel together in every shell reader that globs archives — the fanout gap
+above was invisible precisely because the plain rotation such a reader is tested on still
+matches. Population 3, false-positive set 0: scoping to `*.sh` drops the two prose files naming
+the pair as a class, and readers naming a literal archive carry no `*` and fall out unlisted.
+
 ## [0.470.0] - 2026-09-01
 
 ### The base was taken on faith while the stamp recorded the answer

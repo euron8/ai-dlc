@@ -705,6 +705,17 @@ nothing about the result signals that it measured the wrong thing:
 A retro that reports zero steerability findings on a sprint in which the operator
 visibly repeated themselves has run the audit wrong.
 
+**READ THE ORDINAL SIBLINGS BESIDE THIS SPRINT'S ARCHIVE, NOT ONLY THE LIVE LOG.**
+`_bmad-output/implementation-artifacts/s<N>/pipeline-continuation-log-archive-*.md`
+holds any epoch route.md Step 1a rotated out mid-flight — the INTER-SPRINT window
+between the previous retro's rotation and this sprint's start. Nothing else opens
+it: the previous sprint's audit had already run when those events were written,
+and they left the live log before this one began. Skipping them is not a smaller
+audit, it is a clean report over a window nobody read, which is the failure the
+paragraph above names. Each such archive states its span in its first line; a
+`# Pipeline Flow Log` header there instead means the span was never written and
+the rotating session owes it.
+
 **Rotation.** The flow log is append-only and is a Rule 25(c) log: a live log must
 hold only the current epoch, or the audit above reads all of history instead of
 this sprint.

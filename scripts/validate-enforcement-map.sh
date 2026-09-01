@@ -8151,6 +8151,93 @@ case "${i101_enf:-x}${i101_role:-x}" in
     fi ;;
 esac
 
+# --- I102: a rotation destination is spelled the grammar's way, never as a dated archive ---
+# =============================================================================
+# Rule 25's preamble makes the DIRECTORY the only sprint slot and forbids a basename carrying
+# a sprint token; artifact-path-grammar.md owns the one destination every rotation archive
+# takes. Four other files stated the destination in prose and FIVE of them said "a dated
+# archive" instead -- route.md's Step 1a remedy, validate-artifact-budget.sh twice (once in
+# the operator-facing breach message), artifact-consolidation.md, and Rule 25(c) itself, which
+# is the rulebook contradicting its own preamble sixty lines up.
+#
+# WHAT IT COST, and it is why this is an arm rather than a corrected sentence. A consumer hit
+# route.md Step 1a HARD_BLOCK on an over-budget continuation log at sprint START, read the
+# remedy, found no destination it could resolve -- Step 1a runs before the sprint's own
+# directory exists -- and reported the pipeline deadlocked: unable to start the sprint, and
+# unable to reach the retro that §4b says is where rotation happens. It is not deadlocked;
+# Step 1a's remedy IS a rotation site. The prose was what could not be followed.
+#
+# THE GRAMMAR IS DESTINATION-SHAPED, AND THE NARROWING IS THE WHOLE DESIGN. A bare `dated
+# archive` convicts core/scripts/rotate-snapshot-archive.sh:29 -- "destroyed if all 158 dated
+# archives vanish" -- which is a MEASUREMENT about pipeline-snapshot-archive.md, the one
+# archive artifact-path-grammar.md explicitly EXEMPTS from the destination rule. Keying on
+# the preposition+article form separates an instruction from a measurement: FP set measured
+# at 0 against the whole of core/, with that exempt line as the near-miss.
+#
+# THE REVERSE DIRECTION EXISTS BECAUSE THE FORWARD ONE PASSES VACUOUSLY IF THE OWNER'S
+# SENTENCE IS DELETED. Removing the destination from the grammar file makes arm A silent
+# forever and reads exactly like a clean tree.
+i102_owner="$REPO_ROOT/core/skills/ai-dlc/artifact-path-grammar.md"
+i102_re='(to|into) a dated archive'
+i102_dest='implementation-artifacts/s<N>/<basename>-archive.md'
+
+# SELF-PROBE, BOTH DIRECTIONS, BEFORE THE CORPUS. An arm reporting zero without first proving
+# it can produce one has established that it ran, not that the tree is clean.
+i102_probe="$(mktemp -d)"
+mkdir -p "$i102_probe/core"
+printf 'Move the epoch to a dated archive (Rule 25(c)).\n' > "$i102_probe/core/offender.md"
+printf '#  destroyed if all 158 dated archives vanish : 17   unchanged\n' > "$i102_probe/core/nearmiss.md"
+i102_pos="$(grep -rlE "$i102_re" "$i102_probe/core" 2>/dev/null | grep -c 'offender.md')"
+i102_neg="$(grep -rlE "$i102_re" "$i102_probe/core" 2>/dev/null | grep -c 'nearmiss.md')"
+rm -rf "$i102_probe"
+if [ "$i102_pos" -ne 1 ] || [ "$i102_neg" -ne 0 ]; then
+  err "I102 SELF-PROBE FAILED (offender matched=$i102_pos expected 1, near-miss matched=$i102_neg expected 0). The grammar no longer discriminates an instruction from a measurement, so a zero from arm A below would mean nothing. Fix the pattern before reading any result from this invariant."
+else
+  # ARM A -- forward. One recursive grep per subtree; do NOT make this a loop over files, the
+  # fixture pole invokes this validator and a nested scan here multiplies across the shards.
+  i102_hits="$(grep -rnE "$i102_re" "$REPO_ROOT/core" --include='*.sh' --include='*.md' 2>/dev/null \
+                | grep -v '/core/fixtures/' || true)"
+  if [ -n "$i102_hits" ]; then
+    err "I102 a rotation destination is spelled as a dated archive, which artifact-path-grammar.md retires and Rule 25's preamble forbids -- the directory is the only sprint slot and no basename carries a sprint token. Say $i102_dest instead. This is the spelling that told a consumer its pipeline was deadlocked at sprint start. Sites:
+$i102_hits"
+  fi
+
+  # ARM C -- the two archive globs travel together in every reader that globs archives.
+  # The ordinal is not decoration: `<basename>-archive-2.md` is what an inter-sprint rotation
+  # writes, and a reader matching only `*-archive.md` silently drops it out of whatever it
+  # protects. MEASURED at v0.471.0, which is why this arm exists rather than a comment:
+  # ai-dlc-protect.sh and validate-artifact-budget.sh's is_archive() carried BOTH spellings
+  # while report-propagation-fanout.sh's FROZEN_NAME_GLOBS carried only the plain one, so an
+  # ordinal rotation was not frozen for fanout and nothing said so.
+  #
+  # THE POPULATION IS SHELL READERS, AND THE SCOPE IS THE FALSE-POSITIVE STORY. Unscoped, this
+  # convicts two PROSE files that name the pair as a class -- artifact-consolidation.md and
+  # carry-over-evaluation.md ("do NOT read the `*-history.md` / `*-archive.md`") -- which are
+  # descriptions, not readers. Scoped to *.sh the population is 3 and the FP set is 0.
+  # Note also that files naming a LITERAL archive (rotate-snapshot-archive.sh,
+  # validate-mandatory-rules.sh) carry no `*` and drop out on their own, hand-listed nowhere.
+  i102c_pop="$(grep -rl --include='*.sh' -- '\*-archive\.md' "$REPO_ROOT/core" 2>/dev/null \
+                | grep -v '/core/fixtures/' || true)"
+  if [ -z "$i102c_pop" ]; then
+    err "I102 arm C read ZERO shell readers carrying the '*-archive.md' glob, so the pairing join below is empty and its silence means nothing. Either the glob spelling moved or the scope is wrong; a zero here retires this direction silently."
+  else
+    i102c_missing=""
+    for i102c_f in $i102c_pop; do
+      grep -q -- '\*-archive-\*\.md' "$i102c_f" 2>/dev/null || i102c_missing="$i102c_missing $i102c_f"
+    done
+    if [ -n "$i102c_missing" ]; then
+      err "I102 arm C: a reader globs '*-archive.md' without its ordinal sibling '*-archive-*.md', so an inter-sprint rotation written as <basename>-archive-2.md falls out of whatever that list protects -- silently, because the plain rotation it was tested on still matches. Add the ordinal glob beside the plain one in:$i102c_missing"
+    fi
+  fi
+
+  # ARM B -- reverse. The owner must still state the destination, or arm A is vacuous.
+  if [ ! -r "$i102_owner" ]; then
+    err "I102 reverse: the destination owner core/skills/ai-dlc/artifact-path-grammar.md is unreadable, so arm A is scanning for a spelling nothing defines and its silence means nothing."
+  elif ! grep -qF "$i102_dest" "$i102_owner"; then
+    err "I102 reverse: core/skills/ai-dlc/artifact-path-grammar.md no longer states the rotation destination '$i102_dest' verbatim. Arm A above would then be silent forever while every reader is free to invent a spelling -- which is the state this invariant was built to end. Restore the destination in the owner, or move this arm with it."
+  fi
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"

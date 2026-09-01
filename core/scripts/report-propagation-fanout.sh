@@ -169,6 +169,7 @@ verdict-*
 *.pre.*
 *-history.md
 *-archive.md
+*-archive-*.md
 *advelicit*
 *advanced-elicitation*
 "
