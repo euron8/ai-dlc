@@ -31,93 +31,91 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 33 SHIPPED, WAS PARTLY REVERSED, AND FOUR MORE RELEASES FOLLOWED IT. BATCH 34 HAS NOT STARTED. THE CORPUS IS NINE FOR WORK AND TEN FOR ADJUDICATION.
+### THE `0.456.0 → 0.462.0` PULL LANDED AND MERGED. BATCH 34 HAS NOT STARTED, AND TWO UPSTREAM DEFECTS CAME OUT OF THE PULL THAT ARE NOT IN THE LEDGER.
 
-**This block is the current state and it replaces the pull block below, whose figures were correct
-and whose instruction is spent.** Every figure here was re-derived after the last merge by running
-the derive block and the sweep, all controls in the same invocation.
+**This block is the current state and it replaces the pull block below.** Every figure was
+re-derived after the consumer's merge by running the derive block and the sweep, all controls in
+the same invocation.
 
-**FIVE RELEASES SINCE THE CONSUMER'S STAMP, AND `v0.460.0` DOES NOT EXIST — do not go looking for
-it.** It was cut, parked mid-batch on an operator redirect, and renumbered to `v0.462.0` when it
-finally landed. The sequence is:
+**THE PULL RAN AND IS MERGED**, as the consumer's PR #994 (`044a8eb15`). Its stamp reads
+**`0.462.0` / `d503d490`** on all four fields. **That authorization is spent** —
+`.claude/rules/operator-rulings.md` governs again and no pull is preapproved. The distribution is
+at **`0.463.0` / `569ebfd3`**, so the gap is ONE release, and it is the wildcard fix below, which
+changes what that consumer's routing report says about its own backlog.
 
-```
-v0.457.0  batch 33's subject                          WRONG -- see below       INSTALLS
-v0.458.0  reverted it, rejected the candidate by-design                        INSTALLS
-v0.459.0  two rules + the durable-ceiling raise 50600 -> 51300                 repo-only
-v0.461.0  OFF-PLAN, operator-directed: the /ai-dlc bypass enforcer             INSTALLS
-v0.462.0  the PAIRED BUT UNPLACEABLE section (was 0.460.0)                     INSTALLS
-```
+**THE PULL CLOSED NOTHING, AND THAT IS CORRECT RATHER THAN A FAILURE.** The consumer reported
+0 `CLOSE-CANDIDATE` and no rotation, and the ledger md5 is UNCHANGED at `28df5c39…`. The range
+delivered machinery — a bypass enforcer, a routing-report section, two prose corrections — and not
+a single `PC-` fix, because batch 33's only candidate was REJECTED as by-design. A pull that
+delivers a decision moves no ledger figure.
 
-**BATCH 33 SHIPPED A DEFECT AND CORRECTED IT ONE RELEASE LATER, AND THE FAILURE IS REPEATABLE BY
-ANYONE WHO TAKES A FILING AT ITS WORD.** `PC-S340-IS-CORE-ANSWERS-BY-DECLARED-GLOB-NOT-BY-MEMBERSHIP`
-is **REJECTED AS BY-DESIGN**, adjudicated in `v0.458.0`'s commit message. `core-paths.sh` is
-byte-identical with `95670e58` again. The answer was written inside the mechanism the filing wanted
-changed: `core/hooks/ai-dlc-core-guard.sh` says `scripts/ai-dlc/` "is core-owned in its entirety …
-so **this deny stands whether or not the distribution ships a file by that name**". The guard denies
-a `Write` BEFORE the file exists, which is the only moment a deny is worth anything, so `--is-core`
-answering 0 for an uncreated name is the resolver AGREEING with it. **Read the remedy text of the
-mechanism that CONSUMES a value before calling that value a defect** — the rule is now in
-`.claude/rules/verification-discipline.md`, and one `sed -n` would have ended that batch in ten
-minutes.
+**THE 39-FIXTURE COUPLING RESOLVED CLEAN**, which is the first end-to-end confirmation that the
+DEFER path produces a consistent tree rather than merely avoiding a red one: the pre-push hook ran
+the whole suite on the reconcile branch and printed `all gates green`. Machinery and rulebook
+landing on ONE branch is what made it green. Do not read a future DEFER as a problem to route
+around.
 
-**THREE MECHANISMS WERE GREEN WHILE BLIND IN ONE SESSION, and that is the pattern to carry forward
-rather than any one of them.** `I25` binds guard and resolver by byte-comparing `parse_manifest()`
-and `to_consumer_glob()` while the fork landed at the DECISION, outside both.
-`validate-scope-confirmation.sh:213` reports PENDING on a snapshot with no routing record, saying
-in as many words "this is not a skipped pause point" — which is exactly what a bypass produces. And
-`v0.458.0`'s own `[NO SUCH FILE HERE]` label could not reach its subject, because the pairing skip
-runs before the rows it decorates are built. All three read exactly like they were working.
+**TWO UPSTREAM DEFECTS CAME OUT OF THAT PULL. NEITHER IS IN THE LEDGER, BOTH ARE VERIFIED HERE,
+AND THE SECOND IS THE MORE SERIOUS.** They compete with the `PC-S340-*` set for batch 34's slot and
+they did not arrive through the sweep, so a session that only runs the sweep will not see them.
 
-**THE FIGURES, re-derived after the last merge.** Ledger md5 `28df5c39…` — UNCHANGED, because the
-consumer's ledger moves only when the consumer writes — **73 live candidates, 139 archived, 30
-cited, 43 UNFILED**. DISCHARGED **14 raw / 13 corrected**, IN-FLIGHT **17**, UNTOUCHED **43**,
-overlap **1**, discharged-unnamed **0**, TERMINAL **31**. Partition control closes on the raw
-figure: 14+17+43−1 = 73. Presence controls filed-known 1, spaced bullet 1, bare-bold 1, dotted id 1;
-absence controls partition 0, impossible id 0. `docs/backlog.md` depth **73 live / 57 archived**
-against a ceiling of 100.
+- **Nothing compares the ref an operator APPROVED to the ref that gets STAMPED.** `apply.sh:115`
+  takes `THEIRS` as a caller-supplied parameter, and a grep across all 27 `reconcile/` files for
+  any approved-vs-applied comparison returns nothing, against a control of 27 files present. The
+  consumer hit it live — the ref moved `86ee28aa` → `d503d490` between its dry run and its apply —
+  and improvised the right check: tree-hash `<ref>:core` on both, controlled against the whole-repo
+  tree, then re-derive both subject digests before trusting any recorded verdict. **A consumer that
+  simply re-ran `apply` would silently stamp a ref its operator never approved.** The failure is
+  silent and it lands on the operator's own authorization, which is why it ranks first.
+- **An adjudication row does not carry its own clause id.** `emit()` at `layer-drift.sh:272` prints
+  four tab-separated fields and no `LC-` id, so an adjudicator must look the code up. Derived here
+  with a control: `LC-E14` owns `EXTENSION-ANCHOR-DRIFT` (contract line 801), while `LC-E19` is
+  `EXTENSION-TITLE-MATCHES-CORE` at level WARN. The consumer's historical register carried the
+  wrong precedent and a reader reached for it. This is the render-do-not-retype case; the fix is
+  not one line, because `ADJ_CODES` is a code LIST and needs to become a code→id map parsed from
+  the contract.
 
-**BATCH 34 HAS NOT STARTED. ITS CORPUS IS THE TEN `PC-S340-*` IDS, ALL STILL UNFILED** — re-derived,
-10 of them in the unfiled set. Nine are work; the tenth is `IS-CORE`, which is REJECTED and still
-appears because a rejection is not a filing and nothing here moves it out of `UNFILED`. It will keep
-showing up in every sweep. Do not take it as a subject; do carry its adjudication to the consumer.
+**THE FIGURES, re-derived after the consumer's merge.** Ledger md5 `28df5c39…` — UNCHANGED —
+**73 live candidates, 139 archived, 30 cited, 43 UNFILED**. DISCHARGED **14 raw / 13 corrected**,
+IN-FLIGHT **17**, UNTOUCHED **43**, overlap **1**, discharged-unnamed **0**, TERMINAL **31**.
+Partition control closes on the raw figure: 14+17+43−1 = 73. Presence controls filed-known 1,
+spaced bullet 1, bare-bold 1, dotted id 1; absence controls partition 0, impossible id 0.
+`docs/backlog.md` depth **73 live / 57 archived** against a ceiling of 100.
+
+**BATCH 34'S LEDGER CORPUS IS THE TEN `PC-S340-*` IDS, ALL STILL UNFILED** — re-derived, 10 in the
+unfiled set. Nine are work; the tenth is `IS-CORE`, REJECTED as by-design and still present because
+a rejection is not a filing. It will surface in every sweep forever. **Do not take it as a subject;
+DO carry its adjudication to the consumer**, which has not yet been done and is the one piece of
+batch 33 still owed.
 
 **RANKED PICK AMONG THE NINE, on consequence.**
 `STAMP-READOPT-GATE-IS-BLIND-TO-AN-ADDITIVE-CHANGE-AND-TO-A-REWRITTEN-BODY` and
 `SAFE-STOP-ACQUITTAL-TESTS-ANCESTRY-NOT-CONTENT` are defects in `v0.455.0` itself and carry killing
-controls already.
-`DERIVATION-CAPTURE-HOOK-ROLLS-BACK-THE-WHOLE-FILE-ON-A-REJECTED-BLOCK` is the highest raw
-consequence — measured data loss on the consumer — **and its mechanism sentence is refuted**: the
-hook is `PostToolUse` and carries no write path at all, so whatever destroyed that file, it was not
-the hook's rollback. Its OTHER half is real and sited elsewhere,
+controls already. `DERIVATION-CAPTURE-HOOK-ROLLS-BACK-THE-WHOLE-FILE-ON-A-REJECTED-BLOCK` is the
+highest raw consequence — measured data loss — **and its mechanism sentence is refuted**: the hook
+is `PostToolUse` and carries no write path, so whatever destroyed that file, it was not the hook's
+rollback. Its OTHER half is real and sited at
 `core/scripts/validate-artifact-derivations.sh:124`, which splits a command on `|` so a `grep -E
-'a|b'` alternation inside a fence parses as a pipeline and is refused. **Enumerate that entry's two
-claims before taking it.**
+'a|b'` alternation inside a fence parses as a pipeline. **Enumerate that entry's two claims before
+taking it.**
 
-**EVERY ONE OF THE NINE WAS FILED BY THE SESSION WHOSE RECEIPT ACCEPTED A TOTAL DISARM.** Batch 33
-built six implementations against that receipt — the correct fix, a second spelling and four
-regressions, each asserted to differ from the correct one first — and it accepted all six, including
-a `--is-core` that exits 2 unconditionally and ships nothing. **Score what a receipt ACCEPTS before
-reading its verdict as a close**, and build the discriminating battery yourself.
+**EVERY ONE OF THE NINE WAS FILED BY THE SESSION WHOSE RECEIPT ACCEPTED A TOTAL DISARM.** Six
+implementations were scored against it in one invocation — the correct fix, a second spelling and
+four regressions, each asserted to differ from the correct one first — and it accepted all six,
+including a `--is-core` that exits 2 unconditionally and ships nothing. **Score what a receipt
+ACCEPTS before reading its verdict as a close.**
 
-**A PULL IS OWED AND IS NOT REQUIRED, AND IT IS NOT AUTHORIZED.** Consumer installed **0.456.0**,
-shipped **0.462.0**. Four of the five releases install; `v0.459.0` is `.claude/rules/` and a
-validator and reaches no consumer. PENDING is **0 fixes and 1 adjudication** against the ledger —
-the only `PC-` id named upstream is the one `v0.458.0` REJECTED — but the consumer would also
-receive the `/ai-dlc` bypass enforcer, which is not a ledger candidate and is the reason a pull is
-worth more now than the ledger count suggests. Report it; do not run it, and do not hand it to a
-peer session.
-
-**THE CONSUMER IS LIVE AND ITS DIRTY COUNT IS NOT THE CRITERION.** It moved 11 → 19 → 11 during
-batch 33 as its own sessions worked, while the ledger md5 held and **0 paths under
-`_bmad-output/ai-dlc-update/` were dirty**. `carry-over-backlog.md` is among the files it edits, so
-every routing figure here is a snapshot of a corpus another party holds open. Criterion 4 is
-measured by CONTENT and it holds. One of that consumer's sessions ALSO bypassed the pipeline
-entirely during batch 33 and reverted its own work; `v0.461.0` is the enforcer that came out of it.
+**TWO SESSIONS READ ONE RELEASE AND BOTH GOT IT WRONG IN OPPOSITE DIRECTIONS.** `v0.462.0` shipped
+a label that marked a prose wildcard as a missing file; `v0.463.0` fixed it. This side had measured
+that wildcard the same morning and named it in the changelog as an "absent token", reading "not a
+filename" as "absent". The consumer then found the defect, RETRACTED its own finding after reading
+the new `rules/upstream-routing.md` as sanctioning the label, and was corrected only by the fix
+commit's subject. **When a rule and a mechanism disagree, neither reader is reliable — build the
+discriminating case.**
 
 **THE IMPOSSIBLE-ID CONTROL FOR THE COMMIT-MESSAGE CHANNEL CANNOT BE `PC-S999-NEVER`.** It returns
-**2** commits on `origin/main` — earlier sessions wrote the token into messages. Use a token never
-written, paired with a known-cited id in the same invocation.
+**2** commits on `origin/main`. Use a token never written, paired with a known-cited id in the same
+invocation.
 ### THE `0.452.0 → 0.456.0` PULL LANDED — A RECORD OF WHAT IT DELIVERED AND WHAT IT FILED. THE GAP IT CLOSED HAS SINCE REOPENED AT ONE RELEASE; TAKE THE STATE FROM THE BLOCK ABOVE.
 
 **This block is the current state and it replaces the batch-32 block below, whose heading asked for a
@@ -2592,11 +2590,21 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **RUN THE SWEEP (action 1b below) AND LET IT PICK BATCH 34's SUBJECT.** Batch 33 is merged as
-   `v0.457.0`, corrected by `v0.458.0`, and `v0.459.0`, `v0.461.0` and `v0.462.0` followed it —
-   `v0.461.0` off-plan on an operator redirect. So number yours 34, and there is no `v0.460.0`
-   to find: it was renumbered to `v0.462.0` after being parked mid-batch. **Nothing is owed ahead
-   of the sweep.**
+1. **RUN THE SWEEP (action 1b below), THEN PICK BATCH 34's SUBJECT FROM THE SWEEP *AND* THE TWO
+   PULL-FOUND DEFECTS IN THE RESUME BLOCK.** Batch 33 is merged as `v0.457.0`, corrected by
+   `v0.458.0`, with `v0.459.0`, `v0.461.0`, `v0.462.0` and `v0.463.0` after it — `v0.461.0`
+   off-plan on an operator redirect. Number yours 34, and there is no `v0.460.0` to find: it was
+   renumbered to `v0.462.0` after being parked mid-batch.
+
+   **THE SWEEP IS NOT THE WHOLE CANDIDATE SET THIS TIME, AND A SESSION THAT ONLY RUNS IT WILL MISS
+   THE BEST SUBJECT.** Two upstream defects came out of the `0.456.0 → 0.462.0` pull, are verified
+   in the resume block above, and are in NO ledger — so no sweep can surface them. The
+   approved-ref-vs-stamped-ref gap ranks above every `PC-S340-*` candidate on consequence: it is
+   silent and it lands on the operator's own authorization. Take it unless you can say why not.
+
+   **ONE PIECE OF BATCH 33 IS STILL OWED**: `IS-CORE`'s rejection has not been carried to the
+   consumer. It is not a subject and it is not work — it is an adjudication that needs to reach
+   the party still holding the candidate.
 
    **BEFORE YOU BUILD ANYTHING, READ THE REMEDY TEXT OF THE MECHANISM THAT CONSUMES THE ANSWER YOUR
    SUBJECT CALLS WRONG.** Batch 33 shipped a fix for a filing whose premise was contradicted, in as
