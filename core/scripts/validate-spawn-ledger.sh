@@ -227,10 +227,16 @@ SUSPECT=0
 # at every implementation gate.
 #
 # THE SCOPE KEY IS DECLARATION, NOT A ROLE LIST. `aiDlcRoles` is Rule 19's single source
-# of truth (see ai-dlc-dispatch-guard.sh's header), this script already reads that file to
-# resolve the pin, and I22 in scripts/validate-enforcement-map.sh binds its keys to
-# core/team-roles/*.md in both directions — so the scope is derived from a bound
-# vocabulary rather than restated as a list here, which would be one more copy to drift.
+# of truth (see ai-dlc-dispatch-guard.sh's header) and this script already reads that file
+# to resolve the pin, so the scope is derived from the consumer's own declaration rather
+# than restated as a list here, which would be one more copy to drift.
+#
+# **I22 DOES NOT BIND THE FILE THIS READS, AND AN EARLIER REVISION OF THIS COMMENT SAID IT
+# DID.** I22 joins `core/team-roles/*.md` to `templates/settings.json.template` — what a
+# FRESH INSTALL starts from. `--settings` at gate time is the consumer's own
+# `.claude/settings.json`, which that consumer may edit. So the vocabulary is bound at
+# INSTALL and unbound thereafter, which is exactly why a role dropped from it must be
+# visible rather than silently out of scope: see the out-of-scope naming below.
 #
 # THE `role_contract_cited` DISJUNCT IS WHAT KEEPS THE FIX FROM BEING A DISARM. A dispatch
 # that cited `team-roles/<role>.md` CLAIMED an AI/DLC role contract, and it is judged
@@ -248,6 +254,12 @@ DECLARED_NL="${NL}${DECLARED_ROLES}${NL}"
 # caught by this check's own fixture before release.
 row_in_scope() {  # role, role_contract_cited
   [ "$2" = "true" ] && return 0
+  # AN EMPTY ROLE IS NOT A DECLARED ONE, and without this line it was — an empty
+  # `DECLARED_ROLES` makes `DECLARED_NL` two newlines, which is exactly the pattern an
+  # empty role builds, so a role-less row matched the membership test and was judged.
+  # Its scope then depended on whether the settings file declared ANY role: measured, the
+  # same row answered rc=1 under `aiDlcRoles: {}` and rc=3 under a one-key block.
+  [ -n "$1" ] || return 1
   case "$DECLARED_NL" in *"${NL}${1}${NL}"*) return 0 ;; esac
   return 1
 }

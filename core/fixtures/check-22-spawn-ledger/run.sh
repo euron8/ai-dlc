@@ -119,10 +119,15 @@ row dev sonnet sonnet true true dev-beside-gp                        >> "$WORK/o
 row general-purpose sonnet sonnet true true gp-cited                  > "$WORK/outscope-cited.jsonl"
 # A DECLARED role outside Check 22's five gate-trigger roles. Narrowing the script to those
 # five acquits this row; measured on the reference consumer, that narrowing dropped 23 of
-# the 25 true findings. Its violation is a TIER MISMATCH, not a missing citation: asserted
-# on the citation arm this row would move with the `cited` mutant and one of the two
-# assertions would be vacuous.
-row adversary sonnet sonnet true true adv-wrongtier                   > "$WORK/declared-nonfive.jsonl"
+# the 25 true findings.
+#
+# **UNCITED ON PURPOSE, and an earlier revision of this row was NOT.** Spelled `cited=true`
+# it reached the loop through the CITED disjunct, so it asserted nothing about the
+# declaration it exists to test — disabling the declared-role disjunct entirely left this
+# arm unmoved. Uncited, the DECLARATION is the only thing keeping it in scope. Its asserted
+# violation stays the TIER MISMATCH rather than the missing citation, so the `cited` mutant
+# does not move it and the two arms stay independent.
+row adversary sonnet sonnet false true adv-wrongtier                  > "$WORK/declared-nonfive.jsonl"
 # Every in-sprint row out of scope. Nothing was compared, so this must not read as a pass.
 row general-purpose inherit '' false false gp-only                    > "$WORK/allout.jsonl"
 # THE SHAPE THE SCOPE FILTER CANNOT SEE BY ROLE. A real team role dispatched through the
@@ -202,6 +207,7 @@ battery() {
   # A declared role outside the five gate-trigger roles is judged, not acquitted.
   run declared-nonfive.jsonl
   if [ "$rc" -eq 1 ] && grep -q 'Rule 19(a) tier' <<<"$out" \
+     && grep -q 'examined 1 S900 spawn row' <<<"$out" \
      && grep -q "role 'adversary'" <<<"$out"; then t="$t D:judged"; else t="$t D:$rc"; fi
 
   printf '%s' "$t"
@@ -488,6 +494,53 @@ else
     ok "MUTANT dedup: the space-separated accumulator against a newline-delimited test repeats every role after the first"
   else
     bad "MUTANT dedup survived: the list still de-duplicated with the delimiters mismatched"
+  fi
+fi
+
+# --- 8. an empty role is not a declared one -----------------------------------
+# `DECLARED_NL` is two newlines when the settings file declares nothing, and that is exactly
+# the pattern an empty role builds — so a role-less row matched the declared-membership test
+# and was JUDGED, and its scope depended on whether the file declared any role at all. The
+# guard never writes a null role, but the ledger has more than one writer.
+row '' inherit '' false true norole                                   > "$WORK/norole.jsonl"
+cat > "$WORK/noroles-block.json" <<'JSON'
+{ "aiDlcModels": { "opus": "claude-opus-5[1m]" }, "aiDlcRoles": {} }
+JSON
+bash "$VSL" --ledger "$WORK/norole.jsonl" --sprint 900 --settings "$WORK/noroles-block.json" >"$WORK/nr-a.out" 2>&1; a=$?
+bash "$VSL" --ledger "$WORK/norole.jsonl" --sprint 900 --settings "$WORK/settings.json"      >"$WORK/nr-b.out" 2>&1; b=$?
+if [ "$a" -eq 3 ] && [ "$b" -eq 3 ] && grep -q '<none>' "$WORK/nr-a.out"; then
+  ok "a role-less row is out of scope under BOTH an empty aiDlcRoles block and a populated one, and is named <none> — its scope does not depend on how many roles the settings file happens to declare"
+else
+  bad "the role-less row answered rc=$a with an empty roles block and rc=$b with a populated one; expected 3 and 3"
+fi
+
+sed 's/^  \[ -n "\$1" \] || return 1$/  : ; /' "$VSL" > "$WORK/noguard.sh"
+if cmp -s "$VSL" "$WORK/noguard.sh"; then
+  bad "FIXTURE BROKEN: the empty-role guard line was renamed, so this mutant proves nothing"
+else
+  bash "$WORK/noguard.sh" --ledger "$WORK/norole.jsonl" --sprint 900 --settings "$WORK/noroles-block.json" >/dev/null 2>&1; a=$?
+  bash "$WORK/noguard.sh" --ledger "$WORK/norole.jsonl" --sprint 900 --settings "$WORK/settings.json"      >/dev/null 2>&1; b=$?
+  if [ "$a" -ne "$b" ]; then
+    ok "MUTANT emptyrole: without the guard the same role-less row answers rc=$a with an empty roles block and rc=$b with a populated one — the collision the guard exists to stop"
+  else
+    bad "MUTANT emptyrole survived: both configs answered rc=$a without the guard"
+  fi
+fi
+
+# --- 9. the DECLARED disjunct, on its own copy --------------------------------
+# The cited disjunct has a mutant; this one had none, and the arm that was supposed to cover
+# it reached the loop through the CITATION instead. Kept standalone because `uncited.jsonl`
+# is also declared-and-uncited, so a battery mutant moves the B arm with it.
+sed 's|^  case "\$DECLARED_NL" in \*"\${NL}\${1}\${NL}"\*) return 0 ;; esac$|  case "$DECLARED_NL" in *"__NEVER__"*) return 0 ;; esac|' "$VSL" > "$WORK/nodecl.sh"
+if cmp -s "$VSL" "$WORK/nodecl.sh"; then
+  bad "FIXTURE BROKEN: the declared-membership test was renamed, so this mutant proves nothing"
+else
+  bash "$VSL"           --ledger "$WORK/declared-nonfive.jsonl" --sprint 900 --settings "$WORK/settings.json" >/dev/null 2>&1; a=$?
+  bash "$WORK/nodecl.sh" --ledger "$WORK/declared-nonfive.jsonl" --sprint 900 --settings "$WORK/settings.json" >/dev/null 2>&1; b=$?
+  if [ "$a" -eq 1 ] && [ "$b" -eq 3 ]; then
+    ok "MUTANT declaredisjunct: without it an UNCITED dispatch of a declared role falls out of scope (3) instead of being judged (1) — the declaration is what carries the D arm, and it is now asserted rather than assumed"
+  else
+    bad "MUTANT declaredisjunct: shipping gave rc=$a and the mutant rc=$b; expected 1 then 3"
   fi
 fi
 

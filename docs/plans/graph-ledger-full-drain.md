@@ -104,7 +104,46 @@ The arms are `case` matches now, which also avoids the `grep -q`-from-a-pipe EPI
 `printf '%s'` does not interpret `\n`: a JSONL heredoc flattened into one line, `jq` refused the
 file, and the receipt exited 2 — which reads exactly like a real rejection. `printf '%b'`.
 
-**THE SHIPPED RECEIPT ACCEPTS 2 OF 8.** Scored against the correct fix, a second spelling of it,
+**THE RECEIPT ACCEPTED A TOTAL VERDICT DISARM, BECAUSE IT NEVER READ AN EXIT CODE.** A second
+hand scored it against sixteen implementations and it accepted SIX — including a fix that
+prints every `FAIL:` line and exits 0, one with the exit-3 arm deleted, and a five-line script
+that examines nothing and prints canned text. `a=$(... 2>&1) || true` discards both statuses,
+so every arm was a substring match over merged output. **Ask what a receipt READS, not only
+what it asserts**: four content arms over a stream that a `printf` can forge are four arms
+about nothing. It now asserts three exit codes beside its content arms and carries a row whose
+undeclared role is not a harness built-in — the input that separates DERIVING the scope from
+hardcoding `{general-purpose, fork, claude}`. Re-scored 2 of 12.
+
+**A FIXTURE ARM PROVED NOTHING IT CLAIMED, AND ONLY A MUTANT AIMED AT THE OTHER DISJUNCT FOUND
+IT.** The battery row asserting that a declared role outside the five is judged was spelled
+`role_contract_cited: true`, so it reached the loop through the CITED disjunct; disabling the
+declared-role disjunct entirely left the arm unmoved. **An arm is carried by whichever
+condition admits its input first, and that is not always the one the comment names.** The
+`OUTSCOPE_ROLES` de-duplication branch had zero coverage for the same reason — no scenario
+carried two out-of-scope rows, which is exactly where the de-duplication defect lived.
+
+**TWO MORE CORRECTNESS DEFECTS CAME OUT OF THE SAME PASS.** An EMPTY role was a DECLARED role:
+with no `aiDlcRoles` block, `DECLARED_NL` is two newlines, which is the pattern an empty role
+builds, so a role-less row was judged — and its scope depended on how many roles the settings
+file happened to declare (exit 1 under `{}`, exit 3 under a one-key block). And the "bound
+vocabulary" claim named the wrong file: **`I22` binds `templates/settings.json.template`, not
+the consumer's `.claude/settings.json` that `--settings` actually reads.** The vocabulary is
+bound at INSTALL and unbound thereafter, which is the reason a role dropped from it must be
+NAMED rather than silently skipped.
+
+**A CLAIM ABOUT A GUARD'S SUBJECT IS NOT A MEASUREMENT OF IT.** "The disjunct keeps the
+fail-closed arm's real subject" is true by construction and the fixture proves it both ways —
+but on the reference consumer, of 64 rows carrying `role_file_readable=false`, **0 are in
+scope**. Reachable in principle, empty in practice there, and the release note says which.
+
+**EXIT-CODE SEMANTICS WERE SPELLED IN THREE PLACES AND THE FIRST CUT UPDATED TWO.**
+`enforcement-map.yaml`'s `posture:` line still called exit 3 PRE-LEDGER, and nothing binds
+posture prose to an enforcer's exit codes — `posture:` appears 13 times in
+`validate-enforcement-map.sh` (control: `call_sites` 10) and every one is a presence check.
+`gate-validation.md` also said PRE-LEDGER was "handled below" of a paragraph that does not
+exist. **Before restating a mechanism's contract, grep for every copy of it and count them.**
+
+**THE FIRST SHIPPED RECEIPT SCORE WAS 2 OF 8.** Scored against the correct fix, a second spelling of it,
 the pre-fix script, the filed five-role remedy, a total disarm, the fix minus its cited disjunct, a
 fix that skips out-of-scope rows without counting them, and a fix that skips a role-named row
 without NOTEing it. **An arm that merely asserted the skipped role was MENTIONED accepted the

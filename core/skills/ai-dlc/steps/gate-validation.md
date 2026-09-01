@@ -1378,8 +1378,11 @@ that made it.
 **Exit 0 = clean. Exit 1 FAILS**, clearable only by the four-arm disposition
 below. **Exit 2 FAILS** — a fumbled invocation, an unreadable settings.json, or
 no `jq`; nothing was compared. **Exit 3 says nothing was compared** — either
-PRE-LEDGER, handled below, or every in-sprint row was out of scope; it is
-not a pass in either case, and the message names which. **Record the command, its exit code and its `COUNTS:` line in the
+PRE-LEDGER, or every in-sprint row was out of scope; it is not a pass in
+either case. **The disposition is in the script's own message, which names
+which branch fired and what to fall back to; this file does not restate it,
+and an earlier revision said "handled below" of a paragraph that does not
+exist.** Record that message in the gate log. **Record the command, its exit code and its `COUNTS:` line in the
 gate-log entry.** A verdict without the counts cannot be told apart from one
 that examined nothing.
 

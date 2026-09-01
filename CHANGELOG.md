@@ -81,12 +81,56 @@ it told the reader to ignore.
 accumulator tested against a newline-delimited membership pattern, which read
 `(roles: general-purpose fork general-purpose fork)` for two distinct roles.
 
+**An empty role was a DECLARED role.** With no `aiDlcRoles` block, `DECLARED_NL` is two
+newlines — exactly the pattern an empty role builds — so a role-less row matched the
+membership test and was judged, and its scope depended on whether the settings file declared
+any role at all: the same row answered exit 1 under `aiDlcRoles: {}` and exit 3 under a
+one-key block.
+
+**The scope key is bound at INSTALL and unbound thereafter, and the first draft of this fix
+claimed otherwise.** `I22` joins `core/team-roles/*.md` to `templates/settings.json.template`
+— what a fresh install starts from. `--settings` at gate time is the consumer's own
+`.claude/settings.json`, which that consumer may edit. That is precisely why a role dropped
+from it has to be visible in `COUNTS:` rather than silently out of scope.
+
+**The fail-closed `role_file_readable` arm is reachable and, on the reference consumer, has
+no live subject.** Constructed both ways — a cited dispatch of an undeclared role and an
+uncited dispatch of a declared one both fire it, and the near-miss stays quiet. But of the 64
+rows there carrying `role_file_readable=false`, **0 are in scope**. "Keeps the fail-closed
+arm's real subject" is a property of the design, not a measurement of that consumer, and it
+is stated here as the former.
+
+**Exit 3's meaning is spelled in three places and the first cut of this release updated
+two.** `enforcement-map.yaml`'s `posture:` line still called it PRE-LEDGER, and nothing binds
+posture prose to an enforcer's exit codes. `gate-validation.md` also said PRE-LEDGER was
+"handled below" of a paragraph that does not exist — a pre-existing dangling reference this
+release would have given a second branch to. The disposition now lives in the script's own
+message, which names which branch fired, and the doc says so instead of restating it.
+
 **The fixture found two entangled assertions in this change before it shipped**, both of them
 mine: the new scope test was byte-identical to the Rule 19(b) arm below it, so a mutant aimed
 at one hit both, and a new arm asserting on a null field rode on the sentinel mutant. The
 scope test is a function for that reason. Its battery is fifteen arms with ten mutants each
 moving exactly one, plus four standalone arms whose subjects are shared and would entangle by
-construction — 25 assertions in all, including a near-miss (devops-audit) seated beside the offender in the same run.
+construction — 28 assertions in all, including a near-miss (`devops-audit`) seated beside the
+offender in the same run.
+
+**A hand also found that one battery arm proved nothing it claimed.** The row asserting that
+a declared role outside the five is judged was spelled `role_contract_cited: true`, so it
+reached the loop through the CITED disjunct — disabling the declared-role disjunct entirely
+left that arm unmoved. It is uncited now, and the declared disjunct has a mutant of its own.
+The `OUTSCOPE_ROLES` de-duplication branch likewise had zero coverage: no scenario carried two
+out-of-scope rows, which is exactly where the de-duplication defect lived.
+
+**The receipt accepted a total verdict disarm, and the reason is that it never read an exit
+code.** A second hand scored it against sixteen implementations and it accepted six: a fix
+that prints every `FAIL:` line and exits 0; one with the exit-3 arm deleted; and a five-line
+script that examines nothing and prints canned text. All four arms were substring matches over
+merged stdout and stderr. The receipt now asserts three exit codes (1 on a violating ledger, 1
+on a cited undeclared row, 3 on an all-out-of-scope one) alongside its content arms, and adds a
+row whose undeclared role is not a harness built-in — which is what separates deriving the
+scope from hardcoding `{general-purpose, fork, claude}`. Re-scored: **2 of 12**, the fix and a
+second spelling.
 
 Changed: `core/scripts/validate-spawn-ledger.sh`,
 `core/skills/ai-dlc/steps/gate-validation.md`, `core/fixtures/check-22-spawn-ledger/run.sh`,

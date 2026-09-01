@@ -4376,10 +4376,26 @@ RARE one (a deleted `aiDlcRoles` entry) while the common one hid inside the list
 reader to ignore; and the `COUNTS:` role list de-duplicated only its first element, a
 space-separated accumulator against a newline-delimited membership test.
 
-The receipt drives the shipping script over two ledgers and keys on which rows it judged, never on
-a sentence. Scored against eight implementations built for it: it ACCEPTS the fix and a second
-spelling of it, and REJECTS the pre-fix script, the filed five-role remedy, a total disarm, the fix
-minus its cited disjunct, a fix that skips out-of-scope rows without counting them, and a fix that
-skips a role-named row without NOTEing it.
+**THE FIRST RECEIPT NEVER READ AN EXIT CODE AND ACCEPTED A TOTAL VERDICT DISARM.** Scored by a
+second hand against sixteen implementations, it accepted six — a fix that prints every `FAIL:`
+line and exits 0, one with the exit-3 arm removed, and a five-line script that examines nothing
+and prints canned text. Four content arms over merged stdout and stderr are four arms a `printf`
+can forge. The receipt asserts three EXIT CODES now — 1 on a violating ledger, 1 on a cited
+undeclared row, 3 on an all-out-of-scope one — beside its content arms, and carries a row whose
+undeclared role is not a harness built-in, which is the input separating a DERIVED scope from a
+hardcoded `{general-purpose, fork, claude}`.
 
-verify: sh set -e; V=core/scripts/validate-spawn-ledger.sh; d=$(mktemp -d); printf '%s' '{"aiDlcModels":{"o":"opus"},"aiDlcRoles":{"adversary":{"model":"o"}}}' > "$d/s.json"; printf '%b' '{"v":1,"sprint":900,"name":"gp","role":"general-purpose","model_bound":"inherit","model_requested":"inherit","role_contract_cited":false,"role_file_readable":false}\n{"v":1,"sprint":900,"name":"adv","role":"adversary","model_bound":"o","model_requested":"o","role_contract_cited":false,"role_file_readable":true}\n{"v":1,"sprint":900,"name":"adversary-misrouted","role":"general-purpose","model_bound":"inherit","model_requested":"inherit","role_contract_cited":false,"role_file_readable":false}\n' > "$d/l.jsonl"; printf '%b' '{"v":1,"sprint":900,"name":"gpc","role":"general-purpose","model_bound":"x","model_requested":"x","role_contract_cited":true,"role_file_readable":false}\n' > "$d/c.jsonl"; a=$(bash "$V" --ledger "$d/l.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) || true; b=$(bash "$V" --ledger "$d/c.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) || true; case "$a" in *"row(s) out"*) ;; *) exit 1 ;; esac; case "$a" in *general-purpose*) ;; *) exit 1 ;; esac; case "$a" in *"FAIL: [gp]"*) exit 1 ;; esac; case "$a" in *"FAIL: [adv]"*) ;; *) exit 1 ;; esac; case "$b" in *"FAIL: [gpc]"*) ;; *) exit 1 ;; esac; case "$a" in *"NOTE: [adversary-misrouted]"*) ;; *) exit 1 ;; esac; exit 0
+Two further correctness defects came out of the same pass. An empty role was a DECLARED role: with
+no `aiDlcRoles` block `DECLARED_NL` is two newlines, the pattern an empty role builds, so a
+role-less row was judged and its scope depended on how many roles the file declared. And the
+vocabulary claim named the wrong file — `I22` binds `templates/settings.json.template`, not the
+consumer's `.claude/settings.json` that `--settings` reads, so the scope key is bound at INSTALL
+and unbound thereafter.
+
+Scored against twelve implementations: it ACCEPTS the fix and a second spelling, and REJECTS the
+pre-fix script, the filed five-role remedy, a total disarm, the fix minus its cited disjunct, a fix
+that skips out-of-scope rows without counting them, one that skips a role-named row without NOTEing
+it, one that exits 0 on violations, one with the exit-3 arm deleted, one that hardcodes the harness
+types as an exclusion list, and a canned-output script that examines nothing.
+
+verify: sh V=core/scripts/validate-spawn-ledger.sh; set -e; d=$(mktemp -d); printf '%s' '{"aiDlcModels":{"o":"opus"},"aiDlcRoles":{"adversary":{"model":"o"}}}' > "$d/s.json"; printf '%b' '{"v":1,"sprint":900,"name":"gp","role":"general-purpose","model_bound":"i","model_requested":"i","role_contract_cited":false,"role_file_readable":false}\n{"v":1,"sprint":900,"name":"walker","role":"rubric-walker","model_bound":"i","model_requested":"i","role_contract_cited":false,"role_file_readable":false}\n{"v":1,"sprint":900,"name":"adversary-misrouted","role":"general-purpose","model_bound":"i","model_requested":"i","role_contract_cited":false,"role_file_readable":false}\n{"v":1,"sprint":900,"name":"adv","role":"adversary","model_bound":"o","model_requested":"o","role_contract_cited":false,"role_file_readable":true}\n' > "$d/l.jsonl"; printf '%b' '{"v":1,"sprint":900,"name":"gpc","role":"general-purpose","model_bound":"x","model_requested":"x","role_contract_cited":true,"role_file_readable":false}\n' > "$d/c.jsonl"; printf '%b' '{"v":1,"sprint":900,"name":"gponly","role":"general-purpose","model_bound":"i","model_requested":"i","role_contract_cited":false,"role_file_readable":false}\n' > "$d/o.jsonl"; a=$(bash "$V" --ledger "$d/l.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) && ra=0 || ra=$?; b=$(bash "$V" --ledger "$d/c.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) && rb=0 || rb=$?; o=$(bash "$V" --ledger "$d/o.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) && ro=0 || ro=$?; [ "$ra" -eq 1 ] || exit 1; [ "$rb" -eq 1 ] || exit 1; [ "$ro" -eq 3 ] || exit 1; case "$a" in *"row(s) out"*) ;; *) exit 1 ;; esac; case "$a" in *"FAIL: [adv]"*) ;; *) exit 1 ;; esac; case "$a" in *"NOTE: [adversary-misrouted]"*) ;; *) exit 1 ;; esac; case "$a" in *"FAIL: [gp]"*) exit 1 ;; esac; case "$a" in *"FAIL: [walker]"*) exit 1 ;; esac; case "$b" in *"FAIL: [gpc]"*) ;; *) exit 1 ;; esac; exit 0
