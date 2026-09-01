@@ -49,6 +49,52 @@ so the false-positive set is empty by construction rather than by narrowing.
 
 Scored three ways on the probe: move across core → `1`, docs-only move → `0`, no move → `0`.
 
+**The population, stated because the first draft of this entry overstated it.** "Exactly one line"
+is a property of a FRESH consumer, not of the renderer. The region is content-blind by
+construction — every section renders a projection of detector output, statuses and paths
+(`emit-report.sh:76`, `:79`, `:174`, `:183`, `:226`, `:230`, `:251`) — and its only content-bearing
+block, the orientation diff, is gated at `:100` on `[ -n "$classify" ]` and renders only for
+CLASSIFY/BOTH-CHANGED files. The probe's consumer had none. So the blindness is exact for core
+changes OUTSIDE the CLASSIFY set — the pure applies, which are the bulk and are overwritten
+wholesale — while a CLASSIFY file's content change is caught by the orientation block. Measured
+independently by a second hand on the other axis: with the ref spelled as a SHA, ten lines differ
+at five sha-bearing sites, so a sha-spelled move is caught today — and is caught even when
+`core/` is byte-identical, which is a false positive rather than a catch. The gate was keyed on
+the wrong axis in both directions; this entry fixes the silent one.
+
+### `--finish` asked whether the ref resolved, never whether it was the right one
+
+`apply.sh --finish` now refuses to advance the stamp to a ref whose `core/` tree is not the one
+this tree was written from.
+
+**Resolvable is not the same question as correct.** The existing guard (`apply.sh:1301`) refuses a
+ref that names nothing. A ref that names the WRONG thing resolves perfectly, and every arm
+downstream then did its job over it: the stamp took its sha, the read-back agreed with what had
+just been written, `RESOLVED consistent "the tree matches <ref>"` was printed over a tree never
+brought there, and the in-flight marker was removed. `--finish` is the one invocation retyped by
+hand from a withheld row, which `apply.sh` itself already says.
+
+**The second side of the join existed and nothing had ever read it.** `.claude/.ai-dlc-applying`
+records `theirs:` at `apply.sh:209`, and a census of the tracked tree found **zero** parsers of it
+— every reader is an existence test, e.g. `core/git-hooks/pre-push:767` — against a non-zero
+control of writes and existence tests in the same run. It is deliberately not rewritten under
+`--finish` (`:208`), so on that path it still holds the ref whose content was actually applied:
+the record of what was approved, sitting unread beside the argument most likely to be fumbled,
+and deleted by the same run that ignored it.
+
+**Keyed on the `core/` tree, for the same reason as the entry above.** Refusing on the commit
+would wedge a finisher whose only sin is naming the newer of two equivalent refs. Scored four
+ways: recorded `86ee28aa` / argv `569ebfd3` (trees differ) → `restamp-identity-mismatch`, stamp
+unmoved at `2c0cc4e`, marker PRESENT; argv `86ee28aa` → `restamp`, marker cleared; argv
+`d503d490` (docs-only, `<ref>:core` identical) → `restamp`, marker cleared, no false positive;
+no marker at all → `restamp-identity-unchecked` **and** `restamp`.
+
+**It never fails for want of the record.** A missing marker, a marker with no `theirs:` line, or
+an unresolvable recorded ref are UNCHECKED rather than refused — a consumer whose marker was
+cleared by hand, which is the remedy `core/git-hooks/pre-push` itself prints, must still be able
+to finish. Each says so on its own `DECISION` row, because "could not check" printing the same as
+"checked and agreed" is what let this survive unnoticed.
+
 ## [0.463.0] - 2026-09-01
 
 ### A wildcard in prose is not a missing file, and the label said it was

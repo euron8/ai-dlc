@@ -24,6 +24,26 @@ CONSUMER="$WORK/consumer"
 mkdir -p "$DIST/core/schemas" "$CONSUMER/.claude/schemas"
 
 printf '{\n  "rule": "original"\n}\n' > "$DIST/core/schemas/thing.json"
+
+# THE SUBJECT OF run.sh's MOVED-REF ARMS, and it is shaped to reproduce the incident exactly.
+#
+# Those arms move a branch across a core change and require the region to change. That proves
+# nothing unless the region's OTHER rows hold still — if the move also adds a bucket row, the
+# arm fires on the bucket and would pass against a renderer carrying no content key at all.
+# So this file is upstream-modified base->theirs ALREADY: its bucket row exists in the approved
+# render, and a further edit to its CONTENT moves the `core/` tree while every row keyed on
+# STATUS+path stays byte-identical. The consumer carries the BASE bytes at the installed path
+# (`core/scripts/<x>` lands at `scripts/ai-dlc/<x>`), which keeps it out of CLASSIFY and so out
+# of the orientation block, whose sample WOULD render its bytes.
+#
+# Measured while building this: with the file merely PRESENT at base and theirs unchanged, the
+# harmful move added `UPSTREAM-MOD+consumer-deleted->CLASSIFY` plus three orientation lines, and
+# the arm passed for the wrong reason. run.sh re-derives that hold-still property on every run
+# rather than trusting this comment.
+mkdir -p "$DIST/core/scripts" "$CONSUMER/scripts/ai-dlc"
+printf '#!/usr/bin/env bash\necho MOVED-REF-PROBE base\n' > "$DIST/core/scripts/moved-ref-probe.sh"
+cp "$DIST/core/scripts/moved-ref-probe.sh" "$CONSUMER/scripts/ai-dlc/moved-ref-probe.sh"
+
 git -C "$DIST" init -q
 git -C "$DIST" -c user.email=f@f -c user.name=fixture add -A
 git -C "$DIST" -c user.email=f@f -c user.name=fixture commit -q -m base
@@ -40,11 +60,22 @@ printf '{\n  "rule": "consumer-edited"\n}\n' > "$CONSUMER/.claude/schemas/thing.
 mkdir -p "$DIST/core/skills/ai-dlc/templates" "$CONSUMER/.claude/skills/ai-dlc/templates"
 printf 'shared line\nSENTINEL-THEIRS-ONLY upstream process class\n' \
   > "$DIST/core/skills/ai-dlc/templates/classes.md"
+# The moved-ref probe is upstream-modified in this same commit, so its bucket row is already in
+# the APPROVED render and a later content move cannot add one. See the block above.
+printf '#!/usr/bin/env bash\necho MOVED-REF-PROBE approved\n' > "$DIST/core/scripts/moved-ref-probe.sh"
 git -C "$DIST" -c user.email=f@f -c user.name=fixture add -A
 git -C "$DIST" -c user.email=f@f -c user.name=fixture commit -q -m theirs-adds-template
 THEIRS="$(git -C "$DIST" rev-parse HEAD)"
 printf 'shared line\nSENTINEL-OURS-ONLY consumer domain class\n' \
   > "$CONSUMER/.claude/skills/ai-dlc/templates/classes.md"
+
+# A SYMBOLIC spelling of theirs, parked at the same commit the sha-spelled assertions use.
+# `--verify` re-renders from whatever the caller passes, so a branch is the shape of theirs an
+# operator actually types (`origin/main`, `main`, "upstream HEAD") and the shape whose RESOLUTION
+# can change between the dry run that was approved and the apply that writes. run.sh moves this
+# ref; nothing above reads it.
+MOVEREF="fixture-moving-theirs"
+git -C "$DIST" branch -f "$MOVEREF" "$THEIRS"
 
 # A PUSH-CANDIDATE LEDGER. Without one, `ledger-reverify.sh` short-circuits on a missing file
 # and the region's ledger section renders `none` — so every assertion about that section passes
@@ -92,6 +123,8 @@ DIST="$DIST"
 BASE="$BASE"
 THEIRS="$THEIRS"
 CONSUMER="$CONSUMER"
+MOVEREF="$MOVEREF"
+MOVED_PROBE_PATH="core/scripts/moved-ref-probe.sh"
 REGION="$REGION"
 REPORT_GOOD="$WORK/report-good.md"
 REPORT_MISSING="$WORK/report-missing.md"
