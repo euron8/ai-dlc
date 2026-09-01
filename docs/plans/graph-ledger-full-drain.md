@@ -31,133 +31,93 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 33 SHIPPED AS `v0.457.0` AND `v0.458.0` REVERSED ITS MAIN HALF. THE CANDIDATE WAS BY-DESIGN, THE CORPUS IS STILL TEN, AND A PULL IS OWED BUT NOT REQUIRED.
+### BATCH 33 SHIPPED, WAS PARTLY REVERSED, AND FOUR MORE RELEASES FOLLOWED IT. BATCH 34 HAS NOT STARTED. THE CORPUS IS NINE FOR WORK AND TEN FOR ADJUDICATION.
 
 **This block is the current state and it replaces the pull block below, whose figures were correct
-and whose instruction is spent.** Every figure here was re-derived AFTER the merge by running the
-derive block and the sweep, all controls in the same invocation.
+and whose instruction is spent.** Every figure here was re-derived after the last merge by running
+the derive block and the sweep, all controls in the same invocation.
 
-**READ THIS BEFORE PICKING A SUBJECT: BATCH 33 SHIPPED A DEFECT AND CORRECTED IT ONE RELEASE LATER,
-AND THE FAILURE IS REPEATABLE BY ANYONE WHO TAKES A FILING AT ITS WORD.**
-`PC-S340-IS-CORE-ANSWERS-BY-DECLARED-GLOB-NOT-BY-MEMBERSHIP` is **REJECTED AS BY-DESIGN**, adjudicated
-in `v0.458.0`'s commit message. `core-paths.sh` is byte-identical with `95670e58` again (`cmp -s`).
+**FIVE RELEASES SINCE THE CONSUMER'S STAMP, AND `v0.460.0` DOES NOT EXIST — do not go looking for
+it.** It was cut, parked mid-batch on an operator redirect, and renumbered to `v0.462.0` when it
+finally landed. The sequence is:
 
-**The answer was written inside the mechanism the filing wanted changed, in its own remedy text.**
-`core/hooks/ai-dlc-core-guard.sh` says `scripts/ai-dlc/` "is core-owned in its entirety
-(core-manifest.md claims `scripts/ai-dlc/*`), so **this deny stands whether or not the distribution
-ships a file by that name**". The guard denies a `Write` BEFORE the file exists, which is the only
-moment a deny is worth anything, so `--is-core` answering 0 for an uncreated name is the resolver
-AGREEING with the guard. **Before treating a resolver's answer as a defect, read the remedy text of
-the mechanism that consumes it** — one `sed -n` on that file would have ended this batch in ten
+```
+v0.457.0  batch 33's subject                          WRONG -- see below       INSTALLS
+v0.458.0  reverted it, rejected the candidate by-design                        INSTALLS
+v0.459.0  two rules + the durable-ceiling raise 50600 -> 51300                 repo-only
+v0.461.0  OFF-PLAN, operator-directed: the /ai-dlc bypass enforcer             INSTALLS
+v0.462.0  the PAIRED BUT UNPLACEABLE section (was 0.460.0)                     INSTALLS
+```
+
+**BATCH 33 SHIPPED A DEFECT AND CORRECTED IT ONE RELEASE LATER, AND THE FAILURE IS REPEATABLE BY
+ANYONE WHO TAKES A FILING AT ITS WORD.** `PC-S340-IS-CORE-ANSWERS-BY-DECLARED-GLOB-NOT-BY-MEMBERSHIP`
+is **REJECTED AS BY-DESIGN**, adjudicated in `v0.458.0`'s commit message. `core-paths.sh` is
+byte-identical with `95670e58` again. The answer was written inside the mechanism the filing wanted
+changed: `core/hooks/ai-dlc-core-guard.sh` says `scripts/ai-dlc/` "is core-owned in its entirety …
+so **this deny stands whether or not the distribution ships a file by that name**". The guard denies
+a `Write` BEFORE the file exists, which is the only moment a deny is worth anything, so `--is-core`
+answering 0 for an uncreated name is the resolver AGREEING with it. **Read the remedy text of the
+mechanism that CONSUMES a value before calling that value a defect** — the rule is now in
+`.claude/rules/verification-discipline.md`, and one `sed -n` would have ended that batch in ten
 minutes.
 
-**THE INVARIANT THAT EXISTS TO CATCH EXACTLY THIS COULD NOT SEE IT, and that is the finding worth
-carrying.** `I25` binds guard and resolver by byte-comparing `parse_manifest()` and
-`to_consumer_glob()` — verified, it loops over exactly those two names — while its own error text
-names the stake: "a rule that differs between them means a file the guard protects can be audited as
-consumer-authored." `v0.457.0` forked them at the DECISION, outside both functions, and `I25` passed
-on every run. The gate was green for the whole defect. A three-way guard/resolver/`fnmatch`
-agreement arm now lives in `core/fixtures/upstream-routing/run.sh`, over a seeded set including an
-invented filename under a core glob, proven to fire by re-applying the reverted behaviour to a copy.
+**THREE MECHANISMS WERE GREEN WHILE BLIND IN ONE SESSION, and that is the pattern to carry forward
+rather than any one of them.** `I25` binds guard and resolver by byte-comparing `parse_manifest()`
+and `to_consumer_glob()` while the fork landed at the DECISION, outside both.
+`validate-scope-confirmation.sh:213` reports PENDING on a snapshot with no routing record, saying
+in as many words "this is not a skipped pause point" — which is exactly what a bypass produces. And
+`v0.458.0`'s own `[NO SUCH FILE HERE]` label could not reach its subject, because the pairing skip
+runs before the rows it decorates are built. All three read exactly like they were working.
 
-**THE OTHER HALF SHIPPED AN UNMEASURED FALSE-POSITIVE SET, WHICH `CLAUDE.md` FORBIDS IN AS MANY
-WORDS.** The router's `[NO SUCH FILE HERE]` label keyed existence on `AI_DLC_ROOT` — wherever the
-running copy resolved from — while a carry-over entry's paths are relative to the consumer that
-wrote it and `--backlog` names a corpus in a third place. On released `v0.457.0` the distribution's
-copy reading the consumer's real backlog marked **4 of 4** findings falsely. `v0.458.0` roots it at
-the BACKLOG's own directory: that case **4 → 0** with findings unchanged at 3, an unrootable corpus
-labels nothing while still reporting all 10 findings, and the positive control marks exactly the one
-path the filing names with 10 near-miss rows unlabelled in the same run. **The label survives; only
-its root moved.**
+**THE FIGURES, re-derived after the last merge.** Ledger md5 `28df5c39…` — UNCHANGED, because the
+consumer's ledger moves only when the consumer writes — **73 live candidates, 139 archived, 30
+cited, 43 UNFILED**. DISCHARGED **14 raw / 13 corrected**, IN-FLIGHT **17**, UNTOUCHED **43**,
+overlap **1**, discharged-unnamed **0**, TERMINAL **31**. Partition control closes on the raw
+figure: 14+17+43−1 = 73. Presence controls filed-known 1, spaced bullet 1, bare-bold 1, dotted id 1;
+absence controls partition 0, impossible id 0. `docs/backlog.md` depth **73 live / 57 archived**
+against a ceiling of 100.
 
-**TWO HANDS GOT THIS RIGHT AND REPORTED AFTER THE MERGE.** Both recommended rejecting the candidate
-as by-design, with the guard's sentence as the evidence, and both had gone idle twice with nothing
-delivered before the release shipped. Their result payloads were TRUNCATED at ~16000 characters on
-arrival. **Do not treat an idle hand as a hand with nothing to say, and do not merge on the theory
-that it has stopped** — ask it by name, and budget for the answer arriving late rather than never.
+**BATCH 34 HAS NOT STARTED. ITS CORPUS IS THE TEN `PC-S340-*` IDS, ALL STILL UNFILED** — re-derived,
+10 of them in the unfiled set. Nine are work; the tenth is `IS-CORE`, which is REJECTED and still
+appears because a rejection is not a filing and nothing here moves it out of `UNFILED`. It will keep
+showing up in every sweep. Do not take it as a subject; do carry its adjudication to the consumer.
 
-**WHAT SHIPPED.** `PC-S340-IS-CORE-ANSWERS-BY-DECLARED-GLOB-NOT-BY-MEMBERSHIP`, the first of the ten
-`PC-S340-*` candidates. `core-paths.sh --is-core` answered exit 0 for any path matching a declared
-glob, and `scripts/ai-dlc/*` is a whole namespace, so an invented filename answered "core". It now
-resolves a layered-consumer root by walking up from `$PWD` — `--audit-diff`'s existing activation
-rule — and exits **2** when the matched path names no file there; dormant elsewhere, byte-identical
-to `HEAD`, asserted with a `cmp -s` control. `audit-upstream-routing.sh` LABELS an absent named path
-and deliberately does not filter it. Merged as `92d8c3b3`, id verbatim in the release commit message
-(1 hit; absence control 0 on an uncontaminated token, positive control 1 on a known-cited id).
-
-**THE FILED REMEDY WAS BUILT AND REFUSED, AND THAT MEASUREMENT IS THE REUSABLE PART.** It asked that
-`--is-core` require the distribution to carry the corresponding `core/` file. An installed consumer
-has no `core/` directory — measured on a tree built by `install.sh` into an empty directory and on
-the reference consumer, against the consumer-relative form as the control — and in the distribution
-`scripts/ai-dlc/X` ships from `core/scripts/X` while `core/scripts/ai-dlc/` does not exist, so the
-reverse map is `install.sh`'s flattening rather than anything the manifest carries. Unanswerable
-from both sides.
-
-**THE CANDIDATE'S OWN RECEIPT ACCEPTS A TOTAL DISARM.** Six implementations were built and scored
-against it in one invocation, each asserted to differ from the correct one first: the correct fix, a
-second spelling, and four regressions — and it **ACCEPTED ALL SIX**, including a `--is-core` that
-exits 2 unconditionally. Its single arm asks only that the invented name is non-zero. The battery
-that discriminates needs three more inputs in the same run (a real core file still 0, a non-core
-path still 1, the same verdicts from a subdirectory) and kills all four. **Do not read that
-receipt's verdict as a close on its own** — and expect the same shape from the other nine, which
-were filed by the same session in the same sprint.
-
-**THE CORPUS FOR BATCH 34 IS NINE FOR WORK AND TEN FOR ADJUDICATION** — the `PC-S340-*` set less
-the one that was rejected, which still needs its rejection carried to the consumer, and which is
-still UNFILED here so the sweep will keep offering it. Three carry
-killing controls already recorded in the pull block below;
+**RANKED PICK AMONG THE NINE, on consequence.**
 `STAMP-READOPT-GATE-IS-BLIND-TO-AN-ADDITIVE-CHANGE-AND-TO-A-REWRITTEN-BODY` and
-`SAFE-STOP-ACQUITTAL-TESTS-ANCESTRY-NOT-CONTENT` are the two defects in `v0.455.0` itself and are
-the ranked pick on consequence; `DERIVATION-CAPTURE-HOOK-ROLLS-BACK-THE-WHOLE-FILE-ON-A-REJECTED-BLOCK`
-is the highest raw consequence in the set (measured data loss on the consumer) **and its mechanism
-sentence is refuted**: the hook is `PostToolUse` and carries no write path at all (`grep -c` for a
-rollback in `core/hooks/ai-dlc-derivation-capture.sh` returns 0 against 3 for its `mktemp`/`trap`
-lines), so whatever destroyed that file, it was not the hook's rollback. Its OTHER half is real and
-sited elsewhere — `core/scripts/validate-artifact-derivations.sh:124` splits a command on `|`
-unconditionally, so a `grep -E 'a|b'` alternation inside a fence is parsed as a pipeline and refused.
-**Enumerate that entry's two claims before taking it.**
+`SAFE-STOP-ACQUITTAL-TESTS-ANCESTRY-NOT-CONTENT` are defects in `v0.455.0` itself and carry killing
+controls already.
+`DERIVATION-CAPTURE-HOOK-ROLLS-BACK-THE-WHOLE-FILE-ON-A-REJECTED-BLOCK` is the highest raw
+consequence — measured data loss on the consumer — **and its mechanism sentence is refuted**: the
+hook is `PostToolUse` and carries no write path at all, so whatever destroyed that file, it was not
+the hook's rollback. Its OTHER half is real and sited elsewhere,
+`core/scripts/validate-artifact-derivations.sh:124`, which splits a command on `|` so a `grep -E
+'a|b'` alternation inside a fence parses as a pipeline and is refused. **Enumerate that entry's two
+claims before taking it.**
 
-**THE FIGURES, re-derived after the merge.** Ledger md5 `28df5c39…` — UNCHANGED, because the
-consumer's ledger moves only when the consumer writes — **73 live candidates, 139 archived, 30 cited,
-43 UNFILED**. DISCHARGED **14 raw / 13 corrected**, IN-FLIGHT **17**, UNTOUCHED **43**, overlap **1**,
-discharged-unnamed **0**, TERMINAL **31**. Partition control closes on the raw figure: 14+17+43−1 = 73.
-Presence controls filed-known 1, spaced bullet 1, bare-bold 1, dotted id 1; absence controls partition
-0, impossible id 0. `docs/backlog.md` depth **73 live / 57 archived** against a ceiling of 100.
-
-**THIS BATCH'S DISCHARGE IS INVISIBLE TO `DISCHARGED`, BY CONSTRUCTION, AND THAT IS THE INSTRUMENT
-GAP THIS FILE ALREADY RECORDS.** The bucket is keyed on a live candidate being cited by an entry in
-`docs/backlog.archive.md`. This subject was never a `BL-` entry, so nothing here cites it and the
-partition cannot move. The visible signal is PENDING.
+**EVERY ONE OF THE NINE WAS FILED BY THE SESSION WHOSE RECEIPT ACCEPTED A TOTAL DISARM.** Batch 33
+built six implementations against that receipt — the correct fix, a second spelling and four
+regressions, each asserted to differ from the correct one first — and it accepted all six, including
+a `--is-core` that exits 2 unconditionally and ships nothing. **Score what a receipt ACCEPTS before
+reading its verdict as a close**, and build the discriminating battery yourself.
 
 **A PULL IS OWED AND IS NOT REQUIRED, AND IT IS NOT AUTHORIZED.** Consumer installed **0.456.0**,
-shipped **0.459.0** — a gap of THREE releases, but only TWO of them touch `core/`: `v0.459.0` is
-`.claude/rules/` and a validator, neither of which installs. PENDING is **0 fixes and 1
-adjudication**: the only id named upstream is the one `v0.458.0` REJECTED, so a pull delivers a
-decision, not a repair. Re-derived against the consumer's tree AFTER a peer session restored
-uncommitted work there: 80 entries, 172 globs, 7 paired, 4 findings, 13 core-glob tokens with 11
-present and 2 absent, ledger md5 unchanged, dirty back to the 11 this batch started from.
-**The prescribed differential is UNAVAILABLE, not null**: the consumer's installed
-`validate-layer-entries.sh` is byte-identical to this distribution's under `cmp -s`, so two runs of
-one program would have produced a perfect null reading exactly like agreement. The subject-specific
-differential was run instead, with `cmp -s` controls proving both binaries differ: on the consumer's
-CURRENT carry-over corpus the two reports are **IDENTICAL** — all four named paths exist, so the new
-label is silent — and on the corpus at its pre-pull commit `948b8a881` they **DIFFER** by exactly the
-label, on exactly the one path the filing names. **So this fix repairs a state the consumer was in a
-day ago and can re-enter, not one it is in today**, which is what the null does not cover. No
-bootstrapping step is in the range (four core paths, none of them `preclassify.sh`, `apply.sh`,
-`ledger-reverify.sh` or the skill) and 0 mode-only changes. Report it; do not run it, and do not hand
-it to a peer session.
+shipped **0.462.0**. Four of the five releases install; `v0.459.0` is `.claude/rules/` and a
+validator and reaches no consumer. PENDING is **0 fixes and 1 adjudication** against the ledger —
+the only `PC-` id named upstream is the one `v0.458.0` REJECTED — but the consumer would also
+receive the `/ai-dlc` bypass enforcer, which is not a ledger candidate and is the reason a pull is
+worth more now than the ledger count suggests. Report it; do not run it, and do not hand it to a
+peer session.
 
-**THE CONSUMER WAS WRITING THROUGHOUT AND ITS DIRTY COUNT IS NOT THE CRITERION.** It went 11 → 19
-during this batch — sprint 308 artifacts, retro artifacts, its own server code — while the ledger's
-md5 held and **0 paths under `_bmad-output/ai-dlc-update/` are dirty**. `carry-over-backlog.md` is
-among the modified files, so every routing figure above is a snapshot of a corpus another party holds
-open. Criterion 4 is measured by CONTENT and it holds.
+**THE CONSUMER IS LIVE AND ITS DIRTY COUNT IS NOT THE CRITERION.** It moved 11 → 19 → 11 during
+batch 33 as its own sessions worked, while the ledger md5 held and **0 paths under
+`_bmad-output/ai-dlc-update/` were dirty**. `carry-over-backlog.md` is among the files it edits, so
+every routing figure here is a snapshot of a corpus another party holds open. Criterion 4 is
+measured by CONTENT and it holds. One of that consumer's sessions ALSO bypassed the pipeline
+entirely during batch 33 and reverted its own work; `v0.461.0` is the enforcer that came out of it.
 
-**THE IMPOSSIBLE-ID CONTROL FOR THE COMMIT-MESSAGE CHANNEL CANNOT BE `PC-S999-NEVER`, and this batch
-reproduced that.** It returns **2** commits on `origin/main` — earlier sessions wrote the token into
-messages. Use a token never written, and pair it with a known-cited id in the same invocation.
-
+**THE IMPOSSIBLE-ID CONTROL FOR THE COMMIT-MESSAGE CHANNEL CANNOT BE `PC-S999-NEVER`.** It returns
+**2** commits on `origin/main` — earlier sessions wrote the token into messages. Use a token never
+written, paired with a known-cited id in the same invocation.
 ### THE `0.452.0 → 0.456.0` PULL LANDED — A RECORD OF WHAT IT DELIVERED AND WHAT IT FILED. THE GAP IT CLOSED HAS SINCE REOPENED AT ONE RELEASE; TAKE THE STATE FROM THE BLOCK ABOVE.
 
 **This block is the current state and it replaces the batch-32 block below, whose heading asked for a
@@ -2633,8 +2593,10 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **RUN THE SWEEP (action 1b below) AND LET IT PICK BATCH 34's SUBJECT.** Batch 33 is merged as
-   `v0.457.0` and corrected by `v0.458.0`, so number yours 34. **Nothing is owed ahead of the
-   sweep.**
+   `v0.457.0`, corrected by `v0.458.0`, and `v0.459.0`, `v0.461.0` and `v0.462.0` followed it —
+   `v0.461.0` off-plan on an operator redirect. So number yours 34, and there is no `v0.460.0`
+   to find: it was renumbered to `v0.462.0` after being parked mid-batch. **Nothing is owed ahead
+   of the sweep.**
 
    **BEFORE YOU BUILD ANYTHING, READ THE REMEDY TEXT OF THE MECHANISM THAT CONSUMES THE ANSWER YOUR
    SUBJECT CALLS WRONG.** Batch 33 shipped a fix for a filing whose premise was contradicted, in as
