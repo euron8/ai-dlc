@@ -133,6 +133,14 @@ For every figure: what population produced this, and is it the population the me
 actually runs on? A recorded instance count is a FLOOR. Most failures of this kind are
 failures of scope, not of arithmetic, and they read as precision.
 
+## A correction is itself a measurement, and NARROWING is not the safe direction
+
+Correcting a claim toward "narrower" reads as honesty and is just as capable of being wrong.
+Measured, inside one release: a shipped entry was corrected mid-batch to say a gate's blindness
+held only outside one file class — which was one ROW of a two-row table read as the whole table.
+On the other row the gate caught nothing at all, and a second hand had to WIDEN the claim back.
+Ask which row a correction was measured on before believing it.
+
 ## Key a binding on the emission site
 
 A whole-file `grep -qF` is satisfied by a comment. A grep hit inside a file is not a

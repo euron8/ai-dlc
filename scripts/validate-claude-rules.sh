@@ -565,7 +565,31 @@ fi
 # the exact fork -- but that arm is bound to one resolver and says nothing to the next author
 # trusting a filing in another subsystem. Prose only, so `resident-context.md` bars scoping both.
 # ---------------------------------------------------------------------------
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-51300}"
+# RAISED AGAIN, 51300 -> 51800, ON AN OPERATOR RULING, FOR ONE RULE COSTING 491 BYTES. The
+# duplicate scan was run BEFORE the raise, not after: zero occurrences of the rule's subject across
+# the durable channel, against a positive control finding a phrase known to sit in `CLAUDE.md` and
+# a negative control returning nothing. The A6 arm was also observed FAILING at 51791 before the
+# ceiling moved, so this raise is a response to a check that fired rather than to one assumed.
+#
+# The rule is `verification-discipline.md`'s "a correction is itself a measurement, and NARROWING
+# is not the safe direction". Earned in v0.464.0: a CHANGELOG entry was corrected mid-batch to say
+# a gate's blindness held only outside one file class, which was one ROW of a two-row table read as
+# the whole table -- on the other row the gate caught nothing at all, and an adversarial hand had to
+# WIDEN the claim back. The correction was made in good faith, reviewed, and shipped wrong.
+#
+# WHY IT CANNOT BE SCOPED OR MECHANIZED. It is a judgement about the population a CORRECTION was
+# measured on, made while editing prose, and no tracked file carries a trace of the error -- the
+# narrowed claim and the true one are both well-formed English about the same subject. Nothing can
+# scan for "this correction was measured on a different population than the claim it corrects".
+# Prose only, so `resident-context.md` bars scoping it. It sits beside "Ask what SET a number was
+# taken over" deliberately: that rule governs a figure, this one governs a revision to a figure,
+# and the second is the case the first did not cover.
+#
+# WHAT WAS STILL NOT COVERED. The judgement-per-passage vestigial form the entry above names as the
+# place to start was again NOT exhaustively enumerated. That debt is now three raises old and is
+# stated rather than quietly carried forward.
+# ---------------------------------------------------------------------------
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-51800}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done
