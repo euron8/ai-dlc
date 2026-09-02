@@ -49,11 +49,27 @@ read in full -- 8 deny an obligation in as many words, 2 draw an explicit contra
 false-acquittal set is empty and enumerated.
 
 **PER OCCURRENCE, NEVER PER ROW.** A row is still reported when any cue survives, so a reason that
-denies one obligation and states another is still caught. `nothing` is deliberately NOT a negator:
-it is the exact word the strongest true positive uses -- *"Nothing but this reason field is
-tracking that debt."* -- and admitting it would acquit the sentence the file exists to surface.
-`not` and `never` are excluded for a weaker version of the same reason: measured, they acquitted
-two rows on a `not` governing an unrelated clause, reaching the right verdict for the wrong reason.
+denies one obligation and states another is still caught.
+
+**AND THE NEGATOR CARVE-OUTS WERE RE-MEASURED AFTER AN ADVERSARIAL HAND SHOWED THE FIRST ONE WAS
+JUSTIFIED FROM THE WRONG EVIDENCE.** `nothing` is excluded because it is the word the strongest
+true positive uses -- *"Nothing but this reason field is tracking that debt."* -- and that much is
+right. What the comment claimed beyond it was not: admitting `nothing` acquits **0 of 29**, because
+both rows carrying that sentence survive on an `OWED REMEDIATION, deferred by operator decision`
+cue five hundred characters earlier. **The sentence is not what protects those rows.** The
+exclusion stays because a row whose ONLY cue is that sentence is constructible and IS lost when
+`nothing` is admitted -- the fixture seeds exactly that row and mutant M7 kills on it. Free on
+this corpus, load-bearing for a reachable one.
+
+`never` is vacuous here -- it acquits 0 of 29 and moves no row, which is the loaded gun
+`mechanism-design.md` describes. `not` acquits exactly ONE further row, accidentally: the `not`
+governs a parenthetical about who dispatches a repair seat, several clauses from the `remediation`
+cue it would silence. Right verdict, wrong reason, on the only case available.
+
+**THE HAND'S OTHER FINDING WAS ALREADY CLOSED BY THE COMMA, AND CHECKING BEAT ACCEPTING.** It
+reported that one early `no` silences every cue after it, with a probe swapping a period for a
+comma. Re-run against the shipped bound, both forms REPORT -- the probe was scored against the
+pre-comma revision. Re-measure a finding against what shipped before acting on it.
 
 **THE COMMA HAD TO BE ADDED TO THE CLAUSE BOUND, AND IT CAME FROM ATTACKING THE FIX AFTER IT WAS
 COMMITTED.** The first cut bounded a clause on `.`, `;` and `:` only. A comma does not bound one,

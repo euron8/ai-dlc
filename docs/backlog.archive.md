@@ -4737,6 +4737,18 @@ the arm's own `(?![\w-])` lookahead already refuses it. Control in the same run 
 deferred` standing alone yields two. The citation shape the filing describes is real; the
 mechanism it named cannot fire.
 
+**THE `nothing` CARVE-OUT WAS JUSTIFIED FROM THE WRONG EVIDENCE, AND AN ADVERSARIAL HAND CAUGHT
+IT AFTER THE COMMIT.** Admitting `nothing` acquits **0 of 29** — both rows carrying *"Nothing but
+this reason field is tracking that debt"* survive on an `OWED REMEDIATION, deferred` cue five
+hundred characters earlier, so that sentence is not what protects them. The exclusion stays
+because a row whose ONLY cue is that sentence is constructible and is lost without it; the fixture
+seeds that row and M7 kills on it. `never` acquits 0 and is vacuous. `not` acquits exactly one
+more, accidentally, on a `not` governing a parenthetical several clauses from the cue.
+
+**The hand's other finding was already closed by the comma bound**, and its probe — a period
+swapped for a comma — REPORTS in both forms against what shipped. It had scored the pre-comma
+revision. Re-measure a late finding against what shipped before acting on it.
+
 **What is NOT claimed.** Two false-positive classes survive and are stated rather than deferred:
 the cue naming a CORE CONSTRUCT (`core's Remediation Rule 12`, `the remediation EDIT`) and the cue
 in a clause citing a resolvable `OWED-` id. Both are per-row prose judgements, and the arm's own

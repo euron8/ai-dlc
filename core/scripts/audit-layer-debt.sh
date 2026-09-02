@@ -229,11 +229,28 @@ PROSE = re.compile(r"(?<![\w-])(owed|still owed|deferred|remediation|follow-?up|
 # operator decision` and both saying `Nothing but this reason field is tracking that debt` —
 # survive this narrowing, asserted as an arm rather than assumed.
 #
-# `nothing` IS DELIBERATELY NOT A NEGATOR. It reads like one and it is the exact word the
-# strongest TRUE positive in the corpus uses: *"Nothing but this reason field is tracking that
-# debt."* Admitting it would acquit the sentence this whole file exists to surface. `not` and
-# `never` are excluded for a weaker version of the same reason — measured, they acquitted two
-# rows on a `not` governing an unrelated clause, reaching the right verdict for the wrong reason.
+# THE THREE WORDS THAT READ LIKE NEGATORS AND ARE NOT IN THE SET, each with what it actually
+# costs. An earlier revision of this comment justified the first one from the wrong evidence, and
+# the correction is the useful part.
+#
+# `nothing`. It is the word the strongest TRUE positive uses — *"Nothing but this reason field is
+# tracking that debt."* — so admitting it silences that SENTENCE. What it does NOT do is silence
+# the two rows carrying it: measured, admitting `nothing` acquits **0 of 29**, because both of
+# those rows survive on an `OWED REMEDIATION, deferred by operator decision` cue five hundred
+# characters earlier. **So the exclusion is free on this corpus and the sentence is not what
+# protects those rows.** It stays because a row whose ONLY cue is that sentence is constructible
+# and IS lost when `nothing` is admitted — `core/fixtures/layer-debt-due-and-discharge` seeds
+# exactly that row and mutant M7 kills on it. Load-bearing for a reachable case, zero-cost on the
+# real one; both halves measured rather than either assumed.
+#
+# `never`. Vacuous on this corpus — admitting it acquits 0 of 29 and moves no row. A widening
+# that changes nothing today is the loaded gun `mechanism-design.md` describes, so it stays out.
+#
+# `not`. Admitting it acquits exactly ONE further row, and that acquittal is ACCIDENTAL: the
+# `not` governs a parenthetical about who dispatches a repair seat, several clauses from the
+# `remediation` cue it would silence. The row is a false positive either way, so admitting `not`
+# would reach the right verdict for the wrong reason — and a rule that is right by accident on
+# the one case available is a rule nobody can predict on the next one.
 #
 # THE FILED REMEDY WAS REFUTED BY BUILDING IT, and the refutation is the reusable part.
 # `PC-S340-UNDECLARED-CUE-CANNOT-TELL-A-REFERENCE-FROM-A-DECLARATION` asked to skip a row whose
