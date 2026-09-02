@@ -36,7 +36,7 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 41 SHIPPED AS `v0.478.0`, CORRECTED BY `v0.479.0`, AND THE CONSUMER PULLED IT. THE GAP IS ZERO AND PENDING IS 0. START AT BATCH 42.
+### BATCH 41 SHIPPED AS `v0.478.0`, CORRECTED BY `v0.479.0`, THE CONSUMER PULLED IT, AND THE DENOMINATOR FELL ON A PULL FOR THE FIRST TIME. GAP ZERO, PENDING 0. START AT BATCH 42.
 **THE FILED REMEDY WAS REFUTED BY BUILDING IT, AND THE REFUTATION IS THE BATCH'S REUSABLE
 LESSON.** `PC-S340-UNDECLARED-CUE-CANNOT-TELL-A-REFERENCE-FROM-A-DECLARATION` asked
 `audit-layer-debt.sh` to skip a row whose cue occurrences all sit INSIDE a resolvable
@@ -151,11 +151,18 @@ all 8 pre-pull FAILs were role `general-purpose` — exactly the class core's ne
 declares out of scope, so the benefit is causal rather than correlated. `audit-layer-debt.sh` went
 **29 → 19 UNDECLARED**, `OPEN` unchanged at 16, over a register that grew 318 → 322 rows.
 
-**THE DENOMINATOR HAS NOT MOVED AND THAT IS NOT A FAILURE. LIVE IS STILL 72.** The one candidate
-that closed is ANNOTATED `**ADOPTED UPSTREAM (v0.476.0, verified 2026-09-02)**` and **NOT YET
-ROTATED** — `ledger-rotate.sh` archives only on that annotation taken as a human act. **The
-denominator falls when the consumer ROTATES, not when the pull lands.** Ledger md5 moved
-`91deb97f…` → `dbce0d07…`, which is the close plus four adjudications being recorded.
+**THE DENOMINATOR FELL ON A PULL FOR THE FIRST TIME IN THIS PROGRAM: LIVE 72 → 71, ARCHIVE
+141 → 142.** It has fallen once before, at batch 40, and that was an operator carrying a REJECTION.
+This is the first time SHIPPING moved it. It took two acts, not one: the pull delivered the fix and
+the consumer then ROTATED the annotated entry. **`ledger-rotate.sh` archives only on
+`**ADOPTED UPSTREAM (v<version>, verified <date>)**` taken as a human act, so a pull alone never
+moves the denominator** — expect to ask for the rotation explicitly. Ledger md5 walked
+`91deb97f…` → `dbce0d07…` (close + four adjudications) → `a79811f7…` (rotation).
+
+**AND THE SCOREBOARD INVERTED EXACTLY AS THIS FILE PREDICTS IT WILL.** `DISCHARGED` FELL 18 → 17
+and `TERMINAL` rose 31 → 32, because the rotated id left `live.txt` and therefore left the
+DISCHARGED numerator. **A falling DISCHARGED here is the program succeeding, not regressing.**
+`CITED` fell 36 → 35 for the same reason.
 
 **THE REHEARSAL WAS RIGHT ON EVERY WORKLIST FIGURE AND WRONG ON ONE VERDICT, AND THE EXECUTING
 SESSION CAUGHT IT.** It predicted 2 `CLOSE-CANDIDATE`; the truth is 1. **A `file://` clone does not
@@ -177,10 +184,10 @@ checked there would have read as a pass having measured nothing.
 carries a discharged `HANDOFF POINT` record, so `ai-dlc-handoff-pending.sh` key 2 keeps returning
 pending. Consumer-side state; an ai-dlc session never writes there. **Operator's to clear.**
 
-**THE FIGURES, re-derived after the pull merged.** Ledger md5 **`dbce0d07…`**. **72 live, 141
-archived, 36 cited, 36 UNFILED.** DISCHARGED **18 raw / 17 corrected**, IN-FLIGHT **19**, UNTOUCHED
-**36**, overlap **1**, TERMINAL **31**; partition 18+19+36−1 = 72. `docs/backlog.md` **80 live / 63
-archived**. `CITED` rose and `UNFILED` fell by one for a reason unrelated to the pull: filing
+**THE FIGURES, re-derived after the pull merged AND the consumer rotated.** Ledger md5
+**`a79811f7…`**. **71 live, 142 archived, 35 cited, 36 UNFILED.** DISCHARGED **17 raw / 16
+corrected**, IN-FLIGHT **19**, UNTOUCHED **36**, overlap **1**, TERMINAL **32**; partition
+17+19+36−1 = 71. `docs/backlog.md` **80 live / 63 archived**. `CITED` rose and `UNFILED` fell by one for a reason unrelated to the pull: filing
 `BL-143` cites `PC-S312-TRUNK-PUSH-DECLINES-TO-POLICE-THE-TRUNK`, a live candidate, so that id now
 reads as in flight. Do not read it as consumer activity.
 
@@ -4042,12 +4049,12 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # dbce0d07... moved when the pull's close and adjudications landed; a MOVE alone is NOT an alarm -- check the id set too
-   wc -l < /tmp/live.txt    # 72
+   md5 -q "$L"              # a79811f7... after the pull AND the rotation; a MOVE alone is NOT an alarm -- check the id set too
+   wc -l < /tmp/live.txt    # 71
    wc -l < /tmp/unfiled.txt # 36 after the pull; BL-143 cites PC-S312, moving it to CITED
    ```
 
-   **THE BASELINE IS 72 LIVE CANDIDATES, 36 CITED, 36 UNFILED.** Live FELL for the first time in
+   **THE BASELINE IS 71 LIVE CANDIDATES, 35 CITED, 36 UNFILED.** Live FELL for the first time in
    this program: the operator carried the `IS-CORE` rejection into a graph session and that session
    rotated it together with `PC-S308-STEP1A-ROTATE-REMEDY-NO-SPRINT-START-DESTINATION`, which had
    been delivered at `v0.471.0` and stayed live only because the pull did not rotate it. **A

@@ -3717,6 +3717,24 @@ creates — that `--is-core` answers by membership — is the one that already c
 and the operator's session had no other token available. The vocabulary is the defect and it is
 upstream's: both `ledger-rotate.sh` and `ledger-reverify.sh` are core.
 
+**MEASURED AGAIN ON THE 0.471.0 -> 0.479.0 PULL, AND THE GAP IS NOT A ONE-OFF.** Driving
+`ledger-rotate.sh` in report mode against the consumer's live ledger after that pull: it names
+**FOUR entries CLOSED for re-verification but NOT archivable**, because each is a genuine close
+with no version — a withdrawal, or an absorption predating `base`. They stay in the live ledger
+and are re-reported on every run, and the script's own row is the only place they appear.
+Post-rotation the ledger carries **10 `ADOPTED UPSTREAM` occurrences and 1** in the
+`**ADOPTED UPSTREAM (v` form the rotator accepts, against an impossible-token control of 0. The
+executing session measured 11 and 2 immediately before the rotation; both readings are correct at
+their own moment, and the SPREAD is the point. **The gap between "closed" and "archivable" is nine
+occurrences wide on one ledger.**
+
+The four: `PC-S297-H2-SEEDS-STILL-VACUOUS-PURE-ECHO`,
+`PC-S300-ORIGIN-TAG-GATE-HAS-NO-WAIVER-FOR-TRACEABILITY-CITATIONS` (the withdrawn entry and its
+retained original), and `PC-S305-CHECK-17-BYPASS-CONSUMER-CASES-V8-V9-AND-A-PASSING-CONTROL`.
+**They were deliberately left stuck rather than papered over** — inventing a version to make them
+archivable would record an adoption that never happened, which is this entry's own defect pointed
+the other way.
+
 Sibling to `BL-068`, which records that the rotate acceptance test false-fails on the workflow it
 documents. Take them together or say which one you are closing.
 
