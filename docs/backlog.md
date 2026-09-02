@@ -3778,3 +3778,61 @@ changing the schema or accepting a prose predicate, and measuring the false-posi
 whichever you choose.
 
 verify: sh set -e; d=$(mktemp -d); printf '%s\n' '{"clause":"LC-E4","entry":"x/e.md","subject_digest":"a","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"The body-relocation half of that debt was NOT re-checked and the debt is therefore left open."}' '{"clause":"LC-E4","entry":"x/e.md","subject_digest":"a","verdict":"still-additive","recorded_utc":"2026-01-01T00:30:00Z","closes_owed":["OWED-X"],"reason":"Debt discharged. CORRECTION to the row recorded earlier for this entry: there is no body-relocation half; that sentence was an unverified inference and is withdrawn."}' '{"clause":"LC-E4","entry":"x/keep.md","subject_digest":"b","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"The split remains deferred to a later pull."}' > "$d/r.jsonl"; o="$(bash core/scripts/audit-layer-debt.sh --register "$d/r.jsonl" 2>/dev/null)"; grep -q 'keep\.md' <<<"$o" && ! grep -q 'x/e\.md\|^  e\.md' <<<"$o"
+
+## BL-143 — the absent-subject guard cannot spell the paths that most often go missing
+
+**Found by a peer session executing `docs/plans/graph-pull-0471-to-0479.md`**, 2026-09-02, and NOT
+fixed here — see the deferral reason below, which is a live constraint rather than difficulty.
+Distribution-internal, no `PC-` id, so under the provenance-first rule it ranks BELOW any PC-backed
+entry a sweep turns up.
+
+`ledger-reverify.sh` maps a non-zero `verify: sh` exit to `CLOSE-CANDIDATE`. Because a receipt
+whose SUBJECT is missing also exits non-zero — for the absence, not for a fix — the script carries
+`receipt_absent_subjects()` and routes such a row to `NEEDS-REVIEW` instead. Its own message says
+why: *"that is indistinguishable from exiting non-zero because the defect is gone — so this status
+cannot be read as 'fixed'."*
+
+**THE GUARD IS SCOPED BY AN ALLOW-LIST AND MOST CONSUMER PATHS FALL OUTSIDE IT.**
+
+    case "$p" in
+      docs/*|_bmad-output/*|scripts/*|.claude/*) ;;
+      *) continue ;;
+    esac
+
+`.git/hooks/pre-push` matches none of those prefixes and is skipped, as is any bare dotfile such
+as `.pre-commit-config.yaml`. So for exactly the subjects that a fresh checkout most often lacks,
+the guard is a check that cannot fire.
+
+**Reproduced in isolation against the shipping script** — a seeded one-entry ledger whose only
+receipt names an absent `.git/hooks/pre-push` emits:
+
+    CLOSE-CANDIDATE  PC-PROBE-ABSENT-HOOK  verify sh: no longer reproduces at theirs — likely absorbed
+
+That is an absorption that never happened, which this system calls its worst output.
+
+**IT HAS ALREADY COST A REAL FALSE CLOSE.** The `0.471.0 → 0.479.0` pull runbook's rehearsal
+recorded `2 CLOSE-CANDIDATE` where the live run correctly reports 1. Cause: a `git clone` does not
+carry `.git/hooks/`, and `PC-S312-TRUNK-PUSH-DECLINES-TO-POLICE-THE-TRUNK` carries two `verify: sh`
+receipts, the second of which reads `.git/hooks/pre-push`. Real consumer 314 bytes → rc=0 →
+`STILL-LIVE`; clone absent → rc=2 → `CLOSE-CANDIDATE`. **Had the guard covered that prefix the
+rehearsal would have said `NEEDS-REVIEW` and the false expectation would never have shipped.**
+
+**WHY IT IS FILED RATHER THAN FIXED, and the reason is not difficulty.** `ledger-reverify.sh` is
+currently NOT in the `0.471.0 → 0.479.0` range, and a pull against that exact range is in flight
+with its dry run already matched against the rehearsal. Editing this file now would move the range
+under the executing session and invalidate a comparison it has already made. Take it after that
+pull lands.
+
+**AND THE OBVIOUS WIDENING NEEDS ITS FALSE-POSITIVE SET MEASURED FIRST.** The allow-list is doing
+real work: receipt bodies are full of path-shaped tokens that are NOT consumer paths — `$WORK/`
+and `$d/` temp-dir fragments, `sed` substitution fragments, and DISTRIBUTION-relative `core/...`
+paths that correctly resolve nowhere under `$CONSUMER`. A naive widening turns every one of those
+into a spurious `NEEDS-REVIEW`, which suppresses real closes and is the opposite failure. Scope the
+widening to consumer-relative prefixes that genuinely exist (`.git/`, and bare dotfiles at the
+root), and measure the FP set over the reference ledger's 36 `verify: sh` receipts before shipping.
+
+Sibling to `BL-089`, which records that a non-zero exit meaning *"a precondition moved and I
+measured nothing"* is displayed identically to a genuine reproduction. Same class, opposite
+direction.
+
+verify: sh set -e; r="$PWD"; h="$(git -C "$r" rev-parse HEAD)"; w=$(mktemp -d); mkdir -p "$w/c/_bmad-output/ai-dlc-update" "$w/c/.claude"; printf '%s\n' '# l' '' '## PC-PROBE-ABSENT-HOOK — probe' '' 'Body.' '' 'verify: sh cd "$CONSUMER" && grep -qF sentinel .git/hooks/pre-push' > "$w/c/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; printf 'version: 0.471.0\ncommit: 31b51d48\nskill_version: 0.471.0\nskill_commit: 31b51d48\n' > "$w/c/.claude/.ai-dlc-version"; o="$(cd "$w/c" && bash "$r/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh" "$r" 31b51d48 "$w/c" "$h" 2>/dev/null)"; grep -q 'PC-PROBE-ABSENT-HOOK' <<<"$o" || exit 9; grep -qE '^NEEDS-REVIEW[[:space:]]+PC-PROBE-ABSENT-HOOK' <<<"$o"
