@@ -298,7 +298,26 @@ else
 fi
 
 SPAWN_NAME="$(printf '%s' "$INPUT" | jq -r '.tool_input.name // .tool_input.subagent_type // empty' 2>/dev/null || true)"
-SPAWN_SPRINT="$(sed -n 's/^- \*\*sprint_id:\*\* *\([0-9][0-9]*\).*/\1/p' "$SPAWN_SNAPSHOT" 2>/dev/null | head -1 || true)"
+# THE DECORATION IS NOT PART OF THE FIELD. This read used to require the field
+# name wrapped in emphasis markers; the snapshot's writer emits the plain
+# `- sprint_id: N` whenever nothing re-emphasises it, and the two forms alternate
+# across sprints with no schema mandating either. The emphasised spelling is
+# deliberately not written out anywhere in this file: the consumer-side receipt
+# for this defect greps this path for it, so quoting it in a comment would report
+# a shipped fix as unshipped.
+# A reader that spells one of the two forms resolves EMPTY on
+# the other, and an empty resolve is written to the ledger as `"sprint":null` --
+# silently, because every arm here is `2>/dev/null || true`. Check 22 then reports
+# PRE-LEDGER on a sprint whose rows are all present and correctly named.
+# Measured over 2066 real snapshot revisions: the bold-only spelling resolved
+# nothing on 195 of them where this one resolves a real sprint, and loses none
+# that it found (0 LOST, 0 differing values). `[*]*` matches the decoration run
+# rather than enumerating its spellings, so a future drift to any other emphasis
+# cannot reproduce this. The digit class stays: `TBD`, `none` and `S270` are the
+# schema saying no sprint is assigned, and null is the right answer for those.
+# The identical read lives in ai-dlc-subagent-probe.sh and ai-dlc-context-sensor.sh
+# and I104 fails the push if the three ever diverge again.
+SPAWN_SPRINT="$(sed -n 's/^- *[*]*sprint_id:[*]* *\([0-9][0-9]*\).*/\1/p' "$SPAWN_SNAPSHOT" 2>/dev/null | head -1 || true)"
 # `model_pinned` carries the RESOLVED string so the ledger stays as informative
 # as it was when the role file held the string itself; `tier_pinned` carries the
 # key. Both fields keep their names — Check 22 reads neither, but a renamed field

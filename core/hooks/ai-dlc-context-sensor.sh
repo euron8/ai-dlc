@@ -280,7 +280,9 @@ case "${CUR_SIZE:-}" in ''|*[!0-9]*) CUR_SIZE=0 ;; esac
 LEAD_MODEL="$(printf '%s' "$LINE" | jq -r '.message.model // empty' 2>/dev/null || true)"
 if [ -n "$LEAD_MODEL" ]; then
   ARM_LOG="${STATE_DIR}/arm-log.jsonl"
-  ARM_SPRINT="$(sed -n 's/^- \*\*sprint_id:\*\* *\([0-9][0-9]*\).*/\1/p' "$SNAPSHOT_FILE" 2>/dev/null | head -1)"
+  # Decoration is not part of the field -- see the measurement in
+  # ai-dlc-dispatch-guard.sh's copy of this read. I104 binds the three.
+  ARM_SPRINT="$(sed -n 's/^- *[*]*sprint_id:[*]* *\([0-9][0-9]*\).*/\1/p' "$SNAPSHOT_FILE" 2>/dev/null | head -1)"
   ARM_LAST="$(tail -1 "$ARM_LOG" 2>/dev/null || true)"
   LAST_MODEL="$(printf '%s' "$ARM_LAST" | jq -r '.lead_model // empty' 2>/dev/null || true)"
   LAST_SPRINT="$(printf '%s' "$ARM_LAST" | jq -r '(.sprint // empty) | tostring' 2>/dev/null || true)"
