@@ -36,7 +36,7 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 41 SHIPPED AS `v0.478.0`, CORRECTED BY `v0.479.0`. THE GAP IS EIGHT RELEASES AND PENDING IS 4. START AT BATCH 42.
+### BATCH 41 SHIPPED AS `v0.478.0`, CORRECTED BY `v0.479.0`, AND THE CONSUMER PULLED IT. THE GAP IS ZERO AND PENDING IS 0. START AT BATCH 42.
 **THE FILED REMEDY WAS REFUTED BY BUILDING IT, AND THE REFUTATION IS THE BATCH'S REUSABLE
 LESSON.** `PC-S340-UNDECLARED-CUE-CANNOT-TELL-A-REFERENCE-FROM-A-DECLARATION` asked
 `audit-layer-debt.sh` to skip a row whose cue occurrences all sit INSIDE a resolvable
@@ -108,16 +108,6 @@ ran. The subject came from the standing `PC-S340-*` corpus, ranked by consequenc
 remaining candidates' own status lines were read before ranking** — the thing this block has asked
 for since batch 1.
 
-**THE FIGURES, re-derived AFTER `v0.479.0` MERGED, every command re-run with its controls in the
-same invocation.** Ledger md5 **`91deb97f…`** — it did not move at any point in this batch, so
-nothing was filed or rotated on the consumer's side. **72 live candidates, 141 archived, 35 cited,
-37 UNFILED.** DISCHARGED **18 raw / 17 corrected**, IN-FLIGHT **18**, UNTOUCHED **37**, overlap
-**1**, TERMINAL **31**. Partition control closes on the raw figure: 18+18+37−1 = 72. Presence
-controls 1/1/1/1; absence controls 0 and 0; discharged-but-unnamed **0**, so the id reached a
-commit MESSAGE and not only the CHANGELOG. `docs/backlog.md` **79 live / 63 archived** against a
-ceiling of 100 — `BL-142` was filed by `v0.479.0` and deliberately NOT rotated, so live rose by one. **The denominator did not move, and shipping here never moves it** — only a
-rejection reaching the party holding the candidate does, which happened once, at batch 40.
-
 **THE CONSUMER WROTE WHILE THIS RAN AND THE SWEEP IS UNAFFECTED.** Its dirty count went 8 → 16 on
 branch `ai-dlc/carry-over/pool-pnl-backlog-triage`; the ledger md5 did not move, so nothing was
 filed or rotated there.
@@ -143,6 +133,61 @@ INSTALLED `audit-layer-debt.sh` and this distribution's fixed copy, run over tha
 318-row register with a `cmp -s` control asserting the two differ (15934 vs 20006 bytes), report
 **29 against 19**. So the pull removes **10 false rows the consumer is looking at today** —
 observable, not latent. Report that alongside the gap; it does not authorize anything.
+
+**THE `0.471.0 → 0.479.0` PULL RAN AND MERGED, AND THE GAP IS ZERO FOR THE FIRST TIME SINCE BATCH
+37.** A graph session executed `docs/plans/graph-pull-0471-to-0479.md` under operator
+authorization; it landed as the consumer's PR #1005, 18 files, +1909/-321. **A ZERO GAP IS A
+STATE, NOT AN ACHIEVEMENT THAT STAYS TRUE** — it goes non-zero on the next release that discharges
+anything. Re-derive it; do not read this sentence.
+
+**EVERY FIGURE HERE WAS RE-DERIVED ON THIS SIDE AFTER THE MERGE**, not taken from the executing
+session's report. All of theirs survived it. Consumer stamp `0.479.0`/`7dd68c34` on all four
+fields against a distribution `VERSION` of `0.479.0`; `PENDING 0`, with all four candidates
+resolving to releases at or below what the consumer now runs.
+
+**THE PULL DELIVERED A GATE THAT WAS FAILING ON CORRECT DATA, WHICH IS WHY THIS ONE WAS WORTH
+RUNNING.** `validate-spawn-ledger.sh` went **exit 1 → exit 0** on the consumer's live sprint, and
+all 8 pre-pull FAILs were role `general-purpose` — exactly the class core's new Check 22 text
+declares out of scope, so the benefit is causal rather than correlated. `audit-layer-debt.sh` went
+**29 → 19 UNDECLARED**, `OPEN` unchanged at 16, over a register that grew 318 → 322 rows.
+
+**THE DENOMINATOR HAS NOT MOVED AND THAT IS NOT A FAILURE. LIVE IS STILL 72.** The one candidate
+that closed is ANNOTATED `**ADOPTED UPSTREAM (v0.476.0, verified 2026-09-02)**` and **NOT YET
+ROTATED** — `ledger-rotate.sh` archives only on that annotation taken as a human act. **The
+denominator falls when the consumer ROTATES, not when the pull lands.** Ledger md5 moved
+`91deb97f…` → `dbce0d07…`, which is the close plus four adjudications being recorded.
+
+**THE REHEARSAL WAS RIGHT ON EVERY WORKLIST FIGURE AND WRONG ON ONE VERDICT, AND THE EXECUTING
+SESSION CAUGHT IT.** It predicted 2 `CLOSE-CANDIDATE`; the truth is 1. **A `file://` clone does not
+carry `.git/hooks/`**, so a receipt reading the consumer's installed hooks exits non-zero for the
+ABSENCE — and non-zero is `CLOSE-CANDIDATE` in that tool. That is a FALSE CLOSE manufactured by the
+rehearsal, filed as `BL-143`. **THE TWO RE-VERIFY TOOLS USE OPPOSITE EXIT CONVENTIONS**:
+`ledger-reverify.sh` reads exit 0 as STILL-LIVE, `backlog-reverify.sh` reads exit 0 as
+CLOSE-CANDIDATE. Carrying one into the other is how a close gets recorded backwards, and it is how
+this file's author misdiagnosed it before reading the case statement.
+
+**TWO THINGS THE RUNBOOK DID NOT PREDICT AND A FUTURE ONE MUST.** `emit-report --verify` exits 1
+immediately BEFORE the apply, correctly: recording the adjudications clears the HARD rows and makes
+the rendered region stale, so **the union gate fires on the executor's own verdicts**. And a
+done-when that names a COMMAND but not a POPULATION is unfalsifiable — the consumer's sprint 308
+has no rows and returns exit 3, byte-identical to the impossible-sprint control, so criterion 2
+checked there would have read as a pass having measured nothing.
+
+**LEFT OPEN ON THE CONSUMER, FLAGGED AND NOT ACTIONED.** `_bmad-output/pipeline-snapshot.md` still
+carries a discharged `HANDOFF POINT` record, so `ai-dlc-handoff-pending.sh` key 2 keeps returning
+pending. Consumer-side state; an ai-dlc session never writes there. **Operator's to clear.**
+
+**THE FIGURES, re-derived after the pull merged.** Ledger md5 **`dbce0d07…`**. **72 live, 141
+archived, 36 cited, 36 UNFILED.** DISCHARGED **18 raw / 17 corrected**, IN-FLIGHT **19**, UNTOUCHED
+**36**, overlap **1**, TERMINAL **31**; partition 18+19+36−1 = 72. `docs/backlog.md` **80 live / 63
+archived**. `CITED` rose and `UNFILED` fell by one for a reason unrelated to the pull: filing
+`BL-143` cites `PC-S312-TRUNK-PUSH-DECLINES-TO-POLICE-THE-TRUNK`, a live candidate, so that id now
+reads as in flight. Do not read it as consumer activity.
+
+**THE NEXT PULL IS STILL NOT AUTHORIZED, AND A ZERO GAP IS NOT A STANDING PERMISSION.**
+`operator-rulings.md` governs unchanged: a consumer pull is operator-initiated, readiness is not
+authorization, a `PENDING` count is not a decision about WHEN, and one is never handed to a peer
+session. The authorization that ran `0.471.0 → 0.479.0` was for THAT pull and is SPENT.
 
 **`v0.479.0` CORRECTS `v0.478.0`, AND THE CORRECTION IS WHERE THE BATCH'S REAL LESSONS ARE.**
 Two adversarial hands reported AFTER the merge — the fourth and fifth time in this program — and
@@ -191,12 +236,6 @@ express it — its own description scopes it to a DIFFERENT verdict, and both ro
 `still-additive`. Three remedies were built and scored: entry-grain silences 3 of 19 with **2 of
 the 3 wrong**; a retraction token silences exactly 1 of 19 correctly but keys on free prose over a
 5-row corpus; the shape the defect actually has is a schema field, which is a different subsystem.
-
-**THE GAP IS EIGHT RELEASES AND PENDING IS 4.** The consumer stamp reads `0.471.0`/`31b51d48` on
-all four fields against a distribution `VERSION` of `0.479.0`. PENDING stays 4 rather than 5
-because `v0.479.0` corrects `v0.478.0` and carries the SAME candidate id. **A PULL IS NOT
-AUTHORIZED.** `operator-rulings.md` governs: readiness is not authorization, a PENDING count is
-not a decision about WHEN, and a pull is never handed to a peer session.
 
 **THE FIRST HAND WENT IDLE ACROSS TWO DIRECT ASKS AND DELIVERED NOTHING; A SECOND WAS SPAWNED
 RATHER THAN MERGING ON ITS SILENCE.** Every finding in this release — the vacuity of the filed
@@ -3663,8 +3702,10 @@ so no block written before it changes verdict.
    interrupt; if you genuinely need to ask, ask the OPERATOR whether to, and put the peer's current
    state into the question.
 
-   **THE GAP IS EIGHT RELEASES AND PENDING IS 4** — the consumer stamp reads `0.471.0`/`31b51d48`
-   on all four fields and this distribution is `0.479.0`. Your batch widens the gap to nine. That is
+   **THE GAP IS ZERO AND PENDING IS 0** — the consumer pulled `0.471.0 → 0.479.0` and its stamp
+   reads `0.479.0`/`7dd68c34` on all four fields, matching this distribution. **Your batch will
+   reopen the gap at one release, which is expected and is not a reason to reorder anything.**
+   Re-derive both; a zero gap is a state, not a property. That is
    not permission to close it: a pull is operator-initiated, readiness is not authorization, a
    `PENDING` count is not a decision about WHEN, and one is never handed to a peer session.
    `operator-rulings.md` governs.
@@ -3951,7 +3992,7 @@ so no block written before it changes verdict.
    `predicate-differential.sh` fingerprints the corpus either side of its own run for exactly this
    reason; a hand-rolled measurement has no such guard.
 
-1a. **`docs/backlog.md` IS AT 79 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
+1a. **`docs/backlog.md` IS AT 80 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
    is not blocked. That is not licence to file rather than fix — the standing correction in the
    resume block still governs — but a filing no longer costs a rotation, and rotating still means
    CLOSING, which needs a measurement.
@@ -4001,12 +4042,12 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 91deb97f... unchanged across the whole of batch 41; a MOVE alone is NOT an alarm -- check the id set too
+   md5 -q "$L"              # dbce0d07... moved when the pull's close and adjudications landed; a MOVE alone is NOT an alarm -- check the id set too
    wc -l < /tmp/live.txt    # 72
-   wc -l < /tmp/unfiled.txt # 37 after batch 41 filed and rotated BL-141
+   wc -l < /tmp/unfiled.txt # 36 after the pull; BL-143 cites PC-S312, moving it to CITED
    ```
 
-   **THE BASELINE IS 72 LIVE CANDIDATES, 35 CITED, 37 UNFILED.** Live FELL for the first time in
+   **THE BASELINE IS 72 LIVE CANDIDATES, 36 CITED, 36 UNFILED.** Live FELL for the first time in
    this program: the operator carried the `IS-CORE` rejection into a graph session and that session
    rotated it together with `PC-S308-STEP1A-ROTATE-REMEDY-NO-SPRINT-START-DESTINATION`, which had
    been delivered at `v0.471.0` and stayed live only because the pull did not rotate it. **A

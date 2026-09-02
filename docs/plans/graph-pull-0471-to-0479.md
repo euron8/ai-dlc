@@ -1,12 +1,19 @@
-# Pull the graph consumer from 0.471.0 to 0.479.0
+# DISCHARGED — DO NOT EXECUTE — pull the graph consumer from 0.471.0 to 0.479.0
 
-## RESUME HERE
+**THIS RUNBOOK IS SPENT. IT RAN, IT MERGED, AND IT IS A RECORD RATHER THAN AN INSTRUCTION.**
+Do not follow the numbered actions below; they describe work that is finished. Read
+`## Discharge` at the foot for what the run found, and read the rest only as a worked example.
 
-**You were started with one sentence: `READ and FOLLOW docs/plans/graph-pull-0471-to-0479.md`.**
-This block is the only current status record in this file.
+The pull landed on 2026-09-02 as the consumer's PR #1005. **The delivery gap is ZERO and PENDING
+is 0** — re-derived on the distribution side after the merge, not taken from the executing
+session's report.
 
-**STATE: WRITTEN AND REHEARSED. NOT STARTED.** The rehearsal ran on `file://` clones of both
-trees and every figure in `## Rehearsal` came from it. Nothing has been written to the consumer.
+## RESUME HERE — HISTORICAL
+
+**This block was the status record while the file was live. It is kept as written.**
+
+**STATE AT THE TIME: WRITTEN AND REHEARSED, NOT STARTED.** The rehearsal ran on `file://` clones
+of both trees and every figure in `## Rehearsal` came from it.
 
 **THIS FILE BEING GREEN IS NOT AUTHORIZATION.** `.claude/rules/operator-rulings.md` is
 unconditional: a consumer pull is operator-initiated, readiness is not authorization, and a
@@ -231,5 +238,85 @@ directly with no pipe, because zsh has no `PIPESTATUS`:
 
 ## Discharge
 
-*(empty — the executing session fills this in, then retitles this file
-`DISCHARGED — DO NOT EXECUTE`.)*
+**Merged 2026-09-02 as the consumer's PR #1005**, squash-merged onto its carry-over branch, 18
+files, +1909/-321. Executed by a graph session under operator authorization; this section was
+written on the distribution side because actions 10 and 11 write to a file that session correctly
+treats as READ ONLY.
+
+**EVERY FIGURE BELOW WAS RE-DERIVED HERE RATHER THAN TRANSCRIBED**, because a number from another
+session is a hypothesis until re-run. All of the executing session's figures survived that.
+
+### What the rehearsal predicted correctly
+
+| claim | outcome |
+|---|---|
+| 13 rows, 11 `UPSTREAM-ONLY`, 1 `UPSTREAM-ONLY-ADD`, 1 `DIST-ONLY-SKIP`, 0 `->CLASSIFY` | exact |
+| templates 4, all unchanged | exact |
+| `SELF-UPDATE-DEFER`, no safe stop, slice folds into the gated apply | exact; `--carried-machinery-slice` |
+| bootstrapping hazard zero | held; no `--stamp readopt` decision fell to the old gate |
+| `audit-layer-debt.sh` `UNDECLARED` 29 → 19, `OPEN` unchanged at 16 | exact |
+| `validate-spawn-ledger.sh` exit 1 → exit 0 | exact |
+| only ONE candidate closes | exact |
+
+Re-derived post-merge on the distribution side: stamp `0.479.0` / `7dd68c34` on all four fields
+with `installed_at` and `upstream` preserved; `validate-spawn-ledger.sh` sprint 307 **exit 0**;
+`audit-layer-debt.sh` **19 UNDECLARED / 16 OPEN** over **322** register rows; both installed
+copies now byte-identical to the distribution; **0 `CLOSE-CANDIDATE`** rows remain.
+
+### What the rehearsal got WRONG, and it was corrected mid-run
+
+The table originally said **2 `CLOSE-CANDIDATE`**; the live run correctly reported 1. The second
+was a FALSE CLOSE the rehearsal manufactured: a `git clone` does not carry `.git/hooks/`, and the
+entry it fired on carries TWO `verify: sh` receipts, the second of which reads
+`.git/hooks/pre-push`. The executing session caught it and was right; the table was corrected
+before the apply. Filed as `BL-143` — the absent-subject guard that exists to prevent exactly this
+is scoped by an allow-list that cannot spell `.git/*`, so it is a check that cannot fire.
+
+### What the rehearsal did NOT predict, and what it cost
+
+**`emit-report --verify` exits 1 immediately BEFORE the apply, and that is correct behaviour.**
+Recording the four `LC-E4` verdicts clears the HARD rows and makes the rendered region stale, so
+**the union gate fires on your own adjudications**. Regenerating and re-verifying is the prescribed
+path and it cleared. Nothing in the step text makes that obvious, and a session that reads the
+exit as a blocker will stop with the work already correct. **A future runbook should say this.**
+
+**CRITERION 2 CANNOT BE MEASURED ON AN EMPTY SPRINT, AND THIS FILE DID NOT SAY WHICH SPRINT.** It
+said "the live sprint". Measured after the merge: sprint 307 carries 128 rows and returns exit 0;
+**sprint 308 has no rows and returns exit 3 — byte-identical to the impossible-sprint control.** A
+done-when checked on 308 would have been unfalsifiable while reading as a pass. The executing
+session noticed and used 307. **Name the population a criterion is measured over, not just the
+command.**
+
+**The benefit is causally confirmed rather than correlated.** All 8 pre-pull FAILs were role
+`general-purpose` — exactly the class core's new Check 22 text declares out of scope.
+
+### State after the pull, derived here
+
+Delivery gap **ZERO** (consumer 0.479.0, distribution 0.479.0). **PENDING 0** — all four
+candidates resolved to releases at or below what the consumer now runs.
+
+Ledger md5 moved `91deb97f…` → `dbce0d07…`, which is the consumer recording the close and the four
+adjudications. **LIVE is still 72 and the archive still 141**: the closed candidate is ANNOTATED
+`**ADOPTED UPSTREAM (v0.476.0, verified 2026-09-02)**` but NOT YET ROTATED, and `ledger-rotate.sh`
+archives only on an explicit annotation taken as a human act. **The denominator falls when the
+consumer rotates, not when the pull lands** — do not read 72 as the pull having failed to move
+anything.
+
+`CITED` rose 35 → 36 and `UNFILED` fell 37 → 36 for a reason that has nothing to do with the pull:
+filing `BL-143` here cites `PC-S312-TRUNK-PUSH-DECLINES-TO-POLICE-THE-TRUNK`, a live candidate, so
+that id now reads as in flight. An incidental effect of a filing, recorded so the next sweep does
+not read it as consumer activity.
+
+### Left open on the consumer, flagged and NOT actioned
+
+`_bmad-output/pipeline-snapshot.md` still carries a discharged `HANDOFF POINT` record, so
+`ai-dlc-handoff-pending.sh` key 2 keeps returning pending and the Stop guard demands a resume block
+every turn. It is consumer-side state; an ai-dlc session never writes there. **Operator's to
+clear.**
+
+### What a future runbook should copy
+
+Name the sprint or population every criterion is measured over. Say that the union gate fires on
+the executor's own adjudications. And state that a `file://` clone cannot rehearse a receipt
+reading anything outside the tracked tree — that class of receipt yields a false CLOSE in
+rehearsal specifically, which is the direction that matters.
