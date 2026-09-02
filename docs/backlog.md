@@ -3691,60 +3691,6 @@ for as long as the allowlist has existed.
 
 verify: sh set -e; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; V=$PWD/core/scripts/validate-artifact-derivations.sh; cd "$d"; printf 'alpha\n' > f.txt; printf '```derived\n$ sed -n \047w canary\047 f.txt\n0\n```\n' > a.md; AI_DLC_PROJECT_ROOT="$d" bash "$V" a.md >/dev/null 2>&1 || true; [ -e canary ] && exit 1; exit 0
 
-## BL-139 — the un-adopted arm shipped as a REFUSAL, and a refusal there loses the clause it protects
-
-**Provenance: `PC-S340-STAMP-READOPT-GATE-IS-BLIND-TO-AN-ADDITIVE-CHANGE-AND-TO-A-REWRITTEN-BODY`**,
-the same candidate `BL-138` closed. **FIXED in `v0.477.0`**, which corrects `v0.476.0`. Raised by a
-late adversarial hand and re-derived here against the consumer's own history before acting on it.
-
-**A body is a REWRITE by definition, so the mirror predicate inherits the defect it fixes.** The
-filing's own claim is that a line-literal test cannot see a body that REWORDED what it copied;
-`unadopted_lines()` is that test with the sign flipped, so it cannot see a body that adopted
-upstream's addition by rewording — and `v0.476.0` REFUSED on that.
-
-**Measured on 27 real adjudications, not on a constructed case.** Every commit in the reference
-consumer's history where an override's `base_sha` moved, with the body as it stood when the stamp
-was taken — `--merge` writes the body and `--stamp` rewrites only `base_sha`, and both land in one
-commit. 35 events, **27 re-adoptions / 8 reaffirms**, split by the tool's own
-`RE-AFFIRMED against <sha>` record. Scored against three implementations, each asserted to differ
-from the others first (27103 / 34243 / 36938 bytes):
-
-    pre-v0.476.0  allows 27/27      (it must -- these stamps happened)
-    v0.476.0      allows 10/27      -> 17 newly refused: 7 unadopted, 10 stale
-    v0.477.0      allows 17/27      -> the 7 unadopted refusals are gone
-
-**The escape is worse than the wedge, which inverts the argument that shipped it.** `v0.476.0`
-recorded that the refusal "terminates rather than wedging" because `--stamp reaffirm --note`
-advances `base_sha`. True, and that is the defect: a falsely refused re-adoption routed to
-reaffirm is re-stamped, so the clause is never offered again — permanently, under a note asserting
-the consumer declined text it had already adopted. That is the failure this file exists to
-prevent, reached THROUGH the new arm instead of around it.
-
-**So the un-adopted direction REPORTS.** `--check` prints the panel and exits 0 when that is the
-only finding; `--stamp readopt` prints it and lands. The filed defect was SILENCE, and silence is
-what is gone. Superseded text still refuses, unchanged.
-
-**An HTML comment is not the body either, and the frontmatter fix left this target open.** The same
-upstream lines pasted into `<!-- … -->` inside the body scored as adoption, against a near-miss
-control of unrelated text in the same place that did not — and `--check` prints the offending
-lines verbatim, so the tool emitted the exact text that silenced it. Comment spans are stripped
-before flattening, both directions.
-
-**Two figures `BL-138` published are corrected.** Its "false-positive set 0 over the consumer's 8
-live overrides" was a check that could not fire: all 15 shadowed anchors are byte-identical
-`base_sha`→`origin/main`, derived two ways, while the enclosing files moved hard — `OK` was the
-only reachable verdict, so that FP set is UNMEASURABLE rather than zero. And its "5 lines absent
-from the body" holds for the PRE-merge body it names and reads as 1 against the body at stamp
-time, because the operator's merge had already adopted 4 of the 5 verbatim.
-
-**The 10 surviving refusals are the superseded direction and are the filed defect working.** Of 38
-carried stale lines, 25 are re-wraps and 13 are a core line inside a longer body line. The one
-event resting entirely on the second kind was adjudicated by reading it — both matches are the
-body carrying core's superseded clause, extended or re-flowed. The other nine are not
-individually adjudicated and are **not** claimed.
-
-verify: sh set -e; RO="${RECEIPT_SUBJECT:-$PWD/core/skills/ai-dlc-update/reconcile/readopt-override.sh}"; ROOT="$(bash "$PWD/core/fixtures/layer-readopt-gate/seed.sh")"; trap 'rm -rf "$ROOT"' EXIT; D="$ROOT/dist"; C="$ROOT/consumer"; O="$C/.claude/skills/ai-dlc/overrides"; CL='**A NEW UPSTREAM CLAUSE ADDED TO THE SWEEP RULE**, recorded here and nowhere else in core.'; printf '\n%s\n' "$CL" >> "$D/core/skills/ai-dlc/SKILL.md"; git -C "$D" -c user.email=f@x -c user.name=f commit -aqm additive; T="$(git -C "$D" rev-parse --short HEAD)"; A="$O/SKILL__Rule-19-nested.md"; B="$(sed -n 's/^base_sha:[[:space:]]*//p' "$A" | head -1)"; out="$(bash "$RO" "$D" "$T" "$C" "$A" --check 2>&1)"; printf '%s' "$out" | grep -q 'UNADOPTED-CORE-TEXT'; bash "$RO" "$D" "$T" "$C" "$A" --check >/dev/null 2>&1; bash "$RO" "$D" "$T" "$C" "$A" --stamp readopt >/dev/null 2>&1; [ "$(sed -n 's/^base_sha:[[:space:]]*//p' "$A" | head -1)" = "$T" ]; F="$O/fm.md"; printf -- '---\nshadows: SKILL.md#Rule 19\nbase_sha: %s\nreason: we decline %s\n---\n\n## Rule 19 -- Sweep (CONSUMER OVERRIDE)\n\nConsumer sweep rules.\n' "$B" "$CL" > "$F"; printf '%s' "$(bash "$RO" "$D" "$T" "$C" "$F" --check 2>&1)" | grep -q 'UNADOPTED-CORE-TEXT'; H="$O/hc.md"; printf -- '---\nshadows: SKILL.md#Rule 19\nbase_sha: %s\nreason: consumer sweep rules.\n---\n\n## Rule 19 -- Sweep (CONSUMER OVERRIDE)\n\nConsumer sweep rules.\n\n<!--\n%s\n-->\n' "$B" "$CL" > "$H"; printf '%s' "$(bash "$RO" "$D" "$T" "$C" "$H" --check 2>&1)" | grep -q 'UNADOPTED-CORE-TEXT'; P="$O/ad.md"; printf -- '---\nshadows: SKILL.md#Rule 19\nbase_sha: %s\nreason: consumer sweep rules.\n---\n\n## Rule 19 -- Sweep (CONSUMER OVERRIDE)\n\nConsumer sweep rules.\n\n%s\n' "$B" "$CL" > "$P"; ! printf '%s' "$(bash "$RO" "$D" "$T" "$C" "$P" --check 2>&1)" | grep -q 'UNADOPTED-CORE-TEXT'
-
 ## BL-140 — the ledger's close vocabulary has one token and it asserts the opposite of a rejection
 
 **Surfaced by the operator carrying an adjudication into the reference consumer**, 2026-09-02, and

@@ -144,19 +144,23 @@ section changed.
 sentence REWORDED — "relocate" where core says "archive" — is reachable by no containment test
 over core's own words. On the motivating entry the UNADOPTED direction catches the file anyway.
 
-**THE FIGURES, re-derived after `v0.476.0` merged.** Ledger md5 **`6d84cbec…`**, unmoved across
-the whole batch — **74 live candidates, 139 archived, 34 cited, 40 UNFILED**. DISCHARGED **17
-raw / 16 corrected**, IN-FLIGHT **18**, UNTOUCHED **40**, overlap **1**, TERMINAL **31**.
-Partition control closes on the raw figure: 17+18+40−1 = 74. Presence controls 1/1/1/1; absence
-controls 0 and 0. `docs/backlog.md` **77 live / 61 archived** against a ceiling of 100. The
-partition moved by exactly one, out of UNTOUCHED and into DISCHARGED.
+**THE FIGURES, re-derived after `v0.477.0` merged AND after the operator's `IS-CORE` delivery.**
+Ledger md5 **`91deb97f…`** — it held at `6d84cbec…` through both releases and moved only when the
+consumer recorded the adjudication. **72 live candidates, 141 archived, 34 cited, 38 UNFILED.**
+DISCHARGED **17 raw / 16 corrected**, IN-FLIGHT **18**, UNTOUCHED **38**, overlap **1**,
+TERMINAL **31**. Partition control closes on the raw figure: 17+18+38−1 = 72. Presence controls
+1/1/1/1; absence controls 0 and 0. `docs/backlog.md` **78 live / 62 archived** against a ceiling
+of 100. **THE DENOMINATOR FELL FOR THE FIRST TIME**, by two, and not because this program shipped
+— because a rejection finally reached the party holding the candidate.
 
 **THE CONSUMER WROTE WHILE THIS RAN AND THE SWEEP IS UNAFFECTED.** Its dirty count went 28 → 29
 on branch `ai-dlc/carry-over/pool-pnl-backlog-triage`; the ledger md5 did not move, so nothing
 was filed or rotated there.
 
-**THE GAP IS FIVE RELEASES AND PENDING IS 3 — both DERIVED, with controls.** The consumer stamp
-reads `0.471.0`/`31b51d48` on all four fields against a distribution `VERSION` of `0.476.0`.
+**THE GAP IS SIX RELEASES AND PENDING IS 3 — both DERIVED, with controls.** The consumer stamp
+reads `0.471.0`/`31b51d48` on all four fields against a distribution `VERSION` of `0.477.0`.
+PENDING stays 3 rather than 4 because `v0.477.0` corrects `v0.476.0` and carries the SAME
+candidate id.
 PENDING is batch 38's candidate at `v0.472.0`, batch 39's at `v0.474.0` and batch 40's at
 `v0.476.0`, each resolved to the release that FIRST named it, against an impossible-id control of
 0 and a known-present control of 5. **A PULL IS NOT AUTHORIZED.** `operator-rulings.md` governs.
@@ -196,9 +200,11 @@ fourteen files, a per-file prose judgement — not one subject); and
 `IS-CORE-ANSWERS-BY-DECLARED-GLOB-NOT-BY-MEMBERSHIP` (REJECTED by-design, an adjudication owed to
 the consumer, not work).
 
-**`IS-CORE`'s REJECTION IS STILL OWED AND HAS NOW SURVIVED SEVEN BATCHES.** A rejection is not a
-filing and nothing here moves it out of UNFILED. The brief is written at
-`docs/reviews/graph-s340-adjudication-brief.md` §1. **Carrying it is the operator's.**
+**`IS-CORE` IS DISCHARGED — the operator carried it, and it is the only thing that could have.**
+Recorded and rotated by the consumer at `a4304cbfc`. Do not re-raise it. What it left behind is
+`BL-140`: the ledger's close vocabulary has ONE token, `**ADOPTED UPSTREAM (v<digit>`, and no form
+for a rejection — so the entry is archived under an annotation claiming upstream ADOPTED it,
+naming the release that REVERTED that very fix.
 
 ### BATCH 39 SHIPPED AS `v0.474.0`, CORRECTED BY `v0.475.0`. BATCH 40 HAS SINCE RUN; TAKE THE STATE FROM THE BLOCK ABOVE, NOT FROM THIS HEADING.
 
@@ -3449,8 +3455,8 @@ so no block written before it changes verdict.
    interrupt; if you genuinely need to ask, ask the OPERATOR whether to, and put the peer's current
    state into the question.
 
-   **THE GAP IS FIVE RELEASES AND PENDING IS 3** — the consumer stamp reads `0.471.0`/`31b51d48`
-   on all four fields and this distribution is `0.476.0`. Your batch widens the gap to six. That is
+   **THE GAP IS SIX RELEASES AND PENDING IS 3** — the consumer stamp reads `0.471.0`/`31b51d48`
+   on all four fields and this distribution is `0.477.0`. Your batch widens the gap to seven. That is
    not permission to close it: a pull is operator-initiated, readiness is not authorization, a
    `PENDING` count is not a decision about WHEN, and one is never handed to a peer session.
    `operator-rulings.md` governs.
@@ -3774,15 +3780,16 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 6d84cbec... UNMOVED across the whole of batch 40; a MOVE alone is NOT an alarm -- check the id set too
-   wc -l < /tmp/live.txt    # 74
-   wc -l < /tmp/unfiled.txt # 40 after batch 40 rotated BL-138
+   md5 -q "$L"              # 91deb97f... moved when the consumer recorded the IS-CORE rejection; a MOVE alone is NOT an alarm -- check the id set too
+   wc -l < /tmp/live.txt    # 72
+   wc -l < /tmp/unfiled.txt # 38 after batch 40 rotated BL-138 and the consumer rotated TWO candidates
    ```
 
-   **THE BASELINE IS 74 LIVE CANDIDATES, 34 CITED, 40 UNFILED.** Live is unchanged since the
-   0.471.0 pull; cited rose and unfiled fell by one because batch 40 FILED its subject here and
-   rotated the entry, which is the only way a candidate leaves UNTOUCHED without the consumer
-   moving. A higher LIVE count means the consumer filed while nobody was looking.
+   **THE BASELINE IS 72 LIVE CANDIDATES, 34 CITED, 38 UNFILED.** Live FELL for the first time in
+   this program: the operator carried the `IS-CORE` rejection into a graph session and that session
+   rotated it together with `PC-S308-STEP1A-ROTATE-REMEDY-NO-SPRINT-START-DESTINATION`, which had
+   been delivered at `v0.471.0` and stayed live only because the pull did not rotate it. **A
+   rejection reaching its holder moves this denominator; shipping here does not.** A higher LIVE count means the consumer filed while nobody was looking.
 
    **THE md5 MOVED TWICE DURING BATCH 37, BOTH TIMES FROM THE CONSUMER WRITING MID-BATCH, AND
    NEITHER MOVE WAS A PULL.** It went `28df5c39…` → `a8bdf944…` when a blocked consumer session
