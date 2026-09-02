@@ -89,7 +89,7 @@ what is SPECIAL about this range.
 
    **A distribution-root run has turned a live `STILL-LIVE` into a `CLOSE-CANDIDATE`, and a false
    close retires a live entry** — that is the worst output this system has. Report which ids
-   closed and which did not. **Expect only ONE to close.** Three of the four PENDING candidates
+   closed and which did not. **Expect only ONE to close, and the table above agrees.** Three of the four PENDING candidates
    will NOT close, and `## Rehearsal` records why each one is correct to stay open.
 
 8. **A `CLOSE-CANDIDATE` row is a hypothesis, not a verdict.** For each one, run that entry's
@@ -168,7 +168,28 @@ any bucket below.
 | `DIST-ONLY-SKIP` | **1** — `core/fixtures/enforcement-map-sites/run.sh` |
 | `->CLASSIFY` | **0** — the consumer has diverged on none of these paths, so nothing needs adjudicating |
 | templates | 4, all unchanged — **0** template paths moved in this range |
-| `ledger-reverify` verdicts | 46 `STILL-LIVE`, 32 `HAND-REVIEW`, 28 `NAMED-UPSTREAM`, **2 `CLOSE-CANDIDATE`** |
+| `ledger-reverify` verdicts | **47 `STILL-LIVE`, 32 `HAND-REVIEW`, 28 `NAMED-UPSTREAM`, 1 `CLOSE-CANDIDATE`** — corrected after the run; see the clone-artifact note below |
+
+**THIS TABLE ORIGINALLY SAID 2 `CLOSE-CANDIDATE` AND THAT WAS A FALSE CLOSE PRODUCED BY THE
+REHEARSAL ITSELF.** The executing session caught it. **A `git clone` does not carry `.git/hooks/`**,
+so any receipt that reads the consumer's INSTALLED hooks cannot be rehearsed on a clone: it exits
+non-zero for the ABSENCE of a hook, and `ledger-reverify` maps non-zero to `CLOSE-CANDIDATE`.
+Reproduced both ways — real consumer `.git/hooks/pre-push` present at 314 bytes, receipt rc=0,
+`STILL-LIVE`; clone hook ABSENT, same receipt rc=2, `CLOSE-CANDIDATE`.
+
+The entry it fired on, `PC-S312-TRUNK-PUSH-DECLINES-TO-POLICE-THE-TRUNK`, carries **TWO
+`verify: sh` lines** — one reading the distribution at `$THEIRS`, one reading the consumer's
+`.pre-commit-config.yaml` and `.git/hooks/pre-push`. The distribution-reading one exits 0 in
+every tree; the consumer-reading one is the one that flipped. **When a rehearsal and a live run
+disagree on a receipt, check first whether the receipt reads state a clone does not carry.**
+
+**AND THE TWO RE-VERIFY TOOLS USE OPPOSITE EXIT CONVENTIONS. DO NOT CARRY ONE INTO THE OTHER.**
+`reconcile/ledger-reverify.sh` (the consumer ledger) reads **exit 0 as `STILL-LIVE`** — "still
+reproduces at theirs" — and NON-ZERO as `CLOSE-CANDIDATE`, with `126|127` routed to
+`NEEDS-REVIEW` so a renamed subject cannot look like a fix. `scripts/backlog-reverify.sh` (this
+distribution's own backlog) is the INVERSE: exit 0 means the fix is present and yields
+`CLOSE-CANDIDATE`. Both are correct in their own tool. Reading a raw exit code without saying
+which tool will consume it is how a close gets recorded backwards.
 
 **THE BOOTSTRAPPING HAZARD IS MEASURED AT ZERO FOR THIS RANGE, re-derived rather than carried
 from the previous batch.** The consumer's INSTALLED pre-fix `readopt-override.sh` and this
