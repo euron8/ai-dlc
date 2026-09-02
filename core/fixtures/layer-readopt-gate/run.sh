@@ -1554,6 +1554,34 @@ else
   bad "  the stamp still refused after a clean merge, or base_sha did not advance to $GTH"
 fi
 
+# THE FRONTMATTER IS NOT THE BODY. `reason:` is prose ABOUT the override, and the natural
+# way to decline an upstream clause is to quote it there — so a containment test that reads
+# the whole file scores the clause as ADOPTED on the entry that says, in as many words, that
+# it did not adopt it. That is a false clean produced by the remedy text itself. Its ALLOW
+# twin is the same clause in the body, in the same run: without that half this arm passes for
+# an implementation that reads neither.
+GFM="$CONS/.claude/skills/ai-dlc/overrides/G__reason-only.md"
+cat > "$GFM" <<EOF
+---
+shadows: SKILL.md#Rule 7
+base_sha: ${GPRE}
+reason: consumer rule 7. Upstream now says **Every rule-7 adjudication now records the deciding session id**, and a record that carries no session id is rejected at the gate rather than queued. This consumer declines it.
+---
+
+## Rule 7 -- Something Else
+
+This consumer also records the adjudicating team, which core does not ask for.
+
+Untouched across the range. Present so the fixture proves the gate is
+section-scoped and not merely file-scoped.
+EOF
+if bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GFM" --check >/dev/null 2>&1; then
+  bad "an entry carrying core's new clause only in its \`reason:\` — to say it DECLINES it — was scored as having adopted it, so the gate is cleared by the sentence that says it was not"
+else
+  ok "  and core text quoted in \`reason:\` does NOT count as adoption: only the body the lead reads can carry it"
+fi
+rm -f "$GFM"
+
 echo "== H. the body test is WRAP-INSENSITIVE in the superseded direction too =="
 out="$(bash "$READOPT" "$DIST" "$GTH" "$CONS" "$HOVR" --check 2>&1)"; rc=$?
 if [ "$rc" -eq 1 ] && grep -q 'STALE-CORE-TEXT' <<<"$out"; then

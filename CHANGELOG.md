@@ -45,6 +45,13 @@ compares against the body flattened to one line, the same treatment `layer-drift
 `asserts_shadow_survives` already gives a body for the same reason. `--check` and
 `--stamp readopt` refuse on either direction, and the dossier grew the matching panel.
 
+**The containment corpus is the BODY, not the file, and reading the file was a hole this gate
+could not afford.** `reason:` is prose ABOUT the override, and the natural way to decline an
+upstream clause is to quote it there — which, read as body text, scores the clause as adopted on
+the entry that says in as many words that it did not adopt it. Measured on a constructed entry:
+whole-file reading exits 0 against a control of 1 for the same entry with the clause nowhere. The
+body extraction is now `--merge`'s own, verbatim.
+
 **False-positive set: 0 of the reference consumer's 8 live overrides**, each run at its own
 declared `base_sha` against this distribution's `origin/main`, pre-fix and fixed, with a
 `cmp -s` control asserting the two implementations differ and the pre-fix copy materialised

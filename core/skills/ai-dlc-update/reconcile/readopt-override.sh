@@ -182,7 +182,21 @@ THEIRS_SHA="$(git -C "$DIST" rev-parse --short "$THEIRS")"
 # candidate never closes. It answered NO on a sentence the body demonstrably contains,
 # wrapped at a different column — a false clean on the superseded side, and a false
 # refusal on the other.
-BODY_FLAT="$(sed 's/^[[:space:]]*//; s/[[:space:]]*$//' "$OVR" | tr '\n' ' ' | tr -s ' ')"
+#
+# THE FRONTMATTER IS NOT THE BODY, and reading the whole file was a hole this gate could
+# not afford. `reason:` is prose ABOUT the override, and the natural way to decline an
+# upstream clause is to quote it there — "upstream now says X; we decline it" — which,
+# read as body text, scores X as adopted and clears the block on the entry that says in
+# as many words that it did not adopt it. Measured on a constructed entry: whole-file
+# reading exits 0, against a control of 1 for the same entry with the clause nowhere.
+# Only the LEAD reads the body, so only the body can carry the adoption. Extraction is
+# `--merge`'s, verbatim, so the two cannot disagree about where a body starts.
+BODY_FLAT="$(awk 'BEGIN{fm=0; started=0}
+                  NR==1 && /^---$/ {fm=1; next}
+                  fm && /^---$/    {fm=0; started=1; next}
+                  fm               {next}
+                  started          {print}' "$OVR" \
+             | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr '\n' ' ' | tr -s ' ')"
 
 # body_carries <core-line> — is this core line's word sequence in the body at all?
 # The needle is squeezed the same way the haystack is, or a core line carrying a

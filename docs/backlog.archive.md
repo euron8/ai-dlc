@@ -4586,6 +4586,13 @@ negated — and replaces the whole-line body test with `body_carries()`, a conta
 the body flattened to one line. `--check` reports `UNADOPTED-CORE-TEXT`, `--stamp readopt` refuses,
 and the dossier carries the matching panel. `--merge` already produces the body that clears it.
 
+**The containment corpus is the body past the frontmatter fence, and the first cut read the whole
+file.** `reason:` is prose about the override; quoting upstream's clause there to DECLINE it scored
+it as adopted, clearing the gate on the entry whose own sentence says it was not. Found by
+attacking the change rather than by review, measured at exit 0 against a control of 1 for the same
+entry with the clause nowhere, and fixed by reusing `--merge`'s body extractor so the two cannot
+disagree about where a body starts. The fixture arm carries both halves in one run.
+
 **False-positive set: 0.** The consumer's 8 live overrides, each at its own declared `base_sha`
 against this distribution's `origin/main`, scored pre-fix and fixed: 0 refused either way, 0 newly
 refused. Controls in the same invocation: `cmp -s` asserts the two implementations differ, and the
