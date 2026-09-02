@@ -589,7 +589,31 @@ fi
 # place to start was again NOT exhaustively enumerated. That debt is now three raises old and is
 # stated rather than quietly carried forward.
 # ---------------------------------------------------------------------------
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-51800}"
+# RAISED AGAIN, 51800 -> 52350, ON AN OPERATOR RULING, FOR ONE RULE COSTING 518 BYTES. The
+# duplicate scan was run BEFORE the raise, as the entry above requires: zero occurrences of the
+# rule's subject across the durable channel over six distinct tokens, against a positive control
+# finding a phrase known to sit in `CLAUDE.md` and a negative control returning nothing. The single
+# near-match, `the executor` at `CLAUDE.md:243`, is a session executing a PLAN and not a program
+# executing input -- read, not assumed from the count. A6 was observed FAILING at 52309 before the
+# ceiling moved, so this raise responds to a check that fired.
+#
+# The rule is `verification-discipline.md`'s "cross-check a parser against what EXECUTES it, never
+# against another parser". Earned in v0.474.0: a shell quote scanner was checked against python
+# `shlex` and against `bash -n -c` over the same 3408 commands. The two oracles disagreed on 23;
+# `shlex` was wrong on 20, and the 2 the scanner got wrong were a real false-refusal defect about to
+# ship. `shlex` as the oracle buys 21 phantom cases and misses both true ones.
+#
+# WHY IT CANNOT BE SCOPED OR MECHANIZED. It is a judgement about which of two available oracles to
+# believe, made while designing a check, and no tracked file records which one was consulted -- both
+# choices produce the same shape of comparison and the same clean-looking table. It generalises past
+# shells to any grammar with a real interpreter, so an arm bound to one resolver would say nothing to
+# the next author. Prose only, so `resident-context.md` bars scoping it. It sits beside "run the
+# shipping code against the real corpus" deliberately: that rule governs choosing the real PROGRAM
+# over a probe, this one governs choosing between two programs that both look real.
+#
+# WHAT WAS STILL NOT COVERED. The judgement-per-passage vestigial form is STILL not exhaustively
+# enumerated. That debt is now four raises old.
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-52350}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

@@ -112,6 +112,14 @@ A hand-written probe is a second implementation whose bugs nobody finds. When a 
 the shipping code disagree, the probe is wrong until proven otherwise. Reach for the real
 program and the real tree; where that is impossible, say so in the same breath as the number.
 
+## Cross-check a parser against what EXECUTES it, never against another parser
+
+A second implementation of a grammar is an opinion; the thing that runs the input is the
+answer. Measured on a shell quote scanner over 3408 real commands: checked against python
+`shlex` AND against `bash -n -c`, the two oracles disagreed on 23. `shlex` was wrong on 20 of
+them, and the 2 the scanner itself got wrong were a real defect it was about to ship. Taking
+`shlex` as the oracle buys 21 phantom cases and misses both true ones.
+
 ## Read the CONSUMING mechanism's own remedy text before calling its input wrong
 
 The contract is usually written inside whatever reads the value. Measured: a fix made
