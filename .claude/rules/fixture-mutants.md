@@ -114,6 +114,15 @@ paths:
   observable. Score a re-anchored mutation three ways before believing it — the anchor
   is UNIQUE in the file (control: an impossible anchor returns 0), the mutant produces
   the right observable FOR THE RIGHT REASON, and it fails ONLY its own assertion.
+- **A MUTATION THAT APPLIES CAN STILL BE INSUFFICIENT, AND `cmp -s` CANNOT SEE IT.** The
+  bullet above catches a mutation that matches NOTHING. This is the half that matches
+  something and does not remove the whole property: an arm that hand-named the two sites
+  documenting a mode stripped both, the file still documented it a THIRD time in prose a
+  later release added, the invariant correctly stayed silent, and the arm failed the push
+  reading exactly like a regression in the change under test. Key the mutation on the
+  SUBJECT'S OWN predicate rather than on a list of sites, and assert the post-mutation
+  count is 0 against a non-zero unmutated count — a hand-written site list goes vacuous
+  the release somebody adds a site, and nothing announces it.
 - **Mutate the file the fixture RESOLVES, which is not always the one you are
   changing.** A fixture that names candidates in both install layouts takes the
   first that exists, and in this repo `core/git-hooks/pre-push` is found before
