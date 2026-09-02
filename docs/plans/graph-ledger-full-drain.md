@@ -36,7 +36,131 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 42 SHIPPED AS `v0.480.0`, CORRECTED TWICE INSIDE ITS OWN RELEASE, MERGED AT `5e3182a9`. GAP 1, PENDING 1. START AT BATCH 43.
+### BATCH 43 SHIPPED AS `v0.481.0`. GAP 2, PENDING 3. START AT BATCH 44.
+**THE SWEEP HAD BEEN LYING FOR THREE BATCHES AND ITS md5 TEST WAS TELLING THE TRUTH THE WHOLE
+TIME.** Batches 41, 42 and 43 all opened by reporting the ledger "empty of new work" on an
+unmoved md5 and unmoved counts. The md5 was genuinely unmoved and that claim was TRUE. What was
+false was the GRAMMAR: `lids()` matched `^## PC-` and the consumer had filed
+`PC-S308-DISPATCH-GUARD-SPRINT-FIELD-INTERMITTENTLY-NULL` as `### PC-`, NESTED under another
+entry's heading, where the third character is `#` and not a space. **The two tests answer
+different questions and only one of them was wrong.** The arm is now `^#{2,6}`, which is the
+range the SHIPPING `ledger_entry_shape()` has always used — the shipping tooling was never blind
+to this form, only this file's hand-rolled copy of its grammar was. Live goes **71 → 72**,
+archive unchanged at 142, every prior control still passing. **A sweep reporting no new work has
+made a claim about its own grammar first; that is the fourth time this grammar has been wrong and
+the first time it cost a batch of delay on a live consumer gate.**
+
+**THE SUBJECT WAS THE RECOVERED CANDIDATE, AND IT WAS THE SAME DEFECT AS ONE HELD FOR A RULING
+SINCE BATCH 20.** Three hooks read the sprint out of `pipeline-snapshot.md` with an expression
+requiring the field name wrapped in emphasis markers; the writer emits the plain bullet whenever
+nothing re-emphasises it, so the read resolved EMPTY and the spawn ledger recorded
+`"sprint":null` — silently, because every arm on that read is `2>/dev/null || true`. Check 22
+then reports exit 3 PRE-LEDGER on a sprint whose rows are all present and correctly named.
+`PC-S305-DISPATCH-GUARD-SED-PATTERN-BOLD-MISMATCH` is the same line filed at sprint 305 and
+RECURRED at 306 blocking a live incident fix. **The operator ruled: take both, hook-side, all
+three hooks.**
+
+**THE CONSUMER'S SCHEMA-SIDE WORKAROUND DOES NOT HOLD, AND THAT IS WHAT DECIDED THE FIX SITE.**
+Its snapshot reads plain at 305, re-emphasised at 306 and 307 after the workaround, ABSENT at one
+revision, and plain again at 308. Upstream cannot enforce a consumer artifact's writer; it owns
+the reader. **Do not re-litigate this as a schema fix.**
+
+**THE FILED REMEDY SURVIVED BEING BUILT FOR THE FIRST TIME IN FIVE BATCHES — BUT ONLY ONE OF ITS
+TWO HALVES.** The filing offered "drop the bold requirement" OR "accept both forms". The first is
+a REGRESSION: it breaks the emphasised form the consumer itself used at 306 and 307. The second
+is sound and disagrees with the shipped spelling on **0 of 2066** real revisions. **Score every
+half of a two-part remedy separately; one of them was a regression and the entry read as one
+suggestion.** The character class ships over enumerating the two spellings on a DESIGN ground —
+enumerating them is what failed — and the corpus does not discriminate between them. That is
+stated as a judgement, not dressed as a measurement.
+
+**THE MEASUREMENT, over 2066 real snapshot revisions from the consumer's own history**, applying
+each expression exactly as the hook does: **195 recovered, 0 lost, 0 differing values.** Residue
+partitioned and correct — 311 non-numeric (`TBD`, `none`, `S270`, where null IS the right
+answer), 668 fieldless, **0** excluded by the bullet anchor — summing to 979 against a both-empty
+count of 979.
+
+**THE CLOSE WAS VERIFIED BY DRIVING THE CONSUMER'S OWN INSTALLED ENGINE, WITH THE DISCRIMINATING
+CONTROL IN THE SAME PAIR OF RUNS.** `theirs` at the unfixed ref reports `STILL-LIVE`; at this one,
+`CLOSE-CANDIDATE`. The run's total `STILL-LIVE` count moves **47 → 46**, so exactly ONE entry
+flipped and the close is specific rather than a wholesale verdict shift. **A `CLOSE-CANDIDATE`
+alone would not have shown that.**
+
+**A COMMENT NEARLY DEFEATED THE CONSUMER'S RECEIPT.** `PC-S305`'s receipt greps
+`ai-dlc-dispatch-guard.sh` for the emphasised token, and it lives in the CONSUMER's ledger where
+this side cannot edit it. The first draft of the fix explained itself by quoting that token in a
+comment, which would have reported a shipped fix as unshipped. **The emphasised spelling is now
+deliberately absent from all three hooks and the reason is written in the file.** Check what your
+own prose re-introduces when a receipt greps the whole file.
+
+**MY RECEIPT FOR THE NEW FILING WAS WRITTEN BACKWARDS, AND THE HISTOGRAM CAUGHT IT.** I carried
+`ledger-reverify.sh`'s convention (exit 0 = STILL-LIVE) into a `docs/backlog.md` entry, where
+**exit 0 = the fix is present = CLOSE-CANDIDATE**. It showed up as an incidental close in action
+5's histogram and was inverted and re-scored 1/0/9. **The two conventions are opposite and this
+file has now recorded that twice.**
+
+**I104 BINDS THE THREE COPIES**, both directions, probe before corpus, and a `core/fixtures/`
+directory exclusion was written and REMOVED — the reader grammar already scores zero fixtures, so
+the exclusion had no subject and would only have hidden a fixture that grew a real reader.
+
+**THE BATTERY COULD NOT HAVE CAUGHT THIS AND THAT IS THE REUSABLE HALF.** All three fixtures
+seeded the EMPHASISED form — the form the reader already accepted — so the suite proved the hook
+accepts its own grammar and stayed green for the defect's whole life. That is
+`fixture-mutants.md`'s *"never seed from what the reader accepts"*, live. The arms now assert both
+forms BESIDE each other in one run with a non-numeric near-miss, and scored against the pre-fix
+reader the plain-bullet arm fails and ONLY that arm fails.
+
+**FILED, NOT FIXED: `BL-145`.** `named_absorbed()` joins on commit MESSAGES, so a docs commit that
+merely MENTIONS a candidate id is reported to the consumer as upstream having absorbed it.
+Measured: **6 entries report `NAMED-UPSTREAM` where every commit naming them touches zero `core/`
+paths**, and this program's own resume-block edits are the largest producer of them. The obvious
+predicate would also drop a genuine close whose remedy was a `steps/` or `templates/` change, so
+its false-positive set needs measuring first.
+
+**AND THIS BATCH DID THE THING `BL-145` DESCRIBES, AT SCALE.** `UNFILED` fell **33 → 28** and only
+**TWO** of those five are discharged work; the other three moved because `BL-145`'s evidence table
+NAMES them. `PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD`, `PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY`
+and `PC-S336-STEP-1-AUTOPUSH-IS-THE-UNGUARDED-TWIN-OF-THE-PUSH-STEP-2-HARDENED` are cited as
+EVIDENCE and are NOT claimed. **Do not read them as taken.**
+
+**THE FIGURES, re-derived after the release by running the derive block with the CORRECTED
+grammar.** Ledger md5 **`a79811f7…`** (unmoved — the consumer filed nothing during this batch;
+the S308 entry predates it). **72 live, 142 archived, 44 cited, 28 UNFILED.** DISCHARGED **20 raw
+/ 17 corrected**, IN-FLIGHT **27**, UNTOUCHED **28**, overlap **3**, TERMINAL **32**; partition
+20+27+28−3 = 72. `docs/backlog.md` **81 live / 65 archived**. Consumer dirty count moved 3 → 6
+DURING this batch — it is writing pipeline state, the ledger md5 did not move, so nothing was
+filed or rotated there.
+
+**THE GAP IS TWO RELEASES AND PENDING IS 3.** Consumer stamp `0.479.0` against a distribution
+`VERSION` of `0.481.0`. **THE PULL IS NOT AUTHORIZED** — `operator-rulings.md` governs unchanged:
+operator-initiated, readiness is not authorization, a `PENDING` count is not a decision about
+WHEN, and one is never handed to a peer session.
+
+**THE SECOND TEST WAS NOT RUN THIS BATCH AND THAT IS AN OWED ITEM, NOT A NULL.** Batch 42 banked
+it on both corpora. This batch's subject is a HOOK, and the differential in action 7 drives
+`validate-layer-entries.sh`, which does not exercise it. **The discriminating test for THIS
+release is the spawn-ledger one**: run the consumer's installed `validate-spawn-ledger.sh
+--sprint 308` against its live ledger and read the exit. It reported 3 PRE-LEDGER before this
+fix. It cannot change until they pull, so the honest reading is that the value of this pull is
+measurable and unmeasured. Run it next batch before proposing anything.
+
+**THREE REMAIN UNFILED IN THE STANDING `PC-S340-*` CORPUS**, unchanged from batch 42 and all
+three `verify: manual`: `RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-PASSES-ON-RETRY` (the defect IS
+intermittency — compute the predicted count before reading any clean sweep as a refutation),
+`CHECK-26-READS-A-PARTIAL-RE-VERIFY-VERDICT-FILE-AS-UNADJUDICATED` (needs a new script AND a
+`_gate-procedures.md` change, so say which you are closing), and
+`AUDIT-RULE-FILES-DRIFT-FINDINGS-IN-CORE-PROSE-ARE-NOT-CONSUMER-FIXABLE` (33 findings across
+fourteen files, a per-file prose judgement — not one subject as it stands).
+
+**BATCH 43's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW BOTH IDS.** `PC-S308-DISPATCH-GUARD-SPRINT-FIELD-INTERMITTENTLY-NULL`
+and `PC-S305-DISPATCH-GUARD-SED-PATTERN-BOLD-MISMATCH` shipped as `v0.481.0`, are cited by
+`BL-146` in `docs/backlog.archive.md`, and stay live in the consumer's ledger until they pull. Do
+not re-scope onto them. **Their unfiled SIBLING is named deliberately**:
+`PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR` is the same class — a
+bold-markdown grammar against a plain artifact — in a different program, and it is NOT closed by
+this change.
+
+### BATCH 42 SHIPPED AS `v0.480.0`, CORRECTED TWICE INSIDE ITS OWN RELEASE, MERGED AT `5e3182a9`. BATCH 43 HAS SINCE RUN; TAKE THE STATE FROM THE BLOCK ABOVE, NOT FROM THIS HEADING.
 **THE BATCH'S BEST LESSON IS A CLAIM I HAD TO WITHDRAW: ISOLATING A PREDICATE AND READING A
 MOVEMENT ITS OWN CONTROL FLOW NEVER REACHES.** I measured that one live citation in the
 consumer's convergence corpus goes `NOMATCH -> MATCH` under the fix and published it as a LIVE
@@ -3055,6 +3179,27 @@ ledger.** Point the grammar at its own subject before believing its zero, and no
 earlier repairs both PASSED their own controls — a control drawn from the form you already know
 about cannot discover the form you do not.
 
+**A FIFTH FORM, AND IT IS THE PROOF OF THAT LAST SENTENCE. THE HEADING ARM WAS `^## PC-` AND AN
+ENTRY IS FREE TO BE `### PC-`.** The consumer files a candidate NESTED under another entry's
+heading, at heading level three, and `^## ` cannot match it — the third character is `#`, not a
+space. Measured at batch 43, both ledgers, with every prior control still passing: the live count
+goes **71 → 72** and the archive is unchanged at 142. The single recovered id is
+`PC-S308-DISPATCH-GUARD-SPRINT-FIELD-INTERMITTENTLY-NULL`.
+
+**IT HAD BEEN IN THE LEDGER SINCE THE `6d84cbec…` ANCHOR AND THREE CONSECUTIVE SWEEPS CALLED THE
+LEDGER EMPTY OF NEW WORK.** It was present at every md5 this file records for batches 41 and 42.
+The md5-and-counts test was not the thing that failed — the ledger's md5 was genuinely unmoved,
+so "nothing was filed" was TRUE — the GRAMMAR is what failed, and the two tests answer different
+questions. **A sweep that reports no new work has made a claim about its own grammar first.**
+It became this batch's subject, so the cost of the blind spot was a full batch of delay on a
+defect that was breaking a gate on the consumer's live sprint.
+
+The arm is `^#{2,6}` for that reason, which is also the range `ledger_entry_shape()` in
+`core/skills/ai-dlc-update/reconcile/lib.sh:278` has always used. **The SHIPPING tooling was never
+blind to this form; only this file's hand-rolled copy of its grammar was** — which is the standing
+"cite, do not restate" rule collecting its debt. If you touch this function again, check it
+against `ledger_entry_shape()` rather than against your own reading of the ledger.
+
 **`sed -E '...;t;d'` IS NOT PORTABLE AND THE FIRST CUT OF THIS BLOCK USED IT.** BSD sed answers
 `undefined label ';d'`, both files come back EMPTY, and the partition control — *"must be 0"* —
 comes back 0 and AGREES. Only the PRESENCE control, which must come back 1, catches it. That is
@@ -3069,13 +3214,15 @@ taken up when a BACKLOG ENTRY cites it. Prose is not a filing.
 
 ```
 D=/Users/n8/git/graph/_bmad-output/ai-dlc-update
-# TWO deliberate widenings, each one a measured defect:
+# THREE deliberate widenings, each one a measured defect:
 #   1. NO TRAILING SPACE after the id -- that space hid 43 of 63 bullet-form entries.
 #   2. THE CLASS INCLUDES `.` -- an id may embed a version, and [A-Z0-9-] truncates it into a
 #      FALSE MEMBER that joins against nothing and reports as no absence at all.
+#   3. THE HEADING ARM IS `^#{2,6}`, NOT `^##` -- see the FIFTH FORM below. A `### PC-` entry
+#      nested under another entry's heading was invisible for three consecutive batches.
 # The optional `-? ?` also admits the DASH-LESS `**<id>**` at column 0, which is the subject of
 # PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY.
-lids() { { grep -h '^## PC-' "$1" | sed -E 's/^## (PC-[A-Z0-9][A-Z0-9.-]*).*/\1/'
+lids() { { grep -hE '^#{2,6} PC-' "$1" | sed -E 's/^#+ (PC-[A-Z0-9][A-Z0-9.-]*).*/\1/'
            grep -hE '^-? ?\*\*PC-[A-Z0-9]' "$1" | sed -E 's/^-? ?\*\*(PC-[A-Z0-9][A-Z0-9.-]*).*/\1/'
          } | sort -u; }
 lids "$D/push-candidate-ledger.md"         > /tmp/live.txt
@@ -3804,8 +3951,37 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 43's
-   SUBJECT.** Batch 42 is merged as `v0.480.0` at `5e3182a9`. Number yours 43.
+1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 44's
+   SUBJECT.** Batch 43 shipped as `v0.481.0`. Number yours 44.
+
+   **RUN THE SECOND TEST FIRST THIS TIME — BATCH 43 LEFT IT OWED.** Its subject was a hook, and
+   action 7's differential drives `validate-layer-entries.sh`, which does not exercise one. The
+   discriminating test for `v0.481.0` is the consumer's installed `validate-spawn-ledger.sh
+   --sprint 308` against its live spawn ledger: it reported **exit 3 PRE-LEDGER** before the fix
+   because every row carried `"sprint":null`. It cannot change until they pull, so this is a
+   measurable-and-unmeasured value, not a null. Take the reading before you propose anything.
+
+   **DO NOT TRUST A SWEEP THAT REPORTS NO NEW WORK UNTIL YOU HAVE CHECKED ITS GRAMMAR.** Three
+   consecutive batches reported the ledger empty while a candidate sat in it, filed at a heading
+   level the grammar could not spell. The md5 test was TRUE throughout — the two tests answer
+   different questions. The arm is now `^#{2,6}`; if you touch it, check it against
+   `ledger_entry_shape()` at `core/skills/ai-dlc-update/reconcile/lib.sh:278` rather than against
+   your own reading of the ledger.
+
+   **BATCH 43's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW BOTH IDS.**
+   `PC-S308-DISPATCH-GUARD-SPRINT-FIELD-INTERMITTENTLY-NULL` and
+   `PC-S305-DISPATCH-GUARD-SED-PATTERN-BOLD-MISMATCH` shipped as `v0.481.0`, cited by `BL-146`.
+   Do not re-scope onto them. **Their sibling
+   `PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR` is the same class in a
+   different program and is NOT closed** — it is the readiest sibling join available, and the
+   join is by SUBSYSTEM (a decoration-requiring grammar against a plain artifact), not by sprint
+   prefix.
+
+   **THREE OF THE IDS THAT LEFT `UNFILED` THIS BATCH WERE NOT TAKEN.** `BL-145` cites
+   `PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD`,
+   `PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY` and
+   `PC-S336-STEP-1-AUTOPUSH-IS-THE-UNGUARDED-TWIN-OF-THE-PUSH-STEP-2-HARDENED` as EVIDENCE in a
+   table. They are available work. The join cannot tell a citation from a claim.
 
    **BATCH 42's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW IT.**
    `PC-S340-VALIDATE-ESCALATION-RESOLUTION-NONDETERMINISTIC-ON-BYTE-IDENTICAL-INPUT` shipped as
@@ -4194,12 +4370,17 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # a79811f7... unmoved across batches 41 and 42; a MOVE alone is NOT an alarm -- check the id set too
-   wc -l < /tmp/live.txt    # 71
-   wc -l < /tmp/unfiled.txt # 32 -- BL-144 cites this batch's own candidate, moving it to CITED
+   md5 -q "$L"              # a79811f7... unmoved across batches 41, 42 and 43; a MOVE alone is NOT an alarm -- check the id set too
+   wc -l < /tmp/live.txt    # 72 with the corrected ^#{2,6} grammar; 71 with the old ^## one
+   wc -l < /tmp/unfiled.txt # 28
    ```
 
-   **THE BASELINE IS 71 LIVE CANDIDATES, 39 CITED, 32 UNFILED.** Live FELL for the first time in
+   **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
+   against batch 42's 71 on a byte-identical ledger, because the heading arm was widened to
+   `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
+   about the consumer.
+
+   **THE BASELINE IS 72 LIVE CANDIDATES, 44 CITED, 28 UNFILED.** Live FELL for the first time in
    this program: the operator carried the `IS-CORE` rejection into a graph session and that session
    rotated it together with `PC-S308-STEP1A-ROTATE-REMEDY-NO-SPRINT-START-DESTINATION`, which had
    been delivered at `v0.471.0` and stayed live only because the pull did not rotate it. **A

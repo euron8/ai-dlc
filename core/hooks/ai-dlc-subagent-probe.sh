@@ -297,7 +297,9 @@ case "${DURATION:-}" in ''|*[!0-9]*) DURATION="" ;; esac
 case "${PEAK:-}" in ''|*[!0-9]*) exit 0 ;; esac
 [ "$PEAK" -gt 0 ] || exit 0
 
-SPRINT="$(sed -n 's/^- \*\*sprint_id:\*\* *\([0-9][0-9]*\).*/\1/p' "$SNAPSHOT_FILE" 2>/dev/null | head -1)"
+# Decoration is not part of the field -- see the measurement in
+# ai-dlc-dispatch-guard.sh's copy of this read. I104 binds the three.
+SPRINT="$(sed -n 's/^- *[*]*sprint_id:[*]* *\([0-9][0-9]*\).*/\1/p' "$SNAPSHOT_FILE" 2>/dev/null | head -1)"
 
 mkdir -p "$STATE_DIR" 2>/dev/null || true
 jq -nc --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \

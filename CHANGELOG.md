@@ -15,6 +15,70 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.481.0] - 2026-09-02
+
+### The snapshot sprint reader spelled the decoration, so half the corpus resolved to null
+
+Discharges `PC-S308-DISPATCH-GUARD-SPRINT-FIELD-INTERMITTENTLY-NULL`, filed by the reference
+consumer against sprint 308, and `PC-S305-DISPATCH-GUARD-SED-PATTERN-BOLD-MISMATCH`, the same
+defect at the same line filed against sprint 305 and recorded as RECURRED at sprint 306, where it
+blocked a live incident fix.
+
+**Three hooks read the sprint out of `_bmad-output/pipeline-snapshot.md` and all three required
+the field name wrapped in emphasis markers.** The snapshot's writer emits the plain bullet
+whenever nothing re-emphasises it. The reader then resolves EMPTY, and because every arm on that
+read is `2>/dev/null || true` the empty resolve is written to the spawn ledger as `"sprint":null`
+with no diagnostic. Check 22 resolves a sprint's dispatches by that stamped field, so it reports
+exit 3 PRE-LEDGER on a sprint whose rows are all present and correctly named -- a cause its own
+text does not anticipate.
+
+**The consumer's schema-side workaround does not hold, and that is what decided the fix site.**
+Its snapshot reads plain at sprint 305, re-emphasised at 306 and 307 after the workaround, absent
+at one revision, and plain again at 308. Upstream cannot enforce a consumer artifact's writer; it
+owns the reader. So the reader stops spelling the decoration.
+
+**Measured over 2066 real snapshot revisions**, applying each expression exactly as the hook does:
+the shipped spelling resolves nothing on **195** revisions where the new one resolves a real
+sprint, **loses none** that it found, and never disagrees on a value. The residue is accounted for
+and correct -- 311 revisions carry a non-numeric value (`TBD`, `none`, `S270`) where null is the
+right answer, 668 carry no field, and 0 are excluded by the bullet anchor; the partition sums to
+979 against a both-empty count of 979.
+
+**The filed remedy named two fixes and they score differently.** "Drop the bold requirement" is a
+regression -- it breaks the emphasised form the consumer itself used at sprints 306 and 307.
+"Accept both forms" is sound and disagrees with the shipped spelling on **0 of 2066** revisions;
+after four consecutive batches whose filed remedy was refuted by building it, this one survives.
+The character-class form ships in preference to enumerating the two spellings, on the design
+ground that enumerating them is what failed -- the corpus does not discriminate between the two,
+and that is stated rather than dressed as a measurement.
+
+Verified by driving the consumer's own installed `ledger-reverify.sh` against its live ledger,
+with the discriminating control in the same pair of runs: `PC-S305`'s receipt reports
+`STILL-LIVE` at the unfixed ref and `CLOSE-CANDIDATE` at this one, and the run's total
+`STILL-LIVE` count moves 47 to 46 -- exactly one entry flips, so the close is specific rather
+than a wholesale verdict shift.
+
+`I104` binds the three copies: the canonical expression appears verbatim in each, and no fourth
+reader exists outside them. The site list is derived as well as declared, because byte-equality
+across three declared paths cannot see a fourth copy written the brittle way in a fourth file.
+
+**The fixture battery could not have caught this**, and that is fixed in the same change. All
+three fixtures seeded the emphasised form -- the form the reader already accepted -- so the suite
+proved the hook accepts its own grammar and stayed green throughout. The arms now assert both
+forms beside each other in one run, with a non-numeric near-miss so the positive arms cannot be
+satisfied by a read that matches anything after the colon. Scored against the pre-fix reader, the
+plain-bullet arm fails and only that arm fails.
+
+### Filed, not fixed
+
+`BL-145` -- `named_absorbed()` joins on commit MESSAGES, so a docs commit that merely MENTIONS a
+candidate id is reported to the consumer as upstream having absorbed it. Measured against
+`origin/main`: **6 entries report `NAMED-UPSTREAM` where every commit naming them touches zero
+`core/` paths**, and this program's own resume-block edits are the largest producer of them. The
+obvious fix -- requiring a naming commit to touch `core/` -- would also drop a genuine close whose
+remedy was a `steps/` or `templates/` change, so the predicate needs its false-positive set
+measured before it is built.
+
 ## [0.480.0] - 2026-09-02
 
 ### The operator-citation parser was greedy, so which quoted segment wins was decided by position

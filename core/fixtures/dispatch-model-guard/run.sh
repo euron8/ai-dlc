@@ -376,6 +376,44 @@ raw "$CONSUMER" "$(mkjson Agent - opus)" >/dev/null
   && ok "a dispatch binding no role writes no row (not our spawn)" \
   || bad "a role-less dispatch wrote a ledger row: $(lrow)"
 
+# --- SPRINT STAMP: THE READER MUST NOT SPELL THE DECORATION -------------------
+# EVERY SEED HERE USED TO BE THE EMPHASISED BULLET, WHICH IS THE FORM THE READER
+# ALREADY ACCEPTED. That is seeding from the reader's accept-set: it proved the
+# hook accepts its own grammar and stayed green while the hook resolved EMPTY on
+# the plain bullet the snapshot writer actually emits. Measured over 2066 real
+# snapshot revisions, the old spelling resolved nothing on 195 of them.
+# Both forms are asserted BESIDE each other, in this run, because a second clean
+# tree can only ask whether the read fires at all -- never whether it fires on
+# the right shape. Every arm is PRESENCE-shaped: it demands a specific sprint
+# value, so a hook that resolves nothing fails it rather than passing quietly.
+sprint_of() { # sprint_of <snapshot-line>  -> the .sprint the guard recorded
+  rm -f "$LEDGER"
+  printf -- '%s\n' "$1" > "$CONSUMER/_bmad-output/pipeline-snapshot.md"
+  raw "$CONSUMER" "$(mkjson Agent remediator sonnet)" >/dev/null
+  lfield .sprint
+}
+
+[ "$(sprint_of '- sprint_id: 291')" = "291" ] \
+  && ok "plain bullet resolves the sprint (the form the snapshot writer emits)" \
+  || bad "plain '- sprint_id: 291' recorded sprint='$(sprint_of '- sprint_id: 291')', expected 291 — the reader is spelling the decoration again"
+
+[ "$(sprint_of '- **sprint_id:** 291')" = "291" ] \
+  && ok "  and the emphasised bullet still resolves it (the fix widened, it did not move)" \
+  || bad "emphasised bullet recorded sprint='$(sprint_of '- **sprint_id:** 291')', expected 291 — this is the regression the fix must not cause"
+
+# The near-miss, beside the offender: a non-numeric value is the schema saying no
+# sprint is assigned yet, and null is the right answer. Without this arm the two
+# above are satisfied by a read that matches anything after the colon.
+[ "$(sprint_of '- sprint_id: TBD')" = "null" ] \
+  && ok "  and a non-numeric value stays null (TBD/none/S270 mean no sprint is assigned)" \
+  || bad "'- sprint_id: TBD' recorded sprint='$(sprint_of '- sprint_id: TBD')', expected null"
+
+# The three readers share one expression by hand, and I104 fails the push if they
+# diverge. This asserts the BEHAVIOUR the invariant protects is actually present
+# in the copy this fixture drives, so a byte-identical set of three broken reads
+# cannot pass on agreement alone.
+printf -- '- **sprint_id:** 291\n' > "$CONSUMER/_bmad-output/pipeline-snapshot.md"
+
 # The ledger must never be able to block a spawn.
 rm -rf "$CONSUMER/_bmad-output"
 OUT_RO="$(setmodel "$CONSUMER" "$(mkjson Agent remediator sonnet)")"
