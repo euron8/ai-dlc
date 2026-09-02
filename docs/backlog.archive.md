@@ -4426,3 +4426,70 @@ probe tree with the shipped script as a passing control, the canned-output scrip
 assertions, the hardcode 3, the missing exit-3 arm 5. No wrong-accept was ever a live coverage gap.
 
 verify: sh V=core/scripts/validate-spawn-ledger.sh; set -e; d=$(mktemp -d); printf '%s' '{"aiDlcModels":{"o":"opus"},"aiDlcRoles":{"adversary":{"model":"o"}}}' > "$d/s.json"; printf '%s' '{"aiDlcModels":{"o":"opus"},"aiDlcRoles":{}}' > "$d/e.json"; printf '%b' '{"v":1,"sprint":900,"name":"gp","role":"general-purpose","model_bound":"i","model_requested":"i","role_contract_cited":false,"role_file_readable":false}\n{"v":1,"sprint":900,"name":"walker","role":"rubric-walker","model_bound":"i","model_requested":"i","role_contract_cited":false,"role_file_readable":false}\n{"v":1,"sprint":900,"name":"adversary-misrouted","role":"general-purpose","model_bound":"i","model_requested":"i","role_contract_cited":false,"role_file_readable":false}\n{"sprint":900,"role":"adversary","dispatched_at":"t","deliverable":"x.md","sha":"a","step":"s"}\n{"v":1,"sprint":900,"name":"adv","role":"adversary","model_bound":"o","model_requested":"o","role_contract_cited":false,"role_file_readable":true}\n' > "$d/l.jsonl"; printf '%b' '{"v":1,"sprint":900,"name":"gpc","role":"general-purpose","model_bound":"x","model_requested":"x","role_contract_cited":true,"role_file_readable":false}\n' > "$d/c.jsonl"; printf '%b' '{"v":1,"sprint":900,"name":"gponly","role":"general-purpose","model_bound":"i","model_requested":"i","role_contract_cited":false,"role_file_readable":false}\n' > "$d/o.jsonl"; printf '%b' '{"v":1,"sprint":900,"name":"nr","role":null,"model_bound":"i","model_requested":"i","role_contract_cited":false,"role_file_readable":true}\n' > "$d/n.jsonl"; a=$(bash "$V" --ledger "$d/l.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) && ra=0 || ra=$?; b=$(bash "$V" --ledger "$d/c.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) && rb=0 || rb=$?; o=$(bash "$V" --ledger "$d/o.jsonl" --sprint 900 --settings "$d/s.json" 2>&1) && ro=0 || ro=$?; bash "$V" --ledger "$d/n.jsonl" --sprint 900 --settings "$d/s.json" >/dev/null 2>&1 && n1=0 || n1=$?; bash "$V" --ledger "$d/n.jsonl" --sprint 900 --settings "$d/e.json" >/dev/null 2>&1 && n2=0 || n2=$?; [ "$ra" -eq 1 ] || exit 1; [ "$rb" -eq 1 ] || exit 1; [ "$ro" -eq 3 ] || exit 1; [ "$n1" -eq "$n2" ] || exit 1; [ "$n1" -eq 3 ] || exit 1; case "$a" in *"3 row(s) out"*) ;; *) exit 1 ;; esac; case "$a" in *rubric-walker*) ;; *) exit 1 ;; esac; case "$a" in *"1 row(s) the dispatch guard did not write"*) ;; *) exit 1 ;; esac; case "$a" in *"FAIL: [adv]"*) ;; *) exit 1 ;; esac; case "$a" in *"NOTE: [adversary-misrouted]"*) ;; *) exit 1 ;; esac; case "$a" in *"FAIL: [gp]"*) exit 1 ;; esac; case "$a" in *"FAIL: [walker]"*) exit 1 ;; esac; case "$a" in *"FAIL: [<unnamed>]"*) exit 1 ;; esac; case "$b" in *"FAIL: [gpc]"*) ;; *) exit 1 ;; esac; exit 0
+## BL-135 — the derivation allowlist split a command on `|` without regard for quoting, and refused correct read-only commands
+
+**LANDED (v0.474.0, verified 3453285f).**
+
+Cites `PC-S340-DERIVATION-CAPTURE-HOOK-ROLLS-BACK-THE-WHOLE-FILE-ON-A-REJECTED-BLOCK`.
+
+`cmd_is_safe()` in `core/scripts/validate-artifact-derivations.sh` splits a fenced command into
+pipeline segments and requires every segment's first word to be on the read-only allowlist. It did
+that with `tr '|' '\n'`, which is quote-blind, so a bar inside a quoted ERE was read as a pipe and
+the fragment after it was refused as an unknown command:
+
+    $ grep -cE 'alpha|beta' data.txt   ->  FAIL (ALLOWLIST), refused token `'beta'`
+    $ grep -cE 'alpha' data.txt        ->  exit 0, the near-miss that names the cause
+
+**THE ENTRY IT CITES HAS TWO CLAIMS AND ONLY ONE SURVIVED. Both are kept here rather than
+re-filed, because which half died is the part that stops the next reader repeating it.** The
+filing's headline was that the rejection ROLLED BACK the whole target file, destroying a consumer
+artifact. That is REFUTED against the tree: `core/hooks/ai-dlc-derivation-capture.sh` is a
+PostToolUse hook that reads the target, writes only inside its own `mktemp -d`, and on a mismatch
+emits stderr and exits 2 — it has no write, truncate, move or remove path against the target at
+all. The parse half is real, and it is what this entry closes.
+
+**THE FALSE-REFUSAL POPULATION IS MEASURED, NOT ESTIMATED.** A verdict differential drove the
+extracted `cmd_is_safe()` from both implementations over the 3408 `$ `-prefixed command lines in
+the reference consumer's 237 fence-carrying artifacts: **43 newly allowed, 0 newly refused**.
+Controls in the same invocation: the two extracted functions differ (4893 vs 7817 bytes) and both
+extractions end at a function close. The 43 split three ways — a bar inside quotes, a
+backslash-escaped bar, and a quoted bar sitting beside a genuine pipe — and all three are the same
+defect wearing different clothes.
+
+**THE UNBALANCED-QUOTE REFUSAL IS LOAD-BEARING, AND A MUTANT IS WHY THAT IS KNOWN.** Splitting
+quote-aware without refusing an unresolved quote opens a hole the old code closed:
+`grep $'a\'b' f | xargs rm` is ONE word plus a real pipe to bash, while a quote-parity scan sees an
+odd number of quotes and stops splitting — so the segment's first word is `grep` and `xargs rm`
+never gets checked. Scored against a copy of the fix with that refusal deleted: pre REFUSE, fix
+REFUSE, no-refusal **ALLOW**, with bash confirming it parses. The guard is not tidiness.
+
+**MY OWN NEW ARM SHIPPED A FALSE REFUSAL FIRST, AND ONLY AN INDEPENDENT PARSER FOUND IT.** Checked
+against `bash -n -c`, which is the actual executor and therefore ground truth, the quote scan
+disagreed on exactly two of 3408 — both `python3 # ... test_safeguards.py's own regex`, where bash
+reads the apostrophe inside a `#` COMMENT and the scan did not. Left alone that would have refused
+`grep -c x f # note`, a correct allowlisted command, which is the very class this change exists to
+remove. The scan now ends a command at an unquoted `#` opening a word. Cross-checked separately
+against python `shlex`: 0 disagreements on top-level pipe count across the 3381 both parse.
+
+**Tiered DEFECT.** It refuses correct data, and since `ai-dlc-derivation-capture.sh` began re-running
+a block inside the tool call that wrote it, the refusal blocks an author's write with no human in the
+loop — the state this repo's own comment says gets a hook turned off.
+
+**THE RECEIPT WAS SCORED, AND ITS FOURTH ARM EXISTS BECAUSE THE FIRST THREE ACCEPTED A
+REGRESSION.** Seven implementations were built and scored — the fix, a second spelling that masks
+quoted regions and splits with `tr`, the pre-fix original, a version that never splits, the fix
+minus its unbalanced-quote refusal, a total disarm, and one with the allowlist widened to every
+command on `PATH`. Each was asserted to differ from the fix first. Three arms accepted **3 of 7**,
+the extra being the no-refusal variant: every one of its inputs still exits 1, because a command
+bash cannot run fails as STALE instead of ALLOWLIST, so an exit-code-only arm cannot separate them.
+The fourth arm reads the failure CLASS for an ANSI-C quoted input, and the count is **2 of 7**.
+
+The receipt drives the shipped validator four ways in one run: a quoted alternation must PASS, a
+non-allowlisted command behind a genuine pipe must still FAIL, a trailing `#` comment must PASS,
+and `$'...'` hiding a pipe must be refused as UNBALANCED rather than merely failing. The second arm
+rejects the regression that "fixes" this by not splitting at all; the fourth rejects the one that
+drops the refusal. Note that a reword of the `unbalanced quote` phrase scores STILL-LIVE — that
+string is what the fourth arm keys on, and no vocabulary binds it.
+
+verify: sh set -e; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; printf 'alpha\nbeta\n' > "$d/f.txt"; V=core/scripts/validate-artifact-derivations.sh; printf '```derived\n$ grep -cE "alpha|beta" f.txt\n2\n```\n' > "$d/a.md"; printf '```derived\n$ grep -c alpha f.txt | xargs echo\n1\n```\n' > "$d/b.md"; printf '```derived\n$ grep -c alpha f.txt # note\n1\n```\n' > "$d/c.md"; printf '```derived\n$ grep $\047a\\\047b\047 f.txt | xargs rm\n2\n```\n' > "$d/e.md"; AI_DLC_PROJECT_ROOT="$d" bash "$V" "$d/a.md" >/dev/null 2>&1 || exit 1; AI_DLC_PROJECT_ROOT="$d" bash "$V" "$d/b.md" >/dev/null 2>&1 && exit 1; AI_DLC_PROJECT_ROOT="$d" bash "$V" "$d/c.md" >/dev/null 2>&1 || exit 1; o=$(AI_DLC_PROJECT_ROOT="$d" bash "$V" "$d/e.md" 2>&1) || true; case "$o" in *"unbalanced quote"*) ;; *) exit 1 ;; esac; exit 0
+
