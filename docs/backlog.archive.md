@@ -4552,3 +4552,79 @@ would have caught this.
 
 verify: sh set -e; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; V=$PWD/core/scripts/validate-artifact-derivations.sh; cd "$d"; printf 'alpha\nbeta\n' > f.txt; printf '```derived\n$ awk \047BEGIN{print "" | "touch canary"}\047\n0\n```\n' > a.md; printf '```derived\n$ grep -cE "alpha|beta" f.txt\n2\n```\n' > b.md; bash -c 'awk "BEGIN{print \"\" | \"touch canary\"}"' >/dev/null 2>&1; [ -e canary ] || exit 1; rm -f canary; AI_DLC_PROJECT_ROOT="$d" bash "$V" a.md >/dev/null 2>&1 || true; [ -e canary ] && exit 1; AI_DLC_PROJECT_ROOT="$d" bash "$V" b.md >/dev/null 2>&1 || exit 1; exit 0
 
+## BL-138 — the re-adoption gate tests one direction of a two-sided difference, and matches whole lines
+
+**LANDED (v0.476.0, verified ed9bf798).**
+
+**Provenance: `PC-S340-STAMP-READOPT-GATE-IS-BLIND-TO-AN-ADDITIVE-CHANGE-AND-TO-A-REWRITTEN-BODY`**,
+filed by the reference consumer during its `0.452.0 -> 0.456.0` pull. **FIXED in this release** —
+this entry records what was measured, which of the filing's two claims survived, and what was
+deliberately left.
+
+`readopt-override.sh`'s `stale_lines()` computed one set difference — substantive lines core
+carried at `base_sha` and does not carry at `theirs`, still present in the override body — and
+tested body membership with a whole-line fixed-string match. Two failures, and the first is the
+one that costs a consumer a fix:
+
+- **A purely ADDITIVE upstream change yields an empty stale set BY CONSTRUCTION.** `--check`
+  printed OK, `--stamp readopt` then rewrote `base_sha`, and drift is computed
+  `base_sha..theirs` — so the next pull sees no drift on that section and never offers the new
+  core text again. The block is cleared by doing nothing, permanently, and every mechanical
+  check stays green.
+- **A whole-line test cannot see a body that re-wrapped what it copied.** An override of a
+  section the consumer rewrote is a re-wrap by definition, so the predicate was weakest exactly
+  where it was needed.
+
+**Measured on the entry's own motivating case** — the consumer's `steps__retro__domain-sections.md`
+at the revision the pull stamped, `base_sha a5cbdf0b` against `theirs 95670e58`: the shipping gate
+exits **0**, and core's `#4a. Close-Out Sweep` gained **5** substantive lines the body does not
+carry. The same run scores its other three anchors at 0, so the reading discriminates rather than
+firing on any moved file.
+
+**The fix** adds `unadopted_lines()` — the same difference with `comm -13` and the body test
+negated — and replaces the whole-line body test with `body_carries()`, a containment test against
+the body flattened to one line. `--check` reports `UNADOPTED-CORE-TEXT`, `--stamp readopt` refuses,
+and the dossier carries the matching panel. `--merge` already produces the body that clears it.
+
+**False-positive set: 0.** The consumer's 8 live overrides, each at its own declared `base_sha`
+against this distribution's `origin/main`, scored pre-fix and fixed: 0 refused either way, 0 newly
+refused. Controls in the same invocation: `cmp -s` asserts the two implementations differ, and the
+pre-fix copy was materialised beside its own `lib.sh` — a lone script copy dies sourcing it, and
+that exit reads as a finding while being a refusal.
+
+**The filing's REWORD half is not fixed and is not claimed.** Its second measurement is a deleted
+core line surviving in the body reworded — "relocate" where core says "archive" — which no
+containment test over core's own words can reach. On the motivating entry the UNADOPTED direction
+catches the file anyway; in general a reword inside an otherwise-adopted section is what
+`--stamp reaffirm --note` exists for.
+
+**NOTE, found while proving the gate satisfiable and NOT fixed here:** `--check` reports OK on a
+body containing unresolved `<<<<<<<` conflict markers. `--stamp readopt` refuses on them, so
+nothing can be stamped away, but the gate's own OK line is wrong about a body a `--merge` has just
+conflicted on. Separate claim, separate arm, not part of this entry's subject.
+
+**The consumer's own receipt for this candidate cannot see the fix.** It is a substring test for
+the removed flags over the whole file, so a comment quoting them would keep it matching forever;
+this release therefore describes the deleted spelling rather than reproducing it, and the token is
+now absent from the file (control: present at `origin/main`, and carried by no other file in that
+directory). That is the only reason their entry can close.
+
+verify: sh set -e; RO="$PWD/core/skills/ai-dlc-update/reconcile/readopt-override.sh"; ROOT="$(bash "$PWD/core/fixtures/layer-readopt-gate/seed.sh")"; trap 'rm -rf "$ROOT"' EXIT; D="$ROOT/dist"; C="$ROOT/consumer"; O="$C/.claude/skills/ai-dlc/overrides"; printf '\n**A NEW UPSTREAM CLAUSE ADDED TO THE SWEEP RULE**, recorded here and nowhere\nelse, so the change to this section is purely additive.\n' >> "$D/core/skills/ai-dlc/SKILL.md"; git -C "$D" -c user.email=f@x -c user.name=f commit -aqm additive; T="$(git -C "$D" rev-parse --short HEAD)"; A="$O/SKILL__Rule-19-nested.md"; B="$(sed -n 's/^base_sha:[[:space:]]*//p' "$A" | head -1)"; ! bash "$RO" "$D" "$T" "$C" "$A" --stamp readopt >/dev/null 2>&1; [ "$(sed -n 's/^base_sha:[[:space:]]*//p' "$A" | head -1)" = "$B" ]; bash "$RO" "$D" "$T" "$C" "$O/SKILL__Rule-12-anchor.md" --check >/dev/null 2>&1; printf -- '---\nshadows: SKILL.md#Rule 19\nbase_sha: %s\nreason: adopted at its own wrap.\n---\n\n## Rule 19 -- Sweep (CONSUMER OVERRIDE)\n\nThe near-miss for the same arm: its override nests a sub-heading INSIDE the claimed section.\nA heading-set difference would report that child; a span-based claim does not.\n\n**A NEW UPSTREAM CLAUSE ADDED TO THE SWEEP RULE**, recorded here and\nnowhere else, so the change to this section is purely additive.\n' "$B" > "$O/adopted.md"; bash "$RO" "$D" "$T" "$C" "$O/adopted.md" --check >/dev/null 2>&1; printf -- '---\nshadows: SKILL.md#Rule 8\nbase_sha: %s\nreason: consumer validation-intensity table.\n---\n\n## Rule 8 -- Validation Depth\n\n**Divergence is a HARD_BLOCK, not a reason for another pass.** If pass\nN+1 reports more CRITICALs than pass N, the repair step is injecting\ndefects faster than review removes them; another pass only finds the\nnext wave. STOP.\n' "$B" > "$O/SKILL__Rule-8.md"; ! bash "$RO" "$D" "$T" "$C" "$O/SKILL__Rule-8.md" --check >/dev/null 2>&1
+
+**Scored against eight implementations, each asserted to differ from the fix first: the receipt
+ACCEPTS 2** — the fix and a second spelling that flattens with `awk` and tests with `grep -Fq`. It
+rejects the pre-fix original, a variant that reports the new finding in `--check` but does not gate
+the stamp (caught by the `base_sha` arm alone), the flattening without the new direction, the new
+direction without the flattening, a disarmed `unadopted_lines`, and an over-refusing variant that
+ignores the body and refuses every moved section. The FIXTURE passes only the fix: the second
+spelling fails it because the committed mutant is anchored on the shipped flattening and `cmp -s`
+correctly reports an un-applied mutation rather than a kill.
+
+The receipt drives the shipping script over a real dist repo and a real consumer tree that
+`seed.sh` writes, and it is four assertions rather than one: the additive offender must be
+REFUSED, `base_sha` must still hold its old value afterwards (an implementation that reports and
+stamps anyway passes any exit-code-only arm), a section that did not move must still be ALLOWED,
+and the SAME moved section adopted at a different wrap must also be ALLOWED — without that last
+one the receipt is satisfied by refusing every entry whose section changed, which passes the first
+three and wedges every legitimate re-adoption. The fourth arm is the superseded-and-re-wrapped
+body, which keys on the flattening rather than on the new direction.
