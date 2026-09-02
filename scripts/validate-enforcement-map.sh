@@ -8382,6 +8382,127 @@ $i102_hits"
   fi
 fi
 
+# --- I104: the snapshot sprint_id READER is one expression in three copies -----
+# =============================================================================
+# WHAT IT BINDS. Three hooks stamp a dispatch with the sprint they read out of
+# `_bmad-output/pipeline-snapshot.md`: ai-dlc-dispatch-guard.sh writes it to the spawn ledger,
+# ai-dlc-subagent-probe.sh and ai-dlc-context-sensor.sh to their own rows. Check 22 resolves a
+# sprint's dispatches by that stamped field, so a reader that resolves EMPTY writes `null` and
+# the check reports PRE-LEDGER on a sprint whose rows are all present and correctly named.
+#
+# WHY IT IS ONE RULE AND NOT THREE. The three copies required the field name wrapped in emphasis
+# markers. The snapshot's writer emits the plain bullet whenever nothing re-emphasises it, and
+# the two forms alternate across sprints with no schema mandating either -- measured over 2066
+# real snapshot revisions from the reference consumer, the emphasis-spelling reader resolved
+# nothing on 195 of them. The consumer worked around it by re-emphasising the line, and it
+# drifted back twice. Every arm on that read is `2>/dev/null || true`, so a fork here is silent
+# in the direction that loses data.
+#
+# COPIES RATHER THAN A SHARED SOURCE, for I92's and I103's reason exactly: install.sh splits
+# core/hooks/ from core/scripts/, I33 fails the build on locating one core file by walking up
+# from another, and a hook that sources a missing helper fails OPEN. Three hand-written copies
+# are safe only while something asserts they are the same string.
+#
+# A SECOND SUBJECT OVER I103's SHAPE, NOT A WIDENING OF IT. I103 binds two function BODIES and
+# extracts them with an `/^fn\(\) \{/,/^\}/` range. This subject is a bare expression on an
+# assignment line, which that extractor cannot reach at all, and the three sites are different
+# files. Folding them would cost the specific remedy text that makes either finding actionable.
+#
+# NOT A VOCABULARY, so no `# vocabulary:` marker: the subject is one executable expression, not
+# an enumerated membership a second reader restates.
+#
+# THE FOURTH-COPY HALF AND ITS FALSE-POSITIVE SET. Byte-equality across three declared paths
+# cannot see a fourth reader written the brittle way in a fourth file, so the site list is
+# DERIVED as well as declared. The grammar keys on the EXTRACTION, not on the field name, which
+# is what separates a reader from a producer: six fixtures write snapshot lines carrying this
+# field on purpose -- that is how the plain-form arm can fail -- and none of them is a member,
+# measured. A DIRECTORY exclusion for core/fixtures/ was written first and removed: the reader
+# grammar already scores zero of them, so the exclusion had no subject and would only have
+# hidden a fixture that grew a real reader. Over the real tree the scan returns exactly the
+# three declared sites and this file, which carries the strings in its own probe.
+i104_expr='s/^- *[*]*sprint_id:[*]* *\([0-9][0-9]*\).*/\1/p'
+i104_declared='core/hooks/ai-dlc-dispatch-guard.sh
+core/hooks/ai-dlc-subagent-probe.sh
+core/hooks/ai-dlc-context-sensor.sh'
+
+# A READER is a sed extraction of the field; the grammar keys on the two together so a line that
+# merely mentions the field is not a member. `\b` is a GNU extension BSD grep does not honour.
+i104_reader_re='sed -n .[^;]*sprint_id'
+i104_sites() { grep -rlE -- "$i104_reader_re" "$@" 2>/dev/null; }
+
+# THE PROBE, RUN BEFORE THE CORPUS. Both halves are absence-shaped -- a needle that no longer
+# matches reports no drift, and a scan that no longer matches reports no fourth copy -- and both
+# silences read exactly like a conforming tree. So both are driven first over a tree with one
+# right answer, in BOTH directions: a seeded offender is reported and a seeded near-miss is not.
+i104_probe_dir="$(mktemp -d "${TMPDIR:-/tmp}/i104-XXXXXX")"
+mkdir -p "$i104_probe_dir/t" "$i104_probe_dir/t/fixtures"
+#  a  a conforming reader, as the real sites carry it.
+printf 'A="$(sed -n '"'"'%s'"'"' "$F" 2>/dev/null | head -1)"\n' "$i104_expr" > "$i104_probe_dir/t/a.sh"
+#  b  the PRE-FIX brittle spelling: a reader that requires the emphasis markers. The scan must
+#     SEE it and the equality half must call it drift -- this is the exact state the arm exists
+#     to report, and it is what shipped for the whole of the defect's life.
+printf 'B="$(sed -n '"'"'s/^- \\*\\*sprint_id:\\*\\* *\\([0-9][0-9]*\\).*/\\1/p'"'"' "$F" | head -1)"\n' > "$i104_probe_dir/t/b.sh"
+#  c  NEAR-MISS for the scan half: the field MENTIONED in prose with no extraction. Must stay
+#     quiet, or the arm flags every file that discusses the field.
+printf '# the sprint_id field is stamped by the dispatch guard\n' > "$i104_probe_dir/t/c.sh"
+#  d  NEAR-MISS for the scan half: a sed extraction of a DIFFERENT field. Must stay quiet, or
+#     the arm flags every snapshot reader for resembling this one.
+printf 'D="$(sed -n '"'"'s/^- sprint_name: *\\(.*\\)/\\1/p'"'"' "$F")"\n' > "$i104_probe_dir/t/d.sh"
+#  e  a fixture-shaped SEED: writes the line, never reads it, and carries the emphasised form
+#     deliberately. Must stay quiet on SHAPE alone -- it is the reason no directory exclusion is
+#     needed, and if the grammar ever stops discriminating it this arm fails rather than the
+#     exclusion silently covering for it.
+printf 'printf -- '"'"'- **sprint_id:** 291\\n'"'"' > "$P/pipeline-snapshot.md"\n' > "$i104_probe_dir/t/e.sh"
+i104_score=0
+grep -qF -- "$i104_expr" "$i104_probe_dir/t/a.sh"     || i104_score=$((i104_score + 1))
+grep -qF -- "$i104_expr" "$i104_probe_dir/t/b.sh"     && i104_score=$((i104_score + 10))
+i104_pm="$(i104_sites "$i104_probe_dir/t" | LC_ALL=C sort)"
+i104_pm_want="$i104_probe_dir/t/a.sh
+$i104_probe_dir/t/b.sh"
+[ "$i104_pm" = "$i104_pm_want" ] || i104_score=$((i104_score + 100))
+rm -rf "$i104_probe_dir"
+if [ "$i104_score" -ne 0 ]; then
+  err "I104's probe scored $i104_score where 0 is the only correct total, so the corpus below was not scanned. +1 the canonical expression was not found in a file that carries it verbatim, so the equality half would report drift on a conforming tree; +10 the canonical expression matched the PRE-FIX brittle reader, so the half that exists to catch a regression cannot tell the two apart; +100 the reader scan did not name exactly the four probe files carrying an extraction -- it either missed the brittle fourth copy, or flagged a prose mention, a different field, or a fixture that only SEEDS the line. Any non-zero total means both halves of I104 would report a clean tree for the reason a broken reader does."
+else
+  # HALF ONE: every declared site carries the canonical expression verbatim, exactly once.
+  i104_missing=''
+  while IFS= read -r i104_rel; do
+    [ -n "$i104_rel" ] || continue
+    if [ ! -r "$REPO_ROOT/$i104_rel" ]; then
+      i104_missing="$i104_missing ${i104_rel}(unreadable)"
+    elif ! grep -qF -- "$i104_expr" "$REPO_ROOT/$i104_rel"; then
+      i104_missing="$i104_missing ${i104_rel}"
+    fi
+  done <<EOF
+$i104_declared
+EOF
+  [ -z "$i104_missing" ] || err "I104: the snapshot sprint_id reader has forked or gone missing at:$i104_missing. All three hooks stamp the sprint Check 22 resolves dispatches by, and a reader that resolves EMPTY writes null rather than failing -- so a fork here is invisible until a gate reports PRE-LEDGER on a sprint whose rows are all present. Make the expression byte-identical across all three, or move this arm with it."
+
+  # HALF TWO: no fourth reader, and none of the three regressed to the brittle spelling. THE
+  # POSITIVE CONTROL IS THIS FILE, read in the same invocation -- it carries both the canonical
+  # and the brittle spelling in i104_expr= and in the probe above, so a scan that is not reading
+  # the roots it was handed shows up here rather than as a clean fourth-copy report.
+  i104_hits="$(i104_sites "$REPO_ROOT/core" "$REPO_ROOT/scripts" | LC_ALL=C sort)"
+  i104_self="$REPO_ROOT/scripts/validate-enforcement-map.sh"
+  case "$i104_hits" in
+    *"$i104_self"*) : ;;
+    *) err "I104's fourth-copy scan did not find scripts/validate-enforcement-map.sh, which carries the reader grammar in its own probe. The scan is not reading the roots it was handed, so its silence about a fourth copy means nothing." ;;
+  esac
+  i104_extra=''
+  while IFS= read -r i104_hit; do
+    [ -n "$i104_hit" ] || continue
+    [ "$i104_hit" = "$i104_self" ] && continue
+    i104_rel_hit="${i104_hit#$REPO_ROOT/}"
+    case "$i104_declared" in
+      *"$i104_rel_hit"*) ;;
+      *) i104_extra="$i104_extra ${i104_rel_hit}" ;;
+    esac
+  done <<EOF
+$i104_hits
+EOF
+  [ -z "$i104_extra" ] || err "I104: a FOURTH reader of the snapshot sprint_id field exists at:$i104_extra. Three copies are already the most this field can carry safely; a fourth written the brittle way reproduces the defect in a file no arm names. Add it to i104_declared here in the same change, or route it through one of the three."
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
