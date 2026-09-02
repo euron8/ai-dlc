@@ -4715,8 +4715,8 @@ own output as an instance of its own subject.
 **Measured on the only register that exists**, 318 rows, driving the shipping script both ways in
 one invocation with a `cmp -s` control asserting the two copies differ: **29 flagged before, 19
 after**, `OPEN` unchanged at 16 either side. All 10 acquitted rows were read in full — 8 deny an
-obligation in as many words, 2 draw an explicit contrast. **The false-acquittal set is empty and
-enumerated.** The two genuine debts both survive, asserted as a fixture arm rather than assumed.
+obligation in as many words, 2 draw an explicit contrast. **The false-acquittal set is 8 unarguable denials and 2 rows taken on the
+adjudicator's word** — see `BL-142`, which corrects this and files what it found. The two genuine debts both survive, asserted as a fixture arm rather than assumed.
 
 **THE COMMA HAD TO BE ADDED TO THE CLAUSE BOUND, AND THAT CAME FROM ATTACKING THE FIX AFTER IT
 WAS COMMITTED.** The first cut bounded a clause on `.`, `;` and `:` only. A comma does not bound
