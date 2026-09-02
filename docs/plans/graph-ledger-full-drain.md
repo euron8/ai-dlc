@@ -32,11 +32,51 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 39 SHIPPED AS `v0.474.0`. THE GAP IS THREE RELEASES AND PENDING IS 2. START AT BATCH 40.
+### BATCH 39 SHIPPED AS `v0.474.0`, CORRECTED BY `v0.475.0`. THE GAP IS FOUR RELEASES AND PENDING IS 2. START AT BATCH 40.
 
 **This block is the current state and it replaces every block below.** Every figure was
 re-derived after the merge by running the derive block and the sweep, all controls in the same
 invocation.
+
+**`v0.474.0` REMOVED A FALSE REFUSAL AND ACQUITTED FIVE ARBITRARY-EXECUTION PATHS IN THE SAME
+EDIT. `v0.475.0` CORRECTS IT, AND THIS IS THE BATCH'S REAL LESSON.** The quote-blind
+`tr '|' '\n'` was ALSO the only thing refusing `awk 'BEGIN{print "" | "touch canary"}'`,
+`awk 'BEGIN{"touch canary" | getline x}'` and three `$'...'` ANSI-C constructs where bash and a
+parity scan disagree about where a quote ends. One edit removed both. Every one was REFUSED
+before and RAN after, verified with a canary file driving the whole validator end to end.
+**Ask what a loosening ACQUITS by building it and watching the tree, not by reading the diff.**
+
+**THE GATE WAS GREEN THROUGH ALL OF IT, AND SO WAS THE FIXTURE I HAD JUST WRITTEN.** Every arm
+in `core/fixtures/artifact-derivations` asserted a VERDICT; not one ran a command and then
+looked at the tree. Section H now scores by EXECUTION — each case is first run by bash directly
+and must create a canary, THEN put through the validator where it must not. Against `v0.474.0`
+those five arms report `EXECUTED through the validator`. **On a boundary whose subject is
+execution, a verdict arm is not coverage.**
+
+**BOTH OBVIOUS ONE-LINE REMEDIES HAD A MEASURED FALSE-POSITIVE SET AND NEITHER SHIPPED AS
+PROPOSED.** Banning `$'` in the up-front metacharacter test refuses **21** correct commands in
+the reference corpus, every one a regex end-anchor before a closing quote — only the quote
+STATE separates those from ANSI-C quoting, so the test went INSIDE the scanner where that state
+exists. Refusing an awk bar adjacent to a double quote falsely refuses
+`awk -F'|' '{print $2,"|",$3,"|",$7}'`, which is in that corpus. **Measure the FP set of a
+remedy an adversary hands you exactly as you would your own.**
+
+**THE PUBLISHED FIGURE WAS WRONG AND IS CORRECTED: 31, NOT 43.** The count was taken over every
+`$ `-prefixed line in a fence-carrying FILE; the population `cmd_is_safe` actually sees is the
+lines INSIDE a ```derived fence — 3044 of 3408, with 364 outside any fence and never submitted.
+**Ask what SET a number was taken over, and whether it is the set the mechanism runs on.**
+
+**NO CONSUMER WAS EXPOSED**, because the gap that this program treats as a cost is also a
+buffer: the reference consumer sits at `0.471.0` and the regression lived only in this
+distribution's `main`.
+
+**THE TWO ADVERSARIAL HANDS REPORTED AFTER THE MERGE AND BOTH WERE RIGHT.** One found all five
+fail-opens and correctly identified that the `shlex` cross-check was blind to the class that
+mattered — it does not model ANSI-C quoting either, so oracle and subject shared a blind spot
+and agreed for that reason. The other refuted the filing's rollback claim independently by
+driving the real hook, and corrected the 43 to 31. **An idle hand is not a hand with nothing to
+say; this is the third time in this program that a late hand has been right and a merge has
+been early.**
 
 **THE FILING HAD TWO CLAIMS AND ONLY ONE SURVIVED, WHICH IS THE BATCH'S SHAPE.**
 `PC-S340-DERIVATION-CAPTURE-HOOK-ROLLS-BACK-THE-WHOLE-FILE-ON-A-REJECTED-BLOCK` said a rejected
@@ -3216,8 +3256,8 @@ so no block written before it changes verdict.
    interrupt; if you genuinely need to ask, ask the OPERATOR whether to, and put the peer's current
    state into the question.
 
-   **THE GAP IS THREE RELEASES AND PENDING IS 2** — the consumer's stamp reads `0.471.0`/`31b51d48`
-   on all four fields and this distribution is `0.474.0`. Your batch widens the gap to four. That is
+   **THE GAP IS FOUR RELEASES AND PENDING IS 2** — the consumer stamp reads `0.471.0`/`31b51d48`
+   on all four fields and this distribution is `0.475.0`. Your batch widens the gap to four. That is
    not permission to close it: a pull is operator-initiated, readiness is not authorization, a
    `PENDING` count is not a decision about WHEN, and one is never handed to a peer session.
    `operator-rulings.md` governs.
