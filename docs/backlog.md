@@ -3721,3 +3721,52 @@ Sibling to `BL-068`, which records that the rotate acceptance test false-fails o
 documents. Take them together or say which one you are closing.
 
 verify: sh set -e; R="$PWD/core/skills/ai-dlc-update/reconcile"; grep -q 'ADOPTED UPSTREAM' "$R/ledger-rotate.sh"; ! grep -qE 'REJECTED[ -]+(BY DESIGN|by design)' "$R/ledger-rotate.sh" && exit 1; exit 0
+
+## BL-141 — the debt audit charges an adjudicator for writing down that nothing is owed
+
+**Filed from the reference consumer's push-candidate ledger**, 2026-09-02, as
+`PC-S340-UNDECLARED-CUE-CANNOT-TELL-A-REFERENCE-FROM-A-DECLARATION`, and FIXED in the same
+release. The third false-positive class of `audit-layer-debt.sh`'s UNDECLARED arm, after the
+lexical one (a cue inside an identifier) and the structural one (a discharge row).
+
+This one is GRAMMATICAL: the cue sits in a clause that DENIES an obligation. `No owed is carried
+because there is no residual obligation on this entry`, `No owed: nothing is left outstanding`,
+`no re-grain is owed`, `GAP CLOSED IN THIS COMMIT rather than deferred`. Every one is an
+adjudicator stating correctly that the row owes nothing, and the arm charged them for it.
+
+**It is self-defeating, which is what makes it worth a fix rather than a glance.** The remedy the
+report prints is *"re-record each with an `owed` object"*. An adjudicator who instead writes that
+no obligation exists trips the cue by writing it, and the register is APPEND-ONLY, so no later act
+can clear the row. One row on the reference register records `audit-layer-debt.sh lists this entry
+under UNDECLARED on cue 'deferred'` and is itself flagged for that sentence — the tool scoring its
+own output as an instance of its own subject.
+
+**Measured on the only register that exists**, 318 rows, driving the shipping script both ways in
+one invocation with a `cmp -s` control asserting the two copies differ: **29 flagged before, 18
+after**, `OPEN` unchanged at 16 either side. All 11 acquitted rows were read in full — 9 deny an
+obligation in as many words, 2 draw an explicit contrast. **The false-acquittal set is empty and
+enumerated.** The two genuine debts both survive, asserted as a fixture arm rather than assumed.
+
+**THE FILED REMEDY WAS REFUTED BY BUILDING IT, and that is the reusable half.** The candidate asked
+to skip a row whose cue occurrences all sit inside a resolvable `OWED-<id>` token. Built and
+scored, it removes **0 of 29**, because a cue occurrence inside such a token is unconstructible:
+the arm's own `(?![\w-])` lookahead already refuses it. Control in the same run — `OWED-DEBT` and
+`OWED-DEFERRED-X`, ids built entirely out of cue words, yield zero cue matches while `debt
+deferred` standing alone yields two. The citation shape the filing describes is real; the
+mechanism it named cannot fire.
+
+**What is NOT claimed.** Two false-positive classes survive and are stated rather than deferred:
+the cue naming a CORE CONSTRUCT (`core's Remediation Rule 12`, `the remediation EDIT`) and the cue
+in a clause citing a resolvable `OWED-` id. Both are per-row prose judgements, and the arm's own
+header declares a deliberate recall bias — narrowing further trades away the thing the file exists
+for. 13 of the surviving 18 are still false; the fix removes noise, it does not make the arm
+precise.
+
+**The receipt ACCEPTS a row-grain implementation** — one that silences the whole row when any cue
+is denied — because its seed carries a single cue each side. That is a real weakness and it is
+covered by the fixture, not by the receipt: `core/fixtures/layer-debt-due-and-discharge` mutant M6
+seeds a row that denies one obligation and states another, which no receipt this shape can reach.
+Scored: 8 mutants, 8 killed, and the `nothing`-as-negator seed had to be narrowed to its governed
+sentence before M7 could fire at all.
+
+verify: sh set -e; d=$(mktemp -d); printf '%s\n' '{"clause":"LC-E4","entry":"x/deny.md","subject_digest":"a","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"Verdict recorded. No owed is carried on this entry."}' '{"clause":"LC-E4","entry":"x/keep.md","subject_digest":"b","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"Verdict recorded. New owed is carried on this entry."}' > "$d/r.jsonl"; o="$(bash core/scripts/audit-layer-debt.sh --register "$d/r.jsonl" 2>/dev/null)"; grep -q 'UNDECLARED (1)' <<<"$o" && grep -q 'keep\.md' <<<"$o" && ! grep -q 'deny\.md' <<<"$o"

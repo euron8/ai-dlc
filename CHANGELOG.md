@@ -15,6 +15,59 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.478.0] - 2026-09-02
+
+### The debt audit charged an adjudicator for writing down that nothing is owed
+
+Batch 41. Subject:
+`PC-S340-UNDECLARED-CUE-CANNOT-TELL-A-REFERENCE-FROM-A-DECLARATION`, filed here as `BL-141`. The
+third false-positive class of `audit-layer-debt.sh`'s UNDECLARED arm, after the lexical one (a cue
+inside an identifier) and the structural one (a discharge row).
+
+**THIS ONE PUNISHES THE CORRECT ANSWER.** The cue sits in a clause that DENIES an obligation --
+`No owed is carried because there is no residual obligation on this entry`, `No owed: nothing is
+left outstanding`, `no re-grain is owed`, `GAP CLOSED IN THIS COMMIT rather than deferred`. The
+remedy the report prints is *"re-record each with an `owed` object"*, so an adjudicator who
+instead writes that no obligation exists trips the cue by writing it -- and the register is
+APPEND-ONLY, so no later act can clear the row. One row on the reference register records
+`audit-layer-debt.sh lists this entry under UNDECLARED on cue 'deferred'` and is itself flagged
+for that sentence: the tool scoring its own output as an instance of its own subject.
+
+**THE FILED REMEDY WAS REFUTED BY BUILDING IT, and that is the durable half.** The candidate asked
+to skip a row whose cue occurrences all sit inside a resolvable `OWED-<id>` token. Built and
+scored, it removes **0 of 29** -- a cue occurrence inside such a token is unconstructible, because
+the arm's own `(?![\w-])` lookahead already refuses it. Control in the same invocation:
+`OWED-DEBT` and `OWED-DEFERRED-X`, ids built entirely out of cue words, yield zero cue matches
+while `debt deferred` standing alone yields two. The citation shape the filing describes is real;
+the mechanism it named cannot fire. **Ask what a proposed remedy's predicate can SPELL before
+building it.**
+
+**MEASURED, NOT ASSERTED.** Driving the shipping script over the reference consumer's 318-row
+register both ways in one invocation, with a `cmp -s` control asserting the two copies differ:
+**29 flagged before, 18 after**, `OPEN` unchanged at 16 on both sides. All 11 acquitted rows were
+read in full -- 9 deny an obligation in as many words, 2 draw an explicit contrast. The
+false-acquittal set is empty and enumerated.
+
+**PER OCCURRENCE, NEVER PER ROW.** A row is still reported when any cue survives, so a reason that
+denies one obligation and states another is still caught. `nothing` is deliberately NOT a negator:
+it is the exact word the strongest true positive uses -- *"Nothing but this reason field is
+tracking that debt."* -- and admitting it would acquit the sentence the file exists to surface.
+`not` and `never` are excluded for a weaker version of the same reason: measured, they acquitted
+two rows on a `not` governing an unrelated clause, reaching the right verdict for the wrong reason.
+
+**WHAT IS NOT CLAIMED.** Two false-positive classes survive and are stated rather than deferred --
+the cue naming a CORE CONSTRUCT (`core's Remediation Rule 12`), and the cue in a clause citing a
+resolvable `OWED-` id. 13 of the surviving 18 are still false. This removes noise; it does not
+make the arm precise, and the arm's own header declares a deliberate recall bias.
+
+**THE SEED HAD TO BE NARROWED BEFORE ITS MUTANT COULD FIRE.**
+`core/fixtures/layer-debt-due-and-discharge` grows from 16 assertions to 27, with four new mutants
+keyed on the three decisions the discount makes -- which words deny, how far back it looks, and
+whether it scores per cue or per row. The `nothing`-as-negator seed was first written with the
+register's full phrasing, which left three cues in a sentence the discount never touches: the row
+reported either way and **mutant M7 SURVIVED**. A guard needs a subject the other guards cannot
+see. 8 mutants, 8 killed.
+
 ## [0.477.0] - 2026-09-02
 
 ### `v0.476.0` shipped the un-adopted arm as a REFUSAL, and a refusal there loses the clause it protects

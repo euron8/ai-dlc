@@ -202,6 +202,63 @@ unowned = sorted({(r.get("clause") or "", r.get("entry") or "") for r in rows
 # on the reference register. Require the cue to stand alone, not to sit between hyphens.
 PROSE = re.compile(r"(?<![\w-])(owed|still owed|deferred|remediation|follow-?up|debt|TODO)(?![\w-])", re.I)
 #
+# A THIRD FALSE-POSITIVE CLASS, AND IT IS THE ONE THAT PUNISHES THE CORRECT ANSWER. The two
+# above are lexical (a cue inside an identifier) and structural (a discharge row). This one is
+# GRAMMATICAL: the cue sits inside a clause that DENIES an obligation. `no owed is declared
+# because the fixture is consumer-side test coverage`, `No owed: nothing is left outstanding on
+# this entry`, `no re-grain is owed`, `GAP CLOSED IN THIS COMMIT rather than deferred`. Every one
+# of those is an adjudicator stating, explicitly and correctly, that this row owes nothing — and
+# the arm charged them for writing it down.
+#
+# IT IS SELF-DEFEATING, WHICH IS WHY IT IS WORTH A FIX RATHER THAN A GLANCE. The remedy this
+# report prints is "re-record each with an `owed` object". An adjudicator who instead does the
+# right thing — says in the reason that no obligation exists — trips the cue by saying so, and
+# the register is APPEND-ONLY, so that row can never be cleared by any act. One row on the
+# reference register records `audit-layer-debt.sh lists this entry under UNDECLARED on cue
+# 'deferred'` and is itself flagged for that sentence: the tool scores its own output as an
+# instance of its own subject.
+#
+# MEASURED ON THE ONLY REGISTER THAT EXISTS — 318 rows, 29 flagged before, 18 after. All 11
+# acquitted rows were read in full: 9 deny an obligation in as many words (`no owed`/`No owed:`/
+# `no new owed`/`no re-grain is owed`), 2 draw an explicit contrast (`rather than deferred`,
+# `rather than declared as consumer debt`). The false-acquittal set is EMPTY and enumerated.
+#
+# PER OCCURRENCE, NEVER PER ROW, and that is what keeps recall. A row is still reported when ANY
+# cue survives, so a reason that denies one obligation and states another is still caught. The
+# two genuine debts on the reference register — both opening `OWED REMEDIATION, deferred by
+# operator decision` and both saying `Nothing but this reason field is tracking that debt` —
+# survive this narrowing, asserted as an arm rather than assumed.
+#
+# `nothing` IS DELIBERATELY NOT A NEGATOR. It reads like one and it is the exact word the
+# strongest TRUE positive in the corpus uses: *"Nothing but this reason field is tracking that
+# debt."* Admitting it would acquit the sentence this whole file exists to surface. `not` and
+# `never` are excluded for a weaker version of the same reason — measured, they acquitted two
+# rows on a `not` governing an unrelated clause, reaching the right verdict for the wrong reason.
+#
+# THE FILED REMEDY WAS REFUTED BY BUILDING IT, and the refutation is the reusable part.
+# `PC-S340-UNDECLARED-CUE-CANNOT-TELL-A-REFERENCE-FROM-A-DECLARATION` asked to skip a row whose
+# cue occurrences all sit inside a resolvable `OWED-<id>` token. That removes 0 of 29, because a
+# cue occurrence INSIDE such a token is unconstructible: the `(?![\w-])` lookahead above already
+# refuses it. Control: `OWED-DEBT` and `OWED-DEFERRED-X` — ids built entirely out of cue words —
+# yield zero cue matches, while `debt deferred` standing alone yields two. The citation shape is
+# real, but the cue is always a SEPARATE word elsewhere in the reason, so the filing named a
+# mechanism that cannot fire.
+NEGATED = re.compile(r"\bno\b|\brather than\b|\binstead of\b", re.I)
+# A clause ends at `.`, `;` or `:`. Bounding on those and searching only the text BEFORE the cue
+# is what stops a negator in a neighbouring sentence from acquitting an obligation two sentences
+# later — the failure a whole-reason search has.
+CLAUSE_END = re.compile(r"[.;:]")
+
+
+def cue_denied(reason, m):
+    """True when the cue's own clause denies an obligation before reaching the cue."""
+    start = 0
+    for b in CLAUSE_END.finditer(reason, 0, m.start()):
+        start = b.end()
+    return bool(NEGATED.search(reason, start, m.start()))
+
+
+#
 # A SECOND FALSE-POSITIVE CLASS, AND IT IS STRUCTURAL WHERE THE ONE ABOVE IS LEXICAL. The
 # cue narrowing cannot reach it: the prose on a DISCHARGE row is genuinely about a debt, and
 # the row genuinely declares no new one. The correct way to close a debt is to carry
@@ -225,7 +282,10 @@ for r in rows:
     if closes_ids(r)[0]:
         continue
     reason = r.get("reason", "") or ""
-    hits = sorted({m.lower() for m in PROSE.findall(reason)})
+    # The surviving cues, not every cue. What is reported is what still reads as an obligation,
+    # so the `cues:` column names the words that actually earned the row its place.
+    hits = sorted({m.group(0).lower() for m in PROSE.finditer(reason)
+                   if not cue_denied(reason, m)})
     if hits:
         undeclared.append({"entry": r.get("entry", ""), "recorded_utc": r.get("recorded_utc", ""),
                            "verdict": r.get("verdict", ""), "cues": hits})
