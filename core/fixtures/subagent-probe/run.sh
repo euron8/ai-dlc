@@ -82,6 +82,20 @@ chk "  exits 0" "$rc" "0"
 chk "records peak_tokens" "$(last .peak_tokens)" "60000"
 chk "  records the teammate's model" "$(last .model)" "claude-opus-4-8"
 chk "  records the sprint from the snapshot" "$(last .sprint)" "291"
+# THE SEED ABOVE IS THE DECORATED FORM, WHICH IS THE FORM THE READER ALREADY
+# ACCEPTS, so the assertion on it cannot fail against the shape that actually
+# broke. The snapshot's writer emits the plain bullet whenever nothing
+# re-emphasises it; measured over 2066 real revisions the decoration-spelling
+# reader resolved nothing on 195 of them. Both forms are asserted here, in this
+# run, and the near-miss holds a non-numeric value to null so neither positive
+# arm can be satisfied by a read that matches anything after the colon.
+# `raw`, NOT `last`, for the near-miss arm: `last` cannot tell null from "" for the
+# reason its own comment above gives, and null is exactly what that arm asserts.
+sprint_seed() { printf -- '%s\n' "$1" > "$PROJ/_bmad-output/pipeline-snapshot.md"; reset; fire "$PROJ" calm.jsonl >/dev/null 2>&1; raw .sprint; }
+chk "  and resolves it from the PLAIN bullet too (the form the writer emits)" "$(sprint_seed '- sprint_id: 291')" "291"
+chk "  and a non-numeric value stays null (no sprint is assigned yet)" "$(sprint_seed '- sprint_id: TBD')" "null"
+printf -- '- **sprint_id:** 291\n' > "$PROJ/_bmad-output/pipeline-snapshot.md"
+reset; fire "$PROJ" calm.jsonl >/dev/null 2>&1
 chk "  records agent_id" "$(last .agent_id)" "adversary-s291-p1"
 # v2, not v1: every row a consumer already holds was derived from the LEAD's
 # transcript, and nothing but its timestamp separates those rows from corrected
