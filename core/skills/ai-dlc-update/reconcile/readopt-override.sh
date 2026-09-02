@@ -13,11 +13,41 @@
 # wearing a stamp, and it is precisely how a core fix lands on disk while the
 # pipeline goes on running the rule it replaced.
 #
-# So `--stamp` is GATED. It refuses while the override body still contains a line
-# that core carried at `base_sha` and does NOT carry at `theirs` — a superseded
-# core line, copied into the override, now stale. That test is mechanical (set
-# difference over lines), it fails RED on the real defect today, and it can only
-# be cleared by actually editing the body or by an explicit, recorded re-affirm.
+# So `--stamp` is GATED, in BOTH directions of the set difference:
+#
+#   SUPERSEDED — a line core carried at `base_sha` and does NOT carry at `theirs`,
+#                still sitting in the body. The override is teaching the old rule.
+#   UNADOPTED  — a line core carries at `theirs` and did NOT carry at `base_sha`,
+#                which the body does not carry. The override never took the fix up.
+#
+# ONE DIRECTION IS NOT THE GATE, AND SHIPPING ONLY THE FIRST MADE THE COMMONEST
+# CHANGE INVISIBLE. A purely ADDITIVE upstream edit removes nothing, so the
+# superseded set is empty BY CONSTRUCTION and the gate printed OK on a body
+# carrying none of the new clause — then `--stamp readopt` advanced `base_sha`,
+# which makes the next pull compute no drift at all, so the un-adopted upstream
+# text is never offered again. Silent, permanent, and clean-looking.
+# Measured on the reference consumer's own `steps__retro__domain-sections.md`
+# across its `a5cbdf0b -> 95670e58` re-adoption: `--check` exit 0, and 5 lines of
+# core's rewritten `#4a. Close-Out Sweep` absent from the body. Its other three
+# anchors, whose sections did not move, score 0 in the same run.
+#
+# The containment test is WRAP-INSENSITIVE for the same reason `layer-drift.sh`'s
+# `asserts_shadow_survives` flattens a body before matching: layer bodies are
+# hard-wrapped, so a whole-line comparison returns a false zero the moment a
+# consumer re-flows a paragraph it did adopt — or keeps a superseded sentence at a
+# different column. Both sides are compared against the flattened body.
+#
+# WHAT NEITHER DIRECTION REACHES, stated so it is not mistaken for coverage: a body
+# that REWORDS core's text rather than re-wrapping it. Same consumer, same pull:
+# core's deleted `… Then **archive terminal entries` survives in that body with
+# "relocate" where core says "archive", and no containment test over core's own
+# words can see it. That case is caught here only because the UNADOPTED direction
+# fires on the same entry; a reword inside an otherwise-adopted section is not
+# mechanically detectable and is what `--stamp reaffirm --note` is for.
+#
+# Both tests are mechanical (set difference over lines), both fail RED on a real
+# defect today, and both can only be cleared by editing the body, by running
+# `--merge`, or by an explicit, recorded re-affirm.
 #
 # Usage:
 #   readopt-override.sh <dist> <theirs> <consumer> <override>            # dossier (default)
@@ -141,28 +171,92 @@ THEIRS_SHA="$(git -C "$DIST" rev-parse --short "$THEIRS")"
 # Trivial lines (blank, punctuation, fence markers, short fragments) are excluded:
 # they collide by coincidence, not by copying, and a gate that trips on "```" is a
 # gate someone comments out.
+#
+# THE FLOOR APPLIES TO THE UNADOPTED DIRECTION TOO, AND THAT IS A STATED LIMIT rather
+# than an oversight. An upstream change made ENTIRELY of lines at or under 24 characters
+# is invisible to both directions: measured, an added `STOP on any red.` scores 0 while
+# one long clause in the same section scores 1 in the same run. Lowering the floor to
+# reach it buys back the coincidental collisions it exists to exclude, on a corpus where
+# short lines are mostly markup — so the floor stays and the blind spot is written down.
 # ---------------------------------------------------------------------------
+
+# The body as ONE line, internal whitespace squeezed. Every containment test below
+# runs against this, so a paragraph the consumer re-flowed still reads as carried.
+# What this replaces was a whole-line fixed-string match against the raw file. That
+# spelling is NOT reproduced here, for the reason the `--merge` comment below gives:
+# the consumer's ledger receipt for this defect is a substring test over this file, so
+# a comment quoting the deleted flags keeps their receipt matching forever and the
+# candidate never closes. It answered NO on a sentence the body demonstrably contains,
+# wrapped at a different column — a false clean on the superseded side, and a false
+# refusal on the other.
+#
+# THE FRONTMATTER IS NOT THE BODY, and reading the whole file was a hole this gate could
+# not afford. `reason:` is prose ABOUT the override, and the natural way to decline an
+# upstream clause is to quote it there — "upstream now says X; we decline it" — which,
+# read as body text, scores X as adopted and clears the block on the entry that says in
+# as many words that it did not adopt it. Measured on a constructed entry: whole-file
+# reading exits 0, against a control of 1 for the same entry with the clause nowhere.
+# Only the LEAD reads the body, so only the body can carry the adoption. Extraction is
+# `--merge`'s, verbatim, so the two cannot disagree about where a body starts.
+BODY_FLAT="$(awk 'BEGIN{fm=0; started=0}
+                  NR==1 && /^---$/ {fm=1; next}
+                  fm && /^---$/    {fm=0; started=1; next}
+                  fm               {next}
+                  started          {print}' "$OVR" \
+             | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr '\n' ' ' | tr -s ' ')"
+
+# body_carries <core-line> — is this core line's word sequence in the body at all?
+# The needle is squeezed the same way the haystack is, or a core line carrying a
+# double space matches nothing and reports as absent.
+body_carries() {
+  local needle
+  needle="$(printf '%s' "$1" | tr -s ' ')"
+  case "$BODY_FLAT" in *"$needle"*) return 0 ;; esac
+  return 1
+}
+
+# section_lines <sha> <anchor> — the substantive lines of one shadowed section.
+# ONE spelling for both directions: two copies of this filter is two chances for
+# the sets being differenced to be built by different rules.
+section_lines() {
+  git -C "$DIST" show "${1}:${CORE}" 2>/dev/null | section_of "$2" \
+    | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -vE '^.{0,24}$' | sort -u
+}
+
 stale_lines() {
   local ids
   ids="$(printf '%s' "$SHADOWS" | tr ',' '\n' | sed -n 's/.*#//p' | sed 's/^ *//; s/ *$//')"
-  local id
+  local id line
   while IFS= read -r id; do
     [ -n "$id" ] || continue
-    comm -23 \
-      <(git -C "$DIST" show "${BASE_SHA}:${CORE}" 2>/dev/null | section_of "$id" \
-          | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -vE '^.{0,24}$' | sort -u) \
-      <(git -C "$DIST" show "${THEIRS}:${CORE}"   2>/dev/null | section_of "$id" \
-          | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -vE '^.{0,24}$' | sort -u) \
-    | while IFS= read -r line; do
-        [ -n "$line" ] || continue
-        grep -Fqx -- "$line" <(sed 's/^[[:space:]]*//; s/[[:space:]]*$//' "$OVR") && printf '%s\n' "$line"
-      done
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      body_carries "$line" && printf '%s\n' "$line"
+    done < <(comm -23 <(section_lines "$BASE_SHA" "$id") <(section_lines "$THEIRS" "$id"))
+  done <<< "$ids"
+}
+
+# The mirror. `comm -13` instead of `-23`, and the body test NEGATED: core gained
+# this line and the override does not have it.
+unadopted_lines() {
+  local ids
+  ids="$(printf '%s' "$SHADOWS" | tr ',' '\n' | sed -n 's/.*#//p' | sed 's/^ *//; s/ *$//')"
+  local id line
+  while IFS= read -r id; do
+    [ -n "$id" ] || continue
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      body_carries "$line" || printf '%s\n' "$line"
+    done < <(comm -13 <(section_lines "$BASE_SHA" "$id") <(section_lines "$THEIRS" "$id"))
   done <<< "$ids"
 }
 
 STALE="$(stale_lines)"
 N_STALE=0
 [ -n "$STALE" ] && N_STALE="$(printf '%s\n' "$STALE" | grep -c .)"
+UNADOPTED="$(unadopted_lines)"
+N_UNADOPTED=0
+[ -n "$UNADOPTED" ] && N_UNADOPTED="$(printf '%s\n' "$UNADOPTED" | grep -c .)"
 RESOLVE="$(anchors_resolve 2>/dev/null)"
 
 # ---------------------------------------------------------------------------
@@ -182,7 +276,15 @@ case "$MODE" in
       echo "  or --stamp reaffirm --note \"<why the old clause still stands>\"."
       exit 1
     fi
-    echo "OK  $(basename "$OVR"): body carries no superseded core text."
+    if [ "$N_UNADOPTED" -gt 0 ]; then
+      echo "UNADOPTED-CORE-TEXT  $(basename "$OVR"): ${N_UNADOPTED} line(s) core@${THEIRS_SHA} ADDS to the shadowed section that the body does not carry."
+      printf '%s\n' "$UNADOPTED" | sed 's/^/    | /'
+      echo "  Nothing is stale, so the one-directional test is silent — and the lead still never"
+      echo "  sees this text, because the override replaces the section it was added to. Run"
+      echo "  --merge, or --stamp reaffirm --note \"<why this consumer declines the addition>\"."
+      exit 1
+    fi
+    echo "OK  $(basename "$OVR"): body carries no superseded core text and no unadopted core text."
     exit 0
     ;;
 
@@ -358,6 +460,14 @@ EOF
           echo "  Edit the body to carry core@${THEIRS_SHA}'s text, then re-run. Or: --stamp reaffirm --note \"...\"" >&2
           exit 1
         fi
+        if [ "$N_UNADOPTED" -gt 0 ]; then
+          echo "REFUSED  $(basename "$OVR"): ${N_UNADOPTED} line(s) core@${THEIRS_SHA} ADDS to the shadowed section are absent from the body." >&2
+          printf '%s\n' "$UNADOPTED" | sed 's/^/    | /' >&2
+          echo "  Stamping now advances base_sha, so the next pull computes NO drift on this section" >&2
+          echo "  and never offers the upstream text again — the addition would be lost silently." >&2
+          echo "  Run --merge, or --stamp reaffirm --note \"<why this consumer declines it>\"." >&2
+          exit 1
+        fi
         ;;
       reaffirm)
         [ -n "$NOTE" ] || { echo "REFUSED  reaffirm REQUIRES --note \"<why the old clause still stands>\" — the record must show a human decided." >&2; exit 1; }
@@ -520,6 +630,21 @@ if [ "$N_STALE" -gt 0 ]; then
   echo "  The lead obeys this override, not core: un-migrated, the fix is INERT here."
 else
   echo "    (none — the body carries no text upstream has superseded)"
+fi
+
+cat <<EOF
+
+--- CORE TEXT ${THEIRS_SHA} ADDS THAT THIS BODY DOES NOT CARRY -------------------------
+EOF
+if [ "$N_UNADOPTED" -gt 0 ]; then
+  printf '%s\n' "$UNADOPTED" | sed 's/^/    | /'
+  echo ""
+  echo "  ${N_UNADOPTED} line(s) above are new in core@${THEIRS_SHA}'s shadowed section."
+  echo "  The override replaces that section, so this text reaches no lead until it is merged."
+  echo "  A purely additive upstream change leaves the panel above EMPTY and this one full;"
+  echo "  read them together, or the commonest kind of drift looks like no drift at all."
+else
+  echo "    (none — the body carries everything upstream added to the shadowed section)"
 fi
 
 cat <<EOF

@@ -15,6 +15,69 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.476.0] - 2026-09-02
+
+### The re-adoption gate tested ONE direction of a two-sided difference, so a purely additive upstream change read as clean
+
+Closes `PC-S340-STAMP-READOPT-GATE-IS-BLIND-TO-AN-ADDITIVE-CHANGE-AND-TO-A-REWRITTEN-BODY`.
+Filed here as `BL-138`.
+
+`readopt-override.sh`'s `stale_lines()` asked one question — is a line core DROPPED
+between `base_sha` and `theirs` still sitting in the override body — and answered it with a
+whole-line fixed-string match. Both halves fail on the commonest real change:
+
+- **An ADDITIVE upstream edit removes nothing**, so the stale set is empty by
+  construction. `--check` printed OK and `--stamp readopt` then advanced `base_sha`, after
+  which the next pull computes no drift on that section at all and the un-adopted upstream
+  text is never offered again. Silent and permanent.
+- **A body that carries a superseded sentence at a different WRAP** is not found by a
+  whole-line match — and an override of a consumer-rewritten section is a re-wrap by
+  definition, so the test was least able to work exactly where it was most needed.
+
+Measured on the reference consumer's own `steps__retro__domain-sections.md` across the
+`a5cbdf0b -> 95670e58` re-adoption it was filed against: the shipping gate exits **0**
+while **5** lines of core's rewritten `#4a. Close-Out Sweep` are absent from that body. Its
+other three anchors, whose sections did not move, score 0 in the same run.
+
+**The fix is the mirror predicate plus a wrap-insensitive body test.** `unadopted_lines()`
+is `stale_lines()` with the set difference and the body test both reversed; `body_carries()`
+compares against the body flattened to one line, the same treatment `layer-drift.sh`'s
+`asserts_shadow_survives` already gives a body for the same reason. `--check` and
+`--stamp readopt` refuse on either direction, and the dossier grew the matching panel.
+
+**The containment corpus is the BODY, not the file, and reading the file was a hole this gate
+could not afford.** `reason:` is prose ABOUT the override, and the natural way to decline an
+upstream clause is to quote it there — which, read as body text, scores the clause as adopted on
+the entry that says in as many words that it did not adopt it. Measured on a constructed entry:
+whole-file reading exits 0 against a control of 1 for the same entry with the clause nowhere. The
+body extraction is now `--merge`'s own, verbatim.
+
+**False-positive set: 0 of the reference consumer's 8 live overrides**, each run at its own
+declared `base_sha` against this distribution's `origin/main`, pre-fix and fixed, with a
+`cmp -s` control asserting the two implementations differ and the pre-fix copy materialised
+beside its own `lib.sh` — a lone copy exits on the missing sibling, which reads as a finding
+and is a refusal.
+
+**One stated limit, measured rather than assumed.** The inherited 24-character floor on
+substantive lines applies to the new direction too, so an upstream change made entirely of short
+lines is invisible to both: an added `STOP on any red.` scores 0 while one long clause in the same
+section scores 1 in the same run. Lowering the floor buys back the coincidental collisions it
+exists to exclude.
+
+**What the entry claimed that is NOT fixed, stated rather than absorbed.** The filing's
+second half also covers a body that REWORDS core's deleted line ("relocate" where core says
+"archive"). No containment test over core's own words can see that, and none is claimed
+here; on the motivating entry it is caught only because the UNADOPTED direction fires on the
+same file. `--stamp reaffirm --note` remains the answer for a reword.
+
+**`core/fixtures/layer-readopt-gate` grew arms G and H**: the additive offender, its
+re-wrapped near-miss in the same run, the refusal asserted on `base_sha`'s VALUE rather than
+on an exit code, the `--merge` -> `--check` -> `--stamp` round trip proving the gate is
+satisfiable by the remedy it prints, the superseded-and-re-wrapped case with its
+carries-nothing control, and a committed mutant that removes the flattening and must kill H
+while leaving G firing. Seven of those arms are RED against the pre-fix validator and 103
+pre-existing assertions stay green.
+
 ## [0.475.0] - 2026-09-01
 
 ### `v0.474.0` made the derivation split quote-aware and acquitted five arbitrary-execution paths in the same edit

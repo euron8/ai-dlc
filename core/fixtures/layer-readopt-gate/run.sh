@@ -1373,6 +1373,268 @@ EOF
   fi
 fi
 
+# ---------------------------------------------------------------------------
+# G / H. THE OTHER DIRECTION OF THE SET DIFFERENCE, AND THE WRAP.
+# ---------------------------------------------------------------------------
+# Arms A-C test SUPERSEDED text: a line core DROPPED that the body still carries.
+# That is one half of a two-sided question and shipping only it made the COMMONEST
+# upstream change invisible — a purely ADDITIVE edit removes nothing, so the stale
+# set is empty by construction, `--check` printed OK, and `--stamp readopt` then
+# advanced base_sha, after which the next pull computes no drift on that section and
+# never offers the new text again. Measured on the reference consumer's own
+# `steps__retro__domain-sections.md` across `a5cbdf0b -> 95670e58`: the shipping gate
+# exited 0 while five lines of core's rewritten `#4a. Close-Out Sweep` were absent
+# from the body.
+#
+# THE TWO NEW GUARDS GET SUBJECTS THE OTHER CANNOT SEE. G's core change is a pure
+# ADDITION (nothing deleted, so the stale arm has no input at all); H's is a pure
+# DELETION (nothing added, so the unadopted arm has none). An arm that fired on both
+# subjects would be reporting "this section moved", which every override in this
+# fixture would trip.
+G3="$ROOT/g3"; rm -rf "$G3"; mkdir -p "$G3"
+GPRE="$(git -C "$DIST" rev-parse --short HEAD)"
+python3 - "$DIST/core/skills/ai-dlc/SKILL.md" <<'GPY'
+import sys
+p = sys.argv[1]; s = open(p).read()
+# PURE ADDITION to Rule 7 -- nothing removed.
+s = s.replace("""## Rule 7 -- Something Else
+
+Untouched across the range. Present so the fixture proves the gate is
+section-scoped and not merely file-scoped.
+""", """## Rule 7 -- Something Else
+
+Untouched across the range. Present so the fixture proves the gate is
+section-scoped and not merely file-scoped.
+
+**Every rule-7 adjudication now records the deciding session id**, and a record
+that carries no session id is rejected at the gate rather than queued.
+""")
+# PURE DELETION from Rule 13 -- nothing added.
+s = s.replace("""The adjudication order, the freeze semantics, and the record format live here, in the
+paragraphs an override of this rule silently drops.
+""", "")
+open(p, "w").write(s)
+GPY
+git -C "$DIST" add -A >/dev/null 2>&1
+git -C "$DIST" -c user.email=f@x -c user.name=f commit -qm "additive rule 7, deleted rule 13 paragraph" >/dev/null 2>&1
+GTH="$(git -C "$DIST" rev-parse --short HEAD)"
+
+GOVR="$CONS/.claude/skills/ai-dlc/overrides/G__additive.md"
+cat > "$GOVR" <<EOF
+---
+shadows: SKILL.md#Rule 7
+base_sha: ${GPRE}
+reason: consumer keeps core's rule 7 and adds one project-specific sentence.
+---
+
+## Rule 7 -- Something Else
+
+This consumer also records the adjudicating team, which core does not ask for.
+
+Untouched across the range. Present so the fixture proves the gate is
+section-scoped and not merely file-scoped.
+EOF
+cp "$GOVR" "$G3/additive.orig"
+# THE CONSUMER DELTA SITS AT THE TOP OF THE BODY ON PURPOSE. Upstream's addition lands
+# at the END of the section, and a three-way merge of two edits to adjacent lines is a
+# CONFLICT -- which the stamp then refuses on its markers, so the satisfiability arm
+# below would be asserting the conflict path rather than the clean one and would pass
+# for the wrong reason.
+
+# THE NEAR-MISS, IN THE SAME RUN. Same anchor, same base_sha, same upstream change --
+# and this body DID adopt it, re-wrapped at a different column. A whole-line test calls
+# that absent, so this entry is what separates "the body lacks upstream's text" from
+# "the body does not match upstream's line breaks".
+GOK="$CONS/.claude/skills/ai-dlc/overrides/G__adopted.md"
+cat > "$GOK" <<EOF
+---
+shadows: SKILL.md#Rule 7
+base_sha: ${GPRE}
+reason: consumer adopted the new clause and re-wrapped it.
+---
+
+## Rule 7 -- Something Else
+
+Untouched across the range. Present so the fixture proves the gate is
+section-scoped and not merely file-scoped.
+
+**Every rule-7 adjudication now records the deciding session id**, and a record that
+carries no session id is rejected at the gate rather than queued.
+EOF
+
+HOVR="$CONS/.claude/skills/ai-dlc/overrides/H__rewrap.md"
+cat > "$HOVR" <<EOF
+---
+shadows: SKILL.md#Rule 13
+base_sha: ${GPRE}
+reason: consumer escalation rules; still carries core's deleted sentence, re-wrapped.
+---
+
+## Rule 13 -- Escalation (CONSUMER OVERRIDE)
+
+Escalate at three failures rather than two.
+
+The adjudication order, the freeze semantics, and the record format live
+here, in the paragraphs an override of this rule silently
+drops.
+EOF
+# EVERY core line is BROKEN by this wrapping, and that is what makes the mutant below
+# readable. Core's paragraph is two lines; if the body re-wrapped only the first, the
+# second would survive whole inside one body line and a substring test would find it
+# with the flattening removed -- the mutant would then survive an arm that is correct.
+
+HOK="$CONS/.claude/skills/ai-dlc/overrides/H__clean.md"
+cat > "$HOK" <<EOF
+---
+shadows: SKILL.md#Rule 13
+base_sha: ${GPRE}
+reason: consumer escalation rules, carrying none of core's superseded prose.
+---
+
+## Rule 13 -- Escalation (CONSUMER OVERRIDE)
+
+Escalate at three failures rather than two. Nothing else from core's rule 13 is
+reproduced here.
+EOF
+
+echo "== G. an ADDITIVE upstream change to a shadowed section is REPORTED =="
+out="$(bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GOVR" --check 2>&1)"; rc=$?
+if [ "$rc" -eq 1 ] && grep -q 'UNADOPTED-CORE-TEXT' <<<"$out"; then
+  ok "--check RED: core ADDED text to the shadowed section and the body does not carry it"
+else
+  bad "--check did NOT fire on a purely additive upstream change (rc=$rc) -- the stale set is empty by construction, so this is the direction that reads as clean"
+  printf '%s\n' "$out" | sed 's/^/    /'
+fi
+if grep -q 'records the deciding session id' <<<"$out"; then
+  ok "  and it names the un-adopted sentence verbatim"
+else
+  bad "  it fired but did not identify the un-adopted line, so the operator cannot act on it"
+fi
+
+before_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$GOVR" | head -1)"
+out="$(bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GOVR" --stamp readopt 2>&1)"; rc=$?
+after_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$GOVR" | head -1)"
+if [ "$rc" -ne 0 ] && grep -q 'REFUSED' <<<"$out"; then
+  ok "--stamp readopt REFUSED while core's addition is un-adopted"
+else
+  bad "--stamp readopt SUCCEEDED on a body that carries none of the addition (rc=$rc)"
+fi
+# THE VALUE, NOT THE EXIT CODE. Stamping is what makes the loss permanent: base_sha
+# advances, the next pull computes base==theirs on this section, and the un-adopted
+# text is never offered again. An arm reading only the exit code passes against an
+# implementation that reports AND stamps.
+if [ "$before_sha" = "$after_sha" ]; then
+  ok "  and base_sha is untouched ($before_sha) -- the next pull still sees the drift"
+else
+  bad "  base_sha moved $before_sha -> $after_sha under a REFUSED stamp: the section will never be offered again"
+fi
+
+if bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GOK" --check >/dev/null 2>&1; then
+  ok "NEAR-MISS: a body that adopted the same addition RE-WRAPPED stays green"
+else
+  bad "NEAR-MISS FAILED: a body carrying upstream's new text at a different column is reported as un-adopted -- the arm is testing line breaks, not content"
+  bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GOK" --check 2>&1 | sed 's/^/    /'
+fi
+
+# SATISFIABILITY. A gate that cannot be cleared by the remedy it prints is a wedge, and
+# `--merge` is that remedy. Assert the whole round trip, ending in the stamp actually
+# landing -- asserting only the refusal would pass against a guard that refuses always.
+cp "$G3/additive.orig" "$GOVR"
+bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GOVR" --merge >/dev/null 2>&1
+if bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GOVR" --check >/dev/null 2>&1; then
+  ok "  --merge clears it: the body carries the addition and --check goes green"
+else
+  bad "  --merge did NOT clear the new gate -- the remedy the message prints cannot satisfy it"
+  bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GOVR" --check 2>&1 | sed 's/^/    /'
+fi
+if bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GOVR" --stamp readopt >/dev/null 2>&1 \
+   && [ "$(sed -n 's/^base_sha:[[:space:]]*//p' "$GOVR" | head -1)" = "$GTH" ]; then
+  ok "  and the stamp then LANDS, advancing base_sha to $GTH"
+else
+  bad "  the stamp still refused after a clean merge, or base_sha did not advance to $GTH"
+fi
+
+# THE FRONTMATTER IS NOT THE BODY. `reason:` is prose ABOUT the override, and the natural
+# way to decline an upstream clause is to quote it there — so a containment test that reads
+# the whole file scores the clause as ADOPTED on the entry that says, in as many words, that
+# it did not adopt it. That is a false clean produced by the remedy text itself. Its ALLOW
+# twin is the same clause in the body, in the same run: without that half this arm passes for
+# an implementation that reads neither.
+GFM="$CONS/.claude/skills/ai-dlc/overrides/G__reason-only.md"
+cat > "$GFM" <<EOF
+---
+shadows: SKILL.md#Rule 7
+base_sha: ${GPRE}
+reason: consumer rule 7. Upstream now says **Every rule-7 adjudication now records the deciding session id**, and a record that carries no session id is rejected at the gate rather than queued. This consumer declines it.
+---
+
+## Rule 7 -- Something Else
+
+This consumer also records the adjudicating team, which core does not ask for.
+
+Untouched across the range. Present so the fixture proves the gate is
+section-scoped and not merely file-scoped.
+EOF
+if bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GFM" --check >/dev/null 2>&1; then
+  bad "an entry carrying core's new clause only in its \`reason:\` — to say it DECLINES it — was scored as having adopted it, so the gate is cleared by the sentence that says it was not"
+else
+  ok "  and core text quoted in \`reason:\` does NOT count as adoption: only the body the lead reads can carry it"
+fi
+rm -f "$GFM"
+
+echo "== H. the body test is WRAP-INSENSITIVE in the superseded direction too =="
+out="$(bash "$READOPT" "$DIST" "$GTH" "$CONS" "$HOVR" --check 2>&1)"; rc=$?
+if [ "$rc" -eq 1 ] && grep -q 'STALE-CORE-TEXT' <<<"$out"; then
+  ok "--check RED: a superseded core sentence carried at a DIFFERENT wrap is still found"
+else
+  bad "--check missed a superseded sentence the body demonstrably carries, re-wrapped (rc=$rc) -- and an override of a consumer-rewritten section is a re-wrap by definition"
+  printf '%s\n' "$out" | sed 's/^/    /'
+fi
+if bash "$READOPT" "$DIST" "$GTH" "$CONS" "$HOK" --check >/dev/null 2>&1; then
+  ok "CONTROL: a body carrying none of the superseded prose stays green"
+else
+  bad "CONTROL FAILED: an override reproducing no core text was reported -- the containment test matches anything"
+fi
+
+# --- MUTANT: put the containment test back on whole LINES -------------------------------
+# A copy of the whole reconcile directory (a lone script dies sourcing lib.sh, and no
+# output otherwise scores as a kill), `cmp -s`-guarded. The mutation flattens nothing,
+# which is exactly the shipped-before behaviour, and it must kill H while leaving G
+# firing: G's subject is absent from the body at ANY wrap, so it does not depend on the
+# flattening at all. Two verdicts from one mutant, and their disagreement is the proof
+# the two guards are separable.
+#
+# THE ANCHOR IS THE SHIPPED SPELLING, and a re-spelling of the flattening MUST re-anchor
+# it here rather than relax this arm. Scored while building it: an implementation that
+# flattens with `awk` instead is behaviourally identical and satisfies the entry's
+# receipt, and this mutation then matches nothing — which the `cmp -s` guard reports as
+# an un-applied mutant rather than passing it off as a kill.
+RMUT="$ROOT/readoptmut"; rm -rf "$RMUT"; mkdir -p "$RMUT"
+cp "$(dirname "$READOPT")"/*.sh "$RMUT/" 2>/dev/null || true
+cp "$READOPT" "$RMUT/readopt-override.sh"
+if bash "$RMUT/readopt-override.sh" "$DIST" "$GTH" "$CONS" "$GOK" --check >/dev/null 2>&1 \
+   && ! bash "$RMUT/readopt-override.sh" "$DIST" "$GTH" "$CONS" "$HOVR" --check >/dev/null 2>&1; then
+  ok "CONTROL: the unmutated copy in a fresh directory still passes the near-miss and still reports the re-wrap"
+else
+  bad "CONTROL: the unmutated copy does not reproduce the two baseline verdicts -- the mutant below would be unreadable"
+fi
+sed "s@| tr '\\\\n' ' ' | tr -s ' ')\"@)\"@" "$READOPT" > "$RMUT/readopt-override.sh"
+if cmp -s "$READOPT" "$RMUT/readopt-override.sh"; then
+  bad "the wrap MUTANT did not apply -- the body-flattening line has been respelled, so the H arm proves nothing"
+else
+  if bash "$RMUT/readopt-override.sh" "$DIST" "$GTH" "$CONS" "$HOVR" --check >/dev/null 2>&1; then
+    ok "MUTANT (body compared un-flattened): the re-wrapped superseded sentence goes UNFOUND -- flattening is what finds it"
+  else
+    bad "MUTANT SURVIVED: the H arm still fires with the flattening removed, so it is not testing wrap-insensitivity"
+  fi
+  if bash "$RMUT/readopt-override.sh" "$DIST" "$GTH" "$CONS" "$GOVR.absent" --check >/dev/null 2>&1; then
+    bad "  the mutant accepted a non-existent override path, so its verdicts say nothing about the subject"
+  else
+    ok "  and it still refuses a path naming no file, so the mutant runs rather than dying early"
+  fi
+fi
+rm -f "$GOK" "$HOVR" "$HOK"
+
 rm -rf "$ROOT"
 echo ""
 if [ "$fails" -eq 0 ]; then echo "layer-readopt-gate: PASS"; exit 0; fi

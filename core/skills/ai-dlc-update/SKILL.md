@@ -1272,8 +1272,10 @@ prose is itself generated rather than composed.
 
    **(1) Build the evidence.** Run `reconcile/readopt-override.sh <dist> <theirs>
    <consumer> <override>` with no flag. It prints the dossier: the core section's
-   `base_sha..theirs` diff, the override's body, its stated `reason:`, and the
-   superseded core lines still sitting in that body.
+   `base_sha..theirs` diff, the override's body, its stated `reason:`, the superseded
+   core lines still sitting in that body, and the lines core ADDED to the shadowed
+   section that the body does not carry. Read both panels: a purely additive upstream
+   change leaves the first empty and the second full.
 
    **(2) Decide, against the dossier, and say which and why in ONE sentence:**
    - upstream's change makes the override redundant → **retire**
