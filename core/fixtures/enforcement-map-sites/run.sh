@@ -1577,14 +1577,24 @@ mv "$V.orig" "$V"
 A33_i59_documented_modes() {
 RO="$ROOT/core/skills/ai-dlc-update/reconcile/readopt-override.sh"
 
-# ARM 1 — THE DEFECT ITSELF, and BOTH layers of the fix are reverted. `--merge` is named in
-# two places in that file (the `# Usage:` header and the exit-2 usage string), so a mutant
-# that removes one proves only the other. A partial revert here comes back green.
+# ARM 1 — THE DEFECT ITSELF, and EVERY layer of the fix is reverted. A partial revert comes
+# back green, proving whichever layer it left behind.
+#
+# THE MUTATION DERIVES ITS OWN TARGETS RATHER THAN NAMING THEM. It used to strip two hand-named
+# sites — the `# Usage:` header line and the exit-2 usage string — and it went silently
+# insufficient the moment a release added a third: v0.476.0's two-directional gate names
+# `--merge` in its remedy prose, so the two-site mutant left the mode documented, I59 correctly
+# stayed quiet, and this arm read as a regression in the change under test. So the deletion is
+# keyed on I59's OWN documentation test, and the count it must reach is asserted here rather
+# than assumed.
 cp "$RO" "$RO.orig"
-grep -v '<override> --merge    # three-way' "$RO.orig" \
+a33_doc_lines() { awk -v m='--merge' 'index($0,m) && ($0 ~ /^[[:space:]]*#/ || index($0,"usage"))' "$1" | grep -c .; }
+awk 'index($0,"--merge") && $0 ~ /^[[:space:]]*#/ { next } { print }' "$RO.orig" \
   | sed 's@\[--check|--merge|--stamp <outcome>\]@[--check|--stamp <outcome>]@' > "$RO"
 if cmp -s "$RO.orig" "$RO"; then
   bad "FIXTURE BROKEN: the I59 undocumented-mode mutation matched nothing, so the defect arm is unproven"
+elif [ "$(a33_doc_lines "$RO")" -ne 0 ] || [ "$(a33_doc_lines "$RO.orig")" -eq 0 ]; then
+  bad "FIXTURE BROKEN: after the mutation $(a33_doc_lines "$RO") line(s) still document --merge (the unmutated file has $(a33_doc_lines "$RO.orig")), so I59 staying silent below would say nothing about the invariant"
 else
   out="$(vrun)"
   if grep -q "readopt-override.sh --merge" <<<"$out"; then
