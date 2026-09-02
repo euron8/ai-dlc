@@ -244,10 +244,23 @@ PROSE = re.compile(r"(?<![\w-])(owed|still owed|deferred|remediation|follow-?up|
 # real, but the cue is always a SEPARATE word elsewhere in the reason, so the filing named a
 # mechanism that cannot fire.
 NEGATED = re.compile(r"\bno\b|\brather than\b|\binstead of\b", re.I)
-# A clause ends at `.`, `;` or `:`. Bounding on those and searching only the text BEFORE the cue
-# is what stops a negator in a neighbouring sentence from acquitting an obligation two sentences
-# later — the failure a whole-reason search has.
-CLAUSE_END = re.compile(r"[.;:]")
+# A clause ends at `.`, `;`, `:` — AND AT A COMMA. Bounding on those and searching only the text
+# BEFORE the cue is what stops a negator in a neighbouring clause from acquitting an obligation
+# further along, which is the failure a whole-reason search has.
+#
+# THE COMMA IS IN THIS SET BECAUSE LEAVING IT OUT WAS A CONSTRUCTIBLE FALSE ACQUITTAL, and false
+# acquittal is the dangerous direction for a recall-biased arm. Adjudicators on the reference
+# register write long comma-spliced reasons as a matter of course, so a negator opening such a
+# sentence reached a cue much later in it. Measured on the shipping script, one register, two
+# rows: `There is no restatement of core clause here, but the narrowing this row proposes is
+# still deferred to a later pull.` was SILENCED, while the same obligation with the opening
+# clause removed was reported — a genuine debt lost to a `no` governing something else.
+#
+# ITS COST IS EXACTLY ONE ROW AND IT WAS MEASURED BEFORE THE CHANGE, not asserted: on the
+# reference register the comma bound takes the arm from 18 back to 19, and the single row that
+# returns is a false positive of the `debt` cue rather than an obligation. A glance is the price
+# of not losing a debt, which is the trade this file's header already declares.
+CLAUSE_END = re.compile(r"[.;:,]")
 
 
 def cue_denied(reason, m):

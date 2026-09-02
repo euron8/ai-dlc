@@ -50,7 +50,7 @@ command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 absent" >&2
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-EXPECTED_ASSERTIONS=27
+EXPECTED_ASSERTIONS=29
 fails=0; made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
@@ -279,6 +279,7 @@ python3 "$WORK/mkreg.py" "$NREG" <<'SPEC'
 {"entry":"extensions/nothingtp.md","reason":"Nothing but this reason field is tracking that debt."}
 {"entry":"extensions/clause.md","reason":"This entry declares no extends: anchor. The split remains deferred to a later pull."}
 {"entry":"extensions/contrast.md","reason":"GAP CLOSED IN THIS COMMIT rather than deferred: added the row with this project's path set."}
+{"entry":"extensions/splice.md","reason":"There is no restatement of core clause here, but the narrowing this row proposes is still deferred to a later pull."}
 SPEC
 nout="$(run "$NREG")"
 nund="$(und_block "$nout")"
@@ -350,11 +351,24 @@ else
   ok "an explicit contrast (\`rather than deferred\`) is not reported as an obligation"
 fi
 
-# --- 15. and the count is exactly the four rows that earn it ----------------------------------
-if grep -qE '^UNDECLARED \(4\)' <<<"$nout"; then
-  ok "exactly 4 of the 6 cue-carrying rows are reported — the other 2 deny their obligation"
+# --- 15. THE COMMA IS A CLAUSE BOUND, AND LEAVING IT OUT LOSES A REAL DEBT --------------------
+# `splice.md` opens with a negated clause about something else and states a genuine obligation
+# after a COMMA. A bound of `[.;:]` alone — the first cut of this fix — silenced it, while the
+# same obligation with the opening clause removed was reported. That is a debt lost to a `no`
+# governing a different subject, and it is the direction this arm must never fail in: a false
+# positive costs a glance, a false acquittal costs the thing the file exists to prevent.
+if grep -q 'splice\.md' <<<"$nund"; then
+  ok "COMMA BOUND: an obligation stated after a comma is not acquitted by a negator earlier in the same sentence"
 else
-  bad "the undeclared count is not 4; the discount is not partitioning denials from obligations"
+  bad "a negator in an earlier COMMA-SPLICED clause acquitted a genuine obligation — the clause bound is missing the comma"
+  show "$nund"
+fi
+
+# --- 15. and the count is exactly the four rows that earn it ----------------------------------
+if grep -qE '^UNDECLARED \(5\)' <<<"$nout"; then
+  ok "exactly 5 of the 7 cue-carrying rows are reported — the other 2 deny their obligation"
+else
+  bad "the undeclared count is not 5; the discount is not partitioning denials from obligations"
   show "$nout"
 fi
 
@@ -454,6 +468,12 @@ score M7 "$(mkmut m7 "$ANCHOR_NEGSET" 'NEGATED = re.compile(r"\bno\b|\bnothing\b
 score M8 "$(mkmut m8 "$ANCHOR_CLAUSE" '    start = 0')" "$NREG" \
   "an unbounded backward search acquits a real obligation on a negator from the previous sentence" \
   absent 'clause\.md'
+
+# M9 — the comma dropped from the clause bound, i.e. the first cut of this fix. Scored on the
+# comma-spliced obligation VANISHING, which is the only arm that can see it.
+score M9 "$(mkmut m9 'CLAUSE_END = re.compile(r"[.;:,]")' 'CLAUSE_END = re.compile(r"[.;:]")')" "$NREG" \
+  "a clause bound without the comma acquits a real obligation stated after a comma splice" \
+  absent 'splice\.md'
 
 # UNMUTATED CONTROL — necessary and NOT sufficient. rc=0-with-no-findings is exactly what a
 # subject replaced by `exit 0` looks like, so this carries a POSITIVE conjunct: a copy taken and

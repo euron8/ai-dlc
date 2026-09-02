@@ -4713,10 +4713,21 @@ under UNDECLARED on cue 'deferred'` and is itself flagged for that sentence — 
 own output as an instance of its own subject.
 
 **Measured on the only register that exists**, 318 rows, driving the shipping script both ways in
-one invocation with a `cmp -s` control asserting the two copies differ: **29 flagged before, 18
-after**, `OPEN` unchanged at 16 either side. All 11 acquitted rows were read in full — 9 deny an
+one invocation with a `cmp -s` control asserting the two copies differ: **29 flagged before, 19
+after**, `OPEN` unchanged at 16 either side. All 10 acquitted rows were read in full — 8 deny an
 obligation in as many words, 2 draw an explicit contrast. **The false-acquittal set is empty and
 enumerated.** The two genuine debts both survive, asserted as a fixture arm rather than assumed.
+
+**THE COMMA HAD TO BE ADDED TO THE CLAUSE BOUND, AND THAT CAME FROM ATTACKING THE FIX AFTER IT
+WAS COMMITTED.** The first cut bounded a clause on `.`, `;` and `:` only. A comma does not bound
+one, so a negator opening a long comma-spliced sentence reached a cue much later in it — and
+adjudicators on this register write comma-spliced reasons as a matter of course. Constructed and
+run against the shipping script, one register, two rows: `There is no restatement of core clause
+here, but the narrowing this row proposes is still deferred to a later pull.` was SILENCED while
+the same obligation without the opening clause was reported. **That is a genuine debt lost to a
+`no` governing something else**, and false acquittal is the direction this arm must never fail
+in. Adding the comma costs exactly ONE row on the reference register — 18 back to 19 — and that
+row is a false positive of the `debt` cue, not an obligation. Mutant M9 keys on it.
 
 **THE FILED REMEDY WAS REFUTED BY BUILDING IT, and that is the reusable half.** The candidate asked
 to skip a row whose cue occurrences all sit inside a resolvable `OWED-<id>` token. Built and
@@ -4730,7 +4741,7 @@ mechanism it named cannot fire.
 the cue naming a CORE CONSTRUCT (`core's Remediation Rule 12`, `the remediation EDIT`) and the cue
 in a clause citing a resolvable `OWED-` id. Both are per-row prose judgements, and the arm's own
 header declares a deliberate recall bias — narrowing further trades away the thing the file exists
-for. 13 of the surviving 18 are still false; the fix removes noise, it does not make the arm
+for. 15 of the surviving 19 are still false; the fix removes noise, it does not make the arm
 precise.
 
 **The receipt ACCEPTS a row-grain implementation** — one that silences the whole row when any cue

@@ -44,8 +44,8 @@ building it.**
 
 **MEASURED, NOT ASSERTED.** Driving the shipping script over the reference consumer's 318-row
 register both ways in one invocation, with a `cmp -s` control asserting the two copies differ:
-**29 flagged before, 18 after**, `OPEN` unchanged at 16 on both sides. All 11 acquitted rows were
-read in full -- 9 deny an obligation in as many words, 2 draw an explicit contrast. The
+**29 flagged before, 19 after**, `OPEN` unchanged at 16 on both sides. All 10 acquitted rows were
+read in full -- 8 deny an obligation in as many words, 2 draw an explicit contrast. The
 false-acquittal set is empty and enumerated.
 
 **PER OCCURRENCE, NEVER PER ROW.** A row is still reported when any cue survives, so a reason that
@@ -55,9 +55,26 @@ tracking that debt."* -- and admitting it would acquit the sentence the file exi
 `not` and `never` are excluded for a weaker version of the same reason: measured, they acquitted
 two rows on a `not` governing an unrelated clause, reaching the right verdict for the wrong reason.
 
+**THE COMMA HAD TO BE ADDED TO THE CLAUSE BOUND, AND IT CAME FROM ATTACKING THE FIX AFTER IT WAS
+COMMITTED.** The first cut bounded a clause on `.`, `;` and `:` only. A comma does not bound one,
+so a negator opening a long comma-spliced sentence reached a cue much later in it -- and
+adjudicators on this register write comma-spliced reasons as a matter of course. Constructed and
+run against the shipping script, one register, two rows: `There is no restatement of core clause
+here, but the narrowing this row proposes is still deferred to a later pull.` was SILENCED, while
+the same obligation with the opening clause removed was reported. **A genuine debt lost to a `no`
+governing something else** -- and false acquittal is the direction a recall-biased arm must never
+fail in. The comma costs exactly ONE row on the reference register, 18 back to 19, and that row is
+a false positive of the `debt` cue rather than an obligation. Mutant M9 keys on it.
+
+**AND THE REPAIR'S OWN COUNT ARM SILENTLY FAILED TO APPLY.** The script that renumbered the
+fixture's `UNDECLARED (4)` assertion to `(5)` escaped its quotes wrong, matched nothing, and
+reported success -- so the fixture greped for a count the run no longer produced and went red on
+the correct change. That is the no-op replacement `mkmut` guards against, in a helper that had no
+such guard. A replacement that matches nothing must not report success.
+
 **WHAT IS NOT CLAIMED.** Two false-positive classes survive and are stated rather than deferred --
 the cue naming a CORE CONSTRUCT (`core's Remediation Rule 12`), and the cue in a clause citing a
-resolvable `OWED-` id. 13 of the surviving 18 are still false. This removes noise; it does not
+resolvable `OWED-` id. 15 of the surviving 19 are still false. This removes noise; it does not
 make the arm precise, and the arm's own header declares a deliberate recall bias.
 
 **THE SEED HAD TO BE NARROWED BEFORE ITS MUTANT COULD FIRE.**
