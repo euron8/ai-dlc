@@ -13,12 +13,33 @@
 # wearing a stamp, and it is precisely how a core fix lands on disk while the
 # pipeline goes on running the rule it replaced.
 #
-# So `--stamp` is GATED, in BOTH directions of the set difference:
+# So the set difference is read in BOTH directions, and the two are TIERED DIFFERENTLY:
 #
 #   SUPERSEDED — a line core carried at `base_sha` and does NOT carry at `theirs`,
 #                still sitting in the body. The override is teaching the old rule.
+#                REFUSES `--stamp readopt`.
 #   UNADOPTED  — a line core carries at `theirs` and did NOT carry at `base_sha`,
 #                which the body does not carry. The override never took the fix up.
+#                REPORTS. It does not refuse, and v0.477.0 demoted it after v0.476.0
+#                shipped it as a refusal.
+#
+# WHY THE SECOND ONE IS A REPORT, MEASURED ON 27 REAL ADJUDICATIONS. Replaying every
+# commit in the reference consumer's history where an override's `base_sha` moved — the
+# body scored as it stood when the stamp was taken — a refusing UNADOPTED arm refuses 7
+# of the 27 re-adoptions that actually happened. At least one is a demonstrated FALSE
+# refusal: 20 lines reported while the body already carried both identifiers that
+# upstream addition introduces, reworded. **A body is a REWRITE by definition**, so the
+# mirror predicate inherits the very defect the filing describes, with the sign flipped:
+# line-literal on a rewritten body gives a false CLEAN one way and a false REFUSAL the
+# other.
+#
+# AND THE ESCAPE MAKES A FALSE REFUSAL WORSE, NOT SAFER. `--stamp reaffirm --note`
+# advances `base_sha`, so a falsely-refused re-adoption routed there is re-stamped: the
+# upstream clause is never offered again, permanently, under a recorded note asserting
+# this consumer deliberately declined text it had in fact already adopted. That is the
+# failure this whole file exists to prevent, reached THROUGH the new arm instead of
+# around it. `mechanism-design.md` — tier a finding as ERROR only where no
+# false-positive path exists.
 #
 # ONE DIRECTION IS NOT THE GATE, AND SHIPPING ONLY THE FIRST MADE THE COMMONEST
 # CHANGE INVISIBLE. A purely ADDITIVE upstream edit removes nothing, so the
@@ -198,11 +219,32 @@ THEIRS_SHA="$(git -C "$DIST" rev-parse --short "$THEIRS")"
 # reading exits 0, against a control of 1 for the same entry with the clause nowhere.
 # Only the LEAD reads the body, so only the body can carry the adoption. Extraction is
 # `--merge`'s, verbatim, so the two cannot disagree about where a body starts.
+#
+# AN HTML COMMENT IS NOT THE BODY EITHER, for the same reason and by the same measurement.
+# The frontmatter fix closed one paste target and left the other: the same upstream lines
+# dropped into `<!-- … -->` INSIDE the body scored as adoption, against a near-miss control
+# of unrelated text in the same place that did not. `--check` prints the offending lines
+# verbatim, so the tool emits the exact text that silences it. Comment spans are removed
+# before flattening, in both directions — a line no lead reads is neither an adoption nor a
+# rule anybody is still obeying.
 BODY_FLAT="$(awk 'BEGIN{fm=0; started=0}
                   NR==1 && /^---$/ {fm=1; next}
                   fm && /^---$/    {fm=0; started=1; next}
                   fm               {next}
                   started          {print}' "$OVR" \
+             | awk 'BEGIN{inc=0}
+                    {
+                      line=$0
+                      while (1) {
+                        if (inc) { i=index(line,"-->"); if (i==0) { line=""; break }
+                                   line=substr(line,i+3); inc=0; continue }
+                        i=index(line,"<!--"); if (i==0) break
+                        rest=substr(line,i+4); j=index(rest,"-->")
+                        if (j==0) { line=substr(line,1,i-1); inc=1; break }
+                        line=substr(line,1,i-1) " " substr(rest,j+3)
+                      }
+                      print line
+                    }' \
              | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr '\n' ' ' | tr -s ' ')"
 
 # body_carries <core-line> — is this core line's word sequence in the body at all?
@@ -277,14 +319,15 @@ case "$MODE" in
       exit 1
     fi
     if [ "$N_UNADOPTED" -gt 0 ]; then
-      echo "UNADOPTED-CORE-TEXT  $(basename "$OVR"): ${N_UNADOPTED} line(s) core@${THEIRS_SHA} ADDS to the shadowed section that the body does not carry."
+      echo "UNADOPTED-CORE-TEXT (report)  $(basename "$OVR"): ${N_UNADOPTED} line(s) core@${THEIRS_SHA} ADDS to the shadowed section that the body does not carry."
       printf '%s\n' "$UNADOPTED" | sed 's/^/    | /'
-      echo "  Nothing is stale, so the one-directional test is silent — and the lead still never"
-      echo "  sees this text, because the override replaces the section it was added to. Run"
-      echo "  --merge, or --stamp reaffirm --note \"<why this consumer declines the addition>\"."
-      exit 1
+      echo "  Nothing is stale, so the one-directional test is silent — and the lead never sees"
+      echo "  this text, because the override replaces the section it was added to. Run --merge,"
+      echo "  or decide deliberately that this consumer does not want it."
+      echo "  REPORT, NOT A REFUSAL: a body that adopted upstream by REWORDING scores here too,"
+      echo "  and refusing on that routes a correct re-adoption to reaffirm, which re-stamps."
     fi
-    echo "OK  $(basename "$OVR"): body carries no superseded core text and no unadopted core text."
+    echo "OK  $(basename "$OVR"): body carries no superseded core text."
     exit 0
     ;;
 
@@ -461,12 +504,10 @@ EOF
           exit 1
         fi
         if [ "$N_UNADOPTED" -gt 0 ]; then
-          echo "REFUSED  $(basename "$OVR"): ${N_UNADOPTED} line(s) core@${THEIRS_SHA} ADDS to the shadowed section are absent from the body." >&2
+          echo "UNADOPTED-CORE-TEXT (report)  $(basename "$OVR"): ${N_UNADOPTED} line(s) core@${THEIRS_SHA} ADDS to the shadowed section are absent from the body." >&2
           printf '%s\n' "$UNADOPTED" | sed 's/^/    | /' >&2
-          echo "  Stamping now advances base_sha, so the next pull computes NO drift on this section" >&2
-          echo "  and never offers the upstream text again — the addition would be lost silently." >&2
-          echo "  Run --merge, or --stamp reaffirm --note \"<why this consumer declines it>\"." >&2
-          exit 1
+          echo "  Stamping advances base_sha, so the next pull computes NO drift on this section" >&2
+          echo "  and does not offer this text again. Stamping anyway is a decision; make it one." >&2
         fi
         ;;
       reaffirm)

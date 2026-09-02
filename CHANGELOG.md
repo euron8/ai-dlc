@@ -15,6 +15,63 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.477.0] - 2026-09-02
+
+### `v0.476.0` shipped the un-adopted arm as a REFUSAL, and a refusal there loses the clause it protects
+
+Corrects `v0.476.0`. Same subject:
+`PC-S340-STAMP-READOPT-GATE-IS-BLIND-TO-AN-ADDITIVE-CHANGE-AND-TO-A-REWRITTEN-BODY`. Filed as
+`BL-139`. Found by a late adversarial hand and re-derived here against the consumer's own
+history; three of its findings stand, one is scoped differently than it was reported.
+
+**A BODY IS A REWRITE BY DEFINITION, SO THE MIRROR PREDICATE INHERITS THE DEFECT IT FIXES.** The
+filing's own claim is that a line-literal test cannot see a body that reworded what it copied.
+`unadopted_lines()` is that test with the sign flipped, so it cannot see a body that adopted
+upstream's addition by rewording it — and it REFUSED on that. Replayed over every commit in the
+reference consumer's history where an override's `base_sha` moved, with the body as it stood when
+the stamp was taken — **35 events, 27 of them re-adoptions** — the shipped form refuses **17 of
+27**, against 27 of 27 allowed before the release. Seven of those are the un-adopted arm; one is a
+demonstrated false refusal, where 20 lines were reported while the body already carried both
+identifiers that addition introduces.
+
+**AND THE ESCAPE IS WORSE THAN THE WEDGE, WHICH INVERTS THE ARGUMENT THAT SHIPPED IT.**
+`v0.476.0` recorded that the refusal "terminates rather than wedging" because
+`--stamp reaffirm --note` advances `base_sha`. That is true and it is the problem: a FALSELY
+refused re-adoption routed to reaffirm is re-stamped, so the upstream clause is never offered
+again — permanently, under a recorded note asserting this consumer deliberately declined text it
+had in fact already adopted. `mechanism-design.md`: tier a finding as ERROR only where no
+false-positive path exists.
+
+**So the un-adopted direction REPORTS and does not refuse.** `--check` prints the panel and exits
+0 on an unadopted-only finding; `--stamp readopt` prints it and lands. The silence that was the
+filed defect is gone — the operator is told, at both surfaces, and decides. Superseded text still
+REFUSES, unchanged.
+
+**An HTML comment is not the body either.** `v0.476.0` closed the frontmatter paste target and
+left this one: the same upstream lines dropped into `<!-- … -->` inside the body scored as
+adoption, against a near-miss control of unrelated text in the same place that did not. `--check`
+prints the offending lines verbatim, so the tool emitted the exact text that silenced it. Comment
+spans are stripped before flattening, in both directions.
+
+**Two figures `v0.476.0` published are corrected here.**
+
+- **"False-positive set 0 over the consumer's 8 live overrides" was a check that could not
+  fire.** All 15 shadowed anchors across those 8 are byte-identical `base_sha`→`origin/main`,
+  derived two ways — `comm` 0/0 in both directions and `cmp -s` on raw `section_of` output —
+  while the enclosing files moved hard (`gate-validation.md` 180+/31-, `retro.md` 82+/13-,
+  `tea.md` 37+/0-). `OK` was the only reachable verdict on that corpus. The FP set there is
+  **unmeasurable, not zero**; the 27-event replay is the population that can produce a finding.
+- **"5 lines absent from the body" is right for the body it names and wrong for the one a reader
+  will assume.** Against the PRE-merge body the gate reports 5; against the body as it stood when
+  the stamp was taken it reports 1, because the operator's merge had already adopted 4 of the 5
+  verbatim. Both were measured with the shipping script; the sentence now says which.
+
+The 10 remaining refusals are the superseded direction, and they are the filed defect working:
+of 38 carried stale lines, 25 are re-wraps and 13 are a core line sitting inside a longer body
+line. One event resting entirely on the second kind was adjudicated by reading it — both its
+matches are the body carrying core's superseded clause, extended or re-flowed. The other nine
+are not individually adjudicated and are not claimed.
+
 ## [0.476.0] - 2026-09-02
 
 ### The re-adoption gate tested ONE direction of a two-sided difference, so a purely additive upstream change read as clean
