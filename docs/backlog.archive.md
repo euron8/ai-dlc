@@ -4856,12 +4856,26 @@ LIVE TODAY.** Found by an independent hand, then re-derived here.
 on the reference consumer that corpus holds 28 citations, 4 of them not two-quote. Scored with
 the shipped `cite_quote()` sourced from the shipping file against the pre-fix capture, both
 against the real transcript corpus: **the needle moves on 3 of the 4, all 24 clean citations
-are unmoved, and one goes NOMATCH to MATCH.** That one is a genuine `"Route A (Recommended)"`
-operator answer whose LAST quoted segment is the file quoting its own closure line
-(`"Status: DECIDED_AUTONOMOUSLY-by-operator (...)"`), so the greedy capture asked the
-transcript for a sentence the file wrote about itself and reported the operator as a forger.
-**The `pending.md` differential returned a null because the defect's shape is absent from that
-consumer's in-scope entries today, not because it is latent everywhere.**
+are unmoved, and one CITATION goes NOMATCH to MATCH.** That one is a genuine
+`"Route A (Recommended)"` operator answer whose LAST quoted segment is the file quoting its
+own closure line (`"Status: DECIDED_AUTONOMOUSLY-by-operator (...)"`), so the greedy capture
+asked the transcript for a sentence the file wrote about itself.
+
+**AND THAT IS A CLAIM ABOUT THE CITATION DECISION, NOT ABOUT THE SHIPPING VERDICT. AN EARLIER
+REVISION OF THIS ENTRY CALLED IT A LIVE FALSE ACCUSATION AND THAT IS WITHDRAWN.** Driving the
+validator on that record rather than its predicate: both builds exit 1 with byte-identical
+output, against a `cmp -s` control asserting the builds differ, because **arm A fails first**
+— the provenance block declares no `verdict:` — so F6's citation arm is never reached. The
+false accusation is LATENT there. Isolating a predicate and reading a movement its own
+control flow never reaches is the mirror of this repo's rule that isolating the subject hides
+a defect in its CALLER. A peer hand reached the same conclusion independently and named the
+sibling record; the two of us were scoring different files and different objects.
+
+**So both corpora return a null on observable behaviour today, for two different reasons** —
+`pending.md` because the defect's shape is absent from that consumer's in-scope entries, and
+the convergence corpus because the one record carrying the shape is refused upstream of the
+citation arm. The case for delivering this rests on the fail-open half, which is silent by
+construction and has no warning shot.
 
 **AND THE CORPUS-ATTRIBUTION HALF IS ADDRESSED WITHOUT BEING CLOSED.** The sibling already
 prints `cite: scanned <N> transcript(s) from <corpus>`; the escalation validator discarded it.

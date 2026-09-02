@@ -141,13 +141,21 @@ steer_dir_has_transcript() { # $1 dir -> 0 if it holds a readable *.jsonl
 # The three narrowings were computed in one invocation over one blob set so only the narrowing
 # varies.
 #
-# AND THE POPULATION EXCLUDED THE OTHER TWO READERS' OWN CORPORA, WHICH IS WHERE THE DEFECT IS
-# LIVE. `validate-adversarial-convergence.sh` parses this same field out of
-# `*-resolution-p<N>.md`, and on the reference consumer TODAY that corpus holds 28 citations, 4
-# of them not two-quote. The needle moves on 3, all 24 clean ones are unmoved, and one goes
-# NOMATCH -> MATCH: a genuine `"Route A (Recommended)"` operator answer whose LAST quoted
-# segment is the file quoting its own closure line, so the greedy capture asked the transcript
-# for a sentence the file wrote about itself and reported the operator as a forger.
+# AND THE POPULATION EXCLUDED THE OTHER TWO READERS' OWN CORPORA.
+# `validate-adversarial-convergence.sh` parses this same field out of `*-resolution-p<N>.md`,
+# and on the reference consumer that corpus holds 28 citations, 4 of them not two-quote. The
+# needle moves on 3, all 24 clean ones are unmoved, and one CITATION goes NOMATCH -> MATCH: a
+# genuine `"Route A (Recommended)"` operator answer whose LAST quoted segment is the file
+# quoting its own closure line, so the greedy capture asked the transcript for a sentence the
+# file wrote about itself.
+#
+# THAT IS A CLAIM ABOUT THE CITATION DECISION AND NOT ABOUT THE SHIPPING VERDICT, AND THE
+# DIFFERENCE WAS FOUND BY DRIVING THE VALIDATOR RATHER THAN ITS PREDICATE. On that record F6
+# is never reached: arm A fails first because the provenance block declares no `verdict:`, so
+# both builds exit 1 with byte-identical output (control: the two builds differ). The false
+# accusation is LATENT there, not live. Isolating a predicate and reading a movement its own
+# control flow never reaches is the mirror of this repo's rule that a defect in the CALLER
+# stays invisible when you isolate the subject.
 cite_segments() { # $1 authline -> one quoted segment per line
   printf '%s\n' "$1" | LC_ALL=C awk '
     { n = split($0, p, /"/)

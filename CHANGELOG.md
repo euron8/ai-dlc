@@ -56,13 +56,20 @@ both builds against one frozen corpus with a `cmp -s` control asserting the buil
 **33 FAIL before, 31 after, both movers the multi-line shape, and no row moved from pass to
 fail.**
 
-**That population excluded the other two readers' own corpora, and that is where the defect is
-live.** `validate-adversarial-convergence.sh` parses the same field out of
-`*-resolution-p<N>.md`, and on the reference consumer today that corpus holds 28 citations, 4
-of them not two-quote. The needle moves on 3, all 24 clean ones are unmoved, and **one goes
-NOMATCH to MATCH**: a genuine `"Route A (Recommended)"` operator answer whose last quoted
-segment is the file quoting its own closure line, so the greedy capture asked the transcript
-for a sentence the file wrote about itself and reported the operator as a forger.
+**That population excluded the other two readers' own corpora.**
+`validate-adversarial-convergence.sh` parses the same field out of `*-resolution-p<N>.md`,
+and on the reference consumer that corpus holds 28 citations, 4 of them not two-quote. The
+needle moves on 3, all 24 clean ones are unmoved, and **one citation goes NOMATCH to
+MATCH**: a genuine `"Route A (Recommended)"` operator answer whose last quoted segment is
+the file quoting its own closure line.
+
+**That is a claim about the citation decision, not about the shipping verdict, and driving
+the validator is what separated them.** On that record F6 is never reached -- arm A fails
+first because the provenance block declares no `verdict:`, so both builds exit 1 with
+byte-identical output against a control that the builds differ. The false accusation is
+latent there, not live. Both corpora therefore return a null on observable behaviour today,
+for two different reasons, and the pull's case rests on the fail-open half rather than on a
+visible finding.
 
 The escalation validator now renders the sibling's own `cite: scanned <N> transcript(s) from
 <corpus>` line into its accusation instead of discarding it, so two runs that disagree are
