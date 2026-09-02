@@ -128,11 +128,18 @@ not the script — establish which before scoping it.
 `AUDIT-RULE-FILES-DRIFT-FINDINGS-IN-CORE-PROSE-ARE-NOT-CONSUMER-FIXABLE` is 33 findings across
 fourteen files, a per-file prose judgement — not one subject as it stands.
 
-**THE SECOND TEST RETURNS A REAL FINDING THIS TIME, WHICH IT DID NOT AT BATCH 40.** The consumer's
-INSTALLED `audit-layer-debt.sh` and this distribution's fixed copy, run over that consumer's own
-318-row register with a `cmp -s` control asserting the two differ (15934 vs 20006 bytes), report
-**29 against 19**. So the pull removes **10 false rows the consumer is looking at today** —
-observable, not latent. Report that alongside the gap; it does not authorize anything.
+**THE SECOND TEST RETURNED A REAL FINDING AND IT IS NOW SPENT — DO NOT RE-RUN IT LOOKING FOR ONE.**
+Before the pull, the consumer's INSTALLED `audit-layer-debt.sh` and this distribution's fixed copy,
+run over that consumer's own 318-row register with a `cmp -s` control asserting the two differed
+(15934 vs 20006 bytes), reported **29 against 19** — 10 false rows the consumer was looking at,
+observable rather than latent. **That was the argument for running the pull, the pull ran, and the
+two copies are now byte-identical**, so the same differential correctly returns a perfect null and
+that null is not evidence of anything. Re-establish the test's value from scratch next batch; a
+null here means the consumer is current, not that the work is worthless.
+
+**AND THE NULL IS THE SHAPE THIS TEST RETURNS MOST OF THE TIME.** Batch 40's was null too. The
+test discriminates only while the consumer is BEHIND on the specific file a batch touched, so run
+it after a batch ships and before a pull is proposed — not after one lands.
 
 **THE `0.471.0 → 0.479.0` PULL RAN AND MERGED, AND THE GAP IS ZERO FOR THE FIRST TIME SINCE BATCH
 37.** A graph session executed `docs/plans/graph-pull-0471-to-0479.md` under operator
@@ -184,10 +191,22 @@ checked there would have read as a pass having measured nothing.
 carries a discharged `HANDOFF POINT` record, so `ai-dlc-handoff-pending.sh` key 2 keeps returning
 pending. Consumer-side state; an ai-dlc session never writes there. **Operator's to clear.**
 
-**THE FIGURES, re-derived after the pull merged AND the consumer rotated.** Ledger md5
-**`a79811f7…`**. **71 live, 142 archived, 35 cited, 36 UNFILED.** DISCHARGED **17 raw / 16
-corrected**, IN-FLIGHT **19**, UNTOUCHED **36**, overlap **1**, TERMINAL **32**; partition
-17+19+36−1 = 71. `docs/backlog.md` **80 live / 63 archived**. `CITED` rose and `UNFILED` fell by one for a reason unrelated to the pull: filing
+**THE FIGURES, re-derived after the pull, the rotation, AND this repo's own filings.** Ledger md5
+**`a79811f7…`**. **71 live, 142 archived, 38 cited, 33 UNFILED.** DISCHARGED **17 raw / 16
+corrected**, IN-FLIGHT **22**, UNTOUCHED **33**, overlap **1**, TERMINAL **32**; partition
+17+22+33−1 = 71. `docs/backlog.md` **80 live / 63 archived**.
+
+**FOUR OF THOSE CITATIONS ARE THIS REPO'S OWN PROSE, NOT CONSUMER ACTIVITY, AND THE JOIN CANNOT
+TELL THE DIFFERENCE.** `UNFILED` fell 36 → 33 and `CITED` rose 35 → 38 in a single batch without
+the consumer touching anything: `BL-143` cites `PC-S312-TRUNK-PUSH-...` as the entry that exposed a
+false close, and `BL-140` cites `PC-S297-H2-SEEDS-...`, `PC-S300-ORIGIN-TAG-GATE-...` and
+`PC-S305-CHECK-17-BYPASS-...` as the four closed-but-unarchivable rows that are its evidence.
+**Every one of those is a citation as EVIDENCE, not a claim to own the candidate** — but a backlog
+entry naming an id IS the definition of "filed" for this join, so all four moved buckets. This is
+`pc()`'s documented overlap caveat one level over: a `PC-` token in an entry is not a claim of
+ownership, and here it is not even a claim of intent. **Before reading a fallen `UNFILED` as
+progress or a risen `CITED` as coverage, diff `docs/backlog.md` against its previous revision and
+subtract your own writing.** `CITED` rose and `UNFILED` fell by one for a reason unrelated to the pull: filing
 `BL-143` cites `PC-S312-TRUNK-PUSH-DECLINES-TO-POLICE-THE-TRUNK`, a live candidate, so that id now
 reads as in flight. Do not read it as consumer activity.
 
@@ -4051,10 +4070,10 @@ so no block written before it changes verdict.
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
    md5 -q "$L"              # a79811f7... after the pull AND the rotation; a MOVE alone is NOT an alarm -- check the id set too
    wc -l < /tmp/live.txt    # 71
-   wc -l < /tmp/unfiled.txt # 36 after the pull; BL-143 cites PC-S312, moving it to CITED
+   wc -l < /tmp/unfiled.txt # 33 -- BL-140 and BL-143 cite FOUR live ids as evidence, moving them to CITED
    ```
 
-   **THE BASELINE IS 71 LIVE CANDIDATES, 35 CITED, 36 UNFILED.** Live FELL for the first time in
+   **THE BASELINE IS 71 LIVE CANDIDATES, 38 CITED, 33 UNFILED.** Live FELL for the first time in
    this program: the operator carried the `IS-CORE` rejection into a graph session and that session
    rotated it together with `PC-S308-STEP1A-ROTATE-REMEDY-NO-SPRINT-START-DESTINATION`, which had
    been delivered at `v0.471.0` and stayed live only because the pull did not rotate it. **A
