@@ -15,6 +15,71 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.479.0] - 2026-09-02
+
+### `v0.478.0` claimed an empty false-acquittal set, and two hands showed it was a judgement
+
+Corrects `v0.478.0`. Same arm, same subject. Both findings arrived from adversarial hands AFTER
+the merge — the fourth and fifth time in this program a late hand has been right, and the second
+time in one batch that CHECKING their specifics beat accepting them.
+
+**THE CLAIM WAS OVERSTATED AND IS WITHDRAWN.** `v0.478.0` recorded "the false-acquittal set is
+EMPTY and enumerated". Eight of the ten acquittals are unarguable denials. **Two rest on a ROUTING
+claim rather than on an absence** — `no owed is declared because the fixture is consumer-side test
+coverage rather than a layer obligation`, and `routed as push-candidate material rather than
+declared as consumer debt`. Both CONCEDE that work exists and assert it is tracked somewhere this
+arm never reads; the second names no id, so the claim cannot be checked at all. `no` and `rather
+than` cannot separate *there is no obligation* from *there is one and I filed it elsewhere*. The
+honest figure is **8 unarguable, 2 taken on the adjudicator's word**. Two hands converged on the
+second row independently, which is why it is a correction and not a defence.
+
+**THE MEASUREMENT WAS TAKEN AT THE WRONG GRAIN, AND THAT IS THE REUSABLE PART.** The mechanism
+runs per OCCURRENCE; the false-acquittal set was read per ROW. A misfiring discount is therefore
+invisible unless it denies a row's LAST surviving cue. Re-measured at occurrence grain — **41 cue
+occurrences on candidate rows, 13 denied, 11 by `no`, 2 by `rather than`, 0 by `instead of`** —
+exactly one denial is a genuine misfire: `a prose obligation in an earlier verdict's reason with
+no owed object` DESCRIBES an undeclared obligation and its `owed` cue is denied by that `no`. The
+row is still reported, but only because a second cue survived. **Score a per-occurrence rule at
+occurrence grain; a row-grain null hides every misfire that was outvoted.**
+
+**AND CHECKING BEAT ACCEPTING, TWICE.** One hand reported three such misfires; **two of the three
+are on rows that are not candidates at all** — one declares an `owed` dict, one carries
+`closes_owed`, so the discount never evaluates either. Both hands' register line numbers were off
+by one or two and had to be resolved by content. Their totals were exact and their substance
+stood; their specifics did not survive re-derivation.
+
+**`instead of` IS A VACUOUS SET MEMBER AND IS KEPT DELIBERATELY.** It fires on 0 of the 41. It is
+not deleted, because dropping it would accept `rather than` and refuse its commonest synonym; it
+is given a SUBJECT in the fixture instead, which is what `mechanism-design.md` asks for in place
+of deleting a guard that has not yet fired.
+
+**THE NEAR-MISS ARM WAS KILLED BY NOTHING, AND NOW IS.** The cell-movement matrix showed no
+mutation of the DISCOUNT can reach `keep.md`, because it carries no negator and the discount only
+ever fires on one — so the arm asserting the near-miss survives could not be shown to discriminate
+at all. `M11` mutates the CUE side instead and kills it. Fixture 30 → 32 assertions, 11 mutants,
+11 killed.
+
+### `BL-142` — a withdrawn claim is reported forever and its withdrawal is invisible by construction
+
+Filed, NOT fixed, and the sharpest thing this review turned up. The register is APPEND-ONLY, so
+the only way to correct a row is a later row — and the correcting row is very often a DISCHARGE
+row, which the arm exempts. Measured verbatim on the reference register: line 302 states *"the
+body-relocation half of that debt was NOT re-checked ... and the debt is therefore left open"* and
+is REPORTED; line 304 on the same entry, twenty minutes later, says *"There is no body-relocation
+half ... The earlier sentence was an unverified inference and is withdrawn"* and is SKIPPED,
+because it carries `closes_owed`. **The two exemptions compose badly and each is right alone.**
+
+**The schema cannot express the correction.** `supersedes` is scoped by its own description to
+*"a DIFFERENT verdict from an earlier record under the same key"*; both rows are `still-additive`,
+so the author correctly did not use it. 1 of 318 rows uses it at all, and this reader reads it in
+0 places against a control of 9 for `closes_owed`.
+
+**Three remedies were built and scored before filing, and the obvious one is refuted.** Entry-grain
+silences 3 of 19 and **2 of the 3 are wrong** — silenced by the discharge of an unrelated debt. A
+retraction-token predicate silences exactly 1 of 19, correctly, but keys on free prose over a
+corpus of 5 such rows. The shape the defect actually has is a schema field for withdrawing a
+`reason` clause without changing the verdict, which is a different subsystem.
+
 ## [0.478.0] - 2026-09-02
 
 ### The debt audit charged an adjudicator for writing down that nothing is owed

@@ -3722,3 +3722,59 @@ documents. Take them together or say which one you are closing.
 
 verify: sh set -e; R="$PWD/core/skills/ai-dlc-update/reconcile"; grep -q 'ADOPTED UPSTREAM' "$R/ledger-rotate.sh"; ! grep -qE 'REJECTED[ -]+(BY DESIGN|by design)' "$R/ledger-rotate.sh" && exit 1; exit 0
 
+
+## BL-142 — a withdrawn claim is reported forever, and its withdrawal is invisible by construction
+
+**Found by two adversarial hands after `v0.478.0` merged**, 2026-09-02, and NOT fixed here. It
+corrects `BL-141`'s claim that the false-acquittal set was empty, and files the defect that review
+turned up underneath it. Distribution-internal; no `PC-` id, so it ranks BELOW any PC-backed entry.
+
+`audit-layer-debt.sh`'s UNDECLARED arm reports a row whose `reason` prose reads like an obligation.
+The register is APPEND-ONLY, so the only way to correct a row is to write a later one. **The later
+row is very often a DISCHARGE row, and discharge rows are exempted at `core/scripts/audit-layer-debt.sh:225`.**
+So the register holds both a claim and its formal retraction, and the arm reads only the claim.
+
+Measured on the reference consumer's register, the two rows verbatim:
+
+    line 302  retro-push-sprint-ship-verification.md  19:10:00Z  closes_owed absent  -> REPORTED
+      "...the body-relocation half of that debt was NOT re-checked this run and the debt is
+       therefore left open."
+
+    line 304  same entry                              19:30:00Z  closes_owed present -> SKIPPED
+      "CORRECTION to the row I recorded for this entry earlier in the same session... There is
+       no body-relocation half... The earlier sentence was an unverified inference and is
+       withdrawn; the register is append-only, so this row is the correction."
+
+**The two exemptions compose badly and each is right on its own terms.** The discharge exemption
+exists so an operator is not charged for closing a debt correctly — that is `BL-140`-era work and
+it should stay. But it makes the register's only correction channel unreadable, permanently, with
+no act available to clear the row.
+
+**THE SCHEMA'S SUPERSESSION FIELD CANNOT EXPRESS THIS, WHICH IS WHY THIS IS NOT A ONE-LINE FIX.**
+`core/schemas/layer-adjudication-register.json` carries `supersedes`, and its own description
+scopes it: *"Required only when this record states a DIFFERENT verdict from an earlier record
+under the same key."* Both rows here are `still-additive`, so the author correctly did NOT use it
+— the correction withdraws a factual sentence inside `reason` without changing the verdict, and
+the schema has no field for that. Exactly 1 of 318 rows uses `supersedes` at all, on a different
+entry, and `audit-layer-debt.sh` reads it in **0** places against a control of 9 for `closes_owed`.
+
+**THREE REMEDIES WERE BUILT AND SCORED BEFORE FILING. THE OBVIOUS ONE IS REFUTED.**
+
+- **Entry-grain** (silence a reported row when any later row on the same entry discharges
+  anything), which is what the `contradicts-core` arm's satisfiability argument at lines 181-186
+  would imply here: silences **3 of 19**, and **2 of the 3 are wrong** — they are silenced by the
+  discharge of an unrelated debt. Refuted.
+- **Retraction token** (a later row on the same entry says `withdrawn`/`CORRECTION`/`retract`):
+  silences exactly **1 of 19**, precisely the withdrawn row, against a control of 5 rows carrying
+  such a token anywhere in the register. Correct on this corpus — but it keys on free prose, which
+  is the class this arm has now been wrong on three separate times, and 5 rows is not a corpus
+  from which to measure a false-positive set.
+- **Schema field** — a way to withdraw a `reason` clause without changing the verdict. That is the
+  shape the defect actually has, and it is a SCHEMA change plus a producer change, not an edit to
+  this reader. It is a different subsystem, so say which one you are closing.
+
+Sibling to `BL-141`, which narrowed the same arm. Taking this means saying whether you are
+changing the schema or accepting a prose predicate, and measuring the false-positive set of
+whichever you choose.
+
+verify: sh set -e; d=$(mktemp -d); printf '%s\n' '{"clause":"LC-E4","entry":"x/e.md","subject_digest":"a","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"The body-relocation half of that debt was NOT re-checked and the debt is therefore left open."}' '{"clause":"LC-E4","entry":"x/e.md","subject_digest":"a","verdict":"still-additive","recorded_utc":"2026-01-01T00:30:00Z","closes_owed":["OWED-X"],"reason":"Debt discharged. CORRECTION to the row recorded earlier for this entry: there is no body-relocation half; that sentence was an unverified inference and is withdrawn."}' '{"clause":"LC-E4","entry":"x/keep.md","subject_digest":"b","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"The split remains deferred to a later pull."}' > "$d/r.jsonl"; o="$(bash core/scripts/audit-layer-debt.sh --register "$d/r.jsonl" 2>/dev/null)"; grep -q 'keep\.md' <<<"$o" && ! grep -q 'x/e\.md\|^  e\.md' <<<"$o"

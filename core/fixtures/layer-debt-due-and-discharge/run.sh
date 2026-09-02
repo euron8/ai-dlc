@@ -50,7 +50,7 @@ command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 absent" >&2
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-EXPECTED_ASSERTIONS=30
+EXPECTED_ASSERTIONS=32
 fails=0; made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
@@ -280,6 +280,7 @@ python3 "$WORK/mkreg.py" "$NREG" <<'SPEC'
 {"entry":"extensions/clause.md","reason":"This entry declares no extends: anchor. The split remains deferred to a later pull."}
 {"entry":"extensions/contrast.md","reason":"GAP CLOSED IN THIS COMMIT rather than deferred: added the row with this project's path set."}
 {"entry":"extensions/splice.md","reason":"There is no restatement of core clause here, but the narrowing this row proposes is still deferred to a later pull."}
+{"entry":"extensions/insteadof.md","reason":"The gap is routed to the push-candidate ledger instead of declared as layer debt."}
 SPEC
 nout="$(run "$NREG")"
 nund="$(und_block "$nout")"
@@ -364,9 +365,24 @@ else
   show "$nund"
 fi
 
-# --- 15. and the count is exactly the four rows that earn it ----------------------------------
+# --- 16. THE THIRD NEGATOR SPELLING, WHICH HAD NO SUBJECT UNTIL THIS SEED ----------------------
+# `instead of` fires on ZERO of the 41 cue occurrences on the reference register — measured, not
+# assumed. A set member that never fires is the vacuous guard `mechanism-design.md` warns about,
+# and its remedy is to give the guard a subject rather than to delete it: dropping the spelling
+# would leave the negator set accepting `rather than` and refusing its commonest synonym.
+if grep -q 'insteadof\.md' <<<"$nund"; then
+  bad "\`instead of\` is carried in the negator set but does not deny — the third spelling is not reached"
+  show "$nund"
+else
+  ok "THE VACUOUS MEMBER HAS A SUBJECT: \`instead of\` denies its cue, though it fires on 0 of 41 real occurrences"
+fi
+
+# --- 17. and the count is exactly the five rows that earn it -----------------------------------
+# A COUNT IS A CONJUNCT HERE, EXACTLY AS AT ARM 3, AND IT IS NOT AN INDEPENDENT ARM. It moves on
+# every mutant, so it can never say WHICH row was lost; the identity assertions either side own
+# that. It is asserted so the set cannot be satisfied by reporting everything or nothing.
 if grep -qE '^UNDECLARED \(5\)' <<<"$nout"; then
-  ok "exactly 5 of the 7 cue-carrying rows are reported — the other 2 deny their obligation"
+  ok "exactly 5 of the 8 cue-carrying rows are reported — the other 3 deny their obligation"
 else
   bad "the undeclared count is not 5; the discount is not partitioning denials from obligations"
   show "$nout"
@@ -484,6 +500,17 @@ score M9 "$(mkmut m9 'CLAUSE_END = re.compile(r"[.;:,]")' 'CLAUSE_END = re.compi
 score M10 "$(mkmut m10 'NEGATED = re.compile(r"\bno\b|\brather than\b|\binstead of\b", re.I)' 'NEGATED = re.compile(r"\bno\b", re.I)')" "$NREG" \
   "dropping the contrast spellings from the negator set files \`rather than deferred\` as deferred work" \
   present 'contrast\.md'
+
+# M11 — every `owed` cue dropped, denied or not. This exists because the NEAR-MISS arm
+# (`keep.md`) was killed by NOTHING, which an adversarial review found and the cell-movement
+# matrix confirmed: no mutation of the DISCOUNT can reach it, because `keep.md` carries no
+# negator and the discount only ever fires on one. Its killer has to mutate the CUE side. Without
+# this mutant the arm asserting the near-miss survives could not be shown to discriminate at all
+# — a check that cannot fire reading exactly like one that passed.
+score M11 "$(mkmut m11 "$ANCHOR_HITS" '    hits = sorted({m.group(0).lower() for m in PROSE.finditer(reason)
+                   if not cue_denied(reason, m) and m.group(0).lower() != "owed"})')" "$NREG" \
+  "dropping the \`owed\` cue entirely loses the near-miss row one token from the denial" \
+  absent 'keep\.md'
 
 # UNMUTATED CONTROL — necessary and NOT sufficient. rc=0-with-no-findings is exactly what a
 # subject replaced by `exit 0` looks like, so this carries a POSITIVE conjunct: a copy taken and

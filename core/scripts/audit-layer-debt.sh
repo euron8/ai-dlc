@@ -223,6 +223,31 @@ PROSE = re.compile(r"(?<![\w-])(owed|still owed|deferred|remediation|follow-?up|
 # `no new owed`/`no re-grain is owed`), 2 draw an explicit contrast (`rather than deferred`,
 # `rather than declared as consumer debt`). The false-acquittal set is EMPTY and enumerated.
 #
+# **AND THE FALSE-ACQUITTAL CLAIM ABOVE WAS OVERSTATED. TWO ADVERSARIAL HANDS CONVERGED ON THE
+# SAME ROW INDEPENDENTLY.** Eight of the ten acquittals are unarguable denials. **Two are not:
+# they rest on a ROUTING claim rather than on an absence** — `no owed is declared because the
+# fixture is consumer-side test coverage rather than a layer obligation`, and `routed as
+# push-candidate material rather than declared as consumer debt`. Both CONCEDE that work exists
+# and assert it is tracked somewhere this arm never reads; the second names no id at all, so the
+# claim cannot be checked. `no` and `rather than` cannot separate *there is no obligation* from
+# *there is one and I filed it elsewhere*. The honest figure is **8 unarguable, 2 taken on the
+# adjudicator's word**, not a measured zero.
+#
+# **AND THE MEASUREMENT WAS TAKEN AT THE WRONG GRAIN, WHICH IS THE REUSABLE PART.** The mechanism
+# runs per OCCURRENCE; the false-acquittal set was read per ROW. A misfiring discount is therefore
+# invisible unless it happens to deny a row's LAST surviving cue. Measured at occurrence grain —
+# 41 cue occurrences on candidate rows, 13 denied, 11 by `no`, 2 by `rather than`, 0 by
+# `instead of` — one denial is a genuine misfire: `a prose obligation in an earlier verdict's
+# reason with no owed object` DESCRIBES an undeclared obligation, and the `owed` cue in it is
+# denied by that `no`. That row is still reported, but only because a second cue survives. **Score
+# a per-occurrence rule at occurrence grain; a row-grain null hides every misfire that was
+# outvoted.**
+#
+# **`instead of` FIRES ON 0 OF THOSE 41.** It is a vacuous set member on the only corpus that
+# exists. It is kept rather than deleted because dropping it would accept `rather than` and refuse
+# its commonest synonym, and it is given a SUBJECT in the fixture instead — which is what
+# `mechanism-design.md` asks for in place of deleting a guard that has not yet fired.
+#
 # PER OCCURRENCE, NEVER PER ROW, and that is what keeps recall. A row is still reported when ANY
 # cue survives, so a reason that denies one obligation and states another is still caught. The
 # two genuine debts on the reference register — both opening `OWED REMEDIATION, deferred by
