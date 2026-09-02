@@ -35,8 +35,10 @@ own heading.
 ### BATCH 39 SHIPPED AS `v0.474.0`, CORRECTED BY `v0.475.0`. THE GAP IS FOUR RELEASES AND PENDING IS 2. START AT BATCH 40.
 
 **This block is the current state and it replaces every block below.** Every figure was
-re-derived after the merge by running the derive block and the sweep, all controls in the same
-invocation.
+re-derived after **`v0.475.0` merged** — the derive block, the sweep, the delivery gap and the
+second test all re-run, with their controls in the same invocation, and the numbers below diffed
+against that run rather than edited. The consumer wrote to its ledger during the re-derivation;
+the md5 paragraph below says what moved and what did not.
 
 **`v0.474.0` REMOVED A FALSE REFUSAL AND ACQUITTED FIVE ARBITRARY-EXECUTION PATHS IN THE SAME
 EDIT. `v0.475.0` CORRECTS IT, AND THIS IS THE BATCH'S REAL LESSON.** The quote-blind
@@ -157,25 +159,35 @@ quoting the old code. Excluding comment lines gives 0 against a control of 1 for
 a live line. Prose documenting a defect becomes an instance of it — the same trap `BL-133` records,
 hit again inside one release.
 
-**THE FIGURES, re-derived after the merge.** Ledger md5 `287f0566…` — UNCHANGED across the whole
-batch — **74 live candidates, 139 archived, 33 cited, 41 UNFILED**. DISCHARGED **16 raw / 15
-corrected**, IN-FLIGHT **18**, UNTOUCHED **41**, overlap **1**, TERMINAL **31**. Partition control
-closes on the raw figure: 16+18+41−1 = 74. Presence controls 1/1/1/1; absence controls 0 and 0.
-`docs/backlog.md` **76 live / 59 archived** against a ceiling of 100. The partition moved by exactly
+**THE FIGURES, re-derived after `v0.475.0` merged.** Ledger md5 **`6d84cbec…`** — **74 live
+candidates, 139 archived, 33 cited, 41 UNFILED**. DISCHARGED **16 raw / 15 corrected**, IN-FLIGHT
+**18**, UNTOUCHED **41**, overlap **1**, TERMINAL **31**. Partition control closes on the raw
+figure: 16+18+41−1 = 74. Presence controls 1/1/1/1; absence controls 0 and 0.
+`docs/backlog.md` **77 live / 60 archived** against a ceiling of 100. The partition moved by exactly
 one, out of UNTOUCHED and into DISCHARGED.
 
-**THE GAP IS THREE RELEASES AND PENDING IS 2 — both DERIVED, with controls.** The consumer stamp
-reads `0.471.0`/`31b51d48` on all four fields against a distribution `VERSION` of `0.474.0`. PENDING
+**THE md5 MOVED AT THE END OF THIS BATCH AND IT IS NOT AN ALARM — READ THE ID SET BESIDE IT.**
+It went `287f0566…` → `6d84cbec…` while live, archived, cited and unfiled all held at
+74/139/33/41 and every control fired. The consumer annotated entries without adding or removing
+a candidate; its dirty count went 22 → 28 across the batch on its own pipeline state. **A moved
+digest alone says only that bytes changed.** Anchor on `6d84cbec…`, and if yours differs, take
+the counts first — nothing has been FILED unless one of them moved too.
+
+**THE GAP IS FOUR RELEASES AND PENDING IS 2 — both DERIVED, with controls.** The consumer stamp
+reads `0.471.0`/`31b51d48` on all four fields against a distribution `VERSION` of `0.475.0`. PENDING
 is batch 38's candidate at `v0.472.0` and batch 39's at `v0.474.0`, each resolved to the release that
-FIRST named it, against an impossible-id control of 0 and a known-present control of 3.
+FIRST named it, against an impossible-id control of 0 and a known-present control of 3. **PENDING
+stays 2 rather than 3 because `v0.475.0` corrects `v0.474.0` and carries the SAME candidate id.**
 **A PULL IS NOT AUTHORIZED.** `operator-rulings.md` governs: readiness is not authorization, a
 `PENDING` count is not a decision about WHEN, and one is never handed to a peer session.
 
 **THE SECOND TEST DIVERGES IN THE FALSE DIRECTION, WHICH IS REPORTABLE RATHER THAN A TRIGGER.** The
 consumer's INSTALLED `scripts/ai-dlc/validate-artifact-derivations.sh` and this distribution's fixed
-copy were scored over that consumer's own 3408 fenced commands, with a `cmp -s` control in the same
-invocation asserting the two binaries differ (13950 vs 16874 bytes). Installed refuses **411**, fixed
-refuses **368**: the consumer would LOSE 43 false refusals and GAIN **0** findings. So the pull
+copy were scored over that consumer's own **3044 fenced commands** — the lines INSIDE a ```derived
+block, which is the population `cmd_is_safe` sees, and not the 3408 `$ ` lines in fence-carrying
+files that `v0.474.0` wrongly counted — with a `cmp -s` control in the same
+invocation asserting the two binaries differ (13950 vs 19289 bytes). Installed refuses **99**, fixed
+refuses **68**: the consumer would LOSE **31** false refusals and GAIN **0** findings. So the pull
 removes live false refusals rather than delivering a missing finding — the same shape as batch 38,
 and not the missing-finding trigger the detection rule names. **No bootstrapping step is in this
 release**: it touched `validate-artifact-derivations.sh`, one fixture and the backlog — not
@@ -389,7 +401,9 @@ one is never handed to a peer session.
 **THE SECOND TEST — the differential — DIVERGES, and that is reportable rather than decisive.**
 The consumer's INSTALLED `scripts/ai-dlc/validate-spawn-ledger.sh` and this distribution's fixed
 copy were run against that consumer's real ledger across its eight sprints, with a `cmp -s` control
-in the same invocation asserting the two binaries differ. Installed: 7 of 8 sprints exit 1, **122
+in the same invocation asserting the two binaries differ. [BATCH 39 NOTE: this is batch 38's
+measurement of a DIFFERENT validator and is left as its record; the live second test is in the block
+above.] Installed: 7 of 8 sprints exit 1, **122
 FAIL arms**. Fixed: 2 of 8, **25 arms**. The divergence is in the FALSE direction — the consumer's
 gate is emitting 97 findings today that no consumer action can clear — so the pull removes a live
 false-FAIL rather than delivering a missing finding. **No bootstrapping step is in the range**:
@@ -3241,7 +3255,7 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 40's
-   SUBJECT.** Batch 39 is merged as `v0.474.0`. Number yours 40.
+   SUBJECT.** Batch 39 is merged as `v0.474.0` AND its correction `v0.475.0`. Number yours 40.
 
    **A PEER SESSION IS A SUBJECT CHANNEL, AND CHECKING IT COSTS ONE CALL.** Batch 37's subject
    arrived as a message from a blocked consumer session, not from the ledger — the sweep could not
@@ -3257,15 +3271,20 @@ so no block written before it changes verdict.
    state into the question.
 
    **THE GAP IS FOUR RELEASES AND PENDING IS 2** — the consumer stamp reads `0.471.0`/`31b51d48`
-   on all four fields and this distribution is `0.475.0`. Your batch widens the gap to four. That is
+   on all four fields and this distribution is `0.475.0`. Your batch widens the gap to five. That is
    not permission to close it: a pull is operator-initiated, readiness is not authorization, a
    `PENDING` count is not a decision about WHEN, and one is never handed to a peer session.
    `operator-rulings.md` governs.
 
    **BATCH 39's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW ITS SIBLINGS.**
    `PC-S340-DERIVATION-CAPTURE-HOOK-ROLLS-BACK-THE-WHOLE-FILE-ON-A-REJECTED-BLOCK` shipped as
-   `v0.474.0`, is cited by `BL-135` in `docs/backlog.archive.md`, and reads DISCHARGED rather than
-   UNFILED — but it stays live in the consumer's ledger until they pull. Do not re-scope onto it.
+   `v0.474.0`, was CORRECTED by `v0.475.0`, and is cited by `BL-135` and `BL-136` in
+   `docs/backlog.archive.md`, so it reads DISCHARGED rather than UNFILED — but it stays live in the
+   consumer's ledger until they pull. Do not re-scope onto it. **Read `BL-136` before you touch
+   this validator at all**: `v0.474.0` removed a false refusal and ACQUITTED five
+   arbitrary-execution paths in the same edit, because the quote-blind `tr '|' '\n'` had been
+   refusing two awk exec vectors and three `$'...'` constructs by accident. `v0.475.0` closed them.
+   The gate and the fixture were green through the whole regression.
    **Only its PARSE half was fixed; its ROLLBACK half is REFUTED, not deferred** — the hook has no
    write path against the target, measured. Do not re-open the rollback claim without new evidence
    from the consumer about what actually destroyed that file, which is a question this side cannot
@@ -3354,6 +3373,18 @@ so no block written before it changes verdict.
    **BOTH PULL-FOUND DEFECTS ARE SPENT. DO NOT RE-SCOPE ONTO THEM.** Batch 34 took them and the
    resume block records what they turned out to be. Neither is available.
 
+   **`BL-137` IS NEW, LIVE, MEASURED, AND CARRIES A WORKING RECEIPT — AND NO SWEEP WILL SURFACE
+   IT, BECAUSE IT HAS NO `PC-` ID.** Batch 39 found it while fixing its own regression:
+   `sed -n 'w canary' data.txt` WRITES A FILE and is allowed, on both sides of `v0.474.0`, so it
+   is not a regression and was deliberately not folded into that release. The allowlist's
+   write-and-exec predicates test OPTION WORDS (`sed:-i`, `find:-delete`, `sort:-o`, `git:-O`),
+   and `sed`'s writing verbs — `w`, `W`, and GNU's `e` — live inside the SCRIPT argument where
+   no option scan reaches. Same class as the awk vectors `v0.475.0` closed: **the allowlist
+   admits programs whose argument is itself a program**, and `sed`, `awk` and `find` all have
+   one. What it needs before it can be taken is the false-positive measurement nobody has run —
+   how many real `sed -n '...p'` scripts a `w`-detecting arm would touch across the reference
+   corpus. Its receipt exits 1 today; run it and read the raw exit before scoping.
+
    **THE OPEN ONE IS `BL-131`, AND IT IS FILED RATHER THAN TAKEN FOR A REASON YOU SHOULD READ
    BEFORE PICKING IT UP.** Nothing executes the union gate, and the three write paths that bypass
    it do not have one home — a check sited in `apply.sh` closes two and leaves step 2's autonomous
@@ -3416,7 +3447,7 @@ so no block written before it changes verdict.
    Measured 2026-08-31: those three ids dated `2026-08-30` one day and `2026-08-31` the next while
    the ledger was BYTE-IDENTICAL throughout — at the value it held THEN, `968f51ce…`, live 66,
    unfiled 33. **That digest is the EPISODE'S and is not your baseline: pulls and filings have moved
-   the ledger since, so your anchor is `287f0566…` / live 74, in action 1b and nowhere else.** Two digests in
+   the ledger since, so your anchor is `6d84cbec…` / live 74, in action 1b and nowhere else.** Two digests in
    one action is how a reader takes the wrong one, and the older value stays because it is the
    evidence for the rule, not because it is current. The sweep dates an
    id with `git log -S … | tail -1`, the OLDEST commit introducing the string, and the consumer
@@ -3515,7 +3546,7 @@ so no block written before it changes verdict.
    `predicate-differential.sh` fingerprints the corpus either side of its own run for exactly this
    reason; a hand-rolled measurement has no such guard.
 
-1a. **`docs/backlog.md` IS AT 76 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
+1a. **`docs/backlog.md` IS AT 77 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
    is not blocked. That is not licence to file rather than fix — the standing correction in the
    resume block still governs — but a filing no longer costs a rotation, and rotating still means
    CLOSING, which needs a measurement.
@@ -3564,7 +3595,7 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 287f0566... unchanged since the 0.471.0 pull; a MOVE alone is NOT an alarm -- check the id set too
+   md5 -q "$L"              # 6d84cbec... moved at the end of batch 39 with EVERY count held; a MOVE alone is NOT an alarm -- check the id set too
    wc -l < /tmp/live.txt    # 74
    wc -l < /tmp/unfiled.txt # 41 after batch 39 rotated BL-135
    ```
