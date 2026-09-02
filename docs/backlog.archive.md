@@ -4764,3 +4764,87 @@ Scored: 10 mutants, 10 killed, and the `nothing`-as-negator seed had to be narro
 sentence before M7 could fire at all.
 
 verify: sh set -e; d=$(mktemp -d); printf '%s\n' '{"clause":"LC-E4","entry":"x/deny.md","subject_digest":"a","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"Verdict recorded. No owed is carried on this entry."}' '{"clause":"LC-E4","entry":"x/keep.md","subject_digest":"b","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"Verdict recorded. New owed is carried on this entry."}' > "$d/r.jsonl"; o="$(bash core/scripts/audit-layer-debt.sh --register "$d/r.jsonl" 2>/dev/null)"; grep -q 'UNDECLARED (1)' <<<"$o" && grep -q 'keep\.md' <<<"$o" && ! grep -q 'deny\.md' <<<"$o"
+## BL-144 — the operator-citation parser is greedy, so which quoted segment wins is decided by position
+
+**LANDED (v0.480.0, verified 6a9456cd).**
+
+**Filed and FIXED in this release.** Consumer candidate
+`PC-S340-VALIDATE-ESCALATION-RESOLUTION-NONDETERMINISTIC-ON-BYTE-IDENTICAL-INPUT`, filed
+2026-08-31 against sprint 307, routing `CO-S307-ESCALATION-VALIDATOR-NONDETERMINISTIC`. **The
+filing's stated mechanism is REFUTED and its symptom is real**; both halves are below, because
+which one you believe decides what you build.
+
+**THE FILED MECHANISM DOES NOT EXIST.** The candidate reports five consecutive runs over a
+`pending.md` whose `shasum` was unchanged producing three different verdicts, and instructs the
+adjudicator to read *"whether the parse of a multi-quote citation still depends on unordered
+iteration"*. It does not. With the transcript corpus FROZEN — a byte copy of the reference
+consumer's 176 `*.jsonl` — ten consecutive runs of the shipping script over one constructed
+`pending.md` returned an identical verdict ten times out of ten. What moves is the SECOND input:
+the live corpus's listing digest moved four times across ten runs while the peer session writing
+it was merely idle. **`pending.md` was byte-identical and the corpus was not, and nothing in the
+output said which corpus state a verdict came from.**
+
+**THE DETERMINISTIC DEFECT IS THE PARSE, AND POSITION DECIDES IT.** The cited substring was
+captured with `sed -n 's/.*"\(.*\)".*/\1/p'`, whose leading `.*` is GREEDY, so the LAST quoted
+segment wins. Measured with the shipping script against one frozen corpus, the same two quotes
+with only their ORDER swapped:
+
+    "<genuine operator words>" / "<invented>"   ->  exit 1, "This is the S290 failure"
+    "<invented>" / "<genuine operator words>"   ->  exit 0, OK
+
+The first is a false accusation of fabrication against a real citation. **The second is
+fail-OPEN: an invented operator disposition notarizes whenever any genuine operator substring
+trails it on the same line, which is the exact fabrication the script exists to stop.** The
+single-quote controls do not move in either direction — `"<genuine>"` alone passes and
+`"<invented>"` alone fails under both builds — so the reading discriminates rather than firing
+on every citation.
+
+**ON AN ODD QUOTE COUNT THE CAPTURE IS THE CONNECTIVE BETWEEN TWO QUOTES.** The reference
+consumer's own committed citation `** 2026-07-20T13:08:33Z | "1. RETIRE" and "This work was
+already done in` captured ` and ` — five characters — and failed as *"too short"* while naming
+none of the operator's words.
+
+**AND THE FIELD IS ROUTINELY MULTI-LINE.** The producing `awk` is line-oriented, so a citation
+whose closing quote sits on the next line reached the fallback, which kept the opening `"`
+inside the needle. No operator message contains that character there.
+
+**THE POPULATION, DERIVED FROM THE CONSUMER'S OWN HISTORY.** Every `Operator authorization:`
+citation ever written on a RESOLVED/OVERRIDDEN entry, across 878 blobs of
+`docs/escalations/pending.md` and `pending-archive.md`: **106 distinct citation lines, of which
+98 carry exactly two quote characters and are unaffected by any of this.** The other 8 are the
+subject — 6 multi-line, 1 with no quote at all, 1 the connective case above.
+
+**SCORED AS A DIFFERENTIAL, PER ROW, NOT AS A TOTAL.** All 106 replayed as one entry each, in
+scope, against one frozen corpus, under the pre-fix and post-fix builds with a `cmp -s` control
+asserting the two differ: **33 FAIL before, 31 after; the two that moved are both the
+multi-line shape; and NO row moved from pass to fail.** The false-positive set is that
+measurement and not an adjudication. What the differential does NOT establish: 31 rows still
+fail, and an unknown share of those fail because the July transcripts they cite are no longer in
+today's corpus — the differential is immune to that, the absolute count is not.
+
+**THE FIX IS ONE PREDICATE IN THREE FILES.** `cite_segments()` reads the field as SEGMENTS —
+`split` on `"` puts the inside-quote fields at the even indices, and an odd count leaves the
+final field unterminated at an even index too, so one loop covers both shapes — and
+`cite_quote()` takes the first segment long enough to verify. Three programs parse this field
+and all three feed the result to the same `--cite` predicate:
+`core/scripts/validate-escalation-resolution.sh`,
+`core/scripts/validate-adversarial-convergence.sh`, and
+`core/hooks/ai-dlc-gate-remediation-guard.sh` — where the permissive direction LIFTS a gate
+deny. **I103** holds the three copies byte-identical and refuses a fourth, mirroring I92 over
+the same three sites; it was proved able to fire in both directions before shipping (a seeded
+one-character drift, and a seeded fourth file), against an unmutated control that is silent.
+
+**WHAT IS NOT CLAIMED.** A second quoted segment beside a verified one is not itself notarized.
+The field has always carried free prose after the quote, so that residue is the grammar's rather
+than this parser's. **A conjunction over every segment was built and scored**: it produces a
+byte-identical fail set over the 106 real citations, and on the constructed case it still
+refuses a genuine citation followed by other text — so it leaves half the filed defect unfixed
+and is not a second spelling of this one. Stated as a limit, not as deferred work.
+
+**AND THE CORPUS-ATTRIBUTION HALF IS ADDRESSED WITHOUT BEING CLOSED.** The sibling already
+prints `cite: scanned <N> transcript(s) from <corpus>`; the escalation validator discarded it.
+It is now rendered into the accusation verbatim rather than restated, so two runs that disagree
+are visibly two runs over two corpora. That does not make a live corpus stable and does not
+claim to.
+
+verify: sh d=$(mktemp -d); printf '{"type":"user","timestamp":"2026-01-01T00:00:00Z","message":{"content":"Reframe the AC as a class invariant, not a per-site fix."}}\n' > "$d/t.jsonl"; e(){ printf '## S50-%s Lead - 2026-01-01\n**Status:** RESOLVED\n**Operator authorization:** %s\n' "$1" "$2" > "$d/$1.md"; }; e a '2026-01-01T00:00:00Z | "zzz invented disposition zzz" / "reframe the AC as a class invariant"'; e b '2026-01-01T00:00:00Z | "reframe the AC as a class invariant"'; e c '2026-01-01T00:00:00Z | "reframe the AC as a class invariant" / "zzz invented disposition zzz"'; e f '2026-01-01T00:00:00Z, verbatim: "reframe the AC as a class invariant'; v(){ bash core/scripts/validate-escalation-resolution.sh --escalations "$d/$1.md" --sprint 50 --transcript "$d/t.jsonl" >/dev/null 2>&1; echo $?; }; r="$(v a)$(v b)$(v c)$(v f)"; rm -rf "$d"; [ "$r" = "1000" ]
