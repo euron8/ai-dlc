@@ -15,6 +15,67 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.474.0] - 2026-09-01
+
+### The derivation allowlist split a command on `|` without regard for quoting, and refused correct read-only commands
+
+Closes `PC-S340-DERIVATION-CAPTURE-HOOK-ROLLS-BACK-THE-WHOLE-FILE-ON-A-REJECTED-BLOCK`
+(the parse half; the rollback half is refuted below). Filed as `BL-135` and rotated in the
+same release.
+
+`cmd_is_safe()` in `core/scripts/validate-artifact-derivations.sh` checks every pipeline
+segment's first word against a read-only allowlist, and split the command with
+`tr '|' '\n'`. That is quote-blind, so a bar inside a quoted ERE was read as a pipe and the
+fragment after it was refused as an unknown command:
+
+    $ grep -cE 'alpha|beta' data.txt   ->  FAIL (ALLOWLIST), refused token `'beta'`
+    $ grep -cE 'alpha' data.txt        ->  exit 0, the near-miss that names the cause
+
+The split now happens only at a `|` outside quotes, the way the shell does it. Since
+`ai-dlc-derivation-capture.sh` began re-running a block inside the tool call that wrote it,
+this refusal blocks an author's write with no human in the loop.
+
+**THE FILING HAD TWO CLAIMS AND ONLY ONE SURVIVED.** Its headline was that the rejection
+rolled back and destroyed the whole target file. Refuted against the tree:
+`core/hooks/ai-dlc-derivation-capture.sh` is a PostToolUse hook that reads the target,
+writes only inside its own `mktemp -d`, and on a mismatch emits stderr and exits 2. It has
+no write, truncate, move or remove path against the target at all. The entry records both
+halves rather than being re-filed, because which half died is what stops the next reader
+repeating it.
+
+**43 newly allowed, 0 newly refused**, measured rather than estimated: a verdict
+differential driving the extracted `cmd_is_safe()` from both implementations over the 3408
+`$ `-prefixed command lines in the reference consumer's 237 fence-carrying artifacts.
+Controls in the same invocation — the two extracted functions differ (4893 vs 7817 bytes)
+and both extractions end at a function close.
+
+**The unbalanced-quote refusal is load-bearing, and a mutant is why that is known.**
+Splitting quote-aware without refusing an unresolved quote opens a hole the old code
+closed: `grep $'a\'b' f | xargs rm` is one word plus a real pipe to bash, while a quote
+parity scan sees odd parity and stops splitting, so `xargs rm` is never checked. Scored
+against a copy of the fix with the refusal deleted: pre REFUSE, fix REFUSE, no-refusal
+ALLOW.
+
+**The new arm shipped a false refusal first, and an independent parser found it.** Checked
+against `bash -n -c` — the actual executor, so ground truth — the scan disagreed on exactly
+2 of 3408, both `python3 # ... test_safeguards.py's own regex`, where bash reads the
+apostrophe inside a `#` comment. Left alone it would have refused `grep -c x f # note`,
+which is the very class this change removes. The scan now ends a command at an unquoted `#`
+opening a word. Cross-checked against python `shlex`: 0 disagreements on top-level pipe
+count across the 3381 both parse.
+
+**The fixture found a defect in its own new arms.** `core/fixtures/artifact-derivations`
+packs `command|expected-message` into one string, which is safe for the existing cases
+because none of their commands contains a bar. Every new case does, so each was truncated at
+its first bar — and one truncation still exited 1, for a reason unrelated to what the arm
+claimed to test. Those arms take two arguments now. 35 assertions pass against the fix and 12
+go red against the pre-fix validator.
+
+Receipt scored against seven implementations — the fix, a second spelling, the pre-fix
+original, a never-split version, the fix minus its refusal, a total disarm, and the
+allowlist widened to every command on `PATH`. Three arms accepted 3 of 7; a fourth arm
+reading the failure CLASS brings it to **2 of 7**, the fix and its second spelling.
+
 ## [0.473.0] - 2026-09-01
 
 ### Twenty-four of the twenty-five findings `v0.472.0` left standing were on rows that were never dispatches

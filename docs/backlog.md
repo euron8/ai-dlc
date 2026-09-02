@@ -3665,3 +3665,68 @@ tree, and 0 against a scratch copy with every citation redacted.
 
 verify: sh n=0; for f in $(git ls-files "core/**/*.md"); do a=$(grep -coE "\`[a-zA-Z0-9._/-]+\.(sh|md|yaml|json):[0-9]+" "$f"); b=$(grep -coE "\`:[0-9]+" "$f"); n=$((n+a+b)); done; [ "$n" -eq 0 ] && exit 0; exit 1
 
+## BL-135 — the derivation allowlist split a command on `|` without regard for quoting, and refused correct read-only commands
+
+Cites `PC-S340-DERIVATION-CAPTURE-HOOK-ROLLS-BACK-THE-WHOLE-FILE-ON-A-REJECTED-BLOCK`.
+
+`cmd_is_safe()` in `core/scripts/validate-artifact-derivations.sh` splits a fenced command into
+pipeline segments and requires every segment's first word to be on the read-only allowlist. It did
+that with `tr '|' '\n'`, which is quote-blind, so a bar inside a quoted ERE was read as a pipe and
+the fragment after it was refused as an unknown command:
+
+    $ grep -cE 'alpha|beta' data.txt   ->  FAIL (ALLOWLIST), refused token `'beta'`
+    $ grep -cE 'alpha' data.txt        ->  exit 0, the near-miss that names the cause
+
+**THE ENTRY IT CITES HAS TWO CLAIMS AND ONLY ONE SURVIVED. Both are kept here rather than
+re-filed, because which half died is the part that stops the next reader repeating it.** The
+filing's headline was that the rejection ROLLED BACK the whole target file, destroying a consumer
+artifact. That is REFUTED against the tree: `core/hooks/ai-dlc-derivation-capture.sh` is a
+PostToolUse hook that reads the target, writes only inside its own `mktemp -d`, and on a mismatch
+emits stderr and exits 2 — it has no write, truncate, move or remove path against the target at
+all. The parse half is real, and it is what this entry closes.
+
+**THE FALSE-REFUSAL POPULATION IS MEASURED, NOT ESTIMATED.** A verdict differential drove the
+extracted `cmd_is_safe()` from both implementations over the 3408 `$ `-prefixed command lines in
+the reference consumer's 237 fence-carrying artifacts: **43 newly allowed, 0 newly refused**.
+Controls in the same invocation: the two extracted functions differ (4893 vs 7817 bytes) and both
+extractions end at a function close. The 43 split three ways — a bar inside quotes, a
+backslash-escaped bar, and a quoted bar sitting beside a genuine pipe — and all three are the same
+defect wearing different clothes.
+
+**THE UNBALANCED-QUOTE REFUSAL IS LOAD-BEARING, AND A MUTANT IS WHY THAT IS KNOWN.** Splitting
+quote-aware without refusing an unresolved quote opens a hole the old code closed:
+`grep $'a\'b' f | xargs rm` is ONE word plus a real pipe to bash, while a quote-parity scan sees an
+odd number of quotes and stops splitting — so the segment's first word is `grep` and `xargs rm`
+never gets checked. Scored against a copy of the fix with that refusal deleted: pre REFUSE, fix
+REFUSE, no-refusal **ALLOW**, with bash confirming it parses. The guard is not tidiness.
+
+**MY OWN NEW ARM SHIPPED A FALSE REFUSAL FIRST, AND ONLY AN INDEPENDENT PARSER FOUND IT.** Checked
+against `bash -n -c`, which is the actual executor and therefore ground truth, the quote scan
+disagreed on exactly two of 3408 — both `python3 # ... test_safeguards.py's own regex`, where bash
+reads the apostrophe inside a `#` COMMENT and the scan did not. Left alone that would have refused
+`grep -c x f # note`, a correct allowlisted command, which is the very class this change exists to
+remove. The scan now ends a command at an unquoted `#` opening a word. Cross-checked separately
+against python `shlex`: 0 disagreements on top-level pipe count across the 3381 both parse.
+
+**Tiered DEFECT.** It refuses correct data, and since `ai-dlc-derivation-capture.sh` began re-running
+a block inside the tool call that wrote it, the refusal blocks an author's write with no human in the
+loop — the state this repo's own comment says gets a hook turned off.
+
+**THE RECEIPT WAS SCORED, AND ITS FOURTH ARM EXISTS BECAUSE THE FIRST THREE ACCEPTED A
+REGRESSION.** Seven implementations were built and scored — the fix, a second spelling that masks
+quoted regions and splits with `tr`, the pre-fix original, a version that never splits, the fix
+minus its unbalanced-quote refusal, a total disarm, and one with the allowlist widened to every
+command on `PATH`. Each was asserted to differ from the fix first. Three arms accepted **3 of 7**,
+the extra being the no-refusal variant: every one of its inputs still exits 1, because a command
+bash cannot run fails as STALE instead of ALLOWLIST, so an exit-code-only arm cannot separate them.
+The fourth arm reads the failure CLASS for an ANSI-C quoted input, and the count is **2 of 7**.
+
+The receipt drives the shipped validator four ways in one run: a quoted alternation must PASS, a
+non-allowlisted command behind a genuine pipe must still FAIL, a trailing `#` comment must PASS,
+and `$'...'` hiding a pipe must be refused as UNBALANCED rather than merely failing. The second arm
+rejects the regression that "fixes" this by not splitting at all; the fourth rejects the one that
+drops the refusal. Note that a reword of the `unbalanced quote` phrase scores STILL-LIVE — that
+string is what the fourth arm keys on, and no vocabulary binds it.
+
+verify: sh set -e; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; printf 'alpha\nbeta\n' > "$d/f.txt"; V=core/scripts/validate-artifact-derivations.sh; printf '```derived\n$ grep -cE "alpha|beta" f.txt\n2\n```\n' > "$d/a.md"; printf '```derived\n$ grep -c alpha f.txt | xargs echo\n1\n```\n' > "$d/b.md"; printf '```derived\n$ grep -c alpha f.txt # note\n1\n```\n' > "$d/c.md"; printf '```derived\n$ grep $\047a\\\047b\047 f.txt | xargs rm\n2\n```\n' > "$d/e.md"; AI_DLC_PROJECT_ROOT="$d" bash "$V" "$d/a.md" >/dev/null 2>&1 || exit 1; AI_DLC_PROJECT_ROOT="$d" bash "$V" "$d/b.md" >/dev/null 2>&1 && exit 1; AI_DLC_PROJECT_ROOT="$d" bash "$V" "$d/c.md" >/dev/null 2>&1 || exit 1; o=$(AI_DLC_PROJECT_ROOT="$d" bash "$V" "$d/e.md" 2>&1) || true; case "$o" in *"unbalanced quote"*) ;; *) exit 1 ;; esac; exit 0
+
