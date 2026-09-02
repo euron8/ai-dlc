@@ -58,6 +58,12 @@ declared `base_sha` against this distribution's `origin/main`, pre-fix and fixed
 beside its own `lib.sh` — a lone copy exits on the missing sibling, which reads as a finding
 and is a refusal.
 
+**One stated limit, measured rather than assumed.** The inherited 24-character floor on
+substantive lines applies to the new direction too, so an upstream change made entirely of short
+lines is invisible to both: an added `STOP on any red.` scores 0 while one long clause in the same
+section scores 1 in the same run. Lowering the floor buys back the coincidental collisions it
+exists to exclude.
+
 **What the entry claimed that is NOT fixed, stated rather than absorbed.** The filing's
 second half also covers a body that REWORDS core's deleted line ("relocate" where core says
 "archive"). No containment test over core's own words can see that, and none is claimed

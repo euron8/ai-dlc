@@ -171,6 +171,13 @@ THEIRS_SHA="$(git -C "$DIST" rev-parse --short "$THEIRS")"
 # Trivial lines (blank, punctuation, fence markers, short fragments) are excluded:
 # they collide by coincidence, not by copying, and a gate that trips on "```" is a
 # gate someone comments out.
+#
+# THE FLOOR APPLIES TO THE UNADOPTED DIRECTION TOO, AND THAT IS A STATED LIMIT rather
+# than an oversight. An upstream change made ENTIRELY of lines at or under 24 characters
+# is invisible to both directions: measured, an added `STOP on any red.` scores 0 while
+# one long clause in the same section scores 1 in the same run. Lowering the floor to
+# reach it buys back the coincidental collisions it exists to exclude, on a corpus where
+# short lines are mostly markup — so the floor stays and the blind spot is written down.
 # ---------------------------------------------------------------------------
 
 # The body as ONE line, internal whitespace squeezed. Every containment test below
