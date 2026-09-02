@@ -3855,3 +3855,102 @@ direction.
 
 verify: sh set -e; r="$PWD"; h="$(git -C "$r" rev-parse HEAD)"; w=$(mktemp -d); mkdir -p "$w/c/_bmad-output/ai-dlc-update" "$w/c/.claude"; printf '%s\n' '# l' '' '## PC-PROBE-ABSENT-HOOK — probe' '' 'Body.' '' 'verify: sh cd "$CONSUMER" && grep -qF sentinel .git/hooks/pre-push' > "$w/c/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; printf 'version: 0.471.0\ncommit: 31b51d48\nskill_version: 0.471.0\nskill_commit: 31b51d48\n' > "$w/c/.claude/.ai-dlc-version"; o="$(cd "$w/c" && bash "$r/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh" "$r" 31b51d48 "$w/c" "$h" 2>/dev/null)"; grep -q 'PC-PROBE-ABSENT-HOOK' <<<"$o" || exit 9; grep -qE '^NEEDS-REVIEW[[:space:]]+PC-PROBE-ABSENT-HOOK' <<<"$o"
 
+
+## BL-145 — a docs commit that MENTIONS a candidate id is reported to the consumer as upstream having absorbed it
+
+**Found while scoping batch 43**, 2026-09-02, and NOT fixed here — the fix is a change to
+`named_absorbed()`'s join, which is a bootstrapping step the consumer runs to classify its own
+pull, and this batch is already changing three hooks in the same range. Distribution-internal in
+its cause and CONSUMER-FACING in its effect, so it ranks below any PC-backed entry a sweep turns
+up but above the distribution-only entries.
+
+`named_absorbed()` (`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:402`) resolves
+"did upstream take this candidate" with `git log -F --grep`, which reads **commit MESSAGES**. A
+message is text about a program, not the program: any commit whose message contains the id
+satisfies the join, including a commit that changes no code at all.
+
+**THIS PROGRAM MANUFACTURES ITS OWN FALSE POSITIVES.** The plan's resume block names candidate
+ids in prose, and every edit to it is a `docs(plan):` commit carrying those ids in its message.
+Measured against `origin/main` at `v0.480.0`, driving the shipping script over the reference
+consumer's live ledger: **6 entries report `NAMED-UPSTREAM` where EVERY commit naming them
+touches zero `core/` paths.**
+
+    PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD                             1 commit, 0 core
+    PC-S312-TRUNK-PUSH-DECLINES-TO-POLICE-THE-TRUNK                      1 commit, 0 core
+    PC-S334-ROTATE-ACCEPTANCE-TEST-FALSE-FAILS-ON-THE-WORKFLOW-IT-DOCUMENTS  1 commit, 0 core
+    PC-S336-STEP-1-AUTOPUSH-IS-THE-UNGUARDED-TWIN-OF-THE-PUSH-STEP-2-HARDENED 1 commit, 0 core
+    PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY                1 commit, 0 core
+    PC-S340-SAFE-STOP-ACQUITTAL-TESTS-ANCESTRY-NOT-CONTENT                1 commit, 0 core
+
+`PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD`'s sole naming commit is `aa819280`,
+*"docs(plan): batch 32 merged, so the block that told you to run it is now a description of
+finished work"* — **one file changed, zero core paths**. Control in the same derivation:
+`PC-S340-VALIDATE-SPAWN-LEDGER-OVERSHOOTS-CHECK-22-DECLARED-ROLE-SCOPE` resolves two commits
+touching four `core/` files each, so the discriminator separates the two classes rather than
+scoring everything docs-only.
+
+**IT IS NOT A COSMETIC ROW.** `NAMED-UPSTREAM` is the signal a pull session reads to decide a
+candidate was taken, and the standing instruction in `## Start here` is to put every closed id in
+the RELEASE COMMIT MESSAGE precisely because this join reads messages. That instruction is
+correct and it is also what makes the false-positive class reachable: the same channel carries
+both a fix's citation and a plan's cross-reference, and the join cannot tell them apart.
+`ledger-reverify.sh:978` already records one instance of this exact class from v0.153.0 — *"the
+entry was then wrongly recorded upstream as absorbed on that basis — a citation read as a fix"* —
+so the shape is known; what is new is that this program is now the largest producer of it.
+
+**THE OBVIOUS FIX IS NOT OBVIOUSLY RIGHT, WHICH IS WHY THIS IS FILED RATHER THAN TAKEN.**
+Requiring a naming commit to touch `core/` would drop all six, and it would also drop a genuine
+close whose remedy was a `steps/*.md` or `templates/` change — both reach a consumer and neither
+lives under `core/` in every case. Deriving "did this commit change anything the consumer
+installs" is the real predicate, and its false-positive set has not been measured. Scope that
+before building it.
+
+**Sibling to `BL-089`** — a status that cannot distinguish "I measured nothing" from a genuine
+reproduction. Same class, and this is the absorption side of it.
+
+**Stated limitation of the receipt below.** It anchors on one real id whose naming commit is
+docs-only today. A future core-touching commit naming that id closes the receipt without the join
+being fixed; if that happens, re-anchor on another row of the table above rather than reading the
+close. It is scored three ways against THIS corpus's convention, where exit 0 is the fix being
+present — the subject id exits 1 (still live), an id backed by a core-touching fix exits 0, and
+an impossible id exits 9 rather than reporting a false close. The first cut of this receipt was
+written the other way round, carrying `ledger-reverify.sh`'s opposite convention into a
+`docs/backlog.md` entry, and it read as an incidental close in the histogram.
+
+verify: sh set -e; r="$PWD"; id='PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD'; n=0; c_core=0; for c in $(git -C "$r" log --format=%H -F --grep="$id" origin/main); do n=$((n+1)); git -C "$r" show --name-only --format='' "$c" | grep -q '^core/' && c_core=$((c_core+1)); done; [ "$n" -gt 0 ] || exit 9; [ "$c_core" -eq 0 ] || exit 0; w=$(mktemp -d); mkdir -p "$w/c/_bmad-output/ai-dlc-update" "$w/c/.claude"; printf '%s\n' '# l' '' "## $id — probe" '' 'Body.' '' 'verify: sh cd "$CONSUMER" && grep -q zzz-never-present README.md' > "$w/c/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; printf 'version: 0.471.0\ncommit: 31b51d48\nskill_version: 0.471.0\nskill_commit: 31b51d48\n' > "$w/c/.claude/.ai-dlc-version"; h="$(git -C "$r" rev-parse HEAD)"; o="$(cd "$w/c" && bash "$r/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh" "$r" 31b51d48 "$w/c" "$h" 2>/dev/null)"; grep -q "$id" <<<"$o" || exit 9; grep -qE "^NAMED-UPSTREAM[[:space:]]+$id" <<<"$o" && exit 1; exit 0
+
+## BL-146 — the snapshot sprint reader spelled the decoration, and the fixture seeded the form it accepted
+
+**LANDED (v0.481.0, verified 6cbad859).**
+
+Discharges `PC-S308-DISPATCH-GUARD-SPRINT-FIELD-INTERMITTENTLY-NULL`, filed by the reference
+consumer 2026-09-02 against sprint 308, and `PC-S305-DISPATCH-GUARD-SED-PATTERN-BOLD-MISMATCH`,
+the same defect at the same line filed against sprint 305 and recorded RECURRED at sprint 306
+where it blocked a live incident fix. Both are cited here so the pair leaves the UNFILED bucket
+together; the S305 half was taken on an explicit operator ruling, its recurrence note having been
+held for a ruling since batch 20.
+
+Three hooks — `core/hooks/ai-dlc-dispatch-guard.sh`, `ai-dlc-subagent-probe.sh`,
+`ai-dlc-context-sensor.sh` — read the sprint out of `_bmad-output/pipeline-snapshot.md` with an
+expression requiring the field name wrapped in emphasis markers. The snapshot's writer emits the
+plain bullet whenever nothing re-emphasises it, so the read resolved EMPTY and the spawn ledger
+recorded `"sprint":null`. Every arm on that read is `2>/dev/null || true`, so nothing said so.
+
+Measured over 2066 real snapshot revisions: **195 recovered, 0 lost, 0 differing values**, with
+the residue partitioned (311 non-numeric, 668 fieldless, 0 excluded by the bullet anchor) summing
+exactly to the both-empty count.
+
+**The instrument that should have caught it was seeded from the reader's own accept-set.** All
+three fixtures wrote the emphasised form, so the battery proved the hook accepts its own grammar
+and stayed green for the whole life of the defect. That is the `fixture-mutants.md` rule *"never
+seed from what the reader accepts"*, and it is now asserted rather than assumed.
+
+`I104` binds the three copies in both directions. `BL-145` was filed from the same scoping pass
+and is NOT closed by this entry.
+
+**The unfiled sibling named here deliberately**: `PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR`
+is the same class — a bold-markdown grammar against a plain artifact — in a different program
+(`validate-scope-confirmation`). It is NOT closed by this change and stays live and unfiled; it is
+named so the next sibling join can find it by subsystem rather than by sprint prefix.
+
+verify: sh set -e; r="$PWD"; e='s/^- *[*]*sprint_id:[*]* *\([0-9][0-9]*\).*/\1/p'; n=0; for f in core/hooks/ai-dlc-dispatch-guard.sh core/hooks/ai-dlc-subagent-probe.sh core/hooks/ai-dlc-context-sensor.sh; do [ -r "$r/$f" ] || exit 9; grep -qF -- "$e" "$r/$f" && n=$((n+1)); done; [ "$n" -eq 3 ] || exit 1; s=$(mktemp); printf -- '- sprint_id: 308\n' > "$s"; [ "$(sed -n "$e" "$s")" = "308" ] || exit 1; printf -- '- **sprint_id:** 307\n' > "$s"; [ "$(sed -n "$e" "$s")" = "307" ] || exit 1; printf -- '- sprint_id: TBD\n' > "$s"; [ -z "$(sed -n "$e" "$s")" ] || exit 1; exit 0
