@@ -15,6 +15,62 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.475.0] - 2026-09-01
+
+### `v0.474.0` made the derivation split quote-aware and acquitted five arbitrary-execution paths in the same edit
+
+Corrects `v0.474.0`. Same subject:
+`PC-S340-DERIVATION-CAPTURE-HOOK-ROLLS-BACK-THE-WHOLE-FILE-ON-A-REJECTED-BLOCK`. Filed as
+`BL-136`; `BL-137` files a pre-existing sibling that is NOT fixed here.
+
+`v0.474.0` removed `tr '|' '\n'` from `cmd_is_safe()` because it was quote-blind and refused
+31 correct commands. **That quote-blind split was also the only thing refusing five
+arbitrary-execution vectors**, and the same edit removed both. Found by an adversarial hand
+after the merge, reproduced independently with a canary file, driving the whole validator end
+to end:
+
+    grep -c $'a\'b' data.txt | xargs touch canary \'      pre: REFUSED   v0.474.0: RAN
+    grep -c $'\''   data.txt | xargs touch canary \'      pre: REFUSED   v0.474.0: RAN
+    grep -c $'a\'b' data.txt | xargs touch canary\'       pre: REFUSED   v0.474.0: RAN
+    awk 'BEGIN{print "" | "touch canary"}'                pre: REFUSED   v0.474.0: RAN
+    awk 'BEGIN{"touch canary" | getline x}'               pre: REFUSED   v0.474.0: RAN
+
+`$'...'` is ANSI-C quoting: bash reads an escaped quote inside it as a literal where a parity
+scan reads a toggle, so both finish balanced while disagreeing about where the quotes were and
+a bar lands in the window. The awk vectors need no quoting trick — `print | "cmd"` and
+`"cmd" | getline` are awk's own pipes to a shell, carry no shell metacharacter, and
+`awk:*system(*` covered one of three exec forms.
+
+**Neither obvious one-line arm shipped, because both have a measured false-positive set.**
+Banning `$'` as a substring refuses **21** correct commands in the reference corpus, each a
+regex end-anchor before a closing quote (`grep -n '...verdict$'`); only the quote STATE
+separates those from ANSI-C quoting, so the test now sits inside the scanner, where its FP set
+is 0 by construction. Refusing an awk bar adjacent to a double quote falsely refuses
+`awk -F'|' '{print $2,"|",$3,"|",$7}'`, which is present in that corpus. **So awk keeps its
+pre-split behaviour: any bar in an awk segment is refused** — not a new refusal, since those
+commands are refused today for the accidental reason, at a cost of the 3 awk alternations in
+the corpus.
+
+**`v0.474.0`'s published figure was wrong and is corrected: 31, not 43.** That count was taken
+over every `$ ` line in a fence-carrying FILE; the population `cmd_is_safe` sees is the lines
+INSIDE a fence, 3044 of 3408. Re-run fence-aware against the pre-`v0.474.0` original: **31
+newly allowed, 0 newly refused.**
+
+**No consumer was exposed.** The reference consumer is installed at `0.471.0`; the regression
+existed only in this distribution's `main`.
+
+**The gate was green throughout, and that is the finding.** Every arm in
+`core/fixtures/artifact-derivations` asserted a verdict; none ran a command and then looked at
+the tree. Section H now scores by EXECUTION — each case is first run by bash directly and must
+create the canary, then put through the validator, where it must not. Against `v0.474.0` those
+arms report `EXECUTED through the validator`. Fixture: 40 assertions green on the fix, 6 red
+against `v0.474.0`, 12 red against the pre-`v0.474.0` original.
+
+`BL-137` records the pre-existing sibling, measured and filed rather than fixed:
+`sed -n 'w canary' data.txt` writes a file on both sides of `v0.474.0`. The write-flag scan
+tests OPTION WORDS, and `sed`'s writing verbs live inside the script argument. Same class —
+the allowlist admits programs whose argument is itself a program.
+
 ## [0.474.0] - 2026-09-01
 
 ### The derivation allowlist split a command on `|` without regard for quoting, and refused correct read-only commands

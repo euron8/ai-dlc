@@ -3665,3 +3665,88 @@ tree, and 0 against a scratch copy with every citation redacted.
 
 verify: sh n=0; for f in $(git ls-files "core/**/*.md"); do a=$(grep -coE "\`[a-zA-Z0-9._/-]+\.(sh|md|yaml|json):[0-9]+" "$f"); b=$(grep -coE "\`:[0-9]+" "$f"); n=$((n+a+b)); done; [ "$n" -eq 0 ] && exit 0; exit 1
 
+## BL-136 — `v0.474.0` made the derivation split quote-aware and acquitted five arbitrary-execution paths in the same edit
+
+**LANDED (v0.475.0, verified pending).**
+
+Fixes a regression this repo shipped one release earlier. `v0.474.0` replaced `tr '|' '\n'`
+in `cmd_is_safe()` with a quote-aware split, removing 31 false refusals. **The quote-blind
+split was also, by accident, the only thing refusing five arbitrary-execution vectors**, and
+removing the accident removed the refusal. Found by an adversarial hand AFTER the merge and
+reproduced here independently with a canary file as the observable, driving the whole
+validator end to end:
+
+    grep -c $'a\'b' data.txt | xargs touch canary \'      pre: REFUSED   v0.474.0: RAN
+    grep -c $'\''   data.txt | xargs touch canary \'      pre: REFUSED   v0.474.0: RAN
+    grep -c $'a\'b' data.txt | xargs touch canary\'       pre: REFUSED   v0.474.0: RAN
+    awk 'BEGIN{print "" | "touch canary"}'                pre: REFUSED   v0.474.0: RAN
+    awk 'BEGIN{"touch canary" | getline x}'               pre: REFUSED   v0.474.0: RAN
+
+**THE TWO CLASSES HAVE DIFFERENT CAUSES AND NEEDED DIFFERENT ARMS.** `$'...'` is ANSI-C
+quoting: bash reads an escaped quote inside it as a LITERAL where a parity scan reads a
+toggle, so the two finish balanced while disagreeing about where the quotes were, and a bar
+lands in that window. The awk vectors need no quoting trick at all — `print | "cmd"` and
+`"cmd" | getline` are awk's own pipes to a shell, invisible to the metacharacter ban because
+they contain no shell metacharacter, and `awk:*system(*` covers only one of three exec forms.
+
+**BOTH OBVIOUS ONE-LINE ARMS HAVE A MEASURED FALSE-POSITIVE SET, WHICH IS WHY NEITHER
+SHIPPED.** Banning `$'` as a SUBSTRING in the up-front metacharacter test refuses **21**
+correct commands in the reference corpus, every one a regex end-anchor before a closing quote
+(`grep -n '...verdict$'`). Only the quote STATE separates those from ANSI-C quoting, so the
+test sits inside the scanner where that state exists; there its false-positive set is 0 by
+construction. Refusing an awk segment whose bar sits adjacent to a double quote falsely
+refuses `awk -F'|' '{print $2,"|",$3,"|",$7}'`, which is real and present in that corpus.
+
+**AWK THEREFORE KEEPS ITS PRE-SPLIT BEHAVIOUR: any bar in an awk segment is refused.**
+Separating an exec vector from `/alpha|beta/` requires scanning awk's own string and regex
+grammar — a second parser and a second divergence surface, on a boundary that just produced
+one. Those commands are refused TODAY for the accidental reason, so this is not a new
+refusal; it costs the 3 awk alternations in the corpus, which stay exactly as they are.
+
+**THE PUBLISHED FIGURE FROM `v0.474.0` WAS WRONG AND IS CORRECTED HERE: 31, NOT 43.** That
+count was taken over every `$ `-prefixed line in a fence-carrying FILE. The population
+`cmd_is_safe` actually sees is the lines INSIDE a ```derived fence, which is 3044 of 3408 —
+364 sit outside any fence and are never submitted. Re-run fence-aware against the
+pre-`v0.474.0` original: **31 newly allowed, 0 newly refused.**
+
+**Tiered BLOCKER while it was live.** A ```derived fence could execute arbitrary commands,
+and `ai-dlc-derivation-capture.sh` runs this boundary inside the tool call that writes the
+block, with no human in the loop. No consumer was exposed — the reference consumer is
+installed at `0.471.0` and the regression existed only in this distribution's `main`.
+
+**THE GATE WAS GREEN THROUGHOUT, AND THAT IS THE LESSON.** Every arm in
+`core/fixtures/artifact-derivations` asserted a VERDICT, and no arm ran a command and then
+looked at the tree. Section H now scores by execution: each case is first run by bash
+directly and must create the canary — that is what makes it an exec vector rather than a
+string resembling one — and only then put through the validator, where the canary must not
+appear. Against `v0.474.0` those arms report `EXECUTED through the validator`; the fixture
+would have caught this.
+
+verify: sh set -e; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; V=$PWD/core/scripts/validate-artifact-derivations.sh; cd "$d"; printf 'alpha\nbeta\n' > f.txt; printf '```derived\n$ awk \047BEGIN{print "" | "touch canary"}\047\n0\n```\n' > a.md; printf '```derived\n$ grep -cE "alpha|beta" f.txt\n2\n```\n' > b.md; bash -c 'awk "BEGIN{print \"\" | \"touch canary\"}"' >/dev/null 2>&1; [ -e canary ] || exit 1; rm -f canary; AI_DLC_PROJECT_ROOT="$d" bash "$V" a.md >/dev/null 2>&1 || true; [ -e canary ] && exit 1; AI_DLC_PROJECT_ROOT="$d" bash "$V" b.md >/dev/null 2>&1 || exit 1; exit 0
+
+## BL-137 — `sed`'s own `w` command writes a file, and the write-flag scan only reads option words
+
+Pre-existing, independent of `v0.474.0`, and it fires on both sides of that release —
+measured with the same canary harness:
+
+    sed -n 'w canary' data.txt      HEAD: RAN, canary created.   pre-v0.474.0: RAN, canary created.
+
+The allowlist's write-and-exec predicates test OPTION WORDS — `sed:-i`, `find:-delete`,
+`sort:-o`, `git:-O` — by iterating `$seg` and matching `${first}:${w}`. `sed`'s writing
+verbs live inside the SCRIPT argument, not in an option: `w file` and `W file` write, and
+GNU's `e` executes. None is an option word, so none is reachable by that scan.
+
+Same class as the awk finding in `BL-136` and stated as its own entry rather than folded in:
+**the allowlist admits programs whose argument is itself a program**, and it currently guards
+only the option surface of that argument. `sed`, `awk` and `find` all have one.
+
+Not fixed here. `BL-136` was a regression with a two-hour-old cause and was taken on that
+basis; this is older, needs its own false-positive measurement over the reference corpus
+(how many real `sed -n '...p'` scripts would a `w`-detecting arm touch), and folding it in
+would have made one release carry two subjects.
+
+**Tiered DEFECT.** Arbitrary file WRITE, not arbitrary execution, and it has been reachable
+for as long as the allowlist has existed.
+
+verify: sh set -e; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; V=$PWD/core/scripts/validate-artifact-derivations.sh; cd "$d"; printf 'alpha\n' > f.txt; printf '```derived\n$ sed -n \047w canary\047 f.txt\n0\n```\n' > a.md; AI_DLC_PROJECT_ROOT="$d" bash "$V" a.md >/dev/null 2>&1 || true; [ -e canary ] && exit 1; exit 0
+

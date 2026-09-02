@@ -113,7 +113,7 @@ fail() { printf 'FAIL (%s): %s\n' "$1" "$2" >&2; fails=$((fails + 1)); }
 # permitted because a count is routinely `grep ... | wc -l`, and every element of the
 # pipe is checked against the allowlist independently.
 cmd_is_safe() { # $1 command -> 0 safe, 1 refused (reason in REFUSED)
-  local c="$1" seg first sub segs
+  local c="$1" seg first sub segs scan_rc=0
   REFUSED=""
   case "$c" in
     *';'*|*'&'*|*'>'*|*'<'*|*'`'*|*'$('*|*'${'*|*'||'*)
@@ -153,6 +153,16 @@ cmd_is_safe() { # $1 command -> 0 safe, 1 refused (reason in REFUSED)
         # Unquoted `#` opening a word is a comment: the shell reads no further and
         # neither do we, so nothing after it can open a quote or be a pipe.
         if (ch == HASH && sq == 0 && dq == 0 && (prev == " " || prev == "\t")) break
+        # ANSI-C QUOTING IS REFUSED, AND THE TEST BELONGS HERE RATHER THAN IN THE
+        # METACHARACTER BAN ABOVE. A dollar sign opening a quote makes bash read an
+        # escaped quote inside it as a LITERAL where this scan reads a toggle, so the two
+        # disagree about where the quotes are and a bar can land in the window between
+        # them. Measured: a command this scan called one segment, whose second stage bash
+        # ran. Banning the two characters as a SUBSTRING instead refuses 21 correct
+        # commands in the reference corpus, every one a regex end-anchor before a closing
+        # quote. Only the quote STATE separates those two populations, and only this loop
+        # has it.
+        if (ch == "$" && sq == 0 && dq == 0 && i < n && substr($0, i+1, 1) == SQ) exit 4
         # Inside single quotes a backslash is literal; everywhere else it escapes the
         # next character, so that character can never open, close or be a delimiter.
         if (ch == BS && sq == 0) { out = out ch; i++; if (i <= n) out = out substr($0, i, 1); prev = "x"; continue }
@@ -163,10 +173,16 @@ cmd_is_safe() { # $1 command -> 0 safe, 1 refused (reason in REFUSED)
       }
       if (sq || dq) exit 3
       print out
-    }')" || {
-    REFUSED="it carries an unbalanced quote, so it cannot be run or safely parsed"
-    return 1
-  }
+    }')" || scan_rc=$?
+  case "${scan_rc:-0}" in
+    0) ;;
+    4) REFUSED="it uses \$'...' ANSI-C quoting, which this checker does not model -- bash and
+      this scan disagree about where such a quote ends, and a pipe hidden in that gap would
+      run unchecked"
+       return 1 ;;
+    *) REFUSED="it carries an unbalanced quote, so it cannot be run or safely parsed"
+       return 1 ;;
+  esac
   # Every segment of the pipeline must itself be allowlisted.
   printf '%s\n' "$segs" | while IFS= read -r seg; do
     first="$(printf '%s' "$seg" | sed 's/^[[:space:]]*//' | awk '{print $1}')"
@@ -214,6 +230,24 @@ cmd_is_safe() { # $1 command -> 0 safe, 1 refused (reason in REFUSED)
     done
     case "$first:$seg" in
       awk:*system\(*) printf 'BADOPT:awk system()\n'; break ;;
+    esac
+    # AWK TAKES A PROGRAM AS ITS ARGUMENT, AND A BAR INSIDE THAT PROGRAM IS AN EXEC
+    # VECTOR THIS CHECKER CANNOT TELL FROM AN ALTERNATION. `print ... | "cmd"` and
+    # `"cmd" | getline` are awk's pipes to a shell -- arbitrary execution, needing no
+    # shell metacharacter, so the ban above never sees them. Until the quote-aware split
+    # landed, `tr '|' '\n'` tore the awk program apart and the fragment failed the
+    # allowlist; that ACCIDENT was the only thing refusing them, and removing it acquitted
+    # a true positive. Measured: both vectors ran and created a file.
+    #
+    # Separating them from `/alpha|beta/` needs a scan of awk's OWN string and regex
+    # grammar -- a second parser, a second divergence surface. The crude test (a bar
+    # adjacent to a double quote) false-refuses `awk -F'|' '{print $2,"|",$3}'`, which is
+    # real and in the reference corpus. So awk keeps its PRE-SPLIT behaviour: any bar in
+    # an awk segment is refused. That is not a new refusal -- those commands are refused
+    # today for the accidental reason -- and it costs the 3 awk alternations in the 3408,
+    # which stay exactly as they are rather than being newly broken.
+    case "$first" in
+      awk) case "$seg" in *'|'*) printf 'BADOPT:awk program containing a pipe\n'; break ;; esac ;;
     esac
   done > "$TMP_SAFE"
   if grep -q '^BAD:' "$TMP_SAFE" 2>/dev/null; then
