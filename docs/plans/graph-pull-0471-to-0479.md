@@ -30,8 +30,12 @@ state, and the set grows while the pipeline runs, so it is deliberately not enum
 **Do not commit, revert, stash or clean it.** Committing makes the branch ahead of its remote and
 the preflight then auto-pushes in-flight state on what was meant to be a dry run.
 
-**THE CONSUMER IS ON A CARRY-OVER BRANCH, NOT `main`.** Re-derive the branch before you start;
-it has moved every time it has been looked at. Do not switch it.
+**THE CONSUMER IS ON A CARRY-OVER BRANCH, NOT `main`, AND IT MOVES WHILE YOU WORK.**
+Re-derive the branch and the head before you start; do not switch either. Measured during the
+session that wrote this file: its head advanced one commit and its dirty count went 8 -> 16 ->
+22 within a few hours, from its own pipeline checkpointing at an operator handoff. **A moved
+consumer head during your run is the normal case, not an alarm** — check whether the consumer
+wrote before concluding anything about it.
 
 **DO NOT WRITE A REF OR A SHA INTO THIS FILE.** The skill pulls latest and resolves the ref
 itself. Any sha written down goes stale the moment anything lands, including the commit that
@@ -147,7 +151,8 @@ by running both copies against the consumer's real ledger before this file was w
 ## Rehearsal
 
 **Run on `file://` clones of both trees, against the consumer's committed HEAD on its carry-over
-branch.** These are EXPECTATIONS, not guarantees. **If the real run disagrees, STOP and ping.**
+branch — the head it carried at the time of the rehearsal, which had already advanced once
+during the session that wrote this file.** These are EXPECTATIONS, not guarantees. **If the real run disagrees, STOP and ping.**
 
 **One known difference by construction:** the clone carries the consumer's committed state, and
 the real run will see its dirty working tree. The pipeline state that makes it dirty is not in
