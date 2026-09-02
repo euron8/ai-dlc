@@ -15,6 +15,69 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.482.0] - 2026-09-02
+
+### Two of the three fixtures still seeded the form their reader accepts, and v0.481.0 said all three were fixed
+
+Correction to `v0.481.0`, found by an adversarial scope hand that reported AFTER the merge. Its
+finding is narrow and it is right.
+
+**What v0.481.0 claimed:** *"The arms now assert both forms beside each other in one run."*
+**What shipped:** that was true of `core/fixtures/dispatch-model-guard/` only. The other two
+fixtures still seeded the emphasised form exclusively, which is the form the reader already
+accepts, so their sprint assertions could not fail against the shape that actually broke.
+
+Both are now covered, and the arms are asserted on real behaviour rather than on the seed:
+
+- `core/fixtures/subagent-probe/run.sh` asserted `.sprint` was `291` from an emphasised seed. It
+  now also resolves the plain bullet and holds a non-numeric value to null. The near-miss arm
+  reads through `raw()` rather than `last()`, because `last()` cannot tell `null` from `""` --
+  its own comment says so, and asserting null through it would have been a check that cannot
+  fire.
+- `core/fixtures/context-sensor/run.sh` asserted `.sprint` was `292` from an emphasised seed. A
+  sprint change appends a fresh arm record, so the plain form is asserted on its own record at
+  `293` rather than sharing one.
+
+Scored against the pre-fix readers restored from history, with a `cmp -s` control asserting all
+three mutants differ from the fixed copies: `dispatch-model-guard` fails 6 lines, `subagent-probe`
+3, `context-sensor` 2. Before this change the latter two passed against those same readers.
+
+`I104` already bound the three readers byte-identically, so a fork in ONE of them was caught. What
+was not caught is all three moving together, and `dispatch-model-guard` was the single point of
+behavioural coverage for that. It is now three.
+
+### `PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR` is REFUTED, and v0.481.0 recommended it as the next subject
+
+The same hand reported that `validate-scope-confirmation.sh` strips decoration rather than
+enumerating it. Driving the shipping `field_of()` on the filing's own case, with a positive
+control in the same invocation (extraction line count non-zero, so an empty result cannot be a
+silently undefined function) and an absent-field control returning empty:
+
+    bold      -> [confirmed]      the filing states this yields the literal **
+    plain     -> [confirmed]
+    backtick  -> [confirmed]
+    cite bold -> [research-requirements.md]
+    ABSENT    -> []               control
+
+The filing describes `field_of()` at lines 158-162 matching a backtick-only optional wrapper. The
+shipping helper opens with `sed -e 's/\*\*//g' -e 's/__//g' -e 's/`//g'` and is decoration-agnostic
+for every grammar the entry names. **The premise expired; the candidate is not available work**,
+and `v0.481.0` named it as the readiest sibling for the next batch. That recommendation is
+withdrawn. It is the measured one-in-two expired-premise rate landing on this program's own
+recommendation rather than on an inbound filing.
+
+### No other decoration-requiring reader is broken on the consumer
+
+The same pass answers the scope question `v0.481.0` left open. Of the `core/` sites that parse a
+markdown field with a grammar requiring decoration, three were the hooks this batch fixed and the
+remainder either strip decoration, try it only as a fallback, target an artifact absent from the
+consumer, or require it as a genuine semantic discriminator the consumer honours with zero
+undecorated instances (`validate-spec-join.sh`'s `CAP-`/`No-AD:`/`Binds:`, 77/3/12 decorated
+against 0 plain; `validate-ci-gates.sh`'s backticked CI-gate declarations, 21 declarations whose
+38 non-backticked word-forms are all prose). The detector's control finds the pre-fix
+`ai-dlc-dispatch-guard.sh:301` when pointed at the revision that carries it. Not swept: the
+consumer's history, so no claim is made about when those formats stabilised.
+
 ## [0.481.0] - 2026-09-02
 
 ### The snapshot sprint reader spelled the decoration, so half the corpus resolved to null

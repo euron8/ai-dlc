@@ -372,6 +372,15 @@ printf -- '- **sprint_id:** 292\n' > "$WORK/_bmad-output/pipeline-snapshot.md"
 fire at-yellow.jsonl >/dev/null
 check "  a new sprint appends a fresh arm record" "$(wc -l < "$ARM" | tr -d ' ')" "2"
 check "  and carries the sprint id" "$(armfield .sprint)" "292"
+# THE SEED ABOVE IS THE DECORATED FORM, WHICH IS THE ONE THE READER ALREADY
+# ACCEPTS, so the assertion on it cannot fail against the shape that actually
+# broke. The snapshot's writer emits the plain bullet whenever nothing
+# re-emphasises it; measured over 2066 real revisions the decoration-spelling
+# reader resolved nothing on 195 of them. A sprint change appends a record, so
+# the plain form gets a NEW sprint number and is asserted on its own record.
+printf -- '- sprint_id: 293\n' > "$WORK/_bmad-output/pipeline-snapshot.md"
+fire at-yellow.jsonl >/dev/null
+check "  and resolves the PLAIN bullet too (the form the writer emits)" "$(armfield .sprint)" "293"
 : > "$WORK/_bmad-output/pipeline-snapshot.md"
 
 # The arm is the LEAD's. A subagent must never write one -- it would attribute a

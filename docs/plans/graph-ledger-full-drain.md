@@ -36,7 +36,27 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 43 SHIPPED AS `v0.481.0`. GAP 2, PENDING 3. START AT BATCH 44.
+### BATCH 43 SHIPPED AS `v0.481.0`, CORRECTED BY `v0.482.0`. GAP 3, PENDING 3. START AT BATCH 44.
+**A LATE HAND CORRECTED TWO OF MY CLAIMS AND IT IS THE FIFTH TIME THAT HAS HAPPENED.** The scope
+hand went idle at 54m, delivered nothing to two asks, and then reported AFTER the merge — the
+pattern this file already records. Both findings were right. **Read a late hand against what
+shipped rather than dismissing it as spent.**
+
+**IT CAUGHT AN OVERSTATEMENT IN MY OWN RELEASE NOTE.** `v0.481.0` said the fixture arms "now
+assert both forms beside each other in one run"; that was true of ONE of the three fixtures.
+`subagent-probe` and `context-sensor` still seeded only the emphasised form and their sprint
+assertions passed against the pre-fix reader. Both are fixed in `v0.482.0` and all three now fail
+against it (6, 3 and 2 lines) under a `cmp -s` control. **`I104` caught a fork in one reader; it
+cannot catch all three moving together, and until this correction ONE fixture was the whole
+behavioural coverage for that.**
+
+**AND IT REFUTED THE NEXT SUBJECT THIS BLOCK RECOMMENDED.** See action 1 —
+`PC-S303-SCOPE-CONFIRMATION-...` is already fixed upstream. **The one-in-two expired-premise rate
+applies to this file's own recommendations, not only to inbound filings.**
+
+**A `null`-ASSERTING ARM READ THROUGH THE WRONG HELPER IS A CHECK THAT CANNOT FIRE.**
+`subagent-probe`'s `last()` cannot tell `null` from `""` — its own comment says so — so the
+near-miss arm reads through `raw()`. I wrote it with `last()` first and the fixture told me.
 **THE SWEEP HAD BEEN LYING FOR THREE BATCHES AND ITS md5 TEST WAS TELLING THE TRUTH THE WHOLE
 TIME.** Batches 41, 42 and 43 all opened by reporting the ledger "empty of new work" on an
 unmoved md5 and unmoved counts. The md5 was genuinely unmoved and that claim was TRUE. What was
@@ -3971,11 +3991,21 @@ so no block written before it changes verdict.
    **BATCH 43's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW BOTH IDS.**
    `PC-S308-DISPATCH-GUARD-SPRINT-FIELD-INTERMITTENTLY-NULL` and
    `PC-S305-DISPATCH-GUARD-SED-PATTERN-BOLD-MISMATCH` shipped as `v0.481.0`, cited by `BL-146`.
-   Do not re-scope onto them. **Their sibling
-   `PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR` is the same class in a
-   different program and is NOT closed** — it is the readiest sibling join available, and the
-   join is by SUBSYSTEM (a decoration-requiring grammar against a plain artifact), not by sprint
-   prefix.
+   Do not re-scope onto them. **`PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR`
+   IS REFUTED — `v0.481.0` RECOMMENDED IT AND `v0.482.0` WITHDREW THAT.** The filing describes a
+   backtick-only wrapper at lines 158-162; the shipping `field_of()` opens by STRIPPING `**`, `__`
+   and backticks, and driving it on the filing's own case returns `confirmed` where the entry says
+   it returns the literal `**`. Not available work. **The expired-premise rate landed on this
+   file's own recommendation, which is the thing to take from it: re-derive a recommendation
+   before acting on it even when this block is where you read it.**
+
+   **AND THERE IS NO REMAINING SIBLING IN THAT CLASS.** An adversarial hand swept every `core/`
+   site parsing a markdown field with a decoration-requiring grammar and the answer is NONE
+   broken on the consumer — the rest strip decoration, use it as a fallback, target an artifact
+   absent there, or require it as a real discriminator the consumer honours with zero undecorated
+   instances. Its detector's control finds the pre-fix `ai-dlc-dispatch-guard.sh:301`. **Do not
+   re-run that sweep; it is spent.** The consumer's HISTORY was not swept, so no claim is made
+   about when those formats stabilised.
 
    **THREE OF THE IDS THAT LEFT `UNFILED` THIS BATCH WERE NOT TAKEN.** `BL-145` cites
    `PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD`,
