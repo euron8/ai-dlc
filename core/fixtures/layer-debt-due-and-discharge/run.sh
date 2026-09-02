@@ -50,7 +50,7 @@ command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 absent" >&2
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-EXPECTED_ASSERTIONS=16
+EXPECTED_ASSERTIONS=30
 fails=0; made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
@@ -259,6 +259,120 @@ else
 fi
 
 # =============================================================================================
+# THE DENIED-CUE CLASS — a reason that says, in as many words, that nothing is owed.
+#
+# The third false-positive class of the same arm, and the one that punishes the correct answer:
+# the remedy this report prints is "re-record each with an `owed` object", and an adjudicator who
+# instead writes `No owed is carried because there is no residual obligation` trips the cue by
+# saying so. The register is APPEND-ONLY, so no later act can clear that row.
+#
+# Every seed below is a phrasing taken from the reference register, never from what the reader
+# accepts — a seed derived from the accept-set only proves the reader accepts its own grammar.
+# The pairs sit in ONE register read by ONE invocation, so each arm asks whether the discount
+# fires on the RIGHT row rather than merely whether it fires.
+# =============================================================================================
+NREG="$WORK/negation.jsonl"
+python3 "$WORK/mkreg.py" "$NREG" <<'SPEC'
+{"entry":"extensions/deny.md","reason":"Verdict recorded. No owed is carried on this entry."}
+{"entry":"extensions/keep.md","reason":"Verdict recorded. New owed is carried on this entry."}
+{"entry":"extensions/mixed.md","reason":"No owed is declared for the anchor. The split remains deferred to a later pull."}
+{"entry":"extensions/nothingtp.md","reason":"Nothing but this reason field is tracking that debt."}
+{"entry":"extensions/clause.md","reason":"This entry declares no extends: anchor. The split remains deferred to a later pull."}
+{"entry":"extensions/contrast.md","reason":"GAP CLOSED IN THIS COMMIT rather than deferred: added the row with this project's path set."}
+{"entry":"extensions/splice.md","reason":"There is no restatement of core clause here, but the narrowing this row proposes is still deferred to a later pull."}
+SPEC
+nout="$(run "$NREG")"
+nund="$(und_block "$nout")"
+
+# --- 9. THE OFFENDER: a reason denying an obligation is not filed as one -----------------------
+if grep -q 'deny\.md' <<<"$nund"; then
+  bad "a reason stating \`No owed is carried\` was filed as an undeclared obligation — the arm charges the adjudicator for writing down that nothing is owed, and an append-only register can never clear it"
+  show "$nund"
+else
+  ok "a cue inside a clause that DENIES an obligation is not reported"
+fi
+
+# --- 10. THE NEAR-MISS, BESIDE IT, IN THE SAME RUN --------------------------------------------
+# `keep.md` differs from `deny.md` by exactly one token: `No` -> `New`. An implementation that
+# discounts the cue rather than the DENIAL swallows this row too, and no separate run could ask.
+if grep -q 'keep\.md' <<<"$nund"; then
+  ok "NEAR-MISS: the same sentence one token apart (\`New owed\` for \`No owed\`) is still reported"
+else
+  bad "the discount swallowed a genuine obligation one token from the denial — it is keyed on the cue, not on the negation"
+  show "$nund"
+fi
+
+# --- 11. PER OCCURRENCE, NOT PER ROW ----------------------------------------------------------
+# `mixed.md` denies one obligation and states another in the next sentence. A row-grain
+# implementation — skip the row if ANY cue is denied — silences the second, and that is a
+# genuine debt lost to a disclaimer sitting in front of it. This is the arm that separates the
+# two designs; nothing else here can.
+if grep -q 'mixed\.md' <<<"$nund"; then
+  ok "PER-OCCURRENCE: a reason that denies one obligation and STATES another is still reported"
+else
+  bad "a row-grain discount silenced a real obligation because an earlier sentence denied a different one"
+  show "$nund"
+fi
+
+# --- 12. `nothing` IS NOT A NEGATOR, AND THIS IS THE ARM THAT SAYS SO -------------------------
+# `Nothing but this reason field is tracking that debt` is the strongest TRUE positive phrasing
+# in the corpus — it is how both genuine debts on the reference register describe themselves.
+# A negator set that reads `nothing` as a denial acquits exactly the sentence this file exists
+# to surface, and it would look like a reasonable widening.
+#
+# THE SEED CARRIES THAT SENTENCE AND NOTHING ELSE, and the first cut of it did not. Written with
+# the register's full phrasing — `OWED REMEDIATION, deferred by operator decision.` ahead of it —
+# the row kept THREE cues in a sentence the discount never touches, so it was reported whatever
+# the negator set said and mutant M7 SURVIVED. A guard needs a subject the other guards cannot
+# see; here that means the governed cue must be the row's ONLY cue.
+if grep -q 'nothingtp\.md' <<<"$nund"; then
+  ok "\`Nothing but this reason field is tracking that debt\` is still reported — \`nothing\` is not admitted as a negator"
+else
+  bad "the strongest true-positive phrasing in the corpus was acquitted — \`nothing\` has been admitted to the negator set and the arm now silences its own subject"
+  show "$nund"
+fi
+
+# --- 13. CLAUSE BOUNDARY: a negator in a PREVIOUS sentence must not reach the cue --------------
+# `clause.md` carries `no` in its first sentence, about an `extends:` anchor, and a real
+# obligation in its second. A discount that searches the whole reason before the cue — the
+# obvious implementation — acquits it on a negator governing something else entirely.
+if grep -q 'clause\.md' <<<"$nund"; then
+  ok "CLAUSE BOUNDARY: a negator in the previous sentence does not acquit the cue in this one"
+else
+  bad "a negator two sentences upstream acquitted a real obligation — the discount is not bounded to the cue's own clause"
+  show "$nund"
+fi
+
+# --- 14. the explicit-contrast spelling ------------------------------------------------------
+if grep -q 'contrast\.md' <<<"$nund"; then
+  bad "\`rather than deferred\` — an explicit statement that the work was NOT deferred — was filed as deferred work"
+  show "$nund"
+else
+  ok "an explicit contrast (\`rather than deferred\`) is not reported as an obligation"
+fi
+
+# --- 15. THE COMMA IS A CLAUSE BOUND, AND LEAVING IT OUT LOSES A REAL DEBT --------------------
+# `splice.md` opens with a negated clause about something else and states a genuine obligation
+# after a COMMA. A bound of `[.;:]` alone — the first cut of this fix — silenced it, while the
+# same obligation with the opening clause removed was reported. That is a debt lost to a `no`
+# governing a different subject, and it is the direction this arm must never fail in: a false
+# positive costs a glance, a false acquittal costs the thing the file exists to prevent.
+if grep -q 'splice\.md' <<<"$nund"; then
+  ok "COMMA BOUND: an obligation stated after a comma is not acquitted by a negator earlier in the same sentence"
+else
+  bad "a negator in an earlier COMMA-SPLICED clause acquitted a genuine obligation — the clause bound is missing the comma"
+  show "$nund"
+fi
+
+# --- 15. and the count is exactly the four rows that earn it ----------------------------------
+if grep -qE '^UNDECLARED \(5\)' <<<"$nout"; then
+  ok "exactly 5 of the 7 cue-carrying rows are reported — the other 2 deny their obligation"
+else
+  bad "the undeclared count is not 5; the discount is not partitioning denials from obligations"
+  show "$nout"
+fi
+
+# =============================================================================================
 # MUTANTS. Every arm above that asserts an ABSENCE passes against a subject that emitted
 # nothing, and a both-directions control cannot see that: it establishes that the arm
 # discriminates between two inputs, never that it discriminates at all. These do.
@@ -317,6 +431,59 @@ score M4 "$(mkmut m4 "$ANCHOR_PARSE" '            _r = json.loads(line)
             rows.append(_r)')" "$DREG" \
   "an exemption that reaches the declaration loop deletes the commitment declared on a discharge row" \
   absent 'OWED-B1'
+
+# The denied-cue anchors. Keyed on the three decisions the discount makes — WHICH words deny,
+# HOW FAR back it looks for one, and WHETHER it is scored per cue or per row — rather than on a
+# spelling. Each mutant below moves exactly one of the three.
+ANCHOR_HITS='    hits = sorted({m.group(0).lower() for m in PROSE.finditer(reason)
+                   if not cue_denied(reason, m)})'
+ANCHOR_NEGSET='NEGATED = re.compile(r"\bno\b|\brather than\b|\binstead of\b", re.I)'
+ANCHOR_CLAUSE='    start = 0
+    for b in CLAUSE_END.finditer(reason, 0, m.start()):
+        start = b.end()'
+
+# M5 — the discount removed entirely, i.e. the behaviour this section's subject replaced. Scored
+# on the denial row REAPPEARING, which is a positive outcome rather than the absence of a message.
+score M5 "$(mkmut m5 "$ANCHOR_HITS" '    hits = sorted({m.group(0).lower() for m in PROSE.finditer(reason)})')" "$NREG" \
+  "with the denial discount gone, a reason stating \`No owed is carried\` is filed as an obligation again" \
+  present 'deny\.md'
+
+# M6 — the discount moved from the CUE to the ROW: any denied cue silences the whole row. This is
+# the design the arm above exists to reject, and every other assertion in this section passes
+# against it — only `mixed.md` can tell the two apart.
+score M6 "$(mkmut m6 "$ANCHOR_HITS" '    hits = sorted({m.group(0).lower() for m in PROSE.finditer(reason)})
+    if any(cue_denied(reason, _m) for _m in PROSE.finditer(reason)):
+        hits = []')" "$NREG" \
+  "a row-grain discount silences a real obligation stated after a denial of a different one" \
+  absent 'mixed\.md'
+
+# M7 — `nothing` admitted to the negator set. The plausible widening, and it acquits the exact
+# sentence both genuine debts on the reference register use to describe themselves.
+score M7 "$(mkmut m7 "$ANCHOR_NEGSET" 'NEGATED = re.compile(r"\bno\b|\bnothing\b|\brather than\b|\binstead of\b", re.I)')" "$NREG" \
+  "admitting \`nothing\` as a negator acquits \`Nothing but this reason field is tracking that debt\`" \
+  absent 'nothingtp\.md'
+
+# M8 — the clause bound dropped, so the search runs from the head of the reason. The obvious
+# implementation, and it acquits an obligation on a negator governing an earlier sentence.
+score M8 "$(mkmut m8 "$ANCHOR_CLAUSE" '    start = 0')" "$NREG" \
+  "an unbounded backward search acquits a real obligation on a negator from the previous sentence" \
+  absent 'clause\.md'
+
+# M9 — the comma dropped from the clause bound, i.e. the first cut of this fix. Scored on the
+# comma-spliced obligation VANISHING, which is the only arm that can see it.
+score M9 "$(mkmut m9 'CLAUSE_END = re.compile(r"[.;:,]")' 'CLAUSE_END = re.compile(r"[.;:]")')" "$NREG" \
+  "a clause bound without the comma acquits a real obligation stated after a comma splice" \
+  absent 'splice\.md'
+
+# M10 — the CONTRAST half of the negator set removed, leaving the bare `no` determiner. Without
+# this mutant the contrast arm has no killer of its own: M5 deletes the whole discount and moves
+# `deny.md` and `contrast.md` together, so an implementation that dropped `rather than` while
+# keeping `no` would pass every other arm here. Measured before adding it — M5 moves two cells,
+# M10 moves exactly one — which is the "give every guard a subject the other guards cannot see"
+# rule applied to the battery rather than to the seeds.
+score M10 "$(mkmut m10 'NEGATED = re.compile(r"\bno\b|\brather than\b|\binstead of\b", re.I)' 'NEGATED = re.compile(r"\bno\b", re.I)')" "$NREG" \
+  "dropping the contrast spellings from the negator set files \`rather than deferred\` as deferred work" \
+  present 'contrast\.md'
 
 # UNMUTATED CONTROL — necessary and NOT sufficient. rc=0-with-no-findings is exactly what a
 # subject replaced by `exit 0` looks like, so this carries a POSITIVE conjunct: a copy taken and

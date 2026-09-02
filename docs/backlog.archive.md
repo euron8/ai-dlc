@@ -4691,3 +4691,76 @@ individually adjudicated and are **not** claimed.
 
 verify: sh set -e; RO="${RECEIPT_SUBJECT:-$PWD/core/skills/ai-dlc-update/reconcile/readopt-override.sh}"; ROOT="$(bash "$PWD/core/fixtures/layer-readopt-gate/seed.sh")"; trap 'rm -rf "$ROOT"' EXIT; D="$ROOT/dist"; C="$ROOT/consumer"; O="$C/.claude/skills/ai-dlc/overrides"; CL='**A NEW UPSTREAM CLAUSE ADDED TO THE SWEEP RULE**, recorded here and nowhere else in core.'; printf '\n%s\n' "$CL" >> "$D/core/skills/ai-dlc/SKILL.md"; git -C "$D" -c user.email=f@x -c user.name=f commit -aqm additive; T="$(git -C "$D" rev-parse --short HEAD)"; A="$O/SKILL__Rule-19-nested.md"; B="$(sed -n 's/^base_sha:[[:space:]]*//p' "$A" | head -1)"; out="$(bash "$RO" "$D" "$T" "$C" "$A" --check 2>&1)"; printf '%s' "$out" | grep -q 'UNADOPTED-CORE-TEXT'; bash "$RO" "$D" "$T" "$C" "$A" --check >/dev/null 2>&1; bash "$RO" "$D" "$T" "$C" "$A" --stamp readopt >/dev/null 2>&1; [ "$(sed -n 's/^base_sha:[[:space:]]*//p' "$A" | head -1)" = "$T" ]; F="$O/fm.md"; printf -- '---\nshadows: SKILL.md#Rule 19\nbase_sha: %s\nreason: we decline %s\n---\n\n## Rule 19 -- Sweep (CONSUMER OVERRIDE)\n\nConsumer sweep rules.\n' "$B" "$CL" > "$F"; printf '%s' "$(bash "$RO" "$D" "$T" "$C" "$F" --check 2>&1)" | grep -q 'UNADOPTED-CORE-TEXT'; H="$O/hc.md"; printf -- '---\nshadows: SKILL.md#Rule 19\nbase_sha: %s\nreason: consumer sweep rules.\n---\n\n## Rule 19 -- Sweep (CONSUMER OVERRIDE)\n\nConsumer sweep rules.\n\n<!--\n%s\n-->\n' "$B" "$CL" > "$H"; printf '%s' "$(bash "$RO" "$D" "$T" "$C" "$H" --check 2>&1)" | grep -q 'UNADOPTED-CORE-TEXT'; P="$O/ad.md"; printf -- '---\nshadows: SKILL.md#Rule 19\nbase_sha: %s\nreason: consumer sweep rules.\n---\n\n## Rule 19 -- Sweep (CONSUMER OVERRIDE)\n\nConsumer sweep rules.\n\n%s\n' "$B" "$CL" > "$P"; ! printf '%s' "$(bash "$RO" "$D" "$T" "$C" "$P" --check 2>&1)" | grep -q 'UNADOPTED-CORE-TEXT'
 
+## BL-141 — the debt audit charges an adjudicator for writing down that nothing is owed
+
+**LANDED (v0.478.0, verified 36cb2ac3).**
+
+**Filed from the reference consumer's push-candidate ledger**, 2026-09-02, as
+`PC-S340-UNDECLARED-CUE-CANNOT-TELL-A-REFERENCE-FROM-A-DECLARATION`, and FIXED in the same
+release. The third false-positive class of `audit-layer-debt.sh`'s UNDECLARED arm, after the
+lexical one (a cue inside an identifier) and the structural one (a discharge row).
+
+This one is GRAMMATICAL: the cue sits in a clause that DENIES an obligation. `No owed is carried
+because there is no residual obligation on this entry`, `No owed: nothing is left outstanding`,
+`no re-grain is owed`, `GAP CLOSED IN THIS COMMIT rather than deferred`. Every one is an
+adjudicator stating correctly that the row owes nothing, and the arm charged them for it.
+
+**It is self-defeating, which is what makes it worth a fix rather than a glance.** The remedy the
+report prints is *"re-record each with an `owed` object"*. An adjudicator who instead writes that
+no obligation exists trips the cue by writing it, and the register is APPEND-ONLY, so no later act
+can clear the row. One row on the reference register records `audit-layer-debt.sh lists this entry
+under UNDECLARED on cue 'deferred'` and is itself flagged for that sentence — the tool scoring its
+own output as an instance of its own subject.
+
+**Measured on the only register that exists**, 318 rows, driving the shipping script both ways in
+one invocation with a `cmp -s` control asserting the two copies differ: **29 flagged before, 19
+after**, `OPEN` unchanged at 16 either side. All 10 acquitted rows were read in full — 8 deny an
+obligation in as many words, 2 draw an explicit contrast. **The false-acquittal set is empty and
+enumerated.** The two genuine debts both survive, asserted as a fixture arm rather than assumed.
+
+**THE COMMA HAD TO BE ADDED TO THE CLAUSE BOUND, AND THAT CAME FROM ATTACKING THE FIX AFTER IT
+WAS COMMITTED.** The first cut bounded a clause on `.`, `;` and `:` only. A comma does not bound
+one, so a negator opening a long comma-spliced sentence reached a cue much later in it — and
+adjudicators on this register write comma-spliced reasons as a matter of course. Constructed and
+run against the shipping script, one register, two rows: `There is no restatement of core clause
+here, but the narrowing this row proposes is still deferred to a later pull.` was SILENCED while
+the same obligation without the opening clause was reported. **That is a genuine debt lost to a
+`no` governing something else**, and false acquittal is the direction this arm must never fail
+in. Adding the comma costs exactly ONE row on the reference register — 18 back to 19 — and that
+row is a false positive of the `debt` cue, not an obligation. Mutant M9 keys on it.
+
+**THE FILED REMEDY WAS REFUTED BY BUILDING IT, and that is the reusable half.** The candidate asked
+to skip a row whose cue occurrences all sit inside a resolvable `OWED-<id>` token. Built and
+scored, it removes **0 of 29**, because a cue occurrence inside such a token is unconstructible:
+the arm's own `(?![\w-])` lookahead already refuses it. Control in the same run — `OWED-DEBT` and
+`OWED-DEFERRED-X`, ids built entirely out of cue words, yield zero cue matches while `debt
+deferred` standing alone yields two. The citation shape the filing describes is real; the
+mechanism it named cannot fire.
+
+**THE `nothing` CARVE-OUT WAS JUSTIFIED FROM THE WRONG EVIDENCE, AND AN ADVERSARIAL HAND CAUGHT
+IT AFTER THE COMMIT.** Admitting `nothing` acquits **0 of 29** — both rows carrying *"Nothing but
+this reason field is tracking that debt"* survive on an `OWED REMEDIATION, deferred` cue five
+hundred characters earlier, so that sentence is not what protects them. The exclusion stays
+because a row whose ONLY cue is that sentence is constructible and is lost without it; the fixture
+seeds that row and M7 kills on it. `never` acquits 0 and is vacuous. `not` acquits exactly one
+more, accidentally, on a `not` governing a parenthetical several clauses from the cue.
+
+**The hand's other finding was already closed by the comma bound**, and its probe — a period
+swapped for a comma — REPORTS in both forms against what shipped. It had scored the pre-comma
+revision. Re-measure a late finding against what shipped before acting on it.
+
+**What is NOT claimed.** Two false-positive classes survive and are stated rather than deferred:
+the cue naming a CORE CONSTRUCT (`core's Remediation Rule 12`, `the remediation EDIT`) and the cue
+in a clause citing a resolvable `OWED-` id. Both are per-row prose judgements, and the arm's own
+header declares a deliberate recall bias — narrowing further trades away the thing the file exists
+for. 15 of the surviving 19 are still false; the fix removes noise, it does not make the arm
+precise.
+
+**The receipt ACCEPTS a row-grain implementation** — one that silences the whole row when any cue
+is denied — because its seed carries a single cue each side. That is a real weakness and it is
+covered by the fixture, not by the receipt: `core/fixtures/layer-debt-due-and-discharge` mutant M6
+seeds a row that denies one obligation and states another, which no receipt this shape can reach.
+Scored: 10 mutants, 10 killed, and the `nothing`-as-negator seed had to be narrowed to its governed
+sentence before M7 could fire at all.
+
+verify: sh set -e; d=$(mktemp -d); printf '%s\n' '{"clause":"LC-E4","entry":"x/deny.md","subject_digest":"a","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"Verdict recorded. No owed is carried on this entry."}' '{"clause":"LC-E4","entry":"x/keep.md","subject_digest":"b","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"Verdict recorded. New owed is carried on this entry."}' > "$d/r.jsonl"; o="$(bash core/scripts/audit-layer-debt.sh --register "$d/r.jsonl" 2>/dev/null)"; grep -q 'UNDECLARED (1)' <<<"$o" && grep -q 'keep\.md' <<<"$o" && ! grep -q 'deny\.md' <<<"$o"

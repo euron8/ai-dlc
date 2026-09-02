@@ -3721,3 +3721,4 @@ Sibling to `BL-068`, which records that the rotate acceptance test false-fails o
 documents. Take them together or say which one you are closing.
 
 verify: sh set -e; R="$PWD/core/skills/ai-dlc-update/reconcile"; grep -q 'ADOPTED UPSTREAM' "$R/ledger-rotate.sh"; ! grep -qE 'REJECTED[ -]+(BY DESIGN|by design)' "$R/ledger-rotate.sh" && exit 1; exit 0
+

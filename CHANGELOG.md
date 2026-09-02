@@ -15,6 +15,92 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.478.0] - 2026-09-02
+
+### The debt audit charged an adjudicator for writing down that nothing is owed
+
+Batch 41. Subject:
+`PC-S340-UNDECLARED-CUE-CANNOT-TELL-A-REFERENCE-FROM-A-DECLARATION`, filed here as `BL-141`. The
+third false-positive class of `audit-layer-debt.sh`'s UNDECLARED arm, after the lexical one (a cue
+inside an identifier) and the structural one (a discharge row).
+
+**THIS ONE PUNISHES THE CORRECT ANSWER.** The cue sits in a clause that DENIES an obligation --
+`No owed is carried because there is no residual obligation on this entry`, `No owed: nothing is
+left outstanding`, `no re-grain is owed`, `GAP CLOSED IN THIS COMMIT rather than deferred`. The
+remedy the report prints is *"re-record each with an `owed` object"*, so an adjudicator who
+instead writes that no obligation exists trips the cue by writing it -- and the register is
+APPEND-ONLY, so no later act can clear the row. One row on the reference register records
+`audit-layer-debt.sh lists this entry under UNDECLARED on cue 'deferred'` and is itself flagged
+for that sentence: the tool scoring its own output as an instance of its own subject.
+
+**THE FILED REMEDY WAS REFUTED BY BUILDING IT, and that is the durable half.** The candidate asked
+to skip a row whose cue occurrences all sit inside a resolvable `OWED-<id>` token. Built and
+scored, it removes **0 of 29** -- a cue occurrence inside such a token is unconstructible, because
+the arm's own `(?![\w-])` lookahead already refuses it. Control in the same invocation:
+`OWED-DEBT` and `OWED-DEFERRED-X`, ids built entirely out of cue words, yield zero cue matches
+while `debt deferred` standing alone yields two. The citation shape the filing describes is real;
+the mechanism it named cannot fire. **Ask what a proposed remedy's predicate can SPELL before
+building it.**
+
+**MEASURED, NOT ASSERTED.** Driving the shipping script over the reference consumer's 318-row
+register both ways in one invocation, with a `cmp -s` control asserting the two copies differ:
+**29 flagged before, 19 after**, `OPEN` unchanged at 16 on both sides. All 10 acquitted rows were
+read in full -- 8 deny an obligation in as many words, 2 draw an explicit contrast. The
+false-acquittal set is empty and enumerated.
+
+**PER OCCURRENCE, NEVER PER ROW.** A row is still reported when any cue survives, so a reason that
+denies one obligation and states another is still caught.
+
+**AND THE NEGATOR CARVE-OUTS WERE RE-MEASURED AFTER AN ADVERSARIAL HAND SHOWED THE FIRST ONE WAS
+JUSTIFIED FROM THE WRONG EVIDENCE.** `nothing` is excluded because it is the word the strongest
+true positive uses -- *"Nothing but this reason field is tracking that debt."* -- and that much is
+right. What the comment claimed beyond it was not: admitting `nothing` acquits **0 of 29**, because
+both rows carrying that sentence survive on an `OWED REMEDIATION, deferred by operator decision`
+cue five hundred characters earlier. **The sentence is not what protects those rows.** The
+exclusion stays because a row whose ONLY cue is that sentence is constructible and IS lost when
+`nothing` is admitted -- the fixture seeds exactly that row and mutant M7 kills on it. Free on
+this corpus, load-bearing for a reachable one.
+
+`never` is vacuous here -- it acquits 0 of 29 and moves no row, which is the loaded gun
+`mechanism-design.md` describes. `not` acquits exactly ONE further row, accidentally: the `not`
+governs a parenthetical about who dispatches a repair seat, several clauses from the `remediation`
+cue it would silence. Right verdict, wrong reason, on the only case available.
+
+**THE HAND'S OTHER FINDING WAS ALREADY CLOSED BY THE COMMA, AND CHECKING BEAT ACCEPTING.** It
+reported that one early `no` silences every cue after it, with a probe swapping a period for a
+comma. Re-run against the shipped bound, both forms REPORT -- the probe was scored against the
+pre-comma revision. Re-measure a finding against what shipped before acting on it.
+
+**THE COMMA HAD TO BE ADDED TO THE CLAUSE BOUND, AND IT CAME FROM ATTACKING THE FIX AFTER IT WAS
+COMMITTED.** The first cut bounded a clause on `.`, `;` and `:` only. A comma does not bound one,
+so a negator opening a long comma-spliced sentence reached a cue much later in it -- and
+adjudicators on this register write comma-spliced reasons as a matter of course. Constructed and
+run against the shipping script, one register, two rows: `There is no restatement of core clause
+here, but the narrowing this row proposes is still deferred to a later pull.` was SILENCED, while
+the same obligation with the opening clause removed was reported. **A genuine debt lost to a `no`
+governing something else** -- and false acquittal is the direction a recall-biased arm must never
+fail in. The comma costs exactly ONE row on the reference register, 18 back to 19, and that row is
+a false positive of the `debt` cue rather than an obligation. Mutant M9 keys on it.
+
+**AND THE REPAIR'S OWN COUNT ARM SILENTLY FAILED TO APPLY.** The script that renumbered the
+fixture's `UNDECLARED (4)` assertion to `(5)` escaped its quotes wrong, matched nothing, and
+reported success -- so the fixture greped for a count the run no longer produced and went red on
+the correct change. That is the no-op replacement `mkmut` guards against, in a helper that had no
+such guard. A replacement that matches nothing must not report success.
+
+**WHAT IS NOT CLAIMED.** Two false-positive classes survive and are stated rather than deferred --
+the cue naming a CORE CONSTRUCT (`core's Remediation Rule 12`), and the cue in a clause citing a
+resolvable `OWED-` id. 15 of the surviving 19 are still false. This removes noise; it does not
+make the arm precise, and the arm's own header declares a deliberate recall bias.
+
+**THE SEED HAD TO BE NARROWED BEFORE ITS MUTANT COULD FIRE.**
+`core/fixtures/layer-debt-due-and-discharge` grows from 16 assertions to 27, with four new mutants
+keyed on the three decisions the discount makes -- which words deny, how far back it looks, and
+whether it scores per cue or per row. The `nothing`-as-negator seed was first written with the
+register's full phrasing, which left three cues in a sentence the discount never touches: the row
+reported either way and **mutant M7 SURVIVED**. A guard needs a subject the other guards cannot
+see. 10 mutants, 10 killed.
+
 ## [0.477.0] - 2026-09-02
 
 ### `v0.476.0` shipped the un-adopted arm as a REFUSAL, and a refusal there loses the clause it protects
