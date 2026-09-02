@@ -36,7 +36,136 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 40 SHIPPED AS `v0.476.0`, CORRECTED BY `v0.477.0`. THE GAP IS SIX RELEASES AND PENDING IS 3. START AT BATCH 41.
+### BATCH 41 SHIPPED AS `v0.478.0`. THE GAP IS SEVEN RELEASES AND PENDING IS 4. START AT BATCH 42.
+**THE FILED REMEDY WAS REFUTED BY BUILDING IT, AND THE REFUTATION IS THE BATCH'S REUSABLE
+LESSON.** `PC-S340-UNDECLARED-CUE-CANNOT-TELL-A-REFERENCE-FROM-A-DECLARATION` asked
+`audit-layer-debt.sh` to skip a row whose cue occurrences all sit INSIDE a resolvable
+`OWED-<id>` token. Built and scored on the reference register, it removes **0 of 29** — a cue
+occurrence inside such a token is UNCONSTRUCTIBLE, because the arm's own `(?![\w-])` lookahead
+already refuses it. Control in the same invocation: `OWED-DEBT` and `OWED-DEFERRED-X`, ids built
+entirely out of cue words, yield ZERO cue matches while `debt deferred` standing alone yields two.
+**ASK WHAT A PROPOSED REMEDY'S PREDICATE CAN SPELL BEFORE BUILDING IT** — the filing was
+authoritative about the symptom and named a mechanism that cannot fire. That is the fourth
+consecutive batch whose filed remedy did not survive being built.
+
+**THE REAL CLASS IS BIGGER THAN THE ONE FILED, AND IT PUNISHES THE CORRECT ANSWER.** The cue sits
+in a clause that DENIES an obligation — `No owed is carried because there is no residual
+obligation on this entry`, `No owed: nothing is left outstanding`, `no re-grain is owed`,
+`GAP CLOSED IN THIS COMMIT rather than deferred`. Ten of the 29 are that shape. The remedy the
+report PRINTS is "re-record each with an `owed` object", so an adjudicator who instead writes that
+no obligation exists trips the cue by writing it — and the register is APPEND-ONLY, so no later act
+can clear the row. One row records `audit-layer-debt.sh lists this entry under UNDECLARED on cue
+'deferred'` and is itself flagged for that sentence: **the tool scores its own output as an
+instance of its own subject.**
+
+**THE FIX IS PER OCCURRENCE, NEVER PER ROW**, so a reason that denies one obligation and states
+another is still caught. `nothing` is deliberately NOT a negator — it is the word the strongest
+TRUE positive uses, *"Nothing but this reason field is tracking that debt."* — and `not`/`never`
+are excluded because, measured, they acquitted two rows on a `not` governing an unrelated clause:
+the right verdict for the wrong reason.
+
+**THE COMMA IS A CLAUSE BOUND, AND LEAVING IT OUT LOST A REAL DEBT — FOUND BY ATTACKING THE
+CHANGE AFTER IT WAS COMMITTED, NOT BY REVIEW.** The first cut bounded a clause on `.`, `;` and `:`
+only. A comma does not bound one, so a negator opening a long comma-spliced sentence reached a cue
+much later in it, and adjudicators on this register write comma-spliced reasons routinely.
+Constructed and run against the shipping script: *"There is no restatement of core clause here,
+but the narrowing this row proposes is still deferred to a later pull."* was SILENCED while the
+same obligation without the opening clause was reported. **A genuine debt lost to a `no` governing
+something else.** The comma costs exactly ONE row — 18 back to 19 — and that row is a `debt`-cue
+false positive, not an obligation. **False acquittal is the direction a recall-biased arm must
+never fail in; measure the cost of the safe direction rather than assuming it is expensive.**
+
+**MEASURED BOTH WAYS IN ONE INVOCATION WITH A `cmp -s` CONTROL ASSERTING THE COPIES DIFFER**:
+**29 flagged before, 19 after**, `OPEN` unchanged at 16 on both sides. All 10 acquitted rows read
+in full — 8 deny an obligation in as many words, 2 draw an explicit contrast. The false-acquittal
+set is EMPTY and enumerated, and both genuine debts survive as a fixture arm rather than an
+assumption.
+
+**A SEED THAT CARRIES MORE THAN ITS GUARD'S SUBJECT CANNOT KILL ITS OWN MUTANT.** The
+`nothing`-as-negator arm was first seeded with the register's full phrasing — `OWED REMEDIATION,
+deferred by operator decision.` ahead of the governed sentence — which left THREE cues in a
+clause the discount never touches. The row reported either way and **mutant M7 SURVIVED**.
+Narrowed to the governed sentence alone it kills. `core/fixtures/layer-debt-due-and-discharge`
+goes 16 → 29 assertions, 9 mutants, 9 killed.
+
+**A HELPER THAT RENUMBERS AN ASSERTION IS A MUTATION WITH NO `cmp -s`.** The script updating the
+fixture's `UNDECLARED (4)` count to `(5)` escaped its quotes wrong, matched NOTHING, and reported
+success — so the fixture greped for a count the run no longer produced and went RED on the correct
+change, which reads exactly like a regression. `mkmut` guards this inside the fixture; an ad-hoc
+edit script has no such guard. **A replacement that matches nothing must not report success.**
+
+**WHAT IS NOT CLAIMED, AND IT IS STATED RATHER THAN DEFERRED.** Two false-positive classes
+survive: the cue naming a CORE CONSTRUCT (`core's Remediation Rule 12`, `the remediation EDIT`)
+and the cue in a clause citing a resolvable `OWED-` id. **Of the surviving 19, two are
+unambiguous obligations, two are marginal, and fifteen are false.** The arm's own header declares
+a deliberate recall bias, so narrowing further trades away what the file exists for. This removes
+noise; it does not make the arm precise.
+
+**THE SWEEP CAME BACK EMPTY OF NEW WORK FOR THE SECOND CONSECUTIVE BATCH.** Ledger md5 held at
+`91deb97f…` across the whole batch, live/archived/cited/unfiled read 72/141/34/38 at the start,
+and the newest filing in the unfiled set dates `2026-08-31`. No consumer filing arrived while this
+ran. The subject came from the standing `PC-S340-*` corpus, ranked by consequence, and **all five
+remaining candidates' own status lines were read before ranking** — the thing this block has asked
+for since batch 1.
+
+**THE FIGURES, re-derived AFTER `v0.478.0` MERGED, every command re-run with its controls in the
+same invocation.** Ledger md5 **`91deb97f…`** — it did not move at any point in this batch, so
+nothing was filed or rotated on the consumer's side. **72 live candidates, 141 archived, 35 cited,
+37 UNFILED.** DISCHARGED **18 raw / 17 corrected**, IN-FLIGHT **18**, UNTOUCHED **37**, overlap
+**1**, TERMINAL **31**. Partition control closes on the raw figure: 18+18+37−1 = 72. Presence
+controls 1/1/1/1; absence controls 0 and 0; discharged-but-unnamed **0**, so the id reached a
+commit MESSAGE and not only the CHANGELOG. `docs/backlog.md` **78 live / 63 archived** against a
+ceiling of 100. **The denominator did not move, and shipping here never moves it** — only a
+rejection reaching the party holding the candidate does, which happened once, at batch 40.
+
+**THE CONSUMER WROTE WHILE THIS RAN AND THE SWEEP IS UNAFFECTED.** Its dirty count went 8 → 16 on
+branch `ai-dlc/carry-over/pool-pnl-backlog-triage`; the ledger md5 did not move, so nothing was
+filed or rotated there.
+
+**FOUR REMAIN UNFILED IN THAT CORPUS, with why each was passed over.**
+`VALIDATE-ESCALATION-RESOLUTION-NONDETERMINISTIC-ON-BYTE-IDENTICAL-INPUT` and
+`RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-PASSES-ON-RETRY` — both `verify: manual` because the
+defect IS intermittency; compute the predicted count before reading any clean sweep as a
+refutation. The escalation one has the worse consequence of the two (one of five runs PASSED on
+malformed input, which is the fail-open half) and **a partial root-cause reading is banked**:
+`validate-escalation-resolution.sh` never sorts, its quote extractor
+`sed -n 's/.*"\(.*\)".*/\1/p'` is greedy and takes the LAST quoted segment of a multi-quote
+citation, and `steer_dir_has_transcript` iterates a LIVE transcript directory the running session
+is itself appending to. That last one is the likeliest source and it is a claim about the CORPUS,
+not the script — establish which before scoping it.
+`CHECK-26-READS-A-PARTIAL-RE-VERIFY-VERDICT-FILE-AS-UNADJUDICATED` needs a new script AND a
+`_gate-procedures.md` change, so say which you are closing.
+`AUDIT-RULE-FILES-DRIFT-FINDINGS-IN-CORE-PROSE-ARE-NOT-CONSUMER-FIXABLE` is 33 findings across
+fourteen files, a per-file prose judgement — not one subject as it stands.
+
+**THE SECOND TEST RETURNS A REAL FINDING THIS TIME, WHICH IT DID NOT AT BATCH 40.** The consumer's
+INSTALLED `audit-layer-debt.sh` and this distribution's fixed copy, run over that consumer's own
+318-row register with a `cmp -s` control asserting the two differ (15934 vs 20006 bytes), report
+**29 against 19**. So the pull removes **10 false rows the consumer is looking at today** —
+observable, not latent. Report that alongside the gap; it does not authorize anything.
+
+**THE GAP IS SEVEN RELEASES AND PENDING IS 4 — both DERIVED, with controls.** The consumer stamp
+reads `0.471.0`/`31b51d48` on all four fields against a distribution `VERSION` of `0.478.0`.
+PENDING is batch 38's candidate at `v0.472.0`, batch 39's at `v0.474.0`, batch 40's at `v0.476.0`
+and batch 41's at `v0.478.0`, each resolved to the release that FIRST named it, against an
+impossible-id control of 0 and a known-present control of 4. **A PULL IS NOT AUTHORIZED.**
+`operator-rulings.md` governs.
+
+**THE FIRST HAND WENT IDLE ACROSS TWO DIRECT ASKS AND DELIVERED NOTHING; A SECOND WAS SPAWNED
+RATHER THAN MERGING ON ITS SILENCE.** Every finding in this release — the vacuity of the filed
+remedy, the seed that could not kill its own mutant, and the comma — came from the lead attacking
+its own change. That is the measured base case for message-deliverable hands across five
+consecutive batches. **When a hand goes idle without delivering, spawn a fresh one with a
+narrower brief rather than reading the silence as completion**; the standing measurement is that a
+late hand has twice been right and cost a release.
+
+**BATCH 41's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW IT.**
+`PC-S340-UNDECLARED-CUE-CANNOT-TELL-A-REFERENCE-FROM-A-DECLARATION` shipped as `v0.478.0` and is
+cited by `BL-141` in `docs/backlog.archive.md`, so it reads DISCHARGED rather than UNFILED — but
+it stays live in the consumer's ledger until they pull. Do not re-scope onto it. Its two surviving
+false-positive classes are stated above as limits, not as deferred work.
+
+### BATCH 40 SHIPPED AS `v0.476.0`, CORRECTED BY `v0.477.0`. BATCH 41 HAS SINCE RUN; TAKE THE STATE FROM THE BLOCK ABOVE, NOT FROM THIS HEADING.
 **`v0.477.0` CORRECTS `v0.476.0`, AND THE CORRECTION IS THE BATCH'S REAL LESSON.** The un-adopted
 arm shipped as a REFUSAL. **A body is a REWRITE by definition, so the mirror predicate inherits
 the very defect the filing describes, with the sign flipped** — it cannot see a body that adopted
@@ -3448,19 +3577,31 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 41's
-   SUBJECT.** Batch 40 is merged as `v0.476.0`. Number yours 41.
+1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 42's
+   SUBJECT.** Batch 41 is merged as `v0.478.0`. Number yours 42.
 
-   **BATCH 40's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW IT.**
+   **BATCH 41's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW IT.**
+   `PC-S340-UNDECLARED-CUE-CANNOT-TELL-A-REFERENCE-FROM-A-DECLARATION` shipped as `v0.478.0` and is
+   cited by `BL-141` in `docs/backlog.archive.md`, so it reads DISCHARGED rather than UNFILED — but
+   it stays live in the consumer's ledger until they pull. Do not re-scope onto it. Its two
+   surviving false-positive classes — the cue naming a CORE CONSTRUCT, and the cue in a clause
+   citing a resolvable `OWED-` id — are STATED LIMITS, not deferred work; fifteen of the nineteen
+   rows it still reports are false, and the arm's own header declares a deliberate recall bias.
+
+   **BATCH 40's SUBJECT IS SPENT TOO.**
    `PC-S340-STAMP-READOPT-GATE-IS-BLIND-TO-AN-ADDITIVE-CHANGE-AND-TO-A-REWRITTEN-BODY` shipped as
-   `v0.476.0` and is cited by `BL-138` in `docs/backlog.archive.md`, so it reads DISCHARGED rather
-   than UNFILED — but it stays live in the consumer's ledger until they pull. Do not re-scope onto
-   it. Its REWORD half is stated as unfixed and unfixable by containment, not deferred.
+   `v0.476.0`, corrected by `v0.477.0`, and is cited by `BL-138`/`BL-139`. Do not re-scope onto it.
+   Its REWORD half is stated as unfixed and unfixable by containment, not deferred.
 
-   **THE SWEEP CAME BACK EMPTY OF NEW WORK FOR THE FIRST TIME**, so batch 40 took the standing
-   `PC-S340-*` corpus ranked by consequence rather than a fresh filing. Expect the same: the
-   remaining six are enumerated in the resume block with the reason each was passed over, and
-   their status lines have now been read.
+   **THE SWEEP CAME BACK EMPTY OF NEW WORK FOR THE SECOND CONSECUTIVE BATCH**, so batch 41 took the
+   standing `PC-S340-*` corpus ranked by consequence rather than a fresh filing. Expect the same:
+   the remaining FOUR are enumerated in the resume block with the reason each was passed over, and
+   every one of their status lines has now been read.
+
+   **BUILD THE FILED REMEDY AND SCORE IT — FOUR CONSECUTIVE BATCHES HAVE NOW REFUTED ONE.** Batch
+   41's was VACUOUS: it named a predicate that cannot fire, and building it removed 0 of 29. Ask
+   what a proposed remedy's predicate can SPELL before building it, not merely whether the defect
+   is real.
 
    **A PEER SESSION IS A SUBJECT CHANNEL, AND CHECKING IT COSTS ONE CALL.** Batch 37's subject
    arrived as a message from a blocked consumer session, not from the ledger — the sweep could not
@@ -3475,8 +3616,8 @@ so no block written before it changes verdict.
    interrupt; if you genuinely need to ask, ask the OPERATOR whether to, and put the peer's current
    state into the question.
 
-   **THE GAP IS SIX RELEASES AND PENDING IS 3** — the consumer stamp reads `0.471.0`/`31b51d48`
-   on all four fields and this distribution is `0.477.0`. Your batch widens the gap to seven. That is
+   **THE GAP IS SEVEN RELEASES AND PENDING IS 4** — the consumer stamp reads `0.471.0`/`31b51d48`
+   on all four fields and this distribution is `0.478.0`. Your batch widens the gap to eight. That is
    not permission to close it: a pull is operator-initiated, readiness is not authorization, a
    `PENDING` count is not a decision about WHEN, and one is never handed to a peer session.
    `operator-rulings.md` governs.
@@ -3802,12 +3943,12 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 91deb97f... moved when the consumer recorded the IS-CORE rejection; a MOVE alone is NOT an alarm -- check the id set too
+   md5 -q "$L"              # 91deb97f... unchanged across the whole of batch 41; a MOVE alone is NOT an alarm -- check the id set too
    wc -l < /tmp/live.txt    # 72
-   wc -l < /tmp/unfiled.txt # 38 after batch 40 rotated BL-138 and the consumer rotated TWO candidates
+   wc -l < /tmp/unfiled.txt # 37 after batch 41 filed and rotated BL-141
    ```
 
-   **THE BASELINE IS 72 LIVE CANDIDATES, 34 CITED, 38 UNFILED.** Live FELL for the first time in
+   **THE BASELINE IS 72 LIVE CANDIDATES, 35 CITED, 37 UNFILED.** Live FELL for the first time in
    this program: the operator carried the `IS-CORE` rejection into a graph session and that session
    rotated it together with `PC-S308-STEP1A-ROTATE-REMEDY-NO-SPRINT-START-DESTINATION`, which had
    been delivered at `v0.471.0` and stayed live only because the pull did not rotate it. **A
