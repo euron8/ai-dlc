@@ -1498,42 +1498,55 @@ reproduced here.
 EOF
 
 echo "== G. an ADDITIVE upstream change to a shadowed section is REPORTED =="
+# THE TIER IS THE ASSERTION, and v0.476.0 got it wrong in the direction that loses data.
+# This arm shipped as a REFUSAL and was demoted one release later: replayed over the 27
+# re-adoptions in the reference consumer's own history, a refusing form refuses 7 of them,
+# at least one demonstrably falsely -- a body that had ALREADY adopted upstream's addition,
+# reworded. And the escape is worse than the wedge: `--stamp reaffirm --note` advances
+# base_sha, so a falsely-refused re-adoption is re-stamped and the clause is never offered
+# again, under a note asserting the consumer declined text it had in fact taken. So the arm
+# must REPORT and must NOT refuse, and both halves are asserted here.
 out="$(bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GOVR" --check 2>&1)"; rc=$?
-if [ "$rc" -eq 1 ] && grep -q 'UNADOPTED-CORE-TEXT' <<<"$out"; then
-  ok "--check RED: core ADDED text to the shadowed section and the body does not carry it"
+if grep -q 'UNADOPTED-CORE-TEXT' <<<"$out"; then
+  ok "--check REPORTS: core ADDED text to the shadowed section and the body does not carry it"
 else
-  bad "--check did NOT fire on a purely additive upstream change (rc=$rc) -- the stale set is empty by construction, so this is the direction that reads as clean"
+  bad "--check did NOT report a purely additive upstream change (rc=$rc) -- the stale set is empty by construction, so this is the direction that reads as clean"
   printf '%s\n' "$out" | sed 's/^/    /'
+fi
+if [ "$rc" -eq 0 ]; then
+  ok "  and it does NOT fail: a REWORDED adoption scores here too, and refusing on that routes a correct re-adoption to reaffirm"
+else
+  bad "  --check exited $rc on an unadopted-only finding: that is the tier v0.477.0 removed, and it converts a false positive into a permanent re-stamp"
 fi
 if grep -q 'records the deciding session id' <<<"$out"; then
   ok "  and it names the un-adopted sentence verbatim"
 else
-  bad "  it fired but did not identify the un-adopted line, so the operator cannot act on it"
+  bad "  it reported but did not identify the un-adopted line, so the operator cannot act on it"
 fi
 
 before_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$GOVR" | head -1)"
 out="$(bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GOVR" --stamp readopt 2>&1)"; rc=$?
 after_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$GOVR" | head -1)"
-if [ "$rc" -ne 0 ] && grep -q 'REFUSED' <<<"$out"; then
-  ok "--stamp readopt REFUSED while core's addition is un-adopted"
+if [ "$rc" -eq 0 ] && grep -q 'UNADOPTED-CORE-TEXT' <<<"$out"; then
+  ok "--stamp readopt LANDS and says what was not adopted -- the operator decides, having been told"
 else
-  bad "--stamp readopt SUCCEEDED on a body that carries none of the addition (rc=$rc)"
+  bad "--stamp readopt exited $rc or said nothing about the unadopted lines: either it refuses (v0.476.0's defect) or it is silent (the defect that release fixed)"
+  printf '%s\n' "$out" | sed 's/^/    /'
 fi
-# THE VALUE, NOT THE EXIT CODE. Stamping is what makes the loss permanent: base_sha
-# advances, the next pull computes base==theirs on this section, and the un-adopted
-# text is never offered again. An arm reading only the exit code passes against an
-# implementation that reports AND stamps.
-if [ "$before_sha" = "$after_sha" ]; then
-  ok "  and base_sha is untouched ($before_sha) -- the next pull still sees the drift"
+# THE VALUE, NOT THE EXIT CODE. An arm reading only the exit code passes against an
+# implementation that reports and does NOT stamp, and against one that stamps silently.
+if [ "$after_sha" = "$GTH" ] && [ "$before_sha" != "$after_sha" ]; then
+  ok "  and base_sha advanced $before_sha -> $after_sha, so the stamp is a real one"
 else
-  bad "  base_sha moved $before_sha -> $after_sha under a REFUSED stamp: the section will never be offered again"
+  bad "  base_sha is $after_sha (was $before_sha, theirs is $GTH): the stamp did not land"
 fi
 
-if bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GOK" --check >/dev/null 2>&1; then
-  ok "NEAR-MISS: a body that adopted the same addition RE-WRAPPED stays green"
+gok_out="$(bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GOK" --check 2>&1)"
+if ! grep -q 'UNADOPTED-CORE-TEXT' <<<"$gok_out"; then
+  ok "NEAR-MISS: a body that adopted the same addition RE-WRAPPED is not reported at all"
 else
   bad "NEAR-MISS FAILED: a body carrying upstream's new text at a different column is reported as un-adopted -- the arm is testing line breaks, not content"
-  bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GOK" --check 2>&1 | sed 's/^/    /'
+  printf '%s\n' "$gok_out" | sed 's/^/    /'
 fi
 
 # SATISFIABILITY. A gate that cannot be cleared by the remedy it prints is a wedge, and
@@ -1575,12 +1588,23 @@ This consumer also records the adjudicating team, which core does not ask for.
 Untouched across the range. Present so the fixture proves the gate is
 section-scoped and not merely file-scoped.
 EOF
-if bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GFM" --check >/dev/null 2>&1; then
-  bad "an entry carrying core's new clause only in its \`reason:\` — to say it DECLINES it — was scored as having adopted it, so the gate is cleared by the sentence that says it was not"
-else
+if grep -q 'UNADOPTED-CORE-TEXT' <<<"$(bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GFM" --check 2>&1)"; then
   ok "  and core text quoted in \`reason:\` does NOT count as adoption: only the body the lead reads can carry it"
+else
+  bad "an entry carrying core's new clause only in its \`reason:\` — to say it DECLINES it — was scored as having adopted it, so the report is silenced by the sentence that says it was not"
 fi
-rm -f "$GFM"
+
+# THE SECOND PASTE TARGET, and the frontmatter fix left it open for a release. Upstream text
+# dropped into an HTML comment INSIDE the body reaches no lead either, so it is not adoption.
+# Its ALLOW twin is the same clause as real body prose, asserted in the near-miss above.
+GHC="$CONS/.claude/skills/ai-dlc/overrides/G__comment-only.md"
+{ cat "$G3/additive.orig"; printf '\n<!--\n**Every rule-7 adjudication now records the deciding session id**, and a record\nthat carries no session id is rejected at the gate rather than queued.\n-->\n'; } > "$GHC"
+if grep -q 'UNADOPTED-CORE-TEXT' <<<"$(bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GHC" --check 2>&1)"; then
+  ok "  and core text pasted into an HTML COMMENT in the body does not count either"
+else
+  bad "core text inside <!-- --> scored as adoption -- the report prints the offending lines verbatim, so the tool emits the exact text that silences it"
+fi
+rm -f "$GFM" "$GHC"
 
 echo "== H. the body test is WRAP-INSENSITIVE in the superseded direction too =="
 out="$(bash "$READOPT" "$DIST" "$GTH" "$CONS" "$HOVR" --check 2>&1)"; rc=$?

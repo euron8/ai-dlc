@@ -32,7 +32,49 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 40 SHIPPED AS `v0.476.0`. THE GAP IS FIVE RELEASES AND PENDING IS 3. START AT BATCH 41.
+### BATCH 40 SHIPPED AS `v0.476.0`, CORRECTED BY `v0.477.0`. THE GAP IS SIX RELEASES AND PENDING IS 3. START AT BATCH 41.
+**`v0.477.0` CORRECTS `v0.476.0`, AND THE CORRECTION IS THE BATCH'S REAL LESSON.** The un-adopted
+arm shipped as a REFUSAL. **A body is a REWRITE by definition, so the mirror predicate inherits
+the very defect the filing describes, with the sign flipped** — it cannot see a body that adopted
+upstream's addition by REWORDING it, and it refused on that. Replayed over every commit in the
+consumer's history where an override's `base_sha` moved, body scored as it stood when the stamp
+was taken — 35 events, **27 re-adoptions / 8 reaffirms** — the shipped form refuses **17 of 27**
+against 27 of 27 allowed before. Seven are the un-adopted arm and one is a demonstrated FALSE
+refusal. The arm now REPORTS: `--check` prints the panel and exits 0, `--stamp readopt` prints it
+and lands. **The filed defect was SILENCE, and silence is what is gone.**
+
+**AND `v0.476.0`'s OWN ARGUMENT FOR SHIPPING IT AS A REFUSAL IS WHAT MAKES IT WORST.** That block
+recorded, correctly, that the refusal "terminates rather than wedging" because
+`--stamp reaffirm --note` advances `base_sha`. That is the defect: a falsely refused re-adoption
+routed to reaffirm is RE-STAMPED, so the clause is never offered again, permanently, under a note
+asserting the consumer declined text it had already adopted. **Ask what a refusal's ESCAPE does
+before treating the escape as the mitigation.**
+
+**THE FRONTMATTER FIX LEFT THE OTHER PASTE TARGET OPEN FOR A RELEASE.** The same upstream lines
+in an HTML comment INSIDE the body scored as adoption, against a near-miss control that did not.
+`--check` prints the offending lines verbatim, so the tool emitted the exact text that silenced
+it. Comment spans are now stripped in both directions.
+
+**THE LATE HAND WAS RIGHT AGAIN — THE THIRD TIME IN THIS PROGRAM, AND THE FIRST WHERE IT REPORTED
+AFTER THE MERGE HAD ALREADY HAPPENED.** It delivered three payloads, all truncated at ~16000
+characters, after going idle three times and being asked twice. Its population — 27 real
+adjudications replayed from the consumer's own history — is the asset; it is the only corpus this
+program has that can produce a false refusal, and it should be reached for again. **One of its
+five findings was scoped wrong and I checked rather than accepting it**: "your 5 is the set size,
+the gate reports 1" is true of the post-merge body and false of the pre-merge body I published,
+which the shipping script reports as 5. Both numbers are real and they answer different questions.
+
+**THE OPERATOR CARRIED THE `IS-CORE` ADJUDICATION AND IT IS DISCHARGED.** The consumer recorded it
+and rotated it (`a4304cbfc`), taking `PC-S308-STEP1A-ROTATE-REMEDY-NO-SPRINT-START-DESTINATION`
+with it — that one was delivered at `v0.471.0` and had stayed live only because the pull did not
+rotate it. **Live 74 → 72, unfiled 40 → 38, archived 139 → 141**, ledger md5 `6d84cbec…` →
+`91deb97f…`, partition control 0. **That is the first time this program's denominator has fallen.**
+
+**AND IT EXPOSED A DEFECT THAT NO SWEEP COULD HAVE FOUND**, filed as `BL-140`: `ledger-rotate.sh`
+has exactly ONE close sentinel, `**ADOPTED UPSTREAM (v<digit>`, and no form for a candidate
+upstream REJECTED as by-design. So the rejection is archived under an annotation claiming upstream
+ADOPTED it, naming `v0.458.0` — the release that REVERTED the very fix it now records as adopted.
+Not the consumer's error and not fixable on their side; both readers are core.
 
 **This block is the current state and it replaces every block below.** Every figure was
 re-derived after **`v0.476.0` merged** — the derive block, the sweep, the delivery gap and the
@@ -52,14 +94,19 @@ removes nothing, so that set is empty BY CONSTRUCTION: `--check` printed OK, `--
 then advanced `base_sha`, and drift is computed `base_sha..theirs`, so no later pull sees the
 section and the upstream text is never offered again.
 
-**THE DETECTOR WAS RUN AGAINST THE CASE THAT MOTIVATED IT BEFORE IT WAS BUILT.** On the
-consumer's own `steps__retro__domain-sections.md` at `a5cbdf0b -> 95670e58` the shipping gate
-exits **0** while **5** lines of core's rewritten `#4a. Close-Out Sweep` are absent from that
-body — and the entry's three unmoved anchors score 0 in the same run, so the reading
-discriminates rather than firing on any moved file.
+**THE DETECTOR WAS RUN AGAINST THE CASE THAT MOTIVATED IT BEFORE IT WAS BUILT — AND WHICH BODY
+YOU SCORE DECIDES THE NUMBER.** On the consumer's own `steps__retro__domain-sections.md` at
+`a5cbdf0b -> 95670e58` the shipping gate exits **0** while **5** lines of core's rewritten
+`#4a. Close-Out Sweep` are absent from the body AS IT STOOD BEFORE THE PULL'S MERGE; against the
+body at the moment the stamp was taken it reports **1**, because the operator's merge had already
+adopted 4 of the 5 verbatim. Both figures come from the shipping script. The entry's three unmoved
+anchors score 0 either way, so the reading discriminates rather than firing on any moved file.
 
-**FALSE-POSITIVE SET 0 over the consumer's 8 live overrides**, each at its own declared
-`base_sha` against `origin/main`, scored pre-fix and fixed. **The pre-fix side needed its
+**THAT FP SET WAS A CHECK THAT COULD NOT FIRE, AND `v0.477.0` CORRECTS IT.** All 15 shadowed
+anchors across those 8 overrides are byte-identical `base_sha`→`origin/main` — derived two ways,
+while the enclosing files moved hard — so `OK` was the only reachable verdict and the set is
+UNMEASURABLE, not zero. The population that can produce a finding is the 27-event replay below.
+The original run, kept because its OTHER half is the durable lesson: **The pre-fix side needed its
 SIBLINGS**: a lone copy of the script exits on a missing `lib.sh`, and that exit reads as a
 finding while being a refusal — the first run of that differential scored all 8 as
 `pre=refused` for that reason alone. Materialise the whole `reconcile/` directory at the ref
