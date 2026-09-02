@@ -36,7 +36,7 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 41 SHIPPED AS `v0.478.0`. THE GAP IS SEVEN RELEASES AND PENDING IS 4. START AT BATCH 42.
+### BATCH 41 SHIPPED AS `v0.478.0`, CORRECTED BY `v0.479.0`. THE GAP IS EIGHT RELEASES AND PENDING IS 4. START AT BATCH 42.
 **THE FILED REMEDY WAS REFUTED BY BUILDING IT, AND THE REFUTATION IS THE BATCH'S REUSABLE
 LESSON.** `PC-S340-UNDECLARED-CUE-CANNOT-TELL-A-REFERENCE-FROM-A-DECLARATION` asked
 `audit-layer-debt.sh` to skip a row whose cue occurrences all sit INSIDE a resolvable
@@ -208,6 +208,65 @@ has exactly ONE close sentinel, `**ADOPTED UPSTREAM (v<digit>`, and no form for 
 upstream REJECTED as by-design. So the rejection is archived under an annotation claiming upstream
 ADOPTED it, naming `v0.458.0` — the release that REVERTED the very fix it now records as adopted.
 Not the consumer's error and not fixable on their side; both readers are core.
+
+**`v0.479.0` CORRECTS `v0.478.0`, AND THE CORRECTION IS WHERE THE BATCH'S REAL LESSONS ARE.**
+Two adversarial hands reported AFTER the merge — the fourth and fifth time in this program — and
+converged independently on the same row.
+
+**A MEASURED-SOUNDING CLAIM WAS A JUDGEMENT, AND IT IS WITHDRAWN.** `v0.478.0` recorded "the
+false-acquittal set is EMPTY and enumerated". Eight of the ten acquittals are unarguable denials;
+**two rest on a ROUTING claim rather than on an absence** — the row CONCEDES that work exists and
+asserts it is tracked somewhere this arm never reads, and one of the two names no id at all. `no`
+and `rather than` cannot separate *there is no obligation* from *there is one and I filed it
+elsewhere*. **"Enumerated and empty" is the phrasing of a measurement; this was an adjudication of
+ten rows by one hand.** Say which you did.
+
+**SCORE A PER-OCCURRENCE RULE AT OCCURRENCE GRAIN — a row-grain null hides every misfire that was
+outvoted.** The mechanism runs per cue occurrence; the false-acquittal set was read per ROW, so a
+misfiring discount is invisible unless it denies a row's LAST surviving cue. Re-measured: **41 cue
+occurrences on candidate rows, 13 denied, 11 by `no`, 2 by `rather than`, 0 by `instead of`** — and
+exactly one denial is a genuine misfire, on a clause that DESCRIBES an undeclared obligation. That
+row is still reported, but only by accident.
+
+**CHECKING BEAT ACCEPTING TWICE IN ONE BATCH, AND BOTH HANDS' SPECIFICS FAILED WHILE THEIR
+SUBSTANCE HELD.** One hand reported three misfires; **two of the three are on rows that are not
+candidates at all** — one declares an `owed` dict, one carries `closes_owed` — so the discount
+never evaluates them. Both hands' register line numbers were off by one or two and had to be
+resolved by content. Their TOTALS were exact. **Take a late hand's finding seriously and re-derive
+its particulars; and re-measure it against WHAT SHIPPED** — one hand's headline had already been
+closed by a fix that landed while it worked, so it was scoring a revision that no longer existed.
+
+**A VACUOUS SET MEMBER GETS A SUBJECT, NOT A DELETION.** `instead of` fires on 0 of the 41. It is
+kept, because dropping it would accept `rather than` and refuse its commonest synonym, and the
+fixture now seeds it.
+
+**AN ARM THAT NO MUTANT CAN REACH IS A CHECK THAT CANNOT FIRE, AND THE CELL-MOVEMENT MATRIX IS HOW
+YOU FIND ONE.** The near-miss arm was killed by NOTHING: no mutation of the DISCOUNT can reach a
+seed that carries no negator. Its killer had to mutate the CUE side instead. **Score every arm by
+which mutants move its cell before believing the battery.** Fixture 16 → 32 assertions, 11 mutants,
+11 killed.
+
+**`BL-142` IS FILED, NOT FIXED, AND IS THE SHARPEST THING THE REVIEW TURNED UP.** An append-only
+register can only be corrected by a LATER row, and that row is usually a DISCHARGE row this arm
+exempts — so a formally withdrawn claim is reported forever. Measured verbatim: one row says a
+debt "is therefore left open" and is REPORTED; the same entry twenty minutes later says that
+sentence "was an unverified inference and is withdrawn" and is SKIPPED for carrying `closes_owed`.
+**The two exemptions compose badly and each is right alone.** The schema's `supersedes` cannot
+express it — its own description scopes it to a DIFFERENT verdict, and both rows are
+`still-additive`. Three remedies were built and scored: entry-grain silences 3 of 19 with **2 of
+the 3 wrong**; a retraction token silences exactly 1 of 19 correctly but keys on free prose over a
+5-row corpus; the shape the defect actually has is a schema field, which is a different subsystem.
+
+**THE FIGURES, re-derived after `v0.479.0` merged.** Ledger md5 **`91deb97f…`**, unmoved across
+both releases. **72 live, 141 archived, 35 cited, 37 UNFILED.** DISCHARGED **18 raw / 17
+corrected**, IN-FLIGHT **18**, UNTOUCHED **37**, overlap **1**, TERMINAL **31**; partition
+18+18+37−1 = 72; discharged-but-unnamed **0**. `docs/backlog.md` **79 live / 63 archived** against
+a ceiling of 100 — `BL-142` is filed and NOT rotated, so live rose by one.
+
+**THE GAP IS EIGHT RELEASES AND PENDING IS 4.** The consumer stamp reads `0.471.0`/`31b51d48` on
+all four fields against a distribution `VERSION` of `0.479.0`. PENDING stays 4 rather than 5
+because `v0.479.0` corrects `v0.478.0` and carries the SAME candidate id. **A PULL IS NOT
+AUTHORIZED.**
 
 **This block is the current state and it replaces every block below.** Every figure was
 re-derived after **`v0.476.0` merged** — the derive block, the sweep, the delivery gap and the
@@ -3616,8 +3675,8 @@ so no block written before it changes verdict.
    interrupt; if you genuinely need to ask, ask the OPERATOR whether to, and put the peer's current
    state into the question.
 
-   **THE GAP IS SEVEN RELEASES AND PENDING IS 4** — the consumer stamp reads `0.471.0`/`31b51d48`
-   on all four fields and this distribution is `0.478.0`. Your batch widens the gap to eight. That is
+   **THE GAP IS EIGHT RELEASES AND PENDING IS 4** — the consumer stamp reads `0.471.0`/`31b51d48`
+   on all four fields and this distribution is `0.479.0`. Your batch widens the gap to nine. That is
    not permission to close it: a pull is operator-initiated, readiness is not authorization, a
    `PENDING` count is not a decision about WHEN, and one is never handed to a peer session.
    `operator-rulings.md` governs.
@@ -3893,7 +3952,7 @@ so no block written before it changes verdict.
    `predicate-differential.sh` fingerprints the corpus either side of its own run for exactly this
    reason; a hand-rolled measurement has no such guard.
 
-1a. **`docs/backlog.md` IS AT 78 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
+1a. **`docs/backlog.md` IS AT 79 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
    is not blocked. That is not licence to file rather than fix — the standing correction in the
    resume block still governs — but a filing no longer costs a rotation, and rotating still means
    CLOSING, which needs a measurement.
