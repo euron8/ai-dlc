@@ -50,7 +50,7 @@ command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 absent" >&2
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-EXPECTED_ASSERTIONS=29
+EXPECTED_ASSERTIONS=30
 fails=0; made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
@@ -474,6 +474,16 @@ score M8 "$(mkmut m8 "$ANCHOR_CLAUSE" '    start = 0')" "$NREG" \
 score M9 "$(mkmut m9 'CLAUSE_END = re.compile(r"[.;:,]")' 'CLAUSE_END = re.compile(r"[.;:]")')" "$NREG" \
   "a clause bound without the comma acquits a real obligation stated after a comma splice" \
   absent 'splice\.md'
+
+# M10 — the CONTRAST half of the negator set removed, leaving the bare `no` determiner. Without
+# this mutant the contrast arm has no killer of its own: M5 deletes the whole discount and moves
+# `deny.md` and `contrast.md` together, so an implementation that dropped `rather than` while
+# keeping `no` would pass every other arm here. Measured before adding it — M5 moves two cells,
+# M10 moves exactly one — which is the "give every guard a subject the other guards cannot see"
+# rule applied to the battery rather than to the seeds.
+score M10 "$(mkmut m10 'NEGATED = re.compile(r"\bno\b|\brather than\b|\binstead of\b", re.I)' 'NEGATED = re.compile(r"\bno\b", re.I)')" "$NREG" \
+  "dropping the contrast spellings from the negator set files \`rather than deferred\` as deferred work" \
+  present 'contrast\.md'
 
 # UNMUTATED CONTROL — necessary and NOT sufficient. rc=0-with-no-findings is exactly what a
 # subject replaced by `exit 0` looks like, so this carries a POSITIVE conjunct: a copy taken and

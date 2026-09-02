@@ -99,7 +99,7 @@ keyed on the three decisions the discount makes -- which words deny, how far bac
 whether it scores per cue or per row. The `nothing`-as-negator seed was first written with the
 register's full phrasing, which left three cues in a sentence the discount never touches: the row
 reported either way and **mutant M7 SURVIVED**. A guard needs a subject the other guards cannot
-see. 8 mutants, 8 killed.
+see. 10 mutants, 10 killed.
 
 ## [0.477.0] - 2026-09-02
 

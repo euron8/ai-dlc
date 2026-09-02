@@ -4760,7 +4760,7 @@ precise.
 is denied — because its seed carries a single cue each side. That is a real weakness and it is
 covered by the fixture, not by the receipt: `core/fixtures/layer-debt-due-and-discharge` mutant M6
 seeds a row that denies one obligation and states another, which no receipt this shape can reach.
-Scored: 8 mutants, 8 killed, and the `nothing`-as-negator seed had to be narrowed to its governed
+Scored: 10 mutants, 10 killed, and the `nothing`-as-negator seed had to be narrowed to its governed
 sentence before M7 could fire at all.
 
 verify: sh set -e; d=$(mktemp -d); printf '%s\n' '{"clause":"LC-E4","entry":"x/deny.md","subject_digest":"a","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"Verdict recorded. No owed is carried on this entry."}' '{"clause":"LC-E4","entry":"x/keep.md","subject_digest":"b","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"Verdict recorded. New owed is carried on this entry."}' > "$d/r.jsonl"; o="$(bash core/scripts/audit-layer-debt.sh --register "$d/r.jsonl" 2>/dev/null)"; grep -q 'UNDECLARED (1)' <<<"$o" && grep -q 'keep\.md' <<<"$o" && ! grep -q 'deny\.md' <<<"$o"
