@@ -32,7 +32,128 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 39 SHIPPED AS `v0.474.0`, CORRECTED BY `v0.475.0`. THE GAP IS FOUR RELEASES AND PENDING IS 2. START AT BATCH 40.
+### BATCH 40 SHIPPED AS `v0.476.0`. THE GAP IS FIVE RELEASES AND PENDING IS 3. START AT BATCH 41.
+
+**This block is the current state and it replaces every block below.** Every figure was
+re-derived after **`v0.476.0` merged** — the derive block, the sweep, the delivery gap and the
+second test all re-run, with their controls in the same invocation.
+
+**THE SWEEP WAS EMPTY OF NEW WORK, AND THAT IS THE FIRST TIME IT HAS BEEN.** Ledger md5
+`6d84cbec…` held across the whole batch, live/archived/cited/unfiled read 74/139/33/41 at the
+start, and the newest filing in the unfiled set dates `2026-09-01` — batch 39's own subject.
+No consumer filing arrived while this ran. The subject therefore came from the standing
+`PC-S340-*` corpus, ranked by consequence.
+
+**BATCH 40's SUBJECT: `PC-S340-STAMP-READOPT-GATE-IS-BLIND-TO-AN-ADDITIVE-CHANGE-AND-TO-A-REWRITTEN-BODY`**,
+shipped as `v0.476.0`, filed and rotated here as `BL-138`. `readopt-override.sh`'s
+`stale_lines()` tested ONE direction of a two-sided difference — a line core DROPPED that the
+body still carries — with a whole-line fixed-string match. A purely ADDITIVE upstream change
+removes nothing, so that set is empty BY CONSTRUCTION: `--check` printed OK, `--stamp readopt`
+then advanced `base_sha`, and drift is computed `base_sha..theirs`, so no later pull sees the
+section and the upstream text is never offered again.
+
+**THE DETECTOR WAS RUN AGAINST THE CASE THAT MOTIVATED IT BEFORE IT WAS BUILT.** On the
+consumer's own `steps__retro__domain-sections.md` at `a5cbdf0b -> 95670e58` the shipping gate
+exits **0** while **5** lines of core's rewritten `#4a. Close-Out Sweep` are absent from that
+body — and the entry's three unmoved anchors score 0 in the same run, so the reading
+discriminates rather than firing on any moved file.
+
+**FALSE-POSITIVE SET 0 over the consumer's 8 live overrides**, each at its own declared
+`base_sha` against `origin/main`, scored pre-fix and fixed. **The pre-fix side needed its
+SIBLINGS**: a lone copy of the script exits on a missing `lib.sh`, and that exit reads as a
+finding while being a refusal — the first run of that differential scored all 8 as
+`pre=refused` for that reason alone. Materialise the whole `reconcile/` directory at the ref
+you are comparing against.
+
+**I FOUND TWO REAL DEFECTS IN MY OWN FIX BY ATTACKING IT, AND NEITHER CAME FROM REVIEW.** The
+containment corpus was the whole override FILE, so core text quoted in `reason:` — the natural
+way to say a consumer DECLINES an upstream clause — scored as adoption and cleared the gate on
+the entry whose own sentence says it did not adopt it (exit 0, against a control of 1 for the
+same entry with the clause nowhere). It now uses `--merge`'s body extractor verbatim. And the
+inherited 24-character floor applies to the new direction too, so an addition made entirely of
+short lines is invisible: `STOP on any red.` scores 0 while a long clause in the same section
+scores 1. That one is a STATED LIMIT, not a fix — lowering the floor buys back the collisions it
+exists to exclude.
+
+**THE GATE CAUGHT A MUTATION THAT HAD LOST ITS SUBJECT, AND IT LOOKED EXACTLY LIKE A REGRESSION
+IN THE CHANGE UNDER TEST.** `enforcement-map-sites` assertion 33 arm 1 hand-named the two sites
+documenting `--merge`; this release's remedy prose is a third, so the two-site mutant left the
+mode documented and I59 correctly stayed silent. The deletion is now keyed on I59's own
+documentation test with the post-mutation count asserted to be 0 against a non-zero unmutated
+count. **A mutation that names its targets goes vacuous the release after somebody adds one.**
+
+**THE RECEIPT ACCEPTS 2 OF 8 SCORED IMPLEMENTATIONS** — the fix and a second spelling — each
+asserted to differ from the fix first. It rejects the pre-fix original, a variant that reports
+but does not gate the stamp, each half of the fix alone, a disarm, and an over-refusing variant.
+**The fourth arm is what makes that 2 rather than 3**: without an ALLOW twin on the SAME moved
+section adopted at a different wrap, the receipt is satisfied by refusing every entry whose
+section changed.
+
+**THE NEW REFUSAL TERMINATES RATHER THAN WEDGING, MEASURED**: `--stamp reaffirm --note` advances
+`base_sha`, so a consumer declining an addition decides it once — readopt exit 1, reaffirm exit
+0, `--check` then exit 0.
+
+**THE FILING'S REWORD HALF IS NOT FIXED AND IS NOT CLAIMED.** A body carrying core's deleted
+sentence REWORDED — "relocate" where core says "archive" — is reachable by no containment test
+over core's own words. On the motivating entry the UNADOPTED direction catches the file anyway.
+
+**THE FIGURES, re-derived after `v0.476.0` merged.** Ledger md5 **`6d84cbec…`**, unmoved across
+the whole batch — **74 live candidates, 139 archived, 34 cited, 40 UNFILED**. DISCHARGED **17
+raw / 16 corrected**, IN-FLIGHT **18**, UNTOUCHED **40**, overlap **1**, TERMINAL **31**.
+Partition control closes on the raw figure: 17+18+40−1 = 74. Presence controls 1/1/1/1; absence
+controls 0 and 0. `docs/backlog.md` **77 live / 61 archived** against a ceiling of 100. The
+partition moved by exactly one, out of UNTOUCHED and into DISCHARGED.
+
+**THE CONSUMER WROTE WHILE THIS RAN AND THE SWEEP IS UNAFFECTED.** Its dirty count went 28 → 29
+on branch `ai-dlc/carry-over/pool-pnl-backlog-triage`; the ledger md5 did not move, so nothing
+was filed or rotated there.
+
+**THE GAP IS FIVE RELEASES AND PENDING IS 3 — both DERIVED, with controls.** The consumer stamp
+reads `0.471.0`/`31b51d48` on all four fields against a distribution `VERSION` of `0.476.0`.
+PENDING is batch 38's candidate at `v0.472.0`, batch 39's at `v0.474.0` and batch 40's at
+`v0.476.0`, each resolved to the release that FIRST named it, against an impossible-id control of
+0 and a known-present control of 5. **A PULL IS NOT AUTHORIZED.** `operator-rulings.md` governs.
+
+**THE SECOND TEST RETURNS A NULL, AND THE NULL IS THE WEAK KIND.** The consumer's INSTALLED
+`readopt-override.sh` and this distribution's fixed copy were run over that consumer's 8 real
+overrides with a `cmp -s` control asserting the two differ (27103 vs 32779 bytes): both refuse 0,
+so the pull delivers **no finding the consumer is missing today**. That is expected and does not
+mean the fix is worthless — **this is a fix for a SILENT failure with no warning shot**: it can
+only fire when a shadowed section next drifts, and none of their 8 has drift pending in this
+range. Report the null AND that limit.
+
+**A BOOTSTRAPPING STEP IS IN THIS RELEASE, AND THE SPECIFIC HAZARD IS MEASURED AT ZERO.** The
+range carries `core/skills/ai-dlc-update/SKILL.md` and `reconcile/readopt-override.sh`, so the
+consumer's INSTALLED pre-fix gate is what adjudicates any `HARD-OVERRIDE-DRIFT-SECTION` row in
+the pull that delivers its own repair. Measured rather than warned about: **no** shadowed section
+of the consumer's 8 overrides drifts between their own `base_sha` values and `origin/main`, so no
+`--stamp readopt` decision falls to the old gate in this range.
+
+**THE ADVERSARIAL HAND WENT IDLE THREE TIMES WITHOUT DELIVERING**, across two direct follow-up
+requests, and the merge went ahead without it. Both defects above came from the lead attacking
+its own change. **If it reports late, read it against what shipped** — the standing measurement
+is that a late hand has twice been right and cost a release.
+
+**THE S340 STATUS LINES HAVE NOW BEEN READ**, which this block has asked for since batch 1. What
+remains UNFILED there, with why each was not taken:
+`UNDECLARED-CUE-CANNOT-TELL-A-REFERENCE-FROM-A-DECLARATION` (the readiest — a functional probe
+that exited 0 at batch 39 — and readiness is not the selection rule, so it ranked below a gate
+whose failure is permanent and silent);
+`VALIDATE-ESCALATION-RESOLUTION-NONDETERMINISTIC-ON-BYTE-IDENTICAL-INPUT` and
+`RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-PASSES-ON-RETRY` (both `verify: manual` because the
+defect IS intermittency — compute the predicted count before reading any clean sweep as a
+refutation); `CHECK-26-READS-A-PARTIAL-RE-VERIFY-VERDICT-FILE-AS-UNADJUDICATED` (needs a new
+script AND a `_gate-procedures.md` change, so say which you are closing);
+`AUDIT-RULE-FILES-DRIFT-FINDINGS-IN-CORE-PROSE-ARE-NOT-CONSUMER-FIXABLE` (33 findings across
+fourteen files, a per-file prose judgement — not one subject); and
+`IS-CORE-ANSWERS-BY-DECLARED-GLOB-NOT-BY-MEMBERSHIP` (REJECTED by-design, an adjudication owed to
+the consumer, not work).
+
+**`IS-CORE`'s REJECTION IS STILL OWED AND HAS NOW SURVIVED SEVEN BATCHES.** A rejection is not a
+filing and nothing here moves it out of UNFILED. The brief is written at
+`docs/reviews/graph-s340-adjudication-brief.md` §1. **Carrying it is the operator's.**
+
+### BATCH 39 SHIPPED AS `v0.474.0`, CORRECTED BY `v0.475.0`. BATCH 40 HAS SINCE RUN; TAKE THE STATE FROM THE BLOCK ABOVE, NOT FROM THIS HEADING.
 
 **This block is the current state and it replaces every block below.** Every figure was
 re-derived after **`v0.475.0` merged** — the derive block, the sweep, the delivery gap and the
@@ -3254,8 +3375,19 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 40's
-   SUBJECT.** Batch 39 is merged as `v0.474.0` AND its correction `v0.475.0`. Number yours 40.
+1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 41's
+   SUBJECT.** Batch 40 is merged as `v0.476.0`. Number yours 41.
+
+   **BATCH 40's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW IT.**
+   `PC-S340-STAMP-READOPT-GATE-IS-BLIND-TO-AN-ADDITIVE-CHANGE-AND-TO-A-REWRITTEN-BODY` shipped as
+   `v0.476.0` and is cited by `BL-138` in `docs/backlog.archive.md`, so it reads DISCHARGED rather
+   than UNFILED — but it stays live in the consumer's ledger until they pull. Do not re-scope onto
+   it. Its REWORD half is stated as unfixed and unfixable by containment, not deferred.
+
+   **THE SWEEP CAME BACK EMPTY OF NEW WORK FOR THE FIRST TIME**, so batch 40 took the standing
+   `PC-S340-*` corpus ranked by consequence rather than a fresh filing. Expect the same: the
+   remaining six are enumerated in the resume block with the reason each was passed over, and
+   their status lines have now been read.
 
    **A PEER SESSION IS A SUBJECT CHANNEL, AND CHECKING IT COSTS ONE CALL.** Batch 37's subject
    arrived as a message from a blocked consumer session, not from the ledger — the sweep could not
@@ -3270,8 +3402,8 @@ so no block written before it changes verdict.
    interrupt; if you genuinely need to ask, ask the OPERATOR whether to, and put the peer's current
    state into the question.
 
-   **THE GAP IS FOUR RELEASES AND PENDING IS 2** — the consumer stamp reads `0.471.0`/`31b51d48`
-   on all four fields and this distribution is `0.475.0`. Your batch widens the gap to five. That is
+   **THE GAP IS FIVE RELEASES AND PENDING IS 3** — the consumer stamp reads `0.471.0`/`31b51d48`
+   on all four fields and this distribution is `0.476.0`. Your batch widens the gap to six. That is
    not permission to close it: a pull is operator-initiated, readiness is not authorization, a
    `PENDING` count is not a decision about WHEN, and one is never handed to a peer session.
    `operator-rulings.md` governs.
@@ -3595,13 +3727,13 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 6d84cbec... moved at the end of batch 39 with EVERY count held; a MOVE alone is NOT an alarm -- check the id set too
+   md5 -q "$L"              # 6d84cbec... UNMOVED across the whole of batch 40; a MOVE alone is NOT an alarm -- check the id set too
    wc -l < /tmp/live.txt    # 74
-   wc -l < /tmp/unfiled.txt # 41 after batch 39 rotated BL-135
+   wc -l < /tmp/unfiled.txt # 40 after batch 40 rotated BL-138
    ```
 
-   **THE BASELINE IS 74 LIVE CANDIDATES, 33 CITED, 41 UNFILED.** Live is unchanged since the
-   0.471.0 pull; cited rose and unfiled fell by one because batch 39 FILED its subject here and
+   **THE BASELINE IS 74 LIVE CANDIDATES, 34 CITED, 40 UNFILED.** Live is unchanged since the
+   0.471.0 pull; cited rose and unfiled fell by one because batch 40 FILED its subject here and
    rotated the entry, which is the only way a candidate leaves UNTOUCHED without the consumer
    moving. A higher LIVE count means the consumer filed while nobody was looking.
 
