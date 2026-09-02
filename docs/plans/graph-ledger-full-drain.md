@@ -13,8 +13,9 @@ BEFORE ACTING:**
    command.** One of those repos is READ ONLY and a write there is the most expensive mistake
    available in this program.
 2. **`### NEXT ACTIONS — numbered, in order`** — what to do, starting at action 1. This is roughly
-   3,600 lines below this block; jump to the heading BY NAME, do not scroll and do not trust
-   this figure — it is advisory and it has been stale before.
+   4,000 lines below this block; jump to the heading BY NAME, do not scroll and do not trust
+   this figure — it is advisory, it has been stale before, and it was 400 lines out when batch 43
+   re-derived it.
 3. **`### Ping the operator`** — when to stop and report.
 4. **`## Hazards`** and **`### Done when`** — what will bite you, and what finishing looks like.
 5. **`### Derive the state; do not trust the numbers below`** — the command block actions 1b and 6
@@ -147,12 +148,29 @@ EVIDENCE and are NOT claimed. **Do not read them as taken.**
 grammar.** Ledger md5 **`a79811f7…`** (unmoved — the consumer filed nothing during this batch;
 the S308 entry predates it). **72 live, 142 archived, 44 cited, 28 UNFILED.** DISCHARGED **20 raw
 / 17 corrected**, IN-FLIGHT **27**, UNTOUCHED **28**, overlap **3**, TERMINAL **32**; partition
-20+27+28−3 = 72. `docs/backlog.md` **81 live / 65 archived**. Consumer dirty count moved 3 → 6
-DURING this batch — it is writing pipeline state, the ledger md5 did not move, so nothing was
-filed or rotated there.
+20+27+28−3 = 72. `docs/backlog.md` **81 live / 65 archived**. **These held across the `v0.482.0`
+correction — it touched two fixtures and this file, and no ledger or backlog row.**
 
-**THE GAP IS TWO RELEASES AND PENDING IS 3.** Consumer stamp `0.479.0` against a distribution
-`VERSION` of `0.481.0`. **THE PULL IS NOT AUTHORIZED** — `operator-rulings.md` governs unchanged:
+**THE CONSUMER'S DIRTY COUNT IS NOT A GATE AND IS NOT A BASELINE.** It read 3 at the start of
+batch 43, 6 mid-batch and 13 by its close, all from pipeline state it writes on its own schedule.
+The ledger md5 did not move, so nothing was filed or rotated there. **Re-derive it; do not diff
+against this number** — it is recorded to show the consumer was ACTIVE throughout, which is the
+only thing it establishes.
+
+**THE GAP IS THREE RELEASES AND PENDING IS 3.** Consumer stamp `0.479.0` against a distribution
+`VERSION` of `0.482.0`; the three pending are `PC-S305-DISPATCH-GUARD-...`,
+`PC-S308-DISPATCH-GUARD-...` and `PC-S340-VALIDATE-ESCALATION-...`, derived per-id against an
+impossible-id control of 0.
+
+**AND ALL THREE RESOLVE TO `0.480.0`, NOT TO THE RELEASE THAT SHIPPED THEM.** `named_absorbed()`
+takes `tail -1`, the OLDEST commit naming an id, and reads `VERSION` at THAT commit. Batch 43
+named its ids in the `fix(hooks)` commit as well as in the release commit, and the fix commit
+predates the `VERSION` bump — so the join reports `0.480.0` for work that shipped in `0.481.0`,
+and a consumer pulling to `0.480.0` would not get it. **Name a closed id in the RELEASE commit
+and NOT in an earlier one**; action 8 now says so. The count is unaffected, the reported version
+is not.
+
+**THE PULL IS NOT AUTHORIZED** — `operator-rulings.md` governs unchanged:
 operator-initiated, readiness is not authorization, a `PENDING` count is not a decision about
 WHEN, and one is never handed to a peer session.
 
@@ -3260,6 +3278,17 @@ grep -cx 'PC-S336-STEP-1-AUTOPUSH-IS-THE-UNGUARDED-TWIN-OF-THE-PUSH-STEP-2-HARDE
                                                       # the arm that fails if anyone reinstates the
                                                       # trailing space, and a reinstated grammar
                                                       # reads as a clean, plausible 47
+grep -cx 'PC-S308-DISPATCH-GUARD-SPRINT-FIELD-INTERMITTENTLY-NULL' /tmp/live.txt
+                                                      # control: 1, a LEVEL-THREE heading nested
+                                                      # under another entry. Fails to 0 if anyone
+                                                      # narrows the heading arm back to `^## `,
+                                                      # which is what hid this entry from three
+                                                      # consecutive sweeps. THE OTHER FOUR CONTROLS
+                                                      # ALL PASSED THROUGHOUT -- that is the point:
+                                                      # a control drawn from a form you already
+                                                      # know cannot discover one you do not, so
+                                                      # this line exists only because the form was
+                                                      # found the expensive way
 grep -cx 'PC-S300-SEVEN-VALIDATORS-SHIPPED-NON-EXECUTABLE-AT-0.242.0' /tmp/arch.txt
                                                       # control: 1, a DOTTED id. Fails as a TRUNCATION
                                                       # if the class loses its `.`, and a truncated id
@@ -3972,7 +4001,8 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 44's
-   SUBJECT.** Batch 43 shipped as `v0.481.0`. Number yours 44.
+   SUBJECT.** Batch 43 shipped as `v0.481.0` and was corrected by `v0.482.0`; the distribution
+   `VERSION` is `0.482.0`. Number yours 44.
 
    **RUN THE SECOND TEST FIRST THIS TIME — BATCH 43 LEFT IT OWED.** Its subject was a hook, and
    action 7's differential drives `validate-layer-entries.sh`, which does not exercise one. The
@@ -4911,6 +4941,14 @@ so no block written before it changes verdict.
 8. **Cite every closed id verbatim in the RELEASE COMMIT MESSAGE**, not only in `CHANGELOG.md`.
    `named_absorbed()` resolves the signal with `git log -F --grep`, which reads commit MESSAGES;
    a `###` section in the CHANGELOG is in the diff and produces no row at all.
+
+   **AND IN THAT COMMIT ONLY — NOT ALSO IN AN EARLIER ONE.** `named_absorbed()` takes `tail -1`,
+   the OLDEST commit naming the id, and reads `VERSION` at that commit. Batch 43 named its two ids
+   in the `fix(hooks)` commit as well, which predates the `VERSION` bump, so the join reports
+   `0.480.0` for work that shipped in `0.481.0` — and a consumer pulling to the reported version
+   would not get the fix. Measured: three commits name `PC-S308`, at `VERSION` 0.480.0, 0.481.0
+   and 0.481.0, and the join takes the 0.480.0 one. **The id goes in the release commit and the
+   CHANGELOG; keep it out of the commits that precede the bump.**
 
 ### Ping the operator
 
