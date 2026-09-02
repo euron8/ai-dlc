@@ -113,15 +113,62 @@ fail() { printf 'FAIL (%s): %s\n' "$1" "$2" >&2; fails=$((fails + 1)); }
 # permitted because a count is routinely `grep ... | wc -l`, and every element of the
 # pipe is checked against the allowlist independently.
 cmd_is_safe() { # $1 command -> 0 safe, 1 refused (reason in REFUSED)
-  local c="$1" seg first sub
+  local c="$1" seg first sub segs
   REFUSED=""
   case "$c" in
     *';'*|*'&'*|*'>'*|*'<'*|*'`'*|*'$('*|*'${'*|*'||'*)
       REFUSED="it can chain, redirect or substitute (one of ; & > < \` \$( \${ ||)"
       return 1 ;;
   esac
+  # SPLIT ON A TOP-LEVEL `|` ONLY, THE WAY THE SHELL DOES. `tr '|' '\n'` was quote-blind,
+  # so a read-only command carrying a quoted ERE alternation was torn in two and the
+  # fragment after the bar was refused as an unknown command:
+  #
+  #     $ grep -cE 'alpha|beta' data.txt   ->  FAIL (ALLOWLIST), refused token `'beta'`
+  #     $ grep -cE 'alpha' data.txt        ->  exit 0, the near-miss that names the cause
+  #
+  # That is a false refusal on correct data, and this boundary now runs with no human in
+  # the loop -- `ai-dlc-derivation-capture.sh` re-runs a block inside the tool call that
+  # wrote it -- so an author who cannot save a file gets the hook turned off.
+  #
+  # AN UNRESOLVED QUOTE IS REFUSED RATHER THAN SPLIT, and that cannot be a false refusal:
+  # a command with an unbalanced quote does not run under `bash -c` either, so no correct
+  # derivation is in that population. Guessing where its segments end is the one way this
+  # scan could fail OPEN, which is the direction the allowlist exists to prevent.
+  #
+  # A `#` AT A WORD BOUNDARY ENDS THE COMMAND, because it does for the shell too, and
+  # skipping that made the scan disagree with `bash -n` on real input: `grep -c x f #
+  # test_safeguards.py's regex` is a command bash runs and this scan called unbalanced,
+  # on an apostrophe the shell never reads. That would have been a NEW false refusal on
+  # correct data, which is the thing this change exists to remove.
+  #
+  # The quote characters are built with `sprintf` rather than written literally, because a
+  # literal `'` inside a single-quoted awk program needs `'"'"'` and that escaping is
+  # itself a place this has to be got right.
+  segs="$(printf '%s' "$c" | awk '
+    BEGIN { SQ = sprintf("%c", 39); DQ = sprintf("%c", 34); BS = sprintf("%c", 92); HASH = sprintf("%c", 35) }
+    { sq = 0; dq = 0; out = ""; n = length($0); prev = " "
+      for (i = 1; i <= n; i++) {
+        ch = substr($0, i, 1)
+        # Unquoted `#` opening a word is a comment: the shell reads no further and
+        # neither do we, so nothing after it can open a quote or be a pipe.
+        if (ch == HASH && sq == 0 && dq == 0 && (prev == " " || prev == "\t")) break
+        # Inside single quotes a backslash is literal; everywhere else it escapes the
+        # next character, so that character can never open, close or be a delimiter.
+        if (ch == BS && sq == 0) { out = out ch; i++; if (i <= n) out = out substr($0, i, 1); prev = "x"; continue }
+        if (ch == SQ && dq == 0) { sq = !sq; out = out ch; prev = ch; continue }
+        if (ch == DQ && sq == 0) { dq = !dq; out = out ch; prev = ch; continue }
+        if (ch == "|" && sq == 0 && dq == 0) { print out; out = ""; prev = " "; continue }
+        out = out ch; prev = ch
+      }
+      if (sq || dq) exit 3
+      print out
+    }')" || {
+    REFUSED="it carries an unbalanced quote, so it cannot be run or safely parsed"
+    return 1
+  }
   # Every segment of the pipeline must itself be allowlisted.
-  printf '%s\n' "$c" | tr '|' '\n' | while IFS= read -r seg; do
+  printf '%s\n' "$segs" | while IFS= read -r seg; do
     first="$(printf '%s' "$seg" | sed 's/^[[:space:]]*//' | awk '{print $1}')"
     [ -n "$first" ] || continue
     # HERE-STRING, NOT `printf | grep -q`. Under `pipefail` the pipeline reports the

@@ -157,6 +157,72 @@ grep -q '^1 derivation' <<< "$out" \
   && ok "f-control              1 derivation  (the CONTROL: the reader is not simply blind)" \
   || bad "f-control expected '1 derivation(s)', got: $out"
 
+# --- G. A `|` IS A PIPE ONLY WHERE THE SHELL SAYS IT IS -------------------------
+# The allowlist splits a command into pipeline segments and checks each segment's first
+# word. That split used to be `tr '|' '\n'`, which is quote-blind, so a read-only command
+# carrying a quoted ERE alternation was torn in two and the fragment after the bar was
+# refused as an unknown command -- a false refusal on correct data, now enforced with no
+# human in the loop by `ai-dlc-derivation-capture.sh`.
+#
+# EVERY GREEN CASE HERE IS PAIRED WITH A STALE TWIN carrying the SAME command and a wrong
+# recorded value. A validator that stopped splitting altogether, or that exits 0 without
+# executing, passes the green half and fails the twin -- so no arm below can be satisfied
+# by a subject that merely emits nothing.
+gpair() { # $1 label  $2 command  $3 true-output  $4 wrong-output
+  mkdir -p "$WORK/g"
+  { printf '```derived\n$ %s\n%s\n```\n' "$2" "$3"; } > "$WORK/g/$1-true.md"
+  out="$(run "$WORK/g/$1-true.md")"; rc=$?
+  [ "$rc" -eq 0 ] && ok "g-$1 (runs)            exit=0  $2" \
+                  || bad "g-$1 expected exit 0 for '$2', got $rc: $out"
+  { printf '```derived\n$ %s\n%s\n```\n' "$2" "$4"; } > "$WORK/g/$1-stale.md"
+  out="$(run "$WORK/g/$1-stale.md")"; rc=$?
+  [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" \
+    && ok "g-$1 (twin)            exit=1  STALE -- so the green half really executed" \
+    || bad "g-$1 twin must be STALE for '$2', got $rc: $out"
+}
+gpair alternation  "grep -cE 'alpha|beta' src/three-lines.txt"   2 9
+gpair alt-dquoted  "grep -cE \"alpha|beta\" src/three-lines.txt" 2 9
+gpair alt-escaped  "grep -cE alpha\\|beta src/three-lines.txt"   2 9
+gpair alt-piped    "grep -E 'alpha|beta' src/three-lines.txt | wc -l" "       2" 9
+gpair hash-comment "grep -c alpha src/three-lines.txt # the trailing comment is not a quote" 1 9
+
+# THE LOOSENING MUST NOT REACH A REAL PIPE. Each of these hides a NON-allowlisted command
+# behind a quoted bar; a splitter that simply stopped splitting would admit every one.
+#
+# THESE TAKE TWO ARGUMENTS RATHER THAN A `|`-PACKED PAIR, and that is the point of the
+# case. Section C above packs `command|expected-message` into one string because none of
+# ITS commands contains a bar. Every command here does, so the same encoding truncated
+# each one at its first bar -- and one of the truncations still exited 1, for a reason
+# that had nothing to do with what the arm claimed to test.
+grefuse() { # $1 command  $2 expected message
+  mkdir -p "$WORK/g"
+  { printf '```derived\n$ %s\n2\n```\n' "$1"; } > "$WORK/g/hidden.md"
+  out="$(run "$WORK/g/hidden.md")"; rc=$?
+  [ "$rc" -eq 1 ] && grep -q "$2" <<< "$out" \
+    && ok "g-refused              exit=1  ($1)" \
+    || bad "g-refused expected exit 1 naming '$2' for '$1', got $rc: $out"
+}
+grefuse "grep -E 'a|b' src/three-lines.txt | xargs echo" "not on the read-only allowlist"
+grefuse "grep -E 'a|b' src/three-lines.txt | sed -i.bak s/a/b/ src/three-lines.txt" "writes a file or runs a command"
+grefuse "grep -cE \"a|b\" src/three-lines.txt | python3 -c 'print(1)'" "not on the read-only allowlist"
+
+# AN UNRESOLVED QUOTE IS REFUSED RATHER THAN SPLIT, and that refusal is load-bearing
+# rather than tidy. `$'...'` is ANSI-C quoting: bash reads it as ONE word and would run
+# the pipe after it, while a parity scan sees an odd number of quotes. Dropping the
+# refusal and simply not splitting inside an open quote admits `xargs` here -- measured
+# against a copy of the fix with the refusal deleted, which is the only thing that
+# distinguishes this arm from decoration.
+grefuse "grep \$'a\\'b' src/three-lines.txt | xargs rm" "unbalanced quote"
+grefuse "grep -cE 'alpha src/three-lines.txt"          "unbalanced quote"
+grefuse "grep 'a src/three-lines.txt | xargs rm"       "unbalanced quote"
+
+# The refused writers above must not have run, exactly as section C asserts for its own.
+if [ -s "$WORK/src/three-lines.txt" ] && ! [ -e "$WORK/src/three-lines.txt.bak" ]; then
+  ok "g-hidden               the refused writers never touched the tree"
+else
+  bad "g-hidden a command hidden behind a quoted bar still wrote to the tree"
+fi
+
 echo
 if [ "$fails" -gt 0 ]; then
   echo "FAIL: $fails assertion(s) wrong."
