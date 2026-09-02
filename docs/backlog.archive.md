@@ -4808,11 +4808,20 @@ none of the operator's words.
 whose closing quote sits on the next line reached the fallback, which kept the opening `"`
 inside the needle. No operator message contains that character there.
 
-**THE POPULATION, DERIVED FROM THE CONSUMER'S OWN HISTORY.** Every `Operator authorization:`
-citation ever written on a RESOLVED/OVERRIDDEN entry, across 878 blobs of
-`docs/escalations/pending.md` and `pending-archive.md`: **106 distinct citation lines, of which
-98 carry exactly two quote characters and are unaffected by any of this.** The other 8 are the
-subject — 6 multi-line, 1 with no quote at all, 1 the connective case above.
+**THE POPULATION, DERIVED FROM THE CONSUMER'S OWN HISTORY, AND STATED BY NARROWING.** Over the
+**713 distinct blobs** of `docs/escalations/pending.md` and `pending-archive.md` — 834 commits
+touch the first and 45 the second, and summing those two counts double-counts, which is the
+error an earlier revision of this entry made when it called 878 a blob count — **106 citations
+are what the READER parses**: the FIRST authorization line of each RESOLVED/OVERRIDDEN entry,
+which is all the extractor emits. 98 of the 106 carry exactly two quote characters and are
+unaffected; the other 8 are the subject — 6 multi-line, 1 with no quote at all, 1 the
+connective case above.
+
+**Every auth line on a terminal entry is 110; every auth line ANYWHERE in those two files is
+129, of which 15 are not the clean two-quote shape.** A second hand measured 129 independently
+and was right about a different question; the three narrowings were then computed in one
+invocation over one blob set, so only the narrowing varies. The reader's population is the one
+a differential over the reader must use, and the other two are the exposure ceiling.
 
 **SCORED AS A DIFFERENTIAL, PER ROW, NOT AS A TOTAL.** All 106 replayed as one entry each, in
 scope, against one frozen corpus, under the pre-fix and post-fix builds with a `cmp -s` control
@@ -4840,6 +4849,19 @@ than this parser's. **A conjunction over every segment was built and scored**: i
 byte-identical fail set over the 106 real citations, and on the constructed case it still
 refuses a genuine citation followed by other text — so it leaves half the filed defect unfixed
 and is not a second spelling of this one. Stated as a limit, not as deferred work.
+
+**THE POPULATION EXCLUDED THE OTHER TWO READERS' OWN CORPORA, AND THAT IS WHERE THE DEFECT IS
+LIVE TODAY.** Found by an independent hand, then re-derived here.
+`validate-adversarial-convergence.sh` parses this same field out of `*-resolution-p<N>.md`, and
+on the reference consumer that corpus holds 28 citations, 4 of them not two-quote. Scored with
+the shipped `cite_quote()` sourced from the shipping file against the pre-fix capture, both
+against the real transcript corpus: **the needle moves on 3 of the 4, all 24 clean citations
+are unmoved, and one goes NOMATCH to MATCH.** That one is a genuine `"Route A (Recommended)"`
+operator answer whose LAST quoted segment is the file quoting its own closure line
+(`"Status: DECIDED_AUTONOMOUSLY-by-operator (...)"`), so the greedy capture asked the
+transcript for a sentence the file wrote about itself and reported the operator as a forger.
+**The `pending.md` differential returned a null because the defect's shape is absent from that
+consumer's in-scope entries today, not because it is latent everywhere.**
 
 **AND THE CORPUS-ATTRIBUTION HALF IS ADDRESSED WITHOUT BEING CLOSED.** The sibling already
 prints `cite: scanned <N> transcript(s) from <corpus>`; the escalation validator discarded it.

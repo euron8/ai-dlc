@@ -120,17 +120,34 @@ steer_dir_has_transcript() { # $1 dir -> 0 if it holds a readable *.jsonl
 #
 # A citation is also routinely MULTI-LINE -- the producing awk is line-oriented, so the closing
 # quote sits on a line it never reads -- and the old fallback then kept the opening `"` inside
-# the needle, which no operator message contains. Six of the reference consumer's 106 distinct
-# citations are that shape.
+# the needle, which no operator message contains. Six of the reference consumer's 106
+# reader-parsed citations are that shape.
 #
 # So: read the field as SEGMENTS. The first segment long enough to verify is the citation; an
 # unterminated trailing quote yields its tail, because that is operator text and not a stray.
-# Measured over those 106 citations, one entry each, against one frozen corpus: 33 FAIL before,
-# 31 after, the two that moved are both the multi-line shape, and NO row moved from pass to
-# fail. What this does NOT do is notarize a SECOND quoted segment beside a verified one -- the
-# field has always carried free prose after the quote, so that residue is the grammar's, not
-# this parser's. A conjunction over every segment was built and scored and produced a
-# byte-identical fail set on that corpus.
+# Measured over those 106, one entry each, against one frozen corpus: 33 FAIL before, 31 after,
+# the two that moved are both the multi-line shape, and NO row moved from pass to fail. What
+# this does NOT do is notarize a SECOND quoted segment beside a verified one -- the field has
+# always carried free prose after the quote, so that residue is the grammar's, not this
+# parser's. A conjunction over every segment was built and scored and produced a byte-identical
+# fail set on that corpus.
+#
+# SAY WHICH SET A NUMBER WAS TAKEN OVER, because two right answers differ by a factor here.
+# **106 is what the READER parses** -- the FIRST authorization line of each RESOLVED/OVERRIDDEN
+# entry, which is all `flush()` above ever emits -- taken over the 713 distinct blobs of the
+# reference consumer's `pending.md` and `pending-archive.md`. Every auth line on a terminal
+# entry is 110; every auth line ANYWHERE in those two files is **129, of which 15 are not the
+# clean two-quote shape**. A second hand measured 129 and was right about a different question.
+# The three narrowings were computed in one invocation over one blob set so only the narrowing
+# varies.
+#
+# AND THE POPULATION EXCLUDED THE OTHER TWO READERS' OWN CORPORA, WHICH IS WHERE THE DEFECT IS
+# LIVE. `validate-adversarial-convergence.sh` parses this same field out of
+# `*-resolution-p<N>.md`, and on the reference consumer TODAY that corpus holds 28 citations, 4
+# of them not two-quote. The needle moves on 3, all 24 clean ones are unmoved, and one goes
+# NOMATCH -> MATCH: a genuine `"Route A (Recommended)"` operator answer whose LAST quoted
+# segment is the file quoting its own closure line, so the greedy capture asked the transcript
+# for a sentence the file wrote about itself and reported the operator as a forger.
 cite_segments() { # $1 authline -> one quoted segment per line
   printf '%s\n' "$1" | LC_ALL=C awk '
     { n = split($0, p, /"/)

@@ -46,11 +46,23 @@ to verify is the citation. **Three programs parse this field** -- the escalation
 convergence gate, and the remediation guard's lift arm, where the permissive direction lifts a
 gate deny -- and the predicate is now byte-identical across all three.
 
-**Scored per row over the consumer's own history**, every `Operator authorization:` citation
-ever written on a terminal entry across 878 blobs: 106 distinct citation lines, 98 of them
-single-segment and unaffected. Replayed under both builds against one frozen corpus with a
-`cmp -s` control asserting the builds differ -- **33 FAIL before, 31 after, both movers the
-multi-line shape, and no row moved from pass to fail.**
+**Scored per row over the consumer's own history.** Population, stated by narrowing because
+two right answers differ here: over the 713 distinct blobs of `pending.md` and
+`pending-archive.md`, **106 citations are what the READER parses** -- the first authorization
+line of each RESOLVED/OVERRIDDEN entry, which is all its extractor emits -- 98 of them
+single-segment and unaffected. Every auth line on a terminal entry is 110; every auth line
+anywhere in those files is 129, of which 15 are not the clean two-quote shape. Replayed under
+both builds against one frozen corpus with a `cmp -s` control asserting the builds differ --
+**33 FAIL before, 31 after, both movers the multi-line shape, and no row moved from pass to
+fail.**
+
+**That population excluded the other two readers' own corpora, and that is where the defect is
+live.** `validate-adversarial-convergence.sh` parses the same field out of
+`*-resolution-p<N>.md`, and on the reference consumer today that corpus holds 28 citations, 4
+of them not two-quote. The needle moves on 3, all 24 clean ones are unmoved, and **one goes
+NOMATCH to MATCH**: a genuine `"Route A (Recommended)"` operator answer whose last quoted
+segment is the file quoting its own closure line, so the greedy capture asked the transcript
+for a sentence the file wrote about itself and reported the operator as a forger.
 
 The escalation validator now renders the sibling's own `cite: scanned <N> transcript(s) from
 <corpus>` line into its accusation instead of discarding it, so two runs that disagree are
