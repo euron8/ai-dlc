@@ -13,7 +13,7 @@ BEFORE ACTING:**
    command.** One of those repos is READ ONLY and a write there is the most expensive mistake
    available in this program.
 2. **`### NEXT ACTIONS — numbered, in order`** — what to do, starting at action 1. This is roughly
-   3,000 lines below this block; jump to the heading BY NAME, do not scroll and do not trust
+   3,600 lines below this block; jump to the heading BY NAME, do not scroll and do not trust
    this figure — it is advisory and it has been stale before.
 3. **`### Ping the operator`** — when to stop and report.
 4. **`## Hazards`** and **`### Done when`** — what will bite you, and what finishing looks like.
@@ -108,14 +108,14 @@ ran. The subject came from the standing `PC-S340-*` corpus, ranked by consequenc
 remaining candidates' own status lines were read before ranking** — the thing this block has asked
 for since batch 1.
 
-**THE FIGURES, re-derived AFTER `v0.478.0` MERGED, every command re-run with its controls in the
+**THE FIGURES, re-derived AFTER `v0.479.0` MERGED, every command re-run with its controls in the
 same invocation.** Ledger md5 **`91deb97f…`** — it did not move at any point in this batch, so
 nothing was filed or rotated on the consumer's side. **72 live candidates, 141 archived, 35 cited,
 37 UNFILED.** DISCHARGED **18 raw / 17 corrected**, IN-FLIGHT **18**, UNTOUCHED **37**, overlap
 **1**, TERMINAL **31**. Partition control closes on the raw figure: 18+18+37−1 = 72. Presence
 controls 1/1/1/1; absence controls 0 and 0; discharged-but-unnamed **0**, so the id reached a
-commit MESSAGE and not only the CHANGELOG. `docs/backlog.md` **78 live / 63 archived** against a
-ceiling of 100. **The denominator did not move, and shipping here never moves it** — only a
+commit MESSAGE and not only the CHANGELOG. `docs/backlog.md` **79 live / 63 archived** against a
+ceiling of 100 — `BL-142` was filed by `v0.479.0` and deliberately NOT rotated, so live rose by one. **The denominator did not move, and shipping here never moves it** — only a
 rejection reaching the party holding the candidate does, which happened once, at batch 40.
 
 **THE CONSUMER WROTE WHILE THIS RAN AND THE SWEEP IS UNAFFECTED.** Its dirty count went 8 → 16 on
@@ -144,12 +144,59 @@ INSTALLED `audit-layer-debt.sh` and this distribution's fixed copy, run over tha
 **29 against 19**. So the pull removes **10 false rows the consumer is looking at today** —
 observable, not latent. Report that alongside the gap; it does not authorize anything.
 
-**THE GAP IS SEVEN RELEASES AND PENDING IS 4 — both DERIVED, with controls.** The consumer stamp
-reads `0.471.0`/`31b51d48` on all four fields against a distribution `VERSION` of `0.478.0`.
-PENDING is batch 38's candidate at `v0.472.0`, batch 39's at `v0.474.0`, batch 40's at `v0.476.0`
-and batch 41's at `v0.478.0`, each resolved to the release that FIRST named it, against an
-impossible-id control of 0 and a known-present control of 4. **A PULL IS NOT AUTHORIZED.**
-`operator-rulings.md` governs.
+**`v0.479.0` CORRECTS `v0.478.0`, AND THE CORRECTION IS WHERE THE BATCH'S REAL LESSONS ARE.**
+Two adversarial hands reported AFTER the merge — the fourth and fifth time in this program — and
+converged independently on the same row.
+
+**A MEASURED-SOUNDING CLAIM WAS A JUDGEMENT, AND IT IS WITHDRAWN.** `v0.478.0` recorded "the
+false-acquittal set is EMPTY and enumerated". Eight of the ten acquittals are unarguable denials;
+**two rest on a ROUTING claim rather than on an absence** — the row CONCEDES that work exists and
+asserts it is tracked somewhere this arm never reads, and one of the two names no id at all. `no`
+and `rather than` cannot separate *there is no obligation* from *there is one and I filed it
+elsewhere*. **"Enumerated and empty" is the phrasing of a measurement; this was an adjudication of
+ten rows by one hand.** Say which you did.
+
+**SCORE A PER-OCCURRENCE RULE AT OCCURRENCE GRAIN — a row-grain null hides every misfire that was
+outvoted.** The mechanism runs per cue occurrence; the false-acquittal set was read per ROW, so a
+misfiring discount is invisible unless it denies a row's LAST surviving cue. Re-measured: **41 cue
+occurrences on candidate rows, 13 denied, 11 by `no`, 2 by `rather than`, 0 by `instead of`** — and
+exactly one denial is a genuine misfire, on a clause that DESCRIBES an undeclared obligation. That
+row is still reported, but only by accident.
+
+**CHECKING BEAT ACCEPTING TWICE IN ONE BATCH, AND BOTH HANDS' SPECIFICS FAILED WHILE THEIR
+SUBSTANCE HELD.** One hand reported three misfires; **two of the three are on rows that are not
+candidates at all** — one declares an `owed` dict, one carries `closes_owed` — so the discount
+never evaluates them. Both hands' register line numbers were off by one or two and had to be
+resolved by content. Their TOTALS were exact. **Take a late hand's finding seriously and re-derive
+its particulars; and re-measure it against WHAT SHIPPED** — one hand's headline had already been
+closed by a fix that landed while it worked, so it was scoring a revision that no longer existed.
+
+**A VACUOUS SET MEMBER GETS A SUBJECT, NOT A DELETION.** `instead of` fires on 0 of the 41. It is
+kept, because dropping it would accept `rather than` and refuse its commonest synonym, and the
+fixture now seeds it.
+
+**AN ARM THAT NO MUTANT CAN REACH IS A CHECK THAT CANNOT FIRE, AND THE CELL-MOVEMENT MATRIX IS HOW
+YOU FIND ONE.** The near-miss arm was killed by NOTHING: no mutation of the DISCOUNT can reach a
+seed that carries no negator. Its killer had to mutate the CUE side instead. **Score every arm by
+which mutants move its cell before believing the battery.** Fixture 16 → 32 assertions, 11 mutants,
+11 killed.
+
+**`BL-142` IS FILED, NOT FIXED, AND IS THE SHARPEST THING THE REVIEW TURNED UP.** An append-only
+register can only be corrected by a LATER row, and that row is usually a DISCHARGE row this arm
+exempts — so a formally withdrawn claim is reported forever. Measured verbatim: one row says a
+debt "is therefore left open" and is REPORTED; the same entry twenty minutes later says that
+sentence "was an unverified inference and is withdrawn" and is SKIPPED for carrying `closes_owed`.
+**The two exemptions compose badly and each is right alone.** The schema's `supersedes` cannot
+express it — its own description scopes it to a DIFFERENT verdict, and both rows are
+`still-additive`. Three remedies were built and scored: entry-grain silences 3 of 19 with **2 of
+the 3 wrong**; a retraction token silences exactly 1 of 19 correctly but keys on free prose over a
+5-row corpus; the shape the defect actually has is a schema field, which is a different subsystem.
+
+**THE GAP IS EIGHT RELEASES AND PENDING IS 4.** The consumer stamp reads `0.471.0`/`31b51d48` on
+all four fields against a distribution `VERSION` of `0.479.0`. PENDING stays 4 rather than 5
+because `v0.479.0` corrects `v0.478.0` and carries the SAME candidate id. **A PULL IS NOT
+AUTHORIZED.** `operator-rulings.md` governs: readiness is not authorization, a PENDING count is
+not a decision about WHEN, and a pull is never handed to a peer session.
 
 **THE FIRST HAND WENT IDLE ACROSS TWO DIRECT ASKS AND DELIVERED NOTHING; A SECOND WAS SPAWNED
 RATHER THAN MERGING ON ITS SILENCE.** Every finding in this release — the vacuity of the filed
@@ -208,65 +255,6 @@ has exactly ONE close sentinel, `**ADOPTED UPSTREAM (v<digit>`, and no form for 
 upstream REJECTED as by-design. So the rejection is archived under an annotation claiming upstream
 ADOPTED it, naming `v0.458.0` — the release that REVERTED the very fix it now records as adopted.
 Not the consumer's error and not fixable on their side; both readers are core.
-
-**`v0.479.0` CORRECTS `v0.478.0`, AND THE CORRECTION IS WHERE THE BATCH'S REAL LESSONS ARE.**
-Two adversarial hands reported AFTER the merge — the fourth and fifth time in this program — and
-converged independently on the same row.
-
-**A MEASURED-SOUNDING CLAIM WAS A JUDGEMENT, AND IT IS WITHDRAWN.** `v0.478.0` recorded "the
-false-acquittal set is EMPTY and enumerated". Eight of the ten acquittals are unarguable denials;
-**two rest on a ROUTING claim rather than on an absence** — the row CONCEDES that work exists and
-asserts it is tracked somewhere this arm never reads, and one of the two names no id at all. `no`
-and `rather than` cannot separate *there is no obligation* from *there is one and I filed it
-elsewhere*. **"Enumerated and empty" is the phrasing of a measurement; this was an adjudication of
-ten rows by one hand.** Say which you did.
-
-**SCORE A PER-OCCURRENCE RULE AT OCCURRENCE GRAIN — a row-grain null hides every misfire that was
-outvoted.** The mechanism runs per cue occurrence; the false-acquittal set was read per ROW, so a
-misfiring discount is invisible unless it denies a row's LAST surviving cue. Re-measured: **41 cue
-occurrences on candidate rows, 13 denied, 11 by `no`, 2 by `rather than`, 0 by `instead of`** — and
-exactly one denial is a genuine misfire, on a clause that DESCRIBES an undeclared obligation. That
-row is still reported, but only by accident.
-
-**CHECKING BEAT ACCEPTING TWICE IN ONE BATCH, AND BOTH HANDS' SPECIFICS FAILED WHILE THEIR
-SUBSTANCE HELD.** One hand reported three misfires; **two of the three are on rows that are not
-candidates at all** — one declares an `owed` dict, one carries `closes_owed` — so the discount
-never evaluates them. Both hands' register line numbers were off by one or two and had to be
-resolved by content. Their TOTALS were exact. **Take a late hand's finding seriously and re-derive
-its particulars; and re-measure it against WHAT SHIPPED** — one hand's headline had already been
-closed by a fix that landed while it worked, so it was scoring a revision that no longer existed.
-
-**A VACUOUS SET MEMBER GETS A SUBJECT, NOT A DELETION.** `instead of` fires on 0 of the 41. It is
-kept, because dropping it would accept `rather than` and refuse its commonest synonym, and the
-fixture now seeds it.
-
-**AN ARM THAT NO MUTANT CAN REACH IS A CHECK THAT CANNOT FIRE, AND THE CELL-MOVEMENT MATRIX IS HOW
-YOU FIND ONE.** The near-miss arm was killed by NOTHING: no mutation of the DISCOUNT can reach a
-seed that carries no negator. Its killer had to mutate the CUE side instead. **Score every arm by
-which mutants move its cell before believing the battery.** Fixture 16 → 32 assertions, 11 mutants,
-11 killed.
-
-**`BL-142` IS FILED, NOT FIXED, AND IS THE SHARPEST THING THE REVIEW TURNED UP.** An append-only
-register can only be corrected by a LATER row, and that row is usually a DISCHARGE row this arm
-exempts — so a formally withdrawn claim is reported forever. Measured verbatim: one row says a
-debt "is therefore left open" and is REPORTED; the same entry twenty minutes later says that
-sentence "was an unverified inference and is withdrawn" and is SKIPPED for carrying `closes_owed`.
-**The two exemptions compose badly and each is right alone.** The schema's `supersedes` cannot
-express it — its own description scopes it to a DIFFERENT verdict, and both rows are
-`still-additive`. Three remedies were built and scored: entry-grain silences 3 of 19 with **2 of
-the 3 wrong**; a retraction token silences exactly 1 of 19 correctly but keys on free prose over a
-5-row corpus; the shape the defect actually has is a schema field, which is a different subsystem.
-
-**THE FIGURES, re-derived after `v0.479.0` merged.** Ledger md5 **`91deb97f…`**, unmoved across
-both releases. **72 live, 141 archived, 35 cited, 37 UNFILED.** DISCHARGED **18 raw / 17
-corrected**, IN-FLIGHT **18**, UNTOUCHED **37**, overlap **1**, TERMINAL **31**; partition
-18+18+37−1 = 72; discharged-but-unnamed **0**. `docs/backlog.md` **79 live / 63 archived** against
-a ceiling of 100 — `BL-142` is filed and NOT rotated, so live rose by one.
-
-**THE GAP IS EIGHT RELEASES AND PENDING IS 4.** The consumer stamp reads `0.471.0`/`31b51d48` on
-all four fields against a distribution `VERSION` of `0.479.0`. PENDING stays 4 rather than 5
-because `v0.479.0` corrects `v0.478.0` and carries the SAME candidate id. **A PULL IS NOT
-AUTHORIZED.**
 
 **This block is the current state and it replaces every block below.** Every figure was
 re-derived after **`v0.476.0` merged** — the derive block, the sweep, the delivery gap and the
@@ -3776,6 +3764,17 @@ so no block written before it changes verdict.
 
    **BOTH PULL-FOUND DEFECTS ARE SPENT. DO NOT RE-SCOPE ONTO THEM.** Batch 34 took them and the
    resume block records what they turned out to be. Neither is available.
+
+   **`BL-142` IS THE NEWEST LIVE ENTRY, FILED BY `v0.479.0` AND DELIBERATELY NOT FIXED — read it
+   before you consider it.** An append-only register can only be corrected by a LATER row, and that
+   row is usually a DISCHARGE row `audit-layer-debt.sh` exempts, so a formally withdrawn claim is
+   reported forever. **Three remedies were already built and scored, and the obvious one is
+   REFUTED**: entry-grain silences 3 of 19 with 2 of the 3 wrong; a retraction-token predicate
+   silences exactly 1 of 19 correctly but keys on free prose over a 5-row corpus; the shape the
+   defect actually has is a SCHEMA field for withdrawing a `reason` clause without changing the
+   verdict, which is a different subsystem. Taking it means saying which of those you are doing.
+   It carries no `PC-` id, so under the provenance-first rule it ranks BELOW any PC-backed entry
+   the sweep turns up. Its receipt drives the subject and exits 1 today; run it raw before scoping.
 
    **`BL-137` IS NEW, LIVE, MEASURED, AND CARRIES A WORKING RECEIPT — AND NO SWEEP WILL SURFACE
    IT, BECAUSE IT HAS NO `PC-` ID.** Batch 39 found it while fixing its own regression:
