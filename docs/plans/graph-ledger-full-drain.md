@@ -36,7 +36,122 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 41 SHIPPED AS `v0.478.0`, CORRECTED BY `v0.479.0`, THE CONSUMER PULLED IT, AND THE DENOMINATOR FELL ON A PULL FOR THE FIRST TIME. GAP ZERO, PENDING 0. START AT BATCH 42.
+### BATCH 42 SHIPPED AS `v0.480.0`, CORRECTED TWICE INSIDE ITS OWN RELEASE, MERGED AT `5e3182a9`. GAP 1, PENDING 1. START AT BATCH 43.
+**THE BATCH'S BEST LESSON IS A CLAIM I HAD TO WITHDRAW: ISOLATING A PREDICATE AND READING A
+MOVEMENT ITS OWN CONTROL FLOW NEVER REACHES.** I measured that one live citation in the
+consumer's convergence corpus goes `NOMATCH -> MATCH` under the fix and published it as a LIVE
+false accusation removed. Driving `validate-adversarial-convergence.sh` on that record instead
+of its citation predicate: **both builds exit 1 with byte-identical output**, against a `cmp -s`
+control asserting the builds differ, because **arm A fails first** — the provenance block
+declares no `verdict:` — so F6's citation arm is never reached. The accusation is LATENT there.
+This is the exact mirror of the standing rule that isolating the subject hides a defect in its
+CALLER, and it cost two corrections in one release. **Drive the PROGRAM before calling a
+predicate's movement a behaviour.**
+
+**THE FILED MECHANISM DOES NOT EXIST, AND THE FILING'S OWN PRIMARY SOURCE REFUTES ITS PREMISE.**
+`PC-S340-VALIDATE-ESCALATION-RESOLUTION-NONDETERMINISTIC-ON-BYTE-IDENTICAL-INPUT` asks whether
+the parse "still depends on unordered iteration". It does not: with the transcript corpus frozen
+— a byte copy of the consumer's 176 `*.jsonl` — ten consecutive runs of the shipping script over
+one `pending.md` returned an identical verdict ten times. **An adversarial hand then went one
+level better than my corpus-liveness explanation.** The `pending.md` that produced the five
+flapping runs is **NOT REACHABLE**: the filing names its `shasum`, and a content-SHA-1 scan of
+all 1989 blobs in the size band returns 0 matches against a control of exactly 1 on a known
+digest, no `pending.md` blob carries the citation shape, and `git fsck` surfaces no dangling
+blob. What IS reachable is the primary source,
+`_bmad-output/gate-adjudication/implementation-20260831T144441Z.verdict.json`, and it records
+the SAME check-9 entry with two DIFFERENT extracted substrings — a zero-quote line and a
+three-quote line. Extraction is deterministic and runs before any corpus byte is read, so one
+byte sequence cannot yield both: **the "shasum unchanged" observation is the claim that has to
+be wrong.** The live corpus is also append-only (12 samples over 60s, 176 files constant, 3
+size increases, 0 decreases), so a growing corpus is monotone under `--cite` and cannot produce
+a non-monotone flap either. **Read a filing's primary source, not its ledger paraphrase** — that
+paraphrase calls the second malformed citation a `" / "`-separated triple-quote citation, where
+the validator actually reported capturing the SEPARATOR ITSELF, `' / '`, three characters.
+
+**THE DETERMINISTIC DEFECT WAS THE CAPTURE, AND ITS SECOND DIRECTION WAS FAIL-OPEN.**
+`sed -n 's/.*"\(.*\)".*/\1/p'` leads with a greedy `.*`, so the LAST quoted segment of the
+`Operator authorization:` field won. Same two quotes, order swapped, shipping script, one frozen
+corpus: `"<genuine>" / "<invented>"` was refused as the S290 fabrication, and
+`"<invented>" / "<genuine>"` was ACCEPTED. On an odd quote count the capture is the CONNECTIVE
+between two quotes — the consumer's own `"1. RETIRE" and "This work was already done in`
+captured ` and `, five characters. Single-segment controls do not move in either direction.
+
+**THREE PROGRAMS PARSE THAT FIELD AND ALL THREE ARE FIXED, BOUND BY `I103`.** The escalation
+gate, the convergence gate, and `ai-dlc-gate-remediation-guard.sh`'s LIFT ARM 9 — where the
+permissive direction LIFTS a gate deny and no human is in the loop. **Two independent hands
+drove the shipping hook end to end and produced the same table**: on the branch build
+`"<forged>" / "<genuine>"` DENIES where it used to lift, `"<genuine>" / "<forged>"` LIFTS where
+it used to deny, a lone genuine citation still lifts, and a missing authorization file still
+denies. **That hook has no non-zero exit path at all** — 21 `exit 0`, no `set -e` — so its
+verdict lives in the stdout JSON and the continuation log, and scoring it by `$?` reads LIFT and
+DENY as the same thing.
+
+**AND REPAIRING THE MULTI-LINE SHAPE LOWERS THAT HOOK'S EVIDENCE FLOOR, WHICH IS STATED RATHER
+THAN HIDDEN.** An unterminated citation used to fail CLOSED at the guard because the fallback
+kept the opening `"` in the needle; it now lifts on the first verified prefix. The prefix is
+still notarized against the transcript, so nothing unsaid lifts — but the floor is "the first
+run of operator words at least twelve characters long", not the whole citation.
+
+**SAY WHICH SET A NUMBER WAS TAKEN OVER: TWO RIGHT ANSWERS DIFFERED BY 23 HERE.** A hand
+measured 129 distinct citation lines where I measured 106, and neither of us was wrong.
+Computed in one invocation over one blob set so only the narrowing varies: **106 is what the
+READER parses** (the first auth line of each `RESOLVED`/`OVERRIDDEN` entry), **110** is every
+auth line on a terminal entry, **129** is every auth line anywhere in the two files — 15 of
+those not the clean two-quote shape. The hand attributed all 23 of the difference (19 non-terminal
+statuses, 4 second-or-later lines in one entry) and withdrew its own "your corpus was undersized"
+framing. **My `878 blobs` was separately wrong and stays worth remembering**: it was a
+commit-row SUM that double-counts, where the union is 834 commits and the distinct blob count is
+**713**.
+
+**BOTH HANDS DELIVERED THIS TIME, BOTH WERE RIGHT ON SUBSTANCE, AND BOTH NEEDED THEIR
+PARTICULARS RE-DERIVED.** That is now the fifth batch running. One hand spent 32 reps driving my
+UNCOMMITTED working tree and caught it itself, from two of its own measurements disagreeing —
+**dispatching a hand against a tree you are editing is the lead's error, not the hand's.** Every
+payload truncated at ~16000 characters; ask for the tail by name. Two of the three went idle
+without delivering and delivered in full on a second, narrower ask.
+
+**A GREEN GATE IS NOT A LANDED PUSH, MEASURED AGAIN.** One push printed
+`pre-push: all gates green` and then exited **128** on `Read from remote host github.com: Can't
+assign requested address` — a transport failure after the gate — while the backgrounded wrapper
+reported exit 0. The remote ref had not moved. **Confirm the ref equals local HEAD; never read a
+wrapper's exit.**
+
+**THE FIGURES, re-derived after the merge by running the derive block.** Ledger md5
+**`a79811f7…`** (unmoved all batch). **71 live, 142 archived, 39 cited, 32 UNFILED.** DISCHARGED
+**18 raw / 17 corrected**, IN-FLIGHT **22**, UNTOUCHED **32**, overlap **1**, TERMINAL **32**;
+partition 18+22+32−1 = 71. `docs/backlog.md` **80 live / 64 archived**. Consumer dirty count 2,
+observed and never a gate. `CITED` rose 38 → 39 and `UNFILED` fell 33 → 32 because `BL-144`
+cites this batch's own candidate — that is this repo's writing, not consumer activity.
+
+**THE SECOND TEST RETURNED A NULL ON BOTH CORPORA, FOR TWO DIFFERENT REASONS, AND THAT IS THE
+HONEST READING.** `pending.md`: installed and distribution copies produce byte-identical output
+at sprints 307 and 308, with a `cmp -s` control asserting the binaries differ. The convergence
+corpus: the one record carrying the defect's shape is refused upstream of the citation arm.
+**So the pull's case rests on the fail-open half, which is silent by construction and has no
+warning shot.** BANK IT.
+
+**THE PULL IS NOT AUTHORIZED.** `operator-rulings.md` governs unchanged: operator-initiated,
+readiness is not authorization, a `PENDING` count is not a decision about WHEN, and one is never
+handed to a peer session.
+
+**BATCH 42's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW IT.**
+`PC-S340-VALIDATE-ESCALATION-RESOLUTION-NONDETERMINISTIC-ON-BYTE-IDENTICAL-INPUT` shipped as
+`v0.480.0` and is cited by `BL-144` in `docs/backlog.archive.md`, so it reads DISCHARGED rather
+than UNFILED — but it stays live in the consumer's ledger until they pull. Do not re-scope onto
+it. Its stated limit: a second quoted segment beside a verified one is not itself notarized. A
+conjunction over every segment was built and scored, produces a byte-identical fail set on the
+106, and still refuses a genuine citation followed by other text — it is a different policy, not
+a second spelling.
+
+**THREE REMAIN UNFILED IN THE STANDING `PC-S340-*` CORPUS**, with why each was passed over.
+`RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-PASSES-ON-RETRY` — `verify: manual` because the defect
+IS intermittency; compute the predicted count before reading any clean sweep as a refutation.
+`CHECK-26-READS-A-PARTIAL-RE-VERIFY-VERDICT-FILE-AS-UNADJUDICATED` needs a new script AND a
+`_gate-procedures.md` change, so say which you are closing.
+`AUDIT-RULE-FILES-DRIFT-FINDINGS-IN-CORE-PROSE-ARE-NOT-CONSUMER-FIXABLE` is 33 findings across
+fourteen files, a per-file prose judgement — not one subject as it stands.
+
+### BATCH 41 SHIPPED AS `v0.478.0`, CORRECTED BY `v0.479.0`, THE CONSUMER PULLED IT. BATCH 42 HAS SINCE RUN; TAKE THE STATE FROM THE BLOCK ABOVE, NOT FROM THIS HEADING.
 **THE FILED REMEDY WAS REFUTED BY BUILDING IT, AND THE REFUTATION IS THE BATCH'S REUSABLE
 LESSON.** `PC-S340-UNDECLARED-CUE-CANNOT-TELL-A-REFERENCE-FROM-A-DECLARATION` asked
 `audit-layer-debt.sh` to skip a row whose cue occurrences all sit INSIDE a resolvable
@@ -3689,8 +3804,19 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 42's
-   SUBJECT.** Batch 41 is merged as `v0.478.0`. Number yours 42.
+1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 43's
+   SUBJECT.** Batch 42 is merged as `v0.480.0` at `5e3182a9`. Number yours 43.
+
+   **BATCH 42's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW IT.**
+   `PC-S340-VALIDATE-ESCALATION-RESOLUTION-NONDETERMINISTIC-ON-BYTE-IDENTICAL-INPUT` shipped as
+   `v0.480.0` and is cited by `BL-144`. Do not re-scope onto it. **Its filing was wrong about
+   its own mechanism AND about its own premise** — read the resume block before you trust any
+   filing's description of what it observed.
+
+   **DRIVE THE PROGRAM, NOT THE PREDICATE, BEFORE CALLING A MOVEMENT A BEHAVIOUR.** Batch 42
+   published a live false accusation removed, on a citation whose `--cite` verdict really does
+   move; driving the validator showed an earlier arm refuses that record, so the citation arm is
+   never reached. Two corrections in one release.
 
    **BATCH 41's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW IT.**
    `PC-S340-UNDECLARED-CUE-CANNOT-TELL-A-REFERENCE-FROM-A-DECLARATION` shipped as `v0.478.0` and is
@@ -3728,9 +3854,9 @@ so no block written before it changes verdict.
    interrupt; if you genuinely need to ask, ask the OPERATOR whether to, and put the peer's current
    state into the question.
 
-   **THE GAP IS ZERO AND PENDING IS 0** — the consumer pulled `0.471.0 → 0.479.0` and its stamp
-   reads `0.479.0`/`7dd68c34` on all four fields, matching this distribution. **Your batch will
-   reopen the gap at one release, which is expected and is not a reason to reorder anything.**
+   **THE GAP IS ONE RELEASE AND PENDING IS 1** — the consumer's stamp reads `0.479.0` against a
+   distribution `VERSION` of `0.480.0`, and the one pending candidate is batch 42's.
+   **Your batch will widen the gap, which is expected and is not a reason to reorder anything.**
    Re-derive both; a zero gap is a state, not a property. That is
    not permission to close it: a pull is operator-initiated, readiness is not authorization, a
    `PENDING` count is not a decision about WHEN, and one is never handed to a peer session.
@@ -4068,12 +4194,12 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # a79811f7... after the pull AND the rotation; a MOVE alone is NOT an alarm -- check the id set too
+   md5 -q "$L"              # a79811f7... unmoved across batches 41 and 42; a MOVE alone is NOT an alarm -- check the id set too
    wc -l < /tmp/live.txt    # 71
-   wc -l < /tmp/unfiled.txt # 33 -- BL-140 and BL-143 cite FOUR live ids as evidence, moving them to CITED
+   wc -l < /tmp/unfiled.txt # 32 -- BL-144 cites this batch's own candidate, moving it to CITED
    ```
 
-   **THE BASELINE IS 71 LIVE CANDIDATES, 38 CITED, 33 UNFILED.** Live FELL for the first time in
+   **THE BASELINE IS 71 LIVE CANDIDATES, 39 CITED, 32 UNFILED.** Live FELL for the first time in
    this program: the operator carried the `IS-CORE` rejection into a graph session and that session
    rotated it together with `PC-S308-STEP1A-ROTATE-REMEDY-NO-SPRINT-START-DESTINATION`, which had
    been delivered at `v0.471.0` and stayed live only because the pull did not rotate it. **A
