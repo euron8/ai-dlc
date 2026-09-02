@@ -769,6 +769,42 @@ steer_dir_has_transcript() { # $1 dir -> 0 if it holds a readable *.jsonl
   return 1
 }
 
+# THE CITED SUBSTRING IS A FIELD, NOT A LINE. The capture here was
+# `sed -n 's/.*"\(.*\)".*/\1/p'`, whose leading `.*` is GREEDY, so on a field carrying more
+# than one quoted segment it took the LAST one and on an odd quote count it took the
+# CONNECTIVE BETWEEN two of them. Both directions are wrong and the second is fail-OPEN: an
+# invented operator disposition verified whenever any genuine operator substring trailed it.
+# These two are byte-identical in `validate-escalation-resolution.sh` and
+# `core/hooks/ai-dlc-gate-remediation-guard.sh`, the other two readers of this same field;
+# invariant I93 holds the three to one text and refuses a fourth. Read that file's header for
+# the measurement.
+cite_segments() { # $1 authline -> one quoted segment per line
+  printf '%s\n' "$1" | LC_ALL=C awk '
+    { n = split($0, p, /"/)
+      # split on `"` yields quotecount+1 fields, and the inside-quote ones are the EVEN
+      # indices. An odd quote count leaves the final field unterminated; it is even-indexed
+      # too, so one loop covers both shapes.
+      for (i = 2; i <= n; i += 2) if (p[i] != "") print p[i] }'
+}
+
+cite_quote() { # $1 authline
+  _cq_segs="$(cite_segments "$1")"
+  [ -n "$_cq_segs" ] || _cq_segs="$(printf '%s' "${1#*|}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  _cq_pick=""
+  _cq_long=""
+  while IFS= read -r _cq_seg; do
+    [ "${#_cq_seg}" -gt "${#_cq_long}" ] && _cq_long="$_cq_seg"
+    [ "${#_cq_seg}" -ge 12 ] || continue
+    [ -n "$_cq_pick" ] || _cq_pick="$_cq_seg"
+  done <<CITEEOF
+$_cq_segs
+CITEEOF
+  # Nothing verifiable. Name the LONGEST segment anyway, so the "too short" message quotes
+  # something the reader can find in the file instead of a fragment between two quotes.
+  [ -n "$_cq_pick" ] || _cq_pick="$_cq_long"
+  printf '%s' "$_cq_pick"
+}
+
 validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -> 0 ok, 1 bad
   local rec="$1" div="$2" idx="$3"
   local resolves kind sha_b sha_a b_b b_a delta auth arch i
@@ -923,9 +959,7 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
       words: operator_authorization: <ISO-8601 UTC ts> | \"<verbatim substring, >=12 chars>\""
     return 1
   fi
-  auth_quote="$(printf '%s' "$auth" | sed -n 's/.*"\(.*\)".*/\1/p')"
-  # No double-quotes: take everything after the first '|', trimmed.
-  [ -z "$auth_quote" ] && auth_quote="$(printf '%s' "${auth#*|}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  auth_quote="$(cite_quote "$auth")"
   if [ "${#auth_quote}" -lt 12 ]; then
     F_WHY="$rec operator_authorization quotes '${auth_quote}', too short (>=12 chars) to be a
       verifiable citation. Quote a real span of the operator's message, not a token."

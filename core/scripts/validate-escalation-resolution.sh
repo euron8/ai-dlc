@@ -105,6 +105,61 @@ steer_dir_has_transcript() { # $1 dir -> 0 if it holds a readable *.jsonl
   return 1
 }
 
+# THE CITED SUBSTRING IS A FIELD, NOT A LINE, AND A GREEDY REGEX READS THE WRONG HALF OF IT.
+# This used to be `sed -n 's/.*"\(.*\)".*/\1/p'`, whose leading `.*` is GREEDY, so the capture
+# is whatever sits between the LAST opening quote and the last quote on the line. Both of its
+# failure directions are wrong and the second is a bypass of the fabrication this script exists
+# to stop. Measured with this script against one frozen transcript corpus, the same two quotes
+# with only their ORDER swapped:
+#     "<genuine operator words>" / "<invented>"  -> exit 1, accusing the lead of S290
+#     "<invented>" / "<genuine operator words>"  -> exit 0, ACCEPTED
+# so an invented operator disposition notarized whenever any genuine operator substring trailed
+# it. On an ODD quote count the capture is the CONNECTIVE BETWEEN two quotes: the reference
+# consumer's own `"1. RETIRE" and "This work was already done in` captured ` and `, five
+# characters, and failed as "too short" while naming none of the operator's words.
+#
+# A citation is also routinely MULTI-LINE -- the producing awk is line-oriented, so the closing
+# quote sits on a line it never reads -- and the old fallback then kept the opening `"` inside
+# the needle, which no operator message contains. Six of the reference consumer's 106 distinct
+# citations are that shape.
+#
+# So: read the field as SEGMENTS. The first segment long enough to verify is the citation; an
+# unterminated trailing quote yields its tail, because that is operator text and not a stray.
+# Measured over those 106 citations, one entry each, against one frozen corpus: 33 FAIL before,
+# 31 after, the two that moved are both the multi-line shape, and NO row moved from pass to
+# fail. What this does NOT do is notarize a SECOND quoted segment beside a verified one -- the
+# field has always carried free prose after the quote, so that residue is the grammar's, not
+# this parser's. A conjunction over every segment was built and scored and produced a
+# byte-identical fail set on that corpus.
+cite_segments() { # $1 authline -> one quoted segment per line
+  printf '%s\n' "$1" | LC_ALL=C awk '
+    { n = split($0, p, /"/)
+      # split on `"` yields quotecount+1 fields, and the inside-quote ones are the EVEN
+      # indices. An odd quote count leaves the final field unterminated; it is even-indexed
+      # too, so one loop covers both shapes.
+      for (i = 2; i <= n; i += 2) if (p[i] != "") print p[i] }'
+}
+
+# The first segment long enough to be verifiable, or empty. Callers fall back to the whole
+# post-`|` remainder, which is what a citation carrying no quote at all leaves them.
+cite_quote() { # $1 authline
+  _cq_segs="$(cite_segments "$1")"
+  [ -n "$_cq_segs" ] || _cq_segs="$(printf '%s' "${1#*|}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  _cq_pick=""
+  _cq_long=""
+  while IFS= read -r _cq_seg; do
+    [ "${#_cq_seg}" -gt "${#_cq_long}" ] && _cq_long="$_cq_seg"
+    [ "${#_cq_seg}" -ge 12 ] || continue
+    [ -n "$_cq_pick" ] || _cq_pick="$_cq_seg"
+  done <<CITEEOF
+$_cq_segs
+CITEEOF
+  # Nothing verifiable. Name the LONGEST segment anyway, so the "too short" message quotes
+  # something the reader can find in the file instead of a fragment between two quotes.
+  [ -n "$_cq_pick" ] || _cq_pick="$_cq_long"
+  printf '%s' "$_cq_pick"
+}
+
 ESCALATIONS=""
 SPRINT=""
 TRANSCRIPT=""
@@ -205,8 +260,7 @@ if [ "$ANY_AUTHORIZED" -eq 1 ]; then
     TERMINAL=$((TERMINAL + 1))
     [ "$authline" = "__MISSING__" ] && continue
     [ -n "$authline" ] || continue
-    quote="$(printf '%s' "$authline" | sed -n 's/.*"\(.*\)".*/\1/p')"
-    [ -z "$quote" ] && quote="$(printf '%s' "${authline#*|}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+    quote="$(cite_quote "$authline")"
     [ "${#quote}" -lt 12 ] && continue
     AUTHORIZED=$((AUTHORIZED + 1))
     [ -n "$FIRST" ] || FIRST="$(printf '%s' "$header" | sed -E 's/^#+ //' | cut -c1-72)"
@@ -246,8 +300,7 @@ while IFS="$(printf '\t')" read -r header status authline; do
     FAIL=1; FAILN=$((FAILN + 1)); continue
   fi
 
-  quote="$(printf '%s' "$authline" | sed -n 's/.*"\(.*\)".*/\1/p')"
-  [ -z "$quote" ] && quote="$(printf '%s' "${authline#*|}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  quote="$(cite_quote "$authline")"
   if [ "${#quote}" -lt 12 ]; then
     echo "FAIL: [$short] operator authorization quotes '${quote}', too short (>=12 chars) to verify." >&2
     FAIL=1; FAILN=$((FAILN + 1)); continue
@@ -277,7 +330,16 @@ while IFS="$(printf '\t')" read -r header status authline; do
     FAIL=1; FAILN=$((FAILN + 1)); continue
   fi
 
-  bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$quote" --quiet >/dev/null 2>&1
+  # CAPTURE THE SIBLING'S OWN CORPUS REPORT; DO NOT RESTATE IT. It prints
+  # `cite: scanned <N> transcript(s) from <corpus>`, which is the only line in this system that
+  # says WHICH corpus state a verdict came from. This caller used to discard it, and that is
+  # half of PC-S340-VALIDATE-ESCALATION-RESOLUTION-NONDETERMINISTIC-ON-BYTE-IDENTICAL-INPUT:
+  # a transcript directory is LIVE -- measured, its listing digest moved four times across ten
+  # runs while the session writing it was merely idle -- so two runs over a byte-identical
+  # pending.md are two runs over two different corpora, and nothing in the output said so.
+  # `2>&1 >/dev/null` in THAT order sends the sibling's stderr to the capture and its stdout
+  # to the bin.
+  CITE_REPORT="$(bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$quote" --quiet 2>&1 >/dev/null)"
   rc=$?
   if [ "$rc" -eq 2 ]; then
     # NAME THE CORPUS THAT WAS SEARCHED. The sibling prints its own corpus identity and this
@@ -286,6 +348,7 @@ while IFS="$(printf '\t')" read -r header status authline; do
     echo "FAIL: [$short] operator authorization quotes \"${quote}\", which appears in NO genuine" >&2
     echo "      operator message in the transcript searched (${STEER_ARG}). A lead-authored" >&2
     echo "      'operator disposition' is not an operator adjudication. This is the S290 failure." >&2
+    [ -n "$CITE_REPORT" ] && printf '      %s\n' "$CITE_REPORT" >&2
     FAIL=1; FAILN=$((FAILN + 1)); continue
   elif [ "$rc" -ne 0 ]; then
     echo "FAIL: [$short] operator authorization could not be verified (validator rc=$rc)." >&2

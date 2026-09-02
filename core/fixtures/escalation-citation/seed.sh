@@ -95,4 +95,34 @@ printf 'not a transcript\n'           > "$ROOT/dir-sidecar/README.md"
 printf '{"note":"summary sidecar"}\n' > "$ROOT/dir-sidecar/summary.json"
 printf 'session-abc123\n'             > "$ROOT/dir-sidecar/.session-id"
 
+# --- the citation is a FIELD, and a line-oriented greedy regex read the wrong half of it ------
+# Every shape below is one the reference consumer actually wrote. Measured over the 106 distinct
+# `Operator authorization:` citations in the whole history of its `pending.md` and
+# `pending-archive.md`: 98 carry exactly one quoted segment and are unaffected by any of this;
+# 8 do not, and those 8 are the population these four entries stand in for.
+#
+# The two ORDER seeds are one property from each other -- same two quoted segments, swapped --
+# because the pre-fix extractor took the LAST one. That made a genuine citation with anything
+# after it a reported S290 fabrication, and made an INVENTED disposition pass whenever a real
+# operator substring trailed it. `pending-real.md` and `pending-fabricated.md` above are the
+# near-miss twins: one quoted segment each, and neither verdict may move.
+CITE_ORDER_GOOD_FIRST='2026-07-12T03:00:00Z | "reframe the AC as a class invariant" / "zzz no operator ever typed this phrase zzz"'
+CITE_ORDER_GOOD_LAST='2026-07-12T03:00:00Z | "zzz no operator ever typed this phrase zzz" / "reframe the AC as a class invariant"'
+
+# An ODD quote count: the capture used to be the CONNECTIVE BETWEEN two quotes. The consumer's
+# own `"1. RETIRE" and "This work was already done in` yielded ` and `, five characters, and
+# failed as "too short" naming none of the operator's words.
+CITE_CONNECTIVE='2026-07-12T03:00:00Z | "1. RETIRE" and "reframe the AC as a class invariant'
+
+# A citation that continues on the NEXT line. The producing awk is line-oriented, so the closing
+# quote is on a line it never reads; the old fallback then kept the opening `"` inside the
+# needle, and no operator message contains that character there. This one also carries no `|`,
+# which is the shape that made the fallback return the whole label line.
+CITE_UNTERMINATED='2026-07-12T03:00:00Z, this session, verbatim: "reframe the AC as a class invariant'
+
+: > "$ROOT/pending-order-good-first.md"; entry "$ROOT/pending-order-good-first.md" S50-ITEM-8  RESOLVED "$CITE_ORDER_GOOD_FIRST"
+: > "$ROOT/pending-order-good-last.md";  entry "$ROOT/pending-order-good-last.md"  S50-ITEM-9  RESOLVED "$CITE_ORDER_GOOD_LAST"
+: > "$ROOT/pending-connective.md";       entry "$ROOT/pending-connective.md"       S50-ITEM-10 RESOLVED "$CITE_CONNECTIVE"
+: > "$ROOT/pending-unterminated.md";     entry "$ROOT/pending-unterminated.md"     S50-ITEM-11 RESOLVED "$CITE_UNTERMINATED"
+
 printf '%s\n' "$ROOT"

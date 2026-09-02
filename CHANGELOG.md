@@ -15,6 +15,66 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.480.0] - 2026-09-02
+
+### The operator-citation parser was greedy, so which quoted segment wins was decided by position
+
+Discharges `PC-S340-VALIDATE-ESCALATION-RESOLUTION-NONDETERMINISTIC-ON-BYTE-IDENTICAL-INPUT`,
+filed by the reference consumer against sprint 307. **Its stated mechanism is refuted and its
+symptom is real.**
+
+**The filing asks whether the parse "still depends on unordered iteration". It does not.** With
+the transcript corpus frozen -- a byte copy of the consumer's 176 `*.jsonl` -- ten consecutive
+runs of the shipping script over one `pending.md` returned an identical verdict ten times. The
+live corpus's listing digest moved four times across those ten runs while the peer session
+writing it was merely idle. `pending.md` was byte-identical; the second input was not, and
+nothing in the output said which corpus state produced a verdict.
+
+**The deterministic defect is the capture.** The extractor led with a greedy `.*`, so the LAST
+quoted segment of the `Operator authorization:` field won. Measured with the shipping script,
+the same two quotes with only their order swapped: a genuine citation followed by anything was
+refused as the S290 fabrication, and **an invented operator disposition was ACCEPTED whenever
+any genuine operator substring trailed it** -- the fail-open direction, and the exact
+fabrication the script exists to stop. On an odd quote count the capture was the connective
+between two quotes: the consumer's own `"1. RETIRE" and "This work was already done in` captured
+` and `, five characters. A citation whose closing quote sits on the next line kept the opening
+double quote inside the needle.
+
+`cite_segments()` and `cite_quote()` replace it: the field is read as segments, an unterminated
+trailing segment is the operator's text rather than a stray, and the first segment long enough
+to verify is the citation. **Three programs parse this field** -- the escalation gate, the
+convergence gate, and the remediation guard's lift arm, where the permissive direction lifts a
+gate deny -- and the predicate is now byte-identical across all three.
+
+**Scored per row over the consumer's own history**, every `Operator authorization:` citation
+ever written on a terminal entry across 878 blobs: 106 distinct citation lines, 98 of them
+single-segment and unaffected. Replayed under both builds against one frozen corpus with a
+`cmp -s` control asserting the builds differ -- **33 FAIL before, 31 after, both movers the
+multi-line shape, and no row moved from pass to fail.**
+
+The escalation validator now renders the sibling's own `cite: scanned <N> transcript(s) from
+<corpus>` line into its accusation instead of discarding it, so two runs that disagree are
+visibly two runs over two corpora.
+
+### Added
+
+- **I103** in `scripts/validate-enforcement-map.sh` -- holds `cite_segments()` and
+  `cite_quote()` byte-identical across the three programs that parse the operator-citation
+  field, and refuses a fourth copy. Mirrors I92 over the same three sites, for the same
+  install-layout reason. Proved able to fire in both directions before shipping: a seeded
+  one-character drift in one copy and a seeded fourth file each produce a finding, against an
+  unmutated control that is silent.
+- `core/fixtures/escalation-citation` grows arms (p)-(t) and mutants Q, U and V -- 54
+  assertions, 12 kills. The two order arms are one property apart, and the single-segment
+  near-miss twins must not move under either mutant.
+
+### Fixed
+
+- `core/scripts/validate-escalation-resolution.sh`,
+  `core/scripts/validate-adversarial-convergence.sh` and
+  `core/hooks/ai-dlc-gate-remediation-guard.sh` -- the greedy citation capture, at all three
+  sites.
+
 ## [0.479.0] - 2026-09-02
 
 ### `v0.478.0` claimed an empty false-acquittal set, and two hands showed it was a judgement

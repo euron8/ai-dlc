@@ -119,3 +119,4 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I100 | no step file prescribes a BARE `git push` |
 | I101 | the adversarial exit ceiling is ONE number, in the enforcer and in the role |
 | I102 | a rotation destination is spelled the grammar's way, never as a dated archive |
+| I103 | the operator-citation PARSER is one rule in three copies, byte-identical |

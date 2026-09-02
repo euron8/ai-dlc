@@ -7657,6 +7657,150 @@ EOF
   fi
 fi
 
+# --- I103: the operator-citation PARSER is one rule in three copies, byte-identical ---
+# WHAT IT BINDS. `cite_segments()` and `cite_quote()` read the one field that decides whether a
+# HARD_BLOCK was adjudicated by the operator or by the lead claiming to be one:
+# `<ISO ts> | "<verbatim substring of the operator's message>"`. Three programs parse it -- the
+# escalation gate, the convergence gate, and the remediation guard's lift arm -- and all three
+# feed the result to the SAME `--cite` predicate, so a fork in the parse is a fork in the answer
+# with no other evidence to catch it. On the guard the fail-open direction LIFTS a gate deny.
+#
+# WHY IT IS ONE RULE AND NOT THREE. The parse used to be `sed -n 's/.*"\(.*\)".*/\1/p'`, whose
+# leading `.*` is GREEDY: the LAST quoted segment won, and on an odd quote count the capture was
+# the CONNECTIVE BETWEEN two quotes. The repair is one predicate written into three files, and
+# three copies are three chances for the guard to lift what a validator would refuse.
+#
+# COPIES RATHER THAN A SHARED SOURCE, for I92's reason exactly: install.sh splits `core/scripts/`
+# from `core/hooks/`, I33 fails the build on locating one core file by walking up from another,
+# and a hook that sources a missing helper fails OPEN. This arm is what makes the duplication
+# safe, and it is a SECOND subject over I92's three sites rather than a widening of I92 -- the
+# two predicates answer different questions and their remedies read differently, so folding them
+# would cost the specific remedy text that makes either finding actionable.
+#
+# NOT A VOCABULARY, so no `# vocabulary:` marker: the subject is an executable predicate's BODY,
+# not an enumerated membership a second reader restates.
+#
+# THE FOURTH-COPY HALF AND ITS FALSE-POSITIVE SET. Byte-equality across three hand-written paths
+# cannot see a fourth copy in a fourth file, so the site list is DERIVED as well as declared.
+# Measured over the real tree, the only hits outside the three declared sites are this file and
+# the mutation battery under core/fixtures/ that seeds a REVERT of this repair and therefore has
+# to name what it reverts. Both are excluded by DIRECTORY rather than by name, for the reason
+# I92 records: a per-file exemption list goes stale the release somebody adds a battery.
+i103_needles='cite_segments
+cite_quote'
+i103_declared='core/scripts/validate-adversarial-convergence.sh
+core/scripts/validate-escalation-resolution.sh
+core/hooks/ai-dlc-gate-remediation-guard.sh'
+
+# The same extractor I25, I40 and I92 use: a function body is the line range between its
+# opening line at column 0 and the matching closing brace at column 0.
+i103_body() { awk "/^$2\(\) \{/,/^\}/" "$1" 2>/dev/null; }
+# ONE scan for BOTH needles. Two recursive greps over core/ and scripts/ is a cost the suite
+# pole pays on every shard, and the union answers the same question.
+i103_sites() { i103_re="$1"; shift; grep -rlE -- "$i103_re" "$@" 2>/dev/null; }
+
+# THE PROBE, RUN BEFORE THE CORPUS. Both halves are absence-shaped -- a body that no longer
+# extracts compares empty-to-empty and reports agreement, and a scan that no longer matches
+# reports no fourth copy -- and both silences read exactly like a conforming tree. So the two
+# functions above are driven first over a tree with one right answer, in BOTH directions: a
+# seeded offender must be reported and a seeded near-miss must not.
+i103_probe_dir="$(mktemp -d "${TMPDIR:-/tmp}/i103-XXXXXX")"
+mkdir -p "$i103_probe_dir/t"
+#  a  the reference bodies, both needles in one file, as the real sites carry them.
+printf 'lead=1\ncite_segments() { # note\n  f "$1"\n}\ncite_quote() { # note\n  g "$1"\n}\ntail=2\n' > "$i103_probe_dir/t/a.sh"
+#  b  NEAR-MISS for the equality half: identical bodies, different surrounding text. Must
+#     compare EQUAL, or the arm reports drift on every file that is not a copy of its neighbour.
+printf 'other=9\ncite_segments() { # note\n  f "$1"\n}\ncite_quote() { # note\n  g "$1"\n}\nmore=0\n' > "$i103_probe_dir/t/b.sh"
+#  c  DRIFT in the SECOND needle only. Must compare UNEQUAL -- an arm that checked only the
+#     first needle would call this file conforming, and the pick is the half that forked.
+printf 'cite_segments() { # note\n  f "$1"\n}\ncite_quote() { # note\n  g "$2"\n}\n' > "$i103_probe_dir/t/c.sh"
+#  d  no definition at all. Extraction must be EMPTY -- an extractor that invents a body here
+#     would compare two inventions and call them equal.
+printf 'unrelated_helper() {\n  :\n}\n' > "$i103_probe_dir/t/d.sh"
+#  e  a FOURTH SITE that MENTIONS a needle without defining it. The scan must SEE it: a copy
+#     arrives as a mention before it arrives as a definition.
+printf '# routes through cite_quote\n' > "$i103_probe_dir/t/e.sh"
+#  f  NEAR-MISS for the scan half: a differently-named helper in the same family. Must stay
+#     quiet, or the scan flags files for resembling the subject rather than carrying it.
+printf 'cite_quoted_span() { :; }\ncite_segment_of() { :; }\n' > "$i103_probe_dir/t/f.sh"
+i103_score=0
+i103_pa_s="$(i103_body "$i103_probe_dir/t/a.sh" cite_segments)"
+i103_pa_q="$(i103_body "$i103_probe_dir/t/a.sh" cite_quote)"
+i103_pb_q="$(i103_body "$i103_probe_dir/t/b.sh" cite_quote)"
+i103_pc_s="$(i103_body "$i103_probe_dir/t/c.sh" cite_segments)"
+i103_pc_q="$(i103_body "$i103_probe_dir/t/c.sh" cite_quote)"
+i103_pd_q="$(i103_body "$i103_probe_dir/t/d.sh" cite_quote)"
+# The scan grammar is the one the corpus half uses, word-bounded so `cite_quoted_span` and
+# `cite_segment_of` are not members. `\b` is a GNU extension BSD grep does not honour, so the
+# boundary is spelled as a bracket class. THE `|$` ALTERNATIVE IS LOAD-BEARING and the probe is
+# what found that: a mention that ENDS the line -- which is what a prose citation of the helper
+# looks like -- has no character after the name at all, so a bracket class alone scored the
+# seeded fourth site as a non-instance and the fourth-copy half went quiet.
+i103_re='(cite_segments|cite_quote)([^A-Za-z0-9_]|$)'
+i103_pm="$(i103_sites "$i103_re" "$i103_probe_dir/t" | LC_ALL=C sort)"
+i103_pm_want="$i103_probe_dir/t/a.sh
+$i103_probe_dir/t/b.sh
+$i103_probe_dir/t/c.sh
+$i103_probe_dir/t/e.sh"
+[ -n "$i103_pa_s" ] && [ -n "$i103_pa_q" ] || i103_score=$((i103_score + 1))
+[ "$i103_pa_q" = "$i103_pb_q" ]            || i103_score=$((i103_score + 10))
+[ "$i103_pa_q" != "$i103_pc_q" ]           || i103_score=$((i103_score + 100))
+[ "$i103_pa_s" = "$i103_pc_s" ]            || i103_score=$((i103_score + 200))
+[ -z "$i103_pd_q" ]                        || i103_score=$((i103_score + 1000))
+[ "$i103_pm" = "$i103_pm_want" ]           || i103_score=$((i103_score + 10000))
+rm -rf "$i103_probe_dir"
+if [ "$i103_score" -ne 0 ]; then
+  err "I103's probe scored $i103_score where 0 is the only correct total, so the corpus below was not scanned. +1 the extractor found no body where one is defined; +10 it called two IDENTICAL bodies in differently-surrounded files different, which would report drift on a conforming tree; +100 it called a cite_quote() body differing by one character the SAME, which is the state this arm exists to report; +200 it reported drift in cite_segments() where the probe seeded drift only in cite_quote(), so the two needles are not being read independently and one of them is riding on the other; +1000 it returned a body from a file defining no such function, so the equality half would be comparing two inventions; +10000 the site scan did not name exactly the four probe files that carry a needle -- it either missed the mention-only fourth site or flagged the similarly-named near-miss. Any non-zero total means both halves of I103 would report a clean tree for the reason a broken reader does."
+else
+  # HALF ONE: for each needle, the three declared copies are one byte string. Read against the
+  # FIRST readable copy rather than pairwise, so N files cost N extractions.
+  i103_vacuous=''; i103_drift=''
+  while IFS= read -r i103_needle; do
+    [ -n "$i103_needle" ] || continue
+    i103_ref=''; i103_ref_of=''
+    while IFS= read -r i103_rel; do
+      [ -n "$i103_rel" ] || continue
+      i103_got="$(i103_body "$REPO_ROOT/$i103_rel" "$i103_needle")"
+      if [ -z "$i103_got" ]; then
+        i103_vacuous="$i103_vacuous ${i103_needle}@${i103_rel}"
+      elif [ -z "$i103_ref" ]; then
+        i103_ref="$i103_got"; i103_ref_of="$i103_rel"
+      elif [ "$i103_got" != "$i103_ref" ]; then
+        i103_drift="$i103_drift ${i103_needle}@${i103_rel}(vs ${i103_ref_of})"
+      fi
+    done <<EOF
+$i103_declared
+EOF
+  done <<EOF
+$i103_needles
+EOF
+  [ -z "$i103_vacuous" ] || err "I103 cannot find a definition for:$i103_vacuous. The check binding the three readings of the operator-citation field just went vacuous -- it must locate every needle at every declared site or fail loudly, never pass by finding nothing. If a helper was renamed or lifted, rename it in i103_needles here in the same change."
+  [ -z "$i103_drift" ] || err "I103: the operator-citation parser has forked:$i103_drift. All three sites feed their extracted quote to the same --cite predicate, so a copy that differs decides the same citation differently with no second piece of evidence anywhere. Two of the three are gate validators; the third is the remediation guard, where the permissive direction LIFTS a gate deny on an authorization no operator wrote. Make cite_segments() and cite_quote() byte-identical across all three."
+
+  # HALF TWO: no fourth site. THE POSITIVE CONTROL IS THIS FILE, read in the same invocation --
+  # it carries both needles in i103_needles= and throughout the prose above, so a scan that is
+  # not reading the roots it was handed shows up here rather than as a clean fourth-copy report.
+  i103_hits="$(i103_sites "$i103_re" "$REPO_ROOT/core" "$REPO_ROOT/scripts" | LC_ALL=C sort)"
+  i103_self="scripts/validate-enforcement-map.sh"
+  if ! in_lines "$REPO_ROOT/$i103_self" "$i103_hits"; then
+    err "I103's site scan did not find $i103_self, which carries both needles in this arm's own i103_needles= assignment. That is the control failing, not a finding about the tree: the scan is not reading the roots it was handed, so its report of no fourth copy would be a zero taken over a corpus it never opened. Fix the roots passed to i103_sites, or the resolution of REPO_ROOT, before reading anything below."
+  else
+    i103_extra=''
+    while IFS= read -r i103_hit; do
+      [ -n "$i103_hit" ] || continue
+      i103_r="${i103_hit#"$REPO_ROOT"/}"
+      case "$i103_r" in
+        core/fixtures/*) continue ;;
+        scripts/validate-enforcement-map.sh) continue ;;
+      esac
+      in_lines "$i103_r" "$i103_declared" || i103_extra="$i103_extra $i103_r"
+    done <<EOF
+$i103_hits
+EOF
+    [ -z "$i103_extra" ] || err "I103: file(s) outside the three bound sites name the citation parser:$i103_extra. A fourth copy is an unbound copy -- the equality half above compares only the three it is given, so a fourth drifts in silence and parses the operator's own words its own way. Either resolve it from one of the three bound sites, or add it to i103_declared here in the same change so it is held byte-identical with them. A file that merely CITES the name in prose still counts."
+  fi
+fi
+
 # --- I93: an "examined nothing" verdict is ONE token across every emitter of it ----
 # vocabulary: empty-subject verdict token
 # vocabulary-invariant: I93

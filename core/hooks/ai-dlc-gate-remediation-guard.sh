@@ -184,6 +184,42 @@ steer_dir_has_transcript() { # $1 dir -> 0 if it holds a readable *.jsonl
   return 1
 }
 
+# THE CITED SUBSTRING IS A FIELD, NOT A LINE. The capture here was
+# `sed -n 's/.*"\(.*\)".*/\1/p'`, whose leading `.*` is GREEDY, so on a field carrying more
+# than one quoted segment it took the LAST one and on an odd quote count it took the
+# CONNECTIVE BETWEEN two of them. On THIS reader the fail-open direction LIFTS a gate deny:
+# an invented operator authorization verified whenever any genuine operator substring trailed
+# it on the same line. These two are byte-identical in
+# `core/scripts/validate-escalation-resolution.sh` and
+# `core/scripts/validate-adversarial-convergence.sh`; invariant I93 holds the three copies to
+# one text and refuses a fourth. Read the escalation validator's header for the measurement.
+cite_segments() { # $1 authline -> one quoted segment per line
+  printf '%s\n' "$1" | LC_ALL=C awk '
+    { n = split($0, p, /"/)
+      # split on `"` yields quotecount+1 fields, and the inside-quote ones are the EVEN
+      # indices. An odd quote count leaves the final field unterminated; it is even-indexed
+      # too, so one loop covers both shapes.
+      for (i = 2; i <= n; i += 2) if (p[i] != "") print p[i] }'
+}
+
+cite_quote() { # $1 authline
+  _cq_segs="$(cite_segments "$1")"
+  [ -n "$_cq_segs" ] || _cq_segs="$(printf '%s' "${1#*|}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  _cq_pick=""
+  _cq_long=""
+  while IFS= read -r _cq_seg; do
+    [ "${#_cq_seg}" -gt "${#_cq_long}" ] && _cq_long="$_cq_seg"
+    [ "${#_cq_seg}" -ge 12 ] || continue
+    [ -n "$_cq_pick" ] || _cq_pick="$_cq_seg"
+  done <<CITEEOF
+$_cq_segs
+CITEEOF
+  # Nothing verifiable. Name the LONGEST segment anyway, so the "too short" message quotes
+  # something the reader can find in the file instead of a fragment between two quotes.
+  [ -n "$_cq_pick" ] || _cq_pick="$_cq_long"
+  printf '%s' "$_cq_pick"
+}
+
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 # `AI_DLC_STATE_DIR` may be absolute or relative; the role files and
 # `_gate-procedures.md:143` both write it as `${AI_DLC_STATE_DIR:-_bmad-output}`.
@@ -367,8 +403,7 @@ fi
 AUTH_FILE="$GATE_DIR/${LIVE_NONCE}.authorization.md"
 if [ -f "$AUTH_FILE" ] && [ -f "$STEER_SCRIPT" ]; then
   AUTH="$(sed -n 's/^[[:space:]]*operator_authorization:[[:space:]]*//p' "$AUTH_FILE" 2>/dev/null | head -1)"
-  AUTH_QUOTE="$(printf '%s' "$AUTH" | sed -n 's/.*"\(.*\)".*/\1/p')"
-  [ -z "$AUTH_QUOTE" ] && AUTH_QUOTE="$(printf '%s' "${AUTH#*|}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  AUTH_QUOTE="$(cite_quote "$AUTH")"
   if [ "${#AUTH_QUOTE}" -ge 12 ]; then
     STEER_FLAG=""; STEER_ARG=""
     if [ -n "$TRANSCRIPT" ] && steer_dir_has_transcript "$(dirname "$TRANSCRIPT")"; then

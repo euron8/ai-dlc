@@ -133,6 +133,28 @@ gsx pending-real.md dir-empty silent.jsonl 1 "appears in NO genuine" "no readabl
 # outright makes every arm above pass.
 gx pending-crossfake.md 50 corpus "" 1 "(o) a corpus with content still FAILs a fabrication (teeth intact)"
 
+# --- the citation is a FIELD, not a LINE -----------------------------------------------------
+# The cited substring used to be captured with `sed -n 's/.*"\(.*\)".*/\1/p'`, whose leading
+# `.*` is GREEDY: on a field carrying more than one quoted segment the capture is the LAST one,
+# and on an odd quote count it is the CONNECTIVE BETWEEN two of them. (p) and (q) are ONE
+# PROPERTY APART -- the same two quoted segments in the two orders -- because the two directions
+# of that bug are a false accusation and a fail-OPEN, and only the pair separates a parser that
+# reads the field from one that refuses everything. pending-real.md and pending-fabricated.md
+# are their single-segment near-miss twins and neither verdict may move.
+echo
+echo "  -- the citation is a FIELD: which quoted segment the parser takes --"
+g pending-order-good-first.md 50 real.jsonl 0 "(p) genuine words first, other text after -> PASS"
+g pending-order-good-last.md  50 real.jsonl 1 "(q) invented disposition first, genuine words trailing -> FAIL (the fail-open half)"
+g pending-connective.md       50 real.jsonl 0 "(r) odd quote count -> the operator's words, not the connective between them"
+g pending-unterminated.md     50 real.jsonl 0 "(s) citation continues on the next line -> the unterminated tail IS the quote"
+says pending-order-good-last.md 50 real.jsonl "appears in NO genuine" "zzz no operator ever typed"
+# (t) A transcript directory is LIVE -- measured, its listing digest moved four times across ten
+# runs while the session writing it was merely idle -- so two runs over a byte-identical
+# pending.md are two runs over two corpora. The sibling already prints which corpus state it
+# read; this caller used to discard it.
+gsx pending-crossfake.md corpus "" 1 "transcript(s) from" "IMPOSSIBLE-TOKEN-NEVER-EMITTED" \
+    "(t) the accusation names the corpus STATE it was measured over"
+
 # --- mutants ---------------------------------------------------------------------------------
 # Built as COPIES, guarded by `cmp -s` (a sed that matched nothing must not pass as a mutation)
 # and `bash -n` (a mutant that is no longer a program emits nothing, and nothing scores as a
@@ -223,10 +245,46 @@ if [ -n "${MW:-}" ]; then
   gx pending-crossfake.md    50 corpus "" 1 "W: (j) unchanged" "$MW"
 fi
 
+# Mutant Q -- the pick reverts to LAST-segment-wins, which is what the greedy capture did. It
+# owns BOTH order arms deliberately: they are one property from each other, so a mutant moving
+# only one of them would mean the other arm is asserting something else. The single-segment
+# twins must not move -- 98 of the reference consumer's 106 citations are that shape, and a
+# mutant that moved them would mean these arms fire on every citation rather than on this one.
+echo "  -- mutant Q: last quoted segment wins (the pre-fix greedy capture) --"
+MQ="$(mutate last-segment-wins 's@\[ -n "\$_cq_pick" \] || _cq_pick="\$_cq_seg"@_cq_pick="$_cq_seg"@')" || FAIL=$((FAIL + 1))
+if [ -n "${MQ:-}" ]; then
+  gx pending-order-good-first.md 50 "" real.jsonl 1 "Q: (p) is red -- the trailing text is taken as the citation" "$MQ" && KILLS=$((KILLS + 1))
+  gx pending-order-good-last.md  50 "" real.jsonl 0 "Q: (q) is red -- an invented disposition passes on a trailing genuine quote" "$MQ" && KILLS=$((KILLS + 1))
+  gx pending-real.md             50 "" real.jsonl 0 "Q: (d) unchanged -- one segment, one answer" "$MQ"
+  gx pending-fabricated.md       50 "" real.jsonl 1 "Q: (c) unchanged" "$MQ"
+fi
+
+# Mutant U -- the unterminated trailing segment is dropped. `split` on `"` puts the inside-quote
+# fields at the EVEN indices and an odd quote count leaves the final field unterminated, also
+# even-indexed; `i < n` skips exactly that one. Balanced citations are untouched, which is why
+# (d) and (p) must stay green here.
+echo "  -- mutant U: the unterminated trailing segment is dropped --"
+MU="$(mutate drop-unterminated-tail 's@for (i = 2; i <= n; i += 2)@for (i = 2; i < n; i += 2)@')" || FAIL=$((FAIL + 1))
+if [ -n "${MU:-}" ]; then
+  gx pending-unterminated.md     50 "" real.jsonl 1 "U: (s) is red -- the tail is gone and the label line becomes the needle" "$MU" && KILLS=$((KILLS + 1))
+  gx pending-connective.md       50 "" real.jsonl 1 "U: (r) is red -- only the too-short segment survives" "$MU" && KILLS=$((KILLS + 1))
+  gx pending-real.md             50 "" real.jsonl 0 "U: (d) unchanged -- a balanced citation has no tail" "$MU"
+  gx pending-order-good-first.md 50 "" real.jsonl 0 "U: (p) unchanged" "$MU"
+fi
+
+# Mutant V -- the sibling's corpus report is captured and then not printed. The verdict does not
+# move, which is the whole point: this arm is about ATTRIBUTION, and the exit code cannot see it.
+echo "  -- mutant V: the corpus report is dropped from the accusation --"
+MV="$(mutate drop-corpus-report 's@\[ -n "\$CITE_REPORT" \] && printf@[ -n "" ] \&\& printf@')" || FAIL=$((FAIL + 1))
+if [ -n "${MV:-}" ]; then
+  gsx pending-crossfake.md corpus "" 1 "appears in NO genuine" "transcript(s) from" \
+      "V: (t) is red -- the accusation no longer says which corpus produced it" "$MV" && KILLS=$((KILLS + 1))
+fi
+
 # KILL COUNT. A mutation that applied cleanly to a file the run never loaded reads exactly
 # like an arm that cannot fire, and `cmp -s` cannot tell them apart. Zero kills is that state.
 N=$((N + 1))
-if [ "$KILLS" -ge 7 ]; then printf '  ok   %-30s %s mutant kill(s) -- these arms can fire\n' "KILL-COUNT" "$KILLS"
+if [ "$KILLS" -ge 12 ]; then printf '  ok   %-30s %s mutant kill(s) -- these arms can fire\n' "KILL-COUNT" "$KILLS"
 else FAIL=$((FAIL + 1)); printf '  FAIL %-30s %s kill(s); the mutants changed bytes in a file these arms never loaded\n' "KILL-COUNT" "$KILLS"; fi
 
 echo
