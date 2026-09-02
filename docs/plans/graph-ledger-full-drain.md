@@ -6,7 +6,7 @@
 This section is the ONLY CURRENT STATUS RECORD in this file.** It tells you WHERE THINGS STAND.
 It does not tell you what to do.
 
-**YOUR INSTRUCTIONS ARE FOUR SECTIONS, AND THEY ARE NOT ALL NEXT TO THIS ONE. READ ALL FOUR
+**YOUR INSTRUCTIONS ARE FIVE SECTIONS, AND THEY ARE NOT ALL NEXT TO THIS ONE. READ ALL FIVE
 BEFORE ACTING:**
 
 1. **`## Start here`** — the two repos and the READ/WRITE boundary. **Read this FIRST, before any
@@ -17,6 +17,10 @@ BEFORE ACTING:**
    this figure — it is advisory and it has been stale before.
 3. **`### Ping the operator`** — when to stop and report.
 4. **`## Hazards`** and **`### Done when`** — what will bite you, and what finishing looks like.
+5. **`### Derive the state; do not trust the numbers below`** — the command block actions 1b and 6
+   both tell you to run, and the only place the figures in this file can be checked. It sits ABOVE
+   the numbered actions and above `## Context`, so it is LIVE despite its position; jump to it by
+   name like the others.
 
 **THE HISTORY BOUNDARY IS BY HEADING, NOT BY POSITION, and an earlier revision of this block got
 that wrong in the direction that matters.** It said "everything from `## Context` down is
@@ -25,7 +29,7 @@ BELOW `## Context`, so a session obeying that sentence literally would skip its 
 boundary and write to the consumer. `scripts/validate-plan-shape.sh:73` cannot catch this: it
 greps that `## Start here` EXISTS and never asks whether the reader was told to ignore it.
 
-So: the four sections above are LIVE. Everything else below `## Context` — the `## Status record`
+So: the five sections above are LIVE. Everything else below `## Context` — the `## Status record`
 band, the per-batch records, `## Phases`, `## What the pull produced` — is HISTORY: measured
 episodes, refuted hypotheses, and status records that were current when written and that THIS
 BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evidence behind a
@@ -195,10 +199,9 @@ whose failure is permanent and silent);
 defect IS intermittency — compute the predicted count before reading any clean sweep as a
 refutation); `CHECK-26-READS-A-PARTIAL-RE-VERIFY-VERDICT-FILE-AS-UNADJUDICATED` (needs a new
 script AND a `_gate-procedures.md` change, so say which you are closing);
-`AUDIT-RULE-FILES-DRIFT-FINDINGS-IN-CORE-PROSE-ARE-NOT-CONSUMER-FIXABLE` (33 findings across
-fourteen files, a per-file prose judgement — not one subject); and
-`IS-CORE-ANSWERS-BY-DECLARED-GLOB-NOT-BY-MEMBERSHIP` (REJECTED by-design, an adjudication owed to
-the consumer, not work).
+and `AUDIT-RULE-FILES-DRIFT-FINDINGS-IN-CORE-PROSE-ARE-NOT-CONSUMER-FIXABLE` (33 findings across
+fourteen files, a per-file prose judgement — not one subject). **FIVE, not six: `IS-CORE` left
+this list when the consumer rotated it.**
 
 **`IS-CORE` IS DISCHARGED — the operator carried it, and it is the only thing that could have.**
 Recorded and rotated by the consumer at `a4304cbfc`. Do not re-raise it. What it left behind is
@@ -2606,6 +2609,23 @@ in either repo, and tell every delegate the same.** Delegates work in `mktemp` c
 Every figure here is a HYPOTHESIS about a tree that has moved. The measured base rate of expired
 premises in this program is roughly one in two. Each command below carries its own control.
 
+**FOUR of this section's fenced blocks are RUNNABLE and the rest are EXAMPLES, so "run the derive
+block" names a set and not a fence.** Run them in this order, and read the prose between them —
+each one's controls are explained there, not in the fence:
+
+1. the four-command INSTRUMENT block immediately below (repo head, backlog counts, receipt
+   histogram);
+2. the `D=…` / `lids()` block, which builds `/tmp/live.txt`, `/tmp/arch.txt` and `/tmp/filed.txt`
+   and carries the presence and absence controls — **actions 1b and 6 both depend on this one**;
+3. the `pc()` PARTITION block, then the four-line overlap block under it, which corrects
+   DISCHARGED;
+4. the delivery-gap block (`.ai-dlc-version` vs `VERSION`).
+
+The others are worked examples: the three ledger RECORD FORMS, the batch-14 grammar table, the
+mode-only `git diff --raw` recipe, and the receipt histogram one-liner action 5 owns. A fresh
+session that concatenates every fence in this section gets a syntax error on the record-forms
+example, which is how this note came to exist.
+
 ```
 git -C /Users/n8/git/ai-dlc log --oneline -1 origin/main
 grep -cE '^## BL-[0-9]+' docs/backlog.md          # live entries
@@ -3492,10 +3512,9 @@ so no block written before it changes verdict.
    the predicted count before reading any clean sweep as a refutation**);
    `CHECK-26-READS-A-PARTIAL-RE-VERIFY-VERDICT-FILE-AS-UNADJUDICATED` (needs a new script AND a
    `_gate-procedures.md` change, so say which you are closing);
-   `AUDIT-RULE-FILES-DRIFT-FINDINGS-IN-CORE-PROSE-ARE-NOT-CONSUMER-FIXABLE` (33 findings across
-   fourteen files, a per-file prose judgement — **not one subject as it stands**); and
-   `IS-CORE-ANSWERS-BY-DECLARED-GLOB-NOT-BY-MEMBERSHIP` (REJECTED by-design, an adjudication owed to
-   the consumer, not work).
+   and `AUDIT-RULE-FILES-DRIFT-FINDINGS-IN-CORE-PROSE-ARE-NOT-CONSUMER-FIXABLE` (33 findings across
+   fourteen files, a per-file prose judgement — **not one subject as it stands**). **`IS-CORE` is no
+   longer among them: the operator carried its rejection and the consumer rotated it.**
 
    **BUILD THE FILED REMEDY AND SCORE IT BEFORE YOU PREFER YOUR OWN, AND ASK WHAT IT ACQUITS.**
    Batch 38's filed remedy was refuted by building it. Batch 39's was refuted by reading the hook.
@@ -3578,24 +3597,26 @@ so no block written before it changes verdict.
    entry and filing step 2 separately. It is distribution-internal and carries no `PC-` id, so under
    the provenance-first rule it ranks BELOW any PC-backed entry the sweep turns up.
 
-   **ONE PIECE OF BATCH 33 IS STILL OWED, AND BATCH 34 DID NOT DO IT EITHER**: `IS-CORE`'s
-   rejection has not been carried to the consumer. It is not a subject and it is not work — it is
-   an adjudication that needs to reach the party still holding the candidate, and because a
-   rejection is not a filing it will surface in every sweep forever until it is delivered.
+   **THE PIECE OF BATCH 33 THAT WAS OWED FOR SEVEN BATCHES IS DELIVERED, AND IT IS THE ONLY THING
+   THAT HAS EVER MOVED THIS DENOMINATOR.** `IS-CORE`'s rejection was carried into a graph session by
+   the operator; that session recorded it and rotated it at `a4304cbfc`, taking
+   `PC-S308-STEP1A-ROTATE-REMEDY-NO-SPRINT-START-DESTINATION` with it, and live fell 74 → 72. **An
+   adjudication is delivered by a person, not by a sweep or a release** — nothing this program can
+   run reaches it. When a candidate is REJECTED, say so in the resume block and ask the operator to
+   carry it; do not let it sit.
 
    **BEFORE YOU BUILD ANYTHING, READ THE REMEDY TEXT OF THE MECHANISM THAT CONSUMES THE ANSWER YOUR
    SUBJECT CALLS WRONG.** Batch 33 shipped a fix for a filing whose premise was contradicted, in as
    many words, by the guard that reads the value — and the invariant binding the two byte-compares
-   the wrong functions, so the gate was green for the whole defect. `PC-S340-IS-CORE-ANSWERS-BY-
-   DECLARED-GLOB-NOT-BY-MEMBERSHIP` is REJECTED as by-design and will keep appearing in your sweep,
-   because a rejection is not a filing and nothing here moves it out of UNFILED.
+   the wrong functions, so the gate was green for the whole defect. That filing,
+   `PC-S340-IS-CORE-ANSWERS-BY-DECLARED-GLOB-NOT-BY-MEMBERSHIP`, was REJECTED as by-design and has
+   since been carried and rotated, so it is OUT of your sweep.
 
-   **THE SWEEP WILL NOT COME BACK EMPTY.** Nine of the ten `PC-S340-*` candidates that arrived with
-   the `0.452.0 → 0.456.0` pull's follow-ups are still UNFILED here; batch 33 took
-   `IS-CORE-ANSWERS-BY-DECLARED-GLOB-NOT-BY-MEMBERSHIP` and the resume block records the ranked pick
-   among the rest, including one entry whose mechanism sentence is refuted and whose real subject is
-   a different file. Re-derive before scoping — that list is a snapshot of a file the consumer holds
-   open, and it was MODIFIED while batch 33 ran.
+   **THE SWEEP CAN COME BACK EMPTY OF NEW WORK, AND AT BATCH 40 IT DID FOR THE FIRST TIME.** That is
+   not a stop condition: the standing `PC-S340-*` corpus is the fallback and the resume block ranks
+   what is left of it by consequence, including one entry whose mechanism sentence is refuted and
+   whose real subject is a different file. Re-derive before scoping — that list is a snapshot of a
+   file the consumer holds open, and it has been MODIFIED mid-batch more than once.
 
    **EVERY ONE OF THE NINE WAS FILED BY THE SAME SESSION IN THE SAME SPRINT AS THE ONE WHOSE RECEIPT
    ACCEPTED A TOTAL DISARM.** Batch 33 built six implementations against that receipt — the correct
@@ -3731,7 +3752,7 @@ so no block written before it changes verdict.
    `predicate-differential.sh` fingerprints the corpus either side of its own run for exactly this
    reason; a hand-rolled measurement has no such guard.
 
-1a. **`docs/backlog.md` IS AT 77 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
+1a. **`docs/backlog.md` IS AT 78 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
    is not blocked. That is not licence to file rather than fix — the standing correction in the
    resume block still governs — but a filing no longer costs a rotation, and rotating still means
    CLOSING, which needs a measurement.
@@ -3740,7 +3761,8 @@ so no block written before it changes verdict.
    instruction, given at the close of batch 17. Do this BEFORE picking any subject when the subject
    is yours to pick, and report what it finds either way.
 
-   Run the derive block above first — it builds `/tmp/live.txt` and `/tmp/filed.txt`, and the set
+   Run **`### Derive the state; do not trust the numbers below`** first — jump to it BY NAME, it
+   sits above this action — it builds `/tmp/live.txt` and `/tmp/filed.txt`, and the set
    you want is the live candidates NO backlog entry cites. Then DATE each one's filing from the
    consumer's own history, because "unfiled" mixes genuinely new candidates with old ones no
    batch has examined, and only the date separates them:
@@ -3856,7 +3878,7 @@ so no block written before it changes verdict.
    after the v0.436.0 merge:
 
    ```
-   # /tmp/live.txt comes from the derive block above -- BOTH record forms
+   # /tmp/live.txt comes from `### Derive the state; do not trust the numbers below` -- BOTH record forms
    awk '/^## BL-[0-9]+/{if(id!=""){out()}; id=$2; pcs=""}
         match($0,/PC-[A-Z0-9][A-Z0-9.-]+/){p=substr($0,RSTART,RLENGTH); if(index(pcs,p)==0) pcs=pcs (pcs?",":"") p}
         END{if(id!=""){out()}}
@@ -3950,7 +3972,7 @@ so no block written before it changes verdict.
    consumer closed itself. Derive the corpus with the join below rather than trusting the list:
 
    ```
-   # /tmp/live.txt comes from the derive block above -- BOTH record forms
+   # /tmp/live.txt comes from `### Derive the state; do not trust the numbers below` -- BOTH record forms
    awk '/^## BL-[0-9]+/{if(id!="")out(); id=$2; pcs=""}
         match($0,/PC-[A-Z0-9][A-Z0-9-]+/){p=substr($0,RSTART,RLENGTH); if(index(pcs,p)==0) pcs=pcs (pcs?",":"") p}
         END{if(id!="")out()} function out(){ if(pcs!="") printf "%s\t%s\n", id, pcs }' docs/backlog.md |
@@ -4188,7 +4210,8 @@ so no block written before it changes verdict.
 
    Do these four, and REPORT the result:
 
-   - **Run the derive block above, verbatim, and compare every figure to what it CLAIMS.** Not
+   - **Run `### Derive the state; do not trust the numbers below` verbatim, and compare every
+     figure to what this block CLAIMS.** Not
      "does it look right" — run it and diff. Fix the file where they disagree.
    - **Read the numbered action 1 as a stranger would.** If it still names work you just
      finished, it is wrong. Replace it with the next action; do not append beside it.
