@@ -32,7 +32,137 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 38 SHIPPED AS `v0.472.0`, CORRECTED BY `v0.473.0`. THE GAP IS TWO RELEASES AND PENDING IS 1. START AT BATCH 39.
+### BATCH 39 SHIPPED AS `v0.474.0`. THE GAP IS THREE RELEASES AND PENDING IS 2. START AT BATCH 40.
+
+**This block is the current state and it replaces every block below.** Every figure was
+re-derived after the merge by running the derive block and the sweep, all controls in the same
+invocation.
+
+**THE FILING HAD TWO CLAIMS AND ONLY ONE SURVIVED, WHICH IS THE BATCH'S SHAPE.**
+`PC-S340-DERIVATION-CAPTURE-HOOK-ROLLS-BACK-THE-WHOLE-FILE-ON-A-REJECTED-BLOCK` said a rejected
+```derived fence caused the capture hook to (a) mis-parse a `|` inside a quoted ERE and (b) ROLL
+BACK the whole target file, destroying a consumer artifact. **(b) is REFUTED against the tree**:
+`core/hooks/ai-dlc-derivation-capture.sh` is a **PostToolUse** hook that reads the target, writes
+only inside its own `mktemp -d`, and on a mismatch emits stderr and exits 2 — it has no write,
+truncate, move or remove path against the target at all. (a) is real and shipped as `v0.474.0`.
+The entry keeps both halves rather than being re-filed, per the standing rule that which half died
+is what stops the next reader repeating it.
+
+**THE DEFECT WAS ONE LEVEL DOWN FROM THE TITLE, IN A DIFFERENT FILE.** Not the hook —
+`cmd_is_safe()` in `core/scripts/validate-artifact-derivations.sh`, which split a command into
+pipeline segments with `tr '|' '\n'` and checked each segment's first word against a read-only
+allowlist. Quote-blind, so `grep -cE 'alpha|beta' f` was torn in two and refused on the token
+`'beta'`, while `grep -cE 'alpha' f` passed — the near-miss that names the cause. It now splits
+only at a `|` outside quotes.
+
+**43 NEWLY ALLOWED, 0 NEWLY REFUSED, and the differential drove the SHIPPING function rather than
+a reimplementation of it.** `cmd_is_safe()` was extracted from both implementations and scored over
+the 3408 `$ `-prefixed command lines in the consumer's 237 fence-carrying artifacts. Controls in the
+same invocation: the two extracted functions differ (4893 vs 7817 bytes) and both extractions end at
+a function close. The 43 split three ways — a bar inside quotes, a backslash-escaped bar, and a
+quoted bar sitting beside a genuine pipe — reconciled against a static classifier that independently
+counted 39 quoted-bar, 558 top-level and 6 unbalanced.
+
+**THE UNBALANCED-QUOTE REFUSAL IS LOAD-BEARING AND A MUTANT IS THE ONLY REASON THAT IS KNOWN.**
+Splitting quote-aware WITHOUT refusing an unresolved quote opens a hole the old code closed:
+`grep $'a\'b' f | xargs rm` is one word plus a real pipe to bash, while a quote-parity scan sees odd
+parity, stops splitting, and never checks `xargs`. Scored against a copy of the fix with the refusal
+deleted: pre REFUSE, fix REFUSE, no-refusal **ALLOW**, with `bash -n` confirming bash parses it.
+**Ask what a loosening ACQUITS by building the version without the guard, not by reasoning about it.**
+
+**MY OWN NEW ARM SHIPPED A FALSE REFUSAL FIRST, AND THE INDEPENDENT PARSER IS WHAT CAUGHT IT.**
+Checked against `bash -n -c` — the actual executor, therefore ground truth rather than a second
+opinion — the scan disagreed on exactly 2 of 3408, both `python3 # ... test_safeguards.py's own
+regex`, where bash reads the apostrophe inside a `#` COMMENT. Left alone that refuses
+`grep -c x f # note`, a correct allowlisted command, which is the exact class the change exists to
+remove. The scan now ends a command at an unquoted `#` opening a word. A separate cross-check
+against python `shlex` found 0 disagreements on top-level pipe count across the 3381 both parse.
+**Two independent parsers, or the segmentation is a hypothesis** — and neither of them is the one
+that decides, because bash is.
+
+**NO FAIL-OPEN, MEASURED AT THE EXECUTION LEVEL RATHER THAN THE VERDICT LEVEL.** Eleven adversarial
+shapes were run under a PATH sandbox of inert fakes that record their own invocation: every command
+that would execute an off-allowlist binary is REFUSED, and the two ALLOWED rows execute nothing.
+Control in the same run: a bare `xargs` IS recorded, so the dashes mean something. The rows that
+matter are `grep 'a'\''b' f | xargs echo` (the classic quote-escape idiom — refused, the real pipe
+still split) and `grep -c a#b f | xargs echo` (a `#` MID-WORD is not a comment — refused), which is
+what proves the word-boundary condition on the `#` rule.
+
+**THE FIXTURE FOUND A DEFECT IN ITS OWN NEW ARMS, AND IT IS THE ENCODING THAT DID IT.**
+`core/fixtures/artifact-derivations` packs `command|expected-message` into one string, which is safe
+for its EXISTING cases because none of their commands contains a bar. Every new case does, so each
+was truncated at its first bar — **and one truncation still exited 1, for a reason unrelated to what
+the arm claimed to test**, which is the shape that would have shipped as a passing arm. Those arms
+take two arguments now. 35 assertions green against the fix, **12 red against the pre-fix
+validator**, so the new arms are proven able to fail.
+
+**THE RECEIPT NEEDED A FOURTH ARM AND EXIT CODES COULD NOT SUPPLY IT.** Scored against seven
+implementations — the fix, a second spelling that masks quoted regions and splits with `tr`, the
+pre-fix original, a never-split version, the fix minus its refusal, a total disarm, and the allowlist
+widened to every command on `PATH` — each asserted to differ from the fix first. Three exit-code arms
+accepted **3 of 7**, the extra being the no-refusal variant, **because a command bash cannot run
+fails as STALE rather than ALLOWLIST and an exit code cannot tell those apart**. The fourth arm reads
+the failure CLASS and the count is **2 of 7**: the fix and its second spelling. A reword of the
+`unbalanced quote` string scores STILL-LIVE, and no vocabulary binds it — that cost is taken
+knowingly.
+
+**A `git checkout -- <path>` IN MY OWN SCORING HARNESS REVERTED THE FIX MID-BATCH.** It restores from
+HEAD, and the fix was uncommitted. Recovered from the scored copy and verified BY CONTENT with
+`cmp -s`, not by reading the file back. The rule is in `tool-hazards.md` already; this is the second
+time it has been paid for. **A harness that restores a file must restore it from the copy it saved,
+never from git.**
+
+**AND A WHOLE-FILE `grep -c "tr '|'"` READ 1 ON THE FIXED FILE.** The match is my own COMMENT
+quoting the old code. Excluding comment lines gives 0 against a control of 1 for the awk splitter on
+a live line. Prose documenting a defect becomes an instance of it — the same trap `BL-133` records,
+hit again inside one release.
+
+**THE FIGURES, re-derived after the merge.** Ledger md5 `287f0566…` — UNCHANGED across the whole
+batch — **74 live candidates, 139 archived, 33 cited, 41 UNFILED**. DISCHARGED **16 raw / 15
+corrected**, IN-FLIGHT **18**, UNTOUCHED **41**, overlap **1**, TERMINAL **31**. Partition control
+closes on the raw figure: 16+18+41−1 = 74. Presence controls 1/1/1/1; absence controls 0 and 0.
+`docs/backlog.md` **76 live / 59 archived** against a ceiling of 100. The partition moved by exactly
+one, out of UNTOUCHED and into DISCHARGED.
+
+**THE GAP IS THREE RELEASES AND PENDING IS 2 — both DERIVED, with controls.** The consumer stamp
+reads `0.471.0`/`31b51d48` on all four fields against a distribution `VERSION` of `0.474.0`. PENDING
+is batch 38's candidate at `v0.472.0` and batch 39's at `v0.474.0`, each resolved to the release that
+FIRST named it, against an impossible-id control of 0 and a known-present control of 3.
+**A PULL IS NOT AUTHORIZED.** `operator-rulings.md` governs: readiness is not authorization, a
+`PENDING` count is not a decision about WHEN, and one is never handed to a peer session.
+
+**THE SECOND TEST DIVERGES IN THE FALSE DIRECTION, WHICH IS REPORTABLE RATHER THAN A TRIGGER.** The
+consumer's INSTALLED `scripts/ai-dlc/validate-artifact-derivations.sh` and this distribution's fixed
+copy were scored over that consumer's own 3408 fenced commands, with a `cmp -s` control in the same
+invocation asserting the two binaries differ (13950 vs 16874 bytes). Installed refuses **411**, fixed
+refuses **368**: the consumer would LOSE 43 false refusals and GAIN **0** findings. So the pull
+removes live false refusals rather than delivering a missing finding — the same shape as batch 38,
+and not the missing-finding trigger the detection rule names. **No bootstrapping step is in this
+release**: it touched `validate-artifact-derivations.sh`, one fixture and the backlog — not
+`preclassify.sh`, `apply.sh`, `ledger-reverify.sh` or the update skill.
+
+**THE PEER CHANNEL WAS CHECKED AND CAME BACK EMPTY, AND THE OPERATOR CLOSED IT.** `ListAgents`
+showed one peer, `graph-8e`, mid-sprint on the consumer; asked whether it held an upstream blocker it
+answered that it was not blocked and had nothing to hand this side. **The operator then instructed
+that the graph session be left alone.** Do not message it. The consumer moved from 22 to 25 dirty
+paths while this batch ran, on branch `ai-dlc/carry-over/pool-pnl-backlog-triage`; the ledger md5 did
+not move, so the sweep is unaffected.
+
+**BOTH ADVERSARIAL HANDS WENT IDLE WITHOUT DELIVERING, ACROSS THREE REQUESTS EACH.** The lead did
+the scope, adversary and receipt jobs itself, which is what action 3 says to budget for — but note
+that this batch therefore has **no independent hand on it**, and that is a weaker position than the
+green gate suggests. **If either hand reports late, read it against what shipped rather than
+dismissing it**: the standing measurement is that a late hand has twice been right and cost a
+release.
+
+**`IS-CORE`'s REJECTION IS STILL OWED AND HAS NOW SURVIVED SIX BATCHES.**
+`PC-S340-IS-CORE-ANSWERS-BY-DECLARED-GLOB-NOT-BY-MEMBERSHIP` is REJECTED as by-design and will keep
+appearing in every sweep, because a rejection is not a filing and nothing here moves it out of
+UNFILED. It is not work; it is an adjudication that needs to reach the party holding the candidate.
+The brief is written at `docs/reviews/graph-s340-adjudication-brief.md` §1. **Carrying it is the
+operator's.**
+
+### BATCH 38 SHIPPED AS `v0.472.0`, CORRECTED BY `v0.473.0`. BATCH 39 HAS SINCE RUN; TAKE THE STATE FROM THE BLOCK ABOVE, NOT FROM THIS HEADING.
 
 **This block is the current state and it replaces every block below.** Every figure was
 re-derived by running the derive block and the sweep serially, all controls in the same
@@ -3070,23 +3200,69 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 39's
-   SUBJECT.** Batch 38 is merged as `v0.472.0` AND its correction `v0.473.0`. Number yours 39.
+1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 40's
+   SUBJECT.** Batch 39 is merged as `v0.474.0`. Number yours 40.
 
-   **A PEER SESSION IS A SUBJECT CHANNEL AND IT OUTRANKED THE SWEEP LAST BATCH.** Batch 37's
-   subject arrived as a message from a blocked consumer session, not from the ledger — the sweep
-   could not have found it, because the candidate did not exist until that session filed it
-   mid-batch. `ListAgents` costs one call. If a peer is holding a live blocker, validate it
-   against the tree before scoping anything else; a consumer stopped at a HARD_BLOCK outranks a
-   candidate that has sat in the ledger for a month.
+   **A PEER SESSION IS A SUBJECT CHANNEL, AND CHECKING IT COSTS ONE CALL.** Batch 37's subject
+   arrived as a message from a blocked consumer session, not from the ledger — the sweep could not
+   have found it, because the candidate did not exist until that session filed it mid-batch. If a
+   peer is holding a live blocker, validate it against the tree before scoping anything else; a
+   consumer stopped at a HARD_BLOCK outranks a candidate that has sat in the ledger for a month.
 
-   **THE GAP IS TWO RELEASES AND PENDING IS 1** — the consumer's stamp reads `0.471.0`/`31b51d48`
-   on all four fields and this distribution is `0.473.0` at `808257ff`. PENDING is 1 rather than 2
-   because both releases carry the SAME candidate. Your batch widens the gap to three. That is not permission to close it: a
-   pull is operator-initiated, readiness is not authorization, a `PENDING` count is not a
-   decision about WHEN, and one is never handed to a peer session. `operator-rulings.md`
-   governs. The consumer's operator initiated the last one in their own tree; that sets no
-   precedent for dispatching from here.
+   **BUT ASKING IS NOT FREE, AND THE OPERATOR STOPPED BATCH 39 FOR IT.** That batch messaged
+   `graph-8e` — a session `ListAgents` showed as `busy` — and the operator's instruction was
+   immediate: the graph session is mid-sprint, leave it alone. **Read `ListAgents` and prefer
+   reading its STATE over messaging it.** A `busy` peer is a reason to look, never a licence to
+   interrupt; if you genuinely need to ask, ask the OPERATOR whether to, and put the peer's current
+   state into the question.
+
+   **THE GAP IS THREE RELEASES AND PENDING IS 2** — the consumer's stamp reads `0.471.0`/`31b51d48`
+   on all four fields and this distribution is `0.474.0`. Your batch widens the gap to four. That is
+   not permission to close it: a pull is operator-initiated, readiness is not authorization, a
+   `PENDING` count is not a decision about WHEN, and one is never handed to a peer session.
+   `operator-rulings.md` governs.
+
+   **BATCH 39's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW ITS SIBLINGS.**
+   `PC-S340-DERIVATION-CAPTURE-HOOK-ROLLS-BACK-THE-WHOLE-FILE-ON-A-REJECTED-BLOCK` shipped as
+   `v0.474.0`, is cited by `BL-135` in `docs/backlog.archive.md`, and reads DISCHARGED rather than
+   UNFILED — but it stays live in the consumer's ledger until they pull. Do not re-scope onto it.
+   **Only its PARSE half was fixed; its ROLLBACK half is REFUTED, not deferred** — the hook has no
+   write path against the target, measured. Do not re-open the rollback claim without new evidence
+   from the consumer about what actually destroyed that file, which is a question this side cannot
+   answer.
+
+   **THE SEVEN REMAINING UNFILED `PC-S340-*` ARE THE STANDING CORPUS, and their own status lines
+   have STILL not all been read** — a thing this block has asked for since batch 1. Batch 39 read
+   the eight then outstanding and ranked them by consequence; what is left, with the reason each was
+   not taken:
+   `STAMP-READOPT-GATE-IS-BLIND-TO-AN-ADDITIVE-CHANGE-AND-TO-A-REWRITTEN-BODY` (real, and its
+   `theirs_has` receipt is anchored on the `grep -Fqx` a fix would SUPPLEMENT rather than remove, so
+   the receipt survives the fix and must be replaced before it is taken);
+   `UNDECLARED-CUE-CANNOT-TELL-A-REFERENCE-FROM-A-DECLARATION` (**receipt run raw at batch 39: exit
+   0, still live** — it is the only one of the eight carrying an executable discriminating probe,
+   and it is the readiest, which is exactly why provenance-then-consequence ranked it below the
+   data-loss claim);
+   `VALIDATE-ESCALATION-RESOLUTION-NONDETERMINISTIC-ON-BYTE-IDENTICAL-INPUT` and
+   `RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-PASSES-ON-RETRY` (both `verify: manual` because the
+   defect IS intermittency — a single run reports either verdict and neither is evidence; **compute
+   the predicted count before reading any clean sweep as a refutation**);
+   `CHECK-26-READS-A-PARTIAL-RE-VERIFY-VERDICT-FILE-AS-UNADJUDICATED` (needs a new script AND a
+   `_gate-procedures.md` change, so say which you are closing);
+   `AUDIT-RULE-FILES-DRIFT-FINDINGS-IN-CORE-PROSE-ARE-NOT-CONSUMER-FIXABLE` (33 findings across
+   fourteen files, a per-file prose judgement — **not one subject as it stands**); and
+   `IS-CORE-ANSWERS-BY-DECLARED-GLOB-NOT-BY-MEMBERSHIP` (REJECTED by-design, an adjudication owed to
+   the consumer, not work).
+
+   **BUILD THE FILED REMEDY AND SCORE IT BEFORE YOU PREFER YOUR OWN, AND ASK WHAT IT ACQUITS.**
+   Batch 38's filed remedy was refuted by building it. Batch 39's was refuted by reading the hook.
+   Both times the filing was authoritative about the SYMPTOM and evidence about nothing else.
+
+   **PUT AN ADVERSARIAL HAND ON YOUR OWN FIX — AND EXPECT IT NOT TO ARRIVE.** Batch 39 dispatched
+   two hands, asked each three times, and got nothing; it did all three jobs itself and shipped
+   with no independent review. That is the measured base case for message-deliverable hands, not
+   an anomaly. **Give every hand a deliverable in the TREE**, do the work yourself in parallel, and
+   if a hand reports after the merge, read it against what shipped — a late hand has twice been
+   right and cost a release.
 
    **BATCH 38's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW IT.**
    `PC-S340-VALIDATE-SPAWN-LEDGER-OVERSHOOTS-CHECK-22-DECLARED-ROLE-SCOPE` shipped as `v0.472.0`,
@@ -3299,7 +3475,7 @@ so no block written before it changes verdict.
    `predicate-differential.sh` fingerprints the corpus either side of its own run for exactly this
    reason; a hand-rolled measurement has no such guard.
 
-1a. **`docs/backlog.md` IS AT 73 OF 100.** The operator raised the ceiling at `v0.446.0`, so filing
+1a. **`docs/backlog.md` IS AT 76 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
    is not blocked. That is not licence to file rather than fix — the standing correction in the
    resume block still governs — but a filing no longer costs a rotation, and rotating still means
    CLOSING, which needs a measurement.
@@ -3350,11 +3526,11 @@ so no block written before it changes verdict.
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
    md5 -q "$L"              # 287f0566... unchanged since the 0.471.0 pull; a MOVE alone is NOT an alarm -- check the id set too
    wc -l < /tmp/live.txt    # 74
-   wc -l < /tmp/unfiled.txt # 42 after batch 38 rotated BL-134
+   wc -l < /tmp/unfiled.txt # 41 after batch 39 rotated BL-135
    ```
 
-   **THE BASELINE IS 74 LIVE CANDIDATES, 32 CITED, 42 UNFILED.** Live is unchanged since the
-   0.471.0 pull; cited rose and unfiled fell by one because batch 38 FILED its subject here and
+   **THE BASELINE IS 74 LIVE CANDIDATES, 33 CITED, 41 UNFILED.** Live is unchanged since the
+   0.471.0 pull; cited rose and unfiled fell by one because batch 39 FILED its subject here and
    rotated the entry, which is the only way a candidate leaves UNTOUCHED without the consumer
    moving. A higher LIVE count means the consumer filed while nobody was looking.
 
