@@ -212,9 +212,61 @@ grefuse "grep -cE \"a|b\" src/three-lines.txt | python3 -c 'print(1)'" "not on t
 # refusal and simply not splitting inside an open quote admits `xargs` here -- measured
 # against a copy of the fix with the refusal deleted, which is the only thing that
 # distinguishes this arm from decoration.
-grefuse "grep \$'a\\'b' src/three-lines.txt | xargs rm" "unbalanced quote"
+# ANSI-C quoting has its own refusal and its own message: it is not an unbalanced quote but
+# a quote this scan deliberately declines to model, because bash and a parity scan disagree
+# about where it ends. Keying this arm on the unbalanced wording would pass only by accident.
+grefuse "grep \$'a\\'b' src/three-lines.txt | xargs rm" "ANSI-C quoting"
 grefuse "grep -cE 'alpha src/three-lines.txt"          "unbalanced quote"
 grefuse "grep 'a src/three-lines.txt | xargs rm"       "unbalanced quote"
+
+# --- H. THE BOUNDARY IS ABOUT EXECUTION, SO ASSERT EXECUTION -----------------------
+# Section G asserts VERDICTS. A verdict arm cannot see the failure that actually shipped:
+# `v0.474.0` made the split quote-aware and, in the same edit, ACQUITTED five arbitrary-
+# execution paths the quote-blind `tr '|' '\n'` had been refusing by accident. Every arm in
+# this file stayed green, and the gate stayed green, because nothing here ran a command and
+# looked at the tree afterwards.
+#
+# So each case below is scored by a CANARY: a file the command creates if it executes. The
+# verdict is not the assertion; the absence of the canary is, and a case that is refused for
+# the wrong reason still passes only if nothing ran.
+# EACH CASE CARRIES ITS OWN POSITIVE CONTROL, IN THE SAME ARM. The command is first run
+# by bash DIRECTLY and must create the canary -- that is what makes it an exec vector rather
+# than a string that merely looks like one. Only then is it put through the validator, where
+# the canary must NOT appear. Without the first half, "no canary" is satisfied by a command
+# that could never have executed anyway, and the arm proves nothing.
+#
+# The legitimate forms are NOT scored here: the allowlist admits only read-only programs, so
+# an allowed command cannot create a file by construction and no canary can express "ran and
+# was permitted". Section G scores those, by verdict.
+exec_contained() { # $1 label  $2 command
+  mkdir -p "$WORK/h"
+  rm -f "$WORK/h/canary"*
+  ( cd "$WORK/h" && cp "$WORK/src/three-lines.txt" data.txt 2>/dev/null; bash -c "$2" ) >/dev/null 2>&1
+  if ! ls "$WORK/h/canary"* >/dev/null 2>&1; then
+    bad "h-$1 CONTROL: bash itself did not execute this, so containing it proves nothing: $2"
+    rm -f "$WORK/h/canary"*; return
+  fi
+  rm -f "$WORK/h/canary"*
+  { printf '```derived\n$ %s\n0\n```\n' "$2"; } > "$WORK/h/story.md"
+  ( cd "$WORK/h" && AI_DLC_PROJECT_ROOT="$WORK/h" bash "$VALIDATOR" "$WORK/h/story.md" ) >/dev/null 2>&1
+  if ls "$WORK/h/canary"* >/dev/null 2>&1; then
+    bad "h-$1 EXECUTED through the validator -- the allowlist was bypassed: $2"
+  else
+    ok "h-$1               bash runs it; the checker does not"
+  fi
+  rm -f "$WORK/h/canary"*
+}
+
+# ANSI-C quoting: bash reads an escaped quote inside $'...' as a literal where a parity scan
+# reads a toggle, so the two disagree about where the quote ends and a pipe lands in the gap.
+exec_contained ansic-1  "grep -c \$'a\\'b' data.txt | xargs touch canary \\'"
+exec_contained ansic-2  "grep -c \$'\\''   data.txt | xargs touch canary \\'"
+exec_contained ansic-3  "grep -c \$'a\\'b' data.txt | xargs touch canary\\'"
+
+# awk's own pipes to a shell. No shell metacharacter is involved, so the chain/redirect ban
+# never sees them, and `awk:*system(*` covers only one of the three exec forms.
+exec_contained awk-print   "awk 'BEGIN{print \"\" | \"touch canary\"}'"
+exec_contained awk-getline "awk 'BEGIN{\"touch canary\" | getline x}'"
 
 # The refused writers above must not have run, exactly as section C asserts for its own.
 if [ -s "$WORK/src/three-lines.txt" ] && ! [ -e "$WORK/src/three-lines.txt.bak" ]; then
