@@ -80,6 +80,46 @@ compaction fires.
 5. If the pipeline computes context proximity itself, use the same input-only formula as
    `used_percentage` so the two agree.
 
+## The shape to build — THIS IS A REFACTOR, and the existing structure is not a constraint
+
+**Operator instruction, 2026-09-02, correcting the first draft of this file: build for the
+OUTCOME and structure the code around achieving it. Do not treat what is there now as the frame
+to fit into.** The first draft read as "add a branch above the env var in two places", which
+preserves exactly the shape that made this fragile.
+
+**The outcome: the pipeline knows the window the session is ACTUALLY running with, at the moment
+it asks, and every reader gets that answer from ONE place.**
+
+What follows from that, and each of these is licence rather than obligation:
+
+- **One resolver owns the whole chain**, and every reader calls it. Two hand-written copies of
+  one precedence order is the defect this task keeps tripping over, not a fact to work around.
+  `.claude/rules/mechanism-design.md` — *"a schema, list or grammar written N times is N−1
+  chances to drift. Single-source it as data the reader LOADS"* — and *"take the reshaped or
+  reduced form over the additive one"*.
+- **The env var stops being the top of the chain.** It becomes one fallback among others. Its
+  current primacy is documented at `core/hooks/ai-dlc-context-sensor.sh:379` as mirroring Claude
+  Code's own config merge; that rationale is about a STATIC config and does not survive a source
+  that changes mid-session.
+- **Nothing about the current layering is protected** — not the `settings.local` → project →
+  user order, not the `EFFECTIVE = min(WINDOW, MODEL_MAX)` clamp at
+  `core/hooks/ai-dlc-context-sensor.sh:402`, not the split between the hook and the validator.
+  If the clamp is redundant once `target` is authoritative, delete it; if a settings layer has no
+  remaining subject, say so and remove it. **A guard whose removal changes nothing is not
+  load-bearing.**
+- **Delete what the new source makes vestigial rather than leaving it beside the new path.**
+  Fix by subtraction first. Two resolution paths where one would do is how the next reader gets
+  the stale answer.
+
+**What is NOT open**: the operator's five required changes and the constraints below, the
+`~/.ai-dlc/window.json` schema, and the instruction not to edit `~/.claude/statusline.sh`. Those
+are the specification. Everything about how this repo currently reaches a window number is yours
+to reshape.
+
+**The acceptance criteria are behavioural on purpose.** None of them names a file. If the right
+structure means the answer comes from somewhere neither current reader lives, that is a better
+outcome and not a deviation.
+
 ## Constraints the operator stated
 
 - **`current_usage` is `null` before the first API call in a session, and again after `/compact`
@@ -92,7 +132,7 @@ compaction fires.
   file.** That is what the `session_id` check in change 2 guards against.
 - Writes are atomic (temp file plus rename), so partial reads do not occur.
 
-## What the premise check already established — do not re-derive, but do re-verify it still holds
+## What the premise check found — this is a MAP OF WHAT EXISTS, not a description of what to keep
 
 Measured 2026-09-02 against `origin/main`, with a control in the same invocation:
 
@@ -101,14 +141,14 @@ Measured 2026-09-02 against `origin/main`, with a control in the same invocation
   - `core/hooks/ai-dlc-context-sensor.sh:386` — `resolve_window()`
   - `core/scripts/validate-compact-window.sh:157` and `:182` — the second also sets
     `WINDOW_SOURCE` to the string `env CLAUDE_CODE_AUTO_COMPACT_WINDOW`
-  **Change both or the validator and the sensor will disagree about the window.** Grep for
-  further readers before starting; that count is a floor, not a census.
+  **That duplication is the thing to remove, not to update twice.** Grep for further readers
+  before starting; that count is a floor, not a census.
 - **The existing precedence is env → `settings.local` → project → user**, documented at
   `core/hooks/ai-dlc-context-sensor.sh:379`, and the resolved value is then clamped:
-  `EFFECTIVE = min(WINDOW, MODEL_MAX)` at `core/hooks/ai-dlc-context-sensor.sh:402`. **The new
-  source slots ABOVE the env var.** Decide deliberately whether `target` is subject to the
-  `MODEL_MAX` clamp — `target` is already model-derived, so clamping it twice may be a no-op or
-  may be wrong, and that is a question to answer with a measurement rather than a reading.
+  `EFFECTIVE = min(WINDOW, MODEL_MAX)` at `core/hooks/ai-dlc-context-sensor.sh:402`. **Recorded
+  so you know what you are replacing.** Whether any of it survives is a design call, not a
+  given — including the clamp, which may be a no-op once `target` is authoritative, since
+  `target` is already model-derived. Answer that with a measurement rather than a reading.
 - **Hook stdin DOES carry `session_id`**, so requirement 2 is feasible.
   `core/hooks/ai-dlc-context-sensor.sh:41` names the shared schema: `session_id`,
   `transcript_path`, `cwd`, `prompt_id`, `permission_mode`, `agent_id`, `agent_type`, `effort`.
@@ -131,13 +171,17 @@ Measured 2026-09-02 against `origin/main`, with a control in the same invocation
 2. **Derive the full reader set**, do not trust the two named above. Ask separately which readers
    IGNORE the window rather than only which ones read it — a status-blind reader has no token for
    a grep to find, and that exact question is what a sibling batch missed one release ago.
-3. **Decide where the read is SITED, once.** Two hand-written copies of one resolution order is
-   the drift `.claude/rules/mechanism-design.md` warns about, and no invariant currently binds
-   them. Prefer one function both readers call over editing the order twice; if that is not
-   possible, bind the copies and say why.
-4. **Build it**, honouring the fallback chain and the null constraints. `bash` is 3.2 — no
-   `mapfile`, `readarray`, `declare -A`; an empty array under `set -u` is an error. `jq` is
-   already a dependency of the sensor.
+3. **Design the resolver before editing anything, and write down the shape you chose and what
+   you are deleting.** One place owns the chain; every reader calls it. This is the step where
+   the refactor is decided, and skipping it produces the additive version by default — a new
+   branch bolted above an unchanged env-var path, in two files, which is the structure that
+   caused the defect. If you conclude the duplication must stay, that is a finding to report
+   with its reason, not a default to fall into.
+4. **Build it**, honouring the fallback chain and the null constraints, and **remove what the
+   new source makes vestigial in the same change**. A second resolution path left beside the new
+   one is how a later reader gets the stale answer. `bash` is 3.2 — no `mapfile`, `readarray`,
+   `declare -A`; an empty array under `set -u` is an error. `jq` is already a dependency of the
+   sensor.
 5. **Add fixture arms, and seed from what the PRODUCER emits, never from what the reader
    accepts.** `core/fixtures/context-sensor/run.sh` and `core/fixtures/context-provenance/run.sh`
    already `unset CLAUDE_CODE_AUTO_COMPACT_WINDOW` at the top because an ambient value silently
@@ -170,8 +214,14 @@ Each is a command, and each was checked to be answerable at the point it is read
    absent, not that a count is unchanged.
 5. `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push` is green on the release branch, with each
    changed fixture read BY NAME against an impossible-name control in the same invocation.
-6. Both readers found in action 2 agree on the window for one input. Assert it, in the same
-   invocation, against a control input where they should differ.
+6. **Every reader found in action 2 agrees on the window for one input** — trivially, if they
+   now share a resolver, in which case assert the SHARED CALL rather than the agreement, because
+   two callers of one function cannot disagree and a null there proves nothing. If any reader
+   still resolves independently, assert agreement in the same invocation against a control input
+   where they should differ.
+7. **The count of places that resolve a window is lower than it was.** Derive it before and
+   after with the same grep, and report both numbers. A refactor that leaves the old path in
+   place beside the new one has not landed, however green the arms are.
 
 ## Hazards
 
