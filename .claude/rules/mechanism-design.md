@@ -55,6 +55,13 @@ path the consumer-side validator BLOCKS, its own remedy pointed at that form, an
 asserted the acquittal on every run — a mechanism defending its own defect. An exemption needs a
 probe proving it does NOT cover the arm's own subject.
 
+**A record a program writes from its own input is a record of INTENT, not of completion.**
+Comparing it against that input is a tautology. Measured: a diagnosis keyed on the in-flight
+marker's `theirs:`, which `apply.sh` writes from its own argument before any write, fired over a
+tree still at base, and the remedy it offered stamped an unwritten tree. Decide only from records
+some OTHER event wrote — the stamp, written by the re-stamp after the writes — and ask of every
+record what state it can be in WITHOUT the thing it seems to attest having happened.
+
 ## Site the duty where the declaration decides
 
 Detect at USE time when a property has to hold across several delivery paths, and put the

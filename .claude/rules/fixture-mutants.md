@@ -131,3 +131,17 @@ paths:
   measured, three in a row, on a change that was in fact correct. `cmp -s` does
   not catch it: the mutation applied cleanly, to a file the run never loaded.
   Print the resolved path, or assert the kill count is non-zero.
+- **A fixture with more than one world records each world's refs IN the world.** A
+  `build_world` that sets `$B`/`$T` globally is overwritten by the next build, and a
+  helper then drives world A with world B's refs — which resolve to NOTHING in A's
+  dist and read as a withheld stamp, not as an error. Measured on one fixture, two
+  verdicts wrong in opposite directions: a correct arm red (manifest expansion empty
+  under the foreign ref) and a mutant green (the gate compared two regions rendered
+  against the same garbage). Write `.B`/`.T` beside the world and have every helper
+  read those.
+- **A mutation whose `sed` DIES is a mutant that never existed, and `if mut_copy ...`
+  then skips its arms with no verdict.** The `cmp -s` guard sees only a `sed` that ran
+  and matched nothing. Measured: BSD `sed` refused an `a\` spelled across two `-e`s,
+  the copy helper returned 1 silently, and the fixture printed PASS over a mutant no
+  arm ever scored. Report a failing `sed` as DID NOT APPLY, and spell `a\` text on the
+  next line of the same script argument with `$'...'`.

@@ -37,9 +37,72 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 45 IS IN FLIGHT. THE `0.482.0 → 0.489.0` PULL LANDED, THE GAP IS ZERO, AND THE SUBJECT IS `PC-S309`.
+### BATCH 45 SHIPPED AS `v0.493.0`, CORRECTED BY `v0.494.0`. THE CONSUMER IS AT `0.492.0`, THE GAP IS TWO, AND BATCH 46 HAS NO PRE-CHOSEN SUBJECT.
 
-This block replaces the batch-44 record below it. Every figure here was re-derived on 2026-09-03
+This block replaces the batch-45 record below it. Every figure here was re-derived on 2026-09-03
+after the merge, against the working tree with the controls in the same invocation; re-derive
+them again rather than reading them.
+
+**`VERSION` IS `0.494.0`, SO BATCH 46 RELEASES AS `0.495.0`.** Re-derive `VERSION` and add one.
+Batch 45 merged at `cb4fff3d` (PR #604, release commit `03eea5cf`), closing
+`PC-S309-APPLY-SH-DRIVER-SELF-UPDATE-ROW-PRESCRIBES-A-RERUN-ITS-OWN-UNION-GATE-REFUSES` as
+`BL-151`; `v0.494.0` corrected it at `04a136e0` (PR #605) and `BL-151` is rotated (archive
+68 → 69, live 83 → 82). `named_absorbed()` resolves the id to `0.493.0`, the FIRST release naming
+it — a consumer pulling to exactly that version gets the defect the correction removed, so the
+brief for the next pull names `0.494.0` as the floor.
+
+**THE CORRECTION, AND WHY IT WAS NEEDED.** The adversarial hand went idle twice without
+delivering, the batch merged on its own battery, and the hand's report landed after the merge —
+right, for the sixth time in this program. The v0.493.0 diagnosis also read the in-flight
+marker's `theirs:`, which `apply.sh` writes from its own argument before phase 1 writes anything,
+so that arm held by construction: a marker over a tree still at base fired the post-apply
+message and the `--finish` it offered stamped 2.0.0 over a 1.0.0 tree. **A record a program
+writes from its own input is a record of INTENT, not of completion** — decide only from records
+some other event wrote. The battery had four scenarios and the fifth, marker present and tree
+unwritten, was the one that failed: ask what state each record can be in WITHOUT the write having
+happened. And `mut_copy` returned silently when BSD `sed` refused an `a\` spelled across two
+`-e`s, so the fixture printed PASS over a mutant that never existed.
+
+**THE CONSUMER PULLED `0.489.0 → 0.492.0` BEFORE THIS BATCH STARTED** (its PR #1010, stamp
+`0.492.0` / `2f1ee8bc` on all four fields), so the gap was zero at the start and is TWO now
+(`0.493.0`, `0.494.0`), PENDING 1 (`PC-S309`). Both releases change `apply.sh`, a
+bootstrapping file: the consumer's installed `0.492.0` driver runs the pull that delivers them,
+and it carries neither the diagnosis nor the defect. A pull is operator-initiated; readiness is
+not authorization.
+
+**THE LEDGER MOVED WITHOUT A FILING.** md5 `30b64caf…` (was `9cdbad2c…`), **live 73, cited 45,
+unfiled 28**, archive 145 (was 143): the `0.492.0` pull's rotation, not a new candidate. Newest
+unfiled filing is still `PC-S309` at `2026-09-03`, and it left `UNFILED` by being cited here.
+Goal partition **18 DISCHARGED / 27 in flight / 28 untouched**, TERMINAL **33**. The sweep is
+EMPTY OF NEW WORK for batch 46; the standing corpus below decides, provenance first.
+
+**WHAT BATCH 45 FOUND, in the order it matters.** The plan's predicted reason for rejecting the
+`--finish`-shaped carve-out was FALSE — the tree being at theirs IS knowable before phase 1, from
+the stamp and the in-flight marker — and the carve-out was rejected anyway, by measurement: after
+a hand `--finish` it re-emits the semantic-merge WORKLIST and re-wedges the consumer. Build the
+alternative and let the battery choose the reason. The gate now DECIDES the third cause from
+those two records rather than listing it. The fixture's first revision returned two wrong
+verdicts in opposite directions because `build_world` set `$B`/`$T` globally and a later world
+clobbered them; refs are now per-world (`fixture-mutants.md` carries the rule). A synthetic
+consumer needs `setup-sites.md` beside the driver and a `core/scripts/` file in the dist, or the
+re-stamp is withheld and the marker stays down. The push gate went 17/17 PASS with exit 141 and
+the ref NOT on origin — second occurrence; `verification-discipline.md` now says to confirm the
+remote ref. The adversarial hand went idle twice without delivering and the batch merged on its
+own battery; read its report against `cb4fff3d` if it arrives.
+
+**THE SPAWN-LEDGER PREDICTION HOLDS** — 5 post-pull rows, 0 null `sprint`, 431 of 1272 null
+before. Closed; see action 1. **`BL-131` needs a scope decision** — its receipt has read 0 since
+`v0.488.0`, annotated and not closed; see action 1.
+
+**THE CONSUMER'S WORKING TREE MOVED DURING THE BATCH AND IT WAS NOT THIS SESSION.** Porcelain
+went 6 → 7, every path under `_bmad-output/` pipeline state (spawn ledger, arm log, compaction
+log), the ledger untouched, a graph session live throughout. This session issued no write to
+`/Users/n8/git/graph`. Record the count before acting and read the PATHS before calling a change
+a stop condition.
+
+### BATCH 45 SHIPPED AS `v0.493.0` — THE BLOCK ABOVE REPLACES THIS ONE. A RECORD OF HOW IT WAS SCOPED.
+
+This block was the batch-45 resume record. Every figure here was re-derived on 2026-09-03
 against the working tree, with the controls in the same invocation; re-derive them again rather
 than reading them.
 
@@ -4274,21 +4337,36 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), THEN CONTINUE BATCH 45 ON
-   `PC-S309`.** Its subject, its two declaring sites and its receipt are in the resume block; the
-   remaining work is to derive the full declaration and reader set, build the filed remedy AND the
-   `--finish`-carve-out alternative, score both against a battery, replace the receipt, and ship as
-   `0.490.0`.
+1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), THEN PICK BATCH 46's SUBJECT.**
+   Batch 45 is SHIPPED — `v0.493.0` at `cb4fff3d`, corrected by `v0.494.0` at `04a136e0`,
+   `PC-S309` closed as `BL-151` and rotated. Do not re-scope onto it. No subject is pre-chosen for batch 46: the sweep decides, and
+   if it is empty of new work the standing corpus in the resume block does, ranked by provenance
+   then consequence.
 
-   **FIRST, ESTABLISH WHICH OF THE TWO STATES YOU ARE IN, because this action reads as live in
-   both.** Run `cat VERSION`. At `0.489.0`, batch 45 has NOT shipped and the paragraph above is
-   your work. At `0.490.0` or higher it HAS, this action is stale, and your first job is action 6 —
-   re-derive this block, then pick batch 46's subject from a fresh sweep. Do not infer the answer
-   from the presence of `PC-S309` in the ledger: it stays live there until the consumer pulls
-   again, so it reads identically before and after the fix ships.
+   **ESTABLISH WHICH STATE YOU ARE IN BY THE COMMIT MESSAGE, NEVER BY VERSION DISTANCE.** The
+   previous revision of this action said "at `0.490.0` or higher batch 45 HAS shipped" — and it
+   had not: `0.490.0` through `0.492.0` were other work and `VERSION` read `0.492.0` with the batch
+   still open. The test is `git log -F --grep='<full PC- id>' origin/main`: a release commit
+   naming the id verbatim means shipped; the docs commit that names its short form does not
+   count, and `named_absorbed()` correctly skips it. Do not infer the answer from the ledger
+   either: an id stays live there until the consumer pulls.
 
    **Re-derive `VERSION` and add one; do not add one to the batch number.** The two have not agreed
-   since batch 44 and four releases between them were other work.
+   since batch 44.
+
+   **THE ADVERSARIAL HAND ON BATCH 45 WENT IDLE TWICE WITHOUT DELIVERING, THE BATCH MERGED ON ITS
+   OWN BATTERY, AND THE HAND WAS RIGHT — it cost `v0.494.0`.** Idle twice with two direct requests
+   unanswered is the measured base case AND the hand still reports; the measured cost of not
+   waiting is now one correction release in each of two batches. Wait for the hand, or ask the
+   operator whether to merge without it and put the hand's state in the question. Its remaining
+   unfixed finding is stated in the v0.494.0 message rather than fixed: a hand-edited report on a
+   stamped tree is diagnosed as post-apply, because the stamp cannot see the edit.
+
+   **`BL-131` NEEDS A SCOPE DECISION, NOT A FIX.** Its receipt has read exit 0 since `v0.488.0`
+   wired the gate into `apply.sh`, which is the partial-fix state the entry itself forbids closing
+   on; batch 45 annotated it and left step 2's autonomous self-update open. Either close step 2 or
+   narrow the entry and file step 2 separately — say which, and ask the operator if it is not
+   obvious. It carries no `PC-` id and ranks below any PC-backed subject.
 
    **DERIVE THE READER SET OF WHATEVER YOUR SUBJECT TOUCHES, AND DO NOT TRUST THE ONE THE FILING
    NAMES. THIS IS BATCH 44's BEST FINDING AND IT COST ONE GREP.** The filing named one reader of
@@ -4310,18 +4388,13 @@ so no block written before it changes verdict.
    validator that exercises YOUR subject.** Batch 44's did: installed exit 1 against shipped exit
    0 on the consumer's own artifact.
 
-   **THE SPAWN-LEDGER PREDICTION IS NOW TESTABLE AND IS STILL UNTESTED — DO NOT SCORE IT YET.**
-   The consumer HAS pulled, so the `v0.481.0` hook-side fix is installed. That fix repairs FUTURE
-   writes only, so the prediction was that a pull cannot flip the verdict. Re-derived after the
-   pull: **431 of 1272 rows carry a null `sprint`**, against 408 of 1249 before it, with 841
-   non-null rows as the control that the field is populated at all. All 23 rows added since the
-   batch-44 reading are null — **and that is NOT the confirmation it looks like.** The newest row
-   is timestamped `2026-09-03T04:43:33Z` and the pull's stamp commit `28cd3b966` landed at
-   `12:13:55Z`, so every row in the file was written by the OLD hook and the installed fix has not
-   yet had an opportunity to write one. **The discriminating input does not exist yet**: it is the
-   first spawn dispatched after the pull, and the consumer's pipeline was PAUSED throughout. Read
-   the verdict only once a row postdates that commit, and until then report the prediction as
-   open rather than as held.
+   **THE SPAWN-LEDGER PREDICTION IS TESTED AND HOLDS.** The `v0.481.0` hook-side fix repairs
+   FUTURE writes only, so the discriminating input was the first spawn after the pull. Read at
+   batch 45, 2026-09-03: **5 rows postdate the `0.489.0` stamp commit and 0 of them carry a null
+   `sprint`**, against 431 of 1272 null before it (the pre-pull population is the control that the
+   field WAS null under the old hook). Timestamps are `Z` in the ledger and offset-local in
+   `git log`, so compare after normalising; the five sit at `19:31Z` onward against a stamp at
+   `12:13Z` and a newest pre-pull row at `04:43Z`. Nothing further is owed on this prediction.
 
    **DO NOT TRUST A SWEEP THAT REPORTS NO NEW WORK UNTIL YOU HAVE CHECKED ITS GRAMMAR.** Three
    consecutive batches reported the ledger empty while a candidate sat in it, filed at a heading
@@ -4768,9 +4841,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 9cdbad2c... after the 0.482.0 -> 0.489.0 pull and its ledger rotation; it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
-   wc -l < /tmp/live.txt    # 73 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. UNCHANGED across that pull, and the ledger still moved -- one id left for the archive as another arrived
-   wc -l < /tmp/unfiled.txt # 29 -- PC-S308 left the set by being cited and archived, PC-S309 entered it by being filed
+   md5 -q "$L"              # 30b64caf... after the 0.489.0 -> 0.492.0 pull's ledger rotation; it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
+   wc -l < /tmp/live.txt    # 73 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. UNCHANGED across two pulls now, and the ledger still moved both times
+   wc -l < /tmp/unfiled.txt # 28 -- PC-S309 left the set at batch 45 by being cited by BL-151 and rotated into docs/backlog.archive.md
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -4778,8 +4851,9 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 73 LIVE CANDIDATES, 44 CITED, 29 UNFILED** — re-derived after the `0.482.0 →
-   0.489.0` pull and its ledger rotation. **Live HELD at 73 across a ledger whose md5 moved**,
+   **THE BASELINE IS 73 LIVE CANDIDATES, 45 CITED, 28 UNFILED** — re-derived after batch 45's
+   merge at `cb4fff3d`, on the ledger as the `0.489.0 → 0.492.0` pull left it (md5 `30b64caf…`,
+   archive 145). The paragraph below records the previous reading. **Live HELD at 73 across a ledger whose md5 moved**,
    because `PC-S308-HANDOFF-STOPPED-STATUS-NOT-IN-VALIDATOR-WHITELIST` was annotated `ADOPTED
    UPSTREAM` and rotated into the archive (142 → 143) in the same pull that filed `PC-S309`. An
    unmoved live count is not an unmoved ledger, and here it concealed two events at once. The
