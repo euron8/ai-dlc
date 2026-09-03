@@ -15,6 +15,62 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.486.0] - 2026-09-02
+
+### `git grep -E` implements neither `\b` nor `\s`, and answers a clean zero
+
+Three false zeros in one premise check, all in ad-hoc tool calls. `\b(1000000|200000)\b`
+scored 0 against a file carrying `200000` seven times. `^\s*(\.|source)` scored 0 over
+`core/hooks/`. Each read as a finished search.
+
+**The third one was load-bearing.** It said no hook sources a shared file — which was the
+premise the v0.485.0 duplication rested on. Re-run with `[[:space:]]`, two hooks do exactly
+that. Believing that zero would have shipped the additive version of the previous release.
+
+**Measured on both engines, because they disagree and only one is broken:**
+
+    /usr/bin/grep -cE 'a\sb'        1     control a[[:space:]]b  1
+    /usr/bin/grep -cE '\b200000\b'  1     control without \b     2
+    git grep -cE '\bMODEL_MAX\b'    0     control without \b    11
+    git grep -cE '^\s*local'        0     control [[:space:]]    2
+    git grep -cP '\bMODEL_MAX\b'    7
+
+`S9` of `validate-shell-portability.sh` mechanizes the tracked-file half. **Building it
+corrected the rule**: the first cut keyed on `grep` and reported 16 legal sites in this
+repo's own validators, because system `grep -E` supports both escapes. Keyed on `git grep`
+the false-positive set is EMPTY over 392 files, with a positive probe, a POSIX-form negative
+probe, and a third negative probe pinning that a plain `grep -E '\b'` is not flagged.
+Mutating the pattern to something unmatchable fails the run with "S9's own probe did not
+fire", so the arm can fail.
+
+The ad-hoc tool-call half reaches no arm — no tracked file records a Bash tool call — so it
+is one bullet in `tool-hazards.md`.
+
+### The durable-channel ceiling is raised on headroom, not on the rule arriving that day
+
+`52350 -> 57344`, on an explicit operator ruling, and it is the first of fourteen raises
+sized to headroom rather than to an incoming rule.
+
+**The thirteen prior raises are the argument.** Each was sized to that day's rule — 351, 477,
+491, 518, 520, 690, 707, 711, 722, 743, 831, 1700, 2560 bytes — and each left the channel
+within a few hundred bytes of its new ceiling. A6 stood at **52346/52350: four bytes free**.
+A ceiling re-set to current occupancy after every rule is a ratchet with an approval step.
+
+**The number is derived.** 52346 bytes across 7 files and 68 `## ` sections is 769 bytes per
+section, the unit a rule actually arrives in. 57344 is 56 KiB, leaving 4998 bytes — 6.5
+sections at the measured mean. Deliberately not more: a ceiling that never fires is
+decorative, and the guard has to keep firing. The channel now reads 52808/57344.
+
+The mechanize-first standard this header demands was met and it paid — `S9` exists because
+of it, and building `S9` is what corrected the rule's own statement.
+
+**A finding against an existing arm, reported rather than quietly reworded.** `S5_WHY` says
+"BSD grep has no `\s` shorthand ... undefined in an ERE". On this machine that is false:
+`/usr/bin/grep -cE 'a\sb'` answers 1 on input containing no literal `asb`, matching its
+`[[:space:]]` control. S5 may still be right for a grep this repo does not run; its stated
+rationale is wrong as written. Left in place — an arm right for a wrong stated reason is a
+finding, not a silent edit.
+
 ## [0.485.0] - 2026-09-02
 
 ### The window came from a launcher variable that a mid-session `/model` never updates
