@@ -322,6 +322,32 @@ render() {
   lr="$(bash "$SELF/ledger-reverify.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1!="STILL-LIVE"{ d = ($1=="HAND-REVIEW") ? "" : "  "$3; print $1"  "$2 d }' | sort -u)"
   none_or "$lr"
 
+  # ITS TWINS WERE BOTH DRIVEN HERE AND IT WAS NOT, WHICH IS THE WHOLE DEFECT. This detector
+  # names itself "the twin of ledger-reverify.sh's CLOSE-CANDIDATE and layer-drift.sh's
+  # EXTENSION-RETIRE-CANDIDATE" in its own header; both of those render above. It shipped in
+  # reconcile/, SKILL.md named it ZERO times, no step and no driver invoked it, and
+  # core/fixtures/shadowed-local-validators/ was green over it the whole time -- a fixture
+  # proving a detector works says nothing about whether anything RUNS it.
+  #
+  # THE 0/2 SPLIT IS ITS CONTRACT, and it is why this call does not end in `|| true` like the
+  # ones above. Its own header: "a caller must be able to tell 'no forks are shadowed' from
+  # 'this never ran', and those are the same empty output." Exit 2 is a refusal -- an
+  # unresolvable root, an unsourceable lib.sh, or a close grammar `ledger_close_awk` would not
+  # lift. Swallowing that would print `none` for a detector that never classified, which is
+  # the exact shape of report this region exists to stop.
+  #
+  # `local` is declared SEPARATELY from the assignment on purpose: `local x="$(cmd)"` returns
+  # the status of `local`, not of the command, so the refusal would read as success.
+  sub "Shadowed local validators (a local fork whose divergence upstream has ADOPTED — the operator confirms and retires, never auto-retired):"
+  local sv sv_rc
+  sv="$(bash "$SELF/warn-shadowed-local-validators.sh" --root "$CONSUMER" 2>/dev/null)"
+  sv_rc=$?
+  if [ "$sv_rc" -eq 0 ]; then
+    none_or "$(printf '%s' "$sv" | awk -F'\t' 'NF{print $1"  "$2"  "$3}' | sort -u)"
+  else
+    echo "DETECTOR-REFUSED  warn-shadowed-local-validators.sh exited ${sv_rc} without classifying, so this section is NOT a finding of 'none'. Run it directly against this consumer to see why: reconcile/warn-shadowed-local-validators.sh --root <consumer>"
+  fi
+
   echo
   echo "<!-- END GENERATED: reconcile-mechanical -->"
 }

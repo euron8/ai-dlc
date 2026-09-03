@@ -415,6 +415,98 @@ else
   bad "MUTANT DID NOT SURVIVE ITS OWN DELETION (region rows present? / tree line gone? / rc=$mut_rc) — something OTHER than the tree line is carrying the moved-ref arms, so those arms do not test what they claim"
 fi
 
+# --- Assertions 12-14: the shadowed-local-validator signal is REACHED by the driver ---
+# THE DEFECT. `warn-shadowed-local-validators.sh` shipped in reconcile/, named itself the twin
+# of ledger-reverify's CLOSE-CANDIDATE and layer-drift's EXTENSION-RETIRE-CANDIDATE, and both
+# of those render here — it did not. SKILL.md named it ZERO times; no step and no driver
+# invoked it. `core/fixtures/shadowed-local-validators/` was green over it the whole time,
+# which is the trap: a fixture proving a detector WORKS says nothing about whether the shipping
+# program RUNS it.
+#
+# A HEADING PLUS `none` CANNOT CATCH THIS, which is why these arms seed a real row. If the
+# driver never called the detector, `sv` would be empty and the section would render `none` —
+# byte-identical to a detector that ran and found nothing. The only arm that discriminates is
+# one where the detector MUST produce output.
+#
+# Seeded at the DEFAULT paths, because emit-report.sh passes only `--root`: the ledger at
+# `_bmad-output/ai-dlc-update/push-candidate-ledger.md`, forks under `scripts/ai-dlc-local`,
+# core twins under `scripts/ai-dlc`. The entry shape is the producer's — a `##` heading and a
+# LINE-LEADING `ADOPTED UPSTREAM (…)` annotation, which is what the anchored close grammar in
+# ledger-reverify.sh actually accepts.
+mkdir -p "$CONSUMER/_bmad-output/ai-dlc-update" "$CONSUMER/scripts/ai-dlc-local" "$CONSUMER/scripts/ai-dlc"
+cat > "$CONSUMER/_bmad-output/ai-dlc-update/push-candidate-ledger.md" <<'SHADLED'
+# Push-candidate ledger (fixture)
+
+## PC-CLOSED-SHADOW — validate-shadowprobe.sh: divergence
+Prose about core/scripts/validate-shadowprobe.sh.
+ADOPTED UPSTREAM (v0.130.0, verified 2026-07-22)
+
+## PC-OPEN-KEEP — validate-keepprobe.sh: divergence
+Prose about core/scripts/validate-keepprobe.sh — still diverging.
+SHADLED
+printf '#!/bin/sh\nexit 0\n' > "$CONSUMER/scripts/ai-dlc-local/validate-shadowprobe.sh"
+printf '#!/bin/sh\nexit 0\n' > "$CONSUMER/scripts/ai-dlc/validate-shadowprobe.sh"
+printf '#!/bin/sh\nexit 0\n' > "$CONSUMER/scripts/ai-dlc-local/validate-keepprobe.sh"
+printf '#!/bin/sh\nexit 0\n' > "$CONSUMER/scripts/ai-dlc/validate-keepprobe.sh"
+
+SHAD_REGION="$WORK/shadow-region.txt"
+bash "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$SHAD_REGION" 2>/dev/null
+
+if grep -q 'Shadowed local validators' "$SHAD_REGION"; then
+  ok "the driver renders a shadowed-local-validator section at all"
+else
+  bad "no shadowed-local-validator section in the region — emit-report.sh does not drive warn-shadowed-local-validators.sh, so the detector never runs on a real pull"
+fi
+
+# The discriminating arm: a row the detector alone can produce.
+if grep -q 'RETIRE-CANDIDATE' "$SHAD_REGION" && grep -q 'scripts/ai-dlc-local/validate-shadowprobe.sh' "$SHAD_REGION"; then
+  ok "a CLOSED entry whose fork shadows a core validator reaches the operator as a RETIRE-CANDIDATE row — the detector actually RAN"
+else
+  bad "the seeded shadowed fork produced no RETIRE-CANDIDATE row in the region. A heading rendering 'none' here is what an uninvoked detector looks like, so this is the arm that separates the two."
+fi
+
+# NEGATIVE: the OPEN entry's fork must NOT be flagged. Without this, a detector widened to
+# report every fork would satisfy the arm above and look correct.
+if grep -q 'validate-keepprobe.sh' "$SHAD_REGION"; then
+  bad "the OPEN entry's fork was flagged too — the region is reporting every fork rather than the closed-entry ones, and the arm above would pass on a signal that discriminates nothing"
+else
+  ok "the OPEN entry's fork is NOT flagged — the rendered signal keeps the CLOSED gate"
+fi
+
+# --- Assertion 15: a REFUSING detector renders DETECTOR-REFUSED, never `none` ----------
+# The detector's own header: "a caller must be able to tell 'no forks are shadowed' from
+# 'this never ran', and those are the same empty output." Exit 2 is a refusal. Rendering
+# `none` for it would put a clean line in front of the operator for a check that never
+# classified — the failure this whole region exists to prevent, reintroduced by its newest
+# section.
+#
+# The sandbox copies the WHOLE reconcile/ dir: emit-report.sh resolves $SELF beside itself, so
+# a copy picks up the stubbed detector, and no shipped file is touched. An UNMUTATED control
+# runs through the same sandbox first — a sandbox that simply died also prints no
+# RETIRE-CANDIDATE row, and that is indistinguishable from the refusal branch working.
+SHADMUT="$WORK/shadow-mutant"
+mkdir -p "$SHADMUT"
+cp "$(dirname "$EMIT")"/*.sh "$SHADMUT/" 2>/dev/null
+cp "$(dirname "$EMIT")"/*.md "$SHADMUT/" 2>/dev/null
+
+ctl_region="$WORK/shadow-ctl-region.txt"
+bash "$SHADMUT/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$ctl_region" 2>/dev/null
+if grep -q 'scripts/ai-dlc-local/validate-shadowprobe.sh' "$ctl_region"; then
+  ok "control: the UNMUTATED sandbox copy renders the RETIRE-CANDIDATE row, so the refusal arm below measures the stub and not a broken sandbox"
+else
+  bad "FIXTURE BROKEN — the unmutated sandbox copy renders no RETIRE-CANDIDATE row; the refusal arm below would pass for the wrong reason"
+fi
+
+printf '#!/usr/bin/env bash\nexit 2\n' > "$SHADMUT/warn-shadowed-local-validators.sh"
+mut_region="$WORK/shadow-mut-region.txt"
+bash "$SHADMUT/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$mut_region" 2>/dev/null
+shad_body="$(awk '/Shadowed local validators/{f=1;next} f&&/^\*\*/{exit} f' "$mut_region")"
+if grep -q 'DETECTOR-REFUSED' <<<"$shad_body" && ! grep -qx 'none' <<<"$shad_body"; then
+  ok "a detector exiting 2 renders DETECTOR-REFUSED and NOT 'none' — a refusal cannot read as a clean section"
+else
+  bad "a detector exiting 2 did not produce DETECTOR-REFUSED (got: $(printf '%s' "$shad_body" | tr '\n' ' ' | head -c 120)) — the 0/2 split the detector's contract requires is not preserved by the driver"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "reconcile-emit-report: PASS"; exit 0; fi
 echo "reconcile-emit-report: $fails assertion(s) FAILED" >&2
