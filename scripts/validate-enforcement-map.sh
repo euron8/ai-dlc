@@ -3785,6 +3785,68 @@ if [ -n "${i33c_hits// /}" ]; then
   err "I33c: these fixtures walk up from their OWN location into a core subtree while naming only the DISTRIBUTION layout:${i33c_hits}. Self-rooting is what I33 and I33b prescribe and it is only half the remedy -- install.sh splits the parent (core/fixtures/ -> tests/fixtures/ at the project root, core/schemas/ -> .claude/schemas/), so the fixture is green here and exits nonzero on every consumer, which step 2 turns into a permanent stop on the self-update. Add the consumer candidate beside the distribution one, as apply-drift-after-write/seed.sh now does."
 fi
 
+# --- I106: a SHIPPING fixture never resolves its root by walking for VERSION (I33 family) ---
+# I33, I33b and I33c all check the SHAPE of a chain that reaches a core subtree. None of
+# them checks the MARKER a fixture walks up for, and a marker walk is the fourth spelling of
+# the same consumer-side failure: `while ...; do [ -f "$_d/VERSION" ] && break; done` finds
+# the distribution root here and finds NOTHING on an installed consumer, whose stamp is
+# `.claude/.ai-dlc-version` and which carries no VERSION file at all. The fixture then takes
+# its own FIXTURE BROKEN arm, exits 2, and the consumer's pre-push -- which treats a nonzero
+# run.sh as FAIL -- refuses the push that would land the release carrying it.
+#
+# THE DEFECT. v0.491.0 shipped `core/fixtures/preclassify-rename-row/run.sh` with that walk,
+# copied from `settings-merge-unparseable-template/run.sh`, where it is CORRECT -- that
+# fixture is `.dist-only` and never reaches a consumer. Reported by the reference consumer
+# against the 0.489.0 -> 0.491.0 apply, against a control fixture green in the same run, and
+# reproduced on a tree built by running install.sh into an empty directory.
+#
+# THE POPULATION IS THE SHIP SET, DERIVED THE WAY install.sh DERIVES IT: every fixture
+# directory with no `.dist-only` marker. A `.dist-only` fixture may walk for VERSION -- eight
+# do today, and the walk is the right resolver for a battery that only ever runs here.
+#
+# MEASURED BEFORE SHIPPING: the grammar matches 9 files across core/fixtures; 8 are
+# `.dist-only`; the ninth is the defect. After the fix it matches 0 shipping files, which is
+# why the probe is not optional. Comment lines are excluded for the reason I33c records --
+# the fix's own comment names the walk to explain why it is gone.
+i33d_pat='\[ ! -f "\$[A-Za-z_][A-Za-z0-9_]*/VERSION" \]|\[ -f "\$[A-Za-z_][A-Za-z0-9_]*/VERSION" \]'
+i33d_scan() { # i33d_scan <file> -> offending non-comment line(s), if any
+  grep -nE "$i33d_pat" "$1" 2>/dev/null | grep -vE '^[0-9]+:[[:space:]]*#'
+}
+
+i33d_probe="$(mktemp -d 2>/dev/null)"
+if [ -n "$i33d_probe" ] && [ -d "$i33d_probe" ]; then
+  printf '_d="$HERE"\nwhile [ "$_d" != "/" ]; do\n  if [ -f "$_d/VERSION" ]; then ROOT="$_d"; break; fi\n  _d="$(dirname "$_d")"\ndone\n' > "$i33d_probe/bad1.sh"
+  printf 'while [ "$R" != "/" ] && [ ! -f "$R/VERSION" ]; do R="$(dirname "$R")"; done\n' > "$i33d_probe/bad2.sh"
+  printf '# if [ -f "$_d/VERSION" ]; then -- quoted in prose only\nROOT="$(cd "$HERE/../../.." && pwd)"\n[ -f "$ROOT/.claude/.ai-dlc-version" ] && :\n' > "$i33d_probe/ok.sh"
+  i33d_p1="$(i33d_scan "$i33d_probe/bad1.sh" | grep -c . || true)"
+  i33d_p2="$(i33d_scan "$i33d_probe/bad2.sh" | grep -c . || true)"
+  i33d_pn="$(i33d_scan "$i33d_probe/ok.sh"   | grep -c . || true)"
+  rm -rf "$i33d_probe"
+  [ "$i33d_p1" -eq 0 ] && err "I106's positive probe (the if/break walk) was NOT reported. That is the spelling v0.491.0 shipped, so a clean corpus result would mean nothing."
+  [ "$i33d_p2" -eq 0 ] && err "I106's negated-test probe (the while ! -f walk) was NOT reported, so the grammar covers only one of the two spellings in the corpus."
+  [ "$i33d_pn" -ne 0 ] && err "I106's negative probe WAS reported: a three-up self-rooted resolver, with the walk quoted only in a comment, was flagged. That is the remedy this invariant prescribes, and flagging it would make the check unsatisfiable."
+else
+  err "I106 could not create its probe directory, so neither direction of its scanner was proven this run."
+fi
+
+i33d_hits=""
+i33d_ship_n=0
+if [ -d "$REPO_ROOT/core/fixtures" ]; then
+  # CANDIDATES first, one recursive grep; the ship-set filter is paid only on matched files.
+  for _sf in $(grep -rlE "$i33d_pat" "$REPO_ROOT/core/fixtures" --include='*.sh' 2>/dev/null | sort); do
+    _fd="$(dirname "$_sf")"
+    while [ "$_fd" != "$REPO_ROOT/core/fixtures" ] && [ "$(dirname "$_fd")" != "$REPO_ROOT/core/fixtures" ]; do _fd="$(dirname "$_fd")"; done
+    [ -f "$_fd/.dist-only" ] && continue
+    _r="$(i33d_scan "$_sf")"
+    [ -n "$_r" ] && i33d_hits="$i33d_hits ${_sf#$REPO_ROOT/}"
+  done
+  i33d_ship_n="$(ls -d "$REPO_ROOT"/core/fixtures/*/ 2>/dev/null | while IFS= read -r _d; do [ -f "$_d.dist-only" ] || echo x; done | grep -c x || true)"
+fi
+[ "${i33d_ship_n:-0}" -gt 0 ] || err "I106 derived ZERO shipping fixtures, so its corpus scan could only report clean. The ship set is derived from the absence of .dist-only markers and an empty one is an instrument failure, not a pass."
+if [ -n "${i33d_hits// /}" ]; then
+  err "I106: these SHIPPING fixtures resolve their root by walking up for a VERSION file:${i33d_hits}. An installed consumer has no VERSION at its root (its stamp is .claude/.ai-dlc-version), so the walk finds nothing there, the fixture exits 2, and the consumer's pre-push refuses the push that lands the release. Root at the fixture's own location -- three levels up is the project root in both layouts -- and name the distribution and consumer candidates side by side, as preclassify-rename-row/run.sh and context-provenance/run.sh do. A fixture that genuinely needs the distribution root is .dist-only, and says why in the marker."
+fi
+
 # --- I20: every fixture is DRIVEN, or declares in writing that it cannot be -----
 # core/git-hooks/pre-push runs the fixture suite as
 #
