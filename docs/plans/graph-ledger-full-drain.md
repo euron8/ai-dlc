@@ -147,8 +147,12 @@ commit, at `VERSION` 0.483.0 — because it was deliberately kept out of the `fi
 precedes the bump. Batch 43's ids still resolve to `0.480.0` for `0.481.0` work, which is the
 `tail -1` defect and is unchanged.
 
-**THE FIGURES, re-derived by running the derive block.** Ledger md5 **`1981713c…`**. **73 live,
-142 archived, 44 cited, 29 unfiled.** DISCHARGED **21 raw / 18 corrected**, IN-FLIGHT **27**,
+**THE FIGURES, re-derived by running the derive block AFTER the merge.** Ledger md5
+**`1981713c…`**. **73 live, 142 archived, 45 cited, 28 unfiled.** **Those last two are the
+POST-BATCH values and they differ by one from what the sweep read** — the sweep found 44/29, and
+filing `BL-147` against the new candidate moved it from unfiled to cited. Both numbers are right
+for the moment they were taken; if you read 44/29 anywhere above, that is the sweep's reading
+before this batch filed anything. DISCHARGED **21 raw / 18 corrected**, IN-FLIGHT **27**,
 UNTOUCHED **28**, overlap **3**, TERMINAL **32**; partition 21+27+28−3 = 73. `docs/backlog.md`
 **82 live / 67 archived** after filing `BL-147`, `BL-148` and `BL-149` and rotating two of the three. **The consumer
 dirty count is not a gate**: it read 5 at the start and 6 at the close, every path its own
@@ -4138,16 +4142,37 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 44's
-   SUBJECT.** Batch 43 shipped as `v0.481.0` and was corrected by `v0.482.0`; the distribution
-   `VERSION` is `0.482.0`. Number yours 44.
+1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 45's
+   SUBJECT.** Batch 44 shipped as `v0.483.0`; the distribution `VERSION` is `0.483.0`. Number
+   yours 45.
 
-   **RUN THE SECOND TEST FIRST THIS TIME — BATCH 43 LEFT IT OWED.** Its subject was a hook, and
-   action 7's differential drives `validate-layer-entries.sh`, which does not exercise one. The
-   discriminating test for `v0.481.0` is the consumer's installed `validate-spawn-ledger.sh
-   --sprint 308` against its live spawn ledger: it reported **exit 3 PRE-LEDGER** before the fix
-   because every row carried `"sprint":null`. It cannot change until they pull, so this is a
-   measurable-and-unmeasured value, not a null. Take the reading before you propose anything.
+   **DERIVE THE READER SET OF WHATEVER YOUR SUBJECT TOUCHES, AND DO NOT TRUST THE ONE THE FILING
+   NAMES. THIS IS BATCH 44's BEST FINDING AND IT COST ONE GREP.** The filing named one reader of
+   the In-Flight status column; deriving all of them found a SECOND live defect in the sibling
+   guard, which had the exact equality bug the first reader's own comment says it deliberately
+   avoided. A filing is authoritative about the symptom and evidence about nothing else — and
+   that includes its account of WHAT READS the thing.
+
+   **ASK WHAT YOUR FIX UNBLOCKS BEFORE DECIDING IT IS A SEPARATE RELEASE.** Batch 44's two halves
+   looked separable and were not: fixing the guard alone converts a failure that fails OPEN into a
+   handoff that WEDGES, because the only compliant way to clear the guard was a token the other
+   half legalises. Shipping either alone was worse than shipping neither.
+
+   **THE SECOND TEST IS BANKED AND NOTHING IS OWED.** Batch 44 discharged batch 43's owed reading
+   AND took its own. Do not skip yours: the recipe in action 7 names `validate-layer-entries.sh`
+   by hand, and at batch 44 that file was **byte-identical** between the consumer and this tree,
+   so its perfect null was two runs of one program and both sides exited 2, which is a refusal
+   rather than a finding. **Put the `cmp -s` control in the same invocation and pick the
+   validator that exercises YOUR subject.** Batch 44's did: installed exit 1 against shipped exit
+   0 on the consumer's own artifact.
+
+   **THE SPAWN-LEDGER READING IS TAKEN AND STAYS AT exit 3 PRE-LEDGER**, correctly, because the
+   consumer has not pulled. Its population is now measured: **408 of 1249 rows carry
+   `sprint:null`, all 28 rows naming 308 are null, and the newest was written during batch 44.**
+   The `v0.481.0` fix is hook-side and repairs FUTURE writes only, so the existing rows stay null
+   after a pull and the verdict cannot flip until new spawns are dispatched post-pull. **Do not
+   report that pull as "will go green"; it will not, and saying so is a prediction sent without
+   its preconditions.**
 
    **DO NOT TRUST A SWEEP THAT REPORTS NO NEW WORK UNTIL YOU HAVE CHECKED ITS GRAMMAR.** Three
    consecutive batches reported the ledger empty while a candidate sat in it, filed at a heading
@@ -4155,6 +4180,19 @@ so no block written before it changes verdict.
    different questions. The arm is now `^#{2,6}`; if you touch it, check it against
    `ledger_entry_shape()` at `core/skills/ai-dlc-update/reconcile/lib.sh:278` rather than against
    your own reading of the ledger.
+
+   **BATCH 44's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW IT.**
+   `PC-S308-HANDOFF-STOPPED-STATUS-NOT-IN-VALIDATOR-WHITELIST` shipped as `v0.483.0`, is cited by
+   `BL-147` in `docs/backlog.archive.md`, and stays live in the consumer's ledger until they pull.
+   Do not re-scope onto it. **`BL-148` IS NEW, LIVE AND DELIBERATELY NOT FIXED** — the In-Flight
+   token set is declared in four core files, is absent from `docs/vocabulary-index.md` and is
+   bound by no invariant, which is why a one-token miss reached a consumer. Its arm would live in
+   `scripts/validate-enforcement-map.sh`, which the suite POLE invokes, so it is a wall-clock
+   change to be timed from inside the repo; its false-positive set over English prose naming
+   tokens in backticks has not been measured; and the single-source form (tokens as DATA the
+   validator loads and the step files render) is probably right and is larger than the arm. It
+   carries no `PC-` id, so it ranks BELOW any PC-backed entry the sweep turns up. Its receipt
+   exits 1 today; run it raw before scoping.
 
    **BATCH 43's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW BOTH IDS.**
    `PC-S308-DISPATCH-GUARD-SPRINT-FIELD-INTERMITTENTLY-NULL` and
@@ -4228,8 +4266,9 @@ so no block written before it changes verdict.
    interrupt; if you genuinely need to ask, ask the OPERATOR whether to, and put the peer's current
    state into the question.
 
-   **THE GAP IS ONE RELEASE AND PENDING IS 1** — the consumer's stamp reads `0.479.0` against a
-   distribution `VERSION` of `0.480.0`, and the one pending candidate is batch 42's.
+   **THE GAP IS FOUR RELEASES AND PENDING IS 4** — the consumer's stamp reads `0.479.0` against
+   a distribution `VERSION` of `0.483.0`, and the four pending are batch 42's, batch 43's two, and
+   batch 44's. **Past five this file calls the range WIDE, and the next batch reaches that line.**
    **Your batch will widen the gap, which is expected and is not a reason to reorder anything.**
    Re-derive both; a zero gap is a state, not a property. That is
    not permission to close it: a pull is operator-initiated, readiness is not authorization, a
@@ -4518,7 +4557,7 @@ so no block written before it changes verdict.
    `predicate-differential.sh` fingerprints the corpus either side of its own run for exactly this
    reason; a hand-rolled measurement has no such guard.
 
-1a. **`docs/backlog.md` IS AT 80 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
+1a. **`docs/backlog.md` IS AT 82 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
    is not blocked. That is not licence to file rather than fix — the standing correction in the
    resume block still governs — but a filing no longer costs a rotation, and rotating still means
    CLOSING, which needs a measurement.
@@ -4568,9 +4607,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # a79811f7... unmoved across batches 41, 42 and 43; a MOVE alone is NOT an alarm -- check the id set too
-   wc -l < /tmp/live.txt    # 72 with the corrected ^#{2,6} grammar; 71 with the old ^## one
-   wc -l < /tmp/unfiled.txt # 28
+   md5 -q "$L"              # 1981713c... at batch 44 close; it MOVED during batch 44 and that was a real filing -- a move alone is still NOT an alarm, check the id set too
+   wc -l < /tmp/live.txt    # 73 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer
+   wc -l < /tmp/unfiled.txt # 28 after this batch filed BL-147; the sweep itself read 29
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -4578,7 +4617,10 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 72 LIVE CANDIDATES, 44 CITED, 28 UNFILED.** Live FELL for the first time in
+   **THE BASELINE IS 73 LIVE CANDIDATES, 45 CITED, 28 UNFILED** — re-derived at batch 44's close,
+   after the consumer filed one and this side cited it. Live ROSE 72 → 73 on that filing. The
+   paragraph below records the one time live FELL, which is a different event and still the only
+   one of its kind. Live FELL for the first time in
    this program: the operator carried the `IS-CORE` rejection into a graph session and that session
    rotated it together with `PC-S308-STEP1A-ROTATE-REMEDY-NO-SPRINT-START-DESTINATION`, which had
    been delivered at `v0.471.0` and stayed live only because the pull did not rotate it. **A
