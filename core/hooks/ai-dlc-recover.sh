@@ -297,6 +297,8 @@ delivers by file (Rule 20), so **the deliverable file IS the handle** -- it need
 no \`agent_id\`, takes no \`task_id\`, and outlives a compaction. For each row of the
 snapshot's \`In-Flight Teammates\` section:
 
+- **Status \`stopped\`** -> SKIP the row. Take this arm FIRST: it also satisfies
+  the absent test below, and re-arming it re-dispatches work an operator ended.
 - **Deliverable exists, is non-empty, and is NEWER than the row's \`dispatched-at\`**
   -> the teammate DELIVERED. Consume the file and strike the row. Never re-dispatch.
 - **Deliverable exists but PREDATES \`dispatched-at\`** -> it is a previous sprint's

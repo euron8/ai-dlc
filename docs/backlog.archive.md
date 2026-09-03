@@ -5031,3 +5031,55 @@ that assertion's text scores STILL-LIVE. Keyed on the behavioural phrase, not on
 binds; if the arm is reworded, re-anchor rather than reading the non-close.
 
 verify: sh o=$(bash core/fixtures/handoff-resume-guard/run.sh 2>&1); grep -qE '^  ok .*trailing note' <<<"$o"
+## BL-150 — legalising `stopped` made three status-blind readers reachable, and they re-arm and re-dispatch a teammate the operator stopped
+
+**LANDED (v0.484.0, verified fd08c6aa).**
+
+**Found by an adversarial hand reporting AFTER `v0.483.0` merged**, 2026-09-02, and FIXED in
+`v0.484.0`. Distribution-internal, no `PC-` id. It is here because `v0.483.0` is what made it
+reachable.
+
+`v0.483.0` legalised `stopped` in the In-Flight `status` column. Three core sites iterate EVERY
+row of that section with **no status filter at all** and route an absent deliverable to re-arm
+and eventually re-dispatch:
+
+    core/skills/ai-dlc/SKILL.md:53-56          "Older = ... resume the beat, as for absent"
+    core/skills/ai-dlc/steps/route.md:72-76    "Older or absent means the beat resumes"
+    core/hooks/ai-dlc-recover.sh:297-313       "Deliverable absent -> ... ARM A FRESH beat"
+
+**A `stopped` row has an absent deliverable BY THE DEFINITION `v0.483.0` ITSELF WROTE** —
+"stopped before delivering". So all three classify it as an undelivered teammate, arm a wait-beat
+over it, and `ai-dlc-recover.sh` — a `SessionStart` hook on the `compact` matcher — carries that
+to re-dispatch once `max_wait_beats` is exhausted. `recover.sh:315` calls re-dispatching a live
+or delivered teammate "a lead-conduct retro finding".
+
+**THE DEFECT WAS UNREACHABLE BEFORE THE FIX, AND THE FIX IS WHAT REACHED IT.** Until `v0.483.0`,
+deletion was the only disposition that passed both gates, so no `stopped` row survived to be
+read by any of the three. **This is the "what does your change make reachable" question, and the
+lead's own reader sweep missed it** — that sweep was keyed on `--include="*.sh"` parsers and
+dispositioned `recover.sh` as "prose, no token branch", which was true and was the wrong
+question. Status-BLIND is worse than branching wrongly: there is no token to find.
+
+**AND `route.md` CONTRADICTED ITSELF 538 LINES APART, WITH `v0.483.0` MAKING THE WRONG HALF
+PERMANENTLY FALSE.** `route.md:75` told the resume path *"(A resume that followed `handoff.md`
+Step 1 finds the table empty)"*, while `route.md:611-617` had carried the handoff exception —
+rows are KEPT — since `v0.408.0`. The premise is now never true, so its consequent is always
+reached: the mirror of a check that cannot fire.
+
+**`stopped` ALSO HAD NO REAPER, WHICH THIS ENTRY FIXES.** `_gate-procedures.md` said "do not
+delete a `stopped` row" and nothing anywhere deleted one. Measured: every hit for `stopped`
+co-occurring with delete/remove/clear/prune across `core/skills`, `core/hooks` and `core/scripts`
+is a PROHIBITION on deleting it; control, `DELETE` instructions for the other two tokens exist,
+1 in each declaring file. The section would have grown monotonically for the snapshot's life,
+bounded only by the byte budget whose 446% overrun IN THIS SAME SECTION is why
+`core/fixtures/inflight-row-shape/` exists. The discharge is now named: the successor deletes
+`stopped` rows at its first snapshot write after the resume, once it has read them.
+
+**Stated limitation of the receipt below.** Its subject is PROSE read by a model, so there is no
+program to drive and the receipt asserts the skip clause is present at all three sites. A
+rewording that preserves the instruction scores STILL-LIVE, and a clause present but ignored by
+the model scores CLOSE. That is the weaker form and it is chosen because the subject is an
+instruction, not a mechanism; it carries a control so a broken grammar exits 9 rather than
+reporting a false close.
+
+verify: sh n=0; for f in core/skills/ai-dlc/SKILL.md core/skills/ai-dlc/steps/route.md core/hooks/ai-dlc-recover.sh; do [ -f "$f" ] || exit 9; grep -q 'In-Flight Teammates' "$f" || exit 9; grep -qiE 'stopped' "$f" && grep -qiE 'skip|never re-arm|SKIP THE ROW' "$f" && n=$((n+1)); done; [ "$n" -eq 3 ]

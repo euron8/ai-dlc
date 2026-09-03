@@ -51,7 +51,9 @@ agent MUST output:
   Position`)
 - Any in-flight sub-step from `Recent Activity`, and every
   `In-Flight Teammates` row with whether its deliverable exists
-  and is newer than its `dispatched-at`. Newer = DELIVERED:
+  and is newer than its `dispatched-at`. Status `stopped` = skip
+  the row: stopped deliberately, never re-arm or re-dispatch.
+  Newer = DELIVERED:
   consume it, never re-dispatch. Older = a prior sprint's file,
   not delivery: resume the beat, as for absent. Unreachable
   never means dead.

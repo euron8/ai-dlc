@@ -845,7 +845,12 @@ the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
   snapshot update"). A teammate STOPPED before it delivered takes `stopped`
   and **keeps its row** — `steps/handoff.md` step 1 requires that, because a
   successor session cannot tell a deleted row from a teammate that never
-  existed. Reachable bounds WHETHER you can message it; Rule 28
+  existed. That row has one reader and is DISCHARGED by it: the successor
+  deletes it at its first snapshot write after the resume (`route.md`), so
+  `stopped` is a handoff-to-resume record and never permanent history. A
+  `stopped` row is also SKIPPED by every wait-beat and re-dispatch rule — its
+  deliverable is absent because it was stopped, and re-arming it would restart
+  work an operator ended. Reachable bounds WHETHER you can message it; Rule 28
   bounds WHAT that message may carry. An empty table is normal and means nothing is in
   flight.
   **Rows only. No prose, no struck-through history** — `status` is how a
