@@ -37,16 +37,66 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### THIS PROGRAM IS LIVE AGAIN. THE RUNTIME CONTEXT-WINDOW TASK IS DISCHARGED — START AT BATCH 45.
+### BATCH 45 IS IN FLIGHT. THE `0.482.0 → 0.489.0` PULL LANDED, THE GAP IS ZERO, AND THE SUBJECT IS `PC-S309`.
 
-The task that outranked this program shipped as `v0.485.0` and merged to `main` at `9cada242`.
-`docs/plans/runtime-context-window-detection.md` is retitled `DISCHARGED — DO NOT EXECUTE`; do
-not open it for work. This block replaces the pause that stood here.
+This block replaces the batch-44 record below it. Every figure here was re-derived on 2026-09-03
+against the working tree, with the controls in the same invocation; re-derive them again rather
+than reading them.
 
-**This program resumes at BATCH 45.** Its state is unchanged from where it stopped — gap 5,
-PENDING 4, and `BL-148` is the standing recommendation.
+**`VERSION` IS `0.489.0`, SO BATCH 45 RELEASES AS `0.490.0`.** Re-derive `VERSION` and add one; do
+not add one to the batch number. **`0.486.0`, `0.487.0`, `0.488.0` and `0.489.0` name no `PC-` and
+no `BL-` id in their commit messages and were NOT batches of this program** — the version distance
+from batch 44 is not a count of batches. `docs/plans/runtime-context-window-detection.md` is
+retitled `DISCHARGED — DO NOT EXECUTE`; do not open it for work.
 
-### BATCH 44 SHIPPED AS `v0.483.0`, CORRECTED BY `v0.484.0`. GAP 5, PENDING 4. BATCH 45 IS NEXT.
+**THE PULL RAN, AND IT WAS NOT THIS SESSION'S TO RUN.** A graph session applied `0.482.0 →
+0.489.0` under the operator's own authorization, as the consumer's PRs #1008 (`28cd3b966`) and
+#1009 (`239418803`, the deferred ledger rotation). The consumer stamp reads `0.489.0` / `4d577755`
+on all four fields. **The delivery gap is ZERO for the first time since `v0.425.0`** — a state, not
+an achievement, and your release reopens it. Report it; do not treat it as a reason to reorder.
+
+**THE LEDGER MOVED AND THE COUNTS MOVED WITH IT.** md5 `9cdbad2c…`, **live 73, cited 44, unfiled
+29**, archive 143. Live HELD at 73 because `PC-S308-HANDOFF-STOPPED-STATUS-NOT-IN-VALIDATOR-WHITELIST`
+left for the archive as `PC-S309` arrived — **an unmoved live count with a moved md5 is not an
+unmoved ledger**, and reading the count alone would have missed both events. Goal partition
+**17 DISCHARGED / 27 in flight / 29 untouched**, TERMINAL **33**.
+
+**BATCH 45'S SUBJECT IS `PC-S309-APPLY-SH-DRIVER-SELF-UPDATE-ROW-PRESCRIBES-A-RERUN-ITS-OWN-UNION-GATE-REFUSES`**,
+filed 2026-09-03, live and unfiled here. Find it in the consumer's ledger by ID, not by line — that
+file is one the consumer holds open and a line number in it is stale by construction.
+`apply.sh:501-502`
+emits a `RESOLVED driver-self-update` row telling the operator to re-run the driver because "it is
+idempotent"; the union gate installed by the SAME range at `apply.sh:212-221` refuses that re-run,
+because the apply has just moved the tree and the detectors legitimately render a different region
+than the approved report. Measured by the consumer by obeying the row: rc=1, nothing written.
+**Neither cause the gate's message names is true** — upstream had not moved and the region was not
+hand-edited — so the common cause is the one the disjunction omits. The comment at `:494-496`
+states the same idempotence claim with its reasoning and is the second declaring site. Receipt
+`theirs_has apply.sh "it is idempotent"`, run raw at HEAD: 1 hit, impossible-token control 0.
+
+**SCORE THE `--finish` CARVE-OUT AS A CANDIDATE FIX AND EXPECT TO REJECT IT.** The gate already
+exempts `--finish` on the reasoning that "that mode writes no core file, so there is no write for
+this condition to authorize", and a post-apply re-run looks like the same shape. It is not: the
+gate runs BEFORE classification, so the tree being at theirs is not knowable when the exemption
+would have to be granted. Build it and score it anyway rather than rejecting it on this paragraph —
+four consecutive batches have had a filed remedy refuted by building it, and this one is mine.
+
+**THE PROGRAM'S OWN ENGINE IS NOT THE CONSUMER'S, AND THIS SESSION GOT THAT WRONG MID-BATCH.** I
+reported that the union gate would refuse the pull the operator was deciding, and recommended
+holding it. False: the engine that RUNS a pull is the consumer's installed copy, which was
+`0.482.0` and gateless — `cmp` against the base blob, with the two refs asserted to differ in the
+same invocation, and 0 gate calls in the installed file against 1 at theirs. The gate ships WITH
+the pull and binds from the NEXT one. **The refusal is latent, which is worse than immediate: it
+has no warning shot, and the first consumer to meet it will be following a shipped instruction.**
+
+**THE SUBJECT ARRIVED THROUGH A CONSULT, NOT THROUGH THE SWEEP, AND THE SWEEP COULD NOT HAVE FOUND
+IT.** The candidate did not exist until the graph session filed it mid-pull. That session consulted
+this one on three dry-run questions under the operator's routing; the union-gate derivation sent
+back to it is what it then reproduced by driving the shipping program. **A peer session is a
+subject channel** — the standing note in action 1 about `ListAgents` is about not INTERRUPTING one,
+never about ignoring what one asks.
+
+### BATCH 44 SHIPPED AS `v0.483.0`, CORRECTED BY `v0.484.0` — THE BLOCK ABOVE REPLACES THIS ONE. TAKE THE STATE FROM THERE.
 
 **A LATE HAND WAS RIGHT AGAIN — THE SIXTH TIME — AND THIS ONE FOUND A DEFECT THIS BATCH
 CREATED.** Both hands went idle without delivering, were asked twice each, and reported only
@@ -3636,10 +3686,14 @@ it cannot, so landing one without the other aborts every later apply — **both 
 both bucket the same way, so the split cannot occur here.** That is a measurement on a `file://`
 clone of both trees, not a reading of the code.
 
-The runbook is `docs/plans/graph-pull-0432-to-0433.md`, written and REHEARSED at `v0.433.0`, and
-**NOT STARTED**. `docs/plans/graph-pull-0425-to-0430.md` is DISCHARGED — read it as a worked
-example, never as a live plan. **Keep measuring the gap and reporting it; do not run the pull, and
-do not treat its growth as a reason to reorder the work.**
+**NO RUNBOOK IS OWED TODAY AND NONE OF THEM IS LIVE.** The gap is ZERO — the `0.482.0 → 0.489.0`
+pull ran on the operator's authorization on 2026-09-03, without a runbook, invoked bare so the ref
+resolved to `HEAD`. Every `docs/plans/graph-pull-*` file is retitled `DO NOT EXECUTE` at its first
+line; `graph-pull-0432-to-0433.md`, which an earlier revision of this paragraph called written,
+rehearsed and NOT STARTED, was replaced by `graph-pull-0432-to-0434.md` and says so in its own
+title. Read them as worked examples, never as live plans, and check the first line of any you open.
+**Keep measuring the gap and reporting it; do not run the pull, and do not treat its growth as a
+reason to reorder the work.**
 
 **EVERY PENDING CANDIDATE IS FROM A SPRINT THE CONSUMER IS STILL RUNNING.** That raises what the
 deferral costs; it does not change whose call it is. Report the number and stop.
@@ -4220,12 +4274,21 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 45's
-   SUBJECT.** Batch 44 shipped as `v0.483.0` and was corrected by `v0.484.0`; the runtime
-   context-window task then shipped as `v0.485.0`, so the distribution `VERSION` is `0.485.0`.
-   **The batch number and the version minor no longer agree — this is BATCH 45 and `0.486.0` is
-   already taken.** Re-derive `VERSION` and add one; do not add one to the batch number, and do
-   not trust this sentence's arithmetic either — it has been corrected once already.
+1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), THEN CONTINUE BATCH 45 ON
+   `PC-S309`.** Its subject, its two declaring sites and its receipt are in the resume block; the
+   remaining work is to derive the full declaration and reader set, build the filed remedy AND the
+   `--finish`-carve-out alternative, score both against a battery, replace the receipt, and ship as
+   `0.490.0`.
+
+   **FIRST, ESTABLISH WHICH OF THE TWO STATES YOU ARE IN, because this action reads as live in
+   both.** Run `cat VERSION`. At `0.489.0`, batch 45 has NOT shipped and the paragraph above is
+   your work. At `0.490.0` or higher it HAS, this action is stale, and your first job is action 6 —
+   re-derive this block, then pick batch 46's subject from a fresh sweep. Do not infer the answer
+   from the presence of `PC-S309` in the ledger: it stays live there until the consumer pulls
+   again, so it reads identically before and after the fix ships.
+
+   **Re-derive `VERSION` and add one; do not add one to the batch number.** The two have not agreed
+   since batch 44 and four releases between them were other work.
 
    **DERIVE THE READER SET OF WHATEVER YOUR SUBJECT TOUCHES, AND DO NOT TRUST THE ONE THE FILING
    NAMES. THIS IS BATCH 44's BEST FINDING AND IT COST ONE GREP.** The filing named one reader of
@@ -4247,13 +4310,18 @@ so no block written before it changes verdict.
    validator that exercises YOUR subject.** Batch 44's did: installed exit 1 against shipped exit
    0 on the consumer's own artifact.
 
-   **THE SPAWN-LEDGER READING IS TAKEN AND STAYS AT exit 3 PRE-LEDGER**, correctly, because the
-   consumer has not pulled. Its population is now measured: **408 of 1249 rows carry
-   `sprint:null`, all 28 rows naming 308 are null, and the newest was written during batch 44.**
-   The `v0.481.0` fix is hook-side and repairs FUTURE writes only, so the existing rows stay null
-   after a pull and the verdict cannot flip until new spawns are dispatched post-pull. **Do not
-   report that pull as "will go green"; it will not, and saying so is a prediction sent without
-   its preconditions.**
+   **THE SPAWN-LEDGER PREDICTION IS NOW TESTABLE AND IS STILL UNTESTED — DO NOT SCORE IT YET.**
+   The consumer HAS pulled, so the `v0.481.0` hook-side fix is installed. That fix repairs FUTURE
+   writes only, so the prediction was that a pull cannot flip the verdict. Re-derived after the
+   pull: **431 of 1272 rows carry a null `sprint`**, against 408 of 1249 before it, with 841
+   non-null rows as the control that the field is populated at all. All 23 rows added since the
+   batch-44 reading are null — **and that is NOT the confirmation it looks like.** The newest row
+   is timestamped `2026-09-03T04:43:33Z` and the pull's stamp commit `28cd3b966` landed at
+   `12:13:55Z`, so every row in the file was written by the OLD hook and the installed fix has not
+   yet had an opportunity to write one. **The discriminating input does not exist yet**: it is the
+   first spawn dispatched after the pull, and the consumer's pipeline was PAUSED throughout. Read
+   the verdict only once a row postdates that commit, and until then report the prediction as
+   open rather than as held.
 
    **DO NOT TRUST A SWEEP THAT REPORTS NO NEW WORK UNTIL YOU HAVE CHECKED ITS GRAMMAR.** Three
    consecutive batches reported the ledger empty while a candidate sat in it, filed at a heading
@@ -4262,10 +4330,11 @@ so no block written before it changes verdict.
    `ledger_entry_shape()` at `core/skills/ai-dlc-update/reconcile/lib.sh:278` rather than against
    your own reading of the ledger.
 
-   **BATCH 44's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW IT.**
+   **BATCH 44's SUBJECT IS SPENT AND THE SWEEP NO LONGER SHOWS IT — IT IS THE ONE THAT CLOSED.**
    `PC-S308-HANDOFF-STOPPED-STATUS-NOT-IN-VALIDATOR-WHITELIST` shipped as `v0.483.0`, is cited by
-   `BL-147` in `docs/backlog.archive.md`, and stays live in the consumer's ledger until they pull.
-   Do not re-scope onto it. **`BL-148` IS NEW, LIVE AND DELIBERATELY NOT FIXED** — the In-Flight
+   `BL-147` in `docs/backlog.archive.md`, and the `0.482.0 → 0.489.0` pull annotated it **ADOPTED
+   UPSTREAM (v0.483.0, verified 2026-09-03)** and rotated it into the consumer's archive. Derived
+   here: live 0, archive 1. Do not re-scope onto it. **`BL-148` IS NEW, LIVE AND DELIBERATELY NOT FIXED** — the In-Flight
    token set is declared in four core files, is absent from `docs/vocabulary-index.md` and is
    bound by no invariant, which is why a one-token miss reached a consumer. Its arm would live in
    `scripts/validate-enforcement-map.sh`, which the suite POLE invokes, so it is a wall-clock
@@ -4347,10 +4416,12 @@ so no block written before it changes verdict.
    interrupt; if you genuinely need to ask, ask the OPERATOR whether to, and put the peer's current
    state into the question.
 
-   **THE GAP IS FIVE RELEASES AND PENDING IS 4** — the consumer's stamp reads `0.479.0` against
-   a distribution `VERSION` of `0.484.0`, and the four pending are batch 42's, batch 43's two, and
-   batch 44's. **FIVE IS THE LINE THIS FILE CALLS WIDE. Say so when you report the gap; a wide
-   range means more paths adjudicated in one session and a bigger blast radius.**
+   **THE GAP IS ZERO AND PENDING IS 0** — the consumer's stamp reads `0.489.0` / `4d577755` on all
+   four fields against a distribution `VERSION` of `0.489.0`, reached by the `0.482.0 → 0.489.0`
+   pull the operator authorized. **A ZERO GAP IS A STATE, NOT AN ACHIEVEMENT**, and it went
+   non-zero on the very next release the last time it was closed, at `v0.425.0`. **FIVE IS THE LINE
+   THIS FILE CALLS WIDE. Say so when you report the gap; a wide range means more paths adjudicated
+   in one session and a bigger blast radius.**
    **Your batch will widen the gap, which is expected and is not a reason to reorder anything.**
    Re-derive both; a zero gap is a state, not a property. That is
    not permission to close it: a pull is operator-initiated, readiness is not authorization, a
@@ -4476,8 +4547,16 @@ so no block written before it changes verdict.
    how many real `sed -n '...p'` scripts a `w`-detecting arm would touch across the reference
    corpus. Its receipt exits 1 today; run it and read the raw exit before scoping.
 
-   **THE OPEN ONE IS `BL-131`, AND IT IS FILED RATHER THAN TAKEN FOR A REASON YOU SHOULD READ
-   BEFORE PICKING IT UP.** Nothing executes the union gate, and the three write paths that bypass
+   **`BL-131` IS STILL LIVE AND ITS PREMISE HAS MOVED UNDER IT — RE-DERIVE BEFORE READING THE
+   ENTRY.** `v0.488.0` shipped the union gate INTO `apply.sh` (`:212-221`), which is that entry's
+   subject, and named no `BL-` id in its commit message, so nothing annotated or rotated it. Either
+   it is an incidental close nobody looked for — action 5's histogram is the instrument — or
+   `v0.488.0` closed one of its three write paths and left step 2's autonomous self-update open,
+   which is the half the entry itself says is the hard one. Say which before you take it. It is
+   also the entry `PC-S309` sits beside: batch 45's subject is the SAME gate, one level over.
+
+   **THE ORIGINAL FILING'S REASONING IS BELOW AND IS STILL WORTH READING.** Nothing executes the
+   union gate, and the three write paths that bypass
    it do not have one home — a check sited in `apply.sh` closes two and leaves step 2's autonomous
    self-update open, which is the one that writes core with no report in existence. Its receipt goes
    GREEN on that partial fix. Taking it means saying what you did about step 2, or narrowing the
@@ -4689,9 +4768,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 1981713c... at batch 44 close; it MOVED during batch 44 and that was a real filing -- a move alone is still NOT an alarm, check the id set too
-   wc -l < /tmp/live.txt    # 73 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer
-   wc -l < /tmp/unfiled.txt # 28 after this batch filed BL-147; the sweep itself read 29
+   md5 -q "$L"              # 9cdbad2c... after the 0.482.0 -> 0.489.0 pull and its ledger rotation; it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
+   wc -l < /tmp/live.txt    # 73 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. UNCHANGED across that pull, and the ledger still moved -- one id left for the archive as another arrived
+   wc -l < /tmp/unfiled.txt # 29 -- PC-S308 left the set by being cited and archived, PC-S309 entered it by being filed
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -4699,8 +4778,11 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 73 LIVE CANDIDATES, 45 CITED, 28 UNFILED** — re-derived at batch 44's close,
-   after the consumer filed one and this side cited it. Live ROSE 72 → 73 on that filing. The
+   **THE BASELINE IS 73 LIVE CANDIDATES, 44 CITED, 29 UNFILED** — re-derived after the `0.482.0 →
+   0.489.0` pull and its ledger rotation. **Live HELD at 73 across a ledger whose md5 moved**,
+   because `PC-S308-HANDOFF-STOPPED-STATUS-NOT-IN-VALIDATOR-WHITELIST` was annotated `ADOPTED
+   UPSTREAM` and rotated into the archive (142 → 143) in the same pull that filed `PC-S309`. An
+   unmoved live count is not an unmoved ledger, and here it concealed two events at once. The
    paragraph below records the one time live FELL, which is a different event and still the only
    one of its kind. Live FELL for the first time in
    this program: the operator carried the `IS-CORE` rejection into a graph session and that session
