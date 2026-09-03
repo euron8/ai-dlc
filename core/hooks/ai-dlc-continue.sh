@@ -325,7 +325,24 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]
             gsub(/^[ \t]+/, "", c[i]); gsub(/[ \t]+$/, "", c[i])
             if (c[i] != "") { last = c[i]; break }
           }
-          if (tolower(last) == "in-flight") found = 1
+          # LEADING TOKEN, NOT THE WHOLE CELL, and this was an equality test until
+          # v0.483.0. check_inflight_status() in validate-artifact-budget.sh has always
+          # split the leading token off, because the live rows of the reference consumer
+          # carry `in-flight, since <ts>`, `in-flight, retrying Write` and `in-flight
+          # (VERIFY pass, ...)`. Against `==` all three compared unequal, so `found`
+          # stayed 0 and this guard ALLOWED a handoff with teammates genuinely still
+          # running -- it fired only on the bare token. Measured on the four real forms:
+          # 1 blocked, 3 allowed. The fixture could not see it because it seeded the bare
+          # token, which is the form the reader already accepted.
+          #
+          # NO APOSTROPHE MAY APPEAR IN THIS COMMENT. It sits inside a single-quoted awk
+          # program, so one closes the string and breaks the whole hook -- which is how
+          # this comment was first written, and the fixture caught it.
+          #
+          # The delimiter set is the one the sibling uses: whitespace, comma or semicolon.
+          tok = tolower(last)
+          sub(/[[:space:],;].*$/, "", tok)
+          if (tok == "in-flight") found = 1
         }
         END { print (found ? "0" : "1") }' "$SNAPSHOT_FILE" 2>/dev/null || echo 1)
       [ -n "$TEAMMATES_OK" ] || TEAMMATES_OK=1

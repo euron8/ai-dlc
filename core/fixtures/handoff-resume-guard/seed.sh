@@ -115,6 +115,16 @@ snap stopped '| agent | role | deliverable | dispatched-at | status |
 |---|---|---|---|---|
 | tester-a | qa | docs/reviews/s305-qa.md | 2026-08-25T01:10:00Z | stopped |' > "$ROOT/.s_stopped"
 
+# (b2) STILL RUNNING, but the status cell carries a trailing note. This is the form the
+#      reference consumer's live snapshot actually writes -- `in-flight, since <ts>`,
+#      `in-flight, retrying Write`, `in-flight (VERIFY pass, ...)`. Seed (a) uses the BARE
+#      token, which is the form the guard already accepted, so it could never have caught
+#      the equality test this replaced: measured on the four real forms, 1 blocked and 3
+#      were ALLOWED with teammates genuinely running.
+snap runningnote '| agent | role | deliverable | dispatched-at | status |
+|---|---|---|---|---|
+| tester-a | qa | docs/reviews/s305-qa.md | 2026-08-25T01:10:00Z | in-flight, since 2026-08-25T01:10:00Z |' > "$ROOT/.s_running_note"
+
 # (c) no In-Flight section at all. route.md says that section AUTO-HEALS, so a snapshot
 #     written by an older version legitimately lacks it and must not be blocked.
 cat > "$ROOT/snap-nosection.md" <<'EOF'
