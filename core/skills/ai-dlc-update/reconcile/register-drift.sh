@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# reconcile-region: exempt — a remediation action that pulls an unregistered edit INTO the layer system; unregistered-drift.sh is the classifier and it IS in the region.
 # register-drift.sh — pull an unregistered in-place core edit INTO the layer system.
 #
 # `unregistered-drift.sh` finds a core file the consumer edited in place: no override

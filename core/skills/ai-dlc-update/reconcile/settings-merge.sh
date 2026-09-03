@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# reconcile-region: exempt — an action that rewrites settings, driven by step 5s own numbered steps, not a classifier.
 # settings-merge.sh — the settings.json reconcile, as a script rather than prose.
 #
 # WHY THIS IS A SCRIPT

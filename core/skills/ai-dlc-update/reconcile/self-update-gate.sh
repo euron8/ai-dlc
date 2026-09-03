@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# reconcile-region: exempt — step 2s gate. Its verdict is consumed before step 5 renders this region, and it decides whether a machinery slice is cut at all.
 # self-update-gate.sh — may the autonomous self-update cycle PUSH, or must it defer?
 #
 # THE DEFECT THIS EXISTS FOR. SKILL.md step 2 runs the machinery self-update autonomously: it cuts

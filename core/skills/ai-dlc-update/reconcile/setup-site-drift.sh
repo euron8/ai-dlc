@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# reconcile-region: exempt — a §7v criterion asserted as a gate with its own exit codes, consumed as a pass/fail rather than as rows the operator reads.
 # setup-site-drift.sh — §7v criterion 5, as a program instead of an instruction.
 #
 #   setup-site-drift.sh <dist> <consumer> <theirs>

@@ -8503,6 +8503,87 @@ EOF
   [ -z "$i104_extra" ] || err "I104: a FOURTH reader of the snapshot sprint_id field exists at:$i104_extra. Three copies are already the most this field can carry safely; a fourth written the brittle way reproduces the defect in a file no arm names. Add it to i104_declared here in the same change, or route it through one of the three."
 fi
 
+# --- I105: every reconcile detector is DRIVEN into the report region or declared exempt ---
+# WHAT IT BINDS. `reconcile/emit-report.sh` renders the `reconcile-mechanical` region, and
+# SKILL.md step 5 tells the operator that region carries "every mechanical finding, complete,
+# from every detector". That was PROSE over a hand-written set of invocations. Measured before
+# this arm: the driver invoked eight of the twenty-three scripts in `reconcile/`, and four
+# shipped classifiers -- predicate-differential, retired-fixtures, retired-layer-contract,
+# retired-layer-passage, each declaring itself "a classifier, not a gate" in its own header --
+# sat outside it. `--verify` byte-compares the region, so it could not fail on their omission:
+# they were never in the region to be omitted from it.
+#
+# WHY BOTH SIDES ARE DERIVED. A list of "detectors that belong" maintained in the driver is one
+# more hand-list, and the next detector added falls out of it silently -- which is exactly how
+# the four above were lost. So the population is `reconcile/*.sh` on disk, and every member must
+# resolve to one of two states: INVOKED by the driver, or carrying its own
+# `# reconcile-region: exempt — <reason>` line. Neither is a finding (a new detector nobody
+# routed) and BOTH is a finding (a file invoked while also claiming exemption, which is how a
+# stale marker outlives the change that made it wrong).
+#
+# THE REASON IS REQUIRED AND IS NOT DECORATION. `.claude/rules/fixture-ship-decl.md` records the
+# same lesson one subsystem over: seven `.dist-only` markers were zero bytes until a rule forced
+# a reason, and a marker with no reason is a decision nobody can audit. The grammar demands at
+# least one non-space character after the em dash.
+#
+# THE GRAMMAR IS ANCHORED AT COLUMN 0 FOR A REASON MEASURED HERE. The driver's own header
+# DESCRIBES the marker -- it has to, to tell the next author how to declare one -- and an
+# unanchored `grep -F reconcile-region:` scored that description as a declaration. Text about a
+# program is not the program. `^# reconcile-region: exempt — ` cannot match the prose form,
+# which embeds the token mid-sentence inside backticks.
+#
+# FALSE-POSITIVE SET: EMPTY, measured over the real `reconcile/` directory at the commit this
+# shipped -- 23 files, 12 invoked, 11 exempt, 0 in neither state and 0 in both.
+i105_rec="$REPO_ROOT/core/skills/ai-dlc-update/reconcile"
+i105_driver="$i105_rec/emit-report.sh"
+# INVOKED means the driver SHELLS to it, keyed on the emission site rather than on the file
+# mentioning the name: a comment naming a detector is not a call to it.
+i105_invoked() { grep -cF "\"\$SELF/$1\"" "$2" 2>/dev/null || true; }
+i105_exempt()  { grep -cE '^# reconcile-region: exempt — .*[^[:space:]]' "$1" 2>/dev/null || true; }
+
+# THE PROBE, RUN BEFORE THE CORPUS, IN BOTH DIRECTIONS. Both halves are absence-shaped: a
+# predicate that can no longer see an invocation reports every file unrouted, and one that can
+# no longer see a marker reports every exemption missing. Either way the arm would fire on the
+# whole tree or on none of it, and a scan that flags everything looks identical to one that
+# discriminates.
+i105_pd="$(mktemp -d "${TMPDIR:-/tmp}/i105-XXXXXX")"
+mkdir -p "$i105_pd/rec"
+printf '#!/usr/bin/env bash\nrun() {\n  x="$(bash "$SELF/called.sh" a b)"\n}\n' > "$i105_pd/rec/driver.sh"
+printf '#!/usr/bin/env bash\n# a detector the driver calls\n'                    > "$i105_pd/rec/called.sh"
+printf '#!/usr/bin/env bash\n# reconcile-region: exempt — an action, not a finding.\n' > "$i105_pd/rec/marked.sh"
+printf '#!/usr/bin/env bash\n# nothing routes this one\n'                       > "$i105_pd/rec/orphan.sh"
+printf '#!/usr/bin/env bash\n# reconcile-region: exempt — \n'                   > "$i105_pd/rec/blank.sh"
+printf '#!/usr/bin/env bash\n# mentions `# reconcile-region: exempt — x` in prose\n' > "$i105_pd/rec/prose.sh"
+i105_bad=0
+[ "$(i105_invoked called.sh "$i105_pd/rec/driver.sh")" -ge 1 ] || { err "I105's probe could not see an invocation the driver plainly makes, so its zero over the real directory would mean nothing."; i105_bad=1; }
+[ "$(i105_invoked orphan.sh "$i105_pd/rec/driver.sh")" -eq 0 ] || { err "I105's probe reported an invocation for a file the driver never calls — the scan matches on resemblance, not on the call."; i105_bad=1; }
+[ "$(i105_exempt "$i105_pd/rec/marked.sh")" -ge 1 ]            || { err "I105's probe could not read a well-formed exemption marker, so every exempt file would report as unrouted."; i105_bad=1; }
+[ "$(i105_exempt "$i105_pd/rec/orphan.sh")" -eq 0 ]            || { err "I105's probe found an exemption in a file carrying none."; i105_bad=1; }
+[ "$(i105_exempt "$i105_pd/rec/blank.sh")" -eq 0 ]             || { err "I105's probe accepted an exemption with NO REASON — the half that makes the marker auditable is not being enforced."; i105_bad=1; }
+[ "$(i105_exempt "$i105_pd/rec/prose.sh")" -eq 0 ]             || { err "I105's probe scored PROSE ABOUT the marker as a declaration of it. The driver's own header describes the marker, so an unanchored grammar exempts the driver by talking about itself."; i105_bad=1; }
+rm -rf "$i105_pd"
+
+if [ "$i105_bad" -eq 0 ]; then
+  if [ ! -d "$i105_rec" ] || [ ! -f "$i105_driver" ]; then
+    err "I105 found no reconcile/ directory or no emit-report.sh at $i105_rec. A scan over nothing reports clean, which is the shape this check exists to end."
+  else
+    i105_n=0; i105_neither=""; i105_both=""
+    for i105_f in "$i105_rec"/*.sh; do
+      [ -f "$i105_f" ] || continue
+      i105_n=$((i105_n + 1))
+      i105_b="$(basename "$i105_f")"
+      i105_d="$(i105_invoked "$i105_b" "$i105_driver")"
+      i105_x="$(i105_exempt "$i105_f")"
+      if   [ "$i105_d" -ge 1 ] && [ "$i105_x" -ge 1 ]; then i105_both="$i105_both $i105_b"
+      elif [ "$i105_d" -eq 0 ] && [ "$i105_x" -eq 0 ]; then i105_neither="$i105_neither $i105_b"
+      fi
+    done
+    [ "$i105_n" -gt 0 ] || err "I105 scanned zero *.sh under $i105_rec — the corpus is empty and the two findings below are vacuous."
+    [ -z "$i105_neither" ] || err "I105: these reconcile scripts are neither invoked by emit-report.sh nor declared exempt:$i105_neither. SKILL.md step 5 tells the operator the rendered region carries every detector's mechanical findings, and --verify byte-compares that region — so a detector outside it cannot be reported missing, because it was never there to omit. Either render it in emit-report.sh, or add '# reconcile-region: exempt — <reason>' to its header saying why its output is not a finding the operator reads before approving apply."
+    [ -z "$i105_both" ] || err "I105: these reconcile scripts are BOTH invoked by emit-report.sh and marked exempt:$i105_both. The marker says the driver does not render it and the driver does. One of the two is stale, and a reader who believes the marker will not look for the rows."
+  fi
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"

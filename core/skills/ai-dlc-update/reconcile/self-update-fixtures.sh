@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# reconcile-region: exempt — step 2s fixture harness. It runs a covering suite and persists a log; its output is a build result, not a pull finding.
 # self-update-fixtures.sh — run step 2's derived covering fixtures AND persist their
 # output, so a red self-update leaves evidence behind instead of a discarded branch.
 #
