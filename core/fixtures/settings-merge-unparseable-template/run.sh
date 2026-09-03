@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # settings-merge-unparseable-template -- `--check` must REFUSE a template it cannot parse,
-# not answer `model_row_needed=no` and exit 0.
+# not answer `model_window_needed=no` and exit 0.
 #
 # Usage: run.sh
 # Exit:  0 = every assertion holds, 1 = the check regressed, 2 = fixture broken.
@@ -10,13 +10,15 @@
 # `SENSOR_WIRED` was `jq -r '<sensor predicate>' "$TEMPLATE" 2>/dev/null || echo false`. That
 # fallback made a jq ERROR and a genuine verdict the SAME STRING, and every guard downstream of
 # the conflation is blind by construction: the verdict gate is
-# `[ "$SENSOR_WIRED" = "true" ] && [ -z "$EXISTING_ROW" ]`, so anything that is not the literal
-# `true` collapses to `model_row_needed=no` at exit 0. Step 5 of ai-dlc-update raises the
-# provisioning question ONLY on `yes`, so a consumer that genuinely needed
-# `.env.AI_DLC_MODEL_ROW` was never asked and the run stayed green.
+# `[ "$SENSOR_WIRED" = "true" ] && [ -z "$DECLARED_FAMILIES" ]`, so anything that is not the
+# literal `true` collapses to `model_window_needed=no` at exit 0. Step 5 of ai-dlc-update
+# raises the declaration question ONLY on `yes`, so a consumer that genuinely needed a model
+# window declared was never asked and the run stayed green. (Measured when the gate's second
+# conjunct was a single `AI_DLC_MODEL_ROW` key; the shape is the same with the per-family
+# `AI_DLC_MODEL_<FAMILY>_WINDOW` declarations that replaced it.)
 #
 # FOUR INPUT CLASSES REACHED THAT SILENT `no`, NOT THE ONE THE REPORT NAMED. Re-measured here
-# against one consumer settings.json carrying no `.env.AI_DLC_MODEL_ROW`, same script, same
+# against one consumer settings.json declaring no model window, same script, same
 # invocation, pre-fix blob vs the tree:
 #
 #   template            pre-fix                              fixed
@@ -40,7 +42,7 @@
 #
 # WHY THE POSITIVE CONTROL IS NOT OPTIONAL. Arms 2 and 3 are ABSENCE-shaped -- "no verdict is
 # produced". A script that answers `no` to EVERYTHING, or refuses everything, satisfies them
-# both. Arm 1 asserts the correct template still reaches `model_row_needed=yes` and the `ask:`
+# both. Arm 1 asserts the correct template still reaches `model_window_needed=yes` and the `ask:`
 # lines step 5 prints, so a fix that closes the check by breaking it is rejected here. Mutant D
 # exists to prove arm 1 can fire.
 
@@ -114,12 +116,13 @@ S_HOOKS="$WORK/hooksnum.json"; printf '{"hooks":5}\n' > "$S_HOOKS"
 
 # --- CAN THE SEEDS REACH THE BRANCH UNDER TEST? -----------------------------------------------
 # A fixture whose tree cannot EXPRESS the defect proves nothing. Arm 1 asserts `yes`, which is
-# reachable only if the producer template wires the sensor AND the consumer seed has no row. Both
-# are derived here rather than assumed, because either one drifting turns arm 1 into a constant.
+# reachable only if the producer template wires the sensor AND the consumer seed declares no
+# model window. Both are derived here rather than assumed, because either one drifting turns
+# arm 1 into a constant.
 grep -qF 'ai-dlc-context-sensor.sh' "$S_GOOD" \
-  || { printf 'FIXTURE BROKEN: the producer template no longer wires ai-dlc-context-sensor.sh, so model_row_needed=yes is unreachable and arm 1 asserts nothing\n' >&2; exit 2; }
-[ -z "$(jq -r '.env.AI_DLC_MODEL_ROW // empty' "$CONSUMER")" ] \
-  || { printf 'FIXTURE BROKEN: the consumer seed carries .env.AI_DLC_MODEL_ROW, which suppresses model_row_needed=yes independently of the sensor\n' >&2; exit 2; }
+  || { printf 'FIXTURE BROKEN: the producer template no longer wires ai-dlc-context-sensor.sh, so model_window_needed=yes is unreachable and arm 1 asserts nothing\n' >&2; exit 2; }
+[ "$(jq -r '(.env // {}) | keys[]' "$CONSUMER" | grep -c '^AI_DLC_MODEL_.*_WINDOW$')" -eq 0 ] \
+  || { printf 'FIXTURE BROKEN: the consumer seed declares an AI_DLC_MODEL_<FAMILY>_WINDOW, which suppresses model_window_needed=yes independently of the sensor\n' >&2; exit 2; }
 [ ! -s "$S_EMPTY" ] \
   || { printf 'FIXTURE BROKEN: the 0-byte seed is not 0 bytes\n' >&2; exit 2; }
 jq -e . "$S_SCALAR" >/dev/null 2>&1 && jq -e . "$S_HOOKS" >/dev/null 2>&1 \
@@ -140,7 +143,7 @@ arm1() { # arm1 <script>
   run_check "$1" "$S_GOOD"
   [ "$RC" -eq 0 ] || return 1
   grep -qF 'sensor_wired=true'      <<<"$OUT" || return 1
-  grep -qF 'model_row_needed=yes'   <<<"$OUT" || return 1
+  grep -qF 'model_window_needed=yes'   <<<"$OUT" || return 1
   grep -q  '^ask: '                 <<<"$OUT" || return 1
   return 0
 }
@@ -155,7 +158,7 @@ arm2() { # arm2 <script>
   [ "$RC" -ne 0 ] || return 1
   grep -q '^FAIL: ' <<<"$OUT" || return 1
   grep -qF "$S_EMPTY" <<<"$OUT" || return 1
-  grep -qF 'model_row_needed=' <<<"$OUT" && return 1
+  grep -qF 'model_window_needed=' <<<"$OUT" && return 1
   return 0
 }
 
@@ -168,7 +171,7 @@ arm3() { # arm3 <script>
     [ "$RC" -ne 0 ] || return 1
     grep -q '^FAIL: ' <<<"$OUT" || return 1
     grep -qF "$_t" <<<"$OUT" || return 1
-    grep -qF 'model_row_needed=' <<<"$OUT" && return 1
+    grep -qF 'model_window_needed=' <<<"$OUT" && return 1
   done
   return 0
 }
@@ -183,15 +186,15 @@ score() { # score <script> -> prints the failing arm names, space-separated, or 
 
 # --- 1..3: the arms against the RESOLVED subject -----------------------------------------------
 if arm1 "$SUBJECT"; then
-  ok "arm1 POSITIVE CONTROL: the producer template reaches sensor_wired=true, model_row_needed=yes and the ask: block"
+  ok "arm1 POSITIVE CONTROL: the producer template reaches sensor_wired=true, model_window_needed=yes and the ask: block"
 else
-  bad "arm1 POSITIVE CONTROL FAILED (rc=$RC): the correct template no longer reaches model_row_needed=yes, so step 5 never raises the provisioning question. A guard that closes the check by refusing everything lands here. Output: $(head -1 <<<"$OUT")"
+  bad "arm1 POSITIVE CONTROL FAILED (rc=$RC): the correct template no longer reaches model_window_needed=yes, so step 5 never raises the provisioning question. A guard that closes the check by refusing everything lands here. Output: $(head -1 <<<"$OUT")"
 fi
 
 if arm2 "$SUBJECT"; then
-  ok "arm2: a 0-byte template is REFUSED with a FAIL: diagnostic and produces no model_row_needed verdict"
+  ok "arm2: a 0-byte template is REFUSED with a FAIL: diagnostic and produces no model_window_needed verdict"
 else
-  bad "arm2 FAILED (rc=$RC): a 0-byte template still reaches a verdict. jq exits 0 and prints nothing on it, so SENSOR_WIRED is the empty string and the gate collapses it to model_row_needed=no at exit 0. Output: $(head -1 <<<"$OUT")"
+  bad "arm2 FAILED (rc=$RC): a 0-byte template still reaches a verdict. jq exits 0 and prints nothing on it, so SENSOR_WIRED is the empty string and the gate collapses it to model_window_needed=no at exit 0. Output: $(head -1 <<<"$OUT")"
 fi
 
 if arm3 "$SUBJECT"; then
@@ -277,8 +280,8 @@ mutant both-layers-reverted 'arm2 arm3' \
 # Arms 2 and 3 are absence-shaped and this mutant satisfies both. Only arm 1 can see it, which is
 # what makes arm 1 non-vacuous rather than decorative.
 mutant answers-no-to-everything 'arm1' \
-  's@^if \[ "$SENSOR_WIRED" = "true" \] && \[ -z "$EXISTING_ROW" \]; then@if false; then@' \
-  'the verdict gate never fires, so every template answers model_row_needed=no -- the shape a fix that closes the check by breaking it takes'
+  's@^if \[ "$SENSOR_WIRED" = "true" \] && \[ -z "$DECLARED_FAMILIES" \]; then@if false; then@' \
+  'the verdict gate never fires, so every template answers model_window_needed=no -- the shape a fix that closes the check by breaking it takes'
 
 # --- 9: the battery must have KILLED something --------------------------------------------------
 # A mutation applied to a file the run never loaded reads exactly like an arm that cannot fire,

@@ -26,32 +26,31 @@
 #                      is exactly that contract, and it is why `core/team-roles`
 #                      needs no setup-substitution sites at all: there is no
 #                      consumer-specific string left in a core file to mask.
-#   3. env.AI_DLC_MODEL_ROW
-#                    — PROVISION ONLY. Written when the key is absent AND the
-#                      template wires ai-dlc-context-sensor.sh AND a row was
-#                      supplied. Never overwrites an existing value. `auto`
-#                      writes nothing (an absent key is the inference path).
+#   3. env.AI_DLC_MODEL_<FAMILY>_WINDOW
+#                    — NEVER WRITTEN. The context sensor's ceiling is declared
+#                      per model family (FABLE, OPUS, SONNET, HAIKU, OTHER) in
+#                      the consumer's own `env`; --check reports whether any
+#                      family is declared so step 5 can raise the question.
 #   4. every other key (permissions, env.*, mcpServers, statusLine, …)
 #                    — preserved untouched.
 #
-# WHY NO DEFAULT MODEL ROW
+# WHY NOTHING IS PROVISIONED
 # The sensor cannot read the context-window size off the transcript (Claude Code
-# records `claude-opus-4-8` for both the 200K and 1M variant). Pinning `200K`
-# sets row_known=1 and disables the sensor's self-correction, so a 1M project
-# fires early reminders forever. Pinning `1M` on a 200K model puts red (200,000)
-# above that model's compact threshold (187,000), so red never fires before
-# compaction — the failure the ordering invariant exists to prevent. An absent
-# key is the only safe default, which is why the operator is asked and `auto`
-# writes nothing.
+# records `claude-opus-4-8` for both the 200K and 1M variant), and it no longer
+# infers or caches one: the operator declares a window per model family, and an
+# undeclared family is assumed at 200,000 tokens — the direction that fires early
+# rather than the one that puts red past compaction. The values are the consumer's
+# own facts about the models they run, no single default is right for every
+# family, and `env` is consumer-owned, so this script reports and never writes.
 #
 # USAGE
-#   settings-merge.sh --consumer <path> --template <path> [--model-row 1M|200K|auto]
+#   settings-merge.sh --consumer <path> --template <path>
 #   settings-merge.sh --consumer <path> --template <path> --check
 #
 #   --check   Report what would change and exit 0 WITHOUT writing. Prints
-#             `model_row_needed=yes` when the operator must be asked (key absent
-#             and the template wires the sensor). Use this to build the step-5
-#             dry-run report.
+#             `model_window_needed=yes` when the operator must be asked (no
+#             family window declared and the template wires the sensor). Use
+#             this to build the step-5 dry-run report.
 #
 # EXIT
 #   0  merged (or, with --check, reported)
@@ -61,30 +60,23 @@ set -u
 
 CONSUMER=""
 TEMPLATE=""
-MODEL_ROW=""
 CHECK=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --consumer)  CONSUMER="$2"; shift 2 ;;
     --template)  TEMPLATE="$2"; shift 2 ;;
-    --model-row) MODEL_ROW="$2"; shift 2 ;;
     --check)     CHECK=1; shift ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
 done
 
 [ -n "$CONSUMER" ] && [ -n "$TEMPLATE" ] || {
-  echo "usage: settings-merge.sh --consumer <path> --template <path> [--model-row 1M|200K|auto] [--check]" >&2
+  echo "usage: settings-merge.sh --consumer <path> --template <path> [--check]" >&2
   exit 1
 }
 command -v jq >/dev/null 2>&1 || { echo "FAIL: jq is required" >&2; exit 1; }
 [ -r "$TEMPLATE" ] || { echo "FAIL: cannot read template: $TEMPLATE" >&2; exit 1; }
-
-case "$MODEL_ROW" in
-  ""|auto|200K|1M) ;;
-  *) echo "FAIL: --model-row must be 200K, 1M, or auto (got '$MODEL_ROW')" >&2; exit 1 ;;
-esac
 
 # A consumer with no settings.json is a fresh target: the template IS the base,
 # exactly as `install.sh` does with `cp`. Starting from `{}` instead would drop
@@ -97,16 +89,16 @@ else
 fi
 jq -e . >/dev/null 2>&1 <<<"$BASE_JSON" || { echo "FAIL: consumer settings.json is not valid JSON; left untouched" >&2; exit 1; }
 
-# Does the template wire the context sensor? Only then is the row meaningful.
+# Does the template wire the context sensor? Only then is a window declaration meaningful.
 #
 # THE `|| echo false` FALLBACK THIS USED TO CARRY MADE AN ERROR AND A VERDICT THE SAME STRING,
 # and every guard written downstream of that conflation is blind by construction. `--check`
-# answered `model_row_needed=no` and exited 0 on a template it could not parse; step 5 raises
-# the provisioning question only on `yes`, so a consumer that genuinely needed
-# `.env.AI_DLC_MODEL_ROW` was never asked and the run stayed green.
+# answered `model_window_needed=no` and exited 0 on a template it could not parse; step 5
+# raises the declaration question only on `yes`, so a consumer that genuinely needed a
+# family window declared was never asked and the run stayed green.
 #
 # FOUR INPUT CLASSES REACHED THAT SILENT `no`, NOT THE ONE THE REPORT NAMED. Measured against
-# one consumer settings.json carrying no `.env.AI_DLC_MODEL_ROW`, same script, same invocation:
+# one consumer settings.json declaring no family window, same script, same invocation:
 # a 0-byte template (jq exits 0 and prints NOTHING, so the fallback never fires and
 # SENSOR_WIRED is the empty string), a readable non-JSON template, a bare JSON scalar, and a
 # valid JSON object whose `.hooks` is not an object. The last two are valid JSON and are why
@@ -134,40 +126,41 @@ case "$SENSOR_WIRED" in
      exit 1 ;;
 esac
 
-EXISTING_ROW="$(printf '%s' "$BASE_JSON" | jq -r '.env.AI_DLC_MODEL_ROW // empty' 2>/dev/null || true)"
+# Which model families already declare a window. `env` is consumer-owned and never written
+# here; this decides only whether step 5 must raise the declaration question. A non-object
+# `env` declares nothing, which asks the question -- the safe direction -- rather than
+# erroring into a verdict.
+DECLARED_FAMILIES="$(printf '%s' "$BASE_JSON" | jq -r '
+  (.env // {}) | if type == "object" then keys else [] end
+  | map(select(test("^AI_DLC_MODEL_(FABLE|OPUS|SONNET|HAIKU|OTHER)_WINDOW$")))
+  | join(" ")' 2>/dev/null || true)"
 
-MODEL_ROW_NEEDED=no
-if [ "$SENSOR_WIRED" = "true" ] && [ -z "$EXISTING_ROW" ]; then
-  MODEL_ROW_NEEDED=yes
+MODEL_WINDOW_NEEDED=no
+if [ "$SENSOR_WIRED" = "true" ] && [ -z "$DECLARED_FAMILIES" ]; then
+  MODEL_WINDOW_NEEDED=yes
 fi
 
 if [ "$CHECK" -eq 1 ]; then
   echo "sensor_wired=${SENSOR_WIRED}"
-  echo "existing_model_row=${EXISTING_ROW:-<unset>}"
-  echo "model_row_needed=${MODEL_ROW_NEEDED}"
-  if [ "$MODEL_ROW_NEEDED" = yes ]; then
-    echo "ask: This project's context sensor needs the model's context window."
-    echo "ask:   1M   -> reminders at yellow 120K / red 200K"
-    echo "ask:   200K -> reminders at yellow 80K / red 120K"
-    echo "ask:   auto -> leave unset; sensor assumes 200K and self-corrects"
-    echo "ask: default is auto (writes nothing)"
+  echo "declared_model_windows=${DECLARED_FAMILIES:-<none>}"
+  echo "model_window_needed=${MODEL_WINDOW_NEEDED}"
+  if [ "$MODEL_WINDOW_NEEDED" = yes ]; then
+    echo "ask: This project's context sensor has no model window declared."
+    echo "ask:   It assumes a 200,000-token ceiling for an undeclared model family:"
+    echo "ask:   yellow/red fire early on a larger model and imminent stays off."
+    echo "ask:   Declare one window per family you run, in .claude/settings.json env,"
+    echo "ask:   e.g. \"AI_DLC_MODEL_OPUS_WINDOW\": \"1m\" -- also FABLE, SONNET, HAIKU"
+    echo "ask:   and OTHER (any id naming no Claude family). The reconcile never"
+    echo "ask:   writes env; add them yourself. Leaving them unset is safe but noisy."
   fi
   exit 0
-fi
-
-# The row is written only when it is genuinely absent. An operator answering a
-# question the reconcile already answered must never clobber a pinned value.
-WRITE_ROW=""
-if [ "$MODEL_ROW_NEEDED" = yes ] && [ -n "$MODEL_ROW" ] && [ "$MODEL_ROW" != auto ]; then
-  WRITE_ROW="$MODEL_ROW"
 fi
 
 OUT="$(mktemp)"
 trap 'rm -f "$OUT"' EXIT
 
 if ! printf '%s' "$BASE_JSON" | jq \
-      --slurpfile tmpl "$TEMPLATE" \
-      --arg row "$WRITE_ROW" '
+      --slurpfile tmpl "$TEMPLATE" '
     . as $u |
     ($tmpl[0]) as $t |
 
@@ -205,7 +198,6 @@ if ! printf '%s' "$BASE_JSON" | jq \
         | map(. as $e | (($uh[$e] // []) | strip_ai_dlc) + ($th[$e] // []) | {($e): .})
         | add
       )
-    | if $row != "" then .env = ((.env // {}) + {AI_DLC_MODEL_ROW: $row}) else . end
   ' > "$OUT" 2>/dev/null; then
   echo "FAIL: merge produced no output; consumer left untouched" >&2
   exit 1
@@ -218,10 +210,8 @@ mv "$OUT" "$CONSUMER"
 trap - EXIT
 
 echo "settings.json reconciled (ai-dlc hooks upserted; user config preserved)"
-if [ -n "$WRITE_ROW" ]; then
-  echo "  env.AI_DLC_MODEL_ROW provisioned as '${WRITE_ROW}'"
-elif [ -n "$EXISTING_ROW" ]; then
-  echo "  env.AI_DLC_MODEL_ROW left as '${EXISTING_ROW}' (consumer-owned)"
-elif [ "$MODEL_ROW_NEEDED" = yes ]; then
-  echo "  env.AI_DLC_MODEL_ROW left unset (auto); the sensor will infer the row"
+if [ -n "$DECLARED_FAMILIES" ]; then
+  echo "  env model windows declared for: ${DECLARED_FAMILIES} (consumer-owned, untouched)"
+elif [ "$MODEL_WINDOW_NEEDED" = yes ]; then
+  echo "  no env.AI_DLC_MODEL_<FAMILY>_WINDOW declared; the sensor assumes a 200,000-token ceiling until one is (see --check)"
 fi

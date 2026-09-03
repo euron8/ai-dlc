@@ -62,8 +62,11 @@
 #
 # OUTPUT
 # - Writes: _bmad-output/.context-sensor-state  (fire state, per pipeline)
-# - Writes: _bmad-output/.context-sensor-model  (proven model row, sticky)
 # - stdout: JSON with additionalContext, only on a firing turn. Silent otherwise.
+#
+# Nothing else is written. The model ceiling is DECLARED per family in the settings
+# `env` block (AI_DLC_MODEL_<FAMILY>_WINDOW, see "Model ceiling" below) and never
+# learned, proven or cached, so the answer is the same on every fire.
 #
 # Register in .claude/settings.json AFTER ai-dlc-continue.sh and
 # ai-dlc-driver-signal.sh:
@@ -82,7 +85,6 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 STATE_DIR="${PROJECT_DIR}/${AI_DLC_STATE_DIR:-_bmad-output}"
 SNAPSHOT_FILE="${STATE_DIR}/pipeline-snapshot.md"
 STATE_FILE="${STATE_DIR}/.context-sensor-state"
-MODEL_FILE="${STATE_DIR}/.context-sensor-model"
 # autoCompactWindow resolution reads these settings layers in Claude Code's
 # precedence order (highest first). Managed/enterprise settings and CLI-flag
 # overrides are not reachable from a hook, so they cannot be modelled here.
@@ -90,12 +92,12 @@ SETTINGS_LOCAL="${PROJECT_DIR}/.claude/settings.local.json"
 SETTINGS_PROJECT="${PROJECT_DIR}/.claude/settings.json"
 SETTINGS_USER="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
 
-# Claude Code compacts at `effectiveWindow - COMPACT_RESERVE`, but the quantity
-# THIS hook measures sits a further ~18,000 below that at fire time: the check
-# adds an output allowance before comparing. Measured on two independent windows
-# (287,000-268,892=18,108 and 987,000-969,084=17,916). So the ceiling visible to
-# a transcript-derived reading is `effectiveWindow - SENSOR_RESERVE`.
-COMPACT_RESERVE=13000
+# Claude Code compacts at `effectiveWindow - 13,000` (COMPACT_RESERVE in
+# validate-compact-window.sh), but the quantity THIS hook measures sits a further
+# ~18,000 below that at fire time: the check adds an output allowance before
+# comparing. Measured on two independent windows (287,000-268,892=18,108 and
+# 987,000-969,084=17,916). So the ceiling visible to a transcript-derived reading
+# is `effectiveWindow - SENSOR_RESERVE`.
 SENSOR_RESERVE="${AI_DLC_SENSOR_RESERVE:-31000}"
 
 # The three context bands are a PERCENTAGE of the resolved effective window,
@@ -141,9 +143,11 @@ RECUR_TURNS="${AI_DLC_SENSOR_RECUR_TURNS:-20}"
 # A drop this large means the context was compacted or /clear'ed.
 RESET_DROP="${AI_DLC_SENSOR_RESET_DROP:-50000}"
 
-# A 200K model auto-compacts at 187,000, so it can never be observed at or above
-# that. Any reading this high PROVES the window is larger than 200K.
-PROOF_1M=$(( 200000 - COMPACT_RESERVE ))
+# The ceiling assumed for a model family whose window nobody declared. The smallest
+# current tier (Haiku's own true maximum) and Claude Code's own fallback for an
+# unrecognized model id. Assuming small fires early, which is noisy and non-blocking;
+# assuming large puts red past the real compaction point, which is silent.
+UNDECLARED_MODEL_MAX=200000
 
 # Fail-open on every error path: a missing reading is never worse than a wrong
 # one, and this hook must never be able to stall the pipeline.
@@ -278,10 +282,11 @@ case "${CUR_SIZE:-}" in ''|*[!0-9]*) CUR_SIZE=0 ;; esac
 # mid-sprint model switch is captured rather than overwritten. Costs one tail
 # read per firing.
 #
-# Caveat inherited from the window-resolution note below: `message.model` is
+# Caveat inherited from the model-ceiling note below: `message.model` is
 # `claude-opus-4-8` for BOTH the 200K and 1M variant. That is fine for arm
-# identity (sonnet vs opus, which is all an A/B needs) and useless for window
-# size -- never read this field for the row.
+# identity (sonnet vs opus, which is all an A/B needs) and for FAMILY
+# classification, and useless for window size -- the ceiling is declared per
+# family, never read off this field.
 # -----------------------------------------------------------------------------
 LEAD_MODEL="$(printf '%s' "$LINE" | jq -r '.message.model // empty' 2>/dev/null || true)"
 if [ -n "$LEAD_MODEL" ]; then
@@ -311,63 +316,73 @@ case "${TOKENS:-}" in ''|*[!0-9]*) exit 0 ;; esac
 [ "$TOKENS" -gt 0 ] || exit 0
 
 # -----------------------------------------------------------------------------
-# Window resolution
-#
-# The transcript records `claude-opus-4-8` for BOTH the 200K and the 1M variant
-# -- the `[1m]` suffix is stripped and no context_window_size is recorded
-# anywhere. So the model row cannot be read off the transcript.
-#
-# The two mistakes are not symmetric. Assuming 200K on a 1M model fires the
-# reminders early: noisy, but they are non-blocking. Assuming 1M on a 200K model
-# puts red at 200,000 while compaction fires at 187,000 -- red never fires
-# before compact, which is the exact failure the ordering invariant exists to
-# prevent. So: assume 200K, and upgrade only on proof.
-#
-# Proof is sticky across sessions, so a project pays the early-reminder noise at
-# most once. Set env AI_DLC_MODEL_ROW=1M in .claude/settings.json to skip it.
-# -----------------------------------------------------------------------------
-ROW="${AI_DLC_MODEL_ROW:-}"
-ROW_KNOWN=0
-
-# `auto` is the explicit "let the sensor infer it" spelling, so an operator who
-# answered the install prompt with "not sure" lands back on the inference path
-# rather than being pinned to a guess.
-[ "$ROW" = "auto" ] && ROW=""
-
-if [ -z "$ROW" ] && [ -r "$MODEL_FILE" ]; then
-  ROW="$(sed -n 's/^row=//p' "$MODEL_FILE" 2>/dev/null | head -1)"
-fi
-
-case "$ROW" in
-  200K|1M) ROW_KNOWN=1 ;;
-  *)       ROW="200K"; ROW_KNOWN=0 ;;
-esac
-
-# A reading at or above a 200K model's compact threshold proves a larger window.
-if [ "$ROW_KNOWN" -eq 0 ] && [ "$TOKENS" -ge "$PROOF_1M" ]; then
-  ROW="1M"
-  ROW_KNOWN=1
-  mkdir -p "$STATE_DIR" 2>/dev/null || true
-  printf 'row=1M\nproven_at_tokens=%s\n' "$TOKENS" > "$MODEL_FILE" 2>/dev/null || true
-fi
-
-case "$ROW" in
-  1M) MODEL_MAX=1000000 ;;
-  *)  MODEL_MAX=200000 ;;
-esac
-
-# Window resolution. THE CHAIN IS NOT SPELLED HERE: scripts/ai-dlc/validate-compact-window.sh
+# The window library. THE CHAIN IS NOT SPELLED HERE: scripts/ai-dlc/validate-compact-window.sh
 # reports the same window this hook ramps against, and the two answers must not
 # drift, so both source ai-dlc-window.sh and neither carries a second copy of the
 # precedence order. The library is a SIBLING -- it installs to .claude/hooks/ beside
 # this file, the way ai-dlc-handoff-pending.sh does for the Stop and recover hooks.
 #
-# Unreadable library -> WINDOW stays empty and the model default applies. That is the
-# safe direction: it tightens the bands rather than opening them, and the library
-# ships in the same copy step as this hook, so its absence means a broken install
-# rather than a configuration a consumer chose.
+# Unreadable library -> WINDOW stays empty, a declared family window cannot be
+# parsed, and the undeclared ceiling applies. That is the safe direction: it
+# tightens the bands rather than opening them, and the library ships in the same
+# copy step as this hook, so its absence means a broken install rather than a
+# configuration a consumer chose.
+# -----------------------------------------------------------------------------
 _AI_DLC_WIN_LIB="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-window.sh"
 [ -r "$_AI_DLC_WIN_LIB" ] && . "$_AI_DLC_WIN_LIB"
+
+# -----------------------------------------------------------------------------
+# Model ceiling -- DECLARED per family by the operator, never inferred
+#
+# The transcript records `claude-opus-4-8` for BOTH the 200K and the 1M variant
+# -- the `[1m]` suffix is stripped and no context_window_size is recorded
+# anywhere. So the ceiling cannot be read off the transcript.
+#
+# It used to be GUESSED: a single closed 200K|1M row, pinned by one env var or
+# proven upward by watching resident tokens cross a 200K model's compact point,
+# and cached sticky across sessions. Two measured failures. A single pinned row
+# is wrong the moment a session runs a family with a different native window --
+# Haiku is 200K where every other current family is 1M. And the proof only ran
+# UPWARD: a model with a window BELOW the proof line was never proven, so it
+# ramped against whatever ceiling the fallback carried and the sensor was silent
+# through the compaction it exists to warn about.
+#
+# So: classify the lead model by family SUBSTRING of the id the arm record
+# already extracted (a version bump never needs a code change; a family with no
+# arm lands in OTHER), take that family's declared window from the settings
+# `env` block, and where none is declared assume UNDECLARED_MODEL_MAX. Nothing
+# is proven, learned or cached. `imminent` stays gated on WINDOW_DECLARED below,
+# because an assumed ceiling can be wrong in the silent direction; yellow and
+# red fire on the assumption, so an undeclared project is never left un-warned.
+# -----------------------------------------------------------------------------
+case "$(printf '%s' "$LEAD_MODEL" | tr '[:upper:]' '[:lower:]')" in
+  *fable*|*mythos*) MODEL_FAMILY=FABLE  ;;
+  *opus*)           MODEL_FAMILY=OPUS   ;;
+  *sonnet*)         MODEL_FAMILY=SONNET ;;
+  *haiku*)          MODEL_FAMILY=HAIKU  ;;
+  *)                MODEL_FAMILY=OTHER  ;;
+esac
+
+case "$MODEL_FAMILY" in
+  FABLE)  DECLARED_WINDOW="${AI_DLC_MODEL_FABLE_WINDOW:-}"  ;;
+  OPUS)   DECLARED_WINDOW="${AI_DLC_MODEL_OPUS_WINDOW:-}"   ;;
+  SONNET) DECLARED_WINDOW="${AI_DLC_MODEL_SONNET_WINDOW:-}" ;;
+  HAIKU)  DECLARED_WINDOW="${AI_DLC_MODEL_HAIKU_WINDOW:-}"  ;;
+  *)      DECLARED_WINDOW="${AI_DLC_MODEL_OTHER_WINDOW:-}"  ;;
+esac
+
+# The declared value takes the library's own spellings (`1m`, `400k`, a bare
+# integer) so a consumer writes it the way they write autoCompactWindow. An
+# unparseable declaration is the same as none: the floor applies and the state
+# file says so, rather than a typo silently pinning a ceiling of zero.
+MODEL_MAX="$UNDECLARED_MODEL_MAX"
+WINDOW_DECLARED=0
+if [ -n "$DECLARED_WINDOW" ] && command -v ai_dlc_parse_window >/dev/null 2>&1; then
+  if _PARSED_MAX="$(ai_dlc_parse_window "$DECLARED_WINDOW")" && [ "${_PARSED_MAX:-0}" -gt 0 ]; then
+    MODEL_MAX="$_PARSED_MAX"
+    WINDOW_DECLARED=1
+  fi
+fi
 
 WINDOW=""
 WINDOW_SOURCE="unset (model default)"
@@ -383,19 +398,19 @@ case "${WINDOW:-}" in ''|*[!0-9]*) WINDOW="" ;; esac
 case "${WINDOW_SOURCE:-}" in '') WINDOW_SOURCE="unset (model default)" ;; esac
 case "${_RT_MODEL_MAX:-}" in ''|*[!0-9]*) _RT_MODEL_MAX="" ;; esac
 
-# THE RUNTIME FILE NAMES THE MODEL, so where it answered the row is a fact and not an
-# inference -- which is what ROW_KNOWN gates the imminent band on. Overriding MODEL_MAX
+# THE RUNTIME FILE NAMES THE MODEL, so where it answered the ceiling is a fact and not
+# a declaration -- it outranks the family lookup exactly as it outranks every lower
+# window layer, and it counts as DECLARED for the imminent gate. Overriding MODEL_MAX
 # here is what keeps the clamp below correct rather than making it a second branch: on
-# a 262144-token model whose row has not been proven, MODEL_MAX is the assumed 200000
-# and an unchanged clamp would drag a correct 262144 down to it.
+# a 262144-token model whose family window nobody declared, MODEL_MAX is the assumed
+# floor and an unchanged clamp would drag a correct 262144 down to it.
 #
-# ROW itself is deliberately NOT rewritten. `model_row` is the closed 200K|1M
-# vocabulary documented in the state-file schema, it means "the row this hook inferred
-# for itself", and widening it would break readers for no gain. `window_source` below
-# is what tells a reader why effective_window need not match the row.
+# MODEL_FAMILY itself is deliberately NOT rewritten: it names the family this hook
+# classified, and `window_source` below is what tells a reader why effective_window
+# need not match the family's declaration.
 if [ -n "$_RT_MODEL_MAX" ]; then
   MODEL_MAX="$_RT_MODEL_MAX"
-  ROW_KNOWN=1
+  WINDOW_DECLARED=1
 fi
 
 EFFECTIVE="$MODEL_MAX"
@@ -405,10 +420,10 @@ fi
 
 # -----------------------------------------------------------------------------
 # Context bands: a clamped percentage of the resolved effective window (see the
-# constant block above). imminent stays gated on ROW_KNOWN below -- EFFECTIVE is a
-# guess on an assumed row, and assuming 1M on a real 200K model would push
-# imminent past the real compaction point. yellow/red still fire on the assumed
-# 200K row, so a fresh project is never left un-warned before its row is proven.
+# constant block above). imminent stays gated on WINDOW_DECLARED below -- an
+# undeclared EFFECTIVE is an assumption, and an assumption in the large direction
+# would push imminent past the real compaction point. yellow/red still fire on the
+# assumed floor, so an undeclared project is never left un-warned.
 # A band whose threshold is <= 0 (a window near the 100000 floor, where MAX_LEAD
 # exceeds the ceiling) is disabled for that reading rather than firing at every
 # token count.
@@ -464,7 +479,7 @@ fi
 # on the 50,000-token / 20-turn recurrence delta and could sail into compaction
 # without ever being told to refresh the snapshot.
 LEVEL=none
-if   [ "$ROW_KNOWN" -eq 1 ] && [ "$T_IMMINENT" -gt 0 ] && [ "$TOKENS" -ge "$T_IMMINENT" ]; then
+if   [ "$WINDOW_DECLARED" -eq 1 ] && [ "$T_IMMINENT" -gt 0 ] && [ "$TOKENS" -ge "$T_IMMINENT" ]; then
   LEVEL=imminent
 elif [ "$T_RED" -gt 0 ] && [ "$TOKENS" -ge "$T_RED" ]; then
   LEVEL=red
@@ -501,8 +516,8 @@ fi
   printf 'turn_counter=%s\n'     "$TURN"
   printf 'last_measured=%s\n'    "$TOKENS"
   printf 'last_read_size=%s\n'   "$CUR_SIZE"
-  printf 'model_row=%s\n'        "$ROW"
-  printf 'row_known=%s\n'        "$ROW_KNOWN"
+  printf 'model_family=%s\n'     "$MODEL_FAMILY"
+  printf 'window_declared=%s\n'  "$WINDOW_DECLARED"
   printf 'effective_window=%s\n' "$EFFECTIVE"
   printf 'window_source=%s\n'    "$WINDOW_SOURCE"
 } > "$STATE_FILE" 2>/dev/null || true
@@ -532,10 +547,10 @@ else
   ADVICE="Rule 2(b): finish the current sub-step, then continue."
 fi
 
-ROW_NOTE=""
-[ "$ROW_KNOWN" -eq 0 ] && ROW_NOTE=" Model row assumed ${ROW} (not yet proven); set env AI_DLC_MODEL_ROW in .claude/settings.json to pin it."
+WINDOW_NOTE=""
+[ "$WINDOW_DECLARED" -eq 0 ] && WINDOW_NOTE=" No context window is declared for the ${MODEL_FAMILY} model family, so a ${UNDECLARED_MODEL_MAX}-token ceiling is assumed; set env AI_DLC_MODEL_${MODEL_FAMILY}_WINDOW in .claude/settings.json to declare it."
 
-CONTEXT="[AI/DLC context sensor] Resident context is ~${TOKENS} tokens (~${PCT}% of the ${EFFECTIVE}-token effective window), crossing the $(printf '%s' "$LEVEL" | tr '[:lower:]' '[:upper:]') threshold (${THR}). ${ADVICE} This reminder is non-blocking: the pipeline continues and the decision is the user's. Reconcile the snapshot Context Reminders fields to this reading at the next gate.${ROW_NOTE}"
+CONTEXT="[AI/DLC context sensor] Resident context is ~${TOKENS} tokens (~${PCT}% of the ${EFFECTIVE}-token effective window), crossing the $(printf '%s' "$LEVEL" | tr '[:lower:]' '[:upper:]') threshold (${THR}). ${ADVICE} This reminder is non-blocking: the pipeline continues and the decision is the user's. Reconcile the snapshot Context Reminders fields to this reading at the next gate.${WINDOW_NOTE}"
 
 # PROVENANCE MARKER -- PC-S306-UNSOLICITED-CONTEXT-HAS-NO-PROVENANCE-SIGNAL. The
 # library is a SIBLING in both layouts (core/hooks/, .claude/hooks/), so this is a

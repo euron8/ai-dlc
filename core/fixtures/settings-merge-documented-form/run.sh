@@ -103,8 +103,8 @@ if [ -n "$TMPL" ]; then
   printf '{"permissions":{"allow":[]}}\n' > "$WORK/settings.json"
   out="$(bash "$MERGE" --consumer "$WORK/settings.json" --template "$TMPL" --check 2>&1)"
   rc=$?
-  if [ "$rc" -eq 0 ] && grep -q 'model_row_needed=' <<<"$out"; then
-    ok "the documented form runs and reports model_row_needed (--check writes nothing)"
+  if [ "$rc" -eq 0 ] && grep -q 'model_window_needed=' <<<"$out"; then
+    ok "the documented form runs and reports model_window_needed (--check writes nothing)"
   else
     bad "the documented --check form did not run cleanly (rc=$rc): $(printf '%s' "$out" | head -1)"
   fi

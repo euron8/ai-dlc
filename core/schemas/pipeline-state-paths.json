@@ -102,13 +102,6 @@
       "reason": "Sidecar marking a wait-for-deliverable beat as in flight. Exists only between a beat's start and its end."
     },
     {
-      "name": ".context-sensor-model",
-      "transient": true,
-      "producer": "core/hooks/ai-dlc-context-sensor.sh",
-      "ignore": "_bmad-output/.context-sensor-model",
-      "reason": "The model the context sensor last observed, held to detect a change. Per session."
-    },
-    {
       "name": ".context-sensor-state",
       "transient": true,
       "producer": "core/hooks/ai-dlc-context-sensor.sh",

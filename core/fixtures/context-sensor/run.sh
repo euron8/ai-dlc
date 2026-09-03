@@ -96,7 +96,6 @@ SKILL
 echo '{"autoCompactWindow":300000}' > "$WORK/.claude/settings.json"
 
 STATE="$WORK/_bmad-output/.context-sensor-state"
-MODEL="$WORK/_bmad-output/.context-sensor-model"
 
 # Synthesized rather than committed: this fixture only needs to be larger than
 # the sensor's 256KB default tail window, and a 400KB blob does not belong in git.
@@ -107,14 +106,20 @@ head -1 "$FIXTURES/at-yellow.jsonl" > "$GIANT"
 PASS=0
 FAIL=0
 
-reset()  { rm -f "$STATE" "$MODEL"; }
+# Every case starts from a clean sidecar AND an explicit ceiling. The committed transcripts
+# and the at() helper record the model as claude-opus-4-8, so `reset1m` declares the OPUS
+# family at 1M -- the role a cached `row=1M` seed played before the sensor stopped caching
+# -- and `reset` leaves every family undeclared, which is the 200000 floor. The sensor
+# never writes a model file any more; a case that needs a ceiling declares one.
+reset()   { unset AI_DLC_MODEL_OPUS_WINDOW; rm -f "$STATE"; }
+reset1m() { reset; export AI_DLC_MODEL_OPUS_WINDOW=1m; }
 fire()   { printf '{"transcript_path":"%s","session_id":"t"%s}' "$FIXTURES/$1" "${2:-}" \
              | CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null; }
 ctx()    { jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null; }
 field()  { sed -n "s/^$1=//p" "$STATE" 2>/dev/null | head -1; }
-at()     { # $1 = tokens -> writes a one-line transcript, returns its path
-  printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-opus-4-8","usage":{"input_tokens":2,"cache_creation_input_tokens":0,"cache_read_input_tokens":%s}}}\n' \
-    "$(( $1 - 2 ))" > "$WORK/at.jsonl"
+at()     { # $1 = tokens  [$2 = model id] -> writes a one-line transcript, returns its path
+  printf '{"type":"assistant","isSidechain":false,"message":{"model":"%s","usage":{"input_tokens":2,"cache_creation_input_tokens":0,"cache_read_input_tokens":%s}}}\n' \
+    "${2:-claude-opus-4-8}" "$(( $1 - 2 ))" > "$WORK/at.jsonl"
   printf '%s' "$WORK/at.jsonl"
 }
 raw()    { printf '{"transcript_path":"%s","session_id":"t"}' "$1" | CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null; }
@@ -179,12 +184,12 @@ check "  and resets fire state" "$(field last_level)" "none"
 # the pre-compaction window (~preTokens) and fires a false IMMINENT one request
 # after compaction reclaimed the space (graph consumer: 265,909 vs a real
 # 80,851). The sensor must ignore any reading that precedes the most recent
-# compact_boundary. Row pinned to 1M so an unguarded 260000 would fire IMMINENT.
-reset; printf 'row=1M\n' > "$MODEL"
+# compact_boundary. OPUS declared at 1M so an unguarded 260000 would fire IMMINENT.
+reset1m
 check "pre-boundary-only transcript is silent" "$(fire post-compact-stale.jsonl | ctx)" ""
 check "  and records no stale reading" "$(field last_measured)" ""
 
-reset; printf 'row=1M\n' > "$MODEL"
+reset1m
 fire post-compact-reattached.jsonl >/dev/null
 check "reads the post-boundary turn, not the pre-boundary one" "$(field last_measured)" "80000"
 
@@ -198,23 +203,96 @@ printf '{"transcript_path":"%s","session_id":"t"}' "$GIANT" \
   | CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
 check "tail ladder survives a 400KB tool_result" "$(field last_measured)" "90000"
 
-# --- model row inference ------------------------------------------------------
-reset
-fire proves-1m.jsonl >/dev/null
-check "a 250000 reading proves the 1M row" "$(field model_row)" "1M"
-check "  and the proof is cached" "$(sed -n 's/^row=//p' "$MODEL" 2>/dev/null | head -1)" "1M"
+# --- model ceiling: declared per family, never inferred -----------------------
+# The transcript names the model but never its window, so the ceiling is the
+# operator's declaration for that model's FAMILY (a substring of the id), and a
+# family nobody declared is assumed at the 200000 floor with imminent gated off.
+# Nothing is proven, learned or cached.
+#
+# ALL FIVE VARS ARE SET IN ONE RUN, EACH TO A DISTINCT VALUE, so a positive case
+# proves the sensor picked ITS family's var and not merely that some lookup fired.
+# Every value sits below the 300000 project window, so it is what effective_window
+# echoes. The id list carries a mixed-case spelling and an id with no Claude family
+# in it at all; the latter must land in OTHER, the conservative bucket.
+fam() { # $1 tokens  $2 model id -> run with all five families declared
+  printf '{"transcript_path":"%s","session_id":"t"}' "$(at "$1" "$2")" \
+    | AI_DLC_MODEL_FABLE_WINDOW=290000 AI_DLC_MODEL_OPUS_WINDOW=280000 \
+      AI_DLC_MODEL_SONNET_WINDOW=270000 AI_DLC_MODEL_HAIKU_WINDOW=260000 \
+      AI_DLC_MODEL_OTHER_WINDOW=256000 \
+      CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null
+}
+for spec in "claude-fable-5-1:FABLE:290000" "claude-mythos-5-1:FABLE:290000" \
+            "claude-opus-4-8:OPUS:280000" "Claude-Opus-5:OPUS:280000" \
+            "claude-sonnet-5:SONNET:270000" "claude-haiku-4-5-20251001:HAIKU:260000" \
+            "local-qwen3-max:OTHER:256000"; do
+  m="${spec%%:*}"; rest="${spec#*:}"; f="${rest%%:*}"; w="${rest#*:}"
+  reset
+  fam 100000 "$m" >/dev/null
+  check "$m classifies as $f" "$(field model_family)" "$f"
+  check "  and reads AI_DLC_MODEL_${f}_WINDOW ($w)" "$(field effective_window)" "$w"
+  check "  and counts as declared" "$(field window_declared)" "1"
+done
 
+# THE ARM THAT PROVES SEPARATION, beside the positives. Only OPUS is declared; a Haiku
+# lead must not inherit it. On the floor a 250000 reading is red, never imminent.
 reset
-OUT="$(fire assumed-ceiling.jsonl | ctx)"
-check "assumed row does not claim imminence" \
-  "$(printf '%s' "$OUT" | grep -c 'imminent' | tr -d ' ')" "0"
-check "  and stays row_known=0" "$(field row_known)" "0"
+OUT="$(printf '{"transcript_path":"%s","session_id":"t"}' "$(at 250000 claude-haiku-4-5)" \
+        | AI_DLC_MODEL_OPUS_WINDOW=1m CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null | ctx)"
+check "a Haiku lead with only OPUS declared does not inherit it" "$(field window_declared)" "0"
+check "  and sits on the 200000 floor" "$(field effective_window)" "200000"
+check "  classified HAIKU" "$(field model_family)" "HAIKU"
+case "$OUT" in *"RED threshold"*) ok "  red still fires on the floor" ;;
+  *) bad "  red still fires on the floor" "got: ${OUT:-<silent>}" ;; esac
+case "$OUT" in *"Auto-compact will fire"*) bad "  imminent stays gated off undeclared" "fired imminent" ;;
+  *) ok "  imminent stays gated off undeclared" ;; esac
+case "$OUT" in *"AI_DLC_MODEL_HAIKU_WINDOW"*) ok "  and the reminder names the var to set" ;;
+  *) bad "  and the reminder names the var to set" "got: ${OUT:-<silent>}" ;; esac
+# The positive twin, one property apart: declare HAIKU and the same reading is imminent.
+reset
+OUT="$(printf '{"transcript_path":"%s","session_id":"t"}' "$(at 250000 claude-haiku-4-5)" \
+        | AI_DLC_MODEL_HAIKU_WINDOW=1m CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null | ctx)"
+case "$OUT" in *"Auto-compact will fire"*) ok "  CONTROL: with HAIKU declared the same reading is imminent" ;;
+  *) bad "  CONTROL: with HAIKU declared the same reading is imminent" "got: ${OUT:-<silent>}" ;; esac
+
+# An undeclared family: the floor, red, no imminence, and NO CACHE. The absence half
+# (no model file) is paired with the state sidecar's presence in the same run, so a
+# hook that exited before writing anything cannot pass it.
+reset
+OUT="$(fire at-250000.jsonl | ctx)"
+check "an undeclared family sits on the 200000 floor" "$(field effective_window)" "200000"
+check "  window_declared=0" "$(field window_declared)" "0"
+check "  and stays red, not imminent" "$(field last_level)" "red"
+check "  and writes no model cache" "$([ -e "$WORK/_bmad-output/.context-sensor-model" ] && echo present || echo absent)" "absent"
+check "  CONTROL: the state sidecar WAS written" "$([ -e "$STATE" ] && echo present || echo absent)" "present"
+
+# An unparseable declaration is the same as none, never a ceiling of zero.
+reset
+printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000)" \
+  | AI_DLC_MODEL_OPUS_WINDOW=banana CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
+check "an unparseable declaration falls to the floor" "$(field effective_window)" "200000"
+check "  and is recorded as undeclared" "$(field window_declared)" "0"
+
+# MUTANT CONTROL for the floor arm: seed the OLD 1M constant in place of 200000 and the
+# floor arm must fail. Built as a COPY with its sibling library beside it, guarded by
+# cmp -s so a sed that matched nothing cannot pass as a mutation.
+HOOK_PATH="${HOOK#bash }"
+MUTD="$WORK/mutant"; mkdir -p "$MUTD"
+cp "$(dirname "$HOOK_PATH")/ai-dlc-window.sh" "$MUTD/" 2>/dev/null || true
+sed 's/^UNDECLARED_MODEL_MAX=200000$/UNDECLARED_MODEL_MAX=1000000/' "$HOOK_PATH" > "$MUTD/ai-dlc-context-sensor.sh"
+if cmp -s "$HOOK_PATH" "$MUTD/ai-dlc-context-sensor.sh"; then
+  bad "floor mutant applied" "sed matched nothing; the copy is byte-identical"
+else
+  reset
+  printf '{"transcript_path":"%s","session_id":"t"}' "$FIXTURES/at-250000.jsonl" \
+    | CLAUDE_PROJECT_DIR="$WORK" bash "$MUTD/ai-dlc-context-sensor.sh" >/dev/null 2>&1
+  check "MUTANT: with the old 1M constant the floor arm fails (effective 300000)" "$(field effective_window)" "300000"
+fi
 
 reset
 OUT="$(printf '{"transcript_path":"%s","session_id":"t"}' "$(at 185000)" \
-        | AI_DLC_MODEL_ROW=1M CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null | ctx)"
-check "AI_DLC_MODEL_ROW pins the row" "$(field model_row)" "1M"
-check "  185000 is yellow on the 1M row (300000 window -> yellow 180000)" \
+        | AI_DLC_MODEL_OPUS_WINDOW=1M CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null | ctx)"
+check "a declaration takes the library's spellings (1M)" "$(field window_declared)" "1"
+check "  185000 is yellow with OPUS at 1M (300000 window -> yellow 180000)" \
   "$(printf '%s' "$OUT" | grep -c 'YELLOW' | tr -d ' ')" "1"
 
 # --- compact_imminent band ----------------------------------------------------
@@ -224,7 +302,7 @@ check "  185000 is yellow on the 1M row (300000 window -> yellow 180000)" \
 # BELOW 269000, because compaction preempts the next turn. The band must open
 # with turns to spare. (at()/raw() are defined near the top helpers.)
 
-reset; printf 'row=1M\n' > "$MODEL"
+reset1m
 OUT="$(raw "$(at 249001)" | ctx)"
 case "$OUT" in *"Auto-compact will fire"*) ok "imminent opens at ceiling-20000 (249001)" ;;
   *) bad "imminent opens at ceiling-20000 (249001)" "got: ${OUT:-<silent>}" ;; esac
@@ -232,14 +310,14 @@ case "$OUT" in *"refresh _bmad-output/pipeline-snapshot.md"*) ok "  and directs 
   *) bad "  and directs a snapshot refresh" "no refresh directive" ;; esac
 check "  level recorded as imminent" "$(field last_level)" "imminent"
 
-reset; printf 'row=1M\n' > "$MODEL"
+reset1m
 OUT="$(raw "$(at 248999)" | ctx)"
 case "$OUT" in *"RED threshold"*) ok "just below the band is red, not imminent" ;;
   *) bad "just below the band is red, not imminent" "got: ${OUT:-<silent>}" ;; esac
 
 # The real ordering hazard: red already fired, then the band opens well inside
 # red's 50K/20-turn recurrence window. imminent must escalate immediately.
-reset; printf 'row=1M\n' > "$MODEL"
+reset1m
 raw "$(at 225000)" >/dev/null                       # red fires (300000 window -> red 220000)
 check "  red fired first" "$(field last_level)" "red"
 OUT="$(raw "$(at 250000)" | ctx)"                   # +25K, only 1 turn later
@@ -255,19 +333,18 @@ case "$OUT" in *"SURFACE that trade-off"*|*"let THEM call it"*)
   *) ok "imminent does not ask the lead to offer a handoff" ;; esac
 
 # The band must still be reachable at the values real compactions were observed at.
-reset; printf 'row=1M\n' > "$MODEL"
+reset1m
 OUT="$(raw "$(at 267445)" | ctx)"                   # lowest real graph preTokens
 case "$OUT" in *"Auto-compact will fire"*) ok "band covers the lowest real observed compaction (267445)" ;;
   *) bad "band covers the lowest real observed compaction (267445)" "got: ${OUT:-<silent>}" ;; esac
 
-reset; printf 'row=1M\n' > "$MODEL"
+reset1m
 OUT="$(raw "$(at 175000)" | ctx)"
 case "$OUT" in *"Auto-compact will fire"*) bad "assumed-safe reading must not claim imminence" "fired at 175000" ;;
   *) ok "a mid-session reading does not claim imminence" ;; esac
 
 # --- recurrence ---------------------------------------------------------------
-reset
-printf 'row=1M\n' > "$MODEL"
+reset1m
 FIRES=0
 i=0
 FLAT="$(at 185000)"                                 # yellow at the 300000 window
@@ -279,16 +356,16 @@ check "flat context fires twice in 25 turns (initial + 20-turn recurrence)" "$FI
 
 # --- window resolution across settings layers (Change A) ----------------------
 # effective_window (recorded in .context-sensor-state) = min(resolved
-# autoCompactWindow, model max); on a 1M row the max is 1000000, so it echoes the
-# resolved window. Each case proves a layer the pre-change sensor could not see:
+# autoCompactWindow, model max); with OPUS declared at 1M the max is 1000000, so it
+# echoes the resolved window. Each case proves a layer the pre-change sensor could not see:
 # it read only the project settings.json, so local/user cases would report 300000.
-reset; printf 'row=1M\n' > "$MODEL"
+reset1m
 echo '{"autoCompactWindow":250000}' > "$WORK/.claude/settings.local.json"    # project is 300000
 raw "$(at 100000)" >/dev/null
 check "settings.local.json overrides project settings.json" "$(field effective_window)" "250000"
 rm -f "$WORK/.claude/settings.local.json"
 
-reset; printf 'row=1M\n' > "$MODEL"
+reset1m
 mv "$WORK/.claude/settings.json" "$WORK/.claude/settings.json.bak"           # drop project layer
 echo '{"autoCompactWindow":420000}' > "$WORK/home/settings.json"             # user layer ($CLAUDE_CONFIG_DIR)
 raw "$(at 100000)" >/dev/null
@@ -296,7 +373,7 @@ check "user settings used when no project/local layer sets the key" "$(field eff
 mv "$WORK/.claude/settings.json.bak" "$WORK/.claude/settings.json"
 rm -f "$WORK/home/settings.json"
 
-reset; printf 'row=1M\n' > "$MODEL"
+reset1m
 printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000)" \
   | CLAUDE_CODE_AUTO_COMPACT_WINDOW=200k CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
 check "env CLAUDE_CODE_AUTO_COMPACT_WINDOW supersedes settings files" "$(field effective_window)" "200000"
@@ -323,13 +400,13 @@ sidfire() { # $1 transcript  $2 session_id -> run the hook as that session
     | CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null
 }
 
-reset; printf 'row=1M\n' > "$MODEL"
+reset1m
 seedwin "$SID" "$NOW" 420000 1000000
 sidfire "$(at 100000)" "$SID" >/dev/null
 check "a 1M-context model reports ramp target 420000" "$(field effective_window)" "420000"
 check "  and records where the window came from" "$(field window_source)" "window.json (runtime)"
 
-# THE DISCRIMINATING ARM. The row is unproven here, so MODEL_MAX is the assumed 200000
+# THE DISCRIMINATING ARM. Nothing is declared here, so MODEL_MAX is the 200000 floor
 # and the clamp is min(window, MODEL_MAX). A reader that took `target` but left that
 # clamp alone reports 200000 -- correct-looking, and wrong by 62144 on every reading.
 # The runtime file names the model, so it supplies MODEL_MAX too and the clamp is a
@@ -338,30 +415,44 @@ reset
 seedwin "$SID" "$NOW" 262144 262144
 sidfire "$(at 100000)" "$SID" >/dev/null
 check "a 262144-context model reports 262144, not the assumed 200000" "$(field effective_window)" "262144"
-check "  and the row counts as KNOWN (the file named the model)" "$(field row_known)" "1"
+check "  and the window counts as DECLARED (the file named the model)" "$(field window_declared)" "1"
+
+# LAYER 1 OUTRANKS THE FAMILY LOOKUP, whichever family matched. A Haiku lead with HAIKU
+# declared at 260000 still takes the runtime file's answer; the declaration is what
+# answers when the file does not.
+reset
+seedwin "$SID" "$NOW" 420000 1000000
+printf '{"transcript_path":"%s","session_id":"%s"}' "$(at 100000 claude-haiku-4-5)" "$SID" \
+  | AI_DLC_MODEL_HAIKU_WINDOW=260000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
+check "window.json outranks a declared family window" "$(field effective_window)" "420000"
+check "  and the family is still recorded" "$(field model_family)" "HAIKU"
+rm -f "$WIN"
+printf '{"transcript_path":"%s","session_id":"%s"}' "$(at 100000 claude-haiku-4-5)" "$SID" \
+  | AI_DLC_MODEL_HAIKU_WINDOW=260000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
+check "  CONTROL: with the file gone the same declaration answers" "$(field effective_window)" "260000"
 
 # Each fallback separately: one arm covering all four cannot say which one fired.
-reset; printf 'row=1M\n' > "$MODEL"
+reset1m
 rm -f "$WIN"
 sidfire "$(at 100000)" "$SID" >/dev/null
 check "a MISSING window file falls back to the settings layers" "$(field effective_window)" "300000"
 
-reset; printf 'row=1M\n' > "$MODEL"
+reset1m
 seedwin "$SID" "$((NOW - 61))" 420000 1000000
 sidfire "$(at 100000)" "$SID" >/dev/null
 check "a STALE window file (ts 61s old) falls back" "$(field effective_window)" "300000"
 
-reset; printf 'row=1M\n' > "$MODEL"
+reset1m
 seedwin "$SID" "$((NOW - 59))" 420000 1000000
 sidfire "$(at 100000)" "$SID" >/dev/null
 check "  CONTROL: 59s old is still fresh and IS taken" "$(field effective_window)" "420000"
 
-reset; printf 'row=1M\n' > "$MODEL"
+reset1m
 seedwin "00000000-9999-9999-9999-999999999999" "$NOW" 420000 1000000
 sidfire "$(at 100000)" "$SID" >/dev/null
 check "a FOREIGN session_id falls back (the path is shared between sessions)" "$(field effective_window)" "300000"
 
-reset; printf 'row=1M\n' > "$MODEL"
+reset1m
 printf '{"model":"m","window":1000000,"target":null,"used_percentage":null,"current_usage":null,"session_id":"%s","ts":%s}\n' "$SID" "$NOW" > "$WIN"
 sidfire "$(at 100000)" "$SID" >/dev/null
 check "a NULL target falls back rather than reading as a 0 window" "$(field effective_window)" "300000"
@@ -369,12 +460,12 @@ check "a NULL target falls back rather than reading as a 0 window" "$(field effe
 # current_usage is null before the first API call and again after a compaction. That
 # says nothing about `target`, which the producer computes from the model, so the file
 # stays usable -- absent is not empty, and neither field is derived from the other.
-reset; printf 'row=1M\n' > "$MODEL"
+reset1m
 seedwin "$SID" "$NOW" 420000 1000000 null
 sidfire "$(at 100000)" "$SID" >/dev/null
 check "a null current_usage does not disqualify a valid target" "$(field effective_window)" "420000"
 
-reset; printf 'row=1M\n' > "$MODEL"
+reset1m
 seedwin "$SID" "$NOW" 420000 1000000
 printf '{"transcript_path":"%s","session_id":"%s"}' "$(at 100000)" "$SID" \
   | CLAUDE_CODE_AUTO_COMPACT_WINDOW=200k CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
@@ -389,12 +480,12 @@ rm -f "$WIN"
 # (300000). The pre-change sensor read red off the 1M table (200000) regardless
 # of the window, so 225000 fired red at BOTH -- this silent-at-500000 case is what
 # it could not produce.
-reset; printf 'row=1M\n' > "$MODEL"
+reset1m
 OUT="$(printf '{"transcript_path":"%s","session_id":"t"}' "$(at 225000)" \
   | CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null | ctx)"
 check "225000 is RED at a 300000 window" "$(printf '%s' "$OUT" | grep -c 'RED threshold' | tr -d ' ')" "1"
 
-reset; printf 'row=1M\n' > "$MODEL"
+reset1m
 OUT="$(printf '{"transcript_path":"%s","session_id":"t"}' "$(at 225000)" \
   | CLAUDE_CODE_AUTO_COMPACT_WINDOW=500000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null | ctx)"
 check "the same 225000 is silent at a 500000 window (bands moved up)" "${OUT:-EMPTY}" "EMPTY"

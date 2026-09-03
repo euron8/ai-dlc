@@ -1526,14 +1526,14 @@ fi
 # script ("prose that an agent retypes as jq drifts", its own header); the residual is that its
 # INVOCATION is still prose, and this row is what stops that from being invisible.
 #
-# WHY A `WORKLIST` ROW AND NOT A CALL TO `settings-merge.sh` HERE. The merge takes an operator
-# answer -- `--model-row`, obtained at the step-5 report -- and this driver has no channel to
-# ask for one. That is also why `.claude/settings.json` is absent from the mechanical set on
-# purpose rather than by oversight: EVERY template-derived consumer file is (`TEMPLATE-` appears
-# zero times in this program, against three `UPSTREAM-ONLY`), because each of the four is a
-# user-owned file whose merge is operator-gated. Calling the merge from here would either
-# discard that gate or invent an answer. Naming the work does neither, and the driver stating
-# it is the difference between an instruction and a hope.
+# WHY A `WORKLIST` ROW AND NOT A CALL TO `settings-merge.sh` HERE. The merge rewrites a
+# user-owned file whose step-5 report the operator reads and gates before step 7 applies it,
+# and this driver has no channel to obtain that gate. That is also why `.claude/settings.json`
+# is absent from the mechanical set on purpose rather than by oversight: EVERY template-derived
+# consumer file is (`TEMPLATE-` appears zero times in this program, against three
+# `UPSTREAM-ONLY`), because each of the four is a user-owned file whose merge is
+# operator-gated. Calling the merge from here would discard that gate. Naming the work does
+# not, and the driver stating it is the difference between an instruction and a hope.
 #
 # WHY IT RUNS AFTER THE RE-STAMP RATHER THAN GATING IT. At this point in step 7 the tree is
 # SUPPOSED to be in this state: the pull writes hook files here and merges settings.json
@@ -1563,7 +1563,7 @@ if [ -n "$HR_VALIDATOR" ]; then
   hr_names="$(printf '%s\n' "$hr_out" | sed -n 's@^ *\.claude/hooks/@@p' | tr '\n' ' ')"
   if [ "$hr_rc" = "1" ] && [ -n "$hr_names" ]; then
     say WORKLIST settings-merge ".claude/settings.json" \
-      "hook(s) present and UNREGISTERED after this apply: ${hr_names}— each is on disk, wired to nothing, and indistinguishable from one that is working. Run the settings reconcile, which is the one program that owns this contract: \`t=\$(mktemp); git -C <dist> show \"<theirs>:templates/settings.json.template\" > \"\$t\"; reconcile/settings-merge.sh --consumer .claude/settings.json --template \"\$t\" [--model-row <operator's answer>]\`. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery."
+      "hook(s) present and UNREGISTERED after this apply: ${hr_names}— each is on disk, wired to nothing, and indistinguishable from one that is working. Run the settings reconcile, which is the one program that owns this contract: \`t=\$(mktemp); git -C <dist> show \"<theirs>:templates/settings.json.template\" > \"\$t\"; reconcile/settings-merge.sh --consumer .claude/settings.json --template \"\$t\"\`. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery."
   elif [ "$hr_rc" = "2" ]; then
     say DECISION hook-registration-unreadable ".claude/settings.json" \
       "the hook-registration check could not run, so whether this pull's hooks are wired is UNKNOWN — and unknown reads exactly like clean. Detail: $(printf '%s' "$hr_out" | tr '\n' ' ')"
