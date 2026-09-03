@@ -963,7 +963,11 @@ if [ -d "$WORK/mut-ctl" ]; then
   fi
 fi
 
-if sed 's|^      err "the report at |      say NOTE report-stale-ignored "" "|' "$REC/apply.sh" \
+# BOTH refusal sites, deliberately: the gate diagnoses a post-apply re-run on one branch and a
+# moved upstream on the other, and both refuse. The mutant is "the gate never refuses", so it has
+# to disarm both spellings — a mutant that disarmed one would leave U2 carried by the other and
+# read as a survivor for the wrong reason.
+if sed 's|^        err "the report at |        say NOTE report-stale-ignored "" "|' "$REC/apply.sh" \
    | mut_apply "$WORK/m12"; then
   M12="$(mut_union "$WORK/m12")"
   case "$M12" in

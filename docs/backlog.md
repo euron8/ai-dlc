@@ -3485,6 +3485,12 @@ verify: sh m=scripts/validate-enforcement-map.sh; r=.ai-dlc-fixture-readsets.tsv
 
 ## BL-131 — the mechanical union gate is prose, so nothing makes `apply` verify the approved report
 
+**Premise moved at `v0.488.0`; re-derived 2026-09-03 while shipping `BL-151`, and NOT closed.**
+`apply.sh` now drives the gate itself, so paths 2 and 3 below are closed and the receipt reads
+exit 0 — which is exactly the partial-fix state this entry says not to close on. Path 1, step 2's
+autonomous self-update, is untouched. Taking the rest means closing step 2 or narrowing this
+entry and filing step 2 separately; that is a scope decision and was not made here.
+
 `SKILL.md` step 7 states that `apply` "may write only after BOTH hold", the first being that
 `reconcile/emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>` exits 0, "a nonzero
 exit means the approval was given without sight of a finding, so STOP and re-emit rather than
@@ -3976,3 +3982,65 @@ grammar reports exit 9 rather than a false STILL-LIVE.
 verify: sh f=docs/vocabulary-index.md; [ -f "$f" ] || exit 9; grep -qE '^\| ' "$f" || exit 9; grep -q 'delivered-reachable' "$f" && exit 0; exit 1
 
 
+
+## BL-151 — the `driver-self-update` row prescribed a re-run that the same range's union gate refuses, and the refusal named two causes that were both false
+
+**Provenance: `PC-S309-APPLY-SH-DRIVER-SELF-UPDATE-ROW-PRESCRIBES-A-RERUN-ITS-OWN-UNION-GATE-REFUSES`**,
+filed by the reference consumer 2026-09-03 on its `0.482.0 -> 0.489.0` pull, by obeying the row.
+Consumer-facing and PC-backed. Fixed in `v0.493.0`; this entry is the distribution-side record and
+the receipt.
+
+When a range updates `apply.sh` itself, phase 1 replaces the driver by inode swap and emits
+`RESOLVED driver-self-update`, which read "Re-run it to see the new one's reading of the same range
+— it is idempotent." The same range (`v0.488.0`) installed the union gate at the top of `apply.sh`,
+which requires `emit-report.sh --verify` to exit 0 against the approved report at THIS run's
+theirs. Post-apply that cannot pass: the apply moved the tree, so the detectors render every applied
+path as `ALREADY-AT-THEIRS` and the region no longer byte-matches the report the operator approved.
+Obeying the row: rc=1, nothing written, and a refusal whose two stated causes — upstream moved,
+region hand-edited — were both false. Two claims, one row apart, both reproduced by driving the
+consumer's own copy of the shipping driver in a synthetic pull (self-replacing, report rendered at
+theirs pre-apply, stamp advanced): the row prescribed an action the same release makes unexecutable
+in the state the row is printed in, and the gate's disjunction omitted the common cause.
+
+**The fix DECIDES the third cause rather than listing it.** The gate's failure branch reads the
+stamp's `commit:` and the in-flight marker's `theirs:`, resolves each to a `core/` tree in the
+distribution — the tree-keyed comparison the `--finish` identity guard already uses, so a docs-only
+commit between releases does not defeat it — and if either equals theirs' tree the refusal says so,
+prints the record it matched, and names the procedure that works: re-render the report with
+`emit-report.sh <dist> <base> <consumer> <theirs>` from the tree as it now stands, re-approve, and
+re-run apply with the same four arguments. Neither record present or resolvable falls through to
+the two-cause message, never to a pass. The row no longer prescribes the re-run; it says one will
+be refused and that the refusal names the procedure. Both branches still refuse with rc=1 and write
+nothing.
+
+**The carve-out was built and REJECTED, and not for the reason the plan predicted.** Letting a
+post-apply re-run through when the stamp is at theirs — the shape of the existing `--finish`
+exemption — fixes the filed case and re-opens the non-termination `apply.sh`'s own resolution-phase
+comment forbids: on a consumer that `--finish`ed a withheld run by hand, the re-run finds the
+semantically merged file BOTH-CHANGED again, emits the WORKLIST, withholds the stamp and writes the
+marker, so the run the row called idempotent wedges the consumer a second time. Measured on three
+candidates across four scenarios (post-apply re-run, stale upstream, re-run after `--finish`,
+re-run while withheld): the shipped copy misdiagnoses in every post-apply state, the carve-out
+re-wedges after `--finish`, the discriminating refusal is right in all four. The plan's stated
+reason for expecting rejection — that the tree being at theirs is not knowable before
+classification — was false; the stamp and the marker are readable before phase 1. The acquittal is
+the reason.
+
+**Reader set, derived rather than taken from the filing.** The row's only reader is
+`core/fixtures/apply-self-overwrite/run.sh`, which greps the row NAME tab-delimited; the gate
+message's only reader is `apply-restamp-worklist`'s `m12`, re-anchored so it disarms both refusal
+sites. `SKILL.md` never restates the row. Mechanism: `apply-self-overwrite` assertions 5–8 — the row
+text, the post-apply refusal naming the record it matched, a stale-upstream report still getting
+the two-cause message, and the prescribed procedure completing — with mutants M4–M7, M7 being the
+rejected carve-out, each scored on the arm it must move and the neighbour it must not. Green in
+both layouts, on a tree built by `install.sh` into an empty directory.
+
+**Receipt limits, stated.** It keys on (a) the refusal line naming `driver-self-update`, the bound
+row-name token the diagnosis cross-references, and (b) the row's own two lines lacking the literal
+`it is idempotent`, the phrase the consumer's `theirs_has` receipt anchors on, so the two flip
+together. A refusal reworded without the cross-reference scores STILL-LIVE though fixed; a row that
+keeps the claim in other words scores fixed here and STILL-LIVE upstream. Scored before landing:
+HEAD 1, tree 0, a second spelling of the row 0, claim restored 1, cross-reference dropped 1, row
+deleted 9, subject missing 9.
+
+verify: sh a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$a" ] || exit 9; s=$(grep -c 'say RESOLVED driver-self-update' "$a"); [ "$s" -eq 1 ] || exit 9; r=$(grep -cE '^[[:space:]]*err "the report at .*driver-self-update' "$a"); i=$(awk '/say RESOLVED driver-self-update/{p=2} p>0{print; p--}' "$a" | grep -c 'it is idempotent'); [ "$r" -ge 1 ] && [ "$i" -eq 0 ] && exit 0; exit 1

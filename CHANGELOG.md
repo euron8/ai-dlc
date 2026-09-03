@@ -15,6 +15,62 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.493.0] - 2026-09-03
+
+### The driver-self-update row prescribed a re-run its own union gate refuses, and the refusal misdiagnosed it
+
+Closes `PC-S309-APPLY-SH-DRIVER-SELF-UPDATE-ROW-PRESCRIBES-A-RERUN-ITS-OWN-UNION-GATE-REFUSES`,
+filed by the reference consumer on its 0.482.0 → 0.489.0 pull by obeying the row; distribution
+record `BL-151`.
+
+When a range updates `apply.sh` itself, phase 1 swaps the driver and emits
+`RESOLVED driver-self-update`, which read "Re-run it to see the new one's reading of the same
+range — it is idempotent." The same range (v0.488.0) installed the union gate at the top of the
+driver, which requires `emit-report.sh --verify` to exit 0 against the approved report at THIS
+run's theirs. Post-apply that cannot pass: the apply moved the tree, the detectors render every
+applied path as `ALREADY-AT-THEIRS`, and the region no longer matches. Obeying the row: rc=1,
+nothing written, and a refusal naming two causes — upstream moved, region hand-edited — both
+false. Reproduced by driving the consumer's own copy of the shipping driver in a synthetic pull.
+
+**The gate now decides the third cause instead of listing it.** On a verify failure it reads the
+stamp's `commit:` and the in-flight marker's `theirs:`, resolves each to a `core/` tree — the
+same tree-keyed comparison the `--finish` identity guard uses, so a docs-only commit between
+releases does not defeat it — and if either is theirs' tree the refusal says this is a post-apply
+re-run, prints the record it matched, and names the procedure that works: re-render the report
+with `emit-report.sh <dist> <base> <consumer> <theirs>` from the tree as it now stands,
+re-approve, re-run apply with the same four arguments. Neither record present or resolvable
+falls through to the two-cause message, never to a pass. Both branches still refuse, rc=1,
+nothing written. The row no longer prescribes the re-run; it says one will be refused and that
+the refusal names the procedure.
+
+**The carve-out was built and rejected.** Letting a post-apply re-run through when the stamp is
+at theirs fixes the filed case and re-opens the non-termination the resolution-phase comment
+forbids: on a consumer that `--finish`ed a withheld run by hand, the re-run finds the
+semantically merged file BOTH-CHANGED again, emits the WORKLIST, withholds the stamp and writes
+the marker — wedged again by the run the row called idempotent. Measured: three candidates
+across four scenarios; the shipped copy misdiagnoses every post-apply state, the carve-out
+re-wedges after `--finish`, the discriminating refusal is right in all four. The plan predicted
+the rejection for a different reason — that the tree being at theirs is unknowable before
+classification — and that reason was false: the stamp and the marker are readable before
+phase 1.
+
+**`apply-self-overwrite` owns it**, because it already drives the self-replacement that emits the
+row. Assertions 5–8: the row no longer carries the claim and says the gate will refuse; the bare
+re-run is refused with the diagnosis naming the matched stamp; a report stale because upstream
+moved still gets the two-cause message; the prescribed procedure completes with the row silent.
+Mutants M4–M7 (claim restored, diagnosis never fires, diagnosis always fires, post-apply re-run
+let through), each scored on the arm it must move and the neighbour it must leave alone. Its
+world now carries VERSION, a stamp, a validator and the reconcile `.md` files so the first run
+re-stamps as a real pull does, and each world records its own refs — the first revision passed
+another world's refs to a dist where they resolved to nothing, and two verdicts came back wrong
+in opposite directions. `apply-restamp-worklist`'s `m12` re-anchored to disarm both refusal
+sites. Both fixtures green in both layouts, on a tree built by `install.sh` into an empty
+directory.
+
+**`BL-131`'s premise moved under it and is annotated, not closed.** Its receipt has read exit 0
+since v0.488.0 wired the gate into `apply.sh`, which is the partial-fix state the entry itself
+says not to close on; step 2's autonomous self-update is untouched.
+
 ## [0.492.0] - 2026-09-03
 
 ### The v0.491.0 fixture walked up for a VERSION file, and a consumer has none
