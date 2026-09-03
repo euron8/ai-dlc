@@ -1,13 +1,35 @@
-# Replace the sensor's model-row guess with operator-declared, per-family window vars
+# DISCHARGED — Replace the sensor's model-row guess with operator-declared, per-family window vars
 
-## RESUME HERE
+> **THIS PLAN IS SPENT. DO NOT EXECUTE IT.** Shipped as **v0.490.0** (`6ab32e66`, merged to
+> `origin/main` as PR #600). Every numbered action below is done, including action 9: this
+> block was re-derived AFTER the merge. Kept as the RECORD of what was measured and why, and
+> as the carrier of the graph migration brief at the bottom, never as a set of instructions.
+>
+> A spent runbook still written in the imperative is this repo's recorded handoff hazard:
+> a session told to FOLLOW it redoes merged work.
 
-**You were started with one sentence: `READ and FOLLOW docs/plans/context-sensor-model-family-window.md`. This section is the ONLY CURRENT STATUS RECORD in this file.**
+**Resume with: `READ and FOLLOW docs/plans/context-sensor-model-family-window.md`.**
+That is the whole instruction the operator gives. This block is the entry point.
 
-**State: BUILT as v0.490.0, gate pending at the time of this write.** Actions 1–6 are done
-and action 8's triple is written; action 7 (the gate) and 9 (re-derive this block after the
-merge) are what remain. The graph migration brief is the section "Graph migration brief"
-at the bottom of this file. The design below is the record of what was built.
+**What is still OWED, and by whom:** nothing in this repo. The graph migration brief below
+is a deliverable for the OPERATOR to carry into a graph session; applying it is a consumer
+pull decision and is not preapproved. Until it is applied, graph's sensor assumes a
+200,000-token ceiling for every family (yellow/red early on 1M models, `imminent` off)
+whenever its statusline's `window.json` does not answer first.
+
+**Post-merge close-out, re-derived on `main` at `3327cf6e`:** non-comment occurrences of
+`AI_DLC_MODEL_ROW` under `core/`, `scripts/` and `templates/` are **0**, against a control of
+5 files carrying `AI_DLC_MODEL_HAIKU_WINDOW`. Six files keep the retired token inside comments
+recording the measured episode behind the AI_DLC_* scrub rule; those are evidence and stay.
+One reader beyond the plan's floor of 12 was found and rewritten: `templates/QUICKSTART.md.template`.
+
+**One design decision the plan left open, taken here:** the install prompt and the
+reconcile's `--model-row` provisioning wrote the single key being deleted, and no single value
+is right for five families, so the provisioning WRITE was removed rather than ported.
+`settings-merge.sh --check` keeps its verdict gate and now reports `model_window_needed=yes`
+with an `ask:` block naming the five vars; `env` is consumer-owned and the operator declares
+the windows themselves. The unparseable-template battery kept its subject unchanged
+(4 mutants, 4 kills).
 
 ## Start here
 
