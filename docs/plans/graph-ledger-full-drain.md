@@ -37,7 +37,76 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 44 SHIPPED AS `v0.483.0`. GAP 4, PENDING 4. START AT BATCH 45.
+### BATCH 44 SHIPPED AS `v0.483.0`, CORRECTED BY `v0.484.0`. GAP 5, PENDING 4. START AT BATCH 45.
+
+**A LATE HAND WAS RIGHT AGAIN — THE SIXTH TIME — AND THIS ONE FOUND A DEFECT THIS BATCH
+CREATED.** Both hands went idle without delivering, were asked twice each, and reported only
+after the merge. **Their central finding was real and neither the sweep nor the lead had it.**
+
+**LEGALISING A TOKEN MADE THREE STATUS-BLIND READERS REACHABLE.** `SKILL.md:53-56`,
+`route.md:72-76` and `ai-dlc-recover.sh:297-313` iterate EVERY In-Flight row with **no status
+filter at all** and route an absent deliverable to re-arm and eventually re-dispatch. A
+`stopped` row has an absent deliverable *by the definition `v0.483.0` itself wrote*, so a
+teammate the operator deliberately stopped was classified as an undelivered one — and
+`recover.sh` is a `SessionStart` hook on the `compact` matcher, so it would arm wait-beats over
+those rows unprompted. **Unreachable before the fix, because deletion was then the only passing
+disposition. The fix is what reached it.** Fixed as `BL-150`.
+
+**THE LEAD'S OWN READER SWEEP MISSED IT, AND THE REASON IS THE REUSABLE PART.** That sweep was
+keyed on `--include="*.sh"` PARSERS and dispositioned `recover.sh` as "prose, mentions the
+section, no token branch" — which was TRUE and was the wrong question. **Status-BLIND is worse
+than branching wrongly: there is no token for a grep to find, so a grammar hunting token
+branches scores the dangerous readers as non-instances.** Ask which readers IGNORE the field,
+not only which ones read it.
+
+**CHECKING BEAT ACCEPTING, FOR THE SECOND RELEASE RUNNING.** Both hands filed a BLOCKER saying a
+fifth disposition (`in-flight, <qualifier>`) passes both mechanisms and that the shipped header's
+"only DELETION passes" enumeration was measurably false. **They had scored `43c7f548`, and the
+`BL-149` fix that closes it landed at `0645904b` on the same branch.** Verified on `origin/main`:
+Check 0 is leading-token, and the shipping fixture asserts `in-flight, since <ts>` BLOCKS. **A
+late hand's SUBSTANCE has now been right six times and its PARTICULARS wrong most of those times
+— read it against what SHIPPED, not against what it measured.**
+
+**MY OWN PROBE FOR THAT CHECK WAS BROKEN AND SAID SO.** Extracting Check 0's awk into a
+standalone driver returned `ARM BROKEN` on all eight cells, on BOTH blobs — a perfectly
+symmetrical null that would have read as agreement if I had only compared the two sides. I
+discarded the extractor and drove the shipping fixture instead. **A second implementation of a
+grammar is an opinion; the thing that runs the input is the answer.**
+
+**`stopped` HAD NO REAPER AND THE SENTENCE CREATING THAT WAS MINE.** `_gate-procedures.md` said
+"do not delete a `stopped` row" and nothing anywhere deleted one — every `stopped`-beside-delete
+hit across `core/` was a prohibition, against a control showing `DELETE` instructions exist for
+the other two tokens. The section would have grown monotonically under the byte budget whose
+446% overrun IN THIS SECTION is why its fixture exists. The discharge is now named at both
+declaring sites: the successor deletes `stopped` rows at its first snapshot write after resume.
+
+**`route.md` CONTRADICTED ITSELF 538 LINES APART AND `v0.483.0` MADE THE WRONG HALF PERMANENTLY
+FALSE.** `:75` told the resume path it "finds the table empty"; `:611-617` had said rows are KEPT
+since `v0.408.0`. A premise that can no longer hold, feeding a consequent that then always
+fires. **Both halves were in the file `v0.483.0` edited and neither the lead nor the gate saw
+it.**
+
+**AND `v0.408.0` IS WHY THE WHOLE BATCH EXISTED.** Both hands derived it independently: that
+release updated `handoff.md`, `route.md`, `_gate-procedures.md` and the continue hook to mandate
+`stopped`, and touched **neither** the validator **nor** its fixture. The closed-set-of-two
+comment predates it by a month. **This was never two philosophies disagreeing — it was one
+release leaving its enforcer behind, and nothing in the repo could see that for five weeks.**
+That is `BL-148`'s subject, filed and unfixed.
+
+**THREE MECHANICAL BOUNDS FIRED ON THE CORRECTION, AND EACH ONE WAS RIGHT.** Prose in
+`_gate-procedures.md` citing `core/fixtures/...` is a dead link on every consumer, where
+`install.sh` maps `core/<x>` to `.claude/<x>` — the enforcement-map invariant caught it and
+**eight fixtures failed behind that one line**. A 7-line arm added to `recover.sh` grew the
+directive that hook EMITS from under its 9500 bound to **9615**; bisected by reverting each
+changed file in turn — `recover.sh` alone, not cumulative — and the same instruction now fits in
+150 characters at 9234. **A hook's prose is PAYLOAD, and editing it spends a budget.**
+
+**`git push` WITHOUT `-u` EXITED 128 AND THE GATE NEVER RAN.** `fatal: The current branch has no
+upstream branch`, because the earlier `-u` push had died AT the gate and so never set it. Read
+the exit: 128 is a transport refusal, 1 is a gate verdict, and only the second has a phase table.
+`steps/handoff.md:46-49` documents this exact form.
+
+### BATCH 44's FIRST RELEASE, `v0.483.0` — THE BLOCK ABOVE REPLACES THIS ONE. TAKE THE STATE FROM THERE.
 
 **THE SWEEP FOUND NEW WORK, FOR THE FIRST TIME IN FOUR BATCHES, AND THE md5 IS WHAT SAID SO.**
 The ledger moved `a79811f7…` → `1981713c…`, live **72 → 73**, unfiled **28 → 29**. The consumer
@@ -154,13 +223,13 @@ filing `BL-147` against the new candidate moved it from unfiled to cited. Both n
 for the moment they were taken; if you read 44/29 anywhere above, that is the sweep's reading
 before this batch filed anything. DISCHARGED **21 raw / 18 corrected**, IN-FLIGHT **27**,
 UNTOUCHED **28**, overlap **3**, TERMINAL **32**; partition 21+27+28−3 = 73. `docs/backlog.md`
-**82 live / 67 archived** after filing `BL-147`, `BL-148` and `BL-149` and rotating two of the three. **The consumer
+**82 live / 68 archived** after filing `BL-147`, `BL-148`, `BL-149` and `BL-150` and rotating three of the four. **The consumer
 dirty count is not a gate**: it read 5 at the start and 6 at the close, every path its own
 pipeline state, and `.handoff-in-progress` appeared while this batch ran — a graph session was
 mid-handoff throughout, which is the operation this release repairs.
 
-**THE GAP IS FOUR RELEASES AND PENDING IS 4.** Consumer stamp `0.479.0` against a distribution
-`VERSION` of `0.483.0`. The four are batch 43's two, batch 42's one, and this batch's, derived
+**THE GAP IS FIVE RELEASES AND PENDING IS 4.** Consumer stamp `0.479.0` against a distribution
+`VERSION` of `0.484.0`. **Five is the WIDE line.** The four are batch 43's two, batch 42's one, and this batch's, derived
 per-id against the corrected impossible-id control of 0. **THE PULL IS NOT AUTHORIZED** —
 `operator-rulings.md` governs unchanged: operator-initiated, readiness is not authorization, a
 `PENDING` count is not a decision about WHEN, and one is never handed to a peer session. **Past
@@ -4143,8 +4212,8 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 45's
-   SUBJECT.** Batch 44 shipped as `v0.483.0`; the distribution `VERSION` is `0.483.0`. Number
-   yours 45.
+   SUBJECT.** Batch 44 shipped as `v0.483.0` and was corrected by `v0.484.0`; the distribution
+   `VERSION` is `0.484.0`. Number yours 45.
 
    **DERIVE THE READER SET OF WHATEVER YOUR SUBJECT TOUCHES, AND DO NOT TRUST THE ONE THE FILING
    NAMES. THIS IS BATCH 44's BEST FINDING AND IT COST ONE GREP.** The filing named one reader of
@@ -4266,9 +4335,10 @@ so no block written before it changes verdict.
    interrupt; if you genuinely need to ask, ask the OPERATOR whether to, and put the peer's current
    state into the question.
 
-   **THE GAP IS FOUR RELEASES AND PENDING IS 4** — the consumer's stamp reads `0.479.0` against
-   a distribution `VERSION` of `0.483.0`, and the four pending are batch 42's, batch 43's two, and
-   batch 44's. **Past five this file calls the range WIDE, and the next batch reaches that line.**
+   **THE GAP IS FIVE RELEASES AND PENDING IS 4** — the consumer's stamp reads `0.479.0` against
+   a distribution `VERSION` of `0.484.0`, and the four pending are batch 42's, batch 43's two, and
+   batch 44's. **FIVE IS THE LINE THIS FILE CALLS WIDE. Say so when you report the gap; a wide
+   range means more paths adjudicated in one session and a bigger blast radius.**
    **Your batch will widen the gap, which is expected and is not a reason to reorder anything.**
    Re-derive both; a zero gap is a state, not a property. That is
    not permission to close it: a pull is operator-initiated, readiness is not authorization, a
