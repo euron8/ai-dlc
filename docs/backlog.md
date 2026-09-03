@@ -3981,5 +3981,71 @@ grammar reports exit 9 rather than a false STILL-LIVE.
 
 verify: sh f=docs/vocabulary-index.md; [ -f "$f" ] || exit 9; grep -qE '^\| ' "$f" || exit 9; grep -q 'delivered-reachable' "$f" && exit 0; exit 1
 
+## BL-152 — `context-sensor`'s freshness control seeds a file 59s old against a `NOW` captured earlier, and the pool eats the one-second margin
 
+**Found 2026-09-03 while landing batch 45's docs commit**, which touched no fixture: the pre-push
+gate refused the push on `context-sensor`, green solo (`99 passed, 0 failed`) and red under the
+12-way pool (`1 of 185 units red`, `98 passed, 1 failed`). Consumer-facing: the fixture ships,
+so a consumer's push can be refused by it for the same reason. DEFECT.
 
+The arm is `CONTROL: 59s old is still fresh and IS taken` (`core/fixtures/context-sensor/run.sh:448`).
+It seeds `window.json` with `ts = NOW - 59`, where `NOW` is captured ONCE at `run.sh:392`, some
+fifty hook invocations before this arm runs; the hook's freshness bound is
+`AI_DLC_WINDOW_MAX_AGE` defaulting to 60 (`core/hooks/ai-dlc-window.sh:89`) and it judges age
+against the wall clock at invocation time. The margin is therefore ONE SECOND minus everything
+that ran since line 392. Solo that is under a second; under the pool it is not, the file reads
+as 60s or older, the hook falls back, and the arm reports `expected '420000', got '300000'`.
+The sibling arm at `:443` (`61s old falls back`) is safe by construction — latency only makes it
+staler.
+
+**Not a hook defect.** The hook's 60-second bound is the subject under test and is correct; the
+fixture's clock is the defect. The measured red run is in `.git/ai-dlc-fixture-failures` under
+the `2026-09-03T20:24:46Z` header.
+
+**Remedy shape:** capture the clock at the seed, not at the file's top — either `seedwin` takes
+an OFFSET and computes `$(date +%s) - offset` itself, or `NOW` is re-read immediately before the
+59s arm. Widening the margin (59 → 30) also works and is worse: it hides latency instead of
+removing it, and the 61s sibling then has a 31-second gap between it and the control. Whichever
+form, prove it can fail: run the arm with a `sleep 2` injected between seed and fire, before and
+after.
+
+**Receipt limits, stated.** The receipt keys on a fresh `date +%s` reaching the seed — inside
+`seedwin`'s body or within six lines above the 59s arm. A fix that widens the margin instead
+scores STILL-LIVE, deliberately: that form is discouraged above. Exit 9 if the arm is gone.
+
+verify: sh f=core/fixtures/context-sensor/run.sh; [ -f "$f" ] || exit 9; n=$(grep -n '59s old is still fresh' "$f" | head -1 | cut -d: -f1); [ -n "$n" ] || exit 9; awk -v n="$n" '/^seedwin\(\)/{s=1} s && /date \+%s/{c++} s && /^}/{s=0} NR>=n-6 && NR<=n && /date \+%s/{c++} END{exit !(c>0)}' "$f" && exit 0; exit 1
+
+## BL-153 — `implementation-join-yield`'s beat-churn arm needs nine stop-hook invocations inside the hook's 30-second rapid-fire window, and the pool spreads them past it
+
+**Found 2026-09-03 on the re-push of the same docs commit**, one run after `BL-152`: the gate
+refused on `implementation-join-yield`, green solo, red under the pool (`1 of 185 units red`).
+Consumer-facing: the fixture ships. DEFECT.
+
+The arm is `beat-churn stall` (`core/fixtures/implementation-join-yield/run.sh:163-165`): it drives
+the sequence `B L B L B L B L B` — nine invocations of `ai-dlc-continue.sh` — and asserts a
+`BACKOFF` appears, which the hook emits once three blocks fall within `RAPID_WINDOW_SECONDS=30`
+of each other (`core/hooks/ai-dlc-continue.sh:88-89,391,770`). Every other gap in the fixture is
+expressed WITHOUT sleeping (`age_state` moves the state file's timestamp back 100s), but the
+"rapid" side of the same clock is left to real wall time: nine hook runs must complete inside 30
+seconds. Under the pool they did not — the red run's sequence reads
+`... BLOCKED (rapid-fire 3/3) ALLOWED_BY_LIVE_BEAT BLOCKED (rapid-fire 1/3) ...`: the counter
+reached three, a gap of 30s or more elapsed before the fourth block, and the hook correctly reset
+it. The arm then reports `no BACKOFF`.
+
+**Not a hook defect.** The reset is the hook's documented behaviour and the fixture's own
+`slow-beat near-miss` arm depends on it. The fixture pins one side of the clock and trusts the
+other. Measured red run: `.git/ai-dlc-fixture-failures`, header `2026-09-03T20:35:37Z`.
+
+**Remedy shape:** pin the rapid side the way the slow side is pinned — a helper that rewrites
+the state file's last-block timestamp to `now` before each `B` (the mirror of `age_state`), so
+the sequence is rapid by construction; or make the window an env override in the hook
+(`${AI_DLC_RAPID_WINDOW_SECONDS:-30}`) and have the fixture raise it. The first form touches
+only the fixture and is preferred. Prove it can fail: inject a `sleep 31` between two blocks with
+the pin in place (the pin must defeat it) and with the pin removed (the arm must go red).
+
+**Receipt limits, stated.** The receipt accepts either form: a fixture helper that writes
+`date +%s` into `pipeline-block-state.txt`, or the hook reading the window from an env override.
+A fix that shortens the sequence or widens the assertion scores STILL-LIVE. Exit 9 if the arm
+or the hook constant is gone.
+
+verify: sh f=core/fixtures/implementation-join-yield/run.sh; h=core/hooks/ai-dlc-continue.sh; [ -f "$f" ] && [ -f "$h" ] || exit 9; grep -q 'beat-churn stall' "$f" || exit 9; grep -q '^RAPID_WINDOW_SECONDS=' "$h" || exit 9; grep -qE '^RAPID_WINDOW_SECONDS="?\$\{' "$h" && exit 0; awk '/pipeline-block-state/ && /date \+%s/ {c++} END{exit !(c>0)}' "$f" && exit 0; exit 1
