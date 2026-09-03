@@ -3975,3 +3975,4 @@ grammar reports exit 9 rather than a false STILL-LIVE.
 
 verify: sh f=docs/vocabulary-index.md; [ -f "$f" ] || exit 9; grep -qE '^\| ' "$f" || exit 9; grep -q 'delivered-reachable' "$f" && exit 0; exit 1
 
+

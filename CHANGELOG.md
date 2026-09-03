@@ -15,6 +15,60 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.484.0] - 2026-09-02
+
+### Legalising `stopped` made three status-blind readers reachable, and they re-arm a teammate the operator stopped
+
+A correction to `v0.483.0`, found by an adversarial hand that reported after
+that release had merged.
+
+`v0.483.0` legalised `stopped` in the In-Flight `status` column. Three core
+sites iterate EVERY row of that section with no status filter at all, and route
+an absent deliverable to re-arm and eventually re-dispatch:
+
+    core/skills/ai-dlc/SKILL.md:53-56          "resume the beat, as for absent"
+    core/skills/ai-dlc/steps/route.md:72-76    "older or absent means the beat resumes"
+    core/hooks/ai-dlc-recover.sh:297-313       "Deliverable absent -> ARM A FRESH beat"
+
+A `stopped` row has an absent deliverable by the definition `v0.483.0` itself
+wrote — "stopped before delivering" — so all three classify a teammate the
+operator deliberately stopped as an undelivered one, and `ai-dlc-recover.sh`, a
+`SessionStart` hook on the `compact` matcher, carries that through to
+re-dispatch once `max_wait_beats` is exhausted. That file's own text calls
+re-dispatching a live teammate a lead-conduct retro finding.
+
+**The defect was unreachable until `v0.483.0` made it reachable.** Deletion was
+previously the only disposition that passed both gates, so no `stopped` row
+survived to be read. Each of the three now skips such a row, and that arm is
+ordered FIRST, because a stopped row also satisfies the absent-deliverable test
+below it.
+
+`route.md:75` told the resume path that "a resume that followed `handoff.md`
+Step 1 finds the table empty", while `route.md:611-617` had said since
+`v0.408.0` that the rows are KEPT. `v0.483.0` made the first permanently false,
+so its consequent was always reached — the mirror of a check that cannot fire.
+Corrected.
+
+**`stopped` also had no reaper.** `_gate-procedures.md` said not to delete such
+a row and nothing anywhere deleted one; every hit for `stopped` beside
+delete/remove/clear/prune across `core/` was a prohibition, against a control
+showing DELETE instructions do exist for the other two tokens. The section would
+have grown monotonically for the snapshot's life, bounded only by the byte
+budget whose 446% overrun in this same section is why
+`core/fixtures/inflight-row-shape/` exists. The discharge is now named at both
+declaring sites: the successor deletes `stopped` rows at its first snapshot
+write after the resume, once it has carried what they record into Recent
+Activity or Open Items.
+
+Fixture arms 4g and 4h. 4g pins that a struck `stopped` row raises the
+struck-through verdict ONLY — scored against a mutant that removes the
+strikethrough exemption, where both verdicts fire and the lead is handed two
+opposite remedies. 4h exercises the comma form the check's own remedy text
+advertises, which was the one form never tested; scored against the pre-fix
+validator, it is indicted there.
+
+Rotated as `BL-150`.
+
 ## [0.483.0] - 2026-09-02
 
 ### Core instructed a status token that core’s own gate refused, and the only passing disposition was the one core forbids
