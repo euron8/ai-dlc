@@ -180,6 +180,47 @@ say() {
 }
 err() { echo "apply: $*" >&2; exit 1; }
 
+# --- MECHANICAL UNION GATE, CONDITION (1), DRIVEN HERE RATHER THAN NARRATED ----
+# SKILL.md step 8 lets `apply` write only after
+# `emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>` exits 0. That gate was
+# PROSE, and `theirs` was an argument the executing session supplied — so a session could verify
+# the report against the ref the REPORT names while this program resolves a NEWER one, and get a
+# clean exit 0 over a region describing a different upstream.
+#
+# THE CHECK WAS NEVER BLIND; THE AFFORDANCE WAS. The rendered region carries theirs' `core/`
+# tree hash, so --verify does see a moved ref. Measured across one release: rc=0 verifying at
+# the ref the region was rendered for, rc=1 one release later, the two `core/` trees differing.
+# A symbolic `origin/main` does not defeat it either — the ref STRING is stable across the move
+# and the tree hash is not. Nothing made the two `theirs` values the same one. They are the same
+# by construction here, because this call passes the `$THEIRS` this program is about to apply.
+#
+# AN ABSENT REPORT DOES NOT BLOCK, deliberately rather than as a hole left open. This driver has
+# never required a report and two dozen fixture directories drive it without one; refusing would
+# wedge every one of them while changing no operator outcome, since step 5 writes the report
+# before step 8 runs. A row is emitted instead, so "nothing checked this" reaches the manifest
+# the operator reads rather than being absent from it.
+#
+# NOTE AND NOT DECISION, ON BOTH ROWS. `say` counts WORKLIST and DECISION into `handback`, and a
+# non-zero hand-back WITHHOLDS the re-stamp. A DECISION here would withhold it on every apply
+# that has no report — which is every fixture — and a withheld stamp leaves `.ai-dlc-applying`
+# in place with no way to clear it. That is the wedge the two-counter design above exists to
+# avoid, and this gate must not reintroduce it one layer up.
+#
+# NOT UNDER `--finish`, for the same reason: that mode writes no core file, so there is no write
+# for this condition to authorize, and a finisher that refuses cannot be cleared.
+UNION_REPORT="$CONSUMER/_bmad-output/ai-dlc-update/reconcile-report.md"
+if [ "$FINISH" = 0 ]; then
+  if [ -f "$UNION_REPORT" ]; then
+    if bash "$SELF/emit-report.sh" --verify "$UNION_REPORT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1; then
+      say NOTE report-verified "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1): the approved report's mechanical region matches what the detectors render at THIS run's theirs ($THEIRS)."
+    else
+      err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS). SKILL.md step 8 lets apply write only after emit-report.sh --verify exits 0, and it does not. Either upstream moved after that report was rendered — which is what this gate exists to catch — or the region was hand-edited. Re-run the dry run at $THEIRS, or name the ref the report describes explicitly so the two agree, then re-approve. NOTHING HAS BEEN WRITTEN."
+    fi
+  else
+    say NOTE report-unverified "" "union-gate condition (1) was NOT evaluated: no report at ${UNION_REPORT#"${CONSUMER}"/}. This does not block — the driver has never required one — but nothing here has confirmed an operator approved a region matching theirs ($THEIRS)."
+  fi
+fi
+
 # --- IN-FLIGHT MARKER: this tree is mid-pull and its self-tests do not hold ----
 # A pull writes core one file at a time, so between the first write and the re-stamp the
 # tree is a MIXTURE of two releases and its own fixture suite reports failures that are
