@@ -15,6 +15,60 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.488.0] - 2026-09-03
+
+### The union gate was prose, and `theirs` was an argument the executor supplied
+
+SKILL.md step 8 lets `apply` write only after
+`emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>` exits 0. `apply.sh` never
+invoked it — two comment mentions at `:81` and `:1320`, against a control of 12 `layer-drift`
+references. The gate was an instruction to the executing session, and that session chose the
+`theirs` it verified against.
+
+So a session could verify the report at the ref the REPORT names while `apply` resolves a
+NEWER one, and get a clean exit 0 over a region describing a different upstream. `origin/main`
+advancing one release between a dry run and its apply is enough, and it did: a consumer session
+running bare at 0.486.0 was re-invoked after 0.487.0 merged.
+
+**The check was never blind; the affordance was.** The rendered region carries theirs' `core/`
+tree hash, so `--verify` does see a moved ref. Measured across the release, both directions:
+
+    render at 69dd8d85, --verify at 69dd8d85   rc=0      [control, the rendered ref]
+    render at 69dd8d85, --verify at e015fd18   rc=1
+    git rev-parse 69dd8d85:core   e7f57665…
+    git rev-parse e015fd18:core   b956f44d…
+
+A symbolic `origin/main` does not defeat it either — the ref string is stable across the move
+and the tree hash is not. Nothing made the two `theirs` values the same one. `apply.sh` now runs
+the verify itself with the `$THEIRS` it is about to apply, so they cannot differ.
+
+**An absent report does not block, deliberately.** This driver has never required one and
+24 fixture directories drive it without one; refusing would wedge every one of them while
+changing no operator outcome, since step 5 writes the report before step 8 runs. A
+`NOTE report-unverified` row is emitted instead, so "nothing checked this" reaches the manifest
+rather than being absent from it. **False-positive set: EMPTY**, measured by running all 24.
+
+**Both rows are `NOTE` and not `DECISION`, which is the part that would have broken things.**
+`say` counts WORKLIST and DECISION into `handback`, and a non-zero hand-back withholds the
+re-stamp. A DECISION here would have withheld it on every apply with no report — every fixture —
+leaving `.ai-dlc-applying` down with no way to clear it. That is the wedge
+`apply-restamp-worklist` exists to prevent, and this gate would have reintroduced it one layer
+up.
+
+**Not under `--finish`.** That mode writes no core file, so there is no write to authorize, and
+a finisher that refuses cannot be cleared.
+
+Five arms in `apply-restamp-worklist`, the fixture that already owns the hand-back and
+re-stamp machinery: a `U0` sanity arm asserting the current and stale regions actually differ
+(without it `U2` passes vacuously); `U1` a current report verifies and the NOTE leaves the stamp
+alone; `U2` a stale region refuses with the stamp at base and no in-flight marker; `U3` an
+absent report does not block and says so; `U4` `--finish` stamps over a stale report. Mutant
+`m12` replaces the refusal with a row — `U2` goes red, and the clean path stays green, so the
+two arms are not entangled.
+
+Reported by a consumer-side session across two dry runs. The operator-side remedy it had already
+adopted — naming the ref explicitly — remains correct and now has a mechanism behind it.
+
 ## [0.487.0] - 2026-09-03
 
 ### A detector nothing invoked, with a green fixture over it

@@ -562,6 +562,81 @@ else
   bad "CWD driven from / the withheld stamp did not reproduce (stamp '$(stamp_ver "$C_CWD")', marker $(marker "$C_CWD")). Some path above resolves from the process cwd, so a green run from the repo root says nothing about a consumer's"
 fi
 
+# --- U1-U4: union-gate condition (1) is DRIVEN by apply.sh, not narrated at it ----------------
+# SKILL.md step 8 lets apply write only after `emit-report.sh --verify` exits 0. That was prose,
+# and `theirs` was an argument the executing session supplied — so a session verifying the report
+# against the ref the REPORT names, while apply resolves a NEWER one, got exit 0 over a region
+# describing a different upstream. apply.sh now runs the verify itself with the `$THEIRS` it is
+# about to apply, so the two values cannot differ.
+#
+# THE ROWS ARE `NOTE`, AND U1/U3 ARE WHAT HOLD THEM THERE. `say` counts WORKLIST and DECISION
+# into `handback`, and a non-zero hand-back withholds the re-stamp. A DECISION on either arm
+# would withhold it on every apply that has no report — which is every other fixture — and a
+# withheld stamp with the marker down is the wedge this whole file exists to prevent.
+EMIT="$REC/emit-report.sh"
+mk_report() { # mk_report <consumer> <theirs-to-render-at>
+  mkdir -p "$1/_bmad-output/ai-dlc-update" || return 1
+  { printf '# reconcile report (fixture)\n\n'
+    bash "$EMIT" "$DIST" "$BASE" "$1" "$2" 2>/dev/null
+  } > "$1/_bmad-output/ai-dlc-update/reconcile-report.md"
+}
+
+C_U1="$WORK/cons-u1"; C_U2="$WORK/cons-u2"; C_U3="$WORK/cons-u3"; C_U4="$WORK/cons-u4"
+for c in "$C_U1" "$C_U2" "$C_U3" "$C_U4"; do
+  mk_consumer "$c" green || { echo "FIXTURE BROKEN — could not build a union-gate consumer" >&2; exit 2; }
+done
+mk_report "$C_U1" "$THEIRS"   # current: rendered at the ref apply will use
+mk_report "$C_U2" "$BASE"     # stale:   rendered at an OLDER upstream
+mk_report "$C_U4" "$BASE"     # stale, for the --finish arm
+
+# SANITY: the current and stale regions must actually DIFFER, or U2 passes vacuously — a
+# differential whose two sides are the same input establishes nothing.
+if ! cmp -s "$C_U1/_bmad-output/ai-dlc-update/reconcile-report.md" \
+            "$C_U2/_bmad-output/ai-dlc-update/reconcile-report.md"; then
+  ok "U0 setup: the region rendered at theirs and the region rendered at base DIFFER, so U2 tests a real mismatch"
+else
+  bad "U0 setup: the two rendered regions are byte-identical — U2 could not fail and proves nothing"
+  echo; echo "apply-restamp-worklist: FIXTURE BROKEN" >&2; exit 2
+fi
+
+OUT_U1="$(run_apply "$APPLY" "$C_U1")"; RC_U1=$?
+OUT_U2="$(run_apply "$APPLY" "$C_U2")"; RC_U2=$?
+OUT_U3="$(run_apply "$APPLY" "$C_U3")"; RC_U3=$?
+
+# U1: a report matching THIS run's theirs verifies, and the NOTE does not withhold the stamp.
+if [ "$RC_U1" -eq 0 ] && has_row "$OUT_U1" NOTE report-verified \
+   && [ "$(stamp_ver "$C_U1")" = "$THEIRS_VER" ]; then
+  ok "U1 a report rendered at this run's theirs passes the union gate, and the NOTE row leaves the stamp alone"
+else
+  bad "U1 a CURRENT report did not pass cleanly (rc=$RC_U1, stamp '$(stamp_ver "$C_U1")', row $(has_row "$OUT_U1" NOTE report-verified && echo present || echo ABSENT)) — either the gate rejects a good report, or it emitted a counting row and withheld a clean pull"
+fi
+
+# U2: THE DEFECT. A region rendered at a different upstream must stop the write.
+if [ "$RC_U2" -ne 0 ] && [ "$(stamp_ver "$C_U2")" = "1.0.0" ] && [ "$(marker "$C_U2")" = GONE ]; then
+  ok "U2 a report rendered at a DIFFERENT theirs refuses the apply (rc=$RC_U2), leaving the stamp at base and writing no in-flight marker"
+else
+  bad "U2 a STALE region did not stop the apply (rc=$RC_U2, stamp '$(stamp_ver "$C_U2")', marker $(marker "$C_U2")) — upstream moving between the dry run and the apply writes content nobody reviewed"
+fi
+
+# U3: no report does NOT block — two dozen fixture directories drive this program without one —
+# but the manifest says nobody checked rather than staying silent about it.
+if [ "$RC_U3" -eq 0 ] && has_row "$OUT_U3" NOTE report-unverified \
+   && [ "$(stamp_ver "$C_U3")" = "$THEIRS_VER" ]; then
+  ok "U3 an absent report does not block, and says so as NOTE report-unverified rather than passing silently"
+else
+  bad "U3 an absent report changed the outcome (rc=$RC_U3, stamp '$(stamp_ver "$C_U3")', row $(has_row "$OUT_U3" NOTE report-unverified && echo present || echo ABSENT)) — either it wedged a driver that has never required a report, or it passed with no row at all"
+fi
+
+# U4: --finish must NOT consult the gate. It writes no core file, so there is no write to
+# authorize, and a finisher that refuses leaves the marker down with no way to clear it.
+printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$C_U4/.claude/.ai-dlc-applying"
+OUT_U4="$(run_finish_as "$APPLY" "$C_U4" "$THEIRS")"; RC_U4=$?
+if [ "$RC_U4" -eq 0 ] && [ "$(stamp_ver "$C_U4")" = "$THEIRS_VER" ]; then
+  ok "U4 --finish stamps over a STALE report — the escape cannot be blocked by the gate that guards writes it does not make"
+else
+  bad "U4 --finish was blocked by a stale report (rc=$RC_U4, stamp '$(stamp_ver "$C_U4")') — the consumer is wedged: the marker is down, pre-push refuses the suite, and the run that clears it just refused"
+fi
+
 # --- MUTANTS ----------------------------------------------------------------------------------
 # Each is a COPY of the whole reconcile directory — apply.sh `eval`s map_consumer() out of its
 # sibling preclassify.sh and shells to retired-tokens.sh and unregistered-drift.sh, so a lone
@@ -865,6 +940,45 @@ if sed 's/elif \[ -n "$finish_id_mismatch" \]; then/elif [ -n "$finish_id_mismat
   fi
 else
   bad "m11 did not apply — the re-stamp no longer branches on \`elif [ -n \"\$finish_id_mismatch\" ]; then\`, so this mutant proves nothing"
+fi
+
+# --- m12: the union gate REPORTS a stale region instead of refusing it. Must die on U2. -------
+# The gate's whole value is the refusal. A version that notices the mismatch and prints a row is
+# indistinguishable from the shipped one on every arm except the one that reads the exit code and
+# the stamp — which is what U2 does, and this proves it is what U2 does.
+mut_union() { # mut_union <rec-dir> -> "<rc>|<ver>|<marker>"
+  local rec="$1" c="$WORK/mu-$$-$RANDOM" out rc
+  mk_consumer "$c" green || { echo "BROKEN||"; return; }
+  mk_report "$c" "$BASE" || { echo "BROKEN||"; return; }
+  out="$(run_apply "$rec/apply.sh" "$c")"; rc=$?
+  printf '%s|%s|%s\n' "$rc" "$(stamp_ver "$c")" "$(marker "$c")"
+}
+
+if [ -d "$WORK/mut-ctl" ]; then
+  UCTL="$(mut_union "$WORK/mut-ctl")"
+  if [ "$UCTL" = "1|1.0.0|GONE" ]; then
+    ok "CONTROL(m12) the unmutated copy refuses a stale region in a fresh directory, so m12's silence below is the mutation and not the copy"
+  else
+    bad "CONTROL(m12) the unmutated copy did not refuse a stale region ($UCTL) — m12's verdict is unreadable"
+  fi
+fi
+
+if sed 's|^      err "the report at |      say NOTE report-stale-ignored "" "|' "$REC/apply.sh" \
+   | mut_apply "$WORK/m12"; then
+  M12="$(mut_union "$WORK/m12")"
+  case "$M12" in
+    "0|$THEIRS_VER|GONE") ok "m12 (gate reports instead of refusing): U2 goes red — a region rendered at another upstream applies and stamps, which is the defect the gate exists to stop" ;;
+    "1|1.0.0|GONE")       bad "m12 SURVIVED: the apply still refused with the err() replaced by a row, so U2 is being carried by something other than that refusal ($M12)" ;;
+    *)                    bad "m12 produced a verdict this fixture does not recognise ($M12) — it may have died for an unrelated reason, in which case U2's kill is unearned" ;;
+  esac
+  M12G="$(mut_stamp "$WORK/m12" green -)"
+  if [ "${M12G%%|*}" = "$THEIRS_VER" ]; then
+    ok "m12 and the clean path stays green under it — U2 and C3 are not entangled"
+  else
+    bad "m12 also moved the clean path ($M12G): the mutation was not confined to the union gate and its kill is unearned"
+  fi
+else
+  bad "m12 did not apply — apply.sh no longer refuses a stale region with \`err \"the report at \`, so this mutant proves nothing. Re-anchor it on the current spelling."
 fi
 
 echo
