@@ -107,17 +107,18 @@ it is the contract, and prose that an agent retypes as jq drifts:
   --template <theirs>/templates/settings.json.template \
   --check
 
-# step 7 (apply): --model-row carries the operator's answer (1M | 200K | auto)
+# step 7 (apply): the same call without --check
 .claude/skills/ai-dlc-update/reconcile/settings-merge.sh \
   --consumer .claude/settings.json \
-  --template <theirs>/templates/settings.json.template \
-  --model-row <answer>
+  --template <theirs>/templates/settings.json.template
 ```
 
-`--check` prints `model_row_needed=yes|no` plus the exact question to ask, and
-writes nothing. Omitting `--model-row` on apply is equivalent to `auto`. The
-script refuses to write when the consumer's settings.json is invalid JSON or
-when the merge would produce invalid JSON, leaving the file untouched.
+`--check` prints `model_window_needed=yes|no` plus the exact `ask:` lines to put
+in the report, and writes nothing. Apply takes no operator answer: the model
+window declarations are the operator's own `env` entries, which the merge
+preserves. The script refuses to write when the consumer's settings.json is
+invalid JSON or when the merge would produce invalid JSON, leaving the file
+untouched.
 
 What the script guarantees (the same contract `scripts/install.sh` applies, so
 a consumer that reconciles and a consumer that reinstalls converge):
@@ -151,35 +152,33 @@ a consumer that reconciles and a consumer that reinstalls converge):
   consumer's `enabledPlugins` is preserved in full, exactly like
   permissions/env/mcpServers. Disabling a plugin is the consumer's decision,
   never the reconcile's; this is NOT a deletions-list case.
-- **permissions / env / mcpServers / other user keys:** preserved untouched,
-  with exactly one provisioning exception (below).
+- **permissions / env / mcpServers / other user keys:** preserved untouched.
 
-### `env.AI_DLC_MODEL_ROW` — first-run provisioning only
+### `env.AI_DLC_MODEL_<FAMILY>_WINDOW` — consumer-owned, surfaced by `--check`, never written
 
-The `ai-dlc-context-sensor.sh` Stop hook reads `AI_DLC_MODEL_ROW`
-from the settings `env` block, which Claude Code propagates into hook
-subprocesses. It selects which row of the SKILL.md threshold table applies.
-The sensor cannot infer it from the transcript: Claude Code records
-`claude-opus-4-8` for both the 200K and the 1M variant, and no window size
-appears anywhere in the transcript.
+The `ai-dlc-context-sensor.sh` hook reads one window per model family —
+`AI_DLC_MODEL_FABLE_WINDOW`, `AI_DLC_MODEL_OPUS_WINDOW`,
+`AI_DLC_MODEL_SONNET_WINDOW`, `AI_DLC_MODEL_HAIKU_WINDOW`,
+`AI_DLC_MODEL_OTHER_WINDOW` — from the settings `env` block, which Claude
+Code propagates into hook subprocesses. It classifies the lead model by family
+from the transcript's model id and takes that family's declared window as the
+ceiling. The sensor cannot infer the window from the transcript: Claude Code
+records `claude-opus-4-8` for both the 200K and the 1M variant, and no window
+size appears anywhere in it. A family with no declaration is assumed at
+200,000 tokens, the direction that fires early rather than the one that puts
+red past compaction.
 
-**The reconcile NEVER writes this key when it is already present** — it is
-consumer-owned, like the rest of `env`. `settings-merge.sh` provisions it only
-when the key is **absent** AND the template being applied wires
-`ai-dlc-context-sensor.sh`; that is precisely the `model_row_needed=yes`
-condition `--check` reports.
+**The reconcile never writes these keys** — they are consumer-owned, like the
+rest of `env`, and the values are the consumer's own facts about their models.
+`settings-merge.sh --check` reports `model_window_needed=yes` when **no**
+family is declared AND the template being applied wires
+`ai-dlc-context-sensor.sh`, and prints an `ask:` block naming the vars.
 
-When `--check` says yes, put the question in the step-5 dry-run report, ask the
-operator, and pass the answer to `--model-row` in step 7. `--check` prints the
-question text; do not improvise it. On `auto` the script writes **nothing** —
-an absent key is the inference path.
-
-Never default this silently. Pinning `200K` sets `row_known=1` and disables
-the sensor's self-correction, so a 1M project would fire early reminders
-forever; pinning `1M` on a 200K model puts red (200,000) above that model's
-compact threshold (187,000), so red would never fire before compaction — the
-exact failure the auto-compact ordering invariant exists to prevent. An unset
-key is always the safe state, which is why `auto` is the default answer.
+When `--check` says yes, put the `ask:` lines in the step-5 dry-run report
+verbatim; do not improvise them. The operator adds the declarations to `env`
+themselves; there is nothing to pass at step 7. Leaving them unset is safe but
+noisy on a large-window model, and the `imminent` band stays off until a
+window is declared.
 
 ## Ownership
 

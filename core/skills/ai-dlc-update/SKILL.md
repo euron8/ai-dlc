@@ -1052,9 +1052,10 @@ prose is itself generated rather than composed.
    `t=$(mktemp); git -C <dist> show "<theirs>:templates/settings.json.template" > "$t";`
    `reconcile/settings-merge.sh --consumer .claude/settings.json --template "$t" --check`
    — when it reports
-   `model_row_needed=yes`, reproduce its `ask:` lines verbatim as an operator
-   question (the model row: `1M` / `200K` / `auto`; default `auto`, which writes
-   nothing). The answer is passed to `--model-row` at apply (step 7) — a
+   `model_window_needed=yes`, reproduce its `ask:` lines verbatim as an operator
+   question (no `AI_DLC_MODEL_<FAMILY>_WINDOW` is declared in the settings `env`
+   block; the operator adds the declarations themselves, and the reconcile never
+   writes `env`, so nothing is passed at apply) — a
    **deletions list**: every
    `UPSTREAM-DELETED` **and `ORPHANED-RELOCATED`** path (upstream removed the file, or
    moved where it ships it and the stale copy at the old path is provably ours — for an
@@ -1583,15 +1584,13 @@ prose is itself generated rather than composed.
    - `TEMPLATE-JSON-MERGE` (`.claude/settings.json` — from step 3b) → run
      `t=$(mktemp); git -C <dist> show "<theirs>:templates/settings.json.template" > "$t"`
      then `reconcile/settings-merge.sh --consumer .claude/settings.json --template
-     "$t" --model-row <operator's answer>`. `--template` is read with `-r` and
+     "$t"`. `--template` is read with `-r` and
      `theirs` is a git ref, so a ref-qualified template path fails the read guard.
      **Do not hand-write the jq** — the script is the contract. It strips stale
      `ai-dlc-*.sh` hook blocks + appends the template's, and preserves user
-     permissions/env/mcpServers/statusLine. It also provisions
-     `.env.AI_DLC_MODEL_ROW` when (and only when) that key is absent and the
-     template wires `ai-dlc-context-sensor.sh` — the question was raised in the
-     step-5 report; pass the answer here. Omit `--model-row` (or pass `auto`) to
-     write nothing. An existing value is never overwritten.
+     permissions/env/mcpServers/statusLine. It writes nothing into `env`: the
+     `AI_DLC_MODEL_<FAMILY>_WINDOW` declarations the step-5 report asked about
+     are the operator's to add, and an existing value is never touched.
      `enabledPlugins` is additive-only and
      NEVER removed: a plugin the template dropped since base (e.g. ai-dlc's own
      `context-mode@context-mode` decommission) removes ai-dlc's *use* of it,

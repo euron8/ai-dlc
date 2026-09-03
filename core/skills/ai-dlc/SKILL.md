@@ -521,9 +521,11 @@ stale one faithfully.
 All three bands are a clamped percentage of the effective window below
 `effectiveWindow - 31,000` (see "Reminder thresholds" above). imminent is
 its own level ranked above red, so entering it always fires on the first
-crossing, and it fires only when the model row is known -- never on an
-assumed row. yellow and red still fire on the assumed 200K row, so a fresh
-project is never left un-warned before its row is proven.
+crossing, and it fires only when the model family's window is declared
+(`AI_DLC_MODEL_<FAMILY>_WINDOW` in the settings `env` block) or the
+statusline's `window.json` answered -- never on an assumed ceiling. yellow
+and red still fire on the assumed 200,000-token floor, so an undeclared
+project is never left un-warned.
 
 ### Auto-compact ordering invariant
 

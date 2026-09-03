@@ -387,7 +387,7 @@ def print_fix():
     print("  strips the stale ones, re-appends the template's, and preserves your permissions,")
     print("  env, mcpServers and statusLine untouched. Do not hand-edit the JSON instead —")
     print("  the merge is a contract install and pull both apply, and a hand edit diverges.")
-    print("  If it asks for a model row, add --model-row 1M|200K|auto; omitting it writes nothing.")
+    print("  It never writes env: declare AI_DLC_MODEL_<FAMILY>_WINDOW there yourself if --check asks.")
 
 rc = 0
 

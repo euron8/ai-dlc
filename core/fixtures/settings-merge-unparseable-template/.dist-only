@@ -7,7 +7,7 @@ settings-merge.sh is on every installed tree. By the criterion in
 ship, and the reason is the CORPUS rather than the subject.
 
 The decisive assertion here is the POSITIVE control: the correct template must still reach
-`model_row_needed=yes`. Without it the fixture passes against a script that answers `no` to
+`model_window_needed=yes`. Without it the fixture passes against a script that answers `no` to
 everything -- a "fix" that closes the check by breaking it. That control needs a template a
 real producer emitted, and the only one is templates/settings.json.template.
 

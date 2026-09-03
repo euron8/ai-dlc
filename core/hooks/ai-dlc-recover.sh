@@ -61,8 +61,9 @@ SOURCE="$(printf '%s' "$INPUT" | jq -r '.source // empty' 2>/dev/null)"
 # Compaction reset the context-window token count, so the context sensor's fire
 # state now describes a window that no longer exists. The sensor self-heals on
 # the next turn (it resets when the reading drops), but clearing it here means
-# the very first post-compact turn starts from a clean slate. The proven model
-# row in `.context-sensor-model` is NOT cleared -- the window size did not change.
+# the very first post-compact turn starts from a clean slate. Nothing else of the
+# sensor's is on disk: its ceiling is declared per model family in settings and
+# re-derived on every fire, never cached.
 rm -f "${STATE_DIR}/.context-sensor-state" 2>/dev/null || true
 
 # Snapshots in the wild spell this two ways: the schema's `current_step_file:`

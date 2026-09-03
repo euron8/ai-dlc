@@ -75,7 +75,8 @@ commit message:
 - Yellow or red token threshold values.
 - Reminder recurrence arithmetic (currently 50K tokens / 20 turns).
 - Context sensor measurement semantics (the `usage` summation, the
-  ~31,000-token sensor-visible reserve, the model-row inference).
+  ~31,000-token sensor-visible reserve, the per-family window declaration
+  and its 200,000-token undeclared floor).
 - The first-5K SKILL.md structural constraint.
 - The auto-handoff precondition-gated firing model.
 

@@ -727,8 +727,8 @@ last_fire_tokens=<int>
 last_fire_turn=<int>
 turn_counter=<int>
 last_measured=<int>
-model_row=200K|1M
-row_known=0|1
+model_family=FABLE|OPUS|SONNET|HAIKU|OTHER
+window_declared=0|1
 effective_window=<int>
 window_source=<string>
 ```
@@ -747,13 +747,28 @@ fresh session, or context still below yellow). Leave the snapshot
 fields at `none` / `null`. Do **not** substitute an estimate: a guess
 beside an authoritative number is worse than silence.
 
-If `row_known=0`, the sensor is assuming the 200K threshold row
+If `window_declared=0`, no context window is declared for the lead
+model's family and the sensor is assuming a 200,000-token ceiling,
 because the model's context-window size is not recorded anywhere in
-the transcript. Reminders may therefore fire early on a 1M model.
-Setting `AI_DLC_MODEL_ROW` to `200K` or `1M` in the project's
-`.claude/settings.json` `env` block removes the ambiguity; the sensor
-also self-corrects once it observes a reading no 200K model could
-reach.
+the transcript. yellow and red still fire on that assumption, so
+reminders may fire early on a 1M model; `imminent` stays off until a
+window is declared. `model_family` names the family the sensor
+classified from the transcript's model id (`mythos` counts as
+`FABLE`; an id naming no Claude family is `OTHER`). Declare each
+family's window in the project's `.claude/settings.json` `env` block,
+one integer token count per family (`1m`, `400k` and bare integers
+are all accepted):
+
+```
+AI_DLC_MODEL_FABLE_WINDOW
+AI_DLC_MODEL_OPUS_WINDOW
+AI_DLC_MODEL_SONNET_WINDOW
+AI_DLC_MODEL_HAIKU_WINDOW
+AI_DLC_MODEL_OTHER_WINDOW
+```
+
+The sensor never infers or caches a window; a statusline-written
+`window.json` for this session outranks the declaration when present.
 
 Do **not** re-emit the reminder here. The hook already delivered it
 to the lead as `additionalContext` on the turn it fired. A user reply

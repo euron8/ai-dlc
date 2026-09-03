@@ -418,82 +418,45 @@ if [ ! -r "$SETTINGS_MERGE" ]; then
 fi
 
 # -----------------------------------------------------------------------------
-# AI_DLC_MODEL_ROW -- the context sensor's model row.
+# AI_DLC_MODEL_<FAMILY>_WINDOW -- the context sensor's ceiling, declared per family.
 #
 # The transcript records `claude-opus-4-8` for BOTH the 200K and the 1M variant,
-# so ai-dlc-context-sensor.sh cannot read the window size off it. Unset, it
-# assumes 200K and self-corrects once it observes a reading no 200K model could
-# reach (>= 187,000). Pinning the row skips that one early-reminder session.
+# so ai-dlc-context-sensor.sh cannot read the window size off it, and it does not
+# infer or cache one: the consumer declares one window per model family (FABLE,
+# OPUS, SONNET, HAIKU, OTHER) in the settings `env` block, which propagates into
+# hook subprocesses (verified against Claude Code 2.1.206). A family with no
+# declaration is assumed at 200,000 tokens -- the safe direction: yellow and red
+# fire early on a larger model, and imminent stays off.
 #
-# We deliberately do NOT ship a default value in the template:
-#   * Pinning "200K" would set row_known=1 and DISABLE the self-correction, so a
-#     1M project would fire early reminders forever -- worse than unset.
-#   * Pinning "1M" on a 200K model would put red (200,000) above that model's
-#     compact threshold (187,000), so red would never fire before compaction --
-#     the exact failure the ordering invariant exists to prevent.
-# Silence is the safe state, so a non-interactive install leaves it unset.
-#
-# The settings `env` block propagates into hook subprocesses (verified against
-# Claude Code 2.1.206), which is how the hook reads this.
+# Nothing is provisioned here and no default ships in the template. The values are
+# the consumer's own facts about the models they run, no single value is right for
+# every family, and `env` is consumer-owned -- the reconcile preserves it untouched.
+# --check reports whether any family is declared; the note after the merge names
+# the vars when none is, on interactive and non-interactive installs alike.
 # -----------------------------------------------------------------------------
-# Ask only when it matters: --check reports model_row_needed=yes exactly when the
-# key is absent AND the template wires the sensor.
 NEEDED="$(bash "$SETTINGS_MERGE" --consumer "$USER_SETTINGS" --template "$TEMPLATE_SETTINGS" --check 2>/dev/null \
-  | sed -n 's/^model_row_needed=//p' | head -1)"
-EXISTING_ROW="$(jq -r '.env.AI_DLC_MODEL_ROW // empty' "$USER_SETTINGS" 2>/dev/null || true)"
+  | sed -n 's/^model_window_needed=//p' | head -1)"
 
-# Non-interactive callers (CI, `curl | bash`) preset the answer:
-#   AI_DLC_MODEL_ROW=1M scripts/install.sh /path/to/project
-PRESET_ROW="${AI_DLC_MODEL_ROW:-}"
-case "$PRESET_ROW" in
-  200K|1M|auto|"") ;;
-  *) echo "  Warning: ignoring AI_DLC_MODEL_ROW='$PRESET_ROW' (expected 200K, 1M, or auto)"
-     PRESET_ROW="" ;;
-esac
-
-CHOSEN_ROW="auto"
-
-if [ -n "$EXISTING_ROW" ]; then
-  : # consumer-owned; settings-merge.sh will not touch it
-elif [ "$NEEDED" != "yes" ]; then
-  : # template does not wire the sensor
-elif [ -n "$PRESET_ROW" ]; then
-  CHOSEN_ROW="$PRESET_ROW"
-elif [ ! -t 0 ]; then
-  echo "  AI_DLC_MODEL_ROW unset (non-interactive install)."
-  echo "    The context sensor will assume the 200K thresholds and self-correct"
-  echo "    once it observes a reading only a larger window could produce."
-  echo "    To pin it: re-run with AI_DLC_MODEL_ROW=1M, or set"
-  echo "    .env.AI_DLC_MODEL_ROW in .claude/settings.json"
-else
-  echo ""
-  echo "  Context sensor: which context window does this project's model run?"
-  echo "    1) 1M    -- e.g. Opus/Sonnet with the 1M context beta enabled"
-  echo "    2) 200K  -- the standard context window"
-  echo "    3) auto  -- let the sensor infer it (safe; costs one session of"
-  echo "                early reminders on a 1M model)"
-  printf "  Choose [1/2/3] (default 3): "
-  read -r MODEL_ROW_CHOICE </dev/tty || MODEL_ROW_CHOICE=""
-  case "$MODEL_ROW_CHOICE" in
-    1) CHOSEN_ROW="1M" ;;
-    2) CHOSEN_ROW="200K" ;;
-    *) CHOSEN_ROW="auto" ;;
-  esac
-fi
-
-# One call, one contract: merge hooks + (maybe) provision the row, atomically.
+# One call, one contract: merge hooks, preserve user config, atomically.
 # Capture rather than pipe: `cmd | sed` reports sed's exit status, so a failed
 # merge would read as a success.
 if MERGE_OUT="$(bash "$SETTINGS_MERGE" \
        --consumer "$USER_SETTINGS" \
-       --template "$TEMPLATE_SETTINGS" \
-       --model-row "$CHOSEN_ROW" 2>&1)"; then
+       --template "$TEMPLATE_SETTINGS" 2>&1)"; then
   printf '%s\n' "$MERGE_OUT" | sed 's/^/  /'
 else
   printf '%s\n' "$MERGE_OUT" | sed 's/^/  /'
   echo "  Error: failed to merge settings.json. Existing file left untouched."
   echo "  Archived copy at docs/pre-ai-dlc/$ARCHIVE_TS/_divergence/.claude/settings.json"
   exit 1
+fi
+
+if [ "$NEEDED" = "yes" ]; then
+  echo "  No AI_DLC_MODEL_<FAMILY>_WINDOW is declared in .claude/settings.json env."
+  echo "    The context sensor assumes a 200,000-token ceiling for an undeclared model"
+  echo "    family: yellow/red fire early on a larger model and imminent stays off."
+  echo "    Declare one window per family you run, e.g. \"AI_DLC_MODEL_OPUS_WINDOW\": \"1m\","
+  echo "    also FABLE, SONNET, HAIKU and OTHER. See the QUICKSTART's context section."
 fi
 
 # Install validation + pipeline scripts (always overwrite with AI/DLC versions)

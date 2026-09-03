@@ -4,10 +4,10 @@
 
 **You were started with one sentence: `READ and FOLLOW docs/plans/context-sensor-model-family-window.md`. This section is the ONLY CURRENT STATUS RECORD in this file.**
 
-**State: not started. Nothing has been built.** The design below was reached interactively
-with the operator, across a long conversation, and is settled — action 1 is to RE-VERIFY it
-against the tree, not to re-derive it from scratch, because the tree may have moved since it
-was written.
+**State: BUILT as v0.490.0, gate pending at the time of this write.** Actions 1–6 are done
+and action 8's triple is written; action 7 (the gate) and 9 (re-derive this block after the
+merge) are what remain. The graph migration brief is the section "Graph migration brief"
+at the bottom of this file. The design below is the record of what was built.
 
 ## Start here
 
@@ -242,3 +242,48 @@ operator's — never narrow it on your own authority.
 - **Do not re-add a cache.** The entire point of this design is that the answer is
   deterministic from settings + the transcript on every fire — a cache reintroduces the
   stale-latch failure this plan exists to remove.
+
+## Graph migration brief — deliverable of action 6, NOT applied
+
+`/Users/n8/git/graph` is READ ONLY to an ai-dlc session (`.claude/rules/consumer-boundary.md`).
+This section is the brief the operator carries into a graph session or applies themselves.
+It ships safe unapplied: from v0.490.0 the sensor ignores `AI_DLC_MODEL_ROW` and assumes a
+200,000-token ceiling for any undeclared family, which fires yellow/red early on a 1M model and
+keeps `imminent` off — noisy, never silent.
+
+**What graph carries today** (read from `/Users/n8/git/graph/.claude/settings.json` at
+installed version 0.489.0): `env.AI_DLC_MODEL_ROW` is `1M`, and no `AI_DLC_MODEL_*_WINDOW` key
+exists. Its `arm-log.jsonl` records the lead ids `claude-opus-4-8`, `claude-opus-5`,
+`claude-sonnet-5`, `qwen3.5:35b-a3b-coding-mxfp8`, `qwen3.6:35b-a3b-mxfp8` and `<synthetic>`.
+The three Claude ids classify as OPUS / OPUS / SONNET; the qwen ids and `<synthetic>` name no
+Claude family and classify as OTHER. graph's statusline is the operator's own
+`~/.claude/statusline.sh` (user-scoped), so `window.json` will usually answer first and this
+declaration is the fallback for when it does not.
+
+**Change to `.claude/settings.json` `env`** — add five keys, remove one:
+
+```json
+"env": {
+  "AI_DLC_MODEL_FABLE_WINDOW":  "1000000",
+  "AI_DLC_MODEL_OPUS_WINDOW":   "1000000",
+  "AI_DLC_MODEL_SONNET_WINDOW": "1000000",
+  "AI_DLC_MODEL_HAIKU_WINDOW":  "200000",
+  "AI_DLC_MODEL_OTHER_WINDOW":  "256000"
+}
+```
+
+and delete `"AI_DLC_MODEL_ROW": "1M"`. Every other `env` key stays.
+
+**Provenance of each value.** The four Claude-family values are graph's own current `1M` pin
+split per family, with Haiku corrected to its native 200K (Claude Haiku 4.5 is the one current
+family that is not 1M) — derivable from this repo and the plan above. **`OTHER: 256000` is NOT
+derivable from this repo.** It is the operator's own stated fact about the local qwen3 models
+graph runs, given directly in the conversation that produced this plan, not measured from any
+file here. If those models or their windows have changed since, ask the operator rather than
+assume; a wrong OTHER value in the LARGE direction is the silent failure this release removes.
+
+**How to verify on graph after applying**, from a graph session: fire one turn with an active
+pipeline and read `_bmad-output/.context-sensor-state`. It must carry `model_family=` naming the
+running family and `window_declared=1`. A `window_declared=0` there means the matched family's
+key is absent or unparseable. `scripts/ai-dlc/validate-compact-window.sh` is unaffected by this
+change and needs no re-run for it.

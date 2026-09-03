@@ -376,11 +376,16 @@ every turn, sums the last main-thread assistant's
 The lead does not self-measure and does not guess. You can still
 share `/context` output as confirmation, but nothing depends on it.
 
-If your model has a 1M context window, set `AI_DLC_MODEL_ROW` to
-`1M` in the `env` block of `.claude/settings.json`. The transcript
-does not record the window size, so the sensor assumes the 200K
-thresholds until it observes a reading no 200K model could reach.
-Pinning it avoids one session of early reminders.
+The transcript does not record the model's window size, so declare
+it per model family in the `env` block of `.claude/settings.json`:
+`AI_DLC_MODEL_FABLE_WINDOW`, `AI_DLC_MODEL_OPUS_WINDOW`,
+`AI_DLC_MODEL_SONNET_WINDOW`, `AI_DLC_MODEL_HAIKU_WINDOW` and
+`AI_DLC_MODEL_OTHER_WINDOW`, each an integer token count (`1m`,
+`400k` and bare integers all parse). The sensor classifies the lead
+model by family from its id, so a version bump needs no change. A
+family with no declaration is assumed at 200,000 tokens: yellow and
+red still fire, early on a larger model, and the imminent band stays
+off until the window is declared.
 
 **Hitting limits — formal handoff.** When context is degrading,
 use the Rule 2(a) handoff procedure: the lead commits in-flight

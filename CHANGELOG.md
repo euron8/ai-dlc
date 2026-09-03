@@ -15,6 +15,73 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.490.0] - 2026-09-03
+
+### The context sensor guessed its ceiling; now the operator declares it per model family
+
+`ai-dlc-context-sensor.sh` needs the model's true maximum to clamp the effective window and
+to gate the `imminent` band. It GUESSED: `AI_DLC_MODEL_ROW` was a closed `200K|1M`
+vocabulary, and absent that it tried to PROVE `1M` by watching resident tokens cross
+187,000, then cached the proof in `.context-sensor-model` sticky across every future session.
+
+**Two measured failures, neither hypothetical.** Claude Haiku 4.5 is natively 200K while every
+other current Claude family is 1M, so the single `AI_DLC_MODEL_ROW=1M` pin the reference
+consumer carries is silently wrong the moment a session runs Haiku. And the proof only ran
+UPWARD: a model whose window sits BELOW the proof line (256K, measured on the operator's local
+`qwen3` models) is never proven, so it ramped against whatever ceiling the fallback carried.
+Driven through the shipping hook with the same tokens and settings, differing only in which
+layer answered: `window.json` present fired IMMINENT correctly; absent, the sensor was
+**silent through the compaction it exists to warn about**.
+
+**The guess is deleted.** The sensor classifies the lead model by family SUBSTRING of the id it
+already extracts for the arm record — `*fable*|*mythos*`, `*opus*`, `*sonnet*`, `*haiku*`,
+anything else `OTHER` — so `opus-4-8 → opus-5-1` needs no code change and a genuinely new family
+lands in the conservative bucket. The matched family's window comes from one of five settings
+`env` vars, `AI_DLC_MODEL_{FABLE,OPUS,SONNET,HAIKU,OTHER}_WINDOW`, parsed by the window
+library's own `ai_dlc_parse_window` (`1m`, `400k`, bare integers). **Undeclared is assumed at
+200,000** — the smallest current tier, Haiku's own maximum, and Claude Code's own fallback for an
+unrecognized model id — with yellow and red firing on the floor and `imminent` gated off, exactly
+as `row_known=0` gated it before. `window.json` (layer 1) still outranks the lookup. Nothing is
+proven, learned or cached: `PROOF_1M`, the `ROW` block and the model file are gone, and the
+answer is deterministic from settings plus the transcript on every fire.
+
+**State-file schema:** `model_row=200K|1M` is now `model_family=FABLE|OPUS|SONNET|HAIKU|OTHER`
+and `row_known` is `window_declared`, same semantics. `.context-sensor-model` leaves
+`pipeline-state-paths.json` (I95 would otherwise fail the push on a declared path nothing
+constructs); a stale copy on a consumer is inert.
+
+**The provisioning went with the key it provisioned.** `settings-merge.sh --model-row` and the
+install-time prompt wrote a single row into a consumer's `env`; there is no single value to
+write any more, the values are the consumer's own facts about their models, and `env` is
+consumer-owned. `--check` keeps its verdict gate — the subject the unparseable-template
+battery exists for, 4 mutants, 4 kills, unchanged — and now reports `model_window_needed=yes`
+when the sensor is wired and NO family is declared, with an `ask:` block naming the five vars.
+`install.sh` prints the same note after the merge, interactive or not, and prompts for nothing.
+
+**Fixture rewritten, not patched.** The 27 `row=1M` seeds became an explicit `reset1m` that
+declares OPUS at 1M, so every case states its ceiling. The new arms: **all five vars set in one
+run, each a distinct value below the project window**, so each of seven ids — including a
+mixed-case one and `local-qwen3-max` — proves the sensor read ITS family's var and not merely
+that some lookup fired; a Haiku lead with only OPUS declared **does not inherit it**, stays red
+and names `AI_DLC_MODEL_HAIKU_WINDOW` in the reminder, with the positive twin one property apart
+(declare HAIKU, same reading goes imminent); the undeclared floor with its **mutant control**,
+a `cmp -s`-guarded copy carrying the old 1M constant that the floor arm must fail against;
+`window.json` outranking a declared family with its file-removed control; an unparseable
+declaration falling to the floor; and no model cache written, paired with the state sidecar's
+presence in the same run. 99 assertions, from the repo root and under
+`env -i PATH=/usr/bin:/bin`.
+
+**Reader set:** 13 files carried `AI_DLC_MODEL_ROW`, one more than the plan's floor
+(`QUICKSTART.md.template`). Non-comment occurrences in `core/`, `scripts/` and `templates/`
+are now **0** against a control of 12 for `AI_DLC_MODEL_OPUS_WINDOW`; six files keep the token
+inside comments recording the measured episode that produced the AI_DLC_* scrub rule, which is
+evidence and stays.
+
+**Consumer migration is a brief, not an edit** — `docs/plans/context-sensor-model-family-window.md`
+carries the `env` snippet for the reference consumer and the instruction to remove
+`AI_DLC_MODEL_ROW`. Shipping without it is safe: the fallback becomes the 200,000 floor, not a
+silent overstatement.
+
 ## [0.489.0] - 2026-09-03
 
 ### The region promised every detector's findings and carried eight of twenty-three
