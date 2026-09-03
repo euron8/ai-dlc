@@ -415,31 +415,45 @@ absorbed_at() {
 # to close an entry upstream never touched, which is strictly worse than the silence it replaces.
 #
 # Returns "<version> <short-sha> <how>" where <how> is `slug` or `prefix`.
-# HOW MANY LEDGER ENTRIES SHARE A `PC-S<n>` PREFIX. Derived from the SAME extraction the main
-# loop reads, so the count can never describe a different entry set than the rows do -- a second
-# scan of the ledger file would be a second parser of the bullet shape.
+# HOW MANY LEDGER ENTRIES SHARE A `PC-S<n>` PREFIX. Counted over the CORPUS -- every entry line
+# in the live ledger AND the archive, open or closed -- by one parser (`corpus_labels` below).
 #
-# THE ARCHIVE COUNTS TOO, AND ITS ABSENCE MADE THIS TEST ANTI-MONOTONIC. The uniqueness test exists
-# so the prefix fallback attributes only when the prefix names exactly ONE entry. Counting the live
-# ledger alone means ARCHIVING an unrelated sibling can flip a prefix from ambiguous to unique --
-# so a routine rotation, which is supposed to be a pure move, silently UNLOCKS an attribution that
-# was correctly withheld before it. The count went down as the corpus grew.
+# THE COUNT IS A PROPERTY OF THE CORPUS, NOT OF WHICH ENTRIES EMIT ROWS, AND THAT IS WHAT MAKES IT
+# STABLE ACROSS THE WORKFLOW STEP 8 PRESCRIBES. Annotating an entry moves nothing between the two
+# files; rotating it moves it from one to the other. A count taken over both files is therefore
+# invariant under both steps by construction -- there is no state in which an entry is on
+# neither side.
 #
-# Measured on the reference consumer at the Phase 0 pin: of 25 prefixes with a live entry, **7 have
-# exactly one live entry AND at least one archived sibling** -- PC-S298 has 1 live against 9
-# archived. Every one of those seven passed the uniqueness test on a false premise, and the header
-# above is explicit that a wrong attribution "tells an operator to close an entry upstream never
-# touched, which is strictly worse than the silence it replaces".
+# THE PREVIOUS COUNT WAS OPEN-LIVE UNIONED WITH ARCHIVE, AND AN ENTRY ANNOTATED BUT NOT YET
+# ROTATED WAS ON NEITHER SIDE: the open extractor drops it (`closed` in `flush()` below) and the
+# archive does not hold it yet. So the count DIPPED at the annotate and RETURNED at the rotate,
+# and where a prefix had exactly two members with one of them annotated it crossed the one-vs-many
+# threshold -- `named_absorbed()`'s prefix fallback fired at the annotate and `named_ambiguous()`
+# at the rotate, and the row FLIPPED between `NAMED-UPSTREAM <slug>` and
+# `NAMED-UPSTREAM-AMBIGUOUS <prefix>`. That is a changed row set by status and subject on a
+# rotation that swept nothing -- exactly the reading step 8's acceptance test forbids. Reported by
+# the reference consumer as
+# PC-S337-ROTATE-ACCEPTANCE-TEST-FALSE-FAILS-WHEN-A-PREFIX-CROSSES-THE-ONE-VS-MANY-THRESHOLD, with
+# its own diff: `NAMED-UPSTREAM PC-S336-…` before the rotate, `NAMED-UPSTREAM-AMBIGUOUS PC-S336`
+# after, 89 rows either side, nothing swept.
 #
-# Counting both moves this in the CONSERVATIVE direction: strictly fewer attributions, never more.
-# That is the correct direction for this test, per the same asymmetry.
+# WHY THE ARCHIVE IS COUNTED AT ALL. The uniqueness test exists so the prefix fallback attributes
+# only when the prefix names exactly ONE entry. Counting the live ledger alone means ARCHIVING an
+# unrelated sibling can flip a prefix from ambiguous to unique -- a routine rotation silently
+# UNLOCKING an attribution that was correctly withheld. Measured on the reference consumer at the
+# Phase 0 pin: of 25 prefixes with a live entry, 7 had exactly one live entry AND at least one
+# archived sibling -- PC-S298 had 1 live against 9 archived -- and every one of the seven passed the
+# uniqueness test on a false premise. Counting closed live entries is the same move one step
+# further: strictly fewer attributions, never more, which is the correct direction because a wrong
+# attribution "tells an operator to close an entry upstream never touched", strictly worse than the
+# silence it replaces.
 #
 # The archive is OPTIONAL -- a consumer that has never rotated has no archive file, and that is a
 # normal state, not an error. `ledger-rotate.sh:67` fixes the name as
 # `<ledger-dir>/push-candidate-ledger.archive.md`, so it is derived from $LEDGER rather than
 # configured twice.
 prefix_entry_count() { # <PC-S<n>> -> integer
-  { printf '%s\n' "$ENTRIES" | awk -F'\t' 'NF{print $1}'
+  { printf '%s\n' "${LIVE_LABELS:-}"
     printf '%s\n' "${ARCHIVE_LABELS:-}"
   } | sort -u | grep -cE "^$1-" 2>/dev/null || true
 }
@@ -940,24 +954,36 @@ TV="$(theirs_show VERSION | tr -d '[:space:]')"
 # closing `**` there. That is complete and greppable and visibly not an id, which is the honest
 # output for a malformed entry. Narrowing the bullet predicate to "closing ** on this line" would
 # instead DROP such an entry, and the reference consumer has a live one.
-# THE ARCHIVED LABELS, for the prefix-uniqueness test only -- never for verdicts. An archived entry
-# is closed and emits no row; it is counted solely so that archiving a sibling cannot make an
-# ambiguous prefix look unique. Same boundary rule and same em-dash label truncation as the live
-# extraction below, because two parsers of the entry shape would be free to disagree about which
-# entries exist -- which is the exact defect the live extraction's own header warns about.
-ARCHIVE_PATH="$(dirname "$LEDGER")/push-candidate-ledger.archive.md"
-ARCHIVE_LABELS=""
-if [ -r "$ARCHIVE_PATH" ]; then
-  ARCHIVE_LABELS="$(LC_ALL=C awk -v DASH=' — ' "$(ledger_entry_awk)"'
+# THE CORPUS LABELS, for the prefix-uniqueness test only -- never for verdicts. Every entry line in
+# a ledger file, open or closed, by the same boundary rule and the same em-dash label truncation as
+# the verdict extraction below -- two parsers of the entry shape would be free to disagree about
+# which entries exist, which is the exact defect that extraction's own header warns about. A
+# closed entry emits no row; it is counted so that annotating or archiving a sibling cannot make an
+# ambiguous prefix look unique (see `prefix_entry_count`).
+#
+# A RETAINED COPY IS NOT AN ENTRY. When a withdrawn entry is superseded, its original text is kept
+# under a heading carrying `(original text, retained for the record)` -- a second heading for one
+# entry. Counted, it inflates "N entries in this ledger carry it" by one for a candidate that is
+# already counted under its own heading; measured on the reference consumer, one such copy took
+# PC-S300 from 10 to 11. The count answers how many ENTRIES carry the prefix, so the copy is skipped.
+corpus_labels() { # <ledger-file> -> one label per entry line
+  LC_ALL=C awk -v DASH=' — ' "$(ledger_entry_awk)"'
     {
       if (ledger_entry_shape($0) == "") next
+      if ($0 ~ /\(original text, retained for the record\)/) next
       l=$0
       sub(/^#+[ \t]*/, "", l); sub(/^- \*\*/, "", l); sub(/\*\*.*/, "", l)
       p=index(l, DASH); if (p > 0) l=substr(l, 1, p-1)
       sub(/[[:space:]]+$/, "", l); gsub(/`/, "", l)
       if (l != "") print l
     }
-  ' "$ARCHIVE_PATH")"
+  ' "$1"
+}
+LIVE_LABELS="$(corpus_labels "$LEDGER")"
+ARCHIVE_PATH="$(dirname "$LEDGER")/push-candidate-ledger.archive.md"
+ARCHIVE_LABELS=""
+if [ -r "$ARCHIVE_PATH" ]; then
+  ARCHIVE_LABELS="$(corpus_labels "$ARCHIVE_PATH")"
 fi
 
 ENTRIES="$(awk -v DASH=' — ' "$(ledger_entry_awk)"'

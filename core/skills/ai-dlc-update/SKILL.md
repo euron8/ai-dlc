@@ -1932,18 +1932,19 @@ declared sites, not everywhere unconditionally.
      receipt edit pays for their bytes. Rotation moves, never deletes, and requires the
      annotation form (`**ADOPTED UPSTREAM (v`) rather than the phrase anywhere — an entry
      wrongly kept costs one pull to notice, one wrongly archived costs the work.
-     **Acceptance test:** `ledger-reverify.sh` must emit the same ROW SET before and after —
-     by status and subject. Rotation moves exactly the entries it already skips, so a changed
-     row set means a live entry was swept. **It is NOT a byte comparison, and running one here
-     false-fails on this very step.** An entry you annotated in this same pass is skipped by
-     the open-entry extractor and not yet in the archive, so the sprint-prefix count inside
-     `NAMED-UPSTREAM-AMBIGUOUS` details rises as it reaches the archive. Measured by annotating
-     every open entry on a copy of the reference consumer's ledger and rotating: identical row
-     set, every differing line carrying a prefix count, and that count rising — nothing swept.
-     Treating it as a sweep unwinds correct work at exactly the moment a large batch of closes
-     has landed. **Derive the row set; do not carry a row COUNT across corpora** — the totals are
-     a property of the ledger's size on the day, and two runs of this experiment on ledgers of
-     different sizes gave different ones.
+     **Acceptance test:** `ledger-reverify.sh` must emit the same ROW SET before and after
+     the `--apply` — by status and subject, `cut -f1,2 | sort` either side. Rotation moves
+     exactly the entries it already skips, and every number it prints is counted over BOTH
+     ledger files, so a rotation that swept nothing changes no row and no detail. **Compare the
+     row set, never a row COUNT** — a count is a property of the ledger's size on the day, and
+     a swept entry can hide behind a duplicate. If a row appears, disappears, or changes status
+     — including `NAMED-UPSTREAM <slug>` becoming `NAMED-UPSTREAM-AMBIGUOUS <prefix>` or the
+     reverse — that is the signal; STOP, and read the entries that moved before anything else.
+     The one benign difference that used to exist here is gone: the sprint-prefix count inside
+     `NAMED-UPSTREAM-AMBIGUOUS` details once dipped while an entry sat annotated-but-unrotated
+     and rose back at the rotate, which on a two-member prefix flipped the surviving sibling's
+     row between the two statuses above and read exactly like a sweep. The count is taken over
+     the corpus, so that flip cannot occur.
 9. **Safety.** Three independent recover layers: the step-6 reconcile **branch**
    (the working branch is never touched), the consumer's
    `docs/pre-ai-dlc/<ts>/_divergence/` archive (written by install), and the

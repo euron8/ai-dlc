@@ -3483,85 +3483,6 @@ rather than a false close.
 
 verify: sh m=scripts/validate-enforcement-map.sh; r=.ai-dlc-fixture-readsets.tsv; [ -f "$m" ] || exit 9; [ -f "$r" ] || exit 9; grep -q ai-dlc-pause.sh "$r" || exit 9; h=$(grep -cE "^# --- I[0-9]+[a-z]?:" "$m"); [ "${h:-0}" -ge 10 ] || exit 9; grep -qiE "^# --- I[0-9]+[a-z]?:.*(read-set|readset)" "$m" && exit 0; exit 1
 
-## BL-131 — the mechanical union gate is prose, so nothing makes `apply` verify the approved report
-
-**Premise moved at `v0.488.0`; re-derived 2026-09-03 while shipping `BL-151`, and NOT closed.**
-`apply.sh` now drives the gate itself, so paths 2 and 3 below are closed and the receipt reads
-exit 0 — which is exactly the partial-fix state this entry says not to close on. Path 1, step 2's
-autonomous self-update, is untouched. Taking the rest means closing step 2 or narrowing this
-entry and filing step 2 separately; that is a scope decision and was not made here.
-
-`SKILL.md` step 7 states that `apply` "may write only after BOTH hold", the first being that
-`reconcile/emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>` exits 0, "a nonzero
-exit means the approval was given without sight of a finding, so STOP and re-emit rather than
-write". That is the only thing standing between a stale or hand-edited approval and a write into a
-consumer's core.
-
-**Nothing executes it.** Measured across the tracked tree: **zero** invocation sites for
-`emit-report.sh` outside its own file and the fixtures, against **76** for `preclassify.sh` under
-the identical grammar in the same invocation. `apply.sh` names `emit-report` exactly once, in a
-comment. So the gate runs if and only if the narrating agent chooses to run it, and a run that
-skips it is indistinguishable from one that ran it and passed — there is no artifact either way.
-
-**THREE PATHS REACH CONSUMER STATE WITHOUT THE GATE, AND THE FIRST IS THE ONE A READER WILL NOT
-EXPECT.** They are ranked by what they write, and only the second is the one this entry was first
-written about:
-
-1. **Step 2's self-update.** `SKILL.md:396-409` cuts a branch, writes from `theirs` at the
-   `map_consumer()` destinations, advances `skill_version`/`skill_commit`, pushes and auto-merges
-   — in its own words, **"no operator gate"**. No report is produced at all, so there is no region
-   to verify and nothing for a rendered-identity fix to reach. `SKILL.md:160-161` records that this
-   runs on EVERY invocation, "step 2's autonomous push→auto-merge writes to `origin` even on a bare
-   dry-run". This is distribution `core/` content landing on a consumer with no approval artifact
-   anywhere in the path.
-2. **Step 7's apply.** `apply.sh` never invokes the gate; the prose sits beside it.
-3. **`apply.sh --finish`.** Writes no core but writes the stamp, which is the next pull's merge
-   base. `v0.464.0` closed the identity half of this one by reading `.claude/.ai-dlc-applying`;
-   it did not make the gate run.
-
-**So a check sited inside `apply.sh` — the obvious repair — closes 2 and 3 and leaves 1 open**,
-which is why the siting has to be decided against all three rather than against the one that
-prompted the entry.
-
-**This is the `CLAUDE.md` case in its purest form**: a prohibition whose enforcement is an
-instruction to a reader. `emit-report.sh:8-13` states the principle in its own header — the region
-exists because "an LLM stands between the detector and the operator and can drop the line" — and
-the gate guarding that region is itself a line an LLM can drop. The two fixes shipped in `v0.464.0` both sharpen what the gate DETECTS —
-the region now carries the `theirs` `core/` tree, so a moved symbolic ref cannot render identically
-— and neither of them causes the gate to be RUN. They are strictly downstream of this entry.
-
-**The fix is not simply "call it from `apply.sh`", which is why this is filed rather than taken.**
-`apply.sh` receives four paths and no report path; it does not know which report the operator
-approved, and inventing a convention for that is a change to the write path with real wedge risk
-for a consumer whose report sits under a name the convention does not predict. The candidate shapes
-— `apply.sh` taking the report as a required argument, or the ordinary run recording the verified
-report's digest into `.claude/.ai-dlc-applying` beside the `theirs:` it already records — differ in
-what they do to a consumer mid-pull, and that has to be measured on a scratch install before
-either is built.
-
-Discovered while shipping `v0.464.0`. Not filed by the reference consumer and carries no `PC-` id;
-it is an ai-dlc-internal discovery and ranks below any PC-backed entry under the provenance-first
-rule.
-
-**Tiered DEFECT.** Nothing is corrupted today. What is missing is the guarantee that the gate ran
-at all, and the symptom of a gate that did not run is a clean report.
-
-The receipt is STRUCTURAL and carries its own control, because a zero here is the claim being made:
-it counts non-comment invocation lines of `emit-report.sh` in tracked `.sh` files outside
-`core/fixtures/`, having first asserted that the same grammar finds callers of `preclassify.sh` —
-a grammar that finds neither has failed rather than found an absence. It exits 1 today, 0 once any
-executable invokes the gate, and 9 if the subject is missing or the control does not fire. Scored
-both directions: 1 against the tree, and 0 against a scratch copy with one real call site seeded.
-
-**The receipt is a FLOOR and will go green on a partial fix — that is stated rather than hidden,
-because it is the shape this repo closes entries on by mistake.** Any executable call site
-satisfies it, so wiring the gate into `apply.sh` flips it to 0 while path 1 above, step 2's
-autonomous self-update, is untouched and still writes core with no report in existence. Do not
-close this entry on the receipt alone: say what was done about step 2, or narrow the entry to
-paths 2 and 3 and file step 2 separately.
-
-verify: sh e=core/skills/ai-dlc-update/reconcile/emit-report.sh; [ -f "$e" ] || exit 9; L=$(git ls-files "*.sh" | grep -vE "^core/fixtures/"); c=$(printf "%s\n" "$L" | grep -v "reconcile/preclassify.sh" | xargs grep -hE "(bash|sh) [^ ]*preclassify\.sh" 2>/dev/null | grep -vcE "^[[:space:]]*#"); [ "${c:-0}" -gt 0 ] || exit 9; n=$(printf "%s\n" "$L" | grep -v "reconcile/emit-report.sh" | xargs grep -hE "(bash|sh) [^ ]*emit-report\.sh" 2>/dev/null | grep -vcE "^[[:space:]]*#"); [ "${n:-0}" -gt 0 ] && exit 0; exit 1
-
 ## BL-132 — the safe-stop acquittal answers a question about BEHAVIOUR with a test on ancestry
 
 Carries the reference consumer's `PC-S340-SAFE-STOP-ACQUITTAL-TESTS-ANCESTRY-NOT-CONTENT`, so it is
@@ -4049,3 +3970,39 @@ A fix that shortens the sequence or widens the assertion scores STILL-LIVE. Exit
 or the hook constant is gone.
 
 verify: sh f=core/fixtures/implementation-join-yield/run.sh; h=core/hooks/ai-dlc-continue.sh; [ -f "$f" ] && [ -f "$h" ] || exit 9; grep -q 'beat-churn stall' "$f" || exit 9; grep -q '^RAPID_WINDOW_SECONDS=' "$h" || exit 9; grep -qE '^RAPID_WINDOW_SECONDS="?\$\{' "$h" && exit 0; awk '/pipeline-block-state/ && /date \+%s/ {c++} END{exit !(c>0)}' "$f" && exit 0; exit 1
+
+## BL-155 — step 2's autonomous self-update writes `core/skills/ai-dlc-update/**` onto a consumer and auto-merges it with no approval artifact anywhere in the path
+
+Split out of `BL-131` on an operator ruling at batch 46, when that entry was narrowed to the two
+write paths `v0.488.0` gated. This is the third path, the one a reader will not expect, and it is
+the one `BL-131` itself called the hard half. Distribution-internal, no `PC-` id; ranks below any
+PC-backed entry under the provenance-first rule. DEFECT.
+
+**What it does.** `SKILL.md:205-210`: the skill's own files are declared upstream-owned and
+overwrite-safe, so the self-update "lands on its OWN cycle, **autonomously — no operator
+approval**". `SKILL.md:160-161` records that this runs on every invocation — the push and
+auto-merge write to `origin` even on a bare dry-run. No report is produced for that write, so
+there is no region for `emit-report.sh --verify` to check and nothing for `apply.sh`'s union gate
+(`v0.488.0`) to reach: that gate sits in step 7 and this write happens in step 2, before it.
+`reconcile/self-update-gate.sh` decides WHETHER the cycle runs (`SELF-UPDATE-OK` /
+`SELF-UPDATE-DEFER` / `SELF-UPDATE-SAFE-STOP`) and names consumer-modified machinery paths; it
+is a classifier, not an approval, and nothing records that an operator saw its verdict before
+the write.
+
+**Why it is filed rather than fixed.** The overwrite-safe declaration is deliberate and measured
+(`SKILL.md:212-220` records the one time it was read too widely), and gating step 2 on an
+operator changes the bootstrapping contract every consumer pull depends on: the broken version
+of the updater is the one that runs the delivery, so a gate that can refuse the self-update can
+also refuse its own repair. The candidate shapes — record the `self-update-gate.sh` verdict and
+the written slice into the stamp so the write has an artifact, or require a dry-run report to
+exist before step 2 may push — differ in what they do to a consumer mid-pull and have to be
+measured on a scratch install before either is built. Read `BL-131`'s archived body for the
+three-path analysis before touching this.
+
+**Receipt limits, stated.** The receipt keys on the declaration in `SKILL.md` that step 2 needs
+no operator approval, case-insensitive and refusing a match inside an HTML comment. It is
+closable by rewording that sentence without changing the behaviour, and a fix that gates the
+write in a program while leaving the sentence in place scores STILL-LIVE; replace it with one
+that drives the gate when a gate exists. A prose receipt is what a prose-only subject affords.
+
+verify: sh f=core/skills/ai-dlc-update/SKILL.md; [ -f "$f" ] || exit 9; grep -qi 'self-update' "$f" || exit 9; sed 's/<!--.*-->//g' "$f" | grep -qiE 'autonomously[^.]*no operator approval' && exit 1; exit 0
