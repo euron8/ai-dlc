@@ -231,6 +231,33 @@ else
   ok "a struck row raises the struck verdict only, not the status one"
 fi
 
+# --- 4f. `stopped` IS ACCEPTED, BESIDE A TOKEN THAT IS NOT ---------------------
+# THE THIRD TOKEN, AND THE ARM IS DELIBERATELY NOT "a stopped row exits 0".
+# That shape is absence-shaped: it passes identically against a subject replaced
+# by `exit 0`, and the status check would then be dead with this arm still green.
+# So the accepted row sits BESIDE a genuinely unrecognised one in the SAME run,
+# and the assertions are PRESENCE-shaped -- the offender must be NAMED and the
+# stopped row must NOT be. A subject that emits nothing fails the first conjunct;
+# the pre-fix two-token whitelist fails the second, because it names both.
+#
+# The seed is the form the reference consumer actually wrote at sprint 308 --
+# `stopped (operator-requested handoff)` -- not a form derived from the reader's
+# accept-set. Its trailing note also re-exercises the space delimiter 4c pins.
+seed "$HEADER
+| \`stopped-s308-alpha\` | \`adversary\` | docs/x.md | 2026-09-02 | stopped (operator-requested handoff) |
+| \`unknown-s308-beta\` | \`qa\` | docs/y.md | 2026-09-02 | idle-reusable |"
+expect 1 "an unrecognised token beside a stopped row still fails"
+if grep -q 'unknown-s308-beta' "$WORK/out.txt"; then
+  ok "  and the unrecognised row is named"
+else
+  bad "  the unrecognised row is NOT named -- the check is not reading this table"
+fi
+if grep -q 'stopped-s308-alpha' "$WORK/out.txt"; then
+  bad "  the stopped row was ALSO indicted -- handoff.md step 1 cannot be obeyed"
+else
+  ok "  and the stopped row is not indicted (steps/handoff.md step 1 is obeyable)"
+fi
+
 # --- 5. THE MUTATION TEST — prove assertion 2's red came from the new code ------
 # Remove the In-Flight call from a COPY and re-run assertion 2's input. If it
 # still fails, something else was producing the red.
@@ -306,6 +333,50 @@ if [ "$warn_status" = "0" ] && grep -q 'struck-through row' "$WORK/out.txt"; the
   ok "--warn-only reports the struck row and still exits 0"
 else
   bad "--warn-only exit $warn_status / message missing -- retro posture broken"
+fi
+
+# --- 5c. THE MUTATION TEST for the third token ---------------------------------
+# 4f establishes that the stopped row is not indicted. Only a mutant establishes
+# that the whitelist entry is what stops it: an arm reading "this row was not
+# named" is satisfied by a check that names nothing at all.
+#
+# Three readings, and the first is not optional. A lone copy that dies for its
+# own reasons emits nothing and exits non-zero, which is indistinguishable from
+# the check firing -- so the unmutated copy is shown ALIVE on a presence-shaped
+# input first, then quiet on the stopped row, and only then is the mutant's red
+# attributable to the missing whitelist line.
+TMUTANT="$WORK/mutant-stopped.sh"
+sed '/if (tok == "stopped") next/d' "$VALIDATOR" > "$TMUTANT" || exit 2
+if cmp -s "$VALIDATOR" "$TMUTANT"; then
+  echo "FIXTURE ERROR: stopped-token mutation matched nothing -- the whitelist" >&2
+  echo "  entry was reworded; re-anchor assertion 5c on the real line" >&2
+  exit 2
+fi
+STOPPED_ROW="$HEADER
+| \`stopped-s308-alpha\` | \`adversary\` | docs/x.md | 2026-09-02 | stopped (operator-requested handoff) |"
+
+seed "$HEADER
+| \`unknown-s308-beta\` | \`qa\` | docs/y.md | 2026-09-02 | idle-reusable |"
+alive_status="$(run_validator "$CONTROL")"
+if [ "$alive_status" = "1" ] && grep -q 'unknown-s308-beta' "$WORK/out.txt"; then
+  ok "CONTROL: the unmutated copy is alive (it still names an unrecognised token)"
+else
+  bad "CONTROL: unmutated copy exited $alive_status without naming the row -- 5c proves nothing"
+fi
+
+seed "$STOPPED_ROW"
+base_status="$(run_validator "$CONTROL")"
+if [ "$base_status" = "0" ]; then
+  ok "CONTROL: the same live copy accepts the stopped row"
+else
+  bad "CONTROL: the unmutated copy rejected the stopped row (exit $base_status)"
+fi
+
+tmutant_status="$(run_validator "$TMUTANT")"
+if [ "$tmutant_status" = "1" ] && grep -q 'stopped-s308-alpha' "$WORK/out.txt"; then
+  ok "MUTATION: removing the stopped entry indicts the stopped row again"
+else
+  bad "MUTATION: without the whitelist entry the stopped row exited $tmutant_status unnamed -- 4f proves nothing"
 fi
 
 echo ""

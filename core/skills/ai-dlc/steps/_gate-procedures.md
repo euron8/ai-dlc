@@ -35,6 +35,10 @@ When a step file says "run sub-step snapshot update", execute:
    invented here to fill the cell. When a deliverable is consumed, set that
    row's `status` to `delivered-reachable` if the teammate is still alive and
    you may message it again, and **DELETE** the row outright once you will not.
+   The one exception is a teammate STOPPED before it delivered: `steps/handoff.md`
+   step 1 sets its `status` to `stopped` and KEEPS the row, because a successor
+   session cannot tell a deleted row from a teammate that never existed. Do not
+   delete a `stopped` row at the next gate.
    Rows only — no prose, no struck-through history; `status` is how a row
    says it has delivered. This section must be written **at
    dispatch**, not only at the transition that follows it — a teammate
