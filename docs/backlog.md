@@ -4013,6 +4013,15 @@ the two-cause message, never to a pass. The row no longer prescribes the re-run;
 be refused and that the refusal names the procedure. Both branches still refuse with rc=1 and write
 nothing.
 
+**CORRECTED BY `v0.494.0`, on the adversarial hand's post-merge report.** The v0.493.0 diagnosis
+also read the in-flight marker's `theirs:`, which `apply.sh` writes from its own argument before
+any write, so that arm held by construction: a marker over a tree still at base fired the
+post-apply message, and the `--finish` it offered stamped 2.0.0 over a 1.0.0 tree. The four
+scenarios below were right; the fifth — marker present, tree unwritten — was not built, and it
+is the one that failed. The diagnosis now reads the stamp alone, asserts only what the stamp
+asserts, and prescribes nothing that writes. `apply-self-overwrite` assertion 8 holds the fifth
+state and M8 restores the marker arm.
+
 **The carve-out was built and REJECTED, and not for the reason the plan predicted.** Letting a
 post-apply re-run through when the stamp is at theirs — the shape of the existing `--finish`
 exemption — fixes the filed case and re-opens the non-termination `apply.sh`'s own resolution-phase

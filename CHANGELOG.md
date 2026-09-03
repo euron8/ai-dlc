@@ -15,6 +15,48 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.494.0] - 2026-09-03
+
+### v0.493.0's post-apply diagnosis read the in-flight marker, which is true by construction, and its advice could stamp an unwritten tree
+
+Corrects v0.493.0 (`PC-S309-APPLY-SH-DRIVER-SELF-UPDATE-ROW-PRESCRIBES-A-RERUN-ITS-OWN-UNION-GATE-REFUSES`,
+`BL-151`). Found by the adversarial hand dispatched on that batch, which reported after the
+merge; every finding below it verified by running.
+
+**The marker arm was a tautology.** `.ai-dlc-applying`'s `theirs:` is written by `apply.sh` from
+its own fourth argument before phase 1 writes anything, so "marker's theirs resolves to this
+run's theirs" holds on every re-run with the same argument, whatever the tree contains. It
+records that a run BEGAN, not that anything was written. Measured: a marker left by an aborted
+run over a tree still byte-identical to base made the post-apply diagnosis fire, the message
+said "there is nothing left for this run to write", and the `apply.sh --finish` it offered
+stamped 2.0.0 over a 1.0.0 tree and printed "the tree matches" — the PC-S304 shape, reached
+through advice. The `--finish` identity guard cannot catch it because it compares the marker's
+ref against the same argument.
+
+**The fix.** The diagnosis reads the stamp's `commit:` only. The diagnosed message no longer
+asserts "upstream has not moved and nothing was hand-edited" or "nothing left to write" — the
+stamp is a claim about the tree, not a measurement of it, and the message now says so — and it
+no longer names `--finish` or prescribes an `emit-report.sh` invocation (that renderer's own
+header says its plain form is the pre-apply one). It points at the skill's dry run, the same
+remedy the listed message gives. The listed message gains the withheld-stamp re-run as a
+POSSIBILITY, which is where that state now lands: under-firing is the safe direction.
+
+**Fixture.** `apply-self-overwrite` assertion 8 was vacuous — it verified a report against a
+region the same code had rendered moments earlier — and is replaced by the state that failed:
+a marker over an unwritten tree with a stale report must get the listed refusal, print no
+matched record, name no `--finish`, and leave stamp and driver at base. Mutant M8 restores the
+marker arm and is killed by it while leaving assertion 6 green. `mut_copy` now reports a `sed`
+that dies instead of returning silently — M8's first spelling did exactly that under BSD `sed`
+and the fixture printed PASS over an arm that never ran. `diag_stale`'s absence key narrowed
+from `records ` to `records [0-9a-f]`, so the stamped-run advisory line "It records the gates"
+cannot collide with it.
+
+**Not closed here.** The adversary's second DEFECT — a hand-edited report on a stamped tree is
+diagnosed as post-apply — is now STATED in the message rather than fixed, because the stamp
+cannot see it. A legacy stamp with no `commit:` line, or one naming a sha absent from the
+distribution, falls through to the listed message: PC-S309 as filed for those consumers,
+conservatively.
+
 ## [0.493.0] - 2026-09-03
 
 ### The driver-self-update row prescribed a re-run its own union gate refuses, and the refusal misdiagnosed it

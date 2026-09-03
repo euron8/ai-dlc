@@ -53,12 +53,18 @@
 # hand-edited. Reported by the reference consumer on its 0.482.0 -> 0.489.0 pull, by obeying the
 # row. The refusal is correct (nothing is left to write); the DIAGNOSIS was not, and the row must
 # not prescribe an action the same release makes unexecutable in the state the row is printed in.
-# The gate now DECIDES the third cause from the stamp's `commit:` / the in-flight marker's
-# `theirs:`, compared by `core/` tree, and prints the record it matched; the row points at that
-# refusal instead of prescribing the re-run. Driven here because this file already drives the
-# self-replacement that emits the row. The carve-out — let a post-apply re-run through — was built
-# and scored before this was written: it re-wedges a consumer that has already `--finish`ed by
-# hand (the semantic-merge WORKLIST returns and the marker with it), so the refusal stays.
+# The gate now DECIDES the third cause from the stamp's `commit:`, compared by `core/` tree, and
+# prints the record it matched; the row points at that refusal instead of prescribing the re-run.
+# Driven here because this file already drives the self-replacement that emits the row. The
+# carve-out — let a post-apply re-run through — was built and scored before this was written: it
+# re-wedges a consumer that has already `--finish`ed by hand (the semantic-merge WORKLIST returns
+# and the marker with it), so the refusal stays.
+#
+# AND NOT FROM THE IN-FLIGHT MARKER, which v0.493.0 shipped and v0.494.0 took back. The marker's
+# `theirs:` is written by apply.sh from its own fourth argument before phase 1 writes anything, so
+# a diagnosis keyed on it is true by construction on every re-run and fired on a tree still
+# byte-identical to base — and the `--finish` that message offered stamped 2.0.0 over a 1.0.0
+# tree. Assertion 8 holds that state, and M8 restores the marker arm.
 set -uo pipefail
 
 # TWO LAYOUTS, and this fixture ships to consumers, so it must resolve in both. install.sh splits
@@ -342,7 +348,7 @@ if build_world "$W/gate-stale" "$REC" && mk_report "$W/gate-stale" stale; then
   drive "$W/gate-stale" out1; G3_RC=$?
   if [ "$G3_RC" -eq 1 ] && [ "$(marker "$W/gate-stale")" = GONE ] \
      && grep -q 'Either upstream moved' "$W/gate-stale/out1.err" \
-     && ! grep -q 'records ' "$W/gate-stale/out1.err" && ! grep -q 'driver-self-update' "$W/gate-stale/out1.err"; then
+     && ! grep -q 'records [0-9a-f]' "$W/gate-stale/out1.err" && ! grep -q 'driver-self-update' "$W/gate-stale/out1.err"; then
     ok "  and a report that is stale because UPSTREAM moved still gets the two-cause refusal, not the post-apply diagnosis"
   else
     bad "a stale-upstream report was misdiagnosed: rc=$G3_RC, marker $(marker "$W/gate-stale"), stderr: $(head -c 200 "$W/gate-stale/out1.err" | tr '\n' ' ')"
@@ -351,19 +357,26 @@ else
   bad "FIXTURE BROKEN — could not stand up the stale-upstream world for assertion 7"
 fi
 
-# --- ASSERTION 8: the procedure the refusal names WORKS. Re-render the report from the tree as it
-# now stands, same base and theirs, and re-run with the same four arguments: the gate passes, the
-# run completes, and the driver-self-update row is silent (the driver is already at theirs).
-if mk_report "$W/gate" current; then
-  drive "$W/gate" out3; G4_RC=$?
-  if [ "$G4_RC" -eq 0 ] && has_row "$W/gate/out3" NOTE report-verified \
-     && ! has_row "$W/gate/out3" RESOLVED driver-self-update && [ "$(marker "$W/gate")" = GONE ]; then
-    ok "  and the re-run the refusal prescribes — report re-rendered post-apply, same arguments — passes the gate and completes"
+# --- ASSERTION 8 (the state v0.493.0 got WRONG): a marker over an UNWRITTEN tree is not post-apply.
+# The in-flight marker's `theirs:` is written by apply.sh from its own argument before phase 1
+# writes anything, so a diagnosis keyed on it held by construction on every re-run — measured
+# firing on a tree byte-identical to base, after which the `--finish` that message offered stamped
+# an unwritten tree. Fresh consumer at base, report stale (rendered at base, U2's shape), marker
+# left exactly as an aborted run leaves it: the refusal must be the LISTED message, print no
+# matched record, name no --finish, and leave stamp and driver at base.
+mk_marker() { printf 'base: %s\ntheirs: %s\n' "$(wB "$1")" "$(wT "$1")" > "$1/cons/.claude/.ai-dlc-applying"; }
+if build_world "$W/gate-marker" "$REC" && mk_report "$W/gate-marker" stale && mk_marker "$W/gate-marker"; then
+  drive "$W/gate-marker" out1; G4_RC=$?
+  if [ "$G4_RC" -eq 1 ] && grep -q 'Either upstream moved' "$W/gate-marker/out1.err" \
+     && ! grep -q 'records [0-9a-f]' "$W/gate-marker/out1.err" && ! grep -q -- '--finish' "$W/gate-marker/out1.err" \
+     && [ "$(stamp_sha "$W/gate-marker")" = "$(git -C "$W/gate-marker/dist" rev-parse --short "$(wB "$W/gate-marker")")" ] \
+     && git -C "$W/gate-marker/dist" show "$(wB "$W/gate-marker"):core/$REL" | cmp -s - "$W/gate-marker/cons/$CONS_REL"; then
+    ok "  and a marker over an UNWRITTEN tree is not read as post-apply: listed refusal, no matched record, no --finish, stamp and driver still at base"
   else
-    bad "the prescribed procedure does not work: rc=$G4_RC, report-verified $(has_row "$W/gate/out3" NOTE report-verified && echo yes || echo no), marker $(marker "$W/gate"); rows: $(awk -F'\t' '$1=="DECISION"||$1=="WORKLIST"{printf "%s/%s ",$1,$2}' "$W/gate/out3")"
+    bad "a marker over an unwritten tree was misread as post-apply (rc=$G4_RC, stamp '$(stamp_sha "$W/gate-marker")'): $(head -c 220 "$W/gate-marker/out1.err" | tr '\n' ' ')"
   fi
 else
-  bad "FIXTURE BROKEN — could not re-render the report for assertion 8"
+  bad "FIXTURE BROKEN — could not stand up the marker-over-unwritten-tree world for assertion 8"
 fi
 
 # --- MUTANTS -----------------------------------------------------------------------------------
@@ -373,11 +386,16 @@ fi
 # `(`, `{` and `}`, every one of which is a metacharacter under `sed -E` and a literal here. The
 # first draft used -E and died with `RE error: empty (sub)expression` on `||` — a mutation that
 # does not apply is caught by the guard below, but only after wasting the arm.
-mut_copy() { # mut_copy <name> <sed-expr> -> a mutated reconcile/ at $W/m-<name>/rec
-  local n="$1" e="$2" d="$W/m-$1"
+mut_copy() { # mut_copy <name> <sed-arg>... -> a mutated reconcile/ at $W/m-<name>/rec
+  local n="$1" d="$W/m-$1"; shift
   rm -rf "$d"; mkdir -p "$d/rec" || return 1
   cp "$REC"/*.sh "$REC"/*.md "$d/rec/" || return 1
-  sed "$e" "$REC/apply.sh" > "$d/rec/apply.sh" || return 1
+  # A sed that DIES is a mutant that never existed, and an `if mut_copy ...` caller then skips its
+  # arms with no verdict at all — M8's first spelling did exactly that, silently, under BSD sed.
+  if ! sed "$@" "$REC/apply.sh" > "$d/rec/apply.sh"; then
+    bad "MUTANT $n DID NOT APPLY — sed refused the expression, so a green arm below would prove nothing"
+    return 1
+  fi
   if cmp -s "$REC/apply.sh" "$d/rec/apply.sh"; then
     bad "MUTANT $n DID NOT APPLY — the expression matched nothing, so a green arm below would prove nothing"
     return 1
@@ -386,7 +404,7 @@ mut_copy() { # mut_copy <name> <sed-expr> -> a mutated reconcile/ at $W/m-<name>
 }
 mutate() { # mutate <name> <sed-expr> — copy, build a world on it, drive once
   local d="$W/m-$1"
-  mut_copy "$1" "$2" || return 1
+  mut_copy "$1" -e "$2" || return 1
   build_world "$d" "$d/rec" || return 1
   ( cd "$d/cons" && bash "$d/cons/$CONS_REL" "$d/dist" "$(wB "$d")" "$d/cons" "$(wT "$d")" ) > "$d/out" 2> "$d/err"
   MRC=$?; MOUT="$d/out"; MERR="$d/err"; MD="$d"
@@ -411,7 +429,14 @@ diag_stale() { # diag_stale <dir> <reconcile-source> -> 0 iff a stale-upstream r
   drive "$d" out1; rc=$?
   [ "$rc" -eq 1 ] && [ "$(marker "$d")" = GONE ] \
     && grep -q 'Either upstream moved' "$d/out1.err" \
-    && ! grep -q 'records ' "$d/out1.err" && ! grep -q 'driver-self-update' "$d/out1.err"
+    && ! grep -q 'records [0-9a-f]' "$d/out1.err" && ! grep -q 'driver-self-update' "$d/out1.err"
+}
+diag_marker() { # diag_marker <dir> <reconcile-source> -> 0 iff a marker over an UNWRITTEN tree gets the listed refusal (assertion 8's shape)
+  local d="$1" rc
+  build_world "$d" "$2" && mk_report "$d" stale && mk_marker "$d" || return 2
+  drive "$d" out1; rc=$?
+  [ "$rc" -eq 1 ] && grep -q 'Either upstream moved' "$d/out1.err" \
+    && ! grep -q 'records [0-9a-f]' "$d/out1.err" && ! grep -q -- '--finish' "$d/out1.err"
 }
 
 # M1 — destroy the inode swap, KEEP the temp file. `cat > "$cons"` truncates the SAME inode, which
@@ -454,7 +479,7 @@ fi
 
 # M4 — put the idempotence claim back on the row. Scoped to assertion 5; the re-run still refuses
 # with the diagnosis, so assertion 6 must stay green on the same world.
-if mut_copy m4 's#and its refusal names the procedure that does\."#and its refusal names the procedure that does. Re-run it — it is idempotent."#' \
+if mut_copy m4 -e 's#and its refusal names the procedure that does\."#and its refusal names the procedure that does. Re-run it — it is idempotent."#' \
    && gate_world "$W/m-m4" "$W/m-m4/rec"; then
   case "$(row_detail "$W/m-m4/out1" driver-self-update)" in
     *"it is idempotent"*) ok "mutant M4 (idempotence claim restored) is caught by assertion 5" ;;
@@ -467,7 +492,7 @@ fi
 # M5 — the diagnosis never fires: the match is found and thrown away. Scoped to assertion 6 —
 # the re-run still refuses, with the two-cause message a post-apply consumer was actually shown.
 # Assertion 7's shape must survive it, since that branch is the one M5 leaves in place.
-if mut_copy m5 's#^          _ug_at="$_ug_r"; break$#          :#' \
+if mut_copy m5 -e 's#^        _ug_at="$_ug_sc"$#        :#' \
    && gate_world "$W/m-m5" "$W/m-m5/rec"; then
   if diag_rerun "$W/m-m5"; then bad "MUTANT M5 SURVIVED — the diagnosis printed with its match discarded, so it is keyed on something other than the stamp"
   else ok "mutant M5 (diagnosis never fires) is caught by assertion 6: $(head -c 80 "$W/m-m5/out2.err" | tr '\n' ' ')..."; fi
@@ -478,7 +503,7 @@ fi
 # M6 — the diagnosis ALWAYS fires: `_ug_at` is seeded before the records are read, so a report
 # stale because upstream moved is called post-apply. Scoped to assertion 7; assertion 6 stays
 # green because the seeded value is overwritten by the real match on the post-apply world.
-if mut_copy m6 's#^      _ug_at=""$#      _ug_at="$THEIRS"#' \
+if mut_copy m6 -e 's#^      _ug_at=""$#      _ug_at="$THEIRS"#' \
    && gate_world "$W/m-m6" "$W/m-m6/rec"; then
   if diag_stale "$W/m-m6-stale" "$W/m-m6/rec"; then bad "MUTANT M6 SURVIVED — a stale-upstream report was still refused with the two-cause message under a diagnosis that fires unconditionally"
   else ok "mutant M6 (diagnosis fires on every mismatch) is caught by assertion 7"; fi
@@ -490,12 +515,26 @@ fi
 # This is the alternative fix that was built and rejected: on a consumer that has already
 # `--finish`ed a withheld run by hand, the semantic-merge WORKLIST re-appears and the marker with
 # it. Scoped to assertion 6 (rc=0, no refusal); assertion 7's branch is untouched.
-if mut_copy m7 's|^        err "\(the report at .*ALREADY been written\)|        say NOTE report-unverified-post-apply "" "\1|' \
+if mut_copy m7 -e 's|^        err "\(the report at .*stamp records \)|        say NOTE report-unverified-post-apply "" "\1|' \
    && gate_world "$W/m-m7" "$W/m-m7/rec"; then
   if diag_rerun "$W/m-m7"; then bad "MUTANT M7 SURVIVED — the post-apply re-run was let through and assertion 6 still read as refused"
-  else ok "mutant M7 (post-apply re-run let through) is caught by assertion 6: rc=$(drive "$W/m-m7" out4; echo $?)"; fi
+  else ok "mutant M7 (post-apply re-run let through) is caught by assertion 6 ($DIAG_WHY)"; fi
   if diag_stale "$W/m-m7-stale" "$W/m-m7/rec"; then ok "  and M7 leaves assertion 7 alone"
   else bad "M7 also moved assertion 7 — the mutation reached the two-cause branch"; fi
+fi
+
+# M8 — the v0.493.0 defect: read the in-flight marker's `theirs:` as a second record when the
+# stamp does not match. Scoped to assertion 8; assertion 6 stays green because the stamp still
+# matches first on the post-apply world.
+# BSD sed takes `a\` text only on the NEXT LINE of the same script argument, never in a second
+# `-e`; the newline is spelled with $'...'.
+M8_EXPR=$'/^      _ug_sc="$(sed -n .s\\/^commit:/a\\\n      [ -n "$_ug_sc" ] && [ "$(git -C "$DIST" rev-parse "${_ug_sc}:core" 2>/dev/null || true)" = "$_ug_tt" ] || _ug_sc="$(sed -n "s/^theirs:[[:space:]]*//p" "$CONSUMER/.claude/.ai-dlc-applying" 2>/dev/null | head -1)"'
+if mut_copy m8 -e "$M8_EXPR" \
+   && gate_world "$W/m-m8" "$W/m-m8/rec"; then
+  if diag_marker "$W/m-m8-marker" "$W/m-m8/rec"; then bad "MUTANT M8 SURVIVED — the marker arm is back and a marker over an unwritten tree still got the listed refusal"
+  else ok "mutant M8 (marker read as a record of a write) is caught by assertion 8"; fi
+  if diag_rerun "$W/m-m8"; then ok "  and M8 leaves assertion 6 alone"
+  else bad "M8 also moved assertion 6 ($DIAG_WHY)"; fi
 fi
 
 # --- UNMUTATED CONTROL --------------------------------------------------------------------------
