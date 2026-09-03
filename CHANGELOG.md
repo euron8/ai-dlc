@@ -15,6 +15,58 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.483.0] - 2026-09-02
+
+### Core instructed a status token that core’s own gate refused, and the only passing disposition was the one core forbids
+
+Closes `PC-S308-HANDOFF-STOPPED-STATUS-NOT-IN-VALIDATOR-WHITELIST`, filed by the
+reference consumer on 2026-09-02 and reproduced here the same day.
+
+`steps/handoff.md` step 1 tells the lead to set each stopped teammate’s
+**In-Flight Teammates** row `status` to `stopped` and to *“Rewrite the row; do not
+delete it”*. `core/hooks/ai-dlc-continue.sh:390` — the hook that BLOCKS the
+handoff while a row still reads `in-flight` — emits remedy text saying the same
+thing verbatim. `validate-artifact-budget.sh`’s `check_inflight_status()`
+whitelisted exactly `in-flight` and `delivered-reachable` and failed on anything
+else, and its own remedy text instructed the opposite: delete the row.
+
+Measured on the shipping validator, one row varied against two near-miss rows
+held constant beside it in the same run:
+
+    stopped (operator-requested handoff)   exit 1   check_inflight_status
+    ~~stopped~~                            exit 1   check_inflight_rows
+    in-flight                              exit 0   but Check 0 blocks the handoff
+    delivered-reachable                    exit 0   and is false: it never delivered
+
+Three of the four dispositions a lead can take were refused, and the only one
+that passed was DELETION — the record loss the instruction exists to prevent.
+The consumer hit this twice in one sprint and worked around it by deleting the
+row both times, recording the reason in its own snapshot.
+
+`stopped` is a third state rather than a spelling of the other two: a stopped
+teammate has not delivered, and it cannot be messaged. The set was closed at two
+on the reasoning that a row which will not be reached again is DELETED, and a
+handoff is the case that reasoning does not cover — there the row must survive,
+because a successor session cannot tell a deleted row from a teammate that never
+existed.
+
+Core already disagreed with itself two homes to two: `handoff.md` and
+`route.md:611-617` named `stopped` and carried the handoff exception, while
+`gate-validation.md:840` and the validator declared a closed set of two. Nothing
+bound the four, so the contradiction was invisible to every gate. The token is
+now added at the validator and at both declaring sites, and
+`_gate-procedures.md` step 3 no longer tells the lead to delete a `stopped` row
+at the next gate.
+
+`core/fixtures/inflight-row-shape/run.sh` gains arm 4f and mutation 5c. Both
+halves of 4f are presence-shaped, so a subject that emits nothing cannot satisfy
+them; scored against the pre-fix validator, exactly one arm fails and 5c
+correctly refuses to run vacuously rather than passing with no subject.
+
+Filed and rotated as `BL-147`. Filed separately and NOT fixed: no invariant
+binds this token set across its declaring files, so a fifth site can still
+disagree silently.
+
 ## [0.482.0] - 2026-09-02
 
 ### Two of the three fixtures still seeded the form their reader accepts, and v0.481.0 said all three were fixed

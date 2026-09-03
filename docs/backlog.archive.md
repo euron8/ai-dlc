@@ -4919,3 +4919,61 @@ is the same class — a bold-markdown grammar against a plain artifact — in a 
 named so the next sibling join can find it by subsystem rather than by sprint prefix.
 
 verify: sh set -e; r="$PWD"; e='s/^- *[*]*sprint_id:[*]* *\([0-9][0-9]*\).*/\1/p'; n=0; for f in core/hooks/ai-dlc-dispatch-guard.sh core/hooks/ai-dlc-subagent-probe.sh core/hooks/ai-dlc-context-sensor.sh; do [ -r "$r/$f" ] || exit 9; grep -qF -- "$e" "$r/$f" && n=$((n+1)); done; [ "$n" -eq 3 ] || exit 1; s=$(mktemp); printf -- '- sprint_id: 308\n' > "$s"; [ "$(sed -n "$e" "$s")" = "308" ] || exit 1; printf -- '- **sprint_id:** 307\n' > "$s"; [ "$(sed -n "$e" "$s")" = "307" ] || exit 1; printf -- '- sprint_id: TBD\n' > "$s"; [ -z "$(sed -n "$e" "$s")" ] || exit 1; exit 0
+## BL-147 — core instructs a status token that core's own gate refuses, and the only passing disposition is the one core forbids
+
+**LANDED (v0.483.0, verified ac2e94eb).**
+
+**Filed by the reference consumer as
+`PC-S308-HANDOFF-STOPPED-STATUS-NOT-IN-VALIDATOR-WHITELIST`**, 2026-09-02, and FIXED in this
+release. PC-backed, so it ranks above every distribution-internal entry under the
+provenance-first rule.
+
+`steps/handoff.md` step 1 tells the lead to set each stopped teammate's **In-Flight Teammates**
+row `status` to `stopped` and to *"Rewrite the row; do not delete it"*. `core/hooks/ai-dlc-continue.sh:390`
+— the hook that BLOCKS the handoff while a row still reads `in-flight` — emits remedy text saying
+the same thing verbatim. `validate-artifact-budget.sh`'s `check_inflight_status()` whitelisted
+exactly two leading tokens, `in-flight` and `delivered-reachable`, and FAILED on anything else;
+its own remedy text said the opposite of both — *"A teammate that will not be messaged again has
+no token: DELETE its row."* Obeying the instruction failed the gate that Rule 25(d) mandates after
+every snapshot edit.
+
+**THE BOX WAS CLOSED ON ALL FOUR SIDES, MEASURED ON THE SHIPPING VALIDATOR** with one row varied
+against two near-miss rows held constant beside it in the same run:
+
+    stopped (operator-requested handoff)   exit 1   check_inflight_status
+    ~~stopped~~                            exit 1   check_inflight_rows
+    in-flight                              exit 0   but ai-dlc-continue.sh Check 0 blocks the handoff
+    delivered-reachable                    exit 0   and is false: it never delivered
+
+So of the four dispositions available to a lead, three were refused and the only passing one was
+DELETION — which `handoff.md` and the continue hook both instruct against, for the stated reason
+that a deleted row is indistinguishable from a teammate that never existed.
+
+**THE RECORD LOSS IS NOT HYPOTHETICAL AND THE CONSUMER WROTE IT DOWN.** Its live snapshot's
+In-Flight section reads, in prose where a row should be: *"(none -- `adversary-s308-product-brief-p3`'s
+row was deleted, not struck or rewritten to `stopped`, on stop: both alternatives are rejected by
+`validate-artifact-budget.sh` per `PC-S308-HANDOFF-STOPPED-STATUS-NOT-IN-VALIDATOR-WHITELIST`.)"
+The filing records the same conflict resolved the same way earlier in the same sprint.
+
+**`stopped` IS A THIRD STATE, NOT A SPELLING OF THE OTHER TWO.** Neither original token is true of
+a stopped teammate: it has not delivered, and it cannot be messaged. The set was closed at two on
+the reasoning that a row which will not be reached again is DELETED — and a handoff is the case
+that reasoning does not cover, because there the row must survive for the successor.
+
+**CORE ALREADY DISAGREED WITH ITSELF TWO HOMES TO TWO, which is the same shape
+`core/fixtures/inflight-row-shape/run.sh` was built for.** `handoff.md` and `route.md:611-617`
+already named `stopped` and already carried the handoff exception; `gate-validation.md:840` and
+the validator declared the closed set of two. Nothing bound the four, so the contradiction was
+invisible to every gate. The fix adds the token at the validator and at both declaring sites.
+
+**Stated limitation.** No invariant binds the token set across its declaring files, so a fifth
+site can still disagree silently. That is filed separately rather than built here.
+
+**The receipt DRIVES the validator rather than reading it**, and is presence-shaped on both
+halves so a subject that emits nothing cannot satisfy it: an unrecognised token beside a `stopped`
+row must still be NAMED, and the `stopped` row must NOT be. Scored six ways against this corpus's
+convention, where exit 0 is the fix being present — the shipped fix exits 0, a second spelling
+(one regex alternation instead of a third equality line) exits 0, and the pre-fix validator, a
+whitelist widened to accept everything, an untouched validator, and a docs-only change all exit 1.
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/_bmad-output"; printf '# S\n\n## In-Flight Teammates\n| a | r | d | t | status |\n|---|---|---|---|---|\n| alpha-stop | x | d.md | t | stopped (handoff) |\n| beta-unk | x | d.md | t | idle-reusable |\n' > "$d/_bmad-output/pipeline-snapshot.md"; AI_DLC_PROJECT_ROOT="$d" bash "$PWD/core/scripts/validate-artifact-budget.sh" --only pipeline-snapshot.md >"$d/o" 2>&1; grep -q beta-unk "$d/o" && ! grep -q alpha-stop "$d/o"
