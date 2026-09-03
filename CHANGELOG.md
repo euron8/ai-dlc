@@ -15,6 +15,55 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.489.0] - 2026-09-03
+
+### The region promised every detector's findings and carried eight of twenty-three
+
+`SKILL.md` step 5 tells the operator the `reconcile-mechanical` region holds "every mechanical
+finding, complete, from every detector". It was prose over a hand-written set of invocations.
+`emit-report.sh` drove **8** of the 23 scripts in `reconcile/`, and four shipped classifiers sat
+outside it — `predicate-differential`, `retired-fixtures`, `retired-layer-contract`,
+`retired-layer-passage`, each declaring itself "a classifier, not a gate" in its own header.
+
+**`--verify` could not fail on their omission, because they were never in the region to omit.**
+Their findings were narrated by the LLM instead — the exact failure this driver's own header
+(`:12-13`) says it exists to end: "an LLM stands between the detector and the operator and can
+drop the line."
+
+All four now render. **`adopt-extension-checks` deliberately does not**, and measuring it is what
+changed the call: its report mode prints operator PROSE carrying absolute paths, not TSV rows,
+and prose with absolute paths in a byte-compared region reintroduces the cross-checkout false
+failure the dist-path normalisation exists to prevent.
+
+**The set is now a DERIVED JOIN, which is the part that keeps this fixed.** Adding four calls
+would have left the next detector to fall out exactly as these four did. `I105` requires every
+`reconcile/*.sh` to be either invoked by the driver or carrying its own
+`# reconcile-region: exempt — <reason>` line. **Neither is a finding and BOTH is a finding** —
+the second catches a stale marker outliving the change that made it wrong. The reason is
+required and non-empty, for the lesson `.claude/rules/fixture-ship-decl.md` already records one
+subsystem over: seven `.dist-only` markers were zero bytes until a rule forced a reason.
+
+**The grammar is anchored at column 0, and that was measured rather than assumed.** The driver's
+header has to DESCRIBE the marker to tell the next author how to declare one, and an unanchored
+`grep -F` scored that description as a declaration — the driver exempting itself by talking
+about itself. Text about a program is not the program. The probe now seeds that exact prose form
+and requires it to stay quiet.
+
+I105's probe runs before the corpus and fires in both directions on six seeded files: an
+invocation seen, a non-invocation not seen, a well-formed marker read, an absent marker not
+invented, a marker with **no reason** refused, and the prose form refused. Proven to fire in
+place, both ways: stripping `apply.sh`'s marker reports NEITHER, adding one to the driven
+`layer-drift.sh` reports BOTH, each rc=1, restores byte-identical.
+
+**False-positive set: EMPTY** over the real directory — 23 files, 12 invoked, 11 exempt, 0 in
+neither state and 0 in both.
+
+Arm cost measured in isolation at **~0.16s** (23 files × 2 greps, 5 reps, 0.156–0.167). The
+whole-validator differential is NOT reported: its spread across reps was 23–42s under load,
+which cannot resolve a 0.16s effect, and reading a null off it would have meant nothing.
+
+`docs/invariant-index.md` re-rendered by its own script: 109 invariants across 106 arms.
+
 ## [0.488.0] - 2026-09-03
 
 ### The union gate was prose, and `theirs` was an argument the executor supplied

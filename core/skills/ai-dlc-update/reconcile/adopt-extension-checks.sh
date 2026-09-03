@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# reconcile-region: exempt — a remediation workflow whose dry-run output is operator PROSE carrying absolute paths, not TSV finding rows. Rendering prose into a byte-compared region reintroduces the cross-checkout false failure the dist-path normalisation exists to prevent.
 # adopt-extension-checks.sh — give a consumer's extension checks the anchor and the
 # `gate_types:` declaration that make them LOADABLE.
 #

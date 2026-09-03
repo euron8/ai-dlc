@@ -121,3 +121,4 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I102 | a rotation destination is spelled the grammar's way, never as a dated archive |
 | I103 | the operator-citation PARSER is one rule in three copies, byte-identical |
 | I104 | the snapshot sprint_id READER is one expression in three copies |
+| I105 | every reconcile detector is DRIVEN into the report region or declared exempt |

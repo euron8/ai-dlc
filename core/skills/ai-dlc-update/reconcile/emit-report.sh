@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# reconcile-region: exempt — this file IS the driver that renders the region.
 # emit-report.sh — the reconcile's MECHANICAL sections, RENDERED by a driver, not composed by the
 # update skill's LLM. And a --verify that fails if a report's mechanical region is stale, missing,
 # or hand-edited.
@@ -13,7 +14,8 @@
 # because an LLM stands between the detector and the operator and can drop the line.
 #
 # So the mechanical sections are no longer narrated. This driver runs every mechanical detector
-# (preclassify, unregistered-drift, layer-drift, hard-blockers, relabel) and RENDERS them into one
+# -- the set is DERIVED and bound by I105, never the parenthetical list this line used to carry --
+# and RENDERS them into one
 # `BEGIN/END GENERATED: reconcile-mechanical` region, deterministically. The skill pastes that
 # region VERBATIM and writes only the genuinely semantic sections (the per-file 3-way prose merge
 # results, the operator questions) AROUND it. `--verify` re-renders and byte-compares — so a report
@@ -22,7 +24,7 @@
 # re-running detectors by hand. The residual LLM work (prose merges) is irreducibly semantic; the
 # mechanical findings are now un-droppable.
 #
-# The four detectors take args in DIFFERENT orders (a pre-existing quirk); this wraps them:
+# The detectors take args in DIFFERENT orders (a pre-existing quirk); this wraps them:
 #   preclassify.sh        <dist> <base> <theirs> <consumer>   KIND<TAB>path<TAB>cons<TAB>bucket
 #   unregistered-drift.sh <dist> <base> <consumer> <theirs>   STATUS<TAB>file<TAB>detail
 #   layer-drift.sh        <dist> <base> <theirs> <consumer>   STATUS<TAB>entry<TAB>tgt<TAB>detail
@@ -33,6 +35,18 @@
 #   relabel-…             <consumer> --dist <dist> --theirs <theirs>
 #   ledger-reverify.sh    <dist> <base> <consumer> <theirs>   STATUS<TAB>entry<TAB>detail
 #   retired-tokens.sh     <dist> <base> <theirs> <consumer> [path]  STATUS<TAB>path<TAB>token
+#   warn-shadowed-…       --root <consumer>                        STATUS<TAB>fork<TAB>detail
+#   predicate-diff…       <dist> <base> <theirs> <consumer>        STATUS<TAB>subject<TAB>detail
+#   retired-fixtures.sh   <dist> <theirs> <consumer>               STATUS<TAB>cons-path<TAB>detail
+#   retired-layer-contract.sh / retired-layer-passage.sh
+#                         <dist> <base> <theirs> <consumer>        STATUS<TAB>path<TAB>detail
+#
+# WHICH SCRIPTS BELONG HERE IS A DERIVED JOIN, NOT A HAND-LIST. Every `reconcile/*.sh` is either
+# invoked above or carries a `# reconcile-region: exempt — <reason>` line in its own header, and
+# `I105` fails the build on any file that is neither or both. Step 5 promises this region carries
+# "every mechanical finding, complete, from every detector"; before that binding existed the
+# promise was prose and six shipped classifiers sat outside it, so `--verify` could not fail on
+# an omission it could not see.
 #
 # Usage:
 #   emit-report.sh <dist> <base> <consumer> <theirs>                 # print the mechanical region
@@ -347,6 +361,32 @@ render() {
   else
     echo "DETECTOR-REFUSED  warn-shadowed-local-validators.sh exited ${sv_rc} without classifying, so this section is NOT a finding of 'none'. Run it directly against this consumer to see why: reconcile/warn-shadowed-local-validators.sh --root <consumer>"
   fi
+
+  # FOUR CLASSIFIERS THAT SHIPPED OUTSIDE THIS REGION WHILE STEP 5 PROMISED IT CARRIED THEM ALL.
+  # Each states in its own header that it is "a classifier, not a gate" emitting TSV for a caller
+  # to read, and each was left to be NARRATED — which is the failure this driver's own header
+  # says it exists to end: an LLM stands between the detector and the operator and can drop the
+  # line. `--verify` could not fail on their omission because they were never in the region to
+  # omit. `I105` now binds the set so a new detector cannot land outside it silently.
+  sub "Predicate reclassification (the incoming release moves an adjudication predicate over artifacts already stored):"
+  local pd
+  pd="$(bash "$SELF/predicate-differential.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' '$1!="PREDICATE-STABLE"{print $1"  "$2"  "$3}' | sort -u)"
+  none_or "$pd"
+
+  sub "Retired core fixtures the consumer still carries (core stopped shipping them; the operator retires the orphan):"
+  local rf
+  rf="$(bash "$SELF/retired-fixtures.sh" "$DIST" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' 'NF{print $1"  "$2"  "$3}' | sort -u)"
+  none_or "$rf"
+
+  sub "Retired contract shapes in consumer layer files:"
+  local rlc
+  rlc="$(bash "$SELF/retired-layer-contract.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' 'NF{print $1"  "$2"  "$3}' | sort -u)"
+  none_or "$rlc"
+
+  sub "Retired core passages still carried by a consumer layer file:"
+  local rlp
+  rlp="$(bash "$SELF/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' 'NF{print $1"  "$2"  "$3}' | sort -u)"
+  none_or "$rlp"
 
   echo
   echo "<!-- END GENERATED: reconcile-mechanical -->"

@@ -1,4 +1,5 @@
 # reconcile/lib.sh — helpers that MUST be identical across the drift classifiers.
+# reconcile-region: exempt — a sourced library, never invoked as a program.
 #
 # Not a general dumping ground. A helper earns a place here only when two tools
 # disagreeing about it is itself a bug — when the gate and the tool would reach

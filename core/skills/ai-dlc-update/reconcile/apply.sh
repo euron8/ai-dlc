@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# reconcile-region: exempt — the WRITER. It acts on the region after the operator approves it; it is not a finding in it.
 # apply.sh — the RESOLUTION half of ai-dlc-update. Executes every MECHANICAL resolution a pull
 # needs, and emits a worklist of the only things left: the genuinely SEMANTIC merges (which the
 # skill does inline) and the genuine OPERATOR decisions. The point of the whole skill is that the

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# reconcile-region: exempt — a remediation workflow that carries the operator through a block layer-drift.sh already reported in the region.
 # readopt-override.sh — carry the operator through a HARD-OVERRIDE-DRIFT-SECTION.
 #
 # `layer-drift.sh` says the shadowed core section changed, so the override is now

@@ -507,6 +507,32 @@ else
   bad "a detector exiting 2 did not produce DETECTOR-REFUSED (got: $(printf '%s' "$shad_body" | tr '\n' ' ' | head -c 120)) — the 0/2 split the detector's contract requires is not preserved by the driver"
 fi
 
+# --- Assertion 16: the four classifiers that shipped OUTSIDE the region now render in it ------
+# SKILL.md step 5 tells the operator this region carries "every mechanical finding, complete,
+# from every detector". It did not: four scripts each declaring themselves "a classifier, not a
+# gate" were left to be NARRATED, and `--verify` could not fail on their omission because they
+# were never in the region to omit.
+#
+# `I105` binds the SET — every reconcile/*.sh is invoked here or declares itself exempt with a
+# reason. That is a join over file contents and it stays true even if a call is wired to a
+# detector that emits nothing usable. This arm is the other half: the sections actually RENDER.
+i16_missing=""
+for i16_h in "Predicate reclassification" \
+             "Retired core fixtures the consumer still carries" \
+             "Retired contract shapes in consumer layer files" \
+             "Retired core passages still carried"; do
+  grep -qF "$i16_h" "$REGION" || i16_missing="$i16_missing | $i16_h"
+done
+# CONTROL in the same invocation: a heading that cannot be there must not be found, or a grep
+# matching everything would report all four present.
+if grep -qF "Retired core passages nobody ever wrote" "$REGION"; then
+  bad "FIXTURE BROKEN — the control heading matched, so assertion 16's four positives prove nothing"
+elif [ -z "$i16_missing" ]; then
+  ok "the four previously-narrated classifiers render as sections of the region (control: an impossible heading is absent)"
+else
+  bad "these classifier sections are missing from the rendered region:$i16_missing — their findings are back to being narrated, where an omission cannot be caught by --verify"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "reconcile-emit-report: PASS"; exit 0; fi
 echo "reconcile-emit-report: $fails assertion(s) FAILED" >&2

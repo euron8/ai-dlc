@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# reconcile-region: exempt — an action that moves CLOSED entries to an archive. It reports what it rotated, not a pull finding.
 # ledger-rotate.sh — move CLOSED push-candidate entries out of the live ledger and into an
 # archive, so the file the pull reads stays proportional to the work that is still open.
 #
