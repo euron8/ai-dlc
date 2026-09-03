@@ -44,7 +44,7 @@ When a step file says "run sub-step snapshot update", execute:
    once what they record has been carried into Recent Activity or Open Items.
    A `stopped` row surviving past the resume that read it is not history, it is
    an unbounded section — this one has overrun its byte budget before, which is
-   why `core/fixtures/inflight-row-shape/` exists.
+   why the `inflight-row-shape` fixture exists.
    Rows only — no prose, no struck-through history; `status` is how a row
    says it has delivered. This section must be written **at
    dispatch**, not only at the transition that follows it — a teammate
