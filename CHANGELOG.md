@@ -15,6 +15,54 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.487.0] - 2026-09-03
+
+### A detector nothing invoked, with a green fixture over it
+
+`reconcile/warn-shadowed-local-validators.sh` shipped, and no step, no driver and no other
+detector ran it. `SKILL.md` named it **0 times** (control: `layer-drift` 16). The two
+references that looked like callers are prose — `retired-fixtures.sh` calls it "the twin of
+`layer-drift.sh`'s EXTENSION-RETIRE-CANDIDATE" in a comment, and the enforcement map mentions
+its `LOCAL_DIR` default. Control: a driven detector appears as
+`bash "$SELF/layer-drift.sh"` at `emit-report.sh:301`.
+
+**Its own header named its twins and both of them were already driven.** `ledger-reverify`'s
+CLOSE-CANDIDATE and `layer-drift`'s EXTENSION-RETIRE-CANDIDATE render in the
+`reconcile-mechanical` region; this one did not. It is now driven there beside them.
+
+**`core/fixtures/shadowed-local-validators/` was green throughout**, which is the part worth
+keeping: a fixture proving a detector WORKS says nothing about whether the shipping program
+RUNS it. Reported by a consumer-side session doing a bare dry-run, not by any gate here.
+
+**The 0/2 split is preserved, and the call deliberately does not end in `|| true`** like its
+neighbours. The detector's contract, in its own words: "a caller must be able to tell 'no
+forks are shadowed' from 'this never ran', and those are the same empty output." Exit 2 is a
+refusal — an unresolvable root, an unsourceable `lib.sh`, or a close grammar `ledger_close_awk`
+would not lift. The section renders `DETECTOR-REFUSED` for it rather than `none`. `local` is
+declared separately from the assignment because `local x="$(cmd)"` returns the status of
+`local`, not of the command, which would have made the refusal read as success.
+
+**A heading rendering `none` cannot catch this defect**, so the arms seed a real row. Had the
+driver not called the detector, the section would render `none` — byte-identical to a detector
+that ran and found nothing. Five arms in `reconcile-emit-report`: the section exists; a CLOSED
+entry whose fork shadows a core validator reaches the operator as a RETIRE-CANDIDATE row; the
+OPEN entry's fork is NOT flagged; an unmutated sandbox control renders that row; and a stubbed
+detector exiting 2 renders DETECTOR-REFUSED and not `none`. Scored against the pre-fix driver,
+**exactly 4 fail** and the negative arm correctly passes.
+
+Ledger entries are seeded in the producer's shape — a `##` heading and a line-leading
+`ADOPTED UPSTREAM (…)` annotation, which is what the anchored close grammar in
+`ledger-reverify.sh` accepts.
+
+Fixture cost 14.3s → 16.9s solo for three extra renders. The suite pole is
+`layer-reference-resolution` at 257s loaded against this fixture's 31s, so the suite's wall
+clock is unaffected.
+
+**Still open, and not fixed here.** `SKILL.md:1024` says the region carries "every mechanical
+finding, complete, from every detector". `emit-report.sh` drives seven; several shipped
+detectors remain outside the region, so their findings are LLM-narrated — the failure that
+driver's own header (`:12-13`) says it exists to end. That is a separate change.
+
 ## [0.486.0] - 2026-09-02
 
 ### `git grep -E` implements neither `\b` nor `\s`, and answers a clean zero
