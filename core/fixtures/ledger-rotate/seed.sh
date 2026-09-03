@@ -113,6 +113,13 @@ BASE="$(git -C "$WORK/dist" rev-parse HEAD)"
 # it match.
 git -C "$WORK/dist" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -q --allow-empty \
   -m 'upstream sprint work landed: PC-S900 and PC-S901 absorbed'
+# PC-S910 GETS ITS OWN COMMIT, and that is not cosmetic. `named_ambiguous()` prints the sha it
+# found and `named_absorbed()` prints how many commits named the id, so folding a third prefix
+# into the message above would move the DETAIL column of every PC-S900 and PC-S901 row. The
+# assertion that reads those details (`pfx_n`, the 2 -> 3 arm) would then be reading a string
+# this addition changed rather than one the rotation changed.
+git -C "$WORK/dist" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -q --allow-empty \
+  -m 'upstream sprint work landed: PC-S910 absorbed'
 git -C "$WORK/dist" -c user.email=f@f -c user.name=f -c commit.gpgsign=false commit -q --allow-empty -m theirs
 THEIRS="$(git -C "$WORK/dist" rev-parse HEAD)"
 
