@@ -5155,3 +5155,150 @@ HEAD 1, tree 0, a second spelling of the row 0, claim restored 1, cross-referenc
 deleted 9, subject missing 9.
 
 verify: sh a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$a" ] || exit 9; s=$(grep -c 'say RESOLVED driver-self-update' "$a"); [ "$s" -eq 1 ] || exit 9; r=$(grep -cE '^[[:space:]]*err "the report at .*driver-self-update' "$a"); i=$(awk '/say RESOLVED driver-self-update/{p=2} p>0{print; p--}' "$a" | grep -c 'it is idempotent'); [ "$r" -ge 1 ] && [ "$i" -eq 0 ] && exit 0; exit 1
+## BL-131 — the mechanical union gate is prose, so nothing makes `apply` verify the approved report
+
+**LANDED (v0.488.0, verified 2f7a260b).** NARROWED on an operator ruling at batch 46: this entry
+closes against what `v0.488.0` delivered — `apply.sh` drives the union gate itself, so paths 2
+and 3 below are gated by a program and the receipt has read exit 0 since. Path 1, step 2's
+autonomous self-update, is NOT closed by that release and is filed on its own as `BL-155`, so
+that a green receipt no longer stands over an open half. Everything below this line is the
+entry as it was when the scope decision was still open.
+
+**Premise moved at `v0.488.0`; re-derived 2026-09-03 while shipping `BL-151`, and NOT closed.**
+`apply.sh` now drives the gate itself, so paths 2 and 3 below are closed and the receipt reads
+exit 0 — which is exactly the partial-fix state this entry says not to close on. Path 1, step 2's
+autonomous self-update, is untouched. Taking the rest means closing step 2 or narrowing this
+entry and filing step 2 separately; that is a scope decision and was not made here.
+
+`SKILL.md` step 7 states that `apply` "may write only after BOTH hold", the first being that
+`reconcile/emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>` exits 0, "a nonzero
+exit means the approval was given without sight of a finding, so STOP and re-emit rather than
+write". That is the only thing standing between a stale or hand-edited approval and a write into a
+consumer's core.
+
+**Nothing executes it.** Measured across the tracked tree: **zero** invocation sites for
+`emit-report.sh` outside its own file and the fixtures, against **76** for `preclassify.sh` under
+the identical grammar in the same invocation. `apply.sh` names `emit-report` exactly once, in a
+comment. So the gate runs if and only if the narrating agent chooses to run it, and a run that
+skips it is indistinguishable from one that ran it and passed — there is no artifact either way.
+
+**THREE PATHS REACH CONSUMER STATE WITHOUT THE GATE, AND THE FIRST IS THE ONE A READER WILL NOT
+EXPECT.** They are ranked by what they write, and only the second is the one this entry was first
+written about:
+
+1. **Step 2's self-update.** `SKILL.md:396-409` cuts a branch, writes from `theirs` at the
+   `map_consumer()` destinations, advances `skill_version`/`skill_commit`, pushes and auto-merges
+   — in its own words, **"no operator gate"**. No report is produced at all, so there is no region
+   to verify and nothing for a rendered-identity fix to reach. `SKILL.md:160-161` records that this
+   runs on EVERY invocation, "step 2's autonomous push→auto-merge writes to `origin` even on a bare
+   dry-run". This is distribution `core/` content landing on a consumer with no approval artifact
+   anywhere in the path.
+2. **Step 7's apply.** `apply.sh` never invokes the gate; the prose sits beside it.
+3. **`apply.sh --finish`.** Writes no core but writes the stamp, which is the next pull's merge
+   base. `v0.464.0` closed the identity half of this one by reading `.claude/.ai-dlc-applying`;
+   it did not make the gate run.
+
+**So a check sited inside `apply.sh` — the obvious repair — closes 2 and 3 and leaves 1 open**,
+which is why the siting has to be decided against all three rather than against the one that
+prompted the entry.
+
+**This is the `CLAUDE.md` case in its purest form**: a prohibition whose enforcement is an
+instruction to a reader. `emit-report.sh:8-13` states the principle in its own header — the region
+exists because "an LLM stands between the detector and the operator and can drop the line" — and
+the gate guarding that region is itself a line an LLM can drop. The two fixes shipped in `v0.464.0` both sharpen what the gate DETECTS —
+the region now carries the `theirs` `core/` tree, so a moved symbolic ref cannot render identically
+— and neither of them causes the gate to be RUN. They are strictly downstream of this entry.
+
+**The fix is not simply "call it from `apply.sh`", which is why this is filed rather than taken.**
+`apply.sh` receives four paths and no report path; it does not know which report the operator
+approved, and inventing a convention for that is a change to the write path with real wedge risk
+for a consumer whose report sits under a name the convention does not predict. The candidate shapes
+— `apply.sh` taking the report as a required argument, or the ordinary run recording the verified
+report's digest into `.claude/.ai-dlc-applying` beside the `theirs:` it already records — differ in
+what they do to a consumer mid-pull, and that has to be measured on a scratch install before
+either is built.
+
+Discovered while shipping `v0.464.0`. Not filed by the reference consumer and carries no `PC-` id;
+it is an ai-dlc-internal discovery and ranks below any PC-backed entry under the provenance-first
+rule.
+
+**Tiered DEFECT.** Nothing is corrupted today. What is missing is the guarantee that the gate ran
+at all, and the symptom of a gate that did not run is a clean report.
+
+The receipt is STRUCTURAL and carries its own control, because a zero here is the claim being made:
+it counts non-comment invocation lines of `emit-report.sh` in tracked `.sh` files outside
+`core/fixtures/`, having first asserted that the same grammar finds callers of `preclassify.sh` —
+a grammar that finds neither has failed rather than found an absence. It exits 1 today, 0 once any
+executable invokes the gate, and 9 if the subject is missing or the control does not fire. Scored
+both directions: 1 against the tree, and 0 against a scratch copy with one real call site seeded.
+
+**The receipt is a FLOOR and will go green on a partial fix — that is stated rather than hidden,
+because it is the shape this repo closes entries on by mistake.** Any executable call site
+satisfies it, so wiring the gate into `apply.sh` flips it to 0 while path 1 above, step 2's
+autonomous self-update, is untouched and still writes core with no report in existence. Do not
+close this entry on the receipt alone: say what was done about step 2, or narrow the entry to
+paths 2 and 3 and file step 2 separately.
+
+verify: sh e=core/skills/ai-dlc-update/reconcile/emit-report.sh; [ -f "$e" ] || exit 9; L=$(git ls-files "*.sh" | grep -vE "^core/fixtures/"); c=$(printf "%s\n" "$L" | grep -v "reconcile/preclassify.sh" | xargs grep -hE "(bash|sh) [^ ]*preclassify\.sh" 2>/dev/null | grep -vcE "^[[:space:]]*#"); [ "${c:-0}" -gt 0 ] || exit 9; n=$(printf "%s\n" "$L" | grep -v "reconcile/emit-report.sh" | xargs grep -hE "(bash|sh) [^ ]*emit-report\.sh" 2>/dev/null | grep -vcE "^[[:space:]]*#"); [ "${n:-0}" -gt 0 ] && exit 0; exit 1
+
+## BL-154 — a rotation flips a sibling's row between `NAMED-UPSTREAM` and `NAMED-UPSTREAM-AMBIGUOUS` when a two-member prefix has one member annotated, and step 8 reads that as a sweep
+
+**LANDED (v0.495.0, verified c7ea323f).** `prefix_entry_count()` now counts the ledger corpus —
+every entry line in both files, open or closed — so annotating moves nothing between the files
+and rotating moves one entry between them, and the count is invariant under both steps by
+construction. Receipt drives the shipping reverify and rotator over a two-member prefix and
+exits 0 on the fix, 1 on the reverted counter, 9 on a counter stubbed to a constant of 1 or of
+2 — the second stub is the reason the receipt also carries a one-member prefix that must stay
+uniquely attributed.
+
+Filed by the reference consumer as
+`PC-S337-ROTATE-ACCEPTANCE-TEST-FALSE-FAILS-WHEN-A-PREFIX-CROSSES-THE-ONE-VS-MANY-THRESHOLD`
+(2026-08-26), from its own ledger: `NAMED-UPSTREAM PC-S336-STEP-1-AUTOPUSH-…` before a
+`ledger-rotate.sh --apply` and `NAMED-UPSTREAM-AMBIGUOUS PC-S336` after it, 89 rows either side,
+the entry present once in the live file and never in the archive. Consumer-facing: the
+acceptance test in `SKILL.md` step 8 named that exact comparison and said a changed row set
+means a live entry was swept. DEFECT.
+
+**Mechanism, driven rather than read.** `prefix_entry_count()` counted OPEN live labels unioned
+with ARCHIVED labels. `flush()` in the verdict extraction prints an entry only
+`if (has_verify && !closed …)`, so an entry carrying `ADOPTED UPSTREAM` is dropped from the live
+side at the moment it is annotated, and it is not on the archive side until `--apply` moves it.
+On neither side, the count dips; on a three-member prefix that is a changed number inside an
+identical row (`BL-068`'s shape), and on a two-member prefix it is a count of ONE — the value at
+which `named_absorbed()`'s prefix fallback fires instead of `named_ambiguous()`. Reproduced by
+driving the shipping scripts on a scratch consumer through three states: both members live
+(`NAMED-UPSTREAM-AMBIGUOUS PC-S900`), one annotated (`NAMED-UPSTREAM PC-S900-BRAVO-…`), rotated
+(`NAMED-UPSTREAM-AMBIGUOUS PC-S900`). Two rows either side, the survivor emitting a verdict in
+every state, the moved entry in the archive and nowhere else. A second hand reproduced it
+independently and added the discriminating control: on the post-rotate tree, moving the archive
+file aside reverts the flip and moving it back restores it.
+
+**`BL-068` rejected this counter change at `v0.377.0` and its measurement was not wrong — it was
+taken at rest.** It widened the live side on the reference consumer's ledger as it stood and
+counted zero verdict flips; a ledger at rest holds no annotated-but-unrotated entry, so the
+transient this defect lives in was not in that population. The consumer's diff was taken ACROSS a
+live rotation, which is the only moment the state exists. Re-measured on a copy of the consumer's
+ledger at rest with the fix: 116 rows either side, 0 row-set changes, 3 displayed counts moved
+(`PC-S297` 18→19, `PC-S303` 11→12, `PC-S308` 7→9 — the annotated-but-unrotated entries now
+counted), 7 `NAMED-UPSTREAM-AMBIGUOUS` rows either side. The retained-copy double count that
+entry also named is closed by skipping `(original text, retained for the record)` headings in
+the corpus parser: a copy is a second heading for an entry already counted.
+
+**The fixture arms that guarded the old behaviour asserted the defect.** `ledger-rotate/run.sh`
+required the bytes to DIFFER and the `PC-S900` count to rise `2 -> 3` across the move — true of
+the counter as it was, and the same mechanism that one member fewer flips a row. Both are
+re-anchored on the stable count (`3 -> 3`, bytes identical), and assertion 4c walks a two-member
+`PC-S910` pair through annotate and rotate with a mutant that reverts the counter to its
+open-union-archive body and shows the flip. The archive-arm mutant `BL-068` added survives
+unchanged: deleting the archive arm still turns a correct ambiguity into a wrong attribution.
+
+**The consumer's own receipt was replaced before the fix landed, for two measured reasons.**
+`theirs_has A B` closes when EITHER substring is absent — `all_present()` is an AND over
+substrings, so two of them is a disjunction of two close conditions, the opposite of what the
+entry's receipt note argued. And both substrings sit at column 6 of wrapped continuation lines
+in `SKILL.md`, so of 61 reflows of that bullet at width 90, 12 closed the receipt with the
+defect verbatim, while the legitimate fix that widens the carve-out and keeps both clauses read
+STILL-LIVE. The receipt below reads no prose.
+
+verify: sh R=core/skills/ai-dlc-update/reconcile; [ -f "$R/ledger-reverify.sh" ] || exit 9; w=$(mktemp -d) || exit 9; g() { git -C "$w/d" -c user.email=r@r -c user.name=r -c commit.gpgsign=false "$@"; }; git -C "$w" init -q d && echo 1 > "$w/d/VERSION" && g add VERSION && g commit -qm base && b=$(g rev-parse HEAD) && g commit -q --allow-empty -m 'absorbed PC-S900 and PC-S901' && t=$(g rev-parse HEAD) || { rm -rf "$w"; exit 9; }; mkdir -p "$w/c/_bmad-output/ai-dlc-update"; L="$w/c/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; printf '# L\n\n## PC-S900-A\n\nverify: theirs_lacks VERSION "ZZA"\n\n## PC-S900-B\n\nverify: theirs_lacks VERSION "ZZB"\n\n## PC-S901-ONLY\n\nverify: theirs_lacks VERSION "ZZC"\n' > "$L"; rs() { bash "$R/ledger-reverify.sh" "$w/d" "$b" "$w/c" "$t" "$L" 2>/dev/null | cut -f1,2 | sort; }; s1=$(rs); grep -qxF "$(printf 'NAMED-UPSTREAM-AMBIGUOUS\tPC-S900')" <<<"$s1" || { rm -rf "$w"; exit 9; }; grep -qxF "$(printf 'NAMED-UPSTREAM\tPC-S901-ONLY')" <<<"$s1" || { rm -rf "$w"; exit 9; }; perl -0pi -e 's/(## PC-S900-A\n)/$1\n**ADOPTED UPSTREAM (v0.1.0, verified 2026-01-01)**\n/' "$L"; s2=$(rs); bash "$R/ledger-rotate.sh" "$L" --apply >/dev/null 2>&1 || { rm -rf "$w"; exit 9; }; s3=$(rs); grep -qxF "$(printf 'NAMED-UPSTREAM-AMBIGUOUS\tPC-S900')" <<<"$s3" || { rm -rf "$w"; exit 9; }; rm -rf "$w"; [ "$s2" = "$s3" ]
+

@@ -15,6 +15,73 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.495.0] - 2026-09-03
+
+### A rotation flipped a sibling's row between `NAMED-UPSTREAM` and `NAMED-UPSTREAM-AMBIGUOUS`, and step 8's acceptance test called that a sweep
+
+Closes `PC-S337-ROTATE-ACCEPTANCE-TEST-FALSE-FAILS-WHEN-A-PREFIX-CROSSES-THE-ONE-VS-MANY-THRESHOLD`
+(`BL-154`), filed by the reference consumer from its own ledger on 2026-08-26. Batch 46 of the
+ledger drain; the sweep at its start was empty of new work and the standing corpus decided it.
+
+**The defect.** `prefix_entry_count()` in `reconcile/ledger-reverify.sh` counted OPEN live entries
+unioned with ARCHIVED labels. An entry annotated `ADOPTED UPSTREAM` but not yet rotated was on
+neither side — the verdict extractor drops it the moment it is annotated, and the archive does not
+hold it until `--apply` — so the count dipped at the annotate and returned at the rotate. On a
+three-member prefix that was a changed number inside an identical row, the shape `BL-068` closed at
+`v0.377.0` by correcting the acceptance test to compare the row SET. On a two-member prefix the dip
+reached ONE, which is the value at which `named_absorbed()`'s prefix fallback attributes the
+survivor instead of `named_ambiguous()` withholding it — so the row itself flipped across a rotation
+that swept nothing, on exactly the comparison step 8 prescribes, and step 8 said that meant a live
+entry was swept. The consumer's diff: `NAMED-UPSTREAM PC-S336-…` before, `NAMED-UPSTREAM-AMBIGUOUS
+PC-S336` after, 89 rows either side.
+
+**The fix.** The count is taken over the ledger CORPUS — every entry line in both files, open or
+closed, by one parser (`corpus_labels`), a retained copy skipped because it is a second heading
+for an entry already counted. Annotating moves nothing between the files and rotating moves one
+entry between them, so the count is invariant under both by construction. Driven on a scratch
+consumer through all three states, the row set now holds; on a copy of the consumer's ledger at
+rest, 116 rows either side, 0 row-set changes, 3 displayed counts moved, 7 ambiguous rows either
+side.
+
+**`BL-068` rejected this counter change and its measurement was right about the wrong population.**
+It widened the live side on a ledger AT REST and flipped zero verdicts; the transient this defect
+lives in exists only between the annotate and the rotate, and a resting ledger has no such entry.
+A census built here to argue the same point predicted six flips at full-drain size and the shipping
+program returned an identical row set — a full drain annotates every member of every prefix, so no
+row survives to flip. The discriminating input is a PARTIAL drain over a two-member prefix, and the
+consumer's own diff was one.
+
+**`core/fixtures/ledger-rotate/`** asserted the defect: two arms required the bytes to DIFFER and
+the `PC-S900` count to rise `2 -> 3` across the move. Both are re-anchored on the stable count, and
+assertion 4c walks a two-member `PC-S910` pair through annotate and rotate with a mutant that
+reverts the counter to its open-union-archive body and shows the flip. The `BL-068` archive-arm
+mutant survives unchanged. 60 arms, about 6s solo against a recorded pole of 266s. The fixture
+ships, so fixture and fix go out in this one release.
+
+**The consumer's own receipt was replaced before the fix landed.** `theirs_has A B` closes when
+EITHER substring is absent — `all_present()` is an AND, so two substrings is a disjunction of two
+close conditions — and both substrings sat at column 6 of wrapped lines in `SKILL.md`, so 12 of 61
+reflows closed it with the defect intact while a legitimate fix that kept both clauses read
+STILL-LIVE. `BL-154`'s receipt drives the shipping reverify and rotator and reads no prose: fixed 0,
+reverted counter 1, a counter stubbed to 1 or to 2 both 9.
+
+**`SKILL.md` step 8, `ledger-rotate.sh`'s header and its printed guidance** now state the
+invariant — row set by status and subject, counts do not move, a status change is the signal —
+instead of carving out the count movement.
+
+**`BL-131` is NARROWED on an operator ruling and rotated**, landed against `v0.488.0`, which gated
+the two `apply.sh` write paths it named. Its third path — step 2's autonomous self-update, which
+writes `core/skills/ai-dlc-update/**` onto a consumer and auto-merges with no approval artifact in
+the path — is filed as `BL-155` with its receipt limits stated.
+
+**Also measured.** The consumer filed two candidates mid-batch,
+`PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT` and
+`PC-S308-AI-DLC-ACKNOWLEDGE-ROUTE-DENIED-SUBAGENT-CANNOT-CLEAR`; both receipts name consumer-shaped
+paths (`core/scripts/ai-dlc/…`, `core/.claude/hooks/…`) that resolve to nothing in this tree, so
+`theirs_has` on them is vacuous at both refs. The indented-fence defect reproduces here in one
+command with a control (`0 block(s)` indented against `1 block(s)` unindented, both `OK`). Neither
+is taken; both are recorded in the drain plan for the next batch and the next pull brief.
+
 ## [0.494.0] - 2026-09-03
 
 ### v0.493.0's post-apply diagnosis read the in-flight marker, which is true by construction, and its advice could stamp an unwritten tree
