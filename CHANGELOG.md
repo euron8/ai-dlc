@@ -15,6 +15,43 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.492.0] - 2026-09-03
+
+### The v0.491.0 fixture walked up for a VERSION file, and a consumer has none
+
+`core/fixtures/preclassify-rename-row/run.sh` resolved its root with
+`while ...; do [ -f "$_d/VERSION" ] && break; done`, copied from
+`settings-merge-unparseable-template/run.sh`, where that walk is correct — that fixture is
+`.dist-only`. This one SHIPS. An installed consumer's stamp is `.claude/.ai-dlc-version` and
+there is no `VERSION` at its root, so the walk found nothing, the fixture took its own
+FIXTURE ERROR arm and exited 2, and the consumer's pre-push — which reads a nonzero `run.sh`
+as FAIL — refused the push that lands v0.491.0. Reported by the reference consumer against the
+0.489.0 → 0.491.0 apply, with `context-sensor/run.sh` green in the same run as the control.
+
+**It shipped because the rule was followed by reading, not by running.** `consumer-boundary.md`
+says to verify path resolution on a tree built by `install.sh` into an empty directory. The
+v0.491.0 gate was green from the repo root, where the walk finds `VERSION` one hop up, and the
+installed-layout run was never taken. Taken now, on a tree built exactly that way: the shipped
+copy exits 2 with the consumer's own error text, the fixed copy passes 6 of 6, and
+`context-sensor` passes 99 of 99 beside it.
+
+**The fix** is the resolver `context-provenance/run.sh` already documents: root at the fixture's
+own location, three levels up is the project root in BOTH layouts, and name the reconcile
+directory at its distribution path and its consumer path side by side. No marker walk.
+
+**`I106` is the mechanism, because I33, I33b and I33c could not see this.** All three check the
+SHAPE of a chain that reaches a core subtree; none checks the MARKER a fixture walks for, and
+a marker walk is a fourth spelling of the same consumer-side failure. I106 scans every fixture
+directory carrying no `.dist-only` — the ship set, derived as `install.sh` derives it — for a
+non-comment `[ -f "$x/VERSION" ]` or `[ ! -f "$x/VERSION" ]`, and fails the push on one.
+**Measured before shipping:** the grammar matches 9 files across `core/fixtures/`; 8 are
+`.dist-only`, where the walk is the right resolver for a battery that only runs here; the ninth
+was the defect. After the fix it matches 0 shipping files. Probe both ways, before the corpus:
+the if/break spelling reported, the `while ! -f` spelling reported, and a three-up resolver
+that quotes the walk only in a comment stays quiet. A derived ship set of zero is an
+instrument failure, not a pass. `docs/invariant-index.md` re-rendered: the renderer's ID
+grammar admits suffixes a–c only, which is why this is I106 and not I33d.
+
 ## [0.491.0] - 2026-09-03
 
 ### The pull classifier read a git rename as one six-field row

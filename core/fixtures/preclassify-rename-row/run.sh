@@ -28,18 +28,20 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-ROOT=""
-_d="$HERE"
-while [ "$_d" != "/" ] && [ -n "$_d" ]; do
-  if [ -f "$_d/VERSION" ]; then ROOT="$_d"; break; fi
-  _d="$(dirname "$_d")"
-done
-[ -n "$ROOT" ] || { echo "FIXTURE ERROR: no VERSION marker above $HERE" >&2; exit 2; }
 
+# TWO LAYOUTS, BOTH ROOTED AT THIS FILE, AND NO VERSION-MARKER WALK. This fixture SHIPS:
+# install.sh lands core/fixtures/<x> at tests/fixtures/<x>, and an installed consumer has no
+# VERSION file at its root (its stamp is .claude/.ai-dlc-version), so a walk up for one
+# resolves to nothing there and the fixture exits 2 on every consumer push -- which is
+# exactly how v0.491.0 shipped it, copied from a .dist-only sibling where the walk is fine.
+# Three levels up from this file is the project root in BOTH layouts; the reconcile dir is
+# then named at its distribution path and its consumer path. I106 fails the push on a
+# shipping fixture that walks for VERSION.
+ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 for cand in "$ROOT/core/skills/ai-dlc-update/reconcile" "$ROOT/.claude/skills/ai-dlc-update/reconcile"; do
   [ -f "$cand/preclassify.sh" ] && RECON="$cand" && break
 done
-[ -n "${RECON:-}" ] || { echo "FIXTURE ERROR: reconcile/preclassify.sh not found in either layout" >&2; exit 2; }
+[ -n "${RECON:-}" ] || { echo "FIXTURE ERROR: reconcile/preclassify.sh not found in either layout below $ROOT" >&2; exit 2; }
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/pc-rename.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
