@@ -37,9 +37,86 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 45 SHIPPED AS `v0.493.0`, CORRECTED BY `v0.494.0`. THE CONSUMER IS AT `0.492.0`, THE GAP IS TWO, AND BATCH 46 HAS NO PRE-CHOSEN SUBJECT.
+### BATCH 46 SHIPPED AS `v0.495.0`. THE CONSUMER IS AT `0.492.0`, THE GAP IS THREE, PENDING IS TWO, AND THE SWEEP FOR BATCH 47 IS NOT EMPTY — THREE `PC-S308-*` CANDIDATES WERE FILED DURING BATCH 46.
 
-This block replaces the batch-45 record below it. Every figure here was re-derived on 2026-09-03
+This block replaces the batch-46 record below it. Every figure here was re-derived on 2026-09-03
+after the merge, against the working tree with the controls in the same invocation; re-derive
+them again rather than reading them.
+
+**`VERSION` IS `0.495.0`, SO BATCH 47 RELEASES AS `0.496.0`.** Re-derive `VERSION` and add one.
+Batch 46 merged at `fec5c5de` (PR #608, release commit `ff368078`), closing
+`PC-S337-ROTATE-ACCEPTANCE-TEST-FALSE-FAILS-WHEN-A-PREFIX-CROSSES-THE-ONE-VS-MANY-THRESHOLD` as
+`BL-154` and rotating it (archive 69 → 71, live 86 → 84 — the second rotation is `BL-131`,
+NARROWED on an operator ruling against `v0.488.0`, with its step-2 autonomous self-update path
+filed as `BL-155`). `named_absorbed()` resolves the id to exactly one commit at `0.495.0`. No
+correction release: both adversarial hands reported BEFORE the merge, for the first time in this
+program, and the fixture hand's blocker — two existing arms in `ledger-rotate/run.sh` asserted the
+DEFECT as a requirement (bytes must differ, count must rise `2 -> 3`) and went red on the fix —
+was fixed in the release commit rather than one later.
+
+**THE DEFECT WAS A TRANSIENT, AND THE MEASUREMENT THAT HAD REJECTED THE FIX WAS TAKEN AT REST.**
+`BL-068` (`v0.377.0`) built the same counter widening, counted zero verdict flips on the consumer's
+ledger AS IT STOOD, and rejected it. A ledger at rest has no annotated-but-unrotated entry, so the
+population could not contain the state the defect lives in. The consumer's diff was taken ACROSS a
+rotation. **And this session's own census to reopen it was wrong in the other direction**: it
+predicted six flips at full-drain size and the shipping program returned an identical row set —
+a full drain annotates every member of every prefix, so no row survives to flip. The
+discriminating input is a PARTIAL drain over a two-member prefix, which is what the consumer's
+filing was. Drive the shipping program; a census is a second implementation. Current exposure on
+the reference consumer at rest is nil (0 of 21 prefixes have exactly two corpus members; control 4
+of 21 with one), which is a corpus property and not a reason to have left it.
+
+**`theirs_has A B` IS A DISJUNCTION OF TWO CLOSE CONDITIONS, NOT A CONJUNCTION.** `all_present()`
+is an AND over substrings, so the row closes the moment ANY one is absent. The consumer's receipt
+note reasoned "both must be present for the entry to be live" and concluded the opposite. Both of
+its substrings sat at column 6 of wrapped lines in `SKILL.md`, and 12 of 61 reflows closed it with
+the defect verbatim, while a legitimate fix keeping both clauses read STILL-LIVE. It will read
+`CLOSE-CANDIDATE` on the next pull for a correct reason — the second substring is gone — and the
+consumer should still re-anchor it; `BL-154`'s receipt drives the shipping reverify and rotator and
+is the shape to offer.
+
+**THE CONSUMER PULLED NOTHING THIS BATCH.** Stamp `0.492.0` / `2f1ee8bc` on all four fields
+against `VERSION` `0.495.0`: gap THREE, PENDING 2 (`PC-S309` at `0.493.0`, corrected `0.494.0`;
+`PC-S337` at `0.495.0`). `0.493.0`/`0.494.0` change `apply.sh`, a bootstrapping file, so the
+floor for the next brief is `0.494.0`; `0.495.0` changes `ledger-reverify.sh` and
+`ledger-rotate.sh`, which step 8 runs AFTER the machinery slice lands, so the fix protects the
+pull that delivers it. The second test is banked for this batch: the consumer's installed
+`ledger-reverify.sh` is byte-identical to the pre-fix distribution copy (`cmp -s`, control: the
+fixed copy differs), and the differential on a copy of its real ledger at rest is 116 rows either
+side, 0 row-set changes, 3 displayed counts moved — the null's limit is that the transient is
+unobservable at rest, stated rather than hidden. A pull is operator-initiated; readiness is not
+authorization.
+
+**THE LEDGER MOVED THREE TIMES DURING THIS BATCH AND NONE OF THEM WAS THIS SESSION.** md5
+`30b64caf…` → `5d1fd6ac…` → `d8902b6c…`, porcelain 4 → 8 → 2 → 5, a graph session
+(`graph-96`) live throughout, this session issuing no write to `/Users/n8/git/graph` (every probe
+copied the ledger out to `mktemp`). **Live 73 → 76, cited 45 → 46, unfiled 28 → 30**, archive 145.
+Three new candidates, all filed 2026-09-03 by sprint-308 sessions:
+`PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT`,
+`PC-S308-AI-DLC-ACKNOWLEDGE-ROUTE-DENIED-SUBAGENT-CANNOT-CLEAR`, and
+`PC-S308-VALIDATE-ADVERSARIAL-CONVERGENCE-SCOPE-GREW-MISFIRES-ON-PASS-1` (the third landed after
+the merge and has not been read). The first two carry `theirs_has` receipts naming CONSUMER-shaped
+paths (`core/scripts/ai-dlc/…`, `core/.claude/hooks/…`) that resolve to nothing in this tree — the
+real files are `core/scripts/validate-artifact-derivations.sh` and
+`core/hooks/ai-dlc-acknowledge.sh` — so both are vacuous at both refs and will read
+`NEEDS-REVIEW`. The indented-fence defect reproduces here in one command with a control: a
+```` ```derived ```` fence indented under a list item reports `0 block(s)` and `OK`, the same content
+unindented reports `1 block(s)` — this repo's signature class. Goal partition **19 DISCHARGED /
+27 in flight / 30 untouched**, TERMINAL **33**. The operator was asked mid-batch whether to switch
+to either of the first two and chose to finish `PC-S337`; that answer was about batch 46's scope
+and is NOT a ruling on batch 47's. **Report the three and ask.**
+
+**`PC-S999-NEVER` IS NOT AN IMPOSSIBLE ID ON THE COMMIT-MESSAGE CHANNEL.** `git log -F --grep`
+returns 2 for it on `origin/main`, because docs commits quote the derive block. Action 1 already
+says so; this batch tripped it anyway. Use an id no commit has ever quoted.
+
+**TWO SMALL TOOL FACTS.** A markdown section with backticks cannot be written through a heredoc
+inside `bash -c '…'` — the outer quoting breaks and nothing is written; use the Write tool and
+splice. `git cherry-pick` has no `-q`.
+
+### BATCH 45 SHIPPED AS `v0.493.0`, CORRECTED BY `v0.494.0` — THE BLOCK ABOVE REPLACES THIS ONE. TAKE THE STATE FROM THERE.
+
+This block was the batch-46 resume record. Every figure here was re-derived on 2026-09-03
 after the merge, against the working tree with the controls in the same invocation; re-derive
 them again rather than reading them.
 
@@ -4350,11 +4427,19 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), THEN PICK BATCH 46's SUBJECT.**
-   Batch 45 is SHIPPED — `v0.493.0` at `cb4fff3d`, corrected by `v0.494.0` at `04a136e0`,
-   `PC-S309` closed as `BL-151` and rotated. Do not re-scope onto it. No subject is pre-chosen for batch 46: the sweep decides, and
-   if it is empty of new work the standing corpus in the resume block does, ranked by provenance
-   then consequence.
+1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), THEN REPORT THE THREE NEW
+   `PC-S308-*` CANDIDATES AND ASK BEFORE SCOPING BATCH 47.** Batch 46 is SHIPPED — `v0.495.0`
+   at `fec5c5de` (PR #608), `PC-S337-ROTATE-ACCEPTANCE-TEST-…` closed as `BL-154` and rotated;
+   batch 45 is SHIPPED — `v0.493.0` at `cb4fff3d`, corrected by `v0.494.0` at `04a136e0`,
+   `PC-S309` closed as `BL-151` and rotated. Do not re-scope onto either. The sweep is NOT empty:
+   the consumer filed three candidates on 2026-09-03 while batch 46 ran (they are named in the
+   resume block, with what was measured about each), the operator's mid-batch answer was to finish
+   `PC-S337` and was not a ruling on them, and this file's own standing rule is "if the sweep finds
+   something new, report it and ask before re-scoping". Read all three in the consumer's ledger
+   first — the third has not been read at all — and put the reproduction of the indented-fence one
+   and the consequence of the route-denied one into the question, with a marked recommendation.
+   Tell the consumer, in the next brief, that two of the three receipts name paths that resolve
+   nowhere in this tree.
 
    **ESTABLISH WHICH STATE YOU ARE IN BY THE COMMIT MESSAGE, NEVER BY VERSION DISTANCE.** The
    previous revision of this action said "at `0.490.0` or higher batch 45 HAS shipped" — and it
@@ -4375,11 +4460,12 @@ so no block written before it changes verdict.
    unfixed finding is stated in the v0.494.0 message rather than fixed: a hand-edited report on a
    stamped tree is diagnosed as post-apply, because the stamp cannot see the edit.
 
-   **`BL-131` NEEDS A SCOPE DECISION, NOT A FIX.** Its receipt has read exit 0 since `v0.488.0`
-   wired the gate into `apply.sh`, which is the partial-fix state the entry itself forbids closing
-   on; batch 45 annotated it and left step 2's autonomous self-update open. Either close step 2 or
-   narrow the entry and file step 2 separately — say which, and ask the operator if it is not
-   obvious. It carries no `PC-` id and ranks below any PC-backed subject.
+   **`BL-131` IS DECIDED AND ROTATED; `BL-155` IS WHAT REMAINS.** The operator ruled at batch 46:
+   narrow it and file step 2 separately. `BL-131` closed against `v0.488.0` and is archived;
+   `BL-155` carries step 2's autonomous self-update — `core/skills/ai-dlc-update/**` written onto
+   a consumer and auto-merged with no approval artifact in the path — with its receipt limits
+   stated (prose-keyed, closable by rewording, replace with one that drives the gate once a gate
+   exists). It carries no `PC-` id and ranks below any PC-backed subject.
 
    **DERIVE THE READER SET OF WHATEVER YOUR SUBJECT TOUCHES, AND DO NOT TRUST THE ONE THE FILING
    NAMES. THIS IS BATCH 44's BEST FINDING AND IT COST ONE GREP.** The filing named one reader of
@@ -4855,9 +4941,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 30b64caf... after the 0.489.0 -> 0.492.0 pull's ledger rotation; it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
-   wc -l < /tmp/live.txt    # 73 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. UNCHANGED across two pulls now, and the ledger still moved both times
-   wc -l < /tmp/unfiled.txt # 28 -- PC-S309 left the set at batch 45 by being cited by BL-151 and rotated into docs/backlog.archive.md
+   md5 -q "$L"              # d8902b6c... after three consumer writes during batch 46; it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
+   wc -l < /tmp/live.txt    # 76 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. ROSE 73 -> 76 during batch 46: three PC-S308-* filings, no rotation
+   wc -l < /tmp/unfiled.txt # 30 -- PC-S337 left the set at batch 46 by being cited by BL-154 and rotated into docs/backlog.archive.md; the three PC-S308-* filings joined it
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -4865,9 +4951,11 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 73 LIVE CANDIDATES, 45 CITED, 28 UNFILED** — re-derived after batch 45's
-   merge at `cb4fff3d`, on the ledger as the `0.489.0 → 0.492.0` pull left it (md5 `30b64caf…`,
-   archive 145). The paragraph below records the previous reading. **Live HELD at 73 across a ledger whose md5 moved**,
+   **THE BASELINE IS 76 LIVE CANDIDATES, 46 CITED, 30 UNFILED** — re-derived after batch 46's
+   merge at `fec5c5de`, on the ledger after the consumer's three mid-batch writes (md5
+   `d8902b6c…`, archive 145). Live ROSE 73 → 76 on three `PC-S308-*` filings and nothing was
+   rotated; batch 45's reading was 73 / 45 / 28 at md5 `30b64caf…`. The paragraph below records
+   the reading before that. **Live HELD at 73 across a ledger whose md5 moved**,
    because `PC-S308-HANDOFF-STOPPED-STATUS-NOT-IN-VALIDATOR-WHITELIST` was annotated `ADOPTED
    UPSTREAM` and rotated into the archive (142 → 143) in the same pull that filed `PC-S309`. An
    unmoved live count is not an unmoved ledger, and here it concealed two events at once. The
