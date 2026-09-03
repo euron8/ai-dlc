@@ -76,6 +76,32 @@ the first, `idle-reusable`, and says the rename was closed "in the validator onl
 control in the same invocation), and is bound by no invariant. **A one-token whitelist miss
 reached a consumer because nothing joins the four declarations.**
 
+**DERIVING THE READER SET FOUND A SECOND DEFECT THE FILING NEVER MENTIONED, AND IT IS THE
+BATCH'S BEST FINDING.** The filing named one reader. Deriving all of them — five non-fixture
+parsers of the section, of which only two touch the TOKEN — turned up
+`core/hooks/ai-dlc-continue.sh` Check 0 comparing the WHOLE status cell to `in-flight` where its
+sibling splits the leading token. Driven on the four real forms, one cell varied: **1 blocked, 3
+ALLOWED**, and the three it let through (`in-flight, since <ts>`, `in-flight, retrying Write`,
+`in-flight (VERIFY pass, ...)`) are the three the consumer actually writes. **The guard that stops
+a handoff while a teammate is still running failed OPEN on three quarters of its own population.**
+Fixed and rotated as `BL-149`. **Derive the reader set; do not trust the one a filing names.**
+
+**AND THE TWO HALVES WERE NOT SEPARABLE, WHICH IS WHY BOTH SHIPPED TOGETHER.** Making Check 0
+fire correctly BLOCKS the handoff until the row is rewritten to `stopped` — the token the budget
+validator rejected until this release. Shipped alone it converts a guard that fails open into a
+handoff that WEDGES. **Ask what a fix UNBLOCKS before deciding it is a separate release.**
+
+**ITS FIXTURE SEEDED THE BARE TOKEN — THE FORM THE READER ACCEPTED — FOR THE SECOND BATCH
+RUNNING.** `handoff-resume-guard/seed.sh` used `| ... | in-flight |`, so the battery proved the
+guard accepts its own grammar for the defect's whole life. This is the same lesson batch 43
+recorded on three other fixtures, on a different subsystem, one release later.
+
+**AN APOSTROPHE IN A COMMENT BROKE THE ENTIRE HOOK, AND EVERY ARM WENT RED AT ONCE.** The comment
+explaining the Check 0 fix sat inside a single-quoted `awk` program; `consumer's` closed the
+string. The fixture reported five failures including arms unrelated to the change, which reads
+like a far larger regression than it was. **`bash -n` on the file is the one-command control, and
+a whole-fixture red is a reason to check syntax before reading any individual arm.**
+
 **THE SECOND TEST IS BANKED AND NON-NULL — the owed item from batch 43 is discharged.** Driving
 the consumer's INSTALLED `validate-artifact-budget.sh` and this distribution's copy against the
 consumer's own snapshot with the deleted row RESTORED as handoff.md requires: installed **exit 1**
@@ -124,7 +150,7 @@ precedes the bump. Batch 43's ids still resolve to `0.480.0` for `0.481.0` work,
 **THE FIGURES, re-derived by running the derive block.** Ledger md5 **`1981713c…`**. **73 live,
 142 archived, 44 cited, 29 unfiled.** DISCHARGED **21 raw / 18 corrected**, IN-FLIGHT **27**,
 UNTOUCHED **28**, overlap **3**, TERMINAL **32**; partition 21+27+28−3 = 73. `docs/backlog.md`
-**82 live / 66 archived** after filing `BL-147` and `BL-148` and rotating `BL-147`. **The consumer
+**82 live / 67 archived** after filing `BL-147`, `BL-148` and `BL-149` and rotating two of the three. **The consumer
 dirty count is not a gate**: it read 5 at the start and 6 at the close, every path its own
 pipeline state, and `.handoff-in-progress` appeared while this batch ran — a graph session was
 mid-handoff throughout, which is the operation this release repairs.
