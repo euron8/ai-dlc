@@ -215,7 +215,33 @@ if [ "$FINISH" = 0 ]; then
     if bash "$SELF/emit-report.sh" --verify "$UNION_REPORT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1; then
       say NOTE report-verified "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1): the approved report's mechanical region matches what the detectors render at THIS run's theirs ($THEIRS)."
     else
-      err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS). SKILL.md step 8 lets apply write only after emit-report.sh --verify exits 0, and it does not. Either upstream moved after that report was rendered — which is what this gate exists to catch — or the region was hand-edited. Re-run the dry run at $THEIRS, or name the ref the report describes explicitly so the two agree, then re-approve. NOTHING HAS BEEN WRITTEN."
+      # THE THIRD CAUSE, DECIDED RATHER THAN LISTED. A region also fails to match when an apply
+      # of THIS theirs has already written this tree: the approved report describes the tree
+      # BEFORE that apply moved it, so the detectors now render every applied path as
+      # already-at-theirs and the bytes cannot agree. Measured on the reference consumer's
+      # 0.482.0 -> 0.489.0 pull, by obeying the driver-self-update row this file used to emit:
+      # rc=1, 26 rows moved UPSTREAM-ONLY -> ALREADY-AT-THEIRS, upstream unmoved, nothing
+      # hand-edited -- and the message named the two causes that were false and not the one
+      # that was true. The REFUSAL stands either way (there is nothing left for this run to
+      # write); the DIAGNOSIS is what was wrong. It is decided from the two records an apply
+      # leaves behind -- the stamp's `commit:` and the in-flight marker's `theirs:` -- compared
+      # by `core/` TREE, for the reason the --finish identity guard below gives: two refs can
+      # differ as commits while the bytes this pull writes are identical. Neither record being
+      # present or resolvable falls through to the two-cause message, never to a pass.
+      _ug_at=""
+      _ug_tt="$(git -C "$DIST" rev-parse "${THEIRS}:core" 2>/dev/null || true)"
+      for _ug_r in "$(sed -n 's/^commit:[[:space:]]*//p' "$CONSUMER/.claude/.ai-dlc-version" 2>/dev/null | head -1)" \
+                   "$(sed -n 's/^theirs:[[:space:]]*//p' "$CONSUMER/.claude/.ai-dlc-applying" 2>/dev/null | head -1)"; do
+        [ -n "$_ug_r" ] && [ -n "$_ug_tt" ] || continue
+        if [ "$(git -C "$DIST" rev-parse "${_ug_r}:core" 2>/dev/null || true)" = "$_ug_tt" ]; then
+          _ug_at="$_ug_r"; break
+        fi
+      done
+      if [ -n "$_ug_at" ]; then
+        err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS) — and this tree has ALREADY been written from that theirs: the consumer's stamp or in-flight marker records ${_ug_at}, whose core/ tree is theirs'. This is a post-apply re-run (the one the driver-self-update row used to prescribe). The approved report describes the tree BEFORE that apply moved it, so the detectors now render the applied paths as already-at-theirs and the region cannot match; upstream has not moved and nothing was hand-edited. There is nothing left for this run to write. If the earlier run withheld the stamp, advance it with apply.sh --finish. To see the current driver's own reading of this tree, re-render the report with emit-report.sh <dist> $BASE <consumer> $THEIRS, re-approve it, then re-run apply with the same four arguments. NOTHING HAS BEEN WRITTEN."
+      else
+        err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS). SKILL.md step 8 lets apply write only after emit-report.sh --verify exits 0, and it does not. Either upstream moved after that report was rendered — which is what this gate exists to catch — or the region was hand-edited. Re-run the dry run at $THEIRS, or name the ref the report describes explicitly so the two agree, then re-approve. NOTHING HAS BEEN WRITTEN."
+      fi
     fi
   else
     say NOTE report-unverified "" "union-gate condition (1) was NOT evaluated: no report at ${UNION_REPORT#"${CONSUMER}"/}. This does not block — the driver has never required one — but nothing here has confirmed an operator approved a region matching theirs ($THEIRS)."
@@ -491,15 +517,22 @@ EOF
 # The rename above makes this SAFE -- the run finishes on the version that was invoked -- but
 # it does not make it invisible, and the difference matters: every row below this point was
 # produced by the OLD driver, so a range that changed how apply.sh classifies or orders work
-# was adjudicated by the pre-range rules. Re-running is cheap and idempotent (every pure-apply
-# file already equals THEIRS, so a second run has nothing to place) and is the only way to see
-# the new driver's own reading of the same range.
+# was adjudicated by the pre-range rules.
+#
+# THIS ROW USED TO PRESCRIBE A BARE RE-RUN AND CALL IT IDEMPOTENT. The resolution phases are;
+# the run is not, once the union gate above precedes them. Post-apply, the approved report no
+# longer matches what the detectors render (every applied path is now already-at-theirs), so
+# the re-run is refused before it reaches phase 1 -- measured on the reference consumer's
+# 0.482.0 -> 0.489.0 pull by obeying this row: rc=1, nothing written, and a refusal whose two
+# stated causes were both false. A row must not prescribe an action the same release makes
+# unexecutable in the state the row is printed in. The gate's post-apply branch carries the
+# procedure that does work, so this row points at it rather than restating it.
 #
 # Not a DECISION row: nothing is owed. The re-stamp below is still correct either way, because
 # it asserts the TREE is at THEIRS, which it is.
 if [ "$self_replaced" -eq 1 ]; then
   say RESOLVED driver-self-update "${SELF_FILE#"$CONSUMER"/}" \
-    "this range updates apply.sh itself; the new copy is in place and this run continued on the version you invoked. Rows below were produced by the previous driver. Re-run it to see the new one's reading of the same range — it is idempotent."
+    "this range updates apply.sh itself; the new copy is in place and this run continued on the version you invoked. Rows below were produced by the previous driver. A bare re-run will NOT show you the new driver's reading: the union gate refuses it, because the approved report describes the tree before this run moved it, and its refusal names the procedure that does."
 fi
 
 # ---------------------------------------------------------------- 2. drift refile (known patterns)
