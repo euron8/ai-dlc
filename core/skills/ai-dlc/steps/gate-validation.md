@@ -837,11 +837,15 @@ the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
   gate.
 - **In-Flight Teammates** — one row per teammate the lead may still need
   to reach: `agent name | role | deliverable path | dispatched-at |
-  status`, where `status` is `in-flight` or `delivered-reachable`. A row is
+  status`, where `status` is `in-flight`, `delivered-reachable` or
+  `stopped`. A row is
   added at dispatch as `in-flight`; at join it becomes `delivered-reachable`
   if the teammate is still alive and may be messaged again, and is
   **DELETED** once it will not be (see `_gate-procedures.md` "Sub-step
-  snapshot update"). Reachable bounds WHETHER you can message it; Rule 28
+  snapshot update"). A teammate STOPPED before it delivered takes `stopped`
+  and **keeps its row** — `steps/handoff.md` step 1 requires that, because a
+  successor session cannot tell a deleted row from a teammate that never
+  existed. Reachable bounds WHETHER you can message it; Rule 28
   bounds WHAT that message may carry. An empty table is normal and means nothing is in
   flight.
   **Rows only. No prose, no struck-through history** — `status` is how a

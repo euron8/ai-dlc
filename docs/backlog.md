@@ -3919,3 +3919,59 @@ written the other way round, carrying `ledger-reverify.sh`'s opposite convention
 
 verify: sh set -e; r="$PWD"; id='PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD'; n=0; c_core=0; for c in $(git -C "$r" log --format=%H -F --grep="$id" origin/main); do n=$((n+1)); git -C "$r" show --name-only --format='' "$c" | grep -q '^core/' && c_core=$((c_core+1)); done; [ "$n" -gt 0 ] || exit 9; [ "$c_core" -eq 0 ] || exit 0; w=$(mktemp -d); mkdir -p "$w/c/_bmad-output/ai-dlc-update" "$w/c/.claude"; printf '%s\n' '# l' '' "## $id — probe" '' 'Body.' '' 'verify: sh cd "$CONSUMER" && grep -q zzz-never-present README.md' > "$w/c/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; printf 'version: 0.471.0\ncommit: 31b51d48\nskill_version: 0.471.0\nskill_commit: 31b51d48\n' > "$w/c/.claude/.ai-dlc-version"; h="$(git -C "$r" rev-parse HEAD)"; o="$(cd "$w/c" && bash "$r/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh" "$r" 31b51d48 "$w/c" "$h" 2>/dev/null)"; grep -q "$id" <<<"$o" || exit 9; grep -qE "^NAMED-UPSTREAM[[:space:]]+$id" <<<"$o" && exit 1; exit 0
 
+
+
+## BL-148 — the In-Flight status token set is a controlled vocabulary with four declaring sites, owned by nobody and bound by no invariant
+
+**Found while fixing `BL-147`**, 2026-09-02, and NOT fixed there — deferral reason below is a
+scope constraint, not difficulty. Distribution-internal in its cause and CONSUMER-FACING in its
+effect, so it ranks below any PC-backed entry a sweep turns up but above the distribution-only
+entries.
+
+`BL-147` was one token missing from one whitelist, and the reason it survived to reach a consumer
+is structural: the In-Flight `status` column's token set is declared in four core files and
+nothing joins them.
+
+    core/scripts/validate-artifact-budget.sh   the enforcing whitelist
+    core/skills/ai-dlc/steps/gate-validation.md  "`status` is X, Y or Z"
+    core/skills/ai-dlc/steps/_gate-procedures.md the reconcile instruction
+    core/skills/ai-dlc/steps/route.md            the schema a lead reads FIRST
+
+At the time `BL-147` was filed these disagreed **two homes to two** — `route.md` and
+`handoff.md` named `stopped` and carried the handoff exception, `gate-validation.md` and the
+validator declared a closed set of two — and every gate in the system was green over the
+contradiction for its whole life.
+
+**THIS IS THE EXACT SHAPE `docs/vocabulary-index.md` EXISTS FOR, AND THIS SET IS NOT IN IT.**
+Measured, with the positive control in the same invocation: the index carries **15** rows and the
+enforcement map carries **12** `# vocabulary:` arms, so the grammar can see a known-present
+instance — and **zero** of either names `delivered-reachable`. The only `in-flight` hit in
+`scripts/validate-enforcement-map.sh` is `I27`, whose subject is the mid-pull MARKER PATH written
+by `apply.sh`, an unrelated token that happens to share the word.
+
+**IT IS THE SECOND TIME THIS SET HAS DRIFTED.** `core/fixtures/inflight-row-shape/run.sh`'s own
+header records the first: the column was `in-flight`/`idle-reusable`, "nothing anywhere enforced
+either spelling -- the token lived in prose in four core files", and the rename to
+`delivered-reachable` closed the set **in the validator only**. That fixture is the mechanism
+that keeps the ENFORCED spelling from drifting back; nothing keeps the four PROSE sites agreeing
+with it, which is the half that failed here.
+
+**WHY IT IS FILED RATHER THAN TAKEN.** Three reasons, and the first is a standing rule.
+`steps/` prose is not a machine-readable declaration, so the join needs a grammar over English
+sentences naming tokens inside backticks — and its false-positive set has not been measured. The
+arm would live in `scripts/validate-enforcement-map.sh`, which the fixture suite's POLE invokes,
+so it is a change to the suite's wall clock and must be timed before and after from inside the
+repo. And this batch is scoped to one subsystem. Deriving the single-source form — the tokens as
+DATA the validator loads and the step files RENDER — is likely the right shape and is a larger
+change than the arm.
+
+**Stated limitation of the receipt below.** It keys on the token set reaching
+`docs/vocabulary-index.md`, which is the derived index and the visible half of the fix; an
+implementation that binds the four sites by some other mechanism and never touches the index
+would score STILL-LIVE. That is deliberate — the index is byte-compared at pre-push and is the
+artifact a later reader consults — but if a competent author closes this another way, re-anchor
+the receipt on their arm rather than reading the non-close. It carries a control so a broken
+grammar reports exit 9 rather than a false STILL-LIVE.
+
+verify: sh f=docs/vocabulary-index.md; [ -f "$f" ] || exit 9; grep -qE '^\| ' "$f" || exit 9; grep -q 'delivered-reachable' "$f" && exit 0; exit 1
+

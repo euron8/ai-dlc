@@ -657,13 +657,37 @@ check_inflight_rows() {
 }
 
 # -----------------------------------------------------------------------------
-# IN-FLIGHT TEAMMATES: THE STATUS TOKEN IS A CLOSED SET OF TWO.
+# IN-FLIGHT TEAMMATES: THE STATUS TOKEN IS A CLOSED SET OF THREE.
 #
-# The column carries one of two facts and no third: the teammate has not
-# delivered (`in-flight`), or it has delivered and the lead can still reach it
-# (`delivered-reachable`). A row that will not be reached again is DELETED, so
-# there is no token for it. An unrecognised token means the row no longer says
-# which of the two it is, and the section's whole purpose is to say exactly that.
+# The column carries one of three facts and no fourth: the teammate has not
+# delivered (`in-flight`), it has delivered and the lead can still reach it
+# (`delivered-reachable`), or it was STOPPED before delivering and will not be
+# reached again (`stopped`). An unrecognised token means the row no longer says
+# which of the three it is, and the section's whole purpose is to say exactly that.
+#
+# `stopped` IS A THIRD STATE AND NOT A SPELLING OF THE OTHER TWO. Neither of the
+# original pair is true of a stopped teammate: it has not delivered, and it
+# cannot be messaged. This set was closed at TWO on the reasoning that "a row
+# that will not be reached again is DELETED, so there is no token for it" -- and
+# steps/handoff.md step 1 is the case that reasoning does not cover. At a handoff
+# the row must SURVIVE, because the successor session needs to know what was
+# running and a deleted row is indistinguishable from a teammate that never
+# existed.
+#
+# MEASURED, on the reference consumer at sprint 308, one row varied against two
+# held constant beside it in the same run:
+#
+#   stopped (operator-requested handoff)   exit 1   <- this check
+#   ~~stopped~~                            exit 1   <- check_inflight_rows
+#   in-flight                              exit 0   <- but ai-dlc-continue.sh
+#                                                      Check 0 blocks the handoff
+#   delivered-reachable                    exit 0   <- false: it never delivered
+#
+# So of the four dispositions available to a lead, three were refused and the
+# only passing one was DELETION, which steps/handoff.md and the remedy text of
+# ai-dlc-continue.sh:390 both instruct against in as many words. That consumer
+# hit this twice in one sprint and worked around it by deleting the row, which
+# is the record loss the instruction exists to prevent.
 #
 # LEADING TOKEN, NOT THE WHOLE CELL. Measured on the reference consumer's live
 # snapshot: its status cells are `in-flight, retrying Write`, `in-flight, since
@@ -686,8 +710,8 @@ check_inflight_rows() {
 # fitted exception list.
 #
 # A closed set is legitimate here because it bounds NAMES, never CONTENT: the
-# two tokens are defined by gate-validation.md and _gate-procedures.md, and this
-# is the mechanism that keeps a renamed token from drifting back.
+# three tokens are defined by gate-validation.md and _gate-procedures.md, and
+# this is the mechanism that keeps a renamed token from drifting back.
 #
 # The excluded rows are enumerated rather than pattern-guessed, because each is
 # a real line the section carries and none of them is a violation: the header
@@ -725,6 +749,7 @@ check_inflight_status() {
       sub(/[[:space:],;].*$/, "", tok)         # keep the leading token only
       if (tok == "in-flight") next
       if (tok == "delivered-reachable") next
+      if (tok == "stopped") next
       print
     }' "$1" 2>/dev/null \
     | while IFS= read -r line; do
@@ -1207,15 +1232,20 @@ if [ -s "$STATUS_FILE" ]; then
   cat "$STATUS_FILE" >&2
   cat >&2 <<'EOF'
 
-      The status column is a closed set of two, and the leading token of the cell
-      must be one of them:
+      The status column is a closed set of three, and the leading token of the
+      cell must be one of them:
 
         in-flight            -- dispatched, has not delivered yet
         delivered-reachable  -- delivered, and the lead can still message it
+        stopped              -- stopped before delivering, will not be reached
 
-      A teammate that will not be messaged again has no token: DELETE its row.
-      A trailing note after a comma is allowed and priced by the byte budget
-      (`in-flight, retrying Write`); only the leading token is checked.
+      A teammate that delivered and will not be messaged again has no token:
+      DELETE its row. A teammate STOPPED at a handoff keeps its row and takes
+      `stopped` -- steps/handoff.md step 1 requires the row to survive, because
+      the successor session cannot tell a deleted row from a teammate that never
+      existed. A trailing note after a comma is allowed and priced by the byte
+      budget (`stopped, operator-requested handoff`); only the leading token is
+      checked.
 
       gate-validation.md defines the column, _gate-procedures.md step 3
       reconciles it, and Rule 28 bounds what a message to a reachable teammate

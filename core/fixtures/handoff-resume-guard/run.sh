@@ -159,6 +159,10 @@ r="$(drive "$SWEEP" "$(cat "$ROOT/.s_running")")"
 [ "$r" = block ] && ok "compliant resume block but a row still reads 'in-flight' -> BLOCK" \
                  || bad "a handoff whose teammate sweep was never recorded was ALLOWED ($r) — this is the s305 shape, and the successor inherits a snapshot that lies about what is running"
 
+r="$(drive "$SWEEP" "$(cat "$ROOT/.s_running_note")")"
+[ "$r" = block ] && ok "a running row carrying a trailing note -> BLOCK (leading token, not the whole cell)" \
+                 || bad "a row reading 'in-flight, since <ts>' was ALLOWED ($r) — that is the form the reference consumer actually writes, and an equality test lets a handoff proceed with teammates still running"
+
 r="$(drive "$SWEEP" "$(cat "$ROOT/.s_stopped")")"
 [ "$r" = allow ] && ok "the same row rewritten to 'stopped' -> ALLOW (the arm accepts the state it demands)" \
                  || bad "BLOCKED a handoff that recorded its sweep exactly as steps/handoff.md step 1 mandates ($r) — the check fires on COMPLIANCE, which is worse than no check"
