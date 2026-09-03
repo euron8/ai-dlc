@@ -422,7 +422,20 @@ while IFS= read -r core_path; do
   printf '%s\t%s\t%s\t%s\n' "R" "$core_path" "$old_cons" "$bucket -> now at $new_cons"
 done < <(git -C "$DIST" ls-tree --name-only "$THEIRS" core/scripts/ 2>/dev/null)
 
-git -C "$DIST" diff --name-status "$BASE" "$THEIRS" -- core/ | while IFS=$'\t' read -r status path; do
+# `--no-renames` IS LOAD-BEARING. Without it git pairs a delete and an add into one
+# `R100<TAB>old<TAB>new` row, `read -r status path` hands `path` the tab-joined pair,
+# map_consumer() maps only its head, the consumer hash of the joined string is MISSING,
+# and the row lands in the M arm's consumer-deleted CLASSIFY bucket with six fields -- a
+# semantic-merge task for a file upstream merely moved. (That bucket string is deliberately
+# not spelled here: preclassify-mode-bucket anchors its M-arm search on it, and a comment
+# carrying it above the loop is text about the program that the search reads as the
+# program.) The first rename ever committed
+# under core/ (v0.490.0, a fixture transcript) hit this on the reference consumer's very
+# next pull. Split, the same change is a D row and an A row, and both arms below already
+# classify those correctly: UPSTREAM-DELETED (gated) for the old path, UPSTREAM-ONLY-ADD
+# for the new one. The fixture preclassify-rename-row drives a real rename through this
+# line and seeds the flag's removal as a mutant.
+git -C "$DIST" diff --no-renames --name-status "$BASE" "$THEIRS" -- core/ | while IFS=$'\t' read -r status path; do
   cons="$(map_consumer "$path")"
 
   # core/scripts/* is owned by the scripts-relocation pass above. On a pre-relocation
@@ -498,7 +511,7 @@ git -C "$DIST" diff --name-status "$BASE" "$THEIRS" -- core/ | while IFS=$'\t' r
       elif [ "$ours_h" = "$base_h" ];      then bucket="UPSTREAM-DELETED"             # consumer untouched -> delete (gated)
       else                                      bucket="UPSTREAM-DELETED+consumer-modified->CLASSIFY"; fi
       ;;
-    *)  # M and renames
+    *)  # M (and T). Renames never reach here: --no-renames above splits them into D + A.
       # THE NOOP ARM IS TESTED FIRST, AND ONLY BECAUSE IT CARRIES THE MODE CONJUNCT.
       # Reordering these two arms WITHOUT it is the obvious-looking fix and it is a
       # REGRESSION: on a mode-only upstream change all three content hashes are equal, so a

@@ -192,6 +192,7 @@ core_manifest:
   - core/fixtures/relabel-theirs-collision/**
   - core/fixtures/release-version-triple/**
   - core/fixtures/relocation-preclassify/**
+  - core/fixtures/preclassify-rename-row/**
   - core/fixtures/resume-whole-read/**
   - core/fixtures/retired-contract-token/**
   - core/fixtures/retired-layer-contract/**

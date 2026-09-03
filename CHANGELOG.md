@@ -15,6 +15,44 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.491.0] - 2026-09-03
+
+### The pull classifier read a git rename as one six-field row
+
+`preclassify.sh` reads `git diff --name-status base..theirs` with `read -r status path`. A
+rename arrives as `R100<TAB>old<TAB>new`, so `path` received both paths tab-joined:
+`map_consumer()` mapped the head, the consumer hash of the joined string was MISSING, and the
+row landed in the M arm's consumer-deleted CLASSIFY bucket carrying six fields — a
+semantic-merge task for a file upstream merely moved. The comment on that arm said
+`# M and renames`; the read beneath it could not honor the second half.
+
+**Latent, not missed.** `git log --diff-filter=R -M -- core/` returns exactly one rename in the
+history of `core/`, and it is v0.490.0's fixture transcript. The reference consumer's
+0.489.0 → 0.490.0 dry run was the first pull that could hit it, and its session derived the
+defect and the two correct buckets from ground truth before this fix existed: the consumer's
+old-path copy equalled the base blob and theirs' new path was that same blob, so the old path
+is UPSTREAM-DELETED (gated) and the new one UPSTREAM-ONLY-ADD.
+
+**The fix is one flag.** `--no-renames` on that diff splits the pair into a D row and an A
+row, and both arms already classify those correctly. Replayed on the real range with a
+consumer holding the base blob: `D proves-1m.jsonl UPSTREAM-DELETED`,
+`A at-250000.jsonl UPSTREAM-ONLY-ADD`, four fields each.
+
+**New shipping fixture `preclassify-rename-row`** builds a two-commit probe repo whose theirs
+commit is a byte-identical `git mv` plus an ordinary edit, asserts git actually paired the
+move as `R100` before trusting any verdict, and drives the shipping script: new path
+UPSTREAM-ONLY-ADD, old path UPSTREAM-DELETED, the M row beside them still UPSTREAM-ONLY as the
+control, every probe row four fields over a non-empty set. The mutant strips `--no-renames`
+from a `cmp -s`-guarded copy and must fail **exactly** arms A, B and D — C staying green is
+what proves the mutant did not kill the whole pass. Registered in `uninstall.sh`,
+`core-manifest.md` and `setup-sites.md`, the three hand lists I74 joins.
+
+**One thing the mutant battery next door caught during the build.** The first draft of the
+comment above the diff line spelled the M arm's bucket string, and
+`preclassify-mode-bucket` anchors its arm search on that string — the comment sat above a
+`;;` the search reads as the arm's end, and the battery reported it could not locate the arm.
+Text about a program read as the program; the comment now says so without spelling it.
+
 ## [0.490.0] - 2026-09-03
 
 ### The context sensor guessed its ceiling; now the operator declares it per model family
