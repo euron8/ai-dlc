@@ -4223,8 +4223,9 @@ so no block written before it changes verdict.
 1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 45's
    SUBJECT.** Batch 44 shipped as `v0.483.0` and was corrected by `v0.484.0`; the runtime
    context-window task then shipped as `v0.485.0`, so the distribution `VERSION` is `0.485.0`.
-   **The batch number and the version minor no longer agree — this is BATCH 45 and its release
-   is `v0.486.0`.** Re-derive `VERSION` before numbering rather than adding one to the batch.
+   **The batch number and the version minor no longer agree — this is BATCH 45 and `0.486.0` is
+   already taken.** Re-derive `VERSION` and add one; do not add one to the batch number, and do
+   not trust this sentence's arithmetic either — it has been corrected once already.
 
    **DERIVE THE READER SET OF WHATEVER YOUR SUBJECT TOUCHES, AND DO NOT TRUST THE ONE THE FILING
    NAMES. THIS IS BATCH 44's BEST FINDING AND IT COST ONE GREP.** The filing named one reader of

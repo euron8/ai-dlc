@@ -97,6 +97,11 @@ against a positive control before trusting a zero from it.
   EMPTY, raises nothing, and refuses `:(glob)`. Use `git ls-files --with-tree=<ref> -- <glob>`,
   also the only way to resolve a glob at a ref where the path was DELETED. Resolved wrongly, a
   glob list collapses to the entries carrying no glob character — a silent partial answer.
+- **`git grep -E` is not the `grep -E` beside it.** It implements neither `\b` nor `\s` and
+  returns a CLEAN ZERO, never an error. Measured: `\bMODEL_MAX\b` answered 0 against a control
+  of 11, while `/usr/bin/grep -E` matches both escapes happily — so the habit that works in one
+  command silently empties the other. Use POSIX classes or `git grep -P`. `S9` of
+  `validate-shell-portability.sh` catches this in a tracked file; in a tool call nothing does.
 - **Never test whether work landed by ancestry** in a squash-merge repo — the commits that
   would answer are the ones a squash removed. Test by content.
 - Commit or stash before any `git checkout` that names a path.

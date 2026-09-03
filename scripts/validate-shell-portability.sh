@@ -95,13 +95,33 @@ S7_WHY="a backreference in an \`awk\` \`sub()\`/\`gsub()\` replacement. awk has 
 # without the word `git`. That number is about this repo's writing about the defect, not about
 # the corpus this arm scans, and reading it as the latter is how the first cut of this comment
 # shipped a false justification.
+# S9 KEYS ON `git grep`, NOT ON `grep`, AND MEASURING THE DIFFERENCE IS THE WHOLE ARM.
+# `git grep -E` and this machine's `/usr/bin/grep -E` are DIFFERENT ENGINES and they disagree
+# about `\b` and `\s`. Measured, both directions, on a token known present:
+#   /usr/bin/grep -cE 'a\sb'         -> 1   (matches; control `a[[:space:]]b` also 1)
+#   /usr/bin/grep -cE '\b200000\b'   -> 1   (matches; control without \b is 2)
+#   git grep -cE '\bMODEL_MAX\b'     -> 0   against a control of 11 without the \b
+#   git grep -cE '^\s*local'         -> 0   against a control of 2 with [[:space:]]
+#   git grep -cP '\bMODEL_MAX\b'     -> 7   (PCRE has it; ERE does not)
+# So a `\b` in a plain `grep -E` is CORRECT here and a `\b` in a `git grep -E` silently
+# returns a clean zero. An arm keyed on `grep` would report 16 legal sites in this repo's own
+# validators, which is what the first cut did before the two engines were measured separately.
+#
+# FALSE-POSITIVE SET: EMPTY, measured over the 392-file shell corpus. The narrowing that got
+# it there is the `git[[:space:]]+` prefix and nothing else; `[^|;]*` keeps the match inside
+# one command so a `git grep` upstream of a pipe cannot claim a `\b` belonging to the reader.
+#
+# This arm cannot reach the case that motivated it -- three false zeros inside ad-hoc Bash
+# tool calls, which no tracked file records. `.claude/rules/tool-hazards.md` carries that half.
+S9_PAT="git[[:space:]]+grep[^|;]*\\\\(b|s)"
+S9_WHY="\`\\b\` or \`\\s\` in a \`git grep -E\` expression. git's ERE is not this machine's grep: it implements neither escape and returns a CLEAN ZERO rather than an error, so the search reads as a proven absence. Measured: \`git grep -cE '\\bMODEL_MAX\\b'\` answers 0 where the control without the escape answers 11. Use \`[[:space:]]\`/\`[[:alnum:]]\` boundaries, or \`git grep -P\`."
 S8_PAT="(show|cat-file -p|ls-tree|archive|diff)[[:space:]]+<[^>]+>:"
 S8_WHY="an UNQUOTED git rev-path in shipped instruction text. A reader who binds the ref to a variable and pastes this into zsh loses the character after the colon: \`:c\` and \`:t\` are history modifiers that consume it, so \`git show \$THEIRS:templates/x\` reports \`fatal: ambiguous argument 'ca1fb6eemplates/x'\` -- and any \`>\` redirect in the same line still creates the target as a 0-byte file that the next command reads and reports on. Render it quoted: \`git show \"<theirs>:<path>\"\`."
 
 # Only S1 subtracts. Declared explicitly rather than defaulted in a loop, because `set -u`
 # turns a missing one into an abort mid-scan, and an aborted scan prints fewer findings than
 # a clean one rather than more.
-S2_SKIP=""; S3_SKIP=""; S4_SKIP=""; S5_SKIP=""; S6_SKIP=""; S8_SKIP=""
+S2_SKIP=""; S3_SKIP=""; S4_SKIP=""; S5_SKIP=""; S6_SKIP=""; S8_SKIP=""; S9_SKIP=""
 # S7's one measured false positive is PYTHON, not awk. Several shell files here embed a
 # heredoc'd python program, and `re.sub(r"...", r"\1...")` is correct there -- python has
 # backreferences and awk does not. The subtraction is on the LANGUAGE (`re.` qualifies the
@@ -109,7 +129,7 @@ S2_SKIP=""; S3_SKIP=""; S4_SKIP=""; S5_SKIP=""; S6_SKIP=""; S8_SKIP=""
 # lands and an awk backreference in the same file is still caught.
 S7_SKIP="re\\.g?sub\\("
 
-ARMS="S1 S2 S3 S4 S5 S6 S7 S8"
+ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S9"
 
 # Two more per-arm columns, declared for EVERY arm for the reason the SKIP block above gives:
 # under `set -u` a missing one aborts the scan mid-way, and an aborted scan prints FEWER
@@ -126,8 +146,10 @@ ARMS="S1 S2 S3 S4 S5 S6 S7 S8"
 # motivated this arm were comments. `keep` scans them.
 S1_CORPUS=shell; S2_CORPUS=shell; S3_CORPUS=shell; S4_CORPUS=shell
 S5_CORPUS=shell; S6_CORPUS=shell; S7_CORPUS=shell; S8_CORPUS=instr
+S9_CORPUS=shell
 S1_COMMENTS=skip; S2_COMMENTS=skip; S3_COMMENTS=skip; S4_COMMENTS=skip
 S5_COMMENTS=skip; S6_COMMENTS=skip; S7_COMMENTS=skip; S8_COMMENTS=keep
+S9_COMMENTS=skip
 
 # Corpus: every tracked shell file except this one and its own mutation battery.
 #
@@ -186,6 +208,7 @@ grep -E 'a\sb' f
 sed -E 's/a\sb/c/' f
 awk '{ gsub(/(a)b/, "\1x") }' f
 git -C <dist> show <theirs>:templates/settings.json.template > "$t"
+git grep -nE '\bMODEL_MAX\b' -- core/
 BADEOF
 cat > "$probe/good.sh" <<'GOODEOF'
 sed -i.bak 's/a/b/' f && rm -f f.bak
@@ -196,6 +219,8 @@ sed -E 's/a[[:blank:]]b/c/' f
 awk '{ if (match($0, /(a)b/)) print substr($0, RSTART, RLENGTH) }' f
 git -C <dist> show "<theirs>:templates/settings.json.template" > "$t"
 git show HEAD:templates/settings.json.template > "$t"
+git grep -nE '[[:space:]]MODEL_MAX' -- core/
+grep -oE '\bLR-[0-9]+\b' f
 # mapfile and declare -A and setsid named in a comment are prose, not code
 GOODEOF
 
@@ -241,6 +266,6 @@ else
 fi
 
 if [ "$fail" -eq 0 ]; then
-  say "validate-shell-portability: PASS -- $n_shell shell file(s) + $n_instr core file(s), 8 arms (S1 sed -i, S2 mapfile, S3 declare -A, S4 setsid, S5/S6 backslash-s, S7 awk backreference, S8 unquoted rev-path), every arm probed in both directions."
+  say "validate-shell-portability: PASS -- $n_shell shell file(s) + $n_instr core file(s), 9 arms (S1 sed -i, S2 mapfile, S3 declare -A, S4 setsid, S5/S6 backslash-s, S7 awk backreference, S8 unquoted rev-path, S9 git-grep ERE escape), every arm probed in both directions."
 fi
 exit "$fail"

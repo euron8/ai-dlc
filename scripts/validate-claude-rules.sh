@@ -613,7 +613,42 @@ fi
 #
 # WHAT WAS STILL NOT COVERED. The judgement-per-passage vestigial form is STILL not exhaustively
 # enumerated. That debt is now four raises old.
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-52350}"
+#
+# RAISED A FOURTEENTH TIME, 52350 -> 57344, ON AN EXPLICIT OPERATOR RULING, AND THIS ONE IS SIZED
+# TO HEADROOM RATHER THAN TO AN INCOMING RULE. THAT IS THE WHOLE DIFFERENCE FROM THE THIRTEEN
+# ABOVE, AND THE OPERATOR ASKED FOR IT IN THOSE TERMS: "increase the headroom on the channel".
+#
+# THE THIRTEEN PRIOR RAISES ARE THE ARGUMENT. Every one was sized to the rule arriving that day --
+# 351, 477, 491, 518, 520, 690, 707, 711, 722, 743, 831, 1700, 2560 bytes -- and every one left the
+# channel within a few hundred bytes of the new ceiling. A6 was at 52346/52350 when this was ruled:
+# FOUR bytes free. A ceiling re-set to the current occupancy after every rule is not a budget, it
+# is a ratchet with an approval step, and the approval had become the only thing it measured.
+#
+# THE NUMBER IS DERIVED, NOT PICKED. The channel is 52346 bytes across 7 files and 68 `## ` sections
+# -- 769 bytes per section, which is the unit a new rule actually arrives in, measured rather than
+# estimated (the fourth raise records an author's estimate missing by 100%, so estimates of unwritten
+# prose are not used here). 57344 is 56 KiB, leaving 4998 bytes: SIX AND A HALF sections of headroom
+# at the measured mean. That is deliberately not ten or twenty. The guard has to keep firing -- a
+# ceiling that never fires is the decorative outcome the top of this header warns about -- and 6.5
+# sections is enough that the next few rules are a drafting decision rather than an approval round.
+#
+# THE MECHANIZE-FIRST STANDARD WAS MET, AND IT PAID. This raise ships alongside `S9` in
+# `validate-shell-portability.sh`, which mechanizes the tracked-file half of the rule that prompted
+# it: `git grep -E` implements neither `\b` nor `\s` and returns a CLEAN ZERO, measured at 0 against
+# a control of 11. Building the arm CORRECTED the rule. The first cut keyed on `grep` and reported
+# 16 legal sites, because `/usr/bin/grep -E` on this machine DOES support both escapes -- the two
+# engines had to be measured separately before either could be described. Only the ad-hoc tool-call
+# half reaches the durable channel, as one bullet in `tool-hazards.md`'s git section, because no
+# tracked file records a Bash tool call for an arm to scan.
+#
+# A FINDING AGAINST AN EXISTING ARM, RAISED HERE BECAUSE IT WAS MEASURED HERE. `S5_WHY` states "BSD
+# grep has no `\s` shorthand: it matches a literal `s` in a BRE and is undefined in an ERE". On this
+# machine that is false: `/usr/bin/grep -cE 'a\sb'` answers 1 on input where a literal `asb` does not
+# occur, matching its `[[:space:]]` control exactly. S5 may still be right for a grep this repo does
+# not run; the RATIONALE is wrong as written. Not changed here -- it is outside what this release was
+# asked to touch, and an arm right for a stated wrong reason is a finding to report, not to quietly
+# reword.
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-57344}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done
