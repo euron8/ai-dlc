@@ -60,28 +60,31 @@ The asymmetry is deliberate and is stated in the script header.
 
 ## Why the acceptance test is the row set and not the bytes
 
-A byte comparison is wrong for the workflow the skill prescribes — annotate, then rotate, in
-one pass. `prefix_entry_count()` in `ledger-reverify.sh` counts a sprint prefix over the OPEN
-entries **unioned with the archived labels**, and the open extractor skips any entry carrying
-`ADOPTED UPSTREAM`. An entry annotated in the same pass is therefore on neither side while it
-sits in the live file, and on the archive side once moved — so the count **rises** across a
-move that can only shrink the live set. That number is printed inside
-`NAMED-UPSTREAM-AMBIGUOUS` details, so correct work surfaces as changed lines on an identical
-row set.
+The row set — status and subject — is what the classifier SAYS about which work, and a swept
+entry cannot hide behind a duplicate in it the way it can behind a row count. The bytes are
+stricter than the invariant needs, and until the counter was corrected they false-failed on
+the workflow the skill prescribes — annotate, then rotate, in one pass.
 
-**What holds is the shape, not a pair of totals: the row set does not move, the differing lines
-all carry a prefix count, and the count rises.** Re-derive it rather than quoting a number —
-run `ledger-reverify.sh` either side of the rotation on the ledger in front of you. Illustrated
-by one run, named with its population: annotating every open entry on a copy of the reference
-consumer's live ledger, 79 entries, gave 12 rows with an identical set, 2 differing lines, both
-of them prefix counts, one of which rose from 3 entries to 5. An earlier run of the same
-experiment on a larger ledger reported 84 rows and 10 differing lines. Both are true of their
-own corpus and neither is the invariant.
+`prefix_entry_count()` in `ledger-reverify.sh` now counts a sprint prefix over the **corpus** —
+every entry line in both files, open or closed — so annotating moves nothing between the files
+and rotating moves one entry from one to the other, and the count is the same on both sides of
+either step. It used to count the OPEN entries unioned with the archived labels, and the open
+extractor skips any entry carrying `ADOPTED UPSTREAM`: an entry annotated in the same pass was
+on neither side while it sat in the live file and on the archive side once moved, so the count
+**dipped** at the annotate and **returned** at the rotate. On the `PC-S900` trio that was a
+count of 2 before the move and 3 after, printed inside the `NAMED-UPSTREAM-AMBIGUOUS` detail —
+a changed line on an identical row. On a two-member prefix with one member annotated, it was
+a count of **1** before the move and 2 after, which crosses the threshold between
+`named_absorbed()`'s single attribution and `named_ambiguous()` — the surviving sibling's row
+flips `NAMED-UPSTREAM <slug>` to `NAMED-UPSTREAM-AMBIGUOUS <prefix>` across a rotation that
+swept nothing, and that IS a changed row set. The reference consumer reported that shape from
+its own ledger with 89 rows either side. Assertion 4c seeds the two-member `PC-S910` pair and
+asserts the row set holds across all three states; its mutant reverts the counter to the
+open-union-archive body and shows the flip.
 
-Nothing was swept in either. The byte form hands the operator a false alarm exactly when a
-large batch of closes has landed, and the remedy it invites is unwinding correct work. The
-counter is not the defect: without its archive arm the count is anti-monotonic and converts a
-correct ambiguity into a confidently wrong attribution. The claim was wrong; the code was right.
+The archive arm of the counter is not the defect: without it the count is anti-monotonic and
+converts a correct ambiguity into a confidently wrong attribution. The corpus count is that
+fix carried one step further — strictly fewer attributions, never more.
 
 The seed carries a `PC-S900` trio — two open entries and one closed in the same pass — because
 `named_ambiguous()` gates on a `PC-S<n>` prefix shared by two or more entries. Before that

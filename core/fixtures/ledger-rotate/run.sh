@@ -8,15 +8,19 @@
 # skips, so a row that appears or disappears means the split took a live entry — the only
 # failure mode that actually costs anything.
 #
-# A BYTE COMPARISON WAS THE OLD CLAIM AND IT FALSE-FAILS THE WORKFLOW THIS SCRIPT IS THE SECOND
-# HALF OF. `prefix_entry_count()` in ledger-reverify.sh counts a sprint prefix over the OPEN
-# entries UNIONED with the ARCHIVED labels, and the open extractor skips anything carrying
-# `ADOPTED UPSTREAM`. An entry annotated in the same pass — which is exactly what annotate-then-
-# rotate prescribes — is therefore on NEITHER side while it sits in the live file and on the
-# archive side once moved, so the count RISES across a move that can only shrink the live set.
-# That number is printed inside NAMED-UPSTREAM-AMBIGUOUS details, so correct work surfaces as
-# changed LINES on an identical ROW SET. Assertion 4 asserts both halves at once, and assertion
-# 4b proves the reshaped comparison still FAILS on a genuine sweep.
+# THE ROW SET IS THE PROJECTION, AND THE COUNTER IS COUNTED SO THAT THE BYTES HOLD TOO.
+# `prefix_entry_count()` in ledger-reverify.sh counts a sprint prefix over the CORPUS — every
+# entry line in both files, open or closed — so annotating moves nothing and rotating moves one
+# entry between the files, and the number printed inside NAMED-UPSTREAM-AMBIGUOUS details is the
+# same on both sides of either step. It used to count OPEN entries unioned with ARCHIVED labels,
+# and an entry annotated in the same pass — exactly what annotate-then-rotate prescribes — sat on
+# NEITHER side until the move landed, so the count dipped at the annotate and returned at the
+# rotate: a changed LINE on an identical ROW SET where the prefix had three members, and a
+# changed ROW where it had two, because a dip to ONE crosses from `named_ambiguous()` into
+# `named_absorbed()`'s single attribution. Assertion 4 asserts the row set and the stable count
+# on the three-member trio, 4b proves the comparison still FAILS on a genuine sweep, and 4c
+# walks the two-member pair through annotate and rotate and asserts the row set holds across
+# the crossing.
 #
 # THE OLD ARM COULD NOT FAIL ON THIS, AND ITS SUBJECT WAS UNCONSTRUCTIBLE RATHER THAN UNSEEDED.
 # `named_ambiguous()` gates on a `PC-S[0-9]+` prefix shared by two or more entries; seed.sh
@@ -151,26 +155,36 @@ else
   diff <(printf '%s\n' "$before_rows") <(printf '%s\n' "$after_rows") | sed 's/^/      /' | head -8
 fi
 
-# ...AND THE BYTES DIFFER, WHICH IS THE OLD ASSERTION FAILING ON CORRECT WORK. This is not a
-# nice-to-have: if the two outputs were byte-identical here the reshaped arm above would be
-# indistinguishable from the one it replaces, and the seed would not be exercising the case the
-# correction exists for.
-if [ "$n_linediff" -gt 0 ]; then
-  ok "  and the BYTES differ on ${n_linediff} of ${n_rows} rows — the byte-identical assertion this arm replaces would FAIL here, and the arm above says whether that difference was a sweep"
+# ...AND THE BYTES ARE IDENTICAL TOO, BECAUSE THE COUNT NO LONGER MOVES. This arm used to assert
+# the opposite — that the bytes DIFFERED on a correct rotation, with the differing lines carrying
+# a prefix count that rose 2 -> 3 — and that was a true description of a defect, not of the
+# invariant: `prefix_entry_count()` counted open-live UNION archive, so the closed-but-unrotated
+# GAMMA sat on neither side until the move landed. It now counts the ledger CORPUS, both files,
+# open or closed, so annotate and rotate both leave it where it was. The dip that arm recorded
+# is the same mechanism that, one member fewer, crosses the one-vs-many threshold and flips a
+# ROW — assertion 4c below — which is why "the bytes differ" could never have been the property.
+#
+# STILL PRESENCE-SHAPED: a report with no prefix count at all would satisfy "identical" on
+# silence, so the count is read out and asserted at its value on BOTH sides.
+if [ "$n_linediff" -eq 0 ]; then
+  ok "  and the BYTES are identical across the move on all ${n_rows} rows — the prefix count printed in the AMBIGUOUS detail no longer dips while GAMMA is annotated-but-unrotated"
 else
-  bad "  the two outputs are byte-identical, so this seed does not exercise the false-failure the row-set correction exists for and the arm above is untested against it"
+  bad "  the two outputs differ on ${n_linediff} of ${n_rows} lines with an identical row set, so a DETAIL moved across a rotation that moved nothing the classifier reads — prefix_entry_count() is counting a set that changes at annotate or at rotate"
+  diff "$WORK/rv-before.txt" "$WORK/rv-after.txt" | sed 's/^/      /' | head -6
 fi
 
-# THE NUMBER THAT MOVES, NAMED. Asserting the specific 2 -> 3 rather than "something changed"
-# is what ties the difference to `prefix_entry_count()`'s archive arm instead of to any other
-# byte in the report — and it is the observation the counter-regression mutant at the foot of
-# this file kills.
+# THE NUMBER THAT USED TO MOVE, NAMED AT ITS VALUE. Asserting the specific 3 -> 3 rather than
+# "nothing changed" ties the arm to `prefix_entry_count()` counting all three trio members on
+# both sides — the closed GAMMA before the move and the archived GAMMA after it. A stub returning
+# a constant, or a count that dropped GAMMA on one side, reads differently here. The archive-arm
+# mutant at the foot of this file kills the after-side reading; the crossing mutant in 4c kills
+# the before-side one.
 pfx_n() { sed -n 's/.*and \([0-9][0-9]*\) entries in this ledger carry it.*/\1/p' <<<"$1"; }
 b_n="$(pfx_n "$before_verdicts")"; a_n="$(pfx_n "$after_verdicts")"
-if [ "$b_n" = "2" ] && [ "$a_n" = "3" ]; then
-  ok "  and the PC-S900 prefix count rises 2 -> 3 across the move: the archived sibling is still counted, which is why the row survives"
+if [ "$b_n" = "3" ] && [ "$a_n" = "3" ]; then
+  ok "  and the PC-S900 prefix count holds 3 -> 3 across the move: the closed sibling is counted while it sits annotated in the live file AND once it is archived"
 else
-  bad "  the PC-S900 prefix count went '${b_n:-<none>}' -> '${a_n:-<none>}', expected 2 -> 3. Either the trio is not reaching named_ambiguous() or prefix_entry_count() stopped counting one of its two sides"
+  bad "  the PC-S900 prefix count went '${b_n:-<none>}' -> '${a_n:-<none>}', expected 3 -> 3. A dip on the left means prefix_entry_count() dropped the annotated-but-unrotated sibling; a change on the right means it stopped counting one of the two files"
 fi
 
 # --- Assertion 4b: MUTATION — A GENUINE SWEEP MUST STILL FAIL THE ROW-SET TEST ----------

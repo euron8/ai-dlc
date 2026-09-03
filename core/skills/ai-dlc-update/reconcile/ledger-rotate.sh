@@ -42,34 +42,33 @@
 # before and after and compare that projection — that is the acceptance test, and the fixture
 # asserts it. The default (no --apply) writes nothing, so the comparison is free.
 #
-# A BYTE COMPARISON IS THE WRONG TEST, AND IT FALSE-FAILS ON THE VERY WORKFLOW THIS SCRIPT IS THE
-# SECOND HALF OF. `prefix_entry_count()` in ledger-reverify.sh counts a sprint prefix over the OPEN
-# entries UNIONED with the ARCHIVED labels, and the open extractor skips any entry carrying
-# `ADOPTED UPSTREAM`. An entry annotated in the same pass — which is exactly what the
-# annotate-then-rotate step prescribes — is therefore on NEITHER side while it sits in the live
-# file, and on the archive side once moved, so the count RISES across a move that can only ever
-# shrink the live set. That number is printed inside NAMED-UPSTREAM-AMBIGUOUS details, so the
-# difference surfaces as changed counts on otherwise identical rows.
+# THE ROW SET, NOT A ROW COUNT, AND NOT THE BYTES EITHER. A count lets a swept entry hide behind a
+# duplicate. The bytes are a stricter test than the invariant needs, and until the counter below
+# was corrected they false-failed on the very workflow this script is the second half of.
 #
-# MEASURED, by annotating every open entry on a COPY of the reference consumer's live ledger (79
-# of them) and rotating: the row SET was identical at 12 rows, 2 LINES differed, and 2 of 2 carried
-# a prefix count -- which ROSE, 3 entries to 5, on the same PC-S330 row. NOTHING WAS SWEPT. Since
-# the stated conclusion for a non-empty diff is that a live entry WAS swept, the byte form hands the
-# operator a false alarm at precisely the moment a large batch of closes has landed, and the remedy
-# it invites is unwinding correct work.
+# THE COUNTER IS COUNTED OVER THE CORPUS, AND THAT IS WHAT MAKES THE ROW SET INVARIANT.
+# `prefix_entry_count()` in ledger-reverify.sh counts a sprint prefix over every entry line in
+# BOTH files, open or closed. Annotating an entry moves nothing between the files and rotating it
+# moves it from one to the other, so the count cannot change at either step. It used to be OPEN
+# entries unioned with ARCHIVED labels: an entry annotated in the same pass — which is exactly what
+# the annotate-then-rotate step prescribes — was on NEITHER side while it sat in the live file and
+# on the archive side once moved, so the count DIPPED at the annotate and RETURNED at the rotate.
+# On a prefix with more than two members that surfaced as a changed count on an identical row; on a
+# prefix with exactly two, one annotated, the dip reached ONE and the surviving sibling's row
+# crossed between `NAMED-UPSTREAM <slug>` and `NAMED-UPSTREAM-AMBIGUOUS <prefix>` — a changed row
+# SET, by status and subject, on a rotation that swept nothing. The reference consumer reported the
+# second shape from its own ledger with 89 rows either side
+# (PC-S337-ROTATE-ACCEPTANCE-TEST-FALSE-FAILS-WHEN-A-PREFIX-CROSSES-THE-ONE-VS-MANY-THRESHOLD).
 #
-# THOSE FIGURES ARE A PROPERTY OF THAT LEDGER AT THAT SIZE, NOT A CONSTANT. An earlier run of the
-# same experiment on a larger ledger reported 84 rows and 10 differing lines. Both are true of their
-# own corpus and neither is the invariant -- what holds is the SHAPE: the row set does not move, the
-# differing lines all carry a prefix count, and the count rises. Re-derive rather than quoting
-# either number.
+# THE ARCHIVE ARM STAYS, AND DELETING IT WOULD BE A REGRESSION. Without it the count was
+# ANTI-MONOTONIC, every rotation lowering it and converting a correct AMBIGUOUS into a confidently
+# wrong single attribution. The corpus count is that fix carried one step further, in the same
+# direction: strictly fewer attributions, never more.
 #
-# THE COUNTER IS NOT THE DEFECT, AND CHANGING IT WOULD BE A REGRESSION. Its archive arm is a
-# deliberate earlier fix: without it the count was ANTI-MONOTONIC, every rotation lowering it and
-# converting a correct AMBIGUOUS into a confidently wrong single attribution. Widening the open
-# side to include annotated-but-unrotated entries was measured on the reference consumer too — it
-# moves 18 displayed counts and flips ZERO classifier verdicts, which is not enough to touch a
-# reader four programs share. The CLAIM was wrong; the code it claims about was right.
+# A WIDENING OF THIS COUNTER WAS ONCE MEASURED ON THE REFERENCE CONSUMER AT REST AND REJECTED FOR
+# FLIPPING ZERO VERDICTS. The defect is a TRANSIENT — it exists only between the annotate and the
+# rotate — and a ledger at rest has no annotated-but-unrotated entry to show it. The consumer's own
+# diff, taken across a live rotation, is what a rest-state census could not see.
 #
 # Usage:
 #   ledger-rotate.sh <ledger-path> [--archive <path>] [--apply]
@@ -428,8 +427,9 @@ if [ "$APPLY" -eq 0 ]; then
   sed 's/^/  /' "$TMPD/moved-names"
   echo "  archive: ${ARCHIVE}"
   echo "  re-run with --apply to write. Verify after: ledger-reverify.sh must emit the SAME ROW SET,"
-  echo "  by status and subject. Prefix counts inside NAMED-UPSTREAM-AMBIGUOUS details DO move when an"
-  echo "  entry annotated in the same pass reaches the archive; that is not a sweep. A changed row SET is."
+  echo "  by status and subject (cut -f1,2 | sort). Prefix counts inside NAMED-UPSTREAM-AMBIGUOUS details"
+  echo "  are taken over both files and do not move. A row that appears, disappears, or changes status"
+  echo "  — NAMED-UPSTREAM <slug> becoming NAMED-UPSTREAM-AMBIGUOUS <prefix> included — means a sweep: STOP."
   exit 0
 fi
 
