@@ -4977,3 +4977,57 @@ convention, where exit 0 is the fix being present — the shipped fix exits 0, a
 whitelist widened to accept everything, an untouched validator, and a docs-only change all exit 1.
 
 verify: sh d=$(mktemp -d); mkdir -p "$d/_bmad-output"; printf '# S\n\n## In-Flight Teammates\n| a | r | d | t | status |\n|---|---|---|---|---|\n| alpha-stop | x | d.md | t | stopped (handoff) |\n| beta-unk | x | d.md | t | idle-reusable |\n' > "$d/_bmad-output/pipeline-snapshot.md"; AI_DLC_PROJECT_ROOT="$d" bash "$PWD/core/scripts/validate-artifact-budget.sh" --only pipeline-snapshot.md >"$d/o" 2>&1; grep -q beta-unk "$d/o" && ! grep -q alpha-stop "$d/o"
+## BL-149 — the handoff guard compared the whole status cell where its sibling compares the leading token, so it fired only on the bare form
+
+**LANDED (v0.483.0, verified 0645904b).**
+
+**Found while fixing `BL-147`**, 2026-09-02, by deriving every core reader of the In-Flight
+status column rather than trusting the one the filing named. FIXED in this release.
+Distribution-internal, no `PC-` id — it is here because it is the same column, the same release
+and the sibling reader of the code `BL-147` changed.
+
+`core/hooks/ai-dlc-continue.sh` Check 0 is the guard that BLOCKS a handoff while a teammate is
+still running. It read the status cell with `if (tolower(last) == "in-flight") found = 1` — an
+equality against the WHOLE cell. `check_inflight_status()` in `validate-artifact-budget.sh` has
+always split the leading token off instead, and its own comment says why: the reference
+consumer's live snapshot carries `in-flight, since 2026-07-27T21:12:41Z`, `in-flight, retrying
+Write` and `in-flight (VERIFY pass, resolves_divergence: ...)`, and *"an equality check would
+have failed every one of them on the day it shipped."*
+
+**MEASURED by driving the arm on the four real forms**, one cell varied:
+
+    in-flight                                        BLOCKS   correct
+    in-flight, since 2026-07-27T21:12:41Z            ALLOWS   teammate is running
+    in-flight, retrying Write                        ALLOWS   teammate is running
+    in-flight (VERIFY pass, resolves_divergence: x)  ALLOWS   teammate is running
+
+**One of four blocked.** The guard fired only on the bare token, and the three forms it let
+through are the three the consumer actually writes. The failure is silent and in the open
+direction: the handoff proceeds, and the successor inherits a snapshot whose rows name teammates
+nobody stopped — the one piece of state `handoff-resume-guard`'s own header says no later step
+can reconstruct.
+
+**THE FIXTURE COULD NOT HAVE CAUGHT IT, AND THE REASON IS THE STANDING RULE.**
+`core/fixtures/handoff-resume-guard/seed.sh` seeded `| ... | in-flight |` — the bare token, the
+form the reader already accepted. That is `fixture-mutants.md`'s *"never seed from what the
+reader accepts"*, and the battery proved the guard accepts its own grammar for the defect's whole
+life. Seed (b2) now carries the trailing-note form; scored against the pre-fix hook, exactly one
+arm fails and it is that one.
+
+**IT COULD NOT SAFELY HAVE BEEN FIXED BEFORE `BL-147`, WHICH IS WHY BOTH ARE IN ONE RELEASE.**
+Making this guard fire correctly means a handoff is BLOCKED while any row reads `in-flight`. The
+only compliant way to clear such a row is to rewrite it to `stopped` — and until `BL-147` landed,
+`validate-artifact-budget.sh` rejected that token, so the lead had no passing move. Fixed alone,
+this change converts a guard that fails open into a handoff that WEDGES.
+
+**A NOTE ON HOW THE FIRST CUT BROKE.** The explanatory comment was written with an apostrophe in
+it, inside a single-quoted `awk` program, which closed the string and broke the entire hook —
+every arm of the fixture went red at once, which reads like a much larger regression than it was.
+The comment now carries its own prohibition. `bash -n` on the hook is the one-command control.
+
+**Stated limitation of the receipt below.** It runs the shipping fixture and keys on the arm's
+own `ok` line rather than on the hook's source, so it drives the real program — but a rename of
+that assertion's text scores STILL-LIVE. Keyed on the behavioural phrase, not on a token nothing
+binds; if the arm is reworded, re-anchor rather than reading the non-close.
+
+verify: sh o=$(bash core/fixtures/handoff-resume-guard/run.sh 2>&1); grep -qE '^  ok .*trailing note' <<<"$o"

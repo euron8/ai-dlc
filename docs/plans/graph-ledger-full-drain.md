@@ -37,7 +37,119 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 43 SHIPPED AS `v0.481.0`, CORRECTED BY `v0.482.0`. GAP 3, PENDING 3. START AT BATCH 44.
+### BATCH 44 SHIPPED AS `v0.483.0`. GAP 4, PENDING 4. START AT BATCH 45.
+
+**THE SWEEP FOUND NEW WORK, FOR THE FIRST TIME IN FOUR BATCHES, AND THE md5 IS WHAT SAID SO.**
+The ledger moved `a79811f7…` → `1981713c…`, live **72 → 73**, unfiled **28 → 29**. The consumer
+filed `PC-S308-HANDOFF-STOPPED-STATUS-NOT-IN-VALIDATOR-WHITELIST` on 2026-09-02, the same day
+this batch ran, and it was the newest row in the dated sweep by two days. **Batches 41–43 opened
+by reporting the ledger empty on an unmoved md5; this one moved, and the counts moved with it,
+which is the three-signal agreement the sweep is for.**
+
+**THE SUBJECT WAS A LIVE BLOCKER ON THE CONSUMER'S HANDOFF, AND ITS OWN SNAPSHOT RECORDS THE
+DAMAGE IN PROSE.** `steps/handoff.md` step 1 and `core/hooks/ai-dlc-continue.sh:390` — the hook
+that BLOCKS the handoff — both instruct the lead to rewrite a stopped teammate's row `status` to
+`stopped` and KEEP the row. `validate-artifact-budget.sh` whitelisted two tokens and failed on
+that one, and its own remedy text instructed the opposite: DELETE it.
+
+**THE BOX WAS CLOSED ON ALL FOUR SIDES**, measured on the shipping validator with one row varied
+against two near-miss rows held constant beside it in the same run:
+
+    stopped (operator-requested handoff)   exit 1   check_inflight_status
+    ~~stopped~~                            exit 1   check_inflight_rows
+    in-flight                              exit 0   but Check 0 blocks the handoff
+    delivered-reachable                    exit 0   and is false: it never delivered
+
+Three of the four dispositions were refused and the only passing one was DELETION, which two core
+files forbid. The consumer's live In-Flight section now reads, in prose where a row should be,
+*"(none -- `adversary-s308-product-brief-p3`'s row was deleted, not struck or rewritten to
+`stopped`, on stop: both alternatives are rejected by `validate-artifact-budget.sh`)"*. **A
+consumer that writes down why it disobeyed core is the strongest filing this program has had.**
+
+**CORE DISAGREED WITH ITSELF TWO HOMES TO TWO AND NO GATE COULD SEE IT.** `handoff.md` and
+`route.md:611-617` already named `stopped` and already carried the handoff exception;
+`gate-validation.md:840` and the validator declared a closed set of two. **That is the SECOND
+drift of this same token set** — `core/fixtures/inflight-row-shape/run.sh`'s own header records
+the first, `idle-reusable`, and says the rename was closed "in the validator only". Filed as
+`BL-148`, NOT fixed: the set is declared in four core files, is absent from
+`docs/vocabulary-index.md` (15 rows, 12 `# vocabulary:` arms, **zero** naming it, positive
+control in the same invocation), and is bound by no invariant. **A one-token whitelist miss
+reached a consumer because nothing joins the four declarations.**
+
+**THE SECOND TEST IS BANKED AND NON-NULL — the owed item from batch 43 is discharged.** Driving
+the consumer's INSTALLED `validate-artifact-budget.sh` and this distribution's copy against the
+consumer's own snapshot with the deleted row RESTORED as handoff.md requires: installed **exit 1**
+with `FAIL: In-Flight Teammates carries row(s) with an unrecognised status`, this distribution
+**exit 0**. Control in the same invocation: the two binaries differ (71605 vs 73434 bytes).
+
+**AND ACTION 7's STANDARD DIFFERENTIAL WAS VOID TWICE OVER — READ ITS CONTROL, NEVER ITS NULL.**
+`validate-layer-entries.sh` installed vs shipped is **byte-identical**, so its perfect null was
+two runs of one program; both also exited **2**, which is a refusal and not a finding. **The
+action-7 recipe names that validator by hand, and it can only discriminate when THAT file is in
+the range. Pick the differential that exercises YOUR subject** — the standard one is a template,
+not the test.
+
+**BATCH 43's OWED SPAWN-LEDGER READING WAS ALSO TAKEN, and it is unchanged at exit 3
+PRE-LEDGER** — correctly, because the consumer has not pulled. What is new is the population:
+**408 of 1249 rows carry `sprint:null`, all 28 rows naming 308 are null, and the newest null row
+was written 2026-09-02T23:37:38Z, during this batch.** The fix is hook-side and repairs FUTURE
+writes only, so the existing rows stay null after a pull and the verdict cannot flip until new
+spawns are dispatched post-pull. **Say that when reporting it; "it will go green on pull" is
+false.**
+
+**`PC-S999-NEVER` IS NOT AN IMPOSSIBLE ID IN THE COMMIT-MESSAGE CHANNEL — IT RETURNS 2.** This
+file already warned that the control for that channel "cannot be `PC-S999-NEVER`", and this batch
+ran it anyway and got a non-zero absence control. It appears in commit messages because this
+corpus writes it down as a control token. Use a token nothing has ever written —
+`PC-QQ7-ZZTOKEN-NEVER-WRITTEN-ANYWHERE` returned 0 against a known-present id returning 1.
+**A control token that the corpus DOCUMENTS is a token the corpus CONTAINS.**
+
+**THE RELEASE-VERSION TRIPLE IS PER-COMMIT AND IT BLOCKED THIS PUSH.** The first cut bumped
+`VERSION` in the fix commit and added the CHANGELOG heading in the release commit, so at the fix
+commit `VERSION` said `0.483.0` while the CHANGELOG top said `0.482.0` — `FAIL: 1 of 2 commit(s)
+disagree`. **The bump and the heading must land in the SAME commit.** Restructured to a `fix(core)`
+commit carrying only `core/` and a `feat(v0.483.0)` commit carrying `VERSION`, CHANGELOG and the
+backlog, and both commits are internally consistent.
+
+**GATE_EXIT=141 WITH ALL 17 PHASES PASS AND THE REF NOT MOVED.** `pre-push: all gates green`
+printed, and `origin/release/v0.483.0` was **NONE**. SIGPIPE on transport, the third time this
+file has recorded it. **Confirm the ref moved by comparing it to local HEAD; a green banner is not
+a landed push.** The retry landed it at `43c7f548`.
+
+**ACTION 8 IS SATISFIED FOR ONCE.** The closed id resolves to exactly ONE commit — the release
+commit, at `VERSION` 0.483.0 — because it was deliberately kept out of the `fix(core)` commit that
+precedes the bump. Batch 43's ids still resolve to `0.480.0` for `0.481.0` work, which is the
+`tail -1` defect and is unchanged.
+
+**THE FIGURES, re-derived by running the derive block.** Ledger md5 **`1981713c…`**. **73 live,
+142 archived, 44 cited, 29 unfiled.** DISCHARGED **21 raw / 18 corrected**, IN-FLIGHT **27**,
+UNTOUCHED **28**, overlap **3**, TERMINAL **32**; partition 21+27+28−3 = 73. `docs/backlog.md`
+**82 live / 66 archived** after filing `BL-147` and `BL-148` and rotating `BL-147`. **The consumer
+dirty count is not a gate**: it read 5 at the start and 6 at the close, every path its own
+pipeline state, and `.handoff-in-progress` appeared while this batch ran — a graph session was
+mid-handoff throughout, which is the operation this release repairs.
+
+**THE GAP IS FOUR RELEASES AND PENDING IS 4.** Consumer stamp `0.479.0` against a distribution
+`VERSION` of `0.483.0`. The four are batch 43's two, batch 42's one, and this batch's, derived
+per-id against the corrected impossible-id control of 0. **THE PULL IS NOT AUTHORIZED** —
+`operator-rulings.md` governs unchanged: operator-initiated, readiness is not authorization, a
+`PENDING` count is not a decision about WHEN, and one is never handed to a peer session. **Past
+five releases this file calls the range WIDE; the next batch reaches that line.**
+
+**THREE REMAIN UNFILED IN THE STANDING `PC-S340-*` CORPUS**, unchanged from batches 42 and 43 and
+all three `verify: manual`: `RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-PASSES-ON-RETRY` (the defect
+IS intermittency — compute the predicted count before reading any clean sweep as a refutation),
+`CHECK-26-READS-A-PARTIAL-RE-VERIFY-VERDICT-FILE-AS-UNADJUDICATED` (needs a new script AND a
+`_gate-procedures.md` change, so say which you are closing), and
+`AUDIT-RULE-FILES-DRIFT-FINDINGS-IN-CORE-PROSE-ARE-NOT-CONSUMER-FIXABLE` (33 findings across
+fourteen files, a per-file prose judgement — not one subject as it stands).
+
+**BATCH 44's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW IT.**
+`PC-S308-HANDOFF-STOPPED-STATUS-NOT-IN-VALIDATOR-WHITELIST` shipped as `v0.483.0`, is cited by
+`BL-147` in `docs/backlog.archive.md`, and stays live in the consumer's ledger until they pull.
+Do not re-scope onto it.
+
+### BATCH 43 SHIPPED AS `v0.481.0`, CORRECTED BY `v0.482.0`. BATCH 44 HAS SINCE RUN; TAKE THE STATE FROM THE BLOCK ABOVE, NOT FROM THIS HEADING.
 **A LATE HAND CORRECTED TWO OF MY CLAIMS AND IT IS THE FIFTH TIME THAT HAS HAPPENED.** The scope
 hand went idle at 54m, delivered nothing to two asks, and then reported AFTER the merge — the
 pattern this file already records. Both findings were right. **Read a late hand against what

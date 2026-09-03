@@ -67,6 +67,36 @@ Filed and rotated as `BL-147`. Filed separately and NOT fixed: no invariant
 binds this token set across its declaring files, so a fifth site can still
 disagree silently.
 
+### And its sibling reader had the equality bug the validator deliberately avoided
+
+Deriving every core reader of that column, rather than trusting the one the
+filing named, turned up a second defect in the same release.
+`core/hooks/ai-dlc-continue.sh` Check 0 — the guard that BLOCKS a handoff while a
+teammate is still running — compared the WHOLE status cell to `in-flight`, where
+`check_inflight_status()` has always split the leading token off. Measured by
+driving the arm on the four real forms, one cell varied:
+
+    in-flight                                        BLOCKS   correct
+    in-flight, since 2026-07-27T21:12:41Z            ALLOWS   still running
+    in-flight, retrying Write                        ALLOWS   still running
+    in-flight (VERIFY pass, resolves_divergence: x)  ALLOWS   still running
+
+One of four. It fired only on the bare token and failed OPEN on the three forms
+the reference consumer actually writes, so a handoff proceeded and the successor
+inherited a snapshot naming teammates nobody had stopped.
+
+`core/fixtures/handoff-resume-guard/seed.sh` seeded the bare token — the form the
+reader already accepted — so the battery proved the guard accepts its own grammar
+for the defect’s whole life. Seed (b2) now carries the trailing-note form, and
+scored against the pre-fix hook exactly one arm fails.
+
+**The two halves are not separable.** Making this guard fire correctly blocks the
+handoff until the row is rewritten to `stopped`, which the budget validator
+rejected until this same release. Shipped alone, it converts a guard that fails
+open into a handoff that wedges.
+
+Rotated as `BL-149`.
+
 ## [0.482.0] - 2026-09-02
 
 ### Two of the three fixtures still seeded the form their reader accepts, and v0.481.0 said all three were fixed
