@@ -297,12 +297,8 @@ delivers by file (Rule 20), so **the deliverable file IS the handle** -- it need
 no \`agent_id\`, takes no \`task_id\`, and outlives a compaction. For each row of the
 snapshot's \`In-Flight Teammates\` section:
 
-- **Status reads \`stopped\`** -> SKIP THE ROW ENTIRELY. Do not arm a beat over it and
-  never re-dispatch it. That teammate was stopped deliberately at a handoff, and its
-  deliverable is absent BECAUSE it was stopped -- so the absent-deliverable rule below
-  would re-arm and eventually re-dispatch work an operator chose to end. The row is a
-  RECORD for you to read, not an outstanding join. Read this arm FIRST: a stopped row
-  satisfies the absent-deliverable test, so ordering is what keeps it out of that path.
+- **Status \`stopped\`** -> SKIP the row. Take this arm FIRST: it also satisfies
+  the absent test below, and re-arming it re-dispatches work an operator ended.
 - **Deliverable exists, is non-empty, and is NEWER than the row's \`dispatched-at\`**
   -> the teammate DELIVERED. Consume the file and strike the row. Never re-dispatch.
 - **Deliverable exists but PREDATES \`dispatched-at\`** -> it is a previous sprint's
