@@ -120,52 +120,31 @@ done
 say() { [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"; }
 
 # -----------------------------------------------------------------------------
-# autoCompactWindow resolution. parse_window() accepts Claude Code's own
-# spellings ("auto", "400k", "1m", bare int where 100..1000 means thousands);
-# resolve_window() walks the settings layers in Claude Code's precedence order.
-#
-# NOTE: parse_window() and resolve_window() below are byte-identical to the
-# copies in core/hooks/ai-dlc-context-sensor.sh. Hooks install to .claude/hooks/
-# and cannot source from scripts/, so they are duplicated deliberately. Keep the
-# two in step.
+# Window resolution. THE CHAIN IS NOT SPELLED HERE. This script reports the window
+# that .claude/hooks/ai-dlc-context-sensor.sh ramps against, so the two must not
+# drift; both source ai-dlc-window.sh and neither carries a copy of the precedence
+# order. The library lives beside the hooks, so it is reached by naming BOTH layouts
+# rather than by walking up from this script's own package -- .claude/hooks/ on a
+# consumer, core/hooks/ in the distribution -- with an env override for tests.
+# Unreadable in every candidate is a REFUSAL, not a guess: reporting a window this
+# script derived by a second route is the exact drift the library exists to end.
 # -----------------------------------------------------------------------------
-parse_window() {
-  local raw
-  raw="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
-  case "$raw" in
-    ""|auto) return 1 ;;
-    *m) awk -v v="${raw%m}" 'BEGIN{printf "%d", v*1000000}' ;;
-    *k) awk -v v="${raw%k}" 'BEGIN{printf "%d", v*1000}' ;;
-    *[!0-9]*) return 1 ;;
-    *)
-      if [ "$raw" -ge 100 ] && [ "$raw" -le 1000 ]; then
-        awk -v v="$raw" 'BEGIN{printf "%d", v*1000}'
-      else
-        printf '%d' "$raw"
-      fi
-      ;;
-  esac
-}
-
-# The highest-precedence layer that DEFINES autoCompactWindow wins; a layer that
-# does not set the key does not shadow a lower one; a defining layer whose value
-# is unparseable ("auto") or otherwise not a plain integer resolves to the model
-# default and lower layers are not consulted -- this mirrors Claude Code's own
-# config merge.
-resolve_window() {
-  local raw val
-  if [ -n "${CLAUDE_CODE_AUTO_COMPACT_WINDOW:-}" ]; then
-    if val="$(parse_window "$CLAUDE_CODE_AUTO_COMPACT_WINDOW")"; then printf '%s' "$val"; fi
-    return 0
-  fi
-  for f in "$SETTINGS_LOCAL" "$SETTINGS_PROJECT" "$SETTINGS_USER"; do
-    [ -r "$f" ] || continue
-    raw="$(jq -r '.autoCompactWindow // empty' "$f" 2>/dev/null || true)"
-    [ -n "$raw" ] || continue
-    if val="$(parse_window "$raw")"; then printf '%s' "$val"; fi
-    return 0
-  done
-}
+if [ -n "${AI_DLC_WINDOW_LIB:-}" ] && [ -r "${AI_DLC_WINDOW_LIB}" ]; then
+  WINDOW_LIB="$AI_DLC_WINDOW_LIB"
+elif [ -r "${AI_DLC_SELF_DIR}/../hooks/ai-dlc-window.sh" ]; then
+  WINDOW_LIB="${AI_DLC_SELF_DIR}/../hooks/ai-dlc-window.sh"
+elif [ -r "${PROJECT_DIR}/.claude/hooks/ai-dlc-window.sh" ]; then
+  WINDOW_LIB="${PROJECT_DIR}/.claude/hooks/ai-dlc-window.sh"
+elif [ -r "${PROJECT_DIR}/core/hooks/ai-dlc-window.sh" ]; then
+  WINDOW_LIB="${PROJECT_DIR}/core/hooks/ai-dlc-window.sh"
+else
+  echo "ERROR: cannot locate ai-dlc-window.sh in either layout" >&2
+  echo "  looked in ${AI_DLC_SELF_DIR}/../hooks/, ${PROJECT_DIR}/.claude/hooks/ and" >&2
+  echo "  ${PROJECT_DIR}/core/hooks/. Set AI_DLC_WINDOW_LIB to the library." >&2
+  exit 2
+fi
+# shellcheck source=/dev/null
+. "$WINDOW_LIB"
 
 # --settings overrides the PROJECT layer; local and user layers derive from
 # PROJECT_DIR and CLAUDE_CONFIG_DIR/HOME.
@@ -173,24 +152,25 @@ SETTINGS_LOCAL="${PROJECT_DIR}/.claude/settings.local.json"
 SETTINGS_PROJECT="$SETTINGS_JSON"
 SETTINGS_USER="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
 
-WINDOW="$(resolve_window 2>/dev/null || true)"
+# ONE call returns the value AND the layer that produced it. It used to take two --
+# resolve_window() applied the precedence and a second loop below re-derived which
+# layer had won -- and a restatement of a precedence order is a copy that can drift
+# from the order it describes.
+#
+# THE RUNTIME LAYER IS NOT REACHABLE FROM HERE, and the report says so rather than
+# implying it was consulted and lost. This is a script, not a hook: nothing feeds it
+# stdin, so it has no session id of its own, and the window file is at a fixed path
+# that concurrent sessions share. Trusting that file without matching a session id
+# would report another session's window as this project's configuration. A caller
+# that does have one passes AI_DLC_SESSION_ID.
+WINDOW_RESULT="$(ai_dlc_resolve_window "${AI_DLC_SESSION_ID:-}" "$SETTINGS_LOCAL" "$SETTINGS_PROJECT" "$SETTINGS_USER" 2>/dev/null || true)"
+WINDOW="${WINDOW_RESULT%%|*}"
+WINDOW_REST="${WINDOW_RESULT#*|}"
+WINDOW_SOURCE="${WINDOW_REST%%|*}"
 case "${WINDOW:-}" in ''|*[!0-9]*) WINDOW="" ;; esac
-
-# Report the layer the winning value came from (mirrors resolve_window's order).
-WINDOW_SOURCE="unset (model default)"
-if [ -n "$WINDOW" ]; then
-  if [ -n "${CLAUDE_CODE_AUTO_COMPACT_WINDOW:-}" ]; then
-    WINDOW_SOURCE="env CLAUDE_CODE_AUTO_COMPACT_WINDOW"
-  else
-    for pair in "settings.local.json:$SETTINGS_LOCAL" "settings.json:$SETTINGS_PROJECT" "user settings:$SETTINGS_USER"; do
-      f="${pair#*:}"
-      [ -r "$f" ] || continue
-      raw="$(jq -r '.autoCompactWindow // empty' "$f" 2>/dev/null || true)"
-      [ -n "$raw" ] || continue
-      WINDOW_SOURCE="${pair%%:*}"
-      break
-    done
-  fi
+case "${WINDOW_SOURCE:-}" in '') WINDOW_SOURCE="unset (model default)" ;; esac
+if [ -z "${AI_DLC_SESSION_ID:-}" ]; then
+  WINDOW_SOURCE="${WINDOW_SOURCE} [window.json not consulted: no session id]"
 fi
 
 if [ -n "$WINDOW" ]; then

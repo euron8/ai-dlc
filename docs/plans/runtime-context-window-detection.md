@@ -163,6 +163,65 @@ Measured 2026-09-02 against `origin/main`, with a control in the same invocation
   uses. **Verify it, then say so; do not "fix" a formula that already agrees.**
 - Both `~/.ai-dlc/window.json` and `~/.claude/statusline.sh` exist on this machine today.
 
+## The design chosen — action 3, written before any edit to the subject
+
+**One library, sourced by both readers.** New file `core/hooks/ai-dlc-window.sh`, exposing
+`ai_dlc_parse_window` and `ai_dlc_resolve_window`. It is not executable and is sourced, never
+run.
+
+**The NOTE that justified the duplication is false, and that is what unblocks this.**
+`core/hooks/ai-dlc-context-sensor.sh:357-360` says hooks "cannot source from scripts/, so they
+are duplicated deliberately". Two shipped hooks already source a shared sibling:
+`core/hooks/ai-dlc-continue.sh:280-282` and `core/hooks/ai-dlc-recover.sh:138` both load
+`core/hooks/ai-dlc-handoff-pending.sh` through `dirname "${BASH_SOURCE[0]}"`, and that helper's
+own header states the same motive this task has — the two callers "ask the same question and
+the two answers must not drift". A library in `core/hooks/` ships to `.claude/hooks/` beside
+its callers, so the sibling resolves in both layouts. `scripts/install.sh:365` copies
+`core/hooks/*.sh` as a glob, so the new file needs no packaging edit.
+
+**The validator reaches it by naming both layouts**, which is the form `I33c` prescribes and
+`core/scripts/sprint-status.sh:129-137` demonstrates: `$AI_DLC_ROOT/core/hooks/` in this repo,
+`$AI_DLC_ROOT/.claude/hooks/` in a consumer, with an env override for tests. Unreadable means
+fall back to today's behaviour, never crash.
+
+**The resolver returns `window|source|model_max` in one call**, and the four layers are:
+
+1. `$AI_DLC_WINDOW_FILE` (default `$HOME/.ai-dlc/window.json`) — taken only when the file is
+   readable, `jq` parses it, `.session_id` equals the caller's non-empty session id, `ts` is
+   within `$AI_DLC_WINDOW_MAX_AGE` (default 60) seconds of now, and `.target` is a positive
+   integer. Emits `model_max` from `.window` as well.
+2. `CLAUDE_CODE_AUTO_COMPACT_WINDOW`.
+3. `settings.local.json`, then project `settings.json`, then user settings.
+4. Nothing — empty window, the model default.
+
+**The `model_max` return is why the clamp survives rather than being deleted.** The plan
+invited removing `EFFECTIVE = min(WINDOW, MODEL_MAX)`. Measured against the chain above,
+deleting it is wrong in one direction and keeping it unchanged is wrong in the other: on a
+262144-token model whose row has not been proven, `MODEL_MAX` is 200000, so an unchanged clamp
+would drag a correct runtime `target` of 262144 down to 200000. Layer 1 therefore supplies
+`MODEL_MAX` from `.window` and marks the row known, after which the existing clamp arithmetic
+is already correct and untouched. That is the reshaped form rather than a second branch beside
+the clamp, and it makes the `imminent` band — gated on `ROW_KNOWN` — reachable in the one case
+where the row is a fact rather than a guess.
+
+**What is deleted**, not left beside the new path:
+
+- `parse_window()` and `resolve_window()` from `core/hooks/ai-dlc-context-sensor.sh` and from
+  `core/scripts/validate-compact-window.sh`, plus the NOTE asserting their byte-identity.
+  Confirmed byte-identical today by `cmp` with a control, and confirmed bound by nothing:
+  no arm in `scripts/validate-enforcement-map.sh` joins the two files (control: 49 arms mention
+  `core/hooks` at all).
+- The validator's SECOND walk of the settings layers at
+  `core/scripts/validate-compact-window.sh:185-192`, which re-derives `WINDOW_SOURCE` by
+  restating the precedence `resolve_window()` had just applied. One call now returns both.
+
+**Requirement 2 is unsatisfiable in the validator, and that is reported rather than faked.**
+`validate-compact-window.sh` is a script, not a hook: it reads no stdin and carries zero
+`session_id` references (control: 16 `WINDOW` references in the same file). It accepts a
+session id from `AI_DLC_SESSION_ID` when a caller has one; with none, layer 1 is SKIPPED rather
+than trusted, and the reported source says so instead of implying the layer was consulted and
+lost.
+
 ## NEXT ACTIONS — numbered, in order
 
 1. **Re-verify the premise before building.** Every bullet above is a hypothesis about a tree
