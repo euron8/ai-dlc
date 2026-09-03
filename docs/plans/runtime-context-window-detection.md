@@ -1,15 +1,48 @@
-# Detect the context window at runtime instead of trusting a launcher env var
+# DISCHARGED — DO NOT EXECUTE — Detect the context window at runtime instead of a launcher env var
 
-## RESUME HERE
+## STATUS
 
-**Resume with exactly: `READ and FOLLOW docs/plans/runtime-context-window-detection.md`.**
+**DISCHARGED 2026-09-02, shipped as v0.485.0, merged to `main` at `9cada242` (ref confirmed
+moved from `ecd75049`). Do not execute this file.** Everything below the next section is the
+record of work that is finished; a session that follows it will redo a landed change.
 
-**STATUS: NOT STARTED. Recorded 2026-09-02 as the operator's highest-priority item, ahead of
-the graph-ledger drain program.** `docs/plans/graph-ledger-full-drain.md` is PAUSED at batch 45
-for this; its own action 1 says so. Nothing in this file has been built, and the premise checks
-below are the only work done.
+`docs/plans/graph-ledger-full-drain.md` is UNPAUSED — its action 1 is restored to batch 45,
+and that is the next thing to pick up.
 
-This section is the only current status record in this file.
+This section replaces the status record that stood here, and is the only one in this file.
+
+## What shipped, and what did NOT
+
+`core/hooks/ai-dlc-window.sh` is the single resolver. The chain is the runtime file, then
+`CLAUDE_CODE_AUTO_COMPACT_WINDOW`, then the three settings layers, then the model default.
+`core/hooks/ai-dlc-context-sensor.sh` sources it as a sibling; `core/scripts/validate-compact-window.sh`
+reaches it by naming both layouts. Places that resolve a window went from **2 to 1**, derived
+with the same grep at `ecd75049` and at `HEAD`.
+
+**Done-when 2 is only half established, and this is the one open item.** That switching models
+mid-session changes the target with no pipeline restart was proven mechanically: one pipeline,
+no state reset, only the file rewritten between two hook fires, giving `effective_window`
+420000 then 262144. What was NOT driven is the PRODUCER half — that `/model` actually causes
+`~/.claude/statusline.sh` to rewrite the file — because this task was instructed not to edit
+that script, and no live model switch was observed during the work. The reader honours whatever
+the file says; whether the file follows `/model` rests on the operator's own report of the
+statusline's behaviour, not on a measurement taken here.
+
+**Requirement 5 needed no change** and was verified in code rather than from the comment
+claiming it: `ai-dlc-context-sensor.sh:302` already sums
+`input_tokens + cache_creation_input_tokens + cache_read_input_tokens`, the same input-only
+formula `used_percentage` uses.
+
+**Requirement 2 is unsatisfiable in the validator**, reported rather than faked. It is a script
+with no stdin and so no session id (zero `session_id` references against a control of 16
+`WINDOW` references). It takes `AI_DLC_SESSION_ID` when a caller has one; with none it skips
+the runtime layer and says `[window.json not consulted: no session id]`.
+
+**Three false zeros were caught by controls while measuring the premise**, all the same class:
+`\b` and `\s` are not POSIX ERE, so `git grep -E` returned a clean, plausible 0 for tokens
+present 7 times and for hook files that do source a shared sibling. That last zero, had it been
+believed, would have left the duplication in place — it was the evidence that the comment
+justifying the duplication was false.
 
 ## Start here
 
