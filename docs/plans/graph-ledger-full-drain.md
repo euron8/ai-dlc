@@ -81,14 +81,27 @@ EMPTY OF NEW WORK for batch 46; the standing corpus below decides, provenance fi
 the stamp and the in-flight marker — and the carve-out was rejected anyway, by measurement: after
 a hand `--finish` it re-emits the semantic-merge WORKLIST and re-wedges the consumer. Build the
 alternative and let the battery choose the reason. The gate now DECIDES the third cause from
-those two records rather than listing it. The fixture's first revision returned two wrong
-verdicts in opposite directions because `build_world` set `$B`/`$T` globally and a later world
-clobbered them; refs are now per-world (`fixture-mutants.md` carries the rule). A synthetic
-consumer needs `setup-sites.md` beside the driver and a `core/scripts/` file in the dist, or the
-re-stamp is withheld and the marker stays down. The push gate went 17/17 PASS with exit 141 and
-the ref NOT on origin — second occurrence; `verification-discipline.md` now says to confirm the
-remote ref. The adversarial hand went idle twice without delivering and the batch merged on its
-own battery; read its report against `cb4fff3d` if it arrives.
+the stamp alone rather than listing it — the marker half was the v0.494.0 correction above. The
+fixture's first revision returned two wrong verdicts in opposite directions because
+`build_world` set `$B`/`$T` globally and a later world clobbered them; refs are now per-world
+(`fixture-mutants.md` carries the rule). A synthetic consumer needs `setup-sites.md` beside the
+driver and a `core/scripts/` file in the dist, or the re-stamp is withheld and the marker stays
+down. The push gate went 17/17 PASS with exit 141 and the ref NOT on origin — second occurrence;
+`verification-discipline.md` now says to confirm the remote ref.
+
+**TWO SHIPPING FIXTURES ARE FLAKY UNDER THE POOL, FILED AS `BL-152` AND `BL-153` ON THE OPERATOR'S INSTRUCTION.** The batch-45 docs push
+was refused twice by fixtures the change never touched, each green solo: `context-sensor`
+(arm "CONTROL: 59s old is still fresh and IS taken" — it seeds a window file at `NOW - 59`
+where `NOW` is captured once at `run.sh:392` and the hook allows 60s, so any second of pool
+latency between capture and arm flips it; 1 of 185 units red, `98 passed, 1 failed`) and, on the
+next run, `implementation-join-yield` (its beat-churn arm needs nine stop-hook invocations inside
+the hook's 30-second rapid-fire window; the pool spread them past it and the counter reset,
+correctly). Same class: one side of a clock pinned, the other left to wall time. Both ship to
+consumers, so a consumer push can be refused by them too. Both entries carry the remedy shape
+and a receipt scored to flip on it; they are off-plan, carry no `PC-` id, and are available work
+for whoever is not mid-batch — take them BEFORE the next batch if the gate refuses again. Also
+measured: `validate-release-version.sh` reads the FIRST version token in any commit subject, so a
+docs subject that names two releases fails the triple — name none.
 
 **THE SPAWN-LEDGER PREDICTION HOLDS** — 5 post-pull rows, 0 null `sprint`, 431 of 1272 null
 before. Closed; see action 1. **`BL-131` needs a scope decision** — its receipt has read 0 since
@@ -4489,17 +4502,18 @@ so no block written before it changes verdict.
    interrupt; if you genuinely need to ask, ask the OPERATOR whether to, and put the peer's current
    state into the question.
 
-   **THE GAP IS ZERO AND PENDING IS 0** — the consumer's stamp reads `0.489.0` / `4d577755` on all
-   four fields against a distribution `VERSION` of `0.489.0`, reached by the `0.482.0 → 0.489.0`
-   pull the operator authorized. **A ZERO GAP IS A STATE, NOT AN ACHIEVEMENT**, and it went
-   non-zero on the very next release the last time it was closed, at `v0.425.0`. **FIVE IS THE LINE
-   THIS FILE CALLS WIDE. Say so when you report the gap; a wide range means more paths adjudicated
-   in one session and a bigger blast radius.**
+   **THE GAP IS TWO AND PENDING IS 1** — the consumer's stamp reads `0.492.0` / `2f1ee8bc` on all
+   four fields against a distribution `VERSION` of `0.494.0`; `PC-S309` is the one discharged
+   candidate it cannot see. The gap was zero when batch 45 started (the `0.489.0 → 0.492.0` pull
+   the operator authorized) and went non-zero on that batch's own release, exactly as it did at
+   `v0.425.0`: **A ZERO GAP IS A STATE, NOT AN ACHIEVEMENT.** **FIVE IS THE LINE THIS FILE CALLS
+   WIDE. Say so when you report the gap; a wide range means more paths adjudicated in one session
+   and a bigger blast radius.** Both pending releases touch `apply.sh`, a bootstrapping file, so
+   when a pull is eventually briefed it names `0.494.0` as the floor, never `0.493.0`.
    **Your batch will widen the gap, which is expected and is not a reason to reorder anything.**
-   Re-derive both; a zero gap is a state, not a property. That is
-   not permission to close it: a pull is operator-initiated, readiness is not authorization, a
-   `PENDING` count is not a decision about WHEN, and one is never handed to a peer session.
-   `operator-rulings.md` governs.
+   Re-derive both. That is not permission to close it: a pull is operator-initiated, readiness is
+   not authorization, a `PENDING` count is not a decision about WHEN, and one is never handed to a
+   peer session. `operator-rulings.md` governs.
 
    **BATCH 39's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW ITS SIBLINGS.**
    `PC-S340-DERIVATION-CAPTURE-HOOK-ROLLS-BACK-THE-WHOLE-FILE-ON-A-REJECTED-BLOCK` shipped as
@@ -4791,7 +4805,7 @@ so no block written before it changes verdict.
    `predicate-differential.sh` fingerprints the corpus either side of its own run for exactly this
    reason; a hand-rolled measurement has no such guard.
 
-1a. **`docs/backlog.md` IS AT 82 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
+1a. **`docs/backlog.md` IS AT 84 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
    is not blocked. That is not licence to file rather than fix — the standing correction in the
    resume block still governs — but a filing no longer costs a rotation, and rotating still means
    CLOSING, which needs a measurement.
