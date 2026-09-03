@@ -37,7 +37,29 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 44 SHIPPED AS `v0.483.0`, CORRECTED BY `v0.484.0`. GAP 5, PENDING 4. START AT BATCH 45.
+### THIS PROGRAM IS PAUSED. DO THE RUNTIME CONTEXT-WINDOW TASK FIRST — `docs/plans/runtime-context-window-detection.md`.
+
+**Operator instruction, 2026-09-02, given after `v0.484.0` merged: that task is the highest
+priority and outranks this program.** It is recorded in full in its own file, which is a handoff
+and is shape-checked. **Read and follow it, not this one**, until it is retitled
+`DISCHARGED — DO NOT EXECUTE`.
+
+The subject: the pipeline ramps snapshot frequency against
+`CLAUDE_CODE_AUTO_COMPACT_WINDOW`, which a shell launcher sets once and which does NOT change
+when the model is switched mid-session with `/model`. So a session launched for a 1M model and
+switched to a 262144 one ramps toward a number it never reaches, and the snapshot is stale when
+compaction fires. The replacement source is `~/.ai-dlc/window.json`, guarded by a `session_id`
+match and a 60-second staleness bound.
+
+**NOTHING OF IT IS BUILT.** The premise checks in that file are the only work done, and they
+found two things worth carrying: there are **TWO** live readers of the env var with hand-written
+copies of one resolution order, and requirement 5's input-only formula **may already be
+satisfied** in the sensor. Re-verify both; the base rate of expired premises here is one in two.
+
+**This program resumes at BATCH 45 when that task is discharged.** Its state is unchanged and
+recorded below — gap 5, PENDING 4, and `BL-148` is the standing recommendation.
+
+### BATCH 44 SHIPPED AS `v0.483.0`, CORRECTED BY `v0.484.0`. GAP 5, PENDING 4. BATCH 45 IS PAUSED BY THE BLOCK ABOVE.
 
 **A LATE HAND WAS RIGHT AGAIN — THE SIXTH TIME — AND THIS ONE FOUND A DEFECT THIS BATCH
 CREATED.** Both hands went idle without delivering, were asked twice each, and reported only
@@ -4210,6 +4232,13 @@ at the close of that work was: **stop measuring the pipeline, build the fix.**
 so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
+
+0. **STOP — THIS PROGRAM IS PAUSED. Do `docs/plans/runtime-context-window-detection.md` first.**
+   Operator instruction, 2026-09-02, given after `v0.484.0` merged and recorded in the block at
+   the head of this file. That task outranks this program and nothing of it is built. **Take
+   action 1 below only once that file is retitled `DISCHARGED — DO NOT EXECUTE`.** This is a
+   numbered action rather than a note beside one because a condition an executor is meant to
+   decide belongs in the action list, where the operator can see the branch.
 
 1. **CHECK `ListAgents` FIRST, THEN RUN THE SWEEP (action 1b below), THEN PICK BATCH 45's
    SUBJECT.** Batch 44 shipped as `v0.483.0` and was corrected by `v0.484.0`; the distribution
