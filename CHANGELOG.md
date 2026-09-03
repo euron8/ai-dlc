@@ -15,6 +15,82 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.485.0] - 2026-09-02
+
+### The window came from a launcher variable that a mid-session `/model` never updates
+
+`CLAUDE_CODE_AUTO_COMPACT_WINDOW` is exported once by a shell launcher. Switching
+the model mid-session with `/model` does not change it, so a launcher configured
+for a 1M-context model left the sensor ramping toward a number a 262144-context
+session never reaches, and the snapshot was stale exactly when compaction fired.
+
+The statusline writes the live answer to `~/.ai-dlc/window.json` on every render.
+That file now outranks the env var, which becomes one fallback among others.
+
+**Two readers carried byte-identical copies of the resolution order** — the Stop
+hook that ramps against the window and the validator that reports it. `cmp`
+confirmed the copies identical and no arm in `validate-enforcement-map.sh` joined
+the two files, so "keep the two in step" was a prose-only prohibition. Both now
+source one library and neither spells the chain.
+
+**The comment justifying that duplication was false, and checking it is what
+unblocked the refactor.** It said hooks "cannot source from scripts/". Two shipped
+hooks already source a sibling: `ai-dlc-continue.sh` and `ai-dlc-recover.sh` both
+load `ai-dlc-handoff-pending.sh` through `dirname "${BASH_SOURCE[0]}"`, and that
+helper's header states the same motive — two callers asking one question must not
+drift. `ai-dlc-window.sh` lives beside the hooks, ships in the same `install.sh`
+glob, and is reached from the validator by naming both layouts, the form `I33c`
+prescribes.
+
+The chain, highest precedence first: the runtime file, then the env var, then
+`settings.local.json`, project settings, user settings, then the model default.
+The runtime layer is taken only when the caller's session id matches the file's,
+the timestamp is within 60s, and `target` is a positive number. **The path is not
+session-scoped**, so concurrent sessions write the same file and a reader without
+a session id declines it rather than guessing.
+
+**The clamp survives because the runtime layer now feeds it.** `EFFECTIVE =
+min(WINDOW, MODEL_MAX)` looked vestigial once `target` was authoritative. It is
+not: on a 262144-token model whose row is unproven `MODEL_MAX` is the assumed
+200000, and an unchanged clamp drags a correct 262144 down to it — measured, as
+the arm that scores `expected '262144', got '200000'` against the pre-fix hook.
+The runtime file names the model, so it supplies `MODEL_MAX` too and marks the row
+known, which also makes the `imminent` band reachable in the one case where the
+row is a fact rather than an inference.
+
+**Requirement 2 is unsatisfiable in the validator and says so instead of faking
+it.** It is a script, not a hook: no stdin, no session id, zero `session_id`
+references against a control of 16 `WINDOW` references. It accepts
+`AI_DLC_SESSION_ID` when a caller has one; with none it SKIPS the runtime layer
+and reports `[window.json not consulted: no session id]` rather than implying the
+layer was consulted and lost.
+
+**A mutation battery found a real gap in the arms.** Seven mutants; the one that
+survived removed the `-n "$sid"` guard, and the probe stayed green because the jq
+comparison already declined a mismatched id. The hole it named was a file whose
+`session_id` is absent or empty read by a caller with no session id — absent
+comparing equal to absent, which is the validator's exact position. Two arms now
+cover it and the mutant dies. One mutant is equivalent rather than surviving:
+`.target // null` and `.target // 0` are indistinguishable behind the `$t > 0`
+guard, which a separate mutant kills.
+
+Eleven arms added to the context-sensor fixture, each fallback asserted
+separately, scored against the pre-fix hook: **exactly 7 fail and the 4 fallback
+arms pass**, the fallback being the old behaviour. The fixture pins
+`AI_DLC_WINDOW_FILE` into its sandbox — the real file is present on the machine
+running the suite and is rewritten every few seconds by whichever session renders
+a statusline, so unpinned arms would test the operator's live session.
+
+Requirement 5 needed no change: the hook already computes
+`input_tokens + cache_creation_input_tokens + cache_read_input_tokens` at
+`ai-dlc-context-sensor.sh:302`, which is the same input-only formula
+`used_percentage` uses. Verified in the code rather than from the comment
+asserting it.
+
+`window_source` is added to `.context-sensor-state` and to the documented schema.
+`model_row` is deliberately NOT widened past `200K|1M`; it keeps meaning the row
+the hook inferred for itself.
+
 ## [0.484.0] - 2026-09-02
 
 ### Legalising `stopped` made three status-blind readers reachable, and they re-arm a teammate the operator stopped

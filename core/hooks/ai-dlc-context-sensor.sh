@@ -160,6 +160,12 @@ INPUT="$(cat 2>/dev/null || true)"
 AGENT_ID="$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null || true)"
 [ -z "$AGENT_ID" ] || exit 0
 
+# The window file the statusline writes is at a FIXED path, so concurrent sessions
+# overwrite each other's. This id is what lets the resolver tell "the live window for
+# THIS session" from "some other session's window", and an empty one makes it decline
+# the file rather than guess.
+SESSION_ID="$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)"
+
 # This hook is wired to two events. Stop fires when the model ends its turn; but
 # an autonomous pipeline run can go hundreds of tool calls deep without ever
 # ending a turn (a real `graph` session climbed 77K->270K across 169 tool_use
@@ -350,54 +356,47 @@ case "$ROW" in
   *)  MODEL_MAX=200000 ;;
 esac
 
-# autoCompactWindow resolution. parse_window() accepts Claude Code's own
-# spellings ("auto", "400k", "1m", bare int where 100..1000 means thousands);
-# resolve_window() walks the settings layers in Claude Code's precedence order.
+# Window resolution. THE CHAIN IS NOT SPELLED HERE: scripts/ai-dlc/validate-compact-window.sh
+# reports the same window this hook ramps against, and the two answers must not
+# drift, so both source ai-dlc-window.sh and neither carries a second copy of the
+# precedence order. The library is a SIBLING -- it installs to .claude/hooks/ beside
+# this file, the way ai-dlc-handoff-pending.sh does for the Stop and recover hooks.
 #
-# NOTE: parse_window() and resolve_window() below are byte-identical to the
-# copies in scripts/ai-dlc/validate-compact-window.sh. Hooks install to .claude/hooks/
-# and cannot source from scripts/, so they are duplicated deliberately. Keep the
-# two in step.
-parse_window() {
-  local raw
-  raw="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
-  case "$raw" in
-    ""|auto) return 1 ;;
-    *m) awk -v v="${raw%m}" 'BEGIN{printf "%d", v*1000000}' ;;
-    *k) awk -v v="${raw%k}" 'BEGIN{printf "%d", v*1000}' ;;
-    *[!0-9]*) return 1 ;;
-    *)
-      if [ "$raw" -ge 100 ] && [ "$raw" -le 1000 ]; then
-        awk -v v="$raw" 'BEGIN{printf "%d", v*1000}'
-      else
-        printf '%d' "$raw"
-      fi
-      ;;
-  esac
-}
+# Unreadable library -> WINDOW stays empty and the model default applies. That is the
+# safe direction: it tightens the bands rather than opening them, and the library
+# ships in the same copy step as this hook, so its absence means a broken install
+# rather than a configuration a consumer chose.
+_AI_DLC_WIN_LIB="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-window.sh"
+[ -r "$_AI_DLC_WIN_LIB" ] && . "$_AI_DLC_WIN_LIB"
 
-# The highest-precedence layer that DEFINES autoCompactWindow wins; a layer that
-# does not set the key does not shadow a lower one; a defining layer whose value
-# is unparseable ("auto") or otherwise not a plain integer resolves to the model
-# default and lower layers are not consulted -- this mirrors Claude Code's own
-# config merge.
-resolve_window() {
-  local raw val
-  if [ -n "${CLAUDE_CODE_AUTO_COMPACT_WINDOW:-}" ]; then
-    if val="$(parse_window "$CLAUDE_CODE_AUTO_COMPACT_WINDOW")"; then printf '%s' "$val"; fi
-    return 0
-  fi
-  for f in "$SETTINGS_LOCAL" "$SETTINGS_PROJECT" "$SETTINGS_USER"; do
-    [ -r "$f" ] || continue
-    raw="$(jq -r '.autoCompactWindow // empty' "$f" 2>/dev/null || true)"
-    [ -n "$raw" ] || continue
-    if val="$(parse_window "$raw")"; then printf '%s' "$val"; fi
-    return 0
-  done
-}
-
-WINDOW="$(resolve_window 2>/dev/null || true)"
+WINDOW=""
+WINDOW_SOURCE="unset (model default)"
+_RT_MODEL_MAX=""
+if command -v ai_dlc_resolve_window >/dev/null 2>&1; then
+  _WR="$(ai_dlc_resolve_window "${SESSION_ID:-}" "$SETTINGS_LOCAL" "$SETTINGS_PROJECT" "$SETTINGS_USER" 2>/dev/null || true)"
+  WINDOW="${_WR%%|*}"
+  _WR_REST="${_WR#*|}"
+  WINDOW_SOURCE="${_WR_REST%%|*}"
+  _RT_MODEL_MAX="${_WR_REST#*|}"
+fi
 case "${WINDOW:-}" in ''|*[!0-9]*) WINDOW="" ;; esac
+case "${WINDOW_SOURCE:-}" in '') WINDOW_SOURCE="unset (model default)" ;; esac
+case "${_RT_MODEL_MAX:-}" in ''|*[!0-9]*) _RT_MODEL_MAX="" ;; esac
+
+# THE RUNTIME FILE NAMES THE MODEL, so where it answered the row is a fact and not an
+# inference -- which is what ROW_KNOWN gates the imminent band on. Overriding MODEL_MAX
+# here is what keeps the clamp below correct rather than making it a second branch: on
+# a 262144-token model whose row has not been proven, MODEL_MAX is the assumed 200000
+# and an unchanged clamp would drag a correct 262144 down to it.
+#
+# ROW itself is deliberately NOT rewritten. `model_row` is the closed 200K|1M
+# vocabulary documented in the state-file schema, it means "the row this hook inferred
+# for itself", and widening it would break readers for no gain. `window_source` below
+# is what tells a reader why effective_window need not match the row.
+if [ -n "$_RT_MODEL_MAX" ]; then
+  MODEL_MAX="$_RT_MODEL_MAX"
+  ROW_KNOWN=1
+fi
 
 EFFECTIVE="$MODEL_MAX"
 if [ -n "$WINDOW" ] && [ "$WINDOW" -lt "$MODEL_MAX" ]; then
@@ -505,6 +504,7 @@ fi
   printf 'model_row=%s\n'        "$ROW"
   printf 'row_known=%s\n'        "$ROW_KNOWN"
   printf 'effective_window=%s\n' "$EFFECTIVE"
+  printf 'window_source=%s\n'    "$WINDOW_SOURCE"
 } > "$STATE_FILE" 2>/dev/null || true
 
 [ "$FIRE" -eq 1 ] || exit 0

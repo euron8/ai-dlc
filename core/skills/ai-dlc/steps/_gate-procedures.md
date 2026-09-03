@@ -730,6 +730,7 @@ last_measured=<int>
 model_row=200K|1M
 row_known=0|1
 effective_window=<int>
+window_source=<string>
 ```
 
 Reconcile the snapshot's Context Reminders fields to it:
