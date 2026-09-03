@@ -223,24 +223,36 @@ if [ "$FINISH" = 0 ]; then
       # rc=1, 26 rows moved UPSTREAM-ONLY -> ALREADY-AT-THEIRS, upstream unmoved, nothing
       # hand-edited -- and the message named the two causes that were false and not the one
       # that was true. The REFUSAL stands either way (there is nothing left for this run to
-      # write); the DIAGNOSIS is what was wrong. It is decided from the two records an apply
-      # leaves behind -- the stamp's `commit:` and the in-flight marker's `theirs:` -- compared
-      # by `core/` TREE, for the reason the --finish identity guard below gives: two refs can
-      # differ as commits while the bytes this pull writes are identical. Neither record being
-      # present or resolvable falls through to the two-cause message, never to a pass.
+      # write); the DIAGNOSIS is what was wrong. It is decided from the STAMP's `commit:` alone,
+      # compared by `core/` TREE, for the reason the --finish identity guard below gives: two
+      # refs can differ as commits while the bytes this pull writes are identical.
+      #
+      # NOT FROM THE IN-FLIGHT MARKER, and v0.493.0 shipped that and had to take it back. The
+      # marker's `theirs:` is written by THIS program, from THIS run's `$THEIRS`, before phase 1
+      # writes anything -- so `marker.theirs:core == THEIRS:core` holds by construction on every
+      # re-run with the same fourth argument, whatever the tree contains. It records that a run
+      # BEGAN, never that the tree was WRITTEN. Measured: a marker left by an aborted run over a
+      # tree still byte-identical to base made the diagnosis fire, and the `--finish` that
+      # message then offered stamped 2.0.0 over a tree at 1.0.0 -- the PC-S304 shape, reached
+      # through advice. A withheld-stamp re-run therefore falls through to the listed message
+      # below, which now names this cause as a POSSIBILITY; under-firing is the safe direction.
+      #
+      # THE STAMP IS A CLAIM ABOUT THE TREE, NOT A MEASUREMENT OF IT. It says an earlier apply
+      # brought this tree to theirs; it cannot say what was done by hand since. So the diagnosed
+      # message asserts only what the stamp asserts, states that limit, and prescribes nothing
+      # that writes: no `--finish`, no "nothing left to write". Absent or unresolvable stamp
+      # falls through to the listed message, never to a pass.
       _ug_at=""
       _ug_tt="$(git -C "$DIST" rev-parse "${THEIRS}:core" 2>/dev/null || true)"
-      for _ug_r in "$(sed -n 's/^commit:[[:space:]]*//p' "$CONSUMER/.claude/.ai-dlc-version" 2>/dev/null | head -1)" \
-                   "$(sed -n 's/^theirs:[[:space:]]*//p' "$CONSUMER/.claude/.ai-dlc-applying" 2>/dev/null | head -1)"; do
-        [ -n "$_ug_r" ] && [ -n "$_ug_tt" ] || continue
-        if [ "$(git -C "$DIST" rev-parse "${_ug_r}:core" 2>/dev/null || true)" = "$_ug_tt" ]; then
-          _ug_at="$_ug_r"; break
-        fi
-      done
+      _ug_sc="$(sed -n 's/^commit:[[:space:]]*//p' "$CONSUMER/.claude/.ai-dlc-version" 2>/dev/null | head -1)"
+      if [ -n "$_ug_sc" ] && [ -n "$_ug_tt" ] \
+         && [ "$(git -C "$DIST" rev-parse "${_ug_sc}:core" 2>/dev/null || true)" = "$_ug_tt" ]; then
+        _ug_at="$_ug_sc"
+      fi
       if [ -n "$_ug_at" ]; then
-        err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS) — and this tree has ALREADY been written from that theirs: the consumer's stamp or in-flight marker records ${_ug_at}, whose core/ tree is theirs'. This is a post-apply re-run (the one the driver-self-update row used to prescribe). The approved report describes the tree BEFORE that apply moved it, so the detectors now render the applied paths as already-at-theirs and the region cannot match; upstream has not moved and nothing was hand-edited. There is nothing left for this run to write. If the earlier run withheld the stamp, advance it with apply.sh --finish. To see the current driver's own reading of this tree, re-render the report with emit-report.sh <dist> $BASE <consumer> $THEIRS, re-approve it, then re-run apply with the same four arguments. NOTHING HAS BEEN WRITTEN."
+        err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS) — and the consumer's stamp records ${_ug_at}, whose core/ tree is theirs'. That stamp says an earlier apply already brought this tree to theirs, so this is a post-apply re-run (the one the driver-self-update row used to prescribe): the approved report describes the tree BEFORE that apply moved it, and a report rendered then cannot verify against the tree as it now stands. The stamp is a claim about the tree, not a measurement of it — if a core file or the report was changed by hand since, this refusal cannot see that. To see the current driver's reading of this tree, re-run the dry run at $THEIRS so the report is rendered from the tree as it now stands, re-approve it, then apply. NOTHING HAS BEEN WRITTEN."
       else
-        err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS). SKILL.md step 8 lets apply write only after emit-report.sh --verify exits 0, and it does not. Either upstream moved after that report was rendered — which is what this gate exists to catch — or the region was hand-edited. Re-run the dry run at $THEIRS, or name the ref the report describes explicitly so the two agree, then re-approve. NOTHING HAS BEEN WRITTEN."
+        err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS). SKILL.md step 8 lets apply write only after emit-report.sh --verify exits 0, and it does not. Either upstream moved after that report was rendered — which is what this gate exists to catch — or the region was hand-edited, or an earlier apply of this same range already moved this tree and its stamp is still withheld (a re-run after a withheld run). Re-run the dry run at $THEIRS, or name the ref the report describes explicitly so the two agree, then re-approve. NOTHING HAS BEEN WRITTEN."
       fi
     fi
   else
