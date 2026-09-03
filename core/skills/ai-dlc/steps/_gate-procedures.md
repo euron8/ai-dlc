@@ -38,7 +38,13 @@ When a step file says "run sub-step snapshot update", execute:
    The one exception is a teammate STOPPED before it delivered: `steps/handoff.md`
    step 1 sets its `status` to `stopped` and KEEPS the row, because a successor
    session cannot tell a deleted row from a teammate that never existed. Do not
-   delete a `stopped` row at the next gate.
+   delete a `stopped` row at the gate that WRITES it. **Its reader is the
+   successor session, and that session discharges it**: `route.md`'s resume
+   sequence deletes `stopped` rows at its first snapshot write after the resume,
+   once what they record has been carried into Recent Activity or Open Items.
+   A `stopped` row surviving past the resume that read it is not history, it is
+   an unbounded section — this one has overrun its byte budget before, which is
+   why `core/fixtures/inflight-row-shape/` exists.
    Rows only — no prose, no struck-through history; `status` is how a row
    says it has delivered. This section must be written **at
    dispatch**, not only at the transition that follows it — a teammate

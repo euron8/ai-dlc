@@ -258,6 +258,43 @@ else
   ok "  and the stopped row is not indicted (steps/handoff.md step 1 is obeyable)"
 fi
 
+# --- 4g. A STRUCK `stopped` ROW RAISES THE STRUCK VERDICT ONLY -----------------
+# 4e pins this for the dash cell. It is repeated for `stopped` because adding a
+# third token is exactly the change that invites a later hand to revisit the
+# `/~~/ next` exemption at the top of check_inflight_status -- and if that
+# exemption goes, a struck stopped row draws BOTH verdicts, whose remedies are
+# opposite: struck says DELETE, unknown-status says KEEP AND RELABEL. A lead
+# handed both deletes the row it was told to fix.
+seed "$HEADER
+| \`struck-s308\` | \`adversary\` | docs/x.md | 2026-09-02 | ~~stopped~~ |"
+expect 1 "a struck 'stopped' row is refused"
+if grep -q 'struck-through row' "$WORK/out.txt" && ! grep -q 'unrecognised status' "$WORK/out.txt"; then
+  ok "  and it raises the struck verdict ONLY, not the status one"
+else
+  bad "  both verdicts fired on one row -- opposite remedies, and the lead deletes what it should relabel"
+fi
+
+# --- 4h. THE COMMA FORM OF `stopped` -------------------------------------------
+# The remedy text this check prints advertises `stopped, operator-requested
+# handoff`. 4c pins the comma delimiter for `in-flight` only, so without this arm
+# the form the check RECOMMENDS is the one form never exercised. Both delimiters
+# are asserted here beside a genuine offender, so the arm stays presence-shaped.
+seed "$HEADER
+| \`comma-s308\` | \`adversary\` | docs/x.md | 2026-09-02 | stopped, operator-requested handoff |
+| \`space-s308\` | \`adversary\` | docs/y.md | 2026-09-02 | stopped (operator-requested handoff) |
+| \`unk-s308\` | \`qa\` | docs/z.md | 2026-09-02 | idle-reusable |"
+expect 1 "an unrecognised token beside both 'stopped' delimiter forms still fails"
+if grep -q 'unk-s308' "$WORK/out.txt"; then
+  ok "  and the unrecognised row is named"
+else
+  bad "  the unrecognised row is NOT named -- the check is not reading this table"
+fi
+if grep -q 'comma-s308' "$WORK/out.txt" || grep -q 'space-s308' "$WORK/out.txt"; then
+  bad "  a 'stopped' row was indicted -- the remedy text advertises a form the check rejects"
+else
+  ok "  and neither 'stopped' form is indicted (the printed remedy is followable)"
+fi
+
 # --- 5. THE MUTATION TEST — prove assertion 2's red came from the new code ------
 # Remove the In-Flight call from a COPY and re-run assertion 2's input. If it
 # still fails, something else was producing the red.

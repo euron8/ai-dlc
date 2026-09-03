@@ -69,11 +69,22 @@ previous session.
      re-read or re-grep the snapshot — that one load serves all of it.
    - Acknowledge the resume in the first output line:
      *"Resuming from snapshot at `{current_step_file}`."*
-   - Reconcile every `In-Flight Teammates` row: a deliverable newer than
+   - Reconcile every `In-Flight Teammates` row: a row whose `status` reads
+     `stopped` is SKIPPED — that teammate was stopped deliberately, its
+     deliverable is absent BECAUSE it was stopped, and re-arming it would
+     re-dispatch work an operator chose to end. Read that arm first, because a
+     stopped row also satisfies the absent test below. Otherwise: a deliverable
+     newer than
      its `dispatched-at` is DELIVERED — consume it, never re-dispatch.
      Older or absent means the beat resumes, not that the teammate died.
-     (A resume that followed `handoff.md` Step 1 finds the table empty;
-     one that followed a crash or context blow-out does not.)
+     (A resume that followed `handoff.md` Step 1 finds the table carrying
+     `stopped` rows and no `in-flight` ones — step 1 rewrites them and KEEPS
+     them, per this file's own In-Flight schema below; one that followed a
+     crash or context blow-out still carries `in-flight` rows. DISCHARGE the
+     `stopped` rows once you have read them: delete them at your first
+     snapshot write after this resume, having carried anything they tell you
+     into Recent Activity or Open Items. They are a handoff RECORD with a
+     reader, not permanent history, and nothing else ever removes them.)
    - Skip the rest of this routing sequence. Steps 1–6 are for fresh
      pipeline starts; on resume they would misclassify the input and
      overwrite the snapshot.
