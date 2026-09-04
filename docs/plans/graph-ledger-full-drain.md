@@ -131,9 +131,10 @@ DISCHARGED / 27 in flight / 29 untouched**, overlap 3, discharged-but-invisible 
 `0.500.0`; `0.501.0` discharges nothing). Do not let a consumer pull stop at `0.500.0`: its
 validator forks per line and its hook pays that on every edit.
 
-**TELL THE CONSUMER, IN THE NEXT BRIEF,** that `0.500.0` will surface 19 stale derivations and
-8 refused commands across 11 files at its next gate (three of those files pass today and will
-fail), that two prose lines (`s303/coe-repair-p1.md:260`,
+**TELL THE CONSUMER, IN THE NEXT BRIEF,** that the pull must reach `0.501.0` and not stop at
+`0.500.0` (whose validator forks per line and whose hook pays that on every markdown edit), that
+`0.500.0` will surface 19 stale derivations and 8 refused commands across 11 files at its next
+gate (three of those files pass today and will fail), that two prose lines (`s303/coe-repair-p1.md:260`,
 `s303/party-mode/sprint-review-tea.md:95`) begin with the fence token and should be re-wrapped,
 that the two `derived` fences it demoted to `text` in `s308/carry-over-evaluation.md` can be
 re-fenced, and that a `$ ` line indented deeper than its fence is OUTPUT under the new rule. The
@@ -4946,8 +4947,9 @@ so no block written before it changes verdict.
    signal was one file's count FALLING while ten rose. The totals rose. A widening that makes a
    new form reachable makes every latent defect in that arm reachable with it.
 
-   **TELL THE CONSUMER, IN THE NEXT BRIEF,** that `0.500.0` will surface 19 stale derivations
-   and 8 refused commands across 11 files (three pass today and will fail), that two prose lines
+   **TELL THE CONSUMER, IN THE NEXT BRIEF,** that the pull must reach `0.501.0`, not `0.500.0`
+   (the corrected reader), that `0.500.0` will surface 19 stale derivations and 8 refused
+   commands across 11 files (three pass today and will fail), that two prose lines
    begin with the fence token and should be re-wrapped (`s303/coe-repair-p1.md:260`,
    `s303/party-mode/sprint-review-tea.md:95`), that its demoted `text` fences in
    `s308/carry-over-evaluation.md` can be re-fenced, and that a `$ ` line indented deeper than
@@ -5447,7 +5449,7 @@ so no block written before it changes verdict.
    `predicate-differential.sh` fingerprints the corpus either side of its own run for exactly this
    reason; a hand-rolled measurement has no such guard.
 
-1a. **`docs/backlog.md` IS AT 86 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
+1a. **`docs/backlog.md` IS AT 87 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
    is not blocked. That is not licence to file rather than fix — the standing correction in the
    resume block still governs — but a filing no longer costs a rotation, and rotating still means
    CLOSING, which needs a measurement.
