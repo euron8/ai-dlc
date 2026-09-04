@@ -42,11 +42,17 @@ the fresh resume, not the compaction the protocol is named for.
 has already routed, not the resume procedure — and sends an un-routed transcript to
 `{project-root}/.claude/skills/ai-dlc/steps/route.md` before any pipeline action, naming the
 hook that denies until it has. `validate-reattach-budget.sh` gained an arm requiring the
-router's installed path inside the section, outside a single-line HTML comment: it fails the
-pre-fix `SKILL.md` and passes the fixed one. `postcompact-rulebook-recovery` carries two new
-mutants — the path stripped, and the path present only inside an HTML comment — each failing on
-that arm and no other. The recover hook's injected block is unchanged: it fires only on a
-compaction, where the router Read is already in the transcript.
+router's installed path inside the section, outside an HTML comment, with comment state carried
+across lines because 18 of the 20 comments in that file are multi-line and a one-line `sed`
+guard passed a path parked in one: it fails the pre-fix `SKILL.md` and passes the fixed one.
+`postcompact-rulebook-recovery` carries three new mutants — the path stripped, parked in a
+one-line comment, parked in a multi-line comment — each failing on that arm and no other, plus
+a control that a live path bracketed by two one-line comments still passes. The recover hook's
+injected block is unchanged: it fires only on a compaction, where the router Read is already in
+the transcript, and the protocol now says a compaction-recovering lead does not re-route. An
+adversarial hand found all three of those before the merge: the multi-line comment form, the
+hook-authority sentence revoking the new paragraph, and a condition a post-compaction lead
+could not evaluate.
 
 **Receipt.** `BL-157` drives the shipping validator against the shipping `SKILL.md` and against
 a copy with the path removed, reading exit codes only; it closes when the real file passes and

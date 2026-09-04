@@ -230,9 +230,32 @@ fi
 # Read. The population is the fresh resume, not the compaction this protocol is named for.
 #
 # The arm requires the router's INSTALLED path inside the section -- the same key the deny's
-# own remedy names -- outside a single-line HTML comment. A protocol that mentions `route.md`
-# bare, or only inside a comment, is one the lead can obey without reading anything.
-PROTO_LIVE="$(sed 's/<!--.*-->//g' <<<"$PROTO_TEXT")"
+# own remedy names -- outside an HTML comment. A protocol that mentions `route.md` bare, or
+# only inside a comment, is one the lead can obey without reading anything.
+#
+# COMMENTS ARE STRIPPED BY A STATE MACHINE, NOT BY `sed 's/<!--.*-->//'`. That sed handles a
+# comment that opens and closes on one line, and 18 of the 20 HTML comments in this very file
+# span lines -- so a path parked inside the house-style comment would have passed. The greedy
+# `.*` also ate a LIVE path bracketed by two comments on one line. The scanner below carries
+# comment state across lines and removes exactly the commented spans.
+strip_html_comments() {
+  awk '{
+    line = $0; out = ""
+    while (1) {
+      if (inc) {
+        p = index(line, "-->")
+        if (p == 0) { line = ""; break }
+        line = substr(line, p + 3); inc = 0
+      } else {
+        p = index(line, "<!--")
+        if (p == 0) { out = out line; break }
+        out = out substr(line, 1, p - 1); line = substr(line, p + 4); inc = 1
+      }
+    }
+    print out
+  }'
+}
+PROTO_LIVE="$(strip_html_comments <<<"$PROTO_TEXT")"
 if ! grep -q '\.claude/skills/ai-dlc/steps/route\.md' <<<"$PROTO_LIVE"; then
   echo "FAIL: the POST-COMPACT RECOVERY PROTOCOL does not send an un-routed session to the" >&2
   echo "      router. Expected '.claude/skills/ai-dlc/steps/route.md' inside lines" >&2

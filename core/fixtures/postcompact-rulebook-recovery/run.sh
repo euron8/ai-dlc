@@ -257,6 +257,42 @@ else
   fi
 fi
 
+# --- Assertion 7d: MUTANT — the router path survives only inside a MULTI-LINE comment ---
+# The house-style form: 18 of the 20 HTML comments in SKILL.md span lines, and a one-line
+# `sed 's/<!--.*-->//'` guard passed a path parked in one. The comment opens on the line
+# before the path and closes on the line after, so a single-line stripper cannot see it.
+MUT_ROUTE_M="$WORK/skill-router-multiline-comment.md"
+awk '
+  index($0, "`{project-root}/.claude/skills/ai-dlc/steps/route.md`") && !d {
+    print "<!-- the router path, parked in a comment:"; print $0; print "-->"; d = 1; next
+  }
+  { print }' "$SKILL" > "$MUT_ROUTE_M"
+if cmp -s "$SKILL" "$MUT_ROUTE_M"; then
+  bad "FIXTURE STALE: the protocol's router mention was reworded, so the multi-line-comment mutant is byte-identical and the comment guard is unproven for the house-style form"
+else
+  out="$(bash "$VAL" --skill "$MUT_ROUTE_M" --quiet 2>&1)"; rc=$?
+  if [ "$rc" -ne 0 ] && grep -q 'does not send an un-routed session to the' <<<"$out"; then
+    ok "mutant: a router path present only inside a MULTI-LINE HTML comment FAILS the router arm"
+  elif [ "$rc" -ne 0 ]; then
+    bad "MUTANT FAILED ON THE WRONG ARM — wrapping the router path in a multi-line comment tripped a different check. Output: $(head -1 <<<"$out")"
+  else
+    bad "MUTANT DID NOT FAIL — a router path inside a multi-line HTML comment satisfies the validator, which is the comment form this file actually uses"
+  fi
+fi
+
+# --- Assertion 7e: CONTROL — a live path BRACKETED by two one-line comments still counts --
+# The greedy `.*` failure: `<!-- a --> path <!-- b -->` on one line stripped the path with the
+# comments. The stripper must remove only the commented spans, so this copy must PASS.
+MUT_ROUTE_B="$WORK/skill-router-bracketed.md"
+sed 's|`{project-root}/\.claude/skills/ai-dlc/steps/route\.md`|<!-- a --> `{project-root}/.claude/skills/ai-dlc/steps/route.md` <!-- b -->|' "$SKILL" > "$MUT_ROUTE_B"
+if cmp -s "$SKILL" "$MUT_ROUTE_B"; then
+  bad "FIXTURE STALE: the protocol's router mention was reworded, so the bracketed control is byte-identical and proves nothing"
+elif bash "$VAL" --skill "$MUT_ROUTE_B" --quiet >/dev/null 2>&1; then
+  ok "control: a live router path bracketed by two one-line comments still PASSES — the stripper removes only the comments"
+else
+  bad "CONTROL FAILED — a live router path between two one-line comments was stripped with them, so the arm refuses a compliant protocol"
+fi
+
 # --- Assertion 8: MUTANT — strip the mandate from the HOOK, arms 1-3 must fail
 # The other end of the join. A validator that guards SKILL.md's prose does not notice the
 # hook losing the same instruction, and the hook is the copy the lead actually reads.

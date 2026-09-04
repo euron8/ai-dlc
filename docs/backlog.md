@@ -4063,9 +4063,12 @@ session that has already routed — and by sending an un-routed transcript to
 untouched: it fires only on a compaction, where the Read is already in the transcript, and a
 re-read of the router there would cost the tokens the block exists to save.
 `core/scripts/validate-reattach-budget.sh` gained an arm requiring the router's installed path
-inside the protocol section outside a single-line HTML comment; it fails the pre-fix `SKILL.md`
-and passes the fixed one, and `core/fixtures/postcompact-rulebook-recovery` carries a mutant that
-strips the path and one that comments it out, each failing on that arm alone.
+inside the protocol section outside an HTML comment, with comment state carried across lines
+because 18 of the 20 comments in that file span them; it fails the pre-fix `SKILL.md` and
+passes the fixed one. `core/fixtures/postcompact-rulebook-recovery` carries a mutant that strips
+the path, one that parks it in a one-line comment, one that parks it in a multi-line comment,
+each failing on that arm alone, and a control asserting a live path bracketed by two comments
+on one line still passes.
 
 **Receipt limits, stated.** The receipt drives the shipping validator against the shipping
 `SKILL.md` and against a copy with every `steps/route.md` path removed, and reads exit codes
