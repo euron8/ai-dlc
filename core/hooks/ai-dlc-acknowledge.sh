@@ -222,7 +222,7 @@ esac
 # mutually exclusive, so `AIDLC_SESSION=1` already implies the session is not the updater. The
 # payload arm is the only site that can set them independently, and `.tool_input.skill` is
 # populated only on a `Skill` call, which this surface never sees. Measured: removing the
-# conjunct moved no cell of a seven-cell probe table, against the control that removing the
+# conjunct moved no cell of the battery's probe table (seven cells when measured), against the control that removing the
 # `AIDLC_SESSION` conjunct DOES move one -- so the probe could see a removal and saw nothing.
 # `mechanism-design.md` says fix by subtraction, because a condition that changes no outcome
 # today changes one when the surrounding schema moves and nobody is looking.
@@ -256,7 +256,11 @@ esac
 # WHAT THIS ACQUITS, stated: a lead that never routed can dispatch a teammate to write a file and
 # this check will not stop that write. It never did -- `Agent` is on the allowed surface by
 # design (above), and the denied teammate wrote via Bash regardless -- and the lead's OWN next
-# write is still denied, so the incident this check exists for is unchanged. Check 3's pause deny
+# write is still denied, so the incident this check exists for is unchanged. THE CONJUNCT SITS
+# BEFORE THE LOG WRITE ON PURPOSE: a teammate's allowed write records no `ROUTE_DENIED` row,
+# because that row is a record of a DENIAL and the shipped fixture holds a nonzero count of them
+# to mean real denials -- a row written for a write that was allowed would make the count
+# meaningless in exactly the way its allow-path arm exists to refuse. Check 3's pause deny
 # below carries no such conjunct and still answers for a teammate; that is `BL-126`'s question
 # and is not decided here.
 if [ -z "$AGENT_ID" ] && [ "$AIDLC_SESSION" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
