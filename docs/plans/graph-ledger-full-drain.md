@@ -37,20 +37,39 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 51 SHIPPED AS `v0.500.0`. THE GAP IS TWO AND PENDING IS TWO. THE CONSUMER FILED A NEW `PC-S308-*` CANDIDATE DURING THE BATCH; ONE VERIFIED SIBLING REMAINS UNFILED; PLUS `BL-161` WITH NO `PC-` ID.
+### BATCH 51 SHIPPED AS `v0.500.0` AND WAS CORRECTED BY `v0.501.0`. THE GAP IS THREE AND PENDING IS TWO. THE CONSUMER FILED A NEW `PC-S308-*` CANDIDATE DURING THE BATCH; ONE VERIFIED SIBLING REMAINS UNFILED; PLUS `BL-161` AND `BL-163` WITH NO `PC-` ID.
 
 This block replaces the batch-51 record below it. Every figure here was re-derived on 2026-09-04
-after the merge, against the working tree with the controls in the same invocation; re-derive
+after the merges, against the working tree with the controls in the same invocation; re-derive
 them again rather than reading them.
 
-**`VERSION` IS `0.500.0`, SO BATCH 52 RELEASES AS `0.501.0`.** Re-derive `VERSION` and add one.
+**`VERSION` IS `0.501.0`, SO BATCH 52 RELEASES AS `0.502.0`.** Re-derive `VERSION` and add one.
 Batch 51 merged at `2dca4815` (PR #622; release commit `7a1b163e` after two fix commits on the
 same branch, neither naming the id), closing
 `PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT` as `BL-162` and rotating it
-(archive 75 → 76, live 86). `named_absorbed()` resolves the id to exactly one commit at
-`0.500.0`, impossible-id control 0. No correction release. The operator scoped this batch from a
-marked recommendation over the SCOPE_GREW sibling, on consequence: a silent false green on an
-instrument outranks a loud wrong diagnosis.
+(archive 75 → 76, live 86 → 87 with `BL-163` filed). `named_absorbed()` resolves the id to
+exactly one commit at `0.500.0`, impossible-id control 0. **One correction release**:
+`v0.501.0` merged at `e06836ca` (PR #624), naming no `PC-` id. The operator scoped this batch
+from a marked recommendation over the SCOPE_GREW sibling, on consequence: a silent false green on
+an instrument outranks a loud wrong diagnosis.
+
+**THE HANDS WERE RIGHT AND LATE, AND THE LATENESS WAS THE CHANNEL, NOT THE HANDS.** All three
+reported about forty minutes AFTER the merge, in one burst, each saying its `SendMessage` had
+"returned success" hours earlier. The adversary found a shipped regression: the validator reached
+its new indent and shed rules through `$( )` helpers, forking once per line of every markdown
+file — 0.05s before, 2.61s shipped, 0.10s inline on a 2855-line consumer artifact, paid by the
+capture hook on every Write or Edit of a fence-carrying file, and about fourteen seconds more per
+gate invocation on the consumer's active sprint. It built the two-line inline repair and scored
+it byte-identical; `v0.501.0` ships it. The fixture hand found the hook-side shed-all mutant
+SURVIVED (only the validator half of "shed exactly the fence indent" was asserted) and two
+silent arms passing on a payload present in no artifact; A22 with its command-line-only payload,
+mutant 13, and a seeded-payload conjunct on A19 and A20 close those. The scope hand found the
+fence grammar taught to authors in one passage copied byte-identically across five role files
+and two record templates with nothing binding any copy to the validator — filed as `BL-163`,
+`verify: manual` — and a tracked sidecar `core/scripts/validate-artifact-derivations.sh.fn` that
+ships through the copy glob and is sourced by nothing, worth retiring on its own. **A `SendMessage`
+from a teammate can queue for hours and land in a burst after the hand reads idle** — now in
+`tool-hazards.md`; ask once more and wait one more timer before merging without a report.
 
 **THE READER SET WAS TWO PROGRAMS, NOT THE ONE THE FILING NAMED.**
 `core/hooks/ai-dlc-derivation-capture.sh` reads the same fence at column 0 in three sites (scope
@@ -107,9 +126,10 @@ the consumer's story gate filed `PC-S308-CHECK-5-DERIVE-STORIES-REMEDY-CANNOT-CR
 (its commit `0b20c7c83`). **Live 74 → 75, cited 45 → 46, unfiled 29** (one out on `BL-162`'s
 citation, one in on the filing), archive 150, partition control 0. Goal partition **19
 DISCHARGED / 27 in flight / 29 untouched**, overlap 3, discharged-but-invisible 0, TERMINAL
-**38**. Gap TWO (`0.498.0` installed, `0.500.0` shipped), PENDING 2
+**38**. Gap THREE (`0.498.0` installed, `0.501.0` shipped), PENDING 2
 (`PC-S308-LEDGER-REVERIFY-…` at `0.499.0`, `PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-…` at
-`0.500.0`).
+`0.500.0`; `0.501.0` discharges nothing). Do not let a consumer pull stop at `0.500.0`: its
+validator forks per line and its hook pays that on every edit.
 
 **TELL THE CONSUMER, IN THE NEXT BRIEF,** that `0.500.0` will surface 19 stale derivations and
 8 refused commands across 11 files at its next gate (three of those files pass today and will
@@ -4909,8 +4929,9 @@ so no block written before it changes verdict.
    `PC-S308-VALIDATE-ADVERSARIAL-CONVERGENCE-SCOPE-GREW-MISFIRES-ON-PASS-1` (2026-09-03,
    reproduced). Put a marked recommendation in the question. Batch 51 is SHIPPED — `v0.500.0`
    at `2dca4815` (PR #622), `PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT`
-   closed as `BL-162` and rotated; batch 50 is SHIPPED — `v0.499.0` at `13502c45` (PR #619),
-   `BL-160`, `BL-161`. Do not re-scope onto any of them. **Check the delivery gap BEFORE
+   closed as `BL-162` and rotated, corrected by `v0.501.0` at `e06836ca` (PR #624), `BL-163`
+   filed; batch 50 is SHIPPED — `v0.499.0` at `13502c45` (PR #619), `BL-160`, `BL-161`. Do not
+   re-scope onto any of them. **Check the delivery gap BEFORE
    reading the resume block's figure for it**: batch 50 opened on a resume block that said gap
    ONE when the consumer had already pulled it to ZERO.
 
@@ -5121,10 +5142,10 @@ so no block written before it changes verdict.
    interrupt; if you genuinely need to ask, ask the OPERATOR whether to, and put the peer's current
    state into the question.
 
-   **THE GAP IS TWO AND PENDING IS 2** — the consumer's stamp reads `0.498.0` / `2babee86` on all
-   four fields against a distribution `VERSION` of `0.500.0`; `PC-S308-LEDGER-REVERIFY-…`
+   **THE GAP IS THREE AND PENDING IS 2** — the consumer's stamp reads `0.498.0` / `2babee86` on
+   all four fields against a distribution `VERSION` of `0.501.0`; `PC-S308-LEDGER-REVERIFY-…`
    (`0.499.0`) and `PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-…` (`0.500.0`) are the two discharged
-   candidates it cannot see. The consumer pulled `0.497.0 → 0.498.0` on its own before batch 50
+   candidates it cannot see, and `0.501.0` is the correction a pull must not stop short of. The consumer pulled `0.497.0 → 0.498.0` on its own before batch 50
    opened, which is the fourth time the gap has closed in this program and the third time it
    reopened on the very next release: **A ZERO GAP IS A STATE, NOT AN ACHIEVEMENT.** FIVE is the
    line this file calls wide; say WIDE when the count reaches it. `0.499.0` carries
