@@ -37,7 +37,7 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 47 SHIPPED AS `v0.496.0`. THE CONSUMER IS AT `0.492.0`, THE GAP IS FOUR, PENDING IS THREE, AND TWO VERIFIED `PC-S308-*` CANDIDATES REMAIN UNFILED FOR BATCH 48.
+### BATCH 47 SHIPPED AS `v0.496.0`. THE CONSUMER IS AT `0.492.0`, THE GAP IS FOUR, PENDING IS THREE, AND THREE `PC-S308-*` CANDIDATES ARE UNFILED FOR BATCH 48 — TWO VERIFIED, ONE FILED DURING THE CLOSE AND NOT YET READ.
 
 This block replaces the batch-47 record below it. Every figure here was re-derived on 2026-09-04
 after the merge, against the working tree with the controls in the same invocation; re-derive
@@ -88,15 +88,24 @@ pre-fix distribution copy (`cmp -s`), and on its real session inputs copied to `
 installed hook answers `ROUTE` to the teammate's Write while the fixed one answers `ALLOW`, the
 lead's own Write `ROUTE` under both. A pull is operator-initiated; readiness is not authorization.
 
-**THE LEDGER DID NOT MOVE.** md5 `d8902b6c…` unchanged, live 76, archive 145, partition control
-0; **cited 46 → 47, unfiled 30 → 29** by this batch's citation. Goal partition **20 DISCHARGED /
-27 in flight / 29 untouched**, discharged-but-invisible 0, TERMINAL **33**. The consumer sat on carry-over
+**THE LEDGER MOVED ONCE, AFTER THE MERGE, AND IT WAS A FILING.** It held at md5 `d8902b6c…`
+through the whole batch (live 76; cited 46 → 47, unfiled 30 → 29 by this batch's citation), then
+while the resume block was being checked for resumability it read `ea30c200…`, **live 77, cited
+47, unfiled 30**, archive 145, partition control 0: the consumer filed
+`PC-S308-POST-COMPACT-RECOVERY-PROTOCOL-SKIPS-ROUTE-MD` on 2026-09-04, UNCOMMITTED in its working
+tree (`git status` shows the ledger ` M`), so a `git log -S` date for it returns nothing until it
+is committed. It is ADJACENT to batch 47's subject: `SKILL.md`'s POST-COMPACT RECOVERY PROTOCOL
+never says to read `steps/route.md`, so a compacted LEAD that follows the protocol correctly is
+denied by the same Check 2z — the lead side of the check this batch fixed the teammate side of.
+Not read beyond its head; its receipt keys on a `SKILL.md` heading a fix would keep, so it reads
+STILL-LIVE through any fix. Goal partition at the earlier md5 was **20 DISCHARGED / 27 in flight
+/ 29 untouched**, discharged-but-invisible 0, TERMINAL **33**; untouched is 30 now. The consumer sat on carry-over
 branch `pool-pnl-backlog-triage` with porcelain 6–7 throughout, graph sessions rotating
 (`graph-60`, `graph-fe`, `graph-9a`, `graph-1a`), none contacted, no write to
 `/Users/n8/git/graph` by this session.
 
-**THE TWO REMAINING `PC-S308-*` CANDIDATES ARE VERIFIED, UNFILED, AND AVAILABLE — REPORT AND ASK
-BEFORE SCOPING.** `PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT`: reproduced
+**THE TWO EARLIER `PC-S308-*` CANDIDATES ARE VERIFIED, UNFILED, AND AVAILABLE, AND THE THIRD
+ABOVE JOINS THEM — REPORT ALL THREE AND ASK BEFORE SCOPING.** `PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT`: reproduced
 here with a control (indented ```` ```derived ```` fence → `0 block(s)`, `OK`; unindented → `1
 block(s)`); the reader set is TWO, `validate-artifact-derivations.sh:289` AND
 `ai-dlc-derivation-capture.sh:120,154`, both column-0, so a fix moves both; the consumer has 10
@@ -4505,8 +4514,11 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), THEN REPORT THE TWO REMAINING
-   `PC-S308-*` CANDIDATES AND ASK BEFORE SCOPING BATCH 48.** Batch 47 is SHIPPED — `v0.496.0`
+1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), THEN REPORT THE THREE UNFILED
+   `PC-S308-*` CANDIDATES AND ASK BEFORE SCOPING BATCH 48.** The third,
+   `PC-S308-POST-COMPACT-RECOVERY-PROTOCOL-SKIPS-ROUTE-MD`, was filed 2026-09-04 during batch 47's
+   close, sits UNCOMMITTED in the consumer's tree, has not been read past its head, and is the
+   lead-side twin of batch 47's subject; read it first. Batch 47 is SHIPPED — `v0.496.0`
    at `5029f2fd` (PR #611), `PC-S308-AI-DLC-ACKNOWLEDGE-ROUTE-DENIED-SUBAGENT-CANNOT-CLEAR`
    closed as `BL-156` and rotated; batch 46 is SHIPPED — `v0.495.0` at `fec5c5de`, `PC-S337`
    closed as `BL-154`. Do not re-scope onto either. The sweep is NOT empty: the two siblings
@@ -5031,9 +5043,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # d8902b6c... unchanged across batch 47 (three consumer writes during batch 46); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
-   wc -l < /tmp/live.txt    # 76 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. HELD at 76 across batch 47: no filing, no rotation
-   wc -l < /tmp/unfiled.txt # 29 -- PC-S308-AI-DLC-ACKNOWLEDGE-... left the set at batch 47 by being cited by BL-156 and rotated into docs/backlog.archive.md; the other two PC-S308-* filings remain
+   md5 -q "$L"              # ea30c200... after one consumer filing at batch 47's close (was d8902b6c... through the batch); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
+   wc -l < /tmp/live.txt    # 77 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. HELD at 76 across batch 47, then 77 on PC-S308-POST-COMPACT-RECOVERY-PROTOCOL-SKIPS-ROUTE-MD, uncommitted in the consumer tree
+   wc -l < /tmp/unfiled.txt # 30 -- PC-S308-AI-DLC-ACKNOWLEDGE-... left the set at batch 47 by being cited by BL-156 and rotated into docs/backlog.archive.md; the new filing joined the two earlier PC-S308-* ones
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -5041,9 +5053,9 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 76 LIVE CANDIDATES, 47 CITED, 29 UNFILED** — re-derived after batch 47's
-   merge at `5029f2fd`, on a ledger the consumer did not write during the batch (md5
-   `d8902b6c…`, archive 145). Cited rose and unfiled fell by one on this batch's citation alone;
+   **THE BASELINE IS 77 LIVE CANDIDATES, 47 CITED, 30 UNFILED** — re-derived after batch 47's
+   merge at `5029f2fd` and after the consumer's one filing at its close (md5 `ea30c200…`,
+   archive 145; through the batch itself it read 76 / 47 / 29 at `d8902b6c…`). Cited rose and unfiled fell by one on this batch's citation alone;
    batch 46's reading was 76 / 46 / 30 at the same md5, after live ROSE 73 → 76 on three
    `PC-S308-*` filings with nothing rotated; batch 45's was 73 / 45 / 28 at md5 `30b64caf…`. The
    paragraph below records the reading before that. **Live HELD at 73 across a ledger whose md5 moved**,
