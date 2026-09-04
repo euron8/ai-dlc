@@ -97,6 +97,15 @@ the same shape to a regex:
 Reach for `awk` over `sed` when the expression does real work, and verify every new expression
 against a positive control before trusting a zero from it.
 
+## A `git stash` inside a diagnostic command takes the working tree with it
+
+`git stash --keep-index` with nothing staged stashes EVERY uncommitted change, exits 0, and the
+probe it was pasted into keeps running against a clean tree. Measured: five edited files
+vanished from `git status` between two tool calls, and only the Edits made after the stash
+survived. `git stash list` is the tell; `git stash pop` recovered all five. A stash is a
+mutation and never belongs in a read-only probe; when `git status` reads cleaner than the
+session's work, check the stash list before concluding anything.
+
 ## Git lies by default
 
 - Pass `-M` or renames read as a delete plus an unrelated add.
