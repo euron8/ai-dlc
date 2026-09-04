@@ -123,7 +123,10 @@ grep -q 'Preamble prose' "$LEDGER" \
 # fence and the tail archived under a timestamp label -- the reference consumer's live ledger
 # holds exactly that residue from its 0.497.0 pull. The property is whole-entry movement AND
 # fence balance on both sides; the mutant at the foot of this file re-derives the split.
-fences() { grep -cE '^[[:space:]]*```' "$1" 2>/dev/null || echo 0; }
+# `grep -c` prints 0 AND exits 1 on no match, so `grep -c … || echo 0` prints two lines and the
+# arithmetic below aborts the whole `if` with no verdict either way -- measured by the batch-50
+# fixture hand on a green run. Capture first, default on failure.
+fences() { local n; n="$(grep -cE '^[[:space:]]*```' "$1" 2>/dev/null)" || n=0; printf '%s\n' "${n:-0}"; }
 if grep -q 'PC-CLOSED-FENCED' "$ARCH" 2>/dev/null && grep -q 'FENCED-EVENT' "$ARCH" 2>/dev/null \
    && ! grep -q 'PC-CLOSED-FENCED' "$LEDGER" && ! grep -q 'FENCED-EVENT' "$LEDGER"; then
   ok "a closed entry whose fence records a heading-shaped line moved WHOLE: heading and fenced line both in the archive, neither left live"

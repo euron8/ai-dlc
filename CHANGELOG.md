@@ -48,9 +48,14 @@ live ledger, its archive and both distribution backlog files: no id-keyed bounda
 exactly one non-id line stops being a boundary, and two id-keyed headings inside earlier-split
 fences are kept and flagged. The state memoises on `NR`, because one reader asks twice per line.
 
-**Fixtures.** `ledger-reverify` seeds the filed shape, an inline-span line followed by a
-prose-titled entry, a quoted id-keyed heading with the entry after it, and an unterminated fence
-with the id-keyed entry after it; four mutants remove one clause each. `ledger-rotate` seeds a
+**Fixtures.** `ledger-reverify` seeds the filed shape, a tilde fence, a two-space-indented fence
+(the consumer's second-commonest delimiter shape), an inline-span line followed by a
+prose-titled entry, a quoted id-keyed heading with the entry after it, a two-quotation fence,
+an unterminated fence with the id-keyed entry after it, and a fence still open at end of file;
+five mutants remove one clause each, and the arms' measured overlap is declared beside them.
+The fixture hand found the rotate fixture's fence-balance arm emitting no verdict on a green run
+(a `grep -c || echo 0` helper printed two lines and the arithmetic aborted the `if`) and a
+two-row entry asserted with the single-row helper; both repaired before the merge. `ledger-rotate` seeds a
 closed entry whose fence records a heading and asserts whole movement with balanced fences on
 both sides; its fence-blind mutant re-derives the consumer's residue. `shadowed-local-validators`
 seeds the same shape with a `.sh` above the fence and a close below it. `backlog-rotate-fence-guard`'s

@@ -633,6 +633,34 @@ verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
 
 ---
 
+## PC-FIXTURE-TILDE-FENCE — a tilde fence at column 0
+
+The tilde branch of the opener grammar had no subject on any real corpus: zero `~~~` lines on
+the consumer's live ledger, its archive and both distribution backlog files. The heading inside
+sits at column 0, because an indented heading is never entry-shaped and would prove nothing.
+
+~~~
+## 2000-01-01T00:00:03Z -- TILDE-TS-EVENT
+~~~
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-INDENTED-FENCE — a fence indented two spaces, the consumer's second-commonest delimiter shape
+
+The consumer's live ledger carries 10 two-space-indented delimiters against 51 at column 0, and
+its archive 82 against 194. The rule tolerates indentation on the DELIMITER while still reading
+the heading line unstripped, so a column-0 heading inside an indented fence is fenced.
+
+  ```derived
+## 2000-01-01T00:00:04Z -- INDENTED-TS-EVENT
+  ```
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
 ## PC-FIXTURE-INLINE-SPAN-LINE — a line that OPENS with an inline code span is not a fence
 ```derived``` is an inline span here, not a fence opener: its info string carries a backtick, which
 CommonMark forbids. The reference consumer's live ledger carries exactly one such line, and a

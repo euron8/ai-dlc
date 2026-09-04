@@ -1719,15 +1719,29 @@ row_has "PC-FIXTURE-EOF-FENCE" ENTRY-SWALLOWED \
   "and the fence left open at end of file is REPORTED by the END rule — the shape a rotation split leaves behind"
 row_is "PC-FIXTURE-AFTER-QUOTE" STILL-LIVE \
   "and it is classified normally"
-row_is "PC-FIXTURE-AFTER-UNTERMINATED" STILL-LIVE \
-  "an id-keyed entry after an UNTERMINATED fence still reports — the fence cannot hide it"
+row_has "PC-FIXTURE-AFTER-UNTERMINATED" STILL-LIVE \
+  "an id-keyed entry after an UNTERMINATED fence still reports — the fence cannot hide it (row_has: this entry emits two rows)"
+row_is "PC-FIXTURE-TILDE-FENCE" STILL-LIVE \
+  "a ~~~ fence is a fence too: the heading-shaped line inside it did not open an entry"
+row_is "PC-FIXTURE-INDENTED-FENCE" STILL-LIVE \
+  "a fence indented two spaces (the consumer's second-commonest delimiter shape) is a fence: the column-0 heading inside it did not open an entry"
+row_is "INDENTED-TS-EVENT" ABSENT \
+  "no row is labelled with the heading inside the indented fence"
 row_has "PC-FIXTURE-AFTER-UNTERMINATED" ENTRY-SWALLOWED \
   "and the reset through the unterminated fence is REPORTED, naming the entry whose fence never closed"
 
-# FOUR MUTANTS, ONE CLAUSE EACH, ALL ON lib.sh COPIES. Every mutant copies the reconcile
+# FIVE MUTANTS, ONE CLAUSE EACH, ALL ON lib.sh COPIES. Every mutant copies the reconcile
 # directory and rewrites ONE clause of the shape rule; the `cmp -s` guard refuses a sed that
 # matched nothing, and each kill requires a control row to SURVIVE so a mutant that broke the
 # parser outright cannot score as a clean kill.
+#
+# THE ARMS OVERLAP, AND THAT IS DECLARED RATHER THAN DISCOVERED. Measured by the batch-50 fixture
+# hand over every row_* assertion against each mutant's real output: fence-blind flips four arms,
+# no-reset and naive-opener three each, no-stray one. Every extra flip is a TRUE finding about
+# the same broken clause, so the overlap is in the arms and not in the mutants; each kill below
+# names the ONE arm it owns. Two arms are controls with no mutant of their own -- the id-keyed
+# entry after the inline-span line, and the STILL-LIVE half of the entry after a quotation --
+# and they are kept as controls, not counted as proven.
 fence_mutant() { # <name> <sed-expr>  -> dir on stdout, empty if the sed matched nothing
   local n="$1" expr="$2" d
   d="$(dirname "$DIST")/mut-$n"; rm -rf "$d"; mkdir -p "$d"
@@ -1777,6 +1791,14 @@ fence_kill mutation-no-stray "$(fence_mutant no-stray 's@if (__lef_stray && rest
   '$1=="ENTRY-SWALLOWED" && $2 ~ /PC-FIXTURE-QUOTED-INSIDE-FENCE/ {f=1} END{exit !f}' \
   "without the stray-closer rule the entry AFTER a quoted heading is accused of being fenced too — one quotation, two rows" \
   "the QUOTED-INSIDE-FENCE fence row"
+# m-no-tilde: the tilde arm of the opener grammar removed. A ~~~ fence then opens nothing and
+# the heading-shaped line inside it opens an entry that captures the receipt. Without this the
+# tilde branch had no subject anywhere: zero ~~~ lines on all four real corpora.
+fence_kill mutation-no-tilde "$(fence_mutant no-tilde 's@if (match(t, /^```+/) || match(t, /^~~~+/)) {@if (match(t, /^```+/)) {@')" \
+  '$2 ~ /TILDE-TS-EVENT/ {f=1} END{exit !f}' \
+  '$2 ~ /PC-FIXTURE-FENCED-NON-ID-HEADING/ && $1=="STILL-LIVE" {f=1} END{exit !f}' \
+  "with the tilde arm removed a ~~~ fence is not a fence and its heading-shaped line captures the receipt — the tilde clause is load-bearing" \
+  "PC-FIXTURE-FENCED-NON-ID-HEADING STILL-LIVE"
 # m-no-reset: the id-keyed escape removed, so an unterminated fence swallows id-keyed lines. The
 # entry after the unterminated fence vanishes; the entry after the properly closed quotation
 # survives, which is what makes this a clean mutation of the reset alone.
