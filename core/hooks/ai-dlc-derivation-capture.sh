@@ -156,9 +156,9 @@ printf '%s\n' "$PAYLOAD" > "$TMPD/payload.txt" 2>/dev/null || exit 0
 MASK="$TMPD/$(basename "$FILE")"
 awk '
 # lead(s): the leading blanks of s. shed(s, ind): s with the block indent removed -- exactly
-# `ind` when s carries it, else whatever leading blanks s has. The same two rules as
-# `fence_indent` / `shed_indent` in the validator; a line is a fence delimiter or a `$ `
-# command line by its SHED form, so the two programs agree on which lines are which.
+# `ind` when s carries it, else whatever leading blanks s has. The same two rules the
+# validator applies inline in check_file; a line is a fence delimiter or a `$ ` command line
+# by its SHED form, so the two programs agree on which lines are which.
 function lead(s) { match(s, /^[ \t]*/); return substr(s, 1, RLENGTH) }
 function shed(s, ind) {
   if (ind == "") return s

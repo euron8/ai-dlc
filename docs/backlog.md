@@ -4084,3 +4084,24 @@ mutants, and the two-quotation seed below is the one it lacks.
 verify: sh d=$(mktemp -d); printf '## BL-001 — one\n\n```text\n## BL-999 — quoted\n```sh\n## BL-998 — quoted again\n```\n\n## BL-002 — a real entry after the fence\n\nverify: manual\n' > "$d/backlog.md"; printf '# archive\n' > "$d/backlog.archive.md"; o=$(bash scripts/backlog-rotate.sh "$d/backlog.md" 2>&1); rm -rf "$d"; grep -q 'line 4:' <<<"$o" && ! grep -q 'line 9:' <<<"$o" && ! grep -q 'unterminated fence' <<<"$o"
 
 
+
+## BL-163 — the `derived`-fence grammar is taught to authors only by example, in one passage copied byte-identically across five role files and two record templates, and nothing binds any copy to the validator's grammar
+
+Distribution-internal, no `PC-` id; NOTE tier — every copy is correct today, because the reader
+now accepts both the column-0 form the passage shows and the indented form the templates invite.
+Found by the batch-51 scope hand while deriving the reader set for `BL-162`.
+
+Five role files (analyst, architect, tea, pm, sm) carry one byte-identical passage opening
+"**Write it in a `derived` fence, which is what makes it checkable:**" followed by a column-0
+example; the remediator and ops record templates place the fence under a `- derivation:` list
+item, which is exactly the indented shape `BL-162` found blind. No file states whether the fence
+may be indented, and no invariant or render step joins the seven sites to
+`core/scripts/validate-artifact-derivations.sh`. A future correction to the taught grammar has
+seven edit sites and no enforcer, so the copies will drift from each other and from the reader
+without a gate noticing.
+
+Shape of the fix: single-source the passage as data the role files render, or bind the seven
+copies byte-identically to one owner with an arm in `scripts/validate-enforcement-map.sh`, and
+state the indent rule once. Both are larger than the finding; neither is owed by `BL-162`.
+
+verify: manual

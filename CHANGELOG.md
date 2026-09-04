@@ -15,6 +15,47 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.501.0] - 2026-09-04
+
+### Correction to 0.500.0: the fence reader forked a subprocess per line, and the hook's shed rule had no arm
+
+Batch 51's three review hands reported after the merge, and two of their findings are real
+defects in what shipped. No `PC-` id is closed here; `0.500.0` remains the release that closes
+`BL-162`'s candidate.
+
+**The parse cost.** `validate-artifact-derivations.sh` reached its indent and shed rules through
+`$( )` helpers, forking once per line of every markdown file it reads. Measured on a 2855-line
+consumer artifact in `--list` mode: 0.05s before the rules existed, 2.61s as shipped, 0.10s with
+the rules inline — and `ai-dlc-derivation-capture.sh` pays that on every Write or Edit of a
+fence-carrying file, which is the shape that gets a hook turned off. The adversary measured the
+gate step at about fourteen seconds more per invocation on the consumer's active sprint. Both
+call sites are now parameter expansion in `check_file`; findings are byte-identical on the
+consumer's active sprint, a 40-file subset and a 30-shape probe corpus, and the fixture stays 50
+of 50 — measured by the hand that built the repair, and re-measured here.
+
+**The hook's shed rule had no arm.** Widening the hook's `shed()` to strip all leading blanks
+left `derivation-capture` fully green; only the validator half of "shed exactly the fence
+indent" was asserted. The indented artifact gains a block whose recorded output is itself a
+`$ ` line indented deeper than the fence, arm A22 asserts the hook stays silent on it, and mutant
+13 in the battery owns that arm. `artifact-derivations` gains the same shape as `i-deep-cmd`.
+
+**A silent arm now proves its payload is seeded.** A19 and A20 asserted exit 0 and no stderr,
+which a payload present in no artifact also produces; each now also asserts its `$ ` line is a
+line of the file, so a seed-versus-payload drift on a fresh block cannot leave the arm green for
+the wrong reason. The `i-pad` comment overstated its stale twin — that twin is STALE under both
+readers and proves execution, not the rule — and is corrected.
+
+**Stated limits, added to the validator header.** A CRLF file opens no fence and reports zero
+derivations with exit 0, the silent-zero shape `0.500.0` exists to close, unchanged. A closer
+indented deeper than its opener is not read as a closer where CommonMark allows it, and the
+block is reported unclosed. Zero instances of either in the reference corpus.
+
+**Filed, not fixed.** `BL-163`: the fence grammar is taught to authors only by example, in one
+passage copied byte-identically across five role files and two record templates, with nothing
+binding any copy to the validator. The scope hand also found `validate-artifact-derivations.sh.fn`,
+a tracked sidecar that ships and is sourced by nothing; it is recorded in the drain plan for a
+separate retirement.
+
 ## [0.500.0] - 2026-09-04
 
 ### An indented ```derived fence was invisible to the validator and the capture hook

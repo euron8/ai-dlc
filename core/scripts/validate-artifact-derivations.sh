@@ -300,30 +300,31 @@ norm() { sed 's/[[:space:]]*$//' | sed '/^$/d'; }
 #
 # AND THE INFO STRING IS EXACTLY `derived`, with nothing after it but blanks. The opener used
 # to accept `'```derived '*` -- any trailing text -- and that arm matched no real fence: over
-# the reference consumer's 2795 openers, zero carry text after the word and the two lines that
-# do are PROSE, a wrapped sentence whose continuation happens to begin with the token
-# ("```derived blocks are machine-checked and plain blocks are not, ..."). Each of those
-# opened a phantom block that ran to the next real opener, read that opener as its closer,
-# and left the real block's pairs outside any fence -- three derivations in one file, silently
-# unchecked, and the indent rule above made the wrapped-in-a-list-item form reachable where
-# the column-0 reader had met it only once. So the arm is closed; a fence CommonMark reads
-# with a longer info string is not a derivation fence here.
-fence_indent() { # $1 line -> the leading blanks of the line, possibly empty
-  local l="$1"
-  printf '%s' "${l%%[![:blank:]]*}"
-}
+# the reference consumer's 2795 openers, none carries a legitimate info string beyond the
+# word, and the only two lines with text after it are PROSE, a wrapped sentence whose
+# continuation happens to begin with the token ("```derived blocks are machine-checked and
+# plain blocks are not, ..."). Each of those opened a phantom block that ran to the next real
+# opener, read that opener as its closer, and left the real block's pairs outside any fence --
+# three derivations in one file, silently unchecked, and the indent rule above made the
+# wrapped-in-a-list-item form reachable where the column-0 reader had met it only once. So the
+# arm is closed; a fence CommonMark reads with a longer info string is not a derivation fence
+# here.
+#
+# NOT COVERED, stated rather than left to be found. A CRLF file opens nothing: the carriage
+# return after the word is not a blank, so the file reports zero derivations with exit 0, the
+# same silent shape as before this rule, unchanged. A closer indented DEEPER than its opener is
+# not read as a closer, where CommonMark would accept it, so the block runs to end of file and
+# is reported unclosed -- loud, not silent. Zero instances of either in the reference corpus.
+#
+# THE INDENT AND SHED RULES ARE INLINE IN check_file, NOT HELPER FUNCTIONS, because a helper
+# reached through `$( )` forks once per line of every markdown file. Measured on a 2855-line
+# consumer artifact, `--list` only: 0.05s before the rules existed, 2.61s with the rules in
+# forked helpers, 0.10s inline -- and `ai-dlc-derivation-capture.sh` pays this on every Write
+# or Edit of a fence-carrying file, which is the shape that gets a hook turned off.
 is_opener() { # $1 line with its indent already shed -> 0 when it opens a ```derived block
   local b="$1"
   b="${b%"${b##*[![:blank:]]}"}"   # drop trailing blanks
   [ "$b" = '```derived' ]
-}
-shed_indent() { # $1 line  $2 indent -> the line with the block's indent removed
-  local l="$1" ind="$2"
-  if [ -z "$ind" ]; then printf '%s' "$l"; return; fi
-  case "$l" in
-    "$ind"*) printf '%s' "${l#"$ind"}" ;;
-    *)       printf '%s' "${l#"${l%%[![:blank:]]*}"}" ;;
-  esac
 }
 
 check_file() { # $1 artifact path
@@ -335,7 +336,7 @@ check_file() { # $1 artifact path
   while IFS= read -r line || [ -n "$line" ]; do
     lineno=$((lineno + 1))
     if [ "$in_block" -eq 0 ]; then
-      indent="$(fence_indent "$line")"
+      indent="${line%%[![:blank:]]*}"          # the line's leading blanks, possibly empty
       if is_opener "${line#"$indent"}"; then
         in_block=1; blockline=$lineno; blocks=$((blocks + 1)); cmd=""; : > "$TMP_EXP"
       else
@@ -343,8 +344,12 @@ check_file() { # $1 artifact path
       fi
       continue
     fi
-    # inside a ```derived block -- every line below is read with the block's indent shed
-    body="$(shed_indent "$line" "$indent")"
+    # inside a ```derived block -- every line below is read with the block's indent shed:
+    # exactly the opener's indent when the line carries it, else whatever leading blanks it has
+    case "$line" in
+      "$indent"*) body="${line#"$indent"}" ;;
+      *)          body="${line#"${line%%[![:blank:]]*}"}" ;;
+    esac
     case "$body" in
       '```'*)
         [ -n "$cmd" ] && run_pair "$f" "$cmdline" "$cmd"

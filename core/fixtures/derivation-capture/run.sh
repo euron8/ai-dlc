@@ -75,11 +75,19 @@ fi
 # with exit 0, and then every indented arm below is a statement about nothing.
 ICTL="$( ( cd "$CONSUMER" && AI_DLC_PROJECT_ROOT="$CONSUMER" bash "$VALIDATOR" "$IND_ART" ) 2>&1 )"
 ICTL_RC=$?
-if [ "$ICTL_RC" = 1 ] && grep -q '1 stale or unrunnable derivation(s) of 2 checked' <<<"$ICTL"; then
-  ok "control: the indented artifact is 1-of-2 stale under the real validator"
+if [ "$ICTL_RC" = 1 ] && grep -q '1 stale or unrunnable derivation(s) of 3 checked' <<<"$ICTL"; then
+  ok "control: the indented artifact is 1-of-3 stale under the real validator"
 else
-  bad "control: expected rc 1 and '1 stale ... of 2 checked' on the indented artifact, got rc $ICTL_RC — the validator cannot see an indented fence, so the indented arms below are vacuous"
+  bad "control: expected rc 1 and '1 stale ... of 3 checked' on the indented artifact, got rc $ICTL_RC — the validator cannot see an indented fence, so the indented arms below are vacuous"
 fi
+
+# EVERY SILENT ARM ON A SEEDED PAIR FIRST PROVES ITS PAYLOAD IS IN THE ARTIFACT. A silent arm
+# asserts exit 0 and no stderr, which a payload found in NO artifact also produces -- so a
+# seed-versus-payload drift on a fresh block would leave the arm green for the wrong reason.
+# The conjunct is the `$ ` line of the payload, whole and exact, present in the file.
+seeded() { # $1 artifact  $2 payload -> 0 when the payload's command line is a line of the file
+  grep -qxF "$(printf '%s\n' "$2" | grep -m1 '\$ ')" "$1"
+}
 
 # --- A2: an edit that wrote the STALE block → BLOCK ---------------------------
 fire "$(edit_json "$ART" "$PAIR_STALE_A")"
@@ -258,10 +266,24 @@ fi
 # The near-miss beside A18: same file, same shape, the reproducing block. A hook that refused
 # every indented fence would pass A18 and fail this.
 fire "$(edit_json "$IND_ART" "$IND_PAIR_FRESH")"
-if [ "$RC" = 0 ] && [ ! -s "$ERR" ]; then
-  ok "indented fresh pair written → exit 0, silent"
+if [ "$RC" = 0 ] && [ ! -s "$ERR" ] && seeded "$IND_ART" "$IND_PAIR_FRESH"; then
+  ok "indented fresh pair written → exit 0, silent (payload seeded in the artifact)"
 else
-  bad "an edit writing the indented FRESH pair exited $RC — the hook is refusing indented fences rather than reading them"
+  bad "an edit writing the indented FRESH pair exited $RC, or its payload is not in the artifact — the hook is refusing indented fences, or the arm is passing on a pair nothing submitted"
+fi
+
+# --- A22: an edit rewriting ONLY the command line of the pair whose output is a deeper `$ `
+# line → SILENT. The hook-side half of "shed exactly the fence indent", and the payload is
+# the command line ALONE on purpose: a mask shedding all leading blanks reads the eight-space
+# `$ x` as a second command and therefore a second, UNTOUCHED pair, blanks it, and submits the
+# real command with no recorded output -- STALE, and a reproducing block is refused. With the
+# whole pair in the payload both masks keep both lines and the mutation is invisible.
+IND_PAIR_DEEP="$(printf '  $ printf '"'"'      $ x\\n'"'"'')"
+fire "$(edit_json "$IND_ART" "$IND_PAIR_DEEP")"
+if [ "$RC" = 0 ] && [ ! -s "$ERR" ] && seeded "$IND_ART" "$IND_PAIR_DEEP"; then
+  ok "indented pair whose output is a deeper \$ line → exit 0, silent (payload seeded)"
+else
+  bad "the deeper-\$-output pair exited $RC (expected 0), or its payload is not in the artifact — the mask is shedding all leading blanks, so a deeper \$ line reads as a command"
 fi
 
 # --- A1c: CONTROL — the prose-opener artifact is 1-of-1 stale under the real validator
@@ -280,10 +302,10 @@ fi
 # holds under a mask that misreads the prose line too, and moves only when every pair is
 # submitted regardless of the payload (the file-grain mutant).
 fire "$(edit_json "$OPN_ART" "A sentence that wraps so its continuation begins with the fence token, and the block")"
-if [ "$RC" = 0 ] && [ ! -s "$ERR" ]; then
-  ok "prose-opener file, edit touching only prose → exit 0"
+if [ "$RC" = 0 ] && [ ! -s "$ERR" ] && grep -qxF "A sentence that wraps so its continuation begins with the fence token, and the block" "$OPN_ART"; then
+  ok "prose-opener file, edit touching only prose → exit 0 (payload seeded in the artifact)"
 else
-  bad "a prose-only edit to the prose-opener file exited $RC — a pair this edit did not write was submitted"
+  bad "a prose-only edit to the prose-opener file exited $RC, or its payload is not in the artifact — a pair this edit did not write was submitted, or the arm drifted from its seed"
 fi
 
 # --- A21: an edit that wrote that file's real stale pair → BLOCK at its real line -----
