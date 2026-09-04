@@ -426,6 +426,13 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]
     # arm falls back to presence, stated. One known extra round: a lead that touched at step 4,
     # was blocked on the teammate arm and re-finalized the snapshot is told to touch again.
     #
+    # THE TEST IS "SNAPSHOT NEWER THAN SIGNAL", NEVER "SIGNAL NEWER THAN SNAPSHOT". bash 3.2's
+    # `-nt` compares whole seconds, and step 3's write and step 4's touch are adjacent tool
+    # calls that routinely land in one second. Measured: two files created in the same second
+    # are `-nt` each other in NEITHER direction, so the positive form would refuse a compliant
+    # handoff and this negative form passes it; a signal back-dated to an earlier handoff is
+    # older by more than a second and still trips it.
+    #
     # THE MARKER ARM IS NOT THE MARKER KEY. Key 1 of ai_dlc_handoff_pending ARMS this guard on the
     # marker's presence; this arm asserts its ABSENCE once steps 1, 3 and 4 are recorded, which is
     # exactly step 5's "cleared here and nowhere earlier". A lead mid-procedure is caught by an
