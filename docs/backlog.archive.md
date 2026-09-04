@@ -5565,3 +5565,58 @@ arm, not by this receipt.
 
 verify: sh t=$(mktemp); printf '## PC-CTRL — t\n\n```\n## 2000-01-01T00:00:00Z -- FENCED-TS\n```\n\nverify: theirs_has core/VERSION "."\n\n## PC-UNT — u\n\n```\nnever closed\n\n## PC-AFTER — v\n\nverify: theirs_has core/VERSION "."\n' > "$t"; o=$(bash core/skills/ai-dlc-update/reconcile/ledger-reverify.sh "$PWD" HEAD "$PWD" HEAD "$t" 2>/dev/null); rm -f "$t"; awk -F'\t' '$2=="PC-CTRL"{c=1} $2=="PC-AFTER"{a=1} $2 ~ /FENCED-TS/{s=1} END{exit !(c && a && !s)}' <<<"$o"
 
+## BL-162 — `validate-artifact-derivations.sh` and the capture hook matched a ```derived fence opener at column 0 only, so a block indented inside a list item was never checked and never witnessed, with exit 0 and no error
+
+**LANDED (v0.500.0, verified 2dca4815).** Merged as PR #622; the release commit names the
+`PC-` id verbatim and `named_absorbed()` resolves it to `0.500.0`. The receipt below drove both
+shipping programs and read CLOSE-CANDIDATE on the merged tree.
+
+Consumer provenance: `PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT`, filed by
+the reference consumer on 2026-09-03 by `remediator-s308-gate1-p2` while repairing
+`carry-over-evaluation.md`, where it had already demoted two indented `derived` fences to `text`
+because the check was not firing. DEFECT tier: a fenced claim is the author's promise that the
+number is machine-checked, and the tool answered that promise with "0 derivation(s) in 0
+block(s)" and exit 0 — the one output it must never produce over a fence.
+
+**The claim, re-derived here before building.** The filing's own two-file reproduction, run on
+`core/scripts/validate-artifact-derivations.sh` at `origin/main` (the filing names the
+consumer-shaped path `scripts/ai-dlc/…`, which resolves nowhere here): the indented file reports
+0 blocks with rc 0, the unindented control reports 1. The fence-open match at `:289` was a `case`
+on the line as read. The reader set is TWO programs, not the one the filing names:
+`core/hooks/ai-dlc-derivation-capture.sh` reads the same fence at column 0 in its scope grep
+(`:120`), its mask (`:154`) and its command grep (`:180`), and its header binds the two to one
+population. Control: `'```derived'` across `core/` names exactly those two programs plus
+fixtures. On the consumer today: 11 files carry 26 indented openers against 272 files with
+unindented ones; the installed and the shipped validator over those 11 files read 87 and 106
+STALE, 6 and 14 ALLOWLIST refusals, and three files flip from rc 0 to rc 1 — nineteen stale
+derivations and eight refused commands the consumer's own gate has never reported.
+
+**The rule, and the obvious one rejected by measurement.** CommonMark's: the opener's leading
+blanks are the block's indent and each content line sheds exactly that prefix, or whatever
+leading blanks it has when it carries fewer. Shedding ALL leading blanks turns a right-aligned
+`wc -l` count STALE under an unindented fence, and the fixture pins that with a padded twin.
+Any indent width opens a fence; CommonMark's three-space cap is deliberately not applied,
+because a fence run that CommonMark would have rendered literal is a visible STALE where a
+skip is the silent zero this entry records.
+
+**What the indent rule uncovered, fixed in the same release.** Driving the indent-aware
+validator over the 11 consumer files, one LOST three derivations: a numbered list item whose
+wrapped continuation begins "```derived blocks are machine-checked and plain blocks are not,
+…" matched the opener arm `'```derived '*`, opened a phantom block that ran to the next real
+opener, read it as a closer, and left the real block's pairs outside any fence. Over the
+consumer's 2795 openers: zero carry legitimate text after the word, two are prose (one at
+column 0, which the old reader was already swallowing in a different file). Both programs now
+require the shed line to be exactly the token plus optional blanks.
+
+**What this does not close.** A `$ ` line indented deeper than its fence is OUTPUT, not a
+command, in both programs — the shed form decides — and an author who indents commands past
+the fence will read a STALE naming the line. The consumer's demoted `text` fences in
+`carry-over-evaluation.md` stay demoted until a consumer hand re-fences them; the fix cannot see
+a fence the author removed.
+
+The receipt drives both shipping programs on a throwaway consumer layout: the validator must
+count an indented block and a block below a prose line beginning with the token as two blocks,
+and the hook must exit 2 on a Write carrying an indented stale pair. It rejects the pre-fix tree,
+the indent-only half of the fix, and a tree where only the validator moved.
+
+verify: sh d=$(mktemp -d); mkdir -p "$d/scripts/ai-dlc"; cp core/scripts/validate-artifact-derivations.sh "$d/scripts/ai-dlc/validate-artifact-derivations.sh"; printf '0\n' > "$d/VERSION"; printf -- '- item\n  ```derived\n  $ cat VERSION\n  9\n  ```\n' > "$d/a.md"; printf '```derived would promise nothing\n\n```derived\n$ cat VERSION\n9\n```\n' > "$d/b.md"; o=$(cd "$d" && AI_DLC_PROJECT_ROOT="$d" bash scripts/ai-dlc/validate-artifact-derivations.sh --list a.md b.md 2>&1); h=$(jq -nc --arg f "$d/a.md" --arg c "$(cat "$d/a.md")" '{tool_name:"Write",tool_input:{file_path:$f,content:$c}}' | CLAUDE_PROJECT_DIR="$d" bash core/hooks/ai-dlc-derivation-capture.sh 2>/dev/null; echo $?); rm -rf "$d"; grep -q '^2 derivation(s) in 2 block(s)' <<<"$o" && [ "$h" = 2 ]
