@@ -328,7 +328,10 @@ count_check "b12 with no argument the default corpus is read" "$TMP/b11" "" "$BL
 seed "$TMP/b13"
 b13_lib="$TMP/b13/core/skills/ai-dlc-update/reconcile/lib.sh"
 cp "$b13_lib" "$b13_lib.orig"
-sed 's|if (l ~ /\^#{2,6}\[ \\t\]/) return "heading"|if (0) return "heading"|' "$b13_lib.orig" > "$b13_lib"
+# RE-ANCHORED when the shape rule became fence-aware: the branch is now an assignment
+# (`else if (… ) sh = "heading"`) inside a larger function, not a bare `return`. Same
+# location, same observable -- the heading branch stops matching.
+sed 's|else if (l ~ /\^#{2,6}\[ \\t\]/) sh = "heading"|else if (0) sh = "heading"|' "$b13_lib.orig" > "$b13_lib"
 if cmp -s "$b13_lib" "$b13_lib.orig"; then
   note "FAIL  b13 -- the sabotage was a NO-OP: lib.sh is byte-identical, so the green below would mean nothing"
   rc=1

@@ -272,12 +272,104 @@ unquote() { # unquote <value>
 # Emitted as awk source rather than a shell function because both call sites are awk programs.
 # The shape is returned, not a boolean, because each caller extracts its label differently from
 # a bullet and from a heading.
+#
+# FENCE-AWARE, AND THE OBVIOUS FORM OF THAT IS THE WRONG ONE -- `scripts/backlog-rotate.sh`
+# measured it before this landed: a plain `infence = !infence` toggle took the reference
+# consumer's entry count from 142 to 95, because that corpus carries an ODD number of fence
+# delimiters. Re-measured here on the same consumer's four ledger files: the toggle hides 6 live
+# ids (one live line OPENS with an inline code span, three backticks followed by more backticks,
+# which is not a fence) and 59 archived ones, 34 headings and 25 bullets (fences left
+# unterminated by earlier splits). Global
+# pairing desynchronises at the first unterminated fence and never recovers.
+#
+# SO THE FENCE IS BOUNDED BY THE ID RULE. Inside a fence, an entry-shaped line whose label is
+# NOT id-keyed is ignored -- that is the subject of PC-S308-LEDGER-REVERIFY-ENTRY-BOUNDARY-
+# IGNORES-FENCED-HEADINGS, a `derived` block whose recorded output carries `## <ts> -- EVENT`
+# lines and split the entry that carried it. An entry-shaped line that IS id-keyed still opens
+# an entry and RESETS the fence state, so an unterminated fence can hide nothing that carries an
+# id: the fence was either unterminated or is quoting an entry heading, and in both cases
+# opening the entry is the failure that loses nothing. `ledger-reverify.sh` reports that reset
+# as an ENTRY-SWALLOWED row so the ledger gets fixed rather than the parse guessed at. Measured
+# over the reference consumer live ledger, its archive and both distribution backlog files: no
+# id-keyed boundary changes, exactly one non-id line stops being a boundary (the fenced
+# timestamp heading the filing names), and two id-keyed headings inside earlier-split fences
+# are kept and flagged.
+#
+# THE OPENER GRAMMAR IS COMMONMARK, NOT "A LINE STARTING WITH THREE BACKTICKS". An opener is
+# three or more backticks or tildes, indentation tolerated, whose info string carries no
+# backtick; a closer is the same character, at least as many of it, and nothing else. The
+# backtick-in-info-string clause is what keeps the inline-span line above from opening a fence.
+# Indentation is tolerated in FULL where CommonMark allows three spaces: a delimiter indented
+# four or more is read as a delimiter here and as literal content there. Permissive direction,
+# and the shape tests below read the UNSTRIPPED line, so an indented heading is still not
+# entry-shaped.
+#
+# WHAT THIS DOES NOT GUARANTEE. A prose-titled (id-less) entry-shaped line after a fence that
+# never closes, or after a closer carrying trailing text, is read as fenced and opens nothing
+# -- silently, because the reset that reverify reports fires only on an id-keyed line. On the
+# reference consumer's four ledger files the only such line is the fenced timestamp heading the
+# filing names. A fence still open at end of file IS reported, by reverify's END rule.
+#
+# STATEFUL, MEMOISED ON NR. Callers ask this once per line and some ask twice
+# (`warn-shadowed-local-validators.sh` has two pattern rules on one line), so the fence
+# decision is taken once per NR and replayed; state resets at FNR==1 so a second file in one
+# awk run starts clean. `__lef_reset` carries the NR at which an id-keyed boundary reset an
+# open fence, for readers that report it.
+#
+# `ledger_entry_id()` LIVES IN THIS EMITTER NOW, because the shape rule reads it. It used to
+# be `ledger_entry_id_awk()` on its own, and every caller loaded both; that emitter is kept as
+# a no-op so those concatenations still parse, and its header says why.
 ledger_entry_awk() {
   cat <<'AWK'
-function ledger_entry_shape(l) {
-  if (l ~ /^- \*\*/)      return "bullet"
-  if (l ~ /^#{2,6}[ \t]/) return "heading"
+function ledger_entry_id(label) {
+  if (match(label, /^`?(PC|BL)-[A-Za-z0-9_.-]+/))
+    return substr(label, RSTART, RLENGTH)
   return ""
+}
+function ledger_entry_shape(l,   t, rest, sh, line) {
+  if (FNR == 1 && __lef_nr != NR) { __lef_in = 0; __lef_stray = 0 }
+  if (__lef_nr == NR) return __lef_shape
+  __lef_nr = NR; __lef_reset = 0
+  sh = ""
+  if (l ~ /^- \*\*/)           sh = "bullet"
+  else if (l ~ /^#{2,6}[ \t]/) sh = "heading"
+  t = l; sub(/^[ \t]+/, "", t)
+  if (!__lef_in) {
+    if (match(t, /^```+/) || match(t, /^~~~+/)) {
+      rest = substr(t, RLENGTH + 1)
+      if (substr(t, 1, 1) == "~" || index(rest, "`") == 0) {
+        # A closer-shaped line right after a reset is the CLOSER of the fence the reset broke
+        # out of -- a quoted entry heading still has its fence closed below it -- so it is
+        # consumed rather than read as a new opener, which would invert parity until the next
+        # delimiter and report the next real entry as fenced too.
+        if (__lef_stray && rest ~ /^[ \t]*$/) { __lef_stray = 0 }
+        else { __lef_in = 1; __lef_ch = substr(t, 1, 1); __lef_len = RLENGTH; __lef_stray = 0 }
+        sh = ""
+      }
+    } else if (sh != "") __lef_stray = 0
+    # THE FLAG CLEARS ON THE NEXT ENTRY-SHAPED LINE, AND THAT IS A MEASURED CHOICE. After a
+    # reset the tracker cannot tell an UNTERMINATED fence (the next bare delimiter is a real
+    # opener) from a fence QUOTING headings (the next bare delimiter is its closer). Letting the
+    # flag survive entry-shaped lines serves the quoting case and, on the reference consumer's
+    # archive, turned 2 true resets into 9 by eating the next real opener after each of its
+    # unterminated fences. Clearing it here serves the unterminated case, which is the one that
+    # exists on every corpus measured, and costs the quoting case ONE false row on the entry
+    # after a fence that quotes TWO headings -- beside the true row about the same fence.
+    # `core/fixtures/ledger-reverify` pins both sides.
+  } else {
+    if ((match(t, /^```+[ \t]*$/) || match(t, /^~~~+[ \t]*$/)) && substr(t, 1, 1) == __lef_ch) {
+      match(t, /^[`~]+/)
+      if (RLENGTH >= __lef_len) { __lef_in = 0; sh = "" }
+    }
+    if (__lef_in && sh != "") {
+      line = l
+      if (sh == "heading") sub(/^#{2,6}[ \t]+/, "", line); else sub(/^- \*\*/, "", line)
+      if (ledger_entry_id(line) != "") { __lef_in = 0; __lef_stray = 1; __lef_reset = NR }
+      else sh = ""
+    }
+  }
+  __lef_shape = sh
+  return sh
 }
 AWK
 }
@@ -338,15 +430,12 @@ function backlog_entry_label(l,   line, shape) {
 AWK
 }
 
-ledger_entry_id_awk() {
-  cat <<'AWK'
-function ledger_entry_id(label) {
-  if (match(label, /^`?(PC|BL)-[A-Za-z0-9_.-]+/))
-    return substr(label, RSTART, RLENGTH)
-  return ""
-}
-AWK
-}
+# A NO-OP, DELIBERATELY. `ledger_entry_id()` is emitted by `ledger_entry_awk()` above, because
+# the fence-aware shape rule reads it. Callers concatenate `"$(ledger_entry_awk)$(ledger_entry_id_awk)"`
+# and defining the function twice is an awk error, so this emits NOTHING -- not a comment, which
+# `$( )` would strip the newline from and which would then swallow the first line of whatever is
+# concatenated after it.
+ledger_entry_id_awk() { :; }
 
 # WHICH BODY LINES CLOSE AN ENTRY -- lifted from `ledger-reverify.sh`, never restated.
 #

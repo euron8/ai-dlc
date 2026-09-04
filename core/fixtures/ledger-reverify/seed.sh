@@ -611,6 +611,152 @@ non-u character, and a backslash-u with only THREE hex digits. An arm keyed on a
 on the token u2026, or on backslash-u without counting the digits, reports this entry and is wrong.
 
 verify: theirs_lacks core/skills/ai-dlc/SKILL.md "NEARMISS-u2026-and-\x-and-\u202-END"
+
+---
+
+## PC-FIXTURE-FENCED-NON-ID-HEADING — a derived block whose recorded output carries `## <ts> -- EVENT` lines
+
+THE SUBJECT OF PC-S308-LEDGER-REVERIFY-ENTRY-BOUNDARY-IGNORES-FENCED-HEADINGS. The consumer's
+`pipeline-continuation-log.md` is a file of `## <timestamp> -- <event>` headings, so a derived
+block that greps it records heading-shaped lines at column 0. A fence-blind boundary rule opened
+a new entry on the first of them, labelled it with the timestamp, and attributed this entry's
+receipt to that label — this entry then emitted no row under its own id, and the receipt was
+reported under a label nobody could find.
+
+```derived
+$ grep '^## ' pipeline-continuation-log.md | head -2
+## 2000-01-01T00:00:00Z -- FENCED-TS-EVENT-A
+## 2000-01-01T00:00:01Z -- FENCED-TS-EVENT-B
+```
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-TILDE-FENCE — a tilde fence at column 0
+
+The tilde branch of the opener grammar had no subject on any real corpus: zero `~~~` lines on
+the consumer's live ledger, its archive and both distribution backlog files. The heading inside
+sits at column 0, because an indented heading is never entry-shaped and would prove nothing.
+
+~~~
+## 2000-01-01T00:00:03Z -- TILDE-TS-EVENT
+~~~
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-INDENTED-FENCE — a fence indented two spaces, the consumer's second-commonest delimiter shape
+
+The consumer's live ledger carries 10 two-space-indented delimiters against 51 at column 0, and
+its archive 82 against 194. The rule tolerates indentation on the DELIMITER while still reading
+the heading line unstripped, so a column-0 heading inside an indented fence is fenced.
+
+  ```derived
+## 2000-01-01T00:00:04Z -- INDENTED-TS-EVENT
+  ```
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-INLINE-SPAN-LINE — a line that OPENS with an inline code span is not a fence
+```derived``` is an inline span here, not a fence opener: its info string carries a backtick, which
+CommonMark forbids. The reference consumer's live ledger carries exactly one such line, and a
+naive "three backticks open a fence" rule read it as an opener, inverted parity for the rest of
+the file, and hid six live ids. The prose-titled entry below is what that rule hides.
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **`inline-span-control.sh` → a prose-titled entry right after an inline-span line**
+
+  NOT id-keyed, deliberately: an id-keyed line survives any fence state by the reset rule, so
+  only a prose-titled entry can show whether the inline-span line above opened a fence.
+
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-QUOTING-ENTRY — an entry whose fence QUOTES an id-keyed entry heading
+
+An id-keyed line inside a fence is the case the boundary rule cannot resolve: the fence is
+either unterminated or is quoting a heading, and hiding an id-keyed entry is the worse
+failure. So the rule opens an entry there anyway and reverify REPORTS it, under
+ENTRY-SWALLOWED with the fence signal, naming this entry as the one truncated.
+
+```
+## PC-FIXTURE-QUOTED-INSIDE-FENCE — quoted, and it still opens an entry
+```
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-AFTER-QUOTE — the entry after a quoted heading, and it must NOT be reported
+
+THE STRAY-CLOSER CONTROL. The closing fence of the quotation above sits after the reset, so a
+rule that read it as a new OPENER would place this whole entry inside a fence and report it as
+fenced too — one quotation, two accusations. It must report STILL-LIVE and carry no
+ENTRY-SWALLOWED row.
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-QUOTING-TWICE — a fence that quotes TWO id-keyed headings
+
+THE BATCH-50 ADVERSARIAL HAND'S CASE, AND THE STATED COST OF THE STRAY-CLOSER RULE. The first
+quoted heading resets the fence and is reported; the second clears the stray flag, so the closer
+below is read as a new opener and the entry after this one is reported as fenced too — one
+false row beside a true one about the same fence. The alternative, letting the flag survive
+entry-shaped lines, was measured on the reference consumer's archive: it turned two true resets
+into nine. Nothing is HIDDEN in this shape; the receipt after the fence still reports.
+
+```
+## PC-FIXTURE-QUOTED-TWICE-A — the first quoted heading
+## PC-FIXTURE-QUOTED-TWICE-B — the second, which clears the stray flag
+```
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-AFTER-TWO-QUOTES — the entry after a two-quotation fence: reported, never hidden
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-UNTERMINATED-FENCE — a fence that never closes
+
+The reference consumer's archive carries two of these, left by rotations that split entries
+mid-fence — counted by driving the shipping rule and taking the openers that reach a reset or
+the end of the file. Everything after this opener is inside the fence until an id-keyed boundary resets it.
+
+```
+this fence is never closed
+## 2000-01-01T00:00:02Z -- FENCED-TS-EVENT-C
+
+## PC-FIXTURE-AFTER-UNTERMINATED — id-keyed, so it opens an entry through the unterminated fence
+
+A rule that let an unterminated fence swallow id-keyed lines would hide this entry and every
+one after it — the 47-entry desync `scripts/backlog-rotate.sh` measured on the reference
+consumer. It must report STILL-LIVE, and the reset is reported as ENTRY-SWALLOWED naming the
+entry above.
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-EOF-FENCE — a fence still open at the end of the ledger
+
+THE LAST ENTRY, and its fence never closes. No id-keyed line follows, so no reset can report
+it; reverify's END rule does, under ENTRY-SWALLOWED with the unterminated signal. The receipt
+below sits inside the open fence and still parses, because a verify: line is not a boundary.
+
+```
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
 LEDGER
 
 printf '%s %s %s %s\n' "$DIST" "$BASE" "$CONS" "$THEIRS"
