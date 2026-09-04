@@ -4588,14 +4588,17 @@ so no block written before it changes verdict.
    interrupt; if you genuinely need to ask, ask the OPERATOR whether to, and put the peer's current
    state into the question.
 
-   **THE GAP IS TWO AND PENDING IS 1** — the consumer's stamp reads `0.492.0` / `2f1ee8bc` on all
-   four fields against a distribution `VERSION` of `0.494.0`; `PC-S309` is the one discharged
-   candidate it cannot see. The gap was zero when batch 45 started (the `0.489.0 → 0.492.0` pull
-   the operator authorized) and went non-zero on that batch's own release, exactly as it did at
-   `v0.425.0`: **A ZERO GAP IS A STATE, NOT AN ACHIEVEMENT.** **FIVE IS THE LINE THIS FILE CALLS
-   WIDE. Say so when you report the gap; a wide range means more paths adjudicated in one session
-   and a bigger blast radius.** Both pending releases touch `apply.sh`, a bootstrapping file, so
-   when a pull is eventually briefed it names `0.494.0` as the floor, never `0.493.0`.
+   **THE GAP IS THREE AND PENDING IS 2** — the consumer's stamp reads `0.492.0` / `2f1ee8bc` on all
+   four fields against a distribution `VERSION` of `0.495.0`; `PC-S309` (`0.493.0`, corrected
+   `0.494.0`) and `PC-S337` (`0.495.0`) are the discharged candidates it cannot see. The gap was
+   zero when batch 45 started (the `0.489.0 → 0.492.0` pull the operator authorized) and has
+   widened by one release per batch since, exactly as it did at `v0.425.0`: **A ZERO GAP IS A
+   STATE, NOT AN ACHIEVEMENT.** **FIVE IS THE LINE THIS FILE CALLS WIDE. Say so when you report
+   the gap; a wide range means more paths adjudicated in one session and a bigger blast radius.**
+   `0.493.0` and `0.494.0` touch `apply.sh`, a bootstrapping file, so when a pull is eventually
+   briefed it names `0.494.0` as the floor, never `0.493.0`; `0.495.0` touches
+   `ledger-reverify.sh` and `ledger-rotate.sh`, which step 8 runs after the machinery slice has
+   landed, so that fix protects the pull that delivers it.
    **Your batch will widen the gap, which is expected and is not a reason to reorder anything.**
    Re-derive both. That is not permission to close it: a pull is operator-initiated, readiness is
    not authorization, a `PENDING` count is not a decision about WHEN, and one is never handed to a
