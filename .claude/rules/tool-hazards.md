@@ -72,6 +72,13 @@ what is true now. Measured: a hand's final message listed four defects as outsta
 already been fixed, because it had not re-read the files between finding them and reporting.
 Check the tree, not the report.
 
+## `grep -c` prints its zero AND exits 1
+
+`n=$(grep -c … || echo 0)` is `0` followed by a newline and another `0` on zero matches, and
+`$((n % 2))` then aborts the enclosing `if` with a syntax error and NO verdict — a fixture arm
+shipped dead on every green run, in both layouts, and read PASS. The `|| echo 0` is right only
+for a MISSING file. Capture first, default on failure: `n="$(grep -c …)" || n=0`.
+
 ## Never read `$?` after a pipe, and never feed `grep -q` from one
 
 `grep -q` leaves at its first match while the writer is still pushing. Under `pipefail` the

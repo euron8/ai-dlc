@@ -37,9 +37,101 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 49 SHIPPED AS `v0.498.0`. THE CONSUMER PULLED TO `0.497.0` MID-BATCH, SO THE GAP IS ONE AND PENDING IS ONE. THREE `PC-S308-*` CANDIDATES ARE UNFILED FOR BATCH 50 — TWO VERIFIED SIBLINGS AND ONE NEW FILING FROM THE PULL, REPRODUCED HERE.
+### BATCH 50 SHIPPED AS `v0.499.0`. THE CONSUMER HAD PULLED TO `0.498.0` BEFORE THE BATCH OPENED, SO THE GAP IS ONE AND PENDING IS ONE. TWO VERIFIED `PC-S308-*` SIBLINGS REMAIN UNFILED, PLUS `BL-161` WITH NO `PC-` ID.
 
-This block replaces the batch-49 record below it. Every figure here was re-derived on 2026-09-04
+This block replaces the batch-50 record below it. Every figure here was re-derived on 2026-09-04
+after the merge, against the working tree with the controls in the same invocation; re-derive
+them again rather than reading them.
+
+**`VERSION` IS `0.499.0`, SO BATCH 51 RELEASES AS `0.500.0`.** Re-derive `VERSION` and add one.
+Batch 50 merged at `13502c45` (PR #619; release commit `078a2a3f`, then three correction commits
+on the same branch before the merge, none naming the id), closing
+`PC-S308-LEDGER-REVERIFY-ENTRY-BOUNDARY-IGNORES-FENCED-HEADINGS` as `BL-160` and rotating it
+(archive 74 → 75, live 86 with `BL-161` filed), and filing `BL-161` for the distribution backlog
+rotator's own naive fence toggle. `named_absorbed()` resolves the id to exactly one commit at
+`0.499.0`. No correction release: three hands (scope, adversary, fixture) all reported BEFORE the
+merge, and every finding was fixed on the branch. The operator scoped this batch from a marked
+recommendation over the two siblings, on consequence.
+
+**THE CONSUMER HAD ALREADY PULLED WHEN THE BATCH OPENED.** The resume block said gap ONE; the
+derive block read installed `0.498.0` / `2babee86` (consumer PR #1012, 2026-09-04 04:36 -04:00),
+gap ZERO, PENDING ZERO, TERMINAL 37 → 38. The premise expired between the previous session's
+close and this one's open — the measured one-in-two rate, again, on the first figure read.
+
+**THE FILING PREDICTED THE DAMAGE; THE CONSUMER HAD ALREADY TAKEN IT.** The filing said
+`ledger-rotate.sh` "shares the boundary rule and needs the same guard, or a rotation archives a
+closed entry in two pieces". Its own 0.497.0 pull (consumer PR #1011) had done exactly that to
+`PC-S308-AI-DLC-ACKNOWLEDGE-ROUTE-DENIED-SUBAGENT-CANNOT-CLEAR`: the archive holds the heading
+and a rebuilt fence carrying one of three timestamp lines, and the live ledger keeps two orphan
+UNFENCED fragments at lines 3222–3225 (md5 `ae45394b…`) that no engine reports. The fix cannot
+re-attach them; a consumer hand has to delete them. Say so in the next brief.
+
+**THE OBVIOUS FIX WAS REJECTED BY MEASUREMENT BEFORE IT WAS WRITTEN.** A plain fence toggle,
+driven over the consumer's four ledger files, hides 6 live ids (one live line OPENS with an
+inline code span, three backticks then more backticks, which CommonMark does not read as a
+fence) and 59 archived ones (34 headings, 25 bullets, inside fences left unterminated by
+earlier splits). `scripts/backlog-rotate.sh` had recorded the same class and chosen to refuse
+rather than parse. The shipped rule pairs delimiters by the CommonMark grammar and is BOUNDED
+BY THE ID RULE: a fenced entry-shaped line whose label is not id-keyed is ignored; one that is
+id-keyed still opens an entry and resets the fence, reported by reverify as `ENTRY-SWALLOWED`
+with the `fence` signal. Over the four files: no id-keyed boundary changes, one non-id line
+stops being a boundary, two id-keyed headings inside earlier-split fences are kept and flagged.
+The reader set is entirely shared through `lib.sh` (scope hand, control: the only other
+`^#{2,6}` sites in `core/` are the I40-bound layer helpers), so one repair reached reverify,
+rotate, the shadowed-validator warning and the distribution's backlog tooling.
+
+**THREE HANDS, THREE DIFFERENT DEFECT CLASSES, ALL BEFORE THE MERGE.** The scope hand found a
+SECOND committed mutant anchored on the old function body (`backlog-size-ceiling`), beside the
+one the fixture run had already shown; both re-anchored. The adversary found a fence quoting
+TWO headings defeats the stray-closer rule and accuses the entry after it — the alternative was
+BUILT AND MEASURED (it turned 2 true resets on the consumer archive into 9 by eating the next
+real opener after each unterminated fence), so the clause stays and the one false row is pinned
+in the fixture as the stated cost. The fixture hand found the rotate fixture's new fence-balance
+arm emitting NO VERDICT on a green run: `grep -c … || echo 0` prints two lines on no match and
+the arithmetic aborted the whole `if`. It could only ever print `bad`, and it was dead in the
+consumer layout too. **A `grep -c` exits 1 on zero matches AFTER printing the zero.** Its
+timing: `ledger-reverify` is about half again as long solo from the added engine runs; it is
+not the pole and the loaded wall clock does not move.
+
+**TWO PROSE FIGURES DID NOT REPRODUCE AND WERE CORRECTED BEFORE THE MERGE**: "34 archived ids"
+was headings only (59 with bullets), and "ten unterminated fences" was a CommonMark-only count
+where the shipping rule finds two. Both stated by me, both found by a hand driving the shipping
+code. A figure taken with a probe is a figure about the probe.
+
+**THE GATE FAILED ONCE ON ONE LINE.** A `[ \t]` bracket class in a fixture helper fired I71,
+and every unit that drives `validate-enforcement-map.sh` went red with it — eleven FAILs, one
+cause. Read the first finding, not the count.
+
+**THE LEDGER DID NOT MOVE.** md5 `ae45394b…` throughout, **live 74, cited 45, unfiled 29**,
+archive 150, partition control 0. Goal partition **18 DISCHARGED / 27 in flight / 29
+untouched**, overlap 3, discharged-but-invisible 0, TERMINAL **38**. Gap ONE (`0.498.0`
+installed, `0.499.0` shipped), PENDING 1 (the id above at `0.499.0`). The consumer's own
+session (`graph-05`) committed three times during this batch on `pool-pnl-backlog-triage`,
+porcelain 5 → 0 → 4; no write to `/Users/n8/git/graph` by this session.
+
+**THE PULL IS OWED AND NOT REQUIRED — BANK IT.** Bootstrapping files ARE in the range
+(`ledger-reverify.sh`, `lib.sh`, `SKILL.md` of `ai-dlc-update`), so the installed 0.498.0 engine
+runs the pull that delivers its own repair. Measured rather than warned: the consumer's live
+ledger holds ZERO fenced heading-shaped lines today, so the installed rotator cannot split
+anything on that pull; the adversary's differential of the installed and shipped reverify on the
+consumer's real ledger, cwd at the consumer root, was byte-identical by row set. The fix fires
+on a TRANSIENT — the next `derived` block whose output carries heading-shaped lines — and that
+is the stated limit of the null. A pull is operator-initiated; readiness is not authorization.
+
+**TWO `PC-S308-*` CANDIDATES REMAIN UNFILED FOR BATCH 51 — REPORT BOTH AND ASK.**
+`PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT` (an indented `derived` fence
+reports "0 blocks" where the unindented control reports 1; reproduced here on
+`core/scripts/validate-artifact-derivations.sh`) and
+`PC-S308-VALIDATE-ADVERSARIAL-CONVERGENCE-SCOPE-GREW-MISFIRES-ON-PASS-1` (the increment at
+`core/scripts/validate-adversarial-convergence.sh:675` counts pass 1's own CRITICALs as scope
+growth; receipt string present). Both filed 2026-09-03, both unchanged since batch 47; equal
+provenance, and the indented-fence one is a fence defect of the same family as batch 50's.
+`BL-161` (no `PC-` id) ranks below both. **Their receipts name consumer-shaped paths
+(`scripts/ai-dlc/…`) that resolve nowhere here** — run them on `core/scripts/…`.
+
+### BATCH 49 SHIPPED AS `v0.498.0` — THE BLOCK ABOVE REPLACES THIS ONE. TAKE THE STATE FROM THERE.
+
+This block was the batch-50 resume record. Every figure here was re-derived on 2026-09-04
 after the merge, against the working tree with the controls in the same invocation; re-derive
 them again rather than reading them.
 
@@ -4713,20 +4805,38 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), THEN REPORT THE THREE UNFILED
-   `PC-S308-*` CANDIDATES AND ASK BEFORE SCOPING BATCH 50.** All three are in the resume block
-   with their reproductions; the fenced-heading one is the newest (filed by the `0.497.0` pull)
-   and the one that misfiles receipts on the instrument this program reads. Put a marked
-   recommendation in the question. Batch 49 is SHIPPED — `v0.498.0` at `2babee86` (PR #616),
-   `PC-S308-HANDOFF-PROCEDURE-5-STEP-NOT-FOLLOWED` closed as `BL-158` and rotated, `BL-159` filed;
-   batch 48 is SHIPPED — `v0.497.0` at `fb2fd0ee`, `BL-157`. Do not re-scope onto either.
+1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), THEN REPORT THE TWO UNFILED
+   `PC-S308-*` CANDIDATES AND ASK BEFORE SCOPING BATCH 51.** Both are in the resume block with
+   their reproductions; both are verified siblings filed 2026-09-03 and unchanged since batch
+   47. Put a marked recommendation in the question. Batch 50 is SHIPPED — `v0.499.0` at
+   `13502c45` (PR #619), `PC-S308-LEDGER-REVERIFY-ENTRY-BOUNDARY-IGNORES-FENCED-HEADINGS` closed
+   as `BL-160` and rotated, `BL-161` filed; batch 49 is SHIPPED — `v0.498.0` at `2babee86`
+   (PR #616), `BL-158`, `BL-159`. Do not re-scope onto any of them. **Check the delivery gap
+   BEFORE reading the resume block's figure for it**: batch 50 opened on a resume block that
+   said gap ONE when the consumer had already pulled it to ZERO.
 
-   **IF YOU TAKE THE FENCED-HEADING CANDIDATE, DERIVE THE READER SET FIRST.** The filing names
-   `ledger-reverify.sh` and says `ledger-rotate.sh` shares the boundary rule; this file's own
-   derive block, `ledger_entry_shape()` in `reconcile/lib.sh:278`, and the `lids()` grammar in
-   this plan are all heading scanners too. A fence-blind scanner that is fixed in one reader and
-   not the others rotates a closed entry in two pieces. The consumer's own receipt drives the
-   INSTALLED engine and a fix here does not reach it until a pull; state that in the entry.
+   **IF THE SWEEP FINDS A NEW FILING, DERIVE THE READER SET FIRST, AND RUN THE FILING'S RECEIPT
+   ON THE DISTRIBUTION PATH.** Batch 50's reader set was entirely shared through `lib.sh` and one
+   repair reached six readers; batch 44's was not. The two sibling receipts name
+   `scripts/ai-dlc/…`, which resolves nowhere here — `core/scripts/…` is the distribution path.
+
+   **TELL THE CONSUMER, IN THE NEXT BRIEF,** that its live ledger carries two orphan UNFENCED
+   timestamp fragments at lines 3222–3225 (md5 `ae45394b…`) left by its own 0.497.0 pull's
+   rotation, that no engine reports them and the `0.499.0` fix cannot re-attach them, so a
+   consumer hand must delete them; that `ENTRY-SWALLOWED` now carries two more signals (`fence`
+   and `unterminated`) with different remedies, documented in SKILL.md step 3f; and that the
+   installed 0.498.0 engine will run the pull delivering the repair, which is safe today only
+   because the live ledger holds zero fenced heading-shaped lines — re-measure that before the
+   pull. `BL-159`'s `.gitignore` item from batch 49 still stands.
+
+   **BUILD THE ALTERNATIVE BEFORE ACCEPTING A HAND'S REMEDY.** The adversary's proposed clause
+   removal was correct about its own case and, built and driven over the consumer's archive,
+   turned two true findings into nine. A hand is authoritative about the symptom it measured and
+   evidence about nothing else — that includes its fix.
+
+   **A `grep -c … || echo 0` HELPER PRINTS TWO LINES ON ZERO MATCHES**, and an arithmetic test on
+   it aborts the whole `if` with no verdict either way. Capture first, default on failure. The
+   fixture hand found that arm dead on a green run in both layouts.
 
    **THE STATE YOU MEASURED IS THE COUNTEREXAMPLE UNTIL PROVEN OTHERWISE.** Batch 49 listed the
    consumer's `.driver/` directory, saw the stale signal beside a stale idle marker, and still
@@ -5252,9 +5362,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 2730455d... after the consumer's 0.492.0 -> 0.497.0 pull during batch 49 (was 0dd318bd... at its start); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
-   wc -l < /tmp/live.txt    # 75 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 78 at batch 49's start, then the pull rotated four PENDING ids into the archive and filed one (LEDGER-REVERIFY-ENTRY-BOUNDARY-IGNORES-FENCED-HEADINGS)
-   wc -l < /tmp/unfiled.txt # 30 -- PC-S308-HANDOFF-... left the set at batch 49 by being cited by BL-158 and rotated into docs/backlog.archive.md; the pull's new filing joined it the same batch, so the count held again
+   md5 -q "$L"              # ae45394b... after the consumer's 0.497.0 -> 0.498.0 pull, which landed BEFORE batch 50 opened (was 2730455d... at batch 49's close); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
+   wc -l < /tmp/live.txt    # 74 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 75 at batch 49's close, then the 0.498.0 pull rotated PC-S308-HANDOFF-... into the archive
+   wc -l < /tmp/unfiled.txt # 29 -- PC-S308-LEDGER-REVERIFY-ENTRY-BOUNDARY-IGNORES-FENCED-HEADINGS left the set at batch 50 by being cited by BL-160 and rotated into docs/backlog.archive.md
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -5262,10 +5372,13 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 75 LIVE CANDIDATES, 45 CITED, 30 UNFILED** — re-derived after batch 49's
-   merge at `2babee86` (md5 `2730455d…`, archive 149; batch 48's close read 78 / 48 / 30 at
-   `0dd318bd…`, and the consumer's `0.492.0 → 0.497.0` pull then rotated four cited ids into its
-   archive and filed one, so live fell by three and cited by three while unfiled held). Batch 47's
+   **THE BASELINE IS 74 LIVE CANDIDATES, 45 CITED, 29 UNFILED** — re-derived after batch 50's
+   merge at `13502c45` (md5 `ae45394b…`, archive 150; batch 49's close read 75 / 45 / 30 at
+   `2730455d…`, then the consumer's `0.497.0 → 0.498.0` pull rotated one cited id into its
+   archive and batch 50's citation moved one id from unfiled to cited). Batch 48's close read
+   78 / 48 / 30 at `0dd318bd…`, and the consumer's `0.492.0 → 0.497.0` pull then rotated four
+   cited ids into its archive and filed one, so live fell by three and cited by three while
+   unfiled held. Batch 47's
    reading was 77 / 47 / 30 after the consumer's one filing at its close (through
    the batch itself it read 76 / 47 / 29 at `d8902b6c…`). Cited rose and unfiled fell by one on that batch's citation alone;
    batch 46's reading was 76 / 46 / 30 at the same md5, after live ROSE 73 → 76 on three

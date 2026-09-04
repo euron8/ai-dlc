@@ -5514,3 +5514,54 @@ hands found are filed as `BL-159` and not fixed here.
 
 verify: sh h=core/hooks; l=core/schemas/pause-routing.json; [ -f "$h/ai-dlc-continue.sh" ] && [ -f "$h/ai-dlc-handoff-pending.sh" ] && [ -f "$l" ] || exit 9; command -v jq >/dev/null || exit 9; w=$(mktemp -d) || exit 9; trap 'rm -rf "$w"' EXIT; mkdir -p "$w/p/_bmad-output/.driver" "$w/q/_bmad-output/.driver"; : > "$w/p/_bmad-output/pipeline-paused.flag"; : > "$w/q/_bmad-output/pipeline-paused.flag"; printf '## 2026-09-04T06:21:13Z -- USER_PAUSE\n- Session: s1\n- Channel: UserPromptSubmit (typed message)\n- Prompt (first 120 chars): /ai-dlc resume\n\n## 2026-09-04T06:47:11Z -- USER_PAUSE\n- Session: s1\n- Channel: UserPromptSubmit (typed message)\n- Prompt (first 120 chars): handoff\n\n' > "$w/p/_bmad-output/pipeline-continuation-log.md"; printf '{"message":{"role":"user","content":"trim"}}\n{"message":{"role":"assistant","content":"done"}}\n' > "$w/t.jsonl"; d() { o=$(jq -nc --arg t "$w/t.jsonl" --arg s s1 '{transcript_path:$t,session_id:$s}' | CLAUDE_PROJECT_DIR="$w/$1" AI_DLC_PAUSE_ROUTING_SCHEMA="$l" bash "$h/ai-dlc-continue.sh" 2>/dev/null); [ -z "$o" ] && { echo allow; return; }; printf '%s' "$o" | jq -r '.decision // "allow"'; }; a=$(d p); [ "$a" = block ] || exit 1; printf '{"message":{"role":"user","content":"hand off the sprint"}}\n{"message":{"role":"assistant","content":"----\\n/ai-dlc resume\\n----"}}\n' > "$w/t.jsonl"; b=$(d q); : > "$w/q/_bmad-output/.driver/handoff"; rm -f "$w/q/_bmad-output/handoff-guard-state.txt"; c=$(d q); [ "$b" = block ] && [ "$c" = allow ] && exit 0; exit 1
 
+## BL-160 — the ledger's entry-boundary rule opened an entry on a heading-shaped line inside a code fence, so a `derived` block split the entry that carried it
+
+**LANDED (v0.499.0, verified 13502c45).** Merged as PR #619; the release commit names the
+`PC-` id verbatim and `named_absorbed()` resolves it to `0.499.0`. The receipt below drove the
+shipping engine and read CLOSE-CANDIDATE on the merged tree.
+
+Consumer provenance: `PC-S308-LEDGER-REVERIFY-ENTRY-BOUNDARY-IGNORES-FENCED-HEADINGS`, filed by
+the reference consumer on 2026-09-04 at step 3f of its 0.492.0 → 0.497.0 pull. DEFECT tier: the
+instrument this program reads misfiled a receipt under a timestamp label, and the same rule in
+`ledger-rotate.sh` then rotated the entry in pieces.
+
+**The claim, re-derived here before building.** `ledger_entry_shape()` in
+`core/skills/ai-dlc-update/reconcile/lib.sh` called every `^#{2,6} ` or `^- **` line a boundary
+and tracked no fence state. Driven on the distribution engine at `origin/main` with the filing's
+own two-line fixture: a fenced `## 2000-01-01T00:00:00Z -- SWALLOW` line labelled the receipt
+with the timestamp; the plain-fence control labelled it `PC-CTRL`. On the consumer the damage had
+already run past the filing: its 0.497.0 pull rotated
+`PC-S308-AI-DLC-ACKNOWLEDGE-ROUTE-DENIED-SUBAGENT-CANNOT-CLEAR` on its three fenced timestamp
+lines, leaving two orphan unfenced fragments in the live ledger (lines 3222–3225 at
+md5 `ae45394b…`) and a rebuilt fence holding one line in the archive. The reader set is entirely
+shared through `lib.sh` — derived by an independent hand, control: the only other `^#{2,6}`
+sites in `core/` are the layer-file heading helpers bound by I40.
+
+**Why the obvious fix is wrong, measured.** A plain fence toggle hides 6 live ids on the
+consumer (one live line opens with an inline code span, which CommonMark does not read as a
+fence) and 59 archived ones (fences left unterminated by earlier splits). The shipped rule uses
+the CommonMark opener and closer grammar, bounded by the id rule: a fenced entry-shaped line
+whose label is not id-keyed is ignored; one that is id-keyed still opens an entry and resets
+the fence, and `ledger-reverify.sh` reports that reset as `ENTRY-SWALLOWED` with the `fence`
+signal. Over the consumer's live ledger, its archive and both backlog files: no id-keyed boundary
+changes, one non-id line stops being a boundary, two id-keyed headings inside earlier-split
+fences are kept and flagged.
+
+**What this does not close.** The consumer's two orphan fragments are bare headings outside any
+fence now; a consumer hand has to delete them. The close predicates stay fence-blind by design.
+A PROSE-titled entry-shaped line after a fence that never closes, or after a closer carrying
+trailing text, is read as fenced and opens nothing, silently: the reported reset fires only on an
+id-keyed line, and only a fence still open at end of file is reported on its own. The adversarial
+hand measured that set as one line on the consumer's four ledger files, the intended one, and it
+is stated in `lib.sh`'s header. A fence quoting TWO id-keyed headings costs one false fence row
+on the entry after it, beside the true row; the alternative was measured to cost seven false
+resets on the consumer's archive, and the `ledger-reverify` fixture pins the chosen side. `scripts/backlog-rotate.sh`'s own fence guard keeps a separate
+naive toggle and is `BL-161`.
+The receipt below drives the shipping engine on a three-entry ledger and reads the label column
+only: it rejects the pre-fix rule, the fence-blind mutant, the id-reset-removed mutant and the
+naive toggle (the last by hiding `PC-AFTER`), and accepts a rule that mis-reads an inline span
+as an opener — that clause is held by the `ledger-reverify` fixture's `mutation-naive-opener`
+arm, not by this receipt.
+
+verify: sh t=$(mktemp); printf '## PC-CTRL — t\n\n```\n## 2000-01-01T00:00:00Z -- FENCED-TS\n```\n\nverify: theirs_has core/VERSION "."\n\n## PC-UNT — u\n\n```\nnever closed\n\n## PC-AFTER — v\n\nverify: theirs_has core/VERSION "."\n' > "$t"; o=$(bash core/skills/ai-dlc-update/reconcile/ledger-reverify.sh "$PWD" HEAD "$PWD" HEAD "$t" 2>/dev/null); rm -f "$t"; awk -F'\t' '$2=="PC-CTRL"{c=1} $2=="PC-AFTER"{a=1} $2 ~ /FENCED-TS/{s=1} END{exit !(c && a && !s)}' <<<"$o"
+
