@@ -67,6 +67,13 @@ not write report files`. A brief naming a report path as the deliverable spends 
 measured across four, the most valuable report arrived after the lead had committed. Ask for
 findings AS TEXT; the TREE is the deliverable for code.
 
+**A teammate's `SendMessage` can QUEUE for hours and then land in a burst.** Measured: three
+hands went idle, three direct requests each got nothing, a merge went ahead on the operator's
+ruling, and forty minutes later all three reports arrived at once — each saying its sends had
+"returned success" hours earlier. One carried a real shipped regression and cost a correction
+release. An idle hand with an unanswered request is a hand whose report is IN TRANSIT: ask once
+more, then wait one more timer before merging without it.
+
 **A delegate's CLOSING SUMMARY can be stale.** It reports what it found when it looked, not
 what is true now. Measured: a hand's final message listed four defects as outstanding that had
 already been fixed, because it had not re-read the files between finding them and reporting.

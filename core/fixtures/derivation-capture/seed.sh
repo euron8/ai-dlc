@@ -121,6 +121,15 @@ cat > "$IND_ART" <<'INDENTED'
   $ cat VERSION
   0.0.0
   ```
+
+- Finding C, fresh, whose recorded output is itself a `$ ` line indented deeper than the fence.
+  Under the shed rule that line is OUTPUT; a mask shedding all leading blanks reads it as a
+  second command and the pair stops reproducing.
+
+  ```derived
+  $ printf '      $ x\n'
+        $ x
+  ```
 INDENTED
 
 # A fourth artifact: a wrapped SENTENCE whose continuation begins with the fence token

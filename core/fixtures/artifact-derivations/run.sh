@@ -316,10 +316,11 @@ out="$(run "$WORK/i-three.md")"; rc=$?
 # THE INDENT IS SHED EXACTLY. BSD `wc -l` right-aligns its count in eight columns, so a
 # derivation of it carries seven leading spaces that are OUTPUT, not indent; the true twin
 # records the fence indent PLUS that padding, and only a reader shedding exactly the fence
-# indent reproduces it. The stale twin records the bare digit, which a reader shedding ALL
-# blanks would wrongly accept as well. The padding is produced by `printf '%8s'` rather than
-# by `wc` itself so the pair discriminates on GNU platforms too, where `wc -l` pads nothing
-# and the two twins would collapse into one.
+# indent reproduces it -- the shed-all mutant fails THIS arm and no other. The stale twin
+# records the bare digit and is STALE under both readers (the comparison runs against the
+# unshed actual output); it is here so the green half is shown to have executed, not to
+# discriminate the rule. The padding is produced by `printf '%8s'` rather than by `wc` itself
+# so the pair holds on GNU platforms too, where `wc -l` pads nothing.
 { printf -- '- item\n\n  ```derived\n  $ %s\n  %s\n  ```\n' "printf '%8s\\n' 2" "       2"; } > "$WORK/i-pad-true.md"
 out="$(run "$WORK/i-pad-true.md")"; rc=$?
 [ "$rc" -eq 0 ] && ok "i-pad-true             exit=0  (indent shed EXACTLY: the output's own padding survives)" \
@@ -329,6 +330,17 @@ out="$(run "$WORK/i-pad-stale.md")"; rc=$?
 [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" \
   && ok "i-pad-stale            exit=1  STALE (the bare digit is not what the command printed)" \
   || bad "i-pad-stale expected exit 1 STALE, got $rc: $out"
+# A `$ ` LINE INDENTED DEEPER THAN ITS FENCE IS OUTPUT, NOT A COMMAND. The shed form decides:
+# under a two-space fence a six-space `$ x` sheds to four spaces and a dollar, which is not a
+# command line, so it is the recorded output of the pair above it and the block holds ONE
+# derivation. A reader shedding all leading blanks reads it as a second command and fails the
+# block twice. The same shape closes the hook-side half of this property in derivation-capture.
+{ printf -- '- item\n\n  ```derived\n  $ %s\n  %s\n  ```\n' "printf '      \$ x\\n'" "      \$ x"; } > "$WORK/i-deep-cmd.md"
+out="$(run "$WORK/i-deep-cmd.md")"; rc=$?
+[ "$rc" -eq 0 ] && grep -q '1 derivation(s) in 1 block(s)' <<< "$out" \
+  && ok "i-deep-cmd             exit=0  one derivation (a deeper-indented \$ line is OUTPUT)" \
+  || bad "i-deep-cmd expected exit 0 with 1 derivation -- a deeper \$ line was read as a command: $rc: $out"
+
 # An unclosed INDENTED block is reported, not skipped -- E's arm has to reach this form too.
 { printf -- '- item\n\n  ```derived\n  $ grep -c needle src/two-needles.txt\n  2\n'; } > "$WORK/i-unclosed.md"
 out="$(run "$WORK/i-unclosed.md")"; rc=$?

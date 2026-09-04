@@ -21,9 +21,9 @@
 # A5, A17, A19 and A20, which differ in the INPUT they present (a reproducing pair, prose
 # alone, a reproducing pair beside a stale sibling, the first two again through an indented
 # fence, and prose beside a real block below a prose line that begins with the fence token),
-# and one deletion makes all six wrong at once. The mask blind to an indented opener reddens
-# A17 and A19: an indented block passes through UNMASKED, so its stale pair is submitted on
-# every edit to the file and both silent arms on that file go red together. Splitting either
+# and one deletion makes all seven wrong at once, A22 included. The mask blind to an indented
+# opener reddens A17, A19 and A22: an indented block passes through UNMASKED, so its stale pair
+# is submitted on every edit to the file and every silent arm on that file goes red together. Splitting either
 # into per-arm mutations that each redden the whole set would assert less, not more.
 #
 # HOW THE MUTANT REACHES THE SIBLING. `seed.sh` resolves the hook and the validator from its
@@ -182,7 +182,7 @@ mutate "rc 2 read as a verdict" "refused to start" \
 # reference consumer's active sprint already fail whole-file validation, so it refuses an
 # unrelated edit in 30% of them. Three arms present three different inputs it gets wrong.
 mutate "payload index ignored (file grain)" \
-  "edit writing a reproducing pair|an edit that wrote no derivation|the reproducing pair of a mixed block|a prose-only edit to the indented file|indented FRESH pair|a prose-only edit to the prose-opener file" \
+  "edit writing a reproducing pair|an edit that wrote no derivation|the reproducing pair of a mixed block|a prose-only edit to the indented file|indented FRESH pair|a prose-only edit to the prose-opener file|deeper-\$-output pair" \
   's/if (cur>0 \&\& (L\[k\] in PAY)) tch\[cur\]=1/if (cur>0) tch[cur]=1/'
 
 # --- 8. the markdown filter removed -------------------------------------------
@@ -206,7 +206,7 @@ mutate "scope grep blind to an indented fence" "indented stale pair" \
   's/^\(grep -q .\^\)\[\[:blank:\]\]\*\(```derived. "\$FILE"\)/\1\2/'
 
 mutate "mask opener blind to an indented fence" \
-  "a prose-only edit to the indented file|indented FRESH pair" \
+  "a prose-only edit to the indented file|indented FRESH pair|deeper-\$-output pair" \
   's/^    ind = lead(L\[i\]); b = substr(L\[i\], length(ind) + 1)$/    ind = ""; b = L[i]/'
 
 mutate "command grep blind to an indented fence" "indented stale pair" \
@@ -220,6 +220,15 @@ mutate "command grep blind to an indented fence" "indented stale pair" \
 # both hooks and does not move. Only the prose-opener artifact carries the shape.
 mutate "opener accepts trailing text" "prose-opener file's stale pair" \
   's/^    if (b ~ \/\^```derived\[ \\t\]\*\$\/) {$/    if (b=="```derived" || index(b,"```derived ")==1) {/'
+
+# --- 13. shed() strips ALL leading blanks, not the fence indent -----------------------
+# The obvious spelling of the shed rule, and the one the validator fixture's padded twin kills
+# on ITS side. On the hook side a six-space `$ x` recorded as OUTPUT under a two-space fence
+# sheds to a command line, the pair stops reproducing, and a fresh block is refused (A22).
+# Found by the batch-51 fixture hand: with this mutation applied the sibling was 25 of 25
+# green before A22 existed.
+mutate "shed strips all leading blanks" "deeper-\$-output pair" \
+  's/^  if (substr(s, 1, length(ind)) == ind) return substr(s, length(ind) + 1)$/  return substr(s, length(lead(s)) + 1) # MUTANT/'
 
 if [ "$fails" -gt 0 ]; then
   printf '  %s mutation(s) did not behave\n' "$fails"
