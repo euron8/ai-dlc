@@ -37,9 +37,126 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 47 SHIPPED AS `v0.496.0`. THE CONSUMER IS AT `0.492.0`, THE GAP IS FOUR, PENDING IS THREE, AND THREE `PC-S308-*` CANDIDATES ARE UNFILED FOR BATCH 48 — TWO VERIFIED, ONE FILED DURING THE CLOSE AND NOT YET READ.
+### BATCH 48 SHIPPED AS `v0.497.0`. THE CONSUMER IS AT `0.492.0`, THE GAP IS FIVE — THE LINE THIS FILE CALLS WIDE — PENDING IS FOUR, AND BATCH 49 IS SCOPED BY THE OPERATOR ON `PC-S308-HANDOFF-PROCEDURE-5-STEP-NOT-FOLLOWED`.
 
-This block replaces the batch-47 record below it. Every figure here was re-derived on 2026-09-04
+This block replaces the batch-48 record below it. Every figure here was re-derived on 2026-09-04
+after the merge, against the working tree with the controls in the same invocation; re-derive
+them again rather than reading them.
+
+**`VERSION` IS `0.497.0`, SO BATCH 49 RELEASES AS `0.498.0`.** Re-derive `VERSION` and add one.
+Batch 48 merged at `fb2fd0ee` (PR #614, release commit `a6101eae` followed by two correction
+commits on the same branch before the merge), closing
+`PC-S308-POST-COMPACT-RECOVERY-PROTOCOL-SKIPS-ROUTE-MD` as `BL-157` and rotating it (archive
+72 → 73, live 85 → 84). `named_absorbed()` resolves the id to exactly one commit at `0.497.0`,
+impossible-id control 0. No correction release: the adversarial hand reported BEFORE the merge
+for the third consecutive batch, and all three of its defects were fixed on the branch. The
+operator chose this subject from the three the sweep reported.
+
+**THE DEFECT WAS A PROSE ORDERING, AND ITS POPULATION WAS NOT THE ONE ITS TITLE NAMES.**
+`SKILL.md`'s recovery protocol sits at line 26 and the unconditional router Read sits under
+`## INITIALIZATION` roughly 1,800 lines below, so a session started with `/ai-dlc resume` read the
+protocol as its resume procedure, proceeded to the next pipeline action, never read
+`steps/route.md`, skipped Step 0a, and was denied its first write by Check 2z. Measured on the
+consumer's transcripts before building: 10 of 41 `/ai-dlc resume` sessions since 2026-09-03 denied
+before any router Read, all 10 having read the snapshot first; 0 of 51 sessions carrying a
+compaction summary denied after it (the adversary's independent scan: 0 of 58). The protocol now
+opens by stating its scope and sending an un-routed session to the router;
+`validate-reattach-budget.sh` gained an arm requiring the installed router path inside the
+section outside an HTML comment; `postcompact-rulebook-recovery` carries three mutants and a
+bracketed-path control. The recover hook's injected block is untouched.
+
+**THE ADVERSARIAL HAND'S THREE DEFECTS, ALL REAL, ALL FIXED PRE-MERGE.** The comment guard was
+`sed 's/<!--.*-->//'` and 18 of the 20 HTML comments in `SKILL.md` span lines, so a path parked
+in the house-style comment passed — **a comment-stripping guard must match the comment form the
+FILE actually uses**; it is now an awk state machine, and the greedy `.*` that ate a live path
+between two comments went with it. The hook-authority sentence ("this section adds nothing")
+revoked the new paragraph for a post-compaction lead; narrowed to the recovery steps below it.
+The paragraph's condition keyed on transcript state a compacted lead cannot evaluate, and a lead
+resolving the doubt by re-routing would be denied by `recover-gate.sh` and paused by Step 0a; it
+now keys on the session's INPUT and tells a compaction-recovering lead not to re-route. The hand
+also found mutant 7b's `cmp -s` guard could not fire for its stated reason (INITIALIZATION's copy
+of the path kept the file differing); it now counts inside the section.
+
+**TWO TOOL FACTS, ONE OF THEM A REPEAT.** A heredoc inside `bash -c '…'` whose body carried
+backticks mangled the release commit message to five lines — the SECOND time this file records
+that hazard, so it is now in `tool-hazards.md` rather than only here; write the body with the Write
+tool and pass `-F`. `scripts/render-postcompact-digest.sh` without `--write` exits 0 and writes
+nothing, which read as "re-rendered" and cost one gate run; the gate's digest check caught it.
+
+**THE CONSUMER PULLED NOTHING THIS BATCH, AND THE GAP IS NOW WIDE.** Stamp `0.492.0` /
+`2f1ee8bc` against `VERSION` `0.497.0`: gap FIVE, PENDING 4 (`PC-S309` at `0.493.0`, corrected
+`0.494.0`; `PC-S337` at `0.495.0`; `PC-S308-AI-DLC-ACKNOWLEDGE-…` at `0.496.0`;
+`PC-S308-POST-COMPACT-…` at `0.497.0`). FIVE is the line this file calls wide: more paths
+adjudicated in one session and a bigger blast radius. `0.497.0` changes `SKILL.md`, a validator,
+a fixture and the digest — no bootstrapping file — so the floor for the next brief stays
+`0.494.0`. The second test is banked: the consumer's installed `SKILL.md` is byte-identical to the
+pre-fix distribution copy and its installed `validate-reattach-budget.sh` passes it, while the
+shipped validator fails it on the router arm (`cmp -s` control: the two validators differ). A
+pull is operator-initiated; readiness is not authorization.
+
+**THE LEDGER MOVED ONCE AND IS COMMITTED.** md5 `ea30c200…` → `0dd318bd…`, **live 78, cited 48,
+unfiled 30**, archive 145, partition control 0: the consumer committed the POST-COMPACT filing
+(`c2ddf7554`) and filed `PC-S308-HANDOFF-PROCEDURE-5-STEP-NOT-FOLLOWED` (`6d645a346`, 2026-09-04).
+Goal partition **21 DISCHARGED / 27 in flight / 30 untouched**, overlap 3, discharged-but-invisible
+0, TERMINAL **33**. The consumer sat on `pool-pnl-backlog-triage` with porcelain 7–8, graph
+sessions `graph-f1` and `graph-c4` seen and neither contacted, no write to `/Users/n8/git/graph` by
+this session.
+
+**BATCH 49 IS SCOPED, BY RULING, ON `PC-S308-HANDOFF-PROCEDURE-5-STEP-NOT-FOLLOWED`, WITH THE
+OPERATOR'S CONTEXT THAT THE HANDOFF MISS "HAPPENS OFTEN, IT'S JUST NEVER BEEN FILED BEFORE".** Two
+read-only hands did the preliminary work during batch 48's close; their findings are HYPOTHESES to
+re-derive, and action 1 says which first.
+
+- **Population (census hand).** 120 handoff commits across all consumer refs (control: 8409
+  commits), but the transcript corpus spans only 2026-08-04 → 2026-09-04, so 39 are scorable and
+  every rate below is over ≤ 39. Step 3 (`git push`) skipped 3 of 39. Step 4's
+  `touch _bmad-output/.driver/handoff` skipped **20 of 39** — the most-skipped step by six times,
+  and the one the filing ranks third. Step 5's `rm -f .handoff-in-progress` skipped 4 of 17 (the
+  clause entered `handoff.md` at `v0.447.0` on 2026-08-30; earlier rows are out of scope). Step-4
+  skips ran 7 of 7 in the first half of August, 12 of 17 in the second, 1 of 15 in September, and
+  the turn coincides with the operator starting to ask — 11 "did the handoff steps run" prompts
+  across 397 transcripts, all on or after 2026-08-30 — not with any mechanism: no hook reads
+  `.driver/handoff`. The scoring credits a step run within 25 minutes of the commit, so
+  operator-prompted remediation counts as run and the unprompted rate is worse than every figure.
+- **Mechanism (mechanism hand).** `core/hooks/ai-dlc-continue.sh` Check 0, a `Stop` hook, already
+  blocks the stop on three arms — step 1's teammate sweep (`:316-349`), step 3's push
+  (`:369-383`, `@{u}..HEAD`), step 4's resume block (`:307-310`) — and the consumer's copy is
+  byte-identical to core. **No arm exists for step 4's touch or step 5's marker clear**, and the
+  marker is a TRIGGER (key 1 of `ai_dlc_handoff_pending`, `ai-dlc-handoff-pending.sh:87`), not an
+  assertion: a stop with the marker still on disk is allowed once the three arms pass.
+- **THE INCIDENT NEVER ARMED THE GUARD, AND THAT IS THE HALF THE FILING DOES NOT NAME.** At the
+  2026-09-04 06:52 handoff the log records `ALLOWED_BY_PAUSE` and no guard row. Arming needs the
+  pause flag plus one of three keys: the entry marker (written by `ai-dlc-handoff-entry.sh` on a
+  READ of `handoff.md` — the lead never read it), an operator handoff request in the log (the lead
+  self-initiated), or the snapshot key (did not hold). A self-initiated handoff that skips the step
+  file is invisible to the guard by construction. The fix has two halves — the arming predicate and
+  the missing arms — and shipping the arms alone leaves this incident unreached.
+- **Four adjacent defects, none of them the subject.** `PUSH_OK` counts COMMITS, so a skipped step
+  2 reads `ahead 0` and passes (consumer today: ahead 0, 7 dirty files; `handoff.md:64-65` names
+  the trap in prose). `_bmad-output/.handoff-in-progress` is TRACKED in the consumer although
+  `core/schemas/pipeline-state-paths.json:168-172` declares it ignored — 2 of the schema's 14
+  transient patterns are missing from the consumer's `.gitignore`, and `sync-transient-ignore.sh:95`
+  is the producer that should have written them. `_gate-procedures.md:681-687`'s auto-handoff twin
+  never clears the marker. Check 0's on-disk trigger sits behind a readable-transcript test
+  (`:288`), and the guard self-releases after `MAX_RAPID_BLOCKS` = 3 (a delay, never a wedge; the
+  consumer's log shows a `(3/3)` exhaustion).
+- **This is the THIRD filing of one end state.** `PC-S307-HANDOFF-PUSH-IS-A-BARE-GIT-PUSH-…`
+  (`BL-120`, `v0.434.0`) and `PC-S307-POSTCOMPACT-RECOVERY-NEVER-ROUTES-TO-HANDOFF-MD` are both
+  archived on both sides; `BL-125` (`v0.438.0`) fixed the resume line; each release removed one
+  route to the same end state and the state returned by another. None covers steps 4 or 5.
+- **Siting and fixture.** The mechanism hand recommends a fourth arm inside Check 0 — the seam
+  every handoff already reaches — asserting the marker is gone and `.driver/handoff` present once
+  the other three arms are green, with `ai-dlc-driver-signal.sh` rejected as a site (its header
+  says it decides nothing) and a `handoff.md` step rejected as the mechanism that already failed.
+  `core/fixtures/handoff-completion-assertion/` owns the seam (19 mutants; `run.sh:153` warns not
+  to seed the marker by touching it). The candidate's receipt, `theirs_has … "git push -u origin
+  HEAD"`, is satisfied at both refs and reads STILL-LIVE through any fix.
+- **Two verified `PC-S308-*` siblings remain available**: the indented-fence blind spot and the
+  SCOPE_GREW pass-1 misfire, both reproduced at batch 47 and 48 and unchanged.
+
+### BATCH 47 SHIPPED AS `v0.496.0` — THE BLOCK ABOVE REPLACES THIS ONE. TAKE THE STATE FROM THERE.
+
+This block was the batch-48 resume record. Every figure here was re-derived on 2026-09-04
 after the merge, against the working tree with the controls in the same invocation; re-derive
 them again rather than reading them.
 
@@ -4514,23 +4631,40 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), THEN REPORT THE THREE UNFILED
-   `PC-S308-*` CANDIDATES AND ASK BEFORE SCOPING BATCH 48.** The third,
-   `PC-S308-POST-COMPACT-RECOVERY-PROTOCOL-SKIPS-ROUTE-MD`, was filed 2026-09-04 during batch 47's
-   close, sits UNCOMMITTED in the consumer's tree, has not been read past its head, and is the
-   lead-side twin of batch 47's subject; read it first. Batch 47 is SHIPPED — `v0.496.0`
-   at `5029f2fd` (PR #611), `PC-S308-AI-DLC-ACKNOWLEDGE-ROUTE-DENIED-SUBAGENT-CANNOT-CLEAR`
-   closed as `BL-156` and rotated; batch 46 is SHIPPED — `v0.495.0` at `fec5c5de`, `PC-S337`
-   closed as `BL-154`. Do not re-scope onto either. The sweep is NOT empty: the two siblings
-   filed beside batch 47's subject on 2026-09-03 are both verified real against this tree (the
-   resume block carries the reproduction of the indented-fence one and the population of the
-   scope-grew one), the operator's choice at batch 47 was a ruling on that batch's scope only, and
-   this file's standing rule is "if the sweep finds something new, report it and ask before
-   re-scoping". Re-derive both against the consumer's ledger first — a filing is authoritative
-   about the symptom and evidence about nothing else — and put a marked recommendation in the
-   question. Tell the consumer, in the next brief, that all three sprint-308 receipts name
-   consumer-shaped paths (`core/scripts/ai-dlc/…`, `core/.claude/hooks/…`) that resolve nowhere
-   in this tree, so each will read `NEEDS-REVIEW` rather than close.
+1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), THEN BUILD BATCH 49 ON
+   `PC-S308-HANDOFF-PROCEDURE-5-STEP-NOT-FOLLOWED` — THE OPERATOR SCOPED IT AT BATCH 48'S CLOSE.**
+   Do not ask whether to take it; do ask if the sweep shows a NEW filing, and put the peer state in
+   the question. Batch 48 is SHIPPED — `v0.497.0` at `fb2fd0ee` (PR #614),
+   `PC-S308-POST-COMPACT-RECOVERY-PROTOCOL-SKIPS-ROUTE-MD` closed as `BL-157` and rotated; batch 47
+   is SHIPPED — `v0.496.0` at `5029f2fd`, `BL-156`. Do not re-scope onto either.
+
+   **START BY RE-DERIVING THE TWO HANDS' FINDINGS IN THE RESUME BLOCK, IN THIS ORDER.** (i) The
+   incident's arming failure: read `core/hooks/ai-dlc-continue.sh` Check 0 and
+   `core/hooks/ai-dlc-handoff-pending.sh`'s three keys, then confirm from the consumer's
+   `_bmad-output/pipeline-continuation-log.md` (read-only) that the 2026-09-04 06:52 handoff has
+   an `ALLOWED_BY_PAUSE` row and no guard row — that is the half the filing does not name and the
+   half a step-4/5 arm alone cannot reach. (ii) The step-4 skip rate: re-run the census over the
+   transcript corpus with Bash tool-call INPUTS, not text matches (the body of `handoff.md` itself
+   contains all three command strings, so a text scan over-scores). (iii) `PUSH_OK`'s vacuity on a
+   skipped step 2, since any arm you add beside it inherits the same blind spot unless it tests the
+   working tree.
+
+   **BUILD BOTH HALVES OR SAY WHICH YOU ARE NOT BUILDING.** The arms for steps 4 and 5 go into
+   Check 0 as a fourth arm, ordered after the three existing remedies; the arming predicate needs
+   a key a self-initiated handoff that never read `handoff.md` still trips. Score the filed remedy
+   (a verification step in `handoff.md`) and reject it by measurement, not by argument — it is the
+   mechanism that already failed. Read `core/fixtures/handoff-completion-assertion/run.sh` in full
+   before touching the fixture; its `:153` warning about seeding the marker is the trap. Replace
+   the candidate's receipt (`theirs_has … "git push -u origin HEAD"` is true at both refs) with one
+   that drives Check 0. File the four adjacent defects the hands found — tracked marker vs schema
+   `ignore`, `sync-transient-ignore.sh` producer gap, the auto-handoff twin's missing marker clear,
+   `PUSH_OK` on commits only — as `BL-` entries with receipts, or fix the ones the fourth arm
+   naturally covers and say so; do not widen the batch to all four.
+
+   **TELL THE CONSUMER, IN THE NEXT BRIEF,** that the three sprint-308 receipts filed on
+   2026-09-03 name consumer-shaped paths that resolve nowhere here and will read `NEEDS-REVIEW`,
+   that `PC-S308-POST-COMPACT-…`'s receipt keys on a heading the fix keeps and will read
+   STILL-LIVE, and that it should re-anchor both.
 
    **A SECOND SPELLING IS NOT A SECOND SPELLING UNTIL AN INPUT SEPARATES THE TWO.** Batch 47's
    receipt, shipped fixture, battery and entry all accepted `agent_type` as equivalent to
@@ -4686,18 +4820,19 @@ so no block written before it changes verdict.
    interrupt; if you genuinely need to ask, ask the OPERATOR whether to, and put the peer's current
    state into the question.
 
-   **THE GAP IS FOUR AND PENDING IS 3** — the consumer's stamp reads `0.492.0` / `2f1ee8bc` on all
-   four fields against a distribution `VERSION` of `0.496.0`; `PC-S309` (`0.493.0`, corrected
-   `0.494.0`), `PC-S337` (`0.495.0`) and `PC-S308-AI-DLC-ACKNOWLEDGE-…` (`0.496.0`) are the
+   **THE GAP IS FIVE AND PENDING IS 4, AND FIVE IS THE LINE THIS FILE CALLS WIDE** — the
+   consumer's stamp reads `0.492.0` / `2f1ee8bc` on all four fields against a distribution
+   `VERSION` of `0.497.0`; `PC-S309` (`0.493.0`, corrected `0.494.0`), `PC-S337` (`0.495.0`),
+   `PC-S308-AI-DLC-ACKNOWLEDGE-…` (`0.496.0`) and `PC-S308-POST-COMPACT-…` (`0.497.0`) are the
    discharged candidates it cannot see. The gap was zero when batch 45 started (the `0.489.0 →
    0.492.0` pull the operator authorized) and has widened by one release per batch since, exactly
-   as it did at `v0.425.0`: **A ZERO GAP IS A STATE, NOT AN ACHIEVEMENT.** **FIVE IS THE LINE THIS
-   FILE CALLS WIDE, AND ONE MORE BATCH REACHES IT. Say so when you report the gap; a wide range
-   means more paths adjudicated in one session and a bigger blast radius.**
-   `0.493.0` and `0.494.0` touch `apply.sh`, a bootstrapping file, so when a pull is eventually
-   briefed it names `0.494.0` as the floor, never `0.493.0`; `0.495.0` touches
+   as it did at `v0.425.0`: **A ZERO GAP IS A STATE, NOT AN ACHIEVEMENT.** **Say WIDE when you
+   report it; a wide range means more paths adjudicated in one session and a bigger blast
+   radius.** `0.493.0` and `0.494.0` touch `apply.sh`, a bootstrapping file, so when a pull is
+   eventually briefed it names `0.494.0` as the floor, never `0.493.0`; `0.495.0` touches
    `ledger-reverify.sh` and `ledger-rotate.sh`, which step 8 runs after the machinery slice has
-   landed, so that fix protects the pull that delivers it; `0.496.0` touches a hook only.
+   landed, so that fix protects the pull that delivers it; `0.496.0` touches a hook only;
+   `0.497.0` touches `SKILL.md`, a validator, a fixture and the digest.
    **Your batch will widen the gap, which is expected and is not a reason to reorder anything.**
    Re-derive both. That is not permission to close it: a pull is operator-initiated, readiness is
    not authorization, a `PENDING` count is not a decision about WHEN, and one is never handed to a
@@ -5043,9 +5178,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # ea30c200... after one consumer filing at batch 47's close (was d8902b6c... through the batch); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
-   wc -l < /tmp/live.txt    # 77 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. HELD at 76 across batch 47, then 77 on PC-S308-POST-COMPACT-RECOVERY-PROTOCOL-SKIPS-ROUTE-MD, uncommitted in the consumer tree
-   wc -l < /tmp/unfiled.txt # 30 -- PC-S308-AI-DLC-ACKNOWLEDGE-... left the set at batch 47 by being cited by BL-156 and rotated into docs/backlog.archive.md; the new filing joined the two earlier PC-S308-* ones
+   md5 -q "$L"              # 0dd318bd... after the consumer committed the POST-COMPACT filing and filed the HANDOFF one during batch 48 (was ea30c200... at its start); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
+   wc -l < /tmp/live.txt    # 78 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 77 at batch 48's start, 78 on PC-S308-HANDOFF-PROCEDURE-5-STEP-NOT-FOLLOWED
+   wc -l < /tmp/unfiled.txt # 30 -- PC-S308-POST-COMPACT-... left the set at batch 48 by being cited by BL-157 and rotated into docs/backlog.archive.md; PC-S308-HANDOFF-... joined it the same batch, so the count held
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -5053,9 +5188,11 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 77 LIVE CANDIDATES, 47 CITED, 30 UNFILED** — re-derived after batch 47's
-   merge at `5029f2fd` and after the consumer's one filing at its close (md5 `ea30c200…`,
-   archive 145; through the batch itself it read 76 / 47 / 29 at `d8902b6c…`). Cited rose and unfiled fell by one on this batch's citation alone;
+   **THE BASELINE IS 78 LIVE CANDIDATES, 48 CITED, 30 UNFILED** — re-derived after batch 48's
+   merge at `fb2fd0ee` (md5 `0dd318bd…`, archive 145; batch 47's close read 77 / 47 / 30 at
+   `ea30c200…`, and one filing plus one citation moved live and cited by one each while unfiled
+   held). Batch 47's reading was 77 / 47 / 30 after the consumer's one filing at its close (through
+   the batch itself it read 76 / 47 / 29 at `d8902b6c…`). Cited rose and unfiled fell by one on that batch's citation alone;
    batch 46's reading was 76 / 46 / 30 at the same md5, after live ROSE 73 → 76 on three
    `PC-S308-*` filings with nothing rotated; batch 45's was 73 / 45 / 28 at md5 `30b64caf…`. The
    paragraph below records the reading before that. **Live HELD at 73 across a ledger whose md5 moved**,
