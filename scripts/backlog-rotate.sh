@@ -88,9 +88,12 @@ LIB="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
 #
 # THE PARSER REPAIR HAS SINCE LANDED, IN THE BOUNDED FORM. `ledger_entry_shape()` in lib.sh now
 # ignores a fenced entry-shaped line whose label is NOT id-keyed, and still opens an entry on
-# one that IS -- so the desync above cannot recur, and neither can a hidden `## BL-…`. That is
-# why this guard keys on the BL- label: the shape lib.sh ignores is exactly the one this guard
-# never split on, and the shape it still opens is exactly the one this guard still refuses.
+# one that IS -- so the desync above cannot recur IN lib.sh's rule, and neither can a hidden
+# `## BL-…`. That is why this guard keys on the BL- label: the shape lib.sh ignores is exactly
+# the one this guard never split on, and the shape it still opens is exactly the one this guard
+# still refuses. THIS GUARD'S OWN `depth` TOGGLE BELOW IS STILL THE NAIVE FORM and disagrees
+# with lib.sh on a fence quoting two `## BL-` headings: it then refuses a real top-level entry
+# and its remedy text tells the operator to strip that entry's marker. BL-161 carries it.
 #
 # REFUSING IS THE CORRECT FAILURE. Everywhere else this repo prefers PENDING over FAIL, because a
 # check that wedges live work gets switched off. Not here: the alternative to stopping is

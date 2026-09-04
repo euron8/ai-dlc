@@ -298,6 +298,16 @@ unquote() { # unquote <value>
 # three or more backticks or tildes, indentation tolerated, whose info string carries no
 # backtick; a closer is the same character, at least as many of it, and nothing else. The
 # backtick-in-info-string clause is what keeps the inline-span line above from opening a fence.
+# Indentation is tolerated in FULL where CommonMark allows three spaces: a delimiter indented
+# four or more is read as a delimiter here and as literal content there. Permissive direction,
+# and the shape tests below read the UNSTRIPPED line, so an indented heading is still not
+# entry-shaped.
+#
+# WHAT THIS DOES NOT GUARANTEE. A prose-titled (id-less) entry-shaped line after a fence that
+# never closes, or after a closer carrying trailing text, is read as fenced and opens nothing
+# -- silently, because the reset that reverify reports fires only on an id-keyed line. On the
+# reference consumer's four ledger files the only such line is the fenced timestamp heading the
+# filing names. A fence still open at end of file IS reported, by reverify's END rule.
 #
 # STATEFUL, MEMOISED ON NR. Callers ask this once per line and some ask twice
 # (`warn-shadowed-local-validators.sh` has two pattern rules on one line), so the fence
@@ -336,6 +346,15 @@ function ledger_entry_shape(l,   t, rest, sh, line) {
         sh = ""
       }
     } else if (sh != "") __lef_stray = 0
+    # THE FLAG CLEARS ON THE NEXT ENTRY-SHAPED LINE, AND THAT IS A MEASURED CHOICE. After a
+    # reset the tracker cannot tell an UNTERMINATED fence (the next bare delimiter is a real
+    # opener) from a fence QUOTING headings (the next bare delimiter is its closer). Letting the
+    # flag survive entry-shaped lines serves the quoting case and, on the reference consumer's
+    # archive, turned 2 true resets into 9 by eating the next real opener after each of its
+    # unterminated fences. Clearing it here serves the unterminated case, which is the one that
+    # exists on every corpus measured, and costs the quoting case ONE false row on the entry
+    # after a fence that quotes TWO headings -- beside the true row about the same fence.
+    # `core/fixtures/ledger-reverify` pins both sides.
   } else {
     if ((match(t, /^```+[ \t]*$/) || match(t, /^~~~+[ \t]*$/)) && substr(t, 1, 1) == __lef_ch) {
       match(t, /^[`~]+/)

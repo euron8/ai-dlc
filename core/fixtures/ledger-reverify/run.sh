@@ -1704,6 +1704,19 @@ else
 fi
 row_lacks "PC-FIXTURE-AFTER-QUOTE" ENTRY-SWALLOWED \
   "the entry AFTER a quoted heading is NOT reported — the quotation's closing fence was consumed as a stray closer, not read as a new opener"
+# THE TWO-QUOTATION FENCE, PINNED AS THE STATED COST rather than dodged by seed ordering. If
+# `after-two-quotes-cost` ever FAILS because the false row disappeared while every other arm
+# holds, that is an improvement: update this arm, do not restore the row.
+row_has "PC-FIXTURE-QUOTED-TWICE-A" ENTRY-SWALLOWED \
+  "the first of two quoted headings is reported"
+row_is "PC-FIXTURE-AFTER-TWO-QUOTES" STILL-LIVE \
+  "the entry after a two-quotation fence is never HIDDEN — its receipt reports"
+row_has "PC-FIXTURE-AFTER-TWO-QUOTES" ENTRY-SWALLOWED \
+  "after-two-quotes-cost: and it carries the ONE false fence row the stray rule costs on this shape (the measured alternative cost seven false resets on the consumer archive)"
+row_is "PC-FIXTURE-EOF-FENCE" STILL-LIVE \
+  "an entry whose fence is still open at end of file still reports its receipt"
+row_has "PC-FIXTURE-EOF-FENCE" ENTRY-SWALLOWED \
+  "and the fence left open at end of file is REPORTED by the END rule — the shape a rotation split leaves behind"
 row_is "PC-FIXTURE-AFTER-QUOTE" STILL-LIVE \
   "and it is classified normally"
 row_is "PC-FIXTURE-AFTER-UNTERMINATED" STILL-LIVE \

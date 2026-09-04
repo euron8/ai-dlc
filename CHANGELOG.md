@@ -57,6 +57,21 @@ seeds the same shape with a `.sh` above the fence and a close below it. `backlog
 widening mutant became layered, with a single-layer twin that must stay quiet. Two committed
 mutants that anchored on the old two-line function are re-anchored on the new body.
 
+**The hands, before the merge.** The scope hand derived the reader set independently (every
+reader is shared; the only other heading scanners in `core/` are the layer-file helpers bound
+by I40) and found a second committed mutant anchored on the old function body. The adversarial
+hand found that a fence quoting TWO headings defeats the stray-closer rule, because the flag
+clears on any entry-shaped line, and the entry after the fence is then falsely reported as
+fenced. The alternative was built and measured: letting the flag survive turned two true resets
+on the consumer's archive into nine, by eating the next real opener after each unterminated
+fence. The clause stays, the two-quotation shape is seeded, and its one false row is pinned as
+the stated cost beside the true row about the same fence. It also found that a prose-titled entry after an unterminated
+fence is dropped with no row, which contradicted a sentence in `lib.sh`; the sentence is
+corrected, a fence still open at end of file is now reported under the entry that opened it, and
+the remaining id-less case is stated as a limit. Both hands found that
+`scripts/backlog-rotate.sh`'s guard keeps a naive toggle of its own and refuses a real entry
+after a two-quotation fence; that predates this change and is filed as `BL-161`.
+
 **Not fixed here, stated so the next reader does not look for it.** The consumer's two orphan
 fragments at live-ledger lines 3222–3225 are bare headings now, outside any fence; the fix
 cannot re-attach them and a consumer hand has to delete them. The close predicates in rotate and

@@ -1556,7 +1556,10 @@ awk -v DASH=' — ' "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE_AWK}"'
     # suppressed a SWALLOWED-RECEIPT finding whenever a body line merely MENTIONED the phrase.
     if (ledger_body_closes($0)) hasclose = 1
   }
-  END { flush() }
+  # A FENCE STILL OPEN AT END OF FILE. lib.sh reports a reset only on an id-keyed line, so an
+  # unterminated fence in the LAST entry -- the shape a rotation split leaves behind -- would
+  # otherwise read as clean. The label is the entry that opened it.
+  END { flush(); if (__lef_in && label != "") printf "%s\t%s\t%s\t%s\n", label, "none", "(end of file)", "unterminated" }
 ' "$LEDGER" 2>/dev/null \
 | while IFS="$(printf '\t')" read -r sw_label sw_cap sw_prev sw_sig; do
     [ -n "${sw_label:-}" ] || continue
@@ -1564,6 +1567,10 @@ awk -v DASH=' — ' "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE_AWK}"'
       sw_harm="and it CAPTURED that entry's verify: receipt, so the entry now emits NO row under its own id — which reads exactly like an entry with nothing to report"
     else
       sw_harm="so everything below it is attributed to this annotation rather than to that entry"
+    fi
+    if [ "${sw_sig:-colon}" = unterminated ]; then
+      emit ENTRY-SWALLOWED "$sw_label" "this entry opens a fenced code block that is still open at the end of the ledger. Every entry-shaped line after that opener was read as fenced: an id-keyed one still opened an entry (and is reported above), a prose-titled one opened nothing and emits no row. Close the fence, then re-run."
+      continue
     fi
     if [ "${sw_sig:-colon}" = fence ]; then
       # THE FENCED ID-KEYED LINE. Not an annotation: an entry-shaped line carrying an id sits

@@ -4091,6 +4091,14 @@ fences are kept and flagged.
 
 **What this does not close.** The consumer's two orphan fragments are bare headings outside any
 fence now; a consumer hand has to delete them. The close predicates stay fence-blind by design.
+A PROSE-titled entry-shaped line after a fence that never closes, or after a closer carrying
+trailing text, is read as fenced and opens nothing, silently: the reported reset fires only on an
+id-keyed line, and only a fence still open at end of file is reported on its own. The adversarial
+hand measured that set as one line on the consumer's four ledger files, the intended one, and it
+is stated in `lib.sh`'s header. A fence quoting TWO id-keyed headings costs one false fence row
+on the entry after it, beside the true row; the alternative was measured to cost seven false
+resets on the consumer's archive, and the `ledger-reverify` fixture pins the chosen side. `scripts/backlog-rotate.sh`'s own fence guard keeps a separate
+naive toggle and is `BL-161`.
 The receipt below drives the shipping engine on a three-entry ledger and reads the label column
 only: it rejects the pre-fix rule, the fence-blind mutant, the id-reset-removed mutant and the
 naive toggle (the last by hiding `PC-AFTER`), and accepts a rule that mis-reads an inline span
@@ -4098,4 +4106,27 @@ as an opener — that clause is held by the `ledger-reverify` fixture's `mutatio
 arm, not by this receipt.
 
 verify: sh t=$(mktemp); printf '## PC-CTRL — t\n\n```\n## 2000-01-01T00:00:00Z -- FENCED-TS\n```\n\nverify: theirs_has core/VERSION "."\n\n## PC-UNT — u\n\n```\nnever closed\n\n## PC-AFTER — v\n\nverify: theirs_has core/VERSION "."\n' > "$t"; o=$(bash core/skills/ai-dlc-update/reconcile/ledger-reverify.sh "$PWD" HEAD "$PWD" HEAD "$t" 2>/dev/null); rm -f "$t"; awk -F'\t' '$2=="PC-CTRL"{c=1} $2=="PC-AFTER"{a=1} $2 ~ /FENCED-TS/{s=1} END{exit !(c && a && !s)}' <<<"$o"
+
+## BL-161 — `backlog-rotate.sh`'s fence guard keeps its own naive parity toggle and refuses a real entry after a fence that quotes two `## BL-` headings, with remedy text that would destroy it
+
+Distribution-internal, no `PC-` id; NOTE tier — its false-positive set on the real backlog is
+empty, and a refusal writes nothing. Found by the batch-50 scope hand while `BL-160` made the
+shared boundary rule fence-aware; the guard predates that and misreports identically under the
+pre-fix rule.
+
+The guard at `scripts/backlog-rotate.sh` tracks fences with a private `depth` that flips on every
+line starting with three backticks or tildes, while `ledger_entry_shape()` in `reconcile/lib.sh`
+now pairs delimiters by the CommonMark grammar and consumes the closer after an id-keyed reset as
+a stray closer. On a closed entry whose fence quotes two `## BL-` headings the two trackers
+disagree: lib.sh reads the entry after the fence as top-level, the guard reads it as inside a
+fence opened at the closer, refuses with a line-numbered finding against that real entry, and its
+remedy text says to indent the line or strip its marker. The first finding (the quoted heading)
+is true; the second and the trailing "unterminated fence" are false.
+
+Shape of the fix: retire the private toggle and read lib.sh's fence state, so the guard and the
+split it protects cannot disagree about what a fence is. The refusal on the genuinely quoted
+`## BL-` line must survive; `core/fixtures/backlog-rotate-fence-guard` carries that arm and its
+mutants, and the two-quotation seed below is the one it lacks.
+
+verify: sh d=$(mktemp -d); printf '## BL-001 — one\n\n```text\n## BL-999 — quoted\n```sh\n## BL-998 — quoted again\n```\n\n## BL-002 — a real entry after the fence\n\nverify: manual\n' > "$d/backlog.md"; printf '# archive\n' > "$d/backlog.archive.md"; o=$(bash scripts/backlog-rotate.sh "$d/backlog.md" 2>&1); rm -rf "$d"; grep -q 'line 4:' <<<"$o" && ! grep -q 'line 9:' <<<"$o" && ! grep -q 'unterminated fence' <<<"$o"
 

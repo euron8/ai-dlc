@@ -895,6 +895,13 @@ prose is itself generated rather than composed.
      above it and says whether a receipt was captured. **Fix the ledger, not the entry** —
      re-indent the annotation so it does not start a line, or drop the bold, then re-run and
      confirm the id reappears. Report-only; it never blocks.
+     **Two more causes share the status.** An id-keyed entry line INSIDE a fenced code block
+     (the fence is unterminated, or it quotes an entry heading) still opens an entry, because
+     hiding an id is the worse failure, and is reported with the entry it truncated; close the
+     fence or indent the quoted line. A fence still open at the END of the ledger is reported
+     under the entry that opened it. A fenced line that is NOT id-keyed — recorded output such
+     as `## <timestamp> -- EVENT` inside a `derived` block — is simply not a boundary and
+     needs no report.
    - `RECEIPTS-UNDECIDED` → one row per run, emitted only when the count is non-zero: how many
      `theirs_has` receipts reported `STILL-LIVE` on a substring present at **base as well as
      theirs**. This pull moved neither side of those predicates, so their verdicts are

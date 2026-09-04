@@ -676,12 +676,34 @@ verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
 
 ---
 
+## PC-FIXTURE-QUOTING-TWICE — a fence that quotes TWO id-keyed headings
+
+THE BATCH-50 ADVERSARIAL HAND'S CASE, AND THE STATED COST OF THE STRAY-CLOSER RULE. The first
+quoted heading resets the fence and is reported; the second clears the stray flag, so the closer
+below is read as a new opener and the entry after this one is reported as fenced too — one
+false row beside a true one about the same fence. The alternative, letting the flag survive
+entry-shaped lines, was measured on the reference consumer's archive: it turned two true resets
+into nine. Nothing is HIDDEN in this shape; the receipt after the fence still reports.
+
+```
+## PC-FIXTURE-QUOTED-TWICE-A — the first quoted heading
+## PC-FIXTURE-QUOTED-TWICE-B — the second, which clears the stray flag
+```
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-AFTER-TWO-QUOTES — the entry after a two-quotation fence: reported, never hidden
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
 ## PC-FIXTURE-UNTERMINATED-FENCE — a fence that never closes
 
 The reference consumer's archive carries ten of these, left by rotations that split entries
 mid-fence. Everything after this opener is inside the fence until an id-keyed boundary resets it.
-LAST IN THIS LEDGER, deliberately: after the reset below the tracker is waiting for a stray
-closer, and any later fence would be read through that state.
 
 ```
 this fence is never closed
@@ -694,6 +716,17 @@ one after it — the 47-entry desync `scripts/backlog-rotate.sh` measured on the
 consumer. It must report STILL-LIVE, and the reset is reported as ENTRY-SWALLOWED naming the
 entry above.
 
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-EOF-FENCE — a fence still open at the end of the ledger
+
+THE LAST ENTRY, and its fence never closes. No id-keyed line follows, so no reset can report
+it; reverify's END rule does, under ENTRY-SWALLOWED with the unterminated signal. The receipt
+below sits inside the open fence and still parses, because a verify: line is not a boundary.
+
+```
 verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
 LEDGER
 
