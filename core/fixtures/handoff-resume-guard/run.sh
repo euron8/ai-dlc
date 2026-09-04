@@ -67,9 +67,18 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 # happens — ai-dlc-pause.sh created it the moment the operator typed the request.
 drive() { # drive <transcript> [snapshot] [hook] -> prints "block" or "allow"
   local t="$1" snap="${2:-}" hk="${3:-$HOOK}" out
-  local proj; proj="$(mktemp -d)"; mkdir -p "$proj/_bmad-output"
+  local proj; proj="$(mktemp -d)"; mkdir -p "$proj/_bmad-output/.driver"
+  # STEP 4's TOUCH, DONE. Check 0 asserts `.driver/handoff` once the resume, sweep and push
+  # arms are satisfied, so an ALLOW case here needs the lead's own touch on disk or it blocks
+  # for a reason this fixture does not test. This is the lead's Bash action, not a hook's
+  # artifact, so writing it here is seeding the actor's step and not the reader's grammar;
+  # handoff-completion-assertion owns the arm and its mutant.
+  # ORDER MATTERS: the driver arm treats a signal OLDER than the snapshot as a previous
+  # handoff's, so the snapshot is copied first and the touch comes after it, as step 3 precedes
+  # step 4 in the procedure.
   [ -n "$snap" ] && { cp "$snap" "$proj/_bmad-output/pipeline-snapshot.md"
                       touch "$proj/_bmad-output/pipeline-paused.flag"; }
+  : > "$proj/_bmad-output/.driver/handoff"
   out="$(jq -nc --arg t "$t" --arg s "fx" '{transcript_path:$t,session_id:$s}' \
         | CLAUDE_PROJECT_DIR="$proj" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" \
           bash "$hk" 2>/dev/null)"

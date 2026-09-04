@@ -135,11 +135,26 @@ ai_dlc_handoff_pending() {
     END { if (inb && mine) out = out buf; printf "%s", out }' "$_log" 2>/dev/null)"
 
   [ -n "$_prose" ] || return 1
+  # PER ROW, NEVER OVER THE SESSION'S PROSE JOINED. The exclusion is a veto on the row that
+  # DISCUSSES the mechanism; applied to every row at once it vetoed the whole session the
+  # moment any row carried an excluded token -- and `/ai-dlc` is one. Every session the
+  # operator starts with `/ai-dlc resume` therefore had key 3 disarmed for its whole life, and
+  # the request row this key exists to see (`handoff`, typed mid-turn, never a transcript
+  # message) was scored NOT PENDING. Measured by driving this function on the reference
+  # consumer's real log for the session that filed
+  # PC-S308-HANDOFF-PROCEDURE-5-STEP-NOT-FOLLOWED: rc=1; the same rows with the `/ai-dlc resume`
+  # row removed: rc=0; a synthetic two-row log, `/ai-dlc resume` then `handoff`: rc=1. A row is
+  # a request when IT matches the intent pattern and IT does not match the exclusion.
+  #
   # Fed by here-strings, never a pipe: `grep -q` leaves at its first match and the writer
   # then takes EPIPE, which under pipefail reports NOT-FOUND on input that matches.
-  if grep -qiE "$_hi" <<<"$_prose" && ! grep -qiE "$_hm" <<<"$_prose"; then
-    AI_DLC_HANDOFF_KEY="log-request"
-    return 0
-  fi
+  local _row
+  while IFS= read -r _row; do
+    [ -n "$_row" ] || continue
+    if grep -qiE "$_hi" <<<"$_row" && ! grep -qiE "$_hm" <<<"$_row"; then
+      AI_DLC_HANDOFF_KEY="log-request"
+      return 0
+    fi
+  done <<<"$_prose"
   return 1
 }

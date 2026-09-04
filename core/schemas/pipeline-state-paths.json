@@ -151,6 +151,13 @@
       "reason": "Handoff guard state for the current session. One of the three transient names that is NOT dot-prefixed, which is why the partition is enumerated rather than derived from a dot-glob."
     },
     {
+      "name": ".handoff-guard-armed",
+      "transient": true,
+      "producer": "core/hooks/ai-dlc-continue.sh",
+      "ignore": "_bmad-output/.handoff-guard-armed",
+      "reason": "The session id of the Stop that first armed the handoff guard. Read at every later paused Stop of the same session so that clearing the entry marker before touching the driver signal cannot disarm the guard; removed when every arm is satisfied, when the backoff releases, or when the pause flag comes down. A tracked copy arms the guard for a session that never existed."
+    },
+    {
       "name": "pipeline-block-state.txt",
       "transient": true,
       "producer": "core/hooks/ai-dlc-continue.sh",

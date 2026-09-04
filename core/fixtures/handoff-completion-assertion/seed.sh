@@ -69,6 +69,12 @@ mk req_noblk "hand off the sprint" \
 mk quiet "did the full handoff steps run" \
   "Yes. The snapshot is finalized and the teammates were swept." > "$ROOT/.t_quiet"
 
+# (4) A NON-request last user message WITH a compliant resume block. The sticky-arming cases
+#     need the transcript channel inert AND the resume arm satisfied, so that the only thing
+#     that can arm the guard is on disk and the only arm that can fail is the one under test.
+#     (3) leaves the resume arm failing; (1) arms through the transcript. Neither can isolate it.
+mk quiet_ok "did the full handoff steps run" "$ASST_OK" > "$ROOT/.t_quiet_ok"
+
 # ---------------------------------------------------------------------------
 # Git probe trees (ai-dlc-continue.sh — the push arm)
 # ---------------------------------------------------------------------------

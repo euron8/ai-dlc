@@ -96,6 +96,7 @@ printf '        vocabulary: %s\n' "$SCHEMA"
 T_REQ_OK="$(cat "$ROOT/.t_req_ok")"
 T_REQ_NOBLK="$(cat "$ROOT/.t_req_noblk")"
 T_QUIET="$(cat "$ROOT/.t_quiet")"
+T_QUIET_OK="$(cat "$ROOT/.t_quiet_ok")"
 
 P_NOGIT="$ROOT/proj-nogit"
 P_NOREMOTE="$ROOT/proj-noremote"
@@ -127,10 +128,17 @@ SESS_B="sess-bravo-22220000"
 # would start ALLOWING -- a leak that reads exactly like the arm standing down.
 reset_state() { # reset_state <projdir>
   local sd="$1/_bmad-output"
-  mkdir -p "$sd"
+  mkdir -p "$sd/.driver"
   rm -f "$sd/handoff-guard-state.txt" "$sd/pipeline-continuation-log.md" \
         "$sd/pipeline-paused.flag" "$sd/.handoff-in-progress" "$sd/.recover-fired" \
-        "$sd/pipeline-snapshot.md"
+        "$sd/pipeline-snapshot.md" "$sd/.handoff-guard-armed"
+  # STEP 4's TOUCH IS PART OF THE BASELINE STATE. Check 0 asserts `.driver/handoff` once the
+  # resume, sweep and push arms are satisfied, so every ALLOW case in this file needs it on
+  # disk or it blocks for the driver arm's reason. It is the LEAD's own Bash action, not a
+  # hook's artifact, so seeding it here seeds the actor's step and not a reader's grammar --
+  # unlike `.handoff-in-progress`, which only ai-dlc-handoff-entry.sh may write (mkmarker).
+  # The driver-arm cases below REMOVE it to reach their subject.
+  : > "$sd/.driver/handoff"
   return 0
 }
 
@@ -187,6 +195,8 @@ rdrive() { # rdrive <projdir> <session> [hooksdir] -> additionalContext
 PUSH_MARK="step 3's push has NOT landed"
 TEAM_MARK="still carries a row whose status reads"
 RESUME_MARK="WITHOUT a copy-pasteable resume prompt"
+DRIVER_MARK="step 4's driver signal was NOT touched"
+MARKER_MARK="step 5's entry marker is still present"
 
 # -----------------------------------------------------------------------------
 # The continuation-log rows, written in the two REAL producers' shapes
@@ -254,6 +264,12 @@ P_NOINTENT="not yet, keep going"
 P_AFTER="Did the full handoff steps run"
 Q_INTENT="should I hand off the sprint before I stop?"
 Q_NOINTENT="anything else before I stop?"
+# THE ROW EVERY RESUMED SESSION CARRIES FIRST. `/ai-dlc` is in the mention exclusion, and the
+# exclusion used to be applied to the whole session's prose joined -- so this one row vetoed
+# key 3 for the rest of the session, and the reference consumer's `handoff` typed five hours
+# later scored NOT PENDING. It is a producer-derived seed: ai-dlc-pause.sh records the slash
+# command verbatim as the first USER_PAUSE row of a resumed session.
+P_RESUME="/ai-dlc resume"
 
 LG="$ROOT/logs/log.md"
 
@@ -332,7 +348,9 @@ ismech() { grep -qiE "$EXCL_RE"   <<<"$1"; }
   broken "seed premise dead: the lead-authored question '$Q_INTENT' no longer reads as a handoff request — the Question-line case could not detect that field being routed"
 ! isreq "$Q_NOINTENT" || \
   broken "seed premise dead: '$Q_NOINTENT' now reads as a handoff request"
-ok "seed premise: the DECLARED vocabulary scores all seven log-prose seeds as this fixture assumes"
+{ ! isreq "$P_RESUME" && ismech "$P_RESUME"; } || \
+  broken "seed premise dead: '$P_RESUME' no longer scores as a NON-request that matches the mention EXCLUSION — the per-row case below would then pass without exercising the exclusion's scope at all"
+ok "seed premise: the DECLARED vocabulary scores all eight log-prose seeds as this fixture assumes"
 
 # The transcripts' own premises, DERIVED from the seeded files rather than restated.
 _req_user="$(jq -rs '[.[]|select(.message.role=="user")|.message.content]|last // ""' "$T_REQ_OK" 2>/dev/null)"
@@ -341,6 +359,9 @@ _quiet_user="$(jq -rs '[.[]|select(.message.role=="user")|.message.content]|last
   broken "the push battery's transcript no longer carries a handoff request as its last user message ('$_req_user') — Check 0 would never open and all five push cases would ALLOW"
 { ! isreq "$_quiet_user"; } || \
   broken "the on-disk battery's transcript ('$_quiet_user') now reads as a handoff request — the transcript path would fire and no on-disk verdict below would mean anything"
+_quiet_ok_user="$(jq -rs '[.[]|select(.message.role=="user")|.message.content]|last // ""' "$T_QUIET_OK" 2>/dev/null)"
+{ ! isreq "$_quiet_ok_user"; } || \
+  broken "the sticky battery's transcript ('$_quiet_ok_user') now reads as a handoff request — the transcript channel would arm the guard and no sticky verdict below would mean anything"
 ok "seed premise: the push transcript IS a request and the on-disk transcript is NOT (so an on-disk BLOCK can only have come from disk)"
 
 # =============================================================================
@@ -409,6 +430,140 @@ reason_case() { # reason_case <label> <projdir>
 # ahead-test mutant fail TWO arms, which is the entanglement `fixture-mutants.md` warns about:
 # assertion (e) OWNS "1 commit ahead -> BLOCK", so this arm stands down for it.
 reason_case "unpushed branch" "$P_UNPUSHED"
+
+# =============================================================================
+# ai-dlc-continue.sh — THE DRIVER-SIGNAL ARM (step 4) AND THE MARKER ARM (step 5)
+# =============================================================================
+# Measured on the reference consumer over the 39 handoffs its transcripts can score: step 4's
+# `touch _bmad-output/.driver/handoff` skipped on 20, step 5's `rm -f .handoff-in-progress` on
+# 4 of the 17 in scope. Neither had an arm. Every case drives the COMPLIANT transcript, so the
+# resume arm is satisfied and the only thing that varies is one file under _bmad-output.
+#
+# (d1) THE PUSHED TREE WITH THE DRIVER SIGNAL REMOVED. Same tree as (d), which is the ALLOW
+#      control beside it: steps 1, 3 and the resume line are all recorded, and the only
+#      difference is the touch.
+reset_state "$P_PUSHED"
+rm -f "$P_PUSHED/_bmad-output/.driver/handoff"
+rr="$(reason "$(drive "$P_PUSHED" "$SESS_A" "$T_REQ_OK")")"
+if [ -z "$rr" ]; then
+  bad "(d1) pushed tree, resume block present, driver signal ABSENT -> was ALLOWED — a handoff that skipped step 4's touch ends the session and an attached driver never learns of it"
+elif ! has "$rr" "$DRIVER_MARK"; then
+  bad "(d1) blocked, but the reason does not name step 4's touch. It reads: $(printf '%s' "$rr" | head -c 120)"
+elif has "$rr" "$PUSH_MARK" || has "$rr" "$TEAM_MARK" || has "$rr" "$RESUME_MARK" || has "$rr" "$MARKER_MARK"; then
+  bad "(d1) the reason names step 4's touch AND another step — the dispatch is not exclusive"
+else
+  ok "(d1) pushed tree, resume block present, driver signal ABSENT -> BLOCK, and the reason is the STEP 4 touch text alone"
+fi
+reset_state "$P_PUSHED"
+r="$(verdict "$(drive "$P_PUSHED" "$SESS_A" "$T_REQ_OK")")"
+[ "$r" = allow ] && ok "  control: the same tree with the driver signal present -> ALLOW (the arm accepts the state it demands)" \
+                 || bad "  the same tree BLOCKED with the signal present ($r) — the arm fires on compliance with step 4"
+
+# (d2) THE MARKER STILL ON DISK AFTER EVERYTHING ELSE. The non-git tree, so the push arm is
+#      out of scope; the marker is produced by the REAL entry hook (mkmarker), never touched
+#      here. The transcript is the compliant one, so the marker is also key 1 -- which is fine:
+#      the key arms the guard and the arm asserts the same file is gone by the end.
+reset_state "$P_DISK"
+mkmarker "$P_DISK"
+marker_at "$P_DISK" || broken "(d2) mkmarker did not produce the entry marker in $P_DISK — the marker arm has no subject"
+rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_REQ_OK")")"
+if [ -z "$rr" ]; then
+  bad "(d2) resume block present, driver signal present, entry marker STILL PRESENT -> was ALLOWED — the next compaction will route this session back into handoff.md"
+elif ! has "$rr" "$MARKER_MARK"; then
+  bad "(d2) blocked, but the reason does not name step 5's marker. It reads: $(printf '%s' "$rr" | head -c 120)"
+elif has "$rr" "$PUSH_MARK" || has "$rr" "$TEAM_MARK" || has "$rr" "$RESUME_MARK" || has "$rr" "$DRIVER_MARK"; then
+  bad "(d2) the reason names step 5's marker AND another step — the dispatch is not exclusive"
+else
+  ok "(d2) everything recorded but the entry marker still present -> BLOCK, and the reason is the STEP 5 text alone"
+fi
+reset_state "$P_DISK"
+r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_REQ_OK")")"
+[ "$r" = allow ] && ok "  control: the same tree with the marker cleared -> ALLOW" \
+                 || bad "  the same tree BLOCKED with the marker cleared ($r) — the marker arm fires on compliance with step 5"
+
+# (d4) THE STALE SIGNAL. The reference consumer's tree: `.driver/handoff` left by a previous
+#      handoff, no driver attached to consume it, and THIS handoff finalized its snapshot after
+#      that touch. A presence test passes here forever; the arm keys on the snapshot's mtime as
+#      the step-3 reference and must BLOCK. `touch -t` back-dates the signal rather than sleeping
+#      for a clock tick, so the ordering is by construction and not by timing.
+reset_state "$P_PUSHED"
+touch -t 202001010000 "$P_PUSHED/_bmad-output/.driver/handoff"
+printf '# Pipeline Snapshot\n\n## Pipeline Position\ncurrent_step_file: implementation.md\n\n## In-Flight Teammates\n\n' > "$P_PUSHED/_bmad-output/pipeline-snapshot.md"
+touch "$P_PUSHED/_bmad-output/pipeline-paused.flag"
+[ "$P_PUSHED/_bmad-output/pipeline-snapshot.md" -nt "$P_PUSHED/_bmad-output/.driver/handoff" ] \
+  || broken "(d4) the seed could not make the snapshot newer than the driver signal — the stale case is not constructible on this filesystem"
+rr="$(reason "$(drive "$P_PUSHED" "$SESS_A" "$T_REQ_OK")")"
+if [ -z "$rr" ]; then
+  bad "(d4) a driver signal OLDER than this handoff's finalized snapshot was accepted as step 4 -> ALLOW — on a tree with no driver attached the previous handoff's marker satisfies the arm forever, and the most-skipped step is unguarded exactly where its skip rate was measured"
+elif ! has "$rr" "$DRIVER_MARK"; then
+  bad "(d4) blocked, but not on the driver arm. It reads: $(printf '%s' "$rr" | head -c 120)"
+else
+  ok "(d4) a driver signal OLDER than the finalized snapshot -> BLOCK on the step-4 arm (presence is not this turn's touch)"
+fi
+: > "$P_PUSHED/_bmad-output/.driver/handoff"
+rm -f "$P_PUSHED/_bmad-output/handoff-guard-state.txt"
+r="$(verdict "$(drive "$P_PUSHED" "$SESS_A" "$T_REQ_OK")")"
+[ "$r" = allow ] && ok "  control: the same tree after a FRESH touch -> ALLOW (the arm accepts the state step 4 produces)" \
+                 || bad "  the same tree BLOCKED after a fresh touch ($r) — the freshness test rejects a compliant step 4"
+reset_state "$P_PUSHED"
+
+# (d3) BOTH MISSING: step 4 is dispatched before step 5, in the procedure's order.
+reset_state "$P_DISK"
+mkmarker "$P_DISK"
+rm -f "$P_DISK/_bmad-output/.driver/handoff"
+rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_REQ_OK")")"
+{ has "$rr" "$DRIVER_MARK" && ! has "$rr" "$MARKER_MARK"; } \
+  && ok "(d3) driver signal absent AND marker present -> the STEP 4 text, not step 5's (dispatched in procedure order)" \
+  || bad "(d3) with both step 4 and step 5 unsatisfied the reason is not step 4's alone — the lead is told the later step first, or both. It reads: $(printf '%s' "$rr" | head -c 120)"
+
+# (d5) STEP 5 BEFORE STEP 4 MUST NOT ESCAPE. The guard is armed by KEY 1 ALONE -- pause flag up,
+#      entry marker produced by the real hook, no log row, no snapshot record, and a transcript
+#      whose last user message is NOT a request (T_QUIET_OK, which still carries the resume block
+#      so the resume arm is satisfied). It blocks on step 4. Then the lead clears the marker WITHOUT
+#      touching the driver signal: key 1 is gone, no other key holds, and a guard armed only by
+#      the predicate would not examine this Stop at all. The first armed Stop recorded the session,
+#      so this one is armed by that record and must still BLOCK on step 4. Then the touch satisfies
+#      it and the record is removed. One file per step, and (d3) is NOT reused here because (d3)
+#      arms through the transcript, which would mask the very channel under test -- measured: the
+#      first cut of this case did reuse it and passed against the mutant that disables the record.
+ARMED="$P_DISK/_bmad-output/.handoff-guard-armed"
+reset_state "$P_DISK"; touch "$P_DISK/_bmad-output/pipeline-paused.flag"
+mkmarker "$P_DISK"; rm -f "$P_DISK/_bmad-output/.driver/handoff"
+rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_QUIET_OK")")"
+has "$rr" "$DRIVER_MARK" || broken "(d5) the key-1-armed first Stop did not block on the driver arm (got: $(printf '%s' "$rr" | head -c 80)) — the sticky case cannot start"
+[ -f "$ARMED" ] || broken "(d5) the armed Stop left no arming record at $ARMED — the sticky arm has no subject"
+rm -f "$P_DISK/_bmad-output/.handoff-in-progress" "$P_DISK/_bmad-output/handoff-guard-state.txt"
+rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_QUIET_OK")")"
+if [ -z "$rr" ]; then
+  bad "(d5) marker cleared first, driver signal still untouched -> ALLOW — clearing the marker disarmed the guard, so step 5 before step 4 escapes both new arms"
+elif has "$rr" "$DRIVER_MARK"; then
+  ok "(d5) marker cleared first, driver signal still untouched -> still BLOCKS on step 4 (the earlier armed Stop keeps the guard armed for this session)"
+else
+  bad "(d5) blocked, but not on the driver arm. It reads: $(printf '%s' "$rr" | head -c 120)"
+fi
+grep -qF -- "armed by an earlier Stop" "$P_DISK/_bmad-output/pipeline-continuation-log.md" 2>/dev/null \
+  && ok "  the block row says the guard was armed by an earlier Stop, not by a key — the record is attributable" \
+  || bad "  the block row does not say how the guard was armed; a retro cannot tell a sticky arming from a live key"
+: > "$P_DISK/_bmad-output/.driver/handoff"; rm -f "$P_DISK/_bmad-output/handoff-guard-state.txt"
+r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_QUIET_OK")")"
+[ "$r" = allow ] && ok "  control: the touch satisfies the guard -> ALLOW" \
+                 || bad "  BLOCKED after the touch ($r) — the sticky arming does not release on a complete handoff"
+[ -f "$ARMED" ] && bad "  the arming record survived a satisfied handoff — the NEXT paused Stop of this session would be examined for a handoff that is over" \
+                || ok "  the arming record is removed on the satisfied path"
+# A DIFFERENT session with the record on disk must not be armed by it, and must clear it.
+reset_state "$P_DISK"; touch "$P_DISK/_bmad-output/pipeline-paused.flag"; printf '%s\n' "$SESS_A" > "$ARMED"
+rm -f "$P_DISK/_bmad-output/.driver/handoff"
+r="$(verdict "$(drive "$P_DISK" "$SESS_B" "$T_QUIET")")"
+[ "$r" = allow ] && ok "  near-miss: another session's arming record does not arm THIS session -> ALLOW" \
+                 || bad "  another session's arming record BLOCKED this one ($r) — the record is not session-bound and would wedge the successor at its first paused Stop"
+[ -f "$ARMED" ] && bad "  a foreign arming record was left on disk — it will be re-read at every Stop" \
+                || ok "  a foreign arming record is cleared"
+# And the record must not survive the pause flag coming down (the handoff was abandoned).
+reset_state "$P_DISK"; printf '%s\n' "$SESS_A" > "$ARMED"; rm -f "$P_DISK/_bmad-output/.driver/handoff"
+r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_QUIET")")"
+{ [ "$r" = allow ] && [ ! -f "$ARMED" ]; } \
+  && ok "  near-miss: the pause flag DOWN clears the record and does not arm (an abandoned handoff does not haunt the session)" \
+  || bad "  with the pause flag down the record armed the guard or survived ($r, record $([ -f "$ARMED" ] && echo present || echo absent)) — a lead that resumed after abandoning a handoff is blocked on it"
 
 # =============================================================================
 # ai-dlc-continue.sh — THE ON-DISK TRIGGER (the predicate, through the Stop caller)
@@ -482,6 +637,23 @@ dsetup "$LG"
 r="$(disk "$SESS_A")"
 [ "$r" = block ] && ok "(g2) the bare word '$P_BARE' as the field VALUE -> BLOCK (the pattern is applied to the value, not the line)" \
                  || bad "(g2) the bare word '$P_BARE' was ALLOWED ($r) — the intent pattern is being applied to the whole log line, where its anchored alternative can never match"
+
+# (g3) KEY 3 IS SCORED PER ROW, AND THIS IS THE EPISODE'S OWN LOG SHAPE. The session was
+#      started by `/ai-dlc resume`, which ai-dlc-pause.sh records as its first row, and the
+#      operator typed `handoff` hours later. With the exclusion applied to the session's prose
+#      JOINED, `/ai-dlc` in row one vetoed the request in row two and the guard allowed the
+#      stop -- the incident PC-S308-HANDOFF-PROCEDURE-5-STEP-NOT-FOLLOWED was filed from. Per
+#      row, the request stands on its own. Killed by mutant M20 and by nothing else.
+log_two_row "$LG" "$SESS_A" "$P_RESUME" "$P_BARE"
+dsetup "$LG"
+r="$(disk "$SESS_A")"
+[ "$r" = block ] && ok "(g3) key 3: a '$P_RESUME' row FOLLOWED by a '$P_BARE' row, same session -> BLOCK (the exclusion vetoes its own row, not the session)" \
+                 || bad "(g3) the request was ALLOWED ($r) — the mention exclusion is being applied to the whole session's prose, so every session started by the slash command has key 3 disarmed for its whole life; this is the filed incident exactly"
+log_two_row "$LG" "$SESS_A" "$P_RESUME" "$P_NOINTENT"
+dsetup "$LG"
+r="$(disk "$SESS_A")"
+[ "$r" = allow ] && ok "  near-miss: the same first row followed by a NON-request -> ALLOW (per-row scoring did not widen the key)" \
+                 || bad "  a resumed session with no request BLOCKED ($r) — per-row scoring is reading the slash command itself as a request"
 
 # (h) THE SESSION BOUND IS THE DISCHARGE. The log is rotated per sprint, so "any handoff row"
 #     would stay true for every later session in the sprint and would block ordinary work at
@@ -981,11 +1153,102 @@ fi
 
 # M12 — drop the exclusion-pattern conjunct. Killed by (i).
 if mkmut m12-no-exclusion "$LIBF" \
-     -e 's|&& ! grep -qiE "$_hm" <<<"$_prose"; then$|\&\& true; then|'; then
+     -e 's|&& ! grep -qiE "$_hm" <<<"$_row"; then$|\&\& true; then|'; then
   log_prompt "$LG" "$SESS_A" "$P_DISCUSS"
   dsetup "$LG"
   kill_stop m12 "$MUT_DIR" block "assertion (i): mechanism discussion now BLOCKS"
   mut_ctl m12 "$MUT_DIR"
+fi
+
+# M20 — THE REGRESSION MUTANT FOR THE INCIDENT THIS RELEASE FIXES. Apply the exclusion to the
+#       session's prose JOINED instead of to the row, which is the shipped predicate before
+#       v0.498.0. Killed by (g3) alone -- every other key-3 seed is a single-row log or a two-row
+#       log whose rows both pass the exclusion, so only the `/ai-dlc resume` + `handoff` pair
+#       can see the scope of the veto. ALLOW-shaped kill, so the control below asserts the
+#       single-row request still BLOCKS under the same mutant: the mutation widened the veto's
+#       scope and did not disable the key.
+if mkmut m20-session-wide-exclusion "$LIBF" \
+     -e 's|&& ! grep -qiE "$_hm" <<<"$_row"; then$|\&\& ! grep -qiE "$_hm" <<<"$_prose"; then|'; then
+  log_two_row "$LG" "$SESS_A" "$P_RESUME" "$P_BARE"
+  dsetup "$LG"
+  kill_stop m20 "$MUT_DIR" allow "assertion (g3): the slash-command row vetoes the request row again, and the resumed session's handoff is ALLOWED to end incomplete"
+  log_prompt "$LG" "$SESS_A" "$P_BARE"
+  dsetup "$LG"
+  r="$(disk "$SESS_A" "$MUT_DIR")"
+  [ "$r" = block ] && ok "  control [m20]: the single-row request still BLOCKS under the same mutant — it widened the veto's scope, it did not disable key 3" \
+                   || bad "MUTANT TOO BROAD [m20]: the single-row request stopped blocking too ($r) — the mutation disabled key 3 outright and (g3)'s kill is unattributable"
+  mut_ctl m20 "$MUT_DIR"
+fi
+
+# --- ai-dlc-continue.sh: the driver-signal and marker arms -------------------------------
+# M21 — the driver arm never fires. Killed by (d1) alone: the pushed tree with the signal
+#       removed must BLOCK with the step-4 text, and under this mutant it ALLOWS.
+if mkmut m21-no-driver-arm "$CONF" \
+     -e 's|^    if \[ ! -f "$_drv" \]; then$|    if false; then|'; then
+  reset_state "$P_PUSHED"
+  rm -f "$P_PUSHED/_bmad-output/.driver/handoff"
+  r="$(verdict "$(drive "$P_PUSHED" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
+  [ "$r" = allow ] && ok "  mutant [m21] KILLED by assertion (d1): with the driver arm gone a handoff that skipped step 4's touch ends the session" \
+                   || bad "MUTANT SURVIVED [m21]: expected allow, got $r — (d1) does not depend on the driver arm, so that assertion proves nothing"
+  # The marker arm must be UNAFFECTED, or the two new arms are one arm wearing two names.
+  reset_state "$P_DISK"; mkmarker "$P_DISK"
+  rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
+  has "$rr" "$MARKER_MARK" && ok "  control [m21]: the marker arm still BLOCKS with the step-5 text under the same mutant — the two arms are separable" \
+                           || bad "MUTANT TOO BROAD [m21]: the marker case no longer blocks on step 5 either — removing the driver arm took the marker arm with it, so (d2) is entangled with (d1)"
+  mut_ctl m21 "$MUT_DIR"
+fi
+
+# M23 — the driver arm accepts a STALE signal (the `-nt` clause removed). Killed by (d4) alone:
+#       every other driver case removes or creates the file, so only the back-dated one sees it.
+if mkmut m23-driver-presence-only "$CONF" \
+     -e 's|^    elif \[ -f "$SNAPSHOT_FILE" \] && \[ "$SNAPSHOT_FILE" -nt "$_drv" \]; then$|    elif false; then|'; then
+  reset_state "$P_PUSHED"
+  touch -t 202001010000 "$P_PUSHED/_bmad-output/.driver/handoff"
+  printf '# Pipeline Snapshot\n\n## Pipeline Position\ncurrent_step_file: implementation.md\n\n## In-Flight Teammates\n\n' > "$P_PUSHED/_bmad-output/pipeline-snapshot.md"
+  touch "$P_PUSHED/_bmad-output/pipeline-paused.flag"
+  r="$(verdict "$(drive "$P_PUSHED" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
+  [ "$r" = allow ] && ok "  mutant [m23] KILLED by assertion (d4): a presence-only arm accepts the previous handoff's stale signal" \
+                   || bad "MUTANT SURVIVED [m23]: expected allow, got $r — (d4) does not depend on the freshness clause, so that assertion proves nothing"
+  reset_state "$P_PUSHED"; rm -f "$P_PUSHED/_bmad-output/.driver/handoff"
+  r="$(verdict "$(drive "$P_PUSHED" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
+  [ "$r" = block ] && ok "  control [m23]: the ABSENT signal still BLOCKS under the same mutant — it removed freshness, not presence" \
+                   || bad "MUTANT TOO BROAD [m23]: the absent signal stopped blocking too ($r) — the mutation disabled the whole driver arm and (d4)'s kill is unattributable"
+  reset_state "$P_PUSHED"
+  mut_ctl m23 "$MUT_DIR"
+fi
+
+# M24 — the sticky arming never reads its record. Killed by (d5) alone: (d3)'s state, then the
+#       marker cleared with the driver signal untouched, must still block, and under this mutant
+#       nothing arms the second Stop.
+if mkmut m24-no-sticky-arm "$CONF" -e 's|^      HANDOFF_STICKY=1$|      HANDOFF_STICKY=0|'; then
+  reset_state "$P_DISK"; touch "$P_DISK/_bmad-output/pipeline-paused.flag"
+  mkmarker "$P_DISK"; rm -f "$P_DISK/_bmad-output/.driver/handoff"
+  drive "$P_DISK" "$SESS_A" "$T_QUIET_OK" "$MUT_DIR" >/dev/null       # the first, key-1-armed Stop
+  rm -f "$P_DISK/_bmad-output/.handoff-in-progress" "$P_DISK/_bmad-output/handoff-guard-state.txt"
+  r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_QUIET_OK" "$MUT_DIR")")"
+  [ "$r" = allow ] && ok "  mutant [m24] KILLED by assertion (d5): with the record unread, clearing the marker first escapes both new arms" \
+                   || bad "MUTANT SURVIVED [m24]: expected allow, got $r — (d5) does not depend on the sticky arming, so that assertion proves nothing"
+  reset_state "$P_DISK"; touch "$P_DISK/_bmad-output/pipeline-paused.flag"
+  mkmarker "$P_DISK"; rm -f "$P_DISK/_bmad-output/.driver/handoff"
+  r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_QUIET_OK" "$MUT_DIR")")"
+  [ "$r" = block ] && ok "  control [m24]: the key-1-armed first Stop still BLOCKS under the same mutant — it removed the sticky arming, not the keys" \
+                   || bad "MUTANT TOO BROAD [m24]: the key-1 Stop stopped blocking too ($r)"
+  reset_state "$P_DISK"
+  mut_ctl m24 "$MUT_DIR"
+fi
+
+# M22 — the marker arm never fires. Killed by (d2) alone.
+if mkmut m22-no-marker-arm "$CONF" \
+     -e 's|^    \[ -f "${LOG_DIR}/.handoff-in-progress" \] && MARKER_OK=0$|    : # marker arm removed|'; then
+  reset_state "$P_DISK"; mkmarker "$P_DISK"
+  r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
+  [ "$r" = allow ] && ok "  mutant [m22] KILLED by assertion (d2): with the marker arm gone a handoff that never cleared its entry marker ends the session" \
+                   || bad "MUTANT SURVIVED [m22]: expected allow, got $r — (d2) does not depend on the marker arm, so that assertion proves nothing"
+  reset_state "$P_PUSHED"; rm -f "$P_PUSHED/_bmad-output/.driver/handoff"
+  rr="$(reason "$(drive "$P_PUSHED" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
+  has "$rr" "$DRIVER_MARK" && ok "  control [m22]: the driver arm still BLOCKS with the step-4 text under the same mutant — the two arms are separable" \
+                           || bad "MUTANT TOO BROAD [m22]: the driver case no longer blocks on step 4 either — removing the marker arm took the driver arm with it"
+  mut_ctl m22 "$MUT_DIR"
 fi
 
 # M13 — apply the intent regex to the whole log LINE rather than the extracted field VALUE.

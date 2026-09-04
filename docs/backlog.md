@@ -4031,3 +4031,99 @@ not a guarantee.
 
 verify: sh f=core/skills/ai-dlc-update/SKILL.md; [ -f "$f" ] || exit 9; grep -qi 'self-update' "$f" || exit 9; [ "$(sed 's/<!--.*-->//g' "$f" | grep -ciE 'autonomously[^.]*no operator approval')" -gt 0 ] && exit 1; exit 0
 
+## BL-158 — the handoff guard never armed on a resumed session's handoff request, and had no arm for steps 4 and 5 once it did
+
+Filed by the reference consumer as `PC-S308-HANDOFF-PROCEDURE-5-STEP-NOT-FOLLOWED` on 2026-09-04,
+the third filing of one end state: `BL-120` (`v0.434.0`) fixed the push COMMAND and `BL-125`
+(`v0.438.0`) fixed the resume line's router, and each removed one route to an incomplete handoff.
+Batch 49 of the ledger drain, scoped by the operator with the context that the miss "happens
+often, it's just never been filed before". DEFECT: a mandated five-step procedure whose enforcer
+could not arm on the incident and asserted three of the five steps when it did.
+
+**Two defects, one seam.** `core/hooks/ai-dlc-continue.sh` Check 0 is the Stop-hook guard on the
+handoff procedure. It arms from the transcript's last user message or from the on-disk predicate
+`ai_dlc_handoff_pending` (`core/hooks/ai-dlc-handoff-pending.sh`), whose key 3 reads this
+session's operator prompts from the continuation log. (1) Key 3 applied the mention-exclusion
+regex to ALL the session's prompts joined, and `/ai-dlc` is in that vocabulary — so the
+`/ai-dlc resume` row every resumed session carries first vetoed every later request row for the
+rest of the session. Driven on a copy of the consumer's real log for the incident session: rc=1;
+the same rows with the resume row removed: rc=0. The transcript channel was blind for the reason
+the hook's own header records (a mid-turn `handoff` is a queue-operation, never a user message;
+`LAST_USER` at the Stop was `trim` from fifteen minutes earlier). Result: `ALLOWED_BY_PAUSE`, no
+guard row. (2) Once armed, the guard asserted steps 1 (teammate sweep), 3 (push) and the resume
+line, and nothing for step 4's `touch _bmad-output/.driver/handoff` or step 5's
+`rm -f _bmad-output/.handoff-in-progress`.
+
+**Population, from the consumer's transcripts.** 120 handoff commits across all refs; 39 fall
+inside the transcript corpus (2026-08-04 → 2026-09-04) and are scorable by Bash tool-call
+INPUTS, not text (the body of `handoff.md` contains all three command strings, so a text scan
+over-scores). Step 3 skipped 3 of 39; step 4 skipped **20 of 39**, six times the push and the
+step the filing ranks third; step 5 skipped 4 of the 17 in scope since `v0.447.0` wrote it. Step-4
+skips ran 7 of 7 in the first half of August, 12 of 17 in the second, 1 of 15 in September, and the
+turn coincides with the operator's first "did the handoff steps run" prompt on 2026-08-30 — 11
+such prompts since, none before, and no mechanism changed. A step counts as run within 25
+minutes of the commit, so operator-prompted remediation is credited and the unprompted rate is
+worse than every figure here.
+
+**The fix.** Key 3 scores intent and exclusion PER ROW: a row is a request when it matches the
+intent pattern and does not itself match the exclusion. Check 0 gains `DRIVER_OK`
+(`.driver/handoff` present) and `MARKER_OK` (`.handoff-in-progress` absent), dispatched after the
+three existing arms in procedure order with their own remedy text and `H_WHY` clauses.
+`handoff.md` step 4 and the auto-handoff twin in `_gate-procedures.md` now spell the touch as
+`mkdir -p _bmad-output/.driver && touch …`, since `touch` fails without the directory. Driven on a
+copy of the incident state, the fixed hooks BLOCK where the shipped ones write `ALLOWED_BY_PAUSE`.
+`core/fixtures/handoff-completion-assertion` carries cases (d1)–(d3) and (g3), mutants m20
+(session-wide exclusion restored), m21 and m22 (each new arm removed, with the other arm's
+survival as the entanglement control); `handoff-resume-guard` seeds the lead's touch in its
+drive().
+
+**Two defects the adversarial hand found in the first cut, both fixed before the merge.** The
+driver arm asserted the FILE's presence, and on the reference consumer `.driver/handoff` has sat
+on disk since the last handoff that touched it — no driver is attached there to consume it — so
+the arm for the most-skipped step would have shipped inert on the tree its skip rate was
+measured on. It now requires the signal to be NEWER than the finalized snapshot when one exists
+(step 3 precedes step 4 in the procedure), with presence as the stated fallback when there is no
+snapshot. And the marker arm asserts the absence of the same file that is key 1, so a lead that
+ran step 5's `rm -f` before step 4's touch removed the only thing arming the guard and escaped
+both arms. The first armed Stop now records its session id in `.handoff-guard-armed`, and every
+later paused Stop of that session is armed by the record until the guard is satisfied, the
+backoff releases, or the pause flag comes down. Both have fixture cases ((d4), (d5)) and mutants
+(m23, m24).
+
+**Stated limits.** A lead that touched the signal at step 4 and then re-finalized the snapshot
+after a teammate-arm block is told to touch again — one extra round in a rare ordering. The
+freshness reference is the snapshot, so a handoff that skipped step 3's finalization entirely has
+no reference and the driver arm falls back to presence. The four adjacent defects the batch-49
+hands found are filed as `BL-159` and not fixed here.
+
+verify: sh h=core/hooks; l=core/schemas/pause-routing.json; [ -f "$h/ai-dlc-continue.sh" ] && [ -f "$h/ai-dlc-handoff-pending.sh" ] && [ -f "$l" ] || exit 9; command -v jq >/dev/null || exit 9; w=$(mktemp -d) || exit 9; trap 'rm -rf "$w"' EXIT; mkdir -p "$w/p/_bmad-output/.driver" "$w/q/_bmad-output/.driver"; : > "$w/p/_bmad-output/pipeline-paused.flag"; : > "$w/q/_bmad-output/pipeline-paused.flag"; printf '## 2026-09-04T06:21:13Z -- USER_PAUSE\n- Session: s1\n- Channel: UserPromptSubmit (typed message)\n- Prompt (first 120 chars): /ai-dlc resume\n\n## 2026-09-04T06:47:11Z -- USER_PAUSE\n- Session: s1\n- Channel: UserPromptSubmit (typed message)\n- Prompt (first 120 chars): handoff\n\n' > "$w/p/_bmad-output/pipeline-continuation-log.md"; printf '{"message":{"role":"user","content":"trim"}}\n{"message":{"role":"assistant","content":"done"}}\n' > "$w/t.jsonl"; d() { o=$(jq -nc --arg t "$w/t.jsonl" --arg s s1 '{transcript_path:$t,session_id:$s}' | CLAUDE_PROJECT_DIR="$w/$1" AI_DLC_PAUSE_ROUTING_SCHEMA="$l" bash "$h/ai-dlc-continue.sh" 2>/dev/null); [ -z "$o" ] && { echo allow; return; }; printf '%s' "$o" | jq -r '.decision // "allow"'; }; a=$(d p); [ "$a" = block ] || exit 1; printf '{"message":{"role":"user","content":"hand off the sprint"}}\n{"message":{"role":"assistant","content":"----\\n/ai-dlc resume\\n----"}}\n' > "$w/t.jsonl"; b=$(d q); : > "$w/q/_bmad-output/.driver/handoff"; rm -f "$w/q/_bmad-output/handoff-guard-state.txt"; c=$(d q); [ "$b" = block ] && [ "$c" = allow ] && exit 0; exit 1
+
+## BL-159 — four handoff-completion defects adjacent to `BL-158`, found by the batch-49 hands and deliberately not fixed there
+
+Distribution-internal, no `PC-` id; ranks below any PC-backed entry. Filed together because they
+share one subject and one release would otherwise have widened past its scope. NOTE tier for each
+until one is measured to have moved a verdict on the consumer.
+
+1. **`PUSH_OK` counts COMMITS, so a skipped step 2 reads `ahead 0` and passes.**
+   `core/hooks/ai-dlc-continue.sh`'s push arm reads `git rev-list --count '@{u}..HEAD'`; an
+   uncommitted tree is zero commits ahead. The consumer at batch 49 read `ahead 0` with 7 dirty
+   files. `handoff.md:64-65` names the trap in prose. A working-tree test beside the ref test is
+   the shape; its false-positive set on a consumer whose `_bmad-output/` is deliberately dirty
+   mid-sprint has not been measured, which is why it is filed and not shipped.
+2. **The entry marker is TRACKED in the consumer although the schema declares it ignored.**
+   `core/schemas/pipeline-state-paths.json` marks `_bmad-output/.handoff-in-progress` transient
+   with an `ignore` pattern; on the consumer `git ls-files` returns it and `git check-ignore` exits
+   1. Two of the schema's 14 transient patterns are missing from the consumer's `.gitignore`
+   (control: 12 present). `core/scripts/sync-transient-ignore.sh` is the producer; whether it was
+   never run there or predates the two entries is a consumer-side question.
+3. **The auto-handoff twin never clears the marker.** `_gate-procedures.md`'s auto-handoff step 5
+   creates the pause flag and omits `rm -f _bmad-output/.handoff-in-progress` (control: it names
+   `pipeline-paused.flag` once). Today that is inert — an auto-handoff reads no `handoff.md`, so
+   no marker exists — and becomes a wedge only if a marker from an interrupted manual handoff
+   survives into an auto-handoff, which `BL-158`'s marker arm would then block on correctly.
+4. **Check 0's on-disk trigger sits behind a readable-transcript test.** `ai-dlc-continue.sh:288`
+   requires `$TRANSCRIPT` to exist before any arm runs, including the `HANDOFF_ON_DISK` path built
+   for the case the transcript cannot see. A Stop with no transcript path skips the guard.
+
+verify: sh h=core/hooks/ai-dlc-continue.sh; [ -f "$h" ] || exit 9; grep -q 'PUSH_OK=' "$h" || exit 9; grep -qE 'git -C "\$PROJECT_DIR" (status --porcelain|diff --quiet)' "$h" && exit 0; exit 1
+
