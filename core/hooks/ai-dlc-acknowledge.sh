@@ -254,9 +254,11 @@ esac
 # inside a dispatched review -- a remedy wrong for the actor even where it is reachable.
 #
 # WHAT THIS ACQUITS, stated: a lead that never routed can dispatch a teammate to write a file and
-# this check will not stop that write. It never did -- `Agent` is on the allowed surface by
-# design (above), and the denied teammate wrote via Bash regardless -- and the lead's OWN next
-# write is still denied, so the incident this check exists for is unchanged. THE CONJUNCT SITS
+# this check will not stop that write. Before this conjunct it DID -- by the accident of the
+# transcript pair above, not by design, and the denied teammate wrote via Bash regardless. What
+# was never stopped is the DISPATCH: `Agent` is on the allowed surface by design (above). So a
+# delegated write path that was covered by accident is now uncovered on purpose, and the lead's
+# OWN next write is still denied, so the incident this check exists for is unchanged. THE CONJUNCT SITS
 # BEFORE THE LOG WRITE ON PURPOSE: a teammate's allowed write records no `ROUTE_DENIED` row,
 # because that row is a record of a DENIAL and the shipped fixture holds a nonzero count of them
 # to mean real denials -- a row written for a write that was allowed would make the count

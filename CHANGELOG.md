@@ -45,9 +45,11 @@ The filing offered two shapes and both were built as copies and scored on one ei
 table. "Also scan the teammate's own transcript" clears only a teammate that has already read
 the router and still tells every other one to READ AND FOLLOW a step that rolls the sprint
 envelope from inside a dispatched review. **What the exemption acquits:** a lead that never
-routed can dispatch a teammate to write a file and this check will not stop it — it never did,
-`Agent` being on the allowed surface by design and the denied teammate writing via Bash
-regardless — and the lead's own next write is still denied. Check 3's Rule 29 pause deny is
+routed can dispatch a teammate to write a file and this check will not stop it. Before the fix
+it did, by the accident of the transcript pair and not by design, and the denied teammate wrote
+via Bash regardless; what was never stopped is the dispatch, `Agent` being on the allowed
+surface by design. A delegated write path covered by accident is now uncovered on purpose, and
+the lead's own next write is still denied. Check 3's Rule 29 pause deny is
 untouched and still denies a teammate on a paused tree; that question is `BL-126`'s.
 
 **The receipt was scored before it was written, and its first revision was wrong.** It accepted

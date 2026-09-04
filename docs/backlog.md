@@ -3228,7 +3228,9 @@ for the pause deny this entry is about. The receipt that stood here keyed on the
 and would have read CLOSED on that change while a teammate's write on a paused tree still
 answers `Rule 29` (measured, before and after). It now drives the pause deny with a teammate
 payload on a paused tree: exit 1 while that write is denied as Rule 29, 0 only when the hook
-both reads an identity field and no longer answers Rule 29 to it, and 9 when the lead's own
+both reads an identity field on a non-comment line (a whole-file grep was satisfied by a
+comment, measured by the adversarial hand at `v0.496.0`) and no longer answers Rule 29 to it, and
+9 when the lead's own
 paused write is not Rule-29-denied (the deny is gone, nothing measured) or the teammate's returns
 a deny naming another check. **Limit, stated:** a change that exempts every teammate from the
 pause deny outright scores 0 here. This entry's own text asks for a quiesce semantic — let the
@@ -3236,7 +3238,7 @@ in-flight write finish, do not admit new dispatches — not a blanket exemption,
 it must say which was built. Read `BL-156` for why Check 2z took the blanket form and this
 check must not inherit it.
 
-verify: sh h=core/hooks/ai-dlc-acknowledge.sh; [ -f "$h" ] || exit 9; command -v jq >/dev/null || exit 9; r=$(grep -oE 'jq -r [^|]*\.[a-z_.]+' "$h" | grep -oE '\.[a-z_][a-z_.]*' | sort -u); [ -n "$r" ] || exit 9; printf '%s\n' "$r" | grep -q '^\.tool_name$' || exit 9; w=$(mktemp -d) || exit 9; trap 'rm -rf "$w"' EXIT; mkdir -p "$w/p/_bmad-output/planning-artifacts/s7" "$w/p/scripts/ai-dlc"; printf '#!/bin/sh\necho 7\n' > "$w/p/scripts/ai-dlc/sprint-status.sh"; chmod +x "$w/p/scripts/ai-dlc/sprint-status.sh"; : > "$w/p/_bmad-output/pipeline-snapshot.md"; : > "$w/p/_bmad-output/pipeline-paused.flag"; printf '{"type":"user","message":{"content":"<command-name>/ai-dlc</command-name>"}}\n{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/w/.claude/skills/ai-dlc/steps/route.md"}}]}}\n' > "$w/s.jsonl"; d(){ jq -nc --arg tr "$w/s.jsonl" --arg ag "$1" '{session_id:"r",transcript_path:$tr,tool_name:"Write",tool_input:{file_path:"/w/_bmad-output/planning-artifacts/x.md"}}+(if $ag=="" then {} else {agent_id:$ag,agent_type:"general-purpose"} end)' | CLAUDE_PROJECT_DIR="$w/p" bash "$h" 2>/dev/null; }; a=$(d ""); b=$(d ax); case "$a" in *"Rule 29"*) ;; *) exit 9;; esac; case "$b" in *"Rule 29"*) exit 1;; *permissionDecision*) exit 9;; esac; printf '%s\n' "$r" | grep -qE '^\.(subagent|agent_type|agent_id|parent_session_id|invoked_by)' || exit 1; exit 0
+verify: sh h=core/hooks/ai-dlc-acknowledge.sh; [ -f "$h" ] || exit 9; command -v jq >/dev/null || exit 9; r=$(grep -v '^[[:space:]]*#' "$h" | grep -oE 'jq -r [^|]*\.[a-z_.]+' | grep -oE '\.[a-z_][a-z_.]*' | sort -u); [ -n "$r" ] || exit 9; printf '%s\n' "$r" | grep -q '^\.tool_name$' || exit 9; w=$(mktemp -d) || exit 9; trap 'rm -rf "$w"' EXIT; mkdir -p "$w/p/_bmad-output/planning-artifacts/s7" "$w/p/scripts/ai-dlc"; printf '#!/bin/sh\necho 7\n' > "$w/p/scripts/ai-dlc/sprint-status.sh"; chmod +x "$w/p/scripts/ai-dlc/sprint-status.sh"; : > "$w/p/_bmad-output/pipeline-snapshot.md"; : > "$w/p/_bmad-output/pipeline-paused.flag"; printf '{"type":"user","message":{"content":"<command-name>/ai-dlc</command-name>"}}\n{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/w/.claude/skills/ai-dlc/steps/route.md"}}]}}\n' > "$w/s.jsonl"; d(){ jq -nc --arg tr "$w/s.jsonl" --arg ag "$1" '{session_id:"r",transcript_path:$tr,tool_name:"Write",tool_input:{file_path:"/w/_bmad-output/planning-artifacts/x.md"}}+(if $ag=="" then {} else {agent_id:$ag,agent_type:"general-purpose"} end)' | CLAUDE_PROJECT_DIR="$w/p" bash "$h" 2>/dev/null; }; a=$(d ""); b=$(d ax); case "$a" in *"Rule 29"*) ;; *) exit 9;; esac; case "$b" in *"Rule 29"*) exit 1;; *permissionDecision*) exit 9;; esac; printf '%s\n' "$r" | grep -qE '^\.(subagent|agent_type|agent_id|parent_session_id|invoked_by)' || exit 1; exit 0
 
 ## BL-130
 
@@ -4081,9 +4083,12 @@ teammate's own transcript" clears exactly the teammate that has already read the
 tells every other one to READ AND FOLLOW a step that rolls the sprint envelope from inside a
 dispatched review — a remedy wrong for the actor even where it is reachable. **What the exemption
 acquits, stated:** a lead that never routed can dispatch a teammate to write a file and Check 2z
-will not stop that write. It never did — `Agent` is on the allowed surface by design and the
-denied teammate wrote via Bash regardless — and the lead's own next write is still denied
-(probe cell `lead-bypass`, and the receipt's control `a`). Check 3's Rule 29 pause deny is
+will not stop that write. Before the fix it DID, by the accident of the transcript pair and not
+by design (all three teammate probe cells read `ROUTE` on the pre-fix hook, and the consumer's
+teammate transcript holds five denials), and the denied teammate wrote via Bash regardless; what
+was never stopped is the DISPATCH, `Agent` being on the allowed surface by design. A delegated
+write path covered by accident is now uncovered on purpose. The lead's own next write is still
+denied (probe cell `lead-bypass`, and the receipt's control `a`). Check 3's Rule 29 pause deny is
 deliberately untouched and still denies a teammate on a paused tree (probe cell `sub-paused`;
 receipt control `c`).
 
