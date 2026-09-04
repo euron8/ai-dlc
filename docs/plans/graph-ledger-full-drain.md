@@ -13,8 +13,8 @@ BEFORE ACTING:**
    command.** One of those repos is READ ONLY and a write there is the most expensive mistake
    available in this program.
 2. **`### NEXT ACTIONS — numbered, in order`** — what to do, starting at action 1. This is roughly
-   4,000 lines below this block; jump to the heading BY NAME, do not scroll and do not trust
-   this figure — it is advisory, it has been stale before, and it was 400 lines out when batch 43
+   4,700 lines below this block; jump to the heading BY NAME, do not scroll and do not trust
+   this figure — it is advisory, it has been stale before, and it was 700 lines out when batch 49
    re-derived it.
 3. **`### Ping the operator`** — when to stop and report.
 4. **`## Hazards`** and **`### Done when`** — what will bite you, and what finishing looks like.
