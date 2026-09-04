@@ -31,6 +31,16 @@
 # these arms discriminate; re-run it the same way if they are ever suspected of being vacuous.
 # The count tracks the surface, so it moves when the surface does -- derive it, do not quote it.
 #
+# SECTION 7 CARRIES ITS OWN DIFFERENTIAL, taken through the same `AI_DLC_RRR_HOOK` seam against
+# the copy of this hook at `origin/main` -- the revision from before Check 2z's guard grew its
+# `agent_id` conjunct -- run from the REPO ROOT, because this fixture resolves its root from the
+# process cwd. Sides asserted to differ by `md5` before the result was read. Against that pre-fix
+# copy the TEAMMATE cell is DENIED and its ROUTE_DENIED row appears, so exactly two of section 7's
+# arms go RED: the teammate allow and the teammate log. The twin and the pause arm stay green,
+# and that shape is the claim -- red on both halves would mean the arms read the tree rather than
+# the conjunct. `origin/main` is a ref that moves, so the durable way to rebuild that copy is the
+# sibling battery's `teammate-conjunct-deleted` mutant, which deletes exactly that conjunct.
+#
 # AND THE ARM'S OWN COULD-NOT-FIRE TRAP, which is arm 2. The remedy for this denial is to READ
 # the router, and the lead reaches a step file through `Skill`/`Agent` dispatch and `Bash`. An
 # arm that denied those would forbid the very act it demands and wedge the pipeline at its first
@@ -119,11 +129,27 @@ printf '{"type":"user","message":{"content":"<command-name>/ai-dlc-update</comma
 printf '{"type":"user","message":{"content":"fix the timezone bug in the ingest worker"}}\n' > "$TR_PLAIN"
 
 # -----------------------------------------------------------------------------
-drive() { # <tree> <tool> <transcript> [file_path] -> stdout
-  local w="$1" tool="$2" tr="$3" fp="${4:-}"
-  jq -nc --arg t "$tool" --arg tr "$tr" --arg fp "$fp" \
+drive() { # <tree> <tool> <transcript> [file_path] [agent_id] -> stdout
+  local w="$1" tool="$2" tr="$3" fp="${4:-}" ag="${5:-}"
+  # THE 5th ARGUMENT IS THE ACTOR, and the two fields it adds are the HARNESS'S, not this
+  # fixture's invention: the shared PreToolUse payload is enumerated in `ai-dlc-context-sensor.sh`
+  # as "session_id, transcript_path, cwd, prompt_id, permission_mode, agent_id, agent_type,
+  # effort", and `ai-dlc-gate-remediation-guard.sh` and `ai-dlc-subagent-probe.sh` both read
+  # `agent_id` off it for this same question. Omitting it is the LEAD's call -- the default, and
+  # what every arm above drives -- so no existing arm changes shape.
+  #
+  # THE TOKEN `TYPE-ONLY` IS A THIRD ACTOR, AND IT IS THE ONE THAT SEPARATES THE TWO FIELD NAMES.
+  # A lead started with `claude --agent <name>` carries `agent_type` and NO `agent_id` --
+  # measured in a headless session with a payload dumper on PreToolUse: the flagged lead's call
+  # read agent_id ABSENT, agent_type "Explore". So `agent_type` is not a second spelling of the
+  # teammate discriminator; a check keyed on it exempts that lead and cannot fire. Every seed
+  # that supplies both fields together, or neither, is blind to that difference by construction.
+  jq -nc --arg t "$tool" --arg tr "$tr" --arg fp "$fp" --arg ag "$ag" \
      '{session_id:"rrr-session",transcript_path:$tr,tool_name:$t,
-       tool_input:(if $fp == "" then {} else {file_path:$fp} end)}' \
+       tool_input:(if $fp == "" then {} else {file_path:$fp} end)}
+      + (if $ag == "" then {}
+         elif $ag == "TYPE-ONLY" then {agent_type:"Explore"}
+         else {agent_id:$ag,agent_type:"general-purpose"} end)' \
     | CLAUDE_PROJECT_DIR="$w" bash "$HOOK" 2>/dev/null
 }
 denied() { case "$1" in *'"permissionDecision": "deny"'*|*'"permissionDecision":"deny"'*) return 0 ;; esac; return 1; }
@@ -299,6 +325,90 @@ if grep -q 'ADVERSARIAL_STATE_UNADJUDICABLE' "$W/_bmad-output/pipeline-continuat
   bad "FIXTURE BROKEN: the seed is unadjudicable to Check 2a, so the arms above exercised the divergence guard"
 else
   ok "the seed reaches Check 2z: no UNADJUDICABLE line, so the router guard is what answered"
+fi
+
+# =============================================================================
+# 7. A DISPATCHED TEAMMATE IS OUTSIDE CHECK 2z
+# =============================================================================
+# THE SAME TREE AND THE SAME TRANSCRIPT AS ARM 1, which is what makes this pair readable at all:
+# on that tree Check 2z is the only check that can deny anything, so a deny here is attributable
+# to it and a mistaken allow cannot be blamed on a downstream carve-out.
+#
+# WHY THE CHECK EVER FIRED ON A TEAMMATE. The harness sends a dispatched teammate's tool call with
+# its own `agent_id` AND the LEAD's `transcript_path` -- the teammate's own session file is one
+# level down at `<session>/subagents/agent-<id>.jsonl`, and this scan never opens it. So
+# `AIDLC_SESSION` is read off the lead's `/ai-dlc` marker while the router Read the teammate DID
+# make is invisible, and the deny's remedy ("READ steps/route.md now") is addressed to an actor
+# who cannot clear it. The transcript pair is the defect; `agent_id` is the property that names it.
+AG="rrr-teammate-01"
+OUT="$(drive "$W" Write "$TR_BYPASS" "$W/_bmad-output/pipeline-snapshot.md" "$AG")"
+if denied "$OUT"; then
+  bad "TEAMMATE: a dispatched teammate's Write was DENIED. The remedy is unreachable by the actor denied — its own router read lands in a transcript file this check never opens, and clearing the deny requires a Read by the LEAD, who is not the one being stopped."
+else
+  ok "TEAMMATE: a dispatched teammate carrying an \`agent_id\` is outside Check 2z, so no deny is issued at all"
+fi
+
+# ITS TWIN, ONE PROPERTY APART, IN THE SAME RUN AND ON THE SAME TREE. Drop the `agent_id` and
+# change nothing else -- same tool, same transcript, same tree. This is the exemption's ACQUITTAL
+# PROBE: an exemption that also covered the LEAD would delete Check 2z outright while every arm
+# above still passed, and an arm asserting only "the teammate is allowed" cannot tell an exemption
+# keyed on the actor from one that acquits everybody.
+#
+# IT OVERLAPS ARM 1's `Write` CELL AND ARM 1 OWNS THAT CELL. Widening the route key turns both red
+# together, which is arms sharing one subject rather than an entangled pair: arm 1 asserts the
+# cell, this arm asserts that the EXEMPTION did not take it away. Measured while building this
+# section, driving the shipped fixture against a hook whose route grep was widened to the mention:
+# the four BYPASS arms, the LOG deny arm and this twin go red together, and the teammate arms above
+# and below stay green.
+OUT="$(drive "$W" Write "$TR_BYPASS" "$W/_bmad-output/pipeline-snapshot.md")"
+if denied "$OUT" && is_route_deny "$OUT"; then
+  ok "TEAMMATE twin: the identical Write with NO \`agent_id\` is still ROUTE-denied, so the exemption is keyed on the actor and does not cover the lead"
+elif denied "$OUT"; then
+  bad "TEAMMATE twin: the lead's Write was denied, but not by Check 2z — the reason names no router, so this arm is reading another check's verdict and the acquittal probe proved nothing"
+else
+  bad "TEAMMATE twin: dropping the \`agent_id\` left the Write ALLOWED. The exemption covers the lead as well, so Check 2z is gone for every session and the incident reproduces."
+fi
+
+# THE LEAD THAT CARRIES `agent_type`. `claude --agent <name>` starts a LEAD whose every payload
+# carries `agent_type` and no `agent_id` (see `drive()`). This is the input that tells an
+# `agent_id`-keyed exemption from an `agent_type`-keyed one; the twin above cannot, because it
+# carries neither field, and the teammate cell cannot, because it carries both. An exemption keyed
+# on `agent_type` would exempt this lead from Check 2z outright -- a check that cannot fire on the
+# population it exists for. Found by an adversarial hand after every other channel had accepted
+# the `agent_type` spelling, because every seed supplied the two fields together.
+OUT="$(drive "$W" Write "$TR_BYPASS" "$W/_bmad-output/pipeline-snapshot.md" TYPE-ONLY)"
+if denied "$OUT" && is_route_deny "$OUT"; then
+  ok "TEAMMATE agent-flag: a lead carrying \`agent_type\` and NO \`agent_id\` (a \`--agent\` session) is still ROUTE-denied, so the exemption is keyed on \`agent_id\` and not on the field a flagged lead also carries"
+elif denied "$OUT"; then
+  bad "TEAMMATE agent-flag: the \`--agent\` lead was denied, but not by Check 2z — the reason names no router, so this arm read another check's verdict"
+else
+  bad "TEAMMATE agent-flag: a lead carrying \`agent_type\` and no \`agent_id\` was ALLOWED. The exemption is keyed on \`agent_type\`, which a \`--agent\` lead also carries, so Check 2z cannot fire on such a session at all."
+fi
+
+# THE SCOPE OF THE EXEMPTION. It is a conjunct on Check 2z's guard, not an early return from the
+# hook. A fresh PAUSED tree, as arm 5 seeds one, and a routed transcript so Check 2z has nothing
+# to say either way: what answers must be Check 3's Rule 29 deny, read by its VALUE and not by the
+# bare verdict. Whether a teammate SHOULD be pause-denied is a separate question; this arm holds
+# the answer where the hook put it and does not decide it.
+WT="$(seed teampaused paused)"
+OUT="$(drive "$WT" Write "$TR_ROUTED" "$WT/_bmad-output/planning-artifacts/product-brief.md" "$AG")"
+if denied "$OUT" && is_pause_deny "$OUT"; then
+  ok "TEAMMATE pause: a teammate's artifact write on a PAUSED tree is still denied by Check 3's Rule 29"
+elif denied "$OUT"; then
+  bad "TEAMMATE pause: the teammate's paused write was denied by the WRONG check — the reason names no Rule 29, so this arm is reading Check 2z's verdict"
+else
+  bad "TEAMMATE pause: a teammate's write on a PAUSED tree was ALLOWED. The \`agent_id\` exemption has leaked out of Check 2z into the whole hook, and every check below it is now unreachable for a dispatched teammate."
+fi
+
+# AND THE LOG, ON A FRESH TREE so it cannot read another arm's record — the same both-directions
+# pattern as section 4's allow arm. An exemption that returned the allow and still wrote the
+# record would leave retro's Rule 25(c) audit counting denials that never happened.
+WTL="$(seed teamlog)"
+drive "$WTL" Write "$TR_BYPASS" "$WTL/_bmad-output/pipeline-snapshot.md" "$AG" >/dev/null
+if grep -q 'ROUTE_DENIED' "$WTL/_bmad-output/pipeline-continuation-log.md" 2>/dev/null; then
+  bad "TEAMMATE log: the teammate's ALLOWED Write still recorded a ROUTE_DENIED event — the audit that reads this file counts a denial that did not happen, and every nonzero count in it is meaningless"
+else
+  ok "TEAMMATE log: the teammate's allowed Write records no ROUTE_DENIED event"
 fi
 
 echo

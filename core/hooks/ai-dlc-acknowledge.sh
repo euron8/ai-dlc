@@ -60,6 +60,12 @@ INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
+# THE ACTOR. The harness sets this only on a tool call made INSIDE a dispatched teammate (an
+# `Agent` child); the lead's own calls carry none. `ai-dlc-gate-remediation-guard.sh:266` and
+# `ai-dlc-context-sensor.sh:164` read the same field for the same question. Read here, beside
+# the transcript path, because the two are a PAIR on a teammate's call: the path is the LEAD's
+# session file, never the teammate's own -- see Check 2z below.
+AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty')
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # -----------------------------------------------------------------------------
@@ -216,7 +222,7 @@ esac
 # mutually exclusive, so `AIDLC_SESSION=1` already implies the session is not the updater. The
 # payload arm is the only site that can set them independently, and `.tool_input.skill` is
 # populated only on a `Skill` call, which this surface never sees. Measured: removing the
-# conjunct moved no cell of a seven-cell probe table, against the control that removing the
+# conjunct moved no cell of the battery's probe table (seven cells when measured), against the control that removing the
 # `AIDLC_SESSION` conjunct DOES move one -- so the probe could see a removal and saw nothing.
 # `mechanism-design.md` says fix by subtraction, because a condition that changes no outcome
 # today changes one when the surrounding schema moves and nobody is looking.
@@ -228,7 +234,38 @@ esac
 # `NotebookEdit` IS in the surface because it is on the hook's registered matcher and writes a
 # file like the rest. Leaving it out would have left a bypassing session one unwatched way to
 # write, which is an affordance to remove rather than a hole to document.
-if [ "$AIDLC_SESSION" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+#
+# A DISPATCHED TEAMMATE IS OUTSIDE THIS CHECK, AND `agent_id` IS THE CONJUNCT THAT SAYS SO.
+# The justification above binds a session that LOADED `SKILL.md` -- the lead. A teammate loaded
+# a role file; the router is not its step to read. The check fired on teammates anyway from the
+# day it shipped, by an accident of the harness: on a teammate's tool call `transcript_path` is
+# the LEAD's session file, not the teammate's own (`<session>/subagents/agent-<id>.jsonl`, see
+# `ai-dlc-subagent-probe.sh:126-151`), so `AIDLC_SESSION` is read off the lead's `/ai-dlc`
+# marker while the router Read the teammate DID make sits in a file this scan never opens.
+# Measured on the reference consumer (`PC-S308-AI-DLC-ACKNOWLEDGE-ROUTE-DENIED-SUBAGENT-CANNOT-
+# CLEAR`): a teammate read `steps/route.md`, was denied twice in the two minutes after, and the
+# lead did not read it for another half hour -- so the remedy this deny hands out is unreachable
+# by the actor it is handed to, and "the cost of firing is one Read" is false for every Rule 19
+# dispatch. The denied teammate then wrote through a Bash redirect, which this matcher never sees.
+#
+# EXEMPT, NOT "ALSO SCAN THE TEAMMATE'S FILE". Both were built and scored on one probe table.
+# Scanning the teammate's transcript clears exactly the teammate that has already read the
+# router and still tells every other one to READ AND FOLLOW a step that rolls the envelope from
+# inside a dispatched review -- a remedy wrong for the actor even where it is reachable.
+#
+# WHAT THIS ACQUITS, stated: a lead that never routed can dispatch a teammate to write a file and
+# this check will not stop that write. Before this conjunct it DID -- by the accident of the
+# transcript pair above, not by design, and the denied teammate wrote via Bash regardless. What
+# was never stopped is the DISPATCH: `Agent` is on the allowed surface by design (above). So a
+# delegated write path that was covered by accident is now uncovered on purpose, and the lead's
+# OWN next write is still denied, so the incident this check exists for is unchanged. THE CONJUNCT SITS
+# BEFORE THE LOG WRITE ON PURPOSE: a teammate's allowed write records no `ROUTE_DENIED` row,
+# because that row is a record of a DENIAL and the shipped fixture holds a nonzero count of them
+# to mean real denials -- a row written for a write that was allowed would make the count
+# meaningless in exactly the way its allow-path arm exists to refuse. Check 3's pause deny
+# below carries no such conjunct and still answers for a teammate; that is `BL-126`'s question
+# and is not decided here.
+if [ -z "$AGENT_ID" ] && [ "$AIDLC_SESSION" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
   case "$TOOL_NAME" in
     Write|Edit|MultiEdit|NotebookEdit)
       if ! grep -q '"file_path":"[^"]*steps/route\.md"' "$TRANSCRIPT" 2>/dev/null; then
