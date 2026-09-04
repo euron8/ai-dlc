@@ -4081,7 +4081,7 @@ sites in `core/` are the layer-file heading helpers bound by I40.
 
 **Why the obvious fix is wrong, measured.** A plain fence toggle hides 6 live ids on the
 consumer (one live line opens with an inline code span, which CommonMark does not read as a
-fence) and 34 archived ones (fences left unterminated by earlier splits). The shipped rule uses
+fence) and 59 archived ones (fences left unterminated by earlier splits). The shipped rule uses
 the CommonMark opener and closer grammar, bounded by the id rule: a fenced entry-shaped line
 whose label is not id-keyed is ignored; one that is id-keyed still opens an entry and resets
 the fence, and `ledger-reverify.sh` reports that reset as `ENTRY-SWALLOWED` with the `fence`

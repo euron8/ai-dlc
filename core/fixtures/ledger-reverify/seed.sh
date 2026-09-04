@@ -730,8 +730,9 @@ verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
 
 ## PC-FIXTURE-UNTERMINATED-FENCE — a fence that never closes
 
-The reference consumer's archive carries ten of these, left by rotations that split entries
-mid-fence. Everything after this opener is inside the fence until an id-keyed boundary resets it.
+The reference consumer's archive carries two of these, left by rotations that split entries
+mid-fence — counted by driving the shipping rule and taking the openers that reach a reset or
+the end of the file. Everything after this opener is inside the fence until an id-keyed boundary resets it.
 
 ```
 this fence is never closed

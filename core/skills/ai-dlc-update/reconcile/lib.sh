@@ -278,7 +278,8 @@ unquote() { # unquote <value>
 # consumer's entry count from 142 to 95, because that corpus carries an ODD number of fence
 # delimiters. Re-measured here on the same consumer's four ledger files: the toggle hides 6 live
 # ids (one live line OPENS with an inline code span, three backticks followed by more backticks,
-# which is not a fence) and 34 archived ones (fences left unterminated by earlier splits). Global
+# which is not a fence) and 59 archived ones, 34 headings and 25 bullets (fences left
+# unterminated by earlier splits). Global
 # pairing desynchronises at the first unterminated fence and never recovers.
 #
 # SO THE FENCE IS BOUNDED BY THE ID RULE. Inside a fence, an entry-shaped line whose label is

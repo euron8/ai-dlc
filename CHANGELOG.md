@@ -38,7 +38,7 @@ fixture gained an arm that its own fence-blind mutant kills.
 
 **The fix, and why the obvious one was rejected by measurement.** A plain fence toggle hides six
 live ids on the consumer (one live line opens with an inline code span, which is not a fence)
-and thirty-four archived ones (fences left unterminated by earlier splits). The rule is now
+and fifty-nine archived ones (fences left unterminated by earlier splits). The rule is now
 CommonMark's opener and closer grammar, bounded by the id rule: inside a fence an entry-shaped
 line whose label is not id-keyed is ignored, and one that is id-keyed still opens an entry and
 resets the fence, so no fence can hide an id. That reset is reported by `ledger-reverify.sh` as
@@ -55,7 +55,9 @@ an unterminated fence with the id-keyed entry after it, and a fence still open a
 five mutants remove one clause each, and the arms' measured overlap is declared beside them.
 The fixture hand found the rotate fixture's fence-balance arm emitting no verdict on a green run
 (a `grep -c || echo 0` helper printed two lines and the arithmetic aborted the `if`) and a
-two-row entry asserted with the single-row helper; both repaired before the merge. `ledger-rotate` seeds a
+two-row entry asserted with the single-row helper; both repaired before the merge. Its
+interleaved timing puts `ledger-reverify` about half again as long solo, from the added engine
+runs and seed lines; the unit is not the suite pole and the loaded wall clock does not move. `ledger-rotate` seeds a
 closed entry whose fence records a heading and asserts whole movement with balanced fences on
 both sides; its fence-blind mutant re-derives the consumer's residue. `shadowed-local-validators`
 seeds the same shape with a `.sh` above the fence and a close below it. `backlog-rotate-fence-guard`'s
