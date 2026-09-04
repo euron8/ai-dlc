@@ -382,7 +382,33 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]
       fi
     fi
 
-    if [ "$RESUME_OK" != "1" ] || [ "$TEAMMATES_OK" != "1" ] || [ "$PUSH_OK" != "1" ]; then
+    # THE DRIVER-SIGNAL ARM (step 4's touch) AND THE MARKER ARM (step 5's clear). Measured on
+    # the reference consumer over every handoff its transcript corpus can score (39 of 120):
+    # the `touch _bmad-output/.driver/handoff` was skipped on 20, the most-skipped step by six
+    # times over the push, and the `rm -f` of the entry marker on 4 of the 17 in scope since it
+    # was written. Neither had an arm; the three above did, and the skip rate of the guarded
+    # steps fell to single digits while the unguarded one did not.
+    #
+    # `.driver/handoff` IS SAFE TO ASSERT HERE. The driver consumes it only when `.driver/idle`
+    # is ALSO present, and idle is written by ai-dlc-driver-signal.sh, a Stop hook registered
+    # after this one -- so at this seam a touched marker is still on disk. `touch` fails when
+    # `.driver/` does not exist, which is why the remedy below says `mkdir -p` first and why
+    # steps/handoff.md step 4 does too. STATED LIMIT: in a tree no driver has ever consumed, a
+    # marker from an earlier handoff persists and satisfies this arm; the arm asserts the file,
+    # not this turn's touch.
+    #
+    # THE MARKER ARM IS NOT THE MARKER KEY. Key 1 of ai_dlc_handoff_pending ARMS this guard on the
+    # marker's presence; this arm asserts its ABSENCE once steps 1, 3 and 4 are recorded, which is
+    # exactly step 5's "cleared here and nowhere earlier". A lead mid-procedure is caught by an
+    # earlier arm first (dispatch order below), so this one fires only on a handoff that did
+    # everything except finish.
+    DRIVER_OK=1
+    [ -f "${LOG_DIR}/.driver/handoff" ] || DRIVER_OK=0
+    MARKER_OK=1
+    [ -f "${LOG_DIR}/.handoff-in-progress" ] && MARKER_OK=0
+
+    if [ "$RESUME_OK" != "1" ] || [ "$TEAMMATES_OK" != "1" ] || [ "$PUSH_OK" != "1" ] \
+       || [ "$DRIVER_OK" != "1" ] || [ "$MARKER_OK" != "1" ]; then
       H_LAST=0; H_CNT=0
       if [ -f "$HANDOFF_STATE" ]; then
         H_LAST=$(sed -n '1p' "$HANDOFF_STATE" 2>/dev/null); H_CNT=$(sed -n '2p' "$HANDOFF_STATE" 2>/dev/null)
@@ -396,6 +422,8 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]
       [ "$RESUME_OK" != "1" ]    && H_WHY="no delimited /ai-dlc resume block"
       [ "$TEAMMATES_OK" != "1" ] && H_WHY="${H_WHY:+$H_WHY; }In-Flight Teammates still carries an \`in-flight\` row"
       [ "$PUSH_OK" != "1" ]      && H_WHY="${H_WHY:+$H_WHY; }step 3's push has not landed (branch unpublished or ahead of its upstream)"
+      [ "$DRIVER_OK" != "1" ]    && H_WHY="${H_WHY:+$H_WHY; }step 4's driver signal was not touched (_bmad-output/.driver/handoff absent)"
+      [ "$MARKER_OK" != "1" ]    && H_WHY="${H_WHY:+$H_WHY; }step 5's entry marker was not cleared (_bmad-output/.handoff-in-progress present)"
       # WHICH CHANNEL SAW THE REQUEST IS PART OF THE RECORD TOO. A row reached only by the
       # on-disk trigger means the transcript could not see the request -- a queued message, or a
       # compaction between the ask and the Stop -- and that is a different investigation from a
@@ -429,6 +457,7 @@ If the push genuinely cannot succeed -- no remote configured, offline, or a prot
 Then finalize the snapshot (step 3) and end the turn again. A handoff whose teammate sweep is not recorded looks identical to one that had no teammates." '{decision:"block",reason:$r,suppressOutput:true}'
           exit 0
         fi
+        if [ "$RESUME_OK" != "1" ]; then
         jq -n --arg r "HANDOFF GUARD: the operator requested a handoff, but this turn ends WITHOUT a copy-pasteable resume prompt. ${H_FIX_RESUME}
 
 \`\`\`
@@ -438,6 +467,15 @@ Then finalize the snapshot (step 3) and end the turn again. A handoff whose team
 \`\`\`
 
 The \`/ai-dlc resume\` line MUST sit BETWEEN two delimiter lines (four or more hyphens, each on its own line). A blockquote is not a delimiter, and a bare mention in prose is not copy-pasteable. Finalize the pipeline snapshot first (step 3) if you have not -- state lives in the snapshot, not the resume line." '{decision:"block",reason:$r,suppressOutput:true}'
+          exit 0
+        fi
+        # Steps 1, 3 and the resume line are all recorded. What remains is step 4's touch, then
+        # step 5's clear -- in that order, because step 5 is the last action before ending.
+        if [ "$DRIVER_OK" != "1" ]; then
+          jq -n --arg r "HANDOFF GUARD: the teammate sweep is recorded, the push has landed and the resume prompt is well-formed, but step 4's driver signal was NOT touched -- \`_bmad-output/.driver/handoff\` is absent. Per steps/handoff.md step 4, run \`mkdir -p _bmad-output/.driver && touch _bmad-output/.driver/handoff\` and end the turn again. The touch is unconditional: a session cannot tell from inside itself whether a driver is attached, and with none attached the marker is inert. Then step 5: \`touch _bmad-output/pipeline-paused.flag\` and \`rm -f _bmad-output/.handoff-in-progress\`. Do not resume pipeline work." '{decision:"block",reason:$r,suppressOutput:true}'
+          exit 0
+        fi
+        jq -n --arg r "HANDOFF GUARD: steps 1 through 4 are recorded, but step 5's entry marker is still present -- \`_bmad-output/.handoff-in-progress\` exists, which tells the next compaction that this session is still INSIDE the handoff procedure. Per steps/handoff.md step 5, run \`rm -f _bmad-output/.handoff-in-progress\` (the pause flag is already set) and end the turn again. Do not resume pipeline work." '{decision:"block",reason:$r,suppressOutput:true}'
         exit 0
       fi
       rm -f "$HANDOFF_STATE"   # backoff exhausted: allow stop (possible false positive)

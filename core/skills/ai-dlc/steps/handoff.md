@@ -65,8 +65,10 @@ Execute this 5-step procedure in order:
    skipped, so verify Step 2 landed before relying on this sentence.
 4. Emit the successor's entry line — exactly `/ai-dlc resume`, wrapped in
    `----` delimiter lines (one before, one after) for copy-paste. Nothing
-   else: no narrated body. Then `touch _bmad-output/.driver/handoff` —
-   the driver's zero-content handoff signal.
+   else: no narrated body. Then
+   `mkdir -p _bmad-output/.driver && touch _bmad-output/.driver/handoff` —
+   the driver's zero-content handoff signal. The continuation hook
+   refuses to let this session end without it.
 
    **The `touch` is unconditional.** A session cannot tell from inside
    itself whether a driver is attached, so a conditional here is a

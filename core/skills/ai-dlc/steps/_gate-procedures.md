@@ -673,7 +673,8 @@ carry the no-human-present additions:
    > user-shared /context."*
 
    The resume line is the bare `/ai-dlc resume` (the successor reads the
-   snapshot for all state). Then `touch _bmad-output/.driver/handoff` —
+   snapshot for all state). Then
+   `mkdir -p _bmad-output/.driver && touch _bmad-output/.driver/handoff` —
    the driver's zero-content handoff signal. **The `touch` is
    unconditional**; `steps/handoff.md` step 4 owns why.
 

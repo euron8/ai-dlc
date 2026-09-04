@@ -15,6 +15,45 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.498.0] - 2026-09-04
+
+### The handoff guard could not arm on a resumed session and asserted three of five steps
+
+Closes `PC-S308-HANDOFF-PROCEDURE-5-STEP-NOT-FOLLOWED` (`BL-158`), filed by the reference
+consumer on 2026-09-04 from inside the incident, and files `BL-159` for four adjacent defects
+found while building it. Batch 49 of the ledger drain, scoped by the operator with the context
+that the handoff miss happens often and had never been filed. It is the third filing of one end
+state: `v0.434.0` fixed the push command and `v0.438.0` the resume line's router.
+
+**The defects.** `ai-dlc-continue.sh` Check 0 is the Stop-hook guard on the five-step handoff
+procedure. Its on-disk arming key read this session's operator prompts from the continuation log
+and applied the mention-exclusion vocabulary — which contains `/ai-dlc` — to all of them joined,
+so the `/ai-dlc resume` row every resumed session carries first vetoed every later request. The
+transcript channel could not see a `handoff` typed mid-turn. At the incident the guard never
+armed and the Stop was `ALLOWED_BY_PAUSE`. Once armed, it asserted the teammate sweep, the push
+and the resume line, and nothing for step 4's driver signal or step 5's marker clear.
+
+**Measured on the consumer's transcripts before building.** 39 of 120 handoffs fall inside the
+transcript corpus. Step 4's `touch _bmad-output/.driver/handoff` was skipped on 20 of them, six
+times the push's rate; step 5's marker clear on 4 of the 17 in scope. Step-4 skips ran 7 of 7 in
+early August, 1 of 15 in September, the turn coinciding with the operator's first "did the handoff
+steps run" prompt and with no mechanism change. The predicate driven on a copy of the incident
+session's real log returned NOT PENDING; with the resume row removed, PENDING.
+
+**The fix.** Key 3 scores intent and exclusion per row. Check 0 gains `DRIVER_OK` and
+`MARKER_OK`, dispatched after the existing arms in procedure order, each with its own remedy and
+log clause. `handoff.md` step 4 and the auto-handoff twin spell the touch with `mkdir -p`. On a
+copy of the incident state the fixed hooks BLOCK where the shipped ones allowed.
+`handoff-completion-assertion` gains cases (d1)–(d3) and (g3), and mutants m20 (session-wide
+exclusion restored, killed by (g3) alone), m21 and m22 (each new arm removed, the other arm's
+survival as the entanglement control). `handoff-resume-guard` seeds the lead's touch.
+
+**Receipt.** `BL-158` drives the shipping hook on three seeded states and reads verdicts only:
+the incident's log shape must BLOCK, a compliant handoff with the driver signal absent must
+BLOCK, and the same with the signal present must ALLOW. It reads STILL-LIVE under the pre-fix
+hooks and under either half of the fix alone. Stated limits: the driver arm asserts the file, not
+this turn's touch; the marker arm fires only while some key still arms the guard.
+
 ## [0.497.0] - 2026-09-04
 
 ### The recovery protocol read as the resume procedure, and a resumed lead skipped the router
