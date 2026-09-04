@@ -4031,3 +4031,50 @@ not a guarantee.
 
 verify: sh f=core/skills/ai-dlc-update/SKILL.md; [ -f "$f" ] || exit 9; grep -qi 'self-update' "$f" || exit 9; [ "$(sed 's/<!--.*-->//g' "$f" | grep -ciE 'autonomously[^.]*no operator approval')" -gt 0 ] && exit 1; exit 0
 
+## BL-157 — `SKILL.md`'s POST-COMPACT RECOVERY PROTOCOL reads as the resume procedure to a fresh `/ai-dlc resume` session, which then skips the router and is denied its first write
+
+Filed by the reference consumer as `PC-S308-POST-COMPACT-RECOVERY-PROTOCOL-SKIPS-ROUTE-MD` on
+2026-09-04, by a lead from inside the deny. Batch 48 of the ledger drain. DEFECT: a mandatory
+step with a documented enforcer, skipped on a documented path, by a lead following the rulebook
+as written.
+
+**What happens.** `core/skills/ai-dlc/SKILL.md:26` opens with the recovery protocol — read the
+snapshot, emit the verification turn, "proceed immediately to the next pipeline action" — and
+the unconditional router Read (`**READ AND FOLLOW** … steps/route.md`) sits under
+`## INITIALIZATION` roughly 1,800 lines below it. A session started with `/ai-dlc resume` loads
+the whole file, and a resumed lead reads the protocol as its resume procedure: it matches the
+trigger's own words (a snapshot referencing turns the lead cannot recall) and it says what to do.
+The lead never reads `steps/route.md`, whose Step 0 is the actual resume path and whose Step 0a
+runs the six snapshot integrity checks, and `core/hooks/ai-dlc-acknowledge.sh` Check 2z then
+denies its first `Write` — correctly, with a remedy the protocol never named.
+
+**Measured on the consumer's own transcripts, both populations.** 41 sessions started with
+`/ai-dlc resume` from 2026-09-03 to 2026-09-04: 10 were denied by Check 2z before any
+`steps/route.md` Read, and all 10 had read `pipeline-snapshot.md` before the deny — the
+protocol's path, exactly as filed. 51 `/ai-dlc` sessions carrying a compaction summary: 0 were
+denied after the summary, because the same transcript already carried the router Read. The
+population is the fresh resume, not the compaction the protocol is named for; the filing's
+title names the section, not the trigger, and the mechanism paragraph is right.
+
+**The fix, one release.** The protocol now opens by stating its scope — a compaction inside a
+session that has already routed — and by sending an un-routed transcript to
+`{project-root}/.claude/skills/ai-dlc/steps/route.md` before any pipeline action, naming
+`ai-dlc-acknowledge.sh` as what denies until it has. The recover hook's injected block is
+untouched: it fires only on a compaction, where the Read is already in the transcript, and a
+re-read of the router there would cost the tokens the block exists to save.
+`core/scripts/validate-reattach-budget.sh` gained an arm requiring the router's installed path
+inside the protocol section outside a single-line HTML comment; it fails the pre-fix `SKILL.md`
+and passes the fixed one, and `core/fixtures/postcompact-rulebook-recovery` carries a mutant that
+strips the path and one that comments it out, each failing on that arm alone.
+
+**Receipt limits, stated.** The receipt drives the shipping validator against the shipping
+`SKILL.md` and against a copy with every `steps/route.md` path removed, and reads exit codes
+only: it closes when the real file passes and the stripped copy fails. It does not read the
+prose, so a protocol that names the path in a sentence telling the lead NOT to read it would
+score as fixed; the fixture's comment mutant covers the comment form and nothing covers that one.
+A validator that fails every file also reads STILL-LIVE here, which is the correct direction.
+The consumer's own receipt keys on the section heading, which any fix keeps, so it reads
+STILL-LIVE through this fix and the consumer should re-anchor it on the next pull.
+
+verify: sh v=core/scripts/validate-reattach-budget.sh; s=core/skills/ai-dlc/SKILL.md; [ -f "$v" ] && [ -f "$s" ] || exit 9; bash "$v" --skill "$s" --quiet >/dev/null 2>&1 || exit 1; t=$(mktemp) || exit 9; trap 'rm -f "$t"' EXIT; sed 's|\.claude/skills/ai-dlc/steps/route\.md|the router step|g' "$s" > "$t"; cmp -s "$s" "$t" && exit 1; bash "$v" --skill "$t" --quiet >/dev/null 2>&1 && exit 1; exit 0
+

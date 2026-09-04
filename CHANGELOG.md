@@ -15,6 +15,46 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.497.0] - 2026-09-04
+
+### The recovery protocol read as the resume procedure, and a resumed lead skipped the router
+
+Closes `PC-S308-POST-COMPACT-RECOVERY-PROTOCOL-SKIPS-ROUTE-MD` (`BL-157`), filed by the
+reference consumer on 2026-09-04 by a lead from inside the deny. Batch 48 of the ledger drain;
+the sweep at its start found three `PC-S308-*` candidates unfiled and the operator chose this
+one, the lead-side twin of `v0.496.0`'s subject.
+
+**The defect.** `SKILL.md`'s `## POST-COMPACT RECOVERY PROTOCOL` sits at line 26 and says: read
+the snapshot, emit the verification turn, proceed immediately to the next pipeline action. The
+unconditional router Read sits under `## INITIALIZATION`, roughly 1,800 lines below. A session
+started with `/ai-dlc resume` loads the whole file, reads the protocol as its resume procedure,
+never reads `steps/route.md` — whose Step 0 is the resume path and whose Step 0a runs the six
+snapshot integrity checks — and `ai-dlc-acknowledge.sh` Check 2z denies its first `Write`, with
+a remedy the protocol never named.
+
+**Measured on the consumer's transcripts, both populations, before building.** 41 `/ai-dlc
+resume` sessions over 2026-09-03 and 2026-09-04: 10 denied by Check 2z before any router Read,
+all 10 having read the snapshot first. 51 `/ai-dlc` sessions carrying a compaction summary: 0
+denied after the summary, because the transcript already carried the Read. The population is
+the fresh resume, not the compaction the protocol is named for.
+
+**The fix.** The protocol now opens by stating its scope — a compaction inside a session that
+has already routed, not the resume procedure — and sends an un-routed transcript to
+`{project-root}/.claude/skills/ai-dlc/steps/route.md` before any pipeline action, naming the
+hook that denies until it has. `validate-reattach-budget.sh` gained an arm requiring the
+router's installed path inside the section, outside a single-line HTML comment: it fails the
+pre-fix `SKILL.md` and passes the fixed one. `postcompact-rulebook-recovery` carries two new
+mutants — the path stripped, and the path present only inside an HTML comment — each failing on
+that arm and no other. The recover hook's injected block is unchanged: it fires only on a
+compaction, where the router Read is already in the transcript.
+
+**Receipt.** `BL-157` drives the shipping validator against the shipping `SKILL.md` and against
+a copy with the path removed, reading exit codes only; it closes when the real file passes and
+the copy fails, and reads STILL-LIVE under the pre-fix validator, the pre-fix `SKILL.md`, or
+both. Its stated limit: a sentence naming the path while telling the lead NOT to read it scores
+as fixed. The consumer's own receipt keys on the section heading, which the fix keeps, so it
+reads STILL-LIVE through this release and should be re-anchored on the next pull.
+
 ## [0.496.0] - 2026-09-04
 
 ### Check 2z of the acknowledge hook denied a dispatched teammate for a router read only the lead could make

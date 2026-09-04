@@ -25,6 +25,18 @@ in a single conversation.
 
 ## POST-COMPACT RECOVERY PROTOCOL
 
+**This protocol governs a COMPACTION inside a session that has already
+routed. It is not the resume procedure.** A session whose input is
+`/ai-dlc resume` -- or any other `/ai-dlc` invocation -- has not
+compacted: INITIALIZATION applies to it unconditionally, and
+`steps/route.md` Step 0 is where `resume` is dispatched, after Step 0a's
+snapshot integrity checks. If this transcript has not yet read the
+router, **READ AND FOLLOW**
+`{project-root}/.claude/skills/ai-dlc/steps/route.md` before any
+pipeline action; `ai-dlc-acknowledge.sh` denies every write until it
+has. Following this section instead is how a resumed lead skips the
+router and Step 0a and is denied on its first write.
+
 The `ai-dlc-recover.sh` hook re-injects the snapshot automatically on
 every compaction, as a block headed "AI/DLC POST-COMPACT RECOVERY".
 When that block is present, follow it -- it is authoritative and this
