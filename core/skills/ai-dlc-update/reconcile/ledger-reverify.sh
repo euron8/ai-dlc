@@ -1533,6 +1533,7 @@ awk -v DASH=' — ' "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE_AWK}"'
     if (shape != "") {
       flush()
       if (label != "" && idshape(label)) { prev_id = label; prev_id_hadv = hasv; prev_id_closed = hasclose }
+      fenced_in = label
       l = $0
       if (shape == "bullet") { sub(/^- \*\*/, "", l); sub(/\*\*.*/, "", l) }
       else                   { sub(/^#+[ \t]*/, "", l) }
@@ -1540,6 +1541,13 @@ awk -v DASH=' — ' "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE_AWK}"'
       sub(/[[:space:]]+$/, "", l)
       gsub(/`/, "", l)
       label = l; hasv = 0; hasclose = 0; is_bullet = (shape == "bullet")
+      # THE FENCE RESET, REPORTED. lib.sh opens an entry on an id-keyed line even inside a
+      # fence -- hiding an id is the worse failure -- and records the NR it did that at. A
+      # non-id fenced line (the PC-S308 shape) is simply not a boundary any more and needs no
+      # row; this one truncates the entry above it exactly as an annotation does, so it is
+      # reported under the same status with its own signal.
+      if (__lef_reset == NR)
+        printf "%s\t%s\t%s\t%s\n", label, "none", (fenced_in == "" ? "(no entry above)" : fenced_in), "fence"
       next
     }
     if ($0 ~ /^[ \t]*(<br[ \t]*\/?[ \t]*>)?[ \t]*[-*]?[ \t]*`?verify:/) hasv = 1
@@ -1556,6 +1564,16 @@ awk -v DASH=' — ' "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE_AWK}"'
       sw_harm="and it CAPTURED that entry's verify: receipt, so the entry now emits NO row under its own id — which reads exactly like an entry with nothing to report"
     else
       sw_harm="so everything below it is attributed to this annotation rather than to that entry"
+    fi
+    if [ "${sw_sig:-colon}" = fence ]; then
+      # THE FENCED ID-KEYED LINE. Not an annotation: an entry-shaped line carrying an id sits
+      # INSIDE a fenced code block opened in the entry above it. lib.sh ignores a fenced line
+      # whose label is not an id, and opens an entry on one that is -- because the fence is
+      # either unterminated or quoting an entry heading, and in both cases silently hiding an
+      # id-keyed entry is the worse failure. So the entry above is truncated here, and this row
+      # says so rather than leaving a parse the operator cannot see.
+      emit ENTRY-SWALLOWED "$sw_label" "this id-keyed entry line sits INSIDE a fenced code block that the entry above it (${sw_prev}) opened and did not close before it. Either that fence is unterminated, or this line is a quotation of an entry heading. The boundary rule opened a new entry here anyway, because hiding an id-keyed entry is the worse failure, so the entry above is truncated at this line and everything after it — including any verify: receipt — is attributed to ${sw_label}. Close the fence, or indent the quoted line so it does not start at column 0, then re-run and confirm both entries report under their own ids."
+      continue
     fi
     if [ "${sw_sig:-colon}" = colon ]; then
       sw_why="its bold span ends in a colon and it is not an id"

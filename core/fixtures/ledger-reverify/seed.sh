@@ -611,6 +611,90 @@ non-u character, and a backslash-u with only THREE hex digits. An arm keyed on a
 on the token u2026, or on backslash-u without counting the digits, reports this entry and is wrong.
 
 verify: theirs_lacks core/skills/ai-dlc/SKILL.md "NEARMISS-u2026-and-\x-and-\u202-END"
+
+---
+
+## PC-FIXTURE-FENCED-NON-ID-HEADING — a derived block whose recorded output carries `## <ts> -- EVENT` lines
+
+THE SUBJECT OF PC-S308-LEDGER-REVERIFY-ENTRY-BOUNDARY-IGNORES-FENCED-HEADINGS. The consumer's
+`pipeline-continuation-log.md` is a file of `## <timestamp> -- <event>` headings, so a derived
+block that greps it records heading-shaped lines at column 0. A fence-blind boundary rule opened
+a new entry on the first of them, labelled it with the timestamp, and attributed this entry's
+receipt to that label — this entry then emitted no row under its own id, and the receipt was
+reported under a label nobody could find.
+
+```derived
+$ grep '^## ' pipeline-continuation-log.md | head -2
+## 2000-01-01T00:00:00Z -- FENCED-TS-EVENT-A
+## 2000-01-01T00:00:01Z -- FENCED-TS-EVENT-B
+```
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-INLINE-SPAN-LINE — a line that OPENS with an inline code span is not a fence
+```derived``` is an inline span here, not a fence opener: its info string carries a backtick, which
+CommonMark forbids. The reference consumer's live ledger carries exactly one such line, and a
+naive "three backticks open a fence" rule read it as an opener, inverted parity for the rest of
+the file, and hid six live ids. The prose-titled entry below is what that rule hides.
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **`inline-span-control.sh` → a prose-titled entry right after an inline-span line**
+
+  NOT id-keyed, deliberately: an id-keyed line survives any fence state by the reset rule, so
+  only a prose-titled entry can show whether the inline-span line above opened a fence.
+
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-QUOTING-ENTRY — an entry whose fence QUOTES an id-keyed entry heading
+
+An id-keyed line inside a fence is the case the boundary rule cannot resolve: the fence is
+either unterminated or is quoting a heading, and hiding an id-keyed entry is the worse
+failure. So the rule opens an entry there anyway and reverify REPORTS it, under
+ENTRY-SWALLOWED with the fence signal, naming this entry as the one truncated.
+
+```
+## PC-FIXTURE-QUOTED-INSIDE-FENCE — quoted, and it still opens an entry
+```
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-AFTER-QUOTE — the entry after a quoted heading, and it must NOT be reported
+
+THE STRAY-CLOSER CONTROL. The closing fence of the quotation above sits after the reset, so a
+rule that read it as a new OPENER would place this whole entry inside a fence and report it as
+fenced too — one quotation, two accusations. It must report STILL-LIVE and carry no
+ENTRY-SWALLOWED row.
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-UNTERMINATED-FENCE — a fence that never closes
+
+The reference consumer's archive carries ten of these, left by rotations that split entries
+mid-fence. Everything after this opener is inside the fence until an id-keyed boundary resets it.
+LAST IN THIS LEDGER, deliberately: after the reset below the tracker is waiting for a stray
+closer, and any later fence would be read through that state.
+
+```
+this fence is never closed
+## 2000-01-01T00:00:02Z -- FENCED-TS-EVENT-C
+
+## PC-FIXTURE-AFTER-UNTERMINATED — id-keyed, so it opens an entry through the unterminated fence
+
+A rule that let an unterminated fence swallow id-keyed lines would hide this entry and every
+one after it — the 47-entry desync `scripts/backlog-rotate.sh` measured on the reference
+consumer. It must report STILL-LIVE, and the reset is reported as ENTRY-SWALLOWED naming the
+entry above.
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
 LEDGER
 
 printf '%s %s %s %s\n' "$DIST" "$BASE" "$CONS" "$THEIRS"

@@ -15,6 +15,53 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.499.0] - 2026-09-04
+
+### The ledger's entry-boundary rule opened an entry on a heading inside a code fence
+
+Closes `PC-S308-LEDGER-REVERIFY-ENTRY-BOUNDARY-IGNORES-FENCED-HEADINGS` (`BL-160`), filed by the
+reference consumer on 2026-09-04 during its 0.492.0 → 0.497.0 pull. Batch 50 of the ledger
+drain, chosen by the operator over two verified siblings on consequence: the instrument this
+whole program reads was misfiling receipts.
+
+**The defect.** `ledger_entry_shape()` in `reconcile/lib.sh` called every `^#{2,6} ` or `^- **`
+line an entry boundary and tracked no fence state. A `derived` block whose recorded output
+carried `## <ts> -- ROUTE_DENIED` lines therefore split the entry that carried it: the receipt
+was reported under a timestamp label and the real id emitted no row. Measured on the consumer
+before building, and the damage the filing only predicted had already happened: its 0.497.0
+pull's rotation split `PC-S308-AI-DLC-ACKNOWLEDGE-ROUTE-DENIED-SUBAGENT-CANNOT-CLEAR` on those
+lines, leaving two orphan unfenced timestamp fragments in the live ledger and a rebuilt fence
+holding one of the three lines in the archive. Every reader of the rule is shared through
+`lib.sh` — reverify, rotate, the shadowed-validator warning, and the distribution's backlog
+rotator, reverifier and size ceiling — so one repair reaches all of them, and each shipping
+fixture gained an arm that its own fence-blind mutant kills.
+
+**The fix, and why the obvious one was rejected by measurement.** A plain fence toggle hides six
+live ids on the consumer (one live line opens with an inline code span, which is not a fence)
+and thirty-four archived ones (fences left unterminated by earlier splits). The rule is now
+CommonMark's opener and closer grammar, bounded by the id rule: inside a fence an entry-shaped
+line whose label is not id-keyed is ignored, and one that is id-keyed still opens an entry and
+resets the fence, so no fence can hide an id. That reset is reported by `ledger-reverify.sh` as
+an `ENTRY-SWALLOWED` row with the `fence` signal, and the closer of a quoted heading's fence is
+consumed as a stray closer so the entry after it is not accused too. Driven over the consumer's
+live ledger, its archive and both distribution backlog files: no id-keyed boundary changes,
+exactly one non-id line stops being a boundary, and two id-keyed headings inside earlier-split
+fences are kept and flagged. The state memoises on `NR`, because one reader asks twice per line.
+
+**Fixtures.** `ledger-reverify` seeds the filed shape, an inline-span line followed by a
+prose-titled entry, a quoted id-keyed heading with the entry after it, and an unterminated fence
+with the id-keyed entry after it; four mutants remove one clause each. `ledger-rotate` seeds a
+closed entry whose fence records a heading and asserts whole movement with balanced fences on
+both sides; its fence-blind mutant re-derives the consumer's residue. `shadowed-local-validators`
+seeds the same shape with a `.sh` above the fence and a close below it. `backlog-rotate-fence-guard`'s
+widening mutant became layered, with a single-layer twin that must stay quiet. Two committed
+mutants that anchored on the old two-line function are re-anchored on the new body.
+
+**Not fixed here, stated so the next reader does not look for it.** The consumer's two orphan
+fragments at live-ledger lines 3222–3225 are bare headings now, outside any fence; the fix
+cannot re-attach them and a consumer hand has to delete them. The close predicates in rotate and
+reverify remain fence-blind by design, for the reason `ledger-rotate.sh` records.
+
 ## [0.498.0] - 2026-09-04
 
 ### The handoff guard could not arm on a resumed session and asserted three of five steps

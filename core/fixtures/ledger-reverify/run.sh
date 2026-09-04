@@ -1668,6 +1668,110 @@ else
     printf '  FAIL  %-22s the escape is back on the emitting line and the arm reported ZERO offenders over %s rows — the arm above cannot fire and its clean run means nothing\n' "mutation-uescape" "$mu_rows"
   fi
 fi
+
+# --- FENCED ENTRY-SHAPED LINES — PC-S308-LEDGER-REVERIFY-ENTRY-BOUNDARY-IGNORES-FENCED-HEADINGS -
+# THE DEFECT. `ledger_entry_shape()` opened an entry on every heading-shaped line and tracked no
+# fence state, so a `derived` block whose recorded output carried `## <ts> -- EVENT` lines split
+# the entry that carried it: the receipt was reported under a timestamp label and the real id
+# emitted no row. Measured on the reference consumer, and its 0.497.0 pull then ROTATED such an
+# entry in pieces, leaving two orphan fragments in its live ledger.
+#
+# THE RULE, AND WHY THE ARMS BELOW COME IN FOUR SHAPES. lib.sh now tracks fences by the
+# CommonMark opener/closer grammar and ignores a fenced entry-shaped line whose label is NOT
+# id-keyed. An id-keyed one still opens an entry and RESETS the fence -- an unterminated fence
+# can hide nothing that carries an id -- and the reset is reported here as ENTRY-SWALLOWED with
+# the `fence` signal. The closer of a quoted heading's fence is then consumed as a stray closer
+# rather than read as a new opener. Each of those four clauses has its own seed, its own arm and
+# its own mutant, because a battery that seeds only the filed shape proves the rule accepts the
+# filed shape and nothing else.
+row_is "PC-FIXTURE-FENCED-NON-ID-HEADING" STILL-LIVE \
+  "the entry reports under its OWN id — the fenced timestamp headings did not open an entry"
+row_is "FENCED-TS-EVENT" ABSENT \
+  "no row is labelled with a fenced timestamp heading (any of the three seeded)"
+row_is "PC-FIXTURE-INLINE-SPAN-LINE" STILL-LIVE \
+  "an entry whose body opens a line with an inline code span still reports"
+row_is "inline-span-control.sh" STILL-LIVE \
+  "the PROSE-titled entry after that inline-span line still reports — the span did not open a fence"
+row_has "PC-FIXTURE-QUOTED-INSIDE-FENCE" ENTRY-SWALLOWED \
+  "an id-keyed heading QUOTED inside a fence is REPORTED — it still opens an entry, and the operator is told"
+ASSERTIONS=$((ASSERTIONS + 1))
+if printf '%s\n' "$OUT" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /PC-FIXTURE-QUOTED-INSIDE-FENCE/ && $3 ~ /PC-FIXTURE-QUOTING-ENTRY/ && $3 ~ /fenced code block/{f=1} END{exit !f}'; then
+  printf '  ok    %-22s the fence row names the entry it truncated and says the line sits inside a fence\n' "fence-names-entry"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the fence row does not name PC-FIXTURE-QUOTING-ENTRY as the truncated entry, or does not say the line is fenced\n' "fence-names-entry"
+  printf '%s\n' "$OUT" | awk -F'\t' '$1=="ENTRY-SWALLOWED"' | sed 's/^/          | /'
+fi
+row_lacks "PC-FIXTURE-AFTER-QUOTE" ENTRY-SWALLOWED \
+  "the entry AFTER a quoted heading is NOT reported — the quotation's closing fence was consumed as a stray closer, not read as a new opener"
+row_is "PC-FIXTURE-AFTER-QUOTE" STILL-LIVE \
+  "and it is classified normally"
+row_is "PC-FIXTURE-AFTER-UNTERMINATED" STILL-LIVE \
+  "an id-keyed entry after an UNTERMINATED fence still reports — the fence cannot hide it"
+row_has "PC-FIXTURE-AFTER-UNTERMINATED" ENTRY-SWALLOWED \
+  "and the reset through the unterminated fence is REPORTED, naming the entry whose fence never closed"
+
+# FOUR MUTANTS, ONE CLAUSE EACH, ALL ON lib.sh COPIES. Every mutant copies the reconcile
+# directory and rewrites ONE clause of the shape rule; the `cmp -s` guard refuses a sed that
+# matched nothing, and each kill requires a control row to SURVIVE so a mutant that broke the
+# parser outright cannot score as a clean kill.
+fence_mutant() { # <name> <sed-expr>  -> dir on stdout, empty if the sed matched nothing
+  local n="$1" expr="$2" d
+  d="$(dirname "$DIST")/mut-$n"; rm -rf "$d"; mkdir -p "$d"
+  cp "$(dirname "$CLOSER")"/*.sh "$d/" 2>/dev/null
+  sed "$expr" "$(dirname "$CLOSER")/lib.sh" > "$d/lib.sh"
+  if cmp -s "$(dirname "$CLOSER")/lib.sh" "$d/lib.sh"; then return 1; fi
+  printf '%s' "$d"
+}
+fence_kill() { # <name> <dir-or-empty> <kill-awk> <control-awk> <kill-msg> <ctl-msg>
+  local n="$1" d="$2" kill="$3" ctl="$4" kmsg="$5" cmsg="$6" out
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ -z "$d" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutation matched nothing in lib.sh, so the arm it targets is unproven\n' "$n"
+    return
+  fi
+  out="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+  if ! printf '%s\n' "$out" | awk -F'\t' "$ctl"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the control row is gone too (%s) — the mutant broke the parser rather than the clause, so its verdict is wreckage\n' "$n" "$cmsg"
+  elif printf '%s\n' "$out" | awk -F'\t' "$kill"; then
+    printf '  ok    %-22s %s\n' "$n" "$kmsg"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the clause was removed and the arm it guards did NOT change verdict — that arm cannot fire\n' "$n"
+    printf '%s\n' "$out" | awk -F'\t' '$2 ~ /FENCED|QUOTE|UNTERMINATED|inline-span/' | sed 's/^/          | /'
+  fi
+}
+# m-fence-blind: the in-fence branch removed. The fenced timestamp heading opens an entry again
+# and captures the receipt: a row appears under a FENCED-TS-EVENT label.
+fence_kill mutation-fence-blind "$(fence_mutant fence-blind 's@if (__lef_in && sh != "") {@if (0) {@')" \
+  '$2 ~ /FENCED-TS-EVENT/ {f=1} END{exit !f}' \
+  '$2 ~ /PC-FIXTURE-COLON-CONTROL/ && $1=="STILL-LIVE" {f=1} END{exit !f}' \
+  "fence-blind, a receipt is reported under a fenced timestamp label again — fence tracking is load-bearing" \
+  "PC-FIXTURE-COLON-CONTROL STILL-LIVE"
+# m-naive-opener: the backtick-in-info-string clause removed, so the inline-span line opens a
+# fence. The prose-titled entry after it goes silent while the id-keyed one survives by reset.
+fence_kill mutation-naive-opener "$(fence_mutant naive-opener 's@if (substr(t, 1, 1) == "~" || index(rest, "`") == 0) {@if (1) {@')" \
+  '$2 ~ /inline-span-control/ {f=1} END{exit f}' \
+  '$2 ~ /PC-FIXTURE-INLINE-SPAN-LINE/ && $1=="STILL-LIVE" {f=1} END{exit !f}' \
+  "with three bare backticks treated as an opener, the prose-titled entry after the inline-span line vanishes — the CommonMark info-string clause is load-bearing" \
+  "PC-FIXTURE-INLINE-SPAN-LINE STILL-LIVE"
+# m-no-stray: the stray-closer rule removed. The quotation's closing fence becomes an opener and
+# the NEXT entry is falsely reported as fenced.
+fence_kill mutation-no-stray "$(fence_mutant no-stray 's@if (__lef_stray && rest ~ @if (0 \&\& rest ~ @')" \
+  '$1=="ENTRY-SWALLOWED" && $2 ~ /PC-FIXTURE-AFTER-QUOTE/ {f=1} END{exit !f}' \
+  '$1=="ENTRY-SWALLOWED" && $2 ~ /PC-FIXTURE-QUOTED-INSIDE-FENCE/ {f=1} END{exit !f}' \
+  "without the stray-closer rule the entry AFTER a quoted heading is accused of being fenced too — one quotation, two rows" \
+  "the QUOTED-INSIDE-FENCE fence row"
+# m-no-reset: the id-keyed escape removed, so an unterminated fence swallows id-keyed lines. The
+# entry after the unterminated fence vanishes; the entry after the properly closed quotation
+# survives, which is what makes this a clean mutation of the reset alone.
+fence_kill mutation-no-reset "$(fence_mutant no-reset 's@if (ledger_entry_id(line) != "") {@if (0) {@')" \
+  '$2 ~ /PC-FIXTURE-AFTER-UNTERMINATED/ {f=1} END{exit f}' \
+  '$2 ~ /PC-FIXTURE-AFTER-QUOTE/ && $1=="STILL-LIVE" {f=1} END{exit !f}' \
+  "without the id-keyed reset an unterminated fence hides the id-keyed entry after it — the 47-entry desync, reproduced" \
+  "PC-FIXTURE-AFTER-QUOTE STILL-LIVE"
 echo
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."

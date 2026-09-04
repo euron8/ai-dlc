@@ -64,9 +64,12 @@ ORIG="$WORK/ledger.orig.md"
 cp "$LEDGER" "$ORIG"
 
 # --- Assertion 0: SANITY — the seed really holds both kinds ---------------------------
-if [ "$before_entries" -eq 9 ] && grep -q 'PC-CLOSED-A' "$LEDGER" && grep -q 'PC-OPEN-DECOY' "$LEDGER" \
-   && grep -q 'PC-S900-ALPHA' "$LEDGER" && grep -q 'PC-S900-BETA' "$LEDGER" && grep -q 'PC-S900-GAMMA' "$LEDGER"; then
-  ok "before: 9 entries — closed + open + a decoy that only MENTIONS the phrase + one closed-but-unarchivable + a PC-S900 prefix trio"
+# 11 boundary-SHAPED lines by the fence-blind grep above: 10 entries plus the heading-shaped
+# line recorded inside PC-CLOSED-FENCED's fence, which is deliberately not an entry.
+if [ "$before_entries" -eq 11 ] && grep -q 'PC-CLOSED-A' "$LEDGER" && grep -q 'PC-OPEN-DECOY' "$LEDGER" \
+   && grep -q 'PC-S900-ALPHA' "$LEDGER" && grep -q 'PC-S900-BETA' "$LEDGER" && grep -q 'PC-S900-GAMMA' "$LEDGER" \
+   && grep -q 'PC-CLOSED-FENCED' "$LEDGER"; then
+  ok "before: 10 entries — closed + open + a decoy that only MENTIONS the phrase + one closed-but-unarchivable + a PC-S900 prefix trio + a closed entry whose fence records a heading-shaped line"
 else
   bad "FIXTURE BROKEN — seed shape wrong ($before_entries entries)"; echo
   echo "ledger-rotate: FIXTURE BROKEN" >&2; exit 2
@@ -112,6 +115,27 @@ fi
 grep -q 'Preamble prose' "$LEDGER" \
   && ok "preamble (belongs to no entry) stays in the live file" \
   || bad "preamble was swept into the archive"
+
+# --- Assertion 2b: A CLOSED ENTRY WHOSE FENCE RECORDS A HEADING-SHAPED LINE ROTATES WHOLE ----
+# PC-S308-LEDGER-REVERIFY-ENTRY-BOUNDARY-IGNORES-FENCED-HEADINGS. The seed's PC-CLOSED-FENCED
+# entry carries a `derived` fence whose recorded output is a `## <ts> -- EVENT` line. Under a
+# fence-blind boundary rule that line opened an entry, the head stayed live with an unterminated
+# fence and the tail archived under a timestamp label -- the reference consumer's live ledger
+# holds exactly that residue from its 0.497.0 pull. The property is whole-entry movement AND
+# fence balance on both sides; the mutant at the foot of this file re-derives the split.
+fences() { grep -cE '^[[:space:]]*```' "$1" 2>/dev/null || echo 0; }
+if grep -q 'PC-CLOSED-FENCED' "$ARCH" 2>/dev/null && grep -q 'FENCED-EVENT' "$ARCH" 2>/dev/null \
+   && ! grep -q 'PC-CLOSED-FENCED' "$LEDGER" && ! grep -q 'FENCED-EVENT' "$LEDGER"; then
+  ok "a closed entry whose fence records a heading-shaped line moved WHOLE: heading and fenced line both in the archive, neither left live"
+else
+  bad "the fenced closed entry was SPLIT: archive has heading=$(grep -c 'PC-CLOSED-FENCED' "$ARCH" 2>/dev/null) fenced-line=$(grep -c 'FENCED-EVENT' "$ARCH" 2>/dev/null); live has heading=$(grep -c 'PC-CLOSED-FENCED' "$LEDGER") fenced-line=$(grep -c 'FENCED-EVENT' "$LEDGER")"
+fi
+fl="$(fences "$LEDGER")"; fa="$(fences "$ARCH")"
+if [ $((fl % 2)) -eq 0 ] && [ $((fa % 2)) -eq 0 ] && [ "$fa" -ge 2 ]; then
+  ok "  fence delimiters are balanced on both sides after the move (live=$fl archive=$fa, archive holds the moved fence)"
+else
+  bad "  fence delimiters unbalanced after the move (live=$fl archive=$fa) — a split left an unterminated fence on one side"
+fi
 
 # --- Assertion 3: NO LINE LOST ---------------------------------------------------------
 after_total=$(( $(wc -l < "$LEDGER" | tr -d ' ') + $(grep -c '' "$ARCH" 2>/dev/null || echo 0) ))
@@ -978,7 +1002,9 @@ cat > "$BM/led.md" <<'BMLED'
 BMLED
 
 cp "$(dirname "$ROT")"/*.sh "$BM"/ 2>/dev/null
-sed 's@if (l ~ /\^- \\\*\\\*/) *return "bullet"@if (0)      return "bullet"@' \
+# RE-ANCHORED when the shape rule became fence-aware: the bullet branch is now an assignment
+# (`if (…) sh = "bullet"`) rather than a bare `return`. Same location, same observable.
+sed 's@if (l ~ /\^- \\\*\\\*/) *sh = "bullet"@if (0) sh = "bullet"@' \
   "$(dirname "$ROT")/lib.sh" > "$BM/lib.sh"
 
 bm_archived() { # <dir> <id> -> 0 iff that id reaches the archive
@@ -1002,6 +1028,57 @@ elif ! bm_archived "$BM" PC-BM-CLOSED-HEADING; then
   bad "  MUTATION: the closed HEADING entry ALSO stopped being archived, so the mutant broke the parser outright and the kill is not attributable to the bullet arm"
 else
   ok "  MUTATION: deleting the bullet arm strands the closed BULLET entry in the live file while the HEADING entry still archives — one assertion, one shape"
+fi
+
+# --- MUTATION: MAKE THE BOUNDARY RULE FENCE-BLIND AGAIN ---------------------------------------
+# THE SUBJECT OF PC-S308-LEDGER-REVERIFY-ENTRY-BOUNDARY-IGNORES-FENCED-HEADINGS, rotate side.
+# `ledger_entry_shape()` in lib.sh ignores a non-id entry-shaped line inside a fence. Blinding
+# it to the fence -- `if (0)` on the in-fence branch -- opens an entry on the fenced
+# `## <ts> -- EVENT` line, so the closed entry's HEAD (heading + opening fence, no annotation
+# yet) stays live with an unterminated fence while its TAIL (closer, annotation) archives under
+# the timestamp label. That is the residue the reference consumer's live ledger carries today.
+# The open entry after it is the control: it must stay live under both copies, or the mutant
+# broke the parser rather than the fence.
+FM="$WORK/fence-blind"; rm -rf "$FM"; mkdir -p "$FM"
+cat > "$FM/led.md" <<'FMLED'
+# Push-candidate ledger
+
+## PC-FM-CLOSED-FENCED — closed, and its fence records a heading-shaped output line
+
+```derived
+$ grep '^## ' pipeline-continuation-log.md | head -1
+## 2000-01-01T00:00:00Z -- FM-EVENT
+```
+
+<br>**ADOPTED UPSTREAM (v0.101.0, verified 2026-01-01).** Upstream took it.
+
+## PC-FM-OPEN — open, the control that must stay live under both copies
+
+verify: theirs_has core/scripts/thing.sh "MARKER_A"
+FMLED
+
+cp "$(dirname "$ROT")"/*.sh "$FM"/ 2>/dev/null
+sed 's@if (__lef_in && sh != "") {@if (0) {@' "$(dirname "$ROT")/lib.sh" > "$FM/lib.sh"
+FMC="$WORK/fence-blind-control"; rm -rf "$FMC"; mkdir -p "$FMC"
+cp "$(dirname "$ROT")"/*.sh "$FMC"/ 2>/dev/null
+
+fm_run() { # <dir> -> rotates a fresh copy of the seed with that dir's rotator
+  local d="$1"
+  rm -f "$d/arc.md"; cp "$FM/led.md" "$d/run.md"
+  bash "$d/ledger-rotate.sh" "$d/run.md" --archive "$d/arc.md" --apply >/dev/null 2>&1
+}
+fm_run "$FMC"; fm_run "$FM"
+
+if cmp -s "$(dirname "$ROT")/lib.sh" "$FM/lib.sh"; then
+  bad "FIXTURE BROKEN — the fence-blind mutation matched nothing in lib.sh, so the fenced-entry arm above is unproven"
+elif ! grep -q 'PC-FM-CLOSED-FENCED' "$FMC/arc.md" 2>/dev/null || grep -q 'FM-EVENT' "$FMC/run.md" || ! grep -q 'PC-FM-OPEN' "$FMC/run.md"; then
+  bad "FIXTURE BROKEN — the UNMUTATED copy did not rotate the fenced closed entry whole (or lost the open control), so the mutant's verdict is not attributable"
+elif ! grep -q 'PC-FM-CLOSED-FENCED' "$FM/run.md"; then
+  bad "  MUTATION: with the boundary rule fence-blind the closed entry STILL rotated whole — the fenced-entry arm above is vacuous"
+elif ! grep -q 'PC-FM-OPEN' "$FM/run.md"; then
+  bad "  MUTATION: the open control was ALSO rotated out, so the mutant broke the parser outright and the kill is not attributable to fence tracking"
+else
+  ok "  MUTATION: fence-blind, the closed entry's head is stranded live with an unterminated fence while its tail archives under the timestamp label, and the open control survives — the fence-aware boundary is load-bearing"
 fi
 
 # --- MUTATION: DELETE THE ARCHIVE ARM OF prefix_entry_count() -----------------------------

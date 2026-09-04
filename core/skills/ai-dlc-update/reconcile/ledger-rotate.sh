@@ -336,6 +336,9 @@ awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" -v st
   # seeded ledger: fenced-with-the-awk-regex does NOT match (the escaped form is not the
   # literal), while INLINE BACKTICKS and BARE PROSE both do. The live case is inline. A
   # fence-skipping fix would have shipped green and left the real defect untouched.
+  # (That is about the CLOSE predicate. The BOUNDARY rule in lib.sh IS fence-aware now, for
+  # PC-S308-LEDGER-REVERIFY-ENTRY-BOUNDARY-IGNORES-FENCED-HEADINGS: a fenced `## <ts>` line no
+  # longer opens an entry, so a closed entry carrying one rotates whole instead of in pieces.)
   #
   # DEFECT 2, FOUND WHILE MEASURING THE FIRST AND REPORTED BY NOBODY: \(v matches (verified.
   # So an entry annotated  **ADOPTED UPSTREAM (verified 2026-07-21).**  -- a close carrying NO

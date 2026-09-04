@@ -80,6 +80,25 @@ verify: theirs_has core/scripts/thing.sh "MARKER_A"
 
 ---
 
+## PC-CLOSED-FENCED — closed, and its derived block records a heading-shaped output line
+
+THE SUBJECT OF PC-S308-LEDGER-REVERIFY-ENTRY-BOUNDARY-IGNORES-FENCED-HEADINGS on the rotate
+side. The fenced `## <ts> -- EVENT` line below is recorded output, not an entry. A fence-blind
+boundary rule opened an entry there, so the head of this entry stayed live with an
+unterminated fence while the tail — annotation, receipt, closing fence — archived under a
+timestamp label. The reference consumer's live ledger carries exactly that residue today.
+
+```derived
+$ grep '^## ' pipeline-continuation-log.md | head -1
+## 2000-01-01T00:00:00Z -- FENCED-EVENT
+```
+
+<br>**ADOPTED UPSTREAM (v0.95.0, verified 2026-01-01).** Upstream took it.
+
+verify: theirs_has core/scripts/thing.sh "MARKER_A"
+
+---
+
 - **PC-OPEN-BULLET** — the bullet entry shape is also supported
 
   verify: theirs_has core/scripts/thing.sh "MARKER_B"

@@ -83,9 +83,14 @@ LIB="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
 # takes the entry-start count from 142 to 95 -- it silently drops 47 real entries. The cause is
 # that the corpus carries 111 fence delimiters, an ODD number, because exactly ONE entry holds an
 # unterminated fence; the toggle desynchronises there and never recovers. A fix that blinds the
-# closer to a third of a ledger while reading as a bug fix is not available here, so the parser
-# repair is scoped as its own remediation with its own fixture, and this file refuses the input it
-# would corrupt instead of guessing at it.
+# closer to a third of a ledger while reading as a bug fix is not available here, so this file
+# refuses the input it would corrupt instead of guessing at it.
+#
+# THE PARSER REPAIR HAS SINCE LANDED, IN THE BOUNDED FORM. `ledger_entry_shape()` in lib.sh now
+# ignores a fenced entry-shaped line whose label is NOT id-keyed, and still opens an entry on
+# one that IS -- so the desync above cannot recur, and neither can a hidden `## BL-…`. That is
+# why this guard keys on the BL- label: the shape lib.sh ignores is exactly the one this guard
+# never split on, and the shape it still opens is exactly the one this guard still refuses.
 #
 # REFUSING IS THE CORRECT FAILURE. Everywhere else this repo prefers PENDING over FAIL, because a
 # check that wedges live work gets switched off. Not here: the alternative to stopping is

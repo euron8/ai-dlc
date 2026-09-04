@@ -81,11 +81,19 @@ Prose about core/scripts/validate-bold.sh.
 ## PC-OPEN-MENTION — validate-mention.sh: divergence
 Prose about core/scripts/validate-mention.sh — still diverging, nothing upstream yet.
 Once the core fix lands, annotate it ADOPTED UPSTREAM and retire the fork.
+
+## PC-CLOSED-FENCED — validate-fenced.sh: divergence, with a derived block recording a heading-shaped line
+Prose about core/scripts/validate-fenced.sh, named ABOVE the fence.
+```derived
+$ grep '^## ' pipeline-continuation-log.md | head -1
+## 2000-01-01T00:00:00Z -- FENCED-EVENT
+```
+ADOPTED UPSTREAM (v0.130.0)
 LED
 
 # Forks the consumer carries.
 for f in validate-foo.sh validate-bar.sh some-tool.sh validate-orphan.sh \
-         validate-bold.sh validate-mention.sh; do : > "$WORK/local/$f"; done
+         validate-bold.sh validate-mention.sh validate-fenced.sh; do : > "$WORK/local/$f"; done
 # A fork filed under a SUBDIRECTORY of the home. The home's internal layout is the
 # consumer's — core declares the directory and claims nothing about its shape — so this is
 # the ordinary way a consumer files a fork once the home holds more than a few scripts.
@@ -93,7 +101,7 @@ mkdir -p "$WORK/local/lib"
 : > "$WORK/local/lib/validate-sub.sh"
 # Core validators (what a fork must shadow to count).
 for f in validate-foo.sh validate-bar.sh validate-nofork.sh validate-orphan.sh \
-         validate-sub.sh validate-bold.sh validate-mention.sh; do : > "$WORK/core/$f"; done
+         validate-sub.sh validate-bold.sh validate-mention.sh validate-fenced.sh; do : > "$WORK/core/$f"; done
 
 run_warn_2() { # run_warn_2 <script> <stderr-file>
   bash "$1" --root "$WORK" --ledger "$WORK/ledger.md" \
@@ -169,6 +177,15 @@ has "validate-bold.sh" && ok "a line-leading **ADOPTED UPSTREAM (v…) annotatio
   || bad "validate-bold.sh not flagged — the lifted close grammar does not recognise the annotation form the operator is told to write, so no real close would ever be seen"
 has "validate-mention.sh" && bad "validate-mention.sh flagged — an OPEN entry whose body merely MENTIONS 'annotate it ADOPTED UPSTREAM once …' scored as closed, and the signal is advising the retirement of a fork that is still doing work" \
   || ok "a mid-sentence MENTION of ADOPTED UPSTREAM does not close an open entry -> not flagged (mention)"
+
+# A CLOSED entry whose fence records a heading-shaped line -> flagged. The entry-boundary rule
+# this script loads from lib.sh used to open a new entry on the fenced `## <ts> -- EVENT` line
+# (PC-S308-LEDGER-REVERIFY-ENTRY-BOUNDARY-IGNORES-FENCED-HEADINGS), so the `.sh` named above the
+# fence was flushed under an OPEN entry and the close annotation below the fence belonged to a
+# pseudo-entry naming nothing: a retired fork that was never reported. The mutant at the foot
+# of this file re-derives that silence.
+has "validate-fenced.sh" && ok "a closed entry whose fence records a heading-shaped line -> RETIRE-CANDIDATE (fenced): the fenced line did not split the entry" \
+  || bad "validate-fenced.sh not flagged — the fenced '## <ts> -- EVENT' line split the entry, so the .sh named above the fence was flushed as OPEN and the close below the fence closed a pseudo-entry naming nothing"
 
 # Never blocks.
 run_warn "$SCRIPT" >/dev/null 2>&1
@@ -266,6 +283,28 @@ else
     bad "MUTATION 3 — widening the close rule LOST the foo row; the mutant did more than widen and its verdict is entangled"
   else
     ok "MUTATION 3 — de-anchoring the close rule in ledger-reverify.sh makes the mid-sentence MENTION close its entry (the lift is a live read, and the anchor is what keeps a still-needed fork off the retire list)"
+  fi
+fi
+
+# MUTATION control 4: MAKE lib.sh's BOUNDARY RULE FENCE-BLIND IN THE SANDBOX. The fenced
+# `## <ts> -- EVENT` line then opens an entry again and `validate-fenced.sh` goes unreported,
+# while `foo` (no fence) stays flagged — one clause, one delta. This is the arm that binds this
+# reader to the shared rule: a subject that re-copied a fence-blind boundary inline would fail
+# the baseline arm above, and one that carried its own fence-aware copy would not move here.
+MUT4_DIR="$(new_sandbox mut-fence-blind)" || { echo "FIXTURE ERROR: cannot build the mut-fence-blind sandbox" >&2; exit 2; }
+MUT4="$MUT4_DIR/warn-shadowed-local-validators.sh"
+cp "$SCRIPT" "$MUT4"
+sed 's@if (__lef_in && sh != "") {@if (0) {@' "$SRC_DIR/lib.sh" > "$MUT4_DIR/lib.sh"
+if cmp -s "$SRC_DIR/lib.sh" "$MUT4_DIR/lib.sh"; then
+  bad "MUTATION 4 matched nothing — the in-fence branch of ledger_entry_shape() in lib.sh has moved; re-anchor this mutant"
+else
+  MOUT4="$(run_warn "$MUT4")"
+  if row "$MOUT4" "local/validate-fenced.sh"; then
+    bad "MUTATION 4 — validate-fenced.sh is STILL reported with the boundary rule fence-blind; the fenced-entry arm above proves nothing about fence tracking"
+  elif row "$MOUT4" "local/validate-foo.sh"; then
+    ok "MUTATION 4 — with the boundary rule fence-blind the fenced closed entry goes silent while foo stays flagged (the fence-aware boundary in lib.sh is load-bearing for this reader)"
+  else
+    bad "MUTATION 4 — blinding the fence silenced foo too; the mutant broke the parser and its verdict is entangled"
   fi
 fi
 

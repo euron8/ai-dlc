@@ -626,18 +626,45 @@ if [ -n "$M1" ]; then
   fi
 fi
 
-# M2 — the guard keyed on `ledger_entry_shape()` alone instead of the BL- label the split
-# actually keys on. Targets `near-miss`: this is the WIDENING mutant, and a widened guard still
-# refuses the offenders, so only the quiet direction can catch it.
+# M2 — LAYERED, AND BOTH LAYERS MUST GO. The guard keyed on `ledger_entry_shape()` alone
+# instead of the BL- label the split actually keys on. Targets `near-miss`: this is the
+# WIDENING mutant, and a widened guard still refuses the offenders, so only the quiet direction
+# can catch it. Since lib.sh's shape rule became fence-aware, a fenced `## Some prose heading`
+# is not entry-shaped to lib.sh either, so widening the guard ALONE no longer changes the
+# near-miss verdict: the property is carried by two layers now, and the mutant reverts both --
+# the guard widened AND lib.sh's in-fence branch removed. The single-layer twin below is the
+# other half of that proof.
 M2="$(mutate m2-shape-only -e 's/if (depth == 1 && backlog_entry_label(\$0) != "")/if (depth == 1 \&\& ledger_entry_shape($0) != "")/')"
 if [ -n "$M2" ]; then
+  M2_LIB="$(dirname "$M2")/../core/skills/ai-dlc-update/reconcile/lib.sh"
+  LC_ALL=C sed 's@if (__lef_in && sh != "") {@if (0) {@' "$LIB" > "$M2_LIB.new"
+  if cmp -s "$M2_LIB.new" "$LIB"; then
+    rm -f "$M2_LIB.new"
+    bad "mutant:m2-shape-only" "the lib.sh layer's sed matched nothing — the in-fence branch of ledger_entry_shape() has moved, so this mutant would revert one layer of two"
+  else
+    mv "$M2_LIB.new" "$M2_LIB"
+    cp "$NM/pristine.ledger" "$NM/backlog.md"
+    printf '# pre-existing archive\nSENTINEL-ARCHIVE-LINE\n' > "$NM/backlog.archive.md"
+    run_rt "$M2" "$NM" --apply
+    if [ "$LAST_RC" -ne 0 ] && has "$FENCE_SAYS" "$LAST_OUT"; then
+      killed m2-shape-only "near-miss would FAIL: guard widened to any heading AND lib.sh fence-blind, the FENCE arm refuses a fenced '## Some prose heading' (exit $LAST_RC)"
+    else
+      bad "mutant:m2-shape-only" "the guard widened to any heading with lib.sh fence-blind and near-miss still passed — it cannot discriminate (exit $LAST_RC)"
+    fi
+  fi
+fi
+# M2A — THE SINGLE-LAYER TWIN: guard widened, lib.sh intact. Must stay QUIET on near-miss,
+# which is what says the fence-aware shape rule in lib.sh now carries the property on its own.
+# A twin that fired here would mean the layered mutant's kill was earned by the guard alone.
+M2A="$(mutate m2a-shape-only-lib-intact -e 's/if (depth == 1 && backlog_entry_label(\$0) != "")/if (depth == 1 \&\& ledger_entry_shape($0) != "")/')"
+if [ -n "$M2A" ]; then
   cp "$NM/pristine.ledger" "$NM/backlog.md"
   printf '# pre-existing archive\nSENTINEL-ARCHIVE-LINE\n' > "$NM/backlog.archive.md"
-  run_rt "$M2" "$NM" --apply
-  if [ "$LAST_RC" -ne 0 ] && has "$FENCE_SAYS" "$LAST_OUT"; then
-    killed m2-shape-only "near-miss would FAIL: the FENCE arm refuses a fenced '## Some prose heading' (exit $LAST_RC)"
+  run_rt "$M2A" "$NM" --apply
+  if [ "$LAST_RC" -eq 0 ] && ! has "$FENCE_SAYS" "$LAST_OUT"; then
+    ok "mutant-twin:m2a" "guard widened with lib.sh intact stays QUIET on near-miss — lib.sh's fence-aware shape rule carries the property, so m2's kill needed both layers"
   else
-    bad "mutant:m2-shape-only" "the guard widened to any heading and near-miss still passed — it cannot discriminate (exit $LAST_RC)"
+    bad "mutant-twin:m2a" "guard widened with lib.sh INTACT still refused the near-miss (exit $LAST_RC) — lib.sh is not ignoring the fenced prose heading, so m2's kill is attributable to the guard alone"
   fi
 fi
 
@@ -699,14 +726,14 @@ fi
 # THE KILL COUNT ITSELF. A mutant that killed nothing reads exactly like an arm that cannot
 # fire, and a battery whose seds all silently missed reads as five clean passes.
 MUT_ATTEMPTED="$(find "$WORK/roots" -name '.mutant-built' -type f 2>/dev/null | wc -l | tr -d ' ')"
-# SIX BUILT, FIVE KILLS. `m5a` is a single-layer TWIN, not a sixth target: it exists to show
-# the conservation arm still speaks when only the line-drop is applied, which is what makes
-# m5's silence a measurement instead of an absence. Counting it as a kill would be counting
-# the control as a result.
-if [ "${MUT_ATTEMPTED:-0}" -eq 6 ] && [ "$KILLS" -eq 5 ]; then
-  ok "mutants" "6 mutants built (5 targets + m5's single-layer twin) and all 5 targets killed the arm they name"
+# SEVEN BUILT, FIVE KILLS. `m2a` and `m5a` are single-layer TWINS, not targets: each exists to
+# show the arm still speaks (m5a) or stays quiet (m2a) when only one layer is applied, which is
+# what makes the layered mutant's verdict a measurement instead of an absence. Counting a twin
+# as a kill would be counting the control as a result.
+if [ "${MUT_ATTEMPTED:-0}" -eq 7 ] && [ "$KILLS" -eq 5 ]; then
+  ok "mutants" "7 mutants built (5 targets + m2's and m5's single-layer twins) and all 5 targets killed the arm they name"
 else
-  bad "mutants" "$MUT_ATTEMPTED of 6 mutants built, $KILLS of 5 killed — an unkilled mutant means an arm cannot fire"
+  bad "mutants" "$MUT_ATTEMPTED of 7 mutants built, $KILLS of 5 killed — an unkilled mutant means an arm cannot fire"
 fi
 
 echo
