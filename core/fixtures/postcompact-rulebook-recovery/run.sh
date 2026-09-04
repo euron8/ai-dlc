@@ -222,10 +222,24 @@ fi
 # kill is attributable to the section's copy and INITIALIZATION's is incidental.
 # ONE MUTANT, ONE RED ARM: the digest and SKILL.md paths are untouched, so the mandate arm
 # (assertion 7's) must stay quiet and the failure must name the router specifically.
+# THE STALENESS GUARD COUNTS INSIDE THE SECTION, NOT `cmp -s` ON THE FILE. INITIALIZATION
+# carries the same path far below, so a whole-file `cmp` stays quiet when the SECTION's copy
+# is reworded and only INITIALIZATION's was mutated -- the guard could not fire for its stated
+# reason. Per fixture-mutants.md: assert the post-mutation count within the section is 0
+# against a non-zero unmutated count, both derived from the validator's own section bounds.
+proto_count() { # proto_count <skill-file> -> occurrences of the router path inside the protocol section
+  _s="$(grep -n '^## POST-COMPACT RECOVERY PROTOCOL' "$1" | head -1 | cut -d: -f1)"
+  [ -n "$_s" ] || { printf '0\n'; return; }
+  _e="$(awk -v s="$_s" 'NR>s && /^## / { print NR; exit }' "$1")"
+  [ -n "$_e" ] || { printf '0\n'; return; }
+  sed -n "${_s},$((_e - 1))p" "$1" | grep -c '\.claude/skills/ai-dlc/steps/route\.md'
+}
 MUT_ROUTE="$WORK/skill-no-router.md"
 sed 's|\.claude/skills/ai-dlc/steps/route\.md|the router step|g' "$SKILL" > "$MUT_ROUTE"
-if cmp -s "$SKILL" "$MUT_ROUTE"; then
-  bad "FIXTURE STALE: the router path is spelled differently in SKILL.md, so the router mutant is a byte-identical copy and the router arm is unproven"
+if [ "$(proto_count "$SKILL")" -eq 0 ]; then
+  bad "FIXTURE STALE: the shipped protocol section names the router path 0 times, so the router mutant has no subject to remove and assertion 6 is the only thing standing"
+elif [ "$(proto_count "$MUT_ROUTE")" -ne 0 ]; then
+  bad "FIXTURE STALE: the mutation left $(proto_count "$MUT_ROUTE") router path(s) inside the protocol section, so the mutant does not remove the whole property"
 else
   out="$(bash "$VAL" --skill "$MUT_ROUTE" --quiet 2>&1)"; rc=$?
   if [ "$rc" -ne 0 ] && grep -q 'does not send an un-routed session to the' <<<"$out"; then

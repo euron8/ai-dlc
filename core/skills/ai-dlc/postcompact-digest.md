@@ -27,6 +27,107 @@ DERIVED from `SKILL.md` past the 20121-byte re-attach cut. Do not hand-edit: run
 `scripts/render-postcompact-digest.sh --write`. Every line below is SKILL.md's own
 text, selected — never summarised, never rewritten.
 
+## AUTONOMY RULES
+These rules apply to ALL agents across ALL phases.
+
+### Rule 1 -- Read CLAUDE.md and coding-conventions.md first
+CLAUDE.md provides project-specific configuration (deploy commands,
+operations protocol, key references). Coding conventions for
+implementation phases live in `docs/coding-conventions.md`. The
+pipeline rules live in this skill file and load automatically via
+`/ai-dlc`.
+
+### Rule 2 -- Single conversation is the default
+Run the entire pipeline in this conversation unless a sanctioned
+handoff exception applies. Handoff triggers:
+- (a) **Human-requested handoff** -- the user explicitly asks to
+  continue in a new session (directly, or in response to a reminder).
+- (b) **Yellow-threshold reminder** (first token threshold crossed) --
+  the lead outputs a one-line reminder with routing options;
+  non-blocking, user decides.
+- (c) **Red-threshold reminder** (degradation-zone token threshold
+  crossed) -- the lead outputs a more urgent one-line reminder;
+  still non-blocking, still the user's call.
+- (d) **Imminent-threshold reminder** (auto-compact is a few turns away)
+  -- the lead refreshes the pipeline snapshot so the coming compaction
+  recovers from a current record, then reminds in one line. **Still
+  non-blocking. Still the user's call.**
+
+### Rule 3 -- Never stall the pipeline
+The pipeline runs as a continuous, uninterrupted flow. Exactly
+FOUR pause points exist where you stop and wait for human input:
+- (a) **Ambiguity resolution** (Rule 11).
+- (b) **Production Validation Checkpoint** (Rule 10).
+- (c) **Retro commentary prompt**.
+- (d) **Sprint-scope confirmation** (`route.md` Step 6) -- the only
+  pause point upstream of planning. Confirm or correct the scope you
+  already resolved; it is never a question about what to build.
+
+### Rule 4 -- No step may be skipped regardless of perceived simplicity
+When a step file is loaded via "READ AND FOLLOW", execute every
+numbered section sequentially. Do not skip sections. Do not jump to
+the next step file until the current step's execution sequence is
+complete and its gate validation has passed.
+
+### Rule 5 -- Follow the routing, not your judgment
+The pipeline sequence is defined by step file routing ("READ AND
+FOLLOW" directives and `nextStepFile` in frontmatter). Do not skip
+steps, reorder steps, or jump ahead because a step seems unnecessary.
+If a step determines it has nothing to do, it completes quickly --
+but it must still be loaded and its checks must still run.
+
+### Rule 6 -- Walk through everything
+Do not skip sections. Do not summarize. Review every element of every
+artifact exhaustively.
+
+### Rule 7 -- Apply all recommended improvements
+When party mode, adversarial review, or advanced elicitation surface
+a finding INSIDE the validation cycle, it is fixed directly in the
+artifact by the dispatched repair seat -- a `remediator` for planning
+artifacts (`_gate-procedures.md`, "Adversarial repair dispatch"), dev
+teammates for code -- not inline by the lead. Do not present a menu of
+options. Do not ask "should I fix this?" Just dispatch it. After the series
+stamps `EXIT_CONDITION_MET`, a finding is DEFERRED to the next step's
+artifact or it re-opens the series on this record.
+
+### Rule 8 -- Run the validation cycle per declared intensity
+Validation intensity is declared at route time (see route.md Step 6)
+and recorded in the pipeline snapshot as `validation_intensity`. The
+intensity determines the MINIMUM validation cycle at each planning
+phase. The lead MUST NOT run less than the declared minimum. Running
+more is always permitted.
+
+### Rule 9 -- Autonomous gates
+At each phase transition, run the gate validation protocol
+(`gate-validation.md`). Do not wait for human approval.
+
+### Rule 10 -- Production validation is the only human checkpoint
+After deployment and smoke tests, present the Production Validation
+Checkpoint to the human. For multi-sprint features (Rule 14), the
+checkpoint runs after each sprint; the agent does not proceed to the
+next sprint until the human validates the current one.
+
+### Rule 11 -- Seek clarity when ambiguous -- HARD_BLOCK severity
+Two observable requirements.
+
+### Rule 12 -- Escalate asynchronously via file
+Write escalations to `docs/escalations/pending.md`. Escalations have
+three tiers that determine whether work blocks or continues.
+
+### Rule 13 -- Requirements define WHAT; agents have autonomy over HOW
+When carry-over items, brainstorming sessions, or direct user
+instructions specify concrete details -- UI placement, implementation
+approach, scope boundaries, feature behavior -- those details are
+**locked requirements**. Validation cycles may challenge or question
+locked requirements, but MUST NOT silently change them. Any
+divergence from specified requirements -- dropping a requirement,
+substituting different behavior, or determining a requirement cannot
+be met as specified -- requires human sign-off via `HARD_BLOCK`
+escalation (Rule 12, Tier 1). The escalation must quote the original
+user-specified detail and the proposed change. Agents that rewrite
+user intent into a vaguer form during planning are violating this
+rule.
+
 ## HANDOFF PROTOCOL AND PIPELINE SNAPSHOT
 The lead maintains a living pipeline snapshot throughout the sprint.
 When context pressure or human request warrants a handoff, the
