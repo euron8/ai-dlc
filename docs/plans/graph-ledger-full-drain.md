@@ -37,9 +37,106 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 50 SHIPPED AS `v0.499.0`. THE CONSUMER HAD PULLED TO `0.498.0` BEFORE THE BATCH OPENED, SO THE GAP IS ONE AND PENDING IS ONE. TWO VERIFIED `PC-S308-*` SIBLINGS REMAIN UNFILED, PLUS `BL-161` WITH NO `PC-` ID.
+### BATCH 51 SHIPPED AS `v0.500.0`. THE GAP IS TWO AND PENDING IS TWO. THE CONSUMER FILED A NEW `PC-S308-*` CANDIDATE DURING THE BATCH; ONE VERIFIED SIBLING REMAINS UNFILED; PLUS `BL-161` WITH NO `PC-` ID.
 
-This block replaces the batch-50 record below it. Every figure here was re-derived on 2026-09-04
+This block replaces the batch-51 record below it. Every figure here was re-derived on 2026-09-04
+after the merge, against the working tree with the controls in the same invocation; re-derive
+them again rather than reading them.
+
+**`VERSION` IS `0.500.0`, SO BATCH 52 RELEASES AS `0.501.0`.** Re-derive `VERSION` and add one.
+Batch 51 merged at `2dca4815` (PR #622; release commit `7a1b163e` after two fix commits on the
+same branch, neither naming the id), closing
+`PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT` as `BL-162` and rotating it
+(archive 75 → 76, live 86). `named_absorbed()` resolves the id to exactly one commit at
+`0.500.0`, impossible-id control 0. No correction release. The operator scoped this batch from a
+marked recommendation over the SCOPE_GREW sibling, on consequence: a silent false green on an
+instrument outranks a loud wrong diagnosis.
+
+**THE READER SET WAS TWO PROGRAMS, NOT THE ONE THE FILING NAMED.**
+`core/hooks/ai-dlc-derivation-capture.sh` reads the same fence at column 0 in three sites (scope
+grep, awk mask, command grep) and its own header binds it to the validator's population.
+Control: `'```derived'` across `core/` names exactly those two programs plus fixtures. Both
+moved in one commit, and each hook site has its own mutant.
+
+**THE WIDENING EXPOSED A SECOND DEFECT IN THE SAME ARM, AND THE SIGNAL WAS ONE COUNT THAT FELL.**
+Driving the indent-aware validator over the consumer's 11 indented-fence files, ten counts rose
+and `s303/coe-repair-p1.md` fell 37 → 34: a numbered-list continuation line beginning
+"```derived blocks are machine-checked …" matched `'```derived '*`, opened a phantom block, read
+the next real opener as its closer, and left three real pairs outside any fence. Over the
+consumer's 2795 openers, ZERO carry legitimate trailing text and two are prose (the other at
+column 0 in `s303/party-mode/sprint-review-tea.md:95`, which the old reader had been swallowing
+too). The info string is now exactly the token in both programs. **Read the per-file
+differential for the row that moved the wrong way, not only the totals.**
+
+**MUTANT FOOTPRINTS PREDICTED WRONG TWICE, CAUGHT BY RUNNING THEM.** The loose-opener hook mutant
+does not "leak" the real pairs: it BLANKS the real opener as the phantom's closer, so the pairs
+reach the validator outside any fence and the stale pair is written UNWITNESSED — the blocking
+arm reddens, silently, not the prose-edit arm. And the pre-existing "command-line-only touch"
+mutant was spelled at column 0 and disarmed every indented command as a side effect until
+re-anchored on the shed form. Run the mutant, then write its declaration.
+
+**TWO QUOTING FACTS, ONE RELEASE.** An apostrophe in a comment inside the hook's single-quoted
+awk program was a syntax error that read as "every arm exits 2". A sed replacement carrying the
+hook's own backticks needs single quotes, and double quotes make bash run the backticks — the
+battery deletes the blank class between backreferences instead. Both are `tool-hazards.md`'s
+heredoc rule one level down: text inside single quotes is not inert.
+
+**THE CONSUMER SIDE IS MEASURED AND THE SECOND TEST DIVERGES TODAY.** Installed (`0.498.0`,
+byte-identical to the pre-fix validator and hook) against shipped, read-only, on
+`/Users/n8/git/graph` while its own session committed around the run: over the 11 files STALE
+87 → 106, ALLOWLIST 6 → 14, three files flip exit 0 → 1; over the whole corpus 3612 derivations
+in 2678 blocks → 3647 in 2702 across 4111 files (+24 blocks = 26 indented openers − 2
+phantoms). Nineteen stale derivations and eight refused commands the consumer's gate has never
+reported. That is action 7's trigger fired on a REST state, not a transient — the pull is
+REQUIRED, not merely owed. `0.500.0` carries no bootstrapping file (a hook and a script);
+`0.499.0`'s bootstrapping range stands as recorded below. Every consumer porcelain move during
+the batch was a pipeline-state file written by `graph-1e`; the six `>`-shaped "write verbs" in
+its derivations were awk comparisons inside quotes, refused by the allowlist; no write to the
+consumer by this session. A pull is operator-initiated; readiness is not authorization.
+
+**THE HANDS DID NOT DELIVER, AND THE MERGE WAITED THREE HOURS FOR THEM.** Scope, fixture and
+adversary hands (all opus) were dispatched at the first fix commit; the two read-only hands went
+idle without a word, the adversary ran for forty minutes and then went idle, and three direct
+requests by name each produced nothing. The operator ruled WAIT while it ran and MERGE once it
+was idle. Both-layout fixture runs, the reader-set control and the pre-fix/half-fix/shed-all
+natural-mutant scoring were done by this session instead. The measured base case for
+message-deliverable hands holds for the fifth batch.
+
+**THE LEDGER MOVED ONCE, ON A CONSUMER FILING.** md5 `ae45394b…` → `d205f502…` at 16:03, when
+the consumer's story gate filed `PC-S308-CHECK-5-DERIVE-STORIES-REMEDY-CANNOT-CREATE-AN-ENTRY`
+(its commit `0b20c7c83`). **Live 74 → 75, cited 45 → 46, unfiled 29** (one out on `BL-162`'s
+citation, one in on the filing), archive 150, partition control 0. Goal partition **19
+DISCHARGED / 27 in flight / 29 untouched**, overlap 3, discharged-but-invisible 0, TERMINAL
+**38**. Gap TWO (`0.498.0` installed, `0.500.0` shipped), PENDING 2
+(`PC-S308-LEDGER-REVERIFY-…` at `0.499.0`, `PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-…` at
+`0.500.0`).
+
+**TELL THE CONSUMER, IN THE NEXT BRIEF,** that `0.500.0` will surface 19 stale derivations and
+8 refused commands across 11 files at its next gate (three of those files pass today and will
+fail), that two prose lines (`s303/coe-repair-p1.md:260`,
+`s303/party-mode/sprint-review-tea.md:95`) begin with the fence token and should be re-wrapped,
+that the two `derived` fences it demoted to `text` in `s308/carry-over-evaluation.md` can be
+re-fenced, and that a `$ ` line indented deeper than its fence is OUTPUT under the new rule. The
+`0.499.0` items (orphan fragments at 3222–3225, `ENTRY-SWALLOWED` signals, re-measure fenced
+heading-shaped lines before the pull) still stand.
+
+**TWO `PC-S308-*` CANDIDATES ARE UNFILED FOR BATCH 52 — REPORT BOTH AND ASK.** The NEW one,
+`PC-S308-CHECK-5-DERIVE-STORIES-REMEDY-CANNOT-CREATE-AN-ENTRY` (filed 2026-09-04 16:03; Check 5
+of `steps/gate-validation.md:492-495` prescribes a `derive-stories` run to repair a stale entry,
+but `sprint-status.sh derive-stories` only rewrites values of entries that already exist and
+exits 3 on an empty envelope, which is the state a `carry-over-single` sprint arrives in;
+reproduction is prose, the empty-envelope state is gone from the consumer's disk; its status
+line and receipt have NOT been read by this session — read them before ranking it), and the
+standing sibling `PC-S308-VALIDATE-ADVERSARIAL-CONVERGENCE-SCOPE-GREW-MISFIRES-ON-PASS-1`
+(`core/scripts/validate-adversarial-convergence.sh:675` counts pass 1's own CRITICALs as scope
+growth; receipt string present; the consumer's own p1 artifacts show authors writing `prior =
+crit` on pass 1 to dodge it, which falsifies that field). `BL-161` (no `PC-` id) ranks below
+both. Both receipts name `scripts/ai-dlc/…` — run them on `core/scripts/…` and
+`core/skills/ai-dlc/steps/…`.
+
+### BATCH 50 SHIPPED AS `v0.499.0` — THE BLOCK ABOVE REPLACES THIS ONE. TAKE THE STATE FROM THERE.
+
+This block was the batch-51 resume record. Every figure here was re-derived on 2026-09-04
 after the merge, against the working tree with the controls in the same invocation; re-derive
 them again rather than reading them.
 
@@ -4806,19 +4903,34 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), THEN REPORT THE TWO UNFILED
-   `PC-S308-*` CANDIDATES AND ASK BEFORE SCOPING BATCH 51.** Both are in the resume block with
-   their reproductions; both are verified siblings filed 2026-09-03 and unchanged since batch
-   47. Put a marked recommendation in the question. Batch 50 is SHIPPED — `v0.499.0` at
-   `13502c45` (PR #619), `PC-S308-LEDGER-REVERIFY-ENTRY-BOUNDARY-IGNORES-FENCED-HEADINGS` closed
-   as `BL-160` and rotated, `BL-161` filed; batch 49 is SHIPPED — `v0.498.0` at `2babee86`
-   (PR #616), `BL-158`, `BL-159`. Do not re-scope onto any of them. **Check the delivery gap
-   BEFORE reading the resume block's figure for it**: batch 50 opened on a resume block that
-   said gap ONE when the consumer had already pulled it to ZERO.
+   `PC-S308-*` CANDIDATES AND ASK BEFORE SCOPING BATCH 52.** Both are in the resume block: the
+   NEW filing `PC-S308-CHECK-5-DERIVE-STORIES-REMEDY-CANNOT-CREATE-AN-ENTRY` (2026-09-04, its
+   status line and receipt UNREAD by batch 51 — read them first) and the standing sibling
+   `PC-S308-VALIDATE-ADVERSARIAL-CONVERGENCE-SCOPE-GREW-MISFIRES-ON-PASS-1` (2026-09-03,
+   reproduced). Put a marked recommendation in the question. Batch 51 is SHIPPED — `v0.500.0`
+   at `2dca4815` (PR #622), `PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT`
+   closed as `BL-162` and rotated; batch 50 is SHIPPED — `v0.499.0` at `13502c45` (PR #619),
+   `BL-160`, `BL-161`. Do not re-scope onto any of them. **Check the delivery gap BEFORE
+   reading the resume block's figure for it**: batch 50 opened on a resume block that said gap
+   ONE when the consumer had already pulled it to ZERO.
 
    **IF THE SWEEP FINDS A NEW FILING, DERIVE THE READER SET FIRST, AND RUN THE FILING'S RECEIPT
-   ON THE DISTRIBUTION PATH.** Batch 50's reader set was entirely shared through `lib.sh` and one
-   repair reached six readers; batch 44's was not. The two sibling receipts name
-   `scripts/ai-dlc/…`, which resolves nowhere here — `core/scripts/…` is the distribution path.
+   ON THE DISTRIBUTION PATH.** Batch 51's reader set was two programs where the filing named
+   one; batch 50's was entirely shared through `lib.sh` and one repair reached six readers;
+   batch 44's was not. Consumer receipts name `scripts/ai-dlc/…`, which resolves nowhere here —
+   `core/scripts/…` is the distribution path.
+
+   **DRIVE THE FIXED PROGRAM OVER THE CONSUMER'S REAL FILES AND READ EVERY ROW, NOT THE TOTALS.**
+   Batch 51's indent rule made a second defect in the same opener arm reachable, and the only
+   signal was one file's count FALLING while ten rose. The totals rose. A widening that makes a
+   new form reachable makes every latent defect in that arm reachable with it.
+
+   **TELL THE CONSUMER, IN THE NEXT BRIEF,** that `0.500.0` will surface 19 stale derivations
+   and 8 refused commands across 11 files (three pass today and will fail), that two prose lines
+   begin with the fence token and should be re-wrapped (`s303/coe-repair-p1.md:260`,
+   `s303/party-mode/sprint-review-tea.md:95`), that its demoted `text` fences in
+   `s308/carry-over-evaluation.md` can be re-fenced, and that a `$ ` line indented deeper than
+   its fence is OUTPUT under the new rule.
 
    **TELL THE CONSUMER, IN THE NEXT BRIEF,** that its live ledger carries two orphan UNFENCED
    timestamp fragments at lines 3222–3225 (md5 `ae45394b…`) left by its own 0.497.0 pull's
@@ -5009,14 +5121,16 @@ so no block written before it changes verdict.
    interrupt; if you genuinely need to ask, ask the OPERATOR whether to, and put the peer's current
    state into the question.
 
-   **THE GAP IS ONE AND PENDING IS 1** — the consumer's stamp reads `0.497.0` / `fb2fd0ee` on all
-   four fields against a distribution `VERSION` of `0.498.0`; `PC-S308-HANDOFF-PROCEDURE-…`
-   (`0.498.0`) is the one discharged candidate it cannot see. The consumer pulled `0.492.0 →
-   0.497.0` on the operator's authorization during batch 49, which is the third time the gap has
-   closed in this program and the second time it reopened on the very next release: **A ZERO GAP
-   IS A STATE, NOT AN ACHIEVEMENT.** FIVE is the line this file calls wide; say WIDE when the
-   count reaches it. `0.498.0` touches two hooks, two step files, a schema and two fixtures — no
-   bootstrapping file — so the floor for the next brief is `0.498.0` itself.
+   **THE GAP IS TWO AND PENDING IS 2** — the consumer's stamp reads `0.498.0` / `2babee86` on all
+   four fields against a distribution `VERSION` of `0.500.0`; `PC-S308-LEDGER-REVERIFY-…`
+   (`0.499.0`) and `PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-…` (`0.500.0`) are the two discharged
+   candidates it cannot see. The consumer pulled `0.497.0 → 0.498.0` on its own before batch 50
+   opened, which is the fourth time the gap has closed in this program and the third time it
+   reopened on the very next release: **A ZERO GAP IS A STATE, NOT AN ACHIEVEMENT.** FIVE is the
+   line this file calls wide; say WIDE when the count reaches it. `0.499.0` carries
+   bootstrapping files (`ledger-reverify.sh`, `lib.sh`, the update skill's `SKILL.md`); `0.500.0`
+   carries a hook and a script. Batch 51's second test DIVERGED on the consumer's real tree at
+   rest, so the pull is REQUIRED and not merely owed — report that, and stop there.
    **Your batch will widen the gap, which is expected and is not a reason to reorder anything.**
    Re-derive both. That is not permission to close it: a pull is operator-initiated, readiness is
    not authorization, a `PENDING` count is not a decision about WHEN, and one is never handed to a
@@ -5362,9 +5476,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # ae45394b... after the consumer's 0.497.0 -> 0.498.0 pull, which landed BEFORE batch 50 opened (was 2730455d... at batch 49's close); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
-   wc -l < /tmp/live.txt    # 74 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 75 at batch 49's close, then the 0.498.0 pull rotated PC-S308-HANDOFF-... into the archive
-   wc -l < /tmp/unfiled.txt # 29 -- PC-S308-LEDGER-REVERIFY-ENTRY-BOUNDARY-IGNORES-FENCED-HEADINGS left the set at batch 50 by being cited by BL-160 and rotated into docs/backlog.archive.md
+   md5 -q "$L"              # d205f502... after the consumer's story gate filed PC-S308-CHECK-5-DERIVE-STORIES-... during batch 51 (was ae45394b... through batch 50); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
+   wc -l < /tmp/live.txt    # 75 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 74 through batch 50, +1 on the batch-51 filing
+   wc -l < /tmp/unfiled.txt # 29 -- held: PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT left the set at batch 51 by being cited by BL-162 and rotated into docs/backlog.archive.md, and PC-S308-CHECK-5-DERIVE-STORIES-... entered it
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -5372,10 +5486,12 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 74 LIVE CANDIDATES, 45 CITED, 29 UNFILED** — re-derived after batch 50's
-   merge at `13502c45` (md5 `ae45394b…`, archive 150; batch 49's close read 75 / 45 / 30 at
-   `2730455d…`, then the consumer's `0.497.0 → 0.498.0` pull rotated one cited id into its
-   archive and batch 50's citation moved one id from unfiled to cited). Batch 48's close read
+   **THE BASELINE IS 75 LIVE CANDIDATES, 46 CITED, 29 UNFILED** — re-derived after batch 51's
+   merge at `2dca4815` (md5 `d205f502…`, archive 150; batch 50's close read 74 / 45 / 29 at
+   `ae45394b…`, then batch 51's citation moved one id from unfiled to cited and the consumer
+   filed one new candidate in the same window, so unfiled held). Batch 49's close read 75 / 45
+   / 30 at `2730455d…`, then the consumer's `0.497.0 → 0.498.0` pull rotated one cited id into
+   its archive and batch 50's citation moved one id from unfiled to cited. Batch 48's close read
    78 / 48 / 30 at `0dd318bd…`, and the consumer's `0.492.0 → 0.497.0` pull then rotated four
    cited ids into its archive and filed one, so live fell by three and cited by three while
    unfiled held. Batch 47's
