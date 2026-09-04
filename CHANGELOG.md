@@ -15,6 +15,70 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.496.0] - 2026-09-04
+
+### Check 2z of the acknowledge hook denied a dispatched teammate for a router read only the lead could make
+
+Closes `PC-S308-AI-DLC-ACKNOWLEDGE-ROUTE-DENIED-SUBAGENT-CANNOT-CLEAR` (`BL-156`), filed by the
+reference consumer on 2026-09-03 by a teammate from inside the deny. Batch 47 of the ledger
+drain; the sweep at its start found three new `PC-S308-*` candidates and the operator chose this
+one.
+
+**The defect.** `core/hooks/ai-dlc-acknowledge.sh` Check 2z denies `Write|Edit|MultiEdit|NotebookEdit`
+to an `/ai-dlc` session whose transcript carries no Read of `steps/route.md`. On a tool call made
+inside a dispatched teammate the harness hands the hook the LEAD's `transcript_path`, not the
+teammate's own `<session>/subagents/agent-<id>.jsonl`, so the scan read the lead's `/ai-dlc`
+marker and never opened the file the teammate's own Read landed in. Measured on the consumer's
+session, from the transcripts under `~/.claude/projects/`: the teammate read the router at
+20:22:33Z, was denied at 20:23:57Z and 20:24:42Z anyway, and the lead did not read it until
+20:53Z. The deny's remedy — "READ steps/route.md now" — was unreachable by the actor it was
+handed to, so the hook's own "the cost of firing is one Read" was false for every Rule 19
+dispatch under a lead that had not routed yet. The teammate then wrote through a Bash redirect,
+the one surface the matcher does not watch. The consumer's continuation log holds 22
+`ROUTE_DENIED` rows across 12 sessions; the rows carry no agent identity, so the teammate-shaped
+share is not derivable from them (`BL-126`).
+
+**The fix.** Check 2z's guard gains `[ -z "$AGENT_ID" ]`, with `AGENT_ID` read from the
+payload's `.agent_id` beside `.transcript_path`. A dispatched teammate is outside the check:
+its justification binds the session that LOADED `SKILL.md`, and a teammate loaded a role file.
+The filing offered two shapes and both were built as copies and scored on one eight-cell probe
+table. "Also scan the teammate's own transcript" clears only a teammate that has already read
+the router and still tells every other one to READ AND FOLLOW a step that rolls the sprint
+envelope from inside a dispatched review. **What the exemption acquits:** a lead that never
+routed can dispatch a teammate to write a file and this check will not stop it — it never did,
+`Agent` being on the allowed surface by design and the denied teammate writing via Bash
+regardless — and the lead's own next write is still denied. Check 3's Rule 29 pause deny is
+untouched and still denies a teammate on a paused tree; that question is `BL-126`'s.
+
+**The receipt was scored before it was written.** Exit 0 on the fix and on an `agent_type`-keyed
+spelling; 1 on the pre-fix hook, on the scan-both-transcripts shape, and on a whole-hook
+exemption; 9 on a hook replaced by `exit 0`. The consumer-side differential on the real session
+inputs, copied out to `mktemp`: the consumer's installed hook is byte-identical to the pre-fix
+distribution copy and answers `ROUTE` to the teammate's Write in the 20:23Z state; the fixed
+hook answers `ALLOW`; the lead's own Write in that state is `ROUTE` under both.
+
+**`BL-126` was one `jq` read from a false close.** Its receipt keyed on the hook's read-set and
+would have read CLOSED the moment any agent-identity field was read, which this fix does for a
+different check. The receipt is replaced with one that drives the pause deny with a teammate
+payload, and the measurement that entry said it owed first — whether a PreToolUse payload
+carries a usable discriminator — is delivered: `agent_id` and `agent_type`, absent on the lead.
+
+**Fixtures.** `route-read-required` (ships) gains the teammate cell, its no-`agent_id` twin one
+property apart, the paused-tree control proving the exemption stayed inside Check 2z, and the
+no-`ROUTE_DENIED`-row arm; the teammate cell goes red against the pre-fix hook through the
+`AI_DLC_RRR_HOOK` seam. The `.dist-only` battery gains the `teammate` probe cell, a mutant
+deleting the conjunct, and a mutant widening the exemption to the whole hook, caught by a
+paused-tree observable the verdict row cannot see.
+
+**For the consumer's next brief.** This candidate's receipt names
+`core/.claude/hooks/ai-dlc-acknowledge.sh`, which resolves to nothing in this tree at either ref
+— the file is `core/hooks/ai-dlc-acknowledge.sh` — so it will read `NEEDS-REVIEW` rather than
+close; anchor it on the guard line instead. The sibling filing
+`PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT` has the same vacuous path
+shape, reproduces here with a control, and is unfiled and available;
+`PC-S308-VALIDATE-ADVERSARIAL-CONVERGENCE-SCOPE-GREW-MISFIRES-ON-PASS-1` is real (18 of 57 of
+the consumer's pass-1 files trip it) and is unfiled and available.
+
 ## [0.495.0] - 2026-09-03
 
 ### A rotation flipped a sibling's row between `NAMED-UPSTREAM` and `NAMED-UPSTREAM-AMBIGUOUS`, and step 8's acceptance test called that a sweep

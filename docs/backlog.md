@@ -3220,12 +3220,23 @@ identity IS available on every `ACK_DENIED` row, so the next occurrence is attri
 **Tiered DEFECT.** It corrupts a shared artifact rather than losing work outright, and reaching it
 requires a pause to be armed while a teammate write is in flight.
 
-The receipt is STRUCTURAL and keys on the READ-SET, not on prose: it exits 1 while
-`ai-dlc-acknowledge.sh` reads no agent-identity field from its PreToolUse payload, 0 once it reads
-one, and 9 if the hook or its `jq` reads cannot be located, so a reshaped hook reports a moved
-precondition rather than a false close.
+**The measurement this entry owed first is delivered, and the receipt is replaced (`v0.496.0`,
+`BL-156`).** A teammate's PreToolUse payload DOES carry a discriminator: `agent_id` and
+`agent_type`, absent on the lead's own calls, with the LEAD's `transcript_path` beside them.
+`v0.496.0` reads `.agent_id` in this very hook — for Check 2z, the router-read guard, and not
+for the pause deny this entry is about. The receipt that stood here keyed on the hook's READ-SET
+and would have read CLOSED on that change while a teammate's write on a paused tree still
+answers `Rule 29` (measured, before and after). It now drives the pause deny with a teammate
+payload on a paused tree: exit 1 while that write is denied as Rule 29, 0 only when the hook
+both reads an identity field and no longer answers Rule 29 to it, and 9 when the lead's own
+paused write is not Rule-29-denied (the deny is gone, nothing measured) or the teammate's returns
+a deny naming another check. **Limit, stated:** a change that exempts every teammate from the
+pause deny outright scores 0 here. This entry's own text asks for a quiesce semantic — let the
+in-flight write finish, do not admit new dispatches — not a blanket exemption, so whoever closes
+it must say which was built. Read `BL-156` for why Check 2z took the blanket form and this
+check must not inherit it.
 
-verify: sh f=core/hooks/ai-dlc-acknowledge.sh; [ -f "$f" ] || exit 9; r=$(grep -oE 'jq -r [^|]*\.[a-z_.]+' "$f" | grep -oE '\.[a-z_][a-z_.]*' | sort -u); [ -n "$r" ] || exit 9; printf '%s\n' "$r" | grep -q '^\.tool_name$' || exit 9; printf '%s\n' "$r" | grep -qE '^\.(subagent|agent_type|agent_id|parent_session_id|invoked_by)' && exit 0; exit 1
+verify: sh h=core/hooks/ai-dlc-acknowledge.sh; [ -f "$h" ] || exit 9; command -v jq >/dev/null || exit 9; r=$(grep -oE 'jq -r [^|]*\.[a-z_.]+' "$h" | grep -oE '\.[a-z_][a-z_.]*' | sort -u); [ -n "$r" ] || exit 9; printf '%s\n' "$r" | grep -q '^\.tool_name$' || exit 9; w=$(mktemp -d) || exit 9; trap 'rm -rf "$w"' EXIT; mkdir -p "$w/p/_bmad-output/planning-artifacts/s7" "$w/p/scripts/ai-dlc"; printf '#!/bin/sh\necho 7\n' > "$w/p/scripts/ai-dlc/sprint-status.sh"; chmod +x "$w/p/scripts/ai-dlc/sprint-status.sh"; : > "$w/p/_bmad-output/pipeline-snapshot.md"; : > "$w/p/_bmad-output/pipeline-paused.flag"; printf '{"type":"user","message":{"content":"<command-name>/ai-dlc</command-name>"}}\n{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/w/.claude/skills/ai-dlc/steps/route.md"}}]}}\n' > "$w/s.jsonl"; d(){ jq -nc --arg tr "$w/s.jsonl" --arg ag "$1" '{session_id:"r",transcript_path:$tr,tool_name:"Write",tool_input:{file_path:"/w/_bmad-output/planning-artifacts/x.md"}}+(if $ag=="" then {} else {agent_id:$ag,agent_type:"general-purpose"} end)' | CLAUDE_PROJECT_DIR="$w/p" bash "$h" 2>/dev/null; }; a=$(d ""); b=$(d ax); case "$a" in *"Rule 29"*) ;; *) exit 9;; esac; case "$b" in *"Rule 29"*) exit 1;; *permissionDecision*) exit 9;; esac; printf '%s\n' "$r" | grep -qE '^\.(subagent|agent_type|agent_id|parent_session_id|invoked_by)' || exit 1; exit 0
 
 ## BL-130
 
@@ -4005,4 +4016,87 @@ closable by rewording that sentence without changing the behaviour, and a fix th
 write in a program while leaving the sentence in place scores STILL-LIVE; replace it with one
 that drives the gate when a gate exists. A prose receipt is what a prose-only subject affords.
 
-verify: sh f=core/skills/ai-dlc-update/SKILL.md; [ -f "$f" ] || exit 9; grep -qi 'self-update' "$f" || exit 9; sed 's/<!--.*-->//g' "$f" | grep -qiE 'autonomously[^.]*no operator approval' && exit 1; exit 0
+**Receipt repaired at `v0.496.0`; it had read `CLOSE-CANDIDATE` since the day it was filed.**
+It fed `grep -q` from a `sed` over a 150 KB file; `grep -q` leaves at the first match, the
+writer takes EPIPE, and under `backlog-reverify.sh`'s `pipefail` the pipeline answers non-zero
+on a MATCH — so `&& exit 1` never fired and the tool reported the fix present. Run bare, the same
+line exits 1. The count form below reads all of its input. The other seven receipts in this file
+that pipe into `grep -q` agree under both modes today; that is a size property of their inputs,
+not a guarantee.
+
+verify: sh f=core/skills/ai-dlc-update/SKILL.md; [ -f "$f" ] || exit 9; grep -qi 'self-update' "$f" || exit 9; [ "$(sed 's/<!--.*-->//g' "$f" | grep -ciE 'autonomously[^.]*no operator approval')" -gt 0 ] && exit 1; exit 0
+
+## BL-156 — Check 2z of the acknowledge hook denied a dispatched teammate for a router read only the lead could make, so the deny's remedy was unreachable by the actor it was handed to
+
+Filed by the reference consumer as
+`PC-S308-AI-DLC-ACKNOWLEDGE-ROUTE-DENIED-SUBAGENT-CANNOT-CLEAR` on 2026-09-03, by its
+`adversary-s308-prd-p2` teammate from inside the deny. Batch 47 of the ledger drain. DEFECT: a
+shipped deny whose stated false-positive cost is "one Read" and whose remedy the denied actor
+cannot perform, so the cost is unbounded for every Rule 19 dispatch under a lead that has not
+routed yet. Nothing was lost on the consumer — the teammate wrote through a Bash redirect, which
+the hook's matcher never sees — and that is the second half of the defect: the deny moved the
+write onto the one surface the hook does not watch.
+
+**The mechanism.** `core/hooks/ai-dlc-acknowledge.sh` Check 2z greps `$TRANSCRIPT` for the
+`"file_path":"…steps/route.md"` a Read emits, and `$TRANSCRIPT` is `.transcript_path` from the
+hook's own payload. On a tool call made INSIDE a dispatched teammate that path is the LEAD's
+session file, not the teammate's own `<session>/subagents/agent-<id>.jsonl`
+(`ai-dlc-subagent-probe.sh:126-151` measured the same fact at `SubagentStop`). So `AIDLC_SESSION`
+is set from the lead's `/ai-dlc` marker while the router Read the teammate DID make sits in a
+file the scan never opens. The deny FIRING is itself the proof of which file was read: the
+consumer's teammate transcript carries 0 `/ai-dlc` markers of either form and its lead's carries
+1, so `AIDLC_SESSION=1` could only have come from the lead's file.
+
+**Measured on the consumer's session `c905e5de`, transcript and teammate file read from
+`~/.claude/projects/`, never from the consumer tree.** Lead `/ai-dlc` marker 19:36Z; teammate
+dispatched 20:03Z; three `ROUTE_DENIED` rows at 20:22:13Z, 20:23:57Z, 20:24:42Z; the teammate's
+own Read of `steps/route.md` at 20:22:33Z, BETWEEN the first and second deny; the lead's first
+Read of it at 20:53Z, after all three. The consumer's continuation log holds 22 `ROUTE_DENIED`
+rows across 12 sessions; which of those were teammate-shaped is NOT derivable from the log,
+because the row carries no agent identity — that observability gap is `BL-126`'s subject and is
+not closed here. The differential on the consumer's real inputs, copied to `mktemp`: its
+installed hook (byte-identical to the pre-fix distribution copy, `cmp -s`) answers `ROUTE` to the
+teammate's Write in the 20:23Z state and the fixed hook answers `ALLOW`, while the LEAD's own
+Write in that state is `ROUTE` under both.
+
+**The harness fact the fix rests on.** A teammate's PreToolUse payload carries `agent_id` (and
+`agent_type`), and the lead's carries neither. Readers of that field at this event already in
+the tree: `ai-dlc-gate-remediation-guard.sh:266-277` ("absent == the lead") and the third-party
+`context-mode` plugin's `pretooluse.mjs` (`isSubagentContext = input.agent_id != null ||
+input.agent_type != null`); `ai-dlc-context-sensor.sh:164` reads it at `Stop`. The receipt below
+supplies both spellings so a fix keyed on either scores the same.
+
+**The fix, and the shape it rejected.** Check 2z's guard gains one conjunct, `[ -z "$AGENT_ID" ]`:
+a dispatched teammate is outside the check, because the check's own justification binds the
+session that LOADED `SKILL.md` and a teammate loaded a role file. The consumer's filing offered
+two shapes and both were built as copies and scored on one eight-cell probe table. "Also scan the
+teammate's own transcript" clears exactly the teammate that has already read the router and still
+tells every other one to READ AND FOLLOW a step that rolls the sprint envelope from inside a
+dispatched review — a remedy wrong for the actor even where it is reachable. **What the exemption
+acquits, stated:** a lead that never routed can dispatch a teammate to write a file and Check 2z
+will not stop that write. It never did — `Agent` is on the allowed surface by design and the
+denied teammate wrote via Bash regardless — and the lead's own next write is still denied
+(probe cell `lead-bypass`, and the receipt's control `a`). Check 3's Rule 29 pause deny is
+deliberately untouched and still denies a teammate on a paused tree (probe cell `sub-paused`;
+receipt control `c`).
+
+**Receipt, scored before it was written.** It drives the shipping hook on a seeded tree with a
+lead transcript that carries the `/ai-dlc` marker and no router read, a teammate file beside it
+with no read either, and a second, paused tree. Exit 0 on the fix and on its `agent_type`
+spelling; 1 on the pre-fix hook, on the scan-both-transcripts shape, and on a whole-hook
+exemption (control `c` flips to allow); 9 when the lead's own Write is not route-denied (Check 2z
+gone or unreachable — nothing measured) or when the teammate cell returns a deny that names
+neither check. The fixture `route-read-required` (ships) carries the same four cells and its
+`.dist-only` battery kills the conjunct. The consumer's own receipt on this candidate names
+`core/.claude/hooks/ai-dlc-acknowledge.sh`, a path that resolves to nothing in this tree at either
+ref (the file is `core/hooks/ai-dlc-acknowledge.sh`), so it will read `NEEDS-REVIEW` rather than
+close; the pull brief says so and offers the guard line as the anchor.
+
+**`BL-126` was one `jq` read from a false close, and its receipt is replaced in this release.**
+It keyed on the hook's READ-SET — exit 0 the moment any agent-identity field is read — and this
+fix reads one, for a different check. Its subject, the pause deny's blindness to a teammate, is
+untouched, so its receipt now drives that deny instead. The measurement `BL-126` said it owed
+first — whether a PreToolUse payload carries a usable discriminator at all — is the paragraph
+above.
+
+verify: sh h=core/hooks/ai-dlc-acknowledge.sh; [ -f "$h" ] || exit 9; command -v jq >/dev/null || exit 9; w=$(mktemp -d) || exit 9; trap 'rm -rf "$w"' EXIT; for d in t p; do mkdir -p "$w/$d/_bmad-output/planning-artifacts/s7" "$w/$d/scripts/ai-dlc"; printf '#!/bin/sh\necho 7\n' > "$w/$d/scripts/ai-dlc/sprint-status.sh"; chmod +x "$w/$d/scripts/ai-dlc/sprint-status.sh"; : > "$w/$d/_bmad-output/pipeline-snapshot.md"; done; : > "$w/p/_bmad-output/pipeline-paused.flag"; mkdir -p "$w/s/subagents"; printf '{"type":"user","message":{"content":"<command-name>/ai-dlc</command-name>"}}\n' > "$w/s.jsonl"; printf '{"type":"assistant","message":{"content":[{"type":"text","text":"working"}],"isSidechain":true}}\n' > "$w/s/subagents/agent-ax.jsonl"; d(){ jq -nc --arg tr "$w/s.jsonl" --arg ag "$2" '{session_id:"r",transcript_path:$tr,tool_name:"Write",tool_input:{file_path:"/w/_bmad-output/planning-artifacts/x.md"}}+(if $ag=="" then {} else {agent_id:$ag,agent_type:"general-purpose"} end)' | CLAUDE_PROJECT_DIR="$w/$1" bash "$h" 2>/dev/null; }; a=$(d t ""); b=$(d t ax); c=$(d p ax); case "$a" in *"has not read the router"*) ;; *) exit 9;; esac; case "$c" in *"Rule 29"*) ;; *) exit 1;; esac; case "$b" in *"has not read the router"*) exit 1;; *permissionDecision*) exit 9;; esac; exit 0
