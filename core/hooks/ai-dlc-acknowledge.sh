@@ -60,6 +60,12 @@ INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
+# THE ACTOR. The harness sets this only on a tool call made INSIDE a dispatched teammate (an
+# `Agent` child); the lead's own calls carry none. `ai-dlc-gate-remediation-guard.sh:266` and
+# `ai-dlc-context-sensor.sh:164` read the same field for the same question. Read here, beside
+# the transcript path, because the two are a PAIR on a teammate's call: the path is the LEAD's
+# session file, never the teammate's own -- see Check 2z below.
+AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty')
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # -----------------------------------------------------------------------------
@@ -228,7 +234,32 @@ esac
 # `NotebookEdit` IS in the surface because it is on the hook's registered matcher and writes a
 # file like the rest. Leaving it out would have left a bypassing session one unwatched way to
 # write, which is an affordance to remove rather than a hole to document.
-if [ "$AIDLC_SESSION" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+#
+# A DISPATCHED TEAMMATE IS OUTSIDE THIS CHECK, AND `agent_id` IS THE CONJUNCT THAT SAYS SO.
+# The justification above binds a session that LOADED `SKILL.md` -- the lead. A teammate loaded
+# a role file; the router is not its step to read. The check fired on teammates anyway from the
+# day it shipped, by an accident of the harness: on a teammate's tool call `transcript_path` is
+# the LEAD's session file, not the teammate's own (`<session>/subagents/agent-<id>.jsonl`, see
+# `ai-dlc-subagent-probe.sh:126-151`), so `AIDLC_SESSION` is read off the lead's `/ai-dlc`
+# marker while the router Read the teammate DID make sits in a file this scan never opens.
+# Measured on the reference consumer (`PC-S308-AI-DLC-ACKNOWLEDGE-ROUTE-DENIED-SUBAGENT-CANNOT-
+# CLEAR`): a teammate read `steps/route.md`, was denied twice in the two minutes after, and the
+# lead did not read it for another half hour -- so the remedy this deny hands out is unreachable
+# by the actor it is handed to, and "the cost of firing is one Read" is false for every Rule 19
+# dispatch. The denied teammate then wrote through a Bash redirect, which this matcher never sees.
+#
+# EXEMPT, NOT "ALSO SCAN THE TEAMMATE'S FILE". Both were built and scored on one probe table.
+# Scanning the teammate's transcript clears exactly the teammate that has already read the
+# router and still tells every other one to READ AND FOLLOW a step that rolls the envelope from
+# inside a dispatched review -- a remedy wrong for the actor even where it is reachable.
+#
+# WHAT THIS ACQUITS, stated: a lead that never routed can dispatch a teammate to write a file and
+# this check will not stop that write. It never did -- `Agent` is on the allowed surface by
+# design (above), and the denied teammate wrote via Bash regardless -- and the lead's OWN next
+# write is still denied, so the incident this check exists for is unchanged. Check 3's pause deny
+# below carries no such conjunct and still answers for a teammate; that is `BL-126`'s question
+# and is not decided here.
+if [ -z "$AGENT_ID" ] && [ "$AIDLC_SESSION" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
   case "$TOOL_NAME" in
     Write|Edit|MultiEdit|NotebookEdit)
       if ! grep -q '"file_path":"[^"]*steps/route\.md"' "$TRANSCRIPT" 2>/dev/null; then
