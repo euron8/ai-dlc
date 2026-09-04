@@ -13,9 +13,9 @@ BEFORE ACTING:**
    command.** One of those repos is READ ONLY and a write there is the most expensive mistake
    available in this program.
 2. **`### NEXT ACTIONS — numbered, in order`** — what to do, starting at action 1. This is roughly
-   4,700 lines below this block; jump to the heading BY NAME, do not scroll and do not trust
-   this figure — it is advisory, it has been stale before, and it was 700 lines out when batch 49
-   re-derived it.
+   4,800 lines below this block; jump to the heading BY NAME, do not scroll and do not trust
+   this figure — it is advisory, it has been stale before, it was 700 lines out when batch 49
+   re-derived it, and every resume block added above it moves it again.
 3. **`### Ping the operator`** — when to stop and report.
 4. **`## Hazards`** and **`### Done when`** — what will bite you, and what finishing looks like.
 5. **`### Derive the state; do not trust the numbers below`** — the command block actions 1b and 6
@@ -5312,7 +5312,7 @@ so no block written before it changes verdict.
    `predicate-differential.sh` fingerprints the corpus either side of its own run for exactly this
    reason; a hand-rolled measurement has no such guard.
 
-1a. **`docs/backlog.md` IS AT 84 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
+1a. **`docs/backlog.md` IS AT 86 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
    is not blocked. That is not licence to file rather than fix — the standing correction in the
    resume block still governs — but a filing no longer costs a rotation, and rotating still means
    CLOSING, which needs a measurement.
