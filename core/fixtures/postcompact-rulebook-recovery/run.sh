@@ -213,6 +213,100 @@ else
   fi
 fi
 
+# --- Assertion 7b: MUTANT — strip the ROUTER path from SKILL.md, only the router arm red
+# The protocol's third mandate, and the one a fresh `/ai-dlc resume` session depends on: it
+# loads the whole file, reads this section as its resume procedure, and never reaches
+# INITIALIZATION's router Read far below -- so the section itself must carry the path, and the
+# validator must refuse a protocol that does not. Built as a COPY, guarded by cmp -s. The
+# mutation edits every occurrence in the file; the validator reads only the section, so the
+# kill is attributable to the section's copy and INITIALIZATION's is incidental.
+# ONE MUTANT, ONE RED ARM: the digest and SKILL.md paths are untouched, so the mandate arm
+# (assertion 7's) must stay quiet and the failure must name the router specifically.
+# THE STALENESS GUARD COUNTS INSIDE THE SECTION, NOT `cmp -s` ON THE FILE. INITIALIZATION
+# carries the same path far below, so a whole-file `cmp` stays quiet when the SECTION's copy
+# is reworded and only INITIALIZATION's was mutated -- the guard could not fire for its stated
+# reason. Per fixture-mutants.md: assert the post-mutation count within the section is 0
+# against a non-zero unmutated count, both derived from the validator's own section bounds.
+proto_count() { # proto_count <skill-file> -> occurrences of the router path inside the protocol section
+  _s="$(grep -n '^## POST-COMPACT RECOVERY PROTOCOL' "$1" | head -1 | cut -d: -f1)"
+  [ -n "$_s" ] || { printf '0\n'; return; }
+  _e="$(awk -v s="$_s" 'NR>s && /^## / { print NR; exit }' "$1")"
+  [ -n "$_e" ] || { printf '0\n'; return; }
+  sed -n "${_s},$((_e - 1))p" "$1" | grep -c '\.claude/skills/ai-dlc/steps/route\.md'
+}
+MUT_ROUTE="$WORK/skill-no-router.md"
+sed 's|\.claude/skills/ai-dlc/steps/route\.md|the router step|g' "$SKILL" > "$MUT_ROUTE"
+if [ "$(proto_count "$SKILL")" -eq 0 ]; then
+  bad "FIXTURE STALE: the shipped protocol section names the router path 0 times, so the router mutant has no subject to remove and assertion 6 is the only thing standing"
+elif [ "$(proto_count "$MUT_ROUTE")" -ne 0 ]; then
+  bad "FIXTURE STALE: the mutation left $(proto_count "$MUT_ROUTE") router path(s) inside the protocol section, so the mutant does not remove the whole property"
+else
+  out="$(bash "$VAL" --skill "$MUT_ROUTE" --quiet 2>&1)"; rc=$?
+  if [ "$rc" -ne 0 ] && grep -q 'does not send an un-routed session to the' <<<"$out"; then
+    ok "mutant: a protocol that names no router FAILS, on the router arm specifically"
+  elif [ "$rc" -ne 0 ]; then
+    bad "MUTANT FAILED ON THE WRONG ARM — stripping the router path tripped a different check, so the arms are entangled and one is vacuous. Output: $(head -1 <<<"$out")"
+  else
+    bad "MUTANT DID NOT FAIL — SKILL.md passes with the router path removed from its protocol, so a resumed lead can be sent past the router and nothing refuses to ship it"
+  fi
+fi
+
+# --- Assertion 7c: MUTANT — the router path survives only inside an HTML comment ---
+# The comment-satisfiable receipt is this repo's most-repeated receipt defect. A protocol that
+# carries the path in `<!-- -->` reads as compliant to a bare grep and instructs the lead of
+# nothing. The mutation wraps the section's live mention; the arm strips single-line comments
+# before matching, so this must fail on the router arm too.
+MUT_ROUTE_C="$WORK/skill-router-commented.md"
+sed 's|`{project-root}/\.claude/skills/ai-dlc/steps/route\.md`|<!-- .claude/skills/ai-dlc/steps/route.md -->|' "$SKILL" > "$MUT_ROUTE_C"
+if cmp -s "$SKILL" "$MUT_ROUTE_C"; then
+  bad "FIXTURE STALE: the protocol's router mention was reworded, so the commented-out mutant is byte-identical and the comment guard is unproven"
+else
+  out="$(bash "$VAL" --skill "$MUT_ROUTE_C" --quiet 2>&1)"; rc=$?
+  if [ "$rc" -ne 0 ] && grep -q 'does not send an un-routed session to the' <<<"$out"; then
+    ok "mutant: a router path present only inside an HTML comment FAILS the router arm"
+  elif [ "$rc" -ne 0 ]; then
+    bad "MUTANT FAILED ON THE WRONG ARM — commenting out the router path tripped a different check. Output: $(head -1 <<<"$out")"
+  else
+    bad "MUTANT DID NOT FAIL — a router path inside an HTML comment satisfies the validator, so the arm is closable by a comment"
+  fi
+fi
+
+# --- Assertion 7d: MUTANT — the router path survives only inside a MULTI-LINE comment ---
+# The house-style form: 18 of the 20 HTML comments in SKILL.md span lines, and a one-line
+# `sed 's/<!--.*-->//'` guard passed a path parked in one. The comment opens on the line
+# before the path and closes on the line after, so a single-line stripper cannot see it.
+MUT_ROUTE_M="$WORK/skill-router-multiline-comment.md"
+awk '
+  index($0, "`{project-root}/.claude/skills/ai-dlc/steps/route.md`") && !d {
+    print "<!-- the router path, parked in a comment:"; print $0; print "-->"; d = 1; next
+  }
+  { print }' "$SKILL" > "$MUT_ROUTE_M"
+if cmp -s "$SKILL" "$MUT_ROUTE_M"; then
+  bad "FIXTURE STALE: the protocol's router mention was reworded, so the multi-line-comment mutant is byte-identical and the comment guard is unproven for the house-style form"
+else
+  out="$(bash "$VAL" --skill "$MUT_ROUTE_M" --quiet 2>&1)"; rc=$?
+  if [ "$rc" -ne 0 ] && grep -q 'does not send an un-routed session to the' <<<"$out"; then
+    ok "mutant: a router path present only inside a MULTI-LINE HTML comment FAILS the router arm"
+  elif [ "$rc" -ne 0 ]; then
+    bad "MUTANT FAILED ON THE WRONG ARM — wrapping the router path in a multi-line comment tripped a different check. Output: $(head -1 <<<"$out")"
+  else
+    bad "MUTANT DID NOT FAIL — a router path inside a multi-line HTML comment satisfies the validator, which is the comment form this file actually uses"
+  fi
+fi
+
+# --- Assertion 7e: CONTROL — a live path BRACKETED by two one-line comments still counts --
+# The greedy `.*` failure: `<!-- a --> path <!-- b -->` on one line stripped the path with the
+# comments. The stripper must remove only the commented spans, so this copy must PASS.
+MUT_ROUTE_B="$WORK/skill-router-bracketed.md"
+sed 's|`{project-root}/\.claude/skills/ai-dlc/steps/route\.md`|<!-- a --> `{project-root}/.claude/skills/ai-dlc/steps/route.md` <!-- b -->|' "$SKILL" > "$MUT_ROUTE_B"
+if cmp -s "$SKILL" "$MUT_ROUTE_B"; then
+  bad "FIXTURE STALE: the protocol's router mention was reworded, so the bracketed control is byte-identical and proves nothing"
+elif bash "$VAL" --skill "$MUT_ROUTE_B" --quiet >/dev/null 2>&1; then
+  ok "control: a live router path bracketed by two one-line comments still PASSES — the stripper removes only the comments"
+else
+  bad "CONTROL FAILED — a live router path between two one-line comments was stripped with them, so the arm refuses a compliant protocol"
+fi
+
 # --- Assertion 8: MUTANT — strip the mandate from the HOOK, arms 1-3 must fail
 # The other end of the join. A validator that guards SKILL.md's prose does not notice the
 # hook losing the same instruction, and the hook is the copy the lead actually reads.

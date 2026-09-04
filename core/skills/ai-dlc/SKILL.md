@@ -25,11 +25,24 @@ in a single conversation.
 
 ## POST-COMPACT RECOVERY PROTOCOL
 
+**This protocol governs a COMPACTION inside a session that has already
+routed. It is not the resume procedure.** A session whose input is
+`/ai-dlc resume` -- or any other `/ai-dlc` invocation -- has not
+compacted and has not routed: **READ AND FOLLOW**
+`{project-root}/.claude/skills/ai-dlc/steps/route.md` before any
+pipeline action, as INITIALIZATION requires. Its Step 0 dispatches
+`resume` after Step 0a's snapshot integrity checks, and
+`ai-dlc-acknowledge.sh` denies every write until the router has been
+read. Following this section instead is how a resumed lead skips the
+router and Step 0a and is denied on its first write. A lead recovering
+from a compaction routed before it compacted and does not re-route.
+
 The `ai-dlc-recover.sh` hook re-injects the snapshot automatically on
 every compaction, as a block headed "AI/DLC POST-COMPACT RECOVERY".
-When that block is present, follow it -- it is authoritative and this
-section adds nothing. What follows is the fallback for when the hook
-is absent, disabled, or reports that its injection was truncated.
+When that block is present, follow it -- it is authoritative and the
+recovery steps below add nothing to it. What follows is the fallback
+for when the hook is absent, disabled, or reports that its injection
+was truncated.
 
 If the previous user turn was `/compact` or an auto-compact event, OR
 if the agent observes signs the conversation history has been

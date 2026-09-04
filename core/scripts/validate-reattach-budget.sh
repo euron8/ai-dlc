@@ -213,6 +213,60 @@ if ! grep -q '\.claude/skills/ai-dlc/SKILL\.md' <<<"$PROTO_TEXT" \
   exit 1
 fi
 
+# -----------------------------------------------------------------------------
+# The protocol must send an UN-ROUTED session to the router, not past it.
+# -----------------------------------------------------------------------------
+# The protocol sits at the top of the file and INITIALIZATION -- "READ AND FOLLOW
+# steps/route.md", unconditional -- sits at the bottom. A session whose first input is
+# `/ai-dlc resume` loads the whole file, reads this section as its resume procedure, obeys
+# "proceed to the next pipeline action", never reads the router, and is denied its first
+# write by ai-dlc-acknowledge.sh Check 2z -- whose remedy is exactly the Read this section
+# did not name. Step 0a's six snapshot integrity checks are skipped on the same path.
+#
+# Measured on the reference consumer (PC-S308-POST-COMPACT-RECOVERY-PROTOCOL-SKIPS-ROUTE-MD):
+# 10 of 41 `/ai-dlc resume` sessions over two days were denied before ever reading the
+# router, every one of them having read the snapshot first; 0 of 51 sessions that actually
+# COMPACTED were denied after the summary, because their transcript already carried the
+# Read. The population is the fresh resume, not the compaction this protocol is named for.
+#
+# The arm requires the router's INSTALLED path inside the section -- the same key the deny's
+# own remedy names -- outside an HTML comment. A protocol that mentions `route.md` bare, or
+# only inside a comment, is one the lead can obey without reading anything.
+#
+# COMMENTS ARE STRIPPED BY A STATE MACHINE, NOT BY `sed 's/<!--.*-->//'`. That sed handles a
+# comment that opens and closes on one line, and 18 of the 20 HTML comments in this very file
+# span lines -- so a path parked inside the house-style comment would have passed. The greedy
+# `.*` also ate a LIVE path bracketed by two comments on one line. The scanner below carries
+# comment state across lines and removes exactly the commented spans.
+strip_html_comments() {
+  awk '{
+    line = $0; out = ""
+    while (1) {
+      if (inc) {
+        p = index(line, "-->")
+        if (p == 0) { line = ""; break }
+        line = substr(line, p + 3); inc = 0
+      } else {
+        p = index(line, "<!--")
+        if (p == 0) { out = out line; break }
+        out = out substr(line, 1, p - 1); line = substr(line, p + 4); inc = 1
+      }
+    }
+    print out
+  }'
+}
+PROTO_LIVE="$(strip_html_comments <<<"$PROTO_TEXT")"
+if ! grep -q '\.claude/skills/ai-dlc/steps/route\.md' <<<"$PROTO_LIVE"; then
+  echo "FAIL: the POST-COMPACT RECOVERY PROTOCOL does not send an un-routed session to the" >&2
+  echo "      router. Expected '.claude/skills/ai-dlc/steps/route.md' inside lines" >&2
+  echo "      ${START_LINE}..${PROTO_END}, outside any HTML comment; found $(grep -c '\.claude/skills/ai-dlc/steps/route\.md' <<<"$PROTO_LIVE")." >&2
+  echo "      A session started with '/ai-dlc resume' reads this section as its resume" >&2
+  echo "      procedure, and INITIALIZATION's unconditional router Read sits far below it." >&2
+  echo "      Without the path here the lead proceeds un-routed, skips Step 0a, and" >&2
+  echo "      ai-dlc-acknowledge.sh denies its first write." >&2
+  exit 1
+fi
+
 say "PASS  protocol ends at ~${EST_TOKENS} tokens; ${SLACK} tokens of slack under the ${CEILING}-token ceiling (${BUDGET} window - ${MARGIN} margin)."
-say "      protocol names the digest to recover from and SKILL.md for full rule text."
+say "      protocol names the digest to recover from, SKILL.md for full rule text, and the router for an un-routed session."
 exit 0
