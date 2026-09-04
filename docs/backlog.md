@@ -4063,8 +4063,11 @@ Write in that state is `ROUTE` under both.
 `agent_type`), and the lead's carries neither. Readers of that field at this event already in
 the tree: `ai-dlc-gate-remediation-guard.sh:266-277` ("absent == the lead") and the third-party
 `context-mode` plugin's `pretooluse.mjs` (`isSubagentContext = input.agent_id != null ||
-input.agent_type != null`); `ai-dlc-context-sensor.sh:164` reads it at `Stop`. The receipt below
-supplies both spellings so a fix keyed on either scores the same.
+input.agent_type != null`); `ai-dlc-context-sensor.sh:164` reads it at `Stop`. The Claude Code
+hooks documentation (`https://code.claude.com/docs/en/hooks`, common input fields) says the same:
+`agent_id` is "present only when the hook fires inside a subagent call", and `transcript_path`
+"is the main session's transcript". The receipt below supplies both spellings so a fix keyed on
+either scores the same.
 
 **The fix, and the shape it rejected.** Check 2z's guard gains one conjunct, `[ -z "$AGENT_ID" ]`:
 a dispatched teammate is outside the check, because the check's own justification binds the
