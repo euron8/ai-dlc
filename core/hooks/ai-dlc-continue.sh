@@ -300,9 +300,30 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]
   # context): those are discussion, not a request, and a bare-substring regex fires on
   # every one of them and spams the operator with a spurious resume prompt. The second
   # grep excludes any message that IS a resume prompt or talks ABOUT the mechanism.
-  if [ "$HANDOFF_ON_DISK" = "1" ] \
+  # ONCE ARMED, ARMED UNTIL SATISFIED -- WITHIN THIS SESSION AND WHILE THE PIPELINE IS PAUSED.
+  # The marker arm below asserts the ABSENCE of the file that is key 1 of the predicate, so a
+  # lead that runs step 5's `rm -f` before step 4's touch removes the only thing arming the guard
+  # and the next Stop is not examined at all. Measured by driving this hook: marker present and
+  # driver signal never touched -> BLOCK; marker cleared, driver still untouched -> ALLOW. So the
+  # first armed Stop records the session id here, and every later Stop of the same session with
+  # the pause flag still up is armed by that record until the guard is satisfied or the backoff
+  # releases, both of which remove it. A Stop with the pause flag DOWN removes it too: the resume
+  # path took the flag, so the handoff was abandoned and the record must not outlive that.
+  HANDOFF_ARMED_FILE="${LOG_DIR}/.handoff-guard-armed"
+  HANDOFF_STICKY=0
+  if [ -f "$HANDOFF_ARMED_FILE" ]; then
+    if [ -f "${LOG_DIR}/pipeline-paused.flag" ] && [ -n "$SESSION_ID" ] \
+       && [ "$(head -n 1 "$HANDOFF_ARMED_FILE" 2>/dev/null)" = "$SESSION_ID" ]; then
+      HANDOFF_STICKY=1
+    else
+      rm -f "$HANDOFF_ARMED_FILE"
+    fi
+  fi
+
+  if [ "$HANDOFF_ON_DISK" = "1" ] || [ "$HANDOFF_STICKY" = "1" ] \
      || { grep -qiE "$HANDOFF_INTENT_RE" <<<"$LAST_USER" \
           && ! grep -qiE "$HANDOFF_MENTION_RE" <<<"$LAST_USER"; }; then
+    [ -n "$SESSION_ID" ] && printf '%s\n' "$SESSION_ID" > "$HANDOFF_ARMED_FILE"
 
     RESUME_OK=$(printf '%s' "$LAST_ASST" | awk '
       /^[[:space:]]*-{4,}[[:space:]]*$/ { marks++; if (marks==1){opened=1;sawcmd=0} else if (marks>=2 && sawcmd){ok=1}; next }
@@ -393,17 +414,31 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]
     # is ALSO present, and idle is written by ai-dlc-driver-signal.sh, a Stop hook registered
     # after this one -- so at this seam a touched marker is still on disk. `touch` fails when
     # `.driver/` does not exist, which is why the remedy below says `mkdir -p` first and why
-    # steps/handoff.md step 4 does too. STATED LIMIT: in a tree no driver has ever consumed, a
-    # marker from an earlier handoff persists and satisfies this arm; the arm asserts the file,
-    # not this turn's touch.
+    # steps/handoff.md step 4 does too.
+    #
+    # PRESENCE IS NOT ENOUGH, AND THE REFERENCE CONSUMER IS THE PROOF. Only the session driver
+    # ever removes this file, no driver is attached there, and `_bmad-output/.driver/handoff`
+    # has sat on disk since the last handoff that touched it -- so a presence test is satisfied
+    # forever on the very tree the 20-of-39 skip rate was measured on, and the arm for the
+    # most-skipped step would have shipped inert. The reference is THIS handoff's step 3: the
+    # finalized snapshot precedes the touch in the procedure, so a marker OLDER than the
+    # snapshot predates this handoff. With no snapshot on disk there is no reference, and the
+    # arm falls back to presence, stated. One known extra round: a lead that touched at step 4,
+    # was blocked on the teammate arm and re-finalized the snapshot is told to touch again.
     #
     # THE MARKER ARM IS NOT THE MARKER KEY. Key 1 of ai_dlc_handoff_pending ARMS this guard on the
     # marker's presence; this arm asserts its ABSENCE once steps 1, 3 and 4 are recorded, which is
     # exactly step 5's "cleared here and nowhere earlier". A lead mid-procedure is caught by an
     # earlier arm first (dispatch order below), so this one fires only on a handoff that did
-    # everything except finish.
+    # everything except finish. Clearing the marker BEFORE touching the driver signal would
+    # disarm key 1 and escape both arms, which is what the sticky arming above exists for.
     DRIVER_OK=1
-    [ -f "${LOG_DIR}/.driver/handoff" ] || DRIVER_OK=0
+    _drv="${LOG_DIR}/.driver/handoff"
+    if [ ! -f "$_drv" ]; then
+      DRIVER_OK=0
+    elif [ -f "$SNAPSHOT_FILE" ] && [ "$SNAPSHOT_FILE" -nt "$_drv" ]; then
+      DRIVER_OK=0                                   # stale: predates this handoff's step 3
+    fi
     MARKER_OK=1
     [ -f "${LOG_DIR}/.handoff-in-progress" ] && MARKER_OK=0
 
@@ -429,6 +464,7 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]
       # compaction between the ask and the Stop -- and that is a different investigation from a
       # lead that was told plainly and skipped the steps.
       [ "$HANDOFF_ON_DISK" = "1" ] && H_WHY="${H_WHY} [pending handoff seen on disk via ${AI_DLC_HANDOFF_KEY:-unknown}, not the transcript]"
+      [ "$HANDOFF_ON_DISK" != "1" ] && [ "$HANDOFF_STICKY" = "1" ] && H_WHY="${H_WHY} [armed by an earlier Stop of this session, no key holds now]"
       # The remediation text is assembled the same way, so a lead that satisfied one arm is
       # not told to redo it.
       H_FIX_RESUME="Per steps/handoff.md step 4, emit exactly this, and nothing else -- no narrated body:"
@@ -472,15 +508,15 @@ The \`/ai-dlc resume\` line MUST sit BETWEEN two delimiter lines (four or more h
         # Steps 1, 3 and the resume line are all recorded. What remains is step 4's touch, then
         # step 5's clear -- in that order, because step 5 is the last action before ending.
         if [ "$DRIVER_OK" != "1" ]; then
-          jq -n --arg r "HANDOFF GUARD: the teammate sweep is recorded, the push has landed and the resume prompt is well-formed, but step 4's driver signal was NOT touched -- \`_bmad-output/.driver/handoff\` is absent. Per steps/handoff.md step 4, run \`mkdir -p _bmad-output/.driver && touch _bmad-output/.driver/handoff\` and end the turn again. The touch is unconditional: a session cannot tell from inside itself whether a driver is attached, and with none attached the marker is inert. Then step 5: \`touch _bmad-output/pipeline-paused.flag\` and \`rm -f _bmad-output/.handoff-in-progress\`. Do not resume pipeline work." '{decision:"block",reason:$r,suppressOutput:true}'
+          jq -n --arg r "HANDOFF GUARD: the teammate sweep is recorded, the push has landed and the resume prompt is well-formed, but step 4's driver signal was NOT touched -- \`_bmad-output/.driver/handoff\` is absent, or is older than the snapshot this handoff finalized and so belongs to an earlier handoff. Per steps/handoff.md step 4, run \`mkdir -p _bmad-output/.driver && touch _bmad-output/.driver/handoff\` and end the turn again. The touch is unconditional: a session cannot tell from inside itself whether a driver is attached, and with none attached the marker is inert. Then step 5: \`touch _bmad-output/pipeline-paused.flag\` and \`rm -f _bmad-output/.handoff-in-progress\`. Do not resume pipeline work." '{decision:"block",reason:$r,suppressOutput:true}'
           exit 0
         fi
         jq -n --arg r "HANDOFF GUARD: steps 1 through 4 are recorded, but step 5's entry marker is still present -- \`_bmad-output/.handoff-in-progress\` exists, which tells the next compaction that this session is still INSIDE the handoff procedure. Per steps/handoff.md step 5, run \`rm -f _bmad-output/.handoff-in-progress\` (the pause flag is already set) and end the turn again. Do not resume pipeline work." '{decision:"block",reason:$r,suppressOutput:true}'
         exit 0
       fi
-      rm -f "$HANDOFF_STATE"   # backoff exhausted: allow stop (possible false positive)
+      rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # backoff exhausted: allow stop (possible false positive)
     else
-      rm -f "$HANDOFF_STATE"   # resume block well-formed AND the sweep recorded: satisfied
+      rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # every arm satisfied: the handoff is complete
     fi
   fi
 fi

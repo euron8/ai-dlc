@@ -4077,12 +4077,24 @@ copy of the incident state, the fixed hooks BLOCK where the shipped ones write `
 survival as the entanglement control); `handoff-resume-guard` seeds the lead's touch in its
 drive().
 
-**Stated limits.** The driver arm asserts the FILE, not this turn's touch: in a tree no driver has
-ever consumed, a marker from an earlier handoff satisfies it. The marker arm can fire only while
-key 1 or another key arms the guard, so a lead that clears the marker WITHOUT touching the driver
-signal disarms key 1 and is caught only if key 3 or key 2 still holds — key 3 does whenever the
-operator typed the request. The four adjacent defects the batch-49 hands found are filed as
-`BL-159` and not fixed here.
+**Two defects the adversarial hand found in the first cut, both fixed before the merge.** The
+driver arm asserted the FILE's presence, and on the reference consumer `.driver/handoff` has sat
+on disk since the last handoff that touched it — no driver is attached there to consume it — so
+the arm for the most-skipped step would have shipped inert on the tree its skip rate was
+measured on. It now requires the signal to be NEWER than the finalized snapshot when one exists
+(step 3 precedes step 4 in the procedure), with presence as the stated fallback when there is no
+snapshot. And the marker arm asserts the absence of the same file that is key 1, so a lead that
+ran step 5's `rm -f` before step 4's touch removed the only thing arming the guard and escaped
+both arms. The first armed Stop now records its session id in `.handoff-guard-armed`, and every
+later paused Stop of that session is armed by the record until the guard is satisfied, the
+backoff releases, or the pause flag comes down. Both have fixture cases ((d4), (d5)) and mutants
+(m23, m24).
+
+**Stated limits.** A lead that touched the signal at step 4 and then re-finalized the snapshot
+after a teammate-arm block is told to touch again — one extra round in a rare ordering. The
+freshness reference is the snapshot, so a handoff that skipped step 3's finalization entirely has
+no reference and the driver arm falls back to presence. The four adjacent defects the batch-49
+hands found are filed as `BL-159` and not fixed here.
 
 verify: sh h=core/hooks; l=core/schemas/pause-routing.json; [ -f "$h/ai-dlc-continue.sh" ] && [ -f "$h/ai-dlc-handoff-pending.sh" ] && [ -f "$l" ] || exit 9; command -v jq >/dev/null || exit 9; w=$(mktemp -d) || exit 9; trap 'rm -rf "$w"' EXIT; mkdir -p "$w/p/_bmad-output/.driver" "$w/q/_bmad-output/.driver"; : > "$w/p/_bmad-output/pipeline-paused.flag"; : > "$w/q/_bmad-output/pipeline-paused.flag"; printf '## 2026-09-04T06:21:13Z -- USER_PAUSE\n- Session: s1\n- Channel: UserPromptSubmit (typed message)\n- Prompt (first 120 chars): /ai-dlc resume\n\n## 2026-09-04T06:47:11Z -- USER_PAUSE\n- Session: s1\n- Channel: UserPromptSubmit (typed message)\n- Prompt (first 120 chars): handoff\n\n' > "$w/p/_bmad-output/pipeline-continuation-log.md"; printf '{"message":{"role":"user","content":"trim"}}\n{"message":{"role":"assistant","content":"done"}}\n' > "$w/t.jsonl"; d() { o=$(jq -nc --arg t "$w/t.jsonl" --arg s s1 '{transcript_path:$t,session_id:$s}' | CLAUDE_PROJECT_DIR="$w/$1" AI_DLC_PAUSE_ROUTING_SCHEMA="$l" bash "$h/ai-dlc-continue.sh" 2>/dev/null); [ -z "$o" ] && { echo allow; return; }; printf '%s' "$o" | jq -r '.decision // "allow"'; }; a=$(d p); [ "$a" = block ] || exit 1; printf '{"message":{"role":"user","content":"hand off the sprint"}}\n{"message":{"role":"assistant","content":"----\\n/ai-dlc resume\\n----"}}\n' > "$w/t.jsonl"; b=$(d q); : > "$w/q/_bmad-output/.driver/handoff"; rm -f "$w/q/_bmad-output/handoff-guard-state.txt"; c=$(d q); [ "$b" = block ] && [ "$c" = allow ] && exit 0; exit 1
 

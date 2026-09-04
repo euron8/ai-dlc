@@ -73,9 +73,12 @@ drive() { # drive <transcript> [snapshot] [hook] -> prints "block" or "allow"
   # for a reason this fixture does not test. This is the lead's Bash action, not a hook's
   # artifact, so writing it here is seeding the actor's step and not the reader's grammar;
   # handoff-completion-assertion owns the arm and its mutant.
-  : > "$proj/_bmad-output/.driver/handoff"
+  # ORDER MATTERS: the driver arm treats a signal OLDER than the snapshot as a previous
+  # handoff's, so the snapshot is copied first and the touch comes after it, as step 3 precedes
+  # step 4 in the procedure.
   [ -n "$snap" ] && { cp "$snap" "$proj/_bmad-output/pipeline-snapshot.md"
                       touch "$proj/_bmad-output/pipeline-paused.flag"; }
+  : > "$proj/_bmad-output/.driver/handoff"
   out="$(jq -nc --arg t "$t" --arg s "fx" '{transcript_path:$t,session_id:$s}' \
         | CLAUDE_PROJECT_DIR="$proj" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" \
           bash "$hk" 2>/dev/null)"

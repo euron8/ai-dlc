@@ -48,11 +48,21 @@ copy of the incident state the fixed hooks BLOCK where the shipped ones allowed.
 exclusion restored, killed by (g3) alone), m21 and m22 (each new arm removed, the other arm's
 survival as the entanglement control). `handoff-resume-guard` seeds the lead's touch.
 
+**The adversarial hand found two defects in the first cut, both fixed before the merge.** The
+driver arm tested presence, and on the reference consumer `.driver/handoff` persists from the
+last handoff with no driver attached to consume it, so the arm for the most-skipped step would
+have shipped inert exactly where its skip rate was measured. It now requires the signal to be
+newer than the finalized snapshot (step 3 precedes step 4), presence only when no snapshot
+exists. And clearing the entry marker before touching the driver signal removed the only arming
+key and escaped both new arms; the first armed Stop now records its session in
+`.handoff-guard-armed` (declared transient in `pipeline-state-paths.json`), and later paused
+Stops of that session stay armed until the guard is satisfied. Cases (d4) and (d5), mutants m23
+and m24.
+
 **Receipt.** `BL-158` drives the shipping hook on three seeded states and reads verdicts only:
 the incident's log shape must BLOCK, a compliant handoff with the driver signal absent must
 BLOCK, and the same with the signal present must ALLOW. It reads STILL-LIVE under the pre-fix
-hooks and under either half of the fix alone. Stated limits: the driver arm asserts the file, not
-this turn's touch; the marker arm fires only while some key still arms the guard.
+hooks and under either half of the fix alone.
 
 ## [0.497.0] - 2026-09-04
 
