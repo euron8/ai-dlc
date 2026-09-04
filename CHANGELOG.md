@@ -15,6 +15,62 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.500.0] - 2026-09-04
+
+### An indented ```derived fence was invisible to the validator and the capture hook
+
+Closes `PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT` (`BL-162`), filed by
+the reference consumer on 2026-09-03 while a remediator repaired `carry-over-evaluation.md` and
+found the check not firing on two fences inside a list item. Batch 51 of the ledger drain, chosen
+by the operator over its verified sibling on consequence: a fenced claim promises a machine check,
+and the tool answered that promise with "0 derivation(s) in 0 block(s)" and exit 0.
+
+**The defect.** `validate-artifact-derivations.sh` matched the fence opener against the line as
+read, so a block written inside a list item — `- item` then `  ```derived` — never opened, its
+pairs never ran, and the file reported clean. `ai-dlc-derivation-capture.sh` read the same shape
+at column 0 in its scope grep, its mask and its command grep, so the block was neither witnessed
+at write time nor checked at the gate, with no error from either. The reader set is those two
+programs and no other; the hook's own header binds them to one population. Measured on the
+consumer before building: 11 files carry 26 indented openers against 272 files with unindented
+ones. The installed and the shipped validator over those 11 files read 87 and 106 STALE, 6 and
+14 ALLOWLIST refusals, and three files flip from exit 0 to exit 1 — nineteen stale derivations
+and eight refused commands the consumer's gate has never reported.
+
+**The rule.** CommonMark's: the opener's leading blanks are the block's indent and each content
+line sheds exactly that prefix, or whatever leading blanks it has when it carries fewer. Not
+"all leading blanks" — a right-aligned `wc -l` count keeps its padding under an unindented
+fence, and the fixture pins that with a padded twin the shed-all mutant fails. Any indent width
+opens a fence; the three-space CommonMark cap is deliberately not applied, because a fence run
+that CommonMark would have rendered literal is a visible STALE where a skip is a silent zero.
+The hook applies the same two rules in its awk mask and both cheap rejects, so a `$ ` line is a
+command in both programs by its shed form.
+
+**What the indent rule uncovered, fixed in the same release.** Driving the indent-aware validator
+over the consumer's 11 files, one LOST three derivations: a numbered list item whose wrapped
+continuation begins "```derived blocks are machine-checked and plain blocks are not, …" matched
+the opener arm `'```derived '*`, opened a phantom block that ran to the next real opener, read it
+as a closer, and left the real block's pairs outside any fence. Over the consumer's 2795 openers
+zero carry legitimate text after the word and two are prose — one at column 0, which the old
+reader was already swallowing in a second file. Both programs now require the shed line to be
+exactly the token plus optional blanks. That file reads 37 derivations in 8 blocks under both
+validators again; the second drops one phantom block with the same seven derivations.
+
+**Fixtures.** `artifact-derivations` gains section I (indented true and stale twins, the
+`--list` count that was the filing's own observable, a three-space indent, the exact-shed padded
+pair, an unclosed indented block) and section J (column-0 and indented prose-opener twins).
+Against the pre-fix validator nine of the ten new arms are red; against the indent-only half of
+the fix exactly the three J arms are; against a shed-all mutant exactly the padded true twin is.
+`derivation-capture` gains an indented artifact and a prose-opener artifact, two controls that
+fail loudly under a fence-blind validator, and arms A17–A21; its mutant battery gains one mutant
+per fence-reading site in the hook plus the loose-opener mutant, which owns A21 — under it the
+real pair after a prose line is written UNWITNESSED, silently — and re-anchors the
+command-line-only mutant on the shed form so it no longer disarms indented commands as a side
+effect. Twenty-five sibling arms, fourteen mutants, each reddening exactly its declared set.
+
+**What this does not close.** A `$ ` line indented deeper than its fence is OUTPUT in both
+programs, and an author who indents commands past the fence reads a STALE naming the line. The
+consumer's fences already demoted to `text` stay demoted until a consumer hand re-fences them.
+
 ## [0.499.0] - 2026-09-04
 
 ### The ledger's entry-boundary rule opened an entry on a heading inside a code fence

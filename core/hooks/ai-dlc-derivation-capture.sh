@@ -117,7 +117,16 @@ case "$FILE" in *.md) ;; *) exit 0 ;; esac
 # whatever file it is handed; keying this hook on a directory declaration instead
 # would give the two programs different populations and one of them would be wrong
 # about a file the other checks.
-grep -q '^```derived' "$FILE" 2>/dev/null || exit 0
+#
+# AND A FENCE MAY BE INDENTED. A ```derived block written inside a list item opens with
+# `  ```derived`, and until v0.500.0 this reject, the mask below and the validator all
+# matched the opener at column 0 only -- so an indented block was never witnessed here and
+# never checked at the gate, with no error from either. The validator carries the rule
+# (CommonMark: the opener's leading blanks are the block's indent and each content line
+# sheds that prefix); this hook applies the same rule in the three places it reads a
+# fence line, because the two programs are one population by the contract above.
+# PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT.
+grep -q '^[[:blank:]]*```derived' "$FILE" 2>/dev/null || exit 0
 
 [ -r "$VALIDATOR" ] || exit 0
 
@@ -146,18 +155,33 @@ printf '%s\n' "$PAYLOAD" > "$TMPD/payload.txt" 2>/dev/null || exit 0
 # index because nearly every payload has one and it would touch every pair.
 MASK="$TMPD/$(basename "$FILE")"
 awk '
+# lead(s): the leading blanks of s. shed(s, ind): s with the block indent removed -- exactly
+# `ind` when s carries it, else whatever leading blanks s has. The same two rules as
+# `fence_indent` / `shed_indent` in the validator; a line is a fence delimiter or a `$ `
+# command line by its SHED form, so the two programs agree on which lines are which.
+function lead(s) { match(s, /^[ \t]*/); return substr(s, 1, RLENGTH) }
+function shed(s, ind) {
+  if (ind == "") return s
+  if (substr(s, 1, length(ind)) == ind) return substr(s, length(ind) + 1)
+  return substr(s, length(lead(s)) + 1)
+}
 FNR==NR { if ($0 != "") PAY[$0]=1; next }
 { L[FNR]=$0; N=FNR }
 END {
   i=1
   while (i<=N) {
-    if (L[i]=="```derived" || index(L[i],"```derived ")==1) {
+    ind = lead(L[i]); b = substr(L[i], length(ind) + 1)
+    # The info string is EXACTLY derived, as the validator requires: a wrapped sentence whose
+    # continuation begins with the token used to open a phantom block that swallowed the real
+    # one after it (measured in the validator header). No apostrophe in this comment: it sits
+    # inside a single-quoted awk program.
+    if (b ~ /^```derived[ \t]*$/) {
       j=i+1
-      while (j<=N && index(L[j],"```")!=1) j++
+      while (j<=N && index(shed(L[j], ind),"```")!=1) j++
       split("", pid); split("", tch)
       cur=0
       for (k=i+1;k<j;k++) {
-        if (index(L[k],"$ ")==1) cur=k
+        if (index(shed(L[k], ind),"$ ")==1) cur=k
         pid[k]=cur
         if (cur>0 && (L[k] in PAY)) tch[cur]=1
       }
@@ -176,8 +200,8 @@ END {
 ' "$TMPD/payload.txt" "$FILE" > "$MASK" 2>/dev/null || exit 0
 
 # Nothing this edit wrote is a derivation -- the common case for an edit to prose in
-# a file that happens to carry fences elsewhere.
-grep -q '^\$ ' "$MASK" 2>/dev/null || exit 0
+# a file that happens to carry fences elsewhere. Indent-tolerant for the reason above.
+grep -q '^[[:blank:]]*\$ ' "$MASK" 2>/dev/null || exit 0
 
 OUT=$( ( cd "$PROJECT_DIR" 2>/dev/null && AI_DLC_PROJECT_ROOT="$PROJECT_DIR" \
          bash "$VALIDATOR" "$MASK" ) 2>&1 )

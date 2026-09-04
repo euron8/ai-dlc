@@ -275,6 +275,96 @@ else
   bad "g-hidden a command hidden behind a quoted bar still wrote to the tree"
 fi
 
+# --- I. AN INDENTED FENCE IS A FENCE ----------------------------------------------
+# A ```derived block written inside a list item opens with `  ```derived`, and the reader
+# matched the opener at column 0 only -- so the block never opened, its pair never ran, and the
+# file printed "0 derivation(s) in 0 block(s)" with exit 0. That line is the ONE output this
+# validator must never produce over a fence: the author fenced the claim to make it checkable
+# and got no check and no error. Reported by the reference consumer as
+# PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT, whose own reproduction is
+# the `--list` pair below: indented reports 0 blocks, the unindented control reports 1.
+#
+# EVERY GREEN CASE HAS A STALE TWIN, as in G: a reader that opens the block and executes
+# nothing passes the green half and fails the twin. The `wc -l` pair is the one that
+# separates the CORRECT rule (shed exactly the fence's indent) from the OBVIOUS one (shed all
+# leading blanks): `wc -l` prints seven spaces before its digit, an author writing under a
+# two-space fence records nine, and shedding all of them turns a true derivation STALE.
+iemit() { # $1 file  $2 indent  $3 recorded-output  -- one block inside a list item
+  { printf '# Story\n\n- AC1, with its derivation fenced beneath it:\n\n'
+    printf '%s```derived\n%s$ grep -c needle src/two-needles.txt\n%s%s\n%s```\n' "$2" "$2" "$2" "$3" "$2"; } > "$1"
+}
+iemit "$WORK/i-true.md" "  " 2
+out="$(run "$WORK/i-true.md")"; rc=$?
+[ "$rc" -eq 0 ] && grep -q '1 derivation(s) in 1 block(s)' <<< "$out" \
+  && ok "i-true                 exit=0  and the block is COUNTED (the filing's observable was '0 block(s)')" \
+  || bad "i-true expected exit 0 counting 1 block, got $rc: $out"
+out="$(run --list "$WORK/i-true.md")"
+grep -q '^1 derivation(s) in 1 block' <<< "$out" \
+  && ok "i-list                 --list sees the indented block (control: f-control saw the flat one)" \
+  || bad "i-list expected '1 derivation(s) in 1 block(s)', got: $out"
+iemit "$WORK/i-stale.md" "  " 1
+out="$(run "$WORK/i-stale.md")"; rc=$?
+[ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" && grep -q 'recorded: 1' <<< "$out" && grep -q 'actual:   2' <<< "$out" \
+  && ok "i-stale                exit=1  STALE -- so the indented block really executed" \
+  || bad "i-stale expected exit 1 STALE contrasting 1 with 2, got $rc: $out"
+# Three spaces -- an ordered-list item's content offset -- opens a fence too.
+iemit "$WORK/i-three.md" "   " 2
+out="$(run "$WORK/i-three.md")"; rc=$?
+[ "$rc" -eq 0 ] && grep -q '1 derivation(s) in 1 block(s)' <<< "$out" \
+  && ok "i-three                exit=0  (a three-space indent opens the fence)" \
+  || bad "i-three expected exit 0 counting 1 block, got $rc: $out"
+# THE INDENT IS SHED EXACTLY. BSD `wc -l` right-aligns its count in eight columns, so a
+# derivation of it carries seven leading spaces that are OUTPUT, not indent; the true twin
+# records the fence indent PLUS that padding, and only a reader shedding exactly the fence
+# indent reproduces it. The stale twin records the bare digit, which a reader shedding ALL
+# blanks would wrongly accept as well. The padding is produced by `printf '%8s'` rather than
+# by `wc` itself so the pair discriminates on GNU platforms too, where `wc -l` pads nothing
+# and the two twins would collapse into one.
+{ printf -- '- item\n\n  ```derived\n  $ %s\n  %s\n  ```\n' "printf '%8s\\n' 2" "       2"; } > "$WORK/i-pad-true.md"
+out="$(run "$WORK/i-pad-true.md")"; rc=$?
+[ "$rc" -eq 0 ] && ok "i-pad-true             exit=0  (indent shed EXACTLY: the output's own padding survives)" \
+                || bad "i-pad-true expected exit 0 -- the reader is shedding more than the fence indent: $out"
+{ printf -- '- item\n\n  ```derived\n  $ %s\n  %s\n  ```\n' "printf '%8s\\n' 2" "2"; } > "$WORK/i-pad-stale.md"
+out="$(run "$WORK/i-pad-stale.md")"; rc=$?
+[ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" \
+  && ok "i-pad-stale            exit=1  STALE (the bare digit is not what the command printed)" \
+  || bad "i-pad-stale expected exit 1 STALE, got $rc: $out"
+# An unclosed INDENTED block is reported, not skipped -- E's arm has to reach this form too.
+{ printf -- '- item\n\n  ```derived\n  $ grep -c needle src/two-needles.txt\n  2\n'; } > "$WORK/i-unclosed.md"
+out="$(run "$WORK/i-unclosed.md")"; rc=$?
+[ "$rc" -eq 1 ] && grep -q 'never closed' <<< "$out" \
+  && ok "i-unclosed             exit=1  (an unclosed indented block is reported)" \
+  || bad "i-unclosed expected exit 1 naming 'never closed', got $rc: $out"
+
+# --- J. A PROSE LINE THAT BEGINS WITH THE TOKEN IS NOT AN OPENER --------------------
+# The opener accepted `'```derived '*` -- any trailing text -- and over the reference
+# consumer's 2795 openers that arm matched nothing but two wrapped SENTENCES whose
+# continuation begins with the token. Each opened a phantom block that ran to the next real
+# opener, read it as a closer, and left the real block's pairs outside any fence: three
+# derivations silently unchecked in one file, found the moment the indent rule made the
+# list-item form reachable. The stale twins are the arms -- a reader that swallows the real
+# block reports 0 checked and exits 0 on both of them.
+jemit() { # $1 file  $2 indent  $3 recorded-output
+  { printf '# Story\n\n%sA sentence that wraps so its continuation begins with the fence token, so a\n' "$2"
+    printf '%s```derived would promise a machine check the command cannot keep -- this claim stays unfenced.\n\n' "$2"
+    printf '%s```derived\n%s$ grep -c needle src/two-needles.txt\n%s%s\n%s```\n' "$2" "$2" "$2" "$3" "$2"; } > "$1"
+}
+jemit "$WORK/j-col0-true.md" "" 2
+out="$(run "$WORK/j-col0-true.md")"; rc=$?
+[ "$rc" -eq 0 ] && grep -q '1 derivation(s) in 1 block(s)' <<< "$out" \
+  && ok "j-col0-true            exit=0  and the REAL block after the prose line is counted" \
+  || bad "j-col0-true expected exit 0 counting 1 block, got $rc: $out"
+jemit "$WORK/j-col0-stale.md" "" 1
+out="$(run "$WORK/j-col0-stale.md")"; rc=$?
+[ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" \
+  && ok "j-col0-stale           exit=1  STALE (the prose line opened nothing; the real block ran)" \
+  || bad "j-col0-stale expected exit 1 STALE -- the prose line swallowed the real block: $rc: $out"
+jemit "$WORK/j-ind-stale.md" "   " 1
+out="$(run "$WORK/j-ind-stale.md")"; rc=$?
+[ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" \
+  && ok "j-ind-stale            exit=1  STALE (the same, wrapped inside a list item)" \
+  || bad "j-ind-stale expected exit 1 STALE -- the indented prose line swallowed the real block: $rc: $out"
+
 echo
 if [ "$fails" -gt 0 ]; then
   echo "FAIL: $fails assertion(s) wrong."

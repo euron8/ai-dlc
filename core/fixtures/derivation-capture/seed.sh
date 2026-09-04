@@ -98,6 +98,48 @@ cat > "$CONSUMER/_bmad-output/planning-artifacts/s1/prose-only.md" <<'PROSE'
 No derivation anywhere in this file. 42 things, asserted and underived.
 PROSE
 
+# A third artifact whose ONLY fences are INDENTED -- both sit inside list items, as the
+# reference consumer writes them. Block A (line 6) is stale, block B (line 13) is fresh. Kept
+# in its own file so the arms that drive it are the only ones an indent-blind hook moves:
+# the hook's two cheap rejects and its mask all matched the opener at column 0 until
+# v0.500.0, and each of the three sites has a mutant in the sibling battery keyed on this
+# file. PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT.
+IND_ART="$CONSUMER/_bmad-output/planning-artifacts/s1/indented-repair-p1.md"
+cat > "$IND_ART" <<'INDENTED'
+# Indented repair p1
+
+- Finding A, in a list item, with its derivation fenced beneath it -- and stale.
+
+  ```derived
+  $ grep -c neverpresent VERSION
+  7
+  ```
+
+- Finding B, the same shape, fresh.
+
+  ```derived
+  $ cat VERSION
+  0.0.0
+  ```
+INDENTED
+
+# A fourth artifact: a wrapped SENTENCE whose continuation begins with the fence token
+# (line 4), above one real, stale block (lines 6-9). The opener grammar used to accept any
+# text after the word, so this line opened a phantom block that swallowed the real one --
+# measured on two lines in the reference consumer. The info string is now exactly `derived`.
+OPN_ART="$CONSUMER/_bmad-output/planning-artifacts/s1/prose-opener-p1.md"
+cat > "$OPN_ART" <<'OPENER'
+# Prose opener p1
+
+A sentence that wraps so its continuation begins with the fence token, and the block
+```derived would promise a machine check the command cannot keep -- so it stays unfenced.
+
+```derived
+$ grep -c neverpresent VERSION
+7
+```
+OPENER
+
 cat > "$WORK/env.sh" <<EOF
 WORK="$WORK"
 CONSUMER="$CONSUMER"
@@ -105,6 +147,8 @@ HOOK="$CONSUMER/.claude/hooks/ai-dlc-derivation-capture.sh"
 VALIDATOR="$CONSUMER/scripts/ai-dlc/validate-artifact-derivations.sh"
 ART="$ART"
 PROSE_ART="$CONSUMER/_bmad-output/planning-artifacts/s1/prose-only.md"
+IND_ART="$IND_ART"
+OPN_ART="$OPN_ART"
 EOF
 
 printf '%s\n' "$WORK"
