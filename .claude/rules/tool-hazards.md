@@ -23,6 +23,15 @@ here. What follows has no corpus to scan because it happens in tool calls.
 **Force `bash -c` for any loop, any heredoc, and any hook test.** The rule is not "be careful
 in zsh"; it is "do not author shell logic in the interactive shell at all".
 
+**But a heredoc INSIDE `bash -c '…'` whose body carries a backtick or a single quote breaks the
+outer quoting silently**: the body executes as commands, the consumer of the heredoc gets a
+truncated fragment, and the call exits 0. Measured twice, both times on a commit message — five
+lines landed of twenty-four. Write the body with the Write tool and pass it by `-F` or redirect.
+
+**A renderer that changes nothing exits 0.** `render-postcompact-digest.sh` without `--write`
+reports and writes nothing, and the run reads as "re-rendered". Run `--check` after, never
+instead.
+
 ## The Bash tool's OUTPUT is rewritten before you read it
 
 A compressor sits on Bash results and edits the text inside them, CODE INCLUDED. Measured on
