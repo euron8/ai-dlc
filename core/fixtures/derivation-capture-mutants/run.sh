@@ -16,12 +16,14 @@
 # an arm the mutation does not own is not a stronger kill, it is an entangled assertion, and
 # this battery fails on it exactly as it fails on a survivor.
 #
-# EIGHT OF THE NINE MUTATIONS DECLARE ONE ARM. The ninth -- the payload index ignored, so
-# every pair is submitted -- declares three, and that is the honest shape rather than a
-# weakened rule: A3, A4 and A5 differ in the INPUT they present (a reproducing pair, prose
-# alone, a reproducing pair beside a stale sibling), and one deletion makes all three wrong at
-# once. Splitting it into three mutations that each redden all three would assert less, not
-# more.
+# MOST MUTATIONS DECLARE ONE ARM. Two declare several, and that is the honest shape rather
+# than a weakened rule. The payload index ignored -- every pair submitted -- reddens A3, A4,
+# A5, A17 and A19, which differ in the INPUT they present (a reproducing pair, prose alone, a
+# reproducing pair beside a stale sibling, and the last two again through an indented fence),
+# and one deletion makes all five wrong at once. The mask blind to an indented opener reddens
+# A17 and A19: an indented block passes through UNMASKED, so its stale pair is submitted on
+# every edit to the file and both silent arms on that file go red together. Splitting either
+# into per-arm mutations that each redden the whole set would assert less, not more.
 #
 # HOW THE MUTANT REACHES THE SIBLING. `seed.sh` resolves the hook and the validator from its
 # own directory's grandparent, so the battery builds a THROWAWAY DISTRIBUTION -- core/hooks/,
@@ -149,8 +151,10 @@ mutate "block-grain mask" "the reproducing pair of a mixed block" \
   's/? L\[k\] : "")/? L[k] : "") # MUTANT/; s/(pid\[k\]>0 \&\& tch\[pid\[k\]\]) ? L\[k\]/(pid[k]>0 \&\& any) ? L[k]/'
 
 # --- 2. touch keyed on the command line alone ---------------------------------
+# Keyed on the SHED line, as the hook's own command test is, so this mutation removes only
+# the output-line touch and not, incidentally, every indented command line too.
 mutate "command-line-only touch" "an output-only rewrite" \
-  's/if (cur>0 \&\& (L\[k\] in PAY)) tch\[cur\]=1/if (cur>0 \&\& (L[k] in PAY) \&\& index(L[k],"$ ")==1) tch[cur]=1/'
+  's/if (cur>0 \&\& (L\[k\] in PAY)) tch\[cur\]=1/if (cur>0 \&\& (L[k] in PAY) \&\& index(shed(L[k], ind),"$ ")==1) tch[cur]=1/'
 
 # --- 3. MultiEdit payload dropped ---------------------------------------------
 mutate "MultiEdit edits[] unread" "MultiEdit exited" \
@@ -177,12 +181,35 @@ mutate "rc 2 read as a verdict" "refused to start" \
 # reference consumer's active sprint already fail whole-file validation, so it refuses an
 # unrelated edit in 30% of them. Three arms present three different inputs it gets wrong.
 mutate "payload index ignored (file grain)" \
-  "edit writing a reproducing pair|an edit that wrote no derivation|the reproducing pair of a mixed block" \
+  "edit writing a reproducing pair|an edit that wrote no derivation|the reproducing pair of a mixed block|a prose-only edit to the indented file|indented FRESH pair" \
   's/if (cur>0 \&\& (L\[k\] in PAY)) tch\[cur\]=1/if (cur>0) tch[cur]=1/'
 
 # --- 8. the markdown filter removed -------------------------------------------
 mutate "markdown filter removed" "a .txt path exited" \
   's/^case "\$FILE" in \*\.md) ;; \*) exit 0 ;; esac/case "$FILE" in *) ;; esac/'
+
+# --- 9, 10, 11. THE THREE SITES THAT READ A FENCE LINE, each restored to column 0 ------
+# PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT. The hook reads a fence
+# line in three places -- the scope grep, the mask's opener, and the `$ ` grep in front of
+# the validator -- and until v0.500.0 all three matched at column 0 only. Each is reverted
+# ALONE below, because they fail in different directions: the two greps exit 0 early, so the
+# indented stale pair is written unwitnessed (A18 reddens, the silent arms hold); the mask
+# passes the indented block through UNMASKED, so its stale pair is submitted on every edit and
+# the silent arms on that file redden (A17, A19) while A18 still blocks, for the wrong reason.
+# The two grep mutations DELETE the blank class between backreferences rather than rewriting
+# the line: the pattern is single-quoted, and a replacement carrying the hook's own quoted
+# backticks would need a quote inside it -- or double quotes, under which bash reads the
+# backticks as a command substitution and the mutant is a syntax error that exits 2 on every
+# arm. Measured: that shape reddened eleven undeclared arms before this comment existed.
+mutate "scope grep blind to an indented fence" "indented stale pair" \
+  's/^\(grep -q .\^\)\[\[:blank:\]\]\*\(```derived. "\$FILE"\)/\1\2/'
+
+mutate "mask opener blind to an indented fence" \
+  "a prose-only edit to the indented file|indented FRESH pair" \
+  's/^    ind = lead(L\[i\]); b = substr(L\[i\], length(ind) + 1)$/    ind = ""; b = L[i]/'
+
+mutate "command grep blind to an indented fence" "indented stale pair" \
+  's/^\(grep -q .\^\)\[\[:blank:\]\]\*\(\\\$ . "\$MASK"\)/\1\2/'
 
 if [ "$fails" -gt 0 ]; then
   printf '  %s mutation(s) did not behave\n' "$fails"

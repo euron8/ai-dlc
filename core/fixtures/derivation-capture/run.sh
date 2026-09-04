@@ -69,6 +69,18 @@ else
   bad "control: expected rc 1 and '2 stale ... of 4 checked', got rc $CTL_RC — the seed no longer discriminates, so every arm below is vacuous"
 fi
 
+# --- A1b: CONTROL — the indented artifact is 1-of-2 stale under the real validator
+# The validator half of PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT.
+# A validator matching the opener at column 0 reports "0 derivation(s) in 0 block(s)" here
+# with exit 0, and then every indented arm below is a statement about nothing.
+ICTL="$( ( cd "$CONSUMER" && AI_DLC_PROJECT_ROOT="$CONSUMER" bash "$VALIDATOR" "$IND_ART" ) 2>&1 )"
+ICTL_RC=$?
+if [ "$ICTL_RC" = 1 ] && grep -q '1 stale or unrunnable derivation(s) of 2 checked' <<<"$ICTL"; then
+  ok "control: the indented artifact is 1-of-2 stale under the real validator"
+else
+  bad "control: expected rc 1 and '1 stale ... of 2 checked' on the indented artifact, got rc $ICTL_RC — the validator cannot see an indented fence, so the indented arms below are vacuous"
+fi
+
 # --- A2: an edit that wrote the STALE block → BLOCK ---------------------------
 fire "$(edit_json "$ART" "$PAIR_STALE_A")"
 if [ "$RC" = 2 ] && grep -q 'is not backed by' "$ERR"; then
@@ -215,6 +227,41 @@ if [ "$RC" = 2 ] && grep -q 'ALLOWLIST' "$ERR"; then
   ok "a command the allowlist refuses → exit 2, named as a refusal"
 else
   bad "a refused command exited $RC without naming ALLOWLIST — a refusal that reaches nobody is a skip"
+fi
+
+# --- A17: an edit to PROSE in a file whose only fences are INDENTED → SILENT --
+# The indented artifact's block A is stale. A hook whose mask cannot see an indented opener
+# passes that block through UNMASKED, so the stale pair is submitted on every edit to the
+# file and an author who touched only prose is refused -- the wedge this fixture's header
+# measures, arriving through the fence form the mask could not spell.
+IND_PAIR_STALE="$(printf '  ```derived\n  $ grep -c neverpresent VERSION\n  7\n  ```')"
+IND_PAIR_FRESH="$(printf '  ```derived\n  $ cat VERSION\n  0.0.0\n  ```')"
+fire "$(edit_json "$IND_ART" "- Finding B, the same shape, fresh.")"
+if [ "$RC" = 0 ] && [ ! -s "$ERR" ]; then
+  ok "indented file, edit touching only prose → exit 0, though its block A is stale"
+else
+  bad "a prose-only edit to the indented file exited $RC — the mask is passing an indented block through unmasked"
+fi
+
+# --- A18: an edit that wrote the INDENTED stale pair → BLOCK at its real line ---
+# Both cheap rejects sit in front of the validator: the fence grep that scopes the hook to
+# files carrying a fence, and the `$ ` grep that skips a mask holding no command. Either one
+# matching at column 0 only exits 0 here, and the indented stale pair is written unwitnessed.
+fire "$(edit_json "$IND_ART" "$IND_PAIR_STALE")"
+if [ "$RC" = 2 ] && grep -q 'indented-repair-p1.md:6' "$ERR"; then
+  ok "indented stale pair written → exit 2 citing indented-repair-p1.md:6"
+else
+  bad "an edit writing the indented stale pair exited $RC (expected 2 citing :6) — an indented fence is not witnessed"
+fi
+
+# --- A19: an edit that wrote the INDENTED fresh pair → SILENT ------------------
+# The near-miss beside A18: same file, same shape, the reproducing block. A hook that refused
+# every indented fence would pass A18 and fail this.
+fire "$(edit_json "$IND_ART" "$IND_PAIR_FRESH")"
+if [ "$RC" = 0 ] && [ ! -s "$ERR" ]; then
+  ok "indented fresh pair written → exit 0, silent"
+else
+  bad "an edit writing the indented FRESH pair exited $RC — the hook is refusing indented fences rather than reading them"
 fi
 
 # --- A14: the artifact is not modified by the hook ----------------------------

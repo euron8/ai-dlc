@@ -276,34 +276,71 @@ trap 'rm -f "$TMP_SAFE" "$TMP_OUT" "$TMP_EXP"' EXIT
 # author and is never the defect being hunted. Everything else compares byte-for-byte.
 norm() { sed 's/[[:space:]]*$//' | sed '/^$/d'; }
 
+# A FENCE MAY BE INDENTED, AND UNTIL v0.500.0 THIS READER COULD NOT SEE ONE THAT WAS. The
+# opener was matched against the line as read, so a ```derived block written inside a list
+# item -- `- item` then `  ```derived` -- never opened a block, its pairs were never run, and
+# the file reported "0 derivation(s) in 0 block(s)" with exit 0: the one output this script
+# must never produce over a fence, because an author who fenced a claim to make it
+# machine-checkable got no check and no error. Measured on the reference consumer: 11 files
+# carrying indented fences against 272 unindented, plus fences an author had already demoted
+# to `text` because the check was not firing. Filed as
+# PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT.
+#
+# The rule is CommonMark's: the opener's leading blanks are the block's indent, and each
+# content line sheds THAT prefix -- exactly it when present, whatever leading blanks it has
+# when it carries fewer. Not "all leading blanks": a `wc -l` output is `       2`, and an
+# unindented block must keep those seven spaces or the recorded output stops matching the
+# command that produced it. Any width of indent opens a fence. CommonMark caps a fence at
+# three spaces outside a list and this deliberately does not: the fence is the author's
+# promise, and running a fence CommonMark would have rendered as literal text is a visible
+# STALE the author can read, where skipping it is the silent zero this comment records.
+# `ai-dlc-derivation-capture.sh` carries the same rule in its mask and its two cheap rejects;
+# the two are one population by contract (its header says why), so a change here is a change
+# there.
+fence_indent() { # $1 line -> the leading blanks of the line, possibly empty
+  local l="$1"
+  printf '%s' "${l%%[![:blank:]]*}"
+}
+shed_indent() { # $1 line  $2 indent -> the line with the block's indent removed
+  local l="$1" ind="$2"
+  if [ -z "$ind" ]; then printf '%s' "$l"; return; fi
+  case "$l" in
+    "$ind"*) printf '%s' "${l#"$ind"}" ;;
+    *)       printf '%s' "${l#"${l%%[![:blank:]]*}"}" ;;
+  esac
+}
+
 check_file() { # $1 artifact path
-  local f="$1" in_block=0 line cmd expected_started
+  local f="$1" in_block=0 line body indent cmd expected_started
   local blockline=0 cmdline=0
   files_seen=$((files_seen + 1))
-  cmd=""; : > "$TMP_EXP"; expected_started=0
+  cmd=""; : > "$TMP_EXP"; expected_started=0; indent=""
   local lineno=0
   while IFS= read -r line || [ -n "$line" ]; do
     lineno=$((lineno + 1))
     if [ "$in_block" -eq 0 ]; then
-      case "$line" in
+      indent="$(fence_indent "$line")"
+      case "${line#"$indent"}" in
         '```derived'|'```derived '*) in_block=1; blockline=$lineno; blocks=$((blocks + 1)); cmd=""; : > "$TMP_EXP" ;;
+        *) indent="" ;;
       esac
       continue
     fi
-    # inside a ```derived block
-    case "$line" in
+    # inside a ```derived block -- every line below is read with the block's indent shed
+    body="$(shed_indent "$line" "$indent")"
+    case "$body" in
       '```'*)
         [ -n "$cmd" ] && run_pair "$f" "$cmdline" "$cmd"
-        in_block=0; cmd=""; : > "$TMP_EXP"
+        in_block=0; cmd=""; : > "$TMP_EXP"; indent=""
         continue ;;
     esac
-    case "$line" in
+    case "$body" in
       '$ '*)
         [ -n "$cmd" ] && run_pair "$f" "$cmdline" "$cmd"
-        cmd="${line#\$ }"; cmdline=$lineno; : > "$TMP_EXP"
+        cmd="${body#\$ }"; cmdline=$lineno; : > "$TMP_EXP"
         continue ;;
     esac
-    [ -n "$cmd" ] && printf '%s\n' "$line" >> "$TMP_EXP"
+    [ -n "$cmd" ] && printf '%s\n' "$body" >> "$TMP_EXP"
   done < "$f"
   if [ "$in_block" -eq 1 ]; then
     fail "GRAMMAR" "$f:$blockline opens a \`\`\`derived block that is never closed."
