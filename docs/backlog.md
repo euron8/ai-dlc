@@ -4059,15 +4059,19 @@ installed hook (byte-identical to the pre-fix distribution copy, `cmp -s`) answe
 teammate's Write in the 20:23Z state and the fixed hook answers `ALLOW`, while the LEAD's own
 Write in that state is `ROUTE` under both.
 
-**The harness fact the fix rests on.** A teammate's PreToolUse payload carries `agent_id` (and
-`agent_type`), and the lead's carries neither. Readers of that field at this event already in
+**The harness fact the fix rests on.** A teammate's PreToolUse payload carries `agent_id`, and
+the lead's carries none. `agent_type` is NOT a second spelling of that fact: a lead started with
+`claude --agent <name>` carries `agent_type` and no `agent_id` (measured by the adversarial hand
+in a headless session with a PreToolUse payload dumper: the flagged lead read `agent_id` ABSENT,
+`agent_type` "Explore"), so a check keyed on `agent_type` exempts that lead and cannot fire on
+the population it exists for. Readers of `agent_id` at this event already in
 the tree: `ai-dlc-gate-remediation-guard.sh:266-277` ("absent == the lead") and the third-party
 `context-mode` plugin's `pretooluse.mjs` (`isSubagentContext = input.agent_id != null ||
 input.agent_type != null`); `ai-dlc-context-sensor.sh:164` reads it at `Stop`. The Claude Code
 hooks documentation (`https://code.claude.com/docs/en/hooks`, common input fields) says the same:
 `agent_id` is "present only when the hook fires inside a subagent call", and `transcript_path`
-"is the main session's transcript". The receipt below supplies both spellings so a fix keyed on
-either scores the same.
+"is the main session's transcript". The receipt below drives a `--agent`-shaped lead as its
+own cell, and a fix keyed on `agent_type` scores STILL-LIVE on it.
 
 **The fix, and the shape it rejected.** Check 2z's guard gains one conjunct, `[ -z "$AGENT_ID" ]`:
 a dispatched teammate is outside the check, because the check's own justification binds the
@@ -4085,12 +4089,17 @@ receipt control `c`).
 
 **Receipt, scored before it was written.** It drives the shipping hook on a seeded tree with a
 lead transcript that carries the `/ai-dlc` marker and no router read, a teammate file beside it
-with no read either, and a second, paused tree. Exit 0 on the fix and on its `agent_type`
-spelling; 1 on the pre-fix hook, on the scan-both-transcripts shape, and on a whole-hook
-exemption (control `c` flips to allow); 9 when the lead's own Write is not route-denied (Check 2z
-gone or unreachable — nothing measured) or when the teammate cell returns a deny that names
-neither check. The fixture `route-read-required` (ships) carries the same four cells and its
-`.dist-only` battery kills the conjunct. The consumer's own receipt on this candidate names
+with no read either, a second, paused tree, and a `--agent`-shaped lead carrying `agent_type`
+alone. Exit 0 on the fix; 1 on the pre-fix hook, on the scan-both-transcripts shape, on a
+whole-hook exemption (control `c` flips to allow), and on an `agent_type`-keyed exemption
+(control `e`, the flagged lead, flips to allow); 9 when the lead's own Write is not route-denied
+(Check 2z gone or unreachable — nothing measured) or when the teammate cell returns a deny that
+names neither check. **The first revision of this receipt accepted the `agent_type` spelling and
+called that a design property**; the shipped fixture and the battery accepted it too, because
+every seed supplied both fields together or neither, and four channels agreeing for that reason
+is the shared-seed failure `verification-discipline.md` names. The fixture `route-read-required`
+(ships) carries the same five cells and its `.dist-only` battery kills both the conjunct and the
+field-name swap. The consumer's own receipt on this candidate names
 `core/.claude/hooks/ai-dlc-acknowledge.sh`, a path that resolves to nothing in this tree at either
 ref (the file is `core/hooks/ai-dlc-acknowledge.sh`), so it will read `NEEDS-REVIEW` rather than
 close; the pull brief says so and offers the guard line as the anchor.
@@ -4102,4 +4111,4 @@ untouched, so its receipt now drives that deny instead. The measurement `BL-126`
 first — whether a PreToolUse payload carries a usable discriminator at all — is the paragraph
 above.
 
-verify: sh h=core/hooks/ai-dlc-acknowledge.sh; [ -f "$h" ] || exit 9; command -v jq >/dev/null || exit 9; w=$(mktemp -d) || exit 9; trap 'rm -rf "$w"' EXIT; for d in t p; do mkdir -p "$w/$d/_bmad-output/planning-artifacts/s7" "$w/$d/scripts/ai-dlc"; printf '#!/bin/sh\necho 7\n' > "$w/$d/scripts/ai-dlc/sprint-status.sh"; chmod +x "$w/$d/scripts/ai-dlc/sprint-status.sh"; : > "$w/$d/_bmad-output/pipeline-snapshot.md"; done; : > "$w/p/_bmad-output/pipeline-paused.flag"; mkdir -p "$w/s/subagents"; printf '{"type":"user","message":{"content":"<command-name>/ai-dlc</command-name>"}}\n' > "$w/s.jsonl"; printf '{"type":"assistant","message":{"content":[{"type":"text","text":"working"}],"isSidechain":true}}\n' > "$w/s/subagents/agent-ax.jsonl"; d(){ jq -nc --arg tr "$w/s.jsonl" --arg ag "$2" '{session_id:"r",transcript_path:$tr,tool_name:"Write",tool_input:{file_path:"/w/_bmad-output/planning-artifacts/x.md"}}+(if $ag=="" then {} else {agent_id:$ag,agent_type:"general-purpose"} end)' | CLAUDE_PROJECT_DIR="$w/$1" bash "$h" 2>/dev/null; }; a=$(d t ""); b=$(d t ax); c=$(d p ax); case "$a" in *"has not read the router"*) ;; *) exit 9;; esac; case "$c" in *"Rule 29"*) ;; *) exit 1;; esac; case "$b" in *"has not read the router"*) exit 1;; *permissionDecision*) exit 9;; esac; exit 0
+verify: sh h=core/hooks/ai-dlc-acknowledge.sh; [ -f "$h" ] || exit 9; command -v jq >/dev/null || exit 9; w=$(mktemp -d) || exit 9; trap 'rm -rf "$w"' EXIT; for d in t p; do mkdir -p "$w/$d/_bmad-output/planning-artifacts/s7" "$w/$d/scripts/ai-dlc"; printf '#!/bin/sh\necho 7\n' > "$w/$d/scripts/ai-dlc/sprint-status.sh"; chmod +x "$w/$d/scripts/ai-dlc/sprint-status.sh"; : > "$w/$d/_bmad-output/pipeline-snapshot.md"; done; : > "$w/p/_bmad-output/pipeline-paused.flag"; mkdir -p "$w/s/subagents"; printf '{"type":"user","message":{"content":"<command-name>/ai-dlc</command-name>"}}\n' > "$w/s.jsonl"; printf '{"type":"assistant","message":{"content":[{"type":"text","text":"working"}],"isSidechain":true}}\n' > "$w/s/subagents/agent-ax.jsonl"; d(){ jq -nc --arg tr "$w/s.jsonl" --arg ag "$2" '{session_id:"r",transcript_path:$tr,tool_name:"Write",tool_input:{file_path:"/w/_bmad-output/planning-artifacts/x.md"}}+(if $ag=="" then {} elif $ag=="type" then {agent_type:"Explore"} else {agent_id:$ag,agent_type:"general-purpose"} end)' | CLAUDE_PROJECT_DIR="$w/$1" bash "$h" 2>/dev/null; }; a=$(d t ""); b=$(d t ax); c=$(d p ax); e=$(d t type); case "$a" in *"has not read the router"*) ;; *) exit 9;; esac; case "$c" in *"Rule 29"*) ;; *) exit 1;; esac; case "$e" in *"has not read the router"*) ;; *) exit 1;; esac; case "$b" in *"has not read the router"*) exit 1;; *permissionDecision*) exit 9;; esac; exit 0

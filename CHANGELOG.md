@@ -50,9 +50,14 @@ routed can dispatch a teammate to write a file and this check will not stop it �
 regardless — and the lead's own next write is still denied. Check 3's Rule 29 pause deny is
 untouched and still denies a teammate on a paused tree; that question is `BL-126`'s.
 
-**The receipt was scored before it was written.** Exit 0 on the fix and on an `agent_type`-keyed
-spelling; 1 on the pre-fix hook, on the scan-both-transcripts shape, and on a whole-hook
-exemption; 9 on a hook replaced by `exit 0`. The consumer-side differential on the real session
+**The receipt was scored before it was written, and its first revision was wrong.** It accepted
+an `agent_type`-keyed spelling as equivalent, and so did the shipped fixture and the battery,
+because every seed supplied `agent_id` and `agent_type` together or neither. The adversarial hand
+measured, in a headless session with a PreToolUse payload dumper, that a lead started with
+`claude --agent <name>` carries `agent_type` and NO `agent_id` — so that spelling exempts such a
+lead and makes Check 2z unreachable for it. Every channel now drives that lead as its own cell.
+Final scoring: exit 0 on the fix; 1 on the pre-fix hook, on the scan-both-transcripts shape, on
+a whole-hook exemption, and on the `agent_type` spelling; 9 on a hook replaced by `exit 0`. The consumer-side differential on the real session
 inputs, copied out to `mktemp`: the consumer's installed hook is byte-identical to the pre-fix
 distribution copy and answers `ROUTE` to the teammate's Write in the 20:23Z state; the fixed
 hook answers `ALLOW`; the lead's own Write in that state is `ROUTE` under both.

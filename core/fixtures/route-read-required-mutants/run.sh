@@ -82,12 +82,19 @@ printf '{"type":"user","message":{"content":"fix the timezone bug in the ingest 
 # tool call -- and by nothing else: same tool, same transcript, same tree. Two cells one property
 # apart are what tell an exemption keyed on the actor from one that acquits everybody, and the
 # pair has to sit in ONE table or a mutant cannot be scored against both at once.
-PROBE_NAME=( bypass  routed  skill  agent  bash   notebook      updater  plain  teammate )
-PROBE_TOOL=( Write   Write   Skill  Agent  Bash   NotebookEdit  Write    Write  Write    )
-PROBE_TR=(   BYPASS  ROUTED  BYPASS BYPASS BYPASS BYPASS        UPDATER  PLAIN  BYPASS   )
-PROBE_AG=(   -       -       -      -      -      -             -        -      ax       )
-BASELINE='DENY ALLOW ALLOW ALLOW ALLOW DENY ALLOW ALLOW ALLOW'
-CELLS='0 1 2 3 4 5 6 7 8'
+# THE TENTH CELL IS A LEAD, NOT A TEAMMATE, AND IT CARRIES `agent_type` ALONE. `claude --agent
+# <name>` starts a lead whose payloads carry `agent_type` and no `agent_id` (measured in a
+# headless session with a PreToolUse payload dumper: agent_id ABSENT, agent_type "Explore"). It
+# is the only input that separates an `agent_id`-keyed exemption from an `agent_type`-keyed one:
+# `teammate` carries both fields and every lead cell carries neither, so without this cell a
+# mutant swapping the field name survives every row -- which is exactly what happened before it
+# was added. Baseline DENY: a flagged lead that never routed is the check's own population.
+PROBE_NAME=( bypass  routed  skill  agent  bash   notebook      updater  plain  teammate agentlead )
+PROBE_TOOL=( Write   Write   Skill  Agent  Bash   NotebookEdit  Write    Write  Write    Write     )
+PROBE_TR=(   BYPASS  ROUTED  BYPASS BYPASS BYPASS BYPASS        UPDATER  PLAIN  BYPASS   BYPASS    )
+PROBE_AG=(   -       -       -      -      -      -             -        -      ax       type      )
+BASELINE='DENY ALLOW ALLOW ALLOW ALLOW DENY ALLOW ALLOW ALLOW DENY'
+CELLS='0 1 2 3 4 5 6 7 8 9'
 
 tr_of() { case "$1" in BYPASS) printf '%s' "$TR_BYPASS";; ROUTED) printf '%s' "$TR_ROUTED";;
                        UPDATER) printf '%s' "$TR_UPDATER";; PLAIN) printf '%s' "$TR_PLAIN";; esac; }
@@ -99,7 +106,9 @@ verdict() { # <hook copy> <tool> <transcript token> [agent token; `-` is the LEA
   local out
   out="$(jq -nc --arg t "$2" --arg tr "$(tr_of "$3")" --arg ag "${4:--}" \
           '{session_id:"m",transcript_path:$tr,tool_name:$t,tool_input:{file_path:"/w/_bmad-output/x.md"}}
-           + (if $ag == "-" then {} else {agent_id:$ag,agent_type:"general-purpose"} end)' \
+           + (if $ag == "-" then {}
+              elif $ag == "type" then {agent_type:"Explore"}
+              else {agent_id:$ag,agent_type:"general-purpose"} end)' \
         | CLAUDE_PROJECT_DIR="$W" bash "$1" 2>/dev/null)"
   case "$out" in
     *'"permissionDecision": "deny"'*|*'"permissionDecision":"deny"'*) printf 'DENY' ;;
@@ -241,7 +250,7 @@ elif splice route-key-widened-to-mention "$LN_KEY" replace \
        '      if ! grep -q '"'"'steps/route\.md'"'"' "$TRANSCRIPT" 2>/dev/null; then'; then
   # BOTH denial cells move, and they share ONE subject: the route key is what makes `bypass` and
   # `notebook` deny at all. This is arms overlapping on a single mutation, not an entangled pair.
-  score route-key-widened-to-mention 'ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW' \
+  score route-key-widened-to-mention 'ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW' \
     "turns both denial cells from DENY to ALLOW: keying on the string instead of a Read's file_path detects nothing"
 fi
 
@@ -259,9 +268,9 @@ if [ -z "$LN_SURF" ]; then
   bad "ANCHOR: could not locate exactly one \`$SURF\` line above the route grep. Check 3 carries the same tool set, so a battery that cannot tell the two apart would mutate the wrong copy, leave every cell green, and report a full sweep."
 else
   for T in Skill Agent Bash; do
-    case "$T" in Skill) want='DENY ALLOW DENY ALLOW ALLOW DENY ALLOW ALLOW ALLOW';;
-                 Agent) want='DENY ALLOW ALLOW DENY ALLOW DENY ALLOW ALLOW ALLOW';;
-                 Bash)  want='DENY ALLOW ALLOW ALLOW DENY DENY ALLOW ALLOW ALLOW';; esac
+    case "$T" in Skill) want='DENY ALLOW DENY ALLOW ALLOW DENY ALLOW ALLOW ALLOW DENY';;
+                 Agent) want='DENY ALLOW ALLOW DENY ALLOW DENY ALLOW ALLOW ALLOW DENY';;
+                 Bash)  want='DENY ALLOW ALLOW ALLOW DENY DENY ALLOW ALLOW ALLOW DENY';; esac
     if splice "surface-widened-to-$T" "$LN_SURF" replace "    Write|Edit|MultiEdit|NotebookEdit|$T)"; then
       score "surface-widened-to-$T" "$want" \
         "turns \`$T\` from ALLOW to DENY: the deny would forbid the act it demands, and the pipeline wedges at its first step"
@@ -273,7 +282,7 @@ else
   # plausible "tidy the tool list" edit and it silently restores one unwatched way to produce a
   # file. A widening mutant cannot detect a narrowing regression.
   if splice surface-narrowed-drop-notebook "$LN_SURF" replace '    Write|Edit|MultiEdit)'; then
-    score surface-narrowed-drop-notebook 'DENY ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW' \
+    score surface-narrowed-drop-notebook 'DENY ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW DENY' \
       "turns \`NotebookEdit\` from DENY to ALLOW: the surface's coverage of it is load-bearing, not decorative"
   fi
 fi
@@ -289,7 +298,7 @@ if mk aidlc-guard-deleted 's#\[ "\$AIDLC_SESSION" = "1" \] && ##'; then
   # IT OWNS BOTH SCOPE CELLS, and that is the whole scope guard rather than two entangled arms.
   # `updater` and `plain` are both outside this check for the same reason -- neither is an
   # `/ai-dlc` session -- and one conjunct is what holds them there.
-  score aidlc-guard-deleted 'DENY ALLOW ALLOW ALLOW ALLOW DENY DENY DENY ALLOW' \
+  score aidlc-guard-deleted 'DENY ALLOW ALLOW ALLOW ALLOW DENY DENY DENY ALLOW DENY' \
     "turns BOTH scope cells from ALLOW to DENY — the guard is what keeps the updater, and 12 of the reference consumer's 171 ordinary sessions, out of this check"
 fi
 
@@ -347,8 +356,17 @@ fi
 # the mutant in the same arm. A mutant scored only against the row would come back green here, and
 # a survival that means "the probe cannot look there" reads exactly like a guard that is vestigial.
 if mk teammate-conjunct-deleted 's#\[ -z "\$AGENT_ID" \] && ##'; then
-  score teammate-conjunct-deleted 'DENY ALLOW ALLOW ALLOW ALLOW DENY ALLOW ALLOW DENY' \
+  score teammate-conjunct-deleted 'DENY ALLOW ALLOW ALLOW ALLOW DENY ALLOW ALLOW DENY DENY' \
     "turns the \`teammate\` cell from ALLOW to DENY and moves no other cell: the exemption is load-bearing and keyed on the actor rather than on the transcript"
+fi
+
+# THE FIELD NAME SWAPPED. `agent_type` reads like a second spelling of `agent_id` and is not one:
+# a `--agent` lead carries it too. This mutant is the one every earlier channel survived, because
+# every seed supplied both fields together; it is killed by the `agentlead` cell alone, which
+# flips DENY to ALLOW while `teammate` (both fields) and every neither-field lead cell hold.
+if mk teammate-keyed-on-agent-type 's#\.agent_id // empty#.agent_type // empty#'; then
+  score teammate-keyed-on-agent-type 'DENY ALLOW ALLOW ALLOW ALLOW DENY ALLOW ALLOW ALLOW ALLOW' \
+    "turns the \`agentlead\` cell from DENY to ALLOW and moves nothing else: keying the exemption on \`agent_type\` exempts a \`--agent\` lead, and Check 2z cannot fire on such a session"
 fi
 
 LN_AG="$(anchor 'AGENT_ID=$(echo "$INPUT"')"
@@ -386,13 +404,15 @@ JOIN_TOK=( 'BYPASS: \`$T\` is DENIED'
            'TEAMMATE: a dispatched teammate'
            'TEAMMATE twin:'
            'TEAMMATE pause:'
-           'TEAMMATE log:' )
+           'TEAMMATE log:'
+           'TEAMMATE agent-flag:' )
 JOIN_WHY=( bypass "routed near-miss" "the remedy arms" "all three remedy tools" \
            "the whole denied surface including NotebookEdit" updater "not-an-ai-dlc-session" \
            "the checks below Check 2z" "the teammate exemption" \
            "the teammate's lead twin, one property apart" \
            "the exemption's scope at Check 3's pause deny" \
-           "the teammate allow writing no ROUTE_DENIED row" )
+           "the teammate allow writing no ROUTE_DENIED row" \
+           "the --agent lead carrying agent_type alone still being denied" )
 i=0
 while [ "$i" -lt ${#JOIN_TOK[@]} ]; do
   if grep -qF -- "${JOIN_TOK[$i]}" "$SUBJ"; then

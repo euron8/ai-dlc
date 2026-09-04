@@ -137,10 +137,19 @@ drive() { # <tree> <tool> <transcript> [file_path] [agent_id] -> stdout
   # effort", and `ai-dlc-gate-remediation-guard.sh` and `ai-dlc-subagent-probe.sh` both read
   # `agent_id` off it for this same question. Omitting it is the LEAD's call -- the default, and
   # what every arm above drives -- so no existing arm changes shape.
+  #
+  # THE TOKEN `TYPE-ONLY` IS A THIRD ACTOR, AND IT IS THE ONE THAT SEPARATES THE TWO FIELD NAMES.
+  # A lead started with `claude --agent <name>` carries `agent_type` and NO `agent_id` --
+  # measured in a headless session with a payload dumper on PreToolUse: the flagged lead's call
+  # read agent_id ABSENT, agent_type "Explore". So `agent_type` is not a second spelling of the
+  # teammate discriminator; a check keyed on it exempts that lead and cannot fire. Every seed
+  # that supplies both fields together, or neither, is blind to that difference by construction.
   jq -nc --arg t "$tool" --arg tr "$tr" --arg fp "$fp" --arg ag "$ag" \
      '{session_id:"rrr-session",transcript_path:$tr,tool_name:$t,
        tool_input:(if $fp == "" then {} else {file_path:$fp} end)}
-      + (if $ag == "" then {} else {agent_id:$ag,agent_type:"general-purpose"} end)' \
+      + (if $ag == "" then {}
+         elif $ag == "TYPE-ONLY" then {agent_type:"Explore"}
+         else {agent_id:$ag,agent_type:"general-purpose"} end)' \
     | CLAUDE_PROJECT_DIR="$w" bash "$HOOK" 2>/dev/null
 }
 denied() { case "$1" in *'"permissionDecision": "deny"'*|*'"permissionDecision":"deny"'*) return 0 ;; esac; return 1; }
@@ -358,6 +367,22 @@ elif denied "$OUT"; then
   bad "TEAMMATE twin: the lead's Write was denied, but not by Check 2z — the reason names no router, so this arm is reading another check's verdict and the acquittal probe proved nothing"
 else
   bad "TEAMMATE twin: dropping the \`agent_id\` left the Write ALLOWED. The exemption covers the lead as well, so Check 2z is gone for every session and the incident reproduces."
+fi
+
+# THE LEAD THAT CARRIES `agent_type`. `claude --agent <name>` starts a LEAD whose every payload
+# carries `agent_type` and no `agent_id` (see `drive()`). This is the input that tells an
+# `agent_id`-keyed exemption from an `agent_type`-keyed one; the twin above cannot, because it
+# carries neither field, and the teammate cell cannot, because it carries both. An exemption keyed
+# on `agent_type` would exempt this lead from Check 2z outright -- a check that cannot fire on the
+# population it exists for. Found by an adversarial hand after every other channel had accepted
+# the `agent_type` spelling, because every seed supplied the two fields together.
+OUT="$(drive "$W" Write "$TR_BYPASS" "$W/_bmad-output/pipeline-snapshot.md" TYPE-ONLY)"
+if denied "$OUT" && is_route_deny "$OUT"; then
+  ok "TEAMMATE agent-flag: a lead carrying \`agent_type\` and NO \`agent_id\` (a \`--agent\` session) is still ROUTE-denied, so the exemption is keyed on \`agent_id\` and not on the field a flagged lead also carries"
+elif denied "$OUT"; then
+  bad "TEAMMATE agent-flag: the \`--agent\` lead was denied, but not by Check 2z — the reason names no router, so this arm read another check's verdict"
+else
+  bad "TEAMMATE agent-flag: a lead carrying \`agent_type\` and no \`agent_id\` was ALLOWED. The exemption is keyed on \`agent_type\`, which a \`--agent\` lead also carries, so Check 2z cannot fire on such a session at all."
 fi
 
 # THE SCOPE OF THE EXEMPTION. It is a conjunct on Check 2z's guard, not an early return from the
