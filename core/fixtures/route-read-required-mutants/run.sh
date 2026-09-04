@@ -77,19 +77,29 @@ printf '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu
 printf '{"type":"user","message":{"content":"<command-name>/ai-dlc-update</command-name>"}}\n' > "$TR_UPDATER"
 printf '{"type":"user","message":{"content":"fix the timezone bug in the ingest worker"}}\n' > "$TR_PLAIN"
 
-PROBE_NAME=( bypass  routed  skill  agent  bash   notebook      updater  plain  )
-PROBE_TOOL=( Write   Write   Skill  Agent  Bash   NotebookEdit  Write    Write  )
-PROBE_TR=(   BYPASS  ROUTED  BYPASS BYPASS BYPASS BYPASS        UPDATER  PLAIN  )
-BASELINE='DENY ALLOW ALLOW ALLOW ALLOW DENY ALLOW ALLOW'
-CELLS='0 1 2 3 4 5 6 7'
+# THE ACTOR IS A PROBE AXIS, not a variant of the transcript axis. `teammate` differs from
+# `bypass` by exactly one property -- the `agent_id` the harness sets on a dispatched teammate's
+# tool call -- and by nothing else: same tool, same transcript, same tree. Two cells one property
+# apart are what tell an exemption keyed on the actor from one that acquits everybody, and the
+# pair has to sit in ONE table or a mutant cannot be scored against both at once.
+PROBE_NAME=( bypass  routed  skill  agent  bash   notebook      updater  plain  teammate )
+PROBE_TOOL=( Write   Write   Skill  Agent  Bash   NotebookEdit  Write    Write  Write    )
+PROBE_TR=(   BYPASS  ROUTED  BYPASS BYPASS BYPASS BYPASS        UPDATER  PLAIN  BYPASS   )
+PROBE_AG=(   -       -       -      -      -      -             -        -      ax       )
+BASELINE='DENY ALLOW ALLOW ALLOW ALLOW DENY ALLOW ALLOW ALLOW'
+CELLS='0 1 2 3 4 5 6 7 8'
 
 tr_of() { case "$1" in BYPASS) printf '%s' "$TR_BYPASS";; ROUTED) printf '%s' "$TR_ROUTED";;
                        UPDATER) printf '%s' "$TR_UPDATER";; PLAIN) printf '%s' "$TR_PLAIN";; esac; }
 
-verdict() { # <hook copy> <tool> <transcript token> -> ALLOW | DENY
+verdict() { # <hook copy> <tool> <transcript token> [agent token; `-` is the LEAD] -> ALLOW | DENY
+  # `agent_id` and `agent_type` are the HARNESS's field names, not this battery's: the shared
+  # PreToolUse payload is enumerated in `ai-dlc-context-sensor.sh`, and both
+  # `ai-dlc-gate-remediation-guard.sh` and `ai-dlc-subagent-probe.sh` read `agent_id` off it.
   local out
-  out="$(jq -nc --arg t "$2" --arg tr "$(tr_of "$3")" \
-          '{session_id:"m",transcript_path:$tr,tool_name:$t,tool_input:{file_path:"/w/_bmad-output/x.md"}}' \
+  out="$(jq -nc --arg t "$2" --arg tr "$(tr_of "$3")" --arg ag "${4:--}" \
+          '{session_id:"m",transcript_path:$tr,tool_name:$t,tool_input:{file_path:"/w/_bmad-output/x.md"}}
+           + (if $ag == "-" then {} else {agent_id:$ag,agent_type:"general-purpose"} end)' \
         | CLAUDE_PROJECT_DIR="$W" bash "$1" 2>/dev/null)"
   case "$out" in
     *'"permissionDecision": "deny"'*|*'"permissionDecision":"deny"'*) printf 'DENY' ;;
@@ -97,9 +107,11 @@ verdict() { # <hook copy> <tool> <transcript token> -> ALLOW | DENY
   esac
 }
 
-row() { # <hook copy> -> the eight verdicts in PROBE order
+row() { # <hook copy> -> one verdict per probe cell, in PROBE order
   local h="$1" i out=""
-  for i in $CELLS; do out="$out $(verdict "$h" "${PROBE_TOOL[$i]}" "${PROBE_TR[$i]}")"; done
+  for i in $CELLS; do
+    out="$out $(verdict "$h" "${PROBE_TOOL[$i]}" "${PROBE_TR[$i]}" "${PROBE_AG[$i]}")"
+  done
   printf '%s' "${out# }"
 }
 
@@ -114,6 +126,29 @@ logcell() { # <hook copy> <transcript token> -> PRESENT | ABSENT
     | CLAUDE_PROJECT_DIR="$lw" bash "$1" >/dev/null 2>&1
   if grep -q 'ROUTE_DENIED' "$lw/_bmad-output/pipeline-continuation-log.md" 2>/dev/null
   then printf 'PRESENT'; else printf 'ABSENT'; fi
+}
+
+# THE THIRD OBSERVABLE, and it exists for the same reason the log cells do: no cell of the verdict
+# table is PAUSED, so a mutation that turns Check 2z's `agent_id` conjunct into a whole-hook exit
+# moves nothing in that table and would score a survival. This drives a teammate's Write on a
+# PAUSED tree with a ROUTED transcript -- Check 2z has nothing to say either way, so what answers
+# is Check 3's Rule 29 deny, which the exemption must NOT have reached.
+pausecell() { # <hook copy> -> DENY | ALLOW
+  local pw="$WORK/pause.$$"; rm -rf "$pw"
+  mkdir -p "$pw/_bmad-output/planning-artifacts/s7" "$pw/scripts/ai-dlc"
+  : > "$pw/_bmad-output/pipeline-snapshot.md"
+  : > "$pw/_bmad-output/pipeline-paused.flag"
+  printf '#!/bin/sh\necho 7\n' > "$pw/scripts/ai-dlc/sprint-status.sh"; chmod +x "$pw/scripts/ai-dlc/sprint-status.sh"
+  local out
+  out="$(jq -nc --arg tr "$(tr_of ROUTED)" \
+     '{session_id:"m",transcript_path:$tr,tool_name:"Write",agent_id:"ax",
+       agent_type:"general-purpose",
+       tool_input:{file_path:"/w/_bmad-output/planning-artifacts/product-brief.md"}}' \
+    | CLAUDE_PROJECT_DIR="$pw" bash "$1" 2>/dev/null)"
+  case "$out" in
+    *'"permissionDecision": "deny"'*|*'"permissionDecision":"deny"'*) printf 'DENY' ;;
+    *) printf 'ALLOW' ;;
+  esac
 }
 
 # Build a mutant as a COPY and refuse one that changed nothing: an unmutated copy answers the
@@ -181,7 +216,7 @@ echo "route-read-required-mutants:"
 cp "$HOOK" "$WORK/control.sh"
 CTRL="$(row "$WORK/control.sh")"
 if [ "$CTRL" = "$BASELINE" ]; then
-  ok "CONTROL: an unmutated copy DENIES both write cells and allows the other six (positive conjunct: \`bypass\` and \`notebook\` are DENY, so a subject that emitted nothing would fail this)"
+  ok "CONTROL: an unmutated copy DENIES both lead write cells and allows every other cell including \`teammate\` (positive conjunct: \`bypass\` and \`notebook\` are DENY, so a subject that emitted nothing would fail this)"
 else
   bad "CONTROL: an unmutated copy answers '$CTRL' over (${PROBE_NAME[*]}), not '$BASELINE' — the harness, not the mutants, is what the arms below measure"
 fi
@@ -206,7 +241,7 @@ elif splice route-key-widened-to-mention "$LN_KEY" replace \
        '      if ! grep -q '"'"'steps/route\.md'"'"' "$TRANSCRIPT" 2>/dev/null; then'; then
   # BOTH denial cells move, and they share ONE subject: the route key is what makes `bypass` and
   # `notebook` deny at all. This is arms overlapping on a single mutation, not an entangled pair.
-  score route-key-widened-to-mention 'ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW' \
+  score route-key-widened-to-mention 'ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW' \
     "turns both denial cells from DENY to ALLOW: keying on the string instead of a Read's file_path detects nothing"
 fi
 
@@ -224,9 +259,9 @@ if [ -z "$LN_SURF" ]; then
   bad "ANCHOR: could not locate exactly one \`$SURF\` line above the route grep. Check 3 carries the same tool set, so a battery that cannot tell the two apart would mutate the wrong copy, leave every cell green, and report a full sweep."
 else
   for T in Skill Agent Bash; do
-    case "$T" in Skill) want='DENY ALLOW DENY ALLOW ALLOW DENY ALLOW ALLOW';;
-                 Agent) want='DENY ALLOW ALLOW DENY ALLOW DENY ALLOW ALLOW';;
-                 Bash)  want='DENY ALLOW ALLOW ALLOW DENY DENY ALLOW ALLOW';; esac
+    case "$T" in Skill) want='DENY ALLOW DENY ALLOW ALLOW DENY ALLOW ALLOW ALLOW';;
+                 Agent) want='DENY ALLOW ALLOW DENY ALLOW DENY ALLOW ALLOW ALLOW';;
+                 Bash)  want='DENY ALLOW ALLOW ALLOW DENY DENY ALLOW ALLOW ALLOW';; esac
     if splice "surface-widened-to-$T" "$LN_SURF" replace "    Write|Edit|MultiEdit|NotebookEdit|$T)"; then
       score "surface-widened-to-$T" "$want" \
         "turns \`$T\` from ALLOW to DENY: the deny would forbid the act it demands, and the pipeline wedges at its first step"
@@ -238,7 +273,7 @@ else
   # plausible "tidy the tool list" edit and it silently restores one unwatched way to produce a
   # file. A widening mutant cannot detect a narrowing regression.
   if splice surface-narrowed-drop-notebook "$LN_SURF" replace '    Write|Edit|MultiEdit)'; then
-    score surface-narrowed-drop-notebook 'DENY ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW' \
+    score surface-narrowed-drop-notebook 'DENY ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW ALLOW' \
       "turns \`NotebookEdit\` from DENY to ALLOW: the surface's coverage of it is load-bearing, not decorative"
   fi
 fi
@@ -254,7 +289,7 @@ if mk aidlc-guard-deleted 's#\[ "\$AIDLC_SESSION" = "1" \] && ##'; then
   # IT OWNS BOTH SCOPE CELLS, and that is the whole scope guard rather than two entangled arms.
   # `updater` and `plain` are both outside this check for the same reason -- neither is an
   # `/ai-dlc` session -- and one conjunct is what holds them there.
-  score aidlc-guard-deleted 'DENY ALLOW ALLOW ALLOW ALLOW DENY DENY DENY' \
+  score aidlc-guard-deleted 'DENY ALLOW ALLOW ALLOW ALLOW DENY DENY DENY ALLOW' \
     "turns BOTH scope cells from ALLOW to DENY — the guard is what keeps the updater, and 12 of the reference consumer's 171 ordinary sessions, out of this check"
 fi
 
@@ -296,9 +331,44 @@ if [ -n "$LN_SURF" ] && \
 fi
 
 # =============================================================================
-# 5. THE JOIN — a load-bearing cell the SHIPPED suite does not assert is still uncovered.
+# 5. THE TEAMMATE CONJUNCT DELETED — and the same exemption widened past its own check.
 # =============================================================================
-# Sections 1-4 prove these cells are load-bearing IN THE HOOK. They do not prove any consumer
+# Two mutations, one property each, failing in opposite directions. The first DELETES the
+# `agent_id` conjunct from Check 2z's guard, which is the whole of the exemption: it must flip the
+# `teammate` cell to DENY and move nothing else, because no other cell of the table carries an
+# actor. The second leaves the conjunct alone and HOISTS the same test into a whole-hook early
+# exit -- the plausible "a teammate is exempt, so say it once at the top" edit -- and it moves no
+# cell of the verdict table at all, because no probe cell is PAUSED and Check 2z already allows
+# the one cell that would notice.
+#
+# THAT SECOND MUTANT IS THE SAME BLINDNESS SECTION 4 ANSWERS, one observable over: the verdict row
+# cannot see the log, and it cannot see a check that lives below the one being mutated. So it is
+# answered the same way -- a second observable, here `pausecell()`, with the control scored beside
+# the mutant in the same arm. A mutant scored only against the row would come back green here, and
+# a survival that means "the probe cannot look there" reads exactly like a guard that is vestigial.
+if mk teammate-conjunct-deleted 's#\[ -z "\$AGENT_ID" \] && ##'; then
+  score teammate-conjunct-deleted 'DENY ALLOW ALLOW ALLOW ALLOW DENY ALLOW ALLOW DENY' \
+    "turns the \`teammate\` cell from ALLOW to DENY and moves no other cell: the exemption is load-bearing and keyed on the actor rather than on the transcript"
+fi
+
+LN_AG="$(anchor 'AGENT_ID=$(echo "$INPUT"')"
+if [ -z "$LN_AG" ]; then
+  bad "ANCHOR: the AGENT_ID assignment is not unique in the hook, so the whole-hook exemption mutant is aimed at nothing and a battery that cannot locate its subject must say so rather than report a survival"
+elif splice teammate-exemption-whole-hook "$LN_AG" after '[ -z "$AGENT_ID" ] || exit 0'; then
+  MR="$(row "$WORK/teammate-exemption-whole-hook.sh")"
+  CP="$(pausecell "$WORK/control.sh")"
+  MP="$(pausecell "$WORK/teammate-exemption-whole-hook.sh")"
+  if [ "$CP" = DENY ] && [ "$MP" = ALLOW ] && [ "$MR" = "$BASELINE" ]; then
+    ok "MUTANT teammate-exemption-whole-hook moves NO verdict cell, and the paused probe catches it anyway: the control DENIES a teammate's paused write (Rule 29) where the mutant ALLOWS it, so \"the exemption is scoped to Check 2z\" is a falsifiable claim and not a description"
+  else
+    bad "MUTANT teammate-exemption-whole-hook: expected pause cells 'DENY'/'ALLOW' over (control,mutant) and an unchanged verdict row; got '$CP'/'$MP' and '$MR'"
+  fi
+fi
+
+# =============================================================================
+# 6. THE JOIN — a load-bearing cell the SHIPPED suite does not assert is still uncovered.
+# =============================================================================
+# Sections 1-5 prove these cells are load-bearing IN THE HOOK. They do not prove any consumer
 # would find out: this battery is `.dist-only` and never runs there. `route-read-required` is
 # the shipped fixture that drives Check 2z, so every cell must be named in it.
 # JOIN ON THE LABEL EACH ARM EMITS, never on the cell's bare name. `grep -qi bash` is satisfied
@@ -312,10 +382,17 @@ JOIN_TOK=( 'BYPASS: \`$T\` is DENIED'
            'for T in Write Edit MultiEdit NotebookEdit'
            'SCOPE updater:'
            'SCOPE not-an-ai-dlc-session:'
-           'DOWNSTREAM: Check 3' )
+           'DOWNSTREAM: Check 3'
+           'TEAMMATE: a dispatched teammate'
+           'TEAMMATE twin:'
+           'TEAMMATE pause:'
+           'TEAMMATE log:' )
 JOIN_WHY=( bypass "routed near-miss" "the remedy arms" "all three remedy tools" \
            "the whole denied surface including NotebookEdit" updater "not-an-ai-dlc-session" \
-           "the checks below Check 2z" )
+           "the checks below Check 2z" "the teammate exemption" \
+           "the teammate's lead twin, one property apart" \
+           "the exemption's scope at Check 3's pause deny" \
+           "the teammate allow writing no ROUTE_DENIED row" )
 i=0
 while [ "$i" -lt ${#JOIN_TOK[@]} ]; do
   if grep -qF -- "${JOIN_TOK[$i]}" "$SUBJ"; then
