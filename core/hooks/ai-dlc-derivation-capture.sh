@@ -171,7 +171,11 @@ END {
   i=1
   while (i<=N) {
     ind = lead(L[i]); b = substr(L[i], length(ind) + 1)
-    if (b=="```derived" || index(b,"```derived ")==1) {
+    # The info string is EXACTLY derived, as the validator requires: a wrapped sentence whose
+    # continuation begins with the token used to open a phantom block that swallowed the real
+    # one after it (measured in the validator header). No apostrophe in this comment: it sits
+    # inside a single-quoted awk program.
+    if (b ~ /^```derived[ \t]*$/) {
       j=i+1
       while (j<=N && index(shed(L[j], ind),"```")!=1) j++
       split("", pid); split("", tch)

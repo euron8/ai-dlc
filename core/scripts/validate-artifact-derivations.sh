@@ -24,7 +24,7 @@
 # "found by an LLM one pass later" to "failed by a script before the pass is dispatched."
 #
 # THE GRAMMAR. A claim is checkable when the author says it is, in a fenced block whose
-# info-string is `derived`:
+# info-string is exactly `derived` (the fence may be indented, as inside a list item):
 #
 #     ```derived
 #     $ grep -c 'save_state_fn' rebalancer/execution.py
@@ -297,9 +297,25 @@ norm() { sed 's/[[:space:]]*$//' | sed '/^$/d'; }
 # `ai-dlc-derivation-capture.sh` carries the same rule in its mask and its two cheap rejects;
 # the two are one population by contract (its header says why), so a change here is a change
 # there.
+#
+# AND THE INFO STRING IS EXACTLY `derived`, with nothing after it but blanks. The opener used
+# to accept `'```derived '*` -- any trailing text -- and that arm matched no real fence: over
+# the reference consumer's 2795 openers, zero carry text after the word and the two lines that
+# do are PROSE, a wrapped sentence whose continuation happens to begin with the token
+# ("```derived blocks are machine-checked and plain blocks are not, ..."). Each of those
+# opened a phantom block that ran to the next real opener, read that opener as its closer,
+# and left the real block's pairs outside any fence -- three derivations in one file, silently
+# unchecked, and the indent rule above made the wrapped-in-a-list-item form reachable where
+# the column-0 reader had met it only once. So the arm is closed; a fence CommonMark reads
+# with a longer info string is not a derivation fence here.
 fence_indent() { # $1 line -> the leading blanks of the line, possibly empty
   local l="$1"
   printf '%s' "${l%%[![:blank:]]*}"
+}
+is_opener() { # $1 line with its indent already shed -> 0 when it opens a ```derived block
+  local b="$1"
+  b="${b%"${b##*[![:blank:]]}"}"   # drop trailing blanks
+  [ "$b" = '```derived' ]
 }
 shed_indent() { # $1 line  $2 indent -> the line with the block's indent removed
   local l="$1" ind="$2"
@@ -320,10 +336,11 @@ check_file() { # $1 artifact path
     lineno=$((lineno + 1))
     if [ "$in_block" -eq 0 ]; then
       indent="$(fence_indent "$line")"
-      case "${line#"$indent"}" in
-        '```derived'|'```derived '*) in_block=1; blockline=$lineno; blocks=$((blocks + 1)); cmd=""; : > "$TMP_EXP" ;;
-        *) indent="" ;;
-      esac
+      if is_opener "${line#"$indent"}"; then
+        in_block=1; blockline=$lineno; blocks=$((blocks + 1)); cmd=""; : > "$TMP_EXP"
+      else
+        indent=""
+      fi
       continue
     fi
     # inside a ```derived block -- every line below is read with the block's indent shed

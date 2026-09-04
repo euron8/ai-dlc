@@ -264,6 +264,39 @@ else
   bad "an edit writing the indented FRESH pair exited $RC — the hook is refusing indented fences rather than reading them"
 fi
 
+# --- A1c: CONTROL — the prose-opener artifact is 1-of-1 stale under the real validator
+# A validator whose opener accepts any text after `derived` opens a phantom block on line 4,
+# closes it on the real opener at line 6, and reports 0 checked with exit 0.
+OCTL="$( ( cd "$CONSUMER" && AI_DLC_PROJECT_ROOT="$CONSUMER" bash "$VALIDATOR" "$OPN_ART" ) 2>&1 )"
+OCTL_RC=$?
+if [ "$OCTL_RC" = 1 ] && grep -q '1 stale or unrunnable derivation(s) of 1 checked' <<<"$OCTL"; then
+  ok "control: the prose-opener artifact is 1-of-1 stale under the real validator"
+else
+  bad "control: expected rc 1 and '1 stale ... of 1 checked' on the prose-opener artifact, got rc $OCTL_RC — the prose line is swallowing the real block"
+fi
+
+# --- A20: an edit to PROSE in a file whose real block sits below a prose line that begins
+# with the fence token → SILENT. The near-miss beside A21: same file, one property apart. It
+# holds under a mask that misreads the prose line too, and moves only when every pair is
+# submitted regardless of the payload (the file-grain mutant).
+fire "$(edit_json "$OPN_ART" "A sentence that wraps so its continuation begins with the fence token, and the block")"
+if [ "$RC" = 0 ] && [ ! -s "$ERR" ]; then
+  ok "prose-opener file, edit touching only prose → exit 0"
+else
+  bad "a prose-only edit to the prose-opener file exited $RC — a pair this edit did not write was submitted"
+fi
+
+# --- A21: an edit that wrote that file's real stale pair → BLOCK at its real line -----
+# A mask that reads the prose line as an opener blanks the REAL opener as that phantom block's
+# closer, so the real pairs reach the validator outside any fence and are never run: the pair
+# is written unwitnessed and the hook exits 0. Silent, in the direction that matters.
+fire "$(edit_json "$OPN_ART" "$PAIR_STALE_C")"
+if [ "$RC" = 2 ] && grep -q 'prose-opener-p1.md:7' "$ERR"; then
+  ok "prose-opener file, stale pair written → exit 2 citing prose-opener-p1.md:7"
+else
+  bad "an edit writing the prose-opener file's stale pair exited $RC (expected 2 citing :7)"
+fi
+
 # --- A14: the artifact is not modified by the hook ----------------------------
 # The rejected design overwrote the recorded output with the captured one. It must
 # stay rejected: a wrong COMMAND would then be silently paired with its own real

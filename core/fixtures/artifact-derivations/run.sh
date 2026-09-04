@@ -336,6 +336,35 @@ out="$(run "$WORK/i-unclosed.md")"; rc=$?
   && ok "i-unclosed             exit=1  (an unclosed indented block is reported)" \
   || bad "i-unclosed expected exit 1 naming 'never closed', got $rc: $out"
 
+# --- J. A PROSE LINE THAT BEGINS WITH THE TOKEN IS NOT AN OPENER --------------------
+# The opener accepted `'```derived '*` -- any trailing text -- and over the reference
+# consumer's 2795 openers that arm matched nothing but two wrapped SENTENCES whose
+# continuation begins with the token. Each opened a phantom block that ran to the next real
+# opener, read it as a closer, and left the real block's pairs outside any fence: three
+# derivations silently unchecked in one file, found the moment the indent rule made the
+# list-item form reachable. The stale twins are the arms -- a reader that swallows the real
+# block reports 0 checked and exits 0 on both of them.
+jemit() { # $1 file  $2 indent  $3 recorded-output
+  { printf '# Story\n\n%sA sentence that wraps so its continuation begins with the fence token, so a\n' "$2"
+    printf '%s```derived would promise a machine check the command cannot keep -- this claim stays unfenced.\n\n' "$2"
+    printf '%s```derived\n%s$ grep -c needle src/two-needles.txt\n%s%s\n%s```\n' "$2" "$2" "$2" "$3" "$2"; } > "$1"
+}
+jemit "$WORK/j-col0-true.md" "" 2
+out="$(run "$WORK/j-col0-true.md")"; rc=$?
+[ "$rc" -eq 0 ] && grep -q '1 derivation(s) in 1 block(s)' <<< "$out" \
+  && ok "j-col0-true            exit=0  and the REAL block after the prose line is counted" \
+  || bad "j-col0-true expected exit 0 counting 1 block, got $rc: $out"
+jemit "$WORK/j-col0-stale.md" "" 1
+out="$(run "$WORK/j-col0-stale.md")"; rc=$?
+[ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" \
+  && ok "j-col0-stale           exit=1  STALE (the prose line opened nothing; the real block ran)" \
+  || bad "j-col0-stale expected exit 1 STALE -- the prose line swallowed the real block: $rc: $out"
+jemit "$WORK/j-ind-stale.md" "   " 1
+out="$(run "$WORK/j-ind-stale.md")"; rc=$?
+[ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" \
+  && ok "j-ind-stale            exit=1  STALE (the same, wrapped inside a list item)" \
+  || bad "j-ind-stale expected exit 1 STALE -- the indented prose line swallowed the real block: $rc: $out"
+
 echo
 if [ "$fails" -gt 0 ]; then
   echo "FAIL: $fails assertion(s) wrong."

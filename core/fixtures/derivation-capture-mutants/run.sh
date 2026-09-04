@@ -18,9 +18,10 @@
 #
 # MOST MUTATIONS DECLARE ONE ARM. Two declare several, and that is the honest shape rather
 # than a weakened rule. The payload index ignored -- every pair submitted -- reddens A3, A4,
-# A5, A17 and A19, which differ in the INPUT they present (a reproducing pair, prose alone, a
-# reproducing pair beside a stale sibling, and the last two again through an indented fence),
-# and one deletion makes all five wrong at once. The mask blind to an indented opener reddens
+# A5, A17, A19 and A20, which differ in the INPUT they present (a reproducing pair, prose
+# alone, a reproducing pair beside a stale sibling, the first two again through an indented
+# fence, and prose beside a real block below a prose line that begins with the fence token),
+# and one deletion makes all six wrong at once. The mask blind to an indented opener reddens
 # A17 and A19: an indented block passes through UNMASKED, so its stale pair is submitted on
 # every edit to the file and both silent arms on that file go red together. Splitting either
 # into per-arm mutations that each redden the whole set would assert less, not more.
@@ -181,7 +182,7 @@ mutate "rc 2 read as a verdict" "refused to start" \
 # reference consumer's active sprint already fail whole-file validation, so it refuses an
 # unrelated edit in 30% of them. Three arms present three different inputs it gets wrong.
 mutate "payload index ignored (file grain)" \
-  "edit writing a reproducing pair|an edit that wrote no derivation|the reproducing pair of a mixed block|a prose-only edit to the indented file|indented FRESH pair" \
+  "edit writing a reproducing pair|an edit that wrote no derivation|the reproducing pair of a mixed block|a prose-only edit to the indented file|indented FRESH pair|a prose-only edit to the prose-opener file" \
   's/if (cur>0 \&\& (L\[k\] in PAY)) tch\[cur\]=1/if (cur>0) tch[cur]=1/'
 
 # --- 8. the markdown filter removed -------------------------------------------
@@ -210,6 +211,15 @@ mutate "mask opener blind to an indented fence" \
 
 mutate "command grep blind to an indented fence" "indented stale pair" \
   's/^\(grep -q .\^\)\[\[:blank:\]\]\*\(\\\$ . "\$MASK"\)/\1\2/'
+
+# --- 12. the opener accepts any text after `derived` (the pre-v0.500.0 arm) ----------
+# A wrapped sentence beginning with the token opens a phantom block; the real opener after it
+# is read as that block's CLOSER and blanked, so the real pairs reach the validator with no
+# fence around them and are never run. The failure is SILENT in the blocking direction: an
+# edit writing the real stale pair exits 0 (A21). The prose-only edit (A20) is silent under
+# both hooks and does not move. Only the prose-opener artifact carries the shape.
+mutate "opener accepts trailing text" "prose-opener file's stale pair" \
+  's/^    if (b ~ \/\^```derived\[ \\t\]\*\$\/) {$/    if (b=="```derived" || index(b,"```derived ")==1) {/'
 
 if [ "$fails" -gt 0 ]; then
   printf '  %s mutation(s) did not behave\n' "$fails"

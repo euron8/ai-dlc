@@ -123,6 +123,23 @@ cat > "$IND_ART" <<'INDENTED'
   ```
 INDENTED
 
+# A fourth artifact: a wrapped SENTENCE whose continuation begins with the fence token
+# (line 4), above one real, stale block (lines 6-9). The opener grammar used to accept any
+# text after the word, so this line opened a phantom block that swallowed the real one --
+# measured on two lines in the reference consumer. The info string is now exactly `derived`.
+OPN_ART="$CONSUMER/_bmad-output/planning-artifacts/s1/prose-opener-p1.md"
+cat > "$OPN_ART" <<'OPENER'
+# Prose opener p1
+
+A sentence that wraps so its continuation begins with the fence token, and the block
+```derived would promise a machine check the command cannot keep -- so it stays unfenced.
+
+```derived
+$ grep -c neverpresent VERSION
+7
+```
+OPENER
+
 cat > "$WORK/env.sh" <<EOF
 WORK="$WORK"
 CONSUMER="$CONSUMER"
@@ -131,6 +148,7 @@ VALIDATOR="$CONSUMER/scripts/ai-dlc/validate-artifact-derivations.sh"
 ART="$ART"
 PROSE_ART="$CONSUMER/_bmad-output/planning-artifacts/s1/prose-only.md"
 IND_ART="$IND_ART"
+OPN_ART="$OPN_ART"
 EOF
 
 printf '%s\n' "$WORK"
