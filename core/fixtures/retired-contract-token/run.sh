@@ -59,6 +59,13 @@ CHAN="$ROOT/.chan"
 rm -f "$CHAN"
 printf 'x\n' >> "$ROOT/.chan"
 BASE
+# A SECOND core file upstream modifies and the consumer has DELETED. It is listed as
+# CLASSIFY and never opened, so every world has listed > opened, and a NOTE that prints
+# "$opened of $opened" cannot pass for one that prints "$opened of $listed". Measured
+# on the reference consumer's history: 8 listed, 7 opened, and the first cut of the
+# denominator NOTE printed only the 7.
+SECOND_PATH="core/scripts/second.sh"
+printf '#!/bin/bash\nX="$ROOT/.second"\n' > "$DIST/$SECOND_PATH"
 git -C "$DIST" add -A >/dev/null 2>&1
 git -C "$DIST" commit -qm base >/dev/null 2>&1
 BASE_SHA="$(git -C "$DIST" rev-parse HEAD)"
@@ -72,6 +79,7 @@ TMPROOT="$(mktemp -d)"
 CHAN="$TMPROOT/chan"
 printf 'x\n' >> "$CHAN"
 THEIRS
+printf '#!/bin/bash\nX="$ROOT/.second"\ny=2\n' > "$DIST/$SECOND_PATH"
 git -C "$DIST" add -A >/dev/null 2>&1
 git -C "$DIST" commit -qm theirs >/dev/null 2>&1
 THEIRS_SHA="$(git -C "$DIST" rev-parse HEAD)"
@@ -179,7 +187,7 @@ fi
 # empty retired set, and its own stderr says so. A mutant that never ran says something
 # else, or nothing.
 merr="$(bash "$MUTANT" "$DIST" "$BASE_SHA" "$THEIRS_SHA" "$CONS" 2>&1 >/dev/null)"
-if grep -q '1 CLASSIFY file(s) opened, 0 carrying' <<<"$merr"; then
+if grep -q '1 of 2 CLASSIFY file(s) opened, 0 carrying' <<<"$merr"; then
   ok "MUTATION control: the mutant's silence is a scan that opened 1 file and retired nothing, by its own stderr"
 else
   bad "MUTATION control: the mutant's silence is unexplained -- it may never have scanned: ${merr:-<no stderr>}"
@@ -230,7 +238,7 @@ p6() {
   seed_repointed
   o="$(out_of "$1" "$BASE_SHA")"; e="$(err_of "$1" "$BASE_SHA")"
   [ -z "$(printf '%s' "$o" | grep . || true)" ] \
-    && grep -q '1 CLASSIFY file(s) opened, 1 carrying' <<<"$e" \
+    && grep -q '1 of 2 CLASSIFY file(s) opened, 1 carrying' <<<"$e" \
     && ! grep -q 'opened NONE' <<<"$e"
 }
 p7() {
@@ -251,7 +259,7 @@ p8() {
 seed_at_theirs
 nrows="$(bash "$PRE" "$DIST" "$BASE_SHA" "$THEIRS_SHA" "$CONS" 2>/dev/null | grep -c .)" || nrows=0
 if [ "$nrows" -gt 0 ]; then
-  ok "control: the ALREADY-AT-THEIRS world yields $nrows preclassify row(s), none CLASSIFY"
+  ok "control: the ALREADY-AT-THEIRS world yields $nrows preclassify row(s); the one CLASSIFY row is the deleted second file, listed and never opened"
 else
   echo "FIXTURE ERROR: the ALREADY-AT-THEIRS world produced no preclassify rows -- p5 cannot discriminate" >&2
   exit 2
@@ -302,9 +310,17 @@ score "no-vacuity-note" "$(mkmut nonote 's|^  echo "retired-tokens: NOTE -- this
 # this fix is silent on its own motivating case and prints the denominator NOTE with
 # a zero in it instead. p5 alone falls.
 score "keyed-on-no-rows" "$(mkmut norows 's|^if \[ "\$opened" -eq 0 \]; then|if [ -z "$ROWS" ]; then|')" "0111"
+# Wrong fix 1b: key the NOTE on the LISTED count. A CLASSIFY file the consumer deleted is
+# listed and never opened, so a pull made only of those reads as scanned. p5's world
+# lists exactly one such file, so p5 alone falls.
+score "keyed-on-listed" "$(mkmut listed 's|^if \[ "\$opened" -eq 0 \]; then|if [ "$listed" -eq 0 ]; then|')" "0111"
 # Wrong fix 2: one NOTE for every quiet run, worded as "opened nothing". True for the
 # incident, false for a scan that opened files and matched nothing. p6 alone falls.
-score "denominator-collapsed" "$(mkmut collapse 's|^  echo "retired-tokens: NOTE -- \$opened CLASSIFY file(s) opened,|  echo "retired-tokens: NOTE -- opened NONE, listed $listed, $opened opened,|')" "1011"
+score "denominator-collapsed" "$(mkmut collapse 's|^  echo "retired-tokens: NOTE -- \$opened of \$listed CLASSIFY file(s) opened,|  echo "retired-tokens: NOTE -- opened NONE, listed $listed, $opened opened,|')" "1011"
+# Wrong fix 2b: the denominator is the opened count itself. Reads as a complete scan on
+# a pull that listed more than it opened. p6 alone falls, because its world lists 2 and
+# opens 1.
+score "opened-of-opened" "$(mkmut ofopened 's|\$opened of \$listed CLASSIFY file(s) opened,|$opened of $opened CLASSIFY file(s) opened,|')" "1011"
 # Wrong fix 3: a NOTE beside real rows. Drop the early exit after the rows print so the
 # denominator NOTE follows every match. p7 alone falls.
 score "note-beside-rows" "$(mkmut fallthrough '/^  printf '"'"'%s'"'"' "\$rows"$/{n;s|^  exit 0$|  :|;}')" "1101"

@@ -138,7 +138,9 @@ fi
 if [ "$opened" -eq 0 ]; then
   echo "retired-tokens: NOTE -- this pull listed $listed CLASSIFY file(s)${ONLY:+ at $ONLY} and opened NONE, so NO core file was scanned. This run is SILENT about retired contract tokens, not a finding of none. $LIMIT" >&2
 else
-  echo "retired-tokens: NOTE -- $opened CLASSIFY file(s) opened, $retiring carrying a token upstream retired; no consumer reference to a retired token. $LIMIT" >&2
+  # Both counts, always: a pull that lists many and opens one is a partial scan, and
+  # "1 opened" alone reads as a complete scan of a one-file pull.
+  echo "retired-tokens: NOTE -- $opened of $listed CLASSIFY file(s) opened, $retiring carrying a token upstream retired; no consumer reference to a retired token. $LIMIT" >&2
 fi
 
 exit 0
