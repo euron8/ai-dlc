@@ -6214,3 +6214,75 @@ verify: sh h=${H:-core/hooks/ai-dlc-continue.sh}; [ -f "$h" ] || exit 9; d=$(mkt
 
 
 
+## BL-172 — `ledger-reverify.sh` searched a `theirs_*` anchor for its backslashes literally, so a receipt whose backticks were markdown-escaped read "vacuous predicate" on an entry upstream had just fixed
+
+**LANDED (v0.506.0, verified 3e59c856).** Merged as PR #637; the release commit names the id verbatim.
+
+Filed by the reference consumer as `PC-S308-LEDGER-REVERIFY-READS-ESCAPED-BACKTICKS-LITERALLY`
+on 2026-09-05, from its `0.502.0 → 0.504.0` pull. Batch 56 of the ledger drain, opened by a
+peer handoff and scoped from this session's own ranking: the only PC-backed unfiled candidate,
+shipping alone because its subject is a bootstrapping file. DEFECT tier: the wrong verdict is
+silent in the direction that keeps an absorbed entry open forever, and its stated reason sends
+the operator to re-read the entry body rather than the receipt's spelling.
+
+The consumer's `PC-S308-RESUME-SNAPSHOT-BUDGET-ASKS-INSTEAD-OF-AUTO-TRIMMING` carried a
+`theirs_has` receipt on `steps/route.md` whose substring wrapped `trim` in backslash-escaped
+backticks, as a markdown author writes them inside prose. The reader stripped the outer quotes
+and passed the rest to `grep -F`, so the substring was searched for WITH its backslashes, was at
+neither ref, and the entry read `NEEDS-REVIEW  vacuous predicate: … absent at BOTH base and
+theirs`. The bare substring was present at base and gone at theirs: the `0.504.0` close the
+release commit names as `BL-168`, reported as no close at all. Re-driven here on the consumer's
+ledger as it stood before it repaired the receipt (a scratch copy at its `37d7d2aa5`, base
+`4dc8d791`, theirs `6fc38a46`, installed reader against this one with a `cmp -s` control that
+they differ): 123 rows both sides, no status moved, two details moved, that row and the
+`RECEIPTS-UNDECIDED` tally, which counts one fewer `theirs_has` receipt because a refused one is
+not a measurement.
+
+The filing offered two readings and asked upstream to choose. **Refuse, do not unescape**,
+because the consumer's own archive carries the same spelling meaning the opposite:
+`PC-S302-EMIT-REPORT-EMITS-LITERAL-BACKSLASHES-INTO-THE-MECHANICAL-REGION` anchored
+`theirs_has` on a shell printf whose backslash-backtick pairs WERE the defect text, and that
+receipt closed correctly under the literal reading (its annotation quotes the row). The token
+cannot say which the author meant, and a reader that unescaped would have reported that entry
+still-live after its fix. The distribution's own `scripts/backlog-reverify.sh` made the same
+choice for `has` / `lacks` before this was filed. The false-positive population of an
+unescaping reader, derived at `origin/main` before this batch and confirmed by the census hand
+with three tools: 78 `core/` files carry a literal backslash-backtick pair, against 494 carrying
+a backtick; this batch's fixture adds two more.
+
+The fix: the `theirs_has` / `theirs_lacks` parse site refuses any anchor carrying a backslash
+with a `NEEDS-REVIEW` row that names the backslash, says the grammar has no escape mechanism,
+and gives the remedy (write backticks and quotes bare; anchor text that genuinely contains a
+backslash on a backslash-free neighbour, or write the predicate as `sh`). The whole quoted run
+is tested, not its first member. **The path field is held to the same rule**, found by the
+batch-56 adversarial hand: a markdown-escaped path resolves at neither ref and falls to the
+basename fallback, whose `awk -v` strips the backslash and finds the real file, so the escaped
+receipt produced a verdict byte-identical to the correct one — a guess in the direction that
+closes live entries, one field over from the guess the anchor guard refuses. The refused
+receipt no longer counts toward the `theirs_has` tally. The reader's header and the update
+skill's step 3f state the rule. **The stated cost**: the `PC-S302` shape loses its mechanical
+receipt and is told to re-anchor. The population, from the batch-56 census hand: seven distinct
+backslash-bearing receipts across the consumer's history (six `theirs_has`, one `theirs_lacks`);
+two survive today, both in its archive (the closed `PC-S302` one and the regex-shaped
+`theirs_lacks`, which the rule now refuses instead of reporting still-live forever), and none
+in its live ledger. **A rendering limit, not fixed here**: `emit-report.sh` prints every detail
+into an unfenced markdown region, so a rendered refusal row shows the anchor with its backslash
+consumed; the sentence beside it still names the backslash, and the raw ledger line is the
+operator's source. That is a property of the region, shared by every detail carrying markdown.
+
+The receipt below drives the shipping reader over a two-commit repo and a ten-entry ledger:
+the escaped anchor refused with the backslash reason and both remedies, the same text bare
+closing, the literal shape refused, the regex shape refused, a two-anchor receipt whose second
+anchor carries the backslash refused, an escaped double quote refused, an escaped path refused
+with its remedy, the same path bare closing, and an escaped anchor on a path that resolves
+nowhere refused for the backslash (the guard sits before path resolution), and an `sh` receipt
+carrying a backslash still evaluated. It rejects the pre-fix reader (escaped reads vacuous), an
+unescaping reader (escaped closes), a backtick-only or backtick-and-dot guard (regex or quote
+passes through), a guard that keeps the literal search when it matches at base (literal
+closes), a guard that reads only the first anchor (the two-anchor entry closes), a reader
+without the path guard (the escaped path closes), a guard sited after path resolution, a row
+without its remedy, and a guard that refuses every verb (the `sh` receipt goes silent — found
+by the batch-56 scope hand, which measured that shape silencing fifteen of the consumer's
+thirty-six live `sh` receipts).
+
+verify: sh A=$PWD; R=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -f "$R" ] || exit 9; w=$(mktemp -d) || exit 9; trap 'rm -rf "$w"' EXIT; g() { git -C "$w/d" -c user.email=r@r -c user.name=r -c commit.gpgsign=false "$@"; }; mkdir -p "$w/d/core/x" "$w/c" || exit 9; git -c init.templateDir= -C "$w" init -q d >/dev/null 2>&1 || exit 9; printf '%s\n' '# r' 'Reply `trim` to have me trim it' '_base_ \`%s\`' 'version: 9.9.9' > "$w/d/core/x/r.md"; printf '%s\n' 'TOKEN_AT_BASE' > "$w/d/core/x/r_n.md"; echo 1 > "$w/d/VERSION"; g add -A && g commit -qm base || exit 9; b=$(g rev-parse HEAD); printf '%s\n' '# r' 'trimmed' '_base_ %s' 'version: 9.9.9' > "$w/d/core/x/r.md"; printf '%s\n' 'fixed' > "$w/d/core/x/r_n.md"; g add -A && g commit -qm theirs || exit 9; t=$(g rev-parse HEAD); printf '%s\n' '## PC-ESC — escaped' 'verify: theirs_has core/x/r.md "Reply \`trim\` to have me"' '## PC-BARE — bare' 'verify: theirs_has core/x/r.md "Reply `trim` to have me"' '## PC-LIT — literal' 'verify: theirs_has core/x/r.md "_base_ \`%s\`"' '## PC-RX — regex' 'verify: theirs_lacks core/x/r.md "^version: 9\.9\.9$"' '## PC-SECOND — second anchor escaped' 'verify: theirs_has core/x/r.md "version: 9.9.9" "_base_ \`%s\`"' '## PC-QUOTE — escaped quote' 'verify: theirs_has core/x/r.md "to have \"me\" trim"' '## PC-EPATH — escaped path' 'verify: theirs_has core/x/r\_n.md "TOKEN_AT_BASE"' '## PC-CPATH — clean path' 'verify: theirs_has core/x/r_n.md "TOKEN_AT_BASE"' '## PC-MISS — escaped anchor on a missing path' 'verify: theirs_has core/x/none.md "Reply \`trim\` to"' '## PC-SH — sh with a backslash is still evaluated' 'verify: sh case "a\b" in *\\*) exit 0 ;; *) exit 1 ;; esac' > "$w/l.md"; o=$(cd "$w/c" && bash "$A/$R" "$w/d" "$b" "$w/c" "$t" "$w/l.md" 2>/dev/null); printf '%s\n' "$o" | awk -F'\t' 'function ref(p){return $2 ~ p && $1=="NEEDS-REVIEW" && index($3,"contains a backslash")>0} function cl(p){return $2 ~ p && $1=="CLOSE-CANDIDATE"} ref("^PC-ESC") && index($3,"Write backticks and quotes bare")>0 && index($3,"verify: sh")>0 {e=1} cl("^PC-BARE"){k=1} ref("^PC-LIT"){l=1} ref("^PC-RX"){x=1} ref("^PC-SECOND"){s=1} ref("^PC-QUOTE"){q=1} ref("^PC-EPATH") && index($3,"Write the path bare")>0 {p=1} cl("^PC-CPATH"){c=1} ref("^PC-MISS"){m=1} $2 ~ /^PC-SH/ && $1=="STILL-LIVE" {h=1} END{exit !(e && k && l && x && s && q && p && c && m && h)}'
