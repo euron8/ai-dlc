@@ -37,9 +37,104 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 54 SHIPPED AS `v0.504.0`. THE GAP IS TWO AND PENDING IS FOUR. ONE `PC-S308-*` CANDIDATE IS UNFILED WITH A MEASURED MECHANISM, THEN THE STANDING CORPUS; PLUS `BL-159`, `BL-161`, `BL-163` AND `BL-169` WITH NO `PC-` ID.
+### BATCH 55 SHIPPED AS `v0.505.0`. THE GAP IS ONE AND PENDING IS TWO. ONE NEW `PC-S308-*` CANDIDATE IS UNFILED, ITS SUBJECT A BOOTSTRAPPING FILE; THEN THE STANDING CORPUS; PLUS `BL-159`, `BL-161`, `BL-163` AND `BL-171` WITH NO `PC-` ID.
 
-This block replaces the batch-53 record below it. Every figure here was re-derived on 2026-09-05
+This block replaces the batch-54 record below it. Every figure here was re-derived on 2026-09-05
+after the merge, against the working tree with the controls in the same invocation; re-derive
+them again rather than reading them.
+
+**`VERSION` IS `0.505.0`, SO BATCH 56 RELEASES AS `0.506.0`.** Re-derive `VERSION` and add one.
+Batch 55 merged at `288d0e53` (PR #635, squash; on the branch the release commit came last after
+seventeen fix, test and docs commits, none naming an id), closing
+`PC-S308-RULE-11-AMBIGUITY-QUESTIONS-HAVE-NO-MANDATED-PRESENTATION-TOOL` as `BL-170` and the
+no-`PC` `BL-169`, both rotated (archive 82 → 84, live 89 → 87 after two filings and two
+rotations; `BL-171` filed, not fixed). `named_absorbed()` lists exactly one release commit for the
+id at `0.505.0`; the impossible-id control for that channel is NOT `PC-S999-NEVER`, which two docs
+commits quote. No correction release. **The third batch opened by a peer's handoff** (action 9's
+message from `ai-dlc-1b`), so it scoped itself from its own ranking and stated the choice in its
+first ping: RULE-11 as the only PC-backed unfiled candidate, `BL-169` batched with it as the one
+no-`PC` entry with a measured consumer consequence and a one-call remedy.
+
+**THE CENSUS REFUTED THE FILING'S SUGGESTED SITE BEFORE ANYTHING WAS BUILT, AND THE ADVERSARIES
+THEN FOUND THREE HOLES, EACH IN A DIFFERENT DIRECTION.** The read-only census over the consumer's
+247 transcripts (3660 turn-ends, control 138 turns carrying the tool): the predicate fires 97
+times, 84 genuine questions, and the incident's burial turn ended with the pause flag DOWN on the
+Stop hook's default block path, whose reason told the lead to create the flag — so an arm sited
+only in the pause-flag branch, which is what the filing's shape produces, cannot fire on its own
+motivating case; 32 of 97 fires and 10 of 53 real decisions sit there. The predicate is now read
+in both branches. Pause points (b) and (c) end the turn with a prose question by design (7 of 65
+flag-up fires), so the flag-up branch warns with a neutral `systemMessage` and never blocks.
+Then: the RULE-11 adversary timed the first cut at sixteen seconds per Stop on the consumer's
+largest transcript (a whitespace `gsub` over every record, paid before Check 1 on every exit),
+found a wrong fix counting ANY tool use that passed fixture and receipt and would acquit 65 of 96
+fires, and found the hook's own header still naming a Rule 11(a) HARD_BLOCK as a flag case; the
+BL-169 adversary drove a lead-authored `SUPPRESSED` entry through the guard end to end (arm 6
+lets the lead write `pending.md`; nothing verified the quote) and found the cache key blind to a
+same-size rewrite inside one second. All closed before the merge; the guard now verifies each
+covering quote with `--cite` and Check 26's half is `BL-171`. Every hand delivered before the
+merge; four payloads truncated, each recovered by asking for the tail by name. The census hand's
+turn definition was independently reproduced by the adversary (3601 / 96 against 3660 / 97).
+
+**THE CONSUMER PULLED MID-BATCH, AND THE RESUME BLOCK SAID GAP TWO.** Its stamp reads `0.504.0` /
+`6fc38a46` on all four fields (PR #1015 at 15:39, while this batch's hands were out), which
+rotated three of the four batch-53/54 ids into its archive and left
+`PC-S308-VALIDATE-ADVERSARIAL-CONVERGENCE-SCOPE-GREW-MISFIRES-ON-PASS-1` LIVE — the pull did not
+rotate it, so it reads DISCHARGED here and cited there. The same pull filed
+`PC-S308-LEDGER-REVERIFY-READS-ESCAPED-BACKTICKS-LITERALLY`. **Check the delivery gap BEFORE
+reading this block's figure for it** — the sixth time the gap has closed in this program and the
+fifth time it reopened on the very next release. The consumer's porcelain read 4 at open and 6 at
+close, every path a pipeline-state file written by its own session; no write to the consumer by
+this session. Its HEAD is `fd2dadbec` on `ai-dlc/carry-over/pool-pnl-backlog-triage`; peer
+`graph-0f` was busy throughout and was not messaged.
+
+**THE CONSUMER SIDE IS MEASURED ON REAL FILES, READ-ONLY, ON SCRATCH COPIES.** On its live pass
+by the guard's own nonce pick (`implementation-20260905T172547Z`, catalog `core`, one FAIL, `16`,
+covered by `[S308-GATE3-STORY-1]`) with a `cmp -s` control that the two guards differ: installed
+denies the lead's edit, fixed allows, against a known-positive pass where both deny. That
+differential was taken before the citation check landed; the entry's quote was then verified
+separately, `validate-steering-budget.sh --cite "Suppress Check 16 (Recommended)"` over the
+consumer's 249 transcripts → `MATCH`, control phrase `NOMATCH`. The two readings have not been
+taken in one invocation on the final guard; the first thing batch 56 measures is that.
+
+**THE LEDGER MOVED ONCE, ON THE CONSUMER'S PULL.** md5 `3724a5b3…` at open, `8c904ef9…` after the
+pull and at close. **Live 78 → 76, cited 50 → 48, unfiled 28 → 28** (three rotated out of cited,
+RULE-11 in by citation, one new filing in unfiled), archive 151 → 154, partition control 0. Goal
+partition **21 DISCHARGED / 27 in flight / 28 untouched**, overlap 3, discharged-but-invisible 0,
+TERMINAL **42**. Gap ONE (`0.504.0` installed, `0.505.0` shipped), PENDING 2 (`BL-169`, `BL-170`
+at `0.505.0`; one `PC-` id between them). Say WIDE at five. The second test diverges today on the
+consumer's live pass (installed deny, fixed allow, above), and its HEAD commit records a handoff
+with the lead still locked out — the pull is REQUIRED, not merely owed. A pull is
+operator-initiated; readiness is not authorization.
+
+**TELL THE CONSUMER, IN THE NEXT BRIEF,** that `0.505.0` lifts its remediation lock-out on the
+live pass once pulled, provided the suppression's operator quote verifies against the transcript
+corpus its `transcript_path` sits in (it does today); that a Rule 11(a) ambiguity question is now
+put with `AskUserQuestion` and sets NO pause flag, while PVC and retro prompts still set the flag
+and end the turn; that a session opening under a persisted pause flag whose greeting ends in a
+question mark will get the neutral pointer; that Check 26 still accepts a `SUPPRESSED` entry
+whose quote nothing verifies (`BL-171`); that the `--in-force` row is now six fields; that
+`_bmad-output/.gate-remediation-in-force` is a new transient path its `.gitignore` will need
+beside `BL-159`'s two; that its `QUICKSTART.md` still says three pause points; and that every
+earlier brief item in the batch-54 block below still stands.
+
+**ONE NEW `PC-S308-*` CANDIDATE IS UNFILED FOR BATCH 56, THEN THE STANDING CORPUS — RANK THEM, AND
+IF A PEER HANDED YOU THIS PLAN, TAKE THE TOP ONE(S) WITHOUT ASKING.**
+`PC-S308-LEDGER-REVERIFY-READS-ESCAPED-BACKTICKS-LITERALLY` (2026-09-05, filed on the consumer's
+`0.502.0 → 0.504.0` pull, `verify: manual`): a `theirs_has` receipt whose quoted substring carries
+markdown-escaped backticks is matched with the backslashes in it, so `BL-168`'s own candidate read
+NEEDS-REVIEW "absent at BOTH refs" while the unescaped substring was present at base and gone at
+theirs — a CLOSE-CANDIDATE reported as vacuous, in the direction that keeps an absorbed entry open
+forever. The filing offers two readings (grammar says backticks are literal and authors must not
+escape; or the reader unescapes) and asks upstream to choose. Its status line was read by this
+session; its receipt is manual. **Its subject is `ledger-reverify.sh`, a BOOTSTRAPPING file, so it
+ships ALONE under action 2** and the consumer's INSTALLED reader runs the pull that delivers the
+fix. The other 27 unfiled ids are the standing corpus enumerated in action 1b and the batch-39
+paragraph of action 1, none filed since 2026-08-31. `BL-159`, `BL-161`, `BL-163`, `BL-171` (no
+`PC-` id) rank below the PC-backed one; `BL-171` is the one with a consumer consequence today.
+
+### BATCH 54 SHIPPED AS `v0.504.0` — THE BLOCK ABOVE REPLACES THIS ONE. TAKE THE STATE FROM THERE.
+
+This block was the batch-55 resume record. It replaced the batch-53 record below it. Every figure here was re-derived on 2026-09-05
 after the merge, against the working tree with the controls in the same invocation; re-derive
 them again rather than reading them.
 
@@ -5209,17 +5304,21 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), RANK THE UNFILED CANDIDATES,
-   THEN SCOPE BATCH 55 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
+   THEN SCOPE BATCH 56 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
    instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
    candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
    FROM ANOTHER SESSION** — a cross-session message carrying `READ and FOLLOW …`, which is
    action 9's handoff — do NOT stop to ask: take the item(s) your own sweep and ranking
    recommend, state that choice and its reason in your FIRST message to the operator, and
    proceed; the operator can redirect at any ping. **Regardless of who invoked you, batch
-   multiple candidates into one release wherever action 2 allows it.** One recent candidate is
-   unfiled today, in the resume block with its status line read and its mechanism measured:
-   `PC-S308-RULE-11-AMBIGUITY-QUESTIONS-HAVE-NO-MANDATED-PRESENTATION-TOOL` (2026-09-04); the
-   rest of the unfiled set is the standing corpus, nothing filed since 2026-08-31. Batch 54 is
+   multiple candidates into one release wherever action 2 allows it.** One new candidate is
+   unfiled today, in the resume block with its status line read:
+   `PC-S308-LEDGER-REVERIFY-READS-ESCAPED-BACKTICKS-LITERALLY` (2026-09-05), whose subject is a
+   BOOTSTRAPPING file and ships alone; the rest of the unfiled set is the standing corpus,
+   nothing else filed since 2026-08-31. Batch 55 is SHIPPED — `v0.505.0` at `288d0e53`
+   (PR #635), `PC-S308-RULE-11-AMBIGUITY-QUESTIONS-HAVE-NO-MANDATED-PRESENTATION-TOOL` closed as
+   `BL-170` and the no-`PC` `BL-169` beside it, both rotated, `BL-171` filed and not fixed, no
+   correction release; batch 54 is
    SHIPPED — `v0.504.0` at `6fc38a46` (PR #633), `PC-S308-CHECK26-NO-SUPPRESSED-CARVEOUT`
    closed as `BL-167` and `PC-S308-RESUME-SNAPSHOT-BUDGET-ASKS-INSTEAD-OF-AUTO-TRIMMING` as
    `BL-168`, both rotated, `BL-169` filed and not fixed, no correction release; batch 53 is
@@ -5459,16 +5558,17 @@ so no block written before it changes verdict.
    interrupt; if you genuinely need to ask, ask the OPERATOR whether to, and put the peer's current
    state into the question.
 
-   **THE GAP IS TWO AND PENDING IS 4** — the consumer's stamp reads `0.502.0` / `4dc8d791` on
-   all four fields against a distribution `VERSION` of `0.504.0`; `BL-165` and `BL-166` at
-   `0.503.0` and `BL-167` and `BL-168` at `0.504.0` are the four discharged candidates it cannot
-   see. The consumer pulled `0.498.0 → 0.502.0` on its own before batch 53 opened, which is the
-   fifth time the gap has closed in this program and the fourth time it reopened on the very
+   **THE GAP IS ONE AND PENDING IS 2** — the consumer's stamp reads `0.504.0` / `6fc38a46` on
+   all four fields against a distribution `VERSION` of `0.505.0`; `BL-169` and `BL-170` at
+   `0.505.0` are the two discharged entries it cannot see, one `PC-` id between them. The
+   consumer pulled `0.502.0 → 0.504.0` on its own WHILE batch 55 was running, which is the
+   sixth time the gap has closed in this program and the fifth time it reopened on the very
    next release: **A ZERO GAP IS A STATE, NOT AN ACHIEVEMENT.** FIVE is the line this file calls
-   wide; say WIDE when the count reaches it. Neither `0.503.0` nor `0.504.0` carries a
-   bootstrapping file. Batch 54's second test diverges on the consumer's LIVE gate-3 verdict
-   (installed exit 1, shipped exit 0, `cmp -s` control), and the consumer's HEAD commit names
-   that block, so the pull is REQUIRED and not merely owed — report that, and stop there.
+   wide; say WIDE when the count reaches it. `0.505.0` carries no bootstrapping file; the
+   candidate now at the top of the unfiled set DOES (`ledger-reverify.sh`). Batch 55's second
+   test diverges on the consumer's LIVE pass (installed deny, fixed allow, `cmp -s` control),
+   and its HEAD commit records a handoff with the lead still locked out, so the pull is
+   REQUIRED and not merely owed — report that, and stop there.
    **Your batch will widen the gap, which is expected and is not a reason to reorder anything.**
    Re-derive both. That is not permission to close it: a pull is operator-initiated, readiness is
    not authorization, a `PENDING` count is not a decision about WHEN, and one is never handed to a
@@ -5814,9 +5914,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 3724a5b3... unmoved through batch 54; reached at batch 53's fresh-resume check after two 2026-09-05 filings (90862de4... after the first; f4e7ae5f... after its 0.502.0 pull rotated one id); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
-   wc -l < /tmp/live.txt    # 78 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 76 after the consumer's pull rotated PC-S308-LEDGER-REVERIFY-..., +2 on the two 2026-09-05 filings
-   wc -l < /tmp/unfiled.txt # 28 -- the two batch-54 ids left the set by being cited by BL-167 and BL-168 and rotated into docs/backlog.archive.md; nothing entered it during the batch
+   md5 -q "$L"              # 8c904ef9... after the consumer's mid-batch-55 pull to 0.504.0 (3724a5b3... before it, unmoved through batch 54); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
+   wc -l < /tmp/live.txt    # 76 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 78 through batch 54, then the consumer's 0.504.0 pull rotated three ids and filed one
+   wc -l < /tmp/unfiled.txt # 28 -- RULE-11 left the set by being cited by BL-170; PC-S308-LEDGER-REVERIFY-READS-ESCAPED-BACKTICKS-LITERALLY entered it on the consumer's pull
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -5824,9 +5924,10 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 78 LIVE CANDIDATES, 50 CITED, 28 UNFILED** — re-derived after batch 54's
-   merge at `6fc38a46` (md5 `3724a5b3…`, archive 151; batch 53's close read 78 / 48 / 30 at the
-   same md5, and batch 52's read 77 / 47 / 30 at `31a0b94b…`, archive 150; batch 51's close read 75 / 46 / 29 at
+   **THE BASELINE IS 76 LIVE CANDIDATES, 48 CITED, 28 UNFILED** — re-derived after batch 55's
+   merge at `288d0e53` (md5 `8c904ef9…`, archive 154, after the consumer's mid-batch pull rotated
+   three and filed one; batch 54's close read 78 / 50 / 28 at `3724a5b3…`, archive 151; batch
+   53's close read 78 / 48 / 30 at the same md5, and batch 52's read 77 / 47 / 30 at `31a0b94b…`, archive 150; batch 51's close read 75 / 46 / 29 at
    `d205f502…`, then the consumer filed two candidates before batch 52 opened and batch 52's
    citation moved one of them from unfiled to cited, so unfiled rose by one). Batch 50's close
    read 74 / 45 / 29 at `ae45394b…`. Batch 49's close read 75 / 45
