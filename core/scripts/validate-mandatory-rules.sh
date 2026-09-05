@@ -588,11 +588,13 @@ fi
 #   defect) or because it was cut from the trunk and main moved before the PR
 #   opened (benign). Measured over the reference consumer's 118 measurable
 #   merged retro PRs: 16 were behind origin/main at the branch cut, the incident
-#   among them. The benign class is not a defect, but the remedy the failure
-#   names (`git merge origin/main`) is the merge GitHub performs for it at PR
-#   time anyway, so firing on it costs one command; a predicate that separated
-#   the two classes would need the sprint's squash commit, which no artifact
-#   this validator reads records.
+#   among them. The benign class is not a defect, and for it the remedy is a
+#   merge that is clean unless the trunk moved on a file the retro also touched
+#   (measured on three built worlds: trunk moves on another file -> clean; on a
+#   retro-touched file -> conflict; the squash alone -> clean). The failure text
+#   names re-cutting the branch first because it is cheaper than that conflict.
+#   A predicate that separated the two classes would need the sprint's squash
+#   commit, which no artifact this validator reads records.
 # ============================================================================
 echo "[Check 7] Retro branch not behind origin/main..."
 C7_REFRESH="origin/main not refreshed: no remote named origin"
@@ -618,7 +620,7 @@ else
       echo "  CHECK 7: PASS — HEAD contains origin/main (${C7_REFRESH})"
       ;;
     *)
-      fail "Check7_BRANCH_BEHIND_MAIN" "HEAD is ${C7_BEHIND} commit(s) behind origin/main (${C7_REFRESH}). The retro branch was not cut from the merged trunk (retro.md Step 1: 'git fetch origin main && git checkout main && git merge --ff-only origin/main' before 'git checkout -b'), so its PR will re-include every commit origin/main has that this branch lacks. Remedy: 'git fetch origin main && git merge origin/main' on this branch, resolve in origin/main's favour for every file the retro did not touch, then re-run this validator."
+      fail "Check7_BRANCH_BEHIND_MAIN" "HEAD is ${C7_BEHIND} commit(s) behind origin/main (${C7_REFRESH}). The retro branch was not cut from the merged trunk (retro.md Step 1: 'git fetch origin main && git checkout main && git merge --ff-only origin/main' before 'git checkout -b'), so its PR will re-include every commit origin/main has that this branch lacks. Remedy, cheapest first: re-cut the branch from the trunk ('git checkout main && git merge --ff-only origin/main && git checkout -b <retro-branch>-fresh' then cherry-pick this branch's own retro commits onto it); or 'git merge origin/main' on this branch, resolving in origin/main's favour for every file the retro did not touch -- that merge is clean unless the trunk moved on a file the retro also touched. Then re-run this validator."
       echo "  CHECK 7: FAIL — HEAD is ${C7_BEHIND} commit(s) behind origin/main (${C7_REFRESH})"
       ;;
   esac

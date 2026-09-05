@@ -80,8 +80,10 @@
 #       Without it that citation cannot be checked and the run says so by name. Passed
 #       through to validate-steering-budget.sh, which owns the genuine-operator predicate.
 #   ... [--transcript-dir <dir>]
-#       The transcript CORPUS, and it takes precedence over --transcript. Prefer it, and
-#       the hooks now pass it. A resolution record OUTLIVES the session that wrote it,
+#       The transcript CORPUS, and it takes precedence over --transcript. gate-validation.md
+#       REQUIRES it at every call site it prescribes and the hooks pass it; --transcript
+#       alone is the degraded form this tool still accepts for a corpus with no readable
+#       JSONL. A resolution record OUTLIVES the session that wrote it,
 #       while `transcript_path` is always the session ASKING permission -- never the one
 #       in which the operator spoke. Checking one file therefore made every record
 #       unverifiable across a handoff or /clear: the citation reported
@@ -974,7 +976,8 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
   # transcript, which is always the session asking permission and never the one in which
   # the operator spoke, so a single-file check made every record unverifiable across a
   # handoff or /clear -- and re-closed the stall deadlock v0.247.0 opened.
-  # A transcript DIRECTORY is the corpus the citation actually lives in; prefer it.
+  # A transcript DIRECTORY is the corpus the citation actually lives in; the gate step
+  # requires it, and this tool takes it over the single file whenever both are given.
   # SCALARS, NOT AN ARRAY. `arr=()` then `${#arr[@]}` under `set -u` is an unbound-variable
   # error on bash 3.2, which is what macOS ships and what this repo has already shipped a
   # silent fail-open on once.

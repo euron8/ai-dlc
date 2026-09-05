@@ -31,7 +31,8 @@ count and the remedy, SKIP when no `origin/main` ref resolves — and it refresh
 where a remote named `origin` exists, stating on its line whether it could, because a stale
 local ref reads the exact defect world as 0. Measured over the consumer's 118
 measurable merged retro PRs, 16 were behind at the cut, the incident among them; a trunk cut
-that main moved past fires too, at the cost of the merge GitHub would have performed anyway.
+that main moved past fires too, and the failure names the cheap recovery (re-cut and replay)
+before the merge, which conflicts only when the trunk moved on a file the retro touched.
 Fixture `retro-branch-behind-main` (ships) drives both directions and kills three mutants;
 `mandatory-rules-skip-accounting` mints the ref so its arms stay about checks 2/4/5. `BL-173`.
 

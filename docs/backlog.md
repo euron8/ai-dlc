@@ -4135,9 +4135,12 @@ established freshness. A sandbox with no remote skips the fetch without touching
 **The firing set is wider than the defect, on purpose.** Measured over the reference consumer's
 118 measurable merged retro PRs: 16 were behind `origin/main` at the branch cut, the incident
 among them; a branch cut from the trunk that main moved past before the PR opened fires too.
-The remedy the failure names is the merge GitHub performs for that class at PR time anyway, so
-the false positive costs one command, and a predicate that separated the two classes would
-need the sprint's squash commit, which no artifact this validator reads records.
+For that class the merge the failure offers is clean unless the trunk moved on a file the
+retro also touched (three worlds built by the batch-57 adversarial hand: another file → clean;
+a retro-touched file → conflict; the squash alone → clean), which is why the failure names
+re-cutting the branch and replaying the retro commits first. A predicate that separated the
+two classes would need the sprint's squash commit, which no artifact this validator reads
+records.
 
 Fixture: `core/fixtures/retro-branch-behind-main/` drives the validator inside a seeded repo in
 both directions and kills the deleted-check, reversed-range and silent-skip mutants;
