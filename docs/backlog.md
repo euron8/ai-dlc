@@ -3918,40 +3918,6 @@ grammar reports exit 9 rather than a false STILL-LIVE.
 
 verify: sh f=docs/vocabulary-index.md; [ -f "$f" ] || exit 9; grep -qE '^\| ' "$f" || exit 9; grep -q 'delivered-reachable' "$f" && exit 0; exit 1
 
-## BL-152 — `context-sensor`'s freshness control seeds a file 59s old against a `NOW` captured earlier, and the pool eats the one-second margin
-
-**Found 2026-09-03 while landing batch 45's docs commit**, which touched no fixture: the pre-push
-gate refused the push on `context-sensor`, green solo (`99 passed, 0 failed`) and red under the
-12-way pool (`1 of 185 units red`, `98 passed, 1 failed`). Consumer-facing: the fixture ships,
-so a consumer's push can be refused by it for the same reason. DEFECT.
-
-The arm is `CONTROL: 59s old is still fresh and IS taken` (`core/fixtures/context-sensor/run.sh:448`).
-It seeds `window.json` with `ts = NOW - 59`, where `NOW` is captured ONCE at `run.sh:392`, some
-fifty hook invocations before this arm runs; the hook's freshness bound is
-`AI_DLC_WINDOW_MAX_AGE` defaulting to 60 (`core/hooks/ai-dlc-window.sh:89`) and it judges age
-against the wall clock at invocation time. The margin is therefore ONE SECOND minus everything
-that ran since line 392. Solo that is under a second; under the pool it is not, the file reads
-as 60s or older, the hook falls back, and the arm reports `expected '420000', got '300000'`.
-The sibling arm at `:443` (`61s old falls back`) is safe by construction — latency only makes it
-staler.
-
-**Not a hook defect.** The hook's 60-second bound is the subject under test and is correct; the
-fixture's clock is the defect. The measured red run is in `.git/ai-dlc-fixture-failures` under
-the `2026-09-03T20:24:46Z` header.
-
-**Remedy shape:** capture the clock at the seed, not at the file's top — either `seedwin` takes
-an OFFSET and computes `$(date +%s) - offset` itself, or `NOW` is re-read immediately before the
-59s arm. Widening the margin (59 → 30) also works and is worse: it hides latency instead of
-removing it, and the 61s sibling then has a 31-second gap between it and the control. Whichever
-form, prove it can fail: run the arm with a `sleep 2` injected between seed and fire, before and
-after.
-
-**Receipt limits, stated.** The receipt keys on a fresh `date +%s` reaching the seed — inside
-`seedwin`'s body or within six lines above the 59s arm. A fix that widens the margin instead
-scores STILL-LIVE, deliberately: that form is discouraged above. Exit 9 if the arm is gone.
-
-verify: sh f=core/fixtures/context-sensor/run.sh; [ -f "$f" ] || exit 9; n=$(grep -n '59s old is still fresh' "$f" | head -1 | cut -d: -f1); [ -n "$n" ] || exit 9; awk -v n="$n" '/^seedwin\(\)/{s=1} s && /date \+%s/{c++} s && /^}/{s=0} NR>=n-6 && NR<=n && /date \+%s/{c++} END{exit !(c>0)}' "$f" && exit 0; exit 1
-
 ## BL-153 — `implementation-join-yield`'s beat-churn arm needs nine stop-hook invocations inside the hook's 30-second rapid-fire window, and the pool spreads them past it
 
 **Found 2026-09-03 on the re-push of the same docs commit**, one run after `BL-152`: the gate
@@ -4105,4 +4071,141 @@ copies byte-identically to one owner with an arm in `scripts/validate-enforcemen
 state the indent rule once. Both are larger than the finding; neither is owed by `BL-162`.
 
 verify: manual
+
+## BL-165 — `validate-adversarial-convergence.sh` counted pass 1 as "scope grew" whenever its first pass found a CRITICAL, so arm D told every mid-cycle series to FREEZE and CUT scope that had never moved
+
+Filed by the reference consumer as `PC-S308-VALIDATE-ADVERSARIAL-CONVERGENCE-SCOPE-GREW-MISFIRES-ON-PASS-1`
+on 2026-09-03, found while gate-validating a sprint-308 PRD adversarial series. Batch 53 of the
+ledger drain, scoped by this session from its own ranking on consequence (a gate-blocking wrong
+diagnosis that trains authors to falsify a fail-closed field), batched with `BL-166`. DEFECT.
+
+The SCOPE_GREW accumulator at `core/scripts/validate-adversarial-convergence.sh:674` incremented
+on `crit > prior` for every pass, with no test that a previous pass exists. Pass 1 has no
+predecessor, so an honest `findings_critical_prior_scope: 0` beside any CRITICAL satisfied it,
+and arm D's terminal branch (`:1617`) then reported "MOVING ARTIFACT … FREEZE the artifact …
+CUT the added scope" for every gate run while the series was still mid-cycle. Arm C one screen
+above (`:655`) already guards the same comparison with `[ -n "$PREV_CRIT" ]`; the increment did
+not.
+
+**Population, measured on the consumer's real artifacts, read-only.** Over every tracked
+pass-1 adversarial artifact under its `_bmad-output/` (79 files, repair records excluded, 68
+declaring the field): 28 report more CRITICALs than prior scope, 27 of them at an honest
+`prior_scope: 0` (every one misdiagnosed), 7 declare `prior == crit` with a CRITICAL present
+(authors dodging the misfire by declaring the fail-closed default, which falsifies the field
+arm C depends on), 33 found no CRITICAL. Differential on scratch copies of the 28, each as the
+gate saw it mid-cycle with only pass 1 on disk, installed validator against the fixed one with a
+`cmp -s` control that the two differ in the same run: installed says MOVING ARTIFACT on 28 of
+28; fixed, 0 of 28 and the generic "run another pass" remedy on all 28.
+
+**The fix** is the one guard arm C already has, `[ -n "$PREV_CRIT" ]`, on the increment.
+Growth at pass 2 or later still counts: the fixture's existing `scope-grew-unconverged` case
+(growth at passes 2 and 3) still reports MOVING ARTIFACT, and a new case with growth at pass 2
+only proves the guard excludes pass 1 and nothing else. The consumer's dominant shape (pass 1
+with a CRITICAL and an honest zero) had no fixture case before this: every seed set pass-1
+`prior == crit`. `core/fixtures/check-24-adversarial-convergence` gains `pass1-honest-zero-unconverged`
+(exit 1 with the GENERIC remedy, and `MOVING ARTIFACT` / `CUT the added scope` both asserted
+silent), `pass1-honest-zero-converges` (the near-miss control, green on both sides by design),
+`pass1-honest-zero-then-growth` (growth at pass 2 only, MOVING ARTIFACT required), and two
+mutants driven on a copy of the validator: `scope-grew-unguarded` (the guard removed, kills only
+the first case) and `scope-grew-wrong-var` (guard on an unrelated variable, kills only the third),
+each with an anchor-uniqueness arm and an unmutated control. Against the pre-fix validator the
+fixture reports seven reds, all of them the new arms; on an `install.sh` tree, 123 of 123.
+
+**Two pre-existing arms were dead and are repaired in the same commit.** `stall-preempts-d` and
+`ceiling-preempts-d` asserted the ABSENCE of "Either run another pass to a clean verdict", a
+phrase the validator wraps across two lines and so can never emit (`grep -cF` 0 against a
+control of 1 for the single-line token beside it); both had passed on an unproducible absence.
+Rekeyed on the single-line token, both still pass, and the new generic-remedy arm is the
+positive control that the token appears at all.
+
+**Two wrong fixes the first receipt and the first fixture both accepted, found by the
+adversarial hand.** `[ "$prior" -gt 0 ]` in place of the guard passed every behavioural arm (only
+the byte-locked mutation anchor failed, which an author re-anchors as `fixture-mutants.md`
+prescribes), because every seed and the receipt's control placed pass-2+ growth at `prior > 0`;
+growth at `prior == 0` after pass 1 is the purest moving-artifact signal, the consumer carries 11
+such passes across 9 series, and that variant loses MOVING ARTIFACT on 13 mid-cycle states in 6
+real series. And a guard on the pass NUMBER being 1 counts the first file of a series whose
+lowest pass on disk is 2 (the consumer's `s288` architecture and PRD series, passes 2–4 and
+2–8, both legacy series carrying no `verdict:` field, so arm D takes its no-verdict branch on
+them and neither exercises the guard today), reproducing
+the defect on that shape. Both are now seeded in the receipt and in the fixture as
+`scope-grew-at-zero-prior` and `series-starts-at-pass2`; against the `prior > 0` variant and the
+pass-number variant, each re-anchored as an author shipping it would, the fixture still fails on
+four arms, the discriminating ones behavioural.
+
+**Receipt limits, stated.** The receipt seeds four series and drives the shipping validator on
+each: pass-1 honest zero then nothing (GENERIC required), growth at pass 2 with `prior == 0`
+(MOVING ARTIFACT required), passes 2 and 3 only with the first carrying a CRITICAL at prior 0
+(GENERIC required), and a read-control with growth at `prior > 0` that refuses (exit 9) unless it
+says MOVING ARTIFACT. Scored: the fix 0; pre-fix, the unguarded, the `prior > 0` and the
+pass-number variants 1. A guard on "first file in sorted order" rather than on `PREV_CRIT` also
+passes and differs from the fix only when that first file has no parseable CRITICAL count. The
+receipt cannot see the seven falsified consumer fields; those are the consumer's to correct once
+its gate stops demanding them.
+
+verify: sh V=core/scripts/validate-adversarial-convergence.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d); p() { printf "# pass %s\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\nmode: subagent\nlead_role: r\ninvoked_at: 2026-07-12T%02d:00:00Z\ntool_use_id: t%s\nfindings: %s CRITICAL, 1 MAJOR, 0 MINOR\nfindings_critical: %s\nfindings_critical_prior_scope: %s\nfindings_major: 1\nfindings_minor: 0\nverdict: EXIT_CONDITION_NOT_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n" "$2" "$2" "$2" "$3" "$3" "$4" > "$1"; }; s() { bash "$V" --series "$d/$1/s-adversarial-pass" 2>&1; }; mkdir -p "$d/a" "$d/b" "$d/c" "$d/k"; p "$d/a/s-adversarial-pass1.md" 1 1 0; p "$d/a/s-adversarial-pass2.md" 2 0 0; p "$d/b/s-adversarial-pass1.md" 1 2 2; p "$d/b/s-adversarial-pass2.md" 2 3 0; p "$d/c/s-adversarial-pass2.md" 2 1 0; p "$d/c/s-adversarial-pass3.md" 3 0 0; p "$d/k/s-adversarial-pass1.md" 1 1 0; p "$d/k/s-adversarial-pass2.md" 2 3 1; A=$(s a); B=$(s b); C=$(s c); K=$(s k); rm -rf "$d"; case "$K" in *"MOVING ARTIFACT"*) ;; *) exit 9 ;; esac; case "$A" in *"MOVING ARTIFACT"*) exit 1 ;; esac; case "$C" in *"MOVING ARTIFACT"*) exit 1 ;; esac; case "$B" in *"MOVING ARTIFACT"*) exit 0 ;; esac; exit 1
+
+## BL-166 — Check 5's stale-entry remedy prescribed a `derive-stories` write that "writes the entry from the story file", and the mode never creates an entry, so on a sprint that skipped planning the prescribed repair was a no-op
+
+Filed by the reference consumer as `PC-S308-CHECK-5-DERIVE-STORIES-REMEDY-CANNOT-CREATE-AN-ENTRY`
+on 2026-09-04, found while running the `story` gate for a `carry-over-single` sprint whose
+envelope carried only the `# populated at stories-test-strategy` placeholder in both canonical
+copies. Batch 53 of the ledger drain, batched with `BL-165`. DEFECT.
+
+`core/skills/ai-dlc/steps/gate-validation.md:492-497` told the remediator that the repair for a
+stale entry is "a `derive-stories` run that writes the entry from the story file in every
+canonical copy". `core/scripts/sprint-status.sh derive-stories` walks entries already parsed
+from the envelope (`:1049`) and rewrites the value token of a field the entry already carries
+(`:1063-1065`); its own header states as policy that core resolves files FROM the entries and
+must not infer which files on disk are stories (`:58-61`). With no entry there is nothing to
+write: the consumer ran the prescribed command, got `MATCHED NO STORY FILES (exit 3)`, both
+canonical files byte-identical before and after, and hand-transcribed the entries. The sentence
+had exactly one copy across `core/`, `templates/`, `scripts/` and `docs/`; `implementation.md`
+(`:380-388`, the write's home) already said "rewrites each declared field's value" and is
+unchanged. The consumer's own `overrides/steps__gate-validation__check-5.md` inherited the claim
+and is the consumer's to correct.
+
+**The filing's option (b), a `--create-missing` mode, is rejected**: it contradicts the header
+policy, and a core tool that seeds entries from whatever files it finds decides which files on
+disk are stories, which is the consumer's membership rule and not core's.
+
+**The fix has two halves, because either alone leaves the other reachable.** The remedy prose
+now says the mode rewrites the VALUES of an entry that already exists and never creates one,
+and that a missing entry is written BY HAND from the story file's own frontmatter in each
+canonical copy — the story id as a key under `stories:` carrying `status:` (an entry without it
+is compared on nothing and exits 4) plus `file:` where the path is not derivable from the key —
+because `/bmad-sprint-planning` populates that mapping where it runs and a `carry-over-single`
+sprint skips it, and no core step owns it (`stories-test-strategy.md` never names
+`sprint-status.yaml`; control, `story` on 74 lines). The transcription is confirmed with
+`derive-stories --check`, whose `0 drifted key(s)` means agreement, and NOT with the write, which
+overwrote a wrong transcription silently (`4 value(s) written`, exit 0) when the adversarial hand
+drove it. And the exit-3 message carries a 143-character clause saying the same thing, keyed on
+the PER-VIEW state — it prints only when every derived view is `empty` or `no-block` — so a
+list-form mapping (`no-entries`, populated in a shape no reader accepts), a canonical holding
+another sprint under `--sprint`, and no canonical on disk all keep today's message, whose remedy
+is different; exit code unchanged. The first cut keyed on the bare entry count and printed the
+clause on all three; the adversarial hand found it.
+`core/fixtures/story-fields-derive` gains the entry-less envelope as an arm (exit 3 from the
+WRITE mode, the headline, the clause, both canonicals `cmp -s` before and after), the three
+false-clause near-misses with the clause withheld, a one-entry near-miss, a resolving twin, and
+prose arms on the gate step (the correction present, the old sentence absent, `0 drifted key(s)`
+named, `0 value(s) written` not cited); `story-fields-derive-mutants` gains the clause switched
+off (one red), the key reverted to the bare count (exactly the three near-misses red), the
+rejected create path (the `cmp -s` arm alone red), and the resolving path forced onto the
+zero-entry branch (the twin arm red). Against the pre-fix tool the fixture reports one red;
+against the pre-fix prose two; against the first cut the three near-misses and two token arms.
+
+**Receipt limits, stated.** The receipt drives the shipping tool on a synthetic entry-less
+envelope and refuses (exit 9) unless it exits 3 with the headline, so a tool that stops exiting
+3 is a refusal and not a close. It then requires the clause AND the old sentence gone from the
+gate step. A rewording of the clause closes the tool half only if it keeps `NEVER CREATES AN
+ENTRY`, which the fixture arm also keys on. A prose fix that restates the wrong promise in other
+words ("the derive will lay the entry down for you") passes the receipt and both prose arms —
+the negative grep is a literal, and wordings are not enumerated. The consumer's own Check 5
+override (`overrides/steps__gate-validation__check-5.md`, shadowing `gate-validation.md#5`
+verbatim) still carries the wrong sentence at its line 153 and is read INSTEAD of core by its
+remediator, so the prose half does not reach that consumer until it edits the override; the tool
+half lands on the pull regardless, which is the reason the fix has two halves.
+
+verify: sh T=core/scripts/sprint-status.sh; G=core/skills/ai-dlc/steps/gate-validation.md; S=core/schemas/sprint-status.json; [ -f "$T" ] && [ -f "$G" ] && [ -f "$S" ] || exit 9; grep -q "derive-stories" "$G" || exit 9; d=$(mktemp -d); mkdir -p "$d/.claude/skills/ai-dlc" "$d/_bmad-output/implementation-artifacts" "$d/_bmad-output/planning-artifacts"; printf "contract_version: 13\nconsumer_story_fields_file: .claude/skills/ai-dlc/story-fields.md\n" > "$d/.claude/skills/ai-dlc/layer-contract.yaml"; printf "sprint: 42\nstatus: in_progress\nstories:\n  # populated at stories-test-strategy. A MAPPING keyed by story id\n" | tee "$d/_bmad-output/implementation-artifacts/sprint-status.yaml" > "$d/_bmad-output/planning-artifacts/sprint-status.yaml"; o=$(AI_DLC_SPRINT_STATUS_SCHEMA="$S" bash "$T" derive-stories --root "$d" 2>&1); rc=$?; rm -rf "$d"; [ "$rc" -eq 3 ] || exit 9; case "$o" in *"MATCHED NO STORY FILES"*) ;; *) exit 9 ;; esac; grep -q "writes the entry from the story file" "$G" && exit 1; case "$o" in *"NEVER CREATES AN ENTRY"*) exit 0 ;; esac; exit 1
 

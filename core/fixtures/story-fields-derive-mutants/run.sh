@@ -77,7 +77,14 @@ expect_set check-writes 1 'check WROTE to the envelope' \
 
 # M2 — exit 3 collapses into the success path. "Matched no story files" becomes clean, which is
 # the vacuous green every consumer implementation of this join has shipped at least once.
-expect_set exit3-becomes-clean 2 'resolved no story file exited|exit 3 printed no explanation' \
+# EIGHT, and it is a fan-out rather than an entanglement: the branch this deletes is the sole
+# emitter of the exit code, the headline and the zero-entry clause, and FIVE envelopes reach it —
+# an unresolvable entry, no entry at all, a list-form mapping, another sprint's canonical, and no
+# canonical. Deleting an emitter takes every fact emitted from it. M16 isolates the clause, M17
+# the byte-comparison and M18 the KEY, so no zero-entry cell is proven only by this knock-out.
+# The zero-entry cmp arm and the three clause-withheld arms stay GREEN here, correctly: removing
+# the branch stops it reporting, and a clause that is never printed is still not printed.
+expect_set exit3-becomes-clean 8 'resolved no story file exited|exit 3 printed no explanation|entry-less envelope exited|zero-entry exit-3 line does not name|does not say the mode cannot create an entry|list form exited|sprint-mismatch case exited|no-canonical case exited' \
   's@^    if files_matched == 0:@    if False:@'
 
 # M3 — exit 4 collapses. Distinct from M2 and that is the point: "found nothing to read" and
@@ -178,6 +185,46 @@ expect_set entry-set-not-union 1 'distinct count is not a union' \
 # gate must not call. TWO reds because `--check` has two summaries and they are built separately.
 expect_set check-drops-entry-count 2 'check FAIL prints no entry count|check PASS prints no entry count' \
   's@entr%s declared@entr%s@g'
+
+# M16 — the zero-entry clause is keyed off. The headline and the exit code are untouched, so the
+# run still reports "matched no story files (exit 3) — 0 entries parsed": true, and read by a
+# session sent here to repair a stale entry as a resolution near-miss rather than as "this mode
+# cannot do what you were told to run it for". ONE red, and it is the clause arm alone — the
+# near-miss arms assert the clause's ABSENCE on an envelope that carries an entry, and it is still
+# absent there, which is what makes them a near-miss rather than a second copy of this cell.
+expect_set zero-entry-clause-off 1 'does not say the mode cannot create an entry' \
+  's@^        if entries_n == 0 and no_entry_views@        if False and no_entry_views@'
+
+# M18 — THE KEY IS WRONG: the clause goes back to keying on the bare entry count. This is the
+# form the arm above cannot tell from the right one, because both print the clause on the case
+# the arm asserts. It is caught only by the near-misses: three other states reach exit 3 with
+# zero entries parsed and each of them then gets a repair that does not apply — including one
+# that contradicts the per-view line printed three lines above it. THREE reds, one per state.
+expect_set zero-entry-clause-miskeyed 3 'the clause printed for' \
+  's@^        if entries_n == 0 and no_entry_views > 0 and other_views == 0:@        if entries_n == 0:@'
+
+# M17 — the write path CREATES the entry the envelope is missing, which is filing option (b) and
+# the thing core must not do: it resolves files FROM the entries, so inferring which files on disk
+# are stories is the consumer's membership rule and not core's. The mutation writes down the view
+# that reported "no entry to derive", so the exit code, the headline and the clause all survive
+# and only the byte-comparison moves. That isolation is the point — a create mode is invisible to
+# every other assertion in the fixture, including the one that reads the message.
+expect_set zero-entry-write-creates 1 'edited a canonical over a run that matched nothing' \
+  's@^            per_view.append((view, "no entry to derive@            p.write_text(text + "  story-42-1:" + chr(10) + "    status: draft" + chr(10)); per_view.append((view, "no entry to derive@'
+
+# M19 — the RESOLVING path is forced down the exit-3 branch. This is the mutant the "a run that
+# resolves its entries neither exits 3 nor prints the clause" arm was missing: that arm is
+# satisfied by a subject that never reaches the branch AT ALL, so without this it passes against
+# a program doing nothing, which is the shape this repository names as an arm that cannot fire.
+# IT IS A KNOCK-OUT AND THAT IS ACCEPTED HERE RATHER THAN ISOLATED, because the cell it exists
+# to prove — a resolving run does not take the zero-entry branch — is reachable only by putting a
+# resolving run on that branch, and every verdict in this fixture is an exit code off the same
+# return path. FOURTEEN, each of them genuinely true under the mutation: the resolution tally is
+# zeroed AFTER the loop, so every write still happens and every VALUE assertion still holds while
+# each verdict becomes exit 3. The clause itself stays keyed, so the target arm reddens on its
+# rc conjunct, not on its clause conjunct — M18 is the mutant that owns the clause conjunct.
+expect_set resolving-path-forced-to-exit3 14 'did not name the drift|check exited 3|successful derive exited 3|did not pass after a successful derive|resolving run took the zero-entry branch|compared on nothing exited 3|exit 4 did not name its subject|silenced .status. too|does not read back as itself|unwritable value was accepted|summary counted per view|distinct count is not a union|check FAIL prints no entry count|check PASS prints no entry count' \
+  's@^    stories_n = len(seen_resolved)@    files_matched = 0; stories_n = len(seen_resolved)@'
 
 if [ "$fails" -eq 0 ]; then echo "PASS story-fields-derive-mutants"; exit 0; fi
 echo "FAIL story-fields-derive-mutants ($fails)"; exit 1

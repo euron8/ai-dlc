@@ -5743,3 +5743,43 @@ curly apostrophe and the declaration's `let's` is ASCII. (6) Three June rows are
 "Handoff" behind a `<system-reminder>` prefix; `ai-dlc-pause.sh` strips that prefix today.
 
 verify: sh d=$(mktemp -d); s=core/schemas/pause-routing.json; h=core/hooks/ai-dlc-handoff-pending.sh; { [ -f "$s" ] && [ -f "$h" ]; } || exit 9; : > "$d/pipeline-paused.flag"; printf '# log\n\n## 2026-09-05T01:54:16Z -- USER_PAUSE\n- Session: s1\n- Prompt (first 120 chars): I am solving this issue. handoff.\n\n## 2026-09-05T01:55:00Z -- USER_PAUSE\n- Session: s2\n- Prompt (first 120 chars): I did not request handoff\n\n## 2026-09-05T01:56:00Z -- USER_PAUSE\n- Session: s3\n- Prompt (first 120 chars): continue. Note for retro that you were not supposed to pause the pipeline to ask me if I wanted to handoff.\n\n' > "$d/pipeline-continuation-log.md"; . "$h"; ai_dlc_handoff_pending "$d" s1 "$s" || exit 1; ai_dlc_handoff_pending "$d" s2 "$s" && exit 1; ai_dlc_handoff_pending "$d" s3 "$s" && exit 1; exit 0
+## BL-152 — `context-sensor`'s freshness control seeds a file 59s old against a `NOW` captured earlier, and the pool eats the one-second margin
+
+**LANDED (v0.502.0, verified b69bfd13).** Incidental close found by batch 53's pre-batch receipt
+histogram: `b69bfd13` (`fix(fixture): context-sensor measures a seed age from the moment it is
+written`), on the batch-52 branch merged as PR #627, moved the `date +%s` read into the seed call
+of the 59s arm (`core/fixtures/context-sensor/run.sh:453`); the receipt below exits 0 against
+`origin/main` and the fix commit named no `BL-` id, so nothing rotated it.
+
+**Found 2026-09-03 while landing batch 45's docs commit**, which touched no fixture: the pre-push
+gate refused the push on `context-sensor`, green solo (`99 passed, 0 failed`) and red under the
+12-way pool (`1 of 185 units red`, `98 passed, 1 failed`). Consumer-facing: the fixture ships,
+so a consumer's push can be refused by it for the same reason. DEFECT.
+
+The arm is `CONTROL: 59s old is still fresh and IS taken` (`core/fixtures/context-sensor/run.sh:448`).
+It seeds `window.json` with `ts = NOW - 59`, where `NOW` is captured ONCE at `run.sh:392`, some
+fifty hook invocations before this arm runs; the hook's freshness bound is
+`AI_DLC_WINDOW_MAX_AGE` defaulting to 60 (`core/hooks/ai-dlc-window.sh:89`) and it judges age
+against the wall clock at invocation time. The margin is therefore ONE SECOND minus everything
+that ran since line 392. Solo that is under a second; under the pool it is not, the file reads
+as 60s or older, the hook falls back, and the arm reports `expected '420000', got '300000'`.
+The sibling arm at `:443` (`61s old falls back`) is safe by construction — latency only makes it
+staler.
+
+**Not a hook defect.** The hook's 60-second bound is the subject under test and is correct; the
+fixture's clock is the defect. The measured red run is in `.git/ai-dlc-fixture-failures` under
+the `2026-09-03T20:24:46Z` header.
+
+**Remedy shape:** capture the clock at the seed, not at the file's top — either `seedwin` takes
+an OFFSET and computes `$(date +%s) - offset` itself, or `NOW` is re-read immediately before the
+59s arm. Widening the margin (59 → 30) also works and is worse: it hides latency instead of
+removing it, and the 61s sibling then has a 31-second gap between it and the control. Whichever
+form, prove it can fail: run the arm with a `sleep 2` injected between seed and fire, before and
+after.
+
+**Receipt limits, stated.** The receipt keys on a fresh `date +%s` reaching the seed — inside
+`seedwin`'s body or within six lines above the 59s arm. A fix that widens the margin instead
+scores STILL-LIVE, deliberately: that form is discouraged above. Exit 9 if the arm is gone.
+
+verify: sh f=core/fixtures/context-sensor/run.sh; [ -f "$f" ] || exit 9; n=$(grep -n '59s old is still fresh' "$f" | head -1 | cut -d: -f1); [ -n "$n" ] || exit 9; awk -v n="$n" '/^seedwin\(\)/{s=1} s && /date \+%s/{c++} s && /^}/{s=0} NR>=n-6 && NR<=n && /date \+%s/{c++} END{exit !(c>0)}' "$f" && exit 0; exit 1
+

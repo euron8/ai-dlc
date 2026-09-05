@@ -671,7 +671,11 @@ for f in "${SORTED[@]}"; do
   [ "$DIVERGENCE_LIED" -eq 1 ] && C_DIVERGED=1
 
   # Did this pass find CRITICALs in scope that did not exist at the previous pass?
-  if [ -n "$crit" ] && [ -n "$prior" ] && [ "$crit" -gt "$prior" ]; then
+  # PASS 1 HAS NO PREVIOUS PASS, so an honest `findings_critical_prior_scope: 0` there is not
+  # added scope -- it is the absence of a comparison, and counting it hands arm D the
+  # MOVING ARTIFACT remedy for every series whose first pass found anything. Guarded on
+  # PREV_CRIT, exactly as arm C's comparison above is.
+  if [ -n "$crit" ] && [ -n "$prior" ] && [ -n "$PREV_CRIT" ] && [ "$crit" -gt "$prior" ]; then
     SCOPE_GREW=$((SCOPE_GREW + 1))
   fi
 

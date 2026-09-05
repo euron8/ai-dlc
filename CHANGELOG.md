@@ -15,6 +15,87 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.503.0] - 2026-09-05
+
+### `PC-S308-VALIDATE-ADVERSARIAL-CONVERGENCE-SCOPE-GREW-MISFIRES-ON-PASS-1` — pass 1 has no previous pass, so it cannot have grown scope (`BL-165`)
+
+`validate-adversarial-convergence.sh` incremented its SCOPE_GREW accumulator on `crit > prior`
+for every pass, pass 1 included. Pass 1 has no predecessor, so an honest
+`findings_critical_prior_scope: 0` beside any CRITICAL satisfied it, and arm D then told every
+mid-cycle gate run of such a series to FREEZE the artifact and CUT scope that had never moved.
+Arm C one screen above already guards the same comparison on a previous pass existing; the
+increment now carries the same guard and nothing else changes. Growth at pass 2 or later still
+counts.
+
+**Measured on the reference consumer, read-only.** Of its 79 tracked pass-1 adversarial
+artifacts, 68 declare the field; 28 report more CRITICALs than prior scope (27 at an honest
+zero) and 7 declare `prior == crit` with a CRITICAL present, the fail-closed default written by
+hand to dodge the misfire. Scratch copies of the 28, each as the gate saw it mid-cycle, installed
+against fixed with a `cmp -s` control: MOVING ARTIFACT on 28 of 28 before, 0 of 28 after.
+
+**Fixture.** `check-24-adversarial-convergence` gains the pass-1 honest-zero shape, which no seed
+carried (every seed set pass-1 `prior == crit`): the unconverged case asserts the generic remedy
+and the silence of MOVING ARTIFACT, the converged case is the near-miss control, and a
+growth-at-pass-2-only case proves the guard excludes pass 1 and nothing else; two mutants on a
+copy of the validator each kill exactly one case. Two pre-existing arms that asserted the ABSENCE
+of a phrase the validator wraps across two lines, and so could never fail, are rekeyed on the
+single-line token beside it. Seven reds against the pre-fix validator, all new arms; 123 of 123 on
+an installed tree.
+
+**Adversarial review found two wrong fixes the first fixture accepted, seeded before the merge.**
+A guard on `prior > 0` passed every behavioural arm because every seed placed later growth at a
+non-zero prior; growth at `prior == 0` after pass 1 is the purest moving-artifact signal, and that
+variant loses MOVING ARTIFACT on 13 mid-cycle states in 6 real consumer series. A guard on the
+pass NUMBER being 1 counts the first file of a series whose lowest pass on disk is 2, a shape
+three consumer series have. Both are now cases in the fixture and series in `BL-165`'s receipt,
+which scores the fix 0 and the pre-fix, unguarded, `prior > 0` and pass-number variants 1.
+
+### `PC-S308-CHECK-5-DERIVE-STORIES-REMEDY-CANNOT-CREATE-AN-ENTRY` — `derive-stories` maintains entries and never creates them, and both the remedy and the tool now say so (`BL-166`)
+
+Check 5's stale-entry remedy in `steps/gate-validation.md` promised "a `derive-stories` run that
+writes the entry from the story file in every canonical copy". The mode walks entries already
+parsed from the envelope and rewrites the value token of a field the entry already carries; with
+no entry there is nothing to write. On a `carry-over-single` sprint, where planning is skipped
+and the `stories:` mapping is still its placeholder comment, the prescribed repair was a no-op
+that exited 3, and the consumer hand-transcribed its entries. The filing's create mode is
+rejected: core resolves files FROM the entries and must not infer which files on disk are
+stories.
+
+**Two halves.** The remedy prose now says the mode rewrites the VALUES of an entry that already
+exists and never creates one, and that a missing entry is written by hand from the story file's
+own frontmatter in each canonical copy (the key under `stories:` with `status:`, plus `file:`
+where the path is not derivable), because sprint planning populates the mapping where it runs, a
+`carry-over-single` sprint skips it, and no core step owns it. The transcription is confirmed
+with `derive-stories --check` and its `0 drifted key(s)`, not with the write, which overwrites a
+wrong transcription silently. The exit-3 message carries a short clause saying the same thing,
+keyed on the per-view state so it prints only when every derived view is empty or has no
+`stories:` key; a list-form mapping, a canonical holding another sprint, and no canonical on disk
+keep their own messages. Exit code unchanged. The sentence had exactly one copy in the tree;
+`steps/implementation.md` already described the write correctly and is unchanged.
+
+**Adversarial review found three defects in the first cut, repaired before the merge.** The
+clause was keyed on the bare entry count and printed on three states whose remedy is different;
+the prose named a mapping owner no core step is; and the confirmation token was the write mode's.
+
+**Fixture.** `story-fields-derive` gains the entry-less envelope as an arm from the WRITE mode
+(exit 3, the headline, the clause, both canonicals byte-identical before and after), the three
+false-clause near-misses with the clause withheld, a one-entry near-miss, a resolving twin, and
+prose arms on the gate step; `story-fields-derive-mutants` gains the clause switched off, the key
+reverted to the bare count, the rejected create path, and the resolving path forced onto the
+zero-entry branch. One red against the pre-fix tool, two against the pre-fix prose, five against
+the first cut.
+
+**Stated limits.** A restatement of the wrong promise in other words passes both prose arms. The
+consumer's own Check 5 override shadows core's text verbatim and still carries the sentence, so
+the prose half reaches that consumer only when it edits the override; the tool half lands on the
+pull regardless.
+
+### Incidental close: `BL-152`
+
+`b69bfd13` on the batch-52 branch moved the context-sensor fixture's clock read into the seed
+call and named no entry, so `BL-152` stayed live with a receipt reading CLOSE-CANDIDATE. Found by
+this batch's pre-batch receipt histogram; annotated LANDED (v0.502.0) and rotated here.
+
 ## [0.502.0] - 2026-09-05
 
 ### `PC-S308-HANDOFF-INTENT-PATTERN-MISSES-TRAILING-TERSE-PHRASING` — a terse handoff as the final sentence of a longer message is a request (`BL-164`)

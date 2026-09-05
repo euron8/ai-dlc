@@ -1026,20 +1026,36 @@ def derive_stories():
     seen_entries = set()
     seen_resolved = set()
     per_view = []
+    # THE ZERO-ENTRY CLAUSE IS KEYED ON THESE TWO, NOT ON THE ENTRY COUNT. Five distinct states
+    # reach the exit-3 branch with zero entries parsed, and only two of them are "this envelope
+    # declares no story". Telling the other three to populate the mapping names a repair that is
+    # wrong and, for the sprint-mismatch case, contradicts the per-view line printed beside it.
+    no_entry_views = 0     # `stories:` present and empty, or absent: the clause's own subject
+    other_views = 0        # no canonical, another sprint's canonical, or a mapping in a bad shape
 
     for view in VIEWS:
         p = VIEWS[view]
         if not p.is_file():
+            other_views += 1
             per_view.append((view, "no canonical on disk"))
             continue
         text = p.read_text()
         n, _ = parse(text)
         if n is not None and n != target:
             # a canonical holding a different sprint is not ours
+            other_views += 1
             per_view.append((view, "holds sprint %s, not %d — not derived" % (n, target)))
             continue
         st, entries = parse_story_entries(text)
         if st != "ok":
+            # `empty` and `no-block` are the clause's subject: the mapping is the placeholder
+            # `roll` wrote, or there is no mapping. `no-entries` is NOT — parse_story_entries
+            # calls it a FINDING, the mapping IS populated, in a shape no reader accepts — so
+            # "populate the mapping first" is the wrong instruction for it.
+            if st in ("empty", "no-block"):
+                no_entry_views += 1
+            else:
+                other_views += 1
             per_view.append((view, "no entry to derive (`stories:` %s)" % st))
             continue
         lines = text.split("\n")
@@ -1128,10 +1144,32 @@ def derive_stories():
 
     print("")
     if files_matched == 0:
+        # A ZERO-ENTRY ENVELOPE IS A DIFFERENT REMEDY FROM AN UNRESOLVABLE ONE, and the bare
+        # headline cannot tell them apart: both read as a resolution near-miss, so a session sent
+        # here to repair a stale entry runs this mode, gets exit 3, and concludes the tool is
+        # broken. It is not. The loop above walks entries PARSED FROM THE ENVELOPE and rewrites a
+        # field the entry already carries, so with no entry there is nothing to write and the run
+        # is a no-op by construction. Creation cannot live here either: core resolves files FROM
+        # the entries and must not infer which files on disk are stories. The clause is keyed on
+        # the per-view classification above, never on the entry count: four other states reach
+        # here with zero entries and each has a different repair.
+        #
+        # IT IS ALSO SHORT ON PURPOSE. This line lands verbatim in a consumer's gate log, and the
+        # headline above already carries the count, the sprint and what was not done. The clause
+        # owes the reader one fact the headline cannot give: that re-running this mode is not the
+        # repair. Everything past that belongs in the step file the reader was sent from.
+        # `entries_n == 0` stays a conjunct and is NOT redundant: an `ok` view increments neither
+        # counter, so a tree whose one canonical declares an entry and whose other is the
+        # placeholder would otherwise satisfy the other two and be told to populate a mapping it
+        # has already populated.
+        tail = ""
+        if entries_n == 0 and no_entry_views > 0 and other_views == 0:
+            tail = (" DERIVE-STORIES NEVER CREATES AN ENTRY — add each story key under `stories:` "
+                    "by hand from its frontmatter (`status:` required), then --check.")
         print("sprint-status: derive-stories MATCHED NO STORY FILES (exit 3) — %d entr%s parsed "
               "for sprint %d and not one resolved to a story file on disk. This is not a clean "
-              "run: it compared nothing."
-              % (entries_n, "y" if entries_n == 1 else "ies", target))
+              "run: it compared nothing.%s"
+              % (entries_n, "y" if entries_n == 1 else "ies", target, tail))
         return 3
     if roundtrip:
         for r in roundtrip:
