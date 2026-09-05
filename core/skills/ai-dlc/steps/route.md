@@ -563,8 +563,9 @@ badge does its most damage in exactly the case this pause point exists to
 catch. Present the options flat and let the operator choose.
 
 **No pause flag here.** Rule 3 tells you to `touch
-_bmad-output/pipeline-paused.flag` at a pause point; pause point (d) is the
-exception, and this is deliberate rather than an omission. The flag exists so
+_bmad-output/pipeline-paused.flag` at a pause point; pause point (d) is one
+of the two exceptions Rule 3 names, and this is deliberate rather than an
+omission. The flag exists so
 the Stop hook can tell an intentional pause from a stall, and a solicited
 `AskUserQuestion` is neither — you have not ended the turn, the answer
 arrives as a tool result rather than a UserPromptSubmit, and no
