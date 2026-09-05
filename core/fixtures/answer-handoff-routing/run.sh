@@ -172,6 +172,18 @@ newcase yes; OUT="$(fire "What does the guard check?" "the handoff guard checks 
 [ "$(flag)" = no ] && ok "an answer DISCUSSING the handoff guard routes nothing" \
   || bad "fired on an answer about the mechanism rather than a request for one — a bare-substring match, and it will fire on the hook's own injected context"
 
+# --- Assertion 6b: the terse request as the FINAL SENTENCE of a longer answer ------------
+# The reference consumer's own row from PC-S308-HANDOFF-INTENT-PATTERN-MISSES-TRAILING-TERSE-
+# PHRASING, verbatim. This hook reads the declaration through the same jq line as the Stop
+# guard, so the answer channel must route what the guard was taught -- and must NOT route a
+# denial that merely ends in the word, which is the shape a trailing-word match would admit.
+newcase yes; OUT="$(fire "$Q_REAL" "I'm solving this issue. handoff.")"
+[ "$(flag)" = yes ] && ok "a terse 'handoff.' as the final sentence after unrelated context -> pause flag created" \
+  || bad "the trailing terse request routed NOTHING (flag=$(flag)) — the answer channel misses the phrasing the Stop guard reads, and the two readers of one declaration disagree"
+newcase yes; OUT="$(fire "$Q_REAL" "I did not request handoff")"
+[ "$(flag)" = no ] && ok "near-miss: a denial that merely ENDS in the word routes nothing" \
+  || bad "a denial ending in the word PAUSED the pipeline (flag=$(flag)) — the final-sentence alternative has widened into a trailing-word match"
+
 # --- Assertion 7: intent is read from the ANSWER, never the QUESTION --------------------
 # The question is text the LEAD authored. A hook that matched on it would route on the
 # lead's own words, which is the self-referential provenance hole this hook's header already
