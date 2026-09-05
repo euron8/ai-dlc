@@ -563,10 +563,21 @@ fi
 #   hand merge of every file both sides touched.
 #
 #   THE PREDICATE is `git rev-list --count HEAD..origin/main` == 0 -- the same
-#   test sprint-review.md §0 runs before a review. It reads the LOCAL origin/main
-#   ref and does NOT fetch: a validator that reaches the network from inside a
-#   gate hangs a fixture sandbox and a CI runner alike, so the fetch stays in the
-#   step prose (Step 1, and again immediately before this validator at Step 5c).
+#   test sprint-review.md §0 runs before a review.
+#
+#   IT REFRESHES THE REF FIRST, AND SAYS WHETHER IT COULD. The squash's branch
+#   point is an ancestor of the leftover feature branch by construction, so a
+#   STALE local origin/main reads the exact defect world as 0 -- measured: the
+#   defect world fails at behind-count 2 with a fresh ref and passes with the ref
+#   rewound to the branch point. A fetch that lives only in the step prose is the
+#   same omission class this check exists to catch. So when a remote named
+#   `origin` exists the check runs `git fetch origin main` itself, non-interactive
+#   and with a low-speed timeout so a stalled transfer cannot wedge the gate, and
+#   the CHECK 7 line states whether the ref was refreshed. A failed fetch does not
+#   fail the check -- an offline retro is live work -- but its line says the ref
+#   may be stale, and a reader who sees that sentence beside PASS has not been
+#   told the branch is fresh. A sandbox with no remote (every fixture here) skips
+#   the fetch without touching the network.
 #
 #   SKIP, loudly, when origin/main does not resolve. A checkout with no such ref
 #   (a fixture sandbox, a clone with no remote) cannot be measured, and an
@@ -584,22 +595,31 @@ fi
 #   this validator reads records.
 # ============================================================================
 echo "[Check 7] Retro branch not behind origin/main..."
+C7_REFRESH="origin/main not refreshed: no remote named origin"
+if git remote get-url origin >/dev/null 2>&1; then
+  if GIT_TERMINAL_PROMPT=0 git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=20 \
+       fetch -q --no-tags origin main >/dev/null 2>&1; then
+    C7_REFRESH="origin/main refreshed"
+  else
+    C7_REFRESH="origin/main NOT refreshed: fetch failed, so the local ref may be stale"
+  fi
+fi
 if ! git rev-parse -q --verify 'refs/remotes/origin/main^{commit}' >/dev/null 2>&1; then
-  echo "  CHECK 7: SKIP (no origin/main ref resolves in this checkout -- branch freshness cannot be measured here)"
+  echo "  CHECK 7: SKIP (no origin/main ref resolves in this checkout -- branch freshness cannot be measured here; ${C7_REFRESH})"
   SKIPPED_CHECKS="$SKIPPED_CHECKS 7"
 else
   C7_BEHIND="$(git rev-list --count HEAD..origin/main 2>/dev/null)" || C7_BEHIND=""
   case "$C7_BEHIND" in
     ''|*[!0-9]*)
       fail "Check7_BRANCH_BEHIND_MAIN" "git rev-list --count HEAD..origin/main produced no count (got: '${C7_BEHIND}'). The branch's relation to origin/main is undeterminable, which is not a fresh branch."
-      echo "  CHECK 7: FAIL — behind-count undeterminable"
+      echo "  CHECK 7: FAIL — behind-count undeterminable (${C7_REFRESH})"
       ;;
     0)
-      echo "  CHECK 7: PASS — HEAD contains origin/main"
+      echo "  CHECK 7: PASS — HEAD contains origin/main (${C7_REFRESH})"
       ;;
     *)
-      fail "Check7_BRANCH_BEHIND_MAIN" "HEAD is ${C7_BEHIND} commit(s) behind origin/main. The retro branch was not cut from the merged trunk (retro.md Step 1: 'git fetch origin main && git checkout main && git merge --ff-only origin/main' before 'git checkout -b'), so its PR will re-include every commit origin/main has that this branch lacks. Remedy: 'git fetch origin main && git merge origin/main' on this branch, resolve in origin/main's favour for every file the retro did not touch, then re-run this validator."
-      echo "  CHECK 7: FAIL — HEAD is ${C7_BEHIND} commit(s) behind origin/main"
+      fail "Check7_BRANCH_BEHIND_MAIN" "HEAD is ${C7_BEHIND} commit(s) behind origin/main (${C7_REFRESH}). The retro branch was not cut from the merged trunk (retro.md Step 1: 'git fetch origin main && git checkout main && git merge --ff-only origin/main' before 'git checkout -b'), so its PR will re-include every commit origin/main has that this branch lacks. Remedy: 'git fetch origin main && git merge origin/main' on this branch, resolve in origin/main's favour for every file the retro did not touch, then re-run this validator."
+      echo "  CHECK 7: FAIL — HEAD is ${C7_BEHIND} commit(s) behind origin/main (${C7_REFRESH})"
       ;;
   esac
 fi

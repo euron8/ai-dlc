@@ -27,8 +27,9 @@ carried it, reported CONFLICTING at Step 7a, and recovery was a hand merge that 
 content the retro had rotated. Step 1 now lands on `main` at `origin/main` first, with the same
 `rev-list --count HEAD..origin/main` test `sprint-review.md` §0 runs, and only then cuts the
 branch. `validate-mandatory-rules.sh` grows **Check 7** — the count must be 0, FAIL names the
-count and the remedy, SKIP when no `origin/main` ref resolves — read at Step 5c after a fetch
-the step now prescribes; the validator itself does not fetch. Measured over the consumer's 118
+count and the remedy, SKIP when no `origin/main` ref resolves — and it refreshes the ref itself
+where a remote named `origin` exists, stating on its line whether it could, because a stale
+local ref reads the exact defect world as 0. Measured over the consumer's 118
 measurable merged retro PRs, 16 were behind at the cut, the incident among them; a trunk cut
 that main moved past fires too, at the cost of the merge GitHub would have performed anyway.
 Fixture `retro-branch-behind-main` (ships) drives both directions and kills three mutants;

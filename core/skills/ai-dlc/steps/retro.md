@@ -914,16 +914,17 @@ core-layer-immutability).
    if it is not accessible in the conversation (common after compact),
    write `tool_use_id: NOT_ACCESSIBLE`. A fabricated id is a forged block.
 
-3. **Mandatory rules validation.** Run `git fetch origin main`, then:
+3. **Mandatory rules validation.** Run:
    `scripts/ai-dlc/validate-mandatory-rules.sh <N>` (where N is the sprint
    number). It runs `validate-retro-evidence.sh` (Check 1) and inline
    Checks 3/5/6/7; Checks 2 (`validate-cycle-commits.sh`) and 4
    (`validate-retro-prereq.sh`) are consumer-provided and SKIP when their
    sibling script is absent from core. Check 3 reads the envelope you closed
-   in the Close-Out Sweep above via `sprint-status.sh close`. Check 7 reads
-   the local `origin/main` ref — which is why the fetch comes first — and
-   fails a retro branch that is behind it (Step 1 is where the branch is cut
-   from the merged trunk).
+   in the Close-Out Sweep above via `sprint-status.sh close`. Check 7
+   refreshes `origin/main` itself and fails a retro branch that is behind it
+   (Step 1 is where the branch is cut from the merged trunk); if its line says
+   the ref was NOT refreshed, a PASS there has not established freshness —
+   fetch by hand and re-run.
    MUST exit 0. If it fails, fix the issues before proceeding to Step 6.
 
 4. **Audit-anchor schema validation.** Run

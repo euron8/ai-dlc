@@ -352,27 +352,43 @@ NARRATIVE = re.compile(
 # discriminator is the text BEFORE it, and a line-initial match reads the
 # previous scannable line because prose wraps exactly there ("MUST NOT be" /
 # "used to satisfy").
-#   1. a form of `be` immediately before          -> purpose (passive)
-#   2. an indefinite article within the four words before -> purpose (a reduced
-#      relative on a noun phrase); the habitual reading takes a definite or a
-#      pronoun subject.
+#   1. a form of `be` before it, with at most the few adverbs and negations that
+#      sit between a copula and its participle ("is not used to", "be directly
+#      used to")                                      -> purpose (passive)
+#   2. an indefinite article within the four words before, none of them carrying
+#      sentence punctuation -- the window stops at a sentence boundary, or the
+#      article in "This is not a gate. The step used to stop here." would acquit
+#      the habitual clause after it              -> purpose (a reduced relative
+#      on a noun phrase); the habitual reading takes a definite or a pronoun
+#      subject.
+# The fall-through to the previous line is decided on the RAW text: `used()`
+# blanks a quoted span to spaces, and "`X` used to run six checks" is a habitual
+# line with a quoted subject, not a wrapped one.
 # Measured over the distribution's 24 hits and the reference consumer's 26 at
 # the same revision: clause 1 clears the wrapped `be` / `used to satisfy`, clause
 # 2 clears the two `a <noun> used to <verb>` sites, and every habitual line
 # survives. A tense-shift marker in the window ("now", "no longer") was scored
 # and rejected: it clears the same purpose sites and silences most of the
 # habitual ones, because a rule stating what it USED TO say rarely says "now".
+# STATED LIMITS, neither shape in either corpus today: a purpose clause on a
+# bare or definite noun ("Evidence used to close a finding MUST ...") still
+# flags, which is the old behaviour and a triage cost rather than a wrong gate;
+# a habitual clause with an indefinite subject ("a step used to say") clears.
+# Both directions read one line and its predecessor, so a reflow that moves the
+# cue onto a third line moves the verdict -- the scan is line-grain by design.
 HABITUAL = re.compile(r"\bused to\b", re.I)
 PURPOSE_BEFORE = re.compile(
-    r"(\b(am|is|are|was|were|be|been|being)\s*$"
-    r"|\b(a|an)\b(\s+[^\s]+){0,3}\s*$)", re.I)
+    r"(\b(am|is|are|was|were|be|been|being)"
+    r"(\s+(not|never|only|also|then|directly|solely|merely|still|already"
+    r"|explicitly|first|ever|now))*\s*$"
+    r"|\b(a|an)\b(\s+[^\s.;:!?]+){0,3}\s*$)", re.I)
 
 
 def habitual_used_to(prev, text):
     t = used(text)
     for m in HABITUAL.finditer(t):
         before = t[:m.start()]
-        if not before.strip():
+        if not text[:m.start()].strip():
             before = used(prev)
         if not PURPOSE_BEFORE.search(before):
             return True

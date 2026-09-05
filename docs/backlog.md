@@ -4123,9 +4123,14 @@ HEAD..origin/main` test that MUST read 0 — and only then cuts the branch
 (`core/skills/ai-dlc/steps/retro.md:16-40`). `core/scripts/validate-mandatory-rules.sh:557` is
 Check 7, run at Step 5c with the other six: `git rev-list --count HEAD..origin/main` must be 0,
 FAIL names the count and the remedy, SKIP when no `origin/main` ref resolves in the checkout
-and the skip is counted in the summary like checks 2, 4 and 5. It reads the LOCAL ref and does
-not fetch — a validator that reaches the network from inside a gate hangs a sandbox and a CI
-runner alike — so Step 5c fetches immediately before it.
+and the skip is counted in the summary like checks 2, 4 and 5. **It refreshes the ref itself
+and says whether it could**, because the squash's branch point is an ancestor of the leftover
+feature branch by construction, so a stale local `origin/main` reads the exact defect world as
+0 — measured by the batch-57 adversarial hand: behind-count 2 with a fresh ref, 0 with the ref
+rewound to the branch point. When a remote named `origin` exists the check fetches `main`
+non-interactively with a low-speed timeout; a failed fetch does not fail the check, but its
+line says the ref may be stale, and Step 5c tells the lead a PASS beside that sentence has not
+established freshness. A sandbox with no remote skips the fetch without touching the network.
 
 **The firing set is wider than the defect, on purpose.** Measured over the reference consumer's
 118 measurable merged retro PRs: 16 were behind `origin/main` at the branch cut, the incident
@@ -4163,9 +4168,14 @@ corpora survived. A tense-shift marker in the window, the filing's other suggest
 and rejected: it clears the same purpose sites and silences most of the habitual ones, because
 a rule stating what it used to say rarely says "now".
 
-**Stated limit.** A habitual line whose subject is an indefinite noun phrase ("a step used to
-say") scores clean, and a purpose line with a definite subject and no `be` ("the probe used to
-clear it MUST be absolute") still flags; neither shape occurs in either corpus today. The
+**Stated limits.** A habitual line whose subject is an indefinite noun phrase ("a step used to
+say") scores clean, and a purpose line on a bare or definite noun ("Evidence used to close a
+finding MUST name its derivation") still flags — the old behaviour, a triage cost rather than a
+wrong gate; neither shape occurs in either corpus today. The window for the article stops at
+sentence punctuation and the fall-through to the previous line is decided on the raw text, so
+an article in the previous sentence and a backticked subject both score as the batch-57
+adversarial hand's cases require. Both directions read one line and its predecessor, so a
+reflow that moves the cue onto a third line moves the verdict: the scan is line-grain. The
 consumer's routed carry-over of its remaining core-prose findings is not moved by this entry:
 those are genuine habitual lines, and whether resident prose keeps them is a judgement
 `.claude/rules/resident-context.md` reserves.

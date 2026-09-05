@@ -204,7 +204,7 @@ EXPECTED="A:6 B:5-2 C:5-4 D:5-5 E:3-245 F:fail"
 toolchain "$WORK/bin" "$VMR"
 GOT="$(battery "$WORK/bin")"
 if [ "$GOT" = "$EXPECTED" ]; then
-  ok "all six arms: zero skips says 'all 7 checks passed', each of checks 2/4/5 skipping alone names ITSELF and reports a floor of 5, three at once reports a floor of 3, and a real failure still FAILs at rc=1"
+  ok "all six arms: zero skips says 'all 7 checks passed', each of checks 2/4/5 skipping alone names ITSELF and reports a floor of 6, three at once reports a floor of 4, and a real failure still FAILs at rc=1"
 else
   bad "battery: expected [$EXPECTED], got [$GOT]"
 fi
