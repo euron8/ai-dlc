@@ -247,6 +247,7 @@ p5() {
   o="$(out_of "$1" "$BASE_SHA")"; e="$(err_of "$1" "$BASE_SHA")"
   [ -z "$(printf '%s' "$o" | grep . || true)" ] \
     && grep -q 'listed 2 CLASSIFY file(s) and opened NONE, so NO core file was scanned' <<<"$e" \
+    && grep -q 'this zero does not cover it' <<<"$e" \
     && ! grep -q 'produced no rows' <<<"$e"
 }
 # p6 drives TWO worlds so every count in the denominator NOTE is bound by a world where
@@ -353,6 +354,10 @@ score "fabricated-listed" "$(mkmut fablisted 's|listed \$listed CLASSIFY file(s)
 # Wrong fix 3: a NOTE beside real rows. Drop the early exit after the rows print so the
 # denominator NOTE follows every match. p7 alone falls.
 score "note-beside-rows" "$(mkmut fallthrough '/^  printf '"'"'%s'"'"' "\$rows"$/{n;s|^  exit 0$|  :|;}')" "1101"
+# The stated limit dropped from every NOTE. The header says a quiet run must restate it
+# because the operator reads the run and never the header; nothing bound that until the
+# receipt adversary stripped it and both channels stayed green. p5 alone falls.
+score "limit-dropped" "$(mkmut nolimit 's| \$LIMIT" >&2$|" >\&2|')" "0111"
 # Refusal neutered: an unresolvable input falls through to the vacuity NOTE. p8 alone falls.
 score "refusal-neutered" "$(mkmut norefuse 's|^  echo "retired-tokens: preclassify.sh produced no rows|  : "|')" "1110"
 
