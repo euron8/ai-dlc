@@ -183,6 +183,11 @@ newcase yes; OUT="$(fire "$Q_REAL" "I'm solving this issue. handoff.")"
 newcase yes; OUT="$(fire "$Q_REAL" "I did not request handoff")"
 [ "$(flag)" = no ] && ok "near-miss: a denial that merely ENDS in the word routes nothing" \
   || bad "a denial ending in the word PAUSED the pipeline (flag=$(flag)) — the final-sentence alternative has widened into a trailing-word match"
+# And the PUNCTUATED denial, the consumer's own row: a trailing-word regression that REQUIRES a
+# terminal period passes the unpunctuated near-miss above and is caught only here.
+newcase yes; OUT="$(fire "$Q_REAL" "continue. Note for retro that you weren't supposed to be able to pause the pipeline to ask me if I wanted to handoff.")"
+[ "$(flag)" = no ] && ok "near-miss: a punctuated denial, the word after a verb and before a period, routes nothing" \
+  || bad "an operator saying a handoff was NOT wanted PAUSED the pipeline (flag=$(flag)) — the alternative has widened to a trailing word plus period"
 
 # --- Assertion 6c: a multi-line answer is ONE field, not a set of lines -----------------
 # The declared patterns anchor on `^` and `$`, and grep anchors per line, so an answer whose

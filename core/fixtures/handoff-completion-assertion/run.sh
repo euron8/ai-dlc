@@ -283,6 +283,20 @@ P_RESUME="/ai-dlc resume"
 # two channels seed one shape apart rather than converging on the same bytes.
 P_TERSE="I'm solving this issue. handoff."
 P_TERSE_NEAR="I didn’t request handoff"
+# A SECOND NEAR-MISS WITH TERMINAL PUNCTUATION, because the first has none. The adversarial hand
+# built a trailing-word regression that REQUIRES a terminal period and it passed every arm keyed
+# on the unpunctuated denial. This is the consumer's own row (verbatim, 117 chars, so it survives
+# the 120-char preview): the operator saying a handoff was NOT wanted, ending in the word and a
+# period, with no sentence boundary before the word.
+P_TERSE_NEAR2="continue. Note for retro that you weren't supposed to be able to pause the pipeline to ask me if I wanted to handoff."
+# PLAIN NOUN MENTIONS, exclusion-clean. The declaration's description says noun mentions are
+# not requests and nothing asserted it: the adversarial hand's widenings `|the hand[ -]?off|`
+# and `|handoff (is|was|will)|` passed every arm. Three shapes, because one seed guards one
+# shape: indefinite article and definite article are the consumer's own rows; the copula form
+# has no producer instance in the consumer's history and is SYNTHETIC, said so here.
+P_NOUN="why haven't we done a handoff"
+P_NOUN2="did all of the handoff steps run?"
+P_NOUN3="the handoff was fine yesterday"
 
 LG="$ROOT/logs/log.md"
 
@@ -367,7 +381,15 @@ ismech() { grep -qiE "$EXCL_RE"   <<<"$1"; }
   broken "seed premise dead: the declared vocabulary no longer reads '$P_TERSE' as a handoff REQUEST — the final-sentence alternative is gone, and (g4) would report the shipped defect PC-S308-HANDOFF-INTENT-PATTERN-MISSES-TRAILING-TERSE-PHRASING as a fixture failure"
 ! isreq "$P_TERSE_NEAR" || \
   broken "seed premise dead: '$P_TERSE_NEAR' now reads as a handoff REQUEST — the final-sentence alternative has widened into a trailing-word match, which on the reference consumer's history admits five questions or denials about a handoff"
-ok "seed premise: the DECLARED vocabulary scores all ten log-prose seeds as this fixture assumes"
+! isreq "$P_TERSE_NEAR2" || \
+  broken "seed premise dead: the punctuated denial '$P_TERSE_NEAR2' now reads as a handoff REQUEST — the final-sentence alternative has widened into a trailing-word-plus-period match, which admits an operator saying a handoff was not wanted"
+! ismech "$P_TERSE_NEAR2" || \
+  broken "seed premise dead: '$P_TERSE_NEAR2' now matches the mention EXCLUSION, so its near-miss would pass for the wrong reason"
+for _n in "$P_NOUN" "$P_NOUN2" "$P_NOUN3"; do
+  { ! isreq "$_n" && ! ismech "$_n"; } || \
+    broken "seed premise dead: the plain noun mention '$_n' now scores as a request or as mechanism discussion — the declaration's own description says a noun mention is neither, and a widening that admits it is the bare-substring match the description forbids"
+done
+ok "seed premise: the DECLARED vocabulary scores all fourteen log-prose seeds as this fixture assumes"
 
 # The transcripts' own premises, DERIVED from the seeded files rather than restated.
 _req_user="$(jq -rs '[.[]|select(.message.role=="user")|.message.content]|last // ""' "$T_REQ_OK" 2>/dev/null)"
@@ -689,6 +711,16 @@ dsetup "$LG"
 r="$(disk "$SESS_A")"
 [ "$r" = allow ] && ok "  near-miss: '$P_TERSE_NEAR', the word trailing a VERB with no sentence boundary before it -> ALLOW (the alternative anchors the sentence, not the word)" \
                  || bad "  a denial that merely ENDS in the word BLOCKED ($r) — the alternative has widened to any trailing 'handoff', which on the reference consumer's history admits five questions or denials"
+log_prompt "$LG" "$SESS_A" "$P_TERSE_NEAR2"
+dsetup "$LG"
+r="$(disk "$SESS_A")"
+[ "$r" = allow ] && ok "  near-miss: the PUNCTUATED denial, the word after a verb and before a period -> ALLOW (the boundary is before the word, not after it)" \
+                 || bad "  an operator saying a handoff was NOT wanted BLOCKED ($r) — the alternative has widened to a trailing word plus period, which admits four denials or questions on the consumer's history"
+log_prompt "$LG" "$SESS_A" "$P_NOUN"
+dsetup "$LG"
+r="$(disk "$SESS_A")"
+[ "$r" = allow ] && ok "  near-miss: a plain noun mention '$P_NOUN' -> ALLOW" \
+                 || bad "  a plain noun mention BLOCKED ($r) — the declaration matches the noun its own description says it does not"
 # AND THROUGH THE TRANSCRIPT CHANNEL, the other reader of the same declaration at this seam.
 # The same message as the LAST user turn, no resume block, no log row: a BLOCK here can only
 # be Check 0's transcript arm reading the declaration. Both readers resolve one jq line, so
@@ -1354,8 +1386,11 @@ fi
 #       lost subject and the repair is re-anchoring, never a relaxed assertion. Killed by (g4)'s
 #       on-disk arm; the transcript arm moves with it BY CONSTRUCTION, because both readers
 #       resolve the same jq line (I94), and that second cell is asserted rather than left to be
-#       read as entanglement. Control: the bare word still BLOCKS under the same copy, so the
-#       mutation removed one alternative and not key 3.
+#       read as entanglement. Control: the VERB-PHRASE seed still BLOCKS under the same copy, so
+#       the mutation removed one alternative and not key 3. The bare word cannot be the control:
+#       the final-sentence alternative's start-of-field branch is what carries it now (the old
+#       whole-field alternative was subsumed and removed), so under this copy the bare word is
+#       a non-instance and a bare-word control would misreport the mutation as a total disarm.
 ALT_TERSE='(^|[.!?][[:space:]]*)[[:space:]]*hand[ -]?off[[:space:]]*[.!]?[[:space:]]*$'
 MUT_SCHEMA="$ROOT/mut-m25-pause-routing.json"
 jq --arg alt "|$ALT_TERSE" '.handoff_intent_pattern |= rtrimstr($alt)' "$SCHEMA" > "$MUT_SCHEMA" 2>/dev/null
@@ -1363,7 +1398,7 @@ _m25_re="$(jq -rj '.handoff_intent_pattern // ""' "$MUT_SCHEMA" 2>/dev/null)"
 if [ -z "$_m25_re" ]; then
   bad "MUTANT HARNESS BROKEN [m25]: the declaration copy did not parse or carries no pattern — the kill below is unreadable"
 elif cmp -s "$SCHEMA" "$MUT_SCHEMA"; then
-  bad "FIXTURE STALE: mutation m25 matched nothing — the final-sentence alternative is no longer the LAST alternative of handoff_intent_pattern, so this battery is editing a declaration it does not understand"
+  bad "FIXTURE STALE: mutation m25 matched nothing — handoff_intent_pattern no longer ENDS with the byte-exact alternative ALT_TERSE names (it was respelled, moved, or followed by another alternative). This is a byte-lock on the shipped spelling, not a claim that the fix is wrong: re-anchor ALT_TERSE on the declaration as shipped and re-run the seed-premise arms, never relax this assertion"
 else
   ok "  mutant [m25] built: the declaration copy differs from the shipped one and still parses"
   log_prompt "$LG" "$SESS_A" "$P_TERSE"
@@ -1379,31 +1414,42 @@ else
   SCHEMA="$_m25_saved"
   [ "$r" = allow ] && ok "  and the transcript reader moves with it (ALLOW) — one declaration, two readers, one mutation" \
                    || bad "MUTANT SURVIVED [m25] on the transcript reader: expected allow, got $r — the transcript arm is matching on something other than the declaration"
-  # THE SAME COPY ON THE BARE-WORD SEED, which it does NOT change. Without this the kills
+  # THE SAME COPY ON THE VERB-PHRASE SEED, which it does NOT change. Without this the kills
   # above are equally consistent with a copy that disabled key 3 or the vocabulary outright.
+  log_prompt "$LG" "$SESS_A" "$P_INTENT"
+  dsetup "$LG"
+  SCHEMA="$MUT_SCHEMA"
+  r="$(disk "$SESS_A")"
+  SCHEMA="$_m25_saved"
+  [ "$r" = block ] && ok "  control [m25]: the verb phrase '$P_INTENT' still BLOCKS under the same copy — it removed one alternative, not key 3" \
+                   || bad "MUTANT TOO BROAD [m25]: the verb phrase stopped blocking too ($r) — the copy disabled the vocabulary outright and (g4)'s kill is unattributable"
+  # AND THE BARE WORD IS A NON-INSTANCE UNDER THIS COPY, BY CONSTRUCTION: its only carrier is
+  # the start-of-field branch of the alternative the copy strips. Asserted so that a later
+  # reinstatement of a separate whole-field alternative is noticed here rather than silently
+  # doubling the grammar.
   log_prompt "$LG" "$SESS_A" "$P_BARE"
   dsetup "$LG"
   SCHEMA="$MUT_SCHEMA"
   r="$(disk "$SESS_A")"
   SCHEMA="$_m25_saved"
-  [ "$r" = block ] && ok "  control [m25]: the bare word still BLOCKS under the same copy — it removed one alternative, not key 3" \
-                   || bad "MUTANT TOO BROAD [m25]: the bare word stopped blocking too ($r) — the copy disabled the vocabulary outright and (g4)'s kill is unattributable"
+  [ "$r" = allow ] && ok "  and the bare word is ALLOWED under the copy — the final-sentence alternative is the bare word's only carrier, so the two forms are one alternative" \
+                   || bad "  the bare word still BLOCKED under the copy ($r) — a second whole-field alternative has been reinstated beside the final-sentence one, and the grammar now spells the terse form twice"
   # AND THE SAME COPY THROUGH THE TRANSCRIPT CHANNEL. The control above drives KEY 3 and is
   # blind to the other reader, while the transcript kill is ALLOW-shaped -- so a hook whose
   # transcript arm is dead satisfies that cell and the fixture prints "one declaration, two
   # readers" over a single reader. MEASURED: with the transcript arm's intent grep replaced by
   # `false` in a copy of ai-dlc-continue.sh, the on-disk control still passed and the
   # transcript cell still scored a kill. This arm is PRESENCE-shaped in that channel, on the
-  # bare word the mutation does not touch, so the ALLOW above can only be the mutation.
-  T_BARE_NOBLK="$ROOT/t_bare_noblk.jsonl"
-  jq -nc --arg u "$P_BARE" '{message:{role:"user",content:$u}}' > "$T_BARE_NOBLK"
-  jq -nc --arg a "Done. Everything is committed and the snapshot is updated." '{message:{role:"assistant",content:$a}}' >> "$T_BARE_NOBLK"
+  # verb phrase the mutation does not touch, so the ALLOW above can only be the mutation.
+  T_PHRASE_NOBLK="$ROOT/t_phrase_noblk.jsonl"
+  jq -nc --arg u "$P_INTENT" '{message:{role:"user",content:$u}}' > "$T_PHRASE_NOBLK"
+  jq -nc --arg a "Done. Everything is committed and the snapshot is updated." '{message:{role:"assistant",content:$a}}' >> "$T_PHRASE_NOBLK"
   dsetup
   SCHEMA="$MUT_SCHEMA"
-  r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_BARE_NOBLK")")"
+  r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_PHRASE_NOBLK")")"
   SCHEMA="$_m25_saved"
-  [ "$r" = block ] && ok "  control [m25] through the TRANSCRIPT: the bare word as the last user turn still BLOCKS under the same copy — that reader is alive, so its ALLOW above is the mutation and not a dead channel" \
-                   || bad "MUTANT HARNESS BROKEN [m25]: the transcript reader did not block the bare word either ($r) — it is not reading, and the transcript kill above is unreadable"
+  [ "$r" = block ] && ok "  control [m25] through the TRANSCRIPT: the verb phrase as the last user turn still BLOCKS under the same copy — that reader is alive, so its ALLOW above is the mutation and not a dead channel" \
+                   || bad "MUTANT HARNESS BROKEN [m25]: the transcript reader did not block the verb phrase either ($r) — it is not reading, and the transcript kill above is unreadable"
 fi
 
 # M26 — the transcript reader matches PER LINE again: strip the newline collapse from

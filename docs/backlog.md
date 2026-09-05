@@ -4149,15 +4149,35 @@ repaired one; across every session in that log the PENDING count moves 21 → 22
 that moves is the incident's.
 
 **The fix** is that one alternative appended to the declaration, with the schema's own
-description recording the shape and the census. `core/fixtures/handoff-completion-assertion`
-gains the consumer's row verbatim as `P_TERSE` and the consumer's own denial, curly apostrophe
-and all, as `P_TERSE_NEAR`, two seed-premise arms, case (g4) through the on-disk reader AND the
-transcript reader with a near-miss on each, and mutant m25 — a COPY of the declaration with the
+description recording the shape and the census — and the old whole-field alternative
+(`^[[:space:]]*hand[ -]?off[[:space:]]*$`) removed, because the new one's start-of-field branch
+subsumes it: deleting it changes zero verdicts on the census (8 matches either way, 0 lost, the
+same 2 admitted), and a dead alternative left in place was the thing m25's first control had come
+to depend on. `core/fixtures/handoff-completion-assertion` gains the consumer's row verbatim as
+`P_TERSE`, three real near-misses and one synthetic (the unpunctuated denial with its curly
+apostrophe, the punctuated denial "…if I wanted to handoff.", the definite-article question "did
+all of the handoff steps run?", and the copula noun "the handoff was fine yesterday", which no
+consumer row carries), seed-premise arms on each, case (g4) through the on-disk reader AND the
+transcript reader with near-misses, and mutant m25 — a COPY of the declaration with the
 alternative stripped, driven through the unmodified hooks, killed by (g4) on both readers, with
-the bare word as the control on each reader that the key survived.
-`core/fixtures/answer-handoff-routing` gains the same pair through the answer channel. Against the
-pre-fix declaration the first fixture reports FIXTURE BROKEN at its seed premise and the second
-one assertion FAILED.
+the verb phrase as the control on each reader that the key survived and the bare word asserted
+ALLOWED under the copy so a reinstated duplicate is noticed. `core/fixtures/answer-handoff-routing`
+gains the same pairs through the answer channel. Against the pre-fix declaration the first fixture
+reports FIXTURE BROKEN at its seed premise and the second four assertions FAILED.
+
+**The receipt and the battery were scored against nine implementations, and two rounds of that
+scoring each found a hole.** The first receipt's near-miss carried no terminal punctuation, so a
+trailing-word regression that REQUIRES a period (`hand[ -]?off[[:space:]]*[.!][[:space:]]*$`,
+which admits four denials or questions on the consumer's history) passed it and passed the
+fixture's behavioural near-miss too — caught only by m25's byte-lock. The punctuated real denial
+is now the receipt's third row and a seed in both fixtures. And two noun-mention widenings
+(`|the hand[ -]?off|`, `|handoff (is|was|will)|`) passed the receipt and both fixtures, because
+nothing asserted the description's own claim that a noun mention is not a request; the three
+noun seeds close them. Final scoring: the receipt closes on the fix and on a second spelling and
+stays open on the shipped pattern, both trailing-word regressions, both noun widenings, a
+disarm and an empty pattern; the fixtures are green only on the fix, and red on a respelling
+solely at m25's byte-lock, whose message now says so and names `ALT_TERSE` as the thing to
+re-anchor.
 
 **Two defects the batch-52 hands found in the readers, both fixed before the merge.** The
 declared patterns anchor on `^` and `$`, and grep anchors per LINE, so a multi-line message whose
@@ -4171,7 +4191,7 @@ per-line mutant, each with a last-line sibling that must still route. And I94(c)
 three hooks that carry the BRANCH TEXT and omitted `ai-dlc-handoff-pending.sh`, which reads the
 PATTERNS through its own `$_schema` argument and decides key 3; each reader now carries the
 variable its `jq` line feeds, proved on a worktree in both directions, validator wall clock 25s
-against 26s. On a tree built by `install.sh` the three handoff fixtures read 141 / 20 / 13 ok,
+against 26s. On a tree built by `install.sh` the three handoff fixtures read 144 / 21 / 13 ok,
 the same as here.
 
 **Stated limits, each measured, none fixed here.** (1) `core/hooks/ai-dlc-pause.sh:67` records
@@ -4193,4 +4213,4 @@ already carried a matching row. (5) "Ok, then let's handoff" misses because the 
 curly apostrophe and the declaration's `let's` is ASCII. (6) Three June rows are a bare
 "Handoff" behind a `<system-reminder>` prefix; `ai-dlc-pause.sh` strips that prefix today.
 
-verify: sh d=$(mktemp -d); s=core/schemas/pause-routing.json; h=core/hooks/ai-dlc-handoff-pending.sh; { [ -f "$s" ] && [ -f "$h" ]; } || exit 9; : > "$d/pipeline-paused.flag"; printf '# log\n\n## 2026-09-05T01:54:16Z -- USER_PAUSE\n- Session: s1\n- Prompt (first 120 chars): I am solving this issue. handoff.\n\n## 2026-09-05T01:55:00Z -- USER_PAUSE\n- Session: s2\n- Prompt (first 120 chars): I did not request handoff\n\n' > "$d/pipeline-continuation-log.md"; . "$h"; ai_dlc_handoff_pending "$d" s1 "$s" || exit 1; ai_dlc_handoff_pending "$d" s2 "$s" && exit 1; exit 0
+verify: sh d=$(mktemp -d); s=core/schemas/pause-routing.json; h=core/hooks/ai-dlc-handoff-pending.sh; { [ -f "$s" ] && [ -f "$h" ]; } || exit 9; : > "$d/pipeline-paused.flag"; printf '# log\n\n## 2026-09-05T01:54:16Z -- USER_PAUSE\n- Session: s1\n- Prompt (first 120 chars): I am solving this issue. handoff.\n\n## 2026-09-05T01:55:00Z -- USER_PAUSE\n- Session: s2\n- Prompt (first 120 chars): I did not request handoff\n\n## 2026-09-05T01:56:00Z -- USER_PAUSE\n- Session: s3\n- Prompt (first 120 chars): continue. Note for retro that you were not supposed to pause the pipeline to ask me if I wanted to handoff.\n\n' > "$d/pipeline-continuation-log.md"; . "$h"; ai_dlc_handoff_pending "$d" s1 "$s" || exit 1; ai_dlc_handoff_pending "$d" s2 "$s" && exit 1; ai_dlc_handoff_pending "$d" s3 "$s" && exit 1; exit 0

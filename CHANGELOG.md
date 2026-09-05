@@ -44,15 +44,23 @@ I94(c) hand-listed the three hooks that carry the branch text and omitted
 `ai-dlc-handoff-pending.sh`, the reader that decides key 3; each reader now carries the variable
 its `jq` line feeds, proved in both directions on a worktree.
 
-**Fixtures.** `handoff-completion-assertion` carries the consumer's row verbatim and its own
-curly-apostrophe denial as the near-miss, case (g4) through both the on-disk and the transcript
-reader, mutant m25 — a copy of the declaration with the alternative stripped, driven through the
-unmodified hooks, with the bare word as the control on each reader — and case (g5) with mutant
-m26 for the collapse. `answer-handoff-routing` carries the same pairs through the answer channel
-with a per-line mutant. Against the pre-fix declaration the first reports FIXTURE BROKEN at its
-seed premise and the second one assertion FAILED; against the pre-collapse hooks each goes red
-on exactly its new arm; on an `install.sh` tree the three handoff fixtures read 141 / 20 / 13
-ok, as here.
+**The old whole-field alternative is removed**, because the new one's start-of-field branch
+subsumes it: zero verdicts change on the census, and a dead alternative was what the mutant's
+first control had come to depend on.
+
+**Fixtures, scored against nine implementations across two rounds.** `handoff-completion-assertion`
+carries the consumer's row verbatim, three real near-misses and one synthetic (the unpunctuated
+and the punctuated denial, a definite-article question, a copula noun), case (g4) through both
+the on-disk and the transcript reader, mutant m25 — a copy of the declaration with the
+alternative stripped, driven through the unmodified hooks, with the verb phrase as the control
+on each reader — and case (g5) with mutant m26 for the collapse. `answer-handoff-routing`
+carries the same pairs through the answer channel with a per-line mutant. The adversarial hand's
+first round found a trailing-word regression that requires a period passing the receipt and the
+behavioural near-miss, and two noun-mention widenings passing everything; the punctuated denial
+and the three noun seeds close both. Against the pre-fix declaration the first reports FIXTURE
+BROKEN at its seed premise and the second four assertions FAILED; against the pre-collapse hooks
+each goes red on exactly its new arm; on an `install.sh` tree the three handoff fixtures read
+144 / 21 / 13 ok, as here.
 
 **Stated limits, none fixed here.** `ai-dlc-pause.sh` records the first 120 characters of a
 prompt, so a terse request trailing more than that is invisible to key 3 under any pattern. An
