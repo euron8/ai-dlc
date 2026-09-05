@@ -385,6 +385,328 @@ out="$(audit)"; has 'escalations.md.*ORIGIN_TAG' "$out" \
   && ok "escalations.md is inside the corpus" \
   || bad "escalations.md ships to every consumer and is scanned by nothing"
 
+# ===== Class 1: `used to` — the habitual past vs a reduced passive of PURPOSE =====
+#
+# THE DEFECT THIS EXISTS TO CATCH, IN BOTH DIRECTIONS. `used to` sat inside the
+# NARRATIVE alternation, so every reduced passive of purpose in the corpus scored
+# as a rule telling the story of its own history — "a health signal used to clear
+# the operation", "MUST NOT be used to satisfy a per-element AC" — text that says
+# what the rule requires TODAY and nothing about what it once said. Class 1 is the
+# class a lead dispositions by hand, so a false positive there is a lead reading a
+# correct line, waving it through, and learning to wave the next one through too.
+# The mirror is a fix that clears the false positives by acquitting the true
+# habitual lines as well, and the mutants below are eight separate ways to write
+# it — two of them wrong fixes BUILT and scored rather than described.
+#
+# EVERY SEED IS PRODUCER TEXT, never text derived from the predicate. A seed read
+# off the accept-set proves the reader accepts its own grammar. The purpose shapes
+# come from `steps/deploy-validate.md`, the reference consumer's
+# `docs/coding-conventions.md` and one of its check extensions; the habitual ones
+# from `steps/artifact-consolidation.md`, `steps/discovery.md`,
+# `ai-dlc-update/SKILL.md` and `steps/stories-test-strategy.md`. `ua`, `ub` and
+# `uc` are the three constructed cases the predicate's second cut was driven on:
+# an article in the PREVIOUS sentence, a backticked SUBJECT, and a negation
+# between the copula and the participle.
+#
+# TWO PURPOSE SEEDS KEEP THEIR LINE WRAP, and that is load-bearing. Prose wraps
+# exactly at `MUST NOT be` / `used to satisfy`, so the words that discriminate sit
+# on the PREVIOUS line and a predicate reading one line in isolation sees a
+# line-initial `used to` with nothing before it. `u_h4` is the same wrap carrying a
+# HABITUAL clause, so the previous-line join cannot be a blanket acquittal.
+#
+# THE VERDICT IS ASSERTED WITH ITS EXACT `n=[...]` LIST, never a bare FLAGGED. The
+# predicate decides per LINE; a bare FLAGGED is satisfied by any other hit anywhere
+# in the corpus, and the same-file arm could not be written at all.
+TR=".claude/team-roles"
+
+u_p1() { cat > "$WORK/t/$TR/up1.md" <<'EOF'
+- **Liveness must be absolute, not differential.** A health signal used to
+  clear the operation MUST be an absolute progress reading against an
+EOF
+}
+u_p2() { cat > "$WORK/t/$TR/up2.md" <<'EOF'
+  source-string presence check (`assertIn("method_name", body)`) MUST NOT be
+  used to satisfy a per-element AC.
+EOF
+}
+u_p3() { cat > "$WORK/t/$TR/up3.md" <<'EOF'
+same data-flow term as the value under test — e.g. a TEL-denominated total
+used to validate a USD total derived from the same pool tick — is a
+EOF
+}
+u_h1() { cat > "$WORK/t/$TR/uh1.md" <<'EOF'
+The step used to say nothing here, and the silence is the defect.
+EOF
+}
+u_h2() { cat > "$WORK/t/$TR/uh2.md" <<'EOF'
+Where the blocks used to sit, write a pointer.
+EOF
+}
+u_h3() { cat > "$WORK/t/$TR/uh3.md" <<'EOF'
+This paragraph used to read "pass theirs as the base".
+EOF
+}
+u_h4() { cat > "$WORK/t/$TR/uh4.md" <<'EOF'
+**The one benign difference that**
+used to exist here is gone.
+EOF
+}
+u_h5() { cat > "$WORK/t/$TR/uh5.md" <<'EOF'
+  disambiguation rule when more than one matches. The per-sprint working files
+  that used to collide with it now sit under `s<N>/`, out of a non-recursive
+EOF
+}
+u_mix() { cat > "$WORK/t/$TR/umix.md" <<'EOF'
+- **Liveness must be absolute, not differential.** A health signal used to
+  clear the operation MUST be an absolute progress reading against an
+
+The step used to say nothing here, and the silence is the defect.
+EOF
+}
+# The article window must stop at a sentence boundary: `a gate.` ends a sentence
+# and the habitual clause after it is a new one.
+u_a() { cat > "$WORK/t/$TR/ua.md" <<'EOF'
+This is not a gate. The step used to stop here.
+EOF
+}
+# A habitual line whose SUBJECT is a backticked span. `used()` blanks it, so the
+# blanked prefix is empty while the RAW prefix is not — the line is not wrapped
+# and must not borrow its predecessor's verdict.
+u_b() { cat > "$WORK/t/$TR/ub.md" <<'EOF'
+this is a normal sentence.
+`validate-mandatory-rules.sh` used to run six checks.
+EOF
+}
+# THE SAME SHAPE WITH A PREDECESSOR THAT WOULD ACQUIT IT. `ub.md`'s previous line
+# ends in a sentence period, so the article window rejects it on its own and the
+# arm cannot see which rule did the work; this one ends in a bare `an`, which the
+# window accepts, so only the raw-text fall-through keeps the line FLAGGED. The
+# previous line is `steps/deploy-validate.md`'s own continuation line.
+u_b2() { cat > "$WORK/t/$TR/ub2.md" <<'EOF'
+  clear the operation MUST be an absolute progress reading against an
+`validate-mandatory-rules.sh` used to run six checks.
+EOF
+}
+# A negation between the copula and the participle is still the passive of
+# purpose: this says what the nonce is FOR, not what the rule once said.
+u_c() { cat > "$WORK/t/$TR/uc.md" <<'EOF'
+The nonce is not used to reconcile anything.
+EOF
+}
+
+# --- Assertion 12u1: purpose after a noun phrase -> CLEAN --------------------
+fresh; u_p1
+has 'NARRATIVE_DRIFT: CLEAN' "$(audit)" \
+  && ok "'A health signal used to clear …' -> NARRATIVE_DRIFT CLEAN (purpose, not history)" \
+  || bad "a reduced passive of purpose on a noun phrase scored as narrative drift"
+
+# --- Assertion 12u2: purpose after `be`, WRAPPED -> CLEAN --------------------
+# The wrap is the point: `be` is on the previous line and `used to` opens this one.
+fresh; u_p2
+has 'NARRATIVE_DRIFT: CLEAN' "$(audit)" \
+  && ok "'MUST NOT be' / 'used to satisfy …' across a line wrap -> CLEAN" \
+  || bad "a passive of purpose wrapping at 'be' / 'used to' scored as narrative drift"
+
+# --- Assertion 12u3: purpose after an article, WRAPPED -> CLEAN -------------
+fresh; u_p3
+has 'NARRATIVE_DRIFT: CLEAN' "$(audit)" \
+  && ok "'a TEL-denominated total' / 'used to validate …' across a wrap -> CLEAN" \
+  || bad "a reduced relative wrapping onto a line-initial 'used to' scored as drift"
+
+# --- Assertion 12u4-12u8: the habitual past is still DETECTED, per line ------
+fresh; u_h1
+has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/uh1.md:1\]" "$(audit)" \
+  && ok "'The step used to say nothing here' -> FLAGGED at uh1.md:1" \
+  || bad "the habitual past went undetected — the purpose carve-out swallowed Class 1"
+
+# No tense-shift marker anywhere on this line, deliberately: the marker fix reads
+# as the obvious one and this is the seed that refuses it.
+fresh; u_h2
+has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/uh2.md:1\]" "$(audit)" \
+  && ok "'Where the blocks used to sit' (no 'now'/'no longer') -> FLAGGED at uh2.md:1" \
+  || bad "a habitual line carrying no tense-shift marker was acquitted"
+
+fresh; u_h3
+has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/uh3.md:1\]" "$(audit)" \
+  && ok "'This paragraph used to read …' -> FLAGGED at uh3.md:1" \
+  || bad "a habitual line whose object is a quoted span was acquitted"
+
+# Line-initial AND habitual. The previous-line join must not acquit on its own.
+fresh; u_h4
+has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/uh4.md:2\]" "$(audit)" \
+  && ok "a line-initial habitual 'used to exist here is gone' -> FLAGGED at uh4.md:2" \
+  || bad "the previous-line join acquits every line-initial 'used to', purpose or not"
+
+fresh; u_h5
+has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/uh5.md:2\]" "$(audit)" \
+  && ok "'that used to collide with it now sit …' -> FLAGGED at uh5.md:2" \
+  || bad "a habitual line that DOES carry 'now' was acquitted"
+
+# --- Assertion 12u9: one purpose line and one habitual line, SAME FILE -------
+# The arm that proves the predicate decides per LINE and not per FILE. Both
+# clauses are in one file; only the habitual line's number may appear.
+fresh; u_mix
+has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/umix.md:4\]" "$(audit)" \
+  && ok "purpose at umix.md:1 + habitual at umix.md:4 -> FLAGGED naming ONLY line 4" \
+  || bad "a file holding both shapes reported the wrong line set — the predicate is file-scoped"
+
+# --- Assertion 12u9a: the article window stops at a sentence boundary --------
+fresh; u_a
+has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ua.md:1\]" "$(audit)" \
+  && ok "'This is not a gate. The step used to stop here.' -> FLAGGED at ua.md:1" \
+  || bad "an indefinite article in the PREVIOUS sentence acquitted the habitual clause after it"
+
+# --- Assertion 12u9b: a backticked SUBJECT is not a line wrap ----------------
+fresh; u_b
+has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ub.md:2\]" "$(audit)" \
+  && ok "'\`validate-mandatory-rules.sh\` used to run six checks.' -> FLAGGED at ub.md:2" \
+  || bad "a habitual line whose subject is a backticked span was read as a wrap and took its predecessor's verdict"
+
+# --- Assertion 12u9c: the same shape over a predecessor that WOULD acquit ----
+# The discriminating input. 12u9b is FLAGGED under either fall-through rule
+# because its previous line ends in a period; this one is FLAGGED only under the
+# raw-text rule, and it is the seed mutant m7 moves.
+fresh; u_b2
+has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ub2.md:2\]" "$(audit)" \
+  && ok "the same line over a predecessor ending in a bare 'an' -> still FLAGGED at ub2.md:2" \
+  || bad "a blanked prefix fell through to the previous line and borrowed its acquittal"
+
+# --- Assertion 12u9d: a negated passive of purpose -> CLEAN -----------------
+fresh; u_c
+has 'NARRATIVE_DRIFT: CLEAN' "$(audit)" \
+  && ok "'The nonce is not used to reconcile anything.' -> CLEAN (negated passive)" \
+  || bad "a negation between the copula and the participle broke the passive-of-purpose clause"
+
+# ---- MUTANTS: four ways to get this wrong, scored on one combined corpus ----
+# A COPY of the shipping audit, `cmp -s` guarded, pointed at the SAME seeded tree.
+# Each mutant is asserted on the EXACT hit set it produces, so a mutation that
+# moves a cell it does not own fails its own arm rather than passing quietly.
+mkmut() { # <name> <sed script>; 0 = applied, 1 = DID NOT APPLY
+  cp "$AUDIT" "$WORK/$1.pre" || return 1
+  sed "$2" "$WORK/$1.pre" > "$WORK/$1.sh" || return 1
+  cmp -s "$WORK/$1.pre" "$WORK/$1.sh" && return 1
+  return 0
+}
+audit_at() { ( cd "$WORK/t" && bash "$1" 2>&1 ); }
+
+# The mutation guard's own control. Every anchor below is unique in the audit
+# script; this proves a `sed` that matched NOTHING is reported as DID NOT APPLY
+# rather than scored as a mutant that changed no cell.
+if mkmut umx 's/ZZZ_NO_SUCH_ANCHOR_ZZZ/x/'; then
+  bad "the impossible-anchor control APPLIED — mkmut cannot tell a live mutation from a no-op"
+else
+  ok "mutation guard: an impossible anchor reports DID NOT APPLY"
+fi
+
+fresh; u_p1; u_p2; u_p3; u_h1; u_h2; u_h3; u_h4; u_h5; u_a; u_b; u_b2; u_c
+HAB="$TR/uh1.md:1,$TR/uh2.md:1,$TR/uh3.md:1,$TR/uh4.md:2,$TR/uh5.md:2"
+ALLHITS="$TR/ua.md:1,$TR/ub.md:2,$TR/ub2.md:2,$HAB"
+WITHUC="$TR/ua.md:1,$TR/ub.md:2,$TR/ub2.md:2,$TR/uc.md:1,$HAB"
+
+# --- Assertion 12u10: UNMUTATED CONTROL, with a positive conjunct ------------
+# Not "nothing went wrong": the eight habitual lines must be THERE and the four
+# purpose lines must NOT, or a subject replaced by `exit 0` scores every mutant
+# below as a kill.
+has "NARRATIVE_DRIFT: FLAGGED  n=\[$ALLHITS\]" "$(audit)" \
+  && ok "CONTROL: 4 purpose + 8 habitual in one corpus -> exactly the 8 habitual lines" \
+  || bad "the unmutated control did not produce the baseline hit set — every mutant below is unreadable"
+
+# --- Assertion 12u11: m1, the OLD grammar restored --------------------------
+# `used to\b` back inside NARRATIVE, which is what the audit did before the split.
+if mkmut um1 's/|measured:|/|measured:|used to\\b|/'; then
+  has "NARRATIVE_DRIFT: FLAGGED  n=\[$WITHUC,$TR/up1.md:1,$TR/up2.md:2,$TR/up3.md:2\]" "$(audit_at "$WORK/um1.sh")" \
+    && ok "MUTANT m1 (old NARRATIVE grammar) -> all four purpose lines flip to FLAGGED; killed" \
+    || bad "MUTANT m1 restored 'used to' to NARRATIVE and no purpose arm moved — 12u1-12u3 prove nothing"
+else
+  bad "MUTANT m1 DID NOT APPLY — its anchor moved; 12u1-12u3 are unproven"
+fi
+
+# --- Assertion 12u12: m2, the tense-marker wrong fix -------------------------
+# The fix the audit's own comment records as scored and rejected: require
+# "now"/"no longer" on the line. It clears the same purpose sites AND silences
+# every habitual line that does not announce its own tense shift.
+if mkmut um2 's#^            return True$#            return bool(re.search(r"\\bnow\\b|\\btoday\\b|\\bcurrently\\b|no longer", t, re.I))#'; then
+  has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/uh5.md:2\]" "$(audit_at "$WORK/um2.sh")" \
+    && ok "MUTANT m2 (tense marker required) -> seven habitual lines go CLEAN, only 'now' survives; killed" \
+    || bad "MUTANT m2 required a tense-shift marker and the habitual arms did not move — 12u4-12u8 prove nothing"
+else
+  bad "MUTANT m2 DID NOT APPLY — its anchor moved; 12u4-12u8 are unproven"
+fi
+
+# --- Assertion 12u13: m3, the predicate acquits everything -------------------
+# uh5 is what separates m3 from m2: it carries "now", so m2 keeps it and m3 does
+# not. Without that seed the two mutants have one footprint and neither is proven.
+if mkmut um3 's#^            return True$#            return False#'; then
+  has 'NARRATIVE_DRIFT: CLEAN' "$(audit_at "$WORK/um3.sh")" \
+    && ok "MUTANT m3 (habitual_used_to always False) -> every habitual line goes CLEAN; killed" \
+    || bad "MUTANT m3 acquitted every line and Class 1 still flagged — some other pattern is catching the seeds"
+else
+  bad "MUTANT m3 DID NOT APPLY — its anchor moved; 12u4-12u8 are unproven"
+fi
+
+# --- Assertion 12u14: m4, the previous-line join removed --------------------
+# Owns BOTH wrapped purpose seeds: they are one property, and a mutant that moved
+# only one of them would mean the other arm is reading something else.
+if mkmut um4 's#            before = used(prev)#            before = ""#'; then
+  has "NARRATIVE_DRIFT: FLAGGED  n=\[$ALLHITS,$TR/up2.md:2,$TR/up3.md:2\]" "$(audit_at "$WORK/um4.sh")" \
+    && ok "MUTANT m4 (previous-line join removed) -> both WRAPPED purpose lines flip, up1 and uc do not; killed" \
+    || bad "MUTANT m4 dropped the previous-line join and the wrapped arms did not move — 12u2/12u3 prove nothing"
+else
+  bad "MUTANT m4 DID NOT APPLY — its anchor moved; 12u2/12u3 are unproven"
+fi
+
+# --- Assertion 12u15: m5, the WRONG FIX, built rather than described ---------
+# The plausible over-wide fix: acquit on ANY article rather than an indefinite
+# one. It clears all three purpose sites, which is what makes it look finished,
+# and takes "The step used to" and "the blocks used to" with it. Seeding the
+# absent fix proves the arms fire; seeding the WRONG one proves they discriminate.
+if mkmut um5 's#(a|an)#(a|an|the)#'; then
+  has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ub.md:2,$TR/ub2.md:2,$TR/uh3.md:1,$TR/uh4.md:2,$TR/uh5.md:2\]" "$(audit_at "$WORK/um5.sh")" \
+    && ok "MUTANT m5 (definite article acquits too) -> ua, uh1 and uh2 go CLEAN; killed" \
+    || bad "MUTANT m5 widened the article class and no habitual arm moved — the a/an narrowing is unbound"
+else
+  bad "MUTANT m5 DID NOT APPLY — its anchor moved; the article narrowing is unproven"
+fi
+
+# --- Assertion 12u16: m6, the OTHER wrong fix, also built -------------------
+# "The word before it looks like a noun, so this is a reduced relative": both
+# clauses replaced by a lowercase-word test. It fails in BOTH directions at once,
+# which is why it needs seeds on both sides — it FLAGS the wrapped `be` purpose
+# site (`be` is two letters, not a noun) and ACQUITS `The step used to`,
+# `the blocks used to` and `This paragraph used to`, whose preceding words are
+# nouns. Only the seeds whose cue ends in punctuation or in a blank survive it.
+if mkmut um6 $'s#.*am|is|are.*#    r"([a-z]{3,}\\\\s*$)", re.I)#\n/directly|solely/d\n/explicitly|first/d\n/(a|an)/d'; then
+  has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ub.md:2,$TR/ub2.md:2,$TR/uh4.md:2,$TR/up2.md:2\]" "$(audit_at "$WORK/um6.sh")" \
+    && ok "MUTANT m6 (noun-looking token before) -> up2 flips AND uh1/uh2/uh3/ua go CLEAN; killed" \
+    || bad "MUTANT m6 replaced the two clauses with a noun heuristic and nothing moved — the clause split is unbound"
+else
+  bad "MUTANT m6 DID NOT APPLY — its anchor moved; the clause split is unproven"
+fi
+
+# --- Assertion 12u17: m7, the fall-through decided on BLANKED text ----------
+# The state before the raw-text fix: a line whose only prefix is a backticked
+# subject reads as line-initial and borrows the previous line's verdict. It moves
+# exactly one cell, ub2, which is why ub2 had to be seeded — ub is FLAGGED under
+# both rules and could never have shown this.
+if mkmut um7 's#if not text#if not before#'; then
+  has "NARRATIVE_DRIFT: FLAGGED  n=\[$TR/ua.md:1,$TR/ub.md:2,$HAB\]" "$(audit_at "$WORK/um7.sh")" \
+    && ok "MUTANT m7 (fall-through on blanked text) -> ub2 alone goes CLEAN; killed" \
+    || bad "MUTANT m7 restored the blanked-prefix fall-through and no arm moved — 12u9c proves nothing"
+else
+  bad "MUTANT m7 DID NOT APPLY — its anchor moved; 12u9c is unproven"
+fi
+
+# --- Assertion 12u18: m8, the adverb allowance removed ----------------------
+# A copula with a negation between it and the participle is still a passive.
+# Deleting the allowance moves exactly one cell, uc.
+if mkmut um8 $'/directly|solely/d\ns#.*explicitly|first.*#    r"\\\\s*$"#'; then
+  has "NARRATIVE_DRIFT: FLAGGED  n=\[$WITHUC\]" "$(audit_at "$WORK/um8.sh")" \
+    && ok "MUTANT m8 (no adverb between copula and participle) -> uc alone flips to FLAGGED; killed" \
+    || bad "MUTANT m8 removed the adverb allowance and uc did not flip — 12u9d proves nothing"
+else
+  bad "MUTANT m8 DID NOT APPLY — its anchor moved; 12u9d is unproven"
+fi
+
 # ========================= validate-gate-manifest.sh ========================
 
 # --- Assertion 13: SANITY — a consistent manifest resolves ------------------
