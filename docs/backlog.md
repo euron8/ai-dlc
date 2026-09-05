@@ -4106,10 +4106,12 @@ conditions. The guard now asks the sibling `--in-force` after the guarded-root t
 rows on the verdict's `catalog` with a bare bracket counting as `core` only, subtracts the
 covered checks, allows and logs `GATE_REMEDIATION_SUPPRESSED` when nothing remains, and denies
 naming both sets otherwise; every absence fails closed with its status in the reason, including
-a sibling that predates the mode. The sibling costs about 0.66s over the consumer's 389KB
-escalations file, so the answer is cached at `_bmad-output/.gate-remediation-in-force`, keyed on
-the live nonce and the size and mtime of the escalations file, the metrics file and the sibling,
-declared transient. Measured on a read-only copy of the consumer: on its live pass
+a sibling that predates the mode, and an entry whose operator citation the transcript corpus does
+not carry. The sibling costs roughly fifteen times its own small-input control over the consumer's
+398582-byte escalations file, so the verified answer is cached at
+`_bmad-output/.gate-remediation-in-force`, keyed on the live nonce, a DIGEST of the escalations
+file, the size and mtime of the metrics file and the sibling, and a marker recording that the
+citations were verified; declared transient. Measured on a read-only copy of the consumer: on its live pass
 (`implementation-20260905T172547Z`, one FAIL, `16`, covered by `[S308-GATE3-STORY-1]`) the
 installed guard denies and the fixed one allows, against a known-positive pass where both deny.
 The receipt drives the shipped seed on five shapes because a single allow shape cannot separate
