@@ -65,6 +65,173 @@ with open(out, "w", encoding="utf-8") as fh:
     fh.write(json.dumps(doc, indent=2) + "\n")
 PY
 
+# ---- the SUPPRESSED carve-out: escalations and a gate timeline ---------------
+# validate-gate-adjudication.sh asks validate-suppression-lifetime.sh --in-force before it
+# blocks on a per-check FAIL. These are the inputs to that join. Nothing here is hand-listed:
+# X, Y and XPFX are DERIVED from $IDS above, so an escalated set that moves cannot leave this
+# fixture naming a check the gate no longer adjudicates.
+#
+#   X    an escalated id at least two characters long whose FIRST character is ALSO an
+#        escalated id. That property is what makes the prefix case (S11) constructible: an
+#        entry naming XPFX must not cover X, and only a pair in that relation can say so.
+#   Y    an escalated id that is neither a prefix of X nor prefixed BY it, so an entry naming
+#        X covers nothing about Y under any substring rule.
+#   XPFX X's first character, and an escalated id in its own right.
+eval "$(python3 - $IDS <<'PY'
+import sys
+ids = sys.argv[1:]
+s = set(ids)
+cands = sorted((i for i in ids if len(i) > 1 and i[0] in s), key=lambda x: (len(x), x))
+if not cands:
+    sys.stderr.write("FIXTURE STALE: no escalated id has a one-character prefix that is also "
+                     "escalated; the prefix case (S11) cannot be built from this map.\n")
+    sys.exit(2)
+X = cands[0]
+ys = sorted((i for i in ids if i != X and not i.startswith(X) and not X.startswith(i)),
+            key=lambda x: (len(x), x))
+if not ys:
+    sys.stderr.write("FIXTURE STALE: no escalated id is independent of %s.\n" % X)
+    sys.exit(2)
+print("X=%s" % X)
+print("Y=%s" % ys[0])
+print("XPFX=%s" % X[0])
+PY
+)" || { echo "FIXTURE ERROR: could not derive the case ids from the escalated set" >&2; exit 2; }
+[ -n "${X:-}" ] && [ -n "${Y:-}" ] && [ -n "${XPFX:-}" ] || {
+  echo "FIXTURE ERROR: X/Y/XPFX did not derive" >&2; exit 2; }
+
+A0="2026-07-01T00:00:00Z"       # operator authorization on every seeded entry
+mkdir -p "$WORK/esc"
+
+# BOTH JSON SPACINGS, in both timelines. The reference consumer's gate-metrics.jsonl carries
+# `"check":"1"` and `"check": "1"` in roughly equal numbers — the two spellings track which
+# lead session wrote the row. A timeline seeded in one spacing lets a reader that can only
+# parse that spacing score identically to one that reads the whole file.
+emit_unspaced() { # <ts> <check> <verdict>
+  printf '{"v":1,"sprint":401,"gate":"implementation","phase":"a→b","ts":"%s","sha":"deadbeef","catalog":"core","check":"%s","title":"t","verdict":"%s","defect_class":null,"evidence":"e","tok_slice":1}\n' "$1" "$2" "$3"
+}
+emit_spaced() {   # <ts> <check> <verdict>
+  printf '{"v": 1, "sprint": 401, "gate": "implementation", "phase": "a→b", "ts": "%s", "sha": "deadbeef", "catalog": "core", "check": "%s", "title": "t", "verdict": "%s", "defect_class": null, "evidence": "e", "tok_slice": 1}\n' "$1" "$2" "$3"
+}
+
+# BEFORE: two distinct gate events, both EARLIER than the authorization, so `gates_since`
+# counts 0 and a 1-gate suppression is in force. Deliberately not an empty file: with no gate
+# timeline at all the sibling takes a different branch (elapsed=0 without counting), and this
+# fixture would then never exercise the counting one.
+GM_BEFORE="$WORK/gm-before.jsonl"
+{
+  emit_unspaced "2026-06-01T01:00:00Z" "$X" "FAIL"; emit_spaced "2026-06-01T01:00:00Z" "$Y" "PASS"
+  emit_spaced   "2026-06-02T01:00:00Z" "$X" "FAIL"; emit_unspaced "2026-06-02T01:00:00Z" "$Y" "PASS"
+} > "$GM_BEFORE"
+
+# AFTER: two distinct gate events LATER than the authorization, so a 1-gate suppression has
+# elapsed 2 and is out of force.
+GM_AFTER="$WORK/gm-after.jsonl"
+{
+  emit_unspaced "2026-07-02T01:00:00Z" "$X" "FAIL"; emit_spaced "2026-07-02T01:00:00Z" "$Y" "PASS"
+  emit_spaced   "2026-07-03T01:00:00Z" "$X" "FAIL"; emit_unspaced "2026-07-03T01:00:00Z" "$Y" "PASS"
+} > "$GM_AFTER"
+
+# --- the well-formed, in-force suppression naming X in the verdict's own catalog ---
+ESC_INFORCE="$WORK/esc/in-force.md"
+cat > "$ESC_INFORCE" <<EOF
+## [S401 gate — the operator dispositioned this finding] [lead] - ${A0}
+**Status:** SUPPRESSED
+**Suppresses:** [core] ${X} — the check the operator waved through
+**Expires after:** 1 gate
+**Operator authorization:** ${A0} | "proceed past this one, file a backlog item"
+EOF
+
+# --- the same entry, out of force: 1 gate permitted, two recorded since ---
+ESC_EXPIRED="$WORK/esc/expired.md"
+cp "$ESC_INFORCE" "$ESC_EXPIRED"
+
+# --- malformed: no **Operator authorization:** line at all ---
+# Expires after 3 so that a mutant which stops EXCLUDING a malformed entry actually reaches
+# the lifetime test with the two gates in GM_BEFORE... and, having no authorization to count
+# from, finds them all elapsed. Seeded at the top of the permitted range so the mutation's
+# effect is a COVER rather than a second exclusion for a different reason.
+ESC_MALFORMED="$WORK/esc/malformed.md"
+cat > "$ESC_MALFORMED" <<EOF
+## [S401 gate — a suppression with no operator citation] [lead] - ${A0}
+**Status:** SUPPRESSED
+**Suppresses:** [core] ${X} — the check nobody authorized waving through
+**Expires after:** 3 gates
+EOF
+
+# --- the consumer's ORIGINAL shape: the fields under a non-SUPPRESSED status ---
+ESC_DECIDED="$WORK/esc/decided-autonomously.md"
+cat > "$ESC_DECIDED" <<EOF
+## [S401 gate — dispositioned by the lead] [lead] - ${A0}
+**Status:** DECIDED_AUTONOMOUSLY (root cause understood), suppression noted below.
+**Suppresses:** [core] ${X} — the check the lead decided about
+**Expires after:** 2 gates
+**Operator authorization:** ${A0} | "proceed past this one, file a backlog item"
+EOF
+
+# --- a FOREIGN catalog: in force, and about a different catalog's check ${X} ---
+ESC_OTHERCAT="$WORK/esc/other-catalog.md"
+cat > "$ESC_OTHERCAT" <<EOF
+## [S401 gate — an extension's check ${X}] [lead] - ${A0}
+**Status:** SUPPRESSED
+**Suppresses:** [extension:foo] ${X} — an extension check that shares an id with core's
+**Expires after:** 1 gate
+**Operator authorization:** ${A0} | "proceed past this one, file a backlog item"
+EOF
+
+# --- the lenient form the lifetime parser already accepts: no [catalog] prefix ---
+ESC_NOCAT="$WORK/esc/no-catalog.md"
+cat > "$ESC_NOCAT" <<EOF
+## [S401 gate — no catalog prefix written] [lead] - ${A0}
+**Status:** SUPPRESSED
+**Suppresses:** ${X} — the check the operator waved through
+**Expires after:** 1 gate
+**Operator authorization:** ${A0} | "proceed past this one, file a backlog item"
+EOF
+
+# --- a terminal entry whose PROSE names the check and which suppresses nothing ---
+ESC_RESOLVED="$WORK/esc/resolved-prose.md"
+cat > "$ESC_RESOLVED" <<EOF
+## [S401 gate — closed out] [lead] - ${A0}
+**Status:** RESOLVED
+**Operator authorization:** ${A0} | "proceed past this one, file a backlog item"
+
+The gate blocked on Check ${X} and the finding was discussed at length. Check ${X} is
+named here in prose and NOWHERE in a **Suppresses:** field.
+EOF
+
+# --- in force, naming XPFX: a PREFIX of X, and an escalated check in its own right ---
+ESC_PREFIX="$WORK/esc/prefix.md"
+cat > "$ESC_PREFIX" <<EOF
+## [S401 gate — a different, shorter check id] [lead] - ${A0}
+**Status:** SUPPRESSED
+**Suppresses:** [core] ${XPFX} — the check whose id is a prefix of ${X}
+**Expires after:** 1 gate
+**Operator authorization:** ${A0} | "proceed past this one, file a backlog item"
+EOF
+
+# --- a file carrying BOTH: one malformed entry AND one well-formed in-force entry ---
+# Every seeded file above holds a single entry, so no case among them can tell "this entry is
+# excluded" from "this FILE is refused". The sibling reports the malformed one on stderr and
+# still lists the good one; a caller that reads a diagnostic as a refusal, or that folds the
+# sibling's stderr into its rows, loses a carve-out it was granted.
+ESC_MIXED="$WORK/esc/mixed.md"
+cat > "$ESC_MIXED" <<EOF
+## [S401 gate — a suppression with no operator citation] [lead] - ${A0}
+**Status:** SUPPRESSED
+**Suppresses:** [core] ${Y} — the check nobody authorized waving through
+**Expires after:** 2 gates
+
+## [S401 gate — the operator dispositioned this finding] [lead] - ${A0}
+**Status:** SUPPRESSED
+**Suppresses:** [core] ${X} — the check the operator waved through
+**Expires after:** 1 gate
+**Operator authorization:** ${A0} | "proceed past this one, file a backlog item"
+EOF
+
+ESC_MISSING="$WORK/esc/there-is-no-such-file.md"
+[ -e "$ESC_MISSING" ] && { echo "FIXTURE ERROR: the absent-escalations path exists" >&2; exit 2; }
+
 # Hand run.sh everything it needs, so it does not re-resolve the layout.
 cat > "$WORK/env.sh" <<ENV
 VALIDATOR="$VALIDATOR"
@@ -75,6 +242,21 @@ GATE_TYPE="$GATE_TYPE"
 NONCE="$NONCE"
 VERDICT="$VERDICT"
 IDS="$IDS"
+X="$X"
+Y="$Y"
+XPFX="$XPFX"
+GM_BEFORE="$GM_BEFORE"
+GM_AFTER="$GM_AFTER"
+ESC_INFORCE="$ESC_INFORCE"
+ESC_EXPIRED="$ESC_EXPIRED"
+ESC_MALFORMED="$ESC_MALFORMED"
+ESC_DECIDED="$ESC_DECIDED"
+ESC_OTHERCAT="$ESC_OTHERCAT"
+ESC_NOCAT="$ESC_NOCAT"
+ESC_RESOLVED="$ESC_RESOLVED"
+ESC_PREFIX="$ESC_PREFIX"
+ESC_MIXED="$ESC_MIXED"
+ESC_MISSING="$ESC_MISSING"
 ENV
 
 printf '%s\n' "$WORK"
