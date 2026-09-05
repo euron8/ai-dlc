@@ -5019,12 +5019,20 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), THEN REPORT THE THREE UNFILED
-   `PC-S308-*` CANDIDATES AND ASK BEFORE SCOPING BATCH 53.** All three are in the resume block
-   with their status lines and receipts already read: `PC-S308-CHECK-5-DERIVE-STORIES-REMEDY-CANNOT-CREATE-AN-ENTRY`
-   (2026-09-04), `PC-S308-RULE-11-AMBIGUITY-QUESTIONS-HAVE-NO-MANDATED-PRESENTATION-TOOL`
-   (2026-09-04) and the standing `PC-S308-VALIDATE-ADVERSARIAL-CONVERGENCE-SCOPE-GREW-MISFIRES-ON-PASS-1`
-   (2026-09-03). Put a marked recommendation in the question. Batch 52 is SHIPPED — `v0.502.0`
+1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), RANK THE UNFILED CANDIDATES,
+   THEN SCOPE BATCH 53 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
+   instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
+   candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
+   FROM ANOTHER SESSION** — a cross-session message carrying `READ and FOLLOW …`, which is
+   action 9's handoff — do NOT stop to ask: take the item(s) your own sweep and ranking
+   recommend, state that choice and its reason in your FIRST message to the operator, and
+   proceed; the operator can redirect at any ping. **Regardless of who invoked you, batch
+   multiple candidates into one release wherever action 2 allows it.** The three unfiled today
+   are in the resume block with their status lines and receipts already read:
+   `PC-S308-CHECK-5-DERIVE-STORIES-REMEDY-CANNOT-CREATE-AN-ENTRY` (2026-09-04),
+   `PC-S308-RULE-11-AMBIGUITY-QUESTIONS-HAVE-NO-MANDATED-PRESENTATION-TOOL` (2026-09-04) and
+   the standing `PC-S308-VALIDATE-ADVERSARIAL-CONVERGENCE-SCOPE-GREW-MISFIRES-ON-PASS-1`
+   (2026-09-03). Batch 52 is SHIPPED — `v0.502.0`
    at `4dc8d791` (PR #627), `PC-S308-HANDOFF-INTENT-PATTERN-MISSES-TRAILING-TERSE-PHRASING`
    closed as `BL-164` and rotated, no correction release; batch 51 is SHIPPED — `v0.500.0`
    at `2dca4815` (PR #622), `BL-162`, corrected by `v0.501.0` at `e06836ca` (PR #624), `BL-163`;
@@ -5917,11 +5925,34 @@ so no block written before it changes verdict.
    removing it (`retro.md` moves at `v0.455.0`, above the safe stop) and manufactures the
    `commit != skill_commit` state. The gate could not reach that conclusion itself, which is now
    filed as `PC-S340-SAFE-STOP-ACQUITTAL-TESTS-ANCESTRY-NOT-CONTENT`.
-2. **Keep the batch to ONE subsystem.** Take one group or the other, not both.
-   Batch 16 was a deliberate exception the operator scoped, and it is over. **When an exception is
-   granted again, land it the way batch 16 did**: separate commits on ONE release branch, one per
-   candidate, each naming its `PC-` id in its own commit message. Do not squash them.
-3. **Put independent hands on SCOPE, FIXTURE and RECEIPT, every time.** In batch 8 they found
+2. **BATCH MULTIPLE CANDIDATES INTO ONE RELEASE WHEREVER POSSIBLE.** Operator instruction at
+   batch 52, replacing the one-subsystem rule that governed batches 17 through 52. "Possible"
+   is a set of conditions, each of which keeps the candidates SEPARABLE after they ship:
+   - each candidate gets its own fix commit(s) naming NO `PC-` id, its own `BL-` entry with its
+     own receipt scored against its own regressions AND against the other candidates' fixes
+     (a receipt the other fix closes is a pairing to refuse), its own fixture arms and mutants,
+     and its own hands;
+   - the ONE release commit names every closed id verbatim, and the CHANGELOG carries one `###`
+     per id — action 8 governs: `named_absorbed()` reads `VERSION` at the OLDEST commit naming
+     an id, so a per-candidate commit that named its id would report the previous version;
+   - a candidate whose fix touches a BOOTSTRAPPING file (`preclassify.sh`, `apply.sh`,
+     `ledger-reverify.sh`, the update skill) ships ALONE — action 7's hazard is per release, and
+     a wide release multiplies its blast radius;
+   - one PR, one gate, one merge; a correction release names only what it corrects.
+   Batch 16 landed as one commit per candidate each naming its id; that shape predates the
+   batch-43 measurement behind action 8 and is not the pattern any more.
+3. **USE SUBAGENTS GENEROUSLY AND KEEP THE LEAD'S CONTEXT ON PLAN EXECUTION.** Operator
+   instruction at batch 52. Delegate every reading-heavy or corpus-scale job — the sweep's
+   census and the consumer's history, receipt scoring across candidate implementations, the
+   consumer-side differential, a fixture battery, and, when batching, each candidate's
+   implementation in its own worktree — and keep in the lead only what cannot be delegated:
+   the read/write boundary, scoping, collection by content, the release commit, and the
+   operator pings. Every hand gets the boundary sentence (`/Users/n8/git/graph` is READ ONLY),
+   a deliverable in the tree or findings as text, and a model chosen by what a wrong answer
+   would cost. The lead does not read what a hand can summarise, and treats what a hand
+   returns as a check on its own answer rather than as the answer.
+
+   **Put independent hands on SCOPE, FIXTURE and RECEIPT, every time.** In batch 8 they found
    THREE defects in work already committed on the branch; in batch 9 the fixture hand found
    FOUR more live instances of the entry's own defect, and two scope hands independently found
    that the entry's receipt could be closed by prose. Every one returned a WRONG ANSWER rather
