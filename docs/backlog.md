@@ -4189,8 +4189,11 @@ consumer's routed carry-over of its remaining core-prose findings is not moved b
 those are genuine habitual lines, and whether resident prose keeps them is a judgement
 `.claude/rules/resident-context.md` reserves.
 
-Fixture: `core/fixtures/retro-audit-scans/` seeds each shape alone and both in one file, and
-kills the restored-regex, tense-marker, always-false and no-previous-line mutants.
+Fixture: `core/fixtures/retro-audit-scans/` seeds each shape alone and both in one file from
+producer text in both corpora, and kills eight mutants — the restored regex, the tense-marker
+fix, an always-false predicate, the previous-line join removed, any-article acquittal,
+noun-looking-token acquittal, the blanked-text fall-through, and the adverb allowance removed —
+each with a distinct footprint.
 
 verify: sh A="${AUDIT:-core/scripts/audit-rule-files.sh}"; [ -f "$A" ] || A="scripts/ai-dlc/audit-rule-files.sh"; [ -f "$A" ] || exit 9; A="$PWD/$A"; d=$(mktemp -d) || exit 9; trap 'rm -rf "$d"' EXIT; mkdir -p "$d/.claude/rules"; printf 'A health signal used to clear the operation MUST be an absolute probe.\n\nA rule MUST NOT be\nused to satisfy an AC.\n\nWhere the blocks used to sit, write a pointer.\n' > "$d/.claude/rules/x.md"; case "$( cd "$d" && bash "$A" --list 2>/dev/null )" in *".claude/rules/x.md"*) ;; *) exit 9 ;; esac; o=$( cd "$d" && bash "$A" 2>&1 ); case "$o" in *"NARRATIVE_DRIFT: "*) ;; *) exit 9 ;; esac; case "$o" in *"NARRATIVE_DRIFT: FLAGGED  n=[.claude/rules/x.md:6]  "*) exit 0 ;; esac; exit 1
 

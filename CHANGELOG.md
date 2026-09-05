@@ -49,7 +49,8 @@ purpose and scores clean; a line-initial match reads the previous scannable line
 prose wraps exactly there. Measured on both corpora: the distribution's 24 hits lost one, the
 consumer's 26 lost three, every habitual line survived. The filing's tense-shift-marker
 alternative was scored and rejected — it clears the same sites and silences most of the genuine
-ones. `retro-audit-scans` seeds each shape and kills four mutants. `BL-174`.
+ones. `retro-audit-scans` seeds each shape from producer text and kills eight mutants, two of
+them the plausible wrong fixes (acquit on any article; acquit on a noun-looking token). `BL-174`.
 
 ### `PC-S305-GATE-VALIDATION-PREFER-IT-SOFT-LANGUAGE` — `--transcript-dir` is MANDATORY, not preferred
 
