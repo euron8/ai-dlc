@@ -4197,12 +4197,25 @@ the same as here.
 **Stated limits, each measured, none fixed here.** (1) `core/hooks/ai-dlc-pause.sh:67` records
 the first 120 characters of a prompt, so a terse request trailing more than that is invisible to
 key 3 under any pattern; the transcript reader sees the whole message but is blind to a mid-turn
-request (the hook's own header). (2) `[.!?]` is any period: an abbreviation, a decimal or a
-single-letter list marker before the word opens the alternative ("Use a terse word, e.g.
-handoff", "See section 4.2. handoff", "A. resume B. handoff" all score REQUEST, exclusion
-clean). Zero instances in the 3379-row census; a false PENDING costs one blocked Stop with its
-remedy text, a false NOT-PENDING is this entry, and the tightening that excludes them
-(`[A-Za-z]{2,}[.!?]`) also excludes a sentence ending in a number or a version. (3)
+request (the hook's own header). The cut runs the other way too: it manufactures the end anchor
+and can delete the exclusion's object in the same stroke, so a long mention whose 120th
+character falls after a sentence-initial "Handoff" scores PENDING on the row and not on the
+full text. Over the consumer's 872 full request bodies, 249 exceed the cut and exactly one
+request-shaped match is lost to it, a mention. (2) `[.!?]` is any period, and the space class
+after it admits zero characters: an abbreviation, a decimal, a single-letter list marker or an
+abutting token before the word opens the alternative ("Use a terse word, e.g. handoff", "See
+section 4.2. handoff", "A. resume B. handoff", "the file is data.handoff" all score REQUEST,
+exclusion clean). Zero instances in the 3379-row census; a false PENDING costs one blocked Stop
+with its remedy text, a false NOT-PENDING is this entry, and the tightening that excludes them
+(`[A-Za-z]{2,}[.!?]`) also excludes a sentence ending in a number or a version. (7) A quoted
+request that lands on the LAST line of a message is, after the collapse, byte-identical to a
+message ending in that request, and the transcript and answer readers score it PENDING
+("Please add a fixture arm for the row this filing quotes:" followed by the incident row). No
+regex separates a quotation from a request at the end of a field; a heuristic keyed on a
+preceding colon would be a lint with an unmeasured false-positive set, and the cost of the
+false PENDING is one blocked Stop with its remedy text. The middle-line position is closed by
+the collapse; the last-line position is not, and (g5)'s sibling asserts that a last-line
+request BLOCKS. (3)
 `core/skills/ai-dlc/steps/route.md:29-31` restates the ENTRY-TOKEN predicate in prose as the
 WHOLE input, deliberately narrower than the declaration and measured on its own 67-prompt
 corpus; a session whose FIRST input is the terse-trailing form is routed as a new feature there

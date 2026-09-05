@@ -63,14 +63,18 @@ each goes red on exactly its new arm; on an `install.sh` tree the three handoff 
 144 / 21 / 13 ok, as here.
 
 **Stated limits, none fixed here.** `ai-dlc-pause.sh` records the first 120 characters of a
-prompt, so a terse request trailing more than that is invisible to key 3 under any pattern. An
-abbreviation, decimal or single-letter list marker before the word ("e.g. handoff") opens the
-alternative — zero instances in the census, and the tightening that excludes them also excludes
-a sentence ending in a number. `steps/route.md` Step 0 restates the entry-token predicate in
-prose as the whole input, narrower than the declaration and bound by nothing. Two consumer rows
-that OPEN with the word and a comma match nothing, both in sessions that already carried a
-request row. A curly-apostrophe "let's handoff" misses the ASCII `let's` alternative. All six
-are recorded in `BL-164`.
+prompt, so a terse request trailing more than that is invisible to key 3 under any pattern, and
+the same cut can manufacture the end anchor on a long mention. An abbreviation, decimal,
+single-letter list marker or abutting token before the word ("e.g. handoff", "data.handoff")
+opens the alternative — zero instances in the census, and the tightening that excludes them
+also excludes a sentence ending in a number. A quoted request that lands on the LAST line of a
+message is, after the collapse, a message ending in that request, and reads PENDING; no regex
+separates a quotation from a request there, and the cost is one blocked Stop with its remedy
+text. `steps/route.md` Step 0 restates the entry-token predicate in prose as the whole input,
+narrower than the declaration and bound by nothing. Two consumer rows that OPEN with the word
+and a comma match nothing, both in sessions that already carried a request row. A
+curly-apostrophe "let's handoff" misses the ASCII `let's` alternative. All seven are recorded in
+`BL-164`.
 
 ## [0.501.0] - 2026-09-04
 
