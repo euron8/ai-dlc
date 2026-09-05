@@ -27,6 +27,8 @@
 #             or the sprint's gate-log section cannot be isolated)
 #   Check 6: Dev Agent Record compliance — no "lead (self-executed" without waiver
 #             (reads story files + docs/escalations/pending.md)
+#   Check 7: The retro branch is not BEHIND origin/main (SKIP when no origin/main
+#             ref resolves in this checkout)
 #
 # Exit codes:
 #   0  -- all checks pass
@@ -552,6 +554,57 @@ else
 fi
 
 # ============================================================================
+# Check 7: the retro branch is not BEHIND the integration branch
+#   retro.md Step 1 cuts the retro branch from `main` after a fast-forward to
+#   `origin/main`. A squash merge never fast-forwards the sprint's feature
+#   branch, so a retro branch cut from that leftover ref lacks the squash commit
+#   as an ancestor: its PR re-includes the whole sprint diff against a main that
+#   already carries it and reports CONFLICTING at Step 7a, and the recovery is a
+#   hand merge of every file both sides touched.
+#
+#   THE PREDICATE is `git rev-list --count HEAD..origin/main` == 0 -- the same
+#   test sprint-review.md §0 runs before a review. It reads the LOCAL origin/main
+#   ref and does NOT fetch: a validator that reaches the network from inside a
+#   gate hangs a fixture sandbox and a CI runner alike, so the fetch stays in the
+#   step prose (Step 1, and again immediately before this validator at Step 5c).
+#
+#   SKIP, loudly, when origin/main does not resolve. A checkout with no such ref
+#   (a fixture sandbox, a clone with no remote) cannot be measured, and an
+#   unmeasurable branch is not a fresh one -- the summary counts it as a skip.
+#
+#   THE FIRING SET IS WIDER THAN THE DEFECT, on purpose. A branch is behind
+#   origin/main either because it was cut from a leftover feature ref (the
+#   defect) or because it was cut from the trunk and main moved before the PR
+#   opened (benign). Measured over the reference consumer's 118 measurable
+#   merged retro PRs: 16 were behind origin/main at the branch cut, the incident
+#   among them. The benign class is not a defect, but the remedy the failure
+#   names (`git merge origin/main`) is the merge GitHub performs for it at PR
+#   time anyway, so firing on it costs one command; a predicate that separated
+#   the two classes would need the sprint's squash commit, which no artifact
+#   this validator reads records.
+# ============================================================================
+echo "[Check 7] Retro branch not behind origin/main..."
+if ! git rev-parse -q --verify 'refs/remotes/origin/main^{commit}' >/dev/null 2>&1; then
+  echo "  CHECK 7: SKIP (no origin/main ref resolves in this checkout -- branch freshness cannot be measured here)"
+  SKIPPED_CHECKS="$SKIPPED_CHECKS 7"
+else
+  C7_BEHIND="$(git rev-list --count HEAD..origin/main 2>/dev/null)" || C7_BEHIND=""
+  case "$C7_BEHIND" in
+    ''|*[!0-9]*)
+      fail "Check7_BRANCH_BEHIND_MAIN" "git rev-list --count HEAD..origin/main produced no count (got: '${C7_BEHIND}'). The branch's relation to origin/main is undeterminable, which is not a fresh branch."
+      echo "  CHECK 7: FAIL — behind-count undeterminable"
+      ;;
+    0)
+      echo "  CHECK 7: PASS — HEAD contains origin/main"
+      ;;
+    *)
+      fail "Check7_BRANCH_BEHIND_MAIN" "HEAD is ${C7_BEHIND} commit(s) behind origin/main. The retro branch was not cut from the merged trunk (retro.md Step 1: 'git fetch origin main && git checkout main && git merge --ff-only origin/main' before 'git checkout -b'), so its PR will re-include every commit origin/main has that this branch lacks. Remedy: 'git fetch origin main && git merge origin/main' on this branch, resolve in origin/main's favour for every file the retro did not touch, then re-run this validator."
+      echo "  CHECK 7: FAIL — HEAD is ${C7_BEHIND} commit(s) behind origin/main"
+      ;;
+  esac
+fi
+
+# ============================================================================
 # Final summary
 # ============================================================================
 #
@@ -599,12 +652,12 @@ echo ""
 if [ $FAILURES -eq 0 ]; then
   if [ "$SKIPPED_UNIQUE" -eq 0 ]; then
     echo "VALIDATE-MANDATORY-RULES: PASS"
-    echo "  Sprint ${SPRINT_N}: all 6 checks passed"
+    echo "  Sprint ${SPRINT_N}: all 7 checks passed"
   else
     echo "VALIDATE-MANDATORY-RULES: PASS WITH SKIPS"
-    echo "  Sprint ${SPRINT_N}: $((6 - SKIPPED_UNIQUE)) of 6 checks verified; ${SKIPPED_UNIQUE} SKIPPED (check ${SKIPPED_LIST})."
+    echo "  Sprint ${SPRINT_N}: $((7 - SKIPPED_UNIQUE)) of 7 checks verified; ${SKIPPED_UNIQUE} SKIPPED (check ${SKIPPED_LIST})."
     echo "  A skipped check is not a passed one. Each skip is legitimate on its own terms,"
-    echo "  but the verified floor here is $((6 - SKIPPED_UNIQUE)), not 6 -- read the CHECK lines above."
+    echo "  but the verified floor here is $((7 - SKIPPED_UNIQUE)), not 7 -- read the CHECK lines above."
   fi
   exit 0
 else

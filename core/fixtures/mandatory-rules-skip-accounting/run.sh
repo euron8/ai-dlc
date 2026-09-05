@@ -2,11 +2,13 @@
 # mandatory-rules-skip-accounting — a SKIPPED check is not a PASSED check, and the summary
 # line has to be able to tell the reader which it got.
 #
-# THE DEFECT THIS EXISTS TO CATCH. validate-mandatory-rules.sh has six checks and three of
-# them (2, 4, 5) carry legitimate SKIP branches: a consumer on the per-artifact-changelog
-# model ships no validation-cycle-log.md, `validate-retro-prereq.sh` is consumer-provided, and
-# a sprint whose diff base will not resolve has no determinable web/** change set. None of
-# those is a failure. But no SKIP branch touched a counter, and the final line read
+# THE DEFECT THIS EXISTS TO CATCH. validate-mandatory-rules.sh has seven checks and four of
+# them (2, 4, 5, 7) carry legitimate SKIP branches: a consumer on the per-artifact-changelog
+# model ships no validation-cycle-log.md, `validate-retro-prereq.sh` is consumer-provided, a
+# sprint whose diff base will not resolve has no determinable web/** change set, and a
+# checkout with no origin/main ref cannot measure branch freshness (this sandbox mints that
+# ref at the trunk commit, so Check 7 runs its live path and the arms below stay about 2/4/5).
+# None of those is a failure. But no SKIP branch touched a counter, and the final line read
 # `all 6 checks passed` whether six checks ran or three did, on the same exit code 0.
 # Measured on the reference consumer: two checks SKIPped on EVERY sprint from 296 through
 # 302, and `retro.md` accepts this validator on its exit code alone — so seven consecutive
@@ -115,6 +117,10 @@ mkdir -p _bmad-output/planning-artifacts/s900/stories
 printf '# Story 900-1\n\n## Dev Agent Record\n\ndev (delegated) implemented this.\n' \
   > _bmad-output/planning-artifacts/s900/stories/story-1-fixture.md
 git add -A && git commit -q -m "Sprint 900 web change"
+# Check 7 compares HEAD against the local origin/main ref. This sandbox has no remote, so
+# the ref is minted at the trunk commit the retro branch is cut from: Check 7 then runs its
+# live PASS path rather than its SKIP path, and the accounting arms stay about checks 2/4/5.
+git update-ref refs/remotes/origin/main HEAD
 git checkout -q -b ai-dlc/retro/sprint-900
 
 printf '## Gate Log: Sprint 900\n\n| Gate | Result | Notes |\n|------|--------|-------|\n| Deploy Status Report | PASS | USER-CONFIRMED visual verification captured |\n' \
@@ -156,29 +162,29 @@ battery() {
   # A — every input present: six checks run, and the sentence says so.
   anchors_on; cyclelog_on; prereq_on "$D"; evidence_rc "$D" 0
   run
-  if [ "$rc" -eq 0 ] && [ "$(summary)" = "Sprint 900: all 6 checks passed" ]; then t="A:6"; else t="A:[$(summary)]/$rc"; fi
+  if [ "$rc" -eq 0 ] && [ "$(summary)" = "Sprint 900: all 7 checks passed" ]; then t="A:6"; else t="A:[$(summary)]/$rc"; fi
 
   # B — no validation-cycle-log.md: Check 2 alone skips.
   cyclelog_off
   run
-  if [ "$rc" -eq 0 ] && [ "$(summary)" = "Sprint 900: 5 of 6 checks verified; 1 SKIPPED (check 2)." ]; then t="$t B:5-2"; else t="$t B:[$(summary)]/$rc"; fi
+  if [ "$rc" -eq 0 ] && [ "$(summary)" = "Sprint 900: 6 of 7 checks verified; 1 SKIPPED (check 2)." ]; then t="$t B:5-2"; else t="$t B:[$(summary)]/$rc"; fi
   cyclelog_on
 
   # C — no validate-retro-prereq.sh sibling: Check 4 alone skips.
   prereq_off "$D"
   run
-  if [ "$rc" -eq 0 ] && [ "$(summary)" = "Sprint 900: 5 of 6 checks verified; 1 SKIPPED (check 4)." ]; then t="$t C:5-4"; else t="$t C:[$(summary)]/$rc"; fi
+  if [ "$rc" -eq 0 ] && [ "$(summary)" = "Sprint 900: 6 of 7 checks verified; 1 SKIPPED (check 4)." ]; then t="$t C:5-4"; else t="$t C:[$(summary)]/$rc"; fi
   prereq_on "$D"
 
   # D — no audit-anchors.md: Check 5's diff base will not resolve, so Check 5 alone skips.
   anchors_off
   run
-  if [ "$rc" -eq 0 ] && [ "$(summary)" = "Sprint 900: 5 of 6 checks verified; 1 SKIPPED (check 5)." ]; then t="$t D:5-5"; else t="$t D:[$(summary)]/$rc"; fi
+  if [ "$rc" -eq 0 ] && [ "$(summary)" = "Sprint 900: 6 of 7 checks verified; 1 SKIPPED (check 5)." ]; then t="$t D:5-5"; else t="$t D:[$(summary)]/$rc"; fi
 
   # E — the reference consumer's real shape: three inputs absent at once.
   cyclelog_off; prereq_off "$D"
   run
-  if [ "$rc" -eq 0 ] && [ "$(summary)" = "Sprint 900: 3 of 6 checks verified; 3 SKIPPED (check 2 4 5)." ]; then t="$t E:3-245"; else t="$t E:[$(summary)]/$rc"; fi
+  if [ "$rc" -eq 0 ] && [ "$(summary)" = "Sprint 900: 4 of 7 checks verified; 3 SKIPPED (check 2 4 5)." ]; then t="$t E:3-245"; else t="$t E:[$(summary)]/$rc"; fi
 
   # F — a skip AND a real failure. The failure has to win, on wording and on exit code, or the
   #     accounting has bought a nicer sentence at the cost of the verdict. This is also the
@@ -198,7 +204,7 @@ EXPECTED="A:6 B:5-2 C:5-4 D:5-5 E:3-245 F:fail"
 toolchain "$WORK/bin" "$VMR"
 GOT="$(battery "$WORK/bin")"
 if [ "$GOT" = "$EXPECTED" ]; then
-  ok "all six arms: zero skips says 'all 6 checks passed', each of checks 2/4/5 skipping alone names ITSELF and reports a floor of 5, three at once reports a floor of 3, and a real failure still FAILs at rc=1"
+  ok "all six arms: zero skips says 'all 7 checks passed', each of checks 2/4/5 skipping alone names ITSELF and reports a floor of 5, three at once reports a floor of 3, and a real failure still FAILs at rc=1"
 else
   bad "battery: expected [$EXPECTED], got [$GOT]"
 fi
@@ -210,7 +216,7 @@ cyclelog_off; anchors_on; prereq_on "$WORK/bin"; evidence_rc "$WORK/bin" 0
 OUT="$( cd "$P" && bash "$WORK/bin/validate-mandatory-rules.sh" 900 2>&1 )"; RC=$?
 if [ "$RC" -eq 0 ] && grep -q '^VALIDATE-MANDATORY-RULES: PASS WITH SKIPS$' <<<"$OUT" \
    && grep -q 'A skipped check is not a passed one' <<<"$OUT" \
-   && grep -q 'the verified floor here is 5, not 6' <<<"$OUT"; then
+   && grep -q 'the verified floor here is 6, not 7' <<<"$OUT"; then
   ok "a skipping run gets its own headline (PASS WITH SKIPS), names the floor, and still exits 0 — a skip is legitimate and is not blocked"
 else
   bad "the skipping run did not carry the distinct headline and floor — rc=$RC, got: $OUT"
@@ -276,17 +282,17 @@ mutate zeroskipbug \
 # arm where it skips at all.
 mutate c2counter \
   's@^  SKIPPED_CHECKS="\$SKIPPED_CHECKS 2"$@  :@' \
-  'A:6 B:[Sprint 900: all 6 checks passed]/0 C:5-4 D:5-5 E:[Sprint 900: 4 of 6 checks verified; 2 SKIPPED (check 4 5).]/0 F:fail' \
-  "not counting Check 2's skip returns its arm to 'all 6 checks passed' and under-reports the three-skip run as two"
+  'A:6 B:[Sprint 900: all 7 checks passed]/0 C:5-4 D:5-5 E:[Sprint 900: 5 of 7 checks verified; 2 SKIPPED (check 4 5).]/0 F:fail' \
+  "not counting Check 2's skip returns its arm to 'all 7 checks passed' and under-reports the three-skip run as two"
 
 mutate c4counter \
   's@^  SKIPPED_CHECKS="\$SKIPPED_CHECKS 4"$@  :@' \
-  'A:6 B:5-2 C:[Sprint 900: all 6 checks passed]/0 D:5-5 E:[Sprint 900: 4 of 6 checks verified; 2 SKIPPED (check 2 5).]/0 F:fail' \
+  'A:6 B:5-2 C:[Sprint 900: all 7 checks passed]/0 D:5-5 E:[Sprint 900: 5 of 7 checks verified; 2 SKIPPED (check 2 5).]/0 F:fail' \
   "not counting Check 4's skip hides the exact skip the reference consumer takes on every sprint"
 
 mutate c5counter \
   's@^  SKIPPED_CHECKS="\$SKIPPED_CHECKS 5"$@  :@' \
-  'A:6 B:5-2 C:5-4 D:[Sprint 900: all 6 checks passed]/0 E:[Sprint 900: 4 of 6 checks verified; 2 SKIPPED (check 2 4).]/0 F:fail' \
+  'A:6 B:5-2 C:5-4 D:[Sprint 900: all 7 checks passed]/0 E:[Sprint 900: 5 of 7 checks verified; 2 SKIPPED (check 2 4).]/0 F:fail' \
   "not counting Check 5's skip returns the unresolvable-diff-base run to a full pass"
 
 # The branch itself. With it always taking the zero-skip road, every counter above still runs
@@ -294,7 +300,7 @@ mutate c5counter \
 # is about, so it must move every skipping arm and neither A nor F.
 mutate zerobranch \
   's@^  if \[ "\$SKIPPED_UNIQUE" -eq 0 \]; then$@  if true; then@' \
-  'A:6 B:[Sprint 900: all 6 checks passed]/0 C:[Sprint 900: all 6 checks passed]/0 D:[Sprint 900: all 6 checks passed]/0 E:[Sprint 900: all 6 checks passed]/0 F:fail' \
+  'A:6 B:[Sprint 900: all 7 checks passed]/0 C:[Sprint 900: all 7 checks passed]/0 D:[Sprint 900: all 7 checks passed]/0 E:[Sprint 900: all 7 checks passed]/0 F:fail' \
   "forcing the zero-skip road restores the pre-fix summary on all four skipping arms and leaves the other two alone"
 
 # The failure road. The accounting sits inside the FAILURES==0 branch, and a mutant that lets a

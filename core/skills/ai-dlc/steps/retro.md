@@ -15,12 +15,29 @@ a chance to comment or ask questions before it closes.
 
 ### 1. Context Loading
 
-Create the retro branch using the canonical name that
-`scripts/ai-dlc/validate-mandatory-rules.sh` expects:
+Land on the merged trunk FIRST, then cut the retro branch from it, using the
+canonical name that `scripts/ai-dlc/validate-mandatory-rules.sh` expects:
 
 ```bash
+git fetch origin main && git checkout main && git merge --ff-only origin/main
+git rev-list --count HEAD..origin/main   # MUST be 0
 git checkout -b ai-dlc/retro/sprint-<N>
 ```
+
+**The retro branch MUST be cut from `main` at `origin/main`, never from
+whatever ref happens to be checked out.** A squash merge never fast-forwards
+the sprint's feature branch, so a retro branch cut from that leftover branch
+lacks the squash commit as an ancestor: its PR re-includes the whole sprint
+diff against a `main` that already carries it and reports CONFLICTING at
+Step 7a. If the fast-forward refuses because local `main` holds commits
+`origin/main` lacks, STOP and resolve that before branching. Step 5c's
+Check 7 fails a retro branch that is behind `origin/main`.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a retro PR that carries
+the sprint's diff a second time and cannot merge. False-positive cost: one
+`git fetch` per retro; the count is 0 in the steady state. Removal condition:
+retire only if branch creation is itself guarded so that a retro branch cannot
+be cut from a ref other than the merged trunk.
 
 The branch name MUST contain `sprint-<N>` (literal word "sprint"
 followed by the sprint number). Abbreviated forms (`s<N>`,
@@ -897,13 +914,16 @@ core-layer-immutability).
    if it is not accessible in the conversation (common after compact),
    write `tool_use_id: NOT_ACCESSIBLE`. A fabricated id is a forged block.
 
-3. **Mandatory rules validation.** Run:
+3. **Mandatory rules validation.** Run `git fetch origin main`, then:
    `scripts/ai-dlc/validate-mandatory-rules.sh <N>` (where N is the sprint
    number). It runs `validate-retro-evidence.sh` (Check 1) and inline
-   Checks 3/5/6; Checks 2 (`validate-cycle-commits.sh`) and 4
+   Checks 3/5/6/7; Checks 2 (`validate-cycle-commits.sh`) and 4
    (`validate-retro-prereq.sh`) are consumer-provided and SKIP when their
    sibling script is absent from core. Check 3 reads the envelope you closed
-   in the Close-Out Sweep above via `sprint-status.sh close`.
+   in the Close-Out Sweep above via `sprint-status.sh close`. Check 7 reads
+   the local `origin/main` ref — which is why the fetch comes first — and
+   fails a retro branch that is behind it (Step 1 is where the branch is cut
+   from the merged trunk).
    MUST exit 0. If it fails, fix the issues before proceeding to Step 6.
 
 4. **Audit-anchor schema validation.** Run

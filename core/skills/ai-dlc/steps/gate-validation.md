@@ -327,7 +327,8 @@ genuine operator message **FAILS**. If you made the call yourself, its status is
 **closed** if neither flag is given — a forgotten flag cannot silently
 disarm the check.
 
-**Pass `--transcript-dir` too, and prefer it.** A sprint spans sessions: an
+**Pass `--transcript-dir` too. It is MANDATORY: `--transcript` alone is not an
+acceptable invocation of this check.** A sprint spans sessions: an
 escalation adjudicated on Monday is re-gated on Friday, and `transcript_path`
 is always the session ASKING permission, never the one the operator spoke in.
 Checking one file therefore rejects adjudications that genuinely happened — and
@@ -1648,7 +1649,8 @@ Each arm emits its own named failure
 with the offending pass and the concrete counts — `err "C -- DIVERGENCE" "<file> declares
 findings_critical_prior_scope=N but ..."` — so the remedy arrives with the verdict and is
 not restated here. Arm F is why `--transcript` is mandatory.
-**Pass `--transcript-dir` too, and prefer it.** A resolution record OUTLIVES the session
+**Pass `--transcript-dir` too. It is MANDATORY: `--transcript` alone is not an acceptable
+invocation of this check.** A resolution record OUTLIVES the session
 that wrote it, while `transcript_path` is always the session ASKING permission — never the
 one in which the operator spoke. Checking one file made every record unverifiable across a
 handoff, `/clear` or auto-compact: the citation reported NOMATCH, the record stopped
