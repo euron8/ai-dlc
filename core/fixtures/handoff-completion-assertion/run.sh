@@ -273,11 +273,16 @@ P_RESUME="/ai-dlc resume"
 # THE TERSE REQUEST AS THE FINAL SENTENCE OF A LONGER MESSAGE. Producer-derived: this is the
 # reference consumer's own `- Prompt (first 120 chars):` row, verbatim, from the episode filed
 # as PC-S308-HANDOFF-INTENT-PATTERN-MISSES-TRAILING-TERSE-PHRASING. The standalone alternative
-# is anchored to the whole field and cannot see it. The near-miss is also a real consumer row
-# (apostrophe straightened): the word trails a VERB with no sentence boundary before it, and
-# on the consumer's full history that shape is a question or a denial five times in fifteen.
+# is anchored to the whole field and cannot see it. The near-miss is a real consumer row too,
+# VERBATIM and therefore carrying the operator's CURLY apostrophe: the word trails a VERB with
+# no sentence boundary before it, and on the consumer's full history that shape is a question
+# or a denial five times in fifteen. The curly form is not decoration -- the row travels
+# through the log writer, the awk field extractor and the intent grep, and a multibyte
+# character is the class of input a bracket class silently mis-reads. Straightened, the seed
+# exercises none of that; `answer-handoff-routing` carries the straightened spelling, so the
+# two channels seed one shape apart rather than converging on the same bytes.
 P_TERSE="I'm solving this issue. handoff."
-P_TERSE_NEAR="I did not request handoff"
+P_TERSE_NEAR="I didn’t request handoff"
 
 LG="$ROOT/logs/log.md"
 
@@ -1358,6 +1363,22 @@ else
   SCHEMA="$_m25_saved"
   [ "$r" = block ] && ok "  control [m25]: the bare word still BLOCKS under the same copy — it removed one alternative, not key 3" \
                    || bad "MUTANT TOO BROAD [m25]: the bare word stopped blocking too ($r) — the copy disabled the vocabulary outright and (g4)'s kill is unattributable"
+  # AND THE SAME COPY THROUGH THE TRANSCRIPT CHANNEL. The control above drives KEY 3 and is
+  # blind to the other reader, while the transcript kill is ALLOW-shaped -- so a hook whose
+  # transcript arm is dead satisfies that cell and the fixture prints "one declaration, two
+  # readers" over a single reader. MEASURED: with the transcript arm's intent grep replaced by
+  # `false` in a copy of ai-dlc-continue.sh, the on-disk control still passed and the
+  # transcript cell still scored a kill. This arm is PRESENCE-shaped in that channel, on the
+  # bare word the mutation does not touch, so the ALLOW above can only be the mutation.
+  T_BARE_NOBLK="$ROOT/t_bare_noblk.jsonl"
+  jq -nc --arg u "$P_BARE" '{message:{role:"user",content:$u}}' > "$T_BARE_NOBLK"
+  jq -nc --arg a "Done. Everything is committed and the snapshot is updated." '{message:{role:"assistant",content:$a}}' >> "$T_BARE_NOBLK"
+  dsetup
+  SCHEMA="$MUT_SCHEMA"
+  r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_BARE_NOBLK")")"
+  SCHEMA="$_m25_saved"
+  [ "$r" = block ] && ok "  control [m25] through the TRANSCRIPT: the bare word as the last user turn still BLOCKS under the same copy — that reader is alive, so its ALLOW above is the mutation and not a dead channel" \
+                   || bad "MUTANT HARNESS BROKEN [m25]: the transcript reader did not block the bare word either ($r) — it is not reading, and the transcript kill above is unreadable"
 fi
 
 # --- ai-dlc-recover.sh: the override ------------------------------------------------------
