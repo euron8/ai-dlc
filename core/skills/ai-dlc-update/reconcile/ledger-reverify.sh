@@ -1222,6 +1222,19 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # distribution's own `scripts/backlog-reverify.sh` made the same choice for its `has` and
       # `lacks` verbs. The cost is stated in the row: an anchor that genuinely contains a
       # backslash is re-anchored on a backslash-free neighbour or written as `verify: sh`.
+      #
+      # THE PATH FIELD IS HELD TO THE SAME RULE, AND FOR A WORSE REASON. A markdown-escaped path
+      # (`route\_notes.md`) resolves at neither ref, so it falls to the basename fallback below,
+      # whose `awk -v` strips one level of escaping -- and the escaped path then silently resolves
+      # to the real file and produces a verdict byte-identical to a correctly spelled one. The
+      # anchor guard refuses to guess; a path guard that guessed beside it would close live
+      # entries. Refused first, so the fallback never sees a backslash.
+      case "$path" in
+        *\\*)
+          emit NEEDS-REVIEW "$label" "unresolved: the path '$path' contains a backslash, which this grammar does not interpret. Paths are matched literally against the tree at theirs; a markdown-escaped underscore or dot resolves nowhere directly and would otherwise be guessed at by basename. Write the path bare."
+          continue
+          ;;
+      esac
       case "$sub" in
         *\\*)
           emit NEEDS-REVIEW "$label" "unresolved: the anchor \"$sub\" contains a backslash, which this grammar does not interpret. Substrings are matched literally, so a markdown-escaped backtick or quote is searched for WITH its backslash, is found at neither ref, and the entry reads vacuous or still-live forever whatever upstream did. Write backticks and quotes bare inside the double quotes. If the text you mean really contains a backslash, anchor on a backslash-free neighbour or write the predicate as 'verify: sh'."
