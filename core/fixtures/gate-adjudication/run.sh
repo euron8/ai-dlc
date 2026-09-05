@@ -371,6 +371,46 @@ else
   bad "S13: a malformed entry elsewhere in the file cost the well-formed entry its carve-out (rc=$RC) — a diagnostic is being read as a refusal, or the sibling's stderr is being parsed as rows"
 fi
 
+# --- S14: the lifetime cannot be COUNTED → exit 1 --------------------------
+# The same expired entry as S3, with the timeline pointed at a file that is not there. Both
+# states arrive at the sibling as GATES_N=0, and reading that as "nothing has elapsed" made an
+# expired suppression in force from any cwd where the metrics did not resolve — a fail-OPEN
+# reachable by a typo in one environment variable. The rows become gate passage, so the query
+# must decline exactly where the lifetime arm declines.
+restore; fail_on "$X"
+runx "$ESC_EXPIRED" "$GM_MISSING"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "NOT listed in force" && has "gates_recorded=NONE"; then
+  ok "S14: an entry whose lifetime cannot be counted (no metrics file found) is NOT in force → exit 1, and the sibling says why"
+else
+  bad "S14: an unmeasurable lifetime was read as a licence (rc=$RC) — an expired suppression is in force from any cwd where the timeline does not resolve"
+fi
+
+# --- S15: the FRESH CONSUMER control → exit 0 ------------------------------
+# The ALLOW twin of S14, one property apart: the metrics file EXISTS and records no gate. That
+# is a consumer that has genuinely run none yet, and its fresh suppression is in force at 0
+# elapsed. Without this case S14 is satisfied by a guard that simply refuses every suppression
+# whenever GATES_N is 0, which would wedge every new consumer's first gate.
+restore; fail_on "$X"
+runx "$ESC_INFORCE" "$GM_EMPTY"
+if [ "$RC" -eq 0 ] && has "$SUPP_LINE"; then
+  ok "S15: an EXISTING but empty gate timeline is a consumer with no gate yet, not an unreadable one → exit 0"
+else
+  bad "S15: a fresh consumer's first suppression was refused because its timeline is empty (rc=$RC) — 'no gate recorded' and 'no timeline found' are being treated as one state"
+fi
+
+# --- S16: an all-PASS verdict does not ASK the sibling ---------------------
+# The parse is hundreds of KB on a real consumer and a verdict with no FAIL has nothing to
+# cover. The absence of the sibling's summary line is the only observable that says the query
+# was skipped rather than asked and answered empty; S10 already holds the exit and the summary
+# line, so this arm owns the skip alone.
+restore
+runx "$ESC_INFORCE" "$GM_BEFORE"
+if [ "$RC" -eq 0 ] && has "all PASS)" && ! has "IN-FORCE:"; then
+  ok "S16: an all-PASS verdict skips the in-force query entirely → exit 0 and no IN-FORCE: line"
+else
+  bad "S16: the sibling was asked on a verdict with no FAIL to cover (rc=$RC) — every all-PASS gate pays a parse of the whole escalations file"
+fi
+
 # --- restore, once more, after the carve-out arms ---------------------------
 restore
 run "$VERDICT"

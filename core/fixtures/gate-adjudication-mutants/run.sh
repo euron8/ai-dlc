@@ -3,7 +3,7 @@
 # --in-force query in validate-suppression-lifetime.sh that owns its predicate, scored through
 # the SHIPPED `gate-adjudication` fixture.
 #
-# WHY A BATTERY AND NOT MORE ARMS. Cases S2–S11 of that fixture are, in substance,
+# WHY A BATTERY AND NOT MORE ARMS. Cases S2–S16 of that fixture are, in substance,
 # ABSENCE-shaped: each claims the carve-out does NOT fire for an expired entry, a malformed
 # one, a foreign catalog, a prose mention, a prefix of the failing id. A both-directions
 # control establishes that a check discriminates between two inputs; only a mutant establishes
@@ -205,7 +205,7 @@ score "M0 control (unmutated)" validate-gate-adjudication.sh "" \
 # block text offers no reason, because as far as the caller knows there was nothing to apply.
 # --------------------------------------------------------------------------
 score "m1 caller never asks the sibling (rows blanked)" validate-gate-adjudication.sh \
-  "S1 S2b S6-idonly S13" \
+  "S1 S2b S6-idonly S13 S15" \
   '        if [ "$supp_rc" -eq 0 ]; then
             GA_IN_FORCE_STATUS="ok:$ESC"' \
   '        if [ "$supp_rc" -eq 0 ]; then
@@ -358,7 +358,7 @@ score "m8 sibling refuses the file when any entry drew a diagnostic" \
 # --------------------------------------------------------------------------
 score "m9 caller folds the sibling's stderr into its rows" \
   validate-gate-adjudication.sh \
-  "S3 S4 S5 S6-mismatch S8 S9 S11 S12 S13" \
+  "S3 S4 S5 S6-mismatch S8 S9 S11 S12 S13 S14" \
   '            GA_IN_FORCE="$(bash "$SUPP_DIR/validate-suppression-lifetime.sh" --in-force \
                 --escalations "$ESC" --enforcement-map "$MAP" --gate-metrics "$AI_DLC_GATE_METRICS")"' \
   '            GA_IN_FORCE="$(bash "$SUPP_DIR/validate-suppression-lifetime.sh" --in-force \
@@ -369,18 +369,56 @@ score "m9 caller folds the sibling's stderr into its rows" \
   one and worse: a stderr line became a ROW, and the parser's five-field guard is not holding."
 
 # --------------------------------------------------------------------------
+# m12 — the SIBLING drops its unresolved-timeline guard, so GATES_N=0 means "nothing has
+# elapsed" again whatever produced the zero. This is the shipped fail-OPEN it was written to
+# close: an expired suppression back in force from any cwd where the metrics did not resolve,
+# or from one typo in AI_DLC_GATE_METRICS. S15 must NOT move — the guard keys on the FILE, not
+# on the gate count, and a guard keyed on the count would wedge every fresh consumer.
+# --------------------------------------------------------------------------
+score "m12 sibling reads an unresolvable timeline as nothing elapsed" \
+  validate-suppression-lifetime.sh "S14" \
+  '        if [ -z "$GATE_METRICS" ] || [ ! -f "$GATE_METRICS" ]; then
+          unresolved_n=$((unresolved_n + 1))
+          echo "NOTE: entry '"'"'$supp'"'"' -- NOT listed in force: no gate-metrics.jsonl was found, so" >&2
+          echo "      its lifetime cannot be counted. Pass --gate-metrics <file> or run from the" >&2
+          echo "      project root. A lifetime that cannot be counted is not a licence." >&2
+          continue
+        fi
+' \
+  '' \
+  "An entry whose lifetime nobody can count is listed as in force and the gate adopts it. S14
+  owns this alone: every other case either resolves its timeline or is excluded earlier, and
+  S15 proves the guard did not simply refuse everything with an empty gate count."
+
+# --------------------------------------------------------------------------
+# m13 — the CALLER drops the all-PASS pre-test and asks the sibling on every verdict. The
+# behaviour is unchanged in every direction that decides anything, which is exactly why it
+# needs a mutant: the only observable is the sibling's summary line APPEARING on a gate that
+# had nothing to cover, and no exit code anywhere moves.
+# --------------------------------------------------------------------------
+score "m13 caller asks the sibling on a verdict with no FAIL" \
+  validate-gate-adjudication.sh "S16" \
+  '    if [ ! -f "$VERDICT_PATH" ] || ! grep -q '"'"'"FAIL"'"'"' "$VERDICT_PATH"; then
+        GA_IN_FORCE_STATUS="not-needed:no FAIL token in the verdict"
+    elif [ ! -f "$ESC" ]; then' \
+  '    if [ ! -f "$ESC" ]; then' \
+  "Every all-PASS gate pays a parse of the whole escalations file again — hundreds of KB on the
+  reference consumer, on the common path. S10 cannot see it: the exit and the summary line are
+  identical either way, which is what makes the skip a property only S16 asserts."
+
+# --------------------------------------------------------------------------
 # m10 — the SIBLING emits nothing. The question `.claude/rules/fixture-mutants.md` puts to every
-# new arm: would this pass against a program that never ran? Eleven of the fifteen carve-out
+# new arm: would this pass against a program that never ran? Twelve of the eighteen carve-out
 # cases expect exit 1, which is exactly what a gate gets when the predicate it asks is a stub —
-# so on exit codes alone this mutant would score eleven survivals. The set below is the answer:
-# it is twelve cases wide because every one of them demands a TOKEN the sibling is the only
+# so on exit codes alone this mutant would score twelve survivals. The set below is the answer:
+# it is fourteen cases wide because every one of them demands a TOKEN the sibling is the only
 # source of (`in_force=`, the malformed diagnostic, the misclassified-fields diagnostic, the
 # terminal-naming diagnostic, the SUPPRESSED line the rows produce). S2, S7 and S10 survive and
 # should: S2 and S10 assert the carve-out stayed OUT of the way, and S7's absent file means the
 # sibling is never invoked at all.
 # --------------------------------------------------------------------------
 score "m10 sibling replaced by 'exit 0'" validate-suppression-lifetime.sh \
-  "S1 S2b S3 S4 S5 S6-idonly S6-mismatch S8 S9 S11 S12 S13" "" "" \
+  "S1 S2b S3 S4 S5 S6-idonly S6-mismatch S8 S9 S11 S12 S13 S14 S15" "" "" \
   "A sibling that emits nothing and exits 0 satisfied a case, which means that case is
   asserting an ABSENCE and would certify a predicate that never ran."
 
@@ -401,8 +439,8 @@ score "m11 caller replaced by 'exit 0'" validate-gate-adjudication.sh NOPASS "" 
 # The kill count itself. A battery whose mutants all applied and killed nothing reports zero
 # failures, which is byte-identical to a battery that worked.
 # --------------------------------------------------------------------------
-if [ "$SCORED" -lt 12 ]; then
-  note_fail "only $SCORED mutant(s) were scored; this battery declares 12. A mutant that never
+if [ "$SCORED" -lt 14 ]; then
+  note_fail "only $SCORED mutant(s) were scored; this battery declares 14. A mutant that never
   ran cannot have been survived or killed."
 fi
 

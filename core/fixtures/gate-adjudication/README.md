@@ -19,7 +19,7 @@ holes this fixture proves are closed:
 - a **stale** verdict whose `gate_nonce` does not match its path (the freshness anchor);
 - an absent **`gate_series_id`** (a pass invisible to `--series` and to the stall rung).
 
-## The SUPPRESSED carve-out (S1–S13)
+## The SUPPRESSED carve-out (S1–S16)
 
 A FAIL under an operator's in-force `SUPPRESSED` entry does not block, and the predicate is
 asked of `validate-suppression-lifetime.sh --in-force` rather than restated here. Every way of
@@ -45,6 +45,11 @@ writing that carve-out too widely reopens something worse, so each hole gets its
 - **S13** one malformed entry beside one well-formed in-force entry, in the SAME file → exit 0
   with the SUPPRESSED line. Every other case's file holds a single entry, so only this one can
   tell "this ENTRY is excluded" from "this FILE is refused".
+- **S14** the expired entry with the timeline pointed at a MISSING file → exit 1. A lifetime
+  that cannot be counted is not a licence.
+- **S15** its ALLOW twin: an EXISTING but empty timeline is a consumer that has run no gate
+  yet, and its fresh suppression is in force at 0 elapsed → exit 0.
+- **S16** an all-PASS verdict does not ASK the sibling at all — no `IN-FORCE:` line on stderr.
 
 Each case asserts a TOKEN as well as an exit code — the `SUPPRESSED —` line, the block's
 `no-escalations-file`, or the sibling's own `in_force=` count — because an exit code alone
@@ -53,8 +58,8 @@ Both channels (`AI_DLC_ESCALATIONS`, `AI_DLC_GATE_METRICS`) are set explicitly o
 consumer's real `docs/escalations/pending.md` holds real in-force suppressions, and a case that
 inherits the default is adjudicated against whatever that consumer suppressed this week.
 
-`core/fixtures/gate-adjudication-mutants/` scores these cases against eleven wrong fixes and an
-unmutated control, and asserts for each one exactly which cases go red.
+`core/fixtures/gate-adjudication-mutants/` scores these cases against thirteen wrong fixes and
+an unmutated control, and asserts for each one exactly which cases go red.
 
 ## Files
 

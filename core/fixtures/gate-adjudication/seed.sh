@@ -132,6 +132,16 @@ GM_AFTER="$WORK/gm-after.jsonl"
   emit_spaced   "2026-07-03T01:00:00Z" "$X" "FAIL"; emit_unspaced "2026-07-03T01:00:00Z" "$Y" "PASS"
 } > "$GM_AFTER"
 
+# EMPTY vs ABSENT, and they are not the same state. A metrics file that EXISTS and records no
+# gate is a consumer that has genuinely run no gate yet, and a fresh suppression there is in
+# force at 0 elapsed. A metrics file that could not be FOUND is a lifetime that cannot be
+# counted, and an entry whose lifetime cannot be counted is not a licence. Both produce
+# GATES_N=0, so only a case per state can tell the two readings apart.
+GM_EMPTY="$WORK/gm-empty.jsonl"
+: > "$GM_EMPTY"
+GM_MISSING="$WORK/gm-there-is-no-such-file.jsonl"
+[ -e "$GM_MISSING" ] && { echo "FIXTURE ERROR: the absent-metrics path exists" >&2; exit 2; }
+
 # --- the well-formed, in-force suppression naming X in the verdict's own catalog ---
 ESC_INFORCE="$WORK/esc/in-force.md"
 cat > "$ESC_INFORCE" <<EOF
@@ -247,6 +257,8 @@ Y="$Y"
 XPFX="$XPFX"
 GM_BEFORE="$GM_BEFORE"
 GM_AFTER="$GM_AFTER"
+GM_EMPTY="$GM_EMPTY"
+GM_MISSING="$GM_MISSING"
 ESC_INFORCE="$ESC_INFORCE"
 ESC_EXPIRED="$ESC_EXPIRED"
 ESC_MALFORMED="$ESC_MALFORMED"
