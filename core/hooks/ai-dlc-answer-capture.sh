@@ -287,6 +287,15 @@ Event types:
   already cleared
 - `BLOCKED`: Stop event blocked; Rule 3 enforcement forced continue
 - `ALLOWED_BY_PAUSE`: Stop event allowed because pause flag exists
+- `PAUSE_QUESTION_IN_PROSE`: the pause flag was UP, the last line of the lead's
+  reply was a question, and the turn carried no `AskUserQuestion`. The stop was
+  allowed either way; the operator got one pointer line. A Rule 11(a) ambiguity
+  question belongs in the tool, so a nonzero count is decisions the operator was
+  asked for in prose and may never have seen — but the Production Validation
+  Checkpoint and the retro commentary prompt are asked in prose by design and
+  land here too. Read each one before counting it as a miss.
+  The same predicate on the flag-DOWN side does NOT raise its own event: the
+  verdict there is `BLOCKED`, and those rows carry `- Question in prose: yes`
 - `ACK_DENIED`: a pipeline-advancing tool call was DENIED because an operator
   message was outstanding and unacknowledged (Rule 29). A nonzero count means
   the lead tried to execute straight through a waiting human and the hook --
