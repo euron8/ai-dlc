@@ -115,6 +115,17 @@ logged f2 '^- Question in prose: yes$' \
   && ok "F2 the BLOCKED row records the prose question" \
   || bad "F2 the BLOCKED row carries no \`- Question in prose: yes\` line, so the flag-down half of this population is invisible to retro"
 
+# --- F3: an ORDINARY turn -- a Bash tool_use and its result -- still fires -----------------
+# THE POPULATION IS THIS SHAPE, NOT F1'S. A turn that calls no tool at all is the exception; a
+# predicate keyed on any `tool_use` rather than on the tool's NAME passes F1, A1, A2, A3, A4,
+# A5, A6, A7 and every receipt, and acquits most of the real fires. F3 is the only seed that
+# can tell the two apart, and A1 is its twin one property away: same shape, AskUserQuestion in
+# place of Bash.
+drive f3 "$ROOT/othertool.jsonl" 1 0
+haskey f3 systemMessage \
+  && ok "F3 an ordinary Bash tool_use in the turn -> still fires (the key is the tool's NAME)" \
+  || bad "F3 did not fire on a turn that merely called Bash. The predicate is counting ANY tool_use, so it acquits every turn that did some work -- which is nearly all of them -- and the arm is dead on the population it was written for"
+
 # --- A1: same text, but the turn CARRIES an AskUserQuestion tool_use -----------------------
 drive a1 "$ROOT/asked.jsonl" 1 0
 haskey a1 systemMessage \

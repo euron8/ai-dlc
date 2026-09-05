@@ -20,6 +20,7 @@ u_text()   { jq -nc --arg t "$1" '{message:{role:"user",content:$t}}'; }
 a_text()   { jq -nc --arg t "$1" '{message:{role:"assistant",content:[{type:"text",text:$t}]}}'; }
 a_auq()    { jq -nc --arg i "$1" '{message:{role:"assistant",content:[{type:"tool_use",id:$i,name:"AskUserQuestion",input:{questions:[]}}]}}'; }
 u_result() { jq -nc --arg i "$1" --arg c "$2" '{message:{role:"user",content:[{type:"tool_result",tool_use_id:$i,content:$c}]}}'; }
+a_bash()   { jq -nc --arg i "$1" --arg c "$2" '{message:{role:"assistant",content:[{type:"tool_use",id:$i,name:"Bash",input:{command:$c}}]}}'; }
 
 # The BURIAL shape, as it happened: a long recap whose closing line is the decision.
 QTEXT="Gate 3 checks 1-9 are green. Checks 10 and 11 both show the same injection pattern,
@@ -69,6 +70,16 @@ ASK="gate 3 is showing an injection pattern in two checks"
   a_auq "tu_a4"
   u_result "tu_a4" "Pause here"
   a_text "$QTEXT"; } > "$ROOT/answered.jsonl"
+
+# (F3) THE ORDINARY TURN. Same closing question, but the turn does real work first: a `Bash`
+#      tool_use and the tool_result it returns. This is what almost every real turn looks like,
+#      and it must still FIRE -- the predicate asks whether the OPERATOR was asked with
+#      AskUserQuestion, not whether the lead called a tool. A predicate keyed on any `tool_use`
+#      would acquit most of the population while passing every other case in this file.
+{ u_text "$ASK"
+  a_bash "tu_f3" "bash scripts/ai-dlc/gate-check.sh 3"
+  u_result "tu_f3" "checks 10 and 11: injection pattern"
+  a_text "$QTEXT"; } > "$ROOT/othertool.jsonl"
 
 # (A7) the non-firing flag-down baseline: same reply, no terminal question mark.
 { u_text "$ASK"; a_text "$NOQTEXT"; } > "$ROOT/noq.jsonl"

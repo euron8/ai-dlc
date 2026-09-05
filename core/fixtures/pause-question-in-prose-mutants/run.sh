@@ -90,13 +90,13 @@ fi
 # M1 -- the operator-facing emission neutered: the branch still runs and still logs, but the
 # JSON it prints carries no systemMessage key.
 #
-# TWO ARMS OWN THIS OBSERVABLE AND BOTH ARE MEANT TO. F1 and A3 are the fixture's two FIRING
-# arms on the flag-up side, and `systemMessage` is the only thing either can read; a mutant
-# that removes it must redden both, and an expected set naming one would be scoring a kill it
+# EVERY FLAG-UP FIRING ARM OWNS THIS OBSERVABLE AND ALL OF THEM ARE MEANT TO. F1, A3 and F3
+# are the three, and `systemMessage` is the only thing any of them can read; a mutant that
+# removes it must redden all three, and an expected set naming fewer would be scoring a kill it
 # did not earn. The overlap is real rather than accidental, so the expectation names it. The
-# arms are NOT interchangeable: M4 leaves the key in place and moves only F1, and M3 moves
-# only A3, so each still has a subject the other cannot see.
-score M1 "$(mut M1 's#{systemMessage:$m}#{}#')" "A3 F1 "
+# arms are NOT interchangeable: M4 leaves the key in place and moves only F1, M3 moves only A3,
+# and M7 moves only F3 -- each still has a subject the others cannot see.
+score M1 "$(mut M1 's#{systemMessage:$m}#{}#')" "A3 F1 F3 "
 
 # M2 -- the predicate widened to `?` ANYWHERE in the last assistant text, which is the obvious
 # wrong implementation: A2's reply asks its question three paragraphs above the final line.
@@ -116,42 +116,61 @@ score M5 "$(mut M5 's#^def genuine: (.message.role=="user") and ((txt|blank)|not
 
 # M6 -- the second reader removed: the block reason loses its prepended paragraph. This is the
 # branch that covers the turn the defect actually happened on, and only the flag-DOWN arm sees it.
-score M6 "$(mut M6 's#^if \[ "$PQ_FIRE" = "1" \]; then$#if false; then#')" "F2 "
+# The anchor is the COLUMN-ZERO call. Check 1's call and the log row's are both indented two,
+# so a pattern keyed on the call alone would edit three sites and move two arms at once.
+score M6 "$(mut M6 's#^if pq_fire; then$#if false; then#')" "F2 "
 
-# --- THE PRE-ARM BASELINE, byte-compared ---------------------------------------------------
+# M7 -- the tool NAME dropped from the search, so any tool_use acquits the turn. Measured over
+# the reference consumer, this widening acquits 65 of 96 fires while passing every arm except
+# F3; it is the wrong fix that looks most like the right one.
+score M7 "$(mut M7 's#select(.type=="tool_use" and .name=="AskUserQuestion")#select(.type=="tool_use")#')" "F3 "
+
+# --- THE NO-PREPEND BASELINE, byte-compared ------------------------------------------------
 # A7 in the shipped fixture asserts the standing block reason is unshortened and carries no
-# Rule 11(a) paragraph. That is two substring tests, and a substring test cannot see a byte the
-# prepend moved somewhere else in the same string. Here the reason is compared BYTE FOR BYTE
-# against the revision immediately before this arm existed, with the control that the two hook
-# files genuinely differ -- two runs reading the same program establish nothing.
-BASE_SHA="4bba7170"
-if git -C "$HERE" cat-file -e "${BASE_SHA}:core/hooks/ai-dlc-continue.sh" 2>/dev/null; then
-  git -C "$HERE" show "${BASE_SHA}:core/hooks/ai-dlc-continue.sh" > "$ROOT/hook-base.sh"
-  if cmp -s "$HOOK" "$ROOT/hook-base.sh"; then
-    bad "BASELINE VACUOUS — ${BASE_SHA}'s hook is byte-identical to today's, so the comparison below runs the same program twice and its agreement means nothing"
-  else
-    ok "baseline control: ${BASE_SHA}'s hook and today's differ"
-    SEED_ROOT="$(bash "$HERE/../pause-question-in-prose/seed.sh")"
-    reason_of() { # reason_of <hook> -> the block reason on the non-firing flag-down seed
-      local hk="$1" proj; proj="$(mktemp -d)"; mkdir -p "$proj/_bmad-output"
-      cp "$SEED_ROOT/snapshot.md" "$proj/_bmad-output/pipeline-snapshot.md"
-      jq -nc --arg t "$SEED_ROOT/noq.jsonl" --arg s "fx-base" '{transcript_path:$t,session_id:$s}' \
-        | CLAUDE_PROJECT_DIR="$proj" bash "$hk" 2>/dev/null | jq -r '.reason // "NO-REASON"'
-      rm -rf "$proj"
-    }
-    reason_of "$HOOK"              > "$ROOT/reason-now.txt"
-    reason_of "$ROOT/hook-base.sh" > "$ROOT/reason-base.txt"
-    if [ ! -s "$ROOT/reason-base.txt" ] || grep -q '^NO-REASON$' "$ROOT/reason-base.txt"; then
-      bad "BASELINE BROKEN — ${BASE_SHA}'s hook produced no block reason on the A7 seed, so the comparison has nothing on one side"
-    elif cmp -s "$ROOT/reason-now.txt" "$ROOT/reason-base.txt"; then
-      ok "A7 baseline: on a non-firing flag-down seed the block reason is byte-identical to ${BASE_SHA}'s"
+# Rule 11(a) paragraph. Those are two substring tests, and a substring test cannot see a byte
+# the prepend moved somewhere else in the same string. This is the byte-exact half.
+#
+# THE BASELINE IS THE BRANCH-DISABLED MUTANT, NOT A HISTORICAL SHA, AND THE REASON IS A
+# MEASUREMENT. It was pinned to the revision before this arm existed, and the first release to
+# reword the STANDING reason -- prose this arm does not own and has no opinion about -- turned
+# the comparison red with a message accusing the prepend of leaking. A pin to a sha is a
+# byte-lock on every line of that string, not on the property under test. M6's copy is the same
+# hook with only the prepend branch neutered, so the two sides differ in exactly the thing this
+# arm is about and in nothing else, and it stays true through any later rewording.
+#
+# BOTH DIRECTIONS, because equality alone cannot show the comparison RESOLVES anything: the
+# non-firing seed must produce identical reasons, and the FIRING seed must produce different
+# ones. Without the second, a `reason_of` that returned "" on every input would pass.
+BASE="$(mut BASE 's#^if pq_fire; then$#if false; then#')"
+if [ -n "$BASE" ]; then
+  SEED_ROOT="$(bash "$HERE/../pause-question-in-prose/seed.sh")"
+  reason_of() { # reason_of <hook> <transcript> -> the block reason, flag DOWN, snapshot present
+    local hk="$1"
+    local tr="$2"
+    local proj
+    proj="$(mktemp -d)"; mkdir -p "$proj/_bmad-output"
+    cp "$SEED_ROOT/snapshot.md" "$proj/_bmad-output/pipeline-snapshot.md"
+    jq -nc --arg t "$tr" --arg s "fx-base" '{transcript_path:$t,session_id:$s}' \
+      | CLAUDE_PROJECT_DIR="$proj" bash "$hk" 2>/dev/null | jq -r '.reason // "NO-REASON"'
+    rm -rf "$proj"
+  }
+  reason_of "$HOOK" "$SEED_ROOT/noq.jsonl"  > "$ROOT/r-now-noq.txt"
+  reason_of "$BASE" "$SEED_ROOT/noq.jsonl"  > "$ROOT/r-base-noq.txt"
+  reason_of "$HOOK" "$SEED_ROOT/fire.jsonl" > "$ROOT/r-now-fire.txt"
+  reason_of "$BASE" "$SEED_ROOT/fire.jsonl" > "$ROOT/r-base-fire.txt"
+  if grep -q '^NO-REASON$' "$ROOT/r-base-noq.txt" || [ ! -s "$ROOT/r-now-noq.txt" ]; then
+    bad "BASELINE BROKEN — one side produced no block reason at all, so the comparison has nothing to compare"
+  elif ! cmp -s "$ROOT/r-now-fire.txt" "$ROOT/r-base-fire.txt"; then
+    ok "baseline control: on the FIRING seed the two reasons DIFFER, so this comparison can resolve the prepend"
+    if cmp -s "$ROOT/r-now-noq.txt" "$ROOT/r-base-noq.txt"; then
+      ok "A7 baseline: on a non-firing flag-down seed the reason is byte-identical to the branch-disabled hook's"
     else
-      bad "A7 baseline: the block reason on a NON-FIRING seed differs from ${BASE_SHA}'s. The prepend is leaking into turns that carry no question: $(diff "$ROOT/reason-base.txt" "$ROOT/reason-now.txt" | head -5)"
+      bad "A7 baseline: the block reason on a NON-FIRING seed differs from the branch-disabled hook's, so the prepend is leaking into turns that carry no question: $(diff "$ROOT/r-base-noq.txt" "$ROOT/r-now-noq.txt" | head -5)"
     fi
-    rm -rf "$SEED_ROOT"
+  else
+    bad "BASELINE VACUOUS — the two hooks produce the SAME reason on the FIRING seed, so the comparison cannot see the prepend and its agreement on the non-firing seed means nothing"
   fi
-else
-  bad "BASELINE UNREACHABLE — ${BASE_SHA}:core/hooks/ai-dlc-continue.sh is not in this repository. This battery is distribution-only and that object is part of its corpus; a skip here would report as a pass"
+  rm -rf "$SEED_ROOT"
 fi
 
 rm -rf "$ROOT"
