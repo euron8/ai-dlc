@@ -490,8 +490,14 @@ a story inlines — to satisfy a tooling constraint.
   its `sprint-status.yaml` entry. Determine which of the two is wrong before
   changing either — the two remedies write in opposite directions:
   - **The story file is right and the entry is stale.** The repair is a
-    `derive-stories` run that writes the entry from the story file in every
-    canonical copy. It does not happen here — Check 5 runs the read-only mode,
+    `derive-stories` run, which rewrites the VALUES of an entry that already
+    exists in every canonical copy and NEVER creates one. If the envelope
+    carries no entry for the story — the `carry-over-single` case, where sprint
+    planning is skipped and the `stories:` mapping is still its placeholder
+    comment — the entry is created FIRST, by the step that owns the `stories:`
+    mapping or by hand from the story file's own frontmatter; `derive-stories`
+    then runs as the correctness check, where `0 value(s) written` confirms the
+    transcription. It does not happen here — Check 5 runs the read-only mode,
     and a gate that edits the artifact it is validating can pass a tree it just
     changed. Take it through the Gate Failure protocol at the end of this file,
     dispatched; the write's home is `steps/implementation.md`.

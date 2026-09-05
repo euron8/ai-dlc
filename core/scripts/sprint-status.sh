@@ -1128,10 +1128,24 @@ def derive_stories():
 
     print("")
     if files_matched == 0:
+        # A ZERO-ENTRY ENVELOPE IS A DIFFERENT REMEDY FROM AN UNRESOLVABLE ONE, and the bare
+        # headline cannot tell them apart: both read as a resolution near-miss, so a session sent
+        # here to repair a stale entry runs this mode, gets exit 3, and concludes the tool is
+        # broken. It is not. The loop above walks entries PARSED FROM THE ENVELOPE and rewrites a
+        # field the entry already carries, so with no entry there is nothing to write and the run
+        # is a no-op by construction. Creation cannot live here either: core resolves files FROM
+        # the entries and must not infer which files on disk are stories. The clause is keyed on
+        # the entry count so that the case which HAS an entry still reads as a resolution failure.
+        tail = ""
+        if entries_n == 0:
+            tail = (" DERIVE-STORIES NEVER CREATES AN ENTRY — it rewrites the values of entries "
+                    "the envelope already declares, and this envelope declares none for sprint "
+                    "%d. Populate the `stories:` mapping first (sprint planning, or by hand from "
+                    "each story file's own frontmatter); this mode then maintains it." % target)
         print("sprint-status: derive-stories MATCHED NO STORY FILES (exit 3) — %d entr%s parsed "
               "for sprint %d and not one resolved to a story file on disk. This is not a clean "
-              "run: it compared nothing."
-              % (entries_n, "y" if entries_n == 1 else "ies", target))
+              "run: it compared nothing.%s"
+              % (entries_n, "y" if entries_n == 1 else "ies", target, tail))
         return 3
     if roundtrip:
         for r in roundtrip:
