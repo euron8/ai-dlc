@@ -4133,8 +4133,14 @@ line says the ref may be stale, and Step 5c tells the lead a PASS beside that se
 established freshness. A sandbox with no remote skips the fetch without touching the network.
 
 **The firing set is wider than the defect, on purpose.** Measured over the reference consumer's
-118 measurable merged retro PRs: 16 were behind `origin/main` at the branch cut, the incident
-among them; a branch cut from the trunk that main moved past before the PR opened fires too.
+118 measurable merged retro PRs: 16 were behind `origin/main` at the branch cut. Twelve of
+those had inherited another pull request's history — the incident among them, and the
+leftover ref was a carry-over or `ai-dlc-update` reconcile branch more often than the sprint's
+feature branch, so the filing's title names one instance of a wider class — and four were
+trunk cuts that main moved past before the PR opened. The split was taken by the batch-57
+census hand with two independent discriminators (a commit in the branch's range touching a
+path outside the retro write-set; a commit GitHub associates with another pull request) that
+agreed on all sixteen, controlled on the incident and on a known-clean retro PR.
 For that class the merge the failure offers is clean unless the trunk moved on a file the
 retro also touched (three worlds built by the batch-57 adversarial hand: another file → clean;
 a retro-touched file → conflict; the squash alone → clean), which is why the failure names
@@ -4200,3 +4206,29 @@ directory is MANDATORY and that the single-file invocation is not an acceptable 
 `audit-rule-files.sh` Class 2 no longer reports the file.
 
 verify: sh G="${GV:-core/skills/ai-dlc/steps/gate-validation.md}"; [ -f "$G" ] || G=".claude/skills/ai-dlc/steps/gate-validation.md"; A="${AUDIT:-core/scripts/audit-rule-files.sh}"; [ -f "$A" ] || A="scripts/ai-dlc/audit-rule-files.sh"; [ -f "$G" ] && [ -f "$A" ] || exit 9; o="$(bash "$A" 2>&1)"; case "$o" in *"RULE_WEAKNESS: "*) ;; *) exit 9 ;; esac; l="$(grep -n -- '--transcript-dir' "$G")"; [ -n "$l" ] || exit 9; w="$(printf '%s\n' "$o" | grep RULE_WEAKNESS | grep -c -e 'gate-validation.md.*transcript-dir')" || w=0; s="$(printf '%s\n' "$l" | grep -Eiwc 'prefer|should|try to|consider|ideally|when possible|in most cases')" || s=0; m="$(printf '%s\n' "$l" | grep -Ec 'MUST|MANDATORY|SHALL')" || m=0; [ "$w" -eq 0 ] && [ "$s" -eq 0 ] && [ "$m" -ge 2 ] && exit 0; exit 1
+
+## BL-176 — nothing binds a gate-adjudication verdict file to the dispatch that produced it, and the remediation guard picks the live verdict by lexical stem order, so a hand-written file at a later-sorting nonce becomes the gate's verdict
+
+Distribution-internal, no `PC-` id; DEFECT tier — the reference consumer's history holds one
+such file (`gate-adjudication/planning-20260902T160000Z.verdict.json`, a round nonce no
+dispatch generated, assembled by the lead from a prior pass's verdicts and a two-check
+re-verify's), and both readers accepted it. Found by the batch-57 adversarial hand while
+refuting the rejection of the consumer's Check-26 partial-re-verify candidate, and deliberately
+not fixed there: the fix's shape is a binding to a dispatch record, which is a different
+subsystem from the verdict reader.
+
+`core/scripts/validate-gate-adjudication.sh` anchors freshness on the filename stem matching
+the in-file `gate_nonce`, both of which the lead can write; `grep -c` for a spawn or dispatch
+ledger over that file returns 0 against a control of 21 for `gate_nonce`. The guard at
+`core/hooks/ai-dlc-gate-remediation-guard.sh:162-170` then selects the live verdict by lexical
+stem order, which a hand-chosen round timestamp wins. `team-roles/gate-adjudicator.md:78`
+requires the check-id set to equal the derived escalated set exactly, and
+`_gate-procedures.md` now says a re-dispatch is a whole new dispatch, so the rule is stated in
+every place the lead reads; what is missing is the mechanism. Shape of the fix: bind the
+verdict to the dispatch that wrote it — the adjudicator's `agent_id` joined against the spawn
+ledger row for that nonce, the way the dispatch guard already joins subagent spawns — and have
+the guard refuse a verdict whose stem no dispatch row names. The receipt is manual because no
+artifact today records which dispatch wrote a verdict; write a driving receipt the moment the
+join exists.
+
+verify: manual

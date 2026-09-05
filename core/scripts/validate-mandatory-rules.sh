@@ -584,11 +584,14 @@ fi
 #   unmeasurable branch is not a fresh one -- the summary counts it as a skip.
 #
 #   THE FIRING SET IS WIDER THAN THE DEFECT, on purpose. A branch is behind
-#   origin/main either because it was cut from a leftover feature ref (the
+#   origin/main either because it was cut from a leftover squash-merged ref (the
 #   defect) or because it was cut from the trunk and main moved before the PR
 #   opened (benign). Measured over the reference consumer's 118 measurable
-#   merged retro PRs: 16 were behind origin/main at the branch cut, the incident
-#   among them. The benign class is not a defect, and for it the remedy is a
+#   merged retro PRs: 16 were behind origin/main at the branch cut; 12 of those
+#   had inherited another pull request's history (the incident among them, and
+#   the leftover ref was a carry-over or reconcile branch more often than the
+#   sprint's feature branch), 4 were trunk cuts main moved past. The benign
+#   class is not a defect, and for it the remedy is a
 #   merge that is clean unless the trunk moved on a file the retro also touched
 #   (measured on three built worlds: trunk moves on another file -> clean; on a
 #   retro-touched file -> conflict; the squash alone -> clean). The failure text

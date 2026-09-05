@@ -30,8 +30,10 @@ branch. `validate-mandatory-rules.sh` grows **Check 7** — the count must be 0,
 count and the remedy, SKIP when no `origin/main` ref resolves — and it refreshes the ref itself
 where a remote named `origin` exists, stating on its line whether it could, because a stale
 local ref reads the exact defect world as 0. Measured over the consumer's 118
-measurable merged retro PRs, 16 were behind at the cut, the incident among them; a trunk cut
-that main moved past fires too, and the failure names the cheap recovery (re-cut and replay)
+measurable merged retro PRs, 16 were behind at the cut — 12 had inherited another PR's
+history (the incident among them; the leftover ref is more often a carry-over or reconcile
+branch than the feature branch) and 4 were trunk cuts main moved past. The benign class fires
+too, and the failure names the cheap recovery (re-cut and replay)
 before the merge, which conflicts only when the trunk moved on a file the retro touched.
 Fixture `retro-branch-behind-main` (ships) drives both directions and kills three mutants;
 `mandatory-rules-skip-accounting` mints the ref so its arms stay about checks 2/4/5. `BL-173`.
@@ -59,12 +61,17 @@ is not an acceptable invocation. `BL-175`.
 
 ### Not taken — `PC-S340-CHECK-26-READS-A-PARTIAL-RE-VERIFY-VERDICT-FILE-AS-UNADJUDICATED`
 
-Read for this batch and recommended for REJECTION as by-design, pending the operator's ruling:
-`gate-validation.md`'s escalation preamble says a re-dispatch re-derives EVERY check under a
-fresh nonce and never carries forward, cites or reconciles against a superseded dispatch, and
-the consumer's two-check re-verify plus its hand-written merged verdict file are the acts that
-rule forbids. The proposed merge script would institutionalise them. No core file changes for
-it in this release.
+Read for this batch and recommended for REJECTION as by-design, pending the operator's ruling,
+narrowed to the consumer's two acts: `team-roles/gate-adjudicator.md` requires the verdict's
+check-id set to equal the derived escalated set exactly, and `gate-validation.md`'s escalation
+preamble says a re-dispatch re-derives EVERY check under a fresh nonce and never carries
+forward, cites or reconciles against a superseded dispatch — so the two-check re-verify and
+the hand-written merged verdict file are what the rule forbids, and the proposed merge script
+would institutionalise them. The batch-57 adversarial hand upheld the ruling and named the two
+upstream gaps the acts exposed: `_gate-procedures.md`'s dispatch section never stated the rule
+its reader is judged against, and now does in one paragraph pointing at the preamble; and
+nothing binds a verdict file to the dispatch that produced it, filed as `BL-176` and not fixed
+here.
 
 ## [0.506.0] - 2026-09-05
 
