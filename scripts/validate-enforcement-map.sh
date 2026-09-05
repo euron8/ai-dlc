@@ -5735,11 +5735,22 @@ Resolve it from $i94_schema instead. A second copy of the branch text hands the 
 
   # (c) THE READER BIND, keyed on the line that passes the resolved path to jq. A hook that
   # merely names the file in a comment satisfies a whole-file grep and reads nothing.
-  for _r in core/hooks/ai-dlc-pause.sh core/hooks/ai-dlc-answer-capture.sh core/hooks/ai-dlc-continue.sh; do
+  #
+  # THE SHARED PREDICATE IS A READER TOO, AND IT WAS NOT IN THIS LIST. ai-dlc-handoff-pending.sh
+  # reads both patterns through its own `$_schema` argument (it is sourced, not invoked, so it
+  # never sees PAUSE_ROUTING_SCHEMA), and it is the reader that decides key 3 -- the channel
+  # the incident behind BL-164 arrived on. The list named the three hooks that emit or consume
+  # the BRANCH TEXT and omitted the one that consumes the PATTERNS. Each entry therefore carries
+  # the variable its jq line feeds, and the grep is keyed on that pair.
+  for _rv in core/hooks/ai-dlc-pause.sh:PAUSE_ROUTING_SCHEMA \
+             core/hooks/ai-dlc-answer-capture.sh:PAUSE_ROUTING_SCHEMA \
+             core/hooks/ai-dlc-continue.sh:PAUSE_ROUTING_SCHEMA \
+             core/hooks/ai-dlc-handoff-pending.sh:_schema; do
+    _r="${_rv%%:*}"; _v="${_rv#*:}"
     if [ ! -f "$_r" ]; then
       err "I94(c): $_r is missing, so this invariant cannot establish that the declaration has the readers it claims."
-    elif ! grep -q 'jq -rj .*"\$PAUSE_ROUTING_SCHEMA"' "$_r"; then
-      err "I94(c): $_r does not READ $i94_schema — no line feeds \$PAUSE_ROUTING_SCHEMA to jq. Either it went back to a literal, in which case arm (b) above is scanning for a value this file no longer carries verbatim, or it stopped emitting the branch at all. Both are silent."
+    elif ! grep -q "jq -rj .*\"\\\$${_v}\"" "$_r"; then
+      err "I94(c): $_r does not READ $i94_schema — no line feeds \$${_v} to jq. Either it went back to a literal, in which case arm (b) above is scanning for a value this file no longer carries verbatim, or it stopped reading the declaration at all. Both are silent."
     fi
   done
 

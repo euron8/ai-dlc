@@ -15,6 +15,67 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.502.0] - 2026-09-05
+
+### `PC-S308-HANDOFF-INTENT-PATTERN-MISSES-TRAILING-TERSE-PHRASING` — a terse handoff as the final sentence of a longer message is a request (`BL-164`)
+
+The reference consumer typed "I'm solving this issue. handoff." and the Stop guard never armed:
+`pause-routing.json`'s `handoff_intent_pattern` spelled a terse request only as the whole field,
+so every reader of the declaration — key 3 of `ai-dlc-handoff-pending.sh`, Check 0's transcript
+arm in `ai-dlc-continue.sh`, and the answer channel in `ai-dlc-answer-capture.sh` — scored the
+row NOT-PENDING, and the lead improvised the five-step procedure. The declaration gains one
+alternative that anchors the FINAL SENTENCE rather than the field: sentence punctuation, the
+word, optional terminal punctuation, end of field.
+
+**The shape was chosen by census, not by the filing.** Over every operator-prose row the consumer
+has ever recorded (3379 unique across all refs and the working tree) the new alternative admits
+exactly two rows the shipped pattern missed and both are requests; the obvious wider form, any
+message ending in the word, admits fifteen, five of them questions or denials about a handoff.
+Driven through the shipping predicate on a copy of the consumer's real log, the incident session
+flips NOT-PENDING → PENDING and no other session moves.
+
+**Two reader defects the review hands found, fixed before the merge.** The declared patterns
+anchor on `^` and `$` and grep anchors per LINE, so a multi-line message whose middle line ended
+in the terse form — a pasted filing quoting the incident row — routed the whole message through
+Check 0's transcript arm and the answer channel, as a bare `handoff` line already did.
+`ai-dlc-continue.sh` and `ai-dlc-answer-capture.sh` now match a newline-collapsed copy, the
+shape `ai-dlc-pause.sh` already writes for key 3; the answer record keeps its newlines. And
+I94(c) hand-listed the three hooks that carry the branch text and omitted
+`ai-dlc-handoff-pending.sh`, the reader that decides key 3; each reader now carries the variable
+its `jq` line feeds, proved in both directions on a worktree.
+
+**The old whole-field alternative is removed**, because the new one's start-of-field branch
+subsumes it: zero verdicts change on the census, and a dead alternative was what the mutant's
+first control had come to depend on.
+
+**Fixtures, scored against nine implementations across two rounds.** `handoff-completion-assertion`
+carries the consumer's row verbatim, three real near-misses and one synthetic (the unpunctuated
+and the punctuated denial, a definite-article question, a copula noun), case (g4) through both
+the on-disk and the transcript reader, mutant m25 — a copy of the declaration with the
+alternative stripped, driven through the unmodified hooks, with the verb phrase as the control
+on each reader — and case (g5) with mutant m26 for the collapse. `answer-handoff-routing`
+carries the same pairs through the answer channel with a per-line mutant. The adversarial hand's
+first round found a trailing-word regression that requires a period passing the receipt and the
+behavioural near-miss, and two noun-mention widenings passing everything; the punctuated denial
+and the three noun seeds close both. Against the pre-fix declaration the first reports FIXTURE
+BROKEN at its seed premise and the second four assertions FAILED; against the pre-collapse hooks
+each goes red on exactly its new arm; on an `install.sh` tree the three handoff fixtures read
+144 / 21 / 13 ok, as here.
+
+**Stated limits, none fixed here.** `ai-dlc-pause.sh` records the first 120 characters of a
+prompt, so a terse request trailing more than that is invisible to key 3 under any pattern, and
+the same cut can manufacture the end anchor on a long mention. An abbreviation, decimal,
+single-letter list marker or abutting token before the word ("e.g. handoff", "data.handoff")
+opens the alternative — zero instances in the census, and the tightening that excludes them
+also excludes a sentence ending in a number. A quoted request that lands on the LAST line of a
+message is, after the collapse, a message ending in that request, and reads PENDING; no regex
+separates a quotation from a request there, and the cost is one blocked Stop with its remedy
+text. `steps/route.md` Step 0 restates the entry-token predicate in prose as the whole input,
+narrower than the declaration and bound by nothing. Two consumer rows that OPEN with the word
+and a comma match nothing, both in sessions that already carried a request row. A
+curly-apostrophe "let's handoff" misses the ASCII `let's` alternative. All seven are recorded in
+`BL-164`.
+
 ## [0.501.0] - 2026-09-04
 
 ### Correction to 0.500.0: the fence reader forked a subprocess per line, and the hook's shed rule had no arm

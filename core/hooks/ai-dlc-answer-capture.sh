@@ -215,9 +215,14 @@ while IFS=$'\t' read -r Q_ESC A_ESC; do
   # the LEAD authored -- "should I hand off or keep going?" carries the phrasing and none of
   # the intent -- so matching on it would route on the lead's own words and pause the
   # pipeline on every question that mentions the option.
+  # MATCHED ON ONE LINE. The declared patterns anchor on `^` and `$`, and grep anchors per
+  # line, so a multi-line answer with a middle line reading `handoff` matched on that line
+  # alone and paused the pipeline. The record below keeps the answer's newlines; only the
+  # match sees them collapsed -- the same shape ai-dlc-pause.sh writes for key 3's reader.
+  ANSWER_FLAT=$(tr '\n' ' ' <<<"$ANSWER")
   if [ -z "$HANDOFF_ANSWER" ] && [ -n "$HANDOFF_INTENT_RE" ] && [ -n "$HANDOFF_MENTION_RE" ] \
-     && grep -qiE "$HANDOFF_INTENT_RE" <<<"$ANSWER" \
-     && ! grep -qiE "$HANDOFF_MENTION_RE" <<<"$ANSWER"; then
+     && grep -qiE "$HANDOFF_INTENT_RE" <<<"$ANSWER_FLAT" \
+     && ! grep -qiE "$HANDOFF_MENTION_RE" <<<"$ANSWER_FLAT"; then
     HANDOFF_ANSWER="$ANSWER"
     HANDOFF_QUESTION="$QUESTION"
   fi
