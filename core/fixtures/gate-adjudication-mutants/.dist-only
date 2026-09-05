@@ -1,0 +1,11 @@
+MUTATION BATTERY behind a shipped fixture: it edits COPIES of core's own sources
+(core/scripts/validate-gate-adjudication.sh and core/scripts/validate-suppression-lifetime.sh)
+inside a sandbox tree and scores the shipped `gate-adjudication` fixture against each mutant.
+
+Its subject is therefore the distribution's own source layout — `core/scripts/`,
+`core/schemas/`, `core/skills/ai-dlc/enforcement-map.yaml`, `core/fixtures/gate-adjudication/`
+— which does not exist on a consumer, where those files land at `scripts/ai-dlc/`,
+`.claude/schemas/` and `.claude/skills/ai-dlc/`. Shipped, it would either fail to resolve its
+subject on every consumer or, worse, mutate a consumer's installed engine.
+
+The property it proves reaches consumers through `gate-adjudication`, which DOES ship.
