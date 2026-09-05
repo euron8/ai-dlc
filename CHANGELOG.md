@@ -35,7 +35,8 @@ history (the incident among them; the leftover ref is more often a carry-over or
 branch than the feature branch) and 4 were trunk cuts main moved past. The benign class fires
 too, and the failure names the cheap recovery (re-cut and replay)
 before the merge, which conflicts only when the trunk moved on a file the retro touched.
-Fixture `retro-branch-behind-main` (ships) drives both directions and kills three mutants;
+Fixture `retro-branch-behind-main` (ships) drives eight worlds, including a clone whose remote
+moved after the clone, and kills six mutants;
 `mandatory-rules-skip-accounting` mints the ref so its arms stay about checks 2/4/5. `BL-173`.
 
 ### `PC-S305-NARRATIVE-DRIFT-FALSE-POSITIVE-USED-TO` — a purpose-shaped `used to` is no longer scored as narrative drift

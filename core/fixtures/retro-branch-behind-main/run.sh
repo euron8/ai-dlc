@@ -396,7 +396,7 @@ OUT="$( cd "$WB" && bash "$WORK/bin/validate-mandatory-rules.sh" 900 2>&1 )"; RC
 if [ "$RC" -eq 1 ] \
    && grep -qF 'Check7_BRANCH_BEHIND_MAIN' <<<"$OUT" \
    && grep -qF "HEAD is ${BEHIND} commit(s) behind origin/main" <<<"$OUT" \
-   && grep -qF 'git fetch origin main && git merge origin/main' <<<"$OUT" \
+   && grep -qF "'git merge origin/main' on this branch" <<<"$OUT" \
    && grep -qF 'VALIDATE-MANDATORY-RULES: FAIL' <<<"$OUT"; then
   ok "the defect world's failure carries its check name, the derived behind count ${BEHIND}, the remedy command, and the FAIL headline"
 else

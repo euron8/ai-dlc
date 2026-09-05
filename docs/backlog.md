@@ -4148,8 +4148,12 @@ re-cutting the branch and replaying the retro commits first. A predicate that se
 two classes would need the sprint's squash commit, which no artifact this validator reads
 records.
 
-Fixture: `core/fixtures/retro-branch-behind-main/` drives the validator inside a seeded repo in
-both directions and kills the deleted-check, reversed-range and silent-skip mutants;
+Fixture: `core/fixtures/retro-branch-behind-main/` drives the validator inside seeded repos —
+trunk cut, stranded-ref cut, the remedy applied, the ref deleted, ahead-only, local `main`
+ahead, a `file://` clone whose remote gained the squash after the clone, and the same clone
+with a dead remote — and kills six mutants: the check deleted, the range reversed, the skip
+made silent, the fetch removed, local `main` compared instead of `origin/main`, and the cut
+point measured instead of HEAD;
 `mandatory-rules-skip-accounting` mints the ref at the trunk so its accounting arms stay about
 checks 2/4/5.
 
