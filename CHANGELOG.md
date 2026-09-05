@@ -15,6 +15,108 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.505.0] - 2026-09-05
+
+### `PC-S308-RULE-11-AMBIGUITY-QUESTIONS-HAVE-NO-MANDATED-PRESENTATION-TOOL` — a Rule 11(a) question is put with `AskUserQuestion` and sets no pause flag, and the Stop hook notices a question that went out as prose on both sides of the flag (`BL-170`)
+
+The lead put a real pending decision to the operator as the closing line of a long recap and
+ended its turn; the operator read narration, the decision was never taken, and it had to be
+re-asked. `SKILL.md` mandated `AskUserQuestion` once, for the sprint-scope pause point (d) only,
+and Rule 11(a) said ask and named no form. The other half of the defect is in the Stop hook:
+measured on the reference consumer, the burial turn ended with the pause flag DOWN, so
+`ai-dlc-continue.sh` took its default block path, whose reason told the lead to create the pause
+flag if it had no next action — it did, and re-asked in prose.
+
+Rule 11(a) now says put the question with `AskUserQuestion`, recommended option first, and set
+NO pause flag for it, for the reason Rule 3 gives for (d): the tool holds the turn open, the Stop
+hook never runs, and a flag set there is a pause nobody clears. Rule 3 names (a) and (d) as the
+no-flag exceptions and (b) and (c) as the ones that set the flag and end the turn; `route.md`
+Step 6 cites that. The hook computes one predicate — the final non-empty line of the turn's last
+assistant text contains `?` and the turn holds no `AskUserQuestion` tool_use, where a turn starts
+at the last user record carrying genuine text and an `AskUserQuestion` answer (a tool_result-only
+user record) does not start one — fail-open on any transcript problem, and reads it twice. With
+the flag up it logs `PAUSE_QUESTION_IN_PROSE` and emits a `systemMessage` for the operator: a
+neutral pointer, true at every pause point, that the decision is in the final paragraph and that
+Rule 11(a) questions use the tool while PVC and retro prompts are prose; no `decision` key, so
+the stop stays allowed. With the flag down it prepends one paragraph to the block reason carrying
+both readings — a Rule 11(a) question goes through the tool with no flag; a PVC or retro prompt
+sets the flag and ends the turn again — and records `- Question in prose: yes` on the `BLOCKED`
+row. `core/fixtures/pause-question-in-prose` ships and drives both branches with their allow
+twins; its `.dist-only` battery kills six mutants, including a `?` anywhere in the text and a
+tool_use anywhere in the transcript.
+
+**Measured on the reference consumer, read-only, over its 247 transcripts.** 3660 turn-ends,
+control 138 turns carrying the tool. The predicate fires 97 times, 84 of them genuine pending
+questions; 65 with the flag up (43 real ambiguity decisions, 7 PVC or retro prompts, 8
+session-opening greetings that fire because the flag persists on disk across sessions, 2 handoff
+prompts, 5 other) and 32 with the flag down, among them the incident's burial turn and 9 more
+real decisions — so an arm sited in the pause-flag branch alone, which is what the filing's
+suggested shape produces, cannot fire on the case that motivated it. Requiring a terminal `?`
+drops 22 real questions to remove one false positive and is rejected. The flag-up branch warns
+and never blocks because (b) and (c) end the turn with a prose question by design; one recurring
+retro line would otherwise wedge every sprint. The consumer's own receipt keys on a string the
+fix keeps and cannot see this close; `BL-170`'s receipt drives the hook.
+
+**Adversarial review before the merge.** The first cut's whitespace test regex-substituted every
+record's full text and ran before Check 1, so every Stop on the consumer's largest transcript
+(28MB, 9938 records) went from under 400ms to over 16 seconds, paid on every exit including the
+ones that never read the answer; the predicate is now one regex per record, memoised, called only
+by the two branches that read it, and prefiltered on a 200-record tail whose "no" is conclusive and
+whose "yes" hands off to the full parse — measured, the non-firing Stop adds about 7ms and the
+firing one about 160ms. A wrong fix counting ANY tool use passed the fixture and the receipt and
+would have acquitted 65 of 96 real fires; a seed carrying an ordinary `Bash` call now fires and a
+mutant dropping the tool's name goes red on it, and the entry's receipt drives that turn and a
+tool-asked one. The hook's own header and its standing block reason still named a Rule 11(a)
+HARD_BLOCK as a flag case three paragraphs below the prepend that forbids it; both now say an
+ambiguity question is not a turn-ending pause at any severity. A turn that asked one question with
+the tool and buried a second in prose is acquitted, measured at 8 of 3601 turn-ends, and stated.
+
+### The gate-remediation guard subtracts in-force `SUPPRESSED` checks whose operator citation VERIFIES from its lock-out set, so a lead is no longer locked out of the artifact corpus for a FAIL the operator has dispositioned (`BL-169`)
+
+`0.504.0` made a FAIL under an in-force suppression pass Check 26, and left the hook that reads the
+same verdict for a different purpose untouched: `ai-dlc-gate-remediation-guard.sh` built its
+lock-out set from every raw FAIL and lifted only on a repair record or a `<nonce>.authorization.md`
+that no step names beside `SUPPRESSED`. Measured on a read-only copy of the reference consumer:
+on its live pass, one FAIL covered by an in-force entry whose quote the transcript corpus carries,
+the installed guard denies the lead's edits and the fixed one allows them, against a
+known-positive pass where both deny.
+
+After the guarded-root test, when the live pass records a FAIL, the guard asks its sibling
+`validate-suppression-lifetime.sh --in-force` — resolved from the consumer's `scripts/ai-dlc/`
+first, handed the project root so it finds the same enforcement map and metrics the gate uses.
+The sibling's row now carries the entry's `**Operator authorization:**` line as a sixth field,
+forwarded verbatim and parsed by nothing there; the guard verifies that quote against the
+harness transcript corpus with `validate-steering-budget.sh --cite`, the same predicate its
+authorization-file lift already uses, and an entry whose quote no operator typed covers nothing.
+It joins the verified rows on the verdict's own `catalog` with a bare bracket counting as `core`
+only, subtracts the covered checks by exact id, and either allows with a
+`GATE_REMEDIATION_SUPPRESSED` event or denies naming both the remaining and the suppressed set.
+Every absence fails closed and says which: no sibling, no escalations file, a sibling that refuses
+or predates the mode, no transcript corpus. The repair-record lift reads the subtracted set. The
+cold path costs roughly twenty-five times the base guard on the consumer's escalations file, so
+the verified answer is cached at `_bmad-output/.gate-remediation-in-force`, keyed on the live
+nonce, a DIGEST of the escalations file, the size and mtime of the metrics file and the sibling,
+and a marker that the citations were verified; the path is declared transient, and the warm path
+adds about a third to the base guard. `core/fixtures/gate-remediation-deny` grows the allow, the
+cache read and its invalidation on an equal-size same-second rewrite, an expired entry, a wrong
+catalog, a bare id against an extension verdict, no catalog field, partial coverage, a repair
+record naming only the suppressed check, an absent sibling, an absent escalations file, a
+sibling refusing the mode, a forged citation beside its genuine twin, and the id grain in both
+directions, with nine mutants. `escalations.md` and `gate-validation.md` say what the guard does.
+
+**Adversarial review before the merge.** The first cut subtracted on any well-formed in-force
+entry, and the lead may write `docs/escalations/pending.md` while denied because the escalation
+is its sanctioned exit, so a lead-authored `SUPPRESSED` entry quoting words no operator said
+lifted the deny end to end: the one mechanism whose purpose is being unreachable by lead-authored
+records had been given a lead-writable input. `escalations.md` claimed the suppression citation
+got "the identical verification" as a `RESOLVED` one; the grammar was identical and the
+verification absent. Check 26 has accepted such an entry since `0.504.0` and still does: the
+gate's validator carries no transcript, the sibling cannot host the check without becoming an
+I103 site, and a sibling verifying unconditionally would omit every in-force row at gate time.
+That half is filed as `BL-171`. The same review found the cache key blind to a same-size rewrite
+inside one second, now a content digest, and a cost figure in resident prose four times too low
+under load, now stated as a ratio to its own control.
+
 ## [0.504.0] - 2026-09-05
 
 ### `PC-S308-CHECK26-NO-SUPPRESSED-CARVEOUT` — a FAIL under an in-force `SUPPRESSED` entry no longer blocks Check 26, and the script that owns "in force" answers the question (`BL-167`)

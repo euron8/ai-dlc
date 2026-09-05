@@ -163,7 +163,7 @@ write_record gate-repaired-record-beside-verdicts 2 edit \
 
 # (f) LEAD RESOLUTION — no remediator repaired anything, and none could have. The FAILs
 #     closed on an edit to a file the remediation guard leaves LEAD-editable
-#     (ai-dlc-gate-remediation-guard.sh:284-285: `docs/escalations/**` and
+#     (ai-dlc-gate-remediation-guard.sh:336-337: `docs/escalations/**` and
 #     `*-resolution-p*.md`), so a repair record would assert a dispatch that never
 #     happened. The record is at `gate-<type>-resolution-p<M>.md` and carries the same
 #     three fields. Nothing is owed.

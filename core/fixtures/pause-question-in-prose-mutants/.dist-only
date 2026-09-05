@@ -1,0 +1,16 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is a MUTATION BATTERY behind the shipped fixture core/fixtures/pause-question-in-prose.
+It builds sed-mutated copies of core/hooks/ai-dlc-continue.sh under mktemp, drives the shipped
+fixture's own run.sh against each one, and asserts that each mutant turns exactly the named arm
+red. Editing copies of core's own sources is the third shape in .claude/rules/fixture-ship-decl.md,
+and a consumer running it would pay the cost of six extra hook drives per mutant for a result
+about the DISTRIBUTION's hook rather than its own.
+
+It also carries the byte-exact half of the shipped fixture's A7: the block reason on a
+non-firing flag-down seed is compared byte for byte against the same hook with only the
+prepend branch neutered, in both directions. That needs a mutant, which is why it lives here.
+
+The shipped fixture is NOT vacuous without this battery. Its firing arms (F1, F2) are
+PRESENCE-shaped -- each demands a specific key or a specific sentence -- so a hook replaced by
+`exit 0`, or one whose arm was deleted, fails them rather than passing them silently.

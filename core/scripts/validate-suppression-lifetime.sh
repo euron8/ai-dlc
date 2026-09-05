@@ -65,7 +65,12 @@
 # THE IN-FORCE QUERY IS THE SAME PREDICATE, ASKED BY THE GATE THAT ADOPTS A FAIL
 # `--in-force` lists every suppression that is well-formed, names a catalog check, and is
 # within its lifetime — one row per entry on stdout, tab-separated:
-#   <catalog-or-empty> <check-id> <expires-after> <gates-elapsed> <entry header, 92 chars>
+#   <catalog-or-empty> <check-id> <expires-after> <gates-elapsed> <operator-auth line> <entry header, 92 chars>
+# The header is LAST because it is the only field that can itself contain a tab; every reader
+# splits on a bounded field count so the header absorbs the remainder. The operator-auth line
+# is carried verbatim and unparsed: WHETHER THAT CITATION IS GENUINE IS NOT DECIDED HERE, and
+# a caller that can reach a transcript corpus is expected to verify it before treating the row
+# as a licence. `ai-dlc-gate-remediation-guard.sh` does; see its arm 7b.
 # `validate-gate-adjudication.sh` asks this before it blocks on a per-check FAIL, so the one
 # place that defines "in force" is this file; the gate does not restate the grammar. In this
 # mode the exit is 0 whenever the file was read (an empty list is a real answer and is printed
@@ -220,9 +225,9 @@ fi
 RECORDS="$(awk '
   function flush() {
     if (header != "")
-      printf "%s\037%s\037%s\037%s\037%s\037%s\037%s\n", header, status, supp, expires, authts, named, suppcat
+      printf "%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\n", header, status, supp, expires, authts, named, suppcat, authline
   }
-  /^#{2,3} / { flush(); header=$0; status=""; supp=""; expires=""; authts=""; named=""; suppcat=""; next }
+  /^#{2,3} / { flush(); header=$0; status=""; supp=""; expires=""; authts=""; named=""; suppcat=""; authline=""; next }
   /\*\*[Ss]tatus:\*\*/ {
     if (status == "") {
       s=$0; sub(/^.*\*\*[Ss]tatus:\*\*[[:space:]]*/,"",s)
@@ -254,6 +259,11 @@ RECORDS="$(awk '
   /\*\*Operator authorization:\*\*/ {
     if (authts == "") {
       s=$0; sub(/^.*\*\*Operator authorization:\*\*[[:space:]]*/,"",s)
+      # The line is carried VERBATIM as its own field, and no quote is extracted here. The
+      # quoted-segment parser a verifying caller needs is held to exactly three copies by an
+      # invariant whose site list is DERIVED, so this file forwards the line unparsed rather
+      # than becoming a fourth.
+      if (authline == "") authline=s
       if (match(s,/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}/))
         authts=substr(s,RSTART,RLENGTH)
     }
@@ -359,7 +369,7 @@ matched_baseline=""
 # it cannot occur in markdown prose the way `|` or `~` can.
 in_force_n=0
 unresolved_n=0
-while IFS="$(printf '\037')" read -r header status supp expires authts named suppcat; do
+while IFS="$(printf '\037')" read -r header status supp expires authts named suppcat authline; do
   [ -n "${header:-}" ] || continue
   short="$(printf '%s' "$header" | cut -c1-92)"
 
@@ -440,7 +450,7 @@ while IFS="$(printf '\037')" read -r header status supp expires authts named sup
         [ "$GATES_N" -eq 0 ] || elapsed="$(gates_since "$authts")"
         if [ "$elapsed" -le "$expires" ]; then
           in_force_n=$((in_force_n + 1))
-          printf '%s\t%s\t%s\t%s\t%s\n' "$suppcat" "$supp" "$expires" "$elapsed" "$short"
+          printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$suppcat" "$supp" "$expires" "$elapsed" "$authline" "$short"
         fi
         continue
       fi

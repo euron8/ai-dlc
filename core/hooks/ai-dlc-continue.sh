@@ -32,9 +32,14 @@
 # PAUSE CONTRACT
 # The pause flag is created by:
 #   1. ai-dlc-pause.sh on any user message during an active pipeline, OR
-#   2. The lead itself when it has a legitimate intentional pause
-#      (HARD_BLOCK awaiting operator decision per Rule 11(a), handoff
-#      per Rule 2, gate failure, Production Validation Checkpoint).
+#   2. The lead itself when it has a legitimate intentional pause that
+#      ENDS THE TURN -- handoff per Rule 2, gate failure, Production
+#      Validation Checkpoint, retro commentary.
+#      NOT a Rule 11(a) ambiguity question. That one is put with
+#      AskUserQuestion and sets NO flag: the tool holds the turn open, so
+#      this hook never runs and a flag left there is a pause nobody
+#      clears. Rule 11's HARD_BLOCK severity is about how hard the
+#      ambiguity blocks, never about which mechanism asks.
 # The lead interprets user intent and deletes the flag when the user
 # wants to resume autonomous execution. This hook never creates or
 # deletes the flag; it only reads it.
@@ -123,6 +128,15 @@ Event types:
   already cleared
 - `BLOCKED`: Stop event blocked; Rule 3 enforcement forced continue
 - `ALLOWED_BY_PAUSE`: Stop event allowed because pause flag exists
+- `PAUSE_QUESTION_IN_PROSE`: the pause flag was UP, the last line of the lead's
+  reply was a question, and the turn carried no `AskUserQuestion`. The stop was
+  allowed either way; the operator got one pointer line. A Rule 11(a) ambiguity
+  question belongs in the tool, so a nonzero count is decisions the operator was
+  asked for in prose and may never have seen — but the Production Validation
+  Checkpoint and the retro commentary prompt are asked in prose by design and
+  land here too. Read each one before counting it as a miss.
+  The same predicate on the flag-DOWN side does NOT raise its own event: the
+  verdict there is `BLOCKED`, and those rows carry `- Question in prose: yes`
 - `ACK_DENIED`: a pipeline-advancing tool call was DENIED because an operator
   message was outstanding and unacknowledged (Rule 29). A nonzero count means
   the lead tried to execute straight through a waiting human and the hook --
@@ -747,6 +761,142 @@ THE EXIT:  STOP -> ADJUDICATE -> RESOLVE -> VERIFY
 fi
 
 # -----------------------------------------------------------------------------
+# THE PAUSE-QUESTION PREDICATE: evaluated at most ONCE, and only by the TWO branches that read it
+# -----------------------------------------------------------------------------
+# It changes no verdict. Check 1 still allows the stop; the default below still blocks it.
+# What it adds is one paragraph, addressed to a different reader on each branch.
+#
+# Minimum mechanism (Rule 26(c)).
+#   Failure caught: the lead put a real pending decision to the operator as trailing prose at
+#     the end of a longer reply, and ended the turn. The operator's own account: "you haven't
+#     asked any question. You just threw something in your output ... buried in the transcript
+#     and not readily apparent." The decision was never taken and had to be re-asked. Rule
+#     11(a) requires `AskUserQuestion` for an ambiguity question; this is the reader that
+#     notices when a question went out as prose instead.
+#   WHY TWO BRANCHES, AND WHY THE BLOCK BRANCH IS THE LOAD-BEARING HALF. Measured on the
+#     reference consumer: the burial turn ended with the pause flag DOWN, so this hook took
+#     the DEFAULT BLOCK path, and that path's REASON text tells the lead "If you genuinely
+#     have no next action: create the pause flag". The lead did exactly that and re-asked in
+#     prose on the next turn. An arm sited only in Check 1 could not have fired on the turn
+#     that motivated it, and the block reason was steering the lead toward the FLAG where the
+#     rule wanted the TOOL -- that reason text was the defect's other half. Roughly a third of
+#     the fires on that corpus are flag-DOWN.
+#   Why the allow path WARNS and never blocks: pause points (b) and (c) -- the Production
+#     Validation Checkpoint and the retro commentary prompt -- legitimately end the turn
+#     carrying a prose question, and a block would wedge the two pauses the pipeline is built
+#     around. `systemMessage` is a universal hook field shown to the user; the JSON carries NO
+#     `decision` and NO `hookSpecificOutput.additionalContext`, either of which would change
+#     what happens to the turn. On the block path the verdict is ALREADY block and is
+#     unchanged -- only the reason text grows a paragraph.
+#   BOTH MESSAGES ARE TRUE AT EVERY PAUSE POINT, and that is a constraint, not a courtesy. A
+#     message reading "Rule 11(a) requires the tool, ask it again" is FALSE at (b) and (c),
+#     where a prose question is the mandated form. The operator-facing line therefore POINTS
+#     and does not accuse; the lead-facing paragraph names both readings and lets the lead
+#     take the one it is in.
+#   NOT ON THE BACKOFF PATH, and not on any handoff or cycle path. Check 3 allows the stop
+#     precisely because the lead is looping, and a fresh instruction there re-arms the loop
+#     the backoff exists to end.
+#   FALSE-POSITIVE SET, MEASURED BEFORE THIS SHIPPED, over the reference consumer's
+#     transcripts: the predicate fires on 97 of 3660 turn-ends, against a control of 138 turns
+#     that do carry the tool. 84 of the 97 carry a genuine pending question. Of the 65
+#     flag-up fires, 43 are real ambiguity decisions, 7 are (b)/(c) prompts, 8 are
+#     session-opening greetings that fire because the flag persists on disk across sessions, 2
+#     are handoff prompts and 5 are other. The only fire carrying no question at all is a `?`
+#     inside a regex in a code span. THE NARROWING THAT WAS REJECTED: requiring the reply to
+#     END on the `?` character loses 22 real questions to remove 1 false positive.
+#   COST, measured against the same hook without this arm, on the reference consumer's largest
+#     session file (28.3 MB, 9938 records), five interleaved reps each: a NON-firing Stop is
+#     about 1.15x the base hook on both branches -- six or seven milliseconds, all of it the
+#     tail prefilter. A FIRING Stop is about 4.5x, because that is where the full-file parse
+#     runs, and it runs on 97 of 3660 turn-ends. The first cut of this arm ran 45x on EVERY
+#     Stop; the two paragraphs below are the two things that cost that, and both are gone.
+#   Removal condition: retire when every pause point carrying a decision is solicited with
+#     `AskUserQuestion`, at which point this arm has no population left.
+#
+# THE TURN IS BOUNDED BY THE LAST USER RECORD CARRYING GENUINE TEXT, and that exclusion is what
+# makes "no AskUserQuestion in the turn" a legible key. An AskUserQuestion ANSWER arrives as a
+# `message.role=="user"` record whose content array holds a `tool_result` and no text block --
+# `core/scripts/validate-steering-budget.sh` :249-262 reads the same shape for the same reason.
+# Counting that record as a turn boundary would cut the turn BETWEEN the tool_use and the text
+# the lead wrote after the answer came back, so a question that WAS asked with the tool would
+# read as one that was not.
+#
+# The transcript's record shape, and why assistant text is rebuilt with join("") rather than
+# join(" "), are stated at :253-306 and are not restated here.
+#
+# FAIL-OPEN IN EVERY DIRECTION. No transcript path, no file, unparseable JSON, or any jq
+# failure leaves the verdict at 0, and both branches then behave byte-identically to what they
+# did before this predicate existed. A Stop guard that cannot read a transcript must not start
+# printing warnings on every pause.
+#
+# WHAT THE FIXTURE SEEDS -- core/fixtures/pause-question-in-prose: the firing case on BOTH
+# sides of the flag; the same text with an AskUserQuestion tool_use in the turn; a `?` on a
+# MIDDLE line only; a tool_use in the PREVIOUS turn only (fires); an answer-shaped tool_result
+# user record sitting between the tool_use and the final text (does not fire); a non-firing
+# flag-down seed whose block reason must stay byte-identical to the pre-arm hook's; and an
+# absent transcript.
+PQ_PROG='
+def txt: if (.message.content|type)=="string" then (.message.content // "")
+         else ((.message.content // []) | map(select(.type=="text") | (.text // "")) | join("")) end;
+def blank: (test("\\S") | not);
+def genuine: (.message.role=="user") and ((txt|blank)|not);
+def auq: if (.message.content|type)=="array"
+         then ((.message.content // []) | map(select(.type=="tool_use" and .name=="AskUserQuestion")) | length)
+         else 0 end;
+. as $r
+| ([ range(0; ($r|length)) | select($r[.]|genuine) ] | last) as $i
+| (if $i == null then $r else $r[($i+1):] end) as $turn
+| ([ $turn[] | select(.message.role=="assistant") ]) as $a
+| ([ $a[] | txt ] | map(select(blank|not)) | last // "") as $last
+| (($a | map(auq) | add) // 0) as $n
+| (($last | split("\n") | map(select(blank|not)) | last) // "") as $final_line
+| if (($final_line | index("?")) != null) and $n == 0 then "1" else "0" end
+'
+# LAZY, AND MEMOISED. The predicate is a `jq -s` over the WHOLE transcript, and the transcript
+# is the largest thing this hook can touch -- measured on the reference consumer's biggest
+# session file (28.3 MB, 9938 records), one evaluation is roughly a third of the base hook's
+# whole Stop-to-exit cost. Every path that exits BEFORE Check 1 or the default block must
+# therefore not pay it: Check 0's handoff exits, the adversarial-cycle exit, Check 2 (no
+# pipeline), Check 2b (a live wait-beat) and Check 3 (backoff) all return without a reader,
+# and each of those is a common outcome.
+#
+# THE TWO READERS CALL THIS; NOTHING ELSE MAY. It caches in `PQ_FIRE` so the default block's
+# reason and its log row cost one evaluation between them, not two.
+#
+# `blank` IS A SEARCH, NEVER A SUBSTITUTION, AND THAT IS THE FIRST HALF OF THE COST. `gsub`
+# rewrites every record's full text before measuring the result, which is linear in the
+# transcript and was 16.2s of a 16.4s run on that file; `test("\\S")` stops at the first
+# non-space character, usually offset 0, for the same answer -- a text is blank when it holds
+# no non-whitespace.
+#
+# THE SECOND HALF IS THE SLURP, AND A 200-RECORD TAIL IS A PREFILTER, NEVER THE ANSWER. `jq -s`
+# over the whole file parses 28 MB to decide a question about its last few records, and that
+# alone measured ~200ms with `blank` already fixed. So the tail runs first and the full parse
+# runs ONLY when the tail says yes -- which, on the reference consumer, is 97 of 3660 turn-ends.
+#
+# THE PREFILTER IS SOUND IN ONE DIRECTION AND THAT IS THE ONE IT IS USED IN. Truncating the
+# front of the file can only make the windowed turn a SUBSET of the true turn, and both end on
+# the same record, so the last assistant text is identical and the AskUserQuestion count can
+# only fall. A window that says NO therefore guarantees the full file says no. A window that
+# says YES guarantees nothing, which is exactly why its yes is not taken as the verdict: a
+# tool_use further back than 200 records would otherwise manufacture a warning. The answer this
+# hook acts on is always the full-file one.
+PQ_FIRE=""
+pq_fire() { # -> 0 when the pause-question predicate holds, 1 otherwise
+  if [ -z "$PQ_FIRE" ]; then
+    PQ_FIRE=0
+    if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+      _pq_w="$(tail -n 200 "$TRANSCRIPT" 2>/dev/null | jq -rs "$PQ_PROG" 2>/dev/null)" || _pq_w=0
+      if [ "$_pq_w" = "1" ]; then
+        PQ_FIRE="$(jq -rs "$PQ_PROG" "$TRANSCRIPT" 2>/dev/null)" || PQ_FIRE=0
+      fi
+      [ "$PQ_FIRE" = "1" ] || PQ_FIRE=0
+    fi
+  fi
+  [ "$PQ_FIRE" = "1" ]
+}
+
+# -----------------------------------------------------------------------------
 # Check 1: Pause flag (user-initiated pause)
 # -----------------------------------------------------------------------------
 if [ -f "$PAUSE_FLAG" ]; then
@@ -758,6 +908,17 @@ if [ -f "$PAUSE_FLAG" ]; then
   } >> "$LOG_FILE"
   # Reset block state -- pause-resume cycle counts as progress
   rm -f "$STATE_FILE"
+
+  if pq_fire; then
+    {
+      echo "## ${TIMESTAMP} -- PAUSE_QUESTION_IN_PROSE"
+      echo "- Session: ${SESSION_ID}"
+      echo "- Pause allowed; the reply's final line is a question and the turn carries no AskUserQuestion"
+      echo ""
+    } >> "$LOG_FILE"
+    jq -n --arg m "AI/DLC: the pipeline is PAUSED and the last line of the reply above is a question. If it is a decision for you, it is in that final paragraph -- it sits inside the recap and is easy to read past. A Rule 11(a) ambiguity question is put with AskUserQuestion; the Production Validation Checkpoint and the retro commentary prompt are asked in prose." \
+      '{systemMessage:$m}'
+  fi
   exit 0
 fi
 
@@ -892,7 +1053,7 @@ REASON="Pipeline is active. You ended your turn without a tool call. This may be
 
 CHECK BEFORE ACTING: Did you just complete a sub-skill and need to present its output before invoking the next one? If so, this is a FALSE POSITIVE — combine the presentation with the next tool call in your next response. Do NOT skip steps to avoid this hook.
 
-If you genuinely have no next action: create the pause flag (touch _bmad-output/pipeline-paused.flag). HARD_BLOCK, PVC, handoff and retro commentary are EXAMPLES, not the closed set. An UNATTENDED SESSION is one too: no genuine operator turn has occurred at all, every user-role turn having been raised by the harness rather than typed by a human. DERIVE that, never feel it — scripts/ai-dlc/validate-steering-budget.sh already classifies harness-raised turns against the declaration in schemas/harness-origin.json, and _bmad-output/operator-requests-history.md records the genuine ones keyed by session. A quiet stretch is not evidence. Having no next action is the condition; not wanting to take one is not.
+If you genuinely have no next action: create the pause flag (touch _bmad-output/pipeline-paused.flag). PVC, handoff, retro commentary and a gate failure awaiting a human are EXAMPLES, not the closed set. A Rule 11(a) AMBIGUITY QUESTION IS NOT ON THIS LIST at any severity: it is put with AskUserQuestion, which holds the turn open, and it sets no flag. An UNATTENDED SESSION is one too: no genuine operator turn has occurred at all, every user-role turn having been raised by the harness rather than typed by a human. DERIVE that, never feel it — scripts/ai-dlc/validate-steering-budget.sh already classifies harness-raised turns against the declaration in schemas/harness-origin.json, and _bmad-output/operator-requests-history.md records the genuine ones keyed by session. A quiet stretch is not evidence. Having no next action is the condition; not wanting to take one is not.
 
 IF YOU ARE WAITING ON A TEAMMATE, this block means NO LIVE WAIT-BEAT IS ARMED. Your turn may end during a join only while _bmad-output/.beat-inflight holds a future epoch, and the ONLY thing that writes it is scripts/ai-dlc/wait-for-deliverable.sh, on its sleeping path. Four ways you can believe you have a beat and not have one: (1) a hand-rolled sleep/stat/until loop — it writes no marker, and is the Rule 29 Check A violation gate Check 25 counts; (2) a foreground call — its exit trap clears the marker before your turn ends; (3) a call that RETURNED INSTANTLY because every target was already on disk; (4) a second beat chained into the same Bash call as another. Do NOT emit filler tool calls to get past this block. Re-arm the real beat and end your turn in the SAME response: Bash(run_in_background: true) scripts/ai-dlc/wait-for-deliverable.sh <path> [<path>...]
 
@@ -901,6 +1062,20 @@ If you have a next action but emitted text first: pair the text with the tool ca
 IMPORTANT: This hook exists to prevent 'should I continue?' stalls (Rule 3). It does NOT mean 'skip the current step to produce a tool call faster.' Every numbered section in the current step file must be completed in full (Rule 4). If a section produces text output (party-mode results, failure classification, gate announcements), emit that text WITH the next section's tool call in the same response.
 
 FIDELITY CHECK: Do NOT pattern-match on prior sprint execution. Re-read the current step file's numbered sections and execute each one literally. The pipeline is designed for fidelity, not throughput. Rushing through deploy-validate and retro — treating them as formalities because implementation feels 'done' — is the documented failure mode. Each section exists for a reason. Execute it."
+
+# THE PAUSE-QUESTION PARAGRAPH, PREPENDED. Second reader of the predicate computed above; the
+# verdict is already block and does not move. It goes FIRST because the paragraph it has to
+# outrank is the one telling the lead to create the pause flag, and on the motivating turn that
+# is the instruction the lead obeyed instead of asking with the tool.
+if pq_fire; then
+  REASON="RULE 11(a) -- THE LAST LINE OF YOUR REPLY IS A QUESTION AND THIS TURN CARRIES NO AskUserQuestion. A question left in prose with no pause flag is not a pause: the pipeline blocks, you are told to create the flag, and a flag on its own does not make the question visible. Take whichever of the two readings you are in.
+
+(i) A Rule 11(a) AMBIGUITY QUESTION: put it with AskUserQuestion, recommended option first, and set NO pause flag -- the tool holds the turn open, so a flag there is a pause nobody clears.
+
+(ii) The PRODUCTION VALIDATION CHECKPOINT or the RETRO COMMENTARY PROMPT: those are asked in prose, so touch _bmad-output/pipeline-paused.flag and end the turn again (Rule 3).
+
+${REASON}"
+fi
 
 if [ -n "$CURRENT_STEP" ]; then
   REASON="${REASON} Current step: ${CURRENT_STEP}."
@@ -918,6 +1093,9 @@ echo "$COUNTER" >> "$STATE_FILE"
 {
   echo "## ${TIMESTAMP} -- BLOCKED (rapid-fire ${COUNTER}/${MAX_RAPID_BLOCKS})"
   echo "- Session: ${SESSION_ID}"
+  if pq_fire; then
+    echo "- Question in prose: yes"
+  fi
   if [ -n "$CURRENT_STEP" ]; then
     echo "- Current step: ${CURRENT_STEP}"
   fi

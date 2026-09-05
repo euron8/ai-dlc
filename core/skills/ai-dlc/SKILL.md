@@ -158,9 +158,10 @@ flag alone; without it your pause reads as a stall and the hook returns
 a forced-continuation reason urging you to pair the text with a tool
 call, pushing you past the very checkpoint you stopped at.
 
-(d) is the exception and sets NO flag: it is solicited with
+(a) and (d) are the exceptions and set NO flag: each is solicited with
 `AskUserQuestion`, so the turn never ends and the Stop hook never runs.
-A flag set there is a pause nobody clears.
+A flag set there is a pause nobody clears. (b) and (c) set the flag and
+end the turn.
 
 **EVERY `AskUserQuestion` CARRIES 2-4 OPTIONS PER QUESTION. A question with one
 option is REJECTED BY THE HARNESS**, not by this rule -- `InputValidationError`,
@@ -302,6 +303,16 @@ Two observable requirements.
 genuine ambiguity in the user's request, requirements, or intent. Do
 not ask about matters resolvable by reading existing artifacts,
 project memory, or applying professional defaults.
+
+**Put the question to the operator with `AskUserQuestion`, the
+recommended option first, and set NO pause flag for it.** The option
+constraint on every `AskUserQuestion` is stated in Rule 3's pause-point
+section and is not restated here. A question typed as prose at the end
+of a reply, followed by ending the turn, reads as narration: the
+operator sees a paragraph of recap, not a decision that is theirs to
+take, and the decision is never taken. The tool holds the turn open, so
+the Stop hook never runs and a flag set here is a pause nobody clears --
+the same reason Rule 3 gives for (d).
 
 **(b) In-flight interpretation preamble.** The first line of the
 agent's response to ANY user message that arrives during or after an
