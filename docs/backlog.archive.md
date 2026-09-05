@@ -6108,3 +6108,109 @@ load-bearing half and it fails closed.
 
 verify: sh f="${ROUTE:-core/skills/ai-dlc/steps/route.md}"; [ -f "$f" ] || exit 9; grep -qF 'to have me trim it to its' "$f" && exit 1; grep -qF 'remedy the script names YOURSELF, without asking' "$f" || exit 1; grep -qF 'one trim pass did not clear it' "$f" || exit 1; exit 0
 
+## BL-169 — the gate-remediation guard derives its lock-out set from raw FAIL verdicts, so a FAIL Check 26 now proceeds past under an in-force suppression still keeps the lead locked out of the artifact corpus until a repair record or an authorization file that no step tells it to write
+
+**LANDED (v0.505.0, verified 288d0e53).** Merged as PR #635; the release commit names the id verbatim.
+
+Distribution-internal, no `PC-` id; NOTE tier — found by the batch-54 adversarial hand while
+attacking `BL-167`, and deliberately not fixed there. Adjacent, not the same subject: `BL-167`
+joins the suppression to the check that ADOPTS the verdict; this is the hook that reads the same
+verdict for a different purpose.
+
+`core/hooks/ai-dlc-gate-remediation-guard.sh:301` builds `FAILED_CHECKS` from every
+`.verdict == "FAIL"` in the live verdict and denies the lead's edits to the artifact corpus while
+that set is non-empty, lifting only on a repair record or on
+`<nonce>.authorization.md` carrying a verified operator quote (`:454`). It reads neither
+`docs/escalations/pending.md` nor `validate-suppression-lifetime.sh --in-force`. A suppressed
+FAIL is still a recorded FAIL — correctly, since a suppression bounds the licence and not the
+check — but no repair is coming for a check the operator has dispositioned, so after `0.504.0`
+the gate passes while the lead stays in remediation lockdown, and the only exit is an
+authorization file that `gate-validation.md` Check 26 and `escalations.md` never mention beside
+`SUPPRESSED`. Measured on the consumer: its story-308-1 gate 3 carries exactly this state.
+
+Shape of the fix: either the guard asks the same `--in-force` query and subtracts covered
+checks from `FAILED_CHECKS` (keyed on the verdict's `catalog`, as `BL-167` does), or the
+`SUPPRESSED` procedure names the authorization file as the paired step. The first is one call
+and one subtraction and is probably right; whichever lands, the guard's own fixture needs a
+seeded in-force entry beside a FAIL verdict. Also recorded from the same review, not defects:
+`--series` deliberately still counts a suppressed FAIL toward the stall rung, so `Expires after: 3`
+across three passes of one gate trips it; and the caller's `refused:` branch may be unreachable
+because every sibling exit-2 condition keys on inputs the caller resolved itself.
+
+**Taken in batch 55 of the ledger drain**, batched with `BL-170` under the separability
+conditions. The guard now asks the sibling `--in-force` after the guarded-root test, joins its
+rows on the verdict's `catalog` with a bare bracket counting as `core` only, subtracts the
+covered checks, allows and logs `GATE_REMEDIATION_SUPPRESSED` when nothing remains, and denies
+naming both sets otherwise; every absence fails closed with its status in the reason, including
+a sibling that predates the mode, and an entry whose operator citation the transcript corpus does
+not carry. The sibling costs roughly fifteen times its own small-input control over the consumer's
+398582-byte escalations file, so the verified answer is cached at
+`_bmad-output/.gate-remediation-in-force`, keyed on the live nonce, a DIGEST of the escalations
+file, the size and mtime of the metrics file and the sibling, and a marker recording that the
+citations were verified; declared transient. Measured on a read-only copy of the consumer: on its live pass
+(`implementation-20260905T172547Z`, one FAIL, `16`, covered by `[S308-GATE3-STORY-1]`) the
+installed guard denies and the fixed one allows, against a known-positive pass where both deny.
+The receipt drives the shipped seed on five shapes because a single allow shape cannot separate
+the catalog-blind, bare-wildcard and fail-open wrong fixes. The two side notes above stand.
+
+verify: sh h=${H:-core/hooks/ai-dlc-gate-remediation-guard.sh}; s=core/fixtures/gate-remediation-deny/seed.sh; [ -f "$h" ] && [ -f "$s" ] || exit 9; a=_bmad-output/planning-artifacts/s302/test-strategy.md; d(){ w=$(bash "$s" "$1") || exit 9; o=$(jq -nc --arg f "$w/$a" --arg t "$w/sessions-jsonl/current.jsonl" '{session_id:"r",tool_name:"Edit",transcript_path:$t,tool_input:{file_path:$f}}' | CLAUDE_PROJECT_DIR="$w" AI_DLC_GATE_METRICS="" bash "$h" 2>/dev/null); g=$(grep -c GATE_REMEDIATION_SUPPRESSED "$w/_bmad-output/pipeline-continuation-log.md" 2>/dev/null) || g=0; rm -rf "$w"; }; d suppressed; [ -z "$o" ] && [ "$g" -gt 0 ] || exit 1; for c in suppressed-forged suppressed-superset suppressed-wrongcat suppressed-bare suppressed-partial suppressed-nosibling; do d "$c"; case "$o" in *'"deny"'*) ;; *) exit 1;; esac; done; exit 0
+
+
+## BL-170 — Rule 11(a) named no presentation mechanism, so an ambiguity question went out as the last line of a recap and the operator read it as narration; the Stop hook's block reason then steered the lead to the pause flag instead of the tool
+
+**LANDED (v0.505.0, verified 288d0e53).** Merged as PR #635; the release commit names the id verbatim.
+
+Filed by the reference consumer as
+`PC-S308-RULE-11-AMBIGUITY-QUESTIONS-HAVE-NO-MANDATED-PRESENTATION-TOOL` on 2026-09-04, from a
+live session in which the lead asked a real pending decision ("continue through the remaining
+gate-3 checks, or pause given the injection pattern") as trailing prose and ended its turn; the
+operator's next message was that no question had been asked. Batch 55 of the ledger drain,
+opened by a peer handoff and scoped from this session's own ranking: the only PC-backed unfiled
+candidate.
+
+**The defect has two halves, and the filing named one.** `SKILL.md` mandated `AskUserQuestion`
+once, for pause point (d) only; Rule 11(a) said ask and named no form. The other half is in
+`core/hooks/ai-dlc-continue.sh`: the burial turn ended with the pause flag DOWN, so the hook
+took its default block path, whose reason told the lead to create the pause flag if it had no
+next action. The lead obeyed, touched the flag, and re-asked in prose. Measured over the
+consumer's 247 transcripts (3660 turn-ends, control 138 turns carrying the tool): the
+predicate "final non-empty line of the turn's last assistant text contains `?` and the turn
+holds no `AskUserQuestion` tool_use" fires 97 times, 84 of them genuine pending questions; 65
+fire with the flag up (43 real ambiguity decisions, 7 PVC or retro prompts, 8 session-opening
+greetings because the flag persists on disk across sessions, 2 handoff prompts, 5 other) and
+32 with the flag down, including the incident's burial turn and 9 more real decisions. An arm
+sited in the pause-flag branch alone cannot fire on the case that motivated it. Requiring a
+TERMINAL `?` drops 22 real questions to remove one false positive (a `?` inside a regex in a
+code span) and is rejected.
+
+**The fix.** Rule 11(a) says put the question with `AskUserQuestion`, recommended option
+first, and set no pause flag for it; Rule 3 now names (a) and (d) as the no-flag exceptions
+and (b) and (c) as the flag-and-end-turn ones; `route.md` Step 6 cites that. The hook computes
+the predicate once, fail-open on any transcript problem, and reads it in two branches: with the
+flag up it logs `PAUSE_QUESTION_IN_PROSE` and emits a `systemMessage` for the operator, a
+neutral pointer that is true at every pause point (the decision is in the final paragraph;
+Rule 11(a) questions use the tool, PVC and retro prompts are prose) with no `decision` key, so
+the stop stays allowed; with the flag down it prepends one paragraph to the block reason that
+carries both readings (a Rule 11(a) question goes through the tool with no flag; a PVC or retro
+prompt sets the flag and ends the turn again) and records `- Question in prose: yes` on the
+`BLOCKED` row. A block would wedge (b) and (c), which end the turn with a prose question by
+design, so the flag-up branch warns and never blocks. `core/fixtures/pause-question-in-prose`
+ships; its `.dist-only` battery kills six mutants including the two wrong fixes (a `?`
+anywhere in the text; a tool_use anywhere in the transcript).
+
+**Limits, stated.** The consumer's receipt, `theirs_has core/skills/ai-dlc/SKILL.md "is
+solicited with"`, keys on a string the fix deliberately keeps, so it reads STILL-LIVE before and
+after and cannot see this close; the receipt below drives the hook instead. The 8 greeting fires
+remain: a session opening under a persisted flag that ends "What do you need?" gets the pointer.
+`templates/QUICKSTART.md.template` still says three pause points and predates this change. A
+turn that asked one question with the tool and buried a second decision in prose is acquitted,
+because the predicate counts any `AskUserQuestion` in the turn; a question buried at a join-yield
+(Check 2b's live-beat allow) gets no pointer on either branch. The adversarial hand found the
+first cut's whitespace test regex-substituting every record's full text, sixteen seconds per Stop
+on the consumer's largest transcript and paid before Check 1 on every exit; the predicate is now
+one regex per record and is computed only inside the two branches that read it.
+
+verify: sh h=${H:-core/hooks/ai-dlc-continue.sh}; [ -f "$h" ] || exit 9; d=$(mktemp -d); u(){ jq -nc --arg t "$1" '{message:{role:"user",content:$t}}'; }; a(){ jq -nc --arg t "$1" '{message:{role:"assistant",content:[{type:"text",text:$t}]}}'; }; tu(){ jq -nc --arg n "$1" '{message:{role:"assistant",content:[{type:"tool_use",id:"t1",name:$n,input:{}}]}}'; }; tr(){ jq -nc '{message:{role:"user",content:[{type:"tool_result",tool_use_id:"t1",content:"ok"}]}}'; }; Q=$'Checks are green.\n\nContinue the remaining checks, or pause given the pattern?'; { u ask; a "$Q"; } >"$d/q.jsonl"; { u ask; a $'Continue the remaining checks, or pause given the pattern?\n\nContinuing now.'; } >"$d/m.jsonl"; { u ask; tu Bash; tr; a "$Q"; } >"$d/b.jsonl"; { u ask; tu AskUserQuestion; tr; a "$Q"; } >"$d/k.jsonl"; printf '## Pipeline Position\ncurrent_step_file: gate-validation.md\n' >"$d/snap.md"; run(){ p="$d/p$1"; mkdir -p "$p/_bmad-output"; [ "$3" = 1 ] && touch "$p/_bmad-output/pipeline-paused.flag"; [ "$4" = 1 ] && cp "$d/snap.md" "$p/_bmad-output/pipeline-snapshot.md"; jq -nc --arg t "$d/$2" '{transcript_path:$t,session_id:"r"}' | CLAUDE_PROJECT_DIR="$p" bash "$h" 2>/dev/null; }; f1=$(run 1 q.jsonl 1 0); a2=$(run 2 m.jsonl 1 0); f2=$(run 3 q.jsonl 0 1); f3=$(run 4 b.jsonl 1 0); a8=$(run 5 k.jsonl 1 0); rm -rf "$d"; jq -e 'has("systemMessage") and (has("decision")|not)' <<<"$f1" >/dev/null 2>&1 || exit 1; jq -e 'has("systemMessage")' <<<"$a2" >/dev/null 2>&1 && exit 1; jq -e 'has("systemMessage")' <<<"$f3" >/dev/null 2>&1 || exit 1; jq -e 'has("systemMessage")' <<<"$a8" >/dev/null 2>&1 && exit 1; jq -e '.decision=="block" and (.reason|test("AskUserQuestion"))' <<<"$f2" >/dev/null 2>&1 || exit 1; exit 0
+
+
+
