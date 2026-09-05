@@ -53,7 +53,10 @@
 #   byte-identical to a run that scanned every CLASSIFY file and found nothing. The
 #   0.410.0 -> 0.412.0 reference-consumer pull bucketed every path ALREADY-AT-THEIRS,
 #   the CLASSIFY set was empty, and this script exited 0 with zero rows -- read as a
-#   clean scan. Its siblings carried a NOTE for the same state; this one did not. A
+#   clean scan. Any bucket set with no CLASSIFY member produces the same state: on the
+#   same consumer's 0.504.0 -> 0.508.0 range it is UPSTREAM-ONLY paths (the consumer
+#   never touched them), not ALREADY-AT-THEIRS, so read the NOTE's counts and not this
+#   header for the cause. Its siblings carried a NOTE for the same state; this one did not. A
 #   run that opened files and matched nothing states its denominator for the same
 #   reason. A run that produced rows says nothing on stderr: the rows are the answer.
 #   Both program callers (`apply.sh`, `emit-report.sh`) discard stderr and read the
