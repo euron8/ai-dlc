@@ -37,7 +37,7 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 53 SHIPPED AS `v0.503.0`. THE GAP IS ONE AND PENDING IS TWO. TWO `PC-S308-*` CANDIDATES ARE UNFILED, ONE WITH A MEASURED MECHANISM AND ONE FILED TODAY; PLUS `BL-159`, `BL-161` AND `BL-163` WITH NO `PC-` ID.
+### BATCH 53 SHIPPED AS `v0.503.0`. THE GAP IS ONE AND PENDING IS TWO. THREE `PC-S308-*` CANDIDATES ARE UNFILED, ONE WITH A MEASURED MECHANISM AND TWO FILED TODAY; PLUS `BL-159`, `BL-161` AND `BL-163` WITH NO `PC-` ID.
 
 This block replaces the batch-52 record below it. Every figure here was re-derived on 2026-09-05
 after the merge, against the working tree with the controls in the same invocation; re-derive
@@ -89,13 +89,15 @@ consumer's porcelain read 4 through the batch and 14 at its close, every path a 
 file or the ledger written by its own session; no write to the consumer by this session. A pull
 is operator-initiated; readiness is not authorization.
 
-**THE LEDGER MOVED ONCE DURING THE BATCH, ON A CONSUMER FILING, UNCOMMITTED.** md5 `f4e7ae5f…`
-(after the consumer's pull) → `90862de4…` in its working tree, on
-`PC-S308-RESUME-SNAPSHOT-BUDGET-ASKS-INSTEAD-OF-AUTO-TRIMMING` (2026-09-05, ledger line 3450,
-not yet in any consumer commit so `git log -S` dates it to nothing — that zero is the working-tree
-state, not a grammar failure). **Live 76 → 77, cited 46 → 48, unfiled 30 → 29**, archive 151,
-partition control 0. Goal partition **21 DISCHARGED / 27 in flight / 29 untouched**, overlap 3,
-discharged-but-invisible 0, TERMINAL **39**. Gap ONE (`0.502.0` installed, `0.503.0` shipped),
+**THE LEDGER MOVED TWICE DURING THE BATCH, ON TWO CONSUMER FILINGS, THE SECOND BETWEEN THE DOCS
+COMMIT AND THE FRESH-RESUME CHECK.** md5 `f4e7ae5f…` (after the consumer's pull) → `90862de4…` on
+`PC-S308-RESUME-SNAPSHOT-BUDGET-ASKS-INSTEAD-OF-AUTO-TRIMMING` (2026-09-05, ledger line 3450) →
+`3724a5b3…` on `PC-S308-CHECK26-NO-SUPPRESSED-CARVEOUT` (2026-09-05, line 3507), the second
+caught only because action 6b re-ran the derive block from a fresh checkout and read 78 where the
+block said 77. **Live 76 → 78, cited 46 → 48, unfiled 30 → 30** (two out on `BL-165` and
+`BL-166`, two in on the filings), archive 151, partition control 0. Goal partition **21 DISCHARGED
+/ 27 in flight / 30 untouched**, overlap 3, discharged-but-invisible 0, TERMINAL **39**. The
+consumer's gate-3 session is filing as it runs; expect these to have moved again. Gap ONE (`0.502.0` installed, `0.503.0` shipped),
 PENDING 2 (`BL-165` and `BL-166`, both at `0.503.0`). Say WIDE at five. The consumer sits on
 `ai-dlc/carry-over/pool-pnl-backlog-triage` again after merging its reconcile; peer `graph-5f` was
 idle throughout and was not messaged.
@@ -110,8 +112,8 @@ Check 5 verbatim and still carries "writes the entry from the story file" at its
 prose half of `0.503.0` does not reach its remediator until it edits the override (the tool half
 lands regardless); and that every earlier brief item in the batch-52 block below still stands.
 
-**TWO `PC-S308-*` CANDIDATES ARE UNFILED FOR BATCH 54 — RANK THEM, AND IF A PEER HANDED YOU THIS
-PLAN, TAKE THE TOP ONE WITHOUT ASKING.**
+**THREE `PC-S308-*` CANDIDATES ARE UNFILED FOR BATCH 54 — RANK THEM, AND IF A PEER HANDED YOU
+THIS PLAN, TAKE THE TOP ONE(S) WITHOUT ASKING.**
 `PC-S308-RULE-11-AMBIGUITY-QUESTIONS-HAVE-NO-MANDATED-PRESENTATION-TOOL` (2026-09-04) has its
 mechanism MEASURED by this batch's read-only opus hand over the consumer's 244 transcripts
 (sidechains excluded): both signals are readable inside the existing Stop hook
@@ -133,8 +135,16 @@ consumer): `steps/route.md` Step 0a check 1 HARD_BLOCKs and asks `trim`/`archive
 over-budget snapshot at resume (`route.md:133`), while Step 1a applies the same script's `trim`
 remedy autonomously for the identical condition (`:216-220`); the filing asks that Step 0a try
 `trim` first and ask only if the snapshot is still over budget. Its receipt string is present at
-`route.md:133` (control 1). Status line and receipt READ by this session; not ranked. `BL-159`,
-`BL-161`, `BL-163` (no `PC-` id) rank below both.
+`route.md:133` (control 1). Status line and receipt READ by this session; not ranked.
+`PC-S308-CHECK26-NO-SUPPRESSED-CARVEOUT` (2026-09-05, filed from the consumer's story-308-1
+gate 3): `validate-gate-adjudication.sh` is unconditionally fail-closed on any per-check FAIL
+with no branch for an in-force `SUPPRESSED` escalation, which `escalations.md:96-110` defines as
+an authorization to proceed past a failing check and `gate-validation.md:280` says does not block
+while in force, so every `adjudication: llm` check adopted through Check 26 cannot be suppressed;
+its receipt is `theirs_lacks scripts/ai-dlc/validate-gate-adjudication.sh "escalations/pending.md"`
+(consumer-shaped path; run it on `core/scripts/`). Status line read, receipt not run, not ranked;
+the batch-42 record below says drive that validator before calling any movement a behaviour.
+`BL-159`, `BL-161`, `BL-163` (no `PC-` id) rank below all three.
 
 ### BATCH 52 SHIPPED AS `v0.502.0` — THE BLOCK ABOVE REPLACES THIS ONE. TAKE THE STATE FROM THERE.
 
@@ -5126,12 +5136,13 @@ so no block written before it changes verdict.
    action 9's handoff — do NOT stop to ask: take the item(s) your own sweep and ranking
    recommend, state that choice and its reason in your FIRST message to the operator, and
    proceed; the operator can redirect at any ping. **Regardless of who invoked you, batch
-   multiple candidates into one release wherever action 2 allows it.** The two unfiled today
-   are in the resume block with their status lines and receipts already read:
+   multiple candidates into one release wherever action 2 allows it.** The three unfiled today
+   are in the resume block with their status lines read:
    `PC-S308-RULE-11-AMBIGUITY-QUESTIONS-HAVE-NO-MANDATED-PRESENTATION-TOOL` (2026-09-04, its
-   mechanism measured and a marked recommendation recorded there) and
-   `PC-S308-RESUME-SNAPSHOT-BUDGET-ASKS-INSTEAD-OF-AUTO-TRIMMING` (2026-09-05, uncommitted at
-   the consumer when read). Batch 53 is SHIPPED — `v0.503.0` at `69010ae9` (PR #630),
+   mechanism measured and a marked recommendation recorded there),
+   `PC-S308-RESUME-SNAPSHOT-BUDGET-ASKS-INSTEAD-OF-AUTO-TRIMMING` (2026-09-05) and
+   `PC-S308-CHECK26-NO-SUPPRESSED-CARVEOUT` (2026-09-05, filed while batch 53 was closing; its
+   receipt has not been run). Batch 53 is SHIPPED — `v0.503.0` at `69010ae9` (PR #630),
    `PC-S308-VALIDATE-ADVERSARIAL-CONVERGENCE-SCOPE-GREW-MISFIRES-ON-PASS-1` closed as `BL-165`
    and `PC-S308-CHECK-5-DERIVE-STORIES-REMEDY-CANNOT-CREATE-AN-ENTRY` as `BL-166`, both rotated,
    `BL-152` closed incidentally, no correction release; batch 52 is SHIPPED — `v0.502.0`
@@ -5722,9 +5733,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 90862de4... in the consumer's WORKING TREE at batch 53's close, on an uncommitted 2026-09-05 filing (f4e7ae5f... after its 0.502.0 pull rotated one id; 31a0b94b... before that); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
-   wc -l < /tmp/live.txt    # 77 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 76 after the consumer's pull rotated PC-S308-LEDGER-REVERIFY-..., +1 on the 2026-09-05 filing
-   wc -l < /tmp/unfiled.txt # 29 -- the two batch-53 ids left the set by being cited by BL-165 and BL-166 and rotated into docs/backlog.archive.md; PC-S308-RESUME-SNAPSHOT-BUDGET-ASKS-INSTEAD-OF-AUTO-TRIMMING entered it during the batch
+   md5 -q "$L"              # 3724a5b3... at batch 53's fresh-resume check, after two 2026-09-05 filings (90862de4... after the first; f4e7ae5f... after its 0.502.0 pull rotated one id; 31a0b94b... before that); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
+   wc -l < /tmp/live.txt    # 78 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 76 after the consumer's pull rotated PC-S308-LEDGER-REVERIFY-..., +2 on the two 2026-09-05 filings
+   wc -l < /tmp/unfiled.txt # 30 -- the two batch-53 ids left the set by being cited by BL-165 and BL-166 and rotated into docs/backlog.archive.md; PC-S308-RESUME-SNAPSHOT-BUDGET-... and PC-S308-CHECK26-NO-SUPPRESSED-CARVEOUT entered it during the batch
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
