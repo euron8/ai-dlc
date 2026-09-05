@@ -281,7 +281,9 @@ Two arms, either satisfies (dual-arm OR):
   expiry and an operator citation, and the script above adjudicates them. Past
   expiry with the named check still failing, the gate FAILS and the prior
   citation may not be re-cited — re-suppression is a new entry and a new
-  operator turn.
+  operator turn. This holds for an escalated `adjudication: llm` check too:
+  Check 26's validator consults the same script and a covered `FAIL` does not
+  block there.
 - `DEFERRAL_REQUEST` entries block only the deferred item, not the
   pipeline. Proceed with non-deferred work.
 - A HARD_BLOCK marked `RESOLVED`/`OVERRIDDEN` must cite the operator — enforced by
@@ -2068,8 +2070,20 @@ id, an empty evidence, an envelope or `gate_nonce` mismatch, or any per-check `F
 blocks. The lead adopts an `llm` verdict ONLY through this check — evaluating one inline is a
 Rule 20 solo violation.
 
-**PASS:** exit 0 — every escalated check covered, well-formed, all PASS. **FAIL:** any nonzero
-exit. Fixture: `tests/fixtures/gate-adjudication/`.
+**A per-check `FAIL` under an in-force `SUPPRESSED` entry does not block.** Check 2's rule
+that a suppression does not block while in force reaches the escalated checks here and nowhere
+else, because this is the only check that adopts them. The validator asks
+`validate-suppression-lifetime.sh --in-force` for the suppressions that are well-formed, name a
+catalog check and are within their lifetime, and joins them on `[<catalog>] <check-id>` against
+the verdict's own `catalog`; a covered `FAIL` is printed as `SUPPRESSED` with the entry that
+covers it and the gate proceeds. The adjudicator's verdict is unchanged — the check is still
+recorded `FAIL`; what the entry carries is the operator's licence to proceed past it, with the
+lifetime `escalations.md` gives it. Absence fails closed: no `docs/escalations/pending.md`, no
+sibling script, or a sibling refusal means no carve-out, and the block names which.
+
+**PASS:** exit 0 — every escalated check covered, well-formed, each PASS or `FAIL` under an
+in-force `SUPPRESSED` entry naming it. **FAIL:** any nonzero exit. Fixture:
+`tests/fixtures/gate-adjudication/`.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: the lead on a cheaper model silently
 mis-judging or skipping a judgment check — a check that cannot fire reads exactly like one that

@@ -62,17 +62,32 @@
 # False-positive set on the reference consumer: 0 of 123 entries, against a control of 16
 # entries that do classify `SUPPRESSED`.
 #
+# THE IN-FORCE QUERY IS THE SAME PREDICATE, ASKED BY THE GATE THAT ADOPTS A FAIL
+# `--in-force` lists every suppression that is well-formed, names a catalog check, and is
+# within its lifetime — one row per entry on stdout, tab-separated:
+#   <catalog-or-empty> <check-id> <expires-after> <gates-elapsed> <entry header, 92 chars>
+# `validate-gate-adjudication.sh` asks this before it blocks on a per-check FAIL, so the one
+# place that defines "in force" is this file; the gate does not restate the grammar. In this
+# mode the exit is 0 whenever the file was read (an empty list is a real answer and is printed
+# as `in_force=0` on stderr), and 2 on a refusal exactly as below. Malformed and expired
+# entries are simply not listed; the diagnostics for them stay on stderr, because a caller
+# leaning on a suppression that is malformed should see why it did not count.
+#
 # USAGE
 #   validate-suppression-lifetime.sh --escalations <pending.md>
 #                                   [--gate-metrics <gate-metrics.jsonl>]
 #                                   [--enforcement-map <enforcement-map.yaml>]
 #                                   [--baseline <file>]
+#   validate-suppression-lifetime.sh --in-force --escalations <pending.md>
+#                                   [--gate-metrics <gate-metrics.jsonl>]
+#                                   [--enforcement-map <enforcement-map.yaml>]
 #
 # EXIT
 #   0  no suppression is past its expiry on a still-failing check, and no terminal entry
-#      closes a still-failing check; or there is nothing in scope
+#      closes a still-failing check; or there is nothing in scope; or (--in-force) the
+#      escalations file was read and the in-force rows, possibly none, were printed
 #   1  a violation above, a malformed SUPPRESSED entry, or suppression fields on an
-#      entry that does not classify as SUPPRESSED
+#      entry that does not classify as SUPPRESSED (never under --in-force)
 #   2  bad arguments, or a required input could not be read — a refusal, not a pass
 set -u
 
@@ -80,6 +95,7 @@ ESCALATIONS=""
 GATE_METRICS=""
 ENFORCEMENT_MAP=""
 BASELINE=""
+IN_FORCE=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -88,8 +104,9 @@ while [ $# -gt 0 ]; do
     --gate-metrics)    GATE_METRICS="${2:-}"; shift 2 ;;
     --enforcement-map) ENFORCEMENT_MAP="${2:-}"; shift 2 ;;
     --baseline)        BASELINE="${2:-}"; shift 2 ;;
+    --in-force)        IN_FORCE=1; shift ;;
     -h|--help)
-      sed -n '1,76p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '1,90p' "$0" | sed 's/^# \{0,1\}//'
       exit 0 ;;
 # MODE_DISPATCH_END
     *)
@@ -137,6 +154,10 @@ AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 
 # No escalations file is a legitimate clean state — nothing to adjudicate.
 if [ ! -f "$ESCALATIONS" ]; then
+  if [ "$IN_FORCE" -eq 1 ]; then
+    echo "IN-FORCE: entries_scanned=0 suppressed=0 in_force=0 -- no escalations file ($ESCALATIONS)." >&2
+    exit 0
+  fi
   echo "OK: EXAMINED NOTHING — entries_scanned=0 suppressed=0 terminal_naming_check=0 malformed_attempt=0 -- no escalations file ($ESCALATIONS)."
   exit 0
 fi
@@ -199,9 +220,9 @@ fi
 RECORDS="$(awk '
   function flush() {
     if (header != "")
-      printf "%s\037%s\037%s\037%s\037%s\037%s\n", header, status, supp, expires, authts, named
+      printf "%s\037%s\037%s\037%s\037%s\037%s\037%s\n", header, status, supp, expires, authts, named, suppcat
   }
-  /^#{2,3} / { flush(); header=$0; status=""; supp=""; expires=""; authts=""; named=""; next }
+  /^#{2,3} / { flush(); header=$0; status=""; supp=""; expires=""; authts=""; named=""; suppcat=""; next }
   /\*\*[Ss]tatus:\*\*/ {
     if (status == "") {
       s=$0; sub(/^.*\*\*[Ss]tatus:\*\*[[:space:]]*/,"",s)
@@ -213,7 +234,9 @@ RECORDS="$(awk '
     if (supp == "") {
       s=$0; sub(/^.*\*\*Suppresses:\*\*[[:space:]]*/,"",s)
       gsub(/`/,"",s)
-      # optional [catalog] prefix, then the id up to the em/en dash or hyphen separator
+      # optional [catalog] prefix, kept as its own field for the in-force join, then the id
+      # up to the em/en dash or hyphen separator
+      if (match(s,/^\[[^]]*\]/)) suppcat=substr(s,RSTART+1,RLENGTH-2)
       sub(/^\[[^]]*\][[:space:]]*/,"",s)
       sub(/[[:space:]]*[—–-][[:space:]].*$/,"",s)
       gsub(/^[[:space:]]+|[[:space:]]+$/,"",s)
@@ -334,7 +357,8 @@ matched_baseline=""
 # its later fields left and `named` arrives empty, which reads exactly like an entry that
 # names no check. 0x1f is non-whitespace, so empty fields are preserved positionally, and
 # it cannot occur in markdown prose the way `|` or `~` can.
-while IFS="$(printf '\037')" read -r header status supp expires authts named; do
+in_force_n=0
+while IFS="$(printf '\037')" read -r header status supp expires authts named suppcat; do
   [ -n "${header:-}" ] || continue
   short="$(printf '%s' "$header" | cut -c1-92)"
 
@@ -395,6 +419,18 @@ while IFS="$(printf '\037')" read -r header status supp expires authts named; do
         echo "      does not exist suppresses nothing and expires never." >&2
         continue
       fi
+      # --- the in-force query: within lifetime, whatever the check's latest verdict ---
+      # With no gate timeline nothing has elapsed, so a fresh suppression on a consumer that
+      # has recorded no gate yet is in force at 0 elapsed rather than unanswerable.
+      if [ "$IN_FORCE" -eq 1 ]; then
+        elapsed=0
+        [ "$GATES_N" -eq 0 ] || elapsed="$(gates_since "$authts")"
+        if [ "$elapsed" -le "$expires" ]; then
+          in_force_n=$((in_force_n + 1))
+          printf '%s\t%s\t%s\t%s\t%s\n' "$suppcat" "$supp" "$expires" "$elapsed" "$short"
+        fi
+        continue
+      fi
       # --- lifetime ---
       if [ "$GATES_N" -eq 0 ]; then
         echo "NOTE: entry '$supp' -- expiry NOT-APPLICABLE, no gate-metrics.jsonl found," >&2
@@ -453,6 +489,12 @@ while IFS="$(printf '\037')" read -r header status supp expires authts named; do
 done <<EOF
 $RECORDS
 EOF
+
+# ---- 6b. The in-force query answers here, with its counts, and never with exit 1 ------
+if [ "$IN_FORCE" -eq 1 ]; then
+  echo "IN-FORCE: entries_scanned=$ENTRIES_N suppressed=$suppressed_n in_force=$in_force_n gates_recorded=$GATES_N catalog=$CATALOG_N" >&2
+  exit 0
+fi
 
 # ---- 7. A baseline may not outlive its cause -------------------------------
 if [ -n "$BASELINE_KEYS" ]; then

@@ -141,6 +141,14 @@ which counts elapsed gates from `gate-metrics.jsonl` and re-reads the named
 check's own recorded verdict — so a suppression whose cause has genuinely been
 fixed costs nothing, and only one that is still red is stopped.
 
+**An escalated check is covered the same way.** The `adjudication: llm` checks
+are adopted only through Check 26, whose validator asks the same script
+(`--in-force`) before it blocks on a per-check `FAIL`; a FAIL the adjudicator
+recorded stays recorded, and an in-force entry naming `[<catalog>] <check-id>`
+in the verdict's own catalog is what lets the gate proceed past it. An entry
+that names the wrong catalog, is malformed, or is past its lifetime covers
+nothing there, exactly as at Check 2.
+
 **AC verification-category-change disclosure.** When resolving a
 HARD_BLOCK changes how an acceptance criterion is verified — moving it
 between verification categories (e.g. discriminator → smoke-only,
