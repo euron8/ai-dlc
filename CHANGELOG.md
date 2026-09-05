@@ -15,6 +15,83 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.504.0] - 2026-09-05
+
+### `PC-S308-CHECK26-NO-SUPPRESSED-CARVEOUT` — a FAIL under an in-force `SUPPRESSED` entry no longer blocks Check 26, and the script that owns "in force" answers the question (`BL-167`)
+
+`escalations.md` defines `SUPPRESSED` as an authorization to proceed past a failing check, with
+a lifetime, and Check 2 says such an entry does not block while in force. Every
+`adjudication: llm` check is adopted only through Check 26, whose validator blocked on any
+per-check FAIL and read nothing else — so a suppression could cover a lead-evaluated check and
+never an escalated one. Measured on the reference consumer: a well-formed, in-force entry naming
+`[core] 16`, the lifetime validator PASS, and the installed validator exiting 1 on `['16']` for
+its story-308-1 gate-3 verdict, with no compliant way past it.
+
+`validate-suppression-lifetime.sh` gains `--in-force`, which runs the same extraction, catalog
+join and elapsed-gate count as the lifetime arm and lists every well-formed suppression within
+its lifetime as one tab-separated row (catalog, check id, expires-after, gates elapsed, header),
+exit 0 whenever the file was read and 2 on a refusal. `validate-gate-adjudication.sh` asks its
+sibling for those rows before blocking, joins them on (catalog, check id) against the verdict's
+own `catalog`, prints each covered FAIL as `SUPPRESSED` with the entry that covers it, and blocks
+on the rest. Absence fails closed and names which absence: no `docs/escalations/pending.md`, no
+sibling beside the script, or a sibling refusal. The all-PASS line is unchanged when nothing was
+suppressed; `--series` still counts a suppressed FAIL as a FAIL, because a suppression bounds the
+licence and not the check. **I107** binds the mode the caller spells to the mode the sibling
+dispatches and to its USAGE lines, on I53's pattern. Check 26's prose, Check 2's `SUPPRESSED`
+bullet, `escalations.md` and the enforcement-map posture say so.
+
+**Measured on the reference consumer, read-only, from its own cwd.** On the real gate-3 verdict
+and `pending.md`, with a `cmp -s` control that the two validators differ: installed exits 1;
+fixed prints the `SUPPRESSED` row for `[S308-GATE3-STORY-1]` and exits 0 with 14 PASS and 1 FAIL
+under an in-force entry; fixed with the escalations path pointed at a missing file exits 1 and
+says why. The in-force query lists exactly one of that file's 17 `SUPPRESSED` entries. Over its
+whole corpus of 195 verdicts, 86 carry a FAIL; reconstructing the escalations file and the gate
+metrics at each verdict's commit, 11 were covered by an in-force entry naming the failing check,
+6 of which flip from blocked to clean and 5 of which stay blocked on a second, uncovered FAIL.
+Its gate-log archives record four hand adoptions of a suppressed FAIL, one saying the script
+"has no suppression concept". A suppression naming an extension-catalog check is refused by the
+lifetime validator's core-only catalog join today, as before; none exists in that history.
+
+**Adversarial review before the merge.** The first cut let a `**Suppresses:**` line with no
+catalog bracket match on the id alone, so a bare `16` covered a FAIL on an extension check `16`
+in a catalog the entry never named; a bare id now counts as `core` and nothing else, because the
+sibling resolves ids against the core catalog alone and the bracket is mandatory. Suppressing a
+`hard_block: true` check, Check 2 included, is deliberately within scope: that bounded licence is
+what `SUPPRESSED` was created for. `escalations.md` spells an extension catalog `extension:<id>`
+while the consumer's gate metrics carry both that and `ext:<id>`; the join here is against the
+verdict's own `catalog` field, and the two spellings are recorded in `BL-167` as a stated limit
+rather than resolved. The fixture hand then measured a fail-open: a missing gate timeline read
+as zero elapsed, so an expired entry was in force from any cwd where the metrics file did not
+resolve; a lifetime that cannot be counted now covers nothing, and an existing empty timeline
+stays the fresh-consumer case. Metrics rows are written after Check 26 runs, so `Expires after:
+1` covers the authorizing gate and one more; `escalations.md` now says so beside the default.
+
+**Fixture.** `gate-adjudication` (shipping) gains eighteen cases for the carve-out, each
+asserting a token no wrong fix emits and each naming its own escalations and metrics files so a
+consumer's real in-force entries cannot reach it; `gate-adjudication-mutants` (`.dist-only`)
+scores thirteen wrong fixes across both scripts on WHICH case dies, sets compared for equality,
+beside an unmutated control that must show the covered row. Both layouts
+green. The remediation guard still locks the lead out under a suppressed FAIL; that is `BL-169`,
+filed and not fixed here.
+
+### `PC-S308-RESUME-SNAPSHOT-BUDGET-ASKS-INSTEAD-OF-AUTO-TRIMMING` — Step 0a trims the over-budget snapshot itself and asks only if one pass did not clear it (`BL-168`)
+
+`route.md` Step 0a check 1 HARD_BLOCKed on an over-budget `pipeline-snapshot.md` at resume and
+asked the operator to reply `trim`, `archive` or `abort`, while Step 1a applies the same
+script's `trim` remedy for the identical condition without asking. Measured over the reference
+consumer's session transcripts: the question reached the operator on 10 distinct occasions, all
+10 answered `trim`, `archive` and `abort` chosen zero times, and one reply was the operator
+asking for exactly this remedy in words. The trim performs the whole read the check defers, and
+so did the `trim` reply one round-trip later; the only answers that avoided the read were the
+two nobody chose.
+
+Check 1 now applies `trim` itself by the mechanics Step 1a's bullet already gives, citing Rule
+25(a) and Check 14 as the owners of move-never-delete and of the seven-section schema rather
+than restating them, re-runs the verdict, and falls through to the existing pause-flag-first
+HARD_BLOCK — `archive`, `abort`, or a named manual trim — only when one pass did not close the
+gap. The ask-first sentence had one copy in the tree and now has none; SKILL.md's Rule 25
+passage names Step 0a among the history file's feeders, which it already was.
+
 ## [0.503.0] - 2026-09-05
 
 ### `PC-S308-VALIDATE-ADVERSARIAL-CONVERGENCE-SCOPE-GREW-MISFIRES-ON-PASS-1` — pass 1 has no previous pass, so it cannot have grown scope (`BL-165`)
