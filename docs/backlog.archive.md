@@ -6112,6 +6112,12 @@ verify: sh f="${ROUTE:-core/skills/ai-dlc/steps/route.md}"; [ -f "$f" ] || exit 
 
 **LANDED (v0.505.0, verified 288d0e53).** Merged as PR #635; the release commit names the id verbatim.
 
+**ABSORBS `PC-S308-GATE-REMEDIATION-GUARD-BLIND-TO-SUPPRESSED`**, which the reference consumer
+filed on 2026-09-05 against its installed `0.504.0` while batch 57 ran: the same guard, the same
+raw-FAIL lock-out under an in-force `SUPPRESSED` entry, reproduced on a story edit and worked
+around with a remediator dispatch per suppressed gate. Arm 7b above is the fix; the consumer
+sees it on its next pull, and its receipt (`theirs_has` on the `SUPPRESSED` token) closes there.
+
 Distribution-internal, no `PC-` id; NOTE tier — found by the batch-54 adversarial hand while
 attacking `BL-167`, and deliberately not fixed there. Adjacent, not the same subject: `BL-167`
 joins the suppression to the check that ADOPTS the verdict; this is the hook that reads the same
