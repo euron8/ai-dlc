@@ -15,6 +15,40 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.502.0] - 2026-09-05
+
+### `PC-S308-HANDOFF-INTENT-PATTERN-MISSES-TRAILING-TERSE-PHRASING` — a terse handoff as the final sentence of a longer message is a request (`BL-164`)
+
+The reference consumer typed "I'm solving this issue. handoff." and the Stop guard never armed:
+`pause-routing.json`'s `handoff_intent_pattern` spelled a terse request only as the whole field,
+so every reader of the declaration — key 3 of `ai-dlc-handoff-pending.sh`, Check 0's transcript
+arm in `ai-dlc-continue.sh`, and the answer channel in `ai-dlc-answer-capture.sh` — scored the
+row NOT-PENDING, and the lead improvised the five-step procedure. The declaration gains one
+alternative that anchors the FINAL SENTENCE rather than the field: sentence punctuation, the
+word, optional terminal punctuation, end of field.
+
+**The shape was chosen by census, not by the filing.** Over every operator-prose row the consumer
+has ever recorded (3379 unique across all refs and the working tree) the new alternative admits
+exactly two rows the shipped pattern missed and both are requests; the obvious wider form, any
+message ending in the word, admits fifteen, five of them questions or denials about a handoff.
+Driven through the shipping predicate on a copy of the consumer's real log, the incident session
+flips NOT-PENDING → PENDING and no other session moves. No hook changed; I94 holds the readers to
+the one declaration.
+
+**Fixtures.** `handoff-completion-assertion` carries the consumer's row verbatim and a real
+denial as its near-miss, case (g4) through both the on-disk and the transcript reader, and
+mutant m25 — a copy of the declaration with the alternative stripped, driven through the
+unmodified hooks, with the bare word as the control that key 3 survived.
+`answer-handoff-routing` carries the same pair through the answer channel. Against the pre-fix
+declaration the first reports FIXTURE BROKEN at its seed premise and the second one assertion
+FAILED; on an `install.sh` tree the three handoff fixtures read 135 / 16 / 13 ok, as here.
+
+**Stated limits, none fixed here.** `ai-dlc-pause.sh` records the first 120 characters of a
+prompt, so a terse request trailing more than that is invisible to key 3 under any pattern. Two
+consumer rows that OPEN with the word and a comma match nothing, and both sit in sessions that
+already carried a request row. A curly-apostrophe "let's handoff" misses the ASCII `let's`
+alternative. All four are recorded in `BL-164`.
+
 ## [0.501.0] - 2026-09-04
 
 ### Correction to 0.500.0: the fence reader forked a subprocess per line, and the hook's shed rule had no arm

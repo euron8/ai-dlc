@@ -4105,3 +4105,69 @@ copies byte-identically to one owner with an arm in `scripts/validate-enforcemen
 state the indent rule once. Both are larger than the finding; neither is owed by `BL-162`.
 
 verify: manual
+
+## BL-164 — the handoff-intent declaration could not read a terse request that trails unrelated context, so a typed "I'm solving this issue. handoff." armed nothing and the lead improvised the procedure
+
+Filed by the reference consumer as `PC-S308-HANDOFF-INTENT-PATTERN-MISSES-TRAILING-TERSE-PHRASING`
+on 2026-09-05 (ledger row `2026-09-05T01:54:16Z`, filing commit `a0de44a99` six minutes later),
+the fourth filing of the end state `BL-158` records — an unperformed handoff — and the first
+against the VOCABULARY rather than a reader of it. Batch 52 of the ledger drain, scoped by the
+operator from a marked recommendation over three siblings on consequence: a silent guard failure in
+the subsystem batch 49 repaired. DEFECT: `core/schemas/pause-routing.json`'s
+`handoff_intent_pattern` spelled a terse request only as the whole field
+(`^[[:space:]]*hand[ -]?off[[:space:]]*$`), so the same word as the final sentence of a message
+that opens with unrelated context scored NOT-PENDING on every reader, and `ai-dlc-continue.sh`
+Check 0 never armed.
+
+**Reader set, derived.** Five sites resolve the declaration through one `jq` line each:
+`core/hooks/ai-dlc-handoff-pending.sh:118` (key 3, per row of this session's continuation-log
+prose), `core/hooks/ai-dlc-continue.sh:239` (Check 0 on the transcript's last user message),
+`core/hooks/ai-dlc-answer-capture.sh:194` (an AskUserQuestion answer),
+`core/fixtures/handoff-completion-assertion/run.sh:327`, and invariant I94 in
+`scripts/validate-enforcement-map.sh`, which forbids a second copy anywhere under `core/` or
+`scripts/`. Control: `handoff_intent_pattern` names exactly those files and no other. The
+consumer's installed copies of the schema and of all three hooks were byte-identical to `core/`
+at filing, so the filing describes what ships.
+
+**The remedy was BUILT AND SCORED against the consumer's whole history, and the obvious wider
+form is refuted.** Population: every `- Prompt (first 120 chars):` and `- Answer (first 120
+chars):` row ever added under the consumer's `_bmad-output/` across all refs, plus the working
+tree — 3379 unique rows, incident row present as the positive control, 110 rows carrying the word
+at all. The shipped pattern matches 6 (all outside the exclusion). The filing's own shape — a
+final sentence that is exactly the word, preceded by sentence punctuation:
+`(^|[.!?][[:space:]]*)[[:space:]]*hand[ -]?off[[:space:]]*[.!]?[[:space:]]*$` — admits exactly
+two more, both requests ("I'll fix the pipeline routing logic in the upstream ai-dlc distribution
+project. Handoff." and the incident). An alternative keyed only on the trailing word
+(`hand[ -]?off[[:space:]]*[.!]?[[:space:]]*$`) admits fifteen, five of them questions or denials
+("I didn't request handoff", "why haven't we done a handoff", "The interesting thing to me is that
+the handoff that I issued should have pushed it before completing the handoff."), and is rejected
+on that count. Widening the boundary class to commas and semicolons changes nothing on this
+corpus, so it was not taken. Driven through the SHIPPING predicate on a copy of the consumer's
+real continuation log with the pause flag raised and no other key: the incident session
+(`14a97e8b`, 82 rows) reads rc=1 under the shipped declaration and rc=0 `log-request` under the
+repaired one; across every session in that log the PENDING count moves 21 → 22 and the one
+that moves is the incident's.
+
+**The fix** is that one alternative appended to the declaration, with the schema's own
+description recording the shape and the census. No hook changed; I94 binds the readers to the
+declaration and passes. `core/fixtures/handoff-completion-assertion` gains the consumer's row
+verbatim as `P_TERSE` and a real denial as `P_TERSE_NEAR`, two seed-premise arms, case (g4)
+through the on-disk reader AND the transcript reader with a near-miss on each, and mutant m25 — a
+COPY of the declaration with the alternative stripped, driven through the unmodified hooks,
+killed by (g4) on both readers, with the bare word as the control that key 3 survived.
+`core/fixtures/answer-handoff-routing` gains the same pair through the answer channel. Against the
+pre-fix declaration the first fixture reports FIXTURE BROKEN at its seed premise and the second
+one assertion FAILED; on a tree built by `install.sh` the three handoff fixtures read 135 / 16 /
+13 ok, the same as here.
+
+**Stated limits, each measured, none fixed here.** (1) `core/hooks/ai-dlc-pause.sh:67` records
+the first 120 characters of a prompt, so a terse request trailing more than that is invisible to
+key 3 under any pattern; the transcript reader sees the whole message but is blind to a mid-turn
+request (the hook's own header). (2) Two consumer rows open with the word and a comma
+("handoff, will PVC after handoff", "Handoff, explicit authorize on resume") and match nothing;
+both sit in sessions that already carried a matching row, so the per-session verdict does not
+move. (3) "Ok, then let's handoff" misses because the row carries a curly apostrophe and the
+declaration's `let's` is ASCII. (4) Three June rows are a bare "Handoff" behind a
+`<system-reminder>` prefix; `ai-dlc-pause.sh` strips that prefix today.
+
+verify: sh d=$(mktemp -d); s=core/schemas/pause-routing.json; h=core/hooks/ai-dlc-handoff-pending.sh; { [ -f "$s" ] && [ -f "$h" ]; } || exit 9; : > "$d/pipeline-paused.flag"; printf '# log\n\n## 2026-09-05T01:54:16Z -- USER_PAUSE\n- Session: s1\n- Prompt (first 120 chars): I am solving this issue. handoff.\n\n## 2026-09-05T01:55:00Z -- USER_PAUSE\n- Session: s2\n- Prompt (first 120 chars): I did not request handoff\n\n' > "$d/pipeline-continuation-log.md"; . "$h"; ai_dlc_handoff_pending "$d" s1 "$s" || exit 1; ai_dlc_handoff_pending "$d" s2 "$s" && exit 1; exit 0
