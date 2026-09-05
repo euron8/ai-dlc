@@ -58,7 +58,11 @@
 #   never touched them), not ALREADY-AT-THEIRS, so read the NOTE's counts and not this
 #   header for the cause. Its siblings carried a NOTE for the same state; this one did not. A
 #   run that opened files and matched nothing states its denominator for the same
-#   reason. A run that produced rows says nothing on stderr: the rows are the answer.
+#   reason. A run where preclassify.sh listed nothing at all -- an empty range, a bad
+#   ref, an unreadable dist -- is refused rather than read as clean; no program caller
+#   can reach that state (both call from inside a CLASSIFY case arm), so the by-hand
+#   run is its only reader. A run that produced rows says nothing on stderr: the rows
+#   are the answer.
 #   Both program callers (`apply.sh`, `emit-report.sh`) discard stderr and read the
 #   rows only; the NOTE is for the operator running step 3a-ii by hand.
 #
@@ -90,11 +94,14 @@ LIMIT='A consumer path upstream never had is outside this detector BY DESIGN (th
 # opened: a counter kept in a pipeline's last stage is lost to its subshell.
 ROWS="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null || true)"
 
-# preclassify.sh emitting NOTHING is an unresolvable input (a bad ref, an unreadable
-# dist), not a pull that touched no file. Refuse to read it as clean: "no rows" and
-# "no retired token" are the same stdout.
+# preclassify.sh emitting NOTHING has three causes and this script cannot tell them
+# apart: no file under a mapped core path moved between base and theirs (a docs-only
+# release, or base == theirs), a ref that did not resolve, or an unreadable dist. All
+# three mean NO core file was scanned. Refuse to read it as clean -- "no rows" and "no
+# retired token" are the same stdout -- and name every cause, because a refusal that
+# lists only the exotic ones misdiagnoses the common one.
 if [ -z "$ROWS" ]; then
-  echo "retired-tokens: preclassify.sh produced no rows for ${BASE}..${THEIRS} -- refusing to report clean, because 'no rows' and 'no retired token' are the same output. $LIMIT" >&2
+  echo "retired-tokens: preclassify.sh produced no rows for ${BASE}..${THEIRS} (no file under a mapped core path moved between them, a ref did not resolve, or the dist is unreadable) -- refusing to report clean, because 'no rows' and 'no retired token' are the same output. $LIMIT" >&2
   exit 0
 fi
 
