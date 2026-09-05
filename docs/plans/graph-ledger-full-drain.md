@@ -6054,6 +6054,34 @@ so no block written before it changes verdict.
    moved.** A stale action 1 costs a whole session redoing a batch. A stale figure costs the
    trust that makes the other figures usable. A stale command costs whichever the reader
    believes.
+6b. **THE FRESH-RESUME CHECK. ONE RESPONSIBILITY: A SESSION THAT STARTS FROM `origin/main` WITH
+   NOTHING BUT THE ONE-LINER RESUMES CORRECTLY. Run it AFTER action 6's docs commit has MERGED,
+   and do not stop before it passes.** Action 6 re-derives the block and validates its shape;
+   this step proves the re-derived block is the one a stranger will actually read, and that it
+   sends them to the right work. Measured at batch 52: action 6 was complete, the validator was
+   green, and the re-derived block still sat on an unmerged branch — a fresh session on `main`
+   would have read batch 51's block and re-scoped batch 52's subject. Nothing in action 6 could
+   see that, because action 6 reads the working tree and a fresh session does not.
+
+   - **Merge the docs commit FIRST.** A resume block that lives only on a branch is invisible
+     to a fresh session. `git log -1 --format=%h origin/main -- docs/plans/graph-ledger-full-drain.md`
+     must name the commit that carries the new block.
+   - **Read it from a FRESH CHECKOUT, as a stranger.** `W="$(mktemp -d)/wt"; git worktree add
+     "$W" origin/main`, then in `$W` read ONLY the five live sections `## RESUME HERE` names,
+     in the order it names them, with no memory of this session. If any sentence needs this
+     session's context to make sense, it is not resumable; fix it and go back to action 6.
+   - **Run `### Derive the state; do not trust the numbers below` verbatim from `$W`** and
+     compare every figure to the block's claims. A mismatch is a stop, not a note.
+   - **Assert action 1 names no shipped work.** For every `PC-` id action 1 offers as NEXT
+     work: `git log -F --grep='<id>' --format=%h origin/main | wc -l` must be 0. For the id
+     the block says SHIPPED it must be non-zero, with `VERSION` at the oldest such commit equal
+     to the release the block names. An action 1 naming shipped work is the whole failure this
+     step exists for, and it is the one a green validator cannot see.
+   - **`bash scripts/validate-plan-shape.sh` from `$W`.** PASS is the floor, not the answer.
+   - **Remove the worktree** (`git worktree remove --force "$W"`) and report one line:
+     `resumable from origin/main at <sha>` with the figures compared, or the mismatch and what
+     was done about it.
+
 7. **DETECT WHETHER A PULL IS OWED, AND SEPARATELY WHETHER IT IS REQUIRED. Do not run the pull,
    and do not write a runbook until the second test says yes.**
 

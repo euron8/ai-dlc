@@ -72,6 +72,21 @@ v0.370.0 landed on `main` as `d4fd318`, squashed from `perf/pre-push-wall-clock`
    number, and a resuming session runs the command. `bash scripts/validate-plan-shape.sh` is the
    floor, not the answer: it cannot see that an action is stale.
 
+3b. **THE FRESH-RESUME CHECK. ONE RESPONSIBILITY: A SESSION THAT STARTS FROM `origin/main` WITH
+   NOTHING BUT THE ONE-LINER RESUMES CORRECTLY. Run it AFTER action 3's docs commit has MERGED,
+   and do not stop before it passes.** Action 3 re-derives the block; this step proves the
+   re-derived block is the one a stranger will read. Measured on the sibling plan at batch 52 of
+   the ledger drain: action 3's twin was complete and the validator green while the new block
+   sat on an unmerged branch, so a fresh session on `main` would have read the previous block and
+   redone the batch. Merge the docs commit first and confirm
+   `git log -1 --format=%h origin/main -- docs/plans/pre-push-wall-clock.md` names it; then
+   `git worktree add "$(mktemp -d)/wt" origin/main` and, in that worktree, read ONLY
+   `## Start here` and this action list as a stranger with no memory of the session; re-run the
+   measurements the block quotes from the worktree and compare; assert action 1 names no work a
+   commit on `origin/main` has already done; run `bash scripts/validate-plan-shape.sh` there as
+   the floor; remove the worktree and report `resumable from origin/main at <sha>` or the
+   mismatch.
+
 **Do not re-open Steps 7 or 8.** Both are marked DROPPED ON MEASUREMENT with the figures that
 killed them, and both sections are kept in full below because their hazard notes are the reason
 to read them if the numbers ever change back.
