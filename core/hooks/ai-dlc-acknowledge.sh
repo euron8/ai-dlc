@@ -61,7 +61,7 @@ SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
 # THE ACTOR. The harness sets this only on a tool call made INSIDE a dispatched teammate (an
-# `Agent` child); the lead's own calls carry none. `ai-dlc-gate-remediation-guard.sh:266` and
+# `Agent` child); the lead's own calls carry none. `ai-dlc-gate-remediation-guard.sh:282` and
 # `ai-dlc-context-sensor.sh:164` read the same field for the same question. Read here, beside
 # the transcript path, because the two are a PAIR on a teammate's call: the path is the LEAD's
 # session file, never the teammate's own -- see Check 2z below.

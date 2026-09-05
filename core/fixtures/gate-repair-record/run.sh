@@ -197,7 +197,7 @@ expect gate-repaired-lead-resolution 0 '' \
 "Both repaired passes carry a structured record named \`gate-<type>-resolution-p<M>.md\` and
   no \`-repair-p<M>.md\` exists. Not every FAIL closes by a remediator repair: a check whose
   input is a file the remediation guard leaves LEAD-editable
-  (ai-dlc-gate-remediation-guard.sh:284-285 — \`docs/escalations/**\`, \`*-resolution-p*.md\`)
+  (ai-dlc-gate-remediation-guard.sh:336-337 — \`docs/escalations/**\`, \`*-resolution-p*.md\`)
   closes by a lead-authored resolution, and no dispatch is warranted or possible for it. If
   this case exits 1 the arm accepts only the remediator's filename, which leaves the lead
   choosing between fabricating a dispatch it did not make and taking a MISSING finding for

@@ -742,7 +742,7 @@ def run_series():
                 # TWO SUFFIXES, ONE EXPRESSION, AND THE `gate-` ANCHOR SURVIVES BOTH. Not every
                 # FAIL closes by a remediator repair. A check whose input is a file the
                 # remediation guard leaves LEAD-editable — `docs/escalations/**` and
-                # `*-resolution-p*.md`, ai-dlc-gate-remediation-guard.sh:284-285 — closes by a
+                # `*-resolution-p*.md`, ai-dlc-gate-remediation-guard.sh:336-337 — closes by a
                 # lead-authored RESOLUTION, and no remediator dispatch is warranted or possible
                 # for it. With one accepted suffix the lead's only ways out were to file the
                 # record under a name asserting a dispatch that did not happen, or to take a
