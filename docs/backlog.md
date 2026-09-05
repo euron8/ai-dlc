@@ -4102,3 +4102,52 @@ across three passes of one gate trips it; and the caller's `refused:` branch may
 because every sibling exit-2 condition keys on inputs the caller resolved itself.
 
 verify: manual
+
+
+## BL-170 — Rule 11(a) named no presentation mechanism, so an ambiguity question went out as the last line of a recap and the operator read it as narration; the Stop hook's block reason then steered the lead to the pause flag instead of the tool
+
+Filed by the reference consumer as
+`PC-S308-RULE-11-AMBIGUITY-QUESTIONS-HAVE-NO-MANDATED-PRESENTATION-TOOL` on 2026-09-04, from a
+live session in which the lead asked a real pending decision ("continue through the remaining
+gate-3 checks, or pause given the injection pattern") as trailing prose and ended its turn; the
+operator's next message was that no question had been asked. Batch 55 of the ledger drain,
+opened by a peer handoff and scoped from this session's own ranking: the only PC-backed unfiled
+candidate.
+
+**The defect has two halves, and the filing named one.** `SKILL.md` mandated `AskUserQuestion`
+once, for pause point (d) only; Rule 11(a) said ask and named no form. The other half is in
+`core/hooks/ai-dlc-continue.sh`: the burial turn ended with the pause flag DOWN, so the hook
+took its default block path, whose reason told the lead to create the pause flag if it had no
+next action. The lead obeyed, touched the flag, and re-asked in prose. Measured over the
+consumer's 247 transcripts (3660 turn-ends, control 138 turns carrying the tool): the
+predicate "final non-empty line of the turn's last assistant text contains `?` and the turn
+holds no `AskUserQuestion` tool_use" fires 97 times, 84 of them genuine pending questions; 65
+fire with the flag up (43 real ambiguity decisions, 7 PVC or retro prompts, 8 session-opening
+greetings because the flag persists on disk across sessions, 2 handoff prompts, 5 other) and
+32 with the flag down, including the incident's burial turn and 9 more real decisions. An arm
+sited in the pause-flag branch alone cannot fire on the case that motivated it. Requiring a
+TERMINAL `?` drops 22 real questions to remove one false positive (a `?` inside a regex in a
+code span) and is rejected.
+
+**The fix.** Rule 11(a) says put the question with `AskUserQuestion`, recommended option
+first, and set no pause flag for it; Rule 3 now names (a) and (d) as the no-flag exceptions
+and (b) and (c) as the flag-and-end-turn ones; `route.md` Step 6 cites that. The hook computes
+the predicate once, fail-open on any transcript problem, and reads it in two branches: with the
+flag up it logs `PAUSE_QUESTION_IN_PROSE` and emits a `systemMessage` for the operator, a
+neutral pointer that is true at every pause point (the decision is in the final paragraph;
+Rule 11(a) questions use the tool, PVC and retro prompts are prose) with no `decision` key, so
+the stop stays allowed; with the flag down it prepends one paragraph to the block reason that
+carries both readings (a Rule 11(a) question goes through the tool with no flag; a PVC or retro
+prompt sets the flag and ends the turn again) and records `- Question in prose: yes` on the
+`BLOCKED` row. A block would wedge (b) and (c), which end the turn with a prose question by
+design, so the flag-up branch warns and never blocks. `core/fixtures/pause-question-in-prose`
+ships; its `.dist-only` battery kills six mutants including the two wrong fixes (a `?`
+anywhere in the text; a tool_use anywhere in the transcript).
+
+**Limits, stated.** The consumer's receipt, `theirs_has core/skills/ai-dlc/SKILL.md "is
+solicited with"`, keys on a string the fix deliberately keeps, so it reads STILL-LIVE before and
+after and cannot see this close; the receipt below drives the hook instead. The 8 greeting fires
+remain: a session opening under a persisted flag that ends "What do you need?" gets the pointer.
+`templates/QUICKSTART.md.template` still says three pause points and predates this change.
+
+verify: sh h=${H:-core/hooks/ai-dlc-continue.sh}; [ -f "$h" ] || exit 9; d=$(mktemp -d); u(){ jq -nc --arg t "$1" '{message:{role:"user",content:$t}}'; }; a(){ jq -nc --arg t "$1" '{message:{role:"assistant",content:[{type:"text",text:$t}]}}'; }; { u ask; a $'Checks are green.\n\nContinue the remaining checks, or pause given the pattern?'; } >"$d/q.jsonl"; { u ask; a $'Continue the remaining checks, or pause given the pattern?\n\nContinuing now.'; } >"$d/m.jsonl"; printf '## Pipeline Position\ncurrent_step_file: gate-validation.md\n' >"$d/snap.md"; run(){ p="$d/p$1"; mkdir -p "$p/_bmad-output"; [ "$3" = 1 ] && touch "$p/_bmad-output/pipeline-paused.flag"; [ "$4" = 1 ] && cp "$d/snap.md" "$p/_bmad-output/pipeline-snapshot.md"; jq -nc --arg t "$d/$2" '{transcript_path:$t,session_id:"r"}' | CLAUDE_PROJECT_DIR="$p" bash "$h" 2>/dev/null; }; f1=$(run 1 q.jsonl 1 0); a2=$(run 2 m.jsonl 1 0); f2=$(run 3 q.jsonl 0 1); rm -rf "$d"; jq -e 'has("systemMessage") and (has("decision")|not)' <<<"$f1" >/dev/null 2>&1 || exit 1; jq -e 'has("systemMessage")' <<<"$a2" >/dev/null 2>&1 && exit 1; jq -e '.decision=="block" and (.reason|test("AskUserQuestion"))' <<<"$f2" >/dev/null 2>&1 || exit 1; exit 0
