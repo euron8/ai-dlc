@@ -708,6 +708,31 @@ r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_NEAR_NOBLK")")"
 [ "$r" = allow ] && ok "  near-miss through the transcript: the denial -> ALLOW" \
                  || bad "  the denial BLOCKED through the transcript ($r) — the transcript reader has widened where the on-disk reader has not, or both have"
 
+# (g5) A MULTI-LINE MESSAGE IS ONE FIELD, NOT A SET OF LINES. The declared patterns anchor on
+#      `^` and `$`, and grep anchors per LINE, so a message whose MIDDLE line ends in the terse
+#      form -- an operator pasting the incident's own row into a question -- matched on that
+#      line alone and routed the whole message. ai-dlc-pause.sh collapses newlines before it
+#      writes the row key 3 reads; the transcript reader now collapses the same way. The
+#      sibling BLOCK is the same message with the terse form on its LAST line, which is a
+#      request whether or not it is collapsed. Killed by mutant M26.
+P_PASTED="$(printf 'Look at this filing:\nRepro row: %s\nIs the fix right?' "$P_TERSE")"
+P_LASTLINE="$(printf 'Everything is committed.\n%s' "$P_TERSE")"
+T_PASTED_NOBLK="$ROOT/t_pasted_noblk.jsonl"
+jq -nc --arg u "$P_PASTED" '{message:{role:"user",content:$u}}' > "$T_PASTED_NOBLK"
+jq -nc --arg a "Done. Everything is committed and the snapshot is updated." '{message:{role:"assistant",content:$a}}' >> "$T_PASTED_NOBLK"
+T_LASTLINE_NOBLK="$ROOT/t_lastline_noblk.jsonl"
+jq -nc --arg u "$P_LASTLINE" '{message:{role:"user",content:$u}}' > "$T_LASTLINE_NOBLK"
+jq -nc --arg a "Done. Everything is committed and the snapshot is updated." '{message:{role:"assistant",content:$a}}' >> "$T_LASTLINE_NOBLK"
+[ "$(printf '%s' "$P_PASTED" | wc -l | tr -d ' ')" = "2" ] || broken "seed premise dead: the pasted-filing seed is not three lines, so (g5) cannot tell a per-line reader from a per-field one"
+dsetup
+r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_PASTED_NOBLK")")"
+[ "$r" = allow ] && ok "(g5) a three-line message whose MIDDLE line ends in the terse form -> ALLOW (the transcript is one field, not a set of lines)" \
+                 || bad "(g5) a pasted filing quoting the incident row BLOCKED ($r) — the transcript reader matches per line, so any message that quotes a request on its own line arms the guard"
+dsetup
+r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_LASTLINE_NOBLK")")"
+[ "$r" = block ] && ok "  control: the same shape with the terse form on the LAST line -> BLOCK (collapsing did not disarm the final-sentence alternative)" \
+                 || bad "  a two-line message ending in the terse request was ALLOWED ($r) — the collapse broke the final-sentence alternative, or the transcript reader is dead and (g5) is unreadable"
+
 # (h) THE SESSION BOUND IS THE DISCHARGE. The log is rotated per sprint, so "any handoff row"
 #     would stay true for every later session in the sprint and would block ordinary work at
 #     its first Stop. Same tree, same log bytes, only the driving session id differs.
@@ -1379,6 +1404,22 @@ else
   SCHEMA="$_m25_saved"
   [ "$r" = block ] && ok "  control [m25] through the TRANSCRIPT: the bare word as the last user turn still BLOCKS under the same copy — that reader is alive, so its ALLOW above is the mutation and not a dead channel" \
                    || bad "MUTANT HARNESS BROKEN [m25]: the transcript reader did not block the bare word either ($r) — it is not reading, and the transcript kill above is unreadable"
+fi
+
+# M26 — the transcript reader matches PER LINE again: strip the newline collapse from
+#       LAST_USER in a copy of ai-dlc-continue.sh. Killed by (g5): the pasted filing whose
+#       middle line ends in the terse form BLOCKS under the copy. Control: (g5)'s last-line
+#       sibling still BLOCKS, so the copy reads the transcript and the kill is the anchor's.
+if mkmut m26-per-line-transcript "$CONF" -e "s/; } | tr '\\\\n' ' ')\$/; })/"; then
+  dsetup
+  r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_PASTED_NOBLK" "$MUT_DIR")")"
+  [ "$r" = block ] && ok "  mutant [m26] KILLED by assertion (g5): with the collapse gone the middle line matches on its own and the pasted filing BLOCKS" \
+                   || bad "MUTANT SURVIVED [m26]: expected block, got $r — (g5) does not depend on the newline collapse, so that assertion proves nothing"
+  dsetup
+  r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_LASTLINE_NOBLK" "$MUT_DIR")")"
+  [ "$r" = block ] && ok "  control [m26]: the last-line request still BLOCKS under the same copy — the copy runs and reads the transcript" \
+                   || bad "MUTANT HARNESS BROKEN [m26]: the last-line request stopped blocking ($r) — the copy is not reading the transcript, and the kill above is unreadable"
+  mut_ctl m26 "$MUT_DIR"
 fi
 
 # --- ai-dlc-recover.sh: the override ------------------------------------------------------

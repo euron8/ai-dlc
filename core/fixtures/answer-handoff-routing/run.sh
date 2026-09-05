@@ -184,6 +184,35 @@ newcase yes; OUT="$(fire "$Q_REAL" "I did not request handoff")"
 [ "$(flag)" = no ] && ok "near-miss: a denial that merely ENDS in the word routes nothing" \
   || bad "a denial ending in the word PAUSED the pipeline (flag=$(flag)) — the final-sentence alternative has widened into a trailing-word match"
 
+# --- Assertion 6c: a multi-line answer is ONE field, not a set of lines -----------------
+# The declared patterns anchor on `^` and `$`, and grep anchors per line, so an answer whose
+# MIDDLE line ends in the terse form -- the operator pasting the incident row into a longer
+# reply -- matched on that line alone and paused the pipeline. The hook matches a collapsed
+# copy now (the record keeps the newlines). The sibling is the same shape with the request on
+# the LAST line, which routes whether or not it is collapsed. Killed by the mutant below.
+A_PASTED="$(printf 'Look at this row:\nI am solving this issue. handoff.\nIs the fix right?')"
+A_LASTLINE="$(printf 'Everything is committed.\nI am solving this issue. handoff.')"
+newcase yes; OUT="$(fire "$Q_REAL" "$A_PASTED")"
+[ "$(flag)" = no ] && ok "a three-line answer whose MIDDLE line ends in the terse form routes nothing (one field, not a set of lines)" \
+  || bad "a pasted row on a middle line PAUSED the pipeline (flag=$(flag)) — the answer is matched per line, so quoting a request on its own line routes"
+newcase yes; OUT="$(fire "$Q_REAL" "$A_LASTLINE")"
+[ "$(flag)" = yes ] && ok "control: the same shape with the terse form on the LAST line -> pause flag created (collapsing did not disarm the alternative)" \
+  || bad "a two-line answer ending in the terse request routed NOTHING (flag=$(flag)) — the collapse broke the final-sentence alternative, or the arm is dead and 6c is unreadable"
+MUT_PERLINE="$ROOT/answer-capture-perline.sh"
+sed 's#^  ANSWER_FLAT=$(tr .\\n. . . <<<"\$ANSWER")$#  ANSWER_FLAT="$ANSWER"#' "$HOOK" > "$MUT_PERLINE"
+if cmp -s "$HOOK" "$MUT_PERLINE"; then
+  bad "FIXTURE STALE: the per-line mutation matched nothing in $HOOK — the collapse line was reworded, so this battery is editing a file it does not understand"
+elif ! bash -n "$MUT_PERLINE" 2>/dev/null; then
+  bad "FIXTURE STALE: the per-line mutant does not parse — a kill would be a syntax error rather than a disarmed collapse"
+else
+  newcase yes; OUT="$(fire "$Q_REAL" "$A_PASTED" "$MUT_PERLINE")"
+  [ "$(flag)" = yes ] && ok "mutant: with the collapse gone, the middle line matches on its own and the pasted row PAUSES — assertion 6c depends on the collapse" \
+    || bad "MUTANT SURVIVED: the pasted row still routes nothing (flag=$(flag)) under a per-line copy — 6c does not depend on the collapse, so it proves nothing"
+  newcase yes; OUT="$(fire "$Q_REAL" "$A_LASTLINE" "$MUT_PERLINE")"
+  [ "$(flag)" = yes ] && ok "mutant control: the last-line request still routes under the same copy — it loads and runs, so the kill above is real" \
+    || bad "MUTANT HARNESS BROKEN — the copy routes nothing at all (flag=$(flag)); it is not running, and the kill above is unreadable"
+fi
+
 # --- Assertion 7: intent is read from the ANSWER, never the QUESTION --------------------
 # The question is text the LEAD authored. A hook that matched on it would route on the
 # lead's own words, which is the self-referential provenance hole this hook's header already

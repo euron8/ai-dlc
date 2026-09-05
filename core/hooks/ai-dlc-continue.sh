@@ -286,7 +286,13 @@ if [ -r "$_AI_DLC_HP" ]; then
 fi
 
 if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
-  LAST_USER=$(jq -rs '[.[]|select(.message.role=="user")|.message.content|(if type=="string" then . else (map(select(.type=="text")|.text)|join(" ")) end)]|map(select(length>0))|last // ""' "$TRANSCRIPT" 2>/dev/null || echo "")
+  # ONE LINE, BECAUSE THE DECLARED PATTERNS ANCHOR ON `^` AND `$` AND grep ANCHORS PER LINE.
+  # A multi-line message with a middle line reading `handoff` (or, since the final-sentence
+  # alternative, ending `. handoff`) matched on that line alone and routed the whole message --
+  # a pasted filing quoting the incident row would arm the guard. ai-dlc-pause.sh already
+  # collapses newlines before writing the row key 3 reads, so this is the transcript reader
+  # seeing the same text shape as the on-disk reader, not a new rule.
+  LAST_USER=$({ jq -rs '[.[]|select(.message.role=="user")|.message.content|(if type=="string" then . else (map(select(.type=="text")|.text)|join(" ")) end)]|map(select(length>0))|last // ""' "$TRANSCRIPT" 2>/dev/null || echo ""; } | tr '\n' ' ')
   # LAST_ASST is reconstructed with join("") (NOT " "): the format check below is
   # line-anchored, and a streaming split of one text block into chunks can land a
   # boundary mid-line — join(" ") then corrupts a `----` marker into `-- --` and the
