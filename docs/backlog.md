@@ -4232,3 +4232,32 @@ correct. That is a stated limit rather than a defect in the receipt — the ask-
 load-bearing half and it fails closed.
 
 verify: sh f="${ROUTE:-core/skills/ai-dlc/steps/route.md}"; [ -f "$f" ] || exit 9; grep -qF 'to have me trim it to its' "$f" && exit 1; grep -qF 'remedy the script names YOURSELF, without asking' "$f" || exit 1; grep -qF 'one trim pass did not clear it' "$f" || exit 1; exit 0
+
+## BL-169 — the gate-remediation guard derives its lock-out set from raw FAIL verdicts, so a FAIL Check 26 now proceeds past under an in-force suppression still keeps the lead locked out of the artifact corpus until a repair record or an authorization file that no step tells it to write
+
+Distribution-internal, no `PC-` id; NOTE tier — found by the batch-54 adversarial hand while
+attacking `BL-167`, and deliberately not fixed there. Adjacent, not the same subject: `BL-167`
+joins the suppression to the check that ADOPTS the verdict; this is the hook that reads the same
+verdict for a different purpose.
+
+`core/hooks/ai-dlc-gate-remediation-guard.sh:301` builds `FAILED_CHECKS` from every
+`.verdict == "FAIL"` in the live verdict and denies the lead's edits to the artifact corpus while
+that set is non-empty, lifting only on a repair record or on
+`<nonce>.authorization.md` carrying a verified operator quote (`:454`). It reads neither
+`docs/escalations/pending.md` nor `validate-suppression-lifetime.sh --in-force`. A suppressed
+FAIL is still a recorded FAIL — correctly, since a suppression bounds the licence and not the
+check — but no repair is coming for a check the operator has dispositioned, so after `0.504.0`
+the gate passes while the lead stays in remediation lockdown, and the only exit is an
+authorization file that `gate-validation.md` Check 26 and `escalations.md` never mention beside
+`SUPPRESSED`. Measured on the consumer: its story-308-1 gate 3 carries exactly this state.
+
+Shape of the fix: either the guard asks the same `--in-force` query and subtracts covered
+checks from `FAILED_CHECKS` (keyed on the verdict's `catalog`, as `BL-167` does), or the
+`SUPPRESSED` procedure names the authorization file as the paired step. The first is one call
+and one subtraction and is probably right; whichever lands, the guard's own fixture needs a
+seeded in-force entry beside a FAIL verdict. Also recorded from the same review, not defects:
+`--series` deliberately still counts a suppressed FAIL toward the stall rung, so `Expires after: 3`
+across three passes of one gate trips it; and the caller's `refused:` branch may be unreachable
+because every sibling exit-2 condition keys on inputs the caller resolved itself.
+
+verify: manual
