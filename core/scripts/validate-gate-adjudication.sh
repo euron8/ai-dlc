@@ -279,7 +279,14 @@ if [ "$MODE" = "adjudicate" ]; then
     for cand in "$GA_SCRIPT_DIR" "$GA_ROOT/core/scripts" "$GA_ROOT/scripts/ai-dlc"; do
         [ -f "$cand/validate-suppression-lifetime.sh" ] && { SUPP_DIR="$cand"; break; }
     done
-    if [ ! -f "$ESC" ]; then
+    # A verdict carrying no FAIL has nothing to cover, so the sibling's parse of the whole
+    # escalations file (hundreds of KB on the reference consumer) is skipped on the common
+    # all-PASS gate. The token test is a superset of the JSON test: any FAIL verdict carries
+    # the string, and a false hit only costs the parse. An absent verdict falls through to
+    # the python block's own exit 2.
+    if [ ! -f "$VERDICT_PATH" ] || ! grep -q '"FAIL"' "$VERDICT_PATH"; then
+        GA_IN_FORCE_STATUS="not-needed:no FAIL token in the verdict"
+    elif [ ! -f "$ESC" ]; then
         GA_IN_FORCE_STATUS="no-escalations-file:$ESC"
     elif [ -z "$SUPP_DIR" ]; then
         GA_IN_FORCE_STATUS="no-sibling:validate-suppression-lifetime.sh not found beside $GA_SCRIPT_DIR"

@@ -358,6 +358,7 @@ matched_baseline=""
 # names no check. 0x1f is non-whitespace, so empty fields are preserved positionally, and
 # it cannot occur in markdown prose the way `|` or `~` can.
 in_force_n=0
+unresolved_n=0
 while IFS="$(printf '\037')" read -r header status supp expires authts named suppcat; do
   [ -n "${header:-}" ] || continue
   short="$(printf '%s' "$header" | cut -c1-92)"
@@ -420,9 +421,21 @@ while IFS="$(printf '\037')" read -r header status supp expires authts named sup
         continue
       fi
       # --- the in-force query: within lifetime, whatever the check's latest verdict ---
-      # With no gate timeline nothing has elapsed, so a fresh suppression on a consumer that
-      # has recorded no gate yet is in force at 0 elapsed rather than unanswerable.
+      # A lifetime that cannot be COUNTED is not a licence. The lifetime arm below declines
+      # to adjudicate when no metrics file was found and says so; the query must do the
+      # same, because its rows become gate passage. Measured before this guard: an expired
+      # entry read as in force at 0 elapsed from any cwd where the timeline did not
+      # resolve, and again with --gate-metrics pointed at a missing file. A metrics file
+      # that EXISTS and records no gate is the genuine fresh-consumer case and stays in
+      # force at 0 elapsed.
       if [ "$IN_FORCE" -eq 1 ]; then
+        if [ -z "$GATE_METRICS" ] || [ ! -f "$GATE_METRICS" ]; then
+          unresolved_n=$((unresolved_n + 1))
+          echo "NOTE: entry '$supp' -- NOT listed in force: no gate-metrics.jsonl was found, so" >&2
+          echo "      its lifetime cannot be counted. Pass --gate-metrics <file> or run from the" >&2
+          echo "      project root. A lifetime that cannot be counted is not a licence." >&2
+          continue
+        fi
         elapsed=0
         [ "$GATES_N" -eq 0 ] || elapsed="$(gates_since "$authts")"
         if [ "$elapsed" -le "$expires" ]; then
@@ -492,7 +505,11 @@ EOF
 
 # ---- 6b. The in-force query answers here, with its counts, and never with exit 1 ------
 if [ "$IN_FORCE" -eq 1 ]; then
-  echo "IN-FORCE: entries_scanned=$ENTRIES_N suppressed=$suppressed_n in_force=$in_force_n gates_recorded=$GATES_N catalog=$CATALOG_N" >&2
+  if [ -n "$GATE_METRICS" ] && [ -f "$GATE_METRICS" ]; then
+    echo "IN-FORCE: entries_scanned=$ENTRIES_N suppressed=$suppressed_n in_force=$in_force_n gates_recorded=$GATES_N catalog=$CATALOG_N metrics=$GATE_METRICS" >&2
+  else
+    echo "IN-FORCE: entries_scanned=$ENTRIES_N suppressed=$suppressed_n in_force=$in_force_n lifetime_unresolved=$unresolved_n gates_recorded=NONE catalog=$CATALOG_N metrics=(none found)" >&2
+  fi
   exit 0
 fi
 

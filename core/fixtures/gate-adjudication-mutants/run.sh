@@ -337,10 +337,10 @@ for cid in fails:
 score "m8 sibling refuses the file when any entry drew a diagnostic" \
   validate-suppression-lifetime.sh "S13" \
   'if [ "$IN_FORCE" -eq 1 ]; then
-  echo "IN-FORCE: entries_scanned=' \
+  if [ -n "$GATE_METRICS" ] && [ -f "$GATE_METRICS" ]; then' \
   'if [ "$IN_FORCE" -eq 1 ]; then
   [ "$bad" -eq 0 ] || exit 1
-  echo "IN-FORCE: entries_scanned=' \
+  if [ -n "$GATE_METRICS" ] && [ -f "$GATE_METRICS" ]; then' \
   "One malformed entry withdraws every other entry's authorization. S13 is the only case whose
   file holds more than one entry, and that is exactly what makes it the owner: S4 and S5 hold a
   malformed entry ALONE, so for them 'this entry is excluded' and 'this file is refused' have
