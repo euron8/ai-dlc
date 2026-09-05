@@ -4154,24 +4154,41 @@ disk are stories, which is the consumer's membership rule and not core's.
 
 **The fix has two halves, because either alone leaves the other reachable.** The remedy prose
 now says the mode rewrites the VALUES of an entry that already exists and never creates one,
-names the entry-less case, sends creation to the step that owns the `stories:` mapping or to a
-hand transcription from the story frontmatter, and runs `derive-stories` afterwards as the
-correctness check (`0 value(s) written`). And the exit-3 message says the same thing at the
-moment the wrong remedy is tried, keyed on the entry count so that an envelope which DOES carry
-an entry still reads as a resolution failure; exit code unchanged.
+and that a missing entry is written BY HAND from the story file's own frontmatter in each
+canonical copy — the story id as a key under `stories:` carrying `status:` (an entry without it
+is compared on nothing and exits 4) plus `file:` where the path is not derivable from the key —
+because `/bmad-sprint-planning` populates that mapping where it runs and a `carry-over-single`
+sprint skips it, and no core step owns it (`stories-test-strategy.md` never names
+`sprint-status.yaml`; control, `story` on 74 lines). The transcription is confirmed with
+`derive-stories --check`, whose `0 drifted key(s)` means agreement, and NOT with the write, which
+overwrote a wrong transcription silently (`4 value(s) written`, exit 0) when the adversarial hand
+drove it. And the exit-3 message carries a 143-character clause saying the same thing, keyed on
+the PER-VIEW state — it prints only when every derived view is `empty` or `no-block` — so a
+list-form mapping (`no-entries`, populated in a shape no reader accepts), a canonical holding
+another sprint under `--sprint`, and no canonical on disk all keep today's message, whose remedy
+is different; exit code unchanged. The first cut keyed on the bare entry count and printed the
+clause on all three; the adversarial hand found it.
 `core/fixtures/story-fields-derive` gains the entry-less envelope as an arm (exit 3 from the
-WRITE mode, the headline, the clause, both canonicals `cmp -s` before and after), a near-miss
-where one entry is present and the clause is withheld, a resolving twin, and two prose arms on
-the gate step; `story-fields-derive-mutants` gains M16 (clause off, one red) and M17 (the
-rejected create path, the `cmp -s` arm alone goes red). Against the pre-fix tool the fixture
-reports exactly one red; against the pre-fix prose exactly two.
+WRITE mode, the headline, the clause, both canonicals `cmp -s` before and after), the three
+false-clause near-misses with the clause withheld, a one-entry near-miss, a resolving twin, and
+prose arms on the gate step (the correction present, the old sentence absent, `0 drifted key(s)`
+named, `0 value(s) written` not cited); `story-fields-derive-mutants` gains the clause switched
+off (one red), the key reverted to the bare count (exactly the three near-misses red), the
+rejected create path (the `cmp -s` arm alone red), and the resolving path forced onto the
+zero-entry branch (the twin arm red). Against the pre-fix tool the fixture reports one red;
+against the pre-fix prose two; against the first cut the three near-misses and two token arms.
 
 **Receipt limits, stated.** The receipt drives the shipping tool on a synthetic entry-less
 envelope and refuses (exit 9) unless it exits 3 with the headline, so a tool that stops exiting
 3 is a refusal and not a close. It then requires the clause AND the old sentence gone from the
-gate step; a rewording of the clause closes the tool half only if it keeps `NEVER CREATES AN
-ENTRY`, which the fixture arm also keys on, and a prose fix that restates the wrong claim in
-other words is invisible to the negative grep. Nothing here reaches the consumer's override.
+gate step. A rewording of the clause closes the tool half only if it keeps `NEVER CREATES AN
+ENTRY`, which the fixture arm also keys on. A prose fix that restates the wrong promise in other
+words ("the derive will lay the entry down for you") passes the receipt and both prose arms —
+the negative grep is a literal, and wordings are not enumerated. The consumer's own Check 5
+override (`overrides/steps__gate-validation__check-5.md`, shadowing `gate-validation.md#5`
+verbatim) still carries the wrong sentence at its line 153 and is read INSTEAD of core by its
+remediator, so the prose half does not reach that consumer until it edits the override; the tool
+half lands on the pull regardless, which is the reason the fix has two halves.
 
 verify: sh T=core/scripts/sprint-status.sh; G=core/skills/ai-dlc/steps/gate-validation.md; S=core/schemas/sprint-status.json; [ -f "$T" ] && [ -f "$G" ] && [ -f "$S" ] || exit 9; grep -q "derive-stories" "$G" || exit 9; d=$(mktemp -d); mkdir -p "$d/.claude/skills/ai-dlc" "$d/_bmad-output/implementation-artifacts" "$d/_bmad-output/planning-artifacts"; printf "contract_version: 13\nconsumer_story_fields_file: .claude/skills/ai-dlc/story-fields.md\n" > "$d/.claude/skills/ai-dlc/layer-contract.yaml"; printf "sprint: 42\nstatus: in_progress\nstories:\n  # populated at stories-test-strategy. A MAPPING keyed by story id\n" | tee "$d/_bmad-output/implementation-artifacts/sprint-status.yaml" > "$d/_bmad-output/planning-artifacts/sprint-status.yaml"; o=$(AI_DLC_SPRINT_STATUS_SCHEMA="$S" bash "$T" derive-stories --root "$d" 2>&1); rc=$?; rm -rf "$d"; [ "$rc" -eq 3 ] || exit 9; case "$o" in *"MATCHED NO STORY FILES"*) ;; *) exit 9 ;; esac; grep -q "writes the entry from the story file" "$G" && exit 1; case "$o" in *"NEVER CREATES AN ENTRY"*) exit 0 ;; esac; exit 1
 

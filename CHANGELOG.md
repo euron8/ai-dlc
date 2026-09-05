@@ -54,20 +54,33 @@ rejected: core resolves files FROM the entries and must not infer which files on
 stories.
 
 **Two halves.** The remedy prose now says the mode rewrites the VALUES of an entry that already
-exists and never creates one, names the entry-less case, sends creation to the step that owns the
-mapping or to a hand transcription from the story frontmatter, and runs `derive-stories`
-afterwards as the correctness check. The exit-3 message says the same thing at the moment the
-wrong remedy is tried, keyed on the entry count so an envelope that does carry an entry still
-reads as a resolution failure; exit code unchanged. The sentence had exactly one copy in the tree;
-`steps/implementation.md` already described the write correctly and is unchanged. The consumer's
-own Check 5 override inherited the claim and is the consumer's to correct.
+exists and never creates one, and that a missing entry is written by hand from the story file's
+own frontmatter in each canonical copy (the key under `stories:` with `status:`, plus `file:`
+where the path is not derivable), because sprint planning populates the mapping where it runs, a
+`carry-over-single` sprint skips it, and no core step owns it. The transcription is confirmed
+with `derive-stories --check` and its `0 drifted key(s)`, not with the write, which overwrites a
+wrong transcription silently. The exit-3 message carries a short clause saying the same thing,
+keyed on the per-view state so it prints only when every derived view is empty or has no
+`stories:` key; a list-form mapping, a canonical holding another sprint, and no canonical on disk
+keep their own messages. Exit code unchanged. The sentence had exactly one copy in the tree;
+`steps/implementation.md` already described the write correctly and is unchanged.
+
+**Adversarial review found three defects in the first cut, repaired before the merge.** The
+clause was keyed on the bare entry count and printed on three states whose remedy is different;
+the prose named a mapping owner no core step is; and the confirmation token was the write mode's.
 
 **Fixture.** `story-fields-derive` gains the entry-less envelope as an arm from the WRITE mode
-(exit 3, the headline, the clause, both canonicals byte-identical before and after), a near-miss
-with one entry where the clause is withheld, a resolving twin, and two prose arms on the gate
-step; `story-fields-derive-mutants` gains the clause switched off and the rejected create path,
-each moving exactly one assertion. One red against the pre-fix tool, two against the pre-fix
-prose.
+(exit 3, the headline, the clause, both canonicals byte-identical before and after), the three
+false-clause near-misses with the clause withheld, a one-entry near-miss, a resolving twin, and
+prose arms on the gate step; `story-fields-derive-mutants` gains the clause switched off, the key
+reverted to the bare count, the rejected create path, and the resolving path forced onto the
+zero-entry branch. One red against the pre-fix tool, two against the pre-fix prose, five against
+the first cut.
+
+**Stated limits.** A restatement of the wrong promise in other words passes both prose arms. The
+consumer's own Check 5 override shadows core's text verbatim and still carries the sentence, so
+the prose half reaches that consumer only when it edits the override; the tool half lands on the
+pull regardless.
 
 ### Incidental close: `BL-152`
 
