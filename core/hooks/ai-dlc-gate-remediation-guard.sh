@@ -64,6 +64,8 @@
 #   5. newest pass records no FAIL   -> allow (the gate is not in remediation)
 #   6. target is in the permitted set-> allow (Rule 28(a); enumerated below)
 #   7. target is outside the guarded roots -> allow
+#  7b. every live FAIL is under an in-force SUPPRESSED entry
+#                                    -> allow, and log GATE_REMEDIATION_SUPPRESSED
 #   8. a bound repair record exists  -> allow, and log GATE_REMEDIATION_LIFTED
 #   9. a verified operator citation  -> allow, and log GATE_REMEDIATION_LIFTED
 #  10. otherwise                     -> DENY, and log GATE_REMEDIATION_DENIED
@@ -99,6 +101,16 @@
 #   (that is a forgery signal and must not lift), and fail-open when no transcript
 #   is readable at all (refusing every lift on a harness that omitted the field
 #   would wedge the pipeline on the honest path). The fail-open case is logged.
+#
+#   ARM 7b FAILS CLOSED, AND ITS PREDICATE IS NOT ITS OWN.
+#   A suppressed FAIL is still a recorded FAIL -- the suppression bounds the operator's
+#   LICENCE and never the check -- but no repair is coming for a check the operator has
+#   dispositioned, so arm 7b PARTITIONS the live FAIL set rather than discarding it. What is
+#   left over is what a remediator is still owed; that is what gates the edit, what the
+#   repair-record arm must claim, and what the deny names. No escalations file, no sibling,
+#   or a sibling refusal all mean NO subtraction and the deny stands exactly as before, with
+#   the status printed beside it. Every failure of this arm therefore costs an edit, never a
+#   lift.
 #
 # WHAT ARM 8 CANNOT PROVE, STATED PLAINLY
 # Existence + structure is the honest floor, exactly as
@@ -153,7 +165,11 @@
 #
 # OUTPUT
 # - Appends to: _bmad-output/pipeline-continuation-log.md
-#   (GATE_REMEDIATION_DENIED / GATE_REMEDIATION_LIFTED / GATE_STATE_UNADJUDICABLE)
+#   (GATE_REMEDIATION_DENIED / GATE_REMEDIATION_LIFTED / GATE_REMEDIATION_SUPPRESSED /
+#    GATE_STATE_UNADJUDICABLE)
+# - Rewrites: _bmad-output/.gate-remediation-in-force (arm 7b's one-line-keyed cache;
+#   declared transient in schemas/pipeline-state-paths.json, so it renders into the
+#   consumer's .gitignore and is never committed)
 # - JSON to stdout on deny: permissionDecision + reason
 # - Exit 0 in all cases (the deny is in the JSON body)
 #
@@ -339,6 +355,151 @@ esac
 [ "$GUARDED" -eq 1 ] || exit 0
 
 # -----------------------------------------------------------------------------
+# 7b. THE SUPPRESSED CARVE-OUT -- a FAIL the operator has dispositioned is a FAIL
+#     no repair is coming for.
+# -----------------------------------------------------------------------------
+# WHAT IT CATCHES. `escalations.md` defines SUPPRESSED as an operator's authorization to
+# proceed past a failing check, with a lifetime, and `validate-gate-adjudication.sh` already
+# stops Check 26 blocking on such a FAIL. This hook reads the same verdict for a different
+# purpose and did not ask, so the gate passed while the lead stayed locked out of the artifact
+# corpus -- the only exit an `<nonce>.authorization.md` that no step tells it to write.
+# Measured on the reference consumer while this was built: `implementation-20260905T172547Z`
+# is the live pass by nonce, its single FAIL is check 16, and the `[S308-GATE3-STORY-1]` entry
+# suppresses `[core] 16` in force. The lead was denied every artifact edit on a gate the
+# operator had already dispositioned.
+#
+# THE PREDICATE IS THE SIBLING'S AND IS NOT RESTATED HERE. Well-formed, catalog-known and
+# within lifetime all live in `validate-suppression-lifetime.sh --in-force`, the one owner of
+# "in force". This hook consumes its rows and joins them on (catalog, check_id) against the
+# verdict's own `catalog`, exactly as the gate validator does -- a row with an EMPTY catalog
+# counts as `core` and nothing else, because the sibling resolves bare ids against the core
+# catalog alone; and a verdict carrying NO `catalog` field joins against nothing, so it gets
+# no carve-out. Measured over the reference consumer's 195 verdict files: 195 carry
+# `catalog: core` and 0 carry none, so that strictness has an empty false-positive set there.
+#
+# THE ENFORCEMENT MAP IS DELIBERATELY NOT PASSED. The sibling resolves it itself from a root
+# it walks up to, and that walk starts inside `PROJECT_DIR` because `SUPP_DIR` was derived
+# from `PROJECT_DIR` -- so it lands on the same map either way. `AI_DLC_PROJECT_ROOT` is
+# handed over so the walk cannot wander out of the project the hook was told about. Copying
+# the sibling's three-candidate list into a hook would be a third spelling of one resolver,
+# drifting with nothing watching; the gate validator's copy is already the second.
+#
+# WHY THIS SITS AFTER ARM 7 AND NOT AFTER ARM 5. The subtraction changes exactly three
+# things, all downstream of the guarded-root test: the repair record's `repaired_checks`
+# join, the deny, and this allow. Running it at arm 5 would pay the sibling's parse -- 0.66s
+# median over the reference consumer's 389KB `pending.md`, five reps -- on every
+# `pipeline-snapshot.md` and `sprint-status.yaml` write the lead makes during remediation,
+# and would log GATE_REMEDIATION_SUPPRESSED for each of them. The header already gives the
+# reason in the sibling's own words: logging the common path drowns the signal.
+#
+# THE CACHE EXISTS BECAUSE 0.66s IS A WALL-CLOCK CHANGE ON AN EDIT. Keyed on the live nonce,
+# on the size+mtime of the escalations file, of the gate-metrics file and of the sibling
+# itself. It can only ever be stale WITHIN one live gate pass and only when the sibling
+# resolved a metrics file this key does not name; the direction is an entry that expired
+# mid-pass still reading in force, bounded by one gate because `--in-force` already refuses
+# any entry more than `Expires after:` gates old. A pull replaces the sibling, which changes
+# its mtime, which is why the enforcement map does not need its own key term.
+IN_FORCE_STATUS=""
+IN_FORCE_ROWS=""
+SUPPRESSED_CHECKS=""
+ESC_FILE="${PROJECT_DIR}/docs/escalations/pending.md"
+CACHE_FILE="${LOG_DIR}/.gate-remediation-in-force"
+SUPP_DIR=""
+for _sd in "${PROJECT_DIR}/scripts/ai-dlc" "${PROJECT_DIR}/core/scripts"; do
+  [ -f "$_sd/validate-suppression-lifetime.sh" ] && { SUPP_DIR="$_sd"; break; }
+done
+
+# BSD and GNU `stat` spell this differently, AND THE WRONG FLAG DOES NOT ERROR. `stat -f` is
+# `--file-system` on GNU, which answers `?` for an unknown format and exits 0 -- so a flavour
+# probe keyed on the exit status detects BSD on Linux, every term of the key becomes the same
+# constant, and the cache then never invalidates. That is the one direction this cache must
+# not fail in, so the SHAPE of the answer is what selects the spelling, not the exit code.
+fkey() { # <path> -> "<size>:<mtime>", "-" when there is no such file, "?" when unreadable
+  [ -n "${1:-}" ] && [ -f "$1" ] || { printf '%s' "-"; return 0; }
+  _fk="$(stat -f "%z:%m" "$1" 2>/dev/null)"
+  case "${_fk:-}" in [0-9]*:[0-9]*) printf '%s' "$_fk"; return 0 ;; esac
+  _fk="$(stat -c "%s:%Y" "$1" 2>/dev/null)"
+  case "${_fk:-}" in [0-9]*:[0-9]*) printf '%s' "$_fk"; return 0 ;; esac
+  printf '%s' "?"
+}
+
+if [ ! -f "$ESC_FILE" ]; then
+  IN_FORCE_STATUS="no-escalations-file:${ESC_FILE}"
+elif [ -z "$SUPP_DIR" ]; then
+  IN_FORCE_STATUS="no-sibling:validate-suppression-lifetime.sh is under neither ${PROJECT_DIR}/scripts/ai-dlc nor ${PROJECT_DIR}/core/scripts"
+else
+  # AI_DLC_GATE_METRICS is the fixture's channel, the same one the gate validator honours; a
+  # live gate lets the sibling locate the timeline itself.
+  CACHE_KEY="${LIVE_NONCE}|$(fkey "$ESC_FILE")|$(fkey "${AI_DLC_GATE_METRICS:-${LOG_DIR}/implementation-artifacts/gate-metrics.jsonl}")|$(fkey "$SUPP_DIR/validate-suppression-lifetime.sh")"
+  # A key with an unreadable term cannot invalidate, so there is no key: pay the parse.
+  case "$CACHE_KEY" in *"?"*) CACHE_KEY="" ;; esac
+  CACHED_KEY=""
+  [ -n "$CACHE_KEY" ] && [ -f "$CACHE_FILE" ] && CACHED_KEY="$(head -1 "$CACHE_FILE" 2>/dev/null)"
+  if [ -n "$CACHED_KEY" ] && [ "$CACHED_KEY" = "$CACHE_KEY" ]; then
+    IN_FORCE_ROWS="$(sed -n '2,$p' "$CACHE_FILE" 2>/dev/null)"
+    IN_FORCE_STATUS="ok:${ESC_FILE}"
+  else
+    # The sibling is named IN FULL here, never through a variable holding the whole path:
+    # I107 in scripts/validate-enforcement-map.sh joins the mode spelled at a call site to the
+    # modes that script dispatches, and it reads the literal beside the basename.
+    if [ -n "${AI_DLC_GATE_METRICS:-}" ]; then
+      IN_FORCE_ROWS="$(AI_DLC_PROJECT_ROOT="$PROJECT_DIR" bash "$SUPP_DIR/validate-suppression-lifetime.sh" --in-force \
+        --escalations "$ESC_FILE" --gate-metrics "$AI_DLC_GATE_METRICS" 2>/dev/null)"
+    else
+      IN_FORCE_ROWS="$(AI_DLC_PROJECT_ROOT="$PROJECT_DIR" bash "$SUPP_DIR/validate-suppression-lifetime.sh" --in-force \
+        --escalations "$ESC_FILE" 2>/dev/null)"
+    fi
+    SUPP_RC=$?
+    if [ "$SUPP_RC" -eq 0 ]; then
+      IN_FORCE_STATUS="ok:${ESC_FILE}"
+      [ -n "$CACHE_KEY" ] && mkdir -p "$LOG_DIR" 2>/dev/null \
+        && printf '%s\n%s\n' "$CACHE_KEY" "$IN_FORCE_ROWS" > "$CACHE_FILE" 2>/dev/null
+    else
+      IN_FORCE_ROWS=""
+      IN_FORCE_STATUS="refused:validate-suppression-lifetime.sh --in-force exited ${SUPP_RC}"
+    fi
+  fi
+fi
+
+if [ -n "$IN_FORCE_ROWS" ]; then
+  # `awk -F'\t'` and not `IFS`+`read`: TAB is IFS-whitespace, so a shell read COLLAPSES the
+  # empty leading field a bare-catalog row carries and shifts the check id into the catalog.
+  VERDICT_CATALOG="$(jq -r '.catalog // ""' "$LIVE_VERDICT" 2>/dev/null)"
+  COVERED="$(printf '%s\n' "$IN_FORCE_ROWS" | LC_ALL=C awk -F'\t' -v want="$VERDICT_CATALOG" '
+    NF >= 2 && $2 != "" { c = ($1 == "" ? "core" : $1); if (c == want) print $2 }' | sort -u)"
+  REMAINING=""
+  for _c in $FAILED_CHECKS; do
+    if printf '%s\n' "$COVERED" | grep -qxF "$_c"; then
+      SUPPRESSED_CHECKS="${SUPPRESSED_CHECKS:+$SUPPRESSED_CHECKS }$_c"
+    else
+      REMAINING="${REMAINING:+$REMAINING }$_c"
+    fi
+  done
+  FAILED_CHECKS="$REMAINING"
+fi
+
+# THE SET IS PARTITIONED, NOT DISCARDED: this exit is reached only when EVERY live FAIL is
+# covered, and it is LOUD because retro's Rule 25(c) audit has to be able to tell an edit that
+# passed under an operator's disposition from one no gate was watching.
+if [ -z "$FAILED_CHECKS" ]; then
+  log_event GATE_REMEDIATION_SUPPRESSED \
+    "Tool: ${TOOL_NAME} on ${FP}" \
+    "Live pass ${LIVE_NONCE}: every recorded FAIL (${SUPPRESSED_CHECKS}) is covered by an in-force SUPPRESSED entry." \
+    "Rule 28 does not apply: no repair is owed for a check the operator has dispositioned." \
+    "Carve-out source: ${IN_FORCE_STATUS}"
+  exit 0
+fi
+
+# The sentence the deny and the log both carry. Mirrors validate-gate-adjudication.sh's own
+# two reasons, because a lead reading one of these and then the other must not have to work
+# out whether they are talking about the same predicate.
+SUPP_NOTE=""
+case "$IN_FORCE_STATUS" in
+  ok:*) [ -n "$SUPPRESSED_CHECKS" ] && SUPP_NOTE=" $(printf '%s' "$SUPPRESSED_CHECKS" | wc -w | tr -d ' ') other FAIL(s) are under an in-force suppression; these are not." ;;
+  *)    SUPP_NOTE=" No SUPPRESSED carve-out was applied (${IN_FORCE_STATUS}); a suppression that cannot be read covers nothing." ;;
+esac
+
+# -----------------------------------------------------------------------------
 # LIFT ARM 8 -- a dispatched remediator's repair record, bound to THIS pass.
 # -----------------------------------------------------------------------------
 # Two accepted homes, one binding. The sibling path is DERIVED from the live
@@ -430,7 +591,7 @@ fi
 # -----------------------------------------------------------------------------
 # DENY. The gate is failing and you are the lead.
 # -----------------------------------------------------------------------------
-REASON="AI/DLC Rule 28: GATE REMEDIATION IS DELEGATED. Gate pass \`${LIVE_NONCE}\` recorded FAIL on check(s) \`${FAILED_CHECKS}\` and no repair has been dispatched, so \`${TOOL_NAME}\` on \`${FP}\` is DENIED.
+REASON="AI/DLC Rule 28: GATE REMEDIATION IS DELEGATED. Gate pass \`${LIVE_NONCE}\` recorded FAIL on check(s) \`${FAILED_CHECKS}\` and no repair has been dispatched, so \`${TOOL_NAME}\` on \`${FP}\` is DENIED.${SUPP_NOTE}
 
 You are the lead. You own PASS/FAIL, the disposition and the escalation. You do not own the edit.
 
@@ -456,7 +617,8 @@ IF THE REPAIR IS GENUINELY NOT A REMEDIATOR'S CALL -- a provenance re-stamp, a g
 log_event GATE_REMEDIATION_DENIED \
   "Tool denied: ${TOOL_NAME}" \
   "Target: ${FP}" \
-  "Live gate pass: ${LIVE_NONCE}; FAILed check(s): ${FAILED_CHECKS}" \
+  "Live gate pass: ${LIVE_NONCE}; FAILed check(s) still owed a repair: ${FAILED_CHECKS}" \
+  "SUPPRESSED carve-out: ${IN_FORCE_STATUS}${SUPPRESSED_CHECKS:+; covered: ${SUPPRESSED_CHECKS}}" \
   "No bound remediator repair record and no verified operator authorization${LIFT_WHY:+ (${LIFT_WHY})}"
 
 jq -n --arg reason "$REASON" \

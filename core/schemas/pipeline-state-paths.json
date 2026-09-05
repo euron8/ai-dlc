@@ -123,6 +123,13 @@
       "reason": "Session-driver runtime markers -- handoff, idle, turns -- exchanged between the tmux launcher and the driver-signal hook. Tracked in the reference consumer, which is one of this release's three subjects."
     },
     {
+      "name": ".gate-remediation-in-force",
+      "transient": true,
+      "producer": "core/hooks/ai-dlc-gate-remediation-guard.sh",
+      "ignore": "_bmad-output/.gate-remediation-in-force",
+      "reason": "First line a key over the live gate nonce and the size+mtime of the escalations file, the gate-metrics file and the sibling; the rest the in-force SUPPRESSED rows that key resolved to. It exists because the sibling's parse of a real escalations corpus is 0.66s and the guard runs on every lead Edit. Transient in the strongest sense available: a committed copy is a suppression set from another checkout deciding whether this one's lead is locked out, and the key cannot detect that, because the files it names are not the ones that produced the rows."
+    },
+    {
       "name": ".recover-fired",
       "transient": true,
       "producer": "core/hooks/ai-dlc-postcompact.sh",
