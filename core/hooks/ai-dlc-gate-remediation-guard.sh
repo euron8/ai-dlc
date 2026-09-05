@@ -469,7 +469,7 @@ if [ -n "$IN_FORCE_ROWS" ]; then
     NF >= 2 && $2 != "" { c = ($1 == "" ? "core" : $1); if (c == want) print $2 }' | sort -u)"
   REMAINING=""
   for _c in $FAILED_CHECKS; do
-    if printf '%s\n' "$COVERED" | grep -qxF "$_c"; then
+    if grep -qxF "$_c" <<<"$COVERED"; then
       SUPPRESSED_CHECKS="${SUPPRESSED_CHECKS:+$SUPPRESSED_CHECKS }$_c"
     else
       REMAINING="${REMAINING:+$REMAINING }$_c"

@@ -195,6 +195,24 @@ case "$CASE" in
     install_sibling; metrics "$METRICS" 2
     rm -f "$W/docs/escalations/pending.md"
     ;;
+  suppressed-oldsibling)
+    # A CONSUMER RUNS ITS OWN INSTALLED ENGINE, and this hook can arrive one pull ahead of a
+    # sibling that dispatches the mode it asks for. Measured on the reference consumer while
+    # this was written: its installed copy predated `--in-force` and exited 2 on the flag,
+    # then a pull mid-session replaced it -- so the state was real, and the arm outlives it.
+    # DERIVED from the shipped file by deleting the dispatch line, not hand-written: a stub
+    # would prove only that this hook handles a stub.
+    verdict "story-20260811T193044Z" "$FAILING1"
+    install_sibling; suppression "[core] 7" 3; metrics "$METRICS" 2
+    _old="$W/scripts/ai-dlc/validate-suppression-lifetime.sh"
+    cp "$_old" "$_old.orig"
+    sed -i.bak '/^    --in-force)/d' "$_old"; rm -f "$_old.bak"
+    if cmp -s "$_old" "$_old.orig"; then
+      echo "seed.sh: case '$CASE' removed no --in-force dispatch line; the sibling still accepts the flag and the case would measure 'ok'" >&2
+      rm -rf "$W"; exit 2
+    fi
+    rm -f "$_old.orig"
+    ;;
   *)
     echo "seed.sh: unknown case '$CASE'" >&2; rm -rf "$W"; exit 2 ;;
 esac
@@ -220,7 +238,7 @@ fi
 # reason: if the base seed ever starts shipping those files, those two arms would be
 # measuring `ok` and reporting the fail-closed path.
 case "$CASE" in
-  suppressed|suppressed-expired|suppressed-wrongcat|suppressed-bare|suppressed-nocat|suppressed-partial)
+  suppressed|suppressed-expired|suppressed-wrongcat|suppressed-bare|suppressed-nocat|suppressed-partial|suppressed-oldsibling)
     for _need in "$W/scripts/ai-dlc/validate-suppression-lifetime.sh" \
                  "$W/.claude/skills/ai-dlc/enforcement-map.yaml" \
                  "$W/docs/escalations/pending.md" \

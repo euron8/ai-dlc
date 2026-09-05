@@ -530,6 +530,16 @@ case "$OUT" in *"no-escalations-file"*) ok "S7: ...and the deny carries that sta
   *) bad "S7: the deny does not distinguish a missing escalations file from a clean one" ;; esac
 rm -rf "$W"
 
+# --- S9. The sibling is PRESENT and does not dispatch the mode. A consumer runs its own
+# installed engine, so this hook can arrive one pull ahead of the sibling it asks.
+seed suppressed-oldsibling
+OUT="$(drive "$W" Edit "$W/$ART")"
+if denied "$OUT"; then ok "S9: a sibling that refuses --in-force -> no carve-out, and the deny stands"
+else bad "S9: a sibling REFUSAL was read as coverage — the pull that delivers this hook ahead of the mode would unlock the corpus"; fi
+case "$OUT" in *"refused:"*) ok "S9: ...and the deny carries 'refused', which is a different repair from a missing file" ;;
+  *) bad "S9: a refusal is indistinguishable from a clean read in the deny" ;; esac
+rm -rf "$W"
+
 # --- S8. The repair-record arm reads the SUBTRACTED set, not the raw one.
 # A record claiming only the SUPPRESSED check has repaired nothing that is still owed. Its
 # twin — the same record claiming the REMAINING check — must lift, or this arm is just the
@@ -563,10 +573,12 @@ rm -rf "$W"
 #        all lifts". It passes S1, S2, S3, S4 and S6 and is wrong only on S5, where a real
 #        failing check goes unguarded. That is M5, and a receipt scored on S1 alone takes it.
 #
-# NOT MUTATED, AND WHY: the `refused:` branch clearing `IN_FORCE_ROWS`. The sibling exits 2
-# before it prints any row, so a copy that ignored the return code reads the same empty stdout
-# and behaves identically — there is no input at this site whose verdict the check changes.
-# The fail-open direction that IS observable is the ABSENCE branch, which M4 mutates.
+# THE `refused:` RETURN-CODE CHECK MOVES NO VERDICT AND IS STILL LOAD-BEARING, so it is armed
+# on what it DOES move. The sibling exits 2 before printing any row, so ignoring its return
+# code reads the same empty stdout and denies either way; what changes is the STATUS the deny
+# carries, and `refused` and `ok` name different repairs. M7 mutates it and S9's status arm is
+# the observable — `fixture-mutants.md`'s "when a guard flips no verdict, arm it on the first
+# thing it actually gates".
 MW="$(mktemp -d)"
 cp "$HOOK" "$MW/control.sh"
 mut() { # <name> <sed-expr> -> 0 if a real, parseable mutant landed at $MW/<name>.sh
@@ -632,6 +644,17 @@ rm -rf "$W"
 seed suppressed-nosibling
 if mut m4-absence-is-coverage 's@elif \[ -z "\$SUPP_DIR" \]; then@elif [ -z "$SUPP_DIR" ]; then FAILED_CHECKS="";@'; then
   kill_arm m4-absence-is-coverage allow "$W" "M4: reading an ABSENT sibling as 'everything is covered' ALLOWS S6 — the fail-closed posture is load-bearing"
+fi
+rm -rf "$W"
+
+# M7 flips no verdict, so it is scored on the status string S9 asserts, not on deny/allow.
+seed suppressed-oldsibling
+if mut m7-ignore-sibling-rc 's@if \[ "\$SUPP_RC" -eq 0 \]; then@if true; then@'; then
+  OUT="$(drive "$W" Edit "$W/$ART" "" "" "$MW/m7-ignore-sibling-rc.sh")"
+  if denied "$OUT"; then ok "M7: ignoring the sibling's return code still DENIES (this check moves no verdict, as declared)"
+  else bad "M7: ignoring the return code changed the VERDICT — then the declaration above is wrong and this needs a verdict arm"; fi
+  case "$OUT" in *"refused:"*) bad "M7: the mutant still reported 'refused' — S9's status arm cannot see the return-code check at all" ;;
+    *) ok "M7: ...and it reports the refusal as a clean read, which is exactly what S9's status arm catches" ;; esac
 fi
 rm -rf "$W"
 
