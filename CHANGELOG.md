@@ -42,6 +42,14 @@ of a phrase the validator wraps across two lines, and so could never fail, are r
 single-line token beside it. Seven reds against the pre-fix validator, all new arms; 123 of 123 on
 an installed tree.
 
+**Adversarial review found two wrong fixes the first fixture accepted, seeded before the merge.**
+A guard on `prior > 0` passed every behavioural arm because every seed placed later growth at a
+non-zero prior; growth at `prior == 0` after pass 1 is the purest moving-artifact signal, and that
+variant loses MOVING ARTIFACT on 13 mid-cycle states in 6 real consumer series. A guard on the
+pass NUMBER being 1 counts the first file of a series whose lowest pass on disk is 2, a shape
+three consumer series have. Both are now cases in the fixture and series in `BL-165`'s receipt,
+which scores the fix 0 and the pre-fix, unguarded, `prior > 0` and pass-number variants 1.
+
 ### `PC-S308-CHECK-5-DERIVE-STORIES-REMEDY-CANNOT-CREATE-AN-ENTRY` — `derive-stories` maintains entries and never creates them, and both the remedy and the tool now say so (`BL-166`)
 
 Check 5's stale-entry remedy in `steps/gate-validation.md` promised "a `derive-stories` run that

@@ -4118,15 +4118,32 @@ control of 1 for the single-line token beside it); both had passed on an unprodu
 Rekeyed on the single-line token, both still pass, and the new generic-remedy arm is the
 positive control that the token appears at all.
 
-**Receipt limits, stated.** The receipt seeds a two-pass series (pass 1: one CRITICAL, prior 0;
-pass 2: none, still NOT_MET) and a control series with genuine growth at pass 2, drives the
-shipping validator on both, and refuses (exit 9) unless the control says MOVING ARTIFACT. A
-validator that suppresses growth on every pass fails the control; one that keys on the pass
-NUMBER rather than on `PREV_CRIT` also passes, and is a correct fix. The receipt cannot see
-the seven falsified consumer fields; those are the consumer's to correct once its gate stops
-demanding them.
+**Two wrong fixes the first receipt and the first fixture both accepted, found by the
+adversarial hand.** `[ "$prior" -gt 0 ]` in place of the guard passed every behavioural arm (only
+the byte-locked mutation anchor failed, which an author re-anchors as `fixture-mutants.md`
+prescribes), because every seed and the receipt's control placed pass-2+ growth at `prior > 0`;
+growth at `prior == 0` after pass 1 is the purest moving-artifact signal, the consumer carries 11
+such passes across 9 series, and that variant loses MOVING ARTIFACT on 13 mid-cycle states in 6
+real series. And a guard on the pass NUMBER being 1 counts the first file of a series whose
+lowest pass on disk is 2 (the consumer's `s288` architecture and PRD series, passes 2–4 and
+2–8, both legacy series carrying no `verdict:` field, so arm D takes its no-verdict branch on
+them and neither exercises the guard today), reproducing
+the defect on that shape. Both are now seeded in the receipt and in the fixture as
+`scope-grew-at-zero-prior` and `series-starts-at-pass2`; against the `prior > 0` variant and the
+pass-number variant, each re-anchored as an author shipping it would, the fixture still fails on
+four arms, the discriminating ones behavioural.
 
-verify: sh V=core/scripts/validate-adversarial-convergence.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d); p() { printf "# pass %s\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\nmode: subagent\nlead_role: r\ninvoked_at: 2026-07-12T%02d:00:00Z\ntool_use_id: t%s\nfindings: %s CRITICAL, 1 MAJOR, 0 MINOR\nfindings_critical: %s\nfindings_critical_prior_scope: %s\nfindings_major: 1\nfindings_minor: 0\nverdict: EXIT_CONDITION_NOT_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n" "$2" "$2" "$2" "$3" "$3" "$4" > "$1"; }; mkdir -p "$d/a" "$d/b"; p "$d/a/s-adversarial-pass1.md" 1 1 0; p "$d/a/s-adversarial-pass2.md" 2 0 0; p "$d/b/s-adversarial-pass1.md" 1 1 0; p "$d/b/s-adversarial-pass2.md" 2 3 1; A=$(bash "$V" --series "$d/a/s-adversarial-pass" 2>&1); B=$(bash "$V" --series "$d/b/s-adversarial-pass" 2>&1); rm -rf "$d"; case "$B" in *"MOVING ARTIFACT"*) ;; *) exit 9 ;; esac; case "$A" in *"MOVING ARTIFACT"*) exit 1 ;; esac; exit 0
+**Receipt limits, stated.** The receipt seeds four series and drives the shipping validator on
+each: pass-1 honest zero then nothing (GENERIC required), growth at pass 2 with `prior == 0`
+(MOVING ARTIFACT required), passes 2 and 3 only with the first carrying a CRITICAL at prior 0
+(GENERIC required), and a read-control with growth at `prior > 0` that refuses (exit 9) unless it
+says MOVING ARTIFACT. Scored: the fix 0; pre-fix, the unguarded, the `prior > 0` and the
+pass-number variants 1. A guard on "first file in sorted order" rather than on `PREV_CRIT` also
+passes and differs from the fix only when that first file has no parseable CRITICAL count. The
+receipt cannot see the seven falsified consumer fields; those are the consumer's to correct once
+its gate stops demanding them.
+
+verify: sh V=core/scripts/validate-adversarial-convergence.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d); p() { printf "# pass %s\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\nmode: subagent\nlead_role: r\ninvoked_at: 2026-07-12T%02d:00:00Z\ntool_use_id: t%s\nfindings: %s CRITICAL, 1 MAJOR, 0 MINOR\nfindings_critical: %s\nfindings_critical_prior_scope: %s\nfindings_major: 1\nfindings_minor: 0\nverdict: EXIT_CONDITION_NOT_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n" "$2" "$2" "$2" "$3" "$3" "$4" > "$1"; }; s() { bash "$V" --series "$d/$1/s-adversarial-pass" 2>&1; }; mkdir -p "$d/a" "$d/b" "$d/c" "$d/k"; p "$d/a/s-adversarial-pass1.md" 1 1 0; p "$d/a/s-adversarial-pass2.md" 2 0 0; p "$d/b/s-adversarial-pass1.md" 1 2 2; p "$d/b/s-adversarial-pass2.md" 2 3 0; p "$d/c/s-adversarial-pass2.md" 2 1 0; p "$d/c/s-adversarial-pass3.md" 3 0 0; p "$d/k/s-adversarial-pass1.md" 1 1 0; p "$d/k/s-adversarial-pass2.md" 2 3 1; A=$(s a); B=$(s b); C=$(s c); K=$(s k); rm -rf "$d"; case "$K" in *"MOVING ARTIFACT"*) ;; *) exit 9 ;; esac; case "$A" in *"MOVING ARTIFACT"*) exit 1 ;; esac; case "$C" in *"MOVING ARTIFACT"*) exit 1 ;; esac; case "$B" in *"MOVING ARTIFACT"*) exit 0 ;; esac; exit 1
 
 ## BL-166 — Check 5's stale-entry remedy prescribed a `derive-stories` write that "writes the entry from the story file", and the mode never creates an entry, so on a sprint that skipped planning the prescribed repair was a no-op
 
