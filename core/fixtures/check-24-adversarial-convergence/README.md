@@ -132,6 +132,56 @@ The control must be a **full-tree** copy. A partial one — the four files this 
 copied into a skeleton — fails 8 unrelated assertions because the other arms cannot resolve
 their own dependencies, and 8 pre-existing failures score as kills.
 
+## Pass 1 has no previous pass — the seed gap that hid a live misfire
+
+`findings_critical_prior_scope` partitions a pass's CRITICALs into "in text the previous
+pass also reviewed" and "in scope added since". Arm D counts a pass as **growth** when
+`crit > prior` and turns a nonzero count into the **MOVING ARTIFACT** remedy: *freeze the
+artifact, cut the added scope.*
+
+**Pass 1 has no previous pass**, so an honest `findings_critical_prior_scope: 0` there is
+not added scope — it is the absence of a comparison. Counted anyway, every mid-cycle gate
+run of a series whose first pass found a CRITICAL was told to freeze an artifact that had
+not moved and cut scope it had not added. Arm C's comparison one line above was already
+guarded with `[ -n "$PREV_CRIT" ]`; the increment was not.
+
+**Every case in this fixture declared pass 1 with `prior == crit`** — the one shape that
+cannot reach the pass-1 branch. Measured over the reference consumer's pass-1 adversarial
+artifacts, 68 declare the field: **28 report more CRITICALs than prior scope** (27 of them
+at prior exactly 0) against 40 declaring `prior == crit`. The seeded shape was the one that
+cannot fire, and the common one had no case at all.
+
+| Case | Shape | Must |
+|---|---|---|
+| `pass1-honest-zero-unconverged` | p1 1C at prior 0, p2 clears it, terminal `NOT_MET` on 2 blocking MAJOR | **FAIL** (D), with the **generic** remedy |
+| `pass1-honest-zero-converges` | the same p1, p2 converges | **PASS** — near-miss control |
+| `pass1-honest-zero-then-growth` | the same p1, p2 finds 3C against 1 in prior scope | **FAIL** (D), with **MOVING ARTIFACT** |
+
+**The exit code cannot be the assertion on the first of them.** It exits 1 before the guard
+(arm D, moving artifact) and 1 after it (arm D, generic) — only the MESSAGE separates the
+two validators, so the case asserts the generic remedy is present and both moving-artifact
+tokens are absent, each against `pass1-honest-zero-then-growth` as a live control.
+
+Two mutants, each of which must move exactly one of those two cells:
+
+| Mutant | `unconverged` | `then-growth` |
+|---|---|---|
+| *shipped* | `GENERIC` | `MOVING` |
+| the guard removed | `MOVING` ← kill | `MOVING` |
+| the guard on `STALL_FROM` instead | `GENERIC` | `GENERIC` ← kill |
+
+A mutant that moved both would mean the two cells are one assertion and the guard's
+placement — excluding pass 1 and **nothing else** — is unasserted. `scope-grew-unconverged`
+above is the same claim on a longer series and is unchanged by the guard.
+
+**A dead arm was found writing this.** Both `stall-preempts-d` and `ceiling-preempts-d`
+grep the validator's output for the absence of `Either run another pass to a clean
+verdict` — a phrase arm D's message **wraps across a newline** and therefore never emits.
+Measured: 0 occurrences in the validator, against a control of 1 for the single-line
+`Do not pass the gate by overriding the field in prose.` Both arms were passing on an
+absence that no input could ever produce. They now key on the single-line token, and
+`D-generic-at-pass1` is the positive control that the token appears at all.
+
 ## The `skill:` field in the seeded blocks is INERT — do not read it as coverage
 
 v0.58.0 changed the seeded blocks to `skill: ai-dlc-adversary-review`, because that is

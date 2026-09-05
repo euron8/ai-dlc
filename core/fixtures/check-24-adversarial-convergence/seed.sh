@@ -222,6 +222,52 @@ pass "$TARGET/scope-grew-unconverged/s1-adversarial-pass1.md" 1 3 2 1 EXIT_CONDI
 pass "$TARGET/scope-grew-unconverged/s1-adversarial-pass2.md" 2 2 1 2 EXIT_CONDITION_NOT_MET 1 NOSHA
 pass "$TARGET/scope-grew-unconverged/s1-adversarial-pass3.md" 3 3 2 3 EXIT_CONDITION_NOT_MET 0 NOSHA
 
+# --- PASS 1 HAS NO PREVIOUS PASS ---------------------------------------------
+# THE SEED GAP THESE THREE CLOSE. Every case above declares pass 1 with prior == crit,
+# which is the ONE shape that cannot exercise the pass-1 branch of the SCOPE_GREW
+# increment. The dominant shape on the reference consumer is the opposite: pass 1
+# declares `findings_critical_prior_scope: 0`, honestly, because there is no previous
+# pass for anything to be prior to. Measured over the reference consumer's pass-1
+# adversarial artifacts, 68 declare the field: 28 of them report more CRITICALs than
+# prior scope -- the shape that misfires, 27 of the 28 at prior exactly 0 -- against 40
+# declaring prior == crit. The seeded shape was the one that cannot fire.
+#
+# The three below are a PARTITION of what pass 1 can do to arm D, and the middle one is
+# the discriminating case: it is the only one whose MESSAGE differs before and after the
+# guard, so the exit code cannot be the assertion.
+
+# (a) THE DISCRIMINATING CASE. Pass 1 finds a CRITICAL and declares prior 0; pass 2 clears
+# it and the cycle is still short of the exit on a residue of blocking MAJORs. Nothing here
+# GREW -- p2's CRITICALs fell to zero -- so arm D owes this series the generic "run another
+# pass" remedy. Counting pass 1 makes D say FREEZE the artifact and CUT the added scope, to
+# a cycle that added no scope and has nothing to cut.
+# The MAJOR residue is 2, INSIDE the exit ceiling: at 4 arm E would fire and pre-empt D,
+# and this case would assert nothing about D at all.
+mkdir -p "$TARGET/pass1-honest-zero-unconverged"
+pass "$TARGET/pass1-honest-zero-unconverged/s1-adversarial-p1.md" 1 1 2 1 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/pass1-honest-zero-unconverged/s1-adversarial-p2.md" 2 0 2 2 EXIT_CONDITION_NOT_MET 0 NOSHA
+# p1 -> p2 falls 1C -> 0C, so arm H owns that transition and wants the record. Seeded so
+# this case reports on arm D and nothing else.
+repair "$TARGET/pass1-honest-zero-unconverged/s1-brief-repair-p1.md"
+
+# (b) THE NEAR-MISS CONTROL. Byte-identical pass 1; pass 2 converges instead. This case is
+# GREEN both before and after the guard -- a terminal EXIT_CONDITION_MET takes arm D's first
+# branch and never reads SCOPE_GREW -- and it is here to pin that the guard did not buy its
+# fix by suppressing a terminal verdict.
+mkdir -p "$TARGET/pass1-honest-zero-converges"
+pass "$TARGET/pass1-honest-zero-converges/s1-adversarial-p1.md" 1 1 2 1 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/pass1-honest-zero-converges/s1-adversarial-p2.md" 2 0 0 2 EXIT_CONDITION_MET     0 NOSHA
+repair "$TARGET/pass1-honest-zero-converges/s1-brief-repair-p1.md"
+
+# (c) THE OVER-FIRE CONTROL, and the reason the guard is keyed on PREV_CRIT rather than on
+# the increment. Same pass 1. Pass 2 finds 3 CRITICALs against 1 in prior scope -- GENUINE
+# growth, at a pass that HAS a predecessor -- and arm D must still say MOVING ARTIFACT. A
+# guard that suppressed the increment outright passes case (a) and fails this one.
+# No repair record: findings ROSE across the only transition, so arm H does not fire.
+mkdir -p "$TARGET/pass1-honest-zero-then-growth"
+pass "$TARGET/pass1-honest-zero-then-growth/s1-adversarial-p1.md" 1 1 2 1 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/pass1-honest-zero-then-growth/s1-adversarial-p2.md" 2 3 2 2 EXIT_CONDITION_NOT_MET 1 NOSHA
+
 # =============================================================================
 # v0.55.3 -- numeric pass ordering, and the STALL rung.
 # =============================================================================

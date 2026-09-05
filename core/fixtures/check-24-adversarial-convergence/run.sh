@@ -129,9 +129,18 @@ expect_says stalled s1-adversarial-p "E-remedy" \
 
 # E must PRE-EMPT D. A stalled series that merely inherits D's generic "run another pass to
 # a clean verdict" is the bug wearing a new error code.
+#
+# THE TOKEN IS ONE THE MESSAGE ACTUALLY CARRIES ON ONE LINE. Arm D's generic remedy wraps
+# between "Either run another pass to a" and "clean verdict", so the obvious phrase spans a
+# newline, is absent from the output of EVERY series, and an absence arm keyed on it can
+# never fire. Measured: 0 occurrences in the validator against a control of 1 for the line
+# below. Both pre-empt arms were keyed that way, and both were dead.
+# The POSITIVE control for this token is `D-generic-at-pass1` further down, which requires
+# it to APPEAR: without it, an arm D that stopped emitting the remedy passes both arms here.
+D_GENERIC="Do not pass the gate by overriding the field in prose."
 ASSERTIONS=$((ASSERTIONS + 1))
 if bash "$VALIDATOR" --series "$ROOT/stalled/s1-adversarial-p" 2>&1 \
-   | grep -q "Either run another pass to a clean verdict"; then
+   | grep -qF -- "$D_GENERIC"; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-28s a STALLED series still got Check D generic advice. E must pre-empt D.\n' "stall-preempts-d"
 else
@@ -337,7 +346,7 @@ expect_says ceiling-unanchored s1-adversarial-p "I-remedy" \
 ASSERTIONS=$((ASSERTIONS + 1))
 if bash "$VALIDATOR" --series "$ROOT/ceiling-unanchored/s1-adversarial-p" \
      --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1 \
-   | grep -q "Either run another pass to a clean verdict"; then
+   | grep -qF -- "$D_GENERIC"; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-28s a CEILING series still got Check D generic advice. I must pre-empt D.\n' "ceiling-preempts-d"
 else
@@ -722,7 +731,10 @@ expect_says ceiling-plateau-below s1-adversarial-p "D-owns-plateau-series" \
 expect_state ceiling-plateau-below s1-adversarial-p DIVERGENT 3 \
   "the hooks must deny on the divergence that ended the plateau"
 
-ceiling_silent() {  # $1 case-dir  $2 token  $3 control-dir  $4 why-it-must-be-silent
+# AN ABSENCE ASSERTION CARRIES ITS CONTROL IN THE SAME INVOCATION -- the token must be
+# missing from the subject AND present in a case that must emit it, or a validator that
+# stopped emitting the token at all passes every negative arm below.
+expect_silent() {  # $1 case-dir  $2 token  $3 control-dir  $4 why-it-must-be-silent
   local out ctl
   out="$(bash "$VALIDATOR" --series "$ROOT/$1/s1-adversarial-p" \
           --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
@@ -731,19 +743,143 @@ ceiling_silent() {  # $1 case-dir  $2 token  $3 control-dir  $4 why-it-must-be-s
   ASSERTIONS=$((ASSERTIONS + 1))
   if grep -qF -- "$2" <<<"$out"; then
     FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-28s %s fired below the ceiling -- %s\n' "$1" "$2" "$4"
+    printf '  FAIL  %-28s %s fired where it must be SILENT -- %s\n' "$1" "$2" "$4"
   elif ! grep -qF -- "$2" <<<"$ctl"; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-28s CONTROL: %s absent from %s too -- the negative assertion is vacuous\n' "$1" "$2" "$3"
   else
-    printf '  ok    %-28s %s silent below the ceiling, present in %s (control)\n' "$1" "$2" "$3"
+    printf '  ok    %-28s %s silent here, present in %s (control)\n' "$1" "$2" "$3"
   fi
 }
 
-ceiling_silent ceiling-plateau-below "E -- STALL" stalled \
+expect_silent ceiling-plateau-below "E -- STALL" stalled \
   "E and B's MET half are reading two different ceilings"
-ceiling_silent ceiling-plateau-below "B -- CONSISTENCY" ceiling-above-limit \
+expect_silent ceiling-plateau-below "B -- CONSISTENCY" ceiling-above-limit \
   "the biconditional is back and every consumer's mid-cycle NOT_MET is retroactively an error"
+
+echo
+# --- PASS 1 HAS NO PREVIOUS PASS -----------------------------------------------
+# THE SEED GAP THESE CLOSE. Every case above declares pass 1 with prior == crit, and that
+# is the ONE shape that cannot exercise the pass-1 branch of arm D's SCOPE_GREW counter.
+# The reference consumer's dominant pass-1 shape is the other one -- an honest
+# `findings_critical_prior_scope: 0`, because there is no previous pass. seed.sh carries
+# the census and the three cases.
+#
+# THE EXIT CODE CANNOT BE THE ASSERTION on the first case: it exits 1 with the MOVING
+# ARTIFACT remedy before the guard and exits 1 with the generic remedy after it. Only the
+# MESSAGE separates a validator that excludes pass 1 from one that counts it.
+expect pass1-honest-zero-unconverged 1 \
+  "p1 1C at prior 0, p2 clears it, exit still short on 2 blocking MAJOR -- D fires" s1-adversarial-p
+expect_says pass1-honest-zero-unconverged s1-adversarial-p "D-generic-at-pass1" \
+  "$D_GENERIC"
+expect_silent pass1-honest-zero-unconverged "MOVING ARTIFACT" pass1-honest-zero-then-growth \
+  "an honest prior_scope 0 at pass 1 reads as scope the sprint ADDED, and every series whose FIRST pass found a CRITICAL is then told to freeze"
+expect_silent pass1-honest-zero-unconverged "CUT the added scope" pass1-honest-zero-then-growth \
+  "the remedy names an action this series cannot take: there is no added scope to cut"
+
+# THE NEAR-MISS CONTROL. Byte-identical pass 1; pass 2 converges. Green on both sides of
+# the guard -- a terminal EXIT_CONDITION_MET takes arm D's first branch and never reads
+# SCOPE_GREW -- so it pins that the guard bought nothing by suppressing a terminal verdict.
+expect pass1-honest-zero-converges 0 \
+  "NEAR-MISS CONTROL: same p1, p2 converges -- a terminal MET never reads SCOPE_GREW" s1-adversarial-p
+
+# THE OVER-FIRE CONTROL. Growth at a pass that HAS a predecessor is the arm's real subject
+# and must be untouched. `scope-grew-unconverged` above is the same claim on a longer series.
+expect pass1-honest-zero-then-growth 1 \
+  "OVER-FIRE CONTROL: p2 finds 3C against 1 in prior scope -- genuine growth" s1-adversarial-p
+expect_says pass1-honest-zero-then-growth s1-adversarial-p "D-moving-at-pass2" \
+  "MOVING ARTIFACT" "CUT the added scope"
+
+# --- MUTATION: the pass-1 guard, keyed on LOCATION and on BEHAVIOUR -------------
+# Two cells, two mutants, and each must move exactly ONE of them. A mutant that moved
+# both would mean the two cells are one assertion and the guard's PLACEMENT -- excluding
+# pass 1 and nothing else -- is unasserted.
+#
+#                                       unconverged        then-growth
+#   shipped                             GENERIC            MOVING
+#   m1  the guard removed               MOVING   <- kill   MOVING
+#   m2  the guard on a wrong variable   GENERIC            GENERIC  <- kill
+#
+# Anchored on the WHOLE condition line. `[ -n "$crit" ] && [ -n "$prior" ]` opens arm C's
+# partition check as well, so a mutation keyed on the shared prefix would edit that instead
+# and come out green here.
+SG_ANCHOR='  if [ -n "$crit" ] && [ -n "$prior" ] && [ -n "$PREV_CRIT" ] && [ "$crit" -gt "$prior" ]; then'
+ASSERTIONS=$((ASSERTIONS + 1))
+sg_n="$(grep -cF -- "$SG_ANCHOR" "$VALIDATOR")" || sg_n=0
+sg_ctl="$(grep -cF -- "$SG_ANCHOR-no-such-line" "$VALIDATOR")" || sg_ctl=0
+if [ "$sg_n" -ne 1 ] || [ "$sg_ctl" -ne 0 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s the anchor matches %s line(s) (want 1; impossible-anchor control %s, want 0) -- the two mutants below prove nothing\n' \
+    "MUTATION sg-anchor" "$sg_n" "$sg_ctl"
+else
+  printf '  ok    %-28s the anchor is unique in %s (impossible-anchor control: 0)\n' \
+    "MUTATION sg-anchor" "$(basename "$VALIDATOR")"
+fi
+
+SG_CASES="pass1-honest-zero-unconverged pass1-honest-zero-then-growth"
+SG_REAL="GENERIC MOVING"
+
+sg_remedy() {  # $1 script  $2 case-dir -> which of arm D's two remedies it emitted
+  local out
+  out="$(bash "$1" --series "$ROOT/$2/s1-adversarial-p" \
+          --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
+  case "$out" in
+    *"MOVING ARTIFACT"*) printf 'MOVING\n' ;;
+    *"$D_GENERIC"*)      printf 'GENERIC\n' ;;
+    *)                   printf 'NEITHER\n' ;;
+  esac
+}
+
+sg_score() {  # $1 label  $2 script  $3 expected pair
+  local label="$1" script="$2" want="$3" got="" c
+  ASSERTIONS=$((ASSERTIONS + 1))
+  for c in $SG_CASES; do got="$got $(sg_remedy "$script" "$c")"; done
+  if [ "$(echo $got)" = "$(echo $want)" ]; then
+    printf '  ok    %-28s [%s]\n' "$label" "$(echo $got)"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s got [%s] want [%s]\n' "$label" "$(echo $got)" "$(echo $want)"
+  fi
+}
+
+# THE UNMUTATED CONTROL, from $ROOT like every mutant. A copy that dies resolving a
+# sibling emits nothing, NEITHER is what "no output" scores as, and NEITHER would read
+# as a kill on both mutants below.
+SG_CTRL="$ROOT/control-scope-grew.sh"
+cp "$VALIDATOR" "$SG_CTRL"
+sg_score "CONTROL scope-grew copy" "$SG_CTRL" "$SG_REAL"
+
+sg_mutate() {  # $1 label  $2 replacement condition line  $3 expected pair
+  local label="$1" new="$2" want="$3"
+  local mut="$ROOT/mutant-$label.sh"
+  MUT_OLD="$SG_ANCHOR" MUT_NEW="$new" python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["MUT_OLD"],os.environ["MUT_NEW"],1))' \
+    "$VALIDATOR" "$mut"
+  if cmp -s "$VALIDATOR" "$mut"; then
+    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s the mutation matched NOTHING -- this assertion proves nothing\n' "MUTATION $label"
+    return
+  fi
+  if ! bash -n "$mut" 2>/dev/null; then
+    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s the mutant is not a valid shell script -- its silence is not a kill\n' "MUTATION $label"
+    return
+  fi
+  sg_score "MUTATION $label" "$mut" "$want"
+}
+
+# m1 -- REMOVE THE GUARD. This is the shipped defect on demand: pass 1's honest zero is
+# counted as growth and the unconverged series is handed the freeze-and-cut remedy.
+sg_mutate scope-grew-unguarded \
+  '  if [ -n "$crit" ] && [ -n "$prior" ] && [ "$crit" -gt "$prior" ]; then' \
+  "MOVING MOVING"
+
+# m2 -- GUARD ON THE WRONG VARIABLE. STALL_FROM is also empty at pass 1, so it looks like
+# "a previous pass exists" and is not: it is empty on every pass of a series that never
+# stalls, which kills the increment outright. The unconverged case is GREEN against this
+# mutant -- right answer, no working guard -- and only the growth case says so.
+sg_mutate scope-grew-wrong-var \
+  '  if [ -n "$crit" ] && [ -n "$prior" ] && [ -n "$STALL_FROM" ] && [ "$crit" -gt "$prior" ]; then' \
+  "GENERIC GENERIC"
 
 # --- PAIRING: a case that DENIES must assert the state the hooks read -------------
 # THE MECHANISM FOR A DEFECT CLASS THIS FIXTURE HAS NOW HIT TWICE. Gate mode and
