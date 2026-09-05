@@ -953,8 +953,12 @@ prose is itself generated rather than composed.
    `theirs_lacks <core-path> "<substr>"` (innovation upstream lacks),
    `theirs_has <core-path> "<substr>"` (defect present upstream), `sh <one-liner>`
    (exit 0 = still reproduces), or `manual`. A `theirs_*` line MAY carry more than one quoted
-   substring; all must match. Rendered into the step-5 report by
-   `emit-report.sh`, so a CLOSE-CANDIDATE cannot be silently dropped.
+   substring; all must match. **The substring is literal and has no escape mechanism**: write
+   backticks and quotes bare inside the double quotes. A substring carrying a backslash is
+   refused as `NEEDS-REVIEW`, never searched for — a markdown-escaped backtick is otherwise
+   found at neither ref and the entry reads vacuous or still-live forever. Text that genuinely
+   contains a backslash is anchored on a backslash-free neighbour or written as `sh`. Rendered
+   into the step-5 report by `emit-report.sh`, so a CLOSE-CANDIDATE cannot be silently dropped.
 
 3g. **Predicate reclassification — what this pull re-decides about artifacts nobody touched.**
    Run `reconcile/predicate-differential.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>`.
