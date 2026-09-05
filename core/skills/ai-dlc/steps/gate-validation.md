@@ -492,12 +492,16 @@ a story inlines — to satisfy a tooling constraint.
   - **The story file is right and the entry is stale.** The repair is a
     `derive-stories` run, which rewrites the VALUES of an entry that already
     exists in every canonical copy and NEVER creates one. If the envelope
-    carries no entry for the story — the `carry-over-single` case, where sprint
-    planning is skipped and the `stories:` mapping is still its placeholder
-    comment — the entry is created FIRST, by the step that owns the `stories:`
-    mapping or by hand from the story file's own frontmatter; `derive-stories`
-    then runs as the correctness check, where `0 value(s) written` confirms the
-    transcription. It does not happen here — Check 5 runs the read-only mode,
+    carries no entry for the story, write the entry by hand from the story
+    file's own frontmatter, in each canonical copy: the story id as a key under
+    `stories:`, carrying `status:` — an entry without it is compared on nothing
+    and exits 4 — plus `file:` wherever the path is not derivable from the key.
+    `/bmad-sprint-planning` populates that mapping where it runs, and a
+    `carry-over-single` sprint skips it. Then confirm the transcription with
+    `derive-stories --check`: `0 drifted key(s)` means the entry agrees with the
+    story file, and a non-zero count means it does not. Confirm with `--check`
+    and not with the write, which would OVERWRITE a wrong transcription and exit
+    0. It does not happen here — Check 5 runs the read-only mode,
     and a gate that edits the artifact it is validating can pass a tree it just
     changed. Take it through the Gate Failure protocol at the end of this file,
     dispatched; the write's home is `steps/implementation.md`.
