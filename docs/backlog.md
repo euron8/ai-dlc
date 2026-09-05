@@ -4072,3 +4072,58 @@ state the indent rule once. Both are larger than the finding; neither is owed by
 
 verify: manual
 
+
+
+## BL-168 — Step 0a's snapshot-budget check stopped and asked the operator for `trim`, the one remedy it could apply itself, and the reply forced the same whole read the check exists to defer
+
+Filed by the reference consumer as `PC-S308-RESUME-SNAPSHOT-BUDGET-ASKS-INSTEAD-OF-AUTO-TRIMMING`
+on 2026-09-05, found live in-session on a resume whose snapshot measured 155% of its budget.
+Batch 54 of the ledger drain. DEFECT, not NOTE: it is not a wording preference but a stall on
+every over-budget resume, and it parks an auto-chained session behind a question whose answer was
+never in doubt.
+
+`core/skills/ai-dlc/steps/route.md` Step 0a check 1 ran
+`verdict.sh validate-artifact-budget --only pipeline-snapshot.md` and, on non-zero exit,
+HARD_BLOCKed with a message inviting a reply of `trim`, `archive` or `abort`. Step 1a runs the
+same script over the same artifact on the same exit code and directs the agent to apply the
+remedy the script names, singling out `consolidate` alone as supervised — `trim` is gated at
+neither site, yet only the resume site waited.
+
+Measured over the reference consumer's session transcripts, non-sidechain assistant records only:
+the check-1 question reached the operator on **10 distinct occasions** — 8 emissions of the
+verbatim sentence beginning "Reply" and naming the trim, plus 3 `AskUserQuestion` calls carrying
+the `Snapshot budget` header, one session emitting both. **Every one of the 10 resolved to
+`trim`; `archive` and `abort` were chosen zero times.** One operator reply was not a token at all
+but the filing's own remedy in words: *"why do you need me to tell you to trim it? shouldn't that
+be a natural first step and only if you're unable to bring it under budget you would need to
+escalate to me?"* Control in the same scan: `pipeline-snapshot.md` matched 111 assistant-text
+records and 4744 tool-use records, so the scan discriminates rather than merely running. The
+breaches were 117%, 147%, 155%, 162% and 215% of a 6000-token budget — none large enough that
+reading the file in order to trim it is itself the harm.
+
+The check's own sentence, "This check protects the read that follows it", survives the fix and
+was never a reason to ask. An autonomous trim must whole-read the snapshot to find what is
+superseded, so it spends that read — but so did the `trim` reply, one round-trip later. The only
+answers that ever avoided the read were `archive` and `abort`, and the measured population chose
+neither. The fix removes no protection that was being exercised, and it keeps the operator gate
+for the case that genuinely needs one: a snapshot still over budget after one mechanical pass,
+where `archive` and `abort` stop being equivalent to `trim`.
+
+The fix is confined to check 1. It applies the `trim` remedy autonomously by the mechanics Step
+1a's `trim` bullet already gives, cites Rule 25(a) and `gate-validation.md` Check 14 as the owners
+of move-never-delete and of the seven-section schema rather than restating either, re-runs the
+same verdict, and falls through to the existing HARD_BLOCK — pause flag first, per the paragraph
+that opens Step 0a — with `archive`, `abort` and a named manual trim as the remaining options.
+The ask-first shape had exactly one copy across `core/`, `templates/`, `scripts/` and `docs/`,
+and the fix leaves zero (control: `Step 0a` still matches 34 lines in 10 files across those same
+trees). `core/fixtures/resume-whole-read` arms A1-A4 still hold, the verdict invocation being
+unchanged and still ahead of the whole read. `enforcement-map.yaml`'s `route.md Step 0a (resume)`
+call site keeps `posture: HARD_BLOCK`, which stays true of the fall-through, so the map is
+unedited.
+
+The receipt is prose-keyed, because the subject is prose and no program reads it: a rewrite that
+re-wraps either asserted sentence across a line break scores STILL-LIVE with the behaviour
+correct. That is a stated limit rather than a defect in the receipt — the ask-first arm is the
+load-bearing half and it fails closed.
+
+verify: sh f="${ROUTE:-core/skills/ai-dlc/steps/route.md}"; [ -f "$f" ] || exit 9; grep -qF 'to have me trim it to its' "$f" && exit 1; grep -qF 'remedy the script names YOURSELF, without asking' "$f" || exit 1; grep -qF 'one trim pass did not clear it' "$f" || exit 1; exit 0
