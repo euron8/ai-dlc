@@ -283,7 +283,9 @@ Two arms, either satisfies (dual-arm OR):
   citation may not be re-cited — re-suppression is a new entry and a new
   operator turn. This holds for an escalated `adjudication: llm` check too:
   Check 26's validator consults the same script and a covered `FAIL` does not
-  block there.
+  block there. The Rule 28 remediation guard subtracts the same in-force checks
+  from its artifact lock-out, so a `FAIL` covered by a verified in-force entry
+  does not hold the lead out of the corpus either.
 - `DEFERRAL_REQUEST` entries block only the deferred item, not the
   pipeline. Proceed with non-deferred work.
 - A HARD_BLOCK marked `RESOLVED`/`OVERRIDDEN` must cite the operator — enforced by

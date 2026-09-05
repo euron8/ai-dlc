@@ -102,7 +102,13 @@
 #   is readable at all (refusing every lift on a harness that omitted the field
 #   would wedge the pipeline on the honest path). The fail-open case is logged.
 #
-#   ARM 7b FAILS CLOSED, AND ITS PREDICATE IS NOT ITS OWN.
+#   ARM 7b FAILS CLOSED, AND ITS CITATION IS VERIFIED LIKE ARM 9'S.
+#   Arm 6 lets the lead write `docs/escalations/pending.md` while denied, so a suppression is
+#   a record the lead CAN author -- and the sentence above about no lead-authored record
+#   reaching this hook holds only because arm 7b subtracts a check on a VERIFIED operator
+#   quote and on nothing else. Same `--cite` predicate as arm 9, same fail-closed posture:
+#   no verifier, no corpus, no quote or a quote the operator never said all leave the deny
+#   standing. The lifetime and shape half of the predicate stays in the sibling that owns it.
 #   A suppressed FAIL is still a recorded FAIL -- the suppression bounds the operator's
 #   LICENCE and never the check -- but no repair is coming for a check the operator has
 #   dispositioned, so arm 7b PARTITIONS the live FAIL set rather than discarding it. What is
@@ -384,24 +390,73 @@ esac
 # the sibling's three-candidate list into a hook would be a third spelling of one resolver,
 # drifting with nothing watching; the gate validator's copy is already the second.
 #
+# THE CITATION IS VERIFIED HERE, AND THAT IS WHAT KEEPS THIS ARM OUT OF THE LEAD'S REACH.
+# Arm 6 lets the lead edit `docs/escalations/pending.md` while denied, deliberately -- the
+# escalation is its sanctioned exit. So without this, arm 7b is a self-discharge: the lead
+# writes its own SUPPRESSED entry quoting an operator turn that never happened and the next
+# edit is allowed. Measured end to end before this existed: DENY, one lead-authored entry,
+# ALLOW. The sibling requires only an ISO timestamp on `**Operator authorization:**`; it does
+# not and cannot decide whether the words were said.
+#
+# So every COVERING row's citation is verified against the harness transcript corpus with
+# `validate-steering-budget.sh --cite`, the same predicate arm 9 uses one screen down and the
+# same one `validate-escalation-resolution.sh` runs for RESOLVED/OVERRIDDEN. FAIL CLOSED: a
+# row whose quote does not verify, or that cannot be verified for want of a corpus or a
+# verifier, is NOT subtracted and the deny stands. An unverifiable claim never releases
+# permission to edit, which is arm 9's rule applied to the same evidence class.
+#
+# WHY THE VERIFICATION IS HERE AND NOT IN THE SIBLING, WHICH WOULD COVER Check 26 TOO.
+# Three measured reasons, in the order they were established. (1) The predicate is
+# SATISFIABLE: the reference consumer's genuine `[S308-GATE3-STORY-1]` entry, quote
+# "Suppress Check 16 (Recommended)", verifies over its 249-transcript corpus -- MATCH at
+# 2026-09-05T17:46:59Z, against a control phrase that returns NOMATCH. (2) The sibling's OTHER
+# caller cannot supply a corpus: `validate-gate-adjudication.sh` takes no transcript argument
+# and no caller passes it one, so a sibling that verified unconditionally would omit every
+# in-force row at gate time and re-block every suppressed FAIL -- a check that wedges live
+# work. (3) The sibling could not host the extraction anyway: `cite_quote()` and
+# `cite_segments()` are held to exactly three copies by I93, whose site list is DERIVED from
+# every file under core/ that names them, so a fourth copy fails the push. This hook is one of
+# the three and already carries both. The sibling therefore forwards the auth line verbatim as
+# a row field and parses nothing. Check 26's half of the hole is a separate subject.
+#
 # WHY THIS SITS AFTER ARM 7 AND NOT AFTER ARM 5. The subtraction changes exactly three
 # things, all downstream of the guarded-root test: the repair record's `repaired_checks`
-# join, the deny, and this allow. Running it at arm 5 would pay the sibling's parse -- 0.66s
-# median over the reference consumer's 389KB `pending.md`, five reps -- on every
-# `pipeline-snapshot.md` and `sprint-status.yaml` write the lead makes during remediation,
-# and would log GATE_REMEDIATION_SUPPRESSED for each of them. The header already gives the
-# reason in the sibling's own words: logging the common path drowns the signal.
+# join, the deny, and this allow. Running it at arm 5 would pay the sibling's parse on every
+# `pipeline-snapshot.md` and `sprint-status.yaml` write the lead makes during remediation, and
+# would log GATE_REMEDIATION_SUPPRESSED for each of them. The header already gives the reason
+# in the sibling's own words: logging the common path drowns the signal.
 #
-# THE CACHE EXISTS BECAUSE 0.66s IS A WALL-CLOCK CHANGE ON AN EDIT. Keyed on the live nonce,
-# on the size+mtime of the escalations file, of the gate-metrics file and of the sibling
-# itself. It can only ever be stale WITHIN one live gate pass and only when the sibling
-# resolved a metrics file this key does not name; the direction is an entry that expired
-# mid-pass still reading in force, bounded by one gate because `--in-force` already refuses
-# any entry more than `Expires after:` gates old. A pull replaces the sibling, which changes
-# its mtime, which is why the enforcement map does not need its own key term.
+# WHAT THAT PARSE COSTS, five reps interleaved against a control in the same invocation:
+# 0.593s median over the reference consumer's 398582-byte `pending.md`, against 0.039s on a
+# 399-byte seed -- roughly fifteen times the control, which is the figure that survives a
+# change of machine. A second hand measured 2.92s and 0.20s on the same inputs; every row of
+# that run including its own control and baseline is about four times this one, so the
+# ABSOLUTE numbers here are load-dependent and the RATIOS are what to read.
+#
+# THE CACHE EXISTS BECAUSE THAT IS A WALL-CLOCK CHANGE ON AN EDIT. Whole guard, five reps,
+# interleaved: base 0.045s median, cold 1.117s, warm 0.057s. A warm guarded edit adds about
+# 12ms over the unguarded baseline and a cold one adds a full second; the other hand's run
+# reads 0.147s / 3.06s / 0.225s, ~80ms warm, on the same shape.
+#
+# THE CITATION FILTER RUNS ON THE COLD PATH ONLY, and that siting is worth a second of the
+# two. Verified on every read instead, the warm edit measured 0.48s -- eight times the cached
+# figure above, because a `--cite` scan crosses the whole transcript corpus. What the cache
+# holds is therefore the set that already passed.
+#
+# THE KEY IS THE ESCALATION FILE'S CONTENT, NEVER ITS SIZE AND MTIME. Measured: an entry
+# rewritten from `[core] 7` to `[core] 9` is the same 190 bytes, and inside one whole second
+# `mtime` does not move either -- so a size+mtime key returned a stale ALLOW for a suppression
+# that no longer names the failing check. `mtime` granularity cannot be raised and the equal
+# size is not a coincidence: an id swap is the common edit. A digest costs a few milliseconds
+# against a 3s parse. The other terms stay size+mtime, because none of them is edited in place
+# by the actor the deny is pointed at. The verification result is folded into the key by a
+# `+cite` marker, so rows cached by a build that did not verify can never be read by one that
+# does; a verified quote stays verified, transcripts being append-only, so nothing else about
+# the corpus needs a key term.
 IN_FORCE_STATUS=""
 IN_FORCE_ROWS=""
 SUPPRESSED_CHECKS=""
+UNVERIFIED_CITES=0
 ESC_FILE="${PROJECT_DIR}/docs/escalations/pending.md"
 CACHE_FILE="${LOG_DIR}/.gate-remediation-in-force"
 SUPP_DIR=""
@@ -423,6 +478,44 @@ fkey() { # <path> -> "<size>:<mtime>", "-" when there is no such file, "?" when 
   printf '%s' "?"
 }
 
+# CONTENT, for the one input the denied lead can rewrite in place. `md5`, `md5sum` and
+# `cksum` in that order; `cksum` is POSIX and always present, so the last arm cannot fail on
+# a tree the other two are missing from.
+ckey() { # <path> -> a digest of the bytes, "-" when absent, "?" when nothing could hash it
+  [ -n "${1:-}" ] && [ -f "$1" ] || { printf '%s' "-"; return 0; }
+  _ck="$(md5 -q "$1" 2>/dev/null)"
+  case "${_ck:-}" in [0-9a-f][0-9a-f]*) printf '%s' "$_ck"; return 0 ;; esac
+  _ck="$(md5sum "$1" 2>/dev/null | awk '{print $1}')"
+  case "${_ck:-}" in [0-9a-f][0-9a-f]*) printf '%s' "$_ck"; return 0 ;; esac
+  _ck="$(cksum "$1" 2>/dev/null | awk '{print $1 "-" $2}')"
+  case "${_ck:-}" in [0-9]*-[0-9]*) printf '%s' "$_ck"; return 0 ;; esac
+  printf '%s' "?"
+}
+
+# THE CITATION PREDICATE, asked of the script that owns it. Returns 0 only when the quote on
+# this entry's `**Operator authorization:**` line is a genuine operator message in the
+# transcript corpus. Every other outcome -- no verifier, no corpus, no quote, a quote too
+# short to be evidence, a validator tooling error -- returns non-zero, because this answer
+# releases permission to edit and there is no second piece of evidence behind it.
+cite_verifies() { # <auth-line> -> 0 verified, 1 not
+  local q flag arg
+  [ -n "${1:-}" ] || return 1
+  [ -f "$STEER_SCRIPT" ] || return 1
+  q="$(cite_quote "$1")"
+  [ "${#q}" -ge 12 ] || return 1
+  flag=""; arg=""
+  if [ -n "$TRANSCRIPT" ] && steer_dir_has_transcript "$(dirname "$TRANSCRIPT")"; then
+    # THE DIRECTORY, for arm 9's reason: an operator authorizes a suppression in one session
+    # and the gate that leans on it runs in another, so `transcript_path` is never the file
+    # the words are in.
+    flag="--dir"; arg="$(dirname "$TRANSCRIPT")"
+  elif [ -n "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ]; then
+    flag="--transcript"; arg="$TRANSCRIPT"
+  fi
+  [ -n "$flag" ] || return 1
+  bash "$STEER_SCRIPT" "$flag" "$arg" --cite "$q" --quiet >/dev/null 2>&1
+}
+
 if [ ! -f "$ESC_FILE" ]; then
   IN_FORCE_STATUS="no-escalations-file:${ESC_FILE}"
 elif [ -z "$SUPP_DIR" ]; then
@@ -430,7 +523,7 @@ elif [ -z "$SUPP_DIR" ]; then
 else
   # AI_DLC_GATE_METRICS is the fixture's channel, the same one the gate validator honours; a
   # live gate lets the sibling locate the timeline itself.
-  CACHE_KEY="${LIVE_NONCE}|$(fkey "$ESC_FILE")|$(fkey "${AI_DLC_GATE_METRICS:-${LOG_DIR}/implementation-artifacts/gate-metrics.jsonl}")|$(fkey "$SUPP_DIR/validate-suppression-lifetime.sh")"
+  CACHE_KEY="${LIVE_NONCE}|+cite|$(ckey "$ESC_FILE")|$(fkey "${AI_DLC_GATE_METRICS:-${LOG_DIR}/implementation-artifacts/gate-metrics.jsonl}")|$(fkey "$SUPP_DIR/validate-suppression-lifetime.sh")"
   # A key with an unreadable term cannot invalidate, so there is no key: pay the parse.
   case "$CACHE_KEY" in *"?"*) CACHE_KEY="" ;; esac
   CACHED_KEY=""
@@ -452,8 +545,28 @@ else
     SUPP_RC=$?
     if [ "$SUPP_RC" -eq 0 ]; then
       IN_FORCE_STATUS="ok:${ESC_FILE}"
+      # THE CITATION IS VERIFIED BEFORE THE ROWS ARE CACHED, so what the cache holds is the
+      # set that already passed. Verifying on every read instead would put a `--cite` scan of
+      # the whole transcript corpus on every guarded edit -- measured at 0.48s warm against
+      # 0.09s once the filter moved here. A verified quote stays verified, so caching the
+      # survivors is sound; the `+cite` term in the key stops a build that did not verify from
+      # ever handing its rows to one that does.
+      _VROWS=""
+      while IFS= read -r _row; do
+        [ -n "${_row:-}" ] || continue
+        _rauth="$(printf '%s' "$_row" | LC_ALL=C awk -F'\t' 'NF >= 6 { print $5 }')"
+        if cite_verifies "${_rauth:-}"; then
+          _VROWS="${_VROWS}${_row}
+"
+        else
+          UNVERIFIED_CITES=$((UNVERIFIED_CITES + 1))
+        fi
+      done <<VROWEOF
+$IN_FORCE_ROWS
+VROWEOF
+      IN_FORCE_ROWS="$(printf '%s' "$_VROWS")"
       [ -n "$CACHE_KEY" ] && mkdir -p "$LOG_DIR" 2>/dev/null \
-        && printf '%s\n%s\n' "$CACHE_KEY" "$IN_FORCE_ROWS" > "$CACHE_FILE" 2>/dev/null
+        && printf '%s\n%s' "$CACHE_KEY" "$IN_FORCE_ROWS" > "$CACHE_FILE" 2>/dev/null
     else
       IN_FORCE_ROWS=""
       IN_FORCE_STATUS="refused:validate-suppression-lifetime.sh --in-force exited ${SUPP_RC}"
@@ -464,11 +577,19 @@ fi
 if [ -n "$IN_FORCE_ROWS" ]; then
   # `awk -F'\t'` and not `IFS`+`read`: TAB is IFS-whitespace, so a shell read COLLAPSES the
   # empty leading field a bare-catalog row carries and shifts the check id into the catalog.
+  #
+  # `NF >= 6` is the SAME field count validate-gate-adjudication.sh's parse requires. The two
+  # readers of this row must narrow together or one of them starts accepting a shape the other
+  # rejects, and the disagreement surfaces as a gate that blocks beside a guard that allows.
   VERDICT_CATALOG="$(jq -r '.catalog // ""' "$LIVE_VERDICT" 2>/dev/null)"
+  # Every row reaching here has already had its citation verified, cold or from the cache.
   COVERED="$(printf '%s\n' "$IN_FORCE_ROWS" | LC_ALL=C awk -F'\t' -v want="$VERDICT_CATALOG" '
-    NF >= 2 && $2 != "" { c = ($1 == "" ? "core" : $1); if (c == want) print $2 }' | sort -u)"
+    NF >= 6 && $2 != "" { c = ($1 == "" ? "core" : $1); if (c == want) print $2 }' | sort -u)"
   REMAINING=""
   for _c in $FAILED_CHECKS; do
+    # `-x`, and the mutant that drops it is committed. A substring match acquits a FAIL on `3`
+    # under a suppression naming `3a` and the reverse, which is the grain the repair-record
+    # join at arm 8 already spells out one screen down.
     if grep -qxF "$_c" <<<"$COVERED"; then
       SUPPRESSED_CHECKS="${SUPPRESSED_CHECKS:+$SUPPRESSED_CHECKS }$_c"
     else
@@ -489,6 +610,12 @@ if [ -z "$FAILED_CHECKS" ]; then
     "Carve-out source: ${IN_FORCE_STATUS}"
   exit 0
 fi
+
+# THE STATUS IS DOWNGRADED ONLY ONCE THE DENY STANDS. An unverifiable entry beside a genuine
+# one that covers the whole live FAIL set changes no outcome, and saying "unverified" on an
+# allow would point the reader at the wrong record.
+[ "$UNVERIFIED_CITES" -eq 0 ] || \
+  IN_FORCE_STATUS="unverified-citation:${UNVERIFIED_CITES} in-force entr(y/ies) cite an operator message that is NOT in this session's transcript corpus, so they suppress nothing"
 
 # The sentence the deny and the log both carry. Mirrors validate-gate-adjudication.sh's own
 # two reasons, because a lead reading one of these and then the other must not have to work

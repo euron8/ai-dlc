@@ -123,9 +123,17 @@ run — so an entry covers the authorizing gate and then `<n>` more.** `<catalog
 distribution check and `extension:<id>` for a consumer domain check, matching
 the `GATE_METRIC v1` field of the same name — the id is a join key, so it is
 written the way the metrics write it. The `**Operator authorization:**` line
-carries the identical grammar and the identical verification as the
-`RESOLVED`/`OVERRIDDEN` citation above; a suppression is an operator decision
-or it is nothing.
+carries the identical grammar as the `RESOLVED`/`OVERRIDDEN` citation above; a
+suppression is an operator decision or it is nothing.
+
+**Where that citation is VERIFIED, and where it is not.** The lifetime script
+reads the line for its timestamp and does not decide whether the words were
+said. `ai-dlc-gate-remediation-guard.sh` verifies the quote against the harness
+transcript corpus before it will treat an entry as covering a failing check, and
+an entry it cannot verify covers nothing there. Check 26's validator has no
+transcript to verify against, so at the gate the citation is read and not
+checked. Write the quote verbatim from the operator's own turn: a paraphrase is
+indistinguishable from an invention to the reader that does check.
 
 **A suppression names its target.** `RESOLVED` and `OVERRIDDEN` name none, and
 that is the loophole: an entry may be closed on an operator's word while a

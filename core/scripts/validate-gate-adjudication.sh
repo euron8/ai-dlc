@@ -1026,13 +1026,20 @@ if not E:
 # author error that drops the required field must not buy wider coverage than writing it
 # correctly would. Measured before this clause existed: a bare `16` covered an extension
 # check `16` in a catalog the entry never named.
+#
+# THE ROW'S OPERATOR-AUTH FIELD IS READ AND DISCARDED HERE, and the field count is what makes
+# that visible. This reader has no transcript corpus -- there is no `--transcript` on this
+# script and no caller that could pass one -- so it cannot verify the citation, and a reader
+# that silently ignored a field would be indistinguishable from one that never received it.
+# `ai-dlc-gate-remediation-guard.sh` arm 7b, which does have a corpus, verifies it. Both
+# readers take the same bounded split so the row shape cannot narrow under one of them.
 in_force_status = os.environ.get("GA_IN_FORCE_STATUS", "not-asked")
 in_force = {}
 for raw in os.environ.get("GA_IN_FORCE", "").splitlines():
-    parts = raw.split("\t", 4)
-    if len(parts) < 5:
+    parts = raw.split("\t", 5)
+    if len(parts) < 6:
         continue
-    cat, cid_s, expires, elapsed, header = parts
+    cat, cid_s, expires, elapsed, _auth, header = parts
     in_force.setdefault((cat or "core", cid_s), (expires, elapsed, header))
 catalog = str(V.get("catalog", ""))
 suppressed = []
