@@ -257,6 +257,60 @@ for cand in \
     [ -f "$cand" ] && { SIBLING="$cand"; break; }
 done
 
+# --- the SUPPRESSED carve-out: asked of the script that OWNS "in force", never restated ---
+# escalations.md defines SUPPRESSED as an authorization to proceed past a failing check, with
+# a lifetime, and Check 2 says such an entry does not block while in force. Every
+# `adjudication: llm` check is adopted through THIS script, so without this join a
+# suppression could cover a lead-evaluated check and never an escalated one — measured on the
+# reference consumer: a well-formed, in-force entry naming `[core] 16` and the gate still
+# exiting 1 on that FAIL. The predicate (well-formed, catalog-known, within lifetime) lives in
+# validate-suppression-lifetime.sh --in-force; this script consumes its rows and joins them on
+# (catalog, check_id) against the verdict's own `catalog` field. FAIL-CLOSED on every
+# absence: no escalations file, no sibling, or a sibling refusal all mean NO carve-out and the
+# FAIL blocks exactly as before, with the reason printed beside the block.
+GA_IN_FORCE=""
+GA_IN_FORCE_STATUS="not-asked"
+if [ "$MODE" = "adjudicate" ]; then
+    ESC="${AI_DLC_ESCALATIONS:-$GA_ROOT/docs/escalations/pending.md}"
+    # The sibling is named IN FULL at its call sites below, never through a variable holding
+    # the whole path: I107 in scripts/validate-enforcement-map.sh joins the mode spelled here
+    # to the mode the sibling dispatches, and it reads the literal beside the basename.
+    SUPP_DIR=""
+    for cand in "$GA_SCRIPT_DIR" "$GA_ROOT/core/scripts" "$GA_ROOT/scripts/ai-dlc"; do
+        [ -f "$cand/validate-suppression-lifetime.sh" ] && { SUPP_DIR="$cand"; break; }
+    done
+    # A verdict carrying no FAIL has nothing to cover, so the sibling's parse of the whole
+    # escalations file (hundreds of KB on the reference consumer) is skipped on the common
+    # all-PASS gate. The token test is a superset of the JSON test: any FAIL verdict carries
+    # the string, and a false hit only costs the parse. An absent verdict falls through to
+    # the python block's own exit 2.
+    if [ ! -f "$VERDICT_PATH" ] || ! grep -q '"FAIL"' "$VERDICT_PATH"; then
+        GA_IN_FORCE_STATUS="not-needed:no FAIL token in the verdict"
+    elif [ ! -f "$ESC" ]; then
+        GA_IN_FORCE_STATUS="no-escalations-file:$ESC"
+    elif [ -z "$SUPP_DIR" ]; then
+        GA_IN_FORCE_STATUS="no-sibling:validate-suppression-lifetime.sh not found beside $GA_SCRIPT_DIR"
+    else
+        # AI_DLC_GATE_METRICS is the fixture's channel; a live gate lets the sibling locate
+        # the timeline itself, from the same cwd the lead runs verdict.sh in.
+        if [ -n "${AI_DLC_GATE_METRICS:-}" ]; then
+            GA_IN_FORCE="$(bash "$SUPP_DIR/validate-suppression-lifetime.sh" --in-force \
+                --escalations "$ESC" --enforcement-map "$MAP" --gate-metrics "$AI_DLC_GATE_METRICS")"
+        else
+            GA_IN_FORCE="$(bash "$SUPP_DIR/validate-suppression-lifetime.sh" --in-force \
+                --escalations "$ESC" --enforcement-map "$MAP")"
+        fi
+        supp_rc=$?
+        if [ "$supp_rc" -eq 0 ]; then
+            GA_IN_FORCE_STATUS="ok:$ESC"
+        else
+            GA_IN_FORCE=""
+            GA_IN_FORCE_STATUS="refused:validate-suppression-lifetime.sh --in-force exited $supp_rc"
+        fi
+    fi
+fi
+export GA_IN_FORCE GA_IN_FORCE_STATUS
+
 python3 - "$MODE" "$GATE_TYPE" "$VERDICT_PATH" "$SCHEMA" "$MAP" "$SIBLING" ${SERIES_PATHS+"${SERIES_PATHS[@]}"} <<'PYEOF'
 import glob
 import json
@@ -962,9 +1016,54 @@ if not E:
           f"envelope well-formed.")
     sys.exit(0)
 
-if fails:
-    block(1, f"gate check(s) FAILED per the adjudicator: {sorted(fails, key=lambda x: (len(x), x))}. "
-             f"The lead owns the block; this verdict is what it adopts.")
+# --- the SUPPRESSED carve-out (see the shell header above the python block) ---------------
+# A FAIL is non-blocking ONLY when an in-force SUPPRESSED entry names this check in THIS
+# verdict's catalog. The rows come from validate-suppression-lifetime.sh --in-force, which is
+# the one owner of "in force". A row whose bracket is spelled matches only its own catalog. A
+# row with NO bracket — escalations.md makes the bracket mandatory, but the sibling's shape
+# arm only requires the id — counts as `core` and nothing else: the sibling resolves ids
+# against the core catalog alone, so a bare id can only ever have named a core check, and an
+# author error that drops the required field must not buy wider coverage than writing it
+# correctly would. Measured before this clause existed: a bare `16` covered an extension
+# check `16` in a catalog the entry never named.
+in_force_status = os.environ.get("GA_IN_FORCE_STATUS", "not-asked")
+in_force = {}
+for raw in os.environ.get("GA_IN_FORCE", "").splitlines():
+    parts = raw.split("\t", 4)
+    if len(parts) < 5:
+        continue
+    cat, cid_s, expires, elapsed, header = parts
+    in_force.setdefault((cat or "core", cid_s), (expires, elapsed, header))
+catalog = str(V.get("catalog", ""))
+suppressed = []
+blocking = []
+for cid in fails:
+    hit = in_force.get((catalog, cid))
+    if hit:
+        expires, elapsed, header = hit
+        suppressed.append(cid)
+        print(f"VALIDATE-GATE-ADJUDICATION: SUPPRESSED — check {cid!r} FAIL is covered by an "
+              f"in-force SUPPRESSED entry (expires after {expires} gate(s), {elapsed} recorded "
+              f"since authorization): {header}")
+    else:
+        blocking.append(cid)
+
+if blocking:
+    reason = ""
+    if not in_force_status.startswith("ok:"):
+        reason = (f" No SUPPRESSED carve-out was applied ({in_force_status}); a suppression "
+                  f"that cannot be read covers nothing.")
+    elif suppressed:
+        reason = (f" {len(suppressed)} other FAIL(s) are under an in-force suppression; these "
+                  f"are not.")
+    block(1, f"gate check(s) FAILED per the adjudicator: {sorted(blocking, key=lambda x: (len(x), x))}. "
+             f"The lead owns the block; this verdict is what it adopts.{reason}")
+
+if suppressed:
+    print(f"VALIDATE-GATE-ADJUDICATION: PASS ({verdict_path}, {len(E)} escalated check(s) for "
+          f"{gate_type}, {len(E) - len(suppressed)} PASS, {len(suppressed)} FAIL under an "
+          f"in-force SUPPRESSED entry: {sorted(suppressed, key=lambda x: (len(x), x))})")
+    sys.exit(0)
 
 print(f"VALIDATE-GATE-ADJUDICATION: PASS ({verdict_path}, {len(E)} escalated check(s) for "
       f"{gate_type}, all PASS)")

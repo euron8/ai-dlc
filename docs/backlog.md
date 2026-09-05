@@ -4072,3 +4072,203 @@ state the indent rule once. Both are larger than the finding; neither is owed by
 
 verify: manual
 
+
+
+## BL-167 — Check 26's validator blocked on every per-check FAIL and read nothing else, so an operator's in-force `SUPPRESSED` entry could cover a lead-evaluated check and never an escalated one
+
+Filed by the reference consumer as `PC-S308-CHECK26-NO-SUPPRESSED-CARVEOUT` on 2026-09-05, from
+its story-308-1 gate 3, which was blocked on it when this batch opened (the consumer's HEAD
+commit names the block). Batch 54 of the ledger drain, scoped by this session from its own
+ranking on consequence — a live consumer gate with no compliant way past it — and batched with
+`BL-168`. DEFECT.
+
+`escalations.md` defines `SUPPRESSED` as an authorization to proceed past a failing check, with
+a lifetime, and `gate-validation.md` Check 2 says such an entry does not block while in force.
+Every `adjudication: llm` check is adopted only through Check 26, and its validator
+(`core/scripts/validate-gate-adjudication.sh`) called `block(1, …)` on any entry of its `fails`
+list with no read of `docs/escalations/pending.md` anywhere in the file (one `escalations`
+token, an unrelated comment about the remediation guard). So the two subsystems never joined:
+the lead's inline checks could be suppressed and the escalated ones — which include every
+read-and-compare check an implementation gate runs — could not. Measured on the consumer's real
+files, read-only, from its own cwd: a well-formed in-force entry naming `[core] 16`,
+`validate-suppression-lifetime.sh` PASS, and the installed validator exiting 1 on `['16']` for
+the gate-3 verdict `implementation-20260905T172547Z`. The consumer's first attempt at the
+disposition was `DECIDED_AUTONOMOUSLY` carrying the suppression fields, which the lifetime arm
+correctly refuses; the corrected `SUPPRESSED` entry then covered nothing at Check 26 either.
+
+**The fix puts the predicate in the script that already owns it.**
+`validate-suppression-lifetime.sh` gains `--in-force`, which runs the same record extraction,
+the same catalog join and the same `gates_since` count the lifetime arm runs and lists every
+suppression that is well-formed, names a catalog check and is within its lifetime — one
+tab-separated row per entry (catalog, check id, expires-after, gates elapsed, header), exit 0
+whenever the file was read, 2 on a refusal, never 1. The parser now carries the bracketed
+catalog as its own field instead of stripping it. `validate-gate-adjudication.sh`, in adjudicate
+mode only, asks the sibling for those rows before blocking and treats a FAIL as non-blocking
+when a row's (catalog, check id) matches the verdict's own `catalog` field and the id. A row
+whose entry wrote no bracket counts as `core` and nothing else: `escalations.md` makes the
+bracket mandatory, the sibling's shape arm requires only the id, and the sibling resolves ids
+against the core catalog alone, so a bare id can only have named a core check. The adversarial
+hand found the first cut let a bare `16` cover an extension check `16` in a catalog the entry
+never named — an author error buying wider coverage than the correct spelling — and that is now
+a fixture case. A covered FAIL is printed as `SUPPRESSED` with the entry that covers it; the remainder block as
+before; the all-PASS line is unchanged when nothing was suppressed. Absence fails closed and
+says which absence: no escalations file, no sibling beside the script, or a sibling exit other
+than 0 all mean no carve-out. The sibling is named in full at its two call sites so that
+**I107** in `scripts/validate-enforcement-map.sh` can join the mode spelled there to the mode
+the sibling dispatches and to its USAGE lines, on I53's pattern; the arm was probed in both
+directions plus a near-miss under `core/fixtures/`, and the validator's wall clock moved from
+25.1s to 25.3s over three reps each.
+
+Driven on the consumer's real gate-3 verdict and `pending.md`, read-only, from the consumer's
+cwd with a `cmp -s` control that the two validators differ: installed exits 1 on `['16']`; fixed
+prints the `SUPPRESSED` row for `[S308-GATE3-STORY-1]` (expires after 1 gate, 0 recorded since
+authorization) and exits 0 with `14 PASS, 1 FAIL under an in-force SUPPRESSED entry`; fixed with
+the escalations path pointed at a missing file exits 1 and names `no-escalations-file`. The
+in-force query over that file lists exactly one of its 17 `SUPPRESSED` entries against 10
+recorded gate timestamps.
+
+**Population, measured over the consumer's whole verdict corpus, read-only.** Of 195 verdict
+files (all `catalog: core`), 86 carry a FAIL. Reconstructing `pending.md` and the gate metrics at
+the commit nearest each verdict's `generated_at` (323 commits; the metrics file is rotated, so a
+second reconstruction from the metrics blob at the same commit was run and selects the same set)
+and driving the shipped `--in-force` query: 47 had some in-force suppression at their gate and 11
+had one naming a check the verdict failed. Driving both validators on those 11 with the
+reconstructed inputs: 6 flip from exit 1 to 0; 5 stay at 1 because a second FAIL in the same
+verdict is uncovered, and on every one of the 11 the fixed side prints the `SUPPRESSED` row.
+Controls in the same run: four uncovered FAIL verdicts read 1 on both sides with no row, four
+all-PASS verdicts read 0 on both, and deleting the live `[S308-GATE3-STORY-1]` entry from a scratch
+copy returns the live case to 1. The consumer's gate-log archives record four hand adoptions of a
+suppressed Check 16 FAIL across sprints 303 and 304, one stating "the script has no suppression
+concept and the licence can only be given effect by the lead's own disposition". Every such gate
+proceeded by hand; the fix converts that adoption into a mechanical one and unblocks nothing that
+stayed blocked. Of the 17 suppressions the consumer ever filed, 15 name `llm` checks (16, 22, 11)
+and 2 name script checks (24, 30) the carve-out cannot reach, correctly.
+
+**A stated limit, pre-existing and not widened here.** The lifetime validator joins
+`**Suppresses:**` ids against the core `enforcement-map.yaml` only, so a suppression naming an
+extension check (`[extension:<id>] XVH` or the `[ext:<id>]` spelling the consumer's gate metrics
+also carry, 62 rows against 8) is refused as "not a check in the catalog" and is never listed in
+force. No such suppression exists in the consumer's history, every verdict carries `core`, and
+the join here inherits that scope rather than inventing an extension resolver.
+
+**The fixture hand found a fail-open inside the carve-out, closed before the merge.** In the
+first cut the query treated a missing gate timeline as zero elapsed, so every well-formed entry
+was in force regardless of age from any cwd where the metrics file did not auto-locate, and
+again with the metrics path naming a missing file — the same entry the lifetime arm declines to
+judge ("expiry NOT-APPLICABLE") was adopted as an authorization. Measured three sides on the
+fixture's expired entry: explicit timeline 1, no candidate 0, missing file 0. The query now lists
+nothing when no metrics file was found, says so per entry and in its summary
+(`gates_recorded=NONE`), and a metrics file that exists and records no gate stays the genuine
+fresh-consumer case at 0 elapsed. The caller also skips the query on a verdict carrying no FAIL
+token, so an all-PASS gate no longer parses the whole escalations file.
+
+**The lifetime's span is now stated where it is declared.** Measured on the consumer by the
+adversarial hand: the newest recorded gate timestamp predates the live gate's nonce and the
+entry's authorization, so a lead writes gate-metrics rows AFTER Check 26 runs and the gate being
+adjudicated is never in the timeline it is measured against. `gates_since` therefore reads 0 at
+the authorizing gate and 1 at the next, and `Expires after: 1` covers both. That is arithmetic
+the lifetime arm has always done; this carve-out is the first mechanism that turns the second
+gate into passage rather than a warning, so `escalations.md` now says beside the default that an
+entry covers the authorizing gate and then `<n>` more. `gates_since` itself is unchanged, because
+Check 2's arm shares it. Suppressing a `hard_block: true` check, Check 2 itself included, is
+within scope by decision: a bounded operator licence past a red check is what `SUPPRESSED` was
+created for, and the entry still needs the operator citation Check 2a verifies.
+
+**Reader set derived, not taken from the filing.** The filing named the validator and the step
+prose; the enforcement-map posture for Check 26 and `escalations.md`'s own `SUPPRESSED` section
+also described the block as unconditional, and both now say a covered FAIL proceeds and where
+the predicate lives. The gate-adjudicator role is unchanged — it still records the FAIL, and the
+entry carries the licence, not the verdict. `--series` (the stall rung) still counts a
+suppressed FAIL as a FAIL, deliberately: a suppression bounds the licence, not the check.
+
+The receipt seeds a scratch escalated set derived with `--expected`, a verdict failing its first
+id, and an in-force entry, then scores: entry naming a different id must block (kills a fix that
+lets any entry cover every FAIL), the matching entry must pass with a `SUPPRESSED` line, an
+entry two recorded gates past a one-gate lifetime must block (kills a fix that ignores expiry),
+and a missing escalations file must block (kills a fix that fails open). Unfixed scores 1, the
+id-blind wrong fix scores 1, fixed scores 0.
+
+verify: sh V="${GA:-core/scripts/validate-gate-adjudication.sh}"; S="${GASCHEMA:-core/schemas/gate-adjudication-verdict.json}"; M="${GAMAP:-core/skills/ai-dlc/enforcement-map.yaml}"; [ -f "$V" ] && [ -f "$S" ] && [ -f "$M" ] || exit 9; d=$(mktemp -d); N=implementation-20260101T000000Z; ids=$(AI_DLC_VERDICT_SCHEMA="$S" AI_DLC_ENFORCEMENT_MAP="$M" bash "$V" --expected implementation) || { rm -rf "$d"; exit 9; }; x=$(printf '%s\n' "$ids" | head -1); y=$(printf '%s\n' "$ids" | sed -n 2p); [ -n "$x" ] && [ -n "$y" ] || { rm -rf "$d"; exit 9; }; python3 -c 'import json,sys; o,n,f=sys.argv[1],sys.argv[2],sys.argv[3]; ids=sys.argv[4:]; json.dump({"schema_id":"GATE_ADJUDICATION_VERDICT v1","gate_type":"implementation","gate_series_id":n,"gate_nonce":n,"generated_at":"2026-01-01T00:05:00Z","adjudicator_agent_id":"a1","catalog":"core","verdicts":[{"check_id":c,"verdict":"FAIL" if c==f else "PASS","evidence":"e"} for c in ids]},open(o,"w"))' "$d/$N.verdict.json" "$N" "$x" $ids; e() { printf '## [E] [lead] - 2025-12-31T00:00:00Z\n**Status:** SUPPRESSED\n**Suppresses:** [core] %s — t\n**Expires after:** 1 gate\n**Operator authorization:** 2025-12-31T00:00:00Z | "twelve characters long"\n' "$1" > "$d/p.md"; }; g() { printf '{"v":1,"ts":"%s","catalog":"core","check":"%s","verdict":"FAIL"}\n' "$1" "$x"; }; r() { AI_DLC_VERDICT_SCHEMA="$S" AI_DLC_ENFORCEMENT_MAP="$M" AI_DLC_ESCALATIONS="$d/p.md" AI_DLC_GATE_METRICS="$d/m.jsonl" bash "$V" implementation "$d/$N.verdict.json" >"$d/out" 2>&1; echo $?; }; : > "$d/m.jsonl"; e "$y"; B=$(r); e "$x"; A=$(r); C=$(grep -c SUPPRESSED "$d/out"); g 2026-01-02T00:00:00Z > "$d/m.jsonl"; g 2026-01-03T00:00:00Z >> "$d/m.jsonl"; X=$(r); AI_DLC_ESCALATIONS="$d/none.md" AI_DLC_VERDICT_SCHEMA="$S" AI_DLC_ENFORCEMENT_MAP="$M" bash "$V" implementation "$d/$N.verdict.json" >/dev/null 2>&1; Z=$?; rm -rf "$d"; [ "$B" = 1 ] && [ "$X" = 1 ] && [ "$Z" = 1 ] && [ "$A" = 0 ] && [ "$C" -ge 1 ] && exit 0; exit 1
+
+## BL-168 — Step 0a's snapshot-budget check stopped and asked the operator for `trim`, the one remedy it could apply itself, and the reply forced the same whole read the check exists to defer
+
+Filed by the reference consumer as `PC-S308-RESUME-SNAPSHOT-BUDGET-ASKS-INSTEAD-OF-AUTO-TRIMMING`
+on 2026-09-05, found live in-session on a resume whose snapshot measured 155% of its budget.
+Batch 54 of the ledger drain. DEFECT, not NOTE: it is not a wording preference but a stall on
+every over-budget resume, and it parks an auto-chained session behind a question whose answer was
+never in doubt.
+
+`core/skills/ai-dlc/steps/route.md` Step 0a check 1 ran
+`verdict.sh validate-artifact-budget --only pipeline-snapshot.md` and, on non-zero exit,
+HARD_BLOCKed with a message inviting a reply of `trim`, `archive` or `abort`. Step 1a runs the
+same script over the same artifact on the same exit code and directs the agent to apply the
+remedy the script names, singling out `consolidate` alone as supervised — `trim` is gated at
+neither site, yet only the resume site waited.
+
+Measured over the reference consumer's session transcripts, non-sidechain assistant records only:
+the check-1 question reached the operator on **10 distinct occasions** — 8 emissions of the
+verbatim sentence beginning "Reply" and naming the trim, plus 3 `AskUserQuestion` calls carrying
+the `Snapshot budget` header, one session emitting both. **Every one of the 10 resolved to
+`trim`; `archive` and `abort` were chosen zero times.** One operator reply was not a token at all
+but the filing's own remedy in words: *"why do you need me to tell you to trim it? shouldn't that
+be a natural first step and only if you're unable to bring it under budget you would need to
+escalate to me?"* Control in the same scan: `pipeline-snapshot.md` matched 111 assistant-text
+records and 4744 tool-use records, so the scan discriminates rather than merely running. The
+breaches were 117%, 147%, 155%, 162% and 215% of a 6000-token budget — none large enough that
+reading the file in order to trim it is itself the harm.
+
+The check's own sentence, "This check protects the read that follows it", survives the fix and
+was never a reason to ask. An autonomous trim must whole-read the snapshot to find what is
+superseded, so it spends that read — but so did the `trim` reply, one round-trip later. The only
+answers that ever avoided the read were `archive` and `abort`, and the measured population chose
+neither. The fix removes no protection that was being exercised, and it keeps the operator gate
+for the case that genuinely needs one: a snapshot still over budget after one mechanical pass,
+where `archive` and `abort` stop being equivalent to `trim`.
+
+The fix is confined to check 1. It applies the `trim` remedy autonomously by the mechanics Step
+1a's `trim` bullet already gives, cites Rule 25(a) and `gate-validation.md` Check 14 as the owners
+of move-never-delete and of the seven-section schema rather than restating either, re-runs the
+same verdict, and falls through to the existing HARD_BLOCK — pause flag first, per the paragraph
+that opens Step 0a — with `archive`, `abort` and a named manual trim as the remaining options.
+The ask-first shape had exactly one copy across `core/`, `templates/`, `scripts/` and `docs/`,
+and the fix leaves zero (control: `Step 0a` still matches 34 lines in 10 files across those same
+trees). `core/fixtures/resume-whole-read` arms A1-A4 still hold, the verdict invocation being
+unchanged and still ahead of the whole read. `enforcement-map.yaml`'s `route.md Step 0a (resume)`
+call site keeps `posture: HARD_BLOCK`, which stays true of the fall-through, so the map is
+unedited.
+
+The receipt is prose-keyed, because the subject is prose and no program reads it: a rewrite that
+re-wraps either asserted sentence across a line break scores STILL-LIVE with the behaviour
+correct. That is a stated limit rather than a defect in the receipt — the ask-first arm is the
+load-bearing half and it fails closed.
+
+verify: sh f="${ROUTE:-core/skills/ai-dlc/steps/route.md}"; [ -f "$f" ] || exit 9; grep -qF 'to have me trim it to its' "$f" && exit 1; grep -qF 'remedy the script names YOURSELF, without asking' "$f" || exit 1; grep -qF 'one trim pass did not clear it' "$f" || exit 1; exit 0
+
+## BL-169 — the gate-remediation guard derives its lock-out set from raw FAIL verdicts, so a FAIL Check 26 now proceeds past under an in-force suppression still keeps the lead locked out of the artifact corpus until a repair record or an authorization file that no step tells it to write
+
+Distribution-internal, no `PC-` id; NOTE tier — found by the batch-54 adversarial hand while
+attacking `BL-167`, and deliberately not fixed there. Adjacent, not the same subject: `BL-167`
+joins the suppression to the check that ADOPTS the verdict; this is the hook that reads the same
+verdict for a different purpose.
+
+`core/hooks/ai-dlc-gate-remediation-guard.sh:301` builds `FAILED_CHECKS` from every
+`.verdict == "FAIL"` in the live verdict and denies the lead's edits to the artifact corpus while
+that set is non-empty, lifting only on a repair record or on
+`<nonce>.authorization.md` carrying a verified operator quote (`:454`). It reads neither
+`docs/escalations/pending.md` nor `validate-suppression-lifetime.sh --in-force`. A suppressed
+FAIL is still a recorded FAIL — correctly, since a suppression bounds the licence and not the
+check — but no repair is coming for a check the operator has dispositioned, so after `0.504.0`
+the gate passes while the lead stays in remediation lockdown, and the only exit is an
+authorization file that `gate-validation.md` Check 26 and `escalations.md` never mention beside
+`SUPPRESSED`. Measured on the consumer: its story-308-1 gate 3 carries exactly this state.
+
+Shape of the fix: either the guard asks the same `--in-force` query and subtracts covered
+checks from `FAILED_CHECKS` (keyed on the verdict's `catalog`, as `BL-167` does), or the
+`SUPPRESSED` procedure names the authorization file as the paired step. The first is one call
+and one subtraction and is probably right; whichever lands, the guard's own fixture needs a
+seeded in-force entry beside a FAIL verdict. Also recorded from the same review, not defects:
+`--series` deliberately still counts a suppressed FAIL toward the stall rung, so `Expires after: 3`
+across three passes of one gate trips it; and the caller's `refused:` branch may be unreachable
+because every sibling exit-2 condition keys on inputs the caller resolved itself.
+
+verify: manual

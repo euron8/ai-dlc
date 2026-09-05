@@ -117,7 +117,9 @@ A `SUPPRESSED` entry MUST carry, in the same edit that sets the status:
 **Operator authorization:** <ISO-8601 UTC ts> | "<verbatim substring, ≥12 chars, of the operator's message>"
 ```
 
-`<n>` defaults to 1 and may not exceed 3. `<catalog>` is `core` for a
+`<n>` defaults to 1 and may not exceed 3. **`<n>` counts gates RECORDED after the
+authorization, and the gate whose checks are running is recorded after they
+run — so an entry covers the authorizing gate and then `<n>` more.** `<catalog>` is `core` for a
 distribution check and `extension:<id>` for a consumer domain check, matching
 the `GATE_METRIC v1` field of the same name — the id is a join key, so it is
 written the way the metrics write it. The `**Operator authorization:**` line
@@ -140,6 +142,14 @@ turn. Enforced by `scripts/ai-dlc/validate-suppression-lifetime.sh` at Check 2,
 which counts elapsed gates from `gate-metrics.jsonl` and re-reads the named
 check's own recorded verdict — so a suppression whose cause has genuinely been
 fixed costs nothing, and only one that is still red is stopped.
+
+**An escalated check is covered the same way.** The `adjudication: llm` checks
+are adopted only through Check 26, whose validator asks the same script
+(`--in-force`) before it blocks on a per-check `FAIL`; a FAIL the adjudicator
+recorded stays recorded, and an in-force entry naming `[<catalog>] <check-id>`
+in the verdict's own catalog is what lets the gate proceed past it. An entry
+that names the wrong catalog, is malformed, or is past its lifetime covers
+nothing there, exactly as at Check 2.
 
 **AC verification-category-change disclosure.** When resolving a
 HARD_BLOCK changes how an acceptance criterion is verified — moving it

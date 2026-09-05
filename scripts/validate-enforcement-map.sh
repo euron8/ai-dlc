@@ -3348,6 +3348,45 @@ else
   fi
 fi
 
+# --- I107: the in-force query Check 26's validator asks its sibling for is a mode that sibling dispatches ---
+#
+# I53's join, one script over. `validate-gate-adjudication.sh` decides whether a per-check
+# FAIL is covered by an in-force SUPPRESSED entry by shelling out to
+# `validate-suppression-lifetime.sh --in-force`, because that script owns the escalations.md
+# suppression grammar and the lifetime predicate and the gate must not restate either. The
+# delegation is only better than a restatement while the mode on the other side is real: rename
+# or drop it and the call exits 2, which the caller reads as "no carve-out" — every gate holding
+# an in-force suppression on an escalated check blocks again, with the reason printed and the
+# repair reachable only by whoever reads it. Same two arms as I53, for the same measured
+# reasons: forward, every mode a caller names beside the basename is dispatched; reverse, every
+# dispatched mode appears in the USAGE lines. "Every mode has a caller" is again NOT asserted —
+# `--baseline` and `--gate-metrics` are modifiers, and the gate names the sibling only through
+# the modes it needs.
+i107_f="$REPO_ROOT/core/scripts/validate-suppression-lifetime.sh"
+if [ ! -f "$i107_f" ]; then
+  err "I107 cannot find core/scripts/validate-suppression-lifetime.sh. It binds the modes that script dispatches to the modes validate-gate-adjudication.sh invokes on it; with the script gone the join compares nothing and passes, while Check 26's carve-out calls a file that is not there."
+else
+  i107_modes="$(awk '/# MODE_DISPATCH_BEGIN/{on=1;next} /# MODE_DISPATCH_END/{exit} on{print}' "$i107_f" \
+    | sed -nE 's@^[[:space:]]*(--[a-z-]+([|]--[a-z-]+)*)\).*@\1@p' | tr '|' '\n' | sort -u)"
+  # Callers, minus the non-callers I49 measured: core/fixtures/ writes wrong spellings on
+  # purpose, this file quotes them in prose and in its own grep flags, and a script documenting
+  # itself is not a caller. The optional closing quote is what lets one pattern see both the
+  # code form (`"$DIR/validate-suppression-lifetime.sh" --in-force`) and the prose form.
+  i107_cited="$(grep -rhoE 'validate-suppression-lifetime\.sh"? --[a-z-]+' "$REPO_ROOT/core" "$REPO_ROOT/scripts" "$REPO_ROOT/templates" 2>/dev/null \
+    --exclude-dir=fixtures --exclude=validate-suppression-lifetime.sh --exclude="$(basename "$0")" \
+    | sed -E 's@^validate-suppression-lifetime\.sh"? @@' | sort -u)"
+  i107_usage="$(sed -nE 's@^#[[:space:]]+(validate-suppression-lifetime\.sh |\[)(.*)$@\2@p' "$i107_f" \
+    | grep -oE '\-\-[a-z-]+' | sort -u)"
+  if [ -z "$i107_modes" ] || [ -z "$i107_cited" ] || [ -z "$i107_usage" ]; then
+    err "I107 parsed ZERO modes out of validate-suppression-lifetime.sh's dispatch ($(printf '%s' "$i107_modes" | grep -c . ) found), out of the core scripts that invoke it ($(printf '%s' "$i107_cited" | grep -c . ) found), and/or out of its USAGE block ($(printf '%s' "$i107_usage" | grep -c . ) found). An empty set is a subset of everything, so this fails closed rather than reporting agreement it never computed."
+  else
+    i107_ghost="$(comm -23 <(printf '%s\n' "$i107_cited") <(printf '%s\n' "$i107_modes") | tr '\n' ' ')"
+    [ -n "$i107_ghost" ] && err "I107 core scripts invoke validate-suppression-lifetime.sh mode(s) it does not dispatch: ${i107_ghost}. That call exits 2 on an unknown argument, and validate-gate-adjudication.sh reads any non-zero as 'no carve-out' — so a renamed mode re-blocks every gate whose escalated FAIL an operator has suppressed in force, which is the defect the carve-out closed."
+    i107_undoc="$(comm -23 <(printf '%s\n' "$i107_modes") <(printf '%s\n' "$i107_usage") | tr '\n' ' ')"
+    [ -n "$i107_undoc" ] && err "I107 validate-suppression-lifetime.sh dispatches mode(s) its own USAGE block never names: ${i107_undoc}. A mode no usage line mentions is one an operator cannot discover and a rename cannot reach."
+  fi
+fi
+
 # --- I50: every scripts/ai-dlc/<script> a shipped file names is one core actually ships ---
 #
 # I49 binds the MODES of one resolver. This is the same join one level out, over every

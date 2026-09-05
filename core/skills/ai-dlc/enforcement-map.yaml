@@ -565,6 +565,9 @@ checks:
           stale verdict, an uncovered escalated check, a duplicate, or any FAIL blocks. The lead
           never evaluates an llm check inline (that is a Rule 20 solo violation), so if this check
           is not wired the escalated checks are adjudicated by no one, which reads as clean.
+          A FAIL named by an in-force SUPPRESSED entry (validate-suppression-lifetime.sh
+          --in-force, the same predicate Check 2 runs) does not block; absence of the entry,
+          the file or the sibling fails closed.
     fixtures: [tests/fixtures/gate-adjudication]
     ci_workflow: ~
 

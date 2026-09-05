@@ -1185,7 +1185,7 @@ read in the hot path — so their growth is free.
 
 **ONE HISTORY FILE ROTATES, AND IT IS NAMED HERE BECAUSE THE SENTENCE
 ABOVE IS OTHERWISE FALSE FOR IT.** `pipeline-snapshot-history.md` is fed
-by the trim remedy at *every gate* — route.md Step 1a,
+by the trim remedy at *every gate* — route.md Steps 0a and 1a,
 `_gate-procedures.md`, Check 14 — not by a sprint close, so it accretes
 on a cadence no rotation step bounded. Measured on the reference
 consumer: 87 KB to 617 KB across four weeks and 29 commits, every one of

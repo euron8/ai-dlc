@@ -127,11 +127,29 @@ Run these integrity checks in order:
    This check protects the read that follows it: resume skips Steps 1–6,
    so Step 1a never runs, and the next budget check is
    `gate-validation.md` Check 14 — after the read. On non-zero exit,
-   HARD_BLOCK with the `trim` remedy the script names (Rule 25(a),
-   seven-section schema):
-   > *"Snapshot at `_bmad-output/pipeline-snapshot.md` is over budget:
-   > [verdict line, verbatim]. Reply `trim` to have me trim it to its
-   > seven-section schema, `archive` to start fresh, or `abort`."*
+   apply the `trim` remedy the script names YOURSELF, without asking, by
+   the mechanics Step 1a's `trim` bullet already gives. Rule 25(a) in
+   `SKILL.md` owns move-never-delete and the history destination, and
+   `gate-validation.md` Check 14 owns the seven-section schema; follow
+   them there rather than from a restatement here. Then re-run the same
+   verdict.
+
+   **The trim performs the whole read this check guards, and that is
+   acceptable because the question it replaces performed it too.** A lead
+   told to trim has to read the file to find what is superseded, so
+   waiting for a `trim` reply bought a round-trip and then spent the same
+   read anyway. What the operator is owed is the case a trim cannot fix,
+   not the case it can.
+
+   If the re-run exits 0, continue to check 2.
+
+   If it still exits non-zero, one mechanical pass did not close the gap
+   and what is left is a judgment call. Create the pause flag as the
+   paragraph above directs, then HARD_BLOCK:
+   > *"Snapshot at `_bmad-output/pipeline-snapshot.md` is over budget and
+   > one trim pass did not clear it: [verdict line, verbatim]. Reply
+   > `archive` to start fresh, `abort` to stop, or name what to move and
+   > I will trim again."*
 
 2. **Load the snapshot.** Read `_bmad-output/pipeline-snapshot.md` **in
    full**. This is the single load that serves every check below, the

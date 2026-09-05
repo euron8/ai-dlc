@@ -133,6 +133,289 @@ restore
 run "$VERDICT"
 [ "$RC" -eq 0 ] && ok "restored verdict → exit 0" || bad "the restored pristine verdict did not pass again (rc=$RC)"
 
+# =============================================================================
+# S1–S11: the SUPPRESSED carve-out.
+#
+# THE DEFECT THESE EXIST TO CATCH, IN BOTH DIRECTIONS. A FAIL on an escalated check used to
+# block unconditionally, so an operator's in-force suppression could cover a lead-evaluated
+# check and never an escalated one. The carve-out closes that — and every way of writing it
+# too widely reopens something worse: a suppression that is expired, malformed, filed under
+# another catalog, written for a different check, or simply unreadable must still block.
+#
+# EVERY CASE SETS AI_DLC_ESCALATIONS AND AI_DLC_GATE_METRICS EXPLICITLY. Both channels
+# default to the tree the validator resolves — `<root>/docs/escalations/pending.md`, and for
+# the metrics the sibling's own locate-from-cwd. On a consumer those are REAL files holding
+# REAL in-force suppressions (measured on the reference consumer: one in-force `[core] 16`),
+# so a case that leaves either unset is adjudicated against whatever that consumer happens to
+# have suppressed this week. The negative cases would go green there for a reason no output
+# names, which is this whole fixture's failure mode one level up.
+#
+# EVERY CASE IS PRESENCE-SHAPED. An exit code alone cannot tell a carve-out that fired for the
+# right reason from a validator that never looked: `exit 1` is also what a program that never
+# ran produces. Each arm names a token that only its own path emits.
+SOUT="$WORK/carveout.out"
+
+runx() { # runx <escalations> <gate-metrics> — RC and $SOUT from the pristine-plus-mutation verdict
+  AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
+  AI_DLC_ESCALATIONS="$1" AI_DLC_GATE_METRICS="$2" \
+    bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" > "$SOUT" 2>&1
+  RC=$?
+}
+
+# `grep -c` PRINTS ITS ZERO AND EXITS 1, so `n=$(grep -c … || echo 0)` is two lines and the
+# arithmetic below would abort the arm with no verdict. Capture first, default on failure.
+has() { local n; n="$(grep -cF -- "$1" "$SOUT")" || n=0; [ "$n" -gt 0 ]; }
+
+fail_on() { # fail_on <check_id>… — flip exactly these checks to FAIL in $VERDICT
+  python3 - "$VERDICT" "$@" <<'PY'
+import json, sys
+path, want = sys.argv[1], set(sys.argv[2:])
+doc = json.load(open(path))
+hit = {v["check_id"] for v in doc["verdicts"] if v["check_id"] in want}
+if hit != want:
+    sys.stderr.write("FIXTURE STALE: %s not in the verdict\n" % sorted(want - hit))
+    sys.exit(2)
+for v in doc["verdicts"]:
+    if v["check_id"] in want:
+        v["verdict"] = "FAIL"
+        v["evidence"] = "fixture: seeded FAIL on check %s" % v["check_id"]
+open(path, "w").write(json.dumps(doc, indent=2) + "\n")
+PY
+}
+
+# The tokens each arm demands. Written once here rather than inline, because a token typed
+# twice is a token that can drift in one place only.
+SUPP_LINE="VALIDATE-GATE-ADJUDICATION: SUPPRESSED — check '$X' FAIL is covered"
+BLOCK_X="gate check(s) FAILED per the adjudicator: ['$X']"
+BLOCK_Y="gate check(s) FAILED per the adjudicator: ['$Y']"
+
+# --- S1: an in-force entry naming X, and X FAILs → exit 0 --------------------
+restore; fail_on "$X"
+runx "$ESC_INFORCE" "$GM_BEFORE"
+if [ "$RC" -eq 0 ] && has "$SUPP_LINE" && has "1 FAIL under an in-force"; then
+  ok "S1: FAIL on '$X' under an in-force SUPPRESSED entry naming it → exit 0, and the PASS line says 1 FAIL under an in-force entry"
+else
+  bad "S1: a FAIL covered by a well-formed, in-force suppression did NOT pass (rc=$RC) or printed no SUPPRESSED line — the carve-out this fixture guards is not reachable"
+fi
+
+# --- S2: the same entry, a FAIL on a DIFFERENT check → exit 1 ---------------
+# X PASSes here, so the block carries no "other FAIL(s)" clause. A suppression is about the
+# check it names; anything that reads it as an authorization to proceed past THE GATE would
+# pass this, and that is the widest possible wrong fix.
+restore; fail_on "$Y"
+runx "$ESC_INFORCE" "$GM_BEFORE"
+if [ "$RC" -eq 1 ] && has "$BLOCK_Y" && ! has "VALIDATE-GATE-ADJUDICATION: SUPPRESSED" \
+   && ! has "other FAIL(s) are under"; then
+  ok "S2: an entry naming '$X' does NOT cover a FAIL on '$Y' → exit 1, block names '$Y', nothing suppressed"
+else
+  bad "S2: a suppression naming '$X' covered a FAIL on '$Y' (rc=$RC) — the carve-out is keyed on the gate, not on the check"
+fi
+
+# --- S2b: BOTH fail, one covered → exit 1 with the "other FAIL(s)" clause ----
+# The ALLOW twin of S2, one property apart: the same entry, the same two checks, and X now
+# failing too. Without it, "no other-FAIL clause" in S2 is satisfied by a validator that never
+# writes the clause at all, and the partial-coverage path is asserted by nothing.
+restore; fail_on "$X" "$Y"
+runx "$ESC_INFORCE" "$GM_BEFORE"
+if [ "$RC" -eq 1 ] && has "$BLOCK_Y" && has "$SUPP_LINE" && has "1 other FAIL(s) are under"; then
+  ok "S2b: '$X' covered and '$Y' not → exit 1, block names only '$Y', and says 1 other FAIL is under a suppression"
+else
+  bad "S2b: partial coverage was not reported (rc=$RC) — either the covered FAIL blocked anyway or the block text does not say which FAILs were suppressed"
+fi
+
+# --- S3: the entry is EXPIRED → exit 1 --------------------------------------
+# Two distinct gate events recorded after the authorization, against `**Expires after:** 1`.
+# The token is the sibling's own `in_force=0`: it proves the query RAN and returned nothing,
+# which is a different claim from the gate having blocked.
+#
+# S3 is the ONLY exclusion case keyed on that summary line, and deliberately: its entry is the
+# only one that produces no diagnostic, so the summary is all it has. S4, S5 and S8 each key on
+# the diagnostic their own exclusion emits instead. Keying all four on the summary would tie
+# them to WHEN that line is printed rather than to WHY each entry was excluded, and one change
+# to the sibling's exit discipline would then move four cases at once.
+restore; fail_on "$X"
+runx "$ESC_EXPIRED" "$GM_AFTER"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "in_force=0"; then
+  ok "S3: an entry past its 1-gate lifetime (2 gates recorded since authorization) covers nothing → exit 1"
+else
+  bad "S3: an EXPIRED suppression still covered the FAIL (rc=$RC) — a suppression with no expiry is an override with a new name"
+fi
+
+# --- S4: the entry is MALFORMED — no operator citation → exit 1 -------------
+restore; fail_on "$X"
+runx "$ESC_MALFORMED" "$GM_BEFORE"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "malformed SUPPRESSED entry"; then
+  ok "S4: a SUPPRESSED entry with no **Operator authorization:** covers nothing → exit 1, and the sibling says why"
+else
+  bad "S4: a malformed suppression covered the FAIL (rc=$RC) — an unauthorized entry became an authorization"
+fi
+
+# --- S5: the CONSUMER'S ORIGINAL SHAPE — fields under DECIDED_AUTONOMOUSLY --
+# The status token is the first [A-Z_] run after the label, so this entry classifies as
+# DECIDED_AUTONOMOUSLY and its three suppression fields are adjudicated for nothing. It is the
+# shape the corpus actually contains; a carve-out that reads the FIELDS rather than the STATUS
+# would let a lead's own disposition wave a gate through.
+restore; fail_on "$X"
+runx "$ESC_DECIDED" "$GM_BEFORE"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "does not classify as SUPPRESSED"; then
+  ok "S5: **Suppresses:**/**Expires after:** under a DECIDED_AUTONOMOUSLY status cover nothing → exit 1"
+else
+  bad "S5: a non-SUPPRESSED entry carrying suppression fields covered the FAIL (rc=$RC) — the carve-out reads fields, not status"
+fi
+
+# --- S6: catalog MISMATCH → exit 1, and the id-only twin → exit 0 -----------
+# `in_force=1` in the same output is the load-bearing half: the row IS in force, and the JOIN
+# is what rejected it. Without that token this arm passes against a sibling that listed
+# nothing, for a reason that has nothing to do with catalogs.
+restore; fail_on "$X"
+runx "$ESC_OTHERCAT" "$GM_BEFORE"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "in_force=1"; then
+  ok "S6-mismatch: an in-force entry for [extension:foo] '$X' does not cover core's '$X' → exit 1"
+else
+  bad "S6-mismatch: a suppression in a FOREIGN catalog covered this verdict's check (rc=$RC) — ids collide across catalogs and this join is what separates them"
+fi
+
+restore; fail_on "$X"
+runx "$ESC_NOCAT" "$GM_BEFORE"
+if [ "$RC" -eq 0 ] && has "$SUPP_LINE"; then
+  ok "S6-idonly: an entry written **Suppresses:** '$X' with no [catalog] prefix matches on the id alone → exit 0"
+else
+  bad "S6-idonly: the lenient no-prefix form the lifetime parser accepts was NOT honoured (rc=$RC) — the catalog compare rejects the form the corpus is allowed to write"
+fi
+
+# --- S7: no escalations file at all → exit 1, fail-closed and named --------
+restore; fail_on "$X"
+runx "$ESC_MISSING" "$GM_BEFORE"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "no-escalations-file"; then
+  ok "S7: an unreadable escalations path → exit 1 and the block says 'no-escalations-file'"
+else
+  bad "S7: a missing escalations file did not fail closed (rc=$RC) — a suppression that cannot be read must cover nothing, and the block must say which absence it was"
+fi
+
+# --- S8: a terminal entry whose PROSE names the check → exit 1 -------------
+# Kills a carve-out written as a grep for `Check <id>` over pending.md. The prose citation is
+# how a RESOLVED entry describes what it closed; reading it as an authorization means every
+# discussion of a check becomes a licence to fail it.
+restore; fail_on "$X"
+runx "$ESC_RESOLVED" "$GM_BEFORE"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "entry names check(s)"; then
+  ok "S8: a RESOLVED entry mentioning 'Check $X' in prose, with no **Suppresses:** field, covers nothing → exit 1"
+else
+  bad "S8: prose naming the check covered the FAIL (rc=$RC) — the carve-out is a text search, not a field join"
+fi
+
+# --- S9: the verdict's OWN catalog is foreign → exit 1 ---------------------
+# The near-miss that SUPPORTS the fix, and the mirror of S6-mismatch: the entry is core's, the
+# VERDICT is an extension's. One entry, two directions; a join tested from one side only reads
+# as working while comparing nothing.
+restore; fail_on "$X"
+py_edit 'doc["catalog"] = "extension:foo"'
+runx "$ESC_INFORCE" "$GM_BEFORE"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "in_force=1"; then
+  ok "S9: an in-force [core] entry does not cover a verdict whose own catalog is 'extension:foo' → exit 1"
+else
+  bad "S9: a core suppression covered an extension's verdict (rc=$RC) — the join ignores the verdict's catalog field"
+fi
+
+# --- S10: all PASS with an in-force entry present → the OLD line, unchanged -
+# The carve-out must be invisible when it carves nothing. If the summary line changes shape on
+# every gate that happens to have a live suppression, every downstream reader of that line has
+# been rewritten by a change that was supposed to be conditional.
+restore
+runx "$ESC_INFORCE" "$GM_BEFORE"
+if [ "$RC" -eq 0 ] && has "all PASS)" && ! has "VALIDATE-GATE-ADJUDICATION: SUPPRESSED"; then
+  ok "S10: an all-PASS verdict with an in-force entry present → exit 0 and the unchanged 'all PASS)' line"
+else
+  bad "S10: the all-PASS summary line changed, or something was reported as SUPPRESSED with no FAIL to suppress (rc=$RC)"
+fi
+
+# --- S11: an entry naming a PREFIX of the failing id → exit 1 -------------
+# '$XPFX' is an escalated check in its own right and the first character of '$X'. A join
+# written with startswith/`in`/a substring test covers X from this entry and cannot be told
+# from a correct one by any case above.
+restore; fail_on "$X"
+runx "$ESC_PREFIX" "$GM_BEFORE"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "in_force=1"; then
+  ok "S11: an in-force entry naming '$XPFX' does not cover a FAIL on '$X' → exit 1 (no prefix or substring match)"
+else
+  bad "S11: an entry naming '$XPFX' covered a FAIL on '$X' (rc=$RC) — the check id is matched by prefix or substring, so a short id suppresses every longer one"
+fi
+
+# --- S12: the bare-id entry against a FOREIGN verdict catalog → exit 1 -----
+# The other half of S6-idonly, and the one that says what a missing bracket MEANS. A row with
+# no `[catalog]` counts as core and nothing else, because the sibling resolves ids against the
+# core catalog alone — so an author error that drops the required field must not buy WIDER
+# coverage than writing it correctly would. Without this case, reading the empty catalog as a
+# wildcard passes S6-idonly, S6-mismatch and S9 alike.
+restore; fail_on "$X"
+py_edit 'doc["catalog"] = "ext:gate-validation-domain"'
+runx "$ESC_NOCAT" "$GM_BEFORE"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "in_force=1" \
+   && ! has "VALIDATE-GATE-ADJUDICATION: SUPPRESSED"; then
+  ok "S12: a bare-id entry (no [catalog]) does NOT cover '$X' in a verdict whose catalog is 'ext:gate-validation-domain' → exit 1"
+else
+  bad "S12: an entry that named no catalog covered an extension's verdict (rc=$RC) — a dropped bracket is being read as EVERY catalog, which is wider coverage than writing it correctly"
+fi
+
+# --- S13: one malformed entry beside one good one → the good one still holds -
+# Every other case's file holds a single entry, so none of them can tell "this ENTRY was
+# excluded" from "this FILE was refused". Two implementations fail here and pass everything
+# else: one that treats any malformed entry as poisoning the file, and one that folds the
+# sibling's stderr into the rows it parses. The malformed entry names a different check, so the
+# coverage of '$X' can only have come from the well-formed one.
+restore; fail_on "$X"
+runx "$ESC_MIXED" "$GM_BEFORE"
+if [ "$RC" -eq 0 ] && has "$SUPP_LINE" && has "malformed SUPPRESSED entry"; then
+  ok "S13: a malformed entry beside a well-formed in-force one is diagnosed and does NOT withdraw the carve-out → exit 0"
+else
+  bad "S13: a malformed entry elsewhere in the file cost the well-formed entry its carve-out (rc=$RC) — a diagnostic is being read as a refusal, or the sibling's stderr is being parsed as rows"
+fi
+
+# --- S14: the lifetime cannot be COUNTED → exit 1 --------------------------
+# The same expired entry as S3, with the timeline pointed at a file that is not there. Both
+# states arrive at the sibling as GATES_N=0, and reading that as "nothing has elapsed" made an
+# expired suppression in force from any cwd where the metrics did not resolve — a fail-OPEN
+# reachable by a typo in one environment variable. The rows become gate passage, so the query
+# must decline exactly where the lifetime arm declines.
+restore; fail_on "$X"
+runx "$ESC_EXPIRED" "$GM_MISSING"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "NOT listed in force" && has "gates_recorded=NONE"; then
+  ok "S14: an entry whose lifetime cannot be counted (no metrics file found) is NOT in force → exit 1, and the sibling says why"
+else
+  bad "S14: an unmeasurable lifetime was read as a licence (rc=$RC) — an expired suppression is in force from any cwd where the timeline does not resolve"
+fi
+
+# --- S15: the FRESH CONSUMER control → exit 0 ------------------------------
+# The ALLOW twin of S14, one property apart: the metrics file EXISTS and records no gate. That
+# is a consumer that has genuinely run none yet, and its fresh suppression is in force at 0
+# elapsed. Without this case S14 is satisfied by a guard that simply refuses every suppression
+# whenever GATES_N is 0, which would wedge every new consumer's first gate.
+restore; fail_on "$X"
+runx "$ESC_INFORCE" "$GM_EMPTY"
+if [ "$RC" -eq 0 ] && has "$SUPP_LINE"; then
+  ok "S15: an EXISTING but empty gate timeline is a consumer with no gate yet, not an unreadable one → exit 0"
+else
+  bad "S15: a fresh consumer's first suppression was refused because its timeline is empty (rc=$RC) — 'no gate recorded' and 'no timeline found' are being treated as one state"
+fi
+
+# --- S16: an all-PASS verdict does not ASK the sibling ---------------------
+# The parse is hundreds of KB on a real consumer and a verdict with no FAIL has nothing to
+# cover. The absence of the sibling's summary line is the only observable that says the query
+# was skipped rather than asked and answered empty; S10 already holds the exit and the summary
+# line, so this arm owns the skip alone.
+restore
+runx "$ESC_INFORCE" "$GM_BEFORE"
+if [ "$RC" -eq 0 ] && has "all PASS)" && ! has "IN-FORCE:"; then
+  ok "S16: an all-PASS verdict skips the in-force query entirely → exit 0 and no IN-FORCE: line"
+else
+  bad "S16: the sibling was asked on a verdict with no FAIL to cover (rc=$RC) — every all-PASS gate pays a parse of the whole escalations file"
+fi
+
+# --- restore, once more, after the carve-out arms ---------------------------
+restore
+run "$VERDICT"
+[ "$RC" -eq 0 ] && ok "restored verdict after the carve-out arms → exit 0" || bad "the pristine verdict did not pass after the carve-out arms (rc=$RC)"
+
 echo
 if [ "$fails" -eq 0 ]; then echo "gate-adjudication: PASS"; exit 0; fi
 echo "gate-adjudication: $fails assertion(s) FAILED" >&2
