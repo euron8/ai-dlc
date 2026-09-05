@@ -78,6 +78,8 @@
 #   validate-escalation-resolution.sh --escalations <pending.md> --sprint <N> [--transcript PATH]
 #   validate-escalation-resolution.sh --escalations <pending.md> --sprint <N> [--transcript-dir DIR]
 #   validate-escalation-resolution.sh --any-authorized <pending.md>
+#   (gate-validation.md Check 2 requires --transcript-dir at its call site; --transcript
+#   alone is the degraded form this tool accepts for a corpus with no readable JSONL)
 #
 # EXIT
 #   0  every current-sprint RESOLVED/OVERRIDDEN entry cites a verified operator message (or none

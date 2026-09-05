@@ -4106,3 +4106,29 @@ the validator has no channel for today; write a driving receipt the moment the c
 
 verify: manual
 
+
+## BL-176 — nothing binds a gate-adjudication verdict file to the dispatch that produced it, and the remediation guard picks the live verdict by lexical stem order, so a hand-written file at a later-sorting nonce becomes the gate's verdict
+
+Distribution-internal, no `PC-` id; DEFECT tier — the reference consumer's history holds one
+such file (`gate-adjudication/planning-20260902T160000Z.verdict.json`, a round nonce no
+dispatch generated, assembled by the lead from a prior pass's verdicts and a two-check
+re-verify's), and both readers accepted it. Found by the batch-57 adversarial hand while
+refuting the rejection of the consumer's Check-26 partial-re-verify candidate, and deliberately
+not fixed there: the fix's shape is a binding to a dispatch record, which is a different
+subsystem from the verdict reader.
+
+`core/scripts/validate-gate-adjudication.sh` anchors freshness on the filename stem matching
+the in-file `gate_nonce`, both of which the lead can write; `grep -c` for a spawn or dispatch
+ledger over that file returns 0 against a control of 21 for `gate_nonce`. The guard at
+`core/hooks/ai-dlc-gate-remediation-guard.sh:162-170` then selects the live verdict by lexical
+stem order, which a hand-chosen round timestamp wins. `team-roles/gate-adjudicator.md:78`
+requires the check-id set to equal the derived escalated set exactly, and
+`_gate-procedures.md` now says a re-dispatch is a whole new dispatch, so the rule is stated in
+every place the lead reads; what is missing is the mechanism. Shape of the fix: bind the
+verdict to the dispatch that wrote it — the adjudicator's `agent_id` joined against the spawn
+ledger row for that nonce, the way the dispatch guard already joins subagent spawns — and have
+the guard refuse a verdict whose stem no dispatch row names. The receipt is manual because no
+artifact today records which dispatch wrote a verdict; write a driving receipt the moment the
+join exists.
+
+verify: manual

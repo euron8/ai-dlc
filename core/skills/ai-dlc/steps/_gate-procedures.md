@@ -165,6 +165,12 @@ Check 26 uses), reads each escalated check's body in `gate-validation.md` as the
 one `GATE_ADJUDICATION_VERDICT v1` JSON to the verdict path. No Skill, no provenance block — it is
 the native path with its own schema.
 
+**A re-dispatch is a whole new dispatch.** The escalation preamble at the top of
+`gate-validation.md` governs: a fresh `gate_nonce`, every escalated check re-derived from current
+state, and no verdict carried forward, cited or merged from a superseded dispatch. There is no
+partial or targeted re-adjudication, and a verdict file assembled by hand is not a dispatch's
+verdict.
+
 **Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh <verdict_path>`.
 
 **While it runs, the lead evaluates ONLY the `script` / `project` / `lead` checks.**

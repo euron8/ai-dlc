@@ -27,6 +27,8 @@
 #             or the sprint's gate-log section cannot be isolated)
 #   Check 6: Dev Agent Record compliance — no "lead (self-executed" without waiver
 #             (reads story files + docs/escalations/pending.md)
+#   Check 7: The retro branch is not BEHIND origin/main (SKIP when no origin/main
+#             ref resolves in this checkout)
 #
 # Exit codes:
 #   0  -- all checks pass
@@ -552,6 +554,82 @@ else
 fi
 
 # ============================================================================
+# Check 7: the retro branch is not BEHIND the integration branch
+#   retro.md Step 1 cuts the retro branch from `main` after a fast-forward to
+#   `origin/main`. A squash merge never fast-forwards the sprint's feature
+#   branch, so a retro branch cut from that leftover ref lacks the squash commit
+#   as an ancestor: its PR re-includes the whole sprint diff against a main that
+#   already carries it and reports CONFLICTING at Step 7a, and the recovery is a
+#   hand merge of every file both sides touched.
+#
+#   THE PREDICATE is `git rev-list --count HEAD..origin/main` == 0 -- the same
+#   test sprint-review.md §0 runs before a review.
+#
+#   IT REFRESHES THE REF FIRST, AND SAYS WHETHER IT COULD. The squash's branch
+#   point is an ancestor of the leftover feature branch by construction, so a
+#   STALE local origin/main reads the exact defect world as 0 -- measured: the
+#   defect world fails at behind-count 2 with a fresh ref and passes with the ref
+#   rewound to the branch point. A fetch that lives only in the step prose is the
+#   same omission class this check exists to catch. So when a remote named
+#   `origin` exists the check runs `git fetch origin main` itself, non-interactive
+#   and with a low-speed timeout so a stalled transfer cannot wedge the gate, and
+#   the CHECK 7 line states whether the ref was refreshed. A failed fetch does not
+#   fail the check -- an offline retro is live work -- but its line says the ref
+#   may be stale, and a reader who sees that sentence beside PASS has not been
+#   told the branch is fresh. A sandbox with no remote (every fixture here) skips
+#   the fetch without touching the network.
+#
+#   SKIP, loudly, when origin/main does not resolve. A checkout with no such ref
+#   (a fixture sandbox, a clone with no remote) cannot be measured, and an
+#   unmeasurable branch is not a fresh one -- the summary counts it as a skip.
+#
+#   THE FIRING SET IS WIDER THAN THE DEFECT, on purpose. A branch is behind
+#   origin/main either because it was cut from a leftover squash-merged ref (the
+#   defect) or because it was cut from the trunk and main moved before the PR
+#   opened (benign). Measured over the reference consumer's 118 measurable
+#   merged retro PRs: 16 were behind origin/main at the branch cut; 12 of those
+#   had inherited another pull request's history (the incident among them, and
+#   the leftover ref was a carry-over or reconcile branch more often than the
+#   sprint's feature branch), 4 were trunk cuts main moved past. The benign
+#   class is not a defect, and for it the remedy is a
+#   merge that is clean unless the trunk moved on a file the retro also touched
+#   (measured on three built worlds: trunk moves on another file -> clean; on a
+#   retro-touched file -> conflict; the squash alone -> clean). The failure text
+#   names re-cutting the branch first because it is cheaper than that conflict.
+#   A predicate that separated the two classes would need the sprint's squash
+#   commit, which no artifact this validator reads records.
+# ============================================================================
+echo "[Check 7] Retro branch not behind origin/main..."
+C7_REFRESH="origin/main not refreshed: no remote named origin"
+if git remote get-url origin >/dev/null 2>&1; then
+  if GIT_TERMINAL_PROMPT=0 git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=20 \
+       fetch -q --no-tags origin main >/dev/null 2>&1; then
+    C7_REFRESH="origin/main refreshed"
+  else
+    C7_REFRESH="origin/main NOT refreshed: fetch failed, so the local ref may be stale"
+  fi
+fi
+if ! git rev-parse -q --verify 'refs/remotes/origin/main^{commit}' >/dev/null 2>&1; then
+  echo "  CHECK 7: SKIP (no origin/main ref resolves in this checkout -- branch freshness cannot be measured here; ${C7_REFRESH})"
+  SKIPPED_CHECKS="$SKIPPED_CHECKS 7"
+else
+  C7_BEHIND="$(git rev-list --count HEAD..origin/main 2>/dev/null)" || C7_BEHIND=""
+  case "$C7_BEHIND" in
+    ''|*[!0-9]*)
+      fail "Check7_BRANCH_BEHIND_MAIN" "git rev-list --count HEAD..origin/main produced no count (got: '${C7_BEHIND}'). The branch's relation to origin/main is undeterminable, which is not a fresh branch."
+      echo "  CHECK 7: FAIL — behind-count undeterminable (${C7_REFRESH})"
+      ;;
+    0)
+      echo "  CHECK 7: PASS — HEAD contains origin/main (${C7_REFRESH})"
+      ;;
+    *)
+      fail "Check7_BRANCH_BEHIND_MAIN" "HEAD is ${C7_BEHIND} commit(s) behind origin/main (${C7_REFRESH}). The retro branch was not cut from the merged trunk (retro.md Step 1: 'git fetch origin main && git checkout main && git merge --ff-only origin/main' before 'git checkout -b'), so its PR will re-include every commit origin/main has that this branch lacks. Remedy, cheapest first: re-cut the branch from the trunk ('git checkout main && git merge --ff-only origin/main && git checkout -b <retro-branch>-fresh' then cherry-pick this branch's own retro commits onto it); or 'git merge origin/main' on this branch, resolving in origin/main's favour for every file the retro did not touch -- that merge is clean unless the trunk moved on a file the retro also touched. Then re-run this validator."
+      echo "  CHECK 7: FAIL — HEAD is ${C7_BEHIND} commit(s) behind origin/main (${C7_REFRESH})"
+      ;;
+  esac
+fi
+
+# ============================================================================
 # Final summary
 # ============================================================================
 #
@@ -599,12 +677,12 @@ echo ""
 if [ $FAILURES -eq 0 ]; then
   if [ "$SKIPPED_UNIQUE" -eq 0 ]; then
     echo "VALIDATE-MANDATORY-RULES: PASS"
-    echo "  Sprint ${SPRINT_N}: all 6 checks passed"
+    echo "  Sprint ${SPRINT_N}: all 7 checks passed"
   else
     echo "VALIDATE-MANDATORY-RULES: PASS WITH SKIPS"
-    echo "  Sprint ${SPRINT_N}: $((6 - SKIPPED_UNIQUE)) of 6 checks verified; ${SKIPPED_UNIQUE} SKIPPED (check ${SKIPPED_LIST})."
+    echo "  Sprint ${SPRINT_N}: $((7 - SKIPPED_UNIQUE)) of 7 checks verified; ${SKIPPED_UNIQUE} SKIPPED (check ${SKIPPED_LIST})."
     echo "  A skipped check is not a passed one. Each skip is legitimate on its own terms,"
-    echo "  but the verified floor here is $((6 - SKIPPED_UNIQUE)), not 6 -- read the CHECK lines above."
+    echo "  but the verified floor here is $((7 - SKIPPED_UNIQUE)), not 7 -- read the CHECK lines above."
   fi
   exit 0
 else

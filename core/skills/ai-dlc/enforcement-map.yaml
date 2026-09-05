@@ -1002,8 +1002,8 @@ non_catalog_units:
     checks:
       - id: skip-floor-is-reported
         asserts: a run with N distinct skips prints `PASS WITH SKIPS`, names the skipped
-          check numbers, and states a verified floor of 6-N; a run with none prints the
-          unqualified `all 6 checks passed` and neither the headline nor the word SKIPPED
+          check numbers, and states a verified floor of 7-N; a run with none prints the
+          unqualified `all 7 checks passed` and neither the headline nor the word SKIPPED
         protects: against the pre-fix state where the two roads to exit 0 were one
           sentence, and against the inverse — a zero-skip run reported as a skipping one
       - id: a-failure-still-wins

@@ -259,6 +259,7 @@ core_manifest:
   - fixtures/consumer-machinery-inventory/**
   - fixtures/upstream-routing/**
   - fixtures/retro-audit-scans/**
+  - fixtures/retro-branch-behind-main/**
   - fixtures/route-defect-classification/**
   - fixtures/self-update-gate/**
   - fixtures/setup-config-drift/**
