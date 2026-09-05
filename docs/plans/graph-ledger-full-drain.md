@@ -37,9 +37,89 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 53 SHIPPED AS `v0.503.0`. THE GAP IS ONE AND PENDING IS TWO. THREE `PC-S308-*` CANDIDATES ARE UNFILED, ONE WITH A MEASURED MECHANISM AND TWO FILED TODAY; PLUS `BL-159`, `BL-161` AND `BL-163` WITH NO `PC-` ID.
+### BATCH 54 SHIPPED AS `v0.504.0`. THE GAP IS TWO AND PENDING IS FOUR. ONE `PC-S308-*` CANDIDATE IS UNFILED WITH A MEASURED MECHANISM, THEN THE STANDING CORPUS; PLUS `BL-159`, `BL-161`, `BL-163` AND `BL-169` WITH NO `PC-` ID.
 
-This block replaces the batch-52 record below it. Every figure here was re-derived on 2026-09-05
+This block replaces the batch-53 record below it. Every figure here was re-derived on 2026-09-05
+after the merge, against the working tree with the controls in the same invocation; re-derive
+them again rather than reading them.
+
+**`VERSION` IS `0.504.0`, SO BATCH 55 RELEASES AS `0.505.0`.** Re-derive `VERSION` and add one.
+Batch 54 merged at `6fc38a46` (PR #633, squash; on the branch the release commit came last after
+eleven fix, test and docs commits, none naming an id), closing
+`PC-S308-CHECK26-NO-SUPPRESSED-CARVEOUT` as `BL-167` and
+`PC-S308-RESUME-SNAPSHOT-BUDGET-ASKS-INSTEAD-OF-AUTO-TRIMMING` as `BL-168`, both rotated
+(archive 80 → 82, live 89 → 87 after three filings and two rotations; `BL-169` filed, not fixed).
+`named_absorbed()` lists exactly one release commit for each id at `0.504.0`, impossible-id
+control 0. No correction release. **The second batch opened by a peer's handoff** (action 9's
+message from `ai-dlc-5c`), so it scoped itself from its own ranking and stated the choice in its
+first ping: CHECK26 first because the consumer's HEAD commit said its story-308-1 gate 3 was
+blocked on it, RESUME-SNAPSHOT second as small and separable, RULE-11 left because its remedy
+changes the pause-point protocol and needs its own adversary.
+
+**BOTH HANDS THAT ATTACKED THE FIX FOUND A HOLE, AND BOTH HOLES WERE IN THE DIRECTION THAT
+ACQUITS.** The adversary: a `**Suppresses:**` line with no catalog bracket produced a row that
+matched EVERY catalog, so a bare `16` covered an extension check `16` the entry never named — a
+bare id now counts as `core` only, because the sibling resolves ids against the core map alone.
+The fixture hand: a gate timeline that did not resolve (wrong cwd, or a missing metrics path)
+read as zero elapsed, so an expired entry was in force — a lifetime that cannot be counted now
+covers nothing, and an existing empty timeline stays the fresh-consumer case. Both are shipped
+fixture cases with their allow twins and their mutants. **THE PROPERTY THE FIXTURE HAND MEASURED
+AND THE LIFETIME ARM ALREADY KNEW**: gate-metrics rows are written AFTER Check 26 runs, so
+`Expires after: 1` covers the authorizing gate and one more; `escalations.md` now says so. All
+four hands delivered before the merge, three payloads truncated, each recovered by asking for
+the tail by name; the census hand corrected its own count (13 → 19 entries) after widening a
+header anchor, and the shipped query's `suppressed=17` was the control that caught it.
+
+**THE CONSUMER SIDE IS MEASURED ON REAL FILES, READ-ONLY, ON SCRATCH COPIES.** On the live
+gate-3 verdict from the consumer's own cwd with a `cmp -s` control: installed exits 1 on `['16']`,
+fixed prints the `SUPPRESSED` row for `[S308-GATE3-STORY-1]` and exits 0. Over its 195 verdicts
+(all `catalog: core`), 86 carry a FAIL; reconstructing `pending.md` and the metrics at each
+verdict's commit, 11 were covered at their gate, 6 flip from blocked to clean, 5 stay blocked on a
+second uncovered FAIL; its gate-log archives record four hand adoptions of a suppressed FAIL, one
+saying "the script has no suppression concept". Ten snapshot-budget questions in its transcripts,
+ten answered `trim`, one of them the operator asking for the remedy in words. `0.504.0` carries no
+bootstrapping file (two validators, three step files, SKILL.md, the map, two fixtures, one
+invariant). The consumer's porcelain read 2 through the batch and 4 at its close, every path a
+pipeline-state file written by its own session; no write to the consumer by this session. A pull
+is operator-initiated; readiness is not authorization.
+
+**THE LEDGER DID NOT MOVE DURING THE BATCH.** md5 `3724a5b3…` before and after. **Live 78, cited
+48 → 50, unfiled 30 → 28** (the two batch-54 ids left by citation), archive 151, partition
+control 0. Goal partition **23 DISCHARGED / 27 in flight / 28 untouched**, overlap 3,
+discharged-but-invisible 0, TERMINAL **39**. Gap TWO (`0.502.0` installed, `0.504.0` shipped),
+PENDING 4 (`BL-165`, `BL-166` at `0.503.0`; `BL-167`, `BL-168` at `0.504.0`). Say WIDE at five.
+**THE PULL IS REQUIRED, NOT MERELY OWED**: the second test diverges today on the consumer's live
+gate-3 verdict (installed 1, fixed 0), and its HEAD commit names that block. The consumer sits on
+`ai-dlc/carry-over/pool-pnl-backlog-triage`; peer `graph-0f` was idle throughout and was not
+messaged.
+
+**TELL THE CONSUMER, IN THE NEXT BRIEF,** that `0.504.0` makes its in-force `[S308-GATE3-STORY-1]`
+entry cover Check 16 at Check 26, so story-308-1's gate 3 passes on the existing verdict once
+pulled — but the gate-remediation guard still derives its lock-out from the raw FAIL and the lead
+stays locked out of the artifact corpus until a `<nonce>.authorization.md` or a repair record
+(`BL-169`, filed and not fixed); that `Expires after: 1` covers this gate and the next; that a
+suppression naming an extension-catalog check is refused by the core-only catalog join as before,
+and that its own metrics spell that catalog both `ext:` and `extension:`; that Step 0a now trims
+the snapshot without asking; that the pause flag was created AFTER the HARD_BLOCK message on one
+measured resume (`route.md:110-111` says before); and that every earlier brief item in the
+batch-53 block below still stands.
+
+**ONE `PC-S308-*` CANDIDATE IS UNFILED FOR BATCH 55, THEN THE STANDING CORPUS — RANK THEM, AND IF
+A PEER HANDED YOU THIS PLAN, TAKE THE TOP ONE(S) WITHOUT ASKING.**
+`PC-S308-RULE-11-AMBIGUITY-QUESTIONS-HAVE-NO-MANDATED-PRESENTATION-TOOL` (2026-09-04) has its
+mechanism MEASURED by batch 53's read-only opus hand over the consumer's transcripts and the
+record is in the batch-53 block below: the predicate "final line contains `?` and the turn has no
+`AskUserQuestion`" fires on 73 of 2786 turn-ends, 62 real buried decisions, 8 greeting false
+positives removable by gating on `pipeline-paused.flag`; the collision with pause point (d) and
+the marked recommendation (Rule 11(a) prose plus one warning arm in `ai-dlc-continue.sh`) are
+there too. Its receipt `theirs_has core/skills/ai-dlc/SKILL.md "is solicited with"` reads 1 on
+`core/`. Re-derive before ranking. The other 27 unfiled ids are the standing corpus enumerated in
+action 1b and the batch-39 paragraph of action 1, none filed since 2026-08-31. `BL-159`,
+`BL-161`, `BL-163`, `BL-169` (no `PC-` id) rank below the PC-backed one.
+
+### BATCH 53 SHIPPED AS `v0.503.0` — THE BLOCK ABOVE REPLACES THIS ONE. TAKE THE STATE FROM THERE.
+
+This block was the batch-54 resume record. It replaced the batch-52 record below it. Every figure here was re-derived on 2026-09-05
 after the merge, against the working tree with the controls in the same invocation; re-derive
 them again rather than reading them.
 
@@ -5129,20 +5209,21 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), RANK THE UNFILED CANDIDATES,
-   THEN SCOPE BATCH 53 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
+   THEN SCOPE BATCH 55 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
    instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
    candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
    FROM ANOTHER SESSION** — a cross-session message carrying `READ and FOLLOW …`, which is
    action 9's handoff — do NOT stop to ask: take the item(s) your own sweep and ranking
    recommend, state that choice and its reason in your FIRST message to the operator, and
    proceed; the operator can redirect at any ping. **Regardless of who invoked you, batch
-   multiple candidates into one release wherever action 2 allows it.** The three unfiled today
-   are in the resume block with their status lines read:
-   `PC-S308-RULE-11-AMBIGUITY-QUESTIONS-HAVE-NO-MANDATED-PRESENTATION-TOOL` (2026-09-04, its
-   mechanism measured and a marked recommendation recorded there),
-   `PC-S308-RESUME-SNAPSHOT-BUDGET-ASKS-INSTEAD-OF-AUTO-TRIMMING` (2026-09-05) and
-   `PC-S308-CHECK26-NO-SUPPRESSED-CARVEOUT` (2026-09-05, filed while batch 53 was closing; its
-   receipt has not been run). Batch 53 is SHIPPED — `v0.503.0` at `69010ae9` (PR #630),
+   multiple candidates into one release wherever action 2 allows it.** One recent candidate is
+   unfiled today, in the resume block with its status line read and its mechanism measured:
+   `PC-S308-RULE-11-AMBIGUITY-QUESTIONS-HAVE-NO-MANDATED-PRESENTATION-TOOL` (2026-09-04); the
+   rest of the unfiled set is the standing corpus, nothing filed since 2026-08-31. Batch 54 is
+   SHIPPED — `v0.504.0` at `6fc38a46` (PR #633), `PC-S308-CHECK26-NO-SUPPRESSED-CARVEOUT`
+   closed as `BL-167` and `PC-S308-RESUME-SNAPSHOT-BUDGET-ASKS-INSTEAD-OF-AUTO-TRIMMING` as
+   `BL-168`, both rotated, `BL-169` filed and not fixed, no correction release; batch 53 is
+   SHIPPED — `v0.503.0` at `69010ae9` (PR #630),
    `PC-S308-VALIDATE-ADVERSARIAL-CONVERGENCE-SCOPE-GREW-MISFIRES-ON-PASS-1` closed as `BL-165`
    and `PC-S308-CHECK-5-DERIVE-STORIES-REMEDY-CANNOT-CREATE-AN-ENTRY` as `BL-166`, both rotated,
    `BL-152` closed incidentally, no correction release; batch 52 is SHIPPED — `v0.502.0`
@@ -5378,16 +5459,16 @@ so no block written before it changes verdict.
    interrupt; if you genuinely need to ask, ask the OPERATOR whether to, and put the peer's current
    state into the question.
 
-   **THE GAP IS ONE AND PENDING IS 2** — the consumer's stamp reads `0.502.0` / `4dc8d791` on
-   all four fields against a distribution `VERSION` of `0.503.0`; `BL-165` and `BL-166`, both at
-   `0.503.0`, are the two discharged candidates it cannot see. The consumer pulled
-   `0.498.0 → 0.502.0` on its own before batch 53 opened, which is the fifth time the gap has
-   closed in this program and the fourth time it reopened on the very next release: **A ZERO GAP
-   IS A STATE, NOT AN ACHIEVEMENT.** FIVE is the line this file calls wide; say WIDE when the
-   count reaches it. `0.503.0` carries no bootstrapping file. Batch 53's second test diverged on
-   scratch copies of the consumer's real pass-1 artifacts (28 of 28 misdiagnosed under the
-   installed validator, 0 of 28 under the shipped one), so the pull is REQUIRED and not merely
-   owed — report that, and stop there.
+   **THE GAP IS TWO AND PENDING IS 4** — the consumer's stamp reads `0.502.0` / `4dc8d791` on
+   all four fields against a distribution `VERSION` of `0.504.0`; `BL-165` and `BL-166` at
+   `0.503.0` and `BL-167` and `BL-168` at `0.504.0` are the four discharged candidates it cannot
+   see. The consumer pulled `0.498.0 → 0.502.0` on its own before batch 53 opened, which is the
+   fifth time the gap has closed in this program and the fourth time it reopened on the very
+   next release: **A ZERO GAP IS A STATE, NOT AN ACHIEVEMENT.** FIVE is the line this file calls
+   wide; say WIDE when the count reaches it. Neither `0.503.0` nor `0.504.0` carries a
+   bootstrapping file. Batch 54's second test diverges on the consumer's LIVE gate-3 verdict
+   (installed exit 1, shipped exit 0, `cmp -s` control), and the consumer's HEAD commit names
+   that block, so the pull is REQUIRED and not merely owed — report that, and stop there.
    **Your batch will widen the gap, which is expected and is not a reason to reorder anything.**
    Re-derive both. That is not permission to close it: a pull is operator-initiated, readiness is
    not authorization, a `PENDING` count is not a decision about WHEN, and one is never handed to a
@@ -5733,9 +5814,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 3724a5b3... at batch 53's fresh-resume check, after two 2026-09-05 filings (90862de4... after the first; f4e7ae5f... after its 0.502.0 pull rotated one id; 31a0b94b... before that); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
+   md5 -q "$L"              # 3724a5b3... unmoved through batch 54; reached at batch 53's fresh-resume check after two 2026-09-05 filings (90862de4... after the first; f4e7ae5f... after its 0.502.0 pull rotated one id); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
    wc -l < /tmp/live.txt    # 78 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 76 after the consumer's pull rotated PC-S308-LEDGER-REVERIFY-..., +2 on the two 2026-09-05 filings
-   wc -l < /tmp/unfiled.txt # 30 -- the two batch-53 ids left the set by being cited by BL-165 and BL-166 and rotated into docs/backlog.archive.md; PC-S308-RESUME-SNAPSHOT-BUDGET-... and PC-S308-CHECK26-NO-SUPPRESSED-CARVEOUT entered it during the batch
+   wc -l < /tmp/unfiled.txt # 28 -- the two batch-54 ids left the set by being cited by BL-167 and BL-168 and rotated into docs/backlog.archive.md; nothing entered it during the batch
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -5743,8 +5824,9 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 77 LIVE CANDIDATES, 47 CITED, 30 UNFILED** — re-derived after batch 52's
-   merge at `4dc8d791` (md5 `31a0b94b…`, archive 150; batch 51's close read 75 / 46 / 29 at
+   **THE BASELINE IS 78 LIVE CANDIDATES, 50 CITED, 28 UNFILED** — re-derived after batch 54's
+   merge at `6fc38a46` (md5 `3724a5b3…`, archive 151; batch 53's close read 78 / 48 / 30 at the
+   same md5, and batch 52's read 77 / 47 / 30 at `31a0b94b…`, archive 150; batch 51's close read 75 / 46 / 29 at
    `d205f502…`, then the consumer filed two candidates before batch 52 opened and batch 52's
    citation moved one of them from unfiled to cited, so unfiled rose by one). Batch 50's close
    read 74 / 45 / 29 at `ae45394b…`. Batch 49's close read 75 / 45
