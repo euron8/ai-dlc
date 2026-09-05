@@ -4074,6 +4074,71 @@ verify: manual
 
 
 
+## BL-167 — Check 26's validator blocked on every per-check FAIL and read nothing else, so an operator's in-force `SUPPRESSED` entry could cover a lead-evaluated check and never an escalated one
+
+Filed by the reference consumer as `PC-S308-CHECK26-NO-SUPPRESSED-CARVEOUT` on 2026-09-05, from
+its story-308-1 gate 3, which was blocked on it when this batch opened (the consumer's HEAD
+commit names the block). Batch 54 of the ledger drain, scoped by this session from its own
+ranking on consequence — a live consumer gate with no compliant way past it — and batched with
+`BL-168`. DEFECT.
+
+`escalations.md` defines `SUPPRESSED` as an authorization to proceed past a failing check, with
+a lifetime, and `gate-validation.md` Check 2 says such an entry does not block while in force.
+Every `adjudication: llm` check is adopted only through Check 26, and its validator
+(`core/scripts/validate-gate-adjudication.sh`) called `block(1, …)` on any entry of its `fails`
+list with no read of `docs/escalations/pending.md` anywhere in the file (one `escalations`
+token, an unrelated comment about the remediation guard). So the two subsystems never joined:
+the lead's inline checks could be suppressed and the escalated ones — which include every
+read-and-compare check an implementation gate runs — could not. Measured on the consumer's real
+files, read-only, from its own cwd: a well-formed in-force entry naming `[core] 16`,
+`validate-suppression-lifetime.sh` PASS, and the installed validator exiting 1 on `['16']` for
+the gate-3 verdict `implementation-20260905T172547Z`. The consumer's first attempt at the
+disposition was `DECIDED_AUTONOMOUSLY` carrying the suppression fields, which the lifetime arm
+correctly refuses; the corrected `SUPPRESSED` entry then covered nothing at Check 26 either.
+
+**The fix puts the predicate in the script that already owns it.**
+`validate-suppression-lifetime.sh` gains `--in-force`, which runs the same record extraction,
+the same catalog join and the same `gates_since` count the lifetime arm runs and lists every
+suppression that is well-formed, names a catalog check and is within its lifetime — one
+tab-separated row per entry (catalog, check id, expires-after, gates elapsed, header), exit 0
+whenever the file was read, 2 on a refusal, never 1. The parser now carries the bracketed
+catalog as its own field instead of stripping it. `validate-gate-adjudication.sh`, in adjudicate
+mode only, asks the sibling for those rows before blocking and treats a FAIL as non-blocking
+when a row's (catalog, check id) matches the verdict's own `catalog` field and the id, or when
+the row carries no catalog and the id matches — the leniency the lifetime parser already had. A
+covered FAIL is printed as `SUPPRESSED` with the entry that covers it; the remainder block as
+before; the all-PASS line is unchanged when nothing was suppressed. Absence fails closed and
+says which absence: no escalations file, no sibling beside the script, or a sibling exit other
+than 0 all mean no carve-out. The sibling is named in full at its two call sites so that
+**I107** in `scripts/validate-enforcement-map.sh` can join the mode spelled there to the mode
+the sibling dispatches and to its USAGE lines, on I53's pattern; the arm was probed in both
+directions plus a near-miss under `core/fixtures/`, and the validator's wall clock moved from
+25.1s to 25.3s over three reps each.
+
+Driven on the consumer's real gate-3 verdict and `pending.md`, read-only, from the consumer's
+cwd with a `cmp -s` control that the two validators differ: installed exits 1 on `['16']`; fixed
+prints the `SUPPRESSED` row for `[S308-GATE3-STORY-1]` (expires after 1 gate, 0 recorded since
+authorization) and exits 0 with `14 PASS, 1 FAIL under an in-force SUPPRESSED entry`; fixed with
+the escalations path pointed at a missing file exits 1 and names `no-escalations-file`. The
+in-force query over that file lists exactly one of its 17 `SUPPRESSED` entries against 10
+recorded gate timestamps.
+
+**Reader set derived, not taken from the filing.** The filing named the validator and the step
+prose; the enforcement-map posture for Check 26 and `escalations.md`'s own `SUPPRESSED` section
+also described the block as unconditional, and both now say a covered FAIL proceeds and where
+the predicate lives. The gate-adjudicator role is unchanged — it still records the FAIL, and the
+entry carries the licence, not the verdict. `--series` (the stall rung) still counts a
+suppressed FAIL as a FAIL, deliberately: a suppression bounds the licence, not the check.
+
+The receipt seeds a scratch escalated set derived with `--expected`, a verdict failing its first
+id, and an in-force entry, then scores: entry naming a different id must block (kills a fix that
+lets any entry cover every FAIL), the matching entry must pass with a `SUPPRESSED` line, an
+entry two recorded gates past a one-gate lifetime must block (kills a fix that ignores expiry),
+and a missing escalations file must block (kills a fix that fails open). Unfixed scores 1, the
+id-blind wrong fix scores 1, fixed scores 0.
+
+verify: sh V="${GA:-core/scripts/validate-gate-adjudication.sh}"; S="${GASCHEMA:-core/schemas/gate-adjudication-verdict.json}"; M="${GAMAP:-core/skills/ai-dlc/enforcement-map.yaml}"; [ -f "$V" ] && [ -f "$S" ] && [ -f "$M" ] || exit 9; d=$(mktemp -d); N=implementation-20260101T000000Z; ids=$(AI_DLC_VERDICT_SCHEMA="$S" AI_DLC_ENFORCEMENT_MAP="$M" bash "$V" --expected implementation) || { rm -rf "$d"; exit 9; }; x=$(printf '%s\n' "$ids" | head -1); y=$(printf '%s\n' "$ids" | sed -n 2p); [ -n "$x" ] && [ -n "$y" ] || { rm -rf "$d"; exit 9; }; python3 -c 'import json,sys; o,n,f=sys.argv[1],sys.argv[2],sys.argv[3]; ids=sys.argv[4:]; json.dump({"schema_id":"GATE_ADJUDICATION_VERDICT v1","gate_type":"implementation","gate_series_id":n,"gate_nonce":n,"generated_at":"2026-01-01T00:05:00Z","adjudicator_agent_id":"a1","catalog":"core","verdicts":[{"check_id":c,"verdict":"FAIL" if c==f else "PASS","evidence":"e"} for c in ids]},open(o,"w"))' "$d/$N.verdict.json" "$N" "$x" $ids; e() { printf '## [E] [lead] - 2025-12-31T00:00:00Z\n**Status:** SUPPRESSED\n**Suppresses:** [core] %s — t\n**Expires after:** 1 gate\n**Operator authorization:** 2025-12-31T00:00:00Z | "twelve characters long"\n' "$1" > "$d/p.md"; }; g() { printf '{"v":1,"ts":"%s","catalog":"core","check":"%s","verdict":"FAIL"}\n' "$1" "$x"; }; r() { AI_DLC_VERDICT_SCHEMA="$S" AI_DLC_ENFORCEMENT_MAP="$M" AI_DLC_ESCALATIONS="$d/p.md" AI_DLC_GATE_METRICS="$d/m.jsonl" bash "$V" implementation "$d/$N.verdict.json" >"$d/out" 2>&1; echo $?; }; : > "$d/m.jsonl"; e "$y"; B=$(r); e "$x"; A=$(r); C=$(grep -c SUPPRESSED "$d/out"); g 2026-01-02T00:00:00Z > "$d/m.jsonl"; g 2026-01-03T00:00:00Z >> "$d/m.jsonl"; X=$(r); AI_DLC_ESCALATIONS="$d/none.md" AI_DLC_VERDICT_SCHEMA="$S" AI_DLC_ENFORCEMENT_MAP="$M" bash "$V" implementation "$d/$N.verdict.json" >/dev/null 2>&1; Z=$?; rm -rf "$d"; [ "$B" = 1 ] && [ "$X" = 1 ] && [ "$Z" = 1 ] && [ "$A" = 0 ] && [ "$C" -ge 1 ] && exit 0; exit 1
+
 ## BL-168 — Step 0a's snapshot-budget check stopped and asked the operator for `trim`, the one remedy it could apply itself, and the reply forced the same whole read the check exists to defer
 
 Filed by the reference consumer as `PC-S308-RESUME-SNAPSHOT-BUDGET-ASKS-INSTEAD-OF-AUTO-TRIMMING`
