@@ -43,7 +43,12 @@ printf '# Architecture\n'   > "$W/docs/architecture.md"
 printf '# Pending\n'        > "$W/docs/escalations/pending.md"
 printf 'int main(){}\n'     > "$W/src/main.c"
 
-verdict() { # <nonce> <json-verdicts-array>
+verdict() { # <nonce> <json-verdicts-array> [catalog|"none"]
+  # The third argument exists because arm 7b joins on the verdict's OWN catalog. `none` omits
+  # the field entirely, which is the shape that must join against nothing at all.
+  _cat="${3:-core}"
+  _catline="  \"catalog\": \"${_cat}\","
+  [ "$_cat" = "none" ] && _catline=""
   cat > "$W/_bmad-output/gate-adjudication/$1.verdict.json" <<EOF
 {
   "schema_id": "GATE_ADJUDICATION_VERDICT v1",
@@ -51,9 +56,58 @@ verdict() { # <nonce> <json-verdicts-array>
   "gate_nonce": "$1",
   "generated_at": "2026-08-11T19:30:44Z",
   "adjudicator_agent_id": "gate-adjudicator@session-seed",
-  "catalog": "core",
+${_catline}
   "verdicts": $2
 }
+EOF
+}
+
+# --- arm 7b's inputs ---------------------------------------------------------------------
+# SEEDED FROM WHAT THE REAL PRODUCER EMITS, never from what the reader accepts: the sibling
+# and the enforcement map are the SHIPPED files, copied in, and the entry is written in the
+# `**Status:** / **Suppresses:** / **Expires after:** / **Operator authorization:**` shape
+# `escalations.md` prescribes and the reference consumer's `pending.md` actually carries.
+pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
+HERE="$(cd "$(dirname "$0")" && pwd)"
+
+install_sibling() { # copy the real validate-suppression-lifetime.sh + catalog into $W
+  local sib map
+  sib="$(pick "$HERE/../../scripts/validate-suppression-lifetime.sh" \
+              "$HERE/../../../scripts/ai-dlc/validate-suppression-lifetime.sh" \
+              "$HERE/../../core/scripts/validate-suppression-lifetime.sh")"
+  map="$(pick "$HERE/../../skills/ai-dlc/enforcement-map.yaml" \
+              "$HERE/../../../.claude/skills/ai-dlc/enforcement-map.yaml" \
+              "$HERE/../../core/skills/ai-dlc/enforcement-map.yaml")"
+  [ -n "$sib" ] || { echo "seed.sh: cannot locate validate-suppression-lifetime.sh; every 7b arm would read as no-sibling" >&2; rm -rf "$W"; exit 2; }
+  [ -n "$map" ] || { echo "seed.sh: cannot locate enforcement-map.yaml; the sibling would refuse and every 7b arm would read as refused" >&2; rm -rf "$W"; exit 2; }
+  mkdir -p "$W/.claude/skills/ai-dlc"
+  cp "$sib" "$W/scripts/ai-dlc/validate-suppression-lifetime.sh" || { echo "seed.sh: sibling copy failed" >&2; rm -rf "$W"; exit 2; }
+  cp "$map" "$W/.claude/skills/ai-dlc/enforcement-map.yaml"      || { echo "seed.sh: catalog copy failed" >&2; rm -rf "$W"; exit 2; }
+}
+
+metrics() { # <file> <n-gate-events-after-the-authorization>
+  local f="$1" n="$2" i=1
+  mkdir -p "$(dirname "$f")"
+  : > "$f"
+  while [ "$i" -le "$n" ]; do
+    printf '{"ts":"2026-08-%02dT00:00:00Z","check":"7","verdict":"FAIL"}\n' "$((4 + i))" >> "$f"
+    i=$((i + 1))
+  done
+}
+
+suppression() { # <suppresses-field-value> <expires>
+  cat > "$W/docs/escalations/pending.md" <<EOF
+# Pending
+
+## [S302-GATE3-STORY-1] [lead] - 2026-08-01T00:00:00Z — seeded suppression
+
+**Status:** SUPPRESSED (operator, 2026-08-01T00:00:00Z)
+
+**Suppresses:** $1 — seeded target for the gate-remediation carve-out
+**Expires after:** $2 gates
+**Operator authorization:** 2026-08-01T00:00:00Z | "Operator-suppress this FAIL (Recommended)"
+
+Body prose, so the entry is not a bare field block.
 EOF
 }
 
@@ -62,6 +116,12 @@ FAILING='[{"check_id":"7","verdict":"FAIL","evidence":"citation drift in test-st
           {"check_id":"2","verdict":"PASS","evidence":"escalation census clean"}]'
 CLEAN='[{"check_id":"7","verdict":"PASS","evidence":"citations resolve"},
         {"check_id":"2","verdict":"PASS","evidence":"escalation census clean"}]'
+# ONE failing check, so "every live FAIL is covered" and "some remain" are separate seeds
+# rather than the same seed read two ways.
+FAILING1='[{"check_id":"7","verdict":"FAIL","evidence":"citation drift in test-strategy.md"},
+           {"check_id":"2","verdict":"PASS","evidence":"escalation census clean"}]'
+
+METRICS="$W/_bmad-output/implementation-artifacts/gate-metrics.jsonl"
 
 case "$CASE" in
   open-fail)
@@ -83,6 +143,58 @@ case "$CASE" in
   no-gate)
     rmdir "$W/_bmad-output/gate-adjudication"
     ;;
+
+  # --- arm 7b, THE SUPPRESSED CARVE-OUT -----------------------------------------------
+  # Every case below is `open-fail` plus one changed property, so each arm of the fixture
+  # discriminates on that property alone.
+  suppressed)
+    # The whole FAIL set is covered, in force. This is the ALLOW.
+    verdict "story-20260811T193044Z" "$FAILING1"
+    install_sibling; suppression "[core] 7" 3; metrics "$METRICS" 2
+    # ...and an ALTERNATE timeline that expires the same entry. Nothing reads it unless a
+    # caller passes AI_DLC_GATE_METRICS, which is what gives that channel a subject.
+    metrics "$W/alt-gate-metrics.jsonl" 5
+    ;;
+  suppressed-expired)
+    # IDENTICAL to `suppressed` but for the number of gate events recorded after the
+    # authorization. 5 > **Expires after:** 3, so the sibling does not list the entry.
+    verdict "story-20260811T193044Z" "$FAILING1"
+    install_sibling; suppression "[core] 7" 3; metrics "$METRICS" 5
+    ;;
+  suppressed-wrongcat)
+    # The entry names a catalog this verdict is not in.
+    verdict "story-20260811T193044Z" "$FAILING1"
+    install_sibling; suppression "[ext-catalog] 7" 3; metrics "$METRICS" 2
+    ;;
+  suppressed-bare)
+    # No bracket at all. The sibling resolves a bare id against the core catalog alone, so
+    # it can only ever have meant `core` -- and this verdict is an extension's.
+    verdict "story-20260811T193044Z" "$FAILING1" "some-extension"
+    install_sibling; suppression "7" 3; metrics "$METRICS" 2
+    ;;
+  suppressed-nocat)
+    # A verdict with NO catalog field joins against nothing, exactly as the gate validator's
+    # `str(V.get("catalog",""))` does. Fail-closed, and measured at 0 of the reference
+    # consumer's 195 verdict files.
+    verdict "story-20260811T193044Z" "$FAILING1" "none"
+    install_sibling; suppression "[core] 7" 3; metrics "$METRICS" 2
+    ;;
+  suppressed-partial)
+    # Two FAILs, one covered. The deny must survive and must name both halves.
+    verdict "story-20260811T193044Z" "$FAILING"
+    install_sibling; suppression "[core] 7" 3; metrics "$METRICS" 2
+    ;;
+  suppressed-nosibling)
+    # `suppressed`, with the one thing arm 7b cannot do without.
+    verdict "story-20260811T193044Z" "$FAILING1"
+    suppression "[core] 7" 3; metrics "$METRICS" 2
+    ;;
+  suppressed-noesc)
+    # `suppressed`, with no escalations file to read.
+    verdict "story-20260811T193044Z" "$FAILING1"
+    install_sibling; metrics "$METRICS" 2
+    rm -f "$W/docs/escalations/pending.md"
+    ;;
   *)
     echo "seed.sh: unknown case '$CASE'" >&2; rm -rf "$W"; exit 2 ;;
 esac
@@ -100,5 +212,36 @@ if [ "$CASE" != "no-gate" ]; then
   ls "$W"/_bmad-output/gate-adjudication/*.verdict.json >/dev/null 2>&1 \
     || { echo "seed.sh: case '$CASE' wrote no verdict file" >&2; rm -rf "$W"; exit 2; }
 fi
+
+# ARM 7b'S INPUTS ARE CERTIFIED SEPARATELY, IN BOTH DIRECTIONS. Every absence arm 7b knows
+# about produces a DENY, which is also what a correct guard produces on a covered set it
+# could not read -- so a seed that quietly failed to place the sibling scores an
+# indistinguishable pass. The `nosibling` and `noesc` cases assert the ABSENCE for the same
+# reason: if the base seed ever starts shipping those files, those two arms would be
+# measuring `ok` and reporting the fail-closed path.
+case "$CASE" in
+  suppressed|suppressed-expired|suppressed-wrongcat|suppressed-bare|suppressed-nocat|suppressed-partial)
+    for _need in "$W/scripts/ai-dlc/validate-suppression-lifetime.sh" \
+                 "$W/.claude/skills/ai-dlc/enforcement-map.yaml" \
+                 "$W/docs/escalations/pending.md" \
+                 "$METRICS"; do
+      [ -s "$_need" ] || { echo "seed.sh: case '$CASE' did not produce ${_need#$W/}; arm 7b would report no-sibling and its DENY would read as the guard holding" >&2; rm -rf "$W"; exit 2; }
+    done
+    grep -q '^\*\*Suppresses:\*\*' "$W/docs/escalations/pending.md" \
+      || { echo "seed.sh: case '$CASE' wrote no **Suppresses:** field, so no entry can ever be in force" >&2; rm -rf "$W"; exit 2; }
+    ;;
+  suppressed-nosibling)
+    [ ! -f "$W/scripts/ai-dlc/validate-suppression-lifetime.sh" ] \
+      || { echo "seed.sh: case '$CASE' HAS a sibling, so it cannot exercise no-sibling" >&2; rm -rf "$W"; exit 2; }
+    [ -s "$W/docs/escalations/pending.md" ] \
+      || { echo "seed.sh: case '$CASE' has no escalations file either, so the status would be no-escalations-file" >&2; rm -rf "$W"; exit 2; }
+    ;;
+  suppressed-noesc)
+    [ -s "$W/scripts/ai-dlc/validate-suppression-lifetime.sh" ] \
+      || { echo "seed.sh: case '$CASE' has no sibling either, so the status would be no-sibling" >&2; rm -rf "$W"; exit 2; }
+    [ ! -f "$W/docs/escalations/pending.md" ] \
+      || { echo "seed.sh: case '$CASE' HAS an escalations file, so it cannot exercise no-escalations-file" >&2; rm -rf "$W"; exit 2; }
+    ;;
+esac
 
 printf '%s' "$W"
