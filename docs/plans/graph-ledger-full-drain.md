@@ -6103,11 +6103,16 @@ so no block written before it changes verdict.
      session's context to make sense, it is not resumable; fix it and go back to action 6.
    - **Run `### Derive the state; do not trust the numbers below` verbatim from `$W`** and
      compare every figure to the block's claims. A mismatch is a stop, not a note.
-   - **Assert action 1 names no shipped work.** For every `PC-` id action 1 offers as NEXT
-     work: `git log -F --grep='<id>' --format=%h origin/main | wc -l` must be 0. For the id
-     the block says SHIPPED it must be non-zero, with `VERSION` at the oldest such commit equal
-     to the release the block names. An action 1 naming shipped work is the whole failure this
-     step exists for, and it is the one a green validator cannot see.
+   - **Assert action 1 names no shipped work — counting RELEASE commits only.** For every
+     `PC-` id action 1 offers as NEXT work:
+     `git log -F --grep='<id>' --format=%s origin/main | grep -c '^release:'` must be 0. For the
+     id the block says SHIPPED it must be non-zero, with `VERSION` at the oldest commit naming
+     the id equal to the release the block names. **A docs commit that names a candidate while
+     REPORTING it does not count** — measured on the first run of this step: batch 51's docs
+     commit names `PC-S308-CHECK-5-…` verbatim, so a count over all commits read 1 for an id
+     nothing has shipped, and a literal reader would have reported a false mismatch. An
+     action 1 naming shipped work is the whole failure this step exists for, and it is the one
+     a green validator cannot see.
    - **`bash scripts/validate-plan-shape.sh` from `$W`.** PASS is the floor, not the answer.
    - **Remove the worktree** (`git worktree remove --force "$W"`) and report one line:
      `resumable from origin/main at <sha>` with the figures compared, or the mismatch and what
