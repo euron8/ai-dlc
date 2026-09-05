@@ -4105,3 +4105,55 @@ transcript. The receipt below is manual because the discriminating input is a tr
 the validator has no channel for today; write a driving receipt the moment the channel exists.
 
 verify: manual
+
+## BL-172 — `ledger-reverify.sh` searched a `theirs_*` anchor for its backslashes literally, so a receipt whose backticks were markdown-escaped read "vacuous predicate" on an entry upstream had just fixed
+
+Filed by the reference consumer as `PC-S308-LEDGER-REVERIFY-READS-ESCAPED-BACKTICKS-LITERALLY`
+on 2026-09-05, from its `0.502.0 → 0.504.0` pull. Batch 56 of the ledger drain, opened by a
+peer handoff and scoped from this session's own ranking: the only PC-backed unfiled candidate,
+shipping alone because its subject is a bootstrapping file. DEFECT tier: the wrong verdict is
+silent in the direction that keeps an absorbed entry open forever, and its stated reason sends
+the operator to re-read the entry body rather than the receipt's spelling.
+
+The consumer's `PC-S308-RESUME-SNAPSHOT-BUDGET-ASKS-INSTEAD-OF-AUTO-TRIMMING` carried a
+`theirs_has` receipt on `steps/route.md` whose substring wrapped `trim` in backslash-escaped
+backticks, as a markdown author writes them inside prose. The reader stripped the outer quotes
+and passed the rest to `grep -F`, so the substring was searched for WITH its backslashes, was at
+neither ref, and the entry read `NEEDS-REVIEW  vacuous predicate: … absent at BOTH base and
+theirs`. The bare substring was present at base and gone at theirs: the `0.504.0` close the
+release commit names as `BL-168`, reported as no close at all. Re-driven here on the consumer's
+ledger as it stood before it repaired the receipt (a scratch copy at its `37d7d2aa5`, base
+`4dc8d791`, theirs `6fc38a46`, installed reader against this one with a `cmp -s` control that
+they differ): 123 rows both sides, no status moved, two details moved, that row and the
+`RECEIPTS-UNDECIDED` tally, which counts one fewer `theirs_has` receipt because a refused one is
+not a measurement.
+
+The filing offered two readings and asked upstream to choose. **Refuse, do not unescape**,
+because the consumer's own archive carries the same spelling meaning the opposite:
+`PC-S302-EMIT-REPORT-EMITS-LITERAL-BACKSLASHES-INTO-THE-MECHANICAL-REGION` anchored
+`theirs_has` on a shell printf whose backslash-backtick pairs WERE the defect text, and that
+receipt closed correctly under the literal reading (its annotation quotes the row). The token
+cannot say which the author meant, and a reader that unescaped would have reported that entry
+still-live after its fix. The distribution's own `scripts/backlog-reverify.sh` made the same
+choice for `has` / `lacks` before this was filed. The false-positive population of an
+unescaping reader, derived at `HEAD`: 78 `core/` files carry a literal backslash-backtick pair,
+against 494 carrying a backtick.
+
+The fix: the `theirs_has` / `theirs_lacks` parse site refuses any anchor carrying a backslash
+with a `NEEDS-REVIEW` row that names the backslash, says the grammar has no escape mechanism,
+and gives the remedy (write backticks and quotes bare; anchor text that genuinely contains a
+backslash on a backslash-free neighbour, or write the predicate as `sh`). The refused receipt
+no longer counts toward the `theirs_has` tally. The reader's header and the update skill's
+step 3f state the rule. **The stated cost**: the `PC-S302` shape loses its mechanical receipt
+and is told to re-anchor — one receipt in the consumer's history, already closed, and none in
+its live ledger today (the one `grep` hit on the live ledger is the filing's own prose; the
+archive carries that closed one and one regex-shaped `theirs_lacks` anchor, which the same rule
+now refuses instead of reporting still-live forever).
+
+The receipt below drives the shipping reader over a two-commit repo and a four-entry ledger:
+the escaped anchor refused with the backslash reason, the same text bare closing, the literal
+shape refused, the regex shape refused. It rejects the pre-fix reader (escaped reads vacuous),
+an unescaping reader (escaped closes), a backtick-only guard (regex passes through), and a
+guard that keeps the literal search when it matches at base (literal closes).
+
+verify: sh A=$PWD; R=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -f "$R" ] || exit 9; w=$(mktemp -d) || exit 9; trap 'rm -rf "$w"' EXIT; g() { git -C "$w/d" -c user.email=r@r -c user.name=r -c commit.gpgsign=false "$@"; }; mkdir -p "$w/d/core/x" "$w/c" || exit 9; git -c init.templateDir= -C "$w" init -q d >/dev/null 2>&1 || exit 9; printf '%s\n' '# r' 'Reply `trim` to have me trim it' '_base_ \`%s\`' 'version: 9.9.9' > "$w/d/core/x/r.md"; echo 1 > "$w/d/VERSION"; g add -A && g commit -qm base || exit 9; b=$(g rev-parse HEAD); printf '%s\n' '# r' 'trimmed' '_base_ %s' 'version: 9.9.9' > "$w/d/core/x/r.md"; g add -A && g commit -qm theirs || exit 9; t=$(g rev-parse HEAD); printf '%s\n' '## PC-ESC — escaped' 'verify: theirs_has core/x/r.md "Reply \`trim\` to have me"' '## PC-BARE — bare' 'verify: theirs_has core/x/r.md "Reply `trim` to have me"' '## PC-LIT — literal' 'verify: theirs_has core/x/r.md "_base_ \`%s\`"' '## PC-RX — regex' 'verify: theirs_lacks core/x/r.md "^version: 9\.9\.9$"' > "$w/l.md"; o=$(cd "$w/c" && bash "$A/$R" "$w/d" "$b" "$w/c" "$t" "$w/l.md" 2>/dev/null); printf '%s\n' "$o" | awk -F'\t' '$2 ~ /^PC-ESC/ && $1=="NEEDS-REVIEW" && index($3,"contains a backslash")>0 {e=1} $2 ~ /^PC-BARE/ && $1=="CLOSE-CANDIDATE" {k=1} $2 ~ /^PC-LIT/ && $1=="NEEDS-REVIEW" && index($3,"contains a backslash")>0 {l=1} $2 ~ /^PC-RX/ && $1=="NEEDS-REVIEW" && index($3,"contains a backslash")>0 {x=1} END{exit !(e && k && l && x)}'
