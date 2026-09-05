@@ -661,18 +661,20 @@ row_is "Entry TH-DECIDED"   STILL-LIVE "also STILL-LIVE, so the STATUS cannot be
 # still-live theirs_has receipts wearing this row's name; the claim is specifically about the
 # subset whose predicate did not move in range.
 #
-# THE DENOMINATOR IS FOUR, AND WHICH FOUR IS THE POINT. TH-UNDECIDED, TH-DECIDED, the vacuous
-# MARKER_A entry, and PC-FIXTURE-BARE-BACKTICK's close. The three anchors carrying a backslash
-# (ESCAPED-BACKTICK, LITERAL-BACKSLASH, REGEX-ANCHOR) are REFUSED before the tally and must not
-# be in it -- a refused receipt is not a measurement -- so a guard placed after the tally
-# increment reads "1 of 7" here and fails this arm.
+# THE DENOMINATOR IS FIVE, AND WHICH FIVE IS THE POINT. TH-UNDECIDED, TH-DECIDED, the vacuous
+# MARKER_A entry, PC-FIXTURE-BARE-BACKTICK's close and PC-FIXTURE-CLEAN-PATH's close. The six
+# receipts carrying a backslash (ESCAPED-BACKTICK, LITERAL-BACKSLASH, SECOND-SUBSTRING,
+# ESCAPED-QUOTE, ESCAPED-PATH, and REGEX-ANCHOR's theirs_lacks) are REFUSED before the tally and
+# must not be in it -- a refused receipt is not a measurement -- so a guard placed after the
+# tally increment reads a larger denominator here and fails this arm (built and driven by the
+# batch-56 scope hand on the four-seed version: 1 of 6 against a wanted 1 of 4).
 ASSERTIONS=$((ASSERTIONS + 1))
 und="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{print $3; exit}')"
-if grep -q "^1 of 4 'theirs_has' receipt" <<<"$und"; then
-  printf '  ok    %-22s 1 of 4 — the control is excluded, the vacuous entry still counts in the total, and the three refused anchors do not\n' "undecided-tally"
+if grep -q "^1 of 5 'theirs_has' receipt" <<<"$und"; then
+  printf '  ok    %-22s 1 of 5 — the control is excluded, the vacuous entry still counts in the total, and the refused anchors do not\n' "undecided-tally"
 else
   FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s want "1 of 4", got: %s\n' "undecided-tally" "${und:-<no row>}"
+  printf '  FAIL  %-22s want "1 of 5", got: %s\n' "undecided-tally" "${und:-<no row>}"
 fi
 
 # It must reach the operator, which means NOT being STILL-LIVE: emit-report.sh filters that one
@@ -703,7 +705,7 @@ fi
 rm -f "$zled"
 
 # MUTATION — drop the base-side test, so the tally counts every still-live theirs_has receipt.
-# The control entry is then swept in and the row reads "2 of 4": a number that still looks like
+# The control entry is then swept in and the row reads "2 of 5": a number that still looks like
 # a finding, which is what makes this mutant worth having.
 MUTU="$(dirname "$DIST")/mut-undecided"
 rm -rf "$MUTU"; mkdir -p "$MUTU"
@@ -720,14 +722,14 @@ else
   mu_det="$(printf '%s\n' "$mu_out" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{print $3; exit}')"
   mu_rest="$(printf '%s\n' "$mu_out" | awk -F'\t' '$1!="RECEIPTS-UNDECIDED"' | sort)"
   ok_rest="$(printf '%s\n' "$OUT" | awk -F'\t' '$1!="RECEIPTS-UNDECIDED"' | sort)"
-  if ! grep -q "^2 of 4 'theirs_has' receipt" <<<"$mu_det"; then
+  if ! grep -q "^2 of 5 'theirs_has' receipt" <<<"$mu_det"; then
     FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s without the base test the tally read: %s — want "2 of 4", so the control above is vacuous\n' "mutation-undecided" "${mu_det:-<no row>}"
+    printf '  FAIL  %-22s without the base test the tally read: %s — want "2 of 5", so the control above is vacuous\n' "mutation-undecided" "${mu_det:-<no row>}"
   elif [ "$mu_rest" != "$ok_rest" ]; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s the mutant also moved a non-tally row, so it is not a clean mutation of the base test alone\n' "mutation-undecided"
   else
-    printf '  ok    %-22s without the base test the control is swept in ("2 of 4") and nothing else moves\n' "mutation-undecided"
+    printf '  ok    %-22s without the base test the control is swept in ("2 of 5") and nothing else moves\n' "mutation-undecided"
   fi
 fi
 
@@ -1553,7 +1555,9 @@ fi
 # verbatim, so a receipt may legally name any of them. PC-FIXTURE-UESCAPE-NEAR-MISS in seed.sh
 # carries all three in ONE substring that the real producer copies into a detail, and this arm
 # requires that row to be PRESENT in the corpus it scanned: a near-miss control that is absent
-# proves nothing.
+# proves nothing. Since the backslash refusal shipped, that entry's row IS the refusal row —
+# its anchor carries a backslash — and it still qualifies because the refusal echoes the anchor
+# into the detail. A refusal that stopped quoting the anchor would silently drop this control.
 #
 # THE POSITIVE CONTROL is the row and ENTRY-SWALLOWED counts. This is an absence-shaped arm, so
 # a subject that emits nothing sweeps it clean — the exact failure fixture-mutants.md measures.
@@ -1866,31 +1870,70 @@ row_is "PC-FIXTURE-REGEX-ANCHOR" NEEDS-REVIEW \
   "a regex escape is a backslash like any other — theirs_lacks is refused on the same rule"
 detail_has "PC-FIXTURE-REGEX-ANCHOR" "contains a backslash" \
   "and says so"
+# THE THREE SHAPES THE ADVERSARIAL HAND ADDED, each the seed that separates the shipped guard
+# from a narrower one that passed every single-anchor arm above.
+row_is "PC-FIXTURE-SECOND-SUBSTRING" NEEDS-REVIEW \
+  "a backslash in the SECOND of two anchors is refused — the whole quoted run is covered, not its first member"
+detail_has "PC-FIXTURE-SECOND-SUBSTRING" "contains a backslash" \
+  "and for the backslash, not for the multi-anchor shape"
+row_is "PC-FIXTURE-ESCAPED-QUOTE" NEEDS-REVIEW \
+  "a backslash before a double quote is refused — the rule is any backslash, not the two escapes the other seeds use"
+detail_has "PC-FIXTURE-ESCAPED-QUOTE" "contains a backslash" \
+  "and says so"
+row_is "PC-FIXTURE-ESCAPED-PATH" NEEDS-REVIEW \
+  "a markdown-escaped PATH is refused before the basename fallback can guess it right"
+detail_has "PC-FIXTURE-ESCAPED-PATH" "the path" \
+  "and the row names the PATH as the field at fault"
+row_is "PC-FIXTURE-CLEAN-PATH" CLOSE-CANDIDATE \
+  "the same receipt with the path bare closes: the underscore is not what is refused, and the token discriminates"
+row_is "PC-FIXTURE-ESCAPED-ON-MISSING-PATH" NEEDS-REVIEW \
+  "an escaped anchor on an unresolvable path is still a refusal"
+detail_has "PC-FIXTURE-ESCAPED-ON-MISSING-PATH" "contains a backslash" \
+  "and it is refused for the BACKSLASH — the guard sits before path resolution, so the missing path does not pre-empt it"
+detail_has "Entry I" "does not resolve" \
+  "the near-miss: a clean anchor on a missing path still reads as an unresolvable path"
+# THE REMEDY IS PART OF THE ROW. A refusal that names the fault and not the fix sends the author
+# to guess, and the adversarial hand's one-clause variant passed every arm above.
+detail_has "PC-FIXTURE-ESCAPED-BACKTICK" "Write backticks and quotes bare" \
+  "the anchor row carries its remedy"
+detail_has "PC-FIXTURE-ESCAPED-BACKTICK" "verify: sh" \
+  "and names the escape hatch for text that genuinely contains a backslash"
+detail_has "PC-FIXTURE-ESCAPED-PATH" "Write the path bare" \
+  "the path row carries its remedy"
+# THE ESCAPE HATCH IS PINNED. The scope hand built a guard refusing a backslash for EVERY verb;
+# the receipt as first written accepted it, and it would silence fifteen of the reference
+# consumer's thirty-six live `sh` receipts. An `sh` receipt is a program and its backslashes
+# are its own.
+row_is "PC-FIXTURE-SH-WITH-BACKSLASH" STILL-LIVE \
+  "an sh receipt carrying a backslash is EVALUATED, not refused — the remedy the refusal row offers exists"
 
-# THREE MUTANTS ON A TINY LEDGER. Each runs the closer over ONLY the four backslash entries, cut
+# SIX MUTANTS ON A TINY LEDGER. Each runs the closer over ONLY the eight backslash entries, cut
 # from the seeded ledger by heading so the receipts are not restated here, because a full-ledger
 # run is what makes this fixture the suite's third-longest unit. Each mutation is anchored on
-# the guard's own `case` pattern line, asserted UNIQUE below so a second copy cannot be edited
-# by accident; `cmp -s` refuses a program that changed nothing; and each kill requires the bare-
-# backtick control row to SURVIVE, so a mutant that broke the parser cannot score as a kill.
+# one of the two `case` SUBJECT lines (`case "$path" in`, `case "$sub" in`), asserted UNIQUE
+# below so a second copy cannot be edited by accident — the pattern line beneath them is shared
+# by both guards and is reached by state, never matched on its own. `cmp -s` refuses a program
+# that changed nothing; and each kill requires a control row to SURVIVE, so a mutant that broke
+# the parser cannot score as a kill.
 LED_SEEDED="$CONS/_bmad-output/ai-dlc-update/push-candidate-ledger.md"
 TINY="$(dirname "$DIST")/tiny-backslash-ledger.md"
 awk '/^## PC-FIXTURE-ESCAPED-BACKTICK/{p=1} /^## PC-FIXTURE-EOF-FENCE/{p=0} p' "$LED_SEEDED" > "$TINY"
 ASSERTIONS=$((ASSERTIONS + 1))
 tiny_n="$(grep -c '^## PC-FIXTURE-' "$TINY")" || tiny_n=0
-if [ "$tiny_n" -eq 4 ]; then
-  printf '  ok    %-22s the tiny ledger carries exactly the four backslash entries\n' "tiny-ledger"
+if [ "$tiny_n" -eq 10 ]; then
+  printf '  ok    %-22s the tiny ledger carries exactly the ten backslash entries\n' "tiny-ledger"
 else
   FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the tiny ledger carries %s entries, not 4 — the mutants below would run over the wrong corpus\n' "tiny-ledger" "$tiny_n"
+  printf '  FAIL  %-22s the tiny ledger carries %s entries, not 10 — the mutants below would run over the wrong corpus\n' "tiny-ledger" "$tiny_n"
 fi
 ASSERTIONS=$((ASSERTIONS + 1))
-guard_n="$(grep -c '^ *\*\\\\\*)$' "$CLOSER")" || guard_n=0
-if [ "$guard_n" -eq 1 ]; then
-  printf '  ok    %-22s the backslash guard pattern line is unique in the closer (the mutation anchor)\n' "guard-anchor"
+sub_n="$(grep -c '^ *case "\$sub" in$' "$CLOSER")" || sub_n=0
+path_n="$(grep -c '^ *case "\$path" in$' "$CLOSER")" || path_n=0
+if [ "$sub_n" -eq 1 ] && [ "$path_n" -eq 1 ]; then
+  printf '  ok    %-22s the two guard case-subject lines are each unique in the closer (the mutation anchors)\n' "guard-anchor"
 else
   FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s %s lines match the guard pattern; the mutations below anchor on it and need exactly one\n' "guard-anchor" "$guard_n"
+  printf '  FAIL  %-22s %s `case "$sub" in` and %s `case "$path" in` lines; the mutations below anchor on them and need exactly one each\n' "guard-anchor" "$sub_n" "$path_n"
 fi
 # THE UNMUTATED CONTROL, with a positive conjunct: the same tiny ledger through the shipped closer
 # must produce the refusal row AND the close, or every kill below is scored against wreckage.
@@ -1932,13 +1975,13 @@ bs_kill() { # <name> <dir-or-empty> <kill-awk> <control-awk> <kill-msg> <ctl-msg
     printf '%s\n' "$out" | sed 's/^/          | /'
   fi
 }
-# THE ARM'S OWN MUTANT: the guard pattern made unmatchable. The escaped receipt is searched for
-# literally again and the filed wrong reason comes back.
+# THE ARM'S OWN MUTANT: the anchor guard's subject emptied, so its pattern can never match. The
+# escaped receipt is searched for literally again and the filed wrong reason comes back.
 bs_kill mutation-bs-no-guard \
-  "$(bs_mutant bs-no-guard '$0 ~ /^ *\*\\\\\*\)$/ { $0 = "        *NEVER-MATCHES-A-BACKSLASH*)" } { print }')" \
+  "$(bs_mutant bs-no-guard '/^ *case "\$sub" in$/ { $0 = "      case \"\" in" } { print }')" \
   '$2 ~ /PC-FIXTURE-ESCAPED-BACKTICK/ && index($3,"vacuous predicate")>0 {f=1} END{exit !f}' \
   '$2 ~ /PC-FIXTURE-BARE-BACKTICK/ && $1=="CLOSE-CANDIDATE" {f=1} END{exit !f}' \
-  "with the guard unmatchable the escaped receipt reads \"vacuous predicate\" again — the refusal is load-bearing" \
+  "with the anchor guard disarmed the escaped receipt reads \"vacuous predicate\" again — the refusal is load-bearing" \
   "PC-FIXTURE-BARE-BACKTICK CLOSE-CANDIDATE"
 # THE FIRST WRONG FIX: unescape backslash-backtick and drop the guard. The escaped receipt then
 # CLOSES, which is the filing's reading (b) -- and the shape the literal-backslash entry shows to
@@ -1946,20 +1989,47 @@ bs_kill mutation-bs-no-guard \
 UNESC_LINE='      sub="$(printf '"'"'%s'"'"' "$sub" | sed '"'"'s/\\`/`/g'"'"')"'
 export UNESC_LINE
 bs_kill mutation-bs-unescape \
-  "$(bs_mutant bs-unescape '$0 ~ /^ *\*\\\\\*\)$/ { $0 = "        *NEVER-MATCHES-A-BACKSLASH*)" } /^      subs="\$\(printf/ { print ENVIRON["UNESC_LINE"] } { print }')" \
+  "$(bs_mutant bs-unescape '/^ *case "\$sub" in$/ { $0 = "      case \"\" in" } /^      subs="\$\(printf/ { print ENVIRON["UNESC_LINE"] } { print }')" \
   '$2 ~ /PC-FIXTURE-ESCAPED-BACKTICK/ && $1=="CLOSE-CANDIDATE" {f=1} END{exit !f}' \
   '$2 ~ /PC-FIXTURE-BARE-BACKTICK/ && $1=="CLOSE-CANDIDATE" {f=1} END{exit !f}' \
   "an unescaping reader closes the escaped receipt — the arm sees the guess the fix refuses to make" \
   "PC-FIXTURE-BARE-BACKTICK CLOSE-CANDIDATE"
-# THE SECOND WRONG FIX: refuse only backslash-BACKTICK. The regex anchor is then searched for
-# literally, matches nothing at either ref, and theirs_lacks reads STILL-LIVE with reachability
-# unchecked (this consumer root has no tracked-file list) — a positive verdict, not an absence.
+# THE SECOND WRONG FIX: refuse only backslash-BACKTICK. The pattern line is reached by state from
+# the anchor guard's subject line, so the path guard's identical pattern is left alone. The regex
+# anchor is then searched for literally, matches nothing at either ref, and theirs_lacks reads
+# STILL-LIVE with reachability unchecked (this consumer root has no tracked-file list) — a
+# positive verdict, not an absence.
 bs_kill mutation-bs-backtick-only \
-  "$(bs_mutant bs-backtick-only 'BEGIN { BS = sprintf("%c", 92); BT = sprintf("%c", 96) } $0 ~ /^ *\*\\\\\*\)$/ { $0 = "        *" BS BS BS BT "*)" } { print }')" \
+  "$(bs_mutant bs-backtick-only 'BEGIN { BS = sprintf("%c", 92); BT = sprintf("%c", 96) } /^ *case "\$sub" in$/ { f = 1 } f && $0 ~ /^ *\*\\\\\*\)$/ { $0 = "        *" BS BS BS BT "*)"; f = 0 } { print }')" \
   '$2 ~ /PC-FIXTURE-REGEX-ANCHOR/ && $1=="STILL-LIVE" {f=1} END{exit !f}' \
   '$2 ~ /PC-FIXTURE-ESCAPED-BACKTICK/ && $1=="NEEDS-REVIEW" && index($3,"contains a backslash")>0 {f=1} END{exit !f}' \
   "a backtick-only guard lets the regex anchor through and it reads STILL-LIVE forever — any backslash is the rule" \
   "PC-FIXTURE-ESCAPED-BACKTICK refused with the backslash reason"
+# THE THIRD WRONG FIX, the adversarial hand's BLOCKER: a guard that tests only the FIRST quoted
+# substring. It passed every single-anchor arm and the receipt as first shipped, and on the
+# two-anchor seed it manufactures a CLOSE-CANDIDATE on an anchor the rule says cannot be decided.
+bs_kill mutation-bs-first-only \
+  "$(bs_mutant bs-first-only 'BEGIN { BS = sprintf("%c", 92) } /^ *case "\$sub" in$/ { $0 = "      case \"${sub%%" BS "\"*}\" in" } { print }')" \
+  '$2 ~ /PC-FIXTURE-SECOND-SUBSTRING/ && $1=="CLOSE-CANDIDATE" {f=1} END{exit !f}' \
+  '$2 ~ /PC-FIXTURE-BARE-BACKTICK/ && $1=="CLOSE-CANDIDATE" {f=1} END{exit !f}' \
+  "a first-substring-only guard CLOSES the two-anchor entry whose second anchor carries the backslash — the whole run is what the guard reads" \
+  "PC-FIXTURE-BARE-BACKTICK CLOSE-CANDIDATE"
+# THE FOURTH WRONG FIX: refuse only the two escapes the first four seeds happen to use (backtick
+# and dot). The escaped-quote receipt is searched for literally and reads vacuous.
+bs_kill mutation-bs-two-escapes \
+  "$(bs_mutant bs-two-escapes 'BEGIN { BS = sprintf("%c", 92); BT = sprintf("%c", 96) } /^ *case "\$sub" in$/ { f = 1 } f && $0 ~ /^ *\*\\\\\*\)$/ { $0 = "        *" BS BS BS BT "*|*" BS BS ".*)"; f = 0 } { print }')" \
+  '$2 ~ /PC-FIXTURE-ESCAPED-QUOTE/ && index($3,"vacuous predicate")>0 {f=1} END{exit !f}' \
+  '$2 ~ /PC-FIXTURE-REGEX-ANCHOR/ && $1=="NEEDS-REVIEW" && index($3,"contains a backslash")>0 {f=1} END{exit !f}' \
+  "a backtick-or-dot guard lets the escaped quote through and it reads vacuous — the rule is any backslash" \
+  "PC-FIXTURE-REGEX-ANCHOR still refused"
+# THE PATH GUARD'S OWN MUTANT: its subject emptied. The escaped path falls to the basename
+# fallback, whose awk -v strips the backslash, and the entry CLOSES on a path nobody wrote.
+bs_kill mutation-bs-no-path-guard \
+  "$(bs_mutant bs-no-path-guard '/^ *case "\$path" in$/ { $0 = "      case \"\" in" } { print }')" \
+  '$2 ~ /PC-FIXTURE-ESCAPED-PATH/ && $1=="CLOSE-CANDIDATE" {f=1} END{exit !f}' \
+  '$2 ~ /PC-FIXTURE-CLEAN-PATH/ && $1=="CLOSE-CANDIDATE" {f=1} END{exit !f}' \
+  "without the path guard the escaped path is guessed right by basename and the entry CLOSES — the guard is what stops the guess" \
+  "PC-FIXTURE-CLEAN-PATH CLOSE-CANDIDATE"
 echo
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."
