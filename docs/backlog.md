@@ -4149,25 +4149,48 @@ repaired one; across every session in that log the PENDING count moves 21 → 22
 that moves is the incident's.
 
 **The fix** is that one alternative appended to the declaration, with the schema's own
-description recording the shape and the census. No hook changed; I94 binds the readers to the
-declaration and passes. `core/fixtures/handoff-completion-assertion` gains the consumer's row
-verbatim as `P_TERSE` and a real denial as `P_TERSE_NEAR`, two seed-premise arms, case (g4)
-through the on-disk reader AND the transcript reader with a near-miss on each, and mutant m25 — a
-COPY of the declaration with the alternative stripped, driven through the unmodified hooks,
-killed by (g4) on both readers, with the bare word as the control that key 3 survived.
+description recording the shape and the census. `core/fixtures/handoff-completion-assertion`
+gains the consumer's row verbatim as `P_TERSE` and the consumer's own denial, curly apostrophe
+and all, as `P_TERSE_NEAR`, two seed-premise arms, case (g4) through the on-disk reader AND the
+transcript reader with a near-miss on each, and mutant m25 — a COPY of the declaration with the
+alternative stripped, driven through the unmodified hooks, killed by (g4) on both readers, with
+the bare word as the control on each reader that the key survived.
 `core/fixtures/answer-handoff-routing` gains the same pair through the answer channel. Against the
 pre-fix declaration the first fixture reports FIXTURE BROKEN at its seed premise and the second
-one assertion FAILED; on a tree built by `install.sh` the three handoff fixtures read 135 / 16 /
-13 ok, the same as here.
+one assertion FAILED.
+
+**Two defects the batch-52 hands found in the readers, both fixed before the merge.** The
+declared patterns anchor on `^` and `$`, and grep anchors per LINE, so a multi-line message whose
+MIDDLE line ended in the terse form — an operator pasting this entry's own incident row into a
+question — matched on that line alone and routed the whole message through Check 0's transcript
+arm and through the answer channel; a bare `handoff` line inside a longer message already did,
+before this release. `ai-dlc-pause.sh` collapses newlines before it writes the row key 3 reads,
+so `ai-dlc-continue.sh` and `ai-dlc-answer-capture.sh` now collapse the same way for the match
+(the answer record keeps its newlines): case (g5) and mutant m26, and Assertion 6c with a
+per-line mutant, each with a last-line sibling that must still route. And I94(c) hand-listed the
+three hooks that carry the BRANCH TEXT and omitted `ai-dlc-handoff-pending.sh`, which reads the
+PATTERNS through its own `$_schema` argument and decides key 3; each reader now carries the
+variable its `jq` line feeds, proved on a worktree in both directions, validator wall clock 25s
+against 26s. On a tree built by `install.sh` the three handoff fixtures read 141 / 20 / 13 ok,
+the same as here.
 
 **Stated limits, each measured, none fixed here.** (1) `core/hooks/ai-dlc-pause.sh:67` records
 the first 120 characters of a prompt, so a terse request trailing more than that is invisible to
 key 3 under any pattern; the transcript reader sees the whole message but is blind to a mid-turn
-request (the hook's own header). (2) Two consumer rows open with the word and a comma
-("handoff, will PVC after handoff", "Handoff, explicit authorize on resume") and match nothing;
-both sit in sessions that already carried a matching row, so the per-session verdict does not
-move. (3) "Ok, then let's handoff" misses because the row carries a curly apostrophe and the
-declaration's `let's` is ASCII. (4) Three June rows are a bare "Handoff" behind a
-`<system-reminder>` prefix; `ai-dlc-pause.sh` strips that prefix today.
+request (the hook's own header). (2) `[.!?]` is any period: an abbreviation, a decimal or a
+single-letter list marker before the word opens the alternative ("Use a terse word, e.g.
+handoff", "See section 4.2. handoff", "A. resume B. handoff" all score REQUEST, exclusion
+clean). Zero instances in the 3379-row census; a false PENDING costs one blocked Stop with its
+remedy text, a false NOT-PENDING is this entry, and the tightening that excludes them
+(`[A-Za-z]{2,}[.!?]`) also excludes a sentence ending in a number or a version. (3)
+`core/skills/ai-dlc/steps/route.md:29-31` restates the ENTRY-TOKEN predicate in prose as the
+WHOLE input, deliberately narrower than the declaration and measured on its own 67-prompt
+corpus; a session whose FIRST input is the terse-trailing form is routed as a new feature there
+while key 3 arms at its first Stop. Nothing binds that prose to the declaration and I94 cannot
+see a paraphrase. (4) Two consumer rows open with the word and a comma ("handoff, will PVC after
+handoff", "Handoff, explicit authorize on resume") and match nothing; both sit in sessions that
+already carried a matching row. (5) "Ok, then let's handoff" misses because the row carries a
+curly apostrophe and the declaration's `let's` is ASCII. (6) Three June rows are a bare
+"Handoff" behind a `<system-reminder>` prefix; `ai-dlc-pause.sh` strips that prefix today.
 
 verify: sh d=$(mktemp -d); s=core/schemas/pause-routing.json; h=core/hooks/ai-dlc-handoff-pending.sh; { [ -f "$s" ] && [ -f "$h" ]; } || exit 9; : > "$d/pipeline-paused.flag"; printf '# log\n\n## 2026-09-05T01:54:16Z -- USER_PAUSE\n- Session: s1\n- Prompt (first 120 chars): I am solving this issue. handoff.\n\n## 2026-09-05T01:55:00Z -- USER_PAUSE\n- Session: s2\n- Prompt (first 120 chars): I did not request handoff\n\n' > "$d/pipeline-continuation-log.md"; . "$h"; ai_dlc_handoff_pending "$d" s1 "$s" || exit 1; ai_dlc_handoff_pending "$d" s2 "$s" && exit 1; exit 0

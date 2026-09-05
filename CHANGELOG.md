@@ -32,22 +32,37 @@ has ever recorded (3379 unique across all refs and the working tree) the new alt
 exactly two rows the shipped pattern missed and both are requests; the obvious wider form, any
 message ending in the word, admits fifteen, five of them questions or denials about a handoff.
 Driven through the shipping predicate on a copy of the consumer's real log, the incident session
-flips NOT-PENDING → PENDING and no other session moves. No hook changed; I94 holds the readers to
-the one declaration.
+flips NOT-PENDING → PENDING and no other session moves.
 
-**Fixtures.** `handoff-completion-assertion` carries the consumer's row verbatim and a real
-denial as its near-miss, case (g4) through both the on-disk and the transcript reader, and
-mutant m25 — a copy of the declaration with the alternative stripped, driven through the
-unmodified hooks, with the bare word as the control that key 3 survived.
-`answer-handoff-routing` carries the same pair through the answer channel. Against the pre-fix
-declaration the first reports FIXTURE BROKEN at its seed premise and the second one assertion
-FAILED; on an `install.sh` tree the three handoff fixtures read 135 / 16 / 13 ok, as here.
+**Two reader defects the review hands found, fixed before the merge.** The declared patterns
+anchor on `^` and `$` and grep anchors per LINE, so a multi-line message whose middle line ended
+in the terse form — a pasted filing quoting the incident row — routed the whole message through
+Check 0's transcript arm and the answer channel, as a bare `handoff` line already did.
+`ai-dlc-continue.sh` and `ai-dlc-answer-capture.sh` now match a newline-collapsed copy, the
+shape `ai-dlc-pause.sh` already writes for key 3; the answer record keeps its newlines. And
+I94(c) hand-listed the three hooks that carry the branch text and omitted
+`ai-dlc-handoff-pending.sh`, the reader that decides key 3; each reader now carries the variable
+its `jq` line feeds, proved in both directions on a worktree.
+
+**Fixtures.** `handoff-completion-assertion` carries the consumer's row verbatim and its own
+curly-apostrophe denial as the near-miss, case (g4) through both the on-disk and the transcript
+reader, mutant m25 — a copy of the declaration with the alternative stripped, driven through the
+unmodified hooks, with the bare word as the control on each reader — and case (g5) with mutant
+m26 for the collapse. `answer-handoff-routing` carries the same pairs through the answer channel
+with a per-line mutant. Against the pre-fix declaration the first reports FIXTURE BROKEN at its
+seed premise and the second one assertion FAILED; against the pre-collapse hooks each goes red
+on exactly its new arm; on an `install.sh` tree the three handoff fixtures read 141 / 20 / 13
+ok, as here.
 
 **Stated limits, none fixed here.** `ai-dlc-pause.sh` records the first 120 characters of a
-prompt, so a terse request trailing more than that is invisible to key 3 under any pattern. Two
-consumer rows that OPEN with the word and a comma match nothing, and both sit in sessions that
-already carried a request row. A curly-apostrophe "let's handoff" misses the ASCII `let's`
-alternative. All four are recorded in `BL-164`.
+prompt, so a terse request trailing more than that is invisible to key 3 under any pattern. An
+abbreviation, decimal or single-letter list marker before the word ("e.g. handoff") opens the
+alternative — zero instances in the census, and the tightening that excludes them also excludes
+a sentence ending in a number. `steps/route.md` Step 0 restates the entry-token predicate in
+prose as the whole input, narrower than the declaration and bound by nothing. Two consumer rows
+that OPEN with the word and a comma match nothing, both in sessions that already carried a
+request row. A curly-apostrophe "let's handoff" misses the ASCII `let's` alternative. All six
+are recorded in `BL-164`.
 
 ## [0.501.0] - 2026-09-04
 
