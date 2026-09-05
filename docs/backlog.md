@@ -4151,6 +4151,17 @@ also carry, 62 rows against 8) is refused as "not a check in the catalog" and is
 force. No such suppression exists in the consumer's history, every verdict carries `core`, and
 the join here inherits that scope rather than inventing an extension resolver.
 
+**The fixture hand found a fail-open inside the carve-out, closed before the merge.** In the
+first cut the query treated a missing gate timeline as zero elapsed, so every well-formed entry
+was in force regardless of age from any cwd where the metrics file did not auto-locate, and
+again with the metrics path naming a missing file — the same entry the lifetime arm declines to
+judge ("expiry NOT-APPLICABLE") was adopted as an authorization. Measured three sides on the
+fixture's expired entry: explicit timeline 1, no candidate 0, missing file 0. The query now lists
+nothing when no metrics file was found, says so per entry and in its summary
+(`gates_recorded=NONE`), and a metrics file that exists and records no gate stays the genuine
+fresh-consumer case at 0 elapsed. The caller also skips the query on a verdict carrying no FAIL
+token, so an all-PASS gate no longer parses the whole escalations file.
+
 **The lifetime's span is now stated where it is declared.** Measured on the consumer by the
 adversarial hand: the newest recorded gate timestamp predates the live gate's nonce and the
 entry's authorization, so a lead writes gate-metrics rows AFTER Check 26 runs and the gate being
