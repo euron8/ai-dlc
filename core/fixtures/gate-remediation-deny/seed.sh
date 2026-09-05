@@ -83,6 +83,14 @@ install_sibling() { # copy the real validate-suppression-lifetime.sh + catalog i
   mkdir -p "$W/.claude/skills/ai-dlc"
   cp "$sib" "$W/scripts/ai-dlc/validate-suppression-lifetime.sh" || { echo "seed.sh: sibling copy failed" >&2; rm -rf "$W"; exit 2; }
   cp "$map" "$W/.claude/skills/ai-dlc/enforcement-map.yaml"      || { echo "seed.sh: catalog copy failed" >&2; rm -rf "$W"; exit 2; }
+  # ...and the CITATION verifier arm 7b runs on every covering entry. Without it the guard
+  # fails closed on every 7b case and the whole family would score DENY for the wrong reason.
+  steer="$(pick "$HERE/../../scripts/validate-steering-budget.sh" \
+                "$HERE/../../../scripts/ai-dlc/validate-steering-budget.sh" \
+                "$HERE/../../core/scripts/validate-steering-budget.sh")"
+  [ -n "$steer" ] || { echo "seed.sh: cannot locate validate-steering-budget.sh; arm 7b would fail closed on every case and the ALLOW arms would read as the guard holding" >&2; rm -rf "$W"; exit 2; }
+  cp "$steer" "$W/scripts/ai-dlc/validate-steering-budget.sh" || { echo "seed.sh: verifier copy failed" >&2; rm -rf "$W"; exit 2; }
+  transcripts
 }
 
 metrics() { # <file> <n-gate-events-after-the-authorization>
@@ -95,7 +103,9 @@ metrics() { # <file> <n-gate-events-after-the-authorization>
   done
 }
 
-suppression() { # <suppresses-field-value> <expires>
+suppression() { # <suppresses-field-value> <expires> [operator-quote]
+  # The default quote is the one the transcript corpus below carries, so a suppression is by
+  # default GENUINE and a forgery is spelled out at the one call site that wants one.
   cat > "$W/docs/escalations/pending.md" <<EOF
 # Pending
 
@@ -105,10 +115,23 @@ suppression() { # <suppresses-field-value> <expires>
 
 **Suppresses:** $1 — seeded target for the gate-remediation carve-out
 **Expires after:** $2 gates
-**Operator authorization:** 2026-08-01T00:00:00Z | "Operator-suppress this FAIL (Recommended)"
+**Operator authorization:** 2026-08-01T00:00:00Z | "${3:-Operator-suppress this FAIL (Recommended)}"
 
 Body prose, so the entry is not a bare field block.
 EOF
+}
+
+# THE TRANSCRIPT CORPUS THE CITATION IS VERIFIED AGAINST. Written in the harness's own shape --
+# a `*.jsonl` file of `{"type":"user", ...}` records -- because the reader is
+# validate-steering-budget.sh --cite and seeding from what that reader accepts rather than from
+# what the harness emits would prove only that it accepts its own grammar. The guard is driven
+# with a `transcript_path` INSIDE this directory; the corpus is the directory.
+transcripts() {
+  mkdir -p "$W/sessions-jsonl"
+  cat > "$W/sessions-jsonl/monday.jsonl" <<'EOF'
+{"type":"user","timestamp":"2026-08-01T00:00:00Z","message":{"content":"Operator-suppress this FAIL (Recommended)"}}
+EOF
+  : > "$W/sessions-jsonl/current.jsonl"
 }
 
 FAILING='[{"check_id":"7","verdict":"FAIL","evidence":"citation drift in test-strategy.md"},
@@ -120,6 +143,13 @@ CLEAN='[{"check_id":"7","verdict":"PASS","evidence":"citations resolve"},
 # rather than the same seed read two ways.
 FAILING1='[{"check_id":"7","verdict":"FAIL","evidence":"citation drift in test-strategy.md"},
            {"check_id":"2","verdict":"PASS","evidence":"escalation census clean"}]'
+
+# The id-grain pair. `3` and `3a` are both real catalog ids, so neither seed can pass the
+# sibling's catalog join by accident and the only thing separating them is the token grain.
+FAILING_3='[{"check_id":"3","verdict":"FAIL","evidence":"story AC not traced"},
+            {"check_id":"2","verdict":"PASS","evidence":"escalation census clean"}]'
+FAILING_3A='[{"check_id":"3a","verdict":"FAIL","evidence":"story AC not traced"},
+             {"check_id":"2","verdict":"PASS","evidence":"escalation census clean"}]'
 
 METRICS="$W/_bmad-output/implementation-artifacts/gate-metrics.jsonl"
 
@@ -154,6 +184,25 @@ case "$CASE" in
     # ...and an ALTERNATE timeline that expires the same entry. Nothing reads it unless a
     # caller passes AI_DLC_GATE_METRICS, which is what gives that channel a subject.
     metrics "$W/alt-gate-metrics.jsonl" 5
+    ;;
+  suppressed-forged)
+    # THE SELF-DISCHARGE. Arm 6 lets the lead write pending.md while denied, so this entry is
+    # one the lead can author -- everything about it is well-formed and in force, and the only
+    # thing wrong with it is that no operator ever said the words.
+    verdict "story-20260811T193044Z" "$FAILING1"
+    install_sibling; metrics "$METRICS" 2
+    suppression "[core] 7" 3 "the operator never said this sentence"
+    ;;
+  suppressed-superset)
+    # THE ID GRAIN. The suppression names `3a`; the only live FAIL is `3`. A substring join
+    # acquits it, and `3` is a different check from `3a` in every catalog that has both.
+    verdict "story-20260811T193044Z" "$FAILING_3"
+    install_sibling; suppression "[core] 3a" 3; metrics "$METRICS" 2
+    ;;
+  suppressed-subset)
+    # The mirror: the suppression names `3`, the live FAIL is `3a`.
+    verdict "story-20260811T193044Z" "$FAILING_3A"
+    install_sibling; suppression "[core] 3" 3; metrics "$METRICS" 2
     ;;
   suppressed-expired)
     # IDENTICAL to `suppressed` but for the number of gate events recorded after the
@@ -238,7 +287,7 @@ fi
 # reason: if the base seed ever starts shipping those files, those two arms would be
 # measuring `ok` and reporting the fail-closed path.
 case "$CASE" in
-  suppressed|suppressed-expired|suppressed-wrongcat|suppressed-bare|suppressed-nocat|suppressed-partial|suppressed-oldsibling)
+  suppressed|suppressed-expired|suppressed-wrongcat|suppressed-bare|suppressed-nocat|suppressed-partial|suppressed-oldsibling|suppressed-forged|suppressed-superset|suppressed-subset)
     for _need in "$W/scripts/ai-dlc/validate-suppression-lifetime.sh" \
                  "$W/.claude/skills/ai-dlc/enforcement-map.yaml" \
                  "$W/docs/escalations/pending.md" \
@@ -247,6 +296,12 @@ case "$CASE" in
     done
     grep -q '^\*\*Suppresses:\*\*' "$W/docs/escalations/pending.md" \
       || { echo "seed.sh: case '$CASE' wrote no **Suppresses:** field, so no entry can ever be in force" >&2; rm -rf "$W"; exit 2; }
+    # THE VERIFIER AND ITS CORPUS, both directions. Arm 7b fails CLOSED without either, so a
+    # seed that dropped one would make every ALLOW case DENY and read as the guard holding.
+    [ -s "$W/scripts/ai-dlc/validate-steering-budget.sh" ] \
+      || { echo "seed.sh: case '$CASE' has no citation verifier; arm 7b would fail closed on every entry" >&2; rm -rf "$W"; exit 2; }
+    ls "$W"/sessions-jsonl/*.jsonl >/dev/null 2>&1 \
+      || { echo "seed.sh: case '$CASE' seeded no transcript corpus; no citation could ever verify" >&2; rm -rf "$W"; exit 2; }
     ;;
   suppressed-nosibling)
     [ ! -f "$W/scripts/ai-dlc/validate-suppression-lifetime.sh" ] \

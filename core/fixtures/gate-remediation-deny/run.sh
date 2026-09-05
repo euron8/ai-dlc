@@ -418,6 +418,11 @@ rm -rf "$W"
 # ARM 7b — THE SUPPRESSED CARVE-OUT. Every case is a TWIN: one property apart
 # from the case beside it, and the two verdicts must differ.
 # =============================================================================
+# EVERY DRIVE BELOW CARRIES A TRANSCRIPT, because arm 7b verifies each covering entry's
+# operator citation and fails CLOSED without a corpus. A 7b arm driven with no transcript
+# denies for want of a verifier rather than for want of coverage -- the same verdict as a
+# working guard, reached without the guard ever reading a suppression.
+TRC="sessions-jsonl/current.jsonl"
 # A DENY arm alone cannot tell a guard that reads the suppression from one that ignores it,
 # and an ALLOW arm alone cannot tell one that reads it from one that lifts on anything. So
 # S1 (covered -> allow) is scored against S2..S7 (one property changed -> deny) and never on
@@ -426,7 +431,7 @@ rm -rf "$W"
 
 # --- S1. Every live FAIL is covered by an in-force SUPPRESSED entry -> ALLOW.
 seed suppressed
-OUT="$(drive "$W" Edit "$W/$ART")"
+OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
 if denied "$OUT"; then bad "S1: a FAIL under an in-force SUPPRESSED entry still DENIED the lead — the gate passes and the lead stays locked out, which is the whole defect"
 else ok "S1: every live FAIL under an in-force suppression -> the edit is ALLOWED"; fi
 if grep -q 'GATE_REMEDIATION_SUPPRESSED' "$W/_bmad-output/pipeline-continuation-log.md" 2>/dev/null; then
@@ -451,13 +456,33 @@ if [ -f "$CACHEF" ]; then
   # Same key, rows rewritten to a catalog this verdict is not in. If the cache is consulted,
   # the edit is denied; if it is ignored, the sibling re-answers and the edit is allowed.
   CK="$(head -1 "$CACHEF")"
-  printf '%s\nnot-this-catalog\t7\t3\t0\tseeded cache poison\n' "$CK" > "$CACHEF"
-  OUT="$(drive "$W" Edit "$W/$ART")"
+  # SIX fields, because the reader requires six. A short poison row is dropped by the field
+  # count and the arm below would then score a DENY that the poison never caused.
+  printf '%s\nnot-this-catalog\t7\t3\t0\t2026-08-01T00:00:00Z | "Operator-suppress this FAIL (Recommended)"\tseeded cache poison\n' "$CK" > "$CACHEF"
+  OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
   if denied "$OUT"; then ok "S1-cache: the cached rows are what the join reads (a poisoned cache changes the verdict)"
   else bad "S1-cache: the cache file is written and never read — it costs a write and saves nothing"; fi
   # ...and the key invalidates. Rewriting the escalations file changes its size and mtime.
+  # THE EQUAL-SIZE, SAME-SECOND REWRITE — the one a size+mtime key cannot see. `[core] 7`
+  # becomes `[core] 9`: identical byte count, and inside one whole second `mtime` has not moved
+  # either, so the ONLY thing that has changed is the content. Measured against a size+mtime
+  # key: 190 bytes vs 190 bytes, stale ALLOW. Run BEFORE the size-changing probe below, while
+  # the cache is still warm from the call above.
+  B4="$(wc -c < "$W/docs/escalations/pending.md")"
+  sed -i.bak 's/\*\*Suppresses:\*\* \[core\] 7/**Suppresses:** [core] 9/' "$W/docs/escalations/pending.md"
+  rm -f "$W/docs/escalations/pending.md.bak"
+  AF="$(wc -c < "$W/docs/escalations/pending.md")"
+  if [ "$B4" != "$AF" ]; then
+    bad "S1-cache: FIXTURE BROKEN — the 7->9 rewrite changed the file SIZE ($B4 -> $AF), so a size key would catch it and this arm cannot see a content key"
+  else
+    OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
+    if denied "$OUT"; then ok "S1-cache: an EQUAL-SIZE, same-second rewrite (7 -> 9) invalidates the key — the cache is keyed on CONTENT"
+    else bad "S1-cache: a suppression rewritten to name a different check at the same size in the same second still lifted — the key cannot see an in-place edit, which is the only edit the denied lead can make"; fi
+  fi
+  sed -i.bak 's/\*\*Suppresses:\*\* \[core\] 9/**Suppresses:** [core] 7/' "$W/docs/escalations/pending.md"
+  rm -f "$W/docs/escalations/pending.md.bak"
   printf '\n<!-- key-invalidation touch -->\n' >> "$W/docs/escalations/pending.md"
-  OUT="$(drive "$W" Edit "$W/$ART")"
+  OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
   if denied "$OUT"; then bad "S1-cache: a changed escalations file did NOT invalidate the key — a stale suppression set decides the lock-out forever"
   else ok "S1-cache: a changed escalations file invalidates the key and the sibling re-answers"; fi
 fi
@@ -470,9 +495,42 @@ if denied "$OUT"; then ok "S1-twin: the SAME entry against a timeline past its e
 else bad "S1-twin: an EXPIRED suppression still lifted — the licence has no lifetime here, and the metrics channel may not be read at all"; fi
 rm -rf "$W"
 
+# --- S10. THE SELF-DISCHARGE. Arm 6 lets the lead write pending.md while denied, so a
+# SUPPRESSED entry is a record the lead CAN author. Its quote is the whole claim.
+seed suppressed-forged
+OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
+if denied "$OUT"; then ok "S10: a well-formed, in-force suppression whose quote NO operator said does NOT lift the deny"
+else bad "S10: the lead cleared its own lock-out by writing its own suppression — the hook's 'no lead-authored record reaches this' is false"; fi
+case "$OUT" in *"unverified-citation"*) ok "S10: ...and the deny says the citation is the thing that failed, not the coverage" ;;
+  *) bad "S10: the deny gives no account of the forged citation, so the lead reads it as an uncovered FAIL" ;; esac
+# THE TWIN, one property apart: the SAME entry with the quote the corpus really carries. Without
+# it, a guard that verified nothing and a guard that rejected everything both pass S10.
+sed -i.bak 's/the operator never said this sentence/Operator-suppress this FAIL (Recommended)/' "$W/docs/escalations/pending.md"
+rm -f "$W/docs/escalations/pending.md.bak"
+if grep -q 'the operator never said' "$W/docs/escalations/pending.md"; then
+  bad "S10-twin: FIXTURE BROKEN — the quote substitution did not apply, so the twin re-ran S10"
+else
+  OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
+  if denied "$OUT"; then bad "S10-twin: a GENUINE operator quote in the seeded corpus did not lift — arm 7b rejects everything and S10 proves nothing"
+  else ok "S10-twin: the identical entry quoting a real operator turn DOES lift (the arm verifies rather than refuses)"; fi
+fi
+rm -rf "$W"
+
+# --- S11. THE ID GRAIN. `3` and `3a` are different checks in the same catalog.
+seed suppressed-superset
+OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
+if denied "$OUT"; then ok "S11: a suppression naming 3a does not cover a live FAIL on 3"
+else bad "S11: a substring join acquitted check 3 under a suppression for 3a"; fi
+rm -rf "$W"
+seed suppressed-subset
+OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
+if denied "$OUT"; then ok "S11-mirror: a suppression naming 3 does not cover a live FAIL on 3a"
+else bad "S11-mirror: a substring join acquitted check 3a under a suppression for 3"; fi
+rm -rf "$W"
+
 # --- S2. The same entry, EXPIRED by the recorded timeline -> DENY.
 seed suppressed-expired
-OUT="$(drive "$W" Edit "$W/$ART")"
+OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
 if denied "$OUT"; then ok "S2: an EXPIRED suppression does not carve out (the deny stands)"
 else bad "S2: an expired suppression lifted the deny — an operator's licence with no end"; fi
 case "$OUT" in *'check(s) `7`'*) ok "S2: ...and the deny still names check 7 as owed a repair" ;;
@@ -481,28 +539,28 @@ rm -rf "$W"
 
 # --- S3. The entry names a DIFFERENT catalog -> DENY. The join is (catalog, check_id).
 seed suppressed-wrongcat
-OUT="$(drive "$W" Edit "$W/$ART")"
+OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
 if denied "$OUT"; then ok "S3: an in-force entry in ANOTHER catalog does not cover this verdict's check"
 else bad "S3: the join dropped the catalog — check 7 of any extension now suppresses core's check 7"; fi
 rm -rf "$W"
 
 # --- S4. A BARE id counts as core and nothing else -> DENY against an extension verdict.
 seed suppressed-bare
-OUT="$(drive "$W" Edit "$W/$ART")"
+OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
 if denied "$OUT"; then ok "S4: a bare (bracketless) **Suppresses:** id covers core only, not an extension catalog"
 else bad "S4: a bare id was treated as a wildcard — an author error buys wider coverage than writing it correctly"; fi
 rm -rf "$W"
 
 # --- S4b. A verdict carrying NO catalog field joins against nothing -> DENY.
 seed suppressed-nocat
-OUT="$(drive "$W" Edit "$W/$ART")"
+OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
 if denied "$OUT"; then ok "S4b: a verdict with no catalog field gets no carve-out (fail-closed, as the gate validator's own join is)"
 else bad "S4b: a verdict with no catalog defaulted into core and collected a suppression it never named"; fi
 rm -rf "$W"
 
 # --- S5. Two FAILs, one covered -> DENY, naming both halves.
 seed suppressed-partial
-OUT="$(drive "$W" Edit "$W/$ART")"
+OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
 if denied "$OUT"; then ok "S5: one covered FAIL beside an uncovered one still DENIES"
 else bad "S5: any suppression at all lifted the deny — a real failing check is now unguarded"; fi
 if denied "$OUT"; then
@@ -515,7 +573,7 @@ rm -rf "$W"
 
 # --- S6/S7. FAIL CLOSED on every absence, and the status is IN the deny.
 seed suppressed-nosibling
-OUT="$(drive "$W" Edit "$W/$ART")"
+OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
 if denied "$OUT"; then ok "S6: no sibling -> no carve-out, and the deny stands"
 else bad "S6: an absent sibling was read as 'everything is covered' — the guard fails OPEN on its own missing dependency"; fi
 case "$OUT" in *"no-sibling"*) ok "S6: ...and the deny carries the status, so the lead can tell this from a real FAIL set" ;;
@@ -523,7 +581,7 @@ case "$OUT" in *"no-sibling"*) ok "S6: ...and the deny carries the status, so th
 rm -rf "$W"
 
 seed suppressed-noesc
-OUT="$(drive "$W" Edit "$W/$ART")"
+OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
 if denied "$OUT"; then ok "S7: no escalations file -> no carve-out, and the deny stands"
 else bad "S7: a missing escalations file lifted the deny"; fi
 case "$OUT" in *"no-escalations-file"*) ok "S7: ...and the deny carries that status" ;;
@@ -533,7 +591,7 @@ rm -rf "$W"
 # --- S9. The sibling is PRESENT and does not dispatch the mode. A consumer runs its own
 # installed engine, so this hook can arrive one pull ahead of the sibling it asks.
 seed suppressed-oldsibling
-OUT="$(drive "$W" Edit "$W/$ART")"
+OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
 if denied "$OUT"; then ok "S9: a sibling that refuses --in-force -> no carve-out, and the deny stands"
 else bad "S9: a sibling REFUSAL was read as coverage — the pull that delivers this hook ahead of the mode would unlock the corpus"; fi
 case "$OUT" in *"refused:"*) ok "S9: ...and the deny carries 'refused', which is a different repair from a missing file" ;;
@@ -545,7 +603,12 @@ rm -rf "$W"
 # twin — the same record claiming the REMAINING check — must lift, or this arm is just the
 # lift being broken.
 seed suppressed-partial
-TR8="$W/transcript.jsonl"
+# ONE transcript carrying BOTH claims, and it has to be inside the corpus. Arm 8 greps the
+# named FILE for the dispatched agent_id; arm 7b verifies the operator quote over the file's
+# DIRECTORY. A transcript outside `sessions-jsonl/` makes arm 7b fail closed, the subtraction
+# never happens, and the record then lifts the raw FAIL set — which is the defect this arm
+# exists to catch, reached without arm 7b ever running. Measured: that spelling failed S8.
+TR8="$W/$TRC"
 printf '{"agent_id":"remediator@session-abc123"}\n' > "$TR8"
 REC8="$W/_bmad-output/gate-adjudication/story-20260811T193044Z.repair.md"
 printf 'gate_nonce: story-20260811T193044Z\nremediator_agent_id: remediator@session-abc123\nrepaired_checks: 7\n' > "$REC8"
@@ -594,7 +657,7 @@ mut() { # <name> <sed-expr> -> 0 if a real, parseable mutant landed at $MW/<name
 }
 kill_arm() { # <name> <expect deny|allow> <workspace> <label> [gate-metrics]
   local nm="$1" want="$2" w="$3" label="$4" gm="${5:-}"
-  local o; o="$(drive "$w" Edit "$w/$ART" "" "" "$MW/$nm.sh" "$gm")"
+  local o; o="$(drive "$w" Edit "$w/$ART" "" "$w/$TRC" "$MW/$nm.sh" "$gm")"
   if [ "$want" = deny ]; then
     if denied "$o"; then ok "$label"; else bad "$label"; fi
   else
@@ -612,7 +675,7 @@ fi
 if mut m5-any-suppression-lifts 's@if \[ -z "\$FAILED_CHECKS" \]; then@if [ -n "$SUPPRESSED_CHECKS" ]; then@'; then
   kill_arm m5-any-suppression-lifts allow "$W" "M5: 'any suppression lifts' is INVISIBLE on S1 — which is why S5 exists"
 fi
-if mut m6-key-drops-escalations 's@|\$(fkey "\$ESC_FILE")@@'; then
+if mut m6-key-drops-escalations 's@|\$(ckey "\$ESC_FILE")@@'; then
   kill_arm m6-key-drops-escalations allow "$W" "M6: dropping the escalations term from the cache key does not move S1 itself"
 fi
 rm -rf "$W"
@@ -623,6 +686,26 @@ if [ -f "$MW/m5-any-suppression-lifts.sh" ]; then
 fi
 if [ -f "$MW/m1-no-subtract.sh" ]; then
   kill_arm m1-no-subtract deny "$W" "M1: ...and S5 is UNCHANGED under M1 (the mutants kill only their own arms)"
+fi
+rm -rf "$W"
+
+# M8 is the whole BLOCKER as a mutation: drop the citation verification and every covering row
+# is taken on trust, which is the state this fixture's own subject shipped in.
+seed suppressed-forged
+if mut m8-no-cite-verification 's@if cite_verifies "\${_rauth:-}"; then@if true; then@'; then
+  kill_arm m8-no-cite-verification allow "$W" "M8: dropping the citation check ALLOWS a lead-authored suppression — the verification is what keeps arm 7b out of the lead's reach"
+fi
+rm -rf "$W"
+
+# M9: the id grain. `-qxF` -> `-qF` is one character and acquits a FAIL on 3 under 3a.
+seed suppressed-superset
+if mut m9-substring-join 's@if grep -qxF "\$_c" <<<"\$COVERED"; then@if grep -qF "$_c" <<<"$COVERED"; then@'; then
+  kill_arm m9-substring-join allow "$W" "M9: a substring covered-set join ALLOWS S11 — the whole-token match is load-bearing"
+fi
+rm -rf "$W"
+seed suppressed
+if [ -f "$MW/m9-substring-join.sh" ]; then
+  kill_arm m9-substring-join allow "$W" "M9: ...and S1 is UNCHANGED under it (the mutant kills only its own arm)"
 fi
 rm -rf "$W"
 
@@ -650,7 +733,7 @@ rm -rf "$W"
 # M7 flips no verdict, so it is scored on the status string S9 asserts, not on deny/allow.
 seed suppressed-oldsibling
 if mut m7-ignore-sibling-rc 's@if \[ "\$SUPP_RC" -eq 0 \]; then@if true; then@'; then
-  OUT="$(drive "$W" Edit "$W/$ART" "" "" "$MW/m7-ignore-sibling-rc.sh")"
+  OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "$MW/m7-ignore-sibling-rc.sh")"
   if denied "$OUT"; then ok "M7: ignoring the sibling's return code still DENIES (this check moves no verdict, as declared)"
   else bad "M7: ignoring the return code changed the VERDICT — then the declaration above is wrong and this needs a verdict arm"; fi
   case "$OUT" in *"refused:"*) bad "M7: the mutant still reported 'refused' — S9's status arm cannot see the return-code check at all" ;;
@@ -662,12 +745,12 @@ rm -rf "$W"
 # answer again. With the escalations term gone from the key the second answer is the stale one.
 seed suppressed
 if [ -f "$MW/m6-key-drops-escalations.sh" ]; then
-  OUT="$(drive "$W" Edit "$W/$ART" "" "" "$MW/m6-key-drops-escalations.sh")"
+  OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "$MW/m6-key-drops-escalations.sh")"
   : > "$W/docs/escalations/pending.md"
-  OUT="$(drive "$W" Edit "$W/$ART" "" "" "$MW/m6-key-drops-escalations.sh")"
+  OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "$MW/m6-key-drops-escalations.sh")"
   if denied "$OUT"; then bad "M6: emptying the escalations file still DENIED under the mutant — the cache-invalidation arm asserts nothing"
   else ok "M6: with the escalations term dropped from the key, an EMPTIED escalations file still lifts — the key term is load-bearing"; fi
-  OUT="$(drive "$W" Edit "$W/$ART" "" "" "$MW/control.sh")"
+  OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "$MW/control.sh")"
   if denied "$OUT"; then ok "M6: ...and the unmutated copy DENIES on the same emptied file (the two sides differ)"
   else bad "M6: the unmutated copy also lifted on an emptied escalations file — the differential's two sides do not differ, so M6's kill is unearned"; fi
 fi
