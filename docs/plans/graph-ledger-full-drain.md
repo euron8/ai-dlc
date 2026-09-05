@@ -37,9 +37,108 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 52 SHIPPED AS `v0.502.0`. THE GAP IS FOUR AND PENDING IS THREE. THREE `PC-S308-*` CANDIDATES REMAIN UNFILED, TWO OF THEM FILED 2026-09-04; PLUS `BL-159`, `BL-161` AND `BL-163` WITH NO `PC-` ID.
+### BATCH 53 SHIPPED AS `v0.503.0`. THE GAP IS ONE AND PENDING IS TWO. TWO `PC-S308-*` CANDIDATES ARE UNFILED, ONE WITH A MEASURED MECHANISM AND ONE FILED TODAY; PLUS `BL-159`, `BL-161` AND `BL-163` WITH NO `PC-` ID.
 
-This block replaces the batch-51 record below it. Every figure here was re-derived on 2026-09-05
+This block replaces the batch-52 record below it. Every figure here was re-derived on 2026-09-05
+after the merge, against the working tree with the controls in the same invocation; re-derive
+them again rather than reading them.
+
+**`VERSION` IS `0.503.0`, SO BATCH 54 RELEASES AS `0.504.0`.** Re-derive `VERSION` and add one.
+Batch 53 merged at `69010ae9` (PR #630, squash; on the branch the release commit `3e7ac9e0` came
+third after two fix commits, with six fix and docs commits after it, none naming an id), closing
+`PC-S308-VALIDATE-ADVERSARIAL-CONVERGENCE-SCOPE-GREW-MISFIRES-ON-PASS-1` as `BL-165` and
+`PC-S308-CHECK-5-DERIVE-STORIES-REMEDY-CANNOT-CREATE-AN-ENTRY` as `BL-166`, both rotated, plus
+the incidental close `BL-152` (archive 77 → 80, live 87 → 86 after two filings and three
+rotations). `named_absorbed()` lists exactly one commit for the first id at `0.503.0` and TWO for
+the second — the release commit and batch 51's docs commit `7b237e02` at `0.500.0`, which named
+the candidate while reporting it; impossible-id control 0. No correction release. **The first
+batch opened by a peer's handoff** (action 9's message from `ai-dlc-db`), so it scoped itself from
+its own ranking as action 1 says and stated the choice in its first ping: two non-bootstrapping
+candidates batched into one release under action 2, each implemented in its own worktree by its
+own hand, each attacked by its own adversary.
+
+**THE CONSUMER PULLED BEFORE THE BATCH OPENED, AND THE RESUME BLOCK SAID GAP FOUR.** Its
+`363f34b89` (PR #1014, 2026-09-05 12:49 -0400) reconciled `0.498.0 → 0.502.0`, a stamp-only bump
+with an empty reconcile, and rotated `PC-S308-LEDGER-REVERIFY-…` (archive 150 → 151). The two
+other delivered ids (`…INDENTED-FENCE-BLIND-SPOT` at `0.500.0`, `…TRAILING-TERSE-PHRASING` at
+`0.502.0`) read NAMED-UPSTREAM in its reverify and are STILL LIVE in its ledger, because their
+`theirs_has` receipts survive the fix. Check the gap before reading this block's figure for it;
+this is the second time in four batches the figure was stale in the same direction.
+
+**BOTH FIRST CUTS WERE WRONG IN WAYS EVERY GREEN CHANNEL ACCEPTED, AND THE ADVERSARIES FOUND
+FIVE DEFECTS BEFORE THE MERGE.** SCOPE-GREW: a `prior > 0` guard and a pass-number guard both
+passed every behavioural arm and the receipt, because every seed placed later growth at a
+non-zero prior and every seed had a pass 1; the consumer has 11 zero-prior growth passes across 9
+series and two multi-pass series starting at pass 2. Both shapes are now cases and receipt
+series. CHECK-5: the exit-3 clause was keyed on the bare entry count and printed on three states
+whose remedy is different (a list-form mapping, a canonical for another sprint, no canonical);
+the prose named "the step that owns the `stories:` mapping" and no core step does
+(`stories-test-strategy.md` never names `sprint-status.yaml`); and it cited the WRITE mode's
+`0 value(s) written` as the check, when the write silently overwrites a wrong transcription and
+`--check`'s `0 drifted key(s)` is the token. **SEED THE WRONG FIX, NOT ONLY THE ABSENT ONE**: a
+mutant that removes the guard proves the guard exists; only a seed in the shape a plausible wrong
+guard mishandles proves it is the RIGHT guard. All four hands delivered before the merge; three
+payloads truncated at ~16000 characters, each recovered by asking for the tail by name.
+
+**THE CONSUMER SIDE IS MEASURED ON REAL FILES, READ-ONLY, ON SCRATCH COPIES.** Over its 79
+tracked pass-1 adversarial artifacts (68 declaring the field) the installed validator says MOVING
+ARTIFACT on all 28 misfiring ones and the fixed one on 0 of 28; on the five real series with
+later genuine growth the fix keeps MOVING ARTIFACT on all 13 growth states. `0.503.0` carries no
+bootstrapping file (a validator, a script, a step file, two fixtures and a mutant battery). The
+consumer's porcelain read 4 through the batch and 14 at its close, every path a pipeline-state
+file or the ledger written by its own session; no write to the consumer by this session. A pull
+is operator-initiated; readiness is not authorization.
+
+**THE LEDGER MOVED ONCE DURING THE BATCH, ON A CONSUMER FILING, UNCOMMITTED.** md5 `f4e7ae5f…`
+(after the consumer's pull) → `90862de4…` in its working tree, on
+`PC-S308-RESUME-SNAPSHOT-BUDGET-ASKS-INSTEAD-OF-AUTO-TRIMMING` (2026-09-05, ledger line 3450,
+not yet in any consumer commit so `git log -S` dates it to nothing — that zero is the working-tree
+state, not a grammar failure). **Live 76 → 77, cited 46 → 48, unfiled 30 → 29**, archive 151,
+partition control 0. Goal partition **21 DISCHARGED / 27 in flight / 29 untouched**, overlap 3,
+discharged-but-invisible 0, TERMINAL **39**. Gap ONE (`0.502.0` installed, `0.503.0` shipped),
+PENDING 2 (`BL-165` and `BL-166`, both at `0.503.0`). Say WIDE at five. The consumer sits on
+`ai-dlc/carry-over/pool-pnl-backlog-triage` again after merging its reconcile; peer `graph-5f` was
+idle throughout and was not messaged.
+
+**TELL THE CONSUMER, IN THE NEXT BRIEF,** that its two NAMED-UPSTREAM rows
+(`…INDENTED-FENCE-BLIND-SPOT` at `0.500.0`, `…TRAILING-TERSE-PHRASING` at `0.502.0`) are
+delivered and its own reverify names them, so a consumer hand can annotate ADOPTED UPSTREAM and
+rotate; that `0.503.0` stops arm D's FREEZE/CUT diagnosis on every mid-cycle series whose pass 1
+found a CRITICAL, so the 7 pass-1 artifacts hand-written with `prior == crit` to dodge it can
+carry honest zeros again; that its `overrides/steps__gate-validation__check-5.md` shadows core's
+Check 5 verbatim and still carries "writes the entry from the story file" at its line 153, so the
+prose half of `0.503.0` does not reach its remediator until it edits the override (the tool half
+lands regardless); and that every earlier brief item in the batch-52 block below still stands.
+
+**TWO `PC-S308-*` CANDIDATES ARE UNFILED FOR BATCH 54 — RANK THEM, AND IF A PEER HANDED YOU THIS
+PLAN, TAKE THE TOP ONE WITHOUT ASKING.**
+`PC-S308-RULE-11-AMBIGUITY-QUESTIONS-HAVE-NO-MANDATED-PRESENTATION-TOOL` (2026-09-04) has its
+mechanism MEASURED by this batch's read-only opus hand over the consumer's 244 transcripts
+(sidechains excluded): both signals are readable inside the existing Stop hook
+(`core/hooks/ai-dlc-continue.sh:213` reads the transcript path, `:301` rebuilds the last
+assistant text; `core/scripts/validate-steering-budget.sh:490` already reads `AskUserQuestion`
+tool_use blocks from the same transcript); the predicate "final line contains `?` and the turn
+has no `AskUserQuestion`" fires on 73 of 2786 turn-ends against a control of 106 turns carrying
+the tool; it fires on the incident turn and on the same buried decision one turn earlier; all 73
+classified by hand, 62 real buried decisions, 8 session-opening greetings (the only
+false-positive class, removable by gating on `pipeline-paused.flag`), 3 residual. Requiring the
+line to END with `?` loses 15 real decisions and is rejected. **Collision the filing missed**:
+`SKILL.md:162-164` makes pause point (d) use `AskUserQuestion` BECAUSE the turn never ends and
+the Stop hook never runs, while (a)–(c) set the flag and END the turn, so a blanket mandate must
+say what happens to the flag. Marked recommendation from that hand: Rule 11(a) prose says PRESENT
+the clarification with `AskUserQuestion` (pause point (a) only), plus one warning arm in
+`ai-dlc-continue.sh` gated on the flag; not prose alone. Re-derive before ranking.
+`PC-S308-RESUME-SNAPSHOT-BUDGET-ASKS-INSTEAD-OF-AUTO-TRIMMING` (2026-09-05, uncommitted at the
+consumer): `steps/route.md` Step 0a check 1 HARD_BLOCKs and asks `trim`/`archive`/`abort` on an
+over-budget snapshot at resume (`route.md:133`), while Step 1a applies the same script's `trim`
+remedy autonomously for the identical condition (`:216-220`); the filing asks that Step 0a try
+`trim` first and ask only if the snapshot is still over budget. Its receipt string is present at
+`route.md:133` (control 1). Status line and receipt READ by this session; not ranked. `BL-159`,
+`BL-161`, `BL-163` (no `PC-` id) rank below both.
+
+### BATCH 52 SHIPPED AS `v0.502.0` — THE BLOCK ABOVE REPLACES THIS ONE. TAKE THE STATE FROM THERE.
+
+This block was the batch-53 resume record. It replaced the batch-51 record below it. Every figure here was re-derived on 2026-09-05
 after the merge, against the working tree with the controls in the same invocation; re-derive
 them again rather than reading them.
 
@@ -5027,17 +5126,26 @@ so no block written before it changes verdict.
    action 9's handoff — do NOT stop to ask: take the item(s) your own sweep and ranking
    recommend, state that choice and its reason in your FIRST message to the operator, and
    proceed; the operator can redirect at any ping. **Regardless of who invoked you, batch
-   multiple candidates into one release wherever action 2 allows it.** The three unfiled today
+   multiple candidates into one release wherever action 2 allows it.** The two unfiled today
    are in the resume block with their status lines and receipts already read:
-   `PC-S308-CHECK-5-DERIVE-STORIES-REMEDY-CANNOT-CREATE-AN-ENTRY` (2026-09-04),
-   `PC-S308-RULE-11-AMBIGUITY-QUESTIONS-HAVE-NO-MANDATED-PRESENTATION-TOOL` (2026-09-04) and
-   the standing `PC-S308-VALIDATE-ADVERSARIAL-CONVERGENCE-SCOPE-GREW-MISFIRES-ON-PASS-1`
-   (2026-09-03). Batch 52 is SHIPPED — `v0.502.0`
+   `PC-S308-RULE-11-AMBIGUITY-QUESTIONS-HAVE-NO-MANDATED-PRESENTATION-TOOL` (2026-09-04, its
+   mechanism measured and a marked recommendation recorded there) and
+   `PC-S308-RESUME-SNAPSHOT-BUDGET-ASKS-INSTEAD-OF-AUTO-TRIMMING` (2026-09-05, uncommitted at
+   the consumer when read). Batch 53 is SHIPPED — `v0.503.0` at `69010ae9` (PR #630),
+   `PC-S308-VALIDATE-ADVERSARIAL-CONVERGENCE-SCOPE-GREW-MISFIRES-ON-PASS-1` closed as `BL-165`
+   and `PC-S308-CHECK-5-DERIVE-STORIES-REMEDY-CANNOT-CREATE-AN-ENTRY` as `BL-166`, both rotated,
+   `BL-152` closed incidentally, no correction release; batch 52 is SHIPPED — `v0.502.0`
    at `4dc8d791` (PR #627), `PC-S308-HANDOFF-INTENT-PATTERN-MISSES-TRAILING-TERSE-PHRASING`
-   closed as `BL-164` and rotated, no correction release; batch 51 is SHIPPED — `v0.500.0`
+   closed as `BL-164`; batch 51 is SHIPPED — `v0.500.0`
    at `2dca4815` (PR #622), `BL-162`, corrected by `v0.501.0` at `e06836ca` (PR #624), `BL-163`;
    batch 50 is SHIPPED — `v0.499.0` at `13502c45` (PR #619), `BL-160`, `BL-161`. Do not
    re-scope onto any of them.
+
+   **SEED THE WRONG FIX, NOT ONLY THE ABSENT ONE.** Batch 53's first fixture proved the guard
+   EXISTED (a mutant removing it went red) and accepted two wrong guards that pass every seed —
+   because every seed was in the shape the right guard and the wrong ones agree on. Before
+   declaring a fixture done, write down the two most plausible WRONG fixes, build them on a
+   copy, and confirm a behavioural arm — not a byte-lock on the condition line — kills each.
 
    **BUILD THE REGRESSION, THEN READ WHICH PROPERTY OF THE OFFENDER YOUR NEAR-MISS LACKS.**
    Batch 52's near-miss had no terminal period, and a trailing-word regression that REQUIRED
@@ -5259,17 +5367,16 @@ so no block written before it changes verdict.
    interrupt; if you genuinely need to ask, ask the OPERATOR whether to, and put the peer's current
    state into the question.
 
-   **THE GAP IS FOUR AND PENDING IS 3** — the consumer's stamp reads `0.498.0` / `2babee86` on
-   all four fields against a distribution `VERSION` of `0.502.0`; `PC-S308-LEDGER-REVERIFY-…`
-   (`0.499.0`), `PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-…` (`0.500.0`) and
-   `PC-S308-HANDOFF-INTENT-PATTERN-…` (`0.502.0`) are the three discharged candidates it cannot
-   see, and `0.501.0` is the correction a pull must not stop short of. The consumer pulled `0.497.0 → 0.498.0` on its own before batch 50
-   opened, which is the fourth time the gap has closed in this program and the third time it
-   reopened on the very next release: **A ZERO GAP IS A STATE, NOT AN ACHIEVEMENT.** FIVE is the
-   line this file calls wide; say WIDE when the count reaches it. `0.499.0` carries
-   bootstrapping files (`ledger-reverify.sh`, `lib.sh`, the update skill's `SKILL.md`); `0.500.0`
-   carries a hook and a script. Batch 51's second test DIVERGED on the consumer's real tree at
-   rest, so the pull is REQUIRED and not merely owed — report that, and stop there.
+   **THE GAP IS ONE AND PENDING IS 2** — the consumer's stamp reads `0.502.0` / `4dc8d791` on
+   all four fields against a distribution `VERSION` of `0.503.0`; `BL-165` and `BL-166`, both at
+   `0.503.0`, are the two discharged candidates it cannot see. The consumer pulled
+   `0.498.0 → 0.502.0` on its own before batch 53 opened, which is the fifth time the gap has
+   closed in this program and the fourth time it reopened on the very next release: **A ZERO GAP
+   IS A STATE, NOT AN ACHIEVEMENT.** FIVE is the line this file calls wide; say WIDE when the
+   count reaches it. `0.503.0` carries no bootstrapping file. Batch 53's second test diverged on
+   scratch copies of the consumer's real pass-1 artifacts (28 of 28 misdiagnosed under the
+   installed validator, 0 of 28 under the shipped one), so the pull is REQUIRED and not merely
+   owed — report that, and stop there.
    **Your batch will widen the gap, which is expected and is not a reason to reorder anything.**
    Re-derive both. That is not permission to close it: a pull is operator-initiated, readiness is
    not authorization, a `PENDING` count is not a decision about WHEN, and one is never handed to a
@@ -5565,7 +5672,7 @@ so no block written before it changes verdict.
    `predicate-differential.sh` fingerprints the corpus either side of its own run for exactly this
    reason; a hand-rolled measurement has no such guard.
 
-1a. **`docs/backlog.md` IS AT 87 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
+1a. **`docs/backlog.md` IS AT 86 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
    is not blocked. That is not licence to file rather than fix — the standing correction in the
    resume block still governs — but a filing no longer costs a rotation, and rotating still means
    CLOSING, which needs a measurement.
@@ -5615,9 +5722,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 31a0b94b... after the consumer's handoff commit a0de44a99 filed two PC-S308-* candidates before batch 52 opened (was d205f502... at batch 51's close); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
-   wc -l < /tmp/live.txt    # 77 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 75 through batch 51, +2 on the two 2026-09-04 filings
-   wc -l < /tmp/unfiled.txt # 30 -- PC-S308-HANDOFF-INTENT-PATTERN-MISSES-TRAILING-TERSE-PHRASING left the set at batch 52 by being cited by BL-164 and rotated into docs/backlog.archive.md; the two 2026-09-04 filings entered it before the batch
+   md5 -q "$L"              # 90862de4... in the consumer's WORKING TREE at batch 53's close, on an uncommitted 2026-09-05 filing (f4e7ae5f... after its 0.502.0 pull rotated one id; 31a0b94b... before that); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
+   wc -l < /tmp/live.txt    # 77 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 76 after the consumer's pull rotated PC-S308-LEDGER-REVERIFY-..., +1 on the 2026-09-05 filing
+   wc -l < /tmp/unfiled.txt # 29 -- the two batch-53 ids left the set by being cited by BL-165 and BL-166 and rotated into docs/backlog.archive.md; PC-S308-RESUME-SNAPSHOT-BUDGET-ASKS-INSTEAD-OF-AUTO-TRIMMING entered it during the batch
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -6301,9 +6408,13 @@ So **the id goes in the RELEASE COMMIT MESSAGE, verbatim, for every closed entry
 `CHANGELOG.md` as well — the message is what the closer joins on, the `CHANGELOG` is what a human
 and the brief read. Citing only one of the two is the failure this paragraph exists to prevent.
 
-`named_absorbed` takes `tail -1`, the OLDEST matching commit, so re-naming an id already named by an
-earlier release does not move the reported version — it still reports the release that first named
-it, which is the correct answer.
+`named_absorbed` no longer elects a commit: it reports EVERY commit whose message names the id
+(`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:461`, the header above it records why the
+old `tail -1` was wrong), and the consumer's step 8 establishes the release from the commit that
+carries the fix. So a docs commit that names a candidate while REPORTING it does not mis-attribute
+the release, but it does appear in the list beside the release commit — batch 53's `BL-166` shows
+two commits for that reason. Keep ids out of commits that precede the release commit anyway
+(action 8); a shorter list is a clearer row.
 
 **Never run `ledger-reverify.sh` with the process cwd at the ai-dlc root.** Measured and
 recorded at `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:927-948`: a distribution-root
