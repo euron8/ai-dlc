@@ -301,6 +301,82 @@ for f in "${FILES[@]}"; do
     fi
   fi
 
+  # --- P12: a LIVE plan carries a FRESH-RESUME CHECK, run from origin/main after the docs merge ---
+  # P11 BINDS THE RE-DERIVATION AND CANNOT SEE WHERE IT LANDED. Measured at batch 52 of the
+  # ledger drain: the re-derived resume block was written, every figure re-measured, this
+  # validator green -- and the block sat on an UNMERGED branch. A fresh session resumes from
+  # `main` with one sentence and reads whatever is there, so it would have met the previous
+  # batch's block and re-scoped a shipped subject. Action 6 could not see that, because it
+  # reads the working tree and a fresh session does not; the operator's question "is the plan
+  # set for a fresh session resume?" is what caught it, which is the check that does not
+  # happen on its own -- the same shape P11 records one step earlier.
+  #
+  # WHAT THE STEP IS, so the loose grammar below has a referent: a numbered action, placed
+  # after the re-derivation action, whose SOLE job is to (1) merge the docs commit, (2) read
+  # the plan from a FRESH CHECKOUT of origin/main as a stranger, (3) re-run the derive block
+  # from there, (4) assert the next-action list names no id a commit on origin/main has
+  # already shipped, and (5) run this validator there as the floor. Steps 1 and 4 are the two
+  # the re-derivation action structurally cannot perform.
+  #
+  # THIS ARM CANNOT VERIFY THE CHECK RAN, for the reason P11 gives: an act at a point in time
+  # is not a property of the text. It binds that every live plan TELLS its executor to do it,
+  # tied to a fresh checkout or to origin/main -- the two words that separate this step from
+  # P11's, which is satisfied by a re-derivation in the working tree.
+  #
+  # FALSE-POSITIVE SET, MEASURED BEFORE SHIPPING: over docs/plans/*.md at the release that
+  # added this -- 38 plans, 2 live by the P9/P10/P11 discharge test -- the set is EXACTLY THE
+  # TWO LIVE PLANS, neither of which carried the instruction; both were given one in the same
+  # commit. Control in the same invocation: the grammar hit 0 of 38 before the edit, so that
+  # zero was a real absence. PROVEN TO FIRE on a copy of the live plan with the step stripped,
+  # driven by passing the copy's path as this script's argument.
+  #
+  # THE GRAMMAR IS LOOSE ON PURPOSE, as P3b and P11 are: any phrasing that ties resuming (or a
+  # stranger's reading) to a fresh checkout, worktree, clone or origin/main satisfies it.
+  if ! grep -qiE "$DISCHARGE_BANNER" <<<"$(head -12 "$f")"; then
+    # HERE-STRING, NOT A PIPE (I54b), for the reason P6, P9, P10 and P11 all record.
+    if ! grep -qiE '(fresh (checkout|worktree|clone|session)|origin/main)[^.]{0,200}(resum|stranger)|(resum|stranger)[^.]{0,200}(fresh (checkout|worktree|clone|session)|origin/main)' <<<"$(cat "$f")"; then
+      err "$rel" "is a LIVE plan that never tells its executor to run a FRESH-RESUME CHECK from origin/main after the docs merge. P11's re-derivation happens in the working tree; a fresh session resumes from main and reads whatever landed there. Measured at batch 52 of the ledger drain: the re-derived block was complete and this validator green while it sat on an unmerged branch, so a fresh session would have read the previous batch's block and redone the batch. Add a numbered action after the re-derivation whose sole job is to merge the docs commit, read the plan from a fresh checkout of origin/main as a stranger, re-run the derive block there, and assert the next-action list names no shipped id."
+    fi
+  fi
+
+  # --- P13: a LIVE plan ends by HANDING ITSELF to a local ai-dlc session, then stopping ---
+  # OPERATOR INSTRUCTION, GIVEN AT BATCH 52 OF THE LEDGER DRAIN, in as many words: after the
+  # plan is ready for a fresh session resume, look for a local ai-dlc session; if one is found
+  # send it "READ and FOLLOW <relative path of this plan>"; once sent, the sending session has
+  # no further work and does not communicate further with the receiver; if none is found there
+  # is nothing further to do. It is the step that turns P12's "ready to resume" into a resume
+  # that actually happens without the operator retyping the one-liner, and it has to be the
+  # LAST action because its postcondition is that the sender is finished.
+  #
+  # WHAT THE STEP MUST SAY, so the loose grammar has a referent: the target is found through
+  # ListAgents and is a LOCAL ai-dlc session (never the consumer's `graph-*` session, which
+  # operator-rulings.md forbids handing a pull to); the message is the plan's own resume
+  # one-liner; and the sender stops. The self-naming half is P10's job and is not repeated.
+  #
+  # THIS ARM CANNOT VERIFY THE SEND HAPPENED, for the reason P11 and P12 give. It binds that
+  # every live plan tells its executor to do it, keyed on the one-liner appearing within a
+  # sentence that names the session-discovery tool or a local/peer session.
+  #
+  # FALSE-POSITIVE SET, MEASURED BEFORE SHIPPING: over docs/plans/*.md at the release that
+  # added this -- 38 plans, 2 live -- the grammar hit 0 of 38 before the edit (control in the
+  # same invocation: `READ and FOLLOW` alone appears in 9), so the set is exactly the two live
+  # plans, both given the step in the same commit. Proven to fire on a copy with the step
+  # stripped, driven by passing the copy's path as this script's argument.
+  #
+  # GREP MATCHES PER LINE, AND PROSE WRAPS. The first grammar keyed the discovery tool and the
+  # one-liner within one sentence, and fired on BOTH live plans that carried the step, because
+  # the two tokens sat on different wrapped lines -- an arm that cannot pass its own subject.
+  # The text is collapsed to one line first, and the join is the SEND verb beside the
+  # one-liner (those two are always in one sentence), with the discovery tool required anywhere.
+  if ! grep -qiE "$DISCHARGE_BANNER" <<<"$(head -12 "$f")"; then
+    # HERE-STRING, NOT A PIPE (I54b), for the reason P6, P9, P10, P11 and P12 all record.
+    p13_flat="$(tr '\n' ' ' < "$f")"
+    if ! grep -qiE 'ListAgents' <<<"$p13_flat" \
+       || ! grep -qiE 'SendMessage.{0,120}READ and FOLLOW|READ and FOLLOW.{0,120}SendMessage' <<<"$p13_flat"; then
+      err "$rel" "is a LIVE plan that never tells its executor to hand the plan to a local ai-dlc session once it is ready for a fresh resume. Operator instruction at batch 52: after the fresh-resume check passes, ListAgents; if a local ai-dlc session (never a graph-* one) is found, SendMessage it exactly 'READ and FOLLOW $rel' and stop -- no further work, no further communication with the receiver; if none is found there is nothing further to do. Add it as the LAST numbered action."
+    fi
+  fi
+
   # --- P7: an instruction that ships its own opt-out --------------------------------
   # THE DEFECT, measured on this repo's own runbook before it was handed over. A section
   # told a graph session to run a consolidation pass. Beside it sat a fenced decision

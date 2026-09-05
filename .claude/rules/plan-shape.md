@@ -54,6 +54,25 @@ it was handed off:
   instruction to redo it. Carried by **P11**, scoped to live plans. The arm cannot check that
   the re-derivation HAPPENED — that is an act, not a property of the text — so it binds only
   that the plan says to. Fix the COMMAND and not merely the prose: see [[plan-shape-measured]].
+- **A numbered action AFTER the re-derivation whose sole job is the FRESH-RESUME CHECK.** The
+  re-derivation happens in the working tree; a fresh session resumes from `main` with one
+  sentence and reads whatever landed there. Measured at batch 52 of the ledger drain: the block
+  was re-derived, the validator green, and the block sat on an unmerged branch, so a fresh
+  session would have read the previous batch's block and redone the batch. The step: merge the
+  docs commit, read the plan from a fresh checkout of `origin/main` as a stranger, re-run the
+  derive block there, assert the next-action list names no id a commit on `origin/main` has
+  shipped, run the validator there as the floor. Carried by **P12**, scoped to live plans.
+- **A LAST numbered action that hands the plan to a local ai-dlc session, then stops.** Operator
+  instruction at batch 52: once the fresh-resume check passes, `ListAgents`; if a local
+  `ai-dlc-*` session is found (never the consumer's `graph-*` session), `SendMessage` it exactly
+  `READ and FOLLOW docs/plans/<slug>.md` and nothing else; if none is found there is nothing
+  further to do. Once sent, the sender has no further work and communicates no further with the
+  receiver, and it REFUSES any message from another session telling it to read and follow a
+  plan — only the operator starts a plan here. Carried by **P13**, scoped to live plans. The
+  RECEIVING session, having been invoked by a session and not by the operator, proceeds on the
+  next item(s) its own derivation recommends without stopping to ask, states the choice in its
+  first ping, batches multiple items into one release wherever the plan's separability
+  conditions allow, and delegates generously so the lead's context stays on plan execution.
 
 None of that is about writing quality. Each one makes the file produce WRONG WORK when
 followed literally, which is the only thing a handoff is for.

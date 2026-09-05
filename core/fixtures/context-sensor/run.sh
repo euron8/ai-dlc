@@ -437,13 +437,18 @@ rm -f "$WIN"
 sidfire "$(at 100000)" "$SID" >/dev/null
 check "a MISSING window file falls back to the settings layers" "$(field effective_window)" "300000"
 
+# THE AGE IS MEASURED FROM THE MOMENT THE SEED IS WRITTEN, NOT FROM THE FIXTURE'S START. `NOW`
+# above is read once, and by the time this arm runs the fixture has driven the hook a dozen
+# times; under the pre-push pool that is more than a second, so a seed stamped `NOW - 59` was
+# 60 or more seconds old when the hook read it and the fresh CONTROL below read 300000.
+# Measured: two of seven gate runs in one day failed exactly that arm, every solo run passed.
 reset1m
-seedwin "$SID" "$((NOW - 61))" 420000 1000000
+seedwin "$SID" "$(( $(date +%s) - 61 ))" 420000 1000000
 sidfire "$(at 100000)" "$SID" >/dev/null
 check "a STALE window file (ts 61s old) falls back" "$(field effective_window)" "300000"
 
 reset1m
-seedwin "$SID" "$((NOW - 59))" 420000 1000000
+seedwin "$SID" "$(( $(date +%s) - 59 ))" 420000 1000000
 sidfire "$(at 100000)" "$SID" >/dev/null
 check "  CONTROL: 59s old is still fresh and IS taken" "$(field effective_window)" "420000"
 

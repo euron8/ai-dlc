@@ -59,6 +59,10 @@ Ping the operator on any question or decision, and when this plan completes.
 
 After the merge, re-derive this plan's own resume block before stopping.
 
+Then, from a fresh checkout of origin/main, read this plan as a stranger and confirm it resumes.
+
+Then ListAgents; if a local ai-dlc session is found, SendMessage it `READ and FOLLOW` plus this plan's path, and stop.
+
 ## Where things stand
 
 Evidence: `scripts/validate-plan-shape.sh:1` is the subject of this fixture.
@@ -241,6 +245,49 @@ grep -q 'never tells its executor to re-derive' <<<"$(run "$T/p11.md")" \
 grep -q 'never tells its executor to re-derive' <<<"$(run "$T/p11b.md")" \
   && bad "P11 fired on a DISCHARGED plan — a spent record is not resumed and owes no re-derivation" \
   || ok "  and it exempts a banner-marked plan, so only live plans owe the instruction"
+
+# --- P12 a live plan says to run the FRESH-RESUME CHECK from origin/main ----------
+# P11's re-derivation happens in the working tree; a fresh session resumes from main. Measured
+# at batch 52 of the ledger drain: the block was re-derived, the validator green, and the block
+# sat on an unmerged branch. The seed deletes only the fresh-checkout sentence, so P11's
+# sentence survives and this arm has a subject P11 cannot see.
+conforming p12.md | grep -v 'fresh checkout of origin/main' > "$T/p12.md"
+grep -q 'FRESH-RESUME CHECK' <<<"$(run "$T/p12.md")" \
+  && ok "P12 fires on a live plan that never says to check the resume from a fresh checkout of origin/main" \
+  || bad "P12 silent on a plan whose re-derived block could sit on an unmerged branch — a fresh session reads the previous block"
+grep -q 'never tells its executor to re-derive' <<<"$(run "$T/p12.md")" \
+  && bad "P11 fired on the P12 seed — the two arms share a subject and one of them is vacuous" \
+  || ok "  and P11 stays quiet on it, so the two arms have separate subjects"
+{ printf -- '# Some plan — DISCHARGED\n'; conforming p12b.md | tail -n +2 | grep -v 'fresh checkout of origin/main'; } > "$T/p12b.md"
+grep -q 'FRESH-RESUME CHECK' <<<"$(run "$T/p12b.md")" \
+  && bad "P12 fired on a DISCHARGED plan — a spent record is not resumed and owes no fresh-resume check" \
+  || ok "  and it exempts a banner-marked plan"
+
+# --- P13 a live plan ends by handing itself to a local ai-dlc session -------------
+# Operator instruction at batch 52. Two conjuncts, seeded separately so the arm is proven on
+# each: the discovery tool must be named somewhere, and the send verb must sit beside the
+# one-liner. The text is collapsed before matching, so the second seed WRAPS the sentence
+# across a line break to prove a wrapped instruction still satisfies the arm.
+conforming p13.md | grep -v 'ListAgents' > "$T/p13.md"
+grep -q 'hand the plan to a local ai-dlc session' <<<"$(run "$T/p13.md")" \
+  && ok "P13 fires on a live plan that never names ListAgents" \
+  || bad "P13 silent on a plan with no session discovery — the plan is never handed on"
+conforming p13s.md | sed 's/SendMessage it `READ and FOLLOW` plus this plan.s path, and stop\./send it the one-liner and stop./' > "$T/p13s.md"
+cmp -s "$T/p13s.md" <(conforming p13s.md) && bad "FIXTURE STALE: the P13 send-verb seed matched nothing — the conforming sentence was reworded"
+grep -q 'hand the plan to a local ai-dlc session' <<<"$(run "$T/p13s.md")" \
+  && ok "P13 fires on a live plan that names ListAgents but never puts SendMessage beside the one-liner" \
+  || bad "P13 silent on a plan that discovers a session and never sends — the two conjuncts are not both load-bearing"
+# awk, not sed: a `\n` in a BSD sed replacement is a literal `n`, so the seed would not wrap and
+# the arm below would pass over a sentence that never crossed a line.
+conforming p13w.md | awk '{ sub(/SendMessage it `READ and FOLLOW`/, "SendMessage it\n`READ and FOLLOW`") } 1' > "$T/p13w.md"
+cmp -s "$T/p13w.md" <(conforming p13w.md) && bad "FIXTURE STALE: the P13 wrap seed matched nothing"
+grep -q 'hand the plan to a local ai-dlc session' <<<"$(run "$T/p13w.md")" \
+  && bad "P13 fired on a conforming plan whose send sentence WRAPS across a line — the arm matches per line and cannot pass its own subject" \
+  || ok "  and a send sentence wrapped across a line break still satisfies it (the text is collapsed before matching)"
+{ printf -- '# Some plan — DISCHARGED\n'; conforming p13b.md | tail -n +2 | grep -v 'ListAgents'; } > "$T/p13b.md"
+grep -q 'hand the plan to a local ai-dlc session' <<<"$(run "$T/p13b.md")" \
+  && bad "P13 fired on a DISCHARGED plan — a spent record is not handed on" \
+  || ok "  and it exempts a banner-marked plan"
 
 # --- empty corpus is not a pass ---------------------------------------------------
 # `for f in docs/plans/*.md` over an empty directory reads exactly like a clean run.
