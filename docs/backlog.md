@@ -4106,3 +4106,84 @@ the validator has no channel for today; write a driving receipt the moment the c
 
 verify: manual
 
+
+## BL-173 — `retro.md` Step 1 cut the retro branch from whatever ref was checked out, so a branch cut from a squash-merged feature branch carried the sprint diff a second time and its PR could not merge
+
+`PC-S305-RETRO-BRANCH-CUT-FROM-STALE-PARENT-NOT-MAIN`, filed by the reference consumer at
+sprint 305; DEFECT tier — the retro PR reported CONFLICTING at Step 7a and recovery was a hand
+merge of every file both sides touched, with content the retro had deliberately rotated
+resurrected by non-conflicting adds. `steps/retro.md:16-23` read `git checkout -b
+ai-dlc/retro/sprint-<N>` with no precondition on the ref beneath it, while `sprint-review.md:31`
+already asserts the same freshness before a review and Step 7a-post lands on the merged trunk
+with the same three commands the branch cut needed.
+
+The fix is in two places. Step 1 now lands on `main` at `origin/main` first — `git fetch origin
+main && git checkout main && git merge --ff-only origin/main`, then the `rev-list --count
+HEAD..origin/main` test that MUST read 0 — and only then cuts the branch
+(`core/skills/ai-dlc/steps/retro.md:16-40`). `core/scripts/validate-mandatory-rules.sh:557` is
+Check 7, run at Step 5c with the other six: `git rev-list --count HEAD..origin/main` must be 0,
+FAIL names the count and the remedy, SKIP when no `origin/main` ref resolves in the checkout
+and the skip is counted in the summary like checks 2, 4 and 5. It reads the LOCAL ref and does
+not fetch — a validator that reaches the network from inside a gate hangs a sandbox and a CI
+runner alike — so Step 5c fetches immediately before it.
+
+**The firing set is wider than the defect, on purpose.** Measured over the reference consumer's
+118 measurable merged retro PRs: 16 were behind `origin/main` at the branch cut, the incident
+among them; a branch cut from the trunk that main moved past before the PR opened fires too.
+The remedy the failure names is the merge GitHub performs for that class at PR time anyway, so
+the false positive costs one command, and a predicate that separated the two classes would
+need the sprint's squash commit, which no artifact this validator reads records.
+
+Fixture: `core/fixtures/retro-branch-behind-main/` drives the validator inside a seeded repo in
+both directions and kills the deleted-check, reversed-range and silent-skip mutants;
+`mandatory-rules-skip-accounting` mints the ref at the trunk so its accounting arms stay about
+checks 2/4/5.
+
+verify: sh V="${VMR:-core/scripts/validate-mandatory-rules.sh}"; [ -f "$V" ] || V="scripts/ai-dlc/validate-mandatory-rules.sh"; [ -f "$V" ] || exit 9; A="$PWD/$V"; d=$(mktemp -d) || exit 9; trap 'rm -rf "$d"' EXIT; b="$d/b"; p="$d/p"; mkdir -p "$b" "$p" || exit 9; cp "$A" "$b/validate-mandatory-rules.sh"; for s in retro-evidence cycle-commits retro-prereq audit-anchors; do printf '#!/bin/sh\nexit 0\n' > "$b/validate-$s.sh"; done; chmod +x "$b"/*.sh; g(){ git -C "$p" -c user.email=r@r -c user.name=r -c commit.gpgsign=false "$@"; }; g -c init.defaultBranch=main -c init.templateDir= init -q . >/dev/null 2>&1 || exit 9; g commit -q --allow-empty -m c0 && g branch feat && g commit -q --allow-empty -m squash && g update-ref refs/remotes/origin/main HEAD && g checkout -q feat && g commit -q --allow-empty -m leftover || exit 9; cut(){ g checkout -q -B ai-dlc/retro/sprint-900 "$1" || exit 9; }; run(){ ( cd "$p" && bash "$b/validate-mandatory-rules.sh" 900 2>&1 ); }; cut feat; W1=$(run); cut main; W2=$(run); g commit -q --allow-empty -m retro || exit 9; W4=$(run); C0=$(g rev-parse main~1) && g branch -f main "$C0" || exit 9; cut main; W3=$(run); for w in "$W1" "$W2" "$W3" "$W4"; do case "$w" in *"VALIDATE-MANDATORY-RULES:"*) ;; *) exit 9 ;; esac; done; case "$W1$W3" in *"CHECK 7: FAIL"*"CHECK 7: FAIL"*) ;; *) exit 1 ;; esac; case "$W2" in *"CHECK 7: PASS"*) ;; *) exit 1 ;; esac; case "$W4" in *"CHECK 7: PASS"*) ;; *) exit 1 ;; esac; exit 0
+
+## BL-174 — `audit-rule-files.sh` scored every `used to` as narrative drift, so a rule stating what a check is used to do was reported as the story of what the rule used to say
+
+`PC-S305-NARRATIVE-DRIFT-FALSE-POSITIVE-USED-TO`, filed by the reference consumer at sprint 305;
+NOTE tier by consequence — Class 1 is tier 2 and dispositioned by the lead, so the cost was
+per-hit triage at every retro rather than a wrong gate, and the consumer's own two non-core
+hits were both this shape. The token `used to` is the habitual past ("the step used to say
+nothing here") only when it is the clause's own verb; after a noun phrase ("a health signal
+used to clear the operation") or a form of `be` ("MUST NOT be used to satisfy an AC") it is a
+reduced passive of purpose and says nothing about the rule's history. The words after the match
+are the same infinitive in both readings, so the old regex could not tell them apart.
+
+`core/scripts/audit-rule-files.sh:365-380` now decides `used to` on the text BEFORE the match:
+a form of `be` immediately before, or an indefinite article within the four words before,
+scores as purpose; a line-initial match reads the previous scannable line, because prose wraps
+exactly there. Measured on both corpora at the same revision: the distribution's 24 hits lost
+one (`deploy-validate.md:72`, a signal used to clear an operation) and the consumer's 26 lost
+three (the same line, its `coding-conventions.md:550` wrapped `be` / `used to satisfy`, and an
+extension's `a TEL-denominated total` / `used to validate`); every habitual line in both
+corpora survived. A tense-shift marker in the window, the filing's other suggestion, was scored
+and rejected: it clears the same purpose sites and silences most of the habitual ones, because
+a rule stating what it used to say rarely says "now".
+
+**Stated limit.** A habitual line whose subject is an indefinite noun phrase ("a step used to
+say") scores clean, and a purpose line with a definite subject and no `be` ("the probe used to
+clear it MUST be absolute") still flags; neither shape occurs in either corpus today. The
+consumer's routed carry-over of its remaining core-prose findings is not moved by this entry:
+those are genuine habitual lines, and whether resident prose keeps them is a judgement
+`.claude/rules/resident-context.md` reserves.
+
+Fixture: `core/fixtures/retro-audit-scans/` seeds each shape alone and both in one file, and
+kills the restored-regex, tense-marker, always-false and no-previous-line mutants.
+
+verify: sh A="${AUDIT:-core/scripts/audit-rule-files.sh}"; [ -f "$A" ] || A="scripts/ai-dlc/audit-rule-files.sh"; [ -f "$A" ] || exit 9; A="$PWD/$A"; d=$(mktemp -d) || exit 9; trap 'rm -rf "$d"' EXIT; mkdir -p "$d/.claude/rules"; printf 'A health signal used to clear the operation MUST be an absolute probe.\n\nA rule MUST NOT be\nused to satisfy an AC.\n\nWhere the blocks used to sit, write a pointer.\n' > "$d/.claude/rules/x.md"; case "$( cd "$d" && bash "$A" --list 2>/dev/null )" in *".claude/rules/x.md"*) ;; *) exit 9 ;; esac; o=$( cd "$d" && bash "$A" 2>&1 ); case "$o" in *"NARRATIVE_DRIFT: "*) ;; *) exit 9 ;; esac; case "$o" in *"NARRATIVE_DRIFT: FLAGGED  n=[.claude/rules/x.md:6]  "*) exit 0 ;; esac; exit 1
+
+## BL-175 — `gate-validation.md` told the lead to "prefer" `--transcript-dir` inside the passage that makes the single-file form reject every cross-session adjudication
+
+`PC-S305-GATE-VALIDATION-PREFER-IT-SOFT-LANGUAGE`, filed by the reference consumer at sprint
+305; NOTE tier — prose only, and the audit's own RULE_WEAKNESS row already named the second
+site. Both `**Pass \`--transcript-dir\` too, and prefer it.**` openers
+(`core/skills/ai-dlc/steps/gate-validation.md:330` and `:1652`) sat in paragraphs whose whole
+point is that `--transcript` alone names an honest lead a forger, and "prefer" is the soft
+form Rule 18's authoring style excludes from a mandating passage. Both now read that the
+directory is MANDATORY and that the single-file invocation is not an acceptable one;
+`audit-rule-files.sh` Class 2 no longer reports the file.
+
+verify: sh G="${GV:-core/skills/ai-dlc/steps/gate-validation.md}"; [ -f "$G" ] || G=".claude/skills/ai-dlc/steps/gate-validation.md"; A="${AUDIT:-core/scripts/audit-rule-files.sh}"; [ -f "$A" ] || A="scripts/ai-dlc/audit-rule-files.sh"; [ -f "$G" ] && [ -f "$A" ] || exit 9; o="$(bash "$A" 2>&1)"; case "$o" in *"RULE_WEAKNESS: "*) ;; *) exit 9 ;; esac; l="$(grep -n -- '--transcript-dir' "$G")"; [ -n "$l" ] || exit 9; w="$(printf '%s\n' "$o" | grep RULE_WEAKNESS | grep -c -e 'gate-validation.md.*transcript-dir')" || w=0; s="$(printf '%s\n' "$l" | grep -Eiwc 'prefer|should|try to|consider|ideally|when possible|in most cases')" || s=0; m="$(printf '%s\n' "$l" | grep -Ec 'MUST|MANDATORY|SHALL')" || m=0; [ "$w" -eq 0 ] && [ "$s" -eq 0 ] && [ "$m" -ge 2 ] && exit 0; exit 1

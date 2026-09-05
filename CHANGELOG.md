@@ -15,6 +15,55 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.507.0] - 2026-09-05
+
+### `PC-S305-RETRO-BRANCH-CUT-FROM-STALE-PARENT-NOT-MAIN` — the retro branch is cut from the merged trunk, and Check 7 fails one that is behind `origin/main`
+
+`steps/retro.md` Step 1 read `git checkout -b ai-dlc/retro/sprint-<N>` with no precondition
+on the ref beneath it. A squash merge never fast-forwards the sprint's feature branch, so a
+retro branch cut from that leftover ref lacked the squash commit as an ancestor: the reference
+consumer's sprint-305 retro PR re-included the whole sprint diff against a `main` that already
+carried it, reported CONFLICTING at Step 7a, and recovery was a hand merge that resurrected
+content the retro had rotated. Step 1 now lands on `main` at `origin/main` first, with the same
+`rev-list --count HEAD..origin/main` test `sprint-review.md` §0 runs, and only then cuts the
+branch. `validate-mandatory-rules.sh` grows **Check 7** — the count must be 0, FAIL names the
+count and the remedy, SKIP when no `origin/main` ref resolves — read at Step 5c after a fetch
+the step now prescribes; the validator itself does not fetch. Measured over the consumer's 118
+measurable merged retro PRs, 16 were behind at the cut, the incident among them; a trunk cut
+that main moved past fires too, at the cost of the merge GitHub would have performed anyway.
+Fixture `retro-branch-behind-main` (ships) drives both directions and kills three mutants;
+`mandatory-rules-skip-accounting` mints the ref so its arms stay about checks 2/4/5. `BL-173`.
+
+### `PC-S305-NARRATIVE-DRIFT-FALSE-POSITIVE-USED-TO` — a purpose-shaped `used to` is no longer scored as narrative drift
+
+`audit-rule-files.sh` Class 1 matched the bare token, so "a health signal used to clear the
+operation" and "MUST NOT be used to satisfy an AC" — what a rule says today — were reported
+beside "the step used to say nothing here". The words after the match are the same infinitive
+in both readings, so the discriminator is the text before it: a form of `be` immediately
+before, or an indefinite article within the four words before, is the reduced passive of
+purpose and scores clean; a line-initial match reads the previous scannable line, because
+prose wraps exactly there. Measured on both corpora: the distribution's 24 hits lost one, the
+consumer's 26 lost three, every habitual line survived. The filing's tense-shift-marker
+alternative was scored and rejected — it clears the same sites and silences most of the genuine
+ones. `retro-audit-scans` seeds each shape and kills four mutants. `BL-174`.
+
+### `PC-S305-GATE-VALIDATION-PREFER-IT-SOFT-LANGUAGE` — `--transcript-dir` is MANDATORY, not preferred
+
+Both `**Pass \`--transcript-dir\` too, and prefer it.**` openers in `gate-validation.md` sat in
+paragraphs whose point is that the single-file form names an honest lead a forger; "prefer" is
+the soft form Rule 18 excludes from a mandating passage, and the audit's RULE_WEAKNESS row
+already named the second site. Both now say the directory is MANDATORY and `--transcript` alone
+is not an acceptable invocation. `BL-175`.
+
+### Not taken — `PC-S340-CHECK-26-READS-A-PARTIAL-RE-VERIFY-VERDICT-FILE-AS-UNADJUDICATED`
+
+Read for this batch and recommended for REJECTION as by-design, pending the operator's ruling:
+`gate-validation.md`'s escalation preamble says a re-dispatch re-derives EVERY check under a
+fresh nonce and never carries forward, cites or reconciles against a superseded dispatch, and
+the consumer's two-check re-verify plus its hand-written merged verdict file are the acts that
+rule forbids. The proposed merge script would institutionalise them. No core file changes for
+it in this release.
+
 ## [0.506.0] - 2026-09-05
 
 ### `PC-S308-LEDGER-REVERIFY-READS-ESCAPED-BACKTICKS-LITERALLY` — a `theirs_*` anchor carrying a backslash is refused with a row that says why, instead of being searched for literally and reported vacuous (`BL-172`)
