@@ -4104,9 +4104,13 @@ tab-separated row per entry (catalog, check id, expires-after, gates elapsed, he
 whenever the file was read, 2 on a refusal, never 1. The parser now carries the bracketed
 catalog as its own field instead of stripping it. `validate-gate-adjudication.sh`, in adjudicate
 mode only, asks the sibling for those rows before blocking and treats a FAIL as non-blocking
-when a row's (catalog, check id) matches the verdict's own `catalog` field and the id, or when
-the row carries no catalog and the id matches — the leniency the lifetime parser already had. A
-covered FAIL is printed as `SUPPRESSED` with the entry that covers it; the remainder block as
+when a row's (catalog, check id) matches the verdict's own `catalog` field and the id. A row
+whose entry wrote no bracket counts as `core` and nothing else: `escalations.md` makes the
+bracket mandatory, the sibling's shape arm requires only the id, and the sibling resolves ids
+against the core catalog alone, so a bare id can only have named a core check. The adversarial
+hand found the first cut let a bare `16` cover an extension check `16` in a catalog the entry
+never named — an author error buying wider coverage than the correct spelling — and that is now
+a fixture case. A covered FAIL is printed as `SUPPRESSED` with the entry that covers it; the remainder block as
 before; the all-PASS line is unchanged when nothing was suppressed. Absence fails closed and
 says which absence: no escalations file, no sibling beside the script, or a sibling exit other
 than 0 all mean no carve-out. The sibling is named in full at its two call sites so that
@@ -4122,6 +4126,30 @@ authorization) and exits 0 with `14 PASS, 1 FAIL under an in-force SUPPRESSED en
 the escalations path pointed at a missing file exits 1 and names `no-escalations-file`. The
 in-force query over that file lists exactly one of its 17 `SUPPRESSED` entries against 10
 recorded gate timestamps.
+
+**Population, measured over the consumer's whole verdict corpus, read-only.** Of 195 verdict
+files (all `catalog: core`), 86 carry a FAIL. Reconstructing `pending.md` and the gate metrics at
+the commit nearest each verdict's `generated_at` (323 commits; the metrics file is rotated, so a
+second reconstruction from the metrics blob at the same commit was run and selects the same set)
+and driving the shipped `--in-force` query: 47 had some in-force suppression at their gate and 11
+had one naming a check the verdict failed. Driving both validators on those 11 with the
+reconstructed inputs: 6 flip from exit 1 to 0; 5 stay at 1 because a second FAIL in the same
+verdict is uncovered, and on every one of the 11 the fixed side prints the `SUPPRESSED` row.
+Controls in the same run: four uncovered FAIL verdicts read 1 on both sides with no row, four
+all-PASS verdicts read 0 on both, and deleting the live `[S308-GATE3-STORY-1]` entry from a scratch
+copy returns the live case to 1. The consumer's gate-log archives record four hand adoptions of a
+suppressed Check 16 FAIL across sprints 303 and 304, one stating "the script has no suppression
+concept and the licence can only be given effect by the lead's own disposition". Every such gate
+proceeded by hand; the fix converts that adoption into a mechanical one and unblocks nothing that
+stayed blocked. Of the 17 suppressions the consumer ever filed, 15 name `llm` checks (16, 22, 11)
+and 2 name script checks (24, 30) the carve-out cannot reach, correctly.
+
+**A stated limit, pre-existing and not widened here.** The lifetime validator joins
+`**Suppresses:**` ids against the core `enforcement-map.yaml` only, so a suppression naming an
+extension check (`[extension:<id>] XVH` or the `[ext:<id>]` spelling the consumer's gate metrics
+also carry, 62 rows against 8) is refused as "not a check in the catalog" and is never listed in
+force. No such suppression exists in the consumer's history, every verdict carries `core`, and
+the join here inherits that scope rather than inventing an extension resolver.
 
 **Reader set derived, not taken from the filing.** The filing named the validator and the step
 prose; the enforcement-map posture for Check 26 and `escalations.md`'s own `SUPPRESSED` section

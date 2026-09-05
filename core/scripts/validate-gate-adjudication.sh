@@ -1012,8 +1012,13 @@ if not E:
 # --- the SUPPRESSED carve-out (see the shell header above the python block) ---------------
 # A FAIL is non-blocking ONLY when an in-force SUPPRESSED entry names this check in THIS
 # verdict's catalog. The rows come from validate-suppression-lifetime.sh --in-force, which is
-# the one owner of "in force"; a row whose catalog is empty (the field is optional there)
-# matches on the id alone, a row whose catalog is spelled matches only its own catalog.
+# the one owner of "in force". A row whose bracket is spelled matches only its own catalog. A
+# row with NO bracket — escalations.md makes the bracket mandatory, but the sibling's shape
+# arm only requires the id — counts as `core` and nothing else: the sibling resolves ids
+# against the core catalog alone, so a bare id can only ever have named a core check, and an
+# author error that drops the required field must not buy wider coverage than writing it
+# correctly would. Measured before this clause existed: a bare `16` covered an extension
+# check `16` in a catalog the entry never named.
 in_force_status = os.environ.get("GA_IN_FORCE_STATUS", "not-asked")
 in_force = {}
 for raw in os.environ.get("GA_IN_FORCE", "").splitlines():
@@ -1021,12 +1026,12 @@ for raw in os.environ.get("GA_IN_FORCE", "").splitlines():
     if len(parts) < 5:
         continue
     cat, cid_s, expires, elapsed, header = parts
-    in_force.setdefault((cat, cid_s), (expires, elapsed, header))
+    in_force.setdefault((cat or "core", cid_s), (expires, elapsed, header))
 catalog = str(V.get("catalog", ""))
 suppressed = []
 blocking = []
 for cid in fails:
-    hit = in_force.get((catalog, cid)) or in_force.get(("", cid))
+    hit = in_force.get((catalog, cid))
     if hit:
         expires, elapsed, header = hit
         suppressed.append(cid)
