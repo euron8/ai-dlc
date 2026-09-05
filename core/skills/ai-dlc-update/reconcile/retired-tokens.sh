@@ -48,6 +48,17 @@
 # OUTPUT  (TAB-delimited, the same contract as its sibling detectors)
 #   RETIRED-CONTRACT-TOKEN<TAB><core-path><TAB><token>
 #
+# STDERR
+#   A run that opened no core file says so, in one NOTE line, because its stdout is
+#   byte-identical to a run that scanned every CLASSIFY file and found nothing. The
+#   0.410.0 -> 0.412.0 reference-consumer pull bucketed every path ALREADY-AT-THEIRS,
+#   the CLASSIFY set was empty, and this script exited 0 with zero rows -- read as a
+#   clean scan. Its siblings carried a NOTE for the same state; this one did not. A
+#   run that opened files and matched nothing states its denominator for the same
+#   reason. A run that produced rows says nothing on stderr: the rows are the answer.
+#   Both program callers (`apply.sh`, `emit-report.sh`) discard stderr and read the
+#   rows only; the NOTE is for the operator running step 3a-ii by hand.
+#
 # EXIT
 #   0  always (a detector reports; the caller decides)
 
@@ -68,29 +79,66 @@ toks() {
   | sort -u
 }
 
-bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null \
-| awk -F'\t' 'NF>=4 && $4 ~ /CLASSIFY/ {print $2"\t"$3}' | sort -u \
-| while IFS="$(printf '\t')" read -r cp cons; do
-    [ -n "${cp:-}" ] || continue
-    [ -z "$ONLY" ] || [ "$ONLY" = "$cp" ] || continue
+# The limit a quiet run must restate, because the operator reads the RUN and never this
+# header. Every NOTE below carries it.
+LIMIT='A consumer path upstream never had is outside this detector BY DESIGN (there is no retirement to detect) -- this zero does not cover it.'
 
-    ours="$CONSUMER/$cons"
-    [ -f "$ours" ] || continue
+# The subject set is captured ONCE, outside the loop, so the run can count what it
+# opened: a counter kept in a pipeline's last stage is lost to its subshell.
+ROWS="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null || true)"
 
-    b="$(git -C "$DIST" show "${BASE}:${cp}" 2>/dev/null || true)"
-    t="$(git -C "$DIST" show "${THEIRS}:${cp}" 2>/dev/null || true)"
-    [ -n "$b" ] && [ -n "$t" ] || continue
+# preclassify.sh emitting NOTHING is an unresolvable input (a bad ref, an unreadable
+# dist), not a pull that touched no file. Refuse to read it as clean: "no rows" and
+# "no retired token" are the same stdout.
+if [ -z "$ROWS" ]; then
+  echo "retired-tokens: preclassify.sh produced no rows for ${BASE}..${THEIRS} -- refusing to report clean, because 'no rows' and 'no retired token' are the same output. $LIMIT" >&2
+  exit 0
+fi
 
-    # base tokens MINUS theirs tokens = what upstream retired.
-    # Intersected with ours = what the consumer still speaks.
-    retired="$(comm -23 <(printf '%s\n' "$b" | toks) <(printf '%s\n' "$t" | toks))"
-    [ -n "$retired" ] || continue
+SUBJECT="$(printf '%s\n' "$ROWS" | awk -F'\t' 'NF>=4 && $4 ~ /CLASSIFY/ {print $2"\t"$3}' | sort -u)"
 
-    comm -12 <(printf '%s\n' "$retired") <(toks < "$ours") \
-    | while IFS= read -r tok; do
-        [ -n "$tok" ] || continue
-        printf 'RETIRED-CONTRACT-TOKEN\t%s\t%s\n' "$cp" "$tok"
-      done
-  done
+listed=0; opened=0; retiring=0; rows=""
+while IFS="$(printf '\t')" read -r cp cons; do
+  [ -n "${cp:-}" ] || continue
+  [ -z "$ONLY" ] || [ "$ONLY" = "$cp" ] || continue
+  listed=$((listed + 1))
+
+  ours="$CONSUMER/$cons"
+  [ -f "$ours" ] || continue
+
+  b="$(git -C "$DIST" show "${BASE}:${cp}" 2>/dev/null || true)"
+  t="$(git -C "$DIST" show "${THEIRS}:${cp}" 2>/dev/null || true)"
+  [ -n "$b" ] && [ -n "$t" ] || continue
+  opened=$((opened + 1))
+
+  # base tokens MINUS theirs tokens = what upstream retired.
+  # Intersected with ours = what the consumer still speaks.
+  retired="$(comm -23 <(printf '%s\n' "$b" | toks) <(printf '%s\n' "$t" | toks))"
+  [ -n "$retired" ] || continue
+  retiring=$((retiring + 1))
+
+  while IFS= read -r tok; do
+    [ -n "$tok" ] || continue
+    rows="$rows$(printf 'RETIRED-CONTRACT-TOKEN\t%s\t%s' "$cp" "$tok")
+"
+  done < <(comm -12 <(printf '%s\n' "$retired") <(toks < "$ours"))
+done < <(printf '%s\n' "$SUBJECT")
+
+if [ -n "$rows" ]; then
+  printf '%s' "$rows"
+  exit 0
+fi
+
+# A ZERO THAT NEVER OPENED A FILE MUST NOT READ LIKE A ZERO THAT SCANNED EVERYTHING.
+# Two quiet states, and they are different findings. Opened nothing: the pull listed no
+# CLASSIFY file (every path ALREADY-AT-THEIRS, the measured case), or listed some and
+# none was readable on all three sides -- either way this run scanned no core file and
+# is SILENT about retired contract tokens, which is not a finding of none. Opened some
+# and matched nothing: a real result, stated with its denominator.
+if [ "$opened" -eq 0 ]; then
+  echo "retired-tokens: NOTE -- this pull listed $listed CLASSIFY file(s)${ONLY:+ at $ONLY} and opened NONE, so NO core file was scanned. This run is SILENT about retired contract tokens, not a finding of none. $LIMIT" >&2
+else
+  echo "retired-tokens: NOTE -- $opened CLASSIFY file(s) opened, $retiring carrying a token upstream retired; no consumer reference to a retired token. $LIMIT" >&2
+fi
 
 exit 0

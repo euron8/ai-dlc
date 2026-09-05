@@ -555,6 +555,11 @@ prose is itself generated rather than composed.
    token list on the worklist item itself, so the obligation arrives with the work.
    Note what it does NOT catch: a consumer path upstream never had (there is no
    retirement to detect). A clean result is not proof the merge is semantically whole.
+   **Read its stderr, not only its rows.** A pull whose every path is already at
+   theirs lists no `CLASSIFY` file, so this scan opens nothing and its zero rows are
+   byte-identical to a full scan that matched nothing; the NOTE it prints in that
+   state — and the denominator it prints when it opened files and matched nothing —
+   is the difference between a scan that found nothing and a scan that never ran.
 3a-iii. **Retired contract shapes in consumer layer files** (cheap, deterministic
    — no agents): run `reconcile/retired-layer-contract.sh <dist-repo> <base-sha>
    <theirs-ref> <consumer-root>`. `retired-tokens.sh` above scans only `CLASSIFY`

@@ -138,7 +138,14 @@ fi
 # leaves a pipeline starting with `|`, so the mutant dies on a syntax error and
 # produces no output, which reads as "did not fire" and passes the assertion for
 # entirely the wrong reason. The first version of this fixture did exactly that.
-MUTANT="$WORK/mutant.sh"
+# The mutant is built in a copy of the WHOLE reconcile directory. The detector resolves
+# `preclassify.sh` beside itself, and a lone copy in $WORK had no sibling: it read zero
+# rows on every input and was silent for THAT reason, so this arm scored a kill the
+# strip never earned. The stderr control below is what exposes it -- a mutant that ran
+# says it opened one file; one with no sibling says preclassify produced no rows.
+MDIR="$WORK/mutant-strip"
+cp -R "$(dirname "$DETECT")" "$MDIR" || exit 2
+MUTANT="$MDIR/$(basename "$DETECT")"
 sed "s|grep -vE '\^\[\[:space:\]\]\*#'|cat|" "$DETECT" > "$MUTANT" || exit 2
 if cmp -s "$DETECT" "$MUTANT"; then
   echo "FIXTURE ERROR: mutation matched nothing -- the comment-strip line moved" >&2
@@ -148,6 +155,7 @@ fi
 bash -n "$MUTANT" 2>/dev/null || {
   echo "FIXTURE ERROR: mutant does not parse -- it would fail for the wrong reason" >&2
   exit 2; }
+[ -f "$MDIR/preclassify.sh" ] || { echo "FIXTURE ERROR: mutant has no preclassify.sh beside it" >&2; exit 2; }
 # Re-seed assertion 1's input: a genuinely severed contract, which the real
 # detector catches.
 cat > "$CONS/scripts/ai-dlc/validate-artifact-budget.sh" <<'OURS'
@@ -167,6 +175,141 @@ if grep -q 'RETIRED-CONTRACT-TOKEN' <<<"$out"; then
 else
   ok "MUTATION: without the strip, THEIRS' own doc-comment masks a real severed contract"
 fi
+# The silence above must be the RIGHT silence: the mutant opened the file and derived an
+# empty retired set, and its own stderr says so. A mutant that never ran says something
+# else, or nothing.
+merr="$(bash "$MUTANT" "$DIST" "$BASE_SHA" "$THEIRS_SHA" "$CONS" 2>&1 >/dev/null)"
+if grep -q '1 CLASSIFY file(s) opened, 0 carrying' <<<"$merr"; then
+  ok "MUTATION control: the mutant's silence is a scan that opened 1 file and retired nothing, by its own stderr"
+else
+  bad "MUTATION control: the mutant's silence is unexplained -- it may never have scanned: ${merr:-<no stderr>}"
+fi
+
+# --- 5-8. A ZERO THAT OPENED NO FILE SAYS SO, AND ONLY THEN --------------------
+# Measured on the reference consumer's 0.410.0 -> 0.412.0 pull: every path bucketed
+# ALREADY-AT-THEIRS, the CLASSIFY set was empty, and the detector exited 0 with zero
+# rows -- byte-identical on stdout to a full scan that matched nothing. The NOTE on
+# stderr is the only thing that separates the two, so each quiet state gets a
+# predicate, the loud state gets one asserting SILENCE on stderr, and each predicate
+# is scored against the wrong fix that would satisfy the others:
+#   p5  opened nothing (rows exist, none CLASSIFY)  -> NOTE says opened NONE
+#   p6  opened a file, matched nothing              -> NOTE states the denominator
+#   p7  matched (rows on stdout)                    -> stderr EMPTY
+#   p8  preclassify produced no rows at all         -> refusal, not a clean NOTE
+# Every predicate takes the script to drive, re-seeds its own consumer, and asserts
+# a PRESENCE, so a copy that emits nothing fails by construction.
+PRE="$(dirname "$DETECT")/preclassify.sh"
+seed_at_theirs() { cp "$DIST/$CORE_PATH" "$CONS/scripts/ai-dlc/validate-artifact-budget.sh"; }
+seed_repointed() {
+  cat > "$CONS/scripts/ai-dlc/validate-artifact-budget.sh" <<'OURS'
+#!/bin/bash
+TMPROOT="$(mktemp -d)"
+CHAN="$TMPROOT/chan"
+pool_report() { printf 'OVER\n' >> "$CHAN"; }
+OURS
+}
+seed_severed() {
+  cat > "$CONS/scripts/ai-dlc/validate-artifact-budget.sh" <<'OURS'
+#!/bin/bash
+CHAN="$ROOT/.chan"
+pool_report() { printf 'OVER\n' >> "$ROOT/.chan"; }
+OURS
+}
+# stderr only; stdout discarded. `2>&1 >/dev/null` in that order.
+err_of() { bash "$1" "$DIST" "$2" "$THEIRS_SHA" "$CONS" 2>&1 >/dev/null; }
+out_of() { bash "$1" "$DIST" "$2" "$THEIRS_SHA" "$CONS" 2>/dev/null; }
+
+p5() {
+  seed_at_theirs
+  o="$(out_of "$1" "$BASE_SHA")"; e="$(err_of "$1" "$BASE_SHA")"
+  [ -z "$(printf '%s' "$o" | grep . || true)" ] \
+    && grep -q 'opened NONE, so NO core file was scanned' <<<"$e" \
+    && ! grep -q 'produced no rows' <<<"$e"
+}
+p6() {
+  seed_repointed
+  o="$(out_of "$1" "$BASE_SHA")"; e="$(err_of "$1" "$BASE_SHA")"
+  [ -z "$(printf '%s' "$o" | grep . || true)" ] \
+    && grep -q '1 CLASSIFY file(s) opened, 1 carrying' <<<"$e" \
+    && ! grep -q 'opened NONE' <<<"$e"
+}
+p7() {
+  seed_severed
+  o="$(out_of "$1" "$BASE_SHA")"; e="$(err_of "$1" "$BASE_SHA")"
+  grep -q 'RETIRED-CONTRACT-TOKEN.*\$ROOT/\.chan' <<<"$o" && [ -z "$e" ]
+}
+p8() {
+  seed_at_theirs
+  o="$(out_of "$1" "$THEIRS_SHA")"; e="$(err_of "$1" "$THEIRS_SHA")"
+  [ -z "$(printf '%s' "$o" | grep . || true)" ] \
+    && grep -q 'produced no rows' <<<"$e" \
+    && ! grep -q 'NOTE --' <<<"$e"
+}
+
+# The world p5 drives must PRODUCE preclassify rows, or the wrong fix keyed on "no rows"
+# is indistinguishable from the right one keyed on "opened nothing". Assert that first.
+seed_at_theirs
+nrows="$(bash "$PRE" "$DIST" "$BASE_SHA" "$THEIRS_SHA" "$CONS" 2>/dev/null | grep -c .)" || nrows=0
+if [ "$nrows" -gt 0 ]; then
+  ok "control: the ALREADY-AT-THEIRS world yields $nrows preclassify row(s), none CLASSIFY"
+else
+  echo "FIXTURE ERROR: the ALREADY-AT-THEIRS world produced no preclassify rows -- p5 cannot discriminate" >&2
+  exit 2
+fi
+
+if p5 "$DETECT"; then ok "a run that opened no core file says so on stderr, with stdout empty"
+else bad "opened nothing and said nothing -- the vacuous scan reads as a clean one"; fi
+if p6 "$DETECT"; then ok "a run that opened a file and matched nothing states its denominator"
+else bad "scanned-and-clean carries no denominator, or claims it opened nothing"; fi
+if p7 "$DETECT"; then ok "a run that matched says nothing on stderr: the rows are the answer"
+else bad "a NOTE was printed beside real rows, or the rows are gone"; fi
+if p8 "$DETECT"; then ok "preclassify producing no rows is refused, not reported as a clean NOTE"
+else bad "an unresolvable input reads as a clean scan"; fi
+
+# --- 9. MUTANTS: each wrong fix flips exactly its own predicate -------------------
+# Build as a copy, refuse a sed that dies or matches nothing, refuse a copy that does not
+# parse. Then score p5..p8 and compare the whole vector: a mutant that flips more than
+# its own cell means two predicates are entangled; one that flips none means the
+# predicate cannot fire.
+# The mutant lives in a COPY OF THE WHOLE DIRECTORY, not a lone file: the detector finds
+# `preclassify.sh` beside itself, and a copy with no sibling reads zero rows on every
+# world, so every mutant scores the same vector and the score is about the harness.
+# Measured on the first cut of this block: five mutants, one vector, 0001.
+mkmut() {  # name sed-expr -> path on stdout
+  d="$WORK/mut-$1"
+  cp -R "$(dirname "$DETECT")" "$d" || { echo "FIXTURE ERROR: could not copy the reconcile dir for $1" >&2; exit 2; }
+  m="$d/$(basename "$DETECT")"
+  sed "$2" "$DETECT" > "$m" || { echo "FIXTURE ERROR: mutation $1 DID NOT APPLY (sed died)" >&2; exit 2; }
+  cmp -s "$DETECT" "$m" && { echo "FIXTURE ERROR: mutation $1 matched nothing -- its anchor moved" >&2; exit 2; }
+  bash -n "$m" 2>/dev/null || { echo "FIXTURE ERROR: mutant $1 does not parse" >&2; exit 2; }
+  [ -f "$d/preclassify.sh" ] || { echo "FIXTURE ERROR: mutant $1 has no preclassify.sh beside it" >&2; exit 2; }
+  printf '%s\n' "$m"
+}
+vec() { v=""; for p in p5 p6 p7 p8; do if "$p" "$1"; then v="${v}1"; else v="${v}0"; fi; done; printf '%s' "$v"; }
+score() {  # name path expected-vector
+  got="$(vec "$2")"
+  if [ "$got" = "$3" ]; then ok "MUTATION $1: flips exactly its own predicate ($3)"
+  else bad "MUTATION $1: expected $3 got $got (p5 p6 p7 p8)"; fi
+}
+
+if [ "$(vec "$DETECT")" = "1111" ]; then ok "unmutated control: every predicate holds"
+else bad "unmutated control: $(vec "$DETECT") -- a mutant score below is meaningless"; fi
+
+# NOTE deleted outright: the pre-fix script. p5 alone falls.
+score "no-vacuity-note" "$(mkmut nonote 's|^  echo "retired-tokens: NOTE -- this pull listed|  : "|')" "0111"
+# Wrong fix 1: key the vacuity NOTE on preclassify emitting nothing, rather than on
+# opening nothing. The measured incident HAD rows (every path ALREADY-AT-THEIRS), so
+# this fix is silent on its own motivating case and prints the denominator NOTE with
+# a zero in it instead. p5 alone falls.
+score "keyed-on-no-rows" "$(mkmut norows 's|^if \[ "\$opened" -eq 0 \]; then|if [ -z "$ROWS" ]; then|')" "0111"
+# Wrong fix 2: one NOTE for every quiet run, worded as "opened nothing". True for the
+# incident, false for a scan that opened files and matched nothing. p6 alone falls.
+score "denominator-collapsed" "$(mkmut collapse 's|^  echo "retired-tokens: NOTE -- \$opened CLASSIFY file(s) opened,|  echo "retired-tokens: NOTE -- opened NONE, listed $listed, $opened opened,|')" "1011"
+# Wrong fix 3: a NOTE beside real rows. Drop the early exit after the rows print so the
+# denominator NOTE follows every match. p7 alone falls.
+score "note-beside-rows" "$(mkmut fallthrough '/^  printf '"'"'%s'"'"' "\$rows"$/{n;s|^  exit 0$|  :|;}')" "1101"
+# Refusal neutered: an unresolvable input falls through to the vacuity NOTE. p8 alone falls.
+score "refusal-neutered" "$(mkmut norefuse 's|^  echo "retired-tokens: preclassify.sh produced no rows|  : "|')" "1110"
 
 echo ""
 if [ "$fails" -eq 0 ]; then
