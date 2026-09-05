@@ -4167,3 +4167,37 @@ remain: a session opening under a persisted flag that ends "What do you need?" g
 `templates/QUICKSTART.md.template` still says three pause points and predates this change.
 
 verify: sh h=${H:-core/hooks/ai-dlc-continue.sh}; [ -f "$h" ] || exit 9; d=$(mktemp -d); u(){ jq -nc --arg t "$1" '{message:{role:"user",content:$t}}'; }; a(){ jq -nc --arg t "$1" '{message:{role:"assistant",content:[{type:"text",text:$t}]}}'; }; { u ask; a $'Checks are green.\n\nContinue the remaining checks, or pause given the pattern?'; } >"$d/q.jsonl"; { u ask; a $'Continue the remaining checks, or pause given the pattern?\n\nContinuing now.'; } >"$d/m.jsonl"; printf '## Pipeline Position\ncurrent_step_file: gate-validation.md\n' >"$d/snap.md"; run(){ p="$d/p$1"; mkdir -p "$p/_bmad-output"; [ "$3" = 1 ] && touch "$p/_bmad-output/pipeline-paused.flag"; [ "$4" = 1 ] && cp "$d/snap.md" "$p/_bmad-output/pipeline-snapshot.md"; jq -nc --arg t "$d/$2" '{transcript_path:$t,session_id:"r"}' | CLAUDE_PROJECT_DIR="$p" bash "$h" 2>/dev/null; }; f1=$(run 1 q.jsonl 1 0); a2=$(run 2 m.jsonl 1 0); f2=$(run 3 q.jsonl 0 1); rm -rf "$d"; jq -e 'has("systemMessage") and (has("decision")|not)' <<<"$f1" >/dev/null 2>&1 || exit 1; jq -e 'has("systemMessage")' <<<"$a2" >/dev/null 2>&1 && exit 1; jq -e '.decision=="block" and (.reason|test("AskUserQuestion"))' <<<"$f2" >/dev/null 2>&1 || exit 1; exit 0
+
+
+
+## BL-171 — Check 26's `SUPPRESSED` carve-out accepts an entry whose operator citation no transcript verifies, so a lead can write its own gate passage into `docs/escalations/pending.md`
+
+Distribution-internal, no `PC-` id; DEFECT tier — the acquittal is reachable on every consumer
+running `0.504.0` or later, and the file it keys on is one the lead may edit while every other
+edit is denied. Found by the batch-55 adversarial hand while attacking `BL-169`, and deliberately
+not fixed there.
+
+`validate-suppression-lifetime.sh` admits a `SUPPRESSED` entry as in force when its
+`**Operator authorization:**` line carries an ISO timestamp and a quote; nothing compares the
+quote to anything. `validate-escalation-resolution.sh` runs `validate-steering-budget.sh --cite`
+for `RESOLVED` and `OVERRIDDEN` and for those statuses only. `escalations.md` said the suppression
+citation received "the identical verification" as those; the grammar was identical and the
+verification absent, and the sentence now says so. `0.505.0` closes the guard's half: the sibling
+forwards the authorization line verbatim as a sixth row field, and
+`ai-dlc-gate-remediation-guard.sh`, already a declared `--cite` site with a `transcript_path` in
+its input, verifies it and subtracts nothing on a quote the corpus does not carry. The gate's
+half is open: `validate-gate-adjudication.sh` reads the same rows, carries no transcript, and
+passes the FAIL. Driven on the shipped gate-adjudication seed: a well-formed in-force entry with
+no transcript corpus anywhere exits 0 with the `SUPPRESSED` line.
+
+Shape of the fix: give Check 26's validator a transcript channel (the lead runs it from the
+session whose `transcript_path` the Stop and PreToolUse hooks already receive; a pointer file the
+pause hook writes is the existing pattern), verify each covering row's sixth field the way the
+guard does, fail closed on an unverifiable quote with the status named beside the block, and
+re-seed the gate-adjudication fixture's S1 with a corpus carrying its quote plus a forged twin.
+The sibling cannot host the check: naming the citation helpers there makes it an I103 site, and
+a sibling verifying unconditionally would omit every in-force row for the caller that has no
+transcript. The receipt below is manual because the discriminating input is a transcript corpus
+the validator has no channel for today; write a driving receipt the moment the channel exists.
+
+verify: manual
