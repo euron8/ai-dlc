@@ -37,9 +37,105 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 51 SHIPPED AS `v0.500.0` AND WAS CORRECTED BY `v0.501.0`. THE GAP IS THREE AND PENDING IS TWO. THE CONSUMER FILED A NEW `PC-S308-*` CANDIDATE DURING THE BATCH; ONE VERIFIED SIBLING REMAINS UNFILED; PLUS `BL-161` AND `BL-163` WITH NO `PC-` ID.
+### BATCH 52 SHIPPED AS `v0.502.0`. THE GAP IS FOUR AND PENDING IS THREE. THREE `PC-S308-*` CANDIDATES REMAIN UNFILED, TWO OF THEM FILED 2026-09-04; PLUS `BL-159`, `BL-161` AND `BL-163` WITH NO `PC-` ID.
 
-This block replaces the batch-51 record below it. Every figure here was re-derived on 2026-09-04
+This block replaces the batch-51 record below it. Every figure here was re-derived on 2026-09-05
+after the merge, against the working tree with the controls in the same invocation; re-derive
+them again rather than reading them.
+
+**`VERSION` IS `0.502.0`, SO BATCH 53 RELEASES AS `0.503.0`.** Re-derive `VERSION` and add one.
+Batch 52 merged at `4dc8d791` (PR #627; release commit `b2e1da74` first on the branch, then
+five fix and docs commits after it, none naming the id), closing
+`PC-S308-HANDOFF-INTENT-PATTERN-MISSES-TRAILING-TERSE-PHRASING` as `BL-164` and rotating it
+(archive 76 → 77, live 88 → 87). `named_absorbed()` resolves the id to exactly one
+commit at `0.502.0`, impossible-id control 0 (`PC-S999-NEVER` returns docs commits on this
+channel and is not that control). No correction release. The operator scoped this batch from a
+marked recommendation over three siblings on consequence: a silent guard failure in the
+subsystem batch 49 repaired.
+
+**THE SHAPE WAS CHOSEN BY CENSUS, AND THE FILING'S OWN REMEDY WAS RIGHT THIS TIME.** Over every
+operator-prose row the consumer has ever committed (3379 unique, incident present as the
+positive control) the filing's final-sentence alternative admits exactly two rows the shipped
+pattern missed, both requests; the obvious wider form, any message ending in the word, admits
+fifteen with five denials or questions, and is refuted by name. Driven through the shipping
+predicate on a copy of the consumer's real log, the incident session flips NOT-PENDING →
+PENDING (`log-request`) and no other session moves. The old whole-field alternative was
+subsumed by the new one's start-of-field branch and REMOVED: zero verdicts change.
+
+**ALL THREE HANDS DELIVERED BEFORE THE MERGE, EVERY PAYLOAD TRUNCATED AT ~16000 CHARACTERS,
+EACH RECOVERED BY ASKING FOR THE TAIL BY NAME.** Five payloads in all. The fixture hand
+(worktree) found m25's transcript kill had no control in its own channel and made the near-miss
+the consumer's verbatim curly-apostrophe row; collected by cherry-pick and `cmp -s`. The scope
+hand found `[.!?]` opens on abbreviation and list-marker periods, that grep's `$` is end of
+LINE so a multi-line message routed on any line ending in the terse form through the transcript
+and answer readers, that I94(c) hand-listed the branch-text readers and omitted the PATTERN
+reader `ai-dlc-handoff-pending.sh`, and that `steps/route.md` Step 0 restates the entry-token
+predicate in prose. The adversary built a trailing-word regression that REQUIRES a period and it
+passed the receipt AND the fixture's behavioural near-miss, because the near-miss had no period;
+two noun-mention widenings passed everything; the dead alternative was locked in by m25's
+control; and m25's STALE message named the wrong cause. Fixed before the merge: both readers now
+collapse newlines to pause.sh's shape ((g5), m26, 6c and a per-line mutant); I94(c) binds each
+reader by the variable its jq line feeds, proved on a worktree in both directions; the
+punctuated real denial is the receipt's third row and a seed in both fixtures; three noun seeds;
+m25's control is the verb phrase and the bare word is asserted ALLOWED under the copy. **A
+NEAR-MISS ONE PROPERTY SHORT OF THE OFFENDER DISCRIMINATES AGAINST NOTHING THAT REQUIRES THAT
+PROPERTY** — now a bullet in `fixture-mutants.md`.
+
+**MY FIRST PROBE OF THE NEW I94(c) ARM WAS INSUFFICIENT AND READ LIKE A DEAD ARM.** It mutated
+one of the reader's two jq lines; the other still fed `$_schema` and the arm was correctly
+satisfied. Mutate the SUBJECT'S predicate to zero, assert the pre-mutation count is non-zero,
+and add a positive control that the validator is reading the probe tree at all.
+
+**THE CONSUMER SIDE IS MEASURED AND THE SECOND TEST DIVERGES TODAY.** Installed (`0.498.0`,
+byte-identical to the pre-fix schema and all three hooks) against shipped, read-only, on
+`/Users/n8/git/graph`: the incident session (`14a97e8b`, its row at `2026-09-05T01:54:16Z`)
+reads NOT-PENDING under the installed declaration and PENDING under the shipped one, on a
+rest state. The pull is REQUIRED, not merely owed. `0.502.0` carries no bootstrapping file (a
+schema, two hooks, two fixtures, one validator arm). The consumer's porcelain read 2 before and
+after every phase, both pipeline-state files written by its own session; the ledger md5
+(`31a0b94b…`) did not move during the batch; no write to the consumer by this session. A pull
+is operator-initiated; readiness is not authorization.
+
+**THE LEDGER MOVED BEFORE THE BATCH, ON TWO CONSUMER FILINGS.** md5 `d205f502…` → `31a0b94b…`
+at the consumer's `a0de44a99` (2026-09-04 22:00 -0400, "commit harness bookkeeping at handoff"),
+which filed `PC-S308-HANDOFF-INTENT-PATTERN-MISSES-TRAILING-TERSE-PHRASING` (taken) and
+`PC-S308-RULE-11-AMBIGUITY-QUESTIONS-HAVE-NO-MANDATED-PRESENTATION-TOOL`. **Live 75 → 77, cited
+46 → 47, unfiled 31 → 30**, archive 150, partition control 0. Goal partition
+**20 DISCHARGED / 27 in flight / 30 untouched**, overlap 3,
+discharged-but-invisible 0, TERMINAL **38**. Gap FOUR (`0.498.0` installed, `0.502.0` shipped),
+PENDING 3 (`PC-S308-LEDGER-REVERIFY-…` at `0.499.0`,
+`PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-…` at `0.500.0`,
+`PC-S308-HANDOFF-INTENT-PATTERN-…` at `0.502.0`; `0.501.0` discharges nothing). Say WIDE at
+five. The consumer sits on `ai-dlc/carry-over/pool-pnl-backlog-triage`, not `main`, and `main`
+is NOT an ancestor of its HEAD; peer `graph-5f` was idle throughout and its one new escalation
+was already RESOLVED.
+
+**TELL THE CONSUMER, IN THE NEXT BRIEF,** that `0.502.0` makes "I'm solving this issue.
+handoff." and any message ending in a terse handoff after sentence punctuation a request on
+all three readers, and that a message QUOTING such a row on its LAST line will arm the guard
+(one blocked Stop with remedy text; quote it mid-message or paraphrase); that the pull must
+still reach `0.501.0` or later and not stop at `0.500.0`; and that every `0.499.0`, `0.500.0`
+and `0.501.0` item in the batch-51 block below still stands (orphan fragments at 3222–3225,
+`ENTRY-SWALLOWED` signals, the 19 stale derivations and 8 refused commands, the two prose lines
+beginning with the fence token, the demoted `text` fences).
+
+**THREE `PC-S308-*` CANDIDATES ARE UNFILED FOR BATCH 53 — REPORT ALL THREE AND ASK.** Their
+status lines and receipts WERE read by batch 52 and all three receipts exit 0 on `core/` paths:
+`PC-S308-CHECK-5-DERIVE-STORIES-REMEDY-CANNOT-CREATE-AN-ENTRY` (2026-09-04; the remedy prose
+at `gate-validation.md:493` prescribes a write `sprint-status.sh derive-stories` cannot do —
+its loop at `:1049` iterates existing entries only; the filing's option (b), a create mode,
+contradicts the tool's own header policy at `:59`, so the fix is the prose);
+`PC-S308-RULE-11-AMBIGUITY-QUESTIONS-HAVE-NO-MANDATED-PRESENTATION-TOOL` (2026-09-04; a
+SKILL.md rule change with no possible enforcer and a resident-context cost); and the standing
+`PC-S308-VALIDATE-ADVERSARIAL-CONVERGENCE-SCOPE-GREW-MISFIRES-ON-PASS-1` (2026-09-03; `:675`
+counts pass 1's own CRITICALs, arm D at `:1617` reports a false FREEZE/CUT; consumers falsify
+`prior_scope` to dodge it). Batch 52's marked recommendation ranked CHECK-5 above SCOPE-GREW
+above RULE-11 on consequence; re-derive before ranking. `BL-159`, `BL-161`, `BL-163` (no `PC-`
+id) rank below all three.
+
+### BATCH 51 SHIPPED AS `v0.500.0` AND WAS CORRECTED BY `v0.501.0` — THE BLOCK ABOVE REPLACES THIS ONE. TAKE THE STATE FROM THERE.
+
+This block was the batch-52 resume record. It replaced the batch-51 record below it. Every figure here was re-derived on 2026-09-04
 after the merges, against the working tree with the controls in the same invocation; re-derive
 them again rather than reading them.
 
@@ -4923,16 +5019,27 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), THEN REPORT THE TWO UNFILED
-   `PC-S308-*` CANDIDATES AND ASK BEFORE SCOPING BATCH 52.** Both are in the resume block: the
-   NEW filing `PC-S308-CHECK-5-DERIVE-STORIES-REMEDY-CANNOT-CREATE-AN-ENTRY` (2026-09-04, its
-   status line and receipt UNREAD by batch 51 — read them first) and the standing sibling
-   `PC-S308-VALIDATE-ADVERSARIAL-CONVERGENCE-SCOPE-GREW-MISFIRES-ON-PASS-1` (2026-09-03,
-   reproduced). Put a marked recommendation in the question. Batch 51 is SHIPPED — `v0.500.0`
-   at `2dca4815` (PR #622), `PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT`
-   closed as `BL-162` and rotated, corrected by `v0.501.0` at `e06836ca` (PR #624), `BL-163`
-   filed; batch 50 is SHIPPED — `v0.499.0` at `13502c45` (PR #619), `BL-160`, `BL-161`. Do not
-   re-scope onto any of them. **Check the delivery gap BEFORE
+1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), THEN REPORT THE THREE UNFILED
+   `PC-S308-*` CANDIDATES AND ASK BEFORE SCOPING BATCH 53.** All three are in the resume block
+   with their status lines and receipts already read: `PC-S308-CHECK-5-DERIVE-STORIES-REMEDY-CANNOT-CREATE-AN-ENTRY`
+   (2026-09-04), `PC-S308-RULE-11-AMBIGUITY-QUESTIONS-HAVE-NO-MANDATED-PRESENTATION-TOOL`
+   (2026-09-04) and the standing `PC-S308-VALIDATE-ADVERSARIAL-CONVERGENCE-SCOPE-GREW-MISFIRES-ON-PASS-1`
+   (2026-09-03). Put a marked recommendation in the question. Batch 52 is SHIPPED — `v0.502.0`
+   at `4dc8d791` (PR #627), `PC-S308-HANDOFF-INTENT-PATTERN-MISSES-TRAILING-TERSE-PHRASING`
+   closed as `BL-164` and rotated, no correction release; batch 51 is SHIPPED — `v0.500.0`
+   at `2dca4815` (PR #622), `BL-162`, corrected by `v0.501.0` at `e06836ca` (PR #624), `BL-163`;
+   batch 50 is SHIPPED — `v0.499.0` at `13502c45` (PR #619), `BL-160`, `BL-161`. Do not
+   re-scope onto any of them.
+
+   **BUILD THE REGRESSION, THEN READ WHICH PROPERTY OF THE OFFENDER YOUR NEAR-MISS LACKS.**
+   Batch 52's near-miss had no terminal period, and a trailing-word regression that REQUIRED
+   one passed the receipt and the fixture's behavioural arm — caught only by a byte-lock mutant.
+   A receipt and a fixture that together constrain two messages are blind to any widening that
+   leaves those two alone: seed the declaration's own NEGATIVE claims too.
+
+   **ASK WHAT A NEW ALTERNATIVE SUBSUMES.** Batch 52's final-sentence alternative made the old
+   whole-field one dead code, and a mutant control silently came to depend on the dead code.
+   Remove what is subsumed, and move the control to a seed the mutation does not touch. **Check the delivery gap BEFORE
    reading the resume block's figure for it**: batch 50 opened on a resume block that said gap
    ONE when the consumer had already pulled it to ZERO.
 
@@ -5144,10 +5251,11 @@ so no block written before it changes verdict.
    interrupt; if you genuinely need to ask, ask the OPERATOR whether to, and put the peer's current
    state into the question.
 
-   **THE GAP IS THREE AND PENDING IS 2** — the consumer's stamp reads `0.498.0` / `2babee86` on
-   all four fields against a distribution `VERSION` of `0.501.0`; `PC-S308-LEDGER-REVERIFY-…`
-   (`0.499.0`) and `PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-…` (`0.500.0`) are the two discharged
-   candidates it cannot see, and `0.501.0` is the correction a pull must not stop short of. The consumer pulled `0.497.0 → 0.498.0` on its own before batch 50
+   **THE GAP IS FOUR AND PENDING IS 3** — the consumer's stamp reads `0.498.0` / `2babee86` on
+   all four fields against a distribution `VERSION` of `0.502.0`; `PC-S308-LEDGER-REVERIFY-…`
+   (`0.499.0`), `PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-…` (`0.500.0`) and
+   `PC-S308-HANDOFF-INTENT-PATTERN-…` (`0.502.0`) are the three discharged candidates it cannot
+   see, and `0.501.0` is the correction a pull must not stop short of. The consumer pulled `0.497.0 → 0.498.0` on its own before batch 50
    opened, which is the fourth time the gap has closed in this program and the third time it
    reopened on the very next release: **A ZERO GAP IS A STATE, NOT AN ACHIEVEMENT.** FIVE is the
    line this file calls wide; say WIDE when the count reaches it. `0.499.0` carries
@@ -5499,9 +5607,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # d205f502... after the consumer's story gate filed PC-S308-CHECK-5-DERIVE-STORIES-... during batch 51 (was ae45394b... through batch 50); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
-   wc -l < /tmp/live.txt    # 75 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 74 through batch 50, +1 on the batch-51 filing
-   wc -l < /tmp/unfiled.txt # 29 -- held: PC-S308-VALIDATE-ARTIFACT-DERIVATIONS-INDENTED-FENCE-BLIND-SPOT left the set at batch 51 by being cited by BL-162 and rotated into docs/backlog.archive.md, and PC-S308-CHECK-5-DERIVE-STORIES-... entered it
+   md5 -q "$L"              # 31a0b94b... after the consumer's handoff commit a0de44a99 filed two PC-S308-* candidates before batch 52 opened (was d205f502... at batch 51's close); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
+   wc -l < /tmp/live.txt    # 77 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 75 through batch 51, +2 on the two 2026-09-04 filings
+   wc -l < /tmp/unfiled.txt # 30 -- PC-S308-HANDOFF-INTENT-PATTERN-MISSES-TRAILING-TERSE-PHRASING left the set at batch 52 by being cited by BL-164 and rotated into docs/backlog.archive.md; the two 2026-09-04 filings entered it before the batch
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -5509,10 +5617,11 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 75 LIVE CANDIDATES, 46 CITED, 29 UNFILED** — re-derived after batch 51's
-   merge at `2dca4815` (md5 `d205f502…`, archive 150; batch 50's close read 74 / 45 / 29 at
-   `ae45394b…`, then batch 51's citation moved one id from unfiled to cited and the consumer
-   filed one new candidate in the same window, so unfiled held). Batch 49's close read 75 / 45
+   **THE BASELINE IS 77 LIVE CANDIDATES, 47 CITED, 30 UNFILED** — re-derived after batch 52's
+   merge at `4dc8d791` (md5 `31a0b94b…`, archive 150; batch 51's close read 75 / 46 / 29 at
+   `d205f502…`, then the consumer filed two candidates before batch 52 opened and batch 52's
+   citation moved one of them from unfiled to cited, so unfiled rose by one). Batch 50's close
+   read 74 / 45 / 29 at `ae45394b…`. Batch 49's close read 75 / 45
    / 30 at `2730455d…`, then the consumer's `0.497.0 → 0.498.0` pull rotated one cited id into
    its archive and batch 50's citation moved one id from unfiled to cited. Batch 48's close read
    78 / 48 / 30 at `0dd318bd…`, and the consumer's `0.492.0 → 0.497.0` pull then rotated four
