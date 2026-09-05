@@ -40,6 +40,13 @@
 # rejecting the habit outright would only move the failure from silent to loud without helping
 # anyone. Do not write receipts to satisfy the parser; write them and let it cope.
 #
+# THE SUBSTRING IS LITERAL AND HAS NO ESCAPE MECHANISM. Backticks and quotes go bare inside the
+# double quotes. An anchor carrying a backslash is refused as NEEDS-REVIEW rather than searched
+# for literally, because the same spelling has meant a markdown escape in one entry and the
+# defect text itself in another, and a literal search on the first shape reports a fixed entry
+# as vacuous forever. Text that genuinely contains a backslash is anchored on a backslash-free
+# neighbour or written as `verify: sh`. The refusal sits at the `theirs_*` parse site below.
+#
 # An entry with NO `verify:` line is left to hand-review, exactly as today — it is not
 # emitted. An entry already annotated `ADOPTED UPSTREAM` is closed and skipped.
 #
@@ -1198,6 +1205,42 @@ while IFS="$(printf '\t')" read -r label ord directive; do
         emit NEEDS-REVIEW "$label" "unresolved: malformed verify: $directive"
         continue
       fi
+      # A BACKSLASH IN THE ANCHOR IS REFUSED, NOT INTERPRETED. The substring is matched with
+      # `grep -F`, so every byte of it is literal and this grammar has no escape mechanism. A
+      # markdown author reflexively writes a backslash before a backtick inside prose, and a
+      # receipt written that way is searched for WITH the backslash: found at neither ref, so
+      # `theirs_has` reported "vacuous predicate" -- the wrong reason -- on an entry upstream had
+      # just fixed, and `theirs_lacks` on the same spelling reports still-live forever. Measured
+      # on the reference consumer: its entry for the resume-snapshot budget carried exactly that
+      # receipt and read NEEDS-REVIEW "absent at BOTH" while the bare substring was present at
+      # base and gone at theirs.
+      #
+      # REFUSED RATHER THAN UNESCAPED, because the SAME spelling has meant the opposite in the
+      # same ledger: an earlier entry there anchored `theirs_has` on a shell printf whose
+      # backslashes WERE the defect text, and that receipt closed correctly under the literal
+      # reading. The token cannot say which the author meant, so the reader does not guess; the
+      # distribution's own `scripts/backlog-reverify.sh` made the same choice for its `has` and
+      # `lacks` verbs. The cost is stated in the row: an anchor that genuinely contains a
+      # backslash is re-anchored on a backslash-free neighbour or written as `verify: sh`.
+      #
+      # THE PATH FIELD IS HELD TO THE SAME RULE, AND FOR A WORSE REASON. A markdown-escaped path
+      # (`route\_notes.md`) resolves at neither ref, so it falls to the basename fallback below,
+      # whose `awk -v` strips one level of escaping -- and the escaped path then silently resolves
+      # to the real file and produces a verdict byte-identical to a correctly spelled one. The
+      # anchor guard refuses to guess; a path guard that guessed beside it would close live
+      # entries. Refused first, so the fallback never sees a backslash.
+      case "$path" in
+        *\\*)
+          emit NEEDS-REVIEW "$label" "unresolved: the path '$path' contains a backslash, which this grammar does not interpret. Paths are matched literally against the tree at theirs; a markdown-escaped underscore or dot resolves nowhere directly and would otherwise be guessed at by basename. Write the path bare."
+          continue
+          ;;
+      esac
+      case "$sub" in
+        *\\*)
+          emit NEEDS-REVIEW "$label" "unresolved: the anchor \"$sub\" contains a backslash, which this grammar does not interpret. Substrings are matched literally, so a markdown-escaped backtick or quote is searched for WITH its backslash, is found at neither ref, and the entry reads vacuous or still-live forever whatever upstream did. Write backticks and quotes bare inside the double quotes. If the text you mean really contains a backslash, anchor on a backslash-free neighbour or write the predicate as 'verify: sh'."
+          continue
+          ;;
+      esac
       if ! theirs_has_path "$path"; then
         # Filed in the consumer's install layout rather than dist-relative. Retry by basename.
         matches="$(theirs_basename_matches "${path##*/}")"

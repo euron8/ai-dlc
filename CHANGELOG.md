@@ -15,6 +15,67 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.506.0] - 2026-09-05
+
+### `PC-S308-LEDGER-REVERIFY-READS-ESCAPED-BACKTICKS-LITERALLY` — a `theirs_*` anchor carrying a backslash is refused with a row that says why, instead of being searched for literally and reported vacuous (`BL-172`)
+
+The reference consumer's entry for the resume-snapshot budget carried a `theirs_has` receipt
+whose backticks were markdown-escaped, as an author writes them inside prose. `ledger-reverify.sh`
+passed the substring to `grep -F` with the backslashes in it, found it at neither ref, and
+reported `NEEDS-REVIEW  vacuous predicate: … absent at BOTH base and theirs` — on an entry whose
+bare substring was present at base and gone at theirs, the `0.504.0` close that release names.
+The verdict was silent in the direction that keeps an absorbed entry open forever, and its
+reason sent the operator to the entry body rather than to the receipt's spelling.
+
+The filing offered two readings and asked upstream to choose. The reader now **refuses** any
+anchor carrying a backslash rather than unescaping it, because the consumer's own archive holds
+the same spelling meaning the opposite: `PC-S302-…-LITERAL-BACKSLASHES` anchored on a shell
+printf whose backslash-backtick pairs WERE the defect text, and that receipt closed correctly
+under the literal reading. The token cannot say which the author meant; the distribution's own
+`scripts/backlog-reverify.sh` already made the same choice for `has` / `lacks`. The row names
+the backslash, says the grammar has no escape mechanism, and gives the remedy: write backticks
+and quotes bare; anchor text that genuinely contains a backslash on a backslash-free neighbour,
+or write the predicate as `verify: sh`. The whole quoted run is tested, not its first anchor.
+**The path field is held to the same rule**, found by the batch-56 adversarial hand: a
+markdown-escaped path (`route\_notes.md`) resolves at neither ref and falls to the basename
+fallback, whose `awk -v` strips the backslash and finds the real file, so the escaped receipt
+produced a verdict byte-identical to the correct one — a guess in the direction that closes
+live entries. A refused receipt no longer counts toward the `RECEIPTS-UNDECIDED` tally. The
+reader's header and `ai-dlc-update` step 3f state the rule.
+
+**Measured on the consumer's ledger as it stood before it repaired the receipt** (scratch copy,
+installed `0.504.0` reader against this one, `cmp -s` control that they differ): 123 rows both
+sides, no status moved, two details moved — that row, and the tally, which counts nine
+`theirs_has` receipts instead of ten. The consumer's history holds seven distinct
+backslash-bearing receipts (six `theirs_has`, one `theirs_lacks`, from the batch-56 census hand);
+two survive today, both in its archive — the closed `PC-S302` one and a regex-shaped
+`theirs_lacks`, which the same rule now refuses instead of reporting still-live forever — and
+its live ledger carries none. **The stated cost**: the `PC-S302` shape loses its mechanical
+receipt and is told to re-anchor. An unescaping reader's false-positive population at
+`origin/main` before this batch: 78 `core/` files carry a literal backslash-backtick pair, of 494
+carrying a backtick. **A rendering limit, not fixed here**: `emit-report.sh` prints every detail
+into an unfenced markdown region, so a rendered refusal row shows the anchor with its backslash
+consumed while the sentence beside it names it; the raw ledger line is the operator's source.
+
+The `ledger-reverify` fixture seeds the shapes the consumer's ledger has carried — the escaped
+anchor, the literal-backslash anchor, a regex anchor, a two-anchor receipt whose second anchor
+carries the backslash, an escaped double quote, an escaped path, an escaped anchor on a path
+that resolves nowhere — beside the same text with its backticks bare and the same path spelled
+bare, both of which must close, and an `sh` receipt carrying a backslash, which must still be
+evaluated; asserts the DETAIL and the remedy, not only the status, since the old behaviour was
+also a `NEEDS-REVIEW` row; and kills six mutants on a ten-entry ledger cut from the seed: each
+guard disarmed, an unescaping reader, a backtick-only guard, a backtick-and-dot guard, and a
+first-anchor-only guard — the last being the adversarial hand's BLOCKER, which passed the
+receipt and the fixture as first built and manufactured a close on the two-anchor shape.
+`BL-172`'s receipt drives the shipping reader over the same ten shapes and rejects every one of
+those readers, a guard that keeps the literal search when it matches at base, a guard sited
+after path resolution, a row without its remedy, and a guard that refuses every verb (the
+scope hand's find: it would silence fifteen of the consumer's thirty-six live `sh` receipts).
+
+**Bootstrapping note for the consumer.** `ledger-reverify.sh` is a file the pull itself runs, so
+the consumer's INSTALLED reader classifies the pull that delivers this fix. That is safe today
+because its live ledger carries no backslash anchor; re-measure that before the pull.
+
 ## [0.505.0] - 2026-09-05
 
 ### `PC-S308-RULE-11-AMBIGUITY-QUESTIONS-HAVE-NO-MANDATED-PRESENTATION-TOOL` — a Rule 11(a) question is put with `AskUserQuestion` and sets no pause flag, and the Stop hook notices a question that went out as prose on both sides of the flag (`BL-170`)

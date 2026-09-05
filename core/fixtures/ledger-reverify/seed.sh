@@ -128,6 +128,23 @@ git -C "$DIST" commit -q -m 'docs(ledger): record PC-S906-TWO-NAMING-COMMITS-NOT
 # --- base: neither marker present ---
 printf '# SKILL\nrule one\nrule two\n' > "$SK"
 printf '0.100.0\n' > "$DIST/VERSION"
+# THE BACKSLASH SUBJECT, and the three shapes the reference consumer's own ledger has carried.
+# Line 2 is prose with BARE backticks, present here and gone at theirs: a receipt quoting it
+# with markdown-escaped backticks is the filed defect, and the same receipt written bare is the
+# near-miss control. Line 3 carries a LITERAL backslash-backtick pair, the shell-printf shape an
+# earlier consumer entry anchored on where the backslashes WERE the defect text; theirs drops
+# them. Line 4 is the text a regex-shaped anchor is aimed at, kept identical at both refs.
+# printf's `\\` yields one backslash and `%%` one percent sign, so the file holds exactly
+# `_base_ \`%s\`` on line 3 -- asserted by the seed rather than trusted.
+RT="$DIST/core/skills/ai-dlc/steps/route.md"
+mkdir -p "$(dirname "$RT")"
+printf '# route\nReply `trim` to have me trim it to its budget.\n_base_ \\`%%s\\`\nversion: 9.9.9\n' > "$RT"
+grep -qF -- '_base_ \`%s\`' "$RT" || { echo 'seed: route.md line 3 is not the literal backslash-backtick pair' >&2; exit 1; }
+# THE PATH-FIELD SUBJECT: a file whose name carries an underscore, so a markdown author may
+# write it `route\_notes.md`. Its token is present here and gone at theirs; a correctly spelled
+# receipt on it closes, an escaped one must be refused rather than resolved by basename.
+RN="$DIST/core/skills/ai-dlc/steps/route_notes.md"
+printf '# notes\nTHE_DEFECT_TOKEN lives here at base\n' > "$RN"
 git -C "$DIST" add -A
 git -C "$DIST" commit -qm base
 BASE="$(git -C "$DIST" rev-parse HEAD)"
@@ -163,6 +180,10 @@ git -C "$DIST" commit -qm 'release: v0.102.0'
 
 # --- theirs: an unrelated change, VERSION moves on to 0.103.0 ---
 printf '#!/bin/sh\necho thing\necho more\n' > "$DIST/core/skills/ai-dlc/validate-thing.sh"
+# route.md at theirs: the bare-backtick prose is GONE (the fix the escaped receipt should have
+# closed on), the backslashes on line 3 are gone (the shell-printf fix), the version line stays.
+printf '# route\nStep 0a trims the snapshot itself.\n_base_ %%s\nversion: 9.9.9\n' > "$RT"
+printf '# notes\nfixed at theirs\n' > "$RN"
 printf '0.103.0\n' > "$DIST/VERSION"
 git -C "$DIST" add -A
 git -C "$DIST" commit -qm theirs
@@ -746,6 +767,107 @@ consumer. It must report STILL-LIVE, and the reset is reported as ENTRY-SWALLOWE
 entry above.
 
 verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-ESCAPED-BACKTICK — a receipt whose backticks are markdown-escaped
+
+THE FILED DEFECT. Read with bare backticks the substring is present at base and gone at
+theirs, a textbook close; written with a backslash before each backtick it is found at
+neither ref. The reader must refuse the anchor and say why, not report the predicate vacuous.
+
+verify: theirs_has core/skills/ai-dlc/steps/route.md "Reply \`trim\` to have me trim it to its"
+
+---
+
+## PC-FIXTURE-BARE-BACKTICK — the same receipt with its backticks bare, the near-miss control
+
+Backticks themselves are not the problem. This one closes, which is also the proof that the
+seed's base and theirs discriminate on this text.
+
+verify: theirs_has core/skills/ai-dlc/steps/route.md "Reply `trim` to have me trim it to its"
+
+---
+
+## PC-FIXTURE-LITERAL-BACKSLASH — the anchor's backslashes ARE the source text, the stated limit
+
+The shell-printf shape: route.md line 3 carries this literally at base and loses the backslashes
+at theirs, so a literal reading would close it correctly. It is refused anyway, because the
+reader cannot tell this spelling from the escaped one above, and the row tells the author to
+re-anchor or write `sh`. If this arm ever fails because an escape mechanism was built, update
+the arm deliberately; do not restore the literal search.
+
+verify: theirs_has core/skills/ai-dlc/steps/route.md "_base_ \`%s\`"
+
+---
+
+## PC-FIXTURE-REGEX-ANCHOR — a regex written into a fixed-string grammar
+
+The reference consumer's archive carries one of these. The text it aims at is at both refs;
+searched literally the anchor matches nothing anywhere, so `theirs_lacks` would read still-live
+forever. A backslash is a backslash whatever it precedes: this one is refused like the others.
+
+verify: theirs_lacks core/skills/ai-dlc/steps/route.md "^version: 9\.9\.9$"
+
+---
+
+## PC-FIXTURE-SECOND-SUBSTRING — two anchors, and only the SECOND carries the backslash
+
+THE BATCH-56 ADVERSARIAL HAND'S CASE. A guard that tests only the first substring passes every
+single-anchor seed and then manufactures a CLOSE-CANDIDATE here: the first anchor is at both
+refs, the second is the literal pair that theirs drops, so a first-only guard lets the run
+reach the close. The whole quoted run is what the rule covers.
+
+verify: theirs_has core/skills/ai-dlc/steps/route.md "version: 9.9.9" "_base_ \`%s\`"
+
+---
+
+## PC-FIXTURE-ESCAPED-QUOTE — a backslash before a double quote, the other escape a markdown author writes
+
+Not a backtick and not a dot, so a guard narrowed to the escapes the other seeds happen to use
+lets this one through and it reads vacuous again.
+
+verify: theirs_has core/skills/ai-dlc/steps/route.md "to have me \"trim\" it"
+
+---
+
+## PC-FIXTURE-ESCAPED-PATH — the PATH field markdown-escaped, which the basename fallback would guess right
+
+`route\_notes.md` resolves at neither ref, so it falls to the basename fallback, whose `awk -v`
+strips the backslash and finds the real file — a verdict byte-identical to the correctly
+spelled receipt below, on a path the author never wrote. Refused instead.
+
+verify: theirs_has core/skills/ai-dlc/steps/route\_notes.md "THE_DEFECT_TOKEN"
+
+---
+
+## PC-FIXTURE-CLEAN-PATH — the same receipt with its path spelled bare, the control
+
+The underscore is not what is refused. This one closes.
+
+verify: theirs_has core/skills/ai-dlc/steps/route_notes.md "THE_DEFECT_TOKEN"
+
+---
+
+## PC-FIXTURE-ESCAPED-ON-MISSING-PATH — an escaped anchor on a path that resolves nowhere
+
+The guard sits BEFORE path resolution. Sited after it, the unresolvable path would pre-empt the
+backslash reason and the author would fix the path, re-run, and only then learn about the
+anchor. The near-miss is the no-such-file entry above, whose anchor is clean and whose row
+must still say the path does not resolve.
+
+verify: theirs_has core/skills/ai-dlc/steps/no-such-step.md "Reply \`trim\` to have me"
+
+---
+
+## PC-FIXTURE-SH-WITH-BACKSLASH — the escape hatch the refusal row offers, pinned
+
+The refusal tells the author to write text that genuinely contains a backslash as `sh`. A guard
+that refused every verb carrying a backslash would silence that remedy and, measured on the
+reference consumer, fifteen of its thirty-six live `sh` receipts with it. This one exits 0 and
+must read STILL-LIVE.
+
+verify: sh case 'a\b' in *\\*) exit 0 ;; *) exit 1 ;; esac
 
 ---
 
