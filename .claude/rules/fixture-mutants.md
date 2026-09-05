@@ -73,6 +73,12 @@ paths:
 - **Never seed from what the reader accepts.** Seed from what the real producer
   emits. A seed derived from the reader's accept-set proves the reader accepts
   its own grammar and nothing else, and it stays green through a change to both.
+- **A near-miss must carry every property a feared regression would KEY on.** A
+  near-miss one property short of the offender discriminates against nothing that
+  requires that property. Measured: a regex near-miss ending without a period
+  passed a trailing-word regression that REQUIRED one, in the receipt and in the
+  battery, caught only by a byte-lock mutant. Build the regression, then read which
+  property of the offender the near-miss lacks, and seed a second near-miss that has it.
 - **A fixture whose tree cannot EXPRESS the defect proves nothing.** Check the
   seed can actually reach the branch under test, exercise a layout-conditional
   resolver against every root shape it claims to handle, and give the unit a
