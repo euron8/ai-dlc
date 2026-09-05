@@ -4101,7 +4101,21 @@ seeded in-force entry beside a FAIL verdict. Also recorded from the same review,
 across three passes of one gate trips it; and the caller's `refused:` branch may be unreachable
 because every sibling exit-2 condition keys on inputs the caller resolved itself.
 
-verify: manual
+**Taken in batch 55 of the ledger drain**, batched with `BL-170` under the separability
+conditions. The guard now asks the sibling `--in-force` after the guarded-root test, joins its
+rows on the verdict's `catalog` with a bare bracket counting as `core` only, subtracts the
+covered checks, allows and logs `GATE_REMEDIATION_SUPPRESSED` when nothing remains, and denies
+naming both sets otherwise; every absence fails closed with its status in the reason, including
+a sibling that predates the mode. The sibling costs about 0.66s over the consumer's 389KB
+escalations file, so the answer is cached at `_bmad-output/.gate-remediation-in-force`, keyed on
+the live nonce and the size and mtime of the escalations file, the metrics file and the sibling,
+declared transient. Measured on a read-only copy of the consumer: on its live pass
+(`implementation-20260905T172547Z`, one FAIL, `16`, covered by `[S308-GATE3-STORY-1]`) the
+installed guard denies and the fixed one allows, against a known-positive pass where both deny.
+The receipt drives the shipped seed on five shapes because a single allow shape cannot separate
+the catalog-blind, bare-wildcard and fail-open wrong fixes. The two side notes above stand.
+
+verify: sh h=core/hooks/ai-dlc-gate-remediation-guard.sh; s=core/fixtures/gate-remediation-deny/seed.sh; [ -f "$h" ] && [ -f "$s" ] || exit 9; a=_bmad-output/planning-artifacts/s302/test-strategy.md; d(){ w=$(bash "$s" "$1") || exit 9; o=$(printf '{"session_id":"r","tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$w/$a" | CLAUDE_PROJECT_DIR="$w" AI_DLC_GATE_METRICS="" bash "$h" 2>/dev/null); g=$(grep -c GATE_REMEDIATION_SUPPRESSED "$w/_bmad-output/pipeline-continuation-log.md" 2>/dev/null) || g=0; rm -rf "$w"; }; d suppressed; [ -z "$o" ] && [ "$g" -gt 0 ] || exit 1; for c in suppressed-wrongcat suppressed-bare suppressed-partial suppressed-nosibling; do d "$c"; case "$o" in *'"deny"'*) ;; *) exit 1;; esac; done; exit 0
 
 
 ## BL-170 — Rule 11(a) named no presentation mechanism, so an ambiguity question went out as the last line of a recap and the operator read it as narration; the Stop hook's block reason then steered the lead to the pause flag instead of the tool
