@@ -256,6 +256,55 @@ grep -q 'NEVER CREATES AN ENTRY' <<<"$out3" \
   && ok "a run that resolves its entries neither exits 3 nor prints the clause" \
   || bad "a resolving run took the zero-entry branch (rc=$rc1) or printed its clause"
 
+# ---- 44-46: THE THREE OTHER ZERO-ENTRY STATES, and the clause must be silent in all of them.
+# `0 entries parsed` is reached by five distinct states and only two of them — a `stories:` key
+# holding nothing but comments, and no `stories:` key at all — mean "this envelope declares no
+# story". The other three have different repairs, so a clause keyed on the entry count is not
+# merely imprecise: it prescribes the wrong action, and for the sprint-mismatch case it
+# contradicts the per-view line printed three lines above it.
+nc() { # $1 = label, $2 = out, $3 = rc, $4 = why the clause is wrong here
+  grep -q 'NEVER CREATES AN ENTRY' <<<"$2" \
+    && bad "the clause printed for $1 — $4" \
+    || ok "the clause is withheld for $1 (it exits $3, and the repair is not this one)"
+}
+
+# 44: the LIST form. `parse_story_entries` calls this a FINDING, not an empty result: the mapping
+# IS populated, in the one shape no reader accepts. "Populate the mapping first" is wrong twice.
+RL="$WORK/rl"; mkc "$RL" 'sprint: 42
+status: in_progress
+stories:
+  - id: story-42-1
+    status: draft' 'field: priority'
+seed_stories "$RL"
+out_l="$(run "$RL")"; rc_l="$(arc)"
+[ "$rc_l" -eq 3 ] && ok "a LIST-form stories mapping still exits 3" \
+                  || bad "the list form exited $rc_l, not 3"
+nc "a list-form \`stories:\` mapping" "$out_l" "$rc_l" "the mapping IS populated, in a shape no reader accepts"
+
+# 45: a canonical holding ANOTHER sprint, with the target named explicitly. The per-view line
+# already says `holds sprint 41, not 42 — not derived`; a clause telling the reader to populate
+# sprint 42's mapping contradicts it in the same output.
+RS="$WORK/rs"; mkc "$RS" 'sprint: 41
+status: in_progress
+stories:
+  story-41-1:
+    status: draft' 'field: priority'
+seed_stories "$RS"
+out_s="$(run "$RS" --sprint 42)"; rc_s="$(arc)"
+[ "$rc_s" -eq 3 ] && ok "a canonical holding another sprint still exits 3 under --sprint" \
+                  || bad "the sprint-mismatch case exited $rc_s, not 3"
+nc "a canonical holding another sprint" "$out_s" "$rc_s" "it contradicts the per-view line printed beside it"
+
+# 46: NO canonical on disk. The repair is `roll`, which writes the envelope; nothing can be
+# populated into a file that does not exist.
+RN="$WORK/rn"; mkc "$RN" 'sprint: 42' 'field: priority'
+rm -f "$RN/_bmad-output/implementation-artifacts/sprint-status.yaml"
+seed_stories "$RN"
+out_n="$(run "$RN" --sprint 42)"; rc_n="$(arc)"
+[ "$rc_n" -eq 3 ] && ok "no canonical on disk still exits 3 under --sprint" \
+                  || bad "the no-canonical case exited $rc_n, not 3"
+nc "no canonical on disk" "$out_n" "$rc_n" "the repair is \`roll\`, and nothing can be written into a file that does not exist"
+
 # ---- 14 & 15: EXIT 4 — a story file resolved and yielded no readable field at all
 R4="$WORK/r4"; mkc "$R4" 'sprint: 42
 status: in_progress
@@ -497,6 +546,23 @@ else
   grep -q -- 'writes the entry from the story file' "$STEPS/gate-validation.md" 2>/dev/null \
     && bad "the gate still describes derive-stories as writing the ENTRY from the story file — it writes VALUES into an entry that already exists" \
     || ok "the gate no longer describes the mode as writing the entry itself"
+  # THE NEGATIVE GREP IS A LITERAL AND IT IS NOT A COVERAGE CLAIM. The same wrong promise restated
+  # in new words — "the derive will lay the entry down for you" — passes both arms above. That is
+  # a stated limit, not a gap to close by enumerating wordings: a list of phrasings goes vacuous on
+  # the first paraphrase and reads as though it were exhaustive. The PRESENCE arm is what carries
+  # the correction; this one only stops the exact sentence coming back.
+  #
+  # ---- 47 & 48: THE CONFIRMATION TOKEN IS `--check`'s, NOT THE WRITE'S. The same bullet says
+  # Check 5 runs the read-only mode, so a remedy citing `N value(s) written` cites a mode the
+  # reader has just been told not to run — and the write is the wrong confirmation on its own
+  # terms: handed a WRONG transcription it rewrites it from the story file and exits 0, so the
+  # number that was supposed to confirm the entry is the number produced by silently replacing it.
+  grep -q -- '0 drifted key(s)' "$STEPS/gate-validation.md" 2>/dev/null \
+    && ok "the remedy confirms the hand-written entry with \`--check\`'s own token (\`0 drifted key(s)\`)" \
+    || bad "the remedy names no read-only confirmation token — the reader is left to pick a mode"
+  grep -q -- '0 value(s) written' "$STEPS/gate-validation.md" 2>/dev/null \
+    && bad "the remedy cites the WRITE mode's token as the confirmation — that mode overwrites a wrong transcription and exits 0" \
+    || ok "the remedy does NOT cite the write mode's token as a confirmation"
 fi
 
 # ---- the run itself is a control
