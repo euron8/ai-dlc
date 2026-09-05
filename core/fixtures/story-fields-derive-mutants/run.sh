@@ -77,7 +77,13 @@ expect_set check-writes 1 'check WROTE to the envelope' \
 
 # M2 — exit 3 collapses into the success path. "Matched no story files" becomes clean, which is
 # the vacuous green every consumer implementation of this join has shipped at least once.
-expect_set exit3-becomes-clean 2 'resolved no story file exited|exit 3 printed no explanation' \
+# FIVE, and it is a fan-out rather than an entanglement: the branch this deletes is the sole
+# emitter of the exit code, the headline and the zero-entry clause, and TWO envelopes reach it —
+# one carrying an unresolvable entry, one carrying no entry at all. Deleting an emitter takes
+# every fact emitted from it. M16 isolates the clause and M17 isolates the byte-comparison, so
+# neither of the two zero-entry cells is proven only by this total knock-out. The zero-entry
+# cmp arm stays GREEN here, correctly: removing the branch stops it reporting, not writing.
+expect_set exit3-becomes-clean 5 'resolved no story file exited|exit 3 printed no explanation|entry-less envelope exited|zero-entry exit-3 line does not name|does not say the mode cannot create an entry' \
   's@^    if files_matched == 0:@    if False:@'
 
 # M3 — exit 4 collapses. Distinct from M2 and that is the point: "found nothing to read" and
@@ -178,6 +184,24 @@ expect_set entry-set-not-union 1 'distinct count is not a union' \
 # gate must not call. TWO reds because `--check` has two summaries and they are built separately.
 expect_set check-drops-entry-count 2 'check FAIL prints no entry count|check PASS prints no entry count' \
   's@entr%s declared@entr%s@g'
+
+# M16 — the zero-entry clause is keyed off. The headline and the exit code are untouched, so the
+# run still reports "matched no story files (exit 3) — 0 entries parsed": true, and read by a
+# session sent here to repair a stale entry as a resolution near-miss rather than as "this mode
+# cannot do what you were told to run it for". ONE red, and it is the clause arm alone — the
+# near-miss arms assert the clause's ABSENCE on an envelope that carries an entry, and it is still
+# absent there, which is what makes them a near-miss rather than a second copy of this cell.
+expect_set zero-entry-clause-off 1 'does not say the mode cannot create an entry' \
+  's@^        if entries_n == 0:@        if False:@'
+
+# M17 — the write path CREATES the entry the envelope is missing, which is filing option (b) and
+# the thing core must not do: it resolves files FROM the entries, so inferring which files on disk
+# are stories is the consumer's membership rule and not core's. The mutation writes down the view
+# that reported "no entry to derive", so the exit code, the headline and the clause all survive
+# and only the byte-comparison moves. That isolation is the point — a create mode is invisible to
+# every other assertion in the fixture, including the one that reads the message.
+expect_set zero-entry-write-creates 1 'edited a canonical over a run that matched nothing' \
+  's@^            per_view.append((view, "no entry to derive@            p.write_text(text + "  story-42-1:" + chr(10) + "    status: draft" + chr(10)); per_view.append((view, "no entry to derive@'
 
 if [ "$fails" -eq 0 ]; then echo "PASS story-fields-derive-mutants"; exit 0; fi
 echo "FAIL story-fields-derive-mutants ($fails)"; exit 1

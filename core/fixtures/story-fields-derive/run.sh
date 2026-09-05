@@ -207,6 +207,55 @@ grep -q 'MATCHED NO STORY FILES' <<<"$out3" \
   && ok "the exit-3 line says it matched no files rather than reporting a count" \
   || bad "exit 3 printed no explanation of what it did not do"
 
+# ---- 36-39: EXIT 3 OVER AN ENVELOPE THAT CARRIES NO ENTRY AT ALL. `roll` writes the `stories:`
+# mapping as a placeholder comment, and a sprint that skipped planning never populates it — so the
+# entry-less envelope is a real state, not a malformed one. Check 5's stale-entry remedy sends a
+# session to this mode, and this mode CANNOT satisfy it: the derive walks entries parsed from the
+# envelope and rewrites a value the entry already carries, so with no entry there is nothing to
+# write. The story files are seeded ON DISK here on purpose — resolution is FROM the entries, so
+# a corpus full of stories still matches nothing, and the message is the only thing standing
+# between the reader and the conclusion that the tool is broken.
+EMPTY_ENV='sprint: 42
+status: in_progress
+stories:
+  # populated at stories-test-strategy. A MAPPING keyed by story id
+  # (story-42-<M>:), never a list — a list form matches no reader.'
+R0="$WORK/r0"; mkc "$R0" "$EMPTY_ENV" 'field: priority'
+printf '%s\n' "$EMPTY_ENV" > "$R0/_bmad-output/planning-artifacts/sprint-status.yaml"
+seed_stories "$R0"
+I0="$R0/_bmad-output/implementation-artifacts/sprint-status.yaml"
+P0="$R0/_bmad-output/planning-artifacts/sprint-status.yaml"
+cp "$I0" "$WORK/r0.impl.pristine"; cp "$P0" "$WORK/r0.plan.pristine"
+# THE WRITE MODE, not `--check`. `--check` is trivially a no-op; the claim being asserted is that
+# the mode a session is told to run as a REPAIR writes nothing and says why.
+out0="$(run "$R0")"; rc0="$(arc)"
+
+[ "$rc0" -eq 3 ] && ok "an envelope carrying zero entries exits 3 from the WRITE mode, not 0" \
+                 || bad "a write-mode derive over an entry-less envelope exited $rc0 — a no-op reported as a run"
+grep -q 'MATCHED NO STORY FILES' <<<"$out0" \
+  && ok "the zero-entry run reports MATCHED NO STORY FILES (same headline, same branch)" \
+  || bad "the zero-entry exit-3 line does not name what it did not do"
+grep -q 'NEVER CREATES AN ENTRY' <<<"$out0" \
+  && ok "the zero-entry message states this mode never creates an entry and names populating \`stories:\` as the precondition" \
+  || bad "the message does not say the mode cannot create an entry — the gate's stale-entry remedy sends a session here and exit 3 alone reads as a resolution near-miss"
+cmp -s "$WORK/r0.impl.pristine" "$I0" && cmp -s "$WORK/r0.plan.pristine" "$P0" \
+  && ok "the zero-entry write-mode run leaves BOTH canonical copies byte-identical" \
+  || bad "the write mode edited a canonical over a run that matched nothing — it invented an entry"
+
+# ---- 40: THE NEAR-MISS, one property from the case above. `$out3` is an envelope that DOES carry
+# an entry and exits 3 down the identical branch with the identical headline; only the entry count
+# differs. A clause printed unconditionally passes the assertion above and is indistinguishable
+# from one that reads its key — and it would name the wrong remedy on every resolution failure.
+grep -q 'NEVER CREATES AN ENTRY' <<<"$out3" \
+  && bad "the never-creates clause printed for an envelope that DOES carry an entry — it is unconditional, and it names the wrong remedy for a resolution failure" \
+  || ok "the never-creates clause is withheld when the envelope carries an entry (that exit 3 is a resolution failure, not a missing entry)"
+
+# ---- 41: and the twin one step further out — a run whose entries resolve is not exit 3 at all
+# and carries no clause. `$out1`/`$rc1` is that run.
+[ "$rc1" -ne 3 ] && ! grep -q 'NEVER CREATES AN ENTRY' <<<"$out1" \
+  && ok "a run that resolves its entries neither exits 3 nor prints the clause" \
+  || bad "a resolving run took the zero-entry branch (rc=$rc1) or printed its clause"
+
 # ---- 14 & 15: EXIT 4 — a story file resolved and yielded no readable field at all
 R4="$WORK/r4"; mkc "$R4" 'sprint: 42
 status: in_progress
@@ -436,6 +485,18 @@ else
   grep -rq -- 'sprint-status.sh derive-stories`' "$STEPS/gate-validation.md" 2>/dev/null \
     && bad "the GATE invokes the writing form — a gate that edits what it validates can pass a tree it just changed" \
     || ok "the gate does NOT carry the writing form (the read/write split is asserted, not assumed)"
+  # ---- 42 & 43: THE REMEDY PROSE AND THE TOOL AGREE ON WHAT THE TOOL DOES. The step file names
+  # this mode as the repair for a stale entry, so its description of the mode is part of the
+  # mode's contract: prose promising a capability the program refuses sends a session down a
+  # no-op and costs it a hand transcription. The PRESENCE arm is first and it is what makes the
+  # ABSENCE arm below safe — a missing or unreadable gate-validation.md reddens the presence arm
+  # rather than acquitting the absence one.
+  grep -q -- 'and NEVER creates one' "$STEPS/gate-validation.md" 2>/dev/null \
+    && ok "Check 5's stale-entry remedy states that derive-stories never creates an entry" \
+    || bad "the gate's stale-entry remedy does not say the mode cannot create an entry — the prose promises what exit 3 refuses"
+  grep -q -- 'writes the entry from the story file' "$STEPS/gate-validation.md" 2>/dev/null \
+    && bad "the gate still describes derive-stories as writing the ENTRY from the story file — it writes VALUES into an entry that already exists" \
+    || ok "the gate no longer describes the mode as writing the entry itself"
 fi
 
 # ---- the run itself is a control
