@@ -117,7 +117,9 @@ A `SUPPRESSED` entry MUST carry, in the same edit that sets the status:
 **Operator authorization:** <ISO-8601 UTC ts> | "<verbatim substring, ≥12 chars, of the operator's message>"
 ```
 
-`<n>` defaults to 1 and may not exceed 3. `<catalog>` is `core` for a
+`<n>` defaults to 1 and may not exceed 3. **`<n>` counts gates RECORDED after the
+authorization, and the gate whose checks are running is recorded after they
+run — so an entry covers the authorizing gate and then `<n>` more.** `<catalog>` is `core` for a
 distribution check and `extension:<id>` for a consumer domain check, matching
 the `GATE_METRIC v1` field of the same name — the id is a join key, so it is
 written the way the metrics write it. The `**Operator authorization:**` line

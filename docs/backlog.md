@@ -4151,6 +4151,18 @@ also carry, 62 rows against 8) is refused as "not a check in the catalog" and is
 force. No such suppression exists in the consumer's history, every verdict carries `core`, and
 the join here inherits that scope rather than inventing an extension resolver.
 
+**The lifetime's span is now stated where it is declared.** Measured on the consumer by the
+adversarial hand: the newest recorded gate timestamp predates the live gate's nonce and the
+entry's authorization, so a lead writes gate-metrics rows AFTER Check 26 runs and the gate being
+adjudicated is never in the timeline it is measured against. `gates_since` therefore reads 0 at
+the authorizing gate and 1 at the next, and `Expires after: 1` covers both. That is arithmetic
+the lifetime arm has always done; this carve-out is the first mechanism that turns the second
+gate into passage rather than a warning, so `escalations.md` now says beside the default that an
+entry covers the authorizing gate and then `<n>` more. `gates_since` itself is unchanged, because
+Check 2's arm shares it. Suppressing a `hard_block: true` check, Check 2 itself included, is
+within scope by decision: a bounded operator licence past a red check is what `SUPPRESSED` was
+created for, and the entry still needs the operator citation Check 2a verifies.
+
 **Reader set derived, not taken from the filing.** The filing named the validator and the step
 prose; the enforcement-map posture for Check 26 and `escalations.md`'s own `SUPPRESSED` section
 also described the block as unconditional, and both now say a covered FAIL proceeds and where
