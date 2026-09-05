@@ -790,15 +790,42 @@ expect pass1-honest-zero-then-growth 1 \
 expect_says pass1-honest-zero-then-growth s1-adversarial-p "D-moving-at-pass2" \
   "MOVING ARTIFACT" "CUT the added scope"
 
+# GROWTH AT prior == 0 AFTER PASS 1 -- the case that separates "no previous pass exists"
+# from "prior is zero". Every case above puts its pass-2 growth at prior > 0, so a guard
+# keyed on `[ "$prior" -gt 0 ]` passes all of them and is WRONG: it also drops the purest
+# moving-artifact signal there is, a pass none of whose CRITICALs sit in reviewed text.
+expect scope-grew-at-zero-prior 1 \
+  "p1 declares prior == crit, p2 finds 3C with NONE in prior scope -- the sprint added all of them" s1-adversarial-p
+expect_says scope-grew-at-zero-prior s1-adversarial-p "D-moving-at-zero-prior" \
+  "MOVING ARTIFACT" "CUT the added scope"
+
+# A SERIES WHOSE FIRST FILE IS NOT PASS 1 -- the case that separates "has no predecessor"
+# from "is numbered 1". p2 is the first file on disk; its honest prior 0 is not growth.
+expect series-starts-at-pass2 1 \
+  "the series starts at p2 -- its first file has no predecessor either, and p3 clears the CRITICAL" s1-adversarial-p
+expect_says series-starts-at-pass2 s1-adversarial-p "D-generic-at-first-file" \
+  "$D_GENERIC"
+expect_silent series-starts-at-pass2 "MOVING ARTIFACT" scope-grew-at-zero-prior \
+  "a guard reading the pass NUMBER counts the first file of every series that starts above 1, and five of the consumer's 84 do"
+
 # --- MUTATION: the pass-1 guard, keyed on LOCATION and on BEHAVIOUR -------------
-# Two cells, two mutants, and each must move exactly ONE of them. A mutant that moved
-# both would mean the two cells are one assertion and the guard's PLACEMENT -- excluding
-# pass 1 and nothing else -- is unasserted.
+# FOUR cells, four mutants. The last two are WRONG FIXES, not vandalism: each is a guard a
+# careful author would write, each satisfies every case the first two cells can see, and
+# each is killed by exactly one of the cells added for it. A byte-lock on the shipped
+# condition would flag them too -- and an author who re-anchors the mutations, as
+# fixture-mutants.md tells them to, is then green on a validator that lost real coverage.
+# So the discrimination lives in BEHAVIOUR, and the anchor arm is only the guard on the
+# mutations being applied at all.
 #
-#                                       unconverged        then-growth
-#   shipped                             GENERIC            MOVING
-#   m1  the guard removed               MOVING   <- kill   MOVING
-#   m2  the guard on a wrong variable   GENERIC            GENERIC  <- kill
+#                                    unconv   growth   zero-prior   starts-p2
+#   shipped                          GENERIC  MOVING   MOVING       GENERIC
+#   m1  guard removed                MOVING   MOVING   MOVING       MOVING     <- both
+#   m2  guard on a wrong variable    GENERIC  GENERIC  GENERIC      GENERIC    <- growth
+#   m3  guard on `prior > 0`         GENERIC  MOVING   GENERIC      GENERIC    <- zero-prior
+#   m4  guard on the pass NUMBER     GENERIC  MOVING   MOVING       MOVING     <- starts-p2
+#
+# m3 and m4 move ONE cell each, and it is a different cell. That is the whole assertion:
+# "this pass has no PREDECESSOR" is neither "prior is zero" nor "the number is 1".
 #
 # Anchored on the WHOLE condition line. `[ -n "$crit" ] && [ -n "$prior" ]` opens arm C's
 # partition check as well, so a mutation keyed on the shared prefix would edit that instead
@@ -816,8 +843,8 @@ else
     "MUTATION sg-anchor" "$(basename "$VALIDATOR")"
 fi
 
-SG_CASES="pass1-honest-zero-unconverged pass1-honest-zero-then-growth"
-SG_REAL="GENERIC MOVING"
+SG_CASES="pass1-honest-zero-unconverged pass1-honest-zero-then-growth scope-grew-at-zero-prior series-starts-at-pass2"
+SG_REAL="GENERIC MOVING MOVING GENERIC"
 
 sg_remedy() {  # $1 script  $2 case-dir -> which of arm D's two remedies it emitted
   local out
@@ -871,7 +898,7 @@ sg_mutate() {  # $1 label  $2 replacement condition line  $3 expected pair
 # counted as growth and the unconverged series is handed the freeze-and-cut remedy.
 sg_mutate scope-grew-unguarded \
   '  if [ -n "$crit" ] && [ -n "$prior" ] && [ "$crit" -gt "$prior" ]; then' \
-  "MOVING MOVING"
+  "MOVING MOVING MOVING MOVING"
 
 # m2 -- GUARD ON THE WRONG VARIABLE. STALL_FROM is also empty at pass 1, so it looks like
 # "a previous pass exists" and is not: it is empty on every pass of a series that never
@@ -879,7 +906,24 @@ sg_mutate scope-grew-unguarded \
 # mutant -- right answer, no working guard -- and only the growth case says so.
 sg_mutate scope-grew-wrong-var \
   '  if [ -n "$crit" ] && [ -n "$prior" ] && [ -n "$STALL_FROM" ] && [ "$crit" -gt "$prior" ]; then' \
-  "GENERIC GENERIC"
+  "GENERIC GENERIC GENERIC GENERIC"
+
+# m3 -- A WRONG FIX: "there is no previous pass" spelled as "prior is zero". It excludes
+# pass 1 in every case seeded before `scope-grew-at-zero-prior` existed, and it also
+# excludes a mid-cycle pass whose CRITICALs are ALL in added scope -- the strongest
+# moving-artifact evidence the field can carry.
+sg_mutate scope-grew-prior-zero \
+  '  if [ -n "$crit" ] && [ -n "$prior" ] && [ "$prior" -gt 0 ] && [ "$crit" -gt "$prior" ]; then' \
+  "GENERIC MOVING GENERIC GENERIC"
+
+# m4 -- A WRONG FIX: "there is no previous pass" spelled as "the pass number is not 1".
+# True of pass 1 and false of nothing else, so it counts the FIRST FILE of every series
+# that starts above pass 1 -- which is the state the guard exists to exclude. The pass
+# number is read off `$f` the way order_key does, so the mutant is the guard an author
+# would actually write.
+sg_mutate scope-grew-pass-number \
+  '  if [ -n "$crit" ] && [ -n "$prior" ] && [ "$(printf "%s" "$f" | sed -E "s/.*[^0-9]([0-9]+)\.md$/\1/")" != "1" ] && [ "$crit" -gt "$prior" ]; then' \
+  "GENERIC MOVING MOVING MOVING"
 
 # --- PAIRING: a case that DENIES must assert the state the hooks read -------------
 # THE MECHANISM FOR A DEFECT CLASS THIS FIXTURE HAS NOW HIT TWICE. Gate mode and

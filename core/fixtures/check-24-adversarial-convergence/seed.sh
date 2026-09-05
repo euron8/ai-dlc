@@ -268,6 +268,37 @@ mkdir -p "$TARGET/pass1-honest-zero-then-growth"
 pass "$TARGET/pass1-honest-zero-then-growth/s1-adversarial-p1.md" 1 1 2 1 EXIT_CONDITION_NOT_MET 0 NOSHA
 pass "$TARGET/pass1-honest-zero-then-growth/s1-adversarial-p2.md" 2 3 2 2 EXIT_CONDITION_NOT_MET 1 NOSHA
 
+# (d) GROWTH AT prior == 0, AFTER PASS 1. The three cases above all place their pass-2
+# growth at prior > 0, and that is a hole a wrong fix walks through: keying the guard on
+# `[ "$prior" -gt 0 ]` instead of on the previous pass EXISTING passes every one of them,
+# because the only pass they exercise with prior 0 is pass 1. It is also the PUREST
+# moving-artifact signal -- none of this pass's CRITICALs sit in text the previous pass
+# reviewed, so the sprint added all of them -- and the reference consumer has 11 such
+# passes across 9 series.
+#
+# Pass 1 declares prior == crit here, so it contributes NOTHING to the count under any
+# candidate guard. The whole verdict rests on pass 2, and MOVING ARTIFACT is required.
+mkdir -p "$TARGET/scope-grew-at-zero-prior"
+pass "$TARGET/scope-grew-at-zero-prior/s1-adversarial-p1.md" 1 2 2 1 EXIT_CONDITION_NOT_MET 2 NOSHA
+pass "$TARGET/scope-grew-at-zero-prior/s1-adversarial-p2.md" 2 3 2 2 EXIT_CONDITION_NOT_MET 0 NOSHA
+
+# (e) THE SERIES WHOSE FIRST FILE IS NOT PASS 1. The guard's subject is "this pass has no
+# PREDECESSOR", which is not the same claim as "this pass is numbered 1" -- and a guard
+# written as `pass == 1` accepts every case above while still counting the first file of a
+# series that starts higher. Measured over the reference consumer's 84 adversarial series,
+# 5 have no pass 1 on disk and all 5 start at pass 2; 2 of the 5 are multi-pass (an
+# architecture series p2..p4 and a prd series p2..p8) and can reach arm D as a series at
+# all. The other 3 are single-file.
+#
+# p2 is the FIRST file on disk, so it has no predecessor and its honest prior 0 is not
+# growth. p3 clears the CRITICAL and the exit is still short on blocking MAJORs, so arm D
+# owes this series the generic remedy.
+mkdir -p "$TARGET/series-starts-at-pass2"
+pass "$TARGET/series-starts-at-pass2/s1-adversarial-p2.md" 2 1 2 1 EXIT_CONDITION_NOT_MET 0 NOSHA
+pass "$TARGET/series-starts-at-pass2/s1-adversarial-p3.md" 3 0 2 2 EXIT_CONDITION_NOT_MET 0 NOSHA
+# p2 -> p3 falls 1C -> 0C; arm H owns that transition and wants the record for pass 2.
+repair "$TARGET/series-starts-at-pass2/s1-brief-repair-p2.md"
+
 # =============================================================================
 # v0.55.3 -- numeric pass ordering, and the STALL rung.
 # =============================================================================

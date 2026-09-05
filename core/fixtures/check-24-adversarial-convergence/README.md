@@ -156,23 +156,43 @@ cannot fire, and the common one had no case at all.
 | `pass1-honest-zero-unconverged` | p1 1C at prior 0, p2 clears it, terminal `NOT_MET` on 2 blocking MAJOR | **FAIL** (D), with the **generic** remedy |
 | `pass1-honest-zero-converges` | the same p1, p2 converges | **PASS** — near-miss control |
 | `pass1-honest-zero-then-growth` | the same p1, p2 finds 3C against 1 in prior scope | **FAIL** (D), with **MOVING ARTIFACT** |
+| `scope-grew-at-zero-prior` | p1 `prior == crit`, p2 finds 3C at prior **0** | **FAIL** (D), with **MOVING ARTIFACT** |
+| `series-starts-at-pass2` | no p1 on disk; p2 1C at prior 0, p3 clears it | **FAIL** (D), with the **generic** remedy |
 
 **The exit code cannot be the assertion on the first of them.** It exits 1 before the guard
 (arm D, moving artifact) and 1 after it (arm D, generic) — only the MESSAGE separates the
 two validators, so the case asserts the generic remedy is present and both moving-artifact
 tokens are absent, each against `pass1-honest-zero-then-growth` as a live control.
 
-Two mutants, each of which must move exactly one of those two cells:
+**Two of the four cases exist because two WRONG FIXES pass the other two.** Both are
+guards a careful author would write, and neither is what the arm needs:
 
-| Mutant | `unconverged` | `then-growth` |
-|---|---|---|
-| *shipped* | `GENERIC` | `MOVING` |
-| the guard removed | `MOVING` ← kill | `MOVING` |
-| the guard on `STALL_FROM` instead | `GENERIC` | `GENERIC` ← kill |
+- **`[ "$prior" -gt 0 ]`** — "no previous pass" spelled as "prior is nonzero". Every case
+  seeded before `scope-grew-at-zero-prior` puts its pass-2 growth at `prior > 0`, so this
+  passes all of them — and it also drops the *purest* moving-artifact signal there is, a
+  pass none of whose CRITICALs sit in previously reviewed text. The consumer has **11 such
+  passes across 9 series**.
+- **`pass number == 1`** — true of pass 1 and false of nothing else, so it counts the first
+  file of a series that starts higher. Of the consumer's **84** adversarial series, **5**
+  have no pass 1 on disk; 2 of those are multi-pass and can reach arm D as a series.
 
-A mutant that moved both would mean the two cells are one assertion and the guard's
-placement — excluding pass 1 and **nothing else** — is unasserted. `scope-grew-unconverged`
-above is the same claim on a longer series and is unchanged by the guard.
+The battery is four cells and five rows, and each wrong fix is killed by exactly one cell:
+
+| Mutant | `unconverged` | `then-growth` | `zero-prior` | `starts-p2` |
+|---|---|---|---|---|
+| *shipped* | `GENERIC` | `MOVING` | `MOVING` | `GENERIC` |
+| the guard removed | `MOVING` ← | `MOVING` | `MOVING` | `MOVING` ← |
+| the guard on `STALL_FROM` | `GENERIC` | `GENERIC` ← | `GENERIC` | `GENERIC` |
+| the guard on `prior > 0` | `GENERIC` | `MOVING` | `GENERIC` ← | `GENERIC` |
+| the guard on the pass number | `GENERIC` | `MOVING` | `MOVING` | `MOVING` ← |
+
+**The discrimination is behavioural, not byte-locked, and that is the point.** A byte-lock
+on the shipped condition flags a wrong fix too — but an author who re-anchors the mutations,
+exactly as `fixture-mutants.md` prescribes, is then green on a validator that lost real
+coverage. Measured: with every anchor re-pointed at its own wrong condition, the `prior > 0`
+tree still fails `D-moving-at-zero-prior` and the pass-number tree still fails
+`D-generic-at-first-file`. `scope-grew-unconverged` above is the same claim on a longer
+series and is unchanged by any of this.
 
 **A dead arm was found writing this.** Both `stall-preempts-d` and `ceiling-preempts-d`
 grep the validator's output for the absence of `Either run another pass to a clean
