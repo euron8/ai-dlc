@@ -238,6 +238,7 @@ core_manifest:
   - fixtures/transient-ignore-block/**
   - fixtures/trunk-push-bound/**
   - fixtures/pause-hook-origin/**
+  - fixtures/pause-question-in-prose/**
   - fixtures/postcompact-rulebook-recovery/**
   - fixtures/fanout-payload-channel/**
   - fixtures/fanout-untracked-corpus/**
