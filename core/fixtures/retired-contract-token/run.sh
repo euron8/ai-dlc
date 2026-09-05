@@ -66,6 +66,12 @@ BASE
 # denominator NOTE printed only the 7.
 SECOND_PATH="core/scripts/second.sh"
 printf '#!/bin/bash\nX="$ROOT/.second"\n' > "$DIST/$SECOND_PATH"
+# A THIRD core file upstream modifies WITHOUT retiring its token. When the consumer
+# carries a modified copy it is listed, opened, and contributes nothing to `retiring`,
+# so a world exists where the retiring count is 0 and a NOTE that hardcodes "1 carrying"
+# cannot pass. Found by the receipt adversary: every earlier world had retiring == 1.
+THIRD_PATH="core/scripts/third.sh"
+printf '#!/bin/bash\nX="$ROOT/.third"\n' > "$DIST/$THIRD_PATH"
 git -C "$DIST" add -A >/dev/null 2>&1
 git -C "$DIST" commit -qm base >/dev/null 2>&1
 BASE_SHA="$(git -C "$DIST" rev-parse HEAD)"
@@ -80,6 +86,7 @@ CHAN="$TMPROOT/chan"
 printf 'x\n' >> "$CHAN"
 THEIRS
 printf '#!/bin/bash\nX="$ROOT/.second"\ny=2\n' > "$DIST/$SECOND_PATH"
+printf '#!/bin/bash\nX="$ROOT/.third"\ny=2\n' > "$DIST/$THIRD_PATH"
 git -C "$DIST" add -A >/dev/null 2>&1
 git -C "$DIST" commit -qm theirs >/dev/null 2>&1
 THEIRS_SHA="$(git -C "$DIST" rev-parse HEAD)"
@@ -187,7 +194,7 @@ fi
 # empty retired set, and its own stderr says so. A mutant that never ran says something
 # else, or nothing.
 merr="$(bash "$MUTANT" "$DIST" "$BASE_SHA" "$THEIRS_SHA" "$CONS" 2>&1 >/dev/null)"
-if grep -q '1 of 2 CLASSIFY file(s) opened, 0 carrying' <<<"$merr"; then
+if grep -q '1 of 3 CLASSIFY file(s) opened, 0 carrying' <<<"$merr"; then
   ok "MUTATION control: the mutant's silence is a scan that opened 1 file and retired nothing, by its own stderr"
 else
   bad "MUTATION control: the mutant's silence is unexplained -- it may never have scanned: ${merr:-<no stderr>}"
@@ -207,7 +214,11 @@ fi
 # Every predicate takes the script to drive, re-seeds its own consumer, and asserts
 # a PRESENCE, so a copy that emits nothing fails by construction.
 PRE="$(dirname "$DETECT")/preclassify.sh"
-seed_at_theirs() { cp "$DIST/$CORE_PATH" "$CONS/scripts/ai-dlc/validate-artifact-budget.sh"; }
+THIRD_OURS="$CONS/scripts/ai-dlc/third.sh"
+# Consumer states. The second core file never has a consumer copy (listed, never opened).
+# The third has one only where a seed writes it (listed, opened, retiring nothing).
+seed_at_theirs() { cp "$DIST/$CORE_PATH" "$CONS/scripts/ai-dlc/validate-artifact-budget.sh"; rm -f "$THIRD_OURS"; }
+seed_third_modified() { printf '#!/bin/bash\nX="$ROOT/.third"\ny=3\n' > "$THIRD_OURS"; }
 seed_repointed() {
   cat > "$CONS/scripts/ai-dlc/validate-artifact-budget.sh" <<'OURS'
 #!/bin/bash
@@ -215,6 +226,7 @@ TMPROOT="$(mktemp -d)"
 CHAN="$TMPROOT/chan"
 pool_report() { printf 'OVER\n' >> "$CHAN"; }
 OURS
+  seed_third_modified
 }
 seed_severed() {
   cat > "$CONS/scripts/ai-dlc/validate-artifact-budget.sh" <<'OURS'
@@ -222,23 +234,34 @@ seed_severed() {
 CHAN="$ROOT/.chan"
 pool_report() { printf 'OVER\n' >> "$ROOT/.chan"; }
 OURS
+  rm -f "$THIRD_OURS"
 }
 # stderr only; stdout discarded. `2>&1 >/dev/null` in that order.
 err_of() { bash "$1" "$DIST" "$2" "$THEIRS_SHA" "$CONS" 2>&1 >/dev/null; }
 out_of() { bash "$1" "$DIST" "$2" "$THEIRS_SHA" "$CONS" 2>/dev/null; }
 
+# p5's world lists the two consumer-deleted CLASSIFY files and opens neither, so the
+# listed count in the NOTE is asserted as a number, not merely as present.
 p5() {
   seed_at_theirs
   o="$(out_of "$1" "$BASE_SHA")"; e="$(err_of "$1" "$BASE_SHA")"
   [ -z "$(printf '%s' "$o" | grep . || true)" ] \
-    && grep -q 'opened NONE, so NO core file was scanned' <<<"$e" \
+    && grep -q 'listed 2 CLASSIFY file(s) and opened NONE, so NO core file was scanned' <<<"$e" \
     && ! grep -q 'produced no rows' <<<"$e"
 }
+# p6 drives TWO worlds so every count in the denominator NOTE is bound by a world where
+# it differs: re-pointed + third modified lists 3, opens 2, 1 retiring; third modified
+# alone lists 2, opens 1, 0 retiring.
 p6() {
   seed_repointed
   o="$(out_of "$1" "$BASE_SHA")"; e="$(err_of "$1" "$BASE_SHA")"
   [ -z "$(printf '%s' "$o" | grep . || true)" ] \
-    && grep -q '1 of 2 CLASSIFY file(s) opened, 1 carrying' <<<"$e" \
+    && grep -q '2 of 3 CLASSIFY file(s) opened, 1 carrying' <<<"$e" \
+    && ! grep -q 'opened NONE' <<<"$e" || return 1
+  seed_at_theirs; seed_third_modified
+  o="$(out_of "$1" "$BASE_SHA")"; e="$(err_of "$1" "$BASE_SHA")"
+  [ -z "$(printf '%s' "$o" | grep . || true)" ] \
+    && grep -q '1 of 2 CLASSIFY file(s) opened, 0 carrying' <<<"$e" \
     && ! grep -q 'opened NONE' <<<"$e"
 }
 p7() {
@@ -259,7 +282,7 @@ p8() {
 seed_at_theirs
 nrows="$(bash "$PRE" "$DIST" "$BASE_SHA" "$THEIRS_SHA" "$CONS" 2>/dev/null | grep -c .)" || nrows=0
 if [ "$nrows" -gt 0 ]; then
-  ok "control: the ALREADY-AT-THEIRS world yields $nrows preclassify row(s); the one CLASSIFY row is the deleted second file, listed and never opened"
+  ok "control: the ALREADY-AT-THEIRS world yields $nrows preclassify row(s); its CLASSIFY rows are the consumer-deleted second and third files, listed and never opened"
 else
   echo "FIXTURE ERROR: the ALREADY-AT-THEIRS world produced no preclassify rows -- p5 cannot discriminate" >&2
   exit 2
@@ -321,6 +344,12 @@ score "denominator-collapsed" "$(mkmut collapse 's|^  echo "retired-tokens: NOTE
 # a pull that listed more than it opened. p6 alone falls, because its world lists 2 and
 # opens 1.
 score "opened-of-opened" "$(mkmut ofopened 's|\$opened of \$listed CLASSIFY file(s) opened,|$opened of $opened CLASSIFY file(s) opened,|')" "1011"
+# Wrong fix 2c: the retiring count is a constant. Every earlier world had exactly one
+# file retiring a token, so this passed both channels until the third file existed.
+score "hardcoded-retiring" "$(mkmut retiring 's|\$retiring carrying a token upstream retired|1 carrying a token upstream retired|')" "1011"
+# Wrong fix 1c: the listed count in the opened-NONE NOTE is fabricated. p5 alone falls,
+# because its world lists exactly two.
+score "fabricated-listed" "$(mkmut fablisted 's|listed \$listed CLASSIFY file(s)\${ONLY:+|listed 47 CLASSIFY file(s)${ONLY:+|')" "0111"
 # Wrong fix 3: a NOTE beside real rows. Drop the early exit after the rows print so the
 # denominator NOTE follows every match. p7 alone falls.
 score "note-beside-rows" "$(mkmut fallthrough '/^  printf '"'"'%s'"'"' "\$rows"$/{n;s|^  exit 0$|  :|;}')" "1101"
