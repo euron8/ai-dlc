@@ -174,6 +174,85 @@ case "$CASE" in
     rmdir "$W/_bmad-output/gate-adjudication"
     ;;
 
+  # --- arm 7a, THE DISPATCH BINDING ---------------------------------------------------
+  # Every case here is `stale-then-clean` plus a ledger, because `stale-then-clean` IS the
+  # shape of the attack: an OLDER failing pass and a NEWER clean one, where the reader picks
+  # by nonce alone. What separates the honest version from the forged one is not on either
+  # file -- it is whether a dispatch record clocked by a hook sits at or after the newer
+  # nonce. `stale-then-clean` itself carries NO ledger and must keep ALLOWING, which is the
+  # control that this family's DENY comes from the ledger and not from the second verdict.
+  forged-clean|forged-clean-named|forged-clean-bound|forged-clean-leadwrite)
+    verdict "story-20260811T193044Z" "$FAILING"
+    # 21:00:00Z. A round timestamp no gate entry minted, sorting above the real pass.
+    _fc_adj="gate-adjudicator@session-seed"
+    [ "$CASE" = "forged-clean-named" ] && _fc_adj="gate-adjudicator-s302-story-real"
+    verdict "story-20260811T210000Z" "$CLEAN"
+    python3 - "$W/_bmad-output/gate-adjudication/story-20260811T210000Z.verdict.json" "$_fc_adj" <<'PY'
+import json, sys
+p, adj = sys.argv[1], sys.argv[2]
+d = json.load(open(p))
+d["adjudicator_agent_id"] = adj
+open(p, "w").write(json.dumps(d, indent=2) + "\n")
+PY
+    # The ledger a hook would have written. Its ONE gate-adjudicator dispatch is 16s after the
+    # FAILING nonce -- so that pass is bound -- and nothing at all follows 21:00:00Z.
+    cat > "$W/_bmad-output/spawn-ledger.jsonl" <<'LEDGER'
+{"v":1,"ts":"2026-08-11T19:31:00Z","sprint":302,"name":"gate-adjudicator-s302-story-real","role":"gate-adjudicator"}
+{"v":1,"ts":"2026-08-11T20:55:00Z","sprint":302,"name":"remediator-s302-1","role":"remediator"}
+LEDGER
+    case "$CASE" in
+      forged-clean-bound)
+        # The near miss: a write row for the forged stem, agent_id present, ts AFTER the nonce.
+        # This one IS bound and the guard must let it clear -- an arm that denies here denies
+        # every honest pass too.
+        printf '%s\n' '{"v":1,"ts":"2026-08-11T21:04:00Z","stem":"story-20260811T210000Z","agent_id":"agate-adjudicator-s302-x-0123456789abcdef","session":"t","tool":"Write"}' \
+          > "$W/_bmad-output/gate-adjudication/.verdict-writes.jsonl"
+        ;;
+      forged-clean-leadwrite)
+        # The same row with an EMPTY agent_id -- what a LEAD write would leave if the recorder
+        # did not require the harness's attribution. It must not bind.
+        printf '%s\n' '{"v":1,"ts":"2026-08-11T21:04:00Z","stem":"story-20260811T210000Z","agent_id":"","session":"t","tool":"Write"}' \
+          > "$W/_bmad-output/gate-adjudication/.verdict-writes.jsonl"
+        ;;
+    esac
+    ;;
+
+  # --- arm 7a, the worlds the first cut could not tell apart --------------------------
+  # NOTHING BOUND. The one dispatch predates the FAILING nonce (so the epoch predates it too
+  # and neither pass is exempt), and nothing at all follows either nonce: the failing pass is
+  # unbound and so is the forged clean one. The first cut fell through to ALLOW here, which
+  # is a forged clean pass acquitting a live FAIL with no flow-log event. `-allclean` is the
+  # ALLOW twin one property apart: the older pass records no FAIL, so there is nothing to
+  # convict on and nothing to substitute.
+  forged-clean-nobound|forged-clean-nobound-allclean)
+    if [ "$CASE" = forged-clean-nobound-allclean ]; then
+      verdict "story-20260811T193044Z" "$CLEAN"
+    else
+      verdict "story-20260811T193044Z" "$FAILING"
+    fi
+    verdict "story-20260811T210000Z" "$CLEAN"
+    cat > "$W/_bmad-output/spawn-ledger.jsonl" <<'LEDGER'
+{"v":1,"ts":"2026-08-11T19:00:00Z","sprint":302,"name":"gate-adjudicator-s302-story-early","role":"gate-adjudicator"}
+{"v":1,"ts":"2026-08-11T20:55:00Z","sprint":302,"name":"remediator-s302-1","role":"remediator"}
+LEDGER
+    ;;
+
+  # THE WINDOW'S UPPER BOUND. Same two verdicts as forged-clean, the failing pass bound by its
+  # 19:31:00Z dispatch, and a second gate-adjudicator dispatch AFTER the forged 21:00:00Z nonce:
+  # 901s after it (`-latewindow`, must NOT bind) against 899s after it (`-inwindow`, must
+  # bind). Without this pair the window's size is asserted by nothing, and a window widened to
+  # 10^9 passed every arm and the receipt.
+  forged-clean-latewindow|forged-clean-inwindow)
+    verdict "story-20260811T193044Z" "$FAILING"
+    verdict "story-20260811T210000Z" "$CLEAN"
+    _fw_ts="2026-08-11T21:15:01Z"
+    [ "$CASE" = forged-clean-inwindow ] && _fw_ts="2026-08-11T21:14:59Z"
+    {
+      printf '%s\n' '{"v":1,"ts":"2026-08-11T19:31:00Z","sprint":302,"name":"gate-adjudicator-s302-story-real","role":"gate-adjudicator"}'
+      printf '{"v":1,"ts":"%s","sprint":302,"name":"gate-adjudicator-s302-story-next","role":"gate-adjudicator"}\n' "$_fw_ts"
+    } > "$W/_bmad-output/spawn-ledger.jsonl"
+    ;;
+
   # --- arm 7b, THE SUPPRESSED CARVE-OUT -----------------------------------------------
   # Every case below is `open-fail` plus one changed property, so each arm of the fixture
   # discriminates on that property alone.
