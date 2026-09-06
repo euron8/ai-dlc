@@ -37,7 +37,125 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 59 SHIPPED AS `v0.509.0`, TWO CANDIDATES IN ONE RELEASE. THE GAP IS TWO AND PENDING IS THREE, AND THE PULL IS REQUIRED: THE CONSUMER'S OWN PRE-PUSH FAILS ON THE INSTALLED PAIR AND IT PUSHES `--no-verify`. THE SWEEP IS EMPTY. TWO `PC-S337-RETRO-*` SIBLINGS WERE FOUND ALREADY IN CORE AND ARE THE CONSUMER'S TO ROTATE, NOT WORK. ONE CANDIDATE STILL AWAITS THE OPERATOR'S REJECTION, PLUS `BL-159`, `BL-161`, `BL-163`, `BL-171`, `BL-176`, `BL-179` AND `BL-181` WITH NO `PC-` ID.
+### BATCH 60 SHIPPED AS `v0.510.0`, ONE CANDIDATE, A BOOTSTRAPPING SUBJECT SHIPPED ALONE. THE GAP IS THREE AND PENDING IS FOUR, AND THE PULL IS REQUIRED ON BATCH 59's EVIDENCE PLUS THIS ONE: THE INSTALLED GATE STILL NAMES TWO FALSE CAUSES ON EVERY PULL THAT HAS A BLOCKER, INCLUDING THE ONE THAT DELIVERS THIS FIX. THE SWEEP IS EMPTY. ONE CANDIDATE STILL AWAITS THE OPERATOR'S REJECTION, PLUS `BL-159`, `BL-161`, `BL-163`, `BL-171`, `BL-176`, `BL-179` AND `BL-181` WITH NO `PC-` ID.
+
+This block replaces the batch-59 record below it. Every figure here was re-derived on 2026-09-06
+after the merge, against the working tree with the controls in the same invocation; re-derive
+them again rather than reading them.
+
+**`VERSION` IS `0.510.0`, SO BATCH 61 RELEASES AS `0.511.0`.** Re-derive `VERSION` and add one.
+Batch 60 merged at `5a29d41a` (PR #646, squash; on the branch the release commit came
+last after five fix and five test commits, none naming an id), closing
+`PC-S305-UNION-GATE-UNPASSABLE-ON-ANY-PULL-THAT-HAD-A-BLOCKER` as `BL-182`, rotated (archive
+91 → 92, live 90 → 91 → 90 after one filing and one rotation; nothing else filed).
+`named_absorbed()` lists exactly one release commit for the id at `0.510.0`; the impossible-id
+control for that channel is `grep -c '^release:'` reading 0, NOT `PC-S999-NEVER` being absent,
+which docs commits quote. No correction release. **The eighth batch opened by a peer's handoff**
+(action 9's message from `ai-dlc-bc`), so it scoped itself from its own ranking and stated the
+choice in its first ping: the sweep was empty, the top-ranked standing candidate's subject is
+`apply.sh`, `emit-report.sh` and the update skill — bootstrapping, so it shipped ALONE under
+action 2.
+
+**THE FILING WAS VERIFIED LIVE UNDER THE CURRENT DRIVER BEFORE ANYTHING WAS BUILT, FROM THE
+CONSUMER'S COMMITTED LOGS.** Step 7 requires every `HARD-*` blocker resolved before `apply.sh`
+writes, and each resolution rewrites the region clause (1) verifies, so on every pull with a
+blocker the approved report listed findings that no longer existed and the gate refused naming
+"upstream moved" and "hand-edited". Four of the consumer's six applies since `v0.488.0`
+re-rendered the region after resolving as an unwritten workaround; the 0.502.0 → 0.504.0 log
+records the first `apply.sh` attempt refused for exactly this. No step 7 sentence said to
+re-render (control: `grep -n 're-render\|re-emit'` found the two generic remedies only). The
+replay hand reconstructed all six pulls on a `file://` clone (the post-resolution, pre-apply tree
+is never committed — each pull is one squash) and drove the fixed and the origin/main `--verify`
+over each: the four blocker pulls read `BLOCKERS-RESOLVED` with the row counts their logs record
+(3, 3, 11, 13) against a bare exit 1; the two without blockers read 0 on both. Census over the
+consumer's 150 reconcile logs: 54 name a `HARD-` status (a floor), 10 mention a re-render, all
+ten after the gate moved into `apply.sh`.
+
+**THE FIX IS A DECIDED REFUSAL, NOT A PASS, AND THE ADVERSARY MOVED IT FOUR TIMES BEFORE THE
+MERGE.** `emit-report.sh --verify` classifies a mismatch — `UPSTREAM-MOVED` on the
+`_base_`/`_theirs_` lines, `STAMP-MOVED` on the consumer's `_stamp_` line, `BLOCKERS-RESOLVED`
+(exit 3) when the refs are unchanged and the approved region lists `HARD-` rows the fresh render
+lacks with no HARD row and no `DETECTOR-REFUSED` line new, `UNDECIDED` otherwise — and `apply.sh`
+forwards that stderr and names the cause and the one-step remedy. The filed "re-emit-then-verify"
+half was not taken as a pass: a pass needs a benign-row vocabulary and acquits what it misses.
+The four pre-merge repairs, each from a measurement: the refusal told the operator to read a diff
+it had discarded; the "no finding hidden" sentence was false for non-HARD rows a resolution
+renders (now counted and listed as `unseen:`, boilerplate excluded because a plain resolution and
+one hiding a finding both counted 2); `_stamp_` keyed with the refs made a consumer re-stamp read
+as upstream moved, and dropped altogether made a post-apply re-run read as resolved — so it is a
+cause of its own; and the de-duplication ran on `comm`'s OUTPUT, so a blocker still rendered in
+one section read as resolved when only its padded copy was missing, reachable through
+`hard-blockers.sh` refusing (the one detector call with no exit-code check, now `DETECTOR-REFUSED`
+like `unregistered-drift.sh` and `layer-drift.sh`). The fixture hand found the cause is decided
+from row ABSENCE, so a dead detector read as a blocker resolved by name; the three refused arms
+and the `refused_new` conjunct are its finding. A detector that exits 0 having scanned nothing
+stays invisible and is stated as such.
+
+**THE BATTERY: ELEVEN WORLDS, THIRTEEN PROGRAMS, AND TWO MUTANTS THAT MASK EACH OTHER.**
+`reconcile-emit-report` runs eleven worlds (current, hand-dropped blocker, hand-dropped plus an
+adjudication file, half copy, moved upstream, moved stamp, resolved, resolved beside a new HARD
+row, resolved beside an unseen non-HARD row, a non-HARD row resolved, dead detector, dead wrapper)
+against the shipped copy, the control and eleven mutants, with exact kill sets; E9 (raw `comm`)
+and E10 (the wrapper's refusal arm removed) each move only a count, and applied TOGETHER read a
+dead wrapper as the operator's own resolution — E11 applies both and is the arm that reaches the
+defect, which is `fixture-mutants.md`'s masked pair verbatim. Solo 24s → 97s with the signatures
+computed four at a time; the pole is `layer-reference-resolution` at ~247 loaded and did not
+move. `apply-restamp-worklist` `U5` drives `apply.sh` over a resolved-blocker world and reads the
+forwarded stderr; A1 (branch removed), A2 (exit 3 treated as a pass) and A3 (forward removed)
+each die on a conjunct the others cannot reach. `LC-O4` and `LC-O8` now declare the fixtures
+that prove them (I65). Every validator green, both fixtures PASS under `env -i`.
+
+**THE LEDGER DID NOT MOVE THIS BATCH.** md5 `417c783e…` at open and at close; the consumer
+committed its filing before this batch opened (ledger porcelain empty). **Live 72, cited 51,
+unfiled 21**, archive 160, partition control 0. Goal partition **24 DISCHARGED / 27 in flight /
+21 untouched**, overlap 3, discharged-but-invisible 0, TERMINAL **49**. The consumer's porcelain
+read 4 at open and 4 at close, its HEAD `9e6466cad` unmoved, on
+`ai-dlc/carry-over/pool-pnl-backlog-triage`; no write to the consumer by this session or its
+three hands (the replay hand's only command against it was `git clone file://`).
+
+**GAP THREE (`0.507.0` installed, `0.510.0` shipped), PENDING 4 (`BL-177` at `0.508.0`;
+`BL-178`, `BL-180` at `0.509.0`; `BL-182` at `0.510.0`; four `PC-` ids), AND THE PULL IS
+REQUIRED.** Batch 59's evidence stands (the consumer's own pre-push fails `gate-remediation-deny`
+on the installed pair and it pushes `--no-verify`), and this batch adds a second: the installed
+`apply.sh` refuses every pull that has a blocker with two false causes, and the consumer pays a
+re-render it had to discover for itself. Say WIDE at five. The range `528ca84b..origin/main`
+carries `0.508.0`'s and `0.510.0`'s bootstrapping files (`retired-tokens.sh`, `apply.sh`,
+`emit-report.sh`, the update skill's `SKILL.md`), 0 mode-only changes over 14 core paths, and
+the hazard is measured rather than warned about: the INSTALLED `0.507.0` gate runs the pull that
+delivers this fix, so if that pull has blockers the consumer will see the old two-cause refusal
+ONCE more and must re-render as it already does; the new gate takes effect on the pull after. A
+pull is operator-initiated; readiness is not authorization.
+
+**THE TOP-RANKED STANDING CANDIDATE STILL AWAITS THE OPERATOR'S REJECTION.**
+`PC-S340-CHECK-26-READS-A-PARTIAL-RE-VERIFY-VERDICT-FILE-AS-UNADJUDICATED` is live at the
+consumer, recommended for rejection in the batch-57 block below and in the `0.507.0`
+CHANGELOG's "Not taken" section, deliberately not named in any release commit. Ask the
+operator to carry it into a graph session; until then it stays live and unfiled.
+
+**TELL THE CONSUMER, IN THE NEXT BRIEF,** that `0.510.0` makes `emit-report.sh --verify` exit
+**3** with `cause: BLOCKERS-RESOLVED` after blockers are resolved pre-apply, so any consumer
+script asserting `--verify` exits exactly 1 must widen (none found outside the installed skill
+today, control 9 inside it); that `apply.sh` now forwards `--verify`'s stderr (cause, resolved
+rows, `unseen:` rows, the diff) before its refusal, and the three fixtures capturing its stderr
+stay green; that the pull delivering `0.510.0` runs the INSTALLED gate, so one more two-cause
+refusal is expected if that pull has blockers, and the re-render it already does is the remedy;
+that step 7's new paragraph is the sentence its `verify: manual` receipt reads, and the entry can
+be annotated `ADOPTED UPSTREAM` and rotated after the pull; that a `DETECTOR-REFUSED` line now
+renders when `unregistered-drift.sh`, `layer-drift.sh` or `hard-blockers.sh` exit non-zero, and
+a region carrying one must not be approved; and that the batch-59 brief items below still stand.
+
+**THE SWEEP FOR BATCH 61 IS EMPTY, AND THE 21 UNFILED IDS ARE THE STANDING CORPUS.** Check the
+ledger's md5 first — the consumer files mid-batch and pulls mid-batch. Of the 21, two are the
+already-in-core `RETRO` siblings (batch 59), and the other 19 are enumerated in action 1b and
+the batch-39 paragraph of action 1, none filed since 2026-08-31. What ranks first, by
+consequence: `PC-S335-NO-DETECTOR-REACHES-A-RETIRED-STATUS-TOKEN-REUSED-IN-A-LAYER-BODY` (a new
+report-only detector in reconcile — bootstrapping, alone; its receipt is `verify: manual` by its
+own note; derive the retired-token set from the same corpus `retired-layer-contract.sh` walks
+before believing the filing's shape), then `BL-181` (no `PC-` id, DEFECT tier, a one-line fix
+with a three-fixture `env -i` receipt — readiest, and it has a consumer consequence today), then
+`BL-171`, `BL-176` and `BL-179`.
+
+### BATCH 59 SHIPPED AS `v0.509.0` — THE BLOCK ABOVE REPLACES THIS ONE. TAKE THE STATE FROM THERE.
 
 This block replaces the batch-58 record below it. Every figure here was re-derived on 2026-09-05
 after the merge, against the working tree with the controls in the same invocation; re-derive
@@ -5803,7 +5921,7 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), RANK THE UNFILED CANDIDATES,
-   THEN SCOPE BATCH 60 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
+   THEN SCOPE BATCH 61 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
    instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
    candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
    FROM ANOTHER SESSION** — a cross-session message carrying `READ and FOLLOW …`, which is
@@ -5811,9 +5929,11 @@ so no block written before it changes verdict.
    recommend, state that choice and its reason in your FIRST message to the operator, and
    proceed; the operator can redirect at any ping. **Regardless of who invoked you, batch
    multiple candidates into one release wherever action 2 allows it.** The sweep is EMPTY
-   today: the 22 unfiled ids are the standing corpus, two of them (`PC-S337-RETRO-PARTY-MODE-…`
+   today: the 21 unfiled ids are the standing corpus, two of them (`PC-S337-RETRO-PARTY-MODE-…`
    and `…SPRINT-SHIP-DUAL-COUNTER-…`) already in core and the consumer's to rotate, not work;
-   the resume block ranks the rest. Batch 59 is SHIPPED — `v0.509.0` at `68fa7e95` (PR #644),
+   the resume block ranks the rest. Batch 60 is SHIPPED — `v0.510.0` at `5a29d41a` (PR #646),
+   `PC-S305-UNION-GATE-UNPASSABLE-ON-ANY-PULL-THAT-HAD-A-BLOCKER` closed as `BL-182`, rotated,
+   nothing filed, no correction release; batch 59 is SHIPPED — `v0.509.0` at `68fa7e95` (PR #644),
    `PC-S308-SUPPRESSION-LIFETIME-RESOLVES-GATE-METRICS-FROM-CWD-BEFORE-PROJECT-ROOT` closed
    as `BL-178` and `PC-S337-RETRO-PROCESS-IMPROVEMENTS-RULE-EXERCISE-AUDIT` as `BL-180`, both
    rotated, `BL-179` and `BL-181` filed and not fixed, no correction release; batch 58 is SHIPPED — `v0.508.0` at
@@ -6429,9 +6549,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 417c783e... unmoved through batch 59 (the consumer filed once AFTER batch 58's merge; 7f097cf7... after its mid-batch pull to 0.507.0); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
-   wc -l < /tmp/live.txt    # 72 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 77 through batch 57, 71 after the consumer's pull rotated six, 72 after its post-merge filing, unmoved through batch 59
-   wc -l < /tmp/unfiled.txt # 22 -- PC-S308-SUPPRESSION-LIFETIME-... and PC-S337-RETRO-PROCESS-IMPROVEMENTS-... left the set by being cited by BL-178 and BL-180; two of the 22 are RETRO siblings already in core
+   md5 -q "$L"              # 417c783e... unmoved through batches 59 and 60 (the consumer filed once AFTER batch 58's merge and committed it before batch 60 opened; 7f097cf7... after its mid-batch pull to 0.507.0); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
+   wc -l < /tmp/live.txt    # 72 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 77 through batch 57, 71 after the consumer's pull rotated six, 72 after its post-merge filing, unmoved through batch 60
+   wc -l < /tmp/unfiled.txt # 21 -- PC-S305-UNION-GATE-UNPASSABLE-... left the set at batch 60 by being cited by BL-182; two of the 21 are RETRO siblings already in core
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -6439,8 +6559,10 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 72 LIVE CANDIDATES, 50 CITED, 22 UNFILED** — re-derived at batch 59's
-   close after its merge at `68fa7e95` (md5 `417c783e…` unmoved, archive 160; the batch's two
+   **THE BASELINE IS 72 LIVE CANDIDATES, 51 CITED, 21 UNFILED** — re-derived at batch 60's
+   close after its merge at `5a29d41a` (md5 `417c783e…` unmoved, archive 160; the batch's one
+   citation moved one id from unfiled to cited and the consumer wrote nothing; batch 59's close
+   read 72 / 50 / 22 at the same md5 after its merge at `68fa7e95`, after the batch's two
    citations moved two ids from unfiled to cited and the consumer wrote nothing; batch 58's
    fresh-resume check read 72 / 48 / 24 at the same md5 after its merge at `d6cf1a97`; the
    consumer's mid-batch pull to `0.507.0` rotated six cited ids, the batch's one citation
