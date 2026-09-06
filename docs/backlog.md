@@ -4286,10 +4286,10 @@ above.
 
 verify: sh n=0; for s in core/scripts/*.sh scripts/*.sh; do grep -qE 'wc -c.*SKILL|SKILL.*wc -c' "$s" 2>/dev/null && n=$((n+1)); done; [ "$n" -gt 1 ]
 
-## BL-189 — `core.bare=true` appeared on the main checkout mid-session for the second time, no mechanism is reproduced, and 24 fixture scripts make repo-mutating git calls that depend on the process cwd
+## BL-189 — an argument-less `git init --bare` under an exported `GIT_DIR` writes `core.bare=true` into the real repo, which git exports to any hook running from a linked worktree
 
-**THE MECHANISM IS NOT ESTABLISHED. THIS ENTRY RECORDS A CORRELATION AND A HAZARD CLASS, AND
-SAYING SO IS THE POINT** — a cause asserted here would be the "text about a program is not the
+**THE MECHANISM IS REPRODUCED; THE WRITER IS NOT IDENTIFIED. THE ENTRY KEEPS BOTH CLAIMS SEPARATE, AND
+THAT SEPARATION IS THE POINT** — a cause asserted here would be the "text about a program is not the
 program" failure one level up. What follows separates what was measured from what was not.
 
 **The event, twice now.** During batch 65, `git commit` failed with `fatal: this operation must
@@ -4336,10 +4336,37 @@ thrown away:**
 and capture `ls -la .git/`, `git worktree list`, the config mtime and the running agent set in the
 same invocation. The first flip cost the diagnosis; the second paid for it.
 
-**A SUBAGENT WORKTREE IS THE STANDING SUSPECT AND IS STILL NOT PROVEN.** Both flips happened while
-an `isolation: worktree` hand was running. The rule in `mechanism-design.md` applies to this entry
-itself: a cause that FITS the evidence is not a cause DEMONSTRATED, and the value `true` is the
-part no reproduction has produced.
+**THE MECHANISM IS NOW REPRODUCED, ON THE ELEVENTH ATTEMPT, AND IT IS AN ARGUMENT-LESS
+`git init --bare` UNDER AN EXPORTED `GIT_DIR`.** The missing piece came from a subagent's
+unrelated finding: **git EXPORTS `GIT_DIR` to a pre-push hook, unset from a main checkout and
+ABSOLUTE from a linked worktree** (measured with the two sides asserted differing). With that
+variable set, a `git init --bare` carrying NO path argument initialises the repository `GIT_DIR`
+names — the real one — and writes `bare = true` into it:
+
+| probe, `GIT_DIR` exported to the real `.git` | result |
+|---|---|
+| `git init -q .` from elsewhere | `bare = false` |
+| `git init -q` from inside `.git/` | `bare = false` |
+| `git init -q .` from a locked worktree | `bare = false` |
+| `git init -q --bare "<path>"` (WITH an argument) | **unset — parent untouched** |
+| `git clone -q --bare <src> "<path>"` | **unset — parent untouched** |
+| **`git init -q --bare` (NO argument)** | **`bare = true`, at LINE 8, after `hooksPath`** |
+
+**Value and position both match the preserved evidence exactly.** The argument is what decides
+it: given a path, git initialises that path; given none, it initialises `GIT_DIR`.
+
+**No call site in this tree is the culprit, and that is stated rather than assumed.** All three
+`--bare` sites pass a destination — `core/fixtures/self-update-fixture-log/run.sh:730` and
+`core/fixtures/retro-branch-behind-main/run.sh:250` (`clone --bare <src> <dest>`), and
+`core/fixtures/handoff-completion-assertion/seed.sh:110` (`init -q --bare "$2"`). Each was driven
+in the argument-bearing form above and left the parent untouched. So the reproduction establishes
+the CLASS and does not convict a site; the writer remains unidentified, and any agent or tool
+running an argument-less bare init while `GIT_DIR` is exported produces this exact state.
+
+**The precondition is what makes it a distribution-wide hazard rather than a curiosity.** Both
+flips happened while an `isolation: worktree` hand was running, and a linked worktree is
+precisely where git exports `GIT_DIR` absolute. A probe that is safe from a main checkout is
+unsafe from a worktree, and nothing about the probe changes between the two.
 
 **THE LIVE HAZARD CLASS, DERIVED.** Of **283** fixture `run.sh`/`seed.sh` scripts, **24** make an
 unqualified repo-mutating git call (`git init|config|add|commit|checkout|stash` with no `-C` and
