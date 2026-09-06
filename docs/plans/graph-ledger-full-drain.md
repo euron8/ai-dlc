@@ -7628,9 +7628,17 @@ so no block written before it changes verdict.
      compare every figure to the block's claims. A mismatch is a stop, not a note.
    - **Assert action 1 names no shipped work — counting RELEASE commits only.** For every
      `PC-` id action 1 offers as NEXT work:
-     `git log -F --grep='<id>' --format=%s origin/main | grep -c '^release:'` must be 0. For the
-     id the block says SHIPPED it must be non-zero, with `VERSION` at the oldest commit naming
-     the id equal to the release the block names. **A docs commit that names a candidate while
+     `git log -F --grep='<id>' --format=%H origin/main` must be EMPTY. For the id the block says
+     SHIPPED it must be non-empty, with `VERSION` at the OLDEST commit naming the id equal to the
+     release the block names.
+
+     **DO NOT KEY THIS ON A `^release:` SUBJECT, AND AN EARLIER REVISION DID.** A GitHub squash
+     takes the PR TITLE as the commit subject, so a correctly-cited release lands with a subject
+     like `0.517.0 — …(#658)` and no `release:` prefix. Measured at batch 65: both shipped ids
+     returned 0 `^release:` commits while `named_absorbed()`'s own join — a message mention, any
+     subject — resolved both to the squash at `VERSION` 0.517.0, control 0 for an impossible id.
+     The arm reported a mismatch on a release that was fine. Key on the MESSAGE MENTION, which is
+     what the closer reads. **A docs commit that names a candidate while
      REPORTING it does not count** — measured on the first run of this step: batch 51's docs
      commit names `PC-S308-CHECK-5-…` verbatim, so a count over all commits read 1 for an id
      nothing has shipped, and a literal reader would have reported a false mismatch. An
