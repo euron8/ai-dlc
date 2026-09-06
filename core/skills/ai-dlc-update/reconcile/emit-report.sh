@@ -418,7 +418,9 @@ render() {
 
   # This sibling exits 2 when a corpus could not be read, because its empty-theirs failure
   # is a MAXIMAL report (every rulebook token retired) rather than a silent one; a refusal
-  # that rendered as `none` here would be the third shape of the same defect.
+  # that rendered as `none` here would be the third shape of the same defect. The `$?`
+  # read below is the detector's status only under this file's `set -o pipefail`, as at
+  # the four refusal sites above; without it the awk's 0 would render the refusal as `none`.
   sub "Retired status tokens reused in a consumer layer file's own prose:"
   local rlt rlt_rc
   rlt="$(bash "$SELF/retired-layer-token.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' 'NF{print $1"  "$2"  "$3}' | sort -u)"

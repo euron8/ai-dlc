@@ -636,9 +636,12 @@ prose is itself generated rather than composed.
    item, owed before the pull counts as done.
    Note what it does NOT catch: a token the consumer invented that core never had, a
    word core still carries anywhere in its rulebook at theirs, a plain word no core
-   program ever printed, a multi-word status whose other word survived (matched word by
-   word), and a paraphrase that drops the literal word. A clean result is not proof every
-   layer file survived the release.
+   program ever printed, a vocabulary whose owner sits outside the rulebook (a
+   `layer-contract.yaml` clause code, a ledger status) unless the rulebook also spells
+   it, a space-separated status whose other word survived (matched one word at a time),
+   a hyphen chain the layer carries only a prefix or one segment of (a chain is one token,
+   retired whole), and a paraphrase that drops the literal word. A clean result is not
+   proof every layer file survived the release.
 
 3b. **Template pre-classification** (the generated files outside `core/`):
    run `reconcile/preclassify.sh <dist-repo> <base-sha> <theirs-ref>

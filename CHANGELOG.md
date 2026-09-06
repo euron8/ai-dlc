@@ -48,7 +48,10 @@ anything and no row appears, a population that cannot separate the grammars; ove
 spans, the shape a real reconcile compares, the rulebook-only set difference produced 16 false
 rows (`ABSENT`, `CURRENT`, emphasis words one revision skipped; `S290`, a sprint id), the
 program witness alone acquitted `APPROVED-WITH-FIXES` and `CHANGES-REQUIRED`, and the
-composite keeps both and reads zero false rows. Refused on the way: a backticked-only grammar
+composite keeps both and reads zero false rows; the adversarial hand's 201 wide spans agree
+(134 rows, every one the incident). Stated limits: a plain word no program prints (273 of 594
+at `origin/main`), a vocabulary owned outside the rulebook globs, a hyphen chain carried only
+in part (a chain is one token, retired whole), a paraphrase. Refused on the way: a backticked-only grammar
 (the rulebook wrote `VACUOUS` bare), a witness taken as a union over every program at theirs
 (`readopt-override.sh:348` still prints the word in another sense), and a boundary-group
 `grep -o` extractor that loses the token after a separator (550 of 589 on the real rulebook)

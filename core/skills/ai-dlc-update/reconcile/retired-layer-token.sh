@@ -59,9 +59,16 @@
 # A token the consumer invented that core never had (no retirement to detect). A word
 # core still carries ANYWHERE in its rulebook at theirs, even if the layer file's use of
 # it is stale. A PLAIN word that left the rulebook and that no core program under the
-# declared globs ever printed — it is read as emphasis, and the NOTE names it. A
-# multi-word status is matched word by word, so a rename that keeps one of its words is
-# reported on the word that changed. And a retired construct the layer file PARAPHRASES
+# declared globs ever printed — it is read as emphasis, and the NOTE names it; measured at
+# `origin/main`, 273 of the rulebook's 594 plain capitals have no program witness and would
+# be acquitted if retired, `APPROVED` among them, against 321 that do. A vocabulary a layer
+# quotes whose OWNER sits outside the rulebook globs — `layer-contract.yaml`'s clause codes,
+# `enforcement-map.yaml`'s statuses, the push-candidate ledger's — is seen only where the
+# rulebook also spells it; the motivating token reached this corpus because `retro.md` did.
+# A SPACE-separated status is matched one word at a time, so a rename that keeps one word
+# is reported on the word that changed; a hyphen or underscore CHAIN is one token on both
+# sides, so a chain renamed in one segment is retired whole and a layer carrying only its
+# prefix or one segment is NOT flagged. And a retired construct the layer file PARAPHRASES
 # without the literal word. Do not read a clean result as "every layer file survived."
 #
 # USAGE

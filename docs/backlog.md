@@ -4254,8 +4254,12 @@ Report-only: the layer is consumer-owned, so a row is a worklist item, never an 
 
 What it does not catch, stated in its header and its NOTE: a token the consumer invented, a
 word core still carries anywhere in its rulebook at theirs, a plain word no core program ever
-printed, a multi-word status whose other word survived (matched word by word), and a
-paraphrase. `BL-016` is the neighbouring gap for a retired PATH and is unchanged by this.
+printed (273 of the rulebook's 594 plain capitals at `origin/main`, `APPROVED` among them), a
+vocabulary owned outside the rulebook globs unless the rulebook also spells it, a
+space-separated status whose other word survived (matched one word at a time), a hyphen chain
+the layer carries only a prefix or a segment of (a chain is one token on both sides, retired
+whole), and a paraphrase. `BL-016` is the neighbouring gap for a retired PATH and is unchanged
+by this.
 
 The receipt drives the shipped detector over a seeded dist repo with a witnessing program, a
 second program that keeps printing the word at theirs, and an emphasis word dropped without a

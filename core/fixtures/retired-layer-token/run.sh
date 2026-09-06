@@ -492,7 +492,8 @@ if cmp -s "$MREN" "$SCRIPT"; then
 else
   cp "$(dirname "$SCRIPT")/setup-sites.md" "$WORK/" 2>/dev/null; cp "$MREN" "$WORK/retired-layer-token.sh"
   m_out="$(bash "$WORK/retired-layer-token.sh" "$DIST3" "$BASE3" "$THEIRS3" "$RENC" 2>/dev/null)"
-  if printf '%s\n' "$m_out" | grep -qE '^RETIRED-LAYER-TOKEN[[:space:]].*o\.md:3[[:space:]]RENAMEDWORD$'; then
+  m_rows="$(printf '%s\n' "$m_out" | grep -cE '^RETIRED-LAYER-TOKEN[[:space:]].*o\.md:3[[:space:]]RENAMEDWORD$')" || m_rows=0
+  if [ "$m_rows" -ge 1 ]; then
     ok "  MUTATION: with the rename map disabled the same world ROWS the word, so the arm above is what holds"
   else
     bad "  the rename-map mutant produced no row — the arm above cannot fail and proves nothing"
