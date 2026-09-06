@@ -113,6 +113,8 @@ use are the same shape to a regex:
   through it needs doubled backslashes, so a correct site looks wrong.
 - **A multibyte character needs an alternation, not a bracket class.** `S10` refuses the class
   in a tracked file; the C locale is where the class comes apart, and a tool call never runs there.
+- **`"\."` inside an awk DYNAMIC string is a bare `.`.** A regex built by concatenation needs
+  `"\\."`; the single-backslash form matched `24X` for `24.` on three shipped lines before a probe caught it.
 - **An `&` in a `sed` replacement is the whole match**, so editing a script whose new text
   carries `&&` re-inserts the matched line inside itself. Measured: two lines of a scorer
   mangled silently, the run reporting "mutant did not apply". Rewrite such a line with the

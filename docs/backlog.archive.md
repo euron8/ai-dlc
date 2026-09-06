@@ -6776,3 +6776,111 @@ opened-nothing NOTE — so a copy that emits nothing, a substring matcher, a sil
 branch, the no-witness set difference and the union-at-theirs witness each read STILL-LIVE.
 
 verify: sh V=core/skills/ai-dlc-update/reconcile/retired-layer-token.sh; [ -f "$V" ] || exit 9; D=$(mktemp -d); R="$D/dist"; C="$D/cons"; mkdir -p "$R/core/skills/ai-dlc/steps" "$R/core/scripts" "$C/.claude/skills/ai-dlc/overrides"; git -C "$R" init -q; git -C "$R" config user.email a@b; git -C "$R" config user.name a; printf 'With neither, the run is WIDGETGONE (exit 78) and prints every gate. NEVER skip it.\n' > "$R/core/skills/ai-dlc/steps/retro.md"; printf 'echo "WIDGETGONE: $n scanned" >&2\n' > "$R/core/scripts/validate-ci-gates.sh"; printf 'echo "REFUSED: a WIDGETGONE anchor"\n' > "$R/core/scripts/readopt.sh"; git -C "$R" add -A; git -C "$R" commit -qm b; B=$(git -C "$R" rev-parse HEAD); printf 'With neither, the run is EXAMINED NOTHING (exit 78) and prints every gate. Do not skip it.\n' > "$R/core/skills/ai-dlc/steps/retro.md"; printf 'echo "EXAMINED NOTHING: $n scanned" >&2\n' > "$R/core/scripts/validate-ci-gates.sh"; git -C "$R" commit -qam t; T=$(git -C "$R" rev-parse HEAD); printf -- '---\nreason: grep control cites WIDGETGONE reading 1 in core\n---\n# Override\n\nor stock exits 78 WIDGETGONE; empty falls to the alias table\nfooWIDGETGONE and x-WIDGETGONE and widgetgone stay; NEVER is emphasis\n' > "$C/.claude/skills/ai-dlc/overrides/o.md"; P=$(bash "$V" "$R" "$B" "$T" "$C" 2>/dev/null); N=$(bash "$V" "$R" "$B" "$B" "$C" 2>&1 >/dev/null); rm -rf "$D"; b=$(printf '%s\n' "$P" | grep -cE '^RETIRED-LAYER-TOKEN[[:space:]]+\.claude/skills/ai-dlc/overrides/o\.md:6[[:space:]]+WIDGETGONE$'); f=$(printf '%s\n' "$P" | grep -cE 'overrides/o\.md:2[[:space:]]+WIDGETGONE$'); m=$(printf '%s\n' "$P" | grep -cE 'o\.md:7[[:space:]]'); a=$(printf '%s\n' "$P" | grep -c '^RETIRED-LAYER-TOKEN'); z=$(printf '%s\n' "$N" | grep -c 'NO layer file was opened'); [ "$b" -eq 1 ] && [ "$f" -eq 1 ] && [ "$m" -eq 0 ] && [ "$a" -eq 2 ] && [ "$z" -eq 1 ]
+## BL-179 — two core scripts still resolve a core file from the process cwd, so a copy driven from another ai-dlc tree reads that tree's file and says nothing
+
+**LANDED (v0.513.0, verified 81c17d1a).**
+
+Distribution-internal, no `PC-` id; NOTE tier — the silent wrong answer needs the cwd to be
+ANOTHER ai-dlc tree, and every other cwd is a refusal (exit 2, "no gate-validation.md found in
+either layout"). Found by the batch-59 adversarial hand's census of `for cand in` / `for c in`
+loops in `core/` once `BL-178` closed the same class in `validate-suppression-lifetime.sh`,
+which is the control: that loop, `validate-snapshot-conservation.sh:165,188` and
+`validate-h2-attestation.sh:143` all test their candidates under a resolved root. Deliberately
+not folded into `BL-178`, whose subject is a project ARTIFACT (a timeline) read on a gate's
+behalf; these read a CORE file and are driven by hand or by callers that pass the path.
+
+Two subjects, and this entry expires only when both do. `core/scripts/validate-gate-manifest.sh`
+takes the file as its only argument and, given none, tries `.claude/skills/ai-dlc/steps/…`
+then `core/skills/ai-dlc/steps/…` relative to the cwd with no root resolution anywhere in the
+file — driven with no argument from a scratch tree carrying a one-line decoy at the consumer
+path, it reads the decoy (its FAIL names that path) against a control from this root that
+resolves both directions. `core/scripts/artifact-path-config.sh` defaults `ROOT="."` and `cd`s
+there before its two candidate loops (`layer-contract.yaml`, `artifact-path-grammar.md`); its
+usage text documents `--root <dir>`, so the cwd default is its stated contract and the fix is
+to resolve a root the way its siblings do when `--root` is absent, not to remove the flag.
+Derive each script's callers before touching either: `validate-layer-entries.sh` locates
+`artifact-path-config.sh` beside itself, and `validate-enforcement-map.sh` runs from this root.
+
+THE FIRST RECEIPT DROVE ONE OF THE TWO SUBJECTS, so a fix to `validate-gate-manifest.sh` alone
+closed it: scored against a candidate pair holding the fixed manifest validator and the
+unfixed resolver, the original line exited 0. It also keyed the manifest arm on the decoy's
+ABSOLUTE path, and a cwd-relative reader names the file with no prefix at all — that arm scored
+the defect and the fix identically at 0, so the half of the receipt that could still see one
+subject was the resolver half by accident. The line below drives both, keys the manifest arms
+on the candidate path in either spelling, and carries its own two controls: `--root` and an
+explicit `$1` must still REACH that same decoy, or the arms are agreeing with a dead run rather
+than discriminating. Scored: the pre-fix pair 1, the fixed pair 0, `CLAUDE_PROJECT_DIR`-first 1,
+either subject fixed alone 1, the canonical block added while the candidate loops stay relative
+1, and a second spelling of the fix 0. It does NOT see a chain with no terminal guard — the
+canonical chain's last step is a walk up from the cwd, and every directory a decoy can be placed
+in is a resolvable root by construction, so the fail-closed half is I75's arm and not this one.
+
+verify: sh V=$PWD/core/scripts/validate-gate-manifest.sh; C=$PWD/core/scripts/artifact-path-config.sh; [ -f "$V" ] && [ -f "$C" ] || exit 9; bash $V >/dev/null 2>&1 || exit 9; bash $C --areas >/dev/null 2>&1 || exit 9; W=$(mktemp -d); mkdir -p $W/.claude/skills/ai-dlc/steps; printf '# decoy\n' > $W/.claude/skills/ai-dlc/steps/gate-validation.md; printf 'consumer_artifact_paths_file: DECOYPATHS\n' > $W/.claude/skills/ai-dlc/layer-contract.yaml; printf 'areas:\n  DECOYAREA\n' > $W/.claude/skills/ai-dlc/artifact-path-grammar.md; g=$( cd / && bash $C --areas --root $W 2>&1 ); h=$( cd / && bash $V $W/.claude/skills/ai-dlc/steps/gate-validation.md 2>&1 ); a=$( cd $W && bash $V 2>&1 ); b=$( cd $W && CLAUDE_PROJECT_DIR=$W bash $V 2>&1 ); c=$( cd $W && bash $C --areas 2>&1 ); d=$( cd $W && CLAUDE_PROJECT_DIR=$W bash $C --areas 2>&1 ); e=$( cd $W && CLAUDE_PROJECT_DIR=$W bash $C --consumer-file 2>&1 ); rm -rf $W; case $g in *DECOYAREA*) ;; *) exit 9;; esac; case $h in *"$W"*) ;; *) exit 9;; esac; r=0; for o in "$a" "$b"; do case $o in *"$W"*|*".claude/skills/ai-dlc/steps/gate-validation.md"*) r=1;; esac; done; for o in "$c" "$d" "$e"; do case $o in *DECOY*) r=1;; esac; done; exit $r
+
+## BL-181 — the suppression-lifetime validator splits a `**Suppresses:**` value on a bracket class holding an em-dash, so under the C locale every suppression names a check "not in the catalog" and the carve-out vanishes
+
+**LANDED (v0.512.0, verified db7cc1a1).**
+
+Distribution-internal, no `PC-` id; DEFECT tier — a consumer whose gate or pre-push runs
+with no UTF-8 locale (a CI runner with `LANG` unset, `env -i`) gets no SUPPRESSED carve-out
+at all from the remediation guard, which fails closed, and `validate-suppression-lifetime.sh`
+itself reports `FAIL: **Suppresses:** names '32 …', which is not a check in the catalog` for
+every well-formed entry. Found by the batch-59 fixture hand, which ran the three fixtures
+under `env -i PATH=/usr/bin:/bin bash` as `CLAUDE.md` asks and found all three already red on
+origin/main (10, 10 and a `node absent` abort) before its own arms were added.
+
+`core/scripts/validate-suppression-lifetime.sh:252` trims the check title with
+`sub(/[[:space:]]*[—–-][[:space:]].*$/,"",s)`. Under a UTF-8 locale that class holds three
+characters; under the C locale it holds the seven BYTES of those characters, the match lands
+on the em-dash's last byte, and the id comes back as `32 ` followed by two stray bytes, which
+joins against nothing. That is the "a multibyte character needs an alternation, not a
+bracket class" hazard `tool-hazards.md` names for tool calls, in a tracked file; `I71` covers
+only `\t` in a bracket class and `validate-shell-portability.sh`'s arms do not scan awk
+programs for multibyte classes, so nothing fires. Fix shape: an alternation `(—|–|-)`, then the
+three fixtures driven under `env -i` as the receipt of the whole class (`gate-remediation-deny`
+needs `node` on that PATH before its verdict means anything). Not folded into `BL-178`, whose
+subject is where the timeline is read from; this one is what the entry says, and it fails the
+same way from every cwd.
+
+**Batch 62 widened this to its CLASS, on a census, before building.** The filing names one
+site. `git ls-files '*.sh'` under `LC_ALL=C` for a whitespace-free bracket span carrying a high
+byte, comment lines dropped, finds 23 lines in 9 files in a regex context (control: line 252
+among them; 4 python sites answer identically under both locales and are left as written):
+the check-heading grammar `[.—]` in `validate-gate-manifest.sh`, `validate-layer-entries.sh`,
+`reconcile/layer-drift.sh` and `reconcile/relabel-extension-checks.sh` — four copies I47/I15
+bind byte-identical, whose `[.—]$` strip leaves the same two bytes on every em-dash heading
+(measured: `## Check 3 —` → `3 \342\200` under C; the consumer's own `gate-validation.md`
+carries 0 em-dash headings against 40 dot-form, but its two extension checks `## Check XAP —`
+and `## Check XVH —` DO reach that branch — the adversarial hand drove `anchor_form()` and
+`heading_title()` over them under C and read `XAP \342` and a title still carrying the dash on
+the old form, correct on the new, present in 59 of 60 sampled revisions of that directory) —
+`validate-artifact-budget.sh:824`'s `[|—-]` (a matcher only, byte-correct under C but
+the same class), `layer-retired-id-crosswalk/run.sh:84`, and six `[^—]*—` lines in
+`layer-reference-resolution`'s two run scripts. Every site is an alternation now, probed in
+awk, `sed -E` and `grep -E` on the em-dash, the en-dash, the hyphen and a no-separator
+near-miss under both locales; the three awk DYNAMIC-string sites carry `\\.` because `"\."`
+in an awk string is a bare `.`. The prohibition has a mechanism: `S10` of
+`scripts/validate-shell-portability.sh` refuses the bracket form in every tracked shell file,
+pins `LC_ALL=C` for the whole scan (its byte-range pattern is `illegal byte sequence` under
+UTF-8), reports all 23 on origin/main and 0 here, and records its narrowing beside the arm.
+The differential the entry asked for: `gate-adjudication-mutants` (152 FAIL lines) and
+`gate-remediation-deny` (22) red under `env -i PATH=/usr/bin:/bin:<node>` on origin/main and
+green on the fix; `validator-path-resolution` green on both, so it is not a witness.
+`retired-layer-token.sh`'s `env -i` arm from batch 61 is the third fixture that already
+carried this class's hazard by name. The receipt's last conjunct rejects the wrong fix the
+behavioural half accepts: `export LC_ALL=en_US.UTF-8` inside the script passes both drives on
+this machine and fixes nothing on a runner without that locale (a missing locale falls back to
+C silently), so the receipt also refuses any bracket class carrying a high byte in the program
+text, spelt in awk octal because a receipt line cannot carry raw bytes. A second spelling of
+the fix (first whitespace-delimited token) passes it; a re-ordered class does not; comment
+lines are excluded so prose naming the class cannot turn it red on correct code. The
+goal-closing measurement, taken by the adversarial hand on a `file://` clone of the consumer:
+its `docs/escalations/pending.md` (143 entries, 17 suppressions, every one em-dash-separated)
+reads `in_force=1` under UTF-8 on both copies and `in_force=0` under `env -i` on the installed
+copy against `in_force=1` on this one, `cmp` control showing the two scripts differ. The
+`_bmad-output` subtree carries 50 `**Suppresses:**` lines and none in a parseable entry, so a
+differential over it is a null neither side owns.
+
+verify: sh V=$PWD/core/scripts/validate-suppression-lifetime.sh; [ -f "$V" ] || exit 9; W=$(mktemp -d); mkdir -p $W/r; printf 'checks:\n  - id: 16\n    title: a\n  - id: 32\n    title: b\n' > $W/map.yaml; printf '## [S1 gate] [lead] - 2026-05-01T00:00:00Z\n**Status:** SUPPRESSED\n**Suppresses:** [core] 32 — b\n**Expires after:** 3 gates\n**Operator authorization:** 2026-05-01T00:00:00Z | "Override, proceed, file backlog item"\n' > $W/r/pending.md; printf '{"ts":"2026-05-02T01:00:00Z","check":"32","verdict":"FAIL"}\n' > $W/gm.jsonl; a=$(LC_ALL=en_US.UTF-8 AI_DLC_PROJECT_ROOT=$W/r bash $V --in-force --escalations $W/r/pending.md --enforcement-map $W/map.yaml --gate-metrics $W/gm.jsonl 2>&1 >/dev/null); b=$(env -i PATH=/usr/bin:/bin AI_DLC_PROJECT_ROOT=$W/r bash $V --in-force --escalations $W/r/pending.md --enforcement-map $W/map.yaml --gate-metrics $W/gm.jsonl 2>&1 >/dev/null); rm -rf $W; case $a in *"in_force=1 "*) ;; *) exit 9;; esac; case $b in *"in_force=1 "*) ;; *) exit 1;; esac; LC_ALL=C awk '!/^[[:space:]]*#/ && /\[[^][:space:]]*[\200-\377][^][:space:]]*\]/{f=1} END{exit !f}' "$V" && exit 1; exit 0
+
+
