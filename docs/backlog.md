@@ -4050,12 +4050,34 @@ B  same 12 as `[MOVED …]`          -> exit 1, REFUSED: "not one '## ' heading,
                                       so there is no cut point"
 ```
 
-The refusal is correct behaviour and is reported, not silent — but nothing reports the state
-that PRODUCES it. Measured on the reference consumer's live
-`_bmad-output/pipeline-snapshot-history.md`: 13 `^## ` headings and 11 `^[MOVED` brackets, and
-**all 11 brackets sit inside the single heading entry at line 830**, whose span is 467 lines
-against a next-largest of 175. The rotator sees 13 entries where 24 moves happened; 11 are not
-independently cuttable and travel as one lump. At `--keep-entries 1` the lump still moves whole.
+**THAT REFUSAL IS A KNIFE-EDGE AT EXACTLY ZERO HEADINGS, AND AN EARLIER REVISION OF THIS ENTRY
+CLAIMED OTHERWISE.** It said "the refusal is correct behaviour and is reported, not silent",
+which holds only for `N_BOUND == 0`. ONE surviving `^## ` line takes a different branch —
+`N_CUT <= KEEP_ENTRIES` at `core/scripts/rotate-snapshot-archive.sh:178` — which prints an
+affirmative line and exits **0**. Differential, sides asserted to differ on headings and to AGREE
+on brackets before either was read:
+
+```
+C1  0 headings + 40 bracket blocks              exit 1  REFUSED (stderr)
+C2  1 heading  + 40 bracket blocks              exit 0  "1 entr(ies) present, keeping 10
+                                                         -- nothing to rotate (125 lines stay)"
+C3  1 heading  + 400 blocks, 1205 lines         exit 0  same sentence, 1205 lines stay
+```
+
+So an unbounded file reports "nothing to rotate" AFFIRMATIVELY, and the loud refusal is reachable
+only from the one state a real history never reaches — headings decay toward zero but the last
+one is sticky, because every rotation keeps `--keep-entries` of them. **The correction runs in
+the direction that makes the defect worse, which is the direction the first author is least
+likely to check.** Found by the adversarial hand.
+
+Measured on the reference consumer's live `_bmad-output/pipeline-snapshot-history.md`: 13 `^## `
+headings and 11 `^[MOVED` brackets, anchored and unanchored counts both 11 so no bracket hides
+mid-line, and **all 11 sit inside the single heading entry at line 830**, spanning 467 lines
+against a next-largest of 175. **The 11 are trim passes 13, 14 and 15, written unheaded into the
+10th pass's span; the three headings after them (13:14–13:32) are `## MOVED …` again, so the
+practice self-corrected on its own.** That is three whole trim passes made uncuttable, not eleven
+loose fragments — and the self-correction is why stating the header in the rule is worth its
+bytes: the convention is learnable, it was simply never written down.
 
 **The false-positive set of the obvious remedy is the whole corpus, which is why the fix is a
 FORMAT and not a scan.** Across the consumer's 110 tracked `-history`/`-archive` `.md` files,
