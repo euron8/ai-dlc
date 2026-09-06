@@ -1228,7 +1228,8 @@ block a move lands in a history/archive file opens with
 
 **The `## ` is load-bearing.** `rotate-snapshot-archive.sh` cuts at the
 Nth-from-last `^## ` line and never interprets a heading, so a block
-headed any other way is not a cut point and cannot be rotated out.
+headed any other way is not a cut point, and moves only when the entry
+containing it does.
 
 **(b) Slice-read large sectioned artifacts.** Read the section(s)
 relevant to the current scope, not the whole file (Rule 23(b)).
