@@ -214,12 +214,25 @@ fi
 # Every predicate takes the script to drive, re-seeds its own consumer, and asserts
 # a PRESENCE, so a copy that emits nothing fails by construction.
 PRE="$(dirname "$DETECT")/preclassify.sh"
+SECOND_OURS="$CONS/scripts/ai-dlc/second.sh"
 THIRD_OURS="$CONS/scripts/ai-dlc/third.sh"
-# Consumer states. The second core file never has a consumer copy (listed, never opened).
-# The third has one only where a seed writes it (listed, opened, retiring nothing).
-seed_at_theirs() { cp "$DIST/$CORE_PATH" "$CONS/scripts/ai-dlc/validate-artifact-budget.sh"; rm -f "$THIRD_OURS"; }
+# Consumer states. The second core file has no consumer copy except in the all-at-theirs
+# world (listed, never opened). The third has one only where a seed writes it (listed,
+# opened, retiring nothing).
+seed_at_theirs() { cp "$DIST/$CORE_PATH" "$CONS/scripts/ai-dlc/validate-artifact-budget.sh"; rm -f "$SECOND_OURS" "$THIRD_OURS"; }
+# THE INCIDENT'S OWN SHAPE: every path ALREADY-AT-THEIRS, so nothing is listed at all.
+# The second and third files displaced it from every other world, and a wrong fix that
+# requires something to have been listed passed the whole fixture until the adversarial
+# hand put it back. `listed 0` is asserted here as a number.
+seed_all_at_theirs() { seed_at_theirs; cp "$DIST/$SECOND_PATH" "$SECOND_OURS"; cp "$DIST/$THIRD_PATH" "$THIRD_OURS"; }
 seed_third_modified() { printf '#!/bin/bash\nX="$ROOT/.third"\ny=3\n' > "$THIRD_OURS"; }
+# EVERY seed defines the WHOLE consumer state. A predicate that returns early on a mutant
+# leaves whatever its last world wrote, and the next predicate's world then has a shape
+# nobody seeded -- measured: p5 failed at its all-at-theirs world, left the second file
+# at theirs, and p6 read "2 of 2" instead of "2 of 3", scoring a two-cell flip on a
+# mutant that flips one.
 seed_repointed() {
+  rm -f "$SECOND_OURS" "$THIRD_OURS"
   cat > "$CONS/scripts/ai-dlc/validate-artifact-budget.sh" <<'OURS'
 #!/bin/bash
 TMPROOT="$(mktemp -d)"
@@ -234,21 +247,33 @@ seed_severed() {
 CHAN="$ROOT/.chan"
 pool_report() { printf 'OVER\n' >> "$ROOT/.chan"; }
 OURS
-  rm -f "$THIRD_OURS"
+  rm -f "$SECOND_OURS" "$THIRD_OURS"
 }
 # stderr only; stdout discarded. `2>&1 >/dev/null` in that order.
-err_of() { bash "$1" "$DIST" "$2" "$THEIRS_SHA" "$CONS" 2>&1 >/dev/null; }
-out_of() { bash "$1" "$DIST" "$2" "$THEIRS_SHA" "$CONS" 2>/dev/null; }
+# An optional third argument is the per-path fifth argument both program callers pass.
+err_of() { bash "$1" "$DIST" "$2" "$THEIRS_SHA" "$CONS" ${3:+"$3"} 2>&1 >/dev/null; }
+out_of() { bash "$1" "$DIST" "$2" "$THEIRS_SHA" "$CONS" ${3:+"$3"} 2>/dev/null; }
 
-# p5's world lists the two consumer-deleted CLASSIFY files and opens neither, so the
-# listed count in the NOTE is asserted as a number, not merely as present.
+# p5 drives THREE worlds. Two consumer-deleted CLASSIFY files listed and neither opened
+# (the listed count asserted as a number); the incident's own shape, nothing listed at
+# all; and the per-path form both program callers use, restricted to the deleted second
+# file, whose NOTE names the path.
 p5() {
   seed_at_theirs
   o="$(out_of "$1" "$BASE_SHA")"; e="$(err_of "$1" "$BASE_SHA")"
   [ -z "$(printf '%s' "$o" | grep . || true)" ] \
     && grep -q 'listed 2 CLASSIFY file(s) and opened NONE, so NO core file was scanned' <<<"$e" \
     && grep -q 'this zero does not cover it' <<<"$e" \
-    && ! grep -q 'produced no rows' <<<"$e"
+    && ! grep -q 'produced no rows' <<<"$e" || return 1
+  seed_all_at_theirs
+  o="$(out_of "$1" "$BASE_SHA")"; e="$(err_of "$1" "$BASE_SHA")"
+  [ -z "$(printf '%s' "$o" | grep . || true)" ] \
+    && grep -q 'listed 0 CLASSIFY file(s) and opened NONE' <<<"$e" \
+    && ! grep -q 'produced no rows' <<<"$e" || return 1
+  seed_at_theirs
+  o="$(out_of "$1" "$BASE_SHA" "$SECOND_PATH")"; e="$(err_of "$1" "$BASE_SHA" "$SECOND_PATH")"
+  [ -z "$(printf '%s' "$o" | grep . || true)" ] \
+    && grep -q "listed 1 CLASSIFY file(s) at $SECOND_PATH and opened NONE" <<<"$e"
 }
 # p6 drives TWO worlds so every count in the denominator NOTE is bound by a world where
 # it differs: re-pointed + third modified lists 3, opens 2, 1 retiring; third modified
@@ -265,9 +290,12 @@ p6() {
     && grep -q '1 of 2 CLASSIFY file(s) opened, 0 carrying' <<<"$e" \
     && ! grep -q 'opened NONE' <<<"$e"
 }
+# p7 drives the whole-run form and the per-path form apply.sh uses on a CLASSIFY path.
 p7() {
   seed_severed
   o="$(out_of "$1" "$BASE_SHA")"; e="$(err_of "$1" "$BASE_SHA")"
+  grep -q 'RETIRED-CONTRACT-TOKEN.*\$ROOT/\.chan' <<<"$o" && [ -z "$e" ] || return 1
+  o="$(out_of "$1" "$BASE_SHA" "$CORE_PATH")"; e="$(err_of "$1" "$BASE_SHA" "$CORE_PATH")"
   grep -q 'RETIRED-CONTRACT-TOKEN.*\$ROOT/\.chan' <<<"$o" && [ -z "$e" ]
 }
 p8() {
@@ -319,6 +347,10 @@ mkmut() {  # name sed-expr -> path on stdout
 }
 vec() { v=""; for p in p5 p6 p7 p8; do if "$p" "$1"; then v="${v}1"; else v="${v}0"; fi; done; printf '%s' "$v"; }
 score() {  # name path expected-vector
+  # mkmut runs inside `$( )`, so its `exit 2` ends the subshell and not this fixture; an
+  # empty path here IS that refusal, and it must read as BROKEN, never as a regression
+  # (`bash ""` fails every predicate and prints 0000). Measured by the adversarial hand.
+  [ -n "$2" ] || { echo "FIXTURE ERROR: mutant $1 was not built -- see the FIXTURE ERROR above; a lost anchor is a lost subject, not a regression" >&2; exit 2; }
   got="$(vec "$2")"
   if [ "$got" = "$3" ]; then ok "MUTATION $1: flips exactly its own predicate ($3)"
   else bad "MUTATION $1: expected $3 got $got (p5 p6 p7 p8)"; fi
@@ -358,6 +390,10 @@ score "note-beside-rows" "$(mkmut fallthrough '/^  printf '"'"'%s'"'"' "\$rows"$
 # because the operator reads the run and never the header; nothing bound that until the
 # receipt adversary stripped it and both channels stayed green. p5 alone falls.
 score "limit-dropped" "$(mkmut nolimit 's| \$LIMIT" >&2$|" >\&2|')" "0111"
+# Wrong fix 1d: say nothing unless something was listed. Invisible until the all-at-theirs
+# world existed -- the adversarial hand inserted this one line and every arm stayed green.
+# p5 alone falls.
+score "requires-listed" "$(mkmut reqlisted 's|^if \[ "\$opened" -eq 0 \]; then|[ "$listed" -gt 0 ] \|\| exit 0; if [ "$opened" -eq 0 ]; then|')" "0111"
 # Refusal neutered: an unresolvable input falls through to the vacuity NOTE. p8 alone falls.
 score "refusal-neutered" "$(mkmut norefuse 's|^  echo "retired-tokens: preclassify.sh produced no rows|  : "|')" "1110"
 
