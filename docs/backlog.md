@@ -4134,86 +4134,6 @@ join exists.
 verify: manual
 
 
-## BL-178 — the suppression-lifetime validator resolved its default gate-metrics file from the process cwd before the project root, so the remediation guard counted a suppression's lifetime against whichever project the caller was standing in
-
-Filed by the reference consumer as
-`PC-S308-SUPPRESSION-LIFETIME-RESOLVES-GATE-METRICS-FROM-CWD-BEFORE-PROJECT-ROOT`
-(2026-09-05, on its 0.504.0 → 0.507.0 pull, at its pre-push gate); DEFECT tier — every
-consumer with real gate history has failed `gate-remediation-deny` at pre-push from 0.505.0
-on, and the failure reads exactly like the SUPPRESSED carve-out having been deleted (18 of the
-same assertions), so the consumer pushed its reconcile `--no-verify` on the record. Verified
-here before the fix: `bash core/fixtures/gate-remediation-deny/run.sh` PASS from this root,
-which carries no metrics file, and `18 assertion(s) FAILED` from a scratch directory carrying
-a copy of the consumer's 348-line `_bmad-output/implementation-artifacts/gate-metrics.jsonl`.
-The distribution's own suite could not see it, because nothing here writes that file. The
-defect fails OPEN as readily as closed: the installed validator driven over the consumer's
-live escalations file with its real root, from a cwd carrying a two-gate timeline, listed all
-17 of its SUPPRESSED entries in force (Checks 11, 16, 22, 24, 30) where the root's own
-timeline puts exactly 1 in force — the fixed copy reads 1 from every cwd, and the two agree
-byte-for-byte when the cwd is the root, so the production hook, which the harness runs from
-`PROJECT_DIR`, was never wrong on that consumer; every hand-driven or sub-directory invocation
-was.
-
-Reader set, derived rather than taken from the filing: the cwd-first `for cand in` loop was
-ONE program, `core/scripts/validate-suppression-lifetime.sh` section 2 — its sibling
-`validate-snapshot-conservation.sh` anchors the same three candidates on `$ROOT/` and was
-the model — with THREE callers: the remediation guard's arm 7b (`BL-169`, 0.505.0), which
-passed `AI_DLC_PROJECT_ROOT` and no `--gate-metrics` unless the fixture channel
-`AI_DLC_GATE_METRICS` was set; `validate-gate-adjudication.sh`, which passed neither and whose
-comment said the sibling located the timeline "from the same cwd the lead runs verdict.sh
-in"; and the fixtures. Every candidate is now under the resolved root and the "cannot be
-counted" NOTE no longer says to run from the project root. That is wider than a reorder,
-and the fixture hand measured the width: the old list carried the flat and `docs/` layouts
-ONLY as cwd-relative candidates, so a consumer keeping its timeline at either got no
-carve-out from any cwd that carried nothing — red on origin/main from this repo's root,
-independently of the cwd defect — and the root-anchored forms of both are new and now
-guarded. Both callers changed in comment
-only: the guard already handed the sibling `AI_DLC_PROJECT_ROOT`, and the gate-adjudication
-caller walks up from the same directory and inherits the same variable, so handing the root
-over explicitly there changed nothing except the unresolvable-root case, where it would have
-broken the fallback.
-
-The filed remedy was built and scored in both halves, and both fell. "Fall back to CWD only
-when no root was given": the validator exits 2 with no root, so the clause is unreachable,
-and the root-first-then-cwd shape it describes still reads a stranger's timeline from any
-cwd that carries one when the root carries none; the receipt's third world kills it. "Have
-the hook pass `--gate-metrics` explicitly, since it knows `PROJECT_DIR`": built as a guard
-that named `${LOG_DIR}/implementation-artifacts/gate-metrics.jsonl` on every call, it turned
-three ALLOW worlds into DENY (the flat `_bmad-output/gate-metrics.jsonl` layout, the
-`docs/_bmad-output/` layout, and a custom `AI_DLC_STATE_DIR`), because the sibling resolves
-three layouts under the root and the gate WRITER (`gate-validation.md`, the structured
-metrics emission) writes the literal `_bmad-output/implementation-artifacts/` path whatever
-the state dir is, so `LOG_DIR` is not where the timeline lives under a custom one — the
-first cut of this fix shipped that hunk with the opposite claim in its message, and the
-adversarial hand's differential over four `(hook, sibling)` pairs from the decoy cwd showed
-the validator-only pair passing the fixture, the receipt and every layout. The guard's cache
-key still names the standard layout's path for its freshness term, which is narrower than
-the sibling's resolution; that is stated beside the key and is not this entry's subject.
-
-Stated limit of root-only resolution: a copy of the validator that lives OUTSIDE the
-project (this distribution's `core/scripts/` driven against a consumer) with no
-`AI_DLC_PROJECT_ROOT` resolves its root from its own directory, finds no timeline there, and
-reports "cannot be counted" where the cwd-first code read the cwd's; pass the root, which is
-what every shipping caller and this program's own differential do. The sibling
-`validate-snapshot-conservation.sh` has had exactly that property since it was written.
-
-The receipt seeds a root with a one-gate timeline and a SUPPRESSED entry inside its
-lifetime, drives `--in-force` with no `--gate-metrics` from a cwd carrying an eight-gate
-decoy timeline, and asserts the summary line reads the ROOT's file (`in_force=1
-gates_recorded=1`), that the same invocation from the root itself is byte-identical, and
-that a root carrying NO metrics file read from the same decoy cwd reports
-`gates_recorded=NONE` rather than the decoy's 8. Driven: exit 0 on the fixed validator;
-exit 1 on the origin/main copy (world one reads `in_force=0 gates_recorded=8`) and on the
-root-then-cwd copy (world three reads `gates_recorded=8`). Limit: the receipt drives the
-validator only and cannot see the hook; fixture `gate-remediation-deny` is the channel for
-the hook, with flat-layout and `docs/`-layout worlds where the refuted always-pass hook
-DENIES and the shipped one ALLOWs, and it asserts its own cwd-invariance by running from a
-cwd that carries a decoy timeline, which is the world the consumer's pre-push runs in and
-this repo's never has. The consumer's own receipt is `verify: manual` by its own note (a
-reorder keeps every token present today).
-
-verify: sh V=$PWD/core/scripts/validate-suppression-lifetime.sh; [ -f "$V" ] || exit 9; W=$(mktemp -d); R=$W/r; C=$W/c; N=$W/n; M=$W/map.yaml; mkdir -p $R/_bmad-output/implementation-artifacts $C/_bmad-output/implementation-artifacts $N; printf 'checks:\n  - id: 16\n    title: a\n  - id: 32\n    title: b\n' > $M; g() { printf '{"v":1,"sprint":1,"gate":"planning","phase":"a","ts":"%s","sha":"deadbeef","catalog":"core","check":"32","title":"t","verdict":"FAIL","defect_class":null,"evidence":"e","tok_slice":1}\n' "$1"; }; g 2026-05-02T01:00:00Z > $R/_bmad-output/implementation-artifacts/gate-metrics.jsonl; for i in 2 3 4 5 6 7 8 9; do g 2026-05-0${i}T01:00:00Z; done > $C/_bmad-output/implementation-artifacts/gate-metrics.jsonl; printf '## [S1 gate] [lead] - 2026-05-01T00:00:00Z\n**Status:** SUPPRESSED\n**Suppresses:** [core] 32 — b\n**Expires after:** 3 gates\n**Operator authorization:** 2026-05-01T00:00:00Z | "Override, proceed, file backlog item"\n' > $R/pending.md; d() { ( cd "$1" && AI_DLC_PROJECT_ROOT=$2 bash $V --in-force --escalations $R/pending.md --enforcement-map $M 2>&1 >/dev/null | grep '^IN-FORCE:' ); }; a=$(d $C $R); b=$(d $R $R); c=$(d $C $N); rm -rf $W; case $a in *"in_force=1 gates_recorded=1 "*) ;; *) exit 1;; esac; [ "$a" = "$b" ] || exit 1; case $c in *"in_force=0 "*"gates_recorded=NONE"*) ;; *) exit 1;; esac
-
 ## BL-179 — two core scripts still resolve a core file from the process cwd, so a copy driven from another ai-dlc tree reads that tree's file and says nothing
 
 Distribution-internal, no `PC-` id; NOTE tier — the silent wrong answer needs the cwd to be
@@ -4238,46 +4158,6 @@ Derive each script's callers before touching either: `validate-layer-entries.sh`
 `artifact-path-config.sh` beside itself, and `validate-enforcement-map.sh` runs from this root.
 
 verify: sh V=$PWD/core/scripts/validate-gate-manifest.sh; [ -f "$V" ] || exit 9; bash $V >/dev/null 2>&1 || exit 9; W=$(mktemp -d); mkdir -p $W/.claude/skills/ai-dlc/steps; printf '# decoy\n' > $W/.claude/skills/ai-dlc/steps/gate-validation.md; o=$( cd $W && bash $V 2>&1 ); rm -rf $W; case $o in *".claude/skills/ai-dlc/steps/gate-validation.md"*) exit 1;; esac; exit 0
-
-## BL-180 — retro's rule-file audit judged what a rule SAYS and never whether the sprint exercised one, so a rule nothing in the pipeline can reach cleared the accretion tally at zero catches against zero false positives
-
-Drain of `PC-S337-RETRO-PROCESS-IMPROVEMENTS-RULE-EXERCISE-AUDIT`, the reference consumer's
-`push_candidate: true` extension hooking `steps/retro.md` "### 4. Apply Process Improvements";
-NOTE tier — the cost is a rule set that grows unreachable members while every scan reports
-clean, not a wrong gate verdict.
-
-Core's `#### Rule file audit (every retro)` ran five mechanical scans plus the lead's Class 3
-accretion pass, and every one of them judged rule TEXT: narrative drift, an incomplete Rule
-26(c) triple, soft language, pointer resolution, path-filter dormancy, and a false-positive
-tally against true catches. Class 3's ratio is the closest thing to an exercise question and it
-does not ask one — an item never reached scores zero false positives against zero catches and
-passes, which reads exactly like an item that fired cleanly all sprint. `### Empirical gate
-validation` covers the other half only for GATES added via retro and only inside the exercise
-window; a rule in `CLAUDE.md`, a coding convention, or a hook from an earlier sprint has no
-liveness question anywhere in the step. The consumer runs the missing pass as a project-local
-script because its corpus helper is theirs and not core's, which is the only reason the QUESTION
-was not already upstream.
-
-`core/skills/ai-dlc/steps/retro.md` now carries the question in core's voice, inside the same
-Class 3 pass and over the same population: for each item, whether THIS sprint produced evidence
-it fired — a gate log line, a review finding, a refused action, a change made to satisfy it —
-derived from artifacts the sprint already committed rather than recalled. An item with no such
-evidence is UNEXERCISED, and the lead says which of the two states it is in: the subject did not
-arise, or nothing can reach it. An unreachable item routes to Step 4 for wiring, narrowing, or
-removal, which is the mechanism that added it. The consumer's local script and its corpus helper
-are not restated and are not required — the procedure names the artifact classes, not a program.
-
-**Stated limits.** The receipt is a grep on prose, because the subject IS prose: a step file
-carries no emission site to bind. It is satisfied by any text placing the three tokens between
-the `#### Rule file audit` and `#### Resident-ordering scan` headings, so a comment, a quotation
-of this entry, or a mutant that keeps the tokens and inverts the instruction all close it; the
-section bound is the only discrimination it has, and it stops a mention elsewhere in the file
-from counting. Nothing mechanizes whether a lead actually performs the pass — Class 3 has the
-same property and for the same reason, which is that only the lead holds the history the
-question needs.
-
-verify: sh R="${RETRO:-core/skills/ai-dlc/steps/retro.md}"; [ -f "$R" ] || R=".claude/skills/ai-dlc/steps/retro.md"; [ -f "$R" ] || exit 9; a=$(grep -n '^#### Rule file audit' "$R" | head -1 | cut -d: -f1); b=$(grep -n '^#### Resident-ordering scan' "$R" | head -1 | cut -d: -f1); [ -n "$a" ] && [ -n "$b" ] && [ "$a" -lt "$b" ] || exit 9; s=$(sed -n "${a},${b}p" "$R"); case "$s" in *UNEXERCISED*) ;; *) exit 1 ;; esac; case "$s" in *"Presence is not exercise"*) ;; *) exit 1 ;; esac; case "$s" in *"nothing in the pipeline can reach it"*) exit 0 ;; esac; exit 1
-
 
 ## BL-181 — the suppression-lifetime validator splits a `**Suppresses:**` value on a bracket class holding an em-dash, so under the C locale every suppression names a check "not in the catalog" and the carve-out vanishes
 

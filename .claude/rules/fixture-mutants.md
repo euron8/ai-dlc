@@ -148,6 +148,13 @@ paths:
   site. And a seed must define the WHOLE consumer state, removing what it does not write: a
   predicate that failed at its second world left that world's files behind and the next
   predicate read a shape nobody seeded, a two-cell flip that read as entanglement.
+- **A subject that CACHES its answer scores every mutant of the fetch as SURVIVED, and the
+  cache key will not say so.** Two hook variants driven in one workspace computed the same
+  key (escalations file, sibling, timeline — never the hook itself), so the mutant read the
+  original's cached rows and never asked the sibling; measured on `gate-remediation-deny`,
+  where a `M10` kill read SURVIVED twice for that reason. Give every drive of a fetch mutant a
+  fresh workspace, and ask of any new hook mutant whether its edit is upstream or downstream
+  of the cache read — the existing decision mutants are safe only because they sit below it.
 - **Mutate the file the fixture RESOLVES, which is not always the one you are
   changing.** A fixture that names candidates in both install layouts takes the
   first that exists, and in this repo `core/git-hooks/pre-push` is found before

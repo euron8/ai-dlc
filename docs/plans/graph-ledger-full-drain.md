@@ -37,7 +37,143 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 58 SHIPPED AS `v0.508.0`. THE CONSUMER PULLED TO `0.507.0` MID-BATCH, SO THE GAP IS ONE AND PENDING IS ONE. THE CONSUMER THEN FILED ONE NEW, VERIFIED, CONSUMER-BLOCKING CANDIDATE AFTER THE MERGE — IT IS BATCH 59'S SUBJECT. ONE CANDIDATE STILL AWAITS THE OPERATOR'S REJECTION, PLUS `BL-159`, `BL-161`, `BL-163`, `BL-171` AND `BL-176` WITH NO `PC-` ID.
+### BATCH 59 SHIPPED AS `v0.509.0`, TWO CANDIDATES IN ONE RELEASE. THE GAP IS TWO AND PENDING IS THREE, AND THE PULL IS REQUIRED: THE CONSUMER'S OWN PRE-PUSH FAILS ON THE INSTALLED PAIR AND IT PUSHES `--no-verify`. THE SWEEP IS EMPTY. TWO `PC-S337-RETRO-*` SIBLINGS WERE FOUND ALREADY IN CORE AND ARE THE CONSUMER'S TO ROTATE, NOT WORK. ONE CANDIDATE STILL AWAITS THE OPERATOR'S REJECTION, PLUS `BL-159`, `BL-161`, `BL-163`, `BL-171`, `BL-176`, `BL-179` AND `BL-181` WITH NO `PC-` ID.
+
+This block replaces the batch-58 record below it. Every figure here was re-derived on 2026-09-05
+after the merge, against the working tree with the controls in the same invocation; re-derive
+them again rather than reading them.
+
+**`VERSION` IS `0.509.0`, SO BATCH 60 RELEASES AS `0.510.0`.** Re-derive `VERSION` and add one.
+Batch 59 merged at `68fa7e95` (PR #644, squash; on the branch the release commit came last
+after ten fix, test and docs commits, none naming an id), closing
+`PC-S308-SUPPRESSION-LIFETIME-RESOLVES-GATE-METRICS-FROM-CWD-BEFORE-PROJECT-ROOT` as `BL-178`
+and `PC-S337-RETRO-PROCESS-IMPROVEMENTS-RULE-EXERCISE-AUDIT` as `BL-180` under action 2, both
+rotated (archive 89 → 91, live 88 → 92 → 90 after four filings and two rotations; `BL-179`
+and `BL-181` filed and not fixed). `named_absorbed()` lists TWO commits for the `S308` id —
+batch 58's docs commit `e867eec9`, which named it while REPORTING it at `VERSION` `0.508.0`,
+and the release at `0.509.0` — which is batch 53's `BL-166` shape and not a mis-attribution
+under the current reader; one commit for the `RETRO` id. The impossible-id control for that
+channel is `grep -c '^release:'` reading 0, NOT `PC-S999-NEVER` being absent, which docs
+commits quote. No correction release. **The seventh batch opened by a peer's handoff**
+(action 9's message from `ai-dlc-29`), so it scoped itself from its own ranking and stated the
+choice in its first ping: the new filing ranked first, and the three `PC-S337-RETRO-*` drains
+were batched beside it because none touches a bootstrapping file.
+
+**THE FIRST CUT'S GUARD HUNK WAS A PURE LOSS, AND THE ADVERSARY'S FOUR-PAIR DIFFERENTIAL
+REVERTED IT BEFORE THE MERGE.** The filing's remedy had two halves and both were built and
+fell. "Fall back to CWD only when no root was given": the validator exits 2 with no root, so
+the clause is unreachable, and the root-then-cwd shape it describes reads a stranger's
+timeline from any cwd carrying one when the root carries none (the `BL-178` receipt's third
+world kills it). "Have the hook pass `--gate-metrics` explicitly": built as a guard naming
+`${LOG_DIR}/implementation-artifacts/gate-metrics.jsonl` on every call, it turned the flat
+`_bmad-output/gate-metrics.jsonl` layout, the `docs/_bmad-output/` layout and every custom
+`AI_DLC_STATE_DIR` from ALLOW into DENY — the sibling resolves three layouts under the root,
+and the gate WRITER (`gate-validation.md`'s structured metrics emission) writes the literal
+`_bmad-output/…` path whatever the state dir says, so `LOG_DIR` is not where the timeline
+lives under a custom one. The first cut shipped that hunk with the OPPOSITE claim in its
+commit message; the validator-only pair passed the fixture, the receipt and every layout. So
+the whole fix is root-anchoring the validator's candidate list, which also gives the flat and
+`docs/` layouts a root-anchored form for the first time (the old list carried them only
+cwd-relative, red on `origin/main` from this repo's root independently of the cwd defect).
+The guard and `validate-gate-adjudication.sh` changed in comment only; a stale
+`_gate-procedures.md:143` citation in the guard now reads `:153`.
+
+**THE DEFECT FAILS OPEN AS READILY AS CLOSED, MEASURED ON THE CONSUMER'S LIVE FILE.** The
+installed validator, driven read-only over the consumer's live `pending.md` with its real
+root, from a cwd carrying a foreign two-gate timeline, listed all 17 of its SUPPRESSED entries
+in force (Checks 11, 16, 22, 24, 30) where the root's own timeline puts exactly 1; the fixed
+copy reads 1 from every cwd, and the two are byte-identical when the cwd is the root or a
+neutral directory. No committed record on the consumer carries a foreign `metrics=` path (the
+hook discards the sibling's stderr; 101 verdicts' `gates_recorded=` climb 40 → 60, reset at a
+rotation, climb 5 → 11), so the production hook, which the harness runs from `PROJECT_DIR`,
+was never wrong there. Every hand-driven or sub-directory invocation was.
+
+**THE FIXTURE HAND'S THREE BATTERIES MAKE THE DEFECT RED FROM THE REPO ROOT ON THE PREVIOUS
+VALIDATOR** (`suppression-lifetime` 9, `gate-remediation-deny` 3, `gate-adjudication` 1;
+21 from the decoy cwd), and every wrong fix dies in a named arm: cwd-first, root-then-cwd
+(world B, root has no timeline), guard-only, always-pass guard (`S13a`/`S13b`, the flat and
+`docs/` layouts). Three `gate-adjudication-mutants` kill sets grew by the new `S17` arm and
+one anchor moved to the reworded NOTE. Solo timings moved by +0.3s / +0.1s / +1.5s; the pole
+is `layer-reference-resolution` at ~247 loaded. **Under `env -i PATH=/usr/bin:/bin` all three
+fixtures were ALREADY RED on `origin/main`** — the em-dash bracket class at
+`validate-suppression-lifetime.sh:252` splits every `**Suppresses:**` line under the C locale,
+which is `BL-181` (DEFECT tier: a CI consumer with no UTF-8 locale gets no carve-out at all).
+Its fix is a one-line alternation and the three fixtures under `env -i` are its receipt of the
+whole class; it was filed rather than folded in because it is a second subject with no filing
+behind it. `BL-179` files the two remaining `core/` scripts that still resolve a CORE file from
+the cwd (`validate-gate-manifest.sh`, `artifact-path-config.sh`); NOTE tier.
+
+**TWO OF THE THREE `PC-S337-RETRO-*` DRAINS WERE ALREADY IN CORE, AND THEY ARE NOT WORK.**
+`…PARTY-MODE-TOPOLOGY-CITATION-MANDATE` is `retro.md`'s topology citation mandate under
+`### 3. Write Retro Document`, strictly stronger than the extension, since `9f1d5751`;
+`…SPRINT-SHIP-DUAL-COUNTER-PROVENANCE` is the exact `dual-counter:` template line under
+`### Sprint-Ship Verification` since `20f2dc14`, the only delta being the consumer's own
+requirement-id prefix. Neither is named in any release commit (the join would report
+`0.509.0` as the absorbing release and a consumer pulling to it for that reason would get
+nothing new); the `0.509.0` CHANGELOG's "Not taken" section carries the `path:line` for each,
+and both stay in the unfiled set until the consumer annotates them `ADOPTED UPSTREAM` and
+rotates. **Do not re-scope onto them; the sweep will show both.** The third,
+`…PROCESS-IMPROVEMENTS-RULE-EXERCISE-AUDIT`, was real: every scan in retro's rule-file audit
+judged rule TEXT, and an item nothing in the pipeline can reach cleared the Class 3 tally at
+zero against zero; eleven lines in `retro.md` now ask per item whether THIS sprint produced
+evidence it fired, and route an unreachable item to Step 4.
+
+**THE LEDGER DID NOT MOVE THIS BATCH.** md5 `417c783e…` at open and at close; the consumer's
+filing is still an uncommitted edit there. **Live 72, cited 50, unfiled 22**, archive 160,
+partition control 0. Goal partition **23 DISCHARGED / 27 in flight / 22 untouched**, overlap 3,
+discharged-but-invisible 0, TERMINAL **49**. The consumer's porcelain read 6 at open and 4 at
+close, its HEAD `2fb0ae7d7` → `9e6466cad` (its own reconcile commit), back on
+`ai-dlc/carry-over/pool-pnl-backlog-triage`; no write to the consumer by this session or its
+four hands.
+
+**GAP TWO (`0.507.0` installed, `0.509.0` shipped), PENDING 3 (`BL-177` at `0.508.0`;
+`BL-178`, `BL-180` at `0.509.0`; three `PC-` ids), AND THE PULL IS REQUIRED ON THIS BATCH'S
+EVIDENCE.** The second test diverges on the consumer's real tree today in the one place that
+matters: its own `tests/fixtures/gate-remediation-deny/run.sh` from its root reads
+`18 assertion(s) FAILED` on the installed `0.507.0` pair and `PASS` with the two fixed files
+overlaid on a clone (`cmp -s` control: the installed copies are byte-identical to `528ca84b`),
+and its reconcile log records the `0.507.0` push going `--no-verify` for exactly that
+failure. On the consumer's live escalations file the in-force row set is byte-identical before
+and after when the cwd is the root, so nothing in normal gate operation changes. Say WIDE at
+five. The range `528ca84b..origin/main` carries `0.508.0`'s bootstrapping files
+(`reconcile/retired-tokens.sh`, the update skill's `SKILL.md`) and 0 mode-only changes over 12
+core paths; `0.509.0` carries none. A pull is operator-initiated; readiness is not
+authorization.
+
+**THE TOP-RANKED STANDING CANDIDATE STILL AWAITS THE OPERATOR'S REJECTION.**
+`PC-S340-CHECK-26-READS-A-PARTIAL-RE-VERIFY-VERDICT-FILE-AS-UNADJUDICATED` is live at the
+consumer, recommended for rejection in the batch-57 block below and in the `0.507.0`
+CHANGELOG's "Not taken" section, deliberately not named in any release commit. Ask the
+operator to carry it into a graph session; until then it stays live and unfiled.
+
+**TELL THE CONSUMER, IN THE NEXT BRIEF,** that `0.509.0` makes `gate-remediation-deny` pass
+from its root, so the `--no-verify` disposition can be retired, and that it is the only
+verdict that moves; that the `metrics=` field on the sibling's `IN-FORCE:` stderr line is now
+absolute and the "cannot be counted" NOTE no longer says "run from the project root" (no
+consumer fixture anchors either); that its own `verify: manual` receipt for the entry only
+runs if the seeded root also carries `.claude/skills/ai-dlc/enforcement-map.yaml` (without it
+both copies exit 2 identically and read as "no difference"), and that it accepts the
+root-then-cwd reorder this distribution refuted, so `BL-178`'s receipt is the discriminating
+one; that `…PARTY-MODE-TOPOLOGY-CITATION-MANDATE` and `…SPRINT-SHIP-DUAL-COUNTER-PROVENANCE`
+are in core at the `path:line`s the CHANGELOG names and can be annotated `ADOPTED UPSTREAM`
+and rotated; that under a C locale (`env -i`, a CI runner with no `LANG`) the installed
+validator names every suppressed check "not in the catalog" and the guard fails closed
+(`BL-181`, unfixed); and that the batch-58 brief items below still stand.
+
+**THE SWEEP FOR BATCH 60 IS EMPTY, AND THE 22 UNFILED IDS ARE THE STANDING CORPUS.** Check
+the ledger's md5 first — the consumer files mid-batch, pulls mid-batch, and filed once after
+batch 58's merge. Of the 22, two are the already-in-core `RETRO` siblings above, and the other
+20 are enumerated in action 1b and the batch-39 paragraph of action 1, none filed since
+2026-08-31. What ranks first, by consequence:
+`PC-S305-UNION-GATE-UNPASSABLE-ON-ANY-PULL-THAT-HAD-A-BLOCKER` (SKILL.md step 7 —
+bootstrapping, alone; re-derive whether the union gate's clause (1) still precedes the
+adjudication loop before believing the filing),
+`PC-S335-NO-DETECTOR-REACHES-A-RETIRED-STATUS-TOKEN-…` (a new report-only detector in
+reconcile — bootstrapping, alone; its receipt is `verify: manual` by its own note). `BL-181`
+(no `PC-` id, DEFECT tier, a one-line fix with a three-fixture `env -i` receipt) is the
+readiest and has a consumer consequence today; `BL-171`, `BL-176` and `BL-179` rank below it.
+
+### BATCH 58 SHIPPED AS `v0.508.0` — THE BLOCK ABOVE REPLACES THIS ONE. TAKE THE STATE FROM THERE.
 
 This block replaces the batch-57 record below it. Every figure here was re-derived on 2026-09-05
 after the merge, against the working tree with the controls in the same invocation, and
@@ -5667,18 +5803,20 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), RANK THE UNFILED CANDIDATES,
-   THEN SCOPE BATCH 58 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
+   THEN SCOPE BATCH 60 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
    instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
    candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
    FROM ANOTHER SESSION** — a cross-session message carrying `READ and FOLLOW …`, which is
    action 9's handoff — do NOT stop to ask: take the item(s) your own sweep and ranking
    recommend, state that choice and its reason in your FIRST message to the operator, and
    proceed; the operator can redirect at any ping. **Regardless of who invoked you, batch
-   multiple candidates into one release wherever action 2 allows it.** ONE new candidate is
-   unfiled today, verified and consumer-blocking:
-   `PC-S308-SUPPRESSION-LIFETIME-RESOLVES-GATE-METRICS-FROM-CWD-BEFORE-PROJECT-ROOT`, filed
-   after batch 58's merge and ranked first in the resume block; the other 23 unfiled ids are
-   the standing corpus. Batch 58 is SHIPPED — `v0.508.0` at
+   multiple candidates into one release wherever action 2 allows it.** The sweep is EMPTY
+   today: the 22 unfiled ids are the standing corpus, two of them (`PC-S337-RETRO-PARTY-MODE-…`
+   and `…SPRINT-SHIP-DUAL-COUNTER-…`) already in core and the consumer's to rotate, not work;
+   the resume block ranks the rest. Batch 59 is SHIPPED — `v0.509.0` at `68fa7e95` (PR #644),
+   `PC-S308-SUPPRESSION-LIFETIME-RESOLVES-GATE-METRICS-FROM-CWD-BEFORE-PROJECT-ROOT` closed
+   as `BL-178` and `PC-S337-RETRO-PROCESS-IMPROVEMENTS-RULE-EXERCISE-AUDIT` as `BL-180`, both
+   rotated, `BL-179` and `BL-181` filed and not fixed, no correction release; batch 58 is SHIPPED — `v0.508.0` at
    `d6cf1a97` (PR #641), `PC-S337-RETIRED-TOKENS-CANNOT-SAY-IT-SCANNED-NOTHING` closed as
    `BL-177`, rotated, no correction release, and the consumer pulled to `0.507.0` mid-batch;
    batch 57 is SHIPPED — `v0.507.0` at `3520fbb4` (PR #639),
@@ -6291,9 +6429,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 417c783e... after the consumer filed once AFTER batch 58's merge (7f097cf7... after its mid-batch pull to 0.507.0; 773146d7... through batch 57); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
-   wc -l < /tmp/live.txt    # 72 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 77 through batch 57, 71 after the consumer's pull rotated six, 72 after its post-merge filing
-   wc -l < /tmp/unfiled.txt # 24 -- PC-S337-RETIRED-TOKENS-... left the set by being cited by BL-177, and PC-S308-SUPPRESSION-LIFETIME-... entered it; the six the pull rotated were all already cited
+   md5 -q "$L"              # 417c783e... unmoved through batch 59 (the consumer filed once AFTER batch 58's merge; 7f097cf7... after its mid-batch pull to 0.507.0); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
+   wc -l < /tmp/live.txt    # 72 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 77 through batch 57, 71 after the consumer's pull rotated six, 72 after its post-merge filing, unmoved through batch 59
+   wc -l < /tmp/unfiled.txt # 22 -- PC-S308-SUPPRESSION-LIFETIME-... and PC-S337-RETRO-PROCESS-IMPROVEMENTS-... left the set by being cited by BL-178 and BL-180; two of the 22 are RETRO siblings already in core
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -6301,8 +6439,10 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 72 LIVE CANDIDATES, 48 CITED, 24 UNFILED** — re-derived at batch 58's
-   fresh-resume check after its merge at `d6cf1a97` (md5 `417c783e…`, archive 160; the
+   **THE BASELINE IS 72 LIVE CANDIDATES, 50 CITED, 22 UNFILED** — re-derived at batch 59's
+   close after its merge at `68fa7e95` (md5 `417c783e…` unmoved, archive 160; the batch's two
+   citations moved two ids from unfiled to cited and the consumer wrote nothing; batch 58's
+   fresh-resume check read 72 / 48 / 24 at the same md5 after its merge at `d6cf1a97`; the
    consumer's mid-batch pull to `0.507.0` rotated six cited ids, the batch's one citation
    moved one id from unfiled to cited, and the consumer then filed one after the merge, so
    unfiled reads 24 against batch 57's 24 for different reasons; batch 57's close read
