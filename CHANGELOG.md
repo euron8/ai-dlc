@@ -27,7 +27,9 @@ suite from its own root, where a real 348-line timeline exists; the seeded two-g
 `AI_DLC_PROJECT_ROOT` was ignored, the seeded entry read expired, and `gate-remediation-deny`
 failed 18 assertions there on every push from 0.505.0 on, reading exactly like the carve-out
 having been deleted, while passing from any root that carries no metrics file — which is why
-this distribution's own suite never saw it. Every candidate is now anchored on the resolved
+this distribution's own suite never saw it. It fails open too: the installed copy, driven
+over that consumer's live escalations file from a cwd carrying a two-gate timeline, listed
+all 17 of its suppressions in force where its own timeline puts 1. Every candidate is now anchored on the resolved
 root (the shape `validate-snapshot-conservation.sh` already had) and the "cannot be counted"
 NOTE no longer tells the operator to run from the project root. Neither caller changed in
 code: the guard already handed the sibling `AI_DLC_PROJECT_ROOT`, and

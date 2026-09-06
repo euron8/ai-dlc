@@ -4145,7 +4145,14 @@ same assertions), so the consumer pushed its reconcile `--no-verify` on the reco
 here before the fix: `bash core/fixtures/gate-remediation-deny/run.sh` PASS from this root,
 which carries no metrics file, and `18 assertion(s) FAILED` from a scratch directory carrying
 a copy of the consumer's 348-line `_bmad-output/implementation-artifacts/gate-metrics.jsonl`.
-The distribution's own suite could not see it, because nothing here writes that file.
+The distribution's own suite could not see it, because nothing here writes that file. The
+defect fails OPEN as readily as closed: the installed validator driven over the consumer's
+live escalations file with its real root, from a cwd carrying a two-gate timeline, listed all
+17 of its SUPPRESSED entries in force (Checks 11, 16, 22, 24, 30) where the root's own
+timeline puts exactly 1 in force — the fixed copy reads 1 from every cwd, and the two agree
+byte-for-byte when the cwd is the root, so the production hook, which the harness runs from
+`PROJECT_DIR`, was never wrong on that consumer; every hand-driven or sub-directory invocation
+was.
 
 Reader set, derived rather than taken from the filing: the cwd-first `for cand in` loop was
 ONE program, `core/scripts/validate-suppression-lifetime.sh` section 2 — its sibling
