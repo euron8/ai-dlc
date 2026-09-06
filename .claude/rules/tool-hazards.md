@@ -104,7 +104,7 @@ because a loose control read non-zero in the same run.
 
 ## BSD tools are not GNU tools, and they fail silently
 
-In a tracked file, arms S1–S10 of `scripts/validate-shell-portability.sh` and `I71` mechanize
+In a tracked file, arms `S1`–`S10` of `scripts/validate-shell-portability.sh` and `I71` mechanize
 this and it is not restated here — read those arms for the grammars. In an ad-hoc tool call
 nothing is watching, and the traps below no arm covers there, because correct and incorrect
 use are the same shape to a regex:
