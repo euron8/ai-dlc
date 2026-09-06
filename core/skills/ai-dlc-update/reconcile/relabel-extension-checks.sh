@@ -162,6 +162,10 @@ while IFS= read -r ext; do
     # prefix the grammar matched, and bash removes exactly that literal prefix (quoted, so a
     # glob character in it is literal too) and re-emits it with the label after it.
     pre="$(printf '%s' "$text" | grep -oE "$anchor_at" | head -1)"
+    # An EMPTY prefix means the grammar that selected this line did not match it again, which
+    # cannot happen and must not be written if it does: `$( )` swallows grep's exit, and the
+    # splice below would otherwise prepend the label to the line start (`[ext:x] ## Check 24.`).
+    [ -n "$pre" ] || continue
     new="${pre}[ext:${id}] ${text#"$pre"}"
 
     found=$((found+1))
@@ -192,6 +196,7 @@ while IFS= read -r ext; do
     # Same splice as the check pass above, for the same reasons; `rule_at` carries no `|`
     # today, and the day it does this line must not be the one that finds out.
     pre="$(printf '%s' "$text" | grep -oE "$rule_at" | head -1)"
+    [ -n "$pre" ] || continue
     new="${pre}[ext:${id}] ${text#"$pre"}"
 
     found=$((found+1))

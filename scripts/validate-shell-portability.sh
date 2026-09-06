@@ -32,7 +32,9 @@
 #
 # THE WHOLE SCAN RUNS UNDER `LC_ALL=C`, for S10's sake: its pattern is a raw byte range that a
 # UTF-8 grep rejects as an illegal byte sequence. The other nine arms are pure ASCII and answer
-# identically under either locale.
+# identically under either locale. An arm added later inherits it: one that needs a UTF-8-aware
+# match (a `.` meant to consume one CHARACTER, a class meant to hold one) answers differently
+# here than in an interactive shell, and must be probed under this file's locale, not yours.
 #
 # Because the finding set is empty, `core/fixtures/shell-portability/` is the ONLY evidence
 # any of these arms works. Every arm self-probes before it touches the corpus.
