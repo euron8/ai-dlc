@@ -1219,6 +1219,17 @@ file rotates** — the banners in `ai-dlc-pause.sh` and
 `ai-dlc-answer-capture.sh` reading "Rotation: none, ever." still hold
 verbatim.
 
+**THE MOVED BLOCK IS HEADED, AND THE HEADING IS A `## ` LINE.** Every
+block a move lands in a history/archive file opens with
+
+```
+## [MOVED <ISO-8601 timestamp> from <source basename> — <trigger>]
+```
+
+**The `## ` is load-bearing.** `rotate-snapshot-archive.sh` cuts at the
+Nth-from-last `^## ` line and never interprets a heading, so a block
+headed any other way is not a cut point and cannot be rotated out.
+
 **(b) Slice-read large sectioned artifacts.** Read the section(s)
 relevant to the current scope, not the whole file (Rule 23(b)).
 Exception: cross-cutting evaluations that must weigh every item against
