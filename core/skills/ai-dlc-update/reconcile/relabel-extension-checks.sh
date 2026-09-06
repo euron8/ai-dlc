@@ -69,11 +69,11 @@ EXT_DIR="$SKILL_DIR/extensions"
 # this pair widened for `### H1.` and that pair did not, and no check compared the pairs: a
 # rewriter that could already relabel `## Check AP — …` alongside a detector that could not
 # report it, green for four releases. Any widening now moves all four in one release.
-ANCHOR_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[[:space:]]*[.—]'
-core_num_stream() { grep -oE "$ANCHOR_RE" | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//; s/[[:space:]]*[.—]$//'; }
+ANCHOR_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[[:space:]]*(\.|—)'
+core_num_stream() { grep -oE "$ANCHOR_RE" | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//; s/[[:space:]]*(\.|—)$//'; }
 
 # RULE numbers are a SECOND namespace and need their own grammar: a rule heading
-# (`### Rule 29 -- Steering budget`) carries no `[.—]` terminator, so ANCHOR_RE
+# (`### Rule 29 -- Steering budget`) carries no `(\.|—)` terminator, so ANCHOR_RE
 # above matches none of the 31 rules in core's SKILL.md — verified, 0 of 31. That
 # is why this pass exists separately rather than as a widened ANCHOR_RE: teaching
 # the check grammar the word `Rule` would fold `Rule 29` and check `29` into one
@@ -140,7 +140,7 @@ while IFS= read -r ext; do
     # This extension's heading at that anchor, if any, and not already labelled. The
     # separator class matches ANCHOR_RE, so `### 24. T`, `### Check 24. T` and
     # `## Check AP — T` all resolve; requiring a literal `. ` skipped the last two.
-    anchor_at="^#{2,4}[[:space:]]+(Check[[:space:]]+)?${n}[[:space:]]*[.—][[:space:]]*"
+    anchor_at="^#{2,4}[[:space:]]+(Check[[:space:]]+)?${n}[[:space:]]*(\.|—)[[:space:]]*"
     hd="$(grep -nE "$anchor_at" "$ext" | grep -v '\[ext:' | grep -v '\[core\]' | head -1)"
     [ -n "$hd" ] || continue
 
@@ -150,7 +150,23 @@ while IFS= read -r ext; do
     # hardcoded `<hashes> <n>. `, which silently rewrote an em-dash separator or dropped
     # a `Check ` prefix -- mangling the very headings the widened grammar just taught it
     # to see. Everything left of the title is carried through untouched.
-    new="$(printf '%s' "$text" | sed -E "s|(${anchor_at})|\1[ext:${id}] |")"
+    # NO sed here, on purpose. The anchor grammar's terminator is an ALTERNATION, `(\.|—)`,
+    # so it CARRIES a `|` -- and this line used `|` as its `s|…|…|` delimiter, so sed read
+    # `s|(^#...(\.|` as the whole pattern, refused it, and `new` came back EMPTY; three
+    # fixtures went red on the first push of the rewrite. Changing the delimiter only moved the
+    # exposure: the REPLACEMENT side interpolates `${id}`, no validator constrains an extension
+    # `id:`, an `&` in it is the whole match to sed (measured: `id=a&b` wrote
+    # `[ext:a## Check 24. b]` into the heading, a label the readers' `\[ext:[A-Za-z0-9_.-]+\]`
+    # strip can never see again), and whatever character is the delimiter is one more. A
+    # string splice has no delimiter and no metacharacter: `grep -oE` returns the anchored
+    # prefix the grammar matched, and bash removes exactly that literal prefix (quoted, so a
+    # glob character in it is literal too) and re-emits it with the label after it.
+    pre="$(printf '%s' "$text" | grep -oE "$anchor_at" | head -1)"
+    # An EMPTY prefix means the grammar that selected this line did not match it again, which
+    # cannot happen and must not be written if it does: `$( )` swallows grep's exit, and the
+    # splice below would otherwise prepend the label to the line start (`[ext:x] ## Check 24.`).
+    [ -n "$pre" ] || continue
+    new="${pre}[ext:${id}] ${text#"$pre"}"
 
     found=$((found+1))
     printf '%s:%s\n  -  %s\n  +  %s\n' "${ext#$CONSUMER/}" "$lineno" "$text" "$new"
@@ -177,7 +193,11 @@ while IFS= read -r ext; do
 
     lineno="${hd%%:*}"
     text="${hd#*:}"
-    new="$(printf '%s' "$text" | sed -E "s|(${rule_at})|\1[ext:${id}] |")"
+    # Same splice as the check pass above, for the same reasons; `rule_at` carries no `|`
+    # today, and the day it does this line must not be the one that finds out.
+    pre="$(printf '%s' "$text" | grep -oE "$rule_at" | head -1)"
+    [ -n "$pre" ] || continue
+    new="${pre}[ext:${id}] ${text#"$pre"}"
 
     found=$((found+1))
     printf '%s:%s\n  -  %s\n  +  %s\n' "${ext#$CONSUMER/}" "$lineno" "$text" "$new"

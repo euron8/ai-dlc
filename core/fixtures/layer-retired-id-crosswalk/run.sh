@@ -81,7 +81,7 @@ WANT='33=R 34=- 5=- 933=- guard=0'
 # the conclusion one measurement — an extractor that returned nothing would report every
 # id retired AND satisfy every assertion below.
 head_at() { # head_at <ref> <path> <id>
-  git -C "$CONS" show "$1:$2" 2>/dev/null | grep -cE "^#{2,4}[[:space:]]+(Check[[:space:]]+)?$3[[:space:]]*[.—]"
+  git -C "$CONS" show "$1:$2" 2>/dev/null | grep -cE "^#{2,4}[[:space:]]+(Check[[:space:]]+)?$3[[:space:]]*(\.|—)"
 }
 C1="$(git -C "$CONS" rev-list --max-parents=0 HEAD)"
 EP='.claude/skills/ai-dlc/extensions/checks/domain.md'

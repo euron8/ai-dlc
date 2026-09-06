@@ -747,8 +747,8 @@ adj_register_contradictions() {
 # The id shape stays deliberately narrow -- `24`, `3b`, `11a`, `H1`, `AP` -- and is
 # NOT a general word. A permissive `[A-Z]*[a-z-]*` would read `### Scope.` as an
 # anchor named "Scope" and start diffing prose sections against each other.
-ANCHOR_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[[:space:]]*[.—]'
-strip_anchor() { sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//; s/[[:space:]]*[.—]$//'; }
+ANCHOR_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[[:space:]]*(\.|—)'
+strip_anchor() { sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//; s/[[:space:]]*(\.|—)$//'; }
 anchors_of_stream() {
   { grep -Eho "$ANCHOR_RE" | strip_anchor
   } 2>/dev/null | grep -E '.' | sort -u
@@ -825,7 +825,7 @@ heading_titles_of_stream() {
       h=$0; sub(/^#+[ \t]+/,"",h)
       d=0; while (substr($0, d+1, 1) == "#") d++
       gsub(/\[ext:[A-Za-z0-9_.-]+\][ \t]*/, "", h); gsub(/\[core\][ \t]*/, "", h)
-      sub(/^(Check[ \t]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[ \t]*[.—][ \t]*/, "", h)
+      sub(/^(Check[ \t]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[ \t]*(\.|—)[ \t]*/, "", h)
       t = nrm(h); if (t != "") printf "%d\t%s\n", d, t
     }' 2>/dev/null | sort -u
 }
@@ -944,9 +944,9 @@ skeleton_titles_of() {
 heading_text_for() { # heading_text_for <anchor>  < stream
   awk -v a="$1" '
     function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s); gsub(/^ +| +$/,"",s); return s }
-    $0 ~ ("^#{2,4}[ \t]+(Check[ \t]+)?" a "[.—]") || $0 ~ ("^\\*\\*(Check[ \t]+)?" a "\\.") {
+    $0 ~ ("^#{2,4}[ \t]+(Check[ \t]+)?" a "(\\.|—)") || $0 ~ ("^\\*\\*(Check[ \t]+)?" a "\\.") {
       h=$0; sub(/^#+[ \t]+/,"",h); sub(/^\*\*/,"",h); sub(/^Check[ \t]+/,"",h)
-      sub("^" a "[.—][ \t]*","",h)
+      sub("^" a "(\\.|—)[ \t]*","",h)
       # Strip the catalog label before normalizing, or "[ext:foo]" becomes part of the
       # title and a correctly-labelled heading can never match the core title.
       gsub(/\[ext:[A-Za-z0-9_.-]+\][ \t]*/, "", h); gsub(/\[core\][ \t]*/, "", h)
@@ -971,7 +971,7 @@ heading_text_for() { # heading_text_for <anchor>  < stream
 # register-drift's resolver vs layer-drift's; now this.)
 heading_labelled_for() { # heading_labelled_for <anchor>  < stream
   awk -v a="$1" '
-    $0 ~ ("^#{2,4}[ \t]+(Check[ \t]+)?" a "[.—]") || $0 ~ ("^\\*\\*(Check[ \t]+)?" a "\\.") {
+    $0 ~ ("^#{2,4}[ \t]+(Check[ \t]+)?" a "(\\.|—)") || $0 ~ ("^\\*\\*(Check[ \t]+)?" a "\\.") {
       print ($0 ~ /\[ext:[A-Za-z0-9_.-]+\]|\[core\]/) ? "yes" : "no"; exit
     }' 2>/dev/null
 }

@@ -109,7 +109,7 @@ esac
 # asserts. It lives here in BASH rather than in the python below because python's `re` has
 # no `[[:space:]]`, so a python spelling could not be the same string — and a second
 # spelling of an anchor grammar is the defect I40's header records five times over.
-CHECK_HEAD_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[[:space:]]*[.—]'
+CHECK_HEAD_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[[:space:]]*(\.|—)'
 
 # Every check id a layer entry DEFINES as a heading, as `<file>\t<id>` lines. The
 # python filters these to the entries that hook this file; collecting them here keeps
@@ -122,7 +122,7 @@ if [ -n "$SKILL_DIR" ] && [ -d "$SKILL_DIR/extensions" ]; then
     [ -n "$entry" ] || continue
     while IFS= read -r h; do
       [ -n "$h" ] || continue
-      cid="$(printf '%s' "$h" | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//' | sed -E 's/[[:space:]]*[.—]$//')"
+      cid="$(printf '%s' "$h" | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//' | sed -E 's/[[:space:]]*(\.|—)$//')"
       EXT_HEADINGS="${EXT_HEADINGS}${entry}	${cid}
 "
     done <<EOH

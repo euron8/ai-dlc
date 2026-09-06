@@ -4182,6 +4182,45 @@ needs `node` on that PATH before its verdict means anything). Not folded into `B
 subject is where the timeline is read from; this one is what the entry says, and it fails the
 same way from every cwd.
 
-verify: sh V=$PWD/core/scripts/validate-suppression-lifetime.sh; [ -f "$V" ] || exit 9; W=$(mktemp -d); mkdir -p $W/r; printf 'checks:\n  - id: 16\n    title: a\n  - id: 32\n    title: b\n' > $W/map.yaml; printf '## [S1 gate] [lead] - 2026-05-01T00:00:00Z\n**Status:** SUPPRESSED\n**Suppresses:** [core] 32 — b\n**Expires after:** 3 gates\n**Operator authorization:** 2026-05-01T00:00:00Z | "Override, proceed, file backlog item"\n' > $W/r/pending.md; printf '{"ts":"2026-05-02T01:00:00Z","check":"32","verdict":"FAIL"}\n' > $W/gm.jsonl; a=$(LC_ALL=en_US.UTF-8 AI_DLC_PROJECT_ROOT=$W/r bash $V --in-force --escalations $W/r/pending.md --enforcement-map $W/map.yaml --gate-metrics $W/gm.jsonl 2>&1 >/dev/null); b=$(env -i PATH=/usr/bin:/bin AI_DLC_PROJECT_ROOT=$W/r bash $V --in-force --escalations $W/r/pending.md --enforcement-map $W/map.yaml --gate-metrics $W/gm.jsonl 2>&1 >/dev/null); rm -rf $W; case $a in *"in_force=1 "*) ;; *) exit 9;; esac; case $b in *"in_force=1 "*) exit 0;; esac; exit 1
+**Batch 62 widened this to its CLASS, on a census, before building.** The filing names one
+site. `git ls-files '*.sh'` under `LC_ALL=C` for a whitespace-free bracket span carrying a high
+byte, comment lines dropped, finds 23 lines in 9 files in a regex context (control: line 252
+among them; 4 python sites answer identically under both locales and are left as written):
+the check-heading grammar `[.—]` in `validate-gate-manifest.sh`, `validate-layer-entries.sh`,
+`reconcile/layer-drift.sh` and `reconcile/relabel-extension-checks.sh` — four copies I47/I15
+bind byte-identical, whose `[.—]$` strip leaves the same two bytes on every em-dash heading
+(measured: `## Check 3 —` → `3 \342\200` under C; the consumer's own `gate-validation.md`
+carries 0 em-dash headings against 40 dot-form, but its two extension checks `## Check XAP —`
+and `## Check XVH —` DO reach that branch — the adversarial hand drove `anchor_form()` and
+`heading_title()` over them under C and read `XAP \342` and a title still carrying the dash on
+the old form, correct on the new, present in 59 of 60 sampled revisions of that directory) —
+`validate-artifact-budget.sh:824`'s `[|—-]` (a matcher only, byte-correct under C but
+the same class), `layer-retired-id-crosswalk/run.sh:84`, and six `[^—]*—` lines in
+`layer-reference-resolution`'s two run scripts. Every site is an alternation now, probed in
+awk, `sed -E` and `grep -E` on the em-dash, the en-dash, the hyphen and a no-separator
+near-miss under both locales; the three awk DYNAMIC-string sites carry `\\.` because `"\."`
+in an awk string is a bare `.`. The prohibition has a mechanism: `S10` of
+`scripts/validate-shell-portability.sh` refuses the bracket form in every tracked shell file,
+pins `LC_ALL=C` for the whole scan (its byte-range pattern is `illegal byte sequence` under
+UTF-8), reports all 23 on origin/main and 0 here, and records its narrowing beside the arm.
+The differential the entry asked for: `gate-adjudication-mutants` (152 FAIL lines) and
+`gate-remediation-deny` (22) red under `env -i PATH=/usr/bin:/bin:<node>` on origin/main and
+green on the fix; `validator-path-resolution` green on both, so it is not a witness.
+`retired-layer-token.sh`'s `env -i` arm from batch 61 is the third fixture that already
+carried this class's hazard by name. The receipt's last conjunct rejects the wrong fix the
+behavioural half accepts: `export LC_ALL=en_US.UTF-8` inside the script passes both drives on
+this machine and fixes nothing on a runner without that locale (a missing locale falls back to
+C silently), so the receipt also refuses any bracket class carrying a high byte in the program
+text, spelt in awk octal because a receipt line cannot carry raw bytes. A second spelling of
+the fix (first whitespace-delimited token) passes it; a re-ordered class does not; comment
+lines are excluded so prose naming the class cannot turn it red on correct code. The
+goal-closing measurement, taken by the adversarial hand on a `file://` clone of the consumer:
+its `docs/escalations/pending.md` (143 entries, 17 suppressions, every one em-dash-separated)
+reads `in_force=1` under UTF-8 on both copies and `in_force=0` under `env -i` on the installed
+copy against `in_force=1` on this one, `cmp` control showing the two scripts differ. The
+`_bmad-output` subtree carries 50 `**Suppresses:**` lines and none in a parseable entry, so a
+differential over it is a null neither side owns.
+
+verify: sh V=$PWD/core/scripts/validate-suppression-lifetime.sh; [ -f "$V" ] || exit 9; W=$(mktemp -d); mkdir -p $W/r; printf 'checks:\n  - id: 16\n    title: a\n  - id: 32\n    title: b\n' > $W/map.yaml; printf '## [S1 gate] [lead] - 2026-05-01T00:00:00Z\n**Status:** SUPPRESSED\n**Suppresses:** [core] 32 — b\n**Expires after:** 3 gates\n**Operator authorization:** 2026-05-01T00:00:00Z | "Override, proceed, file backlog item"\n' > $W/r/pending.md; printf '{"ts":"2026-05-02T01:00:00Z","check":"32","verdict":"FAIL"}\n' > $W/gm.jsonl; a=$(LC_ALL=en_US.UTF-8 AI_DLC_PROJECT_ROOT=$W/r bash $V --in-force --escalations $W/r/pending.md --enforcement-map $W/map.yaml --gate-metrics $W/gm.jsonl 2>&1 >/dev/null); b=$(env -i PATH=/usr/bin:/bin AI_DLC_PROJECT_ROOT=$W/r bash $V --in-force --escalations $W/r/pending.md --enforcement-map $W/map.yaml --gate-metrics $W/gm.jsonl 2>&1 >/dev/null); rm -rf $W; case $a in *"in_force=1 "*) ;; *) exit 9;; esac; case $b in *"in_force=1 "*) ;; *) exit 1;; esac; LC_ALL=C awk '!/^[[:space:]]*#/ && /\[[^][:space:]]*[\200-\377][^][:space:]]*\]/{f=1} END{exit !f}' "$V" && exit 1; exit 0
 
 

@@ -132,8 +132,8 @@ vector() {
   # APPLICABILITY: is the form E15 emits actually present in the file it is emitted about?
   # This is the property that failed, and it is not the same as "the message changed".
   local apf dotf
-  apf="$(grep -oE "SECTION ID OUT OF BAND[^—]*— '[^']*' allocates" <<<"$out" | grep -oE "'[^']*'" | tr -d "'" | grep -E '^AP' | head -1)"
-  dotf="$(grep -oE "SECTION ID OUT OF BAND[^—]*— '[^']*' allocates" <<<"$out" | grep -oE "'[^']*'" | tr -d "'" | grep -E '^7' | head -1)"
+  apf="$(grep -oE "SECTION ID OUT OF BAND(, ALREADY COLLIDED)? — '[^']*' allocates" <<<"$out" | grep -oE "'[^']*'" | tr -d "'" | grep -E '^AP' | head -1)"
+  dotf="$(grep -oE "SECTION ID OUT OF BAND(, ALREADY COLLIDED)? — '[^']*' allocates" <<<"$out" | grep -oE "'[^']*'" | tr -d "'" | grep -E '^7' | head -1)"
   v="$v apform=$([ -n "$apf" ] && grep -qF -- "$apf" "$DOMAIN" && echo OK || echo BAD)"
   v="$v dotform=$([ -n "$dotf" ] && grep -qF -- "$dotf" "$DOMAIN" && echo OK || echo BAD)"
   # W9 — the script-citation namespace. Three subjects that must report and four that must
@@ -209,7 +209,7 @@ got="$(vector "$LINTER" "$CONS")"
 # that USED to be emitted for this subject is not. Without the second half "it matches" could
 # be true of a change that did nothing.
 out="$(bash "$LINTER" "$CONS" 2>&1)"
-apf="$(grep -oE "SECTION ID OUT OF BAND[^—]*— '[^']*' allocates" <<<"$out" | grep -oE "'[^']*'" | tr -d "'" | grep -E '^AP' | head -1)"
+apf="$(grep -oE "SECTION ID OUT OF BAND(, ALREADY COLLIDED)? — '[^']*' allocates" <<<"$out" | grep -oE "'[^']*'" | tr -d "'" | grep -E '^AP' | head -1)"
 if [ -n "$apf" ] && grep -qF -- "$apf" "$DOMAIN"; then
   ok "the em-dash subject's emitted form [$apf] occurs in the file it is reported about"
 else

@@ -2143,7 +2143,7 @@ fi
 # the operator is handed a remedy that does not run — which is how the CHECK label went
 # unadopted for three releases and is exactly the failure I15 was added for.
 #
-# Separate from I15 on purpose. ANCHOR_RE matches `### 24.` and terminates on `[.—]`; a rule
+# Separate from I15 on purpose. ANCHOR_RE matches `### 24.` and terminates on `(\.|—)`; a rule
 # heading is `### Rule 29 -- Steering budget` and has no terminator, so ANCHOR_RE matches
 # 0 of core's 30 rules. Folding the word `Rule` into ANCHOR_RE would merge `Rule 29` and
 # check `29` into one id and start joining two unrelated catalogs by integer.

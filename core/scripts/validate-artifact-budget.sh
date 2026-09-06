@@ -821,7 +821,7 @@ if [ "$CHECK_EVIDENCE" -eq 1 ]; then
   # short form appears in the compact per-check tables some gates append
   # (`| 14 | lead | <evidence> |`). Matching only the long one would pass the
   # short one vacuously.
-  ROW="$(grep -nE '^\|[[:space:]]*(\[core\][[:space:]]*)?14[[:space:]]*[|—-]' "$GATE_LOG" 2>/dev/null | tail -1)"
+  ROW="$(grep -nE '^\|[[:space:]]*(\[core\][[:space:]]*)?14[[:space:]]*(\||—|-)' "$GATE_LOG" 2>/dev/null | tail -1)"
 
   if [ -z "$ROW" ]; then
     echo "FAIL: no Check 14 row found in ${GATE_LOG#"$ROOT"/}" >&2
