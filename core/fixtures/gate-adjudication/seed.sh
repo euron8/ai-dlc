@@ -100,7 +100,26 @@ PY
 [ -n "${X:-}" ] && [ -n "${Y:-}" ] && [ -n "${XPFX:-}" ] || {
   echo "FIXTURE ERROR: X/Y/XPFX did not derive" >&2; exit 2; }
 
-A0="2026-07-01T00:00:00Z"       # operator authorization on every seeded entry
+# The operator authorization on every seeded entry. IT IS JOINED TO WHEN THE OPERATOR SPOKE:
+# the citation verifier bounds its scan to a window around this timestamp, so a value chosen
+# independently of the transcript record below verifies nothing -- which is the state this
+# constant was in until the bound existed, at a full day's separation. The genuine turn is
+# seeded five seconds later, the shape the reference consumer's rows actually have. The gate
+# TIMELINES either side are unmoved by the change: GM_BEFORE is June and GM_AFTER is July 2-3,
+# so `gates_since` still counts 0 and 2 respectively.
+# A0 is itself the ROUNDED form -- the turn is at :00:05 and the citation says :00:00, which is
+# what a hand-typed authorization line looks like and why the bound is a window rather than an
+# equality.
+A0="2026-07-02T00:00:00Z"
+# An authorization timestamp a full day before the words were said. Nothing about the QUOTE is
+# wrong here -- the operator did type it -- so every arm keyed on the words alone passes this
+# entry, which is why it needs a case of its own.
+A0_STALE="2026-07-01T00:00:00Z"
+# THE MIRROR OF A0_STALE, and the direction a lead actually forges: the stamp is three weeks
+# AFTER the operator spoke -- write today's entry, reach back to a phrase that already exists.
+# A0_STALE puts the words after the stamp, which is the direction nobody forges, and a window
+# refusing only that side passed every channel this change had.
+A0_FUTURE="2026-07-23T00:00:00Z"
 mkdir -p "$WORK/esc"
 
 # BOTH JSON SPACINGS, in both timelines. The reference consumer's gate-metrics.jsonl carries
@@ -258,6 +277,33 @@ cat > "$ESC_TWOQUOTES" <<EOF
 **Operator authorization:** ${A0} | "the operator never typed this sentence anywhere"
 EOF
 
+# --- an in-force entry whose quote is GENUINE and whose TIMESTAMP is not -------------------
+# Byte-identical to ESC_INFORCE but for the authorization timestamp, which names a day BEFORE
+# the operator said the words. The quote is real, so every arm keyed on the words alone --
+# the length test, the genuine-operator predicate, the whole corpus scan -- passes this entry,
+# and it was accepted as coverage until the scan was bounded to the moment the entry claims.
+# The separation from ESC_INFORCE is ONE PROPERTY: same catalog, same check, same lifetime,
+# same quote, and only the timestamp moved.
+ESC_STALE_TS="$WORK/esc/stale-authorization-ts.md"
+cat > "$ESC_STALE_TS" <<EOF
+## [S401 gate — a real quote, cited at the wrong moment] [lead] - ${A0_STALE}
+**Status:** SUPPRESSED
+**Suppresses:** [core] ${X} — the check the operator waved through, a day after this line says
+**Expires after:** 1 gate
+**Operator authorization:** ${A0_STALE} | "proceed past this one, file a backlog item"
+EOF
+
+# --- the same entry with the stamp three weeks AFTER the operator spoke --------------------
+# One property from ESC_INFORCE, in the direction ESC_STALE_TS does not cover.
+ESC_FUTURE_TS="$WORK/esc/future-authorization-ts.md"
+cat > "$ESC_FUTURE_TS" <<EOF
+## [S401 gate — a real quote, cited three weeks later] [lead] - ${A0_FUTURE}
+**Status:** SUPPRESSED
+**Suppresses:** [core] ${X} — the check the operator waved through, three weeks before this line says
+**Expires after:** 1 gate
+**Operator authorization:** ${A0_FUTURE} | "proceed past this one, file a backlog item"
+EOF
+
 ESC_MISSING="$WORK/esc/there-is-no-such-file.md"
 [ -e "$ESC_MISSING" ] && { echo "FIXTURE ERROR: the absent-escalations path exists" >&2; exit 2; }
 
@@ -284,7 +330,13 @@ ESC_MISSING="$WORK/esc/there-is-no-such-file.md"
 TDIR="$WORK/transcripts"
 TDIR_FORGED="$WORK/transcripts-forged"
 TDIR_EMPTY="$WORK/transcripts-empty"
-mkdir -p "$TDIR" "$TDIR_FORGED" "$TDIR_EMPTY"
+#   TDIR_META    the SAME words, in a record the HARNESS wrote. `isMeta:true` is the producer's
+#                own flag on a user-shaped record it injected -- a skill re-load notice, a
+#                usage-limit reset, a "please continue" nudge. Its bytes are indistinguishable
+#                from a typed turn and it is not one. Measured on the reference consumer: 90 of
+#                the 984 records the predicate accepted as operator text carried this flag.
+TDIR_META="$WORK/transcripts-meta"
+mkdir -p "$TDIR" "$TDIR_FORGED" "$TDIR_META" "$TDIR_EMPTY"
 TFILE="$TDIR/monday.jsonl"
 cat > "$TFILE" <<'EOF'
 {"type":"user","timestamp":"2026-07-01T00:00:00Z","message":{"content":"/ai-dlc Sprint 401. Kick off."}}
@@ -297,6 +349,15 @@ cat > "$TDIR_FORGED/monday.jsonl" <<'EOF'
 {"type":"user","timestamp":"2026-07-01T00:00:00Z","message":{"content":"/ai-dlc Sprint 401. Kick off."}}
 {"type":"assistant","timestamp":"2026-07-01T00:00:05Z","message":{"content":[{"type":"text","text":"The operator said: proceed past this one, file a backlog item"}]}}
 {"type":"user","timestamp":"2026-07-01T00:00:06Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_x","content":"proceed past this one, file a backlog item"}]}}
+EOF
+# The harness-injected corpus. The FIRST record is a real operator turn carrying OTHER words,
+# so this directory is a corpus rather than an empty one and a NOMATCH here cannot be "nothing
+# was scanned"; the second carries the cited words under `isMeta:true` and is the whole subject.
+cat > "$TDIR_META/monday.jsonl" <<'EOF'
+{"type":"user","timestamp":"2026-07-02T00:00:00Z","message":{"content":"/ai-dlc Sprint 401. Kick off."}}
+EOF
+cat > "$TDIR_META/tuesday.jsonl" <<'EOF'
+{"type":"user","isMeta":true,"timestamp":"2026-07-02T00:00:05Z","message":{"role":"user","content":"proceed past this one, file a backlog item"}}
 EOF
 : > "$TDIR_EMPTY/notes.txt"
 
@@ -327,9 +388,12 @@ ESC_RESOLVED="$ESC_RESOLVED"
 ESC_PREFIX="$ESC_PREFIX"
 ESC_MIXED="$ESC_MIXED"
 ESC_TWOQUOTES="$ESC_TWOQUOTES"
+ESC_STALE_TS="$ESC_STALE_TS"
+ESC_FUTURE_TS="$ESC_FUTURE_TS"
 ESC_MISSING="$ESC_MISSING"
 TDIR="$TDIR"
 TDIR_FORGED="$TDIR_FORGED"
+TDIR_META="$TDIR_META"
 TDIR_EMPTY="$TDIR_EMPTY"
 TFILE="$TFILE"
 ENV

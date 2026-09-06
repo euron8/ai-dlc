@@ -55,6 +55,11 @@ $ grep -c 'save_state_fn' rebalancer/execution.py
 19
 ```
 
+**The fence may be indented, and the info string is exactly `derived` with nothing after it.**
+Under a `- derivation:` list item, column 0 and the item's own indent are both read. Whatever
+indent the opener carries, every recorded line carries it too — the reader sheds exactly that
+prefix and no more, so output the command itself printed with leading spaces keeps them.
+
 One read-only command, then its output **verbatim** — no `-> 19` annotation, no trailing
 comment. `scripts/ai-dlc/validate-artifact-derivations.sh` re-runs every command in one of
 those blocks and compares, so a claim written this way is settled by an exit code before the

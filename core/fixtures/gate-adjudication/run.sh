@@ -573,6 +573,64 @@ else
   bad "S22: rows were not narrowed by the citation check (rc=$RC) — either the forged entry poisoned the genuine one, or the forged one covered '$Y' anyway"
 fi
 
+# --- S24: the words are in the corpus, and the HARNESS said them → exit 1 --
+# The near-miss S18 cannot reach. S18's forgery is structural -- an assistant turn and a
+# tool_result, shapes the predicate already rejects by TYPE. This corpus holds a `type:"user"`
+# record whose content is a plain string, the exact shape a typed turn has, differing from one
+# only by the `isMeta:true` flag Claude Code sets on records IT injected. Measured on the
+# reference consumer: 90 of the 984 records the predicate accepted as operator text carried it.
+# A lead cannot make the harness inject arbitrary text, so this is not a forgery surface; it is
+# a record class that is not an operator turn being counted as one.
+restore; fail_on "$X"
+runx "$ESC_INFORCE" "$GM_BEFORE" "$TDIR_META"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "$UNVERIFIED_LINE" && ! has "$SUPP_LINE"; then
+  ok "S24: an in-force entry whose quote appears only in an isMeta harness injection covers nothing → exit 1"
+else
+  bad "S24: a harness-injected record verified the citation (rc=$RC) — the predicate reads the bytes of a user record and not the flag saying who wrote it"
+fi
+
+# --- S25: the quote is GENUINE and the TIMESTAMP is not → exit 1 -----------
+# ONE PROPERTY from S1: same catalog, same check, same lifetime, same words, same corpus, and
+# only the authorization timestamp moved -- to a day before the operator said them. Every arm
+# keyed on the words alone passes this entry, which is what made it invisible: unbounded, the
+# corpus is the project's whole session history and any phrase the operator ever typed verifies
+# a citation filed at any time.
+restore; fail_on "$X"
+runx "$ESC_STALE_TS" "$GM_BEFORE"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "$UNVERIFIED_LINE" && ! has "$SUPP_LINE"; then
+  ok "S25: an in-force entry citing real operator words from a DIFFERENT day covers nothing → exit 1"
+else
+  bad "S25: a citation whose words were said a day after its own authorization timestamp still covered the FAIL (rc=$RC) — the citation verifier is not bounded to the moment the entry claims"
+fi
+
+# --- S26: the stamp is three weeks AFTER the operator spoke → exit 1 -------
+# THE MIRROR OF S25, and the direction a lead actually forges: nobody writes an entry and then
+# waits for the operator to say something, they write today's entry and reach back for a phrase
+# that already exists. S25 puts the words after the stamp; every out-of-window seed in every
+# channel did, and a window refusing only that side passed all of them while accepting this.
+restore; fail_on "$X"
+runx "$ESC_FUTURE_TS" "$GM_BEFORE" "$TDIR"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "$UNVERIFIED_LINE" && ! has "$SUPP_LINE"; then
+  ok "S26: an in-force entry whose stamp is three weeks AFTER the operator spoke covers nothing → exit 1"
+else
+  bad "S26: a citation reaching three weeks BACKWARD for its words still covered the FAIL (rc=$RC) — the window has no lower side, so the only forgery direction anyone uses is unrefused"
+fi
+
+# --- S27: the PASS line says whether the rows were verified with a bound ----
+# `cite_ts` requires `T` between the date and the time, so a space, a lowercase `t` or a
+# date-only stamp yields no bound and a row is verified against the whole corpus -- a pass that
+# read byte-identically to a bounded one. On THIS path the count is held at zero by the SIBLING,
+# which refuses a non-canonical stamp as malformed before the row is ever listed in force (S4 is
+# that arm). The count is printed anyway: the zero belongs to the sibling's shape guard, not to
+# this validator, and if that guard widens this number is what moves.
+restore; fail_on "$X"
+runx "$ESC_INFORCE" "$GM_BEFORE" "$TDIR"
+if [ "$RC" -eq 0 ] && has "$SUPP_LINE" && has "unbounded-citation: 0"; then
+  ok "S27: the carve-out PASS line reports unbounded-citation: 0 — a gate log can tell a bounded pass from an unbounded one"
+else
+  bad "S27: the PASS line does not report the unbounded-verify count (rc=$RC) — an unbounded pass and a bounded one are the same bytes"
+fi
+
 # --- restore, once more, after the carve-out arms ---------------------------
 restore
 run "$VERDICT"

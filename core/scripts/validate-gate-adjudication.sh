@@ -338,6 +338,26 @@ CITEEOF
   printf '%s' "$_cq_pick"
 }
 
+# The citation's own TIMESTAMP -- the `<ISO ts>` half of `<ISO ts> | "<verbatim quote>"`, which
+# is what says WHEN the record claims the operator spoke. Without it the --cite corpus is the
+# project's entire session history, and any twelve-character phrase the operator ever typed
+# verifies a citation filed today; the sibling prints `MATCH <ts>` and every caller sent it to
+# /dev/null, so the one output that could have refuted the claim was the one nobody read.
+# Callers pass it as `--authorized-at`, and the sibling owns the tolerance.
+#
+# EMPTY WHEN THE FIELD CARRIES NO PARSEABLE TIMESTAMP, and the caller then passes no bound and
+# gets the unbounded answer. The grammar of this field is enforced elsewhere and not every
+# producer requires the timestamp -- on the reference consumer 1 of 26 authorization rows is
+# written `2026-08-26, this session, verbatim: "..."` and cites a real operator turn. Refusing
+# that row here would fail a genuine citation for a reason that is not about whether the
+# operator spoke, which is a check that wedges live work.
+cite_ts() { # $1 authline
+  printf '%s\n' "$1" | LC_ALL=C awk '
+    got { next }
+    { if (match($0, /[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:?[0-9]{2})?/)) {
+        printf "%s", substr($0, RSTART, RLENGTH); got = 1 } }'
+}
+
 # --- the SUPPRESSED carve-out: asked of the script that OWNS "in force", never restated ---
 # escalations.md defines SUPPRESSED as an authorization to proceed past a failing check, with
 # a lifetime, and Check 2 says such an entry does not block while in force. Every
@@ -353,6 +373,16 @@ GA_IN_FORCE=""
 GA_IN_FORCE_STATUS="not-asked"
 GA_UNVERIFIED_CITES=0
 GA_VERIFIER_ERRORS=0
+# ROWS VERIFIED WITH NO TIMESTAMP BOUND. `cite_ts` requires `T` between the date and the time,
+# so a space, a lowercase `t` or a date-only value yields no bound and the row is verified
+# against the project's whole session history -- an unbounded pass that reads byte-identically
+# to a bounded one. On THIS path that count is held at zero by a DIFFERENT PROGRAM:
+# `validate-suppression-lifetime.sh` refuses a SUPPRESSED entry whose `**Operator
+# authorization:**` line carries no `<date>T<time>` as malformed, so a non-canonical row is
+# never listed in force and never reaches the verifier here. The count is printed anyway,
+# because that zero is a property of the sibling's shape guard and not of this file: if that
+# guard ever widens, this number moves instead of the bound disappearing in silence.
+GA_UNBOUNDED_CITES=0
 if [ "$MODE" = "adjudicate" ]; then
     ESC="${AI_DLC_ESCALATIONS:-$GA_ROOT/docs/escalations/pending.md}"
     # The sibling is named IN FULL at its call sites below, never through a variable holding
@@ -456,14 +486,27 @@ if [ "$MODE" = "adjudicate" ]; then
                         # operator's own authorization of being invented, which is the reading
                         # validate-escalation-resolution.sh and the convergence validator both
                         # refuse to make on the same status.
-                        bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$ga_quote" --quiet >/dev/null 2>&1
+                        # BOUND THE SCAN TO WHEN THE ENTRY SAYS THE OPERATOR SPOKE.
+                        # Unbounded, the corpus is the project's entire session history
+                        # and any phrase the operator ever typed verifies a suppression
+                        # filed today. `cite_ts` is empty for a field with no parseable
+                        # timestamp and the bound is then omitted -- though a SUPPRESSED
+                        # entry cannot reach here in that state: the sibling that produced
+                        # this row refuses one with no `**Operator authorization:**`
+                        # timestamp as malformed and never lists it in force.
+                        # Passed unconditionally, empty meaning no bound, so the
+                        # literal sits on the invocation where **I109** joins it
+                        # to `--cite`.
+                        ga_ts="$(cite_ts "$ga_auth")"
+                        bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$ga_quote" --authorized-at "$ga_ts" --quiet >/dev/null 2>&1
                         ga_rc=$?
                         if [ "$ga_rc" -eq 0 ]; then
+                            [ -n "$ga_ts" ] || GA_UNBOUNDED_CITES=$((GA_UNBOUNDED_CITES + 1))
                             GA_VERIFIED="${GA_VERIFIED}${ga_row}
 "
                         elif [ "$ga_rc" -eq 2 ]; then
                             GA_UNVERIFIED_CITES=$((GA_UNVERIFIED_CITES + 1))
-                            echo "VALIDATE-GATE-ADJUDICATION: UNVERIFIED — an in-force SUPPRESSED entry cites an operator message that no genuine operator turn in ${STEER_ARG} carries, so it suppresses nothing: ${ga_header}"
+                            echo "VALIDATE-GATE-ADJUDICATION: UNVERIFIED — an in-force SUPPRESSED entry cites an operator message that no genuine operator turn in ${STEER_ARG} carries${ga_ts:+ within the tolerance of its own authorization time ${ga_ts}}, so it suppresses nothing: ${ga_header}"
                         else
                             GA_VERIFIER_ERRORS=$((GA_VERIFIER_ERRORS + 1))
                             echo "VALIDATE-GATE-ADJUDICATION: UNVERIFIABLE — the citation verifier failed (validate-steering-budget.sh rc=${ga_rc}) before it could say whether a genuine operator turn carries this entry's quote, so the entry suppresses nothing until it can be verified. This is a tooling failure, not a finding about the citation (is node on PATH?): ${ga_header}"
@@ -480,7 +523,7 @@ GAROWEOF
         fi
     fi
 fi
-export GA_IN_FORCE GA_IN_FORCE_STATUS GA_UNVERIFIED_CITES GA_VERIFIER_ERRORS
+export GA_IN_FORCE GA_IN_FORCE_STATUS GA_UNVERIFIED_CITES GA_VERIFIER_ERRORS GA_UNBOUNDED_CITES
 
 python3 - "$MODE" "$GATE_TYPE" "$VERDICT_PATH" "$SCHEMA" "$MAP" "$SIBLING" ${SERIES_PATHS+"${SERIES_PATHS[@]}"} <<'PYEOF'
 import calendar
@@ -1317,6 +1360,7 @@ if not E:
 in_force_status = os.environ.get("GA_IN_FORCE_STATUS", "not-asked")
 unverified_cites = int(os.environ.get("GA_UNVERIFIED_CITES", "0") or 0)
 verifier_errors = int(os.environ.get("GA_VERIFIER_ERRORS", "0") or 0)
+unbounded_cites = int(os.environ.get("GA_UNBOUNDED_CITES", "0") or 0)
 in_force = {}
 for raw in os.environ.get("GA_IN_FORCE", "").splitlines():
     parts = raw.split("\t", 5)
@@ -1365,7 +1409,8 @@ if blocking:
 if suppressed:
     print(f"VALIDATE-GATE-ADJUDICATION: PASS ({verdict_path}, {len(E)} escalated check(s) for "
           f"{gate_type}, {len(E) - len(suppressed)} PASS, {len(suppressed)} FAIL under an "
-          f"in-force SUPPRESSED entry: {sorted(suppressed, key=lambda x: (len(x), x))})")
+          f"in-force SUPPRESSED entry: {sorted(suppressed, key=lambda x: (len(x), x))}, "
+          f"unbounded-citation: {unbounded_cites})")
     sys.exit(0)
 
 print(f"VALIDATE-GATE-ADJUDICATION: PASS ({verdict_path}, {len(E)} escalated check(s) for "

@@ -296,8 +296,343 @@ else
   ok_ dir-since-excluded-identity "a fully-excluded corpus still names the source it was pointed at"
 fi
 
+# ===========================================================================
+# WHO SAID IT, AND WHEN. Two properties of the genuine-operator predicate that
+# nothing above can see, because every arm above cites a phrase that IS in the
+# corpus and asks only whether the scan found it.
+#
+#   isMeta   Claude Code writes user-SHAPED records of its own -- skill re-load
+#            notices, usage-limit resets, "please continue" nudges -- and flags
+#            them `isMeta:true`. Their bytes are a typed turn's bytes. Measured
+#            on the reference consumer's 252 transcripts: of 984 records the
+#            predicate accepted as operator text, 90 carried the flag, every one
+#            long enough to verify a citation quoting it. The exclusions beside
+#            this one are a list of the injections somebody happened to SEE; the
+#            flag is the producer saying so.
+#
+#   the WHEN A citation is `<ISO ts> | "<quote>"`. Unbounded, the corpus is the
+#            project's entire session history, so any phrase the operator ever
+#            typed verifies a citation filed today -- and `MATCH <ts>` was
+#            printed and discarded by every caller, so the one output that could
+#            have refuted it was the one nobody read. `--authorized-at` bounds
+#            the scan to a window around the citation's own timestamp.
+#
+# WHY A WINDOW AND NOT AN EQUALITY, and why the exact compare is seeded as a
+# MUTANT below: over the reference consumer's 26 authorization rows the gap
+# between the stated timestamp and the NEAREST accepted record runs from -1116s
+# to +4283s, because these timestamps are hand-typed and routinely rounded to
+# the minute or the ten-minute. An exact compare NOMATCHes 22 of the 24 rows
+# that verify today.
+echo
+echo "  -- who said it, and when --"
+AWORK="$(mktemp -d)"
+trap 'rm -rf "$ROOT" "$CORPA" "$CORPB" "$AWORK"' EXIT
+mkdir -p "$AWORK/corpus"
+# THE FIRST MEMBER CARRIES NO CITED PHRASE. A verifier that reads the corpus's first file and
+# stops satisfied every case of this kind when the seed held one transcript, and returned
+# NOMATCH on the reference consumer's one genuine in-force citation.
+# THE OLD TURN IS IN THE FIRST FILE, and it is the direction a lead actually forges: write
+# today's entry, reach back to a phrase the operator typed weeks ago. Every out-of-window seed
+# this suite had placed the record AFTER the bound, which is the direction nobody forges --
+# measured, a window spliced to refuse only the later side passed the receipt, this fixture,
+# the reader fixture and its whole mutation battery, while accepting a citation stamped in
+# September for a phrase said in June.
+cat > "$AWORK/corpus/a-monday.jsonl" <<'JSONL'
+{"type":"user","timestamp":"2026-06-10T08:12:44Z","message":{"role":"user","content":"take the second option and carry on"}}
+{"type":"user","timestamp":"2026-07-01T09:00:00Z","message":{"role":"user","content":"/ai-dlc Sprint 77. Kick off."}}
+JSONL
+# The SECOND member holds every subject: the authorization turn, a harness injection, its
+# one-property-apart typed twin, and a turn a week later carrying different words.
+cat > "$AWORK/corpus/b-tuesday.jsonl" <<'JSONL'
+{"type":"user","timestamp":"2026-07-02T14:37:41Z","message":{"role":"user","content":"Suppress this check for this gate only"}}
+{"type":"user","isMeta":true,"timestamp":"2026-07-02T14:38:00Z","message":{"role":"user","content":"the harness injected this sentence verbatim"}}
+{"type":"user","timestamp":"2026-07-02T14:39:00Z","message":{"role":"user","content":"the operator typed this sentence verbatim"}}
+{"type":"user","timestamp":"2026-07-09T11:02:13Z","message":{"role":"user","content":"Carry the residue into the next sprint"}}
+JSONL
+AUTH_TS="2026-07-02T14:37:00Z"     # the turn is at :41; a hand-typed line rounds to the minute
+CITE_AUTH="Suppress this check for this gate only"
+CITE_LATER="Carry the residue into the next sprint"
+CITE_META="the harness injected this sentence verbatim"
+CITE_TYPED="the operator typed this sentence verbatim"
+CITE_OLD="take the second option and carry on"
+# The SAME INSTANT as the authorization turn, written with a zone offset instead of `Z`. The
+# citation field's grammar permits it and the lifetime sibling accepts it, so it reaches every
+# call site; truncated to its naive part it moves the window by the offset -- seven hours here.
+AUTH_TS_OFFSET="2026-07-02T07:37:00-07:00"
+
+# rc AND stdout from one invocation. `cmd | grep` takes grep's status, and --cite exits 2 on
+# NOMATCH, so the two have to be captured together.
+acite() { # acite <validator> <quote> [<authorized-at>] -> prints "<verdict>/<rc>"
+  local v="$1" q="$2" at="${3:-}" o r
+  if [ -n "$at" ]; then
+    o="$(bash "$v" --dir "$AWORK/corpus" --cite "$q" --authorized-at "$at" --quiet 2>/dev/null)"; r=$?
+  else
+    o="$(bash "$v" --dir "$AWORK/corpus" --cite "$q" --quiet 2>/dev/null)"; r=$?
+  fi
+  printf '%s/%s' "${o:-EMPTY}" "$r"
+}
+acount() { bash "$1" --transcript "$2" --count 2>/dev/null; }
+
+w() { # w <name> <got> <want> <why>
+  if [ "$2" = "$3" ]; then ok_ "$1" "$4"; else bad_ "$1" "got '$2', want '$3' -- $4"; fi
+}
+
+# --- W1: the two-file corpus, bounded, with a ROUNDED authorization timestamp --
+w two-file-rounded "$(acite "$VALIDATOR" "$CITE_AUTH" "$AUTH_TS")" "MATCH 2026-07-02T14:37:41Z/0" \
+  "a genuine turn 41s after a minute-rounded authorization time still verifies, and it is in the corpus's SECOND file"
+
+# --- W2: the same corpus, a phrase said a WEEK from the cited moment ----------
+w said-elsewhere "$(acite "$VALIDATOR" "$CITE_LATER" "$AUTH_TS")" "NOMATCH/2" \
+  "words the operator really said, seven days from the moment this citation claims, do not verify it"
+
+# --- W2c: THE DISCRIMINATOR for W2. Same quote, same corpus, no bound ---------
+# Without this the NOMATCH above is indistinguishable from a corpus that does not hold the
+# words at all, which is what every pre-bound arm in this file would have reported.
+w said-elsewhere-unbounded "$(acite "$VALIDATOR" "$CITE_LATER")" "MATCH 2026-07-09T11:02:13Z/0" \
+  "unbounded, that same phrase verifies -- so W2's NOMATCH came from the WINDOW and not from the corpus"
+
+# --- W2d: the NOMATCH says WHICH of the two findings it is -------------------
+# "nothing carried these words" and "the operator said them at another moment" are different
+# facts and a reader cannot act on them alike. The exit code is 2 either way.
+W2D="$(bash "$VALIDATOR" --dir "$AWORK/corpus" --cite "$CITE_LATER" --authorized-at "$AUTH_TS" --quiet 2>&1)"
+if has "carried it outside the" "$W2D" && has "$AUTH_TS" "$W2D"; then
+  ok_ nomatch-names-the-window "the out-of-window NOMATCH says the words WERE said, and names the cited authorization time"
+else
+  bad_ nomatch-names-the-window "the diagnostic does not separate 'never said' from 'said at another moment': $W2D"
+fi
+
+# --- W2e: THE OTHER SIDE OF THE WINDOW, and the one a lead actually reaches for -----------
+# The entry is stamped 2026-07-02; the words were typed on 2026-06-10, three weeks BEFORE it.
+# Every other out-of-window case in this suite puts the record AFTER the bound, and a window
+# refusing only that side accepts this citation while passing every one of them.
+w said-weeks-before "$(acite "$VALIDATOR" "$CITE_OLD" "$AUTH_TS")" "NOMATCH/2" \
+  "a phrase the operator typed three weeks BEFORE the cited authorization does not verify it"
+
+# --- W2f: THE DISCRIMINATOR for W2e. Same quote, same corpus, no bound --------
+w said-weeks-before-unbounded "$(acite "$VALIDATOR" "$CITE_OLD")" "MATCH 2026-06-10T08:12:44Z/0" \
+  "unbounded, that same phrase verifies -- so W2e's NOMATCH came from the WINDOW and not from the corpus, and it came from the corpus's FIRST file"
+
+# --- W2g: a zone OFFSET is honoured, not truncated ---------------------------
+# The same instant as the in-window authorization time, written `-07:00` instead of `Z`. Read
+# as its naive part the window moves by the offset and this citation NOMATCHes; read whole it
+# is the same moment and must MATCH. The pair is W1's, one property apart -- only the spelling
+# of the timestamp differs.
+w offset-honoured "$(acite "$VALIDATOR" "$CITE_AUTH" "$AUTH_TS_OFFSET")" "MATCH 2026-07-02T14:37:41Z/0" \
+  "an authorization time written with a -07:00 offset is the same instant as the Z form and verifies the same citation"
+w offset-still-bounds "$(acite "$VALIDATOR" "$CITE_OLD" "$AUTH_TS_OFFSET")" "NOMATCH/2" \
+  "and it still BOUNDS -- the offset form is not a way to widen the window to everything"
+
+# --- W3: a harness injection is not an operator turn -------------------------
+w ismeta-not-citable "$(acite "$VALIDATOR" "$CITE_META")" "NOMATCH/2" \
+  "an isMeta:true record's text does not verify a citation, however operator-shaped its bytes are"
+
+# --- W3b: the ALLOW twin, ONE PROPERTY APART ---------------------------------
+# Same file, same record shape, same neighbourhood; only the isMeta key differs. Without it,
+# W3 passes identically against a predicate that rejects everything in this corpus.
+w typed-still-citable "$(acite "$VALIDATOR" "$CITE_TYPED")" "MATCH 2026-07-02T14:39:00Z/0" \
+  "the same record without isMeta still verifies -- W3 discriminates on the flag, not on the file"
+
+# --- W4: an unparseable bound is REFUSED, never dropped ----------------------
+# Silently ignoring it hands back a fully unbounded verify wearing a bounded one's exit code.
+W4="$(bash "$VALIDATOR" --dir "$AWORK/corpus" --cite "$CITE_AUTH" --authorized-at "yesterday afternoon" --quiet 2>&1)"; W4RC=$?
+if [ "$W4RC" -ne 0 ] && [ "$W4RC" -ne 2 ] && has "authorized-at" "$W4"; then
+  ok_ bad-bound-refused "an --authorized-at that will not parse exits ${W4RC} (neither MATCH nor NOMATCH) and names the flag"
+else
+  bad_ bad-bound-refused "an unparseable bound produced rc=$W4RC -- a caller reading 0/2 cannot tell it from a verdict: $W4"
+fi
+
+# --- W5: the bound has no meaning without --cite -----------------------------
+bash "$VALIDATOR" --dir "$AWORK/corpus" --authorized-at "$AUTH_TS" --quiet >/dev/null 2>&1
+W5RC=$?
+w bound-needs-cite "$W5RC" "1" "--authorized-at outside a --cite query is refused rather than accepted and ignored"
+
+# --- W6: CHECK B MOVES WITH THE PREDICATE, and its twin says so --------------
+# The isMeta arm sits in genuineOperatorText, which Check B is the only other caller of. A fix
+# applied to --cite alone leaves the steamroll check reading a machine event as a human steer --
+# the failure class its own header warns against twice.
+mkdir -p "$AWORK/bmeta" "$AWORK/btyped"
+cat > "$AWORK/bmeta/session.jsonl" <<'JSONL'
+{"type":"user","isMeta":true,"timestamp":"2026-07-04T10:00:00Z","message":{"role":"user","content":"Your claude.ai usage limit has reset. Continue the task you were working on"}}
+{"type":"assistant","timestamp":"2026-07-04T10:00:05Z","message":{"content":[{"type":"tool_use","id":"t1","name":"Agent","input":{"prompt":"go"}}]}}
+JSONL
+cat > "$AWORK/btyped/session.jsonl" <<'JSONL'
+{"type":"user","timestamp":"2026-07-04T10:00:00Z","message":{"role":"user","content":"Your claude.ai usage limit has reset. Continue the task you were working on"}}
+{"type":"assistant","timestamp":"2026-07-04T10:00:05Z","message":{"content":[{"type":"tool_use","id":"t1","name":"Agent","input":{"prompt":"go"}}]}}
+JSONL
+w checkb-ignores-ismeta "$(acount "$VALIDATOR" "$AWORK/bmeta/session.jsonl")" "0" \
+  "a harness injection followed by an Agent dispatch is not a steamroll"
+w checkb-counts-typed "$(acount "$VALIDATOR" "$AWORK/btyped/session.jsonl")" "1" \
+  "the SAME two records without isMeta still count as one -- W6 discriminates on the flag"
+
+# ===========================================================================
+# MUTANTS. Every arm above is a claim about one line of the predicate, and an
+# exit code cannot say which line produced it. Each mutant is a COPY, guarded by
+# `cmp -s` (a sed that matched nothing must not pass as a mutation) and `bash -n`
+# (a mutant that is no longer a program emits nothing, and every NOMATCH arm
+# above would score that as a kill).
+echo
+echo "  -- mutants --"
+MWORK="$(mktemp -d)"
+trap 'rm -rf "$ROOT" "$CORPA" "$CORPB" "$AWORK" "$MWORK"' EXIT
+KILLS=0
+# SETS A GLOBAL RATHER THAN PRINTING. A builder called inside `$( )` reports its refusal into
+# a subshell: the failure count is lost, the caller gets an empty path, and `if [ -n "$M" ]`
+# then SKIPS every arm that mutant owns with no verdict at all -- which reads exactly like a
+# clean run. MUTP is the answer and the refusal is scored here, in this shell.
+MUTP=""
+mut() { # mut <name> <sed-expr> -> 0 and MUTP set, or 1 with the refusal already reported
+  MUTP=""
+  local name="$1"
+  local expr="$2"
+  local p="$MWORK/m-$name.sh"
+  sed "$expr" "$VALIDATOR" > "$p" || { bad_ "mutant-$name" "sed DID NOT APPLY -- a mutation that dies is a mutant that never existed"; return 1; }
+  if cmp -s "$VALIDATOR" "$p"; then
+    bad_ "mutant-$name" "changed no bytes -- its anchor is gone, and a no-op mutant scores every NOMATCH arm as a kill"; return 1
+  fi
+  bash -n "$p" 2>/dev/null || { bad_ "mutant-$name" "does not parse; its silence would score as a kill"; return 1; }
+  MUTP="$p"
+}
+kill_() { KILLS=$((KILLS + 1)); ok_ "$1" "$2"; }
+mw() { # mw <name> <mutant> <quote> <at-or-empty> <want> <kill|hold> <why>
+  local got; got="$(acite "$2" "$3" "$4")"
+  if [ "$got" = "$5" ]; then
+    case "$6" in kill) kill_ "$1" "$7" ;; *) ok_ "$1" "$7" ;; esac
+  else
+    bad_ "$1" "got '$got', want '$5' -- $7"
+  fi
+}
+
+# CONTROL. An unmutated copy in the same directory must reproduce the baseline, or neither
+# mutant result means anything -- and it must reproduce it POSITIVELY, because a copy that
+# died before reaching node emits nothing and every NOMATCH expectation would accept that.
+MCTL="$MWORK/control.sh"
+cp "$VALIDATOR" "$MCTL"
+mw control-match "$MCTL" "$CITE_AUTH" "$AUTH_TS" "MATCH 2026-07-02T14:37:41Z/0" hold \
+  "control: an unmutated copy still MATCHes the bounded citation, so the copies below can run"
+mw control-meta "$MCTL" "$CITE_META" "" "NOMATCH/2" hold \
+  "control: the unmutated copy still refuses the harness injection"
+
+# MUTANT A -- the isMeta arm removed. Kill set: {ismeta-not-citable, checkb-ignores-ismeta}.
+mut no-ismeta 's|^  if (r.isMeta === true) return "";$||'
+MA="$MUTP"
+if [ -n "$MA" ]; then
+  mw A-meta-cites "$MA" "$CITE_META" "" "MATCH 2026-07-02T14:38:00Z/0" kill \
+    "A: without the isMeta arm a harness injection cites -- W3 has teeth"
+  if [ "$(acount "$MA" "$AWORK/bmeta/session.jsonl")" = "1" ]; then
+    kill_ A-checkb-counts-meta "A: Check B counts the injection as a steamroll too -- the arm is shared, as W6 asserts"
+  else
+    bad_ A-checkb-counts-meta "A: Check B did not move, so W6 is not testing the shared arm"
+  fi
+  mw A-window-holds "$MA" "$CITE_LATER" "$AUTH_TS" "NOMATCH/2" hold "A: the window arm is unmoved -- the two subjects are not entangled"
+  mw A-typed-holds  "$MA" "$CITE_TYPED" "" "MATCH 2026-07-02T14:39:00Z/0" hold "A: the typed twin is unmoved"
+fi
+
+# MUTANT B -- THE WRONG FIX: an EXACT timestamp compare instead of a window. It repairs
+# `said-elsewhere` (which is why it reads as a fix) and destroys every rounded citation, which
+# on the reference consumer is 22 of the 24 rows that verify today.
+mut exact-ts-compare 's|Math.abs(ts - authMs) > authTolMs|ts !== authMs|'
+MB="$MUTP"
+if [ -n "$MB" ]; then
+  mw B-rounded-dies "$MB" "$CITE_AUTH" "$AUTH_TS" "NOMATCH/2" kill \
+    "B: an exact compare NOMATCHes a genuine citation whose timestamp was rounded to the minute -- W1 has teeth"
+  mw B-window-holds "$MB" "$CITE_LATER" "$AUTH_TS" "NOMATCH/2" hold \
+    "B: said-elsewhere is unmoved, which is exactly why this wrong fix reads as a fix"
+  mw B-meta-holds "$MB" "$CITE_META" "" "NOMATCH/2" hold "B: the isMeta arm is unmoved"
+fi
+
+# MUTANT C -- the bound is computed and never applied. Kill set: {said-elsewhere}.
+mut bound-not-applied 's|if (authMs !== null \&\& Math.abs(ts - authMs) > authTolMs) {|if (false) {|'
+MC="$MUTP"
+if [ -n "$MC" ]; then
+  mw C-elsewhere-cites "$MC" "$CITE_LATER" "$AUTH_TS" "MATCH 2026-07-09T11:02:13Z/0" kill \
+    "C: with the window never applied, a phrase from another week verifies -- W2 has teeth"
+  mw C-rounded-holds "$MC" "$CITE_AUTH" "$AUTH_TS" "MATCH 2026-07-02T14:37:41Z/0" hold "C: W1 is unmoved"
+  mw C-meta-holds "$MC" "$CITE_META" "" "NOMATCH/2" hold "C: the isMeta arm is unmoved"
+fi
+
+# MUTANT D -- an unparseable bound is DROPPED instead of refused. Kill set: {bad-bound-refused}.
+# The shape a hurried fix takes, and the one that cannot be seen from an exit code: the scan
+# runs unbounded and answers 0 or 2 exactly as a bounded one would.
+mut bad-bound-ignored 's|^    if (Number.isNaN(authMs)) {$|    if (false) {|'
+MD="$MUTP"
+if [ -n "$MD" ]; then
+  MDO="$(bash "$MD" --dir "$AWORK/corpus" --cite "$CITE_AUTH" --authorized-at "yesterday afternoon" --quiet 2>&1)"; MDRC=$?
+  if [ "$MDRC" -eq 0 ] || [ "$MDRC" -eq 2 ]; then
+    kill_ D-bad-bound-verdict "D: a bound that will not parse now answers with a VERDICT (rc=$MDRC) -- W4 has teeth"
+  else
+    bad_ D-bad-bound-verdict "D: rc=$MDRC, so W4 is not testing the refusal: $MDO"
+  fi
+  mw D-window-holds "$MD" "$CITE_LATER" "$AUTH_TS" "NOMATCH/2" hold "D: a parseable bound still binds"
+fi
+
+# --- W7: THE TOLERANCE IS A CONSTANT, AND NO ENVIRONMENT REACHES IT ------------
+# Every other tunable in this validator is a BUDGET -- widen it and the check reports
+# differently about the same facts. This one is a PROVENANCE bound: widen it and the check
+# stops asking its question while its output, its exit codes, every other arm here and every
+# receipt stay exactly as green. Readers inherit the environment they are run in and the
+# remediation guard runs in the LEAD'S, so an exported value would be a one-word way to turn
+# off the arm standing between a lead and lifting its own gate deny.
+#
+# THE ARM IS RUN WITH THE OLD VARIABLE SET, not with it absent: an absent variable proves only
+# that the default is 7200, which was true while the knob existed too.
+W7O="$(AI_DLC_CITE_AUTH_TOLERANCE_S=1000000000 bash "$VALIDATOR" --dir "$AWORK/corpus" --cite "$CITE_LATER" --authorized-at "$AUTH_TS" --quiet 2>/dev/null)"; W7RC=$?
+w tolerance-not-overridable "${W7O:-EMPTY}/$W7RC" "NOMATCH/2" \
+  "a phrase said a week away still NOMATCHes with AI_DLC_CITE_AUTH_TOLERANCE_S=10^9 exported -- the window is a literal in the program"
+# The ALLOW twin, one property apart: the same environment must not break a genuine citation
+# either. Without it this arm passes against a build that refuses everything.
+W7B="$(AI_DLC_CITE_AUTH_TOLERANCE_S=1000000000 bash "$VALIDATOR" --dir "$AWORK/corpus" --cite "$CITE_AUTH" --authorized-at "$AUTH_TS" --quiet 2>/dev/null)"; W7BRC=$?
+w tolerance-env-harmless "${W7B:-EMPTY}/$W7BRC" "MATCH 2026-07-02T14:37:41Z/0" \
+  "the same environment leaves a genuine in-window citation verifying -- W7 discriminates on the window, not on the run failing"
+
+# MUTANT E -- THE OVERRIDE RESTORED, exactly as it was written for one revision: the constant
+# read from the environment with 7200 as a default. Kill set: {tolerance-not-overridable}.
+# Nothing else moves, because with the variable unset the mutant and the shipping program are
+# the same program -- which is precisely why an overridable bound is invisible to every arm
+# that does not export it, and why this mutant has to.
+mut env-overridable-tolerance 's|^const CITE_AUTH_TOLERANCE_S = 7200;$|const CITE_AUTH_TOLERANCE_S = +(process.env.AI_DLC_CITE_AUTH_TOLERANCE_S \|\| 7200);|'
+ME="$MUTP"
+if [ -n "$ME" ]; then
+  MEO="$(AI_DLC_CITE_AUTH_TOLERANCE_S=1000000000 bash "$ME" --dir "$AWORK/corpus" --cite "$CITE_LATER" --authorized-at "$AUTH_TS" --quiet 2>/dev/null)"; MERC=$?
+  if [ "${MEO:-EMPTY}/$MERC" = "MATCH 2026-07-09T11:02:13Z/0" ]; then
+    kill_ E-env-widens-window "E: with the override restored, one exported variable makes a week-away phrase verify -- W7 has teeth"
+  else
+    bad_ E-env-widens-window "E: got '${MEO:-EMPTY}/$MERC', want 'MATCH 2026-07-09T11:02:13Z/0' -- W7 is not testing the override"
+  fi
+  # And the mutant is INDISTINGUISHABLE from the shipping program without the variable, which
+  # is the whole hazard: no other arm in this file can see it.
+  mw E-unset-holds "$ME" "$CITE_LATER" "$AUTH_TS" "NOMATCH/2" hold \
+    "E: with the variable unset the mutant behaves identically -- an overridable bound is invisible to every arm that does not export it"
+  mw E-meta-holds "$ME" "$CITE_META" "" "NOMATCH/2" hold "E: the isMeta arm is unmoved"
+fi
+
+# MUTANT F -- THE WINDOW MADE ONE-SIDED: a record EARLIER than the cited authorization always
+# verifies. Kill set: {said-weeks-before} exactly. This is the shape that survived every
+# evidence channel this change had -- the receipt, this fixture, the reader fixture and its
+# whole 21-mutant battery all exited 0 against it -- because every out-of-window seed anywhere
+# placed the record AFTER the bound. It is also the direction a lead forges in: nobody writes
+# an entry and then waits for the operator to say something, they write the entry today and
+# reach back for a phrase that already exists.
+mut window-one-sided 's|if (authMs !== null \&\& Math.abs(ts - authMs) > authTolMs) {|if (authMs !== null \&\& ts - authMs > authTolMs) {|'
+MF="$MUTP"
+if [ -n "$MF" ]; then
+  mw F-before-cites "$MF" "$CITE_OLD" "$AUTH_TS" "MATCH 2026-06-10T08:12:44Z/0" kill \
+    "F: with only the later side refused, a phrase from three weeks before the cited moment verifies -- W2e has teeth"
+  mw F-after-holds "$MF" "$CITE_LATER" "$AUTH_TS" "NOMATCH/2" hold \
+    "F: the AFTER side is unmoved, which is why every seed that only looks forward passes this mutant"
+  mw F-rounded-holds "$MF" "$CITE_AUTH" "$AUTH_TS" "MATCH 2026-07-02T14:37:41Z/0" hold "F: W1 is unmoved"
+  mw F-meta-holds "$MF" "$CITE_META" "" "NOMATCH/2" hold "F: the isMeta arm is unmoved"
+fi
+
+# KILL COUNT. A mutation that applied cleanly to a file this run never loaded reads exactly
+# like an arm that cannot fire, and `cmp -s` cannot tell them apart. Zero kills is that state.
+if [ "$KILLS" -ge 7 ]; then
+  ok_ KILL-COUNT "$KILLS mutant kill(s) -- the arms above can fire"
+else
+  bad_ KILL-COUNT "$KILLS kill(s); the mutants changed bytes in a file these arms never loaded"
+fi
+
 if [ "$FAILURES" -eq 0 ]; then
-  echo "PASS: check-25 steering-conduct fixture holds (3 cases + count contract + 9 identity arms)."
+  echo "PASS: check-25 steering-conduct fixture holds (3 cases + count contract + 9 identity arms + provenance window/isMeta arms + 6 mutants)."
   exit 0
 fi
 echo "FAIL: $FAILURES check-25 assertion(s) failed."

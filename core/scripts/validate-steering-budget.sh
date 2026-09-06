@@ -104,7 +104,7 @@
 #       Print ONLY the total violation count (A+B+C+D) as a bare integer, exit 0.
 #       gate-validation.md Check 25 needs an integer to compare against the count
 #       the previous gate recorded; it must not have to grep one out of prose.
-#   core/scripts/validate-steering-budget.sh (--transcript PATH | --dir PATH) --cite "SUBSTR" [--since ISO]
+#   core/scripts/validate-steering-budget.sh (--transcript PATH | --dir PATH) --cite "SUBSTR" [--since ISO] [--authorized-at ISO]
 #       PROVENANCE-CITATION query mode. Asks a different question from the checks
 #       above: not "did the lead mishandle operator messages?" but "did a GENUINE
 #       operator message actually contain these words?" Prints MATCH <ts> or NOMATCH
@@ -112,6 +112,43 @@
 #       or after an ISO-8601 timestamp (the pause window). This exists so a record
 #       that CLAIMS operator authorization (an ADVERSARIAL_RESOLUTION operator_
 #       authorization citation) can be checked against the harness-owned transcript.
+#
+#       --authorized-at IS THE CITATION'S OWN TIMESTAMP, and it is the difference
+#       between "the operator said these words" and "the operator said these words
+#       WHEN THIS RECORD SAYS THEY DID". Without it the corpus is the project's whole
+#       session history and any twelve-character phrase the operator ever typed
+#       verifies a citation filed today: every caller printed `MATCH <ts>` and sent it
+#       to /dev/null, so the one output that could have refuted the claim was the one
+#       nobody read. A record verifies only if an accepted operator turn carrying the
+#       quote falls within CITE_AUTH_TOLERANCE_S seconds either side of this
+#       timestamp. The bound is OPTIONAL and an EMPTY value is how a caller says so:
+#       a caller that cannot derive a timestamp from its own record passes `""` and
+#       gets today's unbounded answer, because refusing a citation for a field the
+#       entry grammar does not require is a check that wedges live work. Every shipped
+#       reader passes the flag UNCONDITIONALLY for that reason -- the literal then sits
+#       on the invocation line, where invariant I109 joins it to `--cite`, rather than
+#       on a conditional assignment a whole-file grep would find in a comment. A
+#       NON-EMPTY value that will not parse is REFUSED (exit 1) rather than ignored --
+#       a bound silently dropped is an unbounded verify wearing a bound's exit code.
+#
+#       WHY A WINDOW AND NOT AN EQUALITY, measured over the reference consumer's 26
+#       `**Operator authorization:**` rows. These timestamps are HAND-TYPED and
+#       routinely rounded (`19:34:00Z`, `22:40:00Z`), so the record they cite is not at
+#       the stated instant: taking each row's NEAREST matching accepted record, the gap
+#       runs from -1116s to +4283s. An exact compare would NOMATCH 22 of the 24 rows
+#       that verify today. CITE_AUTH_TOLERANCE_S is 7200, which admits every one of
+#       the 23 timestamped rows that verify, with a 1.68x margin on the worst (+4283s,
+#       an entry stated at 22:40:00Z whose operator answer landed at 23:51:22Z) and
+#       6.45x on the other side.
+#
+#       THE TOLERANCE IS A HARD CONSTANT WITH NO ENVIRONMENT AND NO FLAG OVERRIDE, and
+#       that is the whole of its security. It was overridable for one revision, and an
+#       overridable bound is not a bound: any reader inherits the environment it is run
+#       in, and the remediation guard runs in the LEAD'S, so a single exported value of
+#       10^9 makes the window wider than the project's history while every receipt,
+#       every fixture and every exit code stays exactly as green as before. The same
+#       hole shipped once already on a different knob and had to be closed pre-merge.
+#       Changing this number is a code change, reviewed against the corpus that set it.
 #
 #       Its predicate is Check B's, plus AskUserQuestion ANSWERS -- and only the answer
 #       side, never the lead-authored question -- plus SLASH-COMMAND ARGUMENTS, and only
@@ -126,6 +163,10 @@
 #   AI_DLC_STEERING_BUDGET  max foreground block, seconds   (default 120)
 #   AI_DLC_STEERING_GRACE   jitter allowance, seconds       (default 30)
 #   AI_DLC_MAX_WAIT_BEATS   max consecutive wait beats      (default 6)
+#
+# THE --authorized-at WINDOW IS NOT ON THIS LIST AND MUST NOT JOIN IT. It is a provenance
+# bound, not a budget: a knob that widens it is a knob that turns the check off, silently and
+# from any environment. See CITE_AUTH_TOLERANCE_S in the --cite usage above.
 #
 # AI_DLC_STEERING_BUDGET IS FOREGROUND-ONLY and must stay 120. It is not the
 # backgrounded beat's sleep quantum -- that is AI_DLC_WAIT_BEAT_SECS, read only
@@ -150,6 +191,7 @@ QUIET=0
 COUNT=0
 CITE=""
 SINCE=""
+AUTH_AT=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -159,6 +201,7 @@ while [ $# -gt 0 ]; do
     --count)      COUNT=1; shift ;;
     --cite)       CITE="${2:-}"; shift 2 ;;
     --since)      SINCE="${2:-}"; shift 2 ;;
+    --authorized-at) AUTH_AT="${2:-}"; shift 2 ;;
     *) echo "unknown arg: $1" >&2; exit 1 ;;
   esac
 done
@@ -192,6 +235,15 @@ if [ -n "$CITE" ] && [ -z "$TRANSCRIPT" ] && [ -z "$DIR" ]; then
   exit 1
 fi
 
+# --authorized-at ONLY BOUNDS --cite, and a caller that passes it to a checks run has asked for
+# a bound nothing will apply. Refusing beats ignoring: the same silence would report a
+# fully-unbounded verify with the exit code of a bounded one, which is the defect this flag
+# exists to close, one level up.
+if [ -n "$AUTH_AT" ] && [ -z "$CITE" ]; then
+  echo "FAIL: --authorized-at bounds --cite and has no meaning without it" >&2
+  exit 1
+fi
+
 if [ -z "$TRANSCRIPT" ] && [ -z "$DIR" ]; then
   echo "FAIL: pass --transcript PATH or --dir PATH" >&2
   exit 1
@@ -209,7 +261,7 @@ command -v node >/dev/null 2>&1 || { echo "FAIL: node is required" >&2; exit 1; 
 
 THRESHOLD=$(( BUDGET + GRACE ))
 
-AI_DLC_T="$TRANSCRIPT" AI_DLC_D="$DIR" AI_DLC_TH="$THRESHOLD" AI_DLC_B="$BUDGET" AI_DLC_MB="$MAX_BEATS" AI_DLC_Q="$QUIET" AI_DLC_C="$COUNT" AI_DLC_CITE="$CITE" AI_DLC_SINCE="$SINCE" node <<'NODE'
+AI_DLC_T="$TRANSCRIPT" AI_DLC_D="$DIR" AI_DLC_TH="$THRESHOLD" AI_DLC_B="$BUDGET" AI_DLC_MB="$MAX_BEATS" AI_DLC_Q="$QUIET" AI_DLC_C="$COUNT" AI_DLC_CITE="$CITE" AI_DLC_SINCE="$SINCE" AI_DLC_AUTH_AT="$AUTH_AT" node <<'NODE'
 const fs = require("fs"), path = require("path");
 const TH = +process.env.AI_DLC_TH, BUDGET = +process.env.AI_DLC_B;
 const MAX_BEATS = +process.env.AI_DLC_MB;
@@ -217,6 +269,16 @@ const QUIET = process.env.AI_DLC_Q === "1";
 const COUNT = process.env.AI_DLC_C === "1";
 const CITE = process.env.AI_DLC_CITE || "";
 const SINCE = process.env.AI_DLC_SINCE || "";
+const AUTH_AT = process.env.AI_DLC_AUTH_AT || "";
+// A LITERAL, READ FROM NO ENVIRONMENT AND NO FLAG. Every other tunable in this file is a
+// BUDGET -- widen it and the check reports differently about the same facts. This one is a
+// PROVENANCE bound: widen it and the check stops asking the question, while its output, its
+// exit codes, every fixture and every receipt stay identical. Readers inherit the environment
+// they are run in and the remediation guard runs in the lead's, so `export` of a large value
+// would be a one-word way to turn off the arm that stands between a lead and lifting its own
+// gate deny. 7200 is derived in the --authorized-at note above, from the reference consumer's
+// own citation rows; moving it is a code change reviewed against that corpus.
+const CITE_AUTH_TOLERANCE_S = 7200;
 const one = process.env.AI_DLC_T, dir = process.env.AI_DLC_D;
 
 // AskUserQuestion measures the human's think-time, not machine starvation.
@@ -233,6 +295,19 @@ const ADVANCING = new Set(["Agent", "Task", "Skill", "TaskCreate"]);
 // on citableOperatorText for why sharing one predicate was wrong in BOTH directions.
 const genuineOperatorText = (r) => {
   if (!r || r.type !== "user") return "";
+  // THE HARNESS'S OWN FLAG, and the only exclusion here that does not have to be spelled as a
+  // prefix. `isMeta:true` is what Claude Code sets on a user-shaped record IT wrote: skill
+  // re-load notices, re-invocation notes, usage-limit resets, "please continue" nudges. The
+  // prefix list below is a list of the injections somebody happened to see; this is the
+  // producer saying so. Measured over the reference consumer's 252 transcripts (205851 records
+  // after the sidechain filter, 38572 type:user): 984 records accepted as operator text, 90 of
+  // them isMeta -- "Skill /ai-dlc-update is already loaded above; instructions unchanged.",
+  // "(Re-invocation of /ai-dlc-update ...)", "Your claude.ai usage limit has reset. Continue the
+  // task you were working on". Every one is over twelve characters and would have verified a
+  // citation quoting it. All 90 arrived through THIS arm and none through the AskUserQuestion
+  // or command-args arms, which is why the test sits here and is not restated in
+  // citableOperatorText: a guard there would have no subject today.
+  if (r.isMeta === true) return "";
   const c = r.message?.content;
   if (Array.isArray(c) && c.some(b => b.type === "tool_result")) return "";
   let txt = typeof c === "string" ? c
@@ -456,7 +531,9 @@ const files = one ? [one]
 
 // ---- --cite: provenance-citation query (single transcript) ------------------
 // Answer one mechanical question: is CITE a verbatim (whitespace-normalized,
-// case-insensitive) substring of a GENUINE operator message at or after --since?
+// case-insensitive) substring of a GENUINE operator message at or after --since,
+// and -- when the caller can say when its record claims the authorization happened --
+// within the --authorized-at window rather than anywhere in the project's history?
 // It deliberately does NOT judge whether those words AUTHORIZE anything -- that is
 // an LLM judgment, itself forgeable, and the caller (a resolution record's operator_
 // authorization field) surfaces the words verbatim for the human to own the meaning.
@@ -465,6 +542,36 @@ if (CITE) {
   const norm = (s) => (s || "").replace(/\s+/g, " ").trim().toLowerCase();
   const needle = norm(CITE);
   const sinceMs = SINCE ? Date.parse(SINCE) : -Infinity;
+  // THE AUTHORIZATION WINDOW. The header carries the measurement that set the tolerance.
+  // A value that will not parse is a REFUSAL and not an unbounded scan: every caller reads
+  // rc 0 as MATCH and rc 2 as the verifier's own NOMATCH, treating anything else as a tooling
+  // failure that covers nothing, so exit 1 is the only answer here that cannot be read as a
+  // verdict. Silently dropping an unparseable bound would hand back a fully unbounded verify
+  // wearing a bounded one's exit code -- the defect this flag exists to close, one level up.
+  let authMs = null;
+  const authTolMs = CITE_AUTH_TOLERANCE_S * 1000;
+  if (AUTH_AT) {
+    // A ZONE-LESS VALUE IS UTC HERE, NOT LOCAL. escalations.md prescribes UTC and all 26 of the
+    // reference consumer's authorization rows carry `Z`, but Date.parse reads a zone-less
+    // ISO string in the RUNNER's local time -- which would move the window by the machine's
+    // offset and make the verdict a property of where the gate ran rather than of the citation.
+    const v = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(AUTH_AT) ? AUTH_AT + "Z" : AUTH_AT;
+    authMs = Date.parse(v);
+    if (Number.isNaN(authMs)) {
+      console.error(`FAIL: --authorized-at "${AUTH_AT}" is not an ISO-8601 timestamp, so the citation window cannot be computed. Refusing rather than verifying unbounded.`);
+      process.exit(1);
+    }
+    // NO GUARD ON THE TOLERANCE, and its absence is the point: it is a literal above, so
+    // "not a non-negative number of seconds" is a state this program cannot reach. The guard
+    // that used to sit here validated a value read from the environment, and a condition that
+    // can no longer change an outcome is a loaded gun -- it would go on reading as though the
+    // knob still existed and invite the next author to restore it.
+  }
+  // Records carrying the quote that fell OUTSIDE the window. The two NOMATCHes are different
+  // findings and a caller cannot act on them alike: nothing carried these words at all is the
+  // S290 fabrication, while the operator said them a fortnight from the stated authorization is
+  // a citation pointed at the wrong turn. Counted so the diagnostic can say which.
+  let outsideWindow = 0;
   // THE CORPUS, not one file. `files` is already [one] for --transcript and the
   // since-bounded directory listing for --dir, so this needs no second assembly.
   let recs = [];
@@ -494,12 +601,21 @@ if (CITE) {
     if (!txt) continue;
     const ts = Date.parse(r.timestamp);
     if (!(ts >= sinceMs)) continue;
-    if (norm(txt).includes(needle)) {
+    const carries = norm(txt).includes(needle);
+    if (authMs !== null && Math.abs(ts - authMs) > authTolMs) {
+      if (carries) outsideWindow++;
+      continue;
+    }
+    if (carries) {
       console.error(`cite: scanned ${files.length} transcript(s) from ${CORPUS_ID}`);
       console.log(`MATCH ${r.timestamp}`); process.exit(0);
     }
   }
-  console.error(`cite: scanned ${files.length} transcript(s) from ${CORPUS_ID}, no genuine operator message carried it`);
+  const windowNote = authMs === null ? ""
+    : outsideWindow
+      ? `, though ${outsideWindow} operator turn(s) carried it outside the +/-${CITE_AUTH_TOLERANCE_S}s window around the cited authorization time ${AUTH_AT} -- the words were said, but not when this record says they were`
+      : ` within +/-${CITE_AUTH_TOLERANCE_S}s of the cited authorization time ${AUTH_AT}`;
+  console.error(`cite: scanned ${files.length} transcript(s) from ${CORPUS_ID}, no genuine operator message carried it${windowNote}`);
   console.log("NOMATCH"); process.exit(2);
 }
 

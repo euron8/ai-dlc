@@ -4047,7 +4047,7 @@ split it protects cannot disagree about what a fence is. The refusal on the genu
 `## BL-` line must survive; `core/fixtures/backlog-rotate-fence-guard` carries that arm and its
 mutants, and the two-quotation seed below is the one it lacks.
 
-verify: sh d=$(mktemp -d); printf '## BL-001 — one\n\n```text\n## BL-999 — quoted\n```sh\n## BL-998 — quoted again\n```\n\n## BL-002 — a real entry after the fence\n\nverify: manual\n' > "$d/backlog.md"; printf '# archive\n' > "$d/backlog.archive.md"; o=$(bash scripts/backlog-rotate.sh "$d/backlog.md" 2>&1); rm -rf "$d"; grep -q 'line 4:' <<<"$o" && ! grep -q 'line 9:' <<<"$o" && ! grep -q 'unterminated fence' <<<"$o"
+verify: sh d=$(mktemp -d); mkdir -p "$d/a" "$d/b" "$d/c"; printf '## BL-001 — one\n\n```text\n## BL-999 — quoted\n```sh\n## BL-998 — quoted again\n```\n\n## BL-002 — a real entry after the fence\n\nverify: manual\n' > "$d/a/backlog.md"; printf '## BL-001 — one\n\n```text\n## BL-999 — quoted\n### BL-998 — quoted again\n```\n\n## BL-002 — a real entry after the fence\n\nverify: manual\n' > "$d/b/backlog.md"; printf '## BL-001 — one\n\n```text\n## BL-999 — quoted\n\n## BL-002 — a real entry after the fence\n\nverify: manual\n' > "$d/c/backlog.md"; a=$(bash scripts/backlog-rotate.sh "$d/a/backlog.md" 2>&1); b=$(bash scripts/backlog-rotate.sh "$d/b/backlog.md" 2>&1); c=$(bash scripts/backlog-rotate.sh "$d/c/backlog.md" 2>&1); rm -rf "$d"; al=$(sed -n 's/^ *line \([0-9]*\):.*/\1/p' <<<"$a" | tr '\n' ' '); bl=$(sed -n 's/^ *line \([0-9]*\):.*/\1/p' <<<"$b" | tr '\n' ' '); cl=$(sed -n 's/^ *line \([0-9]*\):.*/\1/p' <<<"$c" | tr '\n' ' '); [ "$al" = "4 6 " ] && [ "$bl" = "4 5 " ] && [ "$cl" = "" ] && ! grep -q 'unterminated fence opened' <<<"$a$b" && grep -q 'unterminated fence opened at line 3' <<<"$c"
 
 
 
@@ -4060,7 +4060,10 @@ Found by the batch-51 scope hand while deriving the reader set for `BL-162`.
 Five role files (analyst, architect, tea, pm, sm) carry one byte-identical passage opening
 "**Write it in a `derived` fence, which is what makes it checkable:**" followed by a column-0
 example; the remediator and ops record templates place the fence under a `- derivation:` list
-item, which is exactly the indented shape `BL-162` found blind. No file states whether the fence
+item. **Re-measured while fixing this: both templates write that fence at COLUMN 0, not
+indented** — `grep -n '```' core/team-roles/remediator.md` puts it at column 0 — so the entry's
+claim that they carry the indented shape `BL-162` found blind was wrong. What they do carry is a
+list item that INVITES the indented form from anyone copying it. No file states whether the fence
 may be indented, and no invariant or render step joins the seven sites to
 `core/scripts/validate-artifact-derivations.sh`. A future correction to the taught grammar has
 seven edit sites and no enforcer, so the copies will drift from each other and from the reader
@@ -4070,7 +4073,21 @@ Shape of the fix: single-source the passage as data the role files render, or bi
 copies byte-identically to one owner with an arm in `scripts/validate-enforcement-map.sh`, and
 state the indent rule once. Both are larger than the finding; neither is owed by `BL-162`.
 
-verify: manual
+The receipt DRIVES the arm and cannot be satisfied by prose: it copies the tree, requires
+`--arms I108` to be GREEN on the unmutated copy, then INDENTS the recorded command line inside
+`sm.md`'s taught example by two spaces and requires the fork message. The green-first control is
+load-bearing — without it an arm that reported unconditionally would score a close, and an arm
+that is only a comment cannot pass either, because `--arms` resolves its unit through
+`render-invariant-index.sh --arm-lines`, which refuses an arm containing no emitter.
+
+**The seed is whitespace-only, and that is deliberate: the fixture's seeds change a WORD.** Two
+channels seeding the same shape agree for that reason rather than because the subject is right.
+Measured against a wrong fix that normalises leading blanks at the comparison site
+(`i108_passage … | sed 's/^[[:blank:]]*//'`): the whitespace-seeded receipt exits 1 and a
+word-drift receipt exits 0 on the same tree. That wrong fix is `W4` in
+`core/fixtures/derived-fence-binding/run.sh`.
+
+verify: sh M=scripts/validate-enforcement-map.sh; R=core/team-roles/sm.md; [ -f "$M" ] && [ -f "$R" ] || exit 9; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$M" --arms I108 >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; A='$ grep -c'; grep -qF -- "$A" "$D/$R" || { rm -rf "$D"; exit 9; }; awk -v a="$A" 'index($0, a) == 1 { print "  " $0; next } { print }' "$D/$R" > "$D/x" && mv "$D/x" "$D/$R" || { rm -rf "$D"; exit 9; }; O="$(cd "$D" && bash "$M" --arms I108 2>&1)"; rm -rf "$D"; case "$O" in *"the taught derivation-fence passage has forked"*) exit 0 ;; esac; exit 1
 
 
 
@@ -4105,4 +4122,9 @@ Two distinct subjects, enumerated so a close of one is not read as a close of bo
    consumer's 17 historical suppressions has not been measured, and the two 2026 paraphrase
    entries that already NOMATCH (`BL-171`'s brief item) are the population to score it on.
 
-verify: manual
+The receipt covers BOTH subjects and drives the shipping predicate AND one of its four readers,
+because three partial fixes close a narrower one: the isMeta arm alone, the bound at the owner
+with no call site passing it, and a bound that compares the timestamp exactly. Scored against
+all three plus the pre-fix tree.
+
+verify: sh V=core/scripts/validate-steering-budget.sh; E=core/scripts/validate-escalation-resolution.sh; [ -f "$V" ] && [ -f "$E" ] || exit 9; command -v node >/dev/null 2>&1 || exit 9; w=$(mktemp -d); mkdir -p "$w/t"; printf '%s\n' '{"type":"user","timestamp":"2026-06-10T08:12:44Z","message":{"role":"user","content":"take the second option and carry on"}}' '{"type":"user","timestamp":"2026-07-01T09:00:00Z","message":{"role":"user","content":"kick off sprint seventy seven"}}' > "$w/t/a.jsonl"; printf '%s\n' '{"type":"user","timestamp":"2026-07-02T14:37:41Z","message":{"role":"user","content":"suppress this check for this gate only"}}' '{"type":"user","isMeta":true,"timestamp":"2026-07-02T14:38:00Z","message":{"role":"user","content":"the harness injected this sentence verbatim"}}' '{"type":"user","timestamp":"2026-07-09T11:02:13Z","message":{"role":"user","content":"carry the residue into the next sprint"}}' > "$w/t/b.jsonl"; c(){ bash "$V" --dir "$w/t" --cite "$1" ${2:+--authorized-at "$2"} --quiet >/dev/null 2>&1; echo $?; }; q1='suppress this check for this gate only'; q2='carry the residue into the next sprint'; q3='take the second option and carry on'; qm='the harness injected this sentence verbatim'; at='2026-07-02T14:37:00Z'; ato='2026-07-02T07:37:00-07:00'; p=0; [ "$(c "$q1" '')" = 0 ] && [ "$(c "$q2" '')" = 0 ] && [ "$(c "$q3" '')" = 0 ] || p=9; [ "$p" = 0 ] || { rm -rf "$w"; exit 9; }; [ "$(c "$qm" '')" = 2 ] || { rm -rf "$w"; exit 1; }; [ "$(c "$q2" "$at")" = 2 ] || { rm -rf "$w"; exit 1; }; [ "$(c "$q3" "$at")" = 2 ] || { rm -rf "$w"; exit 1; }; [ "$(c "$q1" "$at")" = 0 ] || { rm -rf "$w"; exit 1; }; [ "$(c "$q1" "$ato")" = 0 ] || { rm -rf "$w"; exit 1; }; printf '%s\n' '## S50-ITEM-1 Lead (gate [planning]) - 2026-07-02' '**Status:** RESOLVED' "**Operator authorization:** $at | \"$q1\"" > "$w/ok.md"; printf '%s\n' '## S50-ITEM-2 Lead (gate [planning]) - 2026-07-02' '**Status:** RESOLVED' "**Operator authorization:** $at | \"$q2\"" > "$w/stale.md"; printf '%s\n' '## S50-ITEM-3 Lead (gate [planning]) - 2026-07-02' '**Status:** RESOLVED' "**Operator authorization:** $at | \"$q3\"" > "$w/before.md"; printf '%s\n' '## S50-ITEM-4 Lead (gate [planning]) - 2026-07-02' '**Status:** RESOLVED' "**Operator authorization:** 2026-07-02 14:37:00Z | \"$q1\"" > "$w/space.md"; r(){ bash "$E" --escalations "$w/$1" --sprint 50 --transcript-dir "$w/t" 2>/dev/null; }; oa="$(r ok.md)"; a=$?; r stale.md >/dev/null 2>&1; b=$?; r before.md >/dev/null 2>&1; d=$?; os="$(r space.md)"; e=$?; rm -rf "$w"; [ "$a" = 0 ] || exit 9; [ "$b" = 1 ] || exit 1; [ "$d" = 1 ] || exit 1; [ "$e" = 0 ] || exit 9; case "$oa" in *"unbounded-citation: 0"*) : ;; *) exit 1 ;; esac; case "$os" in *"unbounded-citation: 1"*) : ;; *) exit 1 ;; esac; exit 0

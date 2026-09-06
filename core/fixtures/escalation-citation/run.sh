@@ -155,6 +155,35 @@ says pending-order-good-last.md 50 real.jsonl "appears in NO genuine" "zzz no op
 gsx pending-crossfake.md corpus "" 1 "transcript(s) from" "IMPOSSIBLE-TOKEN-NEVER-EMITTED" \
     "(t) the accusation names the corpus STATE it was measured over"
 
+# --- the citation's TIMESTAMP, at the READER ------------------------------------------------
+echo
+echo "  -- what the citation's timestamp bounds, and what a writer can do to it --"
+# (u) THE FORGERY DIRECTION. The quote is a real operator turn from three weeks before the
+# stamp, so `pending-real.md` beside it is the near-miss: same file shape, same corpus, same
+# genuine words, and only the distance from the stamp differs.
+g pending-before.md 50 real.jsonl 1 "(u) a genuine turn three weeks BEFORE the cited stamp -> FAIL"
+says pending-before.md 50 real.jsonl "appears in NO genuine" "within the tolerance"
+# (v) THE UNBOUNDED PASS, WHICH USED TO BE INVISIBLE. A space where the grammar wants `T`
+# yields no bound, so the citation is verified against the whole corpus. It still PASSES -- a
+# citation with no parseable timestamp may still be real, and one live consumer row is exactly
+# that -- but the PASS now SAYS SO, and the canonical twin says zero in the same run.
+g pending-space.md 50 real.jsonl 0 "(v) a space instead of T verifies unbounded -> PASS"
+saysout() {  # $1 pending  $2 transcript  $3.. must-appear
+  local f="$1" t="$2"; shift 2; N=$((N + 1))
+  local out miss=""
+  out="$(bash "$VALIDATOR" --escalations "$ROOT/$f" --sprint 50 --transcript "$ROOT/$t" 2>/dev/null)"
+  local w; for w in "$@"; do grep -qF -- "$w" <<<"$out" || miss="$miss [$w]"; done
+  if [ -z "$miss" ]; then printf '  ok   %-26s PASS line carries the count\n' "$f"
+  else FAIL=$((FAIL + 1)); printf '  FAIL %-26s missing:%s\n       | %s\n' "$f" "$miss" "$out"; fi
+}
+saysout pending-space.md real.jsonl "unbounded-citation: 1"
+# ...and the CANONICAL twin, one property apart, must say zero. Without it the count arm passes
+# against a reader that prints the same number on every run.
+saysout pending-real.md  real.jsonl "unbounded-citation: 0"
+# (w) A ZONE OFFSET IS THE SAME INSTANT, not a naive time. Same quote and same corpus as
+# pending-real.md; only the spelling of the stamp differs.
+g pending-offset.md 50 real.jsonl 0 "(w) an offset stamp naming the same instant -> PASS"
+
 # --- mutants ---------------------------------------------------------------------------------
 # Built as COPIES, guarded by `cmp -s` (a sed that matched nothing must not pass as a mutation)
 # and `bash -n` (a mutant that is no longer a program emits nothing, and nothing scores as a
@@ -281,10 +310,37 @@ if [ -n "${MV:-}" ]; then
       "V: (t) is red -- the accusation no longer says which corpus produced it" "$MV" && KILLS=$((KILLS + 1))
 fi
 
+# Mutant T -- cite_ts TRUNCATES a zone offset, the shape it had before this round: the regex
+# stops before `+`/`-`, the naive part is handed to the verifier, and the owner reads it as UTC.
+# Kills (w) ONLY -- every other citation here carries `Z`, which the truncating form returns
+# whole, so this mutant and the fixed one are the same program for them.
+echo "  -- mutant T: cite_ts truncates a zone offset (expect ONLY (w) to go red) --"
+MT="$(mutate ts-truncates-offset 's@(Z|\[+-\]\[0-9\]{2}:?\[0-9\]{2})?@Z?@')" || FAIL=$((FAIL + 1))
+if [ -n "${MT:-}" ]; then
+  gx pending-offset.md 50 "" real.jsonl 1 "T: (w) is red -- the offset stamp is read seven hours from the instant it names" "$MT" && KILLS=$((KILLS + 1))
+  gx pending-real.md   50 "" real.jsonl 0 "T: (d) unchanged -- a Z stamp is returned whole either way" "$MT"
+  gx pending-before.md 50 "" real.jsonl 1 "T: (u) unchanged" "$MT"
+fi
+
+# Mutant B2 -- the UNBOUNDED-VERIFY COUNT dropped from the PASS line. The verdict does not move,
+# which is the whole point: a gate log then cannot tell a bounded pass from an unbounded one,
+# and no exit code anywhere can see it.
+echo "  -- mutant B2: the unbounded-verify count is not reported --"
+MB2="$(mutate drop-unbounded-count 's@ unbounded-citation: \${UNBOUNDED} verified with no timestamp bound\.@@')" || FAIL=$((FAIL + 1))
+if [ -n "${MB2:-}" ]; then
+  N=$((N + 1))
+  OUTB2="$(bash "$MB2" --escalations "$ROOT/pending-space.md" --sprint 50 --transcript "$ROOT/real.jsonl" 2>/dev/null)"; rcb2=$?
+  if [ "$rcb2" -eq 0 ] && ! grep -qF -- "unbounded-citation:" <<<"$OUTB2"; then
+    KILLS=$((KILLS + 1)); printf '  ok   %-26s B2: the count is gone while the verdict stays PASS -- (v) has teeth\n' "pending-space.md"
+  else
+    FAIL=$((FAIL + 1)); printf '  FAIL %-26s B2 DID NOT FAIL (rc=%s): the count survived the mutation, so (v) is not testing it\n' "pending-space.md" "$rcb2"
+  fi
+fi
+
 # KILL COUNT. A mutation that applied cleanly to a file the run never loaded reads exactly
 # like an arm that cannot fire, and `cmp -s` cannot tell them apart. Zero kills is that state.
 N=$((N + 1))
-if [ "$KILLS" -ge 12 ]; then printf '  ok   %-30s %s mutant kill(s) -- these arms can fire\n' "KILL-COUNT" "$KILLS"
+if [ "$KILLS" -ge 14 ]; then printf '  ok   %-30s %s mutant kill(s) -- these arms can fire\n' "KILL-COUNT" "$KILLS"
 else FAIL=$((FAIL + 1)); printf '  FAIL %-30s %s kill(s); the mutants changed bytes in a file these arms never loaded\n' "KILL-COUNT" "$KILLS"; fi
 
 echo

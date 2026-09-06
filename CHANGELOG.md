@@ -15,6 +15,110 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.516.0] - 2026-09-06
+
+### `BL-184` — the genuine-operator predicate refuses a harness-injected record, and a citation verifies only inside a window around its own authorization timestamp
+
+`validate-steering-budget.sh` owns the genuine-operator predicate that `--cite` and Check B
+share, and four readers delegate to it. It accepted a `type: user` record carrying
+`isMeta: true` — harness injections such as "Skill /ai-dlc-update is already loaded above;
+instructions unchanged." — as operator text, and it discarded the timestamp of the record it
+matched, so any twelve-character phrase the operator ever typed verified a citation filed
+today. Census over the consumer's 252 transcripts with the shipping predicate lifted verbatim:
+984 records accepted as operator text, 90 of them `isMeta`, all arriving through
+`genuineOperatorText`; after the change 894 and 0, with three named genuine records accepted
+both ways and one named injection refused as the control.
+
+`--cite` gains `--authorized-at ISO`: the entry's own `**Operator authorization:**` timestamp,
+and a `MATCH` now requires the matched record inside a window of that moment. The window is
+a hard constant of 7200s each side, derived from the consumer's 23 timestamped citations that
+verify — the operator's words sit up to +4283s after the stated timestamp, because the field
+is written as "roughly when I filed this", and the exact compare is a measured wrong fix at 1
+MATCH and 24 NOMATCH. The escalation, convergence and adjudication validators and both call
+sites in the remediation guard pass the timestamp through `cite_ts()` at the four I103 helper
+sites; the guard's cache gains the citation verifier's own file key as a key term, so a row
+cached under one predicate cannot be read by a build running another (the `+cite+at` tag
+beside it is a note and decides nothing; reverting it left every channel green until the key
+term existed). `cite_ts()` accepts a zone offset and hands it to the parser whole, because the
+first cut truncated `-07:00` to a naive stamp and moved the window seven hours. The window is
+held on BOTH sides: the adversary's one-sided splice, verifying any record earlier than the
+bound, passed the receipt and every fixture because every out-of-window seed sat after the
+bound, and the before-the-bound direction is the one a lead actually forges; all three
+channels now seed it. Over the consumer's 26 authorization rows: 24 MATCH before and after,
+the same two paraphrase rows NOMATCH, the one in-force suppression still verifies, and every
+row NOMATCHes with its timestamp shifted back a year. Check B's corpus-wide steering count
+drops from 56 to 52, the four removed rows are all injections, and no sprint window's verdict
+flips. `escalations.md` says the timestamp is when the operator spoke and is verified.
+
+An authorization line with no parseable ISO timestamp passes an empty bound and stays
+unbounded (one of the consumer's 26 rows; the in-force readers cannot reach that state, the
+escalation and convergence gates and the guard's arm 9 can, and a space, a lowercase `t` or
+a date-only value reaches it with a one-character edit); closing it at the producer is a
+grammar change and is stated, not done. Each reader instead COUNTS the rows it verified with
+no bound and prints `unbounded-citation: N` on its PASS line, and the guard's arm 9 logs it,
+so a gate log tells a bounded pass from an unbounded one. Fixture `check-25-steering-conduct`
+gains the owner arms and six mutants including the exact compare and a one-sided window;
+`gate-adjudication` gains S24 through S27; `escalation-citation` gains the before-the-bound,
+unbounded-count and zone-offset arms with mutants restoring the truncation and dropping the
+count; `gate-remediation-deny` gains the verifier-key arm and M6b; `gate-adjudication-mutants`
+gains a reader that never passes the bound and one that reads NOMATCH as verified. BL-184's
+receipt drives the predicate and the escalation reader end to
+end and rejects a subject-1-only fix and an owner-only fix. Invariant **I109** binds the
+five reader call sites to the flag by their emission sites, and readers that drop the bound
+fail the push naming the file.
+
+### `BL-163` — the taught derived-fence passage is bound to itself across five role files and to the reader that owns the grammar
+
+Five role files carried one byte-identical passage teaching the `derived` fence, two record
+templates invited the indented form under a `- derivation:` list item, no file said whether
+the fence may be indented, and nothing joined any copy to
+`validate-artifact-derivations.sh`. Invariant **I108** in `validate-enforcement-map.sh` binds
+them in three halves: the five copies are one byte string, extracted between two of the
+passage's own sentences and reported vacuous rather than agreeing when a delimiter is lost;
+no sixth copy exists under `core/`, `scripts/`, `templates/`, `patterns/`, `.claude/rules/`
+or the root `CLAUDE.md`; and the shipping reader's `--list` opens a block in every one of
+the seven sites, with its stderr captured separately so a `GRAMMAR` refusal naming a role
+file is a finding rather than an acquittal. The probe drives the reader on the template's
+column-0 shape and on the same fence indented into a list item before the corpus is read.
+The passage states the indent rule once. The binding was taken over a render step because a
+render keeps seven copies in step with an owner free to drift from the reader.
+
+Entry premise corrected: both templates write their fence at column 0, not indented; what
+they carry is the list item that invites the indented form. Stated limits in the header: the
+corpus binds the example fence and not the surrounding prose, so five copies inverting the
+taught sentence together are invisible to the arm; and the block test is per file. Arm cost
+0.27s over the selection prologue; the full validator's differential cannot resolve it.
+Fixture `derived-fence-binding` (`.dist-only`): 25 assertions, five wrong fixes killed by the
+probe or by a sibling half rather than by the arm they disable, including a whitespace-only
+fork the word-drift seeds could not see and a merged-stderr reader. BL-163's receipt drives
+`--arms I108`, requires green on the unmutated copy first, and seeds whitespace rather than a
+word.
+
+### `BL-161` — the backlog rotator's fence guard reads lib.sh's fence state instead of a private parity toggle, and refuses a delimiter the two readers place differently
+
+`scripts/backlog-rotate.sh`'s guard tracked fences with a toggle that flipped on every
+delimiter, while `ledger_entry_shape()` in `reconcile/lib.sh` pairs delimiters by CommonMark
+and resets on an id-keyed line inside a fence. On a closed entry whose fence quotes two
+`## BL-` headings they disagreed: the guard named the real entry after the fence as fenced
+and told the author to strip its marker. The guard now reads lib.sh's state through a masked
+first pass, so it and the split it protects cannot disagree; the refusal on a genuinely
+quoted heading survives, and the literal reading of the entry's fix shape — reading lib.sh's
+state directly — is a measured wrong fix, because an id-keyed line inside a fence resets that
+state by design. `lib.sh` is unchanged.
+
+The adversary's BLOCKER, latent on every live ledger: CommonMark caps a closing fence at
+three columns and lib.sh strips all leading blanks, so a delimiter indented four or more, a
+tab-indented one or a blockquoted one re-balanced the parity and `--apply` cut inside a
+fence. A fourth finding refuses those three classes and a CR-carrying delimiter by position.
+A fence opened inside a list item is a stated limit: the widening's own condition fires on
+92 indented delimiters in the consumer's ledgers. Over the four real ledgers the fix moved
+one verdict, the consumer's live ledger from a phantom `unterminated fence` refusal to
+classified. Fixture `backlog-rotate-fence-guard` grows from 21 column-0 delimiters to a
+column axis (38 assertions, nine mutants, five wrong fixes), its balance helper bounded to
+CommonMark's ceiling because it shared the subject's blind spot. BL-161's receipt as filed
+was unsatisfiable — it demanded the absence of a phrase every refusal prints — and is
+re-anchored with a third world so a guard with its unterminated-fence rule deleted fails it.
+
 ## [0.515.0] - 2026-09-06
 
 ### `BL-176` — a gate-adjudication verdict is bound to the dispatch that produced it, and a verdict at a nonce no dispatch follows may convict but never acquit

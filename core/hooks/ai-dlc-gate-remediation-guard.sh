@@ -251,6 +251,26 @@ CITEEOF
   printf '%s' "$_cq_pick"
 }
 
+# The citation's own TIMESTAMP -- the `<ISO ts>` half of `<ISO ts> | "<verbatim quote>"`, which
+# is what says WHEN the record claims the operator spoke. Without it the --cite corpus is the
+# project's entire session history, and any twelve-character phrase the operator ever typed
+# verifies a citation filed today; the sibling prints `MATCH <ts>` and every caller sent it to
+# /dev/null, so the one output that could have refuted the claim was the one nobody read.
+# Callers pass it as `--authorized-at`, and the sibling owns the tolerance.
+#
+# EMPTY WHEN THE FIELD CARRIES NO PARSEABLE TIMESTAMP, and the caller then passes no bound and
+# gets the unbounded answer. The grammar of this field is enforced elsewhere and not every
+# producer requires the timestamp -- on the reference consumer 1 of 26 authorization rows is
+# written `2026-08-26, this session, verbatim: "..."` and cites a real operator turn. Refusing
+# that row here would fail a genuine citation for a reason that is not about whether the
+# operator spoke, which is a check that wedges live work.
+cite_ts() { # $1 authline
+  printf '%s\n' "$1" | LC_ALL=C awk '
+    got { next }
+    { if (match($0, /[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:?[0-9]{2})?/)) {
+        printf "%s", substr($0, RSTART, RLENGTH); got = 1 } }'
+}
+
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 # `AI_DLC_STATE_DIR` may be absolute or relative; the role files and
 # `_gate-procedures.md:153` both write it as `${AI_DLC_STATE_DIR:-_bmad-output}`.
@@ -700,9 +720,19 @@ fi
 # size is not a coincidence: an id swap is the common edit. A digest costs a few milliseconds
 # against a 3s parse. The other terms stay size+mtime, because none of them is edited in place
 # by the actor the deny is pointed at. The verification result is folded into the key by a
-# `+cite` marker, so rows cached by a build that did not verify can never be read by one that
+# `+cite+at` marker, so rows cached by a build that did not verify can never be read by one that
 # does; a verified quote stays verified, transcripts being append-only, so nothing else about
 # the corpus needs a key term.
+#
+# THE MARKER IS A BUILD IDENTITY AND IT MOVES WHENEVER THE PREDICATE DOES. It went `+cite` ->
+# `+cite+at` when the verification gained the `--authorized-at` window, because the two builds
+# answer differently about the same bytes and every other term of this key would agree: the
+# escalation file's digest, the metrics file and the sibling are all unmoved by a change to
+# what verification MEANS. Without the bump, one warm read of a cache written by the older
+# build would hand a bounded build a row that only the unbounded predicate ever accepted --
+# a stale verification surviving a fix, in the one place whose answer releases permission to
+# edit. The window itself needs no term: it is derived from the entry's own authorization line,
+# which is inside the content digest above.
 IN_FORCE_STATUS=""
 IN_FORCE_ROWS=""
 SUPPRESSED_CHECKS=""
@@ -748,11 +778,19 @@ ckey() { # <path> -> a digest of the bytes, "-" when absent, "?" when nothing co
 # short to be evidence, a validator tooling error -- returns non-zero, because this answer
 # releases permission to edit and there is no second piece of evidence behind it.
 cite_verifies() { # <auth-line> -> 0 verified, 1 not
-  local q flag arg
+  local q ts flag arg
   [ -n "${1:-}" ] || return 1
   [ -f "$STEER_SCRIPT" ] || return 1
   q="$(cite_quote "$1")"
   [ "${#q}" -ge 12 ] || return 1
+  # BOUND THE SCAN TO WHEN THE ENTRY SAYS THE OPERATOR SPOKE. Unbounded, the corpus is the
+  # project's entire session history and any phrase the operator ever typed lifts a deny
+  # today. `cite_ts` is empty for a field with no parseable timestamp and the bound is then
+  # omitted; a row reaching here cannot be in that state, because the sibling that produced
+  # it refuses a SUPPRESSED entry with no authorization timestamp as malformed.
+  # Passed unconditionally, empty meaning no bound, so the literal sits on the invocation
+  # where **I109** joins it to `--cite`.
+  ts="$(cite_ts "$1")"
   flag=""; arg=""
   if [ -n "$TRANSCRIPT" ] && steer_dir_has_transcript "$(dirname "$TRANSCRIPT")"; then
     # THE DIRECTORY, for arm 9's reason: an operator authorizes a suppression in one session
@@ -763,7 +801,7 @@ cite_verifies() { # <auth-line> -> 0 verified, 1 not
     flag="--transcript"; arg="$TRANSCRIPT"
   fi
   [ -n "$flag" ] || return 1
-  bash "$STEER_SCRIPT" "$flag" "$arg" --cite "$q" --quiet >/dev/null 2>&1
+  bash "$STEER_SCRIPT" "$flag" "$arg" --cite "$q" --authorized-at "$ts" --quiet >/dev/null 2>&1
 }
 
 if [ ! -f "$ESC_FILE" ]; then
@@ -781,7 +819,20 @@ else
   # The cache key below names the standard layout's path for its freshness term, which is a
   # narrower claim than the sibling's resolution -- a timeline at a fallback layout does not
   # refresh this key when it moves.
-  CACHE_KEY="${LIVE_NONCE}|+cite|$(ckey "$ESC_FILE")|$(fkey "${AI_DLC_GATE_METRICS:-${LOG_DIR}/implementation-artifacts/gate-metrics.jsonl}")|$(fkey "$SUPP_DIR/validate-suppression-lifetime.sh")"
+  # THE VERIFIER IS A KEY TERM, AND THAT IS WHAT THE HAND-WRITTEN MARKER WAS STANDING IN FOR.
+  # The rows this cache holds are the ones that PASSED `validate-steering-budget.sh --cite`, so
+  # what they are worth is a property of that program. Every other term is blind to it: the
+  # escalations digest, the metrics file and the sibling are all unmoved when the verification
+  # changes, so a build with a weaker predicate could hand its survivors to a build with a
+  # stronger one and no term would disagree. The `+cite+at` tag is a human-readable note about
+  # WHICH verification generation this is; it decides nothing, because a tag only invalidates
+  # when somebody remembers to change it, and reverting it left every fixture and every
+  # validator green -- measured. A digest of the verifier's BYTES is the term that cannot be
+  # forgotten: edit the predicate and the key moves. It is `ckey`, not `fkey`, because the
+  # size-and-mtime form is blind to exactly the class this term exists for -- a same-length
+  # edit (`Math.abs(ts - authMs)` to `Math.abs(authMs - ts)`) under a checkout that preserves
+  # mtime left the key byte-identical, measured by the batch-64 adversary.
+  CACHE_KEY="${LIVE_NONCE}|+cite+at|$(ckey "$ESC_FILE")|$(fkey "${AI_DLC_GATE_METRICS:-${LOG_DIR}/implementation-artifacts/gate-metrics.jsonl}")|$(fkey "$SUPP_DIR/validate-suppression-lifetime.sh")|$(ckey "$STEER_SCRIPT")"
   # A key with an unreadable term cannot invalidate, so there is no key: pay the parse.
   case "$CACHE_KEY" in *"?"*) CACHE_KEY="" ;; esac
   CACHED_KEY=""
@@ -950,6 +1001,11 @@ AUTH_FILE="$GATE_DIR/${LIVE_NONCE}.authorization.md"
 if [ -f "$AUTH_FILE" ] && [ -f "$STEER_SCRIPT" ]; then
   AUTH="$(sed -n 's/^[[:space:]]*operator_authorization:[[:space:]]*//p' "$AUTH_FILE" 2>/dev/null | head -1)"
   AUTH_QUOTE="$(cite_quote "$AUTH")"
+  # BOUND THE SCAN TO WHEN THE RECORD SAYS THE OPERATOR SPOKE. This is the arm a lead could
+  # otherwise author for itself, and unbounded it lifts on any phrase the operator ever typed
+  # anywhere in the project's history. `cite_ts` is empty for a field carrying no parseable
+  # timestamp; the bound is then omitted and the answer is the one this arm gave before.
+  AUTH_TS="$(cite_ts "$AUTH")"
   if [ "${#AUTH_QUOTE}" -ge 12 ]; then
     STEER_FLAG=""; STEER_ARG=""
     if [ -n "$TRANSCRIPT" ] && steer_dir_has_transcript "$(dirname "$TRANSCRIPT")"; then
@@ -961,12 +1017,30 @@ if [ -f "$AUTH_FILE" ] && [ -f "$STEER_SCRIPT" ]; then
       STEER_FLAG="--transcript"; STEER_ARG="$TRANSCRIPT"
     fi
     if [ -n "$STEER_FLAG" ]; then
-      bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$AUTH_QUOTE" --quiet >/dev/null 2>&1
+      bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$AUTH_QUOTE" --authorized-at "$AUTH_TS" --quiet >/dev/null 2>&1
       if [ $? -eq 0 ]; then
-        log_event GATE_REMEDIATION_LIFTED \
-          "Tool: ${TOOL_NAME} on ${FP}" \
-          "Live pass ${LIVE_NONCE} FAILs: ${FAILED_CHECKS}" \
-          "Lifted by VERIFIED operator authorization: ${AUTH_FILE}"
+        # AN UNBOUNDED LIFT IS STILL A LIFT, AND IT LOOKED IDENTICAL TO A BOUNDED ONE.
+        # `cite_ts` requires `T` between the date and the time; a space, a lowercase `t` or a
+        # date-only value yields no bound, and this citation is then verified against the
+        # project's WHOLE session history -- so any phrase the operator ever typed lifts the
+        # deny. Unlike arm 7b, nothing upstream holds this shape: arm 7b's rows come from
+        # `validate-suppression-lifetime.sh`, which refuses a non-canonical timestamp as
+        # malformed, while THIS field is read straight out of a file the denied lead writes.
+        # It is not refused -- a record whose timestamp will not parse may still cite a real
+        # operator turn -- but the lift says which kind it was, in the flow log the retro reads.
+        if [ -z "$AUTH_TS" ]; then
+          log_event GATE_REMEDIATION_LIFTED \
+            "Tool: ${TOOL_NAME} on ${FP}" \
+            "Live pass ${LIVE_NONCE} FAILs: ${FAILED_CHECKS}" \
+            "Lifted by VERIFIED operator authorization: ${AUTH_FILE}" \
+            "unbounded-citation: 1 -- operator_authorization carries no parseable ISO-8601 timestamp, so the quote was verified against the WHOLE transcript corpus rather than the moment this record claims. Write it as <YYYY-MM-DD>T<HH:MM:SS>Z."
+        else
+          log_event GATE_REMEDIATION_LIFTED \
+            "Tool: ${TOOL_NAME} on ${FP}" \
+            "Live pass ${LIVE_NONCE} FAILs: ${FAILED_CHECKS}" \
+            "Lifted by VERIFIED operator authorization: ${AUTH_FILE}" \
+            "unbounded-citation: 0 -- verified within the window around ${AUTH_TS}"
+        fi
         exit 0
       fi
     fi
