@@ -43,6 +43,33 @@ describes still reads a stranger's timeline when the root carries none. Fixture
 consumer's pre-push runs in — with a custom state-dir world that only the guard's explicit
 path satisfies. `BL-178`.
 
+### `PC-S337-RETRO-PROCESS-IMPROVEMENTS-RULE-EXERCISE-AUDIT` — retro's rule-file audit asks whether a rule was EXERCISED this sprint, not only what its text says
+
+Drain of the reference consumer's `retro-push-process-improvements` extension. Every scan in
+`steps/retro.md`'s `#### Rule file audit` judged rule TEXT, and the lead's Class 3 accretion
+pass scored an item nothing in the pipeline can reach at zero false positives against zero
+catches — indistinguishable from an item that fired cleanly all sprint. The pass now asks, per
+item, whether THIS sprint produced evidence it fired (a gate log line, a review finding, a
+refused action, a change made to satisfy it), derived from committed artifacts rather than
+recall; an item with none is `UNEXERCISED`, split into "its subject did not arise" and "nothing
+can reach it", and the unreachable one routes to Step 4 for wiring, narrowing or removal. The
+consumer's local corpus script is neither restated nor required. Eleven lines, no budget
+binds the file, `audit-rule-files.sh` unchanged at 61 findings before and after. `BL-180`.
+
+### Not taken — two `PC-S337-RETRO-*` siblings are already in core, and have been since 0.4.x
+
+`PC-S337-RETRO-PARTY-MODE-TOPOLOGY-CITATION-MANDATE` asks that a retro finding asserting
+infrastructure topology cite an IaC source file and line, with agent consensus not evidence;
+`steps/retro.md` has carried that mandate, strictly stronger (the analyst carries the
+`file:line` in the draft and the lead validates it), under `### 3. Write Retro Document` since
+`9f1d5751`. `PC-S337-RETRO-SPRINT-SHIP-DUAL-COUNTER-PROVENANCE` asks that both counters be
+reported on one fixed template line carrying the run-id; `steps/retro.md` has carried exactly
+that line under `### Sprint-Ship Verification` since `20f2dc14`, and the only delta in the
+consumer's extension is its own requirement-id prefix. Neither id is named in this release's
+commit, because the join would report this release as the one that absorbed them and a
+consumer pulling to it for that reason would get nothing new; both are for the consumer to
+annotate `ADOPTED UPSTREAM` and rotate, which the next brief says.
+
 ## [0.508.0] - 2026-09-05
 
 ### `PC-S337-RETIRED-TOKENS-CANNOT-SAY-IT-SCANNED-NOTHING` — a retired-token scan that opened no core file says so
