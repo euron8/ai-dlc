@@ -15,6 +15,54 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.511.0] - 2026-09-06
+
+### `PC-S335-NO-DETECTOR-REACHES-A-RETIRED-STATUS-TOKEN-REUSED-IN-A-LAYER-BODY` — a token-grain sibling reports a status word a release retired and a layer file still uses in its own prose
+
+`retired-layer-contract.sh` matches contract SHAPES and `retired-layer-passage.sh` matches
+whole deleted core LINES, so when `v0.378.0` renamed the validator status `VACUOUS` to
+`EXAMINED NOTHING`, an override's rendered body still read `or stock exits 78 VACUOUS;`, a
+frontmatter grep control still cited the old word, and both siblings printed their clean
+NOTE — the consumer found it by grepping by hand. `reconcile/retired-layer-token.sh` is the
+third sibling. The retired set is derived, never listed: every ALL-CAPS word of four or more
+characters (hyphen or underscore chains allowed, read as a maximal run of `[A-Za-z0-9_-]`)
+that the core rulebook — `setup-sites.md`'s `rulebook:` list, the same declaration the
+siblings read — carries at base and carries nowhere at theirs, kept when one of two witnesses
+says it was a contract and not emphasis: it is JOINED (`-` or `_`), or it is PLAIN and some
+core program file printed it in a non-comment line at base and stopped in that same file at
+theirs, its new path followed through the rename map when the file moved. A plain word with
+neither witness is read as emphasis and stderr names it on every run, quiet or after rows;
+a base with no readable program file is a refusal. Every layer file under
+`overrides/` and `extensions/` (`.md` and `.json`) is split on the same class and looked up
+word by word in one `awk`; rows are `RETIRED-LAYER-TOKEN<TAB><path>:<line><TAB><token>`. Three
+quiet states each say which they are: an unreadable rulebook list, an unresolvable base or an
+unresolvable theirs is a refusal with exit 2 — an empty theirs side retires every rulebook
+token, measured at 1320 rows with no stderr before the guard existed; a release that retired
+no token opens no layer file and says so; a scanned-but-no-match run names the retired tokens
+and the file count. `emit-report.sh` renders the rows as a fifth classifier section and a
+refusal as `DETECTOR-REFUSED`, so `--verify` byte-compares them and `I105` binds the call; SKILL.md step 3a-vi is the by-hand form and says a row is a worklist item,
+never an apply blocker. Measured on the reference consumer: over `6011d94d^..9f4e585` against
+its layer files at the pre-repair commit, exactly the two incident lines, witnessed by
+`validate-ci-gates.sh`; over the 40 most recent consecutive release pairs only two retire
+anything and no row appears, a population that cannot separate the grammars; over 21 wide
+spans, the shape a real reconcile compares, the rulebook-only set difference produced 16 false
+rows (`ABSENT`, `CURRENT`, emphasis words one revision skipped; `S290`, a sprint id), the
+program witness alone acquitted `APPROVED-WITH-FIXES` and `CHANGES-REQUIRED`, and the
+composite keeps both and reads zero false rows; the adversarial hand's 201 wide spans agree
+(134 rows, every one the incident). Stated limits: a plain word no program prints (273 of 594
+at `origin/main`), a vocabulary owned outside the rulebook globs, a hyphen chain carried only
+in part (a chain is one token, retired whole), a paraphrase. Refused on the way: a backticked-only grammar
+(the rulebook wrote `VACUOUS` bare), a witness taken as a union over every program at theirs
+(`readopt-override.sh:348` still prints the word in another sense), and a boundary-group
+`grep -o` extractor that loses the token after a separator (550 of 589 on the real rulebook)
+and so manufactures retirements. Fixture `retired-layer-token`: seventeen worlds, two install
+layouts, an `env -i` arm, the driver's own section rendered and refused, and seventeen
+mutants each killed by a named cell — backtick-only, substring, per-file-rulebook,
+silent-branch, silent-subject, glob-expansion, no-witness, union-witness, shape-arm-removed,
+unstripped-comment, theirs-list-from-base, three-letter floor, overrides-only,
+diff-derived-drop, refusal-disabled, corpus-widened, theirs-guard-removed, and a rename-map
+world with its own mutant. `BL-183`.
+
 ## [0.510.0] - 2026-09-05
 
 ### `PC-S305-UNION-GATE-UNPASSABLE-ON-ANY-PULL-THAT-HAD-A-BLOCKER` — the union gate says "blockers resolved" instead of listing two false causes, and step 7 says to re-render after the last resolution

@@ -255,6 +255,7 @@ core_manifest:
   - fixtures/retired-contract-token/**
   - fixtures/retired-layer-contract/**
   - fixtures/retired-layer-passage/**
+  - fixtures/retired-layer-token/**
   - fixtures/retired-fixture-orphan/**
   - fixtures/consumer-machinery-inventory/**
   - fixtures/upstream-routing/**
