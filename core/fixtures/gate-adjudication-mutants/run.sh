@@ -380,8 +380,9 @@ score "m12 sibling reads an unresolvable timeline as nothing elapsed" \
   '        if [ -z "$GATE_METRICS" ] || [ ! -f "$GATE_METRICS" ]; then
           unresolved_n=$((unresolved_n + 1))
           echo "NOTE: entry '"'"'$supp'"'"' -- NOT listed in force: no gate-metrics.jsonl was found, so" >&2
-          echo "      its lifetime cannot be counted. Pass --gate-metrics <file> or run from the" >&2
-          echo "      project root. A lifetime that cannot be counted is not a licence." >&2
+          echo "      its lifetime cannot be counted. Pass --gate-metrics <file>, or set" >&2
+          echo "      AI_DLC_PROJECT_ROOT to the root that carries one; the process cwd is not" >&2
+          echo "      consulted. A lifetime that cannot be counted is not a licence." >&2
           continue
         fi
 ' \
