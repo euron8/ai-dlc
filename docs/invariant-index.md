@@ -108,7 +108,7 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I89 | the procedure citation join, and the fix-imperative attribution |
 | I90 | the procedure citation join, and the fix-imperative attribution |
 | I91 | harness-origin prefixes are ONE declaration, never a second copy |
-| I92 | the transcript-corpus predicate is one rule in three copies, byte-identical |
+| I92 | the transcript-corpus predicate is one rule in four copies, byte-identical |
 | I93 | an "examined nothing" verdict is ONE token across every emitter of it |
 | I94 | the pause branch text and the handoff-intent PATTERNS are ONE declaration |
 | I95 | every pipeline state path is CLASSIFIED transient or durable, in one place |
@@ -119,7 +119,7 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I100 | no step file prescribes a BARE `git push` |
 | I101 | the adversarial exit ceiling is ONE number, in the enforcer and in the role |
 | I102 | a rotation destination is spelled the grammar's way, never as a dated archive |
-| I103 | the operator-citation PARSER is one rule in three copies, byte-identical |
+| I103 | the operator-citation PARSER is one rule in four copies, byte-identical |
 | I104 | the snapshot sprint_id READER is one expression in three copies |
 | I105 | every reconcile detector is DRIVEN into the report region or declared exempt |
 | I106 | a SHIPPING fixture never resolves its root by walking for VERSION (I33 family) |
