@@ -266,13 +266,23 @@ SNAPSHOT_FILE="${LOG_DIR}/pipeline-snapshot.md"
 LOG_FILE="${LOG_DIR}/pipeline-continuation-log.md"
 GATE_DIR="${LOG_DIR}/gate-adjudication"
 STEER_SCRIPT="${PROJECT_DIR}/scripts/ai-dlc/validate-steering-budget.sh"
-# The two records arm 7a joins on. Neither is written from the lead's own input:
-# `ts` in both comes from `date -u` inside a hook, and `agent_id` in the write
-# ledger is the harness's attribution of a tool call to a dispatched agent.
+# The two records arm 7a joins on, and what each half of a row is worth. `ts` in both comes
+# from `date -u` inside a hook, and `agent_id` in the write ledger is the harness's
+# attribution of a tool call to a dispatched agent -- neither is copied from the tool input.
+# The spawn ledger's `role`, though, is what `ai-dlc-dispatch-guard.sh` reads out of the
+# lead's OWN dispatch prompt, so a dispatch naming the adjudicator role is a genuine
+# `gate-adjudicator` row whatever that dispatch then does. Both files are guarded roots below
+# (the write ledger by its directory, the spawn ledger by name), so a denied lead cannot
+# rewrite either through Write or Edit; through Bash it can rewrite both, as it can every
+# artifact this guard reads, and that limit is the guard's, not this arm's.
 WRITE_LEDGER="${GATE_DIR}/.verdict-writes.jsonl"
 SPAWN_LEDGER="${LOG_DIR}/spawn-ledger.jsonl"
-# Seconds. The B2 arm's only constant, and it is picked by measurement -- see arm 7a.
-DISPATCH_WINDOW_S="${AI_DLC_GATE_DISPATCH_WINDOW_S:-900}"
+# Seconds. The B2 arm's only constant, picked by measurement (see arm 7a) and a HARD CONSTANT
+# in this file for the reason validate-gate-adjudication.sh gives for its stall threshold K: a
+# window the environment can widen is an opt-out shipped inside the mechanism. Measured: with
+# it overridable, `AI_DLC_GATE_DISPATCH_WINDOW_S=1000000000` bound every forged nonce to the
+# next real dispatch and passed the receipt and all three fixtures.
+DISPATCH_WINDOW_S=900
 
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
@@ -456,6 +466,13 @@ case "$FP" in
   # belong here for the same reason: the adjudicator writes them and carries an
   # agent_id, so nothing legitimate is lost.
   */${STATE_DIR_NAME}/gate-adjudication/*|${STATE_DIR_NAME}/gate-adjudication/*) GUARDED=1 ;;
+  # THE SPAWN LEDGER, for arm 7a's reason: it is one of the two records a verdict binds by,
+  # and a denied lead that could rewrite it with Write could mint the dispatch row that binds
+  # its own forged pass. Measured before this line: a lead Write on it while denied was
+  # ALLOWED, and one hand-written gate-adjudicator row inside the window lifted the deny.
+  # Hooks append to it directly and never pass through this matcher, so nothing legitimate
+  # is lost; a dispatched agent's edit still exits at arm 2.
+  */${STATE_DIR_NAME}/spawn-ledger.jsonl|${STATE_DIR_NAME}/spawn-ledger.jsonl) GUARDED=1 ;;
   */docs/*|docs/*) GUARDED=1 ;;
 esac
 [ "$GUARDED" -eq 1 ] || exit 0
@@ -513,12 +530,27 @@ esac
 # row for them and their dispatch sits outside the window. All nine are older than the newest
 # bound pass, so the pick reaches none of them and the arm changes no outcome on that tree today.
 #
+# WHAT IT DOES NOT CATCH, STATED SO THE NEXT READER DOES NOT WIDEN IT INTO A CLAIM. The arm
+# catches a nonce minted in its own FUTURE -- the measured class, nine files on the reference
+# consumer -- and not forgery as such. A lead that mints the nonce at `now`, dispatches any
+# gate-adjudicator (B2's role is read from the lead's own dispatch prompt), and writes the
+# verdict itself is `bound-dispatch` and indistinguishable here from a real pass; measured, a
+# forged clean verdict at a nonce 30s before a real dispatch ALLOWS. Likewise a state where
+# both ledgers are absent (`nocorpus`) or where the nonce predates every row (`exempt`)
+# allows, because installing this must change no verdict already on disk; a lead that
+# reaches either state through Bash has the same power over every artifact this guard reads.
+#
 # FAIL POSTURE: MONOTONE, WHICH IS WHY IT CANNOT WEDGE. An unbound verdict's own FAILs still
 # count -- the deny stands exactly as before. What it may not do is CLEAR: an unbound pass with
-# no FAIL falls back to the newest BOUND pass, so the worst a false refusal costs is that the
-# lead stays denied on a FAIL that is genuinely recorded, with the sanctioned remediator exit
-# still open. A jq that errors, an absent ledger pair, or a stem the query cannot rank all leave
-# the verdict treated as bound: undecidable is never a deny.
+# no FAIL falls back to the newest BOUND pass, and when NO pass in the directory is bound, to
+# the newest pass that records a FAIL, bound or not -- an unbound verdict may convict. The
+# first cut fell through to ALLOW when nothing was bound, which acquitted a forged clean pass
+# beside an unbound failing one and wrote no flow-log event at all; measured on a three-tree
+# differential (A: the failing pass alone denies, B: A plus the forged pass allowed, C: A
+# bound plus the forged pass denies). So the worst a false refusal costs is that the lead
+# stays denied on a FAIL that is genuinely recorded, with the sanctioned remediator exit still
+# open. A jq that errors, an absent ledger pair, or a stem the query cannot rank all leave the
+# verdict treated as bound: undecidable is never a deny.
 if [ "$LIVE_CLEAN" -eq 1 ]; then
   # An absent ledger is `--slurpfile`d from /dev/null and comes back as `nocorpus`, so there is
   # no separate cheap path here. One was written and then REMOVED: an interleaved three-rep A/B
@@ -533,6 +565,21 @@ if [ "$LIVE_CLEAN" -eq 1 ]; then
     unbound|unbound-malformed) ;;
     *) exit 0 ;;   # bound, exempt, nocorpus, or the query failed -- unchanged behaviour
   esac
+  SUBST_HOW="the newest BOUND pass"
+  if [ -z "$BOUND_STEM" ]; then
+    # NOTHING IN THE DIRECTORY IS BOUND. An unbound verdict may still convict, so the fallback
+    # is the newest pass, by nonce, that records a FAIL -- excluding the live one, which
+    # records none. Falling through to ALLOW here was the first cut's defect: it acquitted a
+    # forged clean pass beside an unbound failing one, silently.
+    for _cs in $(printf '%s' "$CONFORMING_STEMS" | sort -r); do
+      [ "$_cs" != "$LIVE_NONCE" ] || continue
+      _cf="$(jq -r '[.verdicts[]? | select(.verdict=="FAIL") | .check_id] | join(" ")' \
+               "${GATE_DIR}/${_cs}.verdict.json" 2>/dev/null)" || _cf=""
+      [ -n "$_cf" ] || continue
+      BOUND_STEM="$_cs"; SUBST_HOW="the newest FAILING pass, itself unbound"
+      break
+    done
+  fi
   [ -n "$BOUND_STEM" ] || exit 0
   SUBST_VERDICT="${GATE_DIR}/${BOUND_STEM}.verdict.json"
   [ -f "$SUBST_VERDICT" ] || exit 0
@@ -543,7 +590,7 @@ if [ "$LIVE_CLEAN" -eq 1 ]; then
   log_event GATE_VERDICT_UNBOUND \
     "$UNBOUND_NOTE." \
     "It records no FAIL, so it would have cleared the Rule 28 deny; it may not." \
-    "Adjudicating on ${BOUND_STEM} instead, whose FAILs are: ${FAILED_CHECKS}." \
+    "Adjudicating on ${BOUND_STEM} instead (${SUBST_HOW}), whose FAILs are: ${FAILED_CHECKS}." \
     "A verdict binds by a .verdict-writes.jsonl row for its own stem, or by a gate-adjudicator" \
     "dispatch within ${DISPATCH_WINDOW_S}s AFTER its nonce. A nonce minted after the work has neither."
   LIVE_VERDICT="$SUBST_VERDICT"

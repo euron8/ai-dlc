@@ -595,7 +595,17 @@ run "$VERDICT"
 GA_LEDGER="$WORK/spawn-ledger.jsonl"
 GA_WRITES="$WORK/gate-adjudication/.verdict-writes.jsonl"
 ga_clean_ledgers() { rm -f "$GA_LEDGER" "$GA_WRITES"; }
-ga_ledger() { printf '{"v":1,"ts":"%s","sprint":1,"name":"gate-adjudicator-seed","role":"gate-adjudicator"}\n' "$1" > "$GA_LEDGER"; }
+# TWO ROWS, AND THE FIRST ONE IS THE EPOCH. A ledger holding only the dispatch under test
+# makes that dispatch the EARLIEST row, so a nonce before it is EXEMPT and every "binds"
+# arm below passes by exemption rather than by binding — measured: the 20s-after arm and a
+# 901s-after arm both read exit 0 with a one-row ledger. A remediator row two weeks before
+# the nonce pins the epoch, so the only way to exit 0 is to bind.
+ga_ledger() { # <dispatch-ts>
+  printf '{"v":1,"ts":"2026-07-01T00:00:00Z","sprint":1,"name":"remediator-seed","role":"remediator"}\n{"v":1,"ts":"%s","sprint":1,"name":"gate-adjudicator-seed","role":"gate-adjudicator"}\n' "$1" > "$GA_LEDGER"
+}
+ga_ledger_only() { # <dispatch-ts> -- ONE row, so the dispatch IS the epoch; the pre-migration arm's shape
+  printf '{"v":1,"ts":"%s","sprint":1,"name":"gate-adjudicator-seed","role":"gate-adjudicator"}\n' "$1" > "$GA_LEDGER"
+}
 ga_writerow() { # <ts> <stem> <agent_id>
   printf '{"v":1,"ts":"%s","stem":"%s","agent_id":"%s","session":"t","tool":"Write"}\n' "$1" "$2" "$3" > "$GA_WRITES"
 }
@@ -632,6 +642,26 @@ if [ "$RC" -eq 1 ] && ga_unbound; then
 else
   bad "BINDING: a nonce minted after its own dispatch passed (rc=$RC) — the arm is not reading the order"
 fi
+
+# THE WINDOW'S UPPER BOUND, from both sides one property apart. The nonce is 14:03:22Z; a
+# dispatch 899s after it binds and one 901s after it does not. Without this pair the window's
+# size is asserted by nothing here, and a window widened to 10^9 passed every arm.
+ga_ledger "2026-07-15T14:18:21Z"
+ga_run
+if [ "$RC" -eq 0 ] && ! ga_unbound; then
+  ok "BINDING: a gate-adjudicator dispatched 899s AFTER the nonce binds the pass → exit 0"
+else
+  bad "BINDING: a dispatch inside the 900s window did not bind (rc=$RC) — the window is narrower than stated"
+fi
+ga_ledger "2026-07-15T14:18:23Z"
+ga_run
+if [ "$RC" -eq 1 ] && ga_unbound; then
+  ok "BINDING: the SAME dispatch 901s AFTER the nonce does not bind it → exit 1 (the window has an upper bound)"
+else
+  bad "BINDING: a dispatch outside the window bound the pass (rc=$RC) — the window is unbounded above"
+fi
+# The wrong-fix arms below start from the UNBOUND state, explicitly.
+ga_ledger "2026-07-15T14:03:02Z"
 
 # WRONG FIX #1, killed here: the id in the verdict is now the ledger's exact dispatch name.
 # A join on `adjudicator_agent_id` reports BOUND; measured on the reference consumer that join
@@ -693,7 +723,7 @@ rm -f "$GA_WRITES"
 # PRE-MIGRATION. Every row in both ledgers postdates the nonce, so nothing could have recorded
 # this pass and the arm must report PENDING rather than a defect. Without this, installing the
 # binding turns every verdict already on disk into a gate failure.
-ga_ledger "2027-01-01T00:00:00Z"
+ga_ledger_only "2027-01-01T00:00:00Z"
 ga_run
 if [ "$RC" -eq 0 ] && ! ga_unbound; then
   ok "BINDING: a nonce predating every row in the ledger is EXEMPT → exit 0 (pre-migration is not a defect)"

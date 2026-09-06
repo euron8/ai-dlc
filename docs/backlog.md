@@ -4198,6 +4198,31 @@ of `core/scripts/validate-gate-adjudication.sh`, joining a new
 the write to a dispatched `agent_id`) and the existing `spawn-ledger.jsonl`. Read arm 7a's
 header for the window measurement and the enumerated false-refusal set.
 
+**The batch-63 adversary's round, each finding with what it changed.** (1) With NO pass in the
+directory bound, the first cut fell through to ALLOW and wrote no flow-log event — a forged
+clean pass beside an unbound failing one acquitted a live FAIL, measured on a three-tree
+differential; the fallback is now the newest FAILING pass whatever its binding, logged as
+`itself unbound`, with the all-clean twin still allowing. (2) `spawn-ledger.jsonl` matched no
+guarded root, so a denied lead could rewrite it with Write and one hand-written
+`gate-adjudicator` row inside the window lifted the deny; it is a guarded root now, and a
+dispatched agent's edit still exits at arm 2. (3) The 900s window was overridable from the
+environment and its upper bound was asserted by nothing, so a window of 10^9 passed the receipt
+and all three fixtures; both readers carry it as a hard constant now and the 899s/901s pair
+holds the bound from both sides. (4) The validator fixture's one-row ledger made its dispatch
+the EPOCH, so every "binds" arm passed by exemption rather than by binding; the seed carries an
+epoch row now and the pre-migration arm alone uses the one-row shape.
+
+**What the arm does not catch, and what no arm here can.** It catches a nonce minted in its own
+FUTURE — the measured class, nine files — not forgery as such: a lead that mints the nonce at
+now, dispatches any gate-adjudicator (B2's `role` is read from the lead's own dispatch prompt
+by `ai-dlc-dispatch-guard.sh`), and writes the verdict itself is `bound-dispatch` and
+indistinguishable from a real pass; measured, a forged clean verdict at a nonce 30s before a
+real dispatch allows. `nocorpus` and `exempt` allow because installing this must change no
+verdict on disk. Through Bash the lead can rewrite both ledgers, as it can every artifact the
+guard reads; that is the guard's limit, stated in its header, and not this arm's. The guard's
+jq and the validator's python are two implementations of one binding and no invariant binds
+them; they were cross-scored over the consumer's 195 stems once, by hand.
+
 verify: sh V=core/scripts/validate-gate-adjudication.sh; [ -f "$V" ] || exit 9; D="$(mktemp -d)" || exit 9; G="$D/_bmad-output/gate-adjudication"; mkdir -p "$G" || { rm -rf "$D"; exit 9; }; I="$(bash "$V" --expected implementation)" || { rm -rf "$D"; exit 9; }; [ -n "$I" ] || { rm -rf "$D"; exit 9; }; mk() { python3 -c 'import json,sys;n=sys.argv[2];json.dump({"schema_id":"GATE_ADJUDICATION_VERDICT v1","gate_type":"implementation","gate_series_id":n,"gate_nonce":n,"generated_at":sys.argv[3],"adjudicator_agent_id":"gate-adjudicator-seed","catalog":"core","verdicts":[{"check_id":c,"verdict":"PASS","evidence":"receipt"} for c in sys.argv[4:]]},open(sys.argv[1],"w"))' "$G/$1.verdict.json" "$1" "$2" $I; }; S=implementation-20260715T140322Z; F=implementation-20260715T160000Z; mk "$S" 2026-07-15T14:05:07Z; mk "$F" 2026-07-15T16:00:00Z; printf '{"v":1,"ts":"2026-07-15T14:03:42Z","sprint":1,"name":"gate-adjudicator-seed","role":"gate-adjudicator"}\n' > "$D/_bmad-output/spawn-ledger.jsonl"; bash "$V" implementation "$G/$S.verdict.json" >/dev/null 2>&1 || { rm -rf "$D"; exit 1; }; O="$(bash "$V" implementation "$G/$F.verdict.json" 2>&1)"; r=$?; rm -rf "$D"; [ "$r" -eq 1 ] || exit 1; case "$O" in *"bound to NO dispatch"*) exit 0 ;; esac; exit 1
 
 

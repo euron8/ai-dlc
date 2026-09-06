@@ -217,6 +217,42 @@ LEDGER
     esac
     ;;
 
+  # --- arm 7a, the worlds the first cut could not tell apart --------------------------
+  # NOTHING BOUND. The one dispatch predates the FAILING nonce (so the epoch predates it too
+  # and neither pass is exempt), and nothing at all follows either nonce: the failing pass is
+  # unbound and so is the forged clean one. The first cut fell through to ALLOW here, which
+  # is a forged clean pass acquitting a live FAIL with no flow-log event. `-allclean` is the
+  # ALLOW twin one property apart: the older pass records no FAIL, so there is nothing to
+  # convict on and nothing to substitute.
+  forged-clean-nobound|forged-clean-nobound-allclean)
+    if [ "$CASE" = forged-clean-nobound-allclean ]; then
+      verdict "story-20260811T193044Z" "$CLEAN"
+    else
+      verdict "story-20260811T193044Z" "$FAILING"
+    fi
+    verdict "story-20260811T210000Z" "$CLEAN"
+    cat > "$W/_bmad-output/spawn-ledger.jsonl" <<'LEDGER'
+{"v":1,"ts":"2026-08-11T19:00:00Z","sprint":302,"name":"gate-adjudicator-s302-story-early","role":"gate-adjudicator"}
+{"v":1,"ts":"2026-08-11T20:55:00Z","sprint":302,"name":"remediator-s302-1","role":"remediator"}
+LEDGER
+    ;;
+
+  # THE WINDOW'S UPPER BOUND. Same two verdicts as forged-clean, the failing pass bound by its
+  # 19:31:00Z dispatch, and a second gate-adjudicator dispatch AFTER the forged 21:00:00Z nonce:
+  # 901s after it (`-latewindow`, must NOT bind) against 899s after it (`-inwindow`, must
+  # bind). Without this pair the window's size is asserted by nothing, and a window widened to
+  # 10^9 passed every arm and the receipt.
+  forged-clean-latewindow|forged-clean-inwindow)
+    verdict "story-20260811T193044Z" "$FAILING"
+    verdict "story-20260811T210000Z" "$CLEAN"
+    _fw_ts="2026-08-11T21:15:01Z"
+    [ "$CASE" = forged-clean-inwindow ] && _fw_ts="2026-08-11T21:14:59Z"
+    {
+      printf '%s\n' '{"v":1,"ts":"2026-08-11T19:31:00Z","sprint":302,"name":"gate-adjudicator-s302-story-real","role":"gate-adjudicator"}'
+      printf '{"v":1,"ts":"%s","sprint":302,"name":"gate-adjudicator-s302-story-next","role":"gate-adjudicator"}\n' "$_fw_ts"
+    } > "$W/_bmad-output/spawn-ledger.jsonl"
+    ;;
+
   # --- arm 7b, THE SUPPRESSED CARVE-OUT -----------------------------------------------
   # Every case below is `open-fail` plus one changed property, so each arm of the fixture
   # discriminates on that property alone.

@@ -1229,10 +1229,12 @@ def dispatch_binding(stem, gate_dir, window_s):
     return "unbound"
 
 
-try:
-    _window = int(os.environ.get("AI_DLC_GATE_DISPATCH_WINDOW_S", "900"))
-except ValueError:
-    _window = 900
+# A HARD CONSTANT, for the reason K is one above: a window the environment can widen is an
+# opt-out shipped inside the mechanism. Measured with it overridable: a value of 10^9 bound
+# every forged nonce to the next real dispatch and passed the receipt and all three fixtures.
+# The guard carries the same literal (`DISPATCH_WINDOW_S=900`); the two readers of these
+# ledgers must move together.
+_window = 900
 _binding = dispatch_binding(stem, os.path.dirname(os.path.abspath(verdict_path)), _window)
 if _binding not in BINDING_STATUSES:
     block(2, f"dispatch binding returned {_binding!r}, which is not one of {BINDING_STATUSES}.")
