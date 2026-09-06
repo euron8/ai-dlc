@@ -72,16 +72,24 @@
 #
 # STDERR
 #   Three quiet states and each says which it is, because their stdout is identical:
-#   the rulebook list or the rulebook at base could not be read (a refusal, never
-#   "clean"); the release retired no token, so no layer file was opened; and every
-#   layer file was read against a non-empty retired set and nothing matched, stated
-#   with both counts. Every quiet line also names the plain words that left the rulebook
-#   WITHOUT a witness, so an acquittal is visible rather than silent. The program caller
-#   (`emit-report.sh`) discards stderr and reads the rows; the NOTE is for the operator
-#   running step 3a-vi by hand.
+#   the rulebook list, the rulebook at base, or the rulebook at THEIRS could not be read
+#   (a refusal, never "clean"); the release retired no token, so no layer file was
+#   opened; and every layer file was read against a non-empty retired set and nothing
+#   matched, stated with both counts. Every quiet line also names the plain words that
+#   left the rulebook WITHOUT a witness, so an acquittal is visible rather than silent.
+#   The program caller (`emit-report.sh`) discards stderr and reads the rows and the
+#   exit; the NOTE is for the operator running step 3a-vi by hand.
+#
+#   THE THEIRS GUARD IS NOT SYMMETRY FOR ITS OWN SAKE. An unresolvable theirs ref leaves
+#   the theirs set EMPTY, and an empty theirs set retires EVERY rulebook token — measured:
+#   1320 rows, zero bytes of stderr, exit 0, into the region the operator approves. "No
+#   tokens at theirs" and "the release retired everything" are the same output, with the
+#   opposite polarity to the base case, and the base guard alone acquits it.
 #
 # EXIT
-#   0  always (a detector reports; the caller decides)
+#   0  reported (rows, or a NOTE saying which quiet state this is)
+#   2  refused: a corpus could not be read, so nothing was examined. The driver renders
+#      DETECTOR-REFUSED for the section rather than `none`.
 
 set -u
 # Every scan below is byte-wise. The layer corpus carries em-dashes and the rulebook
@@ -153,7 +161,7 @@ collect() {
 
 if [ -z "$(rulebook_globs)" ]; then
   echo "retired-layer-token: could not read the rulebook list from setup-sites.md — refusing to report clean, because an empty corpus and a clean corpus are the same output" >&2
-  exit 0
+  exit 2
 fi
 
 BASE_SET="$(collect "$BASE")"
@@ -167,7 +175,12 @@ listed()   { printf '%s\n' "$1" | sed '/^$/d' | tr '\n' ' ' | sed 's/ $//'; }
 # silently report "retired NO token" for every release.
 if [ -z "$BASE_SET" ]; then
   echo "retired-layer-token: could not read any rulebook token at base ($BASE) — refusing to report clean, because 'no tokens' and 'nothing retired' are the same output" >&2
-  exit 0
+  exit 2
+fi
+# The mirror, with the opposite polarity: an empty THEIRS side retires everything.
+if [ -z "$THEIRS_SET" ]; then
+  echo "retired-layer-token: could not read any rulebook token at theirs ($THEIRS) — refusing to report, because 'no tokens at theirs' and 'the release retired every token' are the same output and the second would fill the region with false rows" >&2
+  exit 2
 fi
 
 # Every word the whole rulebook dropped, split by shape.

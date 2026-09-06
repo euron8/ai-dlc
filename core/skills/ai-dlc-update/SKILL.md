@@ -629,7 +629,9 @@ prose is itself generated rather than composed.
    same re-read.
    **Read its stderr, not only its rows.** When the release retired no token it opens no
    layer file at all and says so; a scanned-but-no-match run prints both counts; an
-   unreadable rulebook is a refusal, never a clean line.
+   unreadable rulebook at either ref is a refusal with exit 2, never a clean line — an
+   unresolvable theirs would otherwise retire every token — and the report renders that
+   section as `DETECTOR-REFUSED`, which must not be approved.
    **This does NOT block the apply** — a layer file is consumer-owned. It is a worklist
    item, owed before the pull counts as done.
    Note what it does NOT catch: a token the consumer invented that core never had, a

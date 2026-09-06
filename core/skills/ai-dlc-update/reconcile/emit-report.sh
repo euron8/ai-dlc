@@ -416,10 +416,16 @@ render() {
   rlp="$(bash "$SELF/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' 'NF{print $1"  "$2"  "$3}' | sort -u)"
   none_or "$rlp"
 
+  # This sibling exits 2 when a corpus could not be read, because its empty-theirs failure
+  # is a MAXIMAL report (every rulebook token retired) rather than a silent one; a refusal
+  # that rendered as `none` here would be the third shape of the same defect.
   sub "Retired status tokens reused in a consumer layer file's own prose:"
-  local rlt
+  local rlt rlt_rc
   rlt="$(bash "$SELF/retired-layer-token.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' 'NF{print $1"  "$2"  "$3}' | sort -u)"
-  none_or "$rlt"
+  rlt_rc=$?
+  if [ "$rlt_rc" -eq 0 ]; then none_or "$rlt"; else
+    echo "DETECTOR-REFUSED  retired-layer-token.sh exited ${rlt_rc} without scanning, so this section is NOT a finding of 'none'. Run it directly against this consumer to see why: reconcile/retired-layer-token.sh <dist> <base> <theirs> <consumer>"
+  fi
 
   echo
   echo "<!-- END GENERATED: reconcile-mechanical -->"

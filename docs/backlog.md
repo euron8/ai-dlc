@@ -4237,11 +4237,15 @@ separator and loses the next token, measured at 550 of 589 on the real rulebook,
 manufactures false retirements.
 
 Three quiet states each say which they are, because their stdout is identical: an unreadable
-rulebook list or an unresolvable base is a refusal; a release that retired no token opens no
-layer file and says so with the corpus counts; a scanned-but-no-match run names the retired
-tokens and the file count. `emit-report.sh` renders the rows as a fifth classifier section
-("Retired status tokens reused in a consumer layer file's own prose"), so `--verify`
-byte-compares them and `I105` binds the invocation; SKILL.md step 3a-vi is the by-hand form.
+rulebook list, an unresolvable base, or an unresolvable THEIRS is a refusal with exit 2 — the
+adversarial hand measured a bad theirs ref emptying the theirs side and retiring every
+rulebook token, 1320 rows with no stderr, the opposite polarity of the base case and the one
+the sibling guards do not cover; a release that retired no token opens no layer file and says
+so with the corpus counts; a scanned-but-no-match run names the retired tokens and the file
+count. `emit-report.sh` renders the rows as a fifth classifier section ("Retired status
+tokens reused in a consumer layer file's own prose") and renders a refusal as
+`DETECTOR-REFUSED` rather than `none`, so `--verify` byte-compares them and `I105` binds the
+invocation; SKILL.md step 3a-vi is the by-hand form.
 Report-only: the layer is consumer-owned, so a row is a worklist item, never an apply blocker.
 
 What it does not catch, stated in its header and its NOTE: a token the consumer invented, a
