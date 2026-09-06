@@ -4208,6 +4208,32 @@ this repo's never has. The consumer's own receipt is `verify: manual` by its own
 reorder keeps every token present today).
 
 verify: sh V=$PWD/core/scripts/validate-suppression-lifetime.sh; [ -f "$V" ] || exit 9; W=$(mktemp -d); R=$W/r; C=$W/c; N=$W/n; M=$W/map.yaml; mkdir -p $R/_bmad-output/implementation-artifacts $C/_bmad-output/implementation-artifacts $N; printf 'checks:\n  - id: 16\n    title: a\n  - id: 32\n    title: b\n' > $M; g() { printf '{"v":1,"sprint":1,"gate":"planning","phase":"a","ts":"%s","sha":"deadbeef","catalog":"core","check":"32","title":"t","verdict":"FAIL","defect_class":null,"evidence":"e","tok_slice":1}\n' "$1"; }; g 2026-05-02T01:00:00Z > $R/_bmad-output/implementation-artifacts/gate-metrics.jsonl; for i in 2 3 4 5 6 7 8 9; do g 2026-05-0${i}T01:00:00Z; done > $C/_bmad-output/implementation-artifacts/gate-metrics.jsonl; printf '## [S1 gate] [lead] - 2026-05-01T00:00:00Z\n**Status:** SUPPRESSED\n**Suppresses:** [core] 32 — b\n**Expires after:** 3 gates\n**Operator authorization:** 2026-05-01T00:00:00Z | "Override, proceed, file backlog item"\n' > $R/pending.md; d() { ( cd "$1" && AI_DLC_PROJECT_ROOT=$2 bash $V --in-force --escalations $R/pending.md --enforcement-map $M 2>&1 >/dev/null | grep '^IN-FORCE:' ); }; a=$(d $C $R); b=$(d $R $R); c=$(d $C $N); rm -rf $W; case $a in *"in_force=1 gates_recorded=1 "*) ;; *) exit 1;; esac; [ "$a" = "$b" ] || exit 1; case $c in *"in_force=0 "*"gates_recorded=NONE"*) ;; *) exit 1;; esac
+
+## BL-179 — two core scripts still resolve a core file from the process cwd, so a copy driven from another ai-dlc tree reads that tree's file and says nothing
+
+Distribution-internal, no `PC-` id; NOTE tier — the silent wrong answer needs the cwd to be
+ANOTHER ai-dlc tree, and every other cwd is a refusal (exit 2, "no gate-validation.md found in
+either layout"). Found by the batch-59 adversarial hand's census of `for cand in` / `for c in`
+loops in `core/` once `BL-178` closed the same class in `validate-suppression-lifetime.sh`,
+which is the control: that loop, `validate-snapshot-conservation.sh:165,188` and
+`validate-h2-attestation.sh:143` all test their candidates under a resolved root. Deliberately
+not folded into `BL-178`, whose subject is a project ARTIFACT (a timeline) read on a gate's
+behalf; these read a CORE file and are driven by hand or by callers that pass the path.
+
+Two subjects, and this entry expires only when both do. `core/scripts/validate-gate-manifest.sh`
+takes the file as its only argument and, given none, tries `.claude/skills/ai-dlc/steps/…`
+then `core/skills/ai-dlc/steps/…` relative to the cwd with no root resolution anywhere in the
+file — driven with no argument from a scratch tree carrying a one-line decoy at the consumer
+path, it reads the decoy (its FAIL names that path) against a control from this root that
+resolves both directions. `core/scripts/artifact-path-config.sh` defaults `ROOT="."` and `cd`s
+there before its two candidate loops (`layer-contract.yaml`, `artifact-path-grammar.md`); its
+usage text documents `--root <dir>`, so the cwd default is its stated contract and the fix is
+to resolve a root the way its siblings do when `--root` is absent, not to remove the flag.
+Derive each script's callers before touching either: `validate-layer-entries.sh` locates
+`artifact-path-config.sh` beside itself, and `validate-enforcement-map.sh` runs from this root.
+
+verify: sh V=$PWD/core/scripts/validate-gate-manifest.sh; [ -f "$V" ] || exit 9; bash $V >/dev/null 2>&1 || exit 9; W=$(mktemp -d); mkdir -p $W/.claude/skills/ai-dlc/steps; printf '# decoy\n' > $W/.claude/skills/ai-dlc/steps/gate-validation.md; o=$( cd $W && bash $V 2>&1 ); rm -rf $W; case $o in *".claude/skills/ai-dlc/steps/gate-validation.md"*) exit 1;; esac; exit 0
+
 ## BL-180 — retro's rule-file audit judged what a rule SAYS and never whether the sprint exercised one, so a rule nothing in the pipeline can reach cleared the accretion tally at zero catches against zero false positives
 
 Drain of `PC-S337-RETRO-PROCESS-IMPROVEMENTS-RULE-EXERCISE-AUDIT`, the reference consumer's
