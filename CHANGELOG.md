@@ -15,6 +15,60 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.519.0] - 2026-09-06
+
+### `BL-192` — the report driver runs each drift detector once per render, and a refusing detector can no longer render as a clean sheet
+
+`PC-S308-EMIT-REPORT-RUNS-LAYER-DRIFT-AND-UNREGISTERED-DRIFT-TWICE`, filed by the reference
+consumer from its `0.515.0 → 0.516.0` pull.
+
+**The filed defect, confirmed by comparing output rather than by reading the source.**
+`emit-report.sh` needs three outputs — the blocking list and each detector's own section — and
+derived them from three processes: it invoked `hard-blockers.sh`, which runs both detectors, then
+invoked the same two detectors again directly. The refs cannot move inside one invocation, so the
+second run recomputed the first exactly: `layer-drift.sh` byte-identical across the two call sites
+at 50 rows, `unregistered-drift.sh` at 85, with a degenerate-range control proving the comparison
+could report DIFFER.
+
+The cost is larger than the filing describes. Interleaved with the order reversed between reps:
+`layer-drift.sh` 19–20s, `unregistered-drift.sh` 2–3s, a whole render 60–64s. But `--verify` calls
+the same `render()`, and `apply.sh:219` gates every write on `--verify`, so a clean pull pays three
+renders — eight runs of each detector, three of them the duplication — and a pull that had a
+blocker pays step 7's re-render on top.
+
+**The finding that outranks it: the wrapper swallowed a refusing detector.** Measured in a sandbox
+copy with an unmutated control rendering correctly through the same sandbox — stub `layer-drift.sh`
+to `exit 2` and `hard-blockers.sh` printed `0 HARD blockers.` at exit 0; stub `unregistered-drift.sh`
+and it did too. That line is what the whole `HARD-` contract keys on, so a detector that never
+classified was authorising the write. **The duplication is what had been masking it**, because the
+driver ran the detectors again and rendered `DETECTOR-REFUSED` from their exit codes. De-duplicating
+without closing the swallow would have deleted the only signal, which is why both land here and
+neither is safe alone.
+
+**The shape, chosen by building the alternatives and scoring them.** `emit-report.sh` keeps invoking
+all three programs by name, runs each detector once into a temp file, captures each rc off the bare
+run rather than off a pipeline, and passes rows plus status into `hard-blockers.sh` through four
+optional flags. The wrapper keeps the `HARD-` filter, the degenerate qualifier and the per-detector
+base split that `--post-apply` moves; supplying rows alongside `--post-apply` is refused, as is a
+rows flag without its rc, an rc without its rows, and a rows file that does not exist.
+
+Two alternatives were built rather than argued. Inlining the wrapper's rows into the driver makes
+the whole wrapper inert under `--verify` — the world that stubs it dead scores exit 0 with the
+region byte-identical stubbed or not, on a gate `apply.sh` depends on. Routing every section through
+the wrapper entangles two previously independent refusal channels and widens a mutant's kill set.
+Both also break `I105`, which is keyed on the driver naming each detector: they move one and two
+files respectively into the unrouted bucket, against zero for the shape shipped.
+
+**Behaviour preserved, measured.** The rendered region is byte-identical before and after, which
+matters because `apply.sh:219` byte-compares it. `I105`'s partition is unchanged at 24 files, 13
+invoked, 11 exempt, 0 in neither state and 0 in both. `hard-blockers.sh`'s standalone print mode is
+byte-identical, so every existing caller is unaffected.
+
+`--check` now fails when a detector refused. Its contract is that the report names every `HARD` item
+the detectors emit, which against a detector that computed nothing is vacuously true — so the pass
+certified a report against a set that was never built. A degenerate range keeps its warning, because
+that set is honestly computed and merely narrower.
+
 ## [0.518.0] - 2026-09-06
 
 ### `BL-190` — every git call in `validate-claude-rules.sh` now answers about the repository it was pointed at
