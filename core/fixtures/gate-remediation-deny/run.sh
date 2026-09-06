@@ -404,6 +404,67 @@ else ok "ORDERING: touching the old FAILing verdict changes nothing (mtime is no
 rm -rf "$W"
 
 # =============================================================================
+# ARM 7a — THE DISPATCH BINDING. A clean pass no dispatch produced may not clear.
+# =============================================================================
+# THE DEFECT. The pick above orders by nonce and nothing else, and the nonce is a field the
+# lead writes into a filename it chooses. So a clean verdict written by hand at a round
+# timestamp sorts above every real pass and the ORDERING arm's own allow is what lets it
+# through. The reference consumer holds one:
+# `gate-adjudication/planning-20260902T160000Z.verdict.json`, a 16:00:00Z nonce whose
+# adjudicator was dispatched at 13:57:46Z and wrote the file at 14:12:35Z.
+#
+# THE PAIR THAT DISCRIMINATES is `stale-then-clean` (asserted above, NO ledger, must ALLOW)
+# against `forged-clean` (same two verdicts, plus a ledger). If a change makes both deny, it
+# has broken ordering rather than added a binding; if both allow, the arm is not firing.
+seed forged-clean
+OUT="$(drive "$W" Edit "$W/$ART")"
+if denied "$OUT"; then ok "7a: a clean pass at a nonce no dispatch follows does NOT clear a live FAIL"
+else bad "7a: the forged clean pass cleared the deny — a nonce the lead chooses is still the whole freshness anchor"; fi
+case "$OUT" in
+  *"NOT THIS PASS"*) ok "7a: ...and the deny NAMES the unbound file rather than denying anonymously" ;;
+  *) bad "7a: the deny fired but never says which file was refused or why" ;;
+esac
+if grep -q 'GATE_VERDICT_UNBOUND' "$W/_bmad-output/pipeline-continuation-log.md" 2>/dev/null; then
+  ok "7a: ...and the substitution is in the flow log, where retro's Rule 25(c) audit reads it"
+else
+  bad "7a: the guard silently re-adjudicated on another pass. A substitution nobody can see reads exactly like the pick working."
+fi
+# The FAILING pass must be the one named, not merely 'something failed'.
+case "$OUT" in
+  *"story-20260811T193044Z"*) ok "7a: ...and it adjudicates on the BOUND pass, naming its nonce" ;;
+  *) bad "7a: the deny does not name the bound pass it fell back to" ;;
+esac
+rm -rf "$W"
+
+# WRONG FIX #1 — the join everyone reaches for first. `adjudicator_agent_id` here is the
+# EXACT `name` of the ledger's one gate-adjudicator dispatch, so a binding keyed on that
+# field alone reports BOUND and the forgery clears. Measured on the reference consumer: the
+# name join accepts 92 of 193 conforming verdicts AND accepts the round-nonce file.
+seed forged-clean-named
+OUT="$(drive "$W" Edit "$W/$ART")"
+if denied "$OUT"; then ok "7a: naming a REAL dispatched agent in adjudicator_agent_id does not bind the pass"
+else bad "7a: a name join was enough — the binding is keyed on a field whoever writes the file writes"; fi
+rm -rf "$W"
+
+# WRONG FIX #2 — a row that exists but is not evidence. Same write-ledger row as the honest
+# case with the harness's `agent_id` emptied, which is what a LEAD write leaves behind if the
+# recorder records every writer instead of only dispatched ones.
+seed forged-clean-leadwrite
+OUT="$(drive "$W" Edit "$W/$ART")"
+if denied "$OUT"; then ok "7a: a write row with an EMPTY agent_id does not bind — the lead's own write is not a dispatch"
+else bad "7a: a write row bound the pass without the harness attributing it to any agent"; fi
+rm -rf "$W"
+
+# THE ACQUITTING DIRECTION, and this is the one that keeps the arm from being a blanket deny.
+# Same forged tree, plus a write row for that exact stem, carrying an agent_id, clocked AFTER
+# the nonce. That is what an honest late pass looks like and it must go through.
+seed forged-clean-bound
+OUT="$(drive "$W" Edit "$W/$ART")"
+if denied "$OUT"; then bad "7a: a pass bound by a dispatched agent's own write was still refused — the arm denies every honest pass too"
+else ok "7a: a clean pass BOUND by a dispatched agent's write clears the deny (the arm is not a blanket refusal)"; fi
+rm -rf "$W"
+
+# =============================================================================
 # FAILURE POSTURE — unreadable gate state fails OPEN, and says so.
 # =============================================================================
 # A hook that wedges every artifact edit on its own JSON-parse bug gets switched
@@ -953,6 +1014,63 @@ if [ -f "$MW/m6-key-drops-escalations.sh" ]; then
   else bad "M6: the unmutated copy also lifted on an emptied escalations file — the differential's two sides do not differ, so M6's kill is unearned"; fi
 fi
 rm -rf "$W"
+
+# --- arm 7a's mutants -------------------------------------------------------------------
+# THE TWO WRONG FIXES FOR THIS ARM, written down before the arms were built:
+#   (W3) bind to a dispatch and ignore ORDER — "some gate-adjudicator ran near this nonce" is
+#        the obvious reading of "bind the verdict to a dispatch", and it is the one that fails
+#        silently: the forged pass's own gate DID dispatch an adjudicator, just before the
+#        invented nonce rather than after it. That is M11.
+#   (W4) record every writer instead of only DISPATCHED ones. Dropping `agent_id` from the
+#        recorder's predicate makes the ledger a list of writes, and a lead that writes its own
+#        verdict then binds it with the row its own write left. That is M12.
+# M13 is the arm present but unreachable, and M14 is the acquitting half — without it, every
+# arm above is satisfied by a binding that never binds anything.
+seed forged-clean
+if mut m11-window-ignores-order 's@\. >= \$N and @@'; then
+  kill_arm m11-window-ignores-order allow "$W" "M11: a dispatch window that ignores ORDER binds the forged pass — 'a dispatch near this nonce' is not 'a dispatch after it'"
+fi
+if mut m13-arm-unreachable '/^\[ -n "\$FAILED_CHECKS" \] || LIVE_CLEAN=1$/d'; then
+  kill_arm m13-arm-unreachable allow "$W" "M13: with LIVE_CLEAN never set, arm 7a never runs and the forgery clears — the arm is reachable"
+fi
+if mut m14-write-never-binds 's@then "bound-write"@then "unbound"@'; then
+  kill_arm m14-write-never-binds deny "$W" "M14: ...and a B1 that never binds leaves this world UNCHANGED (the mutant kills only its own arm)"
+fi
+rm -rf "$W"
+
+seed forged-clean-leadwrite
+if mut m12-records-every-writer 's@select((\.agent_id // "") != "")@select(true)@'; then
+  kill_arm m12-records-every-writer allow "$W" "M12: a write ledger that does not require the harness's agent_id lets a LEAD write bind its own verdict"
+fi
+if [ -f "$MW/m11-window-ignores-order.sh" ]; then
+  kill_arm m11-window-ignores-order allow "$W" "M11: ...and W3 acquits this world too — both wrong fixes fail open, in different places"
+fi
+rm -rf "$W"
+
+# THE ACQUITTING DIRECTION UNDER MUTATION. `forged-clean-bound` must ALLOW, so an arm that
+# only ever denies would pass every assertion above. M14 makes B1 unable to bind and this
+# world must go red — that is what proves the allow is a measurement and not a default.
+seed forged-clean-bound
+kill_arm control allow "$W" "CONTROL: an unmutated COPY of the hook reproduces 7a's allow on a BOUND clean pass"
+if [ -f "$MW/m14-write-never-binds.sh" ]; then
+  kill_arm m14-write-never-binds deny "$W" "M14: a B1 arm that never returns bound-write DENIES a legitimately bound pass — the acquitting arm can fire"
+fi
+if [ -f "$MW/m12-records-every-writer.sh" ]; then
+  kill_arm m12-records-every-writer allow "$W" "M12: ...and W4 leaves the honest world UNCHANGED, which is why it needs its own"
+fi
+rm -rf "$W"
+
+# THE NO-CORPUS CONTROL. `stale-then-clean` is byte-for-byte this family's tree minus the
+# ledger, and it must ALLOW under every mutant above. A change that reddens it has broken the
+# nonce ordering rather than added a binding, and the two are indistinguishable from the
+# forged world alone.
+seed stale-then-clean
+for _m7a in m11-window-ignores-order m12-records-every-writer m14-write-never-binds; do
+  [ -f "$MW/$_m7a.sh" ] || continue
+  kill_arm "$_m7a" allow "$W" "7a: ${_m7a} leaves the NO-LEDGER world allowing — the arm's subject is the ledger, not the second verdict"
+done
+rm -rf "$W"
+
 rm -rf "$MW"
 [ -n "$GRD_DECOY" ] && rm -rf "$GRD_DECOY"
 
