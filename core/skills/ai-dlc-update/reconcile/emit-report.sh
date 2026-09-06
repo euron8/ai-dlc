@@ -308,8 +308,17 @@ render() {
   printf '%s\n' "$hro" | grep -v '^hook-registration: root '
 
   sub "Blocking-layer (HARD-* — blocks apply):"
-  bash "$SELF/hard-blockers.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null \
-    | sed '/BEGIN GENERATED: hard-blockers/d;/END GENERATED: hard-blockers/d'
+  # The wrapper gets the same REFUSED treatment as the two detectors it drives (below): print
+  # mode exits 0 always, so a non-zero exit is a run that did not happen, and an empty blocking
+  # list from one must not read as `0 HARD blockers.` — the one line the whole HARD- contract
+  # keys on.
+  local hb hb_rc
+  hb="$(bash "$SELF/hard-blockers.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null \
+    | sed '/BEGIN GENERATED: hard-blockers/d;/END GENERATED: hard-blockers/d')"
+  hb_rc=$?
+  if [ "$hb_rc" -eq 0 ]; then printf '%s\n' "$hb"; else
+    echo "DETECTOR-REFUSED  hard-blockers.sh exited ${hb_rc} without rendering the blocking list, so this section is NOT '0 HARD blockers.'. Run it directly against this consumer to see why: reconcile/hard-blockers.sh <dist> <base> <consumer> <theirs>"
+  fi
 
   # A DETECTOR THAT DID NOT RUN RENDERS AS REFUSED, NOT AS `none`. Both classifiers exit 0
   # always when they classified and non-zero only when they could not (usage, an unsourceable
@@ -485,18 +494,23 @@ echo "  what the detectors render now. Re-render with emit-report.sh and re-emit
 # the HARD rule is the blocking contract, but the cause line COUNTS those rows rather than
 # asserting they do not exist, and the re-approval is where they get read. That is why (c)
 # refuses instead of passing.
-only_render="$(LC_ALL=C comm -23 <(printf '%s\n' "$want" | LC_ALL=C sort) <(printf '%s\n' "$got" | LC_ALL=C sort))"
-only_report="$(LC_ALL=C comm -13 <(printf '%s\n' "$want" | LC_ALL=C sort) <(printf '%s\n' "$got" | LC_ALL=C sort))"
+# NORMALISED BEFORE THE SET DIFFERENCE, NOT AFTER. One blocker renders twice in the region with
+# different padding — `%-32s %s` in the blocking list, `STATUS  path` in its detector's section
+# — and a difference taken over raw lines then de-duplicated afterwards reports a blocker as
+# GONE when only its padded copy is missing while the other copy still renders. Measured: a
+# still-rendered blocker and a genuinely resolved one were indistinguishable that way. So both
+# sides are whitespace-normalised and made unique first, and every count below is over sets.
+norm_rows() { sed -E 's/[[:space:]]+/ /g' | LC_ALL=C sort -u; }
+only_render="$(LC_ALL=C comm -23 <(printf '%s\n' "$want" | norm_rows) <(printf '%s\n' "$got" | norm_rows))"
+only_report="$(LC_ALL=C comm -13 <(printf '%s\n' "$want" | norm_rows) <(printf '%s\n' "$got" | norm_rows))"
 # `_base_`/`_theirs_` ONLY. The `_stamp_` line is rendered from the CONSUMER's stamp and moves
 # when the consumer re-stamps, not when upstream does; keyed here it made a moved stamp read as
 # "upstream moved" with both disjuncts false, and pre-empted (c) on a resolved pull. It falls
 # through to the diff and the `unseen:` count like any other non-HARD line.
 refs_render="$(printf '%s\n' "$want" | grep -E '^_(base|theirs)_ ')"
 refs_report="$(printf '%s\n' "$got"  | grep -E '^_(base|theirs)_ ')"
-# One blocker renders TWICE in the region — once in the blocking list (`%-32s %s`) and once in
-# its detector's own section (`STATUS  path`) — so the rows are whitespace-normalised and
-# de-duplicated before counting, and the count names blockers rather than lines.
-hard_rows() { grep '^HARD-' | sed -E 's/[[:space:]]+/ /g' | LC_ALL=C sort -u; }
+# The sets are already normalised and unique, so a HARD row here is one blocker, not one line.
+hard_rows() { grep '^HARD-'; }
 gone_rows="$(printf '%s\n' "$only_report" | hard_rows)"
 new_rows="$(printf '%s\n' "$only_render"  | hard_rows)"
 hard_gone="$(printf '%s\n' "$gone_rows" | grep -c '^HARD-')" || hard_gone=0
@@ -507,7 +521,7 @@ hard_new="$(printf '%s\n' "$new_rows"   | grep -c '^HARD-')" || hard_new=0
 # `**section**` header into the diff; measured, a plain resolution and one hiding a real finding
 # both counted 2 until those were excluded, because the finding REPLACED `none` rather than
 # adding to it. So the boilerplate shapes are left out of the count and kept in the list.
-unseen_rows() { grep -Ev '^HARD-|^DETECTOR-REFUSED|^$|^none$|^0 HARD blockers\.$|^\*\*|^[A-Z][A-Z-]*-OK[[:space:]]'; }
+unseen_rows() { grep -Ev '^HARD-|^DETECTOR-REFUSED|^$|^none$|^0 HARD blockers\.$|^\*\*|^[A-Z][A-Z-]*-OK([[:space:]]|$)|^<!--|^_(base|theirs|stamp)_ |: none$'; }
 other_new="$(printf '%s\n' "$only_render" | unseen_rows | grep -c .)" || other_new=0
 # A detector that REFUSED on this render is a HARD row's absence with no one to vouch for it: the
 # rows it would have rendered are simply not there, which is exactly what (c) keys on. A new
