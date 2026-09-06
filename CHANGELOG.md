@@ -36,8 +36,15 @@ verify — the operator's words sit up to +4283s after the stated timestamp, bec
 is written as "roughly when I filed this", and the exact compare is a measured wrong fix at 1
 MATCH and 24 NOMATCH. The escalation, convergence and adjudication validators and both call
 sites in the remediation guard pass the timestamp through `cite_ts()` at the four I103 helper
-sites; the guard's cache marker moves `+cite` to `+cite+at` so no row cached by the old build
-is read by this one. Over the consumer's 26 authorization rows: 24 MATCH before and after,
+sites; the guard's cache gains the citation verifier's own file key as a key term, so a row
+cached under one predicate cannot be read by a build running another (the `+cite+at` tag
+beside it is a note and decides nothing; reverting it left every channel green until the key
+term existed). `cite_ts()` accepts a zone offset and hands it to the parser whole, because the
+first cut truncated `-07:00` to a naive stamp and moved the window seven hours. The window is
+held on BOTH sides: the adversary's one-sided splice, verifying any record earlier than the
+bound, passed the receipt and every fixture because every out-of-window seed sat after the
+bound, and the before-the-bound direction is the one a lead actually forges; all three
+channels now seed it. Over the consumer's 26 authorization rows: 24 MATCH before and after,
 the same two paraphrase rows NOMATCH, the one in-force suppression still verifies, and every
 row NOMATCHes with its timestamp shifted back a year. Check B's corpus-wide steering count
 drops from 56 to 52, the four removed rows are all injections, and no sprint window's verdict
@@ -45,11 +52,17 @@ flips. `escalations.md` says the timestamp is when the operator spoke and is ver
 
 An authorization line with no parseable ISO timestamp passes an empty bound and stays
 unbounded (one of the consumer's 26 rows; the in-force readers cannot reach that state, the
-escalation and convergence gates and the guard's arm 9 can); closing it is a producer-side
-grammar change and is stated, not done. Fixture `check-25-steering-conduct` gains the owner
-arms and four mutants including the exact compare; `gate-adjudication` gains S24 and S25;
-`gate-adjudication-mutants` gains a reader that never passes the bound and one that reads
-NOMATCH as verified. BL-184's receipt drives the predicate and the escalation reader end to
+escalation and convergence gates and the guard's arm 9 can, and a space, a lowercase `t` or
+a date-only value reaches it with a one-character edit); closing it at the producer is a
+grammar change and is stated, not done. Each reader instead COUNTS the rows it verified with
+no bound and prints `unbounded-citation: N` on its PASS line, and the guard's arm 9 logs it,
+so a gate log tells a bounded pass from an unbounded one. Fixture `check-25-steering-conduct`
+gains the owner arms and six mutants including the exact compare and a one-sided window;
+`gate-adjudication` gains S24 through S27; `escalation-citation` gains the before-the-bound,
+unbounded-count and zone-offset arms with mutants restoring the truncation and dropping the
+count; `gate-remediation-deny` gains the verifier-key arm and M6b; `gate-adjudication-mutants`
+gains a reader that never passes the bound and one that reads NOMATCH as verified. BL-184's
+receipt drives the predicate and the escalation reader end to
 end and rejects a subject-1-only fix and an owner-only fix. Invariant **I109** binds the
 five reader call sites to the flag by their emission sites, and readers that drop the bound
 fail the push naming the file.
