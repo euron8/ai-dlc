@@ -4093,15 +4093,34 @@ engine's basename fallback refuses on ambiguity); it used `theirs_has` where an 
 deliberately (`:604-606`). Proved by construction: a correct fix written into a probe file scores
 literal 0 / regex 1, so the receipt reports a shipped fix as unshipped.
 
-**And the receipt below was itself repaired before it landed.** Its first form closed the awk
-range on `(b) Sprint-scoped`, a string that does not exist — Rule 25's real subsections are
-`(a) Current-state live`, `(b) Slice-read large sectioned artifacts`, `(c) Rotate append-only
-logs`, `(d) Size budgets`. An unmatched closer runs the range to EOF: 656 lines selected instead
-of 42, and a `[MOVED ` token planted anywhere below Rule 25 scored as a hit. Both directions
-probed on the repaired form: 0 today, 1 against a seeded fix, and 0 against a near-miss that
-places the marker prose OUTSIDE 25(a).
+**THE RECEIPT WAS REPAIRED TWICE AND THEN REPLACED OUTRIGHT, AND THE SECOND ROUND IS THE
+INSTRUCTIVE ONE.** Its first form closed the awk range on `(b) Sprint-scoped`, a string that does
+not exist — an unmatched closer runs the range to EOF, selecting 656 lines instead of 42, so a
+`[MOVED ` token anywhere below Rule 25 scored as a hit. Repaired to the real closer
+(`(b) Slice-read large sectioned artifacts`), it still counted a TOKEN rather than testing a
+FIX, and the adversarial hand broke it. Measured, each case a full copy of the tree with the rule
+passage replaced, against a shipped-tree control of exit 0 and a pre-fix control of exit 1:
 
-verify: sh S=$(awk "/\(a\) Current-state live/,/\(b\) Slice-read large sectioned/" core/skills/ai-dlc/SKILL.md | grep -cF "[MOVED ") || S=0; [ "$S" -gt 0 ]
+| passage replaced by | old receipt |
+|---|---|
+| prose merely quoting `` `[MOVED ` `` in passing | **exit 0 — false close** |
+| prose FORBIDDING the form (`"that form is FORBIDDEN"`) | **exit 0 — false close** |
+| an HTML comment (`<!-- TODO: someday document … -->`) | **exit 0 — false close** |
+| a factual aside naming no rule | **exit 0 — false close** |
+
+A receipt satisfied by prose forbidding the very thing it checks for is the `BL-078` shape this
+repo already names: it read the RENDERED token, not the behaviour. **The replacement drives the
+shipping program.** It extracts the prescribed form FROM Rule 25(a), builds a history file using
+it, and runs the real `rotate-snapshot-archive.sh` — so it closes only if the rule states a form
+AND that form actually cuts. Scored on all six inputs: shipped tree 0, pre-fix parent 1, all four
+false-close cases 1, and a correct-but-REWORDED fix 0 (a receipt that rejects a competent
+author's other phrasing is as broken as one accepting a regression).
+
+**Stated limit:** it cannot tell a rule a reader OBEYS from one merely present, and it says
+nothing about the silent exit-0 branch above — that is a rotator behaviour and no rulebook text
+reaches it.
+
+verify: sh T=$(mktemp -d); F=$(awk "/\(a\) Current-state live/,/\(b\) Slice-read large sectioned/" core/skills/ai-dlc/SKILL.md | grep -oE "^## \[MOVED [^]]*\]" | head -1); [ -n "$F" ] || { rm -rf "$T"; exit 1; }; { echo "# H"; echo; i=0; while [ $i -lt 12 ]; do i=$((i+1)); echo "## [MOVED 2026-09-06T10:0${i}:00Z from pipeline-snapshot.md — trim]"; echo "body $i"; done; } > "$T/h.md"; bash core/scripts/rotate-snapshot-archive.sh "$T/h.md" --keep-entries 5 >/dev/null 2>&1; rc=$?; rm -rf "$T"; [ "$rc" -eq 0 ]
 
 ## BL-186 — format steering is attached at three write sites and absent at twenty-one, and a rule telling the lead to LOCATE a format is discharged by looking when no format exists
 
