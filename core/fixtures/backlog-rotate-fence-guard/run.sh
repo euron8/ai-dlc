@@ -347,9 +347,9 @@ printf '%s\n' \
   'verify: has VERSION "."' \
   '' \
   '```text' \
-  "$(printf '\t```')" \
+  $'\t```' \
   '## BL-500 — INSIDE the fence in CommonMark' \
-  "$(printf '\t```')" \
+  $'\t```' \
   '```' \
   '' \
   'DELIM-TAB-TAIL — the line the corrupting split strands.' \
