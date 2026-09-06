@@ -104,14 +104,15 @@ because a loose control read non-zero in the same run.
 
 ## BSD tools are not GNU tools, and they fail silently
 
-In a tracked file, arms S1–S7 of `scripts/validate-shell-portability.sh` and `I71` mechanize
+In a tracked file, arms S1–S10 of `scripts/validate-shell-portability.sh` and `I71` mechanize
 this and it is not restated here — read those arms for the grammars. In an ad-hoc tool call
-nothing is watching, and two traps no arm can cover, because correct and incorrect use are
-the same shape to a regex:
+nothing is watching, and the traps below no arm covers there, because correct and incorrect
+use are the same shape to a regex:
 
 - **`awk -v` strips one level of escaping** and carries no newline at all. A regex passed
   through it needs doubled backslashes, so a correct site looks wrong.
-- **A multibyte character needs an alternation, not a bracket class.**
+- **A multibyte character needs an alternation, not a bracket class.** `S10` refuses the class
+  in a tracked file; the C locale is where the class comes apart, and a tool call never runs there.
 - **An `&` in a `sed` replacement is the whole match**, so editing a script whose new text
   carries `&&` re-inserts the matched line inside itself. Measured: two lines of a scorer
   mangled silently, the run reporting "mutant did not apply". Rewrite such a line with the

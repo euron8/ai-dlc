@@ -150,7 +150,12 @@ while IFS= read -r ext; do
     # hardcoded `<hashes> <n>. `, which silently rewrote an em-dash separator or dropped
     # a `Check ` prefix -- mangling the very headings the widened grammar just taught it
     # to see. Everything left of the title is carried through untouched.
-    new="$(printf '%s' "$text" | sed -E "s|(${anchor_at})|\1[ext:${id}] |")"
+    # `@` and not `|` as the delimiter: the anchor grammar's terminator is an ALTERNATION,
+    # `(\.|—)`, so its `|` is a character the expression CARRIES. With `|` as the delimiter
+    # sed read `s|(^#...(\.|` as the whole pattern, refused it, and `new` came back EMPTY --
+    # three fixtures went red on the first push of the rewrite and this line was the cause.
+    # The id class is `[A-Za-z0-9_.-]` and the anchor has no `@`, so `@` can collide with nothing.
+    new="$(printf '%s' "$text" | sed -E "s@(${anchor_at})@\1[ext:${id}] @")"
 
     found=$((found+1))
     printf '%s:%s\n  -  %s\n  +  %s\n' "${ext#$CONSUMER/}" "$lineno" "$text" "$new"
