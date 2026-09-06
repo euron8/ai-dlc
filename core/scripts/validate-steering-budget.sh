@@ -120,7 +120,7 @@
 #       verifies a citation filed today: every caller printed `MATCH <ts>` and sent it
 #       to /dev/null, so the one output that could have refuted the claim was the one
 #       nobody read. A record verifies only if an accepted operator turn carrying the
-#       quote falls within AI_DLC_CITE_AUTH_TOLERANCE_S seconds either side of this
+#       quote falls within CITE_AUTH_TOLERANCE_S seconds either side of this
 #       timestamp. The bound is OPTIONAL and an EMPTY value is how a caller says so:
 #       a caller that cannot derive a timestamp from its own record passes `""` and
 #       gets today's unbounded answer, because refusing a citation for a field the
@@ -135,10 +135,20 @@
 #       `**Operator authorization:**` rows. These timestamps are HAND-TYPED and
 #       routinely rounded (`19:34:00Z`, `22:40:00Z`), so the record they cite is not at
 #       the stated instant: taking each row's NEAREST matching accepted record, the gap
-#       runs from -1116s to +4283s. An exact compare would NOMATCH 19 of the 23 rows
-#       that verify today. The default tolerance is 7200s, which admits every one of
-#       the 23 with a 1.68x margin on the worst (+4283s, an entry stated at 22:40:00Z
-#       whose operator answer landed at 23:51:22Z) and 6.45x on the other side.
+#       runs from -1116s to +4283s. An exact compare would NOMATCH 22 of the 24 rows
+#       that verify today. CITE_AUTH_TOLERANCE_S is 7200, which admits every one of
+#       the 23 timestamped rows that verify, with a 1.68x margin on the worst (+4283s,
+#       an entry stated at 22:40:00Z whose operator answer landed at 23:51:22Z) and
+#       6.45x on the other side.
+#
+#       THE TOLERANCE IS A HARD CONSTANT WITH NO ENVIRONMENT AND NO FLAG OVERRIDE, and
+#       that is the whole of its security. It was overridable for one revision, and an
+#       overridable bound is not a bound: any reader inherits the environment it is run
+#       in, and the remediation guard runs in the LEAD'S, so a single exported value of
+#       10^9 makes the window wider than the project's history while every receipt,
+#       every fixture and every exit code stays exactly as green as before. The same
+#       hole shipped once already on a different knob and had to be closed pre-merge.
+#       Changing this number is a code change, reviewed against the corpus that set it.
 #
 #       Its predicate is Check B's, plus AskUserQuestion ANSWERS -- and only the answer
 #       side, never the lead-authored question -- plus SLASH-COMMAND ARGUMENTS, and only
@@ -153,7 +163,10 @@
 #   AI_DLC_STEERING_BUDGET  max foreground block, seconds   (default 120)
 #   AI_DLC_STEERING_GRACE   jitter allowance, seconds       (default 30)
 #   AI_DLC_MAX_WAIT_BEATS   max consecutive wait beats      (default 6)
-#   AI_DLC_CITE_AUTH_TOLERANCE_S  --authorized-at window, seconds each side (default 7200)
+#
+# THE --authorized-at WINDOW IS NOT ON THIS LIST AND MUST NOT JOIN IT. It is a provenance
+# bound, not a budget: a knob that widens it is a knob that turns the check off, silently and
+# from any environment. See CITE_AUTH_TOLERANCE_S in the --cite usage above.
 #
 # AI_DLC_STEERING_BUDGET IS FOREGROUND-ONLY and must stay 120. It is not the
 # backgrounded beat's sleep quantum -- that is AI_DLC_WAIT_BEAT_SECS, read only
@@ -248,7 +261,7 @@ command -v node >/dev/null 2>&1 || { echo "FAIL: node is required" >&2; exit 1; 
 
 THRESHOLD=$(( BUDGET + GRACE ))
 
-AI_DLC_T="$TRANSCRIPT" AI_DLC_D="$DIR" AI_DLC_TH="$THRESHOLD" AI_DLC_B="$BUDGET" AI_DLC_MB="$MAX_BEATS" AI_DLC_Q="$QUIET" AI_DLC_C="$COUNT" AI_DLC_CITE="$CITE" AI_DLC_SINCE="$SINCE" AI_DLC_AUTH_AT="$AUTH_AT" AI_DLC_AUTH_TOL="${AI_DLC_CITE_AUTH_TOLERANCE_S:-7200}" node <<'NODE'
+AI_DLC_T="$TRANSCRIPT" AI_DLC_D="$DIR" AI_DLC_TH="$THRESHOLD" AI_DLC_B="$BUDGET" AI_DLC_MB="$MAX_BEATS" AI_DLC_Q="$QUIET" AI_DLC_C="$COUNT" AI_DLC_CITE="$CITE" AI_DLC_SINCE="$SINCE" AI_DLC_AUTH_AT="$AUTH_AT" node <<'NODE'
 const fs = require("fs"), path = require("path");
 const TH = +process.env.AI_DLC_TH, BUDGET = +process.env.AI_DLC_B;
 const MAX_BEATS = +process.env.AI_DLC_MB;
@@ -257,7 +270,15 @@ const COUNT = process.env.AI_DLC_C === "1";
 const CITE = process.env.AI_DLC_CITE || "";
 const SINCE = process.env.AI_DLC_SINCE || "";
 const AUTH_AT = process.env.AI_DLC_AUTH_AT || "";
-const AUTH_TOL_S = +(process.env.AI_DLC_AUTH_TOL || 7200);
+// A LITERAL, READ FROM NO ENVIRONMENT AND NO FLAG. Every other tunable in this file is a
+// BUDGET -- widen it and the check reports differently about the same facts. This one is a
+// PROVENANCE bound: widen it and the check stops asking the question, while its output, its
+// exit codes, every fixture and every receipt stay identical. Readers inherit the environment
+// they are run in and the remediation guard runs in the lead's, so `export` of a large value
+// would be a one-word way to turn off the arm that stands between a lead and lifting its own
+// gate deny. 7200 is derived in the --authorized-at note above, from the reference consumer's
+// own citation rows; moving it is a code change reviewed against that corpus.
+const CITE_AUTH_TOLERANCE_S = 7200;
 const one = process.env.AI_DLC_T, dir = process.env.AI_DLC_D;
 
 // AskUserQuestion measures the human's think-time, not machine starvation.
@@ -528,7 +549,7 @@ if (CITE) {
   // verdict. Silently dropping an unparseable bound would hand back a fully unbounded verify
   // wearing a bounded one's exit code -- the defect this flag exists to close, one level up.
   let authMs = null;
-  const authTolMs = AUTH_TOL_S * 1000;
+  const authTolMs = CITE_AUTH_TOLERANCE_S * 1000;
   if (AUTH_AT) {
     // A ZONE-LESS VALUE IS UTC HERE, NOT LOCAL. escalations.md prescribes UTC and all 26 of the
     // reference consumer's authorization rows carry `Z`, but Date.parse reads a zone-less
@@ -540,10 +561,11 @@ if (CITE) {
       console.error(`FAIL: --authorized-at "${AUTH_AT}" is not an ISO-8601 timestamp, so the citation window cannot be computed. Refusing rather than verifying unbounded.`);
       process.exit(1);
     }
-    if (!Number.isFinite(AUTH_TOL_S) || AUTH_TOL_S < 0) {
-      console.error(`FAIL: AI_DLC_CITE_AUTH_TOLERANCE_S="${process.env.AI_DLC_AUTH_TOL}" is not a non-negative number of seconds.`);
-      process.exit(1);
-    }
+    // NO GUARD ON THE TOLERANCE, and its absence is the point: it is a literal above, so
+    // "not a non-negative number of seconds" is a state this program cannot reach. The guard
+    // that used to sit here validated a value read from the environment, and a condition that
+    // can no longer change an outcome is a loaded gun -- it would go on reading as though the
+    // knob still existed and invite the next author to restore it.
   }
   // Records carrying the quote that fell OUTSIDE the window. The two NOMATCHes are different
   // findings and a caller cannot act on them alike: nothing carried these words at all is the
@@ -591,8 +613,8 @@ if (CITE) {
   }
   const windowNote = authMs === null ? ""
     : outsideWindow
-      ? `, though ${outsideWindow} operator turn(s) carried it outside the +/-${AUTH_TOL_S}s window around the cited authorization time ${AUTH_AT} -- the words were said, but not when this record says they were`
-      : ` within +/-${AUTH_TOL_S}s of the cited authorization time ${AUTH_AT}`;
+      ? `, though ${outsideWindow} operator turn(s) carried it outside the +/-${CITE_AUTH_TOLERANCE_S}s window around the cited authorization time ${AUTH_AT} -- the words were said, but not when this record says they were`
+      : ` within +/-${CITE_AUTH_TOLERANCE_S}s of the cited authorization time ${AUTH_AT}`;
   console.error(`cite: scanned ${files.length} transcript(s) from ${CORPUS_ID}, no genuine operator message carried it${windowNote}`);
   console.log("NOMATCH"); process.exit(2);
 }

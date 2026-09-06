@@ -532,16 +532,56 @@ if [ -n "$MD" ]; then
   mw D-window-holds "$MD" "$CITE_LATER" "$AUTH_TS" "NOMATCH/2" hold "D: a parseable bound still binds"
 fi
 
+# --- W7: THE TOLERANCE IS A CONSTANT, AND NO ENVIRONMENT REACHES IT ------------
+# Every other tunable in this validator is a BUDGET -- widen it and the check reports
+# differently about the same facts. This one is a PROVENANCE bound: widen it and the check
+# stops asking its question while its output, its exit codes, every other arm here and every
+# receipt stay exactly as green. Readers inherit the environment they are run in and the
+# remediation guard runs in the LEAD'S, so an exported value would be a one-word way to turn
+# off the arm standing between a lead and lifting its own gate deny.
+#
+# THE ARM IS RUN WITH THE OLD VARIABLE SET, not with it absent: an absent variable proves only
+# that the default is 7200, which was true while the knob existed too.
+W7O="$(AI_DLC_CITE_AUTH_TOLERANCE_S=1000000000 bash "$VALIDATOR" --dir "$AWORK/corpus" --cite "$CITE_LATER" --authorized-at "$AUTH_TS" --quiet 2>/dev/null)"; W7RC=$?
+w tolerance-not-overridable "${W7O:-EMPTY}/$W7RC" "NOMATCH/2" \
+  "a phrase said a week away still NOMATCHes with AI_DLC_CITE_AUTH_TOLERANCE_S=10^9 exported -- the window is a literal in the program"
+# The ALLOW twin, one property apart: the same environment must not break a genuine citation
+# either. Without it this arm passes against a build that refuses everything.
+W7B="$(AI_DLC_CITE_AUTH_TOLERANCE_S=1000000000 bash "$VALIDATOR" --dir "$AWORK/corpus" --cite "$CITE_AUTH" --authorized-at "$AUTH_TS" --quiet 2>/dev/null)"; W7BRC=$?
+w tolerance-env-harmless "${W7B:-EMPTY}/$W7BRC" "MATCH 2026-07-02T14:37:41Z/0" \
+  "the same environment leaves a genuine in-window citation verifying -- W7 discriminates on the window, not on the run failing"
+
+# MUTANT E -- THE OVERRIDE RESTORED, exactly as it was written for one revision: the constant
+# read from the environment with 7200 as a default. Kill set: {tolerance-not-overridable}.
+# Nothing else moves, because with the variable unset the mutant and the shipping program are
+# the same program -- which is precisely why an overridable bound is invisible to every arm
+# that does not export it, and why this mutant has to.
+mut env-overridable-tolerance 's|^const CITE_AUTH_TOLERANCE_S = 7200;$|const CITE_AUTH_TOLERANCE_S = +(process.env.AI_DLC_CITE_AUTH_TOLERANCE_S \|\| 7200);|'
+ME="$MUTP"
+if [ -n "$ME" ]; then
+  MEO="$(AI_DLC_CITE_AUTH_TOLERANCE_S=1000000000 bash "$ME" --dir "$AWORK/corpus" --cite "$CITE_LATER" --authorized-at "$AUTH_TS" --quiet 2>/dev/null)"; MERC=$?
+  if [ "${MEO:-EMPTY}/$MERC" = "MATCH 2026-07-09T11:02:13Z/0" ]; then
+    kill_ E-env-widens-window "E: with the override restored, one exported variable makes a week-away phrase verify -- W7 has teeth"
+  else
+    bad_ E-env-widens-window "E: got '${MEO:-EMPTY}/$MERC', want 'MATCH 2026-07-09T11:02:13Z/0' -- W7 is not testing the override"
+  fi
+  # And the mutant is INDISTINGUISHABLE from the shipping program without the variable, which
+  # is the whole hazard: no other arm in this file can see it.
+  mw E-unset-holds "$ME" "$CITE_LATER" "$AUTH_TS" "NOMATCH/2" hold \
+    "E: with the variable unset the mutant behaves identically -- an overridable bound is invisible to every arm that does not export it"
+  mw E-meta-holds "$ME" "$CITE_META" "" "NOMATCH/2" hold "E: the isMeta arm is unmoved"
+fi
+
 # KILL COUNT. A mutation that applied cleanly to a file this run never loaded reads exactly
 # like an arm that cannot fire, and `cmp -s` cannot tell them apart. Zero kills is that state.
-if [ "$KILLS" -ge 5 ]; then
+if [ "$KILLS" -ge 6 ]; then
   ok_ KILL-COUNT "$KILLS mutant kill(s) -- the arms above can fire"
 else
   bad_ KILL-COUNT "$KILLS kill(s); the mutants changed bytes in a file these arms never loaded"
 fi
 
 if [ "$FAILURES" -eq 0 ]; then
-  echo "PASS: check-25 steering-conduct fixture holds (3 cases + count contract + 9 identity arms + provenance window/isMeta arms + 4 mutants)."
+  echo "PASS: check-25 steering-conduct fixture holds (3 cases + count contract + 9 identity arms + provenance window/isMeta arms + 5 mutants)."
   exit 0
 fi
 echo "FAIL: $FAILURES check-25 assertion(s) failed."
