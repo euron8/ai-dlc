@@ -4109,18 +4109,34 @@ passage replaced, against a shipped-tree control of exit 0 and a pre-fix control
 | a factual aside naming no rule | **exit 0 — false close** |
 
 A receipt satisfied by prose forbidding the very thing it checks for is the `BL-078` shape this
-repo already names: it read the RENDERED token, not the behaviour. **The replacement drives the
-shipping program.** It extracts the prescribed form FROM Rule 25(a), builds a history file using
-it, and runs the real `rotate-snapshot-archive.sh` — so it closes only if the rule states a form
-AND that form actually cuts. Scored on all six inputs: shipped tree 0, pre-fix parent 1, all four
-false-close cases 1, and a correct-but-REWORDED fix 0 (a receipt that rejects a competent
-author's other phrasing is as broken as one accepting a regression).
+repo already names: it read the RENDERED token, not the behaviour. **THE FIRST REPLACEMENT FOR IT CARRIED THE SAME CLASS OF DEFECT AND WAS ITSELF REPLACED.** That
+one built a probe history and ran the real `rotate-snapshot-archive.sh`, and was described as
+"driving the shipping program" — but it built the probe from a HARDCODED heading rather than from
+the form it extracted, so the rotator arm returned 0 whatever the rulebook said. A conjunct that
+cannot fail is not a conjunct. All discrimination sat in the extraction, and the world that
+exposes it is `L3`: the fix DELETED and an anchored `## [MOVED …]` heading left in 25(a) as an
+EXAMPLE (controls: normative sentence 0, decoy heading 1) scored **exit 0 — a false pass**.
+Running a program is not the same as letting it decide.
+
+**The shipped receipt is two anchored greps and no range**, which is what finally holds. The
+`^…$` grep pins the fenced format line so a paraphrase cannot satisfy it; the `grep -qF` on the
+normative sentence is what kills prose that merely quotes or FORBIDS the token. Either conjunct
+alone is weaker — the format line alone passes `forbid`, since inverting only the sentence leaves
+the fence standing. Dropping the awk range removes the runaway entirely: a subsection REORDER puts
+the closer before the opener and re-creates the 656-line span that the first repair fixed, and a
+reword of `(b) Slice-read large sectioned` drops the closer to 0 and spans 667 of 1847 lines. Both
+were survivable only because `grep -cF "[MOVED "` over `SKILL.md` returns **1** — the token is
+globally unique today (control: `Rule 25` = 4), and Rule 25(c) is about rotating logs, so a second
+mention there is an ordinary future edit.
+
+Scored across nine worlds: shipped 0; fix deleted 1; `forbid` 1; `drive_by` 1; HTML comment 1;
+`L3` anchored decoy 1; reorder-with-fix 0; reworded fix 0.
 
 **Stated limit:** it cannot tell a rule a reader OBEYS from one merely present, and it says
 nothing about the silent exit-0 branch above — that is a rotator behaviour and no rulebook text
 reaches it.
 
-verify: sh T=$(mktemp -d); F=$(awk "/\(a\) Current-state live/,/\(b\) Slice-read large sectioned/" core/skills/ai-dlc/SKILL.md | grep -oE "^## \[MOVED [^]]*\]" | head -1); [ -n "$F" ] || { rm -rf "$T"; exit 1; }; { echo "# H"; echo; i=0; while [ $i -lt 12 ]; do i=$((i+1)); echo "## [MOVED 2026-09-06T10:0${i}:00Z from pipeline-snapshot.md — trim]"; echo "body $i"; done; } > "$T/h.md"; bash core/scripts/rotate-snapshot-archive.sh "$T/h.md" --keep-entries 5 >/dev/null 2>&1; rc=$?; rm -rf "$T"; [ "$rc" -eq 0 ]
+verify: sh grep -qE "^## \[MOVED <ISO-8601 timestamp> from <source basename> . <trigger>\]$" core/skills/ai-dlc/SKILL.md && grep -qF "block a move lands in a history/archive file opens with" core/skills/ai-dlc/SKILL.md
 
 ## BL-186 — format steering is attached at three write sites and absent at twenty-one, and a rule telling the lead to LOCATE a format is discharged by looking when no format exists
 
