@@ -177,3 +177,12 @@ paths:
   the copy helper returned 1 silently, and the fixture printed PASS over a mutant no
   arm ever scored. Report a failing `sed` as DID NOT APPLY, and spell `a\` text on the
   next line of the same script argument with `$'...'`.
+- **A seeded SET with one member cannot tell "scanned the set" from "scanned its first
+  member", and a one-row ledger makes its own row the epoch.** Measured twice in one batch:
+  every transcript corpus a fixture seeded held one `.jsonl`, so a verifier that read the
+  first file and stopped satisfied the receipt and every case while reading NOMATCH on the
+  consumer's real 250-file corpus; and a spawn ledger seeded with only the dispatch under
+  test made that dispatch the earliest row, so every "binds" arm passed by the pre-migration
+  EXEMPTION rather than by binding. Seed the discriminating member NOT first, and seed an
+  epoch row that is not the subject, then ask which arm dies when the subject scans one
+  member — if none does, the set is not being scanned.
