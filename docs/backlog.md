@@ -4171,3 +4171,60 @@ cover the 21 unsteered artifacts, per `mechanism-design.md` — an exemption nee
 it does not cover the arm's own subject.
 
 verify: sh n=$(grep -rl "STEP_LOADED_TOKEN" core/scripts/ scripts/ .githooks/ 2>/dev/null | wc -l) || n=0; [ "$n" -gt 0 ]
+
+## BL-188 — no gate bounds `core/skills/ai-dlc/SKILL.md`'s total size or its narrative content, and `audit-rule-files.sh` scores narrative 0 where its own header says narrative "fails where it is authored"
+
+**Found by the OPERATOR, mid-batch, reading a diff — which is the finding.** Batch 65's `BL-185`
+fix added 16 lines to Rule 25(a) where 6 were the instruction. The other 10 were the consumer
+measurement, an entry line number, two span figures and a closing moral: an incident report
+written into a file that costs its bytes on every turn. `resident-context.md` governs directly —
+the measurement is why a rule exists and stays with it, the story of the incident does not. It
+was cut to +414 bytes from +1259 before merge. **Nothing mechanical objected, and the session
+had run the rule audit after the edit and read its clean tier-1 as confirmation.**
+
+**Measured, with the control in the same invocation.** A worktree at the pre-trim commit,
+confirmed to carry the fat text (`grep -c "travel as"` -> 1, so the probe is valid and the zero
+below is a real absence rather than a broken measurement):
+
+| gate | verdict on the fat version |
+|---|---|
+| `core/scripts/audit-rule-files.sh` | 62 findings / **0 tier-1** — byte-identical to the trimmed version |
+| `core/scripts/validate-reattach-budget.sh` | measures **lines 26-95 only**, 4688 of 105903 bytes; Rule 25(a) sits at ~1181, outside the window |
+| any fixture reading `SKILL.md`'s size | **none** — the only reader in the tree is the re-attach budget |
+| `scripts/validate-claude-rules.sh` A6 | bounds `.claude/rules/`, not `core/skills/ai-dlc/SKILL.md` |
+
+`docs/backlog.md` and `docs/backlog.archive.md` carry no entry for this (`SKILL.md size` 0/0;
+the `narrative` and `resident prose` hits all belong to `BL-044`, an unrelated subject, against a
+control of 101 `verify:` lines in the same file).
+
+**THE SHARP PART IS THAT THE AUDIT NAMES THIS AS ITS OWN JOB.**
+`core/scripts/audit-rule-files.sh:19` reads "narrative fails where it is authored rather than one
+release later" — and it scored the offending passage 0. Its tier-1 grammar keys on origin tags,
+dates and version stamps, which is what narrative usually CARRIES. This narrative carried none:
+it was measurements and a moral, in the house style, indistinguishable by any regex from the
+surrounding scar tissue that is supposed to be there. A check that cannot fire reads exactly like
+one that passed, one level up from the rule this repo already states.
+
+**DO NOT ANSWER THIS WITH A NARRATIVE LINT, AND THE FALSE-POSITIVE PROBLEM IS THE ENTRY'S REAL
+CONTENT.** `resident-context.md` holds that verbosity in this corpus is deliberate scar tissue —
+almost every long passage is long because a short one failed — so the governing rule for this
+file is the OPPOSITE of brevity. The discriminator applied by hand was "is this the instruction,
+or the story of why", which is a judgement and not a grammar. Any check keyed on length, on
+measurement-shaped tokens, or on figure density flags the scar tissue the rule requires. That is
+the unmeasured-lint shape `CLAUDE.md` forbids shipping, and it is why this entry proposes no
+mechanism yet.
+
+**What is worth building, in preference order.** (1) A total-byte OBSERVATION for
+`core/skills/ai-dlc/SKILL.md` reported at the gate and never failing it — the file has no size
+signal at all today, and a number nobody gates on still moves the author. (2) If a check is ever
+tiered ERROR, it must be sited at the DIFF, not the file: the question is whether a CHANGE added
+resident narrative, which is answerable about a hunk and not about a corpus. (3) Measure the
+false-positive set over the existing file before either — a rule whose FP set is the scar tissue
+is a rule the operator turns off.
+
+**Stated limit of the receipt below.** It closes when any shipped program reads the whole file's
+size, which a mere observation satisfies. It cannot tell an observation from a gate, and it says
+nothing about narrative detection — that half is deliberately unmechanised here, for the reason
+above.
+
+verify: sh n=0; for s in core/scripts/*.sh scripts/*.sh; do grep -qE 'wc -c.*SKILL|SKILL.*wc -c' "$s" 2>/dev/null && n=$((n+1)); done; [ "$n" -gt 1 ]
