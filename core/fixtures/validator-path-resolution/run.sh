@@ -169,6 +169,11 @@ argv_for() {
     validate-escalation-status-vocabulary.sh) printf '%s' "$WORK/docs/pending.md" ;;
     validate-suppression-lifetime.sh) printf '%s' "--escalations $WORK/docs/pending.md" ;;
     validate-h2-attestation.sh)     printf '%s' "--digest" ;;
+    # A bare run stops at "no mode given", which is byte-identical from every root and
+    # scores the resolver INERT — the agreement assertion above then holds for a script
+    # nobody asked a root-dependent question of. `--scan-roots` is the cheapest mode that
+    # reads a file out of the resolved tree, so the answer names the root either way.
+    artifact-path-config.sh)        printf '%s' "--scan-roots" ;;
     # A base ref is a REQUIRED positional for this one, so a bare run stops at its
     # usage line — byte-identical from any root, which scored it inert and took its
     # agreement assertion down with it. The ref need not resolve: with one present the
@@ -357,6 +362,127 @@ p_pois="$(cd "$WORK" && CLAUDE_PROJECT_DIR="$WORK2" bash "$PROBE" 2>&1 | norm)"
   && ok "CONTROL: the probe still detects a script that DOES let CLAUDE_PROJECT_DIR win" \
   || bad "CONTROL: the probe could not detect a deliberately-broken script — every WRONG REPO ok above is silence"
 rm -f "$PROBE"
+
+# --- DECOY CWD: the two scripts that resolve a CORE FILE, not a project artifact ---
+#
+# The two arms above ask which ROOT a script resolves. These ask what it then OPENS,
+# and they are a different question with a different failure: a script that resolves no
+# root at all and names its candidates relative to the cwd never touches a root channel,
+# so the mutant arm scores it inert and the WRONG REPO arm has nothing to poison. Both
+# of these read a CORE file — gate-validation.md, and the artifact-path grammar plus the
+# layer contract — and both used to name it relative to wherever the process was
+# standing. Every cwd but one is then a refusal, and the one that is not is another
+# ai-dlc tree: it reads that tree's file, reports about it by name, and exits 0.
+#
+# THE DECOY IS PLACED IN $WORK2, WHICH IS A TREE. That is deliberate and it is what
+# makes the arm honest: the canonical chain's last step is a walk up from the cwd, so a
+# cwd carrying a decoy at a candidate path is a legitimately resolvable root and the
+# only thing separating right from wrong is that the script's OWN LOCATION outranks it.
+# Seeding the decoy somewhere unresolvable would test nothing, because the decoy's own
+# parent directory (`.claude/`, `core/skills/ai-dlc/`) is itself a root marker.
+#
+# EACH ARM CARRIES ITS POSITIVE CONTROL IN THE SAME RUN. "Did not name the decoy" is
+# satisfied by a script that died, by a decoy that was never written, and by a $WORK2
+# this fixture spelled wrong; the control drives the same copy at the same decoy through
+# the argument or the flag that IS supposed to reach it, and requires the decoy back.
+printf '# decoy — the gate-validation.md of ANOTHER tree\n' \
+  > "$WORK2/.claude/skills/ai-dlc/steps/gate-validation.md"
+printf 'consumer_artifact_paths_file: DECOY-PATHS-FILE\n' \
+  > "$WORK2/.claude/skills/ai-dlc/layer-contract.yaml"
+{ printf '```scan-roots\n'; printf 'DECOY-SCAN-ROOT\n'; printf '```\n'
+  printf 'areas:\n'; printf '  DECOY-AREA\n'; } \
+  > "$WORK2/.claude/skills/ai-dlc/artifact-path-grammar.md"
+
+DEC_GV="$WORK2/.claude/skills/ai-dlc/steps/gate-validation.md"
+MUTD="$WORK/.decoy-mut"
+mkdir -p "$MUTD" || exit 2
+
+# mut_copy <script> <sed program> <token whose count must drop to 0> -> path, or ""
+# The mutation is keyed on the subject's OWN predicate — the text that consumes the
+# resolved root — and scored by that text's count going from non-zero to zero, so a
+# hand-named site list cannot go vacuous the release somebody adds a site.
+mut_copy() {
+  local src="$1" prog="$2" tok="$3" dst="$MUTD/$(basename "$1")" before after
+  before="$(grep -cF "$tok" "$src")" || before=0
+  [ "$before" -gt 0 ] || { printf ''; return 1; }
+  sed -e "$prog" "$src" > "$dst" 2>/dev/null || { printf ''; return 1; }
+  cmp -s "$src" "$dst" && { printf ''; return 1; }
+  after="$(grep -cF "$tok" "$dst")" || after=0
+  [ "$after" -eq 0 ] || { printf ''; return 1; }
+  printf '%s\n' "$dst"
+}
+
+GM_S="$WORK/scripts/ai-dlc/validate-gate-manifest.sh"
+if [ ! -f "$GM_S" ]; then
+  bad "DECOY CWD: validate-gate-manifest.sh is not among the installed scripts — the arm did not run"
+else
+  # KEYED ON THE CANDIDATE PATH, NOT ON THE DECOY'S ABSOLUTE ONE, and that is a
+  # measurement: a cwd-relative reader names the file `.claude/skills/…` with no
+  # prefix at all, so an arm looking for "$WORK2/.claude/…" scored the mutant SURVIVED
+  # while the mutant was reading the decoy and saying so. The suffix appears in both
+  # spellings; the root assertion beside it is what makes the silent-refusal case fail
+  # rather than pass, since a script that died also fails to name the decoy.
+  gm_dec="$( cd "$WORK2" && bash "$GM_S" 2>&1 )"
+  case "$gm_dec" in
+    *".claude/skills/ai-dlc/steps/gate-validation.md"*)
+      bad "DECOY CWD: validate-gate-manifest.sh with no argument read ANOTHER tree's gate-validation.md — it resolved its candidates against the cwd, not the root" ;;
+    *"under $WORK"*)
+      ok  "DECOY CWD: validate-gate-manifest.sh with no argument ignores another tree's gate-validation.md at the cwd, and names the root it did search" ;;
+    *)
+      bad "DECOY CWD: validate-gate-manifest.sh named neither the decoy nor its own root — it cannot be told from a run that died" ;;
+  esac
+  gm_ctl="$( cd "$WORK2" && bash "$GM_S" "$DEC_GV" 2>&1 )"
+  case "$gm_ctl" in
+    *".claude/skills/ai-dlc/steps/gate-validation.md"*)
+      ok  "CONTROL: an explicit \$1 still reaches that same decoy, so the arm above is a discrimination and not a dead run" ;;
+    *)
+      bad "CONTROL: an explicit \$1 did not reach the decoy — the decoy is unreadable or the \$1 contract broke, and the arm above proves nothing" ;;
+  esac
+  gm_mut="$(mut_copy "$GM_S" 's@"\$AI_DLC_ROOT/@"@g' '"$AI_DLC_ROOT/')"
+  if [ -z "$gm_mut" ]; then
+    bad "MUTANT: the root prefix on validate-gate-manifest.sh's candidates could not be removed — the anchor moved and the DECOY CWD arm above is unproven"
+  else
+    gm_mout="$( cd "$WORK2" && bash "$gm_mut" 2>&1 )"
+    case "$gm_mout" in
+      *".claude/skills/ai-dlc/steps/gate-validation.md"*)
+        ok  "MUTANT: candidates back to cwd-relative -> validate-gate-manifest.sh reads the decoy; the arm kills it" ;;
+      *)
+        bad "MUTANT: candidates back to cwd-relative and validate-gate-manifest.sh STILL did not read the decoy — the arm cannot fire" ;;
+    esac
+  fi
+fi
+
+APC_S="$WORK/scripts/ai-dlc/artifact-path-config.sh"
+if [ ! -f "$APC_S" ]; then
+  bad "DECOY CWD: artifact-path-config.sh is not among the installed scripts — the arm did not run"
+else
+  apc_dec="$( cd "$WORK2" && bash "$APC_S" --scan-roots 2>&1 )"
+  case "$apc_dec" in
+    *DECOY-SCAN-ROOT*) bad "DECOY CWD: artifact-path-config.sh --scan-roots read ANOTHER tree's artifact-path-grammar.md — its root defaulted to the cwd" ;;
+    *)                 ok  "DECOY CWD: artifact-path-config.sh --scan-roots ignores another tree's grammar at the cwd" ;;
+  esac
+  apc_cf="$( cd "$WORK2" && bash "$APC_S" --consumer-file 2>&1 )"
+  case "$apc_cf" in
+    *DECOY-PATHS-FILE*) bad "DECOY CWD: artifact-path-config.sh --consumer-file read ANOTHER tree's layer-contract.yaml" ;;
+    *)                  ok  "DECOY CWD: artifact-path-config.sh --consumer-file ignores another tree's layer contract at the cwd" ;;
+  esac
+  apc_ctl="$( cd "$WORK2" && bash "$APC_S" --scan-roots --root "$WORK2" 2>&1 )"
+  case "$apc_ctl" in
+    *DECOY-SCAN-ROOT*) ok  "CONTROL: --root still reaches that same decoy grammar, so the two arms above are discriminations and the documented flag survived the fix" ;;
+    *)                 bad "CONTROL: --root did not reach the decoy grammar — either the flag stopped winning or the decoy is unreadable, and both arms above prove nothing" ;;
+  esac
+  apc_mut="$(mut_copy "$APC_S" 's@^  ROOT="\$AI_DLC_ROOT"$@  ROOT="."@' '  ROOT="$AI_DLC_ROOT"')"
+  if [ -z "$apc_mut" ]; then
+    bad "MUTANT: artifact-path-config.sh's resolved-root assignment could not be reverted to the cwd — the anchor moved and the two DECOY CWD arms above are unproven"
+  else
+    apc_mout="$( cd "$WORK2" && bash "$apc_mut" --scan-roots 2>&1 )"
+    case "$apc_mout" in
+      *DECOY-SCAN-ROOT*) ok  "MUTANT: default root back to \".\" -> artifact-path-config.sh reads the decoy grammar; the arm kills it" ;;
+      *)                 bad "MUTANT: default root back to \".\" and artifact-path-config.sh STILL did not read the decoy — the arm cannot fire" ;;
+    esac
+  fi
+fi
+rm -rf "$MUTD"
 
 echo ""
 n_sensitive=$(printf '%s' "$sensitive_list" | wc -w | tr -d ' ')

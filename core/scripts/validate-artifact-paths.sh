@@ -99,10 +99,14 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
        echo "  scanning the filesystem instead would judge build output and scratch files the" >&2
        echo "  grammar never governed." >&2; exit 2; }
 
+# `--root "$ROOT_ABS"` IS SAID, NOT INHERITED. This used to hand the resolver the cwd by
+# omission, which was correct only while the resolver's default WAS the cwd. It resolves its own
+# root now, and a distribution copy of it pointed at a consumer would answer about the
+# distribution -- so the tree this run is about is named, once, by the one program that knows it.
 cfg() { # <mode> -> the resolver's answer, or die with its own message
   local out rc
-  if [ -n "$GRAMMAR_ARG" ]; then out="$(bash "$CONFIG" "$1" --grammar "$GRAMMAR_ARG" 2>&1)"; rc=$?
-  else                           out="$(bash "$CONFIG" "$1" 2>&1)"; rc=$?; fi
+  if [ -n "$GRAMMAR_ARG" ]; then out="$(bash "$CONFIG" "$1" --root "$ROOT_ABS" --grammar "$GRAMMAR_ARG" 2>&1)"; rc=$?
+  else                           out="$(bash "$CONFIG" "$1" --root "$ROOT_ABS" 2>&1)"; rc=$?; fi
   if [ "$rc" -ne 0 ]; then
     echo "$PROG: artifact-path-config.sh $1 failed (rc=$rc):" >&2
     printf '%s\n' "$out" >&2

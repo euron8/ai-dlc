@@ -102,10 +102,14 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
 # reference consumer the file was byte-identical to the scaffolded template and nothing consulted
 # it, so the remedy this report prints would have changed no later verdict -- a corrected sentence
 # in front of an inert mechanism reads as done, which is worse than the wrong sentence.
+# `--root "$ROOT_ABS"` IS SAID, NOT INHERITED, for the reason validate-artifact-paths.sh states
+# beside its own copy: the resolver no longer defaults to the cwd, so the tree this run is about
+# has to be named by the program that knows it rather than left to whichever root the resolver
+# would find from its own install path.
 cfg() { # <mode> -> the resolver's answer, or die carrying its own message
   local out rc
-  if [ -n "$GRAMMAR_ARG" ]; then out="$(bash "$CONFIG" "$1" --grammar "$GRAMMAR_ARG" 2>&1)"; rc=$?
-  else                           out="$(bash "$CONFIG" "$1" 2>&1)"; rc=$?; fi
+  if [ -n "$GRAMMAR_ARG" ]; then out="$(bash "$CONFIG" "$1" --root "$ROOT_ABS" --grammar "$GRAMMAR_ARG" 2>&1)"; rc=$?
+  else                           out="$(bash "$CONFIG" "$1" --root "$ROOT_ABS" 2>&1)"; rc=$?; fi
   if [ "$rc" -ne 0 ]; then
     echo "$PROG: artifact-path-config.sh $1 failed (rc=$rc):" >&2
     printf '%s\n' "$out" >&2
