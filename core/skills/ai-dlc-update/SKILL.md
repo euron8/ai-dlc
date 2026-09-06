@@ -1235,6 +1235,22 @@ prose is itself generated rather than composed.
    operator has explicitly accepted each remaining one per-path. This is the gap that shipped a
    data-loss drift past two reports: the detector caught it, the narrated report did not.
 
+   **Resolving a blocker rewrites the region clause (1) verifies, so clause (1) is re-run AFTER
+   the last resolution, on a re-rendered region.** `--stamp readopt` turns a
+   `HARD-OVERRIDE-DRIFT-SECTION` row into `OVERRIDE-OK`; a register row removes a
+   `HARD-LAYER-ADJUDICATION-MISSING` row. The blocking-layer gate above requires those resolutions
+   BEFORE any write, so on every pull that had a blocker the approved report lists findings that no
+   longer exist, and `--verify` fails on a region whose only fault is that its blockers were fixed.
+   `--verify` says which direction it failed in: it exits **3** with `cause: BLOCKERS-RESOLVED`
+   when the refs are unchanged and the approved region lists `HARD-*` rows the detectors no longer
+   render and none they newly do, and `apply.sh` refuses naming that cause; exit **1** is the other
+   direction — upstream moved, or a finding the approval never saw — and is the stop the gate
+   exists for. So: resolve every blocker, then re-render the region
+   (`reconcile/emit-report.sh <dist> <base> <consumer> <theirs>`) into the report, run `--verify`
+   to exit 0, have the operator re-approve it, and only then run `apply.sh`. An `apply.sh` that
+   refuses with `BLOCKERS-RESOLVED` is telling you the report predates your own work, not that the
+   tree is unsafe; do that one re-render and re-run it.
+
    **THE ADJUDICATION LOOP — YOU do the work; the operator APPROVES it.**
 
    **First, run the resolution driver — it does the mechanical bulk.**

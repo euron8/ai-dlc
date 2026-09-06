@@ -53,7 +53,11 @@
 #   emit-report.sh --verify <report.md> <dist> <base> <consumer> <theirs>
 # Exit:
 #   print  : 0 always.
-#   verify : 0 = region present and current; 1 = missing / stale / hand-edited; 2 = usage.
+#   verify : 0 = region present and current; 1 = missing / stale / hand-edited; 2 = usage;
+#            3 = stale in the SAFE direction only: the refs are unchanged and the approved region
+#                lists HARD-* row(s) the detectors no longer render, and none they newly do — the
+#                blockers were RESOLVED after the render (the adjudication loop's own work). Still a
+#                refusal; apply.sh names the cause and the remedy is a re-render and re-approval.
 set -uo pipefail
 
 MODE=print
@@ -430,6 +434,57 @@ if [ "$want" = "$got" ]; then
 fi
 echo "FAIL: the report's 'reconcile-mechanical' region is STALE or HAND-EDITED — it does not match" >&2
 echo "  what the detectors render now. Re-render with emit-report.sh and re-emit the report." >&2
+# --- THE MISMATCH IS DECIDED, NOT ONLY REPORTED ------------------------------------------------
+# A region goes stale for three reasons, and only one of them is the unsafe direction this gate
+# exists for. (a) Upstream moved after the render: the `_theirs_` tree or `VERSION` line differs,
+# and the whole region describes another range. (b) The report was hand-edited, or a detector now
+# renders a row the operator never saw: the fresh render carries a line the approved region lacks.
+# (c) The approved region carries `HARD-*` row(s) the detectors no longer render, the refs are
+# unchanged, and nothing HARD is new — the blockers were RESOLVED after the render. SKILL.md step 7
+# demands that resolution before `apply` writes, and every resolution rewrites the region: a
+# `--stamp readopt` turns `HARD-OVERRIDE-DRIFT-SECTION` into `OVERRIDE-OK`, a register row removes
+# `HARD-LAYER-ADJUDICATION-MISSING`. So (c) is the COMMON path on any pull that had a blocker, not
+# an edge case. Measured on the reference consumer: four of its six applies since this gate moved
+# into apply.sh re-rendered the region after resolving blockers as an unwritten workaround, and the
+# fifth got this FAIL first with a message naming (a) and (b), both false. Filed as
+# PC-S305-UNION-GATE-UNPASSABLE-ON-ANY-PULL-THAT-HAD-A-BLOCKER.
+#
+# STILL A REFUSAL. The operator approved findings that no longer exist, and a resolution can add
+# rows they have not seen (a merge that leaves OVERRIDE-ASSERTS-SHADOW-SURVIVES, say), so the
+# post-resolution region is re-rendered and re-approved rather than waved through; a pass here
+# would need a vocabulary of "benign" rows and would acquit whatever that vocabulary missed. What
+# changes is the DIAGNOSIS: a distinct exit code so apply.sh can say which case this is, and a
+# `cause:` line so an operator running --verify by hand reads the same answer.
+#
+# KEYED ON THE `HARD-` PREFIX ONLY, which is the contract SKILL.md already binds ("statuses
+# prefixed HARD- must block apply"), never on a list of status names. Under-firing is the safe
+# direction: a mismatch with no HARD row in it, or with a HARD row the operator has NOT seen,
+# reads as (b) and gets the generic message, never a false (c). (a) is decided before (c) because
+# a moved upstream makes every other line incomparable, including the HARD rows.
+only_render="$(LC_ALL=C comm -23 <(printf '%s\n' "$want" | LC_ALL=C sort) <(printf '%s\n' "$got" | LC_ALL=C sort))"
+only_report="$(LC_ALL=C comm -13 <(printf '%s\n' "$want" | LC_ALL=C sort) <(printf '%s\n' "$got" | LC_ALL=C sort))"
+refs_render="$(printf '%s\n' "$want" | grep -E '^_(base|theirs|stamp)_ ')"
+refs_report="$(printf '%s\n' "$got"  | grep -E '^_(base|theirs|stamp)_ ')"
+# One blocker renders TWICE in the region — once in the blocking list (`%-32s %s`) and once in
+# its detector's own section (`STATUS  path`) — so the rows are whitespace-normalised and
+# de-duplicated before counting, and the count names blockers rather than lines.
+hard_rows() { grep '^HARD-' | sed -E 's/[[:space:]]+/ /g' | LC_ALL=C sort -u; }
+gone_rows="$(printf '%s\n' "$only_report" | hard_rows)"
+new_rows="$(printf '%s\n' "$only_render"  | hard_rows)"
+hard_gone="$(printf '%s\n' "$gone_rows" | grep -c '^HARD-')" || hard_gone=0
+hard_new="$(printf '%s\n' "$new_rows"   | grep -c '^HARD-')" || hard_new=0
+if [ "$refs_render" != "$refs_report" ]; then
+  cause=UPSTREAM-MOVED
+  echo "  cause: UPSTREAM-MOVED — the region was rendered for a different range or a different core/ tree than this run's theirs; every other line is incomparable." >&2
+elif [ "$hard_gone" -gt 0 ] && [ "$hard_new" -eq 0 ]; then
+  cause=BLOCKERS-RESOLVED
+  echo "  cause: BLOCKERS-RESOLVED — ${hard_gone} HARD-* row(s) in the approved region no longer render, none is new, and the refs are unchanged: the blockers were resolved after this report was rendered. That is the adjudication loop's own work, not a finding hidden from the approval. Re-render the region from the tree as it now stands and re-approve it." >&2
+  printf '%s\n' "$gone_rows" | sed 's/^/    resolved: /' >&2
+else
+  cause=UNDECIDED
+  echo "  cause: UNDECIDED — the fresh render carries ${hard_new} HARD-* row(s) the approved region lacks (a finding the approval never saw), or the difference is outside the blocking list. Read the diff." >&2
+fi
 echo "  Diff (want vs report):" >&2
 diff <(printf '%s\n' "$want") <(printf '%s\n' "$got") >&2 || true
+[ "$cause" = BLOCKERS-RESOLVED ] && exit 3
 exit 1
