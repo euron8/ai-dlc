@@ -249,7 +249,7 @@ RECORDS="$(awk '
       # up to the em/en dash or hyphen separator
       if (match(s,/^\[[^]]*\]/)) suppcat=substr(s,RSTART+1,RLENGTH-2)
       sub(/^\[[^]]*\][[:space:]]*/,"",s)
-      sub(/[[:space:]]*[—–-][[:space:]].*$/,"",s)
+      sub(/[[:space:]]*(—|–|-)[[:space:]].*$/,"",s)
       gsub(/^[[:space:]]+|[[:space:]]+$/,"",s)
       supp=s
     }

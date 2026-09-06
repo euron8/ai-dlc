@@ -60,7 +60,7 @@
 #        additive, so `## Rule 29 -- <consumer thing>` and core's `### Rule 29 --
 #        Steering budget` render into one merged rulebook, and "Rule 29" in a gate
 #        log, retro finding or dispatch brief has two referents. E6 could never see
-#        it: rule headings carry no `[.—]` terminator and the anchor grammar above
+#        it: rule headings carry no `(\.|—)` terminator and the anchor grammar above
 #        deliberately matches only check/step ids, so a rule number never reached
 #        the collision arm at all. Measured on the reference consumer before
 #        shipping: EIGHT live collisions, zero false positives — and six of the
@@ -432,18 +432,18 @@ bold_anchors_of_file() {
 #
 # ALPHABETIC IDS AND THE `—` TERMINATOR. This was numeric-and-dot-only for four releases,
 # while `reconcile/relabel-extension-checks.sh` and `reconcile/layer-drift.sh` had ALREADY
-# widened their ANCHOR_RE to `[A-Z]{1,3}[0-9]*` and `[.—]`. The two pairs forked in
+# widened their ANCHOR_RE to `[A-Z]{1,3}[0-9]*` and `(\.|—)`. The two pairs forked in
 # silence: the rewriter could relabel `## Check AP — …` and the detector could not see it,
 # so the reference consumer's `Check AP` and `Check VH` were live, unloadable, and absent
 # from every report. I47 now binds this line to that ANCHOR_RE as well, so the fork cannot
 # reopen. Measured before widening: across core and the reference consumer the alphabetic
 # branch harvests exactly `H1 H2 AP VH` and nothing else, and the `—` terminator harvests
 # no numeric id at all (control: the numeric branch is unchanged at 171 core matches).
-CHECK_HEAD_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[[:space:]]*[.—]'
+CHECK_HEAD_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[[:space:]]*(\.|—)'
 defined_anchors() {
   [ -f "$1" ] || return 0
   { grep -Eho "$CHECK_HEAD_RE" "$1" 2>/dev/null \
-      | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//' | sed -E 's/[[:space:]]*[.—]$//'
+      | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//' | sed -E 's/[[:space:]]*(\.|—)$//'
     bold_anchors_of_file "$1"
   } | sort -u
 }
@@ -458,10 +458,12 @@ defined_anchors() {
 # harvester feeds them an id whose title comes back EMPTY — and an empty title routes the
 # collision arm into its RESTATES branch, where `heading_labelled` can never clear it. That
 # is the "remedy that does not remedy" this function's own header records, reached from the
-# other direction. The terminator is spelled as an ALTERNATION rather than the bracket
-# class `[.—]` used in the shell grammar: a byte-oriented awk treats a multibyte `—` inside
-# brackets as three separate bytes, so `sub()` would strip one of them and leave the rest in
-# the title. The BOLD arm keeps its `\.` for the reason `bold_anchors_of_file` states.
+# other direction. The terminator is spelled as an ALTERNATION, never as a bracket class: a
+# byte-oriented awk (any awk under the C locale) treats a multibyte `—` inside brackets as
+# three separate bytes, so `sub()` would strip one of them and leave the rest in the title.
+# `CHECK_HEAD_RE` above spells its terminator the same way for the same reason, and `S10` of
+# `scripts/validate-shell-portability.sh` refuses the bracket form in every tracked shell file.
+# The BOLD arm keeps its `\.` for the reason `bold_anchors_of_file` states.
 heading_title() { # heading_title <file> <anchor>
   awk -v a="$2" "$NRM_FN"'
     $0 ~ ("^#{2,4}[ \t]+(Check[ \t]+)?" a "[ \t]*(\\.|—)") || $0 ~ ("^\\*\\*(Check[ \t]+)?" a "\\.") {
@@ -508,7 +510,7 @@ heading_labelled() { # heading_labelled <file> <anchor>
 # consumer to rename ids in.
 anchor_form() { # anchor_form <file> <id> -> the id carrying the terminator its heading uses
   local m
-  m="$(grep -Ehom1 "^#{2,4}[[:space:]]+(Check[[:space:]]+)?$2[[:space:]]*[.—]" "$1" 2>/dev/null)"
+  m="$(grep -Ehom1 "^#{2,4}[[:space:]]+(Check[[:space:]]+)?$2[[:space:]]*(\.|—)" "$1" 2>/dev/null)"
   if [ -n "$m" ]; then
     printf '%s' "$m" | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//'
     return

@@ -26,7 +26,13 @@
 #
 # THE BRACKET-CLASS `\t` RULE IS NOT HERE. `I71` in the enforcement map already owns it, with
 # a narrowing this scan does not reproduce -- a crude version reports 26 hits, nearly all of
-# them `awk`, where the class IS a tab. Cite the invariant; do not restate it.
+# them `awk`, where the class IS a tab. Cite the invariant; do not restate it. The bracket-class
+# MULTIBYTE rule IS here, as S10: `I71` never covered it, and an earlier revision of this
+# paragraph read as though it did.
+#
+# THE WHOLE SCAN RUNS UNDER `LC_ALL=C`, for S10's sake: its pattern is a raw byte range that a
+# UTF-8 grep rejects as an illegal byte sequence. The other nine arms are pure ASCII and answer
+# identically under either locale.
 #
 # Because the finding set is empty, `core/fixtures/shell-portability/` is the ONLY evidence
 # any of these arms works. Every arm self-probes before it touches the corpus.
@@ -34,6 +40,7 @@
 # Usage: validate-shell-portability.sh [--quiet]
 # Exit:  0 = clean, 1 = at least one finding, 2 = usage/environment.
 set -uo pipefail
+export LC_ALL=C
 
 QUIET=0
 case "${1:-}" in
@@ -115,6 +122,48 @@ S7_WHY="a backreference in an \`awk\` \`sub()\`/\`gsub()\` replacement. awk has 
 # tool calls, which no tracked file records. `.claude/rules/tool-hazards.md` carries that half.
 S9_PAT="git[[:space:]]+grep[^|;]*\\\\(b|s)"
 S9_WHY="\`\\b\` or \`\\s\` in a \`git grep -E\` expression. git's ERE is not this machine's grep: it implements neither escape and returns a CLEAN ZERO rather than an error, so the search reads as a proven absence. Measured: \`git grep -cE '\\bMODEL_MAX\\b'\` answers 0 where the control without the escape answers 11. Use \`[[:space:]]\`/\`[[:alnum:]]\` boundaries, or \`git grep -P\`."
+# S10 IS THE ARM THIS FILE'S HEADER SAID `I71` OWNED, AND `I71` DOES NOT: it binds `\t` inside
+# a bracket class and nothing else. A MULTIBYTE character inside a bracket class is the other
+# half of the same hazard and it is the worse half, because it is correct under the locale
+# every interactive session runs and wrong under the one every CI runner and every `env -i`
+# gets. Under `LC_ALL=C` a bracket class holds BYTES: `[—–-]` is seven members, a match lands
+# on the em-dash's LAST byte, and `sub()`/`s///` strips one byte and leaves two behind in the
+# extracted value, which then joins against nothing. Measured on the shipped tree before this
+# arm: `validate-suppression-lifetime.sh` read every well-formed `**Suppresses:** [core] 32 —`
+# as `32` followed by two stray bytes under `env -i PATH=/usr/bin:/bin`, so every suppression
+# was "not a check in the catalog" and the remediation guard's SUPPRESSED carve-out vanished;
+# the check-heading grammar's `[.—]$` strip left the same two bytes on every em-dash heading in
+# four scripts bound byte-identical by I47/I15. The fix is an ALTERNATION, `(—|–|-)` /
+# `(\.|—)`, which is a byte SEQUENCE under both locales and behaves identically in `awk`,
+# `sed -E` and `grep -E` -- probed in all three on the em-dash, the en-dash, the hyphen and a
+# no-separator near-miss before this shipped.
+#
+# THE PATTERN IS A RAW BYTE RANGE AND ONLY PARSES UNDER THE C LOCALE. `[\200-\377]` is
+# `grep: illegal byte sequence` under a UTF-8 locale, which is why this script pins `LC_ALL=C`
+# at the top rather than per arm: every other arm is pure ASCII and reads identically either
+# way, and one locale for the whole scan is the form a reader can verify.
+#
+# FALSE-POSITIVE SET: EMPTY over the tracked shell corpus, after two narrowings and one
+# subtraction, each measured on the census that found the 23 offending lines in 9 files:
+#   1. a REGEX CONTEXT must precede the class on the line -- `grep`, `sed`, `awk`, `sub(`,
+#      `match(`, `~`, or a quoted assignment (`NAME="…"`), which is where every non-inline
+#      grammar in this corpus lives. Without it the arm reports `ok "… […] …"` message
+#      prose in two fixture lines, where the bracket is a literal string and harmless.
+#   2. the class may hold NO WHITESPACE. A bracketed prose aside (`[resolved by basename …]`)
+#      is not a class, and every real class in the census was whitespace-free.
+#   3. PYTHON is subtracted by language, the S7 precedent: `re.compile(` on the line, or a
+#      raw-string continuation line (`r"…"`), marks a program whose `re` is unicode-aware
+#      regardless of locale. Measured: the four python sites answer identically under both
+#      locales, and rewriting them would be churn the defect does not ask for.
+# A comment line is skipped, as in S1-S7: the prose that explains this arm names the class.
+S10_HB="$(printf '\200-\377')"
+# `.*` and not `[^#]*` between the context and the class: the heading grammar this arm was
+# written against carries `#{2,4}` BEFORE its terminator class, and the first cut's `[^#]*`
+# could not cross it -- it reported 12 of the 23 lines the census found and read as a pass on
+# the other eleven. A regex that cannot spell its own subject scores it as a non-instance.
+S10_PAT="(grep|sed|awk|sub\\(|match\\(|~|[A-Za-z_][A-Za-z0-9_]*=[\"']).*\\[[^][:space:]]*[${S10_HB}][^][:space:]]*\\]"
+S10_SKIP="re\\.compile\\(|^[^:]+:[0-9]+:[[:space:]]*r[\"']"
+S10_WHY="a MULTIBYTE character inside a bracket class in a shell, awk, sed or grep expression. Under the C locale -- every CI runner with LANG unset, every \`env -i\` -- the class holds the character's BYTES, not the character: a match lands on its last byte, a strip leaves the other two behind in the extracted value, and the value joins against nothing. Measured: \`[—–-]\` split every \`**Suppresses:**\` id in the suppression-lifetime validator so no SUPPRESSED carve-out existed under \`env -i\`. Spell it as an ALTERNATION -- \`(—|–|-)\`, \`(\\\\.|—)\` -- which is a byte sequence under both locales."
 S8_PAT="(show|cat-file -p|ls-tree|archive|diff)[[:space:]]+<[^>]+>:"
 S8_WHY="an UNQUOTED git rev-path in shipped instruction text. A reader who binds the ref to a variable and pastes this into zsh loses the character after the colon: \`:c\` and \`:t\` are history modifiers that consume it, so \`git show \$THEIRS:templates/x\` reports \`fatal: ambiguous argument 'ca1fb6eemplates/x'\` -- and any \`>\` redirect in the same line still creates the target as a 0-byte file that the next command reads and reports on. Render it quoted: \`git show \"<theirs>:<path>\"\`."
 
@@ -129,7 +178,7 @@ S2_SKIP=""; S3_SKIP=""; S4_SKIP=""; S5_SKIP=""; S6_SKIP=""; S8_SKIP=""; S9_SKIP=
 # lands and an awk backreference in the same file is still caught.
 S7_SKIP="re\\.g?sub\\("
 
-ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S9"
+ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S9 S10"
 
 # Two more per-arm columns, declared for EVERY arm for the reason the SKIP block above gives:
 # under `set -u` a missing one aborts the scan mid-way, and an aborted scan prints FEWER
@@ -146,10 +195,10 @@ ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S9"
 # motivated this arm were comments. `keep` scans them.
 S1_CORPUS=shell; S2_CORPUS=shell; S3_CORPUS=shell; S4_CORPUS=shell
 S5_CORPUS=shell; S6_CORPUS=shell; S7_CORPUS=shell; S8_CORPUS=instr
-S9_CORPUS=shell
+S9_CORPUS=shell; S10_CORPUS=shell
 S1_COMMENTS=skip; S2_COMMENTS=skip; S3_COMMENTS=skip; S4_COMMENTS=skip
 S5_COMMENTS=skip; S6_COMMENTS=skip; S7_COMMENTS=skip; S8_COMMENTS=keep
-S9_COMMENTS=skip
+S9_COMMENTS=skip; S10_COMMENTS=skip
 
 # Corpus: every tracked shell file except this one and its own mutation battery.
 #
@@ -209,6 +258,7 @@ sed -E 's/a\sb/c/' f
 awk '{ gsub(/(a)b/, "\1x") }' f
 git -C <dist> show <theirs>:templates/settings.json.template > "$t"
 git grep -nE '\bMODEL_MAX\b' -- core/
+awk '{ sub(/[[:space:]]*[—–-][[:space:]].*$/, "", s) }' f
 BADEOF
 cat > "$probe/good.sh" <<'GOODEOF'
 sed -i.bak 's/a/b/' f && rm -f f.bak
@@ -221,6 +271,11 @@ git -C <dist> show "<theirs>:templates/settings.json.template" > "$t"
 git show HEAD:templates/settings.json.template > "$t"
 git grep -nE '[[:space:]]MODEL_MAX' -- core/
 grep -oE '\bLR-[0-9]+\b' f
+awk '{ sub(/[[:space:]]*(—|–|-)[[:space:]].*$/, "", s) }' f
+HEAD_RE='^#{2,4}[[:space:]]+[0-9]+[[:space:]]*(\.|—)'
+ok "prose naming a class in a message ([…]) is a string, not a class"
+    r"^#{2,4}[ \t]+(?:Check[ \t]+)?([0-9]+)[ \t]*[.—]")
+SECTION_RE = re.compile(r'^## Sprint (\d+) [—\-]+ (.+)')
 # mapfile and declare -A and setsid named in a comment are prose, not code
 GOODEOF
 
@@ -266,6 +321,6 @@ else
 fi
 
 if [ "$fail" -eq 0 ]; then
-  say "validate-shell-portability: PASS -- $n_shell shell file(s) + $n_instr core file(s), 9 arms (S1 sed -i, S2 mapfile, S3 declare -A, S4 setsid, S5/S6 backslash-s, S7 awk backreference, S8 unquoted rev-path, S9 git-grep ERE escape), every arm probed in both directions."
+  say "validate-shell-portability: PASS -- $n_shell shell file(s) + $n_instr core file(s), 10 arms (S1 sed -i, S2 mapfile, S3 declare -A, S4 setsid, S5/S6 backslash-s, S7 awk backreference, S8 unquoted rev-path, S9 git-grep ERE escape, S10 multibyte bracket class), every arm probed in both directions."
 fi
 exit "$fail"

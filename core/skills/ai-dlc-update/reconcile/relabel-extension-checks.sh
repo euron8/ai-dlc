@@ -69,11 +69,11 @@ EXT_DIR="$SKILL_DIR/extensions"
 # this pair widened for `### H1.` and that pair did not, and no check compared the pairs: a
 # rewriter that could already relabel `## Check AP — …` alongside a detector that could not
 # report it, green for four releases. Any widening now moves all four in one release.
-ANCHOR_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[[:space:]]*[.—]'
-core_num_stream() { grep -oE "$ANCHOR_RE" | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//; s/[[:space:]]*[.—]$//'; }
+ANCHOR_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[[:space:]]*(\.|—)'
+core_num_stream() { grep -oE "$ANCHOR_RE" | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//; s/[[:space:]]*(\.|—)$//'; }
 
 # RULE numbers are a SECOND namespace and need their own grammar: a rule heading
-# (`### Rule 29 -- Steering budget`) carries no `[.—]` terminator, so ANCHOR_RE
+# (`### Rule 29 -- Steering budget`) carries no `(\.|—)` terminator, so ANCHOR_RE
 # above matches none of the 31 rules in core's SKILL.md — verified, 0 of 31. That
 # is why this pass exists separately rather than as a widened ANCHOR_RE: teaching
 # the check grammar the word `Rule` would fold `Rule 29` and check `29` into one
@@ -140,7 +140,7 @@ while IFS= read -r ext; do
     # This extension's heading at that anchor, if any, and not already labelled. The
     # separator class matches ANCHOR_RE, so `### 24. T`, `### Check 24. T` and
     # `## Check AP — T` all resolve; requiring a literal `. ` skipped the last two.
-    anchor_at="^#{2,4}[[:space:]]+(Check[[:space:]]+)?${n}[[:space:]]*[.—][[:space:]]*"
+    anchor_at="^#{2,4}[[:space:]]+(Check[[:space:]]+)?${n}[[:space:]]*(\.|—)[[:space:]]*"
     hd="$(grep -nE "$anchor_at" "$ext" | grep -v '\[ext:' | grep -v '\[core\]' | head -1)"
     [ -n "$hd" ] || continue
 
