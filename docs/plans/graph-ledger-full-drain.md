@@ -37,6 +37,120 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 66 SHIPPED AS `v0.518.0`, ONE RELEASE CLOSING A NO-`PC` DEFECT THAT BLOCKED EVERY WORKTREE HAND'S PUSH, WITH TWO ENTRIES FILED AND NOT FIXED. THE CONSUMER DID NOT PULL, SO THE GAP IS TWO AND PENDING IS TWO, AND THE PULL IS OWED, NOT REQUIRED. THE SWEEP IS NOT EMPTY: ONE `PC-S308-*` CANDIDATE IS SCOPED, MEASURED AND DELIBERATELY UNSTARTED, AND UNFILED IS 18.
+
+This block replaces the batch-65 record below it. Every figure here was re-derived on 2026-09-06
+after the merge, against the working tree with the controls in the same invocation; re-derive
+them again rather than reading them.
+
+**`VERSION` IS `0.518.0`, SO BATCH 67 RELEASES AS `0.519.0`.** Re-derive `VERSION` and add one.
+Batch 66 merged once: `11ebb342` (PR #659, squash, `v0.518.0`) closing `BL-190`. Rotated (live
+89 → 88, archive 102 → 103), `--check` PASS before `--apply`, resolving against the merge sha.
+**Receipt histogram after the rotation: 76 receipts, all exit 1 — ZERO incidental closes.** No
+correction release. **The fourteenth batch opened by a peer's handoff** (action 9's message from
+`ai-dlc-52`), so it scoped itself from its own ranking and stated the choice in its first ping.
+**No `PC-` id was cited**, so `named_absorbed()` has nothing to join and the consumer's ledger
+cannot move on this release.
+
+**BL-190: EVERY GIT CALL IN `validate-claude-rules.sh` NOW ANSWERS ABOUT THE REPOSITORY IT WAS
+POINTED AT.** Git exports `GIT_DIR` ABSOLUTE to any hook running from a linked worktree, and
+nothing in that program pinned a repository. **The WRITE:** A1's probe builds a `mktemp` repo by
+upward DISCOVERY, so the inherited environment sent its `git add -A -f` at the caller's index —
+measured on a clone with a linked worktree, **757 tracked paths to 3**, control unset 757 to 757,
+eight arms then failing closed and every one reading as a corpus defect. **The READ, which is
+silent and worse:** `a1_offenders()` and `glob_matches()` enumerate the corpus with a bare
+`git ls-files`, so A1 printed `ok` over a corpus it never opened — measured against a tree carrying
+a real tracked `.claude/settings.json` and a victim clean under `.claude/`, clean environment
+CONVICTS and inherited environment ACQUITS.
+
+**THE FIRST CUT OF THAT FIX SCRUBBED ONLY THE PROBE SUBSHELL AND WAS WORSE THAN THE DEFECT.** It
+closed the write and left the read redirected, turning a loud clobber into a silent false green;
+an adversarial hand caught it after the branch was gate-green. The shipped scrub is one line at the
+TOP of the program, before any git call. **Three rejected alternatives, each BUILT rather than
+argued:** moving the hook's scrub above the validator dispatch breaks nothing above it and still
+reads 757 → 3 when the validator is invoked directly; `--git-dir=` is refuted by construction
+because `git init -q .` itself honours an exported `GIT_DIR`, so no `.git` is created and A1's
+self-probe goes DEAD; and `unset GIT_DIR` alone is defeated by `GIT_INDEX_FILE`, which git exports
+to a pre-commit hook even from a PRIMARY checkout.
+
+**THREE FIXTURE ARMS, EACH KILLING A BUILD THE OTHER TWO ACCEPT — AND THE THIRD EXISTS BECAUSE OF
+A SEED DEFECT THIS BATCH ALMOST SHIPPED.** A fully reverted fix dies at `m12` (victim `9 -> 3`); a
+subshell-only scrub passes `m12` and dies at `m13`; a scrub narrowed to `unset GIT_DIR` passes both
+and dies at `m12b`. The entry NAMED `GIT_INDEX_FILE` + `GIT_WORK_TREE` as the separating input and
+then drove neither — both arms set `GIT_DIR`, the one variable that build handles. **The assertions
+were correct and the SEED was one property short**, which is the shape that reads as thorough
+coverage.
+
+**AND THE ARM POINTED AT CLOBBERING WAS ITSELF CLOBBERING WHILE REPORTING INTACT.** `git init` under
+an exported `GIT_DIR` **silently succeeds without creating a `.git`**, so a victim seeded that way
+is not a repository and every reading of it describes the OUTER repo. Measured on `m12`'s first
+version: outer `17 -> 9`, both readings taken from that outer repo, which the seed had just
+overwritten to exactly 9 — `v_after -eq v_before` held BY CONSTRUCTION and the arm printed
+`intact at 9` over the wreckage. A count guard cannot catch it. Both arms now assert
+`[ -d "$victim/.git" ]`, driven both ways.
+
+**FILED AND NOT FIXED — BOTH ARE REAL WORK.** `BL-191` (the class: **45 files run `git init`, 42
+scrub nothing**; through the hook the exposure is 1 of 14 and `run_fixtures` is protected, but run
+DIRECTLY — how a hand debugs a fixture — **8 of 8 fixtures clobbered a 757-entry index and 6 did it
+at exit 0 with zero FAILs**; its remedy is a `core/fixtures/lib/preamble.sh` seam plus a binding
+that fails the push when a `run.sh` does not source it, touching 40 shipped files and their ship
+declarations, and its detector's FP set measures **41 flagged of 45** so it ships REPORT-ONLY with a
+downward ratchet). `BL-189` amended, not closed — see below.
+
+**`BL-189`'s MECHANISM WAS REPRODUCED BY COMMITTING ITS DEFECT.** An unescaped backtick pair in a
+fixture's diagnostic string — `` `git init` `` written as PROSE inside a double-quoted string — was
+executed by the shell against this repo. No damage (`core.bare` false, index 757, `HEAD` unmoved),
+but it materialised a `bare = false` line at `.git/config` line 8, appended after `hooksPath`. That
+POSITION is exactly what `BL-189` reads as its tell and said was unreproduced: seeded with the bare
+line stripped and a `hooksPath` key added, a re-init writes `bare` at line 8 and `hooksPath` at 7,
+while a fresh clone writes it at line 4. **So the position is a signature of a re-init on a live
+config; it still does not explain the value `true`, since a re-init writes `false`.** **NO LINT IS
+PROPOSED and the entry says why**: the scan returns **224 executable-line hits**, dominated by python
+heredoc bodies where nothing expands, so it is a ceiling of unknown depth and shipping it would be
+the unmeasured lint `CLAUDE.md` forbids.
+
+**THE LEDGER DID NOT MOVE THIS BATCH.** md5 `7b363a17…` at open and at close, unchanged. **The
+consumer did not pull** — its stamp still reads `0.516.0` / `be47fd24`. **Live 67, cited 49, unfiled
+18**, archive 168, partition control 0. Goal partition **22 DISCHARGED / 27 in flight / 18
+untouched**, overlap 3, discharged-but-invisible 0, TERMINAL **54**. No write to the consumer by this
+session or its three hands; a `graph-46` session was live in the peer list mid-batch and was neither
+messaged nor written to, and the consumer's five dirty paths are all its own `_bmad-output/` state.
+
+**GAP TWO (`0.516.0` installed, `0.518.0` shipped) — PENDING 2 (`BL-185`, `BL-186` at `0.517.0`,
+both PC-backed), AND THE PULL IS OWED, NOT REQUIRED.** Batch 66 cited no `PC-` id, so it added
+nothing to PENDING. A pull is operator-initiated; readiness is not authorization. Re-derive the gap
+before reading this figure.
+
+**THE SWEEP FOR BATCH 67, AND THE STRONGEST CANDIDATE IS ALREADY SCOPED AND MEASURED.**
+`PC-S308-EMIT-REPORT-RUNS-LAYER-DRIFT-AND-UNREGISTERED-DRIFT-TWICE` was fully scoped this batch and
+DELIBERATELY NOT STARTED, because `emit-report.sh` is machinery: it matches the
+`core/skills/ai-dlc-update/**` glob in `reconcile/setup-sites.md`, `apply.sh:219` gates its own
+writes on `emit-report.sh --verify`, and `self-update-gate.sh` on the live range returns
+**`SELF-UPDATE-DEFER` twice plus `SELF-UPDATE-SAFE-STOP`** — no split lands the engine first, so
+step 5 renders on the installed unfixed engine. **It SHIPS ALONE.** Its premise HOLDS and is not
+refuted: `hard-blockers.sh:84` and `emit-report.sh:340` both pass layer-drift `DIST BASE THEIRS
+CONSUMER`, and `:97`/`:333` both pass unregistered-drift `DIST BASE CONSUMER THEIRS`; the `UD_BASE`
+split at `:74-78` moves only under `--post-apply`, which `emit-report.sh` never passes. Cost
+re-measured here: **~20s of a 57s render**, five interleaved reps with the order reversed, spread
+±1s.
+
+**THREE THINGS MAKE THAT DE-DUPLICATION UNSAFE, ALL MEASURED, AND A BATCH-67 SESSION MUST READ THEM
+BEFORE WRITING THE FIX.** (1) `hard-blockers.sh` **SWALLOWS a refusing detector** — stub
+`layer-drift.sh` to `exit 2` and the wrapper exits 0 printing `0 HARD blockers.`; the duplication is
+currently what MASKS that, because `emit-report.sh`'s own `ld_rc` renders `DETECTOR-REFUSED` beside
+the false clean line. (2) **Fix shape (a) breaks `I105`** — its two predicates at
+`validate-enforcement-map.sh:8774-8775` go `invoked` 1 → 0 with `exempt` 0, neither state — and makes
+**four arms of `reconcile-emit-report` vacuous**, including the `E10`/`E11` pair whose stated purpose
+is that neither alone moves a verdict. (3) The rendered **BYTES must not move** (`%-32s %s` padding,
+two-space joins) or every approved report fails `--verify`, which `apply.sh:219` gates writes on.
+**Shape (b) — a rows mode on the wrapper — is the recommendation**: it keeps the base split
+single-sourced, leaves `I105` alone, and fails LOUDLY in that fixture rather than going quiet.
+
+**AMONG THE NO-`PC` RESIDUE**, `BL-191` is the readiest and is this batch's own filing. `BL-187`
+(Rule 21's stated mechanism does not exist), `BL-113` (ships alone, bootstrapping), `BL-122` and
+`BL-148` rank after it. The 17 older unfiled ids are enumerated in action 1b, none filed since
+2026-08-31.
+
 ### BATCH 65 SHIPPED AS `v0.517.0`, ONE RELEASE CLOSING THE TWO `PC-S308-*` CANDIDATES THE CONSUMER FILED ON 2026-09-06, WITH THREE MORE ENTRIES FILED AND NOT FIXED. THE CONSUMER PULLED TO `0.516.0` MID-BATCH, SO THE GAP IS ONE AND PENDING IS TWO, AND THE PULL IS OWED, NOT REQUIRED. THE SWEEP IS NOT EMPTY: ONE NEW `PC-S308-*` CANDIDATE ARRIVED WITH THAT PULL AND UNFILED IS 18.
 
 This block replaces the batch-64 record below it. Every figure here was re-derived on 2026-09-06
@@ -6455,7 +6569,7 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), RANK THE UNFILED CANDIDATES,
-   THEN SCOPE BATCH 66 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
+   THEN SCOPE BATCH 67 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
    instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
    candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
    FROM ANOTHER SESSION** — a cross-session message carrying `READ and FOLLOW …`, which is
@@ -6464,15 +6578,27 @@ so no block written before it changes verdict.
    proceed; the operator can redirect at any ping. **Regardless of who invoked you, batch
    multiple candidates into one release wherever action 2 allows it — and do not merge while a
    hand you dispatched is still out, even on a green gate: batch 63's merged branch was green
-   at every phase when its second adversary returned two BLOCKERs.** The sweep is NOT empty
-   today: the consumer's `0.515.0 -> 0.516.0` pull filed
-   `PC-S308-EMIT-REPORT-RUNS-LAYER-DRIFT-AND-UNREGISTERED-DRIFT-TWICE`, which outranks the
-   no-`PC` residue on provenance; the other 17 unfiled ids are the standing corpus. **Batch 65's
-   two subjects are SHIPPED and ROTATED — do not re-scope them.** A no-`PC` defect found by a
-   batch-65 hand and NOT yet filed is the strongest alternative and blocks other hands:
-   `scripts/validate-claude-rules.sh:99-101` runs `git init` + `git add -A -f` in a `mktemp`
-   dir, and from a linked worktree `GIT_DIR` is absolute, so the probe writes the REAL index
-   (757 files to 3) and every corpus-derived arm fails closed. Batch 65 is SHIPPED as ONE release — `v0.517.0` at `db078cbe` (PR #658) closing `BL-185` and
+   at every phase when its second adversary returned two BLOCKERs, and batch 66's was green
+   when its adversary returned a BLOCKER establishing the shipped fix had made things WORSE.**
+
+   **THE READIEST SUBJECT IS ALREADY SCOPED AND MEASURED, AND IT SHIPS ALONE.**
+   `PC-S308-EMIT-REPORT-RUNS-LAYER-DRIFT-AND-UNREGISTERED-DRIFT-TWICE` was fully scoped at batch
+   66 and deliberately not started: `emit-report.sh` is machinery, `apply.sh:219` gates its own
+   writes on `emit-report.sh --verify`, and `self-update-gate.sh` on the live range returns
+   `SELF-UPDATE-DEFER` twice plus `SELF-UPDATE-SAFE-STOP`, so no split lands the engine first.
+   The premise is confirmed rather than refuted and the cost is ~20s of a 57s render. **Read the
+   batch-66 resume block's three "unsafe" clauses before writing the fix** — the wrapper swallows
+   a refusing detector, fix shape (a) breaks `I105` and vacates four `reconcile-emit-report` arms,
+   and the rendered bytes must not move. Shape (b) is the recommendation. The other 17 unfiled ids
+   are the standing corpus.
+
+   **BATCH 66's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.** `BL-190` closed the
+   `validate-claude-rules.sh` `GIT_DIR` defect that blocked every worktree hand's push. **Its
+   CLASS is live as `BL-191`** — 45 files run `git init`, 42 scrub nothing, 8 of 8 fixtures
+   clobber when run directly and 6 do it at exit 0 — and it is the strongest no-`PC` alternative.
+   Batch 66 is SHIPPED as ONE release — `v0.518.0` at `11ebb342` (PR #659) closing `BL-190`, no
+   `PC-` id cited, rotated, `BL-191` filed and `BL-189` amended, no correction release.
+   Batch 65 is SHIPPED as ONE release — `v0.517.0` at `db078cbe` (PR #658) closing `BL-185` and
    `BL-186`, BOTH PC-backed, both rotated, `BL-187`/`BL-188`/`BL-189` filed and not fixed, no
    correction release; the two batched because neither receipt was closed by the other's fix,
    scored in both directions across two spellings of each fix. Batch 64 is SHIPPED as ONE release —
@@ -7114,9 +7240,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 7b363a17... at batch 64's close: the consumer pulled to 0.515.0 (rotating the S340 candidate) and filed two PC-S308-* in its WORKING TREE; 2c129779... through batch 63's close; it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too, and check the consumer's porcelain, because an uncommitted filing has no -S date
-   wc -l < /tmp/live.txt    # 67 at batch 65's close (the consumer's 0.516.0 pull rotated two and filed one); 66 at batch 64's close (two filed, one rotated); 65 after the consumer's batch-63 pull rotated seven; 72 with the corrected ^#{2,6} grammar through batch 62 (the old ^## one reads one fewer)
-   wc -l < /tmp/unfiled.txt # 18 at batch 65's close; 19 at batch 64's close -- two new PC-S308-* filings in, PC-S340-CHECK-26-READS-A-PARTIAL-... out by the operator's carried rejection (batch 64 cited no PC- id); 18 through batch 63; 20 through batch 62
+   md5 -q "$L"              # 7b363a17... at batch 66's close, UNMOVED across the batch (no consumer pull, no PC- citation); same value at batch 64's close: the consumer pulled to 0.515.0 (rotating the S340 candidate) and filed two PC-S308-* in its WORKING TREE; 2c129779... through batch 63's close; it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too, and check the consumer's porcelain, because an uncommitted filing has no -S date
+   wc -l < /tmp/live.txt    # 67 at batch 66's close, unmoved; 67 at batch 65's close (the consumer's 0.516.0 pull rotated two and filed one); 66 at batch 64's close (two filed, one rotated); 65 after the consumer's batch-63 pull rotated seven; 72 with the corrected ^#{2,6} grammar through batch 62 (the old ^## one reads one fewer)
+   wc -l < /tmp/unfiled.txt # 18 at batch 66's close, unmoved; 18 at batch 65's close; 19 at batch 64's close -- two new PC-S308-* filings in, PC-S340-CHECK-26-READS-A-PARTIAL-... out by the operator's carried rejection (batch 64 cited no PC- id); 18 through batch 63; 20 through batch 62
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -7124,8 +7250,12 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 67 LIVE CANDIDATES, 49 CITED, 18 UNFILED** — re-derived at batch 64's
-   close after its merge (md5 `b1e78692…`, archive 168; the consumer pulled to `0.515.0`
+   **THE BASELINE IS 67 LIVE CANDIDATES, 49 CITED, 18 UNFILED** — re-derived at batch 66's
+   close after its merge (md5 `7b363a17…`, archive 168; the consumer did NOT pull during batch 66
+   and batch 66 cited no `PC-` id, so all four figures are unmoved from batch 65's close and the
+   ledger is byte-identical — an unmoved ledger across a batch that shipped is the NORMAL case,
+   because closing an entry here changes what the DISTRIBUTION has done and the consumer's ledger
+   only moves on a pull; batch 65's close read the same 67 / 49 / 18 at the same md5; the consumer pulled to `0.515.0`
    mid-batch, which rotated the `S340` candidate the operator's rejection had been waiting on,
    and then filed two `PC-S308-*` candidates in its working tree, uncommitted at close, so
    their `-S` date is empty exactly like the impossible-id control's; batch 64 cited no `PC-`
