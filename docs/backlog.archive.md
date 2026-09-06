@@ -6969,3 +6969,87 @@ the `MATCH` timestamp discarded — are `BL-184`'s.
 verify: sh d=$(bash core/fixtures/gate-adjudication/seed.sh) || exit 9; . "$d/env.sh"; python3 -c 'import json,sys;p,x=sys.argv[1],sys.argv[2];D=json.load(open(p));[v.update(verdict="FAIL") for v in D["verdicts"] if v["check_id"]==x];open(p,"w").write(json.dumps(D))' "$VERDICT" "$X"; r() { AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" AI_DLC_ESCALATIONS="$ESC_INFORCE" AI_DLC_GATE_METRICS="$GM_BEFORE" bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" "$@" 2>&1; }; g=$(r --transcript-dir "$TDIR"); grc=$?; f=$(r --transcript-dir "$TDIR_FORGED"); frc=$?; n=$(r); nrc=$?; rm -rf "$d"; [ "$grc" -eq 0 ] && grep -q 'FAIL is covered by an' <<<"$g" && [ "$frc" -eq 1 ] && grep -q 'unverified-citation: 1 in-force' <<<"$f" && ! grep -q 'FAIL is covered by an' <<<"$f" && [ "$nrc" -eq 1 ] && grep -q 'no-transcript' <<<"$n"
 
 
+## BL-176 — nothing binds a gate-adjudication verdict file to the dispatch that produced it, and the remediation guard picks the live verdict by lexical stem order, so a hand-written file at a later-sorting nonce becomes the gate's verdict
+
+**LANDED (v0.515.0, verified 24b957e4).**
+
+Distribution-internal, no `PC-` id; DEFECT tier — the reference consumer's history holds one
+such file (`gate-adjudication/planning-20260902T160000Z.verdict.json`, a round nonce no
+dispatch generated, assembled by the lead from a prior pass's verdicts and a two-check
+re-verify's), and both readers accepted it. Found by the batch-57 adversarial hand while
+refuting the rejection of the consumer's Check-26 partial-re-verify candidate, and deliberately
+not fixed there: the fix's shape is a binding to a dispatch record, which is a different
+subsystem from the verdict reader.
+
+`core/scripts/validate-gate-adjudication.sh` anchors freshness on the filename stem matching
+the in-file `gate_nonce`, both of which the lead can write; `grep -c` for a spawn or dispatch
+ledger over that file returns 0 against a control of 21 for `gate_nonce`. The guard at
+`core/hooks/ai-dlc-gate-remediation-guard.sh:162-170` then selects the live verdict by lexical
+stem order, which a hand-chosen round timestamp wins. `team-roles/gate-adjudicator.md:78`
+requires the check-id set to equal the derived escalated set exactly, and
+`_gate-procedures.md` now says a re-dispatch is a whole new dispatch, so the rule is stated in
+every place the lead reads; what is missing is the mechanism.
+
+**THE FILED SHAPE OF THE FIX — `adjudicator_agent_id` joined against a spawn-ledger row — IS
+REFUTED, AND ITS OWN SUBJECT IS THE COUNTEREXAMPLE.** Measured over the reference consumer's
+195 verdicts (193 with a conforming nonce): that field matches a spawn-ledger `.name` for 92,
+and the round-nonce file's `gate-adjudicator-s308-planning-full` is one of the 92 — a real
+dispatched agent, which that consumer's own subagent transcript shows WROTE the file at
+14:12:35Z. The field is also free-form in practice (`gate-adjudicator (fresh dispatch by
+team-lead)`, `MERGED: gate-adjudicator-s307-deploy`, `gate-adjudicator@planning-20260810T172728Z`),
+so the join accepts the subject and refuses a hundred legitimate passes.
+
+What separates it is ORDER, in timestamps only a hook writes. The nonce is minted at gate
+ENTRY, before the dispatch, so on a real pass the work postdates the nonce; here the
+adjudicator was dispatched at 13:57:46Z under a nonce of 16:00:00Z. Over the 137 verdicts
+post-dating the spawn ledger's first row, the write event follows the nonce by 41s–4002s on 93
+of them and PRECEDES it on 9 — six of those nine at a round minute, against 3.2 expected under
+a uniform second. The class is nine files, not one.
+
+Landed as arm 7a of `core/hooks/ai-dlc-gate-remediation-guard.sh` and the dispatch-binding arm
+of `core/scripts/validate-gate-adjudication.sh`, joining a new
+`gate-adjudication/.verdict-writes.jsonl` (written at `PreToolUse` when the harness attributes
+the write to a dispatched `agent_id`) and the existing `spawn-ledger.jsonl`. Read arm 7a's
+header for the window measurement and the enumerated false-refusal set.
+
+**The batch-63 adversary's round, each finding with what it changed.** (1) With NO pass in the
+directory bound, the first cut fell through to ALLOW and wrote no flow-log event — a forged
+clean pass beside an unbound failing one acquitted a live FAIL, measured on a three-tree
+differential; the fallback is now the newest FAILING pass whatever its binding, logged as
+`itself unbound`, with the all-clean twin still allowing. (2) `spawn-ledger.jsonl` matched no
+guarded root, so a denied lead could rewrite it with Write and one hand-written
+`gate-adjudicator` row inside the window lifted the deny; it is a guarded root now, and a
+dispatched agent's edit still exits at arm 2. (3) The 900s window was overridable from the
+environment and its upper bound was asserted by nothing, so a window of 10^9 passed the receipt
+and all three fixtures; both readers carry it as a hard constant now and the 899s/901s pair
+holds the bound from both sides. (4) The validator fixture's one-row ledger made its dispatch
+the EPOCH, so every "binds" arm passed by exemption rather than by binding; the seed carries an
+epoch row now and the pre-migration arm alone uses the one-row shape. (5) The header's
+margin did not reproduce: over 137 post-epoch verdicts the largest sound dispatch gap is 217s
+(p50 21s, ten gaps in (60s, 900s], 18 above), so 900s sits about 4x above it and not 15x; and
+of the 18 unbound, nine are the defect class by transcript write events while 14 read as
+legitimate by `generated_at`, a field the lead writes. The header says both. What that means
+going forward is stated there too: a Bash-written verdict whose dispatch row is missing or
+more than 900s late is refused and costs one re-run; the consumer's live pass today is
+`bound-dispatch`, the validator exits 0 on it with the real ledgers, and the forged file
+blocks as the control. `.verdict-writes.jsonl` inherits its durable classification from the
+`gate-adjudication` directory entry in `pipeline-state-paths.json` and is not ignored on the
+consumer; I95 cannot see the path because the guard builds it from the gate-directory
+variable, which is an omission rather than a misclassification.
+
+**What the arm does not catch, and what no arm here can.** It catches a nonce minted in its own
+FUTURE — the measured class, nine files — not forgery as such: a lead that mints the nonce at
+now, dispatches any gate-adjudicator (B2's `role` is read from the lead's own dispatch prompt
+by `ai-dlc-dispatch-guard.sh`), and writes the verdict itself is `bound-dispatch` and
+indistinguishable from a real pass; measured, a forged clean verdict at a nonce 30s before a
+real dispatch allows. `nocorpus` and `exempt` allow because installing this must change no
+verdict on disk. Through Bash the lead can rewrite both ledgers, as it can every artifact the
+guard reads; that is the guard's limit, stated in its header, and not this arm's. The guard's
+jq and the validator's python are two implementations of one binding and no invariant binds
+them; they were cross-scored over the consumer's 195 stems once, by hand.
+
+verify: sh V=core/scripts/validate-gate-adjudication.sh; [ -f "$V" ] || exit 9; D="$(mktemp -d)" || exit 9; G="$D/_bmad-output/gate-adjudication"; mkdir -p "$G" || { rm -rf "$D"; exit 9; }; I="$(bash "$V" --expected implementation)" || { rm -rf "$D"; exit 9; }; [ -n "$I" ] || { rm -rf "$D"; exit 9; }; mk() { python3 -c 'import json,sys;n=sys.argv[2];json.dump({"schema_id":"GATE_ADJUDICATION_VERDICT v1","gate_type":"implementation","gate_series_id":n,"gate_nonce":n,"generated_at":sys.argv[3],"adjudicator_agent_id":"gate-adjudicator-seed","catalog":"core","verdicts":[{"check_id":c,"verdict":"PASS","evidence":"receipt"} for c in sys.argv[4:]]},open(sys.argv[1],"w"))' "$G/$1.verdict.json" "$1" "$2" $I; }; S=implementation-20260715T140322Z; F=implementation-20260715T160000Z; mk "$S" 2026-07-15T14:05:07Z; mk "$F" 2026-07-15T16:00:00Z; printf '{"v":1,"ts":"2026-07-15T14:03:42Z","sprint":1,"name":"gate-adjudicator-seed","role":"gate-adjudicator"}\n' > "$D/_bmad-output/spawn-ledger.jsonl"; bash "$V" implementation "$G/$S.verdict.json" >/dev/null 2>&1 || { rm -rf "$D"; exit 1; }; O="$(bash "$V" implementation "$G/$F.verdict.json" 2>&1)"; r=$?; rm -rf "$D"; [ "$r" -eq 1 ] || exit 1; case "$O" in *"bound to NO dispatch"*) exit 0 ;; esac; exit 1
+
+
+
+
