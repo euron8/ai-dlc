@@ -307,6 +307,17 @@ true catches. Record the tally per finding and propose removal or narrowing
 as a process improvement — machinery is removed through the same Step 4
 mechanism that added it.
 
+**Presence is not exercise, and no scan above separates them.** In the same
+pass, for each of those items, decide whether THIS sprint produced evidence it
+fired: a gate log line naming it, a review finding citing it, a refused action,
+or a change made to satisfy it. Derive that from the artifacts the sprint
+already committed — gate logs, review findings, validator output — never from
+recall. An item with no such evidence is UNEXERCISED, which is two states: its
+subject did not arise this sprint, or nothing in the pipeline can reach it. Say
+which. An unreachable item is a Step 4 improvement — wire it to a layer that
+runs, narrow it to a subject that does arise, or remove it. Record the per-item
+verdict under `## Rule File Audit` beside the accretion tally.
+
 **The lead dispositions every finding and authors every rewrite inline.**
 Rule rewriting is a governance judgment expressed as text, tightly coupled
 to disposition; routing the decided text-insertion to a dev is pure overhead

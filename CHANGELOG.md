@@ -15,6 +15,68 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.509.0] - 2026-09-05
+
+### `PC-S308-SUPPRESSION-LIFETIME-RESOLVES-GATE-METRICS-FROM-CWD-BEFORE-PROJECT-ROOT` — a suppression's lifetime is counted against the project's own timeline, never the caller's cwd
+
+`validate-suppression-lifetime.sh` resolved its default `gate-metrics.jsonl` by trying three
+cwd-relative candidates before the one under the resolved root, so the remediation guard's
+SUPPRESSED carve-out (arm 7b, 0.505.0) counted a suppression's lifetime against whichever
+project the hook's caller was standing in. The reference consumer's pre-push runs the fixture
+suite from its own root, where a real 348-line timeline exists; the seeded two-gate file under
+`AI_DLC_PROJECT_ROOT` was ignored, the seeded entry read expired, and `gate-remediation-deny`
+failed 18 assertions there on every push from 0.505.0 on, reading exactly like the carve-out
+having been deleted, while passing from any root that carries no metrics file — which is why
+this distribution's own suite never saw it. It fails open too: the installed copy, driven
+over that consumer's live escalations file from a cwd carrying a two-gate timeline, listed
+all 17 of its suppressions in force where its own timeline puts 1. Every candidate is now anchored on the resolved
+root (the shape `validate-snapshot-conservation.sh` already had) — which also gives the flat
+and `docs/` layouts a root-anchored form for the first time, so a timeline kept at either is
+found from any cwd rather than only from the root — and the "cannot be counted"
+NOTE no longer tells the operator to run from the project root. Neither caller changed in
+code: the guard already handed the sibling `AI_DLC_PROJECT_ROOT`, and
+`validate-gate-adjudication.sh`'s comment, which said the sibling read the timeline "from
+the same cwd the lead runs verdict.sh in", now says under the sibling's root. Both halves of
+the filed remedy were built and fell. "Fall back to CWD only when no root was given": no root
+is an exit 2, so the clause is unreachable, and the root-then-cwd shape it describes still
+reads a stranger's timeline when the root carries none. "Have the hook pass `--gate-metrics`
+explicitly": a guard naming `LOG_DIR`'s path on every call turned the flat `_bmad-output/`
+layout, the `docs/_bmad-output/` layout and a custom `AI_DLC_STATE_DIR` from ALLOW into
+DENY — the sibling resolves three layouts under the root, and the gate writer emits the
+literal `_bmad-output/implementation-artifacts/` path whatever the state dir is — so that
+hunk, which the first cut shipped with the opposite claim, was reverted on the adversarial
+hand's four-pair differential. Fixture `suppression-lifetime` drives the validator from a cwd
+carrying a decoy timeline, and `gate-remediation-deny` asserts its own cwd-invariance from
+that world — the one the consumer's pre-push runs in — with flat and `docs/` layout worlds
+where the refuted hook denies and the shipped one allows. `BL-178`.
+
+### `PC-S337-RETRO-PROCESS-IMPROVEMENTS-RULE-EXERCISE-AUDIT` — retro's rule-file audit asks whether a rule was EXERCISED this sprint, not only what its text says
+
+Drain of the reference consumer's `retro-push-process-improvements` extension. Every scan in
+`steps/retro.md`'s `#### Rule file audit` judged rule TEXT, and the lead's Class 3 accretion
+pass scored an item nothing in the pipeline can reach at zero false positives against zero
+catches — indistinguishable from an item that fired cleanly all sprint. The pass now asks, per
+item, whether THIS sprint produced evidence it fired (a gate log line, a review finding, a
+refused action, a change made to satisfy it), derived from committed artifacts rather than
+recall; an item with none is `UNEXERCISED`, split into "its subject did not arise" and "nothing
+can reach it", and the unreachable one routes to Step 4 for wiring, narrowing or removal. The
+consumer's local corpus script is neither restated nor required. Eleven lines, no budget
+binds the file, `audit-rule-files.sh` unchanged at 61 findings before and after. `BL-180`.
+
+### Not taken — two `PC-S337-RETRO-*` siblings are already in core, and have been since 0.4.x
+
+`PC-S337-RETRO-PARTY-MODE-TOPOLOGY-CITATION-MANDATE` asks that a retro finding asserting
+infrastructure topology cite an IaC source file and line, with agent consensus not evidence;
+`steps/retro.md` has carried that mandate, strictly stronger (the analyst carries the
+`file:line` in the draft and the lead validates it), under `### 3. Write Retro Document` since
+`9f1d5751`. `PC-S337-RETRO-SPRINT-SHIP-DUAL-COUNTER-PROVENANCE` asks that both counters be
+reported on one fixed template line carrying the run-id; `steps/retro.md` has carried exactly
+that line under `### Sprint-Ship Verification` since `20f2dc14`, and the only delta in the
+consumer's extension is its own requirement-id prefix. Neither id is named in this release's
+commit, because the join would report this release as the one that absorbed them and a
+consumer pulling to it for that reason would get nothing new; both are for the consumer to
+annotate `ADOPTED UPSTREAM` and rotate, which the next brief says.
+
 ## [0.508.0] - 2026-09-05
 
 ### `PC-S337-RETIRED-TOKENS-CANNOT-SAY-IT-SCANNED-NOTHING` — a retired-token scan that opened no core file says so

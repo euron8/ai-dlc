@@ -55,15 +55,21 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
 # Drive the PreToolUse hook. `agent` empty => the LEAD (the harness omits agent_id
 # on the main thread; `ai-dlc-context-sensor.sh:160` reads exactly that field).
-drive() { # <work> <tool> <file_path> [agent_id] [transcript] [hook-override] [gate-metrics]
-  local w="$1" tool="$2" fp="$3" agent="${4:-}" tr="${5:-}" h="${6:-$HOOK}" gm="${7:-}"
+drive() { # <work> <tool> <file_path> [agent_id] [transcript] [hook-override] [gate-metrics] [cwd]
+  local w="$1" tool="$2" fp="$3" agent="${4:-}" tr="${5:-}" h="${6:-$HOOK}" gm="${7:-}" dcwd="${8:-}"
   # AI_DLC_GATE_METRICS is ALWAYS assigned here, empty by default, so no arm can inherit an
   # operator's timeline: arm 7b's carve-out reads it, and a fixture that let it through would
   # count a developer's own gate history toward a seeded suppression's lifetime.
+  #
+  # THE CWD IS A PARAMETER because it is an INPUT to the verdict. Arm 7b calls the sibling with
+  # the project root in the environment and no `--gate-metrics`, and the sibling then locates
+  # the timeline for itself; a fixture that only ever ran from a cwd carrying no
+  # `_bmad-output/` cannot see which of the two roots that search reached.
   jq -nc --arg t "$tool" --arg f "$fp" --arg a "$agent" --arg tr "$tr" \
     '{session_id:"t", tool_name:$t, transcript_path:$tr, tool_input:{file_path:$f}}
      + (if $a == "" then {} else {agent_id:$a} end)' \
-    | CLAUDE_PROJECT_DIR="$w" AI_DLC_GATE_METRICS="$gm" bash "$h" 2>/dev/null
+    | ( if [ -n "$dcwd" ]; then cd "$dcwd" || exit 2; fi
+        CLAUDE_PROJECT_DIR="$w" AI_DLC_GATE_METRICS="$gm" bash "$h" 2>/dev/null )
 }
 denied() { case "$1" in *'"permissionDecision": "deny"'*|*'"permissionDecision":"deny"'*) return 0 ;; esac; return 1; }
 
@@ -621,6 +627,198 @@ if denied "$OUT"; then bad "S8-twin: a record claiming the REMAINING check did n
 else ok "S8-twin: the same record claiming the remaining check (3a) DOES lift"; fi
 rm -rf "$W"
 
+# =============================================================================
+# S12 — CWD-INVARIANCE. The world the consumer's pre-push runs in.
+# =============================================================================
+# THE DEFECT. Arm 7b hands the sibling `AI_DLC_PROJECT_ROOT` and, when AI_DLC_GATE_METRICS is
+# unset, no `--gate-metrics`. The sibling then locates the timeline itself — and it did so
+# from the PROCESS CWD before the root. Every arm above ran from whatever directory the suite
+# was driven in, which in this repo carries no `_bmad-output/`, so the search fell through to
+# the root by accident and the whole 7b family read green. On the reference consumer, whose
+# pre-push runs the suite from a root that DOES carry one, the same arms have been failing.
+#
+# So the invariance is asserted HERE, in the fixture's own arms, rather than left to the
+# caller's choice of directory: `CLAUDE.md` — a unit that is green only from the repo root
+# may be green because that is a cwd where its decoy files do not exist.
+GRD_DECOY="$(mktemp -d "${TMPDIR:-/tmp}/gate-remediation-decoy.XXXXXX")" || GRD_DECOY=""
+GRD_DECOY_GM="$GRD_DECOY/_bmad-output/implementation-artifacts/gate-metrics.jsonl"
+if [ -n "$GRD_DECOY" ]; then
+  mkdir -p "$(dirname "$GRD_DECOY_GM")"
+  : > "$GRD_DECOY_GM"
+  _i=1
+  while [ "$_i" -le 9 ]; do
+    printf '{"ts":"2026-08-%02dT00:00:00Z","check":"7","verdict":"FAIL"}\n' "$((4 + _i))" >> "$GRD_DECOY_GM"
+    _i=$((_i + 1))
+  done
+fi
+
+seed suppressed
+# THE PRECONDITION. Both timelines must exist and DIFFER, or the pair below agrees for a
+# reason that has nothing to do with where the sibling looked.
+if [ -s "$GRD_DECOY_GM" ] && [ -s "$W/_bmad-output/implementation-artifacts/gate-metrics.jsonl" ] \
+   && ! cmp -s "$GRD_DECOY_GM" "$W/_bmad-output/implementation-artifacts/gate-metrics.jsonl"; then
+  ok "S12-pre: the decoy cwd carries its own gate timeline, and it DIFFERS from the workspace's"
+else
+  bad "S12-pre: FIXTURE BROKEN — no decoy timeline, or it is identical to the workspace's; S12 below cannot discriminate"
+fi
+# ...and it must be a timeline that WOULD change the answer: 9 gates against **Expires after:** 3.
+_dn="$(grep -c . "$GRD_DECOY_GM")" || _dn=0
+_wn="$(grep -c . "$W/_bmad-output/implementation-artifacts/gate-metrics.jsonl")" || _wn=0
+if [ "$_dn" -gt 3 ] && [ "$_wn" -le 3 ]; then
+  ok "S12-pre: the decoy records $_dn gates against the entry's 3-gate lifetime, the workspace $_wn — reading the wrong one flips the verdict"
+else
+  bad "S12-pre: decoy=$_dn workspace=$_wn — the two timelines do not straddle the 3-gate expiry, so S12 would pass under either resolution"
+fi
+
+# S12a: S1's ALLOW, driven from a cwd that is a DIFFERENT project with its own gate history.
+OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "" "" "$GRD_DECOY")"
+if denied "$OUT"; then bad "S12a: from a cwd carrying another project's gate timeline the in-force suppression did NOT lift — the licence's lifetime was counted against a stranger's gates, and this is the state the reference consumer's pre-push has been in"
+else ok "S12a: the carve-out lifts from a foreign cwd exactly as it does from the workspace — the timeline is resolved from the project root"; fi
+
+# S12b: THE TWIN, one property apart, from the SAME foreign cwd. Without it, a guard that
+# lifted unconditionally would pass S12a, and cwd-invariance would read as coverage.
+rm -rf "$W"
+seed suppressed-expired
+OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "" "" "$GRD_DECOY")"
+if denied "$OUT"; then ok "S12b: from the same foreign cwd an EXPIRED suppression still DENIES — S12a is coverage, not a blanket lift"
+else bad "S12b: an expired suppression lifted from the foreign cwd — the 7b family is allowing on cwd rather than on the entry"; fi
+rm -rf "$W"
+
+# =============================================================================
+# S13 — THE OTHER TWO LAYOUTS THE SIBLING RESOLVES, AND THE FIX THAT BREAKS THEM.
+# =============================================================================
+# The sibling offers THREE root-anchored candidates, not one:
+# `<root>/_bmad-output/implementation-artifacts/`, `<root>/docs/_bmad-output/
+# implementation-artifacts/`, and the flat `<root>/_bmad-output/gate-metrics.jsonl`. A
+# consumer on either fallback is a consumer this guard must still carve out for.
+#
+# THE WRONG FIX THIS EXISTS TO KILL. The obvious repair for the cwd defect is to make the
+# GUARD name the file — `--gate-metrics "${LOG_DIR}/implementation-artifacts/
+# gate-metrics.jsonl"` on every call. That names ONE of the three, and a named file that does
+# not exist is a lifetime that cannot be counted, so both fallback layouts flip from ALLOW to
+# DENY. It is invisible in the standard layout, which is the only layout every other arm in
+# this file uses, so it needs its own worlds. The gate WRITER emits that literal relative
+# path irrespective of AI_DLC_STATE_DIR, so the guard's own LOG_DIR is not even the right
+# guess to make.
+#
+# W2 — "the guard names the file and the sibling is left resolving from the cwd" — is not
+# killable here: in every world of this fixture the guard is the only caller, and a guard that
+# names the file is right whatever the sibling would have done alone. It is killed where the
+# sibling's OTHER two callers live: `suppression-lifetime`'s world A drives it directly with
+# no flag, and `gate-adjudication`'s S17 drives it through validate-gate-adjudication.sh,
+# which passes no `--gate-metrics` either.
+GRD_STD="_bmad-output/implementation-artifacts/gate-metrics.jsonl"
+grd_relocate() { # <workspace> <destination relative to the workspace> — move the timeline there
+  mkdir -p "$(dirname "$1/$2")" 2>/dev/null
+  mv "$1/$GRD_STD" "$1/$2" 2>/dev/null
+  [ -s "$1/$2" ] && [ ! -f "$1/$GRD_STD" ]
+}
+
+MW13="$(mktemp -d "${TMPDIR:-/tmp}/gate-remediation-m10.XXXXXX")"
+# M10 — the wrong fix, built from the SUBJECT'S OWN predicate: every invocation of the sibling
+# that carries no `--gate-metrics` gets the guard's one guess appended. A mutation keyed on a
+# hand-named line goes vacuous the release somebody rewrites the call.
+m10_open_sites() { awk '/--escalations "\$ESC_FILE"/ && !/--gate-metrics/ {n++} END {print n+0}' "$1"; }
+M10_PRE="$(m10_open_sites "$HOOK")"
+M10_OK=0
+if [ "$M10_PRE" -lt 1 ]; then
+  bad "M10: the guard has no sibling invocation that leaves --gate-metrics off, so the wrong fix cannot be built — either it has already been applied (and S13 below is the arm that says so) or the call was rewritten and this mutation lost its subject"
+else
+  awk '
+    /--escalations "\$ESC_FILE"/ && !/--gate-metrics/ {
+      sub(/--escalations "\$ESC_FILE"/, "--escalations \"$ESC_FILE\" --gate-metrics \"${LOG_DIR}/implementation-artifacts/gate-metrics.jsonl\"")
+    }
+    { print }
+  ' "$HOOK" > "$MW13/m10.sh"
+  M10_POST="$(m10_open_sites "$MW13/m10.sh")"
+  if cmp -s "$HOOK" "$MW13/m10.sh"; then
+    bad "M10: the mutation changed NO bytes — its silence would score as a kill"
+  elif [ "$M10_POST" != "0" ]; then
+    bad "M10: $M10_POST invocation(s) still leave --gate-metrics off after the mutation (was $M10_PRE) — the mutation is partial and any kill it scores is unearned"
+  elif ! bash -n "$MW13/m10.sh" 2>/dev/null; then
+    bad "M10: the copy does not parse; a hook that dies emits nothing, which reads as allowed"
+  else
+    ok "M10: the wrong fix builds — $M10_PRE open invocation(s) now name one explicit path, 0 left open"
+    M10_OK=1
+  fi
+fi
+
+# EVERY M10 DRIVE GETS A FRESH WORKSPACE, and that is not tidiness. Arm 7b's cache key carries
+# the escalations file, the sibling and `${AI_DLC_GATE_METRICS:-${LOG_DIR}/…}` — and NOT the
+# hook. So the mutant and the unmutated hook compute the SAME key in the same workspace, the
+# mutant reads the rows the unmutated call left behind, and it scores ALLOW without ever asking
+# the sibling. Measured: both kills below read SURVIVED that way, which is exactly what a
+# mutation that changes nothing looks like.
+grd_world() { # <case> <destination for the timeline, relative to the workspace>
+  seed "$1"
+  grd_relocate "$W" "$2"
+}
+
+# --- S13a. THE FLAT LAYOUT: <root>/_bmad-output/gate-metrics.jsonl -----------------------
+GRD_FLAT="_bmad-output/gate-metrics.jsonl"
+if grd_world suppressed "$GRD_FLAT"; then
+  ok "S13a-pre: the timeline sits ONLY at the flat fallback, and the standard path is gone"
+else
+  bad "S13a-pre: FIXTURE BROKEN — the timeline did not move to the flat fallback; S13a would re-run S1"
+fi
+OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
+if denied "$OUT"; then bad "S13a: a consumer keeping its timeline at the flat <root>/_bmad-output/gate-metrics.jsonl gets NO carve-out — its in-force suppressions do not exist as far as this guard is concerned"
+else ok "S13a: the carve-out lifts with the timeline at the flat fallback"; fi
+rm -rf "$W"
+if [ "$M10_OK" = "1" ] && grd_world suppressed "$GRD_FLAT"; then
+  OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "$MW13/m10.sh")"
+  if denied "$OUT"; then ok "M10 killed by S13a — a guard that names ONE path denies every consumer on the flat layout"
+  else bad "M10 SURVIVED S13a — naming one explicit path costs the flat layout nothing here, so this world is not testing the wrong fix"; fi
+  rm -rf "$W"
+fi
+# THE TWIN, one property apart: the same flat layout, the same entry, past its expiry.
+if grd_world suppressed-expired "$GRD_FLAT"; then
+  OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
+  if denied "$OUT"; then ok "S13a-twin: an EXPIRED entry on the flat layout still DENIES — S13a's allow is the fallback timeline being COUNTED, not skipped"
+  else bad "S13a-twin: an expired entry lifted on the flat layout — the fallback file is being found and not read"; fi
+else
+  bad "S13a-twin: FIXTURE BROKEN — the expiring timeline did not move to the flat fallback"
+fi
+rm -rf "$W"
+
+# --- S13b. THE DOCS LAYOUT: <root>/docs/_bmad-output/implementation-artifacts/ ------------
+GRD_DOCS="docs/_bmad-output/implementation-artifacts/gate-metrics.jsonl"
+if grd_world suppressed "$GRD_DOCS"; then
+  ok "S13b-pre: the timeline sits ONLY under docs/_bmad-output/, and the standard path is gone"
+else
+  bad "S13b-pre: FIXTURE BROKEN — the timeline did not move to the docs fallback; S13b would re-run S1"
+fi
+OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
+if denied "$OUT"; then bad "S13b: a consumer keeping its timeline under docs/_bmad-output/ gets NO carve-out"
+else ok "S13b: the carve-out lifts with the timeline under the docs fallback"; fi
+rm -rf "$W"
+if [ "$M10_OK" = "1" ] && grd_world suppressed "$GRD_DOCS"; then
+  OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "$MW13/m10.sh")"
+  if denied "$OUT"; then ok "M10 killed by S13b — the same one-path guess denies every consumer on the docs layout too"
+  else bad "M10 SURVIVED S13b — this world does not separate 'the sibling resolves' from 'the guard guesses'"; fi
+  rm -rf "$W"
+fi
+if grd_world suppressed-expired "$GRD_DOCS"; then
+  OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
+  if denied "$OUT"; then ok "S13b-twin: an EXPIRED entry on the docs layout still DENIES — the fallback timeline is read, not merely found"
+  else bad "S13b-twin: an expired entry lifted on the docs layout — the fallback file is being found and not read"; fi
+else
+  bad "S13b-twin: FIXTURE BROKEN — the expiring timeline did not move to the docs fallback"
+fi
+rm -rf "$W"
+
+# --- S13c. THE CONTROL: in the STANDARD layout the wrong fix is INVISIBLE ----------------
+# Without this, M10's two kills above are indistinguishable from a mutant that simply broke
+# the hook, and the reason the wrong fix is tempting would never be visible.
+if [ "$M10_OK" = "1" ]; then
+  seed suppressed
+  OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "$MW13/m10.sh")"
+  if denied "$OUT"; then bad "M10: the mutant also DENIES the standard layout — either it broke the hook outright, so its kills at S13a/S13b are unearned, or the sibling is still resolving from the process cwd"
+  else ok "M10: INVISIBLE in the standard layout — which is why the wrong fix passes every other arm in this file and needs S13a/S13b"; fi
+  rm -rf "$W"
+fi
+rm -rf "$MW13"
+
 # --- THE MUTANTS ------------------------------------------------------------------------
 # Every arm above is ABSENCE-shaped in one direction ("not denied"), so a hook replaced by
 # `exit 0` passes S1 outright. Only a mutant establishes that these arms discriminate.
@@ -756,6 +954,7 @@ if [ -f "$MW/m6-key-drops-escalations.sh" ]; then
 fi
 rm -rf "$W"
 rm -rf "$MW"
+[ -n "$GRD_DECOY" ] && rm -rf "$GRD_DECOY"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "gate-remediation-deny: PASS"; exit 0; fi

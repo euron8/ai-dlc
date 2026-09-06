@@ -244,7 +244,7 @@ CITEEOF
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 # `AI_DLC_STATE_DIR` may be absolute or relative; the role files and
-# `_gate-procedures.md:143` both write it as `${AI_DLC_STATE_DIR:-_bmad-output}`.
+# `_gate-procedures.md:153` both write it as `${AI_DLC_STATE_DIR:-_bmad-output}`.
 # The NAME is what the path patterns below match on (payload paths arrive both
 # absolute and relative, exactly as `ai-dlc-acknowledge.sh:403` handles them).
 _STATE_DIR="${AI_DLC_STATE_DIR:-_bmad-output}"
@@ -522,7 +522,15 @@ elif [ -z "$SUPP_DIR" ]; then
   IN_FORCE_STATUS="no-sibling:validate-suppression-lifetime.sh is under neither ${PROJECT_DIR}/scripts/ai-dlc nor ${PROJECT_DIR}/core/scripts"
 else
   # AI_DLC_GATE_METRICS is the fixture's channel, the same one the gate validator honours; a
-  # live gate lets the sibling locate the timeline itself.
+  # live gate lets the sibling locate the timeline itself, under the PROJECT_DIR handed to it
+  # below and never under the process cwd. This hook does NOT name the path on the sibling's
+  # behalf: the sibling resolves three layouts under that root, and a single path chosen here
+  # turned the flat and docs/ layouts from ALLOW into DENY when it was tried, while the gate
+  # writer (`gate-validation.md`) writes the literal `_bmad-output/...` path whatever
+  # AI_DLC_STATE_DIR says, so LOG_DIR is not where the timeline is under a custom state dir.
+  # The cache key below names the standard layout's path for its freshness term, which is a
+  # narrower claim than the sibling's resolution -- a timeline at a fallback layout does not
+  # refresh this key when it moves.
   CACHE_KEY="${LIVE_NONCE}|+cite|$(ckey "$ESC_FILE")|$(fkey "${AI_DLC_GATE_METRICS:-${LOG_DIR}/implementation-artifacts/gate-metrics.jsonl}")|$(fkey "$SUPP_DIR/validate-suppression-lifetime.sh")"
   # A key with an unreadable term cannot invalidate, so there is no key: pay the parse.
   case "$CACHE_KEY" in *"?"*) CACHE_KEY="" ;; esac
