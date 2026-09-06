@@ -37,7 +37,126 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 60 SHIPPED AS `v0.510.0`, ONE CANDIDATE, A BOOTSTRAPPING SUBJECT SHIPPED ALONE. THE GAP IS THREE AND PENDING IS FOUR, AND THE PULL IS REQUIRED ON BATCH 59's EVIDENCE PLUS THIS ONE: THE INSTALLED GATE STILL NAMES TWO FALSE CAUSES ON EVERY PULL THAT HAS A BLOCKER, INCLUDING THE ONE THAT DELIVERS THIS FIX. THE SWEEP IS EMPTY. ONE CANDIDATE STILL AWAITS THE OPERATOR'S REJECTION, PLUS `BL-159`, `BL-161`, `BL-163`, `BL-171`, `BL-176`, `BL-179` AND `BL-181` WITH NO `PC-` ID.
+### BATCH 61 SHIPPED AS `v0.511.0`, ONE CANDIDATE, A BOOTSTRAPPING SUBJECT SHIPPED ALONE. THE GAP IS FOUR AND PENDING IS FIVE, AND THE PULL IS REQUIRED ON BATCHES 59 AND 60's EVIDENCE; THIS BATCH ADDS NO NEW TRIGGER AND ONE HAND ITEM. THE SWEEP IS EMPTY. ONE CANDIDATE STILL AWAITS THE OPERATOR'S REJECTION, PLUS `BL-159`, `BL-161`, `BL-163`, `BL-171`, `BL-176`, `BL-179` AND `BL-181` WITH NO `PC-` ID.
+
+This block replaces the batch-60 record below it. Every figure here was re-derived on 2026-09-06
+after the merge, against the working tree with the controls in the same invocation; re-derive
+them again rather than reading them.
+
+**`VERSION` IS `0.511.0`, SO BATCH 62 RELEASES AS `0.512.0`.** Re-derive `VERSION` and add one.
+Batch 61 merged at `86566b0e` (PR #648, squash; on the branch the release commit came after
+three fix commits and one test commit, none naming an id, and one more fix commit followed it
+after the first gate run failed on the fixture's own `printf | grep -q`, the I54 hazard), closing
+`PC-S335-NO-DETECTOR-REACHES-A-RETIRED-STATUS-TOKEN-REUSED-IN-A-LAYER-BODY` as `BL-183`, rotated
+(archive 92 → 93, live 90 → 91 → 90 after one filing and one rotation; nothing else filed, no
+incidental close: the receipt histogram read one 0 and it was the subject). `named_absorbed()`
+lists exactly one release commit for the id at `0.511.0`; the impossible-id control for that
+channel is `grep -c '^release:'` reading 0, NOT `PC-S999-NEVER` being absent, which docs commits
+quote. No correction release. **The ninth batch opened by a peer's handoff** (action 9's message
+from `ai-dlc-ea`), so it scoped itself from its own ranking and stated the choice in its first
+ping: the sweep was empty, the top-ranked standing candidate is a new reconcile detector plus the
+update skill — bootstrapping, so it shipped ALONE under action 2.
+
+**THE GRAMMAR WAS CHOSEN BY MEASUREMENT, AND THE OBVIOUS POPULATION COULD NOT CHOOSE IT.**
+`reconcile/retired-layer-token.sh` retires an ALL-CAPS word the rulebook carries at base and
+nowhere at theirs when it is JOINED (`-`/`_`, which emphasis never is) or PLAIN with a per-file
+program witness (a core script printed it at base and not in that same file at theirs), and scans
+every layer file for each as a whole word. Four derivations fell before it, each on a measurement:
+backticked-only cannot derive the incident (the rulebook wrote `the run is VACUOUS (exit 78)`
+bare); a program witness as a UNION at theirs un-retires it (`readopt-override.sh:348` still
+prints the word in another sense); the rulebook-only set difference read ZERO false rows over the
+40 most recent consecutive pairs — only two pairs retire anything — and 16 over 21 wide spans, the
+shape a real reconcile compares (`ABSENT` ×9, `CURRENT` ×4, emphasis words one theirs revision
+skipped; `S290` ×3, a sprint id); and the program witness alone read zero but acquitted
+`APPROVED-WITH-FIXES` and `CHANGES-REQUIRED`, retired verdict tokens that live only in prose. The
+composite keeps both and reads zero false rows on both hands' populations (the adversary's 201
+spans: 134 rows, all the incident). A boundary-group `grep -oE` extractor was refused too: it
+consumes the separator and loses the next token (637 of 690 at head) and manufactured
+retirements in the census hand's first cut; the shipped split is `tr -c` first, agreeing with an
+independent oracle at 690/690.
+
+**THE ADVERSARY'S BLOCKER WAS A MAXIMAL FALSE REPORT, NOT A SILENT ONE.** An unresolvable
+theirs ref emptied the theirs side and retired every rulebook token — 1320 rows, zero bytes of
+stderr, exit 0, into the region the operator approves; the base guard's polarity ("no tokens,
+nothing retired") does not cover it and the two siblings' guards are base-only. All four refusal
+branches (list, base, theirs, and a base with no readable program file) now exit 2 and
+`emit-report.sh` renders `DETECTOR-REFUSED` for the section. Two defects closed beside it: the
+acquittal list was interpolated into the quiet NOTEs only, so 22 of 79 row-producing spans said
+nothing about what they declined to look for; and a witness file RENAMED at theirs read as a
+deletion at the base path (zero live instances across 321 spans, followed through the rename map
+because it was cheap). The wording "matched word by word" overstated coverage for a hyphen chain,
+which is one token on both sides, and now says so in the header, step 3a-vi, the entry and the
+CHANGELOG.
+
+**THE BATTERY: 45 ARMS, 17 VECTOR MUTANTS, ONE RENAME WORLD WITH ITS OWN MUTANT, 9s SOLO.**
+`retired-layer-token` (written by a separate hand) drives eighteen six-world snapshots — body,
+frontmatter, five near-misses, moved token, token moved into a file created at theirs, thinned
+emphasis, acquitted plain word named on stderr, `.json` scanned and `.txt` not, base==theirs
+NOTE, no-match denominator, no-program refusal, `set -f` cwd trap, bad theirs, orphan copy, bad
+base, the driver's own section rendered and refused, `env -i` with em-dashes — and every mutant
+dies on a named cell: backtick-only, substring, per-file rulebook, silent branch, `exit 0`, glob
+expansion, no witness, union witness, joined arm removed, comment strip removed, theirs list from
+the base tree, three-letter floor, overrides-only, diff-derived drop, refusal disabled, `.txt`
+widened, theirs guard removed. Two anchors were lost when the lead moved lines after delivery and
+`mkmut` refused correctly. The pole is `layer-reference-resolution` at ~251 loaded and did not
+move; the detector adds ~0.7s to the driver on a null span.
+
+**THE LEDGER DID NOT MOVE THIS BATCH.** md5 `417c783e…` at open and at close; the consumer's
+porcelain read 4 at open and 4 at close, its HEAD `9e6466cad` unmoved, on
+`ai-dlc/carry-over/pool-pnl-backlog-triage`; no write to the consumer by this session or its
+three hands (the only commands against it were `git show`/`log`/`archive` and one `git clone
+file://`). **Live 72, cited 52, unfiled 20**, archive 160, partition control 0. Goal partition
+**25 DISCHARGED / 27 in flight / 20 untouched**, overlap 3, discharged-but-invisible 0,
+TERMINAL **49**.
+
+**GAP FOUR (`0.507.0` installed, `0.511.0` shipped), PENDING 5 (`BL-177` at `0.508.0`;
+`BL-178`, `BL-180` at `0.509.0`; `BL-182` at `0.510.0`; `BL-183` at `0.511.0`; five `PC-` ids),
+AND THE PULL IS REQUIRED** on batch 59's evidence (the consumer's own pre-push fails
+`gate-remediation-deny` on the installed pair) and batch 60's (the installed gate names two false
+causes on every pull with a blocker). This batch adds no trigger: the second test on a `file://`
+clone of the consumer's real tree reads the shipped driver against the installed one as exactly
+one added section rendering `none` over `528ca84b..origin/main` (control: the two drivers differ
+by `cmp`), because that range retires nothing. Say WIDE at five; the gap is four. The range
+carries `0.508.0`'s, `0.510.0`'s and `0.511.0`'s bootstrapping files (`retired-tokens.sh`,
+`apply.sh`, `emit-report.sh`, `retired-layer-token.sh`, the update skill's `SKILL.md`), 0
+mode-only changes over 22 core paths. The hazard is the same as batch 60's, measured rather than
+warned about: the INSTALLED `0.507.0` gate runs the delivering pull. A pull is
+operator-initiated; readiness is not authorization.
+
+**THE TOP-RANKED STANDING CANDIDATE STILL AWAITS THE OPERATOR'S REJECTION.**
+`PC-S340-CHECK-26-READS-A-PARTIAL-RE-VERIFY-VERDICT-FILE-AS-UNADJUDICATED` is live at the
+consumer, recommended for rejection in the batch-57 block below and in the `0.507.0`
+CHANGELOG's "Not taken" section, deliberately not named in any release commit. Ask the
+operator to carry it into a graph session; until then it stays live and unfiled.
+
+**TELL THE CONSUMER, IN THE NEXT BRIEF,** that `0.511.0`'s `emit-report.sh` renders a fifth
+classifier section, so any report approved under `0.507.0`–`0.510.0` reads `UNDECIDED` under
+the new driver's `--verify` until re-rendered (one more re-render on the pull after the
+delivering one); that its `overrides/steps__retro__ci-gates-enforcement-surface.md` still carries
+`VACUOUS` at lines 18 (a frontmatter grep control its own dossier NOTE calls stale) and 39 (a
+re-affirmation naming the rename), which the new detector reports on `6011d94d^..9f4e585` and
+which NO future pull will report because the retirement predates its installed release — a hand
+item, and line 18's control now reads 0 against core; that step 3a-vi is the by-hand form and a
+`DETECTOR-REFUSED` line in that section must not be approved; that plain words a core program
+never printed are acquitted by design (273 of 594 at head, `APPROVED` among them) and named on
+stderr; that vocabularies owned outside the rulebook globs (`layer-contract.yaml` clause codes,
+ledger statuses) are seen only where the rulebook also spells them; and that the batch-59 and
+batch-60 brief items below still stand.
+
+**THE SWEEP FOR BATCH 62 IS EMPTY, AND THE 20 UNFILED IDS ARE THE STANDING CORPUS.** Check the
+ledger's md5 first — the consumer files mid-batch and pulls mid-batch. Of the 20, two are the
+already-in-core `RETRO` siblings (batch 59), one awaits the operator's rejection (above), and the
+other 17 are enumerated in action 1b and the batch-39 paragraph of action 1, none filed since
+2026-08-31. No PC-backed candidate is real work today. What ranks first, by consequence:
+`BL-181` (no `PC-` id, DEFECT tier, a one-line alternation in `validate-suppression-lifetime.sh:252`
+with a three-fixture `env -i` receipt — readiest, and a CI consumer with no UTF-8 locale gets no
+carve-out at all today; not bootstrapping, so it may batch), then `BL-179` (NOTE, two scripts, a
+driving receipt, not bootstrapping — batch it with `BL-181`), then `BL-171` and `BL-176` (both
+DEFECT, both `verify: manual`, each a new mechanism: a transcript channel for Check 26's
+validator, and a verdict-to-dispatch binding). Take `BL-181` and `BL-179` together unless the
+sweep turns up a filing.
+
+### BATCH 60 SHIPPED AS `v0.510.0` — THE BLOCK ABOVE REPLACES THIS ONE. TAKE THE STATE FROM THERE.
 
 This block replaces the batch-59 record below it. Every figure here was re-derived on 2026-09-06
 after the merge, against the working tree with the controls in the same invocation; re-derive
@@ -5929,9 +6048,12 @@ so no block written before it changes verdict.
    recommend, state that choice and its reason in your FIRST message to the operator, and
    proceed; the operator can redirect at any ping. **Regardless of who invoked you, batch
    multiple candidates into one release wherever action 2 allows it.** The sweep is EMPTY
-   today: the 21 unfiled ids are the standing corpus, two of them (`PC-S337-RETRO-PARTY-MODE-…`
-   and `…SPRINT-SHIP-DUAL-COUNTER-…`) already in core and the consumer's to rotate, not work;
-   the resume block ranks the rest. Batch 60 is SHIPPED — `v0.510.0` at `5a29d41a` (PR #646),
+   today: the 20 unfiled ids are the standing corpus, two of them (`PC-S337-RETRO-PARTY-MODE-…`
+   and `…SPRINT-SHIP-DUAL-COUNTER-…`) already in core and the consumer's to rotate, not work,
+   and one awaiting the operator's rejection;
+   the resume block ranks the rest. Batch 61 is SHIPPED — `v0.511.0` at `86566b0e` (PR #648),
+   `PC-S335-NO-DETECTOR-REACHES-A-RETIRED-STATUS-TOKEN-REUSED-IN-A-LAYER-BODY` closed as
+   `BL-183`, rotated, nothing filed, no correction release; batch 60 is SHIPPED — `v0.510.0` at `5a29d41a` (PR #646),
    `PC-S305-UNION-GATE-UNPASSABLE-ON-ANY-PULL-THAT-HAD-A-BLOCKER` closed as `BL-182`, rotated,
    nothing filed, no correction release; batch 59 is SHIPPED — `v0.509.0` at `68fa7e95` (PR #644),
    `PC-S308-SUPPRESSION-LIFETIME-RESOLVES-GATE-METRICS-FROM-CWD-BEFORE-PROJECT-ROOT` closed
@@ -6549,9 +6671,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 417c783e... unmoved through batches 59 and 60 (the consumer filed once AFTER batch 58's merge and committed it before batch 60 opened; 7f097cf7... after its mid-batch pull to 0.507.0); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
-   wc -l < /tmp/live.txt    # 72 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 77 through batch 57, 71 after the consumer's pull rotated six, 72 after its post-merge filing, unmoved through batch 60
-   wc -l < /tmp/unfiled.txt # 21 -- PC-S305-UNION-GATE-UNPASSABLE-... left the set at batch 60 by being cited by BL-182; two of the 21 are RETRO siblings already in core
+   md5 -q "$L"              # 417c783e... unmoved through batches 59, 60 and 61 (the consumer filed once AFTER batch 58's merge and committed it before batch 60 opened; 7f097cf7... after its mid-batch pull to 0.507.0); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
+   wc -l < /tmp/live.txt    # 72 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 77 through batch 57, 71 after the consumer's pull rotated six, 72 after its post-merge filing, unmoved through batch 61
+   wc -l < /tmp/unfiled.txt # 20 -- PC-S335-NO-DETECTOR-REACHES-... left the set at batch 61 by being cited by BL-183, PC-S305-UNION-GATE-... at batch 60 by BL-182; two of the 20 are RETRO siblings already in core
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
