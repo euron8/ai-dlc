@@ -175,7 +175,36 @@ fi
 FIRST_BOUND="$(head -1 "$TMPD/boundaries" | cut -d: -f1)"
 PREAMBLE_END=$(( FIRST_BOUND - 1 ))
 
+# REFUSAL 2: at the fixed point WITH unheaded move markers in the body.
+#
+# REFUSAL 1 above catches zero boundaries. It is a knife-edge: ONE surviving `^## ` sends the
+# file here instead, where `N_CUT <= KEEP_ENTRIES` prints an affirmative line and exits 0 --
+# and that is the state a real history reaches, because every rotation KEEPS `KEEP_ENTRIES`
+# headings. Measured on the reference consumer: eight rounds of trims, the file rotates ONCE,
+# lands on exactly 10 headings, then grows +112 lines per round forever while this line reports
+# "nothing to rotate". 122514 bytes against 8821 for the same content correctly headed -- and
+# both arms print `10 entr(ies) present`, exit 0. The verdict cannot tell them apart.
+#
+# The discriminator is not a size threshold, and a size threshold was measured and REJECTED:
+# max-span-over-mean scores the defect case at 4.40 while five healthy files in the same tree
+# score higher (prd-history.md at 131.53), so any cut separating them flags the healthy corpus.
+#
+# What separates them is a property of the file alone: a MOVE MARKER that is not a heading.
+# Those blocks cannot be cut apart, so at the fixed point they are why nothing moves. Measured
+# false-positive set over the reference consumer's 109 tracked `-history`/`-archive` files:
+# ONE hit, the defect case itself. Zero false positives.
+#
+# It refuses rather than warns because "nothing to rotate" and "cannot rotate" look identical
+# from the outside and only one of them is safe -- the same reason REFUSAL 1 exists, one branch
+# over. Rule 25(a) states the heading a moved block carries.
 if [ "$N_CUT" -le "$KEEP_ENTRIES" ]; then
+  N_UNHEADED="$(grep -cE '^\[MOVED|^[[:space:]]+\[MOVED' "$HISTORY")" || N_UNHEADED=0
+  if [ "$N_UNHEADED" -gt 0 ]; then
+    echo "${SELF_NAME}: REFUSED -- '${HISTORY}' is at its cut floor (${N_CUT} entr(ies), keeping ${KEEP_ENTRIES}) and carries ${N_UNHEADED} move marker(s) that are not \`## \` headings, so those blocks can never be cut apart and this file cannot be bounded." >&2
+    echo "  Reported rather than treated as 'nothing to rotate': a file that is merely short and one that is growing without a cut point print the same line otherwise." >&2
+    echo "  Remedy: head each moved block per Rule 25(a) -- '## [MOVED <ISO-8601 timestamp> from <source basename> — <trigger>]'. Nothing written." >&2
+    exit 1
+  fi
   echo "${SELF_NAME}: ${N_CUT} entr(ies) present, keeping ${KEEP_ENTRIES} -- nothing to rotate (${L_ALL} lines stay)."
   exit 0
 fi
