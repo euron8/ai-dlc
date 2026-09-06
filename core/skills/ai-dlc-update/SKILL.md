@@ -618,8 +618,11 @@ prose is itself generated rather than composed.
    body still read `stock exits 78 VACUOUS`, and every mechanical signal was clean — a
    person found it by grepping the body.
    The retired set is derived, never listed: every ALL-CAPS word of four or more
-   characters (hyphen chains allowed) that the core rulebook carried at base and carries
-   nowhere at theirs. Output is `RETIRED-LAYER-TOKEN<TAB><layer-path>:<line><TAB><token>`.
+   characters that the core rulebook carried at base and carries nowhere at theirs, kept
+   when it is JOINED (`-` or `_`, the shape emphasis never has) or when some core program
+   printed it at base and stopped in that same file at theirs — a plain word with neither
+   witness is read as emphasis and the NOTE names it. Output is
+   `RETIRED-LAYER-TOKEN<TAB><layer-path>:<line><TAB><token>`.
    Each row is a sentence to re-read against `theirs`: re-point it at the replacement
    token, or record in the report why the old word is still correct there. A row inside
    a layer file's frontmatter `reason:` is usually a stale grep control and is owed the
@@ -630,9 +633,10 @@ prose is itself generated rather than composed.
    **This does NOT block the apply** — a layer file is consumer-owned. It is a worklist
    item, owed before the pull counts as done.
    Note what it does NOT catch: a token the consumer invented that core never had, a
-   word core still carries anywhere in its rulebook at theirs, a multi-word status whose
-   other word survived (matched word by word), and a paraphrase that drops the literal
-   word. A clean result is not proof every layer file survived the release.
+   word core still carries anywhere in its rulebook at theirs, a plain word no core
+   program ever printed, a multi-word status whose other word survived (matched word by
+   word), and a paraphrase that drops the literal word. A clean result is not proof every
+   layer file survived the release.
 
 3b. **Template pre-classification** (the generated files outside `core/`):
    run `reconcile/preclassify.sh <dist-repo> <base-sha> <theirs-ref>

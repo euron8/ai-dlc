@@ -4203,41 +4203,58 @@ dossier said "SUPERSEDED CORE TEXT ... (none)", correctly, because the word is t
 own prose. The consumer found it by grepping the body by hand and repaired line 52 with operator
 approval; line 18 is still there today and its own dossier NOTE calls that receipt stale.
 
-`reconcile/retired-layer-token.sh` is the token-grain sibling. The retired set is DERIVED:
-every ALL-CAPS word of four or more characters (hyphen chains allowed, bounded by anything
-outside `[A-Za-z0-9_-]`) the core rulebook carries at base and carries nowhere at theirs — the
-rulebook being `setup-sites.md`'s `rulebook:` list, the same declaration both siblings read.
-Every layer file under `overrides/` and `extensions/` (`.md` and `.json`) is split on the same
-class and each retired token is looked up as a whole word, one `awk` for the corpus; rows are
-`RETIRED-LAYER-TOKEN<TAB><layer-path>:<line><TAB><token>`. Driven over the real distribution at
-`6011d94d^..9f4e585` against the consumer's layer files at its pre-repair commit `02ec05984^`:
-exactly the two incident lines (18 and 52), from the repo root and from a cwd carrying
-rulebook-shaped files; the retired set for that pair is two words (`VACUOUS`, `VERIFIED`).
-Over `528ca84b..origin/main` (the consumer's installed release to the head) it retires nothing
-and says so. Two derivations were built and refused before this one: a backticked-only grammar
-cannot derive the incident, because the rulebook wrote `the run is VACUOUS (exit 78)` with no
-code span; and a program-emitted narrowing (keep rulebook words a core script also prints,
-minus everything at theirs) un-retires the incident, because `readopt-override.sh:348` still
-prints the word VACUOUS at theirs in an unrelated sense. The rulebook-only form is what ships,
-with the false-positive set recorded in the CHANGELOG entry beside the census that produced it.
+`reconcile/retired-layer-token.sh` is the token-grain sibling. A token is an ALL-CAPS word of
+four or more characters, hyphen or underscore chains allowed, read as a maximal run of
+`[A-Za-z0-9_-]`; the rulebook is `setup-sites.md`'s `rulebook:` list, the same declaration
+both siblings read. A word the whole rulebook carries at base and nowhere at theirs is RETIRED
+under one of two witnesses: it is JOINED (`-` or `_`), which prose emphasis never is; or it is
+PLAIN and some core program file (`core/scripts/*.sh`, `core/hooks/*.sh`, `core/git-hooks/*`,
+`reconcile/*.sh`) carried it in a non-comment line at base and not in that same file at
+theirs. Every layer file under `overrides/` and `extensions/` (`.md` and `.json`) is split on
+the same class and each retired token is looked up as a whole word, one `awk` for the corpus;
+rows are `RETIRED-LAYER-TOKEN<TAB><layer-path>:<line><TAB><token>`. Unwitnessed plain words are
+named in every quiet NOTE as read-as-emphasis, or as UNDECIDED when no program file was
+readable at base, so an acquittal is never silent.
+
+Measured. Over the real distribution at `6011d94d^..9f4e585` against the consumer's layer
+files at its pre-repair commit `02ec05984^`: exactly the two incident lines (18 and 52), from
+the repo root and from a cwd carrying rulebook-shaped files; the witness is
+`validate-ci-gates.sh`, which printed the word at base and not at theirs. Over the 40 most
+recent consecutive release pairs against the consumer's current 48-file layer corpus only two
+pairs retire anything (`VACUOUS`; `AI_DLC_MODEL_ROW` at `0.490.0`) and no false row appears —
+a population that cannot separate the grammars. Over 21 wide spans, the shape a real reconcile
+compares, the rulebook-only set difference produced 16 false rows — `ABSENT` ×9 and `CURRENT`
+×4, emphasis words still in the rulebook today that one theirs revision skipped, and `S290`
+×3, a sprint id the layer cites as its own provenance — and the per-file program witness alone
+acquitted `APPROVED-WITH-FIXES` and `CHANGES-REQUIRED`, retired verdict tokens that live only
+in rulebook prose. The composite keeps both verdict tokens by shape, keeps `VACUOUS` by
+witness, and its false set on that consumer is zero. Two other derivations were refused: a
+backticked-only grammar cannot derive the incident, because the rulebook wrote `the run is
+VACUOUS (exit 78)` bare; and a witness taken as a union over every program at theirs
+un-retires it, because `readopt-override.sh:348` still prints the word in an unrelated sense.
+The extractor normalises separators before matching: a boundary-group `grep -o` consumes the
+separator and loses the next token, measured at 550 of 589 on the real rulebook, which
+manufactures false retirements.
 
 Three quiet states each say which they are, because their stdout is identical: an unreadable
 rulebook list or an unresolvable base is a refusal; a release that retired no token opens no
-layer file and says so with both corpus counts; a scanned-but-no-match run prints the retired
-count and the file count. `emit-report.sh` renders the rows as a fifth classifier section
+layer file and says so with the corpus counts; a scanned-but-no-match run names the retired
+tokens and the file count. `emit-report.sh` renders the rows as a fifth classifier section
 ("Retired status tokens reused in a consumer layer file's own prose"), so `--verify`
 byte-compares them and `I105` binds the invocation; SKILL.md step 3a-vi is the by-hand form.
 Report-only: the layer is consumer-owned, so a row is a worklist item, never an apply blocker.
 
 What it does not catch, stated in its header and its NOTE: a token the consumer invented, a
-word core still carries anywhere in its rulebook at theirs, a multi-word status whose other
-word survived (matched word by word), and a paraphrase. `BL-016` is the neighbouring gap for a
-retired PATH and is unchanged by this.
+word core still carries anywhere in its rulebook at theirs, a plain word no core program ever
+printed, a multi-word status whose other word survived (matched word by word), and a
+paraphrase. `BL-016` is the neighbouring gap for a retired PATH and is unchanged by this.
 
-The receipt drives the shipped detector over a seeded dist repo and layer file: the body row
-and the frontmatter row must both render with their line numbers, the same word embedded in a
-longer identifier, hyphen-joined, and lower-cased on line 7 must not, the row count must be
-exactly two, and the base==base control must print the opened-nothing NOTE — so a copy that
-emits nothing, a substring matcher, and a silent empty branch each read STILL-LIVE.
+The receipt drives the shipped detector over a seeded dist repo with a witnessing program, a
+second program that keeps printing the word at theirs, and an emphasis word dropped without a
+witness: the body row and the frontmatter row must both render with their line numbers, the
+same word embedded in a longer identifier, hyphen-joined, lower-cased, and the emphasis word on
+line 7 must not, the row count must be exactly two, and the base==base control must print the
+opened-nothing NOTE — so a copy that emits nothing, a substring matcher, a silent empty
+branch, the no-witness set difference and the union-at-theirs witness each read STILL-LIVE.
 
-verify: sh V=core/skills/ai-dlc-update/reconcile/retired-layer-token.sh; [ -f "$V" ] || exit 9; D=$(mktemp -d); R="$D/dist"; C="$D/cons"; mkdir -p "$R/core/skills/ai-dlc/steps" "$C/.claude/skills/ai-dlc/overrides"; git -C "$R" init -q; git -C "$R" config user.email a@b; git -C "$R" config user.name a; printf 'With neither, the run is WIDGETGONE (exit 78) and prints every gate.\n' > "$R/core/skills/ai-dlc/steps/retro.md"; git -C "$R" add -A; git -C "$R" commit -qm b; B=$(git -C "$R" rev-parse HEAD); printf 'With neither, the run is EXAMINED NOTHING (exit 78) and prints every gate.\n' > "$R/core/skills/ai-dlc/steps/retro.md"; git -C "$R" commit -qam t; T=$(git -C "$R" rev-parse HEAD); printf -- '---\nreason: grep control cites WIDGETGONE reading 1 in core\n---\n# Override\n\nor stock exits 78 WIDGETGONE; empty falls to the alias table\nfooWIDGETGONE and x-WIDGETGONE and widgetgone stay\n' > "$C/.claude/skills/ai-dlc/overrides/o.md"; P=$(bash "$V" "$R" "$B" "$T" "$C" 2>/dev/null); N=$(bash "$V" "$R" "$B" "$B" "$C" 2>&1 >/dev/null); rm -rf "$D"; b=$(printf '%s\n' "$P" | grep -cE '^RETIRED-LAYER-TOKEN[[:space:]]+\.claude/skills/ai-dlc/overrides/o\.md:6[[:space:]]+WIDGETGONE$'); f=$(printf '%s\n' "$P" | grep -cE 'overrides/o\.md:2[[:space:]]+WIDGETGONE$'); m=$(printf '%s\n' "$P" | grep -cE 'o\.md:7[[:space:]]'); a=$(printf '%s\n' "$P" | grep -c '^RETIRED-LAYER-TOKEN'); z=$(printf '%s\n' "$N" | grep -c 'NO layer file was opened'); [ "$b" -eq 1 ] && [ "$f" -eq 1 ] && [ "$m" -eq 0 ] && [ "$a" -eq 2 ] && [ "$z" -eq 1 ]
+verify: sh V=core/skills/ai-dlc-update/reconcile/retired-layer-token.sh; [ -f "$V" ] || exit 9; D=$(mktemp -d); R="$D/dist"; C="$D/cons"; mkdir -p "$R/core/skills/ai-dlc/steps" "$R/core/scripts" "$C/.claude/skills/ai-dlc/overrides"; git -C "$R" init -q; git -C "$R" config user.email a@b; git -C "$R" config user.name a; printf 'With neither, the run is WIDGETGONE (exit 78) and prints every gate. NEVER skip it.\n' > "$R/core/skills/ai-dlc/steps/retro.md"; printf 'echo "WIDGETGONE: $n scanned" >&2\n' > "$R/core/scripts/validate-ci-gates.sh"; printf 'echo "REFUSED: a WIDGETGONE anchor"\n' > "$R/core/scripts/readopt.sh"; git -C "$R" add -A; git -C "$R" commit -qm b; B=$(git -C "$R" rev-parse HEAD); printf 'With neither, the run is EXAMINED NOTHING (exit 78) and prints every gate. Do not skip it.\n' > "$R/core/skills/ai-dlc/steps/retro.md"; printf 'echo "EXAMINED NOTHING: $n scanned" >&2\n' > "$R/core/scripts/validate-ci-gates.sh"; git -C "$R" commit -qam t; T=$(git -C "$R" rev-parse HEAD); printf -- '---\nreason: grep control cites WIDGETGONE reading 1 in core\n---\n# Override\n\nor stock exits 78 WIDGETGONE; empty falls to the alias table\nfooWIDGETGONE and x-WIDGETGONE and widgetgone stay; NEVER is emphasis\n' > "$C/.claude/skills/ai-dlc/overrides/o.md"; P=$(bash "$V" "$R" "$B" "$T" "$C" 2>/dev/null); N=$(bash "$V" "$R" "$B" "$B" "$C" 2>&1 >/dev/null); rm -rf "$D"; b=$(printf '%s\n' "$P" | grep -cE '^RETIRED-LAYER-TOKEN[[:space:]]+\.claude/skills/ai-dlc/overrides/o\.md:6[[:space:]]+WIDGETGONE$'); f=$(printf '%s\n' "$P" | grep -cE 'overrides/o\.md:2[[:space:]]+WIDGETGONE$'); m=$(printf '%s\n' "$P" | grep -cE 'o\.md:7[[:space:]]'); a=$(printf '%s\n' "$P" | grep -c '^RETIRED-LAYER-TOKEN'); z=$(printf '%s\n' "$N" | grep -c 'NO layer file was opened'); [ "$b" -eq 1 ] && [ "$f" -eq 1 ] && [ "$m" -eq 0 ] && [ "$a" -eq 2 ] && [ "$z" -eq 1 ]
