@@ -4141,7 +4141,18 @@ Measured on the reference consumer, read-only: one in-force row today
 reader, in 2.0s with the corpus, so the pull moves no verdict on its files today. The fix fires
 on a forged citation, of which the consumer's in-force set holds none, and on a Check 26 call
 site run without `--transcript-dir` — which is every consumer call site until the pull lands
-the updated step file, so the brief must say so.
+the updated step file, so the brief must say so. Two more measurements for that brief, both
+the adversary's: 2 of the consumer's 17 historical suppression citations NOMATCH against its
+live corpus (both S305 paraphrases of "Fresh SUPPRESSED, this gate only (Recommended)", whose
+bytes appear only inside the lead's own AskUserQuestion options and a line-numbered Read of
+the escalations file), neither in force today — the check working, and the first thing that
+will read as a regression to whoever re-cites one; and the REVERSE partial-pull shape: the
+installed `0.507.0` validator never parses past its two positionals, so the new call site's
+flags are INERT on it and a forged suppression passes at exit 0 with no warning. The step file
+and the validator land in one pull because both are core paths outside the machinery slice; a
+consumer that hand-edits its step file ahead of the pull gets no protection and no message.
+The predicate's own limits the adversary measured — `isMeta` records accepted, no `--since`,
+the `MATCH` timestamp discarded — are `BL-184`'s.
 
 verify: sh d=$(bash core/fixtures/gate-adjudication/seed.sh) || exit 9; . "$d/env.sh"; python3 -c 'import json,sys;p,x=sys.argv[1],sys.argv[2];D=json.load(open(p));[v.update(verdict="FAIL") for v in D["verdicts"] if v["check_id"]==x];open(p,"w").write(json.dumps(D))' "$VERDICT" "$X"; r() { AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" AI_DLC_ESCALATIONS="$ESC_INFORCE" AI_DLC_GATE_METRICS="$GM_BEFORE" bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" "$@" 2>&1; }; g=$(r --transcript-dir "$TDIR"); grc=$?; f=$(r --transcript-dir "$TDIR_FORGED"); frc=$?; n=$(r); nrc=$?; rm -rf "$d"; [ "$grc" -eq 0 ] && grep -q 'FAIL is covered by an' <<<"$g" && [ "$frc" -eq 1 ] && grep -q 'unverified-citation: 1 in-force' <<<"$f" && ! grep -q 'FAIL is covered by an' <<<"$f" && [ "$nrc" -eq 1 ] && grep -q 'no-transcript' <<<"$n"
 
@@ -4173,3 +4184,37 @@ join exists.
 verify: manual
 
 
+
+
+## BL-184 — the genuine-operator predicate accepts harness-injected `isMeta` records as operator turns, and no reader compares the authorization timestamp to when the words were said
+
+Distribution-internal, no `PC-` id; NOTE tier — neither limit is reachable by a lead writing
+its own text, and the one in-force suppression on the reference consumer verifies correctly
+under both. Found by the batch-63 adversarial hand while attacking `BL-171`, and deliberately
+not fixed there: the owner is `validate-steering-budget.sh --cite`, which four readers delegate
+to (`validate-escalation-resolution.sh`, `validate-adversarial-convergence.sh`,
+`validate-gate-adjudication.sh`, `ai-dlc-gate-remediation-guard.sh`), so a change there moves
+all four and needs its own false-positive measurement.
+
+Two distinct subjects, enumerated so a close of one is not read as a close of both:
+
+1. **`isMeta` is never consulted.** Census over the consumer's 250 transcripts with the shipping
+   predicate lifted verbatim: 204,920 records after the sidechain filter, 38,436 `type: user`,
+   976 accepted as operator text, 89 of those carrying `isMeta: true` — harness injections such
+   as "Skill /ai-dlc-update is already loaded above; instructions unchanged." and "Your
+   claude.ai usage limit has reset. Continue the task you were working on". Every one is twelve
+   characters or longer and would verify a citation quoting it. A lead cannot cause the harness
+   to inject arbitrary text, which is why this is a NOTE; it is still a record class that is not
+   an operator turn scoring as one.
+2. **No `--since`, and the MATCH timestamp is discarded.** The convergence validator bounds its
+   scan to the window start; the adjudication validator and the guard pass no bound, so the
+   corpus is the project's whole session history and any twelve-character phrase the operator
+   ever typed verifies a citation filed today. `--cite` prints `MATCH <ts>` and every reader
+   sends it to `/dev/null`, so an entry's `**Operator authorization:** <ISO ts> | "<quote>"`
+   is never checked for the words having been said at or before that timestamp. The remedy's
+   shape is a `--since` derived from the entry's own timestamp minus a tolerance, or a compare
+   of the printed `MATCH <ts>` against it, at the owner; its false-positive set over the
+   consumer's 17 historical suppressions has not been measured, and the two 2026 paraphrase
+   entries that already NOMATCH (`BL-171`'s brief item) are the population to score it on.
+
+verify: manual

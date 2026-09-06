@@ -288,7 +288,7 @@ score "m5 caller fails OPEN when the sibling cannot be asked" validate-gate-adju
     if hit:' \
   "A missing escalations file becomes a blanket authorization, so deleting pending.md is a way
   to pass any gate. The mutation keys on ANY non-ok status, so the two cases that hand the
-  validator no transcript corpus (S19, S21) die with S7: their `no-transcript` refusal is the
+  validator no transcript corpus (S19, S21) die with S7: their no-transcript refusal is the
   same fail-closed default, reached from the corpus side. Every other case supplies a readable
   file and a corpus and cannot distinguish the two programs."
 
