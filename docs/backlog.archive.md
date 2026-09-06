@@ -7161,3 +7161,168 @@ with no call site passing it, and a bound that compares the timestamp exactly. S
 all three plus the pre-fix tree.
 
 verify: sh V=core/scripts/validate-steering-budget.sh; E=core/scripts/validate-escalation-resolution.sh; [ -f "$V" ] && [ -f "$E" ] || exit 9; command -v node >/dev/null 2>&1 || exit 9; w=$(mktemp -d); mkdir -p "$w/t"; printf '%s\n' '{"type":"user","timestamp":"2026-06-10T08:12:44Z","message":{"role":"user","content":"take the second option and carry on"}}' '{"type":"user","timestamp":"2026-07-01T09:00:00Z","message":{"role":"user","content":"kick off sprint seventy seven"}}' > "$w/t/a.jsonl"; printf '%s\n' '{"type":"user","timestamp":"2026-07-02T14:37:41Z","message":{"role":"user","content":"suppress this check for this gate only"}}' '{"type":"user","isMeta":true,"timestamp":"2026-07-02T14:38:00Z","message":{"role":"user","content":"the harness injected this sentence verbatim"}}' '{"type":"user","timestamp":"2026-07-09T11:02:13Z","message":{"role":"user","content":"carry the residue into the next sprint"}}' > "$w/t/b.jsonl"; c(){ bash "$V" --dir "$w/t" --cite "$1" ${2:+--authorized-at "$2"} --quiet >/dev/null 2>&1; echo $?; }; q1='suppress this check for this gate only'; q2='carry the residue into the next sprint'; q3='take the second option and carry on'; qm='the harness injected this sentence verbatim'; at='2026-07-02T14:37:00Z'; ato='2026-07-02T07:37:00-07:00'; p=0; [ "$(c "$q1" '')" = 0 ] && [ "$(c "$q2" '')" = 0 ] && [ "$(c "$q3" '')" = 0 ] || p=9; [ "$p" = 0 ] || { rm -rf "$w"; exit 9; }; [ "$(c "$qm" '')" = 2 ] || { rm -rf "$w"; exit 1; }; [ "$(c "$q2" "$at")" = 2 ] || { rm -rf "$w"; exit 1; }; [ "$(c "$q3" "$at")" = 2 ] || { rm -rf "$w"; exit 1; }; [ "$(c "$q1" "$at")" = 0 ] || { rm -rf "$w"; exit 1; }; [ "$(c "$q1" "$ato")" = 0 ] || { rm -rf "$w"; exit 1; }; printf '%s\n' '## S50-ITEM-1 Lead (gate [planning]) - 2026-07-02' '**Status:** RESOLVED' "**Operator authorization:** $at | \"$q1\"" > "$w/ok.md"; printf '%s\n' '## S50-ITEM-2 Lead (gate [planning]) - 2026-07-02' '**Status:** RESOLVED' "**Operator authorization:** $at | \"$q2\"" > "$w/stale.md"; printf '%s\n' '## S50-ITEM-3 Lead (gate [planning]) - 2026-07-02' '**Status:** RESOLVED' "**Operator authorization:** $at | \"$q3\"" > "$w/before.md"; printf '%s\n' '## S50-ITEM-4 Lead (gate [planning]) - 2026-07-02' '**Status:** RESOLVED' "**Operator authorization:** 2026-07-02 14:37:00Z | \"$q1\"" > "$w/space.md"; r(){ bash "$E" --escalations "$w/$1" --sprint 50 --transcript-dir "$w/t" 2>/dev/null; }; oa="$(r ok.md)"; a=$?; r stale.md >/dev/null 2>&1; b=$?; r before.md >/dev/null 2>&1; d=$?; os="$(r space.md)"; e=$?; rm -rf "$w"; [ "$a" = 0 ] || exit 9; [ "$b" = 1 ] || exit 1; [ "$d" = 1 ] || exit 1; [ "$e" = 0 ] || exit 9; case "$oa" in *"unbounded-citation: 0"*) : ;; *) exit 1 ;; esac; case "$os" in *"unbounded-citation: 1"*) : ;; *) exit 1 ;; esac; exit 0
+## BL-185 — Rule 25(a) names a trim move's destination file but not the header the moved block carries, so the one rotator that bounds the one unbounded history file loses its cut points
+
+**LANDED (v0.517.0, verified db078cbe).**
+
+**Provenance:** `PC-S308-RULE-25A-HISTORY-MOVE-HAS-NO-DEFINED-HEADER-FORMAT`, filed by the
+reference consumer 2026-09-06. Its own two `derived` blocks reproduce against this tree; the
+`[MOVED …]` convention it names appears NOWHERE in `core/` or `scripts/` (rc=1, against a
+control of `grep -rn "moved" core/skills/ai-dlc/SKILL.md` rc=0).
+
+Rule 25(a) (`core/skills/ai-dlc/SKILL.md:1181-1195`) specifies WHAT moves (superseded content,
+verbatim, cut-and-paste) and WHERE (the named `-history.md`/`-archive.md` sibling). It states no
+header for the moved block — no marker, no timestamp, no source field.
+
+**THE CONSEQUENCE IS NOT DOCUMENTATION DRIFT. IT DISABLES THE ROTATOR'S GRANULARITY.**
+`core/scripts/rotate-snapshot-archive.sh` picks ONE cut point — the Nth-from-last `^## ` line —
+and never interprets a heading (`:48`). A moved block headed any other way is not a cut point.
+Differential on two synthetic trees, identical content and line counts, sides asserted differing
+before either was read:
+
+```
+A  12 blocks headed `## MOVED …`   -> exit 0, rotates, 12 cut points
+B  same 12 as `[MOVED …]`          -> exit 1, REFUSED: "not one '## ' heading,
+                                      so there is no cut point"
+```
+
+**THAT REFUSAL IS A KNIFE-EDGE AT EXACTLY ZERO HEADINGS, AND AN EARLIER REVISION OF THIS ENTRY
+CLAIMED OTHERWISE.** It said "the refusal is correct behaviour and is reported, not silent",
+which holds only for `N_BOUND == 0`. ONE surviving `^## ` line takes a different branch —
+`N_CUT <= KEEP_ENTRIES` at `core/scripts/rotate-snapshot-archive.sh:178` — which prints an
+affirmative line and exits **0**. Differential, sides asserted to differ on headings and to AGREE
+on brackets before either was read:
+
+```
+C1  0 headings + 40 bracket blocks              exit 1  REFUSED (stderr)
+C2  1 heading  + 40 bracket blocks              exit 0  "1 entr(ies) present, keeping 10
+                                                         -- nothing to rotate (125 lines stay)"
+C3  1 heading  + 400 blocks, 1205 lines         exit 0  same sentence, 1205 lines stay
+```
+
+So an unbounded file reports "nothing to rotate" AFFIRMATIVELY, and the loud refusal is reachable
+only from the one state a real history never reaches — headings decay toward zero but the last
+one is sticky, because every rotation keeps `--keep-entries` of them. **The correction runs in
+the direction that makes the defect worse, which is the direction the first author is least
+likely to check.** Found by the adversarial hand.
+
+Measured on the reference consumer's live `_bmad-output/pipeline-snapshot-history.md`: 13 `^## `
+headings and 11 `^[MOVED` brackets, anchored and unanchored counts both 11 so no bracket hides
+mid-line, and **all 11 sit inside the single heading entry at line 830**, spanning 467 lines
+against a next-largest of 175. **The 11 are trim passes 13, 14 and 15, written unheaded into the
+10th pass's span; the three headings after them (13:14–13:32) are `## MOVED …` again, so the
+practice self-corrected on its own.** That is three whole trim passes made uncuttable, not eleven
+loose fragments — and the self-correction is why stating the header in the rule is worth its
+bytes: the convention is learnable, it was simply never written down.
+
+**The false-positive set of the obvious remedy is the whole corpus, which is why the fix is a
+FORMAT and not a scan.** Across the consumer's 110 tracked `-history`/`-archive` `.md` files,
+exactly one carries a bracket marker; the other 109 carry zero. This tree carries zero of either.
+So a check keyed on marker presence fires everywhere. The fix states the header in Rule 25(a) and
+binds it where the move is DIRECTED, not by scanning destinations.
+
+**The filed receipt was unsatisfiable in three independent ways and is replaced.** It named
+`core/SKILL.md`, which resolves nowhere here (`/SKILL.md$` matches 3 tracked paths, so the
+engine's basename fallback refuses on ambiguity); it used `theirs_has` where an ABSENCE needs
+`theirs_lacks`; and its anchor was a regex, which `all_present()` at
+`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:611` matches with `grep -qF` — literal,
+deliberately (`:604-606`). Proved by construction: a correct fix written into a probe file scores
+literal 0 / regex 1, so the receipt reports a shipped fix as unshipped.
+
+**THE RECEIPT WAS REPAIRED TWICE AND THEN REPLACED OUTRIGHT, AND THE SECOND ROUND IS THE
+INSTRUCTIVE ONE.** Its first form closed the awk range on `(b) Sprint-scoped`, a string that does
+not exist — an unmatched closer runs the range to EOF, selecting 656 lines instead of 42, so a
+`[MOVED ` token anywhere below Rule 25 scored as a hit. Repaired to the real closer
+(`(b) Slice-read large sectioned artifacts`), it still counted a TOKEN rather than testing a
+FIX, and the adversarial hand broke it. Measured, each case a full copy of the tree with the rule
+passage replaced, against a shipped-tree control of exit 0 and a pre-fix control of exit 1:
+
+| passage replaced by | old receipt |
+|---|---|
+| prose merely quoting `` `[MOVED ` `` in passing | **exit 0 — false close** |
+| prose FORBIDDING the form (`"that form is FORBIDDEN"`) | **exit 0 — false close** |
+| an HTML comment (`<!-- TODO: someday document … -->`) | **exit 0 — false close** |
+| a factual aside naming no rule | **exit 0 — false close** |
+
+A receipt satisfied by prose forbidding the very thing it checks for is the `BL-078` shape this
+repo already names: it read the RENDERED token, not the behaviour. **THE FIRST REPLACEMENT FOR IT CARRIED THE SAME CLASS OF DEFECT AND WAS ITSELF REPLACED.** That
+one built a probe history and ran the real `rotate-snapshot-archive.sh`, and was described as
+"driving the shipping program" — but it built the probe from a HARDCODED heading rather than from
+the form it extracted, so the rotator arm returned 0 whatever the rulebook said. A conjunct that
+cannot fail is not a conjunct. All discrimination sat in the extraction, and the world that
+exposes it is `L3`: the fix DELETED and an anchored `## [MOVED …]` heading left in 25(a) as an
+EXAMPLE (controls: normative sentence 0, decoy heading 1) scored **exit 0 — a false pass**.
+Running a program is not the same as letting it decide.
+
+**The shipped receipt is two anchored greps and no range**, which is what finally holds. The
+`^…$` grep pins the fenced format line so a paraphrase cannot satisfy it; the `grep -qF` on the
+normative sentence is what kills prose that merely quotes or FORBIDS the token. Either conjunct
+alone is weaker — the format line alone passes `forbid`, since inverting only the sentence leaves
+the fence standing. Dropping the awk range removes the runaway entirely: a subsection REORDER puts
+the closer before the opener and re-creates the 656-line span that the first repair fixed, and a
+reword of `(b) Slice-read large sectioned` drops the closer to 0 and spans 667 of 1847 lines. Both
+were survivable only because `grep -cF "[MOVED "` over `SKILL.md` returns **1** — the token is
+globally unique today (control: `Rule 25` = 4), and Rule 25(c) is about rotating logs, so a second
+mention there is an ordinary future edit.
+
+Scored across nine worlds: shipped 0; fix deleted 1; `forbid` 1; `drive_by` 1; HTML comment 1;
+`L3` anchored decoy 1; reorder-with-fix 0; reworded fix 0.
+
+**Stated limit:** it cannot tell a rule a reader OBEYS from one merely present, and it says
+nothing about the silent exit-0 branch above — that is a rotator behaviour and no rulebook text
+reaches it.
+
+verify: sh grep -qE "^## \[MOVED <ISO-8601 timestamp> from <source basename> . <trigger>\]$" core/skills/ai-dlc/SKILL.md && grep -qF "block a move lands in a history/archive file opens with" core/skills/ai-dlc/SKILL.md
+
+## BL-186 — format steering is attached at three write sites and absent at twenty-one, and a rule telling the lead to LOCATE a format is discharged by looking when no format exists
+
+**LANDED (v0.517.0, verified db078cbe).**
+
+**Provenance:** `PC-S308-WRITE-FORMAT-STEERING-APPLIED-AD-HOC-NOT-UNIVERSALLY`, filed by the
+reference consumer 2026-09-06. Whether a write gets format steering depends on which core author
+added a `READ AND FOLLOW` sentence at that call site, not on any property of the write.
+
+Census over `core/skills/ai-dlc/**` and `core/rules/**`, positive control being Rule 12's own
+directive at `SKILL.md:366`: **3 of 24** shared append-only artifacts carry steering
+(`docs/escalations/pending.md`, `_bmad-output/audit-anchors.md`,
+`implementation-artifacts/gate-log.md`). **21 carry none.** Three of those 21
+(`layer-adjudication-register.jsonl`, `validation-cycle-log.md`, `arm-log.jsonl`) are declared
+`transient: false` with a named producer and are mentioned in the skill corpus ZERO times — not
+unsteered writes but unmentioned ones, inside an enforcer's reach and outside a prose rule's.
+
+`core/rules/upstream-routing.md` states what a push candidate must carry and mentions `verify:`
+**0** times (control: `push-candidate` 6 in the same file) — the one line the closer parses. The
+entry grammar IS written down, at `ledger-reverify.sh:102-113`, inside the CONSUMING parser; a
+file that mentions a grammar is not a file the filer is steered to.
+
+**THE REMEDY CHANGED ON MEASUREMENT, AND THIS IS THE ENTRY'S LOAD-BEARING FINDING.** The filed
+shape — a duty to LOCATE a format before writing — is discharged by looking. Built as
+`B-wrong-3`: a competently written rule with a valid carrier, fully vacuous, firing on nothing
+across the bucket where no format exists, and a prose-keyed receipt scored it CLOSE-CANDIDATE. No
+rewording separates a vacuous locate-duty from a real one, because they are spelled identically.
+So the duty is that a format EXISTS and is DECLARED, which is the only version with a subject a
+checker can address, and the receipt keys on a program rather than on prose.
+
+**The population is derivable in both directions, so this is an enforcer and not prose.**
+`core/schemas/pipeline-state-paths.json` is bound by **I95**
+(`scripts/validate-enforcement-map.sh:5913`), which fails closed and whose subject is the
+PARTITION. Join key `transient: false` -> **20 entries**; the schema's own text calls `name` "the
+JOIN KEY against that grammar's output". **Stated bound:** the four Rule 25(a) planning histories
+(`prd-history.md`, `product-brief-history.md`, `architecture-history.md`,
+`carry-over-backlog-archive.md`) are declared 0 times there (control: `pipeline-snapshot-history.md`
+1) because they nest under `planning-artifacts`, declared only at top level. That is a schema
+widening the arm must state, not a missing join.
+
+**Ships AFTER `BL-185`, and the order is a finding rather than a preference.** This rule alone
+reports SATISFIED across every member of the bucket where no format is defined — a check that
+cannot fire, shipped as a rule. `BL-185` defines the one format this rule would otherwise send a
+lead to look for and not find.
+
+**Separability from `BL-185`, scored in both directions across two spellings of each fix:**
+neither entry's receipt is closed by the other's fix. `BL-185` closes 1 artifact and cannot reach
+the other 20 — `is_archive()` at `core/scripts/validate-artifact-budget.sh:453-455` excludes every
+`*-history.md`/`*-archive.md` before any measurement, and only one `BUDGETS` row carries `trim`.
+The candidate's own claim to "generalize" its sibling is REFUTED.
+
+verify: sh K=0; for s in core/scripts/*.sh; do case "$(basename "$s")" in validate-write-format*|audit-shared-artifact-format*) K=$((K+1));; esac; done; [ "$K" -gt 0 ]
+
