@@ -97,6 +97,11 @@ a command substitution and feed the reader a here-string.
 Assignments and exit codes made inside `$( )` or in a pipeline's last stage are lost to a
 subshell. Write them to a file, or restructure.
 
+**And a `while … done | grep -c .` inside `$( )` answers with the loop's LAST iteration.**
+Under `pipefail` a final non-matching file makes the substitution "fail", and the `|| n=0`
+beside it overwrites a correct 54 with 0. Measured in a census over 150 files, caught only
+because a loose control read non-zero in the same run.
+
 ## BSD tools are not GNU tools, and they fail silently
 
 In a tracked file, arms S1–S7 of `scripts/validate-shell-portability.sh` and `I71` mechanize
@@ -107,6 +112,10 @@ the same shape to a regex:
 - **`awk -v` strips one level of escaping** and carries no newline at all. A regex passed
   through it needs doubled backslashes, so a correct site looks wrong.
 - **A multibyte character needs an alternation, not a bracket class.**
+- **An `&` in a `sed` replacement is the whole match**, so editing a script whose new text
+  carries `&&` re-inserts the matched line inside itself. Measured: two lines of a scorer
+  mangled silently, the run reporting "mutant did not apply". Rewrite such a line with the
+  Edit tool instead.
 
 Reach for `awk` over `sed` when the expression does real work, and verify every new expression
 against a positive control before trusting a zero from it.
