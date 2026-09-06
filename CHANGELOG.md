@@ -15,6 +15,78 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.518.0] - 2026-09-06
+
+### `BL-190` — every git call in `validate-claude-rules.sh` now answers about the repository it was pointed at
+
+Git exports `GIT_DIR`, absolute, into any hook running from a linked worktree, and this program is
+both a hook-dispatched validator and a thing operators and agents run directly. Nothing in it
+pinned a repository, so every git call answered about whichever repository the environment named.
+Two failures, pulling in opposite directions.
+
+**The write.** A1's probe builds a `mktemp` scratch repo and relies on git's upward DISCOVERY to
+find it — the branch git takes only when the repository environment is unset. Inherited, its
+`git add -A -f` wrote the caller's index: measured on a clone with a linked worktree, **757 tracked
+paths to 3**; control unset, **757 to 757**. Eight arms then fail closed, every one reading as a
+corpus defect rather than a broken instrument.
+
+**The read, which is silent and worse.** `a1_offenders()` and `glob_matches()` enumerate the corpus
+with a bare `git ls-files`. Redirected, they answer about the caller's repo. Measured against a tree
+carrying a real tracked `.claude/settings.json` and a victim clean under `.claude/`: clean
+environment **convicts**, inherited environment prints **`A1 ok`**. The arm's entire subject is
+acquitted with no clobber to give it away.
+
+**The first cut of this fix scrubbed only the probe subshell, and an adversarial pass caught that it
+made things worse** — the probe then correctly builds its own repo and fires, so A1 prints `ok` over
+a corpus it never opened, turning a loud wrong answer into a silent false green. The scrub is now
+one line at the top of the program, before any git call, covering reads and writes together.
+
+Moving `.githooks/pre-push`'s existing scrub instead was built and rejected on measurement: with it
+above the validator dispatch and the validator invoked directly, the index still reads 757 to 3. A
+duty that must hold across several delivery paths is sited in the program that needs it.
+
+All five variables rather than `GIT_DIR` alone — a caller carrying `GIT_INDEX_FILE` and
+`GIT_WORK_TREE` still redirects the probe, and git exports `GIT_INDEX_FILE` to a pre-commit hook
+even from a primary checkout. A `--git-dir=` fix was refuted by construction: `git init -q .` itself
+honours an exported `GIT_DIR`, so no `.git` is created in the `mktemp` dir and A1's self-probe goes
+dead — an arm reporting nothing, indistinguishable from a clean corpus.
+
+**The fixture reproduced the defect it guards.** `core/fixtures/claude-rules-joins/run.sh`'s own
+`seed()` was unscrubbed, so running it by hand under an inherited environment wrote the caller's
+index — measured, an outer repo of 17 tracked files to 7, while the fixture printed PASS. It now
+scrubs at its top, as the sibling `prepush-worktree-env-scrub` already did.
+
+Guarded by three arms, each killing a build the other two accept: `m12` asserts the probe does not
+write the caller's index, `m13` asserts the corpus arms do not read it (seeding a real offender so
+the arm reads a conviction rather than an absence), and `m12b` drives `GIT_INDEX_FILE` and
+`GIT_WORK_TREE` **without** `GIT_DIR`. A fully reverted fix dies at m12 (victim `9 -> 3`); a
+subshell-only scrub passes m12 and dies at m13; a scrub narrowed to `unset GIT_DIR` passes both and
+dies at m12b.
+
+**That third arm is a seed defect this release nearly shipped.** The entry named
+`GIT_INDEX_FILE` + `GIT_WORK_TREE` as the input separating the fix from the one-variable near-miss,
+and then drove neither — both arms set `GIT_DIR`, the one variable that build handles, so it scored
+as fixed. The assertions were right and the seed was one property short, which reads as coverage.
+
+Distribution-only: named nowhere in `scripts/install.sh` (control: `validate-layer-entries` returns
+1), nowhere in `core/scripts/`, and nowhere in the consumer's hook, whose ten pre-scrub validators
+run no `git init` at all.
+
+### `BL-191` — filed, not fixed: 42 of 45 scratch-repo builders depend on a caller having scrubbed
+
+Derived population: 45 files run `git init`; **42 scrub nothing**, and the 3 that do are the two
+hooks plus the fixture whose subject is this hazard. Through the hook the exposure is 1 of 14
+programs — `BL-190`'s subject — and fixtures dispatched by `run_fixtures` are protected. Run
+**directly**, which is how a hand debugs a single fixture, 8 of 8 fixtures driven clobbered a
+757-entry index and **6 did it while printing zero FAILs and exiting 0**. Blast radius is the index
+only; `HEAD`, refs and working files are untouched and `git reset --hard` recovers.
+
+Not fixed here because the remedy is a new seam — a fixture preamble sourced by every `run.sh`, plus
+a binding that fails the push when one does not source it — which touches 40 shipped files and their
+ship declarations, and needs a pole-timing measurement. Its detector arm's false-positive set is
+measured at 41 flagged of 45, roughly 30 of them true, which is why it ships report-only with a
+ratcheting ceiling rather than fail-closed.
+
 ## [0.517.0] - 2026-09-06
 
 ### `BL-185` — Rule 25(a) states the header a moved block carries, because the rotator's only cut point is a `## ` line

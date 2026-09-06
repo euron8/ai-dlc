@@ -4152,6 +4152,46 @@ materialised at line 7. This tree's config carried no `bare` line originally. So
 `git init` reaching the real repo is a route to the KEY EXISTING AT ALL, which is a precondition
 for it holding any value. It does not explain the value `true`.
 
+**THE POSITION IS NOW REPRODUCED, AND IT WAS REPRODUCED BY A SESSION COMMITTING THE DEFECT
+ACCIDENTALLY.** The entry above reads the key's position — line 8, appended INSIDE the live
+`[core]` block directly after `hooksPath`, where a from-scratch init writes it at line 7 BEFORE
+`hooksPath` — as evidence that something appended to a live section rather than re-initialising
+from scratch. That reading is now measured rather than inferred. A re-init on a repo whose
+`[core]` block carries extra keys appends `bare` at the END of the block: seeded with the `bare`
+line stripped and a `hooksPath` key added, `git init` in the existing repo puts `bare = false` at
+line 8 and `hooksPath` at line 7 — the exact ordering this tree carries. Control: a fresh
+`git clone` of this repo writes `bare = false` at line 4, before `logallrefupdates`.
+
+**So the position is a signature of a re-init on a live config, and it is NOT a signature of a
+bare init.** It still does not explain the value `true`; a re-init writes `false`.
+
+**HOW IT WAS REPRODUCED IS THE PART WORTH KEEPING.** During batch 66 a fixture arm was given a
+diagnostic message containing an UNESCAPED backtick pair inside a double-quoted shell string —
+`` `git init` `` written as prose about the command. The shell executed it. `git init` ran against
+`/Users/n8/git/ai-dlc` with no argument and no `GIT_DIR` set, materialising `bare = false` in this
+tree's config at line 8, and spliced `Reinitialized existing Git repository in …` into the message
+text where the prose was meant to be. Nothing else was touched: `core.bare` reads `false`, the
+index held at 757, `HEAD` unmoved. `tool-hazards.md` names this hazard for heredocs inside
+`bash -c`; the same quoting failure in an ordinary double-quoted string inside a tracked fixture
+reaches the real repository the same way, and the sibling line 12 lines above it escapes its
+backticks correctly, so a correct site and an incorrect one sit in the same file.
+
+**This is a route to a stray `git init` that no `GIT_DIR` reasoning covers**, and it is a second
+route beside the unguarded `cd` this entry's receipt keys on: prose about a git command, unescaped,
+in a string a shell expands.
+
+**NO LINT IS PROPOSED FOR IT, AND THE REASON IS A MEASURED FALSE-POSITIVE SET RATHER THAN
+RELUCTANCE.** A scan for an unescaped backtick inside a double-quoted string, comments excluded,
+with its probe fired both ways before the corpus (seeded offender found, escaped near-miss and
+comment line both acquitted), returns **224 executable-line hits across the tracked shell corpus**.
+That number is not a finding count. Inspection of the largest contributor — 31 hits in
+`validate-enforcement-map.sh` — shows they sit inside PYTHON heredoc bodies, where the shell never
+expands anything, and others sit in single-quoted regions the scanner's crude quote-tracking
+mis-parses. **The grammar cannot currently tell an expanded string from an inert one**, so 224 is a
+ceiling of unknown depth and shipping it would be the unmeasured lint `CLAUDE.md` forbids. The one
+true positive is the site above, found by executing rather than by scanning. A usable arm needs
+heredoc-body and quote-state tracking first, and that is its own piece of work.
+
 **THE FIRST RECOVERY DESTROYED THE EVIDENCE; THE SECOND OCCURRENCE PRESERVED IT, AND THAT IS
 WHERE THE REAL FINDINGS CAME FROM.** `git config --unset` removes the line entirely, so after the
 first flip the file could no longer say what wrote it. **It recurred six minutes later, the
@@ -4243,3 +4283,223 @@ detectable from this tree, and it must NOT be read as evidence that the `core.ba
 understood or fixed.
 
 verify: sh f=core/fixtures/check-1c-bypass/seed.sh; [ -f "$f" ] || exit 9; n=$(grep -cE '^[[:space:]]*cd "[^"]+"[[:space:]]*$' "$f") || n=0; [ "$n" -eq 0 ]
+
+## BL-190 — `validate-claude-rules.sh` runs every git call under whatever repository the environment names: the probe WRITES the caller's index, and the corpus arms READ it
+
+**MEASURED, ON A REAL CLONE PUSHED FROM A REAL LINKED WORKTREE.** Git exports `GIT_DIR`,
+ABSOLUTE, into any hook running from a linked worktree, and this program is both a
+hook-dispatched validator and a thing operators and agents run directly. Nothing in it pinned a
+repository, so every git call answered about whichever repository the environment named. The two
+resulting failures pull in opposite directions and the second is the dangerous one.
+
+**THE WRITE.** `scripts/validate-claude-rules.sh`'s A1 probe creates a `mktemp` tree, runs
+`git init -q .`, then `git add -A -f`, relying on git's upward DISCOVERY to find the scratch tree
+— the branch git takes **only when the repository environment is unset**. Inherited, the `git add`
+writes the REAL index. Driven against a clone with a linked worktree, the environment reproduced
+exactly as git hands it to a hook: **757 tracked paths to 3**. Control, identical sequence unset:
+**757 to 757**. The probe emits its two rows in both runs, so a clobbering run and a correct one
+are indistinguishable from the output. Eight arms then fail closed and every one reads as a corpus
+defect — A1 reporting the probe's own `.claude/settings.json`, A2's own probe declaring it cannot
+fire, and six false A2 findings naming rule files whose globs "match NO tracked path", true only
+because the index no longer holds the paths.
+
+**THE READ, WHICH IS SILENT AND STRICTLY WORSE.** `a1_offenders()` and `glob_matches()` enumerate
+the CORPUS with a bare `git ls-files`, outside any probe. Redirected, they answer about the
+caller's repository. Measured against a seed tree carrying a real tracked `.claude/settings.json`
+and a victim repo clean under `.claude/`: in a clean environment A1 **convicts**; with `GIT_DIR`
+inherited A1 prints **`A1 ok`**. The arm's entire subject is acquitted, with no clobber to give it
+away.
+
+**A FIX SCRUBBING ONLY THE PROBE SUBSHELL PASSES EVERY WRITE-SIDE CHECK AND LEAVES THIS OPEN.**
+That was the first build of this fix and an adversarial pass caught it: the probe correctly builds
+its own repo and fires, so A1 prints `ok`, and the corpus read that produced the verdict never
+looked at the corpus. **It converts a loud wrong answer into a silent false green.** The reverted
+build was at least noisy; that one is not. The remedy is one scrub at the TOP of the program,
+before any git call, covering reads and writes together — which is where it now sits.
+
+**MOVING THE HOOK'S SCRUB INSTEAD WAS BUILT AND REJECTED ON MEASUREMENT.** `.githooks/pre-push`
+carries the same unset above its fixture dispatch. With it moved above the validator dispatch and
+the validator invoked DIRECTLY — by an operator, by an agent — the index reads **757 to 3**,
+unchanged. A duty that must hold across several delivery paths is sited in the program that needs
+it, not on one of its callers.
+
+**ALL FIVE VARIABLES, AND THAT IS LOAD-BEARING RATHER THAN BELT-AND-BRACES.** With only `GIT_DIR`
+unset, a caller carrying `GIT_INDEX_FILE` and `GIT_WORK_TREE` still redirects the probe, which then
+fails its own fire check. Git exports `GIT_INDEX_FILE` to a pre-commit hook even from a PRIMARY
+checkout, so that world is real and not hypothetical.
+
+**A `--git-dir=` FIX IS WORSE THAN THE DEFECT AND WAS REFUTED BY CONSTRUCTION.** `git init -q .`
+ITSELF honours an exported `GIT_DIR`: with it set, **no `.git` is created in the `mktemp` dir**
+(control: unset, it is) — the init re-initialises the exported directory. `--git-dir="$probe/.git"`
+then names a directory that does not exist, git answers `fatal: not a git repository`, and A1's
+self-probe goes DEAD — an arm reporting nothing, indistinguishable from a clean corpus. A path
+argument to `git init` does not rescue it. Same shape as `BL-189`'s argument-less bare init.
+
+**THE FIXTURE REPRODUCED THE DEFECT IT GUARDS.** `core/fixtures/claude-rules-joins/run.sh`'s own
+`seed()` ran `git init` + `git add -A` unscrubbed, so running the fixture by hand under an
+inherited environment wrote the caller's index: measured, an outer repo of **17 tracked files went
+to 7**, holding the seed's own paths, while the fixture printed PASS. It now scrubs at its top, as
+the sibling `prepush-worktree-env-scrub/run.sh` already did — that sibling was the only one of the
+27 scratch-repo-building fixtures that did.
+
+**Guarded by THREE arms, each killing a build the other two accept.** `m12` seeds a nine-entry
+victim, drives the real validator with `GIT_DIR` pointed at it, and asserts the index is unmoved AND
+that A1 fired. `m13` seeds a corpus carrying a REAL offender against a victim clean under
+`.claude/`, and asserts A1 convicts the same offender scrubbed AND armed — a conviction, not an
+absence, because a redirected read finds nothing to report and prints `ok`, which is exactly the
+acquittal being guarded. `m12b` drives `GIT_INDEX_FILE` and `GIT_WORK_TREE` **without** `GIT_DIR`.
+
+| build | m12 | m12b | m13 |
+|---|---|---|---|
+| fully reverted (victim `9 -> 3`) | KILLS | — | — |
+| scrub in the probe subshell only | passes | — | KILLS |
+| scrub narrowed to `unset GIT_DIR` | passes | KILLS | passes |
+
+**THE `m12b` ROW IS A SEED DEFECT THIS ENTRY SHIPPED AND AN ADVERSARIAL PASS CAUGHT.** The paragraph
+above names `GIT_INDEX_FILE` + `GIT_WORK_TREE` as the input separating the fix from the one-variable
+near-miss — and neither arm drove it. Both set `GIT_DIR`, the single variable a `GIT_DIR`-only scrub
+handles, so that build scored as fixed against two arms asserting the right outcome on an input that
+could not distinguish it. **The assertions were correct and the SEED was one property short**, which
+is the shape that reads as thorough coverage. `GIT_DIR` is deliberately absent from `m12b` for that
+reason: setting it would let the near-miss pass by handling the one variable it knows.
+
+**THE RECEIPT BELOW IS A TEXT ANCHOR AND `m13` IS THE ARM.** Scored across four implementations,
+three of them broken: a commented-out `unset`, an `unset` moved into prose above the subshell, and
+an `unset` placed AFTER the `git init` all SATISFY a text-keyed receipt while the victim goes
+`10 -> 3` or the probe goes dead; a legitimate per-command `env -u` fix carries no `unset` token
+and would be REJECTED. The receipt is not load-bearing while the fixture runs; if this entry ever
+rotates and the fixture is archived, the receipt alone accepts a commented-out fix.
+
+**DISTRIBUTION-ONLY, VERIFIED TWICE INDEPENDENTLY.** `scripts/validate-claude-rules.sh` is named
+nowhere in `scripts/install.sh` (control: `validate-layer-entries` returns 1 there), nowhere in
+`core/scripts/` (control: 52 entries there), and nowhere in `core/git-hooks/pre-push` (control:
+`audit-rule-files` returns 2). The consumer's hook has no equivalent exposure: its scrub sits at
+line 781 above its only fixture dispatch, and **zero of the ten validators above that line run
+`git init` or `git add`** (control: this validator returns 1 and 1). Note that **I66 binds only the
+`FIXTURE_POOL` block**, so the two hooks agreeing on scrub placement is not something any invariant
+holds true — it is coincidence today.
+
+**Related to `BL-189` and NOT the same subject** — that one is an unguarded `cd` in
+`check-1c-bypass/seed.sh` and an unidentified `core.bare = true` writer. Both are `GIT_DIR`-shaped;
+neither closes the other.
+
+**WHY THIS SITE SHIPPED ALONE, AND THE REASON IS THE HOOK'S POSITION RATHER THAN DIRECT
+INVOCATION.** The paragraphs above argue the scrub belongs in the program because direct invocation
+is unprotected — true, but that applies equally to all 42 members of `BL-191`'s class and so does
+not explain why this one shipped first. The asymmetry that does: `validate-claude-rules.sh` is
+dispatched at `.githooks/pre-push:129`, **734 lines above the scrub at :863**, making it the one
+site the hook does not protect. The fixtures in `BL-191` ARE protected on the hook path, confirmed
+by the 14-program differential. This site is reachable through the gate every push goes through;
+they are reachable only by hand.
+
+**The wider class is `BL-191`, deliberately filed separately** so this entry stays closable.
+
+verify: sh f=scripts/validate-claude-rules.sh; [ -f "$f" ] || exit 9; awk 'BEGIN{c=0} /^unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY$/{c=1} /^[^#]*git (ls-files|init|add)/{if(!c) exit 1} END{exit !c}' "$f"
+
+## BL-191 — 42 of 45 scratch-repo-building scripts depend on a caller having scrubbed the git environment, and a fixture run BY HAND clobbers the index while printing PASS
+
+**FILED SEPARATELY FROM `BL-190` ON PURPOSE.** That entry is one program and it closes. This is the
+class behind it, and folding the two together would make `BL-190` unclosable — a second subject one
+paragraph down is the shape that keeps an entry open forever.
+
+**THE POPULATION, DERIVED.** `git grep -l 'git init' -- '*.sh' '.githooks/*' 'core/git-hooks/*'` =
+**45 files / 54 lines**. Controls in the same invocation: `mktemp` returns 272 files, a nonsense
+token returns 0. Partitioned on whether the file scrubs its own environment
+(`unset …GIT_DIR|GIT_OBJECT_DIRECTORY|env -u GIT_DIR|env -i`):
+
+- **self-scrubbing: 3** — `.githooks/pre-push`, `core/git-hooks/pre-push`, and
+  `core/fixtures/prepush-worktree-env-scrub/run.sh`, whose subject IS this hazard.
+- **not self-scrubbing: 42.**
+
+Stronger form of the same partition: those same 3 are the **only** files of the 45 that mention any
+`GIT_*` repository variable at all (control: 44 of 45 mention `mktemp`, 0 mention an absent token).
+So 42 of 45 depend wholly on a caller having scrubbed. At fixture granularity: 193 suite
+directories, 191 with a `run.sh`; **40 run `git init`** and 55 run any git write verb.
+
+**THE POPULATION IS NOT "SCRIPTS THAT CAN CLOBBER" BUT "SCRIPTS THAT CAN CLOBBER WHILE THEIR OWN
+GUARD REPORTS INTACT", AND THAT DISTINCTION IS THE ENTRY'S MOST REUSABLE PART.** `git init` under an
+exported `GIT_DIR` **silently succeeds without creating a repository in the target directory** —
+measured directly: `.git` absent afterwards, exit 0, no diagnostic. A victim directory seeded that
+way is not a repository, so every subsequent reading of it describes the OUTER repo instead. Measured
+on the first version of `BL-190`'s own `m12` arm: the outer index went 17 to 9, and `v_before` and
+`v_after` both read that outer repo, which the seed had just overwritten to exactly 9 — so
+`v_after -eq v_before` held **by construction rather than by measurement**, and the arm printed
+`caller's index intact at 9` over the wreckage while the fixture exited 0. A count guard cannot
+catch it; both readings are byte-identical to correct ones.
+
+**So the failure mode is one level worse than a clobber: a script that clobbers, carrying an arm
+pointed at exactly that, returning a green verdict COMPUTED FROM THE DAMAGE.** Any of the unscrubbed
+scripts that later gains an index-integrity assertion reproduces it unless the victim is seeded under
+a scrub AND its repository-ness asserted rather than assumed — `[ -d "$victim/.git" ]`, which `m12`
+and `m12b` now both carry, driven both ways: it fires in the armed world and stays quiet in the
+scrubbed one. Without that sentence here the next author writing such an arm writes the broken one
+again. The remedy precedent is `prepush-worktree-env-scrub/run.sh:65`, whose header states the reason
+verbatim.
+
+**THE HOOK CHANNEL IS FINE AND IS NOT WHAT THIS ENTRY IS ABOUT.** An index-keyed differential over
+all 14 programs dispatched above the distribution hook's scrub, against a sandbox clone with a real
+linked worktree, `GIT_DIR` armed versus `env -u GIT_DIR`, victim reset between every trial: exactly
+**one of fourteen** clobbers, and it is `BL-190`'s subject. Discrimination control: `git rm --cached`
+one path reads 756, reset restores 757. Fixtures dispatched through `run_fixtures` are likewise
+protected, by measurement rather than by reading the `unset` line.
+
+**THE DIRECT-INVOCATION CHANNEL IS WHERE THE CLASS LIVES, AND IT IS SILENT.** Fresh worktree per
+trial, `GIT_DIR` armed as git exports it to a hook from a linked worktree, victim baseline 757:
+
+```
+trunk-push-bound         757 ->  4    exit 0   0 FAILs
+release-version-triple   757 ->  2    exit 0   0 FAILs
+suite-content-key        757 -> 35    exit 0   0 FAILs
+claude-rules-joins       757 ->  9    exit 0   0 FAILs
+layer-title-join         757 ->  6    exit 0   0 FAILs
+shell-portability        757 ->  5    exit 0   0 FAILs
+snapshot-archive-rotate  757 ->  1    exit 1   5 FAILs
+check5-anchor-base       757 ->  7    exit 0   1 FAIL
+```
+
+**Eight of eight clobber; six do it while printing zero FAILs and exiting 0.** Unarmed control, same
+fixtures: 757 to 757 throughout, so the sides genuinely differ. This was measured twice
+independently — a first attempt by the lead read "no clobber" because it pointed `GIT_DIR` at one
+worktree's admin directory while reading a different worktree's index, a differential whose two
+sides could not disagree.
+
+**THIS IS REACHED BY THE WORKFLOW THE REPO ITSELF PRESCRIBES.** `CLAUDE.md` tells sessions to run
+the suite through the hook, and hands debugging a single fixture run it by hand — which is exactly
+`bash core/fixtures/X/run.sh`, the unprotected path. Every hand working in a worktree is in the
+armed state by construction.
+
+**BLAST RADIUS, MEASURED: THE INDEX ONLY.** `HEAD` unchanged, refs unchanged, worktree files still
+on disk. The victim then shows `AD` / `D ` / `??` rows — it reads as a catastrophic deletion and
+recovers fully with `git reset --hard`. No object loss.
+
+**THE REMEDY IS TWO PARTS AND NEITHER ALONE IS SUFFICIENT.**
+
+- **A scrub in each of the 40 fixtures is the wrong shape** — a hand-maintained list of 40 with
+  nothing binding the 41st, which is the hand-list this repo's own rules say to derive instead.
+- **The single seam does not exist yet.** Measured while looking for it: 191 `run.sh` files, no
+  shared harness; the most common sourced file appears 38 times and is per-fixture sandbox state.
+  Both hooks dispatch at their own `bash "$d/run.sh"` line, and that point is INSIDE the hook — the
+  already-protected channel. A direct invocation passes through no seam at all. So the fix is to
+  CREATE one: a `core/fixtures/lib/preamble.sh` carrying the scrub, sourced first by every `run.sh`.
+- **That seam needs a both-directions binding** — a `run.sh` that does not source it must fail the
+  push — which is the validator arm wearing a different hat.
+
+**THE ARM'S FALSE-POSITIVE SET IS MEASURED AND IT IS WHY THIS SHIPS REPORT-ONLY.** Population 45,
+minus 2 comment-only and 2 acquitted, gives **41 flagged**. Probe fired both ways before the corpus:
+a seeded offender FLAGGED, a seeded near-miss in the post-fix shape acquitted. Git-history control:
+the pre-fix `validate-claude-rules.sh` at `677acd79^` is FLAGGED and the shipped one acquitted, so
+the rule discriminates across the commit boundary. **41 flagged is not 41 false positives** — of the
+8 driven, 6 genuinely clobbered and 2 never reached a write, so the extrapolation is roughly 30 true
+and 10 that cannot fire. But 41 findings on day one wedges the push and gets the check switched off,
+which is the failure `mechanism-design.md` names. It ships as a REPORTING arm with a ceiling that
+only ratchets down, the shape `validate-write-format-steering.sh` already uses.
+
+**NOT FIXED IN THIS RELEASE, AND THE REASON IS SCOPE RATHER THAN DIFFICULTY.** Creating a fixture
+preamble touches 40 shipped files and their ship declarations, and `CLAUDE.md` requires a validator
+the suite POLE invokes to be timed before and after from inside the repo. That is its own release.
+
+**Two of the three self-scrubbing files are the hooks, and `I66` does not bind their scrub
+placement** — it binds only the `FIXTURE_POOL` block. The two hooks agreeing here is coincidence
+today, and nothing fails if one drifts.
+
+verify: sh n=$(git grep -l 'git init' -- '*.sh' '.githooks/*' 'core/git-hooks/*' | wc -l); [ "$n" -gt 0 ] || exit 9; s=$(git grep -lE 'unset[[:space:]]+GIT_DIR|env -u GIT_DIR|env -i' -- '*.sh' '.githooks/*' 'core/git-hooks/*' | wc -l); [ "$s" -ge 40 ]
