@@ -168,7 +168,13 @@ S10_HB="$(printf '\200-\377')"
 # written against carries `#{2,4}` BEFORE its terminator class, and the first cut's `[^#]*`
 # could not cross it -- it reported 12 of the 23 lines the census found and read as a pass on
 # the other eleven. A regex that cannot spell its own subject scores it as a non-instance.
-S10_PAT="(grep|sed|awk|sub\\(|match\\(|~|[A-Za-z_][A-Za-z0-9_]*=[\"']).*\\[[^][:space:]]*[${S10_HB}][^][:space:]]*\\]"
+# The leading `^[[:space:]]*/` alternative is the bare awk pattern-action rule -- `/re/ { … }`
+# on a continuation line of a multi-line program, which carries no other context token and is
+# the most common awk shape in this corpus (48 files). The adversarial hand seeded it and the
+# first cut acquitted it. What stays acquitted, stated rather than hidden: a class assembled
+# from a variable (`[.${SEP}]`), a `$'…'` string, a `${v//[…]/}` expansion and a `case` pattern
+# -- none carries a multibyte class today, and each would need its own probe before it is added.
+S10_PAT="(^[[:space:]]*/|grep|sed|awk|sub\\(|match\\(|~|[A-Za-z_][A-Za-z0-9_]*=[\"']).*\\[[^][:space:]]*[${S10_HB}][^][:space:]]*\\]"
 S10_SKIP="re\\.[a-z]+\\("
 S10_WHY="a MULTIBYTE character inside a bracket class in a shell, awk, sed or grep expression. Under the C locale -- every CI runner with LANG unset, every \`env -i\` -- the class holds the character's BYTES, not the character: a match lands on its last byte, a strip leaves the other two behind in the extracted value, and the value joins against nothing. Measured: \`[—–-]\` split every \`**Suppresses:**\` id in the suppression-lifetime validator so no SUPPRESSED carve-out existed under \`env -i\`. Spell it as an ALTERNATION -- \`(—|–|-)\`, \`(\\\\.|—)\` -- which is a byte sequence under both locales. The alternation CARRIES a \`|\`: if the expression is later interpolated into a \`sed s|…|…|\`, pick another delimiter (measured: relabel-extension-checks.sh's \`s|(\${anchor_at})|…|\` refused the pattern and wrote nothing)."
 S8_PAT="(show|cat-file -p|ls-tree|archive|diff)[[:space:]]+<[^>]+>:"
@@ -266,6 +272,7 @@ awk '{ gsub(/(a)b/, "\1x") }' f
 git -C <dist> show <theirs>:templates/settings.json.template > "$t"
 git grep -nE '\bMODEL_MAX\b' -- core/
 awk '{ sub(/[[:space:]]*[—–-][[:space:]].*$/, "", s) }' f
+  /^#{2,4}[ \t]+[0-9]+[ \t]*[.—]/ { print }
 BADEOF
 cat > "$probe/good.sh" <<'GOODEOF'
 sed -i.bak 's/a/b/' f && rm -f f.bak
@@ -280,6 +287,8 @@ git grep -nE '[[:space:]]MODEL_MAX' -- core/
 grep -oE '\bLR-[0-9]+\b' f
 awk '{ sub(/[[:space:]]*(—|–|-)[[:space:]].*$/, "", s) }' f
 HEAD_RE='^#{2,4}[[:space:]]+[0-9]+[[:space:]]*(\.|—)'
+  /^#{2,4}[ \t]+[0-9]+[ \t]*(\.|—)/ { print }
+/usr/bin/grep -E '[[:space:]]' f
 ok "prose naming a class in a message ([…]) is a string, not a class"
     r"^#{2,4}[ \t]+(?:Check[ \t]+)?([0-9]+)[ \t]*[.—]")
 SECTION_RE = re.compile(r'^## Sprint (\d+) [—\-]+ (.+)')
