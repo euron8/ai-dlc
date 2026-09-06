@@ -4186,3 +4186,44 @@ world the consumer's pre-push runs in and this repo's never has. The consumer's 
 is `verify: manual` by its own note (a reorder keeps every token present today).
 
 verify: sh V=$PWD/core/scripts/validate-suppression-lifetime.sh; [ -f "$V" ] || exit 9; W=$(mktemp -d); R=$W/r; C=$W/c; N=$W/n; M=$W/map.yaml; mkdir -p $R/_bmad-output/implementation-artifacts $C/_bmad-output/implementation-artifacts $N; printf 'checks:\n  - id: 16\n    title: a\n  - id: 32\n    title: b\n' > $M; g() { printf '{"v":1,"sprint":1,"gate":"planning","phase":"a","ts":"%s","sha":"deadbeef","catalog":"core","check":"32","title":"t","verdict":"FAIL","defect_class":null,"evidence":"e","tok_slice":1}\n' "$1"; }; g 2026-05-02T01:00:00Z > $R/_bmad-output/implementation-artifacts/gate-metrics.jsonl; for i in 2 3 4 5 6 7 8 9; do g 2026-05-0${i}T01:00:00Z; done > $C/_bmad-output/implementation-artifacts/gate-metrics.jsonl; printf '## [S1 gate] [lead] - 2026-05-01T00:00:00Z\n**Status:** SUPPRESSED\n**Suppresses:** [core] 32 — b\n**Expires after:** 3 gates\n**Operator authorization:** 2026-05-01T00:00:00Z | "Override, proceed, file backlog item"\n' > $R/pending.md; d() { ( cd "$1" && AI_DLC_PROJECT_ROOT=$2 bash $V --in-force --escalations $R/pending.md --enforcement-map $M 2>&1 >/dev/null | grep '^IN-FORCE:' ); }; a=$(d $C $R); b=$(d $R $R); c=$(d $C $N); rm -rf $W; case $a in *"in_force=1 gates_recorded=1 "*) ;; *) exit 1;; esac; [ "$a" = "$b" ] || exit 1; case $c in *"in_force=0 "*"gates_recorded=NONE"*) ;; *) exit 1;; esac
+## BL-180 — retro's rule-file audit judged what a rule SAYS and never whether the sprint exercised one, so a rule nothing in the pipeline can reach cleared the accretion tally at zero catches against zero false positives
+
+**LANDED — the receipt below drives the shipped step file.**
+
+Drain of `PC-S337-RETRO-PROCESS-IMPROVEMENTS-RULE-EXERCISE-AUDIT`, the reference consumer's
+`push_candidate: true` extension hooking `steps/retro.md` "### 4. Apply Process Improvements";
+NOTE tier — the cost is a rule set that grows unreachable members while every scan reports
+clean, not a wrong gate verdict.
+
+Core's `#### Rule file audit (every retro)` ran five mechanical scans plus the lead's Class 3
+accretion pass, and every one of them judged rule TEXT: narrative drift, an incomplete Rule
+26(c) triple, soft language, pointer resolution, path-filter dormancy, and a false-positive
+tally against true catches. Class 3's ratio is the closest thing to an exercise question and it
+does not ask one — an item never reached scores zero false positives against zero catches and
+passes, which reads exactly like an item that fired cleanly all sprint. `### Empirical gate
+validation` covers the other half only for GATES added via retro and only inside the exercise
+window; a rule in `CLAUDE.md`, a coding convention, or a hook from an earlier sprint has no
+liveness question anywhere in the step. The consumer runs the missing pass as a project-local
+script because its corpus helper is theirs and not core's, which is the only reason the QUESTION
+was not already upstream.
+
+`core/skills/ai-dlc/steps/retro.md` now carries the question in core's voice, inside the same
+Class 3 pass and over the same population: for each item, whether THIS sprint produced evidence
+it fired — a gate log line, a review finding, a refused action, a change made to satisfy it —
+derived from artifacts the sprint already committed rather than recalled. An item with no such
+evidence is UNEXERCISED, and the lead says which of the two states it is in: the subject did not
+arise, or nothing can reach it. An unreachable item routes to Step 4 for wiring, narrowing, or
+removal, which is the mechanism that added it. The consumer's local script and its corpus helper
+are not restated and are not required — the procedure names the artifact classes, not a program.
+
+**Stated limits.** The receipt is a grep on prose, because the subject IS prose: a step file
+carries no emission site to bind. It is satisfied by any text placing the three tokens between
+the `#### Rule file audit` and `#### Resident-ordering scan` headings, so a comment, a quotation
+of this entry, or a mutant that keeps the tokens and inverts the instruction all close it; the
+section bound is the only discrimination it has, and it stops a mention elsewhere in the file
+from counting. Nothing mechanizes whether a lead actually performs the pass — Class 3 has the
+same property and for the same reason, which is that only the lead holds the history the
+question needs.
+
+verify: sh R="${RETRO:-core/skills/ai-dlc/steps/retro.md}"; [ -f "$R" ] || R=".claude/skills/ai-dlc/steps/retro.md"; [ -f "$R" ] || exit 9; a=$(grep -n '^#### Rule file audit' "$R" | head -1 | cut -d: -f1); b=$(grep -n '^#### Resident-ordering scan' "$R" | head -1 | cut -d: -f1); [ -n "$a" ] && [ -n "$b" ] && [ "$a" -lt "$b" ] || exit 9; s=$(sed -n "${a},${b}p" "$R"); case "$s" in *UNEXERCISED*) ;; *) exit 1 ;; esac; case "$s" in *"Presence is not exercise"*) ;; *) exit 1 ;; esac; case "$s" in *"nothing in the pipeline can reach it"*) exit 0 ;; esac; exit 1
+
