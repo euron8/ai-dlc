@@ -4183,3 +4183,111 @@ subject is where the timeline is read from; this one is what the entry says, and
 same way from every cwd.
 
 verify: sh V=$PWD/core/scripts/validate-suppression-lifetime.sh; [ -f "$V" ] || exit 9; W=$(mktemp -d); mkdir -p $W/r; printf 'checks:\n  - id: 16\n    title: a\n  - id: 32\n    title: b\n' > $W/map.yaml; printf '## [S1 gate] [lead] - 2026-05-01T00:00:00Z\n**Status:** SUPPRESSED\n**Suppresses:** [core] 32 — b\n**Expires after:** 3 gates\n**Operator authorization:** 2026-05-01T00:00:00Z | "Override, proceed, file backlog item"\n' > $W/r/pending.md; printf '{"ts":"2026-05-02T01:00:00Z","check":"32","verdict":"FAIL"}\n' > $W/gm.jsonl; a=$(LC_ALL=en_US.UTF-8 AI_DLC_PROJECT_ROOT=$W/r bash $V --in-force --escalations $W/r/pending.md --enforcement-map $W/map.yaml --gate-metrics $W/gm.jsonl 2>&1 >/dev/null); b=$(env -i PATH=/usr/bin:/bin AI_DLC_PROJECT_ROOT=$W/r bash $V --in-force --escalations $W/r/pending.md --enforcement-map $W/map.yaml --gate-metrics $W/gm.jsonl 2>&1 >/dev/null); rm -rf $W; case $a in *"in_force=1 "*) ;; *) exit 9;; esac; case $b in *"in_force=1 "*) exit 0;; esac; exit 1
+
+## BL-182 — the union gate refused every pull that had a blocker with a message naming two false causes, because resolving a blocker rewrites the region clause (1) verifies and nothing said so
+
+Filed by the reference consumer as
+`PC-S305-UNION-GATE-UNPASSABLE-ON-ANY-PULL-THAT-HAD-A-BLOCKER` (2026-08-26, on its
+0.412.0 → 0.415.0 pull, nine `HARD-*` rows); DEFECT tier — it is the common path, not an edge
+case, on every pull that carries a blocker, and the consumer has been working around it
+unwritten. SKILL.md step 7 requires every `HARD-*` blocker resolved BEFORE `apply.sh` writes,
+and each resolution rewrites the mechanical region: a `--stamp readopt` turns a
+`HARD-OVERRIDE-DRIFT-SECTION` row into `OVERRIDE-OK`, a register row removes a
+`HARD-LAYER-ADJUDICATION-MISSING` row. So the report the operator approved lists findings that
+no longer exist, `emit-report.sh --verify` fails, and `apply.sh` — which has driven clause
+(1) itself since `v0.488.0` — refused with a message whose two named causes, upstream moved
+and region hand-edited, were both false. Verified on the consumer's COMMITTED logs before
+anything was built: of its six applies since `v0.488.0`, four re-rendered the region after
+resolving blockers (`reconcile-log-20260903T192147Z.md` "region re-rendered at apply",
+`…20260904T074628Z.md` "re-rendered after the register write (blocker list 3 → 0)",
+`…2026-09-05T191500Z.md`, `…20260905T235725Z.md`), and the 0.502.0 → 0.504.0 log records the
+refusal firing first: "first `apply.sh` attempt refused because the region still showed the
+now-resolved blockers; re-rendered, verify 0, re-ran". No SKILL.md sentence told the executor
+to re-render (control: `grep -n 're-render\|re-emit'` finds only the generic remedies at
+lines 1048 and 1232). The two logs with no such line had no blockers.
+
+Reader set, derived rather than taken from the filing: `--verify`'s exit code has ONE reader,
+`apply.sh`'s union-gate arm, which discarded its stderr; the refusal message has one reader,
+`apply-restamp-worklist`'s `m12`, anchored on `err "the report at ` and required to disarm
+every refusal site; SKILL.md step 5 says `--verify` "MUST exit 0" and step 7 clause (1) says
+"exits 0", both of which a 3 still fails. The filed remedy offered two shapes and both are
+taken in part. "Order clause (1) before the adjudication loop explicitly and say the region is
+re-emitted after it": step 7 now carries a paragraph stating that resolving a blocker rewrites
+the region, that `--verify` is re-run after the LAST resolution on a re-rendered region, and
+that the executor re-renders, verifies to 0 and has the operator re-approve before `apply.sh`.
+"Make clause (1) re-emit-then-verify rather than verify-only": NOT taken as a pass. The gate
+still refuses, because a resolution can leave rows the operator has not seen (a merge that
+renders `OVERRIDE-ASSERTS-SHADOW-SURVIVES`, say), and letting a "safe-direction" mismatch
+through would need a vocabulary of benign rows and would acquit whatever that vocabulary
+missed. What changes is the DIAGNOSIS: `--verify` classifies the mismatch — `UPSTREAM-MOVED`
+when the `_base_`/`_theirs_`/`_stamp_` lines differ, decided first because a moved range makes
+every other line incomparable; `BLOCKERS-RESOLVED`, exit **3**, when the refs are unchanged and
+the approved region carries `HARD-` rows the fresh render lacks and the render carries none the
+region lacks; `UNDECIDED` otherwise — keyed on the `HARD-` prefix SKILL.md already binds as the
+blocking contract and never on a status list, with rows whitespace-normalised and de-duplicated
+because one blocker renders in two sections. `apply.sh` keeps the stderr, quotes the `cause:`
+line, and on 3 refuses naming the cause and the one-step remedy (re-render, re-approve, re-run
+with the same four arguments), after the post-apply stamp arm and before the listed message.
+Two stale "SKILL.md step 8" citations in that arm now read step 7.
+
+Four repairs came from the two review hands before the merge, each measured. The refusal said
+"read the diff" over a diff `apply.sh` had discarded; `--verify`'s stderr is now forwarded
+whole. The resolved message asserted "not a finding hidden from the approval" while a
+resolution can render a non-HARD row the approval never saw (`OVERRIDE-ANCHOR-UNRESOLVED` on a
+merge); it now counts and lists those as `unseen:`, excluding the boilerplate a resolution moves
+into the diff (`none`, `0 HARD blockers.`, `-OK` rows, section headers) because a plain
+resolution and one hiding a real finding both counted 2 until it did. `_stamp_` left the refs
+comparison and became a cause of its own: it renders from the CONSUMER's stamp, keyed with the
+refs a consumer re-stamp read as "upstream moved" with both disjuncts false, and dropped
+altogether a post-apply re-run (stamp legitimately at theirs) read as blockers resolved and was
+told to re-approve a range already applied — so a changed `_stamp_` line is `STAMP-MOVED`, exit
+1, decided between the two, telling the operator to re-derive the base and re-run the dry run.
+And the fixture hand found the cause is decided from
+row ABSENCE, so a DEAD detector read as a blocker resolved, by name — `unregistered-drift.sh`
+and `layer-drift.sh` ran inside pipelines that lost their exit code and a refusal rendered the
+same `none` as a clean run; both now render `DETECTOR-REFUSED` on a non-zero exit (the treatment
+`warn-shadowed-local-validators.sh` already had) and a new such line blocks the resolved cause
+the way a new HARD row does. A detector exiting 0 having scanned nothing is still invisible to
+the region and is that detector's own honesty problem, not this gate's. The adversary's third
+pass found the de-duplication running on `comm`'s OUTPUT rather than its input: one blocker
+renders twice with different padding, so a report missing only the padded copy while the other
+still rendered read as resolved, and the reachable route was `hard-blockers.sh` refusing — the
+one detector call with no exit-code check, whose empty blocking list then verified clean on the
+prescribed re-render over drift still on disk. Both sides are now normalised and made unique
+BEFORE the difference, and the wrapper renders `DETECTOR-REFUSED` on a non-zero exit too.
+
+Replayed on the consumer's real history before the merge, by the replay hand on a `file://`
+clone: the post-resolution, pre-apply tree was never committed (each pull is one squash and
+its reconcile branch is gone), so each pull was reconstructed — worktree at the squash's
+parent, region rendered there, the reconcile commit's resolution files written in (register
+rows, the readopted override), then `--verify` on that tree with the fixed and the origin/main
+copies, `render()` byte-identical between them and each run asserting the sides differ. All
+four blocker pulls since `v0.488.0` read `BLOCKERS-RESOLVED` with the row count the logs
+record — 0.489.0 → 0.492.0 and 0.492.0 → 0.497.0 with 3, 0.502.0 → 0.504.0 with 11 (ten
+`HARD-LAYER-ADJUDICATION-MISSING` plus the readopted `check-5` override), 0.504.0 → 0.507.0
+with 13 — against exit 1 and no cause line from the control; the two blocker-free pulls read 0
+on both. No real mismatch reads `UNDECIDED` or `UPSTREAM-MOVED`, and both branches were
+reached on real data by reversing a pull's two sides and by verifying at a different `theirs`.
+Census over the consumer's 150 reconcile logs (grammar `HARD-[A-Z][A-Z-]+`, which the phrase
+`0 HARD blockers.` does not match; controls `reconcile` 147, impossible token 0): 54 name a
+blocker, a floor because one log writes "11 HARD rows" and no status name; 10 mention a
+re-render, all of them after the gate moved into `apply.sh`.
+
+Scored before landing, the receipt driving the SHIPPING `--verify` over the
+`reconcile-emit-report` seed (a consumer whose in-place schema edit renders
+`HARD-UNREGISTERED-CORE-DRIFT`): HEAD 0; origin/main 1; four wrong fixes 1 each — count-based
+(resolved whenever HARD rows vanished; the new-blocker world separates it), no refs check
+(the moved-ref world), exit 3 on any mismatch with refs equal (the hand-dropped-blocker world),
+no exit 3 at all; subject missing 9. Mechanism: `reconcile-emit-report` arms on the five
+worlds with mutants over a copy of the reconcile dir, and `apply-restamp-worklist` `U5` driving
+`apply.sh` over a resolved-blocker world with the branch removed and the carve-out (treat 3 as
+a pass) as mutants.
+
+**Receipt limits, stated.** The `apply.sh` conjunct is a SPELLING key on the `elif … -eq 3`
+branch, because the seed world cannot drive `apply.sh` (its dist ships no validator for the
+manifest expansion); the behavioural arm for that half is `U5`. The receipt seeds a world and
+runs `--verify` five times, so it costs seconds rather than milliseconds. A reworded cause
+token in `--verify` scores fixed here (the receipt reads exit codes) while the consumer's
+`verify: manual` reads step 7 by hand.
+
+verify: sh E=core/skills/ai-dlc-update/reconcile/emit-report.sh; A=core/skills/ai-dlc-update/reconcile/apply.sh; S=core/fixtures/reconcile-emit-report/seed.sh; [ -f "$E" ] && [ -f "$A" ] && [ -f "$S" ] || exit 9; W=$(bash "$S") || exit 9; . "$W/env.sh"; v() { bash "$E" --verify "$1" "$DIST" "$BASE" "$CONSUMER" "$2" >/dev/null 2>&1; echo $?; }; g=$(v "$REPORT_GOOD" "$THEIRS"); s=$(v "$REPORT_STALE" "$THEIRS"); git -C "$DIST" show "${BASE}:core/schemas/thing.json" > "$CONSUMER/.claude/schemas/thing.json"; r=$(v "$REPORT_GOOD" "$THEIRS"); git -C "$DIST" checkout -q "$MOVEREF" && printf '#!/usr/bin/env bash\necho moved\n' > "$DIST/$MOVED_PROBE_PATH" && git -C "$DIST" -c user.email=f@f -c user.name=f commit -qam m && git -C "$DIST" checkout -q "$THEIRS"; m=$(v "$REPORT_GOOD" "$MOVEREF"); mkdir -p "$CONSUMER/.claude/skills/ai-dlc/overrides"; printf -- '---\nshadows: "#Nope"\nbase_sha: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\nreason: p\n---\n\nb\n' > "$CONSUMER/.claude/skills/ai-dlc/overrides/probe.md"; n=$(v "$REPORT_GOOD" "$THEIRS"); rm -rf "$W"; a=$(grep -cE '^[[:space:]]*elif \[ "\$_ug_rc" -eq 3 \]' "$A"); [ "$g" = 0 ] && [ "$s" = 1 ] && [ "$r" = 3 ] && [ "$m" = 1 ] && [ "$n" = 1 ] && [ "$a" = 1 ]
