@@ -102,6 +102,14 @@ has() { # has <needle> <haystack>   — here-string, never a pipe: `grep -q` exi
   grep -qF -- "$1" <<<"$2"        # and pipefail turns the writer's EPIPE into a false NOT-FOUND
 }
 
+# THE UNTERMINATED-FENCE FINDING, ANCHORED ON THE FINDING AND NEVER ON THE WORDS. The remedy
+# paragraph printed by EVERY refusal carries "unterminated fence in the archive", so a test for
+# the bare phrase is true on every refusal this fixture can produce and could never fail. Measured
+# while this arm was written: the BL-161 receipt was filed with that test and was unsatisfiable
+# for that reason -- it demanded a refusal naming a line AND the absence of a phrase the refusal
+# always prints. The finding form carries "opened at line"; the remedy sentence does not.
+unterm_finding() { grep -q 'unterminated fence opened at line' <<<"$1"; }
+
 # ---------------------------------------------------------------------------------------
 # Seeds.
 # ---------------------------------------------------------------------------------------
@@ -213,6 +221,86 @@ verify: has VERSION "."
 
 ```markdown
 this fence never closes
+EOM
+
+# OFFENDER-Q — THE TWO-QUOTATION SHAPE, and the one seed whose verdict separates a guard that
+# reads the fence from one that toggles on delimiters. The fence quotes two `## BL-` headings with
+# an INFO-STRING delimiter between them: CommonMark reads ` ```sh ` inside a fence as content, a
+# parity toggle reads it as the closer and inverts. Under the toggle the guard named the fenced
+# heading (true), then named the REAL entry after the fence (false) and an unterminated fence that
+# does not exist (false) -- and its remedy told the author to strip a live entry's marker. The
+# exact-set arm below is what holds all three, and every line number is derived from the seed.
+Q="$WORK/quotes-two"
+mkcase "$Q" <<'EOM'
+# Probe backlog
+
+## BL-401 — open
+
+verify: lacks VERSION "."
+
+## BL-402 — closed, and its fence quotes TWO entry headings
+
+<br>**LANDED (v0.372.0, verified 0cadda4).** Done.
+
+verify: has VERSION "."
+
+```text
+## BL-905 — QUOTED-FIRST
+```sh
+## BL-906 — QUOTED-SECOND
+```
+
+## BL-403 — REAL-ENTRY-AFTER-TWO-QUOTATIONS
+
+verify: lacks VERSION "."
+EOM
+
+# PROSE-FENCE — the ALLOW twin of OFFENDER-Q, one property apart: the fenced heading carries no
+# id, so the split never cuts there and the rotation must SUCCEED with a real entry sitting after
+# the fence. A DENY arm alone cannot tell a guard that reads the label from one that refuses every
+# fence holding a heading, and the header records that narrowing as the one whose false-positive
+# set was non-empty before it. Asserted as the ROTATION OUTCOME, never as the absence of the
+# refusal message: a refusal writes nothing, so an empty archive fails this arm by construction.
+PF="$WORK/prose-fence"
+mkcase "$PF" <<'EOM'
+# Probe backlog
+
+## BL-402 — closed, and its fence quotes an id-less heading
+
+<br>**LANDED (v0.372.0, verified 0cadda4).** Done.
+
+verify: has VERSION "."
+
+```markdown
+## Some prose heading, not a BL- label
+```
+
+PROSE-FENCE-TAIL — this line must move with the entry.
+
+## BL-403 — open, and it must stay a live entry after the fence
+
+verify: lacks VERSION "."
+EOM
+
+# UNTERM-QUOTES — an unterminated fence that quotes an entry heading, with a real entry after it.
+# Per CommonMark the fence swallows both, so a whole-file pairing that emitted a per-line finding
+# for everything it holds would name the real entry -- the same wrong remedy one shape along. The
+# guard reports the unterminated fence ONCE and emits no per-line finding for a fence it never saw
+# close; the file is still refused, by that line.
+UQ="$WORK/unterm-quotes"
+mkcase "$UQ" <<'EOM'
+# Probe backlog
+
+## BL-402 — closed, and its unterminated fence quotes an entry heading
+
+<br>**LANDED (v0.372.0, verified 0cadda4).** Done.
+
+verify: has VERSION "."
+
+```markdown
+## BL-907 — QUOTED-IN-AN-UNTERMINATED-FENCE
+
+## BL-403 — REAL-ENTRY-AFTER-THE-UNTERMINATED-FENCE
 EOM
 
 # NEAR-MISS — every line here is inside a fence in a CLOSED entry and every one of them merely
@@ -347,14 +435,27 @@ if [ -z "$EXP_H" ] || [ -z "$EXP_B" ] || [ -z "$GOOD" ]; then
   echo "FIXTURE BROKEN: could not derive the seeded line numbers from $A/pristine.ledger" >&2
   exit 2
 fi
-if ! has " $EXP_H " " $GOT "; then
+AFTER_A="$(LC_ALL=C grep -n '^## BL-403' "$A/pristine.ledger" | cut -d: -f1)"
+if [ -z "$AFTER_A" ]; then
+  echo "FIXTURE BROKEN: could not derive the post-fence entry line from $A/pristine.ledger" >&2
+  exit 2
+fi
+# AN EXACT SET, NOT TWO PRESENCES AND ONE ABSENCE. This seed's two quotations are ADJACENT, which
+# is the arrangement that desynchronises a tracker keyed on the delimiter line rather than on the
+# fence: the closer then reads as an opener and every line after it, `## BL-403` included, reads
+# as fenced. Naming an extra line is the failure, so the assertion has to be able to see one.
+if [ "$GOT" = "$EXP_H $EXP_B " ]; then
+  ok "names-all" "exactly the two fenced offenders are named ($EXP_H, $EXP_B); neither the entry heading at $GOOD nor the entry after the fence at $AFTER_A is"
+elif has " $AFTER_A " " $GOT "; then
+  bad "names-all" "the real entry AFTER the fence, at line $AFTER_A, is named as fenced — the fence state carried past its own closer; got: [$GOT]"
+elif has " $GOOD " " $GOT "; then
+  bad "names-all" "the real entry heading at line $GOOD is named as an offender; got: [$GOT]"
+elif ! has " $EXP_H " " $GOT "; then
   bad "names-all" "the fenced heading at line $EXP_H is not named as an offender; got: [$GOT]"
 elif ! has " $EXP_B " " $GOT "; then
   bad "names-all" "the SECOND fenced heading at line $EXP_B is not named; only the first is reported, so a fence holding several offenders sends the operator back for a second run — got: [$GOT]"
-elif has " $GOOD " " $GOT "; then
-  bad "names-all" "the real entry heading at line $GOOD is named as an offender; got: [$GOT]"
 else
-  ok "names-all" "both fenced offenders named ($EXP_H, $EXP_B); the entry heading at $GOOD is not"
+  bad "names-all" "expected exactly [$EXP_H $EXP_B]; got: [$GOT]"
 fi
 
 # WROTE NOTHING, BYTE-COMPARED. Not eyeballed, and against an archive that ALREADY had content:
@@ -372,6 +473,47 @@ expect_refusal "fires-bullet" "$B" --apply
 expect_refusal "fires-tilde"  "$C" --apply
 expect_refusal "fires-phantom" "$D" --apply
 expect_refusal "fires-unterm" "$E" --apply
+
+# THE TWO-QUOTATION SHAPE, AS AN EXACT SET. Not "the offenders are named" — the SET of named
+# lines, because the defect this seed exists for is an EXTRA name, not a missing one. Every
+# number is derived from the seed by content, so a line inserted above shifts expectation and
+# observation together.
+EXP_Q1="$(LC_ALL=C grep -n 'QUOTED-FIRST'  "$Q/pristine.ledger" | cut -d: -f1)"
+EXP_Q2="$(LC_ALL=C grep -n 'QUOTED-SECOND' "$Q/pristine.ledger" | cut -d: -f1)"
+REAL_Q="$(LC_ALL=C grep -n 'REAL-ENTRY-AFTER-TWO-QUOTATIONS' "$Q/pristine.ledger" | cut -d: -f1)"
+if [ -z "$EXP_Q1" ] || [ -z "$EXP_Q2" ] || [ -z "$REAL_Q" ]; then
+  echo "FIXTURE BROKEN: could not derive the seeded line numbers from $Q/pristine.ledger" >&2
+  exit 2
+fi
+expect_refusal "quotes-two" "$Q" --apply
+Q_OUT="$LAST_OUT"
+Q_GOT="$(offender_lines "$Q_OUT")"
+if [ "$Q_GOT" = "$EXP_Q1 $EXP_Q2 " ]; then
+  ok "quotes-two-names" "exactly the two quoted headings ($EXP_Q1, $EXP_Q2) are named; the real entry at $REAL_Q is not"
+elif has " $REAL_Q " " $Q_GOT "; then
+  bad "quotes-two-names" "the REAL entry at line $REAL_Q is named as fenced, so the remedy tells the author to strip a live entry's marker; got [$Q_GOT], expected [$EXP_Q1 $EXP_Q2]"
+else
+  bad "quotes-two-names" "expected exactly the two quoted headings [$EXP_Q1 $EXP_Q2]; got [$Q_GOT]"
+fi
+if unterm_finding "$Q_OUT"; then
+  bad "quotes-two-unterm" "an unterminated fence was reported on a ledger whose every fence closes — the delimiter between the two quotations was read as a closer"
+else
+  ok "quotes-two-unterm" "no unterminated-fence finding: the info-string delimiter inside the fence is content, not a closer"
+fi
+
+# AN UNTERMINATED FENCE IS REPORTED ONCE, AND NAMES NO LINE. Whole-file pairing makes every line
+# after an unterminated opener fenced, real entries included; emitting a per-line finding for each
+# would be the wrong remedy at scale.
+expect_refusal "unterm-quotes" "$UQ" --apply
+UQ_OUT="$LAST_OUT"
+UQ_GOT="$(offender_lines "$UQ_OUT")"
+if ! unterm_finding "$UQ_OUT"; then
+  bad "unterm-quotes-once" "a fence that never closes was not reported as unterminated: $UQ_OUT"
+elif [ -n "$UQ_GOT" ]; then
+  bad "unterm-quotes-once" "a fence that never closes produced per-line findings [$UQ_GOT]; the entry after it is a real entry and the remedy names it"
+else
+  ok "unterm-quotes-once" "the unterminated fence is reported once, and no line it swallows is named"
+fi
 
 # REPORT MODE MUST REFUSE TOO. A report that says "1 closed entry would move" and exits 0 is an
 # instruction to the operator to run --apply, which is the corrupting call.
@@ -391,6 +533,25 @@ elif ! has "NEAR-MISS-TAIL" "$(cat "$NM/backlog.archive.md")"; then
   bad "near-miss" "rotation succeeded but the entry's tail did not reach the archive"
 else
   ok "near-miss" "eight near-miss shapes in a fence do not block a normal rotation"
+fi
+
+# THE ALLOW TWIN OF THE TWO-QUOTATION SEED, ONE PROPERTY APART: the fenced heading carries no id.
+# Asserted as the OUTCOME of the rotation, never as the absence of the refusal message — a refusal
+# writes nothing, so an archive without the moved tail fails this by construction, and a subject
+# that emits nothing fails it too.
+run_rt "$RT" "$PF" --apply
+PF_ARCH="$(cat "$PF/backlog.archive.md")"
+PF_LIVE="$(cat "$PF/backlog.md")"
+if ! has "PROSE-FENCE-TAIL" "$PF_ARCH"; then
+  bad "prose-fence" "the closed entry whose fence quotes an id-less heading did not reach the archive (exit $LAST_RC): $LAST_OUT"
+elif has "BL-402" "$PF_LIVE"; then
+  bad "prose-fence" "the closed entry is still in the live ledger"
+elif ! has "BL-403" "$PF_LIVE"; then
+  bad "prose-fence" "the real entry AFTER the fence did not stay live"
+elif has "BL-403" "$PF_ARCH"; then
+  bad "prose-fence" "the real entry AFTER the fence was swept into the archive with the closed one — the fence swallowed the boundary between them"
+else
+  ok "prose-fence" "a fence quoting an id-less heading rotates, tail included, and the entry after it stays live"
 fi
 
 run_rt "$RT" "$N" --apply
@@ -634,7 +795,16 @@ fi
 # near-miss verdict: the property is carried by two layers now, and the mutant reverts both --
 # the guard widened AND lib.sh's in-fence branch removed. The single-layer twin below is the
 # other half of that proof.
-M2="$(mutate m2-shape-only -e 's/if (depth == 1 && backlog_entry_label(\$0) != "")/if (depth == 1 \&\& ledger_entry_shape($0) != "")/')"
+#
+# RE-ANCHORED, BECAUSE THE LINE IT NAMED IS GONE. The guard used to read `if (depth == 1 &&
+# backlog_entry_label($0) != "")`; BL-161 retired that toggle and the label test now sits in the
+# second pass. A `sed` at the old text matches nothing, which `mutate` refuses to score, so the
+# mutation moved to the surviving site asserting the identical observable — the line that DROPS a
+# fenced line carrying no BL- label. It is anchored there and not on the label call beside it
+# because that call appears THREE times in this file (the guard, the split, the annotation
+# reader): a mutation matching all three widens the split too and scores a kill the guard never
+# earned. Measured, not assumed — `grep -c` returns 3 for the call and 1 for this line.
+M2="$(mutate m2-shape-only -e 's/if (lbl == "") next/if (ledger_entry_shape($0) == "") next/')"
 if [ -n "$M2" ]; then
   M2_LIB="$(dirname "$M2")/../core/skills/ai-dlc-update/reconcile/lib.sh"
   LC_ALL=C sed 's@if (__lef_in && sh != "") {@if (0) {@' "$LIB" > "$M2_LIB.new"
@@ -656,7 +826,7 @@ fi
 # M2A — THE SINGLE-LAYER TWIN: guard widened, lib.sh intact. Must stay QUIET on near-miss,
 # which is what says the fence-aware shape rule in lib.sh now carries the property on its own.
 # A twin that fired here would mean the layered mutant's kill was earned by the guard alone.
-M2A="$(mutate m2a-shape-only-lib-intact -e 's/if (depth == 1 && backlog_entry_label(\$0) != "")/if (depth == 1 \&\& ledger_entry_shape($0) != "")/')"
+M2A="$(mutate m2a-shape-only-lib-intact -e 's/if (lbl == "") next/if (ledger_entry_shape($0) == "") next/')"
 if [ -n "$M2A" ]; then
   cp "$NM/pristine.ledger" "$NM/backlog.md"
   printf '# pre-existing archive\nSENTINEL-ARCHIVE-LINE\n' > "$NM/backlog.archive.md"
@@ -687,7 +857,13 @@ fi
 
 # M4 — the fence opener narrowed to backticks. Targets `fires-tilde`, same non-entanglement
 # check against the backtick offender.
-M4="$(mutate m4-backtick-only -e 's/(```|~~~)/(```)/')"
+#
+# RE-ANCHORED INTO lib.sh FOR THE SAME REASON AS M2. `(```|~~~)` was the guard's own delimiter
+# alternation and BL-161 retired it; the opener alternation that decides this now lives in
+# `ledger_entry_shape()`, which is where the tilde arm must be removed for the observable to move.
+# `mutate_either` tries the rotator first, so a future relocation back into this file is picked
+# up rather than silently dropped.
+M4="$(mutate_either m4-backtick-only -e 's@ || match(t, /^~~~+/)@@')"
 if [ -n "$M4" ]; then
   reseed "$C"; run_rt "$M4" "$C" --apply; M4_C_OUT="$LAST_OUT"
   reseed "$B"; run_rt "$M4" "$B" --apply; M4_B_OUT="$LAST_OUT"
@@ -723,17 +899,72 @@ if [ -n "$M5" ] && [ -n "$M5A" ]; then
   fi
 fi
 
+# M6 — THE MASK REMOVED FROM PASS 1. The guard asks lib.sh where the fences are on a line with one
+# space in front of it, so no line can be entry-shaped and no id-keyed line can RESET the fence
+# state mid-file. Take the space away and the reset fires on every quoted `## BL-` heading: the
+# fence closes early, its closer is consumed as a stray, and the fenced set comes out EMPTY —
+# the guard goes silent on exactly the ledger it exists to refuse. Targets `quotes-two`, with
+# OFFENDER-E as the control: an unterminated fence holding nothing entry-shaped has no reset to
+# fire, so the mutant still speaks there and the silence on Q is specific rather than total.
+M6="$(mutate m6-unmasked-pass1 -e 's/ledger_entry_shape(" " \$0)/ledger_entry_shape($0)/')"
+if [ -n "$M6" ]; then
+  reseed "$Q"; run_rt "$M6" "$Q" --apply; M6_Q_OUT="$LAST_OUT"
+  reseed "$E"; run_rt "$M6" "$E" --apply; M6_E_OUT="$LAST_OUT"
+  if ! has "$FENCE_SAYS" "$M6_Q_OUT" && has "$FENCE_SAYS" "$M6_E_OUT"; then
+    killed m6-unmasked-pass1 "quotes-two would FAIL: with pass 1 unmasked the FENCE arm goes silent on the two-quotation ledger while still firing on the unterminated one"
+  else
+    bad "mutant:m6-unmasked-pass1" "unmasking pass 1 did not silence the FENCE arm on the two-quotation seed alone (quotes-two fence-arm=$(has "$FENCE_SAYS" "$M6_Q_OUT" && echo fired || echo silent), unterminated fence-arm=$(has "$FENCE_SAYS" "$M6_E_OUT" && echo fired || echo silent))"
+  fi
+fi
+
+# M7 — THE CLOSER GRAMMAR WIDENED, IN lib.sh, TO IGNORE THE INFO STRING. CommonMark says a closer
+# carries nothing after its delimiter run, which is why ` ```sh ` between the two quotations is
+# CONTENT. Drop that clause and it becomes a closer: the fence ends early, the real closer below
+# opens a new one, and the file ends inside a fence that does not exist. Targets
+# `quotes-two-unterm` — the phantom `unterminated fence` is the exact false finding BL-161 was
+# filed for — and its control is that the FIRST quotation is still named, so the mutant is a
+# misreading rather than a dead guard.
+M7="$(mutate_either m7-closer-ignores-info-string -e 's@(match(t, /^```+\[ \\t\]\*\$/) || match(t, /^~~~+\[ \\t\]\*\$/))@(match(t, /^```+/) || match(t, /^~~~+/))@')"
+if [ -n "$M7" ]; then
+  reseed "$Q"; run_rt "$M7" "$Q" --apply; M7_Q_OUT="$LAST_OUT"
+  M7_GOT="$(offender_lines "$M7_Q_OUT")"
+  if unterm_finding "$M7_Q_OUT" && has " $EXP_Q1 " " $M7_GOT "; then
+    killed m7-closer-ignores-info-string "quotes-two-unterm would FAIL: an info-string delimiter read as a closer produces a phantom unterminated fence on a ledger whose fences all close (named [$M7_GOT])"
+  else
+    bad "mutant:m7-closer-ignores-info-string" "widening the closer did not produce the phantom unterminated fence beside a still-named first quotation (unterm=$(unterm_finding "$M7_Q_OUT" && echo present || echo absent), named=[$M7_GOT])"
+  fi
+fi
+
+# M8 — THE CLOSED-FENCE CONTAINMENT REMOVED. Lines inside a fence are held and marked only when
+# that fence CLOSES; a fence that never closes swallows the rest of the file, so marking its lines
+# would name every real entry after it. Mark them as they are read instead, and the unterminated
+# seed starts naming its own tail. Targets `unterm-quotes-once`, and its control is OFFENDER-Q,
+# whose fences all close and whose finding set must be untouched — otherwise the mutation is
+# changing the whole guard rather than the containment.
+M8="$(mutate m8-mark-before-the-closer -e 's/buf\[++nb\] = FNR/fenced[FNR] = fence_at/')"
+if [ -n "$M8" ]; then
+  reseed "$UQ"; run_rt "$M8" "$UQ" --apply; M8_U_OUT="$LAST_OUT"
+  reseed "$Q";  run_rt "$M8" "$Q"  --apply; M8_Q_OUT="$LAST_OUT"
+  M8_U_GOT="$(offender_lines "$M8_U_OUT")"
+  M8_Q_GOT="$(offender_lines "$M8_Q_OUT")"
+  if [ -n "$M8_U_GOT" ] && [ "$M8_Q_GOT" = "$EXP_Q1 $EXP_Q2 " ]; then
+    killed m8-mark-before-the-closer "unterm-quotes-once would FAIL: an unterminated fence names the lines it swallows ([$M8_U_GOT]) while the closed-fence seed is untouched ([$M8_Q_GOT])"
+  else
+    bad "mutant:m8-mark-before-the-closer" "marking fenced lines before the closer did not make the unterminated seed name lines while leaving the closed-fence seed alone (unterminated=[$M8_U_GOT], closed=[$M8_Q_GOT])"
+  fi
+fi
+
 # THE KILL COUNT ITSELF. A mutant that killed nothing reads exactly like an arm that cannot
 # fire, and a battery whose seds all silently missed reads as five clean passes.
 MUT_ATTEMPTED="$(find "$WORK/roots" -name '.mutant-built' -type f 2>/dev/null | wc -l | tr -d ' ')"
-# SEVEN BUILT, FIVE KILLS. `m2a` and `m5a` are single-layer TWINS, not targets: each exists to
+# TEN BUILT, EIGHT KILLS. `m2a` and `m5a` are single-layer TWINS, not targets: each exists to
 # show the arm still speaks (m5a) or stays quiet (m2a) when only one layer is applied, which is
 # what makes the layered mutant's verdict a measurement instead of an absence. Counting a twin
 # as a kill would be counting the control as a result.
-if [ "${MUT_ATTEMPTED:-0}" -eq 7 ] && [ "$KILLS" -eq 5 ]; then
-  ok "mutants" "7 mutants built (5 targets + m2's and m5's single-layer twins) and all 5 targets killed the arm they name"
+if [ "${MUT_ATTEMPTED:-0}" -eq 10 ] && [ "$KILLS" -eq 8 ]; then
+  ok "mutants" "10 mutants built (8 targets + m2's and m5's single-layer twins) and all 8 targets killed the arm they name"
 else
-  bad "mutants" "$MUT_ATTEMPTED of 7 mutants built, $KILLS of 5 killed — an unkilled mutant means an arm cannot fire"
+  bad "mutants" "$MUT_ATTEMPTED of 10 mutants built, $KILLS of 8 killed — an unkilled mutant means an arm cannot fire"
 fi
 
 echo

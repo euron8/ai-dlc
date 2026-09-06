@@ -91,9 +91,26 @@ LIB="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
 # one that IS -- so the desync above cannot recur IN lib.sh's rule, and neither can a hidden
 # `## BL-…`. That is why this guard keys on the BL- label: the shape lib.sh ignores is exactly
 # the one this guard never split on, and the shape it still opens is exactly the one this guard
-# still refuses. THIS GUARD'S OWN `depth` TOGGLE BELOW IS STILL THE NAIVE FORM and disagrees
-# with lib.sh on a fence quoting two `## BL-` headings: it then refuses a real top-level entry
-# and its remedy text tells the operator to strip that entry's marker. BL-161 carries it.
+# still refuses.
+#
+# THE PRIVATE `depth` TOGGLE IS RETIRED, AND ITS LAST DISAGREEMENT WITH lib.sh IS WHY. That
+# toggle flipped on every line opening with three backticks or tildes, so ` ```sh ` INSIDE a
+# fence read as a closer where CommonMark reads it as content. On a fence quoting two `## BL-`
+# headings the toggle inverted there and stayed inverted: the guard named the next REAL entry as
+# fenced, added a phantom `unterminated fence`, and its remedy text told the author to strip a
+# live entry's marker. One true finding and two false ones, on the shape a backlog quoting its
+# own entries produces first. That was BL-161.
+#
+# SO THE FENCE STATE IS ASKED OF lib.sh, IN A PASS WHERE NO LINE CAN BE ENTRY-SHAPED. Reading
+# `__lef_in` off the ordinary pass does not work and the difference is not cosmetic: an id-keyed
+# line inside a fence RESETS that state by design, and after two of them in a row lib.sh reads
+# the fence CLOSER as an opener and every later line as fenced -- which would name every real
+# entry after the fence. Pass 1 therefore feeds `ledger_entry_shape()` the line with one space
+# in front of it. The shape tests read the UNSTRIPPED line, so nothing is entry-shaped and no
+# reset can fire; the delimiter tests read the STRIPPED one and tolerate indentation in full, so
+# every fence still opens and closes exactly where CommonMark puts it. Pass 2 then asks the
+# SPLIT's own helper where the cuts land. A cut inside a fence is the corruption; the label rule
+# and the fence rule are both lib.sh's, and neither is restated here.
 #
 # REFUSING IS THE CORRECT FAILURE. Everywhere else this repo prefers PENDING over FAIL, because a
 # check that wedges live work gets switched off. Not here: the alternative to stopping is
@@ -101,10 +118,16 @@ LIB="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
 # ledger (indent the fenced line, or drop the `## ` from it). Cheap to satisfy, unrecoverable to
 # skip.
 #
-# Pairs delimiters WITHIN the span the fence-blind rule already produces, never globally: global
-# pairing is the same desync one level along, since one unterminated fence would re-pair every
-# delimiter after it. An UNPAIRED delimiter is reported as corruption in its own right rather
-# than absorbed, because damage and cleanliness are otherwise spelled identically.
+# PAIRED BY lib.sh's GRAMMAR, WHICH IS WHY THE PAIRING IS NOW WHOLE-FILE AND THE OLD PER-SPAN
+# CONTAINMENT IS GONE. Containing the pairing inside one entry was the defence against a naive
+# toggle desynchronising; a grammar that cannot desynchronise does not need it, and per-span
+# resets are what let the old toggle re-pair a fence against the wrong delimiter. The hazard the
+# containment answered survives in one form only -- an unterminated fence swallows the rest of
+# the file, so every later entry heading is inside it -- and it is answered directly instead: an
+# unterminated fence is reported ONCE, as corruption in its own right, and the per-line findings
+# for the lines it holds are DISCARDED rather than emitted against real entries. Only a fence
+# that lib.sh saw CLOSE can produce a per-line finding. Damage and cleanliness stay spelled
+# differently: the file is still refused, by the unterminated-fence line.
 #
 # KEYED ON THE SPLIT PREDICATE, NOT ON `ledger_entry_shape()` ALONE, AND THE FIRST CUT GOT THIS
 # WRONG. `ledger_entry_shape()` calls any `## <text>` line entry-shaped, but this file only SPLITS
@@ -123,24 +146,37 @@ LIB="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
 # `validate-backlog-size.sh` -- and the first thing that reader did was restate it. That is the
 # same drift this file's header warns about, one file over.
 BACKLOG_LABEL_AWK="$(backlog_entry_label_awk)"
+# THE LEDGER IS READ TWICE, ON PURPOSE, AND THE TWO PASSES ASK DIFFERENT QUESTIONS OF THE SAME
+# HELPER. `ledger_entry_shape()` keeps ONE fence state, memoised on NR and reset at FNR==1, so a
+# second file argument is the only way to get a second, independent reading of it. Naming the
+# ledger twice is that second reading; it is not a redundant scan.
 FENCE_FINDINGS="$(LC_ALL=C awk "$(ledger_entry_awk)$BACKLOG_LABEL_AWK"'
   function report(msg) { print msg }
-  # A real entry start at depth 0 closes the previous span and resets, so an unterminated fence
-  # cannot leak past it.
-  {
-    if (backlog_entry_label($0) != "" && depth == 0) {
-      if (open_at) report("  unterminated fence opened at line " open_at " (entry starting line " entry_at ")")
-      entry_at = NR; open_at = 0; depth = 0; next
-    }
-    if ($0 ~ /^[ \t]*(```|~~~)/) {
-      if (depth == 0) { depth = 1; open_at = NR } else { depth = 0; open_at = 0 }
-      next
-    }
-    if (depth == 1 && backlog_entry_label($0) != "")
-      report("  line " NR ": entry-shaped line `" backlog_entry_label($0) "` inside the fence opened at line " open_at " -- rotation would split the entry starting at line " entry_at)
+  FNR == 1 { pass++; if (pass == 2 && __lef_in) unterm_at = fence_at }
+  # PASS 1 -- WHERE THE FENCES ARE. One leading space: no line can be entry-shaped, so no id-keyed
+  # reset can fire and __lef_in is the plain CommonMark fence state. Lines inside a fence are held
+  # and committed only when that fence CLOSES; an unterminated one keeps none of them.
+  pass == 1 {
+    was = __lef_in
+    ledger_entry_shape(" " $0)
+    if (!was && __lef_in)      { fence_at = FNR; nb = 0 }
+    else if (was && !__lef_in) { for (i = 1; i <= nb; i++) fenced[buf[i]] = fence_at; nb = 0; fence_at = 0 }
+    else if (__lef_in)         buf[++nb] = FNR
+    next
   }
-  END { if (open_at) report("  unterminated fence opened at line " open_at " (entry starting line " entry_at ")") }
-' "$LEDGER")"
+  # PASS 2 -- WHERE THE SPLIT WILL CUT, from the helper the split itself calls, on the unmasked
+  # line. A cut inside a closed fence is the corruption this file refuses; every other cut is an
+  # entry, and the entry it opens is what a finding names as the victim.
+  unterm_at && FNR == unterm_at { unterm_entry = entry_at }
+  {
+    lbl = backlog_entry_label($0)
+    if (lbl == "") next
+    if (FNR in fenced)
+      report("  line " FNR ": entry-shaped line `" lbl "` inside the fence opened at line " fenced[FNR] " -- rotation would split the entry starting at line " entry_at)
+    else entry_at = FNR
+  }
+  END { if (unterm_at) report("  unterminated fence opened at line " unterm_at " (entry starting line " unterm_entry ")") }
+' "$LEDGER" "$LEDGER")"
 if [ -n "$FENCE_FINDINGS" ]; then
   echo "backlog-rotate: REFUSING to rotate $LEDGER -- the entry-boundary rule cannot parse it safely." >&2
   printf '%s\n' "$FENCE_FINDINGS" >&2
