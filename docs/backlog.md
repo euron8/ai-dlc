@@ -4124,13 +4124,30 @@ ledger over that file returns 0 against a control of 21 for `gate_nonce`. The gu
 stem order, which a hand-chosen round timestamp wins. `team-roles/gate-adjudicator.md:78`
 requires the check-id set to equal the derived escalated set exactly, and
 `_gate-procedures.md` now says a re-dispatch is a whole new dispatch, so the rule is stated in
-every place the lead reads; what is missing is the mechanism. Shape of the fix: bind the
-verdict to the dispatch that wrote it — the adjudicator's `agent_id` joined against the spawn
-ledger row for that nonce, the way the dispatch guard already joins subagent spawns — and have
-the guard refuse a verdict whose stem no dispatch row names. The receipt is manual because no
-artifact today records which dispatch wrote a verdict; write a driving receipt the moment the
-join exists.
+every place the lead reads; what is missing is the mechanism.
 
-verify: manual
+**THE FILED SHAPE OF THE FIX — `adjudicator_agent_id` joined against a spawn-ledger row — IS
+REFUTED, AND ITS OWN SUBJECT IS THE COUNTEREXAMPLE.** Measured over the reference consumer's
+195 verdicts (193 with a conforming nonce): that field matches a spawn-ledger `.name` for 92,
+and the round-nonce file's `gate-adjudicator-s308-planning-full` is one of the 92 — a real
+dispatched agent, which that consumer's own subagent transcript shows WROTE the file at
+14:12:35Z. The field is also free-form in practice (`gate-adjudicator (fresh dispatch by
+team-lead)`, `MERGED: gate-adjudicator-s307-deploy`, `gate-adjudicator@planning-20260810T172728Z`),
+so the join accepts the subject and refuses a hundred legitimate passes.
+
+What separates it is ORDER, in timestamps only a hook writes. The nonce is minted at gate
+ENTRY, before the dispatch, so on a real pass the work postdates the nonce; here the
+adjudicator was dispatched at 13:57:46Z under a nonce of 16:00:00Z. Over the 137 verdicts
+post-dating the spawn ledger's first row, the write event follows the nonce by 41s–4002s on 93
+of them and PRECEDES it on 9 — six of those nine at a round minute, against 3.2 expected under
+a uniform second. The class is nine files, not one.
+
+Landed as arm 7a of `core/hooks/ai-dlc-gate-remediation-guard.sh` and the dispatch-binding arm
+of `core/scripts/validate-gate-adjudication.sh`, joining a new
+`gate-adjudication/.verdict-writes.jsonl` (written at `PreToolUse` when the harness attributes
+the write to a dispatched `agent_id`) and the existing `spawn-ledger.jsonl`. Read arm 7a's
+header for the window measurement and the enumerated false-refusal set.
+
+verify: sh V=core/scripts/validate-gate-adjudication.sh; [ -f "$V" ] || exit 9; D="$(mktemp -d)" || exit 9; G="$D/_bmad-output/gate-adjudication"; mkdir -p "$G" || { rm -rf "$D"; exit 9; }; I="$(bash "$V" --expected implementation)" || { rm -rf "$D"; exit 9; }; [ -n "$I" ] || { rm -rf "$D"; exit 9; }; mk() { python3 -c 'import json,sys;n=sys.argv[2];json.dump({"schema_id":"GATE_ADJUDICATION_VERDICT v1","gate_type":"implementation","gate_series_id":n,"gate_nonce":n,"generated_at":sys.argv[3],"adjudicator_agent_id":"gate-adjudicator-seed","catalog":"core","verdicts":[{"check_id":c,"verdict":"PASS","evidence":"receipt"} for c in sys.argv[4:]]},open(sys.argv[1],"w"))' "$G/$1.verdict.json" "$1" "$2" $I; }; S=implementation-20260715T140322Z; F=implementation-20260715T160000Z; mk "$S" 2026-07-15T14:05:07Z; mk "$F" 2026-07-15T16:00:00Z; printf '{"v":1,"ts":"2026-07-15T14:03:42Z","sprint":1,"name":"gate-adjudicator-seed","role":"gate-adjudicator"}\n' > "$D/_bmad-output/spawn-ledger.jsonl"; bash "$V" implementation "$G/$S.verdict.json" >/dev/null 2>&1 || { rm -rf "$D"; exit 1; }; O="$(bash "$V" implementation "$G/$F.verdict.json" 2>&1)"; r=$?; rm -rf "$D"; [ "$r" -eq 1 ] || exit 1; case "$O" in *"bound to NO dispatch"*) exit 0 ;; esac; exit 1
 
 
