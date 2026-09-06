@@ -676,18 +676,25 @@ u5_build() { # u5_build <consumer> — approve WITH the blocker, then resolve it
   rm -rf "$1/.claude/skills/ai-dlc/overrides"
 }
 run_apply_err() { bash "$1" "$DIST" "$BASE" "$2" "$THEIRS" 2>"$3"; }
-# u5_score <apply-path> -> "<rc>|<stamp>|<marker>|<CAUSE|->|<REMEDY|->"
+# u5_score <apply-path> -> "<rc>|<stamp>|<marker>|<CAUSE|->|<REMEDY|->|<FWD|->"
 # PRESENCE-SHAPED IN EVERY FIELD, and a fresh consumer per drive so no arm reads a previous
 # one's leftovers.
+#
+# FWD IS THE FORWARDED STDERR, and it is keyed on the two things only the forward produces: a
+# `cause:` LINE at --verify's own indent, and at least one `<`/`>` diff line. The refusal message
+# itself interpolates the cause TEXT, so a `BLOCKERS-RESOLVED` conjunct is satisfied whether or
+# not the forward happened; and the message ends by telling the operator to read a diff, which
+# without the forward apply.sh has discarded — a pointer to a tool they must re-run.
 u5_score() {
   local a="$1" c="$WORK/u5-$$-$RANDOM" e rc
-  u5_build "$c" || { echo "BROKEN||||"; return; }
+  u5_build "$c" || { echo "BROKEN|||||"; return; }
   e="$c/stderr.txt"
   run_apply_err "$a" "$c" "$e" >/dev/null; rc=$?
-  printf '%s|%s|%s|%s|%s\n' "$rc" "$(stamp_ver "$c")" "$(marker "$c")" \
+  printf '%s|%s|%s|%s|%s|%s\n' "$rc" "$(stamp_ver "$c")" "$(marker "$c")" \
     "$(grep -q 'BLOCKERS-RESOLVED' "$e" && echo CAUSE || echo -)" \
     "$(grep -qF "re-render the region with emit-report.sh $DIST $BASE $c $THEIRS" "$e" \
-       && grep -q 're-run apply with the same four arguments' "$e" && echo REMEDY || echo -)"
+       && grep -q 're-run apply with the same four arguments' "$e" && echo REMEDY || echo -)" \
+    "$(grep -qE '^[[:space:]]*cause: ' "$e" && grep -qE '^[<>] ' "$e" && echo FWD || echo -)"
 }
 
 C_U5="$WORK/cons-u5"
@@ -720,8 +727,12 @@ case "$U5" in
   *)                bad "U5 the apply did not refuse cleanly ($U5, want 1|1.0.0|GONE|...) — either step 7's own prescribed resolution now writes over a region nobody re-approved, or the refusal left a marker the operator has to clear by hand" ;;
 esac
 case "$U5" in
-  *"|CAUSE|REMEDY") ok "U5 and the refusal NAMES the cause (BLOCKERS-RESOLVED) and the one-step remedy with this run's four arguments — not the two false causes it used to offer" ;;
-  *)                bad "U5 the refusal did not name the cause and the remedy ($U5) — the operator is told upstream moved or the region was hand-edited, both false, and the pull is unpassable by any sequence step 7 permits" ;;
+  *"|CAUSE|REMEDY|"*) ok "U5 and the refusal NAMES the cause (BLOCKERS-RESOLVED) and the one-step remedy with this run's four arguments — not the two false causes it used to offer" ;;
+  *)                  bad "U5 the refusal did not name the cause and the remedy ($U5) — the operator is told upstream moved or the region was hand-edited, both false, and the pull is unpassable by any sequence step 7 permits" ;;
+esac
+case "$U5" in
+  *"|FWD") ok "U5 and --verify's own stderr is FORWARDED: the cause line and the want-vs-report diff reach the operator, so 'read the diff' points at a diff they have rather than at a tool they must re-run" ;;
+  *)       bad "U5 the refusal did not forward --verify's stderr ($U5) — the message quotes the cause text and then tells the operator to read a diff apply.sh discarded, which is a pointer to nothing" ;;
 esac
 
 # --- MUTANTS ----------------------------------------------------------------------------------
@@ -1099,9 +1110,9 @@ if sed 's/^      elif \[ "$_ug_rc" -eq 3 \]; then$/      elif [ 1 -eq 0 ]; then/
    | mut_apply "$WORK/a1"; then
   A1="$(u5_score "$WORK/a1/apply.sh")"
   case "$A1" in
-    "1|1.0.0|GONE|CAUSE|-") ok "A1 (the exit-3 branch disarmed): U5's DIAGNOSIS half goes red — the refusal still happens and the remedy that closes it is gone, which is the state the consumer filed" ;;
-    "1|1.0.0|GONE|CAUSE|REMEDY") bad "A1 SURVIVED: the remedy was still printed with the exit-3 branch disarmed ($A1), so U5's message half is being carried by some other site" ;;
-    *)                      bad "A1 moved more than the message ($A1, want 1|1.0.0|GONE|CAUSE|-) — the refusal itself changed, so U5's two halves are entangled and one of them proves nothing on its own" ;;
+    "1|1.0.0|GONE|CAUSE|-|FWD") ok "A1 (the exit-3 branch disarmed): U5's DIAGNOSIS half goes red while the refusal AND the forwarded stderr stand — the remedy that closes the state the consumer filed is the one thing gone" ;;
+    "1|1.0.0|GONE|CAUSE|REMEDY|"*) bad "A1 SURVIVED: the remedy was still printed with the exit-3 branch disarmed ($A1), so U5's message half is being carried by some other site" ;;
+    *)                      bad "A1 moved more than the message ($A1, want 1|1.0.0|GONE|CAUSE|-|FWD) — the refusal or the forward changed too, so U5's three halves are entangled and one of them proves nothing on its own" ;;
   esac
   A1G="$(mut_stamp "$WORK/a1" green -)"
   if [ "${A1G%%|*}" = "$THEIRS_VER" ]; then
@@ -1137,6 +1148,22 @@ if sed 's/^    if \[ "$_ug_rc" -eq 0 \]; then$/    if [ "$_ug_rc" -eq 0 ] || [ "
   fi
 else
   bad "A2 did not apply — apply.sh no longer opens the union gate with \`if [ \"\$_ug_rc\" -eq 0 ]; then\`, so this mutant proves nothing. Re-anchor it on the current spelling."
+fi
+
+# A3: the forward deleted. THE MESSAGE SURVIVES IT INTACT, which is the whole reason this needs
+# its own mutant: the refusal interpolates the cause TEXT and ends by telling the operator to read
+# the diff, so with the forward gone every word of it still prints and the diff it points at does
+# not exist. Only the FWD field records that. rc, the stamp and the marker must all hold, or the
+# mutation reached the refusal instead of the forward.
+if sed '/^      printf .%s\\n. "$_ug_verr" >&2$/d' "$REC/apply.sh" | mut_apply "$WORK/a3"; then
+  A3="$(u5_score "$WORK/a3/apply.sh")"
+  case "$A3" in
+    "1|1.0.0|GONE|CAUSE|REMEDY|-") ok "A3 (--verify's stderr not forwarded): U5's FORWARD half goes red alone — the refusal, the named cause and the remedy all still print, and the diff the last sentence sends the operator to is gone" ;;
+    *"|FWD")                       bad "A3 SURVIVED: the cause line and the diff still reached stderr with the forward deleted ($A3), so U5's forward conjunct is being carried by something else" ;;
+    *)                             bad "A3 moved more than the forward ($A3, want 1|1.0.0|GONE|CAUSE|REMEDY|-) — the refusal itself changed, so the forward conjunct's kill is unattributed" ;;
+  esac
+else
+  bad "A3 did not apply — apply.sh no longer forwards --verify's stderr with \`printf '%s\\n' \"\$_ug_verr\" >&2\`, so this mutant proves nothing. Re-anchor it on the current spelling."
 fi
 
 echo
