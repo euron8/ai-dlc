@@ -268,12 +268,19 @@ ESC_MISSING="$WORK/esc/there-is-no-such-file.md"
 # content is a STRING (a tool_result block is a user-typed record carrying a tool's words, and
 # an assistant record is the lead's own).
 #
-#   TDIR         the quote every seeded entry cites, said by the operator -- the ALLOW corpus
+#   TDIR         the quote every seeded entry cites, said by the operator -- the ALLOW corpus.
+#                TWO files, and the quote is in the SECOND one by glob order: a verifier that
+#                scans the corpus's first member and stops passed every case and the receipt
+#                when this held one file (the batch-63 adversary's blocker), and on the
+#                reference consumer's 250-file corpus that verifier returns NOMATCH on the one
+#                genuine in-force citation.
 #   TDIR_FORGED  the SAME words, carried only where no operator said them: an assistant turn
 #                and a tool_result. A verifier written as a grep over the corpus accepts this
 #                one; the genuine-operator predicate does not.
 #   TDIR_EMPTY   a directory with no *.jsonl at all -- exists, and is not a corpus
-#   TFILE        the single transcript file, for the --transcript fallback
+#   TFILE        the corpus member that does NOT carry the quote. --transcript naming it is
+#                widened to its directory, exactly as the remediation guard widens the session
+#                transcript it is handed, so the two readers of these rows scan one corpus.
 TDIR="$WORK/transcripts"
 TDIR_FORGED="$WORK/transcripts-forged"
 TDIR_EMPTY="$WORK/transcripts-empty"
@@ -281,7 +288,10 @@ mkdir -p "$TDIR" "$TDIR_FORGED" "$TDIR_EMPTY"
 TFILE="$TDIR/monday.jsonl"
 cat > "$TFILE" <<'EOF'
 {"type":"user","timestamp":"2026-07-01T00:00:00Z","message":{"content":"/ai-dlc Sprint 401. Kick off."}}
-{"type":"user","timestamp":"2026-07-01T00:00:05Z","message":{"content":"proceed past this one, file a backlog item"}}
+{"type":"user","timestamp":"2026-07-01T00:00:02Z","message":{"content":"carry on with the next check"}}
+EOF
+cat > "$TDIR/tuesday.jsonl" <<'EOF'
+{"type":"user","timestamp":"2026-07-02T00:00:05Z","message":{"content":"proceed past this one, file a backlog item"}}
 EOF
 cat > "$TDIR_FORGED/monday.jsonl" <<'EOF'
 {"type":"user","timestamp":"2026-07-01T00:00:00Z","message":{"content":"/ai-dlc Sprint 401. Kick off."}}

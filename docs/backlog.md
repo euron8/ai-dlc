@@ -4105,18 +4105,37 @@ and I103 — keeps the rows that verify, drops and counts the rest, and prints a
 line per dropped row. It FAILS CLOSED on every absence: no readable corpus (`no-transcript`),
 no verifier beside it (`no-verifier`), a quote under twelve characters, or a quote no genuine
 operator turn carries all mean that row covers nothing, and the block carries
-`unverified-citation: <n>` beside the failing ids. Rows are only ever narrowed, so a forged
-entry beside a genuine one costs the genuine one nothing (S22). The sibling still does not host
-the check, for the reason above.
+`unverified-citation: <n>` beside the failing ids. The verifier's exit is read in three tiers,
+never as a boolean: 0 verifies, 2 is its own NOMATCH, and anything else is the verifier failing
+before it could answer (node off PATH returns 1, measured against a control of 0) — that row
+covers nothing either, but the line says `UNVERIFIABLE` and the block says
+`verifier-error: <n>`, because printing a tooling failure as forgery accuses the operator's own
+authorization of being invented. A `--transcript` file is widened to its directory when that
+directory holds a `*.jsonl`, exactly as the guard widens the session transcript it is handed;
+measured on the other shape, the gate read NOMATCH from the current session's file on an entry
+the guard had just accepted from a sibling file. Rows are only ever narrowed, so a forged entry
+beside a genuine one costs the genuine one nothing (S22). The sibling still does not host the
+check, for the reason above.
+
+**A stated limit, not a fix.** The guard's corpus arrives from the harness on hook stdin; the
+gate's is named by a flag the lead types. A directory the lead creates, holding a `.jsonl` the
+lead writes, verifies a quote no operator said (exit 0 with the `SUPPRESSED` line, against exit 1
+on the seed's genuine corpus). That is the same escape `AI_DLC_ESCALATIONS` already offers one
+screen up and it is the property of every lead-run validator; the two prose sites say so now.
 
 Wrong fixes built and refused, each with the case that kills it: a verifier written as a grep
 over the corpus, which accepts the same words carried in an assistant turn and a tool_result
 (S18, `TDIR_FORGED`); a verifier that treats "no corpus given" as "nothing to verify" and keeps
-the rows (S19, S21, mutant m15); and one that computes the narrowed set and exports the
-original (m16). The mutant battery gained m14–m16 and its m1, m5 and m10 sets widened by the
-new cases; m4 (sibling lists a malformed entry) now keys S4 on the ABSENCE of the `UNVERIFIED`
-line, because the verifier would otherwise drop that row on the sibling's behalf and hide the
-sibling's exclusion. Measured on the reference consumer, read-only: one in-force row today
+the rows (S19, S21, mutant m15); one that computes the narrowed set and exports the original
+(m16); one that scans the corpus's FIRST member and stops (m17) — the batch-63 adversary's
+BLOCKER, because every seeded corpus held one file and so the receipt and every case accepted
+it, while on the consumer's 250-file corpus it reads NOMATCH on the one genuine in-force
+citation; the seed now carries the quote in the second file by glob order; and one that reads
+the verifier's exit as a boolean and reports its failure as forgery (m18, S23). The mutant
+battery gained m14–m18 and its m1, m5 and m10 sets widened by the new cases; m4 (sibling lists
+a malformed entry) now keys S4 on the ABSENCE of the `UNVERIFIED` line, because the verifier
+would otherwise drop that row on the sibling's behalf and hide the sibling's exclusion.
+Measured on the reference consumer, read-only: one in-force row today
 (`[core] 16`), whose quote verifies against its 250-transcript corpus; its latest FAIL verdict
 (`story-20260904T191843Z`, checks 5 and 7) blocks identically under the installed and the fixed
 reader, in 2.0s with the corpus, so the pull moves no verdict on its files today. The fix fires

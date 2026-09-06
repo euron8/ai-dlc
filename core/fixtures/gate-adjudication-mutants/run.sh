@@ -209,7 +209,7 @@ score "M0 control (unmutated)" validate-gate-adjudication.sh "" \
 # block text offers no reason, because as far as the caller knows there was nothing to apply.
 # --------------------------------------------------------------------------
 score "m1 caller never asks the sibling (rows blanked)" validate-gate-adjudication.sh \
-  "S1 S2b S6-idonly S13 S15 S17 S18 S19 S20 S21 S22" \
+  "S1 S2b S6-idonly S13 S15 S17 S18 S19 S20 S21 S22 S23" \
   '        if [ "$supp_rc" -eq 0 ]; then
             GA_IN_FORCE_STATUS="ok:$ESC"' \
   '        if [ "$supp_rc" -eq 0 ]; then
@@ -218,8 +218,8 @@ score "m1 caller never asks the sibling (rows blanked)" validate-gate-adjudicati
   "The carve-out has no input, so a FAIL under a well-formed in-force suppression blocks
   exactly as it did before the fix. The set is wide because the mutation removes the
   carve-out's INPUT rather than a property of the join: S1, S2b, S6-idonly, S13, S15, S17 and
-  S20 assert it FIRED, and S18, S19, S21 and S22 assert the citation check's own tokens, which
-  a validator with no rows to verify never prints. Every case that asserts it did NOT fire is
+  S20 assert it FIRED, and S18, S19, S21, S22 and S23 assert the citation check's own tokens,
+  which a validator with no rows to verify never prints. Every case that asserts it did NOT fire is
   unaffected, which is the point — those cases cannot tell this validator from the fixed one
   on their own, and that is what the rest of this battery is for."
 
@@ -422,13 +422,14 @@ score "m13 caller asks the sibling on a verdict with no FAIL" \
 # Y too and the gate passes. Every case whose quote IS in the corpus is unmoved, and must be.
 # --------------------------------------------------------------------------
 score "m14 caller never asks the citation verifier" validate-gate-adjudication.sh \
-  "S18 S22" \
-  '                        if [ "${#ga_quote}" -ge 12 ] \
-                           && bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$ga_quote" --quiet >/dev/null 2>&1; then' \
-  '                        if [ "${#ga_quote}" -ge 12 ]; then' \
+  "S18 S22 S23" \
+  '                        bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$ga_quote" --quiet >/dev/null 2>&1
+                        ga_rc=$?' \
+  '                        ga_rc=0' \
   "A quote nobody said verifies, so a lead can write its own gate passage into pending.md and
-  the gate adopts it. Only the two cases whose corpus does NOT carry the quote can see this —
-  every other case's entry cites words the operator genuinely typed."
+  the gate adopts it. Only the cases whose corpus does NOT carry the quote (S18, S22) or whose
+  verifier cannot run (S23) can see this — every other case's entry cites words the operator
+  genuinely typed."
 
 # --------------------------------------------------------------------------
 # m15 — the CALLER fails OPEN when no corpus was given. The status still says `no-transcript`,
@@ -454,12 +455,47 @@ score "m15 caller keeps the rows when it has no corpus to verify them against" \
 # kill set as m14, reached from the other side — the ask happened and the answer was dropped.
 # --------------------------------------------------------------------------
 score "m16 caller verifies the rows and exports the unverified set" \
-  validate-gate-adjudication.sh "S18 S22" \
+  validate-gate-adjudication.sh "S18 S22 S23" \
   '                    GA_IN_FORCE="$GA_VERIFIED"' \
   '                    GA_IN_FORCE="$GA_IN_FORCE"' \
-  "The verifier was asked and its answer changed nothing. S18 and S22 are the two cases where
-  the verified set and the original set DIFFER, so they are the only two that can tell the
+  "The verifier was asked and its answer changed nothing. S18, S22 and S23 are the cases where
+  the verified set and the original set DIFFER, so they are the only ones that can tell the
   program that honours the answer from the one that prints it and moves on."
+
+# --------------------------------------------------------------------------
+# m17 — the CALLER scans the corpus's FIRST member and stops. The batch-63 adversary's blocker:
+# with every seeded corpus holding one file, this passed every case and the receipt, and on
+# the reference consumer's 250-file corpus it reads NOMATCH on the one genuine in-force
+# citation. The seed now holds the quote in the SECOND file by glob order, so every case whose
+# quote must be FOUND through --transcript-dir dies. S20 survives, and must: it arrives through
+# --transcript and is widened on the OTHER branch, which this mutation leaves alone — a second
+# mutant on that branch would be the same property spelled twice. S18, S19, S21 and S23
+# survive too: their verdicts do not depend on the quote being found.
+# --------------------------------------------------------------------------
+score "m17 caller scans only the corpus's first transcript" validate-gate-adjudication.sh \
+  "S1 S2b S6-idonly S13 S15 S17 S22" \
+  '                if steer_dir_has_transcript "$TRANSCRIPT_DIR"; then
+                    STEER_FLAG="--dir"; STEER_ARG="$TRANSCRIPT_DIR"' \
+  '                if steer_dir_has_transcript "$TRANSCRIPT_DIR"; then
+                    STEER_FLAG="--transcript"
+                    for _one in "$TRANSCRIPT_DIR"/*.jsonl; do STEER_ARG="$_one"; break; done' \
+  "The corpus is read one file deep, so a genuine authorization in any session but the first
+  reads as forged. Every case that asserts the carve-out FIRED needs the quote found in the
+  corpus's second file, which is why the seed carries it there and nowhere else."
+
+# --------------------------------------------------------------------------
+# m18 — the CALLER reads the verifier's exit as a BOOLEAN. A verifier that could not run (rc 1)
+# is reported as a forgery: the entry still covers nothing, so every exit code is unchanged
+# and the only observable is the LINE — which is why S23 exists and why it keys on the
+# UNVERIFIABLE token and the absence of the forgery sentence.
+# --------------------------------------------------------------------------
+score "m18 caller reports a verifier failure as a forged citation" validate-gate-adjudication.sh \
+  "S23" \
+  '                        elif [ "$ga_rc" -eq 2 ]; then' \
+  '                        elif [ "$ga_rc" -ne 0 ]; then' \
+  "A consumer without node on PATH loses every carve-out under a message accusing the
+  operator's own authorization of being invented. S23 alone can see it: every other case
+  either runs the verifier successfully or never reaches it."
 
 # --------------------------------------------------------------------------
 # m10 — the SIBLING emits nothing. The question `.claude/rules/fixture-mutants.md` puts to every
@@ -473,7 +509,7 @@ score "m16 caller verifies the rows and exports the unverified set" \
 # sibling is never invoked at all.
 # --------------------------------------------------------------------------
 score "m10 sibling replaced by 'exit 0'" validate-suppression-lifetime.sh \
-  "S1 S2b S3 S4 S5 S6-idonly S6-mismatch S8 S9 S11 S12 S13 S14 S15 S17 S18 S19 S20 S21 S22" "" "" \
+  "S1 S2b S3 S4 S5 S6-idonly S6-mismatch S8 S9 S11 S12 S13 S14 S15 S17 S18 S19 S20 S21 S22 S23" "" "" \
   "A sibling that emits nothing and exits 0 satisfied a case, which means that case is
   asserting an ABSENCE and would certify a predicate that never ran."
 
@@ -494,8 +530,8 @@ score "m11 caller replaced by 'exit 0'" validate-gate-adjudication.sh NOPASS "" 
 # The kill count itself. A battery whose mutants all applied and killed nothing reports zero
 # failures, which is byte-identical to a battery that worked.
 # --------------------------------------------------------------------------
-if [ "$SCORED" -lt 17 ]; then
-  note_fail "only $SCORED mutant(s) were scored; this battery declares 17. A mutant that never
+if [ "$SCORED" -lt 19 ]; then
+  note_fail "only $SCORED mutant(s) were scored; this battery declares 19. A mutant that never
   ran cannot have been survived or killed."
 fi
 
@@ -505,8 +541,8 @@ if [ "$FAILURES" -eq 0 ]; then
   echo "    sibling's rows, the catalog compare, the lifetime test, the malformed-shape"
   echo "    exclusion, the fail-closed default, the exact-id match, the empty-catalog rule,"
   echo "    the per-ENTRY exclusion, the sibling's stderr channel, the citation verifier's"
-  echo "    ask, its fail-closed default, its answer, or either script itself each kills"
-  echo "    exactly the case set that owns that property."
+  echo "    ask, its fail-closed default, its answer, its corpus depth, its exit tiers, or"
+  echo "    either script itself each kills exactly the case set that owns that property."
   exit 0
 fi
 echo "FAILED: gate-adjudication-mutants — $FAILURES finding(s) across $SCORED mutant(s)"

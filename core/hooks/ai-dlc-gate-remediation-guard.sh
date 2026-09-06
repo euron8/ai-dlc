@@ -412,14 +412,16 @@ esac
 # SATISFIABLE: the reference consumer's genuine `[S308-GATE3-STORY-1]` entry, quote
 # "Suppress Check 16 (Recommended)", verifies over its 249-transcript corpus -- MATCH at
 # 2026-09-05T17:46:59Z, against a control phrase that returns NOMATCH. (2) The sibling's OTHER
-# caller cannot supply a corpus: `validate-gate-adjudication.sh` takes no transcript argument
-# and no caller passes it one, so a sibling that verified unconditionally would omit every
-# in-force row at gate time and re-block every suppressed FAIL -- a check that wedges live
-# work. (3) The sibling could not host the extraction anyway: `cite_quote()` and
-# `cite_segments()` are held to exactly three copies by I93, whose site list is DERIVED from
-# every file under core/ that names them, so a fourth copy fails the push. This hook is one of
-# the three and already carries both. The sibling therefore forwards the auth line verbatim as
-# a row field and parses nothing. Check 26's half of the hole is a separate subject.
+# caller names its corpus by FLAG: `validate-gate-adjudication.sh` now takes `--transcript-dir`
+# from the lead's Check 26 call site and verifies the same rows itself, while this hook's corpus
+# arrives from the harness on stdin -- two provenances, so a sibling verifying unconditionally
+# would have to be handed one of them and would re-block every suppressed FAIL for the caller
+# whose flag was missing, a check that wedges live work. (3) The sibling could not host the
+# extraction anyway: `cite_quote()` and `cite_segments()` are held to exactly four copies by
+# I103, whose site list is DERIVED from every file under core/ that names them, so a fifth copy
+# fails the push. This hook is one of the four and already carries both. The sibling therefore
+# forwards the auth line verbatim as a row field and parses nothing; each of the two readers
+# verifies it against the corpus it was given.
 #
 # WHY THIS SITS AFTER ARM 7 AND NOT AFTER ARM 5. The subtraction changes exactly three
 # things, all downstream of the guarded-root test: the repair record's `repaired_checks`

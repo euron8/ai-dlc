@@ -2095,7 +2095,12 @@ carries is the operator's licence to proceed past it, with the lifetime `escalat
 it. Absence fails closed: no `docs/escalations/pending.md`, no sibling script, a sibling
 refusal, no readable transcript corpus, or a quote no genuine operator turn carries means that
 entry (or, for an absence, every entry) covers nothing, and the block names which —
-`unverified-citation: <n>` beside the failing ids when a citation did not verify.
+`unverified-citation: <n>` beside the failing ids when a citation did not verify, and
+`verifier-error: <n>` when the verifier could not run at all, which is a tooling failure and
+not a finding about the citation. The two readers differ in one respect that is a stated
+limit: the guard's corpus arrives from the harness, the gate's is the directory this call site
+names, so this check is only as honest as the corpus the lead points it at — the same
+property `AI_DLC_ESCALATIONS` has, and of every validator the lead runs.
 
 **PASS:** exit 0 — every escalated check covered, well-formed, each PASS or `FAIL` under an
 in-force `SUPPRESSED` entry naming it. **FAIL:** any nonzero exit. Fixture:

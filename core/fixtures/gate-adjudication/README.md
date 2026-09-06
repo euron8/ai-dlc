@@ -63,10 +63,17 @@ passage into `pending.md` and the gate adopted it.
 - **S18** the words are in the corpus only in an assistant turn and a tool_result → exit 1,
   `unverified-citation: 1` (kills a verifier written as a grep over the corpus).
 - **S19** neither `--transcript` nor `--transcript-dir` given → exit 1, `no-transcript`.
-- **S20** the `--transcript` single-file fallback verifies a genuine quote → exit 0.
+- **S20** `--transcript` naming a file that does NOT carry the quote, whose sibling does → exit 0:
+  the file is widened to its directory, as the remediation guard widens the session transcript.
 - **S21** `--transcript-dir` naming a directory with no `*.jsonl` → exit 1, `no-transcript`.
 - **S22** two entries, one genuine and one forged, both checks failing → exit 1 naming only the
   forged entry's check, with the genuine one still `SUPPRESSED`: rows are narrowed, not dropped.
+- **S23** the verifier cannot run (node off PATH, asserted first) → exit 1, `verifier-error: 1`,
+  and NOT the forgery sentence: a tooling failure covers nothing and is reported as one.
+
+The ALLOW corpus holds TWO transcripts with the quote in the second by glob order, because a
+verifier that scans the first member and stops passed every case and the receipt when it held
+one — and reads NOMATCH on the reference consumer's one genuine in-force citation.
 
 Each case asserts a TOKEN as well as an exit code — the `SUPPRESSED —` line, the block's
 `no-escalations-file` or `no-transcript`, or the sibling's own `in_force=` count — because an

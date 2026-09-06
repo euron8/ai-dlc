@@ -507,16 +507,49 @@ else
   bad "S19: with no corpus to verify against, the entry still covered the FAIL (rc=$RC) — 'nothing to verify against' is being read as 'verified'"
 fi
 
-# --- S20: the single-file fallback verifies → exit 0 ------------------------
+# --- S20: --transcript is WIDENED to its directory → exit 0 ----------------
+# $TFILE does NOT carry the quote; its sibling in the same directory does. The remediation
+# guard widens the session transcript it is handed to that directory, and the gate must read
+# the same rows against the same corpus or the two disagree about one entry (measured: gate
+# NOMATCH, guard MATCH, on this shape). A single-file scan fails this case.
 restore; fail_on "$X"
+if grep -qF 'proceed past this one' "$TFILE"; then
+  bad "S20-pre: FIXTURE BROKEN — the --transcript file itself carries the quote, so this arm cannot tell a widened scan from a single-file one"
+else
+  ok "S20-pre: the --transcript file does NOT carry the quote; only its sibling does"
+fi
 AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
 AI_DLC_ESCALATIONS="$ESC_INFORCE" AI_DLC_GATE_METRICS="$GM_BEFORE" \
   bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" --transcript "$TFILE" > "$SOUT" 2>&1
 RC=$?
 if [ "$RC" -eq 0 ] && has "$SUPP_LINE"; then
-  ok "S20: --transcript naming the one file that carries the operator's words verifies the entry → exit 0"
+  ok "S20: --transcript naming a file whose SIBLING carries the operator's words verifies the entry → exit 0 (the file is widened to its corpus, as the guard does)"
 else
-  bad "S20: the --transcript fallback did not verify a genuine citation (rc=$RC) — the fix demands a directory where a single readable transcript is the documented degraded form"
+  bad "S20: --transcript was scanned as a single file (rc=$RC) — the gate reads a narrower corpus than the guard reads for the same rows, and the two disagree about the same entry"
+fi
+
+# --- S23: the verifier FAILS (node off PATH) → exit 1, reported as tooling ---
+# A verifier that cannot run is not a finding that the operator's words were invented. The
+# entry still covers nothing (fail closed) but the line and the block reason must say the
+# verifier failed, not that no operator said it. The control asserts node is genuinely absent
+# under the stripped PATH before the arm is read.
+restore; fail_on "$X"
+GA_NODE_DIR="$(dirname "$(command -v node 2>/dev/null || echo /nonexistent/node)")"
+GA_P2="$(printf '%s' "$PATH" | tr ':' '\n' | grep -vx "$GA_NODE_DIR" | paste -sd: -)"
+if [ -n "$(PATH="$GA_P2" command -v node 2>/dev/null)" ]; then
+  bad "S23-pre: FIXTURE BROKEN — node is still on PATH after stripping $GA_NODE_DIR, so the verifier-failure arm cannot be built"
+else
+  ok "S23-pre: node is absent under the stripped PATH (control), so the verifier below cannot run"
+  PATH="$GA_P2" AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
+  AI_DLC_ESCALATIONS="$ESC_INFORCE" AI_DLC_GATE_METRICS="$GM_BEFORE" \
+    bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" --transcript-dir "$TDIR" > "$SOUT" 2>&1
+  RC=$?
+  if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "VALIDATE-GATE-ADJUDICATION: UNVERIFIABLE" \
+     && has "verifier-error: 1 in-force" && ! has "no genuine operator turn" && ! has "$SUPP_LINE"; then
+    ok "S23: with the verifier unable to run, the entry covers nothing → exit 1, and the line and the block say the VERIFIER failed rather than that the citation is forged"
+  else
+    bad "S23: a verifier that could not run was read as a verdict (rc=$RC) — either the entry still covered the FAIL, or a tooling failure was printed as an accusation of forgery"
+  fi
 fi
 
 # --- S21: a directory with NO *.jsonl is not a corpus → exit 1 -------------

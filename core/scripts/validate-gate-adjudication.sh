@@ -352,6 +352,7 @@ CITEEOF
 GA_IN_FORCE=""
 GA_IN_FORCE_STATUS="not-asked"
 GA_UNVERIFIED_CITES=0
+GA_VERIFIER_ERRORS=0
 if [ "$MODE" = "adjudicate" ]; then
     ESC="${AI_DLC_ESCALATIONS:-$GA_ROOT/docs/escalations/pending.md}"
     # The sibling is named IN FULL at its call sites below, never through a variable holding
@@ -408,6 +409,16 @@ if [ "$MODE" = "adjudicate" ]; then
                 STEER_FLAG=""; STEER_ARG=""
                 if steer_dir_has_transcript "$TRANSCRIPT_DIR"; then
                     STEER_FLAG="--dir"; STEER_ARG="$TRANSCRIPT_DIR"
+                elif [ -n "$TRANSCRIPT" ] && steer_dir_has_transcript "$(dirname "$TRANSCRIPT")"; then
+                    # THE DIRECTORY, for the guard's reason (ai-dlc-gate-remediation-guard.sh
+                    # arm 7b widens the session transcript it is handed the same way): an
+                    # operator authorizes a suppression in one session and the gate that leans
+                    # on it runs in another, so the calling session's own file is never the one
+                    # the words are in. Measured: given only the current session's file, the
+                    # single-file scan read NOMATCH on an entry the guard had just accepted from
+                    # the sibling file. The two readers of these rows scan the same corpus from
+                    # the same argument, or they disagree about the same entry.
+                    STEER_FLAG="--dir"; STEER_ARG="$(dirname "$TRANSCRIPT")"
                 elif [ -n "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ]; then
                     STEER_FLAG="--transcript"; STEER_ARG="$TRANSCRIPT"
                 fi
@@ -430,13 +441,32 @@ if [ "$MODE" = "adjudicate" ]; then
                         [ "${ga_nf:-0}" -ge 6 ] || continue
                         ga_auth="$(printf '%s' "$ga_row" | LC_ALL=C awk -F'\t' '{ print $5 }')"
                         ga_quote="$(cite_quote "$ga_auth")"
-                        if [ "${#ga_quote}" -ge 12 ] \
-                           && bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$ga_quote" --quiet >/dev/null 2>&1; then
+                        ga_header="$(printf '%s' "$ga_row" | cut -f6-)"
+                        if [ "${#ga_quote}" -lt 12 ]; then
+                            GA_UNVERIFIED_CITES=$((GA_UNVERIFIED_CITES + 1))
+                            echo "VALIDATE-GATE-ADJUDICATION: UNVERIFIED — an in-force SUPPRESSED entry's operator citation is too short to be evidence (under 12 characters: '${ga_quote}'), so it suppresses nothing: ${ga_header}"
+                            continue
+                        fi
+                        # THE VERIFIER'S EXIT IS READ IN THREE TIERS, never as a boolean. 0 is
+                        # MATCH; 2 is the verifier's own NOMATCH, the finding about the citation;
+                        # anything else is the verifier failing before it could answer (node off
+                        # PATH returns 1, measured against a control of 0 with node present). The
+                        # last is a tooling failure and still covers nothing -- fail closed -- but
+                        # it is reported as one, because printing it as forgery accuses the
+                        # operator's own authorization of being invented, which is the reading
+                        # validate-escalation-resolution.sh and the convergence validator both
+                        # refuse to make on the same status.
+                        bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$ga_quote" --quiet >/dev/null 2>&1
+                        ga_rc=$?
+                        if [ "$ga_rc" -eq 0 ]; then
                             GA_VERIFIED="${GA_VERIFIED}${ga_row}
 "
-                        else
+                        elif [ "$ga_rc" -eq 2 ]; then
                             GA_UNVERIFIED_CITES=$((GA_UNVERIFIED_CITES + 1))
-                            echo "VALIDATE-GATE-ADJUDICATION: UNVERIFIED — an in-force SUPPRESSED entry cites an operator message that no genuine operator turn in ${STEER_ARG} carries, so it suppresses nothing: $(printf '%s' "$ga_row" | cut -f6-)"
+                            echo "VALIDATE-GATE-ADJUDICATION: UNVERIFIED — an in-force SUPPRESSED entry cites an operator message that no genuine operator turn in ${STEER_ARG} carries, so it suppresses nothing: ${ga_header}"
+                        else
+                            GA_VERIFIER_ERRORS=$((GA_VERIFIER_ERRORS + 1))
+                            echo "VALIDATE-GATE-ADJUDICATION: UNVERIFIABLE — the citation verifier failed (validate-steering-budget.sh rc=${ga_rc}) before it could say whether a genuine operator turn carries this entry's quote, so the entry suppresses nothing until it can be verified. This is a tooling failure, not a finding about the citation (is node on PATH?): ${ga_header}"
                         fi
                     done <<GAROWEOF
 $GA_IN_FORCE
@@ -450,7 +480,7 @@ GAROWEOF
         fi
     fi
 fi
-export GA_IN_FORCE GA_IN_FORCE_STATUS GA_UNVERIFIED_CITES
+export GA_IN_FORCE GA_IN_FORCE_STATUS GA_UNVERIFIED_CITES GA_VERIFIER_ERRORS
 
 python3 - "$MODE" "$GATE_TYPE" "$VERDICT_PATH" "$SCHEMA" "$MAP" "$SIBLING" ${SERIES_PATHS+"${SERIES_PATHS[@]}"} <<'PYEOF'
 import glob
@@ -1177,6 +1207,7 @@ if not E:
 # the row shape cannot narrow under one of them.
 in_force_status = os.environ.get("GA_IN_FORCE_STATUS", "not-asked")
 unverified_cites = int(os.environ.get("GA_UNVERIFIED_CITES", "0") or 0)
+verifier_errors = int(os.environ.get("GA_VERIFIER_ERRORS", "0") or 0)
 in_force = {}
 for raw in os.environ.get("GA_IN_FORCE", "").splitlines():
     parts = raw.split("\t", 5)
@@ -1211,6 +1242,11 @@ if blocking:
             reason += (f" unverified-citation: {unverified_cites} in-force entr(y/ies) cite an "
                        f"operator message that is NOT in the transcript corpus, so they "
                        f"suppress nothing.")
+        if verifier_errors:
+            reason += (f" verifier-error: {verifier_errors} in-force entr(y/ies) could not be "
+                       f"verified because the citation verifier failed (a tooling failure, "
+                       f"not a finding about the citation), so they suppress nothing until it "
+                       f"can run.")
         if suppressed:
             reason += (f" {len(suppressed)} other FAIL(s) are under an in-force suppression; "
                        f"these are not.")
