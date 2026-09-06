@@ -4047,7 +4047,7 @@ split it protects cannot disagree about what a fence is. The refusal on the genu
 `## BL-` line must survive; `core/fixtures/backlog-rotate-fence-guard` carries that arm and its
 mutants, and the two-quotation seed below is the one it lacks.
 
-verify: sh d=$(mktemp -d); printf '## BL-001 — one\n\n```text\n## BL-999 — quoted\n```sh\n## BL-998 — quoted again\n```\n\n## BL-002 — a real entry after the fence\n\nverify: manual\n' > "$d/backlog.md"; printf '# archive\n' > "$d/backlog.archive.md"; o=$(bash scripts/backlog-rotate.sh "$d/backlog.md" 2>&1); rm -rf "$d"; grep -q 'line 4:' <<<"$o" && ! grep -q 'line 9:' <<<"$o" && ! grep -q 'unterminated fence' <<<"$o"
+verify: sh d=$(mktemp -d); mkdir -p "$d/a" "$d/b"; printf '## BL-001 — one\n\n```text\n## BL-999 — quoted\n```sh\n## BL-998 — quoted again\n```\n\n## BL-002 — a real entry after the fence\n\nverify: manual\n' > "$d/a/backlog.md"; printf '## BL-001 — one\n\n```text\n## BL-999 — quoted\n### BL-998 — quoted again\n```\n\n## BL-002 — a real entry after the fence\n\nverify: manual\n' > "$d/b/backlog.md"; a=$(bash scripts/backlog-rotate.sh "$d/a/backlog.md" 2>&1); b=$(bash scripts/backlog-rotate.sh "$d/b/backlog.md" 2>&1); rm -rf "$d"; al=$(sed -n 's/^ *line \([0-9]*\):.*/\1/p' <<<"$a" | tr '\n' ' '); bl=$(sed -n 's/^ *line \([0-9]*\):.*/\1/p' <<<"$b" | tr '\n' ' '); [ "$al" = "4 6 " ] && [ "$bl" = "4 5 " ] && ! grep -q 'unterminated fence opened' <<<"$a$b"
 
 
 
