@@ -287,7 +287,7 @@ above land (§2 blocker 1) and before the Step-5c audit commit.
 
 Detection is mechanical and is not dispatched. Run:
 
-    scripts/ai-dlc/audit-rule-files.sh
+    scripts/ai-dlc/audit-rule-files.sh --fail-on=local
 
 The script owns the scan corpus and the detection regexes — neither is
 restated here, where they would drift from the thing that runs. It reports
@@ -296,6 +296,27 @@ six scans: narrative drift (Class 1), an incomplete Rule 26(c) triple
 relocation-pointer resolution, and path-filter dormancy. Exit 0 = every
 mechanized scan clean; exit 1 = findings; exit 2 = the scan could not be
 performed, which is never a pass.
+
+**`--fail-on=local`, and the reason is Rule 27.** Every finding prints with
+its owner — `[core]` or `[local]` — and the exit code counts only the local
+half. A finding in a core-manifest-owned file is NOT yours to disposition:
+the decision tree below ends in editing a rule file, and on a core path the
+next `apply` restores it, so that work is destroyed by design. Route those
+upstream (§ below) instead of rewriting them. **An UNRESOLVED owner counts
+as local and fails**, because a resolver that cannot answer must never be
+able to acquit a whole tree.
+
+**This is not a quieter audit.** The core half still prints, enumerated, at
+the same volume; only what sets the exit code changed. If you find yourself
+re-running to see whether a core finding "cleared", it did not — nothing you
+do here can clear it.
+
+**A `[core]` finding is a push candidate, and that is its disposition.** The
+owner tag comes from the same `core-paths.sh --is-core` call
+`.claude/rules/upstream-routing.md` already prescribes as the routing test, so
+the audit has done that lookup for you: file the finding in
+`_bmad-output/ai-dlc-update/push-candidate-ledger.md` per that rule. Do not
+open a carry-over item for it, and do not rewrite the file.
 
 **Class 3 always reports `DID-NOT-RUN`, and that is correct.** Complexity
 accretion needs each gate's catch/false-positive history since introduction,
@@ -318,10 +339,12 @@ which. An unreachable item is a Step 4 improvement — wire it to a layer that
 runs, narrow it to a subject that does arise, or remove it. Record the per-item
 verdict under `## Rule File Audit` beside the accretion tally.
 
-**The lead dispositions every finding and authors every rewrite inline.**
+**The lead dispositions every LOCAL finding and authors every rewrite inline.**
 Rule rewriting is a governance judgment expressed as text, tightly coupled
 to disposition; routing the decided text-insertion to a dev is pure overhead
-(Rule 26: no dispatch hop for a decision the lead already made). Per finding:
+(Rule 26: no dispatch hop for a decision the lead already made). A `[core]`
+finding is dispositioned by the routing above and never by the tree below —
+its remedy is a file you may not edit. Per LOCAL finding:
 
 - Is the text part of a rule statement (prescriptive/directive), or prose
   explaining how something works (descriptive)? Descriptive prose is exempt.

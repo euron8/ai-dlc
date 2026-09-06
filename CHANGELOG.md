@@ -15,6 +15,68 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.520.0] - 2026-09-06
+
+### `BL-193` — every rule-file audit finding names its owner, and a consumer is no longer gated on a file it may not edit
+
+`PC-S340-AUDIT-RULE-FILES-DRIFT-FINDINGS-IN-CORE-PROSE-ARE-NOT-CONSUMER-FIXABLE`, filed by the
+reference consumer on 2026-08-31. A both-sides item; this closes the upstream half. The consumer
+half — its own files — stays as that consumer's carry-over and is not routed away.
+
+**The filing's own split has expired, and the defect is wider than filed.** It reports 33 findings
+across fourteen files, two of them the consumer's own to fix. Driving the consumer's INSTALLED
+audit against its real tree today gives **32 findings across 14 files, and `core-paths.sh
+--is-core` returns 0 for all 14** — control in the same invocation, `docs/coding-conventions.md`
+returns 1, so the resolver discriminates and the zero is real. Neither named consumer-owned file
+draws a finding now. The consumer can fix **none** of the 32, where the filing implies it can fix
+two.
+
+**The mechanism.** `steps/retro.md` Step 4 told the lead to disposition every finding, and its
+decision tree ends in editing a rule file. Rule 27 forbids a consumer editing core and `apply`
+restores any core file it writes, so on a consumer every one of those 32 dispositions is either
+refused or destroyed by the next pull. The audit had no ownership concept at all.
+
+**Why it went unseen upstream, which is the reusable half.** Both pre-push hooks run the audit
+`--fail-on=deterministic`, so only tier 1 gates; narrative drift is tier 2. This repo pushes green
+carrying 62 findings while the consumer's retro invokes the script bare, defaults to
+`--fail-on=any`, and exits 1 on every run. Drift accumulates upstream and lands downstream as a
+permanently red check nobody there can clear.
+
+**The change.** Ownership is resolved once and reported at `emit()`, the single seam every class
+already routes through — a per-class call would be the hand-list that goes stale the release
+somebody adds a class. Each finding prints `[core]`, `[local]` or `[unknown]`; each verdict line
+carries the split; a new `--fail-on=local` gates on the half the reader can act on. `retro.md` now
+invokes that threshold and routes `[core]` findings to the push-candidate ledger through
+`upstream-routing.md`, which prescribes the same `--is-core` call — so the audit performs the
+routing lookup that rule already asks for. `--fail-on=any` and `--fail-on=deterministic` are
+unchanged in their exit behaviour, asserted both ways.
+
+**Two defects in the fix were caught by its own probe, both in the subject.** With the resolver
+removed, every finding scored `unknown` and `--fail-on=local` exited **0** — a clean sheet over a
+32-finding corpus, the exact false clean `--is-core`'s own exit-2 contract exists to prevent;
+unresolved now counts as local and fails. And the first cut asked the resolver once per corpus
+file, taking the audit from **200ms to 3700ms** across three interleaved pairs timed from inside
+the repo — a cost the suite pole's path pays. Reshaped to fetch the glob set once via `--list` and
+match in-process: **390ms**, of which ~175ms is that single unavoidable resolver call.
+
+**The in-process matcher is a second matcher and is scored against the shipping one.** It loads
+`core-paths.sh --list` as data, so the manifest parser is not copied and a change to how core is
+derived is read rather than restated. Differential over all 112 corpus files on a scratch consumer:
+**112 agree, 0 disagree**, with the corpus containing both verdicts in the same run so the null is
+readable. `fnmatch` was refused because `*` crosses `/` there, which would let `steps/*.md` claim a
+file nested a directory deeper.
+
+**Six fixture arms in `retro-audit-scans`, four worlds one property apart**, each scored against a
+mutant that kills it and no other: unresolved-acquits dies at the fail-closed arm, everything-core
+dies at the local arm, everything-local and a dropped owner tag die at the tag arms. Unmutated
+control clean. The absent-resolver arm carries its own positive control — the same scratch copy
+with the resolver restored returns 0 — so `rc=1` there is the absence and not a copy that could
+not run.
+
+**Not claimed.** This changes which findings gate, never which are reported: the core half still
+prints, enumerated, at full volume. It does not reduce this repo's own 62 findings, which remain
+this repo's to fix and are a separate subject.
+
 ## [0.519.0] - 2026-09-06
 
 ### `BL-192` — the report driver runs each drift detector once per render, and a refusing detector can no longer render as a clean sheet

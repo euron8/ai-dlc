@@ -9,6 +9,7 @@ set -euo pipefail
 #   audit-rule-files.sh                          # audit the repo rooted at $PWD
 #   audit-rule-files.sh --list                   # print the scan corpus, exit 0
 #   audit-rule-files.sh --fail-on=deterministic  # only tier 1 sets the exit code
+#   audit-rule-files.sh --fail-on=local          # only LOCALLY-OWNED findings do
 #
 # exit 0 = no finding at or above the selected fail threshold
 # exit 1 = at least one such finding
@@ -18,6 +19,22 @@ set -euo pipefail
 # distribution keeps the same files under `core/`. Both are scanned by the same
 # corpus rule, so narrative fails where it is authored rather than one release
 # later in a consumer's retro.
+#
+# OWNERSHIP IS REPORTED BESIDE EVERY FINDING, because a consumer cannot fix a
+# core file and Rule 27 forbids it trying. Retro Step 4 tells the lead to
+# disposition every finding; on a consumer, findings in core-manifest-owned
+# files are dispositioned by editing a file the next `apply` restores, so that
+# work is destroyed by design. Each finding carries `[core]` or `[local]`, the
+# per-class verdict line carries the split, and `--fail-on=local` sets the exit
+# code from the LOCAL half alone -- the half the reader can actually act on.
+#
+# Ownership is resolved by `core-paths.sh --is-core`, the SAME resolver the core
+# write guard and the gate check use, so this audit cannot disagree with them
+# about what core is. It is not re-derived here. `core/scripts/*` is a derived
+# glob in install.sh, so the resolver is always installed beside this script;
+# if it is nevertheless unreadable, ownership reports UNKNOWN and never degrades
+# to either answer -- "no manifest" and "not core" are different facts, and a
+# caller that conflates them exempts the whole tree.
 #
 # TWO TIERS, split by falsifiability:
 #   tier 1  deterministic — a hit is a literal violation of a rule-authoring.md
@@ -56,7 +73,8 @@ for arg in "$@"; do
     --list)                   MODE="--list" ;;
     --fail-on=any)            FAIL_ON="any" ;;
     --fail-on=deterministic)  FAIL_ON="deterministic" ;;
-    *) echo "usage: audit-rule-files.sh [--list] [--fail-on=any|deterministic]" >&2; exit 2 ;;
+    --fail-on=local)          FAIL_ON="local" ;;
+    *) echo "usage: audit-rule-files.sh [--list] [--fail-on=any|deterministic|local]" >&2; exit 2 ;;
   esac
 done
 command -v python3 >/dev/null 2>&1 || { echo "audit-rule-files: FAIL — python3 required" >&2; exit 2; }
@@ -88,6 +106,87 @@ for name, skill, roles, schemas in LAYOUTS:
     if os.path.isfile(os.path.join(skill, "SKILL.md")):
         LAYOUT, SKILL, ROLES, SCHEMAS = name, skill, roles, schemas
         break
+
+# argv[1] is this script's own directory, passed by the shell wrapper above. The
+# resolver is a SIBLING, found beside this script rather than by walking up from
+# the corpus: `install.sh` splits what shares a parent here, so a path resolved
+# from the tree under audit resolves nowhere in the other layout.
+SELF_DIR = sys.argv[1] if len(sys.argv) > 1 else os.path.dirname(os.path.abspath(__file__))
+RESOLVER = os.path.join(SELF_DIR, "core-paths.sh")
+
+# THE GLOB SET IS FETCHED ONCE, NOT ONCE PER FILE. `--is-core` is a shell fork,
+# and a fork per corpus file measured 200ms -> 3700ms on this repo (18x, three
+# interleaved pairs) -- a cost the suite POLE pays, since the pre-push audit is
+# on that path. `--list` returns the same derived globs the per-path mode matches
+# against, in ONE call, and the matching is then done in-process.
+#
+# This is a second matcher against a single-sourced DATA set, which is the shape
+# `mechanism-design.md` allows -- the globs are loaded, never restated. It is not
+# a second copy of the manifest PARSER: `core-paths.sh` still owns deriving the
+# set from `core-manifest.md`, and if that derivation changes, this reads the new
+# answer without editing.
+_globs = None
+_own = {}
+
+
+def core_globs():
+    """The consumer-relative core globs, or None if they cannot be resolved.
+    None is NOT an empty list: an empty list would match nothing and score every
+    file as the reader's own, which is the false clean this must never produce."""
+    global _globs
+    if _globs is not None:
+        return _globs or None
+    if not os.path.isfile(RESOLVER):
+        _globs = []
+        return None
+    try:
+        r = subprocess.run(["bash", RESOLVER, "--list"],
+                           capture_output=True, text=True, timeout=30)
+        # exit 2 = unparseable manifest. An empty stdout on exit 0 is equally
+        # unusable, and both must reach the caller as "cannot answer".
+        _globs = [l.strip() for l in r.stdout.splitlines() if l.strip()] if r.returncode == 0 else []
+    except Exception:                               # noqa: BLE001 — report, never swallow
+        _globs = []
+    return _globs or None
+
+
+def owner(path):
+    """`core` | `local` | `unknown`. NEVER guesses: an unresolvable manifest is
+    `unknown`, which is counted in neither half, because "the resolver could not
+    answer" and "this file is the reader's own" are different facts and a caller
+    that conflates them exempts the whole tree."""
+    if path in _own:
+        return _own[path]
+    globs = core_globs()
+    if globs is None:
+        verdict = "unknown"
+    else:
+        # `fnmatch` alone is wrong here: it lets `*` cross a `/`, so a glob like
+        # `.claude/skills/ai-dlc/steps/*.md` would also claim a file nested a
+        # directory deeper. Anchor each segment, and give `**` the recursive
+        # meaning the manifest gives it.
+        verdict = "local"
+        for g in globs:
+            if _glob_match(g, path):
+                verdict = "core"
+                break
+    _own[path] = verdict
+    return verdict
+
+
+def _glob_match(pattern, path):
+    rx = []
+    for part in re.split(r"(\*\*/?|\*|\?)", pattern):
+        if part in ("**", "**/"):
+            rx.append(".*")
+        elif part == "*":
+            rx.append("[^/]*")
+        elif part == "?":
+            rx.append("[^/]")
+        elif part:
+            rx.append(re.escape(part))
+    return re.fullmatch("".join(rx), path) is not None
+
 
 def tree(root):
     out = []
@@ -170,6 +269,8 @@ if not corpus:
 
 t1_findings = 0
 all_findings = 0
+local_findings = 0
+unresolved_findings = 0
 print("=== Rule File Audit ===")
 print(f"layout: {LAYOUT}    corpus: {len(corpus)} files")
 if MUTANT:
@@ -177,15 +278,28 @@ if MUTANT:
 print()
 
 def emit(label, hits, tier, total_note=""):
-    """One class result. An enumerated n=[...] is the evidence; a bare CLEAN is not."""
-    global t1_findings, all_findings
+    """One class result. An enumerated n=[...] is the evidence; a bare CLEAN is not.
+
+    Every finding carries its OWNER, and the verdict line carries the split. This
+    is sited here rather than in each class because every class already routes
+    through this one function -- a per-class ownership call is the hand-listed
+    form that goes stale the release somebody adds a class."""
+    global t1_findings, all_findings, local_findings, unresolved_findings
+    owners = {f: owner(f) for f, _, _ in hits}
     for f, ln, msg in hits:
-        print(f"  {f}:{ln}  {label}  {msg}")
+        print(f"  [{owners[f]}] {f}:{ln}  {label}  {msg}")
     enum = ",".join(f"{f}:{ln}" for f, ln, _ in hits)
+    n_core = sum(1 for f, _, _ in hits if owners[f] == "core")
+    n_local = sum(1 for f, _, _ in hits if owners[f] == "local")
+    n_unknown = len(hits) - n_core - n_local
     verdict = "CLEAN" if not hits else "FLAGGED"
+    split = f"  [core {n_core} / local {n_local}"
+    split += f" / unresolved {n_unknown}]" if n_unknown else "]"
     print(f"  {label}: {verdict}  n=[{enum}]  "
-          f"(tier {tier}; of {len(corpus)} files scanned){total_note}")
+          f"(tier {tier}; of {len(corpus)} files scanned){total_note}{split}")
     all_findings += len(hits)
+    local_findings += n_local
+    unresolved_findings += n_unknown
     if tier == 1:
         t1_findings += len(hits)
     print()
@@ -567,6 +681,27 @@ else:
     else:
         emit("PATH_DORMANCY", dormant, 2, f"  [{len(filtered)} path-filtered workflow(s)]")
 
-print(f"threshold: --fail-on={FAIL_ON}   tier-1 findings: {t1_findings}   all findings: {all_findings}")
-sys.exit(1 if (t1_findings if FAIL_ON == "deterministic" else all_findings) else 0)
+print(f"threshold: --fail-on={FAIL_ON}   tier-1 findings: {t1_findings}   "
+      f"all findings: {all_findings}   locally-owned: {local_findings}   "
+      f"unresolved: {unresolved_findings}")
+# A core-owned finding is reported to EVERY reader and gates only the tree that
+# can fix it. On a consumer that is `--fail-on=local`: the core half still prints,
+# enumerated, so the reader can route it upstream, but it does not fail a gate
+# whose only compliant remedy is a write Rule 27 forbids.
+#
+# AN UNRESOLVED FINDING IS COUNTED AS LOCAL UNDER THIS THRESHOLD, AND THAT IS THE
+# WHOLE SAFETY PROPERTY. Ownership decides whether a finding gates, so a resolver
+# that cannot answer must not be able to ACQUIT: with `core-paths.sh` removed,
+# every finding lands in `unknown`, and treating that as "not local" turns a
+# 32-finding tree into a clean sheet. Measured while building this: exit 0 over
+# 32 unresolved findings, which is exactly the false clean `--is-core`'s own exit-2
+# contract exists to prevent. `--fail-on=any` is unaffected; it counts every
+# finding regardless of owner.
+if FAIL_ON == "deterministic":
+    _gated = t1_findings
+elif FAIL_ON == "local":
+    _gated = local_findings + unresolved_findings
+else:
+    _gated = all_findings
+sys.exit(1 if _gated else 0)
 PY
