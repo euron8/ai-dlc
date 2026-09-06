@@ -4213,8 +4213,12 @@ PLAIN and some core program file (`core/scripts/*.sh`, `core/hooks/*.sh`, `core/
 theirs. Every layer file under `overrides/` and `extensions/` (`.md` and `.json`) is split on
 the same class and each retired token is looked up as a whole word, one `awk` for the corpus;
 rows are `RETIRED-LAYER-TOKEN<TAB><layer-path>:<line><TAB><token>`. Unwitnessed plain words are
-named in every quiet NOTE as read-as-emphasis, or as UNDECIDED when no program file was
-readable at base, so an acquittal is never silent.
+named on stderr as read-as-emphasis on every run, quiet or after rows (the adversarial hand
+measured 22 of 79 row-producing wide spans acquitting a word with empty stderr before that
+line existed), and a base at which no program file can be read is a refusal, not an
+acquittal. A witness file RENAMED at theirs is read at its new path through the rename map,
+because a rename is byte-identical to a deletion at the base path and wants the opposite
+conclusion; zero live instances across 321 wide spans, closed because it is cheap.
 
 Measured. Over the real distribution at `6011d94d^..9f4e585` against the consumer's layer
 files at its pre-repair commit `02ec05984^`: exactly the two incident lines (18 and 52), from

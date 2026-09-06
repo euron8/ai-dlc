@@ -121,7 +121,8 @@ q12() { grep -qE "^RETIRED-LAYER-TOKEN${TAB}${L}/overrides/deferred\.md:${DEFERR
         && ! grep -qF 'stale.md' "$1/main.out"; }
 # 13. a base at which NO program file could be read cannot witness anything, and that is a
 #     limit of the run, not a finding of emphasis.
-q13() { [ ! -s "$1/undec.out" ] && grep -qE 'UNDECIDED, not acquitted: .*NEVER' "$1/undec.err"; }
+q13() { [ "$(rc_of "$1/undec.rc")" = "2" ] && [ ! -s "$1/undec.out" ] \
+        && grep -qE 'NO program file was readable at base.*NEVER' "$1/undec.err"; }
 # 14. the acquitted set is named as an EXACT list. A witness that quietly widens or narrows
 #     acquits or convicts a word with no other observable — the rows do not move, and only
 #     this line says so.
@@ -204,7 +205,7 @@ q6  "$CTL" && ok "base == theirs reports nothing and SAYS it opened no layer fil
            || bad "a release retiring nothing produced a silent zero — the sibling's exact defect"
 q7  "$CTL" && ok "scanned-but-no-match states both counts, and the token count matches its own list" \
            || bad "the denominator NOTE is missing, or its count disagrees with the list beside it"
-q13 "$CTL" && ok "a base with NO readable program file reports UNDECIDED, not an acquittal" \
+q13 "$CTL" && ok "a base with NO readable program file REFUSES with exit 2 and names the words, rather than acquitting them" \
            || bad "an unwitnessable base was reported as though the words had been acquitted"
 q8  "$CTL" && ok "driven from a cwd full of rulebook-shaped files, the rows do not move" \
            || bad "the cwd changed the answer — the rulebook pathspecs are being glob-expanded"
@@ -309,7 +310,7 @@ SED
 # M8 — the witness taken as a UNION at theirs rather than per file. This is G5, refuted on
 # the motivating pull by a second program that still prints the word in another sense.
 cat > "$MUTD/m8.sed" <<'SED'
-s#^    gone="$(comm -23 .*#    gone="$(comm -23 <(printf '%s\n' "$hit") <(printf '%s\n' "$PROGRAMS" | while IFS= read -r g; do show_at "$THEIRS" "$g"; done | code_toks))"#
+s#^    t="$(show_at "$THEIRS" "$f")"#    t="$(printf '%s\n' "$PROGRAMS" | while IFS= read -r g; do show_at "$THEIRS" "$g"; done)"#
 SED
 
 # M9 — the joined-shape witness removed: only a program can retire anything.
@@ -345,9 +346,9 @@ cat > "$MUTD/m14.sed" <<'SED'
 s#^DROPPED="$(comm -23 .*#DROPPED="$(git -C "$DIST" diff "$BASE" "$THEIRS" 2>/dev/null | grep -E "^-" | grep -vE "^---" | sed "s@^-@@" | toks)"#
 SED
 
-# M15 — an unwitnessable base reported as an acquittal rather than as UNDECIDED.
+# M15 — an unwitnessable base reported as an acquittal rather than refused.
 cat > "$MUTD/m15.sed" <<'SED'
-s#^  if \[ "$opened" -eq 0 \]; then#  if false; then#
+s#^if \[ -n "$PLAIN" \] && \[ "$opened" -eq 0 \]; then#if false; then#
 SED
 
 # M16 — the layer corpus widened to .txt.
@@ -449,12 +450,54 @@ plan m11 "$(mkmut m11 '-ls-tree -r --name-only "$ref"')"                   "1111
 plan m12 "$(mkmut m12 '-{3,}')"                                           "11111111111111011"
 plan m13 "$(mkmut m13 '-for dir in overrides extensions; do')"            "10111111010111111"
 plan m14 "$(mkmut m14 '-DROPPED="$(comm -23')"                            "11100111111111101"
-plan m15 "$(mkmut m15 '-if [ "$opened" -eq 0 ]; then')"                   "11111111111101111"
+plan m15 "$(mkmut m15 '-if [ -n "$PLAIN" ] && [ "$opened" -eq 0 ]; then')" "11111111111101111"
 # the leading `-` is the direction marker, so the anchor text itself starts at the second.
 plan m16 "$(mkmut m16 "--name '*.md' -o -name '*.json'")"                 "11111111011111111"
 plan m17 "$(mkmut m17 '-if [ -z "$THEIRS_SET" ]; then')"                  "11111111111111110"
 
 run_plan
+
+# --- A RENAMED witness file is not a deleted one ---------------------------------------------
+# `show_at "$THEIRS" "$f"` on the base path returns empty for a deletion AND for a rename, and
+# the two want opposite conclusions: a deleted emitter witnesses the word, a renamed emitter
+# that still prints it does not. Found by the adversarial hand on a seeded rename; zero live
+# instances across 321 wide spans, closed because it is cheap. This world is its own dist,
+# driven once as shipped and once with the rename map disabled, so the arm is presence-shaped
+# in both directions: the shipped copy must NAME the word as acquitted, the mutant must ROW it.
+DIST3="$WORK/dist-rename"
+mkdir -p "$DIST3/core/skills/ai-dlc" "$DIST3/core/scripts"
+git -C "$DIST3" init -q . 2>/dev/null
+git -C "$DIST3" config user.email f@f; git -C "$DIST3" config user.name f
+printf '# Engine\n\nThe lead ALWAYS records it. The run is RENAMEDWORD when nothing was read.\n' > "$DIST3/core/skills/ai-dlc/SKILL.md"
+printf 'echo "RENAMEDWORD: nothing read" >&2\n' > "$DIST3/core/scripts/validate-a.sh"
+git -C "$DIST3" add -A; git -C "$DIST3" commit -qm base
+BASE3="$(git -C "$DIST3" rev-parse HEAD)"
+printf '# Engine\n\nThe lead ALWAYS records it. The run is EMPTY-READ when nothing was read.\n' > "$DIST3/core/skills/ai-dlc/SKILL.md"
+git -C "$DIST3" mv core/scripts/validate-a.sh core/scripts/validate-b.sh
+git -C "$DIST3" add -A; git -C "$DIST3" commit -qm theirs
+THEIRS3="$(git -C "$DIST3" rev-parse HEAD)"
+RENC="$WORK/rename-consumer"
+mkdir -p "$RENC/.claude/skills/ai-dlc/overrides"
+printf '# Override\n\nstock exits RENAMEDWORD when nothing was read\n' > "$RENC/.claude/skills/ai-dlc/overrides/o.md"
+r_out="$(bash "$SCRIPT" "$DIST3" "$BASE3" "$THEIRS3" "$RENC" 2>"$WORK/rename.err")"
+if [ -z "$r_out" ] && grep -qE 'read as emphasis, not status: .*RENAMEDWORD' "$WORK/rename.err"; then
+  ok "a witness file RENAMED at theirs that still prints the word does not retire it, and the NOTE names the word as acquitted"
+else
+  bad "a renamed witness file was read as a deletion: rows='$(printf '%s' "$r_out" | tr '\n' ' ' | head -c 100)' err='$(head -c 160 "$WORK/rename.err")'"
+fi
+MREN="$WORK/m-rename.sh"
+sed 's#^  RENAMES="$(git -C "$DIST" diff -M .*#  RENAMES=""#' "$SCRIPT" > "$MREN"
+if cmp -s "$MREN" "$SCRIPT"; then
+  bad "FIXTURE BROKEN — the rename-map mutation matched nothing, so the arm above has no mutant"
+else
+  cp "$(dirname "$SCRIPT")/setup-sites.md" "$WORK/" 2>/dev/null; cp "$MREN" "$WORK/retired-layer-token.sh"
+  m_out="$(bash "$WORK/retired-layer-token.sh" "$DIST3" "$BASE3" "$THEIRS3" "$RENC" 2>/dev/null)"
+  if printf '%s\n' "$m_out" | grep -qE '^RETIRED-LAYER-TOKEN[[:space:]].*o\.md:3[[:space:]]RENAMEDWORD$'; then
+    ok "  MUTATION: with the rename map disabled the same world ROWS the word, so the arm above is what holds"
+  else
+    bad "  the rename-map mutant produced no row — the arm above cannot fail and proves nothing"
+  fi
+fi
 
 echo
 if [ "$fails" -eq 0 ]; then echo "retired-layer-token: PASS"; exit 0; fi

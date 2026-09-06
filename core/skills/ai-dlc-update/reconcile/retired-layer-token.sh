@@ -75,8 +75,10 @@
 #   the rulebook list, the rulebook at base, or the rulebook at THEIRS could not be read
 #   (a refusal, never "clean"); the release retired no token, so no layer file was
 #   opened; and every layer file was read against a non-empty retired set and nothing
-#   matched, stated with both counts. Every quiet line also names the plain words that
-#   left the rulebook WITHOUT a witness, so an acquittal is visible rather than silent.
+#   matched, stated with both counts. Every quiet line — and a NOTE after the rows on a
+#   run that found something — names the plain words that left the rulebook WITHOUT a
+#   witness, so an acquittal is visible rather than silent on every run. A base at which
+#   NO program file can be read cannot witness anything and is the fourth refusal.
 #   The program caller (`emit-report.sh`) discards stderr and reads the rows and the
 #   exit; the NOTE is for the operator running step 3a-vi by hand.
 #
@@ -190,13 +192,18 @@ PLAIN="$(printf '%s\n' "$DROPPED" | { grep -vE '[-_]' || true; } | sed '/^$/d')"
 
 # THE PROGRAM WITNESS, per file. Only the plain candidates need one, and there are few,
 # so every program file at base is read once and only a file that carries a candidate in
-# code is read again at theirs. A file deleted at theirs witnesses every word it carried.
+# code is read again at theirs. A file DELETED at theirs witnesses every word it carried —
+# the emitter is gone — but a file RENAMED at theirs is byte-identical to a deletion at
+# the base path and the opposite conclusion is right, so the rename map is consulted
+# first and the new path is read instead. Measured across 321 wide spans: no witness file
+# was ever absent at theirs, so this is latent; it is closed because it is cheap.
 WITNESSED=""; opened=0
 if [ -n "$PLAIN" ]; then
   set -f
   # shellcheck disable=SC2046
   PROGRAMS="$(files_at "$BASE" $(program_globs))"
   set +f
+  RENAMES="$(git -C "$DIST" diff -M --name-status --diff-filter=R "$BASE" "$THEIRS" 2>/dev/null | awk -F'\t' '$1 ~ /^R/ {print $2"\t"$3}')"
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     b="$(show_at "$BASE" "$f")"
@@ -204,7 +211,12 @@ if [ -n "$PLAIN" ]; then
     opened=$((opened + 1))
     hit="$(comm -12 <(printf '%s\n' "$PLAIN") <(printf '%s\n' "$b" | code_toks))"
     [ -n "$hit" ] || continue
-    gone="$(comm -23 <(printf '%s\n' "$hit") <(show_at "$THEIRS" "$f" | code_toks))"
+    t="$(show_at "$THEIRS" "$f")"
+    if [ -z "$t" ]; then
+      to="$(printf '%s\n' "$RENAMES" | awk -F'\t' -v f="$f" '$1==f {print $2; exit}')"
+      [ -z "$to" ] || t="$(show_at "$THEIRS" "$to")"
+    fi
+    gone="$(comm -23 <(printf '%s\n' "$hit") <(printf '%s\n' "$t" | code_toks))"
     [ -n "$gone" ] || continue
     WITNESSED="$WITNESSED$gone
 "
@@ -215,16 +227,17 @@ UNWITNESSED="$(comm -23 <(printf '%s\n' "$PLAIN") <(printf '%s\n' "$WITNESSED"))
 RETIRED="$(printf '%s\n%s\n' "$JOINED" "$WITNESSED" | sed '/^$/d' | sort -u)"
 
 # A plain word that left the rulebook is acquitted as emphasis unless a program witnesses
-# it — and a base at which NO program file could be read cannot witness anything, which
-# is a limit of the run and not a finding of emphasis. Said on stderr either way, so the
-# acquittal is never silent.
+# it. A base at which NO program file could be read cannot witness anything, and that is
+# a REFUSAL, not an acquittal: a string the driver discards cannot separate "evaluated and
+# found emphasis" from "could not evaluate", so the run exits 2 and the section renders
+# DETECTOR-REFUSED like the other unreadable-corpus states.
+if [ -n "$PLAIN" ] && [ "$opened" -eq 0 ]; then
+  echo "retired-layer-token: $(count_of "$PLAIN") plain word(s) left the rulebook and NO program file was readable at base ($BASE) under $(program_globs | tr '\n' ' ')to witness them — refusing to report, because an unwitnessable word and an acquitted word are the same rows: $(listed "$PLAIN")" >&2
+  exit 2
+fi
 ACQUIT=""
 if [ -n "$UNWITNESSED" ]; then
-  if [ "$opened" -eq 0 ]; then
-    ACQUIT=" $(count_of "$UNWITNESSED") plain word(s) left the rulebook and NO program file was readable at base to witness them, so they are UNDECIDED, not acquitted: $(listed "$UNWITNESSED")."
-  else
-    ACQUIT=" $(count_of "$UNWITNESSED") plain word(s) left the rulebook with no program witness ($opened program file(s) read) and are read as emphasis, not status: $(listed "$UNWITNESSED")."
-  fi
+  ACQUIT=" $(count_of "$UNWITNESSED") plain word(s) left the rulebook with no program witness ($opened program file(s) read) and are read as emphasis, not status: $(listed "$UNWITNESSED")."
 fi
 
 # The limit that a clean run must restate, because the operator reads the RUN and never
@@ -278,6 +291,10 @@ fi
 
 if [ -n "$rows" ]; then
   printf '%s\n' "$rows"
+  # A run that found something still says what it declined to look for. Measured on 79
+  # row-producing wide spans: 22 also acquitted a plain word, and before this line their
+  # stderr was empty — the acquittal was visible exactly on the runs nobody re-reads.
+  [ -z "$ACQUIT" ] || echo "retired-layer-token: NOTE —${ACQUIT}" >&2
 else
   # The other unqualified zero: tokens WERE retired and every layer file was read, but
   # nothing matched. That is a real result and it still needs its denominator, or it
