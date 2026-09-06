@@ -183,6 +183,53 @@ else
   bad "CONTROL FAILED: un-ignoring did not make the same rotation succeed (rc=$rc)"
 fi
 
+# --- Assertion 12: REFUSAL — at the cut floor WITH unheaded move markers ---------------------
+# The knife-edge beside assertion 9. That one needs ZERO boundaries; ONE surviving `## ` lands
+# here instead, where the file used to print an affirmative "nothing to rotate" and exit 0 while
+# growing without bound. Measured on the reference consumer: it rotates ONCE, lands on exactly
+# `--keep-entries` headings, then grows every round forever, and the old verdict line was
+# identical to a genuinely short file's.
+FLOOR="$WORK/floor"; rm -rf "$FLOOR"; mkdir -p "$FLOOR"
+{ printf '# H\n\n'
+  printf '## [MOVED 2026-09-06T10:00:00Z from pipeline-snapshot.md — trim]\n'
+  i=0; while [ "$i" -lt 30 ]; do i=$((i + 1))
+    printf '[MOVED 2026-09-06T11:00:%02dZ from pipeline-snapshot.md — trim]\nbody %s\n' "$i" "$i"
+  done; } > "$FLOOR/h.md"
+H0="$(shasum "$FLOOR/h.md" | cut -d' ' -f1)"
+out="$(bash "$ROT" "$FLOOR/h.md" --keep-entries 10 --apply 2>&1)"; rc=$?
+H1="$(shasum "$FLOOR/h.md" | cut -d' ' -f1)"
+if [ "$rc" -eq 1 ] && [ "$H0" = "$H1" ] && grep -q 'cut floor' <<<"$out"; then
+  ok "REFUSAL: at the cut floor with unheaded move markers, the file is refused (exit 1), not reported as nothing-to-rotate"
+else
+  bad "a file at the cut floor carrying unheaded markers was NOT refused (rc=$rc, changed: $([ "$H0" = "$H1" ] && echo no || echo yes))"
+fi
+
+# --- Assertion 13: CONTROL for 12 — same bytes, markers HEADED, must rotate -------------------
+# One property apart. If this refused too, assertion 12 would be measuring the cut floor rather
+# than the unheaded markers, and a rotator that refused everything would pass both.
+sed -E 's/^\[MOVED/## [MOVED/' "$FLOOR/h.md" > "$FLOOR/headed.md"
+if cmp -s "$FLOOR/h.md" "$FLOOR/headed.md"; then
+  bad "CONTROL BROKEN: the sed changed nothing, so assertion 13 is not one property from 12"
+else
+  out="$(bash "$ROT" "$FLOOR/headed.md" --keep-entries 10 --apply 2>&1)"; rc=$?
+  if [ "$rc" -eq 0 ] && grep -q 'entr(ies)' <<<"$out"; then
+    ok "CONTROL: the same content with every marker headed rotates normally — assertion 12 measured the heading, not the floor"
+  else
+    bad "CONTROL FAILED: headed markers did not rotate (rc=$rc)"
+  fi
+fi
+
+# --- Assertion 14: CONTROL for 12 — genuinely short file still exits 0 -----------------------
+# The other side: a file at the floor with NO unheaded markers must keep the old affirmative
+# behaviour. Without this, a refusal keyed on the floor alone would pass assertion 12.
+printf '# H\n\n## [MOVED 2026-09-06T10:00:00Z from pipeline-snapshot.md — trim]\nbody\n' > "$FLOOR/short.md"
+out="$(bash "$ROT" "$FLOOR/short.md" --keep-entries 10 --apply 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ] && grep -q 'nothing to rotate' <<<"$out"; then
+  ok "CONTROL: a genuinely short history at the floor still reports nothing-to-rotate and exits 0"
+else
+  bad "CONTROL FAILED: a short history was refused or misreported (rc=$rc)"
+fi
+
 # --- MUTATION: break the split so the line accounting cannot balance -------------------------
 # The line-accounting refusal cannot be reached from any input — it guards the splitter against
 # itself — so the only way to prove it fires is to break the splitter.
@@ -202,6 +249,27 @@ else
     ok "MUTATION: a splitter that drops one line REFUSES and writes nothing — the accounting invariant is live"
   else
     bad "MUTATION: a splitter that drops a line was NOT caught (rc=$m_rc); the accounting invariant is inert"
+  fi
+fi
+
+# --- MUTATION 2: strip REFUSAL 2's guard and assertion 12 must go red ------------------------
+# Assertion 12 is ABSENCE-shaped — it demands a refusal — so a subject that never checks the
+# marker looks identical to one that checks and finds none. Only a mutant establishes that the
+# arm discriminates at all. The mutation is keyed on the guard's own predicate, not on a line
+# list, and the post-mutation count is asserted 0 against a non-zero unmutated count.
+MUT2="$WORK/mutant2.sh"
+sed 's|^  if \[ "\$N_UNHEADED" -gt 0 \]; then|  if false; then|' "$ROT" > "$MUT2"
+pre="$(grep -c 'N_UNHEADED" -gt 0' "$ROT")" || pre=0
+post="$(grep -c 'N_UNHEADED" -gt 0' "$MUT2")" || post=0
+if cmp -s "$ROT" "$MUT2" || [ "$pre" -eq 0 ] || [ "$post" -ne 0 ]; then
+  bad "MUTATION 2 DID NOT APPLY (unmutated=$pre mutated=$post); REFUSAL 2 is UNPROVEN"
+else
+  m_out="$(bash "$MUT2" "$FLOOR/h.md" --keep-entries 10 --apply 2>&1)"; m_rc=$?
+  # The mutant must do what the OLD code did: affirm, exit 0, never refuse.
+  if [ "$m_rc" -eq 0 ] && grep -q 'nothing to rotate' <<<"$m_out"; then
+    ok "MUTATION 2: with the unheaded-marker guard stripped the file reports nothing-to-rotate and exits 0 — assertion 12 is live, not vacuous"
+  else
+    bad "MUTATION 2: stripping the guard did not restore the silent exit 0 (rc=$m_rc); assertion 12 may be passing for another reason"
   fi
 fi
 

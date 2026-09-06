@@ -4026,3 +4026,385 @@ until one is measured to have moved a verdict on the consumer.
 
 verify: sh h=core/hooks/ai-dlc-continue.sh; [ -f "$h" ] || exit 9; grep -q 'PUSH_OK=' "$h" || exit 9; grep -qE 'git -C "\$PROJECT_DIR" (status --porcelain|diff --quiet)' "$h" && exit 0; exit 1
 
+
+## BL-185 — Rule 25(a) names a trim move's destination file but not the header the moved block carries, so the one rotator that bounds the one unbounded history file loses its cut points
+
+**LANDED (v0.517.0, verified pending).**
+
+**Provenance:** `PC-S308-RULE-25A-HISTORY-MOVE-HAS-NO-DEFINED-HEADER-FORMAT`, filed by the
+reference consumer 2026-09-06. Its own two `derived` blocks reproduce against this tree; the
+`[MOVED …]` convention it names appears NOWHERE in `core/` or `scripts/` (rc=1, against a
+control of `grep -rn "moved" core/skills/ai-dlc/SKILL.md` rc=0).
+
+Rule 25(a) (`core/skills/ai-dlc/SKILL.md:1181-1195`) specifies WHAT moves (superseded content,
+verbatim, cut-and-paste) and WHERE (the named `-history.md`/`-archive.md` sibling). It states no
+header for the moved block — no marker, no timestamp, no source field.
+
+**THE CONSEQUENCE IS NOT DOCUMENTATION DRIFT. IT DISABLES THE ROTATOR'S GRANULARITY.**
+`core/scripts/rotate-snapshot-archive.sh` picks ONE cut point — the Nth-from-last `^## ` line —
+and never interprets a heading (`:48`). A moved block headed any other way is not a cut point.
+Differential on two synthetic trees, identical content and line counts, sides asserted differing
+before either was read:
+
+```
+A  12 blocks headed `## MOVED …`   -> exit 0, rotates, 12 cut points
+B  same 12 as `[MOVED …]`          -> exit 1, REFUSED: "not one '## ' heading,
+                                      so there is no cut point"
+```
+
+**THAT REFUSAL IS A KNIFE-EDGE AT EXACTLY ZERO HEADINGS, AND AN EARLIER REVISION OF THIS ENTRY
+CLAIMED OTHERWISE.** It said "the refusal is correct behaviour and is reported, not silent",
+which holds only for `N_BOUND == 0`. ONE surviving `^## ` line takes a different branch —
+`N_CUT <= KEEP_ENTRIES` at `core/scripts/rotate-snapshot-archive.sh:178` — which prints an
+affirmative line and exits **0**. Differential, sides asserted to differ on headings and to AGREE
+on brackets before either was read:
+
+```
+C1  0 headings + 40 bracket blocks              exit 1  REFUSED (stderr)
+C2  1 heading  + 40 bracket blocks              exit 0  "1 entr(ies) present, keeping 10
+                                                         -- nothing to rotate (125 lines stay)"
+C3  1 heading  + 400 blocks, 1205 lines         exit 0  same sentence, 1205 lines stay
+```
+
+So an unbounded file reports "nothing to rotate" AFFIRMATIVELY, and the loud refusal is reachable
+only from the one state a real history never reaches — headings decay toward zero but the last
+one is sticky, because every rotation keeps `--keep-entries` of them. **The correction runs in
+the direction that makes the defect worse, which is the direction the first author is least
+likely to check.** Found by the adversarial hand.
+
+Measured on the reference consumer's live `_bmad-output/pipeline-snapshot-history.md`: 13 `^## `
+headings and 11 `^[MOVED` brackets, anchored and unanchored counts both 11 so no bracket hides
+mid-line, and **all 11 sit inside the single heading entry at line 830**, spanning 467 lines
+against a next-largest of 175. **The 11 are trim passes 13, 14 and 15, written unheaded into the
+10th pass's span; the three headings after them (13:14–13:32) are `## MOVED …` again, so the
+practice self-corrected on its own.** That is three whole trim passes made uncuttable, not eleven
+loose fragments — and the self-correction is why stating the header in the rule is worth its
+bytes: the convention is learnable, it was simply never written down.
+
+**The false-positive set of the obvious remedy is the whole corpus, which is why the fix is a
+FORMAT and not a scan.** Across the consumer's 110 tracked `-history`/`-archive` `.md` files,
+exactly one carries a bracket marker; the other 109 carry zero. This tree carries zero of either.
+So a check keyed on marker presence fires everywhere. The fix states the header in Rule 25(a) and
+binds it where the move is DIRECTED, not by scanning destinations.
+
+**The filed receipt was unsatisfiable in three independent ways and is replaced.** It named
+`core/SKILL.md`, which resolves nowhere here (`/SKILL.md$` matches 3 tracked paths, so the
+engine's basename fallback refuses on ambiguity); it used `theirs_has` where an ABSENCE needs
+`theirs_lacks`; and its anchor was a regex, which `all_present()` at
+`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:611` matches with `grep -qF` — literal,
+deliberately (`:604-606`). Proved by construction: a correct fix written into a probe file scores
+literal 0 / regex 1, so the receipt reports a shipped fix as unshipped.
+
+**THE RECEIPT WAS REPAIRED TWICE AND THEN REPLACED OUTRIGHT, AND THE SECOND ROUND IS THE
+INSTRUCTIVE ONE.** Its first form closed the awk range on `(b) Sprint-scoped`, a string that does
+not exist — an unmatched closer runs the range to EOF, selecting 656 lines instead of 42, so a
+`[MOVED ` token anywhere below Rule 25 scored as a hit. Repaired to the real closer
+(`(b) Slice-read large sectioned artifacts`), it still counted a TOKEN rather than testing a
+FIX, and the adversarial hand broke it. Measured, each case a full copy of the tree with the rule
+passage replaced, against a shipped-tree control of exit 0 and a pre-fix control of exit 1:
+
+| passage replaced by | old receipt |
+|---|---|
+| prose merely quoting `` `[MOVED ` `` in passing | **exit 0 — false close** |
+| prose FORBIDDING the form (`"that form is FORBIDDEN"`) | **exit 0 — false close** |
+| an HTML comment (`<!-- TODO: someday document … -->`) | **exit 0 — false close** |
+| a factual aside naming no rule | **exit 0 — false close** |
+
+A receipt satisfied by prose forbidding the very thing it checks for is the `BL-078` shape this
+repo already names: it read the RENDERED token, not the behaviour. **THE FIRST REPLACEMENT FOR IT CARRIED THE SAME CLASS OF DEFECT AND WAS ITSELF REPLACED.** That
+one built a probe history and ran the real `rotate-snapshot-archive.sh`, and was described as
+"driving the shipping program" — but it built the probe from a HARDCODED heading rather than from
+the form it extracted, so the rotator arm returned 0 whatever the rulebook said. A conjunct that
+cannot fail is not a conjunct. All discrimination sat in the extraction, and the world that
+exposes it is `L3`: the fix DELETED and an anchored `## [MOVED …]` heading left in 25(a) as an
+EXAMPLE (controls: normative sentence 0, decoy heading 1) scored **exit 0 — a false pass**.
+Running a program is not the same as letting it decide.
+
+**The shipped receipt is two anchored greps and no range**, which is what finally holds. The
+`^…$` grep pins the fenced format line so a paraphrase cannot satisfy it; the `grep -qF` on the
+normative sentence is what kills prose that merely quotes or FORBIDS the token. Either conjunct
+alone is weaker — the format line alone passes `forbid`, since inverting only the sentence leaves
+the fence standing. Dropping the awk range removes the runaway entirely: a subsection REORDER puts
+the closer before the opener and re-creates the 656-line span that the first repair fixed, and a
+reword of `(b) Slice-read large sectioned` drops the closer to 0 and spans 667 of 1847 lines. Both
+were survivable only because `grep -cF "[MOVED "` over `SKILL.md` returns **1** — the token is
+globally unique today (control: `Rule 25` = 4), and Rule 25(c) is about rotating logs, so a second
+mention there is an ordinary future edit.
+
+Scored across nine worlds: shipped 0; fix deleted 1; `forbid` 1; `drive_by` 1; HTML comment 1;
+`L3` anchored decoy 1; reorder-with-fix 0; reworded fix 0.
+
+**Stated limit:** it cannot tell a rule a reader OBEYS from one merely present, and it says
+nothing about the silent exit-0 branch above — that is a rotator behaviour and no rulebook text
+reaches it.
+
+verify: sh grep -qE "^## \[MOVED <ISO-8601 timestamp> from <source basename> . <trigger>\]$" core/skills/ai-dlc/SKILL.md && grep -qF "block a move lands in a history/archive file opens with" core/skills/ai-dlc/SKILL.md
+
+## BL-186 — format steering is attached at three write sites and absent at twenty-one, and a rule telling the lead to LOCATE a format is discharged by looking when no format exists
+
+**LANDED (v0.517.0, verified pending).**
+
+**Provenance:** `PC-S308-WRITE-FORMAT-STEERING-APPLIED-AD-HOC-NOT-UNIVERSALLY`, filed by the
+reference consumer 2026-09-06. Whether a write gets format steering depends on which core author
+added a `READ AND FOLLOW` sentence at that call site, not on any property of the write.
+
+Census over `core/skills/ai-dlc/**` and `core/rules/**`, positive control being Rule 12's own
+directive at `SKILL.md:366`: **3 of 24** shared append-only artifacts carry steering
+(`docs/escalations/pending.md`, `_bmad-output/audit-anchors.md`,
+`implementation-artifacts/gate-log.md`). **21 carry none.** Three of those 21
+(`layer-adjudication-register.jsonl`, `validation-cycle-log.md`, `arm-log.jsonl`) are declared
+`transient: false` with a named producer and are mentioned in the skill corpus ZERO times — not
+unsteered writes but unmentioned ones, inside an enforcer's reach and outside a prose rule's.
+
+`core/rules/upstream-routing.md` states what a push candidate must carry and mentions `verify:`
+**0** times (control: `push-candidate` 6 in the same file) — the one line the closer parses. The
+entry grammar IS written down, at `ledger-reverify.sh:102-113`, inside the CONSUMING parser; a
+file that mentions a grammar is not a file the filer is steered to.
+
+**THE REMEDY CHANGED ON MEASUREMENT, AND THIS IS THE ENTRY'S LOAD-BEARING FINDING.** The filed
+shape — a duty to LOCATE a format before writing — is discharged by looking. Built as
+`B-wrong-3`: a competently written rule with a valid carrier, fully vacuous, firing on nothing
+across the bucket where no format exists, and a prose-keyed receipt scored it CLOSE-CANDIDATE. No
+rewording separates a vacuous locate-duty from a real one, because they are spelled identically.
+So the duty is that a format EXISTS and is DECLARED, which is the only version with a subject a
+checker can address, and the receipt keys on a program rather than on prose.
+
+**The population is derivable in both directions, so this is an enforcer and not prose.**
+`core/schemas/pipeline-state-paths.json` is bound by **I95**
+(`scripts/validate-enforcement-map.sh:5913`), which fails closed and whose subject is the
+PARTITION. Join key `transient: false` -> **20 entries**; the schema's own text calls `name` "the
+JOIN KEY against that grammar's output". **Stated bound:** the four Rule 25(a) planning histories
+(`prd-history.md`, `product-brief-history.md`, `architecture-history.md`,
+`carry-over-backlog-archive.md`) are declared 0 times there (control: `pipeline-snapshot-history.md`
+1) because they nest under `planning-artifacts`, declared only at top level. That is a schema
+widening the arm must state, not a missing join.
+
+**Ships AFTER `BL-185`, and the order is a finding rather than a preference.** This rule alone
+reports SATISFIED across every member of the bucket where no format is defined — a check that
+cannot fire, shipped as a rule. `BL-185` defines the one format this rule would otherwise send a
+lead to look for and not find.
+
+**Separability from `BL-185`, scored in both directions across two spellings of each fix:**
+neither entry's receipt is closed by the other's fix. `BL-185` closes 1 artifact and cannot reach
+the other 20 — `is_archive()` at `core/scripts/validate-artifact-budget.sh:453-455` excludes every
+`*-history.md`/`*-archive.md` before any measurement, and only one `BUDGETS` row carries `trim`.
+The candidate's own claim to "generalize" its sibling is REFUTED.
+
+verify: sh K=0; for s in core/scripts/*.sh; do case "$(basename "$s")" in validate-write-format*|audit-shared-artifact-format*) K=$((K+1));; esac; done; [ "$K" -gt 0 ]
+
+## BL-187 — Rule 21 says the gate FAILS on a missing step-token citation, no program reads the token, and citation practice decayed to zero across five consecutive sprints unreported
+
+**Found while scoping `BL-186`**, by deriving what already mechanizes `READ AND FOLLOW` before
+proposing anything new. Not filed by the consumer; no `PC-` id.
+
+Rule 21 (`core/skills/ai-dlc/SKILL.md:919-955`) states that each step file carries a
+`STEP_LOADED_TOKEN`, that the gate log entry MUST cite it, and that the **gate FAILS on missing
+token citation** (`:933`).
+
+**Nothing reads it.** Programs under `core/scripts/`, `scripts/`, `.githooks/` and `core/hooks/`
+referencing `STEP_LOADED_TOKEN`: **0**, against a control of 9 validators in `core/scripts/` that
+do read `gate-log`. The single hit anywhere is a COMMENT at `core/hooks/ai-dlc-acknowledge.sh:196`
+— a file that mentions the token, not a reader of it. The stated verification does not exist as a
+program.
+
+**The consequence is measured on the reference consumer's own gate logs**, entries counted by
+`^## ` in the same invocation:
+
+| s246 | s248 | s298 | s299 | s302 | s303 | s304 | s305 | s306 | s307 | live |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 12 | 4 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | **0 of 9** |
+
+s246 and s248 are the positive control: the practice was real and then decayed to nothing across
+five consecutive sprints, with the live log at 0 of 9 entries. Nothing reported it, because
+nothing reads it.
+
+**Scope note, so the fix is not mis-sited.** All **21 of 21** `steps/*.md` carry a token (the
+21st is `steps/_gate-procedures.md:5`, a leading-underscore filename a `steps/*.md` glob matches
+but an eye scanning a listing skips; it is a genuine `READ AND FOLLOW` target at
+`gate-validation.md:161`). The two FORMAT files the existing steering directives point at —
+`escalations.md` and `artifact-path-grammar.md` — carry **0**.
+
+**A token join would ACQUIT this entry's subject and must not be sold as covering `BL-186`.** A
+token proves a file was READ. It cannot distinguish a read from a compliance, a defined format
+from an absent one, or a resolvable pointer from a dangling one, and its population is exactly
+the 3 sites that already have steering. Any arm built here needs a probe asserting it does NOT
+cover the 21 unsteered artifacts, per `mechanism-design.md` — an exemption needs a probe proving
+it does not cover the arm's own subject.
+
+verify: sh n=$(grep -rl "STEP_LOADED_TOKEN" core/scripts/ scripts/ .githooks/ 2>/dev/null | wc -l) || n=0; [ "$n" -gt 0 ]
+
+## BL-188 — no gate bounds `core/skills/ai-dlc/SKILL.md`'s total size or its narrative content, and `audit-rule-files.sh` scores narrative 0 where its own header says narrative "fails where it is authored"
+
+**Found by the OPERATOR, mid-batch, reading a diff — which is the finding.** Batch 65's `BL-185`
+fix added 16 lines to Rule 25(a) where 6 were the instruction. The other 10 were the consumer
+measurement, an entry line number, two span figures and a closing moral: an incident report
+written into a file that costs its bytes on every turn. `resident-context.md` governs directly —
+the measurement is why a rule exists and stays with it, the story of the incident does not. It
+was cut to +414 bytes from +1259 before merge. **Nothing mechanical objected, and the session
+had run the rule audit after the edit and read its clean tier-1 as confirmation.**
+
+**Measured, with the control in the same invocation.** A worktree at the pre-trim commit,
+confirmed to carry the fat text (`grep -c "travel as"` -> 1, so the probe is valid and the zero
+below is a real absence rather than a broken measurement):
+
+| gate | verdict on the fat version |
+|---|---|
+| `core/scripts/audit-rule-files.sh` | 62 findings / **0 tier-1** — byte-identical to the trimmed version |
+| `core/scripts/validate-reattach-budget.sh` | measures **lines 26-95 only**, 4688 of 105903 bytes; Rule 25(a) sits at ~1181, outside the window |
+| any fixture reading `SKILL.md`'s size | **none** — the only reader in the tree is the re-attach budget |
+| `scripts/validate-claude-rules.sh` A6 | bounds `.claude/rules/`, not `core/skills/ai-dlc/SKILL.md` |
+
+`docs/backlog.md` and `docs/backlog.archive.md` carry no entry for this (`SKILL.md size` 0/0;
+the `narrative` and `resident prose` hits all belong to `BL-044`, an unrelated subject, against a
+control of 101 `verify:` lines in the same file).
+
+**THE SHARP PART IS THAT THE AUDIT NAMES THIS AS ITS OWN JOB.**
+`core/scripts/audit-rule-files.sh:19` reads "narrative fails where it is authored rather than one
+release later" — and it scored the offending passage 0. Its tier-1 grammar keys on origin tags,
+dates and version stamps, which is what narrative usually CARRIES. This narrative carried none:
+it was measurements and a moral, in the house style, indistinguishable by any regex from the
+surrounding scar tissue that is supposed to be there. A check that cannot fire reads exactly like
+one that passed, one level up from the rule this repo already states.
+
+**DO NOT ANSWER THIS WITH A NARRATIVE LINT, AND THE FALSE-POSITIVE PROBLEM IS THE ENTRY'S REAL
+CONTENT.** `resident-context.md` holds that verbosity in this corpus is deliberate scar tissue —
+almost every long passage is long because a short one failed — so the governing rule for this
+file is the OPPOSITE of brevity. The discriminator applied by hand was "is this the instruction,
+or the story of why", which is a judgement and not a grammar. Any check keyed on length, on
+measurement-shaped tokens, or on figure density flags the scar tissue the rule requires. That is
+the unmeasured-lint shape `CLAUDE.md` forbids shipping, and it is why this entry proposes no
+mechanism yet.
+
+**What is worth building, in preference order.** (1) A total-byte OBSERVATION for
+`core/skills/ai-dlc/SKILL.md` reported at the gate and never failing it — the file has no size
+signal at all today, and a number nobody gates on still moves the author. (2) If a check is ever
+tiered ERROR, it must be sited at the DIFF, not the file: the question is whether a CHANGE added
+resident narrative, which is answerable about a hunk and not about a corpus. (3) Measure the
+false-positive set over the existing file before either — a rule whose FP set is the scar tissue
+is a rule the operator turns off.
+
+**Stated limit of the receipt below.** It closes when any shipped program reads the whole file's
+size, which a mere observation satisfies. It cannot tell an observation from a gate, and it says
+nothing about narrative detection — that half is deliberately unmechanised here, for the reason
+above.
+
+verify: sh n=0; for s in core/scripts/*.sh scripts/*.sh; do grep -qE 'wc -c.*SKILL|SKILL.*wc -c' "$s" 2>/dev/null && n=$((n+1)); done; [ "$n" -gt 1 ]
+
+## BL-189 — an argument-less `git init --bare` under an exported `GIT_DIR` writes `core.bare=true` into the real repo, which git exports to any hook running from a linked worktree
+
+**THE MECHANISM IS REPRODUCED; THE WRITER IS NOT IDENTIFIED. THE ENTRY KEEPS BOTH CLAIMS SEPARATE, AND
+THAT SEPARATION IS THE POINT** — a cause asserted here would be the "text about a program is not the
+program" failure one level up. What follows separates what was measured from what was not.
+
+**The event, twice now.** During batch 65, `git commit` failed with `fatal: this operation must
+be run in a work tree`. `git config --get core.bare` read **`true`** on `/Users/n8/git/ai-dlc`,
+which has a real working tree and a `.git` DIRECTORY — an incoherent state that breaks every
+porcelain command. `git worktree list` reported the main checkout as `(bare)`. The same anomaly
+is recorded once before, in the operator's batch-63 memory entry. No file was lost: the two
+edited files were confirmed intact on disk BEFORE anything was changed, `core.bare` was unset,
+and both re-read byte-identical.
+
+**SIX ATTEMPTED REPRODUCTIONS, ALL NEGATIVE.** Each on a throwaway `mktemp` repo, never the real
+one: `git init` nested in a subdirectory of an existing repo; `git init` inside a worktree;
+`git init` from inside `.git/`; `git init` with `GIT_DIR` exported; the same with cwd outside the
+worktree; and `git worktree add --lock`. **Every one produced `bare = false`. None produced
+`true`.** So the trigger is unknown, and any sentence naming one would be invented.
+
+**What the failed reproductions DID establish, and it is the useful half.** `git init` on an
+ALREADY-INITIALISED repo WRITES a `bare =` line that was not there before — measured: a config
+with the line stripped reads `unset`, and after a re-init reads `false` with the key
+materialised at line 7. This tree's config carried no `bare` line originally. So a stray
+`git init` reaching the real repo is a route to the KEY EXISTING AT ALL, which is a precondition
+for it holding any value. It does not explain the value `true`.
+
+**THE FIRST RECOVERY DESTROYED THE EVIDENCE; THE SECOND OCCURRENCE PRESERVED IT, AND THAT IS
+WHERE THE REAL FINDINGS CAME FROM.** `git config --unset` removes the line entirely, so after the
+first flip the file could no longer say what wrote it. **It recurred six minutes later, the
+config was copied aside BEFORE unsetting, and three things fell out that the first recovery had
+thrown away:**
+
+- **`bare = true` sat at LINE 8, appended INSIDE the existing `[core]` block, directly after
+  `hooksPath`.** A fresh `git init` on a config carrying no bare line writes it at line 7, BEFORE
+  `hooksPath`. The position says the key was appended to a live `[core]` section rather than
+  written by a from-scratch init.
+- **The write landed at 10:40:41, roughly six minutes AFTER this session's last commit
+  (10:34:59), during a stretch running only read-only greps.** The lead's own commands were not
+  writing config in that window. The one process mutating git state was a subagent holding a
+  LOCKED worktree under `.claude/worktrees/`.
+- **The placement REPRODUCES.** On a throwaway repo carrying a `hooksPath` line and no bare key, a
+  `git init` run FROM INSIDE a worktree appends `bare` at line 8, after `hooksPath` — the exact
+  position observed. **The value still comes out `false`, not `true`**, so the position is
+  explained and the VALUE is not.
+
+**On any recurrence, copy `.git/config` and `.git/config.lock` aside BEFORE unsetting anything**,
+and capture `ls -la .git/`, `git worktree list`, the config mtime and the running agent set in the
+same invocation. The first flip cost the diagnosis; the second paid for it.
+
+**THE MECHANISM IS NOW REPRODUCED, ON THE ELEVENTH ATTEMPT, AND IT IS AN ARGUMENT-LESS
+`git init --bare` UNDER AN EXPORTED `GIT_DIR`.** The missing piece came from a subagent's
+unrelated finding: **git EXPORTS `GIT_DIR` to a pre-push hook, unset from a main checkout and
+ABSOLUTE from a linked worktree** (measured with the two sides asserted differing). With that
+variable set, a `git init --bare` carrying NO path argument initialises the repository `GIT_DIR`
+names — the real one — and writes `bare = true` into it:
+
+| probe, `GIT_DIR` exported to the real `.git` | result |
+|---|---|
+| `git init -q .` from elsewhere | `bare = false` |
+| `git init -q` from inside `.git/` | `bare = false` |
+| `git init -q .` from a locked worktree | `bare = false` |
+| `git init -q --bare "<path>"` (WITH an argument) | **unset — parent untouched** |
+| `git clone -q --bare <src> "<path>"` | **unset — parent untouched** |
+| **`git init -q --bare` (NO argument)** | **`bare = true`, at LINE 8, after `hooksPath`** |
+
+**Value and position both match the preserved evidence exactly.** The argument is what decides
+it: given a path, git initialises that path; given none, it initialises `GIT_DIR`.
+
+**No call site in this tree is the culprit, and that is stated rather than assumed.** All three
+`--bare` sites pass a destination — `core/fixtures/self-update-fixture-log/run.sh:730` and
+`core/fixtures/retro-branch-behind-main/run.sh:250` (`clone --bare <src> <dest>`), and
+`core/fixtures/handoff-completion-assertion/seed.sh:110` (`init -q --bare "$2"`). Each was driven
+in the argument-bearing form above and left the parent untouched. So the reproduction establishes
+the CLASS and does not convict a site; the writer remains unidentified, and any agent or tool
+running an argument-less bare init while `GIT_DIR` is exported produces this exact state.
+
+**The precondition is what makes it a distribution-wide hazard rather than a curiosity.** Both
+flips happened while an `isolation: worktree` hand was running, and a linked worktree is
+precisely where git exports `GIT_DIR` absolute. A probe that is safe from a main checkout is
+unsafe from a worktree, and nothing about the probe changes between the two.
+
+**THE LIVE HAZARD CLASS, DERIVED.** Of **283** fixture `run.sh`/`seed.sh` scripts, **24** make an
+unqualified repo-mutating git call (`git init|config|add|commit|checkout|stash` with no `-C` and
+not inside a subshell), so their target is whatever the PROCESS CWD resolves to. Control in the
+same run: `preclassify-mode-bucket/run.sh`, which uses `git -C` 10 times, correctly does not
+appear; an impossible pattern returns 0.
+
+Of those 24, one — `core/fixtures/check-1c-bypass/seed.sh:49` — carries an **UNGUARDED**
+`cd "$REPO"` immediately above `git init -q .`, `git config user.email`, `git config user.name`
+and `git commit`. Every other bare `cd` in the set is guarded `|| exit 2`. **Demonstrated on a
+throwaway repo**: with an empty `cd` target the following `git init` and `git config` land in the
+surrounding repository — `core.bare` went from unset to `false` and `user.name` was overwritten
+with the fixture's value.
+
+**AND THAT SITE IS PROBABLY NOT THE CULPRIT, WHICH IS WHY IT IS FILED AS A HAZARD AND NOT AS THE
+CAUSE.** `check-1c-bypass/seed.sh:40` sets `set -euo pipefail`, so a failing `cd` aborts the
+script rather than continuing — and `$REPO` is `"$OUT/repo"`, non-empty whenever `$OUT` is set,
+which `set -u` guarantees. The demonstration above had to disable those protections to fire. It
+is a real unguarded site worth closing; it is not evidence about this incident.
+
+**The Bash tool's working directory PERSISTS across calls**, which is what makes cwd-dependent
+git calls a distribution-wide hazard rather than a local style question — `tool-hazards.md`
+states it, and this is the shape where the blast radius is the real `.git`.
+
+**Remedy, in preference order.** (1) Guard the one unguarded `cd`, which is a one-line change and
+independent of the diagnosis. (2) A `validate-shell-portability.sh` arm refusing an unqualified
+repo-mutating git call in a fixture script that is not inside a subshell — its false-positive set
+is the 23 currently-guarded sites, so it must key on the GUARD, not on the call, and that FP set
+must be measured before it ships. (3) Nothing keyed on `core.bare` itself: a check for a state
+whose cause is unknown would fire on the symptom and teach nobody anything.
+
+**Stated limit of the receipt.** It closes when the unguarded `cd` at `check-1c-bypass/seed.sh`
+is guarded. That is remedy (1) only. It says nothing about the incident, which is not mechanically
+detectable from this tree, and it must NOT be read as evidence that the `core.bare` flip is
+understood or fixed.
+
+verify: sh f=core/fixtures/check-1c-bypass/seed.sh; [ -f "$f" ] || exit 9; n=$(grep -cE '^[[:space:]]*cd "[^"]+"[[:space:]]*$' "$f") || n=0; [ "$n" -eq 0 ]

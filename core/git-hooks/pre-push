@@ -164,6 +164,22 @@ fi
 #     Decidable from disk, which is why it belongs here and not at a gate. Its remedy is one
 #     command, the validator prints it with no placeholders left in it, and the command ends by
 #     re-running this check.
+if [ -f scripts/ai-dlc/validate-write-format-steering.sh ]; then
+  # 3c-bis. Every SHARED APPEND-ONLY artifact under the pipeline root declares WHERE its
+  #     entry format lives, and every declaration still resolves in THIS tree's layout.
+  #
+  #     NO CEILING IS PASSED HERE, AND THAT IS DELIBERATE RATHER THAN AN OMISSION. The
+  #     distribution's own hook passes `--max-undeclared` because its undeclared count is a
+  #     number this repo controls and ratchets down. A consumer's count is whatever its
+  #     installed release last shipped, so a ceiling written here would fire on a tree whose
+  #     operator had done nothing wrong and could fix nothing -- the shape of gate that gets
+  #     switched off. What runs on a consumer is the half with no false-positive path: a
+  #     declaration naming a file that is absent, or one that no longer carries its anchor.
+  #     Absence is still PRINTED every run, so the backlog is visible without being fatal.
+  step "write-format steering (each shared append-only artifact declares its entry format)" \
+    bash scripts/ai-dlc/validate-write-format-steering.sh --report
+fi
+
 if [ -f scripts/ai-dlc/validate-hook-registration.sh ]; then
   step "hook registration (a hook on disk that nothing registers never fires)" \
     bash scripts/ai-dlc/validate-hook-registration.sh

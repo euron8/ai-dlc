@@ -38,3 +38,4 @@ each whole document, so a schema cannot gain a vocabulary this table does not sh
 | `layer-adjudication-register.json` | `verdict` | `still-additive` `contradicts-core` `retire` |
 | `provenance-block.json` | `mode` | `solo` `subagent` |
 | `provenance-block.json` | `verdict` | `EXIT_CONDITION_MET` `EXIT_CONDITION_NOT_MET` `DIVERGENT_HARD_BLOCK` |
+| `write-format-steering.json` | `kind` | `schema` `generated-region` `prose` |

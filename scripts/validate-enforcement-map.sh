@@ -4700,10 +4700,17 @@ else
     i79_gaps=0
     for i79_n in $i79_band; do
       # the rule's own body span, so a Carrier line cannot be borrowed from a neighbour
+      # A FENCED `## ` LINE IS A CODE SAMPLE, NOT A SECTION TERMINATOR, and reading it as one
+      # truncated Rule 25's body at the heading FORMAT the rule exists to prescribe -- so the
+      # carrier declared below it became unreachable and this arm reported a gap that was not
+      # there. The rule and its own example cannot both be right under a fence-blind reader.
+      # False-positive set of the fence tracking, measured over SKILL.md: ONE rule body carries
+      # a fenced `^## ` line (Rule 25's own), against a control of 2 fence delimiters present.
       i79_body="$(awk -v n="$i79_n" '
-        $0 ~ ("^### Rule " n " ") { inb=1; next }
-        inb && /^### Rule [0-9]/ { exit }
-        inb && /^## / { exit }
+        $0 ~ ("^### Rule " n " ") { inb=1; fence=0; next }
+        inb && /^```/ { fence = !fence; next }
+        inb && !fence && /^### Rule [0-9]/ { exit }
+        inb && !fence && /^## / { exit }
         inb { print }
       ' "$i79_skill")"
       i79_line="$(grep -c '^\*\*Carrier:\*\*' <<<"$i79_body")"

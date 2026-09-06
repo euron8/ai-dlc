@@ -1,0 +1,128 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "write-format-steering.json",
+  "title": "Declared entry formats for the shared append-only artifacts",
+  "description": "THE single declaration of where each shared append-only artifact's ENTRY FORMAT is defined. The population is NOT declared here: it is JOINED from pipeline-state-paths.json on transient:false, which invariant I95 already binds in both directions and which fails closed. This file declares only the OTHER side of that join -- for each durable name, the shipped file that states what one entry looks like, and the anchor inside it that a reader resolves. THE DUTY IS THAT A FORMAT EXISTS AND IS DECLARED, NOT THAT A WRITE SITE LOCATES ONE. A duty to LOCATE a format before writing was built first and refuted on measurement: it is discharged by looking, so a competently written locate-duty firing on nothing scores as a shipped fix, and a vacuous locate-duty and a real one are spelled identically. An existence-and-declaration duty has a subject a checker can address. Format steering was attached at 3 of 24 shared append-only artifacts and absent at 21 when this was filed, and which writes got it depended on which core author added a READ AND FOLLOW sentence at that call site rather than on any property of the write.",
+  "type": "object",
+  "required": [
+    "join",
+    "formats"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "join": {
+      "type": "object",
+      "required": [
+        "population_schema",
+        "population_key",
+        "population_value"
+      ],
+      "additionalProperties": false,
+      "description": "How the POPULATION is derived. Declared as data rather than hard-coded in the reader so the reader and this file cannot disagree about which artifacts are in scope. Hand-listing the population here would create a second copy of a set I95 already owns, and the two would drift in the direction that reads as clean.",
+      "properties": {
+        "population_schema": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The schema that OWNS the population, resolved in both layouts (core/schemas/ in the distribution, .claude/schemas/ on a consumer)."
+        },
+        "population_key": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The field inside each entry of that schema's `paths` array that selects membership."
+        },
+        "population_value": {
+          "type": "boolean",
+          "description": "The value of population_key that selects membership. false selects the DURABLE half -- the artifacts a consumer commits and later sessions append to, which is exactly the set where an undeclared entry format costs something."
+        }
+      }
+    },
+    "formats": {
+      "type": "array",
+      "minItems": 1,
+      "description": "One entry per durable artifact whose format IS declared. The reader set-compares this against the joined population: a durable artifact with no entry here is reported, and an entry naming a name that is not in the population is reported too. Both directions, because a declaration for an artifact nothing writes is as wrong as an artifact nothing declares.",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "declared_in",
+          "anchor",
+          "kind"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The top-level name under the pipeline root, spelled EXACTLY as pipeline-state-paths.json spells it. This string is the JOIN KEY, so any decoration -- a trailing slash, a root prefix -- makes the set-compare fail on a correctly declared artifact."
+          },
+          "declared_in": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A path, relative to the distribution root, to the shipped file that STATES the entry format. Checked for existence AND for containing the anchor, because a declaration pointing at a file that no longer carries the format is the failure this whole file exists to make visible."
+          },
+          "anchor": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A literal substring that must appear in declared_in. It is what makes this a binding rather than a filename: a whole-file check is satisfied by the artifact's name appearing anywhere, including in a comment, and that is how a format declaration goes stale without anything reporting it. The anchor is the format's own marker, region label or field name -- something that cannot survive the format being deleted."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "schema",
+              "generated-region",
+              "prose"
+            ],
+            "description": "How the format is carried. `schema` is a core/schemas/*.json field or key block a program LOADS; `generated-region` is a BEGIN/END GENERATED region rendered from a schema; `prose` is a shipped rule or step file that states the entry shape in text. The tier is recorded because the three are not equally durable -- prose is the weakest and is the class that decayed here -- and because a later arm can raise the floor without re-deriving the population."
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Optional. What is known about the declaration's limits. Present where the format is partial, so a reader does not take a declared entry as a promise of completeness."
+          }
+        }
+      }
+    }
+  },
+  "join": {
+    "population_schema": "pipeline-state-paths.json",
+    "population_key": "transient",
+    "population_value": false
+  },
+  "formats": [
+    {
+      "name": "audit-anchors.md",
+      "declared_in": "core/schemas/audit-anchors.json",
+      "anchor": "audit-anchors-schema",
+      "kind": "schema",
+      "note": "The strongest carrier in the set: the header is RENDERED by validate-audit-anchors.sh --render into a BEGIN/END GENERATED region and byte-compared, and every entry is validated against the schema's own `fields` map."
+    },
+    {
+      "name": "gate-adjudication",
+      "declared_in": "core/schemas/gate-adjudication-verdict.json",
+      "anchor": "GATE_ADJUDICATION_VERDICT v1",
+      "kind": "schema",
+      "note": "A verdict file under this directory is a standalone JSON document the validator json.loads; the envelope marker is the schema_id string."
+    },
+    {
+      "name": "ai-dlc-update",
+      "declared_in": "core/schemas/layer-adjudication-register.json",
+      "anchor": "subject_digest",
+      "kind": "schema",
+      "note": "Declares the register at ai-dlc-update/layer-adjudication-register.jsonl. The pull LEDGERS that share this directory are not covered by it."
+    },
+    {
+      "name": "implementation-artifacts",
+      "declared_in": "core/schemas/sprint-status.json",
+      "anchor": "sprint-status-schema",
+      "kind": "schema",
+      "note": "Declares sprint-status.yaml under this directory. gate-log.md and gate-metrics.jsonl, which sit beside it, carry their own entries here."
+    },
+    {
+      "name": "party-mode-transcripts",
+      "declared_in": "core/schemas/provenance-block.json",
+      "anchor": "SKILL_INVOCATION_PROVENANCE v1",
+      "kind": "schema",
+      "note": "The provenance block a transcript carries is rendered from this schema into retro.md's generated region and byte-matched by validate-retro-evidence.sh. The transcript BODY has no declared shape."
+    }
+  ]
+}

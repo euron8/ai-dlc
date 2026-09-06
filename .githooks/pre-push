@@ -164,6 +164,20 @@ step "re-attach budget (SKILL.md resident region)" \
 step "rule-file audit (origin tags, dates, dangling pointers)" \
   bash core/scripts/audit-rule-files.sh --fail-on=deterministic
 
+# 2c. Every SHARED APPEND-ONLY artifact has a DECLARED entry format, and every declaration
+#     still resolves. The population is JOINED from pipeline-state-paths.json on
+#     transient:false, which I95 already binds in both directions, so this adds no second
+#     copy of that set.
+#
+#     THE RATCHET IS THE POINT AND THE CEILING ONLY MOVES DOWN. Fifteen of the twenty
+#     durable artifacts carry no declared format today; failing on that would wedge the push
+#     on first contact and be switched off, so absence is REPORTED and the ceiling bounds
+#     GROWTH. A BROKEN declaration -- one naming a file that is gone or that no longer
+#     carries its anchor -- fails outright, because that is the state which reads as covered
+#     and is not. Lower the number in the same change that declares a format; never raise it.
+step "write-format steering (every shared append-only artifact declares its entry format)" \
+  bash core/scripts/validate-write-format-steering.sh --max-undeclared 15
+
 # 3. Every fixture is an adversarial self-test for one gate check. A fixture that is
 #    never driven is a green light nobody earned.
 #

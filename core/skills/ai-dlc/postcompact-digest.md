@@ -385,6 +385,9 @@ compaction and dominates cache-read. Living artifacts MUST stay
 current-state; historical and superseded content MUST move out of the
 read path.
 
+## [MOVED <ISO-8601 timestamp> from <source basename> — <trigger>]
+```
+
 ### Rule 26 -- Minimum mechanism (KISS)
 Every produced artifact -- design, code, test, guard, or process
 machinery -- MUST use the smallest mechanism that satisfies the

@@ -15,6 +15,83 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.517.0] - 2026-09-06
+
+### `BL-185` — Rule 25(a) states the header a moved block carries, because the rotator's only cut point is a `## ` line
+
+`PC-S308-RULE-25A-HISTORY-MOVE-HAS-NO-DEFINED-HEADER-FORMAT`. Rule 25(a) named a trim's
+destination file and not the header the moved block lands with, and the `[MOVED …]` convention in
+use appeared nowhere in `core/`. A history/archive move now opens its block with
+`## [MOVED <ISO-8601 timestamp> from <source basename> — <trigger>]`.
+
+**The `## ` is the load-bearing part.** `rotate-snapshot-archive.sh` cuts at the Nth-from-last
+`^## ` line and never interprets a heading. Differential over two synthetic trees with identical
+content and line counts, sides asserted differing before either was read: 12 blocks headed
+`## MOVED` rotate at exit 0; the same 12 as `[MOVED …]` brackets exit 1, REFUSED, no cut point.
+On the reference consumer's live history the shape sits between the two — 13 headings, 11
+brackets, all 11 nested inside one 467-line entry — so the rotator sees 13 entries where 24 moves
+happened. The 11 are trim passes 13, 14 and 15, and the three passes after them are headed again:
+the practice self-corrected, which is why writing the header down is worth its bytes.
+
+The prescribed format was driven through the real rotator before shipping, including under
+`env -i LC_ALL=C` where the em-dash would break if it were going to: it rotates cleanly and
+conserves every block.
+
+### `BL-186` — every shared append-only artifact declares WHERE its entry format lives, and a declaration that stopped resolving fails the push
+
+`PC-S308-WRITE-FORMAT-STEERING-APPLIED-AD-HOC-NOT-UNIVERSALLY`. Format steering was attached at 3
+of 24 shared append-only artifacts and absent at 21. **The filed remedy was refuted on measurement
+and deliberately not built**: a duty to LOCATE a format is discharged by looking, and a
+competently written, fully vacuous locate-duty scored CLOSE-CANDIDATE against a prose-keyed
+receipt. No rewording separates a vacuous locate-duty from a real one. The shipped duty is that a
+format EXISTS and is DECLARED.
+
+`core/scripts/validate-write-format-steering.sh` with `core/schemas/write-format-steering.json`.
+The population is JOINED rather than hand-listed — `pipeline-state-paths.json`, key `transient`,
+value `false`, which **I95** already binds in both directions — and the join key is itself data in
+the schema, so the reader cannot disagree with the declaration about its own scope. **Stated
+bound:** the four Rule 25(a) planning histories nest under `planning-artifacts`, which that schema
+declares only at top level, so reaching them is a widening of the schema and not a gap in this
+join. The validator says so in its own output.
+
+**False-positive set zero on the failing tier**, measured over the real population: 15 of 20 carry
+no declared format, so absence is report-only and ERROR is reserved for a declaration that broke
+(file gone, anchor gone, name outside the population), where no false-positive path exists. The
+ratchet is pinned in `.githooks/pre-push` and was confirmed to fire one below its bound. The
+self-probe runs before the corpus and is scored in both directions against mutants of the shipping
+reader.
+
+### `BL-185` follow-through — the rotator refuses at its cut floor instead of affirming
+
+REFUSAL 1 catches zero boundaries and is a knife-edge: ONE surviving `## ` sent the file to the
+`N_CUT <= KEEP_ENTRIES` branch, which printed an affirmative "nothing to rotate" and exited 0 —
+and that is the state a real history reaches, because every rotation keeps `KEEP_ENTRIES`
+headings. Measured over eight rounds of trims on the reference consumer: the file rotates ONCE,
+lands on exactly 10 headings, then grows +112 lines per round forever while the rotator reports
+success. 122514 bytes against 8821 for the same content correctly headed, and **both arms print
+`10 entr(ies) present`, exit 0** — the verdict could not tell a bounded file from an unbounded
+one.
+
+**A size threshold was measured and REJECTED:** max-span-over-mean scores the defect case at 4.40
+while five healthy files in the same tree score higher (`prd-history.md` at 131.53), so any cut
+separating them flags the healthy corpus. The discriminator is a property of the file alone — a
+move marker that is not a heading — with a false-positive set of ONE across the consumer's 109
+tracked history/archive files: the defect case itself.
+
+`core/fixtures/snapshot-archive-rotate` gains assertions 12/13/14 and MUTATION 2. The arm is
+absence-shaped, so the mutant is what proves it discriminates: with the guard stripped, assertion
+12 goes red and the mutant reports DID NOT APPLY rather than passing.
+
+### Also filed, not fixed
+
+`BL-187` (Rule 21 says the gate FAILS on a missing step-token citation; no program reads the
+token, and citation practice decayed to 0 across five consecutive sprints unreported), `BL-188`
+(no gate bounds `SKILL.md`'s size or its narrative, and the audit that names narrative as its own
+job scores it 0 — filed with no lint proposed, because verbosity-is-scar-tissue governs that file)
+and `BL-189` (an argument-less `git init --bare` under an exported `GIT_DIR` writes
+`core.bare=true` into the real repository, and git exports `GIT_DIR` absolute to any hook running
+from a linked worktree).
+
 ## [0.516.0] - 2026-09-06
 
 ### `BL-184` — the genuine-operator predicate refuses a harness-injected record, and a citation verifies only inside a window around its own authorization timestamp
