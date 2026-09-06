@@ -292,7 +292,9 @@ if [ "$MODE" = "adjudicate" ]; then
         GA_IN_FORCE_STATUS="no-sibling:validate-suppression-lifetime.sh not found beside $GA_SCRIPT_DIR"
     else
         # AI_DLC_GATE_METRICS is the fixture's channel; a live gate lets the sibling locate
-        # the timeline itself, from the same cwd the lead runs verdict.sh in.
+        # the timeline itself. It resolves that under ITS root, which is this script's root
+        # (same directory, same walk-up, same inherited AI_DLC_PROJECT_ROOT), and never under
+        # the cwd the lead ran verdict.sh in.
         if [ -n "${AI_DLC_GATE_METRICS:-}" ]; then
             GA_IN_FORCE="$(bash "$SUPP_DIR/validate-suppression-lifetime.sh" --in-force \
                 --escalations "$ESC" --enforcement-map "$MAP" --gate-metrics "$AI_DLC_GATE_METRICS")"

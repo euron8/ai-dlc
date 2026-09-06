@@ -202,12 +202,18 @@ if [ "$CATALOG_N" -lt 2 ]; then
 fi
 
 # ---- 2. Locate gate-metrics (optional; the shape arm runs without it) -------
+# Every candidate is anchored on the RESOLVED ROOT and none on the process cwd. A
+# cwd-relative candidate ahead of the root one counted a suppression's lifetime against
+# whichever project the caller was STANDING IN: the reference consumer's pre-push runs the
+# fixture suite from its own root, where a real 348-line timeline exists, so the seeded
+# 2-gate file under AI_DLC_PROJECT_ROOT was ignored, the seeded entry read expired, and
+# gate-remediation-deny failed 18 assertions there while passing from a root carrying no
+# metrics file. Same shape as validate-snapshot-conservation.sh's loop.
 if [ -z "$GATE_METRICS" ]; then
   for cand in \
-      "_bmad-output/implementation-artifacts/gate-metrics.jsonl" \
-      "docs/_bmad-output/implementation-artifacts/gate-metrics.jsonl" \
-      "_bmad-output/gate-metrics.jsonl" \
-      "$AI_DLC_ROOT/_bmad-output/implementation-artifacts/gate-metrics.jsonl"; do
+      "$AI_DLC_ROOT/_bmad-output/implementation-artifacts/gate-metrics.jsonl" \
+      "$AI_DLC_ROOT/docs/_bmad-output/implementation-artifacts/gate-metrics.jsonl" \
+      "$AI_DLC_ROOT/_bmad-output/gate-metrics.jsonl"; do
     [ -f "$cand" ] && { GATE_METRICS="$cand"; break; }
   done
 fi
@@ -442,8 +448,9 @@ while IFS="$(printf '\037')" read -r header status supp expires authts named sup
         if [ -z "$GATE_METRICS" ] || [ ! -f "$GATE_METRICS" ]; then
           unresolved_n=$((unresolved_n + 1))
           echo "NOTE: entry '$supp' -- NOT listed in force: no gate-metrics.jsonl was found, so" >&2
-          echo "      its lifetime cannot be counted. Pass --gate-metrics <file> or run from the" >&2
-          echo "      project root. A lifetime that cannot be counted is not a licence." >&2
+          echo "      its lifetime cannot be counted. Pass --gate-metrics <file>, or set" >&2
+          echo "      AI_DLC_PROJECT_ROOT to the root that carries one; the process cwd is not" >&2
+          echo "      consulted. A lifetime that cannot be counted is not a licence." >&2
           continue
         fi
         elapsed=0
