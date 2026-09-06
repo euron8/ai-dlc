@@ -267,7 +267,7 @@ CITEEOF
 cite_ts() { # $1 authline
   printf '%s\n' "$1" | LC_ALL=C awk '
     got { next }
-    { if (match($0, /[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z?/)) {
+    { if (match($0, /[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:?[0-9]{2})?/)) {
         printf "%s", substr($0, RSTART, RLENGTH); got = 1 } }'
 }
 
@@ -819,7 +819,17 @@ else
   # The cache key below names the standard layout's path for its freshness term, which is a
   # narrower claim than the sibling's resolution -- a timeline at a fallback layout does not
   # refresh this key when it moves.
-  CACHE_KEY="${LIVE_NONCE}|+cite+at|$(ckey "$ESC_FILE")|$(fkey "${AI_DLC_GATE_METRICS:-${LOG_DIR}/implementation-artifacts/gate-metrics.jsonl}")|$(fkey "$SUPP_DIR/validate-suppression-lifetime.sh")"
+  # THE VERIFIER IS A KEY TERM, AND THAT IS WHAT THE HAND-WRITTEN MARKER WAS STANDING IN FOR.
+  # The rows this cache holds are the ones that PASSED `validate-steering-budget.sh --cite`, so
+  # what they are worth is a property of that program. Every other term is blind to it: the
+  # escalations digest, the metrics file and the sibling are all unmoved when the verification
+  # changes, so a build with a weaker predicate could hand its survivors to a build with a
+  # stronger one and no term would disagree. The `+cite+at` tag is a human-readable note about
+  # WHICH verification generation this is; it decides nothing, because a tag only invalidates
+  # when somebody remembers to change it, and reverting it left every fixture and every
+  # validator green -- measured. `fkey` on the verifier itself is the term that cannot be
+  # forgotten: edit the predicate and the key moves.
+  CACHE_KEY="${LIVE_NONCE}|+cite+at|$(ckey "$ESC_FILE")|$(fkey "${AI_DLC_GATE_METRICS:-${LOG_DIR}/implementation-artifacts/gate-metrics.jsonl}")|$(fkey "$SUPP_DIR/validate-suppression-lifetime.sh")|$(fkey "$STEER_SCRIPT")"
   # A key with an unreadable term cannot invalidate, so there is no key: pay the parse.
   case "$CACHE_KEY" in *"?"*) CACHE_KEY="" ;; esac
   CACHED_KEY=""
@@ -1006,10 +1016,28 @@ if [ -f "$AUTH_FILE" ] && [ -f "$STEER_SCRIPT" ]; then
     if [ -n "$STEER_FLAG" ]; then
       bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$AUTH_QUOTE" --authorized-at "$AUTH_TS" --quiet >/dev/null 2>&1
       if [ $? -eq 0 ]; then
-        log_event GATE_REMEDIATION_LIFTED \
-          "Tool: ${TOOL_NAME} on ${FP}" \
-          "Live pass ${LIVE_NONCE} FAILs: ${FAILED_CHECKS}" \
-          "Lifted by VERIFIED operator authorization: ${AUTH_FILE}"
+        # AN UNBOUNDED LIFT IS STILL A LIFT, AND IT LOOKED IDENTICAL TO A BOUNDED ONE.
+        # `cite_ts` requires `T` between the date and the time; a space, a lowercase `t` or a
+        # date-only value yields no bound, and this citation is then verified against the
+        # project's WHOLE session history -- so any phrase the operator ever typed lifts the
+        # deny. Unlike arm 7b, nothing upstream holds this shape: arm 7b's rows come from
+        # `validate-suppression-lifetime.sh`, which refuses a non-canonical timestamp as
+        # malformed, while THIS field is read straight out of a file the denied lead writes.
+        # It is not refused -- a record whose timestamp will not parse may still cite a real
+        # operator turn -- but the lift says which kind it was, in the flow log the retro reads.
+        if [ -z "$AUTH_TS" ]; then
+          log_event GATE_REMEDIATION_LIFTED \
+            "Tool: ${TOOL_NAME} on ${FP}" \
+            "Live pass ${LIVE_NONCE} FAILs: ${FAILED_CHECKS}" \
+            "Lifted by VERIFIED operator authorization: ${AUTH_FILE}" \
+            "unbounded-citation: 1 -- operator_authorization carries no parseable ISO-8601 timestamp, so the quote was verified against the WHOLE transcript corpus rather than the moment this record claims. Write it as <YYYY-MM-DD>T<HH:MM:SS>Z."
+        else
+          log_event GATE_REMEDIATION_LIFTED \
+            "Tool: ${TOOL_NAME} on ${FP}" \
+            "Live pass ${LIVE_NONCE} FAILs: ${FAILED_CHECKS}" \
+            "Lifted by VERIFIED operator authorization: ${AUTH_FILE}" \
+            "unbounded-citation: 0 -- verified within the window around ${AUTH_TS}"
+        fi
         exit 0
       fi
     fi

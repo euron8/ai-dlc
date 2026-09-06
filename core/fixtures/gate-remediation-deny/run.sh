@@ -602,6 +602,44 @@ if [ -f "$CACHEF" ]; then
   OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
   if denied "$OUT"; then bad "S1-cache: a changed escalations file did NOT invalidate the key — a stale suppression set decides the lock-out forever"
   else ok "S1-cache: a changed escalations file invalidates the key and the sibling re-answers"; fi
+
+  # --- WHAT THE CACHED ROWS ARE WORTH IS A PROPERTY OF THE VERIFIER, and no arm could see it --
+  # The rows this cache holds are the ones that PASSED the citation verifier, so a cache written
+  # by a build whose predicate was weaker must not be readable by one whose predicate is
+  # stronger. Every other key term is blind to that: the escalations digest, the metrics file
+  # and the sibling are all unmoved when the verification changes. The key carried a
+  # hand-written generation tag for this, and a tag only invalidates when somebody remembers to
+  # change it -- measured, reverting it left this fixture at exit 0 and the string appeared in
+  # no validator, so it was bound by nothing. The verifier's own file key is the term that
+  # cannot be forgotten, and this arm is what says it is there.
+  #
+  # THE WORLD IS THE ARM ABOVE'S, ONE PROPERTY APART. That arm proved a poisoned row IS read
+  # back under a matching key; here the same poison sits under a key whose VERIFIER term is
+  # stale, so a DENY means the row was reused across a change to the predicate and an ALLOW
+  # means the guard treated it as a miss and re-asked. Nothing else about the world moves.
+  drive "$W" Edit "$W/$ART" "" "$W/$TRC" >/dev/null 2>&1   # re-warm; the touch above invalidated
+  GRD_STEER="$W/scripts/ai-dlc/validate-steering-budget.sh"
+  [ -f "$GRD_STEER" ] || GRD_STEER="$W/core/scripts/validate-steering-budget.sh"
+  if [ ! -f "$CACHEF" ]; then
+    bad "S1-verifier-key: FIXTURE BROKEN — no cache after re-warming, so this arm has nothing to read back"
+  elif [ ! -f "$GRD_STEER" ]; then
+    bad "S1-verifier-key: FIXTURE BROKEN — the citation verifier is not in this workspace ($GRD_STEER), so its key term cannot be moved"
+  else
+    VK="$(head -1 "$CACHEF")"
+    printf '%s\nnot-this-catalog\t7\t3\t0\t2026-08-01T00:00:00Z | "Operator-suppress this FAIL (Recommended)"\tseeded cache poison\n' "$VK" > "$CACHEF"
+    # EDIT THE VERIFIER, do not merely touch it: `fkey` is size AND mtime, and inside one whole
+    # second a touch moves neither. A trailing comment moves the size, which no clock can undo.
+    printf '\n# fixture: the verifier changed under a warm cache\n' >> "$GRD_STEER"
+    OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC")"
+    VK2="$(head -1 "$CACHEF")"
+    if [ "$VK" = "$VK2" ] && denied "$OUT"; then
+      bad "S1-verifier-key: the key did not move when the CITATION VERIFIER changed, and the poisoned row was reused — rows that passed one predicate are being handed to a different one, which is the one direction this cache must not fail in"
+    elif denied "$OUT"; then
+      bad "S1-verifier-key: the poisoned row was reused although the key moved — the guard is not comparing the key it computes"
+    else
+      ok "S1-verifier-key: editing the citation verifier invalidates the key and the sibling re-answers — a cache written under one predicate cannot decide a lift under another"
+    fi
+  fi
 fi
 
 # S1's TWIN, same workspace, one property apart: the alternate timeline records enough gates
@@ -984,6 +1022,9 @@ fi
 if mut m5-any-suppression-lifts 's@if \[ -z "\$FAILED_CHECKS" \]; then@if [ -n "$SUPPRESSED_CHECKS" ]; then@'; then
   kill_arm m5-any-suppression-lifts allow "$W" "M5: 'any suppression lifts' is INVISIBLE on S1 — which is why S5 exists"
 fi
+if mut m6b-key-drops-verifier 's@|\$(fkey "\$STEER_SCRIPT")@@'; then
+  kill_arm m6b-key-drops-verifier allow "$W" "M6b: dropping the VERIFIER term from the cache key does not move S1 itself"
+fi
 if mut m6-key-drops-escalations 's@|\$(ckey "\$ESC_FILE")@@'; then
   kill_arm m6-key-drops-escalations allow "$W" "M6: dropping the escalations term from the cache key does not move S1 itself"
 fi
@@ -1062,6 +1103,36 @@ if [ -f "$MW/m6-key-drops-escalations.sh" ]; then
   OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "$MW/control.sh")"
   if denied "$OUT"; then ok "M6: ...and the unmutated copy DENIES on the same emptied file (the two sides differ)"
   else bad "M6: the unmutated copy also lifted on an emptied escalations file — the differential's two sides do not differ, so M6's kill is unearned"; fi
+fi
+rm -rf "$W"
+
+# M6b -- the VERIFIER term dropped from the key, which is S1-verifier-key's subject. Same
+# two-call shape: warm the cache, change the CITATION VERIFIER, answer again. With the term
+# gone the second answer is the stale one, so the poisoned row -- which names a catalog this
+# verdict is not in -- decides the lift and the edit is DENIED. The unmutated copy must ALLOW
+# on the same world, or the two sides do not differ and this kill is unearned.
+seed suppressed
+if [ -f "$MW/m6b-key-drops-verifier.sh" ]; then
+  M6B_STEER="$W/scripts/ai-dlc/validate-steering-budget.sh"
+  [ -f "$M6B_STEER" ] || M6B_STEER="$W/core/scripts/validate-steering-budget.sh"
+  if [ ! -f "$M6B_STEER" ]; then
+    bad "M6b: FIXTURE BROKEN — no citation verifier in this workspace, so its key term cannot be moved"
+  else
+    OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "$MW/m6b-key-drops-verifier.sh")"
+    M6B_CACHE="$W/_bmad-output/.gate-remediation-in-force"
+    if [ ! -f "$M6B_CACHE" ]; then
+      bad "M6b: FIXTURE BROKEN — the mutant wrote no cache, so there is nothing for a stale key to read back"
+    else
+      printf '%s\nnot-this-catalog\t7\t3\t0\t2026-08-01T00:00:00Z | "Operator-suppress this FAIL (Recommended)"\tseeded cache poison\n' "$(head -1 "$M6B_CACHE")" > "$M6B_CACHE"
+      printf '\n# fixture: the verifier changed under a warm cache\n' >> "$M6B_STEER"
+      OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "$MW/m6b-key-drops-verifier.sh")"
+      if denied "$OUT"; then ok "M6b: with the verifier term dropped, a row cached under the OLD predicate is reused after the predicate changed — S1-verifier-key's term is load-bearing"
+      else bad "M6b DID NOT FAIL: the mutant still re-answered after the verifier changed, so S1-verifier-key is not testing that term"; fi
+      OUT="$(drive "$W" Edit "$W/$ART" "" "$W/$TRC" "$MW/control.sh")"
+      if denied "$OUT"; then bad "M6b: the unmutated copy ALSO reused the stale row — the differential's two sides do not differ, so M6b's kill is unearned"
+      else ok "M6b: ...and the unmutated copy re-answers on the same world (the two sides differ)"; fi
+    fi
+  fi
 fi
 rm -rf "$W"
 
