@@ -187,6 +187,26 @@ CITEEOF
   printf '%s' "$_cq_pick"
 }
 
+# The citation's own TIMESTAMP -- the `<ISO ts>` half of `<ISO ts> | "<verbatim quote>"`, which
+# is what says WHEN the record claims the operator spoke. Without it the --cite corpus is the
+# project's entire session history, and any twelve-character phrase the operator ever typed
+# verifies a citation filed today; the sibling prints `MATCH <ts>` and every caller sent it to
+# /dev/null, so the one output that could have refuted the claim was the one nobody read.
+# Callers pass it as `--authorized-at`, and the sibling owns the tolerance.
+#
+# EMPTY WHEN THE FIELD CARRIES NO PARSEABLE TIMESTAMP, and the caller then passes no bound and
+# gets the unbounded answer. The grammar of this field is enforced elsewhere and not every
+# producer requires the timestamp -- on the reference consumer 1 of 26 authorization rows is
+# written `2026-08-26, this session, verbatim: "..."` and cites a real operator turn. Refusing
+# that row here would fail a genuine citation for a reason that is not about whether the
+# operator spoke, which is a check that wedges live work.
+cite_ts() { # $1 authline
+  printf '%s\n' "$1" | LC_ALL=C awk '
+    got { next }
+    { if (match($0, /[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z?/)) {
+        printf "%s", substr($0, RSTART, RLENGTH); got = 1 } }'
+}
+
 ESCALATIONS=""
 SPRINT=""
 TRANSCRIPT=""
@@ -366,15 +386,25 @@ while IFS="$(printf '\t')" read -r header status authline; do
   # pending.md are two runs over two different corpora, and nothing in the output said so.
   # `2>&1 >/dev/null` in THAT order sends the sibling's stderr to the capture and its stdout
   # to the bin.
-  CITE_REPORT="$(bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$quote" --quiet 2>&1 >/dev/null)"
+  # BOUND THE SCAN TO WHEN THIS ENTRY SAYS THE OPERATOR SPOKE. Unbounded, the corpus is the
+  # project's whole session history and any phrase the operator ever typed verifies a citation
+  # filed today. `cite_ts` returns empty for a field carrying no parseable timestamp, and the
+  # bound is then omitted -- see its own note.
+  ts="$(cite_ts "$authline")"
+  STEER_AT=""; STEER_AT_ARG=""
+  if [ -n "$ts" ]; then STEER_AT="--authorized-at"; STEER_AT_ARG="$ts"; fi
+  CITE_REPORT="$(bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$quote" ${STEER_AT:+"$STEER_AT" "$STEER_AT_ARG"} --quiet 2>&1 >/dev/null)"
   rc=$?
   if [ "$rc" -eq 2 ]; then
     # NAME THE CORPUS THAT WAS SEARCHED. The sibling prints its own corpus identity and this
     # caller discards it, so this accusation is otherwise made over a corpus the reader cannot
     # see -- and a wrong-corpus run reads exactly like a real S290 fabrication.
     echo "FAIL: [$short] operator authorization quotes \"${quote}\", which appears in NO genuine" >&2
-    echo "      operator message in the transcript searched (${STEER_ARG}). A lead-authored" >&2
+    echo "      operator message in the transcript searched (${STEER_ARG})${ts:+ within the tolerance}" >&2
+    echo "      ${ts:+of the cited authorization time ${ts}}. A lead-authored" >&2
     echo "      'operator disposition' is not an operator adjudication. This is the S290 failure." >&2
+    echo "      The sibling's own line below says which of the two it is: nothing carried these" >&2
+    echo "      words at all, or the operator said them at some other moment than the one cited." >&2
     [ -n "$CITE_REPORT" ] && printf '      %s\n' "$CITE_REPORT" >&2
     FAIL=1; FAILN=$((FAILN + 1)); continue
   elif [ "$rc" -ne 0 ]; then

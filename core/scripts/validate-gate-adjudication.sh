@@ -338,6 +338,26 @@ CITEEOF
   printf '%s' "$_cq_pick"
 }
 
+# The citation's own TIMESTAMP -- the `<ISO ts>` half of `<ISO ts> | "<verbatim quote>"`, which
+# is what says WHEN the record claims the operator spoke. Without it the --cite corpus is the
+# project's entire session history, and any twelve-character phrase the operator ever typed
+# verifies a citation filed today; the sibling prints `MATCH <ts>` and every caller sent it to
+# /dev/null, so the one output that could have refuted the claim was the one nobody read.
+# Callers pass it as `--authorized-at`, and the sibling owns the tolerance.
+#
+# EMPTY WHEN THE FIELD CARRIES NO PARSEABLE TIMESTAMP, and the caller then passes no bound and
+# gets the unbounded answer. The grammar of this field is enforced elsewhere and not every
+# producer requires the timestamp -- on the reference consumer 1 of 26 authorization rows is
+# written `2026-08-26, this session, verbatim: "..."` and cites a real operator turn. Refusing
+# that row here would fail a genuine citation for a reason that is not about whether the
+# operator spoke, which is a check that wedges live work.
+cite_ts() { # $1 authline
+  printf '%s\n' "$1" | LC_ALL=C awk '
+    got { next }
+    { if (match($0, /[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z?/)) {
+        printf "%s", substr($0, RSTART, RLENGTH); got = 1 } }'
+}
+
 # --- the SUPPRESSED carve-out: asked of the script that OWNS "in force", never restated ---
 # escalations.md defines SUPPRESSED as an authorization to proceed past a failing check, with
 # a lifetime, and Check 2 says such an entry does not block while in force. Every
@@ -456,14 +476,25 @@ if [ "$MODE" = "adjudicate" ]; then
                         # operator's own authorization of being invented, which is the reading
                         # validate-escalation-resolution.sh and the convergence validator both
                         # refuse to make on the same status.
-                        bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$ga_quote" --quiet >/dev/null 2>&1
+                        # BOUND THE SCAN TO WHEN THE ENTRY SAYS THE OPERATOR SPOKE.
+                        # Unbounded, the corpus is the project's entire session history
+                        # and any phrase the operator ever typed verifies a suppression
+                        # filed today. `cite_ts` is empty for a field with no parseable
+                        # timestamp and the bound is then omitted -- though a SUPPRESSED
+                        # entry cannot reach here in that state: the sibling that produced
+                        # this row refuses one with no `**Operator authorization:**`
+                        # timestamp as malformed and never lists it in force.
+                        ga_ts="$(cite_ts "$ga_auth")"
+                        ga_at=""; ga_at_arg=""
+                        if [ -n "$ga_ts" ]; then ga_at="--authorized-at"; ga_at_arg="$ga_ts"; fi
+                        bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$ga_quote" ${ga_at:+"$ga_at" "$ga_at_arg"} --quiet >/dev/null 2>&1
                         ga_rc=$?
                         if [ "$ga_rc" -eq 0 ]; then
                             GA_VERIFIED="${GA_VERIFIED}${ga_row}
 "
                         elif [ "$ga_rc" -eq 2 ]; then
                             GA_UNVERIFIED_CITES=$((GA_UNVERIFIED_CITES + 1))
-                            echo "VALIDATE-GATE-ADJUDICATION: UNVERIFIED — an in-force SUPPRESSED entry cites an operator message that no genuine operator turn in ${STEER_ARG} carries, so it suppresses nothing: ${ga_header}"
+                            echo "VALIDATE-GATE-ADJUDICATION: UNVERIFIED — an in-force SUPPRESSED entry cites an operator message that no genuine operator turn in ${STEER_ARG} carries${ga_ts:+ within the tolerance of its own authorization time ${ga_ts}}, so it suppresses nothing: ${ga_header}"
                         else
                             GA_VERIFIER_ERRORS=$((GA_VERIFIER_ERRORS + 1))
                             echo "VALIDATE-GATE-ADJUDICATION: UNVERIFIABLE — the citation verifier failed (validate-steering-budget.sh rc=${ga_rc}) before it could say whether a genuine operator turn carries this entry's quote, so the entry suppresses nothing until it can be verified. This is a tooling failure, not a finding about the citation (is node on PATH?): ${ga_header}"

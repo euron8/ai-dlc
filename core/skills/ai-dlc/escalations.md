@@ -85,6 +85,12 @@ disposition, and the gate FAILS on it. If you genuinely made the call,
 its status is `DECIDED_AUTONOMOUSLY` (informational, non-blocking, no
 citation required) — the honest label.
 
+**The timestamp is WHEN THE OPERATOR SPOKE, not when you wrote the line, and it
+is verified.** The verifier bounds its scan to a window around it, so a citation
+whose words the operator said hours away from the timestamp on this line is
+refused with the quote intact. Rounding to the minute is fine; reaching for a
+turn from another sitting is not.
+
 The citation is written in the SAME edit that sets the status. An edit
 flipping an entry to `RESOLVED` / `OVERRIDDEN` without the
 `**Operator authorization:**` line is incomplete, not pending — never a

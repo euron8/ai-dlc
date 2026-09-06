@@ -812,6 +812,26 @@ CITEEOF
   printf '%s' "$_cq_pick"
 }
 
+# The citation's own TIMESTAMP -- the `<ISO ts>` half of `<ISO ts> | "<verbatim quote>"`, which
+# is what says WHEN the record claims the operator spoke. Without it the --cite corpus is the
+# project's entire session history, and any twelve-character phrase the operator ever typed
+# verifies a citation filed today; the sibling prints `MATCH <ts>` and every caller sent it to
+# /dev/null, so the one output that could have refuted the claim was the one nobody read.
+# Callers pass it as `--authorized-at`, and the sibling owns the tolerance.
+#
+# EMPTY WHEN THE FIELD CARRIES NO PARSEABLE TIMESTAMP, and the caller then passes no bound and
+# gets the unbounded answer. The grammar of this field is enforced elsewhere and not every
+# producer requires the timestamp -- on the reference consumer 1 of 26 authorization rows is
+# written `2026-08-26, this session, verbatim: "..."` and cites a real operator turn. Refusing
+# that row here would fail a genuine citation for a reason that is not about whether the
+# operator spoke, which is a check that wedges live work.
+cite_ts() { # $1 authline
+  printf '%s\n' "$1" | LC_ALL=C awk '
+    got { next }
+    { if (match($0, /[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z?/)) {
+        printf "%s", substr($0, RSTART, RLENGTH); got = 1 } }'
+}
+
 validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -> 0 ok, 1 bad
   local rec="$1" div="$2" idx="$3"
   local resolves kind sha_b sha_a b_b b_a delta auth arch i
@@ -1009,8 +1029,17 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
       ($STEER_SCRIPT), so the citation cannot be verified. Reinstall ai-dlc."
     return 1
   fi
+  # BOUND THE SCAN TO WHEN THIS RECORD SAYS THE OPERATOR SPOKE. --since already bounds the
+  # scan BELOW, at the moment the divergence record opened the block; this bounds it on both
+  # sides of the record's own authorization timestamp, so a phrase the operator typed at some
+  # other point inside the same window no longer verifies this resolution. `cite_ts` returns
+  # empty for a field carrying no parseable timestamp and the bound is then omitted.
+  local auth_ts steer_at steer_at_arg
+  auth_ts="$(cite_ts "$auth")"
+  steer_at=""; steer_at_arg=""
+  if [ -n "$auth_ts" ]; then steer_at="--authorized-at"; steer_at_arg="$auth_ts"; fi
   bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$auth_quote" \
-    --since "${P_AT[$idx]:-}" --quiet >/dev/null 2>&1
+    --since "${P_AT[$idx]:-}" ${steer_at:+"$steer_at" "$steer_at_arg"} --quiet >/dev/null 2>&1
   cite_rc=$?
   if [ "$cite_rc" -eq 2 ]; then
     # NAME THE CORPUS THAT WAS SEARCHED. The sibling prints its own corpus identity, and this
@@ -1019,9 +1048,11 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
     # wrong-corpus run makes that accusation indistinguishable from a true one.
     F_WHY="$rec operator_authorization quotes \"${auth_quote}\", which appears in NO genuine
       operator message at or after $(basename "$div") opened the block (window start:
-      ${P_AT[$idx]:-<no invoked_at>}), searched in ${STEER_ARG}. The resolution clears an
-      operator-gated HARD_BLOCK, and the operator did not say this. A lead-authored resolution
-      is not an operator adjudication."
+      ${P_AT[$idx]:-<no invoked_at>})${auth_ts:+, and none within the tolerance of the cited
+      authorization time ${auth_ts}}, searched in ${STEER_ARG}. The resolution clears an
+      operator-gated HARD_BLOCK, and the operator did not say this HERE. A lead-authored
+      resolution is not an operator adjudication, and neither is a real operator turn from
+      some other moment cited as though it were this one."
     return 1
   elif [ "$cite_rc" -ne 0 ]; then
     # Tooling error (e.g. node absent), not a NOMATCH. Same two-tier posture.
