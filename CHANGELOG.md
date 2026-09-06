@@ -28,20 +28,23 @@ suite from its own root, where a real 348-line timeline exists; the seeded two-g
 failed 18 assertions there on every push from 0.505.0 on, reading exactly like the carve-out
 having been deleted, while passing from any root that carries no metrics file — which is why
 this distribution's own suite never saw it. Every candidate is now anchored on the resolved
-root (the shape `validate-snapshot-conservation.sh` already had), the "cannot be counted"
-NOTE no longer tells the operator to run from the project root, and the guard names the
-timeline explicitly on every call at the path its cache key already used, so the key and the
-file the sibling reads cannot name two different files and a custom `AI_DLC_STATE_DIR` is
-found where the root-anchored defaults would miss it. `validate-gate-adjudication.sh`'s
-comment said the sibling read the timeline "from the same cwd the lead runs verdict.sh in";
-it now says under the sibling's root, which is that script's root, and no code there
-changed. The filed remedy's "fall back to CWD only when no root was given" was built and
-refuted: no root is an exit 2, so the clause is unreachable, and the root-then-cwd shape it
-describes still reads a stranger's timeline when the root carries none. Fixture
-`suppression-lifetime` drives the validator from a cwd carrying a decoy timeline, and
-`gate-remediation-deny` asserts its own cwd-invariance from that world — the one the
-consumer's pre-push runs in — with a custom state-dir world that only the guard's explicit
-path satisfies. `BL-178`.
+root (the shape `validate-snapshot-conservation.sh` already had) and the "cannot be counted"
+NOTE no longer tells the operator to run from the project root. Neither caller changed in
+code: the guard already handed the sibling `AI_DLC_PROJECT_ROOT`, and
+`validate-gate-adjudication.sh`'s comment, which said the sibling read the timeline "from
+the same cwd the lead runs verdict.sh in", now says under the sibling's root. Both halves of
+the filed remedy were built and fell. "Fall back to CWD only when no root was given": no root
+is an exit 2, so the clause is unreachable, and the root-then-cwd shape it describes still
+reads a stranger's timeline when the root carries none. "Have the hook pass `--gate-metrics`
+explicitly": a guard naming `LOG_DIR`'s path on every call turned the flat `_bmad-output/`
+layout, the `docs/_bmad-output/` layout and a custom `AI_DLC_STATE_DIR` from ALLOW into
+DENY — the sibling resolves three layouts under the root, and the gate writer emits the
+literal `_bmad-output/implementation-artifacts/` path whatever the state dir is — so that
+hunk, which the first cut shipped with the opposite claim, was reverted on the adversarial
+hand's four-pair differential. Fixture `suppression-lifetime` drives the validator from a cwd
+carrying a decoy timeline, and `gate-remediation-deny` asserts its own cwd-invariance from
+that world — the one the consumer's pre-push runs in — with flat and `docs/` layout worlds
+where the refuted hook denies and the shipped one allows. `BL-178`.
 
 ### `PC-S337-RETRO-PROCESS-IMPROVEMENTS-RULE-EXERCISE-AUDIT` — retro's rule-file audit asks whether a rule was EXERCISED this sprint, not only what its text says
 

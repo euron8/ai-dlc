@@ -244,7 +244,7 @@ CITEEOF
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 # `AI_DLC_STATE_DIR` may be absolute or relative; the role files and
-# `_gate-procedures.md:143` both write it as `${AI_DLC_STATE_DIR:-_bmad-output}`.
+# `_gate-procedures.md:153` both write it as `${AI_DLC_STATE_DIR:-_bmad-output}`.
 # The NAME is what the path patterns below match on (payload paths arrive both
 # absolute and relative, exactly as `ai-dlc-acknowledge.sh:403` handles them).
 _STATE_DIR="${AI_DLC_STATE_DIR:-_bmad-output}"
@@ -521,16 +521,17 @@ if [ ! -f "$ESC_FILE" ]; then
 elif [ -z "$SUPP_DIR" ]; then
   IN_FORCE_STATUS="no-sibling:validate-suppression-lifetime.sh is under neither ${PROJECT_DIR}/scripts/ai-dlc nor ${PROJECT_DIR}/core/scripts"
 else
-  # AI_DLC_GATE_METRICS is the fixture's channel, the same one the gate validator honours. A
-  # live gate names the timeline EXPLICITLY, at the path this hook already keys its cache on:
-  # the sibling's own default resolution once looked at the process cwd before the root, so a
-  # hook driven from a directory that was not PROJECT_DIR counted the suppression against a
-  # stranger's timeline, and the cache key and the file the sibling read could name two
-  # different files. One path, chosen here from PROJECT_DIR and AI_DLC_STATE_DIR, is read by
-  # both. A path that does not exist is the sibling's "cannot be counted" case, which lists
-  # nothing in force -- the fail-closed direction arm 7b is built for.
-  GATE_METRICS_FILE="${AI_DLC_GATE_METRICS:-${LOG_DIR}/implementation-artifacts/gate-metrics.jsonl}"
-  CACHE_KEY="${LIVE_NONCE}|+cite|$(ckey "$ESC_FILE")|$(fkey "$GATE_METRICS_FILE")|$(fkey "$SUPP_DIR/validate-suppression-lifetime.sh")"
+  # AI_DLC_GATE_METRICS is the fixture's channel, the same one the gate validator honours; a
+  # live gate lets the sibling locate the timeline itself, under the PROJECT_DIR handed to it
+  # below and never under the process cwd. This hook does NOT name the path on the sibling's
+  # behalf: the sibling resolves three layouts under that root, and a single path chosen here
+  # turned the flat and docs/ layouts from ALLOW into DENY when it was tried, while the gate
+  # writer (`gate-validation.md`) writes the literal `_bmad-output/...` path whatever
+  # AI_DLC_STATE_DIR says, so LOG_DIR is not where the timeline is under a custom state dir.
+  # The cache key below names the standard layout's path for its freshness term, which is a
+  # narrower claim than the sibling's resolution -- a timeline at a fallback layout does not
+  # refresh this key when it moves.
+  CACHE_KEY="${LIVE_NONCE}|+cite|$(ckey "$ESC_FILE")|$(fkey "${AI_DLC_GATE_METRICS:-${LOG_DIR}/implementation-artifacts/gate-metrics.jsonl}")|$(fkey "$SUPP_DIR/validate-suppression-lifetime.sh")"
   # A key with an unreadable term cannot invalidate, so there is no key: pay the parse.
   case "$CACHE_KEY" in *"?"*) CACHE_KEY="" ;; esac
   CACHED_KEY=""
@@ -542,8 +543,13 @@ else
     # The sibling is named IN FULL here, never through a variable holding the whole path:
     # I107 in scripts/validate-enforcement-map.sh joins the mode spelled at a call site to the
     # modes that script dispatches, and it reads the literal beside the basename.
-    IN_FORCE_ROWS="$(AI_DLC_PROJECT_ROOT="$PROJECT_DIR" bash "$SUPP_DIR/validate-suppression-lifetime.sh" --in-force \
-      --escalations "$ESC_FILE" --gate-metrics "$GATE_METRICS_FILE" 2>/dev/null)"
+    if [ -n "${AI_DLC_GATE_METRICS:-}" ]; then
+      IN_FORCE_ROWS="$(AI_DLC_PROJECT_ROOT="$PROJECT_DIR" bash "$SUPP_DIR/validate-suppression-lifetime.sh" --in-force \
+        --escalations "$ESC_FILE" --gate-metrics "$AI_DLC_GATE_METRICS" 2>/dev/null)"
+    else
+      IN_FORCE_ROWS="$(AI_DLC_PROJECT_ROOT="$PROJECT_DIR" bash "$SUPP_DIR/validate-suppression-lifetime.sh" --in-force \
+        --escalations "$ESC_FILE" 2>/dev/null)"
+    fi
     SUPP_RC=$?
     if [ "$SUPP_RC" -eq 0 ]; then
       IN_FORCE_STATUS="ok:${ESC_FILE}"
