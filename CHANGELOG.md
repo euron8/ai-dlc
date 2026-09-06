@@ -15,6 +15,34 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.509.0] - 2026-09-05
+
+### `PC-S308-SUPPRESSION-LIFETIME-RESOLVES-GATE-METRICS-FROM-CWD-BEFORE-PROJECT-ROOT` — a suppression's lifetime is counted against the project's own timeline, never the caller's cwd
+
+`validate-suppression-lifetime.sh` resolved its default `gate-metrics.jsonl` by trying three
+cwd-relative candidates before the one under the resolved root, so the remediation guard's
+SUPPRESSED carve-out (arm 7b, 0.505.0) counted a suppression's lifetime against whichever
+project the hook's caller was standing in. The reference consumer's pre-push runs the fixture
+suite from its own root, where a real 348-line timeline exists; the seeded two-gate file under
+`AI_DLC_PROJECT_ROOT` was ignored, the seeded entry read expired, and `gate-remediation-deny`
+failed 18 assertions there on every push from 0.505.0 on, reading exactly like the carve-out
+having been deleted, while passing from any root that carries no metrics file — which is why
+this distribution's own suite never saw it. Every candidate is now anchored on the resolved
+root (the shape `validate-snapshot-conservation.sh` already had), the "cannot be counted"
+NOTE no longer tells the operator to run from the project root, and the guard names the
+timeline explicitly on every call at the path its cache key already used, so the key and the
+file the sibling reads cannot name two different files and a custom `AI_DLC_STATE_DIR` is
+found where the root-anchored defaults would miss it. `validate-gate-adjudication.sh`'s
+comment said the sibling read the timeline "from the same cwd the lead runs verdict.sh in";
+it now says under the sibling's root, which is that script's root, and no code there
+changed. The filed remedy's "fall back to CWD only when no root was given" was built and
+refuted: no root is an exit 2, so the clause is unreachable, and the root-then-cwd shape it
+describes still reads a stranger's timeline when the root carries none. Fixture
+`suppression-lifetime` drives the validator from a cwd carrying a decoy timeline, and
+`gate-remediation-deny` asserts its own cwd-invariance from that world — the one the
+consumer's pre-push runs in — with a custom state-dir world that only the guard's explicit
+path satisfies. `BL-178`.
+
 ## [0.508.0] - 2026-09-05
 
 ### `PC-S337-RETIRED-TOKENS-CANNOT-SAY-IT-SCANNED-NOTHING` — a retired-token scan that opened no core file says so
