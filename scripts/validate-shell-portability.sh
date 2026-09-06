@@ -151,10 +151,17 @@ S9_WHY="\`\\b\` or \`\\s\` in a \`git grep -E\` expression. git's ERE is not thi
 #      prose in two fixture lines, where the bracket is a literal string and harmless.
 #   2. the class may hold NO WHITESPACE. A bracketed prose aside (`[resolved by basename …]`)
 #      is not a class, and every real class in the census was whitespace-free.
-#   3. PYTHON is subtracted by language, the S7 precedent: `re.compile(` on the line, or a
-#      raw-string continuation line (`r"…"`), marks a program whose `re` is unicode-aware
-#      regardless of locale. Measured: the four python sites answer identically under both
-#      locales, and rewriting them would be churn the defect does not ask for.
+#   3. PYTHON is subtracted by language, the S7 precedent, and the subtraction is SMALLER than
+#      the first cut claimed. Python's `re` is unicode-aware regardless of locale, and the four
+#      python sites in the corpus answer identically under both -- but measured over the real
+#      corpus, narrowing 1 already acquits all four (`NAME = re.compile(` carries spaces around
+#      its `=`, and a raw-string continuation line carries no context token at all), so a
+#      `r"…"` alternative here was structurally unreachable and is not kept. What the SKIP
+#      reaches is one shape: a SHELL regex tool editing or quoting a python line, which this
+#      corpus's own fixtures do (`check-3b-locked-anchor/run.sh:292`). It keys on any `re.<fn>(`
+#      call rather than `re.compile(` alone, because a `re.sub(r"…[—]…")` on such a line is the
+#      same program and would otherwise be reported. The fixture's x6 empties it and proves it
+#      load-bearing on exactly that shape.
 # A comment line is skipped, as in S1-S7: the prose that explains this arm names the class.
 S10_HB="$(printf '\200-\377')"
 # `.*` and not `[^#]*` between the context and the class: the heading grammar this arm was
@@ -162,7 +169,7 @@ S10_HB="$(printf '\200-\377')"
 # could not cross it -- it reported 12 of the 23 lines the census found and read as a pass on
 # the other eleven. A regex that cannot spell its own subject scores it as a non-instance.
 S10_PAT="(grep|sed|awk|sub\\(|match\\(|~|[A-Za-z_][A-Za-z0-9_]*=[\"']).*\\[[^][:space:]]*[${S10_HB}][^][:space:]]*\\]"
-S10_SKIP="re\\.compile\\(|^[^:]+:[0-9]+:[[:space:]]*r[\"']"
+S10_SKIP="re\\.[a-z]+\\("
 S10_WHY="a MULTIBYTE character inside a bracket class in a shell, awk, sed or grep expression. Under the C locale -- every CI runner with LANG unset, every \`env -i\` -- the class holds the character's BYTES, not the character: a match lands on its last byte, a strip leaves the other two behind in the extracted value, and the value joins against nothing. Measured: \`[—–-]\` split every \`**Suppresses:**\` id in the suppression-lifetime validator so no SUPPRESSED carve-out existed under \`env -i\`. Spell it as an ALTERNATION -- \`(—|–|-)\`, \`(\\\\.|—)\` -- which is a byte sequence under both locales. The alternation CARRIES a \`|\`: if the expression is later interpolated into a \`sed s|…|…|\`, pick another delimiter (measured: relabel-extension-checks.sh's \`s|(\${anchor_at})|…|\` refused the pattern and wrote nothing)."
 S8_PAT="(show|cat-file -p|ls-tree|archive|diff)[[:space:]]+<[^>]+>:"
 S8_WHY="an UNQUOTED git rev-path in shipped instruction text. A reader who binds the ref to a variable and pastes this into zsh loses the character after the colon: \`:c\` and \`:t\` are history modifiers that consume it, so \`git show \$THEIRS:templates/x\` reports \`fatal: ambiguous argument 'ca1fb6eemplates/x'\` -- and any \`>\` redirect in the same line still creates the target as a 0-byte file that the next command reads and reports on. Render it quoted: \`git show \"<theirs>:<path>\"\`."
