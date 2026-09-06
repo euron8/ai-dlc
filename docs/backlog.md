@@ -4383,6 +4383,15 @@ holds true — it is coincidence today.
 `check-1c-bypass/seed.sh` and an unidentified `core.bare = true` writer. Both are `GIT_DIR`-shaped;
 neither closes the other.
 
+**WHY THIS SITE SHIPPED ALONE, AND THE REASON IS THE HOOK'S POSITION RATHER THAN DIRECT
+INVOCATION.** The paragraphs above argue the scrub belongs in the program because direct invocation
+is unprotected — true, but that applies equally to all 42 members of `BL-191`'s class and so does
+not explain why this one shipped first. The asymmetry that does: `validate-claude-rules.sh` is
+dispatched at `.githooks/pre-push:129`, **734 lines above the scrub at :863**, making it the one
+site the hook does not protect. The fixtures in `BL-191` ARE protected on the hook path, confirmed
+by the 14-program differential. This site is reachable through the gate every push goes through;
+they are reachable only by hand.
+
 **The wider class is `BL-191`, deliberately filed separately** so this entry stays closable.
 
 verify: sh f=scripts/validate-claude-rules.sh; [ -f "$f" ] || exit 9; awk 'BEGIN{c=0} /^unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY$/{c=1} /^[^#]*git (ls-files|init|add)/{if(!c) exit 1} END{exit !c}' "$f"
@@ -4406,6 +4415,26 @@ Stronger form of the same partition: those same 3 are the **only** files of the 
 `GIT_*` repository variable at all (control: 44 of 45 mention `mktemp`, 0 mention an absent token).
 So 42 of 45 depend wholly on a caller having scrubbed. At fixture granularity: 193 suite
 directories, 191 with a `run.sh`; **40 run `git init`** and 55 run any git write verb.
+
+**THE POPULATION IS NOT "SCRIPTS THAT CAN CLOBBER" BUT "SCRIPTS THAT CAN CLOBBER WHILE THEIR OWN
+GUARD REPORTS INTACT", AND THAT DISTINCTION IS THE ENTRY'S MOST REUSABLE PART.** `git init` under an
+exported `GIT_DIR` **silently succeeds without creating a repository in the target directory** —
+measured directly: `.git` absent afterwards, exit 0, no diagnostic. A victim directory seeded that
+way is not a repository, so every subsequent reading of it describes the OUTER repo instead. Measured
+on the first version of `BL-190`'s own `m12` arm: the outer index went 17 to 9, and `v_before` and
+`v_after` both read that outer repo, which the seed had just overwritten to exactly 9 — so
+`v_after -eq v_before` held **by construction rather than by measurement**, and the arm printed
+`caller's index intact at 9` over the wreckage while the fixture exited 0. A count guard cannot
+catch it; both readings are byte-identical to correct ones.
+
+**So the failure mode is one level worse than a clobber: a script that clobbers, carrying an arm
+pointed at exactly that, returning a green verdict COMPUTED FROM THE DAMAGE.** Any of the unscrubbed
+scripts that later gains an index-integrity assertion reproduces it unless the victim is seeded under
+a scrub AND its repository-ness asserted rather than assumed — `[ -d "$victim/.git" ]`, which `m12`
+and `m12b` now both carry, driven both ways: it fires in the armed world and stays quiet in the
+scrubbed one. Without that sentence here the next author writing such an arm writes the broken one
+again. The remedy precedent is `prepush-worktree-env-scrub/run.sh:65`, whose header states the reason
+verbatim.
 
 **THE HOOK CHANNEL IS FINE AND IS NOT WHAT THIS ENTRY IS ABOUT.** An index-keyed differential over
 all 14 programs dispatched above the distribution hook's scrub, against a sandbox clone with a real

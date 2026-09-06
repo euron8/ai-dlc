@@ -248,7 +248,23 @@ mkdir -p "$victim"
   && for i in 1 2 3 4 5 6 7 8 9; do printf 'x\n' > "f$i.txt"; done \
   && git add -A >/dev/null 2>&1 )
 v_before="$( ( cd "$victim" && git ls-files | wc -l ) | tr -d ' ' )"
-if [ "$v_before" -ne 9 ]; then
+# THE VICTIM MUST BE A REPOSITORY OF ITS OWN, AND THE COUNT GUARD BELOW CANNOT ESTABLISH THAT.
+# MEASURED, on the first version of this arm: seeded while the environment already carried an
+# exported GIT_DIR, `git init -q .` silently succeeded WITHOUT creating a `.git` here, so both
+# readings described the OUTER repository -- which this seed had just overwritten to exactly 9
+# entries. `v_after -eq v_before` then held BY CONSTRUCTION: the 9 in "caller's index intact at
+# 9" was the count this arm wrote, read back, while 17 entries of the real caller's index were
+# destroyed. The fixture printed PASS. The `-ne 9` guard cannot catch it -- it reads 9 either way,
+# and both readings are byte-identical to correct ones.
+#
+# This is the arm's own subject turned on the arm: a script that clobbers, carrying a check
+# pointed at exactly that, returning a green verdict COMPUTED FROM THE DAMAGE. Anyone adding an
+# index-integrity assertion to another fixture reproduces it unless the victim is seeded under a
+# scrub and its repository-ness asserted rather than assumed.
+if [ ! -d "$victim/.git" ]; then
+  note 'FIXTURE BROKEN: m12 victim has no .git -- the seeding git init was redirected, so v_before/v_after describe another repository and any "intact" verdict is computed from the damage.'
+  rc=1
+elif [ "$v_before" -ne 9 ]; then
   note "FIXTURE BROKEN: m12's victim repo seeded $v_before entries, expected 9. The arm below cannot discriminate."
   rc=1
 else
