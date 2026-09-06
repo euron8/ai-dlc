@@ -15,6 +15,68 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.515.0] - 2026-09-06
+
+### `BL-176` — a gate-adjudication verdict is bound to the dispatch that produced it, and a verdict at a nonce no dispatch follows may convict but never acquit
+
+Nothing bound a verdict file to a dispatch: `validate-gate-adjudication.sh` anchored freshness
+on the filename stem matching the in-file `gate_nonce`, both written by whoever wrote the file,
+and `ai-dlc-gate-remediation-guard.sh` picked the live pass by lexical stem order, which a
+hand-chosen round timestamp wins. The reference consumer's `planning-20260902T160000Z` is that
+file, and both readers accepted it.
+
+**The filed remedy is refuted by its own subject.** Joining `adjudicator_agent_id` against the
+spawn ledger matches 92 of the consumer's 193 conforming verdicts, the round-nonce file's id is
+one of the 92 — a real dispatched agent wrote it, through the Write tool, at 14:12Z under a
+nonce of 16:00Z — and the field is free-form prose in most of the rest. What discriminates is
+ORDER, in timestamps only a hook writes: the nonce is minted at gate entry before the dispatch,
+so on a real pass the work postdates it. Over the 137 verdicts after the spawn ledger's first
+row the write follows the nonce by 41s–4002s on 93 and precedes it on 9, zero overlap; 11 nonces
+carry `seconds == 00` against 3.2 expected. The class is nine files, not one.
+
+The guard's arm 2 now records `{v, ts, stem, agent_id, session, tool}` to
+`gate-adjudication/.verdict-writes.jsonl` when the harness attributes a verdict write to a
+dispatched agent — `ts` from the clock and `agent_id` from the harness, neither from the tool
+input. A new arm 7a there and a `dispatch_binding()` in the validator bind a verdict by a write
+row for its stem at or after the nonce, or by a `gate-adjudicator` spawn-ledger dispatch within
+900s after it. The window is measured over the consumer's 137 post-epoch verdicts (p50 21s,
+largest sound gap 217s, 18 gaps above 900s which are exactly the unbound set — about 4× of
+margin, not the 15× the first cut claimed from a subset) and is a hard constant in both
+readers, because overridable from the environment a value of 10^9 bound every forged nonce to
+the next real dispatch and passed the receipt and all three fixtures. A nonce predating both
+ledgers is `exempt`; neither ledger existing is `nocorpus`. The posture is monotone: an
+unbound verdict's own FAILs still count, a clean unbound pass falls back to the newest bound
+one, and when NO pass is bound it falls back to the newest pass that records a FAIL — the
+first cut fell through to ALLOW there, which acquitted a forged clean pass beside an unbound
+failing one with no flow-log event, measured on a three-tree differential by the batch-63
+adversary. The spawn ledger is a guarded root now: a denied lead could rewrite it with Write
+and one hand-written `gate-adjudicator` row inside the window lifted the deny. The validator
+exits 1 on an unbound verdict in adjudicate mode with the order requirement in the remedy.
+
+**Stated limits, in the arm's header and the entry.** The arm catches a nonce minted in its
+own FUTURE — the measured class — and not forgery as such: a lead that mints the nonce at now,
+dispatches any gate-adjudicator (the spawn ledger's `role` is read from the lead's own
+dispatch prompt), and writes the verdict itself is `bound-dispatch` and indistinguishable
+from a real pass; a forged clean verdict at a nonce 30s before a real dispatch allows. Through
+Bash the lead can rewrite both ledgers, as it can every artifact the guard reads. Enumerated
+false-refusal set on the consumer: 18 `unbound` — nine the defect class by transcript write
+events, 14 legitimate by `generated_at`, a lead-written field; the two disagree on five — all
+older than the newest bound pass, so no outcome moves there today: the live pass is
+`bound-dispatch`, the validator exits 0 on it with the real ledgers, and the forged file blocks
+as the control. Going forward a Bash-written verdict whose dispatch row is missing or more than
+900s late is refused at the cost of one re-run of the gate; at least six Bash-written verdicts
+exist in the consumer's history.
+
+Fixture `gate-adjudication` gains thirteen binding arms, seeded with an epoch row two weeks
+before the nonce because a one-row ledger made every "binds" arm pass by exemption rather than
+by binding; `gate-remediation-deny` gains thirteen arms and six mutants (the order half of the
+window dropped, the `agent_id` requirement dropped, the arm made unreachable, the write row
+made unable to bind, the window unbounded above, the no-bound fall-through restored), each
+scored on a world it must move and one it must not, with `stale-then-clean` holding that the
+arm's subject is the ledger and not the second verdict. BL-176's receipt refuses the name join
+and a `gate_nonce == stem` join; it accepts a window-only implementation that the fixture
+kills, and the entry says so.
+
 ## [0.514.0] - 2026-09-06
 
 ### `BL-171` — Check 26's validator verifies each in-force suppression's operator citation against the transcript corpus before the entry can cover a FAIL, and fails closed with no corpus
