@@ -58,12 +58,16 @@
 # DECISION ORDER (first match wins)
 #   0. jq absent                     -> allow (nothing can be parsed; see posture)
 #   1. no pipeline snapshot          -> allow (not an ai-dlc session)
-#   2. payload carries agent_id      -> allow (a dispatched teammate; THE remediator)
+#   2. payload carries agent_id      -> RECORD the write, then allow (a dispatched teammate;
+#                                       THE remediator, and the only event that names a writer)
 #   3. tool is not an edit           -> allow
 #   4. no conforming verdict file    -> allow (no gate has ever run here)
-#   5. newest pass records no FAIL   -> allow (the gate is not in remediation)
+#   5. newest pass records no FAIL   -> carry on to 7a; it is 7a that decides whether that
+#                                       clean pass is entitled to clear the deny
 #   6. target is in the permitted set-> allow (Rule 28(a); enumerated below)
 #   7. target is outside the guarded roots -> allow
+#  7a. the clean newest pass is bound to a dispatch -> allow (the gate really is not failing);
+#      UNBOUND -> fall back to the newest BOUND pass and adjudicate on that instead
 #  7b. every live FAIL is under an in-force SUPPRESSED entry
 #                                    -> allow, and log GATE_REMEDIATION_SUPPRESSED
 #   8. a bound repair record exists  -> allow, and log GATE_REMEDIATION_LIFTED
@@ -172,7 +176,10 @@
 # OUTPUT
 # - Appends to: _bmad-output/pipeline-continuation-log.md
 #   (GATE_REMEDIATION_DENIED / GATE_REMEDIATION_LIFTED / GATE_REMEDIATION_SUPPRESSED /
-#    GATE_STATE_UNADJUDICABLE)
+#    GATE_STATE_UNADJUDICABLE / GATE_VERDICT_UNBOUND)
+# - Appends to: _bmad-output/gate-adjudication/.verdict-writes.jsonl (arm 7a's own record;
+#   durable, because it is evidence about a pass and is read by
+#   `validate-gate-adjudication.sh` at the gate as well as by this hook)
 # - Rewrites: _bmad-output/.gate-remediation-in-force (arm 7b's one-line-keyed cache;
 #   declared transient in schemas/pipeline-state-paths.json, so it renders into the
 #   consumer's .gitignore and is never committed)
@@ -259,6 +266,13 @@ SNAPSHOT_FILE="${LOG_DIR}/pipeline-snapshot.md"
 LOG_FILE="${LOG_DIR}/pipeline-continuation-log.md"
 GATE_DIR="${LOG_DIR}/gate-adjudication"
 STEER_SCRIPT="${PROJECT_DIR}/scripts/ai-dlc/validate-steering-budget.sh"
+# The two records arm 7a joins on. Neither is written from the lead's own input:
+# `ts` in both comes from `date -u` inside a hook, and `agent_id` in the write
+# ledger is the harness's attribution of a tool call to a dispatched agent.
+WRITE_LEDGER="${GATE_DIR}/.verdict-writes.jsonl"
+SPAWN_LEDGER="${LOG_DIR}/spawn-ledger.jsonl"
+# Seconds. The B2 arm's only constant, and it is picked by measurement -- see arm 7a.
+DISPATCH_WINDOW_S="${AI_DLC_GATE_DISPATCH_WINDOW_S:-900}"
 
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
@@ -271,6 +285,78 @@ log_event() { # <event> <line>...
     for l in "$@"; do echo "- ${l}"; done
     echo ""
   } >> "$LOG_FILE"
+}
+
+# THE VERDICT-WRITE LEDGER -- the one place the harness says WHO wrote a verdict file.
+# A PreToolUse payload carries `agent_id` exactly when a DISPATCHED agent is making the call
+# (arm 2 already reads that field for that meaning). The lead's own calls carry none, so a row
+# here cannot be produced by the lead typing a filename: it is written from the harness's
+# attribution and from `date -u`, never from the tool input's contents.
+#
+# WHAT IT ATTESTS AND WHAT IT DOES NOT. PreToolUse fires BEFORE the write, so a row is a record
+# of a dispatched agent ASKING to write that stem -- intent, not completion -- and a lead that
+# afterwards overwrites the same stem leaves no second row. That is the same honest floor arm 8
+# declares for the repair record, for the same reason: this hook can prove a dispatch touched
+# the path and cannot prove authorship of the bytes. What it removes is the case BL-176's
+# subject is made of, where nothing at all binds the file to any dispatch.
+record_verdict_write() { # $1 file_path -- silent no-op unless this is a verdict write
+  case "$TOOL_NAME" in Edit|Write|MultiEdit) ;; *) return 0 ;; esac
+  case "$1" in
+    */${STATE_DIR_NAME}/gate-adjudication/*.verdict.json) ;;
+    ${STATE_DIR_NAME}/gate-adjudication/*.verdict.json) ;;
+    *) return 0 ;;
+  esac
+  _rvw_stem="$(basename "$1" .verdict.json)"
+  # Same conforming-stem filter the pick uses. A non-conforming name is not a pass and must
+  # not seed a row that a later, differently-named file could be read against.
+  case "$_rvw_stem" in
+    *-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
+    *) return 0 ;;
+  esac
+  mkdir -p "$GATE_DIR" 2>/dev/null || return 0
+  jq -nc --arg ts "$TIMESTAMP" --arg stem "$_rvw_stem" --arg agent "$AGENT_ID" \
+         --arg session "${SESSION_ID:-}" --arg tool "$TOOL_NAME" \
+     '{v: 1, ts: $ts, stem: $stem, agent_id: $agent, session: $session, tool: $tool}' \
+     >> "$WRITE_LEDGER" 2>/dev/null || true
+}
+
+# THE BINDING QUERY. One jq invocation answers both questions arm 7a asks -- the live stem's
+# status and the newest stem that is NOT unbound -- because a per-stem shell loop would be one
+# jq per verdict and the reference consumer holds 195 of them.
+# Reads the stem list on stdin; prints exactly two lines, `live:<status>` and `bound:<stem>`.
+BIND_PROG='
+def ep(s): (s | strptime("%Y-%m-%dT%H:%M:%SZ") | mktime);
+def epn(s): (s | strptime("%Y%m%dT%H%M%SZ") | mktime);
+def nts(st): (if (st|length) < 16 then null else (try epn(st[-16:]) catch null) end);
+[inputs | select(length > 0)] as $stems
+| [ $sl[] | select(type == "object") | select(.ts | type == "string")
+    | (try ep(.ts) catch empty) ] as $SALL
+| [ $sl[] | select(type == "object") | select((.role // "") == "gate-adjudicator")
+    | select(.ts | type == "string") | (try ep(.ts) catch empty) ] as $G
+| [ $wl[] | select(type == "object") | select(.ts | type == "string")
+    | (try ep(.ts) catch empty) ] as $WALL
+| (($SALL + $WALL) | min) as $EPOCH
+| def status(st):
+    (nts(st)) as $N
+    | if $N == null then "unbound-malformed"
+      elif $EPOCH == null then "nocorpus"
+      elif $N < $EPOCH then "exempt"
+      elif ([ $wl[] | select(type == "object") | select(.stem == st)
+              | select((.agent_id // "") != "") | select(.ts | type == "string")
+              | (try ep(.ts) catch empty) | select(. >= $N) ] | length) > 0
+        then "bound-write"
+      elif ([ $G[] | select(. >= $N and . <= ($N + $win)) ] | length) > 0
+        then "bound-dispatch"
+      else "unbound" end;
+  "live:" + status($live),
+  "bound:" + ([ $stems[] | select(status(.) | startswith("unbound") | not) ]
+              | if length == 0 then "" else (max_by(nts(.))) end)
+'
+verdict_binding() { # $1 live stem; stem list on stdin -> two lines, or nothing on a tool error
+  _vb_wl="$WRITE_LEDGER"; [ -f "$_vb_wl" ] || _vb_wl=/dev/null
+  _vb_sl="$SPAWN_LEDGER"; [ -f "$_vb_sl" ] || _vb_sl=/dev/null
+  jq -Rrn --slurpfile wl "$_vb_wl" --slurpfile sl "$_vb_sl" \
+          --argjson win "$DISPATCH_WINDOW_S" --arg live "$1" "$BIND_PROG" 2>/dev/null
 }
 
 # --- 0. jq. Everything below parses JSON; without it nothing can be adjudicated.
@@ -298,7 +384,12 @@ FP=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
 # --- 2. A dispatched teammate. THE WHOLE POINT: the remediator edits freely.
 # `agent_id` is the harness's own discriminator; `ai-dlc-context-sensor.sh:160`
 # reads exactly this field for exactly this question. Absent == the lead.
-[ -z "$AGENT_ID" ] || exit 0
+# The allow is unchanged; on the way out it RECORDS, because this is the only event in the
+# harness that names an agent and a file path in the same payload.
+if [ -n "$AGENT_ID" ]; then
+  record_verdict_write "$FP"
+  exit 0
+fi
 
 # --- 3. Only edits.
 case "$TOOL_NAME" in Edit|Write|MultiEdit) ;; *) exit 0 ;; esac
@@ -306,7 +397,7 @@ case "$TOOL_NAME" in Edit|Write|MultiEdit) ;; *) exit 0 ;; esac
 
 # --- 4. Which pass is live? Filter inside the pick; order by nonce, never mtime.
 [ -d "$GATE_DIR" ] || exit 0
-LIVE_TS=""; LIVE_VERDICT=""; LIVE_NONCE=""
+LIVE_TS=""; LIVE_VERDICT=""; LIVE_NONCE=""; CONFORMING_STEMS=""
 for _f in "$GATE_DIR"/*.verdict.json; do
   [ -f "$_f" ] || continue
   _stem="$(basename "$_f" .verdict.json)"
@@ -315,6 +406,8 @@ for _f in "$GATE_DIR"/*.verdict.json; do
     [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
     *) continue ;;
   esac
+  CONFORMING_STEMS="${CONFORMING_STEMS}${_stem}
+"
   if [ "$_ts" \> "$LIVE_TS" ]; then LIVE_TS="$_ts"; LIVE_VERDICT="$_f"; LIVE_NONCE="$_stem"; fi
 done
 [ -n "$LIVE_VERDICT" ] || exit 0
@@ -332,7 +425,12 @@ if [ "$JQ_RC" -ne 0 ]; then
     "An unreadable verdict must never score as a clean one -- fix or remove the file."
   exit 0
 fi
-[ -n "$FAILED_CHECKS" ] || exit 0
+# NOT an exit any more. An EMPTY fail set is the state arm 7a exists to interrogate -- it is
+# what a forged all-PASS verdict at a later-sorting nonce produces, and exiting here is exactly
+# how that file cleared the lead. The two path filters below are pure `case` statements and
+# cost nothing, so the expensive question is asked only for a guarded path.
+[ -n "$FAILED_CHECKS" ] || LIVE_CLEAN=1
+LIVE_CLEAN="${LIVE_CLEAN:-0}"
 
 # --- 6. The permitted set (Rule 28(a)). First match wins; enumerated in the header.
 case "$FP" in
@@ -361,6 +459,98 @@ case "$FP" in
   */docs/*|docs/*) GUARDED=1 ;;
 esac
 [ "$GUARDED" -eq 1 ] || exit 0
+
+# -----------------------------------------------------------------------------
+# 7a. THE DISPATCH BINDING -- an UNBOUND verdict may CONVICT but never ACQUIT.
+# -----------------------------------------------------------------------------
+# WHAT IT CATCHES. The pick above orders passes by nonce and nothing else, and the schema
+# requires only that the nonce equal the filename stem -- both of which the lead writes. A file
+# assembled by hand at a round timestamp therefore sorts above every real pass and BECOMES the
+# live verdict; if it records no FAIL, the exit at arm 5 cleared the lead of a gate that is
+# still failing. That file exists: the reference consumer's
+# `gate-adjudication/planning-20260902T160000Z.verdict.json`.
+#
+# THE JOIN KEY, AND WHY IT IS NOT A NAME. `adjudicator_agent_id` is the obvious key and it does
+# not work. Measured over the reference consumer's 193 conforming verdicts: it matches a
+# spawn-ledger `name` for 92, and the round-nonce file's id is one of the 92 -- a real
+# dispatched agent, named correctly, whose own transcript shows it WROTE the file. The field is
+# also free-form in practice ("gate-adjudicator (fresh dispatch by team-lead)",
+# "MERGED: gate-adjudicator-s307-deploy", "gate-adjudicator@planning-20260810T172728Z"), so a
+# name join both accepts the subject and refuses a hundred legitimate passes.
+#
+# What separates that file is TIME, and time is the half no lead writes. The nonce is minted at
+# gate ENTRY, before the dispatch, so on every legitimate pass the work happens AFTER the nonce.
+# On the round-nonce file the adjudicator was dispatched at 13:57:46Z and wrote at 14:12:35Z
+# under a nonce of 16:00:00Z -- the nonce is 108 minutes into its own future. The forgery that
+# MATTERS has to be in that direction: to win the pick it must sort above the newest real pass,
+# which is roughly now, so it must postdate the work that produced it.
+#
+#   B1  a `.verdict-writes.jsonl` row for THIS stem, agent_id non-empty, ts >= nonce.
+#   B2  a spawn-ledger `gate-adjudicator` dispatch with nonce <= ts <= nonce + window.
+#   EXEMPT  the nonce predates the earliest row in either ledger -- pre-migration, unknowable,
+#           and reported as bound so installing this changes no verdict already on disk.
+#
+# B2 IS THE COMPATIBILITY ARM AND IT IS DELIBERATELY WEAK. It is keyed on a role and a window,
+# not on the stem, so it says only "a gate-adjudicator was dispatched just after this nonce".
+# It is here because B1 cannot see a verdict written through Bash: measured on the consumer's
+# own transcript corpus, 105 verdict stems were written with Write/Edit and at least six more
+# through a `python3` heredoc by a dispatched adjudicator, which no PreToolUse Edit matcher
+# observes. Without B2 those six would be refused for using a different tool.
+# ITS EXEMPTION MUST NOT COVER THE ARM'S OWN SUBJECT, and does not: measured, no
+# gate-adjudicator dispatch falls in [16:00:00Z, +15m) for the round-nonce file, and the
+# fixture asserts that directly.
+#
+# THE WINDOW IS 900s AND THE NUMBER IS MEASURED, NOT CHOSEN. Over the 44 post-epoch verdicts B1
+# cannot speak for, the gap from nonce to the next gate-adjudicator dispatch is <= 60s for the
+# 36 whose ordering is sound; every gap above 169s belongs to a verdict whose own write predates
+# its nonce. 900 sits 15x above the largest sound gap and below the smallest unsound one.
+#
+# THE MEASURED FALSE-REFUSAL SET IS NINE, ENUMERATED, AND NONE OF THEM CAN BE LIVE. Running this
+# predicate over the consumer's 195: 119 bound, 56 exempt, 2 non-conforming (already filtered by
+# the pick and already rejected by the validator's envelope), 18 unbound. Nine of the eighteen
+# are the entry's own defect class -- a nonce minted after the work, four of them at a round
+# minute. The other nine are legitimate passes written before this ledger existed, so B1 has no
+# row for them and their dispatch sits outside the window. All nine are older than the newest
+# bound pass, so the pick reaches none of them and the arm changes no outcome on that tree today.
+#
+# FAIL POSTURE: MONOTONE, WHICH IS WHY IT CANNOT WEDGE. An unbound verdict's own FAILs still
+# count -- the deny stands exactly as before. What it may not do is CLEAR: an unbound pass with
+# no FAIL falls back to the newest BOUND pass, so the worst a false refusal costs is that the
+# lead stays denied on a FAIL that is genuinely recorded, with the sanctioned remediator exit
+# still open. A jq that errors, an absent ledger pair, or a stem the query cannot rank all leave
+# the verdict treated as bound: undecidable is never a deny.
+if [ "$LIVE_CLEAN" -eq 1 ]; then
+  # An absent ledger is `--slurpfile`d from /dev/null and comes back as `nocorpus`, so there is
+  # no separate cheap path here. One was written and then REMOVED: an interleaved three-rep A/B
+  # of the whole guard fixture with and without it read 7.94/8.14/7.84 against 7.84/7.91/7.94,
+  # a spread wider than any effect, and a branch whose removal changes nothing is not
+  # load-bearing. The same interleaving against the pre-arm revision reads 9.25s vs 8.50s mean
+  # -- this arm costs nothing this fixture can resolve.
+  BIND_OUT="$(printf '%s' "$CONFORMING_STEMS" | verdict_binding "$LIVE_NONCE")"
+  LIVE_BIND="$(printf '%s\n' "$BIND_OUT" | sed -n 's/^live://p' | head -1)"
+  BOUND_STEM="$(printf '%s\n' "$BIND_OUT" | sed -n 's/^bound://p' | head -1)"
+  case "${LIVE_BIND:-}" in
+    unbound|unbound-malformed) ;;
+    *) exit 0 ;;   # bound, exempt, nocorpus, or the query failed -- unchanged behaviour
+  esac
+  [ -n "$BOUND_STEM" ] || exit 0
+  SUBST_VERDICT="${GATE_DIR}/${BOUND_STEM}.verdict.json"
+  [ -f "$SUBST_VERDICT" ] || exit 0
+  FAILED_CHECKS="$(jq -r '[.verdicts[]? | select(.verdict=="FAIL") | .check_id] | join(" ")' \
+                     "$SUBST_VERDICT" 2>/dev/null)" || FAILED_CHECKS=""
+  [ -n "$FAILED_CHECKS" ] || exit 0
+  UNBOUND_NOTE="$(basename "$LIVE_VERDICT") is the newest pass by nonce and NO dispatch record binds it"
+  log_event GATE_VERDICT_UNBOUND \
+    "$UNBOUND_NOTE." \
+    "It records no FAIL, so it would have cleared the Rule 28 deny; it may not." \
+    "Adjudicating on ${BOUND_STEM} instead, whose FAILs are: ${FAILED_CHECKS}." \
+    "A verdict binds by a .verdict-writes.jsonl row for its own stem, or by a gate-adjudicator" \
+    "dispatch within ${DISPATCH_WINDOW_S}s AFTER its nonce. A nonce minted after the work has neither."
+  LIVE_VERDICT="$SUBST_VERDICT"
+  LIVE_NONCE="$BOUND_STEM"
+else
+  UNBOUND_NOTE=""
+fi
 
 # -----------------------------------------------------------------------------
 # 7b. THE SUPPRESSED CARVE-OUT -- a FAIL the operator has dispositioned is a FAIL
@@ -730,7 +920,11 @@ fi
 # -----------------------------------------------------------------------------
 # DENY. The gate is failing and you are the lead.
 # -----------------------------------------------------------------------------
-REASON="AI/DLC Rule 28: GATE REMEDIATION IS DELEGATED. Gate pass \`${LIVE_NONCE}\` recorded FAIL on check(s) \`${FAILED_CHECKS}\` and no repair has been dispatched, so \`${TOOL_NAME}\` on \`${FP}\` is DENIED.${SUPP_NOTE}
+UNBOUND_CLAUSE=""
+[ -n "${UNBOUND_NOTE:-}" ] && UNBOUND_CLAUSE="
+
+THE NEWEST FILE IN THE GATE DIRECTORY IS NOT THIS PASS. ${UNBOUND_NOTE}, so it was not allowed to clear this deny -- a verdict binds by a \`.verdict-writes.jsonl\` row for its own stem written when a dispatched agent wrote it, or by a \`gate-adjudicator\` dispatch recorded within ${DISPATCH_WINDOW_S}s AFTER its nonce. A nonce minted after the work it reports has neither. If that file is a real pass, re-run the gate: mint the nonce at gate ENTRY, then dispatch."
+REASON="AI/DLC Rule 28: GATE REMEDIATION IS DELEGATED. Gate pass \`${LIVE_NONCE}\` recorded FAIL on check(s) \`${FAILED_CHECKS}\` and no repair has been dispatched, so \`${TOOL_NAME}\` on \`${FP}\` is DENIED.${SUPP_NOTE}${UNBOUND_CLAUSE}
 
 You are the lead. You own PASS/FAIL, the disposition and the escalation. You do not own the edit.
 
