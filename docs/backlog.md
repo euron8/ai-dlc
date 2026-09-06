@@ -4026,3 +4026,148 @@ until one is measured to have moved a verdict on the consumer.
 
 verify: sh h=core/hooks/ai-dlc-continue.sh; [ -f "$h" ] || exit 9; grep -q 'PUSH_OK=' "$h" || exit 9; grep -qE 'git -C "\$PROJECT_DIR" (status --porcelain|diff --quiet)' "$h" && exit 0; exit 1
 
+
+## BL-185 — Rule 25(a) names a trim move's destination file but not the header the moved block carries, so the one rotator that bounds the one unbounded history file loses its cut points
+
+**Provenance:** `PC-S308-RULE-25A-HISTORY-MOVE-HAS-NO-DEFINED-HEADER-FORMAT`, filed by the
+reference consumer 2026-09-06. Its own two `derived` blocks reproduce against this tree; the
+`[MOVED …]` convention it names appears NOWHERE in `core/` or `scripts/` (rc=1, against a
+control of `grep -rn "moved" core/skills/ai-dlc/SKILL.md` rc=0).
+
+Rule 25(a) (`core/skills/ai-dlc/SKILL.md:1181-1195`) specifies WHAT moves (superseded content,
+verbatim, cut-and-paste) and WHERE (the named `-history.md`/`-archive.md` sibling). It states no
+header for the moved block — no marker, no timestamp, no source field.
+
+**THE CONSEQUENCE IS NOT DOCUMENTATION DRIFT. IT DISABLES THE ROTATOR'S GRANULARITY.**
+`core/scripts/rotate-snapshot-archive.sh` picks ONE cut point — the Nth-from-last `^## ` line —
+and never interprets a heading (`:48`). A moved block headed any other way is not a cut point.
+Differential on two synthetic trees, identical content and line counts, sides asserted differing
+before either was read:
+
+```
+A  12 blocks headed `## MOVED …`   -> exit 0, rotates, 12 cut points
+B  same 12 as `[MOVED …]`          -> exit 1, REFUSED: "not one '## ' heading,
+                                      so there is no cut point"
+```
+
+The refusal is correct behaviour and is reported, not silent — but nothing reports the state
+that PRODUCES it. Measured on the reference consumer's live
+`_bmad-output/pipeline-snapshot-history.md`: 13 `^## ` headings and 11 `^[MOVED` brackets, and
+**all 11 brackets sit inside the single heading entry at line 830**, whose span is 467 lines
+against a next-largest of 175. The rotator sees 13 entries where 24 moves happened; 11 are not
+independently cuttable and travel as one lump. At `--keep-entries 1` the lump still moves whole.
+
+**The false-positive set of the obvious remedy is the whole corpus, which is why the fix is a
+FORMAT and not a scan.** Across the consumer's 110 tracked `-history`/`-archive` `.md` files,
+exactly one carries a bracket marker; the other 109 carry zero. This tree carries zero of either.
+So a check keyed on marker presence fires everywhere. The fix states the header in Rule 25(a) and
+binds it where the move is DIRECTED, not by scanning destinations.
+
+**The filed receipt was unsatisfiable in three independent ways and is replaced.** It named
+`core/SKILL.md`, which resolves nowhere here (`/SKILL.md$` matches 3 tracked paths, so the
+engine's basename fallback refuses on ambiguity); it used `theirs_has` where an ABSENCE needs
+`theirs_lacks`; and its anchor was a regex, which `all_present()` at
+`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:611` matches with `grep -qF` — literal,
+deliberately (`:604-606`). Proved by construction: a correct fix written into a probe file scores
+literal 0 / regex 1, so the receipt reports a shipped fix as unshipped.
+
+**And the receipt below was itself repaired before it landed.** Its first form closed the awk
+range on `(b) Sprint-scoped`, a string that does not exist — Rule 25's real subsections are
+`(a) Current-state live`, `(b) Slice-read large sectioned artifacts`, `(c) Rotate append-only
+logs`, `(d) Size budgets`. An unmatched closer runs the range to EOF: 656 lines selected instead
+of 42, and a `[MOVED ` token planted anywhere below Rule 25 scored as a hit. Both directions
+probed on the repaired form: 0 today, 1 against a seeded fix, and 0 against a near-miss that
+places the marker prose OUTSIDE 25(a).
+
+verify: sh S=$(awk "/\(a\) Current-state live/,/\(b\) Slice-read large sectioned/" core/skills/ai-dlc/SKILL.md | grep -cF "[MOVED ") || S=0; [ "$S" -gt 0 ]
+
+## BL-186 — format steering is attached at three write sites and absent at twenty-one, and a rule telling the lead to LOCATE a format is discharged by looking when no format exists
+
+**Provenance:** `PC-S308-WRITE-FORMAT-STEERING-APPLIED-AD-HOC-NOT-UNIVERSALLY`, filed by the
+reference consumer 2026-09-06. Whether a write gets format steering depends on which core author
+added a `READ AND FOLLOW` sentence at that call site, not on any property of the write.
+
+Census over `core/skills/ai-dlc/**` and `core/rules/**`, positive control being Rule 12's own
+directive at `SKILL.md:366`: **3 of 24** shared append-only artifacts carry steering
+(`docs/escalations/pending.md`, `_bmad-output/audit-anchors.md`,
+`implementation-artifacts/gate-log.md`). **21 carry none.** Three of those 21
+(`layer-adjudication-register.jsonl`, `validation-cycle-log.md`, `arm-log.jsonl`) are declared
+`transient: false` with a named producer and are mentioned in the skill corpus ZERO times — not
+unsteered writes but unmentioned ones, inside an enforcer's reach and outside a prose rule's.
+
+`core/rules/upstream-routing.md` states what a push candidate must carry and mentions `verify:`
+**0** times (control: `push-candidate` 6 in the same file) — the one line the closer parses. The
+entry grammar IS written down, at `ledger-reverify.sh:102-113`, inside the CONSUMING parser; a
+file that mentions a grammar is not a file the filer is steered to.
+
+**THE REMEDY CHANGED ON MEASUREMENT, AND THIS IS THE ENTRY'S LOAD-BEARING FINDING.** The filed
+shape — a duty to LOCATE a format before writing — is discharged by looking. Built as
+`B-wrong-3`: a competently written rule with a valid carrier, fully vacuous, firing on nothing
+across the bucket where no format exists, and a prose-keyed receipt scored it CLOSE-CANDIDATE. No
+rewording separates a vacuous locate-duty from a real one, because they are spelled identically.
+So the duty is that a format EXISTS and is DECLARED, which is the only version with a subject a
+checker can address, and the receipt keys on a program rather than on prose.
+
+**The population is derivable in both directions, so this is an enforcer and not prose.**
+`core/schemas/pipeline-state-paths.json` is bound by **I95**
+(`scripts/validate-enforcement-map.sh:5913`), which fails closed and whose subject is the
+PARTITION. Join key `transient: false` -> **20 entries**; the schema's own text calls `name` "the
+JOIN KEY against that grammar's output". **Stated bound:** the four Rule 25(a) planning histories
+(`prd-history.md`, `product-brief-history.md`, `architecture-history.md`,
+`carry-over-backlog-archive.md`) are declared 0 times there (control: `pipeline-snapshot-history.md`
+1) because they nest under `planning-artifacts`, declared only at top level. That is a schema
+widening the arm must state, not a missing join.
+
+**Ships AFTER `BL-185`, and the order is a finding rather than a preference.** This rule alone
+reports SATISFIED across every member of the bucket where no format is defined — a check that
+cannot fire, shipped as a rule. `BL-185` defines the one format this rule would otherwise send a
+lead to look for and not find.
+
+**Separability from `BL-185`, scored in both directions across two spellings of each fix:**
+neither entry's receipt is closed by the other's fix. `BL-185` closes 1 artifact and cannot reach
+the other 20 — `is_archive()` at `core/scripts/validate-artifact-budget.sh:453-455` excludes every
+`*-history.md`/`*-archive.md` before any measurement, and only one `BUDGETS` row carries `trim`.
+The candidate's own claim to "generalize" its sibling is REFUTED.
+
+verify: sh K=0; for s in core/scripts/*.sh; do case "$(basename "$s")" in validate-write-format*|audit-shared-artifact-format*) K=$((K+1));; esac; done; [ "$K" -gt 0 ]
+
+## BL-187 — Rule 21 says the gate FAILS on a missing step-token citation, no program reads the token, and citation practice decayed to zero across five consecutive sprints unreported
+
+**Found while scoping `BL-186`**, by deriving what already mechanizes `READ AND FOLLOW` before
+proposing anything new. Not filed by the consumer; no `PC-` id.
+
+Rule 21 (`core/skills/ai-dlc/SKILL.md:919-955`) states that each step file carries a
+`STEP_LOADED_TOKEN`, that the gate log entry MUST cite it, and that the **gate FAILS on missing
+token citation** (`:933`).
+
+**Nothing reads it.** Programs under `core/scripts/`, `scripts/`, `.githooks/` and `core/hooks/`
+referencing `STEP_LOADED_TOKEN`: **0**, against a control of 9 validators in `core/scripts/` that
+do read `gate-log`. The single hit anywhere is a COMMENT at `core/hooks/ai-dlc-acknowledge.sh:196`
+— a file that mentions the token, not a reader of it. The stated verification does not exist as a
+program.
+
+**The consequence is measured on the reference consumer's own gate logs**, entries counted by
+`^## ` in the same invocation:
+
+| s246 | s248 | s298 | s299 | s302 | s303 | s304 | s305 | s306 | s307 | live |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 12 | 4 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | **0 of 9** |
+
+s246 and s248 are the positive control: the practice was real and then decayed to nothing across
+five consecutive sprints, with the live log at 0 of 9 entries. Nothing reported it, because
+nothing reads it.
+
+**Scope note, so the fix is not mis-sited.** All **21 of 21** `steps/*.md` carry a token (the
+21st is `steps/_gate-procedures.md:5`, a leading-underscore filename a `steps/*.md` glob matches
+but an eye scanning a listing skips; it is a genuine `READ AND FOLLOW` target at
+`gate-validation.md:161`). The two FORMAT files the existing steering directives point at —
+`escalations.md` and `artifact-path-grammar.md` — carry **0**.
+
+**A token join would ACQUIT this entry's subject and must not be sold as covering `BL-186`.** A
+token proves a file was READ. It cannot distinguish a read from a compliance, a defined format
+from an absent one, or a resolvable pointer from a dangling one, and its population is exactly
+the 3 sites that already have steering. Any arm built here needs a probe asserting it does NOT
+cover the 21 unsteered artifacts, per `mechanism-design.md` — an exemption needs a probe proving
+it does not cover the arm's own subject.
+
+verify: sh n=$(grep -rl "STEP_LOADED_TOKEN" core/scripts/ scripts/ .githooks/ 2>/dev/null | wc -l) || n=0; [ "$n" -gt 0 ]
