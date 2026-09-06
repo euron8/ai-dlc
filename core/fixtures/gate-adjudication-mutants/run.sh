@@ -205,7 +205,7 @@ score "M0 control (unmutated)" validate-gate-adjudication.sh "" \
 # block text offers no reason, because as far as the caller knows there was nothing to apply.
 # --------------------------------------------------------------------------
 score "m1 caller never asks the sibling (rows blanked)" validate-gate-adjudication.sh \
-  "S1 S2b S6-idonly S13 S15" \
+  "S1 S2b S6-idonly S13 S15 S17" \
   '        if [ "$supp_rc" -eq 0 ]; then
             GA_IN_FORCE_STATUS="ok:$ESC"' \
   '        if [ "$supp_rc" -eq 0 ]; then
@@ -244,7 +244,7 @@ score "m2 caller keys on the check id alone" validate-gate-adjudication.sh \
 # restatement the design avoids.
 # --------------------------------------------------------------------------
 score "m3 sibling's lifetime test always true" validate-suppression-lifetime.sh \
-  "S3" \
+  "S3 S17-pre" \
   '        if [ "$elapsed" -le "$expires" ]; then' \
   '        if [ "$elapsed" -le "$expires" ] || [ 1 -eq 1 ]; then' \
   "An expired suppression is listed as in force, so the gate adopts it. Only S3 can see this:
@@ -419,7 +419,7 @@ score "m13 caller asks the sibling on a verdict with no FAIL" \
 # sibling is never invoked at all.
 # --------------------------------------------------------------------------
 score "m10 sibling replaced by 'exit 0'" validate-suppression-lifetime.sh \
-  "S1 S2b S3 S4 S5 S6-idonly S6-mismatch S8 S9 S11 S12 S13 S14 S15" "" "" \
+  "S1 S2b S3 S4 S5 S6-idonly S6-mismatch S8 S9 S11 S12 S13 S14 S15 S17" "" "" \
   "A sibling that emits nothing and exits 0 satisfied a case, which means that case is
   asserting an ABSENCE and would certify a predicate that never ran."
 
