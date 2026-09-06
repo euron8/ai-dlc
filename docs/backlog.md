@@ -4162,7 +4162,12 @@ passed `AI_DLC_PROJECT_ROOT` and no `--gate-metrics` unless the fixture channel
 `AI_DLC_GATE_METRICS` was set; `validate-gate-adjudication.sh`, which passed neither and whose
 comment said the sibling located the timeline "from the same cwd the lead runs verdict.sh
 in"; and the fixtures. Every candidate is now under the resolved root and the "cannot be
-counted" NOTE no longer says to run from the project root. Both callers changed in comment
+counted" NOTE no longer says to run from the project root. That is wider than a reorder,
+and the fixture hand measured the width: the old list carried the flat and `docs/` layouts
+ONLY as cwd-relative candidates, so a consumer keeping its timeline at either got no
+carve-out from any cwd that carried nothing — red on origin/main from this repo's root,
+independently of the cwd defect — and the root-anchored forms of both are new and now
+guarded. Both callers changed in comment
 only: the guard already handed the sibling `AI_DLC_PROJECT_ROOT`, and the gate-adjudication
 caller walks up from the same directory and inherits the same variable, so handing the root
 over explicitly there changed nothing except the unresolvable-root case, where it would have
@@ -4273,3 +4278,28 @@ question needs.
 
 verify: sh R="${RETRO:-core/skills/ai-dlc/steps/retro.md}"; [ -f "$R" ] || R=".claude/skills/ai-dlc/steps/retro.md"; [ -f "$R" ] || exit 9; a=$(grep -n '^#### Rule file audit' "$R" | head -1 | cut -d: -f1); b=$(grep -n '^#### Resident-ordering scan' "$R" | head -1 | cut -d: -f1); [ -n "$a" ] && [ -n "$b" ] && [ "$a" -lt "$b" ] || exit 9; s=$(sed -n "${a},${b}p" "$R"); case "$s" in *UNEXERCISED*) ;; *) exit 1 ;; esac; case "$s" in *"Presence is not exercise"*) ;; *) exit 1 ;; esac; case "$s" in *"nothing in the pipeline can reach it"*) exit 0 ;; esac; exit 1
 
+
+## BL-181 — the suppression-lifetime validator splits a `**Suppresses:**` value on a bracket class holding an em-dash, so under the C locale every suppression names a check "not in the catalog" and the carve-out vanishes
+
+Distribution-internal, no `PC-` id; DEFECT tier — a consumer whose gate or pre-push runs
+with no UTF-8 locale (a CI runner with `LANG` unset, `env -i`) gets no SUPPRESSED carve-out
+at all from the remediation guard, which fails closed, and `validate-suppression-lifetime.sh`
+itself reports `FAIL: **Suppresses:** names '32 …', which is not a check in the catalog` for
+every well-formed entry. Found by the batch-59 fixture hand, which ran the three fixtures
+under `env -i PATH=/usr/bin:/bin bash` as `CLAUDE.md` asks and found all three already red on
+origin/main (10, 10 and a `node absent` abort) before its own arms were added.
+
+`core/scripts/validate-suppression-lifetime.sh:252` trims the check title with
+`sub(/[[:space:]]*[—–-][[:space:]].*$/,"",s)`. Under a UTF-8 locale that class holds three
+characters; under the C locale it holds the seven BYTES of those characters, the match lands
+on the em-dash's last byte, and the id comes back as `32 ` followed by two stray bytes, which
+joins against nothing. That is the "a multibyte character needs an alternation, not a
+bracket class" hazard `tool-hazards.md` names for tool calls, in a tracked file; `I71` covers
+only `\t` in a bracket class and `validate-shell-portability.sh`'s arms do not scan awk
+programs for multibyte classes, so nothing fires. Fix shape: an alternation `(—|–|-)`, then the
+three fixtures driven under `env -i` as the receipt of the whole class (`gate-remediation-deny`
+needs `node` on that PATH before its verdict means anything). Not folded into `BL-178`, whose
+subject is where the timeline is read from; this one is what the entry says, and it fails the
+same way from every cwd.
+
+verify: sh V=$PWD/core/scripts/validate-suppression-lifetime.sh; [ -f "$V" ] || exit 9; W=$(mktemp -d); mkdir -p $W/r; printf 'checks:\n  - id: 16\n    title: a\n  - id: 32\n    title: b\n' > $W/map.yaml; printf '## [S1 gate] [lead] - 2026-05-01T00:00:00Z\n**Status:** SUPPRESSED\n**Suppresses:** [core] 32 — b\n**Expires after:** 3 gates\n**Operator authorization:** 2026-05-01T00:00:00Z | "Override, proceed, file backlog item"\n' > $W/r/pending.md; printf '{"ts":"2026-05-02T01:00:00Z","check":"32","verdict":"FAIL"}\n' > $W/gm.jsonl; a=$(LC_ALL=en_US.UTF-8 AI_DLC_PROJECT_ROOT=$W/r bash $V --in-force --escalations $W/r/pending.md --enforcement-map $W/map.yaml --gate-metrics $W/gm.jsonl 2>&1 >/dev/null); b=$(env -i PATH=/usr/bin:/bin AI_DLC_PROJECT_ROOT=$W/r bash $V --in-force --escalations $W/r/pending.md --enforcement-map $W/map.yaml --gate-metrics $W/gm.jsonl 2>&1 >/dev/null); rm -rf $W; case $a in *"in_force=1 "*) ;; *) exit 9;; esac; case $b in *"in_force=1 "*) exit 0;; esac; exit 1

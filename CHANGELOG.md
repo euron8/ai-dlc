@@ -30,7 +30,9 @@ having been deleted, while passing from any root that carries no metrics file �
 this distribution's own suite never saw it. It fails open too: the installed copy, driven
 over that consumer's live escalations file from a cwd carrying a two-gate timeline, listed
 all 17 of its suppressions in force where its own timeline puts 1. Every candidate is now anchored on the resolved
-root (the shape `validate-snapshot-conservation.sh` already had) and the "cannot be counted"
+root (the shape `validate-snapshot-conservation.sh` already had) — which also gives the flat
+and `docs/` layouts a root-anchored form for the first time, so a timeline kept at either is
+found from any cwd rather than only from the root — and the "cannot be counted"
 NOTE no longer tells the operator to run from the project root. Neither caller changed in
 code: the guard already handed the sibling `AI_DLC_PROJECT_ROOT`, and
 `validate-gate-adjudication.sh`'s comment, which said the sibling read the timeline "from
