@@ -1044,8 +1044,9 @@ prose is itself generated rather than composed.
    region** — a mechanical finding narrated by you is a finding you can drop, and one already was
    (a HARD core-schema drift, twice). After writing the report, run
    `reconcile/emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>`; **it MUST exit 0
-   before the HARD STOP.** A nonzero exit means the region is missing, stale, or was hand-edited —
-   the report is unsound; regenerate and re-emit. This check is not optional, and the operator can
+   before the HARD STOP.** A nonzero exit here means the region is missing, stale, or was hand-edited —
+   the report is unsound; regenerate and re-emit. (Exit 3, `BLOCKERS-RESOLVED`, is a step-7 state
+   and cannot arise at this step, where nothing has been resolved yet.) This check is not optional, and the operator can
    run the same `--verify` to trust any report without re-running the detectors by hand.
 
    Write
@@ -1228,8 +1229,10 @@ prose is itself generated rather than composed.
 
    **Mechanical union gate — the driver, not memory.** `apply` may write only after BOTH hold:
    (1) `reconcile/emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>` exits 0 — the
-   report the operator approved carries a current, complete mechanical region; a nonzero exit means
-   the approval was given without sight of a finding, so STOP and re-emit rather than write; and
+   report the operator approved carries a current, complete mechanical region; exit 1 means
+   the approval was given without sight of a finding, so STOP and re-emit rather than write, and
+   exit 3 means the approval saw findings that have since been resolved — the paragraph after
+   clause (2) says what to do; and
    (2) re-running the blocking list, every `HARD-*` is resolved —
    `reconcile/hard-blockers.sh <dist> <base> <consumer> <theirs>` prints `0 HARD blockers.`, or the
    operator has explicitly accepted each remaining one per-path. This is the gap that shipped a
@@ -1238,7 +1241,7 @@ prose is itself generated rather than composed.
    **Resolving a blocker rewrites the region clause (1) verifies, so clause (1) is re-run AFTER
    the last resolution, on a re-rendered region.** `--stamp readopt` turns a
    `HARD-OVERRIDE-DRIFT-SECTION` row into `OVERRIDE-OK`; a register row removes a
-   `HARD-LAYER-ADJUDICATION-MISSING` row. The blocking-layer gate above requires those resolutions
+   `HARD-LAYER-ADJUDICATION-MISSING` [LC-A1] row. The blocking-layer gate above requires those resolutions
    BEFORE any write, so on every pull that had a blocker the approved report lists findings that no
    longer exist, and `--verify` fails on a region whose only fault is that its blockers were fixed.
    `--verify` says which direction it failed in: it exits **3** with `cause: BLOCKERS-RESOLVED`
@@ -1248,8 +1251,10 @@ prose is itself generated rather than composed.
    exists for. So: resolve every blocker, then re-render the region
    (`reconcile/emit-report.sh <dist> <base> <consumer> <theirs>`) into the report, run `--verify`
    to exit 0, have the operator re-approve it, and only then run `apply.sh`. An `apply.sh` that
-   refuses with `BLOCKERS-RESOLVED` is telling you the report predates your own work, not that the
-   tree is unsafe; do that one re-render and re-run it.
+   refuses with `BLOCKERS-RESOLVED` is telling you the report predates your own work, not that
+   upstream moved. The re-approval is not a formality: a resolution can leave rows the first
+   approval never saw (the refusal lists them as `unseen:`), and the re-rendered region is the
+   only place they get read.
 
    **THE ADJUDICATION LOOP — YOU do the work; the operator APPROVES it.**
 

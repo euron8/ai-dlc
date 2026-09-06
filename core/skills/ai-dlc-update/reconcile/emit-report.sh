@@ -311,13 +311,28 @@ render() {
   bash "$SELF/hard-blockers.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null \
     | sed '/BEGIN GENERATED: hard-blockers/d;/END GENERATED: hard-blockers/d'
 
+  # A DETECTOR THAT DID NOT RUN RENDERS AS REFUSED, NOT AS `none`. Both classifiers exit 0
+  # always when they classified and non-zero only when they could not (usage, an unsourceable
+  # sibling, a consumer root that is not a directory). Inside a pipeline that rc was lost, so a
+  # dead detector rendered the same `none` as a clean one — and, once --verify decides a
+  # mismatch from HARD rows going ABSENT, a dead detector read as a blocker RESOLVED, by name.
+  # The refused line is a row the approval never saw, so --verify treats it as it treats a new
+  # HARD row: UNDECIDED, never BLOCKERS-RESOLVED. A detector that exits 0 having scanned nothing
+  # is not visible here and is the detector's own honesty problem.
+  local ud_rc ld_rc
   sub "Unregistered core drift (consumer in-place edits vs base):"
   ud="$(bash "$SELF/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1!="CORE-OK"{print $1"  "$2}' | sort -u)"
-  none_or "$ud"
+  ud_rc=$?
+  if [ "$ud_rc" -eq 0 ]; then none_or "$ud"; else
+    echo "DETECTOR-REFUSED  unregistered-drift.sh exited ${ud_rc} without classifying, so this section is NOT a finding of 'none'. Run it directly against this consumer to see why: reconcile/unregistered-drift.sh <dist> <base> <consumer> <theirs>"
+  fi
 
   sub "Layer drift (overrides/extensions vs new core):"
   ld="$(bash "$SELF/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' '$1!="EXTENSION-OK"{print $1"  "$2}' | sort -u)"
-  none_or "$ld"
+  ld_rc=$?
+  if [ "$ld_rc" -eq 0 ]; then none_or "$ld"; else
+    echo "DETECTOR-REFUSED  layer-drift.sh exited ${ld_rc} without classifying, so this section is NOT a finding of 'none'. Run it directly against this consumer to see why: reconcile/layer-drift.sh <dist> <base> <theirs> <consumer>"
+  fi
 
   sub "Catalog relabel (extension check-number collisions, incl. NEW-THIS-PULL from theirs):"
   # `#{2,4}`, not a literal `### `: relabel matches headings at h2-h4, so filtering the
@@ -457,14 +472,27 @@ echo "  what the detectors render now. Re-render with emit-report.sh and re-emit
 # `cause:` line so an operator running --verify by hand reads the same answer.
 #
 # KEYED ON THE `HARD-` PREFIX ONLY, which is the contract SKILL.md already binds ("statuses
-# prefixed HARD- must block apply"), never on a list of status names. Under-firing is the safe
-# direction: a mismatch with no HARD row in it, or with a HARD row the operator has NOT seen,
-# reads as (b) and gets the generic message, never a false (c). (a) is decided before (c) because
-# a moved upstream makes every other line incomparable, including the HARD rows.
+# prefixed HARD- must block apply"), never on a list of status names. A mismatch with no HARD row
+# in it, or with a HARD row the operator has NOT seen, reads as (b) and gets the generic message,
+# never (c). (a) is decided before (c) because a moved upstream makes every other line
+# incomparable, including the HARD rows.
+#
+# TWO THINGS (c) DOES NOT SEPARATE, AND NEITHER IS THE UNSAFE DIRECTION. A report hand-edited to
+# ADD a HARD row the detectors never rendered reads (c) too: the approval saw MORE than exists,
+# nothing was hidden from it, and the remedy is the same re-render. And a resolution can leave
+# rows that are NOT HARD and that the approval never saw (a merge that renders
+# OVERRIDE-ANCHOR-UNRESOLVED or OVERRIDE-ASSERTS-SHADOW-SURVIVES, say); (c) still fires, because
+# the HARD rule is the blocking contract, but the cause line COUNTS those rows rather than
+# asserting they do not exist, and the re-approval is where they get read. That is why (c)
+# refuses instead of passing.
 only_render="$(LC_ALL=C comm -23 <(printf '%s\n' "$want" | LC_ALL=C sort) <(printf '%s\n' "$got" | LC_ALL=C sort))"
 only_report="$(LC_ALL=C comm -13 <(printf '%s\n' "$want" | LC_ALL=C sort) <(printf '%s\n' "$got" | LC_ALL=C sort))"
-refs_render="$(printf '%s\n' "$want" | grep -E '^_(base|theirs|stamp)_ ')"
-refs_report="$(printf '%s\n' "$got"  | grep -E '^_(base|theirs|stamp)_ ')"
+# `_base_`/`_theirs_` ONLY. The `_stamp_` line is rendered from the CONSUMER's stamp and moves
+# when the consumer re-stamps, not when upstream does; keyed here it made a moved stamp read as
+# "upstream moved" with both disjuncts false, and pre-empted (c) on a resolved pull. It falls
+# through to the diff and the `unseen:` count like any other non-HARD line.
+refs_render="$(printf '%s\n' "$want" | grep -E '^_(base|theirs)_ ')"
+refs_report="$(printf '%s\n' "$got"  | grep -E '^_(base|theirs)_ ')"
 # One blocker renders TWICE in the region — once in the blocking list (`%-32s %s`) and once in
 # its detector's own section (`STATUS  path`) — so the rows are whitespace-normalised and
 # de-duplicated before counting, and the count names blockers rather than lines.
@@ -473,16 +501,29 @@ gone_rows="$(printf '%s\n' "$only_report" | hard_rows)"
 new_rows="$(printf '%s\n' "$only_render"  | hard_rows)"
 hard_gone="$(printf '%s\n' "$gone_rows" | grep -c '^HARD-')" || hard_gone=0
 hard_new="$(printf '%s\n' "$new_rows"   | grep -c '^HARD-')" || hard_new=0
+# Non-HARD lines the render carries and the approval never saw. Counted, never acquitted — and
+# the LIST is the authority, the count is advisory. A resolution replaces a HARD row with a
+# section's affirmative-empty text (`none`, `0 HARD blockers.`), or with an `-OK` row, or moves a
+# `**section**` header into the diff; measured, a plain resolution and one hiding a real finding
+# both counted 2 until those were excluded, because the finding REPLACED `none` rather than
+# adding to it. So the boilerplate shapes are left out of the count and kept in the list.
+unseen_rows() { grep -Ev '^HARD-|^DETECTOR-REFUSED|^$|^none$|^0 HARD blockers\.$|^\*\*|^[A-Z][A-Z-]*-OK[[:space:]]'; }
+other_new="$(printf '%s\n' "$only_render" | unseen_rows | grep -c .)" || other_new=0
+# A detector that REFUSED on this render is a HARD row's absence with no one to vouch for it: the
+# rows it would have rendered are simply not there, which is exactly what (c) keys on. A new
+# DETECTOR-REFUSED line therefore blocks (c) the way a new HARD row does.
+refused_new="$(printf '%s\n' "$only_render" | grep -c '^DETECTOR-REFUSED')" || refused_new=0
 if [ "$refs_render" != "$refs_report" ]; then
   cause=UPSTREAM-MOVED
   echo "  cause: UPSTREAM-MOVED — the region was rendered for a different range or a different core/ tree than this run's theirs; every other line is incomparable." >&2
-elif [ "$hard_gone" -gt 0 ] && [ "$hard_new" -eq 0 ]; then
+elif [ "$hard_gone" -gt 0 ] && [ "$hard_new" -eq 0 ] && [ "$refused_new" -eq 0 ]; then
   cause=BLOCKERS-RESOLVED
-  echo "  cause: BLOCKERS-RESOLVED — ${hard_gone} HARD-* row(s) in the approved region no longer render, none is new, and the refs are unchanged: the blockers were resolved after this report was rendered. That is the adjudication loop's own work, not a finding hidden from the approval. Re-render the region from the tree as it now stands and re-approve it." >&2
+  echo "  cause: BLOCKERS-RESOLVED — ${hard_gone} HARD-* row(s) in the approved region no longer render, no HARD-* row is new, and the refs are unchanged: the blockers were resolved after this report was rendered (or the report carries a HARD row that never rendered; either way the approval saw more than exists). The fresh render carries ${other_new} finding row(s) the approval has not seen (listed below as unseen:, boilerplate excluded); re-render the region from the tree as it now stands and re-approve it reading them." >&2
   printf '%s\n' "$gone_rows" | sed 's/^/    resolved: /' >&2
+  [ "$other_new" -gt 0 ] && printf '%s\n' "$only_render" | unseen_rows | sed 's/^/    unseen: /' >&2
 else
   cause=UNDECIDED
-  echo "  cause: UNDECIDED — the fresh render carries ${hard_new} HARD-* row(s) the approved region lacks (a finding the approval never saw), or the difference is outside the blocking list. Read the diff." >&2
+  echo "  cause: UNDECIDED — the fresh render carries ${hard_new} HARD-* row(s) and ${refused_new} DETECTOR-REFUSED line(s) the approved region lacks (a finding the approval never saw, or a detector that did not run), or the difference is outside the blocking list. Read the diff." >&2
 fi
 echo "  Diff (want vs report):" >&2
 diff <(printf '%s\n' "$want") <(printf '%s\n' "$got") >&2 || true
