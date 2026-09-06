@@ -6884,3 +6884,88 @@ differential over it is a null neither side owns.
 verify: sh V=$PWD/core/scripts/validate-suppression-lifetime.sh; [ -f "$V" ] || exit 9; W=$(mktemp -d); mkdir -p $W/r; printf 'checks:\n  - id: 16\n    title: a\n  - id: 32\n    title: b\n' > $W/map.yaml; printf '## [S1 gate] [lead] - 2026-05-01T00:00:00Z\n**Status:** SUPPRESSED\n**Suppresses:** [core] 32 — b\n**Expires after:** 3 gates\n**Operator authorization:** 2026-05-01T00:00:00Z | "Override, proceed, file backlog item"\n' > $W/r/pending.md; printf '{"ts":"2026-05-02T01:00:00Z","check":"32","verdict":"FAIL"}\n' > $W/gm.jsonl; a=$(LC_ALL=en_US.UTF-8 AI_DLC_PROJECT_ROOT=$W/r bash $V --in-force --escalations $W/r/pending.md --enforcement-map $W/map.yaml --gate-metrics $W/gm.jsonl 2>&1 >/dev/null); b=$(env -i PATH=/usr/bin:/bin AI_DLC_PROJECT_ROOT=$W/r bash $V --in-force --escalations $W/r/pending.md --enforcement-map $W/map.yaml --gate-metrics $W/gm.jsonl 2>&1 >/dev/null); rm -rf $W; case $a in *"in_force=1 "*) ;; *) exit 9;; esac; case $b in *"in_force=1 "*) ;; *) exit 1;; esac; LC_ALL=C awk '!/^[[:space:]]*#/ && /\[[^][:space:]]*[\200-\377][^][:space:]]*\]/{f=1} END{exit !f}' "$V" && exit 1; exit 0
 
 
+## BL-171 — Check 26's `SUPPRESSED` carve-out accepts an entry whose operator citation no transcript verifies, so a lead can write its own gate passage into `docs/escalations/pending.md`
+
+**LANDED (v0.514.0, verified 56a104cd).**
+
+Distribution-internal, no `PC-` id; DEFECT tier — the acquittal is reachable on every consumer
+running `0.504.0` or later, and the file it keys on is one the lead may edit while every other
+edit is denied. Found by the batch-55 adversarial hand while attacking `BL-169`, and deliberately
+not fixed there.
+
+`validate-suppression-lifetime.sh` admits a `SUPPRESSED` entry as in force when its
+`**Operator authorization:**` line carries an ISO timestamp and a quote; nothing compares the
+quote to anything. `validate-escalation-resolution.sh` runs `validate-steering-budget.sh --cite`
+for `RESOLVED` and `OVERRIDDEN` and for those statuses only. `escalations.md` said the suppression
+citation received "the identical verification" as those; the grammar was identical and the
+verification absent, and the sentence now says so. `0.505.0` closes the guard's half: the sibling
+forwards the authorization line verbatim as a sixth row field, and
+`ai-dlc-gate-remediation-guard.sh`, already a declared `--cite` site with a `transcript_path` in
+its input, verifies it and subtracts nothing on a quote the corpus does not carry. The gate's
+half WAS open: `validate-gate-adjudication.sh` read the same rows, carried no transcript, and
+passed the FAIL. Driven on the shipped gate-adjudication seed before the fix: a well-formed
+in-force entry with no transcript corpus anywhere exited 0 with the `SUPPRESSED` line.
+
+**What shipped.** `validate-gate-adjudication.sh` takes `--transcript PATH` and
+`--transcript-dir DIR` after the two positionals in adjudicate mode, the directory taking
+precedence for `validate-escalation-resolution.sh`'s reason, and Check 26's call site in
+`gate-validation.md` passes both — MANDATORY, in the same words Check 2 uses. Once the sibling
+has listed the in-force rows, the validator verifies each row's fifth field with
+`validate-steering-budget.sh --cite` over that corpus — the guard's predicate, through the same
+`cite_quote()` and `steer_dir_has_transcript()` helpers, now four byte-identical sites under I92
+and I103 — keeps the rows that verify, drops and counts the rest, and prints an `UNVERIFIED`
+line per dropped row. It FAILS CLOSED on every absence: no readable corpus (`no-transcript`),
+no verifier beside it (`no-verifier`), a quote under twelve characters, or a quote no genuine
+operator turn carries all mean that row covers nothing, and the block carries
+`unverified-citation: <n>` beside the failing ids. The verifier's exit is read in three tiers,
+never as a boolean: 0 verifies, 2 is its own NOMATCH, and anything else is the verifier failing
+before it could answer (node off PATH returns 1, measured against a control of 0) — that row
+covers nothing either, but the line says `UNVERIFIABLE` and the block says
+`verifier-error: <n>`, because printing a tooling failure as forgery accuses the operator's own
+authorization of being invented. A `--transcript` file is widened to its directory when that
+directory holds a `*.jsonl`, exactly as the guard widens the session transcript it is handed;
+measured on the other shape, the gate read NOMATCH from the current session's file on an entry
+the guard had just accepted from a sibling file. Rows are only ever narrowed, so a forged entry
+beside a genuine one costs the genuine one nothing (S22). The sibling still does not host the
+check, for the reason above.
+
+**A stated limit, not a fix.** The guard's corpus arrives from the harness on hook stdin; the
+gate's is named by a flag the lead types. A directory the lead creates, holding a `.jsonl` the
+lead writes, verifies a quote no operator said (exit 0 with the `SUPPRESSED` line, against exit 1
+on the seed's genuine corpus). That is the same escape `AI_DLC_ESCALATIONS` already offers one
+screen up and it is the property of every lead-run validator; the two prose sites say so now.
+
+Wrong fixes built and refused, each with the case that kills it: a verifier written as a grep
+over the corpus, which accepts the same words carried in an assistant turn and a tool_result
+(S18, `TDIR_FORGED`); a verifier that treats "no corpus given" as "nothing to verify" and keeps
+the rows (S19, S21, mutant m15); one that computes the narrowed set and exports the original
+(m16); one that scans the corpus's FIRST member and stops (m17) — the batch-63 adversary's
+BLOCKER, because every seeded corpus held one file and so the receipt and every case accepted
+it, while on the consumer's 250-file corpus it reads NOMATCH on the one genuine in-force
+citation; the seed now carries the quote in the second file by glob order; and one that reads
+the verifier's exit as a boolean and reports its failure as forgery (m18, S23). The mutant
+battery gained m14–m18 and its m1, m5 and m10 sets widened by the new cases; m4 (sibling lists
+a malformed entry) now keys S4 on the ABSENCE of the `UNVERIFIED` line, because the verifier
+would otherwise drop that row on the sibling's behalf and hide the sibling's exclusion.
+Measured on the reference consumer, read-only: one in-force row today
+(`[core] 16`), whose quote verifies against its 250-transcript corpus; its latest FAIL verdict
+(`story-20260904T191843Z`, checks 5 and 7) blocks identically under the installed and the fixed
+reader, in 2.0s with the corpus, so the pull moves no verdict on its files today. The fix fires
+on a forged citation, of which the consumer's in-force set holds none, and on a Check 26 call
+site run without `--transcript-dir` — which is every consumer call site until the pull lands
+the updated step file, so the brief must say so. Two more measurements for that brief, both
+the adversary's: 2 of the consumer's 17 historical suppression citations NOMATCH against its
+live corpus (both S305 paraphrases of "Fresh SUPPRESSED, this gate only (Recommended)", whose
+bytes appear only inside the lead's own AskUserQuestion options and a line-numbered Read of
+the escalations file), neither in force today — the check working, and the first thing that
+will read as a regression to whoever re-cites one; and the REVERSE partial-pull shape: the
+installed `0.507.0` validator never parses past its two positionals, so the new call site's
+flags are INERT on it and a forged suppression passes at exit 0 with no warning. The step file
+and the validator land in one pull because both are core paths outside the machinery slice; a
+consumer that hand-edits its step file ahead of the pull gets no protection and no message.
+The predicate's own limits the adversary measured — `isMeta` records accepted, no `--since`,
+the `MATCH` timestamp discarded — are `BL-184`'s.
+
+verify: sh d=$(bash core/fixtures/gate-adjudication/seed.sh) || exit 9; . "$d/env.sh"; python3 -c 'import json,sys;p,x=sys.argv[1],sys.argv[2];D=json.load(open(p));[v.update(verdict="FAIL") for v in D["verdicts"] if v["check_id"]==x];open(p,"w").write(json.dumps(D))' "$VERDICT" "$X"; r() { AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" AI_DLC_ESCALATIONS="$ESC_INFORCE" AI_DLC_GATE_METRICS="$GM_BEFORE" bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" "$@" 2>&1; }; g=$(r --transcript-dir "$TDIR"); grc=$?; f=$(r --transcript-dir "$TDIR_FORGED"); frc=$?; n=$(r); nrc=$?; rm -rf "$d"; [ "$grc" -eq 0 ] && grep -q 'FAIL is covered by an' <<<"$g" && [ "$frc" -eq 1 ] && grep -q 'unverified-citation: 1 in-force' <<<"$f" && ! grep -q 'FAIL is covered by an' <<<"$f" && [ "$nrc" -eq 1 ] && grep -q 'no-transcript' <<<"$n"
+
+
