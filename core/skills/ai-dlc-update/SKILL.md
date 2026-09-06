@@ -1247,8 +1247,8 @@ prose is itself generated rather than composed.
    `--verify` says which direction it failed in: it exits **3** with `cause: BLOCKERS-RESOLVED`
    when the refs are unchanged and the approved region lists `HARD-*` rows the detectors no longer
    render and none they newly do, and `apply.sh` refuses naming that cause; exit **1** is the other
-   direction — upstream moved, or a finding the approval never saw — and is the stop the gate
-   exists for. So: resolve every blocker, then re-render the region
+   direction — upstream moved, the consumer's stamp moved, a detector did not run, or a finding
+   the approval never saw — and is the stop the gate exists for. So: resolve every blocker, then re-render the region
    (`reconcile/emit-report.sh <dist> <base> <consumer> <theirs>`) into the report, run `--verify`
    to exit 0, have the operator re-approve it, and only then run `apply.sh`. An `apply.sh` that
    refuses with `BLOCKERS-RESOLVED` is telling you the report predates your own work, not that

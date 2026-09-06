@@ -503,12 +503,18 @@ echo "  what the detectors render now. Re-render with emit-report.sh and re-emit
 norm_rows() { sed -E 's/[[:space:]]+/ /g' | LC_ALL=C sort -u; }
 only_render="$(LC_ALL=C comm -23 <(printf '%s\n' "$want" | norm_rows) <(printf '%s\n' "$got" | norm_rows))"
 only_report="$(LC_ALL=C comm -13 <(printf '%s\n' "$want" | norm_rows) <(printf '%s\n' "$got" | norm_rows))"
-# `_base_`/`_theirs_` ONLY. The `_stamp_` line is rendered from the CONSUMER's stamp and moves
-# when the consumer re-stamps, not when upstream does; keyed here it made a moved stamp read as
-# "upstream moved" with both disjuncts false, and pre-empted (c) on a resolved pull. It falls
-# through to the diff and the `unseen:` count like any other non-HARD line.
+# `_base_`/`_theirs_` ONLY here. The `_stamp_` line is rendered from the CONSUMER's stamp and
+# moves when the consumer re-stamps, not when upstream does; keyed with these it made a moved
+# stamp read as "upstream moved" with both disjuncts false, and dropped from the key altogether
+# a post-apply re-run (stamp legitimately at theirs, every applied path now already-at-theirs)
+# read as blockers RESOLVED and was told to re-approve and apply a range already applied. So it
+# is a THIRD cause, decided on that line alone, between (a) and (c): the tree's recorded
+# position moved under the report, and the region is not comparable until the base is
+# re-derived. apply.sh decides the post-apply case from the stamp before it ever reads this.
 refs_render="$(printf '%s\n' "$want" | grep -E '^_(base|theirs)_ ')"
 refs_report="$(printf '%s\n' "$got"  | grep -E '^_(base|theirs)_ ')"
+stamp_render="$(printf '%s\n' "$want" | grep -E '^_stamp_ ')"
+stamp_report="$(printf '%s\n' "$got"  | grep -E '^_stamp_ ')"
 # The sets are already normalised and unique, so a HARD row here is one blocker, not one line.
 hard_rows() { grep '^HARD-'; }
 gone_rows="$(printf '%s\n' "$only_report" | hard_rows)"
@@ -530,6 +536,9 @@ refused_new="$(printf '%s\n' "$only_render" | grep -c '^DETECTOR-REFUSED')" || r
 if [ "$refs_render" != "$refs_report" ]; then
   cause=UPSTREAM-MOVED
   echo "  cause: UPSTREAM-MOVED — the region was rendered for a different range or a different core/ tree than this run's theirs; every other line is incomparable." >&2
+elif [ "$stamp_render" != "$stamp_report" ]; then
+  cause=STAMP-MOVED
+  echo "  cause: STAMP-MOVED — the consumer's stamp (.claude/.ai-dlc-version commit:) changed since this report was rendered: an apply of this range already moved this tree (apply.sh decides that case from the stamp), or the stamp was edited by hand. The region is not comparable until the base is re-derived from the stamp as it now stands; re-run the dry run rather than re-approving this report." >&2
 elif [ "$hard_gone" -gt 0 ] && [ "$hard_new" -eq 0 ] && [ "$refused_new" -eq 0 ]; then
   cause=BLOCKERS-RESOLVED
   echo "  cause: BLOCKERS-RESOLVED — ${hard_gone} HARD-* row(s) in the approved region no longer render, no HARD-* row is new, and the refs are unchanged: the blockers were resolved after this report was rendered (or the report carries a HARD row that never rendered; either way the approval saw more than exists). The fresh render carries ${other_new} finding row(s) the approval has not seen (listed below as unseen:, boilerplate excluded); re-render the region from the tree as it now stands and re-approve it reading them." >&2
