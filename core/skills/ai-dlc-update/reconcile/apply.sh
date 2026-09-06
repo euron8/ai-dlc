@@ -182,7 +182,7 @@ say() {
 err() { echo "apply: $*" >&2; exit 1; }
 
 # --- MECHANICAL UNION GATE, CONDITION (1), DRIVEN HERE RATHER THAN NARRATED ----
-# SKILL.md step 8 lets `apply` write only after
+# SKILL.md step 7 lets `apply` write only after
 # `emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>` exits 0. That gate was
 # PROSE, and `theirs` was an argument the executing session supplied — so a session could verify
 # the report against the ref the REPORT names while this program resolves a NEWER one, and get a
@@ -198,7 +198,7 @@ err() { echo "apply: $*" >&2; exit 1; }
 # AN ABSENT REPORT DOES NOT BLOCK, deliberately rather than as a hole left open. This driver has
 # never required a report and two dozen fixture directories drive it without one; refusing would
 # wedge every one of them while changing no operator outcome, since step 5 writes the report
-# before step 8 runs. A row is emitted instead, so "nothing checked this" reaches the manifest
+# before step 7 runs. A row is emitted instead, so "nothing checked this" reaches the manifest
 # the operator reads rather than being absent from it.
 #
 # NOTE AND NOT DECISION, ON BOTH ROWS. `say` counts WORKLIST and DECISION into `handback`, and a
@@ -212,7 +212,13 @@ err() { echo "apply: $*" >&2; exit 1; }
 UNION_REPORT="$CONSUMER/_bmad-output/ai-dlc-update/reconcile-report.md"
 if [ "$FINISH" = 0 ]; then
   if [ -f "$UNION_REPORT" ]; then
-    if bash "$SELF/emit-report.sh" --verify "$UNION_REPORT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1; then
+    # STDERR IS KEPT, NOT DISCARDED: --verify decides the cause of a mismatch on its own exit code
+    # (3 = the approved region lists HARD-* rows that no longer render, refs unchanged, nothing
+    # HARD new) and prints the rows it decided from. The refusal below quotes that line rather
+    # than restating the grammar, so the two programs cannot disagree about what was decided.
+    _ug_verr="$(bash "$SELF/emit-report.sh" --verify "$UNION_REPORT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1 >/dev/null)"
+    _ug_rc=$?
+    if [ "$_ug_rc" -eq 0 ]; then
       say NOTE report-verified "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1): the approved report's mechanical region matches what the detectors render at THIS run's theirs ($THEIRS)."
     else
       # THE THIRD CAUSE, DECIDED RATHER THAN LISTED. A region also fails to match when an apply
@@ -249,10 +255,36 @@ if [ "$FINISH" = 0 ]; then
          && [ "$(git -C "$DIST" rev-parse "${_ug_sc}:core" 2>/dev/null || true)" = "$_ug_tt" ]; then
         _ug_at="$_ug_sc"
       fi
+      # THE FOURTH CAUSE, DECIDED BY --verify ITSELF (exit 3) AND THE COMMON ONE. SKILL.md step 7
+      # requires every HARD-* blocker resolved BEFORE this program writes, and each resolution
+      # rewrites the region the operator approved — `--stamp readopt` turns a
+      # HARD-OVERRIDE-DRIFT-SECTION row into OVERRIDE-OK, a register row removes a
+      # HARD-LAYER-ADJUDICATION-MISSING row — so on any pull that had a blocker the approved report
+      # lists findings that no longer exist and the bytes cannot agree. Measured on the reference
+      # consumer: four of six applies since v0.488.0 re-rendered the region after resolving as an
+      # unwritten workaround; the fifth got the listed message below, both of whose named causes
+      # were false. Filed as PC-S305-UNION-GATE-UNPASSABLE-ON-ANY-PULL-THAT-HAD-A-BLOCKER.
+      #
+      # STILL A REFUSAL, and after the stamp arm above on purpose: a post-apply re-run is the more
+      # specific state (nothing is left to write) and can carry resolved rows too. The remedy here
+      # is one re-render and one re-approval, and the message says so — the safe direction (a HARD
+      # row the operator has NOT seen) never reaches this branch, because --verify keys the cause on
+      # the approved region losing HARD rows and the fresh render gaining none.
+      # The cause line is matched on its `cause:` label at any indent, and an absent line falls
+      # back to naming the exit code rather than to an empty string: a prefix drift in --verify
+      # must not silently delete the diagnosis from the refusal.
+      _ug_cause="$(printf '%s\n' "$_ug_verr" | sed -n 's/^[[:space:]]*cause: //p' | head -1)"
+      : "${_ug_cause:=cause not reported by --verify (exit ${_ug_rc})}"
+      # THE DIFF REACHES THE OPERATOR. --verify prints the cause, the rows it decided from and the
+      # want-vs-report diff to stderr; a refusal that says "read the diff" over a discarded diff is
+      # a pointer to a tool the operator must re-run. Forwarded whole, before the verdict line.
+      printf '%s\n' "$_ug_verr" >&2
       if [ -n "$_ug_at" ]; then
         err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS) — and the consumer's stamp records ${_ug_at}, whose core/ tree is theirs'. That stamp says an earlier apply already brought this tree to theirs, so this is a post-apply re-run (the one the driver-self-update row used to prescribe): the approved report describes the tree BEFORE that apply moved it, and a report rendered then cannot verify against the tree as it now stands. The stamp is a claim about the tree, not a measurement of it — if a core file or the report was changed by hand since, this refusal cannot see that. To see the current driver's reading of this tree, re-run the dry run at $THEIRS so the report is rendered from the tree as it now stands, re-approve it, then apply. NOTHING HAS BEEN WRITTEN."
+      elif [ "$_ug_rc" -eq 3 ]; then
+        err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS) — and the only difference in the blocking list is that the approved region lists HARD-* row(s) the detectors no longer render, with upstream unchanged. ${_ug_cause} Those blockers were resolved after the report was rendered — step 7's own work (a --stamp readopt, a register row) — so no HARD-* row is hidden from the approval; but the operator approved a region that no longer describes this tree, and the 'unseen:' lines above are rows a resolution left that they have not read. One step closes it: re-render the region with emit-report.sh $DIST $BASE $CONSUMER $THEIRS from the tree as it now stands, re-approve it, then re-run apply with the same four arguments. NOTHING HAS BEEN WRITTEN."
       else
-        err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS). SKILL.md step 8 lets apply write only after emit-report.sh --verify exits 0, and it does not. Either upstream moved after that report was rendered — which is what this gate exists to catch — or the region was hand-edited, or an earlier apply of this same range already moved this tree and its stamp is still withheld (a re-run after a withheld run). Re-run the dry run at $THEIRS, or name the ref the report describes explicitly so the two agree, then re-approve. NOTHING HAS BEEN WRITTEN."
+        err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS). SKILL.md step 7 lets apply write only after emit-report.sh --verify exits 0, and it does not. ${_ug_cause} Either upstream moved after that report was rendered — which is what this gate exists to catch — or the region was hand-edited or a detector now renders a finding the approval never saw, or an earlier apply of this same range already moved this tree and its stamp is still withheld (a re-run after a withheld run). Re-run the dry run at $THEIRS, or name the ref the report describes explicitly so the two agree, then re-approve. NOTHING HAS BEEN WRITTEN."
       fi
     fi
   else

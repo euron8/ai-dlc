@@ -15,6 +15,49 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.510.0] - 2026-09-05
+
+### `PC-S305-UNION-GATE-UNPASSABLE-ON-ANY-PULL-THAT-HAD-A-BLOCKER` — the union gate says "blockers resolved" instead of listing two false causes, and step 7 says to re-render after the last resolution
+
+Step 7 requires every `HARD-*` blocker resolved before `apply.sh` writes, and every resolution
+rewrites the region clause (1) verifies — a `--stamp readopt` turns `HARD-OVERRIDE-DRIFT-SECTION`
+into `OVERRIDE-OK`, a register row removes `HARD-LAYER-ADJUDICATION-MISSING` — so on every pull
+that had a blocker the approved report listed findings that no longer existed, `--verify`
+failed, and `apply.sh` refused naming "upstream moved" and "hand-edited", both false. The
+reference consumer's committed logs show four of its six applies since `v0.488.0` re-rendering
+the region after resolving as an unwritten workaround, and the 0.502.0 → 0.504.0 apply hitting
+the refusal first. `emit-report.sh --verify` now decides the cause: `UPSTREAM-MOVED` (exit 1)
+when the `_base_`/`_theirs_` lines differ; `STAMP-MOVED` (exit 1) when the consumer's `_stamp_`
+line changed — neither upstream moving nor a resolution, but a post-apply re-run or a hand
+re-stamp, after which the base must be re-derived; `BLOCKERS-RESOLVED` (exit **3**) when
+the refs are unchanged, the approved region carries `HARD-` rows the fresh render lacks, and the
+render carries no HARD row and no `DETECTOR-REFUSED` line the region lacks, rows de-duplicated
+because one blocker renders in two sections; `UNDECIDED` (exit 1) otherwise — keyed on the
+`HARD-` prefix the blocking contract already binds, never on a status list. The resolved cause
+lists the resolved rows and the finding rows the approval has not seen (`unseen:`, boilerplate
+such as `none` and `0 HARD blockers.` excluded from the count, kept in the list). `apply.sh`
+forwards that stderr whole — cause, rows, diff — and on 3 refuses naming the cause and the
+one-step remedy: re-render the region with `emit-report.sh <dist> <base> <consumer> <theirs>`,
+re-approve reading the unseen rows, re-run with the same four arguments. Still a refusal, not a
+pass: a pass would need a vocabulary of benign rows and acquit whatever it missed. Because the
+cause is decided from rows going ABSENT, a detector that did not run is now visible:
+`unregistered-drift.sh`, `layer-drift.sh` and the `hard-blockers.sh` wrapper render
+`DETECTOR-REFUSED` on a non-zero exit instead of the `none` a clean run renders, and that line
+blocks the resolved cause; and the two sides are whitespace-normalised and made unique before
+the set difference, so a blocker still rendered in one section cannot read as resolved because
+its padded copy is missing from the other. Step 7
+states the order — resolve every blocker, re-render, `--verify` to 0, re-approve, then
+`apply.sh` — and that a `BLOCKERS-RESOLVED` refusal means the report predates your own work, not
+that upstream moved; step 5 says exit 3 cannot arise there. The gate's two stale "step 8"
+citations now read step 7. Replayed on the reference consumer's real history: all four blocker
+pulls since `v0.488.0` read `BLOCKERS-RESOLVED` with the row count their logs record (3, 3, 11,
+13) against a bare exit 1 from the shipped copy. Fixtures `reconcile-emit-report` (worlds:
+current, hand-dropped blocker, moved upstream, moved stamp, resolved, resolved beside a new
+blocker, resolved beside an unseen non-HARD row, non-HARD row resolved, dead detector) and
+`apply-restamp-worklist` (`U5`, `apply.sh` over a resolved-blocker world) with mutants for the
+count-based, refs-less, stamp-keyed, any-mismatch, adjudication-file-keyed, dead-detector-blind
+and carve-out wrong fixes. `BL-182`.
+
 ## [0.509.0] - 2026-09-05
 
 ### `PC-S308-SUPPRESSION-LIFETIME-RESOLVES-GATE-METRICS-FROM-CWD-BEFORE-PROJECT-ROOT` — a suppression's lifetime is counted against the project's own timeline, never the caller's cwd

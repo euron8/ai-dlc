@@ -53,7 +53,11 @@
 #   emit-report.sh --verify <report.md> <dist> <base> <consumer> <theirs>
 # Exit:
 #   print  : 0 always.
-#   verify : 0 = region present and current; 1 = missing / stale / hand-edited; 2 = usage.
+#   verify : 0 = region present and current; 1 = missing / stale / hand-edited; 2 = usage;
+#            3 = stale in the SAFE direction only: the refs are unchanged and the approved region
+#                lists HARD-* row(s) the detectors no longer render, and none they newly do — the
+#                blockers were RESOLVED after the render (the adjudication loop's own work). Still a
+#                refusal; apply.sh names the cause and the remedy is a re-render and re-approval.
 set -uo pipefail
 
 MODE=print
@@ -304,16 +308,40 @@ render() {
   printf '%s\n' "$hro" | grep -v '^hook-registration: root '
 
   sub "Blocking-layer (HARD-* — blocks apply):"
-  bash "$SELF/hard-blockers.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null \
-    | sed '/BEGIN GENERATED: hard-blockers/d;/END GENERATED: hard-blockers/d'
+  # The wrapper gets the same REFUSED treatment as the two detectors it drives (below): print
+  # mode exits 0 always, so a non-zero exit is a run that did not happen, and an empty blocking
+  # list from one must not read as `0 HARD blockers.` — the one line the whole HARD- contract
+  # keys on.
+  local hb hb_rc
+  hb="$(bash "$SELF/hard-blockers.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null \
+    | sed '/BEGIN GENERATED: hard-blockers/d;/END GENERATED: hard-blockers/d')"
+  hb_rc=$?
+  if [ "$hb_rc" -eq 0 ]; then printf '%s\n' "$hb"; else
+    echo "DETECTOR-REFUSED  hard-blockers.sh exited ${hb_rc} without rendering the blocking list, so this section is NOT '0 HARD blockers.'. Run it directly against this consumer to see why: reconcile/hard-blockers.sh <dist> <base> <consumer> <theirs>"
+  fi
 
+  # A DETECTOR THAT DID NOT RUN RENDERS AS REFUSED, NOT AS `none`. Both classifiers exit 0
+  # always when they classified and non-zero only when they could not (usage, an unsourceable
+  # sibling, a consumer root that is not a directory). Inside a pipeline that rc was lost, so a
+  # dead detector rendered the same `none` as a clean one — and, once --verify decides a
+  # mismatch from HARD rows going ABSENT, a dead detector read as a blocker RESOLVED, by name.
+  # The refused line is a row the approval never saw, so --verify treats it as it treats a new
+  # HARD row: UNDECIDED, never BLOCKERS-RESOLVED. A detector that exits 0 having scanned nothing
+  # is not visible here and is the detector's own honesty problem.
+  local ud_rc ld_rc
   sub "Unregistered core drift (consumer in-place edits vs base):"
   ud="$(bash "$SELF/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1!="CORE-OK"{print $1"  "$2}' | sort -u)"
-  none_or "$ud"
+  ud_rc=$?
+  if [ "$ud_rc" -eq 0 ]; then none_or "$ud"; else
+    echo "DETECTOR-REFUSED  unregistered-drift.sh exited ${ud_rc} without classifying, so this section is NOT a finding of 'none'. Run it directly against this consumer to see why: reconcile/unregistered-drift.sh <dist> <base> <consumer> <theirs>"
+  fi
 
   sub "Layer drift (overrides/extensions vs new core):"
   ld="$(bash "$SELF/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' '$1!="EXTENSION-OK"{print $1"  "$2}' | sort -u)"
-  none_or "$ld"
+  ld_rc=$?
+  if [ "$ld_rc" -eq 0 ]; then none_or "$ld"; else
+    echo "DETECTOR-REFUSED  layer-drift.sh exited ${ld_rc} without classifying, so this section is NOT a finding of 'none'. Run it directly against this consumer to see why: reconcile/layer-drift.sh <dist> <base> <theirs> <consumer>"
+  fi
 
   sub "Catalog relabel (extension check-number collisions, incl. NEW-THIS-PULL from theirs):"
   # `#{2,4}`, not a literal `### `: relabel matches headings at h2-h4, so filtering the
@@ -430,6 +458,97 @@ if [ "$want" = "$got" ]; then
 fi
 echo "FAIL: the report's 'reconcile-mechanical' region is STALE or HAND-EDITED — it does not match" >&2
 echo "  what the detectors render now. Re-render with emit-report.sh and re-emit the report." >&2
+# --- THE MISMATCH IS DECIDED, NOT ONLY REPORTED ------------------------------------------------
+# A region goes stale for three reasons, and only one of them is the unsafe direction this gate
+# exists for. (a) Upstream moved after the render: the `_theirs_` tree or `VERSION` line differs,
+# and the whole region describes another range. (b) The report was hand-edited, or a detector now
+# renders a row the operator never saw: the fresh render carries a line the approved region lacks.
+# (c) The approved region carries `HARD-*` row(s) the detectors no longer render, the refs are
+# unchanged, and nothing HARD is new — the blockers were RESOLVED after the render. SKILL.md step 7
+# demands that resolution before `apply` writes, and every resolution rewrites the region: a
+# `--stamp readopt` turns `HARD-OVERRIDE-DRIFT-SECTION` into `OVERRIDE-OK`, a register row removes
+# `HARD-LAYER-ADJUDICATION-MISSING`. So (c) is the COMMON path on any pull that had a blocker, not
+# an edge case. Measured on the reference consumer: four of its six applies since this gate moved
+# into apply.sh re-rendered the region after resolving blockers as an unwritten workaround, and the
+# fifth got this FAIL first with a message naming (a) and (b), both false. Filed as
+# PC-S305-UNION-GATE-UNPASSABLE-ON-ANY-PULL-THAT-HAD-A-BLOCKER.
+#
+# STILL A REFUSAL. The operator approved findings that no longer exist, and a resolution can add
+# rows they have not seen (a merge that leaves OVERRIDE-ASSERTS-SHADOW-SURVIVES, say), so the
+# post-resolution region is re-rendered and re-approved rather than waved through; a pass here
+# would need a vocabulary of "benign" rows and would acquit whatever that vocabulary missed. What
+# changes is the DIAGNOSIS: a distinct exit code so apply.sh can say which case this is, and a
+# `cause:` line so an operator running --verify by hand reads the same answer.
+#
+# KEYED ON THE `HARD-` PREFIX ONLY, which is the contract SKILL.md already binds ("statuses
+# prefixed HARD- must block apply"), never on a list of status names. A mismatch with no HARD row
+# in it, or with a HARD row the operator has NOT seen, reads as (b) and gets the generic message,
+# never (c). (a) is decided before (c) because a moved upstream makes every other line
+# incomparable, including the HARD rows.
+#
+# TWO THINGS (c) DOES NOT SEPARATE, AND NEITHER IS THE UNSAFE DIRECTION. A report hand-edited to
+# ADD a HARD row the detectors never rendered reads (c) too: the approval saw MORE than exists,
+# nothing was hidden from it, and the remedy is the same re-render. And a resolution can leave
+# rows that are NOT HARD and that the approval never saw (a merge that renders
+# OVERRIDE-ANCHOR-UNRESOLVED or OVERRIDE-ASSERTS-SHADOW-SURVIVES, say); (c) still fires, because
+# the HARD rule is the blocking contract, but the cause line COUNTS those rows rather than
+# asserting they do not exist, and the re-approval is where they get read. That is why (c)
+# refuses instead of passing.
+# NORMALISED BEFORE THE SET DIFFERENCE, NOT AFTER. One blocker renders twice in the region with
+# different padding — `%-32s %s` in the blocking list, `STATUS  path` in its detector's section
+# — and a difference taken over raw lines then de-duplicated afterwards reports a blocker as
+# GONE when only its padded copy is missing while the other copy still renders. Measured: a
+# still-rendered blocker and a genuinely resolved one were indistinguishable that way. So both
+# sides are whitespace-normalised and made unique first, and every count below is over sets.
+norm_rows() { sed -E 's/[[:space:]]+/ /g' | LC_ALL=C sort -u; }
+only_render="$(LC_ALL=C comm -23 <(printf '%s\n' "$want" | norm_rows) <(printf '%s\n' "$got" | norm_rows))"
+only_report="$(LC_ALL=C comm -13 <(printf '%s\n' "$want" | norm_rows) <(printf '%s\n' "$got" | norm_rows))"
+# `_base_`/`_theirs_` ONLY here. The `_stamp_` line is rendered from the CONSUMER's stamp and
+# moves when the consumer re-stamps, not when upstream does; keyed with these it made a moved
+# stamp read as "upstream moved" with both disjuncts false, and dropped from the key altogether
+# a post-apply re-run (stamp legitimately at theirs, every applied path now already-at-theirs)
+# read as blockers RESOLVED and was told to re-approve and apply a range already applied. So it
+# is a THIRD cause, decided on that line alone, between (a) and (c): the tree's recorded
+# position moved under the report, and the region is not comparable until the base is
+# re-derived. apply.sh decides the post-apply case from the stamp before it ever reads this.
+refs_render="$(printf '%s\n' "$want" | grep -E '^_(base|theirs)_ ')"
+refs_report="$(printf '%s\n' "$got"  | grep -E '^_(base|theirs)_ ')"
+stamp_render="$(printf '%s\n' "$want" | grep -E '^_stamp_ ')"
+stamp_report="$(printf '%s\n' "$got"  | grep -E '^_stamp_ ')"
+# The sets are already normalised and unique, so a HARD row here is one blocker, not one line.
+hard_rows() { grep '^HARD-'; }
+gone_rows="$(printf '%s\n' "$only_report" | hard_rows)"
+new_rows="$(printf '%s\n' "$only_render"  | hard_rows)"
+hard_gone="$(printf '%s\n' "$gone_rows" | grep -c '^HARD-')" || hard_gone=0
+hard_new="$(printf '%s\n' "$new_rows"   | grep -c '^HARD-')" || hard_new=0
+# Non-HARD lines the render carries and the approval never saw. Counted, never acquitted — and
+# the LIST is the authority, the count is advisory. A resolution replaces a HARD row with a
+# section's affirmative-empty text (`none`, `0 HARD blockers.`), or with an `-OK` row, or moves a
+# `**section**` header into the diff; measured, a plain resolution and one hiding a real finding
+# both counted 2 until those were excluded, because the finding REPLACED `none` rather than
+# adding to it. So the boilerplate shapes are left out of the count and kept in the list.
+unseen_rows() { grep -Ev '^HARD-|^DETECTOR-REFUSED|^$|^none$|^0 HARD blockers\.$|^\*\*|^[A-Z][A-Z-]*-OK([[:space:]]|$)|^<!--|^_(base|theirs|stamp)_ |: none$'; }
+other_new="$(printf '%s\n' "$only_render" | unseen_rows | grep -c .)" || other_new=0
+# A detector that REFUSED on this render is a HARD row's absence with no one to vouch for it: the
+# rows it would have rendered are simply not there, which is exactly what (c) keys on. A new
+# DETECTOR-REFUSED line therefore blocks (c) the way a new HARD row does.
+refused_new="$(printf '%s\n' "$only_render" | grep -c '^DETECTOR-REFUSED')" || refused_new=0
+if [ "$refs_render" != "$refs_report" ]; then
+  cause=UPSTREAM-MOVED
+  echo "  cause: UPSTREAM-MOVED — the region was rendered for a different range or a different core/ tree than this run's theirs; every other line is incomparable." >&2
+elif [ "$stamp_render" != "$stamp_report" ]; then
+  cause=STAMP-MOVED
+  echo "  cause: STAMP-MOVED — the consumer's stamp (.claude/.ai-dlc-version commit:) changed since this report was rendered: an apply of this range already moved this tree (apply.sh decides that case from the stamp), or the stamp was edited by hand. The region is not comparable until the base is re-derived from the stamp as it now stands; re-run the dry run rather than re-approving this report. Beside the stamp, the fresh render carries ${hard_new} HARD-* row(s) the approved region lacks and lacks ${hard_gone} it carries." >&2
+elif [ "$hard_gone" -gt 0 ] && [ "$hard_new" -eq 0 ] && [ "$refused_new" -eq 0 ]; then
+  cause=BLOCKERS-RESOLVED
+  echo "  cause: BLOCKERS-RESOLVED — ${hard_gone} HARD-* row(s) in the approved region no longer render, no HARD-* row is new, and the refs are unchanged: the blockers were resolved after this report was rendered (or the report carries a HARD row that never rendered; either way the approval saw more than exists). The fresh render carries ${other_new} finding row(s) the approval has not seen (listed below as unseen:, boilerplate excluded); re-render the region from the tree as it now stands and re-approve it reading them." >&2
+  printf '%s\n' "$gone_rows" | sed 's/^/    resolved: /' >&2
+  [ "$other_new" -gt 0 ] && printf '%s\n' "$only_render" | unseen_rows | sed 's/^/    unseen: /' >&2
+else
+  cause=UNDECIDED
+  echo "  cause: UNDECIDED — the fresh render carries ${hard_new} HARD-* row(s) and ${refused_new} DETECTOR-REFUSED line(s) the approved region lacks (a finding the approval never saw, or a detector that did not run), or the difference is outside the blocking list. Read the diff." >&2
+fi
 echo "  Diff (want vs report):" >&2
 diff <(printf '%s\n' "$want") <(printf '%s\n' "$got") >&2 || true
+[ "$cause" = BLOCKERS-RESOLVED ] && exit 3
 exit 1
