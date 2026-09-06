@@ -31,6 +31,23 @@
 # A mutant must fail ONLY its own assertion. Two FAIL lines mean the arms are entangled
 # and one of them is vacuous, so the count is asserted, not just the message.
 set -u
+
+# SCRUB THE REPOSITORY ENVIRONMENT BEFORE THIS FIXTURE BUILDS ANYTHING, and note that this
+# fixture's own subject is the defect that makes it necessary. Every seed below runs
+# `git init` + `git add -A` in a `mktemp` tree and relies on git's upward DISCOVERY to find
+# it. Git exports GIT_DIR, ABSOLUTE, to any hook running from a linked worktree, so a suite
+# dispatched by an unscrubbed caller -- or an operator running this file by hand, which is
+# what the repo's own rules tell people to do when debugging a fixture -- has the seeds
+# writing the CALLER's index. MEASURED before this line existed: an outer repo of 17 tracked
+# files went to 7, holding the seed's own paths, while the fixture printed PASS.
+#
+# The sibling prepush-worktree-env-scrub/run.sh scrubs at its top for this same stated
+# reason. It was the only fixture of the 27 building scratch repos that did.
+#
+# m12 below is unaffected: it sets GIT_DIR explicitly at its own call, which is the state it
+# exists to measure, and that assignment is scoped to the command rather than exported here.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 VALIDATOR=""
@@ -255,5 +272,56 @@ else
   fi
 fi
 
-if [ "$rc" -eq 0 ]; then note "PASS  claude-rules-joins -- control green, 12/12 mutants killed by their own arm"; fi
+# m13 -- THE CORPUS READ IS THE OTHER HALF, AND IT IS THE SILENT ONE.
+#
+# m12 above asserts the probe does not WRITE the caller's repository. This asserts the arms do
+# not READ it. `a1_offenders()` and `glob_matches()` enumerate the corpus with bare `git
+# ls-files`; redirected by an inherited environment they answer about the caller's repo, and A1
+# then reports `ok` over a corpus it never opened.
+#
+# WHY BOTH ARMS ARE NEEDED, and why m12 alone was not enough: a fix that scrubs only the probe
+# subshell PASSES m12 -- the index is intact and A1 fires -- while the corpus read stays
+# redirected. That build converts a loud clobber into a silent false green, which is strictly
+# worse than the defect, and m12 scores it as fixed. The two arms are one property apart.
+#
+# THE SEED IS A REAL OFFENDER, not a near-miss: a tracked `.claude/settings.json` in the corpus,
+# against a victim repo that is CLEAN under `.claude/`. So the arm reads a CONVICTION and not an
+# absence -- if the corpus read is redirected, A1 finds nothing to report and prints ok, which is
+# exactly the acquittal being guarded. An arm asserting "no findings" could not tell the two apart.
+seed "$TMP/m13"
+printf '{}\n' > "$TMP/m13/.claude/settings.json"
+( cd "$TMP/m13" && git add -f .claude/settings.json >/dev/null 2>&1 )
+m13victim="$TMP/m13victim"
+mkdir -p "$m13victim"
+( cd "$m13victim" && git init -q . \
+  && for i in 1 2 3 4 5 6 7 8 9 10 11; do printf 'x\n' > "g$i.txt"; done \
+  && git add -A >/dev/null 2>&1 )
+m13_vclaude="$( ( cd "$m13victim" && git ls-files -- '.claude' | wc -l ) | tr -d ' ' )"
+m13_corpus="$( ( cd "$TMP/m13" && git ls-files -- '.claude' | grep -c 'settings.json' ) || true )"
+if [ "$m13_vclaude" -ne 0 ] || [ "$m13_corpus" -ne 1 ]; then
+  note "FIXTURE BROKEN: m13 needs a corpus tracking .claude/settings.json (got $m13_corpus) and a victim clean under .claude/ (got $m13_vclaude tracked). The arm cannot discriminate."
+  rc=1
+else
+  # BOTH DIRECTIONS, in the same run. Scrubbed: A1 must convict. Inherited: A1 must convict
+  # the SAME offender. A build that reads the victim prints `A1  ok` on the second only, so
+  # the pair separates a working scrub from one that covers the write alone.
+  m13_clean="$(run_v_env "AI_DLC_UNUSED=1" "$TMP/m13")"
+  m13_armed="$(run_v_env "GIT_DIR=$m13victim/.git" "$TMP/m13")"
+  if ! grep -qF "A1: tracked path(s) under .claude/" <<<"$m13_clean"; then
+    note "FIXTURE BROKEN: m13's offender was NOT convicted in a clean environment, so the armed arm below proves nothing."
+    rc=1
+  elif grep -qF "A1  ok" <<<"$m13_armed"; then
+    note "FAIL  m13 corpus read redirected -- A1 reported ok under an inherited GIT_DIR while the corpus tracks a real offender."
+    note "      The scrub covers the probe's WRITE and not the arms' READ; the arm's own subject is acquitted with nothing to give it away."
+    rc=1
+  elif ! grep -qF "A1: tracked path(s) under .claude/" <<<"$m13_armed"; then
+    note "FAIL  m13 -- A1 neither convicted nor acquitted under an inherited GIT_DIR; the run is unreadable."
+    printf '%s\n' "$m13_armed" | sed 's/^/      /' | head -4
+    rc=1
+  else
+    note "ok    m13 -- corpus read survives an inherited GIT_DIR; A1 convicts the same offender scrubbed and armed"
+  fi
+fi
+
+if [ "$rc" -eq 0 ]; then note "PASS  claude-rules-joins -- control green, 13/13 mutants killed by their own arm"; fi
 exit "$rc"
