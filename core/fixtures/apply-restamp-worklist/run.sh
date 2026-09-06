@@ -637,6 +637,93 @@ else
   bad "U4 --finish was blocked by a stale report (rc=$RC_U4, stamp '$(stamp_ver "$C_U4")') — the consumer is wedged: the marker is down, pre-push refuses the suite, and the run that clears it just refused"
 fi
 
+# --- U5: THE BLOCKER RESOLVED BETWEEN THE APPROVAL AND THE APPLY -------------------------------
+# SKILL.md step 7 requires every HARD-* blocker resolved BEFORE this program writes, and every
+# resolution REWRITES the region the operator approved — a `--stamp readopt` turns
+# HARD-OVERRIDE-DRIFT-SECTION into OVERRIDE-OK, a register row removes
+# HARD-LAYER-ADJUDICATION-MISSING. So the ordinary, prescribed sequence leaves an approved report
+# listing findings that no longer exist, `--verify` fails, and the refusal used to name two causes
+# — upstream moved, the region was hand-edited — of which neither is true. `--verify` now exits 3
+# for this case and apply.sh refuses NAMING it, with the one-step remedy.
+#
+# THE BLOCKER IS SEEDED IN THE CONSUMER'S OWN LAYER, not stubbed into a detector: an override
+# whose `base_sha` resolves in neither repo is what layer-drift.sh calls
+# HARD-OVERRIDE-BASE-UNRESOLVABLE, and DELETING that file is a resolution of exactly the shape
+# step 7 prescribes. Nothing about the dist changes, so the refs lines hold still and the only
+# difference between the approved region and the fresh render is the blocking list.
+#
+# STILL A REFUSAL. The four conjuncts are asserted in TWO arms on purpose. A gate that refuses
+# and a gate that refuses for the right reason are different claims, and the mutants below kill
+# them separately: A1 leaves the refusal and takes the diagnosis, A2 takes the refusal.
+u5_seed_blocker() {
+  mkdir -p "$1/.claude/skills/ai-dlc/overrides" || return 1
+  cat > "$1/.claude/skills/ai-dlc/overrides/probe.md" <<'U5OVR'
+---
+shadows: core/rules/nonexistent.md#Nope
+base_sha: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+reason: probe
+---
+
+## Nope
+
+probe body
+U5OVR
+}
+u5_build() { # u5_build <consumer> — approve WITH the blocker, then resolve it
+  mk_consumer "$1" green || return 1
+  u5_seed_blocker "$1" || return 1
+  mk_report "$1" "$THEIRS" || return 1
+  rm -rf "$1/.claude/skills/ai-dlc/overrides"
+}
+run_apply_err() { bash "$1" "$DIST" "$BASE" "$2" "$THEIRS" 2>"$3"; }
+# u5_score <apply-path> -> "<rc>|<stamp>|<marker>|<CAUSE|->|<REMEDY|->"
+# PRESENCE-SHAPED IN EVERY FIELD, and a fresh consumer per drive so no arm reads a previous
+# one's leftovers.
+u5_score() {
+  local a="$1" c="$WORK/u5-$$-$RANDOM" e rc
+  u5_build "$c" || { echo "BROKEN||||"; return; }
+  e="$c/stderr.txt"
+  run_apply_err "$a" "$c" "$e" >/dev/null; rc=$?
+  printf '%s|%s|%s|%s|%s\n' "$rc" "$(stamp_ver "$c")" "$(marker "$c")" \
+    "$(grep -q 'BLOCKERS-RESOLVED' "$e" && echo CAUSE || echo -)" \
+    "$(grep -qF "re-render the region with emit-report.sh $DIST $BASE $c $THEIRS" "$e" \
+       && grep -q 're-run apply with the same four arguments' "$e" && echo REMEDY || echo -)"
+}
+
+C_U5="$WORK/cons-u5"
+mk_consumer "$C_U5" green || { echo "FIXTURE BROKEN — could not build the U5 consumer" >&2; exit 2; }
+u5_seed_blocker "$C_U5" || { echo "FIXTURE BROKEN — could not seed the U5 blocker" >&2; exit 2; }
+mk_report "$C_U5" "$THEIRS"
+U5_APPROVED="$C_U5/_bmad-output/ai-dlc-update/reconcile-report.md"
+u5_hard_appr="$(grep -c '^HARD-' "$U5_APPROVED")" || u5_hard_appr=0
+rm -rf "$C_U5/.claude/skills/ai-dlc/overrides"
+U5_AFTER="$WORK/u5-after-region.md"
+bash "$EMIT" "$DIST" "$BASE" "$C_U5" "$THEIRS" > "$U5_AFTER" 2>/dev/null
+u5_hard_after="$(grep -c '^HARD-' "$U5_AFTER")" || u5_hard_after=0
+
+# U5-0 SELF-PROBE, and it runs before the verdict. Both sides reading the same rows establishes
+# nothing, and a render that emitted nothing carries no HARD row either — so the after-render
+# must still carry a baseline bucket row.
+if [ "$u5_hard_appr" -eq 0 ]; then
+  bad "U5-0 the approved region carries no HARD-* row, so there is no blocker to resolve and U5 below tests nothing"
+elif ! grep -qF 'UPSTREAM-ONLY  core/session-driver/ai-dlc-session-driver.sh' "$U5_AFTER"; then
+  bad "U5-0 the render taken AFTER the resolution carries no baseline bucket row — it is an empty or dead render, and its missing HARD row proves nothing"
+elif [ "$u5_hard_after" -ne 0 ]; then
+  bad "U5-0 deleting the override left $u5_hard_after HARD-* row(s) in a fresh render, so the blocker was not resolved and U5 is not the state it claims"
+else
+  ok "U5-0 setup: the approved region carries $u5_hard_appr HARD-* row(s) and the render after the resolution carries none while still rendering the baseline buckets — a real differential"
+fi
+
+U5="$(u5_score "$APPLY")"
+case "$U5" in
+  "1|1.0.0|GONE|"*) ok "U5 a report approved before its blocker was resolved REFUSES the apply (rc 1), leaving the stamp at base and writing no in-flight marker" ;;
+  *)                bad "U5 the apply did not refuse cleanly ($U5, want 1|1.0.0|GONE|...) — either step 7's own prescribed resolution now writes over a region nobody re-approved, or the refusal left a marker the operator has to clear by hand" ;;
+esac
+case "$U5" in
+  *"|CAUSE|REMEDY") ok "U5 and the refusal NAMES the cause (BLOCKERS-RESOLVED) and the one-step remedy with this run's four arguments — not the two false causes it used to offer" ;;
+  *)                bad "U5 the refusal did not name the cause and the remedy ($U5) — the operator is told upstream moved or the region was hand-edited, both false, and the pull is unpassable by any sequence step 7 permits" ;;
+esac
+
 # --- MUTANTS ----------------------------------------------------------------------------------
 # Each is a COPY of the whole reconcile directory — apply.sh `eval`s map_consumer() out of its
 # sibling preclassify.sh and shells to retired-tokens.sh and unregistered-drift.sh, so a lone
@@ -953,6 +1040,16 @@ mut_union() { # mut_union <rec-dir> -> "<rc>|<ver>|<marker>"
   out="$(run_apply "$rec/apply.sh" "$c")"; rc=$?
   printf '%s|%s|%s\n' "$rc" "$(stamp_ver "$c")" "$(marker "$c")"
 }
+# The same drive with a CURRENT report — U1's shape rather than U2's. A mutant that widened the
+# gate's passing branch to accept every exit code produces the same verdict as one that widened it
+# by exactly one, and this is the arm that separates them.
+mut_union_current() { # mut_union_current <rec-dir> -> "<rc>|<ver>|<marker>"
+  local rec="$1" c="$WORK/muc-$$-$RANDOM" out rc
+  mk_consumer "$c" green || { echo "BROKEN||"; return; }
+  mk_report "$c" "$THEIRS" || { echo "BROKEN||"; return; }
+  out="$(run_apply "$rec/apply.sh" "$c")"; rc=$?
+  printf '%s|%s|%s\n' "$rc" "$(stamp_ver "$c")" "$(marker "$c")"
+}
 
 if [ -d "$WORK/mut-ctl" ]; then
   UCTL="$(mut_union "$WORK/mut-ctl")"
@@ -983,6 +1080,63 @@ if sed 's|^        err "the report at |        say NOTE report-stale-ignored "" 
   fi
 else
   bad "m12 did not apply — apply.sh no longer refuses a stale region with \`err \"the report at \`, so this mutant proves nothing. Re-anchor it on the current spelling."
+fi
+
+# --- A1/A2: the resolved-blockers branch. Must die on U5, and on the two halves separately. ---
+# THE TWO HALVES ARE THE POINT. U5 asserts a refusal AND a diagnosis, and those are different
+# claims about the same run: A1 takes the diagnosis and leaves the refusal, A2 takes the refusal.
+# A mutant killing both at once would leave either half free to be vacuous.
+#
+# A1 ANCHORS ON THE BRANCH CONDITION, NOT ON `err "the report at `. The three refusal sites open
+# with byte-identical text — m12 edits all three deliberately — so a mutation keyed on that opener
+# moves three cells and scores a kill this arm did not earn. The condition is what separates them.
+#
+# AND THE MESSAGE CONJUNCT IS KEYED ON THE REMEDY, NOT ON THE WORD `BLOCKERS-RESOLVED`. The
+# generic refusal quotes --verify's own `cause:` line, which carries that word too, so an arm
+# demanding only the word survives A1 and proves nothing. `re-render the region with
+# emit-report.sh <the four arguments>` is emitted by this branch alone.
+if sed 's/^      elif \[ "$_ug_rc" -eq 3 \]; then$/      elif [ 1 -eq 0 ]; then/' "$REC/apply.sh" \
+   | mut_apply "$WORK/a1"; then
+  A1="$(u5_score "$WORK/a1/apply.sh")"
+  case "$A1" in
+    "1|1.0.0|GONE|CAUSE|-") ok "A1 (the exit-3 branch disarmed): U5's DIAGNOSIS half goes red — the refusal still happens and the remedy that closes it is gone, which is the state the consumer filed" ;;
+    "1|1.0.0|GONE|CAUSE|REMEDY") bad "A1 SURVIVED: the remedy was still printed with the exit-3 branch disarmed ($A1), so U5's message half is being carried by some other site" ;;
+    *)                      bad "A1 moved more than the message ($A1, want 1|1.0.0|GONE|CAUSE|-) — the refusal itself changed, so U5's two halves are entangled and one of them proves nothing on its own" ;;
+  esac
+  A1G="$(mut_stamp "$WORK/a1" green -)"
+  if [ "${A1G%%|*}" = "$THEIRS_VER" ]; then
+    ok "A1 and the clean path stays green under it — U5 and C3 are not entangled"
+  else
+    bad "A1 also moved the clean path ($A1G): the mutation was not confined to the union gate's exit-3 branch and its kill is unearned"
+  fi
+else
+  bad "A1 did not apply — apply.sh no longer branches on \`elif [ \"\$_ug_rc\" -eq 3 ]; then\`, so this mutant proves nothing. Re-anchor it on the current spelling."
+fi
+
+# A2 IS THE WRONG FIX, NOT A REVERT: exit 3 read as a pass. It is the tempting one — the cause is
+# the operator's own work, so waving it through looks like removing a wedge — and it authorises a
+# write against a region nobody re-approved, where a resolution can leave rows the operator has
+# not seen. U1 must stay green under it, or the arm is measuring the gate rather than the carve-out.
+if sed 's/^    if \[ "$_ug_rc" -eq 0 \]; then$/    if [ "$_ug_rc" -eq 0 ] || [ "$_ug_rc" -eq 3 ]; then/' "$REC/apply.sh" \
+   | mut_apply "$WORK/a2"; then
+  A2="$(u5_score "$WORK/a2/apply.sh")"
+  case "$A2" in
+    "0|$THEIRS_VER|GONE|"*) ok "A2 (exit 3 treated as a pass): U5's REFUSAL half goes red — the apply writes and stamps $THEIRS_VER over a region nobody re-approved, which is what the carve-out costs" ;;
+    "1|1.0.0|GONE|"*)       bad "A2 SURVIVED: the apply still refused with exit 3 folded into the passing branch ($A2), so U5's rc/stamp half is being carried by something other than that branch" ;;
+    *)                      bad "A2 produced a verdict this fixture does not recognise ($A2) — it may have died for an unrelated reason, in which case U5's kill is unearned" ;;
+  esac
+  # THE NEIGHBOURING ARM, in the same run. A mutation that widened the passing branch to accept
+  # everything would also produce A2's verdict, and U1 is what separates the two.
+  if [ -d "$WORK/a2" ]; then
+    A2U1="$(mut_union_current "$WORK/a2")"
+    if [ "$A2U1" = "0|$THEIRS_VER|GONE" ]; then
+      ok "A2 and U1 stays green under it — a report that genuinely verifies still passes, so the mutation widened the branch by exactly one exit code and not to everything"
+    else
+      bad "A2 also moved the clean union-gate path ($A2U1): the mutation is not confined to exit 3 and its kill on U5 is unearned"
+    fi
+  fi
+else
+  bad "A2 did not apply — apply.sh no longer opens the union gate with \`if [ \"\$_ug_rc\" -eq 0 ]; then\`, so this mutant proves nothing. Re-anchor it on the current spelling."
 fi
 
 echo
