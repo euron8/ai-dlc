@@ -7440,3 +7440,141 @@ they are reachable only by hand.
 
 verify: sh f=scripts/validate-claude-rules.sh; [ -f "$f" ] || exit 9; awk 'BEGIN{c=0} /^unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY$/{c=1} /^[^#]*git (ls-files|init|add)/{if(!c) exit 1} END{exit !c}' "$f"
 
+## BL-192 — the report driver ran the two drift detectors twice per render, and the duplication was MASKING a wrapper that renders a refusing detector as `0 HARD blockers.`
+
+**LANDED (v0.519.0, verified 09aa8af9).**
+
+`PC-S308-EMIT-REPORT-RUNS-LAYER-DRIFT-AND-UNREGISTERED-DRIFT-TWICE`, filed by the reference
+consumer from its `0.515.0 → 0.516.0` pull.
+
+**THE FILED HALF, CONFIRMED RATHER THAN REFUTED.** `emit-report.sh` needs three OUTPUTS — the
+blocking list and each detector's own section — and derived them from three PROCESSES: it invoked
+`hard-blockers.sh`, which runs both detectors, then invoked the same two detectors again directly.
+The refs cannot move inside one invocation, so the second run recomputed the first exactly.
+**Established by comparing OUTPUT, not by reading the source**: `layer-drift.sh` byte-identical
+across the two call sites at 50 rows, `unregistered-drift.sh` at 85, with a degenerate-range
+control proving the `cmp` can report DIFFER.
+
+**THE COST IS LARGER THAN FILED, AND THE ENTRY UNDERSTATES ITS OWN CASE.** Interleaved, order
+reversed between reps: `layer-drift.sh` 19–20s, `unregistered-drift.sh` 2–3s, the wrapper 21–22s,
+a whole render 60–64s. The filing describes the cost of ONE render. But `--verify` calls the same
+`render()` (`emit-report.sh:460`, the function print mode calls at `:437`; no cache in either
+file, control 0 against 14 for `SELF`), and `apply.sh:219` gates every write on `--verify`. So a
+clean pull pays **3 renders = 8 runs of each detector, 3 of them the duplication**; a pull that
+had a blocker pays step 7's re-render and re-verify on top. Per `SKILL.md`'s own note that the
+deferral is structural, the blocker case is the common one.
+
+**THE FINDING THAT OUTRANKS THE FILING: THE WRAPPER SWALLOWS A REFUSING DETECTOR, AND THE
+DUPLICATION IS WHY NOBODY SAW IT.** Measured in a sandbox copy of `reconcile/` with an unmutated
+control rendering correctly through the same sandbox — stub `layer-drift.sh` to `exit 2` and
+`hard-blockers.sh` printed `0 HARD blockers.` at **exit 0**. Stub `unregistered-drift.sh` and it
+did too. `hard-blockers.sh:84` ended in `|| true` and its `collect()` ran the other detector inside
+a pipeline, so both statuses were discarded. **`0 HARD blockers.` is the one line the whole `HARD-`
+contract keys on** — `SKILL.md` tells the operator a `HARD-` status blocks apply, so the
+affirmative empty line is what authorises the write, and a detector that never classified was
+producing it.
+
+**That is why the two changes ship together and neither is safe alone.** `emit-report.sh` ran the
+detectors again and rendered `DETECTOR-REFUSED` from their exit codes, so the false clean line sat
+beside a true refusal in the same region. De-duplicating WITHOUT closing the swallow would have
+deleted the only signal — the optimisation alone is a regression.
+
+**THE FIX, AND THE TWO SHAPES REFUTED BY BUILDING THEM.** `I105`
+(`scripts/validate-enforcement-map.sh:8740`) requires every `reconcile/*.sh` to be INVOKED by the
+driver — keyed on the literal `"$SELF/<name>.sh"` — or to carry an exemption marker. Scored against
+that arm's own two predicates, on copies built with a line-count control and `cmp -s`, impossible
+name reading 0 throughout:
+
+```
+                                        hard-blockers  layer-drift  unregistered-drift  -> NEITHER
+today                                        1              1              1                 0
+(a) inline the wrapper's HARD rows           0              1              1                 1
+(b) rows mode, driver calls only wrapper     1              0              0                 2
+(d) SHIPPED: rows passed DOWN                1              1              1                 0
+```
+
+**Shape (b) was the recommendation carried in this program's plan, on the stated grounds that it
+"leaves `I105` alone". It does the opposite** — it is the only shape that puts TWO files into the
+unrouted bucket. Shape (d) keeps all three call sites and moves only the ROWS: the driver runs each
+detector once into a temp file, captures each rc **off the bare run rather than off a pipeline**,
+and passes rows plus status into `hard-blockers.sh` through four optional flags.
+
+**AND THE FIXTURE AGREES FROM A SECOND, INDEPENDENT DIRECTION.** A hand ran
+`core/fixtures/reconcile-emit-report/run.sh` five times against HEAD-pinned and live baselines that
+both PASS, so the differential resolves: shape (a) **5 FAILED**, shape (b) **6 FAILED**, the shipped
+shape **PASS at 65 ok / 0 FAIL**. Two results there are worth more than the counts:
+
+- **Shape (a) makes the whole wrapper INERT under `--verify`.** `V-HB` — the world that stubs
+  `hard-blockers.sh` dead — scores `0|NONE|0|NA|NA|0`, meaning **`--verify` exits 0**, with the
+  rendered region byte-identical with and without the stub. `apply.sh:219` gates every write on that
+  exit code, so the shape the plan offered as the safe alternative silently disarms the gate.
+- **Shape (b) ENTANGLES two worlds.** One stub makes all three sections refuse at once, `V-HB`
+  scores `…|3|…` against a wanted `1`, and mutant `E7`'s kill set widens from `[V-D]` to
+  `[V-D V-HB]`. The wrapper and the detector stop being independent refusal channels, which is the
+  fixture's own definition of two entangled arms with one of them vacuous.
+
+**NOTHING GOES VACUOUS IN ANY SHAPE, AND THE PLAN'S DESCRIPTION OF THIS HAZARD IS WRONG IN THE
+DIRECTION THAT MATTERS.** It warned that shape (a) *vacates* four arms including "an `E10`/`E11`
+pair". Measured: the co-covering pair is **`E9`/`E10`**, as `run.sh:1172-1181` states in its own
+words, and `E11` is the composite that BREAKS their mutual cover rather than a member of it — `E9`
+survives shape (a) untouched, keying on a `norm_rows` site that never reaches this wrapper. More
+importantly the arms go **LOUD, not silent**: `v_score` is presence-shaped in all six fields and
+`v_kill` asserts kill sets exactly, so shape (a) removes mutant `E10`'s ANCHOR and the fixture
+refuses to score a mutation it could not construct. A fixture reporting "the subject was respelled"
+is the opposite of a vacated arm, and reading it as one would have sent the next author to relax the
+assertion.
+
+**THE BASE SPLIT STAYS IN THE WRAPPER, WHICH IS THE WHOLE REASON THE WRAPPER EXISTS.** The caller
+supplies rows and never a base. `--post-apply` moves `UD_BASE` from the pull's base to `theirs`, so
+rows a caller computed pre-apply are wrong for that detector by construction — the combination is
+**refused (exit 2)** rather than honoured. Rows without their rc, an rc without rows, and a rows
+file that does not exist are all exit 2 as well: empty rows mean "clean" or "never ran" and only the
+status separates them, so the ambiguous state is made unconstructible instead of detectable.
+
+**WHAT WAS MEASURED BEFORE SHIPPING**, both sides extracted the same way with a control asserting
+the two trees differ:
+
+- **The rendered bytes DO NOT MOVE** — same md5, 143 lines, pre and post. This is the one that
+  mattered: `apply.sh:219` gates writes on a byte-compare, and the frozen region is everything
+  between the `reconcile-mechanical` markers with only the dist path normalised.
+- **`I105` unchanged** — 24 files, 13 invoked, 11 exempt, 0 NEITHER, 0 BOTH, both sides.
+- **The swallow is closed** — the same stub that rendered `0 HARD blockers.` now renders
+  `DETECTOR-REFUSED`, at `%-32s %s`, the padding every other row in that list uses.
+- **Standalone print mode BYTE-IDENTICAL** — all seven existing call sites in
+  `core/fixtures/reconcile-blocking-list/run.sh` supply no rows and are unaffected.
+- **Cost falls, across three interleaved pre/post render pairs: 75→62, 68→43, 62→44.** The
+  ABSOLUTE numbers move between pairs by more than the machine is quiet — these are 60s renders
+  against a live consumer tree, not a controlled benchmark — so read the direction and the rough
+  third, never a single figure. Each pair is pre-and-post in the same run, which is what makes the
+  direction readable at all.
+
+**THE NEW ARMS CAUGHT TWO DEFECTS IN THIS FIX ON THEIR FIRST RUN, BOTH IN THE SUBJECT AND NEITHER
+VISIBLE TO REVIEW.** The rendered output looked correct both times; the arm is what disagreed.
+
+- **`printf '%s'` dropped the trailing newline**, so `<!-- END GENERATED: hard-blockers -->` was
+  appended to the last refusal row — one line where there must be two, defeating any reader anchored
+  on `^<!-- END`.
+- **The refusal row QUOTED the line it suppresses.** It read *"this list is NOT a finding of
+  `'0 HARD blockers.'`"*, which put that exact string INTO the region, so a reader testing whether
+  the clean line is absent found it inside the refusal explaining its absence. The fixture arm
+  asserting suppression failed against a wrapper that was suppressing correctly. This is
+  `verification-discipline.md`'s "text about a program is not the program" with the remedy prose as
+  the text; the row now says "NOT a clean sheet" and the affirmative line has exactly one emitter.
+
+**`--check` MODE FAILS ON A REFUSAL WHERE IT USED TO CERTIFY.** Its contract is "the report names
+every `HARD` item the detectors emit"; against a detector that computed nothing that is vacuously
+true, so the pass meant nothing. This is deliberately NOT the treatment `DRIFT-RANGE-DEGENERATE`
+gets — a degenerate range is honestly computed and merely narrower, which is the wedge-live-work
+shape, so it stays a warning.
+
+**THE RECEIPT COUNTS RUNS, NOT SOURCE TOKENS, AND THAT CHOICE IS LOAD-BEARING.** A receipt keyed on
+the driver naming a detector once is closable by any refactor that moves the string — it would have
+scored shape (b), which deletes the string and keeps the run, as a fix. The defect IS the detector
+EXECUTING twice, so that is what is counted: each detector is replaced by a stub appending a line
+per invocation. **Scored both ways: shipped 1/1, pre-fix 2/2.** Two plausible wrong fixes were built
+and scored — shape (b) PASSES this receipt (`I105` is what refuses it, and that limit is stated here
+rather than left to be found), and a mutant that de-duplicates while dropping the rc renders no
+refusal where the shipped driver does.
+
+verify: sh d=$(mktemp -d); R="$PWD"; R2="$R/core/skills/ai-dlc-update/reconcile"; for f in "$R2"/*.sh; do printf '#!/usr/bin/env bash\nexit 0\n' > "$d/$(basename "$f")"; done; cp "$R2/emit-report.sh" "$R2/hard-blockers.sh" "$d/"; printf '#!/usr/bin/env bash\necho r >> "%s/c"\nexit 0\n' "$d" > "$d/layer-drift.sh"; printf '#!/usr/bin/env bash\necho r >> "%s/c"\nexit 0\n' "$d" > "$d/unregistered-drift.sh"; mkdir -p "$d/cons"; : > "$d/c"; bash "$d/emit-report.sh" "$R" HEAD~1 "$d/cons" HEAD >/dev/null 2>&1; n=$(grep -c . "$d/c"); rm -rf "$d"; [ "$n" -gt 0 ] || exit 9; [ "$n" -eq 2 ]
+

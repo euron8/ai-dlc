@@ -37,6 +37,94 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 67 SHIPPED AS `v0.519.0`, ONE PC-BACKED RELEASE, AND THE PLAN'S OWN RECOMMENDED FIX SHAPE WAS REFUTED BY BUILDING IT. THE CONSUMER PULLED TO `0.518.0` MID-BATCH, SO THE GAP IS ONE AND PENDING IS ONE, AND THE PULL IS OWED, NOT REQUIRED — ITS DIVERGENCE IS MEASURED AND LATENT. THE SWEEP IS NOT EMPTY: UNFILED IS 17, WITH NO `PC-` CANDIDATE PRE-SCOPED FOR THE FIRST TIME IN THREE BATCHES.
+
+This block replaces the batch-66 record below it. Every figure here was re-derived on 2026-09-06
+after the merge, against the working tree with the controls in the same invocation; re-derive
+them again rather than reading them.
+
+**`VERSION` IS `0.519.0`, SO BATCH 68 RELEASES AS `0.520.0`.** Re-derive `VERSION` and add one.
+Batch 67 merged once: `09aa8af9` (PR #660, squash, `v0.519.0`) closing `BL-192` and citing
+`PC-S308-EMIT-REPORT-RUNS-LAYER-DRIFT-AND-UNREGISTERED-DRIFT-TWICE` verbatim in the release commit
+message — the id resolves to exactly ONE commit by message, control 0 for an impossible id.
+Rotated (live 89 → 88, archive 103 → 104), `--check` PASS with the sha resolving before `--apply`.
+**Receipt histogram before and after: the ONLY exit 0 is `BL-192`'s own, identified BY NAME — zero
+incidental closes.** The other apparent zero is the `## Receipts` legend, which is prose about the
+grammar and not an entry; that is the known trap in this extraction. No correction release. **The
+fifteenth batch opened by a peer's handoff** (action 9's message from `ai-dlc-f7`), so it scoped
+itself from its own ranking and stated the choice in its first ping.
+
+**THE PLAN'S OWN RECOMMENDATION WAS WRONG, AND ONLY BUILDING IT SHOWED THAT.** The batch-66 block
+below recommends "shape (b) — a rows mode on the wrapper" on the stated grounds that it "leaves
+`I105` alone". `I105` is keyed on the literal `"$SELF/<name>.sh"` appearing in the driver, and
+shape (b) DELETES two of those strings. Scored with that arm's own two predicates, on copies built
+with a line-count control and `cmp -s`, impossible name reading 0 throughout: today 0 unrouted,
+shape (a) 1, **shape (b) 2**, shipped shape 0. It is the only shape that doubles the damage it
+claims to avoid. **A recommendation carried in this file is a hypothesis exactly like every figure
+in it** — this program's own rule, collected on this program's own text.
+
+**THE DUPLICATION WAS LOAD-BEARING, AND REMOVING IT ALONE WOULD HAVE BEEN A REGRESSION.**
+`hard-blockers.sh` SWALLOWED a refusing detector: stub either detector to `exit 2` and it printed
+`0 HARD blockers.` at exit 0 — the one line the whole `HARD-` contract keys on, so a detector that
+never classified was authorising the write. Measured in a sandbox copy with an unmutated control
+rendering correctly through the same sandbox, both detectors, both directions. **The driver's
+SECOND run was the only thing still rendering `DETECTOR-REFUSED`**, so de-duplicating without
+closing the swallow deletes the report's only refusal signal. Ask what a redundancy is
+COMPENSATING FOR before deleting it.
+
+**SHIPPED SHAPE (d): the driver keeps all three call sites, runs each detector ONCE into a temp
+file, captures each rc off the BARE run rather than off a pipeline, and passes rows plus status
+into the wrapper through four optional flags.** The wrapper keeps the `HARD-` filter, the
+degenerate qualifier and the per-detector base split that `--post-apply` moves; the caller supplies
+rows and never a base. `--post-apply` combined with `--ud-rows` is REFUSED, as is a rows flag
+without its rc, an rc without its rows, and a rows file that does not exist.
+
+**WHAT WAS MEASURED BEFORE SHIPPING, each with its control:** rendered region **byte-identical**
+(same md5, 143 lines — `apply.sh:219` byte-compares it); `I105` unchanged at 24 / 13 invoked / 11
+exempt / 0 / 0; the swallow closed for both detectors; `hard-blockers.sh` standalone print mode
+byte-identical so all seven existing call sites are unaffected; cost falling across three
+interleaved pre/post pairs (75→62, 68→43, 62→44 — read the direction, not a figure).
+
+**A DELEGATED HAND PRODUCED THE BATCH'S BEST FINDING AND CORRECTED TWO CLAIMS THIS FILE MAKES.** It
+ran the whole `reconcile-emit-report` fixture five times against two baselines that both PASS:
+shape (a) **5 FAILED**, shape (b) **6 FAILED**, shipped shape **PASS at 65 ok / 0 FAIL**. Under
+shape (a), `V-HB` scores `0|NONE|0|NA|NA|0` — **`--verify` exits 0 with the wrapper stubbed dead**,
+region byte-identical either way, on the gate `apply.sh:219` depends on. And the batch-66 block's
+"vacates four arms including an `E10`/`E11` pair" is wrong twice: the co-covering pair is
+**`E9`/`E10`** (`run.sh:1172-1181` says so in its own words, and `E11` is the composite that BREAKS
+their mutual cover), and **nothing vacates** — the arms go LOUD, because `v_score` is
+presence-shaped in all six fields and removing a mutant's ANCHOR makes the fixture refuse to score
+a mutation it could not construct. Reading that refusal as a vacated arm sends the next author to
+relax the assertion.
+
+**THE NEW FIXTURE ARMS CAUGHT TWO DEFECTS IN THE FIX ON THEIR FIRST RUN, BOTH IN THE SUBJECT.**
+`printf '%s'` dropped the trailing newline so the END marker ran onto the last refusal row; and the
+refusal row QUOTED the string it suppresses, putting `0 HARD blockers.` INTO the region so the arm
+asserting suppression failed against a wrapper that was suppressing correctly. Text about a program
+scored as the program, with the remedy prose as the text.
+
+**GAP ONE (`0.518.0` installed, `0.519.0` shipped) — PENDING 1, AND THE PULL IS OWED, NOT REQUIRED.**
+Action 7's second test was run on the REAL subject rather than the stock validator, which is
+byte-identical here and would have produced a meaningless null: installed wrapper (8735 bytes)
+against shipped (18245), same consumer tree, discriminating input a refusing detector — **installed
+renders a CLEAN SHEET, shipped REFUSES.** That divergence is real and it is **LATENT**: driving both
+installed detectors unstubbed against the consumer, **both exit 0 today**, so nothing is being
+mis-reported now. **Stated as a limit rather than hidden behind the null** — this is a fix for a
+SILENT failure, so it has no warning shot when it becomes live, and a differential taken while
+nothing fails cannot see it. That is an argument for the pull's value, never evidence it is
+required. **The bootstrapping hazard IS live**: both changed files are the update skill's own
+machinery, so the pull delivering this fix runs under the UNFIXED engine. Mode-only changes in the
+range: **0**, derived by comparing the mode columns with a control proving the expression can still
+count (3 blob-differs).
+
+**THE SWEEP FOR BATCH 68, AND FOR THE FIRST TIME IN THREE BATCHES NOTHING IS PRE-SCOPED.** Unfiled
+is 17, none filed since 2026-08-31, and the 2026-09-06 arrival was this batch's own subject. The
+no-`PC` residue ranks after any PC-backed pick: **`BL-191`** is the readiest (the `git init` class —
+45 files run it, 42 scrub nothing; 8 of 8 fixtures clobbered a 757-entry index when run directly and
+6 did it at exit 0; its remedy is a `core/fixtures/lib/preamble.sh` seam plus a binding, touching 40
+shipped files, and its detector's FP set measures 41 of 45 so it ships REPORT-ONLY with a downward
+ratchet), then `BL-187`, `BL-113` (ships alone, bootstrapping), `BL-122`, `BL-148`.
+
 ### BATCH 66 SHIPPED AS `v0.518.0`, ONE RELEASE CLOSING A NO-`PC` DEFECT THAT BLOCKED EVERY WORKTREE HAND'S PUSH, WITH TWO ENTRIES FILED AND NOT FIXED. THE CONSUMER DID NOT PULL, SO THE GAP IS TWO AND PENDING IS TWO, AND THE PULL IS OWED, NOT REQUIRED. THE SWEEP IS NOT EMPTY: ONE `PC-S308-*` CANDIDATE IS SCOPED, MEASURED AND DELIBERATELY UNSTARTED, AND UNFILED IS 18.
 
 This block replaces the batch-65 record below it. Every figure here was re-derived on 2026-09-06
@@ -6581,16 +6669,25 @@ so no block written before it changes verdict.
    at every phase when its second adversary returned two BLOCKERs, and batch 66's was green
    when its adversary returned a BLOCKER establishing the shipped fix had made things WORSE.**
 
-   **THE READIEST SUBJECT IS ALREADY SCOPED AND MEASURED, AND IT SHIPS ALONE.**
-   `PC-S308-EMIT-REPORT-RUNS-LAYER-DRIFT-AND-UNREGISTERED-DRIFT-TWICE` was fully scoped at batch
-   66 and deliberately not started: `emit-report.sh` is machinery, `apply.sh:219` gates its own
-   writes on `emit-report.sh --verify`, and `self-update-gate.sh` on the live range returns
-   `SELF-UPDATE-DEFER` twice plus `SELF-UPDATE-SAFE-STOP`, so no split lands the engine first.
-   The premise is confirmed rather than refuted and the cost is ~20s of a 57s render. **Read the
-   batch-66 resume block's three "unsafe" clauses before writing the fix** — the wrapper swallows
-   a refusing detector, fix shape (a) breaks `I105` and vacates four `reconcile-emit-report` arms,
-   and the rendered bytes must not move. Shape (b) is the recommendation. The other 17 unfiled ids
-   are the standing corpus.
+   **NOTHING IS PRE-SCOPED, FOR THE FIRST TIME IN THREE BATCHES. THE SWEEP DECIDES.** Unfiled is
+   17 and none has been filed since 2026-08-31; the one 2026-09-06 arrival was batch 67's subject
+   and is shipped. Rank the unfiled set yourself, read each candidate's own status line in the
+   consumer's ledger before treating it as work, and run its receipt RAW before scoping it.
+
+   **BATCH 67's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
+   `PC-S308-EMIT-REPORT-RUNS-LAYER-DRIFT-AND-UNREGISTERED-DRIFT-TWICE` shipped as `v0.519.0` at
+   `09aa8af9` (PR #660) closing `BL-192`, cited verbatim in the release commit message, rotated.
+   **AND THE FIX SHAPE THIS BLOCK USED TO RECOMMEND FOR IT WAS REFUTED BY BUILDING IT** — see the
+   batch-67 resume block. If you take a fix shape from a recommendation in this file, score it
+   first; one of them was wrong in the direction that reads as safe.
+
+   **`BL-191` IS THE READIEST NO-`PC` ALTERNATIVE and it is real work** — 45 files run `git init`,
+   42 scrub nothing, 8 of 8 fixtures clobbered a 757-entry index when run DIRECTLY and 6 did it at
+   exit 0 with zero FAILs. Its remedy is a `core/fixtures/lib/preamble.sh` seam plus a binding that
+   fails the push when a `run.sh` does not source it, touching 40 shipped files and their ship
+   declarations; its detector's FP set measures 41 flagged of 45, so it ships REPORT-ONLY with a
+   downward ratchet. `BL-187`, `BL-113` (ships alone, bootstrapping), `BL-122` and `BL-148` rank
+   after it. All carry no `PC-` id, so any PC-backed candidate the sweep turns up outranks them.
 
    **BATCH 66's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.** `BL-190` closed the
    `validate-claude-rules.sh` `GIT_DIR` defect that blocked every worktree hand's push. **Its
@@ -7240,9 +7337,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 7b363a17... at batch 66's close, UNMOVED across the batch (no consumer pull, no PC- citation); same value at batch 64's close: the consumer pulled to 0.515.0 (rotating the S340 candidate) and filed two PC-S308-* in its WORKING TREE; 2c129779... through batch 63's close; it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too, and check the consumer's porcelain, because an uncommitted filing has no -S date
-   wc -l < /tmp/live.txt    # 67 at batch 66's close, unmoved; 67 at batch 65's close (the consumer's 0.516.0 pull rotated two and filed one); 66 at batch 64's close (two filed, one rotated); 65 after the consumer's batch-63 pull rotated seven; 72 with the corrected ^#{2,6} grammar through batch 62 (the old ^## one reads one fewer)
-   wc -l < /tmp/unfiled.txt # 18 at batch 66's close, unmoved; 18 at batch 65's close; 19 at batch 64's close -- two new PC-S308-* filings in, PC-S340-CHECK-26-READS-A-PARTIAL-... out by the operator's carried rejection (batch 64 cited no PC- id); 18 through batch 63; 20 through batch 62
+   md5 -q "$L"              # b7e0f100... at batch 67's close -- the CONSUMER PULLED to 0.518.0 mid-batch (its PR #1025 at 44001c2aa), which rotated one cited id; 7b363a17... through batches 64-66; 2c129779... through batch 63's close; it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too, and check the consumer's porcelain, because an uncommitted filing has no -S date
+   wc -l < /tmp/live.txt    # 66 at batch 67's close (the consumer's 0.518.0 pull rotated one cited id, 67 -> 66); 67 at batch 66's close; 67 at batch 65's close (the consumer's 0.516.0 pull rotated two and filed one); 66 at batch 64's close (two filed, one rotated); 65 after the consumer's batch-63 pull rotated seven; 72 with the corrected ^#{2,6} grammar through batch 62 (the old ^## one reads one fewer)
+   wc -l < /tmp/unfiled.txt # 17 at batch 67's close -- batch 67's own citation moved PC-S308-EMIT-REPORT-... from unfiled to cited; 18 at batch 66's close, unmoved; 18 at batch 65's close; 19 at batch 64's close -- two new PC-S308-* filings in, PC-S340-CHECK-26-READS-A-PARTIAL-... out by the operator's carried rejection (batch 64 cited no PC- id); 18 through batch 63; 20 through batch 62
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -7250,8 +7347,15 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 67 LIVE CANDIDATES, 49 CITED, 18 UNFILED** — re-derived at batch 66's
-   close after its merge (md5 `7b363a17…`, archive 168; the consumer did NOT pull during batch 66
+   **THE BASELINE IS 66 LIVE CANDIDATES, 49 CITED, 17 UNFILED** — re-derived at batch 67's close
+   after its merge at `09aa8af9` (md5 `b7e0f100…`, archive 169, partition control 0, all presence
+   controls 1, absence control 0). **The CONSUMER PULLED to `0.518.0` mid-batch**, its PR #1025 at
+   `44001c2aa`, which rotated one cited id and took live 67 → 66 and archive 168 → 169 while
+   unfiled held at 18; batch 67's own citation of
+   `PC-S308-EMIT-REPORT-RUNS-LAYER-DRIFT-AND-UNREGISTERED-DRIFT-TWICE` then moved that id from
+   unfiled to cited, so unfiled reads 17 and cited holds at 49 for two offsetting reasons.
+   TERMINAL rose 54 → 55. The figures below are the earlier readings and are kept as the record of
+   how the counts moved (md5 `7b363a17…`, archive 168; the consumer did NOT pull during batch 66
    and batch 66 cited no `PC-` id, so all four figures are unmoved from batch 65's close and the
    ledger is byte-identical — an unmoved ledger across a batch that shipped is the NORMAL case,
    because closing an entry here changes what the DISTRIBUTION has done and the consumer's ledger
