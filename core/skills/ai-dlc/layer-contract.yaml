@@ -468,7 +468,7 @@ clauses:
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: HARD-OVERRIDE-BASE-UNRESOLVABLE
-    fixture: none
+    fixture: reconcile-emit-report
 
   - id: LC-O5
     subject: override

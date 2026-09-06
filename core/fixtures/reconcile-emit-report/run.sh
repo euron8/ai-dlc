@@ -579,7 +579,7 @@ v_approve() { # v_approve <world> <ref-to-render-at>
   [ -s "$d/region.md" ]
 }
 # THE RESOLUTION, and it is the shipping producer's own bytes rather than a hand-written
-# near-miss: the consumer's copy is put back to exactly what `git show <base>:` holds, which is
+# near-miss: the consumer's copy is put back to exactly what `git show "<base>:<path>"` holds, as
 # what a real adjudication does.
 v_resolve() { git -C "$DIST" show "${BASE}:core/schemas/thing.json" > "$VW/$1/consumer/.claude/schemas/thing.json"; }
 v_render()  { local d="$VW/$1"; bash "$EMIT" "$DIST" "$BASE" "$d/consumer" "$(cat "$d/ref")" 2>/dev/null; }
