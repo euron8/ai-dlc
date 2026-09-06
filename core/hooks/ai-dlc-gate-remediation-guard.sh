@@ -517,18 +517,27 @@ esac
 # gate-adjudicator dispatch falls in [16:00:00Z, +15m) for the round-nonce file, and the
 # fixture asserts that directly.
 #
-# THE WINDOW IS 900s AND THE NUMBER IS MEASURED, NOT CHOSEN. Over the 44 post-epoch verdicts B1
-# cannot speak for, the gap from nonce to the next gate-adjudicator dispatch is <= 60s for the
-# 36 whose ordering is sound; every gap above 169s belongs to a verdict whose own write predates
-# its nonce. 900 sits 15x above the largest sound gap and below the smallest unsound one.
+# THE WINDOW IS 900s AND THE NUMBER IS MEASURED, NOT CHOSEN -- AND THE MARGIN IS SMALLER THAN
+# THE FIRST CUT CLAIMED. Over the consumer's 137 post-epoch conforming verdicts with a later
+# gate-adjudicator dispatch, the gap from nonce to that dispatch is: min 9s, p50 21s, ten gaps
+# in (60s, 900s] of which eight carry a generated_at at or after their nonce, largest sound gap
+# 217s, and 18 gaps above 900s -- which are exactly the unbound set. 900 sits about 4x above
+# the largest sound gap, not the 15x an earlier revision of this paragraph stated from a
+# 44-verdict subset. A hard constant here, and in the validator; see the assignment above.
 #
-# THE MEASURED FALSE-REFUSAL SET IS NINE, ENUMERATED, AND NONE OF THEM CAN BE LIVE. Running this
-# predicate over the consumer's 195: 119 bound, 56 exempt, 2 non-conforming (already filtered by
-# the pick and already rejected by the validator's envelope), 18 unbound. Nine of the eighteen
-# are the entry's own defect class -- a nonce minted after the work, four of them at a round
-# minute. The other nine are legitimate passes written before this ledger existed, so B1 has no
-# row for them and their dispatch sits outside the window. All nine are older than the newest
-# bound pass, so the pick reaches none of them and the arm changes no outcome on that tree today.
+# THE MEASURED FALSE-REFUSAL SET, ENUMERATED, AND NONE OF IT CAN BE LIVE. Running this predicate
+# over the consumer's 195: 119 bound, 56 exempt, 2 non-conforming (already filtered by the pick
+# and already rejected by the validator's envelope), 18 unbound. How many of the 18 are the
+# defect class depends on the signal: by transcript write events (the signal no lead writes),
+# nine are verdicts whose write predates their nonce, four at a round minute; by
+# generated_at >= nonce (a field the lead writes), 14 read as legitimate. The two disagree on
+# five. Every one of the 18 is older than the newest bound pass, so the pick reaches none of
+# them and the arm changes no outcome on that tree today. What the number says about the
+# FUTURE: a pass whose verdict is written through Bash (no B1 row -- at least six in the
+# consumer's history) AND whose dispatch row is missing or more than 900s after the nonce is
+# refused here and hard-blocked by the validator, at the cost of one re-run of the gate;
+# historically 18 of 137 would have met that shape on the dispatch signal alone, before the
+# write ledger existed to bind the Write-tool majority.
 #
 # WHAT IT DOES NOT CATCH, STATED SO THE NEXT READER DOES NOT WIDEN IT INTO A CLAIM. The arm
 # catches a nonce minted in its own FUTURE -- the measured class, nine files on the reference

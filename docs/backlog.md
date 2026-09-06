@@ -4210,7 +4210,18 @@ environment and its upper bound was asserted by nothing, so a window of 10^9 pas
 and all three fixtures; both readers carry it as a hard constant now and the 899s/901s pair
 holds the bound from both sides. (4) The validator fixture's one-row ledger made its dispatch
 the EPOCH, so every "binds" arm passed by exemption rather than by binding; the seed carries an
-epoch row now and the pre-migration arm alone uses the one-row shape.
+epoch row now and the pre-migration arm alone uses the one-row shape. (5) The header's
+margin did not reproduce: over 137 post-epoch verdicts the largest sound dispatch gap is 217s
+(p50 21s, ten gaps in (60s, 900s], 18 above), so 900s sits about 4x above it and not 15x; and
+of the 18 unbound, nine are the defect class by transcript write events while 14 read as
+legitimate by `generated_at`, a field the lead writes. The header says both. What that means
+going forward is stated there too: a Bash-written verdict whose dispatch row is missing or
+more than 900s late is refused and costs one re-run; the consumer's live pass today is
+`bound-dispatch`, the validator exits 0 on it with the real ledgers, and the forged file
+blocks as the control. `.verdict-writes.jsonl` inherits its durable classification from the
+`gate-adjudication` directory entry in `pipeline-state-paths.json` and is not ignored on the
+consumer; I95 cannot see the path because the guard builds it from the gate-directory
+variable, which is an omission rather than a misclassification.
 
 **What the arm does not catch, and what no arm here can.** It catches a nonce minted in its own
 FUTURE — the measured class, nine files — not forgery as such: a lead that mints the nonce at
