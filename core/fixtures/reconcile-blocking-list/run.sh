@@ -118,6 +118,96 @@ else
     && ok "MUTANT: with the row test removed the qualifier appears on a NON-degenerate range — so the control is what proves it discriminates" \
     || bad "MUTANT: the qualifier stayed absent even with the row test removed — assertion 2b's control is vacuous"
 fi
+
+# --- Assertion 4: A REFUSING DETECTOR IS NOT A CLEAN SHEET --------------------------------
+# THE DEFECT THIS CLOSES, MEASURED BEFORE THE FIX: stub either detector to `exit 2` and this
+# wrapper printed `0 HARD blockers.` at exit 0. That is the one line the whole HARD- contract
+# keys on — SKILL.md tells the operator a HARD- status blocks apply, so the affirmative empty
+# line is what authorises the write, and a detector that never classified was producing it.
+# `:84` above asserts the clean line on a genuinely clean tree; these arms are what stop that
+# line meaning two different things.
+#
+# DRIVEN IN THE DIRECTORY COPY, one detector at a time, each against the SAME copy that just
+# produced a correct control above — a lone script copy resolves no siblings and emits nothing,
+# which would score every arm here as a kill it did not earn.
+for a4_det in layer-drift unregistered-drift; do
+  a4_w="$MW/refuse-$a4_det"
+  rm -rf "$a4_w"; cp -R "$MUTDIR/." "$a4_w/" 2>/dev/null
+
+  # POSITIVE CONTROL FIRST, in the same copy: unstubbed, this world renders the clean line.
+  # Without it a copy that simply died would satisfy the absence half below.
+  a4_ctl="$(bash "$a4_w/hard-blockers.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
+  if ! grep -q '0 HARD blockers' <<<"$a4_ctl"; then
+    bad "CONTROL for $a4_det: the unstubbed copy does not render '0 HARD blockers.', so the refusal arm below cannot tell a suppressed line from a copy that never ran"
+    continue
+  fi
+
+  printf '#!/usr/bin/env bash\nexit 2\n' > "$a4_w/$a4_det.sh"
+  a4_out="$(bash "$a4_w/hard-blockers.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
+  # BOTH HALVES, because either alone is satisfied by the wrong program: a run that emits
+  # nothing lacks the clean line, and a run that emits everything carries the refusal beside it.
+  if grep -q "DETECTOR-REFUSED" <<<"$a4_out" \
+     && grep -q "$a4_det.sh exited 2" <<<"$a4_out" \
+     && ! grep -q '0 HARD blockers' <<<"$a4_out"; then
+    ok "a refusing $a4_det.sh renders DETECTOR-REFUSED naming itself and SUPPRESSES '0 HARD blockers.' — a detector that never classified cannot authorise the write"
+  else
+    bad "a refusing $a4_det.sh did not produce a self-naming DETECTOR-REFUSED row with the clean line suppressed (got: $(printf '%s' "$a4_out" | tr '\n' ' ' | head -c 140)) — an empty blocking list from a dead detector reads as a clean sheet, and apply is authorised on it"
+  fi
+
+  # --check must FAIL on that same world. Its contract is "the report names every HARD item the
+  # detectors emit", which against a detector that computed nothing is vacuously true — so a
+  # pass there certifies a report against a set that was never built.
+  bash "$a4_w/hard-blockers.sh" --check "$REPORT_BAD" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1
+  [ $? -ne 0 ] \
+    && ok "--check REFUSES while $a4_det.sh is refusing — it cannot certify a report against a blocker set that was never computed" \
+    || bad "--check passed while $a4_det.sh was refusing — the report is being certified complete against nothing, which is the vacuous pass this arm exists to stop"
+done
+
+# --- Assertion 5: THE ROWS FLAGS ARE OPTIONAL AND THEIR MISUSE IS REFUSED ------------------
+# The flags exist so `emit-report.sh` can run each detector ONCE and hand the rows down. Every
+# other caller — including all of this fixture's own invocations above — supplies none, so the
+# default path must be untouched, and that is asserted by every arm above still passing.
+#
+# What is asserted here is the REFUSALS, because each one makes an ambiguous state
+# unconstructible rather than merely detectable.
+a5_w="$MW/flags"; rm -rf "$a5_w"; cp -R "$MUTDIR/." "$a5_w/" 2>/dev/null
+: > "$a5_w/rows.empty"
+a5_bad=0
+bash "$a5_w/hard-blockers.sh" --ld-rows "$a5_w/rows.empty" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1
+[ $? -eq 2 ] || { bad "rows supplied without their rc was accepted — empty rows mean 'clean' or 'never ran' and only the status separates them"; a5_bad=1; }
+bash "$a5_w/hard-blockers.sh" --ld-rc 0 "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1
+[ $? -eq 2 ] || { bad "an rc supplied without its rows was accepted — a status with no rows describes nothing"; a5_bad=1; }
+bash "$a5_w/hard-blockers.sh" --ld-rows "$a5_w/nonexistent" --ld-rc 0 "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1
+[ $? -eq 2 ] || { bad "a rows flag naming no readable file was accepted"; a5_bad=1; }
+# THE ONE THAT PROTECTS THE BASE SPLIT. `--post-apply` moves UD_BASE to theirs; rows a caller
+# computed pre-apply are then wrong for that detector, in the direction that reports drift
+# against text apply itself just wrote.
+bash "$a5_w/hard-blockers.sh" --post-apply --ud-rows "$a5_w/rows.empty" --ud-rc 0 "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1
+[ $? -eq 2 ] || { bad "--post-apply with --ud-rows was accepted — the wrapper would filter rows computed at the WRONG base and report drift against text apply wrote"; a5_bad=1; }
+# CONTROL: --post-apply alone still works, or the four refusals above would be satisfied by a
+# script that refuses everything.
+bash "$a5_w/hard-blockers.sh" --post-apply "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1
+[ $? -eq 0 ] || { bad "CONTROL: --post-apply alone no longer works, so the refusals above cannot be told from a wrapper that refuses unconditionally"; a5_bad=1; }
+[ "$a5_bad" -eq 0 ] && ok "the rows flags are refused when unpaired, unreadable, or combined with --post-apply, and --post-apply alone still renders (control)"
+
+# --- Assertion 6: A CALLER THAT SUPPLIED THE ROWS OWNS THE REFUSAL RENDERING ---------------
+# `emit-report.sh` runs each detector itself and renders DETECTOR-REFUSED in that detector's own
+# section from the same rc it passes here. A second copy in the blocking list is not a second
+# finding — and it is not cosmetic: `--verify`'s `refused_new` COUNTS these rows to decide
+# whether a mismatch can be BLOCKERS-RESOLVED, and two arms of reconcile-emit-report assert that
+# count is exactly 1. So the row is emitted by whichever program RAN the detector.
+a6_w="$MW/owns"; rm -rf "$a6_w"; cp -R "$MUTDIR/." "$a6_w/" 2>/dev/null
+: > "$a6_w/rows.empty"
+a6_supplied="$(bash "$a6_w/hard-blockers.sh" --ud-rows "$a6_w/rows.empty" --ud-rc 2 \
+  "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | grep -c '^DETECTOR-REFUSED')" || a6_supplied=0
+printf '#!/usr/bin/env bash\nexit 2\n' > "$a6_w/unregistered-drift.sh"
+a6_ran="$(bash "$a6_w/hard-blockers.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null \
+  | grep -c '^DETECTOR-REFUSED')" || a6_ran=0
+if [ "$a6_supplied" -eq 0 ] && [ "$a6_ran" -eq 1 ]; then
+  ok "the refusal row is rendered by whichever program RAN the detector: 0 rows when the caller supplied them and renders its own, 1 when the wrapper ran it — the two differ, so the suppression is keyed on the flag and not switched off"
+else
+  bad "refusal ownership is wrong (rows-supplied: $a6_supplied, wrapper-ran: $a6_ran; want 0 and 1) — either the row is duplicated, which doubles the DETECTOR-REFUSED count --verify reads to decide BLOCKERS-RESOLVED, or it is suppressed even when this wrapper is the only program that saw the refusal"
+fi
 rm -rf "$MW"
 
 echo
