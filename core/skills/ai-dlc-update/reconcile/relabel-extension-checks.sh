@@ -150,12 +150,19 @@ while IFS= read -r ext; do
     # hardcoded `<hashes> <n>. `, which silently rewrote an em-dash separator or dropped
     # a `Check ` prefix -- mangling the very headings the widened grammar just taught it
     # to see. Everything left of the title is carried through untouched.
-    # `@` and not `|` as the delimiter: the anchor grammar's terminator is an ALTERNATION,
-    # `(\.|—)`, so its `|` is a character the expression CARRIES. With `|` as the delimiter
-    # sed read `s|(^#...(\.|` as the whole pattern, refused it, and `new` came back EMPTY --
-    # three fixtures went red on the first push of the rewrite and this line was the cause.
-    # The id class is `[A-Za-z0-9_.-]` and the anchor has no `@`, so `@` can collide with nothing.
-    new="$(printf '%s' "$text" | sed -E "s@(${anchor_at})@\1[ext:${id}] @")"
+    # NO sed here, on purpose. The anchor grammar's terminator is an ALTERNATION, `(\.|—)`,
+    # so it CARRIES a `|` -- and this line used `|` as its `s|…|…|` delimiter, so sed read
+    # `s|(^#...(\.|` as the whole pattern, refused it, and `new` came back EMPTY; three
+    # fixtures went red on the first push of the rewrite. Changing the delimiter only moved the
+    # exposure: the REPLACEMENT side interpolates `${id}`, no validator constrains an extension
+    # `id:`, an `&` in it is the whole match to sed (measured: `id=a&b` wrote
+    # `[ext:a## Check 24. b]` into the heading, a label the readers' `\[ext:[A-Za-z0-9_.-]+\]`
+    # strip can never see again), and whatever character is the delimiter is one more. A
+    # string splice has no delimiter and no metacharacter: `grep -oE` returns the anchored
+    # prefix the grammar matched, and bash removes exactly that literal prefix (quoted, so a
+    # glob character in it is literal too) and re-emits it with the label after it.
+    pre="$(printf '%s' "$text" | grep -oE "$anchor_at" | head -1)"
+    new="${pre}[ext:${id}] ${text#"$pre"}"
 
     found=$((found+1))
     printf '%s:%s\n  -  %s\n  +  %s\n' "${ext#$CONSUMER/}" "$lineno" "$text" "$new"
@@ -182,7 +189,10 @@ while IFS= read -r ext; do
 
     lineno="${hd%%:*}"
     text="${hd#*:}"
-    new="$(printf '%s' "$text" | sed -E "s|(${rule_at})|\1[ext:${id}] |")"
+    # Same splice as the check pass above, for the same reasons; `rule_at` carries no `|`
+    # today, and the day it does this line must not be the one that finds out.
+    pre="$(printf '%s' "$text" | grep -oE "$rule_at" | head -1)"
+    new="${pre}[ext:${id}] ${text#"$pre"}"
 
     found=$((found+1))
     printf '%s:%s\n  -  %s\n  +  %s\n' "${ext#$CONSUMER/}" "$lineno" "$text" "$new"
