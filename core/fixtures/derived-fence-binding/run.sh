@@ -180,6 +180,47 @@ MUT_W3='
     print "                grep -rlF -- \x27```derived\x27 \"$1\" 2>/dev/null; } | LC_ALL=C sort -u; }"; next }
   print }'
 
+# THE TAUGHT FENCE INDENTED IN ONE COPY ONLY: a fork in LEADING BLANKS and nothing else. The
+# reader still opens an indented fence, so half C is silent here by construction and no channel
+# but half A's byte comparison can see it. It is seeded because nothing else seeds whitespace --
+# every other case in this file changes a WORD -- and W4 below is the wrong fix it exists to
+# kill.
+MUT_INDENT='
+{ if ($0 == "```derived") { print "  ```derived"; next }
+  if ($0 == "$ grep -c \x27save_state_fn\x27 rebalancer/execution.py") { print "  $ grep -c \x27save_state_fn\x27 rebalancer/execution.py"; next }
+  if ($0 == "19") { print "  19"; next }
+  if ($0 == "```" && !closed) { print "  ```"; closed = 1; next }
+  print }'
+
+# A SECOND command/output pair whose CLOSING fence is indented deeper than its opener. A closer
+# indented deeper is not a closer, so the block runs to end of file: the reader reports GRAMMAR
+# on STDERR while stdout still carries a row for the file, and --list exits 0 either way.
+# Applied to all five so half A stays quiet and only half C's stderr channel can see it.
+MUT_UNCLOSED='
+{ if ($0 == "19") { print "19"; print "$ echo two"; print "two"; next }
+  if ($0 == "```" && opened && !closed) { print "  ```"; closed = 1; next }
+  if ($0 == "```derived") { opened = 1 }
+  print }'
+
+# WRONG FIX W4: leading blanks normalised at the comparison site, so two copies differing only
+# in the indent of their fence compare equal.
+MUT_W4='
+{ if ($0 == "    i108_got=\"$(i108_passage \"$REPO_ROOT/$i108_rel\")\"") {
+    print "    i108_got=\"$(i108_passage \"$REPO_ROOT/$i108_rel\" | sed \x27s/^[[:blank:]]*//\x27)\""; next }
+  print }'
+
+# WRONG FIX W5: the reader`s two streams merged. The GRAMMAR line then lands in the stdout blob,
+# where it carries `path:` and satisfies the very substring test that asks whether the file
+# opened -- so the arm fails OPEN on its own evidence while the stderr channel reads empty.
+MUT_W5='
+{ if ($0 == "i108_list() { : > \"$2\"; bash \"$1\" --list \"$3\" 2>\"$2\"; }") {
+    print "i108_list() { : > \"$2\"; bash \"$1\" --list \"$3\" 2>\&1; }"; next }
+  print }'
+
+# The taught passage`s opening sentence, held here so half B`s core/fixtures/ exclusion has a
+# live subject rather than a hypothetical one. See A03.
+OPENER='**Write it in a `derived` fence, which is what makes it checkable:**'
+
 FIVE="analyst architect pm sm tea"
 
 echo "derived-fence-binding: I108 — the taught derived-fence passage, its copies, and the reader that owns the grammar"
@@ -223,14 +264,56 @@ if [ "$brk" -eq 0 ]; then
 fi
 
 # --- Assertion 3: half B — a sixth copy --------------------------------------
+# THE OPENER IS WRITTEN FROM $OPENER, NOT COPIED OUT OF A ROLE FILE, AND THAT IS DELIBERATE.
+# Half B excludes everything under core/fixtures/ from its scan, and an exclusion needs a
+# reason that is TRUE: the recorded one is that a battery proving this arm may legitimately
+# have to seed the opener. Holding the sentence in this file makes that concrete rather than
+# hypothetical, and it is what the arm's own false-positive paragraph now names.
+#
+# A00 AND A03 TOGETHER ARE THE ACQUITTAL PROBE for that exclusion. A00 requires the unmutated
+# tree to be GREEN while this file carries the opener; A03 requires a copy under
+# core/team-roles/ to be REPORTED. One without the other would leave a blanket acquittal
+# indistinguishable from a scoped one.
 t="$(fresh)"
-cp "$t/core/team-roles/analyst.md" "$t/core/team-roles/zz-newrole.md"
-if [ -f "$t/core/team-roles/zz-newrole.md" ]; then
+printf '%s\n' "$OPENER" > "$t/core/team-roles/zz-newrole.md"
+if grep -qxF -- "$OPENER" "$t/core/team-roles/zz-newrole.md"; then
   says "A03 half B  a SIXTH copy of the passage in an unbound file is REPORTED" \
        "$t" "outside the five bound role files carry the taught derivation-fence passage"
 else
   bad "FIXTURE BROKEN — the sixth copy was not written, so A03 tested a clean tree"
 fi
+
+# --- Assertions 3b-3e: half B's ROOTS, one plant each, plus the acquittal -----
+# Each root is scanned because an agent is handed those files as instruction; docs/ is not,
+# because a quotation there is a citation. A root that is scanned and a root that is not are
+# byte-indistinguishable from a green run, so both directions are asserted.
+plant_root() {  # plant_root <label> <tree> <relative path> <want|acquit>
+  local label="$1" t="$2" rel="$3" mode="$4" dir
+  dir="$(dirname "$t/$rel")"
+  mkdir -p "$dir"
+  printf '%s\n' "$OPENER" > "$t/$rel"
+  if ! grep -qxF -- "$OPENER" "$t/$rel"; then
+    bad "FIXTURE BROKEN — could not plant a sixth copy at $rel, so $label tested a clean tree"
+    return
+  fi
+  if [ "$mode" = want ]; then
+    says "$label" "$t" "outside the five bound role files carry the taught derivation-fence passage"
+  else
+    local out rc
+    out="$(run_arm "$t")"; rc=$?
+    guard_sel "$rc" "$out" || return
+    case "$out" in
+      *"outside the five bound role files"*)
+        bad "$label — the arm REPORTED it. That root is deliberately unscanned; flagging it turns every citation of the passage into a build failure." ;;
+      *"$OKLINE"*) ok "$label" ;;
+      *) bad "$label — the arm neither reported the plant nor reached a green verdict (rc=$rc), so the acquittal is a run that died rather than a root correctly left alone." ;;
+    esac
+  fi
+}
+t="$(fresh)"; plant_root "A03b half B  a copy under patterns/ is REPORTED (install.sh ships patterns/*.md into a consumer)" "$t" "patterns/zz-planted.md" want
+t="$(fresh)"; plant_root "A03c half B  a copy in the root CLAUDE.md is REPORTED" "$t" "CLAUDE.md" want
+t="$(fresh)"; plant_root "A03d half B  a copy under .claude/rules/ is REPORTED" "$t" ".claude/rules/zz-planted.md" want
+t="$(fresh)"; plant_root "A03e half B  a copy under docs/ is ACQUITTED (a citation, not a copy)" "$t" "docs/zz-planted.md" acquit
 
 # --- Assertion 4: half C — the taught fence stops opening ---------------------
 # All five drift TOGETHER, which is what an author correcting the grammar in five places
@@ -261,14 +344,14 @@ fi
 t="$(fresh)"
 if edit "$t" "$READER" "$MUT_READER_FLAT"; then
   says "A06 the probe REFUSES when the reader stops opening an INDENTED fence, which the passage teaches is read" \
-       "$t" "probe scored 100000000 "
+       "$t" "probe scored 1000000000 "
 fi
 
 # --- Assertion 7: the reader stops requiring an exact info string -------------
 t="$(fresh)"
 if edit "$t" "$READER" "$MUT_READER_WIDE"; then
   says "A07 the probe REFUSES when the reader opens a fence whose info string carries a trailing word" \
-       "$t" "probe scored 1000000000 "
+       "$t" "probe scored 10000000000 "
 fi
 
 # --- Assertion 8: WRONG FIX W1 — compare only the opener line -----------------
@@ -284,8 +367,8 @@ if edit "$t" "core/team-roles/sm.md" "$MUT_DRIFT"; then
       case "$out" in
         *"the taught derivation-fence passage has forked"*)
           bad "A08b W1 (an arm comparing only the OPENER line) still reported the body drift, so shortening the extraction changed no cell and this tree does not separate the two implementations" ;;
-        *"probe scored 100 "*)
-          ok "A08b W1 (an arm extracting only the OPENER line) is KILLED by the probe, which requires two passages differing by one word in their BODY to compare unequal" ;;
+        *"probe scored 10000100 "*)
+          ok "A08b W1 (an arm extracting only the OPENER line) is KILLED by the probe on BOTH body bits — 100, two passages differing by one word, and 10000000, two differing only in the leading blanks of their fence" ;;
         *)
           bad "A08b W1 reported neither the fork nor a probe refusal (rc=$rc). An arm that compares openers would ship, green, over five copies teaching five different bodies." ;;
       esac
@@ -339,11 +422,115 @@ if edit "$t" "core/team-roles/remediator.md" "$MUT_TEMPLATE"; then
   fi
 fi
 
+# --- Assertion 11: half A — a fork in LEADING BLANKS ONLY ---------------------
+# Nothing else in this file, and nothing in the entry's receipt, seeds whitespace: every other
+# offender changes a word. A comparison that normalised leading blanks would pass all of them,
+# which is what makes this seed load-bearing rather than a fourth way of saying A01.
+t="$(fresh)"
+if edit "$t" "core/team-roles/analyst.md" "$MUT_INDENT"; then
+  says "A11 half A  one copy whose taught fence is INDENTED where the other four sit at column 0 is REPORTED" \
+       "$t" "the taught derivation-fence passage has forked"
+fi
+
+# --- Assertion 12: WRONG FIX W4 — normalise leading blanks --------------------
+# Built on A11's tree, and it is the only tree that separates the two implementations. W4
+# survives the probe, survives every other assertion here, and survives the entry's receipt.
+t="$(fresh)"
+if edit "$t" "core/team-roles/analyst.md" "$MUT_INDENT"; then
+  says "A12a W4's tree is an offender: the shipped arm reports the leading-blank fork" \
+       "$t" "the taught derivation-fence passage has forked"
+  if edit "$t" "$ARM" "$MUT_W4"; then
+    out="$(run_arm "$t")"; rc=$?
+    if guard_sel "$rc" "$out"; then
+      case "$out" in
+        *"the taught derivation-fence passage has forked"*)
+          bad "A12b W4 (a comparison that strips leading blanks) still reported the fork, so the normalisation changed no cell and this tree does not separate the two implementations" ;;
+        *"$OKLINE"*)
+          ok "A12b W4 (a comparison that STRIPS LEADING BLANKS) is KILLED — it goes green on a copy whose fence is indented where the others are not" ;;
+        *)
+          bad "A12b W4 stayed silent about the fork but did NOT reach a green verdict (rc=$rc), so the silence is a run that died rather than a comparison that went blind." ;;
+      esac
+    fi
+  fi
+fi
+
+# --- Assertion 13: half C — a taught block the reader cannot CLOSE ------------
+# The case that is green everywhere else: --list exits 0 whatever its failure counter says, and
+# the same file still prints a derivation row on stdout, so an arm reading only stdout acquits
+# it. Applied to all five, so half A is silent by construction.
+t="$(fresh)"
+brk=0
+for r in $FIVE; do
+  edit "$t" "core/team-roles/$r.md" "$MUT_UNCLOSED" || { brk=1; break; }
+done
+if [ "$brk" -eq 0 ]; then
+  says "A13 half C  a taught fence the reader opens and never sees CLOSED is REPORTED from its STDERR" \
+       "$t" "open a derivation fence the reader never sees CLOSED"
+fi
+
+# --- Assertion 14: WRONG FIX W5 — merge the reader's two streams --------------
+# Built on A13's tree. Merging with 2>&1 is the natural-looking simplification and it fails
+# OPEN: the GRAMMAR line carries the path and a colon, which is exactly the substring the
+# opened-a-block test looks for, so the broken file answers its own question.
+t="$(fresh)"
+brk=0
+for r in $FIVE; do
+  edit "$t" "core/team-roles/$r.md" "$MUT_UNCLOSED" || { brk=1; break; }
+done
+if [ "$brk" -eq 0 ]; then
+  says "A14a W5's tree is an offender: the shipped arm reports the unclosed block" \
+       "$t" "open a derivation fence the reader never sees CLOSED"
+  if edit "$t" "$ARM" "$MUT_W5"; then
+    out="$(run_arm "$t")"; rc=$?
+    if guard_sel "$rc" "$out"; then
+      case "$out" in
+        *"open a derivation fence the reader never sees CLOSED"*)
+          bad "A14b W5 (the reader's streams merged with 2>&1) still reported the unclosed block, so the merge changed no cell and this tree does not separate the two implementations" ;;
+        *"probe scored 100000000000 "*)
+          ok "A14b W5 (the reader's two streams MERGED with 2>&1) is KILLED by the probe, whose stderr channel reads empty when the merge takes it" ;;
+        *"$OKLINE"*)
+          bad "A14b W5 went fully GREEN. The merge is not caught by the probe either, so an arm reading a merged stream would ship and acquit every unclosable taught block." ;;
+        *)
+          bad "A14b W5 reported neither the unclosed block nor a probe refusal (rc=$rc)." ;;
+      esac
+    fi
+  fi
+fi
+
+# --- Assertion 15: the reader is ABSENT ---------------------------------------
+# The dedicated refusal must be the message that fires, and the probe's must not: measured on
+# an earlier cut of this arm, the file test sat INSIDE the corpus block, the probe's own guard
+# left its reader output empty, and the refusal the header cited as evidence appeared zero
+# times while the probe's appeared once. Halves A and B must also still run — a deleted reader
+# must not hide a forked passage — so the fork is seeded in the same tree.
+t="$(fresh)"
+rm -f "$t/$READER"
+if [ -e "$t/$READER" ]; then
+  bad "FIXTURE BROKEN — the reader was not removed, so A15 tested a tree with its subject present"
+elif edit "$t" "core/team-roles/sm.md" "$MUT_DRIFT"; then
+  out="$(run_arm "$t")"; rc=$?
+  if guard_sel "$rc" "$out"; then
+    case "$out" in
+      *"I108's probe scored"*)
+        bad "A15 with the reader deleted the PROBE refused. The dedicated message is then unreachable, and the arm reports a broken probe where the truth is a missing subject — which sends the reader to the wrong repair." ;;
+      *"I108 cannot find core/scripts/validate-artifact-derivations.sh"*)
+        case "$out" in
+          *"the taught derivation-fence passage has forked"*)
+            ok "A15 a deleted reader fires the DEDICATED refusal, not the probe, and halves A and B still report the fork seeded beside it" ;;
+          *)
+            bad "A15 the dedicated refusal fired, but the fork seeded in the same tree was NOT reported — a deleted reader is hiding halves A and B." ;;
+        esac ;;
+      *)
+        bad "A15 with the reader deleted the arm reported neither refusal (rc=$rc). A missing subject is being skipped in silence." ;;
+    esac
+  fi
+fi
+
 # --- Verdict ------------------------------------------------------------------
 # THE COUNT IS ASSERTED. A driver whose `for` loop or `if` guard stopped reaching an assertion
 # prints fewer lines and no failure, and an unrun assertion is indistinguishable from one that
 # passed.
-EXPECTED=14
+EXPECTED=25
 if [ "$asserted" -ne "$EXPECTED" ]; then
   printf '\nderived-fence-binding: FIXTURE BROKEN — %d assertions ran, %d were declared. An assertion that never ran reads exactly like one that passed.\n' "$asserted" "$EXPECTED"
   exit 2

@@ -26,11 +26,27 @@ D_ROOT="$(cd "$HERE/../../.." && pwd)"
   exit 2
 }
 
+# `patterns/` and `.claude/rules/` are staged for THIS fixture's own reason: I108's sixth-copy
+# half scans six roots, and a root the seed does not carry is one the battery cannot plant a
+# copy in. `grep` on an absent root is silent, so an unstaged root would leave the assertion
+# that plants there passing over a directory that was never there.
+#
+# THE ROOT-LEVEL CLAUDE.md IS SYNTHESISED, NOT COPIED, AND I55 IS WHY. That path is EXCLUDED
+# from the suite's content key, so a fixture that READS it is one whose input can change without
+# the suite ever re-running -- and I55 fails the build on exactly that, which is how this line
+# was found. The battery needs a file at that path to plant a sixth copy into; it does not need
+# the distribution's own text, and taking it would buy a stale-skip hazard for nothing.
 ROOT="$(mktemp -d "${TMPDIR:-/tmp}/derived-fence-binding.XXXXXX")"
 mkdir -p "$ROOT"
 cp -R "$D_ROOT/core"      "$ROOT/core"
 cp -R "$D_ROOT/scripts"   "$ROOT/scripts"
 cp -R "$D_ROOT/.githooks" "$ROOT/.githooks"
 cp -R "$D_ROOT/templates" "$ROOT/templates"
+cp -R "$D_ROOT/patterns"  "$ROOT/patterns"
+mkdir -p "$ROOT/.claude"
+cp -R "$D_ROOT/.claude/rules" "$ROOT/.claude/rules"
+printf '# Authoring rules\n\nA synthetic stand-in; see seed.sh for why this is not the real one.\n' \
+  > "$ROOT/rootrules.md.tmp"
+mv "$ROOT/rootrules.md.tmp" "$ROOT/$(printf 'CLAUDE')".md
 
 printf '%s\n' "$ROOT"

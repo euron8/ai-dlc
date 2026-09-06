@@ -4074,13 +4074,20 @@ copies byte-identically to one owner with an arm in `scripts/validate-enforcemen
 state the indent rule once. Both are larger than the finding; neither is owed by `BL-162`.
 
 The receipt DRIVES the arm and cannot be satisfied by prose: it copies the tree, requires
-`--arms I108` to be GREEN on the unmutated copy, then reworks one word inside the passage BODY
-of `sm.md` and requires the fork message. The green-first control is load-bearing — without it
-an arm that reported unconditionally would score a close, and an arm that is only a comment
-cannot pass either, because `--arms` resolves its unit through
+`--arms I108` to be GREEN on the unmutated copy, then INDENTS the recorded command line inside
+`sm.md`'s taught example by two spaces and requires the fork message. The green-first control is
+load-bearing — without it an arm that reported unconditionally would score a close, and an arm
+that is only a comment cannot pass either, because `--arms` resolves its unit through
 `render-invariant-index.sh --arm-lines`, which refuses an arm containing no emitter.
 
-verify: sh M=scripts/validate-enforcement-map.sh; R=core/team-roles/sm.md; [ -f "$M" ] && [ -f "$R" ] || exit 9; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$M" --arms I108 >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; A='prefix and no more, so output the command itself printed with leading spaces keeps them.'; grep -qxF -- "$A" "$D/$R" || { rm -rf "$D"; exit 9; }; awk -v a="$A" '{ if ($0 == a) { print "drifted."; next } print }' "$D/$R" > "$D/x" && mv "$D/x" "$D/$R" || { rm -rf "$D"; exit 9; }; O="$(cd "$D" && bash "$M" --arms I108 2>&1)"; rm -rf "$D"; case "$O" in *"the taught derivation-fence passage has forked"*) exit 0 ;; esac; exit 1
+**The seed is whitespace-only, and that is deliberate: the fixture's seeds change a WORD.** Two
+channels seeding the same shape agree for that reason rather than because the subject is right.
+Measured against a wrong fix that normalises leading blanks at the comparison site
+(`i108_passage … | sed 's/^[[:blank:]]*//'`): the whitespace-seeded receipt exits 1 and a
+word-drift receipt exits 0 on the same tree. That wrong fix is `W4` in
+`core/fixtures/derived-fence-binding/run.sh`.
+
+verify: sh M=scripts/validate-enforcement-map.sh; R=core/team-roles/sm.md; [ -f "$M" ] && [ -f "$R" ] || exit 9; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$M" --arms I108 >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; A='$ grep -c'; grep -qF -- "$A" "$D/$R" || { rm -rf "$D"; exit 9; }; awk -v a="$A" 'index($0, a) == 1 { print "  " $0; next } { print }' "$D/$R" > "$D/x" && mv "$D/x" "$D/$R" || { rm -rf "$D"; exit 9; }; O="$(cd "$D" && bash "$M" --arms I108 2>&1)"; rm -rf "$D"; case "$O" in *"the taught derivation-fence passage has forked"*) exit 0 ;; esac; exit 1
 
 
 
