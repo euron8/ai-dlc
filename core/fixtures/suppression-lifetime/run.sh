@@ -619,6 +619,257 @@ if [ "$SL_F_CTL_OK" = "1" ]; then
   fi
 fi
 
+# ==============================================================================
+# ASSERTIONS 22-33: THE TIMELINE IS RESOLVED FROM THE PROJECT ROOT, NOT FROM THE CWD.
+# ==============================================================================
+# THE DEFECT. Section 2 locates gate-metrics.jsonl for itself when no `--gate-metrics` was
+# given, and it did so by trying CWD-RELATIVE candidates first. Both callers that omit the
+# flag — `ai-dlc-gate-remediation-guard.sh` arm 7b and `validate-gate-adjudication.sh` — hand
+# this script a project root and then run it from whatever directory the session is in. When
+# that directory is a DIFFERENT project carrying its own `_bmad-output/`, a suppression's
+# lifetime is counted against a stranger's gate history: the licence expires, or does not,
+# for reasons no output names.
+#
+# EVERY ASSERTION ABOVE PASSES `--gate-metrics` EXPLICITLY, so none of them can express this.
+# That is the shape `CLAUDE.md` warns about — a unit green only from the repo root may be
+# green because the repo root is a cwd where the decoy does not exist. These arms carry their
+# own cwd, so the world the consumer's pre-push runs in is the world this fixture runs in.
+#
+# THE PAIR IS THE ASSERTION. Each world drives the same invocation twice, once from the decoy
+# cwd and once from the root itself, and demands they AGREE — with a precondition arm proving
+# the two timelines DIFFER, so a differential whose sides are identical cannot read as
+# agreement.
+SL_ROWS="$WORK/inforce.rows"
+SL_OUT=""; SL_RC=""
+sl_inforce() { # <validator> <root> <cwd> <escalations> — stderr to $SL_OUT, rows to $SL_ROWS
+  # No --gate-metrics and no --enforcement-map: the resolution under test is the one the two
+  # real callers use. The catalog is seeded at the ROOT-anchored candidate, so a run that
+  # never received AI_DLC_PROJECT_ROOT refuses rather than answering from somewhere else.
+  SL_OUT="$( cd "$3" && AI_DLC_PROJECT_ROOT="$2" bash "$1" --in-force --escalations "$4" 2>&1 >"$SL_ROWS" )"
+  SL_RC=$?
+}
+sl_field() { # <name> -> the value of `<name>=…` on the IN-FORCE line
+  printf '%s\n' "$SL_OUT" | sed -n "s/.*[[:space:]]$1=\([^[:space:]]*\).*/\1/p" | tail -1
+}
+sl_rows_n() { local n; n="$(grep -c . "$SL_ROWS")" || n=0; printf '%s' "$n"; }
+
+SL_A_GM="$SL_CWD_A_ROOT/_bmad-output/implementation-artifacts/gate-metrics.jsonl"
+SL_A_DECOY_GM="$SL_CWD_A_DECOY/_bmad-output/implementation-artifacts/gate-metrics.jsonl"
+
+# --- Assertion 22: the two sides of the differential DIFFER ---------------------
+# Without this, a seed that wrote one timeline twice would make every arm below agree for a
+# reason that has nothing to do with the resolver.
+if [ -f "$SL_A_GM" ] && [ -f "$SL_A_DECOY_GM" ] && ! cmp -s "$SL_A_GM" "$SL_A_DECOY_GM"; then
+  ok "world A: the root timeline and the decoy-cwd timeline both exist and DIFFER — the pair below can discriminate"
+else
+  bad "world A: FIXTURE BROKEN — the root and decoy timelines are missing or identical, so every arm below agrees for free"
+fi
+
+# --- Assertion 23: world B's root carries NO timeline, at any candidate ---------
+# A zero with its control: world A's root DOES carry one, asserted in the same arm.
+SL_B_ANY="$(find "$SL_CWD_B_ROOT" -name 'gate-metrics.jsonl' 2>/dev/null | grep -c .)" || SL_B_ANY=0
+SL_A_ANY="$(find "$SL_CWD_A_ROOT" -name 'gate-metrics.jsonl' 2>/dev/null | grep -c .)" || SL_A_ANY=0
+if [ "$SL_B_ANY" -eq 0 ] && [ "$SL_A_ANY" -gt 0 ]; then
+  ok "world B: no gate-metrics.jsonl anywhere under its root (control: world A's root has $SL_A_ANY)"
+else
+  bad "world B: FIXTURE BROKEN — found $SL_B_ANY metrics files under its root against a control of $SL_A_ANY; the 'nothing to count' world does not exist"
+fi
+
+# --- Assertions 24-27: WORLD A, the shipped validator --------------------------
+sl_inforce "$VALIDATOR" "$SL_CWD_A_ROOT" "$SL_CWD_A_DECOY" "$SL_CWD_A_ROOT/pending.md"
+SL_A_DECOY_GATES="$(sl_field gates_recorded)"; SL_A_DECOY_INF="$(sl_field in_force)"
+SL_A_DECOY_METRICS="$(sl_field metrics)"; SL_A_DECOY_ROWS="$(sl_rows_n)"
+sl_inforce "$VALIDATOR" "$SL_CWD_A_ROOT" "$SL_CWD_A_ROOT" "$SL_CWD_A_ROOT/pending.md"
+SL_A_ROOT_GATES="$(sl_field gates_recorded)"; SL_A_ROOT_INF="$(sl_field in_force)"
+
+if [ "$SL_A_DECOY_GATES" = "2" ]; then
+  ok "world A: from a cwd whose own timeline records 9 gates, gates_recorded=2 — the ROOT's timeline was counted"
+else
+  bad "world A: gates_recorded='$SL_A_DECOY_GATES' from the decoy cwd, expected 2 — the lifetime was counted against the cwd project's gate history"
+fi
+if [ "$SL_A_DECOY_INF" = "1" ] && [ "$SL_A_DECOY_ROWS" = "1" ]; then
+  ok "world A: the entry is listed in force from the decoy cwd (in_force=1, one row on stdout)"
+else
+  bad "world A: in_force='$SL_A_DECOY_INF' with $SL_A_DECOY_ROWS row(s) from the decoy cwd — a live licence was expired by a stranger's timeline"
+fi
+if [ "$SL_A_DECOY_METRICS" = "$SL_A_GM" ]; then
+  ok "world A: the verdict NAMES the root's metrics file as the one it read"
+else
+  bad "world A: the verdict names metrics='$SL_A_DECOY_METRICS', not '$SL_A_GM' — the resolved timeline is not the root's"
+fi
+if [ "$SL_A_DECOY_GATES" = "$SL_A_ROOT_GATES" ] && [ "$SL_A_DECOY_INF" = "$SL_A_ROOT_INF" ]; then
+  ok "world A: the decoy-cwd run and the root-cwd control AGREE (gates_recorded=$SL_A_ROOT_GATES in_force=$SL_A_ROOT_INF) — the answer does not depend on the cwd"
+else
+  bad "world A: cwd-dependent answer — decoy gave $SL_A_DECOY_GATES/$SL_A_DECOY_INF and the root gave $SL_A_ROOT_GATES/$SL_A_ROOT_INF"
+fi
+
+# --- Assertions 28-30: WORLD B, the wrong fix's world --------------------------
+# "Root first, then fall back to the cwd" is invisible in world A. Here the root answers
+# NOTHING, and a fallback finds the decoy's 1-gate timeline and re-licenses the entry.
+sl_inforce "$VALIDATOR" "$SL_CWD_B_ROOT" "$SL_CWD_B_DECOY" "$SL_CWD_B_ROOT/pending.md"
+SL_B_GATES="$(sl_field gates_recorded)"; SL_B_INF="$(sl_field in_force)"; SL_B_ROWS="$(sl_rows_n)"
+if grep -q 'no gate-metrics.jsonl was found' <<<"$SL_OUT"; then
+  ok "world B: a root with no timeline DECLINES to count a lifetime, and says so"
+else
+  bad "world B: no 'no gate-metrics.jsonl was found' NOTE — the resolver reached past its root and counted somebody else's gates"
+fi
+if [ "$SL_B_INF" = "0" ] && [ "$SL_B_ROWS" = "0" ]; then
+  ok "world B: nothing is listed in force (in_force=0, no rows) — a lifetime that cannot be counted is not a licence"
+else
+  bad "world B: in_force='$SL_B_INF' with $SL_B_ROWS row(s) — the decoy cwd's timeline became this project's licence"
+fi
+if [ "$SL_B_GATES" = "NONE" ]; then
+  ok "world B: gates_recorded=NONE, so the count the verdict was computed over is visible"
+else
+  bad "world B: gates_recorded='$SL_B_GATES', not NONE — the verdict reports a timeline it should not have found"
+fi
+
+# ------------------------------------------------------------------------------
+# THE CWD MUTANTS. Both wrong fixes, built as COPIES.
+#
+# The mutation REPLACES the whole resolution block rather than editing candidate lines,
+# because a mutation keyed on the shipped spelling of a candidate is a no-op the day that
+# spelling changes, and `cmp -s` cannot see the difference between "the wrong fix" and "the
+# anchor moved". The block is delimited by its own section header and the `fi` that closes
+# it; the header is asserted UNIQUE first, and each mutant carries a marker line no copy of
+# the shipped file can contain.
+#
+# This validator resolves no sibling beside itself — the control at assertion 16 is already a
+# lone copy and reproduces the real verdict — so the mutants are lone copies too. Each is
+# scored on a PRESENCE-shaped observable (a specific gates_recorded value, a specific row
+# count), so a copy that died on startup and printed nothing fails rather than scoring a kill.
+# ------------------------------------------------------------------------------
+SL_SEC2='# ---- 2. Locate gate-metrics'
+SL_SEC2_N="$(grep -cF "$SL_SEC2" "$VALIDATOR")" || SL_SEC2_N=0
+SL_SEC2_MISS="$(grep -cF '# ---- 2. Locate the impossible section' "$VALIDATOR")" || SL_SEC2_MISS=0
+if [ "$SL_SEC2_N" = "1" ] && [ "$SL_SEC2_MISS" = "0" ]; then
+  ok "the metrics-resolution block has exactly one section header to anchor on (control: an impossible anchor matches 0)"
+else
+  bad "the metrics-resolution anchor matched $SL_SEC2_N times (control $SL_SEC2_MISS) — the mutants below would land somewhere else or nowhere"
+fi
+
+# The block's own text, extracted so an arm can COUNT what kind of candidates it holds.
+sl_sec2_block() { # <file> -> the section-2 resolution block, header through its closing `fi`
+  awk -v A="$SL_SEC2" '
+    st==0 && index($0, A) { st=1; next }
+    st==1 && $0 == "fi"   { st=2; next }
+    st==1                 { print }
+  ' "$1"
+}
+sl_cwd_cands() { # <file> -> how many candidates in that block are CWD-RELATIVE
+  local n; n="$(sl_sec2_block "$1" | grep -c '^ *"\(_bmad-output\|docs/_bmad-output\)/')" || n=0
+  printf '%s' "$n"
+}
+sl_mkmut() { # <src> <body-file> <out> — replace the block with <body-file>'s contents
+  awk -v A="$SL_SEC2" -v B="$2" '
+    st==0 && index($0, A) { print; st=1; next }
+    st==1 && $0 == "fi"   { while ((getline l < B) > 0) print l; close(B); st=2; next }
+    st==1                 { next }
+                          { print }
+  ' "$1" > "$3"
+}
+
+cat > "$WORK/mut-body-regress.sh" <<'SLBODY'
+# mutant: THE REGRESSION — cwd-relative candidates first, exactly as this shipped.
+if [ -z "$GATE_METRICS" ]; then
+  for cand in \
+      "_bmad-output/implementation-artifacts/gate-metrics.jsonl" \
+      "docs/_bmad-output/implementation-artifacts/gate-metrics.jsonl" \
+      "_bmad-output/gate-metrics.jsonl" \
+      "$AI_DLC_ROOT/_bmad-output/implementation-artifacts/gate-metrics.jsonl"; do
+    [ -f "$cand" ] && { GATE_METRICS="$cand"; break; }
+  done
+fi
+SLBODY
+cat > "$WORK/mut-body-w1.sh" <<'SLBODY'
+# mutant: THE WRONG FIX — the root is tried first and the cwd is still a fallback.
+if [ -z "$GATE_METRICS" ]; then
+  for cand in \
+      "$AI_DLC_ROOT/_bmad-output/implementation-artifacts/gate-metrics.jsonl" \
+      "$AI_DLC_ROOT/docs/_bmad-output/implementation-artifacts/gate-metrics.jsonl" \
+      "$AI_DLC_ROOT/_bmad-output/gate-metrics.jsonl" \
+      "_bmad-output/implementation-artifacts/gate-metrics.jsonl" \
+      "docs/_bmad-output/implementation-artifacts/gate-metrics.jsonl" \
+      "_bmad-output/gate-metrics.jsonl"; do
+    [ -f "$cand" ] && { GATE_METRICS="$cand"; break; }
+  done
+fi
+SLBODY
+
+# --- Assertion 31: no candidate the shipped file offers is CWD-relative --------
+SL_SHIP_CWD="$(sl_cwd_cands "$VALIDATOR")"
+SL_MUT_REGRESS="$WORK/mutant-cwd-regress.sh"
+sl_mkmut "$VALIDATOR" "$WORK/mut-body-regress.sh" "$SL_MUT_REGRESS"
+SL_REGRESS_CWD="$(sl_cwd_cands "$SL_MUT_REGRESS")"
+if [ "$SL_SHIP_CWD" = "0" ] && [ "$SL_REGRESS_CWD" -gt 0 ]; then
+  ok "no candidate in the metrics-resolution block is CWD-relative (control: the regression mutant's block has $SL_REGRESS_CWD)"
+else
+  bad "the metrics-resolution block offers $SL_SHIP_CWD CWD-relative candidate(s), against $SL_REGRESS_CWD in the regression mutant — the timeline is located from wherever the caller happened to be"
+fi
+
+# --- Assertion 32: the UNMUTATED CONTROL, from the decoy cwd -------------------
+# PRESENCE-shaped on purpose: it demands the root's own gate count, so a copy that could not
+# start and printed nothing fails here instead of making every mutant below look killed.
+SL_CWD_CTRL="$WORK/cwd-control.sh"; cp "$VALIDATOR" "$SL_CWD_CTRL"
+sl_inforce "$SL_CWD_CTRL" "$SL_CWD_A_ROOT" "$SL_CWD_A_DECOY" "$SL_CWD_A_ROOT/pending.md"
+SL_CWD_CTRL_OK=0
+if [ "$(sl_field gates_recorded)" = "2" ] && [ "$(sl_field in_force)" = "1" ]; then
+  ok "CWD CONTROL — an unmutated copy reproduces gates_recorded=2 / in_force=1 from the decoy cwd"
+  SL_CWD_CTRL_OK=1
+else
+  bad "CWD CONTROL FAILED — the copy answered gates_recorded='$(sl_field gates_recorded)' in_force='$(sl_field in_force)'; every mutant below is uninterpretable"
+fi
+
+if [ "$SL_CWD_CTRL_OK" = "1" ]; then
+  # --- MUTANT G: the regression -----------------------------------------------
+  if cmp -s "$VALIDATOR" "$SL_MUT_REGRESS"; then
+    bad "MUTANT G did not change the file — the block was not replaced and its silence would score as a kill"
+  elif ! bash -n "$SL_MUT_REGRESS" 2>/dev/null; then
+    bad "MUTANT G is not a valid program — its absence would have scored as a kill"
+  elif ! grep -q 'mutant: THE REGRESSION' "$SL_MUT_REGRESS"; then
+    bad "MUTANT G carries no marker line — the replacement body never landed"
+  else
+    sl_inforce "$SL_MUT_REGRESS" "$SL_CWD_A_ROOT" "$SL_CWD_A_DECOY" "$SL_CWD_A_ROOT/pending.md"
+    if [ "$(sl_field gates_recorded)" = "9" ] && [ "$(sl_field in_force)" = "0" ]; then
+      ok "MUTANT G killed — cwd-first counts the decoy's 9 gates and expires a live licence (assertions 24-27 have teeth)"
+    else
+      bad "MUTANT G SURVIVED (gates_recorded='$(sl_field gates_recorded)' in_force='$(sl_field in_force)') — the cwd arms are not testing the candidate order"
+    fi
+    # ...and from the ROOT cwd it is INDISTINGUISHABLE from the fix. This is why a unit run
+    # only from the repo root could never have caught the defect.
+    sl_inforce "$SL_MUT_REGRESS" "$SL_CWD_A_ROOT" "$SL_CWD_A_ROOT" "$SL_CWD_A_ROOT/pending.md"
+    if [ "$(sl_field gates_recorded)" = "2" ] && [ "$(sl_field in_force)" = "1" ]; then
+      ok "MUTANT G is invisible from the ROOT cwd — the cwd is the property under test, and no root-only arm can see it"
+    else
+      bad "MUTANT G also moved the root-cwd answer (gates_recorded='$(sl_field gates_recorded)') — the mutation is broader than the candidate order and the kill above is unearned"
+    fi
+  fi
+
+  # --- MUTANT H: the wrong fix (root first, cwd fallback) ----------------------
+  SL_MUT_W1="$WORK/mutant-cwd-fallback.sh"
+  sl_mkmut "$VALIDATOR" "$WORK/mut-body-w1.sh" "$SL_MUT_W1"
+  if cmp -s "$VALIDATOR" "$SL_MUT_W1"; then
+    bad "MUTANT H did not change the file — the block was not replaced"
+  elif ! bash -n "$SL_MUT_W1" 2>/dev/null; then
+    bad "MUTANT H is not a valid program"
+  elif ! grep -q 'mutant: THE WRONG FIX' "$SL_MUT_W1"; then
+    bad "MUTANT H carries no marker line — the replacement body never landed"
+  else
+    sl_inforce "$SL_MUT_W1" "$SL_CWD_B_ROOT" "$SL_CWD_B_DECOY" "$SL_CWD_B_ROOT/pending.md"
+    if [ "$(sl_field in_force)" = "1" ] && [ "$(sl_rows_n)" = "1" ]; then
+      ok "MUTANT H killed by WORLD B — a cwd fallback re-licenses an entry whose own project records no gate at all (assertions 28-30 have teeth)"
+    else
+      bad "MUTANT H SURVIVED world B (in_force='$(sl_field in_force)' rows=$(sl_rows_n)) — world B does not separate the fix from 'root first, then the cwd'"
+    fi
+    sl_inforce "$SL_MUT_W1" "$SL_CWD_A_ROOT" "$SL_CWD_A_DECOY" "$SL_CWD_A_ROOT/pending.md"
+    if [ "$(sl_field gates_recorded)" = "2" ] && [ "$(sl_field in_force)" = "1" ]; then
+      ok "MUTANT H is INVISIBLE in world A — which is why world B exists, and why a one-world battery would have shipped it"
+    else
+      bad "MUTANT H also moved world A (gates_recorded='$(sl_field gates_recorded)') — the two worlds are entangled and one of them is redundant"
+    fi
+  fi
+fi
+
 echo
 if [ "$fails" -ne 0 ]; then
   echo "suppression-lifetime: $fails assertion(s) FAILED" >&2

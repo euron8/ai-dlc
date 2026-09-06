@@ -232,6 +232,63 @@ cat > "$f" <<EOF
 **Operator authorization:** ${A0} | "Override, proceed, file backlog item"
 EOF
 
+# ---- THE CWD WORLDS --------------------------------------------------------
+# The metrics file is the ONE input this script locates for itself, and it is located while
+# the process cwd is whatever the caller happened to be in. `ai-dlc-gate-remediation-guard.sh`
+# arm 7b and `validate-gate-adjudication.sh` both invoke it with the project root in the
+# environment and no `--gate-metrics`, from a cwd that is a different project as often as not.
+# So each world below is a PAIR: a root that carries the timeline the answer must come from,
+# and a decoy cwd carrying a DIFFERENT timeline that must not be read. Every case above passes
+# `--gate-metrics` explicitly and therefore cannot express this at all.
+#
+# The catalog is seeded INSIDE each root, at the root-anchored candidate, so a run that never
+# received the root refuses instead of falling back to a catalog it found some other way.
+sl_gm_series() { # <file> <n-gates> — n distinct gate events after A0, check 32 FAILing
+  local f="$1" n="$2" i=1
+  mkdir -p "$(dirname "$f")"
+  : > "$f"
+  while [ "$i" -le "$n" ]; do
+    if [ "$((i % 2))" -eq 1 ]; then
+      emit_unspaced "2026-05-0${i}T01:00:00Z" "32" "FAIL" >> "$f"
+    else
+      emit_spaced   "2026-05-0${i}T01:00:00Z" "32" "FAIL" >> "$f"
+    fi
+    i=$((i + 1))
+  done
+}
+
+sl_world_root() { # <dir> — a project root: catalog at the root-anchored candidate + pending.md
+  mkdir -p "$1/core/skills/ai-dlc"
+  cp "$MAP" "$1/core/skills/ai-dlc/enforcement-map.yaml"
+  cat > "$1/pending.md" <<EOF
+## [S400 gate — bmad invocation] [lead] - ${A0}
+**Status:** SUPPRESSED
+**Suppresses:** [core] 32 — bmad-invocation-resolves
+**Expires after:** 3 gates
+**Operator authorization:** ${A0} | "Override, proceed, file backlog item"
+EOF
+}
+
+# WORLD A — the root HAS a timeline (2 gates, inside the entry's 3-gate lifetime) and the decoy
+# cwd has a longer one (9 gates, past it). The two answers are in force / not in force, so an
+# arm reading `in_force` alone discriminates.
+SL_CWD_A_ROOT="$WORK/cwd-a/root"
+SL_CWD_A_DECOY="$WORK/cwd-a/decoy"
+mkdir -p "$SL_CWD_A_ROOT" "$SL_CWD_A_DECOY"
+sl_world_root "$SL_CWD_A_ROOT"
+sl_gm_series "$SL_CWD_A_ROOT/_bmad-output/implementation-artifacts/gate-metrics.jsonl" 2
+sl_gm_series "$SL_CWD_A_DECOY/_bmad-output/implementation-artifacts/gate-metrics.jsonl" 9
+
+# WORLD B — the root has NO timeline at any candidate and the decoy cwd has a SHORT one, which
+# would leave the entry in force if the resolver ever fell back to the cwd. This is the world
+# that separates the fix from "look at the root first, then the cwd": that wrong fix is
+# invisible in world A, where the root answers on the first candidate.
+SL_CWD_B_ROOT="$WORK/cwd-b/root"
+SL_CWD_B_DECOY="$WORK/cwd-b/decoy"
+mkdir -p "$SL_CWD_B_ROOT" "$SL_CWD_B_DECOY"
+sl_world_root "$SL_CWD_B_ROOT"
+sl_gm_series "$SL_CWD_B_DECOY/_bmad-output/implementation-artifacts/gate-metrics.jsonl" 1
+
 # ---- baseline files --------------------------------------------------------
 printf 'TERMINAL:##[S400][Lead]-%s—gateBLOCKED\n' "$A0" > "$WORK/baseline-good.txt"
 printf 'TERMINAL:##[S400][Lead]-%s—gateBLOCKED\nEXPIRED:16\n' "$A0" > "$WORK/baseline-stale.txt"
@@ -246,6 +303,10 @@ GM_BROKEN="$GM_BROKEN"
 CASES="$WORK/cases"
 BASELINE_GOOD="$WORK/baseline-good.txt"
 BASELINE_STALE="$WORK/baseline-stale.txt"
+SL_CWD_A_ROOT="$SL_CWD_A_ROOT"
+SL_CWD_A_DECOY="$SL_CWD_A_DECOY"
+SL_CWD_B_ROOT="$SL_CWD_B_ROOT"
+SL_CWD_B_DECOY="$SL_CWD_B_DECOY"
 EOF
 
 printf '%s\n' "$WORK"

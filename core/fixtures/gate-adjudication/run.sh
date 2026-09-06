@@ -411,6 +411,51 @@ else
   bad "S16: the sibling was asked on a verdict with no FAIL to cover (rc=$RC) — every all-PASS gate pays a parse of the whole escalations file"
 fi
 
+# --- S17: THE TIMELINE IS FOUND FROM THE PROJECT ROOT, NOT FROM THE CWD -----
+# Every case above sets AI_DLC_GATE_METRICS, so none of them exercises the resolution this
+# script actually performs on a live gate: the sibling is invoked with no `--gate-metrics` and
+# LOCATES the timeline itself. It did that from the process CWD before the project root, and
+# `verdict.sh` runs wherever the lead's session happens to be. So a suppression's lifetime was
+# counted against whatever project the cwd belonged to.
+#
+# THE WORLD IS A PAIR: a root carrying a timeline that leaves the entry in force, and a decoy
+# cwd carrying one that expires it. The two are asserted to DIFFER before the arm is read.
+GA_CWD_ROOT="$WORK/cwd-root"
+GA_CWD_DECOY="$WORK/cwd-decoy"
+mkdir -p "$GA_CWD_ROOT/_bmad-output/implementation-artifacts" \
+         "$GA_CWD_DECOY/_bmad-output/implementation-artifacts"
+cp "$GM_BEFORE" "$GA_CWD_ROOT/_bmad-output/implementation-artifacts/gate-metrics.jsonl"
+cp "$GM_AFTER"  "$GA_CWD_DECOY/_bmad-output/implementation-artifacts/gate-metrics.jsonl"
+if cmp -s "$GA_CWD_ROOT/_bmad-output/implementation-artifacts/gate-metrics.jsonl" \
+          "$GA_CWD_DECOY/_bmad-output/implementation-artifacts/gate-metrics.jsonl"; then
+  bad "S17-pre: FIXTURE BROKEN — the root and decoy timelines are identical, so the arm below agrees for free"
+else
+  ok "S17-pre: the seeded root timeline and the decoy cwd's timeline DIFFER (in force vs expired)"
+fi
+
+# The differential's other side, established first: driven with the decoy's timeline handed in
+# explicitly, this same verdict BLOCKS. So an exit 0 below can only mean the root's file was read.
+restore; fail_on "$X"
+runx "$ESC_INFORCE" "$GA_CWD_DECOY/_bmad-output/implementation-artifacts/gate-metrics.jsonl"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X"; then
+  ok "S17-pre: handed the decoy's timeline explicitly, the same entry is EXPIRED and the gate blocks"
+else
+  bad "S17-pre: FIXTURE BROKEN — the decoy timeline does not expire the entry (rc=$RC), so S17 cannot tell which file was read"
+fi
+
+restore; fail_on "$X"
+GA_S17_OUT="$WORK/s17.out"
+( cd "$GA_CWD_DECOY" && AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
+    AI_DLC_ESCALATIONS="$ESC_INFORCE" AI_DLC_PROJECT_ROOT="$GA_CWD_ROOT" \
+    bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" ) > "$GA_S17_OUT" 2>&1
+GA_S17_RC=$?
+GA_S17_N="$(grep -cF -- "$SUPP_LINE" "$GA_S17_OUT")" || GA_S17_N=0
+if [ "$GA_S17_RC" -eq 0 ] && [ "$GA_S17_N" -gt 0 ]; then
+  ok "S17: with no AI_DLC_GATE_METRICS, run from a cwd whose own timeline expires the entry, the carve-out still fires — the sibling was pointed at the gate's project root"
+else
+  bad "S17: the carve-out did not fire (rc=$GA_S17_RC) — the sibling counted the cwd project's gates, or was never told which root this gate belongs to"
+fi
+
 # --- restore, once more, after the carve-out arms ---------------------------
 restore
 run "$VERDICT"
