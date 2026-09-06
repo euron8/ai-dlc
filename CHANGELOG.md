@@ -15,6 +15,88 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.512.0] - 2026-09-06
+
+### `BL-181` — a multibyte character inside a bracket class is an alternation now, in every tracked shell file, and S10 refuses the bracket form
+
+Under the C locale — every CI runner with `LANG` unset, every `env -i` — a bracket class holds
+BYTES, not characters: `[—–-]` is seven members, a match lands on the em-dash's last byte, and
+`sub()`/`s///` strips one byte and leaves two behind in the extracted value, which then joins
+against nothing. `validate-suppression-lifetime.sh:252` trimmed every `**Suppresses:**` value
+that way, so under `env -i PATH=/usr/bin:/bin` every well-formed suppression was "not a check in
+the catalog", the remediation guard's SUPPRESSED carve-out did not exist, and the validator's
+own two fixtures were red on `origin/main` (`gate-adjudication-mutants` 152 FAIL lines,
+`gate-remediation-deny` 22) — found by the batch-59 fixture hand, filed as `BL-181`. On the
+reference consumer's own `docs/escalations/pending.md` (17 suppressions, all em-dash-separated),
+the installed validator reads `in_force=0` under `env -i` where this one reads `in_force=1`,
+and both read 1 under UTF-8 — measured on a `file://` clone with a `cmp` control.
+
+The filing named one site; the census found the class. `git ls-files '*.sh'` under `LC_ALL=C`
+for a whitespace-free bracket span carrying a high byte in a regex context finds 23 lines in 9
+files: the check-heading grammar's `[.—]` in `validate-gate-manifest.sh`,
+`validate-layer-entries.sh`, `reconcile/layer-drift.sh` and `reconcile/relabel-extension-checks.sh`
+(four copies I47/I15 bind byte-identical, whose `[.—]$` strip leaves the same two bytes on every
+em-dash heading — and the reference consumer's two extension checks, `## Check XAP —` and
+`## Check XVH —`, reach that branch: under C the old `anchor_form()` read `XAP \342` and
+`heading_title()` kept the dash, measured by the adversarial hand on the consumer's real files),
+`validate-artifact-budget.sh`'s `[|—-]` matcher, `layer-retired-id-crosswalk`'s
+`[.—]`, and six `[^—]*—` lines in `layer-reference-resolution`'s two run scripts. Every site is
+an alternation — `(—|–|-)`, `(\.|—)`, `(\||—|-)`, and the fixture's `(, ALREADY COLLIDED)? —`
+derived from the emitter it reads — which is a byte SEQUENCE under both locales; probed in awk,
+`sed -E` and `grep -E` on the em-dash, the en-dash, the hyphen and a no-separator near-miss.
+The three awk DYNAMIC-string sites in `layer-drift.sh` carry `\\.`, because `"\."` in an awk
+string is a bare `.` and would match any character — the first rewrite of those three lines had
+exactly that defect and a probe caught it before it was committed. Four python sites
+(`adopt-extension-checks.sh`, `validate-cycle-commits.sh`, two in `validate-enforcement-map.sh`)
+answer identically under both locales and are left as written.
+
+The prohibition has a mechanism. `scripts/validate-shell-portability.sh` gains **S10**: a raw
+byte-range pattern that only parses under the C locale, so the whole scan now exports
+`LC_ALL=C` (the other nine arms are pure ASCII and answer identically either way). Its
+narrowing, measured on the census and recorded beside the arm: a regex context (`grep`, `sed`,
+`awk`, `sub(`, `match(`, `~`, or a quoted assignment) must precede the class on the line, the
+class holds no whitespace, and python is subtracted by language as S7 already does. The first
+cut's `[^#]*` context span could not cross the heading grammar's own `#{2,4}` and reported 12
+of the 23 — a scan grammar that cannot spell its own subject — and the shipped `.*` reports
+all 23 on `origin/main` and 0 on this tree. This file's header had said the bracket-class rule
+lived in `I71`; `I71` binds `\t` inside a class and nothing else, and the header says so now.
+`core/fixtures/shell-portability` proves S10 in both directions: five census shapes seeded and
+COUNTED (one carrying `#{2,4}` before its class), a negative arm over six correct or harmless
+forms, and four cell mutants each owning a subject the others cannot reach — the `[^#]*`
+regression, the emptied python subtraction, the unreachable probe refusal, the widened
+whitespace exclusion. Writing that battery found the python subtraction SMALLER than the
+arm's first header claimed: over the real corpus the context requirement alone acquits all
+four python sites, so the raw-string alternative was structurally unreachable and is gone; the
+subtraction keeps one reachable shape, a shell regex tool quoting a python `re.<fn>(` line,
+which this repo's own fixtures do, and the mutant that empties it proves it on exactly that.
+The adversarial hand then seeded the shape the context test acquitted — a bare awk
+pattern-action rule `/re/ { … }` on a continuation line, the most common awk shape in the
+corpus at 48 files — and the arm now takes a line beginning with `/` as context too; what it
+still acquits (a class assembled from a variable, a `$'…'` string, a `${v//[…]/}` expansion, a
+`case` pattern) is stated beside the pattern rather than hidden, none carrying the class today.
+
+The alternation CARRIES a `|`, and the first push of the rewrite found the one place that
+mattered: `relabel-extension-checks.sh` interpolates the anchor grammar into a `sed -E
+"s|(${anchor_at})|…|"`, so the pattern ended at the alternation's bar, sed refused it, the
+relabelled heading came back EMPTY, and `relabel-theirs-collision`, `apply-relabel-noop-row`
+and `layer-catalog-collision` went red against a green `origin/main` control — bisected to that
+one file by reverting the four candidates one at a time in detached worktrees. The first repair
+changed the delimiter to `@`, and the adversarial hand showed that only moved the exposure: the
+replacement side interpolates the extension's `id:`, which no validator constrains, so an `&` in
+it was the whole match to sed (`id=a&b` wrote `[ext:a## Check 24. b]` into the heading, a label
+the readers can never strip again) and an `@` in it would have produced the same empty row. Both
+label insertions — the check pass and the rule pass one refactor behind it — are a string splice
+now: `grep -oE` returns the anchored prefix and bash re-emits it with the label after it, with no
+delimiter and no metacharacter to collide with. Probed on `plain`, `a&b`, `a@b`, `a|b` and `a*b`
+against dot and em-dash headings. S10's remedy text names the hazard.
+
+### Not taken
+
+`BL-179` was ranked beside this entry for batching and is NOT in this release: this fix
+touches `reconcile/layer-drift.sh` and `reconcile/relabel-extension-checks.sh`, which run
+inside the update skill's pull, so under the batching rule's separability conditions it ships
+alone. `BL-179` follows as its own release.
+
 ## [0.511.0] - 2026-09-06
 
 ### `PC-S335-NO-DETECTOR-REACHES-A-RETIRED-STATUS-TOKEN-REUSED-IN-A-LAYER-BODY` — a token-grain sibling reports a status word a release retired and a layer file still uses in its own prose
