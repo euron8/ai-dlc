@@ -8699,6 +8699,290 @@ if [ "$i105_bad" -eq 0 ]; then
   fi
 fi
 
+# --- I108: the derived-fence grammar is taught in ONE passage, and what it teaches is what the reader accepts ---
+# WHAT IT BINDS. Seven files under core/team-roles/ hand an agent the shape of a checkable
+# derivation. Five of them -- analyst, architect, pm, sm, tea -- carry one byte-identical
+# passage opening **Write it in a `derived` fence, which is what makes it checkable:** and
+# closing at the sentence saying where the commentary goes. The other two -- remediator and ops
+# -- carry a repair-record template whose fence an agent copies verbatim into a record. None of
+# the seven OWNS the grammar: core/scripts/validate-artifact-derivations.sh decides what opens
+# a block, and core/hooks/ai-dlc-derivation-capture.sh refuses a write on the same rule.
+#
+# THE FAILURE IS SILENT IN THE DIRECTION THAT MATTERS. A taught form the reader cannot open
+# makes that reader print "0 derivation(s)" and exit 0. An author who fenced a claim precisely
+# to make it machine-checkable then gets no check and no error, every later pass reads the
+# silence as a pass, and the finding class this whole mechanism exists to remove comes back
+# with a green validator beside it. Seven hand-maintained copies of a grammar none of them owns
+# is how that arrives.
+#
+# THREE HALVES, EACH WITH A SUBJECT THE OTHER TWO CANNOT SEE.
+#   A  the five taught copies are one byte string.
+#   B  no sixth copy of that passage exists outside the five.
+#   C  the shipping reader actually OPENS a block in every role file that teaches the passage
+#      or templates a derivation record field.
+# A alone is satisfied by five files that drift TOGETHER, which is exactly what an author
+# correcting the taught grammar in five places produces; only C notices, because only C asks
+# the reader. C alone is satisfied by five files that each open a fence and teach five
+# different things around it. And C is the only half that reaches the two record templates at
+# all: they carry the fence and not the prose, so B's needle is not in them.
+#
+# HALF C'S JOIN KEY IS NOT THE TOKEN THAT DRIFTS, and the first cut of this arm got that wrong.
+# Keying the population on files carrying a fence opener excludes from the population exactly
+# the file the arm exists to catch: rename one template's info string to a word the reader does
+# not accept and the file stops matching the key, leaves the population, and the arm reports a
+# clean tree. Measured against that first cut, with one template's opener renamed: zero
+# findings, exit 0. The key is therefore the two things that do NOT move when the fence does --
+# the taught passage's opening sentence, and a record-template line declaring a derivation
+# field -- and their union is the population. A role file that says either of those and gives
+# the reader nothing to open is the finding.
+#
+# WHY A BINDING AND NOT A RENDER, which is the larger mechanism this did not need. Single-
+# sourcing the passage and rendering it into the seven, on render-postcompact-digest.sh's
+# generated-region pattern, was the alternative on the table. It costs a second program, a
+# second gate, and a pair of BEGIN/END markers sitting inside prose an agent reads as
+# instruction -- and it does not close the defect, because a render keeps seven copies in step
+# with an OWNER that is itself free to drift away from the reader. Half C closes that, and half
+# A buys the same byte-equality a render would for the price of one comparison. The smaller
+# mechanism is the one that enforces.
+#
+# COPIES RATHER THAN A SHARED SOURCE, for I25's and I92's reason. These are markdown role files
+# handed to an agent whole; markdown has no include, and install.sh copies them into a consumer
+# where nothing could resolve a shared source anyway.
+#
+# NOT A VOCABULARY, so no vocabulary marker. The subject is one passage's BYTES and one
+# reader's accept-or-reject over real files, not an enumerated membership a second reader could
+# restate.
+#
+# THE MEASURED FALSE-POSITIVE SETS, and the narrowing that got both to zero.
+#
+# HALF B is a fixed-string recursive grep for the opener sentence over core/, scripts/ and
+# templates/. Over the real tree it returns the five declared files plus exactly two others:
+# THIS file, which spells the needle in its own i108_needle assignment and in the paragraphs
+# above, and the mutation battery under core/fixtures/ written to prove this arm, which has to
+# quote the passage it mutates. This file is excluded by name and the battery by DIRECTORY --
+# not by name, for I92's measured reason that a per-file exemption list goes stale the release
+# somebody adds a battery. docs/ is deliberately NOT a scanned root: docs/backlog.md quotes the
+# opener inside the entry that commissioned this arm, and nothing under docs/ is ever handed to
+# an agent as a role file, so a quotation there is a citation and not a copy.
+#
+# HALF C's population over the real tree is the five teaching files plus ops.md and
+# remediator.md, and the reader opens exactly one block in each of the seven -- zero findings,
+# and no file in core/team-roles/ anchors on either key without carrying a readable fence. The
+# key was narrowed to a LINE-ANCHORED record field rather than the bare word derivation, which
+# appears in ordinary prose in several role files and would have put every one of them in the
+# population with nothing to find.
+i108_needle='**Write it in a `derived` fence, which is what makes it checkable:**'
+i108_declared='core/team-roles/analyst.md
+core/team-roles/architect.md
+core/team-roles/pm.md
+core/team-roles/sm.md
+core/team-roles/tea.md'
+
+# The passage is the LINE RANGE between two literal sentences of its own text, on the argument
+# I25 and I92 use for a function body. It prints only when BOTH delimiters are found: an awk
+# range whose closing pattern never matches runs to end of file, and five files each carrying
+# their own tail then compare unequal and report as DRIFT when the truth is that the extractor
+# lost its subject. Nothing printed is reported below as vacuous, which is the loud answer.
+i108_passage() {
+  awk '
+    /^\*\*Write it in a `derived` fence, which is what makes it checkable:\*\*$/ { on = 1 }
+    on { buf = buf $0 "\n" }
+    on && /^in the sentence beside the block\.$/ { printf "%s", buf; exit }
+  ' "$1" 2>/dev/null
+}
+# The three scans, as functions taking their roots, so the probe below drives THE SHIPPING CODE
+# PATH rather than a second implementation of it.
+i108_sites() { i108_sn="$1"; shift; grep -rlF -- "$i108_sn" "$@" 2>/dev/null; }
+i108_pop() { { grep -rlF -- "$i108_needle" "$1" 2>/dev/null
+                grep -rlE '^[[:blank:]]*- derivation:' "$1" 2>/dev/null; } | LC_ALL=C sort -u; }
+# The reader's own --list mode, which parses fences and executes nothing. --list rather than a
+# full run because the property here is whether a block OPENS: a full run would execute the
+# placeholder commands the two record templates carry and fail on them for a reason this arm
+# does not own.
+i108_list() { bash "$1" --list "$2" 2>/dev/null; }
+# WHETHER THE READER OPENED A BLOCK IN A FILE is a substring question about its --list output,
+# and it is asked once per file in the population. `in_body` answers it with a bash `case` and
+# no fork, for the reason recorded at that helper: the forking form measured ~530x the cost,
+# and this arm sits in a file the fixture suite's pole re-runs. The needle carries the trailing
+# colon --list prints after the path, so a path that is a prefix of another cannot answer for
+# it.
+i108_opened() { in_body "$1:" "$2"; }
+
+# THE PROBE, RUN BEFORE THE CORPUS. All three halves are absence-shaped: an extractor that
+# stops matching compares empty to empty and reports agreement, a site scan that stops matching
+# reports no sixth copy, and a population scan that stops matching reports no file left to ask
+# the reader about. Every one of those silences reads exactly like a conforming tree. So the
+# functions above are first driven over a tree with one right answer, and the corpus is not
+# read at all unless they produce it. The tree fires in BOTH directions: a seeded offender must
+# be reported and a seeded near-miss must not.
+#
+# HALF C'S SEEDS ARE THE PRODUCER'S SHAPES, NOT THE READER'S. The two record templates emit a
+# fence at column 0 under a derivation list item; a list item invites the same fence indented to
+# the item's own body column. Both are seeded, because the taught passage states that both are
+# read, and a seed lifted from the reader's accept-set would prove only that the reader accepts
+# its own grammar.
+i108_pd="$(mktemp -d "${TMPDIR:-/tmp}/i108-XXXXXX")"
+mkdir -p "$i108_pd/t" "$i108_pd/c" "$i108_pd/p"
+#  a  the reference passage.
+{ printf 'lead paragraph\n\n'
+  printf '%s\n\n' "$i108_needle"
+  printf '```derived\n$ echo one\none\n```\n\n'
+  printf '%s\n' 'in the sentence beside the block.'; } > "$i108_pd/t/a.md"
+#  b  NEAR-MISS for the equality half: the identical passage in different surrounding text.
+#     Must compare EQUAL, or this arm reports drift on every file that is merely not a copy of
+#     its neighbour.
+{ printf 'a completely different opening\n\n'
+  printf '%s\n\n' "$i108_needle"
+  printf '```derived\n$ echo one\none\n```\n\n'
+  printf '%s\n' 'in the sentence beside the block.'
+  printf '\nand a different closing\n'; } > "$i108_pd/t/b.md"
+#  c  DRIFT: one word inside the passage differs. Must compare UNEQUAL.
+{ printf '%s\n\n' "$i108_needle"
+  printf '```derived\n$ echo two\ntwo\n```\n\n'
+  printf '%s\n' 'in the sentence beside the block.'; } > "$i108_pd/t/c.md"
+#  d  no passage at all. Extraction must be EMPTY -- an extractor that invents a passage here
+#     is one that would compare two inventions and call them equal.
+printf 'a role file that teaches nothing about fences\n' > "$i108_pd/t/d.md"
+#  e  a SIXTH SITE that carries the opener and nothing else. The scan must SEE it: a copy
+#     arrives as one sentence before it arrives as a passage.
+printf '%s\n' "$i108_needle" > "$i108_pd/t/e.md"
+#  f  NEAR-MISS for the scan half: the same sentence without its code span. Must stay quiet, or
+#     the scan flags files for resembling the passage rather than carrying it.
+printf '**Write it in a derived fence, which is what makes it checkable:**\n' > "$i108_pd/t/f.md"
+#  g  the passage OPENED and never closed. Extraction must be EMPTY. Without this the range
+#     runs to end of file and half A reports a fork over five files whose passage is intact.
+{ printf '%s\n\n' "$i108_needle"
+  printf '```derived\n$ echo one\none\n```\n\nand then the file simply ends\n'; } > "$i108_pd/t/g.md"
+#  half C population, in its own directory so the site scan above is not asked about it.
+#  p/teach.md anchors on the taught sentence, p/record.md on the record field, p/other.md on
+#  neither -- and p/other.md names the word derivation in prose, which the line-anchored key
+#  must not take.
+printf '%s\n' "$i108_needle"                       > "$i108_pd/p/teach.md"
+printf '%s\n' '- derivation:'                      > "$i108_pd/p/record.md"
+printf '%s\n' 'a derivation is a claim about the tree' > "$i108_pd/p/other.md"
+#  half C producer shapes.
+{ printf '%s\n\n' '- derivation:'
+  printf '```derived\n$ echo one\none\n```\n'; } > "$i108_pd/c/col0.md"
+{ printf '%s\n\n' '- derivation:'
+  printf '  ```derived\n  $ echo one\n  one\n  ```\n'; } > "$i108_pd/c/indented.md"
+#  half C NEAR-MISS: an info string with a word after it. The reader must open NOTHING -- this
+#  is the shape that produces a silent zero, and an arm that could not tell it from a real
+#  fence would score every file as checked.
+{ printf '%s\n\n' '- derivation:'
+  printf '```derived block\n$ echo one\none\n```\n'; } > "$i108_pd/c/info.md"
+
+i108_pa="$(i108_passage "$i108_pd/t/a.md")"
+i108_pb="$(i108_passage "$i108_pd/t/b.md")"
+i108_pc="$(i108_passage "$i108_pd/t/c.md")"
+i108_pdd="$(i108_passage "$i108_pd/t/d.md")"
+i108_pg="$(i108_passage "$i108_pd/t/g.md")"
+i108_pm="$(i108_sites "$i108_needle" "$i108_pd/t" | LC_ALL=C sort)"
+i108_pm_want="$i108_pd/t/a.md
+$i108_pd/t/b.md
+$i108_pd/t/c.md
+$i108_pd/t/e.md
+$i108_pd/t/g.md"
+i108_pp="$(i108_pop "$i108_pd/p")"
+i108_pp_want="$i108_pd/p/record.md
+$i108_pd/p/teach.md"
+i108_reader="$REPO_ROOT/core/scripts/validate-artifact-derivations.sh"
+i108_pl=""
+[ -f "$i108_reader" ] && i108_pl="$(i108_list "$i108_reader" "$i108_pd/c")"
+i108_score=0
+[ -n "$i108_pa" ]                                  || i108_score=$((i108_score + 1))
+[ "$i108_pa" = "$i108_pb" ]                        || i108_score=$((i108_score + 10))
+[ "$i108_pa" != "$i108_pc" ]                       || i108_score=$((i108_score + 100))
+[ -z "$i108_pdd" ]                                 || i108_score=$((i108_score + 1000))
+[ -z "$i108_pg" ]                                  || i108_score=$((i108_score + 10000))
+[ "$i108_pm" = "$i108_pm_want" ]                   || i108_score=$((i108_score + 100000))
+[ "$i108_pp" = "$i108_pp_want" ]                   || i108_score=$((i108_score + 1000000))
+i108_opened "$i108_pd/c/col0.md" "$i108_pl"       || i108_score=$((i108_score + 10000000))
+i108_opened "$i108_pd/c/indented.md" "$i108_pl"   || i108_score=$((i108_score + 100000000))
+i108_opened "$i108_pd/c/info.md" "$i108_pl"       && i108_score=$((i108_score + 1000000000))
+rm -rf "$i108_pd"
+
+if [ "$i108_score" -ne 0 ]; then
+  err "I108's probe scored $i108_score where 0 is the only correct total, so the corpus below was not read. +1 the extractor found no passage where one is plainly written; +10 it called two IDENTICAL passages in differently-surrounded files different, which would report drift on a conforming tree; +100 it called a passage differing by one word the SAME, which is the state half A exists to report; +1000 it returned a passage from a file carrying none, so half A would be comparing two inventions; +10000 it returned a passage from a file whose CLOSING delimiter is absent, which makes an extractor that lost its subject read as five files that forked; +100000 the site scan did not name exactly the five probe files carrying the opener sentence, so it either missed the mention-only sixth site or flagged the near-miss without the code span; +1000000 the half C population did not name exactly the file anchoring on the taught sentence and the file anchoring on the record field, or it took a file naming the word derivation in ordinary prose; +10000000 the shipping reader did not open the record template's own column-0 fence; +100000000 it did not open that fence INDENTED into a list item, which the taught passage states is read; +1000000000 it opened a fence whose info string carries a trailing word, which must produce nothing. Any non-zero total means one of I108's three halves would report a clean tree for the reason a broken reader does."
+else
+  # HALF A: the five declared copies are one byte string. Read against the FIRST readable copy
+  # rather than pairwise, so N files cost N extractions.
+  i108_ref=''; i108_ref_of=''; i108_vac=''; i108_drift=''
+  while IFS= read -r i108_rel; do
+    [ -n "$i108_rel" ] || continue
+    i108_got="$(i108_passage "$REPO_ROOT/$i108_rel")"
+    if [ -z "$i108_got" ]; then
+      i108_vac="$i108_vac $i108_rel"
+    elif [ -z "$i108_ref" ]; then
+      i108_ref="$i108_got"; i108_ref_of="$i108_rel"
+    elif [ "$i108_got" != "$i108_ref" ]; then
+      i108_drift="$i108_drift $i108_rel"
+    fi
+  done <<EOF
+$i108_declared
+EOF
+  [ -z "$i108_vac" ] || err "I108 cannot find the taught derivation-fence passage in:$i108_vac. It is delimited by its own opening sentence and by the sentence ending 'in the sentence beside the block.', and one of those has moved or been reworded, so nothing was extracted. The check binding the five role files to one grammar just went vacuous -- it must locate all five or fail loudly, never pass by finding nothing. If the passage was rewritten, rewrite both delimiters in i108_passage in the same change."
+  [ -z "$i108_drift" ] || err "I108: the taught derivation-fence passage has forked. $i108_ref_of and$i108_drift teach it differently. Every one of these files is handed whole to an agent that then writes derivations into a planning artifact, and the grammar they teach is not theirs -- validate-artifact-derivations.sh owns it and reports a form it cannot open as ZERO derivations with exit 0. Five copies drifting is five chances to teach a shape that gets no check and no error. Make the passage byte-identical across all five."
+
+  # HALF B: no sixth copy. The hit list is DERIVED; the five declared paths and the two
+  # exclusions are the only things written down.
+  #
+  # THE POSITIVE CONTROL IS THIS FILE, for the reason I92 records at length: asserting the hit
+  # list is merely non-empty is a condition that cannot fail while this arm names its own
+  # needle, and it reads exactly like a check that passed. What IS constructible is a scan that
+  # stops reading one of its roots -- narrow it, or let REPO_ROOT resolve somewhere else -- and
+  # the sixth-copy half then goes quiet over a corpus it never opened. So the control is a
+  # token already known to be present, read in the same invocation.
+  i108_hits="$(i108_sites "$i108_needle" "$REPO_ROOT/core" "$REPO_ROOT/scripts" "$REPO_ROOT/templates" | LC_ALL=C sort)"
+  i108_self="scripts/validate-enforcement-map.sh"
+  if ! in_lines "$REPO_ROOT/$i108_self" "$i108_hits"; then
+    err "I108's site scan did not find $i108_self, which carries the taught passage's opening sentence in this arm's own i108_needle assignment and in the paragraphs above it. That is the control failing, not a finding about the tree: the scan is not reading the roots it was handed, so its report of no sixth copy would be a zero taken over a corpus it never opened. Fix the roots passed to i108_sites, or the resolution of REPO_ROOT, before reading anything below."
+  else
+    i108_extra=''
+    while IFS= read -r i108_hit; do
+      [ -n "$i108_hit" ] || continue
+      i108_r="${i108_hit#"$REPO_ROOT"/}"
+      case "$i108_r" in
+        core/fixtures/*) continue ;;
+        scripts/validate-enforcement-map.sh) continue ;;
+      esac
+      in_lines "$i108_r" "$i108_declared" || i108_extra="$i108_extra $i108_r"
+    done <<EOF
+$i108_hits
+EOF
+    [ -z "$i108_extra" ] || err "I108: file(s) outside the five bound role files carry the taught derivation-fence passage:$i108_extra. A sixth copy is an unbound copy -- half A compares only the five it is given, so a sixth drifts in silence and teaches its own grammar to whichever agent reads that file. Either point it at one of the five, or add it to i108_declared here in the same change so it is held byte-identical with them."
+  fi
+
+  # HALF C: the shipping reader opens a block in every role file that anchors on either key.
+  # This is the half that RUNS the subject rather than reading its prose, and the only one that
+  # can see the taught grammar drifting away from the grammar that is actually enforced.
+  if [ ! -f "$i108_reader" ]; then
+    err "I108 cannot find core/scripts/validate-artifact-derivations.sh. It is the reader that decides what a derivation fence is, and without it this arm cannot tell a role file teaching a checkable form from one teaching a form that produces zero derivations and exit 0. Half C is not skipped over a missing subject: a role file teaching an unreadable grammar is exactly what ships while nobody is looking."
+  else
+    i108_roles="$REPO_ROOT/core/team-roles"
+    i108_set="$(i108_pop "$i108_roles")"
+    i108_missing=''
+    while IFS= read -r i108_rel; do
+      [ -n "$i108_rel" ] || continue
+      in_lines "$i108_roles/${i108_rel##*/}" "$i108_set" || i108_missing="$i108_missing $i108_rel"
+    done <<EOF
+$i108_declared
+EOF
+    if [ -n "$i108_missing" ]; then
+      err "I108's population scan over core/team-roles/ did not find:$i108_missing. Those five are declared above as carrying the taught passage, which is one of the two keys the scan reads, so their absence is the scan failing rather than a finding about the tree. Every count read below would have been taken over a population missing its own known members."
+    else
+      i108_out="$(i108_list "$i108_reader" "$i108_roles")"
+      i108_blind=''
+      while IFS= read -r i108_f; do
+        [ -n "$i108_f" ] || continue
+        i108_opened "$i108_f" "$i108_out" || i108_blind="$i108_blind ${i108_f#"$REPO_ROOT"/}"
+      done <<EOF
+$i108_set
+EOF
+      [ -z "$i108_blind" ] || err "I108: role file(s) teach the derivation passage or template a derivation record field, and validate-artifact-derivations.sh opens no block in them:$i108_blind. The reader's --list mode found nothing there, which is the silent shape -- it prints zero derivations and exits 0, so an agent handed this file writes a fence, gets no check and no error, and every later pass reads that silence as a pass. The info string must be exactly the word derived with nothing after it; the fence may sit at column 0 or at any indent, and each recorded line must carry the opener's own indent. Fix the fence in the role file, or fix the reader, but the two must agree."
+    fi
+  fi
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"

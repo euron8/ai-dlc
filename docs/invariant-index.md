@@ -124,3 +124,4 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I105 | every reconcile detector is DRIVEN into the report region or declared exempt |
 | I106 | a SHIPPING fixture never resolves its root by walking for VERSION (I33 family) |
 | I107 | the in-force query Check 26's validator asks its sibling for is a mode that sibling dispatches |
+| I108 | the derived-fence grammar is taught in ONE passage, and what it teaches is what the reader accepts |

@@ -4060,7 +4060,10 @@ Found by the batch-51 scope hand while deriving the reader set for `BL-162`.
 Five role files (analyst, architect, tea, pm, sm) carry one byte-identical passage opening
 "**Write it in a `derived` fence, which is what makes it checkable:**" followed by a column-0
 example; the remediator and ops record templates place the fence under a `- derivation:` list
-item, which is exactly the indented shape `BL-162` found blind. No file states whether the fence
+item. **Re-measured while fixing this: both templates write that fence at COLUMN 0, not
+indented** — `grep -n '```' core/team-roles/remediator.md` puts it at column 0 — so the entry's
+claim that they carry the indented shape `BL-162` found blind was wrong. What they do carry is a
+list item that INVITES the indented form from anyone copying it. No file states whether the fence
 may be indented, and no invariant or render step joins the seven sites to
 `core/scripts/validate-artifact-derivations.sh`. A future correction to the taught grammar has
 seven edit sites and no enforcer, so the copies will drift from each other and from the reader
@@ -4070,7 +4073,14 @@ Shape of the fix: single-source the passage as data the role files render, or bi
 copies byte-identically to one owner with an arm in `scripts/validate-enforcement-map.sh`, and
 state the indent rule once. Both are larger than the finding; neither is owed by `BL-162`.
 
-verify: manual
+The receipt DRIVES the arm and cannot be satisfied by prose: it copies the tree, requires
+`--arms I108` to be GREEN on the unmutated copy, then reworks one word inside the passage BODY
+of `sm.md` and requires the fork message. The green-first control is load-bearing — without it
+an arm that reported unconditionally would score a close, and an arm that is only a comment
+cannot pass either, because `--arms` resolves its unit through
+`render-invariant-index.sh --arm-lines`, which refuses an arm containing no emitter.
+
+verify: sh M=scripts/validate-enforcement-map.sh; R=core/team-roles/sm.md; [ -f "$M" ] && [ -f "$R" ] || exit 9; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$M" --arms I108 >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; A='prefix and no more, so output the command itself printed with leading spaces keeps them.'; grep -qxF -- "$A" "$D/$R" || { rm -rf "$D"; exit 9; }; awk -v a="$A" '{ if ($0 == a) { print "drifted."; next } print }' "$D/$R" > "$D/x" && mv "$D/x" "$D/$R" || { rm -rf "$D"; exit 9; }; O="$(cd "$D" && bash "$M" --arms I108 2>&1)"; rm -rf "$D"; case "$O" in *"the taught derivation-fence passage has forked"*) exit 0 ;; esac; exit 1
 
 
 

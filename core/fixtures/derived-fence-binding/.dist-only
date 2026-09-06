@@ -1,0 +1,9 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is invariant I108 inside scripts/validate-enforcement-map.sh, which install.sh
+does not ship. A fixture whose subject is absent cannot fail on a consumer's tree, and a unit
+that cannot fail scores as a pass in that consumer's own suite verdict.
+
+It is also a MUTATION BATTERY in two directions: it edits throwaway copies of core's role
+files AND throwaway copies of the validator's own arm, to score the wrong fixes the arm could
+have been written as.
