@@ -993,7 +993,15 @@ for f in ("adjudicator_agent_id", "catalog"):
 # The vocabulary and the window are shared with `core/hooks/ai-dlc-gate-remediation-guard.sh`
 # arm 7a, which reads the same two ledgers for the same decision at edit time. Read that arm's
 # header for the census behind the 900s window and the enumerated false-refusal set.
-BINDING_STATUSES = ("bound-write", "bound-dispatch", "exempt", "nocorpus", "unbound")
+# ONE VOCABULARY, TWO IMPLEMENTATIONS, AND THE SIXTH MEMBER IS WHY IT IS WRITTEN OUT. Scored
+# against the guard's jq over the reference consumer's 195 stems the two agreed on 193 and
+# disagreed on exactly the two non-conforming filenames, where jq said `unbound-malformed` and
+# this said `unbound`. Both refuse, so no verdict moved -- which is precisely the shape a
+# drifting duplicate has before it matters. Neither reader reaches those two today (the guard's
+# pick filters them and the envelope arm above rejects them), so the repair is to spell the same
+# six members here rather than to add a reader for a state that cannot arrive.
+BINDING_STATUSES = ("bound-write", "bound-dispatch", "exempt", "nocorpus", "unbound",
+                    "unbound-malformed")
 
 
 def _ep(s, fmt):
@@ -1032,7 +1040,7 @@ def dispatch_binding(stem, gate_dir, window_s):
     s_ts = [t for t in (_ep(r.get("ts"), "%Y-%m-%dT%H:%M:%SZ") for r in spawns) if t is not None]
     epoch = min(w_ts + s_ts) if (w_ts or s_ts) else None
     if nonce_t is None:
-        return "unbound"
+        return "unbound-malformed"
     if epoch is None:
         return "nocorpus"
     if nonce_t < epoch:
@@ -1059,7 +1067,7 @@ except ValueError:
 _binding = dispatch_binding(stem, os.path.dirname(os.path.abspath(verdict_path)), _window)
 if _binding not in BINDING_STATUSES:
     block(2, f"dispatch binding returned {_binding!r}, which is not one of {BINDING_STATUSES}.")
-if _binding == "unbound":
+if _binding.startswith("unbound"):
     block(1,
           f"gate_nonce {V['gate_nonce']!r} is bound to NO dispatch. Nothing in "
           f"spawn-ledger.jsonl or gate-adjudication/.verdict-writes.jsonl records a "
