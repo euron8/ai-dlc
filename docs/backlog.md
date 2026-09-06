@@ -4152,6 +4152,46 @@ materialised at line 7. This tree's config carried no `bare` line originally. So
 `git init` reaching the real repo is a route to the KEY EXISTING AT ALL, which is a precondition
 for it holding any value. It does not explain the value `true`.
 
+**THE POSITION IS NOW REPRODUCED, AND IT WAS REPRODUCED BY A SESSION COMMITTING THE DEFECT
+ACCIDENTALLY.** The entry above reads the key's position — line 8, appended INSIDE the live
+`[core]` block directly after `hooksPath`, where a from-scratch init writes it at line 7 BEFORE
+`hooksPath` — as evidence that something appended to a live section rather than re-initialising
+from scratch. That reading is now measured rather than inferred. A re-init on a repo whose
+`[core]` block carries extra keys appends `bare` at the END of the block: seeded with the `bare`
+line stripped and a `hooksPath` key added, `git init` in the existing repo puts `bare = false` at
+line 8 and `hooksPath` at line 7 — the exact ordering this tree carries. Control: a fresh
+`git clone` of this repo writes `bare = false` at line 4, before `logallrefupdates`.
+
+**So the position is a signature of a re-init on a live config, and it is NOT a signature of a
+bare init.** It still does not explain the value `true`; a re-init writes `false`.
+
+**HOW IT WAS REPRODUCED IS THE PART WORTH KEEPING.** During batch 66 a fixture arm was given a
+diagnostic message containing an UNESCAPED backtick pair inside a double-quoted shell string —
+`` `git init` `` written as prose about the command. The shell executed it. `git init` ran against
+`/Users/n8/git/ai-dlc` with no argument and no `GIT_DIR` set, materialising `bare = false` in this
+tree's config at line 8, and spliced `Reinitialized existing Git repository in …` into the message
+text where the prose was meant to be. Nothing else was touched: `core.bare` reads `false`, the
+index held at 757, `HEAD` unmoved. `tool-hazards.md` names this hazard for heredocs inside
+`bash -c`; the same quoting failure in an ordinary double-quoted string inside a tracked fixture
+reaches the real repository the same way, and the sibling line 12 lines above it escapes its
+backticks correctly, so a correct site and an incorrect one sit in the same file.
+
+**This is a route to a stray `git init` that no `GIT_DIR` reasoning covers**, and it is a second
+route beside the unguarded `cd` this entry's receipt keys on: prose about a git command, unescaped,
+in a string a shell expands.
+
+**NO LINT IS PROPOSED FOR IT, AND THE REASON IS A MEASURED FALSE-POSITIVE SET RATHER THAN
+RELUCTANCE.** A scan for an unescaped backtick inside a double-quoted string, comments excluded,
+with its probe fired both ways before the corpus (seeded offender found, escaped near-miss and
+comment line both acquitted), returns **224 executable-line hits across the tracked shell corpus**.
+That number is not a finding count. Inspection of the largest contributor — 31 hits in
+`validate-enforcement-map.sh` — shows they sit inside PYTHON heredoc bodies, where the shell never
+expands anything, and others sit in single-quoted regions the scanner's crude quote-tracking
+mis-parses. **The grammar cannot currently tell an expanded string from an inert one**, so 224 is a
+ceiling of unknown depth and shipping it would be the unmeasured lint `CLAUDE.md` forbids. The one
+true positive is the site above, found by executing rather than by scanning. A usable arm needs
+heredoc-body and quote-state tracking first, and that is its own piece of work.
+
 **THE FIRST RECOVERY DESTROYED THE EVIDENCE; THE SECOND OCCURRENCE PRESERVED IT, AND THAT IS
 WHERE THE REAL FINDINGS CAME FROM.** `git config --unset` removes the line entirely, so after the
 first flip the file could no longer say what wrote it. **It recurred six minutes later, the

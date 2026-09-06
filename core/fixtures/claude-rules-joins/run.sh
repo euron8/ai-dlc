@@ -293,7 +293,16 @@ else
     && for i in 1 2 3 4 5 6 7; do printf 'x\n' > "h$i.txt"; done \
     && git add -A >/dev/null 2>&1 )
   b_before="$( ( cd "$m12b_victim" && git ls-files | wc -l ) | tr -d ' ' )"
-  if [ "$b_before" -ne 7 ]; then
+  # ASSERT THE VICTIM IS A REAL REPOSITORY, NOT A DIRECTORY WHOSE READINGS DESCRIBE SOMEWHERE ELSE.
+  # `git init` under an exported GIT_DIR silently succeeds WITHOUT creating a `.git` here --
+  # measured: no `.git` in the directory, and the seed's seven files land in the OUTER repo's
+  # index instead. Every reading below would then describe that outer repo, and the arm would
+  # report a victim count it wrote itself. The fixture's own top-of-file scrub is what prevents
+  # this today, but an arm must not depend on a line ten lines away that a later edit can move.
+  if [ ! -d "$m12b_victim/.git" ]; then
+    note 'FIXTURE BROKEN: m12b victim has no .git -- the seeding git init was redirected, so its counts describe another repository.'
+    rc=1
+  elif [ "$b_before" -ne 7 ]; then
     note "FIXTURE BROKEN: m12b's victim seeded $b_before entries, expected 7; the arm cannot discriminate."
     rc=1
   else
