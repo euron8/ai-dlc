@@ -37,6 +37,120 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 64 SHIPPED AS `v0.516.0`, ONE RELEASE CLOSING THREE NO-`PC` ENTRIES, EACH BUILT BY ITS OWN HAND AND REVIEWED BY ITS OWN ADVERSARY, WITH ONE BLOCKER AND THIRTEEN DEFECTS FIXED PRE-MERGE. THE CONSUMER PULLED TO `0.515.0` MID-BATCH, SO THE GAP IS ONE AND PENDING IS THREE, AND THE PULL IS OWED, NOT REQUIRED. THE SWEEP IS NOT EMPTY: THE CONSUMER FILED TWO `PC-S308-*` CANDIDATES TODAY, UNCOMMITTED, AND THE OPERATOR'S CARRIED REJECTION ROTATED THE `S340` CANDIDATE, SO UNFILED IS 19.
+
+This block replaces the batch-63 record below it. Every figure here was re-derived on 2026-09-06
+after the merge, against the working tree with the controls in the same invocation; re-derive
+them again rather than reading them.
+
+**`VERSION` IS `0.516.0`, SO BATCH 65 RELEASES AS `0.517.0`.** Re-derive `VERSION` and add one.
+Batch 64 merged twice: `a4a64e53` (PR #656, squash, `v0.516.0`) closing `BL-184`, `BL-163` and
+`BL-161`, and the docs commit carrying this block; all three rotated (archive 97 → 100, live 87
+→ 84), nothing filed, and the receipt histogram moved exactly those three rows to exit 0
+(control: 72 rows still at 1). No id carries a `PC-`, so `named_absorbed()` has nothing to join.
+No correction release. **The twelfth batch opened by a peer's handoff** (action 9's message
+from `ai-dlc-c3`), so it scoped itself from its own ranking and stated the choice in its first
+ping: the sweep was empty at open and the block below ranked `BL-163`, `BL-161` and `BL-184`
+first. **All three batched into one release**: deriving each subject's reader set found no
+bootstrapping file (`BL-161` consumes `reconcile/lib.sh`'s exported awk fragments and changes
+nothing there) and no candidate's receipt was closed by another's fix. Three implementing hands
+in three worktrees and three adversaries ran in parallel; every adversary found something on a
+gate-green branch, the merge waited for the last re-verification, and the branch was pushed
+green four times before it merged.
+
+**BL-184: THE GENUINE-OPERATOR PREDICATE REFUSES A HARNESS INJECTION AND VERIFIES A CITATION
+INSIDE A WINDOW AROUND ITS OWN TIMESTAMP.** `validate-steering-budget.sh` refuses a `type: user`
+record carrying `isMeta: true` (consumer census 984 accepted / 90 injected → 894 / 0, all 90
+arriving through `genuineOperatorText`), and `--cite` gains `--authorized-at`, a hard 7200s
+window each side derived from the consumer's 23 verifying rows (worst gap +4283s; the exact
+compare is a measured wrong fix at 1 MATCH / 24 NOMATCH). Five reader call sites pass the
+timestamp through `cite_ts()` at the four I103 sites and I109 binds them by emission site. Over
+the consumer's 26 authorization rows, 24 MATCH before and after and the in-force suppression
+verifies; Check B's corpus count 56 → 52 with no window flipping. The adversary's four defects,
+fixed pre-merge: a one-sided window that every channel passed because every out-of-window seed
+sat AFTER the bound (the forgery direction is BEFORE it; all three channels seed it now); an
+environment override of the tolerance (the BL-176 hole again, removed); a zone offset silently
+truncated to a naive stamp; and a cache marker bound by nothing (the verifier's byte digest is
+a key term now, `ckey` not `fkey`, because a same-length edit under an mtime-preserving
+checkout left the size-and-mtime form unchanged). A non-canonical timestamp still verifies
+unbounded by design and each reader prints `unbounded-citation: N` on its PASS line.
+
+**BL-163: I108 BINDS THE TAUGHT DERIVED-FENCE PASSAGE TO ITSELF AND TO ITS READER.** Five role
+files are one byte string, no sixth copy under the six shipping roots, and the reader's `--list`
+opens a block in all seven sites with its stderr read separately. The binding was taken over a
+render. Six adversarial defects fixed pre-merge, the one that mattered a merged-stderr reader
+failing open on a GRAMMAR refusal. The entry's own premise (that the templates indent their
+fence) was wrong and is corrected. Arm cost 0.27s over the selection prologue.
+
+**BL-161: THE ROTATOR'S FENCE GUARD READS LIB.SH'S STATE, AND THE ADVERSARY'S BLOCKER WAS
+LATENT.** A delimiter indented four or more columns, tab-indented, blockquoted or CR-carrying
+re-balanced the old parity and `--apply` cut inside a fence; a fourth finding refuses those by
+position. Zero such delimiters in 24,431 lines of the four live ledgers. `lib.sh` unchanged. The
+filed receipt was unsatisfiable (it demanded the absence of a phrase every refusal prints). The
+rotator is distribution-only and reaches no consumer.
+
+**THE LEDGER MOVED THIS BATCH, BY THE CONSUMER'S PULL, ITS FILINGS AND THE OPERATOR'S CARRIED
+REJECTION, AND NOT BY ANY CITATION HERE.** md5 `2c129779…` at open, `b1e78692…` at close. The
+consumer pulled `0.513.0 → 0.515.0` while the batch ran (its stamp reads `0.515.0` /
+`490bb3af` on all four fields, its HEAD went `0e5dc276f → b04b6d7dd` on
+`ai-dlc/carry-over/pool-pnl-backlog-triage`, porcelain 4 → 9). The pull's rotation took
+`PC-S340-CHECK-26-READS-A-PARTIAL-RE-VERIFY-VERDICT-FILE-AS-UNADJUDICATED` into the consumer's
+archive (live 0, archive 1) — the rejection this file has asked the operator to carry since
+batch 57 is DELIVERED and nothing further is owed on it. The consumer then filed two candidates
+in its WORKING TREE, `PC-S308-RULE-25A-HISTORY-MOVE-HAS-NO-DEFINED-HEADER-FORMAT` and
+`PC-S308-WRITE-FORMAT-STEERING-APPLIED-AD-HOC-NOT-UNIVERSALLY`; neither has an introducing commit
+yet (the `-S` date is empty for both, and for the impossible-id control), so the ledger file on
+disk is ahead of the consumer's history. No write to the consumer by this session or its six
+hands (reads, `cat`, copies to `mktemp`, a frozen snapshot of its transcript corpus). **Live 66,
+cited 47, unfiled 19**, archive 168, partition control 0. Goal partition **20 DISCHARGED / 27 in
+flight / 19 untouched**, overlap 3, discharged-but-invisible 0, TERMINAL **54** — unchanged,
+because no subject carried a `PC-` id.
+
+**GAP ONE (`0.515.0` installed at `490bb3af`, `0.516.0` shipped) — PENDING 3 (`BL-184`,
+`BL-163`, `BL-161` at `0.516.0`, no `PC-` id among them), AND THE PULL IS OWED, NOT REQUIRED.**
+Batch 63's two entries are delivered. This batch's second test is a null on the consumer's real
+files, read-only: zero of 27 authorization rows flip through the shipping readers against the
+installed engine, the in-force suppression verifies under both, and Check 25's corpus count
+drops by four with no window crossing. What the null does not cover: the installed readers pass
+no bound and accept `isMeta`, so a citation written today reaching back to any old operator
+phrase verifies on the installed engine with no warning shot — a silent acceptance, not a live
+wedge. Range `490bb3af..origin/main`: 22 core rows, 0 mode-only, 0 bootstrapping files;
+the INSTALLED `0.515.0` gate runs the delivering pull. A pull is operator-initiated; readiness is
+not authorization.
+
+**TELL THE CONSUMER, IN THE NEXT BRIEF,** that from `0.516.0` `validate-steering-budget.sh
+--cite` takes `--authorized-at` and its five readers pass it, so the owner and the readers land
+in one pull (a newer reader against an older owner gets `unknown arg`, which every reader
+classifies as tooling and which re-blocks every gate leaning on a suppression); that the window
+is 7200s each side and five of its historical rows cite words said 6–71 minutes AFTER their own
+timestamp, all inside the window, so the field should be written as when the operator spoke and
+the tolerance must not be tightened without re-measuring that corpus; that one of its rows
+(line 3887 of its escalations `pending.md`) has no parseable timestamp and will count as
+`unbounded-citation: 1` on the escalation gate's PASS line; that Check 25's steering count drops
+by up to four corpus-wide (harness injections no longer scored as steers) and the recorded
+baseline is not comparable across the pull; that the remediation guard's citation cache re-keys
+on the verifier's digest so the first guarded edit after the pull pays one cold parse; that five
+role files gain one sentence stating the derived fence may be indented under a list item; and
+that the batch-61, batch-62 and batch-63 brief items below still stand.
+
+**THE SWEEP FOR BATCH 65 HAS TWO NEW `PC-S308-*` CANDIDATES, AND THEY OUTRANK THE NO-`PC`
+RESIDUE.** Check the ledger's md5 and the consumer's porcelain first: both filings are
+uncommitted there, so they may be reworded or committed under a squash before you read them.
+Both are prose gaps in `core/skills/ai-dlc/SKILL.md`'s rulebook — Rule 25(a) names the history
+file a trim move lands in but not the header the moved block carries (the `[MOVED <timestamp>
+…]` convention in use appears nowhere in core), and the "READ AND FOLLOW <format-file> before
+writing" directive Rule 12 attaches to `escalations.md` is attached to no other append-only
+artifact, the push-candidate ledger included. Read both status lines in the consumer's ledger,
+build the filed remedy and score it, and mind the re-attach budget: `SKILL.md` costs its bytes
+on every turn and the gate holds it to a ceiling. The 17 older unfiled ids are enumerated in
+action 1b and the batch-39 paragraph of action 1, none filed since 2026-08-31, and the `S340`
+candidate has left that set. Among the 52 live no-`PC` entries, `BL-113` (the reverify engine
+truncates a two-line `verify: sh` receipt and mis-scores it silently; its reader is
+`ledger-reverify.sh`, a BOOTSTRAPPING file, so it ships alone), `BL-122` (one unreadable layer
+entry suppresses every finding about every other entry) and `BL-148` (the In-Flight token set,
+four declaring sites, no owner, its arm in the pole) rank next, then `BL-159` (brief material).
+Derive each subject's reader set before deciding what batches; run its receipt raw first.
+
 ### BATCH 63 SHIPPED AS `v0.514.0` AND `v0.515.0`, TWO RELEASES IN ONE SESSION, NEITHER PC-BACKED, BOTH REVIEWED BY AN ADVERSARIAL HAND THAT FOUND BLOCKERS PRE-MERGE. THE CONSUMER PULLED TO `0.513.0` MID-BATCH, SO THE GAP IS TWO AND PENDING IS TWO, AND THE PULL IS OWED, NOT REQUIRED. THE SWEEP IS EMPTY AND THE UNFILED SET FELL TO 18 BY THE CONSUMER'S OWN ROTATION. ONE CANDIDATE STILL AWAITS THE OPERATOR'S REJECTION, PLUS `BL-159`, `BL-161`, `BL-163`, `BL-184` WITH NO `PC-` ID.
 
 This block replaces the batch-62 record below it. Every figure here was re-derived on 2026-09-06
@@ -6244,7 +6358,7 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), RANK THE UNFILED CANDIDATES,
-   THEN SCOPE BATCH 63 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
+   THEN SCOPE BATCH 65 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
    instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
    candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
    FROM ANOTHER SESSION** — a cross-session message carrying `READ and FOLLOW …`, which is
@@ -6253,10 +6367,16 @@ so no block written before it changes verdict.
    proceed; the operator can redirect at any ping. **Regardless of who invoked you, batch
    multiple candidates into one release wherever action 2 allows it — and do not merge while a
    hand you dispatched is still out, even on a green gate: batch 63's merged branch was green
-   at every phase when its second adversary returned two BLOCKERs.** The sweep is EMPTY
-   today: the 18 unfiled ids are the standing corpus (the two `PC-S337-RETRO-*` siblings
-   already in core left it when the consumer's mid-batch pull to `0.513.0` rotated them), one
-   awaiting the operator's rejection; the resume block ranks the rest. Batch 63 is SHIPPED as
+   at every phase when its second adversary returned two BLOCKERs.** The sweep is NOT empty
+   today: the consumer filed `PC-S308-RULE-25A-HISTORY-MOVE-HAS-NO-DEFINED-HEADER-FORMAT` and
+   `PC-S308-WRITE-FORMAT-STEERING-APPLIED-AD-HOC-NOT-UNIVERSALLY` in its working tree during
+   batch 64 (uncommitted there when this was written; re-read them), both prose gaps in
+   `SKILL.md`'s rulebook, and they outrank every no-`PC` entry; the other 17 unfiled ids are
+   the standing corpus, and the `S340` candidate that awaited the operator's rejection has been
+   rotated by the consumer and is no longer anyone's work. Batch 64 is SHIPPED as ONE release —
+   `v0.516.0` at `a4a64e53` (PR #656) closing `BL-184`, `BL-163` and `BL-161`, none PC-backed,
+   all rotated, nothing filed, no correction release; the three batched because no reader set
+   reached a bootstrapping file and no receipt was closed by a sibling's fix. Batch 63 is SHIPPED as
    TWO releases — `v0.514.0` at `56a104cd` (PR #653) closing `BL-171` and `v0.515.0` at
    `24b957e4` (PR #654) closing `BL-176`, neither PC-backed, both rotated, `BL-184` filed and
    not fixed, no correction release; the pair did not batch because BL-176's adversarial
@@ -6295,6 +6415,15 @@ so no block written before it changes verdict.
    at `2dca4815` (PR #622), `BL-162`, corrected by `v0.501.0` at `e06836ca` (PR #624), `BL-163`;
    batch 50 is SHIPPED — `v0.499.0` at `13502c45` (PR #619), `BL-160`, `BL-161`. Do not
    re-scope onto any of them.
+
+   **SEED BOTH SIDES OF ANY WINDOW, AND PIN EACH HAND'S INVARIANT ID IN ITS BRIEF.** Batch 64's
+   citation window was one-sided in a wrong fix that passed the receipt and four fixtures,
+   because every out-of-window seed sat AFTER the bound and the forgery direction is BEFORE it;
+   and two hands building arms in the same file both derived "the next free ID" from the same
+   tree at the same moment, so both claimed `I108` and shared its `i108_*` locals — the render's
+   duplicate check would have named it, the shell would not. Derive the ID in the lead and hand
+   it to the brief. **Ask every adversary to re-verify its own findings on the tip**: one
+   measured its own wrong fix incorrectly the second time, and the lead's run settled it.
 
    **SEED THE WRONG FIX, NOT ONLY THE ABSENT ONE.** Batch 53's first fixture proved the guard
    EXISTED (a mutant removing it went red) and accepted two wrong guards that pass every seed —
@@ -6883,9 +7012,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 2c129779... after the consumer's mid-batch pull to 0.513.0 during batch 63 rotated seven (five cited, plus the two RETRO siblings); 417c783e... unmoved through batches 59-62; it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
-   wc -l < /tmp/live.txt    # 65 after the consumer's batch-63 pull rotated seven; 72 with the corrected ^#{2,6} grammar through batch 62 (the old ^## one reads one fewer); 77 through batch 57, 71 after the consumer's pull rotated six, 72 after its post-merge filing
-   wc -l < /tmp/unfiled.txt # 18 -- the two RETRO siblings already in core left at batch 63 by the CONSUMER's rotation, not by a citation here (batch 63 cited no PC- id); 20 through batch 62; PC-S335-NO-DETECTOR-REACHES-... left at batch 61 by BL-183, PC-S305-UNION-GATE-... at batch 60 by BL-182
+   md5 -q "$L"              # b1e78692... at batch 64's close: the consumer pulled to 0.515.0 (rotating the S340 candidate) and filed two PC-S308-* in its WORKING TREE; 2c129779... through batch 63's close; it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too, and check the consumer's porcelain, because an uncommitted filing has no -S date
+   wc -l < /tmp/live.txt    # 66 at batch 64's close (two filed, one rotated); 65 after the consumer's batch-63 pull rotated seven; 72 with the corrected ^#{2,6} grammar through batch 62 (the old ^## one reads one fewer)
+   wc -l < /tmp/unfiled.txt # 19 at batch 64's close -- two new PC-S308-* filings in, PC-S340-CHECK-26-READS-A-PARTIAL-... out by the operator's carried rejection (batch 64 cited no PC- id); 18 through batch 63; 20 through batch 62
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -6893,8 +7022,12 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 65 LIVE CANDIDATES, 47 CITED, 18 UNFILED** — re-derived at batch 63's
-   close after its third merge (md5 `2c129779…`, archive 167; the consumer's mid-batch pull to
+   **THE BASELINE IS 66 LIVE CANDIDATES, 47 CITED, 19 UNFILED** — re-derived at batch 64's
+   close after its merge (md5 `b1e78692…`, archive 168; the consumer pulled to `0.515.0`
+   mid-batch, which rotated the `S340` candidate the operator's rejection had been waiting on,
+   and then filed two `PC-S308-*` candidates in its working tree, uncommitted at close, so
+   their `-S` date is empty exactly like the impossible-id control's; batch 64 cited no `PC-`
+   id; batch 63's close read 65 / 47 / 18 at `2c129779…`, archive 167; the consumer's mid-batch pull to
    `0.513.0` rotated seven, five cited ids moving DISCHARGED → TERMINAL (25 → 20, 49 → 54) and
    the two RETRO siblings leaving unfiled; batch 63 cited no `PC-` id; batch 62's close read
    72 / 52 / 20 at `417c783e…`, archive 160, batch 62 cited no `PC-` id so nothing moved; batch
