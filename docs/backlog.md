@@ -4285,3 +4285,95 @@ nothing about narrative detection — that half is deliberately unmechanised her
 above.
 
 verify: sh n=0; for s in core/scripts/*.sh scripts/*.sh; do grep -qE 'wc -c.*SKILL|SKILL.*wc -c' "$s" 2>/dev/null && n=$((n+1)); done; [ "$n" -gt 1 ]
+
+## BL-189 — `core.bare=true` appeared on the main checkout mid-session for the second time, no mechanism is reproduced, and 24 fixture scripts make repo-mutating git calls that depend on the process cwd
+
+**THE MECHANISM IS NOT ESTABLISHED. THIS ENTRY RECORDS A CORRELATION AND A HAZARD CLASS, AND
+SAYING SO IS THE POINT** — a cause asserted here would be the "text about a program is not the
+program" failure one level up. What follows separates what was measured from what was not.
+
+**The event, twice now.** During batch 65, `git commit` failed with `fatal: this operation must
+be run in a work tree`. `git config --get core.bare` read **`true`** on `/Users/n8/git/ai-dlc`,
+which has a real working tree and a `.git` DIRECTORY — an incoherent state that breaks every
+porcelain command. `git worktree list` reported the main checkout as `(bare)`. The same anomaly
+is recorded once before, in the operator's batch-63 memory entry. No file was lost: the two
+edited files were confirmed intact on disk BEFORE anything was changed, `core.bare` was unset,
+and both re-read byte-identical.
+
+**SIX ATTEMPTED REPRODUCTIONS, ALL NEGATIVE.** Each on a throwaway `mktemp` repo, never the real
+one: `git init` nested in a subdirectory of an existing repo; `git init` inside a worktree;
+`git init` from inside `.git/`; `git init` with `GIT_DIR` exported; the same with cwd outside the
+worktree; and `git worktree add --lock`. **Every one produced `bare = false`. None produced
+`true`.** So the trigger is unknown, and any sentence naming one would be invented.
+
+**What the failed reproductions DID establish, and it is the useful half.** `git init` on an
+ALREADY-INITIALISED repo WRITES a `bare =` line that was not there before — measured: a config
+with the line stripped reads `unset`, and after a re-init reads `false` with the key
+materialised at line 7. This tree's config carried no `bare` line originally. So a stray
+`git init` reaching the real repo is a route to the KEY EXISTING AT ALL, which is a precondition
+for it holding any value. It does not explain the value `true`.
+
+**THE FIRST RECOVERY DESTROYED THE EVIDENCE; THE SECOND OCCURRENCE PRESERVED IT, AND THAT IS
+WHERE THE REAL FINDINGS CAME FROM.** `git config --unset` removes the line entirely, so after the
+first flip the file could no longer say what wrote it. **It recurred six minutes later, the
+config was copied aside BEFORE unsetting, and three things fell out that the first recovery had
+thrown away:**
+
+- **`bare = true` sat at LINE 8, appended INSIDE the existing `[core]` block, directly after
+  `hooksPath`.** A fresh `git init` on a config carrying no bare line writes it at line 7, BEFORE
+  `hooksPath`. The position says the key was appended to a live `[core]` section rather than
+  written by a from-scratch init.
+- **The write landed at 10:40:41, roughly six minutes AFTER this session's last commit
+  (10:34:59), during a stretch running only read-only greps.** The lead's own commands were not
+  writing config in that window. The one process mutating git state was a subagent holding a
+  LOCKED worktree under `.claude/worktrees/`.
+- **The placement REPRODUCES.** On a throwaway repo carrying a `hooksPath` line and no bare key, a
+  `git init` run FROM INSIDE a worktree appends `bare` at line 8, after `hooksPath` — the exact
+  position observed. **The value still comes out `false`, not `true`**, so the position is
+  explained and the VALUE is not.
+
+**On any recurrence, copy `.git/config` and `.git/config.lock` aside BEFORE unsetting anything**,
+and capture `ls -la .git/`, `git worktree list`, the config mtime and the running agent set in the
+same invocation. The first flip cost the diagnosis; the second paid for it.
+
+**A SUBAGENT WORKTREE IS THE STANDING SUSPECT AND IS STILL NOT PROVEN.** Both flips happened while
+an `isolation: worktree` hand was running. The rule in `mechanism-design.md` applies to this entry
+itself: a cause that FITS the evidence is not a cause DEMONSTRATED, and the value `true` is the
+part no reproduction has produced.
+
+**THE LIVE HAZARD CLASS, DERIVED.** Of **283** fixture `run.sh`/`seed.sh` scripts, **24** make an
+unqualified repo-mutating git call (`git init|config|add|commit|checkout|stash` with no `-C` and
+not inside a subshell), so their target is whatever the PROCESS CWD resolves to. Control in the
+same run: `preclassify-mode-bucket/run.sh`, which uses `git -C` 10 times, correctly does not
+appear; an impossible pattern returns 0.
+
+Of those 24, one — `core/fixtures/check-1c-bypass/seed.sh:49` — carries an **UNGUARDED**
+`cd "$REPO"` immediately above `git init -q .`, `git config user.email`, `git config user.name`
+and `git commit`. Every other bare `cd` in the set is guarded `|| exit 2`. **Demonstrated on a
+throwaway repo**: with an empty `cd` target the following `git init` and `git config` land in the
+surrounding repository — `core.bare` went from unset to `false` and `user.name` was overwritten
+with the fixture's value.
+
+**AND THAT SITE IS PROBABLY NOT THE CULPRIT, WHICH IS WHY IT IS FILED AS A HAZARD AND NOT AS THE
+CAUSE.** `check-1c-bypass/seed.sh:40` sets `set -euo pipefail`, so a failing `cd` aborts the
+script rather than continuing — and `$REPO` is `"$OUT/repo"`, non-empty whenever `$OUT` is set,
+which `set -u` guarantees. The demonstration above had to disable those protections to fire. It
+is a real unguarded site worth closing; it is not evidence about this incident.
+
+**The Bash tool's working directory PERSISTS across calls**, which is what makes cwd-dependent
+git calls a distribution-wide hazard rather than a local style question — `tool-hazards.md`
+states it, and this is the shape where the blast radius is the real `.git`.
+
+**Remedy, in preference order.** (1) Guard the one unguarded `cd`, which is a one-line change and
+independent of the diagnosis. (2) A `validate-shell-portability.sh` arm refusing an unqualified
+repo-mutating git call in a fixture script that is not inside a subshell — its false-positive set
+is the 23 currently-guarded sites, so it must key on the GUARD, not on the call, and that FP set
+must be measured before it ships. (3) Nothing keyed on `core.bare` itself: a check for a state
+whose cause is unknown would fire on the symptom and teach nobody anything.
+
+**Stated limit of the receipt.** It closes when the unguarded `cd` at `check-1c-bypass/seed.sh`
+is guarded. That is remedy (1) only. It says nothing about the incident, which is not mechanically
+detectable from this tree, and it must NOT be read as evidence that the `core.bare` flip is
+understood or fixed.
+
+verify: sh f=core/fixtures/check-1c-bypass/seed.sh; [ -f "$f" ] || exit 9; n=$(grep -cE '^[[:space:]]*cd "[^"]+"[[:space:]]*$' "$f") || n=0; [ "$n" -eq 0 ]
