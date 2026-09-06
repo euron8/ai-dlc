@@ -4029,6 +4029,8 @@ verify: sh h=core/hooks/ai-dlc-continue.sh; [ -f "$h" ] || exit 9; grep -q 'PUSH
 
 ## BL-185 — Rule 25(a) names a trim move's destination file but not the header the moved block carries, so the one rotator that bounds the one unbounded history file loses its cut points
 
+**LANDED (v0.517.0, verified pending).**
+
 **Provenance:** `PC-S308-RULE-25A-HISTORY-MOVE-HAS-NO-DEFINED-HEADER-FORMAT`, filed by the
 reference consumer 2026-09-06. Its own two `derived` blocks reproduce against this tree; the
 `[MOVED …]` convention it names appears NOWHERE in `core/` or `scripts/` (rc=1, against a
@@ -4139,6 +4141,8 @@ reaches it.
 verify: sh grep -qE "^## \[MOVED <ISO-8601 timestamp> from <source basename> . <trigger>\]$" core/skills/ai-dlc/SKILL.md && grep -qF "block a move lands in a history/archive file opens with" core/skills/ai-dlc/SKILL.md
 
 ## BL-186 — format steering is attached at three write sites and absent at twenty-one, and a rule telling the lead to LOCATE a format is discharged by looking when no format exists
+
+**LANDED (v0.517.0, verified pending).**
 
 **Provenance:** `PC-S308-WRITE-FORMAT-STEERING-APPLIED-AD-HOC-NOT-UNIVERSALLY`, filed by the
 reference consumer 2026-09-06. Whether a write gets format steering depends on which core author
