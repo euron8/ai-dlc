@@ -6405,3 +6405,55 @@ directory is MANDATORY and that the single-file invocation is not an acceptable 
 
 verify: sh G="${GV:-core/skills/ai-dlc/steps/gate-validation.md}"; [ -f "$G" ] || G=".claude/skills/ai-dlc/steps/gate-validation.md"; A="${AUDIT:-core/scripts/audit-rule-files.sh}"; [ -f "$A" ] || A="scripts/ai-dlc/audit-rule-files.sh"; [ -f "$G" ] && [ -f "$A" ] || exit 9; o="$(bash "$A" 2>&1)"; case "$o" in *"RULE_WEAKNESS: "*) ;; *) exit 9 ;; esac; l="$(grep -n -- '--transcript-dir' "$G")"; [ -n "$l" ] || exit 9; w="$(printf '%s\n' "$o" | grep RULE_WEAKNESS | grep -c -e 'gate-validation.md.*transcript-dir')" || w=0; s="$(printf '%s\n' "$l" | grep -Eiwc 'prefer|should|try to|consider|ideally|when possible|in most cases')" || s=0; m="$(printf '%s\n' "$l" | grep -Ec 'MUST|MANDATORY|SHALL')" || m=0; [ "$w" -eq 0 ] && [ "$s" -eq 0 ] && [ "$m" -ge 2 ] && exit 0; exit 1
 
+## BL-177 — `retired-tokens.sh` could not say it scanned nothing: a run that opened no core file was byte-identical to a full scan that matched nothing
+
+**LANDED (v0.508.0, verified 8c99730b).**
+
+Filed by the reference consumer as `PC-S337-RETIRED-TOKENS-CANNOT-SAY-IT-SCANNED-NOTHING`
+(2026-08-26); DEFECT tier — the 0.410.0 → 0.412.0 pull on that consumer bucketed every path
+`ALREADY-AT-THEIRS`, so the scan's subject set (`$4 ~ /CLASSIFY/`) was empty, it opened no
+file, and it exited 0 with zero rows, which the run read as a clean scan. The consumer's
+decisive measurement reproduces here: `grep -cE '>&2'` on the script returned 0 against 3 for
+each of `retired-layer-contract.sh` and `retired-layer-passage.sh`, both of which print a
+NOTE for the same state. SKILL.md step 3a-ii told the reader a clean result "is not proof the
+merge is semantically whole" and gave the detector no channel to say whether it had run.
+
+Reader set, derived rather than taken from the filing: `apply.sh:504` and
+`emit-report.sh:243` both invoke the script per `CLASSIFY` path with `2>/dev/null` and read
+rows only, so a stderr NOTE changes nothing either program does; the NOTE is for the operator
+running step 3a-ii by hand, which is the channel the two siblings already use. Rows, exit code
+and the per-path form are unchanged. The subject set is captured once outside the loop (a
+counter in a pipeline's last stage is lost to its subshell) so the run can count what it
+listed and what it opened: opened nothing prints
+`this pull listed N CLASSIFY file(s) and opened NONE, so NO core file was scanned`; opened
+files and matched nothing prints `M of N CLASSIFY file(s) opened` — both counts, because the
+consumer-side hand drove the first cut on a real range that listed 8 and opened 7 (one
+`UPSTREAM-MOD+consumer-deleted` path is skipped before it is opened) and the NOTE printed
+only the 7, which reads as a complete scan; `preclassify.sh` emitting no rows at all is
+refused, not read as clean; rows print with no NOTE beside them.
+
+Every NOTE ends with the detector's stated limit (a consumer path upstream never had is
+outside it by design), as the siblings' do. The wrong fixes scored, each built as a copy of
+the whole reconcile directory and driven: key the NOTE on `preclassify.sh` emitting nothing
+(silent on the motivating incident, which HAD rows); key it on the listed count (a pull made
+only of consumer-deleted `CLASSIFY` files reads as scanned); one NOTE worded "opened nothing"
+for every quiet run (false when a file was opened); a denominator of `opened of opened`; a
+constant retiring count; a fabricated listed count; a NOTE beside rows; the stated limit
+dropped from every NOTE; silence unless something was listed (invisible until the incident's
+own all-at-theirs world, where nothing is listed, was seeded beside the deleted-file worlds);
+the refusal neutered. The receipt seeds the incident's shape (rows
+present, none `CLASSIFY`) and anchors on `listed 0 … opened NONE`, a re-pointed `CLASSIFY`
+file anchored on `1 of 1 … opened, 1 carrying`, a severed contract with stderr asserted
+empty, and `base == theirs` anchored on the refusal. Its one-file world cannot separate the
+denominator wordings the fixture's three-file dist does; the fixture is the channel for those. Fixture `retired-contract-token`
+carries one predicate per stderr state, a dist of three core files (one retiring a token, one
+the consumer deleted so it is listed and never opened, one whose token survives so a world
+exists with nothing retiring) and one directory-copy mutant per wrong fix above, each scored
+on the whole predicate vector; its existing comment-strip mutant had scored its kill for the
+wrong reason (a lone copy of the detector has no `preclassify.sh` beside it and reads zero
+rows everywhere), which is fixed in the same change. Limit: the consumer's own receipt,
+`theirs_lacks … ">&2"`, is a whole-file substring test that a comment naming `>&2` would
+satisfy; the fixed script satisfies it for the right reason, and this entry's receipt is the
+one that drives the behaviour.
+
+verify: sh R=core/skills/ai-dlc-update/reconcile/retired-tokens.sh; W=$(mktemp -d); D=$W/d; C=$W/c; P=core/scripts/x.sh; mkdir -p $D/core/scripts $C/scripts/ai-dlc; git -C $D init -q; printf '#!/bin/bash\nX="$ROOT/.chan"\n' > $D/$P; git -C $D add -A; git -C $D -c user.email=f@x -c user.name=f commit -qm b; B=$(git -C $D rev-parse HEAD); printf '#!/bin/bash\nX="$TMP/chan"\n' > $D/$P; git -C $D add -A; git -C $D -c user.email=f@x -c user.name=f commit -qm t; T=$(git -C $D rev-parse HEAD); cp $D/$P $C/scripts/ai-dlc/x.sh; e1=$(bash $R $D $B $T $C 2>&1 >/dev/null); printf '#!/bin/bash\nX="$TMP/chan"\ny=1\n' > $C/scripts/ai-dlc/x.sh; e2=$(bash $R $D $B $T $C 2>&1 >/dev/null); printf '#!/bin/bash\nX="$ROOT/.chan"\ny=1\n' > $C/scripts/ai-dlc/x.sh; o3=$(bash $R $D $B $T $C 2>/dev/null); e3=$(bash $R $D $B $T $C 2>&1 >/dev/null); e4=$(bash $R $D $T $T $C 2>&1 >/dev/null); rm -rf $W; case $e4 in *"produced no rows"*) ;; *) exit 1;; esac; case $e1 in *"listed 0 CLASSIFY file(s) and opened NONE"*) ;; *) exit 1;; esac; case $e2 in *"opened NONE"*) exit 1;; *"1 of 1 CLASSIFY file(s) opened, 1 carrying"*) ;; *) exit 1;; esac; case $o3 in *RETIRED-CONTRACT-TOKEN*) ;; *) exit 1;; esac; [ -z "$e3" ]

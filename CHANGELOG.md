@@ -15,6 +15,38 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.508.0] - 2026-09-05
+
+### `PC-S337-RETIRED-TOKENS-CANNOT-SAY-IT-SCANNED-NOTHING` — a retired-token scan that opened no core file says so
+
+`reconcile/retired-tokens.sh` wrote nothing to stderr, so a run that opened NO file was
+byte-identical to a run that scanned every `CLASSIFY` file and found no retired token: zero
+rows, exit 0. The reference consumer's 0.410.0 → 0.412.0 pull bucketed every path
+`ALREADY-AT-THEIRS`, the scan's subject set was empty, and the one detector SKILL.md says can
+see a defect "no other detector here can see" went vacuous with nothing in the run saying so —
+while its siblings `retired-layer-contract.sh` and `retired-layer-passage.sh` already carried a
+NOTE for exactly that state. The subject set is now captured once, outside the loop, so the run
+can count what it opened; a run that opened nothing prints
+`retired-tokens: NOTE -- this pull listed N CLASSIFY file(s) and opened NONE, so NO core file
+was scanned …` on stderr, a run that opened files and matched nothing prints
+`M of N CLASSIFY file(s) opened` (both counts — driven on the consumer's history, a range
+listed 8 and opened 7, and a NOTE naming only the 7 reads as a complete scan),
+`preclassify.sh` emitting no rows at all is refused rather than read as clean, and a run that
+produced rows says nothing on stderr. Rows, exit code and the per-path form are unchanged;
+both program callers (`apply.sh`, `emit-report.sh`) discard stderr and read rows only, so the
+NOTE reaches the operator running step 3a-ii by hand, which now says to read it. The wrong
+fixes seeded and killed in `retired-contract-token` began as two — keying the NOTE on
+`preclassify.sh` emitting nothing (silent on the incident, which HAD rows) and one NOTE worded
+"opened nothing" for every quiet run (false when a file was opened) — and the review hands
+added the rest: a NOTE keyed on the listed count, a denominator of `opened of opened`, a
+constant retiring count, a fabricated listed count, the stated limit dropped, and silence
+unless something was listed, the last invisible until the incident's own all-at-theirs world
+was seeded beside a dist of three core files (one retiring a token, one the consumer deleted,
+one whose token survives). The same fixture's existing comment-strip
+mutant had been scoring its kill for the wrong reason — a lone copy of the detector has no
+`preclassify.sh` beside it and reads zero rows on every input — so every mutant is now built in
+a copy of the whole reconcile directory with its sibling asserted present. `BL-177`.
+
 ## [0.507.0] - 2026-09-05
 
 ### `PC-S305-RETRO-BRANCH-CUT-FROM-STALE-PARENT-NOT-MAIN` — the retro branch is cut from the merged trunk, and Check 7 fails one that is behind `origin/main`
