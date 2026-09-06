@@ -203,5 +203,57 @@ else
   note "ok    m11 A6 over ceiling -- killed by its own arm, and only its own"
 fi
 
-if [ "$rc" -eq 0 ]; then note "PASS  claude-rules-joins -- control green, 11/11 mutants killed by their own arm"; fi
+# m12 -- THE PROBE MUST BUILD ITS OWN REPOSITORY, NOT WRITE THE CALLER'S.
+#
+# A1's probe builds a scratch repo under `mktemp` and relies on git's upward DISCOVERY to
+# find it. Discovery is the branch git takes only when the repository environment is unset,
+# and git exports GIT_DIR -- ABSOLUTE -- into any hook running from a linked worktree. So a
+# validator invoked with that environment inherited writes the CALLER's index instead of the
+# probe's. Measured on a clone of this repo pushed from a linked worktree before the fix:
+# the index collapsed 757 entries to 3.
+#
+# THIS ARM IS BEHAVIOURAL AND NOT A TEXT ANCHOR, for the reason the sibling
+# prepush-worktree-env-scrub fixture states about its own subject: a `grep` for the `unset`
+# establishes that a line EXISTS, never that it executes, executes in the right shell, or
+# executes BEFORE the `git add`. What is asserted here is the OUTCOME -- a victim repository
+# whose index is untouched across the run -- so any fix that achieves it passes and any that
+# does not fails, whatever it looks like.
+#
+# WHY THE VICTIM IS SEEDED WITH A DISTINCTIVE COUNT rather than checked for equality alone:
+# the probe writes exactly its own two paths, so a victim that happened to hold two entries
+# would compare equal to a clobbered one. Nine entries cannot be confused with the probe's two.
+#
+# THE ENV IS SET AT THE CALL, not exported here, so this arm cannot leak into the arms below.
+seed "$TMP/m12"
+victim="$TMP/m12victim"
+mkdir -p "$victim"
+( cd "$victim" && git init -q . \
+  && for i in 1 2 3 4 5 6 7 8 9; do printf 'x\n' > "f$i.txt"; done \
+  && git add -A >/dev/null 2>&1 )
+v_before="$( ( cd "$victim" && git ls-files | wc -l ) | tr -d ' ' )"
+if [ "$v_before" -ne 9 ]; then
+  note "FIXTURE BROKEN: m12's victim repo seeded $v_before entries, expected 9. The arm below cannot discriminate."
+  rc=1
+else
+  # The ARMING control: with the environment inherited, this is the exact shape git hands a
+  # hook pushed from a linked worktree. If the seed cannot express that, the arm is vacuous.
+  out="$(run_v_env "GIT_DIR=$victim/.git" "$TMP/m12")"
+  v_after="$( ( cd "$victim" && git ls-files | wc -l ) | tr -d ' ' )"
+  if [ "$v_after" -ne "$v_before" ]; then
+    note "FAIL  m12 probe wrote the caller's index -- victim went $v_before -> $v_after entries."
+    note "      A1's probe must build its own repository; inherited GIT_DIR redirected its \`git add\`."
+    rc=1
+  elif [ -z "$out" ]; then
+    note "FAIL  m12 -- validator produced no output under an inherited GIT_DIR; cannot tell a pass from a dead run."
+    rc=1
+  elif ! grep -qF "A1  ok" <<<"$out"; then
+    note "FAIL  m12 -- victim index survived, but A1 did not report ok; the probe is not firing."
+    printf '%s\n' "$out" | sed 's/^/      /' | head -4
+    rc=1
+  else
+    note "ok    m12 -- probe built its own repo under an inherited GIT_DIR; caller's index intact at $v_after, A1 still fired"
+  fi
+fi
+
+if [ "$rc" -eq 0 ]; then note "PASS  claude-rules-joins -- control green, 12/12 mutants killed by their own arm"; fi
 exit "$rc"

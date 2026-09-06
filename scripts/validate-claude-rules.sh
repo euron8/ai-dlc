@@ -95,7 +95,30 @@ fm_keys() {
 a1_offenders() { git ls-files -- '.claude' | grep -vE '^\.claude/rules/.*\.md$' || true; }
 
 probe="$(mktemp -d)"; trap 'rm -rf "$probe"' EXIT
+# THE SCRUB IS THE PROBE'S OWN, AND IT CANNOT BE INHERITED FROM THE CALLER. This
+# subshell builds a scratch repository and relies on git's upward DISCOVERY to find
+# it -- the branch git takes only when the repository environment is unset. Git
+# exports GIT_DIR, ABSOLUTE, into any hook running from a linked worktree, so
+# inherited unscrubbed the `git add -A -f` below writes the REAL index instead of the
+# probe's. MEASURED on a clone of this repo pushed from a linked worktree: the
+# worktree's index collapses 757 entries to 3, A1 and six A2 findings then fire
+# CLOSED against the wreckage, and A2's own probe reports it cannot fire -- eight
+# arms, all reading as corpus defects rather than as a broken instrument.
+#
+# WHY HERE AND NOT AT THE HOOK'S TOP, which is where the same unset already lives for
+# the fixture dispatch (`.githooks/pre-push`, immediately above `run_fixtures`). That
+# line protects the fixtures and nothing else: it is one program's parent shell, and
+# this validator is also run DIRECTLY -- by an operator, by an agent, by any caller
+# that is not the hook. MEASURED, hook-top scrub in place, validator invoked directly
+# with GIT_DIR set: 757 -> 3, unchanged. A duty that has to hold across several
+# delivery paths is sited where the property is needed, not on one caller.
+#
+# The unset covers all five variables rather than GIT_DIR alone, and that is not
+# belt-and-braces: with only GIT_DIR unset, a caller carrying GIT_INDEX_FILE and
+# GIT_WORK_TREE still redirects the probe, which then fails its OWN fire check --
+# measured, and that is the input separating this from the one-variable near-miss.
 (
+  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
   cd "$probe" && git init -q . && mkdir -p .claude/rules
   printf 'x\n' > .claude/rules/ok.md && printf 'x\n' > .claude/settings.json
   git add -A -f >/dev/null 2>&1
