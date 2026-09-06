@@ -62,6 +62,13 @@ set -euo pipefail
 # usage:
 #   validate-gate-manifest.sh [<gate-validation.md>]
 #
+# WITH NO ARGUMENT the file is resolved under the PROJECT ROOT, never relative to the
+# process cwd. The cwd form read whichever tree the caller happened to be standing in:
+# driven from another ai-dlc checkout it resolved THAT checkout's gate-validation.md and
+# reported about it by name, and every other cwd was a refusal — so the one cwd that
+# produces a wrong answer is the one that looks like a working run. An explicit `$1` is
+# still the contract and still wins; only the default moved.
+#
 # exit 0 = both directions resolve
 # exit 1 = MISSING or ORPHAN ids
 # exit 2 = the scan could not be performed (usage, unreadable file, unparseable
@@ -73,16 +80,47 @@ set -euo pipefail
 # is the manifest section's heading: it is read back out of the core file so the
 # override anchors join against what core actually spells.
 
+# --- AI_DLC_ROOT ------------------------------------------------------------
+# Inline on purpose, in every script that needs it: a shared lib cannot fix this,
+# because locating the lib is the same unsolved problem. install.sh splits what
+# shares a parent in core/, so no fixed hop count from $0 reaches the root in both
+# layouts. core/fixtures/validator-path-resolution asserts both agree.
+ai_dlc_resolve_root() {
+  local d="$1"
+  while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
+    if [ -e "$d/.git" ] || [ -d "$d/.claude" ] || [ -d "$d/core/skills/ai-dlc" ]; then
+      printf '%s\n' "$d"; return 0
+    fi
+    d="$(dirname "$d")"
+  done
+  return 1
+}
+AI_DLC_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$AI_DLC_SELF_DIR" || true)"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="${CLAUDE_PROJECT_DIR:-}"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$(pwd)" || true)"
+[ -n "$AI_DLC_ROOT" ] || {
+  echo "ERROR: cannot resolve the project root from ${AI_DLC_SELF_DIR} (no .git or" >&2
+  echo "  .claude/ marker in any parent). Set AI_DLC_PROJECT_ROOT to the repo root." >&2
+  exit 2
+}
+# --- end AI_DLC_ROOT --------------------------------------------------------
+
 FILE="${1:-}"
 if [ -z "$FILE" ]; then
-  for c in ".claude/skills/ai-dlc/steps/gate-validation.md" \
-           "core/skills/ai-dlc/steps/gate-validation.md"; do
+  for c in "$AI_DLC_ROOT/.claude/skills/ai-dlc/steps/gate-validation.md" \
+           "$AI_DLC_ROOT/core/skills/ai-dlc/steps/gate-validation.md"; do
     [ -f "$c" ] && { FILE="$c"; break; }
   done
 fi
+# THE REFUSAL NAMES THE ROOT IT SEARCHED. Without it the message is identical from
+# every tree, which is both unhelpful to an operator and unfalsifiable to a fixture:
+# `core/fixtures/validator-path-resolution` scores a script inert when a wrong root
+# produces the same bytes, and an inert script's agreement assertion proves nothing.
 [ -n "$FILE" ] || {
   echo "usage: validate-gate-manifest.sh [<gate-validation.md>]" >&2
-  echo "validate-gate-manifest: FAIL — no gate-validation.md found in either layout" >&2
+  echo "validate-gate-manifest: FAIL — no gate-validation.md found in either layout under ${AI_DLC_ROOT}" >&2
   exit 2
 }
 [ -f "$FILE" ] || { echo "validate-gate-manifest: FAIL — cannot read '$FILE'" >&2; exit 2; }

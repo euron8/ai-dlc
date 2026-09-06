@@ -4157,7 +4157,21 @@ to resolve a root the way its siblings do when `--root` is absent, not to remove
 Derive each script's callers before touching either: `validate-layer-entries.sh` locates
 `artifact-path-config.sh` beside itself, and `validate-enforcement-map.sh` runs from this root.
 
-verify: sh V=$PWD/core/scripts/validate-gate-manifest.sh; [ -f "$V" ] || exit 9; bash $V >/dev/null 2>&1 || exit 9; W=$(mktemp -d); mkdir -p $W/.claude/skills/ai-dlc/steps; printf '# decoy\n' > $W/.claude/skills/ai-dlc/steps/gate-validation.md; o=$( cd $W && bash $V 2>&1 ); rm -rf $W; case $o in *".claude/skills/ai-dlc/steps/gate-validation.md"*) exit 1;; esac; exit 0
+THE FIRST RECEIPT DROVE ONE OF THE TWO SUBJECTS, so a fix to `validate-gate-manifest.sh` alone
+closed it: scored against a candidate pair holding the fixed manifest validator and the
+unfixed resolver, the original line exited 0. It also keyed the manifest arm on the decoy's
+ABSOLUTE path, and a cwd-relative reader names the file with no prefix at all — that arm scored
+the defect and the fix identically at 0, so the half of the receipt that could still see one
+subject was the resolver half by accident. The line below drives both, keys the manifest arms
+on the candidate path in either spelling, and carries its own two controls: `--root` and an
+explicit `$1` must still REACH that same decoy, or the arms are agreeing with a dead run rather
+than discriminating. Scored: the pre-fix pair 1, the fixed pair 0, `CLAUDE_PROJECT_DIR`-first 1,
+either subject fixed alone 1, the canonical block added while the candidate loops stay relative
+1, and a second spelling of the fix 0. It does NOT see a chain with no terminal guard — the
+canonical chain's last step is a walk up from the cwd, and every directory a decoy can be placed
+in is a resolvable root by construction, so the fail-closed half is I75's arm and not this one.
+
+verify: sh V=$PWD/core/scripts/validate-gate-manifest.sh; C=$PWD/core/scripts/artifact-path-config.sh; [ -f "$V" ] && [ -f "$C" ] || exit 9; bash $V >/dev/null 2>&1 || exit 9; bash $C --areas >/dev/null 2>&1 || exit 9; W=$(mktemp -d); mkdir -p $W/.claude/skills/ai-dlc/steps; printf '# decoy\n' > $W/.claude/skills/ai-dlc/steps/gate-validation.md; printf 'consumer_artifact_paths_file: DECOYPATHS\n' > $W/.claude/skills/ai-dlc/layer-contract.yaml; printf 'areas:\n  DECOYAREA\n' > $W/.claude/skills/ai-dlc/artifact-path-grammar.md; g=$( cd / && bash $C --areas --root $W 2>&1 ); h=$( cd / && bash $V $W/.claude/skills/ai-dlc/steps/gate-validation.md 2>&1 ); a=$( cd $W && bash $V 2>&1 ); b=$( cd $W && CLAUDE_PROJECT_DIR=$W bash $V 2>&1 ); c=$( cd $W && bash $C --areas 2>&1 ); d=$( cd $W && CLAUDE_PROJECT_DIR=$W bash $C --areas 2>&1 ); e=$( cd $W && CLAUDE_PROJECT_DIR=$W bash $C --consumer-file 2>&1 ); rm -rf $W; case $g in *DECOYAREA*) ;; *) exit 9;; esac; case $h in *"$W"*) ;; *) exit 9;; esac; r=0; for o in "$a" "$b"; do case $o in *"$W"*|*".claude/skills/ai-dlc/steps/gate-validation.md"*) r=1;; esac; done; for o in "$c" "$d" "$e"; do case $o in *DECOY*) r=1;; esac; done; exit $r
 
 ## BL-181 — the suppression-lifetime validator splits a `**Suppresses:**` value on a bracket class holding an em-dash, so under the C locale every suppression names a check "not in the catalog" and the carve-out vanishes
 

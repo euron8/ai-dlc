@@ -15,6 +15,43 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.513.0] - 2026-09-06
+
+### `BL-179` — the two core scripts that resolve a CORE file resolve it under the project root, so a copy driven from another ai-dlc tree stops reading that tree's copy and saying nothing
+
+`validate-gate-manifest.sh`, given no argument, tried `.claude/skills/ai-dlc/steps/gate-validation.md`
+then `core/skills/ai-dlc/steps/gate-validation.md` relative to the process cwd, with no root
+resolution anywhere in the file; `artifact-path-config.sh` defaulted `ROOT="."` and `cd`'d there
+before its candidate loops. From a scratch tree carrying a one-line decoy at the consumer path,
+both read the decoy. Both now carry the canonical `# --- AI_DLC_ROOT ---` block their siblings
+carry — override, walk up from the script's own location, `CLAUDE_PROJECT_DIR`, walk up from the
+cwd, fail closed — which makes them subjects of **I75** and of `validator-path-resolution`, whose
+subject set is derived from the same tokens. The manifest validator's `$1` contract is unchanged
+and its refusal names the root it searched. The resolver runs the chain before argument parsing
+but substitutes `/nonexistent` rather than exiting there, so `--root` still outranks the default
+and the six ERE modes still answer with no readable tree at all, which the file's header had
+promised.
+
+The entry named `validate-layer-entries.sh` and `validate-enforcement-map.sh` as the callers to
+derive, and both were already safe. It did not name `validate-artifact-paths.sh` and
+`migrate-artifact-paths.sh`, which `cd` to their own root and handed the resolver the cwd BY
+OMISSION — for them the cwd default was load-bearing, and resolving from the resolver's install
+path would have made a distribution copy pointed at a consumer read the distribution's grammar.
+Both now pass `--root` explicitly.
+
+The receipt as filed drove one of the entry's two subjects and closed on a fix to the manifest
+validator alone, and its first replacement keyed the manifest arms on the decoy's absolute path
+where a cwd-relative reader prints no prefix, scoring defect and fix identically at 0. The
+shipped line drives both scripts from a decoy cwd, keys on the candidate path in either spelling,
+and carries two controls that `--root` and an explicit `$1` still REACH the decoy. Scored: the
+pre-fix pair 1, the fixed pair 0, `CLAUDE_PROJECT_DIR`-first 1, either subject fixed alone 1, the
+block added with the candidate loops left relative 1, a second spelling 0. It cannot see a chain
+with no terminal guard — every directory a decoy can sit in is a resolvable root by construction
+— so that half is I75's arm, which fires on it and names both scripts.
+`validator-path-resolution` gains four decoy-cwd arms, two controls and two mutants, each killed
+on the subject's own predicate with the post-mutation count asserted to fall to zero against a
+non-zero unmutated count.
+
 ## [0.512.0] - 2026-09-06
 
 ### `BL-181` — a multibyte character inside a bracket class is an alternation now, in every tracked shell file, and S10 refuses the bracket form

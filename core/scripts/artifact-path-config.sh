@@ -13,6 +13,11 @@
 #   artifact-path-config.sh --consumer-file [--root <dir>]
 #   artifact-path-config.sh --consumer-syntax [--root <dir>]
 #
+# `--root` wins wherever it appears. With none, the root is RESOLVED (override, then a walk up
+# from this file's own install path, then CLAUDE_PROJECT_DIR, then a walk up from the cwd) and
+# an unresolvable one is a refusal -- never the process cwd, which answers about whichever tree
+# the caller stood in. The six ERE modes need no tree and answer even then.
+#
 # WHY THIS EXISTS, and it is a measurement rather than tidiness. Three shipped programs had
 # already grown their OWN copy of the same four-line extraction -- `migrate-artifact-paths.sh`,
 # `validate-enforcement-map.sh`'s I82, and (as of this release) the conformance validator. The
@@ -60,9 +65,40 @@
 #         conforming, so both are refusals rather than empty output.
 set -uo pipefail
 
+# --- AI_DLC_ROOT ------------------------------------------------------------
+# Inline on purpose, in every script that needs it: a shared lib cannot fix this,
+# because locating the lib is the same unsolved problem. install.sh splits what
+# shares a parent in core/, so no fixed hop count from $0 reaches the root in both
+# layouts. core/fixtures/validator-path-resolution asserts both agree.
+#
+# THIS IS THE DEFAULT, NOT THE ANSWER, and the chain therefore does NOT exit here.
+# `--root` is this script's documented contract and must still win, and the six ERE
+# modes are properties of the grammar's RULES rather than of a checkout -- they answer
+# with no readable tree at all, which is a property the header below already claims and
+# an `exit 2` up here would silently retract. So the chain substitutes an unresolvable
+# path (`validate-gate-adjudication.sh`'s idiom) and the refusal is sited at the one
+# place a root is actually consumed, where it can say which of the two it is.
+ai_dlc_resolve_root() {
+  local d="$1"
+  while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
+    if [ -e "$d/.git" ] || [ -d "$d/.claude" ] || [ -d "$d/core/skills/ai-dlc" ]; then
+      printf '%s\n' "$d"; return 0
+    fi
+    d="$(dirname "$d")"
+  done
+  return 1
+}
+AI_DLC_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$AI_DLC_SELF_DIR" || true)"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="${CLAUDE_PROJECT_DIR:-}"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$(pwd)" || true)"
+AI_DLC_ROOT="${AI_DLC_ROOT:-/nonexistent}"
+# --- end AI_DLC_ROOT --------------------------------------------------------
+
 PROG="artifact-path-config.sh"
 MODE=""
-ROOT="."
+ROOT=""
 GRAMMAR_ARG=""
 
 # THE ERE FOR ONE COMPONENT, defined here and nowhere else. `s`/`S`/`sprint-` followed by
@@ -173,6 +209,29 @@ if [ "$MODE" = "--slot-re" ]; then printf '%s\n' "$SLOT_RE"; exit 0; fi
 if [ "$MODE" = "--slot-re-prescribed" ]; then printf '%s\n' "$SLOT_RE_PRESCRIBED"; exit 0; fi
 if [ "$MODE" = "--conceal-re-prescribed" ]; then printf '%s\n' "$CONCEAL_RE_PRESCRIBED"; exit 0; fi
 if [ "$MODE" = "--conceal-id-re-prescribed" ]; then printf '%s\n' "$CONCEAL_ID_RE_PRESCRIBED"; exit 0; fi
+
+# THE ROOT, DECIDED HERE AND NOWHERE EARLIER. `--root` is read first because it is the stated
+# contract; only when the caller gave none does the resolved default apply. It used to be `.`,
+# which is not a default but a reading of wherever the caller happened to be standing: driven by
+# hand from another ai-dlc checkout this resolved THAT checkout's layer-contract.yaml and
+# artifact-path-grammar.md and reported about them silently, since every other cwd is a refusal.
+#
+# THE TWO SHIPPING CALLERS PASS `--root` EXPLICITLY, and that is what keeps this change
+# behaviour-preserving for them. `validate-artifact-paths.sh` and `migrate-artifact-paths.sh` cd
+# to their own `$ROOT` and used to hand this script the cwd by omission; with the default
+# resolved from THIS file's install path instead, a distribution copy pointed at a consumer with
+# `--root` would have read the distribution's own grammar. They now say which tree they mean.
+if [ -z "$ROOT" ]; then
+  ROOT="$AI_DLC_ROOT"
+  [ "$ROOT" != "/nonexistent" ] || {
+    echo "$PROG: no --root was given and no project root could be resolved -- not from" >&2
+    echo "  $AI_DLC_SELF_DIR, not from AI_DLC_PROJECT_ROOT or CLAUDE_PROJECT_DIR, and not by" >&2
+    echo "  walking up from $(pwd). Refusing rather than reading '.': the grammar and the layer" >&2
+    echo "  contract would then come from whichever tree the caller was standing in, which is a" >&2
+    echo "  wrong answer that looks exactly like a right one. Pass --root or set" >&2
+    echo "  AI_DLC_PROJECT_ROOT." >&2
+    exit 2; }
+fi
 
 # RESOLVE --grammar BEFORE the cd, for migrate-artifact-paths.sh's reason exactly: it is the
 # caller's path, relative to where THEY are standing, and this then changes directory.
