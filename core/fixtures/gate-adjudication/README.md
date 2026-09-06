@@ -50,13 +50,38 @@ writing that carve-out too widely reopens something worse, so each hole gets its
 - **S15** its ALLOW twin: an EXISTING but empty timeline is a consumer that has run no gate
   yet, and its fresh suppression is in force at 0 elapsed → exit 0.
 - **S16** an all-PASS verdict does not ASK the sibling at all — no `IN-FORCE:` line on stderr.
+- **S17** the gate timeline is located from the PROJECT ROOT, never from the process cwd.
+
+## The citation is VERIFIED (S18–S22)
+
+The sibling checks that `**Operator authorization:**` carries a timestamp and a quote; the
+validator verifies the quote against the transcript corpus its `--transcript-dir` names with
+`validate-steering-budget.sh --cite` — the same predicate the remediation guard applies to the
+same rows — before a row can cover anything. Without these, a lead could write its own gate
+passage into `pending.md` and the gate adopted it.
+
+- **S18** the words are in the corpus only in an assistant turn and a tool_result → exit 1,
+  `unverified-citation: 1` (kills a verifier written as a grep over the corpus).
+- **S19** neither `--transcript` nor `--transcript-dir` given → exit 1, `no-transcript`.
+- **S20** `--transcript` naming a file that does NOT carry the quote, whose sibling does → exit 0:
+  the file is widened to its directory, as the remediation guard widens the session transcript.
+- **S21** `--transcript-dir` naming a directory with no `*.jsonl` → exit 1, `no-transcript`.
+- **S22** two entries, one genuine and one forged, both checks failing → exit 1 naming only the
+  forged entry's check, with the genuine one still `SUPPRESSED`: rows are narrowed, not dropped.
+- **S23** the verifier cannot run (node off PATH, asserted first) → exit 1, `verifier-error: 1`,
+  and NOT the forgery sentence: a tooling failure covers nothing and is reported as one.
+
+The ALLOW corpus holds TWO transcripts with the quote in the second by glob order, because a
+verifier that scans the first member and stops passed every case and the receipt when it held
+one — and reads NOMATCH on the reference consumer's one genuine in-force citation.
 
 Each case asserts a TOKEN as well as an exit code — the `SUPPRESSED —` line, the block's
-`no-escalations-file`, or the sibling's own `in_force=` count — because an exit code alone
-cannot tell a carve-out that fired for the right reason from a validator that never looked.
-Both channels (`AI_DLC_ESCALATIONS`, `AI_DLC_GATE_METRICS`) are set explicitly on every case: a
-consumer's real `docs/escalations/pending.md` holds real in-force suppressions, and a case that
-inherits the default is adjudicated against whatever that consumer suppressed this week.
+`no-escalations-file` or `no-transcript`, or the sibling's own `in_force=` count — because an
+exit code alone cannot tell a carve-out that fired for the right reason from a validator that
+never looked. All three channels (`AI_DLC_ESCALATIONS`, `AI_DLC_GATE_METRICS`,
+`--transcript-dir`) are set explicitly on every case: a consumer's real
+`docs/escalations/pending.md` holds real in-force suppressions, and a case that inherits the
+default is adjudicated against whatever that consumer suppressed this week.
 
 `core/fixtures/gate-adjudication-mutants/` scores these cases against thirteen wrong fixes and
 an unmutated control, and asserts for each one exactly which cases go red.

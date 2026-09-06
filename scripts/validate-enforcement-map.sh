@@ -7615,37 +7615,37 @@ done <<EOF
 $I89_OUT
 EOF
 
-# --- I92: the transcript-corpus predicate is one rule in three copies, byte-identical ---
+# --- I92: the transcript-corpus predicate is one rule in four copies, byte-identical ---
 # WHAT IT BINDS. `steer_dir_has_transcript()` answers a single question -- does this directory
-# hold a readable `*.jsonl` -- and at all three sites that one answer decides the same thing:
-# whether the steer is issued as `--dir <corpus>` or falls back. Two of the three are gate
-# validators handed the directory as `--transcript-dir`; the third is the remediation guard,
+# hold a readable `*.jsonl` -- and at all four sites that one answer decides the same thing:
+# whether the steer is issued as `--dir <corpus>` or falls back. Three of the four are gate
+# validators handed the directory as `--transcript-dir`; the fourth is the remediation guard,
 # which derives it from the session transcript and gates a dispatch on it. All three previously
 # tested only that the path EXISTED, which classified an EMPTY corpus as operator forgery and
-# denied every dispatch. The repair is one predicate written into three files, and three copies
-# are three chances for the guard to deny what the validators accept -- a disagreement that
+# denied every dispatch. The repair is one predicate written into four files, and four copies
+# are four chances for the guard to deny what the validators accept -- a disagreement that
 # surfaces as a refused dispatch with two green validators beside it, which reads as a correct
 # denial.
 #
 # COPIES RATHER THAN A SHARED SOURCE, for I25's reason and I33's. install.sh splits what shares
 # a parent here: `core/scripts/<x>` lands at `scripts/ai-dlc/<x>` and `core/hooks/` lands
 # elsewhere, and I33 fails the build on locating one core file by walking up from another, so in
-# an installed tree there is no path all three could source. A hook that sources a helper also
+# an installed tree there is no path all four could source. A hook that sources a helper also
 # fails OPEN when a partial install omits it, which is the failure I25 records at length. The
 # duplication is only safe because this assertion exists.
 #
 # NOT A VOCABULARY, so no `# vocabulary:` marker. The subject is an executable predicate's BODY,
 # not an enumerated membership a second reader could restate: there is no owner-and-readers
 # split to render and nothing for docs/vocabulary-index.md to list. What is bound here is that
-# three byte strings are one byte string.
+# four byte strings are one byte string.
 #
-# THE FOURTH-COPY HALF, AND ITS MEASURED FALSE-POSITIVE SET. Byte-equality across three
-# hand-written paths cannot see a fourth copy appearing in a fourth file, so the site list is
+# THE FIFTH-COPY HALF, AND ITS MEASURED FALSE-POSITIVE SET. Byte-equality across four
+# hand-written paths cannot see a fifth copy appearing in a fifth file, so the site list is
 # DERIVED as well as declared: every file under core/ and scripts/ that names the helper must be
-# one of the three. A declared site that stops defining it fails the first half; an undeclared
+# one of the four. A declared site that stops defining it fails the first half; an undeclared
 # file that starts naming it fails this one.
 #
-# Measured over the real tree, every hit outside the three declared sites is a MUTATION
+# Measured over the real tree, every hit outside the four declared sites is a MUTATION
 # BATTERY under core/fixtures/ that seeds a REVERT of this very repair, and therefore has to
 # quote the line it reverts. That is the entire false-positive set. It is excluded by DIRECTORY
 # and not by name, and the reason is measured rather than tidy: the battery count went from one
@@ -7660,6 +7660,7 @@ EOF
 i92_needle='steer_dir_has_transcript'
 i92_declared='core/scripts/validate-adversarial-convergence.sh
 core/scripts/validate-escalation-resolution.sh
+core/scripts/validate-gate-adjudication.sh
 core/hooks/ai-dlc-gate-remediation-guard.sh'
 
 # The same extractor I25 and I40 use, for the same reason: a function body is a line range
@@ -7712,7 +7713,7 @@ rm -rf "$i92_probe_dir"
 if [ "$i92_score" -ne 0 ]; then
   err "I92's probe scored $i92_score where 0 is the only correct total, so the corpus below was not scanned. +1 the extractor found no body where one is defined; +10 it called two IDENTICAL bodies in differently-surrounded files different, which would report drift on a conforming tree; +100 it called a body differing by one character the SAME, which is the state this arm exists to report; +1000 it returned a body from a file defining no such function, so the equality half would be comparing two inventions; +10000 the site scan did not name exactly the four probe files that carry the string -- it either missed the mention-only fourth site or flagged the similarly-named near-miss. Any non-zero total means both halves of I92 would report a clean tree for the reason a broken reader does."
 else
-  # HALF ONE: the three declared copies are one byte string. Read against the FIRST readable
+  # HALF ONE: the four declared copies are one byte string. Read against the FIRST readable
   # copy rather than pairwise, so N files cost N extractions.
   i92_ref=''; i92_ref_of=''; i92_vacuous=''; i92_drift=''
   while IFS= read -r i92_rel; do
@@ -7729,10 +7730,10 @@ else
   done <<EOF
 $i92_declared
 EOF
-  [ -z "$i92_vacuous" ] || err "I92 cannot find a ${i92_needle}() definition in:$i92_vacuous. The check binding the three readings of what makes a transcript directory a usable corpus just went vacuous -- it must locate all three or fail loudly, never pass by finding nothing. If the helper was renamed or lifted, rename it here in the same change."
-  [ -z "$i92_drift" ] || err "I92: the transcript-corpus predicate has forked. $i92_ref_of and$i92_drift define ${i92_needle}() differently. Two of the three sites are gate validators deciding whether a --dir corpus is real; the third is the remediation guard deciding whether a dispatch may proceed. A copy that differs means the guard denies a dispatch over a directory the validators just accepted, and the operator sees a refusal with two green validators beside it. Make ${i92_needle}() byte-identical across all three."
+  [ -z "$i92_vacuous" ] || err "I92 cannot find a ${i92_needle}() definition in:$i92_vacuous. The check binding the four readings of what makes a transcript directory a usable corpus just went vacuous -- it must locate all four or fail loudly, never pass by finding nothing. If the helper was renamed or lifted, rename it here in the same change."
+  [ -z "$i92_drift" ] || err "I92: the transcript-corpus predicate has forked. $i92_ref_of and$i92_drift define ${i92_needle}() differently. Three of the four sites are gate validators deciding whether a --dir corpus is real; the fourth is the remediation guard deciding whether a dispatch may proceed. A copy that differs means the guard denies a dispatch over a directory the validators just accepted, and the operator sees a refusal with three green validators beside it. Make ${i92_needle}() byte-identical across all four."
 
-  # HALF TWO: no fourth site. The hit list is DERIVED; the three declared paths and the two
+  # HALF TWO: no fifth site. The hit list is DERIVED; the four declared paths and the two
   # excluded directories are the only things written down.
   #
   # THE POSITIVE CONTROL IS THIS FILE, AND IT REPLACED A GUARD THAT COULD NOT FIRE. The first
@@ -7765,36 +7766,37 @@ EOF
     done <<EOF
 $i92_hits
 EOF
-    [ -z "$i92_extra" ] || err "I92: file(s) outside the three bound sites name ${i92_needle}:$i92_extra. A fourth copy is an unbound copy -- the equality half above compares only the three it is given, so a fourth drifts in silence and decides the same corpus question its own way. Either resolve it from one of the three bound sites, or add it to i92_declared here in the same change so it is held byte-identical with them. A file that merely CITES the name in prose still counts: that is how the last unbound copy in this repository arrived."
+    [ -z "$i92_extra" ] || err "I92: file(s) outside the four bound sites name ${i92_needle}:$i92_extra. A fifth copy is an unbound copy -- the equality half above compares only the four it is given, so a fifth drifts in silence and decides the same corpus question its own way. Either resolve it from one of the four bound sites, or add it to i92_declared here in the same change so it is held byte-identical with them. A file that merely CITES the name in prose still counts: that is how the last unbound copy in this repository arrived."
   fi
 fi
 
-# --- I103: the operator-citation PARSER is one rule in three copies, byte-identical ---
+# --- I103: the operator-citation PARSER is one rule in four copies, byte-identical ---
 # WHAT IT BINDS. `cite_segments()` and `cite_quote()` read the one field that decides whether a
 # HARD_BLOCK was adjudicated by the operator or by the lead claiming to be one:
-# `<ISO ts> | "<verbatim substring of the operator's message>"`. Three programs parse it -- the
-# escalation gate, the convergence gate, and the remediation guard's lift arm -- and all three
+# `<ISO ts> | "<verbatim substring of the operator's message>"`. Four programs parse it -- the
+# escalation gate, the adjudication gate's SUPPRESSED carve-out, the convergence gate, and the
+# remediation guard's lift arm -- and all four
 # feed the result to the SAME `--cite` predicate, so a fork in the parse is a fork in the answer
 # with no other evidence to catch it. On the guard the fail-open direction LIFTS a gate deny.
 #
 # WHY IT IS ONE RULE AND NOT THREE. The parse used to be `sed -n 's/.*"\(.*\)".*/\1/p'`, whose
 # leading `.*` is GREEDY: the LAST quoted segment won, and on an odd quote count the capture was
-# the CONNECTIVE BETWEEN two quotes. The repair is one predicate written into three files, and
-# three copies are three chances for the guard to lift what a validator would refuse.
+# the CONNECTIVE BETWEEN two quotes. The repair is one predicate written into four files, and
+# four copies are four chances for the guard to lift what a validator would refuse.
 #
 # COPIES RATHER THAN A SHARED SOURCE, for I92's reason exactly: install.sh splits `core/scripts/`
 # from `core/hooks/`, I33 fails the build on locating one core file by walking up from another,
 # and a hook that sources a missing helper fails OPEN. This arm is what makes the duplication
-# safe, and it is a SECOND subject over I92's three sites rather than a widening of I92 -- the
+# safe, and it is a SECOND subject over I92's four sites rather than a widening of I92 -- the
 # two predicates answer different questions and their remedies read differently, so folding them
 # would cost the specific remedy text that makes either finding actionable.
 #
 # NOT A VOCABULARY, so no `# vocabulary:` marker: the subject is an executable predicate's BODY,
 # not an enumerated membership a second reader restates.
 #
-# THE FOURTH-COPY HALF AND ITS FALSE-POSITIVE SET. Byte-equality across three hand-written paths
-# cannot see a fourth copy in a fourth file, so the site list is DERIVED as well as declared.
-# Measured over the real tree, the only hits outside the three declared sites are this file and
+# THE FIFTH-COPY HALF AND ITS FALSE-POSITIVE SET. Byte-equality across four hand-written paths
+# cannot see a fifth copy in a fifth file, so the site list is DERIVED as well as declared.
+# Measured over the real tree, the only hits outside the four declared sites are this file and
 # the mutation battery under core/fixtures/ that seeds a REVERT of this repair and therefore has
 # to name what it reverts. Both are excluded by DIRECTORY rather than by name, for the reason
 # I92 records: a per-file exemption list goes stale the release somebody adds a battery.
@@ -7802,6 +7804,7 @@ i103_needles='cite_segments
 cite_quote'
 i103_declared='core/scripts/validate-adversarial-convergence.sh
 core/scripts/validate-escalation-resolution.sh
+core/scripts/validate-gate-adjudication.sh
 core/hooks/ai-dlc-gate-remediation-guard.sh'
 
 # The same extractor I25, I40 and I92 use: a function body is the line range between its
@@ -7864,7 +7867,7 @@ rm -rf "$i103_probe_dir"
 if [ "$i103_score" -ne 0 ]; then
   err "I103's probe scored $i103_score where 0 is the only correct total, so the corpus below was not scanned. +1 the extractor found no body where one is defined; +10 it called two IDENTICAL bodies in differently-surrounded files different, which would report drift on a conforming tree; +100 it called a cite_quote() body differing by one character the SAME, which is the state this arm exists to report; +200 it reported drift in cite_segments() where the probe seeded drift only in cite_quote(), so the two needles are not being read independently and one of them is riding on the other; +1000 it returned a body from a file defining no such function, so the equality half would be comparing two inventions; +10000 the site scan did not name exactly the four probe files that carry a needle -- it either missed the mention-only fourth site or flagged the similarly-named near-miss. Any non-zero total means both halves of I103 would report a clean tree for the reason a broken reader does."
 else
-  # HALF ONE: for each needle, the three declared copies are one byte string. Read against the
+  # HALF ONE: for each needle, the four declared copies are one byte string. Read against the
   # FIRST readable copy rather than pairwise, so N files cost N extractions.
   i103_vacuous=''; i103_drift=''
   while IFS= read -r i103_needle; do
@@ -7886,8 +7889,8 @@ EOF
   done <<EOF
 $i103_needles
 EOF
-  [ -z "$i103_vacuous" ] || err "I103 cannot find a definition for:$i103_vacuous. The check binding the three readings of the operator-citation field just went vacuous -- it must locate every needle at every declared site or fail loudly, never pass by finding nothing. If a helper was renamed or lifted, rename it in i103_needles here in the same change."
-  [ -z "$i103_drift" ] || err "I103: the operator-citation parser has forked:$i103_drift. All three sites feed their extracted quote to the same --cite predicate, so a copy that differs decides the same citation differently with no second piece of evidence anywhere. Two of the three are gate validators; the third is the remediation guard, where the permissive direction LIFTS a gate deny on an authorization no operator wrote. Make cite_segments() and cite_quote() byte-identical across all three."
+  [ -z "$i103_vacuous" ] || err "I103 cannot find a definition for:$i103_vacuous. The check binding the four readings of the operator-citation field just went vacuous -- it must locate every needle at every declared site or fail loudly, never pass by finding nothing. If a helper was renamed or lifted, rename it in i103_needles here in the same change."
+  [ -z "$i103_drift" ] || err "I103: the operator-citation parser has forked:$i103_drift. All four sites feed their extracted quote to the same --cite predicate, so a copy that differs decides the same citation differently with no second piece of evidence anywhere. Three of the four are gate validators; the fourth is the remediation guard, where the permissive direction LIFTS a gate deny on an authorization no operator wrote. Make cite_segments() and cite_quote() byte-identical across all four."
 
   # HALF TWO: no fourth site. THE POSITIVE CONTROL IS THIS FILE, read in the same invocation --
   # it carries both needles in i103_needles= and throughout the prose above, so a scan that is

@@ -4090,21 +4090,71 @@ verification absent, and the sentence now says so. `0.505.0` closes the guard's 
 forwards the authorization line verbatim as a sixth row field, and
 `ai-dlc-gate-remediation-guard.sh`, already a declared `--cite` site with a `transcript_path` in
 its input, verifies it and subtracts nothing on a quote the corpus does not carry. The gate's
-half is open: `validate-gate-adjudication.sh` reads the same rows, carries no transcript, and
-passes the FAIL. Driven on the shipped gate-adjudication seed: a well-formed in-force entry with
-no transcript corpus anywhere exits 0 with the `SUPPRESSED` line.
+half WAS open: `validate-gate-adjudication.sh` read the same rows, carried no transcript, and
+passed the FAIL. Driven on the shipped gate-adjudication seed before the fix: a well-formed
+in-force entry with no transcript corpus anywhere exited 0 with the `SUPPRESSED` line.
 
-Shape of the fix: give Check 26's validator a transcript channel (the lead runs it from the
-session whose `transcript_path` the Stop and PreToolUse hooks already receive; a pointer file the
-pause hook writes is the existing pattern), verify each covering row's sixth field the way the
-guard does, fail closed on an unverifiable quote with the status named beside the block, and
-re-seed the gate-adjudication fixture's S1 with a corpus carrying its quote plus a forged twin.
-The sibling cannot host the check: naming the citation helpers there makes it an I103 site, and
-a sibling verifying unconditionally would omit every in-force row for the caller that has no
-transcript. The receipt below is manual because the discriminating input is a transcript corpus
-the validator has no channel for today; write a driving receipt the moment the channel exists.
+**What shipped.** `validate-gate-adjudication.sh` takes `--transcript PATH` and
+`--transcript-dir DIR` after the two positionals in adjudicate mode, the directory taking
+precedence for `validate-escalation-resolution.sh`'s reason, and Check 26's call site in
+`gate-validation.md` passes both — MANDATORY, in the same words Check 2 uses. Once the sibling
+has listed the in-force rows, the validator verifies each row's fifth field with
+`validate-steering-budget.sh --cite` over that corpus — the guard's predicate, through the same
+`cite_quote()` and `steer_dir_has_transcript()` helpers, now four byte-identical sites under I92
+and I103 — keeps the rows that verify, drops and counts the rest, and prints an `UNVERIFIED`
+line per dropped row. It FAILS CLOSED on every absence: no readable corpus (`no-transcript`),
+no verifier beside it (`no-verifier`), a quote under twelve characters, or a quote no genuine
+operator turn carries all mean that row covers nothing, and the block carries
+`unverified-citation: <n>` beside the failing ids. The verifier's exit is read in three tiers,
+never as a boolean: 0 verifies, 2 is its own NOMATCH, and anything else is the verifier failing
+before it could answer (node off PATH returns 1, measured against a control of 0) — that row
+covers nothing either, but the line says `UNVERIFIABLE` and the block says
+`verifier-error: <n>`, because printing a tooling failure as forgery accuses the operator's own
+authorization of being invented. A `--transcript` file is widened to its directory when that
+directory holds a `*.jsonl`, exactly as the guard widens the session transcript it is handed;
+measured on the other shape, the gate read NOMATCH from the current session's file on an entry
+the guard had just accepted from a sibling file. Rows are only ever narrowed, so a forged entry
+beside a genuine one costs the genuine one nothing (S22). The sibling still does not host the
+check, for the reason above.
 
-verify: manual
+**A stated limit, not a fix.** The guard's corpus arrives from the harness on hook stdin; the
+gate's is named by a flag the lead types. A directory the lead creates, holding a `.jsonl` the
+lead writes, verifies a quote no operator said (exit 0 with the `SUPPRESSED` line, against exit 1
+on the seed's genuine corpus). That is the same escape `AI_DLC_ESCALATIONS` already offers one
+screen up and it is the property of every lead-run validator; the two prose sites say so now.
+
+Wrong fixes built and refused, each with the case that kills it: a verifier written as a grep
+over the corpus, which accepts the same words carried in an assistant turn and a tool_result
+(S18, `TDIR_FORGED`); a verifier that treats "no corpus given" as "nothing to verify" and keeps
+the rows (S19, S21, mutant m15); one that computes the narrowed set and exports the original
+(m16); one that scans the corpus's FIRST member and stops (m17) — the batch-63 adversary's
+BLOCKER, because every seeded corpus held one file and so the receipt and every case accepted
+it, while on the consumer's 250-file corpus it reads NOMATCH on the one genuine in-force
+citation; the seed now carries the quote in the second file by glob order; and one that reads
+the verifier's exit as a boolean and reports its failure as forgery (m18, S23). The mutant
+battery gained m14–m18 and its m1, m5 and m10 sets widened by the new cases; m4 (sibling lists
+a malformed entry) now keys S4 on the ABSENCE of the `UNVERIFIED` line, because the verifier
+would otherwise drop that row on the sibling's behalf and hide the sibling's exclusion.
+Measured on the reference consumer, read-only: one in-force row today
+(`[core] 16`), whose quote verifies against its 250-transcript corpus; its latest FAIL verdict
+(`story-20260904T191843Z`, checks 5 and 7) blocks identically under the installed and the fixed
+reader, in 2.0s with the corpus, so the pull moves no verdict on its files today. The fix fires
+on a forged citation, of which the consumer's in-force set holds none, and on a Check 26 call
+site run without `--transcript-dir` — which is every consumer call site until the pull lands
+the updated step file, so the brief must say so. Two more measurements for that brief, both
+the adversary's: 2 of the consumer's 17 historical suppression citations NOMATCH against its
+live corpus (both S305 paraphrases of "Fresh SUPPRESSED, this gate only (Recommended)", whose
+bytes appear only inside the lead's own AskUserQuestion options and a line-numbered Read of
+the escalations file), neither in force today — the check working, and the first thing that
+will read as a regression to whoever re-cites one; and the REVERSE partial-pull shape: the
+installed `0.507.0` validator never parses past its two positionals, so the new call site's
+flags are INERT on it and a forged suppression passes at exit 0 with no warning. The step file
+and the validator land in one pull because both are core paths outside the machinery slice; a
+consumer that hand-edits its step file ahead of the pull gets no protection and no message.
+The predicate's own limits the adversary measured — `isMeta` records accepted, no `--since`,
+the `MATCH` timestamp discarded — are `BL-184`'s.
+
+verify: sh d=$(bash core/fixtures/gate-adjudication/seed.sh) || exit 9; . "$d/env.sh"; python3 -c 'import json,sys;p,x=sys.argv[1],sys.argv[2];D=json.load(open(p));[v.update(verdict="FAIL") for v in D["verdicts"] if v["check_id"]==x];open(p,"w").write(json.dumps(D))' "$VERDICT" "$X"; r() { AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" AI_DLC_ESCALATIONS="$ESC_INFORCE" AI_DLC_GATE_METRICS="$GM_BEFORE" bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" "$@" 2>&1; }; g=$(r --transcript-dir "$TDIR"); grc=$?; f=$(r --transcript-dir "$TDIR_FORGED"); frc=$?; n=$(r); nrc=$?; rm -rf "$d"; [ "$grc" -eq 0 ] && grep -q 'FAIL is covered by an' <<<"$g" && [ "$frc" -eq 1 ] && grep -q 'unverified-citation: 1 in-force' <<<"$f" && ! grep -q 'FAIL is covered by an' <<<"$f" && [ "$nrc" -eq 1 ] && grep -q 'no-transcript' <<<"$n"
 
 
 ## BL-176 — nothing binds a gate-adjudication verdict file to the dispatch that produced it, and the remediation guard picks the live verdict by lexical stem order, so a hand-written file at a later-sorting nonce becomes the gate's verdict
@@ -4134,3 +4184,37 @@ join exists.
 verify: manual
 
 
+
+
+## BL-184 — the genuine-operator predicate accepts harness-injected `isMeta` records as operator turns, and no reader compares the authorization timestamp to when the words were said
+
+Distribution-internal, no `PC-` id; NOTE tier — neither limit is reachable by a lead writing
+its own text, and the one in-force suppression on the reference consumer verifies correctly
+under both. Found by the batch-63 adversarial hand while attacking `BL-171`, and deliberately
+not fixed there: the owner is `validate-steering-budget.sh --cite`, which four readers delegate
+to (`validate-escalation-resolution.sh`, `validate-adversarial-convergence.sh`,
+`validate-gate-adjudication.sh`, `ai-dlc-gate-remediation-guard.sh`), so a change there moves
+all four and needs its own false-positive measurement.
+
+Two distinct subjects, enumerated so a close of one is not read as a close of both:
+
+1. **`isMeta` is never consulted.** Census over the consumer's 250 transcripts with the shipping
+   predicate lifted verbatim: 204,920 records after the sidechain filter, 38,436 `type: user`,
+   976 accepted as operator text, 89 of those carrying `isMeta: true` — harness injections such
+   as "Skill /ai-dlc-update is already loaded above; instructions unchanged." and "Your
+   claude.ai usage limit has reset. Continue the task you were working on". Every one is twelve
+   characters or longer and would verify a citation quoting it. A lead cannot cause the harness
+   to inject arbitrary text, which is why this is a NOTE; it is still a record class that is not
+   an operator turn scoring as one.
+2. **No `--since`, and the MATCH timestamp is discarded.** The convergence validator bounds its
+   scan to the window start; the adjudication validator and the guard pass no bound, so the
+   corpus is the project's whole session history and any twelve-character phrase the operator
+   ever typed verifies a citation filed today. `--cite` prints `MATCH <ts>` and every reader
+   sends it to `/dev/null`, so an entry's `**Operator authorization:** <ISO ts> | "<quote>"`
+   is never checked for the words having been said at or before that timestamp. The remedy's
+   shape is a `--since` derived from the entry's own timestamp minus a tolerance, or a compare
+   of the printed `MATCH <ts>` against it, at the owner; its false-positive set over the
+   consumer's 17 historical suppressions has not been measured, and the two 2026 paraphrase
+   entries that already NOMATCH (`BL-171`'s brief item) are the population to score it on.
+
+verify: manual

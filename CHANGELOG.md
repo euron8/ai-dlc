@@ -15,6 +15,59 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.514.0] - 2026-09-06
+
+### `BL-171` — Check 26's validator verifies each in-force suppression's operator citation against the transcript corpus before the entry can cover a FAIL, and fails closed with no corpus
+
+`validate-gate-adjudication.sh` took `validate-suppression-lifetime.sh --in-force`'s rows and
+joined them on `(catalog, check_id)` with the operator-authorization field read and discarded:
+the sibling checks that the line carries a timestamp and a quote, nothing compared the quote to
+anything, and so a lead could write its own gate passage into `docs/escalations/pending.md` and
+the gate adopted it. Driven on the shipped fixture seed: a well-formed in-force entry with no
+transcript corpus anywhere exited 0 with the `SUPPRESSED` line. The remediation guard's arm 7b
+already verified the same rows; the gate's half was open since `0.504.0`.
+
+The validator now takes `--transcript PATH` and `--transcript-dir DIR` after the two positionals
+in adjudicate mode, the directory taking precedence and a lone file widened to its directory
+when that holds a `*.jsonl`, exactly as the guard widens the session transcript it is handed
+(measured on the other shape: gate NOMATCH, guard MATCH, on one entry). It verifies each row's
+fifth field with `validate-steering-budget.sh --cite` — the guard's predicate, through the same
+`cite_quote()` and `steer_dir_has_transcript()` helpers, now four byte-identical sites under
+**I92** and **I103**. Rows that verify are kept; the rest are dropped, counted, and printed as
+an `UNVERIFIED` line each. It fails closed on every absence: no readable corpus
+(`no-transcript`), no verifier beside it (`no-verifier`), a quote under twelve characters, or a
+quote no genuine operator turn carries. The verifier's exit is read in three tiers, never as a
+boolean: a verifier that could not run (node off PATH returns 1, against a control of 0) still
+covers nothing but is reported as `UNVERIFIABLE` and `verifier-error: <n>`, not as forgery, the
+split the escalation and convergence validators already make. The block carries
+`unverified-citation: <n>` beside the failing ids, in the guard's words. Check 26's call site in
+`gate-validation.md` passes both flags, MANDATORY in the words Check 2 uses; `escalations.md`
+no longer says the gate reads the citation unchecked. Stated limit, in both files: the guard's
+corpus arrives from the harness and the gate's is the directory the lead names, the property
+`AI_DLC_ESCALATIONS` already has.
+
+Fixture `gate-adjudication`: every case names the corpus, and S18–S23 hold the verification —
+the same words carried only in an assistant turn and a tool_result cover nothing (S18), no flag
+is `no-transcript` (S19), a `--transcript` file whose sibling carries the words is widened
+(S20), a directory with no `*.jsonl` is not a corpus (S21), one genuine entry beside one forged
+one keeps the genuine one's cover (S22), and a verifier that cannot run is reported as tooling
+(S23). The ALLOW corpus holds two transcripts with the quote in the second: with one, a
+verifier that scans the first member and stops satisfied every case and the receipt — the
+batch-63 adversary's blocker — and reads NOMATCH on the consumer's one genuine in-force
+citation. S4 now also asserts a malformed row never reached the verifier, so the sibling's
+shape exclusion stays observable from here. `gate-adjudication-mutants` gains m14 (verifier
+never asked), m15 (no corpus reads as verified), m16 (verified set computed, original
+exported), m17 (first transcript only) and m18 (verifier failure reported as forgery); m1, m5
+and m10's kill sets widen by the new cases. BL-171's receipt drives the validator over the
+seed's genuine, forged and absent corpora and refuses the pre-fix copy and the one-file copy.
+
+Measured on the reference consumer, read-only: one in-force row today (`[core] 16`), whose
+quote verifies against its 250-transcript corpus; its latest FAIL verdict blocks identically
+under the installed and the fixed reader, 2.0s with the corpus. The pull moves no verdict on
+its files today. What changes for it: a Check 26 call site run without `--transcript-dir`
+blocks every suppressed FAIL with `no-transcript` in the reason, and every call site is that
+one until the pull lands the updated step file.
+
 ## [0.513.0] - 2026-09-06
 
 ### `BL-179` — the two core scripts that resolve a CORE file resolve it under the project root, so a copy driven from another ai-dlc tree stops reading that tree's copy and saying nothing

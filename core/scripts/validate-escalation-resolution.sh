@@ -96,9 +96,9 @@ set -u
 # corpus reader selects `*.jsonl` (`validate-steering-budget.sh:427`), so a directory holding
 # only sidecar files is exactly as blind as an empty one and this counts what that reader
 # would count. Failing here falls through to the single-file branch. This predicate is
-# byte-identical in `validate-adversarial-convergence.sh` and `core/hooks/`
-# `ai-dlc-gate-remediation-guard.sh`; invariant I92 holds the three copies to one text and
-# refuses a fourth.
+# byte-identical in `validate-adversarial-convergence.sh`, `validate-gate-adjudication.sh`
+# and `core/hooks/ai-dlc-gate-remediation-guard.sh`; invariant I92 holds the four copies to
+# one text and refuses a fifth.
 steer_dir_has_transcript() { # $1 dir -> 0 if it holds a readable *.jsonl
   [ -n "${1:-}" ] && [ -d "$1" ] || return 1
   for _sdht in "$1"/*.jsonl; do

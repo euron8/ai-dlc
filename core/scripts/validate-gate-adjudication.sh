@@ -7,8 +7,13 @@
 #        → prints the derived escalated check_ids (one per line) for that gate type.
 #          This is the adjudicator's worklist AND the completeness check's expected set,
 #          from ONE derivation, so the two can never disagree.
-#   ./scripts/ai-dlc/validate-gate-adjudication.sh <gate_type> <verdict_path>
-#        → completeness adjudication of the verdict at <verdict_path>.
+#   ./scripts/ai-dlc/validate-gate-adjudication.sh <gate_type> <verdict_path> \
+#        [--transcript PATH] [--transcript-dir DIR]
+#        → completeness adjudication of the verdict at <verdict_path>. The transcript
+#          corpus is what the SUPPRESSED carve-out verifies an entry's operator citation
+#          against (see "the SUPPRESSED carve-out" below); --transcript-dir takes
+#          precedence, for the reason validate-escalation-resolution.sh gives. With a FAIL
+#          under an in-force entry and NO readable corpus the carve-out applies to nothing.
 #   ./scripts/ai-dlc/validate-gate-adjudication.sh --series <dir|verdict>...
 #        → THE STALL RUNG. Groups every verdict found by gate_series_id and errors when one
 #          check_id holds FAIL across K consecutive passes of one gate. See "THE STALL RUNG".
@@ -175,11 +180,38 @@ case "${1:-}" in
         GATE_TYPE="$1"
         VERDICT_PATH="${2:-}"
         if [ -z "$VERDICT_PATH" ]; then
-            echo "usage: $0 <gate_type> <verdict_path>" >&2
+            echo "usage: $0 <gate_type> <verdict_path> [--transcript PATH] [--transcript-dir DIR]" >&2
             exit 2
         fi
         ;;
 esac
+
+# --- the transcript corpus (adjudicate mode) ---------------------------------------------
+# The SUPPRESSED carve-out below verifies each in-force entry's operator citation against a
+# transcript corpus, and this is the only channel by which the caller can name one. The
+# directory is the corpus the citation actually lives in and takes precedence over the single
+# file, for the reason validate-escalation-resolution.sh's header gives: an operator authorizes
+# a suppression in one session and the gate that leans on it runs in another, so the calling
+# session's own `transcript_path` is never the file the words are in. Neither flag is required
+# by the parser; what the carve-out does when neither resolves is stated where it is asked.
+TRANSCRIPT=""
+TRANSCRIPT_DIR=""
+if [ "$MODE" = "adjudicate" ]; then
+    shift 2
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --transcript)
+                [ "$#" -ge 2 ] || { echo "usage: $0 <gate_type> <verdict_path> [--transcript PATH] [--transcript-dir DIR]" >&2; exit 2; }
+                TRANSCRIPT="$2"; shift 2 ;;
+            --transcript-dir)
+                [ "$#" -ge 2 ] || { echo "usage: $0 <gate_type> <verdict_path> [--transcript PATH] [--transcript-dir DIR]" >&2; exit 2; }
+                TRANSCRIPT_DIR="$2"; shift 2 ;;
+            *)
+                echo "ERROR: unknown argument: $1" >&2
+                exit 2 ;;
+        esac
+    done
+fi
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
 # Resolve the project root by walking UP for a marker, never by a fixed number of
@@ -257,6 +289,55 @@ for cand in \
     [ -f "$cand" ] && { SIBLING="$cand"; break; }
 done
 
+# A DIRECTORY IS NOT A CORPUS. `-d` answers whether the path EXISTS, never whether it holds
+# any ground truth. The corpus reader selects `*.jsonl` (`validate-steering-budget.sh:427`),
+# so a directory holding only sidecar files is exactly as blind as an empty one and this counts
+# what that reader would count. This predicate is byte-identical in
+# `core/scripts/validate-adversarial-convergence.sh`,
+# `core/scripts/validate-escalation-resolution.sh` and
+# `core/hooks/ai-dlc-gate-remediation-guard.sh`; invariant I92 holds the four copies to one
+# text and refuses a fifth.
+steer_dir_has_transcript() { # $1 dir -> 0 if it holds a readable *.jsonl
+  [ -n "${1:-}" ] && [ -d "$1" ] || return 1
+  for _sdht in "$1"/*.jsonl; do
+    [ -r "$_sdht" ] && return 0
+  done
+  return 1
+}
+
+# THE CITED SUBSTRING IS A FIELD, NOT A LINE. These two are byte-identical in
+# `core/scripts/validate-escalation-resolution.sh`,
+# `core/scripts/validate-adversarial-convergence.sh` and
+# `core/hooks/ai-dlc-gate-remediation-guard.sh`; invariant I103 holds the four copies to one
+# text and refuses a fifth. Read the escalation validator's header for the measurement behind
+# the segment split.
+cite_segments() { # $1 authline -> one quoted segment per line
+  printf '%s\n' "$1" | LC_ALL=C awk '
+    { n = split($0, p, /"/)
+      # split on `"` yields quotecount+1 fields, and the inside-quote ones are the EVEN
+      # indices. An odd quote count leaves the final field unterminated; it is even-indexed
+      # too, so one loop covers both shapes.
+      for (i = 2; i <= n; i += 2) if (p[i] != "") print p[i] }'
+}
+
+cite_quote() { # $1 authline
+  _cq_segs="$(cite_segments "$1")"
+  [ -n "$_cq_segs" ] || _cq_segs="$(printf '%s' "${1#*|}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  _cq_pick=""
+  _cq_long=""
+  while IFS= read -r _cq_seg; do
+    [ "${#_cq_seg}" -gt "${#_cq_long}" ] && _cq_long="$_cq_seg"
+    [ "${#_cq_seg}" -ge 12 ] || continue
+    [ -n "$_cq_pick" ] || _cq_pick="$_cq_seg"
+  done <<CITEEOF
+$_cq_segs
+CITEEOF
+  # Nothing verifiable. Name the LONGEST segment anyway, so the "too short" message quotes
+  # something the reader can find in the file instead of a fragment between two quotes.
+  [ -n "$_cq_pick" ] || _cq_pick="$_cq_long"
+  printf '%s' "$_cq_pick"
+}
+
 # --- the SUPPRESSED carve-out: asked of the script that OWNS "in force", never restated ---
 # escalations.md defines SUPPRESSED as an authorization to proceed past a failing check, with
 # a lifetime, and Check 2 says such an entry does not block while in force. Every
@@ -270,6 +351,8 @@ done
 # FAIL blocks exactly as before, with the reason printed beside the block.
 GA_IN_FORCE=""
 GA_IN_FORCE_STATUS="not-asked"
+GA_UNVERIFIED_CITES=0
+GA_VERIFIER_ERRORS=0
 if [ "$MODE" = "adjudicate" ]; then
     ESC="${AI_DLC_ESCALATIONS:-$GA_ROOT/docs/escalations/pending.md}"
     # The sibling is named IN FULL at its call sites below, never through a variable holding
@@ -305,13 +388,99 @@ if [ "$MODE" = "adjudicate" ]; then
         supp_rc=$?
         if [ "$supp_rc" -eq 0 ]; then
             GA_IN_FORCE_STATUS="ok:$ESC"
+            # --- THE CITATION IS VERIFIED BEFORE A ROW CAN COVER ANYTHING -------------------
+            # Each row's fifth field is the entry's `**Operator authorization:**` line,
+            # forwarded verbatim by the sibling. The sibling checks that the line carries a
+            # timestamp and a quote; it does not decide whether the words were said, and
+            # until this block existed nothing here did either — the field was read and
+            # discarded, so a lead could write its own gate passage into pending.md and this
+            # validator adopted it. Measured on the shipped fixture seed: a well-formed
+            # in-force entry with no transcript corpus anywhere exited 0 with the SUPPRESSED
+            # line. The predicate is the one `ai-dlc-gate-remediation-guard.sh` arm 7b already
+            # applies to the SAME rows: `validate-steering-budget.sh --cite`, THE
+            # genuine-operator predicate, over the corpus the caller named above. FAIL-CLOSED
+            # on every absence, exactly as the escalations file is: no corpus, no verifier, a
+            # quote too short to be evidence, or a quote no genuine operator turn carries all
+            # mean that row suppresses NOTHING, and the block names which. Rows are only ever
+            # NARROWED here; a row that verifies is kept and one that does not is dropped and
+            # counted, so a forged entry beside a genuine one costs the genuine one nothing.
+            if [ -n "$GA_IN_FORCE" ]; then
+                STEER_SCRIPT="$GA_SCRIPT_DIR/validate-steering-budget.sh"
+                STEER_FLAG=""; STEER_ARG=""
+                if steer_dir_has_transcript "$TRANSCRIPT_DIR"; then
+                    STEER_FLAG="--dir"; STEER_ARG="$TRANSCRIPT_DIR"
+                elif [ -n "$TRANSCRIPT" ] && steer_dir_has_transcript "$(dirname "$TRANSCRIPT")"; then
+                    # THE DIRECTORY, for the guard's reason (ai-dlc-gate-remediation-guard.sh
+                    # arm 7b widens the session transcript it is handed the same way): an
+                    # operator authorizes a suppression in one session and the gate that leans
+                    # on it runs in another, so the calling session's own file is never the one
+                    # the words are in. Measured: given only the current session's file, the
+                    # single-file scan read NOMATCH on an entry the guard had just accepted from
+                    # the sibling file. The two readers of these rows scan the same corpus from
+                    # the same argument, or they disagree about the same entry.
+                    STEER_FLAG="--dir"; STEER_ARG="$(dirname "$TRANSCRIPT")"
+                elif [ -n "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ]; then
+                    STEER_FLAG="--transcript"; STEER_ARG="$TRANSCRIPT"
+                fi
+                if [ -z "$STEER_FLAG" ]; then
+                    GA_IN_FORCE=""
+                    GA_IN_FORCE_STATUS="no-transcript:no readable transcript corpus was given (--transcript-dir '${TRANSCRIPT_DIR:-unset}' holds no *.jsonl; --transcript '${TRANSCRIPT:-unset}' is not a readable file), so no operator citation can be verified and no in-force entry covers anything"
+                elif [ ! -f "$STEER_SCRIPT" ]; then
+                    GA_IN_FORCE=""
+                    GA_IN_FORCE_STATUS="no-verifier:$STEER_SCRIPT is missing, so no operator citation can be verified and no in-force entry covers anything. Reinstall ai-dlc."
+                else
+                    GA_VERIFIED=""
+                    while IFS= read -r ga_row; do
+                        [ -n "$ga_row" ] || continue
+                        # `awk -F'\t'` and not `IFS`+`read`: TAB is IFS-whitespace, so a shell
+                        # read collapses the empty leading field a bare-catalog row carries.
+                        # A line with fewer than six fields is NOT a row — the python reader
+                        # below skips it on the same count — so it is neither verified nor
+                        # counted as unverified: a stray line is not a citation that failed.
+                        ga_nf="$(printf '%s' "$ga_row" | LC_ALL=C awk -F'\t' '{ print NF }')"
+                        [ "${ga_nf:-0}" -ge 6 ] || continue
+                        ga_auth="$(printf '%s' "$ga_row" | LC_ALL=C awk -F'\t' '{ print $5 }')"
+                        ga_quote="$(cite_quote "$ga_auth")"
+                        ga_header="$(printf '%s' "$ga_row" | cut -f6-)"
+                        if [ "${#ga_quote}" -lt 12 ]; then
+                            GA_UNVERIFIED_CITES=$((GA_UNVERIFIED_CITES + 1))
+                            echo "VALIDATE-GATE-ADJUDICATION: UNVERIFIED — an in-force SUPPRESSED entry's operator citation is too short to be evidence (under 12 characters: '${ga_quote}'), so it suppresses nothing: ${ga_header}"
+                            continue
+                        fi
+                        # THE VERIFIER'S EXIT IS READ IN THREE TIERS, never as a boolean. 0 is
+                        # MATCH; 2 is the verifier's own NOMATCH, the finding about the citation;
+                        # anything else is the verifier failing before it could answer (node off
+                        # PATH returns 1, measured against a control of 0 with node present). The
+                        # last is a tooling failure and still covers nothing -- fail closed -- but
+                        # it is reported as one, because printing it as forgery accuses the
+                        # operator's own authorization of being invented, which is the reading
+                        # validate-escalation-resolution.sh and the convergence validator both
+                        # refuse to make on the same status.
+                        bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$ga_quote" --quiet >/dev/null 2>&1
+                        ga_rc=$?
+                        if [ "$ga_rc" -eq 0 ]; then
+                            GA_VERIFIED="${GA_VERIFIED}${ga_row}
+"
+                        elif [ "$ga_rc" -eq 2 ]; then
+                            GA_UNVERIFIED_CITES=$((GA_UNVERIFIED_CITES + 1))
+                            echo "VALIDATE-GATE-ADJUDICATION: UNVERIFIED — an in-force SUPPRESSED entry cites an operator message that no genuine operator turn in ${STEER_ARG} carries, so it suppresses nothing: ${ga_header}"
+                        else
+                            GA_VERIFIER_ERRORS=$((GA_VERIFIER_ERRORS + 1))
+                            echo "VALIDATE-GATE-ADJUDICATION: UNVERIFIABLE — the citation verifier failed (validate-steering-budget.sh rc=${ga_rc}) before it could say whether a genuine operator turn carries this entry's quote, so the entry suppresses nothing until it can be verified. This is a tooling failure, not a finding about the citation (is node on PATH?): ${ga_header}"
+                        fi
+                    done <<GAROWEOF
+$GA_IN_FORCE
+GAROWEOF
+                    GA_IN_FORCE="$GA_VERIFIED"
+                fi
+            fi
         else
             GA_IN_FORCE=""
             GA_IN_FORCE_STATUS="refused:validate-suppression-lifetime.sh --in-force exited $supp_rc"
         fi
     fi
 fi
-export GA_IN_FORCE GA_IN_FORCE_STATUS
+export GA_IN_FORCE GA_IN_FORCE_STATUS GA_UNVERIFIED_CITES GA_VERIFIER_ERRORS
 
 python3 - "$MODE" "$GATE_TYPE" "$VERDICT_PATH" "$SCHEMA" "$MAP" "$SIBLING" ${SERIES_PATHS+"${SERIES_PATHS[@]}"} <<'PYEOF'
 import glob
@@ -1029,13 +1198,16 @@ if not E:
 # correctly would. Measured before this clause existed: a bare `16` covered an extension
 # check `16` in a catalog the entry never named.
 #
-# THE ROW'S OPERATOR-AUTH FIELD IS READ AND DISCARDED HERE, and the field count is what makes
-# that visible. This reader has no transcript corpus -- there is no `--transcript` on this
-# script and no caller that could pass one -- so it cannot verify the citation, and a reader
-# that silently ignored a field would be indistinguishable from one that never received it.
-# `ai-dlc-gate-remediation-guard.sh` arm 7b, which does have a corpus, verifies it. Both
-# readers take the same bounded split so the row shape cannot narrow under one of them.
+# THE ROW'S OPERATOR-AUTH FIELD WAS ALREADY VERIFIED IN THE SHELL PRELUDE, against the
+# transcript corpus the caller named, and every row reaching this reader is one whose quote a
+# genuine operator turn carries; the ones that did not verify were dropped there and counted
+# into GA_UNVERIFIED_CITES, which the block below names. The field is still carried and still
+# discarded HERE, and the field count is what makes that visible: both readers of this row
+# (`ai-dlc-gate-remediation-guard.sh` arm 7b is the other) take the same bounded split so
+# the row shape cannot narrow under one of them.
 in_force_status = os.environ.get("GA_IN_FORCE_STATUS", "not-asked")
+unverified_cites = int(os.environ.get("GA_UNVERIFIED_CITES", "0") or 0)
+verifier_errors = int(os.environ.get("GA_VERIFIER_ERRORS", "0") or 0)
 in_force = {}
 for raw in os.environ.get("GA_IN_FORCE", "").splitlines():
     parts = raw.split("\t", 5)
@@ -1062,9 +1234,22 @@ if blocking:
     if not in_force_status.startswith("ok:"):
         reason = (f" No SUPPRESSED carve-out was applied ({in_force_status}); a suppression "
                   f"that cannot be read covers nothing.")
-    elif suppressed:
-        reason = (f" {len(suppressed)} other FAIL(s) are under an in-force suppression; these "
-                  f"are not.")
+    else:
+        # The status is downgraded only once the block stands, and it mirrors the
+        # remediation guard's own wording so a lead reading one and then the other must not
+        # work out whether they are talking about the same predicate.
+        if unverified_cites:
+            reason += (f" unverified-citation: {unverified_cites} in-force entr(y/ies) cite an "
+                       f"operator message that is NOT in the transcript corpus, so they "
+                       f"suppress nothing.")
+        if verifier_errors:
+            reason += (f" verifier-error: {verifier_errors} in-force entr(y/ies) could not be "
+                       f"verified because the citation verifier failed (a tooling failure, "
+                       f"not a finding about the citation), so they suppress nothing until it "
+                       f"can run.")
+        if suppressed:
+            reason += (f" {len(suppressed)} other FAIL(s) are under an in-force suppression; "
+                       f"these are not.")
     block(1, f"gate check(s) FAILED per the adjudicator: {sorted(blocking, key=lambda x: (len(x), x))}. "
              f"The lead owns the block; this verdict is what it adopts.{reason}")
 

@@ -155,10 +155,15 @@ run "$VERDICT"
 # ran produces. Each arm names a token that only its own path emits.
 SOUT="$WORK/carveout.out"
 
-runx() { # runx <escalations> <gate-metrics> — RC and $SOUT from the pristine-plus-mutation verdict
+# EVERY CASE NAMES A TRANSCRIPT CORPUS TOO. The validator verifies each in-force entry's
+# operator citation against `--transcript-dir` before the entry can cover anything, and with no
+# corpus it fails closed (S19, S21). The seed's $TDIR carries the quote every seeded entry
+# cites, said by the operator, so S1–S17 exercise the join and the lifetime with the citation
+# already verified; the third argument overrides the corpus for the cases that are ABOUT it.
+runx() { # runx <escalations> <gate-metrics> [<transcript-dir>] — RC and $SOUT from the pristine-plus-mutation verdict
   AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
   AI_DLC_ESCALATIONS="$1" AI_DLC_GATE_METRICS="$2" \
-    bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" > "$SOUT" 2>&1
+    bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" --transcript-dir "${3:-$TDIR}" > "$SOUT" 2>&1
   RC=$?
 }
 
@@ -188,6 +193,7 @@ PY
 SUPP_LINE="VALIDATE-GATE-ADJUDICATION: SUPPRESSED — check '$X' FAIL is covered"
 BLOCK_X="gate check(s) FAILED per the adjudicator: ['$X']"
 BLOCK_Y="gate check(s) FAILED per the adjudicator: ['$Y']"
+UNVERIFIED_LINE="VALIDATE-GATE-ADJUDICATION: UNVERIFIED"
 
 # --- S1: an in-force entry naming X, and X FAILs → exit 0 --------------------
 restore; fail_on "$X"
@@ -242,12 +248,17 @@ else
 fi
 
 # --- S4: the entry is MALFORMED — no operator citation → exit 1 -------------
+# AND IT IS EXCLUDED BY THE SIBLING, not by the citation verifier one screen down. An entry
+# with no `**Operator authorization:**` line has no quote, so the verifier would drop it too
+# and print its UNVERIFIED line — which would make the sibling's shape exclusion invisible
+# from here and let a sibling that lists malformed entries pass this case on the verifier's
+# back. The absence of that line is what says the row never reached the verifier.
 restore; fail_on "$X"
 runx "$ESC_MALFORMED" "$GM_BEFORE"
-if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "malformed SUPPRESSED entry"; then
-  ok "S4: a SUPPRESSED entry with no **Operator authorization:** covers nothing → exit 1, and the sibling says why"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "malformed SUPPRESSED entry" && ! has "$UNVERIFIED_LINE"; then
+  ok "S4: a SUPPRESSED entry with no **Operator authorization:** covers nothing → exit 1, the sibling says why, and the row never reached the citation verifier"
 else
-  bad "S4: a malformed suppression covered the FAIL (rc=$RC) — an unauthorized entry became an authorization"
+  bad "S4: a malformed suppression covered the FAIL (rc=$RC), or it was excluded only downstream by the citation verifier — an unauthorized entry became an authorization, or the sibling stopped owning the shape"
 fi
 
 # --- S5: the CONSUMER'S ORIGINAL SHAPE — fields under DECIDED_AUTONOMOUSLY --
@@ -447,13 +458,119 @@ restore; fail_on "$X"
 GA_S17_OUT="$WORK/s17.out"
 ( cd "$GA_CWD_DECOY" && AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
     AI_DLC_ESCALATIONS="$ESC_INFORCE" AI_DLC_PROJECT_ROOT="$GA_CWD_ROOT" \
-    bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" ) > "$GA_S17_OUT" 2>&1
+    bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" --transcript-dir "$TDIR" ) > "$GA_S17_OUT" 2>&1
 GA_S17_RC=$?
 GA_S17_N="$(grep -cF -- "$SUPP_LINE" "$GA_S17_OUT")" || GA_S17_N=0
 if [ "$GA_S17_RC" -eq 0 ] && [ "$GA_S17_N" -gt 0 ]; then
   ok "S17: with no AI_DLC_GATE_METRICS, run from a cwd whose own timeline expires the entry, the carve-out still fires — the sibling was pointed at the gate's project root"
 else
   bad "S17: the carve-out did not fire (rc=$GA_S17_RC) — the sibling counted the cwd project's gates, or was never told which root this gate belongs to"
+fi
+
+# =============================================================================
+# S18–S22: THE CITATION IS VERIFIED, and an entry whose quote no operator said covers nothing.
+#
+# THE DEFECT. The sibling checks that `**Operator authorization:**` carries a timestamp and a
+# quote; nothing here compared the quote to anything, so a lead could write its own gate
+# passage into pending.md and this validator adopted it — measured on this very seed: a
+# well-formed in-force entry with no transcript corpus anywhere exited 0 with the SUPPRESSED
+# line. The remediation guard already verifies the same rows with the same predicate
+# (`validate-steering-budget.sh --cite`); these cases hold the gate to it too.
+#
+# THE TWO WRONG FIXES THESE ARE SHAPED AGAINST. (1) A verifier that greps the corpus for the
+# words: it accepts $TDIR_FORGED, where the words sit only in an assistant turn and a
+# tool_result, and S18 is the case that kills it. (2) A verifier that treats "no corpus given"
+# as "nothing to verify" and keeps the rows: S19 and S21 kill it, and S20 holds the single-file
+# fallback so the fix cannot simply demand a directory. S22 holds that rows are NARROWED, not
+# discarded as a set, when one of two entries fails to verify.
+# =============================================================================
+
+# --- S18: the words are in the corpus, and no operator said them → exit 1 --
+restore; fail_on "$X"
+runx "$ESC_INFORCE" "$GM_BEFORE" "$TDIR_FORGED"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "$UNVERIFIED_LINE" \
+   && has "unverified-citation: 1 in-force" && ! has "$SUPP_LINE"; then
+  ok "S18: an in-force entry whose quote appears only in an assistant turn and a tool_result covers nothing → exit 1, and the block says unverified-citation: 1"
+else
+  bad "S18: a FORGED citation covered the FAIL (rc=$RC) — the verifier is a text search over the corpus rather than the genuine-operator predicate, or the block does not say the citation failed to verify"
+fi
+
+# --- S19: NO corpus named at all → exit 1, fail-closed and named ------------
+restore; fail_on "$X"
+AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
+AI_DLC_ESCALATIONS="$ESC_INFORCE" AI_DLC_GATE_METRICS="$GM_BEFORE" \
+  bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" > "$SOUT" 2>&1
+RC=$?
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "no-transcript" && ! has "$SUPP_LINE"; then
+  ok "S19: run with neither --transcript nor --transcript-dir, an in-force entry covers nothing → exit 1 and the block says 'no-transcript'"
+else
+  bad "S19: with no corpus to verify against, the entry still covered the FAIL (rc=$RC) — 'nothing to verify against' is being read as 'verified'"
+fi
+
+# --- S20: --transcript is WIDENED to its directory → exit 0 ----------------
+# $TFILE does NOT carry the quote; its sibling in the same directory does. The remediation
+# guard widens the session transcript it is handed to that directory, and the gate must read
+# the same rows against the same corpus or the two disagree about one entry (measured: gate
+# NOMATCH, guard MATCH, on this shape). A single-file scan fails this case.
+restore; fail_on "$X"
+if grep -qF 'proceed past this one' "$TFILE"; then
+  bad "S20-pre: FIXTURE BROKEN — the --transcript file itself carries the quote, so this arm cannot tell a widened scan from a single-file one"
+else
+  ok "S20-pre: the --transcript file does NOT carry the quote; only its sibling does"
+fi
+AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
+AI_DLC_ESCALATIONS="$ESC_INFORCE" AI_DLC_GATE_METRICS="$GM_BEFORE" \
+  bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" --transcript "$TFILE" > "$SOUT" 2>&1
+RC=$?
+if [ "$RC" -eq 0 ] && has "$SUPP_LINE"; then
+  ok "S20: --transcript naming a file whose SIBLING carries the operator's words verifies the entry → exit 0 (the file is widened to its corpus, as the guard does)"
+else
+  bad "S20: --transcript was scanned as a single file (rc=$RC) — the gate reads a narrower corpus than the guard reads for the same rows, and the two disagree about the same entry"
+fi
+
+# --- S23: the verifier FAILS (node off PATH) → exit 1, reported as tooling ---
+# A verifier that cannot run is not a finding that the operator's words were invented. The
+# entry still covers nothing (fail closed) but the line and the block reason must say the
+# verifier failed, not that no operator said it. The control asserts node is genuinely absent
+# under the stripped PATH before the arm is read.
+restore; fail_on "$X"
+GA_NODE_DIR="$(dirname "$(command -v node 2>/dev/null || echo /nonexistent/node)")"
+GA_P2="$(printf '%s' "$PATH" | tr ':' '\n' | grep -vx "$GA_NODE_DIR" | paste -sd: -)"
+if [ -n "$(PATH="$GA_P2" command -v node 2>/dev/null)" ]; then
+  bad "S23-pre: FIXTURE BROKEN — node is still on PATH after stripping $GA_NODE_DIR, so the verifier-failure arm cannot be built"
+else
+  ok "S23-pre: node is absent under the stripped PATH (control), so the verifier below cannot run"
+  PATH="$GA_P2" AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
+  AI_DLC_ESCALATIONS="$ESC_INFORCE" AI_DLC_GATE_METRICS="$GM_BEFORE" \
+    bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" --transcript-dir "$TDIR" > "$SOUT" 2>&1
+  RC=$?
+  if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "VALIDATE-GATE-ADJUDICATION: UNVERIFIABLE" \
+     && has "verifier-error: 1 in-force" && ! has "no genuine operator turn" && ! has "$SUPP_LINE"; then
+    ok "S23: with the verifier unable to run, the entry covers nothing → exit 1, and the line and the block say the VERIFIER failed rather than that the citation is forged"
+  else
+    bad "S23: a verifier that could not run was read as a verdict (rc=$RC) — either the entry still covered the FAIL, or a tooling failure was printed as an accusation of forgery"
+  fi
+fi
+
+# --- S21: a directory with NO *.jsonl is not a corpus → exit 1 -------------
+restore; fail_on "$X"
+runx "$ESC_INFORCE" "$GM_BEFORE" "$TDIR_EMPTY"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "no-transcript" && ! has "$SUPP_LINE"; then
+  ok "S21: --transcript-dir naming a directory that holds no *.jsonl is no corpus → exit 1 and the block says 'no-transcript'"
+else
+  bad "S21: an EXISTING directory with nothing in it was accepted as a corpus (rc=$RC) — '-d' answers whether the path exists, never whether it holds ground truth"
+fi
+
+# --- S22: two entries, one genuine and one forged → rows NARROWED ----------
+# X's quote is in the corpus and Y's is not; both FAIL. The verified row must still cover X
+# while the forged one covers nothing about Y, and the block must say both things.
+restore; fail_on "$X" "$Y"
+runx "$ESC_TWOQUOTES" "$GM_BEFORE"
+if [ "$RC" -eq 1 ] && has "$BLOCK_Y" && ! has "$BLOCK_X" && has "$SUPP_LINE" \
+   && has "$UNVERIFIED_LINE" && has "unverified-citation: 1 in-force" && has "1 other FAIL(s) are under"; then
+  ok "S22: a genuine entry beside a forged one: '$X' stays covered, '$Y' blocks, and the block says unverified-citation: 1 and 1 other FAIL under a suppression"
+else
+  bad "S22: rows were not narrowed by the citation check (rc=$RC) — either the forged entry poisoned the genuine one, or the forged one covered '$Y' anyway"
 fi
 
 # --- restore, once more, after the carve-out arms ---------------------------

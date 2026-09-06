@@ -196,8 +196,9 @@ set -u
 # (`validate-steering-budget.sh:427`), so a directory holding only sidecar files is exactly
 # as blind as an empty one and this counts what that reader would count. This predicate is
 # byte-identical in `core/scripts/validate-adversarial-convergence.sh` and
-# `core/scripts/validate-escalation-resolution.sh`; invariant I92 holds the three copies to
-# one text and refuses a fourth.
+# `core/scripts/validate-escalation-resolution.sh` and
+# `core/scripts/validate-gate-adjudication.sh`; invariant I92 holds the four copies to one
+# text and refuses a fifth.
 steer_dir_has_transcript() { # $1 dir -> 0 if it holds a readable *.jsonl
   [ -n "${1:-}" ] && [ -d "$1" ] || return 1
   for _sdht in "$1"/*.jsonl; do
@@ -213,8 +214,9 @@ steer_dir_has_transcript() { # $1 dir -> 0 if it holds a readable *.jsonl
 # an invented operator authorization verified whenever any genuine operator substring trailed
 # it on the same line. These two are byte-identical in
 # `core/scripts/validate-escalation-resolution.sh` and
-# `core/scripts/validate-adversarial-convergence.sh`; invariant I93 holds the three copies to
-# one text and refuses a fourth. Read the escalation validator's header for the measurement.
+# `core/scripts/validate-adversarial-convergence.sh` and
+# `core/scripts/validate-gate-adjudication.sh`; invariant I103 holds the four copies to one
+# text and refuses a fifth. Read the escalation validator's header for the measurement.
 cite_segments() { # $1 authline -> one quoted segment per line
   printf '%s\n' "$1" | LC_ALL=C awk '
     { n = split($0, p, /"/)
@@ -410,14 +412,16 @@ esac
 # SATISFIABLE: the reference consumer's genuine `[S308-GATE3-STORY-1]` entry, quote
 # "Suppress Check 16 (Recommended)", verifies over its 249-transcript corpus -- MATCH at
 # 2026-09-05T17:46:59Z, against a control phrase that returns NOMATCH. (2) The sibling's OTHER
-# caller cannot supply a corpus: `validate-gate-adjudication.sh` takes no transcript argument
-# and no caller passes it one, so a sibling that verified unconditionally would omit every
-# in-force row at gate time and re-block every suppressed FAIL -- a check that wedges live
-# work. (3) The sibling could not host the extraction anyway: `cite_quote()` and
-# `cite_segments()` are held to exactly three copies by I93, whose site list is DERIVED from
-# every file under core/ that names them, so a fourth copy fails the push. This hook is one of
-# the three and already carries both. The sibling therefore forwards the auth line verbatim as
-# a row field and parses nothing. Check 26's half of the hole is a separate subject.
+# caller names its corpus by FLAG: `validate-gate-adjudication.sh` now takes `--transcript-dir`
+# from the lead's Check 26 call site and verifies the same rows itself, while this hook's corpus
+# arrives from the harness on stdin -- two provenances, so a sibling verifying unconditionally
+# would have to be handed one of them and would re-block every suppressed FAIL for the caller
+# whose flag was missing, a check that wedges live work. (3) The sibling could not host the
+# extraction anyway: `cite_quote()` and `cite_segments()` are held to exactly four copies by
+# I103, whose site list is DERIVED from every file under core/ that names them, so a fifth copy
+# fails the push. This hook is one of the four and already carries both. The sibling therefore
+# forwards the auth line verbatim as a row field and parses nothing; each of the two readers
+# verifies it against the corpus it was given.
 #
 # WHY THIS SITS AFTER ARM 7 AND NOT AFTER ARM 5. The subtraction changes exactly three
 # things, all downstream of the guarded-root test: the repair record's `repaired_checks`
